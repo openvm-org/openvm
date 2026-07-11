@@ -30,11 +30,11 @@ pub struct Rv64LoadSignExtendByteChipGpu {
 impl Chip<DenseRecordArena, GpuBackend> for Rv64LoadSignExtendByteChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         const RECORD_SIZE: usize = size_of::<(Rv64LoadByteAdapterRecord, LoadByteRecord)>();
+        let rvr_wire = arena.rvr_wire;
         let records = arena.allocated();
         if records.is_empty() {
             return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
         }
-        debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
         let trace_width =
             Rv64LoadByteAdapterCols::<F>::width() + LoadSignExtendByteCoreCols::<F>::width();
@@ -42,10 +42,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64LoadSignExtendByteChipGpu {
         let device_ctx = &self.range_checker.device_ctx;
         // M-GPUDEC (G2): this segment's arena carries compact wire records —
         // decode them on device against the per-exe operand table.
-        if matches!(
-            self.rvr_decode.compact_segment_mode(),
-            Some(crate::rvr_gpu_decode::InlineEmissionMode::CompactWire)
-        ) {
+        if rvr_wire {
             use openvm_circuit::arch::rvr::PREFLIGHT_ADDSUB_RECORD_SIZE;
             assert_eq!(
                 records.len() % PREFLIGHT_ADDSUB_RECORD_SIZE,
@@ -79,6 +76,8 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64LoadSignExtendByteChipGpu {
             }
             return AirProvingContext::simple_no_pis(d_trace);
         }
+
+        debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
         let d_records = tracing::info_span!("trace_gen.h2d_records")
             .in_scope(|| records.to_device_on(device_ctx))

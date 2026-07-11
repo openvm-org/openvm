@@ -33,11 +33,11 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64MulWChipGpu {
             Rv64MultWAdapterRecord,
             MultiplicationCoreRecord<RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>,
         )>();
+        let rvr_wire = arena.rvr_wire;
         let records = arena.allocated();
         if records.is_empty() {
             return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
         }
-        debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
         let trace_width = MultiplicationCoreCols::<F, RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>::width()
             + Rv64MultWAdapterCols::<F>::width();
@@ -49,10 +49,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64MulWChipGpu {
         let device_ctx = &self.range_checker.device_ctx;
         // M-GPUDEC (G2): this segment's arena carries compact wire records —
         // decode them on device against the per-exe operand table.
-        if matches!(
-            self.rvr_decode.compact_segment_mode(),
-            Some(crate::rvr_gpu_decode::InlineEmissionMode::CompactWire)
-        ) {
+        if rvr_wire {
             use openvm_circuit::arch::rvr::PREFLIGHT_ADDSUB_RECORD_SIZE;
             assert_eq!(
                 records.len() % PREFLIGHT_ADDSUB_RECORD_SIZE,
@@ -87,6 +84,8 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64MulWChipGpu {
             }
             return AirProvingContext::simple_no_pis(d_trace);
         }
+
+        debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
         let d_records = records.to_device_on(device_ctx).unwrap();
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
