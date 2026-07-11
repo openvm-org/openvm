@@ -1093,25 +1093,136 @@ where
             MulOpcode::iter().map(|opcode| opcode.global_opcode()),
             assemble_mul::<F, RA>,
         );
-        registry.register_inline(
+        registry.register_inline_arena_native(
             MulOpcode::iter().map(|opcode| opcode.global_opcode()),
             PREFLIGHT_ADDSUB_RECORD_SIZE,
             assemble_mul_inline::<F, RA>,
+            ArenaNativeGeometry {
+                adapter_size: size_of::<Rv64MultAdapterRecord>(),
+                adapter_align: align_of::<Rv64MultAdapterRecord>(),
+                core_size: size_of::<MultiplicationCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>>(),
+                core_align: align_of::<MultiplicationCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>>(),
+                core_off_matrix: <Rv64MultAdapterExecutor as AdapterTraceExecutor<F>>::WIDTH
+                    * size_of::<F>(),
+                layout: ArenaNativeLayout::Alu3(Alu3ArenaFieldOffsets {
+                    from_pc: core::mem::offset_of!(Rv64MultAdapterRecord, from_pc),
+                    from_timestamp: core::mem::offset_of!(Rv64MultAdapterRecord, from_timestamp),
+                    rd_ptr: core::mem::offset_of!(Rv64MultAdapterRecord, rd_ptr),
+                    rs1_ptr: core::mem::offset_of!(Rv64MultAdapterRecord, rs1_ptr),
+                    rs2: core::mem::offset_of!(Rv64MultAdapterRecord, rs2_ptr),
+                    // The Mult adapter has neither rs2_as nor imm-sign.
+                    rs2_as: usize::MAX,
+                    rs2_imm_sign: usize::MAX,
+                    reads_aux0_prev_ts: core::mem::offset_of!(Rv64MultAdapterRecord, reads_aux)
+                        + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+                    reads_aux1_prev_ts: core::mem::offset_of!(Rv64MultAdapterRecord, reads_aux)
+                        + size_of::<MemoryReadAuxRecord>()
+                        + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+                    write_prev_ts: core::mem::offset_of!(Rv64MultAdapterRecord, writes_aux)
+                        + core::mem::offset_of!(
+                            MemoryWriteAuxRecord<u8, RV64_REGISTER_NUM_LIMBS>,
+                            prev_timestamp
+                        ),
+                    write_prev_data: core::mem::offset_of!(Rv64MultAdapterRecord, writes_aux)
+                        + core::mem::offset_of!(
+                            MemoryWriteAuxRecord<u8, RV64_REGISTER_NUM_LIMBS>,
+                            prev_data
+                        ),
+                    core_b: core::mem::offset_of!(MultiplicationCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>, b),
+                    core_c: core::mem::offset_of!(MultiplicationCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>, c),
+                    core_local_opcode: usize::MAX,
+                }),
+            },
         );
-        registry.register_inline(
+        registry.register_inline_arena_native(
             MulHOpcode::iter().map(|opcode| opcode.global_opcode()),
             PREFLIGHT_ADDSUB_RECORD_SIZE,
             assemble_mulh_inline::<F, RA>,
+            ArenaNativeGeometry {
+                adapter_size: size_of::<Rv64MultAdapterRecord>(),
+                adapter_align: align_of::<Rv64MultAdapterRecord>(),
+                core_size: size_of::<MulHCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>>(),
+                core_align: align_of::<MulHCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>>(),
+                core_off_matrix: <Rv64MultAdapterExecutor as AdapterTraceExecutor<F>>::WIDTH
+                    * size_of::<F>(),
+                layout: ArenaNativeLayout::Alu3(Alu3ArenaFieldOffsets {
+                    from_pc: core::mem::offset_of!(Rv64MultAdapterRecord, from_pc),
+                    from_timestamp: core::mem::offset_of!(Rv64MultAdapterRecord, from_timestamp),
+                    rd_ptr: core::mem::offset_of!(Rv64MultAdapterRecord, rd_ptr),
+                    rs1_ptr: core::mem::offset_of!(Rv64MultAdapterRecord, rs1_ptr),
+                    rs2: core::mem::offset_of!(Rv64MultAdapterRecord, rs2_ptr),
+                    // The Mult adapter has neither rs2_as nor imm-sign.
+                    rs2_as: usize::MAX,
+                    rs2_imm_sign: usize::MAX,
+                    reads_aux0_prev_ts: core::mem::offset_of!(Rv64MultAdapterRecord, reads_aux)
+                        + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+                    reads_aux1_prev_ts: core::mem::offset_of!(Rv64MultAdapterRecord, reads_aux)
+                        + size_of::<MemoryReadAuxRecord>()
+                        + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+                    write_prev_ts: core::mem::offset_of!(Rv64MultAdapterRecord, writes_aux)
+                        + core::mem::offset_of!(
+                            MemoryWriteAuxRecord<u8, RV64_REGISTER_NUM_LIMBS>,
+                            prev_timestamp
+                        ),
+                    write_prev_data: core::mem::offset_of!(Rv64MultAdapterRecord, writes_aux)
+                        + core::mem::offset_of!(
+                            MemoryWriteAuxRecord<u8, RV64_REGISTER_NUM_LIMBS>,
+                            prev_data
+                        ),
+                    core_b: core::mem::offset_of!(MulHCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>, b),
+                    core_c: core::mem::offset_of!(MulHCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>, c),
+                    core_local_opcode: core::mem::offset_of!(MulHCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>, local_opcode),
+                }),
+            },
         );
         registry.register_inline(
             MulWOpcode::iter().map(|opcode| opcode.global_opcode()),
             PREFLIGHT_ADDSUB_RECORD_SIZE,
             assemble_mul_w_inline::<F, RA>,
         );
-        registry.register_inline(
+        registry.register_inline_arena_native(
             DivRemOpcode::iter().map(|opcode| opcode.global_opcode()),
             PREFLIGHT_ADDSUB_RECORD_SIZE,
             assemble_divrem_inline::<F, RA>,
+            ArenaNativeGeometry {
+                adapter_size: size_of::<Rv64MultAdapterRecord>(),
+                adapter_align: align_of::<Rv64MultAdapterRecord>(),
+                core_size: size_of::<DivRemCoreRecord<RV64_REGISTER_NUM_LIMBS>>(),
+                core_align: align_of::<DivRemCoreRecord<RV64_REGISTER_NUM_LIMBS>>(),
+                core_off_matrix: <Rv64MultAdapterExecutor as AdapterTraceExecutor<F>>::WIDTH
+                    * size_of::<F>(),
+                layout: ArenaNativeLayout::Alu3(Alu3ArenaFieldOffsets {
+                    from_pc: core::mem::offset_of!(Rv64MultAdapterRecord, from_pc),
+                    from_timestamp: core::mem::offset_of!(Rv64MultAdapterRecord, from_timestamp),
+                    rd_ptr: core::mem::offset_of!(Rv64MultAdapterRecord, rd_ptr),
+                    rs1_ptr: core::mem::offset_of!(Rv64MultAdapterRecord, rs1_ptr),
+                    rs2: core::mem::offset_of!(Rv64MultAdapterRecord, rs2_ptr),
+                    // The Mult adapter has neither rs2_as nor imm-sign.
+                    rs2_as: usize::MAX,
+                    rs2_imm_sign: usize::MAX,
+                    reads_aux0_prev_ts: core::mem::offset_of!(Rv64MultAdapterRecord, reads_aux)
+                        + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+                    reads_aux1_prev_ts: core::mem::offset_of!(Rv64MultAdapterRecord, reads_aux)
+                        + size_of::<MemoryReadAuxRecord>()
+                        + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+                    write_prev_ts: core::mem::offset_of!(Rv64MultAdapterRecord, writes_aux)
+                        + core::mem::offset_of!(
+                            MemoryWriteAuxRecord<u8, RV64_REGISTER_NUM_LIMBS>,
+                            prev_timestamp
+                        ),
+                    write_prev_data: core::mem::offset_of!(Rv64MultAdapterRecord, writes_aux)
+                        + core::mem::offset_of!(
+                            MemoryWriteAuxRecord<u8, RV64_REGISTER_NUM_LIMBS>,
+                            prev_data
+                        ),
+                    core_b: core::mem::offset_of!(DivRemCoreRecord<RV64_REGISTER_NUM_LIMBS>, b),
+                    core_c: core::mem::offset_of!(DivRemCoreRecord<RV64_REGISTER_NUM_LIMBS>, c),
+                    core_local_opcode: core::mem::offset_of!(
+                        DivRemCoreRecord<RV64_REGISTER_NUM_LIMBS>,
+                        local_opcode
+                    ),
+                }),
+            },
         );
         registry.register_inline(
             DivRemWOpcode::iter().map(|opcode| opcode.global_opcode()),

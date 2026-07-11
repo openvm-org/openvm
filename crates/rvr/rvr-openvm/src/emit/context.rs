@@ -479,10 +479,12 @@ impl<'a> EmitContext<'a> {
         for (offset, value) in stores {
             self.write_line(&format!("*(uint32_t*)({rec} + {offset}) = {value};"));
         }
-        self.write_line(&format!(
-            "*(uint8_t*)({rec} + {}) = {}u;",
-            off.rs2_as, baked.rs2_as
-        ));
+        if off.rs2_as != usize::MAX {
+            self.write_line(&format!(
+                "*(uint8_t*)({rec} + {}) = {}u;",
+                off.rs2_as, baked.rs2_as
+            ));
+        }
         if off.rs2_imm_sign != usize::MAX {
             self.write_line(&format!(
                 "*(uint8_t*)({rec} + {}) = {}u;",

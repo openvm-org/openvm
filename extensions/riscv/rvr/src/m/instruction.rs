@@ -1,7 +1,7 @@
 //! RV64M instruction nodes and C code generation.
 
 use rvr_openvm_ir::{
-    CfgEffect, CfgOp, CfgResultWidth, ExtEmitCtx, ExtInstr, InlineRecordShape,
+    ArenaAlu3Baked, CfgEffect, CfgOp, CfgResultWidth, ExtEmitCtx, ExtInstr, InlineRecordShape,
 };
 
 use crate::instruction::{reg_operand, Reg};
@@ -83,7 +83,19 @@ impl ExtInstr for Rv64MInstr {
             "__RVR_LHS__",
             "__RVR_RHS__",
         );
-        if ctx.emit_reg3_inline(self.rd, self.lhs, self.rhs, None, &result_template) {
+        let local_opcode = match self.op {
+            MulDivOp::Mul | MulDivOp::MulHighSigned | MulDivOp::DivSigned => 0,
+            MulDivOp::MulHighSignedUnsigned | MulDivOp::DivUnsigned => 1,
+            MulDivOp::MulHighUnsigned | MulDivOp::RemSigned => 2,
+            MulDivOp::RemUnsigned => 3,
+        };
+        let arena = Some(ArenaAlu3Baked {
+            rs2_field: self.rhs.index() * 8,
+            rs2_as: 0,
+            rs2_imm_sign: 0,
+            local_opcode,
+        });
+        if ctx.emit_reg3_inline(self.rd, self.lhs, self.rhs, arena, &result_template) {
             return;
         }
         let lhs = ctx.read_var(self.lhs);

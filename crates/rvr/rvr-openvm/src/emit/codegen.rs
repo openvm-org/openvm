@@ -73,6 +73,7 @@ pub struct Alu3ArenaFieldOffsets {
     pub rd_ptr: usize,
     pub rs1_ptr: usize,
     pub rs2: usize,
+    /// `usize::MAX` when the adapter always reads rs2 as a register.
     pub rs2_as: usize,
     /// `usize::MAX` for byte adapters without an immediate-sign field.
     pub rs2_imm_sign: usize,
