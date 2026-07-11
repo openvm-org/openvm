@@ -33,7 +33,8 @@ pub fn instr_emits_inline_record(instr: &Instr) -> bool {
         } | Instr::AluImm {
             op: AluOp::Add | AluOp::Sub,
             ..
-        }
+        } | Instr::MulDiv { .. }
+            | Instr::MulDivW { .. }
     )
 }
 
@@ -341,66 +342,51 @@ fn branch_cond_expr(cond: BranchCond, left: &str, right: &str) -> String {
 
 // ── MulDiv ──────────────────────────────────────────────────────────────────
 
+/// C expression computing a MulDiv result from two read register values.
+/// Division/remainder zero-divisor and overflow semantics live inside the
+/// `rv_*` helpers, so the inline-record path reuses these expressions
+/// verbatim.
+fn muldiv_expr(op: MulDivOp, l: &str, r: &str) -> String {
+    match op {
+        MulDivOp::Mul => format!("{l} * {r}"),
+        MulDivOp::Mulh => format!("rv_mulh((int64_t){l}, (int64_t){r})"),
+        MulDivOp::Mulhsu => format!("rv_mulhsu((int64_t){l}, {r})"),
+        MulDivOp::Mulhu => format!("rv_mulhu({l}, {r})"),
+        MulDivOp::Div => format!("rv_div((int64_t){l}, (int64_t){r})"),
+        MulDivOp::Divu => format!("rv_divu({l}, {r})"),
+        MulDivOp::Rem => format!("rv_rem((int64_t){l}, (int64_t){r})"),
+        MulDivOp::Remu => format!("rv_remu({l}, {r})"),
+    }
+}
+
 fn emit_muldiv(ctx: &mut EmitContext, op: MulDivOp, rd: u8, rs1: u8, rs2: u8) {
+    if ctx.inline_records_enabled() {
+        ctx.emit_reg3_inline(rd, rs1, rs2, |l, r| muldiv_expr(op, l, r));
+        return;
+    }
     let l = ctx.read_reg(rs1);
     let r = ctx.read_reg(rs2);
+    ctx.write_reg(rd, &muldiv_expr(op, &l, &r));
+}
 
+/// C expression computing a MulDivW result (see [`muldiv_expr`]).
+fn muldiv_w_expr(op: MulDivOp, l: &str, r: &str) -> String {
     match op {
-        MulDivOp::Mul => {
-            ctx.write_reg(rd, &format!("{l} * {r}"));
-        }
-        MulDivOp::Mulh => {
-            ctx.write_reg(rd, &format!("rv_mulh((int64_t){l}, (int64_t){r})"));
-        }
-        MulDivOp::Mulhsu => {
-            ctx.write_reg(rd, &format!("rv_mulhsu((int64_t){l}, {r})"));
-        }
-        MulDivOp::Mulhu => {
-            ctx.write_reg(rd, &format!("rv_mulhu({l}, {r})"));
-        }
-        MulDivOp::Div => {
-            ctx.write_reg(rd, &format!("rv_div((int64_t){l}, (int64_t){r})"));
-        }
-        MulDivOp::Divu => {
-            ctx.write_reg(rd, &format!("rv_divu({l}, {r})"));
-        }
-        MulDivOp::Rem => {
-            ctx.write_reg(rd, &format!("rv_rem((int64_t){l}, (int64_t){r})"));
-        }
-        MulDivOp::Remu => {
-            ctx.write_reg(rd, &format!("rv_remu({l}, {r})"));
-        }
+        MulDivOp::Mul => format!("(uint64_t)(int32_t)((uint32_t){l} * (uint32_t){r})"),
+        MulDivOp::Div => format!("rv_divw((int32_t)(uint32_t){l}, (int32_t)(uint32_t){r})"),
+        MulDivOp::Divu => format!("rv_divuw((uint32_t){l}, (uint32_t){r})"),
+        MulDivOp::Rem => format!("rv_remw((int32_t)(uint32_t){l}, (int32_t)(uint32_t){r})"),
+        MulDivOp::Remu => format!("rv_remuw((uint32_t){l}, (uint32_t){r})"),
+        _ => unreachable!("no W variant for mul op {op:?}"),
     }
 }
 
 fn emit_muldiv_w(ctx: &mut EmitContext, op: MulDivOp, rd: u8, rs1: u8, rs2: u8) {
+    if ctx.inline_records_enabled() {
+        ctx.emit_reg3_inline(rd, rs1, rs2, |l, r| muldiv_w_expr(op, l, r));
+        return;
+    }
     let l = ctx.read_reg(rs1);
     let r = ctx.read_reg(rs2);
-    match op {
-        MulDivOp::Mul => {
-            ctx.write_reg(
-                rd,
-                &format!("(uint64_t)(int32_t)((uint32_t){l} * (uint32_t){r})"),
-            );
-        }
-        MulDivOp::Div => {
-            ctx.write_reg(
-                rd,
-                &format!("rv_divw((int32_t)(uint32_t){l}, (int32_t)(uint32_t){r})"),
-            );
-        }
-        MulDivOp::Divu => {
-            ctx.write_reg(rd, &format!("rv_divuw((uint32_t){l}, (uint32_t){r})"));
-        }
-        MulDivOp::Rem => {
-            ctx.write_reg(
-                rd,
-                &format!("rv_remw((int32_t)(uint32_t){l}, (int32_t)(uint32_t){r})"),
-            );
-        }
-        MulDivOp::Remu => {
-            ctx.write_reg(rd, &format!("rv_remuw((uint32_t){l}, (uint32_t){r})"));
-        }
-        _ => unreachable!("no W variant for mul op {op:?}"),
-    }
+    ctx.write_reg(rd, &muldiv_w_expr(op, &l, &r));
 }

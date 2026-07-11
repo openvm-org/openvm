@@ -338,52 +338,68 @@ pub fn generate_rv64im_record_arenas_from_logs<F: PrimeField32, RA: Rv64Standard
     generate_record_arenas_from_logs(&registry, exe, output, capacities, pc_to_air_idx)
 }
 
-/// Host mirror of the C `PreflightAddSubRecord` (R3 L1+L5 compact record):
-/// the dynamic witness only — program-redundant operands are re-derived from
-/// the instruction at `from_pc` by [`assemble_add_sub_inline`]. Parsed
-/// field-by-field from little-endian bytes, so no alignment requirements.
-struct PreflightAddSubCompact {
+/// Host mirror of the C `PreflightAddSubRecord` (R3 L1+L5 compact record),
+/// shared by every migrated 2-read-1-write single-row shape ("alu3"): the
+/// dynamic witness only — program-redundant operands are re-derived from the
+/// instruction at `from_pc` by the per-opcode inline assemblers. The 8-byte
+/// read/write values are kept as u64s; shape-specific limb views come from
+/// [`u16x4`] / [`bytes8`]. Parsed field-by-field from little-endian bytes, so
+/// no alignment requirements.
+struct PreflightAlu3Compact {
     from_pc: u32,
     from_timestamp: u32,
     reads_prev_timestamp: [u32; 2],
     write_prev_timestamp: u32,
-    write_prev_data: [u16; BLOCK_FE_WIDTH],
-    b: [u16; BLOCK_FE_WIDTH],
-    c: [u16; BLOCK_FE_WIDTH],
+    write_prev_data: u64,
+    b: u64,
+    c: u64,
 }
 
 // Drift guard: the compact stride must match the C record the preflight
 // tracer writes (guarded by `_Static_assert`s on the C side).
 const _: () = assert!(PREFLIGHT_ADDSUB_RECORD_SIZE == 44);
 
-impl PreflightAddSubCompact {
-    fn read(bytes: &[u8]) -> Self {
+impl PreflightAlu3Compact {
+    /// Parse + order guard: the C emits one record per migrated retired
+    /// instruction in program-log order, so the record's `from_pc` must match
+    /// the program-log pc being assembled.
+    fn read_for_pc(bytes: &[u8], pc: u32) -> Result<Self, ExecutionError> {
         debug_assert_eq!(bytes.len(), PREFLIGHT_ADDSUB_RECORD_SIZE);
         let u32_at =
             |at: usize| u32::from_le_bytes(bytes[at..at + 4].try_into().expect("4-byte field"));
-        let u16x4_at = |at: usize| {
-            core::array::from_fn(|i| {
-                u16::from_le_bytes(
-                    bytes[at + 2 * i..at + 2 * i + 2]
-                        .try_into()
-                        .expect("2-byte limb"),
-                )
-            })
-        };
-        Self {
+        let u64_at =
+            |at: usize| u64::from_le_bytes(bytes[at..at + 8].try_into().expect("8-byte field"));
+        let compact = Self {
             from_pc: u32_at(0),
             from_timestamp: u32_at(4),
             reads_prev_timestamp: [u32_at(8), u32_at(12)],
             write_prev_timestamp: u32_at(16),
-            write_prev_data: u16x4_at(20),
-            b: u16x4_at(28),
-            c: u16x4_at(36),
+            write_prev_data: u64_at(20),
+            b: u64_at(28),
+            c: u64_at(36),
+        };
+        if compact.from_pc != pc {
+            return Err(ExecutionError::RvrExecution(format!(
+                "inline record order mismatch: record from_pc {:#x} vs program-log pc {pc:#x}",
+                compact.from_pc
+            )));
         }
+        Ok(compact)
     }
 }
 
-/// Expand one C-written compact AddSub record into the full
-/// adapter+core record, re-deriving the program-redundant operands
+/// u16 limb view of an 8-byte register value (U16-cell chips).
+fn u16x4(value: u64) -> [u16; BLOCK_FE_WIDTH] {
+    core::array::from_fn(|i| (value >> (16 * i)) as u16)
+}
+
+/// Byte limb view of an 8-byte register value (byte-cell chips).
+fn bytes8(value: u64) -> [u8; RV64_REGISTER_NUM_LIMBS] {
+    value.to_le_bytes()
+}
+
+/// Expand one C-written compact record into the full AddSub adapter+core
+/// record, re-deriving the program-redundant operands
 /// (rd_ptr/rs1_ptr/rs2/rs2_as/rs2_imm_sign/local_opcode) from the instruction
 /// exactly as [`fill_base_alu_u16_adapter`] does from the log path.
 fn assemble_add_sub_inline<F: PrimeField32, RA: Rv64IRecordArena<F>>(
@@ -392,13 +408,7 @@ fn assemble_add_sub_inline<F: PrimeField32, RA: Rv64IRecordArena<F>>(
     compact: &[u8],
     pc: u32,
 ) -> Result<(), ExecutionError> {
-    let compact = PreflightAddSubCompact::read(compact);
-    if compact.from_pc != pc {
-        return Err(ExecutionError::RvrExecution(format!(
-            "inline AddSub record order mismatch: record from_pc {:#x} vs program-log pc {pc:#x}",
-            compact.from_pc
-        )));
-    }
+    let compact = PreflightAlu3Compact::read_for_pc(compact, pc)?;
     let (adapter_record, core_record): (
         &mut Rv64BaseAluU16AdapterRecord,
         &mut AddSubCoreRecord<BLOCK_FE_WIDTH>,
@@ -422,13 +432,228 @@ fn assemble_add_sub_inline<F: PrimeField32, RA: Rv64IRecordArena<F>>(
     adapter_record.rd_ptr = instruction.a.as_canonical_u32();
     adapter_record.writes_aux = MemoryWriteAuxRecord {
         prev_timestamp: compact.write_prev_timestamp,
-        prev_data: compact.write_prev_data,
+        prev_data: u16x4(compact.write_prev_data),
     };
-    core_record.b = compact.b;
-    core_record.c = compact.c;
+    core_record.b = u16x4(compact.b);
+    core_record.c = u16x4(compact.c);
     core_record.local_opcode = instruction
         .opcode
         .local_opcode_idx(BaseAluOpcode::CLASS_OFFSET) as u8;
+    Ok(())
+}
+
+/// Fill a Mult adapter record (Mul/MulH/DivRem) from a compact alu3 record,
+/// mirroring [`fill_mult_adapter`]'s derivation from the log path.
+fn fill_mult_adapter_from_compact<F: PrimeField32>(
+    compact: &PreflightAlu3Compact,
+    instruction: &Instruction<F>,
+    pc: u32,
+    record: &mut Rv64MultAdapterRecord,
+) {
+    record.from_pc = pc;
+    record.from_timestamp = compact.from_timestamp;
+    record.rs1_ptr = instruction.b.as_canonical_u32();
+    record.rs2_ptr = instruction.c.as_canonical_u32();
+    record.rd_ptr = instruction.a.as_canonical_u32();
+    record.reads_aux[0].prev_timestamp = compact.reads_prev_timestamp[0];
+    record.reads_aux[1].prev_timestamp = compact.reads_prev_timestamp[1];
+    record.writes_aux = MemoryWriteAuxRecord {
+        prev_timestamp: compact.write_prev_timestamp,
+        prev_data: bytes8(compact.write_prev_data),
+    };
+}
+
+fn assemble_mul_inline<F: PrimeField32, RA: Rv64MRecordArena<F>>(
+    arena: &mut RA,
+    instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError> {
+    let compact = PreflightAlu3Compact::read_for_pc(compact, pc)?;
+    let (adapter_record, core_record): (
+        &mut Rv64MultAdapterRecord,
+        &mut MultiplicationCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>,
+    ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64MultAdapterExecutor>::new());
+    fill_mult_adapter_from_compact(&compact, instruction, pc, adapter_record);
+    core_record.b = bytes8(compact.b);
+    core_record.c = bytes8(compact.c);
+    Ok(())
+}
+
+fn assemble_mulh_inline<F: PrimeField32, RA: Rv64MRecordArena<F>>(
+    arena: &mut RA,
+    instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError> {
+    let compact = PreflightAlu3Compact::read_for_pc(compact, pc)?;
+    let (adapter_record, core_record): (
+        &mut Rv64MultAdapterRecord,
+        &mut MulHCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>,
+    ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64MultAdapterExecutor>::new());
+    fill_mult_adapter_from_compact(&compact, instruction, pc, adapter_record);
+    core_record.b = bytes8(compact.b);
+    core_record.c = bytes8(compact.c);
+    core_record.local_opcode = instruction
+        .opcode
+        .local_opcode_idx(MulHOpcode::CLASS_OFFSET) as u8;
+    Ok(())
+}
+
+fn assemble_divrem_inline<F: PrimeField32, RA: Rv64MRecordArena<F>>(
+    arena: &mut RA,
+    instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError> {
+    let compact = PreflightAlu3Compact::read_for_pc(compact, pc)?;
+    let (adapter_record, core_record): (
+        &mut Rv64MultAdapterRecord,
+        &mut DivRemCoreRecord<RV64_REGISTER_NUM_LIMBS>,
+    ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64MultAdapterExecutor>::new());
+    fill_mult_adapter_from_compact(&compact, instruction, pc, adapter_record);
+    core_record.b = bytes8(compact.b);
+    core_record.c = bytes8(compact.c);
+    core_record.local_opcode = instruction
+        .opcode
+        .local_opcode_idx(DivRemOpcode::CLASS_OFFSET) as u8;
+    Ok(())
+}
+
+/// RV64 W-op result kinds; see [`run_mul_div_w_result`].
+#[derive(Clone, Copy)]
+enum MulDivWKind {
+    Mul,
+    Div,
+    Divu,
+    Rem,
+    Remu,
+}
+
+/// RV64 W-op result word, matching the generated C's `rv_divw`-family
+/// semantics (div-by-zero -> all ones / dividend, MIN/-1 overflow -> MIN).
+/// Needed because the compact record does not carry the written value, from
+/// which [`fill_mult_w_adapter`] derives `result_word_msl`/`result_sign`.
+fn run_mul_div_w_result(op: MulDivWKind, b: u32, c: u32) -> u32 {
+    match op {
+        MulDivWKind::Mul => b.wrapping_mul(c),
+        MulDivWKind::Div => {
+            let (b, c) = (b as i32, c as i32);
+            if c == 0 {
+                u32::MAX
+            } else if b == i32::MIN && c == -1 {
+                b as u32
+            } else {
+                (b / c) as u32
+            }
+        }
+        MulDivWKind::Divu => {
+            if c == 0 {
+                u32::MAX
+            } else {
+                b / c
+            }
+        }
+        MulDivWKind::Rem => {
+            let (b, c) = (b as i32, c as i32);
+            if c == 0 {
+                b as u32
+            } else if b == i32::MIN && c == -1 {
+                0
+            } else {
+                (b % c) as u32
+            }
+        }
+        MulDivWKind::Remu => {
+            if c == 0 {
+                b
+            } else {
+                b % c
+            }
+        }
+    }
+}
+
+/// Fill a MultW adapter record from a compact alu3 record, mirroring
+/// [`fill_mult_w_adapter`]: the register-read high bytes come from the full
+/// 8-byte values the compact record carries, and the result word (for
+/// `result_word_msl`/`result_sign`) is recomputed from the operands.
+fn fill_mult_w_adapter_from_compact<F: PrimeField32>(
+    compact: &PreflightAlu3Compact,
+    instruction: &Instruction<F>,
+    pc: u32,
+    result_word: u32,
+    record: &mut Rv64MultWAdapterRecord,
+) {
+    let rs1_full = bytes8(compact.b);
+    let rs2_full = bytes8(compact.c);
+    record.from_pc = pc;
+    record.from_timestamp = compact.from_timestamp;
+    record.rs1_ptr = instruction.b.as_canonical_u32();
+    record.rs2_ptr = instruction.c.as_canonical_u32();
+    record.rd_ptr = instruction.a.as_canonical_u32();
+    record
+        .rs1_high
+        .copy_from_slice(&rs1_full[RV64_WORD_NUM_LIMBS..]);
+    record
+        .rs2_high
+        .copy_from_slice(&rs2_full[RV64_WORD_NUM_LIMBS..]);
+    record.reads_aux[0].prev_timestamp = compact.reads_prev_timestamp[0];
+    record.reads_aux[1].prev_timestamp = compact.reads_prev_timestamp[1];
+    record.result_word_msl = result_word.to_le_bytes()[RV64_WORD_NUM_LIMBS - 1];
+    record.result_sign = record.result_word_msl >> (RV64_BYTE_BITS as u8 - 1);
+    record.writes_aux = MemoryWriteAuxRecord {
+        prev_timestamp: compact.write_prev_timestamp,
+        prev_data: bytes8(compact.write_prev_data),
+    };
+}
+
+fn assemble_mul_w_inline<F: PrimeField32, RA: Rv64MRecordArena<F>>(
+    arena: &mut RA,
+    instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError> {
+    let compact = PreflightAlu3Compact::read_for_pc(compact, pc)?;
+    let (adapter_record, core_record): (
+        &mut Rv64MultWAdapterRecord,
+        &mut MultiplicationCoreRecord<RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>,
+    ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64MultWAdapterExecutor>::new());
+    let result = run_mul_div_w_result(MulDivWKind::Mul, compact.b as u32, compact.c as u32);
+    fill_mult_w_adapter_from_compact(&compact, instruction, pc, result, adapter_record);
+    core_record.b = bytes8(compact.b)[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
+    core_record.c = bytes8(compact.c)[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
+    Ok(())
+}
+
+fn assemble_divrem_w_inline<F: PrimeField32, RA: Rv64MRecordArena<F>>(
+    arena: &mut RA,
+    instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError> {
+    let compact = PreflightAlu3Compact::read_for_pc(compact, pc)?;
+    let local_opcode = DivRemWOpcode::from_repr(
+        instruction
+            .opcode
+            .local_opcode_idx(DivRemWOpcode::CLASS_OFFSET),
+    )
+    .expect("opcode already classified");
+    let kind = match local_opcode {
+        DivRemWOpcode::DIVW => MulDivWKind::Div,
+        DivRemWOpcode::DIVUW => MulDivWKind::Divu,
+        DivRemWOpcode::REMW => MulDivWKind::Rem,
+        DivRemWOpcode::REMUW => MulDivWKind::Remu,
+    };
+    let (adapter_record, core_record): (
+        &mut Rv64MultWAdapterRecord,
+        &mut DivRemCoreRecord<RV64_WORD_NUM_LIMBS>,
+    ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64MultWAdapterExecutor>::new());
+    let result = run_mul_div_w_result(kind, compact.b as u32, compact.c as u32);
+    fill_mult_w_adapter_from_compact(&compact, instruction, pc, result, adapter_record);
+    core_record.b = bytes8(compact.b)[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
+    core_record.c = bytes8(compact.c)[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
+    core_record.local_opcode = local_opcode as u8;
     Ok(())
 }
 
@@ -533,6 +758,31 @@ where
         registry.register(
             MulOpcode::iter().map(|opcode| opcode.global_opcode()),
             assemble_mul::<F, RA>,
+        );
+        registry.register_inline(
+            MulOpcode::iter().map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_ADDSUB_RECORD_SIZE,
+            assemble_mul_inline::<F, RA>,
+        );
+        registry.register_inline(
+            MulHOpcode::iter().map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_ADDSUB_RECORD_SIZE,
+            assemble_mulh_inline::<F, RA>,
+        );
+        registry.register_inline(
+            MulWOpcode::iter().map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_ADDSUB_RECORD_SIZE,
+            assemble_mul_w_inline::<F, RA>,
+        );
+        registry.register_inline(
+            DivRemOpcode::iter().map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_ADDSUB_RECORD_SIZE,
+            assemble_divrem_inline::<F, RA>,
+        );
+        registry.register_inline(
+            DivRemWOpcode::iter().map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_ADDSUB_RECORD_SIZE,
+            assemble_divrem_w_inline::<F, RA>,
         );
         registry.register(
             MulHOpcode::iter().map(|opcode| opcode.global_opcode()),
