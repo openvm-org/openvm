@@ -34,6 +34,12 @@ use crate::{
     Rv64StoreHalfwordChipGpu, Rv64StoreWordAir, Rv64StoreWordChipGpu,
 };
 
+/// A `default()` value is correct for configs whose builder does not adopt
+/// compact wire arenas (the fresh decode state stays unbound and the chips
+/// only ever see expanded records); builders that DO opt into
+/// `OPENVM_RVR_GPU_RECORDS=compact` must construct this with their own shared
+/// state so the bound operand table reaches the chips.
+#[derive(Clone, Default)]
 pub struct Rv64ImGpuProverExt {
     /// M-GPUDEC shared decode state, cloned into migrated GPU chips.
     pub rvr_decode: std::sync::Arc<crate::rvr_gpu_decode::RvrGpuDecodeState>,

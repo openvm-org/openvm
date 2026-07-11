@@ -491,8 +491,12 @@ where
 }
 
 #[cfg(feature = "cuda")]
-#[derive(Copy, Clone, Default)]
-pub struct SdkVmGpuBuilder;
+#[derive(Clone, Default)]
+pub struct SdkVmGpuBuilder {
+    /// M-GPUDEC shared decode state: one per VM, cloned into the rv64im GPU
+    /// prover extension so a bound compact operand table reaches the chips.
+    pub rvr_decode: std::sync::Arc<openvm_riscv_circuit::rvr_gpu_decode::RvrGpuDecodeState>,
+}
 
 #[cfg(feature = "cuda")]
 impl VmBuilder<BabyBearPoseidon2GpuEngine> for SdkVmGpuBuilder {
@@ -519,11 +523,14 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SdkVmGpuBuilder {
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
+        let rv64im_ext = Rv64ImGpuProverExt {
+            rvr_decode: self.rvr_decode.clone(),
+        };
         if let Some(rv64i) = &config.rv64i {
-            VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, rv64i, inventory)?;
+            VmProverExtension::<E, _, _>::extend_prover(&rv64im_ext, rv64i, inventory)?;
         }
         if let Some(io) = &config.io {
-            VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, io, inventory)?;
+            VmProverExtension::<E, _, _>::extend_prover(&rv64im_ext, io, inventory)?;
         }
         if let Some(keccak) = &config.keccak {
             VmProverExtension::<E, _, _>::extend_prover(&Keccak256GpuProverExt, keccak, inventory)?;
@@ -532,7 +539,7 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SdkVmGpuBuilder {
             VmProverExtension::<E, _, _>::extend_prover(&Sha2GpuProverExt, sha2, inventory)?;
         }
         if let Some(rv64m) = &config.rv64m {
-            VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, rv64m, inventory)?;
+            VmProverExtension::<E, _, _>::extend_prover(&rv64im_ext, rv64m, inventory)?;
         }
         if let Some(bigint) = &config.bigint {
             VmProverExtension::<E, _, _>::extend_prover(&Int256GpuProverExt, bigint, inventory)?;
@@ -567,6 +574,33 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SdkVmGpuBuilder {
         let mut registry = LogNativeAssemblerRegistry::new();
         config.extend_rvr_log_native(&mut registry);
         registry
+    }
+
+    /// M-GPUDEC: same compact wire-arena adoption as the rv64im GPU builders,
+    /// against this builder's shared decode state (the chips hold clones of
+    /// it via `create_chip_complex`). Airs outside the migrated rv64im set
+    /// simply keep their expanded arenas.
+    #[cfg(feature = "rvr")]
+    fn generate_rvr_record_arenas_from_logs(
+        &self,
+        config: &Self::VmConfig,
+        exe: &openvm_circuit::arch::instructions::exe::VmExe<Val<SC>>,
+        output: &mut openvm_circuit::arch::rvr::RvrPreflightOutput<Val<SC>>,
+        capacities: &[(usize, usize)],
+        pc_to_air_idx: &[Option<usize>],
+    ) -> Result<Option<Vec<Self::RecordArena>>, openvm_circuit::arch::ExecutionError>
+    where
+        Val<SC>: PrimeField32,
+    {
+        let registry = self.create_rvr_log_native_assembler_registry(config);
+        openvm_riscv_circuit::generate_gpu_rvr_record_arenas(
+            &registry,
+            &self.rvr_decode,
+            exe,
+            output,
+            capacities,
+            pc_to_air_idx,
+        )
     }
 
     /// GPU backend: default to the rvr inline preflight engine — the host
