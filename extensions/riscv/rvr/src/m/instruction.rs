@@ -83,7 +83,7 @@ impl ExtInstr for Rv64MInstr {
             "__RVR_LHS__",
             "__RVR_RHS__",
         );
-        if ctx.emit_reg3_inline(self.rd, self.lhs, self.rhs, &result_template) {
+        if ctx.emit_reg3_inline(self.rd, self.lhs, self.rhs, None, &result_template) {
             return;
         }
         let lhs = ctx.read_var(self.lhs);
