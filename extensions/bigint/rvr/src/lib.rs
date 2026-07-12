@@ -14,8 +14,8 @@ use openvm_riscv_transpiler::{
 };
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg, Terminator};
 use rvr_openvm_lift::{
-    decode_reg, opcode_air_idx, AirIndex, ExtensionError, RvrExtension, RvrExtensionCtx,
-    RvrInstruction,
+    air_index_codegen_fingerprint, decode_reg, opcode_air_idx, AirIndex, ExtensionError,
+    RvrExtension, RvrExtensionCtx, RvrInstruction,
 };
 use strum::EnumCount;
 
@@ -303,6 +303,22 @@ impl Int256Extension {
 }
 
 impl RvrExtension for Int256Extension {
+    fn codegen_fingerprint(&self) -> Option<Vec<u8>> {
+        Some(air_index_codegen_fingerprint(
+            b"openvm-int256-rvr-v1",
+            &[
+                self.add_sub_chip_idx,
+                self.bitwise_logic_chip_idx,
+                self.shift_logical_chip_idx,
+                self.shift_right_arithmetic_chip_idx,
+                self.less_than_chip_idx,
+                self.mul_chip_idx,
+                self.branch_eq_chip_idx,
+                self.branch_lt_chip_idx,
+            ],
+        ))
+    }
+
     fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
 
