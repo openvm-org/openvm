@@ -39,7 +39,7 @@ pub const PREFLIGHT_MEMORY_LOG_ENTRY_ALIGN: usize = 8;
 // R3: the tracer gained a `chip_records` pointer for inline compact per-chip
 // record emission. ZG2 adds a direct execution-frequency buffer after it so
 // final-form records need no duplicate program-log row or host frequency scan.
-pub const PREFLIGHT_TRACER_DATA_SIZE: usize = 120;
+pub const PREFLIGHT_TRACER_DATA_SIZE: usize = 128;
 pub const PREFLIGHT_TRACER_DATA_ALIGN: usize = 8;
 /// One entry in the preflight touched-block buffer: the address space and the
 /// block-aligned byte address of a block touched (for the first time) this
@@ -59,6 +59,9 @@ pub const PREFLIGHT_CHIP_RECORD_BUF_ALIGN: usize = 8;
 /// Generated C writes this target in final consumer form. Its duplicate
 /// program-log row and all host adoption/assembly are suppressed.
 pub const PREFLIGHT_CHIP_RECORD_FLAG_DIRECT_FINAL: u32 = 1;
+/// A generated record reservation exceeded or mismatched its target. The
+/// host rejects the segment before any decode/proof work.
+pub const PREFLIGHT_CHIP_RECORD_FLAG_OVERFLOW: u32 = 2;
 /// Byte size of one compact base-ALU AddSub record as stored by the preflight
 /// tracer (R3 L1+L5): the dynamic witness only — from_pc, from_timestamp, the
 /// three access prev_timestamps, the old rd block, and the b/c operand limbs.
@@ -83,6 +86,12 @@ pub const PREFLIGHT_WR1_RECORD_SIZE: usize = 20;
 /// from_timestamp, the rs1 read prev_timestamp and value, and the
 /// (conditional) rd write prev_timestamp and old rd block. Used by Jalr.
 pub const PREFLIGHT_RW1_RECORD_SIZE: usize = 32;
+
+/// Stage-2 chronological delta record. One record covers every inline-routed
+/// instruction, independent of AIR: pc + from-timestamp + three dynamic u64
+/// values. The three access previous-timestamps are implicit in chronological
+/// stream order and are reconstructed by the decoder.
+pub const PREFLIGHT_DELTA_RECORD_SIZE: usize = 32;
 
 const _: () = assert!(MEM_SIZE / WORD_SIZE <= u32::MAX as usize);
 

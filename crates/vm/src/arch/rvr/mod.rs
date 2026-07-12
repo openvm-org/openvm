@@ -36,7 +36,7 @@ pub use initial_image::RvrInitialImage;
 pub use log_native::{
     generate_record_arenas_from_logs, generate_record_arenas_from_logs_with_compact,
     Alu3ArenaFieldOffsets, ArenaNativeGeometry, ArenaNativeLayout, Branch2ArenaFieldOffsets,
-    LoadStoreArenaFieldOffsets, LogNativeAccessView, LogNativeAssembler,
+    DeltaAccessPattern, LoadStoreArenaFieldOffsets, LogNativeAccessView, LogNativeAssembler,
     LogNativeAssemblerRegistry, LogNativeInlineAssembler, LogNativeOpcodeAdmitter,
     Rw1ArenaFieldOffsets, VmRvrLogNativeExtension, Wr1ArenaFieldOffsets,
 };
@@ -48,12 +48,13 @@ pub use pure::{
 };
 pub use preflight::{
     rvr_preflight_engine_env_override, ChipRecordBuf, MemoryLogEntry, PreflightRawLogs,
-    PreflightTracer, PreflightTracerData, ProgramLogEntry, RvrInlineChipRecords,
+    PreflightTracer, PreflightTracerData, ProgramLogEntry, RvrDeltaRecords, RvrInlineChipRecords,
     RvrPreflightEngine, RvrPreflightInstance, RvrPreflightOutput, RvrPreflightRoute, TouchedBlock,
     PREFLIGHT_ADDSUB_RECORD_SIZE, PREFLIGHT_BRANCH2_RECORD_SIZE,
-    PREFLIGHT_CHIP_RECORD_FLAG_DIRECT_FINAL, PREFLIGHT_INITIAL_TIMESTAMP,
-    PREFLIGHT_MEMORY_KIND_READ, PREFLIGHT_MEMORY_KIND_TOUCH, PREFLIGHT_MEMORY_KIND_WRITE,
-    PREFLIGHT_RW1_RECORD_SIZE, PREFLIGHT_TRACER_KIND, PREFLIGHT_WR1_RECORD_SIZE,
+    PREFLIGHT_CHIP_RECORD_FLAG_DIRECT_FINAL, PREFLIGHT_CHIP_RECORD_FLAG_OVERFLOW,
+    PREFLIGHT_DELTA_RECORD_SIZE, PREFLIGHT_INITIAL_TIMESTAMP, PREFLIGHT_MEMORY_KIND_READ,
+    PREFLIGHT_MEMORY_KIND_TOUCH, PREFLIGHT_MEMORY_KIND_WRITE, PREFLIGHT_RW1_RECORD_SIZE,
+    PREFLIGHT_TRACER_KIND, PREFLIGHT_WR1_RECORD_SIZE,
 };
 pub use preflight_normalizer::{
     build_preflight_replay, PreflightMemoryAccessAux, PreflightMemoryReplay,

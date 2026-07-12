@@ -66,6 +66,10 @@ struct PoolInner {
     /// Spare inline-record byte buffers, one per migrated chip in steady
     /// state (best-fit take, since per-air capacities differ).
     record_bufs: Vec<Vec<MaybeUninit<u8>>>,
+    /// Stage-2 chronological backing. Kept separate because generated C
+    /// requires a 32-byte-aligned interior pointer and CUDA builds source it
+    /// from the page-locked arena pool.
+    delta_backing: Option<Vec<u8>>,
     /// Direct-final compact backings keyed by AIR. These leave the pool while
     /// tracegen owns the DenseRecordArena and return from its Drop impl.
     wire_backings: HashMap<usize, Vec<u8>>,
@@ -162,6 +166,46 @@ impl RvrPreflightBufferPool {
                 spare
             }
             None => vec_uninit(cap),
+        }
+    }
+
+    /// Take a backing with enough alignment slack for a `len`-byte delta
+    /// stream. CUDA uses the #2990 page-locked pool; CPU keeps one grow-only
+    /// allocation in this per-executor pool.
+    pub(crate) fn take_delta_backing(&self, len: usize) -> Vec<u8> {
+        let min_len = len.checked_add(31).expect("delta backing size overflow");
+        if !self.enabled {
+            return vec![0u8; min_len];
+        }
+        #[cfg(feature = "cuda")]
+        {
+            return crate::arch::cuda::pinned::take(min_len);
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            match self.lock().delta_backing.take() {
+                Some(backing) if backing.len() >= min_len => backing,
+                _ => vec![0u8; min_len],
+            }
+        }
+    }
+
+    pub(crate) fn recycle_delta_backing(&self, backing: Vec<u8>, dirty_len: usize) {
+        if !self.enabled {
+            return;
+        }
+        #[cfg(feature = "cuda")]
+        {
+            crate::arch::cuda::pinned::give_back(backing, dirty_len);
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let mut inner = self.lock();
+            match inner.delta_backing.as_ref() {
+                Some(existing) if existing.len() >= backing.len() => {}
+                _ => inner.delta_backing = Some(backing),
+            }
+            let _ = dirty_len;
         }
     }
 
@@ -283,6 +327,7 @@ impl RvrPreflightBufferPool {
         &self,
         raw_logs: PreflightRawLogs,
         inline_records: Vec<RvrInlineChipRecords>,
+        delta_records: Option<super::preflight::RvrDeltaRecords>,
     ) {
         if !self.enabled {
             return;
@@ -298,6 +343,8 @@ impl RvrPreflightBufferPool {
         for chip in inline_records {
             push_record_spare(&mut inner.record_bufs, into_uninit_spare(chip.bytes));
         }
+        drop(inner);
+        drop(delta_records);
     }
 }
 

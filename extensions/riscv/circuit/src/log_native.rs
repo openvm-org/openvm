@@ -2,12 +2,12 @@ use openvm_circuit::{
     arch::{
         rvr::{
             generate_record_arenas_from_logs, Alu3ArenaFieldOffsets, ArenaNativeGeometry,
-            ArenaNativeLayout, Branch2ArenaFieldOffsets, LoadStoreArenaFieldOffsets,
-            LogNativeAccessView, LogNativeAssemblerRegistry, PreflightMemoryAccessAux,
-            RvrPreflightOutput, Rw1ArenaFieldOffsets, VmRvrLogNativeExtension,
-            Wr1ArenaFieldOffsets, PREFLIGHT_ADDSUB_RECORD_SIZE, PREFLIGHT_BRANCH2_RECORD_SIZE,
-            PREFLIGHT_MEMORY_KIND_READ, PREFLIGHT_MEMORY_KIND_WRITE, PREFLIGHT_RW1_RECORD_SIZE,
-            PREFLIGHT_WR1_RECORD_SIZE,
+            ArenaNativeLayout, Branch2ArenaFieldOffsets, DeltaAccessPattern,
+            LoadStoreArenaFieldOffsets, LogNativeAccessView, LogNativeAssemblerRegistry,
+            PreflightMemoryAccessAux, RvrPreflightOutput, Rw1ArenaFieldOffsets,
+            VmRvrLogNativeExtension, Wr1ArenaFieldOffsets, PREFLIGHT_ADDSUB_RECORD_SIZE,
+            PREFLIGHT_BRANCH2_RECORD_SIZE, PREFLIGHT_MEMORY_KIND_READ, PREFLIGHT_MEMORY_KIND_WRITE,
+            PREFLIGHT_RW1_RECORD_SIZE, PREFLIGHT_WR1_RECORD_SIZE,
         },
         AdapterTraceExecutor, Arena, EmptyAdapterCoreLayout, EmptyMultiRowLayout, ExecutionError,
         MultiRowLayout, RecordArena, BLOCK_FE_WIDTH,
@@ -1182,6 +1182,55 @@ where
                 }),
             },
         );
+        registry.register_delta_pattern(
+            [
+                BaseAluOpcode::ADD,
+                BaseAluOpcode::SUB,
+                BaseAluOpcode::XOR,
+                BaseAluOpcode::OR,
+                BaseAluOpcode::AND,
+            ]
+            .map(|opcode| opcode.global_opcode())
+            .into_iter()
+            .chain(LessThanOpcode::iter().map(|opcode| opcode.global_opcode()))
+            .chain(ShiftOpcode::iter().map(|opcode| opcode.global_opcode())),
+            DeltaAccessPattern::Alu3,
+        );
+        registry.register_delta_pattern(
+            BranchEqualOpcode::iter()
+                .map(|opcode| opcode.global_opcode())
+                .chain(BranchLessThanOpcode::iter().map(|opcode| opcode.global_opcode())),
+            DeltaAccessPattern::Branch2,
+        );
+        registry.register_delta_pattern(
+            Rv64JalLuiOpcode::iter().map(|opcode| opcode.global_opcode()),
+            DeltaAccessPattern::Wr1,
+        );
+        registry.register_delta_pattern(
+            Rv64AuipcOpcode::iter().map(|opcode| opcode.global_opcode()),
+            DeltaAccessPattern::Wr1Always,
+        );
+        registry.register_delta_pattern(
+            Rv64JalrOpcode::iter().map(|opcode| opcode.global_opcode()),
+            DeltaAccessPattern::Rw1,
+        );
+        registry.register_delta_pattern(
+            Rv64LoadStoreOpcode::iter()
+                .take(Rv64LoadStoreOpcode::STORED as usize)
+                .chain(Rv64LoadStoreOpcode::iter().skip(Rv64LoadStoreOpcode::STOREB as usize + 1))
+                .map(|opcode| opcode.global_opcode()),
+            DeltaAccessPattern::Load,
+        );
+        registry.register_delta_pattern(
+            [
+                Rv64LoadStoreOpcode::STORED,
+                Rv64LoadStoreOpcode::STOREW,
+                Rv64LoadStoreOpcode::STOREH,
+                Rv64LoadStoreOpcode::STOREB,
+            ]
+            .map(|opcode| opcode.global_opcode()),
+            DeltaAccessPattern::Store,
+        );
         registry.register(
             [BaseAluOpcode::XOR, BaseAluOpcode::OR, BaseAluOpcode::AND]
                 .map(|opcode| opcode.global_opcode()),
@@ -1404,6 +1453,15 @@ where
             DivRemWOpcode::iter().map(|opcode| opcode.global_opcode()),
             PREFLIGHT_ADDSUB_RECORD_SIZE,
             assemble_divrem_w_inline::<F, RA>,
+        );
+        registry.register_delta_pattern(
+            MulOpcode::iter()
+                .map(|opcode| opcode.global_opcode())
+                .chain(MulHOpcode::iter().map(|opcode| opcode.global_opcode()))
+                .chain(MulWOpcode::iter().map(|opcode| opcode.global_opcode()))
+                .chain(DivRemOpcode::iter().map(|opcode| opcode.global_opcode()))
+                .chain(DivRemWOpcode::iter().map(|opcode| opcode.global_opcode())),
+            DeltaAccessPattern::Alu3Reg,
         );
         registry.register(
             MulHOpcode::iter().map(|opcode| opcode.global_opcode()),

@@ -64,6 +64,7 @@ const _: () = assert!(offset_of!(PreflightTracerData, timestamp) == 92);
 const _: () = assert!(offset_of!(PreflightTracerData, chip_records) == 96);
 const _: () = assert!(offset_of!(PreflightTracerData, exec_frequencies) == 104);
 const _: () = assert!(offset_of!(PreflightTracerData, exec_frequencies_len) == 112);
+const _: () = assert!(offset_of!(PreflightTracerData, delta_records) == 120);
 const _: () = assert!(size_of::<ChipRecordBuf>() == ffi::PREFLIGHT_CHIP_RECORD_BUF_SIZE);
 const _: () = assert!(align_of::<ChipRecordBuf>() == ffi::PREFLIGHT_CHIP_RECORD_BUF_ALIGN);
 const _: () = assert!(offset_of!(ChipRecordBuf, base) == 0);
