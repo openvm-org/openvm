@@ -79,7 +79,11 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
         inventory.add_executor_chip(bitwise_logic);
 
         inventory.next_air::<Rv64AddSubWAir>()?;
-        let add_sub_w = Rv64AddSubWChipGpu::new(range_checker.clone(), timestamp_max_bits);
+        let add_sub_w = Rv64AddSubWChipGpu::new(
+            range_checker.clone(),
+            timestamp_max_bits,
+            self.rvr_decode.clone(),
+        );
         inventory.add_executor_chip(add_sub_w);
 
         inventory.next_air::<Rv64LessThanAir>()?;
@@ -107,13 +111,19 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
         inventory.add_executor_chip(shift_right_arithmetic);
 
         inventory.next_air::<Rv64ShiftWLogicalAir>()?;
-        let shift_w_logical =
-            Rv64ShiftWLogicalChipGpu::new(range_checker.clone(), timestamp_max_bits);
+        let shift_w_logical = Rv64ShiftWLogicalChipGpu::new(
+            range_checker.clone(),
+            timestamp_max_bits,
+            self.rvr_decode.clone(),
+        );
         inventory.add_executor_chip(shift_w_logical);
 
         inventory.next_air::<Rv64ShiftWRightArithmeticAir>()?;
-        let shift_w_right_arithmetic =
-            Rv64ShiftWRightArithmeticChipGpu::new(range_checker.clone(), timestamp_max_bits);
+        let shift_w_right_arithmetic = Rv64ShiftWRightArithmeticChipGpu::new(
+            range_checker.clone(),
+            timestamp_max_bits,
+            self.rvr_decode.clone(),
+        );
         inventory.add_executor_chip(shift_w_right_arithmetic);
 
         inventory.next_air::<Rv64AddIWAir>()?;

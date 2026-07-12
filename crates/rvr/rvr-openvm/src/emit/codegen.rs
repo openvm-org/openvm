@@ -145,6 +145,19 @@ pub struct Alu3ArenaFieldOffsets {
     pub core_c: usize,
     /// `usize::MAX` for single-opcode cores without this field.
     pub core_local_opcode: usize,
+    /// Extra fields present in RV64 W adapters.
+    pub w: Option<Alu3WArenaFieldOffsets>,
+}
+
+/// W-specific adapter offsets for arena-native ALU records.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Alu3WArenaFieldOffsets {
+    pub rs1_high: usize,
+    pub rs2_high: usize,
+    pub result_word_msl: usize,
+    pub result_sign: usize,
+    pub result_word_msl_shift: u8,
+    pub result_word_msl_bytes: u8,
 }
 
 pub fn inline_record_shape_for_instr(instr: &dyn ExtInstr) -> Option<InlineRecordShape> {

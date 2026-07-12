@@ -1,4 +1,4 @@
-use std::{collections::HashSet, fmt::Write};
+use std::{collections::HashSet, fmt::Write, mem::size_of};
 
 use openvm_instructions::PUBLIC_VALUES_AS;
 use rvr_openvm_ir::{
@@ -464,7 +464,7 @@ impl<'a> EmitContext<'a> {
         if let Some(baked) = arena.filter(|_| self.arena_native_airs.contains_key(&chip)) {
             let geom = self.arena_native_airs[&chip];
             self.emit_arena_alu3_stores(
-                geom, baked, rd, rs1, &pc, &fromts, &p1, &p2, &pw, &rdprev, &v1, &v2,
+                geom, baked, rd, rs1, &pc, &fromts, &p1, &p2, &pw, &rdprev, &v1, &v2, &res,
             );
         } else if self.delta_records {
             self.emit_delta3(&pc, &fromts, &rdprev, &v1, &v2);
@@ -595,6 +595,7 @@ impl<'a> EmitContext<'a> {
         rdprev: &str,
         v1: &str,
         v2: &str,
+        res: &str,
     ) {
         let chip = self.current_chip_idx;
         let crate::ArenaNativeLayout::Alu3(off) = geom.layout else {
@@ -641,18 +642,63 @@ impl<'a> EmitContext<'a> {
             "arena_store_u64_le({rec} + {}, {rdprev});",
             off.write_prev_data
         ));
-        self.write_line(&format!(
-            "arena_store_u64_le({core} + {}, {v1});",
-            off.core_b
-        ));
-        self.write_line(&format!(
-            "arena_store_u64_le({core} + {}, {v2});",
-            off.core_c
-        ));
+        if off.w.is_some() {
+            // Every RV64 W core consumes exactly the low 32-bit word (four
+            // byte cells or two u16 cells). An eight-byte store would run
+            // through the adjacent operand/local-opcode fields.
+            self.write_line(&format!(
+                "*(uint32_t*)({core} + {}) = (uint32_t){v1};",
+                off.core_b
+            ));
+            self.write_line(&format!(
+                "*(uint32_t*)({core} + {}) = (uint32_t){v2};",
+                off.core_c
+            ));
+        } else {
+            self.write_line(&format!(
+                "arena_store_u64_le({core} + {}, {v1});",
+                off.core_b
+            ));
+            self.write_line(&format!(
+                "arena_store_u64_le({core} + {}, {v2});",
+                off.core_c
+            ));
+        }
         if off.core_local_opcode != usize::MAX {
             self.write_line(&format!(
                 "*(uint8_t*)({core} + {}) = {}u;",
                 off.core_local_opcode, baked.local_opcode
+            ));
+        }
+        if let Some(w) = off.w {
+            self.write_line(&format!(
+                "*(uint16_t*)({rec} + {}) = (uint16_t)({v1} >> 32);",
+                w.rs1_high
+            ));
+            self.write_line(&format!(
+                "*(uint16_t*)({rec} + {}) = (uint16_t)({v1} >> 48);",
+                w.rs1_high + size_of::<u16>()
+            ));
+            self.write_line(&format!(
+                "*(uint16_t*)({rec} + {}) = (uint16_t)({v2} >> 32);",
+                w.rs2_high
+            ));
+            self.write_line(&format!(
+                "*(uint16_t*)({rec} + {}) = (uint16_t)({v2} >> 48);",
+                w.rs2_high + size_of::<u16>()
+            ));
+            let msl_store = match w.result_word_msl_bytes {
+                1 => "uint8_t",
+                2 => "uint16_t",
+                bytes => panic!("unsupported W result limb width {bytes}"),
+            };
+            self.write_line(&format!(
+                "*({msl_store}*)({rec} + {}) = ({msl_store})({res} >> {});",
+                w.result_word_msl, w.result_word_msl_shift
+            ));
+            self.write_line(&format!(
+                "*(uint8_t*)({rec} + {}) = (uint8_t)(((uint32_t){res}) >> 31);",
+                w.result_sign
             ));
         }
         self.indent -= 1;
@@ -698,7 +744,7 @@ impl<'a> EmitContext<'a> {
             // the core c operand is the sign-extended immediate value (the
             // same values the compact wire carries for the imm form).
             self.emit_arena_alu3_stores(
-                geom, baked, rd, rs1, &pc, &fromts, &p1, "0u", &pw, &rdprev, &v1, &vimm,
+                geom, baked, rd, rs1, &pc, &fromts, &p1, "0u", &pw, &rdprev, &v1, &vimm, &res,
             );
         } else if self.delta_records {
             self.emit_delta3(&pc, &fromts, &rdprev, &v1, &vimm);
@@ -1417,13 +1463,12 @@ impl<'a> EmitContext<'a> {
             } else {
                 u32::MAX
             };
+            let delta_inline = self.delta_records
+                && single_pass_inline
+                && !self.arena_native_airs.contains_key(&self.current_chip_idx);
             self.write_line(&format!(
                 "trace_pc_indexed(state, 0x{pc:08x}ull, {exec_idx}u, {inline_chip}u, {});",
-                if self.delta_records && single_pass_inline {
-                    "true"
-                } else {
-                    "false"
-                }
+                if delta_inline { "true" } else { "false" }
             ));
         } else {
             self.write_line(&format!("trace_pc(state, 0x{pc:08x}ull);"));

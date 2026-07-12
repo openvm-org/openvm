@@ -873,14 +873,19 @@ impl CProject {
                 .iter()
                 .filter(|instr_at| {
                     instr_emits_inline_record(&instr_at.instr)
-                        && matches!(self.chip_idx_for_pc(instr_at.pc), TraceChipIndex::Chip(_))
+                        && matches!(
+                            self.chip_idx_for_pc(instr_at.pc),
+                            TraceChipIndex::Chip(air)
+                                if !self.arena_native_airs.contains_key(&air.as_u32())
+                        )
                 })
                 .count();
             let terminator = (!matches!(block.terminator, Terminator::FallThrough)
                 && inline_record_shape_for_terminator(&block.terminator).is_some()
                 && matches!(
                     self.chip_idx_for_pc(block.terminator_pc),
-                    TraceChipIndex::Chip(_)
+                    TraceChipIndex::Chip(air)
+                        if !self.arena_native_airs.contains_key(&air.as_u32())
                 )) as usize;
             body + terminator
         } else {

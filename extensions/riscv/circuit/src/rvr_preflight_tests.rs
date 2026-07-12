@@ -87,12 +87,20 @@ fn alu_w(opcode: BaseAluWOpcode, rd: usize, rs1: usize, rs2: usize) -> Instructi
     Instruction::from_usize(opcode.global_opcode(), [reg(rd), reg(rs1), reg(rs2), 1, 1])
 }
 
+fn alu_w_imm(opcode: BaseAluWOpcode, rd: usize, rs1: usize, imm: usize) -> Instruction<F> {
+    Instruction::from_usize(opcode.global_opcode(), [reg(rd), reg(rs1), imm, 1, 0])
+}
+
 fn shift(opcode: ShiftOpcode, rd: usize, rs1: usize, shamt: usize) -> Instruction<F> {
     Instruction::from_usize(opcode.global_opcode(), [reg(rd), reg(rs1), shamt, 1, 0])
 }
 
 fn shift_w(opcode: ShiftWOpcode, rd: usize, rs1: usize, shamt: usize) -> Instruction<F> {
     Instruction::from_usize(opcode.global_opcode(), [reg(rd), reg(rs1), shamt, 1, 0])
+}
+
+fn shift_w_reg(opcode: ShiftWOpcode, rd: usize, rs1: usize, rs2: usize) -> Instruction<F> {
+    Instruction::from_usize(opcode.global_opcode(), [reg(rd), reg(rs1), reg(rs2), 1, 1])
 }
 
 fn beq(rs1: usize, rs2: usize, offset: usize) -> Instruction<F> {
@@ -685,9 +693,13 @@ fn push_standard_group_ops(instructions: &mut Vec<Instruction<F>>) {
         shift(ShiftOpcode::SRA, 14, 12, 2),
         alu_w(BaseAluWOpcode::ADDW, 15, 1, 2),
         alu_w(BaseAluWOpcode::SUBW, 16, 1, 2),
+        alu_w_imm(BaseAluWOpcode::ADDW, 15, 1, 0xff_fffb),
         shift_w(ShiftWOpcode::SLLW, 17, 1, 2),
         shift_w(ShiftWOpcode::SRLW, 18, 17, 2),
         shift_w(ShiftWOpcode::SRAW, 19, 17, 2),
+        shift_w_reg(ShiftWOpcode::SLLW, 17, 1, 2),
+        shift_w_reg(ShiftWOpcode::SRLW, 18, 17, 2),
+        shift_w_reg(ShiftWOpcode::SRAW, 19, 17, 2),
         branch_eq(BranchEqualOpcode::BEQ, 1, 1, 4),
         branch_eq(BranchEqualOpcode::BNE, 1, 2, 4),
         branch_lt(BranchLessThanOpcode::BLT, 2, 1, 4),
@@ -2959,20 +2971,17 @@ fn rvr_preflight_inline_addsub_net_timing() {
     );
 }
 
-/// R4 fused oracle: the same program compiled twice — arena-native OFF
-/// (compact wire + host inline assembler) and ON (`OPENVM_RVR_ARENA_NATIVE=1`:
-/// the generated C writes full AddSub adapter+core records at final Matrix
-/// arena positions, offsets baked from `offset_of!`). The fused arena must be
-/// byte-identical to the assembled arena over every written row, and the
-/// generation loop's count oracle must accept the fused run. nextest gives
-/// each test its own process, so the env mutations are isolated.
+/// Combined Stage-2 oracle: non-W migrated AIRs use the chronological delta
+/// stream while all converted RV64 W families write arena-native. Both arms
+/// must assemble to byte-identical full RV64IM arenas.
 #[test]
-fn rvr_preflight_arena_native_addsub_matches_assembler_matrix() {
+fn rvr_preflight_delta_with_w_arena_native_full_rv64im_matrix_matches_assembler() {
     use std::collections::BTreeMap;
 
     use openvm_circuit::arch::{rvr::ChipRecordBuf, Arena, MatrixRecordArena};
 
-    let exe = inline_addsub_differential_exe();
+    let exe = full_rv64im_matrix_exe();
+    let streams = hard_chip_streams(1);
     let (rvr_vm, _) = VirtualMachine::new_with_keygen(
         test_cpu_engine(),
         Rv64ImCpuBuilder,
@@ -2998,7 +3007,7 @@ fn rvr_preflight_arena_native_addsub_matches_assembler_matrix() {
             panic!("program must route to RVR preflight");
         };
         instance
-            .execute_preflight(Streams::default(), None)
+            .execute_preflight(streams.clone(), None)
             .expect("compact preflight execution")
     };
     let a_instret = a_output.instret;
@@ -3008,9 +3017,10 @@ fn rvr_preflight_arena_native_addsub_matches_assembler_matrix() {
     >(&exe, &mut a_output, &capacities, &pc_to_air_idx)
     .expect("assembler-path record arena generation");
 
-    // Arm F: fused compile — the AddSub air's records land directly in a
-    // Matrix arena backing provided as the C record target.
+    // Combined arm: only W-family records land directly in Matrix targets;
+    // every other migrated AIR stays in the chronological delta stream.
     std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "1");
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "delta");
     let RvrPreflightRoute::Rvr(f_instance) = rvr_vm
         .preflight_routed_instance(&exe)
         .expect("fused routed preflight instance")
@@ -3023,6 +3033,60 @@ fn rvr_preflight_arena_native_addsub_matches_assembler_matrix() {
         .arena_native_airs
         .clone();
     assert!(!arena_native.is_empty(), "arena-native airs must exist");
+    assert!(f_instance.compiled().inline_records().delta_records);
+    assert!(arena_native.iter().all(|(_, geometry)| matches!(
+        geometry.layout,
+        openvm_circuit::arch::rvr::ArenaNativeLayout::Alu3(offsets)
+            if offsets.w.is_some()
+    )));
+    for (family, opcodes) in [
+        (
+            "BaseAluW",
+            vec![
+                BaseAluWOpcode::ADDW.global_opcode(),
+                BaseAluWOpcode::SUBW.global_opcode(),
+            ],
+        ),
+        (
+            "ShiftW logical",
+            vec![
+                ShiftWOpcode::SLLW.global_opcode(),
+                ShiftWOpcode::SRLW.global_opcode(),
+            ],
+        ),
+        (
+            "ShiftW arithmetic",
+            vec![ShiftWOpcode::SRAW.global_opcode()],
+        ),
+        ("MulW", vec![MulWOpcode::MULW.global_opcode()]),
+        (
+            "DivRemW",
+            vec![
+                DivRemWOpcode::DIVW.global_opcode(),
+                DivRemWOpcode::DIVUW.global_opcode(),
+                DivRemWOpcode::REMW.global_opcode(),
+                DivRemWOpcode::REMUW.global_opcode(),
+            ],
+        ),
+    ] {
+        let slot = exe
+            .program
+            .instructions_and_debug_infos
+            .iter()
+            .position(|entry| {
+                entry
+                    .as_ref()
+                    .is_some_and(|(instruction, _)| opcodes.contains(&instruction.opcode))
+            })
+            .unwrap_or_else(|| panic!("fixture must contain {family}"));
+        let air = pc_to_air_idx[slot].unwrap_or_else(|| panic!("{family} must map to an AIR"));
+        assert!(
+            arena_native
+                .iter()
+                .any(|&(native_air, _)| native_air == air),
+            "{family} AIR {air} must be arena-native"
+        );
+    }
     let mut fused_arenas: Vec<(usize, MatrixRecordArena<F>)> = Vec::new();
     let mut targets = BTreeMap::new();
     for &(air, geom) in &arena_native {
@@ -3043,7 +3107,7 @@ fn rvr_preflight_arena_native_addsub_matches_assembler_matrix() {
         );
         fused_arenas.push((air, arena));
     }
-    let f_state = rvr_vm.create_initial_state(&exe, Streams::default());
+    let f_state = rvr_vm.create_initial_state(&exe, streams);
     let mut f_output = f_instance
         .execute_preflight_from_state_with_arena_targets(
             f_state,
@@ -3087,11 +3151,23 @@ fn rvr_preflight_arena_native_addsub_matches_assembler_matrix() {
             "air {fused_air}: fused row count must match assembler"
         );
         let n = rows * a_arenas[fused_air].width;
-        assert_eq!(
-            &a_arenas[fused_air].trace_buffer[..n],
-            &fused_arena.trace_buffer[..n],
-            "air {fused_air}: fused arena must be byte-identical to the assembled arena"
-        );
+        let assembled = &a_arenas[fused_air].trace_buffer[..n];
+        let fused = &fused_arena.trace_buffer[..n];
+        if assembled != fused {
+            let idx = assembled
+                .iter()
+                .zip(fused)
+                .position(|(left, right)| left != right)
+                .expect("different slices have a mismatch");
+            panic!(
+                "air {fused_air} ({}): fused arena differs at field {idx} (row {}, col {}): assembled={} fused={}",
+                rvr_vm.air_names().nth(fused_air).unwrap_or("unknown"),
+                idx / a_arenas[fused_air].width,
+                idx % a_arenas[fused_air].width,
+                assembled[idx],
+                fused[idx],
+            );
+        }
     }
 
     // Every non-fused air must assemble identically across arms.
