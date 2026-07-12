@@ -87,6 +87,10 @@ pub struct EmitContext {
     /// inline records into their chip's record buffer. Only meaningful in the
     /// preflight (`ValueTrace`) mode.
     inline_records: bool,
+    /// Stage-2 chronological delta mode. Every routed instruction writes one
+    /// 32-byte record into a block-reserved span instead of a per-AIR wire.
+    delta_records: bool,
+    delta_batch: Option<(String, u32)>,
     /// Chip (AIR) index of the instruction currently being emitted, or
     /// `u32::MAX` if it maps to no chip. Set per instruction by the block emit
     /// loop before `emit_c`.
@@ -171,6 +175,8 @@ impl EmitContext {
             mode,
             block_abi,
             inline_records: false,
+            delta_records: false,
+            delta_batch: None,
             current_chip_idx: u32::MAX,
             current_pc: 0,
             arena_native_airs: std::collections::BTreeMap::new(),
@@ -180,6 +186,11 @@ impl EmitContext {
     /// R3: enable inline compact-record emission for migrated opcodes.
     pub(crate) fn set_inline_records(&mut self, enabled: bool) {
         self.inline_records = enabled;
+    }
+
+    pub(crate) fn set_delta_records(&mut self, enabled: bool, batch: Option<String>) {
+        self.delta_records = enabled;
+        self.delta_batch = batch.map(|base| (base, 0));
     }
 
     /// R4: set the airs whose records are emitted arena-native.
@@ -205,6 +216,18 @@ impl EmitContext {
     /// (R3 enabled and the instruction maps to a chip).
     pub(crate) fn inline_records_enabled(&self) -> bool {
         self.inline_records && self.current_chip_idx != u32::MAX
+    }
+
+    fn emit_delta3(&mut self, pc: &str, fromts: &str, v0: &str, v1: &str, v2: &str) {
+        let (base, index) = self
+            .delta_batch
+            .as_ref()
+            .map(|(base, index)| (base.clone(), *index))
+            .expect("delta emission requires a block-reserved span");
+        self.write_line(&format!(
+            "preflight_write_delta3({base} ? &{base}[{index}u] : NULL, {pc}, {fromts}, {v0}, {v1}, {v2});"
+        ));
+        self.delta_batch.as_mut().unwrap().1 += 1;
     }
 
     fn next_var(&mut self) -> String {
@@ -420,6 +443,8 @@ impl EmitContext {
             self.emit_arena_alu3_stores(
                 geom, baked, rd, rs1, &pc, &fromts, &p1, &p2, &pw, &rdprev, &v1, &v2,
             );
+        } else if self.delta_records {
+            self.emit_delta3(&pc, &fromts, &rdprev, &v1, &v2);
         } else {
             self.write_line(&format!(
                 "preflight_emit_alu3(state, {chip}u, {pc}, {fromts}, {p1}, {p2}, {pw}, {rdprev}, \
@@ -652,6 +677,8 @@ impl EmitContext {
             self.emit_arena_alu3_stores(
                 geom, baked, rd, rs1, &pc, &fromts, &p1, "0u", &pw, &rdprev, &v1, &vimm,
             );
+        } else if self.delta_records {
+            self.emit_delta3(&pc, &fromts, &rdprev, &v1, &vimm);
         } else {
             self.write_line(&format!(
                 "preflight_emit_alu3(state, {chip}u, {pc}, {fromts}, {p1}, 0u, {pw}, {rdprev}, \
@@ -687,6 +714,8 @@ impl EmitContext {
                 self.write_line(&format!("reg_write(state, {rd}, {tmp});"));
                 if let Some(baked) = arena {
                     self.emit_arena_wr1_stores(baked, &pc, &fromts, Some((&pw, &rdprev)));
+                } else if self.delta_records {
+                    self.emit_delta3(&pc, &fromts, &rdprev, "0ull", "0ull");
                 } else {
                     self.write_line(&format!(
                         "preflight_emit_wr1(state, {chip}u, {pc}, {fromts}, {pw}, {rdprev});"
@@ -697,6 +726,8 @@ impl EmitContext {
                 self.write_line("trace_timestamp(state);");
                 if let Some(baked) = arena {
                     self.emit_arena_wr1_stores(baked, &pc, &fromts, None);
+                } else if self.delta_records {
+                    self.emit_delta3(&pc, &fromts, "0ull", "0ull", "0ull");
                 } else {
                     self.write_line(&format!(
                         "preflight_emit_wr1(state, {chip}u, {pc}, {fromts}, 0u, 0ull);"
@@ -840,6 +871,9 @@ impl EmitContext {
                 self.indent -= 1;
                 self.write_line("}");
             }
+            None if self.delta_records => {
+                self.emit_delta3(&pc, &fromts, "0ull", &v1, &v2);
+            }
             None => {
                 self.write_line(&format!(
                     "preflight_emit_branch2(state, {chip}u, {pc}, {fromts}, {p1}, {p2}, {v1},                      {v2});"
@@ -880,6 +914,8 @@ impl EmitContext {
                 self.write_line(&format!("reg_write(state, {rd}, {tmp});"));
                 if let Some(baked) = arena {
                     self.emit_arena_rw1_stores(baked, &pc, &fromts, &v1, &p1, Some((&pw, &rdprev)));
+                } else if self.delta_records {
+                    self.emit_delta3(&pc, &fromts, &rdprev, &v1, "0ull");
                 } else {
                     self.write_line(&format!(
                         "preflight_emit_rw1(state, {chip}u, {pc}, {fromts}, {p1}, {pw}, {v1}, \
@@ -891,6 +927,8 @@ impl EmitContext {
                 self.write_line("trace_timestamp(state);");
                 if let Some(baked) = arena {
                     self.emit_arena_rw1_stores(baked, &pc, &fromts, &v1, &p1, None);
+                } else if self.delta_records {
+                    self.emit_delta3(&pc, &fromts, "0ull", &v1, "0ull");
                 } else {
                     self.write_line(&format!(
                         "preflight_emit_rw1(state, {chip}u, {pc}, {fromts}, {p1}, 0u, {v1}, \
@@ -1033,6 +1071,8 @@ impl EmitContext {
                 self.emit_arena_loadstore_stores(
                     geom, baked, &pc, &fromts, &v1, &p1, &p2, &addr, &block, None, None,
                 );
+            } else if self.delta_records {
+                self.emit_delta3(&pc, &fromts, "0ull", &v1, &block);
             } else {
                 self.write_line(&format!(
                     "preflight_emit_alu3(state, {chip}u, {pc}, {fromts}, {p1}, {p2}, 0u, 0ull, \
@@ -1063,6 +1103,8 @@ impl EmitContext {
                     Some(&pw),
                     Some(&rdprev),
                 );
+            } else if self.delta_records {
+                self.emit_delta3(&pc, &fromts, &rdprev, &v1, &block);
             } else {
                 self.write_line(&format!(
                     "preflight_emit_alu3(state, {chip}u, {pc}, {fromts}, {p1}, {p2}, {pw}, \
@@ -1124,6 +1166,8 @@ impl EmitContext {
                 Some(&pw),
                 Some(&prev),
             );
+        } else if self.delta_records {
+            self.emit_delta3(&pc, &fromts, &prev, &v1, &v2);
         } else {
             self.write_line(&format!(
                 "preflight_emit_alu3(state, {chip}u, {pc}, {fromts}, {p1}, {p2}, {pw}, {prev}, \
@@ -1207,6 +1251,8 @@ impl EmitContext {
                 Some(&write_prev_ts),
                 Some(&prev),
             );
+        } else if self.delta_records {
+            self.emit_delta3(&pc, &fromts, &prev, &ptr, &src);
         } else {
             self.write_line(&format!(
                 "preflight_emit_alu3(state, {chip}u, {pc}, {fromts}, {ptr_prev_ts}, \
@@ -1341,7 +1387,12 @@ impl EmitContext {
                 u32::MAX
             };
             self.write_line(&format!(
-                "trace_pc_indexed(state, 0x{pc:08x}ull, {exec_idx}u, {inline_chip}u);"
+                "trace_pc_indexed(state, 0x{pc:08x}ull, {exec_idx}u, {inline_chip}u, {});",
+                if self.delta_records && single_pass_inline {
+                    "true"
+                } else {
+                    "false"
+                }
             ));
         } else {
             self.write_line(&format!("trace_pc(state, 0x{pc:08x}ull);"));

@@ -51,7 +51,7 @@ use super::rvr::{
     load_compiled_from_path, preflight::execute_rvr_preflight,
     preflight::{ChipRecordBuf, RvrArenaNativeTarget}, rvr_preflight_engine_env_override,
     ArenaNativeGeometry, ChipMapping, GuestDebugMap, LogNativeOpcodeAdmitter, PreflightRawLogs,
-    RvrCompiled, RvrExecutionKind, RvrInitialImage, RvrInlineChipRecords,
+    RvrCompiled, RvrDeltaRecords, RvrExecutionKind, RvrInitialImage, RvrInlineChipRecords,
     RvrMeteredCostInstance, RvrMeteredInstance, RvrMeteredSegmentInstance, RvrPreflightEngine,
     RvrPreflightBufferPool, RvrPreflightInstance, RvrPreflightOpcodeClass, RvrPureInstance,
     RvrPreflightOutput, RvrPreflightRoute, RvrPureWithInstretTrackingInstance,
@@ -121,6 +121,7 @@ trait CachedRvrPreflightExecutor<F>: Send + Sync {
         &self,
         raw_logs: PreflightRawLogs,
         inline_records: Vec<RvrInlineChipRecords>,
+        delta_records: Option<RvrDeltaRecords>,
     );
     /// R4: airs whose records the compiled library writes arena-native.
     fn arena_native_airs(&self) -> &[(usize, ArenaNativeGeometry)];
@@ -180,8 +181,10 @@ impl<F: PrimeField32> CachedRvrPreflightExecutor<F> for CachedRvrCompiledPreflig
         &self,
         raw_logs: PreflightRawLogs,
         inline_records: Vec<RvrInlineChipRecords>,
+        delta_records: Option<RvrDeltaRecords>,
     ) {
-        self.pool.recycle_segment_buffers(raw_logs, inline_records);
+        self.pool
+            .recycle_segment_buffers(raw_logs, inline_records, delta_records);
     }
     fn arena_native_airs(&self) -> &[(usize, ArenaNativeGeometry)] {
         &self.compiled.inline_records().arena_native_airs
@@ -1583,9 +1586,10 @@ where
                     to_state,
                     raw_logs,
                     inline_records,
+                    delta_records,
                     ..
                 } = rvr_output;
-                rvr_preflight.recycle_segment_buffers(raw_logs, inline_records);
+                rvr_preflight.recycle_segment_buffers(raw_logs, inline_records, delta_records);
 
                 Ok(PreflightExecutionOutput {
                     system_records,
@@ -2176,6 +2180,11 @@ where
                                 .rvr_wire_record_airs(vm.config(), &self.exe, &pc_to_air_idx)
                                 .into_iter()
                                 .collect::<Vec<_>>();
+                            if compiled.inline_records().delta_records {
+                                // Stage-2 uses one cross-AIR chronological
+                                // backing, not the per-AIR G2 wire targets.
+                                wire_airs.clear();
+                            }
                             wire_airs.sort_unstable();
                             CachedRvrPreflight::Rvr(Box::new(CachedRvrCompiledPreflight {
                                 compiled,
