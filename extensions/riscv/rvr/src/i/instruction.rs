@@ -170,7 +170,7 @@ impl ExtInstr for Rv64IInstr {
 
     fn inline_record_shape(&self) -> Option<InlineRecordShape> {
         match self {
-            Self::Alu { word: false, .. } => Some(InlineRecordShape::Alu3),
+            Self::Alu { .. } => Some(InlineRecordShape::Alu3),
             Self::Load { .. } | Self::Store { .. } => Some(InlineRecordShape::Alu3),
             Self::Const { .. } | Self::Jump { .. } => Some(InlineRecordShape::Wr1),
             Self::Branch { .. } => Some(InlineRecordShape::Branch2),
@@ -194,13 +194,9 @@ impl ExtInstr for Rv64IInstr {
                 lhs,
                 rhs,
             } => {
-                if !*word {
-                    let result_template = alu_expr(
-                        *op,
-                        false,
-                        "__RVR_LHS__",
-                        "__RVR_RHS__",
-                    );
+                {
+                    let result_template =
+                        alu_expr(*op, *word, "__RVR_LHS__", "__RVR_RHS__");
                     let emitted = match rhs {
                         CfgOperand::Var(rhs) => {
                             let arena = match op {

@@ -26,7 +26,9 @@ use rvr_openvm_lift::{
 };
 use sha2::{Digest, Sha256};
 
-use super::{debug::GuestDebugMap, ArenaNativeGeometry, LogNativeOpcodeAdmitter};
+use super::{
+    debug::GuestDebugMap, ArenaNativeGeometry, ArenaNativeLayout, LogNativeOpcodeAdmitter,
+};
 use crate::arch::ExecutorInventory;
 
 /// A compiled rvr shared library ready for execution.
@@ -441,9 +443,8 @@ fn collect_inline_records_meta<F: PrimeField32>(
     let gpu_records = std::env::var("OPENVM_RVR_GPU_RECORDS").ok();
     let compact_wire_requested = gpu_records.as_deref() == Some("compact");
     let delta_records_requested = gpu_records.as_deref() == Some("delta");
-    let arena_native_enabled = std::env::var("OPENVM_RVR_ARENA_NATIVE").as_deref() != Ok("0")
-        && !compact_wire_requested
-        && !delta_records_requested;
+    let arena_native_enabled =
+        std::env::var("OPENVM_RVR_ARENA_NATIVE").as_deref() != Ok("0") && !compact_wire_requested;
     {
         let mut record = |pc: u64, shape: InlineRecordShape| {
             let Some(offset) = pc.checked_sub(pc_base) else {
@@ -475,6 +476,13 @@ fn collect_inline_records_meta<F: PrimeField32>(
                         .and_then(|(instruction, _)| {
                             admitter.inline_arena_geometry_for(instruction)
                         })
+                })
+                .filter(|geometry| {
+                    !delta_records_requested
+                        || matches!(
+                            geometry.layout,
+                            ArenaNativeLayout::Alu3(offsets) if offsets.w.is_some()
+                        )
                 });
             let previous = arena_native.insert(air_idx, geometry);
             assert!(
@@ -533,13 +541,18 @@ fn collect_inline_records_meta<F: PrimeField32>(
 fn validate_requested_inline_record_shape(
     inline_meta: &RvrInlineRecordsMeta,
 ) -> Result<(), CompileError> {
-    if matches!(
-        std::env::var("OPENVM_RVR_GPU_RECORDS").as_deref(),
-        Ok("compact" | "delta")
-    ) && !inline_meta.arena_native_airs.is_empty()
-    {
+    let requested = std::env::var("OPENVM_RVR_GPU_RECORDS").ok();
+    let invalid_arena = requested.as_deref() == Some("compact")
+        || requested.as_deref() == Some("delta")
+            && inline_meta.arena_native_airs.iter().any(|(_, geometry)| {
+                !matches!(
+                    geometry.layout,
+                    ArenaNativeLayout::Alu3(offsets) if offsets.w.is_some()
+                )
+            });
+    if invalid_arena && !inline_meta.arena_native_airs.is_empty() {
         return Err(CompileError::InvalidOptions(
-            "OPENVM_RVR_GPU_RECORDS=compact|delta requires non-arena emission for every inline AIR",
+            "requested GPU record shape produced an incompatible arena-native AIR",
         ));
     }
     Ok(())
