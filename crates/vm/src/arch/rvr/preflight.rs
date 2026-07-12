@@ -1036,7 +1036,23 @@ where
 
         // R3: harvest each migrated chip's inline records (the C-advanced
         // cursor gives the written length).
-        let mut arena_native_written: Vec<(usize, u32)> = Vec::new();
+        let arena_native_written: Vec<(usize, u32)> = inline_meta
+            .airs
+            .iter()
+            .filter_map(|&(air_idx, _)| {
+                arena_targets
+                    .is_some_and(|targets| targets.contains_key(&air_idx))
+                    .then(|| {
+                        let buf = &chip_records[air_idx];
+                        assert_eq!(
+                            buf.len % buf.stride,
+                            0,
+                            "arena-native cursor for air {air_idx} is not a whole record count"
+                        );
+                        (air_idx, buf.len / buf.stride)
+                    })
+            })
+            .collect();
         let inline_records: Vec<RvrInlineChipRecords> = if inline_meta.delta_records {
             Vec::new()
         } else {
@@ -1046,13 +1062,6 @@ where
                 .zip(record_bufs.iter_mut())
                 .map(|(&(air_idx, record_size), buffer)| {
                     if arena_targets.is_some_and(|targets| targets.contains_key(&air_idx)) {
-                        let buf = &chip_records[air_idx];
-                        assert_eq!(
-                            buf.len % buf.stride,
-                            0,
-                            "arena-native cursor for air {air_idx} is not a whole record count"
-                        );
-                        arena_native_written.push((air_idx, buf.len / buf.stride));
                         return RvrInlineChipRecords {
                             air_idx,
                             record_size,

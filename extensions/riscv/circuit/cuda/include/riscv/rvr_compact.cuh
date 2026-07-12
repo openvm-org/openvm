@@ -1,6 +1,7 @@
 #pragma once
 
 #include "riscv/adapters/alu_u16.cuh"
+#include "riscv/adapters/alu_w_u16.cuh"
 #include "riscv/adapters/branch.cuh"
 #include "riscv/adapters/jalr.cuh"
 #include "riscv/adapters/rdwrite.cuh"
@@ -70,6 +71,35 @@ rvr_decode_alu3_alu_u16(RvrAlu3Compact const &rec, RvrOperandEntry const &entry)
     // rs2_as: 1 = register read, 0 = immediate (RV64_REGISTER_AS / RV64_IMM_AS).
     out.rs2_as = (entry.flags & RVR_OPERAND_FLAG_RS2_IMM) ? 0 : 1;
     out.rs2_imm_sign = (entry.flags & RVR_OPERAND_FLAG_RS2_IMM_SIGN) ? 1 : 0;
+    out.reads_aux[0].prev_timestamp = rec.reads_prev_timestamp[0];
+    out.reads_aux[1].prev_timestamp = rec.reads_prev_timestamp[1];
+    out.writes_aux.prev_timestamp = rec.write_prev_timestamp;
+#pragma unroll
+    for (size_t i = 0; i < BLOCK_FE_WIDTH; i++) {
+        out.writes_aux.prev_data[i] = rvr_u16_limb(rec.write_prev_data, i);
+    }
+    return out;
+}
+
+// Device mirror of fill_base_alu_w_u16_from_compact. The caller computes the
+// instruction-family-specific low-word result.
+__device__ __forceinline__ Rv64BaseAluWU16AdapterRecord rvr_decode_alu3_alu_w_u16(
+    RvrAlu3Compact const &rec, RvrOperandEntry const &entry, uint32_t result_word
+) {
+    Rv64BaseAluWU16AdapterRecord out;
+    out.from_pc = rec.from_pc;
+    out.from_timestamp = rec.from_timestamp;
+    out.rd_ptr = entry.a;
+    out.rs1_ptr = entry.b;
+    out.rs1_high[0] = rvr_u16_limb(rec.b, 2);
+    out.rs1_high[1] = rvr_u16_limb(rec.b, 3);
+    out.rs2 = entry.c;
+    out.rs2_as = (entry.flags & RVR_OPERAND_FLAG_RS2_IMM) ? 0 : 1;
+    out.rs2_imm_sign = (entry.flags & RVR_OPERAND_FLAG_RS2_IMM_SIGN) ? 1 : 0;
+    out.rs2_high[0] = rvr_u16_limb(rec.c, 2);
+    out.rs2_high[1] = rvr_u16_limb(rec.c, 3);
+    out.result_high = (uint16_t)(result_word >> 16);
+    out.result_sign = (uint8_t)(result_word >> 31);
     out.reads_aux[0].prev_timestamp = rec.reads_prev_timestamp[0];
     out.reads_aux[1].prev_timestamp = rec.reads_prev_timestamp[1];
     out.writes_aux.prev_timestamp = rec.write_prev_timestamp;
