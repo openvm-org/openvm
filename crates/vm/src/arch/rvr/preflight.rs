@@ -37,6 +37,8 @@ pub const PREFLIGHT_MEMORY_KIND_WRITE: u8 = rvr_openvm_ext_ffi_common::PREFLIGHT
 pub const PREFLIGHT_MEMORY_KIND_TOUCH: u8 = rvr_openvm_ext_ffi_common::PREFLIGHT_MEMORY_KIND_TOUCH;
 pub const PREFLIGHT_CHIP_RECORD_FLAG_DIRECT_FINAL: u32 =
     rvr_openvm_ext_ffi_common::PREFLIGHT_CHIP_RECORD_FLAG_DIRECT_FINAL;
+pub const PREFLIGHT_CHIP_RECORD_FLAG_OVERFLOW: u32 =
+    rvr_openvm_ext_ffi_common::PREFLIGHT_CHIP_RECORD_FLAG_OVERFLOW;
 /// R3: byte size of one compact AddSub inline record (see the C
 /// `PreflightAddSubRecord`). Used to size the per-chip inline-record buffers.
 pub const PREFLIGHT_ADDSUB_RECORD_SIZE: usize =
@@ -46,6 +48,8 @@ pub const PREFLIGHT_BRANCH2_RECORD_SIZE: usize =
     rvr_openvm_ext_ffi_common::PREFLIGHT_BRANCH2_RECORD_SIZE;
 pub const PREFLIGHT_WR1_RECORD_SIZE: usize = rvr_openvm_ext_ffi_common::PREFLIGHT_WR1_RECORD_SIZE;
 pub const PREFLIGHT_RW1_RECORD_SIZE: usize = rvr_openvm_ext_ffi_common::PREFLIGHT_RW1_RECORD_SIZE;
+pub const PREFLIGHT_DELTA_RECORD_SIZE: usize =
+    rvr_openvm_ext_ffi_common::PREFLIGHT_DELTA_RECORD_SIZE;
 
 /// C-compatible preflight program log entry.
 ///
@@ -181,6 +185,10 @@ pub struct PreflightTracerData {
     /// filtered program index.
     pub exec_frequencies: *mut u32,
     pub exec_frequencies_len: u32,
+    /// Stage-2 global chronological delta-record target. This is separate
+    /// from the per-AIR compact targets because its cross-AIR order is what
+    /// makes previous timestamps implicit.
+    pub delta_records: *mut ChipRecordBuf,
 }
 
 impl PreflightTracerData {
@@ -211,6 +219,7 @@ impl PreflightTracerData {
             chip_records: std::ptr::null_mut(),
             exec_frequencies: std::ptr::null_mut(),
             exec_frequencies_len: 0,
+            delta_records: std::ptr::null_mut(),
         }
     }
 
@@ -259,6 +268,10 @@ impl PreflightTracerData {
         self.exec_frequencies_len = frequencies.len() as u32;
     }
 
+    pub fn set_delta_records(&mut self, delta_records: &mut ChipRecordBuf) {
+        self.delta_records = delta_records;
+    }
+
     /// Attach the per-address-space timestamp shadows, the public-values base
     /// pointer, and the touched-block buffer. The shadow slices must be sized to
     /// each address space's block count and zero-initialized.
@@ -303,6 +316,7 @@ impl Default for PreflightTracerData {
             chip_records: std::ptr::null_mut(),
             exec_frequencies: std::ptr::null_mut(),
             exec_frequencies_len: 0,
+            delta_records: std::ptr::null_mut(),
         }
     }
 }
@@ -333,6 +347,61 @@ pub struct RvrInlineChipRecords {
     pub bytes: Vec<u8>,
 }
 
+/// Owned Stage-2 chronological record backing. `offset` preserves the
+/// original allocation while exposing a 32-byte-aligned C/decoder window;
+/// CUDA returns `backing` to the page-locked pool after device decode.
+pub struct RvrDeltaRecords {
+    backing: Option<Vec<u8>>,
+    pub(crate) offset: usize,
+    pub(crate) written: usize,
+    dirty_len: usize,
+    pool: RvrPreflightBufferPool,
+}
+
+impl RvrDeltaRecords {
+    fn new(backing: Vec<u8>, offset: usize, capacity: usize, pool: RvrPreflightBufferPool) -> Self {
+        Self {
+            backing: Some(backing),
+            offset,
+            written: 0,
+            // Until native execution returns, conservatively assume C may
+            // have dirtied the complete target on an error path.
+            dirty_len: offset + capacity,
+            pool,
+        }
+    }
+
+    fn aligned_mut_ptr(&mut self) -> *mut u8 {
+        unsafe {
+            self.backing
+                .as_mut()
+                .expect("delta backing already returned")
+                .as_mut_ptr()
+                .add(self.offset)
+        }
+    }
+
+    fn set_written(&mut self, written: usize) {
+        self.written = written;
+        self.dirty_len = self.offset + written;
+    }
+
+    pub fn bytes(&self) -> &[u8] {
+        &self
+            .backing
+            .as_ref()
+            .expect("delta backing already returned")[self.offset..self.offset + self.written]
+    }
+}
+
+impl Drop for RvrDeltaRecords {
+    fn drop(&mut self) {
+        if let Some(backing) = self.backing.take() {
+            self.pool.recycle_delta_backing(backing, self.dirty_len);
+        }
+    }
+}
+
 pub struct RvrPreflightOutput<F> {
     pub system_records: SystemRecords<F>,
     pub raw_logs: PreflightRawLogs,
@@ -344,6 +413,9 @@ pub struct RvrPreflightOutput<F> {
     /// for this segment. Empty when the library was compiled without inline
     /// records.
     pub inline_records: Vec<RvrInlineChipRecords>,
+    /// Stage-2 cross-AIR chronological stream, kept separate so its aligned
+    /// page-locked backing can survive decode and return to the right pool.
+    pub delta_records: Option<RvrDeltaRecords>,
     /// R3: per program slot, whether that instruction emits an inline compact
     /// record — its memory-log entries are suppressed, so record assembly must
     /// skip the log assembler for it and consume `inline_records` instead.
@@ -453,8 +525,11 @@ where
     /// Callers that keep the output alive (differential tests) simply drop it
     /// instead; the pool then refills lazily.
     pub fn recycle_output(&self, output: RvrPreflightOutput<F>) {
-        self.pool
-            .recycle_segment_buffers(output.raw_logs, output.inline_records);
+        self.pool.recycle_segment_buffers(
+            output.raw_logs,
+            output.inline_records,
+            output.delta_records,
+        );
     }
 
     /// Calls [`VmState::initial`] for this fixed executable.
@@ -734,6 +809,9 @@ where
             .airs
             .iter()
             .map(|&(air, record_size)| {
+                if inline_meta.delta_records {
+                    return Vec::new();
+                }
                 if arena_targets.is_some_and(|targets| targets.contains_key(&air)) {
                     return Vec::new();
                 }
@@ -744,6 +822,50 @@ where
                 pool.take_record_buf(rows * record_size)
             })
             .collect();
+        let delta_capacity = program_log_cap.saturating_mul(PREFLIGHT_DELTA_RECORD_SIZE);
+        let mut delta_output = if inline_meta.delta_records {
+            let backing = pool.take_delta_backing(delta_capacity);
+            let offset = (32 - backing.as_ptr() as usize % 32) % 32;
+            assert!(
+                offset + delta_capacity <= backing.len(),
+                "aligned delta window exceeds backing"
+            );
+            Some(RvrDeltaRecords::new(
+                backing,
+                offset,
+                delta_capacity,
+                pool.clone(),
+            ))
+        } else {
+            None
+        };
+        let mut delta_record = ChipRecordBuf::default();
+        if let Some(delta) = delta_output.as_mut() {
+            let aligned_base = delta.aligned_mut_ptr();
+            assert_eq!(
+                aligned_base as usize % 32,
+                0,
+                "delta record base must be 32-byte aligned"
+            );
+            // The CUDA path sources this stream from the page-locked record
+            // pool. Mirror its ready-buffer contract on CPU: fault one byte
+            // per page before the native execute+emit clock starts, so lazy
+            // zero-page faults are never charged as record emission.
+            for page in (0..delta_capacity).step_by(4096) {
+                unsafe { std::ptr::write_volatile(aligned_base.add(page), 0) };
+            }
+            if delta_capacity != 0 {
+                unsafe { std::ptr::write_volatile(aligned_base.add(delta_capacity - 1), 0) };
+            }
+            delta_record = ChipRecordBuf {
+                base: aligned_base.cast(),
+                len: 0,
+                cap: u32::try_from(delta_capacity).expect("delta capacity exceeds u32"),
+                stride: PREFLIGHT_DELTA_RECORD_SIZE as u32,
+                core_off: 0,
+                flags: PREFLIGHT_CHIP_RECORD_FLAG_DIRECT_FINAL,
+            };
+        }
         let mut chip_records = vec![ChipRecordBuf::default(); chip_counts_len.max(1)];
         for (&(air, record_size), buffer) in inline_meta.airs.iter().zip(record_bufs.iter_mut()) {
             debug_assert!(air < chip_records.len(), "inline air {air} out of range");
@@ -781,23 +903,39 @@ where
         tracer.set_touched_uninit(&mut touched);
         tracer.set_chip_records(&mut chip_records);
         tracer.set_exec_frequencies(&mut exec_frequencies);
+        if inline_meta.delta_records {
+            tracer.set_delta_records(&mut delta_record);
+        }
 
+        let native_execute_started = std::time::Instant::now();
         let run_result = execute_preflight_raw(
             compiled,
             runtime_hooks,
             &mut run_state,
             &mut tracer,
             num_insns,
-        )
-        .map_err(map_rvr_execute_error)?;
-        // Handoff fence: the generated C emits compact records with
-        // non-temporal (write-combining) stores, which are weakly ordered
-        // with respect to other stores. Drain them before the buffers are
-        // read — record assembly and trace generation may run on other
-        // threads.
+        );
+        let native_execute_elapsed = native_execute_started.elapsed();
+        // Drain non-temporal record stores before either consuming the
+        // buffers or propagating an execution error. On error, propagation
+        // drops the RAII delta lease and may queue its pinned backing for
+        // asynchronous cleaning/reuse.
         #[cfg(target_arch = "x86_64")]
         unsafe {
             core::arch::x86_64::_mm_sfence();
+        }
+        let run_result = run_result.map_err(map_rvr_execute_error)?;
+        if let Some(delta) = delta_output.as_mut() {
+            delta.set_written(delta_record.len as usize);
+        }
+        if std::env::var("OPENVM_RVR_PREFLIGHT_PROFILE").as_deref() == Ok("1") {
+            eprintln!(
+                "OPENVM_RVR_NATIVE_EXEC_EMIT_US={} delta={} delta_records={} delta_bytes={}",
+                native_execute_elapsed.as_micros(),
+                inline_meta.delta_records as u8,
+                delta_record.len / PREFLIGHT_DELTA_RECORD_SIZE as u32,
+                delta_record.len,
+            );
         }
         if let Some(target_instret) = num_insns {
             if run_result.suspended && run_result.state.instret != target_instret {
@@ -806,6 +944,11 @@ where
                     run_result.state.instret
                 )));
             }
+        }
+        if delta_record.flags & PREFLIGHT_CHIP_RECORD_FLAG_OVERFLOW != 0 {
+            return Err(ExecutionError::RvrExecution(
+                "stage-2 delta record reservation overflow or ABI mismatch".to_string(),
+            ));
         }
 
         let program_len = tracer.program_log_len as usize;
@@ -817,6 +960,7 @@ where
         if program_len > program_log_cap
             || memory_len > memory_log_cap
             || touched_len > touched.len()
+            || delta_record.len as usize > delta_capacity
         {
             if single_shot {
                 // The metered-derived bound was violated: a capacity-model
@@ -826,8 +970,10 @@ where
                     "metered-derived preflight log capacity exceeded: \
                      program {program_len}/{program_log_cap}, \
                      memory {memory_len}/{memory_log_cap}, \
-                     touched {touched_len}/{} — capacity-model bug",
-                    touched.len()
+                     touched {touched_len}/{}, delta {}/{} — capacity-model bug",
+                    touched.len(),
+                    delta_record.len,
+                    delta_capacity
                 )));
             }
             program_log_cap = grow_capacity(program_log_cap, program_len);
@@ -891,37 +1037,42 @@ where
         // R3: harvest each migrated chip's inline records (the C-advanced
         // cursor gives the written length).
         let mut arena_native_written: Vec<(usize, u32)> = Vec::new();
-        let inline_records: Vec<RvrInlineChipRecords> = inline_meta
-            .airs
-            .iter()
-            .zip(record_bufs.iter_mut())
-            .map(|(&(air_idx, record_size), buffer)| {
-                if arena_targets.is_some_and(|targets| targets.contains_key(&air_idx)) {
-                    let buf = &chip_records[air_idx];
-                    assert_eq!(
-                        buf.len % buf.stride,
-                        0,
-                        "arena-native cursor for air {air_idx} is not a whole record count"
-                    );
-                    arena_native_written.push((air_idx, buf.len / buf.stride));
-                    return RvrInlineChipRecords {
+        let inline_records: Vec<RvrInlineChipRecords> = if inline_meta.delta_records {
+            Vec::new()
+        } else {
+            inline_meta
+                .airs
+                .iter()
+                .zip(record_bufs.iter_mut())
+                .map(|(&(air_idx, record_size), buffer)| {
+                    if arena_targets.is_some_and(|targets| targets.contains_key(&air_idx)) {
+                        let buf = &chip_records[air_idx];
+                        assert_eq!(
+                            buf.len % buf.stride,
+                            0,
+                            "arena-native cursor for air {air_idx} is not a whole record count"
+                        );
+                        arena_native_written.push((air_idx, buf.len / buf.stride));
+                        return RvrInlineChipRecords {
+                            air_idx,
+                            record_size,
+                            bytes: Vec::new(),
+                        };
+                    }
+                    let written = chip_records[air_idx].len as usize;
+                    // SAFETY: the C tracer fully writes each emitted record and
+                    // advances the cursor past it, so the first `written` bytes
+                    // are initialized (cap-checked on the C side).
+                    let bytes = unsafe { assume_init_prefix(std::mem::take(buffer), written) };
+                    RvrInlineChipRecords {
                         air_idx,
                         record_size,
-                        bytes: Vec::new(),
-                    };
-                }
-                let written = chip_records[air_idx].len as usize;
-                // SAFETY: the C tracer fully writes each emitted record and
-                // advances the cursor past it, so the first `written` bytes
-                // are initialized (cap-checked on the C side).
-                let bytes = unsafe { assume_init_prefix(std::mem::take(buffer), written) };
-                RvrInlineChipRecords {
-                    air_idx,
-                    record_size,
-                    bytes,
-                }
-            })
-            .collect();
+                        bytes,
+                    }
+                })
+                .collect()
+        };
+        let delta_records = delta_output;
 
         return Ok(RvrPreflightOutput {
             system_records,
@@ -935,6 +1086,7 @@ where
             instret: run_result.state.instret,
             suspended: run_result.suspended,
             inline_records,
+            delta_records,
             inline_pc_slots: inline_meta.pc_slots.clone(),
             arena_native_written,
         });

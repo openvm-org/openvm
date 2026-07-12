@@ -7,7 +7,10 @@ use openvm_instructions::{
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::{PreflightMemoryAccessAux, RvrInlineChipRecords, RvrPreflightOutput};
+use super::{
+    PreflightMemoryAccessAux, ProgramLogEntry, RvrDeltaRecords, RvrInlineChipRecords,
+    RvrPreflightOutput, PREFLIGHT_DELTA_RECORD_SIZE,
+};
 use crate::arch::{Arena, ExecutionError};
 
 /// Timestamp-indexed view of normalized rvr preflight memory accesses.
@@ -133,6 +136,22 @@ struct RegisteredInlineAssembler<F, RA> {
     /// skips `assemble` for it entirely. Families without geometry keep the
     /// R3 compact wire + host expansion, so R4 rolls out shape by shape.
     arena_native: Option<ArenaNativeGeometry>,
+    delta_pattern: Option<DeltaAccessPattern>,
+}
+
+/// How one chronological Stage-2 delta record touches timestamp-shadow
+/// blocks. Values are still carried by the record; only the three previous
+/// timestamps are reconstructed from these program-derived addresses.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DeltaAccessPattern {
+    Alu3,
+    Alu3Reg,
+    Load,
+    Store,
+    Branch2,
+    Wr1,
+    Wr1Always,
+    Rw1,
 }
 
 /// Opcode-keyed registry of log-native record assemblers.
@@ -193,10 +212,32 @@ impl<F, RA> LogNativeAssemblerRegistry<F, RA> {
                             record_size,
                             assemble: assembler,
                             arena_native,
+                            delta_pattern: None,
                         }
                     )
                     .is_none(),
                 "multiple inline record assemblers registered for opcode {opcode:?}"
+            );
+        }
+    }
+
+    /// Attach the program-derived access pattern used by the Stage-2 delta
+    /// decoder. Kept separate from `register_inline*` so existing extension
+    /// registrations remain source-compatible and a missing pattern fails
+    /// closed only when delta mode is requested.
+    pub fn register_delta_pattern(
+        &mut self,
+        opcodes: impl IntoIterator<Item = VmOpcode>,
+        pattern: DeltaAccessPattern,
+    ) {
+        for opcode in opcodes {
+            let registered = self
+                .inline_assemblers
+                .get_mut(&opcode)
+                .unwrap_or_else(|| panic!("delta pattern without inline assembler for {opcode:?}"));
+            assert!(
+                registered.delta_pattern.replace(pattern).is_none(),
+                "multiple delta patterns registered for opcode {opcode:?}"
             );
         }
     }
@@ -387,6 +428,7 @@ pub fn generate_record_arenas_from_logs_with_compact<F: PrimeField32, RA: Arena>
     pc_to_air_idx: &[Option<usize>],
     compact_airs: &std::collections::HashSet<usize>,
 ) -> Result<(Vec<RA>, Vec<RvrInlineChipRecords>), ExecutionError> {
+    let delta_recycle = expand_delta_records(registry, exe, output, pc_to_air_idx)?;
     let inline_records = std::mem::take(&mut output.inline_records);
     let inline_pc_slots = output.inline_pc_slots.clone();
     // Airs whose records C already wrote into direct-final caller backings.
@@ -518,8 +560,294 @@ pub fn generate_record_arenas_from_logs_with_compact<F: PrimeField32, RA: Arena>
         compact_airs.contains(&chip.air_idx) && !arena_native_expected.contains_key(&chip.air_idx)
     });
     output.inline_records = pooled;
+    output.delta_records = delta_recycle;
 
     Ok((arenas, wire_buffers))
+}
+
+#[derive(Clone, Copy)]
+struct DeltaRecord {
+    from_pc: u32,
+    from_timestamp: u32,
+    v0: u64,
+    v1: u64,
+    v2: u64,
+}
+
+fn delta_u32(bytes: &[u8], at: usize) -> u32 {
+    u32::from_le_bytes(bytes[at..at + 4].try_into().expect("delta u32"))
+}
+
+fn delta_u64(bytes: &[u8], at: usize) -> u64 {
+    u64::from_le_bytes(bytes[at..at + 8].try_into().expect("delta u64"))
+}
+
+fn append_u32(out: &mut Vec<u8>, value: u32) {
+    out.extend_from_slice(&value.to_le_bytes());
+}
+
+fn append_u64(out: &mut Vec<u8>, value: u64) {
+    out.extend_from_slice(&value.to_le_bytes());
+}
+
+/// CPU oracle for the Stage-2 device predecoder. It converts the global
+/// chronological 32-byte stream back into the established per-AIR compact
+/// wires. The production GPU path will perform the same merge/partition on
+/// device; keeping this oracle here lets every existing arena/proof gate
+/// compare the reconstructed bytes before a sandbox is considered.
+fn expand_delta_records<F: PrimeField32, RA: Arena>(
+    registry: &LogNativeAssemblerRegistry<F, RA>,
+    exe: &VmExe<F>,
+    output: &mut RvrPreflightOutput<F>,
+    pc_to_air_idx: &[Option<usize>],
+) -> Result<Option<RvrDeltaRecords>, ExecutionError> {
+    let Some(delta) = output.delta_records.take() else {
+        return Ok(None);
+    };
+    let delta_bytes = delta.bytes();
+    if !delta_bytes
+        .len()
+        .is_multiple_of(PREFLIGHT_DELTA_RECORD_SIZE)
+    {
+        return Err(rvr_error(format!(
+            "invalid delta stream: stride {}, bytes {}",
+            PREFLIGHT_DELTA_RECORD_SIZE,
+            delta_bytes.len()
+        )));
+    }
+
+    if let Some((index, entry)) =
+        output
+            .raw_logs
+            .program_log
+            .iter()
+            .enumerate()
+            .find(|(_, entry)| {
+                entry.pc < u64::from(exe.program.pc_base)
+                    || !(entry.pc - u64::from(exe.program.pc_base))
+                        .is_multiple_of(u64::from(DEFAULT_PC_STEP))
+            })
+    {
+        return Err(rvr_error(format!(
+            "delta residual program log has invalid entry {index}/{}: pc={:#x}, timestamp={}",
+            output.raw_logs.program_log.len(),
+            entry.pc,
+            entry.timestamp
+        )));
+    }
+
+    // The residual memory log is already in timestamp order. Merge its
+    // accesses into the same last-touch map before each chronological delta
+    // record; inline accesses themselves never appear in that log.
+    let mut residual = 0usize;
+    let mut last_touch: HashMap<(u8, u64), u32> = HashMap::new();
+    let mut per_air: std::collections::BTreeMap<usize, (usize, Vec<u8>)> =
+        std::collections::BTreeMap::new();
+    let mut synthetic_program = Vec::with_capacity(delta_bytes.len() / PREFLIGHT_DELTA_RECORD_SIZE);
+
+    let delta_record_count = delta_bytes.len() / PREFLIGHT_DELTA_RECORD_SIZE;
+    for (delta_index, bytes) in delta_bytes
+        .chunks_exact(PREFLIGHT_DELTA_RECORD_SIZE)
+        .enumerate()
+    {
+        let record = DeltaRecord {
+            from_pc: delta_u32(bytes, 0),
+            from_timestamp: delta_u32(bytes, 4),
+            v0: delta_u64(bytes, 8),
+            v1: delta_u64(bytes, 16),
+            v2: delta_u64(bytes, 24),
+        };
+        if record.from_pc < exe.program.pc_base
+            || !(record.from_pc - exe.program.pc_base).is_multiple_of(DEFAULT_PC_STEP)
+        {
+            return Err(rvr_error(format!(
+                "delta record {delta_index}/{delta_record_count} has invalid pc {:#x} at timestamp {}",
+                record.from_pc, record.from_timestamp
+            )));
+        }
+        while let Some(entry) = output.raw_logs.memory_log.get(residual) {
+            if entry.timestamp >= record.from_timestamp {
+                break;
+            }
+            last_touch.insert((entry.addr_space, entry.address & !7u64), entry.timestamp);
+            residual += 1;
+        }
+
+        let Some((instruction, air_idx, _)) =
+            instruction_and_air_idx(exe, pc_to_air_idx, record.from_pc)?
+        else {
+            return Err(rvr_error(format!(
+                "delta pc {:#x} has no routed AIR",
+                record.from_pc
+            )));
+        };
+        let registered = registry
+            .inline_assemblers
+            .get(&instruction.opcode)
+            .ok_or_else(|| {
+                rvr_error(format!(
+                    "delta pc {:#x} opcode {:?} has no inline assembler",
+                    record.from_pc, instruction.opcode
+                ))
+            })?;
+        let pattern = registered.delta_pattern.ok_or_else(|| {
+            rvr_error(format!(
+                "delta pc {:#x} opcode {:?} has no access pattern",
+                record.from_pc, instruction.opcode
+            ))
+        })?;
+
+        let reg = |ptr: u32| {
+            Some((
+                openvm_instructions::riscv::RV64_REGISTER_AS as u8,
+                u64::from(ptr),
+            ))
+        };
+        let tick = None;
+        let memory_address = || {
+            let imm = instruction.c.as_canonical_u32() as u16;
+            let offset = if instruction.g.is_one() {
+                i64::from(imm as i16)
+            } else {
+                i64::from(imm)
+            };
+            (record.v1 as u32).wrapping_add(offset as u32) as u64 & !7u64
+        };
+        let accesses: [Option<(u8, u64)>; 3] = match pattern {
+            DeltaAccessPattern::Alu3 => [
+                reg(instruction.b.as_canonical_u32()),
+                if instruction.e.as_canonical_u32() == openvm_instructions::riscv::RV64_REGISTER_AS
+                {
+                    reg(instruction.c.as_canonical_u32())
+                } else {
+                    tick
+                },
+                reg(instruction.a.as_canonical_u32()),
+            ],
+            DeltaAccessPattern::Alu3Reg => [
+                reg(instruction.b.as_canonical_u32()),
+                reg(instruction.c.as_canonical_u32()),
+                reg(instruction.a.as_canonical_u32()),
+            ],
+            DeltaAccessPattern::Load => [
+                reg(instruction.b.as_canonical_u32()),
+                Some((instruction.e.as_canonical_u32() as u8, memory_address())),
+                if instruction.f.is_one() {
+                    reg(instruction.a.as_canonical_u32())
+                } else {
+                    tick
+                },
+            ],
+            DeltaAccessPattern::Store => [
+                reg(instruction.b.as_canonical_u32()),
+                reg(instruction.a.as_canonical_u32()),
+                Some((instruction.e.as_canonical_u32() as u8, memory_address())),
+            ],
+            DeltaAccessPattern::Branch2 => [
+                reg(instruction.a.as_canonical_u32()),
+                reg(instruction.b.as_canonical_u32()),
+                tick,
+            ],
+            DeltaAccessPattern::Wr1 => [
+                if instruction.f.is_one() {
+                    reg(instruction.a.as_canonical_u32())
+                } else {
+                    tick
+                },
+                tick,
+                tick,
+            ],
+            DeltaAccessPattern::Wr1Always => [reg(instruction.a.as_canonical_u32()), tick, tick],
+            DeltaAccessPattern::Rw1 => [
+                reg(instruction.b.as_canonical_u32()),
+                if instruction.f.is_one() {
+                    reg(instruction.a.as_canonical_u32())
+                } else {
+                    tick
+                },
+                tick,
+            ],
+        };
+        let access_count = match pattern {
+            DeltaAccessPattern::Alu3
+            | DeltaAccessPattern::Alu3Reg
+            | DeltaAccessPattern::Load
+            | DeltaAccessPattern::Store => 3,
+            DeltaAccessPattern::Branch2 | DeltaAccessPattern::Rw1 => 2,
+            DeltaAccessPattern::Wr1 | DeltaAccessPattern::Wr1Always => 1,
+        };
+        let mut prev = [0u32; 3];
+        for (offset, access) in accesses.into_iter().take(access_count).enumerate() {
+            if let Some((addr_space, address)) = access {
+                let key = (addr_space, address & !7u64);
+                prev[offset] = last_touch.get(&key).copied().unwrap_or(0);
+                last_touch.insert(key, record.from_timestamp + offset as u32);
+            }
+        }
+
+        let (stride, out) = per_air
+            .entry(air_idx)
+            .or_insert_with(|| (registered.record_size, Vec::new()));
+        if *stride != registered.record_size {
+            return Err(rvr_error(format!(
+                "delta AIR {air_idx} has conflicting strides {stride} and {}",
+                registered.record_size
+            )));
+        }
+        append_u32(out, record.from_pc);
+        append_u32(out, record.from_timestamp);
+        match pattern {
+            DeltaAccessPattern::Alu3
+            | DeltaAccessPattern::Alu3Reg
+            | DeltaAccessPattern::Load
+            | DeltaAccessPattern::Store => {
+                append_u32(out, prev[0]);
+                append_u32(out, prev[1]);
+                append_u32(out, prev[2]);
+                append_u64(out, record.v0);
+                append_u64(out, record.v1);
+                append_u64(out, record.v2);
+            }
+            DeltaAccessPattern::Branch2 => {
+                append_u32(out, prev[0]);
+                append_u32(out, prev[1]);
+                append_u64(out, record.v1);
+                append_u64(out, record.v2);
+            }
+            DeltaAccessPattern::Wr1 | DeltaAccessPattern::Wr1Always => {
+                append_u32(out, prev[0]);
+                append_u64(out, record.v0);
+            }
+            DeltaAccessPattern::Rw1 => {
+                append_u32(out, prev[0]);
+                append_u32(out, prev[1]);
+                append_u64(out, record.v1);
+                append_u64(out, record.v0);
+            }
+        }
+        synthetic_program.push(ProgramLogEntry {
+            opcode: 0,
+            _pad0: 0,
+            timestamp: record.from_timestamp,
+            pc: u64::from(record.from_pc),
+        });
+    }
+
+    let mut decoded = per_air
+        .into_iter()
+        .map(|(air_idx, (record_size, bytes))| RvrInlineChipRecords {
+            air_idx,
+            record_size,
+            bytes,
+        })
+        .collect::<Vec<_>>();
+    output.inline_records.append(&mut decoded);
+    output.raw_logs.program_log.extend(synthetic_program);
+    output
+        .raw_logs
+        .program_log
+        .sort_unstable_by_key(|entry| entry.timestamp);
+    Ok(Some(delta))
 }
 
 /// `(instruction, air_idx, program_slot_idx)` for one program-log pc.
