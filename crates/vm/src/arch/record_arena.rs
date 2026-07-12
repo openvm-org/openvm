@@ -362,13 +362,20 @@ impl DenseRecordArena {
 impl Drop for DenseRecordArena {
     fn drop(&mut self) {
         #[cfg(feature = "rvr")]
-        if let Some((air, pool)) = self.rvr_recycle.take() {
-            let dirty_len = self.records_buffer.position() as usize;
-            let backing = std::mem::take(self.records_buffer.get_mut());
-            pool.recycle_wire_backing(air, backing, dirty_len);
-            return;
+        {
+            if let Some((air, pool)) = self.rvr_recycle.take() {
+                let dirty_len = self.records_buffer.position() as usize;
+                let backing = std::mem::take(self.records_buffer.get_mut());
+                pool.recycle_wire_backing(air, backing, dirty_len);
+            } else {
+                #[cfg(feature = "cuda")]
+                {
+                    let dirty_len = self.records_buffer.position() as usize;
+                    pinned::give_back(std::mem::take(self.records_buffer.get_mut()), dirty_len);
+                }
+            }
         }
-        #[cfg(feature = "cuda")]
+        #[cfg(all(feature = "cuda", not(feature = "rvr")))]
         {
             let dirty_len = self.records_buffer.position() as usize;
             pinned::give_back(std::mem::take(self.records_buffer.get_mut()), dirty_len);
