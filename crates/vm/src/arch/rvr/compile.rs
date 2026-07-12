@@ -428,14 +428,16 @@ fn collect_inline_records_meta<F: PrimeField32>(
     let mut pc_slots = vec![false; num_slots];
     let mut airs: BTreeMap<usize, usize> = BTreeMap::new();
     let mut arena_native: BTreeMap<usize, Option<ArenaNativeGeometry>> = BTreeMap::new();
-    // R4 gate, DEFAULT ON (OPENVM_RVR_ARENA_NATIVE=0 opts out for A/B
-    // measurement). The decision MUST be made here, in the metadata the host
-    // and codegen both consume: gating only the codegen copy leaves the host
-    // staging arena targets against a compact-compiled library — the C then
-    // writes compact records at the arena row stride and the substituted
-    // rows are garbage (a real bus-imbalance bug caught by the prove
-    // fixtures when this gate briefly lived on the codegen side only).
-    let arena_native_enabled = std::env::var("OPENVM_RVR_ARENA_NATIVE").as_deref() != Ok("0");
+    // Three-tier emission precedence: an explicit GPU compact request wins
+    // over the default-on arena-native (G1) emission, then non-migrated
+    // opcodes retain the log fallback. A fused-compiled library has no wire
+    // records to decode, so allowing arena-native metadata under a compact
+    // request would make the GPU builder request one shape while generated C
+    // emits another. Keep this decision in the shared host/codegen metadata.
+    let compact_wire_requested =
+        std::env::var("OPENVM_RVR_GPU_RECORDS").as_deref() == Ok("compact");
+    let arena_native_enabled =
+        std::env::var("OPENVM_RVR_ARENA_NATIVE").as_deref() != Ok("0") && !compact_wire_requested;
     {
         let mut record = |pc: u64, shape: InlineRecordShape| {
             let Some(offset) = pc.checked_sub(pc_base) else {
@@ -515,6 +517,23 @@ fn collect_inline_records_meta<F: PrimeField32>(
             .filter_map(|(air, geometry)| geometry.map(|g| (air, g)))
             .collect(),
     }
+}
+
+/// Fail cheaply during native-project preparation if the requested GPU
+/// record shape and the shape encoded in compile metadata diverge. Under a
+/// compact request every inline AIR (including mixed LoadStore/REVEAL) must
+/// remain wire-shaped; the GPU decode router may select any subset of them.
+fn validate_requested_inline_record_shape(
+    inline_meta: &RvrInlineRecordsMeta,
+) -> Result<(), CompileError> {
+    if std::env::var("OPENVM_RVR_GPU_RECORDS").as_deref() == Ok("compact")
+        && !inline_meta.arena_native_airs.is_empty()
+    {
+        return Err(CompileError::InvalidOptions(
+            "OPENVM_RVR_GPU_RECORDS=compact requires compact-wire emission for every inline AIR",
+        ));
+    }
+    Ok(())
 }
 
 /// Compact record stride per wire shape (the C-side `_Static_assert`s guard
@@ -842,6 +861,14 @@ fn compile_impl<F: PrimeField32>(
     // only CFG/project generation and the recursive project hash are skipped.
     let inline_records = opts.execution_kind == RvrExecutionKind::Preflight
         && !env_flag_is_off("OPENVM_RVR_INLINE_RECORDS");
+    if opts.execution_kind == RvrExecutionKind::Preflight
+        && std::env::var("OPENVM_RVR_GPU_RECORDS").as_deref() == Ok("compact")
+        && !inline_records
+    {
+        return Err(CompileError::InvalidOptions(
+            "OPENVM_RVR_GPU_RECORDS=compact requires inline record emission",
+        ));
+    }
     let (chips, num_airs) = match opts.execution_kind {
         RvrExecutionKind::Pure | RvrExecutionKind::PureWithInstretTracking => (None, None),
         RvrExecutionKind::Metered
@@ -916,6 +943,7 @@ fn compile_impl<F: PrimeField32>(
             chips.expect("preflight chip mapping checked above"),
             opts.preflight_assembler_admitter,
         );
+        validate_requested_inline_record_shape(&inline_meta)?;
     }
     let inline_meta_elapsed = inline_meta_started.elapsed();
 

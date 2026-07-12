@@ -3252,6 +3252,54 @@ fn rvr_preflight_arena_native_reveal_mixed_air_proves_and_verifies() {
     );
 }
 
+/// G2 precedence + mixed-source invariant: the explicit compact request wins
+/// over default-on arena-native emission, and every ordinary AS=2 and REVEAL
+/// AS=3 row sharing LoadStore remains inline in the compact stream. The host
+/// compact assembler is the CPU oracle for the device decoder's expanded
+/// arena shape, so proving and verification pin the full record semantics.
+#[test]
+fn rvr_preflight_compact_request_reveal_mixed_air_proves_and_verifies() {
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "1");
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "compact");
+
+    let exe = public_values_reveal_differential_exe();
+    let config = Rv64ImConfig::with_public_values_bytes(32);
+    let (vm, _) =
+        VirtualMachine::new_with_keygen(test_cpu_engine(), Rv64ImCpuBuilder, config.clone())
+            .expect("rvr vm init");
+    let loadstore_air = vm
+        .air_names()
+        .position(|name| name.contains("Rv64LoadStoreAdapterAir, LoadStoreCoreAir<8>"))
+        .expect("LoadStore air");
+    let pc_to_air_idx = vm.pc_to_air_idx(&exe).expect("pc to air mapping");
+    let RvrPreflightRoute::Rvr(instance) = vm
+        .preflight_routed_instance(&exe)
+        .expect("compact mixed reveal route")
+    else {
+        panic!("mixed reveal program must route to rvr")
+    };
+    let inline = instance.compiled().inline_records();
+    assert!(
+        inline.arena_native_airs.is_empty(),
+        "compact request must override every arena-native AIR"
+    );
+    assert!(
+        inline.airs.iter().any(|&(air, _)| air == loadstore_air),
+        "LoadStore must emit compact wire records"
+    );
+    for (slot, &air) in pc_to_air_idx.iter().enumerate() {
+        if air == Some(loadstore_air) {
+            assert!(
+                inline.pc_slots[slot],
+                "AS=2/AS=3 LoadStore row at program slot {slot} must emit compact wire"
+            );
+        }
+    }
+
+    let segments = prove_rvr_preflight_and_verify(exe, config);
+    assert_eq!(segments, 1, "mixed LoadStore/REVEAL fixture is one segment");
+}
+
 /// G2 zero-copy oracle: the same compact-compiled program executed twice —
 /// arm A harvests the C-written wire records from the pooled record buffers
 /// (the unstaged path), arm B aims every migrated air at a Dense arena staged
@@ -3265,10 +3313,11 @@ fn rvr_preflight_arena_native_reveal_mixed_air_proves_and_verifies() {
 fn rvr_preflight_compact_wire_staged_matches_pooled() {
     use openvm_circuit::arch::rvr::{preflight::RvrArenaNativeTarget, ChipRecordBuf};
 
-    // Both arms need the compact WIRE emission (the G2 shape): opt out of the
-    // default-on fused emission for the whole test; nextest isolates
-    // processes, so the mutation cannot leak.
-    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
+    // Exercise the production precedence, not the legacy manual opt-out:
+    // an explicit compact GPU request must override default-on arena-native
+    // emission. Nextest isolates this process-local environment mutation.
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "1");
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "compact");
 
     let exe = full_rv64im_matrix_exe();
     let streams = hard_chip_streams(1);
@@ -3292,6 +3341,12 @@ fn rvr_preflight_compact_wire_staged_matches_pooled() {
         panic!("program must route to RVR preflight");
     };
     let wire_airs = instance.compiled().inline_records().airs.clone();
+    let wire_air_set = wire_airs
+        .iter()
+        .map(|&(air, _)| air)
+        .collect::<std::collections::HashSet<_>>();
+    let decode_air_set = crate::rvr_gpu_decode::RvrGpuDecodeState::default()
+        .bind_compact_segment(&exe, &pc_to_air_idx);
     assert!(
         instance
             .compiled()
@@ -3299,6 +3354,10 @@ fn rvr_preflight_compact_wire_staged_matches_pooled() {
             .arena_native_airs
             .is_empty(),
         "compact compile must not report arena-native airs"
+    );
+    assert_eq!(
+        wire_air_set, decode_air_set,
+        "compiler wire AIRs must equal the independently routed GPU decode AIRs"
     );
     // ZG2 explicitly encodes the fixture's ordinary AS=2 LoadStore rows and
     // AS=3 REVEAL row in the same compact stream. No mixed-source AIR may be
