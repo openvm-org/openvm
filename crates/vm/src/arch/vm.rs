@@ -1196,6 +1196,16 @@ where
             interpreter.opcode_counts_by_air::<VB::RecordArena>(),
         );
         let touched_memory = exec_state.vm_state.memory.finalize::<Val<E::SC>>();
+        // Keep the sparse GPU initial-memory image in sync with the state carried to the next
+        // continuation segment. Interpreter preflight writes through TracingMemory, whose
+        // finalized touched blocks are the authoritative record of pages that may now be
+        // non-zero.
+        exec_state
+            .vm_state
+            .memory
+            .data
+            .memory
+            .extend_touched_pages_from_touched(&touched_memory);
         #[cfg(feature = "perf-metrics")]
         end_segment_metrics(&mut exec_state);
 
