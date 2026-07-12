@@ -1258,7 +1258,7 @@ where
                 // internally for its capacity-retry loop, and a guest-state
                 // clone is the dominant per-segment fixed cost (~hundreds of
                 // ms), so it must not be paid twice.
-                #[cfg(feature = "stark-debug")]
+                #[cfg(any(feature = "stark-debug", feature = "cuda"))]
                 let split_t0 = std::time::Instant::now();
                 let capacities = self.preflight_capacities(trace_heights);
                 // R4: stage arena-native targets so the C writes those airs'
@@ -1282,10 +1282,10 @@ where
                     Some(trace_heights),
                     (!targets.is_empty()).then_some(&targets),
                 )?;
-                #[cfg(feature = "stark-debug")]
+                #[cfg(any(feature = "stark-debug", feature = "cuda"))]
                 let split_t1 = std::time::Instant::now();
                 let pc_to_air_idx = self.pc_to_air_idx(exe)?;
-                #[cfg(feature = "stark-debug")]
+                #[cfg(any(feature = "stark-debug", feature = "cuda"))]
                 let split_t2 = std::time::Instant::now();
                 #[cfg(feature = "stark-debug")]
                 if std::env::var("OPENVM_STARK_DEBUG_TRACE_ONLY").as_deref() == Ok("1")
@@ -1362,8 +1362,10 @@ where
                     arena.finish_arena_native(written, &geometry);
                     record_arenas[air] = arena;
                 }
-                #[cfg(feature = "stark-debug")]
-                if std::env::var("OPENVM_STARK_DEBUG_TRACE_ONLY").as_deref() == Ok("1") {
+                #[cfg(any(feature = "stark-debug", feature = "cuda"))]
+                if std::env::var("OPENVM_STARK_DEBUG_TRACE_ONLY").as_deref() == Ok("1")
+                    || std::env::var("OPENVM_GPU_E2E_PROFILE").as_deref() == Ok("1")
+                {
                     let split_t3 = std::time::Instant::now();
                     eprintln!(
                         "OPENVM_STARK_DEBUG_RVR_PREFLIGHT_SPLIT cexec_us={} setup_us={} \
@@ -1926,7 +1928,26 @@ where
                 ..
             } = segment;
             let from_state = Option::take(&mut state).unwrap();
+            #[cfg(feature = "cuda")]
+            let gpu_e2e_profile = std::env::var("OPENVM_GPU_E2E_PROFILE").as_deref() == Ok("1");
+            #[cfg(feature = "cuda")]
+            if gpu_e2e_profile {
+                openvm_cuda_common::stream::device_synchronize().unwrap();
+            }
+            #[cfg(feature = "cuda")]
+            let init_h2d_started = std::time::Instant::now();
+            #[cfg(feature = "cuda")]
+            let init_memory_span =
+                gpu_e2e_profile.then(|| info_span!("gpu_e2e_init_memory_h2d_build").entered());
             vm.transport_init_memory_to_device(&from_state.memory);
+            #[cfg(feature = "cuda")]
+            if gpu_e2e_profile {
+                openvm_cuda_common::stream::device_synchronize().unwrap();
+            }
+            #[cfg(feature = "cuda")]
+            drop(init_memory_span);
+            #[cfg(feature = "cuda")]
+            let init_memory_h2d_build_elapsed = init_h2d_started.elapsed();
             #[cfg(feature = "rvr")]
             let rvr_preflight = if let Some(rvr_preflight) = self.rvr_preflight.as_ref() {
                 rvr_preflight
@@ -1960,7 +1981,7 @@ where
                 };
                 self.rvr_preflight.insert(cached)
             };
-            #[cfg(feature = "stark-debug")]
+            #[cfg(any(feature = "stark-debug", feature = "cuda"))]
             let preflight_started = std::time::Instant::now();
             #[cfg(feature = "rvr")]
             let PreflightExecutionOutput {
@@ -1986,14 +2007,18 @@ where
                 num_insns,
                 &trace_heights,
             )?;
-            #[cfg(feature = "stark-debug")]
+            #[cfg(any(feature = "stark-debug", feature = "cuda"))]
             let preflight_elapsed = preflight_started.elapsed();
             state = Some(to_state);
 
-            #[cfg(feature = "stark-debug")]
+            #[cfg(any(feature = "stark-debug", feature = "cuda"))]
             let tracegen_started = std::time::Instant::now();
             let mut ctx = vm.generate_proving_ctx(system_records, record_arenas)?;
-            #[cfg(feature = "stark-debug")]
+            #[cfg(feature = "cuda")]
+            if gpu_e2e_profile {
+                openvm_cuda_common::stream::device_synchronize().unwrap();
+            }
+            #[cfg(any(feature = "stark-debug", feature = "cuda"))]
             let tracegen_elapsed = tracegen_started.elapsed();
             modify_ctx(seg_idx, &mut ctx);
             #[cfg(feature = "stark-debug")]
@@ -2018,7 +2043,22 @@ where
                 }
                 continue;
             }
+            #[cfg(feature = "cuda")]
+            let prove_started = std::time::Instant::now();
             let proof = vm.engine.prove(vm.pk(), ctx).unwrap();
+            #[cfg(feature = "cuda")]
+            if gpu_e2e_profile {
+                openvm_cuda_common::stream::device_synchronize().unwrap();
+                eprintln!(
+                    "OPENVM_GPU_E2E_SEGMENT_TIMING seg={seg_idx} insns={num_insns} \
+                     init_memory_h2d_build_us={} preflight_us={} \
+                     tracegen_including_h2d_us={} prove_us={}",
+                    init_memory_h2d_build_elapsed.as_micros(),
+                    preflight_elapsed.as_micros(),
+                    tracegen_elapsed.as_micros(),
+                    prove_started.elapsed().as_micros()
+                );
+            }
             proofs.push(proof);
         }
         let to_state = state.unwrap();
