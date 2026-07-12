@@ -168,6 +168,24 @@ pub struct Alu3ArenaFieldOffsets {
     /// `usize::MAX` when the family's core record has no local_opcode field
     /// (single-opcode airs like SRA); the emitter then skips the store.
     pub core_local_opcode: usize,
+    /// Extra adapter fields carried by the RV64 W adapters. Non-W adapters
+    /// leave this unset.
+    pub w: Option<Alu3WArenaFieldOffsets>,
+}
+
+/// W-specific adapter offsets for arena-native alu3 records. Both W adapter
+/// layouts retain the high halves of the source registers and metadata for
+/// the sign-extended 32-bit result.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Alu3WArenaFieldOffsets {
+    pub rs1_high: usize,
+    pub rs2_high: usize,
+    pub result_word_msl: usize,
+    pub result_sign: usize,
+    /// Right shift selecting the result's most-significant word limb.
+    pub result_word_msl_shift: u8,
+    /// Width of that limb in bytes (one for byte adapters, two for u16).
+    pub result_word_msl_bytes: u8,
 }
 
 pub use rvr_openvm_ir::InlineRecordShape;
@@ -182,6 +200,9 @@ pub fn inline_record_shape_for_instr(instr: &Instr) -> Option<InlineRecordShape>
         Instr::AluReg { .. }
         | Instr::AluImm { .. }
         | Instr::ShiftImm { .. }
+        | Instr::AluWReg { .. }
+        | Instr::AluWImm { .. }
+        | Instr::ShiftWImm { .. }
         | Instr::MulDiv { .. }
         | Instr::MulDivW { .. } => Some(InlineRecordShape::Alu3),
         Instr::Lui { .. } | Instr::Auipc { .. } => Some(InlineRecordShape::Wr1),
@@ -379,20 +400,64 @@ pub fn emit_instr(ctx: &mut EmitContext, instr: &Instr) {
             }
         }
         Instr::AluWReg { op, rd, rs1, rs2 } => {
-            let l = ctx.read_reg(*rs1);
-            let r = ctx.read_reg(*rs2);
-            ctx.write_reg(*rd, &alu_w_expr(*op, &l, &r));
+            if ctx.inline_records_enabled() {
+                let local_opcode = match op {
+                    AluOp::Add | AluOp::Sll | AluOp::Sra => 0,
+                    AluOp::Sub | AluOp::Srl => 1,
+                    _ => unreachable!("invalid W register op {op:?}"),
+                };
+                let arena = Some(ArenaAlu3Baked {
+                    rs2_field: (*rs2 as u32) * 8,
+                    rs2_as: 1,
+                    rs2_imm_sign: 0,
+                    local_opcode,
+                });
+                ctx.emit_reg3_inline(*rd, *rs1, *rs2, arena, |l, r| alu_w_expr(*op, l, r));
+            } else {
+                let l = ctx.read_reg(*rs1);
+                let r = ctx.read_reg(*rs2);
+                ctx.write_reg(*rd, &alu_w_expr(*op, &l, &r));
+            }
         }
         Instr::AluWImm { op, rd, rs1, imm } => {
-            let l = ctx.read_reg(*rs1);
-            ctx.trace_immediate();
-            let r = imm_literal(*imm);
-            ctx.write_reg(*rd, &alu_w_expr(*op, &l, &r));
+            if ctx.inline_records_enabled() {
+                let arena = Some(ArenaAlu3Baked {
+                    rs2_field: (*imm as u32) & 0xFF_FFFF,
+                    rs2_as: 0,
+                    rs2_imm_sign: (*imm < 0) as u8,
+                    local_opcode: 0,
+                });
+                ctx.emit_reg2imm_inline(*rd, *rs1, *imm as i64 as u64, arena, |l, r| {
+                    alu_w_expr(*op, l, r)
+                });
+            } else {
+                let l = ctx.read_reg(*rs1);
+                ctx.trace_immediate();
+                let r = imm_literal(*imm);
+                ctx.write_reg(*rd, &alu_w_expr(*op, &l, &r));
+            }
         }
         Instr::ShiftWImm { op, rd, rs1, shamt } => {
-            let v = ctx.read_reg(*rs1);
-            ctx.trace_immediate();
-            ctx.write_reg(*rd, &shift_w_imm_expr(*op, &v, *shamt));
+            if ctx.inline_records_enabled() {
+                let local_opcode = match op {
+                    AluOp::Sll | AluOp::Sra => 0,
+                    AluOp::Srl => 1,
+                    _ => unreachable!("invalid W shift op {op:?}"),
+                };
+                let arena = Some(ArenaAlu3Baked {
+                    rs2_field: u32::from(*shamt),
+                    rs2_as: 0,
+                    rs2_imm_sign: 0,
+                    local_opcode,
+                });
+                ctx.emit_reg2imm_inline(*rd, *rs1, u64::from(*shamt), arena, |v, _| {
+                    shift_w_imm_expr(*op, v, *shamt)
+                });
+            } else {
+                let v = ctx.read_reg(*rs1);
+                ctx.trace_immediate();
+                ctx.write_reg(*rd, &shift_w_imm_expr(*op, &v, *shamt));
+            }
         }
         Instr::MulDiv { op, rd, rs1, rs2 } => {
             emit_muldiv(ctx, *op, *rd, *rs1, *rs2);
@@ -747,7 +812,20 @@ fn muldiv_w_expr(op: MulDivOp, l: &str, r: &str) -> String {
 
 fn emit_muldiv_w(ctx: &mut EmitContext, op: MulDivOp, rd: u8, rs1: u8, rs2: u8) {
     if ctx.inline_records_enabled() {
-        ctx.emit_reg3_inline(rd, rs1, rs2, None, |l, r| muldiv_w_expr(op, l, r));
+        let local_opcode = match op {
+            MulDivOp::Mul | MulDivOp::Div => 0,
+            MulDivOp::Divu => 1,
+            MulDivOp::Rem => 2,
+            MulDivOp::Remu => 3,
+            _ => unreachable!("no W variant for mul op {op:?}"),
+        };
+        let arena = Some(ArenaAlu3Baked {
+            rs2_field: (rs2 as u32) * 8,
+            rs2_as: 0,
+            rs2_imm_sign: 0,
+            local_opcode,
+        });
+        ctx.emit_reg3_inline(rd, rs1, rs2, arena, |l, r| muldiv_w_expr(op, l, r));
         return;
     }
     let l = ctx.read_reg(rs1);

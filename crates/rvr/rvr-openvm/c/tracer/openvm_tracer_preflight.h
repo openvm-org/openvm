@@ -832,7 +832,17 @@ static __attribute__((always_inline)) inline void trace_pc_indexed(
       inline_chip_idx < t->chip_counts_len && t->chip_records != NULL &&
       (t->chip_records[inline_chip_idx].flags &
        PREFLIGHT_RECORD_DIRECT_FINAL) != 0u;
-  if (!direct_final) {
+  bool arena_direct_final =
+      !delta_inline && inline_chip_idx < t->chip_counts_len &&
+      t->chip_records != NULL &&
+      (t->chip_records[inline_chip_idx].flags &
+       PREFLIGHT_RECORD_DIRECT_FINAL) != 0u;
+  /* In combined delta + arena-native mode, retain one lightweight chronology
+   * entry for each arena-native instruction. Its final record is already in
+   * the arena, but the delta decoder must replay its register touches before
+   * reconstructing later compact records' previous timestamps. */
+  bool needs_delta_chronology = t->delta_records != NULL && arena_direct_final;
+  if (!direct_final || needs_delta_chronology) {
     preflight_append_program(t, pc);
   }
 }
