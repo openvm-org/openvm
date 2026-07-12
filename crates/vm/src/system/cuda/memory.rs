@@ -19,8 +19,7 @@ use openvm_instructions::DIGEST_WIDTH;
 use openvm_stark_backend::{
     p3_field::PrimeCharacteristicRing,
     p3_maybe_rayon::prelude::{
-        IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator, ParallelSlice,
-        ParallelSliceMut,
+        IndexedParallelIterator, ParallelIterator, ParallelSlice, ParallelSliceMut,
     },
     prover::AirProvingContext,
 };
