@@ -18,8 +18,8 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ext_ffi_common::{DEFERRAL_COMMIT_NUM_BYTES, DEFERRAL_OUTPUT_KEY_BYTES};
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
 use rvr_openvm_lift::{
-    air_index_to_c, decode_reg, opcode_air_idx, AirIndex, ExtensionError, RvrExtension,
-    RvrExtensionCtx, RvrInstruction, RvrRuntimeExtension,
+    air_index_codegen_fingerprint, air_index_to_c, decode_reg, opcode_air_idx, AirIndex,
+    ExtensionError, RvrExtension, RvrExtensionCtx, RvrInstruction, RvrRuntimeExtension,
 };
 
 /// `(def_idx, output_raw) → output_commit` hasher registered by the host.
@@ -149,6 +149,17 @@ impl DeferralRvrExtension {
 }
 
 impl RvrExtension for DeferralRvrExtension {
+    fn codegen_fingerprint(&self) -> Option<Vec<u8>> {
+        Some(air_index_codegen_fingerprint(
+            b"openvm-deferral-rvr-v1",
+            &[
+                self.call_chip_idx,
+                self.output_chip_idx,
+                self.poseidon2_chip_idx,
+            ],
+        ))
+    }
+
     fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
 

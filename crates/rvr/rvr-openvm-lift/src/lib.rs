@@ -22,8 +22,9 @@ pub use convert::{
     ConvertError,
 };
 pub use extension::{
-    air_index_to_c, opcode_air_idx, AirIndex, ExtensionError, ExtensionRegistry, RvrExtension,
-    RvrExtensionCtx, RvrExtensions, RvrRuntimeExtension, TraceChipIndex, VmRvrExtension,
+    air_index_codegen_fingerprint, air_index_to_c, opcode_air_idx, AirIndex, ExtensionError,
+    ExtensionRegistry, RvrExtension, RvrExtensionCtx, RvrExtensions, RvrRuntimeExtension,
+    TraceChipIndex, VmRvrExtension,
 };
 pub use helpers::{decode_imm_cg, decode_reg};
 pub use instruction::RvrInstruction;
