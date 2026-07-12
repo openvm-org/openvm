@@ -25,8 +25,9 @@
 //! `MADV_HUGEPAGE` advice on the large buffers the same way. Both default on.
 
 use std::{
+    collections::HashMap,
     mem::{ManuallyDrop, MaybeUninit},
-    sync::{LazyLock, Mutex, MutexGuard},
+    sync::{Arc, LazyLock, Mutex, MutexGuard},
 };
 
 use openvm_instructions::riscv::RV64_REGISTER_AS;
@@ -45,11 +46,12 @@ use crate::system::memory::merkle::public_values::PUBLIC_VALUES_AS;
 /// One pool per preflight instance; the proving loop's cached executor and
 /// the routed [`super::preflight::RvrPreflightInstance`] each own one, so the
 /// buffers persist exactly as long as the compiled library they serve.
+#[derive(Clone)]
 pub struct RvrPreflightBufferPool {
     enabled: bool,
     // Boxed to keep the pool (and the instance/route types embedding it)
     // pointer-small; the pool is constructed once per compiled library.
-    inner: Box<Mutex<PoolInner>>,
+    inner: Arc<Mutex<PoolInner>>,
 }
 
 #[derive(Default)]
@@ -64,6 +66,9 @@ struct PoolInner {
     /// Spare inline-record byte buffers, one per migrated chip in steady
     /// state (best-fit take, since per-air capacities differ).
     record_bufs: Vec<Vec<MaybeUninit<u8>>>,
+    /// Direct-final compact backings keyed by AIR. These leave the pool while
+    /// tracegen owns the DenseRecordArena and return from its Drop impl.
+    wire_backings: HashMap<usize, Vec<u8>>,
 }
 
 /// Steady-state spare bound for `record_bufs`; buffers round-trip 1:1 per
@@ -81,7 +86,7 @@ impl RvrPreflightBufferPool {
     pub fn from_env() -> Self {
         Self {
             enabled: !env_flag_is_off("OPENVM_RVR_PREFLIGHT_POOL"),
-            inner: Box::new(Mutex::new(PoolInner::default())),
+            inner: Arc::new(Mutex::new(PoolInner::default())),
         }
     }
 
@@ -201,6 +206,73 @@ impl RvrPreflightBufferPool {
             return;
         }
         push_record_spare(&mut self.lock().record_bufs, buf);
+    }
+
+    /// Allocate and fault in a direct-final wire backing before the segment's
+    /// preflight clock starts. Repeated calls are grow-only no-ops.
+    pub fn prepare_wire_backing(&self, air: usize, len: usize) {
+        if !self.enabled {
+            return;
+        }
+        let mut inner = self.lock();
+        if inner
+            .wire_backings
+            .get(&air)
+            .is_some_and(|backing| backing.len() >= len + 32)
+        {
+            return;
+        }
+        #[cfg(feature = "cuda")]
+        let mut backing = crate::arch::cuda::pinned::take(len + 32);
+        #[cfg(not(feature = "cuda"))]
+        let mut backing = vec![0u8; len + 32];
+        advise_hugepages(backing.as_ptr(), backing.len());
+        // `vec![0]` may be a lazy calloc mapping. A volatile byte per page
+        // makes the fault cost unambiguously one-time and outside preflight.
+        for page in (0..backing.len()).step_by(4096) {
+            unsafe { std::ptr::write_volatile(backing.as_mut_ptr().add(page), 0) };
+        }
+        if let Some(last) = backing.last_mut() {
+            unsafe { std::ptr::write_volatile(last, 0) };
+        }
+        inner.wire_backings.insert(air, backing);
+    }
+
+    pub(crate) fn take_wire_backing(&self, air: usize, len: usize) -> Option<Vec<u8>> {
+        if !self.enabled {
+            return None;
+        }
+        let backing = self.lock().wire_backings.remove(&air)?;
+        assert!(
+            backing.len() >= len + 32,
+            "prepared wire backing for air {air} is too small"
+        );
+        Some(backing)
+    }
+
+    pub(crate) fn recycle_wire_backing(&self, air: usize, backing: Vec<u8>, _dirty_len: usize) {
+        if !self.enabled {
+            return;
+        }
+        #[cfg(feature = "cuda")]
+        {
+            // The pinned pool's cleaner waits for outstanding H2D work,
+            // clears the dirty backing off the preflight path, and returns a
+            // registered size-class buffer for the next prepared segment.
+            crate::arch::cuda::pinned::give_back(backing, _dirty_len);
+            let _ = air;
+            return;
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let mut inner = self.lock();
+            match inner.wire_backings.get(&air) {
+                Some(existing) if existing.len() >= backing.len() => {}
+                _ => {
+                    inner.wire_backings.insert(air, backing);
+                }
+            }
+        }
     }
 
     /// Return a consumed segment output's escaping buffers (the raw logs and

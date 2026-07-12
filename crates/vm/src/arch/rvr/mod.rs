@@ -50,7 +50,8 @@ pub use preflight::{
     rvr_preflight_engine_env_override, ChipRecordBuf, MemoryLogEntry, PreflightRawLogs,
     PreflightTracer, PreflightTracerData, ProgramLogEntry, RvrInlineChipRecords,
     RvrPreflightEngine, RvrPreflightInstance, RvrPreflightOutput, RvrPreflightRoute, TouchedBlock,
-    PREFLIGHT_ADDSUB_RECORD_SIZE, PREFLIGHT_BRANCH2_RECORD_SIZE, PREFLIGHT_INITIAL_TIMESTAMP,
+    PREFLIGHT_ADDSUB_RECORD_SIZE, PREFLIGHT_BRANCH2_RECORD_SIZE,
+    PREFLIGHT_CHIP_RECORD_FLAG_DIRECT_FINAL, PREFLIGHT_INITIAL_TIMESTAMP,
     PREFLIGHT_MEMORY_KIND_READ, PREFLIGHT_MEMORY_KIND_TOUCH, PREFLIGHT_MEMORY_KIND_WRITE,
     PREFLIGHT_RW1_RECORD_SIZE, PREFLIGHT_TRACER_KIND, PREFLIGHT_WR1_RECORD_SIZE,
 };
