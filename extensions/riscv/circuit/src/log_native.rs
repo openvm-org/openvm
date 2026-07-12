@@ -1913,9 +1913,9 @@ fn fill_loadstore_adapter_from_compact<F: PrimeField32>(
 }
 
 /// Inline assembler for the zero-extension loads and the main-memory stores
-/// (the pcs the compile migrates: `Instr::Load`/`Instr::Store`, always
-/// `RV64_MEMORY_AS` — REVEAL lifts through the extension registry and stays
-/// on the log path). Mirrors [`assemble_loadstore`].
+/// (the pcs the compile migrates: main-memory `Instr::Load`/`Instr::Store`
+/// plus extension-lifted public-values REVEAL). Mirrors
+/// [`assemble_loadstore`].
 fn assemble_loadstore_inline<F: PrimeField32, RA: Rv64IRecordArena<F>>(
     arena: &mut RA,
     instruction: &Instruction<F>,
@@ -1929,10 +1929,11 @@ fn assemble_loadstore_inline<F: PrimeField32, RA: Rv64IRecordArena<F>>(
             .local_opcode_idx(Rv64LoadStoreOpcode::CLASS_OFFSET),
     )
     .expect("assembler is registered only for RV64 load/store opcodes");
-    if instruction.e.as_canonical_u32() != RV64_MEMORY_AS {
+    let mem_as = instruction.e.as_canonical_u32();
+    if mem_as != RV64_MEMORY_AS && mem_as != PUBLIC_VALUES_AS {
         return Err(ExecutionError::RvrExecution(format!(
-            "inline load/store at pc {pc:#x} must target main memory, got AS {}",
-            instruction.e.as_canonical_u32()
+            "inline load/store at pc {pc:#x} must target main memory or public values, got AS \
+             {mem_as}"
         )));
     }
     let (adapter_record, core_record): (
@@ -1940,7 +1941,7 @@ fn assemble_loadstore_inline<F: PrimeField32, RA: Rv64IRecordArena<F>>(
         &mut LoadStoreCoreRecord<RV64_REGISTER_NUM_LIMBS>,
     ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64LoadStoreAdapterExecutor>::new());
     let start = fill_loadstore_adapter_from_compact(&compact, instruction, pc, adapter_record);
-    adapter_record.mem_as = RV64_MEMORY_AS as u8;
+    adapter_record.mem_as = mem_as as u8;
     let enabled = instruction.f.is_one();
     let is_load = matches!(
         local_opcode,

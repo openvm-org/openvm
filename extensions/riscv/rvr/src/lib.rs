@@ -14,7 +14,9 @@ use openvm_instructions::{
 };
 use openvm_riscv_transpiler::{Rv64HintStoreOpcode, Rv64LoadStoreOpcode, Rv64Phantom};
 use rand::Rng;
-use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, MemWidth, Reg};
+use rvr_openvm_ir::{
+    ExtEmitCtx, ExtInstr, InlineRecordShape, Instr, InstrAt, LiftedInstr, MemWidth, Reg,
+};
 use rvr_openvm_lift::{
     air_index_to_c, decode_imm_cg, decode_reg, opcode_air_idx, AirIndex, ExtensionError,
     RvrExtension, RvrExtensionCtx, RvrInstruction, RvrRuntimeExtension,
@@ -97,15 +99,36 @@ impl ExtInstr for RevealInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        // Interpreter (LoadStore chip) access order for a store: rs1 (ptr)
-        // register read, then rs2 (src) register read, then the traced
-        // public-values write carrying the stored value.
-        let ptr = ctx.read_reg(self.ptr_reg);
-        let src = ctx.read_reg(self.src_reg);
-        let addr = if self.offset == 0 {
-            ptr.clone()
+        // Full-word REVEAL uses the arena-native LoadStore record. Narrow
+        // public-values stores retain the verbose, width-aware record path.
+        let (src, ptr) = if self.width == MemWidth::Double {
+            ctx.trace_store_u64_as(
+                self.src_reg,
+                self.ptr_reg,
+                self.offset,
+                PUBLIC_VALUES_AS,
+                4, // Rv64LoadStoreOpcode::STORED ordinal
+            )
         } else {
-            format!("({ptr} + 0x{:08x}u)", self.offset)
+            let ptr = ctx.read_reg(self.ptr_reg);
+            let src = ctx.read_reg(self.src_reg);
+            let addr = if self.offset == 0 {
+                ptr.clone()
+            } else {
+                format!("({ptr} + 0x{:08x}u)", self.offset)
+            };
+            let width = self.width.bytes().to_string();
+            ctx.extern_call(
+                "trace_wr_as",
+                &[
+                    "state",
+                    &addr,
+                    &src,
+                    &width,
+                    &format!("{PUBLIC_VALUES_AS}u"),
+                ],
+            );
+            (src, ptr)
         };
         let offset = format!("0x{:08x}u", self.offset);
         let width = self.width.bytes().to_string();
@@ -120,6 +143,10 @@ impl ExtInstr for RevealInstr {
             ],
         );
         ctx.extern_call_without_page_flush("openvm_reveal", &[&src, &ptr, &offset, &width]);
+    }
+
+    fn inline_record_shape(&self) -> Option<InlineRecordShape> {
+        (self.width == MemWidth::Double).then_some(InlineRecordShape::Alu3)
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
