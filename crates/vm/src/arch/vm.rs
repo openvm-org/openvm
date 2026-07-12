@@ -1287,6 +1287,52 @@ where
                 let pc_to_air_idx = self.pc_to_air_idx(exe)?;
                 #[cfg(feature = "stark-debug")]
                 let split_t2 = std::time::Instant::now();
+                #[cfg(feature = "stark-debug")]
+                if std::env::var("OPENVM_STARK_DEBUG_TRACE_ONLY").as_deref() == Ok("1")
+                    && std::env::var("OPENVM_STARK_DEBUG_RVR_AIR_ROUTES").as_deref() == Ok("1")
+                {
+                    let mut routed = vec![[0u64; 3]; self.pk.per_air.len()];
+                    let arena_native = rvr_output
+                        .arena_native_written
+                        .iter()
+                        .map(|&(air, _)| air)
+                        .collect::<std::collections::BTreeSet<_>>();
+                    let pc_base = u64::from(exe.program.pc_base);
+                    let pc_step = u64::from(openvm_instructions::program::DEFAULT_PC_STEP);
+                    for entry in &rvr_output.raw_logs.program_log {
+                        let Some(slot) = entry
+                            .pc
+                            .checked_sub(pc_base)
+                            .map(|offset| (offset / pc_step) as usize)
+                        else {
+                            continue;
+                        };
+                        let Some(air) = pc_to_air_idx.get(slot).copied().flatten() else {
+                            continue;
+                        };
+                        let route = if rvr_output
+                            .inline_pc_slots
+                            .get(slot)
+                            .copied()
+                            .unwrap_or(false)
+                        {
+                            usize::from(!arena_native.contains(&air))
+                        } else {
+                            2
+                        };
+                        routed[air][route] += 1;
+                    }
+                    for (air, [native, compact, verbose]) in routed.into_iter().enumerate() {
+                        if native + compact + verbose == 0 {
+                            continue;
+                        }
+                        eprintln!(
+                            "OPENVM_STARK_DEBUG_RVR_AIR_ROUTE air={air} name={:?} native={} \
+                             compact={} verbose={}",
+                            self.pk.per_air[air].air_name, native, compact, verbose
+                        );
+                    }
+                }
                 let mut record_arenas = self
                     .builder
                     .generate_rvr_record_arenas_from_logs(

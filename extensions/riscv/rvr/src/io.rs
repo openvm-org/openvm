@@ -10,7 +10,8 @@ use openvm_instructions::{
 use openvm_platform::WORD_SIZE;
 use openvm_riscv_transpiler::{Rv64HintStoreOpcode, Rv64LoadStoreOpcode, MAX_HINT_BUFFER_DWORDS};
 use rvr_openvm_ir::{
-    CfgEffect, ExtEmitCtx, ExtInstr, InstrAt, LiftedInstr, MemWidth, PageAddressSpace,
+    CfgEffect, ExtEmitCtx, ExtInstr, InlineRecordShape, InstrAt, LiftedInstr, MemWidth,
+    PageAddressSpace,
 };
 use rvr_openvm_lift::{
     air_index_to_c, max_main_memory_pages_for_contiguous_range, opcode_air_idx, AirIndex,
@@ -116,29 +117,45 @@ impl ExtInstr for RevealInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        // Match the LoadStore adapter order: pointer read, source read, then
-        // the public-values write carrying the stored value.
-        let ptr = ctx.read_var(self.ptr_reg);
-        let src = ctx.read_var(self.src_reg);
-        let addr = match self.offset.cmp(&0) {
+        let addr_from_ptr = |ptr: &str| match self.offset.cmp(&0) {
             std::cmp::Ordering::Less => {
                 format!("({ptr} - 0x{:08x}ull)", self.offset.unsigned_abs())
             }
-            std::cmp::Ordering::Equal => ptr,
+            std::cmp::Ordering::Equal => ptr.to_string(),
             std::cmp::Ordering::Greater => format!("({ptr} + 0x{:08x}ull)", self.offset),
         };
+        let (src, addr) = if self.width == MemWidth::Double {
+            let (src, ptr) = ctx.trace_store_u64_as(
+                self.src_reg,
+                self.ptr_reg,
+                self.offset,
+                PUBLIC_VALUES_AS,
+                4,
+            );
+            (src, addr_from_ptr(&ptr))
+        } else {
+            let ptr = ctx.read_var(self.ptr_reg);
+            let src = ctx.read_var(self.src_reg);
+            let addr = addr_from_ptr(&ptr);
+            let width = self.width.bytes().to_string();
+            ctx.extern_call(
+                "trace_wr_as",
+                &[
+                    "state",
+                    &addr,
+                    &src,
+                    &width,
+                    &format!("{PUBLIC_VALUES_AS}u"),
+                ],
+            );
+            (src, addr)
+        };
         let width = self.width.bytes().to_string();
-        ctx.extern_call(
-            "trace_wr_as",
-            &[
-                "state",
-                &addr,
-                &src,
-                &width,
-                &format!("{PUBLIC_VALUES_AS}u"),
-            ],
-        );
         ctx.emit_checked_call_without_page_flush("openvm_reveal", &[&src, &addr, &width]);
+    }
+
+    fn inline_record_shape(&self) -> Option<InlineRecordShape> {
+        (self.width == MemWidth::Double).then_some(InlineRecordShape::Alu3)
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {

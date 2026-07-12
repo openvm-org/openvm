@@ -404,6 +404,16 @@ static __attribute__((always_inline)) inline uint32_t trace_mem_touch(
   return preflight_touch(state->tracer, AS_MEMORY, block_addr, &timestamp);
 }
 
+/* Touch-only public-values block access for inline REVEAL records. Mirrors
+ * the verbose trace_wr_as_u64 timestamp/shadow/touched bookkeeping without
+ * appending a MemoryLogEntry. */
+static __attribute__((always_inline)) inline uint32_t trace_pv_touch(
+    RvState* restrict state, uint64_t block_addr) {
+  uint32_t timestamp;
+  return preflight_touch(state->tracer, AS_PUBLIC_VALUES, block_addr,
+                         &timestamp);
+}
+
 /* Touch-only register access for opcodes migrated to inline compact records
  * (R3): advances the timestamp and updates the shadow/touched bookkeeping
  * exactly like the logging `trace_reg_*` helpers, but appends no
@@ -702,8 +712,16 @@ static __attribute__((always_inline)) inline void trace_wr_as_u64(
 static __attribute__((always_inline)) inline void trace_wr_as(
     RvState* restrict state, uint64_t addr, uint64_t new_val, uint32_t width,
     uint32_t addr_space) {
+  uint64_t block_addr = preflight_block_addr(addr);
+  uint64_t prev_block =
+      addr_space == AS_PUBLIC_VALUES
+          ? preflight_read_pv_block(state->tracer, block_addr)
+          : 0u;
+  uint64_t block =
+      preflight_patch_mem_block(prev_block, addr, width, new_val);
   preflight_append_memory(state->tracer, PREFLIGHT_MEMORY_KIND_WRITE,
-                          (uint8_t)addr_space, addr, (uint8_t)width, new_val);
+                          (uint8_t)addr_space, block_addr, WORD_SIZE, block,
+                          prev_block);
 }
 
 static __attribute__((always_inline)) inline void trace_pc(

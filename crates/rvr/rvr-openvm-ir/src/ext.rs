@@ -256,6 +256,29 @@ pub trait ExtEmitCtx {
     /// the written value; metered records the page; pure is a no-op.
     fn trace_wr_as_u64(&mut self, addr: &str, val: &str, addr_space: u32);
 
+    /// Emit a full-word store and return the resolved `(src, ptr)` values.
+    /// Preflight overrides this to emit the shared LoadStore compact record.
+    fn trace_store_u64_as(
+        &mut self,
+        src: Variable,
+        ptr: Variable,
+        offset: i32,
+        addr_space: u32,
+        _local_opcode: u8,
+    ) -> (String, String) {
+        let ptr = self.read_var(ptr);
+        let src = self.read_var(src);
+        let addr = match offset.cmp(&0) {
+            std::cmp::Ordering::Less => {
+                format!("({ptr} - 0x{:08x}ull)", offset.unsigned_abs())
+            }
+            std::cmp::Ordering::Equal => ptr.clone(),
+            std::cmp::Ordering::Greater => format!("({ptr} + 0x{offset:08x}ull)"),
+        };
+        self.trace_wr_as_u64(&addr, &src, addr_space);
+        (src, ptr)
+    }
+
     /// Emit a timestamp-only trace tick.
     fn trace_timestamp(&mut self);
 }
