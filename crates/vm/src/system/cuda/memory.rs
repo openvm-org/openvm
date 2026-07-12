@@ -16,7 +16,11 @@ use openvm_cuda_common::{
     stream::GpuDeviceCtx,
 };
 use openvm_instructions::VM_DIGEST_WIDTH;
-use openvm_stark_backend::{p3_field::PrimeCharacteristicRing, prover::AirProvingContext};
+use openvm_stark_backend::{
+    p3_field::PrimeCharacteristicRing,
+    p3_maybe_rayon::prelude::{IntoParallelRefIterator, ParallelIterator},
+    prover::AirProvingContext,
+};
 use tracing::instrument;
 
 use super::{
@@ -193,9 +197,10 @@ impl MemoryInventoryGPU {
                 .finalize_records::<VM_DIGEST_WIDTH>(Vec::new());
             0
         } else {
+            let _span = tracing::info_span!("mem_merge_records").entered();
             // `inventory.cu` merges 4-cell block records into 8-cell leaf records.
             let in_records: Vec<MemoryInventoryRecord<BLOCK_FE_WIDTH, 1>> = partition
-                .iter()
+                .par_iter()
                 .map(|&((addr_space, ptr), ts_values)| MemoryInventoryRecord {
                     address_space: addr_space,
                     ptr,
@@ -259,40 +264,24 @@ impl MemoryInventoryGPU {
             self.boundary
                 .finalize_records_device::<VM_DIGEST_WIDTH>(d_out_records, out_num_records);
 
-            // Send records to memory merkle tree
-            let out_records = self
-                .boundary
-                .records()
-                .to_host_on(&self.device_ctx)
-                .unwrap();
-            let record_words = 2 + BLOCKS_PER_LEAF + VM_DIGEST_WIDTH;
-            let mut merkle_records = Vec::with_capacity(out_num_records);
-            for i in 0..out_num_records {
-                let base = i * record_words;
-                let mut values = [0u32; VM_DIGEST_WIDTH];
-                values.copy_from_slice(
-                    &out_records
-                        [base + 2 + BLOCKS_PER_LEAF..base + 2 + BLOCKS_PER_LEAF + VM_DIGEST_WIDTH],
-                );
-                let timestamp = *out_records[base + 2..base + 2 + BLOCKS_PER_LEAF]
-                    .iter()
-                    .max()
-                    .unwrap();
-                let record = MemoryMerkleRecord {
-                    address_space: out_records[base],
-                    ptr: out_records[base + 1],
-                    timestamp,
-                    values,
-                };
-                merkle_records.push(record);
-            }
-            let merkle_words: &[u32] = unsafe {
-                std::slice::from_raw_parts(
-                    merkle_records.as_ptr() as *const u32,
-                    merkle_records.len() * MERKLE_TOUCHED_BLOCK_WIDTH,
+            // Send records to memory merkle tree: convert boundary-layout
+            // records to Merkle touched-block records on device (the merged
+            // records already live there; a host round-trip would serialize
+            // on the stream and rebuild the buffer one record at a time).
+            let d_merkle_records = DeviceBuffer::<u32>::with_capacity_on(
+                out_num_records * MERKLE_TOUCHED_BLOCK_WIDTH,
+                &self.device_ctx,
+            );
+            unsafe {
+                inventory::to_merkle_records(
+                    self.boundary.records(),
+                    out_num_records,
+                    &d_merkle_records,
+                    self.device_ctx.stream.as_raw(),
                 )
-            };
-            self.merkle_records = Some(merkle_words.to_device_on(&self.device_ctx).unwrap());
+                .expect("inventory_to_merkle_records failed");
+            }
+            self.merkle_records = Some(d_merkle_records);
             out_num_records
         };
 
@@ -302,20 +291,32 @@ impl MemoryInventoryGPU {
             self.unpadded_merkle_height = unpadded_merkle_height;
         }
 
-        self.prepare_poseidon2_records(boundary_records, unpadded_merkle_height);
+        {
+            let _span = tracing::info_span!("poseidon2_prepare").entered();
+            self.prepare_poseidon2_records(boundary_records, unpadded_merkle_height);
+        }
         mem.tracing_info("merkle update");
-        self.merkle_tree.finalize();
-        let merkle_proof_ctx = self.merkle_tree.update_with_touched_blocks(
-            unpadded_merkle_height,
-            self.merkle_records
-                .as_ref()
-                .expect("missing merkle records"),
-            partition.is_empty(),
-        );
+        let merkle_proof_ctx = {
+            let _span = tracing::info_span!("merkle_update").entered();
+            self.merkle_tree.finalize();
+            self.merkle_tree.update_with_touched_blocks(
+                unpadded_merkle_height,
+                self.merkle_records
+                    .as_ref()
+                    .expect("missing merkle records"),
+                partition.is_empty(),
+            )
+        };
         mem.tracing_info("boundary tracegen");
-        let ret = vec![self.boundary.generate_proving_ctx(()), merkle_proof_ctx];
+        let ret = {
+            let _span = tracing::info_span!("boundary_trace_gen").entered();
+            vec![self.boundary.generate_proving_ctx(()), merkle_proof_ctx]
+        };
         mem.tracing_info("dropping merkle tree");
-        self.merkle_tree.drop_subtrees();
+        {
+            let _span = tracing::info_span!("merkle_drop").entered();
+            self.merkle_tree.drop_subtrees();
+        }
         self.initial_memory = Vec::new();
         mem.emit_metrics();
         ret
