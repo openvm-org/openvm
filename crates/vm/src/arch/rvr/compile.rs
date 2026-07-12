@@ -1036,6 +1036,23 @@ fn compile_impl<F: PrimeField32>(
         project.enable_lto = false;
     }
     project.pc_base = u64::from(exe.program.pc_base);
+    let mut next_exec_idx = 0u32;
+    project.pc_to_exec_idx = exe
+        .program
+        .instructions_and_debug_infos
+        .iter()
+        .map(|slot| {
+            if slot.is_some() {
+                let idx = next_exec_idx;
+                next_exec_idx = next_exec_idx
+                    .checked_add(1)
+                    .expect("defined program instruction count exceeds u32");
+                idx
+            } else {
+                u32::MAX
+            }
+        })
+        .collect();
 
     // R3: preflight compiles emit inline compact records (with memory-log
     // suppression) for migrated opcodes by default; OPENVM_RVR_INLINE_RECORDS

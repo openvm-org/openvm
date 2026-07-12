@@ -2996,6 +2996,7 @@ fn rvr_preflight_arena_native_addsub_matches_assembler_matrix() {
                 cap: cap_bytes - cap_bytes % stride,
                 stride,
                 core_off: geom.core_off_matrix as u32,
+                flags: openvm_circuit::arch::rvr::PREFLIGHT_CHIP_RECORD_FLAG_DIRECT_FINAL,
             },
         );
         fused_arenas.push((air, arena));
@@ -3017,10 +3018,13 @@ fn rvr_preflight_arena_native_addsub_matches_assembler_matrix() {
     >(&exe, &mut f_output, &capacities, &pc_to_air_idx)
     .expect("fused-path record arena generation (count oracle)");
 
-    // Tick-model identity across arms.
+    // Direct-final records deliberately suppress their duplicate program-log
+    // entries. The generated execution-frequency buffer is the authoritative
+    // full-program oracle across both arms.
     assert_eq!(
-        a_output.raw_logs.program_log, f_output.raw_logs.program_log,
-        "program logs must be identical across arms"
+        a_output.system_records.filtered_exec_frequencies,
+        f_output.system_records.filtered_exec_frequencies,
+        "execution frequencies must be identical across arms"
     );
 
     // Byte-equality of every fused air's arena over every written row (both
@@ -3126,6 +3130,7 @@ fn rvr_preflight_arena_native_addsub_matches_assembler_dense() {
                 cap: (rows * stride) as u32,
                 stride: stride as u32,
                 core_off: geom.core_off_dense() as u32,
+                flags: openvm_circuit::arch::rvr::PREFLIGHT_CHIP_RECORD_FLAG_DIRECT_FINAL,
             },
         );
         stagings.push((air, stride, backing, base));
@@ -3146,8 +3151,9 @@ fn rvr_preflight_arena_native_addsub_matches_assembler_dense() {
     .expect("fused-path record arena generation (count oracle)");
 
     assert_eq!(
-        a_output.raw_logs.program_log, f_output.raw_logs.program_log,
-        "program logs must be identical across arms"
+        a_output.system_records.filtered_exec_frequencies,
+        f_output.system_records.filtered_exec_frequencies,
+        "execution frequencies must be identical across arms"
     );
 
     // Zero-copy adopt each staged backing, then byte-compare against the
@@ -3294,12 +3300,9 @@ fn rvr_preflight_compact_wire_staged_matches_pooled() {
             .is_empty(),
         "compact compile must not report arena-native airs"
     );
-    // Wire staging requires that NO log-assembled record routes to the air —
-    // the CPU mirror of the GPU decode taint (`bind_compact_segment` never
-    // requests a mixed air). The fixture's REVEAL store keeps the loadstore
-    // air mixed (inline loads/stores + a log-assembled REVEAL row), so it
-    // must stay pooled; staging it would hand the log assembler a wire arena,
-    // which the placeholder capacity guard rejects loudly (pinned here).
+    // ZG2 explicitly encodes the fixture's ordinary AS=2 LoadStore rows and
+    // AS=3 REVEAL row in the same compact stream. No mixed-source AIR may be
+    // tainted back to host assembly.
     let inline_pc_slots = instance.compiled().inline_records().pc_slots.clone();
     let mixed_airs: std::collections::HashSet<usize> = pc_to_air_idx
         .iter()
@@ -3312,8 +3315,8 @@ fn rvr_preflight_compact_wire_staged_matches_pooled() {
         })
         .collect();
     assert!(
-        !mixed_airs.is_empty(),
-        "fixture must keep the REVEAL-mixed loadstore air unstageable"
+        mixed_airs.is_empty(),
+        "ordinary LoadStore and REVEAL rows must both be compact-decodable"
     );
 
     // Arm A: pooled record buffers (target-less execute); the wire bytes are
@@ -3333,8 +3336,8 @@ fn rvr_preflight_compact_wire_staged_matches_pooled() {
         "fixture must emit wire records"
     );
 
-    // Arm B: every fully-inline migrated air staged as a wire target; the
-    // mixed loadstore air stays pooled.
+    // Arm B: every migrated AIR, including mixed-source LoadStore, is staged
+    // as a direct-final wire target.
     let mut staged: Vec<(usize, usize, DenseRecordArena)> = Vec::new();
     let mut targets: BTreeMap<usize, ChipRecordBuf> = BTreeMap::new();
     for &(air, wire_size) in &wire_airs {
@@ -3363,10 +3366,13 @@ fn rvr_preflight_compact_wire_staged_matches_pooled() {
         )
         .expect("staged wire preflight execution");
 
-    // Tick-model identity across arms.
+    // Direct-final staged records intentionally suppress their duplicate
+    // program-log rows. The compile-time-indexed frequency vector remains the
+    // complete program-execution oracle across pooled and staged arms.
     assert_eq!(
-        a_output.raw_logs.program_log, b_output.raw_logs.program_log,
-        "program logs must be identical across arms"
+        a_output.system_records.filtered_exec_frequencies,
+        b_output.system_records.filtered_exec_frequencies,
+        "program execution frequencies must be identical across arms"
     );
 
     // The staged run reports counts through the arena-target channel and the
@@ -3414,8 +3420,8 @@ fn rvr_preflight_compact_wire_staged_matches_pooled() {
         );
     }
 
-    // The mixed (unstaged) airs took the pooled path in arm B too: their wire
-    // bytes must match arm A's, and their arenas host-expand normally.
+    // Any future mixed/unstaged AIR remains a valid fallback oracle, but this
+    // fixture must leave the set empty after explicit REVEAL support.
     for &air in &mixed_airs {
         let b_bytes = b_output
             .inline_records
@@ -3448,7 +3454,9 @@ fn rvr_preflight_compact_wire_staged_matches_pooled() {
 fn rvr_preflight_wire_staged_host_write_checkpoint() {
     use std::time::Instant;
 
-    use openvm_circuit::arch::rvr::{preflight::RvrArenaNativeTarget, ChipRecordBuf};
+    use openvm_circuit::arch::rvr::{
+        preflight::RvrArenaNativeTarget, ChipRecordBuf, RvrPreflightBufferPool,
+    };
 
     let (iters_base, iters_shift, body_adds) = (1024usize, 3usize, 1000usize); // 8192 x 1002
     let exe = checkpoint_loop_exe(iters_base, iters_shift, body_adds);
@@ -3633,6 +3641,10 @@ fn rvr_preflight_wire_staged_host_write_checkpoint() {
             panic!("program must route to RVR preflight");
         };
         let wire_airs = instance.compiled().inline_records().airs.clone();
+        let wire_pool = RvrPreflightBufferPool::from_env();
+        for &(air, wire_size) in &wire_airs {
+            wire_pool.prepare_wire_backing(air, trace_heights[air] as usize * wire_size);
+        }
 
         // Arm W: staged wire targets, records land in their final backing.
         let mut best = f64::MAX;
@@ -3645,10 +3657,13 @@ fn rvr_preflight_wire_staged_host_write_checkpoint() {
             let mut staged: Vec<(usize, usize, DenseRecordArena)> = Vec::new();
             let t0 = Instant::now();
             for &(air, wire_size) in &wire_airs {
-                let (arena, buf) = <DenseRecordArena as RvrArenaNativeTarget>::stage_rvr_wire(
-                    trace_heights[air] as usize,
-                    wire_size,
-                );
+                let (arena, buf) =
+                    <DenseRecordArena as RvrArenaNativeTarget>::stage_rvr_wire_pooled(
+                        trace_heights[air] as usize,
+                        wire_size,
+                        air,
+                        &wire_pool,
+                    );
                 targets.insert(air, buf);
                 staged.push((air, wire_size, arena));
             }

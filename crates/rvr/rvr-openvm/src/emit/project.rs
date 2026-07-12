@@ -12,7 +12,10 @@ use rvr_openvm_lift::{ExtensionRegistry, TraceChipIndex};
 use rvr_state::NUM_REGS;
 
 use super::{
-    codegen::{emit_terminator, TermCtx},
+    codegen::{
+        emit_terminator, inline_record_shape_for_terminator, instr_emits_inline_record,
+        TermCtx,
+    },
     context::{validate_chip_index, BlockAbi, EmitContext, EmitMode, InvalidChipIndex},
 };
 use crate::constants::constants_header;
@@ -200,6 +203,9 @@ pub struct CProject {
     /// Index i = chip for PC = pc_base + i*4.
     /// `None` in pure mode (no chip metadata requested); must be set in metered modes.
     pub pc_to_chip: Option<Vec<TraceChipIndex>>,
+    /// Per-program-slot filtered execution-frequency index (`u32::MAX` for
+    /// holes). ZG2 bakes this into each preflight `trace_pc_indexed` call.
+    pub pc_to_exec_idx: Vec<u32>,
     /// Program PC base (used to compute pc_to_chip index).
     pub pc_base: u64,
     /// Per-AIR widths for MeteredCost precomputation. Indexed by chip index.
@@ -233,6 +239,7 @@ impl CProject {
             blocks_per_partition: 512,
             enable_lto: true,
             pc_to_chip: None,
+            pc_to_exec_idx: Vec::new(),
             pc_base: 0,
             chip_widths: None,
             num_airs: None,
@@ -525,6 +532,14 @@ impl CProject {
             .get((offset / 4) as usize)
             .copied()
             .unwrap_or(TraceChipIndex::NoChip)
+    }
+
+    fn exec_idx_for_pc(&self, pc: u64) -> u32 {
+        let slot = ((pc - self.pc_base) / 4) as usize;
+        *self
+            .pc_to_exec_idx
+            .get(slot)
+            .unwrap_or_else(|| panic!("pc {pc:#x} outside execution-frequency map"))
     }
 
     /// Write all C project files.
@@ -877,7 +892,11 @@ impl CProject {
                 };
                 ctx.set_current_instr(chip_idx, instr_at.pc);
             }
-            ctx.trace_pc(instr_at.pc);
+            ctx.trace_pc(
+                instr_at.pc,
+                self.exec_idx_for_pc(instr_at.pc),
+                inline_records && instr_emits_inline_record(&instr_at.instr),
+            );
             instr_at.instr.emit_c(&mut ctx);
             Self::emit_context_scope(&mut body, &mut ctx);
             body.push('\n');
@@ -886,21 +905,26 @@ impl CProject {
         ctx.flush_page_locals();
         Self::emit_context_scope(&mut body, &mut ctx);
 
-        if !matches!(block.terminator, Terminator::FallThrough) {
+        let has_terminator_instruction = !matches!(block.terminator, Terminator::FallThrough);
+        if has_terminator_instruction {
             self.emit_source_annotation(
                 &mut body,
                 block.terminator_pc,
                 block.terminator.opname(),
                 block.terminator_source_loc.as_ref(),
             );
-            ctx.trace_pc(block.terminator_pc);
-        }
-        if inline_records {
-            let chip_idx = match self.chip_idx_for_pc(block.terminator_pc) {
-                TraceChipIndex::Chip(air) => air.as_u32(),
-                TraceChipIndex::NoChip => u32::MAX,
-            };
-            ctx.set_current_instr(chip_idx, block.terminator_pc);
+            if inline_records {
+                let chip_idx = match self.chip_idx_for_pc(block.terminator_pc) {
+                    TraceChipIndex::Chip(air) => air.as_u32(),
+                    TraceChipIndex::NoChip => u32::MAX,
+                };
+                ctx.set_current_instr(chip_idx, block.terminator_pc);
+            }
+            ctx.trace_pc(
+                block.terminator_pc,
+                self.exec_idx_for_pc(block.terminator_pc),
+                inline_records && inline_record_shape_for_terminator(&block.terminator).is_some(),
+            );
         }
         let tc = TermCtx { valid_blocks };
         emit_terminator(&mut ctx, &block.terminator, block.terminator_pc, &tc);

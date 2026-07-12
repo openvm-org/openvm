@@ -212,6 +212,7 @@ __device__ __forceinline__ uint8_t rvr_u8_limb(uint32_t const (&words)[2], size_
 // Loadstore-format flags (per-format interpretation of the flag byte; the
 // loadstore family never sets the jal/jalr bits and vice versa).
 static constexpr uint8_t RVR_OPERAND_FLAG_LS_IMM_SIGN = 1 << 5;
+static constexpr uint8_t RVR_OPERAND_FLAG_LS_PUBLIC_VALUES = 1 << 4;
 static constexpr uint8_t RVR_OPERAND_FLAG_LS_IS_LOAD = 1 << 3;
 static constexpr uint8_t RVR_OPERAND_FLAG_LS_IS_BYTE = 1 << 6;
 static constexpr uint8_t RVR_OPERAND_FLAG_LS_IS_WORD = 1 << 7;
@@ -337,7 +338,7 @@ __device__ __forceinline__ Rv64LoadStoreAdapterRecord rvr_decode_alu3_loadstore_
     uint32_t const ptr = rs1_val + rvr_sign_extend_imm16(out.imm, imm_sign);
     shift_amount = (uint8_t)(ptr & (RV64_REGISTER_NUM_LIMBS - 1));
     out.read_data_aux.prev_timestamp = rec.reads_prev_timestamp[1];
-    out.mem_as = 2; // RV64_MEMORY_AS: inline load/store always targets main memory
+    out.mem_as = (entry.flags & RVR_OPERAND_FLAG_LS_PUBLIC_VALUES) ? 3 : 2;
     out.rd_rs2_ptr = UINT32_MAX;
     out.write_prev_timestamp = 0;
     return out;

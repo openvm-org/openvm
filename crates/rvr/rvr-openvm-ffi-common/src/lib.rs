@@ -36,9 +36,10 @@ pub const PREFLIGHT_MEMORY_LOG_ENTRY_ALIGN: usize = 8;
 // R1: the tracer gained per-address-space timestamp-shadow pointers, a
 // public-values base pointer (for `prev_value` reads on reveal writes), a
 // touched-block buffer, and its length/capacity counters.
-// R3: the tracer gained a `chip_records` pointer (appended at the end so no
-// existing field offsets shift) for inline compact per-chip record emission.
-pub const PREFLIGHT_TRACER_DATA_SIZE: usize = 104;
+// R3: the tracer gained a `chip_records` pointer for inline compact per-chip
+// record emission. ZG2 adds a direct execution-frequency buffer after it so
+// final-form records need no duplicate program-log row or host frequency scan.
+pub const PREFLIGHT_TRACER_DATA_SIZE: usize = 120;
 pub const PREFLIGHT_TRACER_DATA_ALIGN: usize = 8;
 /// One entry in the preflight touched-block buffer: the address space and the
 /// block-aligned byte address of a block touched (for the first time) this
@@ -53,8 +54,11 @@ pub const PREFLIGHT_TOUCHED_BLOCK_ALIGN: usize = 4;
 // buffers use stride == packed record size, arena-native buffers use the
 // arena row/record pitch. A null `base` means the chip is not migrated to
 // inline records (it uses the verbose memory log instead).
-pub const PREFLIGHT_CHIP_RECORD_BUF_SIZE: usize = 24;
+pub const PREFLIGHT_CHIP_RECORD_BUF_SIZE: usize = 32;
 pub const PREFLIGHT_CHIP_RECORD_BUF_ALIGN: usize = 8;
+/// Generated C writes this target in final consumer form. Its duplicate
+/// program-log row and all host adoption/assembly are suppressed.
+pub const PREFLIGHT_CHIP_RECORD_FLAG_DIRECT_FINAL: u32 = 1;
 /// Byte size of one compact base-ALU AddSub record as stored by the preflight
 /// tracer (R3 L1+L5): the dynamic witness only — from_pc, from_timestamp, the
 /// three access prev_timestamps, the old rd block, and the b/c operand limbs.

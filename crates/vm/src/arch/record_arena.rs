@@ -184,6 +184,8 @@ pub struct DenseRecordArena {
     /// on the arena so the mode travels WITH the data — a segment-global flag
     /// can diverge from per-arena reality (tainted AIRs, multiple builders).
     pub rvr_wire: bool,
+    #[cfg(feature = "rvr")]
+    pub(crate) rvr_recycle: Option<(usize, crate::arch::rvr::RvrPreflightBufferPool)>,
 }
 
 const MAX_ALIGNMENT: usize = 32;
@@ -209,6 +211,24 @@ impl DenseRecordArena {
         Self {
             records_buffer: cursor,
             rvr_wire: false,
+            #[cfg(feature = "rvr")]
+            rvr_recycle: None,
+        }
+    }
+
+    #[cfg(feature = "rvr")]
+    pub(crate) fn from_recycled_wire_backing(
+        backing: Vec<u8>,
+        air: usize,
+        pool: crate::arch::rvr::RvrPreflightBufferPool,
+    ) -> Self {
+        let offset = (MAX_ALIGNMENT - (backing.as_ptr() as usize % MAX_ALIGNMENT)) % MAX_ALIGNMENT;
+        let mut cursor = Cursor::new(backing);
+        cursor.set_position(offset as u64);
+        Self {
+            records_buffer: cursor,
+            rvr_wire: false,
+            rvr_recycle: Some((air, pool)),
         }
     }
 
@@ -294,7 +314,7 @@ impl DenseRecordArena {
     /// [`Self::from_prewritten`] later re-derives and verifies the same
     /// offset.
     pub fn backing_with_capacity(size_bytes: usize) -> (Vec<u8>, usize) {
-        let buffer = vec![0; size_bytes + MAX_ALIGNMENT];
+        let buffer = Self::new_buffer(size_bytes);
         let offset = (MAX_ALIGNMENT - (buffer.as_ptr() as usize % MAX_ALIGNMENT)) % MAX_ALIGNMENT;
         (buffer, offset)
     }
@@ -333,15 +353,26 @@ impl DenseRecordArena {
         Self {
             records_buffer: cursor,
             rvr_wire: false,
+            #[cfg(feature = "rvr")]
+            rvr_recycle: None,
         }
     }
 }
 
-#[cfg(feature = "cuda")]
 impl Drop for DenseRecordArena {
     fn drop(&mut self) {
-        let dirty_len = self.records_buffer.position() as usize;
-        pinned::give_back(std::mem::take(self.records_buffer.get_mut()), dirty_len);
+        #[cfg(feature = "rvr")]
+        if let Some((air, pool)) = self.rvr_recycle.take() {
+            let dirty_len = self.records_buffer.position() as usize;
+            let backing = std::mem::take(self.records_buffer.get_mut());
+            pool.recycle_wire_backing(air, backing, dirty_len);
+            return;
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let dirty_len = self.records_buffer.position() as usize;
+            pinned::give_back(std::mem::take(self.records_buffer.get_mut()), dirty_len);
+        }
     }
 }
 
