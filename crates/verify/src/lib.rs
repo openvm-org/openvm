@@ -88,10 +88,19 @@ pub fn verify_vm_stark_proof_decoded(
     vk: &VmStarkVerifyingKey,
     proof: &VmStarkProof,
 ) -> Result<(), VerifyStarkError> {
+    let verify_started = (std::env::var("OPENVM_GPU_E2E_PROFILE").as_deref() == Ok("1"))
+        .then(std::time::Instant::now);
     // Verify the STARK proof.
     let engine = BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(vk.mvk.inner.params.clone());
     engine.verify(&vk.mvk, &proof.inner)?;
-    verify_vm_stark_proof_pvs(vk, proof)
+    verify_vm_stark_proof_pvs(vk, proof)?;
+    if let Some(verify_started) = verify_started {
+        eprintln!(
+            "OPENVM_GPU_E2E_VERIFY_US={}",
+            verify_started.elapsed().as_micros()
+        );
+    }
+    Ok(())
 }
 
 pub fn verify_vm_stark_proof_pvs(
