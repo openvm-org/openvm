@@ -170,20 +170,7 @@ pub struct Alu3ArenaFieldOffsets {
     pub core_local_opcode: usize,
 }
 
-/// Compact inline-record wire shapes (R3). Each migrated instruction class
-/// stores exactly its dynamic witness; the host re-derives program-redundant
-/// operands from the instruction at `from_pc`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum InlineRecordShape {
-    /// 2 reads + 1 write, single row (base ALU, Mul family): 44 bytes.
-    Alu3,
-    /// 2 reads, no write (branches): 32 bytes.
-    Branch2,
-    /// 1 (conditional) write (JalLui, Auipc): 20 bytes.
-    Wr1,
-    /// 1 read + 1 conditional write (Jalr): 32 bytes.
-    Rw1,
-}
+pub use rvr_openvm_ir::InlineRecordShape;
 
 /// The compact shape preflight codegen emits for a body instruction, or
 /// `None` when the instruction stays on the verbose-log path. The single
@@ -199,10 +186,9 @@ pub fn inline_record_shape_for_instr(instr: &Instr) -> Option<InlineRecordShape>
         | Instr::MulDivW { .. } => Some(InlineRecordShape::Alu3),
         Instr::Lui { .. } | Instr::Auipc { .. } => Some(InlineRecordShape::Wr1),
         // Main-memory loads/stores share the alu3 witness (rs1 value, block
-        // read value / rs2 value, previous rd / block value). Public-values
-        // stores (REVEAL) lift through the extension registry and stay on the
-        // verbose-log path.
+        // read value / rs2 value, previous rd / block value).
         Instr::Load { .. } | Instr::Store { .. } => Some(InlineRecordShape::Alu3),
+        Instr::Ext(ext) => ext.inline_record_shape(),
         _ => None,
     }
 }

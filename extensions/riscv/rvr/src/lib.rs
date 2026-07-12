@@ -15,7 +15,7 @@ use openvm_riscv_transpiler::{Rv64HintStoreOpcode, Rv64LoadStoreOpcode, Rv64Phan
 use openvm_stark_backend::p3_field::PrimeField32;
 use rand::Rng;
 use rvr_openvm_ext_ffi_common::AS_PUBLIC_VALUES;
-use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
+use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, InlineRecordShape, Instr, InstrAt, LiftedInstr, Reg};
 use rvr_openvm_lift::{
     air_index_to_c, decode_imm_cg, decode_reg, opcode_air_idx, AirIndex, ExtensionError,
     RvrExtension, RvrExtensionCtx,
@@ -98,18 +98,22 @@ impl ExtInstr for RevealInstr {
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         // Interpreter (LoadStore chip) access order for a store: rs1 (ptr)
-        // register read, then rs2 (src) register read, then the traced
-        // public-values write carrying the stored value.
-        let ptr = ctx.read_reg(self.ptr_reg);
-        let src = ctx.read_reg(self.src_reg);
-        let addr = if self.offset == 0 {
-            ptr.clone()
-        } else {
-            format!("({ptr} + 0x{:08x}u)", self.offset)
-        };
-        ctx.trace_wr_as_u64(&addr, &src, AS_PUBLIC_VALUES);
+        // register read, then rs2 (src) register read, then the public-values
+        // write. Preflight emits the LoadStore row inline; other modes use
+        // the verbose trace default.
+        let (src, ptr) = ctx.trace_store_u64_as(
+            self.src_reg,
+            self.ptr_reg,
+            self.offset,
+            AS_PUBLIC_VALUES,
+            4, // Rv64LoadStoreOpcode::STORED ordinal
+        );
         let offset = format!("0x{:08x}u", self.offset);
         ctx.extern_call("openvm_reveal", &[&src, &ptr, &offset]);
+    }
+
+    fn inline_record_shape(&self) -> Option<InlineRecordShape> {
+        Some(InlineRecordShape::Alu3)
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
