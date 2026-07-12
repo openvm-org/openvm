@@ -389,15 +389,12 @@ pub fn generate_record_arenas_from_logs_with_compact<F: PrimeField32, RA: Arena>
 ) -> Result<(Vec<RA>, Vec<RvrInlineChipRecords>), ExecutionError> {
     let inline_records = std::mem::take(&mut output.inline_records);
     let inline_pc_slots = output.inline_pc_slots.clone();
-    // R4: airs whose records the C already wrote arena-native into
-    // caller-provided backings. Assembly is skipped for them; this loop only
-    // counts their program-log occurrences to verify the C wrote exactly one
-    // record per retired instruction. Their arenas in the returned Vec stay
-    // empty — the caller substitutes the adopted/pre-built arena.
+    // Airs whose records C already wrote into direct-final caller backings.
+    // ZG2 suppresses their duplicate program-log entries entirely; the C
+    // cursor is the exact record-count oracle and the caller substitutes the
+    // finished arena into the empty placeholder below.
     let arena_native_expected: HashMap<usize, u32> =
         output.arena_native_written.iter().copied().collect();
-    let mut arena_native_counts: HashMap<usize, u32> =
-        arena_native_expected.keys().map(|&air| (air, 0)).collect();
     // Compact-aware capacity map: airs whose arenas the caller substitutes —
     // C-staged (arena-native or wire targets) or compact-adopted — get a
     // zero-capacity placeholder. A full-size arena here would be allocated,
@@ -448,10 +445,6 @@ pub fn generate_record_arenas_from_logs_with_compact<F: PrimeField32, RA: Arena>
             ))
         })?;
         if inline_pc_slots.get(slot_idx).copied().unwrap_or(false) {
-            if let Some(count) = arena_native_counts.get_mut(&air_idx) {
-                *count += 1;
-                continue;
-            }
             let registered = registry
                 .inline_assemblers
                 .get(&instruction.opcode)
@@ -499,18 +492,6 @@ pub fn generate_record_arenas_from_logs_with_compact<F: PrimeField32, RA: Arena>
             continue;
         }
         registry.assemble(arena, &access, instruction, pc, program_entry.timestamp)?;
-    }
-
-    // R4: every arena-native air must have written exactly one record per
-    // program-log occurrence (the arena-position analogue of the compact
-    // exact-consumption check below).
-    for (&air_idx, &expected) in &arena_native_expected {
-        let counted = arena_native_counts[&air_idx];
-        if counted != expected {
-            return Err(rvr_error(format!(
-                "arena-native air {air_idx} wrote {expected} records but the program log has                  {counted} (record dropped or duplicated in C?)"
-            )));
-        }
     }
 
     // Every compact buffer must be consumed exactly.

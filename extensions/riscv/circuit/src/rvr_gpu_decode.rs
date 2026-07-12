@@ -60,6 +60,9 @@ pub const OPERAND_FLAG_WRITE_ENABLED: u8 = 1 << 2;
 pub const OPERAND_FLAG_IS_JAL: u8 = 1 << 3;
 /// rw1 (Jalr): the immediate sign bit (`g != 0`).
 pub const OPERAND_FLAG_JALR_IMM_SIGN: u8 = 1 << 4;
+/// loadstore: target public values (REVEAL) instead of main memory. Bit 4 is
+/// format-local and does not overlap another loadstore flag.
+pub const OPERAND_FLAG_LS_PUBLIC_VALUES: u8 = 1 << 4;
 /// loadstore: the 16-bit immediate sign bit (`g != 0`).
 pub const OPERAND_FLAG_LS_IMM_SIGN: u8 = 1 << 5;
 /// loadstore: zero-extension load (vs store); per-format reuse of bit 3.
@@ -161,10 +164,9 @@ impl RvrGpuDecodeState {
                 *table = Some(build_operand_table(exe, exe_key));
             }
         }
-        // An AIR is compact only if EVERY pc routed to it is device-decodable;
-        // a single non-decodable pc (e.g. a REVEAL store sharing the loadstore
-        // AIR) taints the AIR back to the expanded path, since its arena would
-        // otherwise mix wire records with log-assembled ones.
+        // An AIR is compact only if EVERY pc routed to it is device-decodable.
+        // LoadStore explicitly represents both AS=2 ordinary rows and AS=3
+        // REVEAL rows, avoiding a whole-AIR substitution for mixed sources.
         let mut tainted = HashSet::new();
         for (slot_idx, slot) in exe.program.instructions_and_debug_infos.iter().enumerate() {
             let Some((instruction, _)) = slot else {
@@ -356,14 +358,16 @@ fn gpu_decode_entry<F: PrimeField32>(instruction: &Instruction<F>) -> Option<Dev
         });
     }
 
-    // alu3 over the LoadStore adapter (zero-ext loads, stores, sign-ext loads).
-    // Only main-memory targets are device-decodable; REVEAL stores
-    // (e = PUBLIC_VALUES_AS) return None and taint their AIR to expanded.
+    // alu3 over the LoadStore adapter (zero-ext loads, stores, sign-ext loads,
+    // and AS=3 REVEAL stores sharing the same AIR).
     let ls_local = opcode
         .checked_sub(Rv64LoadStoreOpcode::CLASS_OFFSET)
         .and_then(|local| Rv64LoadStoreOpcode::from_repr(local).map(|_| local as u8));
     if let Some(local_opcode) = ls_local {
-        if instruction.e.as_canonical_u32() != openvm_instructions::riscv::RV64_MEMORY_AS {
+        let mem_as = instruction.e.as_canonical_u32();
+        if mem_as != openvm_instructions::riscv::RV64_MEMORY_AS
+            && mem_as != openvm_instructions::PUBLIC_VALUES_AS
+        {
             return None;
         }
         let op = Rv64LoadStoreOpcode::from_repr(local_opcode as usize)
@@ -374,6 +378,9 @@ fn gpu_decode_entry<F: PrimeField32>(instruction: &Instruction<F>) -> Option<Dev
         }
         if !instruction.g.is_zero() {
             flags |= OPERAND_FLAG_LS_IMM_SIGN;
+        }
+        if mem_as == openvm_instructions::PUBLIC_VALUES_AS {
+            flags |= OPERAND_FLAG_LS_PUBLIC_VALUES;
         }
         match op {
             Rv64LoadStoreOpcode::LOADD

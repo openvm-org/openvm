@@ -94,7 +94,10 @@ typedef struct ChipRecordBuf {
   /* R4 arena-native: byte offset of the core record within each record slot
    * (adapter fields sit at offset 0). Zero in compact-wire mode. */
   uint32_t core_off;
+  uint32_t flags;
 } ChipRecordBuf;
+
+static constexpr uint32_t PREFLIGHT_RECORD_DIRECT_FINAL = 1u;
 
 typedef struct Tracer {
   ProgramLogEntry* program_log;
@@ -121,6 +124,10 @@ typedef struct Tracer {
   /* R3: array of `chip_counts_len` per-chip inline-record buffers, indexed by
    * chip (AIR) index. Appended last so R1 field offsets are unchanged. */
   ChipRecordBuf* chip_records;
+  /* ZG2: compile-time-indexed execution frequencies. Direct-final inline
+   * records increment this array without emitting a duplicate program log. */
+  uint32_t* exec_frequencies;
+  uint32_t exec_frequencies_len;
 } Tracer;
 
 _Static_assert(sizeof(ProgramLogEntry) == PREFLIGHT_PROGRAM_LOG_ENTRY_SIZE,
@@ -203,6 +210,10 @@ _Static_assert(offsetof(Tracer, timestamp) == 92,
                "Tracer timestamp offset drift");
 _Static_assert(offsetof(Tracer, chip_records) == 96,
                "Tracer chip_records offset drift");
+_Static_assert(offsetof(Tracer, exec_frequencies) == 104,
+               "Tracer exec_frequencies offset drift");
+_Static_assert(offsetof(Tracer, exec_frequencies_len) == 112,
+               "Tracer exec_frequencies_len offset drift");
 _Static_assert(sizeof(ChipRecordBuf) == PREFLIGHT_CHIP_RECORD_BUF_SIZE,
                "ChipRecordBuf size drift");
 _Static_assert(_Alignof(ChipRecordBuf) == PREFLIGHT_CHIP_RECORD_BUF_ALIGN,
@@ -217,6 +228,8 @@ _Static_assert(offsetof(ChipRecordBuf, stride) == 16,
                "ChipRecordBuf stride offset drift");
 _Static_assert(offsetof(ChipRecordBuf, core_off) == 20,
                "ChipRecordBuf core_off offset drift");
+_Static_assert(offsetof(ChipRecordBuf, flags) == 24,
+               "ChipRecordBuf flags offset drift");
 
 /* R3 (L1+L5 compact): base-ALU AddSub record holding the dynamic witness
  * only. Program-redundant operands (rd_ptr/rs1_ptr/rs2/rs2_as/rs2_imm_sign/
@@ -454,8 +467,7 @@ static __attribute__((always_inline)) inline void preflight_emit_alu3(
   }
   buf->len = off + buf->stride;
   /* The 44-byte record is exactly 11 u32 words: the u16 limb arrays are the
-   * low/high halves of the u64 values they were split from, so the whole
-   * record streams as non-temporal u32 stores (see nt_store_u32). */
+   * low/high halves of the u64 values they were split from. */
   uint32_t* restrict words = (uint32_t*)(buf->base + off);
   nt_store_u32(&words[0], from_pc);
   nt_store_u32(&words[1], from_timestamp);
@@ -727,6 +739,28 @@ static __attribute__((always_inline)) inline void trace_wr_as(
 static __attribute__((always_inline)) inline void trace_pc(
     RvState* restrict state, uint64_t pc) {
   preflight_append_program(state->tracer, pc);
+}
+
+/* ZG2 single-pass dispatch accounting. Every instruction increments its
+ * compile-time filtered program index. An inline instruction whose chip
+ * target is DIRECT_FINAL already carries its pc/timestamp in the final wire
+ * stream, so the duplicate ProgramLogEntry is suppressed. Pooled/unstaged
+ * compact records keep the log because host expansion still consumes it. */
+static __attribute__((always_inline)) inline void trace_pc_indexed(
+    RvState* restrict state, uint64_t pc, uint32_t exec_idx,
+    uint32_t inline_chip_idx) {
+  Tracer* restrict t = state->tracer;
+  if (likely(t->exec_frequencies != NULL &&
+             exec_idx < t->exec_frequencies_len)) {
+    t->exec_frequencies[exec_idx]++;
+  }
+  bool direct_final =
+      inline_chip_idx < t->chip_counts_len && t->chip_records != NULL &&
+      (t->chip_records[inline_chip_idx].flags &
+       PREFLIGHT_RECORD_DIRECT_FINAL) != 0u;
+  if (!direct_final) {
+    preflight_append_program(t, pc);
+  }
 }
 
 static __attribute__((always_inline)) inline void trace_chip(

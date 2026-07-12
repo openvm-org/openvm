@@ -1359,9 +1359,20 @@ impl<'a> EmitContext<'a> {
         }
     }
 
-    /// Emit a PC read when value tracing is enabled.
-    pub fn trace_pc(&mut self, pc: u64) {
-        if self.mode.traces_values() {
+    /// Emit a trace_pc call. Per-instruction chip accounting is rolled into
+    /// the per-block chip update emitted at block entry by
+    /// `CProject::emit_block_function`, not here.
+    pub fn trace_pc(&mut self, pc: u64, exec_idx: u32, single_pass_inline: bool) {
+        if self.mode == EmitMode::ValueTrace {
+            let inline_chip = if single_pass_inline {
+                self.current_chip_idx
+            } else {
+                u32::MAX
+            };
+            self.write_line(&format!(
+                "trace_pc_indexed(state, 0x{pc:08x}ull, {exec_idx}u, {inline_chip}u);"
+            ));
+        } else {
             self.write_line(&format!("trace_pc(state, 0x{pc:08x}ull);"));
         }
     }

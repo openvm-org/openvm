@@ -127,6 +127,18 @@ trait CachedRvrPreflightExecutor<F>: Send + Sync {
     /// R3/G2: `(air, packed wire record size)` for every air the compiled
     /// library emits inline compact records for.
     fn inline_wire_airs(&self) -> &[(usize, usize)];
+
+    /// VmExe-keyed static PC-to-AIR route, built once with the compiled
+    /// preflight executor rather than once per continuation segment.
+    fn pc_to_air_idx(&self) -> &[Option<usize>];
+
+    fn wire_airs(&self) -> &[usize];
+
+    fn buffer_pool(&self) -> &RvrPreflightBufferPool;
+
+    /// Grow and fault in all direct-final compact backings before the timed
+    /// per-segment preflight call.
+    fn prepare_wire_backings(&self, trace_heights: &[u32]);
 }
 
 /// The program-dependent, owned pieces of an rvr preflight instance.
@@ -136,6 +148,8 @@ struct CachedRvrCompiledPreflight {
     runtime_hooks: Vec<Box<dyn RvrRuntimeExtension>>,
     chip_counts_len: usize,
     pool: RvrPreflightBufferPool,
+    pc_to_air_idx: Vec<Option<usize>>,
+    wire_airs: Vec<usize>,
 }
 
 #[cfg(feature = "rvr")]
@@ -174,6 +188,33 @@ impl<F: PrimeField32> CachedRvrPreflightExecutor<F> for CachedRvrCompiledPreflig
 
     fn inline_wire_airs(&self) -> &[(usize, usize)] {
         &self.compiled.inline_records().airs
+    }
+
+    fn pc_to_air_idx(&self) -> &[Option<usize>] {
+        &self.pc_to_air_idx
+    }
+
+    fn wire_airs(&self) -> &[usize] {
+        &self.wire_airs
+    }
+
+    fn buffer_pool(&self) -> &RvrPreflightBufferPool {
+        &self.pool
+    }
+
+    fn prepare_wire_backings(&self, trace_heights: &[u32]) {
+        for &air in &self.wire_airs {
+            let wire_size = self
+                .compiled
+                .inline_records()
+                .airs
+                .iter()
+                .find(|&&(wire_air, _)| wire_air == air)
+                .map(|&(_, size)| size)
+                .expect("cached wire air missing compiled record size");
+            self.pool
+                .prepare_wire_backing(air, trace_heights[air] as usize * wire_size);
+        }
     }
 }
 
@@ -1269,7 +1310,7 @@ where
                 #[cfg(any(feature = "stark-debug", feature = "cuda"))]
                 let split_t0 = std::time::Instant::now();
                 let capacities = self.preflight_capacities(trace_heights);
-                let pc_to_air_idx = self.pc_to_air_idx(exe)?;
+                let pc_to_air_idx = rvr_preflight.pc_to_air_idx();
                 // R4: stage arena-native targets so the C writes those airs'
                 // full records directly into their final arena backings.
                 let arena_native = rvr_preflight.arena_native_airs().to_vec();
@@ -1291,13 +1332,11 @@ where
                 // compact: wire-staging a fused-compiled air would hand the C
                 // a wire-stride descriptor for full-record emission, so the
                 // toggle mismatch fails here instead of corrupting records.
-                let wire_airs =
-                    self.builder
-                        .rvr_wire_record_airs(self.config(), exe, &pc_to_air_idx);
+                let wire_airs = rvr_preflight.wire_airs();
                 let mut staged_wire: Vec<(usize, usize, VB::RecordArena)> = Vec::new();
                 if !wire_airs.is_empty() {
                     let inline_wire = rvr_preflight.inline_wire_airs().to_vec();
-                    for &air in wire_airs.iter().collect::<std::collections::BTreeSet<_>>() {
+                    for &air in wire_airs {
                         if arena_native
                             .iter()
                             .any(|&(native_air, _)| native_air == air)
@@ -1318,9 +1357,11 @@ where
                                 ))
                             })?;
                         let (arena, buf) =
-                            <VB::RecordArena as RvrArenaNativeTarget>::stage_rvr_wire(
+                            <VB::RecordArena as RvrArenaNativeTarget>::stage_rvr_wire_pooled(
                                 capacities[air].0,
                                 wire_size,
+                                air,
+                                rvr_preflight.buffer_pool(),
                             );
                         targets.insert(air, buf);
                         staged_wire.push((air, wire_size, arena));
@@ -1390,7 +1431,7 @@ where
                         exe,
                         &mut rvr_output,
                         &capacities,
-                        &pc_to_air_idx,
+                        pc_to_air_idx,
                     )?
                     .ok_or_else(|| {
                         ExecutionError::RvrExecution(
@@ -2034,17 +2075,32 @@ where
                             chip_counts_len,
                             pool,
                             ..
-                        }) => CachedRvrPreflight::Rvr(Box::new(CachedRvrCompiledPreflight {
-                            compiled,
-                            runtime_hooks,
-                            chip_counts_len,
-                            pool,
-                        })),
+                        }) => {
+                            let pc_to_air_idx = vm.pc_to_air_idx(&self.exe)?;
+                            let mut wire_airs = vm
+                                .builder
+                                .rvr_wire_record_airs(vm.config(), &self.exe, &pc_to_air_idx)
+                                .into_iter()
+                                .collect::<Vec<_>>();
+                            wire_airs.sort_unstable();
+                            CachedRvrPreflight::Rvr(Box::new(CachedRvrCompiledPreflight {
+                                compiled,
+                                runtime_hooks,
+                                chip_counts_len,
+                                pool,
+                                pc_to_air_idx,
+                                wire_airs,
+                            }))
+                        }
                         RvrPreflightRoute::Interpreter(_) => CachedRvrPreflight::Interpreter,
                     },
                 };
                 self.rvr_preflight.insert(cached)
             };
+            #[cfg(feature = "rvr")]
+            if let CachedRvrPreflight::Rvr(rvr) = rvr_preflight {
+                rvr.prepare_wire_backings(&trace_heights);
+            }
             #[cfg(any(feature = "stark-debug", feature = "cuda"))]
             let preflight_started = std::time::Instant::now();
             #[cfg(feature = "rvr")]

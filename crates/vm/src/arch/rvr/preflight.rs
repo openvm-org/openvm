@@ -4,7 +4,6 @@ use std::{collections::BTreeMap, mem::MaybeUninit, sync::Arc};
 
 use openvm_instructions::{
     exe::VmExe,
-    program::DEFAULT_PC_STEP,
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
 };
 use openvm_stark_backend::p3_field::{Field, PrimeField32};
@@ -36,6 +35,8 @@ pub const PREFLIGHT_INITIAL_TIMESTAMP: u32 = rvr_openvm_ext_ffi_common::PREFLIGH
 pub const PREFLIGHT_MEMORY_KIND_READ: u8 = rvr_openvm_ext_ffi_common::PREFLIGHT_MEMORY_KIND_READ;
 pub const PREFLIGHT_MEMORY_KIND_WRITE: u8 = rvr_openvm_ext_ffi_common::PREFLIGHT_MEMORY_KIND_WRITE;
 pub const PREFLIGHT_MEMORY_KIND_TOUCH: u8 = rvr_openvm_ext_ffi_common::PREFLIGHT_MEMORY_KIND_TOUCH;
+pub const PREFLIGHT_CHIP_RECORD_FLAG_DIRECT_FINAL: u32 =
+    rvr_openvm_ext_ffi_common::PREFLIGHT_CHIP_RECORD_FLAG_DIRECT_FINAL;
 /// R3: byte size of one compact AddSub inline record (see the C
 /// `PreflightAddSubRecord`). Used to size the per-chip inline-record buffers.
 pub const PREFLIGHT_ADDSUB_RECORD_SIZE: usize =
@@ -121,6 +122,9 @@ pub struct ChipRecordBuf {
     /// computed host-side, so one generated .so serves both arena flavors.
     /// Zero in compact-wire mode.
     pub core_off: u32,
+    /// ZG2 transport flags. `DIRECT_FINAL` means the C writer targets the
+    /// consumer backing and no host adoption/assembly may follow.
+    pub flags: u32,
 }
 
 impl Default for ChipRecordBuf {
@@ -131,6 +135,7 @@ impl Default for ChipRecordBuf {
             cap: 0,
             stride: 0,
             core_off: 0,
+            flags: 0,
         }
     }
 }
@@ -172,6 +177,10 @@ pub struct PreflightTracerData {
     /// attaches it; a null array (or a null per-chip `base`) means no chip uses
     /// inline records and every opcode takes the verbose-log path.
     pub chip_records: *mut ChipRecordBuf,
+    /// Direct execution-frequency counters indexed by the compile-time
+    /// filtered program index.
+    pub exec_frequencies: *mut u32,
+    pub exec_frequencies_len: u32,
 }
 
 impl PreflightTracerData {
@@ -200,6 +209,8 @@ impl PreflightTracerData {
             touched_cap: 0,
             timestamp: PREFLIGHT_INITIAL_TIMESTAMP,
             chip_records: std::ptr::null_mut(),
+            exec_frequencies: std::ptr::null_mut(),
+            exec_frequencies_len: 0,
         }
     }
 
@@ -241,6 +252,11 @@ impl PreflightTracerData {
     pub fn set_chip_records(&mut self, chip_records: &mut [ChipRecordBuf]) {
         debug_assert_eq!(chip_records.len() as u32, self.chip_counts_len);
         self.chip_records = chip_records.as_mut_ptr();
+    }
+
+    pub fn set_exec_frequencies(&mut self, frequencies: &mut [u32]) {
+        self.exec_frequencies = frequencies.as_mut_ptr();
+        self.exec_frequencies_len = frequencies.len() as u32;
     }
 
     /// Attach the per-address-space timestamp shadows, the public-values base
@@ -285,6 +301,8 @@ impl Default for PreflightTracerData {
             touched_cap: 0,
             timestamp: PREFLIGHT_INITIAL_TIMESTAMP,
             chip_records: std::ptr::null_mut(),
+            exec_frequencies: std::ptr::null_mut(),
+            exec_frequencies_len: 0,
         }
     }
 }
@@ -678,6 +696,7 @@ where
         let mut program_log = pool.take_program_log(program_log_cap);
         let mut memory_log = pool.take_memory_log(memory_log_cap);
         let mut chip_counts = vec![0u32; chip_counts_len.max(1)];
+        let mut exec_frequencies = vec![0u32; exe.program.num_defined_instructions()];
         // Shadows are all-zero at segment start (0 = untouched this segment);
         // pooled reuse preserves that via the exact touched-list scrub below.
         // Distinct touched blocks are bounded by the number of memory-log
@@ -746,6 +765,7 @@ where
                 // backing and sets the row/record pitch here.
                 stride: record_size as u32,
                 core_off: 0,
+                flags: 0,
             };
         }
 
@@ -760,6 +780,7 @@ where
         );
         tracer.set_touched_uninit(&mut touched);
         tracer.set_chip_records(&mut chip_records);
+        tracer.set_exec_frequencies(&mut exec_frequencies);
 
         let run_result = execute_preflight_raw(
             compiled,
@@ -857,7 +878,7 @@ where
         );
         pool.recycle_shadows(shadow_register, shadow_memory, shadow_public_values);
         pool.recycle_touched(touched);
-        let filtered_exec_frequencies = filtered_exec_frequencies(exe, &program_log)?;
+        let filtered_exec_frequencies = exec_frequencies;
         let to_state = ExecutionState::new(run_state.pc(), tracer.timestamp);
         let system_records = SystemRecords {
             from_state,
@@ -918,47 +939,6 @@ where
             arena_native_written,
         });
     }
-}
-
-fn filtered_exec_frequencies<F: Field>(
-    exe: &VmExe<F>,
-    program_log: &[ProgramLogEntry],
-) -> Result<Vec<u32>, ExecutionError> {
-    // Program slots are dense, so the pc -> filtered-index map is a direct
-    // array lookup; a hash probe per program-log entry (one per retired
-    // instruction) was a measured hotspot at large segment sizes.
-    let mut slot_to_filtered_idx = vec![u32::MAX; exe.program.instructions_and_debug_infos.len()];
-    let mut idx = 0u32;
-    for (slot_idx, slot) in exe.program.instructions_and_debug_infos.iter().enumerate() {
-        if slot.is_some() {
-            slot_to_filtered_idx[slot_idx] = idx;
-            idx += 1;
-        }
-    }
-
-    let pc_base = u64::from(exe.program.pc_base);
-    let step = u64::from(DEFAULT_PC_STEP);
-    let mut frequencies = vec![0u32; idx as usize];
-    for entry in program_log {
-        let filtered_idx = entry
-            .pc
-            .checked_sub(pc_base)
-            .map(|offset| offset / step)
-            .and_then(|slot| slot_to_filtered_idx.get(slot as usize).copied())
-            .filter(|&fi| fi != u32::MAX)
-            .ok_or_else(|| {
-                ExecutionError::RvrExecution(format!(
-                    "program-log pc {:#x} is unreachable",
-                    entry.pc
-                ))
-            })?;
-        frequencies[filtered_idx as usize] = frequencies[filtered_idx as usize]
-            .checked_add(1)
-            .ok_or(ExecutionError::RvrExecution(
-                "program execution frequency overflowed u32".to_string(),
-            ))?;
-    }
-    Ok(frequencies)
 }
 
 fn chip_counts_len(chips: &ChipMapping) -> usize {
@@ -1523,6 +1503,17 @@ pub trait RvrArenaNativeTarget: crate::arch::Arena + Sized {
     /// consumers expect expanded records must never be asked.
     fn stage_rvr_wire(records_cap: usize, wire_size: usize) -> (Self, ChipRecordBuf);
 
+    /// Stage from the pre-touched per-executor backing pool. Arena flavors
+    /// without recyclable byte backings retain the ordinary implementation.
+    fn stage_rvr_wire_pooled(
+        records_cap: usize,
+        wire_size: usize,
+        _air: usize,
+        _pool: &RvrPreflightBufferPool,
+    ) -> (Self, ChipRecordBuf) {
+        Self::stage_rvr_wire(records_cap, wire_size)
+    }
+
     /// Commit `written_records` C-written wire records and mark the arena as
     /// wire-mode for its consumer.
     fn finish_rvr_wire(&mut self, written_records: usize, wire_size: usize);
@@ -1546,6 +1537,7 @@ impl<F: openvm_stark_backend::p3_field::Field> RvrArenaNativeTarget
             cap: cap_bytes - cap_bytes % stride,
             stride,
             core_off: geometry.core_off_matrix as u32,
+            flags: PREFLIGHT_CHIP_RECORD_FLAG_DIRECT_FINAL,
         };
         (arena, buf)
     }
@@ -1589,6 +1581,7 @@ impl RvrArenaNativeTarget for crate::arch::DenseRecordArena {
             cap: (height * stride) as u32,
             stride: stride as u32,
             core_off: geometry.core_off_dense() as u32,
+            flags: PREFLIGHT_CHIP_RECORD_FLAG_DIRECT_FINAL,
         };
         (arena, buf)
     }
@@ -1623,6 +1616,36 @@ impl RvrArenaNativeTarget for crate::arch::DenseRecordArena {
             // descriptor shape the pooled record buffers use).
             stride: wire_size as u32,
             core_off: 0,
+            flags: PREFLIGHT_CHIP_RECORD_FLAG_DIRECT_FINAL,
+        };
+        (arena, buf)
+    }
+
+    fn stage_rvr_wire_pooled(
+        records_cap: usize,
+        wire_size: usize,
+        air: usize,
+        pool: &RvrPreflightBufferPool,
+    ) -> (Self, ChipRecordBuf) {
+        let len = records_cap * wire_size;
+        let Some(backing) = pool.take_wire_backing(air, len) else {
+            return Self::stage_rvr_wire(records_cap, wire_size);
+        };
+        let mut arena = Self::from_recycled_wire_backing(backing, air, pool.clone());
+        let offset = arena.records_buffer.position() as usize;
+        debug_assert_eq!(
+            (arena.records_buffer.get_ref().as_ptr() as usize + offset) % 32,
+            0,
+            "recycled dense wire base must be 32-aligned"
+        );
+        let base = unsafe { arena.records_buffer.get_mut().as_mut_ptr().add(offset) };
+        let buf = ChipRecordBuf {
+            base,
+            len: 0,
+            cap: len as u32,
+            stride: wire_size as u32,
+            core_off: 0,
+            flags: PREFLIGHT_CHIP_RECORD_FLAG_DIRECT_FINAL,
         };
         (arena, buf)
     }
