@@ -33,10 +33,10 @@ pub use execute::{
 };
 pub use log_native::{
     generate_record_arenas_from_logs, generate_record_arenas_from_logs_with_compact,
-    Alu3ArenaFieldOffsets, ArenaNativeGeometry, ArenaNativeLayout, Branch2ArenaFieldOffsets,
-    DeltaAccessPattern, LoadStoreArenaFieldOffsets, LogNativeAccessView, LogNativeAssembler,
-    LogNativeAssemblerRegistry, LogNativeInlineAssembler, LogNativeOpcodeAdmitter,
-    Rw1ArenaFieldOffsets, VmRvrLogNativeExtension, Wr1ArenaFieldOffsets,
+    Alu3ArenaFieldOffsets, Alu3WArenaFieldOffsets, ArenaNativeGeometry, ArenaNativeLayout,
+    Branch2ArenaFieldOffsets, DeltaAccessPattern, LoadStoreArenaFieldOffsets, LogNativeAccessView,
+    LogNativeAssembler, LogNativeAssemblerRegistry, LogNativeInlineAssembler,
+    LogNativeOpcodeAdmitter, Rw1ArenaFieldOffsets, VmRvrLogNativeExtension, Wr1ArenaFieldOffsets,
 };
 pub use metered::{
     RunToCompletion, RvrMeteredInstance, RvrMeteredInstanceWith, RvrMeteredResult,

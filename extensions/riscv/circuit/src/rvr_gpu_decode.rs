@@ -21,9 +21,9 @@ use openvm_instructions::{
 };
 #[cfg(feature = "rvr")]
 use openvm_riscv_transpiler::{
-    BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode, DivRemWOpcode,
-    LessThanOpcode, MulHOpcode, MulOpcode, MulWOpcode, Rv64AuipcOpcode, Rv64JalLuiOpcode,
-    Rv64JalrOpcode, Rv64LoadStoreOpcode, ShiftOpcode,
+    BaseAluOpcode, BaseAluWOpcode, BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode,
+    DivRemWOpcode, LessThanOpcode, MulHOpcode, MulOpcode, MulWOpcode, Rv64AuipcOpcode,
+    Rv64JalLuiOpcode, Rv64JalrOpcode, Rv64LoadStoreOpcode, ShiftOpcode, ShiftWOpcode,
 };
 #[cfg(feature = "rvr")]
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -187,11 +187,11 @@ impl RvrGpuDecodeState {
         for air in &tainted {
             airs.remove(air);
         }
-        // The supported formats map to at most the seventeen decode-kernel
+        // The supported formats map to at most the twenty decode-kernel
         // AIRs; more means opcode->air routing changed under us.
         assert!(
-            airs.len() <= 17,
-            "gpu-decode formats mapped to {} AIRs (expected <= 17)",
+            airs.len() <= 20,
+            "gpu-decode formats mapped to {} AIRs (expected <= 20)",
             airs.len()
         );
         airs
@@ -226,6 +226,41 @@ fn gpu_decode_entry<F: PrimeField32>(instruction: &Instruction<F>) -> Option<Dev
         None
     };
     if let Some(local_opcode) = alu_u16_local {
+        let operands = derive_base_alu_u16_operands(instruction);
+        let mut flags = 0u8;
+        if operands.rs2_as != RV64_REGISTER_AS as u8 {
+            flags |= OPERAND_FLAG_RS2_IMM;
+        }
+        if operands.rs2_imm_sign {
+            flags |= OPERAND_FLAG_RS2_IMM_SIGN;
+        }
+        return Some(DeviceOperandEntry {
+            a: operands.rd_ptr,
+            b: operands.rs1_ptr,
+            c: operands.rs2,
+            flags,
+            local_opcode,
+            _reserved: 0,
+        });
+    }
+
+    // alu3 over the W u16 adapter: BaseAluW and ShiftW. The operand
+    // derivation is identical to the full-word u16 adapter; the W kernels
+    // additionally recover the high halves and result-sign witness.
+    let alu_w_local = if opcode == BaseAluWOpcode::ADDW.global_opcode_usize() {
+        Some(0)
+    } else if opcode == BaseAluWOpcode::SUBW.global_opcode_usize() {
+        Some(1)
+    } else if opcode == ShiftWOpcode::SLLW.global_opcode_usize() {
+        Some(0)
+    } else if opcode == ShiftWOpcode::SRLW.global_opcode_usize() {
+        Some(1)
+    } else if opcode == ShiftWOpcode::SRAW.global_opcode_usize() {
+        Some(0)
+    } else {
+        None
+    };
+    if let Some(local_opcode) = alu_w_local {
         let operands = derive_base_alu_u16_operands(instruction);
         let mut flags = 0u8;
         if operands.rs2_as != RV64_REGISTER_AS as u8 {
