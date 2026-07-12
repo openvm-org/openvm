@@ -1039,18 +1039,17 @@ where
         let arena_native_written: Vec<(usize, u32)> = inline_meta
             .airs
             .iter()
-            .filter_map(|&(air_idx, _)| {
-                arena_targets
-                    .is_some_and(|targets| targets.contains_key(&air_idx))
-                    .then(|| {
-                        let buf = &chip_records[air_idx];
-                        assert_eq!(
-                            buf.len % buf.stride,
-                            0,
-                            "arena-native cursor for air {air_idx} is not a whole record count"
-                        );
-                        (air_idx, buf.len / buf.stride)
-                    })
+            .filter(|&&(air_idx, _)| {
+                arena_targets.is_some_and(|targets| targets.contains_key(&air_idx))
+            })
+            .map(|&(air_idx, _)| {
+                let buf = &chip_records[air_idx];
+                assert_eq!(
+                    buf.len % buf.stride,
+                    0,
+                    "arena-native cursor for air {air_idx} is not a whole record count"
+                );
+                (air_idx, buf.len / buf.stride)
             })
             .collect();
         let inline_records: Vec<RvrInlineChipRecords> = if inline_meta.delta_records {
@@ -1151,6 +1150,7 @@ unsafe fn assume_init_prefix<T>(mut buffer: Vec<MaybeUninit<T>>, len: usize) -> 
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod tests {
     use std::collections::HashSet;
 
