@@ -63,6 +63,10 @@ pub struct RvrInlineRecordsMeta {
     /// by `air_idx`. Geometry comes from the assembler registry, which the
     /// owning extension populated from the real record types.
     pub arena_native_airs: Vec<(usize, ArenaNativeGeometry)>,
+    /// Stage-2: emit one chronological 32-byte delta stream instead of the
+    /// per-AIR compact wire. `airs` still describes the decoder's output
+    /// shapes and is used for fail-closed route validation.
+    pub delta_records: bool,
 }
 
 impl RvrInlineRecordsMeta {
@@ -434,10 +438,12 @@ fn collect_inline_records_meta<F: PrimeField32>(
     // records to decode, so allowing arena-native metadata under a compact
     // request would make the GPU builder request one shape while generated C
     // emits another. Keep this decision in the shared host/codegen metadata.
-    let compact_wire_requested =
-        std::env::var("OPENVM_RVR_GPU_RECORDS").as_deref() == Ok("compact");
-    let arena_native_enabled =
-        std::env::var("OPENVM_RVR_ARENA_NATIVE").as_deref() != Ok("0") && !compact_wire_requested;
+    let gpu_records = std::env::var("OPENVM_RVR_GPU_RECORDS").ok();
+    let compact_wire_requested = gpu_records.as_deref() == Some("compact");
+    let delta_records_requested = gpu_records.as_deref() == Some("delta");
+    let arena_native_enabled = std::env::var("OPENVM_RVR_ARENA_NATIVE").as_deref() != Ok("0")
+        && !compact_wire_requested
+        && !delta_records_requested;
     {
         let mut record = |pc: u64, shape: InlineRecordShape| {
             let Some(offset) = pc.checked_sub(pc_base) else {
@@ -516,6 +522,7 @@ fn collect_inline_records_meta<F: PrimeField32>(
             .into_iter()
             .filter_map(|(air, geometry)| geometry.map(|g| (air, g)))
             .collect(),
+        delta_records: delta_records_requested,
     }
 }
 
@@ -526,11 +533,13 @@ fn collect_inline_records_meta<F: PrimeField32>(
 fn validate_requested_inline_record_shape(
     inline_meta: &RvrInlineRecordsMeta,
 ) -> Result<(), CompileError> {
-    if std::env::var("OPENVM_RVR_GPU_RECORDS").as_deref() == Ok("compact")
-        && !inline_meta.arena_native_airs.is_empty()
+    if matches!(
+        std::env::var("OPENVM_RVR_GPU_RECORDS").as_deref(),
+        Ok("compact" | "delta")
+    ) && !inline_meta.arena_native_airs.is_empty()
     {
         return Err(CompileError::InvalidOptions(
-            "OPENVM_RVR_GPU_RECORDS=compact requires compact-wire emission for every inline AIR",
+            "OPENVM_RVR_GPU_RECORDS=compact|delta requires non-arena emission for every inline AIR",
         ));
     }
     Ok(())
@@ -862,11 +871,14 @@ fn compile_impl<F: PrimeField32>(
     let inline_records = opts.execution_kind == RvrExecutionKind::Preflight
         && !env_flag_is_off("OPENVM_RVR_INLINE_RECORDS");
     if opts.execution_kind == RvrExecutionKind::Preflight
-        && std::env::var("OPENVM_RVR_GPU_RECORDS").as_deref() == Ok("compact")
+        && matches!(
+            std::env::var("OPENVM_RVR_GPU_RECORDS").as_deref(),
+            Ok("compact" | "delta")
+        )
         && !inline_records
     {
         return Err(CompileError::InvalidOptions(
-            "OPENVM_RVR_GPU_RECORDS=compact requires inline record emission",
+            "OPENVM_RVR_GPU_RECORDS=compact|delta requires inline record emission",
         ));
     }
     let (chips, num_airs) = match opts.execution_kind {
@@ -1128,6 +1140,7 @@ fn compile_impl<F: PrimeField32>(
             }
             if inline_records {
                 project.inline_records = true;
+                project.delta_records = inline_meta.delta_records;
                 project.arena_native_airs = inline_meta
                     .arena_native_airs
                     .iter()
@@ -1633,6 +1646,7 @@ fn generated_project_input_cache_key<F: PrimeField32>(
     }
     update_debug(&mut hasher, &inline_meta.airs)?;
     update_debug(&mut hasher, &inline_meta.arena_native_airs)?;
+    hasher.update([inline_meta.delta_records as u8]);
 
     // Registry selection and embedded assets can vary independently of the
     // VmExe. Hash their actual bytes so dynamically linked consumers retain

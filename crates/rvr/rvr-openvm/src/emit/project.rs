@@ -217,6 +217,10 @@ pub struct CProject {
     /// R3: emit inline compact records (log-suppressed) for migrated opcodes.
     /// Preflight mode only; see [`Self::inline_records_enabled`].
     pub inline_records: bool,
+    /// Stage-2 chronological 32-byte delta stream. This is a stronger compact
+    /// mode: all inline AIRs share one execution-ordered backing and reserve
+    /// their record slots once per basic-block entry.
+    pub delta_records: bool,
     /// R4: airs whose records the generated C writes arena-native — full
     /// records at final arena positions, field offsets baked as literals
     /// from the geometry's layout table. Airs absent here keep the compact
@@ -245,6 +249,7 @@ impl CProject {
             num_airs: None,
             native_debug_info: false,
             inline_records: false,
+            delta_records: false,
             arena_native_airs: std::collections::BTreeMap::new(),
         }
     }
@@ -862,6 +867,26 @@ impl CProject {
             ctx.set_arena_native_airs(self.arena_native_airs.clone());
         }
 
+        let delta_count = if self.delta_records && inline_records {
+            let body = block
+                .instructions
+                .iter()
+                .filter(|instr_at| {
+                    instr_emits_inline_record(&instr_at.instr)
+                        && matches!(self.chip_idx_for_pc(instr_at.pc), TraceChipIndex::Chip(_))
+                })
+                .count();
+            let terminator = (!matches!(block.terminator, Terminator::FallThrough)
+                && inline_record_shape_for_terminator(&block.terminator).is_some()
+                && matches!(
+                    self.chip_idx_for_pc(block.terminator_pc),
+                    TraceChipIndex::Chip(_)
+                )) as usize;
+            body + terminator
+        } else {
+            0
+        };
+        let delta_batch = (delta_count != 0).then(|| "rvr_delta_batch".to_string());
         if matches!(
             mode,
             EmitMode::Metered {
@@ -876,6 +901,14 @@ impl CProject {
         }
 
         self.emit_block_boundary(&mut body, block);
+        if let Some(batch) = delta_batch.as_deref() {
+            writeln!(
+                body,
+                "    PreflightDeltaRecord* {batch} = preflight_claim_delta_records(state, {delta_count}u);"
+            )
+            .unwrap();
+        }
+        ctx.set_delta_records(self.delta_records, delta_batch);
         self.emit_per_block_chip_updates(&mut body, block)?;
 
         for instr_at in &block.instructions {

@@ -98,6 +98,7 @@ typedef struct ChipRecordBuf {
 } ChipRecordBuf;
 
 static constexpr uint32_t PREFLIGHT_RECORD_DIRECT_FINAL = 1u;
+static constexpr uint32_t PREFLIGHT_RECORD_OVERFLOW = 2u;
 
 typedef struct Tracer {
   ProgramLogEntry* program_log;
@@ -128,6 +129,10 @@ typedef struct Tracer {
    * records increment this array without emitting a duplicate program log. */
   uint32_t* exec_frequencies;
   uint32_t exec_frequencies_len;
+  /* Stage-2 chronological delta stream. Unlike chip_records this is a single
+   * cross-AIR stream, so record order makes prev-timestamps reconstructible
+   * on the device. */
+  ChipRecordBuf* delta_records;
 } Tracer;
 
 _Static_assert(sizeof(ProgramLogEntry) == PREFLIGHT_PROGRAM_LOG_ENTRY_SIZE,
@@ -210,6 +215,8 @@ _Static_assert(offsetof(Tracer, timestamp) == 92,
                "Tracer timestamp offset drift");
 _Static_assert(offsetof(Tracer, chip_records) == 96,
                "Tracer chip_records offset drift");
+_Static_assert(offsetof(Tracer, delta_records) == 120,
+               "Tracer delta_records offset drift");
 _Static_assert(offsetof(Tracer, exec_frequencies) == 104,
                "Tracer exec_frequencies offset drift");
 _Static_assert(offsetof(Tracer, exec_frequencies_len) == 112,
@@ -245,6 +252,24 @@ typedef struct PreflightAddSubRecord {
   uint16_t b[4];                      /* 28 */
   uint16_t c[4];                      /* 36 */
 } PreflightAddSubRecord;
+
+/* Stage-2 global chronological record. The old wire's three previous-access
+ * timestamps are intentionally absent: a decoder merges this stream with the
+ * residual memory log and reconstructs them from access order. The 32-byte
+ * size permits one pair of 16-byte stores and keeps every record naturally
+ * aligned in the pinned backing. */
+typedef struct PreflightDeltaRecord {
+  uint32_t from_pc;
+  uint32_t from_timestamp;
+  uint64_t v0;
+  uint64_t v1;
+  uint64_t v2;
+} PreflightDeltaRecord;
+
+_Static_assert(sizeof(PreflightDeltaRecord) == PREFLIGHT_DELTA_RECORD_SIZE,
+               "PreflightDeltaRecord size drift");
+_Static_assert(_Alignof(PreflightDeltaRecord) == 8,
+               "PreflightDeltaRecord align drift");
 
 _Static_assert(sizeof(PreflightAddSubRecord) == PREFLIGHT_ADDSUB_RECORD_SIZE,
                "PreflightAddSubRecord size drift");
@@ -514,6 +539,52 @@ static __attribute__((always_inline)) inline uint32_t* preflight_claim_record(
   return (uint32_t*)(buf->base + off);
 }
 
+/* Reserve one basic block's delta records with a single cursor/capacity
+ * update. Generated C indexes the returned span at compile-time constants,
+ * removing per-instruction claiming and bounds checks from the hot path. */
+static __attribute__((always_inline)) inline PreflightDeltaRecord*
+preflight_claim_delta_records(RvState* restrict state, uint32_t count) {
+  ChipRecordBuf* restrict buf = state->tracer->delta_records;
+  if (unlikely(buf == NULL)) {
+    return NULL;
+  }
+  if (unlikely(buf->base == NULL ||
+               buf->stride != PREFLIGHT_DELTA_RECORD_SIZE)) {
+    buf->flags |= PREFLIGHT_RECORD_OVERFLOW;
+    return NULL;
+  }
+  if (unlikely(count > UINT32_MAX / PREFLIGHT_DELTA_RECORD_SIZE)) {
+    buf->flags |= PREFLIGHT_RECORD_OVERFLOW;
+    return NULL;
+  }
+  uint32_t off = buf->len;
+  uint32_t bytes = count * PREFLIGHT_DELTA_RECORD_SIZE;
+  if (unlikely(off + bytes < off || off + bytes > buf->cap)) {
+    buf->flags |= PREFLIGHT_RECORD_OVERFLOW;
+    return NULL;
+  }
+  buf->len = off + bytes;
+  return (PreflightDeltaRecord*)(buf->base + off);
+}
+
+static __attribute__((always_inline)) inline void preflight_write_delta3(
+    PreflightDeltaRecord* restrict record, uint32_t from_pc,
+    uint32_t from_timestamp, uint64_t v0, uint64_t v1, uint64_t v2) {
+  if (unlikely(record == NULL)) {
+    return;
+  }
+  /* A struct assignment gives clang the complete 32-byte value at once; on
+   * x86 this lowers to two unaligned 16-byte stores without constructing an
+   * explicit AVX vector in the generated instruction body. */
+  *record = (PreflightDeltaRecord){
+      .from_pc = from_pc,
+      .from_timestamp = from_timestamp,
+      .v0 = v0,
+      .v1 = v1,
+      .v2 = v2,
+  };
+}
+
 /* R3: compact branch record (2 reads, no write); see PreflightBranch2 layout
  * on the host side. */
 static __attribute__((always_inline)) inline void preflight_emit_branch2(
@@ -748,13 +819,16 @@ static __attribute__((always_inline)) inline void trace_pc(
  * compact records keep the log because host expansion still consumes it. */
 static __attribute__((always_inline)) inline void trace_pc_indexed(
     RvState* restrict state, uint64_t pc, uint32_t exec_idx,
-    uint32_t inline_chip_idx) {
+    uint32_t inline_chip_idx, bool delta_inline) {
   Tracer* restrict t = state->tracer;
   if (likely(t->exec_frequencies != NULL &&
              exec_idx < t->exec_frequencies_len)) {
     t->exec_frequencies[exec_idx]++;
   }
-  bool direct_final =
+  bool direct_final = delta_inline
+      ? t->delta_records != NULL &&
+            (t->delta_records->flags & PREFLIGHT_RECORD_DIRECT_FINAL) != 0u
+      :
       inline_chip_idx < t->chip_counts_len && t->chip_records != NULL &&
       (t->chip_records[inline_chip_idx].flags &
        PREFLIGHT_RECORD_DIRECT_FINAL) != 0u;
