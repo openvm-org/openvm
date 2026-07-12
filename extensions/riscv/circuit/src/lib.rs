@@ -255,7 +255,9 @@ where
     }
 }
 
-#[cfg(feature = "cuda")]
+// The operand-table classifier is host-only and is also the independent CPU
+// oracle for compact compiler metadata; only its device upload is CUDA-gated.
+#[cfg(feature = "rvr")]
 pub mod rvr_gpu_decode;
 
 #[cfg(feature = "cuda")]

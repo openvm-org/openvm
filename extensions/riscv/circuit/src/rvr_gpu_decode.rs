@@ -13,6 +13,7 @@
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 
+#[cfg(feature = "cuda")]
 use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::GpuDeviceCtx};
 #[cfg(feature = "rvr")]
 use openvm_instructions::{
@@ -107,11 +108,13 @@ struct HostOperandTable {
 pub struct RvrGpuDecodeState {
     table: Mutex<Option<HostOperandTable>>,
     /// Device copy of the operand table, keyed by the host table's identity.
+    #[cfg(feature = "cuda")]
     device_table: Mutex<Option<(usize, Arc<DeviceBuffer<u8>>)>>,
 }
 
 impl RvrGpuDecodeState {
     /// The device operand table (uploaded once per bound exe) + its pc base.
+    #[cfg(feature = "cuda")]
     pub fn device_operand_table(
         &self,
         device_ctx: &GpuDeviceCtx,
