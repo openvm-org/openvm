@@ -17,8 +17,8 @@ use rand::Rng;
 use rvr_openvm_ext_ffi_common::AS_PUBLIC_VALUES;
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, InlineRecordShape, Instr, InstrAt, LiftedInstr, Reg};
 use rvr_openvm_lift::{
-    air_index_to_c, decode_imm_cg, decode_reg, opcode_air_idx, AirIndex, ExtensionError,
-    RvrExtension, RvrExtensionCtx,
+    air_index_codegen_fingerprint, air_index_to_c, decode_imm_cg, decode_reg, opcode_air_idx,
+    AirIndex, ExtensionError, RvrExtension, RvrExtensionCtx,
 };
 
 /// HINT_STORED: pop one register word (8 bytes) from the hint stream into `mem[reg[ptr_reg]]`.
@@ -203,6 +203,13 @@ impl Rv64IoExtension {
 }
 
 impl<F: PrimeField32> RvrExtension<F> for Rv64IoExtension {
+    fn codegen_fingerprint(&self) -> Option<Vec<u8>> {
+        Some(air_index_codegen_fingerprint(
+            b"openvm-rv64io-rvr-v1",
+            &[self.hint_store_chip_idx],
+        ))
+    }
+
     fn try_lift(&self, insn: &Instruction<F>, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
 
@@ -300,6 +307,10 @@ impl Default for Rv64IExtension {
 }
 
 impl<F: PrimeField32> RvrExtension<F> for Rv64IExtension {
+    fn codegen_fingerprint(&self) -> Option<Vec<u8>> {
+        Some(b"openvm-rv64i-rvr-v1".to_vec())
+    }
+
     fn try_lift(&self, insn: &Instruction<F>, pc: u64) -> Option<LiftedInstr> {
         if insn.opcode.as_usize() != SystemOpcode::PHANTOM.global_opcode_usize() {
             return None;

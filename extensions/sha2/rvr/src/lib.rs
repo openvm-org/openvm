@@ -8,8 +8,8 @@ use openvm_sha2_transpiler::Rv64Sha2Opcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
 use rvr_openvm_lift::{
-    air_index_to_c, decode_reg, opcode_air_idx, AirIndex, ExtensionError, RvrExtension,
-    RvrExtensionCtx,
+    air_index_codegen_fingerprint, air_index_to_c, decode_reg, opcode_air_idx, AirIndex,
+    ExtensionError, RvrExtension, RvrExtensionCtx,
 };
 
 /// IR node for a SHA-256 compress instruction.
@@ -127,6 +127,18 @@ impl Sha2Extension {
 }
 
 impl<F: PrimeField32> RvrExtension<F> for Sha2Extension {
+    fn codegen_fingerprint(&self) -> Option<Vec<u8>> {
+        Some(air_index_codegen_fingerprint(
+            b"openvm-sha2-rvr-v1",
+            &[
+                self.sha256_main_chip_idx,
+                self.sha256_block_hasher_chip_idx,
+                self.sha512_main_chip_idx,
+                self.sha512_block_hasher_chip_idx,
+            ],
+        ))
+    }
+
     fn try_lift(&self, insn: &Instruction<F>, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
 

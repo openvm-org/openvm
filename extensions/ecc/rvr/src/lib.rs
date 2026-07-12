@@ -23,6 +23,15 @@ enum KnownCurve {
 }
 
 impl KnownCurve {
+    fn fingerprint_byte(self) -> u8 {
+        match self {
+            Self::K256 => 0,
+            Self::P256 => 1,
+            Self::Bn254 => 2,
+            Self::Bls12381 => 3,
+        }
+    }
+
     fn from_id(curve_id: u32) -> Option<Self> {
         match curve_id {
             0 => Some(Self::K256),
@@ -167,6 +176,17 @@ impl EccExtension {
 }
 
 impl<F: PrimeField32> RvrExtension<F> for EccExtension {
+    fn codegen_fingerprint(&self) -> Option<Vec<u8>> {
+        let mut fingerprint = b"openvm-ecc-rvr-v1\0".to_vec();
+        fingerprint.extend_from_slice(&(self.curves.len() as u64).to_le_bytes());
+        fingerprint.extend(
+            self.curves
+                .iter()
+                .map(|curve| curve.curve.map_or(u8::MAX, KnownCurve::fingerprint_byte)),
+        );
+        Some(fingerprint)
+    }
+
     fn try_lift(&self, insn: &Instruction<F>, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
 

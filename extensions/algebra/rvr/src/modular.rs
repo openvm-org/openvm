@@ -316,6 +316,19 @@ impl ModularRvrExtension {
 }
 
 impl<F: PrimeField32> RvrExtension<F> for ModularRvrExtension {
+    fn codegen_fingerprint(&self) -> Option<Vec<u8>> {
+        let mut fingerprint = b"openvm-modular-rvr-v1\0".to_vec();
+        fingerprint.extend_from_slice(&(self.moduli.len() as u64).to_le_bytes());
+        for modulus in &self.moduli {
+            fingerprint.extend_from_slice(&modulus.num_limbs.to_le_bytes());
+            fingerprint.extend_from_slice(&(modulus.modulus_bytes.len() as u64).to_le_bytes());
+            fingerprint.extend_from_slice(&modulus.modulus_bytes);
+            fingerprint.extend_from_slice(&(modulus.non_qr_bytes.len() as u64).to_le_bytes());
+            fingerprint.extend_from_slice(&modulus.non_qr_bytes);
+        }
+        Some(fingerprint)
+    }
+
     fn try_lift(&self, insn: &Instruction<F>, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
 

@@ -10,8 +10,8 @@ use openvm_keccak256_transpiler::{KeccakfOpcode, XorinOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
 use rvr_openvm_lift::{
-    air_index_to_c, decode_reg, opcode_air_idx, AirIndex, ExtensionError, RvrExtension,
-    RvrExtensionCtx,
+    air_index_codegen_fingerprint, air_index_to_c, decode_reg, opcode_air_idx, AirIndex,
+    ExtensionError, RvrExtension, RvrExtensionCtx,
 };
 
 /// keccak-f\[1600\]: read 200 bytes via `buffer_ptr_reg`, permute in place.
@@ -104,6 +104,17 @@ impl KeccakExtension {
 }
 
 impl<F: PrimeField32> RvrExtension<F> for KeccakExtension {
+    fn codegen_fingerprint(&self) -> Option<Vec<u8>> {
+        Some(air_index_codegen_fingerprint(
+            b"openvm-keccak-rvr-v1",
+            &[
+                self.xorin_chip_idx,
+                self.keccakf_op_chip_idx,
+                self.keccakf_perm_chip_idx,
+            ],
+        ))
+    }
+
     fn try_lift(&self, insn: &Instruction<F>, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
 
