@@ -2,11 +2,12 @@
 
 use std::{
     collections::BTreeMap,
+    fmt::{self, Write as _},
     fs::{self, File},
     io::Read,
     path::{Path, PathBuf},
     process::{Command, Stdio},
-    sync::Arc,
+    sync::{Arc, OnceLock},
     time::{Duration, Instant},
 };
 
@@ -18,7 +19,7 @@ use rvr_openvm::{
     inline_record_shape_for_instr, inline_record_shape_for_terminator, CProject, InlineRecordShape,
     RvrExecutionKind,
 };
-use rvr_openvm_ir::Block;
+use rvr_openvm_ir::{LiftedInstr, SourceLoc};
 use rvr_openvm_lift::{
     build_blocks, convert_vmexe_to_ir_with_debug, opcode::lift_instruction, AirIndex,
     ExtensionRegistry, RvrInstruction, TraceChipIndex,
@@ -414,11 +415,11 @@ pub fn build_pc_to_chip<F, E>(
 /// records: the emitter's per-instruction decision is
 /// [`instr_emits_inline_record`] on the lifted IR instruction plus a
 /// `TraceChipIndex::Chip` mapping for its pc (mirroring
-/// `CProject::chip_idx_for_pc`). Walks the same lifted blocks the emitter
-/// walks so the host metadata cannot drift from the generated C.
+/// `CProject::chip_idx_for_pc`). Walks the same lifted instruction stream the
+/// emitter consumes so the host metadata cannot drift from the generated C.
 fn collect_inline_records_meta<F: PrimeField32>(
     exe: &VmExe<F>,
-    blocks: &[Block],
+    ir: &[LiftedInstr],
     chips: &ChipMapping,
     admitter: Option<&dyn LogNativeOpcodeAdmitter<F>>,
 ) -> RvrInlineRecordsMeta {
@@ -435,52 +436,59 @@ fn collect_inline_records_meta<F: PrimeField32>(
     // rows are garbage (a real bus-imbalance bug caught by the prove
     // fixtures when this gate briefly lived on the codegen side only).
     let arena_native_enabled = std::env::var("OPENVM_RVR_ARENA_NATIVE").as_deref() != Ok("0");
-    let mut record = |pc: u64, shape: InlineRecordShape| {
-        let Some(offset) = pc.checked_sub(pc_base) else {
-            return;
+    {
+        let mut record = |pc: u64, shape: InlineRecordShape| {
+            let Some(offset) = pc.checked_sub(pc_base) else {
+                return;
+            };
+            let slot = (offset / u64::from(DEFAULT_PC_STEP)) as usize;
+            let Some(TraceChipIndex::Chip(air)) = chips.pc_to_chip.get(slot) else {
+                return;
+            };
+            if let Some(flag) = pc_slots.get_mut(slot) {
+                *flag = true;
+            }
+            let size = inline_record_shape_size(shape);
+            let air_idx = air.as_u32() as usize;
+            let previous = airs.insert(air_idx, size);
+            assert!(
+                previous.is_none_or(|p| p == size),
+                "conflicting inline record sizes for air {air:?}: {previous:?} vs {size}"
+            );
+            // R4: every pc routed to one air must agree on the family's
+            // arena-native geometry (present with equal values, or absent).
+            let geometry = admitter
+                .filter(|_| arena_native_enabled)
+                .and_then(|admitter| {
+                    exe.program
+                        .instructions_and_debug_infos
+                        .get(slot)
+                        .and_then(|entry| entry.as_ref())
+                        .and_then(|(instruction, _)| {
+                            admitter.inline_arena_geometry_for(instruction)
+                        })
+                });
+            let previous = arena_native.insert(air_idx, geometry);
+            assert!(
+                previous.is_none_or(|p| p == geometry),
+                "conflicting arena-native geometry for air {air:?}: {previous:?} vs {geometry:?}"
+            );
         };
-        let slot = (offset / u64::from(DEFAULT_PC_STEP)) as usize;
-        let Some(TraceChipIndex::Chip(air)) = chips.pc_to_chip.get(slot) else {
-            return;
-        };
-        if let Some(flag) = pc_slots.get_mut(slot) {
-            *flag = true;
-        }
-        let size = inline_record_shape_size(shape);
-        let air_idx = air.as_u32() as usize;
-        let previous = airs.insert(air_idx, size);
-        assert!(
-            previous.is_none_or(|p| p == size),
-            "conflicting inline record sizes for air {air:?}: {previous:?} vs {size}"
-        );
-        // R4: every pc routed to one air must agree on the family's
-        // arena-native geometry (present with equal values, or absent).
-        let geometry = admitter
-            .filter(|_| arena_native_enabled)
-            .and_then(|admitter| {
-                exe.program
-                    .instructions_and_debug_infos
-                    .get(slot)
-                    .and_then(|entry| entry.as_ref())
-                    .and_then(|(instruction, _)| admitter.inline_arena_geometry_for(instruction))
-            });
-        let previous = arena_native.insert(air_idx, geometry);
-        assert!(
-            previous.is_none_or(|p| p == geometry),
-            "conflicting arena-native geometry for air {air:?}: {previous:?} vs {geometry:?}"
-        );
-    };
-    for block in blocks {
-        for instr_at in &block.instructions {
-            if let Some(shape) = inline_record_shape_for_instr(instr_at.instr.as_ref()) {
-                record(instr_at.pc, shape);
+        for lifted in ir {
+            match lifted {
+                LiftedInstr::Body(instr_at) => {
+                    if let Some(shape) = inline_record_shape_for_instr(&instr_at.instr) {
+                        record(instr_at.pc, shape);
+                    }
+                }
+                LiftedInstr::Term { pc, terminator, .. } => {
+                    if let Some(shape) = inline_record_shape_for_terminator(terminator) {
+                        record(*pc, shape);
+                    }
+                }
             }
         }
-        if let Some(shape) = inline_record_shape_for_terminator(&block.terminator) {
-            record(block.terminator_pc, shape);
-        }
     }
-    drop(record);
 
     // Arena-native targets replace an AIR's entire assembled arena after the
     // log walk. They are therefore sound only when every program instruction
@@ -777,10 +785,27 @@ fn load_num_airs(
     Ok(Some(num_airs))
 }
 
+struct RvrNativeCache {
+    lib_path: PathBuf,
+    key_path: PathBuf,
+    input_key: Option<String>,
+    manifest: Option<RvrNativeCacheManifest>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct RvrNativeCacheManifest {
+    project_key: String,
+    artifact_key: String,
+    /// Cheap fingerprint of the VmExe, instantiated codegen config, native
+    /// build identity, and generator binary. Absent in legacy manifests.
+    input_key: Option<String>,
+}
+
 fn compile_impl<F: PrimeField32>(
     exe: &VmExe<F>,
     opts: &CompileOptions<'_, F>,
 ) -> Result<RvrCompiled, CompileError> {
+    let prepare_started = Instant::now();
     if opts.execution_kind == RvrExecutionKind::Preflight {
         let no_extension_assemblers = ();
         let assembler_admitter = opts
@@ -796,29 +821,6 @@ fn compile_impl<F: PrimeField32>(
     let toolchain = ensure_toolchain_available()?;
 
     let base_name = sanitize_base_name(opts.base_name.unwrap_or("openvm"));
-
-    let ir = convert_vmexe_to_ir_with_debug(exe, opts.extensions, |pc| {
-        opts.guest_debug_map
-            .and_then(|debug_map| debug_map.get(pc).cloned())
-    })?;
-
-    let valid_pcs: std::collections::HashSet<u64> = ir.iter().map(|li| li.pc()).collect();
-    let extra_targets = opts
-        .extensions
-        .extra_cfg_targets(&exe.init_memory, &valid_pcs);
-    let blocks = build_blocks(&ir, &extra_targets);
-
-    let temp_root = std::env::temp_dir();
-    let temp_dir = tempfile::Builder::new()
-        .prefix("openvm-rvr-")
-        .tempdir_in(&temp_root)
-        .map_err(|source| CompileError::CProject {
-            path: temp_root,
-            source,
-        })?;
-    let output_dir = temp_dir.path();
-
-    let mut project = CProject::new(output_dir, &base_name, opts.execution_kind);
     let lto_env = match opts.execution_kind {
         RvrExecutionKind::Metered | RvrExecutionKind::MeteredSegment => {
             Some("OPENVM_RVR_METERED_LTO")
@@ -830,20 +832,18 @@ fn compile_impl<F: PrimeField32>(
     };
     let disable_lto = lto_env.is_some_and(env_flag_is_off);
     if disable_lto {
-        project.enable_lto = false;
         tracing::info!(
             execution_kind = ?opts.execution_kind,
             "disabled ThinLTO for rvr native compilation"
         );
     }
-    project.pc_base = u64::from(exe.program.pc_base);
-
-    // Preflight compiles emit inline compact records for migrated opcodes by default.
+    // Preflight codegen emits inline records by default. The metadata is
+    // reconstructed from the lifted instruction stream even on a cache hit;
+    // only CFG/project generation and the recursive project hash are skipped.
     let inline_records = opts.execution_kind == RvrExecutionKind::Preflight
         && !env_flag_is_off("OPENVM_RVR_INLINE_RECORDS");
-    let mut inline_meta = RvrInlineRecordsMeta::default();
-    match opts.execution_kind {
-        RvrExecutionKind::Pure | RvrExecutionKind::PureWithInstretTracking => {}
+    let (chips, num_airs) = match opts.execution_kind {
+        RvrExecutionKind::Pure | RvrExecutionKind::PureWithInstretTracking => (None, None),
         RvrExecutionKind::Metered
         | RvrExecutionKind::MeteredSegment
         | RvrExecutionKind::MeteredCost
@@ -860,7 +860,6 @@ fn compile_impl<F: PrimeField32>(
                     "metered rvr compile requires at least one AIR",
                 ));
             }
-            project.num_airs = Some(num_airs);
             let expected_slots = exe.program.instructions_and_debug_infos.len();
             if chips.pc_to_chip.len() != expected_slots {
                 return Err(CompileError::ChipMappingLengthMismatch {
@@ -880,6 +879,177 @@ fn compile_impl<F: PrimeField32>(
                     });
                 }
             }
+            (Some(chips), Some(num_airs))
+        }
+    };
+    let opt_env = match opts.execution_kind {
+        RvrExecutionKind::Metered | RvrExecutionKind::MeteredSegment => Some((
+            "OPENVM_RVR_METERED_OPT",
+            "OPENVM_RVR_METERED_OPT must be one of -O0, -O1, -O2, -O3, -Os, or -Oz",
+        )),
+        RvrExecutionKind::Preflight => Some((
+            "OPENVM_RVR_PREFLIGHT_OPT",
+            "OPENVM_RVR_PREFLIGHT_OPT must be one of -O0, -O1, -O2, -O3, -Os, or -Oz",
+        )),
+        RvrExecutionKind::Pure
+        | RvrExecutionKind::PureWithInstretTracking
+        | RvrExecutionKind::MeteredCost => None,
+    };
+    let native_opt = opt_env
+        .map(|(env, invalid_message)| native_opt_level(env, invalid_message))
+        .transpose()?
+        .flatten();
+
+    let ir_started = Instant::now();
+    let ir = convert_vmexe_to_ir_with_debug(exe, opts.extensions, |pc| {
+        opts.guest_debug_map
+            .and_then(|debug_map| debug_map.get(pc).cloned())
+    })?;
+    let ir_elapsed = ir_started.elapsed();
+
+    let inline_meta_started = Instant::now();
+    let mut inline_meta = RvrInlineRecordsMeta::default();
+    if inline_records {
+        inline_meta = collect_inline_records_meta(
+            exe,
+            &ir,
+            chips.expect("preflight chip mapping checked above"),
+            opts.preflight_assembler_admitter,
+        );
+    }
+    let inline_meta_elapsed = inline_meta_started.elapsed();
+
+    let cache_env = match opts.execution_kind {
+        RvrExecutionKind::Metered | RvrExecutionKind::MeteredSegment => {
+            Some("OPENVM_RVR_METERED_LIB")
+        }
+        RvrExecutionKind::Preflight => Some("OPENVM_RVR_PREFLIGHT_LIB"),
+        RvrExecutionKind::Pure
+        | RvrExecutionKind::PureWithInstretTracking
+        | RvrExecutionKind::MeteredCost => None,
+    };
+    let mut input_key_elapsed = Duration::ZERO;
+    let cache_path =
+        cache_env.and_then(|cache_env| std::env::var_os(cache_env).filter(|path| !path.is_empty()));
+    let cache = if let Some(path) = cache_path {
+        let lib_path = PathBuf::from(path);
+        let key_path = preflight_cache_key_path(&lib_path);
+        let input_key_started = Instant::now();
+        let input_key = generated_project_input_cache_key(
+            exe,
+            &ir,
+            opts,
+            chips,
+            &base_name,
+            disable_lto,
+            inline_records,
+            native_opt.as_deref(),
+            &inline_meta,
+            &toolchain,
+        )?;
+        input_key_elapsed = input_key_started.elapsed();
+        if input_key.is_none() {
+            tracing::info!(
+                path = %lib_path.display(),
+                execution_kind = ?opts.execution_kind,
+                "rvr input cache disabled by an extension without a canonical fingerprint"
+            );
+        }
+        let manifest = read_preflight_cache_manifest(&key_path);
+        Some(RvrNativeCache {
+            lib_path,
+            key_path,
+            input_key,
+            manifest,
+        })
+    } else {
+        None
+    };
+
+    if let Some(cache) = cache.as_ref() {
+        if let (Some(input_key), Some(manifest)) = (
+            cache.input_key.as_deref(),
+            cache
+                .manifest
+                .as_ref()
+                .filter(|manifest| manifest.input_key.as_deref() == cache.input_key.as_deref()),
+        ) {
+            let artifact_started = Instant::now();
+            if let Some(mut compiled) =
+                load_verified_preflight_cache_copy(&cache.lib_path, &manifest.artifact_key)?
+            {
+                let artifact_elapsed = artifact_started.elapsed();
+                tracing::info!(
+                    path = %cache.lib_path.display(),
+                    input_key = %input_key,
+                    project_key = %manifest.project_key,
+                    execution_kind = ?opts.execution_kind,
+                    "loading input-validated rvr native artifact without project regeneration"
+                );
+                if std::env::var("OPENVM_RVR_CACHE_PROFILE").as_deref() == Ok("1") {
+                    eprintln!(
+                        "OPENVM_RVR_CACHE_HIT_TIMING mode={:?} total_us={} ir_us={} \
+                         inline_meta_us={} input_key_us={} artifact_us={}",
+                        opts.execution_kind,
+                        prepare_started.elapsed().as_micros(),
+                        ir_elapsed.as_micros(),
+                        inline_meta_elapsed.as_micros(),
+                        input_key_elapsed.as_micros(),
+                        artifact_elapsed.as_micros(),
+                    );
+                }
+                compiled.inline_records = inline_meta;
+                return Ok(compiled);
+            }
+        }
+        tracing::info!(
+            path = %cache.lib_path.display(),
+            input_key = ?cache.input_key,
+            execution_kind = ?opts.execution_kind,
+            "rvr native artifact input cache miss; regenerating project for validation"
+        );
+    }
+
+    // CFG construction scans the complete initial memory image for indirect
+    // code pointers and dominates cache-hit preparation for large guests.
+    // It is needed only when a project must actually be regenerated.
+    let cfg_started = Instant::now();
+    let valid_pcs: std::collections::HashSet<u64> = ir.iter().map(|li| li.pc()).collect();
+    let extra_targets = opts
+        .extensions
+        .extra_cfg_targets(&exe.init_memory, &valid_pcs);
+    let blocks = build_blocks(&ir, &extra_targets);
+    let cfg_elapsed = cfg_started.elapsed();
+
+    let temp_root = std::env::temp_dir();
+    let temp_dir = tempfile::Builder::new()
+        .prefix("openvm-rvr-")
+        .tempdir_in(&temp_root)
+        .map_err(|source| CompileError::CProject {
+            path: temp_root,
+            source,
+        })?;
+    let output_dir = temp_dir.path();
+
+    let mut project = CProject::new(output_dir, &base_name, opts.execution_kind);
+    if disable_lto {
+        project.enable_lto = false;
+    }
+    project.pc_base = u64::from(exe.program.pc_base);
+
+    // R3: preflight compiles emit inline compact records (with memory-log
+    // suppression) for migrated opcodes by default; OPENVM_RVR_INLINE_RECORDS
+    // set to 0/false/off opts out (verbose log + host assembler for every
+    // opcode). The collected metadata mirrors the codegen decision exactly so
+    // the host skips the assembler for precisely the suppressed pcs.
+    match opts.execution_kind {
+        RvrExecutionKind::Pure | RvrExecutionKind::PureWithInstretTracking => {}
+        RvrExecutionKind::Metered
+        | RvrExecutionKind::MeteredSegment
+        | RvrExecutionKind::MeteredCost
+        | RvrExecutionKind::Preflight => {
+            let chips = chips.expect("chip mapping checked above");
+            project.num_airs = num_airs;
             project.pc_to_chip = Some(chips.pc_to_chip.clone());
             project.chip_widths = chips.chip_widths.clone();
             match opts.execution_kind {
@@ -913,12 +1083,6 @@ fn compile_impl<F: PrimeField32>(
             }
             if inline_records {
                 project.inline_records = true;
-                inline_meta = collect_inline_records_meta(
-                    exe,
-                    &blocks,
-                    chips,
-                    opts.preflight_assembler_admitter,
-                );
                 project.arena_native_airs = inline_meta
                     .arena_native_airs
                     .iter()
@@ -932,6 +1096,7 @@ fn compile_impl<F: PrimeField32>(
 
     let entry_point = u64::from(exe.pc_start);
     let text_start = u64::from(exe.program.pc_base);
+    let emit_started = Instant::now();
     project
         .write_all(&blocks, entry_point, text_start, opts.extensions)
         .map_err(|source| CompileError::CProject {
@@ -940,6 +1105,7 @@ fn compile_impl<F: PrimeField32>(
         })?;
 
     let ext_staticlibs = write_extension_staticlibs(output_dir, opts.extensions)?;
+    let emit_elapsed = emit_started.elapsed();
     if let Some(path) = ext_staticlibs
         .iter()
         .find(|path| path.to_string_lossy().contains(' '))
@@ -975,69 +1141,56 @@ fn compile_impl<F: PrimeField32>(
         // Override an inherited Make environment variable as well as CProject's default.
         make_args.push("LTO=".to_string());
     }
-    let opt_env = match opts.execution_kind {
-        RvrExecutionKind::Metered | RvrExecutionKind::MeteredSegment => Some((
-            "OPENVM_RVR_METERED_OPT",
-            "OPENVM_RVR_METERED_OPT must be one of -O0, -O1, -O2, -O3, -Os, or -Oz",
-        )),
-        RvrExecutionKind::Preflight => Some((
-            "OPENVM_RVR_PREFLIGHT_OPT",
-            "OPENVM_RVR_PREFLIGHT_OPT must be one of -O0, -O1, -O2, -O3, -Os, or -Oz",
-        )),
-        RvrExecutionKind::Pure
-        | RvrExecutionKind::PureWithInstretTracking
-        | RvrExecutionKind::MeteredCost => None,
-    };
-    if let Some((env, invalid_message)) = opt_env {
-        if let Some(opt) = native_opt_level(env, invalid_message)? {
-            make_args.push(format!("OPT={opt}"));
-        }
+    if let Some(opt) = native_opt.as_ref() {
+        make_args.push(format!("OPT={opt}"));
     }
-    let cache_env = match opts.execution_kind {
-        RvrExecutionKind::Metered | RvrExecutionKind::MeteredSegment => {
-            Some("OPENVM_RVR_METERED_LIB")
-        }
-        RvrExecutionKind::Preflight => Some("OPENVM_RVR_PREFLIGHT_LIB"),
-        RvrExecutionKind::Pure
-        | RvrExecutionKind::PureWithInstretTracking
-        | RvrExecutionKind::MeteredCost => None,
-    };
-    let cache = if let Some(cache_env) = cache_env {
-        std::env::var_os(cache_env)
-            .filter(|path| !path.is_empty())
-            .map(|path| {
-                let lib_path = PathBuf::from(path);
-                let key_path = preflight_cache_key_path(&lib_path);
-                let key = generated_project_cache_key(output_dir, &make_args, &toolchain)?;
-                Ok::<_, CompileError>((lib_path, key_path, key))
-            })
-            .transpose()?
-    } else {
-        None
-    };
 
-    if let Some((lib_path, key_path, expected_key)) = cache.as_ref() {
-        if let Some((project_key, artifact_key)) = read_preflight_cache_manifest(key_path) {
-            if project_key == *expected_key {
-                if let Some(mut compiled) =
-                    load_verified_preflight_cache_copy(lib_path, &artifact_key)?
-                {
-                    tracing::info!(
-                        path = %lib_path.display(),
-                        cache_key = %expected_key,
-                        execution_kind = ?opts.execution_kind,
-                        "loading hash-validated rvr native artifact"
-                    );
-                    // The cache key covers the generated C tree, which encodes
-                    // the inline-record decision, so this metadata matches the
-                    // cached library.
-                    compiled.inline_records = inline_meta;
-                    return Ok(compiled);
-                }
+    let hash_started = Instant::now();
+    let project_key = cache
+        .as_ref()
+        .map(|_| generated_project_cache_key(output_dir, &make_args, &toolchain))
+        .transpose()?;
+    let hash_elapsed = hash_started.elapsed();
+    if cache.is_some() {
+        tracing::info!(
+            execution_kind = ?opts.execution_kind,
+            ir_ms = ir_elapsed.as_millis(),
+            cfg_ms = cfg_elapsed.as_millis(),
+            emit_ms = emit_elapsed.as_millis(),
+            project_hash_ms = hash_elapsed.as_millis(),
+            total_ms = prepare_started.elapsed().as_millis(),
+            "rvr generated-project cache preparation breakdown"
+        );
+    }
+
+    if let (Some(cache), Some(expected_key)) = (cache.as_ref(), project_key.as_ref()) {
+        if let Some(manifest) = cache
+            .manifest
+            .as_ref()
+            .filter(|manifest| manifest.project_key == *expected_key)
+        {
+            if let Some(mut compiled) =
+                load_verified_preflight_cache_copy(&cache.lib_path, &manifest.artifact_key)?
+            {
+                write_preflight_cache_manifest(
+                    &cache.key_path,
+                    expected_key,
+                    &manifest.artifact_key,
+                    cache.input_key.as_deref(),
+                )?;
+                tracing::info!(
+                    path = %cache.lib_path.display(),
+                    input_key = ?cache.input_key,
+                    project_key = %expected_key,
+                    execution_kind = ?opts.execution_kind,
+                    "loading project-validated rvr artifact and upgrading input cache"
+                );
+                compiled.inline_records = inline_meta;
+                return Ok(compiled);
             }
         }
         tracing::info!(
-            path = %lib_path.display(),
+            path = %cache.lib_path.display(),
             cache_key = %expected_key,
             execution_kind = ?opts.execution_kind,
             "rvr native artifact cache miss"
@@ -1078,10 +1231,16 @@ fn compile_impl<F: PrimeField32>(
         num_airs,
         inline_records: inline_meta,
     };
-    if let Some((cache_lib, cache_key_path, cache_key)) = cache {
-        publish_preflight_cache(&compiled, &cache_lib, &cache_key_path, &cache_key)?;
+    if let (Some(cache), Some(cache_key)) = (cache, project_key) {
+        publish_preflight_cache(
+            &compiled,
+            &cache.lib_path,
+            &cache.key_path,
+            &cache_key,
+            cache.input_key.as_deref(),
+        )?;
         tracing::info!(
-            path = %cache_lib.display(),
+            path = %cache.lib_path.display(),
             cache_key = %cache_key,
             execution_kind = ?opts.execution_kind,
             "saved hash-validated rvr native artifact"
@@ -1141,12 +1300,33 @@ fn artifact_sha256(path: &Path) -> Result<String, CompileError> {
     Ok(hex_digest(hasher.finalize()))
 }
 
-fn read_preflight_cache_manifest(path: &Path) -> Option<(String, String)> {
+fn read_preflight_cache_manifest(path: &Path) -> Option<RvrNativeCacheManifest> {
     let manifest = fs::read_to_string(path).ok()?;
-    let mut lines = manifest.lines();
-    let project_key = lines.next()?.strip_prefix("project=")?.to_string();
-    let artifact_key = lines.next()?.strip_prefix("artifact=")?.to_string();
-    (lines.next().is_none()).then_some((project_key, artifact_key))
+    let mut project_key = None;
+    let mut artifact_key = None;
+    let mut input_key = None;
+    for line in manifest.lines() {
+        if let Some(value) = line.strip_prefix("project=") {
+            if project_key.replace(value.to_string()).is_some() {
+                return None;
+            }
+        } else if let Some(value) = line.strip_prefix("artifact=") {
+            if artifact_key.replace(value.to_string()).is_some() {
+                return None;
+            }
+        } else if let Some(value) = line.strip_prefix("input=") {
+            if input_key.replace(value.to_string()).is_some() {
+                return None;
+            }
+        } else {
+            return None;
+        }
+    }
+    Some(RvrNativeCacheManifest {
+        project_key: project_key?,
+        artifact_key: artifact_key?,
+        input_key,
+    })
 }
 
 fn load_verified_preflight_cache_copy(
@@ -1198,6 +1378,7 @@ fn publish_preflight_cache(
     cache_lib: &Path,
     cache_key_path: &Path,
     project_key: &str,
+    input_key: Option<&str>,
 ) -> Result<(), CompileError> {
     let parent = cache_lib.parent().unwrap_or_else(|| Path::new("."));
     fs::create_dir_all(parent).map_err(|source| CompileError::CProject {
@@ -1221,6 +1402,21 @@ fn publish_preflight_cache(
         })?;
     let artifact_key = artifact_sha256(temp_lib.path())?;
 
+    temp_lib
+        .persist(cache_lib)
+        .map_err(|err| CompileError::CProject {
+            path: cache_lib.to_path_buf(),
+            source: err.error,
+        })?;
+    write_preflight_cache_manifest(cache_key_path, project_key, &artifact_key, input_key)
+}
+
+fn write_preflight_cache_manifest(
+    cache_key_path: &Path,
+    project_key: &str,
+    artifact_key: &str,
+    input_key: Option<&str>,
+) -> Result<(), CompileError> {
     let key_parent = cache_key_path.parent().unwrap_or_else(|| Path::new("."));
     fs::create_dir_all(key_parent).map_err(|source| CompileError::CProject {
         path: key_parent.to_path_buf(),
@@ -1233,11 +1429,11 @@ fn publish_preflight_cache(
             path: key_parent.to_path_buf(),
             source,
         })?;
-    fs::write(
-        temp_manifest.path(),
-        format!("project={project_key}\nartifact={artifact_key}\n"),
-    )
-    .map_err(|source| CompileError::CProject {
+    let mut manifest = format!("project={project_key}\nartifact={artifact_key}\n");
+    if let Some(input_key) = input_key {
+        manifest.push_str(&format!("input={input_key}\n"));
+    }
+    fs::write(temp_manifest.path(), manifest).map_err(|source| CompileError::CProject {
         path: temp_manifest.path().to_path_buf(),
         source,
     })?;
@@ -1248,13 +1444,6 @@ fn publish_preflight_cache(
             path: temp_manifest.path().to_path_buf(),
             source,
         })?;
-
-    temp_lib
-        .persist(cache_lib)
-        .map_err(|err| CompileError::CProject {
-            path: cache_lib.to_path_buf(),
-            source: err.error,
-        })?;
     temp_manifest
         .persist(cache_key_path)
         .map_err(|err| CompileError::CProject {
@@ -1262,6 +1451,279 @@ fn publish_preflight_cache(
             source: err.error,
         })?;
     Ok(())
+}
+
+/// Cheap, fail-closed identity for the inputs that determine a generated RVR
+/// project. Unlike [`generated_project_cache_key`], this never writes C files.
+/// The full project key remains the authority on a miss; a successful slow
+/// validation upgrades the manifest with this input key for subsequent runs.
+#[allow(clippy::too_many_arguments)]
+fn generated_project_input_cache_key<F: PrimeField32>(
+    exe: &VmExe<F>,
+    ir: &[LiftedInstr],
+    opts: &CompileOptions<'_, F>,
+    chips: Option<&ChipMapping>,
+    base_name: &str,
+    disable_lto: bool,
+    inline_records: bool,
+    native_opt: Option<&str>,
+    inline_meta: &RvrInlineRecordsMeta,
+    toolchain: &rvr_openvm::RuntimeToolchain,
+) -> Result<Option<String>, CompileError> {
+    let Some(extension_fingerprints) = opts.extensions.codegen_fingerprints() else {
+        return Ok(None);
+    };
+    let mut hasher = Sha256::new();
+    hasher.update(b"openvm-rvr-generated-project-input-v3-execution-kind\0");
+    update_framed(&mut hasher, generator_binary_sha256()?.as_bytes());
+    update_framed(&mut hasher, std::env::consts::OS.as_bytes());
+    update_framed(&mut hasher, std::env::consts::ARCH.as_bytes());
+    update_framed(&mut hasher, base_name.as_bytes());
+    hasher.update((opts.execution_kind as u32).to_le_bytes());
+    hasher.update([
+        disable_lto as u8,
+        inline_records as u8,
+        opts.native_debug_info as u8,
+    ]);
+    update_optional(&mut hasher, native_opt.map(str::as_bytes));
+
+    // VmExe hash. Program DebugInfo is intentionally excluded: the lifter
+    // ignores it and native source locations arrive through guest_debug_map,
+    // which is represented in the lifted IR below.
+    hasher.update(exe.program.pc_base.to_le_bytes());
+    hasher.update(exe.pc_start.to_le_bytes());
+    hasher.update((exe.program.instructions_and_debug_infos.len() as u64).to_le_bytes());
+    for entry in &exe.program.instructions_and_debug_infos {
+        let Some((instruction, _)) = entry else {
+            hasher.update([0]);
+            continue;
+        };
+        hasher.update([1]);
+        hasher.update((instruction.opcode.as_usize() as u64).to_le_bytes());
+        for operand in [
+            instruction.a,
+            instruction.b,
+            instruction.c,
+            instruction.d,
+            instruction.e,
+            instruction.f,
+            instruction.g,
+        ] {
+            hasher.update(operand.as_canonical_u32().to_le_bytes());
+        }
+    }
+    hasher.update((exe.init_memory.len() as u64).to_le_bytes());
+    for (&(address_space, address), &value) in &exe.init_memory {
+        hasher.update(address_space.to_le_bytes());
+        hasher.update(address.to_le_bytes());
+        hasher.update([value]);
+    }
+    hasher.update((exe.fn_bounds.len() as u64).to_le_bytes());
+    for (&pc, bound) in &exe.fn_bounds {
+        hasher.update(pc.to_le_bytes());
+        hasher.update(bound.start.to_le_bytes());
+        hasher.update(bound.end.to_le_bytes());
+        update_framed(&mut hasher, bound.name.as_bytes());
+    }
+
+    if let Some(chips) = chips {
+        hasher.update([1]);
+        hasher.update((chips.pc_to_chip.len() as u64).to_le_bytes());
+        for chip in &chips.pc_to_chip {
+            match chip {
+                TraceChipIndex::Chip(air) => {
+                    hasher.update([1]);
+                    hasher.update(air.as_u32().to_le_bytes());
+                }
+                TraceChipIndex::NoChip => hasher.update([0]),
+            }
+        }
+        match chips.chip_widths.as_ref() {
+            Some(widths) => {
+                hasher.update([1]);
+                hasher.update((widths.len() as u64).to_le_bytes());
+                for width in widths {
+                    hasher.update(width.to_le_bytes());
+                }
+            }
+            None => hasher.update([0]),
+        }
+    } else {
+        hasher.update([0]);
+    }
+
+    // Source locations cover the guest debug map because they change
+    // generated #line directives.
+    for lifted in ir {
+        match lifted {
+            LiftedInstr::Body(instr) => {
+                update_source_location(&mut hasher, instr.source_loc.as_ref());
+            }
+            LiftedInstr::Term { source_loc, .. } => {
+                update_source_location(&mut hasher, source_loc.as_ref());
+            }
+        }
+    }
+
+    // Canonical instance state for every extension, in registration order.
+    // Unknown/custom extensions default to `None` above and cannot use the
+    // fast path until they explicitly implement the fingerprint contract.
+    hasher.update((extension_fingerprints.len() as u64).to_le_bytes());
+    for fingerprint in extension_fingerprints {
+        update_framed(&mut hasher, &fingerprint);
+    }
+
+    // The inline metadata is both host-consumed and baked into preflight C.
+    hasher.update((inline_meta.pc_slots.len() as u64).to_le_bytes());
+    let mut packed = 0u8;
+    for (idx, &enabled) in inline_meta.pc_slots.iter().enumerate() {
+        packed |= (enabled as u8) << (idx % 8);
+        if idx % 8 == 7 {
+            hasher.update([packed]);
+            packed = 0;
+        }
+    }
+    if !inline_meta.pc_slots.len().is_multiple_of(8) {
+        hasher.update([packed]);
+    }
+    update_debug(&mut hasher, &inline_meta.airs)?;
+    update_debug(&mut hasher, &inline_meta.arena_native_airs)?;
+
+    // Registry selection and embedded assets can vary independently of the
+    // VmExe. Hash their actual bytes so dynamically linked consumers retain
+    // the same fail-closed property as statically linked binaries.
+    update_named_text_assets(&mut hasher, b"headers", opts.extensions.c_headers());
+    update_named_text_assets(&mut hasher, b"sources", opts.extensions.c_sources());
+    update_named_text_assets(
+        &mut hasher,
+        b"extra-sources",
+        opts.extensions.extra_c_sources(),
+    );
+    update_named_text_assets(
+        &mut hasher,
+        b"extra-includes",
+        opts.extensions.extra_c_include_files(),
+    );
+    hasher.update(b"staticlibs\0");
+    for (name, contents) in opts.extensions.staticlib_files() {
+        update_framed(&mut hasher, name.as_bytes());
+        update_framed(&mut hasher, contents);
+    }
+    hasher.update(b"cflags\0");
+    for flag in opts.extensions.extra_cflags() {
+        update_framed(&mut hasher, flag.as_bytes());
+    }
+
+    update_native_build_identity(&mut hasher, toolchain)?;
+    for name in [
+        "OPT",
+        "DEBUG",
+        "LTO",
+        "LDFLAGS",
+        "LDLIBS",
+        "EXT_LIBS",
+        "EXT_SRCS",
+        "EXT_CFLAGS",
+        "LIB",
+        "HOST_OS",
+    ] {
+        update_framed(&mut hasher, name.as_bytes());
+        update_optional(
+            &mut hasher,
+            std::env::var_os(name)
+                .as_ref()
+                .map(|value| value.as_encoded_bytes()),
+        );
+    }
+
+    Ok(Some(hex_digest(hasher.finalize())))
+}
+
+fn generator_binary_sha256() -> Result<&'static str, CompileError> {
+    static KEY: OnceLock<Result<String, String>> = OnceLock::new();
+    match KEY.get_or_init(|| {
+        let path = std::env::current_exe()
+            .map_err(|err| format!("failed to locate current executable: {err}"))?;
+        artifact_sha256(&path).map_err(|err| err.to_string())
+    }) {
+        Ok(key) => Ok(key),
+        Err(err) => Err(CompileError::LibLoad(err.clone())),
+    }
+}
+
+fn update_native_build_identity(
+    hasher: &mut Sha256,
+    toolchain: &rvr_openvm::RuntimeToolchain,
+) -> Result<(), CompileError> {
+    for value in [
+        toolchain.compiler.as_str(),
+        toolchain.linker.as_str(),
+        toolchain.make.as_str(),
+        toolchain.host_os,
+    ] {
+        update_framed(hasher, value.as_bytes());
+    }
+    update_command_identity(hasher, &toolchain.compiler, &["--version"])?;
+    update_command_identity(hasher, &toolchain.linker, &["--version"])?;
+    update_command_identity(hasher, &toolchain.make, &["--version"])?;
+    update_command_identity(
+        hasher,
+        &toolchain.compiler,
+        &["-march=native", "-###", "-E", "-x", "c", "-"],
+    )
+}
+
+fn update_named_text_assets(
+    hasher: &mut Sha256,
+    category: &[u8],
+    assets: Vec<(&'static str, &'static str)>,
+) {
+    update_framed(hasher, category);
+    for (name, contents) in assets {
+        update_framed(hasher, name.as_bytes());
+        update_framed(hasher, contents.as_bytes());
+    }
+}
+
+fn update_source_location(hasher: &mut Sha256, location: Option<&SourceLoc>) {
+    let Some(location) = location else {
+        hasher.update([0]);
+        return;
+    };
+    hasher.update([1]);
+    update_framed(hasher, location.file.as_bytes());
+    hasher.update(location.line.to_le_bytes());
+    update_framed(hasher, location.function.as_bytes());
+}
+
+fn update_debug(hasher: &mut Sha256, value: &dyn fmt::Debug) -> Result<(), CompileError> {
+    struct DigestWriter<'a>(&'a mut Sha256);
+    impl fmt::Write for DigestWriter<'_> {
+        fn write_str(&mut self, value: &str) -> fmt::Result {
+            self.0.update(value.as_bytes());
+            Ok(())
+        }
+    }
+    let mut value_hasher = Sha256::new();
+    write!(DigestWriter(&mut value_hasher), "{value:?}")
+        .map_err(|_| CompileError::LibLoad("failed to hash rvr codegen configuration".into()))?;
+    hasher.update(value_hasher.finalize());
+    Ok(())
+}
+
+fn update_optional(hasher: &mut Sha256, value: Option<&[u8]>) {
+    match value {
+        Some(value) => {
+            hasher.update([1]);
+            update_framed(hasher, value);
+        }
+        None => hasher.update([0]),
+    }
+}
+
+fn update_framed(hasher: &mut Sha256, value: &[u8]) {
+    hasher.update((value.len() as u64).to_le_bytes());
+    hasher.update(value);
 }
 
 fn generated_project_cache_key(
@@ -1588,4 +2050,76 @@ fn find_shared_lib(dir: &Path) -> Result<PathBuf, CompileError> {
                 dir.display()
             ))
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use openvm_instructions::instruction::Instruction;
+    use p3_baby_bear::BabyBear;
+    use rvr_openvm_lift::RvrExtension;
+
+    use super::*;
+
+    struct UnfingerprintedExtension;
+
+    impl RvrExtension<BabyBear> for UnfingerprintedExtension {
+        fn try_lift(&self, _insn: &Instruction<BabyBear>, _pc: u64) -> Option<LiftedInstr> {
+            None
+        }
+
+        fn c_headers(&self) -> Vec<(&'static str, &'static str)> {
+            Vec::new()
+        }
+    }
+
+    #[test]
+    fn extension_without_fingerprint_disables_input_cache() {
+        let mut registry = ExtensionRegistry::<BabyBear>::new();
+        assert_eq!(registry.codegen_fingerprints(), Some(Vec::new()));
+        registry.register(UnfingerprintedExtension);
+        assert_eq!(registry.codegen_fingerprints(), None);
+    }
+
+    #[test]
+    fn native_cache_manifest_reads_legacy_and_input_keyed_formats() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("artifact.so.sha256");
+
+        fs::write(&path, "project=project-key\nartifact=artifact-key\n").unwrap();
+        assert_eq!(
+            read_preflight_cache_manifest(&path),
+            Some(RvrNativeCacheManifest {
+                project_key: "project-key".into(),
+                artifact_key: "artifact-key".into(),
+                input_key: None,
+            })
+        );
+
+        write_preflight_cache_manifest(&path, "project-key", "artifact-key", Some("input-key"))
+            .unwrap();
+        assert_eq!(
+            read_preflight_cache_manifest(&path),
+            Some(RvrNativeCacheManifest {
+                project_key: "project-key".into(),
+                artifact_key: "artifact-key".into(),
+                input_key: Some("input-key".into()),
+            })
+        );
+    }
+
+    #[test]
+    fn native_cache_manifest_rejects_ambiguous_or_incomplete_data() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("artifact.so.sha256");
+        for invalid in [
+            "project=p\n",
+            "artifact=a\n",
+            "project=p\nartifact=a\nunknown=x\n",
+            "project=p\nproject=q\nartifact=a\n",
+            "project=p\nartifact=a\ninput=x\ninput=y\n",
+        ] {
+            fs::write(&path, invalid).unwrap();
+            assert_eq!(read_preflight_cache_manifest(&path), None);
+        }
+    }
 }

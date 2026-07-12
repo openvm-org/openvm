@@ -14,8 +14,9 @@ use rvr_openvm_ir::{
     CfgEffect, ExtEmitCtx, ExtInstr, FixedTraceRows, InstrAt, LiftedInstr, Variable,
 };
 use rvr_openvm_lift::{
-    decode_variable, fixed_trace_rows_for_chip, max_main_memory_pages_for_contiguous_range,
-    opcode_air_idx, AirIndex, ExtensionError, RvrExtension, RvrExtensionCtx, RvrInstruction,
+    air_index_codegen_fingerprint, decode_variable, fixed_trace_rows_for_chip,
+    max_main_memory_pages_for_contiguous_range, opcode_air_idx, AirIndex, ExtensionError,
+    RvrExtension, RvrExtensionCtx, RvrInstruction,
 };
 
 fn decode_reg(value: u32) -> Variable {
@@ -114,6 +115,17 @@ impl KeccakExtension {
 }
 
 impl RvrExtension for KeccakExtension {
+    fn codegen_fingerprint(&self) -> Option<Vec<u8>> {
+        Some(air_index_codegen_fingerprint(
+            b"openvm-keccak-rvr-v1",
+            &[
+                self.xorin_chip_idx,
+                self.keccakf_op_chip_idx,
+                self.keccakf_perm_chip_idx,
+            ],
+        ))
+    }
+
     fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
 

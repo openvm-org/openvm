@@ -93,6 +93,10 @@ impl Default for PairingExtension {
 }
 
 impl RvrExtension for PairingExtension {
+    fn codegen_fingerprint(&self) -> Option<Vec<u8>> {
+        Some(b"openvm-pairing-rvr-v1".to_vec())
+    }
+
     fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
 
