@@ -1,5 +1,6 @@
 use std::{collections::HashSet, fmt::Write};
 
+use openvm_instructions::PUBLIC_VALUES_AS;
 use rvr_openvm_ir::{
     ArenaAlu3Baked, ArenaRw1Baked, ArenaWr1Baked, MemWidth, PageAddressSpace, Variable,
 };
@@ -1152,6 +1153,92 @@ impl<'a> EmitContext<'a> {
         }
     }
 
+    /// Emit the LoadStore witness for an extension-provided full-word store.
+    fn trace_store_u64_as_inline(
+        &mut self,
+        src: Variable,
+        ptr: Variable,
+        offset: i32,
+        addr_space: u32,
+        local_opcode: u8,
+    ) -> (String, String) {
+        let src_reg = reg_index(src);
+        let ptr_reg = reg_index(ptr);
+        if !self.inline_records_enabled() {
+            let ptr = self.read_reg(ptr_reg);
+            let src = self.read_reg(src_reg);
+            let addr = match offset.cmp(&0) {
+                std::cmp::Ordering::Less => {
+                    format!("({ptr} - {})", hex_u32(offset.unsigned_abs()))
+                }
+                std::cmp::Ordering::Equal => ptr.clone(),
+                std::cmp::Ordering::Greater => format!("({ptr} + {})", hex_u32(offset as u32)),
+            };
+            self.trace_wr_as_u64(&addr, &src, addr_space);
+            return (src, ptr);
+        }
+
+        assert_eq!(
+            addr_space, PUBLIC_VALUES_AS,
+            "inline extension store currently supports public values only"
+        );
+        let chip = self.current_chip_idx;
+        let pc = hex_u32(self.current_pc as u32);
+        let fromts = self.next_var();
+        self.write_line(&format!("uint32_t {fromts} = state->tracer->timestamp;"));
+        let (ptr, ptr_prev_ts) = self.reg_read_capture(ptr_reg);
+        let (src, src_prev_ts) = self.reg_read_capture(src_reg);
+        let addr_expr = match offset.cmp(&0) {
+            std::cmp::Ordering::Less => {
+                format!("{ptr} - {}", hex_u32(offset.unsigned_abs()))
+            }
+            std::cmp::Ordering::Equal => ptr.clone(),
+            std::cmp::Ordering::Greater => format!("{ptr} + {}", hex_u32(offset as u32)),
+        };
+        let addr = self.materialize_u64(&addr_expr);
+        let block_addr = self.materialize_u64(&format!("preflight_block_addr({addr})"));
+        let prev = self.next_var();
+        self.write_line(&format!(
+            "uint64_t {prev} = preflight_read_pv_block(state->tracer, {block_addr});"
+        ));
+        let write_prev_ts = self.next_var();
+        self.write_line(&format!(
+            "uint32_t {write_prev_ts} = trace_pv_touch(state, {block_addr});"
+        ));
+
+        if let Some(geom) = self.arena_native_airs.get(&chip).copied() {
+            let baked = ArenaLoadStoreBaked {
+                rs1_ptr: u32::from(ptr_reg) * 8,
+                rd_rs2_ptr: u32::from(src_reg) * 8,
+                imm: offset as u16,
+                imm_sign: (offset < 0) as u8,
+                mem_as: addr_space as u8,
+                local_opcode,
+                is_byte: 0,
+                is_word: 0,
+            };
+            self.emit_arena_loadstore_stores(
+                geom,
+                baked,
+                &pc,
+                &fromts,
+                &ptr,
+                &ptr_prev_ts,
+                &src_prev_ts,
+                &addr,
+                &src,
+                Some(&write_prev_ts),
+                Some(&prev),
+            );
+        } else {
+            self.write_line(&format!(
+                "preflight_emit_alu3(state, {chip}u, {pc}, {fromts}, {ptr_prev_ts}, \
+                 {src_prev_ts}, {write_prev_ts}, {prev}, {ptr}, {src});"
+            ));
+        }
+        (src, ptr)
+    }
+
     fn write_reg_direct(&mut self, idx: u8, val: &str) {
         if idx == 0 {
             return;
@@ -1691,6 +1778,17 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
 
     fn trace_wr_as_u64(&mut self, addr: &str, val: &str, addr_space: u32) {
         EmitContext::trace_wr_as_u64(self, addr, val, addr_space);
+    }
+
+    fn trace_store_u64_as(
+        &mut self,
+        src: Variable,
+        ptr: Variable,
+        offset: i32,
+        addr_space: u32,
+        local_opcode: u8,
+    ) -> (String, String) {
+        self.trace_store_u64_as_inline(src, ptr, offset, addr_space, local_opcode)
     }
 
     fn trace_timestamp(&mut self) {

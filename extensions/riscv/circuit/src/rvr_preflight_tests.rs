@@ -2167,6 +2167,9 @@ fn rvr_preflight_reveal_registry_admits_stores_only() {
 
 #[test]
 fn rvr_preflight_reveal_differential_matches_interpreter() {
+    // Exercise the compact AS=3 assembler explicitly; the arena-native path
+    // has its own strengthened prove-and-verify gate below.
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
     let exe = public_values_reveal_differential_exe();
     // SystemRecords parity: from/to state (next timestamp), exec frequencies,
     // and touched_memory including the AS=3 blocks' values and last-access
@@ -3187,14 +3190,52 @@ fn rvr_preflight_arena_native_proves_and_verifies() {
     assert!(segments >= 1, "expected at least one proven segment");
 }
 
-/// R4 mixed-AIR regression: main-memory load/store instructions are emitted
-/// arena-native, while REVEAL instructions sharing the same LoadStore AIR are
-/// assembled from the verbose log. The prove-path arena must retain both.
+/// R4 mixed-AIR regression: main-memory load/store instructions and REVEAL
+/// instructions sharing the same LoadStore AIR must all be arena-native. The
+/// four AS=3 rows may never become a secondary source that whole-AIR staging
+/// would overwrite.
 #[test]
 fn rvr_preflight_arena_native_reveal_mixed_air_proves_and_verifies() {
     std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "1");
     let exe = public_values_reveal_differential_exe();
-    let segments = prove_rvr_preflight_and_verify(exe, Rv64ImConfig::with_public_values_bytes(32));
+    let config = Rv64ImConfig::with_public_values_bytes(32);
+    let (vm, _) =
+        VirtualMachine::new_with_keygen(test_cpu_engine(), Rv64ImCpuBuilder, config.clone())
+            .expect("rvr vm init");
+    let loadstore_air = vm
+        .air_names()
+        .position(|name| name.contains("Rv64LoadStoreAdapterAir, LoadStoreCoreAir<8>"))
+        .expect("LoadStore air");
+    let RvrPreflightRoute::Rvr(instance) = vm
+        .preflight_routed_instance(&exe)
+        .expect("mixed reveal route")
+    else {
+        panic!("mixed reveal program must route to rvr")
+    };
+    let inline = instance.compiled().inline_records();
+    assert!(
+        inline
+            .arena_native_airs
+            .iter()
+            .any(|&(air, _)| air == loadstore_air),
+        "LoadStore must remain arena-native when the program contains REVEAL"
+    );
+    for (slot, (instruction, _)) in exe
+        .program
+        .instructions_and_debug_infos
+        .iter()
+        .enumerate()
+        .filter_map(|(slot, entry)| entry.as_ref().map(|entry| (slot, entry)))
+        .filter(|(_, (instruction, _))| instruction.e.as_canonical_u32() == PUBLIC_VALUES_AS)
+    {
+        assert!(
+            inline.pc_slots[slot],
+            "REVEAL at program slot {slot} ({:?}) must emit inline",
+            instruction.opcode
+        );
+    }
+
+    let segments = prove_rvr_preflight_and_verify(exe, config);
     assert_eq!(
         segments, 1,
         "small mixed LoadStore/REVEAL program is single segment"
