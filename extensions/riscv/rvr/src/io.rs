@@ -14,8 +14,9 @@ use rvr_openvm_ir::{
     PageAddressSpace,
 };
 use rvr_openvm_lift::{
-    air_index_to_c, max_main_memory_pages_for_contiguous_range, opcode_air_idx, AirIndex,
-    ExtensionError, RvrExtension, RvrExtensionCtx, RvrInstruction, RvrRuntimeExtension,
+    air_index_codegen_fingerprint, air_index_to_c, max_main_memory_pages_for_contiguous_range,
+    opcode_air_idx, AirIndex, ExtensionError, RvrExtension, RvrExtensionCtx, RvrInstruction,
+    RvrRuntimeExtension,
 };
 
 use crate::instruction::{decode_imm_cg, decode_reg, Reg};
@@ -183,6 +184,13 @@ impl Rv64IoExtension {
 }
 
 impl RvrExtension for Rv64IoExtension {
+    fn codegen_fingerprint(&self) -> Option<Vec<u8>> {
+        Some(air_index_codegen_fingerprint(
+            b"openvm-rv64io-rvr-v1",
+            &[self.hint_store_chip_idx],
+        ))
+    }
+
     fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
 

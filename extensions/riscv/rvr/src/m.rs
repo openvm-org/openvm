@@ -29,6 +29,10 @@ impl Default for Rv64MExtension {
 }
 
 impl RvrExtension for Rv64MExtension {
+    fn codegen_fingerprint(&self) -> Option<Vec<u8>> {
+        Some(b"openvm-rv64m-rvr-v1".to_vec())
+    }
+
     fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
         let operations = [

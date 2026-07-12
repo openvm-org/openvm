@@ -106,6 +106,10 @@ impl Default for Rv64PhantomExtension {
 }
 
 impl RvrExtension for Rv64PhantomExtension {
+    fn codegen_fingerprint(&self) -> Option<Vec<u8>> {
+        Some(b"openvm-rv64phantom-rvr-v1".to_vec())
+    }
+
     fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
         if insn.opcode.as_usize() != SystemOpcode::PHANTOM.global_opcode_usize() {
             return None;

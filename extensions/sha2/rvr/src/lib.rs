@@ -13,8 +13,9 @@ use rvr_openvm_ir::{
     CfgEffect, ExtEmitCtx, ExtInstr, FixedTraceRows, InstrAt, LiftedInstr, Variable,
 };
 use rvr_openvm_lift::{
-    decode_variable, fixed_trace_rows_for_chip, max_main_memory_pages_for_contiguous_range,
-    opcode_air_idx, AirIndex, ExtensionError, RvrExtension, RvrExtensionCtx, RvrInstruction,
+    air_index_codegen_fingerprint, decode_variable, fixed_trace_rows_for_chip,
+    max_main_memory_pages_for_contiguous_range, opcode_air_idx, AirIndex, ExtensionError,
+    RvrExtension, RvrExtensionCtx, RvrInstruction,
 };
 
 // SHA-512 has three independent ranges; its largest range is the 128-byte block.
@@ -143,6 +144,18 @@ impl Sha2Extension {
 }
 
 impl RvrExtension for Sha2Extension {
+    fn codegen_fingerprint(&self) -> Option<Vec<u8>> {
+        Some(air_index_codegen_fingerprint(
+            b"openvm-sha2-rvr-v1",
+            &[
+                self.sha256_main_chip_idx,
+                self.sha256_block_hasher_chip_idx,
+                self.sha512_main_chip_idx,
+                self.sha512_block_hasher_chip_idx,
+            ],
+        ))
+    }
+
     fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
 

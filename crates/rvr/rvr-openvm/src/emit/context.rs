@@ -588,7 +588,7 @@ impl<'a> EmitContext<'a> {
         let rd_ptr = (rd as u32) * 8;
         let rs1_ptr = (rs1 as u32) * 8;
         let stores = [
-            (off.from_pc, format!("{pc}")),
+            (off.from_pc, pc.to_string()),
             (off.from_timestamp, fromts.to_string()),
             (off.rd_ptr, format!("{rd_ptr}u")),
             (off.rs1_ptr, format!("{rs1_ptr}u")),

@@ -83,6 +83,17 @@ impl Fp2RvrExtension {
 }
 
 impl RvrExtension for Fp2RvrExtension {
+    fn codegen_fingerprint(&self) -> Option<Vec<u8>> {
+        let mut fingerprint = b"openvm-fp2-rvr-v1\0".to_vec();
+        fingerprint.extend_from_slice(&(self.fp2_moduli.len() as u64).to_le_bytes());
+        for modulus in &self.fp2_moduli {
+            fingerprint.extend_from_slice(&modulus.num_limbs.to_le_bytes());
+            fingerprint.extend_from_slice(&(modulus.modulus_bytes.len() as u64).to_le_bytes());
+            fingerprint.extend_from_slice(&modulus.modulus_bytes);
+        }
+        Some(fingerprint)
+    }
+
     fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
         self.try_lift_fp2(insn, pc, opcode)

@@ -196,6 +196,7 @@ impl LinearMemory for MmapMemory {
 #[cfg(not(feature = "unprotected"))]
 #[cold]
 #[inline(never)]
+#[cfg(not(feature = "unprotected"))]
 fn panic_oob(start: usize, size: usize, memory_size: usize) -> ! {
     panic!("Memory access out of bounds: start={start} size={size} memory_size={memory_size}");
 }
