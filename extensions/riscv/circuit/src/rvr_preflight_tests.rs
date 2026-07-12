@@ -515,6 +515,48 @@ fn rvr_preflight_inline_addsub_records_match_assembler() {
     }
 }
 
+/// Stage-2 byte oracle over every migrated RV64IM wire family. The delta arm
+/// reconstructs its omitted previous timestamps and partitions the global
+/// stream; the resulting Dense arenas must match the established compact arm
+/// byte-for-byte for every AIR.
+#[test]
+fn rvr_preflight_delta_full_rv64im_matrix_is_byte_equal_to_compact() {
+    let exe = full_rv64im_matrix_exe();
+
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "compact");
+    let (compact_output, compact_arenas, _) = run_inline_addsub_differential_arm(&exe);
+
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "delta");
+    let (delta_output, delta_arenas, _) = run_inline_addsub_differential_arm(&exe);
+    let delta_stream = delta_output
+        .delta_records
+        .as_ref()
+        .expect("delta output must retain its recyclable backing");
+    assert_eq!(
+        delta_stream.bytes().as_ptr() as usize % 32,
+        0,
+        "generated C delta target must be 32-byte aligned"
+    );
+
+    assert_system_records_eq(
+        "delta_full_matrix",
+        &compact_output.system_records,
+        &delta_output.system_records,
+    );
+    assert_eq!(
+        compact_output.raw_logs.program_log, delta_output.raw_logs.program_log,
+        "delta decoder must reconstruct the complete chronological program log"
+    );
+    assert_eq!(compact_arenas.len(), delta_arenas.len());
+    for (air, (compact, delta)) in compact_arenas.iter().zip(delta_arenas.iter()).enumerate() {
+        assert_eq!(
+            compact.allocated(),
+            delta.allocated(),
+            "delta-decoded arena differs from compact for AIR {air}"
+        );
+    }
+}
+
 fn mul_div_vector_exe() -> VmExe<F> {
     exe(&[
         addi(1, 0, 21),
@@ -3298,6 +3340,58 @@ fn rvr_preflight_compact_request_reveal_mixed_air_proves_and_verifies() {
 
     let segments = prove_rvr_preflight_and_verify(exe, config);
     assert_eq!(segments, 1, "mixed LoadStore/REVEAL fixture is one segment");
+}
+
+/// Stage-2 CPU decoder oracle: the chronological 32-byte delta stream omits
+/// every access previous-timestamp, then reconstructs and partitions the
+/// established compact wires before arena assembly. This fixture combines
+/// ordinary AS=2 load/store rows with AS=3 REVEAL rows in the same AIR and
+/// proves the reconstructed arena end to end.
+#[test]
+fn rvr_preflight_delta_request_reveal_mixed_air_proves_and_verifies() {
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "1");
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "delta");
+
+    let exe = public_values_reveal_differential_exe();
+    let config = Rv64ImConfig::with_public_values_bytes(32);
+    let (vm, _) =
+        VirtualMachine::new_with_keygen(test_cpu_engine(), Rv64ImCpuBuilder, config.clone())
+            .expect("rvr vm init");
+    let RvrPreflightRoute::Rvr(instance) = vm
+        .preflight_routed_instance(&exe)
+        .expect("delta mixed reveal route")
+    else {
+        panic!("mixed reveal program must route to rvr")
+    };
+    assert!(instance.compiled().inline_records().delta_records);
+    assert!(instance
+        .compiled()
+        .inline_records()
+        .arena_native_airs
+        .is_empty());
+
+    let segments = prove_rvr_preflight_and_verify(exe, config);
+    assert_eq!(
+        segments, 1,
+        "mixed delta LoadStore/REVEAL fixture is one segment"
+    );
+}
+
+/// A segment-boundary checkpoint runs before the next basic block. Delta
+/// emission must not reserve that block's record span until the checkpoint
+/// admits it; otherwise suspension leaves an unwritten zero-record tail.
+#[test]
+fn rvr_preflight_delta_multi_segment_does_not_reserve_suspended_block() {
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "1");
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "delta");
+
+    let mut config = Rv64ImConfig::default();
+    config.rv64i.system.segmentation_max_memory = 1;
+    let segments = prove_rvr_preflight_and_verify(repeated_adds_exe(400), config);
+    assert!(
+        segments > 1,
+        "tight segmentation must exercise the delta suspension boundary"
+    );
 }
 
 /// G2 zero-copy oracle: the same compact-compiled program executed twice —
