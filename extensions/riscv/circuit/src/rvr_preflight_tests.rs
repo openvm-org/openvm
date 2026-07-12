@@ -3455,6 +3455,55 @@ fn rvr_preflight_wire_staged_host_write_checkpoint() {
     let dyn_insns = checkpoint_loop_dyn_insns(iters_base, iters_shift, body_adds);
     const ITERS: usize = 5;
 
+    // Execution floors for the same 8.2M-instruction fixture. Pure is the
+    // native AOT lower bound; metered retains the page/height bookkeeping
+    // needed to size a proving segment but emits no preflight records.
+    let (floor_vm, _) = VirtualMachine::new_with_keygen(
+        test_cpu_engine(),
+        Rv64ImCpuBuilder,
+        Rv64ImConfig::default(),
+    )
+    .expect("floor vm init");
+    let pure = floor_vm.interpreter(&exe).expect("pure rvr instance");
+    let metered = floor_vm
+        .metered_interpreter(&exe)
+        .expect("metered rvr instance");
+    let mut pure_best = f64::MAX;
+    let mut metered_best = f64::MAX;
+    for _ in 0..ITERS {
+        let state = pure.create_initial_vm_state(Streams::default());
+        let t0 = Instant::now();
+        let state = pure
+            .execute_from_state(state, Some(dyn_insns))
+            .expect("pure rvr execution");
+        pure_best = pure_best.min(t0.elapsed().as_secs_f64());
+        std::hint::black_box(state);
+
+        let state = metered.create_initial_vm_state(Streams::default());
+        let metered_ctx = floor_vm.build_metered_ctx(&exe);
+        let t0 = Instant::now();
+        let (segments, state) = metered
+            .execute_metered_from_state(state, metered_ctx)
+            .expect("metered rvr execution");
+        metered_best = metered_best.min(t0.elapsed().as_secs_f64());
+        std::hint::black_box((segments, state));
+    }
+    let mut pc_map_best = f64::MAX;
+    for _ in 0..ITERS {
+        let t0 = Instant::now();
+        let map = floor_vm.pc_to_air_idx(&exe).expect("pc to air mapping");
+        pc_map_best = pc_map_best.min(t0.elapsed().as_secs_f64());
+        std::hint::black_box(map);
+    }
+    eprintln!(
+        "G2_PHASE1_FLOOR dyn_insns={dyn_insns} pure_ms={:.3} metered_ms={:.3} pc_map_ms={:.3}",
+        pure_best * 1e3,
+        metered_best * 1e3,
+        pc_map_best * 1e3,
+    );
+
+    let checkpoint_wire_bytes;
+
     // Arm F (G1 fused): full records at dense stride, C-written into staged
     // arena backings — the Phase C rvr-arm host shape.
     std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "1");
@@ -3487,6 +3536,9 @@ fn rvr_preflight_wire_staged_host_write_checkpoint() {
             "fused compile must be arena-native"
         );
         let mut best = f64::MAX;
+        let mut setup_best = f64::MAX;
+        let mut execute_best = f64::MAX;
+        let mut finish_best = f64::MAX;
         let mut bytes_written = 0usize;
         for _ in 0..ITERS {
             let mut stagings = Vec::new();
@@ -3500,9 +3552,11 @@ fn rvr_preflight_wire_staged_host_write_checkpoint() {
                     &geom,
                 );
                 targets.insert(air, buf);
-                stagings.push((air, stride, arena));
+                stagings.push((air, stride, geom, arena));
             }
             let init = instance.create_initial_state(Streams::default());
+            let setup_s = t0.elapsed().as_secs_f64();
+            let t1 = Instant::now();
             let output = instance
                 .execute_preflight_from_state_with_arena_targets(
                     init,
@@ -3511,7 +3565,7 @@ fn rvr_preflight_wire_staged_host_write_checkpoint() {
                     &targets,
                 )
                 .expect("fused preflight execution");
-            let dt = t0.elapsed().as_secs_f64();
+            let execute_s = t1.elapsed().as_secs_f64();
             bytes_written = output
                 .arena_native_written
                 .iter()
@@ -3519,18 +3573,39 @@ fn rvr_preflight_wire_staged_host_write_checkpoint() {
                     let stride = stagings
                         .iter()
                         .find(|&&(staged_air, ..)| staged_air == air)
-                        .map(|&(_, stride, _)| stride)
+                        .map(|(_, stride, _, _)| *stride)
                         .unwrap();
                     count as usize * stride
                 })
                 .sum();
+            let t2 = Instant::now();
+            let mut finished = Vec::new();
+            for (air, _, geom, mut arena) in stagings {
+                let written = output
+                    .arena_native_written
+                    .iter()
+                    .find(|&&(written_air, _)| written_air == air)
+                    .map(|&(_, count)| count as usize)
+                    .unwrap();
+                arena.finish_arena_native(written, &geom);
+                finished.push(arena);
+            }
+            let finish_s = t2.elapsed().as_secs_f64();
+            std::hint::black_box(&finished);
             instance.recycle_output(output);
-            best = best.min(dt);
+            setup_best = setup_best.min(setup_s);
+            execute_best = execute_best.min(execute_s);
+            finish_best = finish_best.min(finish_s);
+            best = best.min(setup_s + execute_s + finish_s);
         }
         eprintln!(
             "G2_CHECKPOINT arm=fused_staged(G1) dyn_insns={dyn_insns} bytes={bytes_written} \
-             wall_ms={:.2} write_rate={:.2}GB/s",
+             wall_ms={:.2} setup_ms={:.2} execute_emit_ms={:.2} finish_ms={:.3} \
+             write_rate={:.2}GB/s",
             best * 1e3,
+            setup_best * 1e3,
+            execute_best * 1e3,
+            finish_best * 1e3,
             bytes_written as f64 / best / 1e9,
         );
     }
@@ -3561,6 +3636,9 @@ fn rvr_preflight_wire_staged_host_write_checkpoint() {
 
         // Arm W: staged wire targets, records land in their final backing.
         let mut best = f64::MAX;
+        let mut setup_best = f64::MAX;
+        let mut execute_best = f64::MAX;
+        let mut finish_best = f64::MAX;
         let mut bytes_written = 0usize;
         for _ in 0..ITERS {
             let mut targets: BTreeMap<usize, ChipRecordBuf> = BTreeMap::new();
@@ -3575,6 +3653,8 @@ fn rvr_preflight_wire_staged_host_write_checkpoint() {
                 staged.push((air, wire_size, arena));
             }
             let init = instance.create_initial_state(Streams::default());
+            let setup_s = t0.elapsed().as_secs_f64();
+            let t1 = Instant::now();
             let output = instance
                 .execute_preflight_from_state_with_arena_targets(
                     init,
@@ -3583,6 +3663,9 @@ fn rvr_preflight_wire_staged_host_write_checkpoint() {
                     &targets,
                 )
                 .expect("staged wire preflight execution");
+            let execute_s = t1.elapsed().as_secs_f64();
+            let t2 = Instant::now();
+            let mut finished = Vec::new();
             for (air, wire_size, mut arena) in staged {
                 let written = output
                     .arena_native_written
@@ -3591,9 +3674,10 @@ fn rvr_preflight_wire_staged_host_write_checkpoint() {
                     .map(|&(_, count)| count as usize)
                     .unwrap();
                 arena.finish_rvr_wire(written, wire_size);
-                std::hint::black_box(&arena);
+                finished.push(arena);
             }
-            let dt = t0.elapsed().as_secs_f64();
+            let finish_s = t2.elapsed().as_secs_f64();
+            std::hint::black_box(&finished);
             bytes_written = output
                 .arena_native_written
                 .iter()
@@ -3607,18 +3691,28 @@ fn rvr_preflight_wire_staged_host_write_checkpoint() {
                 })
                 .sum();
             instance.recycle_output(output);
-            best = best.min(dt);
+            setup_best = setup_best.min(setup_s);
+            execute_best = execute_best.min(execute_s);
+            finish_best = finish_best.min(finish_s);
+            best = best.min(setup_s + execute_s + finish_s);
         }
+        checkpoint_wire_bytes = bytes_written;
         eprintln!(
             "G2_CHECKPOINT arm=wire_staged(G2) dyn_insns={dyn_insns} bytes={bytes_written} \
-             wall_ms={:.2} write_rate={:.2}GB/s",
+             wall_ms={:.2} setup_ms={:.2} execute_emit_ms={:.2} finish_ms={:.3} \
+             write_rate={:.2}GB/s",
             best * 1e3,
+            setup_best * 1e3,
+            execute_best * 1e3,
+            finish_best * 1e3,
             bytes_written as f64 / best / 1e9,
         );
 
         // Arm P: pooled wire buffers + the alloc+memcpy adoption (the INC1
         // shape whose fresh-buffer churn M-GPUDEC measured at +86%/seg).
         let mut best = f64::MAX;
+        let mut execute_best = f64::MAX;
+        let mut adopt_best = f64::MAX;
         let mut bytes_written = 0usize;
         for _ in 0..ITERS {
             let init = instance.create_initial_state(Streams::default());
@@ -3626,6 +3720,8 @@ fn rvr_preflight_wire_staged_host_write_checkpoint() {
             let output = instance
                 .execute_preflight_from_state_with_capacities(init, Some(dyn_insns), &trace_heights)
                 .expect("pooled compact preflight execution");
+            let execute_s = t0.elapsed().as_secs_f64();
+            let t1 = Instant::now();
             let mut adopted = Vec::new();
             for chip in &output.inline_records {
                 let mut dense = DenseRecordArena::with_byte_capacity(chip.bytes.len());
@@ -3635,7 +3731,7 @@ fn rvr_preflight_wire_staged_host_write_checkpoint() {
                 dense.rvr_wire = true;
                 adopted.push(dense);
             }
-            let dt = t0.elapsed().as_secs_f64();
+            let adopt_s = t1.elapsed().as_secs_f64();
             bytes_written = output
                 .inline_records
                 .iter()
@@ -3644,13 +3740,50 @@ fn rvr_preflight_wire_staged_host_write_checkpoint() {
             std::hint::black_box(&adopted);
             drop(adopted);
             instance.recycle_output(output);
-            best = best.min(dt);
+            execute_best = execute_best.min(execute_s);
+            adopt_best = adopt_best.min(adopt_s);
+            best = best.min(execute_s + adopt_s);
         }
         eprintln!(
             "G2_CHECKPOINT arm=wire_pooled_memcpy(INC1) dyn_insns={dyn_insns} bytes={bytes_written} \
-             wall_ms={:.2} write_rate={:.2}GB/s",
+             wall_ms={:.2} execute_emit_ms={:.2} adopt_ms={:.2} write_rate={:.2}GB/s",
             best * 1e3,
+            execute_best * 1e3,
+            adopt_best * 1e3,
             bytes_written as f64 / best / 1e9,
         );
     }
+
+    // A warmed contiguous memset/copy over the exact compact payload bounds
+    // the raw DRAM-byte term. The checkpoint's hot loop is AddSub-dominated,
+    // so its C writes already target one sequential per-AIR stream; a large
+    // gap to this floor is per-record compute/store overhead, not scatter.
+    assert!(checkpoint_wire_bytes > 0);
+    let mut src = vec![0x5au8; checkpoint_wire_bytes];
+    let mut dst = vec![0u8; checkpoint_wire_bytes];
+    let t0 = Instant::now();
+    dst.fill(0xa5);
+    let first_touch = t0.elapsed().as_secs_f64();
+    let mut fill_best = f64::MAX;
+    let mut copy_best = f64::MAX;
+    for value in 0..ITERS as u8 {
+        let t0 = Instant::now();
+        dst.fill(value);
+        fill_best = fill_best.min(t0.elapsed().as_secs_f64());
+
+        src[0] = value;
+        let t0 = Instant::now();
+        dst.copy_from_slice(&src);
+        copy_best = copy_best.min(t0.elapsed().as_secs_f64());
+        std::hint::black_box(dst[checkpoint_wire_bytes - 1]);
+    }
+    eprintln!(
+        "G2_PHASE1_STREAM bytes={checkpoint_wire_bytes} first_touch_ms={:.3} fill_ms={:.3} \
+         fill_GBps={:.2} copy_ms={:.3} copy_GBps={:.2}",
+        first_touch * 1e3,
+        fill_best * 1e3,
+        checkpoint_wire_bytes as f64 / fill_best / 1e9,
+        copy_best * 1e3,
+        checkpoint_wire_bytes as f64 / copy_best / 1e9,
+    );
 }
