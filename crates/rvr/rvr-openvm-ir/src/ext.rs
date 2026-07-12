@@ -1,3 +1,16 @@
+/// Inline record shape emitted by a preflight extension instruction.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InlineRecordShape {
+    /// Two reads and one write, shared by ALU and LoadStore records.
+    Alu3,
+    /// Two reads and no write.
+    Branch2,
+    /// One conditional write.
+    Wr1,
+    /// One read and one conditional write.
+    Rw1,
+}
+
 /// Trait abstracting the code-generation context for extension instructions.
 ///
 /// Extensions use this to read/write registers (with tracing handled in the
@@ -51,6 +64,29 @@ pub trait ExtEmitCtx {
     /// the written value; metered records the page; pure is a no-op.
     fn trace_wr_as_u64(&mut self, addr: &str, val: &str, addr_space: u32);
 
+    /// Trace a full-word store to an arbitrary address space and return the
+    /// resolved `(src, ptr)` C expressions. Preflight codegen overrides this
+    /// to emit an inline LoadStore record; other modes retain the verbose
+    /// trace behavior below.
+    fn trace_store_u64_as(
+        &mut self,
+        src_reg: u8,
+        ptr_reg: u8,
+        offset: u32,
+        addr_space: u32,
+        _local_opcode: u8,
+    ) -> (String, String) {
+        let ptr = self.read_reg(ptr_reg);
+        let src = self.read_reg(src_reg);
+        let addr = if offset == 0 {
+            ptr.clone()
+        } else {
+            format!("({ptr} + 0x{offset:08x}u)")
+        };
+        self.trace_wr_as_u64(&addr, &src, addr_space);
+        (src, ptr)
+    }
+
     /// Emit a timestamp-only trace tick.
     fn trace_timestamp(&mut self);
 }
@@ -89,6 +125,11 @@ pub trait ExtInstr: std::fmt::Debug + Send + Sync {
     /// extension FFIs read or write main memory through `state`.
     fn accesses_memory(&self) -> bool {
         true
+    }
+
+    /// Compact record emitted by this extension in preflight mode, if any.
+    fn inline_record_shape(&self) -> Option<InlineRecordShape> {
+        None
     }
 
     /// Clone into a new boxed trait object.

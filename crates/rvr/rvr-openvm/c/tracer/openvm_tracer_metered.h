@@ -403,12 +403,6 @@ static __attribute__((always_inline)) inline void trace_wr_as(
   record_page(state->tracer, addr_space, addr, width);
 }
 
-static __attribute__((always_inline)) inline void trace_wr_as(
-    RvState* restrict state, uint64_t addr, uint64_t new_val, uint32_t width,
-    uint32_t addr_space) {
-  record_page(state->tracer, addr_space, addr, width);
-}
-
 static __attribute__((always_inline)) inline void trace_pc(
     RvState* restrict state, uint64_t pc) {}
 
