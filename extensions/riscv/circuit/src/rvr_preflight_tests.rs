@@ -13,8 +13,8 @@ use openvm_circuit::{
             LogNativeAssemblerRegistry, RvrPreflightEngine, RvrPreflightOutput, RvrPreflightRoute,
             VmRvrLogNativeExtension,
         },
-        verify_segments, ContinuationVmProver, DenseRecordArena, ExecutionError, MatrixRecordArena,
-        Streams, VirtualMachine, VmInstance,
+        verify_segments, AddressSpaceHostLayout, ContinuationVmProver, DenseRecordArena,
+        ExecutionError, MatrixRecordArena, Streams, VirtualMachine, VmInstance,
     },
     system::SystemRecords,
     utils::test_cpu_engine,
@@ -554,6 +554,48 @@ fn load_to_x0_exe() -> VmExe<F> {
         addi(3, 0, 7),
         terminate(),
     ])
+}
+
+#[test]
+fn interpreter_preflight_marks_carried_memory_pages() {
+    let exe = exe(&[addi(1, 0, 64), terminate()]);
+    let config = Rv64ImConfig::default();
+    let (vm, _) = VirtualMachine::new_with_keygen(test_cpu_engine(), Rv64ImCpuBuilder, config)
+        .expect("vm init");
+    let trace_heights = vec![4096u32; vm.num_airs()];
+    let state = vm.create_initial_state(&exe, Streams::default());
+    let mut interpreter = vm
+        .preflight_interpreter(&exe)
+        .expect("preflight interpreter");
+
+    let output = vm
+        .execute_preflight(&mut interpreter, state, Some(1), &trace_heights)
+        .expect("segment preflight");
+    let register_memory = &output.to_state.memory.memory;
+    let register_config = &register_memory.config[RV64_REGISTER_AS as usize];
+    let register_bytes = register_config.num_cells * register_config.layout.size();
+    let x1_byte_offset = reg(1);
+    let x1_bytes = unsafe {
+        output.to_state.memory.get_u8_slice(
+            RV64_REGISTER_AS,
+            x1_byte_offset as u32,
+            size_of::<u64>(),
+        )
+    };
+    assert!(
+        x1_bytes.iter().any(|&byte| byte != 0),
+        "x1 bytes are {x1_bytes:?}, pc={}",
+        output.to_state.pc()
+    );
+
+    let touched_ranges = register_memory.touched_pages[RV64_REGISTER_AS as usize]
+        .touched_byte_ranges(register_bytes);
+    assert!(
+        touched_ranges
+            .iter()
+            .any(|&(start, end)| start <= x1_byte_offset && x1_byte_offset < end),
+        "x1 at byte offset {x1_byte_offset} was not marked for the next segment's sparse H2D transfer"
+    );
 }
 
 #[cfg(feature = "cuda")]
