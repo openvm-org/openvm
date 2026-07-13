@@ -59,7 +59,7 @@ extern "C" int _beq_tracegen(
 ) {
     assert(width == sizeof(BranchEqualCols<uint8_t>));
 
-    auto [grid, block] = kernel_launch_params(height);
+    auto [grid, block] = kernel_launch_params(height, 512);
     beq_tracegen<<<grid, block, 0, stream>>>(
         d_trace, height, d_records, d_rc, rc_bins, timestamp_max_bits
     );

@@ -70,7 +70,7 @@ extern "C" int _rv64_mul_w_tracegen(
     cudaStream_t stream
 ) {
     assert(width == sizeof(Rv64MulWCols<uint8_t>));
-    auto [grid, block] = kernel_launch_params(height);
+    auto [grid, block] = kernel_launch_params(height, 512);
 
     rv64_mul_w_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
