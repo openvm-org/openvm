@@ -34,7 +34,16 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64ShiftLogicalChipGpu {
         #[cfg(feature = "rvr")]
         let rvr_wire = arena.rvr_wire;
         let records = arena.allocated();
-        if records.is_empty() {
+        #[cfg(feature = "rvr")]
+        let delta_records = self.rvr_decode.device_delta_records(
+            crate::rvr_gpu_decode::DeltaAirKind::ShiftLogical,
+            &self.range_checker.device_ctx,
+        );
+        #[cfg(feature = "rvr")]
+        let no_delta_records = delta_records.is_none();
+        #[cfg(not(feature = "rvr"))]
+        let no_delta_records = true;
+        if records.is_empty() && no_delta_records {
             return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
         }
 
@@ -45,20 +54,27 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64ShiftLogicalChipGpu {
         // M-GPUDEC (G2): this segment's arena carries compact wire records —
         // decode them on device against the per-exe operand table.
         #[cfg(feature = "rvr")]
-        if rvr_wire {
+        if rvr_wire || delta_records.is_some() {
             use openvm_circuit::arch::rvr::PREFLIGHT_ADDSUB_RECORD_SIZE;
             assert_eq!(
-                records.len() % PREFLIGHT_ADDSUB_RECORD_SIZE,
+                delta_records
+                    .as_ref()
+                    .map_or(records.len(), |buf| buf.len())
+                    % PREFLIGHT_ADDSUB_RECORD_SIZE,
                 0,
                 "compact arena stride mismatch"
             );
+            let compact_len = delta_records
+                .as_ref()
+                .map_or(records.len(), |buf| buf.len());
             let trace_height =
-                next_power_of_two_or_zero(records.len() / PREFLIGHT_ADDSUB_RECORD_SIZE);
+                next_power_of_two_or_zero(compact_len / PREFLIGHT_ADDSUB_RECORD_SIZE);
             let (d_table, pc_base) = self
                 .rvr_decode
                 .device_operand_table(device_ctx)
                 .expect("compact segment without a bound operand table");
-            let d_records = records.to_device_on(device_ctx).unwrap();
+            let d_records = delta_records
+                .unwrap_or_else(|| Arc::new(records.to_device_on(device_ctx).unwrap()));
             let d_trace =
                 DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
             unsafe {
