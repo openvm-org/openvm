@@ -31,6 +31,7 @@ use crate::{
 #[derive(Clone, Default)]
 pub struct Rv64ImGpuProverExt {
     /// M-GPUDEC shared decode state, cloned into migrated GPU chips.
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
     pub rvr_decode: std::sync::Arc<crate::rvr_gpu_decode::RvrGpuDecodeState>,
 }
 
@@ -54,6 +55,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
         let add_sub = Rv64AddSubChipGpu::new(
             range_checker.clone(),
             timestamp_max_bits,
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
             self.rvr_decode.clone(),
         );
         inventory.add_executor_chip(add_sub);
@@ -63,6 +65,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
             range_checker.clone(),
             bitwise_lu.clone(),
             timestamp_max_bits,
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
             self.rvr_decode.clone(),
         );
         inventory.add_executor_chip(bitwise_logic);
@@ -71,6 +74,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
         let add_sub_w = Rv64AddSubWChipGpu::new(
             range_checker.clone(),
             timestamp_max_bits,
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
             self.rvr_decode.clone(),
         );
         inventory.add_executor_chip(add_sub_w);
@@ -79,6 +83,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
         let lt = Rv64LessThanChipGpu::new(
             range_checker.clone(),
             timestamp_max_bits,
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
             self.rvr_decode.clone(),
         );
         inventory.add_executor_chip(lt);
@@ -87,6 +92,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
         let shift_logical = Rv64ShiftLogicalChipGpu::new(
             range_checker.clone(),
             timestamp_max_bits,
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
             self.rvr_decode.clone(),
         );
         inventory.add_executor_chip(shift_logical);
@@ -95,6 +101,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
         let shift_right_arithmetic = Rv64ShiftRightArithmeticChipGpu::new(
             range_checker.clone(),
             timestamp_max_bits,
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
             self.rvr_decode.clone(),
         );
         inventory.add_executor_chip(shift_right_arithmetic);
@@ -103,6 +110,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
         let shift_w_logical = Rv64ShiftWLogicalChipGpu::new(
             range_checker.clone(),
             timestamp_max_bits,
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
             self.rvr_decode.clone(),
         );
         inventory.add_executor_chip(shift_w_logical);
@@ -111,6 +119,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
         let shift_w_right_arithmetic = Rv64ShiftWRightArithmeticChipGpu::new(
             range_checker.clone(),
             timestamp_max_bits,
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
             self.rvr_decode.clone(),
         );
         inventory.add_executor_chip(shift_w_right_arithmetic);
@@ -121,6 +130,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
             bitwise_lu.clone(),
             byte_ptr_max_bits,
             timestamp_max_bits,
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
             self.rvr_decode.clone(),
         );
         inventory.add_executor_chip(load_store_chip);
@@ -131,6 +141,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
             bitwise_lu.clone(),
             byte_ptr_max_bits,
             timestamp_max_bits,
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
             self.rvr_decode.clone(),
         );
         inventory.add_executor_chip(load_sign_extend);
@@ -139,6 +150,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
         let beq = Rv64BranchEqualChipGpu::new(
             range_checker.clone(),
             timestamp_max_bits,
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
             self.rvr_decode.clone(),
         );
         inventory.add_executor_chip(beq);
@@ -147,6 +159,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
         let blt = Rv64BranchLessThanChipGpu::new(
             range_checker.clone(),
             timestamp_max_bits,
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
             self.rvr_decode.clone(),
         );
         inventory.add_executor_chip(blt);
@@ -155,6 +168,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
         let jal_lui = Rv64JalLuiChipGpu::new(
             range_checker.clone(),
             timestamp_max_bits,
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
             self.rvr_decode.clone(),
         );
         inventory.add_executor_chip(jal_lui);
@@ -163,6 +177,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
         let jalr = Rv64JalrChipGpu::new(
             range_checker.clone(),
             timestamp_max_bits,
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
             self.rvr_decode.clone(),
         );
         inventory.add_executor_chip(jalr);
@@ -171,6 +186,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
         let auipc = Rv64AuipcChipGpu::new(
             range_checker.clone(),
             timestamp_max_bits,
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
             self.rvr_decode.clone(),
         );
         inventory.add_executor_chip(auipc);
@@ -221,6 +237,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64M> for 
             bitwise_lu.clone(),
             range_tuple_checker.clone(),
             timestamp_max_bits,
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
             self.rvr_decode.clone(),
         );
         inventory.add_executor_chip(mult);
@@ -231,6 +248,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64M> for 
             bitwise_lu.clone(),
             range_tuple_checker.clone(),
             timestamp_max_bits,
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
             self.rvr_decode.clone(),
         );
         inventory.add_executor_chip(mul_w);
@@ -241,6 +259,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64M> for 
             bitwise_lu.clone(),
             range_tuple_checker.clone(),
             timestamp_max_bits,
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
             self.rvr_decode.clone(),
         );
         inventory.add_executor_chip(mul_h);
@@ -252,6 +271,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64M> for 
             range_tuple_checker.clone(),
             byte_ptr_max_bits,
             timestamp_max_bits,
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
             self.rvr_decode.clone(),
         );
         inventory.add_executor_chip(div_rem);
@@ -263,6 +283,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64M> for 
             range_tuple_checker.clone(),
             byte_ptr_max_bits,
             timestamp_max_bits,
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
             self.rvr_decode.clone(),
         );
         inventory.add_executor_chip(divrem_w);

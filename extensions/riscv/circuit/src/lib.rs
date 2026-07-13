@@ -255,6 +255,7 @@ pub mod rvr_gpu_decode;
 pub struct Rv64IGpuBuilder {
     /// M-GPUDEC shared producer/consumer state (device operand table +
     /// per-segment emission modes); cloned into migrated GPU chips.
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
     pub rvr_decode: std::sync::Arc<rvr_gpu_decode::RvrGpuDecodeState>,
 }
 
@@ -286,6 +287,7 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64IGpuBuilder {
         )?;
         let inventory = &mut chip_complex.inventory;
         let prover_ext = Rv64ImGpuProverExt {
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
             rvr_decode: self.rvr_decode.clone(),
         };
         VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
@@ -511,6 +513,7 @@ pub fn generate_gpu_rvr_record_arenas(
 #[derive(Clone, Default)]
 pub struct Rv64ImGpuBuilder {
     /// See [`Rv64IGpuBuilder::rvr_decode`]; one shared state per VM.
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
     pub rvr_decode: std::sync::Arc<rvr_gpu_decode::RvrGpuDecodeState>,
 }
 
@@ -536,6 +539,7 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64ImGpuBuilder {
     > {
         let mut chip_complex = VmBuilder::<GpuBabyBearPoseidon2Engine>::create_chip_complex(
             &Rv64IGpuBuilder {
+                #[cfg(all(feature = "cuda", feature = "rvr"))]
                 rvr_decode: self.rvr_decode.clone(),
             },
             &config.rv64i,
@@ -545,6 +549,7 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64ImGpuBuilder {
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
             &Rv64ImGpuProverExt {
+                #[cfg(all(feature = "cuda", feature = "rvr"))]
                 rvr_decode: self.rvr_decode.clone(),
             },
             &config.mul,
