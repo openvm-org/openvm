@@ -20,6 +20,7 @@ deferral-4 = ["deferral-3"]
 deferral-5 = ["deferral-4"]
 deferral-6 = ["deferral-5"]
 deferral-7 = ["deferral-6"]
+std = ["openvm/std"]
 
 [profile.release]
 panic = "abort"
@@ -30,3 +31,6 @@ lto = "thin"
 openvm = { path = "../../../crates/toolchain/openvm" }
 openvm-deferral-guest = { path = "../../../extensions/deferral/guest" }
 openvm-verify-stark-guest = { path = "../../../guest-libs/verify-stark/guest" }
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)', 'cfg(target_os, values("openvm"))'] }
