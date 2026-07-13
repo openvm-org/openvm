@@ -106,6 +106,8 @@ jobs:
       - name: Install clang-22 and lld (required for rvr)
         if: matrix.platform.features == 'rvr'
         run: |
+          sudo apt-get update
+          sudo apt-get install -y lsb-release wget software-properties-common gnupg
           wget https://apt.llvm.org/llvm.sh
           chmod +x llvm.sh
           sudo ./llvm.sh 22
