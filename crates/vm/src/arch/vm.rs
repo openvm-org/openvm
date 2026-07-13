@@ -1383,7 +1383,6 @@ where
     }
 
     #[cfg(feature = "rvr")]
-    #[instrument(name = "execute_rvr_preflight_for_proving", skip_all)]
     fn execute_rvr_preflight_for_proving(
         &self,
         rvr_preflight: &CachedRvrPreflight<Val<E::SC>>,
@@ -1400,6 +1399,7 @@ where
     {
         match rvr_preflight {
             CachedRvrPreflight::Rvr(rvr_preflight) => {
+                let _preflight_span = tracing::info_span!("execute_preflight").entered();
                 // `state` moves in whole: `execute_rvr_preflight` clones it
                 // internally for its capacity-retry loop, and a guest-state
                 // clone is the dominant per-segment fixed cost (~hundreds of
