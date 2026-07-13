@@ -641,7 +641,8 @@ fn test_deferral_aware_sdk_with_odd_children() -> Result<()> {
     let mut stdin = StdIn::default();
     stdin.write(&(1u64 << 17));
 
-    let (_, segments) = aware_sdk.execute_metered(app_exe.clone(), stdin.clone())?;
+    let compiled = aware_sdk.compile_metered(app_exe.clone())?;
+    let (_, segments) = aware_sdk.execute_metered(&compiled, stdin.clone())?;
     assert!(segments.len() >= 3, "expected >= 3 segments");
 
     prove_and_verify_e2e(&aware_sdk, app_exe, stdin, &[])
