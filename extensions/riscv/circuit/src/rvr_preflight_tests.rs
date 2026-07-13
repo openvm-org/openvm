@@ -1831,7 +1831,23 @@ fn assert_gpu_rvr_three_way_single_segment(
     streams: Streams<F>,
     expected_active_instruction_air_count: Option<usize>,
 ) {
-    let config = Rv64ImConfig::default();
+    assert_gpu_rvr_three_way_single_segment_with_config(
+        label,
+        exe,
+        streams,
+        expected_active_instruction_air_count,
+        Rv64ImConfig::default(),
+    );
+}
+
+#[cfg(feature = "cuda")]
+fn assert_gpu_rvr_three_way_single_segment_with_config(
+    label: &str,
+    exe: VmExe<F>,
+    streams: Streams<F>,
+    expected_active_instruction_air_count: Option<usize>,
+    config: Rv64ImConfig,
+) {
     let (vm, _) =
         VirtualMachine::new_with_keygen(test_cpu_engine(), Rv64ImCpuBuilder, config.clone())
             .expect("vm init");
@@ -2463,6 +2479,13 @@ fn rvr_gpu_log_native_full_rv64im_three_way_matrix() {
         print_str_then_memory_exe(),
         Streams::default(),
         None,
+    );
+    assert_gpu_rvr_three_way_single_segment_with_config(
+        "mixed_loadstore_reveal",
+        public_values_reveal_differential_exe(),
+        Streams::default(),
+        None,
+        Rv64ImConfig::with_public_values_bytes(32),
     );
     assert_gpu_rvr_three_way_multi_segment(
         "hard_chip_multi_segment",
