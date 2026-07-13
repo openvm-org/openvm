@@ -91,8 +91,8 @@ pub fn keygen(
         .make_config(vec![SupportedDeferral::VerifyStark]);
     let vm_config = SdkVmConfig::builder()
         .system(Default::default())
-        .rv32i(Default::default())
-        .rv32m(Default::default())
+        .rv64i(Default::default())
+        .rv64m(Default::default())
         .io(Default::default())
         .deferral(deferral_config)
         .build()
