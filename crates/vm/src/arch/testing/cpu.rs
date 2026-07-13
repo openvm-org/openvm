@@ -11,7 +11,6 @@ use openvm_cpu_backend::{CpuBackend, CpuDevice, CpuProverError};
 use openvm_instructions::{
     instruction::Instruction,
     riscv::{RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
-    DEFERRAL_AS,
 };
 use openvm_poseidon2_air::Poseidon2SubAir;
 use openvm_stark_backend::{
