@@ -114,6 +114,12 @@ impl MemoryMerkleSubTree {
             max_size.is_power_of_two(),
             "Max address space size must be a power of two"
         );
+        assert!(
+            addr_space_size <= max_size,
+            "Address space needs {addr_space_size} leaf digests but the tree supports at most \
+             {max_size}; check that every address space's `num_cells` fits within \
+             `pointer_max_bits`"
+        );
         if addr_space_size == 0 {
             let mut res = MemoryMerkleSubTree::dummy();
             res.height = log2_ceil_usize(max_size);
