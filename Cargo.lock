@@ -480,7 +480,7 @@ dependencies = [
  "alloy-rlp",
  "alloy-serde",
  "alloy-sol-types",
- "itertools 0.14.0",
+ "itertools 0.13.0",
  "serde",
  "serde_json",
  "serde_with",
@@ -3458,7 +3458,7 @@ dependencies = [
  "dyn-clone",
  "foundry-compilers-artifacts",
  "foundry-compilers-core",
- "itertools 0.14.0",
+ "itertools 0.13.0",
  "path-slash",
  "rayon",
  "semver 1.0.26",
@@ -5958,8 +5958,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-codec-derive"
-version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#d1723198c81562157c922d9d06c035e9dcad91e2"
+version = "2.0.0"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#0b04cdcd3f7790c5e2d306a4b5cd8640f89e2e49"
 dependencies = [
  "proc-macro-crate 1.3.1",
  "proc-macro2",
@@ -6005,8 +6005,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-cpu-backend"
-version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#d1723198c81562157c922d9d06c035e9dcad91e2"
+version = "2.0.0"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#0b04cdcd3f7790c5e2d306a4b5cd8640f89e2e49"
 dependencies = [
  "cfg-if 1.0.1",
  "derive-new 0.7.0",
@@ -6030,8 +6030,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-cuda-backend"
-version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#d1723198c81562157c922d9d06c035e9dcad91e2"
+version = "2.0.0"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#0b04cdcd3f7790c5e2d306a4b5cd8640f89e2e49"
 dependencies = [
  "derive-new 0.7.0",
  "getset",
@@ -6052,13 +6052,13 @@ dependencies = [
  "serde",
  "thiserror 1.0.69",
  "tracing",
- "zkhash",
+ "zkhash-axiom",
 ]
 
 [[package]]
 name = "openvm-cuda-builder"
-version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#d1723198c81562157c922d9d06c035e9dcad91e2"
+version = "2.0.0"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#0b04cdcd3f7790c5e2d306a4b5cd8640f89e2e49"
 dependencies = [
  "cc",
  "glob",
@@ -6066,8 +6066,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-cuda-common"
-version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#d1723198c81562157c922d9d06c035e9dcad91e2"
+version = "2.0.0"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#0b04cdcd3f7790c5e2d306a4b5cd8640f89e2e49"
 dependencies = [
  "bytesize",
  "ctor",
@@ -6859,8 +6859,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-stark-backend"
-version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#d1723198c81562157c922d9d06c035e9dcad91e2"
+version = "2.0.0"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#0b04cdcd3f7790c5e2d306a4b5cd8640f89e2e49"
 dependencies = [
  "cfg-if 1.0.1",
  "derivative",
@@ -6894,8 +6894,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-stark-sdk"
-version = "2.0.0-alpha"
-source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#d1723198c81562157c922d9d06c035e9dcad91e2"
+version = "2.0.0"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2#0b04cdcd3f7790c5e2d306a4b5cd8640f89e2e49"
 dependencies = [
  "dashmap",
  "derive-new 0.7.0",
@@ -6920,7 +6920,7 @@ dependencies = [
  "tracing",
  "tracing-forest",
  "tracing-subscriber 0.3.20",
- "zkhash",
+ "zkhash-axiom",
 ]
 
 [[package]]
@@ -9790,7 +9790,7 @@ dependencies = [
  "derive_more 2.0.1",
  "dunce",
  "inturn",
- "itertools 0.14.0",
+ "itertools 0.11.0",
  "itoa",
  "normalize-path",
  "once_map",
@@ -9826,7 +9826,7 @@ dependencies = [
  "alloy-primitives",
  "bitflags 2.10.0",
  "bumpalo",
- "itertools 0.14.0",
+ "itertools 0.11.0",
  "memchr",
  "num-bigint 0.4.6",
  "num-rational",
@@ -11760,6 +11760,33 @@ dependencies = [
 name = "zkhash"
 version = "0.2.0"
 source = "git+https://github.com/HorizenLabs/poseidon2.git?rev=bb476b9#bb476b9ca38198cf5092487283c8b8c5d4317c4e"
+dependencies = [
+ "ark-ff 0.4.2",
+ "ark-std 0.4.0",
+ "bitvec",
+ "blake2",
+ "bls12_381",
+ "byteorder",
+ "cfg-if 1.0.1",
+ "group 0.12.1",
+ "group 0.13.0",
+ "halo2",
+ "hex",
+ "jubjub",
+ "lazy_static",
+ "pasta_curves 0.5.1",
+ "rand 0.8.5",
+ "serde",
+ "sha2 0.10.9",
+ "sha3",
+ "subtle",
+]
+
+[[package]]
+name = "zkhash-axiom"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7d038a7895d0e3ab0a352f53e7eb4f1f829f88fce2fb3cff93d665a8a0e01af6"
 dependencies = [
  "ark-ff 0.4.2",
  "ark-std 0.4.0",
