@@ -1,7 +1,7 @@
 #include "riscv/cores/store.cuh"
 
 using StoreDoublewordCore =
-    StoreWidthCore<STORE_DOUBLEWORD_SELECTOR_WIDTH, 4, STORE_DOUBLEWORD_CASES, 8>;
+    StoreWidthCore<STORE_DOUBLEWORD_SELECTOR_WIDTH, 4, 8>;
 
 template <typename T> struct Rv64StoreDoublewordCols {
     Rv64StoreAdapterCols<T> adapter;

@@ -31,9 +31,7 @@ struct StoreByteCore {
         bitwise_lookup.add_range(read_lo_byte, store_byte_from_cell(record.read_data[0], 1));
         bitwise_lookup.add_range(prev_cell_bytes[0], prev_cell_bytes[1]);
 
-        Encoder encoder(
-            STORE_BYTE_CASES, STORE_SELECTOR_MAX_DEGREE, true, STORE_BYTE_SELECTOR_WIDTH
-        );
+        Encoder encoder = shift_encoder(STORE_BYTE_SELECTOR_WIDTH);
         encoder.write_flag_pt(row.slice_from(COL_INDEX(StoreByteCoreCols, selector)), shift);
         COL_WRITE_VALUE(row, StoreByteCoreCols, read_lo_byte, read_lo_byte);
         COL_WRITE_ARRAY(row, StoreByteCoreCols, prev_cell_bytes, prev_cell_bytes);

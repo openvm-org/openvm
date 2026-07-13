@@ -7,19 +7,15 @@
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
 #include "riscv/adapters/store.cuh"
+#include "riscv/cores/shift_selector.cuh"
 
 using namespace riscv;
 using namespace program;
 
 constexpr size_t STORE_BYTE_SELECTOR_WIDTH = 3;
-constexpr uint32_t STORE_BYTE_CASES = 8;
 constexpr size_t STORE_HALFWORD_SELECTOR_WIDTH = 3;
-constexpr uint32_t STORE_HALFWORD_CASES = 8;
 constexpr size_t STORE_WORD_SELECTOR_WIDTH = 3;
-constexpr uint32_t STORE_WORD_CASES = 8;
 constexpr size_t STORE_DOUBLEWORD_SELECTOR_WIDTH = 3;
-constexpr uint32_t STORE_DOUBLEWORD_CASES = 8;
-constexpr uint32_t STORE_SELECTOR_MAX_DEGREE = 2;
 
 struct StoreRecord {
     uint16_t read_data[BLOCK_FE_WIDTH];
@@ -59,7 +55,7 @@ template <typename T, size_t SELECTOR_WIDTH, size_t NUM_VALUE_CELLS> struct Stor
 
 // Shared tracegen for the halfword/word/doubleword store cores. `WIDTH_BYTES` is the access
 // width; `NUM_VALUE_CELLS` must equal `WIDTH_BYTES / 2`.
-template <size_t SELECTOR_WIDTH, size_t NUM_VALUE_CELLS, uint32_t CASES, size_t WIDTH_BYTES>
+template <size_t SELECTOR_WIDTH, size_t NUM_VALUE_CELLS, size_t WIDTH_BYTES>
 struct StoreWidthCore {
     using Cols = StoreWidthCoreCols<uint8_t, SELECTOR_WIDTH, NUM_VALUE_CELLS>;
 
@@ -69,7 +65,7 @@ struct StoreWidthCore {
         : bitwise_lookup(bitwise_lookup) {}
 
     __device__ void fill_trace_row(RowSlice row, StoreRecord record, uint8_t shift) {
-        Encoder encoder(CASES, STORE_SELECTOR_MAX_DEGREE, true, SELECTOR_WIDTH);
+        Encoder encoder = shift_encoder(SELECTOR_WIDTH);
         encoder.write_flag_pt(row.slice_from(offsetof(Cols, selector)), shift);
         row.write_array(offsetof(Cols, read_data), BLOCK_FE_WIDTH, record.read_data);
         row.write_array(offsetof(Cols, prev_data), 2 * BLOCK_FE_WIDTH, &record.prev_data[0][0]);

@@ -1,7 +1,7 @@
 #include "riscv/cores/store.cuh"
 
 using StoreHalfwordCore =
-    StoreWidthCore<STORE_HALFWORD_SELECTOR_WIDTH, 1, STORE_HALFWORD_CASES, 2>;
+    StoreWidthCore<STORE_HALFWORD_SELECTOR_WIDTH, 1, 2>;
 
 template <typename T> struct Rv64StoreHalfwordCols {
     Rv64StoreAdapterCols<T> adapter;

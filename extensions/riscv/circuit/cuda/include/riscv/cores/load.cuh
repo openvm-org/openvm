@@ -7,19 +7,15 @@
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
 #include "riscv/adapters/load.cuh"
+#include "riscv/cores/shift_selector.cuh"
 
 using namespace riscv;
 using namespace program;
 
 constexpr size_t LOAD_BYTE_SELECTOR_WIDTH = 3;
-constexpr uint32_t LOAD_BYTE_CASES = 8;
 constexpr size_t LOAD_HALFWORD_SELECTOR_WIDTH = 3;
-constexpr uint32_t LOAD_HALFWORD_CASES = 8;
 constexpr size_t LOAD_WORD_SELECTOR_WIDTH = 3;
-constexpr uint32_t LOAD_WORD_CASES = 8;
 constexpr size_t LOAD_DOUBLEWORD_SELECTOR_WIDTH = 3;
-constexpr uint32_t LOAD_DOUBLEWORD_CASES = 8;
-constexpr uint32_t LOAD_SELECTOR_MAX_DEGREE = 2;
 
 struct LoadRecord {
     // The block containing the effective address followed by the next block, which is all-zero
@@ -55,7 +51,7 @@ template <typename T, size_t SELECTOR_WIDTH, size_t NUM_OVERLAP_CELLS> struct Lo
 
 // Shared tracegen for the halfword/word/doubleword load cores. `WIDTH_BYTES` is the access
 // width; `NUM_OVERLAP_CELLS` must equal `WIDTH_BYTES / 2 + 1`.
-template <size_t SELECTOR_WIDTH, size_t NUM_OVERLAP_CELLS, uint32_t CASES, size_t WIDTH_BYTES>
+template <size_t SELECTOR_WIDTH, size_t NUM_OVERLAP_CELLS, size_t WIDTH_BYTES>
 struct LoadWidthCore {
     using Cols = LoadWidthCoreCols<uint8_t, SELECTOR_WIDTH, NUM_OVERLAP_CELLS>;
 
@@ -65,7 +61,7 @@ struct LoadWidthCore {
         : bitwise_lookup(bitwise_lookup) {}
 
     __device__ void fill_trace_row(RowSlice row, LoadRecord record, uint8_t shift) {
-        Encoder encoder(CASES, LOAD_SELECTOR_MAX_DEGREE, true, SELECTOR_WIDTH);
+        Encoder encoder = shift_encoder(SELECTOR_WIDTH);
         encoder.write_flag_pt(row.slice_from(offsetof(Cols, selector)), shift);
         row.write_array(offsetof(Cols, read_data), 2 * BLOCK_FE_WIDTH, &record.read_data[0][0]);
 

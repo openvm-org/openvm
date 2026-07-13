@@ -12,12 +12,8 @@ using namespace riscv;
 using namespace program;
 
 constexpr size_t LOAD_SIGN_EXTEND_BYTE_SELECTOR_WIDTH = 3;
-constexpr uint32_t LOAD_SIGN_EXTEND_BYTE_CASES = 8;
 constexpr size_t LOAD_SIGN_EXTEND_HALFWORD_SELECTOR_WIDTH = 3;
-constexpr uint32_t LOAD_SIGN_EXTEND_HALFWORD_CASES = 8;
 constexpr size_t LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH = 3;
-constexpr uint32_t LOAD_SIGN_EXTEND_WORD_CASES = 8;
-constexpr uint32_t LOAD_SIGN_EXTEND_SELECTOR_MAX_DEGREE = 2;
 constexpr uint16_t SIGN_BYTE = 1 << (RV64_BYTE_BITS - 1);
 constexpr uint16_t SIGN_U16 = 1 << (U16_BITS - 1);
 
@@ -51,7 +47,7 @@ static __device__ __forceinline__ uint16_t load_sign_extend_byte_from_cell(
 
 // Shared tracegen for the halfword/word signed load cores. `WIDTH_BYTES` is the access width;
 // `NUM_OVERLAP_CELLS` must equal `WIDTH_BYTES / 2 + 1`.
-template <size_t SELECTOR_WIDTH, size_t NUM_OVERLAP_CELLS, uint32_t CASES, size_t WIDTH_BYTES>
+template <size_t SELECTOR_WIDTH, size_t NUM_OVERLAP_CELLS, size_t WIDTH_BYTES>
 struct LoadSignExtendWidthCore {
     using Cols = LoadSignExtendWidthCoreCols<uint8_t, SELECTOR_WIDTH, NUM_OVERLAP_CELLS>;
 
@@ -67,7 +63,7 @@ struct LoadSignExtendWidthCore {
     __device__ void fill_trace_row(RowSlice row, LoadSignExtendRecord record, uint8_t shift) {
         constexpr size_t WIDTH_CELLS = WIDTH_BYTES / 2;
 
-        Encoder encoder(CASES, LOAD_SIGN_EXTEND_SELECTOR_MAX_DEGREE, true, SELECTOR_WIDTH);
+        Encoder encoder = shift_encoder(SELECTOR_WIDTH);
         encoder.write_flag_pt(row.slice_from(offsetof(Cols, selector)), shift);
         row.write_array(offsetof(Cols, read_data), 2 * BLOCK_FE_WIDTH, &record.read_data[0][0]);
 

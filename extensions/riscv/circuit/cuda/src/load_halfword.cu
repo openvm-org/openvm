@@ -1,7 +1,7 @@
 #include "riscv/cores/load.cuh"
 
 using LoadHalfwordCore =
-    LoadWidthCore<LOAD_HALFWORD_SELECTOR_WIDTH, 2, LOAD_HALFWORD_CASES, 2>;
+    LoadWidthCore<LOAD_HALFWORD_SELECTOR_WIDTH, 2, 2>;
 
 template <typename T> struct Rv64LoadHalfwordCols {
     Rv64LoadAdapterCols<T> adapter;

@@ -25,7 +25,7 @@ struct LoadByteCore {
         };
         bitwise_lookup.add_range(read_cell_bytes[0], read_cell_bytes[1]);
 
-        Encoder encoder(LOAD_BYTE_CASES, LOAD_SELECTOR_MAX_DEGREE, true, LOAD_BYTE_SELECTOR_WIDTH);
+        Encoder encoder = shift_encoder(LOAD_BYTE_SELECTOR_WIDTH);
         encoder.write_flag_pt(row.slice_from(COL_INDEX(LoadByteCoreCols, selector)), shift);
         COL_WRITE_ARRAY(row, LoadByteCoreCols, read_cell_bytes, read_cell_bytes);
         COL_WRITE_ARRAY(row, LoadByteCoreCols, read_data, record.read_data[0]);

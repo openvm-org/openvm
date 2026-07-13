@@ -1,7 +1,7 @@
 #include "riscv/cores/load_sign_extend.cuh"
 
 using LoadSignExtendWordCore =
-    LoadSignExtendWidthCore<LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH, 3, LOAD_SIGN_EXTEND_WORD_CASES, 4>;
+    LoadSignExtendWidthCore<LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH, 3, 4>;
 
 template <typename T> struct Rv64LoadSignExtendWordCols {
     Rv64LoadAdapterCols<T> adapter;
