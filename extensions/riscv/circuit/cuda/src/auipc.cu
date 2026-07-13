@@ -119,7 +119,7 @@ extern "C" int _auipc_tracegen(
     cudaStream_t stream
 ) {
     assert(width == sizeof(Rv64AuipcCols<uint8_t>));
-    auto [grid, block] = kernel_launch_params(height);
+    auto [grid, block] = kernel_launch_params(height, 512);
     auipc_tracegen<<<grid, block, 0, stream>>>(
         d_trace, height, d_records, d_range_checker, range_checker_num_bins, timestamp_max_bits
     );

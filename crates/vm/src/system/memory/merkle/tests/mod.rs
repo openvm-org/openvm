@@ -379,11 +379,9 @@ fn expand_test_negative() {
 }
 
 const BELOW_LEAF_PATH_LEN: usize = 31;
-const COUNTEREXAMPLE_ADDRESS_HEIGHT: usize = 26;
-const COUNTEREXAMPLE_OVERALL_HEIGHT: usize = 29;
 const COUNTEREXAMPLE_TRACE_HEIGHT: usize = 256;
 
-fn counterexample_digest(seed: u32) -> [BabyBear; CHUNK] {
+fn counterexample_digest(seed: u32) -> [BabyBear; DIGEST_WIDTH] {
     array::from_fn(|i| BabyBear::from_u32(seed.wrapping_add(17 * i as u32)))
 }
 
@@ -406,21 +404,24 @@ fn final_direction_different(direction: BabyBear, child_has_expansion: bool) -> 
 fn build_below_leaf_swap_subtree(
     hasher: &Poseidon2PeripheryChip<BabyBear>,
     direction: BabyBear,
-    alpha_digest: [BabyBear; CHUNK],
-    beta_digest: [BabyBear; CHUNK],
+    alpha_digest: [BabyBear; DIGEST_WIDTH],
+    beta_digest: [BabyBear; DIGEST_WIDTH],
     swap_digests: bool,
-) -> ([BabyBear; CHUNK], Vec<MemoryMerkleCols<BabyBear, CHUNK>>) {
+) -> (
+    [BabyBear; DIGEST_WIDTH],
+    Vec<MemoryMerkleCols<BabyBear, DIGEST_WIDTH>>,
+) {
     #[allow(clippy::too_many_arguments)]
     fn rec(
         hasher: &Poseidon2PeripheryChip<BabyBear>,
-        rows: &mut Vec<MemoryMerkleCols<BabyBear, CHUNK>>,
+        rows: &mut Vec<MemoryMerkleCols<BabyBear, DIGEST_WIDTH>>,
         direction: BabyBear,
-        alpha_digest: [BabyBear; CHUNK],
-        beta_digest: [BabyBear; CHUNK],
+        alpha_digest: [BabyBear; DIGEST_WIDTH],
+        beta_digest: [BabyBear; DIGEST_WIDTH],
         swap_digests: bool,
         depth: usize,
         prefix: u32,
-    ) -> [BabyBear; CHUNK] {
+    ) -> [BabyBear; DIGEST_WIDTH] {
         let alpha_path = 0;
         let beta_path = BabyBear::ORDER_U32;
 
@@ -527,10 +528,10 @@ fn build_below_leaf_swap_subtree(
 }
 
 fn counterexample_zero_node_hash(
-    hasher: &impl Hasher<CHUNK, BabyBear>,
+    hasher: &impl Hasher<DIGEST_WIDTH, BabyBear>,
     height: usize,
-) -> [BabyBear; CHUNK] {
-    let mut hash = hasher.hash(&[BabyBear::ZERO; CHUNK]);
+) -> [BabyBear; DIGEST_WIDTH] {
+    let mut hash = hasher.hash(&[BabyBear::ZERO; DIGEST_WIDTH]);
     for _ in 0..height {
         hash = hasher.compress(&hash, &hash);
     }
@@ -557,8 +558,8 @@ fn counterexample_parent_labels(
 #[derive(Clone, Copy)]
 struct CounterexampleLeafUpdate {
     index: u64,
-    initial_hash: [BabyBear; CHUNK],
-    final_hash: [BabyBear; CHUNK],
+    initial_hash: [BabyBear; DIGEST_WIDTH],
+    final_hash: [BabyBear; DIGEST_WIDTH],
 }
 
 fn build_counterexample_canonical_rows(
@@ -566,9 +567,9 @@ fn build_counterexample_canonical_rows(
     memory_dimensions: MemoryDimensions,
     leaf_updates: &[CounterexampleLeafUpdate],
 ) -> (
-    [BabyBear; CHUNK],
-    [BabyBear; CHUNK],
-    Vec<MemoryMerkleCols<BabyBear, CHUNK>>,
+    [BabyBear; DIGEST_WIDTH],
+    [BabyBear; DIGEST_WIDTH],
+    Vec<MemoryMerkleCols<BabyBear, DIGEST_WIDTH>>,
 ) {
     let mut current = BTreeMap::new();
     for update in leaf_updates {
@@ -668,9 +669,12 @@ fn build_hidden_leaf_expansion_row(
     direction: BabyBear,
     address_space_label: u32,
     leaf_label: u32,
-    below_leaf_root: [BabyBear; CHUNK],
-    unchanged_sibling_hash: [BabyBear; CHUNK],
-) -> ([BabyBear; CHUNK], MemoryMerkleCols<BabyBear, CHUNK>) {
+    below_leaf_root: [BabyBear; DIGEST_WIDTH],
+    unchanged_sibling_hash: [BabyBear; DIGEST_WIDTH],
+) -> (
+    [BabyBear; DIGEST_WIDTH],
+    MemoryMerkleCols<BabyBear, DIGEST_WIDTH>,
+) {
     let parent_hash = hasher.compress_and_record(&below_leaf_root, &unchanged_sibling_hash);
     (
         parent_hash,
@@ -743,7 +747,7 @@ fn build_below_leaf_swap_fraud_merkle(
         ADDR_SPACE_OFFSET + hidden_address_space_label,
         hidden_leaf_label,
     ));
-    let hidden_unchanged_sibling_hash = [BabyBear::ZERO; CHUNK];
+    let hidden_unchanged_sibling_hash = [BabyBear::ZERO; DIGEST_WIDTH];
     let (initial_hidden_leaf_hash, initial_hidden_leaf_row) = build_hidden_leaf_expansion_row(
         &poseidon2_chip,
         BabyBear::ONE,
@@ -811,15 +815,15 @@ fn build_below_leaf_swap_fraud_merkle(
             is_root: BabyBear::ZERO,
             parent_as_label: BabyBear::ZERO,
             parent_address_label: BabyBear::ZERO,
-            parent_hash: [BabyBear::ZERO; CHUNK],
-            left_child_hash: [BabyBear::ZERO; CHUNK],
-            right_child_hash: [BabyBear::ZERO; CHUNK],
+            parent_hash: [BabyBear::ZERO; DIGEST_WIDTH],
+            left_child_hash: [BabyBear::ZERO; DIGEST_WIDTH],
+            right_child_hash: [BabyBear::ZERO; DIGEST_WIDTH],
             left_direction_different: BabyBear::ZERO,
             right_direction_different: BabyBear::ZERO,
         });
     }
 
-    let merkle_width = MemoryMerkleCols::<BabyBear, CHUNK>::width();
+    let merkle_width = MemoryMerkleCols::<BabyBear, DIGEST_WIDTH>::width();
     let mut merkle_trace = BabyBear::zero_vec(merkle_width * trace_height);
     for (trace_row, row) in merkle_trace.chunks_exact_mut(merkle_width).zip(rows) {
         *trace_row.borrow_mut() = row;
@@ -865,17 +869,9 @@ fn real_vm_keygen_verifier_rejects_below_leaf_swap_counterexample() {
     };
 
     let vm_config = SystemConfig::default();
-    // The default config has exactly the Merkle dimensions the counterexample
-    // is built for.
+    // Build the counterexample for the active default config; CUDA and CPU
+    // proving configs can use different memory dimensions.
     let memory_dimensions = vm_config.memory_config.memory_dimensions();
-    assert_eq!(
-        memory_dimensions.address_height,
-        COUNTEREXAMPLE_ADDRESS_HEIGHT
-    );
-    assert_eq!(
-        memory_dimensions.overall_height(),
-        COUNTEREXAMPLE_OVERALL_HEIGHT
-    );
 
     let engine = test_cpu_engine();
     let (mut vm, pk) =
