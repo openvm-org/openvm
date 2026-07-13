@@ -1,6 +1,8 @@
 use std::{collections::BTreeMap, sync::Arc};
 
 #[cfg(feature = "cuda")]
+use openvm_circuit::arch::rvr::preflight::RvrArenaNativeTarget;
+#[cfg(feature = "cuda")]
 use openvm_circuit::arch::VmBuilder;
 #[cfg(feature = "cuda")]
 use openvm_circuit::arch::VmState;
@@ -1649,6 +1651,18 @@ fn assert_gpu_rvr_three_way_from_state(
             trace_heights,
         )
         .expect("cpu interpreter execution");
+    let retired_instructions = cpu_output
+        .system_records
+        .filtered_exec_frequencies
+        .iter()
+        .map(|&count| u64::from(count))
+        .sum::<u64>();
+    if let Some(expected) = num_insns {
+        assert_eq!(
+            retired_instructions, expected,
+            "{label}: interpreter retired instruction count"
+        );
+    }
 
     let (mut gpu_arena_vm, _) = VirtualMachine::new_with_keygen(
         test_gpu_engine(),
@@ -1689,16 +1703,37 @@ fn assert_gpu_rvr_three_way_from_state(
         "{label}: GPU log/arena AIR name order"
     );
     let instruction_air_ids = full_rv64im_instruction_air_ids(&air_names);
-    let mut rvr_output = {
+    let capacities = trace_heights
+        .iter()
+        .zip(gpu_log_vm.pk().per_air.iter())
+        .map(|(&height, pk)| (height as usize, pk.vk.params.width.main_width()))
+        .collect::<Vec<_>>();
+    let (mut rvr_output, staged_native) = {
         let route = gpu_log_vm
             .preflight_routed_instance(exe)
             .expect("routed preflight instance");
         let RvrPreflightRoute::Rvr(instance) = route else {
             panic!("{label}: program must route to RVR preflight");
         };
-        instance
-            .execute_preflight_from_state(from_state.clone(), num_insns)
-            .expect("gpu rvr preflight execution")
+        let mut staged = Vec::new();
+        let mut targets = BTreeMap::new();
+        for &(air, geometry) in &instance.compiled().inline_records().arena_native_airs {
+            let (height, width) = capacities[air];
+            let (arena, target) = <DenseRecordArena as RvrArenaNativeTarget>::stage_arena_native(
+                height, width, &geometry,
+            );
+            targets.insert(air, target);
+            staged.push((air, geometry, arena));
+        }
+        let output = instance
+            .execute_preflight_from_state_with_arena_targets(
+                from_state.clone(),
+                Some(retired_instructions),
+                trace_heights,
+                &targets,
+            )
+            .expect("gpu rvr preflight execution");
+        (output, staged)
     };
     assert_system_records_eq(
         &format!("{label}: gpu-record-arenas"),
@@ -1712,13 +1747,8 @@ fn assert_gpu_rvr_three_way_from_state(
     );
 
     let rvr_to_state = rvr_output.to_state.clone();
-    let capacities = trace_heights
-        .iter()
-        .zip(gpu_log_vm.pk().per_air.iter())
-        .map(|(&height, pk)| (height as usize, pk.vk.params.width.main_width()))
-        .collect::<Vec<_>>();
     let pc_to_air_idx = gpu_log_vm.pc_to_air_idx(exe).expect("pc to air mapping");
-    let gpu_log_record_arenas = gpu_log_builder
+    let mut gpu_log_record_arenas = gpu_log_builder
         .generate_rvr_record_arenas_from_logs(
             config,
             exe,
@@ -1728,6 +1758,16 @@ fn assert_gpu_rvr_three_way_from_state(
         )
         .expect("gpu builder log-native record assembly")
         .expect("gpu builder must support rvr log-native tracegen");
+    for (air, geometry, mut arena) in staged_native {
+        let written = rvr_output
+            .arena_native_written
+            .iter()
+            .find(|&&(written_air, _)| written_air == air)
+            .map(|&(_, count)| count as usize)
+            .expect("arena-native AIR must report its written count");
+        arena.finish_arena_native(written, &geometry);
+        gpu_log_record_arenas[air] = arena;
+    }
 
     let cpu_cached_program_trace = cpu_vm.commit_program_on_device(&exe.program);
     cpu_vm.load_program(cpu_cached_program_trace);
