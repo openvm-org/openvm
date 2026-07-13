@@ -204,7 +204,7 @@ extern "C" int _rv64_load_store_tracegen(
     cudaStream_t stream
 ) {
     assert(width == sizeof(Rv64LoadStoreCols<uint8_t>));
-    auto [grid, block] = kernel_launch_params(height);
+    auto [grid, block] = kernel_launch_params(height, 512);
 
     rv64_load_store_tracegen<<<grid, block, 0, stream>>>(
         d_trace,

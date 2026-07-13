@@ -62,7 +62,7 @@ extern "C" int _blt_tracegen(
 ) {
     assert(width == sizeof(BranchLessThanCols<uint8_t>));
 
-    auto [grid, block] = kernel_launch_params(height);
+    auto [grid, block] = kernel_launch_params(height, 512);
     blt_tracegen<<<grid, block, 0, stream>>>(
         d_trace, height, d_records, d_rc, rc_bins, timestamp_max_bits
     );

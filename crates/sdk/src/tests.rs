@@ -617,13 +617,18 @@ fn test_sdk_compiled_metered_cost_execute() -> Result<()> {
 #[test]
 fn test_deferral_aware_sdk_with_odd_children() -> Result<()> {
     setup_tracing();
-    let n_stack = 15;
+    let n_stack = 16;
     let app_params = app_params_with_100_bits_security(DEFAULT_APP_L_SKIP + n_stack);
     let agg_params = AggregationSystemParams::default();
     let hook_commits =
         DeferralHookCommits::from_system_params(&agg_params, hook_params_with_100_bits_security());
+    let mut app_config = AppConfig::riscv64(app_params);
+    app_config
+        .app_vm_config
+        .as_mut()
+        .set_segmentation_max_memory(256 << 20);
     let aware_sdk = Sdk::builder()
-        .app_config(AppConfig::riscv64(app_params))
+        .app_config(app_config)
         .agg_params(agg_params)
         .agg_tree_config(AggregationTreeConfig {
             num_children_leaf: 1,

@@ -138,7 +138,7 @@ extern "C" int _jalr_tracegen(
 ) {
     assert(width == sizeof(Rv64JalrCols<uint8_t>));
 
-    auto [grid, block] = kernel_launch_params(height);
+    auto [grid, block] = kernel_launch_params(height, 512);
 
     jalr_tracegen<<<grid, block, 0, stream>>>(
         d_trace,

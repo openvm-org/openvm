@@ -119,7 +119,7 @@ jobs:
           else
             echo "Unknown matrix mode: ${{ matrix.mode }}" && exit 1
           fi
-          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo nextest run --release --features "$FEATURES"
+          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo nextest run --release --features "$FEATURES" --test-threads=1
 
       - name: Build openvm-sdk examples
         if: ${{ matrix.mode == 'default' }}
