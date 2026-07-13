@@ -18,6 +18,7 @@ pub struct Rv64JalrChipGpu {
     pub timestamp_max_bits: usize,
     /// M-GPUDEC shared decode state (device operand table + per-segment
     /// emission mode).
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
     pub rvr_decode: std::sync::Arc<crate::rvr_gpu_decode::RvrGpuDecodeState>,
 }
 

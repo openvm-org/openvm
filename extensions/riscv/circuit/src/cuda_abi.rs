@@ -23,6 +23,7 @@ use openvm_cuda_common::{
     stream::cudaStream_t,
 };
 
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 pub mod rvr_delta_cuda {
     use super::*;
     use crate::rvr_gpu_decode::{DeltaAirOutputDesc, DeviceOperandEntry};
