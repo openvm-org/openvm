@@ -10,11 +10,15 @@
 //! pins it.
 
 #[cfg(feature = "rvr")]
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
 #[cfg(feature = "cuda")]
-use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::GpuDeviceCtx};
+use openvm_cuda_common::{
+    copy::{MemCopyD2H, MemCopyH2D},
+    d_buffer::DeviceBuffer,
+    stream::GpuDeviceCtx,
+};
 #[cfg(feature = "rvr")]
 use openvm_instructions::{
     exe::VmExe, instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode,
@@ -45,7 +49,11 @@ pub struct DeviceOperandEntry {
     pub c: u32,
     pub flags: u8,
     pub local_opcode: u8,
-    pub _reserved: u16,
+    /// Global AIR index for this program slot. `u8::MAX` marks an unsupported
+    /// slot; the VM's AIR count is checked before binding a delta segment.
+    pub air_idx: u8,
+    /// [`DeviceDeltaAccessPattern`] used by the global delta predecoder.
+    pub access_pattern: u8,
 }
 
 const _: () = assert!(size_of::<DeviceOperandEntry>() == 16);
@@ -72,6 +80,78 @@ pub const OPERAND_FLAG_LS_IS_LOAD: u8 = 1 << 3;
 pub const OPERAND_FLAG_LS_IS_BYTE: u8 = 1 << 6;
 pub const OPERAND_FLAG_LS_IS_WORD: u8 = 1 << 7;
 
+/// Device-visible access pattern. Values are mirrored in `rvr_delta.cu` and
+/// deliberately match the CPU oracle's `DeltaAccessPattern` semantics.
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DeviceDeltaAccessPattern {
+    Alu3 = 0,
+    Alu3Reg = 1,
+    Load = 2,
+    Store = 3,
+    Branch2 = 4,
+    Wr1 = 5,
+    Wr1Always = 6,
+    Rw1 = 7,
+}
+
+/// One unique compact-decoder consumer. This is independent of the global AIR
+/// index so the GPU chips can request their device buffer without changing AIR
+/// or verifying-key construction.
+#[repr(u8)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum DeltaAirKind {
+    AddSub = 0,
+    Bitwise = 1,
+    LessThan = 2,
+    ShiftLogical = 3,
+    ShiftRightArithmetic = 4,
+    AddSubW = 5,
+    ShiftWLogical = 6,
+    ShiftWRightArithmetic = 7,
+    LoadStore = 8,
+    LoadSignExtend = 9,
+    BranchEqual = 10,
+    BranchLessThan = 11,
+    JalLui = 12,
+    Jalr = 13,
+    Auipc = 14,
+    Mul = 15,
+    MulH = 16,
+    MulW = 17,
+    DivRem = 18,
+    DivRemW = 19,
+}
+
+impl DeltaAirKind {
+    pub const COUNT: usize = 20;
+
+    pub const fn wire_size(self) -> usize {
+        use openvm_circuit::arch::rvr::{
+            PREFLIGHT_ADDSUB_RECORD_SIZE, PREFLIGHT_BRANCH2_RECORD_SIZE, PREFLIGHT_RW1_RECORD_SIZE,
+            PREFLIGHT_WR1_RECORD_SIZE,
+        };
+        match self {
+            Self::BranchEqual | Self::BranchLessThan => PREFLIGHT_BRANCH2_RECORD_SIZE,
+            Self::JalLui | Self::Auipc => PREFLIGHT_WR1_RECORD_SIZE,
+            Self::Jalr => PREFLIGHT_RW1_RECORD_SIZE,
+            _ => PREFLIGHT_ADDSUB_RECORD_SIZE,
+        }
+    }
+
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    const fn requires_arena_native(self) -> bool {
+        matches!(
+            self,
+            Self::AddSubW
+                | Self::ShiftWLogical
+                | Self::ShiftWRightArithmetic
+                | Self::MulW
+                | Self::DivRemW
+        )
+    }
+}
+
 /// How a migrated AIR's records are fed to the GPU this segment (naming
 /// shared with the R4-fuse work).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -81,6 +161,9 @@ pub enum InlineEmissionMode {
     /// Full in-arena records written by C, fed zero-copy (G1; requires the
     /// R4 batch-2 arena-native emitters).
     ArenaNative,
+    /// Global chronological 32-byte records. Previous timestamps and stable
+    /// per-AIR compact buffers are reconstructed by the shared CUDA predecode.
+    Delta,
 }
 
 /// Env toggle for the staged G1/G2 measurement matrix. Unset (or any other
@@ -89,17 +172,54 @@ pub fn configured_emission_mode() -> Option<InlineEmissionMode> {
     match std::env::var("OPENVM_RVR_GPU_RECORDS").as_deref() {
         Ok("compact") => Some(InlineEmissionMode::CompactWire),
         Ok("arena-native") => Some(InlineEmissionMode::ArenaNative),
+        Ok("delta") => Some(InlineEmissionMode::Delta),
         _ => None,
     }
 }
 
 struct HostOperandTable {
-    /// Identity of the bound exe: (pc_base, program slot count). A VM binds one
-    /// exe in practice; this guard rebuilds the table if that ever changes.
+    /// The compiled preflight metadata is unique to one VmExe + route and is
+    /// retained here, so its allocation cannot be recycled into a false cache
+    /// hit. Pointer comparison stays constant-time on every segment.
     #[cfg_attr(not(feature = "rvr"), allow(dead_code))]
-    exe_key: (u32, usize),
+    compiled_identity: Arc<Vec<bool>>,
     pc_base: u32,
     entries: Arc<Vec<DeviceOperandEntry>>,
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+struct HostDeltaSegment {
+    delta: openvm_circuit::arch::rvr::RvrDeltaRecords,
+    memory_log: Vec<openvm_circuit::arch::rvr::MemoryLogEntry>,
+    program_log: Vec<openvm_circuit::arch::rvr::ProgramLogEntry>,
+    arena_native_flags: Vec<u8>,
+    specs: Vec<DeltaAirSpec>,
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+#[derive(Clone, Copy)]
+struct DeltaAirSpec {
+    kind: DeltaAirKind,
+    air_idx: usize,
+    count: usize,
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+struct DeviceDeltaSegment {
+    outputs: HashMap<DeltaAirKind, Arc<DeviceBuffer<u8>>>,
+}
+
+/// Device descriptor indexed by global AIR. CUDA writes each stable partition
+/// directly into the owning compact buffer.
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+pub(crate) struct DeltaAirOutputDesc {
+    base: u64,
+    count: u32,
+    stride: u32,
+    sorted_start: u32,
+    _reserved: u32,
 }
 
 /// Shared producer/consumer state. The builder holds one `Arc` per VM and
@@ -110,9 +230,42 @@ pub struct RvrGpuDecodeState {
     /// Device copy of the operand table, keyed by the host table's identity.
     #[cfg(feature = "cuda")]
     device_table: Mutex<Option<(usize, Arc<DeviceBuffer<u8>>)>>,
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    delta_host: Mutex<Option<HostDeltaSegment>>,
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    delta_device: Mutex<Option<DeviceDeltaSegment>>,
 }
 
 impl RvrGpuDecodeState {
+    #[cfg(feature = "rvr")]
+    fn bind_program<F: PrimeField32>(
+        &self,
+        exe: &VmExe<F>,
+        pc_to_air_idx: &[Option<usize>],
+        compiled_identity: &Arc<Vec<bool>>,
+    ) -> HashMap<DeltaAirKind, usize> {
+        {
+            let mut table = self.table.lock().unwrap();
+            let rebuild = table
+                .as_ref()
+                .map(|t| !Arc::ptr_eq(&t.compiled_identity, compiled_identity))
+                .unwrap_or(true);
+            if rebuild {
+                *table = Some(build_operand_table(
+                    exe,
+                    Arc::clone(compiled_identity),
+                    pc_to_air_idx,
+                ));
+                #[cfg(feature = "cuda")]
+                {
+                    *self.device_table.lock().unwrap() = None;
+                }
+            }
+        }
+
+        classify_kind_to_air(exe, pc_to_air_idx)
+    }
+
     /// The device operand table (uploaded once per bound exe) + its pc base.
     #[cfg(feature = "cuda")]
     pub fn device_operand_table(
@@ -154,39 +307,12 @@ impl RvrGpuDecodeState {
         &self,
         exe: &VmExe<F>,
         pc_to_air_idx: &[Option<usize>],
+        compiled_identity: &Arc<Vec<bool>>,
     ) -> HashSet<usize> {
-        let exe_key = (
-            exe.program.pc_base,
-            exe.program.instructions_and_debug_infos.len(),
-        );
-        let mut airs = HashSet::new();
-        {
-            let mut table = self.table.lock().unwrap();
-            let rebuild = table.as_ref().map(|t| t.exe_key != exe_key).unwrap_or(true);
-            if rebuild {
-                *table = Some(build_operand_table(exe, exe_key));
-            }
-        }
-        // An AIR is compact only if EVERY pc routed to it is device-decodable.
-        // LoadStore explicitly represents both AS=2 ordinary rows and AS=3
-        // REVEAL rows, avoiding a whole-AIR substitution for mixed sources.
-        let mut tainted = HashSet::new();
-        for (slot_idx, slot) in exe.program.instructions_and_debug_infos.iter().enumerate() {
-            let Some((instruction, _)) = slot else {
-                continue;
-            };
-            let Some(air_idx) = pc_to_air_idx.get(slot_idx).copied().flatten() else {
-                continue;
-            };
-            if gpu_decode_entry(instruction).is_some() {
-                airs.insert(air_idx);
-            } else {
-                tainted.insert(air_idx);
-            }
-        }
-        for air in &tainted {
-            airs.remove(air);
-        }
+        let airs = self
+            .bind_program(exe, pc_to_air_idx, compiled_identity)
+            .into_values()
+            .collect::<HashSet<_>>();
         // The supported formats map to at most the twenty decode-kernel
         // AIRs; more means opcode->air routing changed under us.
         assert!(
@@ -196,6 +322,217 @@ impl RvrGpuDecodeState {
         );
         airs
     }
+
+    /// Pure route classification used before native execution selects the
+    /// compact staging targets. The actual operand table is bound later from
+    /// the compiled metadata identity carried by the preflight output.
+    #[cfg(feature = "rvr")]
+    pub fn compact_record_airs<F: PrimeField32>(
+        exe: &VmExe<F>,
+        pc_to_air_idx: &[Option<usize>],
+    ) -> HashSet<usize> {
+        classify_kind_to_air(exe, pc_to_air_idx)
+            .into_values()
+            .collect()
+    }
+
+    #[cfg(feature = "rvr")]
+    pub fn bind_delta_airs<F: PrimeField32>(
+        &self,
+        exe: &VmExe<F>,
+        pc_to_air_idx: &[Option<usize>],
+        compiled_identity: &Arc<Vec<bool>>,
+    ) -> HashSet<usize> {
+        self.bind_program(exe, pc_to_air_idx, compiled_identity)
+            .into_values()
+            .collect()
+    }
+
+    /// Bind one delta segment without invoking the CPU reference decoder.
+    /// The escaping raw logs and pinned delta backing remain owned here until
+    /// the first GPU chip launches the shared predecode.
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    #[allow(clippy::too_many_arguments)]
+    pub fn bind_delta_segment<F: PrimeField32>(
+        &self,
+        exe: &VmExe<F>,
+        pc_to_air_idx: &[Option<usize>],
+        compiled_identity: &Arc<Vec<bool>>,
+        delta: openvm_circuit::arch::rvr::RvrDeltaRecords,
+        memory_log: Vec<openvm_circuit::arch::rvr::MemoryLogEntry>,
+        program_log: Vec<openvm_circuit::arch::rvr::ProgramLogEntry>,
+        chip_counts: Vec<u32>,
+        arena_native_written: &[(usize, u32)],
+    ) -> Result<HashSet<usize>, openvm_circuit::arch::ExecutionError> {
+        use openvm_circuit::arch::rvr::PREFLIGHT_DELTA_RECORD_SIZE;
+
+        let kind_to_air = self.bind_program(exe, pc_to_air_idx, compiled_identity);
+        let arena_native = arena_native_written
+            .iter()
+            .map(|&(air, _)| air)
+            .collect::<HashSet<_>>();
+        let mut specs = Vec::new();
+        let mut delta_airs = HashSet::new();
+        for (kind, air_idx) in kind_to_air {
+            if kind.requires_arena_native() && !arena_native.contains(&air_idx) {
+                return Err(openvm_circuit::arch::ExecutionError::RvrExecution(format!(
+                    "device delta requires {kind:?} AIR {air_idx} to use its arena-native GPU consumer"
+                )));
+            }
+            if arena_native.contains(&air_idx) {
+                continue;
+            }
+            let count = chip_counts.get(air_idx).copied().ok_or_else(|| {
+                openvm_circuit::arch::ExecutionError::RvrExecution(format!(
+                    "delta AIR {air_idx} has no chip-count slot"
+                ))
+            })? as usize;
+            delta_airs.insert(air_idx);
+            specs.push(DeltaAirSpec {
+                kind,
+                air_idx,
+                count,
+            });
+        }
+        let records = delta.bytes().len() / PREFLIGHT_DELTA_RECORD_SIZE;
+        let expected = specs.iter().map(|spec| spec.count).sum::<usize>();
+        if expected != records {
+            return Err(openvm_circuit::arch::ExecutionError::RvrExecution(format!(
+                "device delta count mismatch: {records} chronological records but per-AIR counts sum to {expected}"
+            )));
+        }
+        let mut arena_native_flags = vec![0u8; chip_counts.len()];
+        for &air in &arena_native {
+            let Some(flag) = arena_native_flags.get_mut(air) else {
+                return Err(openvm_circuit::arch::ExecutionError::RvrExecution(format!(
+                    "arena-native AIR {air} exceeds chip-count table"
+                )));
+            };
+            *flag = 1;
+        }
+        let host = HostDeltaSegment {
+            delta,
+            memory_log,
+            program_log,
+            arena_native_flags,
+            specs,
+        };
+        *self.delta_host.lock().unwrap() = Some(host);
+        *self.delta_device.lock().unwrap() = None;
+        Ok(delta_airs)
+    }
+
+    /// Drop any previous segment's delta state before entering a non-delta
+    /// route. This prevents a builder reused across emission modes from
+    /// exposing stale device buffers to a later segment.
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    pub fn clear_delta_segment(&self) {
+        *self.delta_host.lock().unwrap() = None;
+        *self.delta_device.lock().unwrap() = None;
+    }
+
+    /// Return the device-resident compact buffer for one chip. The first call
+    /// performs the whole segment predecode exactly once; subsequent chips
+    /// only clone their output buffer.
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    pub fn device_delta_records(
+        &self,
+        kind: DeltaAirKind,
+        device_ctx: &GpuDeviceCtx,
+    ) -> Option<Arc<DeviceBuffer<u8>>> {
+        if let Some(device) = self.delta_device.lock().unwrap().as_ref() {
+            return device.outputs.get(&kind).cloned();
+        }
+
+        let mut host_guard = self.delta_host.lock().unwrap();
+        let host = host_guard.take()?;
+        let (d_table, pc_base) = self
+            .device_operand_table(device_ctx)
+            .expect("delta segment without a bound operand table");
+
+        let mut outputs = HashMap::new();
+        let mut descs = vec![DeltaAirOutputDesc::default(); host.arena_native_flags.len()];
+        let mut sorted_specs = host.specs.clone();
+        sorted_specs.sort_unstable_by_key(|spec| spec.air_idx);
+        let mut sorted_start = 0usize;
+        for spec in &sorted_specs {
+            let stride = spec.kind.wire_size();
+            if spec.count != 0 {
+                let buffer = Arc::new(DeviceBuffer::<u8>::with_capacity_on(
+                    spec.count * stride,
+                    device_ctx,
+                ));
+                descs[spec.air_idx] = DeltaAirOutputDesc {
+                    base: buffer.as_ptr() as u64,
+                    count: u32::try_from(spec.count).expect("delta AIR count exceeds u32"),
+                    stride: stride as u32,
+                    sorted_start: u32::try_from(sorted_start)
+                        .expect("delta sorted offset exceeds u32"),
+                    _reserved: 0,
+                };
+                outputs.insert(spec.kind, buffer);
+            }
+            sorted_start += spec.count;
+        }
+
+        let d_delta = host
+            .delta
+            .bytes()
+            .to_device_on(device_ctx)
+            .expect("delta H2D");
+        let d_memory = if host.memory_log.is_empty() {
+            DeviceBuffer::new()
+        } else {
+            host.memory_log
+                .as_slice()
+                .to_device_on(device_ctx)
+                .expect("delta residual-memory H2D")
+        };
+        let d_program = if host.program_log.is_empty() {
+            DeviceBuffer::new()
+        } else {
+            host.program_log
+                .as_slice()
+                .to_device_on(device_ctx)
+                .expect("delta W-chronology H2D")
+        };
+        let d_flags = host
+            .arena_native_flags
+            .as_slice()
+            .to_device_on(device_ctx)
+            .expect("delta arena flags H2D");
+        let d_descs = descs
+            .as_slice()
+            .to_device_on(device_ctx)
+            .expect("delta output descriptors H2D");
+        let d_error = DeviceBuffer::<u32>::with_capacity_on(1, device_ctx);
+        d_error.fill_zero_on(device_ctx).expect("delta error clear");
+        unsafe {
+            crate::cuda_abi::rvr_delta_cuda::predecode(
+                &d_delta,
+                host.delta.bytes().len() / openvm_circuit::arch::rvr::PREFLIGHT_DELTA_RECORD_SIZE,
+                &d_memory,
+                host.memory_log.len(),
+                &d_program,
+                host.program_log.len(),
+                &d_table,
+                pc_base,
+                &d_flags,
+                &d_descs,
+                &d_error,
+                device_ctx.stream.as_raw(),
+            )
+            .expect("CUDA delta predecode launch");
+        }
+        let error = d_error.to_host_on(device_ctx).expect("delta error D2H")[0];
+        assert_eq!(error, 0, "CUDA delta predecode fail-closed error {error}");
+
+        drop(host);
+        let device = DeviceDeltaSegment { outputs };
+        let result = device.outputs.get(&kind).cloned();
+        *self.delta_device.lock().unwrap() = Some(device);
+        result
+    }
 }
 
 /// The operand-table entry for one instruction, if its opcode belongs to a
@@ -204,7 +541,9 @@ impl RvrGpuDecodeState {
 /// set and the table can never drift apart. Derivations mirror the host
 /// inline assemblers exactly (alu3 via `derive_base_alu_u16_operands`).
 #[cfg(feature = "rvr")]
-fn gpu_decode_entry<F: PrimeField32>(instruction: &Instruction<F>) -> Option<DeviceOperandEntry> {
+fn gpu_decode_entry<F: PrimeField32>(
+    instruction: &Instruction<F>,
+) -> Option<(DeviceOperandEntry, DeltaAirKind)> {
     use openvm_instructions::riscv::RV64_REGISTER_AS;
     let opcode = instruction.opcode.as_usize();
 
@@ -234,14 +573,31 @@ fn gpu_decode_entry<F: PrimeField32>(instruction: &Instruction<F>) -> Option<Dev
         if operands.rs2_imm_sign {
             flags |= OPERAND_FLAG_RS2_IMM_SIGN;
         }
-        return Some(DeviceOperandEntry {
-            a: operands.rd_ptr,
-            b: operands.rs1_ptr,
-            c: operands.rs2,
-            flags,
-            local_opcode,
-            _reserved: 0,
-        });
+        let kind = if opcode == BaseAluOpcode::ADD.global_opcode_usize()
+            || opcode == BaseAluOpcode::SUB.global_opcode_usize()
+        {
+            DeltaAirKind::AddSub
+        } else if opcode == LessThanOpcode::SLT.global_opcode_usize()
+            || opcode == LessThanOpcode::SLTU.global_opcode_usize()
+        {
+            DeltaAirKind::LessThan
+        } else if opcode == ShiftOpcode::SRA.global_opcode_usize() {
+            DeltaAirKind::ShiftRightArithmetic
+        } else {
+            DeltaAirKind::ShiftLogical
+        };
+        return Some((
+            DeviceOperandEntry {
+                a: operands.rd_ptr,
+                b: operands.rs1_ptr,
+                c: operands.rs2,
+                flags,
+                local_opcode,
+                air_idx: u8::MAX,
+                access_pattern: DeviceDeltaAccessPattern::Alu3 as u8,
+            },
+            kind,
+        ));
     }
 
     // alu3 over the W u16 adapter: BaseAluW and ShiftW. The operand
@@ -269,14 +625,27 @@ fn gpu_decode_entry<F: PrimeField32>(instruction: &Instruction<F>) -> Option<Dev
         if operands.rs2_imm_sign {
             flags |= OPERAND_FLAG_RS2_IMM_SIGN;
         }
-        return Some(DeviceOperandEntry {
-            a: operands.rd_ptr,
-            b: operands.rs1_ptr,
-            c: operands.rs2,
-            flags,
-            local_opcode,
-            _reserved: 0,
-        });
+        let kind = if opcode == BaseAluWOpcode::ADDW.global_opcode_usize()
+            || opcode == BaseAluWOpcode::SUBW.global_opcode_usize()
+        {
+            DeltaAirKind::AddSubW
+        } else if opcode == ShiftWOpcode::SRAW.global_opcode_usize() {
+            DeltaAirKind::ShiftWRightArithmetic
+        } else {
+            DeltaAirKind::ShiftWLogical
+        };
+        return Some((
+            DeviceOperandEntry {
+                a: operands.rd_ptr,
+                b: operands.rs1_ptr,
+                c: operands.rs2,
+                flags,
+                local_opcode,
+                air_idx: u8::MAX,
+                access_pattern: DeviceDeltaAccessPattern::Alu3 as u8,
+            },
+            kind,
+        ));
     }
 
     // branch2: BranchEqual (BEQ/BNE), BranchLessThan (BLT/BLTU/BGE/BGEU).
@@ -294,14 +663,25 @@ fn gpu_decode_entry<F: PrimeField32>(instruction: &Instruction<F>) -> Option<Dev
         None
     };
     if let Some(local_opcode) = branch_local {
-        return Some(DeviceOperandEntry {
-            a: instruction.a.as_canonical_u32(),
-            b: instruction.b.as_canonical_u32(),
-            c: instruction.c.as_canonical_u32(),
-            flags: 0,
-            local_opcode,
-            _reserved: 0,
-        });
+        let kind = if opcode == BranchEqualOpcode::BEQ.global_opcode_usize()
+            || opcode == BranchEqualOpcode::BNE.global_opcode_usize()
+        {
+            DeltaAirKind::BranchEqual
+        } else {
+            DeltaAirKind::BranchLessThan
+        };
+        return Some((
+            DeviceOperandEntry {
+                a: instruction.a.as_canonical_u32(),
+                b: instruction.b.as_canonical_u32(),
+                c: instruction.c.as_canonical_u32(),
+                flags: 0,
+                local_opcode,
+                air_idx: u8::MAX,
+                access_pattern: DeviceDeltaAccessPattern::Branch2 as u8,
+            },
+            kind,
+        ));
     }
 
     // wr1: JalLui (conditional write via f) and Auipc (always written).
@@ -315,24 +695,32 @@ fn gpu_decode_entry<F: PrimeField32>(instruction: &Instruction<F>) -> Option<Dev
         if opcode == Rv64JalLuiOpcode::JAL.global_opcode_usize() {
             flags |= OPERAND_FLAG_IS_JAL;
         }
-        return Some(DeviceOperandEntry {
-            a: instruction.a.as_canonical_u32(),
-            b: 0,
-            c: instruction.c.as_canonical_u32(),
-            flags,
-            local_opcode: 0,
-            _reserved: 0,
-        });
+        return Some((
+            DeviceOperandEntry {
+                a: instruction.a.as_canonical_u32(),
+                b: 0,
+                c: instruction.c.as_canonical_u32(),
+                flags,
+                local_opcode: 0,
+                air_idx: u8::MAX,
+                access_pattern: DeviceDeltaAccessPattern::Wr1 as u8,
+            },
+            DeltaAirKind::JalLui,
+        ));
     }
     if opcode == Rv64AuipcOpcode::AUIPC.global_opcode_usize() {
-        return Some(DeviceOperandEntry {
-            a: instruction.a.as_canonical_u32(),
-            b: 0,
-            c: instruction.c.as_canonical_u32(),
-            flags: OPERAND_FLAG_WRITE_ENABLED,
-            local_opcode: 0,
-            _reserved: 0,
-        });
+        return Some((
+            DeviceOperandEntry {
+                a: instruction.a.as_canonical_u32(),
+                b: 0,
+                c: instruction.c.as_canonical_u32(),
+                flags: OPERAND_FLAG_WRITE_ENABLED,
+                local_opcode: 0,
+                air_idx: u8::MAX,
+                access_pattern: DeviceDeltaAccessPattern::Wr1Always as u8,
+            },
+            DeltaAirKind::Auipc,
+        ));
     }
 
     // alu3 over the Mult adapter: Mul, MulH class, DivRem class.
@@ -367,14 +755,29 @@ fn gpu_decode_entry<F: PrimeField32>(instruction: &Instruction<F>) -> Option<Dev
         None
     };
     if let Some(local_opcode) = mult_local.or(mult_w_local) {
-        return Some(DeviceOperandEntry {
-            a: instruction.a.as_canonical_u32(),
-            b: instruction.b.as_canonical_u32(),
-            c: instruction.c.as_canonical_u32(),
-            flags: 0,
-            local_opcode,
-            _reserved: 0,
-        });
+        let kind = if opcode == MulOpcode::MUL.global_opcode_usize() {
+            DeltaAirKind::Mul
+        } else if (MulHOpcode::CLASS_OFFSET..MulHOpcode::CLASS_OFFSET + 3).contains(&opcode) {
+            DeltaAirKind::MulH
+        } else if (DivRemOpcode::CLASS_OFFSET..DivRemOpcode::CLASS_OFFSET + 4).contains(&opcode) {
+            DeltaAirKind::DivRem
+        } else if opcode == MulWOpcode::MULW.global_opcode_usize() {
+            DeltaAirKind::MulW
+        } else {
+            DeltaAirKind::DivRemW
+        };
+        return Some((
+            DeviceOperandEntry {
+                a: instruction.a.as_canonical_u32(),
+                b: instruction.b.as_canonical_u32(),
+                c: instruction.c.as_canonical_u32(),
+                flags: 0,
+                local_opcode,
+                air_idx: u8::MAX,
+                access_pattern: DeviceDeltaAccessPattern::Alu3Reg as u8,
+            },
+            kind,
+        ));
     }
 
     // alu3 over the byte adapter: Bitwise (XOR/OR/AND).
@@ -386,14 +789,18 @@ fn gpu_decode_entry<F: PrimeField32>(instruction: &Instruction<F>) -> Option<Dev
         if instruction.e.as_canonical_u32() != RV64_REGISTER_AS {
             flags |= OPERAND_FLAG_RS2_IMM;
         }
-        return Some(DeviceOperandEntry {
-            a: instruction.a.as_canonical_u32(),
-            b: instruction.b.as_canonical_u32(),
-            c: instruction.c.as_canonical_u32(),
-            flags,
-            local_opcode: (opcode - BaseAluOpcode::CLASS_OFFSET) as u8,
-            _reserved: 0,
-        });
+        return Some((
+            DeviceOperandEntry {
+                a: instruction.a.as_canonical_u32(),
+                b: instruction.b.as_canonical_u32(),
+                c: instruction.c.as_canonical_u32(),
+                flags,
+                local_opcode: (opcode - BaseAluOpcode::CLASS_OFFSET) as u8,
+                air_idx: u8::MAX,
+                access_pattern: DeviceDeltaAccessPattern::Alu3 as u8,
+            },
+            DeltaAirKind::Bitwise,
+        ));
     }
 
     // alu3 over the LoadStore adapter (zero-ext loads, stores, sign-ext loads,
@@ -429,14 +836,37 @@ fn gpu_decode_entry<F: PrimeField32>(instruction: &Instruction<F>) -> Option<Dev
             Rv64LoadStoreOpcode::LOADW => flags |= OPERAND_FLAG_LS_IS_WORD,
             _ => {}
         }
-        return Some(DeviceOperandEntry {
-            a: instruction.a.as_canonical_u32(),
-            b: instruction.b.as_canonical_u32(),
-            c: instruction.c.as_canonical_u32(),
-            flags,
-            local_opcode,
-            _reserved: 0,
-        });
+        let kind = if matches!(
+            op,
+            Rv64LoadStoreOpcode::LOADB | Rv64LoadStoreOpcode::LOADH | Rv64LoadStoreOpcode::LOADW
+        ) {
+            DeltaAirKind::LoadSignExtend
+        } else {
+            DeltaAirKind::LoadStore
+        };
+        let pattern = if matches!(
+            op,
+            Rv64LoadStoreOpcode::STORED
+                | Rv64LoadStoreOpcode::STOREW
+                | Rv64LoadStoreOpcode::STOREH
+                | Rv64LoadStoreOpcode::STOREB
+        ) {
+            DeviceDeltaAccessPattern::Store
+        } else {
+            DeviceDeltaAccessPattern::Load
+        };
+        return Some((
+            DeviceOperandEntry {
+                a: instruction.a.as_canonical_u32(),
+                b: instruction.b.as_canonical_u32(),
+                c: instruction.c.as_canonical_u32(),
+                flags,
+                local_opcode,
+                air_idx: u8::MAX,
+                access_pattern: pattern as u8,
+            },
+            kind,
+        ));
     }
 
     // rw1: Jalr (conditional write via f, imm sign via g).
@@ -448,36 +878,91 @@ fn gpu_decode_entry<F: PrimeField32>(instruction: &Instruction<F>) -> Option<Dev
         if !instruction.g.is_zero() {
             flags |= OPERAND_FLAG_JALR_IMM_SIGN;
         }
-        return Some(DeviceOperandEntry {
-            a: instruction.a.as_canonical_u32(),
-            b: instruction.b.as_canonical_u32(),
-            c: instruction.c.as_canonical_u32(),
-            flags,
-            local_opcode: 0,
-            _reserved: 0,
-        });
+        return Some((
+            DeviceOperandEntry {
+                a: instruction.a.as_canonical_u32(),
+                b: instruction.b.as_canonical_u32(),
+                c: instruction.c.as_canonical_u32(),
+                flags,
+                local_opcode: 0,
+                air_idx: u8::MAX,
+                access_pattern: DeviceDeltaAccessPattern::Rw1 as u8,
+            },
+            DeltaAirKind::Jalr,
+        ));
     }
 
     None
 }
 
 #[cfg(feature = "rvr")]
-fn build_operand_table<F: PrimeField32>(exe: &VmExe<F>, exe_key: (u32, usize)) -> HostOperandTable {
+fn build_operand_table<F: PrimeField32>(
+    exe: &VmExe<F>,
+    compiled_identity: Arc<Vec<bool>>,
+    pc_to_air_idx: &[Option<usize>],
+) -> HostOperandTable {
     let program = &exe.program;
-    let mut entries =
-        vec![DeviceOperandEntry::default(); program.instructions_and_debug_infos.len()];
+    let mut entries = vec![
+        DeviceOperandEntry {
+            air_idx: u8::MAX,
+            access_pattern: u8::MAX,
+            ..DeviceOperandEntry::default()
+        };
+        program.instructions_and_debug_infos.len()
+    ];
     for (slot_idx, slot) in program.instructions_and_debug_infos.iter().enumerate() {
         let Some((instruction, _)) = slot else {
             continue;
         };
-        if let Some(entry) = gpu_decode_entry(instruction) {
+        if let Some((mut entry, _)) = gpu_decode_entry(instruction) {
+            let air_idx = pc_to_air_idx
+                .get(slot_idx)
+                .copied()
+                .flatten()
+                .expect("device-decodable instruction must map to an AIR");
+            entry.air_idx = u8::try_from(air_idx).expect("delta device AIR index exceeds u8");
             entries[slot_idx] = entry;
         }
     }
     let _ = DEFAULT_PC_STEP; // index = (from_pc - pc_base) / DEFAULT_PC_STEP
     HostOperandTable {
-        exe_key,
+        compiled_identity,
         pc_base: program.pc_base,
         entries: Arc::new(entries),
     }
+}
+
+#[cfg(feature = "rvr")]
+fn classify_kind_to_air<F: PrimeField32>(
+    exe: &VmExe<F>,
+    pc_to_air_idx: &[Option<usize>],
+) -> HashMap<DeltaAirKind, usize> {
+    let mut kind_to_air = HashMap::new();
+    let mut air_to_kind = HashMap::new();
+    let mut tainted = HashSet::new();
+    for (slot_idx, slot) in exe.program.instructions_and_debug_infos.iter().enumerate() {
+        let Some((instruction, _)) = slot else {
+            continue;
+        };
+        let Some(air_idx) = pc_to_air_idx.get(slot_idx).copied().flatten() else {
+            continue;
+        };
+        let Some((_, kind)) = gpu_decode_entry(instruction) else {
+            tainted.insert(air_idx);
+            continue;
+        };
+        if let Some(previous) = kind_to_air.insert(kind, air_idx) {
+            assert_eq!(
+                previous, air_idx,
+                "delta kind {kind:?} maps to multiple AIRs"
+            );
+        }
+        if let Some(previous) = air_to_kind.insert(air_idx, kind) {
+            assert_eq!(previous, kind, "AIR {air_idx} maps to multiple delta kinds");
+        }
+    }
+    // An AIR is decoded only if EVERY pc routed to it is device-decodable.
+    // LoadStore explicitly supports both AS=2 ordinary and AS=3 REVEAL rows.
+    kind_to_air.retain(|_, air| !tainted.contains(air));
+    kind_to_air
 }
