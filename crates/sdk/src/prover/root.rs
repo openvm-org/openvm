@@ -30,7 +30,7 @@ use crate::{
     config::{AggregationConfig, AggregationSystemParams, AggregationTreeConfig, AppConfig},
     keygen::AppProvingKey,
     prover::{AggProver, DeferralAggProver, StarkProver},
-    StdIn,
+    DeferralSetup, StdIn,
 };
 
 // Trace heights are structural and backend-independent, so use the CPU engine here.
@@ -190,8 +190,12 @@ pub fn compute_root_proof_heights(
     ));
     app_config.app_vm_config.system.config = system_config;
 
-    let def_hook_cached_commit = def_prover.as_ref().map(|p| p.def_hook_cached_commit());
-    let def_hook_commit = def_prover.as_ref().map(|p| p.def_hook_commit().into());
+    let deferral_setup = match def_prover {
+        Some(def_prover) => DeferralSetup::Active(def_prover),
+        None => DeferralSetup::Disabled,
+    };
+    let def_hook_cached_commit = deferral_setup.hook_cached_commit();
+    let def_hook_commit = deferral_setup.hook_commit().map(Into::into);
 
     let app_pk = AppProvingKey::keygen(app_config)?;
 
@@ -207,7 +211,7 @@ pub fn compute_root_proof_heights(
         &app_pk.app_vm_pk,
         dummy_exe,
         agg_prover.clone(),
-        def_prover,
+        deferral_setup,
     )?;
     let (agg_proof, _) = stark_prover.prove(StdIn::default(), &[])?;
 

@@ -63,7 +63,7 @@ extern "C" int _rv64_less_than_tracegen(
     cudaStream_t stream
 ) {
     assert(width == sizeof(LessThanCols<uint8_t>));
-    auto [grid, block] = kernel_launch_params(height);
+    auto [grid, block] = kernel_launch_params(height, 512);
 
     rv64_less_than_tracegen<<<grid, block, 0, stream>>>(
         d_trace, height, d_records, d_range_checker, range_checker_num_bins, timestamp_max_bits
