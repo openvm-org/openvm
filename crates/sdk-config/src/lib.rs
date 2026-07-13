@@ -495,6 +495,7 @@ where
 pub struct SdkVmGpuBuilder {
     /// M-GPUDEC shared decode state: one per VM, cloned into the rv64im GPU
     /// prover extension so a bound compact operand table reaches the chips.
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
     pub rvr_decode: std::sync::Arc<openvm_riscv_circuit::rvr_gpu_decode::RvrGpuDecodeState>,
 }
 
@@ -524,6 +525,7 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SdkVmGpuBuilder {
         )?;
         let inventory = &mut chip_complex.inventory;
         let rv64im_ext = Rv64ImGpuProverExt {
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
             rvr_decode: self.rvr_decode.clone(),
         };
         if let Some(rv64i) = &config.rv64i {
