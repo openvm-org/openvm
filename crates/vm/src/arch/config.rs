@@ -7,8 +7,10 @@ use std::{
 
 use derive_new::new;
 use getset::{Setters, WithSetters};
-use openvm_instructions::riscv::{RV64_IMM_AS, RV64_MEMORY_AS, RV64_REGISTER_AS};
-use openvm_instructions::DEFERRAL_AS;
+use openvm_instructions::{
+    riscv::{RV64_IMM_AS, RV64_MEMORY_AS, RV64_REGISTER_AS},
+    DEFERRAL_AS,
+};
 use openvm_poseidon2_air::Poseidon2Config;
 #[cfg(feature = "rvr")]
 use openvm_stark_backend::p3_field::PrimeField32;
