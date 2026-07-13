@@ -11,19 +11,19 @@ use crate::{
 };
 
 pub const LOAD_SIGN_EXTEND_HALFWORD_SELECTOR_WIDTH: usize = 3;
-/// Cells loaded by a halfword load: `LOAD_WIDTH_HALFWORD / 2`.
-pub const LOAD_SIGN_EXTEND_HALFWORD_LOADED_CELLS: usize = 1;
+/// Cells overlapped by an odd-shift halfword load: `LOAD_WIDTH_HALFWORD / 2 + 1`.
+pub const LOAD_SIGN_EXTEND_HALFWORD_OVERLAP_CELLS: usize = 2;
 
 pub type LoadSignExtendHalfwordCoreAir = LoadSignExtendCoreAir<
     LOAD_WIDTH_HALFWORD,
     LOAD_SIGN_EXTEND_HALFWORD_SELECTOR_WIDTH,
-    LOAD_SIGN_EXTEND_HALFWORD_LOADED_CELLS,
+    LOAD_SIGN_EXTEND_HALFWORD_OVERLAP_CELLS,
 >;
 pub type LoadSignExtendHalfwordFiller = LoadSignExtendFiller<
     Rv64LoadAdapterFiller,
     LOAD_WIDTH_HALFWORD,
     LOAD_SIGN_EXTEND_HALFWORD_SELECTOR_WIDTH,
-    LOAD_SIGN_EXTEND_HALFWORD_LOADED_CELLS,
+    LOAD_SIGN_EXTEND_HALFWORD_OVERLAP_CELLS,
 >;
 
 pub type Rv64LoadSignExtendHalfwordAir =

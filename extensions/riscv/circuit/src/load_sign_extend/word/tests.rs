@@ -39,7 +39,7 @@ use crate::{
         word::{
             LoadSignExtendWordCoreAir, LoadSignExtendWordFiller, Rv64LoadSignExtendWordAir,
             Rv64LoadSignExtendWordChip, Rv64LoadSignExtendWordExecutor,
-            LOAD_SIGN_EXTEND_WORD_LOADED_CELLS, LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH,
+            LOAD_SIGN_EXTEND_WORD_OVERLAP_CELLS, LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH,
         },
     },
 };
@@ -170,7 +170,7 @@ fn assert_pranked_word_fails(
         &mut LoadSignExtendCoreCols<
             F,
             LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH,
-            LOAD_SIGN_EXTEND_WORD_LOADED_CELLS,
+            LOAD_SIGN_EXTEND_WORD_OVERLAP_CELLS,
         >,
     ),
 ) {
@@ -207,7 +207,7 @@ fn assert_pranked_word_fails(
 #[test]
 fn negative_split_signed_load_test() {
     assert_pranked_word_fails(|core| core.data_most_sig_bit += F::ONE);
-    assert_pranked_word_fails(|core| core.loaded_cell_bytes[0][0] += F::ONE);
+    assert_pranked_word_fails(|core| core.overlap_lo_bytes[0] += F::ONE);
     assert_pranked_word_fails(|core| core.read_data[0][0] += F::ONE);
 }
 
