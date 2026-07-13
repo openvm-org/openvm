@@ -76,8 +76,8 @@ let deferral_config = deferral_agg_prover
 
 let vm_config = SdkVmConfig::builder()
     .system(Default::default())
-    .rv32i(Default::default())
-    .rv32m(Default::default())
+    .rv64i(Default::default())
+    .rv64m(Default::default())
     .io(Default::default())
     .deferral(deferral_config)
     .build()
@@ -118,8 +118,8 @@ let deferral_config =
 
 let vm_config = SdkVmConfig::builder()
     .system(Default::default())
-    .rv32i(Default::default())
-    .rv32m(Default::default())
+    .rv64i(Default::default())
+    .rv64m(Default::default())
     .io(Default::default())
     .deferral(deferral_config)
     .build()

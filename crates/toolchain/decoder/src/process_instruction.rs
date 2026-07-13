@@ -294,7 +294,7 @@ mod tests {
     }
 
     recorder! {
-        // RV32I + RV64I base, register-register (R-type, OPCODE_OP = 0x33)
+        // RV64I base, register-register (R-type, OPCODE_OP = 0x33)
         Add     process_add     RType,
         Sub     process_sub     RType,
         Sll     process_sll     RType,
@@ -306,7 +306,7 @@ mod tests {
         Or      process_or      RType,
         And     process_and     RType,
 
-        // RV32I + RV64I base, register-immediate (I/ITypeShamt, OPCODE_OP_IMM = 0x13)
+        // RV64I base, register-immediate (I/ITypeShamt, OPCODE_OP_IMM = 0x13)
         Addi    process_addi    IType,
         Slli    process_slli    ITypeShamt,
         Slti    process_slti    IType,
@@ -559,7 +559,7 @@ mod tests {
 
     #[test]
     fn dispatch_op_r_type() {
-        // Base RV32I/RV64I R-type integer ops on OPCODE_OP = 0x33.
+        // Base RV64I R-type integer ops on OPCODE_OP = 0x33.
         check_r_dispatch(OPCODE_OP, 0, 0, 1, 2, 3, Called::Add);
         check_r_dispatch(OPCODE_OP, 0x20, 0, 4, 5, 6, Called::Sub);
         check_r_dispatch(OPCODE_OP, 0, 1, 7, 8, 9, Called::Sll);
