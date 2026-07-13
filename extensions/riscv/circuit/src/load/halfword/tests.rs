@@ -27,8 +27,8 @@ use openvm_stark_sdk::utils::create_seeded_rng;
 
 use crate::{
     adapters::{
-        rv64_bytes_to_u16_block, Rv64LoadAdapterAir, Rv64LoadAdapterExecutor, Rv64LoadAdapterFiller,
-        RV64_BYTE_BITS,
+        rv64_bytes_to_u16_block, Rv64LoadAdapterAir, Rv64LoadAdapterExecutor,
+        Rv64LoadAdapterFiller, RV64_BYTE_BITS,
     },
     load::{
         common::load_write_data, core::LoadCoreCols, LoadHalfwordCoreAir, LoadHalfwordFiller,
@@ -194,11 +194,8 @@ fn negative_split_write_data_test() {
     let modify_trace = |trace: &mut DenseMatrix<F>| {
         let mut trace_row = trace.row_slice(0).unwrap().to_vec();
         let (_, core_row) = trace_row.split_at_mut(adapter_width);
-        let core: &mut LoadCoreCols<
-            F,
-            LOAD_HALFWORD_SELECTOR_WIDTH,
-            LOAD_HALFWORD_OVERLAP_CELLS,
-        > = core_row.borrow_mut();
+        let core: &mut LoadCoreCols<F, LOAD_HALFWORD_SELECTOR_WIDTH, LOAD_HALFWORD_OVERLAP_CELLS> =
+            core_row.borrow_mut();
         core.read_data[0][0] += F::ONE;
         *trace = RowMajorMatrix::new(trace_row, trace.width());
     };

@@ -190,11 +190,8 @@ fn negative_split_opcode_role_test() {
     let modify_trace = |trace: &mut DenseMatrix<F>| {
         let mut trace_row = trace.row_slice(0).unwrap().to_vec();
         let (_, core_row) = trace_row.split_at_mut(adapter_width);
-        let core: &mut StoreCoreCols<
-            F,
-            STORE_HALFWORD_SELECTOR_WIDTH,
-            STORE_HALFWORD_VALUE_CELLS,
-        > = core_row.borrow_mut();
+        let core: &mut StoreCoreCols<F, STORE_HALFWORD_SELECTOR_WIDTH, STORE_HALFWORD_VALUE_CELLS> =
+            core_row.borrow_mut();
         core.selector[0] += F::ONE;
         *trace = RowMajorMatrix::new(trace_row, trace.width());
     };

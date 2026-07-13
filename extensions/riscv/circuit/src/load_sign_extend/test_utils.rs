@@ -27,7 +27,7 @@ use {
 };
 
 #[cfg(feature = "cuda")]
-use crate::adapters::Rv64LoadAdapterExecutor;
+use crate::adapters::{Rv64LoadAdapterExecutor, Rv64LoadByteAdapterExecutor};
 use crate::{
     adapters::{
         rv64_bytes_to_u16_block, rv64_bytes_to_u32, rv64_u16_block_to_bytes, sign_extend_imm16,

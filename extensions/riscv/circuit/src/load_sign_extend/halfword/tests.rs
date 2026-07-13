@@ -38,8 +38,8 @@ use crate::{
         halfword::{
             LoadSignExtendHalfwordCoreAir, LoadSignExtendHalfwordFiller,
             Rv64LoadSignExtendHalfwordAir, Rv64LoadSignExtendHalfwordChip,
-            Rv64LoadSignExtendHalfwordExecutor, LOAD_SIGN_EXTEND_HALFWORD_SELECTOR_WIDTH,
-            LOAD_SIGN_EXTEND_HALFWORD_OVERLAP_CELLS,
+            Rv64LoadSignExtendHalfwordExecutor, LOAD_SIGN_EXTEND_HALFWORD_OVERLAP_CELLS,
+            LOAD_SIGN_EXTEND_HALFWORD_SELECTOR_WIDTH,
         },
         test_utils::{memory_config_for, set_and_execute, F, MAX_INS_CAPACITY},
     },

@@ -33,12 +33,12 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 
-use super::{
-    byte_ptr_to_u16_ptr, byte_ptr_to_u16_ptr_value, expand_to_rv64_block, ptr_to_field_u16_limbs,
-    ptr_to_u16_limbs, rv64_address_add_imm, sign_extend_imm16, try_rv64_bytes_to_u32,
-    RV64_PTR_BITS, RV64_PTR_U16_LIMBS, RV64_REGISTER_NUM_LIMBS, U16_BITS,
+use crate::adapters::{
+    byte_ptr_to_u16_ptr, byte_ptr_to_u16_ptr_value, expand_to_rv64_block, memory_read_u16,
+    ptr_to_field_u16_limbs, ptr_to_u16_limbs, rv64_address_add_imm, sign_extend_imm16,
+    timed_write_u16, tracing_read, tracing_read_u16, try_rv64_bytes_to_u32, RV64_PTR_BITS,
+    RV64_PTR_U16_LIMBS, RV64_REGISTER_NUM_LIMBS, U16_BITS,
 };
-use crate::adapters::{memory_read_u16, timed_write_u16, tracing_read, tracing_read_u16};
 
 pub struct LoadInstruction<T> {
     /// Guaranteed boolean by the core selector; may be a degree-2 expression.
@@ -150,8 +150,8 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadAdapterAir {
             .eval(builder, is_valid.clone());
 
         // Constrain mem_ptr = rs1 + sign_extend(imm) as a 32-bit addition. The booleanity
-        // checks hold unconditionally (dummy rows are all-zero), which keeps their degree low
-        // since `is_valid` may be a degree-2 expression.
+        // checks hold unconditionally (dummy rows are all-zero), which keeps
+        // their degree low since `is_valid` may be a degree-2 expression.
         let inv = AB::F::from_u32(1u32 << U16_BITS).inverse();
         let carry = (local_cols.rs1_data[0] + local_cols.imm - local_cols.mem_ptr_limbs[0]) * inv;
         builder.assert_bool(carry.clone());
@@ -204,6 +204,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadAdapterAir {
 
         let mem_ptr = local_cols.mem_ptr_limbs[0]
             + local_cols.mem_ptr_limbs[1] * AB::F::from_u32(1u32 << U16_BITS);
+
         let [read_data0, read_data1] = ctx.reads;
         // Read the memory block containing the effective load address.
         self.memory_bridge
@@ -224,7 +225,9 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadAdapterAir {
             .read(
                 MemoryAddress::new(
                     AB::F::from_u32(RV64_MEMORY_AS),
-                    byte_ptr_to_u16_ptr::<AB>(mem_ptr - shift_amount + block_bytes),
+                    byte_ptr_to_u16_ptr::<AB>(
+                        mem_ptr - shift_amount + AB::F::from_u32(RV64_REGISTER_NUM_LIMBS as u32),
+                    ),
                 ),
                 read_data1,
                 timestamp_pp(),
@@ -312,9 +315,6 @@ impl Rv64LoadAdapterRecord {
     }
 }
 
-/// Reads rs1, computes the effective memory pointer, reads the containing memory block (and the
-/// next block when the `LOAD_WIDTH`-byte access crosses into it), and writes the loaded value to
-/// rd.
 #[derive(Clone, Copy, derive_new::new)]
 pub struct Rv64LoadAdapterExecutor<const LOAD_WIDTH: usize> {
     pointer_max_bits: usize,

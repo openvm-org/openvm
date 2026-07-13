@@ -196,15 +196,12 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: LoadOp, const ENABLED: bo
     // read_data is the containing block followed by the next block, which is only read
     // when the access spans both.
     let mut read_data = [0u8; 2 * RV64_REGISTER_NUM_LIMBS];
-    let block0: [u8; RV64_REGISTER_NUM_LIMBS] =
-        exec_state.vm_read_bytes(RV64_MEMORY_AS, ptr_val);
+    let block0: [u8; RV64_REGISTER_NUM_LIMBS] = exec_state.vm_read_bytes(RV64_MEMORY_AS, ptr_val);
     read_data[..RV64_REGISTER_NUM_LIMBS].copy_from_slice(&block0);
     if shift_amount as usize + OP::WIDTH > RV64_REGISTER_NUM_LIMBS {
         debug_assert!((ptr_val as usize) + 2 * RV64_REGISTER_NUM_LIMBS <= MEM_SIZE);
-        let block1: [u8; RV64_REGISTER_NUM_LIMBS] = exec_state.vm_read_bytes(
-            RV64_MEMORY_AS,
-            ptr_val + RV64_REGISTER_NUM_LIMBS as u32,
-        );
+        let block1: [u8; RV64_REGISTER_NUM_LIMBS] =
+            exec_state.vm_read_bytes(RV64_MEMORY_AS, ptr_val + RV64_REGISTER_NUM_LIMBS as u32);
         read_data[RV64_REGISTER_NUM_LIMBS..].copy_from_slice(&block1);
     }
     let mut write_data = [0u8; RV64_REGISTER_NUM_LIMBS];

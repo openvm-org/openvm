@@ -202,12 +202,12 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: StoreOp>(
     // write_data is the containing block followed by the next block, initialized to their
     // previous contents; the next block is only touched when the access spans both.
     let mut write_data = [0u8; 2 * RV64_REGISTER_NUM_LIMBS];
-    let block0: [u8; RV64_REGISTER_NUM_LIMBS] = exec_state.host_read(RV64_MEMORY_AS, ptr_val);
+    let block0: [u8; RV64_REGISTER_NUM_LIMBS] = exec_state.host_read(pre_compute.e as u32, ptr_val);
     write_data[..RV64_REGISTER_NUM_LIMBS].copy_from_slice(&block0);
     if crosses {
         debug_assert!((ptr_val as usize) + 2 * RV64_REGISTER_NUM_LIMBS <= MEM_SIZE);
         let block1: [u8; RV64_REGISTER_NUM_LIMBS] = exec_state.host_read(
-            RV64_MEMORY_AS,
+            pre_compute.e as u32,
             ptr_val + RV64_REGISTER_NUM_LIMBS as u32,
         );
         write_data[RV64_REGISTER_NUM_LIMBS..].copy_from_slice(&block1);
@@ -221,13 +221,13 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: StoreOp>(
     }
 
     exec_state.vm_write(
-        RV64_MEMORY_AS,
+        pre_compute.e as u32,
         ptr_val,
         write_data.first_chunk::<RV64_REGISTER_NUM_LIMBS>().unwrap(),
     );
     if crosses {
         exec_state.vm_write(
-            RV64_MEMORY_AS,
+            pre_compute.e as u32,
             ptr_val + RV64_REGISTER_NUM_LIMBS as u32,
             write_data.last_chunk::<RV64_REGISTER_NUM_LIMBS>().unwrap(),
         );
