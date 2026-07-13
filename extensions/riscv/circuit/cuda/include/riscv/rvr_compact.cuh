@@ -28,7 +28,8 @@ struct RvrOperandEntry {
     uint32_t c;
     uint8_t flags;
     uint8_t local_opcode;
-    uint16_t _reserved;
+    uint8_t air_idx;
+    uint8_t access_pattern;
 };
 static_assert(sizeof(RvrOperandEntry) == 16, "RvrOperandEntry size drift");
 static_assert(alignof(RvrOperandEntry) == 4, "RvrOperandEntry align drift");

@@ -565,6 +565,41 @@ fn rvr_preflight_delta_full_rv64im_matrix_is_byte_equal_to_compact() {
     }
 }
 
+#[test]
+fn rvr_gpu_operand_table_rebinds_same_shape_different_exe() {
+    let (vm, _) = VirtualMachine::new_with_keygen(
+        test_cpu_engine(),
+        Rv64ImCpuBuilder,
+        Rv64ImConfig::default(),
+    )
+    .expect("vm init");
+    let exe_a = exe(&[addi(1, 0, 1), terminate()]);
+    let exe_len = exe_a.program.instructions_and_debug_infos.len();
+    let map_a = vm.pc_to_air_idx(&exe_a).expect("first pc map");
+    let state = crate::rvr_gpu_decode::RvrGpuDecodeState::default();
+    let identity_a = Arc::new(vec![true; exe_len]);
+
+    state.bind_delta_airs(&exe_a, &map_a, &identity_a);
+    let first = state.operand_table().expect("first operand table").0[0];
+    drop(exe_a);
+    drop(identity_a);
+
+    let exe_b = exe(&[addi(2, 0, 1), terminate()]);
+    assert_eq!(exe_len, exe_b.program.instructions_and_debug_infos.len());
+    let map_b = vm.pc_to_air_idx(&exe_b).expect("second pc map");
+    assert_eq!(map_a, map_b, "fixture must isolate the VmExe identity key");
+    let identity_b = Arc::new(vec![true; exe_len]);
+    state.bind_delta_airs(&exe_b, &map_b, &identity_b);
+    let second = state.operand_table().expect("second operand table").0[0];
+
+    assert_eq!(first.a, reg(1) as u32);
+    assert_eq!(second.a, reg(2) as u32);
+    assert_ne!(
+        first, second,
+        "same-size VmExe must not reuse stale operands"
+    );
+}
+
 fn mul_div_vector_exe() -> VmExe<F> {
     exe(&[
         addi(1, 0, 21),
@@ -3515,8 +3550,11 @@ fn rvr_preflight_compact_wire_staged_matches_pooled() {
         .iter()
         .map(|&(air, _)| air)
         .collect::<std::collections::HashSet<_>>();
-    let decode_air_set = crate::rvr_gpu_decode::RvrGpuDecodeState::default()
-        .bind_compact_segment(&exe, &pc_to_air_idx);
+    let decode_air_set = crate::rvr_gpu_decode::RvrGpuDecodeState::default().bind_compact_segment(
+        &exe,
+        &pc_to_air_idx,
+        &instance.compiled().inline_records().pc_slots,
+    );
     assert!(
         instance
             .compiled()

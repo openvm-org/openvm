@@ -376,13 +376,17 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64IGpuBuilder {
 /// `rvr_wire_record_airs` override, including composed-config builders.
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 pub fn rvr_gpu_wire_record_airs(
-    state: &rvr_gpu_decode::RvrGpuDecodeState,
+    _state: &rvr_gpu_decode::RvrGpuDecodeState,
     exe: &openvm_instructions::exe::VmExe<Val<BabyBearPoseidon2Config>>,
     pc_to_air_idx: &[Option<usize>],
 ) -> std::collections::HashSet<usize> {
     use crate::rvr_gpu_decode::{configured_emission_mode, InlineEmissionMode};
     match configured_emission_mode() {
-        Some(InlineEmissionMode::CompactWire) => state.bind_compact_segment(exe, pc_to_air_idx),
+        Some(InlineEmissionMode::CompactWire) => {
+            rvr_gpu_decode::RvrGpuDecodeState::compact_record_airs(exe, pc_to_air_idx)
+        }
+        // Delta owns one global backing, not per-AIR host wire targets.
+        Some(InlineEmissionMode::Delta) => Default::default(),
         _ => Default::default(),
     }
 }
@@ -418,10 +422,26 @@ pub fn generate_gpu_rvr_record_arenas(
         configured_emission_mode(),
         Some(InlineEmissionMode::CompactWire)
     );
+    let delta_requested = matches!(configured_emission_mode(), Some(InlineEmissionMode::Delta));
+    if !delta_requested {
+        state.clear_delta_segment();
+    }
     let compact_airs = if compact_requested {
-        state.bind_compact_segment(exe, pc_to_air_idx)
+        state.bind_compact_segment(exe, pc_to_air_idx, &output.inline_pc_slots)
+    } else if delta_requested {
+        state.bind_delta_airs(exe, pc_to_air_idx, &output.inline_pc_slots)
     } else {
         Default::default()
+    };
+    let saved_delta = if delta_requested {
+        Some(output.delta_records.take().ok_or_else(|| {
+            openvm_circuit::arch::ExecutionError::RvrExecution(
+                "GPU delta mode requested but native preflight emitted no delta backing"
+                    .to_string(),
+            )
+        })?)
+    } else {
+        None
     };
     let (mut arenas, wire_buffers) = generate_record_arenas_from_logs_with_compact(
         registry,
@@ -431,6 +451,11 @@ pub fn generate_gpu_rvr_record_arenas(
         pc_to_air_idx,
         &compact_airs,
     )?;
+    if delta_requested && !wire_buffers.is_empty() {
+        return Err(openvm_circuit::arch::ExecutionError::RvrExecution(
+            "GPU delta mode unexpectedly produced host compact buffers".to_string(),
+        ));
+    }
     // Silent-mode guard (the gate-#4 class): under the compact opt-in every
     // decodable air must be accounted for — either C-staged by the caller
     // (reported in arena_native_written) or adopted below. An air that is
@@ -468,6 +493,26 @@ pub fn generate_gpu_rvr_record_arenas(
         // chip's compact-decode branch instead of the expanded-record kernel.
         dense.rvr_wire = true;
         *arena = dense;
+    }
+    if let Some(delta) = saved_delta {
+        let memory_log = std::mem::take(&mut output.raw_logs.memory_log);
+        let program_log = std::mem::take(&mut output.raw_logs.program_log);
+        let chip_counts = std::mem::take(&mut output.raw_logs.chip_counts);
+        let bound_airs = state.bind_delta_segment(
+            exe,
+            pc_to_air_idx,
+            &output.inline_pc_slots,
+            delta,
+            memory_log,
+            program_log,
+            chip_counts,
+            &output.arena_native_written,
+        )?;
+        if !bound_airs.is_subset(&compact_airs) {
+            return Err(openvm_circuit::arch::ExecutionError::RvrExecution(
+                "GPU delta bound AIR set drifted from the compiled decode set".to_string(),
+            ));
+        }
     }
     Ok(Some(arenas))
 }
