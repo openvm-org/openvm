@@ -8,7 +8,6 @@ use openvm_circuit::{
         hasher::poseidon2::vm_poseidon2_hasher,
         instructions::{exe::VmExe, DEFERRAL_AS},
         ContinuationVmProver, Streams, VirtualMachine, VmInstance,
-        DEFAULT_DEFERRAL_ADDR_SPACE_CELLS,
     },
     system::memory::{
         dimensions::MemoryDimensions,
