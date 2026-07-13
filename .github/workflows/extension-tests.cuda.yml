@@ -125,6 +125,9 @@ jobs:
               # Run circuit tests
               if [ -d "extensions/$ext/circuit" ]; then
                 pushd extensions/$ext/circuit
+                if [[ "$ext" == "riscv" ]]; then
+                  ${{ env.NEXTEST_ENV }} cargo check --profile=fast --features=cuda,rvr --tests
+                fi
                 ${{ env.NEXTEST_ENV }} cargo nextest run cuda ${{ env.FEATURE_ARGS }} --features=touchemall --profile=heavy --no-tests=pass
                 popd
               fi
