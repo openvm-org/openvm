@@ -147,6 +147,9 @@ jobs:
           cargo build --locked --profile fast -p cargo-openvm --features cuda
           echo "${{ github.workspace }}/target/fast" >> $GITHUB_PATH
 
+      - name: Install openvm rust toolchain
+        run: "$GITHUB_WORKSPACE/ci/install-openvm-toolchain.sh"
+
       - name: Verify book examples with verify-stark
         run: |
           ./examples/verify-stark/verify-book-examples.sh
