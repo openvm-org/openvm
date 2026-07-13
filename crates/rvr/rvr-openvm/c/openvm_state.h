@@ -76,7 +76,8 @@ static __attribute__((always_inline)) inline bool rv_pc_is_dispatchable(
 
 /* ── Guest memory pointer ────────────────────────────────────────── */
 
-/* Adjacent guard regions catch raw out-of-bounds accesses.
+/* Adjacent guard regions catch raw out-of-bounds accesses. Multi-byte
+ * accesses use memcpy so unaligned guest addresses are valid.
  * TODO: addr &= MEMORY_MASK for defense-in-depth. */
 static __attribute__((always_inline)) inline uint8_t* mem_ptr(
     uint8_t* restrict memory, uint64_t addr) {
@@ -114,8 +115,7 @@ static __attribute__((always_inline)) inline uint16_t rd_mem_u16(
     uint8_t* restrict memory, uint64_t addr) {
   check_mem_bounds_u16(addr);
   uint16_t v;
-  const void* p = __builtin_assume_aligned(mem_ptr(memory, addr), sizeof(v));
-  memcpy(&v, p, sizeof(v));
+  memcpy(&v, mem_ptr(memory, addr), sizeof(v));
   return v;
 }
 
@@ -123,8 +123,7 @@ static __attribute__((always_inline)) inline int16_t rd_mem_i16(
     uint8_t* restrict memory, uint64_t addr) {
   check_mem_bounds_i16(addr);
   int16_t v;
-  const void* p = __builtin_assume_aligned(mem_ptr(memory, addr), sizeof(v));
-  memcpy(&v, p, sizeof(v));
+  memcpy(&v, mem_ptr(memory, addr), sizeof(v));
   return v;
 }
 
@@ -132,19 +131,15 @@ static __attribute__((always_inline)) inline int32_t rd_mem_i32(
     uint8_t* restrict memory, uint64_t addr) {
   check_mem_bounds_u32(addr);
   int32_t v;
-  const void* p = __builtin_assume_aligned(mem_ptr(memory, addr), sizeof(v));
-  memcpy(&v, p, sizeof(v));
+  memcpy(&v, mem_ptr(memory, addr), sizeof(v));
   return v;
 }
 
 static __attribute__((always_inline)) inline uint32_t rd_mem_u32(
     uint8_t* restrict memory, uint64_t addr) {
-  /* TODO(rvr): handle unaligned 32-bit word load/store semantics in opcode
-   * codegen if needed; this generic helper assumes aligned callers. */
   check_mem_bounds_u32(addr);
   uint32_t v;
-  const void* p = __builtin_assume_aligned(mem_ptr(memory, addr), sizeof(v));
-  memcpy(&v, p, sizeof(v));
+  memcpy(&v, mem_ptr(memory, addr), sizeof(v));
   return v;
 }
 
@@ -152,8 +147,7 @@ static __attribute__((always_inline)) inline uint64_t rd_mem_u64(
     uint8_t* restrict memory, uint64_t addr) {
   check_mem_bounds_u64(addr);
   uint64_t v;
-  const void* p = __builtin_assume_aligned(mem_ptr(memory, addr), sizeof(v));
-  memcpy(&v, p, sizeof(v));
+  memcpy(&v, mem_ptr(memory, addr), sizeof(v));
   return v;
 }
 
@@ -168,24 +162,19 @@ static __attribute__((always_inline)) inline void wr_mem_u8(
 static __attribute__((always_inline)) inline void wr_mem_u16(
     uint8_t* restrict memory, uint64_t addr, uint16_t val) {
   check_mem_bounds_u16(addr);
-  void* p = __builtin_assume_aligned(mem_ptr(memory, addr), sizeof(val));
-  memcpy(p, &val, sizeof(val));
+  memcpy(mem_ptr(memory, addr), &val, sizeof(val));
 }
 
 static __attribute__((always_inline)) inline void wr_mem_u32(
     uint8_t* restrict memory, uint64_t addr, uint32_t val) {
-  /* TODO(rvr): handle unaligned 32-bit word load/store semantics in opcode
-   * codegen if needed; this generic helper assumes aligned callers. */
   check_mem_bounds_u32(addr);
-  void* p = __builtin_assume_aligned(mem_ptr(memory, addr), sizeof(val));
-  memcpy(p, &val, sizeof(val));
+  memcpy(mem_ptr(memory, addr), &val, sizeof(val));
 }
 
 static __attribute__((always_inline)) inline void wr_mem_u64(
     uint8_t* restrict memory, uint64_t addr, uint64_t val) {
   check_mem_bounds_u64(addr);
-  void* p = __builtin_assume_aligned(mem_ptr(memory, addr), sizeof(val));
-  memcpy(p, &val, sizeof(val));
+  memcpy(mem_ptr(memory, addr), &val, sizeof(val));
 }
 
 /* ── Word-aligned range memory access ────────────────────────────── */

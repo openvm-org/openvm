@@ -266,7 +266,7 @@ impl EmitContext {
             "{var_ty} {var} = {data_func}({data_arg}, {addr});"
         ));
         if self.mode.traces_memory_pages() {
-            self.emit_inline_page_record(&addr);
+            self.emit_inline_page_record(&addr, width);
         }
         var
     }
@@ -285,15 +285,17 @@ impl EmitContext {
         let data_arg = if value_traced { "state" } else { "memory" };
 
         if self.mode.traces_memory_pages() {
-            self.emit_inline_page_record(&addr);
+            self.emit_inline_page_record(&addr, width);
         }
         self.write_line(&format!(
             "{wr_func}({data_arg}, {addr}, ({cast_ty})({val}));"
         ));
     }
 
-    fn emit_inline_page_record(&mut self, addr: &str) {
-        self.write_line(&format!("trace_memory_access_leaf(&trace_memory, {addr});"));
+    fn emit_inline_page_record(&mut self, addr: &str, width: u8) {
+        self.write_line(&format!(
+            "trace_memory_access_span(&trace_memory, {addr}, {width}u);"
+        ));
     }
 
     pub fn flush_page_locals(&mut self) {

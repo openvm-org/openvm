@@ -275,11 +275,28 @@ static __attribute__((always_inline)) inline void trace_memory_access_page(
   memory->last_mem_leaf_mask = leaf_mask;
 }
 
-static __attribute__((always_inline)) inline void trace_memory_access_leaf(
-    TraceMemory* restrict memory, uint64_t addr) {
-  uint32_t leaf = byte_addr_to_local_leaf(addr);
-  trace_memory_access_page(memory, leaf >> TRACER_PAGE_BITS,
-                           1ull << (leaf & ((1u << TRACER_PAGE_BITS) - 1u)));
+/* Record the leaves touched by [addr, addr + size). An unaligned guest
+ * access can span two leaves, which may straddle a page boundary; mirrors
+ * the first/last-leaf structure of `record_page`. `size` is a compile-time
+ * constant at every generated call site, so the single-leaf fast path folds
+ * away for byte accesses. */
+static __attribute__((always_inline)) inline void trace_memory_access_span(
+    TraceMemory* restrict memory, uint64_t addr, uint32_t size) {
+  /* A guest access never spans more than two leaves. */
+  assume(size <= (1u << TRACER_BYTE_SPACE_PTRS_PER_LEAF_BITS));
+  uint32_t first_leaf = byte_addr_to_local_leaf(addr);
+  uint32_t last_leaf = byte_addr_to_local_leaf(addr + size - 1u);
+  uint32_t first_page = first_leaf >> TRACER_PAGE_BITS;
+  uint32_t last_page = last_leaf >> TRACER_PAGE_BITS;
+  if (likely(first_page == last_page)) {
+    trace_memory_access_page(memory, first_page,
+                             leaf_mask_range(first_leaf, last_leaf));
+  } else {
+    trace_memory_access_page(memory, first_page,
+                             leaf_mask_range(first_leaf, first_leaf));
+    trace_memory_access_page(memory, last_page,
+                             leaf_mask_range(last_leaf, last_leaf));
+  }
 }
 
 /* ── Trace-only register access (no-ops in metered mode) ─────────── */
