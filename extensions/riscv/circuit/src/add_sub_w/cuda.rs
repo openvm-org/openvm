@@ -20,6 +20,7 @@ use crate::{
 pub struct Rv64AddSubWChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub timestamp_max_bits: usize,
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
     pub rvr_decode: Arc<crate::rvr_gpu_decode::RvrGpuDecodeState>,
 }
 

@@ -24,6 +24,7 @@ use crate::{
 pub struct Rv64ShiftWLogicalChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub timestamp_max_bits: usize,
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
     pub rvr_decode: Arc<crate::rvr_gpu_decode::RvrGpuDecodeState>,
 }
 
@@ -31,6 +32,7 @@ pub struct Rv64ShiftWLogicalChipGpu {
 pub struct Rv64ShiftWRightArithmeticChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub timestamp_max_bits: usize,
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
     pub rvr_decode: Arc<crate::rvr_gpu_decode::RvrGpuDecodeState>,
 }
 
