@@ -1,6 +1,8 @@
 use std::array;
 
 use openvm_instructions::riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS};
+#[cfg(feature = "cuda")]
+use openvm_instructions::DEFERRAL_AS;
 use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::Rng;
@@ -65,6 +67,7 @@ fn test_cuda_memory_write(its: usize) {
     mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = small;
     mem_config.addr_spaces[RV64_MEMORY_AS as usize].num_cells = small;
     mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = small;
+    mem_config.addr_spaces[DEFERRAL_AS as usize].num_cells = small;
     mem_config.pointer_max_bits = small_bits;
     let mut tester = GpuChipTestBuilder::new(mem_config, default_var_range_checker_bus());
     test_memory_write_by_tester(&mut tester, its);
