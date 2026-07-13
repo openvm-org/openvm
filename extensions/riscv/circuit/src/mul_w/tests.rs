@@ -34,7 +34,7 @@ use openvm_instructions::{
     exe::VmExe,
     instruction::Instruction,
     program::Program,
-    riscv::{RV32_IMM_AS, RV32_REGISTER_AS},
+    riscv::{RV64_IMM_AS, RV64_REGISTER_AS},
     SystemOpcode,
 };
 #[cfg(feature = "aot")]
@@ -448,7 +448,7 @@ fn read_register(state: &VmState<F>, offset: usize) -> u32 {
     let bytes = unsafe {
         state
             .memory
-            .read_bytes::<RV64_WORD_NUM_LIMBS>(RV32_REGISTER_AS, offset as u32)
+            .read_bytes::<RV64_WORD_NUM_LIMBS>(RV64_REGISTER_AS, offset as u32)
     };
     u32::from_le_bytes(bytes)
 }
@@ -461,8 +461,8 @@ fn add_immediate(rd: usize, imm: u32) -> Instruction<F> {
             rd,
             0,
             imm as usize,
-            RV32_REGISTER_AS as usize,
-            RV32_IMM_AS as usize,
+            RV64_REGISTER_AS as usize,
+            RV64_IMM_AS as usize,
         ],
     )
 }
@@ -475,8 +475,8 @@ fn mul_register(rd: usize, rs1: usize, rs2: usize) -> Instruction<F> {
             rd,
             rs1,
             rs2,
-            RV32_REGISTER_AS as usize,
-            RV32_REGISTER_AS as usize,
+            RV64_REGISTER_AS as usize,
+            RV64_REGISTER_AS as usize,
         ],
     )
 }

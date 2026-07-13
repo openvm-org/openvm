@@ -55,7 +55,7 @@ jobs:
               - "crates/vm/**"
               - "crates/toolchain/**"
               - "extensions/riscv/**"
-              - "extensions/rv32-adapters/**"
+              - "extensions/riscv-adapters/**"
               - ".github/workflows/guest-lib-tests.cuda.yml"
               - "crates/sdk/guest/fib/**"
             sha2:

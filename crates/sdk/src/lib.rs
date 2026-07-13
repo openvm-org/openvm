@@ -57,7 +57,7 @@ use crate::{
     config::{AggregationConfig, AggregationSystemParams, AggregationTreeConfig},
     keygen::{AggPrefixProvingKey, AggProvingKey, SdkCachedProvingKey},
     prover::{AggProver, AppProver, DeferralAggProver, DeferralHookCommits, StarkProver},
-    types::{AppExecutionCommit, ExecutableFormat},
+    types::AppExecutionCommit,
 };
 #[cfg(feature = "evm-prove")]
 use crate::{halo2_params::CacheHalo2ParamsReader, keygen::Halo2ProvingKey, prover::Halo2Prover};

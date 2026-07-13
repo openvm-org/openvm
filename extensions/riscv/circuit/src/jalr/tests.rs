@@ -746,7 +746,7 @@ fn terminate_instruction() -> Instruction<F> {
 fn add_instruction(rd: usize, rs1: usize, imm: usize) -> Instruction<F> {
     Instruction::from_usize(
         ADD.global_opcode(),
-        [rd, rs1, imm, RV32_REGISTER_AS as usize, 0],
+        [rd, rs1, imm, RV64_REGISTER_AS as usize, 0],
     )
 }
 
@@ -754,7 +754,7 @@ fn add_instruction(rd: usize, rs1: usize, imm: usize) -> Instruction<F> {
 fn jalr_instruction(rs1: usize) -> Instruction<F> {
     Instruction::from_usize(
         JALR.global_opcode(),
-        [0, rs1, 0, RV32_REGISTER_AS as usize, 0, 0, 0],
+        [0, rs1, 0, RV64_REGISTER_AS as usize, 0, 0, 0],
     )
 }
 
