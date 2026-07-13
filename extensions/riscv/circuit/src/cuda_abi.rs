@@ -23,6 +23,63 @@ use openvm_cuda_common::{
     stream::cudaStream_t,
 };
 
+pub mod rvr_delta_cuda {
+    use super::*;
+    use crate::rvr_gpu_decode::{DeltaAirOutputDesc, DeviceOperandEntry};
+
+    extern "C" {
+        fn _rvr_delta_predecode(
+            d_delta: DeviceBufferView,
+            delta_count: usize,
+            d_memory: DeviceBufferView,
+            memory_count: usize,
+            d_program: DeviceBufferView,
+            program_count: usize,
+            d_operand_table: *const DeviceOperandEntry,
+            operand_count: usize,
+            pc_base: u32,
+            d_arena_native_flags: *const u8,
+            num_airs: usize,
+            d_outputs: *const DeltaAirOutputDesc,
+            d_error: *mut u32,
+            stream: cudaStream_t,
+        ) -> i32;
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn predecode(
+        d_delta: &DeviceBuffer<u8>,
+        delta_count: usize,
+        d_memory: &DeviceBuffer<openvm_circuit::arch::rvr::MemoryLogEntry>,
+        memory_count: usize,
+        d_program: &DeviceBuffer<openvm_circuit::arch::rvr::ProgramLogEntry>,
+        program_count: usize,
+        d_operand_table: &DeviceBuffer<u8>,
+        pc_base: u32,
+        d_arena_native_flags: &DeviceBuffer<u8>,
+        d_outputs: &DeviceBuffer<DeltaAirOutputDesc>,
+        d_error: &DeviceBuffer<u32>,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_rvr_delta_predecode(
+            d_delta.view(),
+            delta_count,
+            d_memory.view(),
+            memory_count,
+            d_program.view(),
+            program_count,
+            d_operand_table.as_ptr().cast(),
+            d_operand_table.len() / std::mem::size_of::<DeviceOperandEntry>(),
+            pc_base,
+            d_arena_native_flags.as_ptr(),
+            d_arena_native_flags.len(),
+            d_outputs.as_ptr(),
+            d_error.as_mut_ptr(),
+            stream,
+        ))
+    }
+}
+
 pub mod auipc_cuda {
     use super::*;
 
