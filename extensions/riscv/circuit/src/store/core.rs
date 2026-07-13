@@ -17,46 +17,19 @@ use openvm_stark_backend::{
 
 use crate::{
     adapters::{
-        u16_cell_byte, Rv64StoreAdapterCols, Rv64StoreAdapterFiller, Rv64StoreAdapterRecord,
-        StoreInstruction, RV64_BYTE_BITS, STORE_WIDTH_DOUBLEWORD, STORE_WIDTH_HALFWORD,
-        STORE_WIDTH_WORD,
+        shift_encoder, u16_cell_byte, Rv64StoreAdapterCols, Rv64StoreAdapterFiller,
+        Rv64StoreAdapterRecord, StoreInstruction, NUM_BYTE_SHIFTS, RV64_BYTE_BITS,
+        STORE_WIDTH_DOUBLEWORD, STORE_WIDTH_HALFWORD, STORE_WIDTH_WORD,
     },
     store::common::StoreRecord,
 };
 
-const SELECTOR_MAX_DEGREE: u32 = 2;
-
-/// Static description of a store chip: the single opcode it handles and the byte shifts it
-/// supports, each shift encoded as a separate selector case.
-#[derive(Clone, Copy)]
-pub(crate) struct StoreInfo {
-    opcode: Rv64LoadStoreOpcode,
-    byte_shifts: &'static [usize],
-}
-
-fn encoder<const SELECTOR_WIDTH: usize>(byte_shifts: &[usize]) -> Encoder {
-    let encoder = Encoder::new(byte_shifts.len(), SELECTOR_MAX_DEGREE, true);
-    debug_assert_eq!(encoder.width(), SELECTOR_WIDTH);
-    encoder
-}
-
-const STORE_DOUBLEWORD_INFO: StoreInfo = StoreInfo {
-    opcode: STORED,
-    byte_shifts: &[0, 1, 2, 3, 4, 5, 6, 7],
-};
-const STORE_WORD_INFO: StoreInfo = StoreInfo {
-    opcode: STOREW,
-    byte_shifts: &[0, 1, 2, 3, 4, 5, 6, 7],
-};
-const STORE_HALFWORD_INFO: StoreInfo = StoreInfo {
-    opcode: STOREH,
-    byte_shifts: &[0, 1, 2, 3, 4, 5, 6, 7],
-};
-pub(crate) fn store_info<const STORE_WIDTH: usize>() -> StoreInfo {
+/// The single opcode handled by the store chip of the given width.
+pub(crate) fn store_opcode<const STORE_WIDTH: usize>() -> Rv64LoadStoreOpcode {
     match STORE_WIDTH {
-        STORE_WIDTH_DOUBLEWORD => STORE_DOUBLEWORD_INFO,
-        STORE_WIDTH_WORD => STORE_WORD_INFO,
-        STORE_WIDTH_HALFWORD => STORE_HALFWORD_INFO,
+        STORE_WIDTH_DOUBLEWORD => STORED,
+        STORE_WIDTH_WORD => STOREW,
+        STORE_WIDTH_HALFWORD => STOREH,
         _ => unreachable!("unsupported width for store"),
     }
 }
@@ -106,7 +79,7 @@ impl<const STORE_WIDTH: usize, const SELECTOR_WIDTH: usize, const NUM_VALUE_CELL
         debug_assert_eq!(NUM_VALUE_CELLS, STORE_WIDTH / 2);
         Self {
             offset,
-            encoder: encoder::<SELECTOR_WIDTH>(store_info::<STORE_WIDTH>().byte_shifts),
+            encoder: shift_encoder::<SELECTOR_WIDTH>(),
             bitwise_lookup_bus,
         }
     }
@@ -154,34 +127,33 @@ where
         _from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
         let cols: &StoreCoreCols<AB::Var, SELECTOR_WIDTH, NUM_VALUE_CELLS> = (*local_core).borrow();
-        let info = store_info::<STORE_WIDTH>();
         let width = STORE_WIDTH / 2;
 
         self.encoder.eval(builder, &cols.selector);
         let flags = self.encoder.flags::<AB>(&cols.selector);
         let is_valid = self.encoder.is_valid::<AB>(&cols.selector);
 
-        let cross = info.byte_shifts.iter().enumerate().fold(
-            AB::Expr::ZERO,
-            |acc, (case_idx, &byte_shift)| {
+        let cross = flags
+            .iter()
+            .enumerate()
+            .fold(AB::Expr::ZERO, |acc, (byte_shift, flag)| {
                 if byte_shift + STORE_WIDTH > 2 * BLOCK_FE_WIDTH {
-                    acc + flags[case_idx].clone()
+                    acc + flag.clone()
                 } else {
                     acc
                 }
-            },
-        );
+            });
 
-        let odd_shift = info.byte_shifts.iter().enumerate().fold(
-            AB::Expr::ZERO,
-            |acc, (case_idx, &byte_shift)| {
+        let odd_shift = flags
+            .iter()
+            .enumerate()
+            .fold(AB::Expr::ZERO, |acc, (byte_shift, flag)| {
                 if byte_shift % 2 == 1 {
-                    acc + flags[case_idx].clone()
+                    acc + flag.clone()
                 } else {
                     acc
                 }
-            },
-        );
+            });
 
         // Cell `k` of the two consecutive previous memory blocks.
         let prev_full = |cell: usize| {
@@ -205,16 +177,16 @@ where
         // The first and last overlapped memory cells, flag-selected per odd shift; zero on even
         // shifts and invalid rows.
         let prev_bound_cell = |which: usize| {
-            info.byte_shifts.iter().enumerate().fold(
-                AB::Expr::ZERO,
-                |acc, (case_idx, &byte_shift)| {
+            flags
+                .iter()
+                .enumerate()
+                .fold(AB::Expr::ZERO, |acc, (byte_shift, flag)| {
                     if byte_shift % 2 == 1 {
-                        acc + flags[case_idx].clone() * prev_full(byte_shift / 2 + which * width)
+                        acc + flag.clone() * prev_full(byte_shift / 2 + which * width)
                     } else {
                         acc
                     }
-                },
-            )
+                })
         };
         // The overwritten boundary-cell bytes are derived from the overlapped cells; range
         // checking them completes the decompositions of both boundary cells.
@@ -230,14 +202,13 @@ where
 
         let expected_opcode = VmCoreAir::<AB, I>::expr_to_global_expr(
             self,
-            is_valid.clone() * AB::Expr::from_u8(info.opcode as u8),
+            is_valid.clone() * AB::Expr::from_u8(store_opcode::<STORE_WIDTH>() as u8),
         );
-        let shift_amount = info
-            .byte_shifts
+        let shift_amount = flags
             .iter()
             .enumerate()
-            .fold(AB::Expr::ZERO, |acc, (i, &byte_shift)| {
-                acc + flags[i].clone() * AB::Expr::from_usize(byte_shift)
+            .fold(AB::Expr::ZERO, |acc, (byte_shift, flag)| {
+                acc + flag.clone() * AB::Expr::from_usize(byte_shift)
             });
 
         // Contents of both written blocks. Even shifts splice whole value cells between
@@ -246,9 +217,10 @@ where
         let write_data: [[AB::Expr; BLOCK_FE_WIDTH]; 2] = std::array::from_fn(|block| {
             std::array::from_fn(|k| {
                 let cell = block * BLOCK_FE_WIDTH + k;
-                info.byte_shifts.iter().enumerate().fold(
-                    AB::Expr::ZERO,
-                    |acc, (case_idx, &byte_shift)| {
+                flags
+                    .iter()
+                    .enumerate()
+                    .fold(AB::Expr::ZERO, |acc, (byte_shift, flag)| {
                         let first = byte_shift / 2;
                         let term = if byte_shift % 2 == 0 {
                             if cell >= first && cell < first + width {
@@ -269,9 +241,8 @@ where
                                 + cols.value_lo_bytes[cell - first]
                                     * AB::Expr::from_u32(1 << RV64_BYTE_BITS)
                         };
-                        acc + flags[case_idx].clone() * term
-                    },
-                )
+                        acc + flag.clone() * term
+                    })
             })
         });
         AdapterAirContext {
@@ -322,7 +293,7 @@ impl<A, const STORE_WIDTH: usize, const SELECTOR_WIDTH: usize, const NUM_VALUE_C
         Self {
             adapter,
             offset,
-            encoder: encoder::<SELECTOR_WIDTH>(store_info::<STORE_WIDTH>().byte_shifts),
+            encoder: shift_encoder::<SELECTOR_WIDTH>(),
             bitwise_lookup_chip,
         }
     }
@@ -353,11 +324,7 @@ where
         let prev_data = record.prev_data;
         let core_row: &mut StoreCoreCols<F, SELECTOR_WIDTH, NUM_VALUE_CELLS> =
             core_row.borrow_mut();
-        let case_idx = store_info::<STORE_WIDTH>()
-            .byte_shifts
-            .iter()
-            .position(|&byte_shift| byte_shift == shift)
-            .expect("invalid store shift");
+        debug_assert!(shift < NUM_BYTE_SHIFTS, "invalid store shift {shift}");
 
         let width = STORE_WIDTH / 2;
         let prev_full: [u16; 2 * BLOCK_FE_WIDTH] =
@@ -391,7 +358,7 @@ where
             [prev_bound_cells[0][0], prev_bound_cells[1][1]].map(F::from_u16);
         core_row.read_data = read_data.map(F::from_u16);
         core_row.prev_data = prev_data.map(|block| block.map(F::from_u16));
-        let pt: [u32; SELECTOR_WIDTH] = self.encoder.get_flag_pt(case_idx).try_into().unwrap();
+        let pt: [u32; SELECTOR_WIDTH] = self.encoder.get_flag_pt(shift).try_into().unwrap();
         core_row.selector = pt.map(F::from_u32);
     }
 

@@ -4,6 +4,7 @@ use openvm_circuit::{
     arch::{execution_mode::ExecutionCtxTrait, VmStateMut, BLOCK_FE_WIDTH},
     system::memory::online::{GuestMemory, TracingMemory},
 };
+use openvm_circuit_primitives::encoder::Encoder;
 pub use openvm_circuit_primitives::U16_BITS;
 use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
@@ -66,6 +67,20 @@ pub(crate) const STORE_WIDTH_BYTE: usize = 1;
 pub(crate) const STORE_WIDTH_HALFWORD: usize = 2;
 pub(crate) const STORE_WIDTH_WORD: usize = 4;
 pub(crate) const STORE_WIDTH_DOUBLEWORD: usize = 8;
+
+/// Byte shifts of an effective pointer inside an 8-byte memory block. Every load/store core
+/// encodes shift `i` as selector case `i`.
+pub(crate) const NUM_BYTE_SHIFTS: usize = 2 * BLOCK_FE_WIDTH;
+/// Maximal degree of the load/store shift-selector flag expressions.
+const SHIFT_SELECTOR_MAX_DEGREE: u32 = 2;
+
+/// Selector encoder shared by all load/store cores: one case per byte shift, with the zero
+/// point reserved for invalid rows.
+pub(crate) fn shift_encoder<const SELECTOR_WIDTH: usize>() -> Encoder {
+    let encoder = Encoder::new(NUM_BYTE_SHIFTS, SHIFT_SELECTOR_MAX_DEGREE, true);
+    debug_assert_eq!(encoder.width(), SELECTOR_WIDTH);
+    encoder
+}
 
 /// Packs two little-endian u8 limbs into one u16-shaped field element.
 #[inline(always)]

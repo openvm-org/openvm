@@ -216,9 +216,6 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64StoreByteAdapterAir {
     }
 }
 
-/// Byte-store counterpart of [`Rv64StoreAdapterExecutor`]. Writes only the containing block and
-/// never consumes a second timestamp slot. Reuses [`Rv64StoreAdapterRecord`]; the crossing field is
-/// set to its no-cross sentinel and ignored by [`Rv64StoreByteAdapterFiller`].
 #[derive(Clone, Copy, derive_new::new)]
 pub struct Rv64StoreByteAdapterExecutor {
     pointer_max_bits: usize,

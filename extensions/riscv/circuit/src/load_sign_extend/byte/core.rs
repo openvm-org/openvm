@@ -17,25 +17,13 @@ use openvm_stark_backend::{
 
 use crate::{
     adapters::{
-        u16_cell_byte, LoadInstruction, Rv64LoadAdapterRecord, Rv64LoadByteAdapterFiller,
-        RV64_BYTE_BITS, RV64_BYTE_SIGN_BIT,
+        shift_encoder, u16_cell_byte, LoadInstruction, Rv64LoadAdapterRecord,
+        Rv64LoadByteAdapterFiller, RV64_BYTE_BITS, RV64_BYTE_SIGN_BIT,
     },
     load::LoadRecord,
 };
 
-const LOAD_SIGN_EXTEND_BYTE_NUM_CASES: usize = 8;
-const LOAD_SIGN_EXTEND_BYTE_SELECTOR_MAX_DEGREE: u32 = 2;
 pub(crate) const LOAD_SIGN_EXTEND_BYTE_SELECTOR_WIDTH: usize = 3;
-
-fn encoder() -> Encoder {
-    let encoder = Encoder::new(
-        LOAD_SIGN_EXTEND_BYTE_NUM_CASES,
-        LOAD_SIGN_EXTEND_BYTE_SELECTOR_MAX_DEGREE,
-        true,
-    );
-    debug_assert_eq!(encoder.width(), LOAD_SIGN_EXTEND_BYTE_SELECTOR_WIDTH);
-    encoder
-}
 
 /// Handles signed byte loads by decomposing the selected u16 cell and sign-extending the chosen
 /// byte.
@@ -66,7 +54,7 @@ impl LoadSignExtendByteCoreAir {
     ) -> Self {
         Self {
             offset,
-            encoder: encoder(),
+            encoder: shift_encoder::<LOAD_SIGN_EXTEND_BYTE_SELECTOR_WIDTH>(),
             bitwise_lookup_bus,
             range_bus,
         }
@@ -198,7 +186,7 @@ impl<A> LoadSignExtendByteFiller<A> {
         Self {
             adapter,
             offset,
-            encoder: encoder(),
+            encoder: shift_encoder::<LOAD_SIGN_EXTEND_BYTE_SELECTOR_WIDTH>(),
             bitwise_lookup_chip,
             range_checker_chip,
         }

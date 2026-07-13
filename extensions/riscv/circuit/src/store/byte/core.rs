@@ -17,14 +17,12 @@ use openvm_stark_backend::{
 
 use crate::{
     adapters::{
-        set_u16_cell_byte, u16_cell_byte, Rv64StoreAdapterRecord, Rv64StoreByteAdapterCols,
-        Rv64StoreByteAdapterFiller, StoreInstruction, RV64_BYTE_BITS,
+        set_u16_cell_byte, shift_encoder, u16_cell_byte, Rv64StoreAdapterRecord,
+        Rv64StoreByteAdapterCols, Rv64StoreByteAdapterFiller, StoreInstruction, RV64_BYTE_BITS,
     },
     store::common::{store_write_data, StoreRecord},
 };
 
-const BYTE_SELECTOR_MAX_DEGREE: u32 = 2;
-const STORE_BYTE_NUM_CASES: usize = 8;
 pub(crate) const STORE_BYTE_SELECTOR_WIDTH: usize = 3;
 
 /// Handles byte stores by replacing one byte in the previous memory block and preserving all other
@@ -53,7 +51,7 @@ impl StoreByteCoreAir {
     pub fn new(offset: usize, bitwise_lookup_bus: BitwiseOperationLookupBus) -> Self {
         Self {
             offset,
-            encoder: Encoder::new(STORE_BYTE_NUM_CASES, BYTE_SELECTOR_MAX_DEGREE, true),
+            encoder: shift_encoder::<STORE_BYTE_SELECTOR_WIDTH>(),
             bitwise_lookup_bus,
         }
     }
@@ -185,7 +183,7 @@ impl<A> StoreByteFiller<A> {
         Self {
             adapter,
             offset,
-            encoder: Encoder::new(STORE_BYTE_NUM_CASES, BYTE_SELECTOR_MAX_DEGREE, true),
+            encoder: shift_encoder::<STORE_BYTE_SELECTOR_WIDTH>(),
             bitwise_lookup_chip,
         }
     }

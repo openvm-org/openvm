@@ -17,45 +17,19 @@ use openvm_stark_backend::{
 
 use crate::{
     adapters::{
-        u16_cell_byte, LoadInstruction, Rv64LoadAdapterFiller, Rv64LoadAdapterRecord,
-        LOAD_WIDTH_DOUBLEWORD, LOAD_WIDTH_HALFWORD, LOAD_WIDTH_WORD, RV64_BYTE_BITS,
+        shift_encoder, u16_cell_byte, LoadInstruction, Rv64LoadAdapterFiller,
+        Rv64LoadAdapterRecord, LOAD_WIDTH_DOUBLEWORD, LOAD_WIDTH_HALFWORD, LOAD_WIDTH_WORD,
+        NUM_BYTE_SHIFTS, RV64_BYTE_BITS,
     },
     load::common::LoadRecord,
 };
 
-const SELECTOR_MAX_DEGREE: u32 = 2;
-
-/// Static description of a load chip: the single opcode it handles and the byte shifts it
-/// supports, each shift encoded as a separate selector case.
-#[derive(Clone, Copy)]
-pub(crate) struct LoadInfo {
-    opcode: Rv64LoadStoreOpcode,
-    byte_shifts: &'static [usize],
-}
-
-fn encoder<const SELECTOR_WIDTH: usize>(byte_shifts: &[usize]) -> Encoder {
-    let encoder = Encoder::new(byte_shifts.len(), SELECTOR_MAX_DEGREE, true);
-    debug_assert_eq!(encoder.width(), SELECTOR_WIDTH);
-    encoder
-}
-
-const LOAD_DOUBLEWORD_INFO: LoadInfo = LoadInfo {
-    opcode: LOADD,
-    byte_shifts: &[0, 1, 2, 3, 4, 5, 6, 7],
-};
-const LOAD_WORD_INFO: LoadInfo = LoadInfo {
-    opcode: LOADWU,
-    byte_shifts: &[0, 1, 2, 3, 4, 5, 6, 7],
-};
-const LOAD_HALFWORD_INFO: LoadInfo = LoadInfo {
-    opcode: LOADHU,
-    byte_shifts: &[0, 1, 2, 3, 4, 5, 6, 7],
-};
-pub(crate) fn load_info<const LOAD_WIDTH: usize>() -> LoadInfo {
+/// The single opcode handled by the load chip of the given width.
+pub(crate) fn load_opcode<const LOAD_WIDTH: usize>() -> Rv64LoadStoreOpcode {
     match LOAD_WIDTH {
-        LOAD_WIDTH_DOUBLEWORD => LOAD_DOUBLEWORD_INFO,
-        LOAD_WIDTH_WORD => LOAD_WORD_INFO,
-        LOAD_WIDTH_HALFWORD => LOAD_HALFWORD_INFO,
+        LOAD_WIDTH_DOUBLEWORD => LOADD,
+        LOAD_WIDTH_WORD => LOADWU,
+        LOAD_WIDTH_HALFWORD => LOADHU,
         _ => unreachable!("unsupported width for load"),
     }
 }
@@ -99,7 +73,7 @@ impl<const LOAD_WIDTH: usize, const SELECTOR_WIDTH: usize, const NUM_OVERLAP_CEL
         debug_assert_eq!(NUM_OVERLAP_CELLS, LOAD_WIDTH / 2 + 1);
         Self {
             offset,
-            encoder: encoder::<SELECTOR_WIDTH>(load_info::<LOAD_WIDTH>().byte_shifts),
+            encoder: shift_encoder::<SELECTOR_WIDTH>(),
             bitwise_lookup_bus,
         }
     }
@@ -148,23 +122,22 @@ where
     ) -> AdapterAirContext<AB::Expr, I> {
         let cols: &LoadCoreCols<AB::Var, SELECTOR_WIDTH, NUM_OVERLAP_CELLS> =
             (*local_core).borrow();
-        let info = load_info::<LOAD_WIDTH>();
         let width = LOAD_WIDTH / 2;
 
         self.encoder.eval(builder, &cols.selector);
         let flags = self.encoder.flags::<AB>(&cols.selector);
         let is_valid = self.encoder.is_valid::<AB>(&cols.selector);
 
-        let cross = info.byte_shifts.iter().enumerate().fold(
-            AB::Expr::ZERO,
-            |acc, (case_idx, &byte_shift)| {
+        let cross = flags
+            .iter()
+            .enumerate()
+            .fold(AB::Expr::ZERO, |acc, (byte_shift, flag)| {
                 if byte_shift + LOAD_WIDTH > 2 * BLOCK_FE_WIDTH {
-                    acc + flags[case_idx].clone()
+                    acc + flag.clone()
                 } else {
                     acc
                 }
-            },
-        );
+            });
 
         // Cell `k` of the two consecutive memory blocks.
         let read_full = |cell: usize| {
@@ -176,16 +149,16 @@ where
         };
         // The j-th cell overlapped by an odd-shift load; zero on even shifts and invalid rows.
         let odd_cell = |j: usize| {
-            info.byte_shifts.iter().enumerate().fold(
-                AB::Expr::ZERO,
-                |acc, (case_idx, &byte_shift)| {
+            flags
+                .iter()
+                .enumerate()
+                .fold(AB::Expr::ZERO, |acc, (byte_shift, flag)| {
                     if byte_shift % 2 == 1 {
-                        acc + flags[case_idx].clone() * read_full(byte_shift / 2 + j)
+                        acc + flag.clone() * read_full(byte_shift / 2 + j)
                     } else {
                         acc
                     }
-                },
-            )
+                })
         };
 
         // High byte of overlapped cell `j`, derived from its materialized low byte; range
@@ -201,14 +174,13 @@ where
 
         let expected_opcode = VmCoreAir::<AB, I>::expr_to_global_expr(
             self,
-            is_valid.clone() * AB::Expr::from_u8(info.opcode as u8),
+            is_valid.clone() * AB::Expr::from_u8(load_opcode::<LOAD_WIDTH>() as u8),
         );
-        let shift_amount = info
-            .byte_shifts
+        let shift_amount = flags
             .iter()
             .enumerate()
-            .fold(AB::Expr::ZERO, |acc, (i, &byte_shift)| {
-                acc + flags[i].clone() * AB::Expr::from_usize(byte_shift)
+            .fold(AB::Expr::ZERO, |acc, (byte_shift, flag)| {
+                acc + flag.clone() * AB::Expr::from_usize(byte_shift)
             });
 
         let write_data = std::array::from_fn(|i| {
@@ -218,16 +190,17 @@ where
             // Even shifts move whole cells. All odd shifts share one slot-indexed term: result
             // cell `i` recomposes from the high byte of overlapped cell `i` and the low byte of
             // overlapped cell `i + 1`; both vanish on even shifts.
-            let even_term = info.byte_shifts.iter().enumerate().fold(
-                AB::Expr::ZERO,
-                |acc, (case_idx, &byte_shift)| {
-                    if byte_shift % 2 == 0 {
-                        acc + flags[case_idx].clone() * read_full(byte_shift / 2 + i)
-                    } else {
-                        acc
-                    }
-                },
-            );
+            let even_term =
+                flags
+                    .iter()
+                    .enumerate()
+                    .fold(AB::Expr::ZERO, |acc, (byte_shift, flag)| {
+                        if byte_shift % 2 == 0 {
+                            acc + flag.clone() * read_full(byte_shift / 2 + i)
+                        } else {
+                            acc
+                        }
+                    });
             even_term
                 + overlap_hi_byte(i)
                 + cols.overlap_lo_bytes[i + 1] * AB::Expr::from_u32(1 << RV64_BYTE_BITS)
@@ -276,7 +249,7 @@ impl<A, const LOAD_WIDTH: usize, const SELECTOR_WIDTH: usize, const NUM_OVERLAP_
         Self {
             adapter,
             offset,
-            encoder: encoder::<SELECTOR_WIDTH>(load_info::<LOAD_WIDTH>().byte_shifts),
+            encoder: shift_encoder::<SELECTOR_WIDTH>(),
             bitwise_lookup_chip,
         }
     }
@@ -306,11 +279,7 @@ where
         let read_data = record.read_data;
         let core_row: &mut LoadCoreCols<F, SELECTOR_WIDTH, NUM_OVERLAP_CELLS> =
             core_row.borrow_mut();
-        let case_idx = load_info::<LOAD_WIDTH>()
-            .byte_shifts
-            .iter()
-            .position(|&byte_shift| byte_shift == shift)
-            .expect("invalid load shift");
+        debug_assert!(shift < NUM_BYTE_SHIFTS, "invalid load shift {shift}");
 
         let read_full: [u16; 2 * BLOCK_FE_WIDTH] =
             std::array::from_fn(|cell| read_data[cell / BLOCK_FE_WIDTH][cell % BLOCK_FE_WIDTH]);
@@ -333,7 +302,7 @@ where
 
         core_row.overlap_lo_bytes = overlap_lo_bytes.map(F::from_u16);
         core_row.read_data = read_data.map(|block| block.map(F::from_u16));
-        let pt: [u32; SELECTOR_WIDTH] = self.encoder.get_flag_pt(case_idx).try_into().unwrap();
+        let pt: [u32; SELECTOR_WIDTH] = self.encoder.get_flag_pt(shift).try_into().unwrap();
         core_row.selector = pt.map(F::from_u32);
     }
 }

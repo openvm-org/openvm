@@ -214,9 +214,6 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadByteAdapterAir {
     }
 }
 
-/// Byte-load counterpart of [`Rv64LoadAdapterExecutor`]. Reads only the containing block and never
-/// consumes a second timestamp slot. Reuses [`Rv64LoadAdapterRecord`]; the crossing fields are set
-/// to their no-cross sentinels and ignored by [`Rv64LoadByteAdapterFiller`].
 #[derive(Clone, Copy, derive_new::new)]
 pub struct Rv64LoadByteAdapterExecutor {
     pointer_max_bits: usize,

@@ -17,14 +17,12 @@ use openvm_stark_backend::{
 
 use crate::{
     adapters::{
-        u16_cell_byte, LoadInstruction, Rv64LoadAdapterRecord, Rv64LoadByteAdapterFiller,
-        RV64_BYTE_BITS,
+        shift_encoder, u16_cell_byte, LoadInstruction, Rv64LoadAdapterRecord,
+        Rv64LoadByteAdapterFiller, RV64_BYTE_BITS,
     },
     load::common::LoadRecord,
 };
 
-const BYTE_SELECTOR_MAX_DEGREE: u32 = 2;
-const LOAD_BYTE_NUM_CASES: usize = 8;
 pub(crate) const LOAD_BYTE_SELECTOR_WIDTH: usize = 3;
 
 /// Handles unsigned byte loads by decomposing the selected u16 cell and zero-extending the chosen
@@ -49,7 +47,7 @@ impl LoadByteCoreAir {
     pub fn new(offset: usize, bitwise_lookup_bus: BitwiseOperationLookupBus) -> Self {
         Self {
             offset,
-            encoder: Encoder::new(LOAD_BYTE_NUM_CASES, BYTE_SELECTOR_MAX_DEGREE, true),
+            encoder: shift_encoder::<LOAD_BYTE_SELECTOR_WIDTH>(),
             bitwise_lookup_bus,
         }
     }
@@ -167,7 +165,7 @@ impl<A> LoadByteFiller<A> {
         Self {
             adapter,
             offset,
-            encoder: Encoder::new(LOAD_BYTE_NUM_CASES, BYTE_SELECTOR_MAX_DEGREE, true),
+            encoder: shift_encoder::<LOAD_BYTE_SELECTOR_WIDTH>(),
             bitwise_lookup_chip,
         }
     }
