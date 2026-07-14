@@ -1,5 +1,6 @@
 [package]
 name = "openvm-sdk"
+description = "OpenVM SDK for executing, proving, and verifying guest programs."
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

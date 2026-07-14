@@ -1,5 +1,6 @@
 [package]
 name = "openvm-sdk-config"
+description = "Standard OpenVM SDK VM configurations and transpiler builders."
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

@@ -1,5 +1,6 @@
 [package]
 name = "openvm-sha2-air"
+description = "SHA-2 compression AIR and trace utilities for OpenVM circuits."
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

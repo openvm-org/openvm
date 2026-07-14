@@ -1,5 +1,6 @@
 [package]
 name = "openvm-transpiler"
+description = "OpenVM transpiler from custom RISC-V ELFs to VM executables."
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

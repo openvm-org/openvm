@@ -1,5 +1,6 @@
 [package]
 name = "openvm-instructions-derive"
+description = "Procedural macros for deriving OpenVM local opcode metadata."
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

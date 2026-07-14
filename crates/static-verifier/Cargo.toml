@@ -1,5 +1,6 @@
 [package]
 name = "openvm-static-verifier"
+description = "Halo2 static verifier circuit for OpenVM root STARK proofs."
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

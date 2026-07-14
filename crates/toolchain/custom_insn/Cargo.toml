@@ -1,5 +1,6 @@
 [package]
 name = "openvm-custom-insn"
+description = "Procedural macros for emitting custom RISC-V instructions in OpenVM guest programs."
 version = "0.1.0"
 edition = "2021"
 rust-version.workspace = true

@@ -1,5 +1,6 @@
 [package]
 name = "openvm-deferral-transpiler"
+description = "OpenVM transpiler extension for deferral call and output instructions."
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
