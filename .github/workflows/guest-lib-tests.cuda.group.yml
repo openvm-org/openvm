@@ -1,0 +1,114 @@
+name: CUDA Guest Library Test Group
+
+on:
+  workflow_call:
+    inputs:
+      group:
+        required: true
+        type: string
+      sha2:
+        type: boolean
+        default: false
+      keccak256:
+        type: boolean
+        default: false
+      verify_stark:
+        type: boolean
+        default: false
+      k256:
+        type: boolean
+        default: false
+      p256:
+        type: boolean
+        default: false
+      ff_derive:
+        type: boolean
+        default: false
+      pairing:
+        type: boolean
+        default: false
+
+env:
+  CARGO_TERM_COLOR: always
+  OPENVM_SKIP_DEBUG: "1"
+
+jobs:
+  tests:
+    name: CUDA (${{ inputs.group }})
+    runs-on:
+      - runs-on=${{ github.run_id }}-guest-lib-cuda-${{ github.run_attempt }}-${{ inputs.group }}/image=ubuntu24-gpu-x64/family=g7.2xlarge+g6.2xlarge+g5.2xlarge/volume=40gb/spot=price-capacity-optimized/extras=s3-cache
+
+    steps:
+      - uses: runs-on/action@v2
+        with:
+          sccache: s3
+      - name: Load SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: |
+            ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        env:
+          RUSTUP_PERMIT_COPY_RENAME: "1"
+      - uses: ./.github/actions/sccache
+
+      # TODO: remove once https://github.com/runs-on/runner-images-for-aws/issues/55 is fixed
+      - name: Setup GPU driver
+        run: bash ./scripts/gpu_driver_setup.sh
+
+      - uses: ./.github/actions/rust-cache-cuda
+        with:
+          cache-on-failure: true
+      - uses: taiki-e/install-action@nextest
+
+      - name: Check CUDA status and set environment variables
+        run: |
+          nvidia-smi
+          nvidia-smi -L
+          nvcc --version
+          echo "CUDA_ARCH=86,89,120" >> $GITHUB_ENV
+          echo "NEXTEST_ENV=CUDA_OPT_LEVEL=3" >> $GITHUB_ENV
+          echo "FEATURE_ARGS=--features=cuda" >> $GITHUB_ENV
+
+      - name: Install OpenVM toolchain
+        run: "$GITHUB_WORKSPACE/ci/install-openvm-toolchain.sh"
+
+      - name: Run SHA-2 tests
+        if: inputs.sha2
+        working-directory: guest-libs/sha2
+        run: ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} --run-ignored=all --no-tests=pass --test-threads=1
+
+      - name: Run Keccak-256 tests
+        if: inputs.keccak256
+        working-directory: guest-libs/keccak256
+        run: ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} --run-ignored=all --no-tests=pass --test-threads=1
+
+      - name: Run STARK verification tests
+        if: inputs.verify_stark
+        working-directory: guest-libs/verify-stark/circuit
+        run: ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} --no-tests=pass --test-threads=1
+
+      - name: Run k256 tests
+        if: inputs.k256
+        working-directory: guest-libs/k256
+        run: ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} --no-tests=pass --test-threads=1
+
+      - name: Run p256 tests
+        if: inputs.p256
+        working-directory: guest-libs/p256
+        run: ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} --no-tests=pass --test-threads=1
+
+      - name: Run ff_derive tests
+        if: inputs.ff_derive
+        working-directory: guest-libs/ff_derive
+        run: ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} --no-tests=pass --test-threads=1
+
+      - name: Run pairing tests
+        if: inputs.pairing
+        working-directory: guest-libs/pairing
+        run: ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} --features=bn254,bls12_381 --no-tests=pass --test-threads=1
+
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true

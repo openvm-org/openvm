@@ -5,9 +5,16 @@ shared: &shared
   - "crates/rvr/**"
   - "Cargo.toml"
   - "Cargo.lock"
+  - "rust-toolchain.toml"
+  - ".cargo/config.toml"
+  - ".github/actions/sccache/**"
   - ".github/filters/extension-tests.yml"
   - ".github/workflows/extension-tests.yml"
-  - ".github/workflows/extension-tests.cuda.yml"
+  - "ci/install-openvm-toolchain.sh"
+cuda:
+  - ".github/actions/rust-cache-cuda/**"
+  - ".github/workflows/extension-tests.cuda*.yml"
+  - "scripts/gpu_driver_setup.sh"
 riscv: &riscv
   - *shared
   - "extensions/riscv/**"

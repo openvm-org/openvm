@@ -4,7 +4,7 @@ on:
   workflow_call:
   push:
     branches: ["main"]
-    paths:
+    paths: &extension_test_paths
       - "crates/circuits/**"
       - "crates/vm/**"
       - "crates/toolchain/**"
@@ -14,22 +14,15 @@ on:
       - "extensions/**"
       - "Cargo.toml"
       - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - ".cargo/config.toml"
+      - ".github/actions/sccache/**"
       - ".github/filters/extension-tests.yml"
       - ".github/workflows/extension-tests.yml"
+      - "ci/install-openvm-toolchain.sh"
   pull_request:
     branches: ["**"]
-    paths:
-      - "crates/circuits/**"
-      - "crates/vm/**"
-      - "crates/toolchain/**"
-      - "crates/sdk/**"
-      - "crates/sdk-config/**"
-      - "crates/rvr/**"
-      - "extensions/**"
-      - "Cargo.toml"
-      - "Cargo.lock"
-      - ".github/filters/extension-tests.yml"
-      - ".github/workflows/extension-tests.yml"
+    paths: *extension_test_paths
 
 concurrency:
   group: ${{ github.workflow_ref }}-extension-tests-${{ github.event.pull_request.number || github.sha }}
@@ -67,6 +60,9 @@ jobs:
           - { extension: shared, mode: default }
           - { extension: shared, mode: rvr }
           - { extension: shared, mode: unprotected }
+          - { extension: cuda, mode: default }
+          - { extension: cuda, mode: rvr }
+          - { extension: cuda, mode: unprotected }
           - { extension: keccak256, mode: unprotected }
           - { extension: sha2, mode: unprotected }
           - { extension: bigint, mode: unprotected }

@@ -4,7 +4,7 @@ on:
   workflow_call:
   push:
     branches: ["main"]
-    paths:
+    paths: &guest_lib_cuda_test_paths
       - "crates/circuits/**"
       - "crates/vm/**"
       - "crates/toolchain/**"
@@ -24,34 +24,18 @@ on:
       - "guest-libs/**"
       - "Cargo.toml"
       - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - ".cargo/config.toml"
+      - ".github/actions/sccache/**"
+      - ".github/actions/rust-cache-cuda/**"
       - ".github/filters/guest-lib-tests.yml"
-      - ".github/workflows/guest-lib-tests.cuda.yml"
+      - ".github/workflows/guest-lib-tests.cuda*.yml"
       - "crates/sdk/guest/fib/**"
+      - "ci/install-openvm-toolchain.sh"
+      - "scripts/gpu_driver_setup.sh"
   pull_request:
     branches: ["**"]
-    paths:
-      - "crates/circuits/**"
-      - "crates/vm/**"
-      - "crates/toolchain/**"
-      - "crates/sdk/**"
-      - "crates/recursion/**"
-      - "crates/continuations/**"
-      - "crates/verify/**"
-      - "crates/rvr/**"
-      - "extensions/riscv/**"
-      - "extensions/riscv-adapters/**"
-      - "extensions/deferral/**"
-      - "extensions/keccak256/**"
-      - "extensions/sha2/**"
-      - "extensions/algebra/**"
-      - "extensions/ecc/**"
-      - "extensions/pairing/**"
-      - "guest-libs/**"
-      - "Cargo.toml"
-      - "Cargo.lock"
-      - ".github/filters/guest-lib-tests.yml"
-      - ".github/workflows/guest-lib-tests.cuda.yml"
-      - "crates/sdk/guest/fib/**"
+    paths: *guest_lib_cuda_test_paths
 
 concurrency:
   group: ${{ github.workflow_ref }}-guest-lib-tests-cuda-${{ github.event.pull_request.number || github.sha }}
@@ -69,172 +53,56 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
-      groups: ${{ steps.groups.outputs.changes }}
+      cuda: ${{ steps.tests.outputs.cuda }}
       sha2: ${{ steps.tests.outputs.sha2 }}
       keccak256: ${{ steps.tests.outputs.keccak256 }}
       ff_derive: ${{ steps.tests.outputs.ff_derive }}
       k256: ${{ steps.tests.outputs.k256 }}
       p256: ${{ steps.tests.outputs.p256 }}
       pairing: ${{ steps.tests.outputs.pairing }}
+      verify_stark: ${{ steps.tests.outputs['verify-stark'] }}
     steps:
       - uses: actions/checkout@v5
-      - uses: dorny/paths-filter@v3
-        id: groups
-        with:
-          filters: |
-            hashes:
-              - "crates/circuits/**"
-              - "crates/vm/**"
-              - "crates/toolchain/**"
-              - "crates/sdk/**"
-              - "crates/rvr/**"
-              - "extensions/riscv/**"
-              - "extensions/sha2/**"
-              - "extensions/keccak256/**"
-              - "guest-libs/sha2/**"
-              - "guest-libs/keccak256/**"
-              - "Cargo.toml"
-              - "Cargo.lock"
-              - ".github/filters/guest-lib-tests.yml"
-              - ".github/workflows/guest-lib-tests.cuda.yml"
-              - "crates/sdk/guest/fib/**"
-            verify-stark:
-              - "crates/circuits/**"
-              - "crates/vm/**"
-              - "crates/toolchain/**"
-              - "crates/recursion/**"
-              - "crates/continuations/**"
-              - "crates/verify/**"
-              - "crates/rvr/**"
-              - "extensions/riscv/**"
-              - "extensions/deferral/**"
-              - "guest-libs/verify-stark/**"
-              - "Cargo.toml"
-              - "Cargo.lock"
-              - ".github/filters/guest-lib-tests.yml"
-              - ".github/workflows/guest-lib-tests.cuda.yml"
-              - "crates/sdk/guest/fib/**"
-            curves:
-              - "crates/circuits/**"
-              - "crates/vm/**"
-              - "crates/toolchain/**"
-              - "crates/rvr/**"
-              - "extensions/riscv/**"
-              - "extensions/riscv-adapters/**"
-              - "extensions/sha2/**"
-              - "extensions/algebra/**"
-              - "extensions/ecc/**"
-              - "guest-libs/sha2/**"
-              - "guest-libs/k256/**"
-              - "guest-libs/p256/**"
-              - "Cargo.toml"
-              - "Cargo.lock"
-              - ".github/filters/guest-lib-tests.yml"
-              - ".github/workflows/guest-lib-tests.cuda.yml"
-              - "crates/sdk/guest/fib/**"
-            algebra:
-              - "crates/circuits/**"
-              - "crates/vm/**"
-              - "crates/toolchain/**"
-              - "crates/rvr/**"
-              - "extensions/riscv/**"
-              - "extensions/riscv-adapters/**"
-              - "extensions/algebra/**"
-              - "extensions/ecc/**"
-              - "extensions/pairing/**"
-              - "guest-libs/ff_derive/**"
-              - "guest-libs/pairing/**"
-              - "Cargo.toml"
-              - "Cargo.lock"
-              - ".github/filters/guest-lib-tests.yml"
-              - ".github/workflows/guest-lib-tests.cuda.yml"
-              - "crates/sdk/guest/fib/**"
       - uses: dorny/paths-filter@v3
         id: tests
         with:
           filters: .github/filters/guest-lib-tests.yml
 
-  guest-lib-tests-cuda:
+  hashes-cuda:
     needs: changes
-    if: needs.changes.outputs.groups != '[]'
-    name: ${{ format('CUDA ({0})', matrix.group) }}
-    strategy:
-      matrix:
-        group: ${{ fromJSON(needs.changes.outputs.groups) }}
-    runs-on:
-      - runs-on=${{ github.run_id }}-guest-lib-cuda-${{ github.run_attempt }}-${{ strategy.job-index }}/image=ubuntu24-gpu-x64/family=g7.2xlarge+g6.2xlarge+g5.2xlarge/volume=40gb/spot=price-capacity-optimized/extras=s3-cache
+    if: needs.changes.outputs.cuda == 'true' || needs.changes.outputs.sha2 == 'true' || needs.changes.outputs.keccak256 == 'true'
+    uses: ./.github/workflows/guest-lib-tests.cuda.group.yml
+    with:
+      group: hashes
+      sha2: ${{ needs.changes.outputs.cuda == 'true' || needs.changes.outputs.sha2 == 'true' }}
+      keccak256: ${{ needs.changes.outputs.cuda == 'true' || needs.changes.outputs.keccak256 == 'true' }}
+    secrets: inherit
 
-    steps:
-      - uses: runs-on/action@v2
-        with:
-          sccache: s3
-      - name: Load SSH key
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: |
-            ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
-        env:
-          RUSTUP_PERMIT_COPY_RENAME: "1"
-      - uses: ./.github/actions/sccache
+  verify-stark-cuda:
+    needs: changes
+    if: needs.changes.outputs.cuda == 'true' || needs.changes.outputs.verify_stark == 'true'
+    uses: ./.github/workflows/guest-lib-tests.cuda.group.yml
+    with:
+      group: verify-stark
+      verify_stark: true
+    secrets: inherit
 
-      # TODO: remove once https://github.com/runs-on/runner-images-for-aws/issues/55 is fixed
-      - name: Setup GPU driver
-        run: bash ./scripts/gpu_driver_setup.sh
+  curves-cuda:
+    needs: changes
+    if: needs.changes.outputs.cuda == 'true' || needs.changes.outputs.k256 == 'true' || needs.changes.outputs.p256 == 'true'
+    uses: ./.github/workflows/guest-lib-tests.cuda.group.yml
+    with:
+      group: curves
+      k256: ${{ needs.changes.outputs.cuda == 'true' || needs.changes.outputs.k256 == 'true' }}
+      p256: ${{ needs.changes.outputs.cuda == 'true' || needs.changes.outputs.p256 == 'true' }}
+    secrets: inherit
 
-      - uses: ./.github/actions/rust-cache-cuda
-        with:
-          cache-on-failure: true
-      - uses: taiki-e/install-action@nextest
-
-      - name: Check CUDA status and set environment variables
-        run: |
-          nvidia-smi
-          nvidia-smi -L
-          nvcc --version
-          echo "CUDA_ARCH=86,89,120" >> $GITHUB_ENV
-          echo "NEXTEST_ENV=CUDA_OPT_LEVEL=3" >> $GITHUB_ENV
-          echo "FEATURE_ARGS=--features=cuda" >> $GITHUB_ENV
-
-      - name: Install OpenVM toolchain
-        run: "$GITHUB_WORKSPACE/ci/install-openvm-toolchain.sh"
-
-      - name: Run SHA-2 tests
-        if: matrix.group == 'hashes' && needs.changes.outputs.sha2 == 'true'
-        working-directory: guest-libs/sha2
-        run: ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} --run-ignored=all --no-tests=pass --test-threads=1
-
-      - name: Run Keccak-256 tests
-        if: matrix.group == 'hashes' && needs.changes.outputs.keccak256 == 'true'
-        working-directory: guest-libs/keccak256
-        run: ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} --run-ignored=all --no-tests=pass --test-threads=1
-
-      - name: Run STARK verification tests
-        if: matrix.group == 'verify-stark'
-        working-directory: guest-libs/verify-stark/circuit
-        run: ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} --no-tests=pass --test-threads=1
-
-      - name: Run k256 tests
-        if: matrix.group == 'curves' && needs.changes.outputs.k256 == 'true'
-        working-directory: guest-libs/k256
-        run: ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} --no-tests=pass --test-threads=1
-
-      - name: Run p256 tests
-        if: matrix.group == 'curves' && needs.changes.outputs.p256 == 'true'
-        working-directory: guest-libs/p256
-        run: ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} --no-tests=pass --test-threads=1
-
-      - name: Run ff_derive tests
-        if: matrix.group == 'algebra' && needs.changes.outputs.ff_derive == 'true'
-        working-directory: guest-libs/ff_derive
-        run: ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} --no-tests=pass --test-threads=1
-
-      - name: Run pairing tests
-        if: matrix.group == 'algebra' && needs.changes.outputs.pairing == 'true'
-        working-directory: guest-libs/pairing
-        run: ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} --features=bn254,bls12_381 --no-tests=pass --test-threads=1
-
-      - name: sccache stats
-        if: always()
-        run: sccache --show-stats || true
+  algebra-cuda:
+    needs: changes
+    if: needs.changes.outputs.cuda == 'true' || needs.changes.outputs.ff_derive == 'true' || needs.changes.outputs.pairing == 'true'
+    uses: ./.github/workflows/guest-lib-tests.cuda.group.yml
+    with:
+      group: algebra
+      ff_derive: ${{ needs.changes.outputs.cuda == 'true' || needs.changes.outputs.ff_derive == 'true' }}
+      pairing: ${{ needs.changes.outputs.cuda == 'true' || needs.changes.outputs.pairing == 'true' }}
+    secrets: inherit

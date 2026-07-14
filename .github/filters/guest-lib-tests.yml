@@ -6,10 +6,17 @@ shared: &shared
   - "extensions/riscv/**"
   - "Cargo.toml"
   - "Cargo.lock"
+  - "rust-toolchain.toml"
+  - ".cargo/config.toml"
+  - ".github/actions/sccache/**"
   - ".github/filters/guest-lib-tests.yml"
   - ".github/workflows/guest-lib-tests.yml"
-  - ".github/workflows/guest-lib-tests.cuda.yml"
   - "crates/sdk/guest/fib/**"
+  - "ci/install-openvm-toolchain.sh"
+cuda:
+  - ".github/actions/rust-cache-cuda/**"
+  - ".github/workflows/guest-lib-tests.cuda*.yml"
+  - "scripts/gpu_driver_setup.sh"
 sha2:
   - *shared
   - "crates/sdk/**"

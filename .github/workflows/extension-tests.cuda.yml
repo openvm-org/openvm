@@ -4,7 +4,7 @@ on:
   workflow_call:
   push:
     branches: ["main"]
-    paths:
+    paths: &extension_cuda_test_paths
       - "crates/circuits/**"
       - "crates/vm/**"
       - "crates/toolchain/**"
@@ -14,22 +14,17 @@ on:
       - "extensions/**"
       - "Cargo.toml"
       - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - ".cargo/config.toml"
+      - ".github/actions/sccache/**"
+      - ".github/actions/rust-cache-cuda/**"
       - ".github/filters/extension-tests.yml"
-      - ".github/workflows/extension-tests.cuda.yml"
+      - ".github/workflows/extension-tests.cuda*.yml"
+      - "ci/install-openvm-toolchain.sh"
+      - "scripts/gpu_driver_setup.sh"
   pull_request:
     branches: ["**"]
-    paths:
-      - "crates/circuits/**"
-      - "crates/vm/**"
-      - "crates/toolchain/**"
-      - "crates/sdk/**"
-      - "crates/sdk-config/**"
-      - "crates/rvr/**"
-      - "extensions/**"
-      - "Cargo.toml"
-      - "Cargo.lock"
-      - ".github/filters/extension-tests.yml"
-      - ".github/workflows/extension-tests.cuda.yml"
+    paths: *extension_cuda_test_paths
   workflow_dispatch:
     inputs:
       machine_type:
@@ -53,7 +48,7 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
-      groups: ${{ github.event_name == 'workflow_dispatch' && '["riscv","extensions"]' || steps.groups.outputs.changes }}
+      cuda: ${{ steps.tests.outputs.cuda }}
       riscv: ${{ steps.tests.outputs.riscv }}
       keccak256: ${{ steps.tests.outputs.keccak256 }}
       sha2: ${{ steps.tests.outputs.sha2 }}
@@ -65,160 +60,41 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: dorny/paths-filter@v3
-        id: groups
-        with:
-          filters: |
-            riscv:
-              - "crates/circuits/**"
-              - "crates/vm/**"
-              - "crates/toolchain/**"
-              - "crates/rvr/**"
-              - "extensions/riscv/**"
-              - "Cargo.toml"
-              - "Cargo.lock"
-              - ".github/filters/extension-tests.yml"
-              - ".github/workflows/extension-tests.cuda.yml"
-            extensions:
-              - "crates/circuits/**"
-              - "crates/vm/**"
-              - "crates/toolchain/**"
-              - "crates/sdk/**"
-              - "crates/sdk-config/**"
-              - "crates/rvr/**"
-              - "extensions/riscv/**"
-              - "extensions/riscv-adapters/**"
-              - "extensions/keccak256/**"
-              - "extensions/sha2/**"
-              - "extensions/bigint/**"
-              - "extensions/algebra/**"
-              - "extensions/ecc/**"
-              - "extensions/pairing/**"
-              - "extensions/deferral/**"
-              - "Cargo.toml"
-              - "Cargo.lock"
-              - ".github/filters/extension-tests.yml"
-              - ".github/workflows/extension-tests.cuda.yml"
-      - uses: dorny/paths-filter@v3
         id: tests
         with:
           filters: .github/filters/extension-tests.yml
 
-  extension-tests-cuda:
+  riscv-cuda:
     needs: changes
-    if: needs.changes.outputs.groups != '[]'
-    name: ${{ format('CUDA ({0})', matrix.group) }}
-    strategy:
-      matrix:
-        group: ${{ fromJSON(needs.changes.outputs.groups) }}
-    runs-on:
-      - runs-on=${{ github.run_id }}-extension-tests-cuda-${{ github.run_attempt }}-${{ strategy.job-index }}/${{ github.event_name == 'workflow_dispatch' && github.event.inputs.machine_type || 'image=ubuntu24-gpu-x64/family=g7.2xlarge+g6.2xlarge+g5.2xlarge/volume=40gb/spot=price-capacity-optimized' }}/extras=s3-cache
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.cuda == 'true' || needs.changes.outputs.riscv == 'true'
+    uses: ./.github/workflows/extension-tests.cuda.group.yml
+    with:
+      group: riscv
+      machine_type: ${{ inputs.machine_type || 'image=ubuntu24-gpu-x64/family=g7.2xlarge+g6.2xlarge+g5.2xlarge/volume=40gb/spot=price-capacity-optimized' }}
+      riscv: true
+    secrets: inherit
 
-    steps:
-      - uses: runs-on/action@v2
-        with:
-          sccache: s3
-      - name: Load SSH key
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: |
-            ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
-      - uses: actions/checkout@v5
-      - uses: dtolnay/rust-toolchain@stable
-        env:
-          RUSTUP_PERMIT_COPY_RENAME: "1"
-      - uses: ./.github/actions/sccache
-
-      # TODO: remove once https://github.com/runs-on/runner-images-for-aws/issues/55 is fixed
-      - name: Setup GPU driver
-        run: bash ./scripts/gpu_driver_setup.sh
-
-      - uses: ./.github/actions/rust-cache-cuda
-        with:
-          cache-on-failure: true
-      - uses: taiki-e/install-action@nextest
-
-      - name: Check CUDA status and set environment variables
-        run: |
-          nvidia-smi
-          nvidia-smi -L
-          nvcc --version
-          echo "CUDA_ARCH=86,89,120" >> $GITHUB_ENV
-          echo "NEXTEST_ENV=CUDA_OPT_LEVEL=3" >> $GITHUB_ENV
-          echo "FEATURE_ARGS=--features=cuda" >> $GITHUB_ENV
-          echo "VPMM_PAGES=1" >> $GITHUB_ENV
-
-      - name: Run RISC-V tests
-        if: matrix.group == 'riscv'
-        working-directory: extensions/riscv
-        run: |
-          pushd circuit
-          ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast cuda ${{ env.FEATURE_ARGS }} --features=touchemall --profile=heavy --no-tests=pass
-          popd
-          pushd tests
-          "$GITHUB_WORKSPACE/ci/install-openvm-toolchain.sh"
-          ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} --profile=heavy --no-tests=pass
-          popd
-
-      - name: Run Keccak-256 tests
-        if: matrix.group == 'extensions' && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.keccak256 == 'true')
-        working-directory: extensions/keccak256/circuit
-        run: |
-          ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast cuda ${{ env.FEATURE_ARGS }} --features=touchemall --profile=heavy --no-tests=pass
-
-      - name: Run SHA-2 tests
-        if: matrix.group == 'extensions' && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.sha2 == 'true')
-        working-directory: extensions/sha2/circuit
-        run: |
-          ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast cuda ${{ env.FEATURE_ARGS }} --features=touchemall --profile=heavy --no-tests=pass
-
-      - name: Run bigint tests
-        if: matrix.group == 'extensions' && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.bigint == 'true')
-        working-directory: extensions/bigint/circuit
-        run: |
-          ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast cuda ${{ env.FEATURE_ARGS }} --features=touchemall --profile=heavy --no-tests=pass
-
-      - name: Run algebra tests
-        if: matrix.group == 'extensions' && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.algebra == 'true')
-        working-directory: extensions/algebra
-        run: |
-          pushd circuit
-          ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast cuda ${{ env.FEATURE_ARGS }} --features=touchemall --profile=heavy --no-tests=pass
-          popd
-          pushd tests
-          "$GITHUB_WORKSPACE/ci/install-openvm-toolchain.sh"
-          ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} --profile=heavy --no-tests=pass
-          popd
-
-      - name: Run ECC tests
-        if: matrix.group == 'extensions' && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.ecc == 'true')
-        working-directory: extensions/ecc
-        run: |
-          pushd circuit
-          ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast cuda ${{ env.FEATURE_ARGS }} --features=touchemall --profile=heavy --no-tests=pass
-          popd
-          pushd tests
-          "$GITHUB_WORKSPACE/ci/install-openvm-toolchain.sh"
-          ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} --profile=heavy --no-tests=pass
-          popd
-
-      - name: Run pairing tests
-        if: matrix.group == 'extensions' && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.pairing == 'true')
-        working-directory: extensions/pairing/circuit
-        run: |
-          ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast cuda ${{ env.FEATURE_ARGS }} --features=touchemall --profile=heavy --no-tests=pass
-
-      - name: Run deferral tests
-        if: matrix.group == 'extensions' && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.deferral == 'true')
-        working-directory: extensions/deferral
-        run: |
-          pushd circuit
-          ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast cuda ${{ env.FEATURE_ARGS }} --features=touchemall --profile=heavy --no-tests=pass
-          popd
-          pushd tests
-          "$GITHUB_WORKSPACE/ci/install-openvm-toolchain.sh"
-          ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} --profile=heavy --no-tests=pass
-          popd
-
-      - name: sccache stats
-        if: always()
-        run: sccache --show-stats || true
+  extensions-cuda:
+    needs: changes
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      needs.changes.outputs.cuda == 'true' ||
+      needs.changes.outputs.keccak256 == 'true' ||
+      needs.changes.outputs.sha2 == 'true' ||
+      needs.changes.outputs.bigint == 'true' ||
+      needs.changes.outputs.algebra == 'true' ||
+      needs.changes.outputs.ecc == 'true' ||
+      needs.changes.outputs.pairing == 'true' ||
+      needs.changes.outputs.deferral == 'true'
+    uses: ./.github/workflows/extension-tests.cuda.group.yml
+    with:
+      group: extensions
+      machine_type: ${{ inputs.machine_type || 'image=ubuntu24-gpu-x64/family=g7.2xlarge+g6.2xlarge+g5.2xlarge/volume=40gb/spot=price-capacity-optimized' }}
+      keccak256: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.cuda == 'true' || needs.changes.outputs.keccak256 == 'true' }}
+      sha2: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.cuda == 'true' || needs.changes.outputs.sha2 == 'true' }}
+      bigint: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.cuda == 'true' || needs.changes.outputs.bigint == 'true' }}
+      algebra: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.cuda == 'true' || needs.changes.outputs.algebra == 'true' }}
+      ecc: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.cuda == 'true' || needs.changes.outputs.ecc == 'true' }}
+      pairing: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.cuda == 'true' || needs.changes.outputs.pairing == 'true' }}
+      deferral: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.cuda == 'true' || needs.changes.outputs.deferral == 'true' }}
+    secrets: inherit

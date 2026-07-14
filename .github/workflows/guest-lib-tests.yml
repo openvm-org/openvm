@@ -4,7 +4,7 @@ on:
   workflow_call:
   push:
     branches: ["main"]
-    paths:
+    paths: &guest_lib_test_paths
       - "crates/circuits/**"
       - "crates/vm/**"
       - "crates/toolchain/**"
@@ -24,34 +24,16 @@ on:
       - "guest-libs/**"
       - "Cargo.toml"
       - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - ".cargo/config.toml"
+      - ".github/actions/sccache/**"
       - ".github/filters/guest-lib-tests.yml"
       - ".github/workflows/guest-lib-tests.yml"
       - "crates/sdk/guest/fib/**"
+      - "ci/install-openvm-toolchain.sh"
   pull_request:
     branches: ["**"]
-    paths:
-      - "crates/circuits/**"
-      - "crates/vm/**"
-      - "crates/toolchain/**"
-      - "crates/sdk/**"
-      - "crates/recursion/**"
-      - "crates/continuations/**"
-      - "crates/verify/**"
-      - "crates/rvr/**"
-      - "extensions/riscv/**"
-      - "extensions/riscv-adapters/**"
-      - "extensions/deferral/**"
-      - "extensions/keccak256/**"
-      - "extensions/sha2/**"
-      - "extensions/algebra/**"
-      - "extensions/ecc/**"
-      - "extensions/pairing/**"
-      - "guest-libs/**"
-      - "Cargo.toml"
-      - "Cargo.lock"
-      - ".github/filters/guest-lib-tests.yml"
-      - ".github/workflows/guest-lib-tests.yml"
-      - "crates/sdk/guest/fib/**"
+    paths: *guest_lib_test_paths
 
 concurrency:
   group: ${{ github.workflow_ref }}-guest-lib-tests-${{ github.event.pull_request.number || github.sha }}
@@ -88,6 +70,8 @@ jobs:
         exclude:
           - { crate: shared, mode: default }
           - { crate: shared, mode: rvr }
+          - { crate: cuda, mode: default }
+          - { crate: cuda, mode: rvr }
           - { crate: verify-stark, mode: rvr }
       # Ensure tests run in parallel even if one fails
       fail-fast: false
