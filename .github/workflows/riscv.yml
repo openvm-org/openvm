@@ -31,17 +31,17 @@ jobs:
         platform:
           # TODO(aot): restore `features: "aot"`
           - {
-              labels: "runner=64cpu-linux-x64/image=ubuntu24-full-x64",
+              labels: "family=c8i-flex.16xlarge+c8i.16xlarge+c8a.16xlarge+c7i.16xlarge+c7a.16xlarge/image=ubuntu24-full-x64",
               image: "ubuntu24-full-x64",
               features: "",
             }
           - {
-              labels: "runner=64cpu-linux-x64/image=ubuntu24-full-x64",
+              labels: "family=c8i-flex.16xlarge+c8i.16xlarge+c8a.16xlarge+c7i.16xlarge+c7a.16xlarge/image=ubuntu24-full-x64",
               image: "ubuntu24-full-x64",
               features: "rvr",
             }
           - {
-              labels: "image=ubuntu24-gpu-x64/family=g6.*+g5+g6e/cpu=4+32/volume=40gb/spot=capacity-optimized",
+              labels: "image=ubuntu24-gpu-x64/family=g7.2xlarge+g6.2xlarge+g5.2xlarge/volume=40gb/spot=price-capacity-optimized",
               image: "ubuntu24-gpu-x64",
               features: "cuda,touchemall",
             }
@@ -75,6 +75,11 @@ jobs:
           git submodule update --init --depth 1 extensions/keccak256/rvr/ffi/openssl
           git submodule update --init --depth 1 extensions/algebra/rvr/ffi/modular/secp256k1
       - uses: ./.github/actions/sccache
+
+      # TODO: remove once https://github.com/runs-on/runner-images-for-aws/issues/55 is fixed
+      - name: Setup GPU driver
+        if: contains(matrix.platform.features, 'cuda')
+        run: bash ./scripts/gpu_driver_setup.sh
 
       - name: Set feature flags
         run: |

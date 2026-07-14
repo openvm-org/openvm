@@ -42,6 +42,7 @@ jobs:
 
       - uses: ./.github/actions/rust-cache-cuda
       - uses: taiki-e/install-action@nextest
+
       - name: Verify GPU setup
         run: |
           nvidia-smi

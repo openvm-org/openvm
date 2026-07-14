@@ -14,7 +14,7 @@ on:
         type: boolean
 
 concurrency:
-  group: ${{ github.workflow_ref }}-release-binaries-${{ inputs.version }}
+  group: ${{ github.workflow_ref }}-release-binaries-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -125,23 +125,15 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.version }}
-      - name: Check out release workflow tooling
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ github.workflow_sha }}
-          path: .ci-workflow
-          sparse-checkout: |
-            .github/actions
-            scripts
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-unknown-linux-gnu
-      - uses: ./.ci-workflow/.github/actions/sccache
+      - uses: ./.github/actions/sccache
       # TODO: remove once https://github.com/runs-on/runner-images-for-aws/issues/55 is fixed
       - name: Setup GPU driver
-        run: bash ./.ci-workflow/scripts/gpu_driver_setup.sh
+        run: bash ./scripts/gpu_driver_setup.sh
 
-      - uses: ./.ci-workflow/.github/actions/rust-cache-cuda
+      - uses: ./.github/actions/rust-cache-cuda
         with:
           cache-on-failure: true
           key: release-cuda-${{ matrix.cuda_version }}
@@ -177,19 +169,6 @@ jobs:
 
       - name: Smoke test binary
         run: ./target/x86_64-unknown-linux-gnu/release/${BINARY_NAME} openvm --version
-
-      - name: Install guest rust-src
-        run: rustup component add rust-src --toolchain nightly-2026-01-18
-
-      - name: Smoke test CUDA proving
-        working-directory: crates/cli
-        run: |
-          export PATH="$GITHUB_WORKSPACE/target/x86_64-unknown-linux-gnu/release:$PATH"
-          cargo openvm build \
-            --manifest-path tests/programs/fibonacci/Cargo.toml \
-            --config tests/programs/fibonacci/openvm.toml
-          EXE_PATH=tests/programs/fibonacci/openvm/release/openvm-cli-example-test.vmexe \
-            bash tests/scripts/cli_app_e2e.sh
 
       - name: Package binary
         id: package

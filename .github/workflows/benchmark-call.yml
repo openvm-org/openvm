@@ -127,6 +127,7 @@ jobs:
 
       - name: Display workflow inputs
         run: echo "${{ toJSON(inputs) }}"
+
       - name: "Feature flags: memory allocator + e2e"
         run: |
           ALLOCATOR=${{ inputs.memory_allocator || github.event.inputs.memory_allocator }}
