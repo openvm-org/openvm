@@ -142,7 +142,6 @@ jobs:
           key: v1
 
       - name: Generate docs
-        # full docs with dependencies are built by docs.yml on main/tags
         run: |
           cargo doc --workspace --no-deps --exclude "openvm-benchmarks*" --exclude "*-tests"
         env:
