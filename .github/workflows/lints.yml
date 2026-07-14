@@ -24,16 +24,17 @@ jobs:
         with:
           filters: |
             cuda:
+              - '**/*.rs'
               - '**/*.cu'
               - '**/*.cuh'
               - '**/cuda/**'
-              - '**/cuda*.rs'
-              - '**/cuda_abi.rs'
-              - '**/build.rs'
               - '**/Cargo.toml'
               - 'Cargo.lock'
+              - 'rust-toolchain.toml'
+              - '.cargo/config.toml'
               - 'scripts/gpu_driver_setup.sh'
               - '.github/workflows/lints.yml'
+              - '.github/actions/sccache/**'
               - '.github/actions/rust-cache-cuda/**'
   lint:
     name: Lint
