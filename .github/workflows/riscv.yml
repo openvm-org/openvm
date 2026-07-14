@@ -31,12 +31,12 @@ jobs:
         platform:
           # TODO(aot): restore `features: "aot"`
           - {
-              labels: "runner=64cpu-linux-x64/image=ubuntu24-full-x64",
+              labels: "family=m8i-flex.16xlarge/image=ubuntu24-full-x64",
               image: "ubuntu24-full-x64",
               features: "",
             }
           - {
-              labels: "runner=64cpu-linux-x64/image=ubuntu24-full-x64",
+              labels: "family=m8i-flex.16xlarge/image=ubuntu24-full-x64",
               image: "ubuntu24-full-x64",
               features: "rvr",
             }

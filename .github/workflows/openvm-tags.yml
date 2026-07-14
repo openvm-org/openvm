@@ -24,7 +24,7 @@ jobs:
     concurrency:
       group: ${{ github.workflow_ref }}-docs-${{ github.ref }}
     runs-on:
-      - runs-on=${{ github.run_id }}/runner=8cpu-linux-x64
+      - runs-on=${{ github.run_id }}/family=m8i-flex.2xlarge/image=ubuntu24-full-x64
     steps:
       - name: Load SSH key
         uses: webfactory/ssh-agent@v0.9.0

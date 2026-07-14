@@ -42,7 +42,7 @@ env:
 jobs:
   cli-tests:
     runs-on:
-      - runs-on=${{ github.run_id }}/volume=80gb/runner=64cpu-linux-x64/image=ubuntu24-full-x64/extras=s3-cache
+      - runs-on=${{ github.run_id }}/volume=80gb/family=m8i-flex.16xlarge/image=ubuntu24-full-x64/extras=s3-cache
 
     steps:
       - uses: runs-on/action@v2
@@ -142,7 +142,7 @@ jobs:
   app-level-cli-none-elf:
     name: app-level-cli (riscv64im-unknown-none-elf)
     runs-on:
-      - runs-on=${{ github.run_id }}/disk=large/runner=8cpu-linux-x64/image=ubuntu24-full-x64/extras=s3-cache
+      - runs-on=${{ github.run_id }}/disk=large/family=m8i-flex.2xlarge/image=ubuntu24-full-x64/extras=s3-cache
     env:
       OPENVM_RUST_TOOLCHAIN: nightly-2026-01-18
       OPENVM_RUSTC_TARGET: riscv64im-unknown-none-elf

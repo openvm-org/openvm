@@ -54,12 +54,12 @@ jobs:
           - { name: "pairing", path: "pairing", aot: false, rvr: true }
           - { name: "deferral", path: "deferral", aot: false, rvr: true }
         platform:
-          - { runner: "64cpu-linux-x64", image: "ubuntu24-full-x64" }
+          - { family: "m8i-flex.16xlarge", image: "ubuntu24-full-x64" }
       # Ensure tests run in parallel even if one fails
       fail-fast: false
 
     runs-on:
-      - runs-on=${{ github.run_id }}-extension-tests-${{ github.run_attempt }}-${{ strategy.job-index }}/runner=${{ matrix.platform.runner }}/image=${{ matrix.platform.image }}/volume=80gb/extras=s3-cache
+      - runs-on=${{ github.run_id }}-extension-tests-${{ github.run_attempt }}-${{ strategy.job-index }}/family=${{ matrix.platform.family }}/image=${{ matrix.platform.image }}/volume=80gb/extras=s3-cache
 
     steps:
       - uses: runs-on/action@v2

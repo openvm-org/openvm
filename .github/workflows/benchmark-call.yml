@@ -10,7 +10,7 @@ on:
       instance_type:
         type: string
         required: false
-        description: The AWS instance type or family (e.g., m7g.16xlarge)
+        description: The AWS instance type or family (e.g., m8g.16xlarge)
         default: g7e.2xlarge+g7.2xlarge+g6e.2xlarge
       memory_allocator:
         type: string
@@ -43,7 +43,7 @@ on:
       instance_type:
         type: string
         required: false
-        description: The AWS instance type or family (e.g., m7g.16xlarge)
+        description: The AWS instance type or family (e.g., m8g.16xlarge)
         default: g7e.2xlarge+g7.2xlarge+g6e.2xlarge
       memory_allocator:
         type: string
