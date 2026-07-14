@@ -99,11 +99,9 @@ jobs:
           cargo openvm build
           cmp app1.vmexe openvm/release/ecc-example.vmexe || (echo "Build is not deterministic!" && exit 1)
 
-      - name: Run app-level keygen
+      - name: Run default-config keygen
         working-directory: crates/cli
-        run: |
-          export RUST_BACKTRACE=1
-          cargo openvm keygen --config ./example/app_config.toml --output-dir .
+        run: cargo openvm keygen --output-dir .
 
       - name: Set USE_LOCAL_OPENVM
         # `cli_init_build.sh` reads USE_LOCAL_OPENVM to decide whether to patch the

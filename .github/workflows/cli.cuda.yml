@@ -101,12 +101,6 @@ jobs:
       - name: Install openvm rust toolchain
         run: "$GITHUB_WORKSPACE/ci/install-openvm-toolchain.sh"
 
-      - name: Run app-level keygen
-        working-directory: crates/cli
-        run: |
-          export RUST_BACKTRACE=1
-          cargo openvm keygen --config ./example/app_config.toml --output-dir .
-
       - name: Run CLI proving tests (CUDA)
         # SKIP_INSTALL=1 so the tests reuse the CUDA-built cargo-openvm on PATH
         # rather than `cargo install`'ing a non-CUDA copy.
