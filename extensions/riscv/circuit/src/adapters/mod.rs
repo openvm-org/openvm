@@ -23,10 +23,11 @@ mod alu_w;
 mod alu_w_u16;
 mod branch;
 mod jalr;
-mod loadstore;
+mod load;
 mod mul;
 mod mul_w;
 mod rdwrite;
+mod store;
 
 pub use alu::*;
 pub use alu_u16::*;
@@ -34,13 +35,14 @@ pub use alu_w::*;
 pub use alu_w_u16::*;
 pub use branch::*;
 pub use jalr::*;
-pub use loadstore::*;
+pub use load::*;
 pub use mul::*;
 pub use mul_w::*;
 pub use openvm_instructions::riscv::{
     RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
 };
 pub use rdwrite::*;
+pub use store::*;
 
 /// Number of u16 limbs needed for a low-32-bit RV64 pointer.
 pub const RV64_PTR_U16_LIMBS: usize = RV64_WORD_NUM_LIMBS / 2;
@@ -49,6 +51,16 @@ pub const RV64_PTR_BITS: usize = U16_BITS * RV64_PTR_U16_LIMBS;
 /// Number of u16 limbs in a 32-bit RV64 word (e.g. an `ADDW`/`SUBW` operand, or one half of a
 /// register). Numerically equal to [`RV64_PTR_U16_LIMBS`], but named for arithmetic-word use.
 pub const RV64_WORD_U16_LIMBS: usize = RV64_WORD_NUM_LIMBS / 2;
+
+/// Load/store memory access widths in bytes.
+pub(crate) const LOAD_WIDTH_BYTE: usize = 1;
+pub(crate) const LOAD_WIDTH_HALFWORD: usize = 2;
+pub(crate) const LOAD_WIDTH_WORD: usize = 4;
+pub(crate) const LOAD_WIDTH_DOUBLEWORD: usize = 8;
+pub(crate) const STORE_WIDTH_BYTE: usize = 1;
+pub(crate) const STORE_WIDTH_HALFWORD: usize = 2;
+pub(crate) const STORE_WIDTH_WORD: usize = 4;
+pub(crate) const STORE_WIDTH_DOUBLEWORD: usize = 8;
 
 /// Packs two little-endian u8 limbs into one u16-shaped field element.
 #[inline(always)]
@@ -216,6 +228,23 @@ pub fn rv64_bytes_to_u16_block(bytes: [u8; RV64_REGISTER_NUM_LIMBS]) -> [u16; BL
     std::array::from_fn(|i| u16::from_le_bytes([bytes[2 * i], bytes[2 * i + 1]]))
 }
 
+pub(crate) const RV64_BYTE_MASK: u16 = (1 << RV64_BYTE_BITS) - 1;
+pub(crate) const RV64_BYTE_SIGN_BIT: u16 = 1 << (RV64_BYTE_BITS - 1);
+pub(crate) const RV64_U16_SIGN_BIT: u16 = 1 << (U16_BITS - 1);
+
+#[inline(always)]
+pub(crate) fn u16_cell_byte(cell: u16, byte_idx: usize) -> u16 {
+    u16::from(cell.to_le_bytes()[byte_idx])
+}
+
+#[inline(always)]
+pub(crate) fn set_u16_cell_byte(cell: u16, byte_idx: usize, byte: u16) -> u16 {
+    debug_assert!(byte <= RV64_BYTE_MASK);
+    let mut bytes = cell.to_le_bytes();
+    bytes[byte_idx] = byte as u8;
+    u16::from_le_bytes(bytes)
+}
+
 /// Converts a low-32-bit value to one zero-extended RV64 u16 block.
 #[inline(always)]
 pub fn rv64_u32_to_u16_block(value: u32) -> [u16; BLOCK_FE_WIDTH] {
@@ -369,6 +398,22 @@ pub fn memory_read<const N: usize>(memory: &GuestMemory, address_space: u32, ptr
 
     // SAFETY: reads raw storage bytes at VM byte pointers.
     unsafe { memory.read_bytes::<N>(address_space, ptr) }
+}
+
+#[inline(always)]
+pub fn memory_read_u16<const N: usize>(
+    memory: &GuestMemory,
+    address_space: u32,
+    ptr: u32,
+) -> [u16; N] {
+    debug_assert!(
+        address_space == RV64_REGISTER_AS
+            || address_space == RV64_MEMORY_AS
+            || address_space == PUBLIC_VALUES_AS,
+    );
+
+    // SAFETY: these address spaces are u16-celled and `ptr` is an AS-native cell pointer.
+    unsafe { memory.read::<u16, N>(address_space, ptr) }
 }
 
 #[inline(always)]

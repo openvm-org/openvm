@@ -2,9 +2,8 @@ use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit::{arch::*, system::memory::MemoryAuxColsFactory};
 use openvm_circuit_primitives::{
-    encoder::Encoder,
-    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
-    AlignedBorrow, ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
+    encoder::Encoder, var_range::SharedVariableRangeCheckerChip, AlignedBorrow, ColumnsAir,
+    StructReflection, StructReflectionHelper, SubAir,
 };
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, *};
 use openvm_stark_backend::{
@@ -16,36 +15,20 @@ use openvm_stark_backend::{
 
 use crate::{
     adapters::{
-        LoadInstruction, Rv64LoadAdapterFiller, Rv64LoadAdapterRecord, LOAD_WIDTH_HALFWORD,
-        LOAD_WIDTH_WORD, RV64_U16_SIGN_BIT, U16_BITS,
+        LoadInstruction, Rv64LoadAdapterFiller, Rv64LoadAdapterRecord, LOAD_WIDTH_DOUBLEWORD,
+        LOAD_WIDTH_HALFWORD, LOAD_WIDTH_WORD,
     },
-    load::LoadRecord,
+    load::common::LoadRecord,
 };
 
 const SELECTOR_MAX_DEGREE: u32 = 2;
 
-/// Static description of a signed width-aligned load chip: the single opcode it handles and the
-/// byte shifts it supports, each shift encoded as a separate selector case.
+/// Static description of a width-aligned load chip: the single opcode it handles and the byte
+/// shifts it supports, each shift encoded as a separate selector case.
 #[derive(Clone, Copy)]
-pub(crate) struct LoadSignExtendInfo {
+pub(crate) struct LoadInfo {
     opcode: Rv64LoadStoreOpcode,
     byte_shifts: &'static [usize],
-}
-
-const LOAD_SIGN_EXTEND_WORD_INFO: LoadSignExtendInfo = LoadSignExtendInfo {
-    opcode: LOADW,
-    byte_shifts: &[0, 4],
-};
-const LOAD_SIGN_EXTEND_HALFWORD_INFO: LoadSignExtendInfo = LoadSignExtendInfo {
-    opcode: LOADH,
-    byte_shifts: &[0, 2, 4, 6],
-};
-pub(crate) fn load_sign_extend_info<const LOAD_WIDTH: usize>() -> LoadSignExtendInfo {
-    match LOAD_WIDTH {
-        LOAD_WIDTH_WORD => LOAD_SIGN_EXTEND_WORD_INFO,
-        LOAD_WIDTH_HALFWORD => LOAD_SIGN_EXTEND_HALFWORD_INFO,
-        _ => unreachable!("unsupported width for signed width-aligned load"),
-    }
 }
 
 fn encoder<const SELECTOR_WIDTH: usize>(byte_shifts: &[usize]) -> Encoder {
@@ -54,54 +37,70 @@ fn encoder<const SELECTOR_WIDTH: usize>(byte_shifts: &[usize]) -> Encoder {
     encoder
 }
 
-/// Handles signed halfword and word loads. The core builds the register write from the selected
-/// read cells and sign-extends the remaining cells.
+const LOAD_DOUBLEWORD_INFO: LoadInfo = LoadInfo {
+    opcode: LOADD,
+    byte_shifts: &[0],
+};
+const LOAD_WORD_INFO: LoadInfo = LoadInfo {
+    opcode: LOADWU,
+    byte_shifts: &[0, 4],
+};
+const LOAD_HALFWORD_INFO: LoadInfo = LoadInfo {
+    opcode: LOADHU,
+    byte_shifts: &[0, 2, 4, 6],
+};
+pub(crate) fn load_info<const LOAD_WIDTH: usize>() -> LoadInfo {
+    match LOAD_WIDTH {
+        LOAD_WIDTH_DOUBLEWORD => LOAD_DOUBLEWORD_INFO,
+        LOAD_WIDTH_WORD => LOAD_WORD_INFO,
+        LOAD_WIDTH_HALFWORD => LOAD_HALFWORD_INFO,
+        _ => unreachable!("unsupported width for width-aligned load"),
+    }
+}
+
+/// Handles unsigned halfword, word, and doubleword loads. Each supported byte shift is encoded
+/// as a separate selector case.
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
-pub struct LoadSignExtendCoreCols<T, const SELECTOR_WIDTH: usize> {
+pub struct LoadCoreCols<T, const SELECTOR_WIDTH: usize> {
     pub selector: [T; SELECTOR_WIDTH],
     /// Kept as a degree-1 copy of the selector validity.
     pub is_valid: T,
-    /// The sign bit that is extended to the remaining cells.
-    pub data_most_sig_bit: T,
+    /// The 8-byte memory block containing the effective load address.
     pub read_data: [T; BLOCK_FE_WIDTH],
 }
 
 #[derive(Debug, Clone, ColumnsAir)]
-#[columns_via(LoadSignExtendCoreCols<u8, SELECTOR_WIDTH>)]
-pub struct LoadSignExtendCoreAir<const LOAD_WIDTH: usize, const SELECTOR_WIDTH: usize> {
+#[columns_via(LoadCoreCols<u8, SELECTOR_WIDTH>)]
+pub struct LoadCoreAir<const LOAD_WIDTH: usize, const SELECTOR_WIDTH: usize> {
     pub offset: usize,
     encoder: Encoder,
-    range_bus: VariableRangeCheckerBus,
 }
 
-impl<const LOAD_WIDTH: usize, const SELECTOR_WIDTH: usize>
-    LoadSignExtendCoreAir<LOAD_WIDTH, SELECTOR_WIDTH>
-{
-    pub fn new(offset: usize, range_bus: VariableRangeCheckerBus) -> Self {
+impl<const LOAD_WIDTH: usize, const SELECTOR_WIDTH: usize> LoadCoreAir<LOAD_WIDTH, SELECTOR_WIDTH> {
+    pub fn new(offset: usize) -> Self {
         Self {
             offset,
-            encoder: encoder::<SELECTOR_WIDTH>(load_sign_extend_info::<LOAD_WIDTH>().byte_shifts),
-            range_bus,
+            encoder: encoder::<SELECTOR_WIDTH>(load_info::<LOAD_WIDTH>().byte_shifts),
         }
     }
 }
 
 impl<F: Field, const LOAD_WIDTH: usize, const SELECTOR_WIDTH: usize> BaseAir<F>
-    for LoadSignExtendCoreAir<LOAD_WIDTH, SELECTOR_WIDTH>
+    for LoadCoreAir<LOAD_WIDTH, SELECTOR_WIDTH>
 {
     fn width(&self) -> usize {
-        LoadSignExtendCoreCols::<F, SELECTOR_WIDTH>::width()
+        LoadCoreCols::<F, SELECTOR_WIDTH>::width()
     }
 }
 
 impl<F: Field, const LOAD_WIDTH: usize, const SELECTOR_WIDTH: usize> BaseAirWithPublicValues<F>
-    for LoadSignExtendCoreAir<LOAD_WIDTH, SELECTOR_WIDTH>
+    for LoadCoreAir<LOAD_WIDTH, SELECTOR_WIDTH>
 {
 }
 
 impl<AB, I, const LOAD_WIDTH: usize, const SELECTOR_WIDTH: usize> VmCoreAir<AB, I>
-    for LoadSignExtendCoreAir<LOAD_WIDTH, SELECTOR_WIDTH>
+    for LoadCoreAir<LOAD_WIDTH, SELECTOR_WIDTH>
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
@@ -115,37 +114,20 @@ where
         local_core: &[AB::Var],
         _from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
-        let cols: &LoadSignExtendCoreCols<AB::Var, SELECTOR_WIDTH> = (*local_core).borrow();
-        let info = load_sign_extend_info::<LOAD_WIDTH>();
+        let cols: &LoadCoreCols<AB::Var, SELECTOR_WIDTH> = (*local_core).borrow();
+        let info = load_info::<LOAD_WIDTH>();
         let width = LOAD_WIDTH / 2;
 
         self.encoder.eval(builder, &cols.selector);
         let flags = self.encoder.flags::<AB>(&cols.selector);
         let is_valid = self.encoder.is_valid::<AB>(&cols.selector);
-
         builder.assert_eq(cols.is_valid, is_valid.clone());
-        builder.assert_bool(cols.data_most_sig_bit);
-
-        // Constrain that data_most_sig_bit matches the selected source sign cell.
-        let sign_cell =
-            info.byte_shifts
-                .iter()
-                .enumerate()
-                .fold(AB::Expr::ZERO, |acc, (i, &byte_shift)| {
-                    acc + flags[i].clone() * cols.read_data[byte_shift / 2 + width - 1]
-                });
-        self.range_bus
-            .range_check(
-                sign_cell - cols.data_most_sig_bit * AB::Expr::from_u32(RV64_U16_SIGN_BIT as u32),
-                U16_BITS - 1,
-            )
-            .eval(builder, is_valid.clone());
 
         let expected_opcode = VmCoreAir::<AB, I>::expr_to_global_expr(
             self,
             cols.is_valid * AB::Expr::from_u8(info.opcode as u8),
         );
-        let load_shift_amount = info
+        let shift_amount = info
             .byte_shifts
             .iter()
             .enumerate()
@@ -153,7 +135,6 @@ where
                 acc + flags[i].clone() * AB::Expr::from_usize(byte_shift)
             });
 
-        let sign_extend = cols.data_most_sig_bit * AB::Expr::from_u32(u16::MAX as u32);
         let write_data = std::array::from_fn(|i| {
             info.byte_shifts.iter().enumerate().fold(
                 AB::Expr::ZERO,
@@ -162,7 +143,7 @@ where
                     let term = if i < width {
                         cols.read_data[i + shift].into()
                     } else {
-                        sign_extend.clone()
+                        AB::Expr::ZERO
                     };
                     acc + flags[case_idx].clone() * term
                 },
@@ -175,7 +156,7 @@ where
             instruction: LoadInstruction {
                 is_valid: cols.is_valid.into(),
                 opcode: expected_opcode,
-                shift_amount: load_shift_amount,
+                shift_amount,
             }
             .into(),
         }
@@ -187,42 +168,40 @@ where
 }
 
 #[derive(Clone)]
-pub struct LoadSignExtendFiller<
+pub struct LoadFiller<
     A = Rv64LoadAdapterFiller,
     const LOAD_WIDTH: usize = LOAD_WIDTH_WORD,
-    const SELECTOR_WIDTH: usize = 2,
+    const SELECTOR_WIDTH: usize = 1,
 > {
     adapter: A,
     pub offset: usize,
     encoder: Encoder,
-    range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
 impl<A, const LOAD_WIDTH: usize, const SELECTOR_WIDTH: usize>
-    LoadSignExtendFiller<A, LOAD_WIDTH, SELECTOR_WIDTH>
+    LoadFiller<A, LOAD_WIDTH, SELECTOR_WIDTH>
 {
     pub fn new(
         adapter: A,
         offset: usize,
-        range_checker_chip: SharedVariableRangeCheckerChip,
+        _range_checker_chip: SharedVariableRangeCheckerChip,
     ) -> Self {
         Self {
             adapter,
             offset,
-            encoder: encoder::<SELECTOR_WIDTH>(load_sign_extend_info::<LOAD_WIDTH>().byte_shifts),
-            range_checker_chip,
+            encoder: encoder::<SELECTOR_WIDTH>(load_info::<LOAD_WIDTH>().byte_shifts),
         }
     }
 }
 
 impl<F, const LOAD_WIDTH: usize, const SELECTOR_WIDTH: usize> TraceFiller<F>
-    for LoadSignExtendFiller<Rv64LoadAdapterFiller, LOAD_WIDTH, SELECTOR_WIDTH>
+    for LoadFiller<Rv64LoadAdapterFiller, LOAD_WIDTH, SELECTOR_WIDTH>
 where
     F: PrimeField32,
 {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         // SAFETY: row_slice is guaranteed by the caller to have at least the adapter width plus
-        // LoadSignExtendCoreCols::width() elements.
+        // LoadCoreCols::width() elements.
         let (mut adapter_row, mut core_row) = unsafe {
             row_slice
                 .split_at_mut_unchecked(<Rv64LoadAdapterFiller as AdapterTraceFiller<F>>::WIDTH)
@@ -236,19 +215,13 @@ where
         // generation.
         let record: &LoadRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
         let read_data = record.read_data;
-        let core_row: &mut LoadSignExtendCoreCols<F, SELECTOR_WIDTH> = core_row.borrow_mut();
-        let case_idx = load_sign_extend_info::<LOAD_WIDTH>()
+        let core_row: &mut LoadCoreCols<F, SELECTOR_WIDTH> = core_row.borrow_mut();
+        let case_idx = load_info::<LOAD_WIDTH>()
             .byte_shifts
             .iter()
             .position(|&byte_shift| byte_shift == shift)
-            .expect("invalid signed width-aligned load shift");
+            .expect("invalid width-aligned load shift");
 
-        let width = LOAD_WIDTH / 2;
-        let sign_cell = read_data[shift / 2 + width - 1];
-        let sign_bit = sign_cell & RV64_U16_SIGN_BIT;
-        self.range_checker_chip
-            .add_count((sign_cell - sign_bit) as u32, U16_BITS - 1);
-        core_row.data_most_sig_bit = F::from_bool(sign_bit != 0);
         core_row.read_data = read_data.map(F::from_u16);
         core_row.is_valid = F::ONE;
         let pt: [u32; SELECTOR_WIDTH] = self.encoder.get_flag_pt(case_idx).try_into().unwrap();

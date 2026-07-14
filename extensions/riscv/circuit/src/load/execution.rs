@@ -20,26 +20,26 @@ use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
-use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, LOADB, LOADH, LOADW};
+use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, LOADBU, LOADD, LOADHU, LOADWU};
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::common::{load_sign_extend_width_for_opcode, LoadSignExtendExecutor};
+use super::common::{load_width_for_opcode, LoadExecutor};
 use crate::adapters::{rv64_address_add_imm, rv64_bytes_to_u32, sign_extend_imm16};
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
-struct LoadSignExtendPreCompute {
+struct LoadPreCompute {
     imm_extended: u32,
     a: u8,
     b: u8,
 }
 
-impl<A, const LOAD_WIDTH: usize> LoadSignExtendExecutor<A, LOAD_WIDTH> {
+impl<A, const LOAD_WIDTH: usize> LoadExecutor<A, LOAD_WIDTH> {
     fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
-        data: &mut LoadSignExtendPreCompute,
+        data: &mut LoadPreCompute,
     ) -> Result<(Rv64LoadStoreOpcode, bool), StaticProgramError> {
         let Instruction {
             opcode,
@@ -63,14 +63,14 @@ impl<A, const LOAD_WIDTH: usize> LoadSignExtendExecutor<A, LOAD_WIDTH> {
             opcode.local_opcode_idx(Rv64LoadStoreOpcode::CLASS_OFFSET),
         );
         match local_opcode {
-            LOADW | LOADH | LOADB
-                if load_sign_extend_width_for_opcode(local_opcode) == LOAD_WIDTH => {}
+            LOADD | LOADWU | LOADHU | LOADBU
+                if load_width_for_opcode(local_opcode) == LOAD_WIDTH => {}
             _ => return Err(StaticProgramError::InvalidInstruction(pc)),
         }
 
         let imm = c.as_canonical_u32();
         let imm_sign = g.as_canonical_u32();
-        *data = LoadSignExtendPreCompute {
+        *data = LoadPreCompute {
             imm_extended: sign_extend_imm16(imm, imm_sign),
             a: a.as_canonical_u32() as u8,
             b: b.as_canonical_u32() as u8,
@@ -82,24 +82,26 @@ impl<A, const LOAD_WIDTH: usize> LoadSignExtendExecutor<A, LOAD_WIDTH> {
 macro_rules! dispatch {
     ($execute_impl:ident, $local_opcode:ident, $enabled:ident) => {
         match ($local_opcode, $enabled) {
-            (LOADW, true) => Ok($execute_impl::<_, _, LoadWOp, true>),
-            (LOADW, false) => Ok($execute_impl::<_, _, LoadWOp, false>),
-            (LOADH, true) => Ok($execute_impl::<_, _, LoadHOp, true>),
-            (LOADH, false) => Ok($execute_impl::<_, _, LoadHOp, false>),
-            (LOADB, true) => Ok($execute_impl::<_, _, LoadBOp, true>),
-            (LOADB, false) => Ok($execute_impl::<_, _, LoadBOp, false>),
+            (LOADD, true) => Ok($execute_impl::<_, _, LoadDOp, true>),
+            (LOADD, false) => Ok($execute_impl::<_, _, LoadDOp, false>),
+            (LOADWU, true) => Ok($execute_impl::<_, _, LoadWUOp, true>),
+            (LOADWU, false) => Ok($execute_impl::<_, _, LoadWUOp, false>),
+            (LOADHU, true) => Ok($execute_impl::<_, _, LoadHUOp, true>),
+            (LOADHU, false) => Ok($execute_impl::<_, _, LoadHUOp, false>),
+            (LOADBU, true) => Ok($execute_impl::<_, _, LoadBUOp, true>),
+            (LOADBU, false) => Ok($execute_impl::<_, _, LoadBUOp, false>),
             _ => Err(StaticProgramError::InvalidInstruction(0)),
         }
     };
 }
 
-impl<F, A, const LOAD_WIDTH: usize> InterpreterExecutor<F> for LoadSignExtendExecutor<A, LOAD_WIDTH>
+impl<F, A, const LOAD_WIDTH: usize> InterpreterExecutor<F> for LoadExecutor<A, LOAD_WIDTH>
 where
     F: PrimeField32,
 {
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
-        size_of::<LoadSignExtendPreCompute>()
+        size_of::<LoadPreCompute>()
     }
 
     #[cfg(not(feature = "tco"))]
@@ -110,7 +112,7 @@ where
         inst: &Instruction<F>,
         data: &mut [u8],
     ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
-        let pre_compute: &mut LoadSignExtendPreCompute = data.borrow_mut();
+        let pre_compute: &mut LoadPreCompute = data.borrow_mut();
         let (local_opcode, enabled) = self.pre_compute_impl(pc, inst, pre_compute)?;
         dispatch!(execute_e1_handler, local_opcode, enabled)
     }
@@ -125,19 +127,18 @@ where
     where
         Ctx: ExecutionCtxTrait,
     {
-        let pre_compute: &mut LoadSignExtendPreCompute = data.borrow_mut();
+        let pre_compute: &mut LoadPreCompute = data.borrow_mut();
         let (local_opcode, enabled) = self.pre_compute_impl(pc, inst, pre_compute)?;
         dispatch!(execute_e1_handler, local_opcode, enabled)
     }
 }
 
-impl<F, A, const LOAD_WIDTH: usize> InterpreterMeteredExecutor<F>
-    for LoadSignExtendExecutor<A, LOAD_WIDTH>
+impl<F, A, const LOAD_WIDTH: usize> InterpreterMeteredExecutor<F> for LoadExecutor<A, LOAD_WIDTH>
 where
     F: PrimeField32,
 {
     fn metered_pre_compute_size(&self) -> usize {
-        size_of::<E2PreCompute<LoadSignExtendPreCompute>>()
+        size_of::<E2PreCompute<LoadPreCompute>>()
     }
 
     #[cfg(not(feature = "tco"))]
@@ -151,7 +152,7 @@ where
     where
         Ctx: MeteredExecutionCtxTrait,
     {
-        let pre_compute: &mut E2PreCompute<LoadSignExtendPreCompute> = data.borrow_mut();
+        let pre_compute: &mut E2PreCompute<LoadPreCompute> = data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
         let (local_opcode, enabled) = self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
         dispatch!(execute_e2_handler, local_opcode, enabled)
@@ -168,7 +169,7 @@ where
     where
         Ctx: MeteredExecutionCtxTrait,
     {
-        let pre_compute: &mut E2PreCompute<LoadSignExtendPreCompute> = data.borrow_mut();
+        let pre_compute: &mut E2PreCompute<LoadPreCompute> = data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
         let (local_opcode, enabled) = self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
         dispatch!(execute_e2_handler, local_opcode, enabled)
@@ -179,10 +180,10 @@ where
 unsafe fn execute_e12_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,
-    OP: LoadSignExtendOp,
+    OP: LoadOp,
     const ENABLED: bool,
 >(
-    pre_compute: &LoadSignExtendPreCompute,
+    pre_compute: &LoadPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
     let pc = exec_state.pc();
@@ -202,7 +203,7 @@ unsafe fn execute_e12_impl<
     if !OP::compute_write_data(&mut write_data, read_data, shift_amount as usize) {
         return Err(ExecutionError::Fail {
             pc,
-            msg: "Invalid signed load",
+            msg: "Invalid load",
         });
     }
 
@@ -219,14 +220,14 @@ unsafe fn execute_e12_impl<
 unsafe fn execute_e1_impl<
     F: PrimeField32,
     CTX: ExecutionCtxTrait,
-    OP: LoadSignExtendOp,
+    OP: LoadOp,
     const ENABLED: bool,
 >(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
-    let pre_compute: &LoadSignExtendPreCompute =
-        std::slice::from_raw_parts(pre_compute, size_of::<LoadSignExtendPreCompute>()).borrow();
+    let pre_compute: &LoadPreCompute =
+        std::slice::from_raw_parts(pre_compute, size_of::<LoadPreCompute>()).borrow();
     execute_e12_impl::<F, CTX, OP, ENABLED>(pre_compute, exec_state)
 }
 
@@ -235,24 +236,21 @@ unsafe fn execute_e1_impl<
 unsafe fn execute_e2_impl<
     F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,
-    OP: LoadSignExtendOp,
+    OP: LoadOp,
     const ENABLED: bool,
 >(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
-    let pre_compute: &E2PreCompute<LoadSignExtendPreCompute> = std::slice::from_raw_parts(
-        pre_compute,
-        size_of::<E2PreCompute<LoadSignExtendPreCompute>>(),
-    )
-    .borrow();
+    let pre_compute: &E2PreCompute<LoadPreCompute> =
+        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<LoadPreCompute>>()).borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
     execute_e12_impl::<F, CTX, OP, ENABLED>(&pre_compute.data, exec_state)
 }
 
-trait LoadSignExtendOp {
+trait LoadOp {
     /// Return if the operation is valid.
     fn compute_write_data(
         write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
@@ -261,11 +259,24 @@ trait LoadSignExtendOp {
     ) -> bool;
 }
 
-struct LoadWOp;
-struct LoadHOp;
-struct LoadBOp;
+struct LoadDOp;
+struct LoadWUOp;
+struct LoadHUOp;
+struct LoadBUOp;
 
-impl LoadSignExtendOp for LoadWOp {
+impl LoadOp for LoadDOp {
+    #[inline(always)]
+    fn compute_write_data(
+        write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
+        read_data: [u8; RV64_REGISTER_NUM_LIMBS],
+        _shift_amount: usize,
+    ) -> bool {
+        *write_data = read_data;
+        true
+    }
+}
+
+impl LoadOp for LoadWUOp {
     #[inline(always)]
     fn compute_write_data(
         write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
@@ -275,18 +286,15 @@ impl LoadSignExtendOp for LoadWOp {
         if shift_amount != 0 && shift_amount != 4 {
             return false;
         }
-        let word = i32::from_le_bytes([
-            read_data[shift_amount],
-            read_data[shift_amount + 1],
-            read_data[shift_amount + 2],
-            read_data[shift_amount + 3],
-        ]);
-        *write_data = (word as i64).to_le_bytes();
+        write_data[0] = read_data[shift_amount];
+        write_data[1] = read_data[shift_amount + 1];
+        write_data[2] = read_data[shift_amount + 2];
+        write_data[3] = read_data[shift_amount + 3];
         true
     }
 }
 
-impl LoadSignExtendOp for LoadHOp {
+impl LoadOp for LoadHUOp {
     #[inline(always)]
     fn compute_write_data(
         write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
@@ -296,21 +304,20 @@ impl LoadSignExtendOp for LoadHOp {
         if shift_amount != 0 && shift_amount != 2 && shift_amount != 4 && shift_amount != 6 {
             return false;
         }
-        let half = i16::from_le_bytes([read_data[shift_amount], read_data[shift_amount + 1]]);
-        *write_data = (half as i64).to_le_bytes();
+        write_data[0] = read_data[shift_amount];
+        write_data[1] = read_data[shift_amount + 1];
         true
     }
 }
 
-impl LoadSignExtendOp for LoadBOp {
+impl LoadOp for LoadBUOp {
     #[inline(always)]
     fn compute_write_data(
         write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
         read_data: [u8; RV64_REGISTER_NUM_LIMBS],
         shift_amount: usize,
     ) -> bool {
-        let byte = read_data[shift_amount] as i8;
-        *write_data = (byte as i64).to_le_bytes();
+        write_data[0] = read_data[shift_amount];
         true
     }
 }
