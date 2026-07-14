@@ -110,6 +110,9 @@ cuda = [
 ]
 halo2-gpu = ["cuda", "openvm-static-verifier?/halo2-gpu"]
 cell-profiling = ["evm-prove", "openvm-static-verifier/cell-profiling"]
+# Compiles the full EVM/Halo2 feature surface while skipping expensive
+# end-to-end proof tests that are covered by the CUDA+Halo2 SDK test lane.
+skip-heavy-sdk-proof-tests = []
 
 [[example]]
 name = "sdk_app"

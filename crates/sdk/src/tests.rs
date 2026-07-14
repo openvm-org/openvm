@@ -377,6 +377,10 @@ fn prove_and_verify_e2e(
 }
 
 #[test]
+#[cfg_attr(
+    feature = "skip-heavy-sdk-proof-tests",
+    ignore = "covered by the CUDA+Halo2 SDK test lane"
+)]
 fn test_sdk_fibonacci() -> Result<()> {
     setup_tracing();
     let (sdk, _, _) = make_fib_sdk();
@@ -394,6 +398,10 @@ fn test_sdk_fibonacci() -> Result<()> {
 }
 
 #[test]
+#[cfg_attr(
+    feature = "skip-heavy-sdk-proof-tests",
+    ignore = "covered by the CUDA+Halo2 SDK test lane"
+)]
 fn test_verify_stark_deferral() -> Result<()> {
     setup_tracing();
     let (fib_sdk, app_params, agg_params) = make_fib_sdk();
@@ -412,6 +420,10 @@ fn test_verify_stark_deferral() -> Result<()> {
 }
 
 #[test]
+#[cfg_attr(
+    feature = "skip-heavy-sdk-proof-tests",
+    ignore = "covered by the CUDA+Halo2 SDK test lane"
+)]
 fn test_verify_many_deferrals() -> Result<()> {
     setup_tracing();
     const NUM_DEFERRAL_CIRCUITS: usize = 5;
@@ -446,6 +458,10 @@ fn test_verify_many_deferrals() -> Result<()> {
 }
 
 #[test]
+#[cfg_attr(
+    feature = "skip-heavy-sdk-proof-tests",
+    ignore = "covered by the CUDA+Halo2 SDK test lane"
+)]
 fn test_verify_stark_path_sdk_can_verify_own_proofs() -> Result<()> {
     setup_tracing();
     let (app_params, agg_params, _) = get_params();
@@ -472,6 +488,10 @@ fn test_verify_stark_path_sdk_can_verify_own_proofs() -> Result<()> {
 }
 
 #[test]
+#[cfg_attr(
+    feature = "skip-heavy-sdk-proof-tests",
+    ignore = "covered by the CUDA+Halo2 SDK test lane"
+)]
 fn test_deferrals_enabled_without_usage() -> Result<()> {
     setup_tracing();
     let (fib_sdk, app_params, agg_params) = make_fib_sdk();
@@ -615,6 +635,10 @@ fn test_sdk_compiled_metered_cost_execute() -> Result<()> {
 }
 
 #[test]
+#[cfg_attr(
+    feature = "skip-heavy-sdk-proof-tests",
+    ignore = "covered by the CUDA+Halo2 SDK test lane"
+)]
 fn test_deferral_aware_sdk_with_odd_children() -> Result<()> {
     setup_tracing();
     let n_stack = 16;
@@ -654,6 +678,10 @@ fn test_deferral_aware_sdk_with_odd_children() -> Result<()> {
 }
 
 #[test]
+#[cfg_attr(
+    feature = "skip-heavy-sdk-proof-tests",
+    ignore = "covered by the CUDA+Halo2 SDK test lane"
+)]
 fn test_verify_stark_with_deferral_child() -> Result<()> {
     setup_tracing();
     let (fib_sdk, app_params, agg_params) = make_fib_sdk();
@@ -710,6 +738,10 @@ fn test_verify_stark_with_deferral_child() -> Result<()> {
 }
 
 #[test]
+#[cfg_attr(
+    feature = "skip-heavy-sdk-proof-tests",
+    ignore = "covered by the CUDA+Halo2 SDK test lane"
+)]
 fn test_prove_mixed_vm_def_depth_mismatch() -> Result<()> {
     setup_tracing();
     let (fib_sdk, app_params, agg_params) = make_fib_sdk();
@@ -784,6 +816,10 @@ fn test_prove_mixed_vm_def_depth_mismatch() -> Result<()> {
 }
 
 #[test]
+#[cfg_attr(
+    feature = "skip-heavy-sdk-proof-tests",
+    ignore = "covered by the CUDA+Halo2 SDK test lane"
+)]
 fn test_deferral_aware_and_active_have_equivalent_vks() -> Result<()> {
     setup_tracing();
     let n_stack = 19;

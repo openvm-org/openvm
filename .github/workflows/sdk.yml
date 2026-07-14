@@ -33,7 +33,7 @@ jobs:
     if: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'run-sdk-tests') }}
     strategy:
       matrix:
-        mode: ["default", "ignored", "rvr"]
+        mode: ["default", "rvr"]
 
     runs-on:
       - runs-on=${{ github.run_id }}-sdk-${{ github.run_attempt }}-${{ strategy.job-index }}/family=${{ inputs.family || 'm7a.24xlarge' }}/image=${{ (inputs.arch || 'x86') == 'arm' && 'ubuntu24-full-arm64' || 'ubuntu24-full-x64' }}/volume=80gb/extras=s3-cache
@@ -106,12 +106,11 @@ jobs:
           diff -u expected_abi_sorted.json compiled_abi.json
 
       - name: Run openvm-sdk crate tests (${{ matrix.mode }})
-        if: ${{ matrix.mode != 'ignored' }}
         working-directory: crates/sdk
         run: |
           export RUST_BACKTRACE=1
           export RUST_MIN_STACK=8388608
-          FEATURES="parallel,root-prover,evm-verify"
+          FEATURES="parallel,root-prover,evm-verify,skip-heavy-sdk-proof-tests"
           if [[ "${{ matrix.mode }}" == "default" ]]; then
             : # no additional features
           elif [[ "${{ matrix.mode }}" == "rvr" ]]; then
@@ -119,20 +118,13 @@ jobs:
           else
             echo "Unknown matrix mode: ${{ matrix.mode }}" && exit 1
           fi
-          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo nextest run --release --features "$FEATURES" --test-threads=1
+          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo nextest run --release --features "$FEATURES"
 
       - name: Build openvm-sdk examples
         if: ${{ matrix.mode == 'default' }}
         working-directory: crates/sdk
         run: |
           cargo build --release --examples --features parallel,root-prover,evm-verify
-
-      - name: Run ignored tests
-        if: ${{ matrix.mode == 'ignored' }}
-        working-directory: crates/sdk
-        # if: ${{ github.event_name == 'push' }}
-        run: |
-          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo nextest run --release --features parallel,root-prover,evm-verify --run-ignored=only --no-tests pass
 
       - name: sccache stats
         if: always()

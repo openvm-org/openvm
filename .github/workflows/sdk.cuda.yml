@@ -22,7 +22,7 @@ jobs:
   cuda-backend:
     name: sdk cuda tests
     runs-on:
-      - runs-on=${{ github.run_id }}/image=ubuntu24-gpu-x64/family=g6.*+g5+g6e/cpu=4+32/volume=40gb/spot=capacity-optimized/extras=s3-cache
+      - runs-on=${{ github.run_id }}/image=ubuntu24-gpu-x64/family=g6.*+g5+g6e/cpu=4+32/volume=80gb/spot=capacity-optimized/extras=s3-cache
     steps:
       - uses: runs-on/action@v2
         with:
@@ -39,6 +39,11 @@ jobs:
       - uses: ./.github/actions/sccache
       - uses: ./.github/actions/rust-cache-cuda
       - uses: taiki-e/install-action@nextest
+      - name: Install architecture specific tools
+        run: |
+          source ci/scripts/utils.sh
+          install_s5cmd
+
       - name: Verify GPU setup
         run: |
           nvidia-smi
@@ -59,11 +64,16 @@ jobs:
             exit 1
           fi
 
+      - name: Setup halo2
+        working-directory: crates/sdk
+        run: |
+          bash ../../scripts/trusted_setup_s3.sh
+
       - name: Run SDK CUDA tests
         working-directory: crates/sdk
         run: |
           "$GITHUB_WORKSPACE/ci/install-openvm-toolchain.sh"
-          cargo nextest run --cargo-profile=fast --features cuda,root-prover --test-threads=1
+          cargo nextest run --cargo-profile=fast --features cuda,root-prover,evm-verify,halo2-gpu --test-threads=1
 
       - name: sccache stats
         if: always()
