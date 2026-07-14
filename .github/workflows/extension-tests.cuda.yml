@@ -16,9 +16,9 @@ on:
   workflow_dispatch:
     inputs:
       machine_type:
-        description: "Runner label fragment (e.g. image=ubuntu24-gpu-x64/family=g7e.*+g7.*+g6e.*/cpu=8+16/ram=64/volume=40gb/spot=capacity-optimized)"
+        description: "Runner label fragment (e.g. image=ubuntu24-gpu-x64/family=g7.4xlarge+g6.4xlarge/volume=40gb/spot=capacity-optimized)"
         required: false
-        default: image=ubuntu24-gpu-x64/family=g7e.*+g7.*+g6e.*/cpu=8+16/ram=64/volume=40gb/spot=capacity-optimized
+        default: image=ubuntu24-gpu-x64/family=g7.4xlarge+g6.4xlarge/volume=40gb/spot=capacity-optimized
 
 concurrency:
   group: ${{ github.workflow_ref }}-extension-tests-cuda-${{ github.event.pull_request.number || github.sha }}
@@ -36,7 +36,7 @@ jobs:
           - "riscv"
           - "keccak256 sha2 bigint algebra ecc pairing deferral"
     runs-on:
-      - runs-on=${{ github.run_id }}-extension-tests-cuda-${{ github.run_attempt }}-${{ strategy.job-index }}/${{ github.event_name == 'workflow_dispatch' && github.event.inputs.machine_type || 'image=ubuntu24-gpu-x64/family=g7e.*+g7.*+g6e.*/cpu=8+16/ram=64/volume=40gb/spot=capacity-optimized' }}/extras=s3-cache
+      - runs-on=${{ github.run_id }}-extension-tests-cuda-${{ github.run_attempt }}-${{ strategy.job-index }}/${{ github.event_name == 'workflow_dispatch' && github.event.inputs.machine_type || 'image=ubuntu24-gpu-x64/family=g7.4xlarge+g6.4xlarge/volume=40gb/spot=capacity-optimized' }}/extras=s3-cache
 
     steps:
       - uses: runs-on/action@v2

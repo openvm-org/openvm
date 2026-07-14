@@ -104,7 +104,7 @@ jobs:
   build-linux-cuda-release:
     name: Build x86_64-unknown-linux-gnu CUDA ${{ matrix.cuda_version }}
     runs-on:
-      - runs-on=${{ github.run_id }}-${{ github.run_attempt }}-cargo-openvm-linux-x64-cuda-${{ matrix.cuda_package_version }}/image=ubuntu24-gpu-x64/family=g7e.*+g7.*+g6e.*/cpu=8+16/ram=64/volume=80gb/spot=capacity-optimized/extras=s3-cache
+      - runs-on=${{ github.run_id }}-${{ github.run_attempt }}-cargo-openvm-linux-x64-cuda-${{ matrix.cuda_package_version }}/image=ubuntu24-gpu-x64/family=g7.2xlarge+g6.2xlarge/volume=80gb/spot=capacity-optimized/extras=s3-cache
     strategy:
       fail-fast: false
       matrix:

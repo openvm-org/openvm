@@ -9,13 +9,9 @@ images:
 runners:
   # runners for running tests
   test-gpu-nvidia:
-    family: ["g7e.*", "g7.*", "g6e.*"]
-    cpu: [8, 16]
-    ram: [64]
+    family: ["g7.4xlarge", "g6.4xlarge"]
     image: ubuntu24-gpu-x64
     spot: capacity-optimized
     extras: s3-cache
     preinstall: |
-      nvidia-smi
-      nvidia-smi -L
       echo 'CUDA_ARCH=86,89,120' >> $GITHUB_ENV

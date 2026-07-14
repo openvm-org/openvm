@@ -110,7 +110,7 @@ jobs:
         run: |
           export RUST_BACKTRACE=1
           export RUST_MIN_STACK=8388608
-          FEATURES="parallel,root-prover,evm-verify,skip-heavy-sdk-proof-tests"
+          FEATURES="parallel,root-prover,evm-verify"
           if [[ "${{ matrix.mode }}" == "default" ]]; then
             : # no additional features
           elif [[ "${{ matrix.mode }}" == "rvr" ]]; then
