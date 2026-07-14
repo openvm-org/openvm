@@ -7,8 +7,8 @@ name: SDK Parameter Sweep
 # sdk.cuda.yml.
 #
 # NOTE: `family` and `arch` must be consistent — `x86`/`arm` require a matching
-# CPU EC2 family (e.g. `m7a.24xlarge` / `c8g.24xlarge`), and `x86-gpu` requires
-# a GPU family (e.g. `g6e.2xlarge`).
+# CPU EC2 family (e.g. `m8a.24xlarge+m8i.24xlarge` / `c9g.4xlarge+c8g.4xlarge`), and `x86-gpu` requires
+# a GPU family (e.g. `g7.4xlarge+g6e.2xlarge`).
 
 on:
   workflow_dispatch:
@@ -32,7 +32,7 @@ on:
       family:
         description: "EC2 instance family (must match selected arch)"
         type: string
-        default: "g6e.2xlarge"
+        default: "g7.4xlarge+g6e.2xlarge"
       test_name:
         description: "Comma-separated test filters passed to --test-name"
         type: string
@@ -111,6 +111,12 @@ jobs:
         if: ${{ matrix.mode != 'cuda' }}
         with:
           cache-on-failure: true
+
+      # TODO: remove once https://github.com/runs-on/runner-images-for-aws/issues/55 is fixed
+      - name: Setup GPU driver
+        if: ${{ matrix.mode == 'cuda' }}
+        run: bash ./scripts/gpu_driver_setup.sh
+
       - uses: ./.github/actions/rust-cache-cuda
         if: ${{ matrix.mode == 'cuda' }}
       - uses: taiki-e/install-action@nextest

@@ -28,18 +28,18 @@ jobs:
   build-linux-release:
     name: Build ${{ matrix.target }}
     runs-on:
-      - runs-on=${{ github.run_id }}-${{ github.run_attempt }}-cargo-openvm-${{ matrix.arch }}/runner=${{ matrix.runner }}/image=${{ matrix.image }}/volume=80gb/extras=s3-cache
+      - runs-on=${{ github.run_id }}-${{ github.run_attempt }}-cargo-openvm-${{ matrix.arch }}/family=${{ matrix.family }}/image=${{ matrix.image }}/volume=80gb/extras=s3-cache
     strategy:
       fail-fast: false
       matrix:
         include:
           - target: x86_64-unknown-linux-gnu
             arch: linux-x64
-            runner: 64cpu-linux-x64
+            family: c8i-flex.16xlarge+c8i.16xlarge+c8a.16xlarge+c7i.16xlarge+c7a.16xlarge
             image: ubuntu24-full-x64
           - target: aarch64-unknown-linux-gnu
             arch: linux-arm64
-            runner: 16cpu-linux-arm64
+            family: c9g.4xlarge+c8g.4xlarge
             image: ubuntu24-full-arm64
     steps:
       - uses: runs-on/action@v2
@@ -104,7 +104,7 @@ jobs:
   build-linux-cuda-release:
     name: Build x86_64-unknown-linux-gnu CUDA ${{ matrix.cuda_version }}
     runs-on:
-      - runs-on=${{ github.run_id }}-${{ github.run_attempt }}-cargo-openvm-linux-x64-cuda-${{ matrix.cuda_package_version }}/image=ubuntu24-gpu-x64/family=g6.*+g5+g6e/cpu=4+32/volume=80gb/spot=capacity-optimized/extras=s3-cache
+      - runs-on=${{ github.run_id }}-${{ github.run_attempt }}-cargo-openvm-linux-x64-cuda-${{ matrix.cuda_package_version }}/image=ubuntu24-gpu-x64/family=g7.2xlarge+g6.2xlarge+g5.2xlarge/volume=80gb/spot=price-capacity-optimized/extras=s3-cache
     strategy:
       fail-fast: false
       matrix:
@@ -129,7 +129,11 @@ jobs:
         with:
           targets: x86_64-unknown-linux-gnu
       - uses: ./.github/actions/sccache
-      - uses: Swatinem/rust-cache@v2
+      # TODO: remove once https://github.com/runs-on/runner-images-for-aws/issues/55 is fixed
+      - name: Setup GPU driver
+        run: bash ./scripts/gpu_driver_setup.sh
+
+      - uses: ./.github/actions/rust-cache-cuda
         with:
           cache-on-failure: true
           key: release-cuda-${{ matrix.cuda_version }}

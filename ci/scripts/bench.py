@@ -1,7 +1,21 @@
 import argparse
 import os
+import re
 import shutil
 import subprocess
+
+
+def resolve_native_target_cpu(toolchain):
+    target_cpus = subprocess.run(
+        ["rustc", toolchain, "--print", "target-cpus"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    match = re.search(r"^\s*native.*\(currently ([^)]+)\)", target_cpus, re.MULTILINE)
+    if match is None:
+        raise RuntimeError(f"failed to resolve native CPU using rustc {toolchain}")
+    return match.group(1)
 
 
 def run_cargo_command(
@@ -54,7 +68,12 @@ def run_cargo_command(
     # Prepare the environment variables
     env = os.environ.copy()  # Copy current environment variables
     env["OUTPUT_PATH"] = output_path
-    env["RUSTFLAGS"] = "-Ctarget-cpu=native"
+    rustflags = env.get("RUSTFLAGS", "").strip()
+    if "target-cpu" not in rustflags:
+        target_cpu = resolve_native_target_cpu(toolchain)
+        print(f"Resolved target CPU: {target_cpu}")
+        rustflags = f"{rustflags} -Ctarget-cpu={target_cpu}".strip()
+    env["RUSTFLAGS"] = rustflags
     if "perf-metrics" in feature_flags:
         env["GUEST_SYMBOLS_PATH"] = os.path.splitext(output_path)[0] + ".syms"
 

@@ -7,7 +7,7 @@
       "e2e_bench": false,
       "run_params": [
         {
-          "instance_type": "g6.2xlarge",
+          "instance_type": "g7.4xlarge",
           "memory_allocator": "jemalloc"
         }
       ]
@@ -19,7 +19,7 @@
       "e2e_bench": false,
       "run_params": [
         {
-          "instance_type": "g6.2xlarge",
+          "instance_type": "g7.4xlarge",
           "memory_allocator": "jemalloc"
         }
       ]
@@ -31,7 +31,7 @@
       "e2e_bench": false,
       "run_params": [
         {
-          "instance_type": "g6.2xlarge",
+          "instance_type": "g7.4xlarge",
           "memory_allocator": "jemalloc"
         }
       ]
@@ -43,7 +43,7 @@
       "e2e_bench": false,
       "run_params": [
         {
-          "instance_type": "g6.2xlarge",
+          "instance_type": "g7.4xlarge",
           "memory_allocator": "jemalloc"
         }
       ]
@@ -55,7 +55,7 @@
       "e2e_bench": false,
       "run_params": [
         {
-          "instance_type": "g6.2xlarge",
+          "instance_type": "g7.4xlarge",
           "memory_allocator": "jemalloc"
         }
       ]
@@ -67,7 +67,7 @@
       "e2e_bench": false,
       "run_params": [
         {
-          "instance_type": "g6.2xlarge",
+          "instance_type": "g7.4xlarge",
           "memory_allocator": "jemalloc"
         }
       ]
@@ -79,7 +79,7 @@
       "e2e_bench": false,
       "run_params": [
         {
-          "instance_type": "g6.2xlarge",
+          "instance_type": "g7.4xlarge",
           "memory_allocator": "jemalloc"
         }
       ]
@@ -91,7 +91,7 @@
       "e2e_bench": true,
       "run_params": [
         {
-          "instance_type": "g6e.4xlarge",
+          "instance_type": "g7.4xlarge",
           "memory_allocator": "jemalloc"
         }
       ]
@@ -103,7 +103,7 @@
       "e2e_bench": true,
       "run_params": [
         {
-          "instance_type": "g6e.4xlarge",
+          "instance_type": "g7.4xlarge",
           "memory_allocator": "jemalloc"
         }
       ]
@@ -115,7 +115,7 @@
       "e2e_bench": true,
       "run_params": [
         {
-          "instance_type": "g6e.4xlarge",
+          "instance_type": "g7.4xlarge",
           "memory_allocator": "jemalloc"
         }
       ]
@@ -127,7 +127,7 @@
       "e2e_bench": true,
       "run_params": [
         {
-          "instance_type": "g6e.4xlarge",
+          "instance_type": "g7.4xlarge",
           "memory_allocator": "jemalloc"
         }
       ]
@@ -139,7 +139,7 @@
       "e2e_bench": true,
       "run_params": [
         {
-          "instance_type": "g6e.4xlarge",
+          "instance_type": "g7.4xlarge",
           "memory_allocator": "jemalloc"
         }
       ]
