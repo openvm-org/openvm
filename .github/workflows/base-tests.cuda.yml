@@ -9,8 +9,11 @@ on:
     branches: ["**"]
     paths:
       - "crates/circuits/**"
+      - "crates/toolchain/instructions/**"
+      - "crates/toolchain/platform/**"
       - "crates/vm/**"
       - "Cargo.toml"
+      - "Cargo.lock"
       - ".github/workflows/base-tests.cuda.yml"
 
 concurrency:

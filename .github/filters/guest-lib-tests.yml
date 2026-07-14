@@ -52,5 +52,6 @@ verify-stark:
   - *shared
   - "crates/recursion/**"
   - "crates/continuations/**"
+  - "crates/verify/**"
   - "extensions/deferral/**"
   - "guest-libs/verify-stark/**"

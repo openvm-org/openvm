@@ -30,6 +30,7 @@ algebra: &algebra
 ecc:
   - *algebra
   - "crates/sdk/**"
+  - "crates/sdk-config/**"
 pairing:
   - *riscv
   - "extensions/algebra/**"
