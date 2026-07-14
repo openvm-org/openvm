@@ -43,7 +43,7 @@ jobs:
           - { name: "p256", path: "p256", rvr: true }
           - { name: "pairing", path: "pairing", rvr: true }
         platform:
-          - { family: "m8i-flex.16xlarge+m8i.16xlarge+m8a.16xlarge", image: "ubuntu24-full-x64" }
+          - { family: "c8i-flex.16xlarge+c8i.16xlarge+c8a.16xlarge+c7i.16xlarge+c7a.16xlarge", image: "ubuntu24-full-x64" }
       # Ensure tests run in parallel even if one fails
       fail-fast: false
 

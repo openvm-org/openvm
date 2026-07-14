@@ -37,7 +37,7 @@ jobs:
   lint:
     name: Lint
     runs-on:
-      - runs-on=${{ github.run_id }}-cpu/family=m8i-flex.16xlarge+m8i.16xlarge+m8a.16xlarge/image=ubuntu24-full-x64/volume=80gb/extras=s3-cache
+      - runs-on=${{ github.run_id }}-cpu/family=c8i-flex.16xlarge+c8i.16xlarge+c8a.16xlarge+c7i.16xlarge+c7a.16xlarge/image=ubuntu24-full-x64/volume=80gb/extras=s3-cache
     steps:
       - uses: runs-on/action@v2
         with:
@@ -119,7 +119,7 @@ jobs:
   docs:
     name: Check Docs
     runs-on:
-      - runs-on=${{ github.run_id }}-docs/family=m8i-flex.8xlarge+m8i.8xlarge+m8a.8xlarge/image=ubuntu24-full-x64/extras=s3-cache
+      - runs-on=${{ github.run_id }}-docs/family=c8i-flex.8xlarge+c8i.8xlarge+c8a.8xlarge+c7i.8xlarge+c7a.8xlarge/image=ubuntu24-full-x64/extras=s3-cache
     steps:
       - uses: runs-on/action@v2
         with:

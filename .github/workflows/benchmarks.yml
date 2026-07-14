@@ -64,7 +64,7 @@ permissions:
 jobs:
   create-matrix:
     runs-on:
-      - runs-on=${{ github.run_id }}/family=m8i-flex.2xlarge+m8i.2xlarge+m8a.2xlarge/image=ubuntu24-full-x64
+      - runs-on=${{ github.run_id }}/family=c8i-flex.2xlarge+c8i.2xlarge+c8a.2xlarge+c7i.2xlarge+c7a.2xlarge/image=ubuntu24-full-x64
     outputs:
       matrix: ${{ steps.create-matrix.outputs.matrix }}
     steps:
@@ -141,7 +141,7 @@ jobs:
   summarize:
     needs: [create-matrix, benchmark]
     runs-on:
-      - runs-on=${{ github.run_id }}/family=m8i-flex.2xlarge+m8i.2xlarge+m8a.2xlarge/image=ubuntu24-full-x64/extras=s3-cache
+      - runs-on=${{ github.run_id }}/family=c8i-flex.2xlarge+c8i.2xlarge+c8a.2xlarge+c7i.2xlarge+c7a.2xlarge/image=ubuntu24-full-x64/extras=s3-cache
     steps:
       - uses: runs-on/action@v2
         with:

@@ -21,7 +21,7 @@ jobs:
   tests:
     name: Static verifier tests
     runs-on:
-      - runs-on=${{ github.run_id }}-static-verifier-${{ github.run_attempt }}/family=m8i-flex.16xlarge+m8i.16xlarge+m8a.16xlarge/image=ubuntu24-full-x64/extras=s3-cache
+      - runs-on=${{ github.run_id }}-static-verifier-${{ github.run_attempt }}/family=c8i-flex.16xlarge+c8i.16xlarge+c8a.16xlarge+c7i.16xlarge+c7a.16xlarge/image=ubuntu24-full-x64/extras=s3-cache
 
     steps:
       - uses: runs-on/action@v2
