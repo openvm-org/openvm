@@ -14,7 +14,7 @@ on:
         type: boolean
 
 concurrency:
-  group: ${{ github.workflow_ref }}-release-binaries-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow_ref }}-release-binaries-${{ inputs.version }}
   cancel-in-progress: true
 
 permissions:

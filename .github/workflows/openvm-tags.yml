@@ -9,7 +9,7 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - "docs"
+      - "docs/**"
       - ".github/workflows/openvm-tags.yml"
       - "ci/scripts/check_openvm_tags.sh"
 

@@ -18,6 +18,7 @@ on:
       - ".github/workflows/benchmark-call.yml"
       - ".github/workflows/benchmarks.yml"
       - "Cargo.toml"
+      - "Cargo.lock"
   pull_request:
     types: [opened, synchronize, reopened, labeled]
     branches: ["**"]
@@ -29,6 +30,7 @@ on:
       - ".github/workflows/benchmark-call.yml"
       - ".github/workflows/benchmarks.yml"
       - "Cargo.toml"
+      - "Cargo.lock"
   workflow_dispatch:
     inputs:
       flamegraphs:
@@ -43,7 +45,7 @@ on:
         default: false
 
 concurrency:
-  group: ${{ github.workflow_ref }}-benchmarks-${{ github.event.pull_request.number || github.sha }}
+  group: ${{ github.workflow_ref }}-benchmarks-${{ github.event.action == 'labeled' && github.event.label.name != 'run-benchmark' && github.event.label.name != 'run-benchmark-e2e' && github.run_id || github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
 env:
