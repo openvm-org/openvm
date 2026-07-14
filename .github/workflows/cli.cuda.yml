@@ -32,6 +32,7 @@ on:
   pull_request:
     branches: ["**"]
     paths:
+      - "crates/toolchain/build/**"
       - "crates/cli/**"
       - "examples/verify-stark/**"
       - ".github/workflows/cli.cuda.yml"
@@ -92,6 +93,9 @@ jobs:
         run: |
           cargo build --locked --profile fast -p cargo-openvm --features cuda,halo2-gpu
           echo "${{ github.workspace }}/target/fast" >> $GITHUB_PATH
+
+      - name: Install openvm rust toolchain
+        run: "$GITHUB_WORKSPACE/ci/install-openvm-toolchain.sh"
 
       - name: Build and run book examples
         working-directory: examples
@@ -200,6 +204,9 @@ jobs:
         run: |
           cargo build --locked --profile fast -p cargo-openvm --features cuda,halo2-gpu
           echo "${{ github.workspace }}/target/fast" >> $GITHUB_PATH
+
+      - name: Install openvm rust toolchain
+        run: "$GITHUB_WORKSPACE/ci/install-openvm-toolchain.sh"
 
       - name: Verify book examples with verify-stark
         run: |
