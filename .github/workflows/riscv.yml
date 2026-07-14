@@ -23,7 +23,12 @@ on:
       - "crates/rvr/**"
       - "Cargo.toml"
       - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - ".cargo/config.toml"
+      - ".github/actions/sccache/**"
       - ".github/workflows/riscv.yml"
+      - "ci/install-openvm-toolchain.sh"
+      - "scripts/gpu_driver_setup.sh"
 
 concurrency:
   group: ${{ github.workflow_ref }}-riscv-${{ github.event.pull_request.number || github.sha }}

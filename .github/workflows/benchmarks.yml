@@ -10,7 +10,7 @@ on:
         default: false
   push:
     branches: ["main"]
-    paths:
+    paths: &benchmark_paths
       - "benchmarks/prove/**"
       - "benchmarks/guest/**"
       - "crates/**"
@@ -22,15 +22,7 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, labeled]
     branches: ["**"]
-    paths:
-      - "benchmarks/prove/**"
-      - "benchmarks/guest/**"
-      - "crates/**"
-      - "extensions/**"
-      - ".github/workflows/benchmark-call.yml"
-      - ".github/workflows/benchmarks.yml"
-      - "Cargo.toml"
-      - "Cargo.lock"
+    paths: *benchmark_paths
   workflow_dispatch:
     inputs:
       flamegraphs:
