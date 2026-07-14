@@ -9,6 +9,9 @@ use rand::{rngs::StdRng, Rng};
 
 use super::adapters::{rv64_bytes_to_u16_block, RV64_REGISTER_NUM_LIMBS, RV_IS_TYPE_IMM_BITS};
 
+#[cfg(test)]
+pub(crate) mod memory;
+
 // Returns (instruction, rd)
 #[cfg_attr(all(feature = "test-utils", not(test)), allow(dead_code))]
 pub fn rv64_rand_write_register_or_imm(

@@ -100,8 +100,7 @@ pub enum LessThanOpcode {
 #[opcode_offset = 0x210]
 #[repr(usize)]
 pub enum Rv64LoadStoreOpcode {
-    // Ordering matters: the circuit routes opcodes to chips using .take(STOREB + 1),
-    // so zero-extend loads and stores must come first, sign-extend loads last.
+    // Ordering matters: local opcode values are recorded in traces and mirrored by CUDA kernels.
     LOADD,
     LOADBU,
     LOADHU,
