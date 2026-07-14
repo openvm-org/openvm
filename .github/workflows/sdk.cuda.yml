@@ -47,6 +47,10 @@ jobs:
           source ci/scripts/utils.sh
           install_s5cmd
 
+      - name: Install solc
+        # The SDK EVM/Halo2 verification tests shell out to solc when generating verifiers.
+        run: (hash svm 2>/dev/null || cargo install --locked --version 0.2.23 svm-rs) && svm install 0.8.19 && solc --version
+
       - name: Verify GPU setup
         run: |
           nvidia-smi
