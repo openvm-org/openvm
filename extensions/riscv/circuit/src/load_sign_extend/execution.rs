@@ -32,7 +32,6 @@ struct LoadSignExtendPreCompute {
     imm_extended: u32,
     a: u8,
     b: u8,
-    e: u8,
 }
 
 impl<A, const LOAD_WIDTH: usize> LoadSignExtendExecutor<A, LOAD_WIDTH> {
@@ -75,7 +74,6 @@ impl<A, const LOAD_WIDTH: usize> LoadSignExtendExecutor<A, LOAD_WIDTH> {
             imm_extended: sign_extend_imm16(imm, imm_sign),
             a: a.as_canonical_u32() as u8,
             b: b.as_canonical_u32() as u8,
-            e: e_u32 as u8,
         };
         Ok((local_opcode, enabled))
     }
@@ -198,7 +196,7 @@ unsafe fn execute_e12_impl<
     let shift_amount = ptr_val % RV64_REGISTER_NUM_LIMBS as u32;
     let ptr_val = ptr_val - shift_amount;
     let read_data: [u8; RV64_REGISTER_NUM_LIMBS] =
-        exec_state.vm_read_bytes(pre_compute.e as u32, ptr_val);
+        exec_state.vm_read_bytes(RV64_MEMORY_AS, ptr_val);
     let mut write_data = [0u8; RV64_REGISTER_NUM_LIMBS];
 
     if !OP::compute_write_data(&mut write_data, read_data, shift_amount as usize) {
