@@ -150,6 +150,7 @@ mod tests {
 
     #[test_case("fibonacci", 1)]
     #[test_case("collatz", 1)]
+    #[test_case("memcpy", 1)]
     fn test_rv64im(example_name: &str, min_segments: usize) -> Result<()> {
         let config = test_rv64im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), example_name, &config)?;

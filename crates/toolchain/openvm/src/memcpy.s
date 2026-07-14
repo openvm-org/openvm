@@ -2,6 +2,11 @@
 //
 // src/string/memcpy.c
 //
+// with one OpenVM addition (not in musl): a jump-table fast path
+// for n <= 32 byte copies, injected into the source before
+// compilation. See FASTPATH_MEMCPY in the generator script for
+// the exact code and rationale.
+//
 // This was compiled into assembly with:
 //
 //     clang -target riscv64 -march=rv64im -O3 -S memcpy.c -nostdlib -fno-builtin -funroll-loops
@@ -215,15 +220,123 @@
 	.type	memcpy,@function
 memcpy:                                 # @memcpy
 # %bb.0:
-	andi	a3, a1, 3
-	beqz	a3, .LBBmemcpy0_16
+	li	a3, 33
+	bgeu	a2, a3, .LBBmemcpy0_34
 # %bb.1:
-	beqz	a2, .LBBmemcpy0_5
+	addi	a2, a2, -1
+	li	a3, 31
+	bltu	a3, a2, .LBBmemcpy0_69
 # %bb.2:
+	slli	a2, a2, 2
+	lui	a3, %hi(.LJTImemcpy0_0)
+	addi	a3, a3, %lo(.LJTImemcpy0_0)
+	add	a2, a3, a2
+	lw	a2, 0(a2)
+	mv	a3, a0
+	jr	a2
+.LBBmemcpy0_3:
+	lbu	a2, 31(a1)
+	sb	a2, 31(a0)
+.LBBmemcpy0_4:
+	lbu	a2, 30(a1)
+	sb	a2, 30(a0)
+.LBBmemcpy0_5:
+	lbu	a2, 29(a1)
+	sb	a2, 29(a0)
+.LBBmemcpy0_6:
+	lbu	a2, 28(a1)
+	sb	a2, 28(a0)
+.LBBmemcpy0_7:
+	lbu	a2, 27(a1)
+	sb	a2, 27(a0)
+.LBBmemcpy0_8:
+	lbu	a2, 26(a1)
+	sb	a2, 26(a0)
+.LBBmemcpy0_9:
+	lbu	a2, 25(a1)
+	sb	a2, 25(a0)
+.LBBmemcpy0_10:
+	lbu	a2, 24(a1)
+	sb	a2, 24(a0)
+.LBBmemcpy0_11:
+	lbu	a2, 23(a1)
+	sb	a2, 23(a0)
+.LBBmemcpy0_12:
+	lbu	a2, 22(a1)
+	sb	a2, 22(a0)
+.LBBmemcpy0_13:
+	lbu	a2, 21(a1)
+	sb	a2, 21(a0)
+.LBBmemcpy0_14:
+	lbu	a2, 20(a1)
+	sb	a2, 20(a0)
+.LBBmemcpy0_15:
+	lbu	a2, 19(a1)
+	sb	a2, 19(a0)
+.LBBmemcpy0_16:
+	lbu	a2, 18(a1)
+	sb	a2, 18(a0)
+.LBBmemcpy0_17:
+	lbu	a2, 17(a1)
+	sb	a2, 17(a0)
+.LBBmemcpy0_18:
+	lbu	a2, 16(a1)
+	sb	a2, 16(a0)
+.LBBmemcpy0_19:
+	lbu	a2, 15(a1)
+	sb	a2, 15(a0)
+.LBBmemcpy0_20:
+	lbu	a2, 14(a1)
+	sb	a2, 14(a0)
+.LBBmemcpy0_21:
+	lbu	a2, 13(a1)
+	sb	a2, 13(a0)
+.LBBmemcpy0_22:
+	lbu	a2, 12(a1)
+	sb	a2, 12(a0)
+.LBBmemcpy0_23:
+	lbu	a2, 11(a1)
+	sb	a2, 11(a0)
+.LBBmemcpy0_24:
+	lbu	a2, 10(a1)
+	sb	a2, 10(a0)
+.LBBmemcpy0_25:
+	lbu	a2, 9(a1)
+	sb	a2, 9(a0)
+.LBBmemcpy0_26:
+	lbu	a2, 8(a1)
+	sb	a2, 8(a0)
+.LBBmemcpy0_27:
+	lbu	a2, 7(a1)
+	sb	a2, 7(a0)
+.LBBmemcpy0_28:
+	lbu	a2, 6(a1)
+	sb	a2, 6(a0)
+.LBBmemcpy0_29:
+	lbu	a2, 5(a1)
+	sb	a2, 5(a0)
+.LBBmemcpy0_30:
+	lbu	a2, 4(a1)
+	sb	a2, 4(a0)
+.LBBmemcpy0_31:
+	lbu	a2, 3(a1)
+	sb	a2, 3(a0)
+.LBBmemcpy0_32:
+	lbu	a2, 2(a1)
+	sb	a2, 2(a0)
+.LBBmemcpy0_33:
+	lbu	a2, 1(a1)
+	sb	a2, 1(a0)
+	mv	a3, a0
+	j	.LBBmemcpy0_68
+.LBBmemcpy0_34:
+	andi	a3, a1, 3
+	beqz	a3, .LBBmemcpy0_43
+# %bb.35:
 	addi	a4, a1, 1
 	li	a5, 1
 	mv	a3, a0
-.LBBmemcpy0_3:                                # =>This Inner Loop Header: Depth=1
+.LBBmemcpy0_36:                               # =>This Inner Loop Header: Depth=1
 	lbu	a7, 0(a1)
 	mv	a6, a2
 	addi	a1, a1, 1
@@ -231,37 +344,75 @@ memcpy:                                 # @memcpy
 	sb	a7, 0(a3)
 	addi	a3, a3, 1
 	addi	a2, a2, -1
-	beqz	t0, .LBBmemcpy0_6
-# %bb.4:                                #   in Loop: Header=BB0_3 Depth=1
+	beqz	t0, .LBBmemcpy0_38
+# %bb.37:                               #   in Loop: Header=BB0_36 Depth=1
 	addi	a4, a4, 1
-	bne	a6, a5, .LBBmemcpy0_3
-	j	.LBBmemcpy0_6
-.LBBmemcpy0_5:
-	mv	a3, a0
-.LBBmemcpy0_6:
+	bne	a6, a5, .LBBmemcpy0_36
+.LBBmemcpy0_38:
 	andi	a5, a3, 3
-	beqz	a5, .LBBmemcpy0_17
-.LBBmemcpy0_7:
+	beqz	a5, .LBBmemcpy0_44
+.LBBmemcpy0_39:
 	li	a4, 32
-	bgeu	a2, a4, .LBBmemcpy0_11
-# %bb.8:
+	bgeu	a2, a4, .LBBmemcpy0_51
+# %bb.40:
 	li	a4, 16
-	bgeu	a2, a4, .LBBmemcpy0_30
-.LBBmemcpy0_9:
+	bgeu	a2, a4, .LBBmemcpy0_62
+.LBBmemcpy0_41:
 	andi	a4, a2, 8
-	bnez	a4, .LBBmemcpy0_31
-.LBBmemcpy0_10:
+	bnez	a4, .LBBmemcpy0_63
+.LBBmemcpy0_42:
 	andi	a4, a2, 4
-	bnez	a4, .LBBmemcpy0_32
-	j	.LBBmemcpy0_33
-.LBBmemcpy0_11:
+	bnez	a4, .LBBmemcpy0_64
+	j	.LBBmemcpy0_65
+.LBBmemcpy0_43:
+	mv	a3, a0
+	andi	a5, a0, 3
+	bnez	a5, .LBBmemcpy0_39
+.LBBmemcpy0_44:
+	li	a4, 16
+	bltu	a2, a4, .LBBmemcpy0_47
+# %bb.45:
+	li	a4, 15
+.LBBmemcpy0_46:                               # =>This Inner Loop Header: Depth=1
+	lw	a5, 0(a1)
+	lw	a6, 4(a1)
+	lw	a7, 8(a1)
+	lw	t0, 12(a1)
+	addi	a1, a1, 16
+	addi	a2, a2, -16
+	sw	a5, 0(a3)
+	sw	a6, 4(a3)
+	sw	a7, 8(a3)
+	sw	t0, 12(a3)
+	addi	a3, a3, 16
+	bltu	a4, a2, .LBBmemcpy0_46
+.LBBmemcpy0_47:
+	li	a4, 8
+	bltu	a2, a4, .LBBmemcpy0_49
+# %bb.48:
+	lw	a4, 0(a1)
+	lw	a5, 4(a1)
+	sw	a4, 0(a3)
+	sw	a5, 4(a3)
+	addi	a3, a3, 8
+	addi	a1, a1, 8
+.LBBmemcpy0_49:
+	andi	a4, a2, 4
+	beqz	a4, .LBBmemcpy0_65
+# %bb.50:
+	lw	a4, 0(a1)
+	addi	a1, a1, 4
+	sw	a4, 0(a3)
+	addi	a3, a3, 4
+	j	.LBBmemcpy0_65
+.LBBmemcpy0_51:
 	lw	a4, 0(a1)
 	li	a6, 3
-	beq	a5, a6, .LBBmemcpy0_24
-# %bb.12:
+	beq	a5, a6, .LBBmemcpy0_56
+# %bb.52:
 	li	a6, 2
-	bne	a5, a6, .LBBmemcpy0_27
-# %bb.13:
+	bne	a5, a6, .LBBmemcpy0_59
+# %bb.53:
 	srli	a5, a4, 8
 	addi	a2, a2, -2
 	addi	a1, a1, 16
@@ -269,7 +420,7 @@ memcpy:                                 # @memcpy
 	sb	a5, 1(a3)
 	addi	a3, a3, 2
 	li	a5, 17
-.LBBmemcpy0_14:                               # =>This Inner Loop Header: Depth=1
+.LBBmemcpy0_54:                               # =>This Inner Loop Header: Depth=1
 	srliw	a6, a4, 16
 	lw	a7, -12(a1)
 	lw	t0, -8(a1)
@@ -293,60 +444,19 @@ memcpy:                                 # @memcpy
 	sw	t1, 12(a3)
 	addi	a3, a3, 16
 	addi	a1, a1, 16
-	bltu	a5, a2, .LBBmemcpy0_14
-# %bb.15:
+	bltu	a5, a2, .LBBmemcpy0_54
+# %bb.55:
 	addi	a1, a1, -14
 	li	a4, 16
-	bltu	a2, a4, .LBBmemcpy0_9
-	j	.LBBmemcpy0_30
-.LBBmemcpy0_16:
-	mv	a3, a0
-	andi	a5, a0, 3
-	bnez	a5, .LBBmemcpy0_7
-.LBBmemcpy0_17:
-	li	a4, 16
-	bltu	a2, a4, .LBBmemcpy0_20
-# %bb.18:
-	li	a4, 15
-.LBBmemcpy0_19:                               # =>This Inner Loop Header: Depth=1
-	lw	a5, 0(a1)
-	lw	a6, 4(a1)
-	lw	a7, 8(a1)
-	lw	t0, 12(a1)
-	addi	a1, a1, 16
-	addi	a2, a2, -16
-	sw	a5, 0(a3)
-	sw	a6, 4(a3)
-	sw	a7, 8(a3)
-	sw	t0, 12(a3)
-	addi	a3, a3, 16
-	bltu	a4, a2, .LBBmemcpy0_19
-.LBBmemcpy0_20:
-	li	a4, 8
-	bltu	a2, a4, .LBBmemcpy0_22
-# %bb.21:
-	lw	a4, 0(a1)
-	lw	a5, 4(a1)
-	sw	a4, 0(a3)
-	sw	a5, 4(a3)
-	addi	a3, a3, 8
-	addi	a1, a1, 8
-.LBBmemcpy0_22:
-	andi	a4, a2, 4
-	beqz	a4, .LBBmemcpy0_33
-# %bb.23:
-	lw	a4, 0(a1)
-	addi	a1, a1, 4
-	sw	a4, 0(a3)
-	addi	a3, a3, 4
-	j	.LBBmemcpy0_33
-.LBBmemcpy0_24:
+	bltu	a2, a4, .LBBmemcpy0_41
+	j	.LBBmemcpy0_62
+.LBBmemcpy0_56:
 	sb	a4, 0(a3)
 	addi	a2, a2, -1
 	addi	a3, a3, 1
 	addi	a1, a1, 16
 	li	a5, 18
-.LBBmemcpy0_25:                               # =>This Inner Loop Header: Depth=1
+.LBBmemcpy0_57:                               # =>This Inner Loop Header: Depth=1
 	srliw	a6, a4, 8
 	lw	a7, -12(a1)
 	lw	t0, -8(a1)
@@ -370,13 +480,13 @@ memcpy:                                 # @memcpy
 	sw	t1, 12(a3)
 	addi	a3, a3, 16
 	addi	a1, a1, 16
-	bltu	a5, a2, .LBBmemcpy0_25
-# %bb.26:
+	bltu	a5, a2, .LBBmemcpy0_57
+# %bb.58:
 	addi	a1, a1, -15
 	li	a4, 16
-	bltu	a2, a4, .LBBmemcpy0_9
-	j	.LBBmemcpy0_30
-.LBBmemcpy0_27:
+	bltu	a2, a4, .LBBmemcpy0_41
+	j	.LBBmemcpy0_62
+.LBBmemcpy0_59:
 	srli	a5, a4, 8
 	srli	a6, a4, 16
 	addi	a2, a2, -3
@@ -386,7 +496,7 @@ memcpy:                                 # @memcpy
 	sb	a6, 2(a3)
 	addi	a3, a3, 3
 	li	a5, 16
-.LBBmemcpy0_28:                               # =>This Inner Loop Header: Depth=1
+.LBBmemcpy0_60:                               # =>This Inner Loop Header: Depth=1
 	srliw	a6, a4, 24
 	lw	a7, -12(a1)
 	lw	t0, -8(a1)
@@ -410,12 +520,12 @@ memcpy:                                 # @memcpy
 	sw	t1, 12(a3)
 	addi	a3, a3, 16
 	addi	a1, a1, 16
-	bltu	a5, a2, .LBBmemcpy0_28
-# %bb.29:
+	bltu	a5, a2, .LBBmemcpy0_60
+# %bb.61:
 	addi	a1, a1, -13
 	li	a4, 16
-	bltu	a2, a4, .LBBmemcpy0_9
-.LBBmemcpy0_30:
+	bltu	a2, a4, .LBBmemcpy0_41
+.LBBmemcpy0_62:
 	lbu	a4, 0(a1)
 	lbu	a5, 1(a1)
 	lbu	a6, 2(a1)
@@ -452,8 +562,8 @@ memcpy:                                 # @memcpy
 	sb	t3, 15(a3)
 	mv	a3, a4
 	andi	a4, a2, 8
-	beqz	a4, .LBBmemcpy0_10
-.LBBmemcpy0_31:
+	beqz	a4, .LBBmemcpy0_42
+.LBBmemcpy0_63:
 	lbu	a4, 0(a1)
 	lbu	a5, 1(a1)
 	lbu	a6, 2(a1)
@@ -474,8 +584,8 @@ memcpy:                                 # @memcpy
 	sb	t3, 7(a3)
 	mv	a3, a4
 	andi	a4, a2, 4
-	beqz	a4, .LBBmemcpy0_33
-.LBBmemcpy0_32:
+	beqz	a4, .LBBmemcpy0_65
+.LBBmemcpy0_64:
 	lbu	a4, 0(a1)
 	lbu	a5, 1(a1)
 	lbu	a6, 2(a1)
@@ -487,15 +597,10 @@ memcpy:                                 # @memcpy
 	sb	a6, 2(a3)
 	sb	a7, 3(a3)
 	mv	a3, t0
-.LBBmemcpy0_33:
+.LBBmemcpy0_65:
 	andi	a4, a2, 2
-	bnez	a4, .LBBmemcpy0_36
-# %bb.34:
-	andi	a2, a2, 1
-	bnez	a2, .LBBmemcpy0_37
-.LBBmemcpy0_35:
-	ret
-.LBBmemcpy0_36:
+	beqz	a4, .LBBmemcpy0_67
+# %bb.66:
 	lbu	a4, 0(a1)
 	lbu	a5, 1(a1)
 	addi	a1, a1, 2
@@ -503,14 +608,51 @@ memcpy:                                 # @memcpy
 	sb	a4, 0(a3)
 	sb	a5, 1(a3)
 	mv	a3, a6
+.LBBmemcpy0_67:
 	andi	a2, a2, 1
-	beqz	a2, .LBBmemcpy0_35
-.LBBmemcpy0_37:
+	beqz	a2, .LBBmemcpy0_69
+.LBBmemcpy0_68:
 	lbu	a1, 0(a1)
 	sb	a1, 0(a3)
+.LBBmemcpy0_69:
 	ret
 .Lmemcpyfunc_end0:
 	.size	memcpy, .Lmemcpyfunc_end0-memcpy
+	.section	.rodata,"a",@progbits
+	.p2align	2, 0x0
+.LJTImemcpy0_0:
+	.word	.LBBmemcpy0_68
+	.word	.LBBmemcpy0_33
+	.word	.LBBmemcpy0_32
+	.word	.LBBmemcpy0_31
+	.word	.LBBmemcpy0_30
+	.word	.LBBmemcpy0_29
+	.word	.LBBmemcpy0_28
+	.word	.LBBmemcpy0_27
+	.word	.LBBmemcpy0_26
+	.word	.LBBmemcpy0_25
+	.word	.LBBmemcpy0_24
+	.word	.LBBmemcpy0_23
+	.word	.LBBmemcpy0_22
+	.word	.LBBmemcpy0_21
+	.word	.LBBmemcpy0_20
+	.word	.LBBmemcpy0_19
+	.word	.LBBmemcpy0_18
+	.word	.LBBmemcpy0_17
+	.word	.LBBmemcpy0_16
+	.word	.LBBmemcpy0_15
+	.word	.LBBmemcpy0_14
+	.word	.LBBmemcpy0_13
+	.word	.LBBmemcpy0_12
+	.word	.LBBmemcpy0_11
+	.word	.LBBmemcpy0_10
+	.word	.LBBmemcpy0_9
+	.word	.LBBmemcpy0_8
+	.word	.LBBmemcpy0_7
+	.word	.LBBmemcpy0_6
+	.word	.LBBmemcpy0_5
+	.word	.LBBmemcpy0_4
+	.word	.LBBmemcpy0_3
                                         # -- End function
 	.section	".note.GNU-stack","",@progbits
 	.addrsig

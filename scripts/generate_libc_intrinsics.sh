@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Generates `crates/toolchain/openvm/src/memcpy.s` and `memset.s` from
-# musl-libc sources, deterministically.
+# musl-libc sources, deterministically. memcpy additionally gets an OpenVM
+# small-copy fast path (see FASTPATH_MEMCPY below) injected before compilation.
 #
 # Usage:
 #   scripts/generate_libc_intrinsics.sh                                  # use defaults (v1.2.6)
@@ -124,6 +125,61 @@ typedef unsigned long long uint64_t;
 EOF
 )
 
+# OpenVM addition to musl's memcpy (injected into the fetched source before
+# compilation, right after the `d`/`s` pointer declarations). Small copies
+# dominate memcpy call counts in zkVM guests, and musl's alignment dispatch
+# and head loops cost 20-90 instructions before the first byte moves. For
+# n <= 32 this switch compiles to a jump table into straight-line
+# constant-offset byte copies with no preamble. Cases fall through in
+# descending order: entering at case n copies bytes n-1..0.
+FASTPATH_MEMCPY=$(cat <<'EOF'
+	/* OpenVM addition (not in musl): small copies dominate call counts in
+	 * zkVM guests, and the paths below spend 20-90 instructions on alignment
+	 * dispatch and head loops before copying anything. For n <= 32 this
+	 * switch compiles to a jump table into straight-line constant-offset
+	 * byte copies (~2.4 instructions/byte, no preamble). Cases fall through
+	 * in descending order: entering at case n copies bytes n-1..0. */
+	if (n <= 32) {
+		switch (n) {
+	case 32: d[31] = s[31]; /* fallthrough */
+	case 31: d[30] = s[30]; /* fallthrough */
+	case 30: d[29] = s[29]; /* fallthrough */
+	case 29: d[28] = s[28]; /* fallthrough */
+	case 28: d[27] = s[27]; /* fallthrough */
+	case 27: d[26] = s[26]; /* fallthrough */
+	case 26: d[25] = s[25]; /* fallthrough */
+	case 25: d[24] = s[24]; /* fallthrough */
+	case 24: d[23] = s[23]; /* fallthrough */
+	case 23: d[22] = s[22]; /* fallthrough */
+	case 22: d[21] = s[21]; /* fallthrough */
+	case 21: d[20] = s[20]; /* fallthrough */
+	case 20: d[19] = s[19]; /* fallthrough */
+	case 19: d[18] = s[18]; /* fallthrough */
+	case 18: d[17] = s[17]; /* fallthrough */
+	case 17: d[16] = s[16]; /* fallthrough */
+	case 16: d[15] = s[15]; /* fallthrough */
+	case 15: d[14] = s[14]; /* fallthrough */
+	case 14: d[13] = s[13]; /* fallthrough */
+	case 13: d[12] = s[12]; /* fallthrough */
+	case 12: d[11] = s[11]; /* fallthrough */
+	case 11: d[10] = s[10]; /* fallthrough */
+	case 10: d[9] = s[9]; /* fallthrough */
+	case 9: d[8] = s[8]; /* fallthrough */
+	case 8: d[7] = s[7]; /* fallthrough */
+	case 7: d[6] = s[6]; /* fallthrough */
+	case 6: d[5] = s[5]; /* fallthrough */
+	case 5: d[4] = s[4]; /* fallthrough */
+	case 4: d[3] = s[3]; /* fallthrough */
+	case 3: d[2] = s[2]; /* fallthrough */
+	case 2: d[1] = s[1]; /* fallthrough */
+	case 1: d[0] = s[0]; /* fallthrough */
+	case 0:;
+		}
+		return dest;
+	}
+EOF
+)
+
 regen_one() {
   local fn="$1"        # memcpy | memset
   local typedefs="$2"  # block of typedef lines
@@ -141,6 +197,23 @@ regen_one() {
     printf '%s\n\n' "${typedefs}"
     curl -fsSL "${src_url}" | sed '/^#include /d'
   } > "${c}"
+
+  if [[ "${fn}" == memcpy ]]; then
+    echo "gen: injecting OpenVM small-copy fast path into memcpy.c"
+    local fp_anchor='	const unsigned char *s = src;'
+    local fp_count
+    fp_count="$(grep -cxF "${fp_anchor}" "${c}")" || true
+    if [[ "${fp_count}" != 1 ]]; then
+      echo "error: fast-path anchor found ${fp_count} times in memcpy.c (expected 1) — musl source changed; update FASTPATH_MEMCPY injection" >&2
+      exit 1
+    fi
+    printf '%s\n' "${FASTPATH_MEMCPY}" > "${TMP}/fastpath_memcpy.c"
+    awk -v anchor="${fp_anchor}" -v blockfile="${TMP}/fastpath_memcpy.c" '
+      { print }
+      $0 == anchor { print ""; while ((getline line < blockfile) > 0) print line }
+    ' "${c}" > "${c}.new"
+    mv "${c}.new" "${c}"
+  fi
 
   echo "gen: compiling ${fn}.c -> ${fn}.s (riscv64im, O3, -funroll-loops)"
   "${CLANG}" -target riscv64 -march=rv64im -O3 -S \
@@ -175,6 +248,13 @@ regen_one() {
     printf '//\n'
     printf '// src/string/%s.c\n' "${fn}"
     printf '//\n'
+    if [[ "${fn}" == memcpy ]]; then
+      printf '// with one OpenVM addition (not in musl): a jump-table fast path\n'
+      printf '// for n <= 32 byte copies, injected into the source before\n'
+      printf '// compilation. See FASTPATH_MEMCPY in the generator script for\n'
+      printf '// the exact code and rationale.\n'
+      printf '//\n'
+    fi
     printf '// This was compiled into assembly with:\n'
     printf '//\n'
     printf '//     clang -target riscv64 -march=rv64im -O3 -S %s.c -nostdlib -fno-builtin -funroll-loops\n' "${fn}"
