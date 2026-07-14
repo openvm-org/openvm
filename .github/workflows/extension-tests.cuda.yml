@@ -4,14 +4,29 @@ on:
   workflow_call:
   push:
     branches: ["main"]
+    paths:
+      - "crates/circuits/**"
+      - "crates/vm/**"
+      - "crates/toolchain/**"
+      - "crates/sdk/**"
+      - "crates/rvr/**"
+      - "extensions/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/filters/extension-tests.yml"
+      - ".github/workflows/extension-tests.cuda.yml"
   pull_request:
     branches: ["**"]
     paths:
-#     - "crates/circuits/**"
-#     - "crates/vm/**"
-#     - "crates/toolchain/**"
+      - "crates/circuits/**"
+      - "crates/vm/**"
+      - "crates/toolchain/**"
+      - "crates/sdk/**"
+      - "crates/rvr/**"
       - "extensions/**"
-#     - "Cargo.toml"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/filters/extension-tests.yml"
       - ".github/workflows/extension-tests.cuda.yml"
   workflow_dispatch:
     inputs:
@@ -29,12 +44,69 @@ env:
   OPENVM_SKIP_DEBUG: "1"
 
 jobs:
+  changes:
+    name: Select CUDA extension tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      groups: ${{ github.event_name == 'workflow_dispatch' && '["riscv","extensions"]' || steps.groups.outputs.changes }}
+      riscv: ${{ steps.tests.outputs.riscv }}
+      keccak256: ${{ steps.tests.outputs.keccak256 }}
+      sha2: ${{ steps.tests.outputs.sha2 }}
+      bigint: ${{ steps.tests.outputs.bigint }}
+      algebra: ${{ steps.tests.outputs.algebra }}
+      ecc: ${{ steps.tests.outputs.ecc }}
+      pairing: ${{ steps.tests.outputs.pairing }}
+      deferral: ${{ steps.tests.outputs.deferral }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dorny/paths-filter@v3
+        id: groups
+        with:
+          filters: |
+            riscv:
+              - "crates/circuits/**"
+              - "crates/vm/**"
+              - "crates/toolchain/**"
+              - "crates/rvr/**"
+              - "extensions/riscv/**"
+              - "Cargo.toml"
+              - "Cargo.lock"
+              - ".github/filters/extension-tests.yml"
+              - ".github/workflows/extension-tests.cuda.yml"
+            extensions:
+              - "crates/circuits/**"
+              - "crates/vm/**"
+              - "crates/toolchain/**"
+              - "crates/sdk/**"
+              - "crates/rvr/**"
+              - "extensions/riscv/**"
+              - "extensions/riscv-adapters/**"
+              - "extensions/keccak256/**"
+              - "extensions/sha2/**"
+              - "extensions/bigint/**"
+              - "extensions/algebra/**"
+              - "extensions/ecc/**"
+              - "extensions/pairing/**"
+              - "extensions/deferral/**"
+              - "Cargo.toml"
+              - "Cargo.lock"
+              - ".github/filters/extension-tests.yml"
+              - ".github/workflows/extension-tests.cuda.yml"
+      - uses: dorny/paths-filter@v3
+        id: tests
+        with:
+          filters: .github/filters/extension-tests.yml
+
   extension-tests-cuda:
+    needs: changes
+    if: needs.changes.outputs.groups != '[]'
+    name: ${{ format('CUDA ({0})', matrix.group) }}
     strategy:
       matrix:
-        extensions: # group extensions on the same runner based on test time
-          - "riscv"
-          - "keccak256 sha2 bigint algebra ecc pairing deferral"
+        group: ${{ fromJSON(needs.changes.outputs.groups) }}
     runs-on:
       - runs-on=${{ github.run_id }}-extension-tests-cuda-${{ github.run_attempt }}-${{ strategy.job-index }}/${{ github.event_name == 'workflow_dispatch' && github.event.inputs.machine_type || 'image=ubuntu24-gpu-x64/family=g7.2xlarge+g6.2xlarge+g5.2xlarge/volume=40gb/spot=price-capacity-optimized' }}/extras=s3-cache
 
@@ -48,55 +120,6 @@ jobs:
           ssh-private-key: |
             ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
       - uses: actions/checkout@v5
-      - uses: dorny/paths-filter@v3
-        id: filter
-        with:
-          filters: |
-            common:
-              - "crates/circuits/**"
-              - "crates/vm/**"
-              - "crates/toolchain/**"
-              - ".github/workflows/extension-tests.cuda.yml"
-            riscv:
-              - "extensions/riscv/**"
-            keccak256:
-              - "extensions/keccak256/**"
-            sha2:
-              - "extensions/sha2/**"
-            bigint:
-              - "extensions/bigint/**"
-            algebra:
-              - "extensions/algebra/**"
-            ecc:
-              - "extensions/ecc/**"
-            pairing:
-              - "extensions/pairing/**"
-            deferral:
-              - "extensions/deferral/**"
-
-      - name: Skip if no changes
-        env:
-          FILTER_OUTPUTS: ${{ toJSON(steps.filter.outputs) }}
-        run: |
-          # Check if common files changed
-          COMMON_CHANGED=$(echo $FILTER_OUTPUTS | jq -r .common)
-
-          # Check if any extension in the current matrix group changed
-          ANY_EXT_CHANGED=false
-          for ext in ${{ matrix.extensions }}; do
-            ext_changed=$(echo $FILTER_OUTPUTS | jq -r --arg ext "$ext" '.[$ext]')
-            if [[ "$ext_changed" == "true" ]]; then
-              ANY_EXT_CHANGED=true
-              break
-            fi
-          done
-
-          # Skip if neither common nor any extension in this matrix group changed
-          if [[ "$COMMON_CHANGED" != "true" && "$ANY_EXT_CHANGED" != "true" ]]; then
-            echo "No relevant changes for extensions [${{ matrix.extensions }}], skipping tests."
-            exit 0
-          fi
-
       - uses: dtolnay/rust-toolchain@stable
         env:
           RUSTUP_PERMIT_COPY_RENAME: "1"
@@ -121,36 +144,77 @@ jobs:
           echo "FEATURE_ARGS=--features=cuda" >> $GITHUB_ENV
           echo "VPMM_PAGES=1" >> $GITHUB_ENV
 
-      - name: Run extension tests
-        env:
-          FILTER_OUTPUTS: ${{ toJSON(steps.filter.outputs) }}
+      - name: Run RISC-V tests
+        if: matrix.group == 'riscv'
+        working-directory: extensions/riscv
         run: |
-          COMMON_CHANGED=$(echo $FILTER_OUTPUTS | jq -r .common)
+          pushd circuit
+          ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast cuda ${{ env.FEATURE_ARGS }} --features=touchemall --profile=heavy --no-tests=pass
+          popd
+          pushd tests
+          "$GITHUB_WORKSPACE/ci/install-openvm-toolchain.sh"
+          ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} --profile=heavy --no-tests=pass
+          popd
 
-          for ext in ${{ matrix.extensions }}; do
-            ext_changed=$(echo $FILTER_OUTPUTS | jq -r --arg ext "$ext" '.[$ext]')
-            if [[ "$COMMON_CHANGED" == "true" || "$ext_changed" == "true" ]]; then
-              echo "::group::Running tests for $ext"
+      - name: Run Keccak-256 tests
+        if: matrix.group == 'extensions' && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.keccak256 == 'true')
+        working-directory: extensions/keccak256/circuit
+        run: |
+          ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast cuda ${{ env.FEATURE_ARGS }} --features=touchemall --profile=heavy --no-tests=pass
 
-              # Run circuit tests
-              if [ -d "extensions/$ext/circuit" ]; then
-                pushd extensions/$ext/circuit
-                ${{ env.NEXTEST_ENV }} cargo nextest run cuda ${{ env.FEATURE_ARGS }} --features=touchemall --profile=heavy --no-tests=pass
-                popd
-              fi
+      - name: Run SHA-2 tests
+        if: matrix.group == 'extensions' && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.sha2 == 'true')
+        working-directory: extensions/sha2/circuit
+        run: |
+          ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast cuda ${{ env.FEATURE_ARGS }} --features=touchemall --profile=heavy --no-tests=pass
 
-              # Run integration tests
-              if [ -d "extensions/$ext/tests" ]; then
-                pushd extensions/$ext/tests
-                "$GITHUB_WORKSPACE/ci/install-openvm-toolchain.sh"
-                ${{ env.NEXTEST_ENV }} cargo nextest run ${{ env.FEATURE_ARGS }} --profile=heavy --no-tests=pass
-                popd
-              fi
-              echo "::endgroup::"
-            else
-              echo "Skipping tests for $ext as no relevant files changed."
-            fi
-          done
+      - name: Run bigint tests
+        if: matrix.group == 'extensions' && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.bigint == 'true')
+        working-directory: extensions/bigint/circuit
+        run: |
+          ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast cuda ${{ env.FEATURE_ARGS }} --features=touchemall --profile=heavy --no-tests=pass
+
+      - name: Run algebra tests
+        if: matrix.group == 'extensions' && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.algebra == 'true')
+        working-directory: extensions/algebra
+        run: |
+          pushd circuit
+          ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast cuda ${{ env.FEATURE_ARGS }} --features=touchemall --profile=heavy --no-tests=pass
+          popd
+          pushd tests
+          "$GITHUB_WORKSPACE/ci/install-openvm-toolchain.sh"
+          ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} --profile=heavy --no-tests=pass
+          popd
+
+      - name: Run ECC tests
+        if: matrix.group == 'extensions' && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.ecc == 'true')
+        working-directory: extensions/ecc
+        run: |
+          pushd circuit
+          ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast cuda ${{ env.FEATURE_ARGS }} --features=touchemall --profile=heavy --no-tests=pass
+          popd
+          pushd tests
+          "$GITHUB_WORKSPACE/ci/install-openvm-toolchain.sh"
+          ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} --profile=heavy --no-tests=pass
+          popd
+
+      - name: Run pairing tests
+        if: matrix.group == 'extensions' && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.pairing == 'true')
+        working-directory: extensions/pairing/circuit
+        run: |
+          ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast cuda ${{ env.FEATURE_ARGS }} --features=touchemall --profile=heavy --no-tests=pass
+
+      - name: Run deferral tests
+        if: matrix.group == 'extensions' && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.deferral == 'true')
+        working-directory: extensions/deferral
+        run: |
+          pushd circuit
+          ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast cuda ${{ env.FEATURE_ARGS }} --features=touchemall --profile=heavy --no-tests=pass
+          popd
+          pushd tests
+          "$GITHUB_WORKSPACE/ci/install-openvm-toolchain.sh"
+          ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} --profile=heavy --no-tests=pass
+          popd
 
       - name: sccache stats
         if: always()

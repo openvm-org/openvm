@@ -63,7 +63,7 @@ permissions:
 
 jobs:
   create-matrix:
-    if: ${{ github.event.action != 'labeled' || github.event.label.name == 'run-benchmark-e2e' }}
+    if: ${{ github.event.action != 'labeled' || github.event.label.name == 'run-benchmark' || github.event.label.name == 'run-benchmark-e2e' }}
     runs-on:
       - runs-on=${{ github.run_id }}/family=c8i-flex.2xlarge+c8i.2xlarge+c8a.2xlarge+c7i.2xlarge+c7a.2xlarge/image=ubuntu24-full-x64
     outputs:
@@ -89,24 +89,21 @@ jobs:
           cat ./ci/benchmark-config.json
 
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            LABELS='${{ toJson(github.event.pull_request.labels) }}'
-            RUN_E2E=$(echo "$LABELS" | jq 'any(.name == "run-benchmark-e2e")')
-            E2E_ONLY=${{ github.event.action == 'labeled' && github.event.label.name == 'run-benchmark-e2e' }}
+            RUN_E2E=${{ contains(github.event.pull_request.labels.*.name, 'run-benchmark-e2e') }}
           else
             RUN_E2E=${{ github.event.inputs.run-benchmark-e2e || 'false' }}
-            E2E_ONLY=false
           fi
           if [[ "${{ github.event.inputs.flamegraphs }}" == "true" ]]; then
             FEATURE_FLAGS="perf-metrics,${FEATURE_FLAGS}"
           fi
 
-          matrix=$(jq -c --argjson run_e2e $RUN_E2E --argjson e2e_only $E2E_ONLY --arg features "$FEATURE_FLAGS" '
+          matrix=$(jq -c --argjson run_e2e $RUN_E2E --arg features "$FEATURE_FLAGS" '
             [
               .benchmarks[] |
               .name as $name |
               .id as $id |
               .e2e_bench as $e2e_bench |
-              select(if $e2e_only then .e2e_bench == true else $run_e2e or .e2e_bench != true end) |
+              select($run_e2e or .e2e_bench != true) |
               .run_params[] |
               {
                 name: $name,

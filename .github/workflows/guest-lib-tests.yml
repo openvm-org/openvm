@@ -4,17 +4,52 @@ on:
   workflow_call:
   push:
     branches: ["main"]
+    paths:
+      - "crates/circuits/**"
+      - "crates/vm/**"
+      - "crates/toolchain/**"
+      - "crates/sdk/**"
+      - "crates/recursion/**"
+      - "crates/continuations/**"
+      - "crates/rvr/**"
+      - "extensions/riscv/**"
+      - "extensions/riscv-adapters/**"
+      - "extensions/deferral/**"
+      - "extensions/keccak256/**"
+      - "extensions/sha2/**"
+      - "extensions/algebra/**"
+      - "extensions/ecc/**"
+      - "extensions/pairing/**"
+      - "guest-libs/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/filters/guest-lib-tests.yml"
+      - ".github/workflows/guest-lib-tests.yml"
+      - "crates/sdk/guest/fib/**"
   pull_request:
     branches: ["**"]
     paths:
-#      - "crates/circuits/**"
-#      - "crates/vm/**"
-#      - "crates/toolchain/**"
-#      - "extensions/**"
+      - "crates/circuits/**"
+      - "crates/vm/**"
+      - "crates/toolchain/**"
+      - "crates/sdk/**"
+      - "crates/recursion/**"
+      - "crates/continuations/**"
+      - "crates/rvr/**"
+      - "extensions/riscv/**"
+      - "extensions/riscv-adapters/**"
+      - "extensions/deferral/**"
+      - "extensions/keccak256/**"
+      - "extensions/sha2/**"
+      - "extensions/algebra/**"
+      - "extensions/ecc/**"
+      - "extensions/pairing/**"
       - "guest-libs/**"
-#      - "Cargo.toml"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/filters/guest-lib-tests.yml"
       - ".github/workflows/guest-lib-tests.yml"
-#      - "crates/sdk/guest/fib/**"
+      - "crates/sdk/guest/fib/**"
 
 concurrency:
   group: ${{ github.workflow_ref }}-guest-lib-tests-${{ github.event.pull_request.number || github.sha }}
@@ -25,30 +60,38 @@ env:
   OPENVM_SKIP_DEBUG: "1"
 
 jobs:
+  changes:
+    name: Select guest library tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      crates: ${{ steps.filter.outputs.changes }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: .github/filters/guest-lib-tests.yml
+
   integration-tests:
+    needs: changes
+    if: needs.changes.outputs.crates != '[]'
+    name: ${{ format('{0} ({1})', matrix.crate, matrix.mode) }}
     strategy:
       matrix:
-        crate:
-          - { name: "sha2", path: "sha2", rvr: false }
-          - { name: "keccak256", path: "keccak256", rvr: false }
-          - { name: "ff_derive", path: "ff_derive", rvr: false }
-          - { name: "k256", path: "k256", rvr: false }
-          - { name: "p256", path: "p256", rvr: false }
-          - { name: "pairing", path: "pairing", rvr: false }
-          - { name: "verify-stark", path: "verify-stark/circuit", rvr: false }
-          - { name: "keccak256", path: "keccak256", rvr: true }
-          - { name: "sha2", path: "sha2", rvr: true }
-          - { name: "ff_derive", path: "ff_derive", rvr: true }
-          - { name: "k256", path: "k256", rvr: true }
-          - { name: "p256", path: "p256", rvr: true }
-          - { name: "pairing", path: "pairing", rvr: true }
-        platform:
-          - { family: "c8i-flex.16xlarge+c8i.16xlarge+c8a.16xlarge+c7i.16xlarge+c7a.16xlarge", image: "ubuntu24-full-x64" }
+        crate: ${{ fromJSON(needs.changes.outputs.crates) }}
+        mode: [default, rvr]
+        exclude:
+          - { crate: shared, mode: default }
+          - { crate: shared, mode: rvr }
+          - { crate: verify-stark, mode: rvr }
       # Ensure tests run in parallel even if one fails
       fail-fast: false
 
     runs-on:
-      - runs-on=${{ github.run_id }}-guest-lib-tests-${{ github.run_attempt }}-${{ strategy.job-index }}/family=${{ matrix.platform.family }}/image=${{ matrix.platform.image }}/extras=s3-cache
+      - runs-on=${{ github.run_id }}-guest-lib-tests-${{ github.run_attempt }}-${{ strategy.job-index }}/family=c8i-flex.16xlarge+c8i.16xlarge+c8a.16xlarge+c7i.16xlarge+c7a.16xlarge/image=ubuntu24-full-x64/extras=s3-cache
 
     steps:
       - uses: runs-on/action@v2
@@ -61,26 +104,10 @@ jobs:
             ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
       - uses: actions/checkout@v5
       - name: Init rvr FFI submodules
-        if: matrix.crate.rvr == true
+        if: matrix.mode == 'rvr'
         run: |
           git submodule update --init --depth 1 extensions/keccak256/rvr/ffi/openssl
           git submodule update --init --depth 1 extensions/algebra/rvr/ffi/modular/secp256k1
-      - uses: dorny/paths-filter@v3
-        id: filter
-        with:
-          filters: |
-            - "crates/circuits/**"
-            - "crates/vm/**"
-            - "crates/toolchain/**"
-            - "extensions/**"
-            - "guest-libs/${{ matrix.crate.path }}/**"
-            - ".github/workflows/guest-lib-tests.yml"
-      - name: Skip if no changes
-        if: steps.filter.outputs.matched == 'false'
-        run: |
-          echo "No relevant changes, skipping tests."
-          exit 0
-
       - uses: dtolnay/rust-toolchain@stable
       - uses: ./.github/actions/sccache
       - uses: Swatinem/rust-cache@v2
@@ -89,7 +116,7 @@ jobs:
       - uses: taiki-e/install-action@nextest
 
       - name: Install clang-22 and lld (required for rvr)
-        if: matrix.crate.rvr == true
+        if: matrix.mode == 'rvr'
         run: |
           sudo apt-get update
           sudo apt-get install -y lsb-release wget software-properties-common gnupg
@@ -98,18 +125,18 @@ jobs:
           sudo ./llvm.sh 22
           sudo apt-get install -y lld
 
-      - name: Run ${{ format('{0}{1}', matrix.crate.name, matrix.crate.rvr && '-rvr' || '') }} guest library tests
-        working-directory: guest-libs/${{ matrix.crate.path }}
+      - name: Run ${{ format('{0}-{1}', matrix.crate, matrix.mode) }} guest library tests
+        working-directory: guest-libs/${{ matrix.crate == 'verify-stark' && 'verify-stark/circuit' || matrix.crate }}
         run: |
           "$GITHUB_WORKSPACE/ci/install-openvm-toolchain.sh"
           EXTRA_ARGS=()
-          if [[ "${{ matrix.crate.rvr }}" == 'true' ]]; then
-            if [[ "${{ matrix.crate.name }}" == "pairing" ]]; then
+          if [[ "${{ matrix.mode }}" == 'rvr' ]]; then
+            if [[ "${{ matrix.crate }}" == "pairing" ]]; then
               EXTRA_ARGS+=(--features=bn254,bls12_381,rvr -E 'not test(fallback)')
             else
               EXTRA_ARGS+=(--features=rvr)
             fi
-          elif [[ "${{ matrix.crate.name }}" == "pairing" ]]; then
+          elif [[ "${{ matrix.crate }}" == "pairing" ]]; then
             EXTRA_ARGS+=(--features=bn254,bls12_381 -E 'not test(fallback)')
           fi
 

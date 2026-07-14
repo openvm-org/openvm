@@ -4,17 +4,52 @@ on:
   workflow_call:
   push:
     branches: ["main"]
+    paths:
+      - "crates/circuits/**"
+      - "crates/vm/**"
+      - "crates/toolchain/**"
+      - "crates/sdk/**"
+      - "crates/recursion/**"
+      - "crates/continuations/**"
+      - "crates/rvr/**"
+      - "extensions/riscv/**"
+      - "extensions/riscv-adapters/**"
+      - "extensions/deferral/**"
+      - "extensions/keccak256/**"
+      - "extensions/sha2/**"
+      - "extensions/algebra/**"
+      - "extensions/ecc/**"
+      - "extensions/pairing/**"
+      - "guest-libs/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/filters/guest-lib-tests.yml"
+      - ".github/workflows/guest-lib-tests.cuda.yml"
+      - "crates/sdk/guest/fib/**"
   pull_request:
     branches: ["**"]
     paths:
-#     - "crates/circuits/**"
-#     - "crates/vm/**"
-#     - "crates/toolchain/**"
-#     - "extensions/**"
+      - "crates/circuits/**"
+      - "crates/vm/**"
+      - "crates/toolchain/**"
+      - "crates/sdk/**"
+      - "crates/recursion/**"
+      - "crates/continuations/**"
+      - "crates/rvr/**"
+      - "extensions/riscv/**"
+      - "extensions/riscv-adapters/**"
+      - "extensions/deferral/**"
+      - "extensions/keccak256/**"
+      - "extensions/sha2/**"
+      - "extensions/algebra/**"
+      - "extensions/ecc/**"
+      - "extensions/pairing/**"
       - "guest-libs/**"
-#     - "Cargo.toml"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/filters/guest-lib-tests.yml"
       - ".github/workflows/guest-lib-tests.cuda.yml"
-#     - "crates/sdk/guest/fib/**"
+      - "crates/sdk/guest/fib/**"
 
 concurrency:
   group: ${{ github.workflow_ref }}-guest-lib-tests-cuda-${{ github.event.pull_request.number || github.sha }}
@@ -25,14 +60,104 @@ env:
   OPENVM_SKIP_DEBUG: "1"
 
 jobs:
+  changes:
+    name: Select CUDA guest library tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      groups: ${{ steps.groups.outputs.changes }}
+      sha2: ${{ steps.tests.outputs.sha2 }}
+      keccak256: ${{ steps.tests.outputs.keccak256 }}
+      ff_derive: ${{ steps.tests.outputs.ff_derive }}
+      k256: ${{ steps.tests.outputs.k256 }}
+      p256: ${{ steps.tests.outputs.p256 }}
+      pairing: ${{ steps.tests.outputs.pairing }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dorny/paths-filter@v3
+        id: groups
+        with:
+          filters: |
+            hashes:
+              - "crates/circuits/**"
+              - "crates/vm/**"
+              - "crates/toolchain/**"
+              - "crates/sdk/**"
+              - "crates/rvr/**"
+              - "extensions/riscv/**"
+              - "extensions/sha2/**"
+              - "extensions/keccak256/**"
+              - "guest-libs/sha2/**"
+              - "guest-libs/keccak256/**"
+              - "Cargo.toml"
+              - "Cargo.lock"
+              - ".github/filters/guest-lib-tests.yml"
+              - ".github/workflows/guest-lib-tests.cuda.yml"
+              - "crates/sdk/guest/fib/**"
+            verify-stark:
+              - "crates/circuits/**"
+              - "crates/vm/**"
+              - "crates/toolchain/**"
+              - "crates/recursion/**"
+              - "crates/continuations/**"
+              - "crates/rvr/**"
+              - "extensions/riscv/**"
+              - "extensions/deferral/**"
+              - "guest-libs/verify-stark/**"
+              - "Cargo.toml"
+              - "Cargo.lock"
+              - ".github/filters/guest-lib-tests.yml"
+              - ".github/workflows/guest-lib-tests.cuda.yml"
+              - "crates/sdk/guest/fib/**"
+            curves:
+              - "crates/circuits/**"
+              - "crates/vm/**"
+              - "crates/toolchain/**"
+              - "crates/rvr/**"
+              - "extensions/riscv/**"
+              - "extensions/riscv-adapters/**"
+              - "extensions/sha2/**"
+              - "extensions/algebra/**"
+              - "extensions/ecc/**"
+              - "guest-libs/sha2/**"
+              - "guest-libs/k256/**"
+              - "guest-libs/p256/**"
+              - "Cargo.toml"
+              - "Cargo.lock"
+              - ".github/filters/guest-lib-tests.yml"
+              - ".github/workflows/guest-lib-tests.cuda.yml"
+              - "crates/sdk/guest/fib/**"
+            algebra:
+              - "crates/circuits/**"
+              - "crates/vm/**"
+              - "crates/toolchain/**"
+              - "crates/rvr/**"
+              - "extensions/riscv/**"
+              - "extensions/riscv-adapters/**"
+              - "extensions/algebra/**"
+              - "extensions/ecc/**"
+              - "extensions/pairing/**"
+              - "guest-libs/ff_derive/**"
+              - "guest-libs/pairing/**"
+              - "Cargo.toml"
+              - "Cargo.lock"
+              - ".github/filters/guest-lib-tests.yml"
+              - ".github/workflows/guest-lib-tests.cuda.yml"
+              - "crates/sdk/guest/fib/**"
+      - uses: dorny/paths-filter@v3
+        id: tests
+        with:
+          filters: .github/filters/guest-lib-tests.yml
+
   guest-lib-tests-cuda:
+    needs: changes
+    if: needs.changes.outputs.groups != '[]'
+    name: ${{ format('CUDA ({0})', matrix.group) }}
     strategy:
       matrix:
-        crates: # group crates on the same runner based on test time
-          - { names: "sha2 keccak256" }
-          - { names: "verify-stark" }
-          - { names: "k256 p256" }
-          - { names: "ff_derive pairing" }
+        group: ${{ fromJSON(needs.changes.outputs.groups) }}
     runs-on:
       - runs-on=${{ github.run_id }}-guest-lib-cuda-${{ github.run_attempt }}-${{ strategy.job-index }}/image=ubuntu24-gpu-x64/family=g7.2xlarge+g6.2xlarge+g5.2xlarge/volume=40gb/spot=price-capacity-optimized/extras=s3-cache
 
@@ -46,68 +171,6 @@ jobs:
           ssh-private-key: |
             ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
       - uses: actions/checkout@v5
-      - uses: dorny/paths-filter@v3
-        id: filter
-        with:
-          filters: |
-            common:
-              - "crates/circuits/**"
-              - "crates/vm/**"
-              - "crates/toolchain/**"
-              - "extensions/riscv/**"
-              - "extensions/riscv-adapters/**"
-              - ".github/workflows/guest-lib-tests.cuda.yml"
-              - "crates/sdk/guest/fib/**"
-            sha2:
-              - "extensions/sha2/**"
-              - "guest-libs/sha2/**"
-            keccak256:
-              - "extensions/keccak256/**"
-              - "guest-libs/keccak256/**"
-            ff_derive:
-              - "extensions/algebra/**"
-              - "guest-libs/ff_derive/**"
-            k256:
-              - "extensions/algebra/**"
-              - "extensions/ecc/**"
-              - "guest-libs/k256/**"
-            p256:
-              - "extensions/algebra/**"
-              - "extensions/ecc/**"
-              - "guest-libs/p256/**"
-            pairing:
-              - "extensions/algebra/**"
-              - "extensions/ecc/**"
-              - "extensions/pairing/**"
-              - "guest-libs/pairing/**"
-            verify-stark:
-              - "crates/recursion/**"
-              - "crates/continuations/**"
-              - "guest-libs/verify-stark/**"
-
-      - name: Skip if no changes
-        env:
-          FILTER_OUTPUTS: ${{ toJSON(steps.filter.outputs) }}
-        run: |
-          # Check if common files changed
-          COMMON_CHANGED=$(echo $FILTER_OUTPUTS | jq -r .common)
-
-          # Check if any crate in the current matrix group changed
-          ANY_CRATE_CHANGED=false
-          for crate in ${{ matrix.crates.names }}; do
-            crate_changed=$(echo $FILTER_OUTPUTS | jq -r --arg c "$crate" '.[$c]')
-            if [[ "$crate_changed" == "true" ]]; then
-              ANY_CRATE_CHANGED=true
-              break
-            fi
-          done
-
-          # Skip if neither common nor any crate in this matrix group changed
-          if [[ "$COMMON_CHANGED" != "true" && "$ANY_CRATE_CHANGED" != "true" ]]; then
-            echo "No relevant changes for crates [${{ matrix.crates.names }}], skipping tests."
-            exit 0
-          fi
-
       - uses: dtolnay/rust-toolchain@stable
         env:
           RUSTUP_PERMIT_COPY_RENAME: "1"
@@ -131,43 +194,43 @@ jobs:
           echo "NEXTEST_ENV=CUDA_OPT_LEVEL=3" >> $GITHUB_ENV
           echo "FEATURE_ARGS=--features=cuda" >> $GITHUB_ENV
 
-      - name: Run guest library tests
-        env:
-          FILTER_OUTPUTS: ${{ toJSON(steps.filter.outputs) }}
-        run: |
-          COMMON_CHANGED=$(echo $FILTER_OUTPUTS | jq -r .common)
-          "$GITHUB_WORKSPACE/ci/install-openvm-toolchain.sh"
+      - name: Install OpenVM toolchain
+        run: "$GITHUB_WORKSPACE/ci/install-openvm-toolchain.sh"
 
-          for crate in ${{ matrix.crates.names }}; do
-            crate_changed=$(echo $FILTER_OUTPUTS | jq -r --arg c "$crate" '.[$c]')
-            if [[ "$COMMON_CHANGED" == "true" || "$crate_changed" == "true" ]]; then
-              echo "::group::Running tests for $crate"
+      - name: Run SHA-2 tests
+        if: matrix.group == 'hashes' && needs.changes.outputs.sha2 == 'true'
+        working-directory: guest-libs/sha2
+        run: ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} --run-ignored=all --no-tests=pass --test-threads=1
 
-              # Run guest library tests
-              if [ -d "guest-libs/$crate" ]; then
-                TEST_DIR="guest-libs/$crate"
-                if [[ "$crate" == "verify-stark" ]]; then
-                  TEST_DIR="guest-libs/$crate/circuit"
-                fi
-                pushd $TEST_DIR
+      - name: Run Keccak-256 tests
+        if: matrix.group == 'hashes' && needs.changes.outputs.keccak256 == 'true'
+        working-directory: guest-libs/keccak256
+        run: ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} --run-ignored=all --no-tests=pass --test-threads=1
 
-                # Handle special feature args for pairing crate
-                SPECIAL_ARGS=""
-                if [[ "$crate" == "pairing" ]]; then
-                  SPECIAL_ARGS="--features=bn254,bls12_381"
-                elif [[ "$crate" == "sha2" || "$crate" == "keccak256" ]]; then
-                  # also run proving tests
-                  SPECIAL_ARGS="--run-ignored=all"
-                fi
+      - name: Run STARK verification tests
+        if: matrix.group == 'verify-stark'
+        working-directory: guest-libs/verify-stark/circuit
+        run: ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} --no-tests=pass --test-threads=1
 
-                ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} $SPECIAL_ARGS --no-tests=pass --test-threads=1
-                popd
-              fi
-              echo "::endgroup::"
-            else
-              echo "Skipping tests for $crate as no relevant files changed."
-            fi
-          done
+      - name: Run k256 tests
+        if: matrix.group == 'curves' && needs.changes.outputs.k256 == 'true'
+        working-directory: guest-libs/k256
+        run: ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} --no-tests=pass --test-threads=1
+
+      - name: Run p256 tests
+        if: matrix.group == 'curves' && needs.changes.outputs.p256 == 'true'
+        working-directory: guest-libs/p256
+        run: ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} --no-tests=pass --test-threads=1
+
+      - name: Run ff_derive tests
+        if: matrix.group == 'algebra' && needs.changes.outputs.ff_derive == 'true'
+        working-directory: guest-libs/ff_derive
+        run: ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} --no-tests=pass --test-threads=1
+
+      - name: Run pairing tests
+        if: matrix.group == 'algebra' && needs.changes.outputs.pairing == 'true'
+        working-directory: guest-libs/pairing
+        run: ${{ env.NEXTEST_ENV }} cargo nextest run --cargo-profile=fast ${{ env.FEATURE_ARGS }} --features=bn254,bls12_381 --no-tests=pass --test-threads=1
 
       - name: sccache stats
         if: always()

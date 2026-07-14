@@ -32,6 +32,9 @@ jobs:
               - '**/cuda*.rs'
               - '**/cuda_abi.rs'
               - '**/build.rs'
+              - '**/Cargo.toml'
+              - 'Cargo.lock'
+              - 'scripts/gpu_driver_setup.sh'
               - '.github/workflows/lints.yml'
               - '.github/actions/rust-cache-cuda/**'
   lint:

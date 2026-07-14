@@ -11,9 +11,14 @@ on:
 #     - "crates/vm/**"
 #     - "crates/toolchain/**"
       - "extensions/riscv/circuit/**"
+      - "extensions/riscv/rvr/**"
       - "extensions/riscv/transpiler/**"
       - "extensions/riscv/guest/**"
-#     - "Cargo.toml"
+      - "extensions/riscv-adapters/**"
+      - "crates/toolchain/tests/**"
+      - "crates/rvr/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
       - ".github/workflows/riscv.yml"
 
 concurrency:
@@ -31,21 +36,25 @@ jobs:
         platform:
           # TODO(aot): restore `features: "aot"`
           - {
+              name: "default runtime",
               labels: "family=c8i-flex.16xlarge+c8i.16xlarge+c8a.16xlarge+c7i.16xlarge+c7a.16xlarge/image=ubuntu24-full-x64",
               image: "ubuntu24-full-x64",
               features: "",
             }
           - {
+              name: "RVR runtime",
               labels: "family=c8i-flex.16xlarge+c8i.16xlarge+c8a.16xlarge+c7i.16xlarge+c7a.16xlarge/image=ubuntu24-full-x64",
               image: "ubuntu24-full-x64",
               features: "rvr",
             }
           - {
+              name: "CUDA prover",
               labels: "image=ubuntu24-gpu-x64/family=g7.2xlarge+g6.2xlarge+g5.2xlarge/volume=40gb/spot=price-capacity-optimized",
               image: "ubuntu24-gpu-x64",
               features: "cuda,touchemall",
             }
 
+    name: ${{ matrix.platform.name }}
     runs-on:
       - runs-on=${{ github.run_id }}-riscv-${{ github.run_attempt }}-${{ strategy.job-index }}/${{ matrix.platform.labels }}/extras=s3-cache
 

@@ -1,0 +1,56 @@
+shared: &shared
+  - "crates/circuits/**"
+  - "crates/vm/**"
+  - "crates/toolchain/**"
+  - "crates/rvr/**"
+  - "extensions/riscv/**"
+  - "Cargo.toml"
+  - "Cargo.lock"
+  - ".github/filters/guest-lib-tests.yml"
+  - ".github/workflows/guest-lib-tests.yml"
+  - ".github/workflows/guest-lib-tests.cuda.yml"
+  - "crates/sdk/guest/fib/**"
+sha2:
+  - *shared
+  - "crates/sdk/**"
+  - "extensions/sha2/**"
+  - "guest-libs/sha2/**"
+keccak256:
+  - *shared
+  - "crates/sdk/**"
+  - "extensions/keccak256/**"
+  - "guest-libs/keccak256/**"
+ff_derive:
+  - *shared
+  - "extensions/algebra/**"
+  - "extensions/riscv-adapters/**"
+  - "guest-libs/ff_derive/**"
+k256:
+  - *shared
+  - "extensions/sha2/**"
+  - "extensions/algebra/**"
+  - "extensions/ecc/**"
+  - "extensions/riscv-adapters/**"
+  - "guest-libs/k256/**"
+  - "guest-libs/sha2/**"
+p256:
+  - *shared
+  - "extensions/sha2/**"
+  - "extensions/algebra/**"
+  - "extensions/ecc/**"
+  - "extensions/riscv-adapters/**"
+  - "guest-libs/p256/**"
+  - "guest-libs/sha2/**"
+pairing:
+  - *shared
+  - "extensions/algebra/**"
+  - "extensions/ecc/**"
+  - "extensions/pairing/**"
+  - "extensions/riscv-adapters/**"
+  - "guest-libs/pairing/**"
+verify-stark:
+  - *shared
+  - "crates/recursion/**"
+  - "crates/continuations/**"
+  - "extensions/deferral/**"
+  - "guest-libs/verify-stark/**"

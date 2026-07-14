@@ -9,6 +9,9 @@ on:
       - "crates/continuations/**"
       - "crates/recursion/**"
       - "crates/sdk/**"
+      - "crates/static-verifier/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
       - ".github/workflows/sdk.cuda.yml"
 
 concurrency:
