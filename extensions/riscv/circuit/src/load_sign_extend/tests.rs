@@ -1,11 +1,7 @@
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{LOADB, LOADH, LOADW};
-use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 
-use super::test_utils::{
-    assert_pranked_byte_fails, assert_pranked_halfword_fails, assert_pranked_word_fails,
-    load_sign_extend_write_data, rv64_u16_block_to_bytes, F,
-};
-use crate::test_utils::memory::rv64_bytes_to_u16_block;
+use super::common::load_sign_extend_write_data;
+use crate::adapters::{rv64_bytes_to_u16_block, rv64_u16_block_to_bytes};
 
 #[test]
 fn load_sign_extend_sanity_tests() {
@@ -56,11 +52,4 @@ fn load_sign_extend_sanity_tests() {
         load_sign_extend_write_data(LOADW, read_data, 4),
         rv64_bytes_to_u16_block([0xAA, 0xBB, 0xCC, 0x7D, 0, 0, 0, 0])
     );
-}
-
-#[test]
-fn negative_split_signed_load_tests() {
-    assert_pranked_byte_fails(|core| core.data_most_sig_bit += F::ONE);
-    assert_pranked_halfword_fails(|core| core.data_most_sig_bit += F::ONE);
-    assert_pranked_word_fails(|core| core.data_most_sig_bit += F::ONE);
 }

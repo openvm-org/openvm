@@ -1,21 +1,67 @@
-#[cfg(feature = "cuda")]
-use openvm_circuit::arch::testing::TestBuilder;
-#[cfg(feature = "cuda")]
-use openvm_instructions::LocalOpcode;
+use std::borrow::BorrowMut;
 
-use crate::test_utils::memory::{
-    create_seeded_rng, create_word_harness, load_memory_config, load_sign_extend_write_data,
-    load_write_data, rv64_bytes_to_u16_block, set_and_execute_load, VmChipTestBuilder, LOADB,
-    LOADH, LOADHU, LOADW, LOADWU, RV64_MEMORY_AS,
+#[cfg(feature = "cuda")]
+use openvm_circuit::arch::testing::{
+    default_var_range_checker_bus, GpuChipTestBuilder, GpuTestChipHarness,
+};
+use openvm_circuit::arch::testing::{TestBuilder, TestChipHarness, VmChipTestBuilder};
+use openvm_instructions::{riscv::RV64_MEMORY_AS, LocalOpcode};
+use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, LOADB, LOADH, LOADHU, LOADW, LOADWU};
+use openvm_stark_backend::{
+    p3_air::BaseAir,
+    p3_field::PrimeCharacteristicRing,
+    p3_matrix::{
+        dense::{DenseMatrix, RowMajorMatrix},
+        Matrix,
+    },
+    utils::disable_debug_builder,
+};
+use openvm_stark_sdk::utils::create_seeded_rng;
+
+use crate::{
+    adapters::{
+        rv64_bytes_to_u16_block, Rv64LoadAdapterAir, Rv64LoadAdapterExecutor, Rv64LoadAdapterFiller,
+    },
+    load::{
+        common::load_write_data, core::LoadCoreCols, LoadWordCoreAir, LoadWordFiller,
+        Rv64LoadWordAir, Rv64LoadWordChip, Rv64LoadWordExecutor, LOAD_WORD_SELECTOR_WIDTH,
+    },
+    load_sign_extend::common::load_sign_extend_write_data,
+    test_utils::memory::{load_memory_config, set_and_execute_load, F, MAX_INS_CAPACITY},
 };
 #[cfg(feature = "cuda")]
-use crate::test_utils::memory::{
-    default_var_range_checker_bus, dummy_range_checker, load_gpu_memory_config,
-    transfer_load_records, GpuChipTestBuilder, GpuTestChipHarness, LoadWordCoreAir, LoadWordFiller,
-    Rv64LoadAdapterAir, Rv64LoadAdapterExecutor, Rv64LoadAdapterFiller, Rv64LoadStoreOpcode,
-    Rv64LoadWordAir, Rv64LoadWordChip, Rv64LoadWordChipGpu, Rv64LoadWordExecutor, F,
-    MAX_INS_CAPACITY,
+use crate::{
+    load::Rv64LoadWordChipGpu,
+    test_utils::memory::{dummy_range_checker, load_gpu_memory_config, transfer_load_records},
 };
+
+type WordHarness = TestChipHarness<F, Rv64LoadWordExecutor, Rv64LoadWordAir, Rv64LoadWordChip<F>>;
+
+fn create_word_harness(tester: &mut VmChipTestBuilder<F>) -> WordHarness {
+    let range_checker = tester.range_checker();
+    let air = Rv64LoadWordAir::new(
+        Rv64LoadAdapterAir::new(
+            tester.memory_bridge(),
+            tester.execution_bridge(),
+            range_checker.bus(),
+            tester.address_bits(),
+        ),
+        LoadWordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET),
+    );
+    let executor = Rv64LoadWordExecutor::new(
+        Rv64LoadAdapterExecutor::new(tester.address_bits()),
+        Rv64LoadStoreOpcode::CLASS_OFFSET,
+    );
+    let chip = Rv64LoadWordChip::<F>::new(
+        LoadWordFiller::new(
+            Rv64LoadAdapterFiller::new(tester.address_bits(), range_checker.clone()),
+            Rv64LoadStoreOpcode::CLASS_OFFSET,
+            range_checker,
+        ),
+        tester.memory_helper(),
+    );
+    WordHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
+}
 
 #[test]
 fn positive_loadwu_shift4_test() {
@@ -106,6 +152,47 @@ fn accepted_shift_sets() {
         let _ = load_sign_extend_write_data(LOADW, read_data, shift);
         let _ = load_write_data(LOADWU, read_data, shift);
     }
+}
+
+fn assert_pranked_load_word_fails(prank: impl Fn(&mut LoadCoreCols<F, LOAD_WORD_SELECTOR_WIDTH>)) {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::from_config(load_memory_config());
+    let mut harness = create_word_harness(&mut tester);
+    set_and_execute_load(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.arena,
+        &mut rng,
+        LOADWU,
+        None,
+        None,
+        None,
+        None,
+    );
+    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
+    let modify_trace = |trace: &mut DenseMatrix<F>| {
+        let mut trace_row = trace.row_slice(0).unwrap().to_vec();
+        let (_, core_row) = trace_row.split_at_mut(adapter_width);
+        prank(core_row.borrow_mut());
+        *trace = RowMajorMatrix::new(trace_row, trace.width());
+    };
+    disable_debug_builder();
+    tester
+        .build()
+        .load_and_prank_trace(harness, modify_trace)
+        .finalize()
+        .simple_test()
+        .expect_err("pranked word load trace should fail");
+}
+
+#[test]
+fn negative_split_write_data_test() {
+    assert_pranked_load_word_fails(|core| core.read_data[0] += F::ONE);
+}
+
+#[test]
+fn negative_split_opcode_role_test() {
+    assert_pranked_load_word_fails(|core| core.selector[0] += F::ONE);
 }
 
 #[cfg(feature = "cuda")]

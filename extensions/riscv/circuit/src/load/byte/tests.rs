@@ -1,21 +1,92 @@
-#[cfg(feature = "cuda")]
-use openvm_circuit::arch::testing::TestBuilder;
-#[cfg(feature = "cuda")]
-use openvm_instructions::LocalOpcode;
+use std::{borrow::BorrowMut, sync::Arc};
 
-use crate::test_utils::memory::{
-    create_byte_harness, create_seeded_rng, load_memory_config, load_write_data,
-    rv64_bytes_to_u16_block, set_and_execute_load, VmChipTestBuilder, LOADBU,
+#[cfg(feature = "cuda")]
+use openvm_circuit::arch::testing::{
+    default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
+    GpuTestChipHarness,
+};
+use openvm_circuit::arch::testing::{
+    TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
+};
+use openvm_circuit_primitives::bitwise_op_lookup::{
+    BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+    SharedBitwiseOperationLookupChip,
 };
 #[cfg(feature = "cuda")]
-use crate::test_utils::memory::{
-    default_bitwise_lookup_bus, default_var_range_checker_bus, dummy_range_checker,
-    load_gpu_memory_config, transfer_load_records, Arc, BitwiseOperationLookupChip,
-    GpuChipTestBuilder, GpuTestChipHarness, LoadByteCoreAir, LoadByteFiller, Rv64LoadAdapterAir,
-    Rv64LoadAdapterExecutor, Rv64LoadAdapterFiller, Rv64LoadByteAir, Rv64LoadByteChip,
-    Rv64LoadByteChipGpu, Rv64LoadByteExecutor, Rv64LoadStoreOpcode, F, MAX_INS_CAPACITY,
-    RV64_BYTE_BITS, RV64_MEMORY_AS,
+use openvm_instructions::riscv::RV64_MEMORY_AS;
+use openvm_instructions::LocalOpcode;
+use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, LOADBU};
+use openvm_stark_backend::{
+    p3_air::BaseAir,
+    p3_field::PrimeCharacteristicRing,
+    p3_matrix::{
+        dense::{DenseMatrix, RowMajorMatrix},
+        Matrix,
+    },
+    utils::disable_debug_builder,
 };
+use openvm_stark_sdk::utils::create_seeded_rng;
+
+use crate::{
+    adapters::{
+        rv64_bytes_to_u16_block, Rv64LoadAdapterAir, Rv64LoadAdapterExecutor,
+        Rv64LoadAdapterFiller, RV64_BYTE_BITS,
+    },
+    load::{
+        common::load_write_data, LoadByteCoreAir, LoadByteCoreCols, LoadByteFiller,
+        Rv64LoadByteAir, Rv64LoadByteChip, Rv64LoadByteExecutor,
+    },
+    test_utils::memory::{load_memory_config, set_and_execute_load, F, MAX_INS_CAPACITY},
+};
+#[cfg(feature = "cuda")]
+use crate::{
+    load::Rv64LoadByteChipGpu,
+    test_utils::memory::{dummy_range_checker, load_gpu_memory_config, transfer_load_records},
+};
+
+type ByteHarness = TestChipHarness<F, Rv64LoadByteExecutor, Rv64LoadByteAir, Rv64LoadByteChip<F>>;
+
+fn create_byte_harness(
+    tester: &mut VmChipTestBuilder<F>,
+) -> (
+    ByteHarness,
+    (
+        BitwiseOperationLookupAir<RV64_BYTE_BITS>,
+        SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+    ),
+) {
+    let range_checker = tester.range_checker();
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
+        bitwise_bus,
+    ));
+    let air = Rv64LoadByteAir::new(
+        Rv64LoadAdapterAir::new(
+            tester.memory_bridge(),
+            tester.execution_bridge(),
+            range_checker.bus(),
+            tester.address_bits(),
+        ),
+        LoadByteCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_chip.bus()),
+    );
+    let executor = Rv64LoadByteExecutor::new(
+        Rv64LoadAdapterExecutor::new(tester.address_bits()),
+        Rv64LoadStoreOpcode::CLASS_OFFSET,
+    );
+    let chip = Rv64LoadByteChip::<F>::new(
+        LoadByteFiller::new(
+            Rv64LoadAdapterFiller::new(tester.address_bits(), range_checker.clone()),
+            Rv64LoadStoreOpcode::CLASS_OFFSET,
+            bitwise_chip.clone(),
+            range_checker,
+        ),
+        tester.memory_helper(),
+    );
+    (
+        ByteHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY),
+        (bitwise_chip.air, bitwise_chip),
+    )
+}
 
 #[test]
 fn rand_load_byte_test() {
@@ -81,6 +152,40 @@ fn run_loadbu_sanity_test() {
             rv64_bytes_to_u16_block(expected)
         );
     }
+}
+
+#[test]
+fn negative_split_opcode_role_test() {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::from_config(load_memory_config());
+    let (mut harness, bitwise) = create_byte_harness(&mut tester);
+    set_and_execute_load(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.arena,
+        &mut rng,
+        LOADBU,
+        None,
+        None,
+        None,
+        None,
+    );
+    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
+    let modify_trace = |trace: &mut DenseMatrix<F>| {
+        let mut trace_row = trace.row_slice(0).unwrap().to_vec();
+        let (_, core_row) = trace_row.split_at_mut(adapter_width);
+        let core: &mut LoadByteCoreCols<F> = core_row.borrow_mut();
+        core.selector[0] += F::ONE;
+        *trace = RowMajorMatrix::new(trace_row, trace.width());
+    };
+    disable_debug_builder();
+    tester
+        .build()
+        .load_and_prank_trace(harness, modify_trace)
+        .load_periphery(bitwise)
+        .finalize()
+        .simple_test()
+        .expect_err("pranked byte load trace should fail");
 }
 
 #[cfg(feature = "cuda")]

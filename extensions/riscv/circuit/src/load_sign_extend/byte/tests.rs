@@ -1,20 +1,99 @@
-#[cfg(feature = "cuda")]
-use openvm_circuit::arch::testing::TestBuilder;
-#[cfg(feature = "cuda")]
-use openvm_instructions::LocalOpcode;
+use std::{borrow::BorrowMut, sync::Arc};
 
-use crate::load_sign_extend::test_utils::{
-    create_byte_harness, create_seeded_rng, memory_config_for, set_and_execute, VmChipTestBuilder,
-    LOADB,
-};
 #[cfg(feature = "cuda")]
-use crate::load_sign_extend::test_utils::{
-    default_bitwise_lookup_bus, dummy_range_checker, transfer_load_sign_extend_records, Arc,
-    BitwiseOperationLookupChip, GpuChipTestBuilder, GpuTestChipHarness, LoadSignExtendByteCoreAir,
-    LoadSignExtendByteFiller, Rv64LoadAdapterAir, Rv64LoadAdapterExecutor, Rv64LoadAdapterFiller,
-    Rv64LoadSignExtendByteAir, Rv64LoadSignExtendByteChip, Rv64LoadSignExtendByteChipGpu,
-    Rv64LoadSignExtendByteExecutor, Rv64LoadStoreOpcode, F, MAX_INS_CAPACITY, RV64_BYTE_BITS,
+use openvm_circuit::arch::testing::{
+    default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness,
 };
+use openvm_circuit::arch::testing::{
+    TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
+};
+use openvm_circuit_primitives::bitwise_op_lookup::{
+    BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+    SharedBitwiseOperationLookupChip,
+};
+use openvm_instructions::LocalOpcode;
+use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, LOADB};
+use openvm_stark_backend::{
+    p3_air::BaseAir,
+    p3_field::PrimeCharacteristicRing,
+    p3_matrix::{
+        dense::{DenseMatrix, RowMajorMatrix},
+        Matrix,
+    },
+    utils::disable_debug_builder,
+};
+use openvm_stark_sdk::utils::create_seeded_rng;
+
+#[cfg(feature = "cuda")]
+use crate::load_sign_extend::{
+    test_utils::{dummy_range_checker, transfer_load_sign_extend_records},
+    Rv64LoadSignExtendByteChipGpu,
+};
+use crate::{
+    adapters::{
+        Rv64LoadAdapterAir, Rv64LoadAdapterExecutor, Rv64LoadAdapterFiller, RV64_BYTE_BITS,
+    },
+    load_sign_extend::{
+        byte::{
+            LoadSignExtendByteCoreAir, LoadSignExtendByteCoreCols, LoadSignExtendByteFiller,
+            Rv64LoadSignExtendByteAir, Rv64LoadSignExtendByteChip, Rv64LoadSignExtendByteExecutor,
+        },
+        test_utils::{memory_config_for, set_and_execute, F, MAX_INS_CAPACITY},
+    },
+};
+
+type ByteHarness = TestChipHarness<
+    F,
+    Rv64LoadSignExtendByteExecutor,
+    Rv64LoadSignExtendByteAir,
+    Rv64LoadSignExtendByteChip<F>,
+>;
+
+fn create_byte_harness(
+    tester: &mut VmChipTestBuilder<F>,
+) -> (
+    ByteHarness,
+    (
+        BitwiseOperationLookupAir<RV64_BYTE_BITS>,
+        SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+    ),
+) {
+    let range_checker = tester.range_checker();
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
+        bitwise_bus,
+    ));
+    let air = Rv64LoadSignExtendByteAir::new(
+        Rv64LoadAdapterAir::new(
+            tester.memory_bridge(),
+            tester.execution_bridge(),
+            range_checker.bus(),
+            tester.address_bits(),
+        ),
+        LoadSignExtendByteCoreAir::new(
+            Rv64LoadStoreOpcode::CLASS_OFFSET,
+            bitwise_chip.bus(),
+            range_checker.bus(),
+        ),
+    );
+    let executor = Rv64LoadSignExtendByteExecutor::new(
+        Rv64LoadAdapterExecutor::new(tester.address_bits()),
+        Rv64LoadStoreOpcode::CLASS_OFFSET,
+    );
+    let chip = Rv64LoadSignExtendByteChip::<F>::new(
+        LoadSignExtendByteFiller::new(
+            Rv64LoadAdapterFiller::new(tester.address_bits(), range_checker.clone()),
+            Rv64LoadStoreOpcode::CLASS_OFFSET,
+            bitwise_chip.clone(),
+            range_checker,
+        ),
+        tester.memory_helper(),
+    );
+    (
+        ByteHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY),
+        (bitwise_chip.air, bitwise_chip),
+    )
+}
 
 #[test]
 fn rand_load_sign_extend_byte_test() {
@@ -64,6 +143,39 @@ fn positive_loadb_shift7_test() {
         .finalize()
         .simple_test()
         .unwrap();
+}
+
+#[test]
+fn negative_split_signed_load_test() {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::from_config(memory_config_for());
+    let (mut harness, bitwise) = create_byte_harness(&mut tester);
+    set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.arena,
+        &mut rng,
+        LOADB,
+        None,
+        None,
+        None,
+    );
+    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
+    let modify_trace = |trace: &mut DenseMatrix<F>| {
+        let mut trace_row = trace.row_slice(0).unwrap().to_vec();
+        let (_, core_row) = trace_row.split_at_mut(adapter_width);
+        let core: &mut LoadSignExtendByteCoreCols<F> = core_row.borrow_mut();
+        core.data_most_sig_bit += F::ONE;
+        *trace = RowMajorMatrix::new(trace_row, trace.width());
+    };
+    disable_debug_builder();
+    tester
+        .build()
+        .load_and_prank_trace(harness, modify_trace)
+        .load_periphery(bitwise)
+        .finalize()
+        .simple_test()
+        .expect_err("pranked signed byte load trace should fail");
 }
 
 #[cfg(feature = "cuda")]

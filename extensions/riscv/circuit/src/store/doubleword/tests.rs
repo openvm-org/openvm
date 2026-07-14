@@ -1,21 +1,64 @@
+use openvm_circuit::arch::testing::{TestBuilder, TestChipHarness, VmChipTestBuilder};
 #[cfg(feature = "cuda")]
-use openvm_circuit::arch::testing::TestBuilder;
+use openvm_circuit::{
+    arch::testing::{default_var_range_checker_bus, GpuChipTestBuilder, GpuTestChipHarness},
+    system::memory::merkle::public_values::PUBLIC_VALUES_AS,
+};
 #[cfg(feature = "cuda")]
+use openvm_instructions::riscv::RV64_MEMORY_AS;
 use openvm_instructions::LocalOpcode;
+use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, STORED};
+use openvm_stark_sdk::utils::create_seeded_rng;
 
-use crate::test_utils::memory::{
-    create_seeded_rng, create_store_doubleword_harness, rv64_bytes_to_u16_block,
-    set_and_execute_store, store_memory_config, store_write_data, VmChipTestBuilder, STORED,
+use crate::{
+    adapters::{
+        rv64_bytes_to_u16_block, Rv64StoreAdapterAir, Rv64StoreAdapterExecutor,
+        Rv64StoreAdapterFiller,
+    },
+    store::{
+        common::store_write_data, Rv64StoreDoublewordAir, Rv64StoreDoublewordChip,
+        Rv64StoreDoublewordExecutor, StoreDoublewordCoreAir, StoreDoublewordFiller,
+    },
+    test_utils::memory::{set_and_execute_store, store_memory_config, F, MAX_INS_CAPACITY},
 };
 #[cfg(feature = "cuda")]
-use crate::test_utils::memory::{
-    default_var_range_checker_bus, dummy_range_checker, store_gpu_memory_config,
-    transfer_store_records, GpuChipTestBuilder, GpuTestChipHarness, Rv64LoadStoreOpcode,
-    Rv64StoreAdapterAir, Rv64StoreAdapterExecutor, Rv64StoreAdapterFiller, Rv64StoreDoublewordAir,
-    Rv64StoreDoublewordChip, Rv64StoreDoublewordChipGpu, Rv64StoreDoublewordExecutor,
-    StoreDoublewordCoreAir, StoreDoublewordFiller, F, MAX_INS_CAPACITY, PUBLIC_VALUES_AS,
-    RV64_MEMORY_AS,
+use crate::{
+    store::Rv64StoreDoublewordChipGpu,
+    test_utils::memory::{dummy_range_checker, store_gpu_memory_config, transfer_store_records},
 };
+
+type StoreDoublewordHarness = TestChipHarness<
+    F,
+    Rv64StoreDoublewordExecutor,
+    Rv64StoreDoublewordAir,
+    Rv64StoreDoublewordChip<F>,
+>;
+
+fn create_store_doubleword_harness(tester: &mut VmChipTestBuilder<F>) -> StoreDoublewordHarness {
+    let range_checker = tester.range_checker();
+    let air = Rv64StoreDoublewordAir::new(
+        Rv64StoreAdapterAir::new(
+            tester.memory_bridge(),
+            tester.execution_bridge(),
+            range_checker.bus(),
+            tester.address_bits(),
+        ),
+        StoreDoublewordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET),
+    );
+    let executor = Rv64StoreDoublewordExecutor::new(
+        Rv64StoreAdapterExecutor::new(tester.address_bits()),
+        Rv64LoadStoreOpcode::CLASS_OFFSET,
+    );
+    let chip = Rv64StoreDoublewordChip::<F>::new(
+        StoreDoublewordFiller::new(
+            Rv64StoreAdapterFiller::new(tester.address_bits(), range_checker.clone()),
+            Rv64LoadStoreOpcode::CLASS_OFFSET,
+            range_checker,
+        ),
+        tester.memory_helper(),
+    );
+    StoreDoublewordHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
+}
 
 #[test]
 fn rand_store_doubleword_test() {

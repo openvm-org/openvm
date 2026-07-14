@@ -1,20 +1,71 @@
-#[cfg(feature = "cuda")]
-use openvm_circuit::arch::testing::TestBuilder;
-#[cfg(feature = "cuda")]
-use openvm_instructions::LocalOpcode;
+use std::borrow::BorrowMut;
 
-use crate::load_sign_extend::test_utils::{
-    create_halfword_harness, create_seeded_rng, memory_config_for, set_and_execute,
-    VmChipTestBuilder, LOADH,
-};
 #[cfg(feature = "cuda")]
-use crate::load_sign_extend::test_utils::{
-    dummy_range_checker, transfer_load_sign_extend_records, GpuChipTestBuilder, GpuTestChipHarness,
-    LoadSignExtendHalfwordCoreAir, LoadSignExtendHalfwordFiller, Rv64LoadAdapterAir,
-    Rv64LoadAdapterExecutor, Rv64LoadAdapterFiller, Rv64LoadSignExtendHalfwordAir,
-    Rv64LoadSignExtendHalfwordChip, Rv64LoadSignExtendHalfwordChipGpu,
-    Rv64LoadSignExtendHalfwordExecutor, Rv64LoadStoreOpcode, F, MAX_INS_CAPACITY,
+use openvm_circuit::arch::testing::{GpuChipTestBuilder, GpuTestChipHarness};
+use openvm_circuit::arch::testing::{TestBuilder, TestChipHarness, VmChipTestBuilder};
+use openvm_instructions::LocalOpcode;
+use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, LOADH};
+use openvm_stark_backend::{
+    p3_air::BaseAir,
+    p3_field::PrimeCharacteristicRing,
+    p3_matrix::{
+        dense::{DenseMatrix, RowMajorMatrix},
+        Matrix,
+    },
+    utils::disable_debug_builder,
 };
+use openvm_stark_sdk::utils::create_seeded_rng;
+
+#[cfg(feature = "cuda")]
+use crate::load_sign_extend::{
+    test_utils::{dummy_range_checker, transfer_load_sign_extend_records},
+    Rv64LoadSignExtendHalfwordChipGpu,
+};
+use crate::{
+    adapters::{Rv64LoadAdapterAir, Rv64LoadAdapterExecutor, Rv64LoadAdapterFiller},
+    load_sign_extend::{
+        core::LoadSignExtendCoreCols,
+        halfword::{
+            LoadSignExtendHalfwordCoreAir, LoadSignExtendHalfwordFiller,
+            Rv64LoadSignExtendHalfwordAir, Rv64LoadSignExtendHalfwordChip,
+            Rv64LoadSignExtendHalfwordExecutor, LOAD_SIGN_EXTEND_HALFWORD_SELECTOR_WIDTH,
+        },
+        test_utils::{memory_config_for, set_and_execute, F, MAX_INS_CAPACITY},
+    },
+};
+
+type HalfwordHarness = TestChipHarness<
+    F,
+    Rv64LoadSignExtendHalfwordExecutor,
+    Rv64LoadSignExtendHalfwordAir,
+    Rv64LoadSignExtendHalfwordChip<F>,
+>;
+
+fn create_halfword_harness(tester: &mut VmChipTestBuilder<F>) -> HalfwordHarness {
+    let range_checker = tester.range_checker();
+    let air = Rv64LoadSignExtendHalfwordAir::new(
+        Rv64LoadAdapterAir::new(
+            tester.memory_bridge(),
+            tester.execution_bridge(),
+            range_checker.bus(),
+            tester.address_bits(),
+        ),
+        LoadSignExtendHalfwordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, range_checker.bus()),
+    );
+    let executor = Rv64LoadSignExtendHalfwordExecutor::new(
+        Rv64LoadAdapterExecutor::new(tester.address_bits()),
+        Rv64LoadStoreOpcode::CLASS_OFFSET,
+    );
+    let chip = Rv64LoadSignExtendHalfwordChip::<F>::new(
+        LoadSignExtendHalfwordFiller::new(
+            Rv64LoadAdapterFiller::new(tester.address_bits(), range_checker.clone()),
+            Rv64LoadStoreOpcode::CLASS_OFFSET,
+            range_checker,
+        ),
+        tester.memory_helper(),
+    );
+    HalfwordHarness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
+}
 
 #[test]
 fn rand_load_sign_extend_halfword_test() {
@@ -62,6 +113,39 @@ fn positive_loadh_shift6_test() {
         .finalize()
         .simple_test()
         .unwrap();
+}
+
+#[test]
+fn negative_split_signed_load_test() {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::from_config(memory_config_for());
+    let mut harness = create_halfword_harness(&mut tester);
+    set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.arena,
+        &mut rng,
+        LOADH,
+        None,
+        None,
+        None,
+    );
+    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
+    let modify_trace = |trace: &mut DenseMatrix<F>| {
+        let mut trace_row = trace.row_slice(0).unwrap().to_vec();
+        let (_, core_row) = trace_row.split_at_mut(adapter_width);
+        let core: &mut LoadSignExtendCoreCols<F, LOAD_SIGN_EXTEND_HALFWORD_SELECTOR_WIDTH> =
+            core_row.borrow_mut();
+        core.data_most_sig_bit += F::ONE;
+        *trace = RowMajorMatrix::new(trace_row, trace.width());
+    };
+    disable_debug_builder();
+    tester
+        .build()
+        .load_and_prank_trace(harness, modify_trace)
+        .finalize()
+        .simple_test()
+        .expect_err("pranked signed halfword load trace should fail");
 }
 
 #[cfg(feature = "cuda")]
