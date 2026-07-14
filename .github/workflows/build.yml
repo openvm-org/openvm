@@ -15,7 +15,7 @@ jobs:
   lint:
     name: Build
     runs-on:
-      - runs-on=${{ github.run_id }}/volume=80gb/family=m8i-flex.16xlarge/image=ubuntu24-full-x64/extras=s3-cache
+      - runs-on=${{ github.run_id }}/volume=80gb/family=m8i-flex.16xlarge+m8i.16xlarge+m8a.16xlarge/image=ubuntu24-full-x64/extras=s3-cache
     steps:
       - uses: runs-on/action@v2
       - name: Load SSH key

@@ -35,11 +35,11 @@ jobs:
         include:
           - target: x86_64-unknown-linux-gnu
             arch: linux-x64
-            family: m8i-flex.16xlarge
+            family: m8i-flex.16xlarge+m8i.16xlarge+m8a.16xlarge
             image: ubuntu24-full-x64
           - target: aarch64-unknown-linux-gnu
             arch: linux-arm64
-            family: c9g.4xlarge
+            family: c9g.4xlarge+c8g.4xlarge
             image: ubuntu24-full-arm64
     steps:
       - uses: runs-on/action@v2
