@@ -9,7 +9,9 @@ images:
 runners:
   # runners for running tests
   test-gpu-nvidia:
-    family: ["g7e.2xlarge", "g7.2xlarge", "g6e.2xlarge"]
+    family: ["g7e.*", "g7.*", "g6e.*"]
+    cpu: [8, 16]
+    ram: [64]
     image: ubuntu24-gpu-x64
     spot: capacity-optimized
     extras: s3-cache

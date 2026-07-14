@@ -34,7 +34,7 @@ jobs:
           - { names: "k256 p256" }
           - { names: "ff_derive pairing" }
     runs-on:
-      - runs-on=${{ github.run_id }}-guest-lib-cuda-${{ github.run_attempt }}-${{ strategy.job-index }}/image=ubuntu24-gpu-x64/family=g7e.2xlarge+g7.2xlarge+g6e.2xlarge/volume=40gb/spot=capacity-optimized/extras=s3-cache
+      - runs-on=${{ github.run_id }}-guest-lib-cuda-${{ github.run_attempt }}-${{ strategy.job-index }}/image=ubuntu24-gpu-x64/family=g7e.*+g7.*+g6e.*/cpu=8+16/ram=64/volume=40gb/spot=capacity-optimized/extras=s3-cache
 
     steps:
       - uses: runs-on/action@v2

@@ -11,7 +11,7 @@ on:
         type: string
         required: false
         description: The AWS instance type or family (e.g., m8g.16xlarge)
-        default: g7e.2xlarge+g7.2xlarge+g6e.2xlarge
+        default: g7e.2xlarge+g7.4xlarge+g6e.2xlarge
       memory_allocator:
         type: string
         required: false
@@ -44,7 +44,7 @@ on:
         type: string
         required: false
         description: The AWS instance type or family (e.g., m8g.16xlarge)
-        default: g7e.2xlarge+g7.2xlarge+g6e.2xlarge
+        default: g7e.2xlarge+g7.4xlarge+g6e.2xlarge
       memory_allocator:
         type: string
         required: false
