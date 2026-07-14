@@ -166,7 +166,7 @@ jobs:
   verify-stark-examples:
     name: verify-stark examples
     runs-on:
-      - runs-on=${{ github.run_id }}-verify-stark-examples/image=ubuntu24-gpu-x64/family=g7.4xlarge+g6.4xlarge/volume=80gb/spot=capacity-optimized/extras=s3-cache
+      - runs-on=${{ github.run_id }}-verify-stark-examples/image=ubuntu24-gpu-x64/family=g7.4xlarge+g6.4xlarge+g5.4xlarge/volume=80gb/spot=price-capacity-optimized/extras=s3-cache
 
     steps:
       - uses: runs-on/action@v2
