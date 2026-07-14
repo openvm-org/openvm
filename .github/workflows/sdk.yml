@@ -30,7 +30,7 @@ env:
 
 jobs:
   tests:
-    if: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'run-sdk-tests') }}
+    if: ${{ github.event_name != 'pull_request' || (contains(github.event.pull_request.labels.*.name, 'run-sdk-tests') && (github.event.action != 'labeled' || github.event.label.name == 'run-sdk-tests')) }}
     strategy:
       matrix:
         mode: ["default", "rvr"]
