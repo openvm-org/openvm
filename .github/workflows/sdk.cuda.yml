@@ -22,7 +22,7 @@ jobs:
   cuda-backend:
     name: sdk cuda tests
     runs-on:
-      - runs-on=${{ github.run_id }}/image=ubuntu24-gpu-x64/family=g7.4xlarge+g6e.2xlarge/volume=80gb/spot=capacity-optimized/extras=s3-cache
+      - runs-on=${{ github.run_id }}/image=ubuntu24-gpu-x64/family=g7e.2xlarge+g6e.2xlarge/volume=80gb/spot=capacity-optimized/extras=s3-cache
     steps:
       - uses: runs-on/action@v2
         with:
@@ -80,7 +80,7 @@ jobs:
         working-directory: crates/sdk
         run: |
           "$GITHUB_WORKSPACE/ci/install-openvm-toolchain.sh"
-          cargo nextest run --cargo-profile=fast --features cuda,root-prover,evm-verify,halo2-gpu --test-threads=1
+          cargo nextest run --cargo-profile=fast --features cuda,root-prover,evm-verify,halo2-gpu --test-threads=2
 
       - name: sccache stats
         if: always()
