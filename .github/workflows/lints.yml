@@ -157,7 +157,7 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.cuda == 'true' }}
     runs-on:
-      - runs-on=${{ github.run_id }}-cuda/image=ubuntu24-gpu-x64/family=g6.*+g5+g6e/cpu=8/volume=40gb/spot=capacity-optimized/extras=s3-cache
+      - runs-on=${{ github.run_id }}-cuda/image=ubuntu24-gpu-x64/family=g7e.2xlarge+g7.2xlarge+g6e.2xlarge/volume=40gb/spot=capacity-optimized/extras=s3-cache
     steps:
       - uses: runs-on/action@v2
         with:
@@ -176,6 +176,9 @@ jobs:
         env:
           RUSTUP_PERMIT_COPY_RENAME: "1"
       - uses: ./.github/actions/sccache
+      # TODO: remove once https://github.com/runs-on/runner-images-for-aws/issues/55 is fixed
+      - name: Setup GPU driver
+        run: bash ./scripts/gpu_driver_setup.sh
       - uses: ./.github/actions/rust-cache-cuda
         with:
           cache-on-failure: true

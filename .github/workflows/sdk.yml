@@ -14,7 +14,7 @@ on:
       family:
         description: "EC2 instance family (must match selected arch)"
         type: string
-        default: "m7a.24xlarge"
+        default: "m8a.24xlarge"
   push:
     branches: ["main"]
   pull_request:
@@ -36,7 +36,7 @@ jobs:
         mode: ["default", "rvr"]
 
     runs-on:
-      - runs-on=${{ github.run_id }}-sdk-${{ github.run_attempt }}-${{ strategy.job-index }}/family=${{ inputs.family || 'm7a.24xlarge' }}/image=${{ (inputs.arch || 'x86') == 'arm' && 'ubuntu24-full-arm64' || 'ubuntu24-full-x64' }}/volume=80gb/extras=s3-cache
+      - runs-on=${{ github.run_id }}-sdk-${{ github.run_attempt }}-${{ strategy.job-index }}/family=${{ inputs.family || 'm8a.24xlarge' }}/image=${{ (inputs.arch || 'x86') == 'arm' && 'ubuntu24-full-arm64' || 'ubuntu24-full-x64' }}/volume=80gb/extras=s3-cache
 
     steps:
       - uses: runs-on/action@v2
