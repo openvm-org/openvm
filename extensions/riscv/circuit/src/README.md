@@ -91,33 +91,38 @@ This circuit proves the following:
 - A memory write to register `rd` is performed if `rd` is not `x0`
 - The instruction is correctly fetched from the program ROM at address `from_pc` and the program counter is set to `to_pc`
 
-#### 6. [Load/store adapter](./adapters/loadstore.rs)
+#### 6. [Load adapter](./adapters/load.rs)
 
 Given
 
 - `rd`, `rs1` are register addresses
 - `imm` is an immediate value
-- `mem_as` is an address space
-- `is_load` is a boolean indicating if the instruction is a load
 - `from_pc` is the current program address
 
 This circuit proves the following:
 
-- If `is_load` is true:
-  - `mem_as` is in `{0, 1, 2}`
-  - A memory read from register `rs1` is performed
-  - A memory read from `mem_as` is performed at address `val(rs1) + imm` where `val(rs1)` is the value read from register `rs1`
-  - A memory write to register `rd` is performed if `rd` is not `x0`
-  - The instruction is correctly fetched from the program ROM at address `from_pc` and the program counter is set to `from_pc + 4`
+- A memory read from register `rs1` is performed
+- A memory read from the RV64 memory address space is performed at address `val(rs1) + imm`
+- A memory write to register `rd` is performed if `rd` is not `x0`
+- The instruction is correctly fetched from the program ROM at address `from_pc` and the program counter is set to `from_pc + 4`
 
-- Otherwise:
-  - `mem_as` is in `{2, 3, 4}`
-  - A memory read from register `rs1` is performed
-  - A memory read from register `rd` is performed
-  - A memory write to `mem_as` is performed at address `val(rs1) + imm` where `val(rs1)` is the value read from register `rs1`
-  - The instruction is correctly fetched from the program ROM at address `from_pc` and the program counter is set to `from_pc + 4`
+#### 7. [Store adapter](./adapters/store.rs)
 
-#### 7. [Multiplication adapter](./adapters/mul.rs)
+Given
+
+- `rs1`, `rs2` are register addresses
+- `imm` is an immediate value
+- `mem_as` is the target address space, constrained to be the RV64 memory address space (`2`) or the public values address space (`3`)
+- `from_pc` is the current program address
+
+This circuit proves the following:
+
+- A memory read from register `rs1` is performed
+- A memory read from register `rs2` is performed
+- A memory write to `mem_as` is performed at address `val(rs1) + imm`
+- The instruction is correctly fetched from the program ROM at address `from_pc` and the program counter is set to `from_pc + 4`
+
+#### 8. [Multiplication adapter](./adapters/mul.rs)
 
 Given
 
@@ -131,7 +136,7 @@ This circuit proves the following:
 - A memory write to register `rd` is performed with the result of the multiplication
 - The instruction is correctly fetched from the program ROM at address `from_pc` and the program counter is set to `from_pc + 4`
 
-#### 8. [Rdwrite adapter](./adapters/rdwrite.rs)
+#### 9. [Rdwrite adapter](./adapters/rdwrite.rs)
 
 Given
 
@@ -294,17 +299,54 @@ This circuit proves that:
 - If `opcode` is `sltu` and `compose(b) < compose(c)` (unsigned comparison), then `a` is 1.
 - Otherwise, `a` is 0.
 
-#### 10. [Load sign extend](./load_sign_extend/core.rs) and [Loadstore](./loadstore/core.rs)
+#### 10. [Load](./load/mod.rs)
+
+The RV64 unsigned-load circuit is split by access width: [byte](./load/byte/core.rs), [halfword](./load/halfword/mod.rs), [word](./load/word/mod.rs), and [doubleword](./load/doubleword/mod.rs).
 
 Given:
 
-- `read_data` is the data read from `mem_as[aligned(val(rs1) + imm)]` if the instruction is load, otherwise it is the data read from register `rd`
-- `write_data` is the data to be written to register `rd` if the instruction is load, otherwise it is the data to be written to `mem_as[aligned(val(rs1) + imm)]`
+- `read_data` is the aligned memory block
 - `opcode` indicates the operation to be performed
 
-This circuit proves that `write_data` equals `shift(read_data)`, where the shift amount is adjusted according to the instruction.
+These circuits prove that:
 
-#### 11. [Multiplication](./mul/core.rs)
+- The selected opcode matches the access width handled by the chip
+- The shift selector matches the low address bits for byte, halfword, and word accesses
+- The value written to `rd` is the selected memory value zero-extended to 64 bits
+
+#### 11. [Store](./store/mod.rs)
+
+The RV64 store circuit is split by access width: [byte](./store/byte/core.rs), [halfword](./store/halfword/mod.rs), [word](./store/word/mod.rs), and [doubleword](./store/doubleword/mod.rs).
+
+Given:
+
+- `read_data` is the data read from register `rs2`
+- `prev_data` is the previous aligned memory block
+- `opcode` indicates the operation to be performed
+
+These circuits prove that:
+
+- The selected opcode matches the access width handled by the chip
+- The shift selector matches the low address bits for byte, halfword, and word accesses
+- The value written to memory is the previous memory block with the selected bytes replaced by the value from `rs2`
+
+#### 12. [Load sign extend](./load_sign_extend/mod.rs)
+
+The RV64 signed-load circuit is split by access width: [byte](./load_sign_extend/byte/core.rs), [halfword](./load_sign_extend/halfword/mod.rs), and [word](./load_sign_extend/word/mod.rs).
+
+Given:
+
+- `read_data` is the data read from the RV64 memory address space at `aligned(val(rs1) + imm)`
+- `opcode` indicates the operation to be performed
+
+These circuits prove that:
+
+- The selected opcode matches the signed-load width handled by the chip
+- The shift selector matches the low address bits for byte, halfword, and word accesses
+- The loaded value is sign-extended to 64 bits before it is written to `rd`
+- The sign bit decomposition used for extension is range-checked
+
+#### 13. [Multiplication](./mul/core.rs)
 
 Given:
 
@@ -317,7 +359,7 @@ This circuit proves that:
 - `compose(a) == (compose(b) * compose(c)) % 2^64`
 - Each limb of `a` is in the range `[0, 2^RV64_BYTE_BITS)`
 
-#### 12. [MULH](./mulh/core.rs)
+#### 14. [MULH](./mulh/core.rs)
 
 Given:
 

@@ -15,7 +15,6 @@ use openvm_stark_backend::{EngineDeviceCtx, StarkEngine, StarkProtocolConfig, Va
 use serde::{Deserialize, Serialize};
 
 pub mod adapters;
-// TEMP: commented out modules not yet ported to RV64
 mod add_sub;
 mod add_sub_w;
 mod auipc;
@@ -29,14 +28,15 @@ mod hintstore;
 mod jal_lui;
 mod jalr;
 mod less_than;
+mod load;
 mod load_sign_extend;
-mod loadstore;
 mod mul;
 mod mul_w;
 mod mulh;
 mod shift_logical;
 mod shift_right_arithmetic;
 mod shift_w;
+mod store;
 
 pub use add_sub::*;
 pub use add_sub_w::*;
@@ -50,14 +50,15 @@ pub use hintstore::*;
 pub use jal_lui::*;
 pub use jalr::*;
 pub use less_than::*;
+pub use load::*;
 pub use load_sign_extend::*;
-pub use loadstore::*;
 pub use mul::*;
 pub use mul_w::*;
 pub use mulh::*;
 pub use shift_logical::*;
 pub use shift_right_arithmetic::*;
 pub use shift_w::*;
+pub use store::*;
 
 mod extension;
 pub use extension::*;
