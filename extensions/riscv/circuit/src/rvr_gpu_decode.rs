@@ -433,7 +433,7 @@ impl RvrGpuDecodeState {
         delta_memory_log: Vec<openvm_circuit::arch::rvr::DeltaMemoryLogEntry>,
         program_log: Vec<openvm_circuit::arch::rvr::ProgramLogEntry>,
         touched: Vec<openvm_circuit::arch::rvr::TouchedBlock>,
-        chip_counts: Vec<u32>,
+        chip_counts: &[u32],
         arena_native_written: &[(usize, u32)],
     ) -> Result<HashSet<usize>, openvm_circuit::arch::ExecutionError> {
         use openvm_circuit::arch::rvr::PREFLIGHT_DELTA_RECORD_SIZE;
