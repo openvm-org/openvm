@@ -162,6 +162,15 @@ pub mod hintstore_cuda {
     use super::{super::hintstore::OffsetInfo, *};
 
     extern "C" {
+        fn _hintstore_decode_offsets(
+            d_records: *const u8,
+            records_len: usize,
+            rows_used: usize,
+            d_record_offsets: *mut OffsetInfo,
+            d_error: *mut u32,
+            stream: cudaStream_t,
+        ) -> i32;
+
         pub fn _hintstore_tracegen(
             d_trace: *mut F,
             height: usize,
@@ -175,6 +184,24 @@ pub mod hintstore_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
+    }
+
+    pub unsafe fn decode_offsets(
+        d_records: &DeviceBuffer<u8>,
+        records_len: usize,
+        rows_used: usize,
+        d_record_offsets: &DeviceBuffer<OffsetInfo>,
+        d_error: &DeviceBuffer<u32>,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_hintstore_decode_offsets(
+            d_records.as_ptr(),
+            records_len,
+            rows_used,
+            d_record_offsets.as_mut_ptr(),
+            d_error.as_mut_ptr(),
+            stream,
+        ))
     }
 
     #[allow(clippy::too_many_arguments)]

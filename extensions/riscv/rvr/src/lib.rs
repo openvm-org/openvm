@@ -22,10 +22,46 @@ use rvr_openvm_lift::{
     AirIndex, ExtensionError, RvrExtension, RvrExtensionCtx, RvrInstruction, RvrRuntimeExtension,
 };
 
+/// Byte geometry of the packed `Rv64HintStoreRecordHeader + N * Var`
+/// consumer record. Circuit-side assertions pin these constants to the real
+/// Rust types; the per-row sum is the conservative metered-height capacity.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HintStoreRecordDescriptor {
+    pub header_size: usize,
+    pub header_align: usize,
+    pub var_size: usize,
+    pub var_align: usize,
+    pub capacity_per_row: usize,
+}
+
+impl HintStoreRecordDescriptor {
+    pub const fn new() -> Self {
+        Self {
+            header_size: 32,
+            header_align: 4,
+            var_size: 20,
+            var_align: 4,
+            capacity_per_row: 52,
+        }
+    }
+
+    pub const fn record_size(self, rows: usize) -> usize {
+        self.header_size + self.var_size * rows
+    }
+}
+
+impl Default for HintStoreRecordDescriptor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// HINT_STORED: pop one register word (8 bytes) from the hint stream into `mem[reg[ptr_reg]]`.
 #[derive(Debug, Clone)]
 pub struct HintStoreWInstr {
+    pub from_pc: u32,
     pub ptr_reg: Reg,
+    pub chip_idx: Option<AirIndex>,
 }
 
 impl ExtInstr for HintStoreWInstr {
@@ -34,11 +70,36 @@ impl ExtInstr for HintStoreWInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let ptr = ctx.read_reg(self.ptr_reg);
+        let (ptr, from_timestamp, mem_ptr_prev_timestamp) = ctx.read_reg_with_trace(self.ptr_reg);
         // HINT_STORED has the same 3-tick AIR shape as HINT_BUFFER:
         // mem_ptr read, a num_words placeholder tick, then the memory write.
         ctx.trace_timestamp();
-        ctx.extern_call_without_page_flush("openvm_hint_storew", &["state", &ptr]);
+        let chip_idx = if ctx.inline_record_enabled() {
+            air_index_to_c(self.chip_idx)
+        } else {
+            u32::MAX
+        };
+        ctx.extern_call(
+            "openvm_hint_storew",
+            &[
+                "state",
+                &ptr,
+                &format!("{}u", self.from_pc),
+                &from_timestamp,
+                &format!(
+                    "{}u",
+                    u32::from(self.ptr_reg) * RV64_REGISTER_NUM_LIMBS as u32
+                ),
+                &mem_ptr_prev_timestamp,
+                &format!("{chip_idx}u"),
+            ],
+        );
+    }
+
+    fn inline_record_shape(&self) -> Option<InlineRecordShape> {
+        Some(InlineRecordShape::CustomVariableRows {
+            capacity_per_row: HintStoreRecordDescriptor::new().capacity_per_row,
+        })
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -50,6 +111,7 @@ impl ExtInstr for HintStoreWInstr {
 /// write them sequentially starting at `mem[reg[ptr_reg]]`.
 #[derive(Debug, Clone)]
 pub struct HintBufferInstr {
+    pub from_pc: u32,
     pub ptr_reg: Reg,
     pub num_words_reg: Reg,
     pub chip_idx: Option<AirIndex>,
@@ -61,8 +123,8 @@ impl ExtInstr for HintBufferInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let ptr = ctx.read_reg(self.ptr_reg);
-        let n = ctx.read_reg(self.num_words_reg);
+        let (ptr, from_timestamp, mem_ptr_prev_timestamp) = ctx.read_reg_with_trace(self.ptr_reg);
+        let (n, _, num_words_prev_timestamp) = ctx.read_reg_with_trace(self.num_words_reg);
         // Block-entry already credits a static +1; emit the runtime
         // `(n - 1)` correction only when there is more than one row.
         let chip_idx = air_index_to_c(self.chip_idx);
@@ -70,8 +132,39 @@ impl ExtInstr for HintBufferInstr {
         ctx.trace_chip(chip_idx, &format!("{n} - 1"));
         ctx.write_line("}");
         ctx.write_line(&format!("if ({n} > 0) {{"));
-        ctx.extern_call_without_page_flush("openvm_hint_buffer", &["state", &ptr, &n]);
+        let direct_chip_idx = if ctx.inline_record_enabled() {
+            chip_idx
+        } else {
+            u32::MAX
+        };
+        ctx.extern_call(
+            "openvm_hint_buffer",
+            &[
+                "state",
+                &ptr,
+                &n,
+                &format!("{}u", self.from_pc),
+                &from_timestamp,
+                &format!(
+                    "{}u",
+                    u32::from(self.ptr_reg) * RV64_REGISTER_NUM_LIMBS as u32
+                ),
+                &mem_ptr_prev_timestamp,
+                &format!(
+                    "{}u",
+                    u32::from(self.num_words_reg) * RV64_REGISTER_NUM_LIMBS as u32
+                ),
+                &num_words_prev_timestamp,
+                &format!("{direct_chip_idx}u"),
+            ],
+        );
         ctx.write_line("}");
+    }
+
+    fn inline_record_shape(&self) -> Option<InlineRecordShape> {
+        Some(InlineRecordShape::CustomVariableRows {
+            capacity_per_row: HintStoreRecordDescriptor::new().capacity_per_row,
+        })
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -118,7 +211,7 @@ impl ExtInstr for RevealInstr {
                 format!("({ptr} + 0x{:08x}u)", self.offset)
             };
             let width = self.width.bytes().to_string();
-            ctx.extern_call(
+            ctx.extern_call_without_page_flush(
                 "trace_wr_as",
                 &[
                     "state",
@@ -132,16 +225,6 @@ impl ExtInstr for RevealInstr {
         };
         let offset = format!("0x{:08x}u", self.offset);
         let width = self.width.bytes().to_string();
-        ctx.extern_call(
-            "trace_wr_as",
-            &[
-                "state",
-                &addr,
-                &src,
-                &width,
-                &format!("{PUBLIC_VALUES_AS}u"),
-            ],
-        );
         ctx.extern_call_without_page_flush("openvm_reveal", &[&src, &ptr, &offset, &width]);
     }
 
@@ -156,7 +239,9 @@ impl ExtInstr for RevealInstr {
 
 /// HINT_INPUT phantom: pop the next input record into the hint stream.
 #[derive(Debug, Clone)]
-pub struct HintInputInstr;
+pub struct HintInputInstr {
+    pub operands: [u32; 3],
+}
 
 impl ExtInstr for HintInputInstr {
     fn opname(&self) -> &str {
@@ -165,7 +250,11 @@ impl ExtInstr for HintInputInstr {
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         ctx.extern_call_without_page_flush("openvm_hint_input", &[]);
-        ctx.trace_timestamp();
+        ctx.trace_phantom_record(self.operands);
+    }
+
+    fn inline_record_shape(&self) -> Option<InlineRecordShape> {
+        Some(InlineRecordShape::Custom { record_size: 20 })
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -178,6 +267,7 @@ impl ExtInstr for HintInputInstr {
 pub struct PrintStrInstr {
     pub ptr_reg: Reg,
     pub len_reg: Reg,
+    pub operands: [u32; 3],
 }
 
 impl ExtInstr for PrintStrInstr {
@@ -189,7 +279,11 @@ impl ExtInstr for PrintStrInstr {
         let ptr = ctx.read_reg_raw(self.ptr_reg);
         let len = ctx.read_reg_raw(self.len_reg);
         ctx.extern_call_without_page_flush("openvm_print_str", &[&ptr, &len]);
-        ctx.trace_timestamp();
+        ctx.trace_phantom_record(self.operands);
+    }
+
+    fn inline_record_shape(&self) -> Option<InlineRecordShape> {
+        Some(InlineRecordShape::Custom { record_size: 20 })
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -202,6 +296,7 @@ impl ExtInstr for PrintStrInstr {
 #[derive(Debug, Clone)]
 pub struct HintRandomInstr {
     pub num_words_reg: Reg,
+    pub operands: [u32; 3],
 }
 
 impl ExtInstr for HintRandomInstr {
@@ -212,7 +307,11 @@ impl ExtInstr for HintRandomInstr {
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         let n = ctx.read_reg_raw(self.num_words_reg);
         ctx.extern_call_without_page_flush("openvm_hint_random", &[&n]);
-        ctx.trace_timestamp();
+        ctx.trace_phantom_record(self.operands);
+    }
+
+    fn inline_record_shape(&self) -> Option<InlineRecordShape> {
+        Some(InlineRecordShape::Custom { record_size: 20 })
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -229,6 +328,15 @@ pub struct Rv64IoExtension {
 impl Rv64IoExtension {
     pub fn new(ctx: Option<&RvrExtensionCtx>) -> Result<Self, ExtensionError> {
         let hint_store_chip_idx = opcode_air_idx(ctx, Rv64HintStoreOpcode::HINT_STORED)?;
+        let hint_buffer_chip_idx = opcode_air_idx(ctx, Rv64HintStoreOpcode::HINT_BUFFER)?;
+        if hint_store_chip_idx != hint_buffer_chip_idx {
+            return Err(ExtensionError::SharedAirMismatch {
+                first_opcode: Rv64HintStoreOpcode::HINT_STORED.global_opcode(),
+                second_opcode: Rv64HintStoreOpcode::HINT_BUFFER.global_opcode(),
+                first_air: hint_store_chip_idx,
+                second_air: hint_buffer_chip_idx,
+            });
+        }
         Ok(Self {
             hint_store_chip_idx,
         })
@@ -238,7 +346,7 @@ impl Rv64IoExtension {
 impl RvrExtension for Rv64IoExtension {
     fn codegen_fingerprint(&self) -> Option<Vec<u8>> {
         Some(air_index_codegen_fingerprint(
-            b"openvm-rv64io-rvr-v1",
+            b"openvm-rv64io-rvr-v2",
             &[self.hint_store_chip_idx],
         ))
     }
@@ -250,7 +358,11 @@ impl RvrExtension for Rv64IoExtension {
             let ptr_reg = decode_reg(insn.b);
             return Some(LiftedInstr::Body(InstrAt {
                 pc,
-                instr: Instr::Ext(Box::new(HintStoreWInstr { ptr_reg })),
+                instr: Instr::Ext(Box::new(HintStoreWInstr {
+                    from_pc: pc as u32,
+                    ptr_reg,
+                    chip_idx: self.hint_store_chip_idx,
+                })),
                 source_loc: None,
             }));
         }
@@ -261,6 +373,7 @@ impl RvrExtension for Rv64IoExtension {
             return Some(LiftedInstr::Body(InstrAt {
                 pc,
                 instr: Instr::Ext(Box::new(HintBufferInstr {
+                    from_pc: pc as u32,
                     ptr_reg,
                     num_words_reg,
                     chip_idx: self.hint_store_chip_idx,
@@ -366,7 +479,7 @@ impl Default for Rv64IExtension {
 
 impl RvrExtension for Rv64IExtension {
     fn codegen_fingerprint(&self) -> Option<Vec<u8>> {
-        Some(b"openvm-rv64i-rvr-v1".to_vec())
+        Some(b"openvm-rv64i-rvr-v2".to_vec())
     }
 
     fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
@@ -375,14 +488,17 @@ impl RvrExtension for Rv64IExtension {
         }
         let discriminant = (insn.c & 0xffff) as u16;
         let phantom = Rv64Phantom::from_repr(discriminant)?;
+        let operands = [insn.a, insn.b, insn.c].map(|value| value.as_canonical_u32());
         let instr: Box<dyn ExtInstr> = match phantom {
-            Rv64Phantom::HintInput => Box::new(HintInputInstr),
+            Rv64Phantom::HintInput => Box::new(HintInputInstr { operands }),
             Rv64Phantom::PrintStr => Box::new(PrintStrInstr {
                 ptr_reg: decode_reg(insn.a),
                 len_reg: decode_reg(insn.b),
+                operands,
             }),
             Rv64Phantom::HintRandom => Box::new(HintRandomInstr {
                 num_words_reg: decode_reg(insn.a),
+                operands,
             }),
         };
         Some(LiftedInstr::Body(InstrAt {
@@ -590,6 +706,10 @@ mod tests {
         fn read_reg(&mut self, idx: u8) -> String {
             self.lines.push(format!("trace_reg_read(state, {idx});"));
             format!("r{idx}")
+        }
+
+        fn read_reg_with_trace(&mut self, idx: u8) -> (String, String, String) {
+            (self.read_reg(idx), "0u".to_string(), "0u".to_string())
         }
 
         fn read_reg_raw(&mut self, idx: u8) -> String {
@@ -806,6 +926,7 @@ mod tests {
     fn hint_buffer_uses_traced_host_callback() {
         let mut ctx = TestEmitCtx::default();
         HintBufferInstr {
+            from_pc: 0x20,
             ptr_reg: 1,
             num_words_reg: 2,
             chip_idx: None,
@@ -815,7 +936,7 @@ mod tests {
         assert!(
             ctx.lines
                 .iter()
-                .any(|l| l.contains("openvm_hint_buffer(state, r1, r2)")),
+                .any(|l| l.contains("openvm_hint_buffer(state, r1, r2,")),
             "expected stateful openvm_hint_buffer call, got: {:#?}",
             ctx.lines
         );

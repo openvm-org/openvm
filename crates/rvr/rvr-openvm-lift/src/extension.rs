@@ -112,6 +112,15 @@ pub enum ExtensionError {
         opcode: VmOpcode,
         executor_idx: usize,
     },
+    #[error(
+        "opcodes {first_opcode:?} and {second_opcode:?} must share one AIR, got {first_air:?} and {second_air:?}"
+    )]
+    SharedAirMismatch {
+        first_opcode: VmOpcode,
+        second_opcode: VmOpcode,
+        first_air: Option<AirIndex>,
+        second_air: Option<AirIndex>,
+    },
     #[error("failed to register host callbacks: {0}")]
     HostCallbackRegistration(String),
 }

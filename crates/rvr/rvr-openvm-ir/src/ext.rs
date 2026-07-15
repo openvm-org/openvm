@@ -13,6 +13,11 @@ pub enum InlineRecordShape {
     /// record and its registered assembler defines how those bytes are
     /// adopted by the consumer arena.
     Custom { record_size: usize },
+    /// Extension-owned packed records with a runtime row count. These records
+    /// are valid only with a matching arena-native target: `capacity_per_row`
+    /// sizes the backing from the metered AIR height, while the extension
+    /// advances the target byte cursor by each record's actual packed size.
+    CustomVariableRows { capacity_per_row: usize },
 }
 
 /// Trait abstracting the code-generation context for extension instructions.
@@ -106,6 +111,14 @@ pub trait ExtEmitCtx {
 
     /// Emit a timestamp-only trace tick.
     fn trace_timestamp(&mut self);
+
+    /// Emit the fixed Phantom consumer record for the current instruction and
+    /// advance its single timestamp. Preflight codegen overrides this to use
+    /// the compiler-selected whole-AIR direct-final target; other contexts
+    /// retain the ordinary timestamp-only behavior.
+    fn trace_phantom_record(&mut self, _operands: [u32; 3]) {
+        self.trace_timestamp();
+    }
 }
 
 /// Trait for extension IR nodes. Implemented by each extension's instruction types.

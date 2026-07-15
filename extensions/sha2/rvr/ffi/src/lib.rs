@@ -40,7 +40,7 @@ fn u64_words_as_bytes(words: &[u64]) -> &[u8] {
     unsafe { core::slice::from_raw_parts(words.as_ptr().cast::<u8>(), len) }
 }
 
-/// SHA-256 compress FFI entry point.
+/// SHA-256 fallback FFI entry point.
 ///
 /// Reads `SHA256_STATE_BYTES` of state and `SHA256_BLOCK_BYTES` of input block,
 /// applies SHA-256 compression, writes new state to `dst_ptr`. Reports chip
@@ -50,12 +50,11 @@ fn u64_words_as_bytes(words: &[u64]) -> &[u8] {
 ///
 /// `state` must be a valid pointer to the C `RvState` struct.
 #[no_mangle]
-pub unsafe extern "C" fn rvr_ext_sha256(
+pub unsafe extern "C" fn rvr_ext_sha256_fallback(
     state: *mut c_void,
     dst_ptr: u64,
     state_ptr: u64,
     input_ptr: u64,
-    _main_chip_idx: u32,
     block_hasher_chip_idx: u32,
 ) {
     let mut state_words = [0u64; SHA256_STATE_WORDS];
@@ -78,6 +77,26 @@ pub unsafe extern "C" fn rvr_ext_sha256(
 
     wr_mem_words_traced(state, dst_ptr, &state_words);
     trace_chip_wrapper(state, block_hasher_chip_idx, SHA256_ROWS_PER_BLOCK);
+}
+
+/// Applies SHA-256 compression to native little-endian memory words.
+///
+/// This computation-only entry point lets generated preflight C own the exact
+/// memory chronology and direct-final record writes without duplicating the
+/// SHA-256 compression implementation.
+///
+/// # Safety
+///
+/// `state_words` and `block_words` must point to arrays of 4 and 8 `u64`s,
+/// respectively.
+#[no_mangle]
+pub unsafe extern "C" fn rvr_sha256_compress_words(state_words: *mut u64, block_words: *const u64) {
+    let state_words = unsafe { &mut *(state_words as *mut [u64; SHA256_STATE_WORDS]) };
+    let block_words = unsafe { &*(block_words as *const [u64; SHA256_BLOCK_WORDS]) };
+    let state_u32s: &mut [u32; 8] = u64s_as_u32s_mut(state_words).try_into().unwrap();
+    let block_array: &GenericArray<u8, _> =
+        GenericArray::from_slice(u64_words_as_bytes(block_words));
+    compress256(state_u32s, &[*block_array]);
 }
 
 /// SHA-512 compress FFI entry point.

@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+#include "rvr_ext_vec_heap_record.h"
+
 struct RvState;
 
 /* k256 coord/scalar ops are C-implemented (rvr_ext_k256.c) and use
@@ -36,9 +38,6 @@ extern uint32_t rvr_ext_mod_setup_iseq(RvState* state, uint64_t rs1_ptr, uint64_
 
 /* Complete-record emitters. They are active only in preflight builds and
  * consume the just-appended memory-log tail in the same execution pass. */
-extern void rvr_ext_emit_vec_heap_record(RvState* state, uint32_t from_pc,
-                                         uint32_t local_opcode, uint32_t num_limbs,
-                                         uint32_t chip_idx);
 extern void rvr_ext_emit_mod_iseq_record(RvState* state, uint32_t from_pc,
                                          uint32_t local_opcode, uint32_t num_limbs,
                                          uint32_t chip_idx);

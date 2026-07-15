@@ -1,10 +1,13 @@
+use std::mem::align_of;
+
 use openvm_circuit::{
     arch::{
         rvr::{
-            LogNativeAccessView, LogNativeAssemblerRegistry, PreflightMemoryAccessAux,
-            VmRvrLogNativeExtension, PREFLIGHT_MEMORY_KIND_READ, PREFLIGHT_MEMORY_KIND_WRITE,
+            ArenaNativeGeometry, ArenaNativeLayout, LogNativeAccessView,
+            LogNativeAssemblerRegistry, PreflightMemoryAccessAux, VmRvrLogNativeExtension,
+            PREFLIGHT_MEMORY_KIND_READ, PREFLIGHT_MEMORY_KIND_WRITE,
         },
-        Arena, ExecutionError, RecordArena,
+        Arena, ExecutionError, RecordArena, SizedRecord,
     },
     system::memory::offline_checker::MemoryWriteBytesAuxRecord,
 };
@@ -19,6 +22,7 @@ use openvm_riscv_circuit::{
 use openvm_sha2_air::{Sha256Config, Sha2BlockHasherSubairConfig, Sha2Variant};
 use openvm_sha2_transpiler::Rv64Sha2Opcode;
 use openvm_stark_backend::p3_field::PrimeField32;
+use rvr_openvm_ext_sha2::SHA256_DIRECT_RECORD_SIZE;
 
 use crate::{
     Sha2, Sha2MainChipConfig, Sha2Metadata, Sha2RecordLayout, Sha2RecordMut, Sha2Rv64Config,
@@ -42,10 +46,30 @@ where
     RA: Sha256RecordArena<F>,
 {
     fn extend_rvr_log_native(&self, registry: &mut LogNativeAssemblerRegistry<F, RA>) {
-        registry.register_if(
-            [Rv64Sha2Opcode::SHA256.global_opcode()],
-            is_sha256_instruction,
-            assemble_sha256::<F, RA>,
+        let opcodes = [Rv64Sha2Opcode::SHA256.global_opcode()];
+        registry.register_if(opcodes, is_sha256_instruction, assemble_sha256::<F, RA>);
+        let layout = Sha2RecordLayout::new(Sha2Metadata {
+            variant: Sha2Variant::Sha256,
+        });
+        assert_eq!(Sha2RecordMut::size(&layout), SHA256_DIRECT_RECORD_SIZE);
+        assert_eq!(
+            Sha2RecordMut::alignment(&layout),
+            align_of::<crate::Sha2RecordHeader>()
+        );
+        registry.register_inline_arena_native(
+            opcodes,
+            SHA256_DIRECT_RECORD_SIZE,
+            assemble_sha256_inline::<F, RA>,
+            ArenaNativeGeometry {
+                adapter_size: SHA256_DIRECT_RECORD_SIZE,
+                adapter_align: Sha2RecordMut::alignment(&layout),
+                core_size: 0,
+                core_align: 1,
+                core_off_matrix: 0,
+                layout: ArenaNativeLayout::Custom {
+                    residual_memory_chronology: true,
+                },
+            },
         );
     }
 }
@@ -66,6 +90,47 @@ where
 fn is_sha256_instruction<F: PrimeField32>(instruction: &Instruction<F>) -> bool {
     instruction.d.as_canonical_u32() == RV64_REGISTER_AS
         && instruction.e.as_canonical_u32() == RV64_MEMORY_AS
+}
+
+fn assemble_sha256_inline<F, RA>(
+    arena: &mut RA,
+    _instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError>
+where
+    F: PrimeField32,
+    RA: Sha256RecordArena<F>,
+{
+    if compact.len() != SHA256_DIRECT_RECORD_SIZE {
+        return Err(rvr_error(format!(
+            "invalid SHA-256 inline record size {} at pc {pc:#x}; expected {}",
+            compact.len(),
+            SHA256_DIRECT_RECORD_SIZE
+        )));
+    }
+    let record = arena.alloc(Sha2RecordLayout::new(Sha2Metadata {
+        variant: Sha2Variant::Sha256,
+    }));
+    unsafe {
+        std::ptr::copy_nonoverlapping(
+            compact.as_ptr(),
+            (record.inner as *mut crate::Sha2RecordHeader).cast::<u8>(),
+            compact.len(),
+        );
+    }
+    if u32::from(record.inner.variant) != u32::from(Sha2Variant::Sha256) {
+        return Err(rvr_error(format!(
+            "SHA-256 inline record variant mismatch at pc {pc:#x}"
+        )));
+    }
+    if record.inner.from_pc != pc {
+        return Err(rvr_error(format!(
+            "SHA-256 inline record pc mismatch: record={:#x}, program={pc:#x}",
+            record.inner.from_pc
+        )));
+    }
+    Ok(())
 }
 
 /// Reconstruct one incremental SHA-256 compression record from normalized rvr logs.

@@ -1,6 +1,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     str::FromStr,
+    sync::Arc,
 };
 
 use eyre::Result;
@@ -9,10 +10,12 @@ use openvm_algebra_transpiler::ModularTranspilerExtension;
 use openvm_circuit::{
     arch::{
         rvr::{
-            generate_record_arenas_from_logs, LogNativeAssemblerRegistry, RvrPreflightOutput,
-            RvrPreflightRoute, VmRvrLogNativeExtension,
+            generate_record_arenas_from_logs, preflight::RvrArenaNativeTarget,
+            LogNativeAssemblerRegistry, RvrPreflightEngine, RvrPreflightOutput, RvrPreflightRoute,
+            VmRvrLogNativeExtension,
         },
-        MatrixRecordArena, Streams, VirtualMachine,
+        verify_segments, ContinuationVmProver, DenseRecordArena, MatrixRecordArena, Streams,
+        VirtualMachine, VmInstance,
     },
     system::SystemRecords,
     utils::{test_cpu_engine, test_system_config},
@@ -182,6 +185,7 @@ fn assert_rvr_differential(
     config: &Rv64WeierstrassConfig,
     segments: Vec<(Option<u64>, Vec<u32>)>,
 ) {
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "delta");
     let (mut interp_vm, _) = VirtualMachine::new_with_keygen(
         test_cpu_engine(),
         Rv64WeierstrassCpuBuilder,
@@ -239,8 +243,27 @@ fn assert_rvr_differential(
                     &trace_heights,
                 )
                 .expect("interpreter execution");
+            let capacities = trace_heights
+                .iter()
+                .zip(&widths)
+                .map(|(&height, &width)| (height as usize, width))
+                .collect::<Vec<_>>();
+            let mut staged = Vec::new();
+            let mut targets = BTreeMap::new();
+            for &(air, geometry) in &instance.compiled().inline_records().arena_native_airs {
+                let (height, width) = capacities[air];
+                let (arena, target) =
+                    MatrixRecordArena::<F>::stage_arena_native(height, width, &geometry);
+                targets.insert(air, target);
+                staged.push((air, geometry, arena));
+            }
             let mut rvr_output = instance
-                .execute_preflight_from_state(from_state.clone(), num_insns)
+                .execute_preflight_from_state_with_arena_targets(
+                    from_state.clone(),
+                    Some(num_insns.unwrap_or(1_000_000)),
+                    &trace_heights,
+                    &targets,
+                )
                 .expect("rvr preflight execution");
             assert_system_records_eq(
                 &segment_label,
@@ -248,12 +271,7 @@ fn assert_rvr_differential(
                 &rvr_output.system_records,
             );
             assert_ecc_timestamp_deltas(exe, config, &rvr_output);
-            let capacities = trace_heights
-                .iter()
-                .zip(&widths)
-                .map(|(&height, &width)| (height as usize, width))
-                .collect::<Vec<_>>();
-            let rvr_arenas = generate_record_arenas_from_logs::<F, MatrixRecordArena<F>>(
+            let mut rvr_arenas = generate_record_arenas_from_logs::<F, MatrixRecordArena<F>>(
                 &registry,
                 exe,
                 &mut rvr_output,
@@ -261,6 +279,16 @@ fn assert_rvr_differential(
                 &pc_to_air_idx,
             )
             .expect("rvr log-native record assembly");
+            for (air, geometry, mut arena) in staged {
+                let written = rvr_output
+                    .arena_native_written
+                    .iter()
+                    .find(|&&(written_air, _)| written_air == air)
+                    .map(|&(_, count)| count as usize)
+                    .expect("arena-native AIR must report its written count");
+                arena.finish_arena_native(written, &geometry);
+                rvr_arenas[air] = arena;
+            }
             state = rvr_output.to_state.clone();
             outputs.push((
                 from_state,
@@ -334,6 +362,146 @@ fn assert_rvr_differential(
         active_ecc_airs, ecc_air_ids,
         "{label}: EcAddNe and EcDouble traces must both be active"
     );
+    std::env::remove_var("OPENVM_RVR_GPU_RECORDS");
+}
+
+fn ecc_dense_oracle(
+    exe: &VmExe<F>,
+    config: &Rv64WeierstrassConfig,
+) -> (SystemRecords<F>, Vec<DenseRecordArena>, u64, Vec<String>) {
+    std::env::set_var("OPENVM_RVR_INLINE_RECORDS", "0");
+    std::env::remove_var("OPENVM_RVR_ARENA_NATIVE");
+    std::env::remove_var("OPENVM_RVR_GPU_RECORDS");
+    let (vm, _) = VirtualMachine::new_with_keygen(
+        test_cpu_engine(),
+        Rv64WeierstrassCpuBuilder,
+        config.clone(),
+    )
+    .expect("ECC oracle vm init");
+    let air_names = vm.air_names().map(str::to_owned).collect::<Vec<_>>();
+    let widths = vm
+        .pk()
+        .per_air
+        .iter()
+        .map(|pk| pk.vk.params.width.main_width())
+        .collect::<Vec<_>>();
+    let heights = vec![32768u32; vm.num_airs()];
+    let capacities = heights
+        .iter()
+        .zip(&widths)
+        .map(|(&height, &width)| (height as usize, width))
+        .collect::<Vec<_>>();
+    let pc_to_air_idx = vm.pc_to_air_idx(exe).expect("ECC oracle pc-to-air mapping");
+    let RvrPreflightRoute::Rvr(instance) = vm
+        .preflight_routed_instance(exe)
+        .expect("ECC oracle routed instance")
+    else {
+        panic!("ECC oracle must route to rvr")
+    };
+    let mut output = instance
+        .execute_preflight_from_state(vm.create_initial_state(exe, Streams::default()), None)
+        .expect("verbose ECC oracle preflight");
+    let retired = output
+        .system_records
+        .filtered_exec_frequencies
+        .iter()
+        .map(|&count| u64::from(count))
+        .sum();
+    let mut registry = LogNativeAssemblerRegistry::new();
+    config.extend_rvr_log_native(&mut registry);
+    let arenas = generate_record_arenas_from_logs::<F, DenseRecordArena>(
+        &registry,
+        exe,
+        &mut output,
+        &capacities,
+        &pc_to_air_idx,
+    )
+    .expect("verbose ECC record assembly");
+    (output.system_records, arenas, retired, air_names)
+}
+
+fn ecc_dense_direct(
+    exe: &VmExe<F>,
+    config: &Rv64WeierstrassConfig,
+    retired: u64,
+) -> (SystemRecords<F>, Vec<DenseRecordArena>) {
+    std::env::remove_var("OPENVM_RVR_INLINE_RECORDS");
+    std::env::remove_var("OPENVM_RVR_ARENA_NATIVE");
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "delta");
+    let (vm, _) = VirtualMachine::new_with_keygen(
+        test_cpu_engine(),
+        Rv64WeierstrassCpuBuilder,
+        config.clone(),
+    )
+    .expect("ECC direct vm init");
+    let widths = vm
+        .pk()
+        .per_air
+        .iter()
+        .map(|pk| pk.vk.params.width.main_width())
+        .collect::<Vec<_>>();
+    let heights = vec![32768u32; vm.num_airs()];
+    let capacities = heights
+        .iter()
+        .zip(&widths)
+        .map(|(&height, &width)| (height as usize, width))
+        .collect::<Vec<_>>();
+    let pc_to_air_idx = vm.pc_to_air_idx(exe).expect("ECC direct pc-to-air mapping");
+    let ecc_airs = ecc_air_ids(exe, &pc_to_air_idx);
+    let RvrPreflightRoute::Rvr(instance) = vm
+        .preflight_routed_instance(exe)
+        .expect("ECC direct routed instance")
+    else {
+        panic!("ECC direct arm must route to rvr")
+    };
+    let native_ecc_airs = instance
+        .compiled()
+        .inline_records()
+        .arena_native_airs
+        .iter()
+        .filter(|&&(air, _)| ecc_airs.contains(&air))
+        .count();
+    assert_eq!(
+        native_ecc_airs, 2,
+        "EcAddNe/Setup and EcDouble/Setup AIRs must migrate atomically"
+    );
+    let mut staged = Vec::new();
+    let mut targets = BTreeMap::new();
+    for &(air, geometry) in &instance.compiled().inline_records().arena_native_airs {
+        let (arena, target) =
+            DenseRecordArena::stage_arena_native(heights[air] as usize, widths[air], &geometry);
+        targets.insert(air, target);
+        staged.push((air, geometry, arena));
+    }
+    let mut output = instance
+        .execute_preflight_from_state_with_arena_targets(
+            vm.create_initial_state(exe, Streams::default()),
+            Some(retired),
+            &heights,
+            &targets,
+        )
+        .expect("direct-final ECC preflight");
+    let mut registry = LogNativeAssemblerRegistry::new();
+    config.extend_rvr_log_native(&mut registry);
+    let mut arenas = generate_record_arenas_from_logs::<F, DenseRecordArena>(
+        &registry,
+        exe,
+        &mut output,
+        &capacities,
+        &pc_to_air_idx,
+    )
+    .expect("ECC direct residual record assembly");
+    for (air, geometry, mut arena) in staged {
+        let written = output
+            .arena_native_written
+            .iter()
+            .find(|&&(written_air, _)| written_air == air)
+            .map(|&(_, count)| count as usize)
+            .expect("ECC direct AIR must report written records");
+        arena.finish_arena_native(written, &geometry);
+        arenas[air] = arena;
+    }
+    (output.system_records, arenas)
 }
 
 #[test]
@@ -341,6 +509,49 @@ fn test_weierstrass_rvr_preflight_differential() -> Result<()> {
     let config = secp256k1_config();
     let exe = build_ecc_exe(&config)?;
     assert_rvr_differential("weierstrass_single", &exe, &config, Vec::new());
+    Ok(())
+}
+
+#[test]
+fn test_weierstrass_rvr_direct_final_bytes_match_verbose_twice() -> Result<()> {
+    for (label, config, exe) in {
+        let secp = secp256k1_config();
+        let secp_exe = build_ecc_exe(&secp)?;
+        let bls = bls12_381_config();
+        let bls_exe = build_bls12_381_ecc_exe(&bls)?;
+        [("32-byte", secp, secp_exe), ("48-byte", bls, bls_exe)]
+    } {
+        let (oracle_system, oracle_arenas, retired, air_names) = ecc_dense_oracle(&exe, &config);
+        let pc_to_air_idx = {
+            let (vm, _) = VirtualMachine::new_with_keygen(
+                test_cpu_engine(),
+                Rv64WeierstrassCpuBuilder,
+                config.clone(),
+            )
+            .expect("ECC AIR-id vm init");
+            vm.pc_to_air_idx(&exe).expect("ECC AIR-id mapping")
+        };
+        let ecc_airs = ecc_air_ids(&exe, &pc_to_air_idx);
+        for pass in 0..2 {
+            let (direct_system, direct_arenas) = ecc_dense_direct(&exe, &config, retired);
+            assert_system_records_eq(
+                &format!("{label} ECC direct-final byte oracle pass {pass}"),
+                &oracle_system,
+                &direct_system,
+            );
+            for &air in &ecc_airs {
+                assert_eq!(
+                    oracle_arenas[air].allocated(),
+                    direct_arenas[air].allocated(),
+                    "{label}, pass {pass}, air {air} ({}): direct-final ECC bytes",
+                    air_names[air]
+                );
+            }
+        }
+    }
+    std::env::remove_var("OPENVM_RVR_INLINE_RECORDS");
+    std::env::remove_var("OPENVM_RVR_ARENA_NATIVE");
+    std::env::remove_var("OPENVM_RVR_GPU_RECORDS");
     Ok(())
 }
 
@@ -377,5 +588,39 @@ fn test_weierstrass_rvr_preflight_multi_segment_differential() -> Result<()> {
         .map(|segment| (Some(segment.num_insns), segment.trace_heights))
         .collect();
     assert_rvr_differential("weierstrass_multi", &exe, &config, segments);
+    Ok(())
+}
+
+#[test]
+fn test_weierstrass_rvr_multi_segment_proves_and_verifies() -> Result<()> {
+    std::env::remove_var("OPENVM_RVR_INLINE_RECORDS");
+    std::env::remove_var("OPENVM_RVR_ARENA_NATIVE");
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "delta");
+    let mut config = secp256k1_config();
+    config.as_mut().segmentation_max_memory = 1;
+    let exe = build_ecc_exe(&config)?;
+    let (vm, pk) =
+        VirtualMachine::new_with_keygen(test_cpu_engine(), Rv64WeierstrassCpuBuilder, config)
+            .expect("ECC proof vm init");
+    assert!(
+        vm.preflight_routed_instance(&exe)
+            .expect("ECC proof route")
+            .is_rvr(),
+        "ECC proof must use rvr preflight"
+    );
+    let vk = pk.get_vk();
+    let cached_program_trace = vm.commit_program_on_device(&exe.program);
+    let mut instance =
+        VmInstance::new(vm, Arc::new(exe), cached_program_trace).expect("ECC proof instance init");
+    instance.set_rvr_preflight_engine(Some(RvrPreflightEngine::Rvr));
+    let proof = ContinuationVmProver::prove(&mut instance, Streams::default())
+        .expect("ECC continuation prove");
+    assert!(
+        proof.per_segment.len() > 1,
+        "expected multiple ECC proof segments"
+    );
+    verify_segments(&instance.vm.engine, &vk, &proof.per_segment)
+        .expect("verify ECC proof segments");
+    std::env::remove_var("OPENVM_RVR_GPU_RECORDS");
     Ok(())
 }
