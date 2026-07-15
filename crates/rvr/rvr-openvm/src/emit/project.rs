@@ -54,7 +54,9 @@ impl TracerMode {
                 include_str!("../../c/tracer/openvm_tracer_metered_cost.h")
             }
             TracerMode::Metered => include_str!("../../c/tracer/openvm_tracer_metered.h"),
-            TracerMode::Preflight => include_str!("../../c/tracer/openvm_tracer_preflight.h"),
+            TracerMode::Preflight => {
+                include_str!("../../c/tracer/openvm_tracer_preflight_common.h")
+            }
         }
     }
 
@@ -492,7 +494,41 @@ impl CProject {
 
         // Tracer header (includes openvm_state.h, defines Tracer + inline functions).
         let tracer_path = self.output_dir.join(self.tracer_mode.header_filename());
-        fs::write(&tracer_path, self.tracer_mode.header_content())?;
+        if self.tracer_mode == TracerMode::Preflight {
+            fs::write(
+                self.output_dir.join("openvm_tracer_preflight_common.h"),
+                include_str!("../../c/tracer/openvm_tracer_preflight_common.h"),
+            )?;
+            if self.delta_records {
+                fs::write(
+                    self.output_dir.join("openvm_tracer_preflight_delta.h"),
+                    include_str!("../../c/tracer/openvm_tracer_preflight_delta.h"),
+                )?;
+            }
+            if self.native_detail {
+                fs::write(
+                    self.output_dir
+                        .join("openvm_tracer_preflight_native_detail.h"),
+                    include_str!("../../c/tracer/openvm_tracer_preflight_native_detail.h"),
+                )?;
+            }
+
+            let mut route_header = String::from(
+                "#ifndef OPENVM_TRACER_PREFLIGHT_H\n#define OPENVM_TRACER_PREFLIGHT_H\n\n",
+            );
+            if self.delta_records {
+                route_header.push_str("#define OPENVM_RVR_PREFLIGHT_DELTA 1\n");
+            }
+            if self.native_detail {
+                route_header.push_str("#define OPENVM_RVR_PREFLIGHT_NATIVE_DETAIL 1\n");
+            }
+            route_header.push_str(
+                "#include \"openvm_tracer_preflight_common.h\"\n\n#endif /* OPENVM_TRACER_PREFLIGHT_H */\n",
+            );
+            fs::write(&tracer_path, route_header)?;
+        } else {
+            fs::write(&tracer_path, self.tracer_mode.header_content())?;
+        }
 
         // Block and suspender headers are selected like tracer headers, then
         // copied under stable include names so generated block C does not
@@ -897,11 +933,14 @@ impl CProject {
         )
         .unwrap();
         self.emit_instret_suspend_check(out, pc, insn_count);
-        // Commit the block-level trace only after an instret-limit rejection
-        // has returned. Preflight's device chronology treats this hook as an
-        // exact executed-block stream; recording it in begin_block would also
-        // include the first unexecuted block of every continuation boundary.
-        writeln!(out, "    trace_block(state, 0x{pc:08x}ull, {insn_count}u);").unwrap();
+        if self.delta_records {
+            // Commit the block-level trace only after an instret-limit
+            // rejection has returned. Device chronology treats this hook as
+            // an exact executed-block stream; recording it in begin_block
+            // would also include the first unexecuted block of every
+            // continuation boundary.
+            writeln!(out, "    trace_block(state, 0x{pc:08x}ull, {insn_count}u);").unwrap();
+        }
     }
 
     fn emit_metered_counter_check(&self, out: &mut String, pc: u64, insn_count: u32) {
