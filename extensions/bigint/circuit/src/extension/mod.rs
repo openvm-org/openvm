@@ -37,7 +37,9 @@ use openvm_riscv_circuit::Rv64ImCpuProverExt;
 use openvm_riscv_transpiler::{BaseAluOpcode, ShiftOpcode};
 use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, StarkProtocolConfig, Val};
 #[cfg(feature = "rvr")]
-use rvr_openvm_lift::VmRvrExtension;
+use rvr_openvm_ext_bigint::Int256Extension;
+#[cfg(feature = "rvr")]
+use rvr_openvm_lift::{RvrExtensionCtx, RvrExtensions, VmRvrExtension};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -82,14 +84,9 @@ fn default_range_tuple_checker_sizes() -> [u32; 2] {
 
 #[cfg(feature = "rvr")]
 impl<F: PrimeField32> VmRvrExtension<F> for Int256 {
-    fn extend_rvr(
-        &self,
-        registry: &mut rvr_openvm_lift::ExtensionRegistry<F>,
-        ctx: Option<&rvr_openvm_lift::RvrExtensionCtx>,
-    ) {
-        let ext = rvr_openvm_ext_bigint::Int256Extension::new(ctx)
-            .expect("failed to construct rvr Int256Extension");
-        registry.register(ext);
+    fn extend_rvr(&self, extensions: &mut RvrExtensions, ctx: Option<&RvrExtensionCtx>) {
+        let ext = Int256Extension::new(ctx).expect("failed to construct rvr Int256Extension");
+        extensions.register_lifter(ext);
     }
 }
 

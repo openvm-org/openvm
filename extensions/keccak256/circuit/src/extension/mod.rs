@@ -31,7 +31,9 @@ use openvm_stark_backend::{
     interaction::PermutationCheckBus, p3_field::PrimeField32, StarkEngine, StarkProtocolConfig, Val,
 };
 #[cfg(feature = "rvr")]
-use rvr_openvm_lift::VmRvrExtension;
+use rvr_openvm_ext_keccak::KeccakExtension;
+#[cfg(feature = "rvr")]
+use rvr_openvm_lift::{RvrExtensionCtx, RvrExtensions, VmRvrExtension};
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
@@ -123,14 +125,9 @@ pub struct Keccak256;
 
 #[cfg(feature = "rvr")]
 impl<F: PrimeField32> VmRvrExtension<F> for Keccak256 {
-    fn extend_rvr(
-        &self,
-        registry: &mut rvr_openvm_lift::ExtensionRegistry<F>,
-        ctx: Option<&rvr_openvm_lift::RvrExtensionCtx>,
-    ) {
-        let ext = rvr_openvm_ext_keccak::KeccakExtension::new(ctx)
-            .expect("failed to construct rvr KeccakExtension");
-        registry.register(ext);
+    fn extend_rvr(&self, extensions: &mut RvrExtensions, ctx: Option<&RvrExtensionCtx>) {
+        let ext = KeccakExtension::new(ctx).expect("failed to construct rvr KeccakExtension");
+        extensions.register_lifter(ext);
     }
 }
 

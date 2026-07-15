@@ -8,7 +8,7 @@ use std::{
 /// Default clang command used for RVR native C builds.
 pub const DEFAULT_CLANG_COMMAND: &str = "clang-22";
 
-/// Minimum supported LLVM clang major version (c23, preserve_none on AArch64).
+/// Minimum supported LLVM clang major version (c2y, preserve_none on AArch64).
 pub const MIN_CLANG_MAJOR: u32 = 19;
 
 /// Keg-only Homebrew LLVM locations (not on PATH by default).
@@ -93,7 +93,7 @@ pub fn ensure_rvr_clang_compiler(compiler: &str) -> Result<(), String> {
     if major < MIN_CLANG_MAJOR {
         return Err(format!(
             "selected compiler '{compiler}' is clang {major}, but RVR requires \
-             clang >= {MIN_CLANG_MAJOR} (c23, preserve_none); install a newer LLVM \
+             clang >= {MIN_CLANG_MAJOR} (c2y, preserve_none); install a newer LLVM \
              (e.g. clang-22) or set RVR_CC to a newer clang"
         ));
     }

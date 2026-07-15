@@ -157,7 +157,7 @@ impl<K: IsEqKind> ExtInstr for FieldIsEqInstr<K> {
         } else {
             let mod_literal = format_c_byte_array(&self.modulus);
             ctx.write_line("{");
-            ctx.write_line(&format!("static const uint8_t mod_[] = {mod_literal};"));
+            ctx.write_line(&format!("static constexpr uint8_t mod_[] = {mod_literal};"));
             let name = format!("rvr_ext_{prefix}_iseq");
             let num_limbs = format!("{}u", self.num_limbs);
             let val = ctx.extern_call_expr(
@@ -197,7 +197,7 @@ impl<K: ArithKind> ExtInstr for FieldArithInstr<K> {
         } else {
             let mod_literal = format_c_byte_array(&self.modulus);
             ctx.write_line("{");
-            ctx.write_line(&format!("static const uint8_t mod_[] = {mod_literal};"));
+            ctx.write_line(&format!("static constexpr uint8_t mod_[] = {mod_literal};"));
             let name = format!("rvr_ext_{prefix}_{op_name}");
             let num_limbs = format!("{}u", self.num_limbs);
             ctx.extern_call(&name, &["state", &rd, &rs1, &rs2, &num_limbs, "mod_"]);

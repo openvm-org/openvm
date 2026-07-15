@@ -2,6 +2,8 @@
 mod tests {
     #[cfg(all(feature = "rvr", not(feature = "unprotected")))]
     use std::{env, process::Command};
+    #[cfg(feature = "rvr")]
+    use std::{sync::Barrier, thread};
 
     use eyre::Result;
     use openvm_circuit::{
@@ -73,6 +75,51 @@ mod tests {
     #[cfg(feature = "rvr")]
     fn test_rvr_fibonacci() {
         execute_rvr_example("fibonacci");
+    }
+
+    #[test]
+    #[cfg(feature = "rvr")]
+    fn test_rvr_concurrent_host_contexts() -> Result<()> {
+        const NUM_THREADS: usize = 8;
+        const NUM_RUNS: usize = 8;
+
+        let mut config = test_rv64im_config();
+        config.rv64i.system = config.rv64i.system.with_public_values_bytes(64);
+        let elf = build_example_program_at_path(get_programs_dir!(), "reveal", &config)?;
+        let exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension),
+        )?;
+        let executor = VmExecutor::new(config)?;
+        let instance = executor.instance(&exe)?;
+        let barrier = Barrier::new(NUM_THREADS);
+        let expected_prefix = (0u8..32).collect::<Vec<_>>();
+
+        thread::scope(|scope| {
+            for _ in 0..NUM_THREADS {
+                scope.spawn(|| {
+                    barrier.wait();
+                    for _ in 0..NUM_RUNS {
+                        let state = instance.execute(vec![], None).unwrap();
+                        let public_values = extract_public_values(64, &state.memory.memory);
+                        assert_eq!(&public_values[..32], &expected_prefix);
+                        assert_eq!(
+                            u64::from_le_bytes(public_values[32..40].try_into().unwrap()),
+                            123
+                        );
+                        assert_eq!(
+                            u64::from_le_bytes(public_values[40..48].try_into().unwrap()),
+                            456
+                        );
+                    }
+                });
+            }
+        });
+
+        Ok(())
     }
 
     #[cfg(all(feature = "rvr", not(feature = "unprotected")))]

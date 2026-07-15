@@ -7,7 +7,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ir::*;
 use rvr_openvm_lift::{ExtensionRegistry, TraceChipIndex};
 
@@ -373,12 +372,12 @@ impl CProject {
     }
 
     /// Write all C project files.
-    pub fn write_all<F: PrimeField32>(
+    pub fn write_all(
         &self,
         blocks: &[Block],
         entry_point: u64,
         text_start: u64,
-        extensions: &ExtensionRegistry<F>,
+        extensions: &ExtensionRegistry,
     ) -> io::Result<()> {
         let text_end = Self::dispatch_max_pc(blocks, entry_point, text_start);
         let table_size = Self::dispatch_table_size(text_start, text_end);
@@ -483,10 +482,7 @@ impl CProject {
 
     // ── Extension files ─────────────────────────────────────────────────
 
-    fn write_extension_files<F: PrimeField32>(
-        &self,
-        extensions: &ExtensionRegistry<F>,
-    ) -> io::Result<()> {
+    fn write_extension_files(&self, extensions: &ExtensionRegistry) -> io::Result<()> {
         let mut created_dirs = HashSet::new();
         self.write_embedded_files(extensions.c_headers(), &mut created_dirs)?;
         self.write_embedded_files(extensions.c_sources(), &mut created_dirs)?;

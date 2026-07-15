@@ -3,11 +3,10 @@
 //! Provides an IR node for the `HintFinalExp` phantom instruction and the
 //! `PairingExtension` for lifting and executing it via FFI.
 
-use openvm_instructions::{instruction::Instruction, LocalOpcode, SystemOpcode};
+use openvm_instructions::{LocalOpcode, SystemOpcode};
 use openvm_pairing_transpiler::PairingPhantom;
-use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
-use rvr_openvm_lift::{helpers::decode_reg, RvrExtension};
+use rvr_openvm_lift::{helpers::decode_reg, RvrExtension, RvrInstruction};
 
 #[derive(Debug, Clone, Copy)]
 enum KnownPairingCurve {
@@ -83,15 +82,15 @@ impl Default for PairingExtension {
     }
 }
 
-impl<F: PrimeField32> RvrExtension<F> for PairingExtension {
-    fn try_lift(&self, insn: &Instruction<F>, pc: u64) -> Option<LiftedInstr> {
+impl RvrExtension for PairingExtension {
+    fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
 
         if opcode != SystemOpcode::PHANTOM.global_opcode_usize() {
             return None;
         }
 
-        let c_val = insn.c.as_canonical_u32();
+        let c_val = insn.c;
         let discriminant = (c_val & 0xffff) as u16;
         let curve_idx = (c_val >> 16) as u16;
 

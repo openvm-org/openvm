@@ -18,7 +18,7 @@ use openvm_stark_backend::{
     p3_field::Field, EngineDeviceCtx, StarkEngine, StarkProtocolConfig, Val,
 };
 #[cfg(feature = "rvr")]
-use rvr_openvm_lift::ExtensionRegistry;
+use rvr_openvm_lift::RvrExtensions;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use super::{AnyEnum, VmChipComplex, BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, PROGRAM_AIR_ID};
@@ -139,7 +139,7 @@ pub trait VmExecutionConfig<F> {
         -> Result<ExecutorInventory<Self::Executor>, ExecutorInventoryError>;
 
     #[cfg(feature = "rvr")]
-    fn create_rvr_extensions(&self, air_idx: Option<&[usize]>) -> ExtensionRegistry<F>
+    fn create_rvr_extensions(&self, air_idx: Option<&[usize]>) -> RvrExtensions
     where
         F: PrimeField32;
 }

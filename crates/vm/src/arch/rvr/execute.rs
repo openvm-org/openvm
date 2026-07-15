@@ -7,8 +7,7 @@
 
 use std::ffi::c_void;
 
-use openvm_stark_backend::p3_field::PrimeField32;
-use rvr_openvm_lift::{ExtensionError, ExtensionRegistry};
+use rvr_openvm_lift::{ExtensionError, RvrRuntimeExtension};
 use rvr_state::{ExecutionStatus, MemoryError, Rv64, RvState, SuspenderState, TracerState};
 
 use super::{
@@ -54,12 +53,10 @@ pub enum ExecuteError {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-fn build_io_state_borrowed<'a, F: PrimeField32>(
-    vm_state: &'a mut VmState<GuestMemory>,
-) -> OpenVmIoState<'a, F> {
+fn build_io_state_borrowed(vm_state: &mut VmState<GuestMemory>) -> OpenVmIoState<'_> {
     let memory_ptr = rv64_memory_ptr(vm_state);
-    let (deferral_memory, deferral_memory_len) =
-        deferral_memory_ptr::<F>(&mut vm_state.memory.memory);
+    let (deferral_memory, deferral_memory_len_bytes) =
+        deferral_memory_ptr(&mut vm_state.memory.memory);
     let streams = &mut vm_state.streams;
     OpenVmIoState {
         input_stream: &mut streams.input_stream,
@@ -68,7 +65,7 @@ fn build_io_state_borrowed<'a, F: PrimeField32>(
         memory_ptr,
         public_values: public_values_slice(&mut vm_state.memory.memory),
         deferral_memory,
-        deferral_memory_len,
+        deferral_memory_len_bytes,
         deferrals: &mut streams.deferrals,
     }
 }
@@ -79,9 +76,9 @@ fn build_io_state_borrowed<'a, F: PrimeField32>(
 /// `register_openvm_io_ctx` and `register_hint_stream_set_fn` with the expected
 /// ABIs. `io_state` must remain valid for the lifetime of the subsequent
 /// `rv_execute` call.
-unsafe fn register_openvm_io_ctx<F: PrimeField32>(
+unsafe fn register_openvm_io_ctx(
     compiled: &RvrCompiled,
-    io_state: &mut OpenVmIoState<'_, F>,
+    io_state: &mut OpenVmIoState<'_>,
 ) -> Result<(), ExecuteError> {
     let register_fn: RegisterIoCtxFn = unsafe {
         let sym = compiled
@@ -90,7 +87,7 @@ unsafe fn register_openvm_io_ctx<F: PrimeField32>(
             .map_err(|e| ExecuteError::SymbolLookup(e.to_string()))?;
         *sym
     };
-    unsafe { register_fn(io_state as *mut OpenVmIoState<'_, F> as *mut c_void) };
+    unsafe { register_fn(io_state as *mut OpenVmIoState<'_> as *mut c_void) };
 
     let register_hint_fn: RegisterHintStreamSetFn = unsafe {
         let sym = compiled
@@ -99,7 +96,7 @@ unsafe fn register_openvm_io_ctx<F: PrimeField32>(
             .map_err(|e| ExecuteError::SymbolLookup(e.to_string()))?;
         *sym
     };
-    unsafe { register_hint_fn(host_hint_stream_set::<F>) };
+    unsafe { register_hint_fn(host_hint_stream_set) };
 
     Ok(())
 }
@@ -130,22 +127,23 @@ pub unsafe fn rv_execute(
 ///
 /// `allow_suspended` permits `Suspended` as a successful outcome (the
 /// limit-armed callers pass `true`; unlimited callers pass `false`).
-fn run_and_finalize<F, T, S>(
+fn run_and_finalize<T, S>(
     compiled: &RvrCompiled,
-    extensions: &ExtensionRegistry<F>,
+    runtime_hooks: &[Box<dyn RvrRuntimeExtension>],
     vm_state: &mut VmState<GuestMemory>,
     state: &mut RvState<Rv64, T, S>,
     allow_suspended: bool,
 ) -> Result<ExecutionStatus, ExecuteError>
 where
-    F: PrimeField32,
     T: TracerState,
     S: SuspenderState,
 {
-    let mut io_state = build_io_state_borrowed::<F>(vm_state);
+    let mut io_state = build_io_state_borrowed(vm_state);
     unsafe {
         register_openvm_io_ctx(compiled, &mut io_state)?;
-        extensions.register_host_callbacks(&compiled.lib)?;
+        for hook in runtime_hooks {
+            hook.register_host_callbacks(&compiled.lib)?;
+        }
         rv_execute(compiled, state.as_void_ptr())?;
     }
 
@@ -181,9 +179,9 @@ where
 /// If `num_insns` is `Some(n)`, the suspender is armed at `n` instructions and
 /// a `Suspended` outcome is accepted as success; otherwise only `Terminated`
 /// (with exit-code 0) succeeds.
-pub fn execute<F: PrimeField32>(
+pub fn execute(
     compiled: &RvrCompiled,
-    extensions: &ExtensionRegistry<F>,
+    runtime_hooks: &[Box<dyn RvrRuntimeExtension>],
     vm_state: &mut VmState<GuestMemory>,
     num_insns: Option<u64>,
 ) -> Result<RvrPureResult, ExecuteError> {
@@ -200,7 +198,7 @@ pub fn execute<F: PrimeField32>(
 
     let status = run_and_finalize(
         compiled,
-        extensions,
+        runtime_hooks,
         vm_state,
         &mut state,
         num_insns.is_some(),
@@ -213,9 +211,9 @@ pub fn execute<F: PrimeField32>(
 }
 
 /// Execute a VmExe with metered cost tracking.
-pub fn execute_metered_cost<F: PrimeField32>(
+pub fn execute_metered_cost(
     compiled: &RvrCompiled,
-    extensions: &ExtensionRegistry<F>,
+    runtime_hooks: &[Box<dyn RvrRuntimeExtension>],
     vm_state: &mut VmState<GuestMemory>,
     widths: &[u64],
 ) -> Result<RvrMeteredCostResult, ExecuteError> {
@@ -230,38 +228,38 @@ pub fn execute_metered_cost<F: PrimeField32>(
     state.tracer.chip_widths = widths.as_ptr();
     state.tracer.cost = 0;
 
-    run_and_finalize(compiled, extensions, vm_state, &mut state, false)
+    run_and_finalize(compiled, runtime_hooks, vm_state, &mut state, false)
         .inspect_err(|error| tracing::warn!(%error, "rvr metered-cost execution failed"))?;
     let cost = state.tracer.cost;
     Ok(RvrMeteredCostResult { state, cost })
 }
 
 /// Execute a VmExe with per-chip metered execution and segmentation.
-pub fn execute_metered<F: PrimeField32>(
+pub fn execute_metered(
     compiled: &RvrCompiled,
-    extensions: &ExtensionRegistry<F>,
+    runtime_hooks: &[Box<dyn RvrRuntimeExtension>],
     vm_state: &mut VmState<GuestMemory>,
     seg_state: SegmentationState,
 ) -> Result<SegmentationState, ExecuteError> {
-    execute_metered_impl(compiled, extensions, vm_state, seg_state, false).map(|result| {
+    execute_metered_impl(compiled, runtime_hooks, vm_state, seg_state, false).map(|result| {
         debug_assert!(!result.suspended);
         result.seg_state
     })
 }
 
 /// Execute a VmExe with per-chip metered execution until termination or a segment boundary.
-pub fn execute_metered_segment_boundary<F: PrimeField32>(
+pub fn execute_metered_segment_boundary(
     compiled: &RvrCompiled,
-    extensions: &ExtensionRegistry<F>,
+    runtime_hooks: &[Box<dyn RvrRuntimeExtension>],
     vm_state: &mut VmState<GuestMemory>,
     seg_state: SegmentationState,
 ) -> Result<RvrMeteredResult, ExecuteError> {
-    execute_metered_impl(compiled, extensions, vm_state, seg_state, true)
+    execute_metered_impl(compiled, runtime_hooks, vm_state, seg_state, true)
 }
 
-fn execute_metered_impl<F: PrimeField32>(
+fn execute_metered_impl(
     compiled: &RvrCompiled,
-    extensions: &ExtensionRegistry<F>,
+    runtime_hooks: &[Box<dyn RvrRuntimeExtension>],
     vm_state: &mut VmState<GuestMemory>,
     mut seg_state: SegmentationState,
     allow_suspended: bool,
@@ -305,8 +303,14 @@ fn execute_metered_impl<F: PrimeField32>(
     state.tracer.on_check = metered_periodic_check;
     state.tracer.seg_state = &mut seg_state as *mut SegmentationState as *mut c_void;
 
-    let status = run_and_finalize(compiled, extensions, vm_state, &mut state, allow_suspended)
-        .inspect_err(|error| tracing::warn!(%error, "rvr metered execution failed"))?;
+    let status = run_and_finalize(
+        compiled,
+        runtime_hooks,
+        vm_state,
+        &mut state,
+        allow_suspended,
+    )
+    .inspect_err(|error| tracing::warn!(%error, "rvr metered execution failed"))?;
 
     debug_assert!(matches!(
         status,
