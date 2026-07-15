@@ -32,12 +32,12 @@
 
 use std::{
     any::Any,
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     mem::{ManuallyDrop, MaybeUninit},
     sync::{Arc, LazyLock, Mutex, MutexGuard},
 };
 
-use openvm_instructions::riscv::RV64_REGISTER_AS;
+use openvm_instructions::riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS};
 use openvm_stark_backend::p3_field::Field;
 
 use super::{
@@ -86,6 +86,15 @@ struct PoolInner {
     /// that retain multiple outputs simply allocate until those outputs are consumed.
     exec_frequencies: Option<Vec<u32>>,
     exec_frequencies_touched: Option<Vec<MaybeUninit<u32>>>,
+    /// Huge-page-aligned virtual regions of the main-memory timestamp shadow that were explicitly
+    /// collapsed after a prior segment touched them. Keyed by virtual address because the pooled
+    /// shadow allocation is stable for the executor lifetime.
+    shadow_memory_hugepages: HashSet<usize>,
+    /// Failed collapse attempts by virtual region. A small retry budget tolerates transient kernel
+    /// failures without issuing an unsupported hint on every later segment.
+    shadow_memory_hugepage_failures: HashMap<usize, u8>,
+    /// Nonempty initial samples used to discover and promote the recurring shadow working set.
+    shadow_locality_training_samples: usize,
     /// Spare inline-record byte buffers, one per migrated chip in steady
     /// state (best-fit take, since per-air capacities differ).
     record_bufs: Vec<Vec<MaybeUninit<u8>>>,
@@ -381,6 +390,101 @@ impl RvrPreflightBufferPool {
         inner.shadow_register = Some(register);
         inner.shadow_memory = Some(memory);
         inner.shadow_public_values = Some(pv);
+    }
+
+    /// Promote only the main-memory shadow regions observed in this segment to resident THPs.
+    /// The generated DSO keeps its unchanged flat `shadow[block_idx]` ABI, while the following
+    /// segment gets a page/block-local translation footprint. Promotion happens after the shadow
+    /// is scrubbed, preserving the all-zero segment-start invariant and exact serial chronology.
+    pub(crate) fn prepare_shadow_locality(
+        &self,
+        shadow_memory: &mut [u32],
+        touched: &[TouchedBlock],
+    ) {
+        if !self.enabled || !*SHADOW_LOCALITY {
+            return;
+        }
+        #[cfg(target_os = "linux")]
+        {
+            let allocation_start = shadow_memory.as_mut_ptr() as usize;
+            let allocation_end = allocation_start + std::mem::size_of_val(shadow_memory);
+            let interior_start = allocation_start.next_multiple_of(HUGE_PAGE_BYTES);
+            let interior_end = allocation_end & !(HUGE_PAGE_BYTES - 1);
+            if interior_end <= interior_start {
+                return;
+            }
+
+            let mut regions = touched
+                .iter()
+                .filter(|block| block.addr_space == RV64_MEMORY_AS)
+                .filter_map(|block| {
+                    let block_idx = block.block_addr as usize / WORD_BYTES;
+                    let byte_offset = block_idx.checked_mul(size_of::<u32>())?;
+                    let slot = allocation_start.checked_add(byte_offset)?;
+                    let region = slot & !(HUGE_PAGE_BYTES - 1);
+                    (region >= interior_start && region < interior_end).then_some(region)
+                })
+                .collect::<Vec<_>>();
+            regions.sort_unstable();
+            regions.dedup();
+            if regions.is_empty() {
+                return;
+            }
+            {
+                let mut inner = self.lock();
+                let training =
+                    inner.shadow_locality_training_samples < SHADOW_LOCALITY_TRAINING_SAMPLES;
+                if training {
+                    inner.shadow_locality_training_samples += 1;
+                }
+                regions.retain(|region| {
+                    let failures = inner
+                        .shadow_memory_hugepage_failures
+                        .get(region)
+                        .copied()
+                        .unwrap_or(0);
+                    !inner.shadow_memory_hugepages.contains(region)
+                        && failures < SHADOW_LOCALITY_MAX_ATTEMPTS
+                        && (training || failures != 0)
+                });
+            }
+
+            let mut promoted = Vec::with_capacity(regions.len());
+            let mut failed = Vec::new();
+            for region in regions {
+                // SAFETY: every selected 2 MiB range is page-aligned and lies wholly within the
+                // live shadow allocation. MADV_COLLAPSE preserves contents and mapping validity.
+                let rc = unsafe {
+                    libc::madvise(
+                        region as *mut libc::c_void,
+                        HUGE_PAGE_BYTES,
+                        libc::MADV_COLLAPSE,
+                    )
+                };
+                if rc == 0 {
+                    promoted.push(region);
+                } else {
+                    failed.push(region);
+                }
+            }
+            if !promoted.is_empty() || !failed.is_empty() {
+                let mut inner = self.lock();
+                for region in promoted {
+                    inner.shadow_memory_hugepage_failures.remove(&region);
+                    inner.shadow_memory_hugepages.insert(region);
+                }
+                for region in failed {
+                    *inner
+                        .shadow_memory_hugepage_failures
+                        .entry(region)
+                        .or_default() += 1;
+                }
+            }
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = (shadow_memory, touched);
+        }
     }
 
     pub(crate) fn recycle_touched(&self, touched: Vec<TouchedBlock>) {
@@ -911,8 +1015,15 @@ fn vec_zeroed_advised(len: usize) -> Vec<u32> {
 }
 
 const HUGE_PAGE_BYTES: usize = 2 * 1024 * 1024;
+const SHADOW_LOCALITY_TRAINING_SAMPLES: usize = 5;
+const SHADOW_LOCALITY_MAX_ATTEMPTS: u8 = 2;
 
 static THP_ADVICE: LazyLock<bool> = LazyLock::new(|| !env_flag_is_off("OPENVM_RVR_PREFLIGHT_THP"));
+
+/// Target-2 kill switch. Default-on after validation; `0|false|off` restores ordinary sparse
+/// 4 KiB-backed timestamp shadows for same-process-shape A/B measurements.
+static SHADOW_LOCALITY: LazyLock<bool> =
+    LazyLock::new(|| !env_flag_is_off("OPENVM_RVR_SHADOW_LOCALITY"));
 
 /// Best-effort `MADV_HUGEPAGE` over the page-aligned interior of a buffer.
 /// Purely a performance hint; failures are ignored.
@@ -961,6 +1072,18 @@ mod tests {
         let (recycled, recycled_needs_prefault) = pool.take_delta_backing(2048);
         assert!(!recycled_needs_prefault);
         assert_eq!(recycled.as_ptr(), first_ptr);
+    }
+
+    #[test]
+    fn empty_shadow_locality_sample_does_not_consume_training_budget() {
+        let pool = RvrPreflightBufferPool {
+            enabled: true,
+            arena_native_enabled: true,
+            inner: Arc::new(Mutex::new(PoolInner::default())),
+        };
+        let mut shadow = Vec::new();
+        pool.prepare_shadow_locality(&mut shadow, &[]);
+        assert_eq!(pool.lock().shadow_locality_training_samples, 0);
     }
 
     #[test]
