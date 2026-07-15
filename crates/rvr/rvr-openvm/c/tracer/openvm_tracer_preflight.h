@@ -418,8 +418,8 @@ static __attribute__((always_inline)) inline void trace_timestamp(
 /* ── Trace-only register access ──────────────────────────────────── */
 
 static __attribute__((always_inline)) inline uint32_t trace_reg_read(
-    RvState* restrict state, uint8_t idx, uint32_t val) {
-  uint64_t reg_value = idx == 0 ? 0 : state->regs[idx];
+    RvState* restrict state, uint8_t idx, uint64_t val) {
+  uint64_t reg_value = idx == 0 ? 0 : val;
   return preflight_append_memory(state->tracer, PREFLIGHT_MEMORY_KIND_READ,
                                  AS_REGISTER, (uint32_t)idx * WORD_SIZE,
                                  WORD_SIZE, reg_value, reg_value);
@@ -429,7 +429,7 @@ static __attribute__((always_inline)) inline uint32_t trace_reg_read(
  * value arrives as `new_val`. Returns the register block's `prev_timestamp`
  * (consumed by inline record emission). */
 static __attribute__((always_inline)) inline uint32_t trace_reg_write(
-    RvState* restrict state, uint8_t idx, uint32_t new_val) {
+    RvState* restrict state, uint8_t idx, uint64_t new_val) {
   return preflight_append_memory(state->tracer, PREFLIGHT_MEMORY_KIND_WRITE,
                                  AS_REGISTER, (uint32_t)idx * WORD_SIZE,
                                  WORD_SIZE, new_val, state->regs[idx]);
