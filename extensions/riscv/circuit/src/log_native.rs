@@ -42,18 +42,17 @@ use crate::{
         Rv64BaseAluAdapterExecutor, Rv64BaseAluAdapterRecord, Rv64BaseAluU16AdapterExecutor,
         Rv64BaseAluU16AdapterRecord, Rv64BaseAluWU16AdapterExecutor, Rv64BaseAluWU16AdapterRecord,
         Rv64BranchAdapterExecutor, Rv64BranchAdapterRecord, Rv64CondRdWriteAdapterExecutor,
-        Rv64JalrAdapterExecutor, Rv64JalrAdapterRecord, Rv64LoadStoreAdapterExecutor,
-        Rv64LoadStoreAdapterRecord, Rv64MultAdapterExecutor, Rv64MultAdapterRecord,
+        Rv64JalrAdapterExecutor, Rv64JalrAdapterRecord, Rv64LoadAdapterExecutor,
+        Rv64LoadAdapterRecord, Rv64MultAdapterExecutor, Rv64MultAdapterRecord,
         Rv64MultWAdapterExecutor, Rv64MultWAdapterRecord, Rv64RdWriteAdapterExecutor,
-        Rv64RdWriteAdapterRecord, RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
-        RV64_WORD_U16_LIMBS, U16_BITS,
+        Rv64RdWriteAdapterRecord, Rv64StoreAdapterExecutor, Rv64StoreAdapterRecord, RV64_BYTE_BITS,
+        RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS, RV64_WORD_U16_LIMBS, U16_BITS,
     },
     AddSubCoreRecord, BitwiseLogicCoreRecord, BranchEqualCoreRecord, BranchLessThanCoreRecord,
-    DivRemCoreRecord, LessThanCoreRecord, LoadSignExtendCoreRecord, LoadStoreCoreRecord,
-    MulHCoreRecord, MultiplicationCoreRecord, Rv64AuipcCoreRecord, Rv64HintStoreLayout,
-    Rv64HintStoreMetadata, Rv64HintStoreRecordHeader, Rv64HintStoreRecordMut, Rv64HintStoreVar,
-    Rv64JalLuiCoreRecord, Rv64JalrCoreRecord, ShiftLogicalCoreRecord,
-    ShiftRightArithmeticCoreRecord,
+    DivRemCoreRecord, LessThanCoreRecord, LoadRecord, MulHCoreRecord, MultiplicationCoreRecord,
+    Rv64AuipcCoreRecord, Rv64HintStoreLayout, Rv64HintStoreMetadata, Rv64HintStoreRecordHeader,
+    Rv64HintStoreRecordMut, Rv64HintStoreVar, Rv64JalLuiCoreRecord, Rv64JalrCoreRecord,
+    ShiftLogicalCoreRecord, ShiftRightArithmeticCoreRecord, StoreRecord,
 };
 
 const JAL: usize = Rv64JalLuiOpcode::JAL as usize;
@@ -66,7 +65,8 @@ pub(crate) type BranchLayout<F> = EmptyAdapterCoreLayout<F, Rv64BranchAdapterExe
 pub(crate) type CondRdWriteLayout<F> = EmptyAdapterCoreLayout<F, Rv64CondRdWriteAdapterExecutor>;
 pub(crate) type JalrLayout<F> = EmptyAdapterCoreLayout<F, Rv64JalrAdapterExecutor>;
 pub(crate) type RdWriteLayout<F> = EmptyAdapterCoreLayout<F, Rv64RdWriteAdapterExecutor>;
-pub(crate) type LoadStoreLayout<F> = EmptyAdapterCoreLayout<F, Rv64LoadStoreAdapterExecutor>;
+pub(crate) type LoadLayout<F> = EmptyAdapterCoreLayout<F, Rv64LoadAdapterExecutor>;
+pub(crate) type StoreLayout<F> = EmptyAdapterCoreLayout<F, Rv64StoreAdapterExecutor>;
 pub(crate) type MultLayout<F> = EmptyAdapterCoreLayout<F, Rv64MultAdapterExecutor>;
 pub(crate) type MultWLayout<F> = EmptyAdapterCoreLayout<F, Rv64MultWAdapterExecutor>;
 
@@ -131,14 +131,8 @@ pub(crate) type MulWRecordMut<'a> = (
     &'a mut Rv64MultWAdapterRecord,
     &'a mut MultiplicationCoreRecord<RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>,
 );
-pub(crate) type LoadStoreRecordMut<'a> = (
-    &'a mut Rv64LoadStoreAdapterRecord,
-    &'a mut LoadStoreCoreRecord<RV64_REGISTER_NUM_LIMBS>,
-);
-pub(crate) type LoadSignExtendRecordMut<'a> = (
-    &'a mut Rv64LoadStoreAdapterRecord,
-    &'a mut LoadSignExtendCoreRecord<RV64_REGISTER_NUM_LIMBS>,
-);
+pub(crate) type LoadRecordMut<'a> = (&'a mut Rv64LoadAdapterRecord, &'a mut LoadRecord);
+pub(crate) type StoreRecordMut<'a> = (&'a mut Rv64StoreAdapterRecord, &'a mut StoreRecord);
 pub(crate) type DivRemRecordMut<'a> = (
     &'a mut Rv64MultAdapterRecord,
     &'a mut DivRemCoreRecord<RV64_REGISTER_NUM_LIMBS>,
@@ -165,8 +159,8 @@ pub trait Rv64IRecordArena<F>:
     + for<'a> RecordArena<'a, CondRdWriteLayout<F>, JalLuiRecordMut<'a>>
     + for<'a> RecordArena<'a, JalrLayout<F>, JalrRecordMut<'a>>
     + for<'a> RecordArena<'a, RdWriteLayout<F>, AuipcRecordMut<'a>>
-    + for<'a> RecordArena<'a, LoadStoreLayout<F>, LoadStoreRecordMut<'a>>
-    + for<'a> RecordArena<'a, LoadStoreLayout<F>, LoadSignExtendRecordMut<'a>>
+    + for<'a> RecordArena<'a, LoadLayout<F>, LoadRecordMut<'a>>
+    + for<'a> RecordArena<'a, StoreLayout<F>, StoreRecordMut<'a>>
     + for<'a> RecordArena<'a, EmptyMultiRowLayout, PhantomRecordMut<'a>>
 {
 }
@@ -186,8 +180,8 @@ impl<F, RA> Rv64IRecordArena<F> for RA where
         + for<'a> RecordArena<'a, CondRdWriteLayout<F>, JalLuiRecordMut<'a>>
         + for<'a> RecordArena<'a, JalrLayout<F>, JalrRecordMut<'a>>
         + for<'a> RecordArena<'a, RdWriteLayout<F>, AuipcRecordMut<'a>>
-        + for<'a> RecordArena<'a, LoadStoreLayout<F>, LoadStoreRecordMut<'a>>
-        + for<'a> RecordArena<'a, LoadStoreLayout<F>, LoadSignExtendRecordMut<'a>>
+        + for<'a> RecordArena<'a, LoadLayout<F>, LoadRecordMut<'a>>
+        + for<'a> RecordArena<'a, StoreLayout<F>, StoreRecordMut<'a>>
         + for<'a> RecordArena<'a, EmptyMultiRowLayout, PhantomRecordMut<'a>>
 {
 }
@@ -1235,126 +1229,96 @@ where
         );
         registry.register_inline_arena_native(
             Rv64LoadStoreOpcode::iter()
-                .take(Rv64LoadStoreOpcode::STOREB as usize + 1)
+                .take(Rv64LoadStoreOpcode::STORED as usize)
+                .chain(Rv64LoadStoreOpcode::iter().skip(Rv64LoadStoreOpcode::STOREB as usize + 1))
                 .map(|opcode| opcode.global_opcode()),
             PREFLIGHT_ADDSUB_RECORD_SIZE,
-            assemble_loadstore_inline::<F, RA>,
+            assemble_load_inline::<F, RA>,
             ArenaNativeGeometry {
-                adapter_size: size_of::<Rv64LoadStoreAdapterRecord>(),
-                adapter_align: align_of::<Rv64LoadStoreAdapterRecord>(),
-                core_size: size_of::<LoadStoreCoreRecord<RV64_REGISTER_NUM_LIMBS>>(),
-                core_align: align_of::<LoadStoreCoreRecord<RV64_REGISTER_NUM_LIMBS>>(),
-                core_off_matrix: <Rv64LoadStoreAdapterExecutor as AdapterTraceExecutor<F>>::WIDTH
+                adapter_size: size_of::<Rv64LoadAdapterRecord>(),
+                adapter_align: align_of::<Rv64LoadAdapterRecord>(),
+                core_size: size_of::<LoadRecord>(),
+                core_align: align_of::<LoadRecord>(),
+                core_off_matrix: <Rv64LoadAdapterExecutor as AdapterTraceExecutor<F>>::WIDTH
                     * size_of::<F>(),
                 layout: ArenaNativeLayout::LoadStore(LoadStoreArenaFieldOffsets {
-                    from_pc: core::mem::offset_of!(Rv64LoadStoreAdapterRecord, from_pc),
-                    from_timestamp: core::mem::offset_of!(
-                        Rv64LoadStoreAdapterRecord,
-                        from_timestamp
-                    ),
-                    rs1_ptr: core::mem::offset_of!(Rv64LoadStoreAdapterRecord, rs1_ptr),
-                    rs1_val: core::mem::offset_of!(Rv64LoadStoreAdapterRecord, rs1_val),
-                    rs1_aux_prev_ts: core::mem::offset_of!(
-                        Rv64LoadStoreAdapterRecord,
-                        rs1_aux_record
-                    ) + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
-                    rd_rs2_ptr: core::mem::offset_of!(Rv64LoadStoreAdapterRecord, rd_rs2_ptr),
+                    from_pc: core::mem::offset_of!(Rv64LoadAdapterRecord, from_pc),
+                    from_timestamp: core::mem::offset_of!(Rv64LoadAdapterRecord, from_timestamp),
+                    rs1_ptr: core::mem::offset_of!(Rv64LoadAdapterRecord, rs1_ptr),
+                    rs1_val: core::mem::offset_of!(Rv64LoadAdapterRecord, rs1_val),
+                    rs1_aux_prev_ts: core::mem::offset_of!(Rv64LoadAdapterRecord, rs1_aux_record)
+                        + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+                    rd_rs2_ptr: core::mem::offset_of!(Rv64LoadAdapterRecord, rd_ptr),
                     read_data_aux_prev_ts: core::mem::offset_of!(
-                        Rv64LoadStoreAdapterRecord,
+                        Rv64LoadAdapterRecord,
                         read_data_aux
                     ) + core::mem::offset_of!(
                         MemoryReadAuxRecord,
                         prev_timestamp
                     ),
-                    imm: core::mem::offset_of!(Rv64LoadStoreAdapterRecord, imm),
-                    imm_sign: core::mem::offset_of!(Rv64LoadStoreAdapterRecord, imm_sign),
-                    mem_as: core::mem::offset_of!(Rv64LoadStoreAdapterRecord, mem_as),
+                    imm: core::mem::offset_of!(Rv64LoadAdapterRecord, imm),
+                    imm_sign: core::mem::offset_of!(Rv64LoadAdapterRecord, imm_sign),
+                    mem_as: usize::MAX,
                     write_prev_ts: core::mem::offset_of!(
-                        Rv64LoadStoreAdapterRecord,
+                        Rv64LoadAdapterRecord,
                         write_prev_timestamp
                     ),
-                    core_local_opcode: core::mem::offset_of!(
-                        LoadStoreCoreRecord<RV64_REGISTER_NUM_LIMBS>,
-                        local_opcode
-                    ),
+                    write_prev_data: core::mem::offset_of!(Rv64LoadAdapterRecord, write_prev_data),
+                    core_local_opcode: usize::MAX,
                     core_is_byte: usize::MAX,
                     core_is_word: usize::MAX,
-                    core_shift_amount: core::mem::offset_of!(
-                        LoadStoreCoreRecord<RV64_REGISTER_NUM_LIMBS>,
-                        shift_amount
-                    ),
-                    core_read_data: core::mem::offset_of!(
-                        LoadStoreCoreRecord<RV64_REGISTER_NUM_LIMBS>,
-                        read_data
-                    ),
-                    core_prev_data: core::mem::offset_of!(
-                        LoadStoreCoreRecord<RV64_REGISTER_NUM_LIMBS>,
-                        prev_data
-                    ),
+                    core_shift_amount: usize::MAX,
+                    core_read_data: core::mem::offset_of!(LoadRecord, read_data),
+                    core_prev_data: usize::MAX,
                 }),
             },
         );
         registry.register_inline_arena_native(
-            Rv64LoadStoreOpcode::iter()
-                .skip(Rv64LoadStoreOpcode::STOREB as usize + 1)
-                .map(|opcode| opcode.global_opcode()),
+            [
+                Rv64LoadStoreOpcode::STORED,
+                Rv64LoadStoreOpcode::STOREW,
+                Rv64LoadStoreOpcode::STOREH,
+                Rv64LoadStoreOpcode::STOREB,
+            ]
+            .map(|opcode| opcode.global_opcode()),
             PREFLIGHT_ADDSUB_RECORD_SIZE,
-            assemble_load_sign_extend_inline::<F, RA>,
+            assemble_store_inline::<F, RA>,
             ArenaNativeGeometry {
-                adapter_size: size_of::<Rv64LoadStoreAdapterRecord>(),
-                adapter_align: align_of::<Rv64LoadStoreAdapterRecord>(),
-                core_size: size_of::<LoadSignExtendCoreRecord<RV64_REGISTER_NUM_LIMBS>>(),
-                core_align: align_of::<LoadSignExtendCoreRecord<RV64_REGISTER_NUM_LIMBS>>(),
-                core_off_matrix: <Rv64LoadStoreAdapterExecutor as AdapterTraceExecutor<F>>::WIDTH
+                adapter_size: size_of::<Rv64StoreAdapterRecord>(),
+                adapter_align: align_of::<Rv64StoreAdapterRecord>(),
+                core_size: size_of::<StoreRecord>(),
+                core_align: align_of::<StoreRecord>(),
+                core_off_matrix: <Rv64StoreAdapterExecutor as AdapterTraceExecutor<F>>::WIDTH
                     * size_of::<F>(),
                 layout: ArenaNativeLayout::LoadStore(LoadStoreArenaFieldOffsets {
-                    from_pc: core::mem::offset_of!(Rv64LoadStoreAdapterRecord, from_pc),
-                    from_timestamp: core::mem::offset_of!(
-                        Rv64LoadStoreAdapterRecord,
-                        from_timestamp
-                    ),
-                    rs1_ptr: core::mem::offset_of!(Rv64LoadStoreAdapterRecord, rs1_ptr),
-                    rs1_val: core::mem::offset_of!(Rv64LoadStoreAdapterRecord, rs1_val),
-                    rs1_aux_prev_ts: core::mem::offset_of!(
-                        Rv64LoadStoreAdapterRecord,
-                        rs1_aux_record
-                    ) + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
-                    rd_rs2_ptr: core::mem::offset_of!(Rv64LoadStoreAdapterRecord, rd_rs2_ptr),
+                    from_pc: core::mem::offset_of!(Rv64StoreAdapterRecord, from_pc),
+                    from_timestamp: core::mem::offset_of!(Rv64StoreAdapterRecord, from_timestamp),
+                    rs1_ptr: core::mem::offset_of!(Rv64StoreAdapterRecord, rs1_ptr),
+                    rs1_val: core::mem::offset_of!(Rv64StoreAdapterRecord, rs1_val),
+                    rs1_aux_prev_ts: core::mem::offset_of!(Rv64StoreAdapterRecord, rs1_aux_record)
+                        + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+                    rd_rs2_ptr: core::mem::offset_of!(Rv64StoreAdapterRecord, rs2_ptr),
                     read_data_aux_prev_ts: core::mem::offset_of!(
-                        Rv64LoadStoreAdapterRecord,
+                        Rv64StoreAdapterRecord,
                         read_data_aux
                     ) + core::mem::offset_of!(
                         MemoryReadAuxRecord,
                         prev_timestamp
                     ),
-                    imm: core::mem::offset_of!(Rv64LoadStoreAdapterRecord, imm),
-                    imm_sign: core::mem::offset_of!(Rv64LoadStoreAdapterRecord, imm_sign),
-                    mem_as: core::mem::offset_of!(Rv64LoadStoreAdapterRecord, mem_as),
+                    imm: core::mem::offset_of!(Rv64StoreAdapterRecord, imm),
+                    imm_sign: core::mem::offset_of!(Rv64StoreAdapterRecord, imm_sign),
+                    mem_as: core::mem::offset_of!(Rv64StoreAdapterRecord, mem_as),
                     write_prev_ts: core::mem::offset_of!(
-                        Rv64LoadStoreAdapterRecord,
+                        Rv64StoreAdapterRecord,
                         write_prev_timestamp
                     ),
+                    write_prev_data: usize::MAX,
                     core_local_opcode: usize::MAX,
-                    core_is_byte: core::mem::offset_of!(
-                        LoadSignExtendCoreRecord<RV64_REGISTER_NUM_LIMBS>,
-                        is_byte
-                    ),
-                    core_is_word: core::mem::offset_of!(
-                        LoadSignExtendCoreRecord<RV64_REGISTER_NUM_LIMBS>,
-                        is_word
-                    ),
-                    core_shift_amount: core::mem::offset_of!(
-                        LoadSignExtendCoreRecord<RV64_REGISTER_NUM_LIMBS>,
-                        shift_amount
-                    ),
-                    core_read_data: core::mem::offset_of!(
-                        LoadSignExtendCoreRecord<RV64_REGISTER_NUM_LIMBS>,
-                        read_data
-                    ),
-                    core_prev_data: core::mem::offset_of!(
-                        LoadSignExtendCoreRecord<RV64_REGISTER_NUM_LIMBS>,
-                        prev_data
-                    ),
+                    core_is_byte: usize::MAX,
+                    core_is_word: usize::MAX,
+                    core_shift_amount: usize::MAX,
+                    core_read_data: core::mem::offset_of!(StoreRecord, read_data),
+                    core_prev_data: core::mem::offset_of!(StoreRecord, prev_data),
                 }),
             },
         );
@@ -1523,13 +1487,16 @@ where
             Rv64AuipcOpcode::iter().map(|opcode| opcode.global_opcode()),
             assemble_auipc::<F, RA>,
         );
-        // Zero-extension loads (LOADD..=LOADWU) read main memory only.
+        // All signed and unsigned loads read main memory only. Develop
+        // splits them by width, but they share the same adapter/core record
+        // representation for log-native assembly.
         registry.register_if(
             Rv64LoadStoreOpcode::iter()
                 .take(Rv64LoadStoreOpcode::STORED as usize)
+                .chain(Rv64LoadStoreOpcode::iter().skip(Rv64LoadStoreOpcode::STOREB as usize + 1))
                 .map(|opcode| opcode.global_opcode()),
             is_rv64_memory_instruction,
-            assemble_loadstore::<F, RA>,
+            assemble_load::<F, RA>,
         );
         // Stores (STORED..=STOREB) additionally write the public-values
         // address space (REVEAL). One stored predicate gates both routing and
@@ -1543,14 +1510,7 @@ where
             ]
             .map(|opcode| opcode.global_opcode()),
             is_rv64_store_instruction,
-            assemble_loadstore::<F, RA>,
-        );
-        registry.register_if(
-            Rv64LoadStoreOpcode::iter()
-                .skip(Rv64LoadStoreOpcode::STOREB as usize + 1)
-                .map(|opcode| opcode.global_opcode()),
-            is_rv64_memory_instruction,
-            assemble_load_sign_extend::<F, RA>,
+            assemble_store::<F, RA>,
         );
         registry.register(
             [SystemOpcode::PHANTOM.global_opcode()],
@@ -2313,127 +2273,90 @@ fn assemble_jalr_inline<F: PrimeField32, RA: Rv64IRecordArena<F>>(
     Ok(())
 }
 
-/// Shared derivation for the load/store inline assemblers, mirroring
-/// [`fill_loadstore_start`]: rs1_val comes from the compact record; the
-/// pointer, alignment shift, and immediate fields come from the instruction.
-struct LoadStoreCompactStart {
-    shift_amount: u8,
-}
-
-fn fill_loadstore_adapter_from_compact<F: PrimeField32>(
+fn fill_load_adapter_from_compact<F: PrimeField32>(
     compact: &PreflightAlu3Compact,
     instruction: &Instruction<F>,
     pc: u32,
-    record: &mut Rv64LoadStoreAdapterRecord,
-) -> LoadStoreCompactStart {
+    record: &mut Rv64LoadAdapterRecord,
+) {
     record.from_pc = pc;
     record.from_timestamp = compact.from_timestamp;
     record.rs1_ptr = instruction.b.as_canonical_u32();
     record.rs1_aux_record.prev_timestamp = compact.reads_prev_timestamp[0];
-    let rs1_val = compact.b as u32;
-    record.rs1_val = rs1_val;
+    record.rs1_val = compact.b as u32;
+    record.rd_ptr = if instruction.f.is_one() {
+        instruction.a.as_canonical_u32()
+    } else {
+        u32::MAX
+    };
+    record.read_data_aux.prev_timestamp = compact.reads_prev_timestamp[1];
     record.imm = instruction.c.as_canonical_u32() as u16;
     record.imm_sign = instruction.g.is_one();
-    let ptr = rs1_val.wrapping_add(sign_extend_imm16(record.imm as u32, record.imm_sign));
-    let shift_amount = (ptr & (RV64_REGISTER_NUM_LIMBS as u32 - 1)) as u8;
-    record.read_data_aux.prev_timestamp = compact.reads_prev_timestamp[1];
-    LoadStoreCompactStart { shift_amount }
+    if record.rd_ptr != u32::MAX {
+        record.write_prev_timestamp = compact.write_prev_timestamp;
+        record.write_prev_data = u16x4(compact.write_prev_data);
+    }
 }
 
-/// Inline assembler for the zero-extension loads and the main-memory stores
-/// (the pcs the compile migrates: main-memory `Instr::Load`/`Instr::Store`
-/// plus extension-lifted public-values REVEAL). Mirrors
-/// [`assemble_loadstore`].
-fn assemble_loadstore_inline<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+fn fill_store_adapter_from_compact<F: PrimeField32>(
+    compact: &PreflightAlu3Compact,
+    instruction: &Instruction<F>,
+    pc: u32,
+    record: &mut Rv64StoreAdapterRecord,
+) {
+    record.from_pc = pc;
+    record.from_timestamp = compact.from_timestamp;
+    record.rs1_ptr = instruction.b.as_canonical_u32();
+    record.rs1_aux_record.prev_timestamp = compact.reads_prev_timestamp[0];
+    record.rs1_val = compact.b as u32;
+    record.rs2_ptr = instruction.a.as_canonical_u32();
+    record.read_data_aux.prev_timestamp = compact.reads_prev_timestamp[1];
+    record.imm = instruction.c.as_canonical_u32() as u16;
+    record.imm_sign = instruction.g.is_one();
+    record.mem_as = instruction.e.as_canonical_u32() as u8;
+    record.write_prev_timestamp = compact.write_prev_timestamp;
+}
+
+/// Inline assembler for all width-specific signed and unsigned load chips.
+fn assemble_load_inline<F: PrimeField32, RA: Rv64IRecordArena<F>>(
     arena: &mut RA,
     instruction: &Instruction<F>,
     compact: &[u8],
     pc: u32,
 ) -> Result<(), ExecutionError> {
     let compact = PreflightAlu3Compact::read_for_pc(compact, pc)?;
-    let local_opcode = Rv64LoadStoreOpcode::from_repr(
-        instruction
-            .opcode
-            .local_opcode_idx(Rv64LoadStoreOpcode::CLASS_OFFSET),
-    )
-    .expect("assembler is registered only for RV64 load/store opcodes");
     let mem_as = instruction.e.as_canonical_u32();
-    if mem_as != RV64_MEMORY_AS && mem_as != PUBLIC_VALUES_AS {
+    if mem_as != RV64_MEMORY_AS {
         return Err(ExecutionError::RvrExecution(format!(
-            "inline load/store at pc {pc:#x} must target main memory or public values, got AS \
-             {mem_as}"
+            "inline load at pc {pc:#x} must target main memory, got AS {mem_as}"
         )));
     }
-    let (adapter_record, core_record): (
-        &mut Rv64LoadStoreAdapterRecord,
-        &mut LoadStoreCoreRecord<RV64_REGISTER_NUM_LIMBS>,
-    ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64LoadStoreAdapterExecutor>::new());
-    let start = fill_loadstore_adapter_from_compact(&compact, instruction, pc, adapter_record);
-    adapter_record.mem_as = mem_as as u8;
-    let enabled = instruction.f.is_one();
-    let is_load = matches!(
-        local_opcode,
-        Rv64LoadStoreOpcode::LOADD
-            | Rv64LoadStoreOpcode::LOADWU
-            | Rv64LoadStoreOpcode::LOADHU
-            | Rv64LoadStoreOpcode::LOADBU
-    );
-    let (read_data, prev_data) = if is_load {
-        let prev_data = if enabled {
-            adapter_record.rd_rs2_ptr = instruction.a.as_canonical_u32();
-            adapter_record.write_prev_timestamp = compact.write_prev_timestamp;
-            bytes8(compact.write_prev_data)
-        } else {
-            adapter_record.rd_rs2_ptr = u32::MAX;
-            [0; RV64_REGISTER_NUM_LIMBS]
-        };
-        (bytes8(compact.c), prev_data)
-    } else {
-        adapter_record.rd_rs2_ptr = instruction.a.as_canonical_u32();
-        adapter_record.write_prev_timestamp = compact.write_prev_timestamp;
-        (bytes8(compact.c), bytes8(compact.write_prev_data))
-    };
-    core_record.local_opcode = local_opcode as u8;
-    core_record.shift_amount = start.shift_amount;
-    core_record.read_data = read_data;
-    core_record.prev_data = prev_data;
+    let (adapter_record, core_record): (&mut Rv64LoadAdapterRecord, &mut LoadRecord) =
+        arena.alloc(EmptyAdapterCoreLayout::<F, Rv64LoadAdapterExecutor>::new());
+    fill_load_adapter_from_compact(&compact, instruction, pc, adapter_record);
+    core_record.read_data = u16x4(compact.c);
     Ok(())
 }
 
-/// Inline assembler for the sign-extending loads (LOADB/LOADH/LOADW),
-/// mirroring [`assemble_load_sign_extend`].
-fn assemble_load_sign_extend_inline<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+/// Inline assembler for all width-specific store chips, including REVEAL.
+fn assemble_store_inline<F: PrimeField32, RA: Rv64IRecordArena<F>>(
     arena: &mut RA,
     instruction: &Instruction<F>,
     compact: &[u8],
     pc: u32,
 ) -> Result<(), ExecutionError> {
     let compact = PreflightAlu3Compact::read_for_pc(compact, pc)?;
-    let local_opcode = Rv64LoadStoreOpcode::from_repr(
-        instruction
-            .opcode
-            .local_opcode_idx(Rv64LoadStoreOpcode::CLASS_OFFSET),
-    )
-    .expect("assembler is registered only for RV64 load/store opcodes");
-    let (adapter_record, core_record): (
-        &mut Rv64LoadStoreAdapterRecord,
-        &mut LoadSignExtendCoreRecord<RV64_REGISTER_NUM_LIMBS>,
-    ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64LoadStoreAdapterExecutor>::new());
-    let start = fill_loadstore_adapter_from_compact(&compact, instruction, pc, adapter_record);
-    adapter_record.mem_as = RV64_MEMORY_AS as u8;
-    let prev_data = if instruction.f.is_one() {
-        adapter_record.rd_rs2_ptr = instruction.a.as_canonical_u32();
-        adapter_record.write_prev_timestamp = compact.write_prev_timestamp;
-        bytes8(compact.write_prev_data)
-    } else {
-        adapter_record.rd_rs2_ptr = u32::MAX;
-        [0; RV64_REGISTER_NUM_LIMBS]
-    };
-    core_record.is_byte = local_opcode == Rv64LoadStoreOpcode::LOADB;
-    core_record.is_word = local_opcode == Rv64LoadStoreOpcode::LOADW;
-    core_record.shift_amount = start.shift_amount;
-    core_record.read_data = bytes8(compact.c);
-    core_record.prev_data = prev_data;
+    let mem_as = instruction.e.as_canonical_u32();
+    if mem_as != RV64_MEMORY_AS && mem_as != PUBLIC_VALUES_AS {
+        return Err(ExecutionError::RvrExecution(format!(
+            "inline store at pc {pc:#x} must target main memory or public values, got AS {mem_as}"
+        )));
+    }
+    let (adapter_record, core_record): (&mut Rv64StoreAdapterRecord, &mut StoreRecord) =
+        arena.alloc(EmptyAdapterCoreLayout::<F, Rv64StoreAdapterExecutor>::new());
+    fill_store_adapter_from_compact(&compact, instruction, pc, adapter_record);
+    core_record.read_data = u16x4(compact.c);
+    core_record.prev_data = u16x4(compact.write_prev_data);
     Ok(())
 }
 
@@ -2764,119 +2687,53 @@ fn assemble_mul_w<F: PrimeField32, RA: Rv64MRecordArena<F>>(
     Ok(())
 }
 
-fn assemble_loadstore<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+fn assemble_load<F: PrimeField32, RA: Rv64IRecordArena<F>>(
     arena: &mut RA,
     access: &AccessView<'_, F>,
     instruction: &Instruction<F>,
     pc: u32,
     timestamp: u32,
 ) -> Result<(), ExecutionError> {
-    let local_opcode = Rv64LoadStoreOpcode::from_repr(
-        instruction
-            .opcode
-            .local_opcode_idx(Rv64LoadStoreOpcode::CLASS_OFFSET),
-    )
-    .expect("assembler is registered only for RV64 load/store opcodes");
-    let (adapter_record, core_record): (
-        &mut Rv64LoadStoreAdapterRecord,
-        &mut LoadStoreCoreRecord<RV64_REGISTER_NUM_LIMBS>,
-    ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64LoadStoreAdapterExecutor>::new());
+    let (adapter_record, core_record): (&mut Rv64LoadAdapterRecord, &mut LoadRecord) =
+        arena.alloc(EmptyAdapterCoreLayout::<F, Rv64LoadAdapterExecutor>::new());
 
-    let LoadStoreInputs {
-        rs1_val,
-        aligned_ptr,
-        shift_amount,
-    } = fill_loadstore_start(access, instruction, pc, timestamp, adapter_record)?;
-    let enabled = instruction.f.is_one();
-    let is_load = matches!(
-        local_opcode,
-        Rv64LoadStoreOpcode::LOADD
-            | Rv64LoadStoreOpcode::LOADWU
-            | Rv64LoadStoreOpcode::LOADHU
-            | Rv64LoadStoreOpcode::LOADBU
-    );
+    let aligned_ptr = fill_load_start(access, instruction, pc, timestamp, adapter_record)?;
+    let read_aux = access.expect_memory_read(timestamp + 1, aligned_ptr, pc)?;
+    adapter_record.read_data_aux.prev_timestamp = read_aux.prev_timestamp;
+    core_record.read_data = read_u16_block(read_aux.entry.value);
 
-    let (read_data, prev_data) = if is_load {
-        adapter_record.mem_as = RV64_MEMORY_AS as u8;
-        let read_aux = access.expect_memory_read(timestamp + 1, aligned_ptr, pc)?;
-        adapter_record.read_data_aux.prev_timestamp = read_aux.prev_timestamp;
-        let read_data = read_bytes(read_aux.entry.value);
-        let prev_data = if enabled {
-            adapter_record.rd_rs2_ptr = instruction.a.as_canonical_u32();
-            let write_aux =
-                access.expect_reg_write(timestamp + 2, adapter_record.rd_rs2_ptr, pc)?;
-            adapter_record.write_prev_timestamp = write_aux.prev_timestamp;
-            prev_bytes(write_aux)
-        } else {
-            adapter_record.rd_rs2_ptr = u32::MAX;
-            [0; RV64_REGISTER_NUM_LIMBS]
-        };
-        (read_data, prev_data)
-    } else {
-        // Stores write the instruction's actual address space: main memory or
-        // the public-values address space for REVEAL, exactly as the
-        // interpreter LoadStoreAdapterExecutor does.
-        let mem_as = instruction.e.as_canonical_u32();
-        adapter_record.mem_as = mem_as as u8;
-        adapter_record.rd_rs2_ptr = instruction.a.as_canonical_u32();
-        let read_aux = access.expect_reg_read(timestamp + 1, adapter_record.rd_rs2_ptr, pc)?;
-        adapter_record.read_data_aux.prev_timestamp = read_aux.prev_timestamp;
-        let write_aux = access.expect_memory_write(timestamp + 2, mem_as, aligned_ptr, pc)?;
+    if instruction.f.is_one() {
+        adapter_record.rd_ptr = instruction.a.as_canonical_u32();
+        let write_aux = access.expect_reg_write(timestamp + 2, adapter_record.rd_ptr, pc)?;
         adapter_record.write_prev_timestamp = write_aux.prev_timestamp;
-        (read_bytes(read_aux.entry.value), prev_bytes(write_aux))
-    };
-
-    debug_assert_eq!(adapter_record.rs1_val, rs1_val);
-    core_record.local_opcode = local_opcode as u8;
-    core_record.shift_amount = shift_amount;
-    core_record.read_data = read_data;
-    core_record.prev_data = prev_data;
+        adapter_record.write_prev_data = prev_u16(write_aux);
+    } else {
+        adapter_record.rd_ptr = u32::MAX;
+    }
     Ok(())
 }
 
-fn assemble_load_sign_extend<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+fn assemble_store<F: PrimeField32, RA: Rv64IRecordArena<F>>(
     arena: &mut RA,
     access: &AccessView<'_, F>,
     instruction: &Instruction<F>,
     pc: u32,
     timestamp: u32,
 ) -> Result<(), ExecutionError> {
-    let local_opcode = Rv64LoadStoreOpcode::from_repr(
-        instruction
-            .opcode
-            .local_opcode_idx(Rv64LoadStoreOpcode::CLASS_OFFSET),
-    )
-    .expect("assembler is registered only for RV64 load/store opcodes");
-    let (adapter_record, core_record): (
-        &mut Rv64LoadStoreAdapterRecord,
-        &mut LoadSignExtendCoreRecord<RV64_REGISTER_NUM_LIMBS>,
-    ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64LoadStoreAdapterExecutor>::new());
+    let (adapter_record, core_record): (&mut Rv64StoreAdapterRecord, &mut StoreRecord) =
+        arena.alloc(EmptyAdapterCoreLayout::<F, Rv64StoreAdapterExecutor>::new());
 
-    let LoadStoreInputs {
-        aligned_ptr,
-        shift_amount,
-        ..
-    } = fill_loadstore_start(access, instruction, pc, timestamp, adapter_record)?;
-    adapter_record.mem_as = RV64_MEMORY_AS as u8;
-    let read_aux = access.expect_memory_read(timestamp + 1, aligned_ptr, pc)?;
+    let aligned_ptr = fill_store_start(access, instruction, pc, timestamp, adapter_record)?;
+    let mem_as = instruction.e.as_canonical_u32();
+    adapter_record.mem_as = mem_as as u8;
+    adapter_record.rs2_ptr = instruction.a.as_canonical_u32();
+    let read_aux = access.expect_reg_read(timestamp + 1, adapter_record.rs2_ptr, pc)?;
     adapter_record.read_data_aux.prev_timestamp = read_aux.prev_timestamp;
-    let read_data = read_bytes(read_aux.entry.value);
+    core_record.read_data = read_u16_block(read_aux.entry.value);
 
-    let prev_data = if instruction.f.is_one() {
-        adapter_record.rd_rs2_ptr = instruction.a.as_canonical_u32();
-        let write_aux = access.expect_reg_write(timestamp + 2, adapter_record.rd_rs2_ptr, pc)?;
-        adapter_record.write_prev_timestamp = write_aux.prev_timestamp;
-        prev_bytes(write_aux)
-    } else {
-        adapter_record.rd_rs2_ptr = u32::MAX;
-        [0; RV64_REGISTER_NUM_LIMBS]
-    };
-
-    core_record.is_byte = local_opcode == Rv64LoadStoreOpcode::LOADB;
-    core_record.is_word = local_opcode == Rv64LoadStoreOpcode::LOADW;
-    core_record.shift_amount = shift_amount;
-    core_record.read_data = read_data;
-    core_record.prev_data = prev_data;
+    let write_aux = access.expect_memory_write(timestamp + 2, mem_as, aligned_ptr, pc)?;
+    adapter_record.write_prev_timestamp = write_aux.prev_timestamp;
+    core_record.prev_data = prev_u16(write_aux);
     Ok(())
 }
 
@@ -3034,35 +2891,46 @@ fn assemble_phantom_inline<F: PrimeField32, RA: Rv64IRecordArena<F>>(
     Ok(())
 }
 
-struct LoadStoreInputs {
-    rs1_val: u32,
-    aligned_ptr: u32,
-    shift_amount: u8,
-}
-
-fn fill_loadstore_start<F: PrimeField32>(
+fn fill_load_start<F: PrimeField32>(
     access: &AccessView<'_, F>,
     instruction: &Instruction<F>,
     pc: u32,
     timestamp: u32,
-    record: &mut Rv64LoadStoreAdapterRecord,
-) -> Result<LoadStoreInputs, ExecutionError> {
+    record: &mut Rv64LoadAdapterRecord,
+) -> Result<u32, ExecutionError> {
     record.from_pc = pc;
     record.from_timestamp = timestamp;
     record.rs1_ptr = instruction.b.as_canonical_u32();
     let rs1_aux = access.expect_reg_read(timestamp, record.rs1_ptr, pc)?;
     record.rs1_aux_record.prev_timestamp = rs1_aux.prev_timestamp;
-    let rs1_val = read_low_u32(rs1_aux.entry.value);
-    record.rs1_val = rs1_val;
+    record.rs1_val = read_low_u32(rs1_aux.entry.value);
     record.imm = instruction.c.as_canonical_u32() as u16;
     record.imm_sign = instruction.g.is_one();
-    let ptr = rs1_val.wrapping_add(sign_extend_imm16(record.imm as u32, record.imm_sign));
-    let shift_amount = (ptr & (RV64_REGISTER_NUM_LIMBS as u32 - 1)) as u8;
-    Ok(LoadStoreInputs {
-        rs1_val,
-        aligned_ptr: ptr - shift_amount as u32,
-        shift_amount,
-    })
+    let ptr = record
+        .rs1_val
+        .wrapping_add(sign_extend_imm16(record.imm as u32, record.imm_sign));
+    Ok(ptr & !(RV64_REGISTER_NUM_LIMBS as u32 - 1))
+}
+
+fn fill_store_start<F: PrimeField32>(
+    access: &AccessView<'_, F>,
+    instruction: &Instruction<F>,
+    pc: u32,
+    timestamp: u32,
+    record: &mut Rv64StoreAdapterRecord,
+) -> Result<u32, ExecutionError> {
+    record.from_pc = pc;
+    record.from_timestamp = timestamp;
+    record.rs1_ptr = instruction.b.as_canonical_u32();
+    let rs1_aux = access.expect_reg_read(timestamp, record.rs1_ptr, pc)?;
+    record.rs1_aux_record.prev_timestamp = rs1_aux.prev_timestamp;
+    record.rs1_val = read_low_u32(rs1_aux.entry.value);
+    record.imm = instruction.c.as_canonical_u32() as u16;
+    record.imm_sign = instruction.g.is_one();
+    let ptr = record
+        .rs1_val
+        .wrapping_add(sign_extend_imm16(record.imm as u32, record.imm_sign));
+    Ok(ptr & !(RV64_REGISTER_NUM_LIMBS as u32 - 1))
 }
 
 fn fill_base_alu_u16_adapter<F: PrimeField32>(

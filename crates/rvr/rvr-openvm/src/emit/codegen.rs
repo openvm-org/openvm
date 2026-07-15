@@ -91,11 +91,8 @@ pub struct Rw1ArenaFieldOffsets {
     pub core_imm_sign: usize,
 }
 
-/// Offsets for the load/store full record: the rs1-indexed memory adapter
-/// (rs1 pointer/value/aux, conditional rd-or-rs2 write slot, 16-bit imm with
-/// sign flag, target AS) plus either the zero-extend core (local_opcode) or
-/// the sign-extend core (is_byte/is_word) — the absent core fields carry the
-/// usize::MAX sentinel.
+/// Offsets for a load or store full record. Adapter/core fields that are not
+/// present in a width-specific record use the `usize::MAX` sentinel.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct LoadStoreArenaFieldOffsets {
     pub from_pc: usize,
@@ -110,6 +107,9 @@ pub struct LoadStoreArenaFieldOffsets {
     pub imm_sign: usize,
     pub mem_as: usize,
     pub write_prev_ts: usize,
+    /// Adapter-relative previous-write data, or `usize::MAX` when the
+    /// previous data lives in the core record.
+    pub write_prev_data: usize,
     pub core_local_opcode: usize,
     pub core_is_byte: usize,
     pub core_is_word: usize,

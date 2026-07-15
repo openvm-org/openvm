@@ -592,10 +592,12 @@ impl<'a> EmitContext<'a> {
             "*(uint8_t*)({rec} + {}) = {}u;",
             off.imm_sign, baked.imm_sign
         ));
-        self.write_line(&format!(
-            "*(uint8_t*)({rec} + {}) = {}u;",
-            off.mem_as, baked.mem_as
-        ));
+        if off.mem_as != usize::MAX {
+            self.write_line(&format!(
+                "*(uint8_t*)({rec} + {}) = {}u;",
+                off.mem_as, baked.mem_as
+            ));
+        }
         if let Some(pw) = write_prev_ts {
             self.write_line(&format!(
                 "*(uint32_t*)({rec} + {}) = {pw};",
@@ -620,19 +622,29 @@ impl<'a> EmitContext<'a> {
                 off.core_is_word, baked.is_word
             ));
         }
-        self.write_line(&format!(
-            "*(uint8_t*)({core} + {}) = (uint8_t)({addr} & 7u);",
-            off.core_shift_amount
-        ));
+        if off.core_shift_amount != usize::MAX {
+            self.write_line(&format!(
+                "*(uint8_t*)({core} + {}) = (uint8_t)({addr} & 7u);",
+                off.core_shift_amount
+            ));
+        }
         self.write_line(&format!(
             "arena_store_u64_le({core} + {}, {read_data});",
             off.core_read_data
         ));
         if let Some(prev) = prev_data {
-            self.write_line(&format!(
-                "arena_store_u64_le({core} + {}, {prev});",
-                off.core_prev_data
-            ));
+            if off.write_prev_data != usize::MAX {
+                self.write_line(&format!(
+                    "arena_store_u64_le({rec} + {}, {prev});",
+                    off.write_prev_data
+                ));
+            }
+            if off.core_prev_data != usize::MAX {
+                self.write_line(&format!(
+                    "arena_store_u64_le({core} + {}, {prev});",
+                    off.core_prev_data
+                ));
+            }
         }
         self.indent -= 1;
         self.write_line("}");
