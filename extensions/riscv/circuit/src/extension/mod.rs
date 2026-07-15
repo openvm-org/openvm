@@ -32,9 +32,11 @@ use openvm_riscv_transpiler::{
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_stark_backend::{StarkEngine, StarkProtocolConfig, Val};
 #[cfg(feature = "rvr")]
-use rvr_openvm_ext_riscv::{Rv64IExtension, Rv64IoExtension};
+use rvr_openvm_ext_riscv::{
+    Rv64IExtension, Rv64IRuntimeHooks, Rv64IoExtension, Rv64IoRuntimeHooks,
+};
 #[cfg(feature = "rvr")]
-use rvr_openvm_lift::{ExtensionRegistry, RvrExtensionCtx, VmRvrExtension};
+use rvr_openvm_lift::{RvrExtensionCtx, RvrExtensions, VmRvrExtension};
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
@@ -89,16 +91,19 @@ fn default_range_tuple_checker_sizes() -> [u32; 2] {
 
 #[cfg(feature = "rvr")]
 impl<F: PrimeField32> VmRvrExtension<F> for Rv64I {
-    fn extend_rvr(&self, registry: &mut ExtensionRegistry<F>, _ctx: Option<&RvrExtensionCtx>) {
-        registry.register(Rv64IExtension::new());
+    fn extend_rvr(&self, extensions: &mut RvrExtensions, _ctx: Option<&RvrExtensionCtx>) {
+        extensions.register_lifter(Rv64IExtension::new());
+        extensions.register_runtime_hook(Rv64IRuntimeHooks);
     }
 }
 
 #[cfg(feature = "rvr")]
 impl<F: PrimeField32> VmRvrExtension<F> for Rv64Io {
-    fn extend_rvr(&self, registry: &mut ExtensionRegistry<F>, ctx: Option<&RvrExtensionCtx>) {
-        registry
-            .register(Rv64IoExtension::new(ctx).expect("Rv64IoExtension chip resolution failed"));
+    fn extend_rvr(&self, extensions: &mut RvrExtensions, ctx: Option<&RvrExtensionCtx>) {
+        extensions.register_lifter(
+            Rv64IoExtension::new(ctx).expect("Rv64IoExtension chip resolution failed"),
+        );
+        extensions.register_runtime_hook(Rv64IoRuntimeHooks);
     }
 }
 

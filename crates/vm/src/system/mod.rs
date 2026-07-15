@@ -223,11 +223,8 @@ impl<F: PrimeField32> VmExecutionConfig<F> for SystemConfig {
     }
 
     #[cfg(feature = "rvr")]
-    fn create_rvr_extensions(
-        &self,
-        _air_idx: Option<&[usize]>,
-    ) -> rvr_openvm_lift::ExtensionRegistry<F> {
-        rvr_openvm_lift::ExtensionRegistry::new()
+    fn create_rvr_extensions(&self, _air_idx: Option<&[usize]>) -> rvr_openvm_lift::RvrExtensions {
+        rvr_openvm_lift::RvrExtensions::new()
     }
 }
 

@@ -925,7 +925,7 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
         extend_rvr.push(quote! {
             <#extension_ty as ::rvr_openvm_lift::VmRvrExtension<F>>::extend_rvr(
                 &self.#ext_field_name,
-                &mut registry,
+                &mut extensions,
                 ctx.as_ref(),
             );
         });
@@ -980,7 +980,7 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
             fn create_rvr_extensions(
                 &self,
                 air_idx: Option<&[usize]>,
-            ) -> ::rvr_openvm_lift::ExtensionRegistry<F>
+            ) -> ::rvr_openvm_lift::RvrExtensions
             {
                 let ctx = air_idx.map(|air_idx| {
                     let inventory = <Self as ::openvm_circuit::arch::VmExecutionConfig<F>>::create_executors(self)
@@ -991,12 +991,12 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
                         .map(|(opcode, executor_idx)| (*opcode, *executor_idx as usize));
                     ::rvr_openvm_lift::RvrExtensionCtx::new(opcode_to_executor_idx, air_idx.to_vec())
                 });
-                let mut registry = <#source_field_ty as ::openvm_circuit::arch::VmExecutionConfig<F>>::create_rvr_extensions(
+                let mut extensions = <#source_field_ty as ::openvm_circuit::arch::VmExecutionConfig<F>>::create_rvr_extensions(
                     &self.#source_name,
                     air_idx,
                 );
                 #(#extend_rvr)*
-                registry
+                extensions
             }
         }
 

@@ -27,7 +27,7 @@ use openvm_stark_backend::{p3_field::Field, StarkEngine, StarkProtocolConfig, Va
 use openvm_stark_sdk::config::baby_bear_poseidon2::F;
 use openvm_transpiler::transpiler::Transpiler;
 #[cfg(feature = "rvr")]
-use rvr_openvm_lift::ExtensionRegistry;
+use rvr_openvm_lift::RvrExtensions;
 use serde::{Deserialize, Serialize};
 
 pub mod deferral;
@@ -351,7 +351,7 @@ where
     }
 
     #[cfg(feature = "rvr")]
-    fn create_rvr_extensions(&self, air_idx: Option<&[usize]>) -> ExtensionRegistry<F>
+    fn create_rvr_extensions(&self, air_idx: Option<&[usize]>) -> RvrExtensions
     where
         F: PrimeField32,
     {

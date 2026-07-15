@@ -1,15 +1,10 @@
-use std::{
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::path::{Path, PathBuf};
 
-use openvm_instructions::exe::VmExe;
-use openvm_stark_backend::p3_field::PrimeField32;
-use rvr_openvm_lift::ExtensionRegistry;
+use rvr_openvm_lift::RvrRuntimeExtension;
 
 use super::{
     bridge::map_rvr_execute_error, compile::CompileError, execute::execute, state::PureState,
-    RvrCompiled,
+    RvrCompiled, RvrInitialImage,
 };
 #[cfg(feature = "metrics")]
 use crate::arch::execution_metrics::{ExecutionMetric, ExecutionMetricTimer};
@@ -24,26 +19,19 @@ pub struct RvrPureResult {
     pub suspended: bool,
 }
 
-pub struct RvrPureInstance<'a, F: PrimeField32> {
+pub struct RvrPureInstance<'a> {
     pub(crate) system_config: &'a SystemConfig,
-    pub(crate) exe: Arc<VmExe<F>>,
+    pub(crate) initial_image: RvrInitialImage,
     pub(crate) compiled: RvrCompiled,
-    pub(crate) extensions: ExtensionRegistry<F>,
+    pub(crate) runtime_hooks: Vec<Box<dyn RvrRuntimeExtension>>,
 }
 
-static_assertions::assert_impl_all!(RvrPureInstance<'static, p3_baby_bear::BabyBear>: Send, Sync);
+static_assertions::assert_impl_all!(RvrPureInstance<'static>: Send, Sync);
 
-impl<'a, F> RvrPureInstance<'a, F>
-where
-    F: PrimeField32,
-{
+impl RvrPureInstance<'_> {
     pub fn create_initial_vm_state(&self, inputs: impl Into<Streams>) -> VmState<GuestMemory> {
-        VmState::initial(
-            self.system_config,
-            &self.exe.init_memory,
-            self.exe.pc_start,
-            inputs,
-        )
+        self.initial_image
+            .create_vm_state(self.system_config, inputs)
     }
 
     pub fn execute(
@@ -64,7 +52,14 @@ where
         let metrics = ExecutionMetricTimer::start(ExecutionMetric::Pure);
         #[allow(unused_variables)]
         let result = tracing::info_span!("execute_pure")
-            .in_scope(|| execute(&self.compiled, &self.extensions, &mut vm_state, num_insns))
+            .in_scope(|| {
+                execute(
+                    &self.compiled,
+                    &self.runtime_hooks,
+                    &mut vm_state,
+                    num_insns,
+                )
+            })
             .map_err(map_rvr_execute_error)?;
         #[cfg(feature = "metrics")]
         {

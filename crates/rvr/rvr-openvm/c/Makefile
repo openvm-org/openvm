@@ -2,7 +2,7 @@ CC ?= clang-22
 LINKER ?= lld
 OPT ?= -O3
 DEBUG ?=
-CFLAGS = -std=c23 $(OPT) $(DEBUG) -Wall -Wno-unused-variable -Wno-unused-function -Wno-unused-parameter -fPIC -march=native -falign-functions=32
+CFLAGS = -std=c2y $(OPT) $(DEBUG) -Wall -Wno-unused-variable -Wno-unused-function -Wno-unused-parameter -fPIC -march=native -falign-functions=32
 LTO ?=
 CFLAGS += $(LTO)
 LDFLAGS ?=

@@ -2,14 +2,18 @@
 //! `DeferralRvrExtension` for lifting them.
 #![cfg(feature = "rvr")]
 
-use std::{ffi::c_void, sync::Arc};
+use std::{
+    ffi::c_void,
+    mem::{align_of, size_of},
+    sync::Arc,
+};
 
 use openvm_circuit::arch::{
     deferral::{DeferralFn, InputMapVal},
     rvr::io::OpenVmIoState,
 };
 use openvm_deferral_transpiler::DeferralOpcode;
-use openvm_instructions::{instruction::Instruction, LocalOpcode};
+use openvm_instructions::LocalOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ext_ffi_common::{
     DEFERRAL_COMMIT_NUM_BYTES, DEFERRAL_DIGEST_SIZE, DEFERRAL_OUTPUT_KEY_BYTES,
@@ -17,15 +21,15 @@ use rvr_openvm_ext_ffi_common::{
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
 use rvr_openvm_lift::{
     air_index_to_c, decode_reg, opcode_air_idx, AirIndex, ExtensionError, RvrExtension,
-    RvrExtensionCtx,
+    RvrExtensionCtx, RvrInstruction, RvrRuntimeExtension,
 };
 
 /// `(def_idx, output_raw) → output_commit` hasher registered by the host.
-pub type DeferralHashFn = Arc<dyn Fn(u32, &[u8]) -> [u8; DEFERRAL_COMMIT_NUM_BYTES] + Send + Sync>;
+pub type DeferralHashFn = Box<dyn Fn(u32, &[u8]) -> [u8; DEFERRAL_COMMIT_NUM_BYTES] + Send + Sync>;
 
 /// Poseidon2 compression over deferral accumulator field elements.
 /// Values cross the crate boundary as canonical u32s.
-pub type DeferralCompressFn = Arc<
+pub type DeferralCompressFn = Box<
     dyn Fn([u32; DEFERRAL_DIGEST_SIZE], [u32; DEFERRAL_DIGEST_SIZE]) -> [u32; DEFERRAL_DIGEST_SIZE]
         + Send
         + Sync,
@@ -130,20 +134,12 @@ impl ExtInstr for DeferralOutputInstr {
 
 /// The Deferral extension (CALL + OUTPUT opcodes).
 pub struct DeferralRvrExtension {
-    #[allow(dead_code)]
-    call_chip_idx: Option<AirIndex>,
     output_chip_idx: Option<AirIndex>,
     poseidon2_chip_idx: Option<AirIndex>,
-    deferral_ctx: DeferralCtx,
 }
 
 impl DeferralRvrExtension {
-    pub fn new(
-        ctx: Option<&RvrExtensionCtx>,
-        fns: Vec<Arc<DeferralFn>>,
-        hash: DeferralHashFn,
-        compress: DeferralCompressFn,
-    ) -> Result<Self, ExtensionError> {
+    pub fn new(ctx: Option<&RvrExtensionCtx>) -> Result<Self, ExtensionError> {
         let call_chip_idx = opcode_air_idx(ctx, DeferralOpcode::CALL)?;
         let output_chip_idx = opcode_air_idx(ctx, DeferralOpcode::OUTPUT)?;
         // The Poseidon2 hasher is registered adjacent to the CALL chip and
@@ -151,22 +147,20 @@ impl DeferralRvrExtension {
         let poseidon2_chip_idx = call_chip_idx.map(AirIndex::next);
 
         Ok(Self {
-            call_chip_idx,
             output_chip_idx,
             poseidon2_chip_idx,
-            deferral_ctx: DeferralCtx::new(fns, hash, compress),
         })
     }
 }
 
-impl<F: PrimeField32> RvrExtension<F> for DeferralRvrExtension {
-    fn try_lift(&self, insn: &Instruction<F>, pc: u64) -> Option<LiftedInstr> {
+impl RvrExtension for DeferralRvrExtension {
+    fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
 
         if opcode == DeferralOpcode::CALL.global_opcode_usize() {
             let rd_reg = decode_reg(insn.a);
             let rs_reg = decode_reg(insn.b);
-            let def_idx = insn.c.as_canonical_u32();
+            let def_idx = insn.c;
             return Some(LiftedInstr::Body(InstrAt {
                 pc,
                 instr: Instr::Ext(Box::new(DeferralCallInstr {
@@ -182,7 +176,7 @@ impl<F: PrimeField32> RvrExtension<F> for DeferralRvrExtension {
         if opcode == DeferralOpcode::OUTPUT.global_opcode_usize() {
             let rd_reg = decode_reg(insn.a);
             let rs_reg = decode_reg(insn.b);
-            let def_idx = insn.c.as_canonical_u32();
+            let def_idx = insn.c;
             return Some(LiftedInstr::Body(InstrAt {
                 pc,
                 instr: Instr::Ext(Box::new(DeferralOutputInstr {
@@ -212,7 +206,35 @@ impl<F: PrimeField32> RvrExtension<F> for DeferralRvrExtension {
             include_str!("../c/rvr_ext_deferral.c"),
         )]
     }
+}
 
+type DeferralCallLookupFn = unsafe extern "C" fn(*mut c_void, *mut c_void, u32, *const u8, *mut u8);
+type DeferralOutputLookupFn =
+    unsafe extern "C" fn(*mut c_void, *mut c_void, u32, *const u8, *mut u8, u32);
+
+pub struct DeferralRuntimeHooks {
+    deferral_ctx: DeferralCtx,
+    call_lookup: DeferralCallLookupFn,
+}
+
+impl DeferralRuntimeHooks {
+    /// # Safety
+    ///
+    /// `F` must be the field used by the VM state whose deferral memory is
+    /// passed to these callbacks.
+    pub unsafe fn new<F: PrimeField32>(
+        fns: Vec<Arc<DeferralFn>>,
+        hash: DeferralHashFn,
+        compress: DeferralCompressFn,
+    ) -> Self {
+        Self {
+            deferral_ctx: DeferralCtx::new(fns, hash, compress),
+            call_lookup: host_deferral_call_lookup::<F>,
+        }
+    }
+}
+
+impl RvrRuntimeExtension for DeferralRuntimeHooks {
     unsafe fn register_host_callbacks(
         &self,
         lib: &libloading::Library,
@@ -226,8 +248,8 @@ impl<F: PrimeField32> RvrExtension<F> for DeferralRvrExtension {
         // `ctx` aliases `self.deferral_ctx`; the C side must not outlive `self`.
         let callbacks = DeferralHostCallbacks {
             ctx: &self.deferral_ctx as *const DeferralCtx as *mut c_void,
-            call_lookup: host_deferral_call_lookup::<F>,
-            output_lookup: host_deferral_output_lookup::<F>,
+            call_lookup: self.call_lookup,
+            output_lookup: host_deferral_output_lookup,
         };
         unsafe { register_fn(&callbacks) };
         Ok(())
@@ -248,48 +270,48 @@ fn commit_bytes_to_field_values(
     out
 }
 
-fn has_deferral_digest_range<F: PrimeField32>(io: &OpenVmIoState<'_, F>, ptr: usize) -> bool {
-    !io.deferral_memory.is_null()
-        && ptr
-            .checked_add(DEFERRAL_DIGEST_SIZE)
-            .is_some_and(|end| end <= io.deferral_memory_len)
+/// # Safety
+/// `io.deferral_memory` must point to a live DEFERRAL_AS buffer containing
+/// initialized native `F` values and have exclusive access for the returned
+/// slice's lifetime.
+unsafe fn deferral_memory<'a, F: PrimeField32>(io: &'a mut OpenVmIoState<'_>) -> &'a mut [F] {
+    assert_eq!(io.deferral_memory_len_bytes % size_of::<F>(), 0);
+    if io.deferral_memory_len_bytes == 0 {
+        return &mut [];
+    }
+    assert!(!io.deferral_memory.is_null());
+    assert_eq!(io.deferral_memory.addr() % align_of::<F>(), 0);
+    unsafe {
+        std::slice::from_raw_parts_mut(
+            io.deferral_memory.cast(),
+            io.deferral_memory_len_bytes / size_of::<F>(),
+        )
+    }
 }
 
-/// Reads one accumulator digest from DEFERRAL_AS as canonical u32 values.
-///
-/// # Safety
-/// Caller must ensure `io.deferral_memory` is a valid `*mut F` pointing into
-/// a live DEFERRAL_AS buffer with at least `io.deferral_memory_len` F slots.
-unsafe fn read_deferral_digest<F: PrimeField32>(
-    io: &OpenVmIoState<'_, F>,
+fn read_deferral_digest<F: PrimeField32>(
+    memory: &[F],
     ptr: usize,
 ) -> Option<[u32; DEFERRAL_DIGEST_SIZE]> {
-    if !has_deferral_digest_range(io, ptr) {
-        return None;
-    }
-    let mut out = [0u32; DEFERRAL_DIGEST_SIZE];
-    for (i, dst) in out.iter_mut().enumerate() {
-        *dst = (*io.deferral_memory.add(ptr + i)).as_canonical_u32();
-    }
-    Some(out)
+    let end = ptr.checked_add(DEFERRAL_DIGEST_SIZE)?;
+    let values = memory.get(ptr..end)?;
+    Some(std::array::from_fn(|i| values[i].as_canonical_u32()))
 }
 
-/// Writes one accumulator digest to DEFERRAL_AS.
-///
-/// # Safety
-/// See `read_deferral_digest`. Each canonical u32 is converted back to `F`
-/// before writing to AS=4.
-unsafe fn write_deferral_digest<F: PrimeField32>(
-    io: &mut OpenVmIoState<'_, F>,
+fn write_deferral_digest<F: PrimeField32>(
+    memory: &mut [F],
     ptr: usize,
     values: [u32; DEFERRAL_DIGEST_SIZE],
 ) -> bool {
-    if !has_deferral_digest_range(io, ptr) {
+    let Some(end) = ptr.checked_add(DEFERRAL_DIGEST_SIZE) else {
         return false;
-    }
-    for (i, value) in values.into_iter().enumerate() {
-        *io.deferral_memory.add(ptr + i) = F::from_u32(value);
-    }
+    };
+    let Some(dst) = memory.get_mut(ptr..end) else {
+        return false;
+    };
+    dst.iter_mut()
+        .zip(values)
+        .for_each(|(dst, value)| *dst = F::from_u32(value));
     true
 }
 
@@ -297,25 +319,26 @@ unsafe fn write_deferral_digest<F: PrimeField32>(
 /// Slot offsets are in F-element units.
 unsafe fn update_deferral_accumulators<F: PrimeField32>(
     deferral_ctx: &DeferralCtx,
-    io: &mut OpenVmIoState<'_, F>,
+    io: &mut OpenVmIoState<'_>,
     def_idx: u32,
     input_commit: &[u8; DEFERRAL_COMMIT_NUM_BYTES],
     output_commit: &[u8; DEFERRAL_COMMIT_NUM_BYTES],
 ) -> bool {
+    let memory = unsafe { deferral_memory::<F>(io) };
     let input_acc_ptr = 2 * def_idx as usize * DEFERRAL_DIGEST_SIZE;
     let output_acc_ptr = input_acc_ptr + DEFERRAL_DIGEST_SIZE;
-    let Some(old_input_acc) = read_deferral_digest(io, input_acc_ptr) else {
+    let Some(old_input_acc) = read_deferral_digest(memory, input_acc_ptr) else {
         return false;
     };
-    let Some(old_output_acc) = read_deferral_digest(io, output_acc_ptr) else {
+    let Some(old_output_acc) = read_deferral_digest(memory, output_acc_ptr) else {
         return false;
     };
     let new_input_acc =
         (deferral_ctx.compress)(old_input_acc, commit_bytes_to_field_values(input_commit));
     let new_output_acc =
         (deferral_ctx.compress)(old_output_acc, commit_bytes_to_field_values(output_commit));
-    write_deferral_digest(io, input_acc_ptr, new_input_acc)
-        && write_deferral_digest(io, output_acc_ptr, new_output_acc)
+    write_deferral_digest(memory, input_acc_ptr, new_input_acc)
+        && write_deferral_digest(memory, output_acc_ptr, new_output_acc)
 }
 
 // ── Host callbacks ──────────────────────────────────────────────────────────
@@ -326,8 +349,8 @@ type RegisterFn = unsafe extern "C" fn(*const DeferralHostCallbacks);
 #[repr(C)]
 pub struct DeferralHostCallbacks {
     pub ctx: *mut c_void,
-    pub call_lookup: unsafe extern "C" fn(*mut c_void, *mut c_void, u32, *const u8, *mut u8),
-    pub output_lookup: unsafe extern "C" fn(*mut c_void, *mut c_void, u32, *const u8, *mut u8, u32),
+    pub call_lookup: DeferralCallLookupFn,
+    pub output_lookup: DeferralOutputLookupFn,
 }
 
 /// Deferral CALL lookup. Panics if `def_idx` or the accumulator update is
@@ -336,7 +359,7 @@ pub struct DeferralHostCallbacks {
 /// # Safety
 ///
 /// `d_ctx` must point to a valid `DeferralCtx`. `io_ctx` must point to a valid
-/// `OpenVmIoState<'_, F>`.
+/// `OpenVmIoState` whose deferral memory contains native `F` values.
 /// `input_commit_raw` must point to `DEFERRAL_COMMIT_NUM_BYTES` readable bytes.
 /// `output_key_out` must point to `DEFERRAL_OUTPUT_KEY_BYTES` writable bytes.
 pub unsafe extern "C" fn host_deferral_call_lookup<F: PrimeField32>(
@@ -347,7 +370,7 @@ pub unsafe extern "C" fn host_deferral_call_lookup<F: PrimeField32>(
     output_key_out: *mut u8,
 ) {
     let deferral_ctx = unsafe { &*(d_ctx as *const DeferralCtx) };
-    let io = unsafe { &mut *(io_ctx as *mut OpenVmIoState<'_, F>) };
+    let io = unsafe { &mut *(io_ctx as *mut OpenVmIoState<'_>) };
 
     let mut input_commit = [0u8; DEFERRAL_COMMIT_NUM_BYTES];
     input_commit.copy_from_slice(unsafe {
@@ -382,7 +405,13 @@ pub unsafe extern "C" fn host_deferral_call_lookup<F: PrimeField32>(
 
     assert!(
         unsafe {
-            update_deferral_accumulators(deferral_ctx, io, def_idx, &input_commit, &output_commit)
+            update_deferral_accumulators::<F>(
+                deferral_ctx,
+                io,
+                def_idx,
+                &input_commit,
+                &output_commit,
+            )
         },
         "deferral CALL lookup failed: accumulator update for def_idx={def_idx}"
     );
@@ -405,10 +434,10 @@ pub unsafe extern "C" fn host_deferral_call_lookup<F: PrimeField32>(
 /// # Safety
 ///
 /// `d_ctx` must point to a valid `DeferralCtx`. `io_ctx` must point to a
-/// valid `OpenVmIoState<'_, F>`.
+/// valid `OpenVmIoState`.
 /// `output_commit_raw` must point to `DEFERRAL_COMMIT_NUM_BYTES` readable bytes.
 /// `output_raw_out` must point to at least `expected_len` writable bytes.
-pub unsafe extern "C" fn host_deferral_output_lookup<F: PrimeField32>(
+pub unsafe extern "C" fn host_deferral_output_lookup(
     _d_ctx: *mut c_void,
     io_ctx: *mut c_void,
     def_idx: u32,
@@ -416,7 +445,7 @@ pub unsafe extern "C" fn host_deferral_output_lookup<F: PrimeField32>(
     output_raw_out: *mut u8,
     expected_len: u32,
 ) {
-    let io = unsafe { &*(io_ctx as *const OpenVmIoState<'_, F>) };
+    let io = unsafe { &*(io_ctx as *const OpenVmIoState<'_>) };
 
     let output_commit: Vec<u8> = unsafe {
         std::slice::from_raw_parts(output_commit_raw, DEFERRAL_COMMIT_NUM_BYTES).to_vec()

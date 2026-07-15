@@ -3,21 +3,18 @@
 
 use std::{
     ffi::c_void,
-    marker::PhantomData,
     path::{Path, PathBuf},
-    sync::Arc,
 };
 
-use openvm_instructions::{exe::VmExe, riscv::RV64_MEMORY_AS, DEFERRAL_AS};
-use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_instructions::{riscv::RV64_MEMORY_AS, DEFERRAL_AS};
 use rvr_openvm::{DEFERRAL_PAGE_BUF_CAP, MEM_PAGE_BUF_CAP, PV_PAGE_BUF_CAP};
-use rvr_openvm_lift::ExtensionRegistry;
+use rvr_openvm_lift::RvrRuntimeExtension;
 
 use super::{
     bridge::map_rvr_execute_error,
     execute_metered, execute_metered_segment_boundary,
     state::{TracerPayload, TracerPtr},
-    RvrCompiled,
+    RvrCompiled, RvrInitialImage,
 };
 #[cfg(feature = "metrics")]
 use crate::arch::execution_metrics::{ExecutionMetric, ExecutionMetricTimer};
@@ -35,27 +32,23 @@ use crate::{
     system::memory::{merkle::public_values::PUBLIC_VALUES_AS, online::GuestMemory},
 };
 
-pub struct RunToCompletion;
-
-pub struct SegmentBoundary;
-
-pub type RvrMeteredInstance<'a, F> = RvrMeteredInstanceWith<'a, F, RunToCompletion>;
-
-pub type RvrMeteredSegmentInstance<'a, F> = RvrMeteredInstanceWith<'a, F, SegmentBoundary>;
-
-pub struct RvrMeteredInstanceWith<'a, F: PrimeField32, S> {
-    pub(crate) system_config: &'a SystemConfig,
-    pub(crate) exe: Arc<VmExe<F>>,
-    pub(crate) extensions: ExtensionRegistry<F>,
-    pub(crate) compiled: RvrCompiled,
-    pub(crate) _mode: PhantomData<S>,
+struct RvrMeteredInstanceInner<'a> {
+    system_config: &'a SystemConfig,
+    initial_image: RvrInitialImage,
+    runtime_hooks: Vec<Box<dyn RvrRuntimeExtension>>,
+    compiled: RvrCompiled,
 }
 
-static_assertions::assert_impl_all!(RvrMeteredInstance<'static, p3_baby_bear::BabyBear>: Send, Sync);
-static_assertions::assert_impl_all!(
-    RvrMeteredSegmentInstance<'static, p3_baby_bear::BabyBear>: Send,
-    Sync
-);
+pub struct RvrMeteredInstance<'a> {
+    inner: RvrMeteredInstanceInner<'a>,
+}
+
+pub struct RvrMeteredSegmentInstance<'a> {
+    inner: RvrMeteredInstanceInner<'a>,
+}
+
+static_assertions::assert_impl_all!(RvrMeteredInstance<'static>: Send, Sync);
+static_assertions::assert_impl_all!(RvrMeteredSegmentInstance<'static>: Send, Sync);
 
 pub struct RvrMeteredResult {
     pub seg_state: SegmentationState,
@@ -345,31 +338,59 @@ pub unsafe extern "C" fn metered_periodic_check(t: *mut MeteredTracerData) -> u8
     did_segment as u8
 }
 
-impl<F: PrimeField32, S> RvrMeteredInstanceWith<'_, F, S> {
+impl RvrMeteredInstanceInner<'_> {
+    fn create_initial_vm_state(&self, inputs: impl Into<Streams>) -> VmState<GuestMemory> {
+        self.initial_image
+            .create_vm_state(self.system_config, inputs)
+    }
+
+    /// Persist the compiled shared library into `dir`. Returns the path to
+    /// the copied artifact. The user must re-supply `exe`, `executor_idx_to_air_idx`,
+    /// and any mode-specific data when loading.
+    fn save(&self, dir: &Path) -> Result<PathBuf, super::CompileError> {
+        let dest_lib = self.compiled.lib_file_name_with_suffix("metered")?;
+        self.compiled.save_artifact(&dir.join(dest_lib))
+    }
+
+    /// Persist generated C sources for inspection.
+    fn save_generated_sources(&self, dir: &Path) -> Result<(), super::CompileError> {
+        self.compiled.save_generated_sources(dir)
+    }
+}
+
+impl RvrMeteredInstance<'_> {
+    pub(crate) fn new(
+        system_config: &SystemConfig,
+        initial_image: RvrInitialImage,
+        runtime_hooks: Vec<Box<dyn RvrRuntimeExtension>>,
+        compiled: RvrCompiled,
+    ) -> RvrMeteredInstance<'_> {
+        RvrMeteredInstance {
+            inner: RvrMeteredInstanceInner {
+                system_config,
+                initial_image,
+                runtime_hooks,
+                compiled,
+            },
+        }
+    }
+
     pub fn create_initial_vm_state(&self, inputs: impl Into<Streams>) -> VmState<GuestMemory> {
-        VmState::initial(
-            self.system_config,
-            &self.exe.init_memory,
-            self.exe.pc_start,
-            inputs,
-        )
+        self.inner.create_initial_vm_state(inputs)
     }
 
     /// Persist the compiled shared library into `dir`. Returns the path to
     /// the copied artifact. The user must re-supply `exe`, `executor_idx_to_air_idx`,
     /// and any mode-specific data when loading.
     pub fn save(&self, dir: &Path) -> Result<PathBuf, super::CompileError> {
-        let dest_lib = self.compiled.lib_file_name_with_suffix("metered")?;
-        self.compiled.save_artifact(&dir.join(dest_lib))
+        self.inner.save(dir)
     }
 
     /// Persist generated C sources for inspection.
     pub fn save_generated_sources(&self, dir: &Path) -> Result<(), super::CompileError> {
-        self.compiled.save_generated_sources(dir)
+        self.inner.save_generated_sources(dir)
     }
-}
 
-impl<F: PrimeField32> RvrMeteredInstance<'_, F> {
     pub fn execute_metered(
         &self,
         inputs: impl Into<Streams>,
@@ -384,13 +405,18 @@ impl<F: PrimeField32> RvrMeteredInstance<'_, F> {
         mut vm_state: VmState<GuestMemory>,
         ctx: MeteredCtx,
     ) -> Result<(Vec<Segment>, VmState<GuestMemory>), ExecutionError> {
-        let seg_state = SegmentationState::new(ctx, self.system_config);
+        let seg_state = SegmentationState::new(ctx, self.inner.system_config);
 
         #[cfg(feature = "metrics")]
         let metrics = ExecutionMetricTimer::start(ExecutionMetric::Metered);
         let result_seg_state = tracing::info_span!("execute_metered")
             .in_scope(|| {
-                execute_metered(&self.compiled, &self.extensions, &mut vm_state, seg_state)
+                execute_metered(
+                    &self.inner.compiled,
+                    &self.inner.runtime_hooks,
+                    &mut vm_state,
+                    seg_state,
+                )
             })
             .map_err(map_rvr_execute_error)?;
         let result_seg_ctx = result_seg_state.ctx.segmentation_ctx;
@@ -404,7 +430,39 @@ impl<F: PrimeField32> RvrMeteredInstance<'_, F> {
     }
 }
 
-impl<F: PrimeField32> RvrMeteredSegmentInstance<'_, F> {
+impl RvrMeteredSegmentInstance<'_> {
+    pub(crate) fn new(
+        system_config: &SystemConfig,
+        initial_image: RvrInitialImage,
+        runtime_hooks: Vec<Box<dyn RvrRuntimeExtension>>,
+        compiled: RvrCompiled,
+    ) -> RvrMeteredSegmentInstance<'_> {
+        RvrMeteredSegmentInstance {
+            inner: RvrMeteredInstanceInner {
+                system_config,
+                initial_image,
+                runtime_hooks,
+                compiled,
+            },
+        }
+    }
+
+    pub fn create_initial_vm_state(&self, inputs: impl Into<Streams>) -> VmState<GuestMemory> {
+        self.inner.create_initial_vm_state(inputs)
+    }
+
+    /// Persist the compiled shared library into `dir`. Returns the path to
+    /// the copied artifact. The user must re-supply `exe`, `executor_idx_to_air_idx`,
+    /// and any mode-specific data when loading.
+    pub fn save(&self, dir: &Path) -> Result<PathBuf, super::CompileError> {
+        self.inner.save(dir)
+    }
+
+    /// Persist generated C sources for inspection.
+    pub fn save_generated_sources(&self, dir: &Path) -> Result<(), super::CompileError> {
+        self.inner.save_generated_sources(dir)
+    }
+
     /// Executes until termination or the next segment-boundary suspension.
     pub fn execute_metered_until_segment_boundary(
         &self,
@@ -424,12 +482,12 @@ impl<F: PrimeField32> RvrMeteredSegmentInstance<'_, F> {
         let metrics = ExecutionMetricTimer::start(ExecutionMetric::Metered);
         #[cfg(feature = "metrics")]
         let start_instret = ctx.segmentation_ctx.instret;
-        let seg_state = SegmentationState::new(ctx, self.system_config);
+        let seg_state = SegmentationState::new(ctx, self.inner.system_config);
 
         let result = tracing::info_span!("execute_metered").in_scope(|| {
             execute_metered_segment_boundary(
-                &self.compiled,
-                &self.extensions,
+                &self.inner.compiled,
+                &self.inner.runtime_hooks,
                 &mut vm_state,
                 seg_state,
             )

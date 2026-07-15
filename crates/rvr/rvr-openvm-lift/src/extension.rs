@@ -2,9 +2,11 @@
 
 use std::collections::HashMap;
 
-use openvm_instructions::{instruction::Instruction, LocalOpcode, VmOpcode};
+use openvm_instructions::{LocalOpcode, VmOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ir::LiftedInstr;
+
+use crate::RvrInstruction;
 
 /// Real AIR index in the trace.
 ///
@@ -116,11 +118,11 @@ pub enum ExtensionError {
 
 /// Trait for an rvr-openvm extension. Each extension handles a range of opcodes
 /// and knows how to lift them to IR (with self-describing codegen via `ExtInstr::emit_c`).
-pub trait RvrExtension<F: PrimeField32>: Send + Sync {
+pub trait RvrExtension: Send + Sync {
     /// Try to lift an OpenVM instruction into IR.
     /// Return `None` if this extension doesn't handle the opcode.
     /// Chip indices are stored on the extension and baked into IR nodes.
-    fn try_lift(&self, insn: &Instruction<F>, pc: u64) -> Option<LiftedInstr>;
+    fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr>;
 
     /// C header files for this extension, as `(filename, content)` pairs.
     /// Written to the output directory and `#include`d in the generated code.
@@ -159,32 +161,33 @@ pub trait RvrExtension<F: PrimeField32>: Send + Sync {
     fn extra_cflags(&self) -> Vec<String> {
         vec![]
     }
+}
 
-    /// Register host-side callbacks for this extension with the loaded `.so`.
-    /// Called after `register_openvm_io_ctx` and before `rv_execute`.
+/// Installs host callbacks for an rvr extension.
+pub trait RvrRuntimeExtension: Send + Sync {
+    /// Register host-side callbacks with the loaded `.so`. Called after the IO
+    /// context is installed and before `rv_execute`.
     ///
     /// # Safety
     ///
-    /// `lib` must be the rvr-compiled shared library this extension was lifted
-    /// into.
+    /// `lib` must be the rvr-compiled shared library containing the matching
+    /// extension code.
     unsafe fn register_host_callbacks(
         &self,
-        _lib: &libloading::Library,
-    ) -> Result<(), ExtensionError> {
-        Ok(())
-    }
+        lib: &libloading::Library,
+    ) -> Result<(), ExtensionError>;
 }
 
 /// Trait implemented by OpenVM extension owner types to contribute their rvr
 /// lifting/codegen extensions during config assembly.
 pub trait VmRvrExtension<F: PrimeField32> {
-    fn extend_rvr(&self, _registry: &mut ExtensionRegistry<F>, _ctx: Option<&RvrExtensionCtx>) {}
+    fn extend_rvr(&self, _extensions: &mut RvrExtensions, _ctx: Option<&RvrExtensionCtx>) {}
 }
 
 impl<F: PrimeField32, EXT: VmRvrExtension<F>> VmRvrExtension<F> for Option<EXT> {
-    fn extend_rvr(&self, registry: &mut ExtensionRegistry<F>, ctx: Option<&RvrExtensionCtx>) {
+    fn extend_rvr(&self, extensions: &mut RvrExtensions, ctx: Option<&RvrExtensionCtx>) {
         if let Some(ext) = self {
-            ext.extend_rvr(registry, ctx);
+            ext.extend_rvr(extensions, ctx);
         }
     }
 }
@@ -192,26 +195,25 @@ impl<F: PrimeField32, EXT: VmRvrExtension<F>> VmRvrExtension<F> for Option<EXT> 
 // ── Extension registry ───────────────────────────────────────────────────────
 
 /// Registry of extensions, consulted during lifting and project generation.
-pub struct ExtensionRegistry<F: PrimeField32> {
-    extensions: Vec<Box<dyn RvrExtension<F>>>,
+#[derive(Default)]
+pub struct ExtensionRegistry {
+    extensions: Vec<Box<dyn RvrExtension>>,
 }
 
-impl<F: PrimeField32> ExtensionRegistry<F> {
+impl ExtensionRegistry {
     /// Create an empty registry (no extensions).
     pub fn new() -> Self {
-        Self {
-            extensions: Vec::new(),
-        }
+        Self::default()
     }
 
     /// Register an extension.
-    pub fn register(&mut self, ext: impl RvrExtension<F> + 'static) {
+    pub fn register(&mut self, ext: impl RvrExtension + 'static) {
         self.extensions.push(Box::new(ext));
     }
 
     /// Try to lift an instruction through all registered extensions.
     /// Returns the first successful lift, or `None`.
-    pub fn try_lift(&self, insn: &Instruction<F>, pc: u64) -> Option<LiftedInstr> {
+    pub fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
         self.extensions
             .iter()
             .find_map(|ext| ext.try_lift(insn, pc))
@@ -269,25 +271,33 @@ impl<F: PrimeField32> ExtensionRegistry<F> {
     pub fn is_empty(&self) -> bool {
         self.extensions.is_empty()
     }
-
-    /// Register host callbacks for every extension in the registry.
-    ///
-    /// # Safety
-    ///
-    /// Same requirements as [`RvrExtension::register_host_callbacks`].
-    pub unsafe fn register_host_callbacks(
-        &self,
-        lib: &libloading::Library,
-    ) -> Result<(), ExtensionError> {
-        for ext in &self.extensions {
-            unsafe { ext.register_host_callbacks(lib)? };
-        }
-        Ok(())
-    }
 }
 
-impl<F: PrimeField32> Default for ExtensionRegistry<F> {
-    fn default() -> Self {
-        Self::new()
+/// Rvr lifters and runtime hooks contributed by a VM configuration.
+#[derive(Default)]
+pub struct RvrExtensions {
+    lifters: ExtensionRegistry,
+    runtime_hooks: Vec<Box<dyn RvrRuntimeExtension>>,
+}
+
+impl RvrExtensions {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn lifters(&self) -> &ExtensionRegistry {
+        &self.lifters
+    }
+
+    pub fn register_lifter(&mut self, ext: impl RvrExtension + 'static) {
+        self.lifters.register(ext);
+    }
+
+    pub fn register_runtime_hook(&mut self, hook: impl RvrRuntimeExtension + 'static) {
+        self.runtime_hooks.push(Box::new(hook));
+    }
+
+    pub fn into_runtime_hooks(self) -> Vec<Box<dyn RvrRuntimeExtension>> {
+        self.runtime_hooks
     }
 }
