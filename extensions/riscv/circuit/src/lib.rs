@@ -158,8 +158,14 @@ impl Rv64ImConfig {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct Rv64ICpuBuilder;
+
+impl Rv64ICpuBuilder {
+    pub const fn new() -> Self {
+        Self
+    }
+}
 
 impl<SC, E> VmBuilder<E> for Rv64ICpuBuilder
 where
@@ -207,8 +213,14 @@ where
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct Rv64ImCpuBuilder;
+
+impl Rv64ImCpuBuilder {
+    pub const fn new() -> Self {
+        Self
+    }
+}
 
 impl<SC, E> VmBuilder<E> for Rv64ImCpuBuilder
 where
@@ -267,6 +279,13 @@ pub struct Rv64IGpuBuilder {
     /// per-segment emission modes); cloned into migrated GPU chips.
     #[cfg(all(feature = "cuda", feature = "rvr"))]
     pub rvr_decode: std::sync::Arc<rvr_gpu_decode::RvrGpuDecodeState>,
+}
+
+#[cfg(feature = "cuda")]
+impl Rv64IGpuBuilder {
+    pub fn new() -> Self {
+        Self::default()
+    }
 }
 
 #[cfg(feature = "cuda")]
@@ -634,6 +653,13 @@ pub struct Rv64ImGpuBuilder {
     /// See [`Rv64IGpuBuilder::rvr_decode`]; one shared state per VM.
     #[cfg(all(feature = "cuda", feature = "rvr"))]
     pub rvr_decode: std::sync::Arc<rvr_gpu_decode::RvrGpuDecodeState>,
+}
+
+#[cfg(feature = "cuda")]
+impl Rv64ImGpuBuilder {
+    pub fn new() -> Self {
+        Self::default()
+    }
 }
 
 #[cfg(feature = "cuda")]

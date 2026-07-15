@@ -220,7 +220,7 @@ pub struct CProject {
     /// opcode before extension lifting erases that distinction.
     pub native_detail_pc_families: Vec<u8>,
     /// R3: emit inline compact records (log-suppressed) for migrated opcodes.
-    /// Preflight mode only; see [`Self::inline_records_enabled`].
+    /// Preflight mode only; see `inline_records_enabled`.
     pub inline_records: bool,
     /// Effective per-program-slot inline decision after compiler-level
     /// whole-AIR taint. This, rather than the IR node's shape alone, controls
