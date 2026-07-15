@@ -1365,8 +1365,12 @@ where
                 for &(air, geometry) in &arena_native {
                     let (height, width) = capacities[air];
                     let (arena, buf) =
-                        <VB::RecordArena as RvrArenaNativeTarget>::stage_arena_native(
-                            height, width, &geometry,
+                        <VB::RecordArena as RvrArenaNativeTarget>::stage_arena_native_pooled(
+                            height,
+                            width,
+                            &geometry,
+                            air,
+                            rvr_preflight.buffer_pool(),
                         );
                     targets.insert(air, buf);
                     staged.push((air, geometry, arena));
