@@ -4,15 +4,26 @@ on:
   workflow_call:
   push:
     branches: ["main"]
+    paths: &extension_test_paths
+      - "crates/circuits/**"
+      - "crates/vm/**"
+      - "crates/toolchain/**"
+      - "crates/sdk/**"
+      - "crates/sdk-config/**"
+      - "crates/rvr/**"
+      - "extensions/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - ".cargo/config.toml"
+      - ".github/actions/sccache/**"
+      - ".github/filters/extension-tests.yml"
+      - ".github/workflows/extension-tests.group.yml"
+      - ".github/workflows/extension-tests.yml"
+      - "ci/install-openvm-toolchain.sh"
   pull_request:
     branches: ["**"]
-    paths:
-#      - "crates/circuits/**"
-#      - "crates/vm/**"
-#      - "crates/toolchain/**"
-      - "extensions/**"
-#      - "Cargo.toml"
-      - ".github/workflows/extension-tests.yml"
+    paths: *extension_test_paths
 
 concurrency:
   group: ${{ github.workflow_ref }}-extension-tests-${{ github.event.pull_request.number || github.sha }}
@@ -23,134 +34,53 @@ env:
   OPENVM_SKIP_DEBUG: "1"
 
 jobs:
-  extension-tests:
-    strategy:
-      matrix:
-        extension:
-          - { name: "riscv", path: "riscv", aot: false, rvr: false }
-          - { name: "keccak256", path: "keccak256", aot: false, rvr: false }
-          - { name: "sha2", path: "sha2", aot: false, rvr: false }
-          - { name: "bigint", path: "bigint", aot: false, rvr: false }
-          - { name: "algebra", path: "algebra", aot: false, rvr: false }
-          - { name: "ecc", path: "ecc", aot: false, rvr: false }
-          - { name: "pairing", path: "pairing", aot: false, rvr: false }
-          - { name: "deferral", path: "deferral", aot: false, rvr: false }
-          # TODO(aot): re-enable these once AOT CI is restored.
-          # - { name: "riscv", path: "riscv", aot: true, rvr: false }
-          # - { name: "keccak256", path: "keccak256", aot: true, rvr: false }
-          # - { name: "sha2", path: "sha2", aot: true, rvr: false }
-          # - { name: "bigint", path: "bigint", aot: true, rvr: false }
-          # - { name: "algebra", path: "algebra", aot: true, rvr: false }
-          # - { name: "ecc", path: "ecc", aot: true, rvr: false }
-          # - { name: "pairing", path: "pairing", aot: true, rvr: false }
-          # - { name: "deferral", path: "deferral", aot: true, rvr: false }
-          - { name: "riscv", path: "riscv", aot: false, rvr: true }
-          - { name: "riscv", path: "riscv", aot: false, rvr: true, unprotected: true }
-          - { name: "keccak256", path: "keccak256", aot: false, rvr: true }
-          - { name: "sha2", path: "sha2", aot: false, rvr: true }
-          - { name: "bigint", path: "bigint", aot: false, rvr: true }
-          - { name: "algebra", path: "algebra", aot: false, rvr: true }
-          - { name: "ecc", path: "ecc", aot: false, rvr: true }
-          - { name: "pairing", path: "pairing", aot: false, rvr: true }
-          - { name: "deferral", path: "deferral", aot: false, rvr: true }
-        platform:
-          - { family: "c8i-flex.16xlarge+c8i.16xlarge+c8a.16xlarge+c7i.16xlarge+c7a.16xlarge", image: "ubuntu24-full-x64" }
-      # Ensure tests run in parallel even if one fails
-      fail-fast: false
-
-    runs-on:
-      - runs-on=${{ github.run_id }}-extension-tests-${{ github.run_attempt }}-${{ strategy.job-index }}/family=${{ matrix.platform.family }}/image=${{ matrix.platform.image }}/volume=80gb/extras=s3-cache
-
+  changes:
+    name: Select affected extensions
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      extensions: ${{ steps.filter.outputs.changes }}
     steps:
-      - uses: runs-on/action@v2
-        with:
-          sccache: s3
-      - name: Load SSH key
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: |
-            ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
       - uses: actions/checkout@v5
-      - name: Init rvr FFI submodules
-        if: matrix.extension.rvr == true
-        run: |
-          git submodule update --init --depth 1 extensions/keccak256/rvr/ffi/openssl
-          git submodule update --init --depth 1 extensions/algebra/rvr/ffi/modular/secp256k1
       - uses: dorny/paths-filter@v3
         id: filter
         with:
-          filters: |
-            - "crates/circuits/**"
-            - "crates/vm/**"
-            - "crates/toolchain/**"
-            - "extensions/${{ matrix.extension.path }}/**"
-            - ".github/workflows/extension-tests.yml"
-      - name: Skip if no changes
-        if: steps.filter.outputs.matched == 'false'
-        run: |
-          echo "No relevant changes, skipping tests."
-          exit 0
+          filters: .github/filters/extension-tests.yml
 
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: ./.github/actions/sccache
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-      - uses: taiki-e/install-action@nextest
+  extension-tests:
+    needs: changes
+    if: needs.changes.outputs.extensions != '[]'
+    name: ${{ format('{0} ({1})', matrix.extension == 'riscv' && 'RISC-V' || matrix.extension, matrix.mode == 'rvr' && 'RVR' || matrix.mode) }}
+    strategy:
+      matrix:
+        extension: ${{ fromJSON(needs.changes.outputs.extensions) }}
+        mode: [default, rvr]
+        exclude:
+          - { extension: shared, mode: default }
+          - { extension: shared, mode: rvr }
+          - { extension: cuda, mode: default }
+          - { extension: cuda, mode: rvr }
+        # TODO(aot): re-enable AOT CI separately.
+      # Ensure tests run in parallel even if one fails
+      fail-fast: false
+    uses: ./.github/workflows/extension-tests.group.yml
+    with:
+      runner_id: cpu-${{ strategy.job-index }}
+      machine_type: family=c8i-flex.16xlarge+c8i.16xlarge+c8a.16xlarge+c7i.16xlarge+c7a.16xlarge/image=ubuntu24-full-x64/volume=80gb
+      extensions: ${{ matrix.extension }}
+      mode: ${{ matrix.mode }}
+    secrets: inherit
 
-      - name: Install clang-22 and lld (required for rvr)
-        if: matrix.extension.rvr == true
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y lsb-release wget software-properties-common gnupg
-          wget https://apt.llvm.org/llvm.sh
-          chmod +x llvm.sh
-          sudo ./llvm.sh 22
-          sudo apt-get install -y lld
-
-      - name: Run ${{ format('{0}{1}{2}{3}', matrix.extension.name, matrix.extension.aot && '-aot' || '', matrix.extension.rvr && '-rvr' || '', matrix.extension.unprotected && '-unprotected' || '') }} circuit crate tests
-        working-directory: extensions/${{ matrix.extension.path }}/circuit
-        run: |
-          TEST_THREADS="--test-threads=32"
-          if [[ "${{ matrix.extension.name }}" == "algebra" ]]; then
-            TEST_THREADS="--test-threads=4"
-          fi
-          if [[ "${{ matrix.extension.aot }}" == 'true' ]]; then
-            cargo nextest run --cargo-profile=fast --features aot $TEST_THREADS --no-tests=pass --success-output=immediate
-          elif [[ "${{ matrix.extension.rvr }}" == 'true' && "${{ matrix.extension.unprotected }}" == 'true' ]]; then
-            cargo nextest run --cargo-profile=fast --features rvr,openvm-circuit/unprotected $TEST_THREADS --no-tests=pass --success-output=immediate
-          elif [[ "${{ matrix.extension.rvr }}" == 'true' ]]; then
-            cargo nextest run --cargo-profile=fast --features rvr $TEST_THREADS --no-tests=pass --success-output=immediate
-          else
-            cargo nextest run --cargo-profile=fast $TEST_THREADS --no-tests=pass --success-output=immediate
-          fi
-
-        # We only need to run guest crate tests on CPU since we are not testing prover functionality
-      - name: Run ${{ matrix.extension.name }} guest crate tests
-        if: hashFiles(format('extensions/{0}/guest', matrix.extension.path)) != ''
-        working-directory: extensions/${{ matrix.extension.path }}/guest
-        run: |
-          GUEST_FEATURE_ARGS=""
-          if [[ "${{ matrix.extension.name }}" == "pairing" ]]; then
-            GUEST_FEATURE_ARGS="--features=bn254,bls12_381,halo2curves"
-          fi
-          cargo nextest run --cargo-profile=fast  $GUEST_FEATURE_ARGS --no-tests=pass
-
-      - name: Run ${{ format('{0}{1}{2}{3}', matrix.extension.name, matrix.extension.aot && '-aot' || '', matrix.extension.rvr && '-rvr' || '', matrix.extension.unprotected && '-unprotected' || '') }} integration tests
-        if: hashFiles(format('extensions/{0}/tests', matrix.extension.path)) != ''
-        working-directory: extensions/${{ matrix.extension.path }}/tests
-        run: |
-          "$GITHUB_WORKSPACE/ci/install-openvm-toolchain.sh"
-          if [[ "${{ matrix.extension.aot }}" == 'true' ]]; then
-            cargo nextest run --cargo-profile=fast --features aot --profile=heavy --no-tests=pass --success-output=immediate
-          elif [[ "${{ matrix.extension.rvr }}" == 'true' && "${{ matrix.extension.unprotected }}" == 'true' ]]; then
-            cargo nextest run --cargo-profile=fast --features rvr,unprotected --profile=heavy --no-tests=pass --success-output=immediate
-          elif [[ "${{ matrix.extension.rvr }}" == 'true' ]]; then
-            cargo nextest run --cargo-profile=fast --features rvr --profile=heavy --no-tests=pass --success-output=immediate
-          else
-            cargo nextest run --cargo-profile=fast --profile=heavy --no-tests=pass --success-output=immediate
-          fi
-
-      - name: sccache stats
-        if: always()
-        run: sccache --show-stats || true
+  riscv-unprotected:
+    needs: changes
+    if: contains(fromJSON(needs.changes.outputs.extensions), 'riscv')
+    name: RISC-V (unprotected)
+    uses: ./.github/workflows/extension-tests.group.yml
+    with:
+      runner_id: cpu-riscv-unprotected
+      machine_type: family=c8i-flex.16xlarge+c8i.16xlarge+c8a.16xlarge+c7i.16xlarge+c7a.16xlarge/image=ubuntu24-full-x64/volume=80gb
+      extensions: riscv
+      mode: unprotected
+    secrets: inherit

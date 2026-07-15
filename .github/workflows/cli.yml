@@ -1,4 +1,4 @@
-name: OpenVM CLI Tests
+name: CLI Tests
 
 # Exercises `cargo-openvm` end-to-end:
 #   * Builds the CLI and puts it on PATH so the integration tests reuse it
@@ -41,6 +41,7 @@ env:
 
 jobs:
   cli-tests:
+    name: Integration and examples
     runs-on:
       - runs-on=${{ github.run_id }}/volume=80gb/family=c8i-flex.16xlarge+c8i.16xlarge+c8a.16xlarge+c7i.16xlarge+c7a.16xlarge/image=ubuntu24-full-x64/extras=s3-cache
 
@@ -62,7 +63,7 @@ jobs:
       - uses: taiki-e/install-action@nextest
 
       - name: Install solc
-        # `cargo openvm setup --evm` and the stark/EVM e2e scripts shell out to solc.
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_evm_e2e }}
         run: |
           (hash svm 2>/dev/null || cargo install --locked --version 0.2.23 svm-rs) && svm install 0.8.19 && solc --version
 
@@ -99,11 +100,9 @@ jobs:
           cargo openvm build
           cmp app1.vmexe openvm/release/ecc-example.vmexe || (echo "Build is not deterministic!" && exit 1)
 
-      - name: Run app-level keygen
+      - name: Run default-config keygen
         working-directory: crates/cli
-        run: |
-          export RUST_BACKTRACE=1
-          cargo openvm keygen --config ./example/app_config.toml --output-dir .
+        run: cargo openvm keygen --output-dir .
 
       - name: Set USE_LOCAL_OPENVM
         # `cli_init_build.sh` reads USE_LOCAL_OPENVM to decide whether to patch the
@@ -140,9 +139,9 @@ jobs:
 
   # Smoke-test the stock tier-3 `riscv64im-unknown-none-elf` path.
   app-level-cli-none-elf:
-    name: app-level-cli (riscv64im-unknown-none-elf)
+    name: riscv64im-unknown-none-elf smoke test
     runs-on:
-      - runs-on=${{ github.run_id }}/disk=large/family=c8i-flex.2xlarge+c8i.2xlarge+c8a.2xlarge+c7i.2xlarge+c7a.2xlarge/image=ubuntu24-full-x64/extras=s3-cache
+      - runs-on=${{ github.run_id }}/volume=80gb/family=c8i-flex.2xlarge+c8i.2xlarge+c8a.2xlarge+c7i.2xlarge+c7a.2xlarge/image=ubuntu24-full-x64/extras=s3-cache
     env:
       OPENVM_RUST_TOOLCHAIN: nightly-2026-01-18
       OPENVM_RUSTC_TARGET: riscv64im-unknown-none-elf
@@ -151,6 +150,11 @@ jobs:
       - uses: runs-on/action@v2
         with:
           sccache: s3
+      - name: Load SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: |
+            ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: mozilla-actions/sccache-action@v0.0.9

@@ -1,0 +1,52 @@
+# Add an extension by defining a filter with the same name as its directory.
+# CPU and CUDA jobs are selected from these filters.
+shared: &shared
+  - "crates/circuits/**"
+  - "crates/vm/**"
+  - "crates/toolchain/**"
+  - "crates/rvr/**"
+  - "Cargo.toml"
+  - "Cargo.lock"
+  - "rust-toolchain.toml"
+  - ".cargo/config.toml"
+  - ".github/actions/sccache/**"
+  - ".github/filters/extension-tests.yml"
+  - ".github/workflows/extension-tests.group.yml"
+  - ".github/workflows/extension-tests.yml"
+  - "ci/install-openvm-toolchain.sh"
+cuda:
+  - ".github/actions/rust-cache-cuda/**"
+  - ".github/workflows/extension-tests.cuda.yml"
+  - "scripts/gpu_driver_setup.sh"
+riscv: &riscv
+  - *shared
+  - "extensions/riscv/**"
+keccak256:
+  - *riscv
+  - "extensions/keccak256/**"
+sha2:
+  - *riscv
+  - "extensions/sha2/**"
+bigint:
+  - *riscv
+  - "extensions/bigint/**"
+  - "extensions/riscv-adapters/**"
+algebra: &algebra
+  - *riscv
+  - "extensions/algebra/**"
+  - "extensions/ecc/**"
+  - "extensions/pairing/guest/**"
+  - "extensions/riscv-adapters/**"
+ecc:
+  - *algebra
+  - "crates/sdk/**"
+  - "crates/sdk-config/**"
+pairing:
+  - *riscv
+  - "extensions/algebra/**"
+  - "extensions/ecc/**"
+  - "extensions/riscv-adapters/**"
+  - "extensions/pairing/**"
+deferral:
+  - *riscv
+  - "extensions/deferral/**"

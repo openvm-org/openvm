@@ -1,4 +1,4 @@
-name: Check that tags are everywhere in the docs
+name: Documentation Checks
 
 on:
   workflow_call:
@@ -9,7 +9,7 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - "docs"
+      - "docs/**"
       - ".github/workflows/openvm-tags.yml"
       - "ci/scripts/check_openvm_tags.sh"
 
@@ -18,19 +18,15 @@ env:
 
 jobs:
   docs:
+    name: OpenVM dependency tags
     permissions:
       contents: write
       packages: read
     concurrency:
       group: ${{ github.workflow_ref }}-docs-${{ github.ref }}
     runs-on:
-      - runs-on=${{ github.run_id }}/family=c8i-flex.2xlarge+c8i.2xlarge+c8a.2xlarge+c7i.2xlarge+c7a.2xlarge/image=ubuntu24-full-x64
+      - runs-on=${{ github.run_id }}/family=c8i-flex.2xlarge+c8i.2xlarge+c8a.2xlarge+c7i.2xlarge+c7a.2xlarge/image=ubuntu24-full-x64/volume=40gb
     steps:
-      - name: Load SSH key
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: |
-            ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
       - uses: actions/checkout@v5
       - name: Check the tags
         working-directory: docs

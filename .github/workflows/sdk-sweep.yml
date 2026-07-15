@@ -60,6 +60,7 @@ jobs:
   # A dedicated job is needed because the `matrix` context isn't available in a
   # job-level `if:`, so we can't filter matrix entries by `inputs.arch` directly.
   matrix-config:
+    name: Select modes
     runs-on: ubuntu-latest
     outputs:
       modes: ${{ steps.set.outputs.modes }}
@@ -83,6 +84,7 @@ jobs:
           esac
 
   sweep:
+    name: ${{ format('{0} ({1}, {2})', inputs.sweep_mode, matrix.mode, inputs.family) }}
     needs: matrix-config
     strategy:
       fail-fast: false
@@ -126,12 +128,6 @@ jobs:
       - name: Install solc
         if: ${{ inputs.sweep_mode == 'sweep_evm' }}
         run: (hash svm 2>/dev/null || cargo install --locked --version 0.2.23 svm-rs) && svm install 0.8.19 && solc --version
-
-      - name: Install Foundry
-        if: ${{ inputs.sweep_mode == 'sweep_evm' }}
-        uses: foundry-rs/foundry-toolchain@v1
-        with:
-          version: 'v1.5.0'
 
       - name: Install architecture specific tools
         if: ${{ inputs.sweep_mode == 'sweep_evm' }}
@@ -188,13 +184,13 @@ jobs:
 
           case "${{ inputs.sweep_mode }}" in
             sweep_internal)
-              build_cuda_tests "parallel,cuda"
+              build_cuda_tests "parallel,cuda,halo2-gpu"
               ;;
             sweep_root)
-              build_cuda_tests "parallel,root-prover,cuda"
+              build_cuda_tests "parallel,root-prover,cuda,halo2-gpu"
               ;;
             sweep_evm)
-              build_cuda_tests "parallel,root-prover,evm-verify,cuda"
+              build_cuda_tests "parallel,root-prover,evm-verify,cuda,halo2-gpu"
               ;;
           esac
 
@@ -206,9 +202,7 @@ jobs:
         working-directory: crates/sdk
         run: |
           export PYTHONUNBUFFERED="1"
-          if [[ "${{ matrix.mode }}" == "cuda" ]]; then
-            rustup component add rust-src --toolchain nightly-2026-01-18
-          else
+          if [[ "${{ matrix.mode }}" != "cuda" ]]; then
             export CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true
             export RUST_BACKTRACE=1
             export RUST_MIN_STACK=8388608

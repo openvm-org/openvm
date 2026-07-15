@@ -14,7 +14,7 @@ on:
         type: boolean
 
 concurrency:
-  group: ${{ github.workflow_ref }}-release-binaries-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow_ref }}-release-binaries-${{ inputs.version }}
   cancel-in-progress: true
 
 permissions:
@@ -169,6 +169,19 @@ jobs:
 
       - name: Smoke test binary
         run: ./target/x86_64-unknown-linux-gnu/release/${BINARY_NAME} openvm --version
+
+      - name: Install OpenVM toolchain
+        run: ./ci/install-openvm-toolchain.sh
+
+      - name: Smoke test CUDA proving
+        working-directory: crates/cli
+        run: |
+          export PATH="$GITHUB_WORKSPACE/target/x86_64-unknown-linux-gnu/release:$PATH"
+          cargo openvm build \
+            --manifest-path tests/programs/fibonacci/Cargo.toml \
+            --config tests/programs/fibonacci/openvm.toml
+          EXE_PATH=tests/programs/fibonacci/openvm/release/openvm-cli-example-test.vmexe \
+            bash tests/scripts/cli_app_e2e.sh
 
       - name: Package binary
         id: package

@@ -19,9 +19,9 @@ env:
 
 jobs:
   tests:
-    name: Recursion tests
+    name: CPU suite
     runs-on:
-      - runs-on=${{ github.run_id }}/family=c9g.4xlarge+c8g.4xlarge/image=ubuntu24-full-arm64/extras=s3-cache
+      - runs-on=${{ github.run_id }}/family=c9g.4xlarge+c8g.4xlarge/image=ubuntu24-full-arm64/volume=40gb/extras=s3-cache
 
     steps:
       - uses: runs-on/action@v2

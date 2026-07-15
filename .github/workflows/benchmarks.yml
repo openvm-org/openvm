@@ -1,4 +1,4 @@
-name: "OpenVM Benchmarks: Coordinate Runner & Reporting"
+name: Benchmarks
 
 on:
   workflow_call:
@@ -10,7 +10,7 @@ on:
         default: false
   push:
     branches: ["main"]
-    paths:
+    paths: &benchmark_paths
       - "benchmarks/prove/**"
       - "benchmarks/guest/**"
       - "crates/**"
@@ -18,17 +18,11 @@ on:
       - ".github/workflows/benchmark-call.yml"
       - ".github/workflows/benchmarks.yml"
       - "Cargo.toml"
+      - "Cargo.lock"
   pull_request:
     types: [opened, synchronize, reopened, labeled]
     branches: ["**"]
-    paths:
-      - "benchmarks/prove/**"
-      - "benchmarks/guest/**"
-      - "crates/**"
-      - "extensions/**"
-      - ".github/workflows/benchmark-call.yml"
-      - ".github/workflows/benchmarks.yml"
-      - "Cargo.toml"
+    paths: *benchmark_paths
   workflow_dispatch:
     inputs:
       flamegraphs:
@@ -43,7 +37,7 @@ on:
         default: false
 
 concurrency:
-  group: ${{ github.workflow_ref }}-benchmarks-${{ github.event.pull_request.number || github.sha }}
+  group: ${{ github.workflow_ref }}-benchmarks-${{ github.event.action == 'labeled' && github.event.label.name != 'run-benchmark' && github.event.label.name != 'run-benchmark-e2e' && github.run_id || github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
 env:
@@ -63,16 +57,13 @@ permissions:
 
 jobs:
   create-matrix:
+    name: Select benchmarks
+    if: ${{ github.event.action != 'labeled' || github.event.label.name == 'run-benchmark' || github.event.label.name == 'run-benchmark-e2e' }}
     runs-on:
-      - runs-on=${{ github.run_id }}/family=c8i-flex.2xlarge+c8i.2xlarge+c8a.2xlarge+c7i.2xlarge+c7a.2xlarge/image=ubuntu24-full-x64
+      - runs-on=${{ github.run_id }}/family=c8i-flex.2xlarge+c8i.2xlarge+c8a.2xlarge+c7i.2xlarge+c7a.2xlarge/image=ubuntu24-full-x64/volume=40gb
     outputs:
       matrix: ${{ steps.create-matrix.outputs.matrix }}
     steps:
-      - name: Load SSH key
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: |
-            ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
       - uses: actions/checkout@v5
         with:
           ref: ${{ env.CURRENT_SHA }}
@@ -88,8 +79,7 @@ jobs:
           cat ./ci/benchmark-config.json
 
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            LABELS='${{ toJson(github.event.pull_request.labels) }}'
-            RUN_E2E=$(echo "$LABELS" | jq 'any(.name == "run-benchmark-e2e")')
+            RUN_E2E=${{ contains(github.event.pull_request.labels.*.name, 'run-benchmark-e2e') }}
           else
             RUN_E2E=${{ github.event.inputs.run-benchmark-e2e || 'false' }}
           fi
@@ -122,6 +112,7 @@ jobs:
           echo "matrix=$matrix" >> $GITHUB_OUTPUT
 
   benchmark:
+    name: ${{ format('{0}{1} | {2} | {3}', matrix.benchmark_run.name, matrix.benchmark_run.e2e_bench && ' (E2E)' || '', matrix.benchmark_run.instance_type, matrix.benchmark_run.memory_allocator) }}
     needs: create-matrix
     strategy:
       matrix:
@@ -139,9 +130,10 @@ jobs:
     secrets: inherit
 
   summarize:
+    name: Report results
     needs: [create-matrix, benchmark]
     runs-on:
-      - runs-on=${{ github.run_id }}/family=c8i-flex.2xlarge+c8i.2xlarge+c8a.2xlarge+c7i.2xlarge+c7a.2xlarge/image=ubuntu24-full-x64/extras=s3-cache
+      - runs-on=${{ github.run_id }}/family=c8i-flex.2xlarge+c8i.2xlarge+c8a.2xlarge+c7i.2xlarge+c7a.2xlarge/image=ubuntu24-full-x64/volume=40gb/extras=s3-cache
     steps:
       - uses: runs-on/action@v2
         with:

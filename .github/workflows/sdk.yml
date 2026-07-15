@@ -1,4 +1,4 @@
-name: OpenVM SDK Tests
+name: SDK Tests
 
 on:
   workflow_call:
@@ -22,7 +22,7 @@ on:
     branches: ["**"]
 
 concurrency:
-  group: ${{ github.workflow_ref }}-sdk-${{ github.event.pull_request.number || github.sha }}
+  group: ${{ github.workflow_ref }}-sdk-${{ github.event.action == 'labeled' && github.event.label.name != 'run-sdk-tests' && github.run_id || github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
 env:
@@ -30,7 +30,8 @@ env:
 
 jobs:
   tests:
-    if: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'run-sdk-tests') }}
+    name: ${{ matrix.mode == 'rvr' && 'RVR' || matrix.mode }}
+    if: ${{ github.event_name != 'pull_request' || (contains(github.event.pull_request.labels.*.name, 'run-sdk-tests') && (github.event.action != 'labeled' || github.event.label.name == 'run-sdk-tests')) }}
     strategy:
       matrix:
         mode: ["default", "rvr"]
