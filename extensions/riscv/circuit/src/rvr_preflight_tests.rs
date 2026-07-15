@@ -2869,6 +2869,83 @@ fn rvr_preflight_pooled_counters_reset_between_segments() {
     instance.recycle_output(second);
 }
 
+/// Device chronology commits block runs only after the instret suspender has
+/// accepted the block. Otherwise every continuation would gain the first
+/// unexecuted block of the following segment and corrupt both chronology and
+/// frequencies. Recycling both outputs also exercises the shared cpool seam.
+#[test]
+fn rvr_preflight_device_chronology_respects_continuation_boundary() {
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "1");
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "delta");
+    std::env::set_var("OPENVM_RVR_DEVICE_REPLAY_ORACLE", "1");
+    let exe = checkpoint_loop_exe(4, 0, 2);
+    let (vm, _) = VirtualMachine::new_with_keygen(
+        test_cpu_engine(),
+        Rv64ImCpuBuilder,
+        Rv64ImConfig::default(),
+    )
+    .expect("vm init");
+    let RvrPreflightRoute::Rvr(instance) = vm
+        .preflight_routed_instance(&exe)
+        .expect("routed preflight instance")
+    else {
+        panic!("program must route to RVR preflight")
+    };
+    let heights = vec![256u32; vm.num_airs()];
+    let targets = BTreeMap::new();
+    let first = instance
+        .execute_preflight_from_state_with_device_touched_memory_for_test(
+            vm.create_initial_state(&exe, Streams::default()),
+            Some(4),
+            &heights,
+            &targets,
+        )
+        .expect("first device chronology segment");
+    assert!(first.suspended);
+    assert_eq!(first.instret, 4);
+    assert_eq!(
+        first
+            .raw_logs
+            .program_runs
+            .iter()
+            .map(|run| u64::from(run.instruction_count))
+            .sum::<u64>(),
+        first.instret,
+        "suspended segment must not retain the rejected next block"
+    );
+    assert_eq!(
+        first.raw_logs.device_program_references.len(),
+        first.instret as usize
+    );
+    let second_state = first.to_state.clone();
+    instance.recycle_output(first);
+
+    let second = instance
+        .execute_preflight_from_state_with_device_touched_memory_for_test(
+            second_state,
+            Some(checkpoint_loop_dyn_insns(4, 0, 2) - 4),
+            &heights,
+            &targets,
+        )
+        .expect("second device chronology segment");
+    assert!(!second.suspended);
+    assert_eq!(
+        second
+            .raw_logs
+            .program_runs
+            .iter()
+            .map(|run| u64::from(run.instruction_count))
+            .sum::<u64>(),
+        second.instret
+    );
+    assert_eq!(
+        second.raw_logs.device_program_references.len(),
+        second.instret as usize
+    );
+    instance.recycle_output(second);
+    std::env::remove_var("OPENVM_RVR_DEVICE_REPLAY_ORACLE");
+}
+
 /// Phase-3 <30 ms checkpoint harness: preflight a large RV64IM-dominated
 /// segment (~8.2M retired instructions, ~8.2M inline AddSub records) on the
 /// single-shot proving path and report the wall time against the r4
@@ -3740,6 +3817,22 @@ fn rvr_preflight_hintstore_direct_final_matches_verbose_twice() {
                 Vec::new(),
                 "production device-owned replay must emit no host first-touch seeds"
             );
+            assert!(
+                !device_output.raw_logs.program_runs.is_empty(),
+                "production device chronology must emit block runs"
+            );
+            assert!(
+                device_output.raw_logs.device_program_references.is_empty(),
+                "production device chronology must not retain per-instruction host records"
+            );
+            assert!(
+                device_output
+                    .system_records
+                    .filtered_exec_frequencies
+                    .iter()
+                    .all(|&count| count == 0),
+                "production device chronology must not compute host program frequencies"
+            );
             let memory = &device_output.to_state.memory.memory;
             let memory_as = RV64_MEMORY_AS as usize;
             let dirty_ranges =
@@ -3769,6 +3862,56 @@ fn rvr_preflight_hintstore_direct_final_matches_verbose_twice() {
                 )
                 .expect("HintStore device-replay oracle preflight");
             std::env::remove_var("OPENVM_RVR_DEVICE_REPLAY_ORACLE");
+            assert!(
+                !oracle_device_output
+                    .raw_logs
+                    .device_program_references
+                    .is_empty(),
+                "device chronology oracle must retain a non-vacuous full-vector reference"
+            );
+            let mut filtered_by_slot =
+                Vec::with_capacity(exe.program.instructions_and_debug_infos.len());
+            let mut next_filtered = 0u32;
+            for instruction in &exe.program.instructions_and_debug_infos {
+                filtered_by_slot.push(instruction.as_ref().map(|_| {
+                    let index = next_filtered;
+                    next_filtered += 1;
+                    index
+                }));
+            }
+            let mut reconstructed = Vec::new();
+            let mut reconstructed_frequencies = vec![0u32; next_filtered as usize];
+            for run in &oracle_device_output.raw_logs.program_runs {
+                assert_eq!(run.complete, 1, "device chronology run must be complete");
+                assert_eq!(
+                    run.chronology_offset as usize,
+                    reconstructed.len(),
+                    "device chronology runs must be contiguous"
+                );
+                for local in 0..run.instruction_count {
+                    let pc = run.first_pc + local * DEFAULT_PC_STEP;
+                    let slot = ((pc - exe.program.pc_base) / DEFAULT_PC_STEP) as usize;
+                    let filtered_index = filtered_by_slot
+                        .get(slot)
+                        .copied()
+                        .flatten()
+                        .expect("device chronology run referenced an undefined program slot");
+                    reconstructed
+                        .push(openvm_circuit::arch::rvr::DeviceProgramEntry { pc, filtered_index });
+                    reconstructed_frequencies[filtered_index as usize] += 1;
+                }
+            }
+            assert_eq!(
+                reconstructed, oracle_device_output.raw_logs.device_program_references,
+                "block-run reconstruction must match the complete host chronology vector"
+            );
+            assert_eq!(
+                reconstructed_frequencies,
+                oracle_device_output
+                    .system_records
+                    .filtered_exec_frequencies,
+                "block-run reconstruction must match the complete host frequency vector"
+            );
             assert_eq!(
                 oracle_device_output.raw_logs.device_aux_references.len(),
                 oracle_device_output.raw_logs.delta_memory_log.len(),

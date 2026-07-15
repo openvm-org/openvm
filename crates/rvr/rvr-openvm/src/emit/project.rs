@@ -897,6 +897,11 @@ impl CProject {
         )
         .unwrap();
         self.emit_instret_suspend_check(out, pc, insn_count);
+        // Commit the block-level trace only after an instret-limit rejection
+        // has returned. Preflight's device chronology treats this hook as an
+        // exact executed-block stream; recording it in begin_block would also
+        // include the first unexecuted block of every continuation boundary.
+        writeln!(out, "    trace_block(state, 0x{pc:08x}ull, {insn_count}u);").unwrap();
     }
 
     fn emit_metered_counter_check(&self, out: &mut String, pc: u64, insn_count: u32) {
