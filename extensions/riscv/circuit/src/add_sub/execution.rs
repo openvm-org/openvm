@@ -6,7 +6,10 @@ use std::{
 use openvm_circuit::{arch::*, system::memory::online::GuestMemory};
 use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV64_REGISTER_AS, LocalOpcode,
+    instruction::Instruction,
+    program::DEFAULT_PC_STEP,
+    riscv::{RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    LocalOpcode,
 };
 use openvm_riscv_transpiler::BaseAluOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -17,9 +20,9 @@ use crate::{common::*, AddSubExecutor};
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
 pub(super) struct AddSubPreCompute {
-    c: u32,
-    a: u8,
-    b: u8,
+    rs2_ptr: u32,
+    rd_ptr: u8,
+    rs1_ptr: u8,
 }
 
 impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> AddSubExecutor<A, NUM_LIMBS, LIMB_BITS> {
@@ -36,9 +39,9 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> AddSubExecutor<A, NUM_LI
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         *data = AddSubPreCompute {
-            c: c.as_canonical_u32(),
-            a: a.as_canonical_u32() as u8,
-            b: b.as_canonical_u32() as u8,
+            rs2_ptr: c.as_canonical_u32(),
+            rd_ptr: a.as_canonical_u32() as u8,
+            rs1_ptr: b.as_canonical_u32() as u8,
         };
         Ok(())
     }
@@ -227,13 +230,19 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: AluOp>(
     pre_compute: &AddSubPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let rs1 = exec_state.vm_read_bytes::<8>(RV64_REGISTER_AS, pre_compute.b as u32);
-    let rs2 = exec_state.vm_read_bytes::<8>(RV64_REGISTER_AS, pre_compute.c);
+    let rs1 = exec_state
+        .vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.rs1_ptr as u32);
+    let rs2 =
+        exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.rs2_ptr);
     let rs1 = u64::from_le_bytes(rs1);
     let rs2 = u64::from_le_bytes(rs2);
     let rd = <OP as AluOp>::compute(rs1, rs2);
     let rd = rd.to_le_bytes();
-    exec_state.vm_write_bytes::<8>(RV64_REGISTER_AS, pre_compute.a as u32, &rd);
+    exec_state.vm_write_bytes::<RV64_REGISTER_NUM_LIMBS>(
+        RV64_REGISTER_AS,
+        pre_compute.rd_ptr as u32,
+        &rd,
+    );
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
 }
@@ -279,5 +288,42 @@ impl AluOp for SubOp {
     #[inline(always)]
     fn compute(rs1: u64, rs2: u64) -> u64 {
         rs1.wrapping_sub(rs2)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use openvm_instructions::{riscv::RV64_IMM_AS, LocalOpcode};
+    use openvm_stark_sdk::p3_baby_bear::BabyBear;
+
+    use super::*;
+    use crate::{adapters::Rv64BaseAluRegU16AdapterExecutor, Rv64AddSubExecutor};
+
+    #[test]
+    fn rejects_immediate_operand() {
+        let executor = Rv64AddSubExecutor::new(
+            Rv64BaseAluRegU16AdapterExecutor,
+            BaseAluOpcode::CLASS_OFFSET,
+        );
+        let instruction = Instruction::<BabyBear>::from_usize(
+            BaseAluOpcode::ADD.global_opcode(),
+            [
+                RV64_REGISTER_NUM_LIMBS,
+                2 * RV64_REGISTER_NUM_LIMBS,
+                1,
+                RV64_REGISTER_AS as usize,
+                RV64_IMM_AS as usize,
+            ],
+        );
+        let mut data = AddSubPreCompute {
+            rs2_ptr: 0,
+            rd_ptr: 0,
+            rs1_ptr: 0,
+        };
+
+        assert!(matches!(
+            executor.pre_compute_impl(0, &instruction, &mut data),
+            Err(StaticProgramError::InvalidInstruction(0))
+        ));
     }
 }

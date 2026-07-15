@@ -9,10 +9,8 @@
 
 using namespace riscv;
 
-// Register-only adapter for ADD/SUB.
-// Compared to Rv64BaseAluU16AdapterCols, rs2_as and rs2_imm_sign are removed;
-// rs2 is always a register pointer, renamed rs2_ptr.
-template <typename T> struct Rv64AddSubAdapterCols {
+// Adapter for base ALU instructions with two register operands.
+template <typename T> struct Rv64BaseAluRegU16AdapterCols {
     ExecutionState<T> from_state;
     T rd_ptr;
     T rs1_ptr;
@@ -21,7 +19,7 @@ template <typename T> struct Rv64AddSubAdapterCols {
     MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> writes_aux;
 };
 
-struct Rv64AddSubAdapterRecord {
+struct Rv64BaseAluRegU16AdapterRecord {
     uint32_t from_pc;
     uint32_t from_timestamp;
     uint32_t rd_ptr;
@@ -31,39 +29,39 @@ struct Rv64AddSubAdapterRecord {
     MemoryWriteU16AuxRecord<BLOCK_FE_WIDTH> writes_aux;
 };
 
-struct Rv64AddSubAdapter {
+struct Rv64BaseAluRegU16Adapter {
     MemoryAuxColsFactory mem_helper;
 
-    __device__ Rv64AddSubAdapter(VariableRangeChecker rc, uint32_t timestamp_max_bits)
+    __device__ Rv64BaseAluRegU16Adapter(VariableRangeChecker rc, uint32_t timestamp_max_bits)
         : mem_helper(rc, timestamp_max_bits) {}
 
-    __device__ void fill_trace_row(RowSlice row, Rv64AddSubAdapterRecord record) {
-        COL_WRITE_VALUE(row, Rv64AddSubAdapterCols, from_state.pc, record.from_pc);
+    __device__ void fill_trace_row(RowSlice row, Rv64BaseAluRegU16AdapterRecord record) {
+        COL_WRITE_VALUE(row, Rv64BaseAluRegU16AdapterCols, from_state.pc, record.from_pc);
         COL_WRITE_VALUE(
-            row, Rv64AddSubAdapterCols, from_state.timestamp, record.from_timestamp
+            row, Rv64BaseAluRegU16AdapterCols, from_state.timestamp, record.from_timestamp
         );
 
-        COL_WRITE_VALUE(row, Rv64AddSubAdapterCols, rd_ptr, record.rd_ptr);
-        COL_WRITE_VALUE(row, Rv64AddSubAdapterCols, rs1_ptr, record.rs1_ptr);
-        COL_WRITE_VALUE(row, Rv64AddSubAdapterCols, rs2_ptr, record.rs2_ptr);
+        COL_WRITE_VALUE(row, Rv64BaseAluRegU16AdapterCols, rd_ptr, record.rd_ptr);
+        COL_WRITE_VALUE(row, Rv64BaseAluRegU16AdapterCols, rs1_ptr, record.rs1_ptr);
+        COL_WRITE_VALUE(row, Rv64BaseAluRegU16AdapterCols, rs2_ptr, record.rs2_ptr);
 
         mem_helper.fill(
-            row.slice_from(COL_INDEX(Rv64AddSubAdapterCols, reads_aux[0])),
+            row.slice_from(COL_INDEX(Rv64BaseAluRegU16AdapterCols, reads_aux[0])),
             record.reads_aux[0].prev_timestamp,
             record.from_timestamp
         );
 
         mem_helper.fill(
-            row.slice_from(COL_INDEX(Rv64AddSubAdapterCols, reads_aux[1])),
+            row.slice_from(COL_INDEX(Rv64BaseAluRegU16AdapterCols, reads_aux[1])),
             record.reads_aux[1].prev_timestamp,
             record.from_timestamp + 1
         );
 
         Fp prev[BLOCK_FE_WIDTH];
         copy_u16_cells(prev, record.writes_aux.prev_data);
-        COL_WRITE_ARRAY(row, Rv64AddSubAdapterCols, writes_aux.prev_data, prev);
+        COL_WRITE_ARRAY(row, Rv64BaseAluRegU16AdapterCols, writes_aux.prev_data, prev);
         mem_helper.fill(
-            row.slice_from(COL_INDEX(Rv64AddSubAdapterCols, writes_aux)),
+            row.slice_from(COL_INDEX(Rv64BaseAluRegU16AdapterCols, writes_aux)),
             record.writes_aux.prev_timestamp,
             record.from_timestamp + 2
         );
