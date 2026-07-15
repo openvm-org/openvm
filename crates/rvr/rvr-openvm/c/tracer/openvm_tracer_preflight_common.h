@@ -19,8 +19,8 @@
  * to the interpreter route upstream and never reach this tracer.
  */
 
-#ifndef OPENVM_TRACER_PREFLIGHT_H
-#define OPENVM_TRACER_PREFLIGHT_H
+#ifndef OPENVM_TRACER_PREFLIGHT_COMMON_H
+#define OPENVM_TRACER_PREFLIGHT_COMMON_H
 
 #include <stddef.h>
 #include <stdint.h>
@@ -85,20 +85,6 @@ typedef struct MemoryLogEntry {
   uint64_t value;
   uint64_t prev_value;
 } MemoryLogEntry;
-
-/* Delta-only residual-memory wire. The chronological decoder reconstructs
- * prev_timestamp and prev_value. CPU, compact, partial-direct, and non-delta
- * routes continue to use the full MemoryLogEntry above. */
-typedef struct DeltaMemoryLogEntry {
-  uint32_t timestamp;
-  uint32_t address;
-  uint64_t value;
-  uint8_t kind;
-  uint8_t addr_space;
-  uint8_t width;
-  uint8_t complete;
-  uint32_t _reserved;
-} DeltaMemoryLogEntry;
 
 /* A block touched (for the first time) this segment. `block_addr` is the
  * block-aligned byte address; the host derives the AS-native block pointer and
@@ -289,26 +275,6 @@ _Static_assert(offsetof(MemoryLogEntry, value) == 24,
                "MemoryLogEntry value offset drift");
 _Static_assert(offsetof(MemoryLogEntry, prev_value) == 32,
                "MemoryLogEntry prev_value offset drift");
-_Static_assert(sizeof(DeltaMemoryLogEntry) == PREFLIGHT_DELTA_MEMORY_LOG_ENTRY_SIZE,
-               "DeltaMemoryLogEntry size drift");
-_Static_assert(_Alignof(DeltaMemoryLogEntry) == PREFLIGHT_DELTA_MEMORY_LOG_ENTRY_ALIGN,
-               "DeltaMemoryLogEntry align drift");
-_Static_assert(offsetof(DeltaMemoryLogEntry, timestamp) == 0,
-               "DeltaMemoryLogEntry timestamp offset drift");
-_Static_assert(offsetof(DeltaMemoryLogEntry, address) == 4,
-               "DeltaMemoryLogEntry address offset drift");
-_Static_assert(offsetof(DeltaMemoryLogEntry, value) == 8,
-               "DeltaMemoryLogEntry value offset drift");
-_Static_assert(offsetof(DeltaMemoryLogEntry, kind) == 16,
-               "DeltaMemoryLogEntry kind offset drift");
-_Static_assert(offsetof(DeltaMemoryLogEntry, addr_space) == 17,
-               "DeltaMemoryLogEntry addr_space offset drift");
-_Static_assert(offsetof(DeltaMemoryLogEntry, width) == 18,
-               "DeltaMemoryLogEntry width offset drift");
-_Static_assert(offsetof(DeltaMemoryLogEntry, complete) == 19,
-               "DeltaMemoryLogEntry complete offset drift");
-_Static_assert(offsetof(DeltaMemoryLogEntry, _reserved) == 20,
-               "DeltaMemoryLogEntry reserved offset drift");
 _Static_assert(sizeof(TouchedBlock) == PREFLIGHT_TOUCHED_BLOCK_SIZE,
                "TouchedBlock size drift");
 _Static_assert(_Alignof(TouchedBlock) == PREFLIGHT_TOUCHED_BLOCK_ALIGN,
@@ -428,93 +394,21 @@ _Static_assert(offsetof(ChipRecordBuf, core_off) == 20,
 _Static_assert(offsetof(ChipRecordBuf, flags) == 24,
                "ChipRecordBuf flags offset drift");
 
-static __attribute__((always_inline)) inline uint64_t
-preflight_detail_clock(void) {
-#if defined(__x86_64__)
-  _mm_lfence();
-  return __rdtsc();
-#elif defined(__aarch64__)
-  uint64_t value;
-  __asm__ volatile("isb\n\tmrs %0, cntvct_el0" : "=r"(value));
-  return value;
+#if defined(OPENVM_RVR_PREFLIGHT_NATIVE_DETAIL)
+#include "openvm_tracer_preflight_native_detail.h"
 #else
-  return 0u;
-#endif
-}
-
-/* Sample one out of roughly 512-1535 phase events. The randomized countdown
- * avoids locking onto a guest loop period while leaving unsampled operations
- * with only a decrement and predictable branch in profiling builds. */
-static __attribute__((noinline)) bool preflight_detail_phase_select(
-    Tracer* restrict t, uint32_t phase, uint64_t bytes) {
-  RvrNativeDetail* restrict detail = t->native_detail;
-  if (unlikely(detail == NULL || phase >= PREFLIGHT_DETAIL_PHASE_COUNT)) {
-    return false;
-  }
-  detail->phase_events[phase]++;
-  detail->phase_bytes[phase] += bytes;
-  uint32_t countdown = detail->sample_countdown;
-  if (likely(countdown > 1u)) {
-    detail->sample_countdown = countdown - 1u;
-    return false;
-  }
-  uint32_t state = detail->sample_state * 1664525u + 1013904223u;
-  detail->sample_state = state;
-  detail->sample_countdown = 512u + (state & 1023u);
-  detail->phase_samples[phase]++;
-  return true;
-}
-
 static __attribute__((always_inline)) inline uint64_t
 preflight_detail_phase_begin(Tracer* restrict t, uint32_t phase,
                              uint64_t bytes) {
-  if (!OPENVM_RVR_NATIVE_DETAIL_ENABLED) {
-    return 0u;
-  }
-  if (likely(!preflight_detail_phase_select(t, phase, bytes))) {
-    return 0u;
-  }
-  return preflight_detail_clock();
+  return 0u;
 }
 
 static __attribute__((always_inline)) inline void preflight_detail_phase_end(
-    Tracer* restrict t, uint32_t phase, uint64_t started) {
-  if (!OPENVM_RVR_NATIVE_DETAIL_ENABLED) {
-    return;
-  }
-  if (likely(started == 0u)) {
-    return;
-  }
-  uint64_t finished = preflight_detail_clock();
-  t->native_detail->phase_cycles[phase] += finished - started;
-}
+    Tracer* restrict t, uint32_t phase, uint64_t started) {}
 
-/* Inclusive opcode-family timing uses run boundaries instead of two clocks per
- * instruction. Long RV64IM runs therefore pay no cycle-clock overhead; custom
- * callbacks naturally include time spent across the host FFI boundary. */
 static __attribute__((always_inline)) inline void preflight_detail_family(
-    Tracer* restrict t, uint32_t family) {
-  if (!OPENVM_RVR_NATIVE_DETAIL_ENABLED) {
-    return;
-  }
-  RvrNativeDetail* restrict detail = t->native_detail;
-  if (unlikely(detail == NULL || family >= PREFLIGHT_DETAIL_FAMILY_COUNT)) {
-    return;
-  }
-  detail->family_instructions[family]++;
-  if (likely(detail->family_active != 0u &&
-             detail->current_family == family)) {
-    return;
-  }
-  uint64_t now = preflight_detail_clock();
-  if (detail->family_active != 0u) {
-    detail->family_cycles[detail->current_family] +=
-        now - detail->family_started;
-  }
-  detail->current_family = family;
-  detail->family_started = now;
-  detail->family_active = 1u;
-}
+    Tracer* restrict t, uint32_t family) {}
+#endif
 
 /* R3 (L1+L5 compact): base-ALU AddSub record holding the dynamic witness
  * only. Program-redundant operands (rd_ptr/rs1_ptr/rs2/rs2_as/rs2_imm_sign/
@@ -530,22 +424,6 @@ typedef struct PreflightAddSubRecord {
   uint16_t b[4];                      /* 28 */
   uint16_t c[4];                      /* 36 */
 } PreflightAddSubRecord;
-
-/* Stage-2 global chronological record. The old wire's three previous-access
- * timestamps and post-write value are intentionally absent: a decoder merges
- * this stream with the residual memory log, reconstructs access chronology,
- * and derives the write from the opcode and the two source values. */
-typedef struct PreflightDeltaRecord {
-  uint32_t from_pc;
-  uint32_t from_timestamp;
-  uint64_t v1;
-  uint64_t v2;
-} PreflightDeltaRecord;
-
-_Static_assert(sizeof(PreflightDeltaRecord) == PREFLIGHT_DELTA_RECORD_SIZE,
-               "PreflightDeltaRecord size drift");
-_Static_assert(_Alignof(PreflightDeltaRecord) == 8,
-               "PreflightDeltaRecord align drift");
 
 _Static_assert(sizeof(PreflightAddSubRecord) == PREFLIGHT_ADDSUB_RECORD_SIZE,
                "PreflightAddSubRecord size drift");
@@ -652,157 +530,66 @@ static __attribute__((always_inline)) inline uint64_t preflight_patch_mem_block(
   return (block & ~(mask << shift)) | ((value & mask) << shift);
 }
 
+#if defined(OPENVM_RVR_PREFLIGHT_DELTA)
+#include "openvm_tracer_preflight_delta.h"
+#else
 static __attribute__((always_inline)) inline bool
 preflight_compact_residual_memory(Tracer* restrict t) {
-  return t->delta_records != NULL &&
-         (t->delta_records->flags &
-          PREFLIGHT_RECORD_COMPACT_RESIDUAL_MEMORY) != 0u;
+  return false;
 }
-
-static constexpr uint32_t PREFLIGHT_DEVICE_AUX_TOKEN = 1u << 31;
 
 static __attribute__((always_inline)) inline bool
 preflight_device_aux(Tracer* restrict t) {
-  return t->delta_records != NULL &&
-         (t->delta_records->flags & PREFLIGHT_RECORD_DEVICE_AUX) != 0u;
+  return false;
 }
 
 static __attribute__((always_inline)) inline bool
 preflight_device_aux_oracle(Tracer* restrict t) {
-  return t->delta_records != NULL &&
-         (t->delta_records->flags & PREFLIGHT_RECORD_DEVICE_AUX_ORACLE) != 0u;
+  return false;
 }
 
 static __attribute__((always_inline)) inline bool
 preflight_device_chronology(Tracer* restrict t) {
-  return t->delta_records != NULL &&
-         (t->delta_records->flags & PREFLIGHT_RECORD_DEVICE_CHRONOLOGY) != 0u;
+  return false;
 }
 
 static __attribute__((always_inline)) inline void
-preflight_mark_dirty_memory_page(Tracer* restrict t, uint64_t address) {
-  if (likely(!preflight_device_aux(t))) {
-    return;
-  }
-  uint64_t page = address >> 12;
-  uint64_t word = page >> 6;
-  if (unlikely(word >= t->dirty_memory_pages_words ||
-               t->dirty_memory_pages == NULL)) {
-    t->delta_records->flags |= PREFLIGHT_RECORD_OVERFLOW;
-    return;
-  }
-  t->dirty_memory_pages[word] |= UINT64_C(1) << (page & 63u);
-}
+preflight_mark_dirty_memory_page(Tracer* restrict t, uint64_t address) {}
 
-static __attribute__((always_inline)) inline void preflight_append_device_patch(
-    Tracer* restrict t, void* target, uint32_t token, uint32_t kind) {
-  if (unlikely((token & PREFLIGHT_DEVICE_AUX_TOKEN) == 0u)) {
-    t->delta_records->flags |= PREFLIGHT_RECORD_OVERFLOW;
-    return;
-  }
-  uint32_t event_index = token & ~PREFLIGHT_DEVICE_AUX_TOKEN;
-  uint32_t patch_index = t->device_aux_patches_len++;
-  if (unlikely(t->device_aux_patches == NULL ||
-               patch_index >= t->device_aux_patches_cap ||
-               event_index >= t->memory_log_len)) {
-    t->delta_records->flags |= PREFLIGHT_RECORD_OVERFLOW;
-    return;
-  }
-  uint64_t expected = 0u;
-  if (unlikely(preflight_device_aux_oracle(t))) {
-    if (unlikely(t->device_aux_references == NULL ||
-                 event_index >= t->device_aux_references_cap)) {
-      t->delta_records->flags |= PREFLIGHT_RECORD_OVERFLOW;
-      return;
-    }
-    DeviceAuxReference reference = t->device_aux_references[event_index];
-    expected = kind == PREFLIGHT_DEVICE_AUX_PATCH_U32
-                   ? (uint64_t)reference.prev_timestamp
-                   : reference.prev_value;
-  }
-  t->device_aux_patches[patch_index] = (DeviceAuxPatch){
-      .target = (uint64_t)(uintptr_t)target,
-      .event_index = event_index,
-      .kind = kind,
-      .expected = expected,
-  };
-}
-
-/* Custom direct-final emitters use these stores for every predecessor field.
- * Production records receive a placeholder and an explicit patch descriptor;
- * oracle records receive the legacy-host value first, then the same device
- * value overwrites it before trace generation. */
 static __attribute__((always_inline)) inline void
 preflight_store_prev_timestamp(Tracer* restrict t, uint32_t* target,
-                               uint32_t token_or_value) {
-  if (likely(!preflight_device_aux(t))) {
-    *target = token_or_value;
-    return;
-  }
-  preflight_append_device_patch(t, target, token_or_value,
-                                PREFLIGHT_DEVICE_AUX_PATCH_U32);
-  uint32_t event_index = token_or_value & ~PREFLIGHT_DEVICE_AUX_TOKEN;
-  *target = preflight_device_aux_oracle(t) &&
-                    likely(t->device_aux_references != NULL &&
-                           event_index < t->device_aux_references_cap)
-                ? t->device_aux_references[event_index].prev_timestamp
-                : 0u;
+                               uint32_t value) {
+  *target = value;
 }
 
 static __attribute__((always_inline)) inline void preflight_store_prev_value(
-    Tracer* restrict t, void* target, uint32_t token_or_timestamp,
+    Tracer* restrict t, void* target, uint32_t timestamp,
     uint64_t legacy_value) {
-  if (likely(!preflight_device_aux(t))) {
-    memcpy(target, &legacy_value, sizeof(legacy_value));
-    return;
-  }
-  preflight_append_device_patch(t, target, token_or_timestamp,
-                                PREFLIGHT_DEVICE_AUX_PATCH_U64);
-  uint32_t event_index = token_or_timestamp & ~PREFLIGHT_DEVICE_AUX_TOKEN;
-  uint64_t value = preflight_device_aux_oracle(t) &&
-                           likely(t->device_aux_references != NULL &&
-                                  event_index < t->device_aux_references_cap)
-                       ? t->device_aux_references[event_index].prev_value
-                       : 0u;
-  memcpy(target, &value, sizeof(value));
+  memcpy(target, &legacy_value, sizeof(legacy_value));
 }
 
-/* Custom VecHeap emitters run after their traced accesses, so compact residual
- * entries no longer contain the predecessor fields they need. Capture only
- * that instruction's events in bounded scratch; ordinary instructions pay a
- * single predictable inactive check and write no side log. */
 static __attribute__((always_inline)) inline void
-preflight_begin_custom_memory_capture(RvState* restrict state) {
-  Tracer* restrict t = state->tracer;
-  if (preflight_compact_residual_memory(t)) {
-    if (unlikely(t->custom_memory_scratch == NULL ||
-                 t->custom_memory_scratch_cap == 0u)) {
-      t->delta_records->flags |= PREFLIGHT_RECORD_OVERFLOW;
-      t->custom_memory_scratch_len = UINT32_MAX;
-      return;
-    }
-    t->custom_memory_scratch_len = 0u;
-  }
-}
+preflight_begin_custom_memory_capture(RvState* restrict state) {}
 
 static __attribute__((always_inline)) inline MemoryLogEntry*
 preflight_take_custom_memory_events(Tracer* restrict t, uint32_t event_count) {
-  if (!preflight_compact_residual_memory(t)) {
-    if (unlikely(t->memory_log_len < event_count ||
-                 t->memory_log_len > t->memory_log_cap)) {
-      return NULL;
-    }
-    return t->memory_log + t->memory_log_len - event_count;
-  }
-  uint32_t captured = t->custom_memory_scratch_len;
-  t->custom_memory_scratch_len = UINT32_MAX;
-  if (unlikely(captured != event_count ||
-               event_count > t->custom_memory_scratch_cap)) {
-    t->delta_records->flags |= PREFLIGHT_RECORD_OVERFLOW;
+  if (unlikely(t->memory_log_len < event_count ||
+               t->memory_log_len > t->memory_log_cap)) {
     return NULL;
   }
-  return t->custom_memory_scratch;
+  return t->memory_log + t->memory_log_len - event_count;
 }
+
+static __attribute__((always_inline)) inline bool preflight_device_trace_pc(
+    Tracer* restrict t, uint64_t pc, uint32_t exec_idx) {
+  return false;
+}
+
+/* The shared extension wrapper exports this symbol for every tracer mode.
+ * Arena-native preflight never calls it from generated blocks. */
+static __attribute__((always_inline)) inline void trace_block(
+    RvState* restrict state, uint64_t pc, uint32_t block_insn_count) {}
+#endif
 
 /* Advance the timestamp, update the block's shadow entry, and record the block
  * on first touch this segment. Returns the block's previous-access timestamp
@@ -915,6 +702,7 @@ preflight_touch_seed_from_state(RvState* restrict state, uint8_t addr_space,
   return prev_timestamp;
 }
 
+#if defined(OPENVM_RVR_PREFLIGHT_DELTA)
 static __attribute__((always_inline)) inline uint32_t
 preflight_append_memory_record(Tracer* restrict t, uint8_t kind,
                                uint8_t addr_space, uint64_t address,
@@ -1002,6 +790,37 @@ preflight_append_memory_record(Tracer* restrict t, uint8_t kind,
                              detail_started);
   return idx;
 }
+#else
+static __attribute__((always_inline)) inline uint32_t
+preflight_append_memory_record(Tracer* restrict t, uint8_t kind,
+                               uint8_t addr_space, uint64_t address,
+                               uint8_t width, uint64_t value,
+                               uint64_t prev_value, uint32_t timestamp,
+                               uint32_t prev_timestamp,
+                               bool compact_residual) {
+  uint64_t detail_started = preflight_detail_phase_begin(
+      t, PREFLIGHT_DETAIL_PHASE_RESIDUAL_EMIT, sizeof(MemoryLogEntry));
+  uint32_t idx = t->memory_log_len++;
+  if (likely(idx < t->memory_log_cap)) {
+    MemoryLogEntry entry = {
+        .timestamp = timestamp,
+        .prev_timestamp = prev_timestamp,
+        .kind = kind,
+        .addr_space = addr_space,
+        .width = width,
+        ._pad0 = 0,
+        ._pad1 = 0,
+        .address = address,
+        .value = value,
+        .prev_value = prev_value,
+    };
+    t->memory_log[idx] = entry;
+  }
+  preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_RESIDUAL_EMIT,
+                             detail_started);
+  return idx;
+}
+#endif
 
 /* Append one self-contained memory event. `address` need not be block-aligned;
  * the shadow index and touched-block key are derived from the aligned block.
@@ -1024,8 +843,12 @@ static __attribute__((always_inline)) inline uint32_t preflight_append_memory(
   uint32_t event_index = preflight_append_memory_record(
       t, kind, addr_space, address, width, value, prev_value, timestamp,
       prev_timestamp, compact_residual);
+#if defined(OPENVM_RVR_PREFLIGHT_DELTA)
   return preflight_device_aux(t) ? (PREFLIGHT_DEVICE_AUX_TOKEN | event_index)
                                  : prev_timestamp;
+#else
+  return prev_timestamp;
+#endif
 }
 
 static __attribute__((always_inline)) inline void trace_timestamp(
@@ -1377,61 +1200,6 @@ preflight_claim_variable_record(RvState* restrict state, uint32_t chip_idx,
   return record;
 }
 
-/* Reserve one basic block's delta records with a single cursor/capacity
- * update. Generated C indexes the returned span at compile-time constants,
- * removing per-instruction claiming and bounds checks from the hot path. */
-static __attribute__((always_inline)) inline PreflightDeltaRecord*
-preflight_claim_delta_records(RvState* restrict state, uint32_t count) {
-  ChipRecordBuf* restrict buf = state->tracer->delta_records;
-  if (unlikely(buf == NULL)) {
-    return NULL;
-  }
-  if (unlikely(buf->base == NULL ||
-               buf->stride != PREFLIGHT_DELTA_RECORD_SIZE)) {
-    buf->flags |= PREFLIGHT_RECORD_OVERFLOW;
-    return NULL;
-  }
-  if (unlikely(count > UINT32_MAX / PREFLIGHT_DELTA_RECORD_SIZE)) {
-    buf->flags |= PREFLIGHT_RECORD_OVERFLOW;
-    return NULL;
-  }
-  uint32_t off = buf->len;
-  uint32_t bytes = count * PREFLIGHT_DELTA_RECORD_SIZE;
-  if (unlikely(off + bytes < off || off + bytes > buf->cap)) {
-    buf->flags |= PREFLIGHT_RECORD_OVERFLOW;
-    return NULL;
-  }
-  uint64_t detail_started = preflight_detail_phase_begin(
-      state->tracer, PREFLIGHT_DETAIL_PHASE_DELTA_EMIT, 0u);
-  buf->len = off + bytes;
-  PreflightDeltaRecord* records = (PreflightDeltaRecord*)(buf->base + off);
-  preflight_detail_phase_end(state->tracer,
-                             PREFLIGHT_DETAIL_PHASE_DELTA_EMIT,
-                             detail_started);
-  return records;
-}
-
-static __attribute__((always_inline)) inline void preflight_write_delta2(
-    RvState* restrict state, PreflightDeltaRecord* restrict record,
-    uint32_t from_pc,
-    uint32_t from_timestamp, uint64_t v1, uint64_t v2) {
-  if (unlikely(record == NULL)) {
-    return;
-  }
-  uint64_t detail_started = preflight_detail_phase_begin(
-      state->tracer, PREFLIGHT_DETAIL_PHASE_DELTA_EMIT,
-      sizeof(PreflightDeltaRecord));
-  *record = (PreflightDeltaRecord){
-      .from_pc = from_pc,
-      .from_timestamp = from_timestamp,
-      .v1 = v1,
-      .v2 = v2,
-  };
-  preflight_detail_phase_end(state->tracer,
-                             PREFLIGHT_DETAIL_PHASE_DELTA_EMIT,
-                             detail_started);
-}
-
 /* R3: compact branch record (2 reads, no write); see PreflightBranch2 layout
  * on the host side. */
 static __attribute__((always_inline)) inline void preflight_emit_branch2(
@@ -1729,21 +1497,8 @@ static __attribute__((always_inline)) inline void trace_pc_indexed(
     RvState* restrict state, uint64_t pc, uint32_t exec_idx,
     uint32_t inline_chip_idx, bool delta_inline, uint32_t detail_family) {
   Tracer* restrict t = state->tracer;
-  if (likely(preflight_device_chronology(t))) {
-    if (likely(!preflight_device_aux_oracle(t))) {
-      return;
-    }
-    uint32_t reference_idx = t->device_program_references_len++;
-    if (unlikely(t->device_program_references == NULL ||
-                 reference_idx >= t->device_program_references_cap ||
-                 pc > UINT32_MAX)) {
-      t->delta_records->flags |= PREFLIGHT_RECORD_OVERFLOW;
-      return;
-    }
-    t->device_program_references[reference_idx] = (DeviceProgramEntry){
-        .pc = (uint32_t)pc,
-        .filtered_index = exec_idx,
-    };
+  if (unlikely(preflight_device_trace_pc(t, pc, exec_idx))) {
+    return;
   }
   preflight_detail_family(t, detail_family);
   uint64_t detail_started = preflight_detail_phase_begin(
@@ -1793,27 +1548,4 @@ static __attribute__((always_inline)) inline void trace_chip(
       count);
 }
 
-static __attribute__((always_inline)) inline void trace_block(
-    RvState* restrict state, uint64_t pc, uint32_t block_insn_count) {
-  Tracer* restrict t = state->tracer;
-  if (likely(!preflight_device_chronology(t))) {
-    return;
-  }
-  uint32_t run_idx = t->program_runs_len++;
-  uint32_t chronology_offset = t->program_instruction_len;
-  uint32_t next = chronology_offset + block_insn_count;
-  if (unlikely(t->program_runs == NULL || run_idx >= t->program_runs_cap ||
-               next < chronology_offset || pc > UINT32_MAX)) {
-    t->delta_records->flags |= PREFLIGHT_RECORD_OVERFLOW;
-    return;
-  }
-  t->program_runs[run_idx] = (ProgramRunEntry){
-      .first_pc = (uint32_t)pc,
-      .instruction_count = block_insn_count,
-      .chronology_offset = chronology_offset,
-      .complete = 1u,
-  };
-  t->program_instruction_len = next;
-}
-
-#endif /* OPENVM_TRACER_PREFLIGHT_H */
+#endif /* OPENVM_TRACER_PREFLIGHT_COMMON_H */

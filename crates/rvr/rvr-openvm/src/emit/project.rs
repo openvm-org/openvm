@@ -86,7 +86,7 @@ impl RvrExecutionKind {
             Self::Metered | Self::MeteredSegment => {
                 include_str!("../../c/tracer/openvm_tracer_metered.h")
             }
-            Self::Preflight => include_str!("../../c/tracer/openvm_tracer_preflight.h"),
+            Self::Preflight => include_str!("../../c/tracer/openvm_tracer_preflight_common.h"),
         }
     }
 
@@ -663,7 +663,41 @@ impl CProject {
         let trace_path = self
             .output_dir
             .join(self.execution_kind.trace_header_filename());
-        fs::write(&trace_path, self.execution_kind.trace_header_content())?;
+        if self.execution_kind == RvrExecutionKind::Preflight {
+            fs::write(
+                self.output_dir.join("openvm_tracer_preflight_common.h"),
+                include_str!("../../c/tracer/openvm_tracer_preflight_common.h"),
+            )?;
+            if self.delta_records {
+                fs::write(
+                    self.output_dir.join("openvm_tracer_preflight_delta.h"),
+                    include_str!("../../c/tracer/openvm_tracer_preflight_delta.h"),
+                )?;
+            }
+            if self.native_detail {
+                fs::write(
+                    self.output_dir
+                        .join("openvm_tracer_preflight_native_detail.h"),
+                    include_str!("../../c/tracer/openvm_tracer_preflight_native_detail.h"),
+                )?;
+            }
+
+            let mut route_header = String::from(
+                "#ifndef OPENVM_TRACER_PREFLIGHT_H\n#define OPENVM_TRACER_PREFLIGHT_H\n\n",
+            );
+            if self.delta_records {
+                route_header.push_str("#define OPENVM_RVR_PREFLIGHT_DELTA 1\n");
+            }
+            if self.native_detail {
+                route_header.push_str("#define OPENVM_RVR_PREFLIGHT_NATIVE_DETAIL 1\n");
+            }
+            route_header.push_str(
+                "#include \"openvm_tracer_preflight_common.h\"\n\n#endif /* OPENVM_TRACER_PREFLIGHT_H */\n",
+            );
+            fs::write(&trace_path, route_header)?;
+        } else {
+            fs::write(&trace_path, self.execution_kind.trace_header_content())?;
+        }
 
         // Metered checkpoint helpers stay in a specialized header. Pure and
         // metered-cost artifacts have no generic block-checking layer.
@@ -1153,11 +1187,13 @@ impl CProject {
                 writeln!(out, "    check_counter -= {insn_count}u;").unwrap();
             }
             RvrExecutionKind::Preflight => {
-                writeln!(
-                    out,
-                    "    trace_block(state, 0x{pc:08x}ull, {insn_count}u);"
-                )
-                .unwrap();
+                if self.delta_records {
+                    writeln!(
+                        out,
+                        "    trace_block(state, 0x{pc:08x}ull, {insn_count}u);"
+                    )
+                    .unwrap();
+                }
             }
         }
     }
