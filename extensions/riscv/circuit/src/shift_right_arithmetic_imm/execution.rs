@@ -75,10 +75,10 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError> {
         let data: &mut ShiftRightArithmeticImmPreCompute = data.borrow_mut();
         self.pre_compute_impl(pc, inst, data)?;
-        Ok(execute_e1_handler::<F, Ctx>)
+        Ok(execute_e1_handler::<Ctx>)
     }
 
     #[cfg(feature = "tco")]
@@ -87,10 +87,10 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError> {
+    ) -> Result<Handler<Ctx>, StaticProgramError> {
         let data: &mut ShiftRightArithmeticImmPreCompute = data.borrow_mut();
         self.pre_compute_impl(pc, inst, data)?;
-        Ok(execute_e1_handler::<F, Ctx>)
+        Ok(execute_e1_handler::<Ctx>)
     }
 }
 
@@ -110,11 +110,11 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError> {
         let data: &mut E2PreCompute<ShiftRightArithmeticImmPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         self.pre_compute_impl(pc, inst, &mut data.data)?;
-        Ok(execute_e2_handler::<F, Ctx>)
+        Ok(execute_e2_handler::<Ctx>)
     }
 
     #[cfg(feature = "tco")]
@@ -124,18 +124,18 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError> {
+    ) -> Result<Handler<Ctx>, StaticProgramError> {
         let data: &mut E2PreCompute<ShiftRightArithmeticImmPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         self.pre_compute_impl(pc, inst, &mut data.data)?;
-        Ok(execute_e2_handler::<F, Ctx>)
+        Ok(execute_e2_handler::<Ctx>)
     }
 }
 
 #[inline(always)]
-unsafe fn execute_e12_impl<F: PrimeField32, Ctx: ExecutionCtxTrait>(
+unsafe fn execute_e12_impl<Ctx: ExecutionCtxTrait>(
     pre_compute: &ShiftRightArithmeticImmPreCompute,
-    exec_state: &mut VmExecState<F, GuestMemory, Ctx>,
+    exec_state: &mut VmExecState<GuestMemory, Ctx>,
 ) {
     let rs1 = exec_state
         .vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.rs1 as u32);
@@ -147,9 +147,9 @@ unsafe fn execute_e12_impl<F: PrimeField32, Ctx: ExecutionCtxTrait>(
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<F: PrimeField32, Ctx: ExecutionCtxTrait>(
+unsafe fn execute_e1_impl<Ctx: ExecutionCtxTrait>(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, Ctx>,
+    exec_state: &mut VmExecState<GuestMemory, Ctx>,
 ) {
     let pre_compute: &ShiftRightArithmeticImmPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<ShiftRightArithmeticImmPreCompute>())
@@ -159,9 +159,9 @@ unsafe fn execute_e1_impl<F: PrimeField32, Ctx: ExecutionCtxTrait>(
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e2_impl<F: PrimeField32, Ctx: MeteredExecutionCtxTrait>(
+unsafe fn execute_e2_impl<Ctx: MeteredExecutionCtxTrait>(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, Ctx>,
+    exec_state: &mut VmExecState<GuestMemory, Ctx>,
 ) {
     let pre_compute: &E2PreCompute<ShiftRightArithmeticImmPreCompute> = std::slice::from_raw_parts(
         pre_compute,
