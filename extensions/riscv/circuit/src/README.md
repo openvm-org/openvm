@@ -16,35 +16,39 @@ For further details, including the underlying constraints and assumptions, pleas
 
 ### Adapter
 
-#### 1. [ALU adapter](./adapters/alu.rs)
+#### 1. ALU register adapters
+
+- [Byte limbs](./adapters/alu_reg.rs)
+- [u16 limbs](./adapters/alu_reg_u16.rs)
 
 Given
 
 - `rs1`, `rs2`, and `rd` are register addresses
-- `rs2_as` is a boolean indicating if `rs2` is read from a register (as opposed to being an immediate value)
 - `from_pc` is the current program address
 
 This circuit proves the following:
 
 - A memory read from register `rs1` is performed
-- If `rs2_as` is true, a memory read from register `rs2` is performed
+- A memory read from register `rs2` is performed
 - A memory write to register `rd` is performed with the result of the operation
 - The instruction is correctly fetched from the program ROM at address `from_pc` and the program counter is set to `from_pc + 4`
 
-#### 2. [ALU u16 adapter](./adapters/alu_u16.rs)
+#### 2. ALU immediate adapters
+
+- [Byte limbs](./adapters/alu_imm.rs)
+- [u16 limbs](./adapters/alu_imm_u16.rs)
 
 Given
 
-- `rs1`, `rs2`, and `rd` are register addresses
-- `rs2_as` is a boolean indicating if `rs2` is an immediate value
+- `rs1` and `rd` are register addresses
+- `imm` is the immediate operand supplied by the core
 - `from_pc` is the current program address
 
 This circuit proves the following:
 
-- A u16-cell memory read from register `rs1` is performed
-- If `rs2_as` is false, a u16-cell memory read from register `rs2` is performed
-- If `rs2_as` is true, the low u16 immediate limb is range-checked and the remaining u16 limbs are constrained to the sign-extension value
-- A u16-cell memory write to register `rd` is performed with the result of the operation
+- A memory read from register `rs1` is performed
+- A memory write to register `rd` is performed with the result of the operation
+- The immediate supplied by the core is bound to the instruction on the execution bus
 - The instruction is correctly fetched from the program ROM at address `from_pc` and the program counter is set to `from_pc + 4`
 
 #### 3. [ALU W u16 adapter](./adapters/alu_w_u16.rs)

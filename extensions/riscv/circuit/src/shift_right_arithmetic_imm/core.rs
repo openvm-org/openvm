@@ -26,9 +26,6 @@ pub struct ShiftRightArithmeticImmCoreCols<T, const NUM_LIMBS: usize, const LIMB
     pub a: [T; NUM_LIMBS],
     pub b: [T; NUM_LIMBS],
 
-    pub is_valid: T,
-    pub bit_multiplier: T,
-    pub carry_multiplier: T,
     pub b_sign: T,
 
     pub bit_shift_marker: [T; LIMB_BITS],
@@ -78,32 +75,25 @@ where
         _from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
         let cols: &ShiftRightArithmeticImmCoreCols<_, NUM_LIMBS, LIMB_BITS> = local_core.borrow();
-        builder.assert_bool(cols.is_valid);
-        let is_valid: AB::Expr = cols.is_valid.into();
-
         let mut bit_marker_sum = AB::Expr::ZERO;
         let mut bit_shift = AB::Expr::ZERO;
+        let mut bit_multiplier = AB::Expr::ZERO;
+        let mut carry_multiplier = AB::Expr::ZERO;
         for i in 0..LIMB_BITS {
             builder.assert_bool(cols.bit_shift_marker[i]);
-            bit_marker_sum += cols.bit_shift_marker[i].into();
-            bit_shift += AB::Expr::from_usize(i) * cols.bit_shift_marker[i];
-
-            let mut when_bit_shift = builder.when(cols.bit_shift_marker[i]);
-            when_bit_shift.assert_eq(
-                cols.bit_multiplier,
-                AB::Expr::from_usize(1 << i) * is_valid.clone(),
-            );
-            when_bit_shift.assert_eq(
-                cols.carry_multiplier,
-                AB::Expr::from_usize(1 << (LIMB_BITS - i)) * is_valid.clone(),
-            );
+            let marker: AB::Expr = cols.bit_shift_marker[i].into();
+            bit_marker_sum += marker.clone();
+            bit_shift += AB::Expr::from_usize(i) * marker.clone();
+            bit_multiplier += AB::Expr::from_usize(1 << i) * marker.clone();
+            carry_multiplier += AB::Expr::from_usize(1 << (LIMB_BITS - i)) * marker;
         }
-        builder.assert_eq(bit_marker_sum, is_valid.clone());
+        builder.assert_bool(bit_marker_sum.clone());
+        let is_valid = bit_marker_sum;
 
         for (k, &b_limb) in cols.b.iter().enumerate() {
             builder.assert_eq(
                 b_limb,
-                cols.bit_shift_carry[k] + cols.bit_shift_aux[k] * cols.bit_multiplier,
+                cols.bit_shift_carry[k] + cols.bit_shift_aux[k] * bit_multiplier.clone(),
             );
         }
 
@@ -115,7 +105,6 @@ where
             limb_shift += AB::Expr::from_usize(i) * cols.limb_shift_marker[i];
 
             let mut when_limb_shift = builder.when(cols.limb_shift_marker[i]);
-            let carry_multiplier: AB::Expr = cols.carry_multiplier.into();
             for (j, &a_limb) in cols.a.iter().enumerate() {
                 if j + i > NUM_LIMBS - 1 {
                     when_limb_shift.assert_eq(
@@ -304,9 +293,6 @@ where
 
         let core_row: &mut ShiftRightArithmeticImmCoreCols<F, NUM_LIMBS, LIMB_BITS> =
             core_row.borrow_mut();
-        core_row.is_valid = F::ONE;
-        core_row.bit_multiplier = F::from_u32(1 << bit_shift);
-        core_row.carry_multiplier = F::from_u32(1 << aux_bits);
         core_row.b_sign = F::from_u16(b_sign);
         core_row.bit_shift_marker = bit_shift_marker;
         core_row.limb_shift_marker = limb_shift_marker;

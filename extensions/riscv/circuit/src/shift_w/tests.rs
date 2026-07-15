@@ -465,8 +465,6 @@ fn rv64_srlw_wrong_bit_mult_side_negative_test() {
 #[derive(Clone, Copy, Default, PartialEq)]
 struct ArithmeticShiftPrankValues<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub a: Option<[u32; NUM_LIMBS]>,
-    pub bit_multiplier: Option<u32>,
-    pub carry_multiplier: Option<u32>,
     pub b_sign: Option<u32>,
     /// Adapter sign bit of the low-word result.
     pub result_sign: Option<u32>,
@@ -506,12 +504,6 @@ fn run_negative_shift_right_arithmetic_test(
 
         if let Some(a) = prank_vals.a {
             cols.a = a.map(F::from_u32);
-        }
-        if let Some(bit_multiplier) = prank_vals.bit_multiplier {
-            cols.bit_multiplier = F::from_u32(bit_multiplier);
-        }
-        if let Some(carry_multiplier) = prank_vals.carry_multiplier {
-            cols.carry_multiplier = F::from_u32(carry_multiplier);
         }
         if let Some(b_sign) = prank_vals.b_sign {
             cols.b_sign = F::from_u32(b_sign);
@@ -582,7 +574,7 @@ fn rv64_shiftw_wrong_negative_test() {
 #[test]
 fn rv64_sraw_wrong_bit_shift_negative_test() {
     // b = 0x8000_0000 (negative word), shift by 9. Pranking bit_shift_marker to index 2 makes the
-    // bit_multiplier constraint expect 4 while the real bit_multiplier is 2^9, so it fails.
+    // core encode a shift of 2, which disagrees with the register operand.
     let b = [0, 0, 0, 128, 255, 255, 255, 255];
     let c = [9, 0, 0, 0, 0, 0, 0, 0];
     let mut bit_shift_marker = [0u32; U16_BITS];
@@ -600,17 +592,6 @@ fn rv64_sraw_wrong_limb_shift_negative_test() {
     let c = [9, 0, 0, 0, 0, 0, 0, 0];
     let prank_vals = ArithmeticShiftPrankValues {
         limb_shift_marker: Some([0, 1]),
-        ..Default::default()
-    };
-    run_negative_shift_right_arithmetic_test(SRAW, b, c, prank_vals);
-}
-
-#[test]
-fn rv64_sraw_wrong_bit_mult_negative_test() {
-    let b = [0, 0, 0, 128, 255, 255, 255, 255];
-    let c = [9, 0, 0, 0, 0, 0, 0, 0];
-    let prank_vals = ArithmeticShiftPrankValues {
-        bit_multiplier: Some(0),
         ..Default::default()
     };
     run_negative_shift_right_arithmetic_test(SRAW, b, c, prank_vals);

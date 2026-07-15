@@ -56,8 +56,8 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
 macro_rules! dispatch {
     ($execute_impl:ident, $shift_opcode:ident, $pc:ident) => {
         match $shift_opcode {
-            ShiftOpcode::SLL => Ok($execute_impl::<_, false, SllOp>),
-            ShiftOpcode::SRL => Ok($execute_impl::<_, false, SrlOp>),
+            ShiftOpcode::SLL => Ok($execute_impl::<_, SllOp>),
+            ShiftOpcode::SRL => Ok($execute_impl::<_, SrlOp>),
             ShiftOpcode::SRA => Err(StaticProgramError::InvalidInstruction($pc)),
         }
     };
@@ -139,17 +139,14 @@ where
 }
 
 #[inline(always)]
-unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_IMM: bool, OP: ShiftOp>(
+unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: ShiftOp>(
     pre_compute: &ShiftLogicalPreCompute,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let rs1 =
         exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.b as u32);
-    let rs2 = if IS_IMM {
-        pre_compute.c.to_le_bytes()
-    } else {
-        exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.c as u32)
-    };
+    let rs2 =
+        exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.c as u32);
     let rs2 = u64::from_le_bytes(rs2);
 
     // Execute the shift operation
@@ -163,18 +160,18 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_IMM: bool, OP: Shift
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, const IS_IMM: bool, OP: ShiftOp>(
+unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, OP: ShiftOp>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pre_compute: &ShiftLogicalPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<ShiftLogicalPreCompute>()).borrow();
-    execute_e12_impl::<CTX, IS_IMM, OP>(pre_compute, exec_state);
+    execute_e12_impl::<CTX, OP>(pre_compute, exec_state);
 }
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, const IS_IMM: bool, OP: ShiftOp>(
+unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, OP: ShiftOp>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
@@ -186,7 +183,7 @@ unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, const IS_IMM: bool, OP:
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<CTX, IS_IMM, OP>(&pre_compute.data, exec_state);
+    execute_e12_impl::<CTX, OP>(&pre_compute.data, exec_state);
 }
 
 trait ShiftOp {

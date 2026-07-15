@@ -85,8 +85,8 @@ where
         let data: &mut LessThanImmPreCompute = data.borrow_mut();
         let opcode = self.pre_compute_impl(pc, inst, data)?;
         Ok(match opcode {
-            LessThanImmOpcode::SLTI => execute_e1_handler::<Ctx, true, SltOp>,
-            LessThanImmOpcode::SLTIU => execute_e1_handler::<Ctx, true, SltuOp>,
+            LessThanImmOpcode::SLTI => execute_e1_handler::<Ctx, SltOp>,
+            LessThanImmOpcode::SLTIU => execute_e1_handler::<Ctx, SltuOp>,
         })
     }
 
@@ -103,8 +103,8 @@ where
         let data: &mut LessThanImmPreCompute = data.borrow_mut();
         let opcode = self.pre_compute_impl(pc, inst, data)?;
         Ok(match opcode {
-            LessThanImmOpcode::SLTI => execute_e1_handler::<Ctx, true, SltOp>,
-            LessThanImmOpcode::SLTIU => execute_e1_handler::<Ctx, true, SltuOp>,
+            LessThanImmOpcode::SLTI => execute_e1_handler::<Ctx, SltOp>,
+            LessThanImmOpcode::SLTIU => execute_e1_handler::<Ctx, SltuOp>,
         })
     }
 }
@@ -134,8 +134,8 @@ where
         data.chip_idx = chip_idx as u32;
         let opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
         Ok(match opcode {
-            LessThanImmOpcode::SLTI => execute_e2_handler::<Ctx, true, SltOp>,
-            LessThanImmOpcode::SLTIU => execute_e2_handler::<Ctx, true, SltuOp>,
+            LessThanImmOpcode::SLTI => execute_e2_handler::<Ctx, SltOp>,
+            LessThanImmOpcode::SLTIU => execute_e2_handler::<Ctx, SltuOp>,
         })
     }
 
@@ -154,8 +154,8 @@ where
         data.chip_idx = chip_idx as u32;
         let opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
         Ok(match opcode {
-            LessThanImmOpcode::SLTI => execute_e2_handler::<Ctx, true, SltOp>,
-            LessThanImmOpcode::SLTIU => execute_e2_handler::<Ctx, true, SltuOp>,
+            LessThanImmOpcode::SLTI => execute_e2_handler::<Ctx, SltOp>,
+            LessThanImmOpcode::SLTIU => execute_e2_handler::<Ctx, SltuOp>,
         })
     }
 }
@@ -181,7 +181,7 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: ImmOp>(
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, const IS_IMM: bool, OP: ImmOp>(
+unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, OP: ImmOp>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
@@ -192,7 +192,7 @@ unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, const IS_IMM: bool, OP: ImmOp>
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, const IS_IMM: bool, OP: ImmOp>(
+unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, OP: ImmOp>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {

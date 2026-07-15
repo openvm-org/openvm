@@ -17,9 +17,6 @@ struct ShiftRightArithmeticImmCoreCols {
     T a[NUM_LIMBS];
     T b[NUM_LIMBS];
 
-    T is_valid;
-    T bit_multiplier;
-    T carry_multiplier;
     T b_sign;
 
     T bit_shift_marker[LIMB_BITS];
@@ -74,9 +71,6 @@ template <size_t NUM_LIMBS, size_t LIMB_BITS> struct ShiftRightArithmeticImmCore
             LIMB_BITS - 1
         );
 
-        COL_WRITE_VALUE(row, Cols, is_valid, 1u);
-        COL_WRITE_VALUE(row, Cols, bit_multiplier, 1u << bit_shift);
-        COL_WRITE_VALUE(row, Cols, carry_multiplier, 1u << aux_bits);
         COL_WRITE_VALUE(row, Cols, b_sign, b_sign);
         COL_WRITE_ARRAY(row, Cols, b, record.b);
         COL_WRITE_ARRAY(row, Cols, a, a);

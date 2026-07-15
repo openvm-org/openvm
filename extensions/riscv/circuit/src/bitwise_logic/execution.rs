@@ -49,9 +49,9 @@ macro_rules! dispatch {
     ($execute_impl:ident, $opcode:expr, $offset:expr) => {
         Ok(
             match BaseAluOpcode::from_usize($opcode.local_opcode_idx($offset)) {
-                BaseAluOpcode::XOR => $execute_impl::<_, false, XorOp>,
-                BaseAluOpcode::OR => $execute_impl::<_, false, OrOp>,
-                BaseAluOpcode::AND => $execute_impl::<_, false, AndOp>,
+                BaseAluOpcode::XOR => $execute_impl::<_, XorOp>,
+                BaseAluOpcode::OR => $execute_impl::<_, OrOp>,
+                BaseAluOpcode::AND => $execute_impl::<_, AndOp>,
                 _ => unreachable!("BitwiseLogicExecutor received non-XOR/OR/AND opcode"),
             },
         )
@@ -145,16 +145,12 @@ where
 }
 
 #[inline(always)]
-unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_IMM: bool, OP: AluOp>(
+unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: AluOp>(
     pre_compute: &BitwiseLogicPreCompute,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let rs1 = exec_state.vm_read_bytes::<8>(RV64_REGISTER_AS, pre_compute.b as u32);
-    let rs2: [u8; 8] = if IS_IMM {
-        pre_compute.c.to_le_bytes()
-    } else {
-        exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.c as u32)
-    };
+    let rs2: [u8; 8] = exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.c as u32);
     let rs1 = u64::from_le_bytes(rs1);
     let rs2 = u64::from_le_bytes(rs2);
     let rd = <OP as AluOp>::compute(rs1, rs2);
@@ -166,18 +162,18 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_IMM: bool, OP: AluOp
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, const IS_IMM: bool, OP: AluOp>(
+unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, OP: AluOp>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pre_compute: &BitwiseLogicPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<BitwiseLogicPreCompute>()).borrow();
-    execute_e12_impl::<CTX, IS_IMM, OP>(pre_compute, exec_state);
+    execute_e12_impl::<CTX, OP>(pre_compute, exec_state);
 }
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, const IS_IMM: bool, OP: AluOp>(
+unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, OP: AluOp>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
@@ -189,7 +185,7 @@ unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, const IS_IMM: bool, OP:
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<CTX, IS_IMM, OP>(&pre_compute.data, exec_state);
+    execute_e12_impl::<CTX, OP>(&pre_compute.data, exec_state);
 }
 
 trait AluOp {

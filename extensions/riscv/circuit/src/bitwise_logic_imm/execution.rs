@@ -85,9 +85,9 @@ where
         let data: &mut BitwiseLogicImmPreCompute = data.borrow_mut();
         let opcode = self.pre_compute_impl(pc, inst, data)?;
         Ok(match opcode {
-            BitwiseImmOpcode::XORI => execute_e1_handler::<Ctx, true, XorOp>,
-            BitwiseImmOpcode::ORI => execute_e1_handler::<Ctx, true, OrOp>,
-            BitwiseImmOpcode::ANDI => execute_e1_handler::<Ctx, true, AndOp>,
+            BitwiseImmOpcode::XORI => execute_e1_handler::<Ctx, XorOp>,
+            BitwiseImmOpcode::ORI => execute_e1_handler::<Ctx, OrOp>,
+            BitwiseImmOpcode::ANDI => execute_e1_handler::<Ctx, AndOp>,
         })
     }
 
@@ -104,9 +104,9 @@ where
         let data: &mut BitwiseLogicImmPreCompute = data.borrow_mut();
         let opcode = self.pre_compute_impl(pc, inst, data)?;
         Ok(match opcode {
-            BitwiseImmOpcode::XORI => execute_e1_handler::<Ctx, true, XorOp>,
-            BitwiseImmOpcode::ORI => execute_e1_handler::<Ctx, true, OrOp>,
-            BitwiseImmOpcode::ANDI => execute_e1_handler::<Ctx, true, AndOp>,
+            BitwiseImmOpcode::XORI => execute_e1_handler::<Ctx, XorOp>,
+            BitwiseImmOpcode::ORI => execute_e1_handler::<Ctx, OrOp>,
+            BitwiseImmOpcode::ANDI => execute_e1_handler::<Ctx, AndOp>,
         })
     }
 }
@@ -136,9 +136,9 @@ where
         data.chip_idx = chip_idx as u32;
         let opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
         Ok(match opcode {
-            BitwiseImmOpcode::XORI => execute_e2_handler::<Ctx, true, XorOp>,
-            BitwiseImmOpcode::ORI => execute_e2_handler::<Ctx, true, OrOp>,
-            BitwiseImmOpcode::ANDI => execute_e2_handler::<Ctx, true, AndOp>,
+            BitwiseImmOpcode::XORI => execute_e2_handler::<Ctx, XorOp>,
+            BitwiseImmOpcode::ORI => execute_e2_handler::<Ctx, OrOp>,
+            BitwiseImmOpcode::ANDI => execute_e2_handler::<Ctx, AndOp>,
         })
     }
 
@@ -157,9 +157,9 @@ where
         data.chip_idx = chip_idx as u32;
         let opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
         Ok(match opcode {
-            BitwiseImmOpcode::XORI => execute_e2_handler::<Ctx, true, XorOp>,
-            BitwiseImmOpcode::ORI => execute_e2_handler::<Ctx, true, OrOp>,
-            BitwiseImmOpcode::ANDI => execute_e2_handler::<Ctx, true, AndOp>,
+            BitwiseImmOpcode::XORI => execute_e2_handler::<Ctx, XorOp>,
+            BitwiseImmOpcode::ORI => execute_e2_handler::<Ctx, OrOp>,
+            BitwiseImmOpcode::ANDI => execute_e2_handler::<Ctx, AndOp>,
         })
     }
 }
@@ -185,7 +185,7 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: ImmOp>(
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, const IS_IMM: bool, OP: ImmOp>(
+unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, OP: ImmOp>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
@@ -196,7 +196,7 @@ unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, const IS_IMM: bool, OP: ImmOp>
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, const IS_IMM: bool, OP: ImmOp>(
+unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, OP: ImmOp>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {

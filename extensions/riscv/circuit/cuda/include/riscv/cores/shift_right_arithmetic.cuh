@@ -24,10 +24,6 @@ template <typename T, size_t NUM_LIMBS, size_t LIMB_BITS> struct ShiftRightArith
     T b[NUM_LIMBS];
     T c[NUM_LIMBS];
 
-    T is_valid;
-
-    T bit_multiplier;
-    T carry_multiplier;
     T b_sign;
 
     T bit_shift_marker[LIMB_BITS];
@@ -122,11 +118,6 @@ template <size_t NUM_LIMBS, size_t LIMB_BITS> struct ShiftRightArithmeticCore {
             (uint32_t)record.b[NUM_LIMBS - 1] - ((uint32_t)b_sign_val << (LIMB_BITS - 1)),
             LIMB_BITS - 1
         );
-
-        COL_WRITE_VALUE(row, Cols, bit_multiplier, 1u << bit_shift);
-        COL_WRITE_VALUE(row, Cols, carry_multiplier, 1u << aux_bits);
-
-        COL_WRITE_VALUE(row, Cols, is_valid, 1u);
 
         COL_WRITE_ARRAY(row, Cols, b, record.b);
         COL_WRITE_ARRAY(row, Cols, c, record.c);
