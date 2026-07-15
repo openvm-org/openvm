@@ -18,18 +18,9 @@ static constexpr uint32_t SECP256K1_ELEM_BYTES = 32;
 static constexpr uint32_t SECP256K1_ELEM_WORDS =
     SECP256K1_ELEM_BYTES / WORD_SIZE;
 
-/* ── Direct-final VecHeap record descriptors ─────────────────────── */
+/* ── Direct-final modular IS_EQ record descriptor ─────────────── */
 
 #ifdef OPENVM_TRACER_PREFLIGHT_H
-typedef struct RvrVecHeapRecordDescriptor {
-  uint32_t blocks;
-  uint32_t adapter_size;
-  uint32_t core_size;
-  uint32_t record_size;
-  uint32_t reads_aux;
-  uint32_t writes_aux;
-} RvrVecHeapRecordDescriptor;
-
 typedef struct RvrModIsEqRecordDescriptor {
   uint32_t blocks;
   uint32_t u16_limbs;
@@ -40,23 +31,6 @@ typedef struct RvrModIsEqRecordDescriptor {
   uint32_t rd_ptr;
   uint32_t writes_aux;
 } RvrModIsEqRecordDescriptor;
-
-static inline RvrVecHeapRecordDescriptor rvr_vec_heap_descriptor(
-    uint32_t num_limbs) {
-  uint32_t blocks = num_limbs / RVR_WORD_SIZE;
-  uint32_t reads_aux = 44u;
-  uint32_t writes_aux = reads_aux + 8u * blocks;
-  uint32_t adapter_size = writes_aux + 12u * blocks;
-  uint32_t core_size = 1u + 16u * blocks;
-  return (RvrVecHeapRecordDescriptor){
-      .blocks = blocks,
-      .adapter_size = adapter_size,
-      .core_size = core_size,
-      .record_size = (adapter_size + core_size + 3u) & ~3u,
-      .reads_aux = reads_aux,
-      .writes_aux = writes_aux,
-  };
-}
 
 static inline RvrModIsEqRecordDescriptor rvr_mod_iseq_descriptor(
     uint32_t num_limbs) {
@@ -79,15 +53,16 @@ static inline RvrModIsEqRecordDescriptor rvr_mod_iseq_descriptor(
   };
 }
 
-static inline void rvr_store_u64_unaligned_le(uint8_t* dst, uint64_t value) {
+static inline void rvr_mod_iseq_store_u64_unaligned_le(uint8_t* dst,
+                                                       uint64_t value) {
   memcpy(dst, &value, sizeof(value));
 }
 
-static inline uint8_t* rvr_claim_custom_record(RvState* state,
-                                                uint32_t chip_idx,
-                                                uint32_t compact_core_off,
-                                                uint32_t record_size,
-                                                uint8_t** core) {
+static inline uint8_t* rvr_claim_mod_iseq_record(RvState* state,
+                                                 uint32_t chip_idx,
+                                                 uint32_t compact_core_off,
+                                                 uint32_t record_size,
+                                                 uint8_t** core) {
   uint8_t* record = (uint8_t*)preflight_claim_record(state, chip_idx);
   if (unlikely(record == NULL)) {
     return NULL;
@@ -106,58 +81,6 @@ static inline uint8_t* rvr_claim_custom_record(RvState* state,
 }
 #endif
 
-void rvr_ext_emit_vec_heap_record(RvState* state, uint32_t from_pc,
-                                  uint32_t local_opcode, uint32_t num_limbs,
-                                  uint32_t chip_idx) {
-#ifdef OPENVM_TRACER_PREFLIGHT_H
-  RvrVecHeapRecordDescriptor d = rvr_vec_heap_descriptor(num_limbs);
-  uint32_t event_count = 3u + 3u * d.blocks;
-  Tracer* tracer = state->tracer;
-  if (unlikely(tracer->memory_log_len < event_count ||
-               tracer->memory_log_len > tracer->memory_log_cap)) {
-    return;
-  }
-  MemoryLogEntry* events =
-      tracer->memory_log + tracer->memory_log_len - event_count;
-  uint8_t* core;
-  uint8_t* record = rvr_claim_custom_record(
-      state, chip_idx, d.adapter_size, d.record_size, &core);
-  if (unlikely(record == NULL)) {
-    return;
-  }
-
-  *(uint32_t*)(record + 0) = from_pc;
-  *(uint32_t*)(record + 4) = events[0].timestamp;
-  for (uint32_t i = 0; i < 2u; i++) {
-    *(uint32_t*)(record + 8u + 4u * i) = (uint32_t)events[i].address;
-    *(uint32_t*)(record + 20u + 4u * i) = (uint32_t)events[i].value;
-    *(uint32_t*)(record + 32u + 4u * i) = events[i].prev_timestamp;
-  }
-  *(uint32_t*)(record + 16) = (uint32_t)events[2].address;
-  *(uint32_t*)(record + 28) = (uint32_t)events[2].value;
-  *(uint32_t*)(record + 40) = events[2].prev_timestamp;
-
-  uint32_t heap_start = 3u;
-  for (uint32_t read = 0; read < 2u; read++) {
-    for (uint32_t block = 0; block < d.blocks; block++) {
-      uint32_t idx = heap_start + read * d.blocks + block;
-      uint32_t flat = read * d.blocks + block;
-      *(uint32_t*)(record + d.reads_aux + 4u * flat) =
-          events[idx].prev_timestamp;
-      rvr_store_u64_unaligned_le(core + 1u + 8u * flat,
-                                 events[idx].prev_value);
-    }
-  }
-  uint32_t write_start = heap_start + 2u * d.blocks;
-  for (uint32_t block = 0; block < d.blocks; block++) {
-    uint8_t* aux = record + d.writes_aux + 12u * block;
-    *(uint32_t*)aux = events[write_start + block].prev_timestamp;
-    arena_store_u64_le(aux + 4u, events[write_start + block].prev_value);
-  }
-  *core = (uint8_t)local_opcode;
-#endif
-}
-
 void rvr_ext_emit_mod_iseq_record(RvState* state, uint32_t from_pc,
                                   uint32_t local_opcode, uint32_t num_limbs,
                                   uint32_t chip_idx) {
@@ -172,7 +95,7 @@ void rvr_ext_emit_mod_iseq_record(RvState* state, uint32_t from_pc,
   MemoryLogEntry* events =
       tracer->memory_log + tracer->memory_log_len - event_count;
   uint8_t* core;
-  uint8_t* record = rvr_claim_custom_record(
+  uint8_t* record = rvr_claim_mod_iseq_record(
       state, chip_idx, d.adapter_size, d.record_size, &core);
   if (unlikely(record == NULL)) {
     return;
@@ -192,7 +115,7 @@ void rvr_ext_emit_mod_iseq_record(RvState* state, uint32_t from_pc,
       uint32_t flat = read * d.blocks + block;
       *(uint32_t*)(record + d.heap_read_aux + 4u * flat) =
           events[idx].prev_timestamp;
-      rvr_store_u64_unaligned_le(
+      rvr_mod_iseq_store_u64_unaligned_le(
           core + 2u + 2u * d.u16_limbs * read + 8u * block,
           events[idx].prev_value);
     }

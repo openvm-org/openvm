@@ -39,6 +39,7 @@ const MODULAR_OPCODE_COUNT: usize = Rv64ModularArithmeticOpcode::COUNT;
 /// Rust record types.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct VecHeapRecordDescriptor {
+    pub num_reads: usize,
     pub blocks: usize,
     pub adapter_size: usize,
     pub adapter_align: usize,
@@ -52,14 +53,25 @@ pub struct VecHeapRecordDescriptor {
 
 impl VecHeapRecordDescriptor {
     pub const fn new(num_limbs: usize) -> Self {
+        Self::new_with_reads(num_limbs, 2)
+    }
+
+    /// Describe a VecHeap record with `num_reads` equally-sized inputs.
+    ///
+    /// Modular and Fp2 use two inputs. Weierstrass doubling uses one, while
+    /// addition uses two; keeping the derivation here gives every family the
+    /// same dense-record ABI rather than duplicating offset arithmetic.
+    pub const fn new_with_reads(num_limbs: usize, num_reads: usize) -> Self {
         assert!(num_limbs.is_multiple_of(8));
+        assert!(num_reads > 0);
         let blocks = num_limbs / 8;
-        let reads_aux = 44;
-        let writes_aux = reads_aux + 8 * blocks;
+        let reads_aux = 20 + 12 * num_reads;
+        let writes_aux = reads_aux + 4 * num_reads * blocks;
         let adapter_size = writes_aux + 12 * blocks;
-        let core_size = 1 + 16 * blocks;
+        let core_size = 1 + 8 * num_reads * blocks;
         let record_size = (adapter_size + core_size + 3) & !3;
         Self {
+            num_reads,
             blocks,
             adapter_size,
             adapter_align: 4,
@@ -291,6 +303,7 @@ fn emit_vec_heap_record(
             &format!("{from_pc}u"),
             &format!("{local_opcode}u"),
             &format!("{num_limbs}u"),
+            "2u",
             &format!("{}u", air_index_to_c(chip_idx)),
         ],
     );
@@ -321,6 +334,7 @@ fn emit_mod_iseq_record(
 #[derive(Debug, Clone)]
 pub struct HintNonQrInstr {
     pub non_qr_bytes: Vec<u8>,
+    pub operands: [u32; 3],
 }
 
 impl ExtInstr for HintNonQrInstr {
@@ -339,6 +353,11 @@ impl ExtInstr for HintNonQrInstr {
         let len = format!("{}u", self.non_qr_bytes.len());
         ctx.emit_call_without_page_flush("ext_hint_stream_set", &["nqr", &len]);
         ctx.write_line("}");
+        ctx.trace_phantom_record(self.operands);
+    }
+
+    fn inline_record_shape(&self) -> Option<InlineRecordShape> {
+        Some(InlineRecordShape::Custom { record_size: 20 })
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -357,6 +376,7 @@ pub struct HintSqrtInstr {
     pub num_limbs: u32,
     pub modulus: Vec<u8>,
     pub non_qr_bytes: Vec<u8>,
+    pub operands: [u32; 3],
 }
 
 impl ExtInstr for HintSqrtInstr {
@@ -384,7 +404,11 @@ impl ExtInstr for HintSqrtInstr {
             &["state", &rs1, &num_limbs, "mod_", "nqr"],
         );
         ctx.write_line("}");
-        ctx.trace_timestamp();
+        ctx.trace_phantom_record(self.operands);
+    }
+
+    fn inline_record_shape(&self) -> Option<InlineRecordShape> {
+        Some(InlineRecordShape::Custom { record_size: 20 })
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -451,7 +475,7 @@ fn resolve_air_index(
 
 impl RvrExtension for ModularRvrExtension {
     fn codegen_fingerprint(&self) -> Option<Vec<u8>> {
-        let mut fingerprint = b"openvm-modular-rvr-v2\0".to_vec();
+        let mut fingerprint = b"openvm-modular-rvr-v3\0".to_vec();
         fingerprint.extend_from_slice(&(self.moduli.len() as u64).to_le_bytes());
         for modulus in &self.moduli {
             fingerprint.extend_from_slice(&modulus.num_limbs.to_le_bytes());
@@ -494,6 +518,10 @@ impl RvrExtension for ModularRvrExtension {
             (
                 "rvr_ext_bls12_381.h",
                 include_str!("../c/rvr_ext_bls12_381.h"),
+            ),
+            (
+                "rvr_ext_vec_heap_record.h",
+                include_str!("../c/rvr_ext_vec_heap_record.h"),
             ),
             ("rvr_ext_mod.h", include_str!("../c/rvr_ext_mod.h")),
         ]
@@ -711,6 +739,7 @@ impl ModularRvrExtension {
         let c_val = insn.c;
         let discriminant = (c_val & 0xffff) as u16;
         let mod_idx = (c_val >> 16) as usize;
+        let operands = [insn.a, insn.b, insn.c];
 
         match ModularPhantom::from_repr(discriminant) {
             Some(ModularPhantom::HintNonQr) => {
@@ -719,6 +748,7 @@ impl ModularRvrExtension {
                     pc,
                     instr: Box::new(HintNonQrInstr {
                         non_qr_bytes: info.non_qr_bytes.clone(),
+                        operands,
                     }),
                     source_loc: None,
                 }))
@@ -733,6 +763,7 @@ impl ModularRvrExtension {
                         num_limbs: info.num_limbs,
                         modulus: info.modulus_bytes.clone(),
                         non_qr_bytes: info.non_qr_bytes.clone(),
+                        operands,
                     }),
                     source_loc: None,
                 }))
@@ -889,6 +920,7 @@ mod tests {
             num_limbs: 4,
             modulus: vec![0u8; 32],
             non_qr_bytes: vec![0u8; 32],
+            operands: [80, 0, ModularPhantom::HintSqrt as u32],
         }
         .emit_c(&mut ctx);
 

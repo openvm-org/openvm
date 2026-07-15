@@ -10,10 +10,11 @@ use openvm_instructions::{
 use openvm_sha2_air::{Sha256Config, Sha2BlockHasherSubairConfig, Sha512Config};
 use openvm_sha2_transpiler::Rv64Sha2Opcode;
 use rvr_openvm_ir::{
-    CfgEffect, ExtEmitCtx, ExtInstr, FixedTraceRows, InstrAt, LiftedInstr, Variable,
+    CfgEffect, ExtEmitCtx, ExtInstr, FixedTraceRows, InlineRecordShape, InstrAt, LiftedInstr,
+    Variable,
 };
 use rvr_openvm_lift::{
-    air_index_codegen_fingerprint, decode_variable, fixed_trace_rows_for_chip,
+    air_index_codegen_fingerprint, air_index_to_c, decode_variable, fixed_trace_rows_for_chip,
     max_main_memory_pages_for_contiguous_range, opcode_air_idx, AirIndex, ExtensionError,
     RvrExtension, RvrExtensionCtx, RvrInstruction,
 };
@@ -37,18 +38,25 @@ const SHA256_ROWS_PER_BLOCK: u32 =
 const SHA512_ROWS_PER_BLOCK: u32 =
     rows_to_u32(<Sha512Config as Sha2BlockHasherSubairConfig>::ROWS_PER_BLOCK);
 
+/// Byte size shared by the generated-C, host-arena, and CUDA SHA-256 record ABIs.
+pub const SHA256_DIRECT_RECORD_SIZE: usize = 272;
+
 /// IR node for a SHA-256 compress instruction.
 ///
 /// Reads 32 bytes of state and 64 bytes of input block, applies SHA-256
 /// compression, writes 32 bytes of new state to the destination pointer.
 #[derive(Debug, Clone)]
 pub struct Sha256Instr {
+    /// Program counter of the SHA-256 instruction.
+    pub from_pc: u32,
     /// Register index holding destination pointer (where new state is written).
     pub dst_ptr_reg: Variable,
     /// Register index holding state pointer (previous hash state).
     pub state_ptr_reg: Variable,
     /// Register index holding input pointer (message block).
     pub input_ptr_reg: Variable,
+    /// AIR index of the SHA-256 main chip (1 row per instruction).
+    pub main_chip_idx: Option<AirIndex>,
     /// AIR index of the SHA-256 block hasher chip (ROWS_PER_BLOCK rows per instruction).
     pub block_hasher_chip_idx: Option<AirIndex>,
 }
@@ -59,10 +67,40 @@ impl ExtInstr for Sha256Instr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let dst = ctx.read_var(self.dst_ptr_reg);
-        let st = ctx.read_var(self.state_ptr_reg);
-        let inp = ctx.read_var(self.input_ptr_reg);
-        ctx.emit_call("rvr_ext_sha256", &["state", &dst, &st, &inp]);
+        let (dst, from_timestamp, dst_prev_timestamp) =
+            ctx.read_var_with_trace(self.dst_ptr_reg);
+        let (st, _, state_prev_timestamp) = ctx.read_var_with_trace(self.state_ptr_reg);
+        let (inp, _, input_prev_timestamp) = ctx.read_var_with_trace(self.input_ptr_reg);
+        let main = if ctx.inline_record_enabled() {
+            air_index_to_c(self.main_chip_idx)
+        } else {
+            u32::MAX
+        };
+        let main = format!("{main}u");
+        ctx.extern_call(
+            "rvr_ext_sha256",
+            &[
+                "state",
+                &dst,
+                &st,
+                &inp,
+                &format!("{}u", self.from_pc),
+                &from_timestamp,
+                &format!("{}u", self.dst_ptr_reg.index() * 8),
+                &format!("{}u", self.state_ptr_reg.index() * 8),
+                &format!("{}u", self.input_ptr_reg.index() * 8),
+                &dst_prev_timestamp,
+                &state_prev_timestamp,
+                &input_prev_timestamp,
+                &main,
+            ],
+        );
+    }
+
+    fn inline_record_shape(&self) -> Option<InlineRecordShape> {
+        Some(InlineRecordShape::Custom {
+            record_size: SHA256_DIRECT_RECORD_SIZE,
+        })
     }
 
     fn fixed_trace_rows(&self) -> Vec<FixedTraceRows> {
@@ -122,7 +160,9 @@ impl ExtInstr for Sha512Instr {
 /// The SHA-2 extension (SHA-256 + SHA-512 opcodes).
 /// Register this with the `ExtensionRegistry`.
 pub struct Sha2Extension {
+    sha256_main_chip_idx: Option<AirIndex>,
     sha256_block_hasher_chip_idx: Option<AirIndex>,
+    sha512_main_chip_idx: Option<AirIndex>,
     sha512_block_hasher_chip_idx: Option<AirIndex>,
 }
 
@@ -137,7 +177,9 @@ impl Sha2Extension {
         let sha512_block_hasher_chip_idx = sha512_main_chip_idx.map(AirIndex::next);
 
         Ok(Self {
+            sha256_main_chip_idx,
             sha256_block_hasher_chip_idx,
+            sha512_main_chip_idx,
             sha512_block_hasher_chip_idx,
         })
     }
@@ -146,7 +188,7 @@ impl Sha2Extension {
 impl RvrExtension for Sha2Extension {
     fn codegen_fingerprint(&self) -> Option<Vec<u8>> {
         Some(air_index_codegen_fingerprint(
-            b"openvm-sha2-rvr-v1",
+            b"openvm-sha2-rvr-v2",
             &[
                 self.sha256_main_chip_idx,
                 self.sha256_block_hasher_chip_idx,
@@ -166,9 +208,11 @@ impl RvrExtension for Sha2Extension {
             return Some(LiftedInstr::Body(InstrAt {
                 pc,
                 instr: Box::new(Sha256Instr {
+                    from_pc: pc as u32,
                     dst_ptr_reg,
                     state_ptr_reg,
                     input_ptr_reg,
+                    main_chip_idx: self.sha256_main_chip_idx,
                     block_hasher_chip_idx: self.sha256_block_hasher_chip_idx,
                 }),
                 source_loc: None,

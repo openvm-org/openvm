@@ -55,6 +55,10 @@ pub enum ArenaNativeLayout {
     Custom {
         residual_memory_chronology: bool,
     },
+    /// Extension-owned packed records with runtime row counts.
+    CustomVariableRows {
+        residual_memory_chronology: bool,
+    },
 }
 
 /// Field offsets for a conditional one-write JAL/LUI/AUIPC record.

@@ -69,13 +69,15 @@ impl Fp2Extension {
 
 #[cfg(feature = "rvr")]
 impl<F: PrimeField32> VmRvrExtension<F> for Fp2Extension {
-    fn extend_rvr(&self, extensions: &mut RvrExtensions, _ctx: Option<&RvrExtensionCtx>) {
+    fn extend_rvr(&self, extensions: &mut RvrExtensions, ctx: Option<&RvrExtensionCtx>) {
         let fp2_moduli = self
             .supported_moduli
             .iter()
             .map(|(_, m)| m.clone())
             .collect();
-        extensions.register_lifter(Fp2RvrExtension::new(fp2_moduli));
+        let extension = Fp2RvrExtension::new(fp2_moduli, ctx)
+            .expect("failed to construct rvr Fp2RvrExtension");
+        extensions.register_lifter(extension);
     }
 }
 

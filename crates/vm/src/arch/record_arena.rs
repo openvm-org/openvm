@@ -184,6 +184,10 @@ pub struct DenseRecordArena {
     /// on the arena so the mode travels WITH the data — a segment-global flag
     /// can diverge from per-arena reality (tainted AIRs, multiple builders).
     pub rvr_wire: bool,
+    /// Packed variable-row direct-final arenas carry their exact unpadded row
+    /// count alongside the byte prefix. GPU consumers use this to allocate a
+    /// device-side row index without scanning records on the host.
+    pub rvr_variable_rows: Option<usize>,
     #[cfg(feature = "rvr")]
     pub(crate) rvr_recycle: Option<(usize, crate::arch::rvr::RvrPreflightBufferPool)>,
 }
@@ -211,6 +215,7 @@ impl DenseRecordArena {
         Self {
             records_buffer: cursor,
             rvr_wire: false,
+            rvr_variable_rows: None,
             #[cfg(feature = "rvr")]
             rvr_recycle: None,
         }
@@ -228,6 +233,7 @@ impl DenseRecordArena {
         Self {
             records_buffer: cursor,
             rvr_wire: false,
+            rvr_variable_rows: None,
             rvr_recycle: Some((air, pool)),
         }
     }
@@ -243,6 +249,8 @@ impl DenseRecordArena {
             pinned::give_back(std::mem::take(self.records_buffer.get_mut()), dirty_len);
         }
         self.records_buffer = cursor;
+        self.rvr_wire = false;
+        self.rvr_variable_rows = None;
     }
 
     /// Returns the allocated size of the arena in bytes.
@@ -353,6 +361,7 @@ impl DenseRecordArena {
         Self {
             records_buffer: cursor,
             rvr_wire: false,
+            rvr_variable_rows: None,
             #[cfg(feature = "rvr")]
             rvr_recycle: None,
         }

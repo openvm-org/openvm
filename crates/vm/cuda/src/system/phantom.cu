@@ -10,6 +10,8 @@ struct PhantomRecord {
     uint32_t timestamp;
 };
 
+static_assert(sizeof(PhantomRecord) == 20, "PhantomRecord ABI drift");
+
 template <typename T> struct PhantomCols {
     T pc;
     T operands[NUM_PHANTOM_OPERANDS];

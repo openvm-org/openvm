@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+#include "rvr_ext_vec_heap_record.h"
+
 typedef struct RvState RvState;
 
 /* Direct C functions use preserve_most so generated block functions keep live

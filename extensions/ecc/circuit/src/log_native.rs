@@ -1,14 +1,15 @@
 //! Log-native record assembly for short-Weierstrass operations.
 
 use openvm_algebra_circuit::log_native::{
-    assemble_rv64_vec_heap_field_expression, ModularRecordArena, VecHeapLayout, VecHeapRecordMut,
+    assemble_rv64_vec_heap_field_expression, assemble_vec_heap_inline, vec_heap_geometry,
+    ModularRecordArena, VecHeapLayout, VecHeapRecordMut,
 };
 use openvm_circuit::arch::{
     rvr::{
         LogNativeAccessView, LogNativeAssemblerRegistry, VmRvrLogNativeExtension,
         PREFLIGHT_MEMORY_KIND_READ,
     },
-    Arena, ExecutionError, RecordArena,
+    Arena, ExecutionError, RecordArena, MEMORY_BLOCK_BYTES,
 };
 use openvm_ecc_transpiler::Rv64WeierstrassOpcode;
 use openvm_instructions::{
@@ -18,6 +19,7 @@ use openvm_instructions::{
 };
 use openvm_riscv_circuit::log_native::{Rv64IRecordArena, Rv64IoRecordArena, Rv64MRecordArena};
 use openvm_stark_backend::p3_field::PrimeField32;
+use rvr_openvm_ext_algebra::VecHeapRecordDescriptor;
 use strum::EnumCount;
 
 use crate::{
@@ -129,23 +131,37 @@ fn register_curve<F: PrimeField32, RA, const BLOCKS: usize>(
             VecHeapRecordMut<'a, 1, BLOCKS, BLOCKS>,
         >,
 {
+    let addne_opcodes = [
+        Rv64WeierstrassOpcode::EC_ADD_NE,
+        Rv64WeierstrassOpcode::SETUP_EC_ADD_NE,
+    ]
+    .map(|opcode| weierstrass_opcode(offset, opcode));
     registry.register_if(
-        [
-            Rv64WeierstrassOpcode::EC_ADD_NE,
-            Rv64WeierstrassOpcode::SETUP_EC_ADD_NE,
-        ]
-        .map(|opcode| weierstrass_opcode(offset, opcode)),
+        addne_opcodes,
         is_weierstrass_instruction,
         assemble_ec_add_ne::<F, RA, BLOCKS>,
     );
+    registry.register_inline_arena_native(
+        addne_opcodes,
+        VecHeapRecordDescriptor::new_with_reads(BLOCKS * MEMORY_BLOCK_BYTES, 2).record_size,
+        assemble_vec_heap_inline::<F, RA, 2, BLOCKS>,
+        vec_heap_geometry::<F, 2, BLOCKS>(),
+    );
+    let double_opcodes = [
+        Rv64WeierstrassOpcode::EC_DOUBLE,
+        Rv64WeierstrassOpcode::SETUP_EC_DOUBLE,
+    ]
+    .map(|opcode| weierstrass_opcode(offset, opcode));
     registry.register_if(
-        [
-            Rv64WeierstrassOpcode::EC_DOUBLE,
-            Rv64WeierstrassOpcode::SETUP_EC_DOUBLE,
-        ]
-        .map(|opcode| weierstrass_opcode(offset, opcode)),
+        double_opcodes,
         is_weierstrass_instruction,
         assemble_ec_double::<F, RA, BLOCKS>,
+    );
+    registry.register_inline_arena_native(
+        double_opcodes,
+        VecHeapRecordDescriptor::new_with_reads(BLOCKS * MEMORY_BLOCK_BYTES, 1).record_size,
+        assemble_vec_heap_inline::<F, RA, 1, BLOCKS>,
+        vec_heap_geometry::<F, 1, BLOCKS>(),
     );
 }
 

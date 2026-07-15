@@ -155,6 +155,72 @@ struct OffsetInfo {
     uint32_t local_idx;
 };
 
+__global__ void hintstore_decode_offsets(
+    const uint8_t *records,
+    size_t records_len,
+    size_t rows_used,
+    OffsetInfo *record_offsets,
+    uint32_t *error
+) {
+    if (blockIdx.x != 0 || threadIdx.x != 0) {
+        return;
+    }
+    size_t record_offset = 0;
+    size_t row = 0;
+    while (record_offset < records_len) {
+        if (records_len - record_offset < sizeof(Rv64HintStoreRecordHeader)) {
+            *error = 1;
+            return;
+        }
+        auto header = reinterpret_cast<const Rv64HintStoreRecordHeader *>(
+            records + record_offset
+        );
+        uint32_t num_words = header->num_words;
+        if (num_words == 0 || num_words > MAX_HINT_BUFFER_DWORDS) {
+            *error = 2;
+            return;
+        }
+        size_t record_bytes = sizeof(Rv64HintStoreRecordHeader) +
+                              (size_t)num_words * sizeof(Rv64HintStoreVars);
+        if (record_bytes > records_len - record_offset) {
+            *error = 3;
+            return;
+        }
+        if ((size_t)num_words > rows_used - row) {
+            *error = 4;
+            return;
+        }
+        for (uint32_t local_idx = 0; local_idx < num_words; local_idx++) {
+            record_offsets[row++] = OffsetInfo{
+                .record_offset = (uint32_t)record_offset,
+                .local_idx = local_idx,
+            };
+        }
+        record_offset += record_bytes;
+    }
+    if (record_offset != records_len || row != rows_used) {
+        *error = 5;
+    }
+}
+
+extern "C" int _hintstore_decode_offsets(
+    const uint8_t *__restrict__ d_records,
+    size_t records_len,
+    size_t rows_used,
+    OffsetInfo *__restrict__ d_record_offsets,
+    uint32_t *__restrict__ d_error,
+    cudaStream_t stream
+) {
+    hintstore_decode_offsets<<<1, 1, 0, stream>>>(
+        d_records,
+        records_len,
+        rows_used,
+        d_record_offsets,
+        d_error
+    );
+    return CHECK_KERNEL();
+}
+
 __global__ void hintstore_tracegen(
     Fp *trace,
     size_t height,

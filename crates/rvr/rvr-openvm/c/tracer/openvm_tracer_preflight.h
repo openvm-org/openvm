@@ -100,6 +100,8 @@ typedef struct ChipRecordBuf {
 static constexpr uint32_t PREFLIGHT_RECORD_DIRECT_FINAL = 1u;
 static constexpr uint32_t PREFLIGHT_RECORD_OVERFLOW = 2u;
 static constexpr uint32_t PREFLIGHT_RECORD_RESIDUAL_MEMORY_CHRONOLOGY = 4u;
+static constexpr uint32_t PREFLIGHT_RECORD_VARIABLE_ROWS = 8u;
+static constexpr uint32_t PREFLIGHT_RECORD_VARIABLE_ROW_STRIDE = 16u;
 
 typedef struct Tracer {
   ProgramLogEntry* program_log;
@@ -538,6 +540,62 @@ static __attribute__((always_inline)) inline uint32_t* preflight_claim_record(
   }
   buf->len = off + buf->stride;
   return (uint32_t*)(buf->base + off);
+}
+
+/* Fixed PhantomRecord ABI: pc, three instruction operands, timestamp. The
+ * instruction has no memory-bus accesses; the caller performs its one bare
+ * timestamp tick after writing the record. */
+static __attribute__((always_inline)) inline void preflight_emit_phantom(
+    RvState* restrict state, uint32_t chip_idx, uint32_t pc,
+    uint32_t timestamp, uint32_t a, uint32_t b, uint32_t c) {
+  uint32_t* restrict words = preflight_claim_record(state, chip_idx);
+  if (unlikely(words == NULL)) {
+    return;
+  }
+  nt_store_u32(&words[0], pc);
+  nt_store_u32(&words[1], a);
+  nt_store_u32(&words[2], b);
+  nt_store_u32(&words[3], c);
+  nt_store_u32(&words[4], timestamp);
+}
+
+/* Claim one packed variable-row direct-final record. `len` remains the byte
+ * cursor; `core_off`, unused by this layout, counts emitted trace rows so the
+ * host can pin the exact unpadded height without parsing record bytes. */
+static __attribute__((always_inline)) inline uint8_t*
+preflight_claim_variable_record(RvState* restrict state, uint32_t chip_idx,
+                                uint32_t record_bytes, uint32_t rows) {
+  Tracer* restrict t = state->tracer;
+  if (unlikely(t->chip_records == NULL || chip_idx >= t->chip_counts_len)) {
+    return NULL;
+  }
+  ChipRecordBuf* restrict buf = &t->chip_records[chip_idx];
+  if (unlikely(buf->base == NULL ||
+               (buf->flags & PREFLIGHT_RECORD_VARIABLE_ROWS) == 0u)) {
+    return NULL;
+  }
+  uint32_t off = buf->len;
+  uint32_t claim_bytes = record_bytes;
+  if ((buf->flags & PREFLIGHT_RECORD_VARIABLE_ROW_STRIDE) != 0u) {
+    if (unlikely(rows > UINT32_MAX / buf->stride)) {
+      buf->flags |= PREFLIGHT_RECORD_OVERFLOW;
+      return NULL;
+    }
+    claim_bytes = rows * buf->stride;
+    if (unlikely(record_bytes > claim_bytes)) {
+      buf->flags |= PREFLIGHT_RECORD_OVERFLOW;
+      return NULL;
+    }
+  }
+  uint32_t next = off + claim_bytes;
+  uint32_t next_rows = buf->core_off + rows;
+  if (unlikely(next < off || next > buf->cap || next_rows < buf->core_off)) {
+    buf->flags |= PREFLIGHT_RECORD_OVERFLOW;
+    return NULL;
+  }
+  buf->len = next;
+  buf->core_off = next_rows;
+  return buf->base + off;
 }
 
 /* Reserve one basic block's delta records with a single cursor/capacity

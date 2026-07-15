@@ -1453,7 +1453,17 @@ where
                                 "arena-native air {air} reported no written count"
                             ))
                         })?;
-                    arena.finish_arena_native(written, &geometry);
+                    let written_bytes = rvr_output
+                        .arena_native_written_bytes
+                        .iter()
+                        .find(|&&(written_air, _)| written_air == air)
+                        .map(|&(_, bytes)| bytes as usize)
+                        .ok_or_else(|| {
+                            ExecutionError::RvrExecution(format!(
+                                "arena-native air {air} reported no written byte cursor"
+                            ))
+                        })?;
+                    arena.finish_arena_native_sized(written, written_bytes, &geometry);
                     record_arenas[air] = arena;
                 }
                 for (air, wire_size, mut arena) in staged_wire {
