@@ -26,18 +26,21 @@ mod tests {
     type F = BabyBear;
 
     #[cfg(feature = "rvr")]
-    use std::collections::BTreeMap;
+    use std::{collections::BTreeMap, sync::Arc};
 
     #[cfg(feature = "rvr")]
     use openvm_algebra_circuit::Rv64ModularCpuBuilder;
     #[cfg(feature = "rvr")]
+    use openvm_circuit::arch::rvr::preflight::RvrArenaNativeTarget;
+    #[cfg(feature = "rvr")]
     use openvm_circuit::{
         arch::{
             rvr::{
-                generate_record_arenas_from_logs, LogNativeAssemblerRegistry, RvrPreflightOutput,
-                RvrPreflightRoute, VmRvrLogNativeExtension,
+                generate_record_arenas_from_logs, LogNativeAssemblerRegistry, RvrPreflightEngine,
+                RvrPreflightOutput, RvrPreflightRoute, VmRvrLogNativeExtension,
             },
-            MatrixRecordArena, Streams, VirtualMachine,
+            verify_segments, ContinuationVmProver, DenseRecordArena, MatrixRecordArena, Streams,
+            VirtualMachine, VmInstance,
         },
         system::SystemRecords,
         utils::test_cpu_engine,
@@ -63,7 +66,12 @@ mod tests {
 
     #[cfg(feature = "rvr")]
     fn build_rvr_modular_exe(config: &Rv64ModularConfig) -> Result<VmExe<F>> {
-        let elf = build_example_program_at_path(get_programs_dir!(), "rvr_modular", config)?;
+        build_rvr_modular_exe_named(config, "rvr_modular")
+    }
+
+    #[cfg(feature = "rvr")]
+    fn build_rvr_modular_exe_named(config: &Rv64ModularConfig, example: &str) -> Result<VmExe<F>> {
+        let elf = build_example_program_at_path(get_programs_dir!(), example, config)?;
         Ok(VmExe::from_elf(
             elf,
             Transpiler::<F>::default()
@@ -188,8 +196,27 @@ mod tests {
                         &trace_heights,
                     )
                     .expect("interpreter execution");
+                let capacities = trace_heights
+                    .iter()
+                    .zip(&widths)
+                    .map(|(&height, &width)| (height as usize, width))
+                    .collect::<Vec<_>>();
+                let mut staged = Vec::new();
+                let mut targets = BTreeMap::new();
+                for &(air, geometry) in &instance.compiled().inline_records().arena_native_airs {
+                    let (height, width) = capacities[air];
+                    let (arena, target) =
+                        MatrixRecordArena::<F>::stage_arena_native(height, width, &geometry);
+                    targets.insert(air, target);
+                    staged.push((air, geometry, arena));
+                }
                 let mut rvr_output = instance
-                    .execute_preflight_from_state(from_state.clone(), num_insns)
+                    .execute_preflight_from_state_with_arena_targets(
+                        from_state.clone(),
+                        Some(num_insns.unwrap_or(1_000_000)),
+                        &trace_heights,
+                        &targets,
+                    )
                     .expect("rvr preflight execution");
                 assert_system_records_eq(
                     &segment_label,
@@ -197,12 +224,7 @@ mod tests {
                     &rvr_output.system_records,
                 );
                 assert_modular_timestamp_deltas(exe, &rvr_output);
-                let capacities = trace_heights
-                    .iter()
-                    .zip(&widths)
-                    .map(|(&height, &width)| (height as usize, width))
-                    .collect::<Vec<_>>();
-                let rvr_arenas = generate_record_arenas_from_logs::<F, MatrixRecordArena<F>>(
+                let mut rvr_arenas = generate_record_arenas_from_logs::<F, MatrixRecordArena<F>>(
                     &registry,
                     exe,
                     &mut rvr_output,
@@ -210,6 +232,16 @@ mod tests {
                     &pc_to_air_idx,
                 )
                 .expect("rvr log-native record assembly");
+                for (air, geometry, mut arena) in staged {
+                    let written = rvr_output
+                        .arena_native_written
+                        .iter()
+                        .find(|&&(written_air, _)| written_air == air)
+                        .map(|&(_, count)| count as usize)
+                        .expect("arena-native AIR must report its written count");
+                    arena.finish_arena_native(written, &geometry);
+                    rvr_arenas[air] = arena;
+                }
                 state = rvr_output.to_state.clone();
                 outputs.push((
                     from_state,
@@ -301,6 +333,219 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "rvr")]
+    fn modular_dense_oracle(
+        exe: &VmExe<F>,
+        config: &Rv64ModularConfig,
+    ) -> (SystemRecords<F>, Vec<DenseRecordArena>, u64, Vec<String>) {
+        std::env::set_var("OPENVM_RVR_INLINE_RECORDS", "0");
+        std::env::remove_var("OPENVM_RVR_ARENA_NATIVE");
+        std::env::remove_var("OPENVM_RVR_GPU_RECORDS");
+        let (vm, _) = VirtualMachine::new_with_keygen(
+            test_cpu_engine(),
+            Rv64ModularCpuBuilder,
+            config.clone(),
+        )
+        .expect("oracle vm init");
+        let air_names = vm.air_names().map(str::to_owned).collect::<Vec<_>>();
+        let widths = vm
+            .pk()
+            .per_air
+            .iter()
+            .map(|pk| pk.vk.params.width.main_width())
+            .collect::<Vec<_>>();
+        let heights = vec![32768u32; vm.num_airs()];
+        let capacities = heights
+            .iter()
+            .zip(&widths)
+            .map(|(&height, &width)| (height as usize, width))
+            .collect::<Vec<_>>();
+        let pc_to_air_idx = vm.pc_to_air_idx(exe).expect("oracle pc-to-air mapping");
+        let RvrPreflightRoute::Rvr(instance) = vm
+            .preflight_routed_instance(exe)
+            .expect("oracle routed instance")
+        else {
+            panic!("modular oracle must route to rvr")
+        };
+        let mut output = instance
+            .execute_preflight_from_state(vm.create_initial_state(exe, Streams::default()), None)
+            .expect("verbose oracle preflight");
+        let retired = output
+            .system_records
+            .filtered_exec_frequencies
+            .iter()
+            .map(|&count| u64::from(count))
+            .sum();
+        let mut registry = LogNativeAssemblerRegistry::new();
+        config.extend_rvr_log_native(&mut registry);
+        let arenas = generate_record_arenas_from_logs::<F, DenseRecordArena>(
+            &registry,
+            exe,
+            &mut output,
+            &capacities,
+            &pc_to_air_idx,
+        )
+        .expect("verbose oracle record assembly");
+        (output.system_records, arenas, retired, air_names)
+    }
+
+    #[cfg(feature = "rvr")]
+    fn modular_dense_direct(
+        exe: &VmExe<F>,
+        config: &Rv64ModularConfig,
+        retired: u64,
+    ) -> (SystemRecords<F>, Vec<DenseRecordArena>) {
+        std::env::remove_var("OPENVM_RVR_INLINE_RECORDS");
+        std::env::remove_var("OPENVM_RVR_ARENA_NATIVE");
+        std::env::set_var("OPENVM_RVR_GPU_RECORDS", "delta");
+        let (vm, _) = VirtualMachine::new_with_keygen(
+            test_cpu_engine(),
+            Rv64ModularCpuBuilder,
+            config.clone(),
+        )
+        .expect("direct vm init");
+        let air_names = vm.air_names().map(str::to_owned).collect::<Vec<_>>();
+        let widths = vm
+            .pk()
+            .per_air
+            .iter()
+            .map(|pk| pk.vk.params.width.main_width())
+            .collect::<Vec<_>>();
+        let heights = vec![32768u32; vm.num_airs()];
+        let capacities = heights
+            .iter()
+            .zip(&widths)
+            .map(|(&height, &width)| (height as usize, width))
+            .collect::<Vec<_>>();
+        let pc_to_air_idx = vm.pc_to_air_idx(exe).expect("direct pc-to-air mapping");
+        let RvrPreflightRoute::Rvr(instance) = vm
+            .preflight_routed_instance(exe)
+            .expect("direct routed instance")
+        else {
+            panic!("modular direct arm must route to rvr")
+        };
+        let modular_native_count = instance
+            .compiled()
+            .inline_records()
+            .arena_native_airs
+            .iter()
+            .filter(|&&(air, _)| {
+                air_names[air].contains("FieldExpressionCoreAir")
+                    || air_names[air].contains("ModularIsEqualCoreAir")
+            })
+            .count();
+        assert_eq!(
+            modular_native_count, 3,
+            "all three modular mixed-opcode AIRs must migrate atomically"
+        );
+        let mut staged = Vec::new();
+        let mut targets = BTreeMap::new();
+        for &(air, geometry) in &instance.compiled().inline_records().arena_native_airs {
+            let (arena, target) =
+                DenseRecordArena::stage_arena_native(heights[air] as usize, widths[air], &geometry);
+            targets.insert(air, target);
+            staged.push((air, geometry, arena));
+        }
+        let mut output = instance
+            .execute_preflight_from_state_with_arena_targets(
+                vm.create_initial_state(exe, Streams::default()),
+                Some(retired),
+                &heights,
+                &targets,
+            )
+            .expect("direct-final modular preflight");
+        let mut registry = LogNativeAssemblerRegistry::new();
+        config.extend_rvr_log_native(&mut registry);
+        let mut arenas = generate_record_arenas_from_logs::<F, DenseRecordArena>(
+            &registry,
+            exe,
+            &mut output,
+            &capacities,
+            &pc_to_air_idx,
+        )
+        .expect("direct residual record assembly");
+        for (air, geometry, mut arena) in staged {
+            let written = output
+                .arena_native_written
+                .iter()
+                .find(|&&(written_air, _)| written_air == air)
+                .map(|&(_, count)| count as usize)
+                .expect("direct AIR must report written records");
+            arena.finish_arena_native(written, &geometry);
+            arenas[air] = arena;
+        }
+        (output.system_records, arenas)
+    }
+
+    #[cfg(feature = "rvr")]
+    fn modular_dense_delta_without_arena(
+        exe: &VmExe<F>,
+        config: &Rv64ModularConfig,
+        retired: u64,
+    ) -> (SystemRecords<F>, Vec<DenseRecordArena>) {
+        std::env::remove_var("OPENVM_RVR_INLINE_RECORDS");
+        std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
+        std::env::set_var("OPENVM_RVR_GPU_RECORDS", "delta");
+        let (vm, _) = VirtualMachine::new_with_keygen(
+            test_cpu_engine(),
+            Rv64ModularCpuBuilder,
+            config.clone(),
+        )
+        .expect("delta-without-arena vm init");
+        let air_names = vm.air_names().map(str::to_owned).collect::<Vec<_>>();
+        let widths = vm
+            .pk()
+            .per_air
+            .iter()
+            .map(|pk| pk.vk.params.width.main_width())
+            .collect::<Vec<_>>();
+        let heights = vec![32768u32; vm.num_airs()];
+        let capacities = heights
+            .iter()
+            .zip(&widths)
+            .map(|(&height, &width)| (height as usize, width))
+            .collect::<Vec<_>>();
+        let pc_to_air_idx = vm
+            .pc_to_air_idx(exe)
+            .expect("delta-without-arena pc-to-air mapping");
+        let RvrPreflightRoute::Rvr(instance) = vm
+            .preflight_routed_instance(exe)
+            .expect("delta-without-arena routed instance")
+        else {
+            panic!("delta-without-arena arm must route to rvr")
+        };
+        for (slot, air) in pc_to_air_idx.iter().enumerate() {
+            if air.is_some_and(|air| {
+                air_names[air].contains("FieldExpressionCoreAir")
+                    || air_names[air].contains("ModularIsEqualCoreAir")
+            }) {
+                assert!(
+                    !instance.compiled().inline_records().pc_slots[slot],
+                    "custom modular slot {slot} must fail closed to verbose assembly"
+                );
+            }
+        }
+        let mut output = instance
+            .execute_preflight_from_state_with_arena_targets(
+                vm.create_initial_state(exe, Streams::default()),
+                Some(retired),
+                &heights,
+                &BTreeMap::new(),
+            )
+            .expect("delta-without-arena preflight");
+        let mut registry = LogNativeAssemblerRegistry::new();
+        config.extend_rvr_log_native(&mut registry);
+        let arenas = generate_record_arenas_from_logs::<F, DenseRecordArena>(
+            &registry,
+            exe,
+            &mut output,
+            &capacities,
+            &pc_to_air_idx,
+        )
+        .expect("delta-without-arena verbose record assembly");
+        (output.system_records, arenas)
+    }
+
     #[test]
     fn test_moduli_setup() -> Result<()> {
         let moduli = ["4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787", "1000000000000000003", "2305843009213693951"]
@@ -347,6 +592,83 @@ mod tests {
 
     #[cfg(feature = "rvr")]
     #[test]
+    fn test_modular_rvr_direct_final_bytes_match_verbose_twice() -> Result<()> {
+        let bls12_381_fq = BigUint::from_str(
+            "4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787",
+        )?;
+        for (label, config, example) in [
+            (
+                "32-byte",
+                test_rv64modular_config(vec![SECP256K1_CONFIG.modulus.clone()]),
+                "rvr_modular",
+            ),
+            (
+                "48-byte",
+                test_rv64modular_config(vec![bls12_381_fq]),
+                "rvr_modular_48",
+            ),
+        ] {
+            let exe = build_rvr_modular_exe_named(&config, example)?;
+            let (oracle_system, oracle_arenas, retired, air_names) =
+                modular_dense_oracle(&exe, &config);
+            let modular_airs = air_names
+                .iter()
+                .enumerate()
+                .filter_map(|(air, name)| {
+                    (name.contains("FieldExpressionCoreAir")
+                        || name.contains("ModularIsEqualCoreAir"))
+                    .then_some(air)
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(
+                modular_airs.len(),
+                3,
+                "{label}: expected three modular AIRs"
+            );
+
+            for pass in 0..2 {
+                let (direct_system, direct_arenas) = modular_dense_direct(&exe, &config, retired);
+                assert_system_records_eq(
+                    &format!("{label} modular direct-final byte oracle pass {pass}"),
+                    &oracle_system,
+                    &direct_system,
+                );
+                for &air in &modular_airs {
+                    assert_eq!(
+                        oracle_arenas[air].allocated(),
+                        direct_arenas[air].allocated(),
+                        "{label}, pass {pass}, air {air} ({}): direct-final bytes",
+                        air_names[air]
+                    );
+                }
+            }
+            if label == "32-byte" {
+                let (fallback_system, fallback_arenas) =
+                    modular_dense_delta_without_arena(&exe, &config, retired);
+                assert_system_records_eq(
+                    "delta custom records without arena-native target",
+                    &oracle_system,
+                    &fallback_system,
+                );
+                for &air in &modular_airs {
+                    assert_eq!(
+                        oracle_arenas[air].allocated(),
+                        fallback_arenas[air].allocated(),
+                        "air {air} ({}): arena-disabled delta must use verbose bytes",
+                        air_names[air]
+                    );
+                }
+            }
+        }
+
+        std::env::remove_var("OPENVM_RVR_INLINE_RECORDS");
+        std::env::remove_var("OPENVM_RVR_ARENA_NATIVE");
+        std::env::remove_var("OPENVM_RVR_GPU_RECORDS");
+        Ok(())
+    }
+
+    #[cfg(feature = "rvr")]
+    #[test]
     fn test_modular_rvr_preflight_multi_segment_differential() -> Result<()> {
         let mut config = test_rv64modular_config(vec![SECP256K1_CONFIG.modulus.clone()]);
         config.system.segmentation_max_memory = 1;
@@ -371,6 +693,41 @@ mod tests {
             .map(|segment| (Some(segment.num_insns), segment.trace_heights))
             .collect();
         assert_rvr_differential("modular_multi", &exe, &config, segments);
+        Ok(())
+    }
+
+    #[cfg(feature = "rvr")]
+    #[test]
+    fn test_modular_rvr_multi_segment_proves_and_verifies() -> Result<()> {
+        std::env::remove_var("OPENVM_RVR_INLINE_RECORDS");
+        std::env::remove_var("OPENVM_RVR_ARENA_NATIVE");
+        std::env::set_var("OPENVM_RVR_GPU_RECORDS", "delta");
+        let mut config = test_rv64modular_config(vec![SECP256K1_CONFIG.modulus.clone()]);
+        config.system.segmentation_max_memory = 1;
+        let exe = build_rvr_modular_exe(&config)?;
+        let (vm, pk) =
+            VirtualMachine::new_with_keygen(test_cpu_engine(), Rv64ModularCpuBuilder, config)
+                .expect("proof vm init");
+        assert!(
+            vm.preflight_routed_instance(&exe)
+                .expect("proof route")
+                .is_rvr(),
+            "modular proof must use rvr preflight"
+        );
+        let vk = pk.get_vk();
+        let cached_program_trace = vm.commit_program_on_device(&exe.program);
+        let mut instance =
+            VmInstance::new(vm, Arc::new(exe), cached_program_trace).expect("proof instance init");
+        instance.set_rvr_preflight_engine(Some(RvrPreflightEngine::Rvr));
+        let proof = ContinuationVmProver::prove(&mut instance, Streams::default())
+            .expect("modular continuation prove");
+        assert!(
+            proof.per_segment.len() > 1,
+            "expected multiple proof segments"
+        );
+        verify_segments(&instance.vm.engine, &vk, &proof.per_segment)
+            .expect("verify modular proof segments");
+        std::env::remove_var("OPENVM_RVR_GPU_RECORDS");
         Ok(())
     }
 

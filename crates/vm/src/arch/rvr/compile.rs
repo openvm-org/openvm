@@ -1,7 +1,7 @@
 //! IR -> CProject -> make -> .so pipeline.
 
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fmt::{self, Write as _},
     fs::{self, File},
     io::Read,
@@ -454,6 +454,38 @@ fn collect_inline_records_meta<F: PrimeField32>(
             let Some(TraceChipIndex::Chip(air)) = chips.pc_to_chip.get(slot) else {
                 return;
             };
+            let registered_geometry = admitter.and_then(|admitter| {
+                exe.program
+                    .instructions_and_debug_infos
+                    .get(slot)
+                    .and_then(|entry| entry.as_ref())
+                    .and_then(|(instruction, _)| admitter.inline_arena_geometry_for(instruction))
+            });
+            let geometry =
+                registered_geometry
+                    .filter(|_| arena_native_enabled)
+                    .filter(|geometry| {
+                        !delta_records_requested
+                            || matches!(
+                                geometry.layout,
+                                ArenaNativeLayout::Alu3(offsets) if offsets.w.is_some()
+                            )
+                            || matches!(
+                                geometry.layout,
+                                ArenaNativeLayout::Custom {
+                                    residual_memory_chronology: true
+                                }
+                            )
+                    });
+            // Extension-owned custom records have no generic Stage-2 delta
+            // encoding. Without their complete-record arena target, keep the
+            // instruction on the verbose program-log/assembler route.
+            if delta_records_requested
+                && matches!(shape, InlineRecordShape::Custom { .. })
+                && geometry.is_none()
+            {
+                return;
+            }
             if let Some(flag) = pc_slots.get_mut(slot) {
                 *flag = true;
             }
@@ -466,24 +498,6 @@ fn collect_inline_records_meta<F: PrimeField32>(
             );
             // R4: every pc routed to one air must agree on the family's
             // arena-native geometry (present with equal values, or absent).
-            let geometry = admitter
-                .filter(|_| arena_native_enabled)
-                .and_then(|admitter| {
-                    exe.program
-                        .instructions_and_debug_infos
-                        .get(slot)
-                        .and_then(|entry| entry.as_ref())
-                        .and_then(|(instruction, _)| {
-                            admitter.inline_arena_geometry_for(instruction)
-                        })
-                })
-                .filter(|geometry| {
-                    !delta_records_requested
-                        || matches!(
-                            geometry.layout,
-                            ArenaNativeLayout::Alu3(offsets) if offsets.w.is_some()
-                        )
-                });
             let previous = arena_native.insert(air_idx, geometry);
             assert!(
                 previous.is_none_or(|p| p == geometry),
@@ -514,13 +528,43 @@ fn collect_inline_records_meta<F: PrimeField32>(
     // writes PUBLIC_VALUES_AS. Staging that AIR would discard the log-assembled
     // REVEAL rows at substitution. Taint mixed AIRs back to compact emission so
     // the host assembler composes both record sources into one arena.
+    let mut tainted_custom_delta_airs = BTreeSet::new();
     for (slot, entry) in exe.program.instructions_and_debug_infos.iter().enumerate() {
         if entry.is_none() || pc_slots.get(slot).copied().unwrap_or(false) {
             continue;
         }
         if let Some(TraceChipIndex::Chip(air)) = chips.pc_to_chip.get(slot) {
-            arena_native.remove(&(air.as_u32() as usize));
+            let air_idx = air.as_u32() as usize;
+            let removed = arena_native.remove(&air_idx).flatten();
+            if delta_records_requested
+                && matches!(
+                    removed.map(|geometry| geometry.layout),
+                    Some(ArenaNativeLayout::Custom { .. })
+                )
+            {
+                tainted_custom_delta_airs.insert(air_idx);
+            }
         }
+    }
+
+    // Custom delta records have no generic chronological wire fallback: the
+    // owning extension writes complete consumer records into an arena target.
+    // If one non-inline program slot taints that AIR, clear every inline slot
+    // on the AIR so all instructions retain their program log and use the
+    // verbose assembler. This makes mixed-AIR safety a compiler property even
+    // for extension-owned custom schemas.
+    if !tainted_custom_delta_airs.is_empty() {
+        for (slot, flag) in pc_slots.iter_mut().enumerate() {
+            if !*flag {
+                continue;
+            }
+            if let Some(TraceChipIndex::Chip(air)) = chips.pc_to_chip.get(slot) {
+                if tainted_custom_delta_airs.contains(&(air.as_u32() as usize)) {
+                    *flag = false;
+                }
+            }
+        }
+        airs.retain(|air, _| !tainted_custom_delta_airs.contains(air));
     }
 
     RvrInlineRecordsMeta {
@@ -548,6 +592,11 @@ fn validate_requested_inline_record_shape(
                 !matches!(
                     geometry.layout,
                     ArenaNativeLayout::Alu3(offsets) if offsets.w.is_some()
+                ) && !matches!(
+                    geometry.layout,
+                    ArenaNativeLayout::Custom {
+                        residual_memory_chronology: true
+                    }
                 )
             });
     if invalid_arena && !inline_meta.arena_native_airs.is_empty() {
@@ -566,6 +615,7 @@ fn inline_record_shape_size(shape: InlineRecordShape) -> usize {
         InlineRecordShape::Branch2 => rvr_openvm_ext_ffi_common::PREFLIGHT_BRANCH2_RECORD_SIZE,
         InlineRecordShape::Wr1 => rvr_openvm_ext_ffi_common::PREFLIGHT_WR1_RECORD_SIZE,
         InlineRecordShape::Rw1 => rvr_openvm_ext_ffi_common::PREFLIGHT_RW1_RECORD_SIZE,
+        InlineRecordShape::Custom { record_size } => record_size,
     }
 }
 
@@ -1153,6 +1203,7 @@ fn compile_impl<F: PrimeField32>(
             }
             if inline_records {
                 project.inline_records = true;
+                project.inline_pc_slots = (*inline_meta.pc_slots).clone();
                 project.delta_records = inline_meta.delta_records;
                 project.arena_native_airs = inline_meta
                     .arena_native_airs

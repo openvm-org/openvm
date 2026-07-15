@@ -99,6 +99,7 @@ typedef struct ChipRecordBuf {
 
 static constexpr uint32_t PREFLIGHT_RECORD_DIRECT_FINAL = 1u;
 static constexpr uint32_t PREFLIGHT_RECORD_OVERFLOW = 2u;
+static constexpr uint32_t PREFLIGHT_RECORD_RESIDUAL_MEMORY_CHRONOLOGY = 4u;
 
 typedef struct Tracer {
   ProgramLogEntry* program_log;
@@ -841,7 +842,12 @@ static __attribute__((always_inline)) inline void trace_pc_indexed(
    * entry for each arena-native instruction. Its final record is already in
    * the arena, but the delta decoder must replay its register touches before
    * reconstructing later compact records' previous timestamps. */
-  bool needs_delta_chronology = t->delta_records != NULL && arena_direct_final;
+  bool residual_memory_chronology =
+      arena_direct_final &&
+      (t->chip_records[inline_chip_idx].flags &
+       PREFLIGHT_RECORD_RESIDUAL_MEMORY_CHRONOLOGY) != 0u;
+  bool needs_delta_chronology = t->delta_records != NULL && arena_direct_final &&
+                                !residual_memory_chronology;
   if (!direct_final || needs_delta_chronology) {
     preflight_append_program(t, pc);
   }

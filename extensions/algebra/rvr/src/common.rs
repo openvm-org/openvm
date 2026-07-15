@@ -1,6 +1,7 @@
 use std::{fmt::Debug, marker::PhantomData};
 
-use rvr_openvm_ir::{CfgEffect, ExtEmitCtx, ExtInstr, Variable};
+use rvr_openvm_ir::{CfgEffect, ExtEmitCtx, ExtInstr, InlineRecordShape, Variable};
+use rvr_openvm_lift::AirIndex;
 
 use crate::{detect_known_field, format_c_byte_array, KnownField, ModOp};
 
@@ -12,6 +13,19 @@ pub(crate) trait FieldKind: Clone + Debug + Send + Sync + 'static {
     /// Returns the C suffix for a known field, or `None` to fall through to the
     /// generic path.
     fn known_suffix(field: KnownField) -> Option<&'static str>;
+
+    fn inline_record_size(_num_limbs: u32) -> Option<usize> {
+        None
+    }
+
+    fn emit_inline_record(
+        _ctx: &mut dyn ExtEmitCtx,
+        _from_pc: u32,
+        _local_opcode: u8,
+        _num_limbs: u32,
+        _chip_idx: Option<AirIndex>,
+    ) {
+    }
 }
 
 /// Extension of [`FieldKind`] for the arithmetic instruction family. Adds the
@@ -30,6 +44,26 @@ pub(crate) trait SetupKind: FieldKind {
 /// IR opname used by [`FieldIsEqInstr`]. Not implemented for Fp2 — fp2 has no IS_EQ.
 pub(crate) trait IsEqKind: FieldKind {
     fn opname() -> &'static str;
+
+    fn inline_record_size(_num_limbs: u32) -> Option<usize> {
+        None
+    }
+
+    fn emit_inline_record(
+        _ctx: &mut dyn ExtEmitCtx,
+        _from_pc: u32,
+        _local_opcode: u8,
+        _num_limbs: u32,
+        _chip_idx: Option<AirIndex>,
+    ) {
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct InlineRecordMeta {
+    from_pc: u32,
+    local_opcode: u8,
+    chip_idx: Option<AirIndex>,
 }
 
 /// Generic IR node for field arithmetic (ADD, SUB, MUL, DIV).
@@ -38,6 +72,7 @@ pub(crate) trait IsEqKind: FieldKind {
 #[derive(Debug, Clone)]
 pub(crate) struct FieldArithInstr<K: ArithKind> {
     _kind: PhantomData<K>,
+    inline_record: Option<InlineRecordMeta>,
     pub op: ModOp,
     pub rd_reg: Variable,
     pub rs1_reg: Variable,
@@ -57,6 +92,7 @@ impl<K: ArithKind> FieldArithInstr<K> {
     ) -> Self {
         Self {
             _kind: PhantomData,
+            inline_record: None,
             op,
             rd_reg,
             rs1_reg,
@@ -65,6 +101,21 @@ impl<K: ArithKind> FieldArithInstr<K> {
             modulus,
         }
     }
+
+    pub fn with_inline_record(
+        mut self,
+        from_pc: u32,
+        local_opcode: u8,
+        chip_idx: Option<AirIndex>,
+        enabled: bool,
+    ) -> Self {
+        self.inline_record = enabled.then_some(InlineRecordMeta {
+            from_pc,
+            local_opcode,
+            chip_idx,
+        });
+        self
+    }
 }
 
 /// Generic IR node for field IS_EQ.
@@ -72,6 +123,7 @@ impl<K: ArithKind> FieldArithInstr<K> {
 #[derive(Debug, Clone)]
 pub(crate) struct FieldIsEqInstr<K: IsEqKind> {
     _kind: PhantomData<K>,
+    inline_record: Option<InlineRecordMeta>,
     pub rd_reg: Variable,
     pub rs1_reg: Variable,
     pub rs2_reg: Variable,
@@ -89,12 +141,28 @@ impl<K: IsEqKind> FieldIsEqInstr<K> {
     ) -> Self {
         Self {
             _kind: PhantomData,
+            inline_record: None,
             rd_reg,
             rs1_reg,
             rs2_reg,
             num_limbs,
             modulus,
         }
+    }
+
+    pub fn with_inline_record(
+        mut self,
+        from_pc: u32,
+        local_opcode: u8,
+        chip_idx: Option<AirIndex>,
+        enabled: bool,
+    ) -> Self {
+        self.inline_record = enabled.then_some(InlineRecordMeta {
+            from_pc,
+            local_opcode,
+            chip_idx,
+        });
+        self
     }
 }
 
@@ -105,6 +173,7 @@ impl<K: IsEqKind> FieldIsEqInstr<K> {
 #[derive(Debug, Clone)]
 pub(crate) struct FieldSetupInstr<K: SetupKind> {
     _kind: PhantomData<K>,
+    inline_record: Option<InlineRecordMeta>,
     pub rd_reg: Variable,
     pub rs1_reg: Variable,
     pub rs2_reg: Variable,
@@ -122,12 +191,28 @@ impl<K: SetupKind> FieldSetupInstr<K> {
     ) -> Self {
         Self {
             _kind: PhantomData,
+            inline_record: None,
             rd_reg,
             rs1_reg,
             rs2_reg,
             num_limbs,
             modulus,
         }
+    }
+
+    pub fn with_inline_record(
+        mut self,
+        from_pc: u32,
+        local_opcode: u8,
+        chip_idx: Option<AirIndex>,
+        enabled: bool,
+    ) -> Self {
+        self.inline_record = enabled.then_some(InlineRecordMeta {
+            from_pc,
+            local_opcode,
+            chip_idx,
+        });
+        self
     }
 }
 
@@ -147,6 +232,22 @@ impl<K: SetupKind> ExtInstr for FieldSetupInstr<K> {
         ctx.write_line(&format!("static constexpr uint8_t mod_[] = {mod_literal};"));
         ctx.emit_checked_call(&name, &["state", &rd, &rs1, &rs2, &num_limbs, "mod_"]);
         ctx.write_line("}");
+        if let Some(meta) = self.inline_record.filter(|_| ctx.inline_record_enabled()) {
+            K::emit_inline_record(
+                ctx,
+                meta.from_pc,
+                meta.local_opcode,
+                self.num_limbs,
+                meta.chip_idx,
+            );
+        }
+    }
+
+    fn inline_record_shape(&self) -> Option<InlineRecordShape> {
+        self.inline_record.and_then(|_| {
+            K::inline_record_size(self.num_limbs)
+                .map(|record_size| InlineRecordShape::Custom { record_size })
+        })
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -182,6 +283,22 @@ impl<K: IsEqKind> ExtInstr for FieldIsEqInstr<K> {
             ctx.write_var(self.rd_reg, &val);
             ctx.write_line("}");
         }
+        if let Some(meta) = self.inline_record.filter(|_| ctx.inline_record_enabled()) {
+            <K as IsEqKind>::emit_inline_record(
+                ctx,
+                meta.from_pc,
+                meta.local_opcode,
+                self.num_limbs,
+                meta.chip_idx,
+            );
+        }
+    }
+
+    fn inline_record_shape(&self) -> Option<InlineRecordShape> {
+        self.inline_record.and_then(|_| {
+            <K as IsEqKind>::inline_record_size(self.num_limbs)
+                .map(|record_size| InlineRecordShape::Custom { record_size })
+        })
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -217,6 +334,22 @@ impl<K: ArithKind> ExtInstr for FieldArithInstr<K> {
             ctx.emit_call(&name, &["state", &rd, &rs1, &rs2, &num_limbs, "mod_"]);
             ctx.write_line("}");
         }
+        if let Some(meta) = self.inline_record.filter(|_| ctx.inline_record_enabled()) {
+            K::emit_inline_record(
+                ctx,
+                meta.from_pc,
+                meta.local_opcode,
+                self.num_limbs,
+                meta.chip_idx,
+            );
+        }
+    }
+
+    fn inline_record_shape(&self) -> Option<InlineRecordShape> {
+        self.inline_record.and_then(|_| {
+            K::inline_record_size(self.num_limbs)
+                .map(|record_size| InlineRecordShape::Custom { record_size })
+        })
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {

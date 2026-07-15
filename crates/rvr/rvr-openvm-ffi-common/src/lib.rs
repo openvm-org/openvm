@@ -62,6 +62,10 @@ pub const PREFLIGHT_CHIP_RECORD_FLAG_DIRECT_FINAL: u32 = 1;
 /// A generated record reservation exceeded or mismatched its target. The
 /// host rejects the segment before any decode/proof work.
 pub const PREFLIGHT_CHIP_RECORD_FLAG_OVERFLOW: u32 = 2;
+/// Every timestamp-bearing access for this direct-final record remains in the
+/// residual memory log. Delta chronology therefore needs no duplicate program
+/// log entry for the instruction.
+pub const PREFLIGHT_CHIP_RECORD_FLAG_RESIDUAL_MEMORY_CHRONOLOGY: u32 = 4;
 /// Byte size of one compact base-ALU AddSub record as stored by the preflight
 /// tracer (R3 L1+L5): the dynamic witness only — from_pc, from_timestamp, the
 /// three access prev_timestamps, the old rd block, and the b/c operand limbs.

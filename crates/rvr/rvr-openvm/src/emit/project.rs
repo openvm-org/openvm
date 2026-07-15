@@ -217,6 +217,10 @@ pub struct CProject {
     /// R3: emit inline compact records (log-suppressed) for migrated opcodes.
     /// Preflight mode only; see [`Self::inline_records_enabled`].
     pub inline_records: bool,
+    /// Effective per-program-slot inline decision after compiler-level
+    /// whole-AIR taint. This, rather than the IR node's shape alone, controls
+    /// program-log suppression and delta reservation.
+    pub inline_pc_slots: Vec<bool>,
     /// Stage-2 chronological 32-byte delta stream. This is a stronger compact
     /// mode: all inline AIRs share one execution-ordered backing and reserve
     /// their record slots once per basic-block entry.
@@ -249,6 +253,7 @@ impl CProject {
             num_airs: None,
             native_debug_info: false,
             inline_records: false,
+            inline_pc_slots: Vec::new(),
             delta_records: false,
             arena_native_airs: std::collections::BTreeMap::new(),
         }
@@ -545,6 +550,16 @@ impl CProject {
             .pc_to_exec_idx
             .get(slot)
             .unwrap_or_else(|| panic!("pc {pc:#x} outside execution-frequency map"))
+    }
+
+    fn pc_emits_inline_record(&self, pc: u64) -> bool {
+        let Some(offset) = pc.checked_sub(self.pc_base) else {
+            return false;
+        };
+        self.inline_pc_slots
+            .get((offset / 4) as usize)
+            .copied()
+            .unwrap_or(false)
     }
 
     /// Write all C project files.
@@ -872,7 +887,7 @@ impl CProject {
                 .instructions
                 .iter()
                 .filter(|instr_at| {
-                    instr_emits_inline_record(&instr_at.instr)
+                    self.pc_emits_inline_record(instr_at.pc)
                         && matches!(
                             self.chip_idx_for_pc(instr_at.pc),
                             TraceChipIndex::Chip(air)
@@ -881,7 +896,7 @@ impl CProject {
                 })
                 .count();
             let terminator = (!matches!(block.terminator, Terminator::FallThrough)
-                && inline_record_shape_for_terminator(&block.terminator).is_some()
+                && self.pc_emits_inline_record(block.terminator_pc)
                 && matches!(
                     self.chip_idx_for_pc(block.terminator_pc),
                     TraceChipIndex::Chip(air)
@@ -924,16 +939,19 @@ impl CProject {
                 instr_at.source_loc.as_ref(),
             );
             if inline_records {
-                let chip_idx = match self.chip_idx_for_pc(instr_at.pc) {
-                    TraceChipIndex::Chip(air) => air.as_u32(),
-                    TraceChipIndex::NoChip => u32::MAX,
+                let chip_idx = match (
+                    self.pc_emits_inline_record(instr_at.pc),
+                    self.chip_idx_for_pc(instr_at.pc),
+                ) {
+                    (true, TraceChipIndex::Chip(air)) => air.as_u32(),
+                    _ => u32::MAX,
                 };
                 ctx.set_current_instr(chip_idx, instr_at.pc);
             }
             ctx.trace_pc(
                 instr_at.pc,
                 self.exec_idx_for_pc(instr_at.pc),
-                inline_records && instr_emits_inline_record(&instr_at.instr),
+                inline_records && self.pc_emits_inline_record(instr_at.pc),
             );
             instr_at.instr.emit_c(&mut ctx);
             Self::emit_context_scope(&mut body, &mut ctx);
@@ -952,16 +970,19 @@ impl CProject {
                 block.terminator_source_loc.as_ref(),
             );
             if inline_records {
-                let chip_idx = match self.chip_idx_for_pc(block.terminator_pc) {
-                    TraceChipIndex::Chip(air) => air.as_u32(),
-                    TraceChipIndex::NoChip => u32::MAX,
+                let chip_idx = match (
+                    self.pc_emits_inline_record(block.terminator_pc),
+                    self.chip_idx_for_pc(block.terminator_pc),
+                ) {
+                    (true, TraceChipIndex::Chip(air)) => air.as_u32(),
+                    _ => u32::MAX,
                 };
                 ctx.set_current_instr(chip_idx, block.terminator_pc);
             }
             ctx.trace_pc(
                 block.terminator_pc,
                 self.exec_idx_for_pc(block.terminator_pc),
-                inline_records && inline_record_shape_for_terminator(&block.terminator).is_some(),
+                inline_records && self.pc_emits_inline_record(block.terminator_pc),
             );
         }
         let tc = TermCtx { valid_blocks };

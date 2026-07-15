@@ -1,8 +1,11 @@
+use std::mem::{align_of, size_of};
+
 use openvm_circuit::{
     arch::{
         rvr::{
-            LogNativeAccessView, LogNativeAssemblerRegistry, PreflightMemoryAccessAux,
-            VmRvrLogNativeExtension, PREFLIGHT_MEMORY_KIND_READ, PREFLIGHT_MEMORY_KIND_WRITE,
+            ArenaNativeGeometry, ArenaNativeLayout, LogNativeAccessView,
+            LogNativeAssemblerRegistry, PreflightMemoryAccessAux, VmRvrLogNativeExtension,
+            PREFLIGHT_MEMORY_KIND_READ, PREFLIGHT_MEMORY_KIND_WRITE,
         },
         Arena, ExecutionError, RecordArena, MEMORY_BLOCK_BYTES,
     },
@@ -18,12 +21,16 @@ use openvm_riscv_circuit::{
     adapters::rv64_u16_block_to_bytes, log_native::Rv64StandardRecordArena,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
+use rvr_openvm_ext_keccak::{KECCAKF_DIRECT_RECORD_SIZE, XORIN_DIRECT_RECORD_SIZE};
 
 use crate::{
     keccakf_op::trace::{KeccakfMetadata, KeccakfRecord, KeccakfRecordLayout},
-    xorin::trace::{XorinVmMetadata, XorinVmRecordLayout, XorinVmRecordMut},
+    xorin::trace::{XorinVmMetadata, XorinVmRecordHeader, XorinVmRecordLayout, XorinVmRecordMut},
     Keccak256, Keccak256Rv64Config, KECCAK_RATE_BYTES, KECCAK_RATE_MEM_OPS, KECCAK_WIDTH_MEM_OPS,
 };
+
+const _: () = assert!(size_of::<KeccakfRecord>() == KECCAKF_DIRECT_RECORD_SIZE);
+const _: () = assert!(size_of::<XorinVmRecordHeader>() == XORIN_DIRECT_RECORD_SIZE);
 
 pub trait KeccakRecordArena<F>:
     Arena
@@ -56,11 +63,104 @@ where
             [KeccakfOpcode::KECCAKF.global_opcode()],
             assemble_keccakf_op::<F, RA>,
         );
+        registry.register_inline_arena_native(
+            [KeccakfOpcode::KECCAKF.global_opcode()],
+            size_of::<KeccakfRecord>(),
+            assemble_keccakf_op_inline::<F, RA>,
+            ArenaNativeGeometry {
+                adapter_size: size_of::<KeccakfRecord>(),
+                adapter_align: align_of::<KeccakfRecord>(),
+                core_size: 0,
+                core_align: 1,
+                core_off_matrix: 0,
+                layout: ArenaNativeLayout::Custom {
+                    residual_memory_chronology: true,
+                },
+            },
+        );
         registry.register(
             [XorinOpcode::XORIN.global_opcode()],
             assemble_xorin::<F, RA>,
         );
+        registry.register_inline_arena_native(
+            [XorinOpcode::XORIN.global_opcode()],
+            size_of::<XorinVmRecordHeader>(),
+            assemble_xorin_inline::<F, RA>,
+            ArenaNativeGeometry {
+                adapter_size: size_of::<XorinVmRecordHeader>(),
+                adapter_align: align_of::<XorinVmRecordHeader>(),
+                core_size: 0,
+                core_align: 1,
+                core_off_matrix: 0,
+                layout: ArenaNativeLayout::Custom {
+                    residual_memory_chronology: true,
+                },
+            },
+        );
     }
+}
+
+fn assemble_xorin_inline<F: PrimeField32, RA: KeccakRecordArena<F>>(
+    arena: &mut RA,
+    _instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError> {
+    if compact.len() != size_of::<XorinVmRecordHeader>() {
+        return Err(rvr_error(format!(
+            "invalid XORIN inline record size {} at pc {pc:#x}; expected {}",
+            compact.len(),
+            size_of::<XorinVmRecordHeader>()
+        )));
+    }
+    let record = arena.alloc(XorinVmRecordLayout::new(XorinVmMetadata {}));
+    unsafe {
+        std::ptr::copy_nonoverlapping(
+            compact.as_ptr(),
+            (record.inner as *mut XorinVmRecordHeader).cast::<u8>(),
+            compact.len(),
+        );
+    }
+    if record.inner.from_pc != pc {
+        return Err(rvr_error(format!(
+            "XORIN inline record pc mismatch: record={:#x}, program={pc:#x}",
+            record.inner.from_pc
+        )));
+    }
+    Ok(())
+}
+
+fn assemble_keccakf_op_inline<F: PrimeField32, RA: KeccakRecordArena<F>>(
+    arena: &mut RA,
+    _instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError> {
+    if compact.len() != size_of::<KeccakfRecord>() {
+        return Err(rvr_error(format!(
+            "invalid Keccakf inline record size {} at pc {pc:#x}; expected {}",
+            compact.len(),
+            size_of::<KeccakfRecord>()
+        )));
+    }
+    let record = arena.alloc(KeccakfRecordLayout::new(KeccakfMetadata));
+    // The generated C layout is statically asserted against this repr(C)
+    // record. Copying through bytes also avoids imposing its alignment on the
+    // compact wire slice.
+    unsafe {
+        std::ptr::copy_nonoverlapping(
+            compact.as_ptr(),
+            (record as *mut KeccakfRecord).cast::<u8>(),
+            compact.len(),
+        );
+    }
+    if record.pc != pc {
+        return Err(rvr_error(format!(
+            "Keccakf inline record pc mismatch: record={:#x}, program={pc:#x}",
+            record.pc
+        )));
+    }
+    Ok(())
 }
 
 impl<F, RA> VmRvrLogNativeExtension<F, RA> for Keccak256Rv64Config

@@ -13,7 +13,10 @@ pub(crate) use common::{
     ArithKind, FieldArithInstr, FieldIsEqInstr, FieldKind, FieldSetupInstr, IsEqKind, SetupKind,
 };
 pub use fp2::Fp2RvrExtension;
-pub use modular::{HintNonQrInstr, HintSqrtInstr, ModularRvrExtension};
+pub use modular::{
+    HintNonQrInstr, HintSqrtInstr, ModIsEqRecordDescriptor, ModularRvrExtension,
+    VecHeapRecordDescriptor,
+};
 use num_bigint::BigUint;
 use openvm_instructions::riscv::{RV64_NUM_REGISTERS, RV64_REGISTER_BYTES};
 use rvr_openvm_ir::Variable;

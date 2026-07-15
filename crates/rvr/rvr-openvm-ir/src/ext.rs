@@ -20,6 +20,8 @@ pub enum InlineRecordShape {
     Branch2,
     Wr1,
     Rw1,
+    /// Extension-owned record bytes with an extension-defined consumer.
+    Custom { record_size: usize },
 }
 
 /// Program-redundant fields required when an ALU compact record is emitted
@@ -83,8 +85,19 @@ impl PageAddressSpace {
 /// recorded read or write advances it. A peek reads the current value and
 /// preserves the current timestamp.
 pub trait ExtEmitCtx {
+    /// Whether this instruction may emit its compiler-approved custom record.
+    fn inline_record_enabled(&self) -> bool {
+        false
+    }
+
     /// Read a variable through a VM memory access.
     fn read_var(&mut self, var: Variable) -> String;
+
+    /// Read a variable while retaining its ordinary memory chronology and
+    /// return `(value, from_timestamp, previous_timestamp)`.
+    fn read_var_with_trace(&mut self, var: Variable) -> (String, String, String) {
+        (self.read_var(var), "0u".to_string(), "0u".to_string())
+    }
 
     /// Read a variable at the current logical memory timestamp.
     fn peek_var(&mut self, var: Variable) -> String;
