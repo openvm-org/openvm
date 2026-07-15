@@ -4,11 +4,14 @@ use num_bigint::BigUint;
 use openvm_algebra_transpiler::Fp2Opcode;
 use openvm_instructions::{instruction::Instruction, LocalOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
-use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
+use rvr_openvm_ir::{Instr, InstrAt, LiftedInstr};
 use rvr_openvm_lift::{helpers::decode_reg, RvrExtension};
 use strum::EnumCount;
 
-use crate::{detect_known_field, format_c_byte_array, ModOp};
+use crate::{
+    pad_modulus, ArithKind, FieldArithInstr, FieldKind, FieldSetupInstr, KnownField, ModOp,
+    SetupKind,
+};
 
 /// Per-modulus info for the Fp2 extension. Fp2 lifting never consults a
 /// non-QR, so we only carry the padded modulus and limb count.
@@ -22,14 +25,7 @@ fn make_moduli(moduli: Vec<BigUint>) -> Vec<ModulusInfo> {
 }
 
 fn make_modulus_info(modulus: BigUint) -> ModulusInfo {
-    let bytes = modulus.bits().div_ceil(8) as usize;
-    assert!(
-        bytes <= 48,
-        "modulus exceeds maximum supported size of 384 bits"
-    );
-    let num_limbs = if bytes <= 32 { 32u32 } else { 48u32 };
-    let mut modulus_bytes = modulus.to_bytes_le();
-    modulus_bytes.resize(num_limbs as usize, 0);
+    let (modulus_bytes, num_limbs) = pad_modulus(&modulus);
     ModulusInfo {
         modulus_bytes,
         num_limbs,
@@ -38,81 +34,35 @@ fn make_modulus_info(modulus: BigUint) -> ModulusInfo {
 
 // ── Fp2 arithmetic IR ────────────────────────────────────────────────────────
 
-/// IR node for Fp2 arithmetic (ADD, SUB, MUL, DIV).
 #[derive(Debug, Clone)]
-pub struct Fp2ArithInstr {
-    pub op: ModOp,
-    pub rd_reg: Reg,
-    pub rs1_reg: Reg,
-    pub rs2_reg: Reg,
-    pub num_limbs: u32,
-    pub modulus: Vec<u8>,
+pub(crate) struct Fp2Kind;
+
+impl FieldKind for Fp2Kind {
+    fn c_prefix() -> &'static str {
+        "fp2"
+    }
+    fn known_suffix(field: KnownField) -> Option<&'static str> {
+        field.fp2_c_suffix()
+    }
 }
 
-impl ExtInstr for Fp2ArithInstr {
-    fn opname(&self) -> &str {
+impl ArithKind for Fp2Kind {
+    fn opname() -> &'static str {
         "fp2_arith"
     }
-
-    fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rd = ctx.read_reg(self.rd_reg);
-        let rs1 = ctx.read_reg(self.rs1_reg);
-        let rs2 = ctx.read_reg(self.rs2_reg);
-        let op_name = self.op.c_name();
-        let fp2_suffix = detect_known_field(&self.modulus).and_then(|f| f.fp2_c_suffix());
-        if let Some(suffix) = fp2_suffix {
-            let name = format!("rvr_ext_fp2_{op_name}_{suffix}");
-            ctx.extern_call(&name, &["state", &rd, &rs1, &rs2]);
-        } else {
-            let mod_literal = format_c_byte_array(&self.modulus);
-            ctx.write_line("{");
-            ctx.write_line(&format!("static const uint8_t mod_[] = {mod_literal};"));
-            let name = format!("rvr_ext_fp2_{op_name}");
-            let num_limbs = format!("{}u", self.num_limbs);
-            ctx.extern_call(&name, &["state", &rd, &rs1, &rs2, &num_limbs, "mod_"]);
-            ctx.write_line("}");
-        }
-    }
-
-    fn clone_box(&self) -> Box<dyn ExtInstr> {
-        Box::new(self.clone())
-    }
-
-    fn is_block_end(&self) -> bool {
-        false
-    }
 }
 
-/// IR node for Fp2 SETUP (SETUP_ADDSUB, SETUP_MULDIV).
-#[derive(Debug, Clone)]
-pub struct Fp2SetupInstr {
-    pub rd_reg: Reg,
-    pub rs1_reg: Reg,
-    pub rs2_reg: Reg,
-    pub num_limbs: u32,
-}
-
-impl ExtInstr for Fp2SetupInstr {
-    fn opname(&self) -> &str {
+impl SetupKind for Fp2Kind {
+    fn opname() -> &'static str {
         "fp2_setup"
     }
-
-    fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rd = ctx.read_reg(self.rd_reg);
-        let rs1 = ctx.read_reg(self.rs1_reg);
-        let rs2 = ctx.read_reg(self.rs2_reg);
-        let num_limbs = format!("{}u", self.num_limbs);
-        ctx.extern_call("rvr_ext_fp2_setup", &["state", &rd, &rs1, &rs2, &num_limbs]);
-    }
-
-    fn clone_box(&self) -> Box<dyn ExtInstr> {
-        Box::new(self.clone())
-    }
-
-    fn is_block_end(&self) -> bool {
-        false
-    }
 }
+
+/// IR node for Fp2 arithmetic (ADD, SUB, MUL, DIV).
+pub(crate) type Fp2ArithInstr = FieldArithInstr<Fp2Kind>;
+
+/// IR node for Fp2 SETUP (SETUP_ADDSUB, SETUP_MULDIV).
+pub(crate) type Fp2SetupInstr = FieldSetupInstr<Fp2Kind>;
 
 // ── Fp2 extension ────────────────────────────────────────────────────────────
 
@@ -175,53 +125,48 @@ impl Fp2RvrExtension {
         let rs1_reg = decode_reg(insn.b);
         let rs2_reg = decode_reg(insn.c);
 
-        let instr: Instr = match local {
-            x if x == Fp2Opcode::ADD as usize => Instr::Ext(Box::new(Fp2ArithInstr {
-                op: ModOp::Add,
-                rd_reg,
-                rs1_reg,
-                rs2_reg,
-                num_limbs: info.num_limbs,
-                modulus: info.modulus_bytes.clone(),
-            })),
-            x if x == Fp2Opcode::SUB as usize => Instr::Ext(Box::new(Fp2ArithInstr {
-                op: ModOp::Sub,
-                rd_reg,
-                rs1_reg,
-                rs2_reg,
-                num_limbs: info.num_limbs,
-                modulus: info.modulus_bytes.clone(),
-            })),
-            x if x == Fp2Opcode::SETUP_ADDSUB as usize => Instr::Ext(Box::new(Fp2SetupInstr {
-                rd_reg,
-                rs1_reg,
-                rs2_reg,
-                num_limbs: info.num_limbs,
-            })),
-            x if x == Fp2Opcode::MUL as usize => Instr::Ext(Box::new(Fp2ArithInstr {
-                op: ModOp::Mul,
-                rd_reg,
-                rs1_reg,
-                rs2_reg,
-                num_limbs: info.num_limbs,
-                modulus: info.modulus_bytes.clone(),
-            })),
-            x if x == Fp2Opcode::DIV as usize => Instr::Ext(Box::new(Fp2ArithInstr {
-                op: ModOp::Div,
-                rd_reg,
-                rs1_reg,
-                rs2_reg,
-                num_limbs: info.num_limbs,
-                modulus: info.modulus_bytes.clone(),
-            })),
-            x if x == Fp2Opcode::SETUP_MULDIV as usize => Instr::Ext(Box::new(Fp2SetupInstr {
-                rd_reg,
-                rs1_reg,
-                rs2_reg,
-                num_limbs: info.num_limbs,
-            })),
-            _ => return None,
-        };
+        let instr: Instr =
+            match local {
+                x if x == Fp2Opcode::ADD as usize => Instr::Ext(Box::new(Fp2ArithInstr::new(
+                    ModOp::Add,
+                    rd_reg,
+                    rs1_reg,
+                    rs2_reg,
+                    info.num_limbs,
+                    info.modulus_bytes.clone(),
+                ))),
+                x if x == Fp2Opcode::SUB as usize => Instr::Ext(Box::new(Fp2ArithInstr::new(
+                    ModOp::Sub,
+                    rd_reg,
+                    rs1_reg,
+                    rs2_reg,
+                    info.num_limbs,
+                    info.modulus_bytes.clone(),
+                ))),
+                x if x == Fp2Opcode::SETUP_ADDSUB as usize => Instr::Ext(Box::new(
+                    Fp2SetupInstr::new(rd_reg, rs1_reg, rs2_reg, info.num_limbs),
+                )),
+                x if x == Fp2Opcode::MUL as usize => Instr::Ext(Box::new(Fp2ArithInstr::new(
+                    ModOp::Mul,
+                    rd_reg,
+                    rs1_reg,
+                    rs2_reg,
+                    info.num_limbs,
+                    info.modulus_bytes.clone(),
+                ))),
+                x if x == Fp2Opcode::DIV as usize => Instr::Ext(Box::new(Fp2ArithInstr::new(
+                    ModOp::Div,
+                    rd_reg,
+                    rs1_reg,
+                    rs2_reg,
+                    info.num_limbs,
+                    info.modulus_bytes.clone(),
+                ))),
+                x if x == Fp2Opcode::SETUP_MULDIV as usize => Instr::Ext(Box::new(
+                    Fp2SetupInstr::new(rd_reg, rs1_reg, rs2_reg, info.num_limbs),
+                )),
+                _ => return None,
+            };
 
         Some(LiftedInstr::Body(InstrAt {
             pc,

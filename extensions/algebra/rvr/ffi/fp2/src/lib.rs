@@ -7,11 +7,10 @@
 
 use std::{ffi::c_void, marker::PhantomData};
 
-use halo2curves_axiom::ff::Field;
 use num_bigint::BigUint;
 use rvr_openvm_ext_algebra_ffi_common::{
-    exec_op, mod_inverse, read_bigint, read_bls12_381_fq, read_field_256, write_bigint,
-    write_bls12_381_fq, write_field_256, FieldArith,
+    known_field_op_fn, mod_inverse, read_bigint, read_bls12_381_fq, read_field_256, write_bigint,
+    write_bls12_381_fq, write_field_256, FieldArith, KnownFieldArith,
 };
 use rvr_openvm_ext_ffi_common::{
     rd_mem_words_traced, trace_mem_access_range, wr_mem_words_traced, AS_MEMORY, WORD_SIZE,
@@ -31,7 +30,7 @@ struct UnknownComplexField {
 
 // ── KnownComplexField impls ─────────────────────────────────────────────────
 
-impl FieldArith for KnownComplexField<halo2curves_axiom::bn256::Fq2> {
+impl KnownFieldArith for KnownComplexField<halo2curves_axiom::bn256::Fq2> {
     type Elem = halo2curves_axiom::bn256::Fq2;
 
     #[inline(always)]
@@ -47,30 +46,9 @@ impl FieldArith for KnownComplexField<halo2curves_axiom::bn256::Fq2> {
         write_field_256::<halo2curves_axiom::bn256::Fq>(state, ptr, &val.c0);
         write_field_256::<halo2curves_axiom::bn256::Fq>(state, ptr + FIELD_256_BYTES, &val.c1);
     }
-
-    #[inline(always)]
-    fn add(&self, a: Self::Elem, b: Self::Elem) -> Self::Elem {
-        a + b
-    }
-    #[inline(always)]
-    fn sub(&self, a: Self::Elem, b: Self::Elem) -> Self::Elem {
-        a - b
-    }
-    #[inline(always)]
-    fn mul(&self, a: Self::Elem, b: Self::Elem) -> Self::Elem {
-        a * b
-    }
-    #[inline(always)]
-    fn div(&self, a: Self::Elem, b: Self::Elem) -> Self::Elem {
-        a * b.invert().unwrap()
-    }
-    #[inline(always)]
-    fn is_eq(&self, a: &Self::Elem, b: &Self::Elem) -> bool {
-        a == b
-    }
 }
 
-impl FieldArith for KnownComplexField<blstrs::Fp2> {
+impl KnownFieldArith for KnownComplexField<blstrs::Fp2> {
     type Elem = blstrs::Fp2;
 
     #[inline(always)]
@@ -85,27 +63,6 @@ impl FieldArith for KnownComplexField<blstrs::Fp2> {
     unsafe fn write_elem(&self, state: *mut c_void, ptr: u64, val: &Self::Elem) {
         write_bls12_381_fq(state, ptr, &val.c0());
         write_bls12_381_fq(state, ptr + BLS12_381_ELEM_BYTES, &val.c1());
-    }
-
-    #[inline(always)]
-    fn add(&self, a: Self::Elem, b: Self::Elem) -> Self::Elem {
-        a + b
-    }
-    #[inline(always)]
-    fn sub(&self, a: Self::Elem, b: Self::Elem) -> Self::Elem {
-        a - b
-    }
-    #[inline(always)]
-    fn mul(&self, a: Self::Elem, b: Self::Elem) -> Self::Elem {
-        a * b
-    }
-    #[inline(always)]
-    fn div(&self, a: Self::Elem, b: Self::Elem) -> Self::Elem {
-        a * b.invert().unwrap()
-    }
-    #[inline(always)]
-    fn is_eq(&self, a: &Self::Elem, b: &Self::Elem) -> bool {
-        a == b
     }
 }
 
@@ -161,25 +118,13 @@ impl FieldArith for UnknownComplexField {
 
 // ── Macros ──────────────────────────────────────────────────────────────────
 
-macro_rules! field_op_fn {
-    ($name:ident, $field:ty, $op:ident) => {
-        /// # Safety
-        /// `state` must be a valid `RvState` pointer.
-        #[no_mangle]
-        pub unsafe extern "C" fn $name(state: *mut c_void, rd: u64, rs1: u64, rs2: u64) {
-            let f = KnownComplexField::<$field>(PhantomData);
-            exec_op(&f, state, rd, rs1, rs2, |f, a, b| f.$op(a, b));
-        }
-    };
-}
-
 macro_rules! define_fp2_ffi {
     ($field:ty, $suffix:ident) => {
         paste::paste! {
-            field_op_fn!([<rvr_ext_fp2_add_ $suffix>], $field, add);
-            field_op_fn!([<rvr_ext_fp2_sub_ $suffix>], $field, sub);
-            field_op_fn!([<rvr_ext_fp2_mul_ $suffix>], $field, mul);
-            field_op_fn!([<rvr_ext_fp2_div_ $suffix>], $field, div);
+            known_field_op_fn!([<rvr_ext_fp2_add_ $suffix>], KnownComplexField, $field, add);
+            known_field_op_fn!([<rvr_ext_fp2_sub_ $suffix>], KnownComplexField, $field, sub);
+            known_field_op_fn!([<rvr_ext_fp2_mul_ $suffix>], KnownComplexField, $field, mul);
+            known_field_op_fn!([<rvr_ext_fp2_div_ $suffix>], KnownComplexField, $field, div);
         }
     };
 }
@@ -189,32 +134,12 @@ define_fp2_ffi!(blstrs::Fp2, bls12_381);
 
 // ── Generic FFI (fallback for unknown moduli) ────────────────────────────────
 
-macro_rules! unknown_field_op_fn {
-    ($name:ident, $op:ident) => {
-        /// # Safety
-        /// `state` must be a valid `RvState` pointer. `modulus_ptr` must point
-        /// to `num_limbs` bytes.
-        #[no_mangle]
-        pub unsafe extern "C" fn $name(
-            state: *mut c_void,
-            rd_ptr: u64,
-            rs1_ptr: u64,
-            rs2_ptr: u64,
-            num_limbs: u32,
-            modulus_ptr: *const u8,
-        ) {
-            let modulus =
-                BigUint::from_bytes_le(std::slice::from_raw_parts(modulus_ptr, num_limbs as usize));
-            let f = UnknownComplexField { modulus, num_limbs };
-            exec_op(&f, state, rd_ptr, rs1_ptr, rs2_ptr, |f, a, b| f.$op(a, b));
-        }
-    };
-}
+use rvr_openvm_ext_algebra_ffi_common::unknown_field_op_fn;
 
-unknown_field_op_fn!(rvr_ext_fp2_add, add);
-unknown_field_op_fn!(rvr_ext_fp2_sub, sub);
-unknown_field_op_fn!(rvr_ext_fp2_mul, mul);
-unknown_field_op_fn!(rvr_ext_fp2_div, div);
+unknown_field_op_fn!(rvr_ext_fp2_add, UnknownComplexField, add);
+unknown_field_op_fn!(rvr_ext_fp2_sub, UnknownComplexField, sub);
+unknown_field_op_fn!(rvr_ext_fp2_mul, UnknownComplexField, mul);
+unknown_field_op_fn!(rvr_ext_fp2_div, UnknownComplexField, div);
 
 /// # Safety
 /// `state` must be a valid `RvState` pointer.

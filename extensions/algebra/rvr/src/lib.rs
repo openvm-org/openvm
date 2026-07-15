@@ -6,13 +6,31 @@
 //! (modular + phantoms; ships the lift-time C and libsecp256k1 inputs for
 //! k256) and [`Fp2RvrExtension`] (fp2 ops only; Rust-only).
 
+mod common;
 mod fp2;
 mod modular;
 
-pub use fp2::{Fp2ArithInstr, Fp2RvrExtension, Fp2SetupInstr};
-pub use modular::{
-    HintNonQrInstr, HintSqrtInstr, ModArithInstr, ModIsEqInstr, ModSetupInstr, ModularRvrExtension,
+pub(crate) use common::{
+    ArithKind, FieldArithInstr, FieldIsEqInstr, FieldKind, FieldSetupInstr, IsEqKind, SetupKind,
 };
+pub use fp2::Fp2RvrExtension;
+pub use modular::{HintNonQrInstr, HintSqrtInstr, ModularRvrExtension};
+use num_bigint::BigUint;
+
+/// Zero-pad `modulus` to the canonical limb boundary (32 or 48 bytes).
+///
+/// Returns `(padded_bytes_le, num_limbs)`. Panics if the modulus exceeds 384 bits.
+fn pad_modulus(modulus: &BigUint) -> (Vec<u8>, u32) {
+    let bytes = modulus.bits().div_ceil(8) as usize;
+    assert!(
+        bytes <= 48,
+        "modulus exceeds maximum supported size of 384 bits"
+    );
+    let num_limbs = if bytes <= 32 { 32u32 } else { 48u32 };
+    let mut modulus_bytes = modulus.to_bytes_le();
+    modulus_bytes.resize(num_limbs as usize, 0);
+    (modulus_bytes, num_limbs)
+}
 
 // ── Modular arithmetic operations ────────────────────────────────────────────
 
