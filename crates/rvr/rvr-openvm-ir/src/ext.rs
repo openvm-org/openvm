@@ -39,6 +39,13 @@ pub struct ArenaAlu3Baked {
     pub local_opcode: u8,
 }
 
+/// Program-redundant fields for the dedicated AddI arena-native record.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ArenaAddIBaked {
+    pub imm_low11: u16,
+    pub imm_sign: u16,
+}
+
 /// Program-redundant fields for a conditional one-write record.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ArenaWr1Baked {
@@ -143,6 +150,18 @@ pub trait ExtEmitCtx {
         _imm_value: u64,
         _arena: Option<ArenaAlu3Baked>,
         _result_template: &str,
+    ) -> bool {
+        false
+    }
+
+    /// Emit the dedicated AddI compact record. Unlike the legacy mixed-ALU
+    /// adapter, AddI consumes no timestamp for its immediate operand.
+    fn emit_addi_inline(
+        &mut self,
+        _rd: Variable,
+        _rs1: Variable,
+        _imm_value: u64,
+        _arena: Option<ArenaAddIBaked>,
     ) -> bool {
         false
     }

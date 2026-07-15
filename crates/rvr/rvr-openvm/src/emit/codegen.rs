@@ -43,6 +43,7 @@ impl ArenaNativeGeometry {
 /// core offsets are relative to the core record start.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ArenaNativeLayout {
+    AddI(AddIArenaFieldOffsets),
     Alu3(Alu3ArenaFieldOffsets),
     Branch2(Branch2ArenaFieldOffsets),
     LoadStore(LoadStoreArenaFieldOffsets),
@@ -59,6 +60,22 @@ pub enum ArenaNativeLayout {
     CustomVariableRows {
         residual_memory_chronology: bool,
     },
+}
+
+/// Offsets for the AddI full record: a one-read one-u16-block-write
+/// immediate adapter and the dedicated AddI core witness.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AddIArenaFieldOffsets {
+    pub from_pc: usize,
+    pub from_timestamp: usize,
+    pub rd_ptr: usize,
+    pub rs1_ptr: usize,
+    pub read_prev_ts: usize,
+    pub write_prev_ts: usize,
+    pub write_prev_data: usize,
+    pub core_rs1: usize,
+    pub core_imm_low11: usize,
+    pub core_imm_sign: usize,
 }
 
 /// Field offsets for a conditional one-write JAL/LUI/AUIPC record.

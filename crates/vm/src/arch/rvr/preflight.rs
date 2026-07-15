@@ -2219,7 +2219,7 @@ mod tests {
         }
     }
 
-    const OPCODE_ADD: usize = 0x200;
+    const OPCODE_ADDI: usize = 0x290;
     const OPCODE_LOADD: usize = 0x210;
     const OPCODE_LOADBU: usize = 0x211;
     const OPCODE_LOADHU: usize = 0x212;
@@ -2240,7 +2240,7 @@ mod tests {
 
     fn addi(rd: usize, rs1: usize, imm: usize) -> Instruction<BabyBear> {
         Instruction::from_usize(
-            VmOpcode::from_usize(OPCODE_ADD),
+            VmOpcode::from_usize(OPCODE_ADDI),
             [reg(rd), reg(rs1), imm, 1, 0],
         )
     }

@@ -316,7 +316,12 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
         inventory.add_executor_chip(auipc);
 
         inventory.next_air::<Rv64AddIAir>()?;
-        let addi = Rv64AddIChipGpu::new(range_checker.clone(), timestamp_max_bits);
+        let addi = Rv64AddIChipGpu::new(
+            range_checker.clone(),
+            timestamp_max_bits,
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
+            self.rvr_decode.clone(),
+        );
         inventory.add_executor_chip(addi);
 
         inventory.next_air::<Rv64ShiftLogicalImmAir>()?;

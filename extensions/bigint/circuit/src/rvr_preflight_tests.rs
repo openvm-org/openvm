@@ -27,8 +27,8 @@ use openvm_instructions::{
     LocalOpcode, SystemOpcode,
 };
 use openvm_riscv_transpiler::{
-    BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, LessThanOpcode, MulOpcode,
-    Rv64LoadStoreOpcode, ShiftOpcode,
+    BaseAluImmOpcode, BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, LessThanOpcode,
+    MulOpcode, Rv64LoadStoreOpcode, ShiftOpcode,
 };
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
@@ -42,7 +42,7 @@ fn reg(idx: usize) -> usize {
 
 fn addi(rd: usize, rs1: usize, imm: usize) -> Instruction<F> {
     Instruction::from_usize(
-        BaseAluOpcode::ADD.global_opcode(),
+        BaseAluImmOpcode::ADDI.global_opcode(),
         [reg(rd), reg(rs1), imm, RV64_REGISTER_AS as usize, 0],
     )
 }

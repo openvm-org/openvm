@@ -1,8 +1,9 @@
 //! RV64I instruction nodes and C code generation.
 
 use rvr_openvm_ir::{
-    ArenaAlu3Baked, ArenaWr1Baked, CfgBranchCond, CfgEffect, CfgIntWidth, CfgJumpKind, CfgOp,
-    CfgOperand, CfgResultWidth, CfgTerm, ExtEmitCtx, ExtInstr, InlineRecordShape, MemWidth,
+    ArenaAddIBaked, ArenaAlu3Baked, ArenaWr1Baked, CfgBranchCond, CfgEffect, CfgIntWidth,
+    CfgJumpKind, CfgOp, CfgOperand, CfgResultWidth, CfgTerm, ExtEmitCtx, ExtInstr,
+    InlineRecordShape, MemWidth,
 };
 
 use crate::instruction::{hex_u64, reg_operand, Reg, RA, ZERO};
@@ -217,8 +218,24 @@ impl ExtInstr for Rv64IInstr {
                             ctx.emit_reg3_inline(*rd, *lhs, *rhs, arena, &result_template)
                         }
                         CfgOperand::Const(imm) if *immediate => {
+                            if *op == AluOp::Add && !*word {
+                                let encoded = (*imm as u32) & 0x00ff_ffff;
+                                if ctx.emit_addi_inline(
+                                    *rd,
+                                    *lhs,
+                                    *imm,
+                                    Some(ArenaAddIBaked {
+                                        imm_low11: (encoded & 0x7ff) as u16,
+                                        imm_sign: ((encoded >> 11) & 1) as u16,
+                                    }),
+                                ) {
+                                    return;
+                                }
+                            }
                             let local_opcode = match op {
-                                AluOp::Add | AluOp::Slt | AluOp::Sll | AluOp::Sra => Some(0),
+                                AluOp::Add if *word => Some(0),
+                                AluOp::Add => None,
+                                AluOp::Slt | AluOp::Sll | AluOp::Sra => Some(0),
                                 AluOp::Sltu | AluOp::Srl => Some(1),
                                 AluOp::Xor => Some(2),
                                 AluOp::Or => Some(3),

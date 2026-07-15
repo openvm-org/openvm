@@ -2,7 +2,8 @@ use std::{collections::HashSet, fmt::Write, mem::size_of};
 
 use openvm_instructions::PUBLIC_VALUES_AS;
 use rvr_openvm_ir::{
-    ArenaAlu3Baked, ArenaRw1Baked, ArenaWr1Baked, MemWidth, PageAddressSpace, Variable,
+    ArenaAddIBaked, ArenaAlu3Baked, ArenaRw1Baked, ArenaWr1Baked, MemWidth, PageAddressSpace,
+    Variable,
 };
 use rvr_state::NUM_REGS;
 
@@ -779,6 +780,122 @@ impl<'a> EmitContext<'a> {
                 w.result_sign
             ));
         }
+        self.indent -= 1;
+        self.write_line("}");
+        self.end_arena_detail(&detail_started);
+    }
+
+    /// Emit the dedicated AddI path. Unlike the legacy mixed base-ALU
+    /// adapter, AddI has only an rs1 read and rd write, so the immediate does
+    /// not consume a timestamp slot.
+    pub(crate) fn emit_addi_inline(
+        &mut self,
+        rd: u8,
+        rs1: u8,
+        imm_value: u64,
+        arena: Option<ArenaAddIBaked>,
+    ) {
+        let chip = self.current_chip_idx;
+        let pc = hex_u32(self.current_pc as u32);
+        let fromts = self.next_var();
+        self.write_line(&format!("uint32_t {fromts} = state->tracer->timestamp;"));
+        let (v1, p1) = self.reg_read_capture(rs1);
+        let vimm = self.next_var();
+        self.write_line(&format!("uint64_t {vimm} = 0x{imm_value:016x}ull;"));
+        let res = self.next_var();
+        self.write_line(&format!("uint64_t {res} = {v1} + {vimm};"));
+        let arena = arena.filter(|_| self.arena_native_airs.contains_key(&chip));
+        let rdprev = (!self.delta_records || arena.is_some()).then(|| {
+            let rdprev = self.next_var();
+            self.write_line(&format!("uint64_t {rdprev} = state->regs[{rd}];"));
+            rdprev
+        });
+        let pw = self.next_var();
+        self.write_line(&format!("uint32_t {pw} = trace_reg_touch(state, {rd});"));
+        self.write_line(&format!("reg_write(state, {rd}, {res});"));
+        if let Some(baked) = arena {
+            self.emit_arena_addi_stores(
+                baked,
+                rd,
+                rs1,
+                &pc,
+                &fromts,
+                &p1,
+                &pw,
+                rdprev.as_deref().expect("arena record requires old rd"),
+                &v1,
+            );
+            if self.delta_records {
+                self.write_line(&format!(
+                    "preflight_set_last_program_write_value(state->tracer, {res});"
+                ));
+            }
+        } else if self.delta_records {
+            self.emit_delta2(&pc, &fromts, &v1, &vimm);
+        } else {
+            let rdprev = rdprev.as_deref().expect("compact record requires old rd");
+            self.write_line(&format!(
+                "preflight_emit_alu3(state, {chip}u, {pc}, {fromts}, {p1}, 0u, {pw}, {rdprev}, \
+                 {v1}, {vimm});"
+            ));
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn emit_arena_addi_stores(
+        &mut self,
+        baked: ArenaAddIBaked,
+        rd: u8,
+        rs1: u8,
+        pc: &str,
+        fromts: &str,
+        p1: &str,
+        pw: &str,
+        rdprev: &str,
+        v1: &str,
+    ) {
+        let chip = self.current_chip_idx;
+        let geom = self.arena_native_airs[&chip];
+        let crate::ArenaNativeLayout::AddI(off) = geom.layout else {
+            panic!("AddI air {chip} registered a non-AddI layout");
+        };
+        let detail_started = self.begin_arena_detail(chip);
+        let rec = self.next_var();
+        self.write_line(&format!(
+            "uint8_t* {rec} = (uint8_t*)preflight_claim_record(state, {chip}u);"
+        ));
+        self.write_line(&format!("if ({rec}) {{"));
+        self.indent += 1;
+        let core = self.next_var();
+        self.write_line(&format!(
+            "uint8_t* {core} = {rec} + state->tracer->chip_records[{chip}].core_off;"
+        ));
+        for (offset, value) in [
+            (off.from_pc, pc.to_string()),
+            (off.from_timestamp, fromts.to_string()),
+            (off.rd_ptr, format!("{}u", u32::from(rd) * 8)),
+            (off.rs1_ptr, format!("{}u", u32::from(rs1) * 8)),
+            (off.read_prev_ts, p1.to_string()),
+            (off.write_prev_ts, pw.to_string()),
+        ] {
+            self.write_line(&format!("*(uint32_t*)({rec} + {offset}) = {value};"));
+        }
+        self.write_line(&format!(
+            "arena_store_u64_le({rec} + {}, {rdprev});",
+            off.write_prev_data
+        ));
+        self.write_line(&format!(
+            "arena_store_u64_le({core} + {}, {v1});",
+            off.core_rs1
+        ));
+        self.write_line(&format!(
+            "*(uint16_t*)({core} + {}) = {}u;",
+            off.core_imm_low11, baked.imm_low11
+        ));
+        self.write_line(&format!(
+            "*(uint16_t*)({core} + {}) = {}u;",
+            off.core_imm_sign, baked.imm_sign
+        ));
         self.indent -= 1;
         self.write_line("}");
         self.end_arena_detail(&detail_started);
@@ -1925,6 +2042,26 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
                     .replace("__RVR_LHS__", lhs)
                     .replace("__RVR_RHS__", rhs)
             },
+        );
+        true
+    }
+
+    fn emit_addi_inline(
+        &mut self,
+        rd: Variable,
+        rs1: Variable,
+        imm_value: u64,
+        arena: Option<ArenaAddIBaked>,
+    ) -> bool {
+        if !self.inline_records_enabled() {
+            return false;
+        }
+        EmitContext::emit_addi_inline(
+            self,
+            reg_index(rd),
+            reg_index(rs1),
+            imm_value,
+            arena,
         );
         true
     }

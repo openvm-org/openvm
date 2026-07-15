@@ -95,7 +95,7 @@ __global__ void add_sub_tracegen_compact(
         RvrOperandEntry const entry = rvr_operand_entry(d_operand_table, pc_base, rec.from_pc);
 
         Rv64AddSubRecord full;
-        full.adapter = rvr_decode_alu3_alu_u16(rec, entry);
+        full.adapter = rvr_decode_alu3_alu_reg_u16(rec, entry);
 #pragma unroll
         for (size_t i = 0; i < BLOCK_FE_WIDTH; i++) {
             full.core.b[i] = rvr_u16_limb(rec.b, i);
@@ -103,7 +103,7 @@ __global__ void add_sub_tracegen_compact(
         }
         full.core.local_opcode = entry.local_opcode;
 
-        auto adapter = Rv64BaseAluU16Adapter(
+        auto adapter = Rv64BaseAluRegU16Adapter(
             VariableRangeChecker(d_range_checker_ptr, range_checker_num_bins),
             timestamp_max_bits
         );
