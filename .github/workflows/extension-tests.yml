@@ -51,7 +51,7 @@ jobs:
   extension-tests:
     needs: changes
     if: needs.changes.outputs.extensions != '[]'
-    name: ${{ format('{0} ({1})', matrix.extension, matrix.mode) }}
+    name: ${{ format('{0} ({1})', matrix.extension == 'riscv' && 'RISC-V' || matrix.extension, matrix.mode == 'rvr' && 'RVR' || matrix.mode) }}
     strategy:
       matrix:
         extension: ${{ fromJSON(needs.changes.outputs.extensions) }}

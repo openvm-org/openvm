@@ -62,7 +62,7 @@ jobs:
   integration-tests:
     needs: changes
     if: needs.changes.outputs.crates != '[]'
-    name: ${{ format('{0} ({1})', matrix.crate, matrix.mode) }}
+    name: ${{ format('{0} ({1})', matrix.crate, matrix.mode == 'rvr' && 'RVR' || matrix.mode) }}
     strategy:
       matrix:
         crate: ${{ fromJSON(needs.changes.outputs.crates) }}

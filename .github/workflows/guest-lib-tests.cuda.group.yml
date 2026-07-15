@@ -1,4 +1,4 @@
-name: CUDA Guest Library Test Group
+name: Guest Library Test Group (CUDA)
 
 on:
   workflow_call:

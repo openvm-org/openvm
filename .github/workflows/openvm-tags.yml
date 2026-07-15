@@ -1,4 +1,4 @@
-name: Check that tags are everywhere in the docs
+name: Docs Dependency Tags
 
 on:
   workflow_call:
@@ -18,7 +18,7 @@ env:
 
 jobs:
   docs:
-    name: Check tags
+    name: Check OpenVM references
     permissions:
       contents: write
       packages: read

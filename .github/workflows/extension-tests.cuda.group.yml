@@ -1,4 +1,4 @@
-name: CUDA Extension Test Group
+name: Extension Test Group (CUDA)
 
 on:
   workflow_call:
