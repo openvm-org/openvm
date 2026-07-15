@@ -15,7 +15,7 @@ use super::{
     compile::{ChipMapping, RvrCompiled},
     execute::execute_preflight as execute_preflight_raw,
     preflight_normalizer::{
-        build_preflight_replay, PreflightMemoryAccessAux, PreflightMemoryReplay,
+        build_preflight_replay_with_scratch, PreflightMemoryAccessAux, PreflightMemoryReplay,
         PreflightShadowsView, WORD_BYTES,
     },
     preflight_pool::{scrub_shadows, RvrPreflightBufferPool},
@@ -961,6 +961,7 @@ where
     /// Callers that keep the output alive (differential tests) simply drop it
     /// instead; the pool then refills lazily.
     pub fn recycle_output(&self, output: RvrPreflightOutput<F>) {
+        self.pool.recycle_access_aux(output.access_aux);
         #[cfg(feature = "rvr")]
         if let Some(exec_pool) = output.system_records.rvr_exec_frequencies_pool.as_ref() {
             exec_pool.recycle_exec_frequencies(
@@ -1805,14 +1806,29 @@ where
                 access_aux: Vec::new(),
             }
         } else {
-            build_preflight_replay::<F>(
+            let replay_fusion = pool.replay_fusion_enabled();
+            let access_aux_backing = (replay_fusion && build_access_aux)
+                .then(|| pool.take_access_aux::<F>(memory_log.len()));
+            let mut touched_order = replay_fusion.then(|| {
+                pool.take_touched_order(
+                    shadow_register.len(),
+                    shadow_memory.len(),
+                    shadow_public_values.len(),
+                )
+            });
+            let replay = build_preflight_replay_with_scratch::<F>(
                 &run_state.memory,
                 &shadows,
                 &touched,
                 &memory_log,
                 build_access_aux,
-            )
-            .map_err(|err| ExecutionError::RvrExecution(err.to_string()))?
+                access_aux_backing,
+                touched_order.as_mut(),
+            );
+            if let Some(touched_order) = touched_order {
+                pool.recycle_touched_order(touched_order);
+            }
+            replay.map_err(|err| ExecutionError::RvrExecution(err.to_string()))?
         };
         let replay_ready = std::time::Instant::now();
         if device_touched_memory && device_aux_oracle {

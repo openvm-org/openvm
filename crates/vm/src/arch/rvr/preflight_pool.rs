@@ -46,7 +46,7 @@ use super::{
         DeltaMemoryLogEntry, DeviceProgramEntry, MemoryLogEntry, PreflightRawLogs, ProgramLogEntry,
         ProgramRunEntry, RvrInlineChipRecords, TouchedBlock,
     },
-    preflight_normalizer::WORD_BYTES,
+    preflight_normalizer::{PreflightMemoryAccessAux, TouchedOrderScratch, WORD_BYTES},
 };
 use crate::system::memory::merkle::public_values::PUBLIC_VALUES_AS;
 
@@ -95,6 +95,11 @@ struct PoolInner {
     shadow_memory_hugepage_failures: HashMap<usize, u8>,
     /// Nonempty initial samples used to discover and promote the recurring shadow working set.
     shadow_locality_training_samples: usize,
+    /// Final log-native access layout, type-erased because the pool is field-generic and returned
+    /// after the record assembler consumes it.
+    access_aux: Option<Box<dyn Any + Send>>,
+    /// Bitmap/radix scratch for emitting canonical touched-memory order without comparison sort.
+    touched_order: Option<TouchedOrderScratch>,
     /// Spare inline-record byte buffers, one per migrated chip in steady
     /// state (best-fit take, since per-air capacities differ).
     record_bufs: Vec<Vec<MaybeUninit<u8>>>,
@@ -208,6 +213,62 @@ impl RvrPreflightBufferPool {
             return vec_uninit(cap);
         }
         take_uninit_slot(&mut self.lock().touched, cap)
+    }
+
+    pub(crate) fn replay_fusion_enabled(&self) -> bool {
+        self.enabled && *REPLAY_FUSION
+    }
+
+    pub(crate) fn take_access_aux<F>(&self, cap: usize) -> Vec<PreflightMemoryAccessAux<F>>
+    where
+        F: Field + Send + 'static,
+    {
+        let Some(erased) = self.lock().access_aux.take() else {
+            return Vec::with_capacity(cap);
+        };
+        let mut values = *erased
+            .downcast::<Vec<PreflightMemoryAccessAux<F>>>()
+            .unwrap_or_else(|_| panic!("rvr access-aux pool field type mismatch"));
+        values.clear();
+        values.reserve(cap);
+        values
+    }
+
+    pub(crate) fn recycle_access_aux<F>(&self, mut values: Vec<PreflightMemoryAccessAux<F>>)
+    where
+        F: Field + Send + 'static,
+    {
+        if !self.replay_fusion_enabled() {
+            return;
+        }
+        values.clear();
+        let mut inner = self.lock();
+        let keep = inner.access_aux.as_ref().is_some_and(|existing| {
+            existing
+                .downcast_ref::<Vec<PreflightMemoryAccessAux<F>>>()
+                .is_some_and(|existing| existing.capacity() >= values.capacity())
+        });
+        if !keep {
+            inner.access_aux = Some(Box::new(values));
+        }
+    }
+
+    pub(crate) fn take_touched_order(
+        &self,
+        register_blocks: usize,
+        memory_blocks: usize,
+        public_values_blocks: usize,
+    ) -> TouchedOrderScratch {
+        let mut scratch = self.lock().touched_order.take().unwrap_or_default();
+        scratch.prepare(register_blocks, memory_blocks, public_values_blocks);
+        scratch
+    }
+
+    pub(crate) fn recycle_touched_order(&self, scratch: TouchedOrderScratch) {
+        if !self.replay_fusion_enabled() {
+            return;
+        }
+        self.lock().touched_order = Some(scratch);
     }
 
     /// Take the two zero-valued counter tables plus write-only first-touch index buffers.
@@ -1024,6 +1085,11 @@ static THP_ADVICE: LazyLock<bool> = LazyLock::new(|| !env_flag_is_off("OPENVM_RV
 /// 4 KiB-backed timestamp shadows for same-process-shape A/B measurements.
 static SHADOW_LOCALITY: LazyLock<bool> =
     LazyLock::new(|| !env_flag_is_off("OPENVM_RVR_SHADOW_LOCALITY"));
+
+/// Target-3 kill switch. Default-on after validation; `0|false|off` restores fresh access-aux
+/// materialization and comparison sorting for controlled A/B measurements.
+static REPLAY_FUSION: LazyLock<bool> =
+    LazyLock::new(|| !env_flag_is_off("OPENVM_RVR_REPLAY_FUSION"));
 
 /// Best-effort `MADV_HUGEPAGE` over the page-aligned interior of a buffer.
 /// Purely a performance hint; failures are ignored.
