@@ -182,6 +182,10 @@ impl ExtInstr for ModArithInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
+        let emit_inline = self.emit_inline && ctx.inline_record_enabled();
+        if emit_inline {
+            ctx.write_line("preflight_begin_custom_memory_capture(state);");
+        }
         let rs1 = ctx.read_reg(self.rs1_reg);
         let rs2 = ctx.read_reg(self.rs2_reg);
         // Match Rv64VecHeapAdapter's memory-bus order: rs1, rs2, then rd.
@@ -200,7 +204,7 @@ impl ExtInstr for ModArithInstr {
             ctx.extern_call(&name, &["state", &rd, &rs1, &rs2, &num_limbs, "mod_"]);
             ctx.write_line("}");
         }
-        if self.emit_inline && ctx.inline_record_enabled() {
+        if emit_inline {
             emit_vec_heap_record(
                 ctx,
                 self.from_pc,
@@ -246,6 +250,10 @@ impl ExtInstr for ModIsEqInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
+        let emit_inline = self.emit_inline && ctx.inline_record_enabled();
+        if emit_inline {
+            ctx.write_line("preflight_begin_custom_memory_capture(state);");
+        }
         let rs1 = ctx.read_reg(self.rs1_reg);
         let rs2 = ctx.read_reg(self.rs2_reg);
         if let Some(field) = detect_known_field(&self.modulus) {
@@ -266,7 +274,7 @@ impl ExtInstr for ModIsEqInstr {
             ctx.write_reg(self.rd_reg, &val);
             ctx.write_line("}");
         }
-        if self.emit_inline && ctx.inline_record_enabled() {
+        if emit_inline {
             emit_mod_iseq_record(
                 ctx,
                 self.from_pc,
@@ -325,6 +333,10 @@ impl ExtInstr for ModIsEqSetupInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
+        let emit_inline = self.emit_inline && ctx.inline_record_enabled();
+        if emit_inline {
+            ctx.write_line("preflight_begin_custom_memory_capture(state);");
+        }
         let rs1 = ctx.read_reg(self.rs1_reg);
         let rs2 = ctx.read_reg(self.rs2_reg);
         let num_limbs = format!("{}u", self.num_limbs);
@@ -334,7 +346,7 @@ impl ExtInstr for ModIsEqSetupInstr {
             &["state", &rs1, &rs2, &num_limbs],
         );
         ctx.write_reg(self.rd_reg, &val);
-        if self.emit_inline && ctx.inline_record_enabled() {
+        if emit_inline {
             emit_mod_iseq_record(
                 ctx,
                 self.from_pc,
@@ -366,13 +378,17 @@ impl ExtInstr for ModSetupInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
+        let emit_inline = self.emit_inline && ctx.inline_record_enabled();
+        if emit_inline {
+            ctx.write_line("preflight_begin_custom_memory_capture(state);");
+        }
         let rs1 = ctx.read_reg(self.rs1_reg);
         let rs2 = ctx.read_reg(self.rs2_reg);
         // Match Rv64VecHeapAdapter's memory-bus order: rs1, rs2, then rd.
         let rd = ctx.read_reg(self.rd_reg);
         let num_limbs = format!("{}u", self.num_limbs);
         ctx.extern_call("rvr_ext_mod_setup", &["state", &rd, &rs1, &rs2, &num_limbs]);
-        if self.emit_inline && ctx.inline_record_enabled() {
+        if emit_inline {
             emit_vec_heap_record(
                 ctx,
                 self.from_pc,

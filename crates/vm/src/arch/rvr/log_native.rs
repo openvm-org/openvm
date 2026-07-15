@@ -581,12 +581,7 @@ pub fn generate_record_arenas_from_logs_with_compact<F: PrimeField32, RA: Arena>
     let mut host_assembled = 0usize;
 
     for program_entry in &output.raw_logs.program_log {
-        let pc = u32::try_from(program_entry.pc).map_err(|_| {
-            rvr_error(format!(
-                "program-log pc {:#x} does not fit OpenVM pc width",
-                program_entry.pc
-            ))
-        })?;
+        let pc = program_entry.pc();
         let Some((instruction, air_idx, slot_idx)) =
             instruction_and_air_idx(exe, pc_to_air_idx, pc)?
         else {
@@ -609,7 +604,9 @@ pub fn generate_record_arenas_from_logs_with_compact<F: PrimeField32, RA: Arena>
         let arena = arenas.get_mut(air_idx).ok_or_else(|| {
             rvr_error(format!(
                 "pc {:#x} maps to air_idx {} but only {} arenas exist",
-                program_entry.pc, air_idx, num_arenas
+                program_entry.pc(),
+                air_idx,
+                num_arenas
             ))
         })?;
         if inline_pc_slots.get(slot_idx).copied().unwrap_or(false) {
@@ -993,15 +990,14 @@ fn expand_delta_records<F: PrimeField32, RA: Arena>(
             .iter()
             .enumerate()
             .find(|(_, entry)| {
-                entry.pc < u64::from(exe.program.pc_base)
-                    || !(entry.pc - u64::from(exe.program.pc_base))
-                        .is_multiple_of(u64::from(DEFAULT_PC_STEP))
+                entry.pc() < exe.program.pc_base
+                    || !(entry.pc() - exe.program.pc_base).is_multiple_of(DEFAULT_PC_STEP)
             })
     {
         return Err(rvr_error(format!(
             "delta residual program log has invalid entry {index}/{}: pc={:#x}, timestamp={}",
             output.raw_logs.program_log.len(),
-            entry.pc,
+            entry.pc(),
             entry.timestamp
         )));
     }
@@ -1037,12 +1033,7 @@ fn expand_delta_records<F: PrimeField32, RA: Arena>(
         .collect::<std::collections::HashSet<_>>();
     let mut arena_events = Vec::new();
     for entry in &output.raw_logs.program_log {
-        let pc = u32::try_from(entry.pc).map_err(|_| {
-            rvr_error(format!(
-                "arena-native chronology pc {:#x} does not fit OpenVM pc width",
-                entry.pc
-            ))
-        })?;
+        let pc = entry.pc();
         let Some((instruction, air_idx, _)) = instruction_and_air_idx(exe, pc_to_air_idx, pc)?
         else {
             continue;
@@ -1069,7 +1060,7 @@ fn expand_delta_records<F: PrimeField32, RA: Arena>(
                 instruction.opcode
             )));
         }
-        if entry.write_complete != 1 {
+        if !entry.write_complete() {
             return Err(rvr_error(format!(
                 "arena-native chronology pc {pc:#x} opcode {:?} omitted its post-write value",
                 instruction.opcode
@@ -1276,13 +1267,7 @@ fn expand_delta_records<F: PrimeField32, RA: Arena>(
                 append_u64(out, write_prev_value);
             }
         }
-        synthetic_program.push(ProgramLogEntry {
-            opcode: 0,
-            write_complete: 0,
-            timestamp: record.from_timestamp,
-            pc: u64::from(record.from_pc),
-            write_value: 0,
-        });
+        synthetic_program.push(ProgramLogEntry::new(record.from_timestamp, record.from_pc));
     }
 
     // No later delta record consumes these touches, but replay the suffix to
