@@ -14,9 +14,7 @@ use nix::sys::mman::{mmap_anonymous, mprotect, munmap, MapFlags, ProtFlags};
 
 use super::{LinearMemory, MmapMemory, PAGE_SIZE};
 
-/// Minimum size of each inaccessible region surrounding guarded memory.
-///
-/// The actual guard size is rounded up to a multiple of the host OS page size.
+/// Minimum guard size before rounding to the host OS page size.
 const MIN_GUARD_SIZE: usize = 1 << 14;
 
 static HOST_PAGE_SIZE: OnceLock<usize> = OnceLock::new();
@@ -32,16 +30,9 @@ enum MemoryAllocation {
     Plain(MmapMemory),
 }
 
-/// Mmap-backed linear memory that uses exact guard regions when its logical size is
-/// OS-page-aligned.
-///
-/// RVR's main memory is a large power-of-two allocation, so its layout is exactly
-/// `[PROT_NONE guard][RW memory][PROT_NONE guard]`. An access that crosses either adjacent
-/// boundary faults at the OS level. Guard regions are defense-in-depth for RVR's raw native memory
-/// accesses; software bounds checks remain authoritative when enabled.
+/// Mmap-backed linear memory with inaccessible guards when the size is OS-page-aligned.
 pub struct GuardedMemory {
     allocation: MemoryAllocation,
-    /// Logical memory size in bytes.
     memory_size: usize,
 }
 
@@ -229,10 +220,7 @@ impl LinearMemory for GuardedMemory {
             return;
         }
 
-        // SAFETY: the usable region is an anonymous private mapping (PROT_READ|PROT_WRITE).
-        // MADV_DONTNEED on anonymous private mappings causes subsequent accesses to return
-        // zero-filled pages without writing anything. We advise only [as_mut_ptr(), +memory_size),
-        // leaving the PROT_NONE guard pages untouched.
+        // SAFETY: MADV_DONTNEED is applied only to the writable part of an anonymous mapping.
         unsafe {
             let ret = madvise(
                 self.as_mut_ptr() as *mut libc::c_void,

@@ -76,9 +76,7 @@ static __attribute__((always_inline)) inline bool rv_pc_is_dispatchable(
 
 /* ── Guest memory pointer ────────────────────────────────────────── */
 
-/* The default Unix RVR memory backend surrounds main memory with inaccessible
- * mmap guard regions. Bounds checks remain authoritative in protected builds;
- * the guards provide a fault barrier for adjacent out-of-bounds raw accesses.
+/* Adjacent guard regions catch raw out-of-bounds accesses.
  * TODO: addr &= MEMORY_MASK for defense-in-depth. */
 static __attribute__((always_inline)) inline uint8_t* mem_ptr(
     uint8_t* restrict memory, uint64_t addr) {
