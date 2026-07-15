@@ -26,7 +26,9 @@ use openvm_riscv_adapters::{
 use openvm_riscv_circuit::adapters::U16_BITS;
 use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, StarkProtocolConfig, Val};
 #[cfg(feature = "rvr")]
-use rvr_openvm_lift::{ExtensionRegistry, RvrExtensionCtx, VmRvrExtension};
+use rvr_openvm_ext_algebra::ModularRvrExtension;
+#[cfg(feature = "rvr")]
+use rvr_openvm_lift::{RvrExtensionCtx, RvrExtensions, VmRvrExtension};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use strum::EnumCount;
@@ -65,10 +67,8 @@ impl ModularExtension {
 
 #[cfg(feature = "rvr")]
 impl<F: PrimeField32> VmRvrExtension<F> for ModularExtension {
-    fn extend_rvr(&self, registry: &mut ExtensionRegistry<F>, _ctx: Option<&RvrExtensionCtx>) {
-        registry.register(rvr_openvm_ext_algebra::ModularRvrExtension::new(
-            self.supported_moduli.clone(),
-        ));
+    fn extend_rvr(&self, extensions: &mut RvrExtensions, _ctx: Option<&RvrExtensionCtx>) {
+        extensions.register_lifter(ModularRvrExtension::new(self.supported_moduli.clone()));
     }
 }
 

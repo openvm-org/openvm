@@ -9,18 +9,16 @@ use std::{ffi::c_void, io::Write};
 
 use openvm_circuit::arch::rvr::io::{check_mem_bounds_range, OpenVmIoState};
 use openvm_instructions::{
-    instruction::Instruction,
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode, SystemOpcode,
 };
 use openvm_riscv_transpiler::{Rv64HintStoreOpcode, Rv64LoadStoreOpcode, Rv64Phantom};
-use openvm_stark_backend::p3_field::PrimeField32;
 use rand::Rng;
 use rvr_openvm_ext_ffi_common::{AS_PUBLIC_VALUES, AS_REGISTER};
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, MemWidth, Reg};
 use rvr_openvm_lift::{
     air_index_to_c, decode_imm_cg, decode_reg, opcode_air_idx, AirIndex, ExtensionError,
-    RvrExtension, RvrExtensionCtx,
+    RvrExtension, RvrExtensionCtx, RvrInstruction, RvrRuntimeExtension,
 };
 
 /// HINT_STORED: pop one register word (8 bytes) from the hint stream into `mem[reg[ptr_reg]]`.
@@ -195,8 +193,8 @@ impl Rv64IoExtension {
     }
 }
 
-impl<F: PrimeField32> RvrExtension<F> for Rv64IoExtension {
-    fn try_lift(&self, insn: &Instruction<F>, pc: u64) -> Option<LiftedInstr> {
+impl RvrExtension for Rv64IoExtension {
+    fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
 
         if opcode == Rv64HintStoreOpcode::HINT_STORED.global_opcode_usize() {
@@ -254,7 +252,11 @@ impl<F: PrimeField32> RvrExtension<F> for Rv64IoExtension {
             include_str!("../c/rv64io_callbacks.c"),
         )]
     }
+}
 
+pub struct Rv64IoRuntimeHooks;
+
+impl RvrRuntimeExtension for Rv64IoRuntimeHooks {
     unsafe fn register_host_callbacks(
         &self,
         lib: &libloading::Library,
@@ -266,17 +268,17 @@ impl<F: PrimeField32> RvrExtension<F> for Rv64IoExtension {
             *sym
         };
         let callbacks = Rv64IoHostCallbacks {
-            hint_storew: host_hint_storew::<F>,
-            hint_buffer: host_hint_buffer::<F>,
-            reveal: host_reveal::<F>,
+            hint_storew: host_hint_storew,
+            hint_buffer: host_hint_buffer,
+            reveal: host_reveal,
         };
         unsafe { register_fn(&callbacks) };
         Ok(())
     }
 }
 
-fn public_values_store_width<F: PrimeField32>(insn: &Instruction<F>) -> Option<MemWidth> {
-    if insn.d.as_canonical_u32() != AS_REGISTER || insn.e.as_canonical_u32() != AS_PUBLIC_VALUES {
+fn public_values_store_width(insn: &RvrInstruction) -> Option<MemWidth> {
+    if insn.d != AS_REGISTER || insn.e != AS_PUBLIC_VALUES {
         return None;
     }
 
@@ -313,12 +315,12 @@ impl Default for Rv64IExtension {
     }
 }
 
-impl<F: PrimeField32> RvrExtension<F> for Rv64IExtension {
-    fn try_lift(&self, insn: &Instruction<F>, pc: u64) -> Option<LiftedInstr> {
+impl RvrExtension for Rv64IExtension {
+    fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
         if insn.opcode.as_usize() != SystemOpcode::PHANTOM.global_opcode_usize() {
             return None;
         }
-        let discriminant = (insn.c.as_canonical_u32() & 0xffff) as u16;
+        let discriminant = (insn.c & 0xffff) as u16;
         let phantom = Rv64Phantom::from_repr(discriminant)?;
         let instr: Box<dyn ExtInstr> = match phantom {
             Rv64Phantom::HintInput => Box::new(HintInputInstr),
@@ -350,7 +352,11 @@ impl<F: PrimeField32> RvrExtension<F> for Rv64IExtension {
             include_str!("../c/rv64i_phantom_callbacks.c"),
         )]
     }
+}
 
+pub struct Rv64IRuntimeHooks;
+
+impl RvrRuntimeExtension for Rv64IRuntimeHooks {
     unsafe fn register_host_callbacks(
         &self,
         lib: &libloading::Library,
@@ -362,9 +368,9 @@ impl<F: PrimeField32> RvrExtension<F> for Rv64IExtension {
             *sym
         };
         let callbacks = Rv64IPhantomCallbacks {
-            hint_input: host_hint_input::<F>,
-            print_str: host_print_str::<F>,
-            hint_random: host_hint_random::<F>,
+            hint_input: host_hint_input,
+            print_str: host_print_str,
+            hint_random: host_hint_random,
         };
         unsafe { register_fn(&callbacks) };
         Ok(())
@@ -395,8 +401,8 @@ pub struct Rv64IoHostCallbacks {
 /// HintInput: pop next input record from VmState's input_stream and overwrite
 /// the active hint stream with `[len: u64 LE][data][padding to 8-byte align]`,
 /// stored directly as bytes.
-pub extern "C" fn host_hint_input<F: PrimeField32>(ctx: *mut c_void) {
-    let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_, F>) };
+pub extern "C" fn host_hint_input(ctx: *mut c_void) {
+    let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_>) };
     io.hint_stream.clear();
     if let Some(mut vec) = io.input_stream.pop_front() {
         let data_len = vec.len();
@@ -409,8 +415,8 @@ pub extern "C" fn host_hint_input<F: PrimeField32>(ctx: *mut c_void) {
 }
 
 /// PrintStr: read UTF-8 from guest memory and print to stdout.
-pub extern "C" fn host_print_str<F: PrimeField32>(ctx: *mut c_void, ptr: u64, len: u32) {
-    let io = unsafe { &*(ctx as *const OpenVmIoState<'_, F>) };
+pub extern "C" fn host_print_str(ctx: *mut c_void, ptr: u64, len: u32) {
+    let io = unsafe { &*(ctx as *const OpenVmIoState<'_>) };
     if len > 0 && !io.memory_ptr.is_null() {
         check_mem_bounds_range(ptr, len as usize);
         let slice =
@@ -422,8 +428,8 @@ pub extern "C" fn host_print_str<F: PrimeField32>(ctx: *mut c_void, ptr: u64, le
 
 /// HintRandom: refill the hint stream with `num_words * RV64_REGISTER_NUM_LIMBS` random
 /// bytes drawn from VmState's persistent RNG.
-pub extern "C" fn host_hint_random<F: PrimeField32>(ctx: *mut c_void, num_words: u32) {
-    let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_, F>) };
+pub extern "C" fn host_hint_random(ctx: *mut c_void, num_words: u32) {
+    let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_>) };
     let nbytes = num_words as usize * RV64_REGISTER_NUM_LIMBS;
     io.hint_stream.clear();
     for _ in 0..nbytes {
@@ -433,8 +439,8 @@ pub extern "C" fn host_hint_random<F: PrimeField32>(ctx: *mut c_void, num_words:
 
 /// HINT_STOREW: pop one rv64 register-width word (8 bytes) from the hint stream
 /// and write it to guest memory at `dest_addr`.
-pub extern "C" fn host_hint_storew<F: PrimeField32>(ctx: *mut c_void, dest_addr: u64) {
-    let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_, F>) };
+pub extern "C" fn host_hint_storew(ctx: *mut c_void, dest_addr: u64) {
+    let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_>) };
     if io.hint_stream.len() < RV64_REGISTER_NUM_LIMBS || io.memory_ptr.is_null() {
         return;
     }
@@ -454,12 +460,8 @@ pub extern "C" fn host_hint_storew<F: PrimeField32>(ctx: *mut c_void, dest_addr:
 
 /// HINT_BUFFER: pop `num_words * RV64_REGISTER_NUM_LIMBS` bytes from the hint stream
 /// and copy them into guest memory.
-pub extern "C" fn host_hint_buffer<F: PrimeField32>(
-    ctx: *mut c_void,
-    dest_addr: u64,
-    num_words: u32,
-) {
-    let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_, F>) };
+pub extern "C" fn host_hint_buffer(ctx: *mut c_void, dest_addr: u64, num_words: u32) {
+    let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_>) };
     let nbytes = num_words as usize * RV64_REGISTER_NUM_LIMBS;
     if io.hint_stream.len() < nbytes || io.memory_ptr.is_null() {
         return;
@@ -474,14 +476,8 @@ pub extern "C" fn host_hint_buffer<F: PrimeField32>(
 
 /// Host callback for stores to `PUBLIC_VALUES_AS`.
 /// Cost corrections are handled in generated C.
-pub extern "C" fn host_reveal<F: PrimeField32>(
-    ctx: *mut c_void,
-    src_val: u64,
-    ptr: u64,
-    offset: u32,
-    width: u32,
-) {
-    let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_, F>) };
+pub extern "C" fn host_reveal(ctx: *mut c_void, src_val: u64, ptr: u64, offset: u32, width: u32) {
+    let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_>) };
     let start = ptr as usize + offset as usize;
     let width = width as usize;
     let end = start + width;
@@ -497,6 +493,7 @@ pub extern "C" fn host_reveal<F: PrimeField32>(
 mod tests {
     use std::collections::VecDeque;
 
+    use openvm_instructions::instruction::Instruction;
     use p3_baby_bear::BabyBear;
     use rand::{rngs::StdRng, SeedableRng};
 
@@ -576,7 +573,7 @@ mod tests {
             (Rv64LoadStoreOpcode::STOREH, 2),
             (Rv64LoadStoreOpcode::STOREB, 1),
         ] {
-            let inst = Instruction::<BabyBear>::from_usize(
+            let inst = RvrInstruction::from_field(&Instruction::<BabyBear>::from_usize(
                 opcode.global_opcode(),
                 [
                     8,
@@ -587,7 +584,7 @@ mod tests {
                     1,
                     0,
                 ],
-            );
+            ));
             let lifted = ext.try_lift(&inst, 0x100).unwrap();
             let LiftedInstr::Body(InstrAt {
                 instr: Instr::Ext(instr),
@@ -609,7 +606,7 @@ mod tests {
     #[test]
     fn rv64io_rejects_public_values_store_with_non_register_d() {
         let ext = Rv64IoExtension::new(None).unwrap();
-        let inst = Instruction::<BabyBear>::from_usize(
+        let inst = RvrInstruction::from_field(&Instruction::<BabyBear>::from_usize(
             Rv64LoadStoreOpcode::STORED.global_opcode(),
             [
                 8,
@@ -620,7 +617,7 @@ mod tests {
                 1,
                 0,
             ],
-        );
+        ));
 
         assert!(ext.try_lift(&inst, 0x100).is_none());
     }
@@ -628,7 +625,7 @@ mod tests {
     #[test]
     fn rv64io_ignores_non_store_public_values_shaped_instruction() {
         let ext = Rv64IoExtension::new(None).unwrap();
-        let inst = Instruction::<BabyBear>::from_usize(
+        let inst = RvrInstruction::from_field(&Instruction::<BabyBear>::from_usize(
             SystemOpcode::TERMINATE.global_opcode(),
             [
                 8,
@@ -639,7 +636,7 @@ mod tests {
                 1,
                 0,
             ],
-        );
+        ));
 
         assert!(ext.try_lift(&inst, 0x100).is_none());
     }
@@ -671,19 +668,19 @@ mod tests {
         let mut public_values = vec![0u8; 16];
         let mut deferrals = Vec::new();
 
-        let mut io = OpenVmIoState::<BabyBear> {
+        let mut io = OpenVmIoState {
             input_stream: &mut input_stream,
             hint_stream: &mut hint_stream,
             rng: &mut rng,
             memory_ptr: memory.as_mut_ptr(),
             public_values: &mut public_values,
             deferral_memory: std::ptr::null_mut(),
-            deferral_memory_len: 0,
+            deferral_memory_len_bytes: 0,
             deferrals: &mut deferrals,
         };
 
-        host_reveal::<BabyBear>(
-            &mut io as *mut OpenVmIoState<'_, BabyBear> as *mut c_void,
+        host_reveal(
+            &mut io as *mut OpenVmIoState<'_> as *mut c_void,
             0x11223344,
             4,
             2,
@@ -702,19 +699,19 @@ mod tests {
         let mut public_values = vec![0u8; 16];
         let mut deferrals = Vec::new();
 
-        let mut io = OpenVmIoState::<BabyBear> {
+        let mut io = OpenVmIoState {
             input_stream: &mut input_stream,
             hint_stream: &mut hint_stream,
             rng: &mut rng,
             memory_ptr: memory.as_mut_ptr(),
             public_values: &mut public_values,
             deferral_memory: std::ptr::null_mut(),
-            deferral_memory_len: 0,
+            deferral_memory_len_bytes: 0,
             deferrals: &mut deferrals,
         };
 
-        host_reveal::<BabyBear>(
-            &mut io as *mut OpenVmIoState<'_, BabyBear> as *mut c_void,
+        host_reveal(
+            &mut io as *mut OpenVmIoState<'_> as *mut c_void,
             0x1122334455667788,
             3,
             0,

@@ -13,6 +13,7 @@ pub mod cfg;
 pub mod convert;
 pub mod extension;
 pub mod helpers;
+pub mod instruction;
 pub mod opcode;
 
 pub use cfg::{build_blocks, CfgError};
@@ -22,6 +23,7 @@ pub use convert::{
 };
 pub use extension::{
     air_index_to_c, opcode_air_idx, AirIndex, ExtensionError, ExtensionRegistry, RvrExtension,
-    RvrExtensionCtx, TraceChipIndex, VmRvrExtension,
+    RvrExtensionCtx, RvrExtensions, RvrRuntimeExtension, TraceChipIndex, VmRvrExtension,
 };
 pub use helpers::{decode_imm_cg, decode_reg};
+pub use instruction::RvrInstruction;

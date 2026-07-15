@@ -29,7 +29,9 @@ use openvm_sha2_transpiler::Rv64Sha2Opcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_stark_backend::{StarkEngine, StarkProtocolConfig, Val};
 #[cfg(feature = "rvr")]
-use rvr_openvm_lift::VmRvrExtension;
+use rvr_openvm_ext_sha2::Sha2Extension;
+#[cfg(feature = "rvr")]
+use rvr_openvm_lift::{RvrExtensionCtx, RvrExtensions, VmRvrExtension};
 use serde::{Deserialize, Serialize};
 
 use crate::{Sha2BlockHasherChip, Sha2BlockHasherVmAir, Sha2MainAir, Sha2MainChip, Sha2VmExecutor};
@@ -119,14 +121,9 @@ pub struct Sha2;
 
 #[cfg(feature = "rvr")]
 impl<F: PrimeField32> VmRvrExtension<F> for Sha2 {
-    fn extend_rvr(
-        &self,
-        registry: &mut rvr_openvm_lift::ExtensionRegistry<F>,
-        ctx: Option<&rvr_openvm_lift::RvrExtensionCtx>,
-    ) {
-        let ext = rvr_openvm_ext_sha2::Sha2Extension::new(ctx)
-            .expect("failed to construct rvr Sha2Extension");
-        registry.register(ext);
+    fn extend_rvr(&self, extensions: &mut RvrExtensions, ctx: Option<&RvrExtensionCtx>) {
+        let ext = Sha2Extension::new(ctx).expect("failed to construct rvr Sha2Extension");
+        extensions.register_lifter(ext);
     }
 }
 

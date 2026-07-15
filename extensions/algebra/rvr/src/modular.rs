@@ -4,11 +4,10 @@
 use num_bigint::BigUint;
 use openvm_algebra_transpiler::{ModularPhantom, Rv64ModularArithmeticOpcode};
 use openvm_algebra_utils::{find_non_qr, NQR_RNG_SEED};
-use openvm_instructions::{instruction::Instruction, LocalOpcode, SystemOpcode};
-use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_instructions::{LocalOpcode, SystemOpcode};
 use rand::{rngs::StdRng, SeedableRng};
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
-use rvr_openvm_lift::{helpers::decode_reg, RvrExtension};
+use rvr_openvm_lift::{helpers::decode_reg, RvrExtension, RvrInstruction};
 use strum::EnumCount;
 
 use crate::{
@@ -110,7 +109,7 @@ impl ExtInstr for HintNonQrInstr {
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         let literal = format_c_byte_array(&self.non_qr_bytes);
         ctx.write_line("{");
-        ctx.write_line(&format!("static const uint8_t nqr[] = {literal};"));
+        ctx.write_line(&format!("static constexpr uint8_t nqr[] = {literal};"));
         let len = format!("{}u", self.non_qr_bytes.len());
         ctx.extern_call("ext_hint_stream_set", &["nqr", &len]);
         ctx.write_line("}");
@@ -144,8 +143,8 @@ impl ExtInstr for HintSqrtInstr {
         let mod_literal = format_c_byte_array(&self.modulus);
         let nqr_literal = format_c_byte_array(&self.non_qr_bytes);
         ctx.write_line("{");
-        ctx.write_line(&format!("static const uint8_t mod_[] = {mod_literal};"));
-        ctx.write_line(&format!("static const uint8_t nqr[] = {nqr_literal};"));
+        ctx.write_line(&format!("static constexpr uint8_t mod_[] = {mod_literal};"));
+        ctx.write_line(&format!("static constexpr uint8_t nqr[] = {nqr_literal};"));
         let num_limbs = format!("{}u", self.num_limbs);
         ctx.extern_call(
             "rvr_ext_algebra_hint_sqrt",
@@ -181,8 +180,8 @@ impl ModularRvrExtension {
     }
 }
 
-impl<F: PrimeField32> RvrExtension<F> for ModularRvrExtension {
-    fn try_lift(&self, insn: &Instruction<F>, pc: u64) -> Option<LiftedInstr> {
+impl RvrExtension for ModularRvrExtension {
+    fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
 
         if let Some(lifted) = self.try_lift_modular(insn, pc, opcode) {
@@ -251,9 +250,9 @@ impl<F: PrimeField32> RvrExtension<F> for ModularRvrExtension {
 }
 
 impl ModularRvrExtension {
-    fn try_lift_modular<F: PrimeField32>(
+    fn try_lift_modular(
         &self,
-        insn: &Instruction<F>,
+        insn: &RvrInstruction,
         pc: u64,
         opcode: usize,
     ) -> Option<LiftedInstr> {
@@ -345,12 +344,8 @@ impl ModularRvrExtension {
         }))
     }
 
-    fn try_lift_phantom<F: PrimeField32>(
-        &self,
-        insn: &Instruction<F>,
-        pc: u64,
-    ) -> Option<LiftedInstr> {
-        let c_val = insn.c.as_canonical_u32();
+    fn try_lift_phantom(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
+        let c_val = insn.c;
         let discriminant = (c_val & 0xffff) as u16;
         let mod_idx = (c_val >> 16) as usize;
 
