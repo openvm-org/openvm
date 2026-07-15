@@ -132,8 +132,8 @@ pub type LogNativeInlineAssembler<F, RA> =
 /// the real record types at registration. Re-exported here so extension
 /// crates keep a single import path.
 pub use rvr_openvm::{
-    Alu3ArenaFieldOffsets, Alu3WArenaFieldOffsets, ArenaNativeGeometry, ArenaNativeLayout,
-    Branch2ArenaFieldOffsets, LoadStoreArenaFieldOffsets, Rw1ArenaFieldOffsets,
+    AddIArenaFieldOffsets, Alu3ArenaFieldOffsets, Alu3WArenaFieldOffsets, ArenaNativeGeometry,
+    ArenaNativeLayout, Branch2ArenaFieldOffsets, LoadStoreArenaFieldOffsets, Rw1ArenaFieldOffsets,
     Wr1ArenaFieldOffsets,
 };
 
@@ -156,6 +156,7 @@ struct RegisteredInlineAssembler<F, RA> {
 /// timestamps are reconstructed from these program-derived addresses.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DeltaAccessPattern {
+    AddI,
     Alu3,
     Alu3Reg,
     Load,
@@ -951,7 +952,7 @@ fn delta_access_count(pattern: DeltaAccessPattern) -> usize {
         | DeltaAccessPattern::Alu3Reg
         | DeltaAccessPattern::Load
         | DeltaAccessPattern::Store => 3,
-        DeltaAccessPattern::Branch2 | DeltaAccessPattern::Rw1 => 2,
+        DeltaAccessPattern::AddI | DeltaAccessPattern::Branch2 | DeltaAccessPattern::Rw1 => 2,
         DeltaAccessPattern::Wr1 | DeltaAccessPattern::Wr1Always => 1,
     }
 }
@@ -978,6 +979,11 @@ fn delta_accesses<F: PrimeField32>(
         (v1 as u32).wrapping_add(offset as u32) as u64 & !7u64
     };
     match pattern {
+        DeltaAccessPattern::AddI => [
+            reg(instruction.b.as_canonical_u32()),
+            reg(instruction.a.as_canonical_u32()),
+            tick,
+        ],
         DeltaAccessPattern::Alu3 => [
             reg(instruction.b.as_canonical_u32()),
             if instruction.e.as_canonical_u32() == openvm_instructions::riscv::RV64_REGISTER_AS {
@@ -1055,6 +1061,7 @@ fn delta_write_slot<F: PrimeField32>(
     pattern: DeltaAccessPattern,
 ) -> Option<usize> {
     match pattern {
+        DeltaAccessPattern::AddI => Some(1),
         DeltaAccessPattern::Alu3 | DeltaAccessPattern::Alu3Reg | DeltaAccessPattern::Store => {
             Some(2)
         }
@@ -1256,7 +1263,7 @@ pub fn expand_delta_records<F: PrimeField32, RA: Arena>(
         };
         if !matches!(
             pattern,
-            DeltaAccessPattern::Alu3 | DeltaAccessPattern::Alu3Reg
+            DeltaAccessPattern::AddI | DeltaAccessPattern::Alu3 | DeltaAccessPattern::Alu3Reg
         ) {
             return Err(rvr_error(format!(
                 "arena-native chronology pc {pc:#x} opcode {:?} has unsupported {pattern:?} pattern",
@@ -1442,6 +1449,14 @@ pub fn expand_delta_records<F: PrimeField32, RA: Arena>(
         append_u32(out, record.from_pc);
         append_u32(out, record.from_timestamp);
         match pattern {
+            DeltaAccessPattern::AddI => {
+                append_u32(out, prev[0]);
+                append_u32(out, 0);
+                append_u32(out, prev[1]);
+                append_u64(out, write_prev_value);
+                append_u64(out, record.v1);
+                append_u64(out, record.v2);
+            }
             DeltaAccessPattern::Alu3
             | DeltaAccessPattern::Alu3Reg
             | DeltaAccessPattern::Load

@@ -35,9 +35,9 @@ pub use execute::{
 pub use initial_image::RvrInitialImage;
 pub use log_native::{
     generate_record_arenas_from_logs, generate_record_arenas_from_logs_with_compact,
-    Alu3ArenaFieldOffsets, Alu3WArenaFieldOffsets, ArenaNativeGeometry, ArenaNativeLayout,
-    Branch2ArenaFieldOffsets, DeltaAccessPattern, LoadStoreArenaFieldOffsets, LogNativeAccessView,
-    LogNativeAssembler, LogNativeAssemblerRegistry, LogNativeInlineAssembler,
+    AddIArenaFieldOffsets, Alu3ArenaFieldOffsets, Alu3WArenaFieldOffsets, ArenaNativeGeometry,
+    ArenaNativeLayout, Branch2ArenaFieldOffsets, DeltaAccessPattern, LoadStoreArenaFieldOffsets,
+    LogNativeAccessView, LogNativeAssembler, LogNativeAssemblerRegistry, LogNativeInlineAssembler,
     LogNativeOpcodeAdmitter, RvrDeltaDecodeEntry, RvrDeltaDecodeInfo, Rw1ArenaFieldOffsets,
     VmRvrLogNativeExtension, Wr1ArenaFieldOffsets,
 };

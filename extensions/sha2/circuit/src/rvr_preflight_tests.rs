@@ -24,7 +24,7 @@ use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode, SystemOpcode,
 };
-use openvm_riscv_transpiler::{BaseAluOpcode, BranchEqualOpcode};
+use openvm_riscv_transpiler::{BaseAluImmOpcode, BranchEqualOpcode};
 use openvm_sha2_air::{Sha256Config, Sha2BlockHasherSubairConfig};
 use openvm_sha2_transpiler::Rv64Sha2Opcode;
 use openvm_stark_backend::{
@@ -75,7 +75,7 @@ fn sha256() -> Instruction<F> {
 
 fn addi(rd: usize, rs1: usize, imm: usize) -> Instruction<F> {
     Instruction::from_usize(
-        BaseAluOpcode::ADD.global_opcode(),
+        BaseAluImmOpcode::ADDI.global_opcode(),
         [reg(rd), reg(rs1), imm, 1, 0],
     )
 }

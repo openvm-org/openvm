@@ -5,7 +5,7 @@ use openvm_instructions::program::DEFAULT_PC_STEP;
 use rvr_openvm_ir::*;
 
 use super::context::{
-    ArenaAlu3Baked, ArenaBranch2Baked, ArenaRw1Baked, ArenaWr1Baked, EmitContext,
+    ArenaAddIBaked, ArenaAlu3Baked, ArenaBranch2Baked, ArenaRw1Baked, ArenaWr1Baked, EmitContext,
 };
 
 /// Trait for instructions that can emit their own C code.
@@ -52,6 +52,7 @@ impl ArenaNativeGeometry {
 /// flavor's core offset carried in `ChipRecordBuf.core_off` at runtime).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ArenaNativeLayout {
+    AddI(AddIArenaFieldOffsets),
     Alu3(Alu3ArenaFieldOffsets),
     Branch2(Branch2ArenaFieldOffsets),
     LoadStore(LoadStoreArenaFieldOffsets),
@@ -71,6 +72,22 @@ pub enum ArenaNativeLayout {
     CustomVariableRows {
         residual_memory_chronology: bool,
     },
+}
+
+/// Offsets for the AddI full record: a one-read one-u16-block-write
+/// immediate adapter and the dedicated AddI core witness.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AddIArenaFieldOffsets {
+    pub from_pc: usize,
+    pub from_timestamp: usize,
+    pub rd_ptr: usize,
+    pub rs1_ptr: usize,
+    pub read_prev_ts: usize,
+    pub write_prev_ts: usize,
+    pub write_prev_data: usize,
+    pub core_rs1: usize,
+    pub core_imm_low11: usize,
+    pub core_imm_sign: usize,
 }
 
 /// Offsets for the wr1-class full record (JalLui / Auipc): a conditional
@@ -291,32 +308,43 @@ pub fn emit_instr(ctx: &mut EmitContext, instr: &Instr) {
         }
         Instr::AluImm { op, rd, rs1, imm } => {
             if ctx.inline_records_enabled() {
-                // R4 imm-form baking (ADDI only; there is no SUB-imm). The
-                // record's rs2 field is the 24-bit immediate encoding and
-                // rs2_imm_sign its 12-bit sign, matching the host assembler.
-                let imm_alu3 = |local_opcode: u8| {
-                    Some(ArenaAlu3Baked {
-                        rs2_field: (*imm as u32) & 0xFF_FFFF,
-                        rs2_as: 0,
-                        rs2_imm_sign: (*imm < 0) as u8,
-                        local_opcode,
-                    })
-                };
-                let arena = match op {
-                    AluOp::Add => imm_alu3(0),
-                    AluOp::Slt => imm_alu3(0),
-                    AluOp::Sltu => imm_alu3(1),
-                    AluOp::Xor => imm_alu3(2),
-                    AluOp::Or => imm_alu3(3),
-                    AluOp::And => imm_alu3(4),
-                    _ => None,
-                };
-                ctx.emit_reg2imm_inline(*rd, *rs1, *imm as i64 as u64, arena, |l, v| {
-                    alu_expr(*op, l, v)
-                });
+                if *op == AluOp::Add {
+                    let encoded = (*imm as u32) & 0xFF_FFFF;
+                    ctx.emit_addi_inline(
+                        *rd,
+                        *rs1,
+                        *imm as i64 as u64,
+                        Some(ArenaAddIBaked {
+                            imm_low11: (encoded & 0x7ff) as u16,
+                            imm_sign: ((encoded >> 11) & 1) as u16,
+                        }),
+                    );
+                } else {
+                    let imm_alu3 = |local_opcode: u8| {
+                        Some(ArenaAlu3Baked {
+                            rs2_field: (*imm as u32) & 0xFF_FFFF,
+                            rs2_as: 0,
+                            rs2_imm_sign: (*imm < 0) as u8,
+                            local_opcode,
+                        })
+                    };
+                    let arena = match op {
+                        AluOp::Slt => imm_alu3(0),
+                        AluOp::Sltu => imm_alu3(1),
+                        AluOp::Xor => imm_alu3(2),
+                        AluOp::Or => imm_alu3(3),
+                        AluOp::And => imm_alu3(4),
+                        _ => None,
+                    };
+                    ctx.emit_reg2imm_inline(*rd, *rs1, *imm as i64 as u64, arena, |l, v| {
+                        alu_expr(*op, l, v)
+                    });
+                }
             } else {
                 let l = ctx.read_reg(*rs1);
-                ctx.trace_immediate();
+                if *op != AluOp::Add {
+                    ctx.trace_immediate();
+                }
                 let r = imm_literal(*imm);
                 ctx.write_reg(*rd, &alu_expr(*op, &l, &r));
             }
