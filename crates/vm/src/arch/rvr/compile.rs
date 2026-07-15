@@ -2349,16 +2349,14 @@ fn find_shared_lib(dir: &Path) -> Result<PathBuf, CompileError> {
 
 #[cfg(test)]
 mod tests {
-    use openvm_instructions::instruction::Instruction;
-    use p3_baby_bear::BabyBear;
     use rvr_openvm_lift::RvrExtension;
 
     use super::*;
 
     struct UnfingerprintedExtension;
 
-    impl RvrExtension<BabyBear> for UnfingerprintedExtension {
-        fn try_lift(&self, _insn: &Instruction<BabyBear>, _pc: u64) -> Option<LiftedInstr> {
+    impl RvrExtension for UnfingerprintedExtension {
+        fn try_lift(&self, _insn: &RvrInstruction, _pc: u64) -> Option<LiftedInstr> {
             None
         }
 
@@ -2369,7 +2367,7 @@ mod tests {
 
     #[test]
     fn extension_without_fingerprint_disables_input_cache() {
-        let mut registry = ExtensionRegistry::<BabyBear>::new();
+        let mut registry = ExtensionRegistry::new();
         assert_eq!(registry.codegen_fingerprints(), Some(Vec::new()));
         registry.register(UnfingerprintedExtension);
         assert_eq!(registry.codegen_fingerprints(), None);
