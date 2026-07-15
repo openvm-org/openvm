@@ -12,8 +12,8 @@ use openvm_circuit::{
     arch::{
         rvr::{
             preflight_compile_invocations_for_test, reset_preflight_compile_invocations_for_test,
-            LogNativeAssemblerRegistry, RvrPreflightEngine, RvrPreflightOutput, RvrPreflightRoute,
-            VmRvrLogNativeExtension,
+            DeltaMemoryLogEntry, LogNativeAssemblerRegistry, RvrPreflightEngine,
+            RvrPreflightOutput, RvrPreflightRoute, VmRvrLogNativeExtension,
         },
         verify_segments, AddressSpaceHostLayout, ContinuationVmProver, DenseRecordArena,
         ExecutionError, MatrixRecordArena, Streams, VirtualMachine, VmInstance,
@@ -547,7 +547,6 @@ fn rvr_preflight_delta_full_rv64im_matrix_is_byte_equal_to_compact() {
         0,
         "generated C delta target must be 32-byte aligned"
     );
-
     assert_system_records_eq(
         "delta_full_matrix",
         &compact_output.system_records,
@@ -3603,6 +3602,70 @@ fn rvr_preflight_hintstore_direct_final_matches_verbose_twice() {
                 &targets,
             )
             .expect("HintStore direct preflight");
+        if pass == 1 {
+            let full_memory_log = direct_output.raw_logs.memory_log.clone();
+            let (_compact_arena, compact_target) = DenseRecordArena::stage_arena_native(
+                heights[hint_air] as usize,
+                capacities[hint_air].1,
+                &geometry,
+            );
+            let compact_targets = BTreeMap::from([(hint_air, compact_target)]);
+            let mut compact_output = direct_instance
+                .execute_preflight_from_state_with_compact_delta_memory_for_test(
+                    direct_vm.create_initial_state(&exe, streams.clone()),
+                    Some(retired),
+                    &heights,
+                    &compact_targets,
+                )
+                .expect("HintStore compact residual-memory writer");
+            assert!(
+                compact_output.raw_logs.memory_log.is_empty(),
+                "compact residual arm must not retain the full memory schema"
+            );
+            assert!(
+                !compact_output.raw_logs.delta_memory_log.is_empty(),
+                "HintStore fixture must emit residual memory chronology"
+            );
+            assert_eq!(
+                full_memory_log.len(),
+                compact_output.raw_logs.delta_memory_log.len(),
+                "compact residual writer must preserve record count"
+            );
+            for (index, (full, compact)) in full_memory_log
+                .iter()
+                .zip(&compact_output.raw_logs.delta_memory_log)
+                .enumerate()
+            {
+                assert_eq!(
+                    *compact,
+                    DeltaMemoryLogEntry {
+                        timestamp: full.timestamp,
+                        address: u32::try_from(full.address)
+                            .expect("OpenVM residual address must fit u32"),
+                        value: full.value,
+                        kind: full.kind,
+                        addr_space: full.addr_space,
+                        width: full.width,
+                        complete: 1,
+                        _reserved: 0,
+                    },
+                    "compact residual entry {index} must retain every decoded field"
+                );
+            }
+            assert_system_records_eq(
+                "HintStore compact residual writer",
+                &oracle_output.system_records,
+                &compact_output.system_records,
+            );
+
+            // Decode the independently C-emitted compact chronology while
+            // retaining the normal arm's access replay for any non-direct
+            // residual records. This tests semantic arena equality without
+            // weakening the production fail-closed access-aux guard.
+            direct_output.raw_logs.memory_log.clear();
+            direct_output.raw_logs.delta_memory_log =
+                std::mem::take(&mut compact_output.raw_logs.delta_memory_log);
+        }
         assert_system_records_eq(
             &format!("HintStore direct pass {pass}"),
             &oracle_output.system_records,
@@ -3915,7 +3978,7 @@ fn rvr_preflight_compact_request_reveal_mixed_air_proves_and_verifies() {
     assert_eq!(segments, 1, "mixed LoadStore/REVEAL fixture is one segment");
 }
 
-/// Stage-2 CPU decoder oracle: the chronological 32-byte delta stream omits
+/// Stage-2 CPU decoder oracle: the chronological 24-byte delta stream omits
 /// every access previous-timestamp, then reconstructs and partitions the
 /// established compact wires before arena assembly. This fixture combines
 /// ordinary AS=2 load/store rows with AS=3 REVEAL rows in the same AIR and

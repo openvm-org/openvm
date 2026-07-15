@@ -33,6 +33,10 @@ pub const PREFLIGHT_PROGRAM_LOG_ENTRY_ALIGN: usize = 8;
 // longer replays the log to recover them.
 pub const PREFLIGHT_MEMORY_LOG_ENTRY_SIZE: usize = 40;
 pub const PREFLIGHT_MEMORY_LOG_ENTRY_ALIGN: usize = 8;
+/// Delta-only residual-memory wire. The full host log remains the ABI for
+/// CPU, compact, partial-direct, and non-delta routes.
+pub const PREFLIGHT_DELTA_MEMORY_LOG_ENTRY_SIZE: usize = 24;
+pub const PREFLIGHT_DELTA_MEMORY_LOG_ENTRY_ALIGN: usize = 8;
 // R1: the tracer gained per-address-space timestamp-shadow pointers, a
 // public-values base pointer (for `prev_value` reads on reveal writes), a
 // touched-block buffer, and its length/capacity counters.
@@ -73,6 +77,9 @@ pub const PREFLIGHT_CHIP_RECORD_FLAG_VARIABLE_ROWS: u32 = 8;
 /// Variable-row records reserve `rows * stride` bytes (Matrix flavor) rather
 /// than their packed byte size (Dense flavor).
 pub const PREFLIGHT_CHIP_RECORD_FLAG_VARIABLE_ROW_STRIDE: u32 = 16;
+/// The shared `memory_log` pointer targets the delta-only 24-byte residual
+/// schema instead of the full 40-byte host `MemoryLogEntry` schema.
+pub const PREFLIGHT_CHIP_RECORD_FLAG_COMPACT_RESIDUAL_MEMORY: u32 = 32;
 /// Byte size of one compact base-ALU AddSub record as stored by the preflight
 /// tracer (R3 L1+L5): the dynamic witness only — from_pc, from_timestamp, the
 /// three access prev_timestamps, the old rd block, and the b/c operand limbs.
@@ -102,7 +109,7 @@ pub const PREFLIGHT_RW1_RECORD_SIZE: usize = 32;
 /// instruction, independent of AIR: pc + from-timestamp + three dynamic u64
 /// values. The three access previous-timestamps are implicit in chronological
 /// stream order and are reconstructed by the decoder.
-pub const PREFLIGHT_DELTA_RECORD_SIZE: usize = 32;
+pub const PREFLIGHT_DELTA_RECORD_SIZE: usize = 24;
 
 const _: () = assert!(MEM_SIZE / WORD_SIZE <= u32::MAX as usize);
 

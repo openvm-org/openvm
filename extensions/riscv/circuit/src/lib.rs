@@ -525,6 +525,7 @@ pub fn generate_gpu_rvr_record_arenas(
     let mut bound_airs_len = 0usize;
     if let Some(delta) = saved_delta {
         let memory_log = std::mem::take(&mut output.raw_logs.memory_log);
+        let delta_memory_log = std::mem::take(&mut output.raw_logs.delta_memory_log);
         let program_log = std::mem::take(&mut output.raw_logs.program_log);
         let touched = std::mem::take(&mut output.raw_logs.touched);
         let chip_counts = std::mem::take(&mut output.raw_logs.chip_counts);
@@ -535,6 +536,7 @@ pub fn generate_gpu_rvr_record_arenas(
             output.delta_decode_precomputed.as_deref(),
             delta,
             memory_log,
+            delta_memory_log,
             program_log,
             touched,
             chip_counts,

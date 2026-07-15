@@ -154,6 +154,10 @@ struct CachedRvrCompiledPreflight {
     /// False only when compiler metadata plus the builder's whole-AIR device
     /// coverage prove that no program slot can reach the host log assembler.
     build_access_aux: bool,
+    /// True only for a fully-direct delta route backed by the builder's
+    /// device decoder. CPU and all-custom arena-only routes keep the full
+    /// host memory schema even when they can safely omit access aux.
+    compact_delta_memory: bool,
 }
 
 #[cfg(feature = "rvr")]
@@ -177,6 +181,7 @@ impl<F: PrimeField32> CachedRvrPreflightExecutor<F> for CachedRvrCompiledPreflig
             record_capacity_rows,
             arena_targets,
             self.build_access_aux,
+            self.compact_delta_memory,
         )
     }
 
@@ -2177,6 +2182,7 @@ where
                                 wire_airs,
                                 build_access_aux: !(fully_direct_delta
                                     && (has_device_delta_route || all_custom_arena)),
+                                compact_delta_memory: fully_direct_delta && has_device_delta_route,
                             }))
                         }
                         RvrPreflightRoute::Interpreter(_) => CachedRvrPreflight::Interpreter,

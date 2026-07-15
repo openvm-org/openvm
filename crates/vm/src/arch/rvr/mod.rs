@@ -48,12 +48,12 @@ pub use pure::{
     RvrTrackedExecutionOutcome,
 };
 pub use preflight::{
-    rvr_preflight_engine_env_override, ChipRecordBuf, MemoryLogEntry, PreflightRawLogs,
-    PreflightTracer, PreflightTracerData, ProgramLogEntry, RvrDeltaRecords, RvrInlineChipRecords,
-    RvrPreflightEngine, RvrPreflightInstance, RvrPreflightOutput, RvrPreflightRoute, TouchedBlock,
-    PREFLIGHT_ADDSUB_RECORD_SIZE, PREFLIGHT_BRANCH2_RECORD_SIZE,
-    PREFLIGHT_CHIP_RECORD_FLAG_DIRECT_FINAL, PREFLIGHT_CHIP_RECORD_FLAG_OVERFLOW,
-    PREFLIGHT_CHIP_RECORD_FLAG_RESIDUAL_MEMORY_CHRONOLOGY,
+    rvr_preflight_engine_env_override, ChipRecordBuf, DeltaMemoryLogEntry, MemoryLogEntry,
+    PreflightRawLogs, PreflightTracer, PreflightTracerData, ProgramLogEntry, RvrDeltaRecords,
+    RvrInlineChipRecords, RvrPreflightEngine, RvrPreflightInstance, RvrPreflightOutput,
+    RvrPreflightRoute, TouchedBlock, PREFLIGHT_ADDSUB_RECORD_SIZE, PREFLIGHT_BRANCH2_RECORD_SIZE,
+    PREFLIGHT_CHIP_RECORD_FLAG_COMPACT_RESIDUAL_MEMORY, PREFLIGHT_CHIP_RECORD_FLAG_DIRECT_FINAL,
+    PREFLIGHT_CHIP_RECORD_FLAG_OVERFLOW, PREFLIGHT_CHIP_RECORD_FLAG_RESIDUAL_MEMORY_CHRONOLOGY,
     PREFLIGHT_CHIP_RECORD_FLAG_VARIABLE_ROWS, PREFLIGHT_CHIP_RECORD_FLAG_VARIABLE_ROW_STRIDE,
     PREFLIGHT_DELTA_RECORD_SIZE, PREFLIGHT_INITIAL_TIMESTAMP, PREFLIGHT_MEMORY_KIND_READ,
     PREFLIGHT_MEMORY_KIND_TOUCH, PREFLIGHT_MEMORY_KIND_WRITE, PREFLIGHT_RW1_RECORD_SIZE,

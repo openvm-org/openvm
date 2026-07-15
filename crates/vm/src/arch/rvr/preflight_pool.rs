@@ -35,7 +35,8 @@ use openvm_instructions::riscv::RV64_REGISTER_AS;
 use super::{
     compile::env_flag_is_off,
     preflight::{
-        MemoryLogEntry, PreflightRawLogs, ProgramLogEntry, RvrInlineChipRecords, TouchedBlock,
+        DeltaMemoryLogEntry, MemoryLogEntry, PreflightRawLogs, ProgramLogEntry,
+        RvrInlineChipRecords, TouchedBlock,
     },
     preflight_normalizer::WORD_BYTES,
 };
@@ -58,6 +59,7 @@ pub struct RvrPreflightBufferPool {
 struct PoolInner {
     program_log: Option<Vec<MaybeUninit<ProgramLogEntry>>>,
     memory_log: Option<Vec<MaybeUninit<MemoryLogEntry>>>,
+    delta_memory_log: Option<Vec<MaybeUninit<DeltaMemoryLogEntry>>>,
     touched: Option<Vec<MaybeUninit<TouchedBlock>>>,
     /// Kept all-zero between segments (scrub-on-recycle).
     shadow_register: Option<Vec<u32>>,
@@ -113,6 +115,16 @@ impl RvrPreflightBufferPool {
             return vec_uninit(cap);
         }
         take_uninit_slot(&mut self.lock().memory_log, cap)
+    }
+
+    pub(crate) fn take_delta_memory_log(
+        &self,
+        cap: usize,
+    ) -> Vec<MaybeUninit<DeltaMemoryLogEntry>> {
+        if !self.enabled {
+            return vec_uninit(cap);
+        }
+        take_uninit_slot(&mut self.lock().delta_memory_log, cap)
     }
 
     pub(crate) fn take_touched(&self, cap: usize) -> Vec<MaybeUninit<TouchedBlock>> {
@@ -239,6 +251,7 @@ impl RvrPreflightBufferPool {
         &self,
         program_log: Vec<MaybeUninit<ProgramLogEntry>>,
         memory_log: Vec<MaybeUninit<MemoryLogEntry>>,
+        delta_memory_log: Vec<MaybeUninit<DeltaMemoryLogEntry>>,
         touched: Vec<MaybeUninit<TouchedBlock>>,
     ) {
         if !self.enabled {
@@ -247,6 +260,7 @@ impl RvrPreflightBufferPool {
         let mut inner = self.lock();
         recycle_uninit_slot(&mut inner.program_log, program_log);
         recycle_uninit_slot(&mut inner.memory_log, memory_log);
+        recycle_uninit_slot(&mut inner.delta_memory_log, delta_memory_log);
         recycle_uninit_slot(&mut inner.touched, touched);
     }
 
@@ -340,12 +354,17 @@ impl RvrPreflightBufferPool {
         let PreflightRawLogs {
             program_log,
             memory_log,
+            delta_memory_log,
             chip_counts: _,
             touched,
         } = raw_logs;
         let mut inner = self.lock();
         recycle_uninit_slot(&mut inner.program_log, into_uninit_spare(program_log));
         recycle_uninit_slot(&mut inner.memory_log, into_uninit_spare(memory_log));
+        recycle_uninit_slot(
+            &mut inner.delta_memory_log,
+            into_uninit_spare(delta_memory_log),
+        );
         recycle_uninit_slot(&mut inner.touched, into_uninit_spare(touched));
         for chip in inline_records {
             push_record_spare(&mut inner.record_bufs, into_uninit_spare(chip.bytes));

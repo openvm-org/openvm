@@ -66,7 +66,7 @@ pub struct RvrInlineRecordsMeta {
     /// by `air_idx`. Geometry comes from the assembler registry, which the
     /// owning extension populated from the real record types.
     pub arena_native_airs: Vec<(usize, ArenaNativeGeometry)>,
-    /// Stage-2: emit one chronological 32-byte delta stream instead of the
+    /// Stage-2: emit one chronological 24-byte delta stream instead of the
     /// per-AIR compact wire. `airs` still describes the decoder's output
     /// shapes and is used for fail-closed route validation.
     pub delta_records: bool,

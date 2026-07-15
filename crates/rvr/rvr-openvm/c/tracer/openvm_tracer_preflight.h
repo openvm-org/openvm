@@ -70,6 +70,20 @@ typedef struct MemoryLogEntry {
   uint64_t prev_value;
 } MemoryLogEntry;
 
+/* Delta-only residual-memory wire. The chronological decoder reconstructs
+ * prev_timestamp and prev_value. CPU, compact, partial-direct, and non-delta
+ * routes continue to use the full MemoryLogEntry above. */
+typedef struct DeltaMemoryLogEntry {
+  uint32_t timestamp;
+  uint32_t address;
+  uint64_t value;
+  uint8_t kind;
+  uint8_t addr_space;
+  uint8_t width;
+  uint8_t complete;
+  uint32_t _reserved;
+} DeltaMemoryLogEntry;
+
 /* A block touched (for the first time) this segment. `block_addr` is the
  * block-aligned byte address; the host derives the AS-native block pointer and
  * reads the final value from live memory + the final timestamp from the
@@ -104,6 +118,7 @@ static constexpr uint32_t PREFLIGHT_RECORD_OVERFLOW = 2u;
 static constexpr uint32_t PREFLIGHT_RECORD_RESIDUAL_MEMORY_CHRONOLOGY = 4u;
 static constexpr uint32_t PREFLIGHT_RECORD_VARIABLE_ROWS = 8u;
 static constexpr uint32_t PREFLIGHT_RECORD_VARIABLE_ROW_STRIDE = 16u;
+static constexpr uint32_t PREFLIGHT_RECORD_COMPACT_RESIDUAL_MEMORY = 32u;
 
 typedef struct Tracer {
   ProgramLogEntry* program_log;
@@ -176,6 +191,26 @@ _Static_assert(offsetof(MemoryLogEntry, value) == 24,
                "MemoryLogEntry value offset drift");
 _Static_assert(offsetof(MemoryLogEntry, prev_value) == 32,
                "MemoryLogEntry prev_value offset drift");
+_Static_assert(sizeof(DeltaMemoryLogEntry) == PREFLIGHT_DELTA_MEMORY_LOG_ENTRY_SIZE,
+               "DeltaMemoryLogEntry size drift");
+_Static_assert(_Alignof(DeltaMemoryLogEntry) == PREFLIGHT_DELTA_MEMORY_LOG_ENTRY_ALIGN,
+               "DeltaMemoryLogEntry align drift");
+_Static_assert(offsetof(DeltaMemoryLogEntry, timestamp) == 0,
+               "DeltaMemoryLogEntry timestamp offset drift");
+_Static_assert(offsetof(DeltaMemoryLogEntry, address) == 4,
+               "DeltaMemoryLogEntry address offset drift");
+_Static_assert(offsetof(DeltaMemoryLogEntry, value) == 8,
+               "DeltaMemoryLogEntry value offset drift");
+_Static_assert(offsetof(DeltaMemoryLogEntry, kind) == 16,
+               "DeltaMemoryLogEntry kind offset drift");
+_Static_assert(offsetof(DeltaMemoryLogEntry, addr_space) == 17,
+               "DeltaMemoryLogEntry addr_space offset drift");
+_Static_assert(offsetof(DeltaMemoryLogEntry, width) == 18,
+               "DeltaMemoryLogEntry width offset drift");
+_Static_assert(offsetof(DeltaMemoryLogEntry, complete) == 19,
+               "DeltaMemoryLogEntry complete offset drift");
+_Static_assert(offsetof(DeltaMemoryLogEntry, _reserved) == 20,
+               "DeltaMemoryLogEntry reserved offset drift");
 _Static_assert(sizeof(TouchedBlock) == PREFLIGHT_TOUCHED_BLOCK_SIZE,
                "TouchedBlock size drift");
 _Static_assert(_Alignof(TouchedBlock) == PREFLIGHT_TOUCHED_BLOCK_ALIGN,
@@ -263,14 +298,12 @@ typedef struct PreflightAddSubRecord {
 } PreflightAddSubRecord;
 
 /* Stage-2 global chronological record. The old wire's three previous-access
- * timestamps are intentionally absent: a decoder merges this stream with the
- * residual memory log and reconstructs them from access order. The 32-byte
- * size permits one pair of 16-byte stores and keeps every record naturally
- * aligned in the pinned backing. */
+ * timestamps and post-write value are intentionally absent: a decoder merges
+ * this stream with the residual memory log, reconstructs access chronology,
+ * and derives the write from the opcode and the two source values. */
 typedef struct PreflightDeltaRecord {
   uint32_t from_pc;
   uint32_t from_timestamp;
-  uint64_t v0;
   uint64_t v1;
   uint64_t v2;
 } PreflightDeltaRecord;
@@ -417,12 +450,33 @@ static __attribute__((always_inline)) inline uint32_t preflight_touch(
 static __attribute__((always_inline)) inline uint32_t preflight_append_memory(
     Tracer* restrict t, uint8_t kind, uint8_t addr_space, uint64_t address,
     uint8_t width, uint64_t value, uint64_t prev_value) {
+  bool compact_residual =
+      t->delta_records != NULL &&
+      (t->delta_records->flags & PREFLIGHT_RECORD_COMPACT_RESIDUAL_MEMORY) != 0u;
+  if (unlikely(compact_residual && address > UINT32_MAX)) {
+    t->delta_records->flags |= PREFLIGHT_RECORD_OVERFLOW;
+    return 0;
+  }
   uint32_t timestamp;
   uint32_t prev_timestamp =
       preflight_touch(t, addr_space, address, prev_value, &timestamp);
 
   uint32_t idx = t->memory_log_len++;
   if (likely(idx < t->memory_log_cap)) {
+    if (compact_residual) {
+      DeltaMemoryLogEntry entry = {
+          .timestamp = timestamp,
+          .address = (uint32_t)address,
+          .value = value,
+          .kind = kind,
+          .addr_space = addr_space,
+          .width = width,
+          .complete = 1,
+          ._reserved = 0,
+      };
+      ((DeltaMemoryLogEntry*)t->memory_log)[idx] = entry;
+      return prev_timestamp;
+    }
     MemoryLogEntry entry = {
         .timestamp = timestamp,
         .prev_timestamp = prev_timestamp,
@@ -689,19 +743,15 @@ preflight_claim_delta_records(RvState* restrict state, uint32_t count) {
   return (PreflightDeltaRecord*)(buf->base + off);
 }
 
-static __attribute__((always_inline)) inline void preflight_write_delta3(
+static __attribute__((always_inline)) inline void preflight_write_delta2(
     PreflightDeltaRecord* restrict record, uint32_t from_pc,
-    uint32_t from_timestamp, uint64_t v0, uint64_t v1, uint64_t v2) {
+    uint32_t from_timestamp, uint64_t v1, uint64_t v2) {
   if (unlikely(record == NULL)) {
     return;
   }
-  /* A struct assignment gives clang the complete 32-byte value at once; on
-   * x86 this lowers to two unaligned 16-byte stores without constructing an
-   * explicit AVX vector in the generated instruction body. */
   *record = (PreflightDeltaRecord){
       .from_pc = from_pc,
       .from_timestamp = from_timestamp,
-      .v0 = v0,
       .v1 = v1,
       .v2 = v2,
   };

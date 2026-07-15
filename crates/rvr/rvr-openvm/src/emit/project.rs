@@ -221,7 +221,7 @@ pub struct CProject {
     /// whole-AIR taint. This, rather than the IR node's shape alone, controls
     /// program-log suppression and delta reservation.
     pub inline_pc_slots: Vec<bool>,
-    /// Stage-2 chronological 32-byte delta stream. This is a stronger compact
+    /// Stage-2 chronological 24-byte delta stream. This is a stronger compact
     /// mode: all inline AIRs share one execution-ordered backing and reserve
     /// their record slots once per basic-block entry.
     pub delta_records: bool,
