@@ -7,11 +7,6 @@ homepage = "https://openvm.dev"
 repository = "https://github.com/openvm-org/"
 license = "MIT OR Apache-2.0"
 
-# M2 DEGREE-5 BINDING PLACEHOLDER: the committed stark-backend v2.0.0 pins are degree-4.
-# Degree-5 validation requires the non-committed local [patch] overlay documented in the M2
-# implementation report. Do not treat these pins as the final degree-5 binding; a published
-# shadow-stark-backend revision is pending the conductor's decision.
-
 [workspace]
 members = [
   "benchmarks/utils",
@@ -147,12 +142,13 @@ lto = "thin"
 
 [workspace.dependencies]
 # Stark Backend
-openvm-stark-backend = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", tag = "v2.0.0", default-features = false }
-openvm-stark-sdk = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", tag = "v2.0.0", default-features = false }
-openvm-cpu-backend = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", tag = "v2.0.0", default-features = false }
-openvm-cuda-backend = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", tag = "v2.0.0", default-features = false }
-openvm-cuda-builder = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", tag = "v2.0.0", default-features = false }
-openvm-cuda-common = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", tag = "v2.0.0", default-features = false }
+openvm-stark-backend = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "feat/bb5-only", default-features = false }
+openvm-codec-derive = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "feat/bb5-only", default-features = false }
+openvm-stark-sdk = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "feat/bb5-only", default-features = false }
+openvm-cpu-backend = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "feat/bb5-only", default-features = false }
+openvm-cuda-backend = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "feat/bb5-only", default-features = false }
+openvm-cuda-builder = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "feat/bb5-only", default-features = false }
+openvm-cuda-common = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "feat/bb5-only", default-features = false }
 
 # OpenVM
 openvm-decoder = { version = "2.0.0", path = "crates/toolchain/decoder", default-features = false }
@@ -353,3 +349,12 @@ ignored = [
 # Crates opt in with `[lints] workspace = true`.
 [workspace.lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)', 'cfg(target_os, values("openvm"))'] }
+
+# halo2-gpu v1.0.0 still names these two crates through the upstream v2.0.0 source, which would
+# clash with the degree-5 workspace pins above on `links = "cuda-common"`. Redirect every
+# `openvm-org/stark-backend` edge for these two crates to the degree-5 branch so Cargo sees a
+# single `links = "cuda-common"` package. A `[patch]` cannot point back at the same URL it
+# patches, so the `www.` host alias (same repo, distinct source to Cargo) is used here.
+[patch."https://github.com/openvm-org/stark-backend.git"]
+openvm-cuda-builder = { git = "https://www.github.com/openvm-org/stark-backend.git", branch = "feat/bb5-only" }
+openvm-cuda-common = { git = "https://www.github.com/openvm-org/stark-backend.git", branch = "feat/bb5-only" }

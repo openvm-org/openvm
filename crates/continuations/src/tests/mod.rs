@@ -232,6 +232,20 @@ fn test_internal_recursive_vk_stabilization(def_hook_cached_commit_set: bool) ->
     setup_tracing_with_log_level(Level::INFO);
     let config = test_rv64im_config();
 
+    // Pin the internal profile fields that change the WHIR/Sumcheck verifier shape. These match
+    // the published degree-5 backend revision and complement the VK-commit fixed-point check
+    // below.
+    let internal_params = internal_system_params();
+    assert_eq!(internal_params.l_skip, 2);
+    assert_eq!(internal_params.n_stack, 19);
+    assert_eq!(internal_params.w_stack, 256);
+    assert_eq!(internal_params.log_blowup, 3);
+    assert_eq!(internal_params.k_whir(), 4);
+    assert_eq!(internal_params.whir.folding_pow_bits, 14);
+    assert_eq!(internal_params.whir.mu_pow_bits, 16);
+    assert_eq!(internal_params.whir.query_phase_pow_bits, 20);
+    assert_eq!(internal_params.max_constraint_degree, 4);
+
     let engine = Engine::new(app_system_params());
     let (_, app_vk) = engine.keygen(
         &config
@@ -251,13 +265,13 @@ fn test_internal_recursive_vk_stabilization(def_hook_cached_commit_set: bool) ->
     );
     let internal_0_prover = InnerProver::<DEFAULT_MAX_NUM_PROOFS>::new::<Engine>(
         leaf_prover.get_vk(),
-        internal_system_params(),
+        internal_params.clone(),
         false,
         def_hook_cached_commit,
     );
     let internal_1_prover = InnerProver::<DEFAULT_MAX_NUM_PROOFS>::new::<Engine>(
         internal_0_prover.get_vk(),
-        internal_system_params(),
+        internal_params.clone(),
         false,
         def_hook_cached_commit,
     );
@@ -265,13 +279,16 @@ fn test_internal_recursive_vk_stabilization(def_hook_cached_commit_set: bool) ->
     // The internal vk should stabilize at the second internal layer
     let test_prover = InnerProver::<DEFAULT_MAX_NUM_PROOFS>::new::<Engine>(
         internal_1_prover.get_vk(),
-        internal_system_params(),
+        internal_params,
         true,
         def_hook_cached_commit,
     );
+
+    let stabilized_internal_vk_commit = test_prover.get_vk_commit(false);
+    let self_recursive_vk_commit = test_prover.get_vk_commit(true);
     assert_eq!(
-        test_prover.get_vk_commit(false),
-        test_prover.get_vk_commit(true)
+        stabilized_internal_vk_commit, self_recursive_vk_commit,
+        "internal child VK and self-recursive VK commits must remain identical after stabilization"
     );
     Ok(())
 }

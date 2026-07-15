@@ -501,6 +501,11 @@ pub struct WhirModule {
 }
 
 impl WhirModule {
+    #[cfg(test)]
+    pub(crate) fn folding_pow_bits(&self) -> usize {
+        self.params.whir.folding_pow_bits
+    }
+
     pub fn new(
         child_vk: &MultiStarkVerifyingKey<BabyBearPoseidon2Config>,
         b: &mut BusIndexManager,
