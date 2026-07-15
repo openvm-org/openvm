@@ -21,7 +21,7 @@ jobs:
   tests:
     name: Recursion tests
     runs-on:
-      - runs-on=${{ github.run_id }}/runner=16cpu-linux-arm64/extras=s3-cache
+      - runs-on=${{ github.run_id }}/family=c9g.4xlarge+c8g.4xlarge/image=ubuntu24-full-arm64/extras=s3-cache
 
     steps:
       - uses: runs-on/action@v2
@@ -33,8 +33,6 @@ jobs:
           ssh-private-key: |
             ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
       - uses: actions/checkout@v6
-        with:
-          submodules: recursive
       - uses: dtolnay/rust-toolchain@stable
         env:
           RUSTUP_PERMIT_COPY_RENAME: "1"
@@ -45,7 +43,7 @@ jobs:
       - name: Run tests
         working-directory: crates/continuations
         run: |
-          rustup component add rust-src --toolchain nightly-2026-01-18
+          "$GITHUB_WORKSPACE/ci/install-openvm-toolchain.sh"
           cargo nextest run
 
       - name: sccache stats

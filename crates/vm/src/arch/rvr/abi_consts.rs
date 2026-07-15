@@ -1,0 +1,41 @@
+//! Drift guards for constants redefined in the rvr crates (which cannot
+//! import from openvm-circuit without creating a cycle).
+//!
+//! TODO: decide whether any redefinition can be replaced with a direct
+//! import — e.g. by moving the canonical constant into a leaf crate.
+//!
+//! TODO(defaults): `DEFAULT_SEGMENT_CHECK_INSNS` is a tunable default, not an
+//! invariant — decide whether to keep it as a `const` or restore runtime
+//! plumbing for it.
+
+use openvm_instructions::{
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    DEFERRAL_AS,
+};
+use rvr_openvm_ext_ffi_common as ffi;
+
+use crate::{
+    arch::execution_mode::metered::{
+        memory_ctx::PAGE_BITS, segment_ctx::DEFAULT_SEGMENT_CHECK_INSNS,
+    },
+    system::memory::{merkle::public_values::PUBLIC_VALUES_AS, DIGEST_WIDTH},
+};
+
+// ── rvr-openvm-ext-ffi-common address-space identifiers ────────────────
+const _: () = assert!(ffi::AS_REGISTER == RV64_REGISTER_AS);
+const _: () = assert!(ffi::AS_MEMORY == RV64_MEMORY_AS);
+const _: () = assert!(ffi::AS_PUBLIC_VALUES == PUBLIC_VALUES_AS);
+const _: () = assert!(ffi::DEFERRAL_AS == DEFERRAL_AS);
+
+// ── rvr-openvm-ext-ffi-common word / digest sizes ──────────────────────
+const _: () = assert!(ffi::WORD_SIZE == openvm_platform::WORD_SIZE);
+const _: () = assert!(ffi::DEFERRAL_DIGEST_SIZE == DIGEST_WIDTH);
+// Gated: plain `rvr` doesn't pull `openvm-stark-sdk`.
+#[cfg(any(feature = "test-utils", feature = "cuda"))]
+const _: () = assert!(
+    ffi::DEFERRAL_DIGEST_SIZE == openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE,
+);
+
+// ── rvr-openvm-ext-ffi-common metered-execution layout ─────────────────
+const _: () = assert!(ffi::PAGE_BITS == PAGE_BITS);
+const _: () = assert!(ffi::DEFAULT_SEGMENT_CHECK_INSNS as u64 == DEFAULT_SEGMENT_CHECK_INSNS);

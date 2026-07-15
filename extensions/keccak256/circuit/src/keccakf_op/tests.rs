@@ -1,5 +1,6 @@
 use std::{
     array::from_fn,
+    mem::size_of,
     sync::{Arc, Mutex},
 };
 
@@ -10,16 +11,23 @@ use openvm_circuit::{
             memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder,
             BITWISE_OP_LOOKUP_BUS,
         },
-        Arena, ExecutionBridge, PreflightExecutor,
+        Arena, ExecutionBridge, PreflightExecutor, MEMORY_BLOCK_BYTES,
     },
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
     utils::get_random_message,
 };
-use openvm_circuit_primitives::bitwise_op_lookup::{
-    BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
-    SharedBitwiseOperationLookupChip,
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::{
+        BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+        SharedBitwiseOperationLookupChip,
+    },
+    var_range::SharedVariableRangeCheckerChip,
 };
-use openvm_instructions::{instruction::Instruction, riscv::RV32_CELL_BITS, LocalOpcode};
+use openvm_instructions::{
+    instruction::Instruction,
+    riscv::{RV64_BYTE_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    LocalOpcode,
+};
 use openvm_keccak256_transpiler::KeccakfOpcode;
 use openvm_stark_backend::{
     interaction::{BusIndex, PermutationCheckBus},
@@ -34,7 +42,7 @@ use tiny_keccak::keccakf;
 use crate::{
     keccakf_op::{KeccakfExecutor, KeccakfOpAir, KeccakfOpChip},
     keccakf_perm::{KeccakfPermAir, KeccakfPermChip},
-    KECCAK_WIDTH_BYTES,
+    KECCAK_WIDTH_BYTES, KECCAK_WIDTH_U64S,
 };
 
 type F = BabyBear;
@@ -46,7 +54,7 @@ const KECCAKF_STATE_BUS: BusIndex = 13;
 fn create_harness_fields(
     execution_bridge: ExecutionBridge,
     memory_bridge: MemoryBridge,
-    bitwise_chip: Arc<BitwiseOperationLookupChip<RV32_CELL_BITS>>,
+    range_checker_chip: SharedVariableRangeCheckerChip,
     memory_helper: SharedMemoryHelper<F>,
     address_bits: usize,
 ) -> (KeccakfOpAir, KeccakfExecutor, KeccakfOpChip<F>) {
@@ -55,34 +63,39 @@ fn create_harness_fields(
     let op_air = KeccakfOpAir::new(
         execution_bridge,
         memory_bridge,
-        bitwise_chip.bus(),
         PermutationCheckBus::new(KECCAKF_STATE_BUS),
+        range_checker_chip.bus(),
         address_bits,
         KeccakfOpcode::CLASS_OFFSET,
     );
-    let op_chip = KeccakfOpChip::new(bitwise_chip, address_bits, memory_helper, empty_records);
+    let op_chip = KeccakfOpChip::new(
+        range_checker_chip,
+        address_bits,
+        memory_helper,
+        empty_records,
+    );
     (op_air, executor, op_chip)
 }
 
 struct TestHarness<RA> {
     harness: Harness<RA>,
     bitwise: (
-        BitwiseOperationLookupAir<RV32_CELL_BITS>,
-        SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+        BitwiseOperationLookupAir<RV64_BYTE_BITS>,
+        SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
     ),
     perm: (KeccakfPermAir, KeccakfPermChip),
 }
 
 fn create_test_harness<RA: Arena>(tester: &mut VmChipTestBuilder<F>) -> TestHarness<RA> {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
         bitwise_bus,
     ));
 
     let (op_air, executor, op_chip) = create_harness_fields(
         tester.execution_bridge(),
         tester.memory_bridge(),
-        bitwise_chip.clone(),
+        tester.range_checker(),
         tester.memory_helper(),
         tester.address_bits(),
     );
@@ -108,37 +121,57 @@ fn set_and_execute_single_perm<RA: Arena, E: PreflightExecutor<F, RA>>(
     opcode: KeccakfOpcode,
 ) {
     const MAX_LEN: usize = KECCAK_WIDTH_BYTES;
+    const U64_NUM_BYTES: usize = size_of::<u64>();
     let rand_buffer = get_random_message(rng, MAX_LEN);
     let mut rand_buffer_arr = [0u8; MAX_LEN];
     rand_buffer_arr.copy_from_slice(&rand_buffer);
 
-    let rd = gen_pointer(rng, 4);
+    let rd = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
     let buffer_ptr = gen_pointer(rng, MAX_LEN);
-    tester.write(1, rd, (buffer_ptr as u32).to_le_bytes().map(F::from_u8));
+    tester.write_bytes(
+        RV64_REGISTER_AS as usize,
+        rd,
+        (buffer_ptr as u64).to_le_bytes().map(F::from_u8),
+    );
     let rand_buffer_arr_f = rand_buffer_arr.map(F::from_u8);
 
-    for i in 0..(MAX_LEN / 4) {
-        let buffer_chunk: [F; 4] = rand_buffer_arr_f[4 * i..4 * i + 4]
+    for i in 0..(MAX_LEN / MEMORY_BLOCK_BYTES) {
+        let buffer_chunk: [F; MEMORY_BLOCK_BYTES] = rand_buffer_arr_f
+            [MEMORY_BLOCK_BYTES * i..MEMORY_BLOCK_BYTES * (i + 1)]
             .try_into()
-            .expect("slice has length 4");
-        tester.write(2, buffer_ptr + 4 * i, buffer_chunk);
+            .expect("slice has correct length");
+        tester.write_bytes(
+            RV64_MEMORY_AS as usize,
+            buffer_ptr + MEMORY_BLOCK_BYTES * i,
+            buffer_chunk,
+        );
     }
 
     tester.execute(
         executor,
         arena,
-        &Instruction::from_usize(opcode.global_opcode(), [rd, 0, 0, 1, 2]),
+        &Instruction::from_usize(
+            opcode.global_opcode(),
+            [rd, 0, 0, RV64_REGISTER_AS as usize, RV64_MEMORY_AS as usize],
+        ),
     );
 
     let mut output_buffer = [0u8; MAX_LEN];
 
-    for i in 0..(MAX_LEN / 4) {
-        let output_chunk: [F; 4] = tester.read(2, buffer_ptr + 4 * i);
+    for i in 0..(MAX_LEN / MEMORY_BLOCK_BYTES) {
+        let output_chunk: [F; MEMORY_BLOCK_BYTES] =
+            tester.read_bytes(RV64_MEMORY_AS as usize, buffer_ptr + MEMORY_BLOCK_BYTES * i);
         let output_chunk = output_chunk.map(|x| x.as_canonical_u32() as u8);
-        output_buffer[4 * i..4 * i + 4].copy_from_slice(&output_chunk);
+        output_buffer[MEMORY_BLOCK_BYTES * i..MEMORY_BLOCK_BYTES * (i + 1)]
+            .copy_from_slice(&output_chunk);
     }
-    let mut state: [u64; 25] =
-        from_fn(|i| u64::from_le_bytes(rand_buffer[8 * i..8 * i + 8].try_into().unwrap()));
+    let mut state: [u64; KECCAK_WIDTH_U64S] = from_fn(|i| {
+        u64::from_le_bytes(
+            rand_buffer[U64_NUM_BYTES * i..U64_NUM_BYTES * (i + 1)]
+                .try_into()
+                .unwrap(),
+        )
+    });
     keccakf(&mut state);
     let expected_out = state.iter().flat_map(|w| w.to_le_bytes()).collect_vec();
     assert_eq!(&output_buffer[..], &expected_out[..]);
@@ -213,15 +246,16 @@ struct CudaTestHarness {
 
 #[cfg(feature = "cuda")]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> CudaTestHarness {
-    let bitwise_bus = default_bitwise_lookup_bus();
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
-        bitwise_bus,
-    ));
+    let dummy_range_checker_chip = Arc::new(
+        openvm_circuit_primitives::var_range::VariableRangeCheckerChip::new(
+            openvm_circuit::arch::testing::default_var_range_checker_bus(),
+        ),
+    );
 
     let (air, executor, cpu_chip) = create_harness_fields(
         tester.execution_bridge(),
         tester.memory_bridge(),
-        dummy_bitwise_chip,
+        dummy_range_checker_chip,
         tester.dummy_memory_helper(),
         tester.address_bits(),
     );
@@ -232,7 +266,6 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> CudaTestHarness {
 
     let gpu_chip = KeccakfOpChipGpu::new(
         tester.range_checker(),
-        tester.bitwise_op_lookup(),
         tester.address_bits(),
         tester.timestamp_max_bits() as u32,
         shared_records.clone(),
@@ -267,22 +300,22 @@ fn cuda_set_and_execute(
 
     const KECCAK_STATE_BYTES: usize = 200;
 
-    let buffer_reg = gen_pointer(rng, 4);
+    let buffer_reg = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
     let buffer_ptr = gen_pointer(rng, KECCAK_STATE_BYTES);
 
-    tester.write(
+    tester.write_bytes(
         1,
         buffer_reg,
-        (buffer_ptr as u32).to_le_bytes().map(F::from_u8),
+        (buffer_ptr as u64).to_le_bytes().map(F::from_u8),
     );
 
     let state_data: Vec<u8> = (0..KECCAK_STATE_BYTES).map(|_| rng.random()).collect();
-    for (i, chunk) in state_data.chunks(4).enumerate() {
-        let mut word = [F::ZERO; 4];
+    for (i, chunk) in state_data.chunks(MEMORY_BLOCK_BYTES).enumerate() {
+        let mut word = [F::ZERO; MEMORY_BLOCK_BYTES];
         for (j, &byte) in chunk.iter().enumerate() {
             word[j] = F::from_u8(byte);
         }
-        tester.write(2, buffer_ptr + i * 4, word);
+        tester.write_bytes(2, buffer_ptr + i * MEMORY_BLOCK_BYTES, word);
     }
 
     let instruction = Instruction::from_usize(
@@ -377,17 +410,21 @@ fn test_keccakf_cuda_tracegen_zero_state() {
 
     const KECCAK_STATE_BYTES: usize = 200;
 
-    let buffer_reg = gen_pointer(&mut rng, 4);
+    let buffer_reg = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
     let buffer_ptr = gen_pointer(&mut rng, KECCAK_STATE_BYTES);
 
-    tester.write(
+    tester.write_bytes(
         1,
         buffer_reg,
-        (buffer_ptr as u32).to_le_bytes().map(F::from_u8),
+        (buffer_ptr as u64).to_le_bytes().map(F::from_u8),
     );
 
-    for i in 0..(KECCAK_STATE_BYTES / 4) {
-        tester.write(2, buffer_ptr + i * 4, [F::ZERO; 4]);
+    for i in 0..(KECCAK_STATE_BYTES / MEMORY_BLOCK_BYTES) {
+        tester.write_bytes(
+            2,
+            buffer_ptr + i * MEMORY_BLOCK_BYTES,
+            [F::ZERO; MEMORY_BLOCK_BYTES],
+        );
     }
 
     let instruction = Instruction::from_usize(

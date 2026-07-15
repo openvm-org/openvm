@@ -20,7 +20,7 @@ jobs:
   cuda-backend:
     name: recursion cuda tracegen tests
     runs-on:
-      - runs-on=${{ github.run_id }}/image=ubuntu24-gpu-x64/family=g6.*+g5+g6e/cpu=4+32/volume=40gb/spot=capacity-optimized/extras=s3-cache
+      - runs-on=${{ github.run_id }}/image=ubuntu24-gpu-x64/family=g7.2xlarge+g6.2xlarge+g5.2xlarge/volume=40gb/spot=price-capacity-optimized/extras=s3-cache
     steps:
       - uses: runs-on/action@v2
         with:
@@ -31,14 +31,18 @@ jobs:
           ssh-private-key: |
             ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
       - uses: actions/checkout@v6
-        with:
-          submodules: recursive
       - uses: dtolnay/rust-toolchain@stable
         env:
           RUSTUP_PERMIT_COPY_RENAME: "1"
       - uses: ./.github/actions/sccache
+
+      # TODO: remove once https://github.com/runs-on/runner-images-for-aws/issues/55 is fixed
+      - name: Setup GPU driver
+        run: bash ./scripts/gpu_driver_setup.sh
+
       - uses: ./.github/actions/rust-cache-cuda
       - uses: taiki-e/install-action@nextest
+
       - name: Verify GPU setup
         run: |
           nvidia-smi

@@ -1,4 +1,4 @@
-#![cfg_attr(target_os = "zkvm", no_std)]
+#![cfg_attr(not(feature = "std"), no_std)]
 
 extern crate alloc;
 
@@ -45,18 +45,33 @@ pub fn verify_stark<const DEF_IDX: u16>(input_commit: &Commit, expected: &ProofO
 }
 
 fn collapse_user_public_values(expanded: &[u8]) -> Vec<u8> {
-    const F_NUM_BYTES: usize = 4;
+    const F_NUM_BYTES: usize = core::mem::size_of::<u32>();
+    const U16_CELL_SIZE: usize = core::mem::size_of::<u16>();
 
     if !expanded.len().is_multiple_of(F_NUM_BYTES) {
         panic!("User public values output length is not a multiple of {F_NUM_BYTES}");
     }
 
-    let mut user_public_values = Vec::with_capacity(expanded.len() / F_NUM_BYTES);
+    let mut user_public_values = Vec::with_capacity(expanded.len() / F_NUM_BYTES * U16_CELL_SIZE);
     for bytes in expanded.chunks_exact(F_NUM_BYTES) {
-        if bytes[1..].iter().any(|&byte| byte != 0) {
+        if bytes[U16_CELL_SIZE..].iter().any(|&byte| byte != 0) {
             panic!("User public value has non-zero high bytes");
         }
-        user_public_values.push(bytes[0]);
+        user_public_values.extend_from_slice(&bytes[..U16_CELL_SIZE]);
     }
     user_public_values
+}
+
+#[cfg(test)]
+mod tests {
+    use super::collapse_user_public_values;
+
+    #[test]
+    fn collapse_user_public_values_preserves_u16_cells() {
+        let expanded = [0x34, 0x12, 0, 0, 0xcd, 0xab, 0, 0];
+        assert_eq!(
+            collapse_user_public_values(&expanded),
+            [0x34, 0x12, 0xcd, 0xab]
+        );
+    }
 }

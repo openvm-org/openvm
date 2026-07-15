@@ -900,6 +900,7 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
     let mut executor_enum_fields = Vec::new();
     let mut create_executors = Vec::new();
     let mut create_airs = Vec::new();
+    let mut extend_rvr = Vec::new();
     let mut execution_where_predicates: Vec<syn::WherePredicate> = Vec::new();
     let mut circuit_where_predicates: Vec<syn::WherePredicate> = Vec::new();
     execution_where_predicates.push(parse_quote! { F: ::openvm_circuit::arch::VmField });
@@ -920,6 +921,13 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
         let extension_ty = e.ty.clone();
         execution_where_predicates.push(parse_quote! {
             #extension_ty: ::openvm_circuit::arch::VmExecutionExtension<F, Executor = #executor_type>
+        });
+        extend_rvr.push(quote! {
+            <#extension_ty as ::rvr_openvm_lift::VmRvrExtension<F>>::extend_rvr(
+                &self.#ext_field_name,
+                &mut registry,
+                ctx.as_ref(),
+            );
         });
         create_airs.push(quote! {
             inventory.start_new_extension();
@@ -968,6 +976,29 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
                 let inventory = self.#source_name.create_executors()?.transmute::<Self::Executor>();
                 #(#create_executors)*
                 Ok(inventory)
+            }
+
+            #[cfg(feature = "rvr")]
+            fn create_rvr_extensions(
+                &self,
+                air_idx: Option<&[usize]>,
+            ) -> ::rvr_openvm_lift::ExtensionRegistry<F>
+            {
+                let ctx = air_idx.map(|air_idx| {
+                    let inventory = <Self as ::openvm_circuit::arch::VmExecutionConfig<F>>::create_executors(self)
+                        .expect("create_executors failed in create_rvr_extensions");
+                    let opcode_to_executor_idx = inventory
+                        .instruction_lookup
+                        .iter()
+                        .map(|(opcode, executor_idx)| (*opcode, *executor_idx as usize));
+                    ::rvr_openvm_lift::RvrExtensionCtx::new(opcode_to_executor_idx, air_idx.to_vec())
+                });
+                let mut registry = <#source_field_ty as ::openvm_circuit::arch::VmExecutionConfig<F>>::create_rvr_extensions(
+                    &self.#source_name,
+                    air_idx,
+                );
+                #(#extend_rvr)*
+                registry
             }
         }
 

@@ -1,19 +1,19 @@
-To see list of all available built-in targets:
+Integration tests for the OpenVM toolchain: builds guest programs and exercises the transpiler/ELF decoder on the resulting binaries.
+
+Guest builds in these tests go through `openvm-build`'s `build_guest_package`, which invokes `cargo build` under the prebuilt `openvm-1.94.0` toolchain for the `riscv64im-unknown-openvm-elf` target. Install the toolchain first:
 
 ```bash
-rustc --print target-list
+cargo openvm toolchain install
 ```
 
-We currently use the risc0 target (`riscv32im-risc0-zkvm-elf`) until we contribute our own RISC-V target to Rust.
-
-WARNING: to prevent from building for your host machine, make sure you do not have `rustflags = ["-Ctarget-cpu=native"]` in your `~/.cargo/config.toml`.
-
-Guest programs live in the `programs/examples` directory of each extension test crate (e.g. [`extensions/rv32im/tests/programs/examples`](../../../../extensions/rv32im/tests/programs/examples)). They are compiled to a RISC-V ELF for the risc0 target by the `build_example_program_at_path` utility, which reads back the output ELF file. See the crate's top-level [README.md](../README.md) for how to add and build guest programs.
-
-To disassemble a compiled ELF to read the instructions, [install cargo-binutils](https://github.com/rust-embedded/cargo-binutils) and run
+Then run the tests as usual:
 
 ```bash
-rust-objdump -d <path-to-elf>
+cargo nextest run --cargo-profile=fast -p openvm-toolchain-tests
 ```
 
-where `-d` is short for `--disassemble`.
+To inspect a built guest ELF directly, the binary lives under `target/riscv64im-unknown-openvm-elf/release/`. Disassemble with [cargo-binutils](https://github.com/rust-embedded/cargo-binutils):
+
+```bash
+rust-objdump -d target/riscv64im-unknown-openvm-elf/release/<example-name>
+```

@@ -51,6 +51,7 @@ OpenVM supports standard Rust written using the `std` library, with the followin
 
 - Standard input (e.g., from console) is not supported. Use the `read` methods [above](#handling-io) instead.
 - Standard output and standard error (e.g., `println!, eprintln!`) are supported and will _both_ print to the host standard output.
+- `std::time` is deterministic and does not expose host wall-clock time. `Instant::now()` starts at zero, and `SystemTime::now()` returns `UNIX_EPOCH`; these APIs do not panic, but they do not report elapsed VM time or real time.
 - System randomness calls are supported by default. **Important**: system randomness requests randomness from the host, and the provided randomness is unvalidated.
   Users must be aware of this and only use system randomness in settings where this meets their security requirements. In particular, system randomness should **not** be used for cryptographic purposes.
 - Reading of environment variables will always return an empty string.
@@ -106,6 +107,8 @@ First, add the following header to `main.rs`:
 #![no_main]
 ```
 
+A crate with this header only builds for the openvm guest target; see below for the `cfg_attr`-gated variant (what `cargo openvm init` generates) that also builds under plain `cargo check` on the host.
+
 This tells Rust there is no handler for the `main` function. OpenVM provides a separate entrypoint for the `main` function, with panic handler, via the `openvm::entry!` macro.
 You should write a `main` function in the normal way, and add the following to `main.rs`:
 
@@ -121,12 +124,12 @@ To selectively enable the standard library, add the `std` feature to your `Cargo
 
 ```rust
 // main.rs
-#![cfg_attr(not(feature = "std"), no_main)]
+#![cfg_attr(all(not(feature = "std"), any(openvm_intrinsics, target_os = "openvm")), no_main)]
 #![cfg_attr(not(feature = "std"), no_std)]
 ```
 
 You still need the `openvm::entry!(main)` line.
-This tells Rust to use the custom `main` handler when the environment is `no_std`, but to use the Rust `std` library and the standard `main` handler when the feature `"std"` is enabled.
+This lets the same source build as a standard binary on the host and as an OpenVM guest, while `"std"` independently toggles the standard library.
 
 ## Using crates that depend on `getrandom`
 

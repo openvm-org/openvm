@@ -2,68 +2,98 @@
 #include "primitives/buffer_view.cuh"
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
-#include "rv32-adapters/vec_heap.cuh"
-#include "rv32-adapters/vec_heap_branch.cuh"
-#include "rv32im/cores/alu.cuh"
-#include "rv32im/cores/beq.cuh"
-#include "rv32im/cores/blt.cuh"
-#include "rv32im/cores/less_than.cuh"
-#include "rv32im/cores/mul.cuh"
-#include "rv32im/cores/shift.cuh"
+#include "riscv-adapters/vec_heap.cuh"
+#include "riscv-adapters/vec_heap_branch_u16.cuh"
+#include "riscv-adapters/vec_heap_u16.cuh"
+#include "riscv/cores/add_sub.cuh"
+#include "riscv/cores/beq.cuh"
+#include "riscv/cores/bitwise_logic.cuh"
+#include "riscv/cores/blt.cuh"
+#include "riscv/cores/less_than.cuh"
+#include "riscv/cores/mul.cuh"
+#include "riscv/cores/shift_logical.cuh"
+#include "riscv/cores/shift_right_arithmetic.cuh"
+#include "system/memory/params.cuh"
 
 using namespace riscv;
+using namespace program;
 
-constexpr size_t INT256_NUM_LIMBS = 32;
-constexpr size_t CONST_BLOCK_SIZE = 4;
-constexpr size_t INT256_NUM_BLOCKS = INT256_NUM_LIMBS / CONST_BLOCK_SIZE;
+constexpr size_t INT256_NUM_U8_LIMBS = 32;
+constexpr size_t INT256_NUM_MEMORY_BLOCKS = INT256_NUM_U8_LIMBS / MEMORY_BLOCK_BYTES;
+constexpr size_t INT256_NUM_U16_LIMBS = INT256_NUM_U8_LIMBS / sizeof(uint16_t);
+constexpr size_t NUM_READS = 2;
 
-using BaseAlu256CoreRecord = BaseAluCoreRecord<32>;
-using BaseAlu256Core = BaseAluCore<32>;
-template <typename T> using BaseAlu256CoreCols = BaseAluCoreCols<T, 32>;
+using BitwiseLogic256CoreRecord = BitwiseLogicCoreRecord<INT256_NUM_U8_LIMBS>;
+using BitwiseLogic256Core = BitwiseLogicCore<INT256_NUM_U8_LIMBS>;
+template <typename T>
+using BitwiseLogic256CoreCols = BitwiseLogicCoreCols<T, INT256_NUM_U8_LIMBS>;
 
-using BranchEqual256Core = BranchEqualCore<32>;
-template <typename T> using BranchEqual256CoreCols = BranchEqualCoreCols<T, 32>;
-using BranchEqual256CoreRecord = BranchEqualCoreRecord<32>;
+using BranchEqual256Core = BranchEqualCore<INT256_NUM_U16_LIMBS>;
+template <typename T>
+using BranchEqual256CoreCols = BranchEqualCoreCols<T, INT256_NUM_U16_LIMBS>;
+using BranchEqual256CoreRecord = BranchEqualCoreRecord<INT256_NUM_U16_LIMBS>;
 
-using LessThan256CoreRecord = LessThanCoreRecord<32>;
-using LessThan256Core = LessThanCore<32>;
-template <typename T> using LessThan256CoreCols = LessThanCoreCols<T, 32>;
+using LessThan256CoreRecord =
+    LessThanCoreRecord<INT256_NUM_U16_LIMBS, U16_BITS>;
+using LessThan256Core = LessThanCore<INT256_NUM_U16_LIMBS, U16_BITS>;
+template <typename T>
+using LessThan256CoreCols =
+    LessThanCoreCols<T, INT256_NUM_U16_LIMBS, U16_BITS>;
 
-using Multiplication256CoreRecord = MultiplicationCoreRecord<32>;
-using Multiplication256Core = MultiplicationCore<32>;
-template <typename T> using Multiplication256CoreCols = MultiplicationCoreCols<T, 32>;
+using Multiplication256CoreRecord = MultiplicationCoreRecord<INT256_NUM_U8_LIMBS>;
+using Multiplication256Core = MultiplicationCore<INT256_NUM_U8_LIMBS>;
+template <typename T> using Multiplication256CoreCols = MultiplicationCoreCols<T, INT256_NUM_U8_LIMBS>;
 
-using Shift256CoreRecord = ShiftCoreRecord<32>;
-using Shift256Core = ShiftCore<32>;
-template <typename T> using Shift256CoreCols = ShiftCoreCols<T, 32>;
+using ShiftRightArithmetic256CoreRecord =
+    ShiftRightArithmeticCoreRecord<INT256_NUM_U16_LIMBS, U16_BITS>;
+using ShiftRightArithmetic256Core = ShiftRightArithmeticCore<INT256_NUM_U16_LIMBS, U16_BITS>;
+template <typename T>
+using ShiftRightArithmetic256CoreCols =
+    ShiftRightArithmeticCoreCols<T, INT256_NUM_U16_LIMBS, U16_BITS>;
+using ShiftLogical256Core = ShiftLogicalCore<INT256_NUM_U16_LIMBS, U16_BITS>;
+using ShiftLogical256CoreRecord = ShiftLogicalCoreRecord<INT256_NUM_U16_LIMBS, U16_BITS>;
+template <typename T>
+using ShiftLogical256CoreCols = ShiftLogicalCoreCols<T, INT256_NUM_U16_LIMBS, U16_BITS>;
 
-using BranchLessThan256CoreRecord = BranchLessThanCoreRecord<32>;
-using BranchLessThan256Core = BranchLessThanCore<32>;
-template <typename T> using BranchLessThan256CoreCols = BranchLessThanCoreCols<T, 32>;
+using BranchLessThan256CoreRecord =
+    BranchLessThanCoreRecord<INT256_NUM_U16_LIMBS, U16_BITS>;
+using BranchLessThan256Core = BranchLessThanCore<INT256_NUM_U16_LIMBS, U16_BITS>;
+template <typename T>
+using BranchLessThan256CoreCols =
+    BranchLessThanCoreCols<T, INT256_NUM_U16_LIMBS, U16_BITS>;
 
-// Heap adapter instantiation for 256-bit operations
-// NUM_READS = 2, BLOCKS_PER_READ = INT256_NUM_BLOCKS (8), BLOCKS_PER_WRITE = INT256_NUM_BLOCKS (8)
-// READ_SIZE = CONST_BLOCK_SIZE (4 bytes), WRITE_SIZE = CONST_BLOCK_SIZE (4 bytes)
-using Rv32VecHeapAdapter256 = Rv32VecHeapAdapter<2, INT256_NUM_BLOCKS, INT256_NUM_BLOCKS, CONST_BLOCK_SIZE, CONST_BLOCK_SIZE>;
+using Rv64VecHeapAdapter256 = Rv64VecHeapAdapter<
+    NUM_READS,
+    INT256_NUM_MEMORY_BLOCKS,
+    INT256_NUM_MEMORY_BLOCKS>;
+template <typename T>
+using Rv64VecHeapAdapter256Cols = Rv64VecHeapAdapterCols<
+    T,
+    NUM_READS,
+    INT256_NUM_MEMORY_BLOCKS,
+    INT256_NUM_MEMORY_BLOCKS>;
+using Rv64VecHeapAdapter256Record = Rv64VecHeapAdapterRecord<
+    NUM_READS,
+    INT256_NUM_MEMORY_BLOCKS,
+    INT256_NUM_MEMORY_BLOCKS>;
 
-template <typename T> struct BaseAlu256Cols {
-    Rv32VecHeapAdapterCols<T, 2, INT256_NUM_BLOCKS, INT256_NUM_BLOCKS, CONST_BLOCK_SIZE, CONST_BLOCK_SIZE> adapter;
-    BaseAlu256CoreCols<T> core;
+template <typename T> struct BitwiseLogic256Cols {
+    Rv64VecHeapAdapter256Cols<T> adapter;
+    BitwiseLogic256CoreCols<T> core;
 };
 
-struct BaseAlu256Record {
-    Rv32VecHeapAdapterRecord<2, INT256_NUM_BLOCKS, INT256_NUM_BLOCKS, CONST_BLOCK_SIZE, CONST_BLOCK_SIZE> adapter;
-    BaseAlu256CoreRecord core;
+struct BitwiseLogic256Record {
+    Rv64VecHeapAdapter256Record adapter;
+    BitwiseLogic256CoreRecord core;
 };
 
-__global__ void alu256_tracegen(
+__global__ void bitwise_logic256_tracegen(
     Fp *d_trace,
     size_t height,
-    DeviceBufferConstView<BaseAlu256Record> d_records,
+    DeviceBufferConstView<BitwiseLogic256Record> d_records,
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits,
     uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits
 ) {
@@ -72,64 +102,63 @@ __global__ void alu256_tracegen(
     if (idx < d_records.len()) {
         auto const &rec = d_records[idx];
 
-        Rv32VecHeapAdapter256 adapter(
+        Rv64VecHeapAdapter256 adapter(
             pointer_max_bits,
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins),
-            BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits),
             timestamp_max_bits
         );
         adapter.fill_trace_row(row, rec.adapter);
 
-        BaseAlu256Core core(BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits));
-        core.fill_trace_row(row.slice_from(COL_INDEX(BaseAlu256Cols, core)), rec.core);
+        BitwiseLogic256Core core{BitwiseOperationLookup(d_bitwise_lookup_ptr)};
+        core.fill_trace_row(row.slice_from(COL_INDEX(BitwiseLogic256Cols, core)), rec.core);
     } else {
-        row.fill_zero(0, sizeof(BaseAlu256Cols<uint8_t>));
+        row.fill_zero(0, sizeof(BitwiseLogic256Cols<uint8_t>));
     }
 }
 
-extern "C" int _alu256_tracegen(
+extern "C" int _bitwise_logic256_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
-    DeviceBufferConstView<BaseAlu256Record> d_records,
+    DeviceBufferConstView<BitwiseLogic256Record> d_records,
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits,
     uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
-    assert((height & (height - 1)) == 0);
-    assert(height >= d_records.len());
-    assert(width == sizeof(BaseAlu256Cols<uint8_t>));
+    assert(width == sizeof(BitwiseLogic256Cols<uint8_t>));
 
     auto [grid, block] = kernel_launch_params(height, 256);
-    alu256_tracegen<<<grid, block, 0, stream>>>(
+    bitwise_logic256_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
         d_records,
         d_range_checker_ptr,
         range_checker_bins,
         d_bitwise_lookup_ptr,
-        bitwise_num_bits,
         pointer_max_bits,
         timestamp_max_bits
     );
     return CHECK_KERNEL();
 }
 
-// Heap branch adapter instantiation for 256-bit operations
-// NUM_READS = 2, BLOCKS_PER_READ = INT256_NUM_BLOCKS (8), READ_SIZE = CONST_BLOCK_SIZE (4 bytes)
-using Rv32VecHeapBranchAdapter256 = Rv32VecHeapBranchAdapter<2, INT256_NUM_BLOCKS, CONST_BLOCK_SIZE>;
+using Rv64VecHeapBranchU16Adapter256 =
+    Rv64VecHeapBranchU16Adapter<NUM_READS, INT256_NUM_MEMORY_BLOCKS>;
+template <typename T>
+using Rv64VecHeapBranchU16Adapter256Cols =
+    Rv64VecHeapBranchU16AdapterCols<T, NUM_READS, INT256_NUM_MEMORY_BLOCKS>;
+using Rv64VecHeapBranchU16Adapter256Record =
+    Rv64VecHeapBranchU16AdapterRecord<NUM_READS, INT256_NUM_MEMORY_BLOCKS>;
 
 template <typename T> struct BranchEqual256Cols {
-    Rv32VecHeapBranchAdapterCols<T, 2, INT256_NUM_BLOCKS, CONST_BLOCK_SIZE> adapter;
+    Rv64VecHeapBranchU16Adapter256Cols<T> adapter;
     BranchEqual256CoreCols<T> core;
 };
 
 struct BranchEqual256Record {
-    Rv32VecHeapBranchAdapterRecord<2, INT256_NUM_BLOCKS> adapter;
+    Rv64VecHeapBranchU16Adapter256Record adapter;
     BranchEqual256CoreRecord core;
 };
 
@@ -139,8 +168,6 @@ __global__ void branch_equal256_tracegen(
     DeviceBufferConstView<BranchEqual256Record> d_records,
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
-    uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits,
     uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits
 ) {
@@ -149,10 +176,9 @@ __global__ void branch_equal256_tracegen(
     if (idx < d_records.len()) {
         auto const &rec = d_records[idx];
 
-        Rv32VecHeapBranchAdapter256 adapter(
+        Rv64VecHeapBranchU16Adapter256 adapter(
             pointer_max_bits,
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins),
-            BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits),
             timestamp_max_bits
         );
         adapter.fill_trace_row(row, rec.adapter);
@@ -171,14 +197,10 @@ extern "C" int _branch_equal256_tracegen(
     DeviceBufferConstView<BranchEqual256Record> d_records,
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
-    uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits,
     uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
-    assert((height & (height - 1)) == 0);
-    assert(height >= d_records.len());
     assert(width == sizeof(BranchEqual256Cols<uint8_t>));
 
     auto [grid, block] = kernel_launch_params(height, 256);
@@ -188,21 +210,27 @@ extern "C" int _branch_equal256_tracegen(
         d_records,
         d_range_checker_ptr,
         range_checker_bins,
-        d_bitwise_lookup_ptr,
-        bitwise_num_bits,
         pointer_max_bits,
         timestamp_max_bits
     );
     return CHECK_KERNEL();
 }
 
+using Rv64VecHeapU16Adapter256 =
+    Rv64VecHeapU16Adapter<NUM_READS, INT256_NUM_MEMORY_BLOCKS, INT256_NUM_MEMORY_BLOCKS>;
+template <typename T>
+using Rv64VecHeapU16Adapter256Cols =
+    Rv64VecHeapU16AdapterCols<T, NUM_READS, INT256_NUM_MEMORY_BLOCKS, INT256_NUM_MEMORY_BLOCKS>;
+using Rv64VecHeapU16Adapter256Record =
+    Rv64VecHeapU16AdapterRecord<NUM_READS, INT256_NUM_MEMORY_BLOCKS, INT256_NUM_MEMORY_BLOCKS>;
+
 template <typename T> struct LessThan256Cols {
-    Rv32VecHeapAdapterCols<T, 2, INT256_NUM_BLOCKS, INT256_NUM_BLOCKS, CONST_BLOCK_SIZE, CONST_BLOCK_SIZE> adapter;
+    Rv64VecHeapU16Adapter256Cols<T> adapter;
     LessThan256CoreCols<T> core;
 };
 
 struct LessThan256Record {
-    Rv32VecHeapAdapterRecord<2, INT256_NUM_BLOCKS, INT256_NUM_BLOCKS, CONST_BLOCK_SIZE, CONST_BLOCK_SIZE> adapter;
+    Rv64VecHeapU16Adapter256Record adapter;
     LessThan256CoreRecord core;
 };
 
@@ -212,8 +240,6 @@ __global__ void less_than256_tracegen(
     DeviceBufferConstView<LessThan256Record> d_records,
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
-    uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits,
     uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits
 ) {
@@ -222,15 +248,14 @@ __global__ void less_than256_tracegen(
     if (idx < d_records.len()) {
         auto const &rec = d_records[idx];
 
-        Rv32VecHeapAdapter256 adapter(
+        Rv64VecHeapU16Adapter256 adapter(
             pointer_max_bits,
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins),
-            BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits),
             timestamp_max_bits
         );
         adapter.fill_trace_row(row, rec.adapter);
 
-        LessThan256Core core(BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits));
+        LessThan256Core core{VariableRangeChecker(d_range_checker_ptr, range_checker_bins)};
         core.fill_trace_row(row.slice_from(COL_INDEX(LessThan256Cols, core)), rec.core);
     } else {
         row.fill_zero(0, sizeof(LessThan256Cols<uint8_t>));
@@ -244,14 +269,10 @@ extern "C" int _less_than256_tracegen(
     DeviceBufferConstView<LessThan256Record> d_records,
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
-    uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits,
     uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
-    assert((height & (height - 1)) == 0);
-    assert(height >= d_records.len());
     assert(width == sizeof(LessThan256Cols<uint8_t>));
 
     auto [grid, block] = kernel_launch_params(height, 256);
@@ -261,8 +282,74 @@ extern "C" int _less_than256_tracegen(
         d_records,
         d_range_checker_ptr,
         range_checker_bins,
-        d_bitwise_lookup_ptr,
-        bitwise_num_bits,
+        pointer_max_bits,
+        timestamp_max_bits
+    );
+    return CHECK_KERNEL();
+}
+
+using AddSub256CoreRecord = AddSubCoreRecord<INT256_NUM_U16_LIMBS>;
+using AddSub256Core = AddSubCore<INT256_NUM_U16_LIMBS, U16_BITS>;
+template <typename T> using AddSub256CoreCols = AddSubCoreCols<T, INT256_NUM_U16_LIMBS>;
+
+template <typename T> struct AddSub256Cols {
+    Rv64VecHeapU16Adapter256Cols<T> adapter;
+    AddSub256CoreCols<T> core;
+};
+
+struct AddSub256Record {
+    Rv64VecHeapU16Adapter256Record adapter;
+    AddSub256CoreRecord core;
+};
+
+__global__ void add_sub256_tracegen(
+    Fp *d_trace,
+    size_t height,
+    DeviceBufferConstView<AddSub256Record> d_records,
+    uint32_t *d_range_checker_ptr,
+    size_t range_checker_bins,
+    uint32_t pointer_max_bits,
+    uint32_t timestamp_max_bits
+) {
+    uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    RowSlice row(d_trace + idx, height);
+    if (idx < d_records.len()) {
+        auto const &rec = d_records[idx];
+
+        Rv64VecHeapU16Adapter256 adapter(
+            pointer_max_bits,
+            VariableRangeChecker(d_range_checker_ptr, range_checker_bins),
+            timestamp_max_bits
+        );
+        adapter.fill_trace_row(row, rec.adapter);
+
+        AddSub256Core core(VariableRangeChecker(d_range_checker_ptr, range_checker_bins));
+        core.fill_trace_row(row.slice_from(COL_INDEX(AddSub256Cols, core)), rec.core);
+    } else {
+        row.fill_zero(0, sizeof(AddSub256Cols<uint8_t>));
+    }
+}
+
+extern "C" int _add_sub256_tracegen(
+    Fp *d_trace,
+    size_t height,
+    size_t width,
+    DeviceBufferConstView<AddSub256Record> d_records,
+    uint32_t *d_range_checker_ptr,
+    size_t range_checker_bins,
+    uint32_t pointer_max_bits,
+    uint32_t timestamp_max_bits,
+    cudaStream_t stream
+) {
+    assert(width == sizeof(AddSub256Cols<uint8_t>));
+
+    auto [grid, block] = kernel_launch_params(height, 256);
+    add_sub256_tracegen<<<grid, block, 0, stream>>>(
+        d_trace,
+        height,
+        d_records,
+        d_range_checker_ptr,
+        range_checker_bins,
         pointer_max_bits,
         timestamp_max_bits
     );
@@ -270,12 +357,12 @@ extern "C" int _less_than256_tracegen(
 }
 
 template <typename T> struct BranchLessThan256Cols {
-    Rv32VecHeapBranchAdapterCols<T, 2, INT256_NUM_BLOCKS, CONST_BLOCK_SIZE> adapter;
+    Rv64VecHeapBranchU16Adapter256Cols<T> adapter;
     BranchLessThan256CoreCols<T> core;
 };
 
 struct BranchLessThan256Record {
-    Rv32VecHeapBranchAdapterRecord<2, INT256_NUM_BLOCKS> adapter;
+    Rv64VecHeapBranchU16Adapter256Record adapter;
     BranchLessThan256CoreRecord core;
 };
 
@@ -285,8 +372,6 @@ __global__ void branch_less_than256_tracegen(
     DeviceBufferConstView<BranchLessThan256Record> d_records,
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
-    uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits,
     uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits
 ) {
@@ -295,15 +380,14 @@ __global__ void branch_less_than256_tracegen(
     if (idx < d_records.len()) {
         auto const &rec = d_records[idx];
 
-        Rv32VecHeapBranchAdapter256 adapter(
+        Rv64VecHeapBranchU16Adapter256 adapter(
             pointer_max_bits,
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins),
-            BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits),
             timestamp_max_bits
         );
         adapter.fill_trace_row(row, rec.adapter);
 
-        BranchLessThan256Core core(BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits));
+        BranchLessThan256Core core{VariableRangeChecker(d_range_checker_ptr, range_checker_bins)};
         core.fill_trace_row(row.slice_from(COL_INDEX(BranchLessThan256Cols, core)), rec.core);
     } else {
         row.fill_zero(0, sizeof(BranchLessThan256Cols<uint8_t>));
@@ -317,14 +401,10 @@ extern "C" int _branch_less_than256_tracegen(
     DeviceBufferConstView<BranchLessThan256Record> d_records,
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
-    uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits,
     uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
-    assert((height & (height - 1)) == 0);
-    assert(height >= d_records.len());
     assert(width == sizeof(BranchLessThan256Cols<uint8_t>));
 
     auto [grid, block] = kernel_launch_params(height, 256);
@@ -334,32 +414,38 @@ extern "C" int _branch_less_than256_tracegen(
         d_records,
         d_range_checker_ptr,
         range_checker_bins,
-        d_bitwise_lookup_ptr,
-        bitwise_num_bits,
         pointer_max_bits,
         timestamp_max_bits
     );
     return CHECK_KERNEL();
 }
 
-template <typename T> struct Shift256Cols {
-    Rv32VecHeapAdapterCols<T, 2, INT256_NUM_BLOCKS, INT256_NUM_BLOCKS, CONST_BLOCK_SIZE, CONST_BLOCK_SIZE> adapter;
-    Shift256CoreCols<T> core;
+template <typename T> struct ShiftLogical256Cols {
+    Rv64VecHeapU16Adapter256Cols<T> adapter;
+    ShiftLogical256CoreCols<T> core;
 };
 
-struct Shift256Record {
-    Rv32VecHeapAdapterRecord<2, INT256_NUM_BLOCKS, INT256_NUM_BLOCKS, CONST_BLOCK_SIZE, CONST_BLOCK_SIZE> adapter;
-    Shift256CoreRecord core;
+template <typename T> struct ShiftRightArithmetic256Cols {
+    Rv64VecHeapU16Adapter256Cols<T> adapter;
+    ShiftRightArithmetic256CoreCols<T> core;
 };
 
-__global__ void shift256_tracegen(
+struct ShiftLogical256Record {
+    Rv64VecHeapU16Adapter256Record adapter;
+    ShiftLogical256CoreRecord core;
+};
+
+struct ShiftRightArithmetic256Record {
+    Rv64VecHeapU16Adapter256Record adapter;
+    ShiftRightArithmetic256CoreRecord core;
+};
+
+__global__ void shift256_logical_tracegen(
     Fp *d_trace,
     size_t height,
-    DeviceBufferConstView<Shift256Record> d_records,
+    DeviceBufferConstView<ShiftLogical256Record> d_records,
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
-    uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits,
     uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits
 ) {
@@ -368,50 +454,98 @@ __global__ void shift256_tracegen(
     if (idx < d_records.len()) {
         auto const &rec = d_records[idx];
 
-        Rv32VecHeapAdapter256 adapter(
+        Rv64VecHeapU16Adapter256 adapter(
             pointer_max_bits,
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins),
-            BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits),
             timestamp_max_bits
         );
         adapter.fill_trace_row(row, rec.adapter);
 
-        Shift256Core core(
-            BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits),
-            VariableRangeChecker(d_range_checker_ptr, range_checker_bins)
-        );
-        core.fill_trace_row(row.slice_from(COL_INDEX(Shift256Cols, core)), rec.core);
+        ShiftLogical256Core core(VariableRangeChecker(d_range_checker_ptr, range_checker_bins));
+        core.fill_trace_row(row.slice_from(COL_INDEX(ShiftLogical256Cols, core)), rec.core);
     } else {
-        row.fill_zero(0, sizeof(Shift256Cols<uint8_t>));
+        row.fill_zero(0, sizeof(ShiftLogical256Cols<uint8_t>));
     }
 }
 
-extern "C" int _shift256_tracegen(
+__global__ void shift256_right_arithmetic_tracegen(
+    Fp *d_trace,
+    size_t height,
+    DeviceBufferConstView<ShiftRightArithmetic256Record> d_records,
+    uint32_t *d_range_checker_ptr,
+    size_t range_checker_bins,
+    uint32_t pointer_max_bits,
+    uint32_t timestamp_max_bits
+) {
+    uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    RowSlice row(d_trace + idx, height);
+    if (idx < d_records.len()) {
+        auto const &rec = d_records[idx];
+
+        Rv64VecHeapU16Adapter256 adapter(
+            pointer_max_bits,
+            VariableRangeChecker(d_range_checker_ptr, range_checker_bins),
+            timestamp_max_bits
+        );
+        adapter.fill_trace_row(row, rec.adapter);
+
+        ShiftRightArithmetic256Core core(
+            VariableRangeChecker(d_range_checker_ptr, range_checker_bins)
+        );
+        core.fill_trace_row(
+            row.slice_from(COL_INDEX(ShiftRightArithmetic256Cols, core)), rec.core
+        );
+    } else {
+        row.fill_zero(0, sizeof(ShiftRightArithmetic256Cols<uint8_t>));
+    }
+}
+
+extern "C" int _shift256_logical_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
-    DeviceBufferConstView<Shift256Record> d_records,
+    DeviceBufferConstView<ShiftLogical256Record> d_records,
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
-    uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits,
     uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
-    assert((height & (height - 1)) == 0);
-    assert(height >= d_records.len());
-    assert(width == sizeof(Shift256Cols<uint8_t>));
+    assert(width == sizeof(ShiftLogical256Cols<uint8_t>));
 
     auto [grid, block] = kernel_launch_params(height, 256);
-    shift256_tracegen<<<grid, block, 0, stream>>>(
+    shift256_logical_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
         d_records,
         d_range_checker_ptr,
         range_checker_bins,
-        d_bitwise_lookup_ptr,
-        bitwise_num_bits,
+        pointer_max_bits,
+        timestamp_max_bits
+    );
+    return CHECK_KERNEL();
+}
+
+extern "C" int _shift256_right_arithmetic_tracegen(
+    Fp *d_trace,
+    size_t height,
+    size_t width,
+    DeviceBufferConstView<ShiftRightArithmetic256Record> d_records,
+    uint32_t *d_range_checker_ptr,
+    size_t range_checker_bins,
+    uint32_t pointer_max_bits,
+    uint32_t timestamp_max_bits,
+    cudaStream_t stream
+) {
+    assert(width == sizeof(ShiftRightArithmetic256Cols<uint8_t>));
+
+    auto [grid, block] = kernel_launch_params(height, 256);
+    shift256_right_arithmetic_tracegen<<<grid, block, 0, stream>>>(
+        d_trace,
+        height,
+        d_records,
+        d_range_checker_ptr,
+        range_checker_bins,
         pointer_max_bits,
         timestamp_max_bits
     );
@@ -419,12 +553,12 @@ extern "C" int _shift256_tracegen(
 }
 
 template <typename T> struct Multiplication256Cols {
-    Rv32VecHeapAdapterCols<T, 2, INT256_NUM_BLOCKS, INT256_NUM_BLOCKS, CONST_BLOCK_SIZE, CONST_BLOCK_SIZE> adapter;
+    Rv64VecHeapAdapter256Cols<T> adapter;
     Multiplication256CoreCols<T> core;
 };
 
 struct Multiplication256Record {
-    Rv32VecHeapAdapterRecord<2, INT256_NUM_BLOCKS, INT256_NUM_BLOCKS, CONST_BLOCK_SIZE, CONST_BLOCK_SIZE> adapter;
+    Rv64VecHeapAdapter256Record adapter;
     Multiplication256CoreRecord core;
 };
 
@@ -435,7 +569,6 @@ __global__ void multiplication256_tracegen(
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits,
     uint32_t *d_range_tuple_ptr,
     uint2 range_tuple_sizes,
     uint32_t pointer_max_bits,
@@ -446,10 +579,9 @@ __global__ void multiplication256_tracegen(
     if (idx < d_records.len()) {
         auto const &rec = d_records[idx];
 
-        Rv32VecHeapAdapter256 adapter(
+        Rv64VecHeapAdapter256 adapter(
             pointer_max_bits,
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins),
-            BitwiseOperationLookup(d_bitwise_lookup_ptr, bitwise_num_bits),
             timestamp_max_bits
         );
         adapter.fill_trace_row(row, rec.adapter);
@@ -457,7 +589,9 @@ __global__ void multiplication256_tracegen(
         RangeTupleChecker<2> range_tuple_checker(
             d_range_tuple_ptr, (uint32_t[2]){range_tuple_sizes.x, range_tuple_sizes.y}
         );
-        Multiplication256Core core(range_tuple_checker);
+        Multiplication256Core core(
+            range_tuple_checker, BitwiseOperationLookup(d_bitwise_lookup_ptr)
+        );
         core.fill_trace_row(row.slice_from(COL_INDEX(Multiplication256Cols, core)), rec.core);
     } else {
         row.fill_zero(0, sizeof(Multiplication256Cols<uint8_t>));
@@ -472,15 +606,12 @@ extern "C" int _multiplication256_tracegen(
     uint32_t *d_range_checker_ptr,
     size_t range_checker_bins,
     uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits,
     uint32_t *d_range_tuple_ptr,
     uint2 range_tuple_sizes,
     uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
-    assert((height & (height - 1)) == 0);
-    assert(height >= d_records.len());
     assert(width == sizeof(Multiplication256Cols<uint8_t>));
 
     auto [grid, block] = kernel_launch_params(height, 256);
@@ -491,7 +622,6 @@ extern "C" int _multiplication256_tracegen(
         d_range_checker_ptr,
         range_checker_bins,
         d_bitwise_lookup_ptr,
-        bitwise_num_bits,
         d_range_tuple_ptr,
         range_tuple_sizes,
         pointer_max_bits,

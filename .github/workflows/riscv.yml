@@ -10,9 +10,9 @@ on:
 #     - "crates/circuits/primitives/**"
 #     - "crates/vm/**"
 #     - "crates/toolchain/**"
-      - "extensions/rv32im/circuit/**"
-      - "extensions/rv32im/transpiler/**"
-      - "extensions/rv32im/guest/**"
+      - "extensions/riscv/circuit/**"
+      - "extensions/riscv/transpiler/**"
+      - "extensions/riscv/guest/**"
 #     - "Cargo.toml"
       - ".github/workflows/riscv.yml"
 
@@ -29,13 +29,19 @@ jobs:
     strategy:
       matrix:
         platform:
+          # TODO(aot): restore `features: "aot"`
           - {
-              labels: "runner=64cpu-linux-x64/image=ubuntu24-full-x64",
+              labels: "family=c8i-flex.16xlarge+c8i.16xlarge+c8a.16xlarge+c7i.16xlarge+c7a.16xlarge/image=ubuntu24-full-x64",
               image: "ubuntu24-full-x64",
-              features: "aot",
+              features: "",
             }
           - {
-              labels: "image=ubuntu24-gpu-x64/family=g6.*+g5+g6e/cpu=4+32/volume=40gb/spot=capacity-optimized",
+              labels: "family=c8i-flex.16xlarge+c8i.16xlarge+c8a.16xlarge+c7i.16xlarge+c7a.16xlarge/image=ubuntu24-full-x64",
+              image: "ubuntu24-full-x64",
+              features: "rvr",
+            }
+          - {
+              labels: "image=ubuntu24-gpu-x64/family=g7.2xlarge+g6.2xlarge+g5.2xlarge/volume=40gb/spot=price-capacity-optimized",
               image: "ubuntu24-gpu-x64",
               features: "cuda,touchemall",
             }
@@ -61,9 +67,19 @@ jobs:
           ssh-private-key: |
             ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
       - uses: actions/checkout@v5
-        with:
-          submodules: recursive
+      - name: Init RISC-V test-vector submodule
+        run: git submodule update --init --depth 1 crates/toolchain/tests/riscv-test-vectors/riscv-tests
+      - name: Init rvr FFI submodules
+        if: matrix.platform.features == 'rvr'
+        run: |
+          git submodule update --init --depth 1 extensions/keccak256/rvr/ffi/openssl
+          git submodule update --init --depth 1 extensions/algebra/rvr/ffi/modular/secp256k1
       - uses: ./.github/actions/sccache
+
+      # TODO: remove once https://github.com/runs-on/runner-images-for-aws/issues/55 is fixed
+      - name: Setup GPU driver
+        if: contains(matrix.platform.features, 'cuda')
+        run: bash ./scripts/gpu_driver_setup.sh
 
       - name: Set feature flags
         run: |
@@ -92,8 +108,18 @@ jobs:
           echo "$GITHUB_WORKSPACE/riscv/bin" >> $GITHUB_PATH
           rm gcc.tar.xz
 
+      - name: Install clang-22 and lld (required for rvr)
+        if: matrix.platform.features == 'rvr'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lsb-release wget software-properties-common gnupg
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 22
+          sudo apt-get install -y lld
+
       - name: Run Makefile
-        working-directory: crates/toolchain/tests/rv32im-test-vectors
+        working-directory: crates/toolchain/tests/riscv-test-vectors
         run: |
           make
 
@@ -101,11 +127,11 @@ jobs:
       - name: Run RISC-V test vector tests
         working-directory: crates/toolchain/tests
         run: |
-          rustup component add rust-src --toolchain nightly-2026-01-18
+          "$GITHUB_WORKSPACE/ci/install-openvm-toolchain.sh"
           if [[ "${{ matrix.platform.features }}" == *"cuda"* ]]; then
-            TEST_NAME=test_rv32im_riscv_vector_prove
+            TEST_NAME=test_rv64im_riscv_vector_prove
           else
-            TEST_NAME=test_rv32im_riscv_vector_runtime
+            TEST_NAME=test_rv64im_riscv_vector_runtime
           fi
           cargo nextest run ${{ env.FEATURE_ARGS }} --cargo-profile=fast --run-ignored only --no-capture -- $TEST_NAME
 

@@ -9,18 +9,16 @@ use openvm_circuit::{
     arch::*,
     system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
 };
-use openvm_circuit_primitives::{
-    bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
-    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
+use openvm_circuit_primitives::var_range::{
+    SharedVariableRangeCheckerChip, VariableRangeCheckerBus,
 };
-use openvm_ecc_transpiler::Rv32WeierstrassOpcode;
-use openvm_instructions::riscv::RV32_CELL_BITS;
+use openvm_ecc_transpiler::Rv64WeierstrassOpcode;
 use openvm_mod_circuit_builder::{
     ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreAir, FieldExpressionExecutor,
     FieldExpressionFiller,
 };
-use openvm_rv32_adapters::{
-    Rv32VecHeapAdapterAir, Rv32VecHeapAdapterExecutor, Rv32VecHeapAdapterFiller,
+use openvm_riscv_adapters::{
+    Rv64VecHeapAdapterAir, Rv64VecHeapAdapterExecutor, Rv64VecHeapAdapterFiller,
 };
 
 use super::{WeierstrassAir, WeierstrassChip};
@@ -51,24 +49,17 @@ pub fn ec_add_ne_expr(
     FieldExpr::new(builder, range_bus, true)
 }
 
-/// BLOCK_SIZE: how many cells do we read at a time, must be a power of 2.
-/// BLOCKS: how many blocks do we need to represent one input or output
-/// For example, for bls12_381, BLOCK_SIZE = 16, each element has 3 blocks and with two elements per
-/// input AffinePoint, BLOCKS = 6. For secp256k1, BLOCK_SIZE = 32, BLOCKS = 2.
+/// `BLOCKS` is the number of memory blocks needed to represent one input or output point.
 // Note: PreflightExecutor is implemented manually in preflight.rs with fast native arithmetic
 #[derive(Clone)]
-pub struct EcAddNeExecutor<const BLOCKS: usize, const BLOCK_SIZE: usize> {
-    pub(crate) inner: FieldExpressionExecutor<
-        Rv32VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
-    >,
+pub struct EcAddNeExecutor<const BLOCKS: usize> {
+    pub(crate) inner: FieldExpressionExecutor<Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS>>,
     pub(crate) cached_field_type: Option<FieldType>,
 }
 
-impl<const BLOCKS: usize, const BLOCK_SIZE: usize> EcAddNeExecutor<BLOCKS, BLOCK_SIZE> {
+impl<const BLOCKS: usize> EcAddNeExecutor<BLOCKS> {
     pub fn new(
-        inner: FieldExpressionExecutor<
-            Rv32VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
-        >,
+        inner: FieldExpressionExecutor<Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS>>,
     ) -> Self {
         let cached_field_type = get_field_type(&inner.expr.prime);
         Self {
@@ -78,19 +69,15 @@ impl<const BLOCKS: usize, const BLOCK_SIZE: usize> EcAddNeExecutor<BLOCKS, BLOCK
     }
 }
 
-impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Deref for EcAddNeExecutor<BLOCKS, BLOCK_SIZE> {
-    type Target = FieldExpressionExecutor<
-        Rv32VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
-    >;
+impl<const BLOCKS: usize> Deref for EcAddNeExecutor<BLOCKS> {
+    type Target = FieldExpressionExecutor<Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS>>;
 
     fn deref(&self) -> &Self::Target {
         &self.inner
     }
 }
 
-impl<const BLOCKS: usize, const BLOCK_SIZE: usize> DerefMut
-    for EcAddNeExecutor<BLOCKS, BLOCK_SIZE>
-{
+impl<const BLOCKS: usize> DerefMut for EcAddNeExecutor<BLOCKS> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.inner
     }
@@ -103,43 +90,37 @@ fn gen_base_expr(
     let expr = ec_add_ne_expr(config, range_checker_bus);
 
     let local_opcode_idx = vec![
-        Rv32WeierstrassOpcode::EC_ADD_NE as usize,
-        Rv32WeierstrassOpcode::SETUP_EC_ADD_NE as usize,
+        Rv64WeierstrassOpcode::EC_ADD_NE as usize,
+        Rv64WeierstrassOpcode::SETUP_EC_ADD_NE as usize,
     ];
 
     (expr, local_opcode_idx)
 }
 
-pub fn get_ec_addne_air<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+pub fn get_ec_addne_air<const BLOCKS: usize>(
     exec_bridge: ExecutionBridge,
     mem_bridge: MemoryBridge,
     config: ExprBuilderConfig,
     range_checker_bus: VariableRangeCheckerBus,
-    bitwise_lookup_bus: BitwiseOperationLookupBus,
     pointer_max_bits: usize,
     offset: usize,
-) -> WeierstrassAir<2, BLOCKS, BLOCK_SIZE> {
+) -> WeierstrassAir<2, BLOCKS> {
     let (expr, local_opcode_idx) = gen_base_expr(config, range_checker_bus);
     WeierstrassAir::new(
-        Rv32VecHeapAdapterAir::new(
-            exec_bridge,
-            mem_bridge,
-            bitwise_lookup_bus,
-            pointer_max_bits,
-        ),
+        Rv64VecHeapAdapterAir::new(exec_bridge, mem_bridge, range_checker_bus, pointer_max_bits),
         FieldExpressionCoreAir::new(expr.clone(), offset, local_opcode_idx.clone(), vec![]),
     )
 }
 
-pub fn get_ec_addne_executor<const BLOCKS: usize, const BLOCK_SIZE: usize>(
+pub fn get_ec_addne_executor<const BLOCKS: usize>(
     config: ExprBuilderConfig,
     range_checker_bus: VariableRangeCheckerBus,
     pointer_max_bits: usize,
     offset: usize,
-) -> EcAddNeExecutor<BLOCKS, BLOCK_SIZE> {
+) -> EcAddNeExecutor<BLOCKS> {
     let (expr, local_opcode_idx) = gen_base_expr(config, range_checker_bus);
     EcAddNeExecutor::new(FieldExpressionExecutor::new(
-        Rv32VecHeapAdapterExecutor::new(pointer_max_bits),
+        Rv64VecHeapAdapterExecutor::new(pointer_max_bits),
         expr,
         offset,
         local_opcode_idx,
@@ -148,17 +129,16 @@ pub fn get_ec_addne_executor<const BLOCKS: usize, const BLOCK_SIZE: usize>(
     ))
 }
 
-pub fn get_ec_addne_chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize>(
+pub fn get_ec_addne_chip<F, const BLOCKS: usize>(
     config: ExprBuilderConfig,
     mem_helper: SharedMemoryHelper<F>,
     range_checker: SharedVariableRangeCheckerChip,
-    bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
     pointer_max_bits: usize,
-) -> WeierstrassChip<F, 2, BLOCKS, BLOCK_SIZE> {
+) -> WeierstrassChip<F, 2, BLOCKS> {
     let (expr, local_opcode_idx) = gen_base_expr(config, range_checker.bus());
     WeierstrassChip::new(
         FieldExpressionFiller::new(
-            Rv32VecHeapAdapterFiller::new(pointer_max_bits, bitwise_lookup_chip),
+            Rv64VecHeapAdapterFiller::new(pointer_max_bits, range_checker.clone()),
             expr,
             local_opcode_idx,
             vec![],

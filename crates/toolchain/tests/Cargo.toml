@@ -13,38 +13,47 @@ openvm-build.workspace = true
 openvm-circuit.workspace = true
 openvm-transpiler.workspace = true
 eyre.workspace = true
+rvr-openvm-lift = { workspace = true, optional = true }
 
 [dev-dependencies]
 openvm-stark-backend.workspace = true
 openvm-stark-sdk.workspace = true
-openvm-circuit = { path = "../../vm", default-features = false, features = ["test-utils"] }
-openvm-algebra-transpiler = { path = "../../../extensions/algebra/transpiler", default-features = false }
-openvm-bigint-circuit = { path = "../../../extensions/bigint/circuit", default-features = false }
-openvm-rv32im-circuit = { path = "../../../extensions/rv32im/circuit", default-features = false }
-openvm-rv32im-transpiler = { path = "../../../extensions/rv32im/transpiler", default-features = false }
-openvm-algebra-circuit = { path = "../../../extensions/algebra/circuit", default-features = false }
-openvm-ecc-circuit = { path = "../../../extensions/ecc/circuit", default-features = false }
-openvm-instructions = { path = "../instructions", default-features = false }
-openvm-platform = { path = "../platform", default-features = false }
+openvm-circuit = { workspace = true, features = ["test-utils"] }
+openvm-algebra-transpiler.workspace = true
+openvm-bigint-circuit.workspace = true
+openvm-riscv-circuit.workspace = true
+openvm-riscv-transpiler.workspace = true
+openvm-algebra-circuit.workspace = true
+openvm-ecc-circuit = { workspace = true }
+openvm-instructions = { workspace = true }
+openvm-platform = { workspace = true }
 test-case.workspace = true
 rand = { workspace = true }
 serde = { workspace = true, features = ["alloc"] }
 derive_more = { workspace = true, features = ["from"] }
 
-[target.'cfg(not(target_os = "zkvm"))'.dev-dependencies]
+[target.'cfg(not(any(target_os = "none", target_os = "openvm")))'.dependencies]
 num-bigint.workspace = true
 
 [features]
 default = ["parallel"]
 parallel = ["openvm-circuit/parallel"]
-cuda = ["openvm-rv32im-circuit/cuda"]
+cuda = ["openvm-riscv-circuit/cuda"]
 tco = ["openvm-circuit/tco"]
 aot = [
     "openvm-circuit/aot",
-    "openvm-rv32im-circuit/aot",
+    "openvm-riscv-circuit/aot",
     "openvm-algebra-circuit/aot",
     "openvm-bigint-circuit/aot",
     "openvm-ecc-circuit/aot",
+]
+rvr = [
+    "dep:rvr-openvm-lift",
+    "openvm-circuit/rvr",
+    "openvm-riscv-circuit/rvr",
+    "openvm-algebra-circuit/rvr",
+    "openvm-bigint-circuit/rvr",
+    "openvm-ecc-circuit/rvr",
 ]
 touchemall = [
     "cuda",
@@ -52,4 +61,4 @@ touchemall = [
 ]
 
 [package.metadata.cargo-shear]
-ignored = ["derive_more", "openvm-stark-backend", "rand"]
+ignored = ["derive_more", "openvm-stark-backend", "rand", "rvr-openvm-lift"]

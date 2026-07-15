@@ -2,7 +2,7 @@ use std::{slice::from_ref, sync::Arc};
 
 use eyre::Result;
 use openvm::platform::memory::MEM_SIZE;
-use openvm_circuit::arch::instructions::exe::VmExe;
+use openvm_circuit::arch::{instructions::exe::VmExe, U16_CELL_SIZE};
 use openvm_continuations::prover::DeferralCircuitProver;
 use openvm_sdk_config::{
     deferral::{DeferralConfig, SupportedDeferral},
@@ -80,7 +80,7 @@ fn get_params() -> (SystemParams, AggregationSystemParams, SystemParams) {
 fn make_fib_sdk() -> (Sdk, SystemParams, AggregationSystemParams) {
     let (app_params, agg_params, _root_params) = get_params();
     let mut sdk_builder =
-        GenericSdkBuilder::new().app_config(AppConfig::riscv32(app_params.clone()));
+        GenericSdkBuilder::new().app_config(AppConfig::riscv64(app_params.clone()));
     sdk_builder = sdk_builder.agg_params(agg_params.clone());
     #[cfg(feature = "root-prover")]
     {
@@ -113,12 +113,12 @@ fn generate_fib_vm_stark_proof(fib_sdk: &Sdk) -> Result<(VmStarkProof, Verificat
     Ok(fib_sdk.prove(fib_exe, stdin, &[])?)
 }
 
-/// Builds the standard riscv32 SDK VM config with the supplied deferral config enabled.
-fn riscv32_config_with_deferral(deferral: DeferralConfig) -> SdkVmConfig {
+/// Builds the standard riscv64 SDK VM config with the supplied deferral config enabled.
+fn riscv64_config_with_deferral(deferral: DeferralConfig) -> SdkVmConfig {
     SdkVmConfig::builder()
         .system(Default::default())
-        .rv32i(Default::default())
-        .rv32m(Default::default())
+        .rv64i(Default::default())
+        .rv64m(Default::default())
         .io(Default::default())
         .deferral(deferral)
         .build()
@@ -212,7 +212,7 @@ fn make_verify_stark_sdk_with_count(
     let supported_deferrals = vec![SupportedDeferral::VerifyStark; num_deferral_circuits];
     let deferral_config = multi_deferral_circuit_prover.make_config(supported_deferrals);
 
-    let vm_config = riscv32_config_with_deferral(deferral_config);
+    let vm_config = riscv64_config_with_deferral(deferral_config);
 
     let sdk = Sdk::builder()
         .app_config(AppConfig::new(vm_config, app_params))
@@ -227,7 +227,7 @@ fn make_recursive_verify_stark_sdk(
     app_params: SystemParams,
     agg_params: AggregationSystemParams,
 ) -> Result<Sdk> {
-    let vm_config = SdkVmConfig::riscv32();
+    let vm_config = SdkVmConfig::riscv64();
     let memory_dimensions = vm_config.system.config.memory_config.memory_dimensions();
     let num_user_pvs = vm_config.system.config.num_public_values;
     let deferral_agg_prover = DeferralAggProver::verify_stark(
@@ -239,7 +239,7 @@ fn make_recursive_verify_stark_sdk(
     let deferral_config = deferral_agg_prover
         .multi_deferral_circuit_prover
         .make_config(vec![SupportedDeferral::VerifyStark]);
-    let vm_config = riscv32_config_with_deferral(deferral_config);
+    let vm_config = riscv64_config_with_deferral(deferral_config);
 
     let sdk = Sdk::builder()
         .app_config(AppConfig::new(vm_config, app_params))
@@ -323,15 +323,23 @@ fn make_verify_stark_inputs_for_indices(
 
 /// Converts byte-expanded BabyBear public values back to raw user public value bytes.
 fn collapse_user_public_values(expanded: &[u8]) -> Vec<u8> {
-    const F_NUM_BYTES: usize = 4;
+    const F_NUM_BYTES: usize = core::mem::size_of::<u32>();
     assert!(expanded.len().is_multiple_of(F_NUM_BYTES));
-    expanded
-        .chunks_exact(F_NUM_BYTES)
-        .map(|bytes| {
-            assert_eq!(&bytes[1..], &[0; F_NUM_BYTES - 1]);
-            bytes[0]
-        })
-        .collect()
+    let mut user_public_values = Vec::with_capacity(expanded.len() / F_NUM_BYTES * U16_CELL_SIZE);
+    for bytes in expanded.chunks_exact(F_NUM_BYTES) {
+        assert_eq!(&bytes[U16_CELL_SIZE..], &[0; F_NUM_BYTES - U16_CELL_SIZE]);
+        user_public_values.extend_from_slice(&bytes[..U16_CELL_SIZE]);
+    }
+    user_public_values
+}
+
+#[test]
+fn collapse_user_public_values_preserves_u16_cells() {
+    let expanded = [0x34, 0x12, 0, 0, 0xcd, 0xab, 0, 0];
+    assert_eq!(
+        collapse_user_public_values(&expanded),
+        [0x34, 0x12, 0xcd, 0xab]
+    );
 }
 
 /// Proves `exe` with the given inputs and verifies the resulting proof. The exact prover path
@@ -482,16 +490,145 @@ fn test_deferrals_enabled_without_usage() -> Result<()> {
     prove_and_verify_e2e(&sdk, app_exe, stdin, &[])
 }
 
+#[cfg(feature = "rvr")]
+#[test]
+fn test_sdk_compiled_pure_save_load_roundtrip() -> Result<()> {
+    let (sdk, _, _) = make_fib_sdk();
+    let elf = Elf::decode(
+        include_bytes!("../programs/examples/fibonacci.elf"),
+        MEM_SIZE as u32,
+    )?;
+    let exe = sdk.convert_to_exe(elf)?;
+
+    let mut stdin = StdIn::default();
+    stdin.write(&100u64);
+
+    let compiled_a = sdk.compile(exe.clone())?;
+    let baseline = sdk.execute(&compiled_a, stdin.clone())?;
+
+    let tmp = tempfile::tempdir()?;
+    let lib_path = compiled_a.save(tmp.path())?;
+    drop(compiled_a);
+
+    let compiled_b = sdk.load_compiled(&lib_path, exe)?;
+    let reloaded = sdk.execute(&compiled_b, stdin)?;
+
+    assert_eq!(baseline, reloaded);
+    Ok(())
+}
+
+#[cfg(feature = "rvr")]
+#[test]
+fn test_sdk_compiled_metered_save_load_roundtrip() -> Result<()> {
+    let (sdk, _, _) = make_fib_sdk();
+    let elf = Elf::decode(
+        include_bytes!("../programs/examples/fibonacci.elf"),
+        MEM_SIZE as u32,
+    )?;
+    let exe = sdk.convert_to_exe(elf)?;
+
+    let mut stdin = StdIn::default();
+    stdin.write(&100u64);
+
+    let compiled_a = sdk.compile_metered(exe.clone())?;
+    let (baseline_pv, baseline_segments) = sdk.execute_metered(&compiled_a, stdin.clone())?;
+
+    let tmp = tempfile::tempdir()?;
+    let lib_path = compiled_a.save(tmp.path())?;
+    drop(compiled_a);
+
+    let compiled_b = sdk.load_compiled_metered(&lib_path, exe)?;
+    let (reloaded_pv, reloaded_segments) = sdk.execute_metered(&compiled_b, stdin)?;
+
+    assert_eq!(baseline_pv, reloaded_pv);
+    assert_eq!(baseline_segments.len(), reloaded_segments.len());
+    for (a, b) in baseline_segments.iter().zip(reloaded_segments.iter()) {
+        assert_eq!(a.instret_start, b.instret_start);
+        assert_eq!(a.num_insns, b.num_insns);
+        assert_eq!(a.trace_heights, b.trace_heights);
+    }
+    Ok(())
+}
+
+#[cfg(feature = "rvr")]
+#[test]
+fn test_sdk_compiled_metered_cost_save_load_roundtrip() -> Result<()> {
+    let (sdk, _, _) = make_fib_sdk();
+    let elf = Elf::decode(
+        include_bytes!("../programs/examples/fibonacci.elf"),
+        MEM_SIZE as u32,
+    )?;
+    let exe = sdk.convert_to_exe(elf)?;
+
+    let mut stdin = StdIn::default();
+    stdin.write(&100u64);
+
+    let compiled_a = sdk.compile_metered_cost(exe.clone())?;
+    let (baseline_pv, baseline_cost) = sdk.execute_metered_cost(&compiled_a, stdin.clone())?;
+
+    let tmp = tempfile::tempdir()?;
+    let lib_path = compiled_a.save(tmp.path())?;
+    drop(compiled_a);
+
+    let compiled_b = sdk.load_compiled_metered_cost(&lib_path, exe)?;
+    let (reloaded_pv, reloaded_cost) = sdk.execute_metered_cost(&compiled_b, stdin)?;
+
+    assert_eq!(baseline_pv, reloaded_pv);
+    assert_eq!(baseline_cost, reloaded_cost);
+    Ok(())
+}
+
+#[test]
+fn test_sdk_compiled_metered_execute() -> Result<()> {
+    let (sdk, _, _) = make_fib_sdk();
+    let elf = Elf::decode(
+        include_bytes!("../programs/examples/fibonacci.elf"),
+        MEM_SIZE as u32,
+    )?;
+    let exe = sdk.convert_to_exe(elf)?;
+
+    let mut stdin = StdIn::default();
+    stdin.write(&100u64);
+
+    let compiled = sdk.compile_metered(exe)?;
+    let (_, segments) = sdk.execute_metered(&compiled, stdin)?;
+    assert!(!segments.is_empty());
+    Ok(())
+}
+
+#[test]
+fn test_sdk_compiled_metered_cost_execute() -> Result<()> {
+    let (sdk, _, _) = make_fib_sdk();
+    let elf = Elf::decode(
+        include_bytes!("../programs/examples/fibonacci.elf"),
+        MEM_SIZE as u32,
+    )?;
+    let exe = sdk.convert_to_exe(elf)?;
+
+    let mut stdin = StdIn::default();
+    stdin.write(&100u64);
+
+    let compiled = sdk.compile_metered_cost(exe)?;
+    let (_, (_, instret)) = sdk.execute_metered_cost(&compiled, stdin)?;
+    assert!(instret > 0);
+    Ok(())
+}
+
 #[test]
 fn test_deferral_aware_sdk_with_odd_children() -> Result<()> {
     setup_tracing();
-    let n_stack = 15;
+    let n_stack = 16;
     let app_params = app_params_with_100_bits_security(DEFAULT_APP_L_SKIP + n_stack);
     let agg_params = AggregationSystemParams::default();
     let hook_commits =
         DeferralHookCommits::from_system_params(&agg_params, hook_params_with_100_bits_security());
+    let mut app_config = AppConfig::riscv64(app_params);
+    app_config
+        .app_vm_config
+        .as_mut()
+        .set_segmentation_max_memory(256 << 20);
     let aware_sdk = Sdk::builder()
-        .app_config(AppConfig::riscv32(app_params))
+        .app_config(app_config)
         .agg_params(agg_params)
         .agg_tree_config(AggregationTreeConfig {
             num_children_leaf: 1,
@@ -509,7 +646,8 @@ fn test_deferral_aware_sdk_with_odd_children() -> Result<()> {
     let mut stdin = StdIn::default();
     stdin.write(&(1u64 << 17));
 
-    let (_, segments) = aware_sdk.execute_metered(app_exe.clone(), stdin.clone())?;
+    let compiled = aware_sdk.compile_metered(app_exe.clone())?;
+    let (_, segments) = aware_sdk.execute_metered(&compiled, stdin.clone())?;
     assert!(segments.len() >= 3, "expected >= 3 segments");
 
     prove_and_verify_e2e(&aware_sdk, app_exe, stdin, &[])
@@ -737,7 +875,7 @@ fn sdk_static_verifier_cell_profiling() -> Result<()> {
                 include_bytes!("../programs/examples/fibonacci.elf"),
                 MEM_SIZE as u32,
             )?;
-            let sdk = Sdk::riscv32(app_params, agg_params);
+            let sdk = Sdk::riscv64(app_params, agg_params);
             let app_exe = sdk.convert_to_exe(elf)?;
 
             // Compute trace heights for root prover with profiling params

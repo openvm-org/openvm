@@ -19,7 +19,11 @@ use openvm_pairing_guest::{
     bn254::{BN254_ECC_STRUCT_NAME, BN254_MODULUS, BN254_ORDER, BN254_XI_ISIZE},
 };
 use openvm_pairing_transpiler::PairingPhantom;
+#[cfg(feature = "rvr")]
+use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_stark_backend::{p3_field::Field, StarkEngine, StarkProtocolConfig};
+#[cfg(feature = "rvr")]
+use rvr_openvm_lift::{ExtensionRegistry, RvrExtensionCtx, VmRvrExtension};
 use serde::{Deserialize, Serialize};
 use strum::FromRepr;
 
@@ -62,6 +66,13 @@ impl PairingCurve {
 #[derive(Clone, Debug, From, derive_new::new, Serialize, Deserialize)]
 pub struct PairingExtension {
     pub supported_curves: Vec<PairingCurve>,
+}
+
+#[cfg(feature = "rvr")]
+impl<F: PrimeField32> VmRvrExtension<F> for PairingExtension {
+    fn extend_rvr(&self, registry: &mut ExtensionRegistry<F>, _ctx: Option<&RvrExtensionCtx>) {
+        registry.register(rvr_openvm_ext_pairing::PairingExtension::new());
+    }
 }
 
 #[derive(Clone, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
@@ -122,7 +133,7 @@ pub(crate) mod phantom {
     };
     use openvm_ecc_guest::{algebra::field::FieldExtension, AffinePoint};
     use openvm_instructions::{
-        riscv::{RV32_MEMORY_AS, RV32_REGISTER_NUM_LIMBS},
+        riscv::{RV64_MEMORY_AS, RV64_REGISTER_NUM_LIMBS},
         PhantomDiscriminant,
     };
     use openvm_pairing_guest::{
@@ -130,7 +141,7 @@ pub(crate) mod phantom {
         bn254::BN254_NUM_LIMBS,
         pairing::{FinalExp, MultiMillerLoop},
     };
-    use openvm_rv32im_circuit::adapters::{memory_read, read_rv32_register};
+    use openvm_riscv_circuit::adapters::{memory_read, read_rv64_register_as_u32};
     use openvm_stark_backend::p3_field::Field;
     use rand::rngs::StdRng;
 
@@ -149,33 +160,33 @@ pub(crate) mod phantom {
             b: u32,
             c_upper: u16,
         ) -> eyre::Result<()> {
-            let rs1 = read_rv32_register(memory, a);
-            let rs2 = read_rv32_register(memory, b);
+            let rs1 = read_rv64_register_as_u32(memory, a);
+            let rs2 = read_rv64_register_as_u32(memory, b);
             hint_pairing(memory, &mut streams.hint_stream, rs1, rs2, c_upper)
         }
     }
 
-    fn hint_pairing<F: Field>(
+    fn hint_pairing(
         memory: &GuestMemory,
-        hint_stream: &mut VecDeque<F>,
+        hint_stream: &mut VecDeque<u8>,
         rs1: u32,
         rs2: u32,
         c_upper: u16,
     ) -> eyre::Result<()> {
-        let p_ptr = u32::from_le_bytes(memory_read(memory, RV32_MEMORY_AS, rs1));
+        let p_ptr = u32::from_le_bytes(memory_read(memory, RV64_MEMORY_AS, rs1));
         // len in bytes
         let p_len = u32::from_le_bytes(memory_read(
             memory,
-            RV32_MEMORY_AS,
-            rs1 + RV32_REGISTER_NUM_LIMBS as u32,
+            RV64_MEMORY_AS,
+            rs1 + RV64_REGISTER_NUM_LIMBS as u32,
         ));
 
-        let q_ptr = u32::from_le_bytes(memory_read(memory, RV32_MEMORY_AS, rs2));
+        let q_ptr = u32::from_le_bytes(memory_read(memory, RV64_MEMORY_AS, rs2));
         // len in bytes
         let q_len = u32::from_le_bytes(memory_read(
             memory,
-            RV32_MEMORY_AS,
-            rs2 + RV32_REGISTER_NUM_LIMBS as u32,
+            RV64_MEMORY_AS,
+            rs2 + RV64_REGISTER_NUM_LIMBS as u32,
         ));
 
         match PairingCurve::from_repr(c_upper as usize) {
@@ -217,8 +228,7 @@ pub(crate) mod phantom {
                         .into_iter()
                         .chain(u.to_coeffs())
                         .flat_map(|fp2| fp2.to_coeffs())
-                        .flat_map(|fp| fp.to_bytes())
-                        .map(F::from_u8),
+                        .flat_map(|fp| fp.to_bytes()),
                 );
             }
             Some(PairingCurve::Bls12_381) => {
@@ -259,8 +269,7 @@ pub(crate) mod phantom {
                         .into_iter()
                         .chain(u.to_coeffs())
                         .flat_map(|fp2| fp2.to_coeffs())
-                        .flat_map(|fp| fp.to_bytes())
-                        .map(F::from_u8),
+                        .flat_map(|fp| fp.to_bytes()),
                 );
             }
             _ => {
@@ -278,12 +287,12 @@ pub(crate) mod phantom {
         Fp::Repr: From<[u8; N]>,
     {
         // SAFETY:
-        // - RV32_MEMORY_AS consists of `u8`s
-        // - RV32_MEMORY_AS is in bounds
+        // - RV64_MEMORY_AS consists of `u8`s
+        // - RV64_MEMORY_AS is in bounds
         let repr: &[u8; N] = unsafe {
             memory
                 .memory
-                .get_slice::<u8>((RV32_MEMORY_AS, ptr), N)
+                .get_u8_slice(RV64_MEMORY_AS, ptr as usize, N)
                 .try_into()
                 .unwrap()
         };

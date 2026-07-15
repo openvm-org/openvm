@@ -1,6 +1,14 @@
-[submodule "toolchain/tests/rv32im-test-vectors/riscv-tests"]
-	path = crates/toolchain/tests/rv32im-test-vectors/riscv-tests
+[submodule "toolchain/tests/riscv-test-vectors/riscv-tests"]
+	path = crates/toolchain/tests/riscv-test-vectors/riscv-tests
 	url = https://github.com/riscv-software-src/riscv-tests.git
 [submodule "crates/sdk/contracts/lib/forge-std"]
 	path = crates/sdk/contracts/lib/forge-std
 	url = https://github.com/foundry-rs/forge-std
+[submodule "extensions/algebra/rvr/ffi/modular/secp256k1"]
+	path = extensions/algebra/rvr/ffi/modular/secp256k1
+	url = https://github.com/bitcoin-core/secp256k1.git
+	shallow = true
+[submodule "extensions/keccak256/rvr/ffi/openssl"]
+	path = extensions/keccak256/rvr/ffi/openssl
+	url = https://github.com/openssl/openssl.git
+	shallow = true

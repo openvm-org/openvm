@@ -10,8 +10,8 @@ on:
       instance_type:
         type: string
         required: false
-        description: The AWS instance type or family (e.g., m7g.16xlarge)
-        default: g6.2xlarge
+        description: The AWS instance type or family (e.g., m8g.16xlarge)
+        default: g7.4xlarge
       memory_allocator:
         type: string
         required: false
@@ -43,8 +43,8 @@ on:
       instance_type:
         type: string
         required: false
-        description: The AWS instance type or family (e.g., m7g.16xlarge)
-        default: g6.2xlarge
+        description: The AWS instance type or family (e.g., m8g.16xlarge)
+        default: g7.4xlarge
       memory_allocator:
         type: string
         required: false
@@ -110,6 +110,12 @@ jobs:
           rm -rf ~/.rustup/toolchains/stable-x86_64-unknown-linux-gnu || true
       - uses: dtolnay/rust-toolchain@stable
       - uses: ./.github/actions/sccache
+
+      # TODO: remove once https://github.com/runs-on/runner-images-for-aws/issues/55 is fixed
+      - name: Setup GPU driver
+        if: ${{ startsWith(inputs.instance_type || github.event.inputs.instance_type, 'g') }}
+        run: bash ./scripts/gpu_driver_setup.sh
+
       - uses: ./.github/actions/rust-cache-cuda
         with:
           cache-on-failure: true
@@ -121,6 +127,7 @@ jobs:
 
       - name: Display workflow inputs
         run: echo "${{ toJSON(inputs) }}"
+
       - name: "Feature flags: memory allocator + e2e"
         run: |
           ALLOCATOR=${{ inputs.memory_allocator || github.event.inputs.memory_allocator }}

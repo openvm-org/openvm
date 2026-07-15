@@ -13,9 +13,10 @@ namespace sha2 {
 
 template <typename V, typename T> struct Sha2MainBlockCols {
     T request_id;
-    T message_bytes[V::BLOCK_U8S];
-    T prev_state[V::STATE_BYTES];
-    T new_state[V::STATE_BYTES];
+    // Message and state data as little-endian u16 cells.
+    T message_u16s[V::BLOCK_U16S];
+    T prev_state[V::STATE_U16S];
+    T new_state[V::STATE_U16S];
 };
 
 template <typename T> struct Sha2MainInstructionCols {
@@ -24,16 +25,17 @@ template <typename T> struct Sha2MainInstructionCols {
     T dst_reg_ptr;
     T state_reg_ptr;
     T input_reg_ptr;
-    T dst_ptr_limbs[RV32_REGISTER_NUM_LIMBS];
-    T state_ptr_limbs[RV32_REGISTER_NUM_LIMBS];
-    T input_ptr_limbs[RV32_REGISTER_NUM_LIMBS];
+    /// Low 32 bits of each register pointer, packed as 2 u16 cells.
+    T dst_ptr_limbs[RV64_PTR_U16_LIMBS];
+    T state_ptr_limbs[RV64_PTR_U16_LIMBS];
+    T input_ptr_limbs[RV64_PTR_U16_LIMBS];
 };
 
 template <typename V, typename T> struct Sha2MainMemoryCols {
     MemoryReadAuxCols<T> register_aux[sha2::SHA2_REGISTER_READS];
     MemoryReadAuxCols<T> input_reads[V::BLOCK_READS];
     MemoryReadAuxCols<T> state_reads[V::STATE_READS];
-    MemoryWriteAuxCols<T, sha2::SHA2_WRITE_SIZE> write_aux[V::STATE_WRITES];
+    MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> write_aux[V::STATE_WRITES];
 };
 
 template <typename V, typename T> struct Sha2MainCols {

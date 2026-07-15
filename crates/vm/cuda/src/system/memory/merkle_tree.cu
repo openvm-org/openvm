@@ -2,36 +2,103 @@
 #include "poseidon2.cuh"
 #include "primitives/shared_buffer.cuh"
 #include "primitives/trace_access.h"
+#include "primitives/utils.cuh"
+#include "system/memory/params.cuh"
 
 #include <cub/cub.cuh>
 
 using poseidon2::poseidon2_mix;
 
 struct alignas(32) digest_t {
-    Fp cells[CELLS_OUT];
+    Fp cells[DIGEST_WIDTH];
 };
 
 #define COPY_DIGEST(dst, src) memcpy(dst, src, sizeof(digest_t))
 
-// `ADDR_SPACE_IDX` is the address space minus `ADDR_SPACE_OFFSET` (which is 1)
-template <int ADDR_SPACE_IDX>
-__global__ void merkle_tree_init(uint8_t *__restrict__ data, digest_t *__restrict__ out) {
-    auto gid = blockDim.x * blockIdx.x + threadIdx.x;
+enum MemoryMerkleSubTreeLayout : uint8_t {
+    FULL = 0,
+    OMIT_BOTTOM_LEVELS = 1,
+};
 
+__device__ __forceinline__ void hash_raw_memory_leaf(
+    uint8_t const *__restrict__ data,
+    uint32_t const addr_space_idx,
+    size_t const leaf_label,
+    digest_t *out
+) {
     Fp cells[CELLS] = {0};
-    // TODO: revisit when we sort out address space handling
 #pragma unroll
-    for (size_t i = 0; i < CELLS_OUT; ++i) {
-        if constexpr (ADDR_SPACE_IDX < 3) {
-            cells[i] = Fp(data[CELLS_OUT * gid + i]);
+    for (size_t i = 0; i < DIGEST_WIDTH; ++i) {
+        if (addr_space_idx + 1 == DEFERRAL_AS) {
+            cells[i] = reinterpret_cast<Fp const *>(data)[DIGEST_WIDTH * leaf_label + i];
         } else {
-            cells[i] = reinterpret_cast<Fp *>(data)[CELLS_OUT * gid + i];
+            auto byte_off = U16_CELL_SIZE * (DIGEST_WIDTH * leaf_label + i);
+            cells[i] = Fp(u16_from_bytes_le(data + byte_off));
         }
     }
 
     poseidon2_mix(cells);
+    COPY_DIGEST(out, cells);
+}
 
-    COPY_DIGEST(&out[gid], cells);
+// `ADDR_SPACE_IDX` is the address space minus `ADDR_SPACE_OFFSET` (which is 1)
+//
+// DEFERRAL_AS stores Fp cells directly.
+// Non-deferral address spaces store u16 cells in little-endian byte order.
+template <int ADDR_SPACE_IDX>
+__global__ void merkle_tree_init(uint8_t *__restrict__ data, digest_t *__restrict__ out) {
+    auto gid = blockDim.x * blockIdx.x + threadIdx.x;
+
+    digest_t digest;
+    hash_raw_memory_leaf(data, ADDR_SPACE_IDX, gid, &digest);
+
+    COPY_DIGEST(&out[gid], &digest);
+}
+
+__device__ void recompute_omitted_node(
+    uint8_t const *__restrict__ data,
+    uint32_t const addr_space_idx,
+    uint32_t const node_height,
+    // label is the index of the node within its level `node_height` (label 0 = leftmost). 
+    // the node roots a subtree of `2^node_height` leaves, 
+    // namely leaf labels `[label << node_height .. (label + 1) << node_height)`.
+    // i.e. those leaves get hashed to this node.
+    size_t const label,
+    digest_t *out
+) {
+    // layer is a fixed-size, thread-local scratch buffer of 2^OMITTED_BOTTOM_LEVELS 
+    // digests, used to rebuild an omitted subtree bottom-up.
+    digest_t layer[1 << OMITTED_BOTTOM_LEVELS];
+    // num_leaves denote the number of leaves of the subtree rooted at this node 
+    size_t const num_leaves = 1 << node_height;
+    // recall again that node_height is counted starting from the bottom
+    // that is, node_height = 0 for the leafs
+    size_t const first_leaf = label << node_height;
+
+    for (size_t i = 0; i < num_leaves; ++i) {
+        hash_raw_memory_leaf(data, addr_space_idx, first_leaf + i, &layer[i]);
+    }
+
+    // cells is a 2-to-1 compression buffer
+    Fp cells[CELLS];
+    for (size_t width = num_leaves / 2; width > 0; width /= 2) {
+        for (size_t i = 0; i < width; ++i) {
+            COPY_DIGEST(cells, &layer[2 * i]);
+            COPY_DIGEST(cells + CELLS_OUT, &layer[2 * i + 1]);
+            poseidon2_mix(cells);
+            COPY_DIGEST(&layer[i], cells);
+        }
+    }
+    COPY_DIGEST(out, &layer[0]);
+}
+
+__global__ void merkle_tree_init_omitted(
+    uint8_t *__restrict__ data,
+    digest_t *__restrict__ out,
+    uint32_t const addr_space_idx
+) {
+    auto gid = blockDim.x * blockIdx.x + threadIdx.x;
+    recompute_omitted_node(data, addr_space_idx, OMITTED_BOTTOM_LEVELS, gid, &out[gid]);
 }
 
 __global__ void merkle_tree_compress(
@@ -114,36 +181,6 @@ __global__ void merkle_tree_root(
 }
 
 // ================== Merkle tree update routine ==================
-
-__global__ void initial_subtrees_advance(
-    uintptr_t *d_subtrees,
-    size_t const *actual_subtree_heights,
-    size_t const num_subtrees,
-    size_t const subtree_height
-) {
-    auto gid = blockDim.x * blockIdx.x + threadIdx.x;
-    if (gid >= num_subtrees) {
-        return;
-    }
-    digest_t **subtrees = reinterpret_cast<digest_t **>(d_subtrees);
-    auto const h = actual_subtree_heights[gid];
-    subtrees[gid] += (1 << (h + 1)) - 1 + (subtree_height - h);
-}
-
-__global__ void adjust_subtrees_before_layer_update(
-    uintptr_t *d_subtrees,
-    size_t const *actual_subtree_heights,
-    size_t const num_subtrees,
-    size_t const h
-) {
-    auto gid = blockDim.x * blockIdx.x + threadIdx.x;
-    if (gid >= num_subtrees) {
-        return;
-    }
-    digest_t **subtrees = reinterpret_cast<digest_t **>(d_subtrees);
-    subtrees[gid] -=
-        h <= actual_subtree_heights[gid] ? 1 << (actual_subtree_heights[gid] - h + 1) : 1;
-}
 
 template <typename T> struct MerkleCols {
     T expand_direction;
@@ -261,27 +298,100 @@ __device__ void fill_merkle_trace_row(
     COL_WRITE_VALUE(row, MerkleCols, right_direction_different, right_new != new_values);
 }
 
-__device__ __forceinline__ digest_t const *layer_value_on_height(
-    digest_t const *subtree_layer,
-    digest_t const *zero_hash,
-    uint32_t const height,
-    uint32_t const layer_actual_height,
+// A "virtual node" is a node of the conceptual full subtree, addressed by
+// (node_height, label). It is "virtual" because depending on where it falls it
+// can map to one of four different physical representations:
+//   1. Non-existent: `label` lies beyond the touched layer (higher memory
+//      addresses that were never written). It is not stored at all; its value
+//      is the precomputed constant `zero_hash[node_height]`.
+//   2. Omitted bottom level: under the OMIT_BOTTOM_LEVELS layout, nodes with
+//      `node_height < OMITTED_BOTTOM_LEVELS` are not stored either; they are
+//      recomputed on demand from `initial_data`.
+//   3. On the vertical path (`node_height > actual_height`): a stored node
+//      above the touched subtree, indexed linearly by height.
+//   4. Inside the actual touched subtree (`node_height <= actual_height`): a
+//      stored node at the heap-style index for its (height, label).
+// virtual_node_exists / stored_node_index / load_virtual_node implement this
+// mapping; see stored_node_index for the exact stored indices of cases 3 and 4.
+__device__ __forceinline__ bool virtual_node_exists(
+    uint32_t const node_height,
+    // actual height denotes the height of the subtree excluding the vertical path length
+    // that is, the height of the subtree excluding the higher memory addresses
+    // which are never touched
+    uint32_t const actual_height, 
     size_t const label
 ) {
-    auto const layer_size =
-        1 << (height <= layer_actual_height ? (layer_actual_height - height) : 0);
-    return label < layer_size ? subtree_layer + label : zero_hash + height;
+    auto const layer_size = 1 << (node_height <= actual_height ? (actual_height - node_height) : 0);
+    return label < layer_size;
+}
+
+__device__ __forceinline__ size_t stored_node_index(
+    uint32_t const subtree_height,
+    uint32_t const actual_height,
+    uint32_t const node_height,
+    size_t const label
+) {
+    if (node_height > actual_height) {
+        return subtree_height - node_height;
+    }
+    auto const path_len = subtree_height - actual_height;
+    return path_len + ((1 << (actual_height - node_height)) - 1) + label;
+}
+
+__device__ void load_virtual_node(
+    digest_t const *subtree,
+    digest_t const *zero_hash,
+    uint8_t const layout,
+    uint8_t const *initial_data,
+    uint32_t const address_space_idx,
+    uint32_t const subtree_height,
+    uint32_t const actual_height,
+    uint32_t const node_height,
+    size_t const label,
+    digest_t *out
+) {
+    if (!virtual_node_exists(node_height, actual_height, label)) {
+        COPY_DIGEST(out, &zero_hash[node_height]);
+        return;
+    }
+
+    if (layout == OMIT_BOTTOM_LEVELS && node_height < OMITTED_BOTTOM_LEVELS) {
+        recompute_omitted_node(initial_data, address_space_idx, node_height, label, out);
+        return;
+    }
+
+    auto const idx = stored_node_index(subtree_height, actual_height, node_height, label);
+    COPY_DIGEST(out, &subtree[idx]);
+}
+
+__device__ void store_virtual_node(
+    digest_t *subtree,
+    uint8_t const layout,
+    uint32_t const subtree_height,
+    uint32_t const actual_height,
+    uint32_t const node_height,
+    size_t const label,
+    digest_t const *value
+) {
+    if (layout == OMIT_BOTTOM_LEVELS && node_height < OMITTED_BOTTOM_LEVELS) {
+        return;
+    }
+    auto const idx = stored_node_index(subtree_height, actual_height, node_height, label);
+    COPY_DIGEST(&subtree[idx], value);
 }
 
 __global__ void update_merkle_layer(
     uint32_t layer_height,
     digest_t const *zero_hash,
     size_t const *actual_subtree_heights,
+    uint8_t const *subtree_layouts,
+    uintptr_t const *initial_data_ptrs,
+    uint32_t const subtree_height,
     LabeledDigest *layer,
     uint32_t const *child_ptrs,
     uint32_t *parent_ptrs,
     size_t const num_parents,
-    uintptr_t *d_subtree_layers,
+    uintptr_t *d_subtrees,
     Fp *const merkle_trace,
     size_t const trace_height,
     Fp *poseidon2_buffer,
@@ -293,33 +403,48 @@ __global__ void update_merkle_layer(
         return;
     }
     Fp cells[CELLS];
-    digest_t **subtree_layers = reinterpret_cast<digest_t **>(d_subtree_layers);
+    digest_t **subtrees = reinterpret_cast<digest_t **>(d_subtrees);
 
     uint32_t const parent_ptr = parent_ptrs[idx] =
         ((child_ptrs[2 * idx] == MISSING_CHILD) ? child_ptrs[2 * idx + 1] : child_ptrs[2 * idx]);
     uint32_t const address_space_idx = layer[parent_ptr].address_space_idx;
     uint32_t const parent_label = layer[parent_ptr].label >> layer_height;
-    auto const subtree_layer = subtree_layers[address_space_idx];
+    auto const subtree = subtrees[address_space_idx];
+    uint32_t const actual_height = actual_subtree_heights[address_space_idx];
+    uint8_t const layout = subtree_layouts[address_space_idx];
+    auto const initial_data = reinterpret_cast<uint8_t const *>(initial_data_ptrs[address_space_idx]);
     Poseidon2Buffer poseidon2(
         reinterpret_cast<FpArray<16> *>(poseidon2_buffer), poseidon2_buffer_idx, poseidon2_capacity
     );
-    auto const old_left_digest = layer_value_on_height(
-        subtree_layer,
+    digest_t old_left_digest;
+    load_virtual_node(
+        subtree,
         zero_hash,
+        layout,
+        initial_data,
+        address_space_idx,
+        subtree_height,
+        actual_height,
         layer_height - 1,
-        actual_subtree_heights[address_space_idx],
-        2 * parent_label
+        2 * parent_label,
+        &old_left_digest
     );
-    auto const old_right_digest = layer_value_on_height(
-        subtree_layer,
+    digest_t old_right_digest;
+    load_virtual_node(
+        subtree,
         zero_hash,
+        layout,
+        initial_data,
+        address_space_idx,
+        subtree_height,
+        actual_height,
         layer_height - 1,
-        actual_subtree_heights[address_space_idx],
-        2 * parent_label + 1
+        2 * parent_label + 1,
+        &old_right_digest
     );
     { // old values trace row
-        COPY_DIGEST(cells, old_left_digest);
-        COPY_DIGEST(cells + CELLS_OUT, old_right_digest);
+        COPY_DIGEST(cells, &old_left_digest);
+        COPY_DIGEST(cells + CELLS_OUT, &old_right_digest);
         RowSlice row(merkle_trace + 2 * idx, trace_height);
         fill_merkle_trace_row(
             row,
@@ -337,16 +462,36 @@ __global__ void update_merkle_layer(
     { // new values trace row + actual update
         bool left_new = false;
         if (auto const child_ptr = child_ptrs[2 * idx]; child_ptr != MISSING_CHILD) {
-            COPY_DIGEST(&subtree_layer[2 * parent_label], layer[child_ptr].digest_raw);
+            COPY_DIGEST(cells, layer[child_ptr].digest_raw);
+            store_virtual_node(
+                subtree,
+                layout,
+                subtree_height,
+                actual_height,
+                layer_height - 1,
+                2 * parent_label,
+                reinterpret_cast<digest_t const *>(layer[child_ptr].digest_raw)
+            );
             left_new = true;
+        } else {
+            COPY_DIGEST(cells, &old_left_digest);
         }
-        COPY_DIGEST(cells, old_left_digest);
         bool right_new = false;
         if (auto const child_ptr = child_ptrs[2 * idx + 1]; child_ptr != MISSING_CHILD) {
-            COPY_DIGEST(&subtree_layer[2 * parent_label + 1], layer[child_ptr].digest_raw);
+            COPY_DIGEST(cells + CELLS_OUT, layer[child_ptr].digest_raw);
+            store_virtual_node(
+                subtree,
+                layout,
+                subtree_height,
+                actual_height,
+                layer_height - 1,
+                2 * parent_label + 1,
+                reinterpret_cast<digest_t const *>(layer[child_ptr].digest_raw)
+            );
             right_new = true;
+        } else {
+            COPY_DIGEST(cells + CELLS_OUT, &old_right_digest);
         }
-        COPY_DIGEST(cells + CELLS_OUT, old_right_digest);
         RowSlice row(merkle_trace + 2 * idx + 1, trace_height);
         fill_merkle_trace_row(
             row,
@@ -483,27 +628,34 @@ extern "C" int _build_merkle_subtree(
     digest_t *buffer,
     const size_t tree_offset,
     const uint addr_space_idx,
+    const uint8_t layout,
     cudaStream_t stream
 ) {
     digest_t *tree = buffer + tree_offset;
     assert((size & (size - 1)) == 0);
     {
         auto [grid, block] = kernel_launch_params(size);
-        switch (addr_space_idx) { // TODO: revisit when we sort out address space handling
-        case 0:
-            merkle_tree_init<0><<<grid, block, 0, stream>>>(data, tree + (size - 1));
-            break;
-        case 1:
-            merkle_tree_init<1><<<grid, block, 0, stream>>>(data, tree + (size - 1));
-            break;
-        case 2:
-            merkle_tree_init<2><<<grid, block, 0, stream>>>(data, tree + (size - 1));
-            break;
-        case 3:
-            merkle_tree_init<3><<<grid, block, 0, stream>>>(data, tree + (size - 1));
-            break;
-        default:
-            return -1;
+        if (layout == OMIT_BOTTOM_LEVELS) {
+            merkle_tree_init_omitted<<<grid, block, 0, stream>>>(
+                data, tree + (size - 1), addr_space_idx
+            );
+        } else {
+            switch (addr_space_idx) { // TODO: revisit when we sort out address space handling
+            case 0:
+                merkle_tree_init<0><<<grid, block, 0, stream>>>(data, tree + (size - 1));
+                break;
+            case 1:
+                merkle_tree_init<1><<<grid, block, 0, stream>>>(data, tree + (size - 1));
+                break;
+            case 2:
+                merkle_tree_init<2><<<grid, block, 0, stream>>>(data, tree + (size - 1));
+                break;
+            case 3:
+                merkle_tree_init<3><<<grid, block, 0, stream>>>(data, tree + (size - 1));
+                break;
+            default:
+                return -1;
+            }
         }
     }
     for (auto i = size / 2; i > 0; i /= 2) {
@@ -573,6 +725,8 @@ extern "C" int _update_merkle_tree(
     digest_t *top_roots,
     digest_t const *zero_hash,
     size_t const *actual_subtree_heights,
+    uint8_t const *subtree_layouts,
+    uintptr_t const *initial_data_ptrs,
     Fp *d_poseidon2_raw_buffer,
     uint32_t *d_poseidon2_buffer_idx,
     size_t poseidon2_capacity,
@@ -590,12 +744,6 @@ extern "C" int _update_merkle_tree(
     {
         auto [grid, block] = kernel_launch_params(num_leaves, 256);
         prepare_for_updating<<<grid, block, 0, stream>>>(child_buf, layer, num_children);
-    }
-    {
-        auto [grid, block] = kernel_launch_params(num_subtrees);
-        initial_subtrees_advance<<<grid, block, 0, stream>>>(
-            subtrees, actual_subtree_heights, num_subtrees, subtree_height
-        );
     }
 
     uint32_t merkle_trace_offset = unpadded_trace_height;
@@ -649,18 +797,15 @@ extern "C" int _update_merkle_tree(
         }
         cudaStreamSynchronize(stream);
         ++num_parents;
-        {
-            auto [grid, block] = kernel_launch_params(num_subtrees);
-            adjust_subtrees_before_layer_update<<<grid, block, 0, stream>>>(
-                subtrees, actual_subtree_heights, num_subtrees, h
-            );
-        }
         merkle_trace_offset -= 2 * num_parents;
         auto [grid, block] = kernel_launch_params(num_parents, 256);
         update_merkle_layer<<<grid, block, 0, stream>>>(
             h,
             zero_hash,
             actual_subtree_heights,
+            subtree_layouts,
+            initial_data_ptrs,
+            subtree_height,
             layer,
             tmp_buf,
             child_buf,

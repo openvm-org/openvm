@@ -1,0 +1,940 @@
+use std::{array, borrow::BorrowMut, sync::Arc};
+
+#[cfg(feature = "aot")]
+use openvm_circuit::arch::{
+    testing::assert_vm_states_equivalent, ExecutionError, VirtualMachine, VmExecutor, VmState,
+};
+use openvm_circuit::{
+    arch::{
+        testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
+        Arena, ExecutionBridge, PreflightExecutor, BLOCK_FE_WIDTH,
+    },
+    system::memory::{offline_checker::MemoryBridge, SharedMemoryHelper},
+};
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::{
+        BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
+        SharedBitwiseOperationLookupChip,
+    },
+    var_range::VariableRangeCheckerChip,
+};
+#[cfg(feature = "aot")]
+use openvm_instructions::{exe::VmExe, program::Program, riscv::RV64_REGISTER_AS, SystemOpcode};
+use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode};
+#[cfg(feature = "aot")]
+use openvm_riscv_transpiler::BaseAluOpcode::ADD;
+use openvm_riscv_transpiler::Rv64JalrOpcode::{self, *};
+use openvm_stark_backend::{
+    p3_air::BaseAir,
+    p3_field::{PrimeCharacteristicRing, PrimeField32},
+    p3_matrix::{
+        dense::{DenseMatrix, RowMajorMatrix},
+        Matrix,
+    },
+    utils::disable_debug_builder,
+};
+#[cfg(feature = "aot")]
+use openvm_stark_backend::{StarkEngine, SystemParams};
+#[cfg(feature = "aot")]
+use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2CpuEngine, DuplexSponge};
+use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
+use rand::{rngs::StdRng, Rng};
+#[cfg(feature = "cuda")]
+use {
+    crate::{adapters::Rv64JalrAdapterRecord, Rv64JalrChipGpu, Rv64JalrCoreRecord},
+    openvm_circuit::arch::{
+        testing::{
+            default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
+            GpuTestChipHarness,
+        },
+        EmptyAdapterCoreLayout,
+    },
+};
+
+use super::Rv64JalrCoreAir;
+#[cfg(feature = "aot")]
+use crate::Rv64ImConfig;
+use crate::{
+    adapters::{
+        rv64_limbs_to_u64, rv64_u16_block_to_bytes, Rv64JalrAdapterAir, Rv64JalrAdapterCols,
+        Rv64JalrAdapterExecutor, Rv64JalrAdapterFiller, RV64_BYTE_BITS, RV64_PTR_U16_LIMBS,
+        RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
+    },
+    jalr::{run_jalr, Rv64JalrChip, Rv64JalrCoreCols, Rv64JalrExecutor},
+    Rv64JalrAir, Rv64JalrFiller,
+};
+#[cfg(feature = "aot")]
+use crate::{Rv32ImBuilder, Rv32ImConfig};
+
+const IMM_BITS: usize = 16;
+const MAX_INS_CAPACITY: usize = 128;
+type F = BabyBear;
+type Harness = TestChipHarness<F, Rv64JalrExecutor, Rv64JalrAir, Rv64JalrChip<F>>;
+
+fn into_limbs(num: u32) -> [u32; RV64_REGISTER_NUM_LIMBS] {
+    array::from_fn(|i| {
+        if i < RV64_WORD_NUM_LIMBS {
+            (num >> (RV64_BYTE_BITS * i)) & ((1 << RV64_BYTE_BITS) - 1)
+        } else {
+            0
+        }
+    })
+}
+
+fn create_harness_fields(
+    memory_bridge: MemoryBridge,
+    execution_bridge: ExecutionBridge,
+    bitwise_chip: Arc<BitwiseOperationLookupChip<RV64_BYTE_BITS>>,
+    range_checker_chip: Arc<VariableRangeCheckerChip>,
+    memory_helper: SharedMemoryHelper<F>,
+) -> (Rv64JalrAir, Rv64JalrExecutor, Rv64JalrChip<F>) {
+    let _ = bitwise_chip;
+    let air = Rv64JalrAir::new(
+        Rv64JalrAdapterAir::new(memory_bridge, execution_bridge),
+        Rv64JalrCoreAir::new(range_checker_chip.bus()),
+    );
+    let executor = Rv64JalrExecutor::new(Rv64JalrAdapterExecutor);
+    let chip = Rv64JalrChip::<F>::new(
+        Rv64JalrFiller::new(Rv64JalrAdapterFiller::new(), range_checker_chip),
+        memory_helper,
+    );
+    (air, executor, chip)
+}
+
+fn create_harness(
+    tester: &mut VmChipTestBuilder<F>,
+) -> (
+    Harness,
+    (
+        BitwiseOperationLookupAir<RV64_BYTE_BITS>,
+        SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
+    ),
+) {
+    let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
+        bitwise_bus,
+    ));
+    let range_checker_chip = tester.range_checker().clone();
+
+    let (air, executor, chip) = create_harness_fields(
+        tester.memory_bridge(),
+        tester.execution_bridge(),
+        bitwise_chip.clone(),
+        range_checker_chip,
+        tester.memory_helper(),
+    );
+    let harness = Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY);
+
+    (harness, (bitwise_chip.air, bitwise_chip))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
+    tester: &mut impl TestBuilder<F>,
+    executor: &mut E,
+    arena: &mut RA,
+    rng: &mut StdRng,
+    opcode: Rv64JalrOpcode,
+    initial_imm: Option<u32>,
+    initial_imm_sign: Option<u32>,
+    initial_pc: Option<u32>,
+    rs1: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
+    rd_ptr: Option<usize>,
+) {
+    let imm = initial_imm.unwrap_or(rng.random_range(0..(1 << IMM_BITS)));
+    let imm_sign = initial_imm_sign.unwrap_or(rng.random_range(0..2));
+    let imm_ext = imm + (imm_sign * 0xffff0000);
+    let a = rd_ptr.unwrap_or_else(|| rng.random_range(0..32) << 3);
+    let b = rng.random_range(1..32) << 3;
+    let imm_signed = (imm_ext as i32) as i64;
+    let min_to_pc = imm_signed.max(0) as u32;
+    let to_pc = rng.random_range(min_to_pc..(1 << PC_BITS));
+
+    let rs1 = rs1.unwrap_or(into_limbs((i64::from(to_pc) - imm_signed) as u32));
+    let rs1 = rs1.map(F::from_u32);
+
+    tester.write_bytes(1, b, rs1);
+
+    let initial_pc = initial_pc.unwrap_or(rng.random_range(0..(1 << PC_BITS)));
+    tester.execute_with_pc(
+        executor,
+        arena,
+        &Instruction::from_usize(
+            opcode.global_opcode(),
+            [
+                a,
+                b,
+                imm as usize,
+                1,
+                0,
+                (a != 0) as usize,
+                imm_sign as usize,
+            ],
+        ),
+        initial_pc,
+    );
+    let final_pc = tester.last_to_pc().as_canonical_u32();
+
+    let rs1 = rv64_limbs_to_u64(rs1) as u32;
+
+    let (next_pc, rd_data) = run_jalr(initial_pc, rs1, imm as u16, imm_sign == 1);
+    // The register write is suppressed for x0.
+    let rd_data = if a == 0 {
+        [0u16; BLOCK_FE_WIDTH]
+    } else {
+        rd_data
+    };
+
+    assert_eq!(next_pc & !1, final_pc);
+    // Compare against the raw 8-byte register value stored in memory.
+    let rd_bytes = rv64_u16_block_to_bytes(rd_data);
+    assert_eq!(
+        rd_bytes.map(F::from_u8),
+        tester.read_bytes::<RV64_REGISTER_NUM_LIMBS>(1, a)
+    );
+}
+
+///////////////////////////////////////////////////////////////////////////////////////
+/// POSITIVE TESTS
+///
+/// Randomly generate computations and execute, ensuring that the generated trace
+/// passes all constraints.
+///////////////////////////////////////////////////////////////////////////////////////
+#[test]
+fn rand_jalr_test() {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+    let (mut harness, bitwise) = create_harness(&mut tester);
+
+    let num_ops = 100;
+    for _ in 0..num_ops {
+        set_and_execute(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.arena,
+            &mut rng,
+            JALR,
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+    }
+
+    let tester = tester
+        .build()
+        .load(harness)
+        .load_periphery(bitwise)
+        .finalize();
+    tester.simple_test().expect("Verification failed");
+}
+
+//////////////////////////////////////////////////////////////////////////////////////
+// NEGATIVE TESTS
+//
+// Given a fake trace of a single operation, setup a chip and run the test. We replace
+// part of the trace and check that the chip throws the expected error.
+//////////////////////////////////////////////////////////////////////////////////////
+
+// Prankable JALR core columns: rs1 low 32 as two u16 cells; rd stores only
+// the high u16 of pc + 4.
+#[derive(Clone, Copy, Default, PartialEq)]
+struct JalrPrankValues {
+    pub rd_high: Option<[u32; RV64_PTR_U16_LIMBS - 1]>,
+    pub rs1_data: Option<[u32; RV64_PTR_U16_LIMBS]>,
+    pub to_pc_least_sig_bit: Option<u32>,
+    pub to_pc_limbs: Option<[u32; RV64_PTR_U16_LIMBS]>,
+    pub imm_sign: Option<u32>,
+    pub rd_ptr: Option<u32>,
+    pub needs_write: Option<bool>,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn run_negative_jalr_test_with_rd_ptr(
+    opcode: Rv64JalrOpcode,
+    initial_pc: Option<u32>,
+    initial_rs1: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
+    initial_imm: Option<u32>,
+    initial_imm_sign: Option<u32>,
+    rd_ptr: Option<usize>,
+    prank_vals: JalrPrankValues,
+    _interaction_error: bool,
+) {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+
+    let (mut harness, bitwise) = create_harness(&mut tester);
+
+    set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.arena,
+        &mut rng,
+        opcode,
+        initial_imm,
+        initial_imm_sign,
+        initial_pc,
+        initial_rs1,
+        rd_ptr,
+    );
+
+    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
+    let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
+        let mut trace_row = trace.row_slice(0).unwrap().to_vec();
+        let (adapter_row, core_row) = trace_row.split_at_mut(adapter_width);
+        let adapter_cols: &mut Rv64JalrAdapterCols<F> = adapter_row.borrow_mut();
+        let core_cols: &mut Rv64JalrCoreCols<F> = core_row.borrow_mut();
+
+        if let Some(data) = prank_vals.rd_high {
+            core_cols.rd_high = data.map(F::from_u32);
+        }
+        if let Some(data) = prank_vals.rs1_data {
+            core_cols.rs1_data = data.map(F::from_u32);
+        }
+        if let Some(data) = prank_vals.to_pc_least_sig_bit {
+            core_cols.to_pc_least_sig_bit = F::from_u32(data);
+        }
+        if let Some(data) = prank_vals.to_pc_limbs {
+            core_cols.to_pc_limbs = data.map(F::from_u32);
+        }
+        if let Some(data) = prank_vals.imm_sign {
+            core_cols.imm_sign = F::from_u32(data);
+        }
+        if let Some(rd_ptr) = prank_vals.rd_ptr {
+            adapter_cols.rd_ptr = F::from_u32(rd_ptr);
+        }
+        if let Some(needs_write) = prank_vals.needs_write {
+            adapter_cols.needs_write = F::from_bool(needs_write);
+        }
+
+        *trace = RowMajorMatrix::new(trace_row, trace.width());
+    };
+
+    disable_debug_builder();
+    let tester = tester
+        .build()
+        .load_and_prank_trace(harness, modify_trace)
+        .load_periphery(bitwise)
+        .finalize();
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
+}
+
+#[allow(clippy::too_many_arguments)]
+fn run_negative_jalr_test(
+    opcode: Rv64JalrOpcode,
+    initial_pc: Option<u32>,
+    initial_rs1: Option<[u32; RV64_REGISTER_NUM_LIMBS]>,
+    initial_imm: Option<u32>,
+    initial_imm_sign: Option<u32>,
+    prank_vals: JalrPrankValues,
+    interaction_error: bool,
+) {
+    run_negative_jalr_test_with_rd_ptr(
+        opcode,
+        initial_pc,
+        initial_rs1,
+        initial_imm,
+        initial_imm_sign,
+        None,
+        prank_vals,
+        interaction_error,
+    );
+}
+
+#[test]
+fn invalid_cols_negative_tests() {
+    run_negative_jalr_test(
+        JALR,
+        None,
+        None,
+        Some(15362),
+        Some(0),
+        JalrPrankValues {
+            imm_sign: Some(1),
+            ..Default::default()
+        },
+        false,
+    );
+
+    run_negative_jalr_test(
+        JALR,
+        None,
+        None,
+        Some(15362),
+        Some(1),
+        JalrPrankValues {
+            imm_sign: Some(0),
+            ..Default::default()
+        },
+        false,
+    );
+
+    run_negative_jalr_test(
+        JALR,
+        None,
+        Some([23, 154, 67, 28, 0, 0, 0, 0]),
+        Some(42512),
+        Some(1),
+        JalrPrankValues {
+            to_pc_least_sig_bit: Some(0),
+            ..Default::default()
+        },
+        false,
+    );
+}
+
+#[test]
+#[should_panic(expected = "upper 4 bytes must be zero")]
+fn rs1_upper_bytes_preflight_rejects_test() {
+    run_negative_jalr_test(
+        JALR,
+        None,
+        Some([23, 154, 67, 28, 1, 0, 0, 0]),
+        Some(42512),
+        Some(1),
+        JalrPrankValues::default(),
+        true,
+    );
+}
+
+#[test]
+fn rs1_upper_bytes_trace_tamper_negative_test() {
+    let mut tester = VmChipTestBuilder::default();
+    let (mut harness, bitwise) = create_harness(&mut tester);
+
+    let initial_pc = 0x1234;
+    let imm = 16usize;
+    let imm_sign = 0usize;
+    let rd_ptr = 16usize;
+    let rs1_ptr = 8usize;
+    let rs1_low = 0x20000u32;
+    let mem_helper = tester.memory_helper();
+
+    let mut poisoned_rs1 = into_limbs(rs1_low);
+    poisoned_rs1[4] = 1;
+    let clean_rs1 = into_limbs(rs1_low);
+    let poisoned_write_timestamp = tester.memory.memory.timestamp();
+
+    // Seed the same source register with a poisoned value, then overwrite with a clean one so
+    // the execution is initially valid.
+    tester.write_bytes(1, rs1_ptr, poisoned_rs1.map(F::from_u32));
+    tester.write_bytes(1, rs1_ptr, clean_rs1.map(F::from_u32));
+
+    tester.execute_with_pc(
+        &mut harness.executor,
+        &mut harness.arena,
+        &Instruction::from_usize(
+            JALR.global_opcode(),
+            [rd_ptr, rs1_ptr, imm, 1, 0, 1, imm_sign],
+        ),
+        initial_pc,
+    );
+
+    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
+    let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
+        let mut trace_row = trace.row_slice(0).unwrap().to_vec();
+        let (adapter_row, _) = trace_row.split_at_mut(adapter_width);
+        let adapter_cols: &mut Rv64JalrAdapterCols<F> = adapter_row.borrow_mut();
+        let read_timestamp = adapter_cols.from_state.timestamp.as_canonical_u32();
+        let rs1_aux_base = adapter_cols.rs1_aux_cols.as_mut();
+        mem_helper
+            .as_borrowed()
+            .fill(poisoned_write_timestamp, read_timestamp, rs1_aux_base);
+        *trace = RowMajorMatrix::new(trace_row, trace.width());
+    };
+
+    disable_debug_builder();
+    let tester = tester
+        .build()
+        .load_and_prank_trace(harness, modify_trace)
+        .load_periphery(bitwise)
+        .finalize();
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
+}
+
+#[test]
+fn rd_upper_bytes_trace_tamper_negative_test() {
+    let mut tester = VmChipTestBuilder::default();
+    let (mut harness, bitwise) = create_harness(&mut tester);
+
+    let initial_pc = 0x1234;
+    let imm = 16usize;
+    let imm_sign = 0usize;
+    let rd_ptr = 16usize;
+    let rs1_ptr = 8usize;
+    let rs1_low = 0x20000u32;
+    let clean_rd_prev = [9u32, 8, 7, 6, 0, 0, 0, 0];
+
+    // Seed the destination register with a known clean value.
+    tester.write_bytes(1, rd_ptr, clean_rd_prev.map(F::from_u32));
+    tester.write_bytes(1, rs1_ptr, into_limbs(rs1_low).map(F::from_u32));
+
+    tester.execute_with_pc(
+        &mut harness.executor,
+        &mut harness.arena,
+        &Instruction::from_usize(
+            JALR.global_opcode(),
+            [rd_ptr, rs1_ptr, imm, 1, 0, 1, imm_sign],
+        ),
+        initial_pc,
+    );
+
+    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
+    let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
+        let mut trace_row = trace.row_slice(0).unwrap().to_vec();
+        let (adapter_row, _) = trace_row.split_at_mut(adapter_width);
+        let adapter_cols: &mut Rv64JalrAdapterCols<F> = adapter_row.borrow_mut();
+        adapter_cols.rd_aux_cols.prev_data[2] = F::from_u32(1);
+        *trace = RowMajorMatrix::new(trace_row, trace.width());
+    };
+
+    disable_debug_builder();
+    let tester = tester
+        .build()
+        .load_and_prank_trace(harness, modify_trace)
+        .load_periphery(bitwise)
+        .finalize();
+    tester
+        .simple_test()
+        .expect_err("Expected verification to fail, but it passed");
+}
+
+#[test]
+fn write_suppression_boundary_negative_tests() {
+    run_negative_jalr_test_with_rd_ptr(
+        JALR,
+        Some(0x1234),
+        Some(into_limbs(0x20000)),
+        Some(16),
+        Some(0),
+        Some(0),
+        JalrPrankValues {
+            rd_ptr: Some(8),
+            ..Default::default()
+        },
+        true,
+    );
+
+    run_negative_jalr_test_with_rd_ptr(
+        JALR,
+        Some(0x1234),
+        Some(into_limbs(0x20000)),
+        Some(16),
+        Some(0),
+        Some(8),
+        JalrPrankValues {
+            needs_write: Some(false),
+            ..Default::default()
+        },
+        true,
+    );
+}
+
+#[test]
+fn overflow_negative_tests() {
+    run_negative_jalr_test(
+        JALR,
+        Some(251),
+        None,
+        None,
+        None,
+        JalrPrankValues {
+            rd_high: Some([1]),
+            ..Default::default()
+        },
+        true,
+    );
+
+    run_negative_jalr_test(
+        JALR,
+        None,
+        Some([0, 0, 0, 0, 0, 0, 0, 0]),
+        Some((1 << 15) - 2),
+        Some(0),
+        JalrPrankValues {
+            to_pc_limbs: Some([
+                (F::NEG_ONE * F::from_u32((1 << 14) + 1)).as_canonical_u32(),
+                1,
+            ]),
+            ..Default::default()
+        },
+        true,
+    );
+}
+
+///////////////////////////////////////////////////////////////////////////////////////
+/// SANITY TESTS
+///
+/// Ensure that solve functions produce the correct results.
+///////////////////////////////////////////////////////////////////////////////////////
+
+#[test]
+fn run_jalr_sanity_test() {
+    let initial_pc = 789456120;
+    let imm = -1235_i32 as u32;
+    let rs1 = 736482910;
+    let (next_pc, rd_data) = run_jalr(initial_pc, rs1, imm as u16, true);
+    assert_eq!(next_pc & !1, 736481674);
+    // u32 pc+4 = 789456124 = 0x2f0e24fc => low u16=0x24fc, high u16=0x2f0e.
+    assert_eq!(rd_data, [0x24fc, 0x2f0e, 0, 0]);
+}
+
+#[test]
+#[should_panic(expected = "JALR target exceeds implemented PC address space")]
+fn run_jalr_rejects_low_32_wraparound_test() {
+    run_jalr(0, 0xffff_fff8, 16, false);
+}
+
+#[test]
+fn jalr_x0_write_suppression_test() {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+    let (mut harness, _) = create_harness(&mut tester);
+
+    set_and_execute(
+        &mut tester,
+        &mut harness.executor,
+        &mut harness.arena,
+        &mut rng,
+        JALR,
+        Some(16),
+        Some(0),
+        Some(0x1234),
+        Some(into_limbs(0x20000)),
+        Some(0),
+    );
+}
+
+#[cfg(feature = "aot")]
+fn run_jalr_program(instructions: Vec<Instruction<F>>) -> (VmState<F>, VmState<F>) {
+    eprintln!("run_jalr_program called");
+    let program = Program::from_instructions(&instructions);
+    let exe = VmExe::new(program);
+    let config = Rv64ImConfig::default();
+    let memory_dimensions = config.rv64i.system.memory_config.memory_dimensions();
+    let executor = VmExecutor::new(config.clone()).expect("failed to create Rv64IM executor");
+
+    let interpreter_instance = executor
+        .interpreter_instance(&exe)
+        .expect("interpreter build must succeed");
+    let interp_state = interpreter_instance
+        .execute(vec![], None)
+        .expect("interpreter execution must succeed");
+
+    let aot_instance = executor.aot_instance(&exe).expect("AOT build must succeed");
+    let aot_state = aot_instance
+        .execute(vec![], None)
+        .expect("AOT execution must succeed");
+
+    assert_vm_states_equivalent(&interp_state, &aot_state, &memory_dimensions);
+    (interp_state, aot_state)
+}
+
+#[cfg(feature = "aot")]
+fn read_register(state: &VmState<F>, offset: usize) -> u32 {
+    let bytes = unsafe {
+        state
+            .memory
+            .read_bytes::<RV64_WORD_NUM_LIMBS>(RV64_REGISTER_AS, offset as u32)
+    };
+    u32::from_le_bytes(bytes)
+}
+
+#[cfg(feature = "aot")]
+#[test]
+fn test_aot_dispatch_rejects_dead_pc_slots() {
+    let cases = [
+        (
+            VmExe::new(Program::new_without_debug_infos_with_option(
+                &[Some(terminate_instruction())],
+                4,
+            ))
+            .with_pc_start(0),
+            0,
+        ),
+        (
+            VmExe::new(Program::new_without_debug_infos_with_option(
+                &[Some(terminate_instruction())],
+                8,
+            ))
+            .with_pc_start(0),
+            0,
+        ),
+        (
+            VmExe::new(Program::new_without_debug_infos_with_option(
+                &[Some(terminate_instruction())],
+                4096,
+            ))
+            .with_pc_start(2048),
+            2048,
+        ),
+        (
+            VmExe::new(Program::new_without_debug_infos_with_option(
+                &[
+                    Some(add_instruction(4, 0, 4)),
+                    Some(jalr_instruction(4)),
+                    Some(terminate_instruction()),
+                ],
+                8,
+            ))
+            .with_pc_start(8),
+            4,
+        ),
+        (
+            VmExe::new(Program::new_without_debug_infos_with_option(
+                &[
+                    Some(terminate_instruction()),
+                    None,
+                    None,
+                    Some(terminate_instruction()),
+                ],
+                0,
+            ))
+            .with_pc_start(4),
+            4,
+        ),
+        (
+            VmExe::new(Program::new_without_debug_infos_with_option(
+                &[
+                    Some(add_instruction(4, 0, 1)),
+                    None,
+                    Some(terminate_instruction()),
+                ],
+                0,
+            ))
+            .with_pc_start(0),
+            4,
+        ),
+        (
+            VmExe::new(Program::new_without_debug_infos_with_option(
+                &[
+                    Some(add_instruction(4, 0, 8)),
+                    Some(jalr_instruction(4)),
+                    None,
+                    Some(terminate_instruction()),
+                ],
+                0,
+            ))
+            .with_pc_start(0),
+            8,
+        ),
+    ];
+
+    let config = Rv32ImConfig::default();
+    let executor = VmExecutor::new(config.clone()).expect("failed to create Rv32IM executor");
+    let engine = BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(SystemParams::new_for_testing(20));
+    let (vm, _) = VirtualMachine::new_with_keygen(engine, Rv32ImBuilder, config).expect("vm init");
+    let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
+
+    for (exe, dead_pc) in cases {
+        assert_dead_pc_rejected_by_pure_aot(&executor, &exe, dead_pc);
+        assert_dead_pc_rejected_by_metered_aot(&vm, &executor_idx_to_air_idx, &exe, dead_pc);
+    }
+}
+
+#[cfg(feature = "aot")]
+fn terminate_instruction() -> Instruction<F> {
+    Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0)
+}
+
+#[cfg(feature = "aot")]
+fn add_instruction(rd: usize, rs1: usize, imm: usize) -> Instruction<F> {
+    Instruction::from_usize(
+        ADD.global_opcode(),
+        [rd, rs1, imm, RV64_REGISTER_AS as usize, 0],
+    )
+}
+
+#[cfg(feature = "aot")]
+fn jalr_instruction(rs1: usize) -> Instruction<F> {
+    Instruction::from_usize(
+        JALR.global_opcode(),
+        [0, rs1, 0, RV64_REGISTER_AS as usize, 0, 0, 0],
+    )
+}
+
+#[cfg(feature = "aot")]
+fn assert_dead_pc_rejected_by_pure_aot(
+    executor: &VmExecutor<F, Rv32ImConfig>,
+    exe: &VmExe<F>,
+    dead_pc: u32,
+) {
+    let interpreter = executor
+        .interpreter_instance(exe)
+        .expect("interpreter build must succeed");
+    let interp_err = match interpreter.execute(vec![], None) {
+        Ok(_) => panic!("interpreter must reject the dead pc slot"),
+        Err(err) => err,
+    };
+    assert!(matches!(interp_err, ExecutionError::Unreachable(pc) if pc == dead_pc));
+
+    let aot_instance = executor.aot_instance(exe).expect("AOT build must succeed");
+    let aot_err = match aot_instance.execute(vec![], None) {
+        Ok(_) => panic!("AOT must reject the dead pc slot"),
+        Err(err) => err,
+    };
+    assert!(matches!(aot_err, ExecutionError::Unreachable(pc) if pc == dead_pc));
+}
+
+#[cfg(feature = "aot")]
+fn assert_dead_pc_rejected_by_metered_aot(
+    vm: &VirtualMachine<BabyBearPoseidon2CpuEngine<DuplexSponge>, Rv32ImBuilder>,
+    executor_idx_to_air_idx: &[usize],
+    exe: &VmExe<F>,
+    dead_pc: u32,
+) {
+    let metered_ctx = vm.build_metered_ctx(exe);
+
+    let metered_interpreter = vm
+        .executor()
+        .metered_interpreter_instance(exe, executor_idx_to_air_idx)
+        .expect("metered interpreter build must succeed");
+    let interp_err = match metered_interpreter.execute_metered(vec![], metered_ctx.clone()) {
+        Ok(_) => panic!("metered interpreter must reject the dead pc slot"),
+        Err(err) => err,
+    };
+    assert!(matches!(interp_err, ExecutionError::Unreachable(pc) if pc == dead_pc));
+
+    let metered_aot = vm
+        .executor()
+        .metered_aot_instance(exe, executor_idx_to_air_idx)
+        .expect("metered AOT build must succeed");
+    let aot_err = match metered_aot.execute_metered(vec![], metered_ctx) {
+        Ok(_) => panic!("metered AOT must reject the dead pc slot"),
+        Err(err) => err,
+    };
+    assert!(matches!(aot_err, ExecutionError::Unreachable(pc) if pc == dead_pc));
+}
+
+#[cfg(feature = "aot")]
+#[test]
+fn test_jalr_aot_jump_forward() {
+    eprintln!("test_jalr_aot_jump_forward called");
+    let instructions = vec![
+        Instruction::from_usize(ADD.global_opcode(), [4, 0, 8, RV64_REGISTER_AS as usize, 0]),
+        Instruction::from_usize(
+            JALR.global_opcode(),
+            [0, 4, 0, RV64_REGISTER_AS as usize, 0, 0, 0],
+        ),
+        Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+    ];
+
+    let (interp_state, aot_state) = run_jalr_program(instructions);
+
+    assert_eq!(interp_state.pc(), 8);
+    assert_eq!(aot_state.pc(), 8);
+
+    let interp_x1 = read_register(&interp_state, 4);
+    let aot_x1 = read_register(&aot_state, 4);
+    assert_eq!(interp_x1, 8);
+    assert_eq!(interp_x1, aot_x1);
+}
+
+#[cfg(feature = "aot")]
+#[test]
+fn test_jalr_aot_writes_return_address() {
+    eprintln!("test_jalr_aot_writes_return_address called");
+    let instructions = vec![
+        Instruction::from_usize(
+            ADD.global_opcode(),
+            [4, 0, 12, RV64_REGISTER_AS as usize, 0],
+        ),
+        Instruction::from_usize(
+            JALR.global_opcode(),
+            [12, 4, 0xfffc, RV64_REGISTER_AS as usize, 0, 1, 1],
+        ),
+        Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+    ];
+
+    let (interp_state, aot_state) = run_jalr_program(instructions);
+
+    assert_eq!(interp_state.pc(), 8);
+    assert_eq!(aot_state.pc(), 8);
+
+    let interp_x1 = read_register(&interp_state, 4);
+    let aot_x1 = read_register(&aot_state, 4);
+    assert_eq!(interp_x1, 12);
+    assert_eq!(interp_x1, aot_x1);
+
+    let interp_x3 = read_register(&interp_state, 12);
+    let aot_x3 = read_register(&aot_state, 12);
+    assert_eq!(interp_x3, 8);
+    assert_eq!(interp_x3, aot_x3);
+}
+
+// ////////////////////////////////////////////////////////////////////////////////////
+//  CUDA TESTS
+//
+//  Ensure GPU tracegen is equivalent to CPU tracegen
+// ////////////////////////////////////////////////////////////////////////////////////
+
+#[cfg(feature = "cuda")]
+type GpuHarness =
+    GpuTestChipHarness<F, Rv64JalrExecutor, Rv64JalrAir, Rv64JalrChipGpu, Rv64JalrChip<F>>;
+
+#[cfg(feature = "cuda")]
+fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
+    let bitwise_bus = default_bitwise_lookup_bus();
+    let range_bus = default_var_range_checker_bus();
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
+        bitwise_bus,
+    ));
+    let dummy_range_checker_chip = Arc::new(VariableRangeCheckerChip::new(range_bus));
+
+    let (air, executor, cpu_chip) = create_harness_fields(
+        tester.memory_bridge(),
+        tester.execution_bridge(),
+        dummy_bitwise_chip,
+        dummy_range_checker_chip,
+        tester.dummy_memory_helper(),
+    );
+    let gpu_chip = Rv64JalrChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
+
+    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
+}
+
+#[cfg(feature = "cuda")]
+#[test]
+fn test_cuda_rand_jalr_tracegen() {
+    let mut tester =
+        GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
+    let mut rng = create_seeded_rng();
+
+    let mut harness = create_cuda_harness(&tester);
+    let num_ops = 100;
+    for _ in 0..num_ops {
+        set_and_execute(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.dense_arena,
+            &mut rng,
+            JALR,
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+    }
+
+    type Record<'a> = (&'a mut Rv64JalrAdapterRecord, &'a mut Rv64JalrCoreRecord);
+    harness
+        .dense_arena
+        .get_record_seeker::<Record, _>()
+        .transfer_to_matrix_arena(
+            &mut harness.matrix_arena,
+            EmptyAdapterCoreLayout::<F, Rv64JalrAdapterExecutor>::new(),
+        );
+
+    tester
+        .build()
+        .load_gpu_harness(harness)
+        .finalize()
+        .simple_test()
+        .unwrap();
+}

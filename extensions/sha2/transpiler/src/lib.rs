@@ -1,9 +1,9 @@
-use openvm_instructions::{riscv::RV32_MEMORY_AS, LocalOpcode};
+use openvm_decoder::instruction_formats::RType;
+use openvm_instructions::{riscv::RV64_MEMORY_AS, LocalOpcode};
 use openvm_instructions_derive::LocalOpcode;
 use openvm_sha2_guest::{Sha2BaseFunct7, OPCODE, SHA2_FUNCT3};
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_transpiler::{util::from_r_type, TranspilerExtension, TranspilerOutput};
-use rrs_lib::instruction_formats::RType;
 use strum::{EnumCount, EnumIter, FromRepr};
 
 // There is no SHA384 opcode because the SHA-384 compression function is
@@ -13,7 +13,7 @@ use strum::{EnumCount, EnumIter, FromRepr};
 )]
 #[opcode_offset = 0x320]
 #[repr(usize)]
-pub enum Rv32Sha2Opcode {
+pub enum Rv64Sha2Opcode {
     SHA256,
     SHA512,
 }
@@ -37,16 +37,16 @@ impl<F: PrimeField32> TranspilerExtension<F> for Sha2TranspilerExtension {
 
         if dec_insn.funct7 == Sha2BaseFunct7::Sha256 as u32 {
             let instruction = from_r_type(
-                Rv32Sha2Opcode::SHA256.global_opcode().as_usize(),
-                RV32_MEMORY_AS as usize,
+                Rv64Sha2Opcode::SHA256.global_opcode().as_usize(),
+                RV64_MEMORY_AS as usize,
                 &dec_insn,
                 true,
             );
             Some(TranspilerOutput::one_to_one(instruction))
         } else if dec_insn.funct7 == Sha2BaseFunct7::Sha512 as u32 {
             let instruction = from_r_type(
-                Rv32Sha2Opcode::SHA512.global_opcode().as_usize(),
-                RV32_MEMORY_AS as usize,
+                Rv64Sha2Opcode::SHA512.global_opcode().as_usize(),
+                RV64_MEMORY_AS as usize,
                 &dec_insn,
                 true,
             );

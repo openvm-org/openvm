@@ -19,8 +19,11 @@ openvm-poseidon2-air = { workspace = true }
 openvm-circuit = { workspace = true }
 openvm-circuit-derive = { workspace = true }
 openvm-instructions = { workspace = true }
-openvm-rv32im-circuit = { workspace = true }
+openvm-riscv-circuit = { workspace = true }
 openvm-deferral-transpiler = { workspace = true }
+rvr-openvm-lift = { workspace = true, optional = true }
+rvr-openvm-ext-deferral = { workspace = true, optional = true }
+rvr-openvm-ext-ffi-common = { workspace = true, optional = true }
 
 openvm-cuda-backend = { workspace = true, optional = true }
 openvm-cuda-common = { workspace = true, optional = true }
@@ -46,6 +49,13 @@ openvm-circuit = { path = "../../../crates/vm", default-features = false, featur
 default = ["parallel", "jemalloc"]
 tco = ["openvm-circuit/tco"]
 aot = ["openvm-circuit/aot"]
+rvr = [
+    "dep:rvr-openvm-lift",
+    "dep:rvr-openvm-ext-deferral",
+    "rvr-openvm-ext-deferral/rvr",
+    "dep:rvr-openvm-ext-ffi-common",
+    "openvm-riscv-circuit/rvr",
+]
 jemalloc = ["openvm-circuit/jemalloc"]
 parallel = ["openvm-circuit/parallel"]
 test-utils = ["openvm-circuit/test-utils"]
@@ -55,7 +65,7 @@ cuda = [
     "dep:openvm-cuda-builder",
     "openvm-circuit-primitives/cuda",
     "openvm-circuit/cuda",
-    "openvm-rv32im-circuit/cuda",
+    "openvm-riscv-circuit/cuda",
 ]
 touchemall = [
     "cuda",
@@ -63,5 +73,5 @@ touchemall = [
     "openvm-circuit-primitives/touchemall",
     "openvm-cuda-backend/touchemall",
     "openvm-cuda-common/touchemall",
-    "openvm-rv32im-circuit/touchemall",
+    "openvm-riscv-circuit/touchemall",
 ]

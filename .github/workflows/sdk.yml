@@ -14,7 +14,7 @@ on:
       family:
         description: "EC2 instance family (must match selected arch)"
         type: string
-        default: "m7a.24xlarge"
+        default: "m8a.24xlarge+m8i.24xlarge"
   push:
     branches: ["main"]
   pull_request:
@@ -33,10 +33,10 @@ jobs:
     if: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'run-sdk-tests') }}
     strategy:
       matrix:
-        mode: ["default", "ignored", "aot"]
+        mode: ["default", "rvr"]
 
     runs-on:
-      - runs-on=${{ github.run_id }}-sdk-${{ github.run_attempt }}-${{ strategy.job-index }}/family=${{ inputs.family || 'm7a.24xlarge' }}/image=${{ (inputs.arch || 'x86') == 'arm' && 'ubuntu24-full-arm64' || 'ubuntu24-full-x64' }}/volume=80gb/extras=s3-cache
+      - runs-on=${{ github.run_id }}-sdk-${{ github.run_attempt }}-${{ strategy.job-index }}/family=${{ inputs.family || 'm8a.24xlarge+m8i.24xlarge' }}/image=${{ (inputs.arch || 'x86') == 'arm' && 'ubuntu24-full-arm64' || 'ubuntu24-full-x64' }}/volume=80gb/extras=s3-cache
 
     steps:
       - uses: runs-on/action@v2
@@ -50,6 +50,11 @@ jobs:
       - uses: actions/checkout@v5
         with:
           submodules: recursive
+      - name: Init rvr FFI submodules
+        if: matrix.mode == 'rvr'
+        run: |
+          git submodule update --init --depth 1 extensions/keccak256/rvr/ffi/openssl
+          git submodule update --init --depth 1 extensions/algebra/rvr/ffi/modular/secp256k1
       - uses: dtolnay/rust-toolchain@stable
       - uses: ./.github/actions/sccache
       - uses: Swatinem/rust-cache@v2
@@ -58,6 +63,16 @@ jobs:
       - uses: taiki-e/install-action@nextest
       - name: Install solc # svm should support arm64 linux
         run: (hash svm 2>/dev/null || cargo install --locked --version 0.2.23 svm-rs) && svm install 0.8.19 && solc --version
+
+      - name: Install clang-22 and lld (required for rvr)
+        if: matrix.mode == 'rvr'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lsb-release wget software-properties-common gnupg
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 22
+          sudo apt-get install -y lld
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
@@ -90,34 +105,26 @@ jobs:
           jq -S . ./abi/IOpenVmHalo2Verifier.json > expected_abi_sorted.json
           diff -u expected_abi_sorted.json compiled_abi.json
 
-      - name: Run openvm-sdk crate tests
-        if: ${{ matrix.mode == 'default' }}
+      - name: Run openvm-sdk crate tests (${{ matrix.mode }})
         working-directory: crates/sdk
         run: |
           export RUST_BACKTRACE=1
           export RUST_MIN_STACK=8388608
-          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo nextest run --release --features parallel,root-prover,evm-verify
+          FEATURES="parallel,root-prover,evm-verify"
+          if [[ "${{ matrix.mode }}" == "default" ]]; then
+            : # no additional features
+          elif [[ "${{ matrix.mode }}" == "rvr" ]]; then
+            FEATURES="$FEATURES,rvr"
+          else
+            echo "Unknown matrix mode: ${{ matrix.mode }}" && exit 1
+          fi
+          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo nextest run --release --features "$FEATURES"
 
       - name: Build openvm-sdk examples
         if: ${{ matrix.mode == 'default' }}
         working-directory: crates/sdk
         run: |
           cargo build --release --examples --features parallel,root-prover,evm-verify
-
-      - name: Run openvm-sdk crate tests (AOT)
-        if: ${{ matrix.mode == 'aot' && inputs.arch == 'x86' }}
-        working-directory: crates/sdk
-        run: |
-          export RUST_BACKTRACE=1
-          export RUST_MIN_STACK=8388608
-          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo nextest run --release --features parallel,root-prover,evm-verify,aot
-
-      - name: Run ignored tests
-        if: ${{ matrix.mode == 'ignored' }}
-        working-directory: crates/sdk
-        # if: ${{ github.event_name == 'push' }}
-        run: |
-          CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS=true cargo nextest run --release --features parallel,root-prover,evm-verify --run-ignored=only --no-tests pass
 
       - name: sccache stats
         if: always()

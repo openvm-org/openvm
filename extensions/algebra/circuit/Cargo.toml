@@ -19,9 +19,12 @@ openvm-stark-backend = { workspace = true }
 openvm-cpu-backend = { workspace = true }
 openvm-mod-circuit-builder = { workspace = true }
 openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
-openvm-rv32im-circuit = { workspace = true }
-openvm-rv32-adapters = { workspace = true }
+openvm-riscv-circuit = { workspace = true }
+openvm-riscv-adapters = { workspace = true }
 openvm-algebra-transpiler = { workspace = true }
+openvm-algebra-utils = { workspace = true }
+rvr-openvm-lift = { workspace = true, optional = true }
+rvr-openvm-ext-algebra = { workspace = true, optional = true }
 openvm-cuda-backend = { workspace = true, optional = true }
 openvm-cuda-common = { workspace = true, optional = true }
 
@@ -41,22 +44,27 @@ halo2curves-axiom = { workspace = true }
 blstrs = { workspace = true, features = ["__private_bench"] }
 
 [dev-dependencies]
-openvm-mod-circuit-builder = { path = "../../../crates/circuits/mod-builder", default-features = false, features = ["test-utils"] }
-openvm-circuit = { path = "../../../crates/vm", default-features = false, features = ["test-utils"] }
-openvm-rv32-adapters = { path = "../../rv32-adapters", default-features = false, features = ["test-utils"] }
-openvm-pairing-guest = { path = "../../pairing/guest", default-features = false, features = ["halo2curves"] }
+openvm-mod-circuit-builder = { workspace = true, features = ["test-utils"] }
+openvm-circuit = { workspace = true, features = ["test-utils"] }
+openvm-riscv-adapters = { workspace = true, features = ["test-utils"] }
+openvm-pairing-guest = { workspace = true, features = ["halo2curves"] }
 test-case = { workspace = true }
 
 [features]
 default = []
-tco = ["openvm-rv32im-circuit/tco"]
-aot = ["openvm-circuit/aot", "openvm-rv32im-circuit/aot", "halo2curves-axiom/asm"]
+tco = ["openvm-riscv-circuit/tco"]
+aot = ["openvm-circuit/aot", "openvm-riscv-circuit/aot", "halo2curves-axiom/asm"]
+rvr = [
+    "dep:rvr-openvm-lift",
+    "dep:rvr-openvm-ext-algebra",
+    "openvm-riscv-circuit/rvr",
+]
 cuda = [
     "dep:openvm-cuda-common",
     "dep:openvm-cuda-backend",
     "openvm-circuit-primitives/cuda",
     "openvm-circuit/cuda",
-    "openvm-rv32im-circuit/cuda",
+    "openvm-riscv-circuit/cuda",
 ]
 touchemall = [
     "cuda",

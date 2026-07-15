@@ -11,17 +11,19 @@ use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS},
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
     LocalOpcode, DEFERRAL_AS,
 };
-use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
+use openvm_riscv_circuit::adapters::rv64_bytes_to_u32;
 
-use super::DeferralCallExecutor;
+use super::{accumulator_ptrs, DeferralCallExecutor};
 use crate::{
+    def_fn::execute_deferral_fn,
     poseidon2::deferral_poseidon2_chip,
     utils::{
-        byte_commit_to_f, combine_output, join_memory_ops, memory_op_chunk, COMMIT_MEMORY_OPS,
-        COMMIT_NUM_BYTES, DIGEST_MEMORY_OPS, OUTPUT_TOTAL_MEMORY_OPS,
+        byte_commit_to_f, byte_memory_op_chunk, combine_output, f_memory_op_chunk,
+        join_byte_memory_ops, join_f_memory_ops, COMMIT_MEMORY_OPS, COMMIT_NUM_BYTES,
+        DIGEST_F_MEMORY_OPS, OUTPUT_LEN_NUM_BYTES, OUTPUT_TOTAL_MEMORY_OPS,
     },
     DeferralFn, CALL_AIR_REL_IDX, POSEIDON2_AIR_REL_IDX,
 };
@@ -56,8 +58,8 @@ impl DeferralCallExecutor {
         } = inst;
 
         if opcode.local_opcode_idx(DeferralOpcode::CLASS_OFFSET) != DeferralOpcode::CALL as usize
-            || d.as_canonical_u32() != RV32_REGISTER_AS
-            || e.as_canonical_u32() != RV32_MEMORY_AS
+            || d.as_canonical_u32() != RV64_REGISTER_AS
+            || e.as_canonical_u32() != RV64_MEMORY_AS
         {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
@@ -68,14 +70,13 @@ impl DeferralCallExecutor {
             .get(deferral_idx as usize)
             .ok_or(StaticProgramError::InvalidInstruction(pc))?;
 
-        const DIGEST_SIZE_U32: u32 = DIGEST_SIZE as u32;
-        let input_acc_ptr = 2 * deferral_idx * DIGEST_SIZE_U32;
+        let (input_acc_ptr, output_acc_ptr) = accumulator_ptrs(deferral_idx);
         *data = DeferralCallPrecompute {
             rd_ptr: a.as_canonical_u32(),
             rs_ptr: b.as_canonical_u32(),
             deferral_idx,
             input_acc_ptr,
-            output_acc_ptr: input_acc_ptr + DIGEST_SIZE_U32,
+            output_acc_ptr,
             deferral_fn: deferral_fn.as_ref(),
         };
 
@@ -170,31 +171,34 @@ unsafe fn execute_e12_impl<F: VmField, CTX: ExecutionCtxTrait>(
     pre_compute: &DeferralCallPrecompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let output_ptr = u32::from_le_bytes(exec_state.vm_read(RV32_REGISTER_AS, pre_compute.rd_ptr));
-    let input_ptr = u32::from_le_bytes(exec_state.vm_read(RV32_REGISTER_AS, pre_compute.rs_ptr));
+    let output_ptr =
+        rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.rd_ptr));
+    let input_ptr =
+        rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.rs_ptr));
 
-    let input_commit_chunks: [[u8; DEFAULT_BLOCK_SIZE]; COMMIT_MEMORY_OPS] = from_fn(|i| {
-        exec_state.vm_read(RV32_MEMORY_AS, input_ptr + (i * DEFAULT_BLOCK_SIZE) as u32)
+    let input_commit_chunks: [[u8; MEMORY_BLOCK_BYTES]; COMMIT_MEMORY_OPS] = from_fn(|i| {
+        exec_state.vm_read_bytes(RV64_MEMORY_AS, input_ptr + (i * MEMORY_BLOCK_BYTES) as u32)
     });
-    let input_commit_bytes: [_; COMMIT_NUM_BYTES] = join_memory_ops(input_commit_chunks);
+    let input_commit_bytes: [_; COMMIT_NUM_BYTES] = join_byte_memory_ops(input_commit_chunks);
     let input_commit: [F; _] = byte_commit_to_f(&input_commit_bytes.map(F::from_u8));
-    let old_input_acc_chunks: [[F; DEFAULT_BLOCK_SIZE]; DIGEST_MEMORY_OPS] = from_fn(|i| {
+    let old_input_acc_chunks: [[F; BLOCK_FE_WIDTH]; DIGEST_F_MEMORY_OPS] = from_fn(|i| {
         exec_state.vm_read(
             DEFERRAL_AS,
-            pre_compute.input_acc_ptr + (i * DEFAULT_BLOCK_SIZE) as u32,
+            pre_compute.input_acc_ptr + (i * BLOCK_FE_WIDTH) as u32,
         )
     });
-    let old_output_acc_chunks: [[F; DEFAULT_BLOCK_SIZE]; DIGEST_MEMORY_OPS] = from_fn(|i| {
+    let old_output_acc_chunks: [[F; BLOCK_FE_WIDTH]; DIGEST_F_MEMORY_OPS] = from_fn(|i| {
         exec_state.vm_read(
             DEFERRAL_AS,
-            pre_compute.output_acc_ptr + (i * DEFAULT_BLOCK_SIZE) as u32,
+            pre_compute.output_acc_ptr + (i * BLOCK_FE_WIDTH) as u32,
         )
     });
-    let old_input_acc = join_memory_ops(old_input_acc_chunks);
-    let old_output_acc = join_memory_ops(old_output_acc_chunks);
+    let old_input_acc = join_f_memory_ops(old_input_acc_chunks);
+    let old_output_acc = join_f_memory_ops(old_output_acc_chunks);
 
     let poseidon2_chip = deferral_poseidon2_chip();
-    let (output_commit, output_len) = pre_compute.deferral_fn.execute(
+    let (output_commit, output_len) = execute_deferral_fn(
+        pre_compute.deferral_fn,
         &input_commit_bytes.to_vec(),
         &mut exec_state.streams.deferrals[pre_compute.deferral_idx as usize],
         pre_compute.deferral_idx,
@@ -203,31 +207,36 @@ unsafe fn execute_e12_impl<F: VmField, CTX: ExecutionCtxTrait>(
     let output_f_commit =
         byte_commit_to_f(&output_commit.iter().map(|v| F::from_u8(*v)).collect_vec());
 
-    // (output_commit, output_len) pair, corresponds to guest struct OutputKey
-    let output_key = combine_output(output_commit, output_len.to_le_bytes());
+    let output_len_u32 =
+        u32::try_from(output_len).expect("deferral output length should fit in a u32");
+    let mut output_len_full = [0u8; OUTPUT_LEN_NUM_BYTES];
+    output_len_full[..4].copy_from_slice(&output_len_u32.to_le_bytes());
+
+    // (output_commit, output_len) pair, corresponds to guest struct OutputKey.
+    let output_key = combine_output(output_commit, output_len_full);
 
     let new_input_acc = poseidon2_chip.perm(&old_input_acc, &input_commit, true);
     let new_output_acc = poseidon2_chip.perm(&old_output_acc, &output_f_commit, true);
 
     for chunk_idx in 0..OUTPUT_TOTAL_MEMORY_OPS {
-        exec_state.vm_write::<u8, DEFAULT_BLOCK_SIZE>(
-            RV32_MEMORY_AS,
-            output_ptr + (chunk_idx * DEFAULT_BLOCK_SIZE) as u32,
-            &memory_op_chunk(&output_key, chunk_idx),
+        exec_state.vm_write_bytes::<MEMORY_BLOCK_BYTES>(
+            RV64_MEMORY_AS,
+            output_ptr + (chunk_idx * MEMORY_BLOCK_BYTES) as u32,
+            &byte_memory_op_chunk(&output_key, chunk_idx),
         );
     }
-    for chunk_idx in 0..DIGEST_MEMORY_OPS {
-        exec_state.vm_write::<F, DEFAULT_BLOCK_SIZE>(
+    for chunk_idx in 0..DIGEST_F_MEMORY_OPS {
+        exec_state.vm_write::<F, BLOCK_FE_WIDTH>(
             DEFERRAL_AS,
-            pre_compute.input_acc_ptr + (chunk_idx * DEFAULT_BLOCK_SIZE) as u32,
-            &memory_op_chunk(&new_input_acc, chunk_idx),
+            pre_compute.input_acc_ptr + (chunk_idx * BLOCK_FE_WIDTH) as u32,
+            &f_memory_op_chunk(&new_input_acc, chunk_idx),
         );
     }
-    for chunk_idx in 0..DIGEST_MEMORY_OPS {
-        exec_state.vm_write::<F, DEFAULT_BLOCK_SIZE>(
+    for chunk_idx in 0..DIGEST_F_MEMORY_OPS {
+        exec_state.vm_write::<F, BLOCK_FE_WIDTH>(
             DEFERRAL_AS,
-            pre_compute.output_acc_ptr + (chunk_idx * DEFAULT_BLOCK_SIZE) as u32,
-            &memory_op_chunk(&new_output_acc, chunk_idx),
+            pre_compute.output_acc_ptr + (chunk_idx * BLOCK_FE_WIDTH) as u32,
+            &f_memory_op_chunk(&new_output_acc, chunk_idx),
         );
     }
 

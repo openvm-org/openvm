@@ -31,6 +31,7 @@ pub enum VmCliCommands {
     Prove(ProveCmd),
     Run(RunCmd),
     Setup(SetupCmd),
+    Toolchain(ToolchainCmd),
     Verify(VerifyCmd),
 }
 
@@ -53,6 +54,7 @@ async fn main() -> Result<()> {
         VmCliCommands::Prove(cmd) => cmd.run(),
         VmCliCommands::Run(cmd) => cmd.run(),
         VmCliCommands::Setup(cmd) => cmd.run().await,
+        VmCliCommands::Toolchain(cmd) => cmd.run().await,
         VmCliCommands::Verify(cmd) => cmd.run(),
     }
 }

@@ -1,15 +1,15 @@
 use openvm_circuit::{
     arch::*,
     system::memory::{
-        offline_checker::{MemoryReadAuxRecord, MemoryWriteBytesAuxRecord},
+        offline_checker::{pack_u8_block_bytes, MemoryReadAuxRecord, MemoryWriteBytesAuxRecord},
         MemoryAuxColsFactory,
     },
     utils::next_power_of_two_or_zero,
 };
-use openvm_circuit_primitives::Chip;
+use openvm_circuit_primitives::{Chip, U16_BITS};
 use openvm_cpu_backend::CpuBackend;
-use openvm_instructions::riscv::{RV32_CELL_BITS, RV32_REGISTER_NUM_LIMBS};
-use openvm_sha2_air::set_arrayview_from_u8_slice;
+use openvm_riscv_circuit::adapters::{ptr_bound_from_ptr, ptr_to_u16_limbs};
+use openvm_sha2_air::{set_arrayview_from_u16_le_bytes, set_arrayview_from_u16_slice};
 use openvm_stark_backend::{
     p3_field::{PrimeCharacteristicRing, PrimeField32},
     p3_matrix::{dense::RowMajorMatrix, Matrix},
@@ -144,9 +144,9 @@ impl<F: PrimeField32, C: Sha2Config> Sha2MainChip<F, C> {
         let mut cols = Sha2ColsRefMut::from::<C>(row_slice);
 
         *cols.block.request_id = F::from_usize(row_idx);
-        set_arrayview_from_u8_slice(&mut cols.block.message_bytes, message_bytes);
-        set_arrayview_from_u8_slice(&mut cols.block.prev_state, prev_state);
-        set_arrayview_from_u8_slice(&mut cols.block.new_state, new_state);
+        set_arrayview_from_u16_le_bytes(&mut cols.block.message_u16s, &message_bytes);
+        set_arrayview_from_u16_le_bytes(&mut cols.block.prev_state, &prev_state);
+        set_arrayview_from_u16_le_bytes(&mut cols.block.new_state, &new_state);
 
         *cols.instruction.is_enabled = F::ONE;
         cols.instruction.from_state.timestamp = F::from_u32(vm_record.timestamp);
@@ -155,22 +155,23 @@ impl<F: PrimeField32, C: Sha2Config> Sha2MainChip<F, C> {
         *cols.instruction.state_reg_ptr = F::from_u32(vm_record.state_reg_ptr);
         *cols.instruction.input_reg_ptr = F::from_u32(vm_record.input_reg_ptr);
 
-        let dst_ptr_limbs = vm_record.dst_ptr.to_le_bytes();
-        let state_ptr_limbs = vm_record.state_ptr.to_le_bytes();
-        let input_ptr_limbs = vm_record.input_ptr.to_le_bytes();
-        set_arrayview_from_u8_slice(&mut cols.instruction.dst_ptr_limbs, dst_ptr_limbs);
-        set_arrayview_from_u8_slice(&mut cols.instruction.state_ptr_limbs, state_ptr_limbs);
-        set_arrayview_from_u8_slice(&mut cols.instruction.input_ptr_limbs, input_ptr_limbs);
-        let needs_range_check = [
-            dst_ptr_limbs[RV32_REGISTER_NUM_LIMBS - 1],
-            state_ptr_limbs[RV32_REGISTER_NUM_LIMBS - 1],
-            input_ptr_limbs[RV32_REGISTER_NUM_LIMBS - 1],
-            input_ptr_limbs[RV32_REGISTER_NUM_LIMBS - 1],
-        ];
-        let shift: u32 = 1 << (RV32_REGISTER_NUM_LIMBS * RV32_CELL_BITS - self.pointer_max_bits);
-        for pair in needs_range_check.chunks_exact(2) {
-            self.bitwise_lookup_chip
-                .request_range(pair[0] as u32 * shift, pair[1] as u32 * shift);
+        // Pack low 32 bits of each pointer into u16 cells.
+        set_arrayview_from_u16_slice(
+            &mut cols.instruction.dst_ptr_limbs,
+            ptr_to_u16_limbs(vm_record.dst_ptr),
+        );
+        set_arrayview_from_u16_slice(
+            &mut cols.instruction.state_ptr_limbs,
+            ptr_to_u16_limbs(vm_record.state_ptr),
+        );
+        set_arrayview_from_u16_slice(
+            &mut cols.instruction.input_ptr_limbs,
+            ptr_to_u16_limbs(vm_record.input_ptr),
+        );
+
+        for ptr in [vm_record.dst_ptr, vm_record.state_ptr, vm_record.input_ptr] {
+            self.range_checker_chip
+                .add_count(ptr_bound_from_ptr(ptr, self.pointer_max_bits), U16_BITS);
         }
 
         // fill in the register reads aux
@@ -211,7 +212,7 @@ impl<F: PrimeField32, C: Sha2Config> Sha2MainChip<F, C> {
             .iter()
             .zip(cols.mem.write_aux)
             .for_each(|(write_aux_record, write_aux_cols)| {
-                write_aux_cols.set_prev_data(write_aux_record.prev_data.map(F::from_u8));
+                write_aux_cols.set_prev_data(pack_u8_block_bytes(&write_aux_record.prev_data));
                 mem_helper.fill(
                     write_aux_record.prev_timestamp,
                     timestamp,

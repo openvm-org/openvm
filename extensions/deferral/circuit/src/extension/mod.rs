@@ -3,10 +3,10 @@ use std::sync::Arc;
 use derive_more::derive::From;
 use openvm_circuit::{
     arch::{
-        AirInventory, AirInventoryError, ChipInventory, ChipInventoryError, ExecutionBridge,
-        ExecutorInventoryBuilder, ExecutorInventoryError, InitFileGenerator, MatrixRecordArena,
-        RowMajorMatrixArena, SystemConfig, VmBuilder, VmChipComplex, VmCircuitExtension,
-        VmExecutionExtension, VmField, VmProverExtension,
+        to_byte_ptr_bits, AirInventory, AirInventoryError, ChipInventory, ChipInventoryError,
+        ExecutionBridge, ExecutorInventoryBuilder, ExecutorInventoryError, InitFileGenerator,
+        MatrixRecordArena, RowMajorMatrixArena, SystemConfig, VmBuilder, VmChipComplex,
+        VmCircuitExtension, VmExecutionExtension, VmField, VmProverExtension,
     },
     system::{memory::SharedMemoryHelper, SystemChipInventory, SystemCpuBuilder, SystemExecutor},
 };
@@ -18,12 +18,18 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
 use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::LocalOpcode;
-use openvm_rv32im_circuit::{
-    Rv32I, Rv32IExecutor, Rv32ImCpuProverExt, Rv32Io, Rv32IoExecutor, Rv32M, Rv32MExecutor,
+use openvm_riscv_circuit::{
+    Rv64I, Rv64IExecutor, Rv64ImCpuProverExt, Rv64Io, Rv64IoExecutor, Rv64M, Rv64MExecutor,
 };
 use openvm_stark_backend::{StarkEngine, StarkProtocolConfig, Val};
+#[cfg(feature = "rvr")]
+use rvr_openvm_ext_deferral::DeferralRvrExtension;
+#[cfg(feature = "rvr")]
+use rvr_openvm_lift::{ExtensionRegistry, RvrExtensionCtx, VmRvrExtension};
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "rvr")]
+use crate::runtime::{make_deferral_compress, make_deferral_hash};
 use crate::{
     call::{
         DeferralCallAdapterAir, DeferralCallAdapterExecutor, DeferralCallAdapterFiller,
@@ -43,11 +49,11 @@ cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
         mod cuda;
         pub use self::cuda::DeferralGpuProverExt as DeferralProverExt;
-        pub use self::cuda::Rv32DeferralGpuBuilder as Rv32DeferralBuilder;
+        pub use self::cuda::Rv64DeferralGpuBuilder as Rv64DeferralBuilder;
 
     } else {
         pub use self::DeferralCpuProverExt as DeferralProverExt;
-        pub use self::Rv32DeferralCpuBuilder as Rv32DeferralBuilder;
+        pub use self::Rv64DeferralCpuBuilder as Rv64DeferralBuilder;
     }
 }
 
@@ -63,6 +69,17 @@ pub struct DeferralExtension {
     #[serde(skip)]
     pub fns: Vec<Arc<DeferralFn>>,
     pub def_circuit_commits: Vec<[u8; COMMIT_NUM_BYTES]>,
+}
+
+#[cfg(feature = "rvr")]
+impl<F: VmField> VmRvrExtension<F> for DeferralExtension {
+    fn extend_rvr(&self, registry: &mut ExtensionRegistry<F>, ctx: Option<&RvrExtensionCtx>) {
+        let hash = make_deferral_hash::<F>();
+        let compress = make_deferral_compress::<F>();
+        let ext = DeferralRvrExtension::new(ctx, self.fns.clone(), hash, compress)
+            .expect("failed to construct rvr DeferralRvrExtension");
+        registry.register(ext);
+    }
 }
 
 #[derive(Clone, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
@@ -123,7 +140,7 @@ where
         };
 
         let base_num_airs = inventory.num_airs();
-        let address_bits = inventory.pointer_max_bits();
+        let address_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
 
         inventory.add_air(DeferralCircuitCountAir::new(count_bus, self.fns.len()));
 
@@ -167,7 +184,7 @@ where
     ) -> Result<(), ChipInventoryError> {
         let range_checker = inventory.range_checker()?.clone();
         let timestamp_max_bits = inventory.timestamp_max_bits();
-        let address_bits = inventory.airs().pointer_max_bits();
+        let address_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
         let bitwise_lu = {
             let existing_chip = inventory
@@ -218,36 +235,36 @@ where
     }
 }
 
-// =================================== VM Rv32 Config and Builder =================================
+// =================================== VM Rv64 Config and Builder =================================
 
 #[derive(Clone, VmConfig, Serialize, Deserialize)]
-pub struct Rv32DeferralConfig {
+pub struct Rv64DeferralConfig {
     #[config(executor = "SystemExecutor<F>")]
     pub system: SystemConfig,
     #[extension]
-    pub rv32i: Rv32I,
+    pub rv64i: Rv64I,
     #[extension]
-    pub rv32m: Rv32M,
+    pub rv64m: Rv64M,
     #[extension]
-    pub io: Rv32Io,
+    pub io: Rv64Io,
     #[serde(skip)]
     #[extension(executor = "DeferralExecutor")]
     pub deferral: DeferralExtension,
 }
 
-impl InitFileGenerator for Rv32DeferralConfig {}
+impl InitFileGenerator for Rv64DeferralConfig {}
 
 #[derive(Clone)]
-pub struct Rv32DeferralCpuBuilder;
+pub struct Rv64DeferralCpuBuilder;
 
-impl<SC, E> VmBuilder<E> for Rv32DeferralCpuBuilder
+impl<SC, E> VmBuilder<E> for Rv64DeferralCpuBuilder
 where
     SC: StarkProtocolConfig,
     E: StarkEngine<SC = SC, PB = CpuBackend<SC>, PD = CpuDevice<SC>>,
     Val<SC>: VmField,
     SC::EF: Ord,
 {
-    type VmConfig = Rv32DeferralConfig;
+    type VmConfig = Rv64DeferralConfig;
     type SystemChipInventory = SystemChipInventory<SC>;
     type RecordArena = MatrixRecordArena<Val<SC>>;
 
@@ -267,9 +284,9 @@ where
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.rv32i, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.rv32m, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv32ImCpuProverExt, &config.io, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.rv64i, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.rv64m, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.io, inventory)?;
         VmProverExtension::<E, _, _>::extend_prover(
             &DeferralCpuProverExt,
             &config.deferral,

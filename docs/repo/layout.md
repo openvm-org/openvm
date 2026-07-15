@@ -16,7 +16,7 @@ The main components of the repository are:
   - [Continuations](#continuations)
   - [Examples](#examples)
   - [Extensions](#extensions)
-    - [RV32IM](#rv32im)
+    - [RV64IM](#rv64im)
     - [Deferral](#deferral)
     - [Keccak256](#keccak256)
     - [Big Integers](#big-integers)
@@ -57,13 +57,13 @@ Command-line binary to compile, execute, and prove guest programs is in [`cli`](
 ### Toolchain
 
 - [`openvm`](../../crates/toolchain/openvm): The OpenVM standard library to be imported by guest programs. Contains `main` function entrypoint and standard intrinsic functions for IO.
-- [`openvm-platform`](../../crates/toolchain/platform): Rust runtime for RV32IM target using OpenVM intrinsic for system termination. This crate is re-exported by the `openvm` crate.
+- [`openvm-platform`](../../crates/toolchain/platform): Rust runtime for RV64IM target using OpenVM intrinsic for system termination. This crate is re-exported by the `openvm` crate.
 - [`openvm-build`](../../crates/toolchain/build): Library of build tools for compiling Rust to the RISC-V target, built on top of `cargo`.
 - [`openvm-transpiler`](../../crates/toolchain/transpiler): Transpiler for converting RISC-V ELF with custom instructions into OpenVM executable with OpenVM instructions. This crate contains the `TranspilerExtension` trait and a `Transpiler` struct which supports adding custom `TranspilerExtension` implementations.
 - [`openvm-instructions`](../../crates/toolchain/instructions): OpenVM instruction struct and trait definitions. Also includes some system instruction definitions.
 - [`openvm-instructions-derive`](../../crates/toolchain/instructions/derive): Procedural macros to derive traits for OpenVM instructions.
 - [`openvm-macros-common`](../../crates/toolchain/macros): Common library for parsing utilities shared across procedural macros used for custom instruction setup in guest programs.
-- [`openvm-toolchain-tests`](../../crates/toolchain/tests): Includes all official RISC-V 32-bit IM test vectors and transpiler tests. Also, provides utilities for writing integration tests for custom extensions.
+- [`openvm-toolchain-tests`](../../crates/toolchain/tests): Includes all official RISC-V 64-bit IM test vectors and transpiler tests. Also, provides utilities for writing integration tests for custom extensions.
 - [`openvm-custom-insn`](../../crates/toolchain/custom_insn): Custom instruction macros for use in guest programs.
 
 ### Circuit Framework
@@ -98,13 +98,13 @@ The toolchain, ISA, and VM are simultaneously extendable. All non-system functio
 - [`openvm-algebra-complex-macros`](../../extensions/algebra/complex-macros): Procedural macros for use in guest program to generate complex field struct with custom intrinsics for compile-time modulus.
 - [`openvm-ecc-sw-macros`](../../extensions/ecc/sw-macros): Procedural macros for use in guest program to generate short Weierstrass curve struct with custom intrinsics for compile-time curve.
 
-#### RV32IM
+#### RV64IM
 
-- [`openvm-rv32im-circuit`](../../extensions/rv32im/circuit): Circuit extension for RV32IM instructions and IO instructions.
-- [`openvm-rv32im-transpiler`](../../extensions/rv32im/transpiler): Transpiler extension for RV32IM instructions and IO instructions.
-- [`openvm-rv32im-guest`](../../extensions/rv32im/guest): Guest library for RV32IM instructions and IO instructions. This is re-exported by the `openvm` crate for convenience.
-- [`openvm-rv32-adapters`](../../extensions/rv32-adapters): Circuit adapters for other circuit extensions to use to be compatible with the RISC-V 32-bit architecture.
-- [`openvm-rv32im-integration-tests`](../../extensions/rv32im/tests): Integration tests for the RV32IM extension.
+- [`openvm-riscv-circuit`](../../extensions/riscv/circuit): Circuit extension for RV64IM instructions and IO instructions.
+- [`openvm-riscv-transpiler`](../../extensions/riscv/transpiler): Transpiler extension for RV64IM instructions and IO instructions.
+- [`openvm-riscv-guest`](../../extensions/riscv/guest): Guest library for RV64IM instructions and IO instructions. This is re-exported by the `openvm` crate for convenience.
+- [`openvm-riscv-adapters`](../../extensions/riscv-adapters): Circuit adapters for other circuit extensions to use to be compatible with the RISC-V 64-bit architecture.
+- [`openvm-riscv-integration-tests`](../../extensions/riscv/tests): Integration tests for the RV64IM extension.
 
 #### Deferral
 

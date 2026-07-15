@@ -32,12 +32,21 @@ use openvm_stark_backend::{
     Com, StarkEngine, StarkProtocolConfig, Val,
 };
 use p3_baby_bear::BabyBear;
+#[cfg(feature = "rvr")]
+use rvr_openvm_lift::ExtensionRegistry;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{info_span, instrument};
 
 #[cfg(feature = "aot")]
 use super::aot::AotInstance;
+#[cfg(feature = "rvr")]
+use super::rvr::{
+    bridge::map_rvr_compile_error, build_pc_to_chip, compile, compile_metered,
+    compile_metered_cost, compile_metered_segment_boundary, load_compiled_from_path, ChipMapping,
+    GuestDebugMap, RunToCompletion, RvrMeteredCostInstance, RvrMeteredInstance,
+    RvrMeteredSegmentInstance, RvrPureInstance, SegmentBoundary,
+};
 use super::{
     execution_mode::{
         ExecutionCtx, MeteredCostCtx, MeteredCtx, MeteredCtxInputs, PreflightCtx, Segment,
@@ -67,7 +76,7 @@ use crate::{
                 MemoryMerklePvs,
             },
             online::{GuestMemory, TracingMemory},
-            AddressMap, CHUNK,
+            AddressMap, DIGEST_WIDTH,
         },
         program::trace::generate_cached_trace,
         SystemChipComplex, SystemRecords, SystemWithFixedTraceHeights,
@@ -106,19 +115,23 @@ pub enum GenerationError {
 
 #[derive(Clone)]
 pub struct Streams<F> {
-    pub input_stream: VecDeque<Vec<F>>,
-    pub hint_stream: VecDeque<F>,
-    /// Stores cached deferred operation inputs and outputs. Each idx corresponds to a
+    pub input_stream: VecDeque<Vec<u8>>,
+    pub hint_stream: VecDeque<u8>,
+    /// Cached deferred operation inputs and outputs. Each idx corresponds to a
     /// unique function that is constrained outside the VM in its own deferral circuit.
     pub deferrals: Vec<DeferralState>,
+    /// The input and hint streams are byte-backed; `F` is retained purely to thread the
+    /// field type through the execution state (`VmState<F>` and friends).
+    phantom: PhantomData<F>,
 }
 
 impl<F> Streams<F> {
-    pub fn new(input_stream: impl Into<VecDeque<Vec<F>>>) -> Self {
+    pub fn new(input_stream: impl Into<VecDeque<Vec<u8>>>) -> Self {
         Self {
             input_stream: input_stream.into(),
             hint_stream: VecDeque::default(),
             deferrals: Vec::default(),
+            phantom: PhantomData,
         }
     }
 }
@@ -129,14 +142,14 @@ impl<F> Default for Streams<F> {
     }
 }
 
-impl<F> From<VecDeque<Vec<F>>> for Streams<F> {
-    fn from(value: VecDeque<Vec<F>>) -> Self {
+impl<F> From<VecDeque<Vec<u8>>> for Streams<F> {
+    fn from(value: VecDeque<Vec<u8>>) -> Self {
         Streams::new(value)
     }
 }
 
-impl<F> From<Vec<Vec<F>>> for Streams<F> {
-    fn from(value: Vec<Vec<F>>) -> Self {
+impl<F> From<Vec<Vec<u8>>> for Streams<F> {
+    fn from(value: Vec<Vec<u8>>) -> Self {
         Streams::new(value)
     }
 }
@@ -217,19 +230,25 @@ where
     /// the given `exe`.
     ///
     /// For metered execution, use the [`metered_instance`](Self::metered_instance) constructor.
-    #[cfg(not(feature = "aot"))]
+    #[cfg(all(not(feature = "aot"), not(feature = "rvr")))]
     pub fn instance(
         &self,
         exe: &VmExe<F>,
     ) -> Result<InterpretedInstance<'_, F, ExecutionCtx>, StaticProgramError> {
+        #[cfg(feature = "metrics")]
+        let _compilation_span =
+            tracing::info_span!("compile_pure", backend = "interpreter").entered();
         InterpretedInstance::new(&self.inventory, exe)
     }
 
-    #[cfg(feature = "aot")]
+    #[cfg(any(feature = "aot", feature = "rvr"))]
     pub fn interpreter_instance(
         &self,
         exe: &VmExe<F>,
     ) -> Result<InterpretedInstance<'_, F, ExecutionCtx>, StaticProgramError> {
+        #[cfg(feature = "metrics")]
+        let _compilation_span =
+            tracing::info_span!("compile_pure", backend = "interpreter").entered();
         InterpretedInstance::new(&self.inventory, exe)
     }
 
@@ -240,7 +259,72 @@ where
     ) -> Result<AotInstance<'_, F, ExecutionCtx>, StaticProgramError> {
         Self::aot_instance(self, exe)
     }
+
+    #[cfg(feature = "rvr")]
+    pub fn instance(&self, exe: &VmExe<F>) -> Result<RvrPureInstance<'_, F>, StaticProgramError> {
+        Self::rvr_instance(self, exe, None)
+    }
 }
+
+#[cfg(feature = "rvr")]
+impl<F, VC> VmExecutor<F, VC>
+where
+    F: PrimeField32,
+    VC: VmExecutionConfig<F>,
+{
+    fn build_rvr_extensions(
+        &self,
+        executor_idx_to_air_idx: Option<&[usize]>,
+    ) -> ExtensionRegistry<F> {
+        self.config.create_rvr_extensions(executor_idx_to_air_idx)
+    }
+}
+
+#[cfg(feature = "rvr")]
+impl<F, VC> VmExecutor<F, VC>
+where
+    F: PrimeField32,
+    VC: VmExecutionConfig<F>,
+    VC::Executor: Executor<F>,
+{
+    pub fn rvr_instance(
+        &self,
+        exe: &VmExe<F>,
+        guest_debug_map: Option<&GuestDebugMap>,
+    ) -> Result<RvrPureInstance<'_, F>, StaticProgramError> {
+        #[cfg(feature = "metrics")]
+        let _compilation_span = tracing::info_span!("compile_pure", backend = "rvr").entered();
+        let extensions = self.build_rvr_extensions(None);
+        let compiled = compile(exe, &extensions, guest_debug_map).map_err(map_rvr_compile_error)?;
+
+        Ok(RvrPureInstance {
+            system_config: self.inventory.config(),
+            exe: Arc::new(exe.clone()),
+            compiled,
+            extensions,
+        })
+    }
+
+    /// Load a previously saved pure-mode artifact and return a ready-to-execute
+    /// [`RvrPureInstance`]. The caller is responsible for supplying the
+    /// matching `exe`; no compatibility validation is performed.
+    pub fn load_instance(
+        &self,
+        lib_path: &std::path::Path,
+        exe: &VmExe<F>,
+    ) -> Result<RvrPureInstance<'_, F>, StaticProgramError> {
+        let extensions = self.build_rvr_extensions(None);
+        let compiled = load_compiled_from_path(lib_path).map_err(map_rvr_compile_error)?;
+
+        Ok(RvrPureInstance {
+            system_config: self.inventory.config(),
+            exe: Arc::new(exe.clone()),
+            compiled,
+            extensions,
+        })
+    }
+}
+
 #[cfg(feature = "aot")]
 impl<F, VC> VmExecutor<F, VC>
 where
@@ -252,6 +336,8 @@ where
         &self,
         exe: &VmExe<F>,
     ) -> Result<AotInstance<'_, F, ExecutionCtx>, StaticProgramError> {
+        #[cfg(feature = "metrics")]
+        let _compilation_span = tracing::info_span!("compile_pure", backend = "aot").entered();
         AotInstance::new(&self.inventory, exe)
     }
 }
@@ -263,21 +349,27 @@ where
     VC::Executor: MeteredExecutor<F>,
 {
     /// Creates an instance of the interpreter specialized for metered execution of the given `exe`.
-    #[cfg(not(feature = "aot"))]
+    #[cfg(all(not(feature = "aot"), not(feature = "rvr")))]
     pub fn metered_instance(
         &self,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
     ) -> Result<InterpretedInstance<'_, F, MeteredCtx>, StaticProgramError> {
+        #[cfg(feature = "metrics")]
+        let _compilation_span =
+            tracing::info_span!("compile_metered", backend = "interpreter").entered();
         InterpretedInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
     }
 
-    #[cfg(feature = "aot")]
+    #[cfg(any(feature = "aot", feature = "rvr"))]
     pub fn metered_interpreter_instance(
         &self,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
     ) -> Result<InterpretedInstance<'_, F, MeteredCtx>, StaticProgramError> {
+        #[cfg(feature = "metrics")]
+        let _compilation_span =
+            tracing::info_span!("compile_metered", backend = "interpreter").entered();
         InterpretedInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
     }
 
@@ -297,17 +389,184 @@ where
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
     ) -> Result<AotInstance<'_, F, MeteredCtx>, StaticProgramError> {
+        #[cfg(feature = "metrics")]
+        let _compilation_span = tracing::info_span!("compile_metered", backend = "aot").entered();
         AotInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
     }
 
     /// Creates an instance of the interpreter specialized for cost metering execution of the given
     /// `exe`.
+    #[cfg(not(feature = "rvr"))]
     pub fn metered_cost_instance(
         &self,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
     ) -> Result<InterpretedInstance<'_, F, MeteredCostCtx>, StaticProgramError> {
+        #[cfg(feature = "metrics")]
+        let _compilation_span =
+            tracing::info_span!("compile_metered_cost", backend = "interpreter").entered();
         InterpretedInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
+    }
+
+    #[cfg(feature = "rvr")]
+    pub fn metered_cost_interpreter_instance(
+        &self,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+    ) -> Result<InterpretedInstance<'_, F, MeteredCostCtx>, StaticProgramError> {
+        #[cfg(feature = "metrics")]
+        let _compilation_span =
+            tracing::info_span!("compile_metered_cost", backend = "interpreter").entered();
+        InterpretedInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
+    }
+}
+
+#[cfg(feature = "rvr")]
+impl<F, VC> VmExecutor<F, VC>
+where
+    F: PrimeField32,
+    VC: VmExecutionConfig<F>,
+    VC::Executor: MeteredExecutor<F>,
+{
+    pub fn metered_instance(
+        &self,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+    ) -> Result<RvrMeteredInstance<'_, F>, StaticProgramError> {
+        self.metered_rvr_instance(exe, executor_idx_to_air_idx, None)
+    }
+
+    pub fn metered_rvr_instance(
+        &self,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+        guest_debug_map: Option<&GuestDebugMap>,
+    ) -> Result<RvrMeteredInstance<'_, F>, StaticProgramError> {
+        #[cfg(feature = "metrics")]
+        let _compilation_span = tracing::info_span!("compile_metered", backend = "rvr").entered();
+        let extensions = self.build_rvr_extensions(Some(executor_idx_to_air_idx));
+        let chips = ChipMapping {
+            pc_to_chip: build_pc_to_chip(exe, &self.inventory, executor_idx_to_air_idx)
+                .map_err(map_rvr_compile_error)?,
+            chip_widths: None,
+        };
+        let compiled = compile_metered(exe, &extensions, &chips, guest_debug_map)
+            .map_err(map_rvr_compile_error)?;
+
+        Ok(RvrMeteredInstance {
+            system_config: self.inventory.config(),
+            exe: Arc::new(exe.clone()),
+            extensions,
+            compiled,
+            _mode: PhantomData::<RunToCompletion>,
+        })
+    }
+
+    pub fn metered_segment_rvr_instance(
+        &self,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+        guest_debug_map: Option<&GuestDebugMap>,
+    ) -> Result<RvrMeteredSegmentInstance<'_, F>, StaticProgramError> {
+        #[cfg(feature = "metrics")]
+        let _compilation_span =
+            tracing::info_span!("compile_metered_segment", backend = "rvr").entered();
+        let extensions = self.build_rvr_extensions(Some(executor_idx_to_air_idx));
+        let chips = ChipMapping {
+            pc_to_chip: build_pc_to_chip(exe, &self.inventory, executor_idx_to_air_idx)
+                .map_err(map_rvr_compile_error)?,
+            chip_widths: None,
+        };
+        let compiled = compile_metered_segment_boundary(exe, &extensions, &chips, guest_debug_map)
+            .map_err(map_rvr_compile_error)?;
+
+        Ok(RvrMeteredSegmentInstance {
+            system_config: self.inventory.config(),
+            exe: Arc::new(exe.clone()),
+            extensions,
+            compiled,
+            _mode: PhantomData::<SegmentBoundary>,
+        })
+    }
+
+    pub fn metered_cost_instance(
+        &self,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+        widths: &[usize],
+    ) -> Result<RvrMeteredCostInstance<'_, F>, StaticProgramError> {
+        self.metered_cost_rvr_instance(exe, executor_idx_to_air_idx, widths, None)
+    }
+
+    /// Load a previously saved metered-mode artifact. Caller supplies `exe` and
+    /// `executor_idx_to_air_idx`. No compatibility validation is performed.
+    pub fn load_metered_instance(
+        &self,
+        lib_path: &std::path::Path,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+    ) -> Result<RvrMeteredInstance<'_, F>, StaticProgramError> {
+        let extensions = self.build_rvr_extensions(Some(executor_idx_to_air_idx));
+        let compiled = load_compiled_from_path(lib_path).map_err(map_rvr_compile_error)?;
+
+        Ok(RvrMeteredInstance {
+            system_config: self.inventory.config(),
+            exe: Arc::new(exe.clone()),
+            extensions,
+            compiled,
+            _mode: PhantomData::<RunToCompletion>,
+        })
+    }
+
+    /// Load a previously saved metered-cost-mode artifact. Caller supplies `exe`,
+    /// `executor_idx_to_air_idx`, and `widths`. No compatibility validation is performed.
+    pub fn load_metered_cost_instance(
+        &self,
+        lib_path: &std::path::Path,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+        widths: &[usize],
+    ) -> Result<RvrMeteredCostInstance<'_, F>, StaticProgramError> {
+        let extensions = self.build_rvr_extensions(Some(executor_idx_to_air_idx));
+        let widths: Vec<u64> = widths.iter().map(|&w| w as u64).collect();
+        let compiled = load_compiled_from_path(lib_path).map_err(map_rvr_compile_error)?;
+
+        Ok(RvrMeteredCostInstance {
+            system_config: self.inventory.config(),
+            exe: Arc::new(exe.clone()),
+            extensions,
+            compiled,
+            widths,
+        })
+    }
+
+    pub fn metered_cost_rvr_instance(
+        &self,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+        widths: &[usize],
+        guest_debug_map: Option<&GuestDebugMap>,
+    ) -> Result<RvrMeteredCostInstance<'_, F>, StaticProgramError> {
+        #[cfg(feature = "metrics")]
+        let _compilation_span =
+            tracing::info_span!("compile_metered_cost", backend = "rvr").entered();
+        let extensions = self.build_rvr_extensions(Some(executor_idx_to_air_idx));
+        let widths: Vec<u64> = widths.iter().map(|&w| w as u64).collect();
+        let chips = ChipMapping {
+            pc_to_chip: build_pc_to_chip(exe, &self.inventory, executor_idx_to_air_idx)
+                .map_err(map_rvr_compile_error)?,
+            chip_widths: Some(widths.clone()),
+        };
+        let compiled = compile_metered_cost(exe, &extensions, &chips, guest_debug_map)
+            .map_err(map_rvr_compile_error)?;
+
+        Ok(RvrMeteredCostInstance {
+            system_config: self.inventory.config(),
+            exe: Arc::new(exe.clone()),
+            extensions,
+            compiled,
+            widths,
+        })
     }
 }
 
@@ -321,8 +580,8 @@ pub enum VmVerificationError<SC: StarkProtocolConfig> {
 
     #[error("exe commit mismatch (expected: {expected:?}, actual: {actual:?})")]
     ExeCommitMismatch {
-        expected: [u32; CHUNK],
-        actual: [u32; CHUNK],
+        expected: [u32; DIGEST_WIDTH],
+        actual: [u32; DIGEST_WIDTH],
     },
 
     #[error("initial pc mismatch (initial: {initial}, prev_final: {prev_final})")]
@@ -434,9 +693,9 @@ where
         &self.executor.config
     }
 
-    /// Pure interpreter.
-    #[cfg(not(feature = "aot"))]
-    pub fn interpreter(
+    /// Pure execution instance.
+    #[cfg(all(not(feature = "aot"), not(feature = "rvr")))]
+    pub fn instance(
         &self,
         exe: &VmExe<Val<E::SC>>,
     ) -> Result<InterpretedInstance<'_, Val<E::SC>, ExecutionCtx>, StaticProgramError>
@@ -447,9 +706,33 @@ where
         self.executor().instance(exe)
     }
 
-    // Pure AOT execution
-    #[cfg(feature = "aot")]
-    pub fn naive_interpreter(
+    #[cfg(feature = "rvr")]
+    pub fn instance(
+        &self,
+        exe: &VmExe<Val<E::SC>>,
+    ) -> Result<RvrPureInstance<'_, Val<E::SC>>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
+    {
+        Self::get_rvr_instance(self, exe)
+    }
+
+    #[cfg(feature = "rvr")]
+    pub fn get_rvr_instance(
+        &self,
+        exe: &VmExe<Val<E::SC>>,
+    ) -> Result<RvrPureInstance<'_, Val<E::SC>>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
+    {
+        self.executor().rvr_instance(exe, None)
+    }
+
+    // Pure AOT / RVR execution
+    #[cfg(any(feature = "aot", feature = "rvr"))]
+    pub fn interpreter_instance(
         &self,
         exe: &VmExe<Val<E::SC>>,
     ) -> Result<InterpretedInstance<'_, Val<E::SC>, ExecutionCtx>, StaticProgramError>
@@ -462,7 +745,7 @@ where
 
     // Pure AOT execution
     #[cfg(feature = "aot")]
-    pub fn interpreter(
+    pub fn instance(
         &self,
         exe: &VmExe<Val<E::SC>>,
     ) -> Result<AotInstance<'_, Val<E::SC>, ExecutionCtx>, StaticProgramError>
@@ -485,8 +768,8 @@ where
         self.executor().aot_instance(exe)
     }
 
-    #[cfg(not(feature = "aot"))]
-    pub fn metered_interpreter(
+    #[cfg(all(not(feature = "aot"), not(feature = "rvr")))]
+    pub fn metered_instance(
         &self,
         exe: &VmExe<Val<E::SC>>,
     ) -> Result<InterpretedInstance<'_, Val<E::SC>, MeteredCtx>, StaticProgramError>
@@ -499,8 +782,65 @@ where
             .metered_instance(exe, &executor_idx_to_air_idx)
     }
 
+    #[cfg(feature = "rvr")]
+    pub fn metered_instance(
+        &self,
+        exe: &VmExe<Val<E::SC>>,
+    ) -> Result<RvrMeteredInstance<'_, Val<E::SC>>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
+    {
+        let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
+        self.executor()
+            .metered_instance(exe, &executor_idx_to_air_idx)
+    }
+
+    #[cfg(feature = "rvr")]
+    pub fn get_metered_rvr_instance(
+        &self,
+        exe: &VmExe<Val<E::SC>>,
+    ) -> Result<RvrMeteredInstance<'_, Val<E::SC>>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
+    {
+        let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
+        self.executor()
+            .metered_rvr_instance(exe, &executor_idx_to_air_idx, None)
+    }
+
+    #[cfg(feature = "rvr")]
+    pub fn get_metered_segment_rvr_instance(
+        &self,
+        exe: &VmExe<Val<E::SC>>,
+    ) -> Result<RvrMeteredSegmentInstance<'_, Val<E::SC>>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
+    {
+        let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
+        self.executor()
+            .metered_segment_rvr_instance(exe, &executor_idx_to_air_idx, None)
+    }
+
+    #[cfg(feature = "rvr")]
+    pub fn load_metered_instance(
+        &self,
+        lib_path: &std::path::Path,
+        exe: &VmExe<Val<E::SC>>,
+    ) -> Result<RvrMeteredInstance<'_, Val<E::SC>>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
+    {
+        let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
+        self.executor()
+            .load_metered_instance(lib_path, exe, &executor_idx_to_air_idx)
+    }
+
     #[cfg(feature = "aot")]
-    pub fn metered_interpreter(
+    pub fn metered_instance(
         &self,
         exe: &VmExe<Val<E::SC>>,
     ) -> Result<AotInstance<'_, Val<E::SC>, MeteredCtx>, StaticProgramError>
@@ -528,8 +868,8 @@ where
             .metered_aot_instance(exe, &executor_idx_to_air_idx)
     }
 
-    #[cfg(feature = "aot")]
-    pub fn naive_metered_interpreter(
+    #[cfg(any(feature = "aot", feature = "rvr"))]
+    pub fn metered_interpreter_instance(
         &self,
         exe: &VmExe<Val<E::SC>>,
     ) -> Result<InterpretedInstance<'_, Val<E::SC>, MeteredCtx>, StaticProgramError>
@@ -542,7 +882,8 @@ where
             .metered_interpreter_instance(exe, &executor_idx_to_air_idx)
     }
 
-    pub fn metered_cost_interpreter(
+    #[cfg(not(feature = "rvr"))]
+    pub fn metered_cost_instance(
         &self,
         exe: &VmExe<Val<E::SC>>,
     ) -> Result<InterpretedInstance<'_, Val<E::SC>, MeteredCostCtx>, StaticProgramError>
@@ -553,6 +894,59 @@ where
         let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
         self.executor()
             .metered_cost_instance(exe, &executor_idx_to_air_idx)
+    }
+
+    #[cfg(feature = "rvr")]
+    pub fn metered_cost_instance(
+        &self,
+        exe: &VmExe<Val<E::SC>>,
+    ) -> Result<RvrMeteredCostInstance<'_, Val<E::SC>>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
+    {
+        Self::get_metered_cost_rvr_instance(self, exe)
+    }
+
+    #[cfg(feature = "rvr")]
+    pub fn get_metered_cost_rvr_instance(
+        &self,
+        exe: &VmExe<Val<E::SC>>,
+    ) -> Result<RvrMeteredCostInstance<'_, Val<E::SC>>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
+    {
+        let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
+        let widths: Vec<usize> = self
+            .pk
+            .per_air
+            .iter()
+            .map(|pk| pk.vk.params.width.total_width())
+            .collect();
+        self.executor()
+            .metered_cost_rvr_instance(exe, &executor_idx_to_air_idx, &widths, None)
+    }
+
+    #[cfg(feature = "rvr")]
+    pub fn load_metered_cost_instance(
+        &self,
+        lib_path: &std::path::Path,
+        exe: &VmExe<Val<E::SC>>,
+    ) -> Result<RvrMeteredCostInstance<'_, Val<E::SC>>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
+    {
+        let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
+        let widths: Vec<usize> = self
+            .pk
+            .per_air
+            .iter()
+            .map(|pk| pk.vk.params.width.total_width())
+            .collect();
+        self.executor()
+            .load_metered_cost_instance(lib_path, exe, &executor_idx_to_air_idx, &widths)
     }
 
     pub fn preflight_interpreter(
@@ -624,6 +1018,15 @@ where
             interpreter.opcode_counts_by_air::<VB::RecordArena>(),
         );
         let touched_memory = exec_state.vm_state.memory.finalize::<Val<E::SC>>();
+        // Grow the touched-page sets on the carried-forward memory image so the next segment's
+        // host-to-device transfer (`set_initial_memory`) stays a correct superset of non-zero
+        // pages.
+        exec_state
+            .vm_state
+            .memory
+            .data
+            .memory
+            .extend_touched_pages_from_touched(&touched_memory);
         #[cfg(feature = "perf-metrics")]
         end_segment_metrics(&mut exec_state);
 
@@ -839,7 +1242,7 @@ where
     }
 
     /// See [`SystemChipComplex::memory_top_tree`].
-    pub fn memory_top_tree(&self) -> Option<&[[Val<E::SC>; CHUNK]]> {
+    pub fn memory_top_tree(&self) -> Option<&[[Val<E::SC>; DIGEST_WIDTH]]> {
         self.chip_complex.system.memory_top_tree()
     }
 
@@ -980,7 +1383,7 @@ mod tests {
 ))]
 pub struct ContinuationVmProof<SC: StarkProtocolConfig> {
     pub per_segment: Vec<Proof<SC>>,
-    pub user_public_values: UserPublicValuesProof<{ CHUNK }, Val<SC>>,
+    pub user_public_values: UserPublicValuesProof<{ DIGEST_WIDTH }, Val<SC>>,
 }
 
 /// Prover for a specific exe in a specific continuation VM using a specific Stark config.
@@ -1057,7 +1460,7 @@ where
         + MeteredExecutor<Val<E::SC>>
         + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
 {
-    /// First performs metered execution (E2) to determine segments. Then sequentially proves each
+    /// First performs metered execution to determine segments. Then sequentially proves each
     /// segment. The proof for each segment uses the specified [ProverBackend], but the proof for
     /// the next segment does not start before the current proof finishes.
     fn prove(
@@ -1089,8 +1492,8 @@ where
         self.reset_state(input.clone());
         let vm = &mut self.vm;
         let metered_ctx = vm.build_metered_ctx(&self.exe);
-        let metered_interpreter = vm.metered_interpreter(&self.exe)?;
-        let (segments, _) = metered_interpreter.execute_metered(input, metered_ctx)?;
+        let metered_instance = vm.metered_instance(&self.exe)?;
+        let (segments, _) = metered_instance.execute_metered(input, metered_ctx)?;
         let mut proofs = Vec::with_capacity(segments.len());
         let mut state = self.state.take();
         for (seg_idx, segment) in segments.into_iter().enumerate() {
@@ -1125,8 +1528,7 @@ where
         let final_memory = &to_state.memory.memory;
         let final_memory_top_tree = vm.memory_top_tree().expect("memory top tree should exist");
         let user_public_values = UserPublicValuesProof::compute(
-            vm.config().as_ref().memory_config.memory_dimensions(),
-            vm.config().as_ref().num_public_values,
+            vm.config().as_ref(),
             &vm_poseidon2_hasher(),
             final_memory,
             final_memory_top_tree,
@@ -1148,9 +1550,9 @@ pub struct VerifiedExecutionPayload<F> {
     ///
     /// The Merklelization uses Poseidon2 as a cryptographic hash function (for the leaves)
     /// and a cryptographic compression function (for internal nodes).
-    pub exe_commit: [F; CHUNK],
+    pub exe_commit: [F; DIGEST_WIDTH],
     /// The Merkle root of the final memory state.
-    pub final_memory_root: [F; CHUNK],
+    pub final_memory_root: [F; DIGEST_WIDTH],
 }
 
 /// Verify segment proofs with boundary condition checks for continuation between segments.
@@ -1177,7 +1579,7 @@ pub fn verify_segments<E>(
 where
     E: StarkEngine,
     Val<E::SC>: PrimeField32,
-    Com<E::SC>: Into<[Val<E::SC>; CHUNK]>,
+    Com<E::SC>: Into<[Val<E::SC>; DIGEST_WIDTH]>,
 {
     if proofs.is_empty() {
         return Err(VmVerificationError::ProofNotFound);
@@ -1264,7 +1666,7 @@ where
                 }
             } else if air_idx == MERKLE_AIR_ID {
                 merkle_air_present = true;
-                let pvs: &MemoryMerklePvs<_, CHUNK> = pvs.as_slice().borrow();
+                let pvs: &MemoryMerklePvs<_, DIGEST_WIDTH> = pvs.as_slice().borrow();
 
                 // Check that initial root matches the previous final root.
                 if i != 0 {

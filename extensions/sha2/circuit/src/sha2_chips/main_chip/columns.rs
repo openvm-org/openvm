@@ -1,17 +1,23 @@
 use openvm_circuit::{
-    arch::ExecutionState,
+    arch::{ExecutionState, BLOCK_FE_WIDTH},
     system::memory::offline_checker::{MemoryReadAuxCols, MemoryWriteAuxCols},
 };
 use openvm_circuit_primitives::ColsRef;
-use openvm_instructions::riscv::RV32_REGISTER_NUM_LIMBS;
+use openvm_riscv_circuit::adapters::RV64_PTR_U16_LIMBS;
 
 use crate::{Sha2MainChipConfig, SHA2_REGISTER_READS, SHA2_WRITE_SIZE};
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, ColsRef)]
 #[config(Sha2MainChipConfig)]
-pub struct Sha2Cols<T, const BLOCK_BYTES: usize, const STATE_BYTES: usize> {
-    pub block: Sha2BlockCols<T, BLOCK_BYTES, STATE_BYTES>,
+pub struct Sha2Cols<
+    T,
+    const BLOCK_BYTES: usize,
+    const BLOCK_U16S: usize,
+    const STATE_BYTES: usize,
+    const STATE_U16S: usize,
+> {
+    pub block: Sha2BlockCols<T, BLOCK_U16S, STATE_U16S>,
     pub instruction: Sha2InstructionCols<T>,
     pub mem: Sha2MemoryCols<T, BLOCK_BYTES, STATE_BYTES, SHA2_WRITE_SIZE>,
 }
@@ -19,15 +25,15 @@ pub struct Sha2Cols<T, const BLOCK_BYTES: usize, const STATE_BYTES: usize> {
 #[repr(C)]
 #[derive(Clone, Copy, Debug, ColsRef)]
 #[config(Sha2MainChipConfig)]
-pub struct Sha2BlockCols<T, const BLOCK_BYTES: usize, const STATE_BYTES: usize> {
+pub struct Sha2BlockCols<T, const BLOCK_U16S: usize, const STATE_U16S: usize> {
     /// Identifier of this row in the interactions between the two chips
     pub request_id: T,
-    /// Input bytes for this block
-    pub message_bytes: [T; BLOCK_BYTES],
-    /// Previous state of the SHA-2 hasher object, as little-endian words
-    pub prev_state: [T; STATE_BYTES],
-    /// New state of the SHA-2 hasher object after processing this block, as little-endian words
-    pub new_state: [T; STATE_BYTES],
+    /// Input block as little-endian u16 cells (`lo | hi << 8`).
+    pub message_u16s: [T; BLOCK_U16S],
+    /// Previous SHA-2 state as little-endian u16 cells.
+    pub prev_state: [T; STATE_U16S],
+    /// New SHA-2 state after processing this block, as little-endian u16 cells.
+    pub new_state: [T; STATE_U16S],
 }
 
 #[repr(C)]
@@ -45,13 +51,12 @@ pub struct Sha2InstructionCols<T> {
     pub state_reg_ptr: T,
     /// Pointer to address space 1 `input` register
     pub input_reg_ptr: T,
-    // Register values
-    /// dst_ptr_limbs <- \[dst_reg_ptr:4\]_1
-    pub dst_ptr_limbs: [T; RV32_REGISTER_NUM_LIMBS],
-    /// state_ptr_limbs <- \[state_reg_ptr:4\]_1
-    pub state_ptr_limbs: [T; RV32_REGISTER_NUM_LIMBS],
-    /// input_ptr_limbs <- \[input_reg_ptr:4\]_1
-    pub input_ptr_limbs: [T; RV32_REGISTER_NUM_LIMBS],
+    /// Low 4 bytes of \[dst_reg_ptr:8\]_1, packed as 2 u16 cells.
+    pub dst_ptr_limbs: [T; RV64_PTR_U16_LIMBS],
+    /// Low 4 bytes of \[state_reg_ptr:8\]_1, packed as 2 u16 cells.
+    pub state_ptr_limbs: [T; RV64_PTR_U16_LIMBS],
+    /// Low 4 bytes of \[input_reg_ptr:8\]_1, packed as 2 u16 cells.
+    pub input_ptr_limbs: [T; RV64_PTR_U16_LIMBS],
 }
 
 #[repr(C)]
@@ -70,5 +75,5 @@ pub struct Sha2MemoryCols<
     #[aligned_borrow]
     pub state_reads: [MemoryReadAuxCols<T>; STATE_READS],
     #[aligned_borrow]
-    pub write_aux: [MemoryWriteAuxCols<T, SHA2_WRITE_SIZE>; STATE_WRITES],
+    pub write_aux: [MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>; STATE_WRITES],
 }

@@ -7,6 +7,7 @@ use openvm_cuda_common::{
     error::CudaError,
     stream::{cudaStream_t, GpuDeviceCtx},
 };
+use tracing::instrument;
 
 use super::{SharedBuffer, DIGEST_WIDTH, MERKLE_TOUCHED_BLOCK_WIDTH};
 
@@ -20,6 +21,7 @@ pub mod merkle_tree {
             d_tree: *mut std::ffi::c_void,
             tree_offset: usize,
             addr_space_idx: u32,
+            layout: u8,
             stream: cudaStream_t,
         ) -> i32;
 
@@ -66,6 +68,8 @@ pub mod merkle_tree {
             top_roots: *mut u32,         // are actually `H`s
             zero_hashes_end: *const u32, // are actually `H`s
             actual_subtree_heights: *const usize,
+            subtree_layouts: *const u8,
+            initial_data_ptrs: *const usize,
             d_poseidon2_raw_buffer: *mut std::ffi::c_void,
             d_poseidon2_buffer_idx: *mut u32,
             poseidon2_capacity: usize,
@@ -79,6 +83,7 @@ pub mod merkle_tree {
         d_tree: &DeviceBuffer<T>,
         tree_offset: usize,
         addr_space_idx: u32,
+        layout: u8,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_build_merkle_subtree(
@@ -87,6 +92,7 @@ pub mod merkle_tree {
             d_tree.as_mut_raw_ptr(),
             tree_offset,
             addr_space_idx,
+            layout,
             stream,
         ))
     }
@@ -152,6 +158,7 @@ pub mod merkle_tree {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[instrument(name = "update_merkle_tree", skip_all)]
     pub unsafe fn update_merkle_tree<T>(
         trace: &DeviceMatrix<T>,
         subtree_ptrs: &DeviceBuffer<usize>,
@@ -160,6 +167,8 @@ pub mod merkle_tree {
         touched_blocks: &DeviceBuffer<u32>,
         subtree_height: usize,
         actual_heights: &[usize],
+        subtree_layouts: &[u8],
+        initial_data_ptrs: &[usize],
         unpadded_height: usize,
         hasher_buffer: &SharedBuffer<F>,
         device_ctx: &GpuDeviceCtx,
@@ -176,6 +185,8 @@ pub mod merkle_tree {
         )?;
         let tmp_storage = DeviceBuffer::<u8>::with_capacity_on(need_tmp_storage_bytes, device_ctx);
         let actual_heights = actual_heights.to_device_on(device_ctx).unwrap();
+        let subtree_layouts = subtree_layouts.to_device_on(device_ctx).unwrap();
+        let initial_data_ptrs = initial_data_ptrs.to_device_on(device_ctx).unwrap();
         let poseidon2_records = hasher_buffer.records();
         CudaError::from_result(_update_merkle_tree(
             num_leaves,
@@ -192,6 +203,8 @@ pub mod merkle_tree {
             top_roots.as_mut_ptr() as *mut u32,
             zero_hash.as_ptr() as *mut u32,
             actual_heights.as_ptr(),
+            subtree_layouts.as_ptr(),
+            initial_data_ptrs.as_ptr(),
             poseidon2_records.as_mut_raw_ptr(),
             hasher_buffer.idx.as_mut_ptr(),
             // Length in F elements; the CUDA side converts to record count.

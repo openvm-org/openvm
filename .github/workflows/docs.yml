@@ -27,7 +27,7 @@ jobs:
     concurrency:
       group: ${{ github.workflow_ref }}-docs-${{ github.ref }}
     runs-on:
-      - runs-on=${{ github.run_id }}/image=ubuntu24-gpu-x64/family=g6.*+g5+g6e/cpu=32/volume=40gb/spot=capacity-optimized/extras=s3-cache
+      - runs-on=${{ github.run_id }}/image=ubuntu24-gpu-x64/family=g7.2xlarge+g6.2xlarge+g5.2xlarge/volume=40gb/spot=price-capacity-optimized/extras=s3-cache
     steps:
       - uses: runs-on/action@v2
         with:
@@ -38,30 +38,26 @@ jobs:
           ssh-private-key: |
             ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
       - uses: actions/checkout@v5
+      - name: Init rvr FFI submodules
+        run: |
+          git submodule update --init --depth 1 extensions/keccak256/rvr/ffi/openssl
+          git submodule update --init --depth 1 extensions/algebra/rvr/ffi/modular/secp256k1
       - name: Set up Rust toolchain
         uses: dtolnay/rust-toolchain@nightly
       - uses: ./.github/actions/sccache
+      # TODO: remove once https://github.com/runs-on/runner-images-for-aws/issues/55 is fixed
+      - name: Setup GPU driver
+        run: bash ./scripts/gpu_driver_setup.sh
       - name: Verify GPU setup
         run: |
           nvidia-smi
           nvidia-smi -L
           echo "CUDA_ARCH=86,89,120" >> $GITHUB_ENV
 
-      - name: Cargo check
-        run: cargo check
-
       - name: Build documentation
-        run: cargo +nightly-2026-01-18 doc --workspace --exclude "openvm-benchmarks" --exclude "*-tests" --exclude "*-test" --features "cuda"
-
-      # We only want the index page to display workspace crates, so we build
-      # separately and copy over the index as a hack
-      - name: Build index page
-        run: |
-          cargo +nightly-2026-01-18 doc --workspace --no-deps --exclude "openvm-benchmarks" --exclude "*-tests" --exclude "*-test" --target-dir target/doc-nodeps
-          cp target/doc-nodeps/doc/index.html target/doc/
-          cp target/doc-nodeps/doc/crates.js target/doc/
+        run: cargo +nightly-2026-01-18 doc --workspace --no-deps --exclude "openvm-benchmarks*" --exclude "*-tests" --features "cuda"
         env:
-          RUSTDOCFLAGS: --enable-index-page -Zunstable-options
+          RUSTDOCFLAGS: -D warnings --enable-index-page -Zunstable-options
 
       - name: Install s5cmd
         run: |
@@ -73,21 +69,21 @@ jobs:
         if: github.ref_type == 'branch' && github.ref == 'refs/heads/main'
         env:
           S3_BUCKET: ${{ vars.CRATE_DOCS_S3_BUCKET }}
-        run: s5cmd sync . s3://${S3_BUCKET%/}/static/
+        run: s5cmd sync --delete . s3://${S3_BUCKET%/}/static/
 
       - name: Sync tagged version S3 bucket
         working-directory: target/doc
         if: github.ref_type == 'tag'
         env:
           S3_BUCKET: ${{ vars.CRATE_DOCS_S3_BUCKET }}
-        run: s5cmd sync . s3://${S3_BUCKET%/}/${{ github.ref_name }}/
+        run: s5cmd sync --delete . s3://${S3_BUCKET%/}/${{ github.ref_name }}/
 
       - name: Sync tagged version S3 bucket
         working-directory: target/doc
         if: github.event_name == 'workflow_dispatch'
         env:
           S3_BUCKET: ${{ vars.CRATE_DOCS_S3_BUCKET }}
-        run: s5cmd sync . s3://${S3_BUCKET%/}/${{ github.event.inputs.tag }}/
+        run: s5cmd sync --delete . s3://${S3_BUCKET%/}/${{ github.event.inputs.tag }}/
 
       - name: sccache stats
         if: always()

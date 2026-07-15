@@ -34,6 +34,14 @@ template <size_t N> struct FpArray {
         return result;
     }
 
+    __device__ static FpArray from_u16_array(uint16_t const arr[N]) {
+        FpArray result;
+        for (int i = 0; i < N; i++) {
+            result.v[i] = Fp(arr[i]).asRaw();
+        }
+        return result;
+    }
+
     __device__ static FpArray from_u8_array(uint8_t const arr[N]) {
         FpArray result;
         for (int i = 0; i < N; i++) {

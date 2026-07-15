@@ -82,6 +82,9 @@ pub enum ExecutionError {
     Inventory(#[from] ExecutorInventoryError),
     #[error("static program error: {0}")]
     Static(#[from] StaticProgramError),
+    #[cfg(feature = "rvr")]
+    #[error("rvr execution failed: {0}")]
+    RvrExecution(String),
 }
 
 /// Errors in the program that can be statically analyzed before runtime.
@@ -141,7 +144,6 @@ pub type Handler<F, CTX> = unsafe fn(
 /// Trait for pure execution via a host interpreter. The trait methods provide the methods to
 /// pre-process the program code into function pointers which operate on `pre_compute` instruction
 /// data.
-// @dev: In the codebase this is sometimes referred to as (E1).
 pub trait InterpreterExecutor<F> {
     fn pre_compute_size(&self) -> usize;
 
@@ -177,14 +179,14 @@ pub trait AotExecutor<F> {
     }
 
     /*
-    Function: Generate x86 assembly for the given RV32 instruction, and transfer control to the next RV32 instruction
+    Function: Generate x86 assembly for the given RISC-V instruction, and transfer control to the next RISC-V instruction
 
     Preconditions:
     x86 Registers: rbx = vm_exec_state_ptr, rbp = pre_compute_insns_ptr,
     - instruction: the instruction to be executed
 
     Postcondition:
-    - x86's PC should be set to the label of the next RV32 instruction, and transfers control to the next instruction
+    - x86's PC should be set to the label of the next RISC-V instruction, and transfers control to the next instruction
     */
     fn generate_x86_asm(&self, _inst: &Instruction<F>, _pc: u32) -> Result<String, AotError> {
         unimplemented!()
@@ -204,7 +206,6 @@ impl<F, T> Executor<F> for T where T: InterpreterExecutor<F> {}
 /// Trait for metered execution via a host interpreter. The trait methods provide the methods to
 /// pre-process the program code into function pointers which operate on `pre_compute` instruction
 /// data which contains auxiliary data (e.g., corresponding AIR ID) for metering purposes.
-// @dev: In the codebase this is sometimes referred to as (E2).
 pub trait InterpreterMeteredExecutor<F> {
     fn metered_pre_compute_size(&self) -> usize;
 
@@ -267,7 +268,6 @@ impl<F, T> MeteredExecutor<F> for T where T: InterpreterMeteredExecutor<F> {}
 /// instructions via enum dispatch within an interpreter. This execution is specialized to record
 /// "records" of execution which will be ingested later for trace matrix generation. The records are
 /// stored in a record arena, which is provided in the [VmStateMut] argument.
-// NOTE: In the codebase this is sometimes referred to as (E3).
 pub trait PreflightExecutor<F, RA = MatrixRecordArena<F>> {
     /// Runtime execution of the instruction, if the instruction is owned by the
     /// current instance. May internally store records of this call for later trace generation.

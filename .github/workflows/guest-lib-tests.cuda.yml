@@ -34,7 +34,7 @@ jobs:
           - { names: "k256 p256" }
           - { names: "ff_derive pairing" }
     runs-on:
-      - runs-on=${{ github.run_id }}-guest-lib-cuda-${{ github.run_attempt }}-${{ strategy.job-index }}/image=ubuntu24-gpu-x64/cpu=8+32/family=g6.*+g5+g6e/volume=40gb/spot=capacity-optimized/extras=s3-cache
+      - runs-on=${{ github.run_id }}-guest-lib-cuda-${{ github.run_attempt }}-${{ strategy.job-index }}/image=ubuntu24-gpu-x64/family=g7.2xlarge+g6.2xlarge+g5.2xlarge/volume=40gb/spot=price-capacity-optimized/extras=s3-cache
 
     steps:
       - uses: runs-on/action@v2
@@ -54,8 +54,8 @@ jobs:
               - "crates/circuits/**"
               - "crates/vm/**"
               - "crates/toolchain/**"
-              - "extensions/rv32im/**"
-              - "extensions/rv32-adapters/**"
+              - "extensions/riscv/**"
+              - "extensions/riscv-adapters/**"
               - ".github/workflows/guest-lib-tests.cuda.yml"
               - "crates/sdk/guest/fib/**"
             sha2:
@@ -104,7 +104,7 @@ jobs:
 
           # Skip if neither common nor any crate in this matrix group changed
           if [[ "$COMMON_CHANGED" != "true" && "$ANY_CRATE_CHANGED" != "true" ]]; then
-            echo "No relevant changes for crates [${{ matrix.crates }}], skipping tests."
+            echo "No relevant changes for crates [${{ matrix.crates.names }}], skipping tests."
             exit 0
           fi
 
@@ -112,6 +112,11 @@ jobs:
         env:
           RUSTUP_PERMIT_COPY_RENAME: "1"
       - uses: ./.github/actions/sccache
+
+      # TODO: remove once https://github.com/runs-on/runner-images-for-aws/issues/55 is fixed
+      - name: Setup GPU driver
+        run: bash ./scripts/gpu_driver_setup.sh
+
       - uses: ./.github/actions/rust-cache-cuda
         with:
           cache-on-failure: true
@@ -131,7 +136,7 @@ jobs:
           FILTER_OUTPUTS: ${{ toJSON(steps.filter.outputs) }}
         run: |
           COMMON_CHANGED=$(echo $FILTER_OUTPUTS | jq -r .common)
-          rustup component add rust-src --toolchain nightly-2026-01-18
+          "$GITHUB_WORKSPACE/ci/install-openvm-toolchain.sh"
 
           for crate in ${{ matrix.crates.names }}; do
             crate_changed=$(echo $FILTER_OUTPUTS | jq -r --arg c "$crate" '.[$c]')

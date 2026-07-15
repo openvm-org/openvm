@@ -123,17 +123,17 @@ impl GroupedMetrics {
         })
     }
 
-    /// Validates that E1, metered, and preflight instruction counts all match each other
+    /// Validates that pure, metered, and preflight instruction counts all match each other
     fn validate_instruction_counts(group_summaries: &HashMap<MetricName, Stats>) {
-        let e1_insns = group_summaries.get(EXECUTE_E1_INSNS_LABEL);
+        let pure_insns = group_summaries.get(EXECUTE_PURE_INSNS_LABEL);
         let metered_insns = group_summaries.get(EXECUTE_METERED_INSNS_LABEL);
         let preflight_insns = group_summaries.get(EXECUTE_PREFLIGHT_INSNS_LABEL);
 
-        if let (Some(e1_insns), Some(preflight_insns)) = (e1_insns, preflight_insns) {
-            assert_eq!(e1_insns.sum.val as u64, preflight_insns.sum.val as u64);
+        if let (Some(pure_insns), Some(preflight_insns)) = (pure_insns, preflight_insns) {
+            assert_eq!(pure_insns.sum.val as u64, preflight_insns.sum.val as u64);
         }
-        if let (Some(e1_insns), Some(metered_insns)) = (e1_insns, metered_insns) {
-            assert_eq!(e1_insns.sum.val as u64, metered_insns.sum.val as u64);
+        if let (Some(pure_insns), Some(metered_insns)) = (pure_insns, metered_insns) {
+            assert_eq!(pure_insns.sum.val as u64, metered_insns.sum.val as u64);
         }
         if let (Some(metered_insns), Some(preflight_insns)) = (metered_insns, preflight_insns) {
             assert_eq!(metered_insns.sum.val as u64, preflight_insns.sum.val as u64);
@@ -205,8 +205,8 @@ impl GroupedMetrics {
                     if let Some(metered) = stats.get(EXECUTE_METERED_TIME_LABEL) {
                         group_time += metered.avg.val / 1000.0;
                     }
-                    if let Some(e1) = stats.get(EXECUTE_E1_TIME_LABEL) {
-                        group_time += e1.avg.val / 1000.0;
+                    if let Some(pure) = stats.get(EXECUTE_PURE_TIME_LABEL) {
+                        group_time += pure.avg.val / 1000.0;
                     }
                 }
             }
@@ -266,7 +266,7 @@ impl AggregateMetrics {
         for (group_name, metrics) in &self.by_group {
             let stats = metrics.get(PROOF_TIME_LABEL);
             let execute_metered_stats = metrics.get(EXECUTE_METERED_TIME_LABEL);
-            let execute_e1_stats = metrics.get(EXECUTE_E1_TIME_LABEL);
+            let execute_pure_stats = metrics.get(EXECUTE_PURE_TIME_LABEL);
             if stats.is_none() {
                 continue;
             }
@@ -299,7 +299,8 @@ impl AggregateMetrics {
                     .expect("total_par_proof_time.diff should be initialized") +=
                     max.diff.unwrap_or(0.0);
 
-                // Account for the serial execute_metered and execute_e1 for app outside of segments
+                // Account for the serial execute_metered and execute_pure for app outside of
+                // segments
                 if is_app_proof_group(group_name) {
                     if let Some(execute_metered_stats) = execute_metered_stats {
                         // For metered metrics without segment labels, we just use the value
@@ -321,10 +322,10 @@ impl AggregateMetrics {
                         }
                     }
 
-                    if let Some(execute_e1_stats) = execute_e1_stats {
-                        total_proof_time.val += execute_e1_stats.avg.val / 1000.0;
-                        total_par_proof_time.val += execute_e1_stats.avg.val / 1000.0;
-                        if let Some(diff) = execute_e1_stats.avg.diff {
+                    if let Some(execute_pure_stats) = execute_pure_stats {
+                        total_proof_time.val += execute_pure_stats.avg.val / 1000.0;
+                        total_par_proof_time.val += execute_pure_stats.avg.val / 1000.0;
+                        if let Some(diff) = execute_pure_stats.avg.diff {
                             *total_proof_time
                                 .diff
                                 .as_mut()
@@ -518,7 +519,7 @@ impl AggregateMetrics {
                     "| `{:<20}` | {:<10} | {:<10} | {:<10} | {:<10} |",
                     metric_name, summary.avg, "-", "-", "-",
                 )?;
-            } else if metric_name == EXECUTE_E1_INSN_MI_S_LABEL
+            } else if metric_name == EXECUTE_PURE_INSN_MI_S_LABEL
                 || metric_name == EXECUTE_PREFLIGHT_INSN_MI_S_LABEL
                 || metric_name == EXECUTE_METERED_INSN_MI_S_LABEL
             {
@@ -575,9 +576,9 @@ impl AggregateMetrics {
                     sum.val += metered.avg.val / 1000.0;
                     max.val += metered.avg.val / 1000.0;
                 }
-                if let Some(e1) = summaries.get(EXECUTE_E1_TIME_LABEL) {
-                    sum.val += e1.avg.val / 1000.0;
-                    max.val += e1.avg.val / 1000.0;
+                if let Some(pure) = summaries.get(EXECUTE_PURE_TIME_LABEL) {
+                    sum.val += pure.avg.val / 1000.0;
+                    max.val += pure.avg.val / 1000.0;
                 }
             }
             rows.push((group_name, sum, max));
@@ -650,17 +651,22 @@ impl BenchmarkOutput {
 pub const PROOF_TIME_LABEL: &str = "total_proof_time_ms";
 pub const MAIN_CELLS_USED_LABEL: &str = "main_cells_used";
 pub const TOTAL_CELLS_USED_LABEL: &str = "total_cells_used";
-pub const EXECUTE_E1_INSNS_LABEL: &str = "execute_e1_insns";
+pub const EXECUTE_PURE_INSNS_LABEL: &str = "execute_pure_insns";
 pub const EXECUTE_METERED_INSNS_LABEL: &str = "execute_metered_insns";
 pub const EXECUTE_PREFLIGHT_INSNS_LABEL: &str = "execute_preflight_insns";
-pub const EXECUTE_E1_TIME_LABEL: &str = "execute_e1_time_ms";
-pub const EXECUTE_E1_INSN_MI_S_LABEL: &str = "execute_e1_insn_mi/s";
+pub const EXECUTE_PURE_TIME_LABEL: &str = "execute_pure_time_ms";
+pub const EXECUTE_PURE_INSN_MI_S_LABEL: &str = "execute_pure_insn_mi/s";
 pub const EXECUTE_METERED_TIME_LABEL: &str = "execute_metered_time_ms";
 pub const EXECUTE_METERED_INSN_MI_S_LABEL: &str = "execute_metered_insn_mi/s";
 pub const EXECUTE_PREFLIGHT_TIME_LABEL: &str = "execute_preflight_time_ms";
 pub const EXECUTE_PREFLIGHT_INSN_MI_S_LABEL: &str = "execute_preflight_insn_mi/s";
+pub const COMPILE_PURE_TIME_LABEL: &str = "compile_pure_time_ms";
+pub const COMPILE_METERED_TIME_LABEL: &str = "compile_metered_time_ms";
+pub const COMPILE_METERED_SEGMENT_TIME_LABEL: &str = "compile_metered_segment_time_ms";
+pub const COMPILE_METERED_COST_TIME_LABEL: &str = "compile_metered_cost_time_ms";
 pub const TRACE_GEN_TIME_LABEL: &str = "trace_gen_time_ms";
 pub const GENERATE_BLOB_TIME_LABEL: &str = "generate_blob_total_time_ms";
+pub const SET_INITIAL_MEMORY_TIME_LABEL: &str = "set_initial_memory_time_ms";
 pub const MEM_FIN_TIME_LABEL: &str = "memory_finalize_time_ms";
 pub const BOUNDARY_FIN_TIME_LABEL: &str = "boundary_finalize_time_ms";
 pub const MERKLE_FIN_TIME_LABEL: &str = "merkle_finalize_time_ms";
@@ -673,8 +679,12 @@ pub const AGGREGATED_METRIC_NAMES: &[&str] = &[
     PROOF_TIME_LABEL,
     MAIN_CELLS_USED_LABEL,
     TOTAL_CELLS_USED_LABEL,
-    EXECUTE_E1_TIME_LABEL,
-    EXECUTE_E1_INSN_MI_S_LABEL,
+    COMPILE_PURE_TIME_LABEL,
+    COMPILE_METERED_TIME_LABEL,
+    COMPILE_METERED_SEGMENT_TIME_LABEL,
+    COMPILE_METERED_COST_TIME_LABEL,
+    EXECUTE_PURE_TIME_LABEL,
+    EXECUTE_PURE_INSN_MI_S_LABEL,
     EXECUTE_METERED_TIME_LABEL,
     EXECUTE_METERED_INSNS_LABEL,
     EXECUTE_METERED_INSN_MI_S_LABEL,
@@ -683,6 +693,7 @@ pub const AGGREGATED_METRIC_NAMES: &[&str] = &[
     EXECUTE_PREFLIGHT_INSN_MI_S_LABEL,
     TRACE_GEN_TIME_LABEL,
     GENERATE_BLOB_TIME_LABEL,
+    SET_INITIAL_MEMORY_TIME_LABEL,
     MEM_FIN_TIME_LABEL,
     BOUNDARY_FIN_TIME_LABEL,
     MERKLE_FIN_TIME_LABEL,

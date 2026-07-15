@@ -1,3 +1,14 @@
+#![cfg_attr(
+    all(not(feature = "std"), any(openvm_intrinsics, target_os = "openvm")),
+    no_main
+)]
+#![cfg_attr(not(feature = "std"), no_std)]
+
+extern crate alloc;
+use alloc::{vec, vec::Vec};
+
+openvm::entry!(main);
+
 use openvm_algebra_guest::IntMod;
 use openvm_ecc_guest::AffinePoint;
 #[allow(unused_imports)]

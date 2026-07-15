@@ -15,7 +15,7 @@ jobs:
   lint:
     name: Build
     runs-on:
-      - runs-on=${{ github.run_id }}/volume=80gb/runner=64cpu-linux-x64/image=ubuntu24-full-x64/extras=s3-cache
+      - runs-on=${{ github.run_id }}/volume=80gb/family=c8i-flex.16xlarge+c8i.16xlarge+c8a.16xlarge+c7i.16xlarge+c7a.16xlarge/image=ubuntu24-full-x64/extras=s3-cache
     steps:
       - uses: runs-on/action@v2
       - name: Load SSH key
@@ -24,6 +24,10 @@ jobs:
           ssh-private-key: |
             ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
       - uses: actions/checkout@v5
+      - name: Init rvr FFI submodules
+        run: |
+          git submodule update --init --depth 1 extensions/keccak256/rvr/ffi/openssl
+          git submodule update --init --depth 1 extensions/algebra/rvr/ffi/modular/secp256k1
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:

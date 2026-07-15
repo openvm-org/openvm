@@ -3,7 +3,7 @@ use openvm_deferral_guest::{COMMIT_NUM_BYTES, DEFERRAL_FUNCT3, MAX_DEF_CIRCUITS,
 use openvm_instructions::{
     exe::SparseMemoryImage,
     instruction::Instruction,
-    riscv::{RV32_MEMORY_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode, DEFERRAL_AS,
 };
 use openvm_instructions_derive::LocalOpcode;
@@ -83,21 +83,21 @@ impl<F: PrimeField32> TranspilerExtension<F> for DeferralTranspilerExtension {
             DeferralOpcode::CALL => Instruction::from_usize(
                 DeferralOpcode::CALL.global_opcode(),
                 [
-                    RV32_REGISTER_NUM_LIMBS * dec_insn.rd,
-                    RV32_REGISTER_NUM_LIMBS * dec_insn.rs1,
+                    RV64_REGISTER_NUM_LIMBS * dec_insn.rd,
+                    RV64_REGISTER_NUM_LIMBS * dec_insn.rs1,
                     def_idx,
-                    RV32_REGISTER_AS as usize,
-                    RV32_MEMORY_AS as usize,
+                    RV64_REGISTER_AS as usize,
+                    RV64_MEMORY_AS as usize,
                 ],
             ),
             DeferralOpcode::OUTPUT => Instruction::from_usize(
                 DeferralOpcode::OUTPUT.global_opcode(),
                 [
-                    RV32_REGISTER_NUM_LIMBS * dec_insn.rd,
-                    RV32_REGISTER_NUM_LIMBS * dec_insn.rs1,
+                    RV64_REGISTER_NUM_LIMBS * dec_insn.rd,
+                    RV64_REGISTER_NUM_LIMBS * dec_insn.rs1,
                     def_idx,
-                    RV32_REGISTER_AS as usize,
-                    RV32_MEMORY_AS as usize,
+                    RV64_REGISTER_AS as usize,
+                    RV64_MEMORY_AS as usize,
                 ],
             ),
         };
@@ -109,15 +109,16 @@ impl<F: PrimeField32> TranspilerExtension<F> for DeferralTranspilerExtension {
         const F_NUM_BYTES: usize = 4;
         const COMMIT_SIZE: usize = COMMIT_NUM_BYTES / F_NUM_BYTES;
 
-        // Each input_acc starts at cell 2 * def_idx * COMMIT_SIZE, and each output_acc
-        // immediately follows it. The initial input_acc must be the def_circuit_commit,
-        // and the initial output_acc must be all 0 (i.e. untouched).
+        // Each input_acc starts at AS-native ptr `2 * def_idx * COMMIT_SIZE` in
+        // DEFERRAL_AS, and each output_acc immediately follows it. The initial
+        // input_acc must be the def_circuit_commit, and the initial output_acc
+        // must be all 0 (i.e. untouched).
         for (def_idx, commit) in self.def_circuit_commits.iter().enumerate() {
-            let start_cell = 2 * def_idx * COMMIT_SIZE;
-            let start_byte = start_cell * F_NUM_BYTES;
+            let start_ptr = 2 * def_idx * COMMIT_SIZE;
+            let start_byte_ptr = start_ptr * F_NUM_BYTES;
 
             for (byte_offset, b) in commit.iter().copied().enumerate() {
-                init_memory.insert((DEFERRAL_AS, (start_byte + byte_offset) as u32), b);
+                init_memory.insert((DEFERRAL_AS, (start_byte_ptr + byte_offset) as u32), b);
             }
         }
 

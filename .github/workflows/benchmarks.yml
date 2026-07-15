@@ -64,7 +64,7 @@ permissions:
 jobs:
   create-matrix:
     runs-on:
-      - runs-on=${{ github.run_id }}/runner=8cpu-linux-x64
+      - runs-on=${{ github.run_id }}/family=c8i-flex.2xlarge+c8i.2xlarge+c8a.2xlarge+c7i.2xlarge+c7a.2xlarge/image=ubuntu24-full-x64
     outputs:
       matrix: ${{ steps.create-matrix.outputs.matrix }}
     steps:
@@ -141,9 +141,7 @@ jobs:
   summarize:
     needs: [create-matrix, benchmark]
     runs-on:
-      - runs-on=${{ github.run_id }}
-      - runner=8cpu-linux-x64
-      - extras=s3-cache
+      - runs-on=${{ github.run_id }}/family=c8i-flex.2xlarge+c8i.2xlarge+c8a.2xlarge+c7i.2xlarge+c7a.2xlarge/image=ubuntu24-full-x64/extras=s3-cache
     steps:
       - uses: runs-on/action@v2
         with:
@@ -192,8 +190,10 @@ jobs:
 
       - name: Set github pages path for dispatch
         if: github.event_name == 'workflow_dispatch'
+        env:
+          BENCHMARK_REF: ${{ github.head_ref || github.ref }}
         run: |
-          BENCHMARK_RESULTS_PATH="benchmarks-dispatch/${{ github.head_ref || github.ref }}"
+          BENCHMARK_RESULTS_PATH="benchmarks-dispatch/${BENCHMARK_REF}"
           echo "BENCHMARK_RESULTS_PATH=${BENCHMARK_RESULTS_PATH}" >> $GITHUB_ENV
 
       - name: Set github pages path for PR

@@ -48,6 +48,9 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 metrics = { workspace = true, optional = true }
 
+[dev-dependencies]
+tempfile = { workspace = true }
+
 [features]
 default = ["parallel", "jemalloc"]
 root-prover = [
@@ -72,7 +75,12 @@ metrics = [
     "openvm-continuations/metrics",
     "openvm-sdk-config/metrics",
 ]
+rvr = [
+    "openvm-circuit/rvr",
+    "openvm-sdk-config/rvr",
+]
 aot = ["openvm-circuit/aot", "openvm-sdk-config/aot"]
+profiling = ["openvm-circuit/profiling"]
 tco = ["openvm-circuit/tco", "openvm-sdk-config/tco"]
 unprotected = ["openvm-circuit/unprotected"]
 

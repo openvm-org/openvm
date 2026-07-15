@@ -1,13 +1,10 @@
 //! Prover extension for the GPU backend which still does trace generation on CPU.
 
-use openvm_algebra_circuit::Rv32ModularHybridBuilder;
+use openvm_algebra_circuit::Rv64ModularHybridBuilder;
 use openvm_circuit::{
-    arch::{DEFAULT_BLOCK_SIZE, *},
+    arch::*,
     system::{
-        cuda::{
-            extensions::{get_inventory_range_checker, get_or_create_bitwise_op_lookup},
-            SystemChipInventoryGPU,
-        },
+        cuda::{extensions::get_inventory_range_checker, SystemChipInventoryGPU},
         memory::SharedMemoryHelper,
     },
 };
@@ -20,42 +17,37 @@ use openvm_cuda_backend::{
 };
 use openvm_cuda_common::stream::GpuDeviceCtx;
 use openvm_mod_circuit_builder::{ExprBuilderConfig, FieldExpressionMetadata};
-use openvm_rv32_adapters::{Rv32VecHeapAdapterCols, Rv32VecHeapAdapterExecutor};
+use openvm_riscv_adapters::{Rv64VecHeapAdapterCols, Rv64VecHeapAdapterExecutor};
 use openvm_stark_backend::{p3_air::BaseAir, prover::AirProvingContext};
 
 use crate::{
-    get_ec_addne_chip, get_ec_double_chip, EccRecord, Rv32WeierstrassConfig, WeierstrassAir,
+    get_ec_addne_chip, get_ec_double_chip, EccRecord, Rv64WeierstrassConfig, WeierstrassAir,
     WeierstrassChip, WeierstrassExtension, ECC_BLOCKS_32, ECC_BLOCKS_48, NUM_LIMBS_32,
     NUM_LIMBS_48,
 };
 
 #[derive(derive_new::new)]
-pub struct HybridWeierstrassChip<
-    F,
-    const NUM_READS: usize,
-    const BLOCKS: usize,
-    const BLOCK_SIZE: usize,
-> {
-    cpu: WeierstrassChip<F, NUM_READS, BLOCKS, BLOCK_SIZE>,
+pub struct HybridWeierstrassChip<F, const NUM_READS: usize, const BLOCKS: usize> {
+    cpu: WeierstrassChip<F, NUM_READS, BLOCKS>,
     device_ctx: GpuDeviceCtx,
 }
 
 // Auto-implementation of Chip for GpuBackend for a Cpu Chip by doing conversion
 // of Dense->Matrix Record Arena, cpu tracegen, and then H2D transfer of the trace matrix.
-impl<const NUM_READS: usize, const BLOCKS: usize, const BLOCK_SIZE: usize>
-    Chip<DenseRecordArena, GpuBackend> for HybridWeierstrassChip<F, NUM_READS, BLOCKS, BLOCK_SIZE>
+impl<const NUM_READS: usize, const BLOCKS: usize> Chip<DenseRecordArena, GpuBackend>
+    for HybridWeierstrassChip<F, NUM_READS, BLOCKS>
 {
     fn generate_proving_ctx(&self, mut arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         let total_input_limbs =
             self.cpu.inner.num_inputs() * self.cpu.inner.expr.canonical_num_limbs();
         let layout = AdapterCoreLayout::with_metadata(FieldExpressionMetadata::<
             F,
-            Rv32VecHeapAdapterExecutor<NUM_READS, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
+            Rv64VecHeapAdapterExecutor<NUM_READS, BLOCKS, BLOCKS>,
         >::new(total_input_limbs));
 
         let record_size = RecordSeeker::<
             DenseRecordArena,
-            EccRecord<NUM_READS, BLOCKS, BLOCK_SIZE>,
+            EccRecord<NUM_READS, BLOCKS>,
             _,
         >::get_aligned_record_size(&layout);
 
@@ -67,15 +59,10 @@ impl<const NUM_READS: usize, const BLOCKS: usize, const BLOCK_SIZE: usize>
 
         let num_records = records.len() / record_size;
         let height = num_records.next_power_of_two();
-        let mut seeker = arena
-            .get_record_seeker::<EccRecord<NUM_READS, BLOCKS, BLOCK_SIZE>, AdapterCoreLayout<
-                FieldExpressionMetadata<
-                    F,
-                    Rv32VecHeapAdapterExecutor<NUM_READS, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
-                >,
-            >>();
-        let adapter_width =
-            Rv32VecHeapAdapterCols::<F, NUM_READS, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>::width();
+        let mut seeker = arena.get_record_seeker::<EccRecord<NUM_READS, BLOCKS>, AdapterCoreLayout<
+            FieldExpressionMetadata<F, Rv64VecHeapAdapterExecutor<NUM_READS, BLOCKS, BLOCKS>>,
+        >>();
+        let adapter_width = Rv64VecHeapAdapterCols::<F, NUM_READS, BLOCKS, BLOCKS>::width();
         let width = adapter_width + BaseAir::<F>::width(&self.cpu.inner.expr);
         let mut matrix_arena = MatrixRecordArena::<F>::with_capacity(height, width);
         seeker.transfer_to_matrix_arena(&mut matrix_arena, layout);
@@ -97,12 +84,10 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
     ) -> Result<(), ChipInventoryError> {
         let range_checker_gpu = get_inventory_range_checker(inventory);
         let timestamp_max_bits = inventory.timestamp_max_bits();
-        let pointer_max_bits = inventory.airs().pointer_max_bits();
+        let byte_ptr_max_bits = to_byte_ptr_bits(inventory.airs().pointer_max_bits());
         let range_checker = range_checker_gpu.cpu_chip.clone().unwrap();
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
 
-        let bitwise_lu_gpu = get_or_create_bitwise_op_lookup(inventory)?;
-        let bitwise_lu = bitwise_lu_gpu.cpu_chip.clone().unwrap();
         let device_ctx = range_checker_gpu.device_ctx.clone();
 
         for curve in extension.supported_curves.iter() {
@@ -115,23 +100,21 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                     limb_bits: 8,
                 };
 
-                inventory.next_air::<WeierstrassAir<2, ECC_BLOCKS_32, DEFAULT_BLOCK_SIZE>>()?;
-                let addne = get_ec_addne_chip::<F, ECC_BLOCKS_32, DEFAULT_BLOCK_SIZE>(
+                inventory.next_air::<WeierstrassAir<2, ECC_BLOCKS_32>>()?;
+                let addne = get_ec_addne_chip::<F, ECC_BLOCKS_32>(
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
-                    bitwise_lu.clone(),
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                 );
                 inventory.add_executor_chip(HybridWeierstrassChip::new(addne, device_ctx.clone()));
 
-                inventory.next_air::<WeierstrassAir<1, ECC_BLOCKS_32, DEFAULT_BLOCK_SIZE>>()?;
-                let double = get_ec_double_chip::<F, ECC_BLOCKS_32, DEFAULT_BLOCK_SIZE>(
+                inventory.next_air::<WeierstrassAir<1, ECC_BLOCKS_32>>()?;
+                let double = get_ec_double_chip::<F, ECC_BLOCKS_32>(
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),
-                    bitwise_lu.clone(),
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                     curve.a.clone(),
                 );
                 inventory.add_executor_chip(HybridWeierstrassChip::new(double, device_ctx.clone()));
@@ -142,23 +125,21 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                     limb_bits: 8,
                 };
 
-                inventory.next_air::<WeierstrassAir<2, ECC_BLOCKS_48, DEFAULT_BLOCK_SIZE>>()?;
-                let addne = get_ec_addne_chip::<F, ECC_BLOCKS_48, DEFAULT_BLOCK_SIZE>(
+                inventory.next_air::<WeierstrassAir<2, ECC_BLOCKS_48>>()?;
+                let addne = get_ec_addne_chip::<F, ECC_BLOCKS_48>(
                     config.clone(),
                     mem_helper.clone(),
                     range_checker.clone(),
-                    bitwise_lu.clone(),
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                 );
                 inventory.add_executor_chip(HybridWeierstrassChip::new(addne, device_ctx.clone()));
 
-                inventory.next_air::<WeierstrassAir<1, ECC_BLOCKS_48, DEFAULT_BLOCK_SIZE>>()?;
-                let double = get_ec_double_chip::<F, ECC_BLOCKS_48, DEFAULT_BLOCK_SIZE>(
+                inventory.next_air::<WeierstrassAir<1, ECC_BLOCKS_48>>()?;
+                let double = get_ec_double_chip::<F, ECC_BLOCKS_48>(
                     config,
                     mem_helper.clone(),
                     range_checker.clone(),
-                    bitwise_lu.clone(),
-                    pointer_max_bits,
+                    byte_ptr_max_bits,
                     curve.a.clone(),
                 );
                 inventory.add_executor_chip(HybridWeierstrassChip::new(double, device_ctx.clone()));
@@ -171,21 +152,21 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
     }
 }
 
-/// This builder will do tracegen for the RV32IM extensions on GPU but the modular and ecc
+/// This builder will do tracegen for the RV64IM extensions on GPU but the modular and ecc
 /// extensions on CPU.
 #[derive(Clone)]
-pub struct Rv32WeierstrassHybridBuilder;
+pub struct Rv64WeierstrassHybridBuilder;
 
 type E = GpuBabyBearPoseidon2Engine;
 
-impl VmBuilder<E> for Rv32WeierstrassHybridBuilder {
-    type VmConfig = Rv32WeierstrassConfig;
+impl VmBuilder<E> for Rv64WeierstrassHybridBuilder {
+    type VmConfig = Rv64WeierstrassConfig;
     type SystemChipInventory = SystemChipInventoryGPU;
     type RecordArena = DenseRecordArena;
 
     fn create_chip_complex(
         &self,
-        config: &Rv32WeierstrassConfig,
+        config: &Rv64WeierstrassConfig,
         circuit: AirInventory<SC>,
         device_ctx: &openvm_stark_backend::EngineDeviceCtx<E>,
     ) -> Result<
@@ -193,7 +174,7 @@ impl VmBuilder<E> for Rv32WeierstrassHybridBuilder {
         ChipInventoryError,
     > {
         let mut chip_complex = VmBuilder::<E>::create_chip_complex(
-            &Rv32ModularHybridBuilder,
+            &Rv64ModularHybridBuilder,
             &config.modular,
             circuit,
             device_ctx,

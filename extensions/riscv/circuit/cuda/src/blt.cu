@@ -1,0 +1,70 @@
+#include "launcher.cuh"
+#include "primitives/buffer_view.cuh"
+#include "primitives/histogram.cuh"
+#include "primitives/trace_access.h"
+#include "primitives/constants.h"
+#include "riscv/adapters/branch.cuh" // Rv64BranchAdapterCols, Rv64BranchAdapterRecord, Rv64BranchAdapter
+#include "riscv/cores/blt.cuh"
+#include "system/memory/params.cuh" // BLOCK_FE_WIDTH
+
+using namespace riscv;
+
+using Rv64BranchLessThanCoreRecord =
+    BranchLessThanCoreRecord<BLOCK_FE_WIDTH, U16_BITS>;
+using Rv64BranchLessThanCore = BranchLessThanCore<BLOCK_FE_WIDTH, U16_BITS>;
+template <typename T>
+using Rv64BranchLessThanCoreCols =
+    BranchLessThanCoreCols<T, BLOCK_FE_WIDTH, U16_BITS>;
+
+template <typename T> struct BranchLessThanCols {
+    Rv64BranchAdapterCols<T> adapter;
+    Rv64BranchLessThanCoreCols<T> core;
+};
+
+struct BranchLessThanRecord {
+    Rv64BranchAdapterRecord adapter;
+    Rv64BranchLessThanCoreRecord core;
+};
+
+__global__ void blt_tracegen(
+    Fp *trace,
+    size_t height,
+    DeviceBufferConstView<BranchLessThanRecord> records,
+    uint32_t *rc_ptr,
+    uint32_t rc_bins,
+    uint32_t timestamp_max_bits
+) {
+    uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    RowSlice row(trace + idx, height);
+
+    if (idx < records.len()) {
+        auto const &full_record = records[idx];
+
+        Rv64BranchAdapter adapter(VariableRangeChecker(rc_ptr, rc_bins), timestamp_max_bits);
+        adapter.fill_trace_row(row, full_record.adapter);
+
+        Rv64BranchLessThanCore core{VariableRangeChecker(rc_ptr, rc_bins)};
+        core.fill_trace_row(row.slice_from(COL_INDEX(BranchLessThanCols, core)), full_record.core);
+    } else {
+        row.fill_zero(0, sizeof(BranchLessThanCols<uint8_t>));
+    }
+}
+
+extern "C" int _blt_tracegen(
+    Fp *d_trace,
+    size_t height,
+    size_t width,
+    DeviceBufferConstView<BranchLessThanRecord> d_records,
+    uint32_t *d_rc,
+    uint32_t rc_bins,
+    uint32_t timestamp_max_bits,
+    cudaStream_t stream
+) {
+    assert(width == sizeof(BranchLessThanCols<uint8_t>));
+
+    auto [grid, block] = kernel_launch_params(height, 512);
+    blt_tracegen<<<grid, block, 0, stream>>>(
+        d_trace, height, d_records, d_rc, rc_bins, timestamp_max_bits
+    );
+    return CHECK_KERNEL();
+}

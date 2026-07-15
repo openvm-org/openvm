@@ -1,6 +1,6 @@
 #![no_std]
 
-#[cfg(target_os = "zkvm")]
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
 use openvm_platform::alloc::AlignedBuf;
 
 pub const OPCODE: u8 = 0x0b;
@@ -12,7 +12,7 @@ pub const XORIN_FUNCT7: u8 = 1;
 pub const KECCAK_WIDTH_BYTES: usize = 200;
 pub const KECCAK_RATE: usize = 136;
 pub const KECCAK_OUTPUT_SIZE: usize = 32;
-pub const MIN_ALIGN: usize = 4;
+pub const MIN_ALIGN: usize = 8;
 
 /// XOR `len` bytes from `input` into `buffer` using the native XORIN instruction.
 ///
@@ -25,7 +25,7 @@ pub const MIN_ALIGN: usize = 4;
 ///
 /// - `buffer` must point to a buffer of at least `len` bytes.
 /// - `input` must point to a buffer of at least `len` bytes.
-#[cfg(target_os = "zkvm")]
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
 #[no_mangle]
 pub unsafe extern "C" fn native_xorin(buffer: *mut u8, input: *const u8, len: usize) {
     assert!(
@@ -74,12 +74,12 @@ pub unsafe extern "C" fn native_xorin(buffer: *mut u8, input: *const u8, len: us
     }
 }
 
-/// Apply the Keccak-f[1600] permutation to the 200-byte state buffer.
+/// Apply the Keccak-f\[1600\] permutation to the 200-byte state buffer.
 ///
 /// # Safety
 ///
 /// - `buffer` must point to a buffer of at least `KECCAK_WIDTH_BYTES` (200) bytes.
-#[cfg(target_os = "zkvm")]
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
 #[no_mangle]
 pub unsafe extern "C" fn native_keccakf(buffer: *mut u8) {
     unsafe {
@@ -97,7 +97,7 @@ pub unsafe extern "C" fn native_keccakf(buffer: *mut u8) {
     }
 }
 
-#[cfg(target_os = "zkvm")]
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
 #[inline(always)]
 fn __native_xorin(mut buffer: *mut u8, input: *const u8, len: usize) {
     openvm_platform::custom_insn_r!(
@@ -110,7 +110,7 @@ fn __native_xorin(mut buffer: *mut u8, input: *const u8, len: usize) {
     );
 }
 
-#[cfg(target_os = "zkvm")]
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
 #[inline(always)]
 fn __native_keccakf(mut buffer: *mut u8) {
     openvm_platform::custom_insn_r!(

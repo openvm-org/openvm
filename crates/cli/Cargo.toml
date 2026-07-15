@@ -42,6 +42,13 @@ itertools.workspace = true
 toml_edit = "0.22"
 include_dir = "0.7"
 
+# Used by `cargo openvm toolchain {install,uninstall,list}`.
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+indicatif = "0.17"
+flate2 = "1"
+tar = "0.4"
+tempfile.workspace = true
+
 [features]
 default = ["parallel", "jemalloc", "evm-verify", "metrics"]
 evm-prove = ["openvm-sdk/evm-prove"]
@@ -49,6 +56,7 @@ evm-verify = ["evm-prove", "openvm-sdk/evm-verify"]
 metrics = ["openvm-sdk/metrics"]
 tco = ["openvm-sdk/tco"]
 aot = ["openvm-sdk/aot"]
+rvr = ["openvm-sdk/rvr"]
 unprotected = ["openvm-sdk/unprotected"]
 # for guest profiling:
 perf-metrics = ["openvm-sdk/perf-metrics", "metrics"]
@@ -61,6 +69,3 @@ jemalloc-prof = ["openvm-sdk/jemalloc-prof"]
 cuda = ["openvm-sdk/cuda"]
 halo2-gpu = ["cuda", "openvm-sdk/halo2-gpu"]
 ci = []
-
-[dev-dependencies]
-tempfile = "3.10.1"

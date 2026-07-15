@@ -4,6 +4,7 @@
 #include "primitives/constants.h"
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
+#include "primitives/utils.cuh"
 #include "system/memory/controller.cuh"
 #include "xorin.cuh"
 #include <cassert>
@@ -12,6 +13,9 @@
 
 using namespace xorin;
 using namespace riscv;
+using namespace keccak256;
+using namespace program;
+using openvm::U16_BITS;
 
 #define XORIN_WRITE(FIELD, VALUE) COL_WRITE_VALUE(row, XorinVmCols, FIELD, VALUE)
 #define XORIN_WRITE_ARRAY(FIELD, VALUES) COL_WRITE_ARRAY(row, XorinVmCols, FIELD, VALUES)
@@ -25,7 +29,6 @@ __global__ void xorin_tracegen(
     uint32_t *d_range_checker_ptr,
     uint32_t range_checker_num_bins,
     uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits,
     uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits
 ) {
@@ -39,19 +42,19 @@ __global__ void xorin_tracegen(
     if (idx < d_records.len()) {
         auto const &rec = d_records[idx];
 
-        assert((rec.len % XORIN_WORD_SIZE) == 0);
+        assert((rec.len % DEFAULT_BLOCK_SIZE) == 0);
         assert(rec.len <= XORIN_RATE_BYTES);
         assert((uint64_t)rec.buffer + rec.len <= (1ULL << pointer_max_bits));
         assert((uint64_t)rec.input + rec.len <= (1ULL << pointer_max_bits));
         assert(rec.len < (1U << pointer_max_bits));
 
-        MemoryAuxColsFactory mem_helper(
-            VariableRangeChecker(d_range_checker_ptr, range_checker_num_bins), timestamp_max_bits
-        );
-        BitwiseOperationLookup bitwise_lookup(d_bitwise_lookup_ptr, bitwise_num_bits);
+        VariableRangeChecker range_checker(d_range_checker_ptr, range_checker_num_bins);
+        MemoryAuxColsFactory mem_helper(range_checker, timestamp_max_bits);
+        BitwiseOperationLookup bitwise_lookup(d_bitwise_lookup_ptr);
 
         auto record_len = rec.len;
-        auto num_reads = (record_len + XORIN_WORD_SIZE - 1) / XORIN_WORD_SIZE;
+        auto num_reads =
+            (record_len + DEFAULT_BLOCK_SIZE - 1) / DEFAULT_BLOCK_SIZE;
 
         // Fill instruction columns
         XORIN_WRITE(instruction.pc, rec.from_pc);
@@ -64,20 +67,20 @@ __global__ void xorin_tracegen(
         XORIN_WRITE(instruction.len, rec.len);
         XORIN_WRITE(instruction.start_timestamp, rec.timestamp);
 
-        // Fill buffer/input/len limbs
-        XORIN_WRITE_ARRAY(
-            instruction.buffer_ptr_limbs, reinterpret_cast<const uint8_t *>(&rec.buffer)
-        );
-        XORIN_WRITE_ARRAY(
-            instruction.input_ptr_limbs, reinterpret_cast<const uint8_t *>(&rec.input)
-        );
-        XORIN_WRITE_ARRAY(instruction.len_limbs, reinterpret_cast<const uint8_t *>(&rec.len));
+        // Store low-32-bit pointers as u16 cells.
+        uint16_t buffer_ptr_limbs[RV64_PTR_U16_LIMBS];
+        uint16_t input_ptr_limbs[RV64_PTR_U16_LIMBS];
+        ptr_to_u16_limbs(buffer_ptr_limbs, rec.buffer);
+        ptr_to_u16_limbs(input_ptr_limbs, rec.input);
+        XORIN_WRITE_ARRAY(instruction.buffer_ptr_limbs, buffer_ptr_limbs);
+        XORIN_WRITE_ARRAY(instruction.input_ptr_limbs, input_ptr_limbs);
+        XORIN_WRITE(instruction.len_limb, static_cast<uint8_t>(rec.len));
 
         // Fill is_padding_bytes
-        for (auto i = 0u; i < num_reads && i < XORIN_NUM_WORDS; i++) {
+        for (auto i = 0u; i < num_reads && i < KECCAK_RATE_MEM_OPS; i++) {
             XORIN_WRITE(sponge.is_padding_bytes[i], 0);
         }
-        for (auto i = num_reads; i < XORIN_NUM_WORDS; i++) {
+        for (auto i = num_reads; i < KECCAK_RATE_MEM_OPS; i++) {
             XORIN_WRITE(sponge.is_padding_bytes[i], 1);
         }
 
@@ -111,7 +114,7 @@ __global__ void xorin_tracegen(
         }
 
         // Buffer bytes read aux cols
-        for (auto t = 0u; t < num_reads && t < XORIN_NUM_WORDS; t++) {
+        for (auto t = 0u; t < num_reads && t < KECCAK_RATE_MEM_OPS; t++) {
             mem_helper.fill(
                 XORIN_SLICE(mem_oc.buffer_bytes_read_aux_cols[t].base),
                 rec.buffer_read_aux_cols[t].prev_timestamp,
@@ -119,12 +122,12 @@ __global__ void xorin_tracegen(
             );
             timestamp++;
         }
-        for (auto t = num_reads; t < XORIN_NUM_WORDS; t++) {
+        for (auto t = num_reads; t < KECCAK_RATE_MEM_OPS; t++) {
             mem_helper.fill_zero(XORIN_SLICE(mem_oc.buffer_bytes_read_aux_cols[t].base));
         }
 
         // Input bytes read aux cols
-        for (auto t = 0u; t < num_reads && t < XORIN_NUM_WORDS; t++) {
+        for (auto t = 0u; t < num_reads && t < KECCAK_RATE_MEM_OPS; t++) {
             mem_helper.fill(
                 XORIN_SLICE(mem_oc.input_bytes_read_aux_cols[t].base),
                 rec.input_read_aux_cols[t].prev_timestamp,
@@ -132,37 +135,37 @@ __global__ void xorin_tracegen(
             );
             timestamp++;
         }
-        for (auto t = num_reads; t < XORIN_NUM_WORDS; t++) {
+        for (auto t = num_reads; t < KECCAK_RATE_MEM_OPS; t++) {
             mem_helper.fill_zero(XORIN_SLICE(mem_oc.input_bytes_read_aux_cols[t].base));
         }
 
         // Buffer bytes write aux cols
-        for (auto t = 0u; t < num_reads && t < XORIN_NUM_WORDS; t++) {
+        for (auto t = 0u; t < num_reads && t < KECCAK_RATE_MEM_OPS; t++) {
             mem_helper.fill(
                 XORIN_SLICE(mem_oc.buffer_bytes_write_aux_cols[t].base),
                 rec.buffer_write_aux_cols[t].prev_timestamp,
                 timestamp
             );
+            Fp packed_prev[BLOCK_FE_WIDTH];
+            pack_u8_block_bytes(packed_prev, rec.buffer_write_aux_cols[t].prev_data);
             XORIN_WRITE_ARRAY(
                 mem_oc.buffer_bytes_write_aux_cols[t].prev_data,
-                rec.buffer_write_aux_cols[t].prev_data
+                packed_prev
             );
             timestamp++;
         }
-        for (auto t = num_reads; t < XORIN_NUM_WORDS; t++) {
+        for (auto t = num_reads; t < KECCAK_RATE_MEM_OPS; t++) {
             XORIN_FILL_ZERO(mem_oc.buffer_bytes_write_aux_cols[t]);
         }
 
-        // Range check for pointer bounds
-        constexpr uint32_t MSL_RSHIFT = RV32_CELL_BITS * (RV32_REGISTER_NUM_LIMBS - 1);
-        constexpr uint32_t RV32_TOTAL_BITS = RV32_CELL_BITS * RV32_REGISTER_NUM_LIMBS;
-        bitwise_lookup.add_range(
-            (rec.buffer >> MSL_RSHIFT) << (RV32_TOTAL_BITS - pointer_max_bits),
-            (rec.input >> MSL_RSHIFT) << (RV32_TOTAL_BITS - pointer_max_bits)
+        // Bound the high u16 cells so the low-32-bit pointers fit in pointer_max_bits.
+        range_checker.add_count(
+            ptr_bound_from_high_u16(buffer_ptr_limbs[RV64_PTR_U16_LIMBS - 1], pointer_max_bits),
+            U16_BITS
         );
-        bitwise_lookup.add_range(
-            (rec.len >> MSL_RSHIFT) << (RV32_TOTAL_BITS - pointer_max_bits),
-            (rec.len >> MSL_RSHIFT) << (RV32_TOTAL_BITS - pointer_max_bits)
+        range_checker.add_count(
+            ptr_bound_from_high_u16(input_ptr_limbs[RV64_PTR_U16_LIMBS - 1], pointer_max_bits),
+            U16_BITS
         );
 
     } else {
@@ -179,13 +182,10 @@ extern "C" int _xorin_tracegen(
     uint32_t *d_range_checker_ptr,
     uint32_t range_checker_num_bins,
     uint32_t *d_bitwise_lookup_ptr,
-    size_t bitwise_num_bits,
     uint32_t pointer_max_bits,
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
-    assert((height & (height - 1)) == 0);
-    assert(height >= d_records.len());
     assert(width == sizeof(XorinVmCols<uint8_t>));
 
     auto [grid, block] = kernel_launch_params(height, 512);
@@ -197,7 +197,6 @@ extern "C" int _xorin_tracegen(
         d_range_checker_ptr,
         range_checker_num_bins,
         d_bitwise_lookup_ptr,
-        bitwise_num_bits,
         pointer_max_bits,
         timestamp_max_bits
     );

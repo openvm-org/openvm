@@ -2,11 +2,11 @@ use std::{fs::read_dir, path::PathBuf};
 
 use eyre::Result;
 use openvm_circuit::arch::{instructions::exe::VmExe, VmExecutor};
-#[cfg(feature = "aot")]
+#[cfg(any(feature = "aot", feature = "rvr"))]
 use openvm_circuit::arch::{testing::assert_vm_states_equivalent, SystemConfig};
-use openvm_rv32im_circuit::Rv32ImConfig;
-use openvm_rv32im_transpiler::{
-    Rv32ITranspilerExtension, Rv32IoTranspilerExtension, Rv32MTranspilerExtension,
+use openvm_riscv_circuit::Rv64ImConfig;
+use openvm_riscv_transpiler::{
+    Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
 };
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 use openvm_toolchain_tests::decode_elf;
@@ -16,10 +16,10 @@ type F = BabyBear;
 
 #[test]
 #[ignore = "must run makefile"]
-fn test_rv32im_riscv_vector_runtime() -> Result<()> {
-    let skip_list = ["rv32ui-p-ma_data", "rv32ui-p-fence_i"];
-    let config = Rv32ImConfig::default();
-    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("rv32im-test-vectors/tests");
+fn test_rv64im_riscv_vector_runtime() -> Result<()> {
+    let skip_list = ["rv64ui-p-ma_data", "rv64ui-p-fence_i"];
+    let config = Rv64ImConfig::default();
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("riscv-test-vectors/tests");
     for entry in read_dir(dir)? {
         let entry = entry?;
         let path = entry.path();
@@ -34,19 +34,19 @@ fn test_rv32im_riscv_vector_runtime() -> Result<()> {
                 let exe = VmExe::from_elf(
                     elf,
                     Transpiler::<F>::default()
-                        .with_extension(Rv32ITranspilerExtension)
-                        .with_extension(Rv32MTranspilerExtension)
-                        .with_extension(Rv32IoTranspilerExtension),
+                        .with_extension(Rv64ITranspilerExtension)
+                        .with_extension(Rv64MTranspilerExtension)
+                        .with_extension(Rv64IoTranspilerExtension),
                 )?;
                 let executor = VmExecutor::new(config.clone())?;
-                let interpreter = executor.instance(&exe)?;
+                let instance = executor.instance(&exe)?;
                 #[allow(unused_variables)]
-                let state = interpreter.execute(vec![], None)?;
+                let state = instance.execute(vec![], None)?;
 
-                #[cfg(feature = "aot")]
+                #[cfg(any(feature = "aot", feature = "rvr"))]
                 {
-                    let naive_interpreter = executor.interpreter_instance(&exe)?;
-                    let naive_state = naive_interpreter.execute(vec![], None)?;
+                    let interpreter_instance = executor.interpreter_instance(&exe)?;
+                    let naive_state = interpreter_instance.execute(vec![], None)?;
                     let system_config: &SystemConfig = config.as_ref();
                     assert_vm_states_equivalent(
                         &state,
@@ -72,13 +72,13 @@ fn test_rv32im_riscv_vector_runtime() -> Result<()> {
 // Running Prove tests only when CUDA is enabled because it is slow on CPU
 #[test]
 #[ignore = "long prover tests"]
-fn test_rv32im_riscv_vector_prove() -> Result<()> {
+fn test_rv64im_riscv_vector_prove() -> Result<()> {
     use openvm_circuit::utils::air_test;
-    use openvm_rv32im_circuit::Rv32ImBuilder;
+    use openvm_riscv_circuit::Rv64ImBuilder;
 
-    let config = Rv32ImConfig::default();
-    let skip_list = ["rv32ui-p-ma_data", "rv32ui-p-fence_i"];
-    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("rv32im-test-vectors/tests");
+    let config = Rv64ImConfig::default();
+    let skip_list = ["rv64ui-p-ma_data", "rv64ui-p-fence_i"];
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("riscv-test-vectors/tests");
     for entry in read_dir(dir)? {
         let entry = entry?;
         let path = entry.path();
@@ -92,13 +92,13 @@ fn test_rv32im_riscv_vector_prove() -> Result<()> {
             let exe = VmExe::from_elf(
                 elf,
                 Transpiler::<F>::default()
-                    .with_extension(Rv32ITranspilerExtension)
-                    .with_extension(Rv32MTranspilerExtension)
-                    .with_extension(Rv32IoTranspilerExtension),
+                    .with_extension(Rv64ITranspilerExtension)
+                    .with_extension(Rv64MTranspilerExtension)
+                    .with_extension(Rv64IoTranspilerExtension),
             )?;
 
             let result = std::panic::catch_unwind(|| {
-                air_test(Rv32ImBuilder, config.clone(), exe);
+                air_test(Rv64ImBuilder, config.clone(), exe);
             });
 
             match result {

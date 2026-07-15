@@ -18,6 +18,12 @@ openvm-circuit-primitives = { workspace = true }
 openvm-circuit-primitives-derive = { workspace = true }
 openvm-circuit-derive = { workspace = true }
 openvm-instructions = { workspace = true }
+openvm-platform = { workspace = true, optional = true }
+rvr-openvm-ext-ffi-common = { workspace = true, optional = true }
+rvr-openvm-ir = { workspace = true, optional = true }
+rvr-state = { workspace = true, optional = true }
+rvr-openvm = { workspace = true, optional = true }
+rvr-openvm-lift = { workspace = true, optional = true }
 
 openvm-stark-backend = { workspace = true }
 openvm-stark-sdk = { workspace = true, optional = true, features = ["cpu-backend"] }
@@ -43,7 +49,6 @@ dashmap.workspace = true
 cfg-if.workspace = true
 libloading = { workspace = true, optional = true }
 tempfile = { workspace = true, optional = true }
-abi_stable.workspace = true
 bytesize.workspace = true
 
 [build-dependencies]
@@ -59,7 +64,7 @@ test-case.workspace = true
 
 openvm-stark-backend = { workspace = true, features = ["test-utils"] }
 openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
-openvm-circuit = { path = ".", default-features = false, features = ["test-utils"] }
+openvm-circuit = { workspace = true, features = ["test-utils"] }
 
 [features]
 default = ["parallel", "jemalloc"]
@@ -75,6 +80,7 @@ metrics = [
     "openvm-stark-backend/metrics",
     "openvm-stark-sdk?/metrics",
 ]
+profiling = []
 # turns on more invasive profiling for fine-grained guest metrics
 perf-metrics = ["metrics"]
 # use basic memory instead of mmap:
@@ -91,8 +97,20 @@ aot = [
     "openvm-circuit-derive/aot",
     "dep:tempfile",
 ]
+# rvr execution backend
+rvr = [
+    "dep:rvr-openvm",
+    "dep:rvr-openvm-lift",
+    "dep:rvr-openvm-ext-ffi-common",
+    "dep:rvr-openvm-ir",
+    "dep:rvr-state",
+    "dep:openvm-platform",
+    "dep:libloading",
+    "dep:tempfile",
+    "openvm-circuit-derive/rvr",
+]
 # Disable bounds checking in memory operations for performance
-unprotected = []
+unprotected = ["rvr-openvm/unprotected"]
 # performance features:
 mimalloc = ["openvm-stark-backend/mimalloc"]
 jemalloc = ["openvm-stark-backend/jemalloc"]

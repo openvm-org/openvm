@@ -1,11 +1,11 @@
-use getset::{Getters, Setters, WithSetters};
 use itertools::Itertools;
-use openvm_instructions::riscv::{RV32_IMM_AS, RV32_REGISTER_AS};
+use openvm_instructions::riscv::{RV64_IMM_AS, RV64_REGISTER_AS};
 use openvm_stark_backend::memory_metering::ProvingMemoryConfig;
+use serde::{Deserialize, Serialize};
 
 use super::{
     memory_ctx::MemoryCtx,
-    segment_ctx::{Segment, SegmentationCtx, SegmentationLimits},
+    segment_ctx::{Segment, SegmentationConfig, SegmentationCtx, SegmentationLimits},
 };
 use crate::{
     arch::{
@@ -15,16 +15,21 @@ use crate::{
     system::memory::online::GuestMemory,
 };
 
-pub const DEFAULT_PAGE_BITS: usize = 6;
-
-#[derive(Clone, Debug, Getters, Setters, WithSetters)]
-pub struct MeteredCtx<const PAGE_BITS: usize = DEFAULT_PAGE_BITS> {
-    pub trace_heights: Vec<u32>,
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct MeteredCtxConfig {
+    pub initial_trace_heights: Vec<u32>,
     pub is_trace_height_constant: Vec<bool>,
-    pub memory_ctx: MemoryCtx<PAGE_BITS>,
+    // TODO: Remove this once segmented execution is selected by typed executor entry points across
+    // all backends. RVR already treats the compiled suspender policy as the source of truth.
+    pub suspend_on_segment: bool,
+}
+
+#[derive(Clone, Debug)]
+pub struct MeteredCtx {
+    pub config: MeteredCtxConfig,
+    pub trace_heights: Vec<u32>,
+    pub memory_ctx: MemoryCtx,
     pub segmentation_ctx: SegmentationCtx,
-    #[getset(get = "pub", set = "pub", set_with = "pub")]
-    suspend_on_segment: bool,
 }
 
 pub struct MeteredCtxInputs<'a> {
@@ -36,7 +41,7 @@ pub struct MeteredCtxInputs<'a> {
     pub segmentation_limits: SegmentationLimits,
 }
 
-impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
+impl MeteredCtx {
     // Note: prefer to use `build_metered_ctx` in `VmExecutor` or `VirtualMachine`.
     pub fn new(
         inputs: MeteredCtxInputs<'_>,
@@ -78,17 +83,19 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
             air_names[MERKLE_AIR_ID]
         );
         let mut ctx = Self {
+            config: MeteredCtxConfig {
+                initial_trace_heights: trace_heights.clone(),
+                is_trace_height_constant,
+                suspend_on_segment: false,
+            },
             trace_heights,
-            is_trace_height_constant,
             memory_ctx,
             segmentation_ctx,
-            suspend_on_segment: false,
         };
 
         // Add merkle height contributions for all registers
         ctx.memory_ctx.add_register_merkle_heights();
-        ctx.memory_ctx
-            .lazy_update_boundary_heights(&mut ctx.trace_heights);
+        ctx.memory_ctx.apply_height_updates(&mut ctx.trace_heights);
 
         ctx
     }
@@ -96,6 +103,52 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
     pub fn with_max_memory(mut self, max_memory: usize) -> Self {
         self.segmentation_ctx.set_max_memory(max_memory);
         self
+    }
+
+    pub fn set_cache_rs_code_matrix(&mut self, cache_rs_code_matrix: bool) {
+        self.segmentation_ctx
+            .set_cache_rs_code_matrix(cache_rs_code_matrix);
+    }
+
+    pub fn with_cache_rs_code_matrix(mut self, cache_rs_code_matrix: bool) -> Self {
+        self.set_cache_rs_code_matrix(cache_rs_code_matrix);
+        self
+    }
+
+    #[inline(always)]
+    pub fn cache_rs_code_matrix(&self) -> bool {
+        self.segmentation_ctx.cache_rs_code_matrix()
+    }
+
+    pub fn from_config(
+        config: MeteredCtxConfig,
+        segmentation_config: SegmentationConfig,
+        system_config: &SystemConfig,
+    ) -> Self {
+        let segmentation_ctx = SegmentationCtx::from_config(segmentation_config);
+        let mut memory_ctx = MemoryCtx::new(system_config, segmentation_ctx.segment_check_insns());
+        let mut trace_heights = config.initial_trace_heights.clone();
+        memory_ctx.add_register_merkle_heights();
+        memory_ctx.apply_height_updates(&mut trace_heights);
+        Self {
+            trace_heights,
+            config,
+            memory_ctx,
+            segmentation_ctx,
+        }
+    }
+
+    pub fn set_suspend_on_segment(&mut self, suspend_on_segment: bool) {
+        self.config.suspend_on_segment = suspend_on_segment;
+    }
+
+    pub fn with_suspend_on_segment(mut self, suspend_on_segment: bool) -> Self {
+        self.set_suspend_on_segment(suspend_on_segment);
+        self
+    }
+
+    pub fn suspend_on_segment(&self) -> &bool {
+        &self.config.suspend_on_segment
     }
 
     pub fn segments(&self) -> &[Segment] {
@@ -118,41 +171,27 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
         self.segmentation_ctx.instret += segment_check_insns;
 
         self.memory_ctx
-            .lazy_update_boundary_heights(&mut self.trace_heights);
+            .apply_height_updates(&mut self.trace_heights);
         let did_segment = self.segmentation_ctx.check_and_segment(
             self.segmentation_ctx.instret,
             &mut self.trace_heights,
-            &self.is_trace_height_constant,
+            &self.config.is_trace_height_constant,
         );
 
         if did_segment {
             // Initialize contexts for new segment
-            self.segmentation_ctx
-                .initialize_segment(&mut self.trace_heights, &self.is_trace_height_constant);
+            self.segmentation_ctx.initialize_segment(
+                &mut self.trace_heights,
+                &self.config.is_trace_height_constant,
+            );
             self.memory_ctx.initialize_segment(&mut self.trace_heights);
 
             // Check if the new segment is within limits
-            if self.segmentation_ctx.should_segment(
+            self.segmentation_ctx.warn_if_exceeds_limits(
                 self.segmentation_ctx.instret,
                 &self.trace_heights,
-                &self.is_trace_height_constant,
-            ) {
-                let trace_heights_str = self
-                    .trace_heights
-                    .iter()
-                    .zip(self.segmentation_ctx.air_names().iter())
-                    .filter(|(&height, _)| height > 0)
-                    .map(|(&height, name)| format!("  {name} = {height}"))
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                tracing::warn!(
-                    "Segment initialized with heights that exceed limits\n\
-                     instret={}\n\
-                     trace_heights=[\n{}\n]",
-                    self.segmentation_ctx.instret,
-                    trace_heights_str
-                );
-            }
+                &self.config.is_trace_height_constant,
+            );
         }
 
         // Update checkpoints
@@ -182,11 +221,11 @@ impl<const PAGE_BITS: usize> MeteredCtx<PAGE_BITS> {
     }
 }
 
-impl<const PAGE_BITS: usize> ExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
+impl ExecutionCtxTrait for MeteredCtx {
     #[inline(always)]
     fn on_memory_operation(&mut self, address_space: u32, ptr: u32, size: u32) {
         debug_assert!(
-            address_space != RV32_IMM_AS,
+            address_space != RV64_IMM_AS,
             "address space must not be immediate"
         );
         debug_assert!(size > 0, "size must be greater than 0, got {size}");
@@ -196,7 +235,7 @@ impl<const PAGE_BITS: usize> ExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
         );
 
         // Handle merkle tree updates
-        if address_space != RV32_REGISTER_AS {
+        if address_space != RV64_REGISTER_AS {
             self.memory_ctx
                 .update_boundary_merkle_heights(address_space, ptr, size);
         }
@@ -209,7 +248,11 @@ impl<const PAGE_BITS: usize> ExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
         // If `segment_suspend` is set, suspend when a segment is determined (but the VM state might
         // be after the segment boundary because the segment happens in the previous checkpoint).
         // Otherwise, execute until termination.
-        if exec_state.ctx.check_and_segment() && exec_state.ctx.suspend_on_segment {
+        if exec_state.ctx.segmentation_ctx.instrets_until_check > 0 {
+            exec_state.ctx.segmentation_ctx.instrets_until_check -= 1;
+            return false;
+        }
+        if exec_state.ctx.check_and_segment() && exec_state.ctx.config.suspend_on_segment {
             true
         } else {
             exec_state.ctx.segmentation_ctx.instrets_until_check -= 1;
@@ -222,7 +265,7 @@ impl<const PAGE_BITS: usize> ExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
         exec_state
             .ctx
             .memory_ctx
-            .lazy_update_boundary_heights(&mut exec_state.ctx.trace_heights);
+            .apply_height_updates(&mut exec_state.ctx.trace_heights);
         exec_state
             .ctx
             .segmentation_ctx
@@ -230,7 +273,7 @@ impl<const PAGE_BITS: usize> ExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
     }
 }
 
-impl<const PAGE_BITS: usize> MeteredExecutionCtxTrait for MeteredCtx<PAGE_BITS> {
+impl MeteredExecutionCtxTrait for MeteredCtx {
     #[inline(always)]
     fn on_height_change(&mut self, chip_idx: usize, height_delta: u32) {
         debug_assert!(

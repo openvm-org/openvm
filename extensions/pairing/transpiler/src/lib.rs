@@ -1,10 +1,10 @@
+use openvm_decoder::instruction_formats::RType;
 use openvm_instructions::{
-    instruction::Instruction, riscv::RV32_REGISTER_NUM_LIMBS, PhantomDiscriminant,
+    instruction::Instruction, riscv::RV64_REGISTER_NUM_LIMBS, PhantomDiscriminant,
 };
 use openvm_pairing_guest::{PairingBaseFunct7, OPCODE, PAIRING_FUNCT3};
 use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_transpiler::{TranspilerExtension, TranspilerOutput};
-use rrs_lib::instruction_formats::RType;
 use strum::FromRepr;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, FromRepr)]
@@ -44,8 +44,8 @@ impl<F: PrimeField32> TranspilerExtension<F> for PairingTranspilerExtension {
             // Return exits the outermost function
             return Some(TranspilerOutput::one_to_one(Instruction::phantom(
                 PhantomDiscriminant(PairingPhantom::HintFinalExp as u16),
-                F::from_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs1),
-                F::from_usize(RV32_REGISTER_NUM_LIMBS * dec_insn.rs2),
+                F::from_usize(RV64_REGISTER_NUM_LIMBS * dec_insn.rs1),
+                F::from_usize(RV64_REGISTER_NUM_LIMBS * dec_insn.rs2),
                 pairing_idx as u16,
             )));
         }

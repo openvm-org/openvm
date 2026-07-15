@@ -1,19 +1,24 @@
 use std::{
     fs::File,
     io::{self, Write},
+    mem::size_of,
     path::Path,
 };
 
 use derive_new::new;
 use getset::{Setters, WithSetters};
 use openvm_instructions::{
-    riscv::{RV32_IMM_AS, RV32_MEMORY_AS, RV32_REGISTER_AS},
+    riscv::{RV64_IMM_AS, RV64_MEMORY_AS, RV64_REGISTER_AS},
     DEFERRAL_AS,
 };
 use openvm_poseidon2_air::Poseidon2Config;
+#[cfg(feature = "rvr")]
+use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_stark_backend::{
     p3_field::Field, EngineDeviceCtx, StarkEngine, StarkProtocolConfig, Val,
 };
+#[cfg(feature = "rvr")]
+use rvr_openvm_lift::ExtensionRegistry;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use super::{AnyEnum, VmChipComplex, BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, PROGRAM_AIR_ID};
@@ -23,7 +28,12 @@ use crate::{
         Arena, ChipInventoryError, ExecutorInventory, ExecutorInventoryError,
     },
     system::{
-        memory::{merkle::public_values::PUBLIC_VALUES_AS, num_memory_airs, POINTER_MAX_BITS},
+        memory::{
+            merkle::public_values::{
+                assert_public_values_shape, public_values_cells_from_bytes, PUBLIC_VALUES_AS,
+            },
+            num_memory_airs, DIGEST_WIDTH, POINTER_MAX_BITS,
+        },
         SystemChipComplex,
     },
 };
@@ -42,6 +52,56 @@ pub const ADDR_SPACE_OFFSET: u32 = 1;
 fn default_segmentation_max_memory() -> usize {
     DEFAULT_MAX_MEMORY
 }
+
+pub const OPENVM_DEFAULT_INIT_FILE_BASENAME: &str = "openvm_init";
+pub const OPENVM_DEFAULT_INIT_FILE_NAME: &str = "openvm_init.rs";
+
+// Memory-layout constants. Mirror the CUDA-side constants in
+// `crates/vm/cuda/include/system/memory/params.cuh` (which also contains the
+// byte/cell/block/leaf layout diagram).
+//
+// Terminology:
+//   Cell    one storage word in an address space.
+//   Block   the unit of one memory-bus message: BLOCK_FE_WIDTH cells =
+//           MEMORY_BLOCK_BYTES bytes.
+//   Digest  the output of one Poseidon2 compression (DIGEST_WIDTH cells); also
+//           one merkle leaf.
+
+/// Host byte width of one u16-celled storage cell.
+pub const U16_CELL_SIZE: usize = size_of::<u16>();
+
+// TODO: replace with `p3_util::log2_strict_usize` once p3-util is bumped to
+// >= 0.4.3 (where it becomes `const fn`).
+pub(crate) const fn const_log2_strict_usize(value: usize) -> usize {
+    assert!(value.is_power_of_two(), "value must be a power of two");
+    value.ilog2() as usize
+}
+
+/// log2 of [`U16_CELL_SIZE`].
+pub const U16_CELL_SIZE_BITS: usize = const_log2_strict_usize(U16_CELL_SIZE);
+
+/// Converts pointer bits for a u16-celled address space to byte-pointer bits.
+pub const fn to_byte_ptr_bits(ptr_bits: usize) -> usize {
+    ptr_bits + U16_CELL_SIZE_BITS
+}
+
+/// Cells per memory-bus block.
+pub const BLOCK_FE_WIDTH: usize = 4;
+
+/// Bytes per memory-bus block.
+pub const MEMORY_BLOCK_BYTES: usize = BLOCK_FE_WIDTH * U16_CELL_SIZE;
+
+/// Default byte-pointer bit width.
+pub const BYTE_POINTER_MAX_BITS: usize = to_byte_ptr_bits(POINTER_MAX_BITS);
+
+/// Byte count for `RV64_MEMORY_AS`.
+// TODO: make executor debug bounds use `MemoryConfig::pointer_max_bits` once
+// execution state carries the memory config.
+pub const RV64_MEMORY_BYTES: usize = 1 << BYTE_POINTER_MAX_BITS;
+
+/// Number of registers in the RV64 register file.
+pub const NUM_RV64_REGISTERS: usize = 32;
+
 /// Returns a Poseidon2 config for the VM.
 pub fn vm_poseidon2_config<F: Field>() -> Poseidon2Config<F> {
     Poseidon2Config::default()
@@ -77,6 +137,11 @@ pub trait VmExecutionConfig<F> {
 
     fn create_executors(&self)
         -> Result<ExecutorInventory<Self::Executor>, ExecutorInventoryError>;
+
+    #[cfg(feature = "rvr")]
+    fn create_rvr_extensions(&self, air_idx: Option<&[usize]>) -> ExtensionRegistry<F>
+    where
+        F: PrimeField32;
 }
 
 pub trait VmCircuitConfig<SC: StarkProtocolConfig> {
@@ -118,12 +183,6 @@ where
 {
 }
 
-pub const OPENVM_DEFAULT_INIT_FILE_BASENAME: &str = "openvm_init";
-pub const OPENVM_DEFAULT_INIT_FILE_NAME: &str = "openvm_init.rs";
-/// Default block size for memory bus interactions. RISC-V byte/halfword loads (`lb`/`lh`) need
-/// fewer bytes, but the adapter always reads a full 4-byte block from memory.
-pub const DEFAULT_BLOCK_SIZE: usize = 4;
-
 /// Trait for generating a init.rs file that contains a call to moduli_init!,
 /// complex_init!, sw_init! with the supported moduli and curves.
 /// Should be implemented by all VM config structs.
@@ -163,8 +222,7 @@ pub trait AddressSpaceHostLayout {
 
     /// # Safety
     /// - This function must only be called when `value` is guaranteed to be of size `self.size()`.
-    /// - Alignment of `value` must be a multiple of the alignment of `F`.
-    /// - The field type `F` must be plain old data.
+    /// - For `F`-cell layouts, `value` must be aligned for `F` and contain a valid `F`.
     unsafe fn to_field<F: Field>(&self, value: &[u8]) -> F;
 }
 
@@ -177,6 +235,7 @@ pub struct MemoryConfig {
     /// It is expected that the size of the list is `(1 << addr_space_height) + 1` and the first
     /// element is 0, which means no address space.
     pub addr_spaces: Vec<AddressSpaceHostConfig>,
+    /// Maximum bit width of AS-native OpenVM memory pointers.
     pub pointer_max_bits: usize,
     /// All timestamps must be in the range `[0, 2^timestamp_max_bits)`. Maximum allowed: 29.
     pub timestamp_max_bits: usize,
@@ -188,9 +247,10 @@ impl Default for MemoryConfig {
     fn default() -> Self {
         let mut addr_spaces =
             Self::empty_address_space_configs((1 << 3) + ADDR_SPACE_OFFSET as usize);
-        const MAX_CELLS: usize = 1 << 29;
-        addr_spaces[RV32_REGISTER_AS as usize].num_cells = 32 * size_of::<u32>();
-        addr_spaces[RV32_MEMORY_AS as usize].num_cells = MAX_CELLS;
+        // RV64 register, memory, and public-values address spaces use u16 storage cells.
+        addr_spaces[RV64_REGISTER_AS as usize].num_cells =
+            NUM_RV64_REGISTERS * size_of::<u64>() / U16_CELL_SIZE;
+        addr_spaces[RV64_MEMORY_AS as usize].num_cells = RV64_MEMORY_BYTES / U16_CELL_SIZE;
         addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = DEFAULT_MAX_NUM_PUBLIC_VALUES;
         addr_spaces[DEFERRAL_AS as usize].num_cells = DEFAULT_DEFERRAL_ADDR_SPACE_CELLS;
         Self::new(3, addr_spaces, POINTER_MAX_BITS, 29, 17)
@@ -202,21 +262,23 @@ impl MemoryConfig {
         // By default only address spaces 1..=4 have non-empty cell counts.
         let mut addr_spaces =
             vec![AddressSpaceHostConfig::new(0, MemoryCellType::field32()); num_addr_spaces];
-        addr_spaces[RV32_IMM_AS as usize] = AddressSpaceHostConfig::new(0, MemoryCellType::Null);
-        addr_spaces[RV32_REGISTER_AS as usize] = AddressSpaceHostConfig::new(0, MemoryCellType::U8);
+        addr_spaces[RV64_IMM_AS as usize] = AddressSpaceHostConfig::new(0, MemoryCellType::Null);
+        addr_spaces[RV64_REGISTER_AS as usize] =
+            AddressSpaceHostConfig::new(0, MemoryCellType::U16);
 
-        addr_spaces[RV32_MEMORY_AS as usize] = AddressSpaceHostConfig::new(0, MemoryCellType::U8);
+        addr_spaces[RV64_MEMORY_AS as usize] = AddressSpaceHostConfig::new(0, MemoryCellType::U16);
 
-        addr_spaces[PUBLIC_VALUES_AS as usize] = AddressSpaceHostConfig::new(0, MemoryCellType::U8);
+        addr_spaces[PUBLIC_VALUES_AS as usize] =
+            AddressSpaceHostConfig::new(0, MemoryCellType::U16);
 
         addr_spaces
     }
 
-    /// Config for aggregation usage with only native address space.
+    /// Config for aggregation usage with only deferral address space.
     pub fn aggregation() -> Self {
         let mut addr_spaces =
             Self::empty_address_space_configs((1 << 3) + ADDR_SPACE_OFFSET as usize);
-        addr_spaces[openvm_instructions::DEFERRAL_AS as usize].num_cells = 1 << 29;
+        addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 28;
         Self::new(3, addr_spaces, POINTER_MAX_BITS, 29, 17)
     }
 }
@@ -230,8 +292,7 @@ pub struct SystemConfig {
     pub max_constraint_degree: usize,
     /// Memory configuration
     pub memory_config: MemoryConfig,
-    /// Public values are stored in a special address space.
-    /// `num_public_values` indicates the number of allowed addresses in that address space.
+    /// Number of cells in the user public-values address space.
     pub num_public_values: usize,
     /// Max memory in bytes used across all chips for triggering segmentation.
     /// This field is skipped in serde as it's only used in execution and
@@ -251,6 +312,7 @@ impl SystemConfig {
             memory_config.timestamp_max_bits <= 29,
             "Timestamp max bits must be <= 29 for LessThan to work in 31-bit field"
         );
+        assert_public_values_shape::<DIGEST_WIDTH>(num_public_values);
         memory_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = num_public_values;
         Self {
             max_constraint_degree,
@@ -269,9 +331,14 @@ impl SystemConfig {
     }
 
     pub fn with_public_values(mut self, num_public_values: usize) -> Self {
+        assert_public_values_shape::<DIGEST_WIDTH>(num_public_values);
         self.num_public_values = num_public_values;
         self.memory_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = num_public_values;
         self
+    }
+
+    pub fn with_public_values_bytes(self, num_public_values_bytes: usize) -> Self {
+        self.with_public_values(public_values_cells_from_bytes(num_public_values_bytes))
     }
 
     /// Returns the AIR ID of the memory boundary AIR. Panic if the boundary AIR is not enabled.
@@ -339,8 +406,10 @@ impl AddressSpaceHostConfig {
 pub enum MemoryCellType {
     Null,
     U8,
+    /// U16 cells are stored as two little-endian bytes in linear byte storage:
+    /// cell `k` is decoded from `bytes[2 * k]` and `bytes[2 * k + 1]`.
     U16,
-    /// Represented in little-endian format.
+    /// U32 cells are stored as four little-endian bytes in linear byte storage.
     U32,
     /// `size` is the size in bytes of the native field type. This should not exceed 8.
     F {
@@ -369,8 +438,7 @@ impl AddressSpaceHostLayout for MemoryCellType {
 
     /// # Safety
     /// - This function must only be called when `value` is guaranteed to be of size `self.size()`.
-    /// - Alignment of `value` must be a multiple of the alignment of `F`.
-    /// - The field type `F` must be plain old data.
+    /// - For `F` cells, `value` must be aligned for `F` and contain a valid `F`.
     ///
     /// # Panics
     /// If the value is of integer type and overflows the field.
@@ -378,8 +446,16 @@ impl AddressSpaceHostLayout for MemoryCellType {
         match self {
             Self::Null => unreachable!(),
             Self::U8 => F::from_u8(*value.get_unchecked(0)),
-            Self::U16 => F::from_u16(core::ptr::read(value.as_ptr() as *const u16)),
-            Self::U32 => F::from_u32(core::ptr::read(value.as_ptr() as *const u32)),
+            Self::U16 => F::from_u16(u16::from_le_bytes([
+                *value.get_unchecked(0),
+                *value.get_unchecked(1),
+            ])),
+            Self::U32 => F::from_u32(u32::from_le_bytes([
+                *value.get_unchecked(0),
+                *value.get_unchecked(1),
+                *value.get_unchecked(2),
+                *value.get_unchecked(3),
+            ])),
             Self::F { .. } => core::ptr::read(value.as_ptr() as *const F),
         }
     }

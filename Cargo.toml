@@ -12,6 +12,7 @@ members = [
   "benchmarks/utils",
   "benchmarks/execute",
   "benchmarks/prove",
+  "crates/toolchain/decoder",
   "crates/prof",
   "crates/cli",
   "crates/sdk",
@@ -32,17 +33,18 @@ members = [
   "crates/recursion",
   "crates/verify",
   "crates/vm",
-  "extensions/rv32im/circuit",
-  "extensions/rv32im/transpiler",
-  "extensions/rv32im/guest",
-  "extensions/rv32im/tests",
-  "extensions/rv32-adapters",
+  "extensions/riscv/circuit",
+  "extensions/riscv/transpiler",
+  "extensions/riscv/guest",
+  "extensions/riscv/tests",
+  "extensions/riscv-adapters",
   "extensions/algebra/circuit",
   "extensions/algebra/transpiler",
   "extensions/algebra/guest",
   "extensions/algebra/moduli-macros",
   "extensions/algebra/complex-macros",
   "extensions/algebra/tests",
+  "extensions/algebra/utils",
   "extensions/bigint/circuit",
   "extensions/bigint/transpiler",
   "extensions/bigint/guest",
@@ -73,6 +75,30 @@ members = [
   "guest-libs/verify-stark/guest",
   "crates/static-verifier",
   "scripts",
+
+  # rvr
+  "crates/rvr/rvr-state",
+  "crates/rvr/rvr-openvm-build",
+  "crates/rvr/rvr-openvm",
+  "crates/rvr/rvr-openvm-ir",
+  "crates/rvr/rvr-openvm-lift",
+  "crates/rvr/rvr-openvm-ffi-common",
+  "extensions/riscv/rvr",
+  "extensions/keccak256/rvr",
+  "extensions/keccak256/rvr/ffi",
+  "extensions/sha2/rvr",
+  "extensions/sha2/rvr/ffi",
+  "extensions/bigint/rvr",
+  "extensions/bigint/rvr/ffi",
+  "extensions/algebra/rvr",
+  "extensions/algebra/rvr/ffi/common",
+  "extensions/algebra/rvr/ffi/modular",
+  "extensions/algebra/rvr/ffi/fp2",
+  "extensions/ecc/rvr",
+  "extensions/ecc/rvr/ffi",
+  "extensions/pairing/rvr",
+  "extensions/pairing/rvr/ffi",
+  "extensions/deferral/rvr",
 ]
 exclude = ["crates/sdk/example", "benchmarks/guest/**"]
 resolver = "2"
@@ -124,6 +150,7 @@ openvm-cuda-builder = { version = "2.0.0", git = "https://github.com/openvm-org/
 openvm-cuda-common = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", tag = "v2.0.0", default-features = false }
 
 # OpenVM
+openvm-decoder = { version = "2.0.0", path = "crates/toolchain/decoder", default-features = false }
 openvm-mod-circuit-builder = { version = "2.0.0", path = "crates/circuits/mod-builder", default-features = false }
 openvm-poseidon2-air = { version = "2.0.0", path = "crates/circuits/poseidon2-air", default-features = false }
 openvm-sha2-air = { version = "2.0.0", path = "crates/circuits/sha2-air", default-features = false }
@@ -150,10 +177,10 @@ openvm-sdk-config = { version = "2.0.0", path = "crates/sdk-config", default-fea
 cargo-openvm = { version = "2.0.0", path = "crates/cli", default-features = false }
 
 # Extensions
-openvm-rv32im-circuit = { version = "2.0.0", path = "extensions/rv32im/circuit", default-features = false }
-openvm-rv32im-transpiler = { version = "2.0.0", path = "extensions/rv32im/transpiler", default-features = false }
-openvm-rv32im-guest = { version = "2.0.0", path = "extensions/rv32im/guest", default-features = false }
-openvm-rv32-adapters = { version = "2.0.0", path = "extensions/rv32-adapters", default-features = false }
+openvm-riscv-circuit = { version = "2.0.0", path = "extensions/riscv/circuit", default-features = false }
+openvm-riscv-transpiler = { version = "2.0.0", path = "extensions/riscv/transpiler", default-features = false }
+openvm-riscv-guest = { version = "2.0.0", path = "extensions/riscv/guest", default-features = false }
+openvm-riscv-adapters = { version = "2.0.0", path = "extensions/riscv-adapters", default-features = false }
 openvm-keccak256-circuit = { version = "2.0.0", path = "extensions/keccak256/circuit", default-features = false }
 openvm-keccak256-transpiler = { version = "2.0.0", path = "extensions/keccak256/transpiler", default-features = false }
 openvm-keccak256-guest = { version = "2.0.0", path = "extensions/keccak256/guest", default-features = false }
@@ -168,6 +195,7 @@ openvm-algebra-transpiler = { version = "2.0.0", path = "extensions/algebra/tran
 openvm-algebra-guest = { version = "2.0.0", path = "extensions/algebra/guest", default-features = false }
 openvm-algebra-moduli-macros = { version = "2.0.0", path = "extensions/algebra/moduli-macros", default-features = false }
 openvm-algebra-complex-macros = { version = "2.0.0", path = "extensions/algebra/complex-macros", default-features = false }
+openvm-algebra-utils = { version = "2.0.0", path = "extensions/algebra/utils", default-features = false }
 openvm-ecc-circuit = { version = "2.0.0", path = "extensions/ecc/circuit", default-features = false }
 openvm-ecc-transpiler = { version = "2.0.0", path = "extensions/ecc/transpiler", default-features = false }
 openvm-ecc-guest = { version = "2.0.0", path = "extensions/ecc/guest", default-features = false }
@@ -179,6 +207,34 @@ openvm-verify-stark-circuit = { version = "2.0.0", path = "guest-libs/verify-sta
 openvm-deferral-circuit = { version = "2.0.0", path = "extensions/deferral/circuit", default-features = false }
 openvm-deferral-guest = { version = "2.0.0", path = "extensions/deferral/guest", default-features = false }
 openvm-deferral-transpiler = { version = "2.0.0", path = "extensions/deferral/transpiler", default-features = false }
+
+# rvr
+rvr-state = { path = "crates/rvr/rvr-state" }
+rvr-openvm-build = { path = "crates/rvr/rvr-openvm-build" }
+rvr-openvm = { path = "crates/rvr/rvr-openvm" }
+rvr-openvm-ir = { path = "crates/rvr/rvr-openvm-ir" }
+rvr-openvm-lift = { path = "crates/rvr/rvr-openvm-lift" }
+rvr-openvm-ext-ffi-common = { path = "crates/rvr/rvr-openvm-ffi-common" }
+rvr-openvm-ext-riscv = { path = "extensions/riscv/rvr" }
+rvr-openvm-ext-keccak = { path = "extensions/keccak256/rvr" }
+rvr-openvm-ext-keccak-ffi = { path = "extensions/keccak256/rvr/ffi" }
+rvr-openvm-ext-sha2 = { path = "extensions/sha2/rvr" }
+rvr-openvm-ext-sha2-ffi = { path = "extensions/sha2/rvr/ffi" }
+rvr-openvm-ext-bigint = { path = "extensions/bigint/rvr" }
+rvr-openvm-ext-bigint-ffi = { path = "extensions/bigint/rvr/ffi" }
+rvr-openvm-ext-algebra = { path = "extensions/algebra/rvr" }
+rvr-openvm-ext-algebra-ffi-common = { path = "extensions/algebra/rvr/ffi/common" }
+rvr-openvm-ext-algebra-modular-ffi = { path = "extensions/algebra/rvr/ffi/modular" }
+rvr-openvm-ext-algebra-fp2-ffi = { path = "extensions/algebra/rvr/ffi/fp2" }
+rvr-openvm-ext-ecc = { path = "extensions/ecc/rvr" }
+rvr-openvm-ext-ecc-ffi = { path = "extensions/ecc/rvr/ffi" }
+rvr-openvm-ext-pairing = { path = "extensions/pairing/rvr" }
+rvr-openvm-ext-pairing-ffi = { path = "extensions/pairing/rvr/ffi" }
+rvr-openvm-ext-deferral = { path = "extensions/deferral/rvr" }
+
+# rvr external
+nix = { version = "0.29", features = ["mman"] }
+generic-array = "=0.14.6"
 
 # Benchmarking
 openvm-benchmarks-utils = { path = "benchmarks/utils", default-features = false }
@@ -200,7 +256,7 @@ snark-verifier-sdk = { version = "0.2.6", git = "https://github.com/axiom-crypto
   "loader_halo2",
 ] }
 halo2-base = { version = "0.5.4", git = "https://github.com/axiom-crypto/halo2-lib.git", tag = "v0.5.4", default-features = false }
-halo2curves-axiom = { version = "0.7.2", git = "https://github.com/axiom-crypto/halo2curves.git", tag = "v0.7.2" }
+halo2curves-axiom = { version = "0.7.3", git = "https://github.com/axiom-crypto/halo2curves.git", tag = "v0.7.3" }
 struct-reflection = "0.1.0"
 
 cargo_metadata = "0.18"
@@ -244,7 +300,6 @@ libc = "0.2.175"
 libloading = "0.8"
 tracing-subscriber = { version = "0.3.20", features = ["std", "env-filter"] }
 tokio = "1" # >=1.0.0 to allow downstream flexibility
-abi_stable = "0.11.3"
 bytesize = "2.0"
 zstd = { version = "0.13", default-features = false }
 inferno = { version = "0.12", default-features = false }
@@ -258,6 +313,7 @@ serde = { version = "1.0.201", default-features = false, features = ["derive"] }
 hex-literal = { version = "1.0.0", default-features = false }
 bytemuck = { version = "1.20.0", default-features = false }
 once_cell = { version = "1.20", default-features = false }
+critical-section = { version = "1.1.2", default-features = false }
 spin = { version = "0.10.0", default-features = false }
 
 # cryptography, default-features = false for no_std
@@ -273,4 +329,22 @@ sha2 = { version = "0.10", default-features = false }
 blstrs = { version = "0.7.1", default-features = true }
 
 [workspace.metadata.cargo-shear]
-ignored = ["cargo-openvm"]
+ignored = [
+    "cargo-openvm",
+    "rvr-openvm-ext-sha2-ffi",
+    "rvr-openvm-ext-ecc-ffi",
+    "rvr-openvm-ext-bigint-ffi",
+    "rvr-openvm-ext-algebra-modular-ffi",
+    "rvr-openvm-ext-algebra-fp2-ffi",
+    "rvr-openvm-ext-pairing-ffi",
+    "rvr-openvm-ext-keccak-ffi",
+]
+
+# Declares the two custom cfgs the guest gating uses so host-side builds
+# (plain `cargo check/test/clippy` with stable-rustc) don't warn:
+#   - `openvm_intrinsics` — custom cfg set by `cargo openvm build` rustflags.
+#   - `target_os = "openvm"` — the value is only known to the openvm-fork toolchain;
+#     stable-rustc otherwise treats it as an unknown target_os value.
+# Crates opt in with `[lints] workspace = true`.
+[workspace.lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)', 'cfg(target_os, values("openvm"))'] }

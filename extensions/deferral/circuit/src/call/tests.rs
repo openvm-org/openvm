@@ -5,7 +5,7 @@ use openvm_circuit::arch::{
     testing::{
         memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
     },
-    Arena, MatrixRecordArena, MemoryConfig, PreflightExecutor, DEFAULT_BLOCK_SIZE,
+    Arena, MatrixRecordArena, MemoryConfig, PreflightExecutor, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
@@ -14,7 +14,7 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{
     instruction::Instruction,
-    riscv::{RV32_CELL_BITS, RV32_MEMORY_AS, RV32_REGISTER_AS},
+    riscv::{RV64_BYTE_BITS, RV64_MEMORY_AS, RV64_REGISTER_AS},
     LocalOpcode, DEFERRAL_AS,
 };
 use openvm_stark_backend::{
@@ -37,9 +37,9 @@ use {
 };
 
 use super::{
-    DeferralCallAdapterAir, DeferralCallAdapterExecutor, DeferralCallAdapterFiller,
-    DeferralCallAir, DeferralCallChip, DeferralCallCoreAir, DeferralCallCoreFiller,
-    DeferralCallExecutor,
+    accumulator_ptrs, DeferralCallAdapterAir, DeferralCallAdapterExecutor,
+    DeferralCallAdapterFiller, DeferralCallAir, DeferralCallChip, DeferralCallCoreAir,
+    DeferralCallCoreFiller, DeferralCallExecutor,
 };
 use crate::{
     count::{DeferralCircuitCountAir, DeferralCircuitCountBus, DeferralCircuitCountChip},
@@ -48,8 +48,8 @@ use crate::{
         DeferralPoseidon2Bus, DeferralPoseidon2Chip,
     },
     utils::{
-        byte_commit_to_f, join_memory_ops, COMMIT_NUM_BYTES, DIGEST_MEMORY_OPS, OUTPUT_TOTAL_BYTES,
-        OUTPUT_TOTAL_MEMORY_OPS,
+        byte_commit_to_f, join_f_memory_ops, COMMIT_NUM_BYTES, DIGEST_F_MEMORY_OPS,
+        OUTPUT_TOTAL_BYTES, OUTPUT_TOTAL_MEMORY_OPS,
     },
     DeferralFn,
 };
@@ -63,8 +63,8 @@ const DEFERRAL_POSEIDON2_BUS: BusIndex = 21;
 type Harness<RA> =
     TestChipHarness<F, DeferralCallExecutor, DeferralCallAir, DeferralCallChip<F>, RA>;
 type BitwisePeriphery = (
-    BitwiseOperationLookupAir<RV32_CELL_BITS>,
-    SharedBitwiseOperationLookupChip<RV32_CELL_BITS>,
+    BitwiseOperationLookupAir<RV64_BYTE_BITS>,
+    SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
 );
 type CountPeriphery = (DeferralCircuitCountAir, Arc<DeferralCircuitCountChip>);
 type Poseidon2Periphery = (DeferralPoseidon2Air<F>, Arc<DeferralPoseidon2Chip<F>>);
@@ -106,7 +106,8 @@ struct CudaHarnessBundle {
 
 fn test_memory_config() -> MemoryConfig {
     let mut config = MemoryConfig::default();
-    config.addr_spaces[RV32_REGISTER_AS as usize].num_cells = 1 << 29;
+    config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << config.pointer_max_bits;
+    config.addr_spaces[DEFERRAL_AS as usize].num_cells = 1 << 20;
     config
 }
 
@@ -129,10 +130,9 @@ fn deferral_fns(num_deferrals: usize) -> Vec<Arc<DeferralFn>> {
 
 fn read_deferral_digest(tester: &mut impl TestBuilder<F>, ptr: usize) -> [F; DIGEST_SIZE] {
     let chunks = from_fn(|chunk_idx| {
-        tester
-            .read::<DEFAULT_BLOCK_SIZE>(DEFERRAL_AS as usize, ptr + chunk_idx * DEFAULT_BLOCK_SIZE)
+        tester.read::<BLOCK_FE_WIDTH>(DEFERRAL_AS as usize, ptr + chunk_idx * BLOCK_FE_WIDTH)
     });
-    join_memory_ops::<_, DIGEST_SIZE, DIGEST_MEMORY_OPS>(chunks)
+    join_f_memory_ops::<_, DIGEST_SIZE, DIGEST_F_MEMORY_OPS>(chunks)
 }
 
 fn init_streams(tester: &mut impl TestBuilder<F>, num_deferrals: usize) {
@@ -149,10 +149,10 @@ fn set_and_execute_call<RA, E>(
     RA: Arena,
     E: PreflightExecutor<F, RA>,
 {
-    let rd = gen_pointer(rng, DEFAULT_BLOCK_SIZE);
-    let rs = gen_pointer(rng, DEFAULT_BLOCK_SIZE);
-    let output_ptr = gen_pointer(rng, DEFAULT_BLOCK_SIZE);
-    let input_ptr = gen_pointer(rng, DEFAULT_BLOCK_SIZE);
+    let rd = gen_pointer(rng, MEMORY_BLOCK_BYTES);
+    let rs = gen_pointer(rng, MEMORY_BLOCK_BYTES);
+    let output_ptr = gen_pointer(rng, MEMORY_BLOCK_BYTES);
+    let input_ptr = gen_pointer(rng, MEMORY_BLOCK_BYTES);
     let deferral_idx = rng.random_range(0..num_deferrals);
 
     let input_commit_f: [F; DIGEST_SIZE] =
@@ -169,27 +169,28 @@ fn set_and_execute_call<RA, E>(
         .collect::<Vec<u8>>();
     tester.streams_mut().deferrals[deferral_idx].store_input(input_commit.to_vec(), input_raw);
 
-    tester.write(
-        RV32_REGISTER_AS as usize,
+    tester.write_bytes(
+        RV64_REGISTER_AS as usize,
         rd,
-        (output_ptr as u32).to_le_bytes().map(F::from_u8),
+        (output_ptr as u64).to_le_bytes().map(F::from_u8),
     );
-    tester.write(
-        RV32_REGISTER_AS as usize,
+    tester.write_bytes(
+        RV64_REGISTER_AS as usize,
         rs,
-        (input_ptr as u32).to_le_bytes().map(F::from_u8),
+        (input_ptr as u64).to_le_bytes().map(F::from_u8),
     );
-    for (chunk_idx, chunk) in input_commit.chunks_exact(DEFAULT_BLOCK_SIZE).enumerate() {
-        let chunk: [u8; DEFAULT_BLOCK_SIZE] = chunk.try_into().unwrap();
-        tester.write(
-            RV32_MEMORY_AS as usize,
-            input_ptr + chunk_idx * DEFAULT_BLOCK_SIZE,
+    for (chunk_idx, chunk) in input_commit.chunks_exact(MEMORY_BLOCK_BYTES).enumerate() {
+        let chunk: [u8; MEMORY_BLOCK_BYTES] = chunk.try_into().unwrap();
+        tester.write_bytes(
+            RV64_MEMORY_AS as usize,
+            input_ptr + chunk_idx * MEMORY_BLOCK_BYTES,
             chunk.map(F::from_u8),
         );
     }
 
-    let input_acc_ptr = 2 * deferral_idx * DIGEST_SIZE;
-    let output_acc_ptr = input_acc_ptr + DIGEST_SIZE;
+    let (input_acc_ptr, output_acc_ptr) = accumulator_ptrs(deferral_idx as u32);
+    let input_acc_ptr = input_acc_ptr as usize;
+    let output_acc_ptr = output_acc_ptr as usize;
     let old_input_acc = read_deferral_digest(tester, input_acc_ptr);
     let old_output_acc = read_deferral_digest(tester, output_acc_ptr);
 
@@ -202,8 +203,8 @@ fn set_and_execute_call<RA, E>(
                 rd,
                 rs,
                 deferral_idx,
-                RV32_REGISTER_AS as usize,
-                RV32_MEMORY_AS as usize,
+                RV64_REGISTER_AS as usize,
+                RV64_MEMORY_AS as usize,
             ],
         ),
     );
@@ -220,12 +221,12 @@ fn set_and_execute_call<RA, E>(
 
     let mut output_key = [0u8; OUTPUT_TOTAL_BYTES];
     for chunk_idx in 0..OUTPUT_TOTAL_MEMORY_OPS {
-        let chunk: [F; DEFAULT_BLOCK_SIZE] = tester.read(
-            RV32_MEMORY_AS as usize,
-            output_ptr + chunk_idx * DEFAULT_BLOCK_SIZE,
+        let chunk: [F; MEMORY_BLOCK_BYTES] = tester.read_bytes(
+            RV64_MEMORY_AS as usize,
+            output_ptr + chunk_idx * MEMORY_BLOCK_BYTES,
         );
-        for i in 0..DEFAULT_BLOCK_SIZE {
-            output_key[chunk_idx * DEFAULT_BLOCK_SIZE + i] = chunk[i].as_canonical_u32() as u8;
+        for i in 0..MEMORY_BLOCK_BYTES {
+            output_key[chunk_idx * MEMORY_BLOCK_BYTES + i] = chunk[i].as_canonical_u32() as u8;
         }
     }
     let output_commit_expected: [u8; COMMIT_NUM_BYTES] = output_commit.clone().try_into().unwrap();
@@ -263,7 +264,7 @@ fn create_cpu_harness(
     fns: Vec<Arc<DeferralFn>>,
 ) -> CpuHarnessBundle {
     let bitwise_bus = BitwiseOperationLookupBus::new(BITWISE_OP_LOOKUP_BUS);
-    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+    let bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
         bitwise_bus,
     ));
 
@@ -313,7 +314,7 @@ fn create_cuda_harness(
     fns: Vec<Arc<DeferralFn>>,
 ) -> CudaHarnessBundle {
     let bitwise_bus = default_bitwise_lookup_bus();
-    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV32_CELL_BITS>::new(
+    let dummy_bitwise_chip = Arc::new(BitwiseOperationLookupChip::<RV64_BYTE_BITS>::new(
         bitwise_bus,
     ));
 
