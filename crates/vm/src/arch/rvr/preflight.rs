@@ -2490,9 +2490,7 @@ mod tests {
                 .iter()
                 .map(|entry| entry.timestamp)
                 .collect::<Vec<_>>(),
-            (0..program_len as u32)
-                .map(|idx| 1 + idx * 3)
-                .collect::<Vec<_>>()
+            vec![1, 3, 5, 8, 11, 13, 16, 19, 22, 25, 28, 31, 34, 37, 40, 43]
         );
         assert!(program_log[..program_len]
             .windows(2)
@@ -2501,7 +2499,7 @@ mod tests {
             .windows(2)
             .all(|pair| pair[0].timestamp < pair[1].timestamp));
         assert_eq!(memory_len, 41);
-        assert_eq!(tracer.timestamp, 46);
+        assert_eq!(tracer.timestamp, 43);
         assert!(memory_log[..memory_len]
             .iter()
             .filter(|entry| entry.addr_space == RV64_MEMORY_AS as u8)
@@ -2635,25 +2633,25 @@ mod tests {
                 .iter()
                 .map(|entry| entry.timestamp)
                 .collect::<Vec<_>>(),
-            vec![1, 4, 5, 8, 9, 12, 13, 16]
+            vec![1, 3, 4, 6, 7, 10, 11, 14]
         );
         assert_eq!(
             memory_log[..memory_len]
                 .iter()
                 .map(|entry| entry.timestamp)
                 .collect::<Vec<_>>(),
-            vec![1, 3, 5, 7, 9, 10, 11, 13, 14, 15]
+            vec![1, 2, 4, 5, 7, 8, 9, 11, 12, 13]
         );
-        assert_eq!(tracer.timestamp, 16);
+        assert_eq!(tracer.timestamp, 14);
 
         let data_memory_timestamps = memory_log[..memory_len]
             .iter()
             .filter(|entry| entry.addr_space == RV64_MEMORY_AS as u8)
             .map(|entry| entry.timestamp)
             .collect::<Vec<_>>();
-        assert_eq!(data_memory_timestamps, vec![11, 14]);
+        assert_eq!(data_memory_timestamps, vec![9, 12]);
 
-        let phantom_timestamps = [4, 8, 12];
+        let phantom_timestamps = [3, 6, 10];
         assert!(phantom_timestamps
             .iter()
             .all(|timestamp| !memory_log[..memory_len]
