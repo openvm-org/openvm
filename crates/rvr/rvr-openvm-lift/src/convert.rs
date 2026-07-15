@@ -2,11 +2,11 @@
 
 use std::collections::HashSet;
 
-use openvm_instructions::exe::VmExe;
+use openvm_instructions::exe::{SparseMemoryImage, VmExe};
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ir::{LiftedInstr, SourceLoc};
 
-use crate::{extension::ExtensionRegistry, opcode::lift_instruction};
+use crate::{extension::ExtensionRegistry, opcode::lift_instruction, RvrInstruction};
 
 /// Error during VmExe to IR conversion.
 #[derive(Debug, thiserror::Error)]
@@ -18,7 +18,7 @@ pub enum ConvertError {
 /// Convert a VmExe to a vector of lifted IR instructions.
 pub fn convert_vmexe_to_ir<F: PrimeField32>(
     exe: &VmExe<F>,
-    extensions: &crate::extension::ExtensionRegistry<F>,
+    extensions: &crate::extension::ExtensionRegistry,
 ) -> Result<Vec<LiftedInstr>, ConvertError> {
     convert_vmexe_to_ir_with_debug(exe, extensions, |_| None)
 }
@@ -30,7 +30,7 @@ pub fn convert_vmexe_to_ir<F: PrimeField32>(
 /// boundary when guest debug info is available.
 pub fn convert_vmexe_to_ir_with_debug<F, G>(
     exe: &VmExe<F>,
-    extensions: &ExtensionRegistry<F>,
+    extensions: &ExtensionRegistry,
     mut source_lookup: G,
 ) -> Result<Vec<LiftedInstr>, ConvertError>
 where
@@ -38,8 +38,8 @@ where
     G: FnMut(u32) -> Option<SourceLoc>,
 {
     let mut lifted = Vec::new();
-
     for (pc, insn, _debug_info) in exe.program.enumerate_by_pc() {
+        let insn = RvrInstruction::from_field(&insn);
         match lift_instruction(&insn, u64::from(pc), extensions) {
             Some(mut li) => {
                 if let Some(loc) = source_lookup(pc) {
@@ -70,13 +70,13 @@ where
 /// Candidates are read at 4-byte-aligned addresses (RISC-V instruction width),
 /// not memory word (u64) boundaries. This discovers switch table entries,
 /// function pointer arrays, and other code pointers embedded in read-only data.
-pub fn scan_init_memory_for_code_pointers<F: PrimeField32>(
-    exe: &VmExe<F>,
+pub fn scan_init_memory_for_code_pointers(
+    init_memory: &SparseMemoryImage,
     valid_pcs: &HashSet<u64>,
 ) -> Vec<u64> {
     // Collect all bytes in address space 2 (main memory).
     let mut mem_bytes: std::collections::BTreeMap<u32, u8> = std::collections::BTreeMap::new();
-    for (&(addr_space, addr), &byte) in &exe.init_memory {
+    for (&(addr_space, addr), &byte) in init_memory {
         if addr_space == 2 {
             mem_bytes.insert(addr, byte);
         }

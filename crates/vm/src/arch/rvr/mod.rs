@@ -5,6 +5,7 @@ pub mod bridge;
 pub mod compile;
 pub mod debug;
 pub mod execute;
+mod initial_image;
 pub mod io;
 pub mod metered;
 pub mod metered_cost;
@@ -21,10 +22,8 @@ pub use execute::{
     execute, execute_metered, execute_metered_cost, execute_metered_segment_boundary, rv_execute,
     ExecuteError,
 };
-pub use metered::{
-    RunToCompletion, RvrMeteredInstance, RvrMeteredInstanceWith, RvrMeteredResult,
-    RvrMeteredSegmentInstance, SegmentBoundary,
-};
+pub use initial_image::RvrInitialImage;
+pub use metered::{RvrMeteredInstance, RvrMeteredResult, RvrMeteredSegmentInstance};
 pub use metered_cost::{
     MeteredCostData, MeteredCostMeter, PureTracer, PureTracerData, RvrMeteredCostInstance,
     RvrMeteredCostResult,

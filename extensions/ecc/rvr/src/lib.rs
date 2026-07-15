@@ -8,10 +8,9 @@
 use openvm_ecc_transpiler::Rv64WeierstrassOpcode::{
     self, EC_ADD_NE, EC_DOUBLE, SETUP_EC_ADD_NE, SETUP_EC_DOUBLE,
 };
-use openvm_instructions::{instruction::Instruction, LocalOpcode};
-use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_instructions::LocalOpcode;
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
-use rvr_openvm_lift::{helpers::decode_reg, RvrExtension};
+use rvr_openvm_lift::{helpers::decode_reg, RvrExtension, RvrInstruction};
 use strum::EnumCount;
 
 #[derive(Debug, Clone, Copy)]
@@ -164,8 +163,8 @@ impl EccExtension {
     }
 }
 
-impl<F: PrimeField32> RvrExtension<F> for EccExtension {
-    fn try_lift(&self, insn: &Instruction<F>, pc: u64) -> Option<LiftedInstr> {
+impl RvrExtension for EccExtension {
+    fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
 
         let ecc_base = Rv64WeierstrassOpcode::CLASS_OFFSET;

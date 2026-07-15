@@ -3,13 +3,12 @@
 //! Provides IR nodes for the SHA-256 and SHA-512 opcodes and the
 //! `Sha2Extension` for lifting and executing them via double FFI.
 
-use openvm_instructions::{instruction::Instruction, LocalOpcode};
+use openvm_instructions::LocalOpcode;
 use openvm_sha2_transpiler::Rv64Sha2Opcode;
-use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
 use rvr_openvm_lift::{
     air_index_to_c, decode_reg, opcode_air_idx, AirIndex, ExtensionError, RvrExtension,
-    RvrExtensionCtx,
+    RvrExtensionCtx, RvrInstruction,
 };
 
 /// IR node for a SHA-256 compress instruction.
@@ -126,8 +125,8 @@ impl Sha2Extension {
     }
 }
 
-impl<F: PrimeField32> RvrExtension<F> for Sha2Extension {
-    fn try_lift(&self, insn: &Instruction<F>, pc: u64) -> Option<LiftedInstr> {
+impl RvrExtension for Sha2Extension {
+    fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
 
         if opcode == Rv64Sha2Opcode::SHA256.global_opcode_usize() {

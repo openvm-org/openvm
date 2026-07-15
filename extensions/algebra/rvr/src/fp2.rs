@@ -2,10 +2,9 @@
 
 use num_bigint::BigUint;
 use openvm_algebra_transpiler::Fp2Opcode;
-use openvm_instructions::{instruction::Instruction, LocalOpcode};
-use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_instructions::LocalOpcode;
 use rvr_openvm_ir::{Instr, InstrAt, LiftedInstr};
-use rvr_openvm_lift::{helpers::decode_reg, RvrExtension};
+use rvr_openvm_lift::{helpers::decode_reg, RvrExtension, RvrInstruction};
 use strum::EnumCount;
 
 use crate::{
@@ -81,8 +80,8 @@ impl Fp2RvrExtension {
     }
 }
 
-impl<F: PrimeField32> RvrExtension<F> for Fp2RvrExtension {
-    fn try_lift(&self, insn: &Instruction<F>, pc: u64) -> Option<LiftedInstr> {
+impl RvrExtension for Fp2RvrExtension {
+    fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
         self.try_lift_fp2(insn, pc, opcode)
     }
@@ -100,12 +99,7 @@ impl<F: PrimeField32> RvrExtension<F> for Fp2RvrExtension {
 }
 
 impl Fp2RvrExtension {
-    fn try_lift_fp2<F: PrimeField32>(
-        &self,
-        insn: &Instruction<F>,
-        pc: u64,
-        opcode: usize,
-    ) -> Option<LiftedInstr> {
+    fn try_lift_fp2(&self, insn: &RvrInstruction, pc: u64, opcode: usize) -> Option<LiftedInstr> {
         let base_offset = Fp2Opcode::CLASS_OFFSET;
         let count = Fp2Opcode::COUNT;
 

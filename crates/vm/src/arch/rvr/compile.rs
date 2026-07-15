@@ -184,10 +184,7 @@ pub fn build_pc_to_chip<F, E>(
     exe: &VmExe<F>,
     inventory: &ExecutorInventory<E>,
     executor_idx_to_air_idx: &[usize],
-) -> Result<Vec<TraceChipIndex>, CompileError>
-where
-    F: PrimeField32,
-{
+) -> Result<Vec<TraceChipIndex>, CompileError> {
     let terminate_opcode = SystemOpcode::TERMINATE.global_opcode();
     exe.program
         .instructions_and_debug_infos
@@ -215,11 +212,11 @@ where
 }
 
 /// Options for the compilation pipeline.
-pub struct CompileOptions<'a, F: PrimeField32> {
+pub struct CompileOptions<'a> {
     /// Base name for generated files and library artifact.
     pub base_name: Option<&'a str>,
     pub tracer_mode: TracerMode,
-    pub extensions: &'a ExtensionRegistry<F>,
+    pub extensions: &'a ExtensionRegistry,
     pub chips: Option<&'a ChipMapping>,
     /// Guest debug map: OpenVM PC -> SourceLoc.
     pub guest_debug_map: Option<&'a GuestDebugMap>,
@@ -232,7 +229,7 @@ pub struct CompileOptions<'a, F: PrimeField32> {
 
 pub fn compile_with_options<F: PrimeField32>(
     exe: &VmExe<F>,
-    opts: CompileOptions<'_, F>,
+    opts: CompileOptions<'_>,
 ) -> Result<RvrCompiled, CompileError> {
     compile_impl(exe, &opts)
 }
@@ -240,7 +237,7 @@ pub fn compile_with_options<F: PrimeField32>(
 /// Compile a VmExe into a shared library (pure execution, optional suspension).
 pub fn compile<F: PrimeField32>(
     exe: &VmExe<F>,
-    extensions: &ExtensionRegistry<F>,
+    extensions: &ExtensionRegistry,
     guest_debug_map: Option<&GuestDebugMap>,
 ) -> Result<RvrCompiled, CompileError> {
     compile_impl(
@@ -261,7 +258,7 @@ pub fn compile<F: PrimeField32>(
 /// Compile a VmExe with per-chip metered execution.
 pub fn compile_metered<F: PrimeField32>(
     exe: &VmExe<F>,
-    extensions: &ExtensionRegistry<F>,
+    extensions: &ExtensionRegistry,
     chips: &ChipMapping,
     guest_debug_map: Option<&GuestDebugMap>,
 ) -> Result<RvrCompiled, CompileError> {
@@ -283,7 +280,7 @@ pub fn compile_metered<F: PrimeField32>(
 /// Compile a VmExe with per-chip metered execution and segment-boundary suspension.
 pub fn compile_metered_segment_boundary<F: PrimeField32>(
     exe: &VmExe<F>,
-    extensions: &ExtensionRegistry<F>,
+    extensions: &ExtensionRegistry,
     chips: &ChipMapping,
     guest_debug_map: Option<&GuestDebugMap>,
 ) -> Result<RvrCompiled, CompileError> {
@@ -305,7 +302,7 @@ pub fn compile_metered_segment_boundary<F: PrimeField32>(
 /// Compile a VmExe with metered cost tracer.
 pub fn compile_metered_cost<F: PrimeField32>(
     exe: &VmExe<F>,
-    extensions: &ExtensionRegistry<F>,
+    extensions: &ExtensionRegistry,
     chips: &ChipMapping,
     guest_debug_map: Option<&GuestDebugMap>,
 ) -> Result<RvrCompiled, CompileError> {
@@ -348,7 +345,7 @@ pub fn load_compiled_from_path(lib_path: &Path) -> Result<RvrCompiled, CompileEr
 
 fn compile_impl<F: PrimeField32>(
     exe: &VmExe<F>,
-    opts: &CompileOptions<'_, F>,
+    opts: &CompileOptions<'_>,
 ) -> Result<RvrCompiled, CompileError> {
     let toolchain = ensure_toolchain_available()?;
 
@@ -360,7 +357,7 @@ fn compile_impl<F: PrimeField32>(
     })?;
 
     let valid_pcs: std::collections::HashSet<u64> = ir.iter().map(|li| li.pc()).collect();
-    let extra_targets = scan_init_memory_for_code_pointers(exe, &valid_pcs);
+    let extra_targets = scan_init_memory_for_code_pointers(&exe.init_memory, &valid_pcs);
     let blocks = build_blocks(&ir, &extra_targets)?;
 
     let temp_root = std::env::temp_dir();
@@ -474,9 +471,9 @@ pub fn ensure_toolchain_available() -> Result<rvr_openvm::RuntimeToolchain, Comp
     Ok(rvr_openvm::runtime_toolchain()?)
 }
 
-fn write_extension_staticlibs<F: PrimeField32>(
+fn write_extension_staticlibs(
     output_dir: &Path,
-    extensions: &ExtensionRegistry<F>,
+    extensions: &ExtensionRegistry,
 ) -> Result<Vec<PathBuf>, CompileError> {
     let mut paths = Vec::new();
     for (filename, content) in extensions.staticlib_files() {

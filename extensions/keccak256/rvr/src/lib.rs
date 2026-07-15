@@ -5,13 +5,12 @@
 //! `.c` shim is emitted alongside generated code so clang can inline the
 //! tracer helpers across the call boundary.
 
-use openvm_instructions::{instruction::Instruction, LocalOpcode};
+use openvm_instructions::LocalOpcode;
 use openvm_keccak256_transpiler::{KeccakfOpcode, XorinOpcode};
-use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
 use rvr_openvm_lift::{
     air_index_to_c, decode_reg, opcode_air_idx, AirIndex, ExtensionError, RvrExtension,
-    RvrExtensionCtx,
+    RvrExtensionCtx, RvrInstruction,
 };
 
 /// keccak-f\[1600\]: read 200 bytes via `buffer_ptr_reg`, permute in place.
@@ -103,8 +102,8 @@ impl KeccakExtension {
     }
 }
 
-impl<F: PrimeField32> RvrExtension<F> for KeccakExtension {
-    fn try_lift(&self, insn: &Instruction<F>, pc: u64) -> Option<LiftedInstr> {
+impl RvrExtension for KeccakExtension {
+    fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
 
         if opcode == KeccakfOpcode::KECCAKF.global_opcode_usize() {

@@ -23,9 +23,9 @@ use openvm_riscv_circuit::{
 };
 use openvm_stark_backend::{StarkEngine, StarkProtocolConfig, Val};
 #[cfg(feature = "rvr")]
-use rvr_openvm_ext_deferral::DeferralRvrExtension;
+use rvr_openvm_ext_deferral::{DeferralRuntimeHooks, DeferralRvrExtension};
 #[cfg(feature = "rvr")]
-use rvr_openvm_lift::{ExtensionRegistry, RvrExtensionCtx, VmRvrExtension};
+use rvr_openvm_lift::{RvrExtensionCtx, RvrExtensions, VmRvrExtension};
 use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "rvr")]
@@ -73,12 +73,16 @@ pub struct DeferralExtension {
 
 #[cfg(feature = "rvr")]
 impl<F: VmField> VmRvrExtension<F> for DeferralExtension {
-    fn extend_rvr(&self, registry: &mut ExtensionRegistry<F>, ctx: Option<&RvrExtensionCtx>) {
+    fn extend_rvr(&self, extensions: &mut RvrExtensions, ctx: Option<&RvrExtensionCtx>) {
         let hash = make_deferral_hash::<F>();
         let compress = make_deferral_compress::<F>();
-        let ext = DeferralRvrExtension::new(ctx, self.fns.clone(), hash, compress)
-            .expect("failed to construct rvr DeferralRvrExtension");
-        registry.register(ext);
+        let lifter =
+            DeferralRvrExtension::new(ctx).expect("failed to construct rvr DeferralRvrExtension");
+        extensions.register_lifter(lifter);
+        // SAFETY: This extension and the VM state use the same field `F`.
+        extensions.register_runtime_hook(unsafe {
+            DeferralRuntimeHooks::new::<F>(self.fns.clone(), hash, compress)
+        });
     }
 }
 

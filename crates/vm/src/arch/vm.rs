@@ -7,8 +7,6 @@
 //!
 //! [VirtualMachine] will similarly be the struct that has done all the setup so it can
 //! execute+prove an arbitrary program for a fixed config - it will internally still hold VmExecutor
-#[cfg(feature = "rvr")]
-use std::marker::PhantomData;
 use std::{any::TypeId, borrow::Borrow, collections::VecDeque, sync::Arc};
 
 use getset::{Getters, MutGetters, Setters, WithSetters};
@@ -35,7 +33,7 @@ use openvm_stark_backend::{
 };
 use p3_baby_bear::BabyBear;
 #[cfg(feature = "rvr")]
-use rvr_openvm_lift::ExtensionRegistry;
+use rvr_openvm_lift::RvrExtensions;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{info_span, instrument};
@@ -46,8 +44,8 @@ use super::aot::AotInstance;
 use super::rvr::{
     bridge::map_rvr_compile_error, build_pc_to_chip, compile, compile_metered,
     compile_metered_cost, compile_metered_segment_boundary, load_compiled_from_path, ChipMapping,
-    GuestDebugMap, RunToCompletion, RvrMeteredCostInstance, RvrMeteredInstance,
-    RvrMeteredSegmentInstance, RvrPureInstance, SegmentBoundary,
+    GuestDebugMap, RvrInitialImage, RvrMeteredCostInstance, RvrMeteredInstance,
+    RvrMeteredSegmentInstance, RvrPureInstance,
 };
 use super::{
     execution_mode::{
@@ -251,7 +249,7 @@ where
     }
 
     #[cfg(feature = "rvr")]
-    pub fn instance(&self, exe: &VmExe<F>) -> Result<RvrPureInstance<'_, F>, StaticProgramError> {
+    pub fn instance(&self, exe: &VmExe<F>) -> Result<RvrPureInstance<'_>, StaticProgramError> {
         Self::rvr_instance(self, exe, None)
     }
 }
@@ -262,10 +260,7 @@ where
     F: PrimeField32,
     VC: VmExecutionConfig<F>,
 {
-    fn build_rvr_extensions(
-        &self,
-        executor_idx_to_air_idx: Option<&[usize]>,
-    ) -> ExtensionRegistry<F> {
+    fn build_rvr_extensions(&self, executor_idx_to_air_idx: Option<&[usize]>) -> RvrExtensions {
         self.config.create_rvr_extensions(executor_idx_to_air_idx)
     }
 }
@@ -281,17 +276,19 @@ where
         &self,
         exe: &VmExe<F>,
         guest_debug_map: Option<&GuestDebugMap>,
-    ) -> Result<RvrPureInstance<'_, F>, StaticProgramError> {
+    ) -> Result<RvrPureInstance<'_>, StaticProgramError> {
         #[cfg(feature = "metrics")]
         let _compilation_span = tracing::info_span!("compile_pure", backend = "rvr").entered();
         let extensions = self.build_rvr_extensions(None);
-        let compiled = compile(exe, &extensions, guest_debug_map).map_err(map_rvr_compile_error)?;
+        let compiled =
+            compile(exe, extensions.lifters(), guest_debug_map).map_err(map_rvr_compile_error)?;
+        let runtime_hooks = extensions.into_runtime_hooks();
 
         Ok(RvrPureInstance {
             system_config: self.inventory.config(),
-            exe: Arc::new(exe.clone()),
+            initial_image: RvrInitialImage::from(exe),
             compiled,
-            extensions,
+            runtime_hooks,
         })
     }
 
@@ -302,15 +299,15 @@ where
         &self,
         lib_path: &std::path::Path,
         exe: &VmExe<F>,
-    ) -> Result<RvrPureInstance<'_, F>, StaticProgramError> {
-        let extensions = self.build_rvr_extensions(None);
+    ) -> Result<RvrPureInstance<'_>, StaticProgramError> {
+        let runtime_hooks = self.build_rvr_extensions(None).into_runtime_hooks();
         let compiled = load_compiled_from_path(lib_path).map_err(map_rvr_compile_error)?;
 
         Ok(RvrPureInstance {
             system_config: self.inventory.config(),
-            exe: Arc::new(exe.clone()),
+            initial_image: RvrInitialImage::from(exe),
             compiled,
-            extensions,
+            runtime_hooks,
         })
     }
 }
@@ -422,7 +419,7 @@ where
         &self,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
-    ) -> Result<RvrMeteredInstance<'_, F>, StaticProgramError> {
+    ) -> Result<RvrMeteredInstance<'_>, StaticProgramError> {
         self.metered_rvr_instance(exe, executor_idx_to_air_idx, None)
     }
 
@@ -431,7 +428,7 @@ where
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
         guest_debug_map: Option<&GuestDebugMap>,
-    ) -> Result<RvrMeteredInstance<'_, F>, StaticProgramError> {
+    ) -> Result<RvrMeteredInstance<'_>, StaticProgramError> {
         #[cfg(feature = "metrics")]
         let _compilation_span = tracing::info_span!("compile_metered", backend = "rvr").entered();
         let extensions = self.build_rvr_extensions(Some(executor_idx_to_air_idx));
@@ -440,16 +437,16 @@ where
                 .map_err(map_rvr_compile_error)?,
             chip_widths: None,
         };
-        let compiled = compile_metered(exe, &extensions, &chips, guest_debug_map)
+        let compiled = compile_metered(exe, extensions.lifters(), &chips, guest_debug_map)
             .map_err(map_rvr_compile_error)?;
+        let runtime_hooks = extensions.into_runtime_hooks();
 
-        Ok(RvrMeteredInstance {
-            system_config: self.inventory.config(),
-            exe: Arc::new(exe.clone()),
-            extensions,
+        Ok(RvrMeteredInstance::new(
+            self.inventory.config(),
+            RvrInitialImage::from(exe),
+            runtime_hooks,
             compiled,
-            _mode: PhantomData::<RunToCompletion>,
-        })
+        ))
     }
 
     pub fn metered_segment_rvr_instance(
@@ -457,7 +454,7 @@ where
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
         guest_debug_map: Option<&GuestDebugMap>,
-    ) -> Result<RvrMeteredSegmentInstance<'_, F>, StaticProgramError> {
+    ) -> Result<RvrMeteredSegmentInstance<'_>, StaticProgramError> {
         #[cfg(feature = "metrics")]
         let _compilation_span =
             tracing::info_span!("compile_metered_segment", backend = "rvr").entered();
@@ -467,16 +464,17 @@ where
                 .map_err(map_rvr_compile_error)?,
             chip_widths: None,
         };
-        let compiled = compile_metered_segment_boundary(exe, &extensions, &chips, guest_debug_map)
-            .map_err(map_rvr_compile_error)?;
+        let compiled =
+            compile_metered_segment_boundary(exe, extensions.lifters(), &chips, guest_debug_map)
+                .map_err(map_rvr_compile_error)?;
+        let runtime_hooks = extensions.into_runtime_hooks();
 
-        Ok(RvrMeteredSegmentInstance {
-            system_config: self.inventory.config(),
-            exe: Arc::new(exe.clone()),
-            extensions,
+        Ok(RvrMeteredSegmentInstance::new(
+            self.inventory.config(),
+            RvrInitialImage::from(exe),
+            runtime_hooks,
             compiled,
-            _mode: PhantomData::<SegmentBoundary>,
-        })
+        ))
     }
 
     pub fn metered_cost_instance(
@@ -484,7 +482,7 @@ where
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
         widths: &[usize],
-    ) -> Result<RvrMeteredCostInstance<'_, F>, StaticProgramError> {
+    ) -> Result<RvrMeteredCostInstance<'_>, StaticProgramError> {
         self.metered_cost_rvr_instance(exe, executor_idx_to_air_idx, widths, None)
     }
 
@@ -495,17 +493,18 @@ where
         lib_path: &std::path::Path,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
-    ) -> Result<RvrMeteredInstance<'_, F>, StaticProgramError> {
-        let extensions = self.build_rvr_extensions(Some(executor_idx_to_air_idx));
+    ) -> Result<RvrMeteredInstance<'_>, StaticProgramError> {
+        let runtime_hooks = self
+            .build_rvr_extensions(Some(executor_idx_to_air_idx))
+            .into_runtime_hooks();
         let compiled = load_compiled_from_path(lib_path).map_err(map_rvr_compile_error)?;
 
-        Ok(RvrMeteredInstance {
-            system_config: self.inventory.config(),
-            exe: Arc::new(exe.clone()),
-            extensions,
+        Ok(RvrMeteredInstance::new(
+            self.inventory.config(),
+            RvrInitialImage::from(exe),
+            runtime_hooks,
             compiled,
-            _mode: PhantomData::<RunToCompletion>,
-        })
+        ))
     }
 
     /// Load a previously saved metered-cost-mode artifact. Caller supplies `exe`,
@@ -516,15 +515,17 @@ where
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
         widths: &[usize],
-    ) -> Result<RvrMeteredCostInstance<'_, F>, StaticProgramError> {
-        let extensions = self.build_rvr_extensions(Some(executor_idx_to_air_idx));
+    ) -> Result<RvrMeteredCostInstance<'_>, StaticProgramError> {
+        let runtime_hooks = self
+            .build_rvr_extensions(Some(executor_idx_to_air_idx))
+            .into_runtime_hooks();
         let widths: Vec<u64> = widths.iter().map(|&w| w as u64).collect();
         let compiled = load_compiled_from_path(lib_path).map_err(map_rvr_compile_error)?;
 
         Ok(RvrMeteredCostInstance {
             system_config: self.inventory.config(),
-            exe: Arc::new(exe.clone()),
-            extensions,
+            initial_image: RvrInitialImage::from(exe),
+            runtime_hooks,
             compiled,
             widths,
         })
@@ -536,7 +537,7 @@ where
         executor_idx_to_air_idx: &[usize],
         widths: &[usize],
         guest_debug_map: Option<&GuestDebugMap>,
-    ) -> Result<RvrMeteredCostInstance<'_, F>, StaticProgramError> {
+    ) -> Result<RvrMeteredCostInstance<'_>, StaticProgramError> {
         #[cfg(feature = "metrics")]
         let _compilation_span =
             tracing::info_span!("compile_metered_cost", backend = "rvr").entered();
@@ -547,13 +548,14 @@ where
                 .map_err(map_rvr_compile_error)?,
             chip_widths: Some(widths.clone()),
         };
-        let compiled = compile_metered_cost(exe, &extensions, &chips, guest_debug_map)
+        let compiled = compile_metered_cost(exe, extensions.lifters(), &chips, guest_debug_map)
             .map_err(map_rvr_compile_error)?;
+        let runtime_hooks = extensions.into_runtime_hooks();
 
         Ok(RvrMeteredCostInstance {
             system_config: self.inventory.config(),
-            exe: Arc::new(exe.clone()),
-            extensions,
+            initial_image: RvrInitialImage::from(exe),
+            runtime_hooks,
             compiled,
             widths,
         })
@@ -700,7 +702,7 @@ where
     pub fn instance(
         &self,
         exe: &VmExe<Val<E::SC>>,
-    ) -> Result<RvrPureInstance<'_, Val<E::SC>>, StaticProgramError>
+    ) -> Result<RvrPureInstance<'_>, StaticProgramError>
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
@@ -712,7 +714,7 @@ where
     pub fn get_rvr_instance(
         &self,
         exe: &VmExe<Val<E::SC>>,
-    ) -> Result<RvrPureInstance<'_, Val<E::SC>>, StaticProgramError>
+    ) -> Result<RvrPureInstance<'_>, StaticProgramError>
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
@@ -776,7 +778,7 @@ where
     pub fn metered_instance(
         &self,
         exe: &VmExe<Val<E::SC>>,
-    ) -> Result<RvrMeteredInstance<'_, Val<E::SC>>, StaticProgramError>
+    ) -> Result<RvrMeteredInstance<'_>, StaticProgramError>
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
@@ -790,7 +792,7 @@ where
     pub fn get_metered_rvr_instance(
         &self,
         exe: &VmExe<Val<E::SC>>,
-    ) -> Result<RvrMeteredInstance<'_, Val<E::SC>>, StaticProgramError>
+    ) -> Result<RvrMeteredInstance<'_>, StaticProgramError>
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
@@ -804,7 +806,7 @@ where
     pub fn get_metered_segment_rvr_instance(
         &self,
         exe: &VmExe<Val<E::SC>>,
-    ) -> Result<RvrMeteredSegmentInstance<'_, Val<E::SC>>, StaticProgramError>
+    ) -> Result<RvrMeteredSegmentInstance<'_>, StaticProgramError>
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
@@ -819,7 +821,7 @@ where
         &self,
         lib_path: &std::path::Path,
         exe: &VmExe<Val<E::SC>>,
-    ) -> Result<RvrMeteredInstance<'_, Val<E::SC>>, StaticProgramError>
+    ) -> Result<RvrMeteredInstance<'_>, StaticProgramError>
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
@@ -890,7 +892,7 @@ where
     pub fn metered_cost_instance(
         &self,
         exe: &VmExe<Val<E::SC>>,
-    ) -> Result<RvrMeteredCostInstance<'_, Val<E::SC>>, StaticProgramError>
+    ) -> Result<RvrMeteredCostInstance<'_>, StaticProgramError>
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
@@ -902,7 +904,7 @@ where
     pub fn get_metered_cost_rvr_instance(
         &self,
         exe: &VmExe<Val<E::SC>>,
-    ) -> Result<RvrMeteredCostInstance<'_, Val<E::SC>>, StaticProgramError>
+    ) -> Result<RvrMeteredCostInstance<'_>, StaticProgramError>
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
@@ -923,7 +925,7 @@ where
         &self,
         lib_path: &std::path::Path,
         exe: &VmExe<Val<E::SC>>,
-    ) -> Result<RvrMeteredCostInstance<'_, Val<E::SC>>, StaticProgramError>
+    ) -> Result<RvrMeteredCostInstance<'_>, StaticProgramError>
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,

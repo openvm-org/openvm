@@ -38,8 +38,7 @@ typedef struct {
                         uint32_t expected_len);
 } DeferralHostCallbacks;
 
-/* NOT thread-safe: installs one process-global deferral callback set. */
-static DeferralHostCallbacks g_deferral;
+static thread_local DeferralHostCallbacks g_deferral;
 
 void register_deferral_callbacks(const DeferralHostCallbacks* cb) {
   g_deferral = *cb;

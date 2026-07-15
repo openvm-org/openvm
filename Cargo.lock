@@ -7325,7 +7325,6 @@ dependencies = [
  "openvm-instructions",
  "openvm-platform",
  "openvm-riscv-guest",
- "openvm-stark-backend",
  "rvr-openvm-build",
  "rvr-openvm-ext-ffi-common",
  "rvr-openvm-ir",
@@ -7345,7 +7344,6 @@ dependencies = [
  "openvm-algebra-transpiler",
  "openvm-algebra-utils",
  "openvm-instructions",
- "openvm-stark-backend",
  "rand 0.9.2",
  "rvr-openvm-build",
  "rvr-openvm-ir",
@@ -7396,7 +7394,6 @@ dependencies = [
  "openvm-bigint-transpiler",
  "openvm-instructions",
  "openvm-riscv-transpiler",
- "openvm-stark-backend",
  "rvr-openvm-build",
  "rvr-openvm-ir",
  "rvr-openvm-lift",
@@ -7430,7 +7427,6 @@ version = "2.1.0"
 dependencies = [
  "openvm-ecc-transpiler",
  "openvm-instructions",
- "openvm-stark-backend",
  "rvr-openvm-build",
  "rvr-openvm-ir",
  "rvr-openvm-lift",
@@ -7465,7 +7461,6 @@ version = "2.1.0"
 dependencies = [
  "openvm-instructions",
  "openvm-keccak256-transpiler",
- "openvm-stark-backend",
  "rvr-openvm-build",
  "rvr-openvm-ir",
  "rvr-openvm-lift",
@@ -7485,7 +7480,6 @@ version = "2.1.0"
 dependencies = [
  "openvm-instructions",
  "openvm-pairing-transpiler",
- "openvm-stark-backend",
  "rvr-openvm-build",
  "rvr-openvm-ir",
  "rvr-openvm-lift",
@@ -7510,7 +7504,6 @@ dependencies = [
  "openvm-circuit",
  "openvm-instructions",
  "openvm-riscv-transpiler",
- "openvm-stark-backend",
  "p3-baby-bear",
  "rand 0.9.2",
  "rvr-openvm-ext-ffi-common",
@@ -7524,7 +7517,6 @@ version = "2.1.0"
 dependencies = [
  "openvm-instructions",
  "openvm-sha2-transpiler",
- "openvm-stark-backend",
  "rvr-openvm-build",
  "rvr-openvm-ir",
  "rvr-openvm-lift",

@@ -4,7 +4,6 @@ use std::{collections::VecDeque, ffi::c_void};
 
 #[cfg(not(feature = "unprotected"))]
 use openvm_platform::memory::MEM_SIZE;
-use openvm_stark_backend::p3_field::PrimeField32;
 use rand::rngs::StdRng;
 
 use crate::arch::deferral::DeferralState;
@@ -13,16 +12,14 @@ use crate::arch::deferral::DeferralState;
 /// one rvr call. Streams, rng, and the public-values byte slice are mutable
 /// borrows; `memory_ptr` is a raw alias of VmState's main memory buffer
 /// (raw because the C engine accesses it directly via pointer).
-///
-/// `deferral_memory` aliases AS=4 as `F` cells for deferral accumulator updates.
-pub struct OpenVmIoState<'a, F: PrimeField32> {
+pub struct OpenVmIoState<'a> {
     pub input_stream: &'a mut VecDeque<Vec<u8>>,
     pub hint_stream: &'a mut VecDeque<u8>,
     pub rng: &'a mut StdRng,
     pub memory_ptr: *mut u8,
     pub public_values: &'a mut [u8],
-    pub deferral_memory: *mut F,
-    pub deferral_memory_len: usize,
+    pub deferral_memory: *mut u8,
+    pub deferral_memory_len_bytes: usize,
     pub deferrals: &'a mut Vec<DeferralState>,
 }
 
@@ -50,12 +47,8 @@ pub fn check_mem_bounds_range(_start: u64, _num_bytes: usize) {}
 /// # Safety
 ///
 /// `ctx` must be a valid `OpenVmIoState` pointer. `data` must point to `len` bytes (or be null).
-pub unsafe extern "C" fn host_hint_stream_set<F: PrimeField32>(
-    ctx: *mut c_void,
-    data: *const u8,
-    len: u32,
-) {
-    let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_, F>) };
+pub unsafe extern "C" fn host_hint_stream_set(ctx: *mut c_void, data: *const u8, len: u32) {
+    let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_>) };
     io.hint_stream.clear();
     if len > 0 && !data.is_null() {
         let slice = unsafe { std::slice::from_raw_parts(data, len as usize) };

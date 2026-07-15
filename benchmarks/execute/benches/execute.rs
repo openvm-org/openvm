@@ -330,7 +330,7 @@ impl BenchExecutor for PureExecution {
     #[cfg(feature = "aot")]
     type Instance = AotInstance<'static, ExecutionCtx>;
     #[cfg(feature = "rvr")]
-    type Instance = RvrPureInstance<'static, BabyBear>;
+    type Instance = RvrPureInstance<'static>;
     #[cfg(all(not(feature = "aot"), not(feature = "rvr")))]
     type Instance = InterpretedInstance<'static, ExecutionCtx>;
 
@@ -361,7 +361,7 @@ impl BenchExecutor for MeteredExecution {
     #[cfg(feature = "aot")]
     type Instance = (AotInstance<'static, MeteredCtx>, MeteredCtx);
     #[cfg(feature = "rvr")]
-    type Instance = (RvrMeteredInstance<'static, BabyBear>, MeteredCtx);
+    type Instance = (RvrMeteredInstance<'static>, MeteredCtx);
     #[cfg(all(not(feature = "aot"), not(feature = "rvr")))]
     type Instance = (InterpretedInstance<'static, MeteredCtx>, MeteredCtx);
 
@@ -394,7 +394,7 @@ impl BenchExecutor for MeteredExecution {
 
 impl BenchExecutor for MeteredCostExecution {
     #[cfg(feature = "rvr")]
-    type Instance = RvrMeteredCostInstance<'static, BabyBear>;
+    type Instance = RvrMeteredCostInstance<'static>;
     #[cfg(not(feature = "rvr"))]
     type Instance = InterpretedInstance<'static, MeteredCostCtx>;
 

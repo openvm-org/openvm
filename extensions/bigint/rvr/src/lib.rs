@@ -8,15 +8,15 @@ use openvm_bigint_transpiler::{
     Rv64BaseAlu256Opcode, Rv64BranchEqual256Opcode, Rv64BranchLessThan256Opcode,
     Rv64LessThan256Opcode, Rv64Mul256Opcode, Rv64Shift256Opcode,
 };
-use openvm_instructions::{
-    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV64_REGISTER_NUM_LIMBS, LocalOpcode,
-};
+use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode};
 use openvm_riscv_transpiler::{
     BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, LessThanOpcode, MulOpcode, ShiftOpcode,
 };
-use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg, Terminator};
-use rvr_openvm_lift::{opcode_air_idx, AirIndex, ExtensionError, RvrExtension, RvrExtensionCtx};
+use rvr_openvm_lift::{
+    decode_reg, opcode_air_idx, AirIndex, ExtensionError, RvrExtension, RvrExtensionCtx,
+    RvrInstruction,
+};
 use strum::EnumCount;
 
 // ── ALU / branch opcode enums ───────────────────────────────────────────────
@@ -299,24 +299,8 @@ impl Int256Extension {
     }
 }
 
-/// Decode register index from OpenVM operand (divided by RV64_REGISTER_NUM_LIMBS).
-fn decode_reg<F: PrimeField32>(f: F) -> u8 {
-    (f.as_canonical_u32() / RV64_REGISTER_NUM_LIMBS as u32) as u8
-}
-
-/// Decode a field element as a signed immediate (for branch offsets).
-fn decode_imm<F: PrimeField32>(f: F) -> i32 {
-    let v = f.as_canonical_u32();
-    let p = F::ORDER_U32;
-    if v > p / 2 {
-        v.wrapping_sub(p) as i32
-    } else {
-        v as i32
-    }
-}
-
-impl<F: PrimeField32> RvrExtension<F> for Int256Extension {
-    fn try_lift(&self, insn: &Instruction<F>, pc: u64) -> Option<LiftedInstr> {
+impl RvrExtension for Int256Extension {
+    fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
 
         // ── ALU body instructions ───────────────────────────────────────
@@ -372,7 +356,7 @@ impl<F: PrimeField32> RvrExtension<F> for Int256Extension {
             let is_ne = opcode - beq_start == 1;
             let rs1_reg = decode_reg(insn.a);
             let rs2_reg = decode_reg(insn.b);
-            let imm = decode_imm(insn.c);
+            let imm = insn.signed_c();
             let target_pc = (pc as i64 + imm as i64) as u64;
             let fall_pc = pc + DEFAULT_PC_STEP as u64;
             let chip_idx = self.chip_idx_for_opcode(opcode);
@@ -403,7 +387,7 @@ impl<F: PrimeField32> RvrExtension<F> for Int256Extension {
             };
             let rs1_reg = decode_reg(insn.a);
             let rs2_reg = decode_reg(insn.b);
-            let imm = decode_imm(insn.c);
+            let imm = insn.signed_c();
             let target_pc = (pc as i64 + imm as i64) as u64;
             let fall_pc = pc + DEFAULT_PC_STEP as u64;
             let chip_idx = self.chip_idx_for_opcode(opcode);
@@ -439,12 +423,7 @@ impl<F: PrimeField32> RvrExtension<F> for Int256Extension {
 
 impl Int256Extension {
     /// Lift an R-type ALU instruction: a=rd, b=rs1, c=rs2.
-    fn lift_alu<F: PrimeField32>(
-        &self,
-        insn: &Instruction<F>,
-        pc: u64,
-        op: Int256AluOp,
-    ) -> LiftedInstr {
+    fn lift_alu(&self, insn: &RvrInstruction, pc: u64, op: Int256AluOp) -> LiftedInstr {
         let rd_reg = decode_reg(insn.a);
         let rs1_reg = decode_reg(insn.b);
         let rs2_reg = decode_reg(insn.c);
@@ -461,5 +440,37 @@ impl Int256Extension {
             })),
             source_loc: None,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn instruction(opcode: impl LocalOpcode, c: u32) -> RvrInstruction {
+        RvrInstruction::from_canonical(opcode.global_opcode(), [8, 16, c, 0, 0, 0, 0], 101)
+    }
+
+    #[test]
+    fn bigint_branches_preserve_negative_field_encoded_offsets() {
+        let pc = 0x1000;
+        let ext = Int256Extension::new(None).unwrap();
+
+        for insn in [
+            instruction(Rv64BranchEqual256Opcode(BranchEqualOpcode::BEQ), 101 - 12),
+            instruction(
+                Rv64BranchLessThan256Opcode(BranchLessThanOpcode::BLT),
+                101 - 12,
+            ),
+        ] {
+            let lifted = ext.try_lift(&insn, pc).unwrap();
+            let LiftedInstr::Term { terminator, .. } = lifted else {
+                panic!("expected bigint branch terminator");
+            };
+            assert_eq!(
+                terminator.successors(pc + DEFAULT_PC_STEP as u64),
+                [pc - 12, pc + 4]
+            );
+        }
     }
 }

@@ -17,17 +17,14 @@ use openvm_circuit::arch::{
 #[cfg(feature = "rvr")]
 use serde::{Deserialize, Serialize};
 
-#[cfg(feature = "rvr")]
-use crate::F;
-
 cfg_if::cfg_if! {
     if #[cfg(feature = "rvr")] {
         use openvm_circuit::arch::rvr::{
             RvrMeteredCostInstance, RvrMeteredInstance, RvrPureInstance,
         };
-        pub type CompiledExePure<'a> = RvrPureInstance<'a, F>;
-        pub type MeteredInstance<'a> = RvrMeteredInstance<'a, F>;
-        pub type MeteredCostInstance<'a> = RvrMeteredCostInstance<'a, F>;
+        pub type CompiledExePure<'a> = RvrPureInstance<'a>;
+        pub type MeteredInstance<'a> = RvrMeteredInstance<'a>;
+        pub type MeteredCostInstance<'a> = RvrMeteredCostInstance<'a>;
     } else if #[cfg(feature = "aot")] {
         use openvm_circuit::arch::AotInstance;
         pub type CompiledExePure<'a> = AotInstance<'a, ExecutionCtx>;

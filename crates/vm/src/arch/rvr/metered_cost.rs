@@ -1,19 +1,14 @@
 //! Metered cost execution: per-chip trace cost tracking matching OpenVM's `MeteredCostCtx`.
 
-use std::{
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::path::{Path, PathBuf};
 
-use openvm_instructions::exe::VmExe;
-use openvm_stark_backend::p3_field::PrimeField32;
-use rvr_openvm_lift::ExtensionRegistry;
+use rvr_openvm_lift::RvrRuntimeExtension;
 
 use super::{
     bridge::map_rvr_execute_error,
     execute_metered_cost,
     state::{MeteredCostState, TracerPayload, TracerPtr},
-    RvrCompiled,
+    RvrCompiled, RvrInitialImage,
 };
 #[cfg(feature = "metrics")]
 use crate::arch::execution_metrics::{ExecutionMetric, ExecutionMetricTimer};
@@ -27,10 +22,10 @@ pub struct RvrMeteredCostResult {
     pub cost: u64,
 }
 
-pub struct RvrMeteredCostInstance<'a, F: PrimeField32> {
+pub struct RvrMeteredCostInstance<'a> {
     pub(crate) system_config: &'a SystemConfig,
-    pub(crate) exe: Arc<VmExe<F>>,
-    pub(crate) extensions: ExtensionRegistry<F>,
+    pub(crate) initial_image: RvrInitialImage,
+    pub(crate) runtime_hooks: Vec<Box<dyn RvrRuntimeExtension>>,
     pub(crate) compiled: RvrCompiled,
     /// Must match the widths baked into `compiled` so per-block constants and
     /// extension `trace_chip` calls compute cost against the same values.
@@ -76,7 +71,7 @@ impl TracerPayload for PureTracerData {
 
 pub type PureTracer = TracerPtr<PureTracerData>;
 
-impl<F: PrimeField32> RvrMeteredCostInstance<'_, F> {
+impl RvrMeteredCostInstance<'_> {
     /// Persist the compiled shared library into `dir`. Returns the path to
     /// the copied artifact. The user must re-supply `exe`, `executor_idx_to_air_idx`,
     /// and `widths` when loading.
@@ -90,12 +85,9 @@ impl<F: PrimeField32> RvrMeteredCostInstance<'_, F> {
         inputs: impl Into<Streams>,
         ctx: MeteredCostCtx,
     ) -> Result<(MeteredCostCtx, VmState<GuestMemory>), ExecutionError> {
-        let vm_state = VmState::initial(
-            self.system_config,
-            &self.exe.init_memory,
-            self.exe.pc_start,
-            inputs,
-        );
+        let vm_state = self
+            .initial_image
+            .create_vm_state(self.system_config, inputs);
         self.execute_metered_cost_from_state(vm_state, ctx)
     }
 
@@ -110,7 +102,7 @@ impl<F: PrimeField32> RvrMeteredCostInstance<'_, F> {
             .in_scope(|| {
                 execute_metered_cost(
                     &self.compiled,
-                    &self.extensions,
+                    &self.runtime_hooks,
                     &mut vm_state,
                     &self.widths,
                 )
