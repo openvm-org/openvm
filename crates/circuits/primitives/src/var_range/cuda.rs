@@ -16,8 +16,7 @@ pub struct VariableRangeCheckerChipGPU {
     pub cpu_chip: Option<Arc<VariableRangeCheckerChip>>,
 }
 
-/// [value, bits] are in preprocessed trace
-/// generate_trace returns [count]
+/// The preprocessed trace contains `value` and `bits`; the generated trace contains `count`.
 impl VariableRangeCheckerChipGPU {
     pub fn new(bus: VariableRangeCheckerBus, device_ctx: GpuDeviceCtx) -> Self {
         let num_rows = (1 << (bus.range_max_bits + 1)) as usize;

@@ -106,7 +106,7 @@ jobs:
           cargo build --release --examples --features parallel,root-prover,evm-verify
 
       - name: Run openvm-sdk crate tests (AOT)
-        if: ${{ matrix.mode == 'aot' && inputs.arch == 'x86' }}
+        if: ${{ matrix.mode == 'aot' && (inputs.arch || 'x86') == 'x86' }}
         working-directory: crates/sdk
         run: |
           export RUST_BACKTRACE=1
