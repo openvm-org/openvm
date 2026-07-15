@@ -9,9 +9,7 @@
 
 using namespace riscv;
 
-// Adapter columns for immediate-operand base-ALU instructions (I-type: read rs1,
-// write rd, immediate operand). Immediate-only variant of Rv64BaseAluU16AdapterCols:
-// rs2 is always an immediate, so there is no rs2_as / rs2_imm_sign and only one reads_aux.
+// U16-limb adapter with one register read and one register write.
 template <typename T> struct Rv64BaseAluImmU16AdapterCols {
     ExecutionState<T> from_state;
     T rd_ptr;
@@ -28,6 +26,10 @@ struct Rv64BaseAluImmU16AdapterRecord {
     MemoryReadAuxRecord reads_aux;
     MemoryWriteU16AuxRecord<BLOCK_FE_WIDTH> writes_aux;
 };
+
+static_assert(sizeof(Rv64BaseAluImmU16AdapterRecord) == 32);
+static_assert(offsetof(Rv64BaseAluImmU16AdapterRecord, reads_aux) == 16);
+static_assert(offsetof(Rv64BaseAluImmU16AdapterRecord, writes_aux) == 20);
 
 struct Rv64BaseAluImmU16Adapter {
     MemoryAuxColsFactory mem_helper;

@@ -11,9 +11,9 @@ use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
-    adapters::{Rv64BaseAluU16ImmAdapterCols, Rv64BaseAluU16ImmAdapterRecord, U16_BITS},
-    cuda_abi::shift_right_arithmetic_imm_cuda::tracegen as rv64_shift_right_arithmetic_imm_tracegen,
-    ShiftRightArithmeticCoreCols, ShiftRightArithmeticCoreRecord,
+    adapters::{Rv64BaseAluImmU16AdapterCols, Rv64BaseAluImmU16AdapterRecord, U16_BITS},
+    cuda_abi::shift_right_arithmetic_imm_cuda::tracegen,
+    ShiftRightArithmeticImmCoreCols, ShiftRightArithmeticImmCoreRecord,
 };
 
 #[derive(new)]
@@ -25,8 +25,8 @@ pub struct Rv64ShiftRightArithmeticImmChipGpu {
 impl Chip<DenseRecordArena, GpuBackend> for Rv64ShiftRightArithmeticImmChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         const RECORD_SIZE: usize = size_of::<(
-            Rv64BaseAluU16ImmAdapterRecord,
-            ShiftRightArithmeticCoreRecord<BLOCK_FE_WIDTH, U16_BITS>,
+            Rv64BaseAluImmU16AdapterRecord,
+            ShiftRightArithmeticImmCoreRecord<BLOCK_FE_WIDTH, U16_BITS>,
         )>();
         let records = arena.allocated();
         if records.is_empty() {
@@ -34,8 +34,8 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64ShiftRightArithmeticImmChipGpu {
         }
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
-        let trace_width = Rv64BaseAluU16ImmAdapterCols::<F>::width()
-            + ShiftRightArithmeticCoreCols::<F, BLOCK_FE_WIDTH, U16_BITS>::width();
+        let trace_width = Rv64BaseAluImmU16AdapterCols::<F>::width()
+            + ShiftRightArithmeticImmCoreCols::<F, BLOCK_FE_WIDTH, U16_BITS>::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
 
@@ -44,7 +44,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64ShiftRightArithmeticImmChipGpu {
             .unwrap();
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
         unsafe {
-            rv64_shift_right_arithmetic_imm_tracegen(
+            tracegen(
                 d_trace.buffer(),
                 trace_height,
                 &d_records,

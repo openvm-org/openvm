@@ -9,9 +9,7 @@
 
 using namespace riscv;
 
-// Immediate-only byte-limb adapter (single register read + register write). The immediate itself
-// lives in the core, which passes it back as the ImmInstruction immediate expression, so there
-// is no rs2_imm column and no bitwise lookup here.
+// Byte-limb adapter with one register read and one register write.
 template <typename T> struct Rv64BaseAluImmAdapterCols {
     ExecutionState<T> from_state;
     T rd_ptr;
@@ -28,6 +26,10 @@ struct Rv64BaseAluImmAdapterRecord {
     MemoryReadAuxRecord reads_aux;
     MemoryWriteBytesAuxRecord<RV64_REGISTER_NUM_LIMBS> writes_aux;
 };
+
+static_assert(sizeof(Rv64BaseAluImmAdapterRecord) == 32);
+static_assert(offsetof(Rv64BaseAluImmAdapterRecord, reads_aux) == 16);
+static_assert(offsetof(Rv64BaseAluImmAdapterRecord, writes_aux) == 20);
 
 struct Rv64BaseAluImmAdapter {
     MemoryAuxColsFactory mem_helper;

@@ -3,7 +3,7 @@
 #include "primitives/constants.h"
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
-#include "riscv/adapters/alu_u16.cuh"
+#include "riscv/adapters/alu_reg_u16.cuh"
 #include "riscv/cores/less_than.cuh"
 #include "system/memory/params.cuh"
 
@@ -16,12 +16,12 @@ using Rv64LessThanCoreCols =
     LessThanCoreCols<T, BLOCK_FE_WIDTH, U16_BITS>;
 
 template <typename T> struct LessThanCols {
-    Rv64BaseAluU16AdapterCols<T> adapter;
+    Rv64BaseAluRegU16AdapterCols<T> adapter;
     Rv64LessThanCoreCols<T> core;
 };
 
 struct LessThanRecord {
-    Rv64BaseAluU16AdapterRecord adapter;
+    Rv64BaseAluRegU16AdapterRecord adapter;
     Rv64LessThanCoreRecord core;
 };
 
@@ -38,7 +38,7 @@ __global__ void rv64_less_than_tracegen(
     if (idx < records.len()) {
         auto const &record = records[idx];
 
-        auto adapter = Rv64BaseAluU16Adapter(
+        auto adapter = Rv64BaseAluRegU16Adapter(
             VariableRangeChecker(range_checker_ptr, range_checker_num_bins),
             timestamp_max_bits
         );

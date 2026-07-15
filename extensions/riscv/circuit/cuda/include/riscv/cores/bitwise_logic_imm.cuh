@@ -7,11 +7,7 @@
 
 using namespace riscv;
 
-// ----------------------------------------------------------------------------
-// Immediate-only fork of BitwiseLogicCore (XORI/ORI/ANDI): the eight `c` byte limbs are replaced
-// by the two low immediate bytes plus a sign bit; the sign-extension bytes are reconstructed
-// here, and the two low bytes are additionally range checked via the bitwise lookup.
-// ----------------------------------------------------------------------------
+// Core columns for bitwise operations with a signed 12-bit immediate.
 
 // Must match BitwiseLogicImmCoreRecord in src/bitwise_logic_imm/core.rs (repr(C, align(4))).
 template <size_t NUM_LIMBS> struct alignas(4) BitwiseLogicImmCoreRecord {
@@ -39,11 +35,11 @@ template <size_t NUM_LIMBS, size_t LIMB_BITS> struct BitwiseLogicImmCore {
     __device__ BitwiseLogicImmCore(BitwiseOperationLookup lookup) : bitwise_lookup(lookup) {}
 
     __device__ void fill_trace_row(RowSlice row, BitwiseLogicImmCoreRecord<NUM_LIMBS> record) {
-        // Sign-extended byte limbs of the immediate: bytes 2.. are 0xFF * imm_sign.
+        // Sign-extended byte limbs of the immediate.
         uint8_t sign_byte = record.imm_sign * uint8_t((1u << LIMB_BITS) - 1u);
         uint8_t c[NUM_LIMBS];
         c[0] = record.c_low[0];
-        c[1] = record.c_low[1];
+        c[1] = record.c_low[1] + record.imm_sign * 0xf8;
 #pragma unroll
         for (size_t i = 2; i < NUM_LIMBS; i++) {
             c[i] = sign_byte;
@@ -68,8 +64,8 @@ template <size_t NUM_LIMBS, size_t LIMB_BITS> struct BitwiseLogicImmCore {
             }
         }
 
-        // Range check the two low immediate bytes (unique decomposition of the operand).
-        bitwise_lookup.add_range(record.c_low[0], record.c_low[1]);
+        // Adding 0xf8 forces c_low[1] into the 3-bit range.
+        bitwise_lookup.add_range(record.c_low[0], record.c_low[1] + 0xf8);
 #pragma unroll
         for (size_t i = 0; i < NUM_LIMBS; i++) {
             bitwise_lookup.add_xor(record.b[i], c[i]);

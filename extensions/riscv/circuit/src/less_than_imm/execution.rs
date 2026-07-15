@@ -8,14 +8,14 @@ use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_IMM_AS, RV64_REGISTER_AS},
+    riscv::{RV64_IMM_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::LessThanImmOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::core::LessThanImmExecutor;
-use crate::adapters::imm_to_rv64_u64;
+use crate::adapters::{imm_to_rv64_u64, is_canonical_i12};
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -44,11 +44,15 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
             e,
             ..
         } = inst;
-        if d.as_canonical_u32() != RV64_REGISTER_AS || e.as_canonical_u32() != RV64_IMM_AS {
+        let c = c.as_canonical_u32();
+        if d.as_canonical_u32() != RV64_REGISTER_AS
+            || e.as_canonical_u32() != RV64_IMM_AS
+            || !is_canonical_i12(c)
+        {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         *data = LessThanImmPreCompute {
-            c: imm_to_rv64_u64(c.as_canonical_u32()),
+            c: imm_to_rv64_u64(c),
             a: a.as_canonical_u32() as u8,
             b: b.as_canonical_u32() as u8,
         };
@@ -161,11 +165,16 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: ImmOp>(
     pre_compute: &LessThanImmPreCompute,
     exec_state: &mut VmExecState<F, GuestMemory, CTX>,
 ) {
-    let rs1 = exec_state.vm_read_bytes::<8>(RV64_REGISTER_AS, pre_compute.b as u32);
+    let rs1 =
+        exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.b as u32);
     let rs1 = u64::from_le_bytes(rs1);
     let rs2 = pre_compute.c;
     let rd = <OP as ImmOp>::compute(rs1, rs2);
-    exec_state.vm_write_bytes::<8>(RV64_REGISTER_AS, pre_compute.a as u32, &rd.to_le_bytes());
+    exec_state.vm_write_bytes::<RV64_REGISTER_NUM_LIMBS>(
+        RV64_REGISTER_AS,
+        pre_compute.a as u32,
+        &rd.to_le_bytes(),
+    );
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
 }

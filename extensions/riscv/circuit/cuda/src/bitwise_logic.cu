@@ -2,7 +2,7 @@
 #include "primitives/buffer_view.cuh"
 #include "primitives/constants.h"
 #include "primitives/trace_access.h"
-#include "riscv/adapters/alu.cuh"
+#include "riscv/adapters/alu_reg.cuh"
 #include "riscv/cores/bitwise_logic.cuh"
 
 using namespace riscv;
@@ -13,12 +13,12 @@ using Rv64BitwiseLogicCore = BitwiseLogicCore<RV64_REGISTER_NUM_LIMBS>;
 template <typename T> using Rv64BitwiseLogicCoreCols = BitwiseLogicCoreCols<T, RV64_REGISTER_NUM_LIMBS>;
 
 template <typename T> struct Rv64BitwiseLogicCols {
-    Rv64BaseAluAdapterCols<T> adapter;
+    Rv64BaseAluRegAdapterCols<T> adapter;
     Rv64BitwiseLogicCoreCols<T> core;
 };
 
 struct Rv64BitwiseLogicRecord {
-    Rv64BaseAluAdapterRecord adapter;
+    Rv64BaseAluRegAdapterRecord adapter;
     Rv64BitwiseLogicCoreRecord core;
 };
 
@@ -36,9 +36,8 @@ __global__ void bitwise_logic_tracegen(
     if (idx < d_records.len()) {
         auto const &rec = d_records[idx];
 
-        Rv64BaseAluAdapter adapter(
+        Rv64BaseAluRegAdapter adapter(
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins),
-            BitwiseOperationLookup(d_bitwise_lookup_ptr),
             timestamp_max_bits
         );
         adapter.fill_trace_row(row, rec.adapter);

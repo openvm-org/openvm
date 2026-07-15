@@ -25,9 +25,7 @@ use strum::IntoEnumIterator;
 
 use crate::less_than::run_less_than;
 
-/// Immediate-only fork of `LessThanCoreCols`: the `c` limbs are replaced by the ADDI-style
-/// two-column immediate encoding (`imm_low11` + `imm_sign`); the sign-extended limbs are
-/// reconstructed as expressions.
+/// Core columns for comparisons with a signed 12-bit immediate.
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection, Debug)]
 pub struct LessThanImmCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
@@ -114,9 +112,13 @@ where
         let mut prefix_sum = AB::Expr::ZERO;
 
         let b_diff = b[NUM_LIMBS - 1] - cols.b_msb_f;
-        let c_diff = c[NUM_LIMBS - 1].clone() - cols.c_msb_f;
         builder.assert_zero(b_diff.clone() * (AB::Expr::from_u32(1 << LIMB_BITS) - b_diff));
-        builder.assert_zero(c_diff.clone() * (AB::Expr::from_u32(1 << LIMB_BITS) - c_diff));
+        builder.assert_eq(
+            cols.c_msb_f,
+            cols.imm_sign
+                * (AB::Expr::from_u32((1 << LIMB_BITS) - 1)
+                    - cols.opcode_slt_flag * AB::Expr::from_u32(1 << LIMB_BITS)),
+        );
 
         for i in (0..NUM_LIMBS).rev() {
             let diff = (if i == NUM_LIMBS - 1 {
@@ -138,9 +140,6 @@ where
         let sign_shift = AB::Expr::from_u32(1 << (LIMB_BITS - 1)) * cols.opcode_slt_flag;
         self.range_bus
             .range_check(cols.b_msb_f + sign_shift.clone(), LIMB_BITS)
-            .eval(builder, is_valid.clone());
-        self.range_bus
-            .range_check(cols.c_msb_f + sign_shift, LIMB_BITS)
             .eval(builder, is_valid.clone());
 
         self.range_bus
@@ -197,7 +196,6 @@ pub struct LessThanImmExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: usize
 pub struct LessThanImmFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
-    pub offset: usize,
 }
 
 pub(crate) fn imm_to_u16_limbs<const NUM_LIMBS: usize>(
@@ -308,16 +306,10 @@ where
                 b[NUM_LIMBS - 1] as u32 + ((is_slt as u32) << (LIMB_BITS - 1)),
             )
         };
-        let (c_msb_f, c_msb_range) = if c_sign {
-            (
-                -F::from_u16(c[NUM_LIMBS - 1].wrapping_neg()),
-                c[NUM_LIMBS - 1] as u32 - (1u32 << (LIMB_BITS - 1)),
-            )
+        let c_msb_f = if c_sign && is_slt {
+            -F::ONE
         } else {
-            (
-                F::from_u16(c[NUM_LIMBS - 1]),
-                c[NUM_LIMBS - 1] as u32 + ((is_slt as u32) << (LIMB_BITS - 1)),
-            )
+            F::from_u16(c[NUM_LIMBS - 1])
         };
 
         let diff_val = if diff_idx == NUM_LIMBS {
@@ -336,7 +328,6 @@ where
 
         self.range_checker_chip.add_count(imm_low11 as u32, 11);
         self.range_checker_chip.add_count(b_msb_range, LIMB_BITS);
-        self.range_checker_chip.add_count(c_msb_range, LIMB_BITS);
 
         core_row.diff_val = diff_val;
         core_row.diff_marker = [F::ZERO; NUM_LIMBS];

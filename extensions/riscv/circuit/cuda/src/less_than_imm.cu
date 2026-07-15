@@ -3,30 +3,32 @@
 #include "primitives/constants.h"
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
-#include "riscv/adapters/imm_alu_u16.cuh"
+#include "riscv/adapters/alu_imm_u16.cuh"
 #include "riscv/cores/less_than_imm.cuh"
 #include "system/memory/params.cuh"
 
 using namespace riscv;
 
-// SLTI/SLTIU use u16 limbs (4 limbs of 16 bits) and the single-read ADDI adapter; the immediate
-// lives in the core as the ADDI-style (imm_low11, imm_sign) pair.
+// SLTI/SLTIU use u16 limbs and the single-read immediate adapter.
 using Rv64LessThanImmCoreRecord = LessThanImmCoreRecord<BLOCK_FE_WIDTH, U16_BITS>;
 using Rv64LessThanImmCore = LessThanImmCore<BLOCK_FE_WIDTH, U16_BITS>;
 template <typename T>
 using Rv64LessThanImmCoreCols = LessThanImmCoreCols<T, BLOCK_FE_WIDTH, U16_BITS>;
 
 template <typename T> struct LessThanImmCols {
-    Rv64ImmBaseAluU16AdapterCols<T> adapter;
+    Rv64BaseAluImmU16AdapterCols<T> adapter;
     Rv64LessThanImmCoreCols<T> core;
 };
 
 struct LessThanImmRecord {
-    Rv64ImmBaseAluU16AdapterRecord adapter;
+    Rv64BaseAluImmU16AdapterRecord adapter;
     Rv64LessThanImmCoreRecord core;
 };
 
-__global__ void rv64_less_than_imm_tracegen(
+static_assert(sizeof(LessThanImmRecord) == 48);
+static_assert(offsetof(LessThanImmRecord, core) == 32);
+
+__global__ void less_than_imm_tracegen(
     Fp *trace,
     size_t height,
     size_t width,
@@ -40,7 +42,7 @@ __global__ void rv64_less_than_imm_tracegen(
     if (idx < records.len()) {
         auto const &record = records[idx];
 
-        auto adapter = Rv64ImmBaseAluU16Adapter(
+        auto adapter = Rv64BaseAluImmU16Adapter(
             VariableRangeChecker(range_checker_ptr, range_checker_num_bins),
             timestamp_max_bits
         );
@@ -54,7 +56,7 @@ __global__ void rv64_less_than_imm_tracegen(
     }
 }
 
-extern "C" int _rv64_less_than_imm_tracegen(
+extern "C" int _less_than_imm_tracegen(
     Fp *__restrict__ d_trace,
     size_t height,
     size_t width,
@@ -67,7 +69,7 @@ extern "C" int _rv64_less_than_imm_tracegen(
     assert(width == sizeof(LessThanImmCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height, 512);
 
-    rv64_less_than_imm_tracegen<<<grid, block, 0, stream>>>(
+    less_than_imm_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
         width,

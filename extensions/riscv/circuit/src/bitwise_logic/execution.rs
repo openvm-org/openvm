@@ -8,13 +8,13 @@ use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_IMM_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    riscv::{RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::BaseAluOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use crate::{adapters::imm_to_rv64_u64, BitwiseLogicExecutor};
+use crate::BitwiseLogicExecutor;
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -25,49 +25,33 @@ pub(super) struct BitwiseLogicPreCompute {
 }
 
 impl<A, const LIMB_BITS: usize> BitwiseLogicExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS> {
-    /// Return `is_imm`, true if `e` is RV64_IMM_AS.
     #[inline(always)]
     pub(super) fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
         data: &mut BitwiseLogicPreCompute,
-    ) -> Result<bool, StaticProgramError> {
+    ) -> Result<(), StaticProgramError> {
         let Instruction { a, b, c, d, e, .. } = inst;
-        let e_u32 = e.as_canonical_u32();
-        if (d.as_canonical_u32() != RV64_REGISTER_AS)
-            || !(e_u32 == RV64_IMM_AS || e_u32 == RV64_REGISTER_AS)
-        {
+        if d.as_canonical_u32() != RV64_REGISTER_AS || e.as_canonical_u32() != RV64_REGISTER_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
-        let is_imm = e_u32 == RV64_IMM_AS;
-        let c_u32 = c.as_canonical_u32();
         *data = BitwiseLogicPreCompute {
-            c: if is_imm {
-                imm_to_rv64_u64(c_u32)
-            } else {
-                c_u32 as u64
-            },
+            c: c.as_canonical_u32() as u64,
             a: a.as_canonical_u32() as u8,
             b: b.as_canonical_u32() as u8,
         };
-        Ok(is_imm)
+        Ok(())
     }
 }
 
 macro_rules! dispatch {
-    ($execute_impl:ident, $is_imm:ident, $opcode:expr, $offset:expr) => {
+    ($execute_impl:ident, $opcode:expr, $offset:expr) => {
         Ok(
-            match (
-                $is_imm,
-                BaseAluOpcode::from_usize($opcode.local_opcode_idx($offset)),
-            ) {
-                (true, BaseAluOpcode::XOR) => $execute_impl::<_, true, XorOp>,
-                (false, BaseAluOpcode::XOR) => $execute_impl::<_, false, XorOp>,
-                (true, BaseAluOpcode::OR) => $execute_impl::<_, true, OrOp>,
-                (false, BaseAluOpcode::OR) => $execute_impl::<_, false, OrOp>,
-                (true, BaseAluOpcode::AND) => $execute_impl::<_, true, AndOp>,
-                (false, BaseAluOpcode::AND) => $execute_impl::<_, false, AndOp>,
+            match BaseAluOpcode::from_usize($opcode.local_opcode_idx($offset)) {
+                BaseAluOpcode::XOR => $execute_impl::<_, false, XorOp>,
+                BaseAluOpcode::OR => $execute_impl::<_, false, OrOp>,
+                BaseAluOpcode::AND => $execute_impl::<_, false, AndOp>,
                 _ => unreachable!("BitwiseLogicExecutor received non-XOR/OR/AND opcode"),
             },
         )
@@ -95,9 +79,8 @@ where
         Ctx: ExecutionCtxTrait,
     {
         let data: &mut BitwiseLogicPreCompute = data.borrow_mut();
-        let is_imm = self.pre_compute_impl(pc, inst, data)?;
-
-        dispatch!(execute_e1_handler, is_imm, inst.opcode, self.offset)
+        self.pre_compute_impl(pc, inst, data)?;
+        dispatch!(execute_e1_handler, inst.opcode, self.offset)
     }
 
     #[cfg(feature = "tco")]
@@ -111,9 +94,8 @@ where
         Ctx: ExecutionCtxTrait,
     {
         let data: &mut BitwiseLogicPreCompute = data.borrow_mut();
-        let is_imm = self.pre_compute_impl(pc, inst, data)?;
-
-        dispatch!(execute_e1_handler, is_imm, inst.opcode, self.offset)
+        self.pre_compute_impl(pc, inst, data)?;
+        dispatch!(execute_e1_handler, inst.opcode, self.offset)
     }
 }
 
@@ -140,9 +122,8 @@ where
     {
         let data: &mut E2PreCompute<BitwiseLogicPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
-        let is_imm = self.pre_compute_impl(pc, inst, &mut data.data)?;
-
-        dispatch!(execute_e2_handler, is_imm, inst.opcode, self.offset)
+        self.pre_compute_impl(pc, inst, &mut data.data)?;
+        dispatch!(execute_e2_handler, inst.opcode, self.offset)
     }
 
     #[cfg(feature = "tco")]
@@ -158,9 +139,8 @@ where
     {
         let data: &mut E2PreCompute<BitwiseLogicPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
-        let is_imm = self.pre_compute_impl(pc, inst, &mut data.data)?;
-
-        dispatch!(execute_e2_handler, is_imm, inst.opcode, self.offset)
+        self.pre_compute_impl(pc, inst, &mut data.data)?;
+        dispatch!(execute_e2_handler, inst.opcode, self.offset)
     }
 }
 

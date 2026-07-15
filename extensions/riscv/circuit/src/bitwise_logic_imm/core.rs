@@ -24,16 +24,15 @@ use openvm_stark_backend::{
 
 use crate::{adapters::imm_to_rv64_bytes, bitwise_logic::run_bitwise_logic};
 
-/// Immediate-only fork of `BitwiseLogicCoreCols`: the eight `c` byte limbs are replaced by the
-/// two low immediate bytes plus a sign bit; the sign-extension bytes are expressions.
+/// Core columns for bitwise operations with a signed 12-bit immediate.
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection, Debug)]
 pub struct BitwiseLogicImmCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub a: [T; NUM_LIMBS],
     pub b: [T; NUM_LIMBS],
-    /// The two low bytes of the 24-bit immediate operand.
+    /// The low byte and bits `[10:8]` of the signed 12-bit immediate.
     pub c_low: [T; 2],
-    /// Sign bit of the immediate: byte 2 of the operand is `0xFF * imm_sign`.
+    /// Sign bit of the immediate.
     pub imm_sign: T,
 
     pub opcode_xor_flag: T,
@@ -89,17 +88,17 @@ where
         builder.assert_bool(is_valid.clone());
         builder.assert_bool(cols.imm_sign);
 
-        // Range check the two low immediate bytes; together with the boolean sign this makes
-        // the decomposition of the 24-bit operand unique.
+        // Adding 0xf8 forces c_low[1] into the 3-bit range while the lookup also range-checks
+        // c_low[0].
         self.bus
-            .send_range(cols.c_low[0], cols.c_low[1])
+            .send_range(cols.c_low[0], cols.c_low[1] + AB::Expr::from_u32(0xf8))
             .eval(builder, is_valid.clone());
 
         // Sign-extended byte limbs of the immediate, as expressions.
         let sign_byte = cols.imm_sign * AB::Expr::from_u32((1 << LIMB_BITS) - 1);
         let c: [AB::Expr; NUM_LIMBS] = array::from_fn(|i| match i {
             0 => cols.c_low[0].into(),
-            1 => cols.c_low[1].into(),
+            1 => cols.c_low[1] + cols.imm_sign * AB::Expr::from_u32(0xf8),
             _ => sign_byte.clone(),
         });
 
@@ -122,10 +121,10 @@ where
                 + cols.opcode_and_flag * AB::Expr::from_u8(BitwiseImmOpcode::ANDI as u8),
         );
 
-        // 24-bit encoding matching i12_to_u24 in the transpiler (byte 2 is the sign byte).
+        // Canonical 24-bit sign extension of the signed 12-bit immediate.
         let imm = cols.c_low[0]
             + cols.c_low[1] * AB::Expr::from_u32(1 << LIMB_BITS)
-            + sign_byte * AB::Expr::from_u32(1 << (2 * LIMB_BITS));
+            + cols.imm_sign * AB::Expr::from_u32(0xff_f800);
 
         AdapterAirContext {
             to_pc: None,
@@ -164,7 +163,6 @@ pub struct BitwiseLogicImmExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: u
 pub struct BitwiseLogicImmFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
-    pub offset: usize,
 }
 
 impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> PreflightExecutor<F, RA>
@@ -210,7 +208,7 @@ where
         let c_bytes_full = imm_to_rv64_bytes(c.as_canonical_u32());
         let mut c_bytes = [0u8; NUM_LIMBS];
         c_bytes.copy_from_slice(&c_bytes_full[..NUM_LIMBS]);
-        core_record.c_low = [c_bytes[0], c_bytes[1]];
+        core_record.c_low = [c_bytes[0], c_bytes[1] & 0x07];
         core_record.imm_sign = (c_bytes[2] != 0) as u8;
         core_record.local_opcode = local_opcode as u8;
 
@@ -248,7 +246,7 @@ where
         let sign_byte = imm_sign * (((1u32 << LIMB_BITS) - 1) as u8);
         let c: [u8; NUM_LIMBS] = array::from_fn(|i| match i {
             0 => c_low[0],
-            1 => c_low[1],
+            1 => c_low[1] + imm_sign * 0xf8,
             _ => sign_byte,
         });
 
@@ -256,7 +254,7 @@ where
         let a = run_bitwise_logic::<NUM_LIMBS, LIMB_BITS>(reg_opcode, &b, &c);
 
         self.bitwise_lookup_chip
-            .request_range(c_low[0] as u32, c_low[1] as u32);
+            .request_range(c_low[0] as u32, (c_low[1] + 0xf8) as u32);
         for (b_val, c_val) in zip(b, c) {
             self.bitwise_lookup_chip
                 .request_xor(b_val as u32, c_val as u32);

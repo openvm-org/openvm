@@ -15,12 +15,10 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 
-mod alu;
 mod alu_imm;
 mod alu_imm_u16;
+mod alu_reg;
 mod alu_reg_u16;
-mod alu_u16;
-mod alu_u16_imm;
 mod alu_w;
 mod alu_w_u16;
 mod branch;
@@ -31,12 +29,10 @@ mod mul_w;
 mod rdwrite;
 mod store;
 
-pub use alu::*;
 pub use alu_imm::*;
 pub use alu_imm_u16::*;
+pub use alu_reg::*;
 pub use alu_reg_u16::*;
-pub use alu_u16::*;
-pub use alu_u16_imm::*;
 pub use alu_w::*;
 pub use alu_w_u16::*;
 pub use branch::*;
@@ -216,6 +212,14 @@ pub fn imm_to_rv64_u64(imm: u32) -> u64 {
     // Sign-extend from 24 bits to 64 bits:
     let sign_extended = ((imm as i32) << 8) >> 8;
     sign_extended as i64 as u64
+}
+
+/// Returns whether `imm` is the canonical 24-bit sign extension of a signed 12-bit immediate.
+#[inline(always)]
+pub fn is_canonical_i12(imm: u32) -> bool {
+    let low11 = imm & ((1 << 11) - 1);
+    let sign = (imm >> 11) & 1;
+    imm == low11 + sign * 0xff_f800
 }
 
 #[inline(always)]

@@ -3,30 +3,36 @@
 #include "primitives/constants.h"
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
-#include "riscv/adapters/alu_u16_imm.cuh"
-#include "riscv/cores/shift_right_arithmetic.cuh"
+#include "riscv/adapters/alu_imm_u16.cuh"
+#include "riscv/cores/shift_right_arithmetic_imm.cuh"
 #include "system/memory/params.cuh"
 
 using namespace riscv;
 using namespace program;
 
 // SRAI uses u16 limbs (4 limbs of 16 bits) and the immediate-only u16 ALU adapter.
-using Rv64ShiftRightArithmeticCoreRecord = ShiftRightArithmeticCoreRecord<BLOCK_FE_WIDTH, U16_BITS>;
-using Rv64ShiftRightArithmeticCore = ShiftRightArithmeticCore<BLOCK_FE_WIDTH, U16_BITS>;
+using Rv64ShiftRightArithmeticImmCoreRecord =
+    ShiftRightArithmeticImmCoreRecord<BLOCK_FE_WIDTH, U16_BITS>;
+using Rv64ShiftRightArithmeticImmCore =
+    ShiftRightArithmeticImmCore<BLOCK_FE_WIDTH, U16_BITS>;
 template <typename T>
-using Rv64ShiftRightArithmeticCoreCols = ShiftRightArithmeticCoreCols<T, BLOCK_FE_WIDTH, U16_BITS>;
+using Rv64ShiftRightArithmeticImmCoreCols =
+    ShiftRightArithmeticImmCoreCols<T, BLOCK_FE_WIDTH, U16_BITS>;
 
 template <typename T> struct ShiftRightArithmeticImmCols {
-    Rv64BaseAluU16ImmAdapterCols<T> adapter;
-    Rv64ShiftRightArithmeticCoreCols<T> core;
+    Rv64BaseAluImmU16AdapterCols<T> adapter;
+    Rv64ShiftRightArithmeticImmCoreCols<T> core;
 };
 
 struct ShiftRightArithmeticImmRecord {
-    Rv64BaseAluU16ImmAdapterRecord adapter;
-    Rv64ShiftRightArithmeticCoreRecord core;
+    Rv64BaseAluImmU16AdapterRecord adapter;
+    Rv64ShiftRightArithmeticImmCoreRecord core;
 };
 
-__global__ void rv64_shift_right_arithmetic_imm_tracegen(
+static_assert(sizeof(ShiftRightArithmeticImmRecord) == 44);
+static_assert(offsetof(ShiftRightArithmeticImmRecord, core) == 32);
+
+__global__ void shift_right_arithmetic_imm_tracegen(
     Fp *trace,
     size_t height,
     size_t width,
@@ -39,11 +45,13 @@ __global__ void rv64_shift_right_arithmetic_imm_tracegen(
     RowSlice row(trace + idx, height);
     if (idx < records.len()) {
         auto const &rec = records[idx];
-        auto adapter = Rv64BaseAluU16ImmAdapter(
+        auto adapter = Rv64BaseAluImmU16Adapter(
             VariableRangeChecker(range_ptr, range_bins), timestamp_max_bits
         );
         adapter.fill_trace_row(row, rec.adapter);
-        auto core = Rv64ShiftRightArithmeticCore(VariableRangeChecker(range_ptr, range_bins));
+        auto core = Rv64ShiftRightArithmeticImmCore(
+            VariableRangeChecker(range_ptr, range_bins)
+        );
         core.fill_trace_row(
             row.slice_from(COL_INDEX(ShiftRightArithmeticImmCols, core)), rec.core
         );
@@ -52,7 +60,7 @@ __global__ void rv64_shift_right_arithmetic_imm_tracegen(
     }
 }
 
-extern "C" int _rv64_shift_right_arithmetic_imm_tracegen(
+extern "C" int _shift_right_arithmetic_imm_tracegen(
     Fp *__restrict__ d_trace,
     size_t height,
     size_t width,
@@ -65,7 +73,7 @@ extern "C" int _rv64_shift_right_arithmetic_imm_tracegen(
     assert(width == sizeof(ShiftRightArithmeticImmCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height, 512);
 
-    rv64_shift_right_arithmetic_imm_tracegen<<<grid, block, 0, stream>>>(
+    shift_right_arithmetic_imm_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
         width,

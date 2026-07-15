@@ -10,8 +10,9 @@ use openvm_instructions::{
 };
 use openvm_platform::memory::MEM_SIZE;
 use openvm_riscv_transpiler::{
-    BaseAluImmOpcode, Rv64HintStoreOpcode, Rv64ITranspilerExtension, Rv64IoTranspilerExtension,
-    Rv64MTranspilerExtension, Rv64Phantom,
+    BaseAluImmOpcode, BitwiseImmOpcode, LessThanImmOpcode, Rv64HintStoreOpcode,
+    Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension, Rv64Phantom,
+    ShiftImmOpcode,
 };
 use openvm_stark_sdk::{openvm_stark_backend::p3_field::PrimeField32, p3_baby_bear::BabyBear};
 use openvm_transpiler::{elf::Elf, transpiler::Transpiler};
@@ -31,6 +32,14 @@ fn rv64_transpiler() -> Transpiler<F> {
         .with_extension(Rv64ITranspilerExtension)
         .with_extension(Rv64MTranspilerExtension)
         .with_extension(Rv64IoTranspilerExtension)
+}
+
+fn encode_op_imm(funct3: u32, immediate: u32) -> u32 {
+    const OPCODE_OP_IMM: u32 = 0b0010011;
+    const RD: u32 = 3;
+    const RS1: u32 = 5;
+
+    ((immediate & 0xfff) << 20) | (RS1 << 15) | (funct3 << 12) | (RD << 7) | OPCODE_OP_IMM
 }
 
 #[test_case(-2048, 0xff_f800; "minimum")]
@@ -83,6 +92,33 @@ fn test_transpile_rv64_undecodable_word_as_unimp() -> Result<()> {
     let unimp = program[1].as_ref().expect("UNIMP should be emitted");
     assert_eq!(unimp.opcode, SystemOpcode::TERMINATE.global_opcode());
     assert_eq!(unimp.c.as_canonical_u32(), 2);
+
+    Ok(())
+}
+
+#[test_case(0b100, 0x800, BitwiseImmOpcode::XORI.global_opcode().as_usize(), 0xff_f800; "xori")]
+#[test_case(0b110, 0x7ff, BitwiseImmOpcode::ORI.global_opcode().as_usize(), 0x7ff; "ori")]
+#[test_case(0b111, 0xfff, BitwiseImmOpcode::ANDI.global_opcode().as_usize(), 0xff_ffff; "andi")]
+#[test_case(0b010, 0x800, LessThanImmOpcode::SLTI.global_opcode().as_usize(), 0xff_f800; "slti")]
+#[test_case(0b011, 0x7ff, LessThanImmOpcode::SLTIU.global_opcode().as_usize(), 0x7ff; "sltiu")]
+#[test_case(0b001, 63, ShiftImmOpcode::SLLI.global_opcode().as_usize(), 63; "slli")]
+#[test_case(0b101, 63, ShiftImmOpcode::SRLI.global_opcode().as_usize(), 63; "srli")]
+#[test_case(0b101, (0b0100000 << 5) | 63, ShiftImmOpcode::SRAI.global_opcode().as_usize(), 63; "srai")]
+fn test_transpile_split_immediate_opcodes(
+    funct3: u32,
+    immediate: u32,
+    expected_opcode: usize,
+    expected_c: u32,
+) -> Result<()> {
+    let program = rv64_transpiler().transpile(&[encode_op_imm(funct3, immediate)])?;
+    let instruction = program[0]
+        .as_ref()
+        .expect("immediate instruction should be emitted");
+
+    assert_eq!(instruction.opcode.as_usize(), expected_opcode);
+    assert_eq!(instruction.c.as_canonical_u32(), expected_c);
+    assert_eq!(instruction.d.as_canonical_u32(), RV64_REGISTER_AS);
+    assert_eq!(instruction.e.as_canonical_u32(), RV64_IMM_AS);
 
     Ok(())
 }

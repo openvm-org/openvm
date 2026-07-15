@@ -3,8 +3,7 @@
 #include "primitives/constants.h"
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
-#include "riscv/adapters/alu.cuh"
-#include "riscv/adapters/alu_u16.cuh"
+#include "riscv/adapters/alu_reg_u16.cuh"
 #include "riscv/cores/shift_logical.cuh"
 #include "system/memory/params.cuh"
 
@@ -18,12 +17,12 @@ template <typename T>
 using Rv64ShiftLogicalCoreCols = ShiftLogicalCoreCols<T, BLOCK_FE_WIDTH, U16_BITS>;
 
 template <typename T> struct ShiftLogicalCols {
-    Rv64BaseAluU16AdapterCols<T> adapter;
+    Rv64BaseAluRegU16AdapterCols<T> adapter;
     Rv64ShiftLogicalCoreCols<T> core;
 };
 
 struct ShiftLogicalRecord {
-    Rv64BaseAluU16AdapterRecord adapter;
+    Rv64BaseAluRegU16AdapterRecord adapter;
     Rv64ShiftLogicalCoreRecord core;
 };
 
@@ -41,7 +40,8 @@ __global__ void rv64_shift_logical_tracegen(
     if (idx < records.len()) {
         auto const &rec = records[idx];
         auto adapter =
-            Rv64BaseAluU16Adapter(VariableRangeChecker(range_ptr, range_bins), timestamp_max_bits);
+            Rv64BaseAluRegU16Adapter(
+                VariableRangeChecker(range_ptr, range_bins), timestamp_max_bits);
         adapter.fill_trace_row(row, rec.adapter);
         auto core = Rv64ShiftLogicalCore(VariableRangeChecker(range_ptr, range_bins));
         core.fill_trace_row(row.slice_from(COL_INDEX(ShiftLogicalCols, core)), rec.core);

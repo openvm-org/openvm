@@ -8,14 +8,13 @@ use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_IMM_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    riscv::{RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::LessThanOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::core::LessThanExecutor;
-use crate::adapters::imm_to_rv64_u64;
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -32,7 +31,7 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> LessThanExecutor<A, NUM_
         pc: u32,
         inst: &Instruction<F>,
         data: &mut LessThanPreCompute,
-    ) -> Result<(bool, bool), StaticProgramError> {
+    ) -> Result<bool, StaticProgramError> {
         let Instruction {
             opcode,
             a,
@@ -42,36 +41,24 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> LessThanExecutor<A, NUM_
             e,
             ..
         } = inst;
-        let e_u32 = e.as_canonical_u32();
-        if d.as_canonical_u32() != RV64_REGISTER_AS
-            || !(e_u32 == RV64_IMM_AS || e_u32 == RV64_REGISTER_AS)
-        {
+        if d.as_canonical_u32() != RV64_REGISTER_AS || e.as_canonical_u32() != RV64_REGISTER_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         let local_opcode = LessThanOpcode::from_usize(opcode.local_opcode_idx(self.offset));
-        let is_imm = e_u32 == RV64_IMM_AS;
-        let c_u32 = c.as_canonical_u32();
-
         *data = LessThanPreCompute {
-            c: if is_imm {
-                imm_to_rv64_u64(c_u32)
-            } else {
-                c_u32 as u64
-            },
+            c: c.as_canonical_u32() as u64,
             a: a.as_canonical_u32() as u8,
             b: b.as_canonical_u32() as u8,
         };
-        Ok((is_imm, local_opcode == LessThanOpcode::SLTU))
+        Ok(local_opcode == LessThanOpcode::SLTU)
     }
 }
 
 macro_rules! dispatch {
-    ($execute_impl:ident, $is_imm:ident, $is_sltu:ident) => {
-        match ($is_imm, $is_sltu) {
-            (true, true) => Ok($execute_impl::<_, true, true>),
-            (true, false) => Ok($execute_impl::<_, true, false>),
-            (false, true) => Ok($execute_impl::<_, false, true>),
-            (false, false) => Ok($execute_impl::<_, false, false>),
+    ($execute_impl:ident, $is_sltu:ident) => {
+        match $is_sltu {
+            true => Ok($execute_impl::<_, false, true>),
+            false => Ok($execute_impl::<_, false, false>),
         }
     };
 }
@@ -95,8 +82,8 @@ where
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError> {
         let pre_compute: &mut LessThanPreCompute = data.borrow_mut();
-        let (is_imm, is_sltu) = self.pre_compute_impl(pc, inst, pre_compute)?;
-        dispatch!(execute_e1_handler, is_imm, is_sltu)
+        let is_sltu = self.pre_compute_impl(pc, inst, pre_compute)?;
+        dispatch!(execute_e1_handler, is_sltu)
     }
 
     #[cfg(feature = "tco")]
@@ -110,8 +97,8 @@ where
         Ctx: ExecutionCtxTrait,
     {
         let pre_compute: &mut LessThanPreCompute = data.borrow_mut();
-        let (is_imm, is_sltu) = self.pre_compute_impl(pc, inst, pre_compute)?;
-        dispatch!(execute_e1_handler, is_imm, is_sltu)
+        let is_sltu = self.pre_compute_impl(pc, inst, pre_compute)?;
+        dispatch!(execute_e1_handler, is_sltu)
     }
 }
 
@@ -137,8 +124,8 @@ where
     {
         let pre_compute: &mut E2PreCompute<LessThanPreCompute> = data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
-        let (is_imm, is_sltu) = self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
-        dispatch!(execute_e2_handler, is_imm, is_sltu)
+        let is_sltu = self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
+        dispatch!(execute_e2_handler, is_sltu)
     }
 
     #[cfg(feature = "tco")]
@@ -154,8 +141,8 @@ where
     {
         let pre_compute: &mut E2PreCompute<LessThanPreCompute> = data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
-        let (is_imm, is_sltu) = self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
-        dispatch!(execute_e2_handler, is_imm, is_sltu)
+        let is_sltu = self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
+        dispatch!(execute_e2_handler, is_sltu)
     }
 }
 #[inline(always)]

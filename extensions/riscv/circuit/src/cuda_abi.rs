@@ -1303,7 +1303,7 @@ pub mod divrem_w_cuda {
 pub mod shift_logical_imm_cuda {
     use super::*;
     extern "C" {
-        fn _rv64_shift_logical_imm_tracegen(
+        fn _shift_logical_imm_tracegen(
             d_trace: *mut F,
             height: usize,
             width: usize,
@@ -1323,7 +1323,7 @@ pub mod shift_logical_imm_cuda {
         timestamp_max_bits: u32,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
-        CudaError::from_result(_rv64_shift_logical_imm_tracegen(
+        CudaError::from_result(_shift_logical_imm_tracegen(
             d_trace.as_mut_ptr(),
             height,
             d_trace.len() / height,
@@ -1339,7 +1339,7 @@ pub mod shift_logical_imm_cuda {
 pub mod shift_right_arithmetic_imm_cuda {
     use super::*;
     extern "C" {
-        fn _rv64_shift_right_arithmetic_imm_tracegen(
+        fn _shift_right_arithmetic_imm_tracegen(
             d_trace: *mut F,
             height: usize,
             width: usize,
@@ -1359,7 +1359,7 @@ pub mod shift_right_arithmetic_imm_cuda {
         timestamp_max_bits: u32,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
-        CudaError::from_result(_rv64_shift_right_arithmetic_imm_tracegen(
+        CudaError::from_result(_shift_right_arithmetic_imm_tracegen(
             d_trace.as_mut_ptr(),
             height,
             d_trace.len() / height,
@@ -1375,7 +1375,7 @@ pub mod shift_right_arithmetic_imm_cuda {
 pub mod less_than_imm_cuda {
     use super::*;
     extern "C" {
-        fn _rv64_less_than_imm_tracegen(
+        fn _less_than_imm_tracegen(
             d_trace: *mut F,
             height: usize,
             width: usize,
@@ -1395,7 +1395,7 @@ pub mod less_than_imm_cuda {
         timestamp_max_bits: u32,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
-        CudaError::from_result(_rv64_less_than_imm_tracegen(
+        CudaError::from_result(_less_than_imm_tracegen(
             d_trace.as_mut_ptr(),
             height,
             d_trace.len() / height,

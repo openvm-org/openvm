@@ -1,26 +1,28 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper, BLOCK_FE_WIDTH};
 
-use crate::{
-    adapters::{
-        Rv64BaseAluU16ImmAdapterAir, Rv64BaseAluU16ImmAdapterExecutor,
-        Rv64BaseAluU16ImmAdapterFiller, U16_BITS,
-    },
-    ShiftRightArithmeticCoreAir, ShiftRightArithmeticExecutor, ShiftRightArithmeticFiller,
+use crate::adapters::{
+    Rv64BaseAluImmU16AdapterAir, Rv64BaseAluImmU16AdapterExecutor, Rv64BaseAluImmU16AdapterFiller,
+    U16_BITS,
 };
+
+mod core;
+mod execution;
+pub use core::*;
 
 #[cfg(feature = "cuda")]
 mod cuda;
 #[cfg(feature = "cuda")]
 pub use cuda::*;
 
-// Immediate-only variant of the shift_right_arithmetic chip (SRAI).
+// Immediate-only variant of the shift_right_arithmetic chip (SRAI): single-read immediate
+// adapter plus a core which reconstructs the immediate from its shift markers.
 pub type Rv64ShiftRightArithmeticImmAir = VmAirWrapper<
-    Rv64BaseAluU16ImmAdapterAir,
-    ShiftRightArithmeticCoreAir<BLOCK_FE_WIDTH, U16_BITS>,
+    Rv64BaseAluImmU16AdapterAir,
+    ShiftRightArithmeticImmCoreAir<BLOCK_FE_WIDTH, U16_BITS>,
 >;
 pub type Rv64ShiftRightArithmeticImmExecutor =
-    ShiftRightArithmeticExecutor<Rv64BaseAluU16ImmAdapterExecutor, BLOCK_FE_WIDTH, U16_BITS>;
+    ShiftRightArithmeticImmExecutor<Rv64BaseAluImmU16AdapterExecutor, BLOCK_FE_WIDTH, U16_BITS>;
 pub type Rv64ShiftRightArithmeticImmChip<F> = VmChipWrapper<
     F,
-    ShiftRightArithmeticFiller<Rv64BaseAluU16ImmAdapterFiller, BLOCK_FE_WIDTH, U16_BITS>,
+    ShiftRightArithmeticImmFiller<Rv64BaseAluImmU16AdapterFiller, BLOCK_FE_WIDTH, U16_BITS>,
 >;
