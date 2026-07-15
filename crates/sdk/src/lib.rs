@@ -216,24 +216,19 @@ where
     /// Creates SDK with a standard configuration that includes a set of default VM extensions
     /// loaded.
     ///
-    /// **Note**: To use this configuration, your `openvm.toml` must match, including the order of
-    /// the moduli and elliptic curve parameters of the respective extensions:
-    /// The `app_vm_config` field of your `openvm.toml` must exactly match the following:
-    ///
-    /// ```toml
-    #[doc = include_str!("../../sdk-config/src/openvm_standard.toml")]
-    /// ```
+    /// **Note**: To use this configuration, your `openvm.toml` must match
+    /// [`SdkVmConfig::standard`], including the order of the moduli and elliptic curve parameters
+    /// of the respective extensions. See the `openvm-sdk-config` crate documentation for the
+    /// corresponding TOML.
     pub fn standard(app_params: SystemParams, agg_params: AggregationSystemParams) -> Self {
         GenericSdk::new(AppConfig::standard(app_params), agg_params).unwrap()
     }
 
     /// Creates SDK with a configuration with RISC-V RV32IM and IO VM extensions loaded.
     ///
-    /// **Note**: To use this configuration, your `openvm.toml` must exactly match the following:
-    ///
-    /// ```toml
-    #[doc = include_str!("../../sdk-config/src/openvm_riscv32.toml")]
-    /// ```
+    /// **Note**: To use this configuration, your `openvm.toml` must match
+    /// [`SdkVmConfig::riscv32`]. See the `openvm-sdk-config` crate documentation for the
+    /// corresponding TOML.
     pub fn riscv32(app_params: SystemParams, agg_params: AggregationSystemParams) -> Self {
         GenericSdk::new(AppConfig::riscv32(app_params), agg_params).unwrap()
     }

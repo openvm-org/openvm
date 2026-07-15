@@ -1,5 +1,6 @@
 [package]
 name = "openvm-instructions"
+description = "OpenVM instruction, opcode, program, and executable types."
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
