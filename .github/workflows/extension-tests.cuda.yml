@@ -10,6 +10,7 @@ on:
       - "crates/toolchain/**"
       - "crates/sdk/**"
       - "crates/sdk-config/**"
+      - "crates/rvr/**"
       - "extensions/**"
       - "Cargo.toml"
       - "Cargo.lock"
@@ -20,6 +21,7 @@ on:
       - ".github/filters/extension-tests.yml"
       - ".github/workflows/extension-tests.group.yml"
       - ".github/workflows/extension-tests.cuda.yml"
+      - "ci/install-openvm-toolchain.sh"
       - "scripts/gpu_driver_setup.sh"
   pull_request:
     branches: ["**"]

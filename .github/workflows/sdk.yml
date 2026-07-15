@@ -22,7 +22,7 @@ on:
     branches: ["**"]
 
 concurrency:
-  group: sdk-${{ github.event.pull_request.number || github.sha }}
+  group: ${{ github.workflow_ref }}-sdk-${{ github.event.action == 'labeled' && github.event.label.name != 'run-sdk-tests' && github.run_id || github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
 env:
@@ -30,7 +30,7 @@ env:
 
 jobs:
   tests:
-    name: ${{ matrix.mode == 'aot' && 'AOT' || matrix.mode == 'rvr' && 'RVR' || matrix.mode }}
+    name: ${{ matrix.mode == 'rvr' && 'RVR' || matrix.mode }}
     if: ${{ github.event_name != 'pull_request' || (contains(github.event.pull_request.labels.*.name, 'run-sdk-tests') && (github.event.action != 'labeled' || github.event.label.name == 'run-sdk-tests')) }}
     strategy:
       matrix:

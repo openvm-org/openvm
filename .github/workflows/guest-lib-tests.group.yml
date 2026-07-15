@@ -82,7 +82,7 @@ jobs:
           nvcc --version
           echo "CUDA_ARCH=86,89,120" >> $GITHUB_ENV
 
-      - name: Install openvm rust toolchain
+      - name: Install OpenVM toolchain
         run: "$GITHUB_WORKSPACE/ci/install-openvm-toolchain.sh"
 
       - name: Run guest library tests
