@@ -488,7 +488,7 @@ impl RvrExtension for Rv64IExtension {
         }
         let discriminant = (insn.c & 0xffff) as u16;
         let phantom = Rv64Phantom::from_repr(discriminant)?;
-        let operands = [insn.a, insn.b, insn.c].map(|value| value.as_canonical_u32());
+        let operands = [insn.a, insn.b, insn.c];
         let instr: Box<dyn ExtInstr> = match phantom {
             Rv64Phantom::HintInput => Box::new(HintInputInstr { operands }),
             Rv64Phantom::PrintStr => Box::new(PrintStrInstr {
