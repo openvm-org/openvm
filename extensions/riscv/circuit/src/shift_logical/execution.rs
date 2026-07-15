@@ -69,10 +69,10 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
 macro_rules! dispatch {
     ($execute_impl:ident, $is_imm:ident, $shift_opcode:ident, $pc:ident) => {
         match ($is_imm, $shift_opcode) {
-            (true, ShiftOpcode::SLL) => Ok($execute_impl::<F, _, true, SllOp>),
-            (false, ShiftOpcode::SLL) => Ok($execute_impl::<F, _, false, SllOp>),
-            (true, ShiftOpcode::SRL) => Ok($execute_impl::<F, _, true, SrlOp>),
-            (false, ShiftOpcode::SRL) => Ok($execute_impl::<F, _, false, SrlOp>),
+            (true, ShiftOpcode::SLL) => Ok($execute_impl::<_, true, SllOp>),
+            (false, ShiftOpcode::SLL) => Ok($execute_impl::<_, false, SllOp>),
+            (true, ShiftOpcode::SRL) => Ok($execute_impl::<_, true, SrlOp>),
+            (false, ShiftOpcode::SRL) => Ok($execute_impl::<_, false, SrlOp>),
             (_, ShiftOpcode::SRA) => Err(StaticProgramError::InvalidInstruction($pc)),
         }
     };
@@ -106,7 +106,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
@@ -229,7 +229,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError> {
+    ) -> Result<Handler<Ctx>, StaticProgramError> {
         let data: &mut E2PreCompute<ShiftLogicalPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let (is_imm, shift_opcode) = self.pre_compute_impl(pc, inst, &mut data.data)?;
@@ -286,12 +286,7 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_IMM: bool, OP: Shift
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<
-    F: PrimeField32,
-    CTX: ExecutionCtxTrait,
-    const IS_IMM: bool,
-    OP: ShiftOp,
->(
+unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, const IS_IMM: bool, OP: ShiftOp>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
@@ -302,12 +297,7 @@ unsafe fn execute_e1_impl<
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e2_impl<
-    F: PrimeField32,
-    CTX: MeteredExecutionCtxTrait,
-    const IS_IMM: bool,
-    OP: ShiftOp,
->(
+unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, const IS_IMM: bool, OP: ShiftOp>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {

@@ -24,10 +24,10 @@ struct BranchLePreCompute {
 macro_rules! dispatch {
     ($execute_impl:ident, $local_opcode:ident) => {
         match $local_opcode {
-            BranchLessThanOpcode::BLT => Ok($execute_impl::<F, _, BltOp>),
-            BranchLessThanOpcode::BLTU => Ok($execute_impl::<F, _, BltuOp>),
-            BranchLessThanOpcode::BGE => Ok($execute_impl::<F, _, BgeOp>),
-            BranchLessThanOpcode::BGEU => Ok($execute_impl::<F, _, BgeuOp>),
+            BranchLessThanOpcode::BLT => Ok($execute_impl::<_, BltOp>),
+            BranchLessThanOpcode::BLTU => Ok($execute_impl::<_, BltuOp>),
+            BranchLessThanOpcode::BGE => Ok($execute_impl::<_, BgeOp>),
+            BranchLessThanOpcode::BGEU => Ok($execute_impl::<_, BgeuOp>),
         }
     };
 }
@@ -93,7 +93,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
@@ -136,7 +136,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
@@ -166,7 +166,7 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: BranchLessThanOp>(
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: BranchLessThanOp>(
+unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, OP: BranchLessThanOp>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
@@ -177,7 +177,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: BranchLes
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, OP: BranchLessThanOp>(
+unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, OP: BranchLessThanOp>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {

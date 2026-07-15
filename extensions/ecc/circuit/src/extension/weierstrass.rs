@@ -114,12 +114,12 @@ pub enum WeierstrassExtensionExecutor {
     EcDoubleRv64_48(EcDoubleExecutor<ECC_BLOCKS_48>),
 }
 
-impl<F: PrimeField32> VmExecutionExtension<F> for WeierstrassExtension {
+impl VmExecutionExtension for WeierstrassExtension {
     type Executor = WeierstrassExtensionExecutor;
 
     fn extend_execution(
         &self,
-        inventory: &mut ExecutorInventoryBuilder<F, WeierstrassExtensionExecutor>,
+        inventory: &mut ExecutorInventoryBuilder<WeierstrassExtensionExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
         let byte_ptr_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
         // TODO: somehow get the range checker bus from `ExecutorInventory`

@@ -1,4 +1,4 @@
-use std::{ffi::c_void, marker::PhantomData};
+use std::ffi::c_void;
 
 use openvm_instructions::{exe::VmExe, program::DEFAULT_PC_STEP};
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -24,20 +24,18 @@ use crate::{
 };
 
 static_assertions::assert_impl_all!(
-    AotInstance<'static, p3_baby_bear::BabyBear, ExecutionCtx>: Send,
+    AotInstance<'static, ExecutionCtx>: Send,
     Sync
 );
 
-impl<'a, F> AotInstance<'a, F, ExecutionCtx>
-where
-    F: PrimeField32,
-{
-    fn create_pure_asm<E>(
+impl<'a> AotInstance<'a, ExecutionCtx> {
+    fn create_pure_asm<F, E>(
         exe: &VmExe<F>,
         inventory: &ExecutorInventory<E>,
         pre_compute_insns_ptr: *const PreComputeInstruction<ExecutionCtx>,
     ) -> Result<String, StaticProgramError>
     where
+        F: PrimeField32,
         E: Executor<F>,
     {
         let mut asm_str = String::new();
@@ -312,11 +310,12 @@ where
     }
 
     /// Creates a new instance for pure execution
-    pub fn new<E>(
+    pub fn new<F, E>(
         inventory: &'a ExecutorInventory<E>,
         exe: &VmExe<F>,
     ) -> Result<Self, StaticProgramError>
     where
+        F: PrimeField32,
         E: Executor<F>,
     {
         let program = &exe.program;
@@ -342,7 +341,6 @@ where
             pc_start: exe.pc_start,
             init_memory,
             lib,
-            _phantom: PhantomData,
         })
     }
 

@@ -24,17 +24,17 @@ pub trait InterpreterExecutor<F> {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait;
 }
 ```
 
-where `ExecuteFunc<F, Ctx>` is a function pointer that contains the instruction execution logic.
+where `ExecuteFunc<Ctx>` is a function pointer that contains the instruction execution logic.
 
 ```rust
-pub type ExecuteFunc<F, CTX> =
-    unsafe fn(pre_compute: *const u8, exec_state: &mut VmExecState<F, GuestMemory, CTX>);
+pub type ExecuteFunc<CTX> =
+    unsafe fn(pre_compute: *const u8, exec_state: &mut VmExecState<GuestMemory, CTX>);
 ```
 
 Each executor pre-computes instruction-specific data during a preprocessing step and returns function pointers for direct instruction execution.
@@ -55,7 +55,7 @@ pub trait InterpreterMeteredExecutor<F> {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait;
 }
@@ -73,7 +73,7 @@ The `PreflightExecutor<F, RA>` trait defines the interface for preflight executi
 pub trait PreflightExecutor<F, RA> {
     fn execute(
         &self,
-        state: VmStateMut<F, TracingMemory, RA>,
+        state: VmStateMut<TracingMemory, RA>,
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError>;
 }
@@ -143,11 +143,11 @@ Phantom sub-instructions are instructions that affect the runtime and trace matr
 You can specify phantom sub-instruction executors by implementing the trait:
 
 ```rust
-pub trait PhantomSubExecutor<F>: Send + Sync {
+pub trait PhantomSubExecutor: Send + Sync {
     fn phantom_execute(
         &self,
         memory: &GuestMemory,
-        streams: &mut Streams<F>,
+        streams: &mut Streams,
         rng: &mut StdRng,
         discriminant: PhantomDiscriminant,
         a: u32,
@@ -159,7 +159,7 @@ pub trait PhantomSubExecutor<F>: Send + Sync {
 pub struct PhantomDiscriminant(pub u16);
 ```
 
-The `PhantomExecutor<F>` internally maintains a mapping from `PhantomDiscriminant` to `Arc<dyn PhantomSubExecutor<F>>` to
+The `PhantomExecutor` internally maintains a mapping from `PhantomDiscriminant` to `Arc<dyn PhantomSubExecutor>` to
 handle different phantom sub-instructions.
 
 ### VM Configuration

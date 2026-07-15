@@ -102,7 +102,7 @@ mod tests {
                 let interpreter_instance = executor.interpreter_instance(&openvm_exe)?;
                 let naive_state = interpreter_instance.execute(stdin, None)?;
                 let system_config: &SystemConfig = config.as_ref();
-                assert_vm_states_equivalent(
+                assert_vm_states_equivalent::<F>(
                     &state,
                     &naive_state,
                     &system_config.memory_config.memory_dimensions(),

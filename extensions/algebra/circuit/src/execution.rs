@@ -32,7 +32,6 @@ macro_rules! generate_field_dispatch {
         match ($field_type, $op) {
             $(
                 (FieldType::$curve, Operation::$operation) => Ok($execute_fn::<
-                    F,
                     _,
                     $blocks,
                     false,
@@ -55,7 +54,6 @@ macro_rules! generate_fp2_dispatch {
         match ($field_type, $op) {
             $(
                 (FieldType::$curve, Operation::$operation) => Ok($execute_fn::<
-                    F,
                     _,
                     $blocks,
                     true,
@@ -91,7 +89,7 @@ macro_rules! dispatch {
                         ]
                     )
                 } else {
-                    Ok($execute_generic_impl::<F, _, BLOCKS, IS_FP2>)
+                    Ok($execute_generic_impl::<_, BLOCKS, IS_FP2>)
                 }
             } else if let Some(field_type) = get_field_type(modulus) {
                 generate_field_dispatch!(
@@ -135,10 +133,10 @@ macro_rules! dispatch {
                     ]
                 )
             } else {
-                Ok($execute_generic_impl::<F, _, BLOCKS, IS_FP2>)
+                Ok($execute_generic_impl::<_, BLOCKS, IS_FP2>)
             }
         } else {
-            Ok($execute_setup_impl::<F, _, BLOCKS, IS_FP2>)
+            Ok($execute_setup_impl::<_, BLOCKS, IS_FP2>)
         }
     };
 }
@@ -277,7 +275,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const IS_FP2: bool> InterpreterExecut
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
@@ -341,7 +339,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const IS_FP2: bool> InterpreterMetere
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
@@ -515,12 +513,7 @@ unsafe fn execute_e12_setup_impl<
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_setup_impl<
-    F: PrimeField32,
-    CTX: ExecutionCtxTrait,
-    const BLOCKS: usize,
-    const IS_FP2: bool,
->(
+unsafe fn execute_e1_setup_impl<CTX: ExecutionCtxTrait, const BLOCKS: usize, const IS_FP2: bool>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
@@ -532,7 +525,6 @@ unsafe fn execute_e1_setup_impl<
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_setup_impl<
-    F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,
     const BLOCKS: usize,
     const IS_FP2: bool,
@@ -554,7 +546,6 @@ unsafe fn execute_e2_setup_impl<
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_impl<
-    F: PrimeField32,
     CTX: ExecutionCtxTrait,
     const BLOCKS: usize,
     const IS_FP2: bool,
@@ -572,7 +563,6 @@ unsafe fn execute_e1_impl<
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<
-    F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,
     const BLOCKS: usize,
     const IS_FP2: bool,
@@ -596,7 +586,6 @@ unsafe fn execute_e2_impl<
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_generic_impl<
-    F: PrimeField32,
     CTX: ExecutionCtxTrait,
     const BLOCKS: usize,
     const IS_FP2: bool,
@@ -612,7 +601,6 @@ unsafe fn execute_e1_generic_impl<
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_generic_impl<
-    F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,
     const BLOCKS: usize,
     const IS_FP2: bool,

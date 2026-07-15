@@ -532,9 +532,9 @@ impl<const NUM_LANES: usize, const TOTAL_READ_SIZE: usize>
 macro_rules! dispatch {
     ($execute_impl:ident, $is_setup:ident) => {
         Ok(if $is_setup {
-            $execute_impl::<F, _, NUM_LANES, TOTAL_READ_SIZE, true>
+            $execute_impl::<_, NUM_LANES, TOTAL_READ_SIZE, true>
         } else {
-            $execute_impl::<F, _, NUM_LANES, TOTAL_READ_SIZE, false>
+            $execute_impl::<_, NUM_LANES, TOTAL_READ_SIZE, false>
         })
     };
 }
@@ -568,7 +568,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
@@ -621,7 +621,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError> {
+    ) -> Result<Handler<Ctx>, StaticProgramError> {
         let pre_compute: &mut E2PreCompute<ModularIsEqualPreCompute<TOTAL_READ_SIZE>> =
             data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
@@ -642,7 +642,6 @@ where
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_impl<
-    F: PrimeField32,
     CTX: ExecutionCtxTrait,
     const NUM_LANES: usize,
     const TOTAL_READ_SIZE: usize,
@@ -663,7 +662,6 @@ unsafe fn execute_e1_impl<
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<
-    F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,
     const NUM_LANES: usize,
     const TOTAL_READ_SIZE: usize,

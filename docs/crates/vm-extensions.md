@@ -15,13 +15,13 @@ These three components are implemented via three corresponding traits `VmExecuti
 ### `VmExecutionExtension`
 
 ```rust
-pub trait VmExecutionExtension<F> {
+pub trait VmExecutionExtension {
     /// Enum of executor variants
     type Executor: AnyEnum;
 
     fn extend_execution(
         &self,
-        inventory: &mut ExecutorInventoryBuilder<F, Self::Executor>,
+        inventory: &mut ExecutorInventoryBuilder<Self::Executor>,
     ) -> Result<(), ExecutorInventoryError>;
 }
 ```
@@ -54,7 +54,7 @@ The added AIRs may have dependencies on previously added AIRs, including those t
 pub trait VmProverExtension<E, RA, EXT>
 where
     E: StarkEngine,
-    EXT: VmExecutionExtension<Val<E::SC>> + VmCircuitExtension<E::SC>,
+    EXT: VmExecutionExtension + VmCircuitExtension<E::SC>,
 {
     fn extend_prover(
         &self,
@@ -130,7 +130,7 @@ Developers are typically not expected to implement `VmConfig`, `VmExecutionConfi
 ```rust
 #[derive(VmConfig)]
 pub struct Rv64IConfig {
-    #[config(executor = "SystemExecutor<F>")]
+    #[config(executor = "SystemExecutor")]
     pub system: SystemConfig,
     #[extension]
     pub base: Rv64I,
@@ -147,11 +147,11 @@ pub struct Rv64ImConfig {
 }
 ```
 
-The struct deriving `VmConfig` should have fields which are given the attribute `#[config]` or `#[extension]`. Exactly one field should have the attribute `#[config]` and its type should implement `VmConfig`. The other fields should have the attribute `#[extension]` and their types should implement `VmExecutionExtension<F>` and `VmCircuitExtension<SC>`. Each field has associated type `Executor`: the macro by default assumes the executor type name is `{FieldTypeName}Executor` without any type generics. A different executor type name can be specified using the `executor` attribute.
+The struct deriving `VmConfig` should have fields which are given the attribute `#[config]` or `#[extension]`. Exactly one field should have the attribute `#[config]` and its type should implement `VmConfig`. The other fields should have the attribute `#[extension]` and their types should implement `VmExecutionExtension` and `VmCircuitExtension<SC>`. Each field has associated type `Executor`: the macro by default assumes the executor type name is `{FieldTypeName}Executor` without any type generics. A different executor type name can be specified using the `executor` attribute.
 
 The macro will create a new enum named `{ConfigTypeName}Executor` with variants equal to the associated `Executor` types of each attributed field.
 
-The macro derives `VmExecutionConfig<F>` with associated type `Executor = {ConfigTypeName}Executor` on the new config struct for all `F` where the `#[config]` field implements `VmExecutionConfig<F>` and the `#[extension]` fields all implement `VmExecutionExtension<F>`. The derived `create_executors` function adds executors in the order of the fields, first calling `create_executors` on the inner config and then calling `extend_execution` on each `#[extension]` field.
+The macro derives `VmExecutionConfig<F>` with associated type `Executor = {ConfigTypeName}Executor` on the new config struct for all `F` where the `#[config]` field implements `VmExecutionConfig<F>` and the `#[extension]` fields all implement `VmExecutionExtension`. The derived `create_executors` function adds executors in the order of the fields, first calling `create_executors` on the inner config and then calling `extend_execution` on each `#[extension]` field.
 
 The macro derives `VmCircuitConfig<SC>` on the new config struct for all `SC` where the `#[config]` field implements `VmCircuitConfig<SC>` and the `#[extension]` fields all implement `VmCircuitExtension<SC>`. The derived `create_airs` function adds AIRs in the order of the fields, first calling `create_airs` on the inner config and then calling `extend_circuit` on each `#[extension]` field.
 
@@ -197,6 +197,6 @@ Currently there is no macro to derive the `VmBuilder` trait implementation, and 
 
 ## Examples
 
-The [`extensions/`](../../extensions/) folder contains extensions implementing all non-system functionality via custom extensions. For example, the `Rv64I`, `Rv64M`, and `Rv64Io` extensions implement `VmExecutionExtension<F>` and `VmCircuitExtension<SC>` in [`openvm-riscv-circuit`](../../extensions/riscv/circuit/src/extension/mod.rs) and correspond to the RISC-V 64-bit base and multiplication instruction sets and an extension for IO, respectively. The ZST `Rv64ImCpuProverExt` [implements](../../extensions/riscv/circuit/src/extension/mod.rs) `VmProverExtension<E, RA, EXT>` for `EXT = Rv64I, Rv64M, Rv64Io`. When the `"cuda"` feature is enabled, the ZST `Rv64ImGpuProverExt` [implements](../../extensions/riscv/circuit/src/extension/cuda.rs) `VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, EXT>` for `EXT = Rv64I, Rv64M, Rv64Io`.
+The [`extensions/`](../../extensions/) folder contains extensions implementing all non-system functionality via custom extensions. For example, the `Rv64I`, `Rv64M`, and `Rv64Io` extensions implement `VmExecutionExtension` and `VmCircuitExtension<SC>` in [`openvm-riscv-circuit`](../../extensions/riscv/circuit/src/extension/mod.rs) and correspond to the RISC-V 64-bit base and multiplication instruction sets and an extension for IO, respectively. The ZST `Rv64ImCpuProverExt` [implements](../../extensions/riscv/circuit/src/extension/mod.rs) `VmProverExtension<E, RA, EXT>` for `EXT = Rv64I, Rv64M, Rv64Io`. When the `"cuda"` feature is enabled, the ZST `Rv64ImGpuProverExt` [implements](../../extensions/riscv/circuit/src/extension/cuda.rs) `VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, EXT>` for `EXT = Rv64I, Rv64M, Rv64Io`.
 
 The `openvm-riscv-circuit` [crate](../../extensions/riscv/circuit/src/lib.rs) also provides definitions for `Rv64ImConfig`, `Rv64ImCpuBuilder`, and `Rv64ImGpuBuilder`.

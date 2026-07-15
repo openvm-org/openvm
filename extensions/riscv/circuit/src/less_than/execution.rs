@@ -76,10 +76,10 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> LessThanExecutor<A, NUM_
 macro_rules! dispatch {
     ($execute_impl:ident, $is_imm:ident, $is_sltu:ident) => {
         match ($is_imm, $is_sltu) {
-            (true, true) => Ok($execute_impl::<F, _, true, true>),
-            (true, false) => Ok($execute_impl::<F, _, true, false>),
-            (false, true) => Ok($execute_impl::<F, _, false, true>),
-            (false, false) => Ok($execute_impl::<F, _, false, false>),
+            (true, true) => Ok($execute_impl::<_, true, true>),
+            (true, false) => Ok($execute_impl::<_, true, false>),
+            (false, true) => Ok($execute_impl::<_, false, true>),
+            (false, false) => Ok($execute_impl::<_, false, false>),
         }
     };
 }
@@ -113,7 +113,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
@@ -232,7 +232,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
@@ -295,12 +295,7 @@ unsafe fn execute_e12_impl<
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<
-    F: PrimeField32,
-    CTX: ExecutionCtxTrait,
-    const E_IS_IMM: bool,
-    const IS_UNSIGNED: bool,
->(
+unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, const E_IS_IMM: bool, const IS_UNSIGNED: bool>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
@@ -312,7 +307,6 @@ unsafe fn execute_e1_impl<
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<
-    F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,
     const E_IS_IMM: bool,
     const IS_UNSIGNED: bool,

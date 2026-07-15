@@ -56,10 +56,10 @@ impl<A> DivRemWExecutor<A> {
 macro_rules! dispatch {
     ($execute_impl:ident, $local_opcode:ident) => {
         match $local_opcode {
-            DivRemWOpcode::DIVW => Ok($execute_impl::<F, _, DivwOp>),
-            DivRemWOpcode::DIVUW => Ok($execute_impl::<F, _, DivuwOp>),
-            DivRemWOpcode::REMW => Ok($execute_impl::<F, _, RemwOp>),
-            DivRemWOpcode::REMUW => Ok($execute_impl::<F, _, RemuwOp>),
+            DivRemWOpcode::DIVW => Ok($execute_impl::<_, DivwOp>),
+            DivRemWOpcode::DIVUW => Ok($execute_impl::<_, DivuwOp>),
+            DivRemWOpcode::REMW => Ok($execute_impl::<_, RemwOp>),
+            DivRemWOpcode::REMUW => Ok($execute_impl::<_, RemuwOp>),
         }
     };
 }
@@ -92,7 +92,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
@@ -256,7 +256,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
@@ -321,7 +321,7 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: DivRemWOp>(
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: DivRemWOp>(
+unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, OP: DivRemWOp>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
@@ -332,7 +332,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: DivRemWOp
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, OP: DivRemWOp>(
+unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, OP: DivRemWOp>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {

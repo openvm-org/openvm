@@ -21,7 +21,7 @@ use openvm_pairing_guest::{
 use openvm_pairing_transpiler::PairingPhantom;
 #[cfg(feature = "rvr")]
 use openvm_stark_backend::p3_field::PrimeField32;
-use openvm_stark_backend::{p3_field::Field, StarkEngine, StarkProtocolConfig};
+use openvm_stark_backend::{StarkEngine, StarkProtocolConfig};
 #[cfg(feature = "rvr")]
 use rvr_openvm_lift::{ExtensionRegistry, RvrExtensionCtx, VmRvrExtension};
 use serde::{Deserialize, Serialize};
@@ -83,16 +83,16 @@ impl<F: PrimeField32> VmRvrExtension<F> for PairingExtension {
         openvm_circuit_derive::AotMeteredExecutor
     )
 )]
-pub enum PairingExtensionExecutor<F: Field> {
-    Phantom(PhantomExecutor<F>),
+pub enum PairingExtensionExecutor {
+    Phantom(PhantomExecutor),
 }
 
-impl<F: Field> VmExecutionExtension<F> for PairingExtension {
-    type Executor = PairingExtensionExecutor<F>;
+impl VmExecutionExtension for PairingExtension {
+    type Executor = PairingExtensionExecutor;
 
     fn extend_execution(
         &self,
-        inventory: &mut ExecutorInventoryBuilder<F, PairingExtensionExecutor<F>>,
+        inventory: &mut ExecutorInventoryBuilder<PairingExtensionExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
         inventory.add_phantom_sub_executor(
             phantom::PairingHintSubEx,
@@ -142,14 +142,13 @@ pub(crate) mod phantom {
         pairing::{FinalExp, MultiMillerLoop},
     };
     use openvm_riscv_circuit::adapters::{memory_read, read_rv64_register_as_u32};
-    use openvm_stark_backend::p3_field::Field;
     use rand::rngs::StdRng;
 
     use super::PairingCurve;
 
     pub struct PairingHintSubEx;
 
-    impl<F: Field> PhantomSubExecutor<F> for PairingHintSubEx {
+    impl PhantomSubExecutor for PairingHintSubEx {
         fn phantom_execute(
             &self,
             memory: &GuestMemory,

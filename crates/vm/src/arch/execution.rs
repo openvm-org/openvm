@@ -136,8 +136,8 @@ pub type ExecuteFunc<CTX> =
 /// - `handlers` is the starting pointer of the table of function pointers of `Handler` type. The
 ///   pointer is typeless to avoid self-referential types.
 #[cfg(feature = "tco")]
-pub type Handler<F, CTX> = unsafe fn(
-    interpreter: &InterpretedInstance<'_, F, CTX>,
+pub type Handler<CTX> = unsafe fn(
+    interpreter: &InterpretedInstance<'_, CTX>,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 );
 
@@ -167,7 +167,7 @@ pub trait InterpreterExecutor<F> {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait;
 }
@@ -232,7 +232,7 @@ pub trait InterpreterMeteredExecutor<F> {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait;
 }
@@ -517,7 +517,7 @@ impl<T: PrimeCharacteristicRing> From<(u32, Option<T>)> for PcIncOrSet<T> {
 /// Phantom sub-instructions are only allowed to use operands
 /// `a,b` and `c_upper = c.as_canonical_u32() >> 16`.
 #[allow(clippy::too_many_arguments)]
-pub trait PhantomSubExecutor<F>: Send + Sync {
+pub trait PhantomSubExecutor: Send + Sync {
     fn phantom_execute(
         &self,
         memory: &GuestMemory,

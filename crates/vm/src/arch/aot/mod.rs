@@ -1,8 +1,7 @@
-use std::{ffi::c_void, io::Write, marker::PhantomData, process::Command};
+use std::{ffi::c_void, io::Write, process::Command};
 
 use libloading::Library;
 use openvm_instructions::{exe::SparseMemoryImage, program::DEFAULT_PC_STEP};
-use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     arch::{
@@ -24,7 +23,7 @@ mod pure;
 /// Verify installation by `as --version`, `ar --version` and `cargo --version`
 /// Refer to AOT.md for further clarification about AOT
 ///  
-pub struct AotInstance<'a, F, Ctx> {
+pub struct AotInstance<'a, Ctx> {
     init_memory: SparseMemoryImage,
     system_config: &'a SystemConfig,
     // SAFETY: this is not actually dead code, but `pre_compute_insns` contains raw pointer refers
@@ -34,9 +33,6 @@ pub struct AotInstance<'a, F, Ctx> {
     lib: Library,
     pre_compute_insns: Vec<PreComputeInstruction<Ctx>>,
     pc_start: u32,
-    // `F` is the program's field type, used by the construction methods (`VmExe<F>`); the stored
-    // pre-computed data is field-erased, so retain `F` here as a marker.
-    _phantom: PhantomData<F>,
 }
 
 type AsmRunFn = unsafe extern "C" fn(
@@ -46,9 +42,8 @@ type AsmRunFn = unsafe extern "C" fn(
     instret_left: u64,
 );
 
-impl<'a, F, Ctx> AotInstance<'a, F, Ctx>
+impl<'a, Ctx> AotInstance<'a, Ctx>
 where
-    F: PrimeField32,
     Ctx: ExecutionCtxTrait,
 {
     pub fn create_initial_vm_state(&self, inputs: impl Into<Streams>) -> VmState {
@@ -232,12 +227,6 @@ where
         asm_str += "   push rdi\n";
 
         asm_str
-    }
-
-    pub fn to_i16(c: F) -> i16 {
-        let c_u24 = (c.as_canonical_u64() & 0xFFFFFF) as u32;
-        let c_i24 = ((c_u24 << 8) as i32) >> 8;
-        c_i24 as i16
     }
 }
 

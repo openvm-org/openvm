@@ -250,7 +250,7 @@ pub type Rv64BranchLessThan256Chip<F> = VmChipWrapper<
 
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
 pub struct Int256Rv64Config {
-    #[config(executor = "SystemExecutor<F>")]
+    #[config(executor = "SystemExecutor")]
     pub system: SystemConfig,
     #[extension]
     pub rv64i: Rv64I,

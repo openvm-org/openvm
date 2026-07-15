@@ -37,9 +37,9 @@ struct BitwiseLogicPreCompute {
 macro_rules! dispatch {
     ($execute_impl:ident, $local_opcode:ident) => {
         Ok(match $local_opcode {
-            BaseAluOpcode::XOR => $execute_impl::<F, _, XorOp>,
-            BaseAluOpcode::OR => $execute_impl::<F, _, OrOp>,
-            BaseAluOpcode::AND => $execute_impl::<F, _, AndOp>,
+            BaseAluOpcode::XOR => $execute_impl::<_, XorOp>,
+            BaseAluOpcode::OR => $execute_impl::<_, OrOp>,
+            BaseAluOpcode::AND => $execute_impl::<_, AndOp>,
             _ => unreachable!("Rv64BitwiseLogic256Executor received non-XOR/OR/AND opcode"),
         })
     };
@@ -72,7 +72,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for Rv64BitwiseLogic256Executor {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
@@ -116,7 +116,7 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv64BitwiseLogic256Execu
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
@@ -151,7 +151,7 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: AluOp>(
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: AluOp>(
+unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, OP: AluOp>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
@@ -162,7 +162,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: AluOp>(
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, OP: AluOp>(
+unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, OP: AluOp>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {

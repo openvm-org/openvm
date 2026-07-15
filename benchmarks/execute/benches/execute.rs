@@ -93,7 +93,7 @@ fn report_program_success(mode: &str, program: &str) {
 
 #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
 pub struct ExecuteConfig {
-    #[config(executor = "SystemExecutor<F>")]
+    #[config(executor = "SystemExecutor")]
     pub system: SystemConfig,
     #[extension]
     pub rv64i: Rv64I,
@@ -113,7 +113,7 @@ pub struct ExecuteConfig {
     pub fp2: Fp2Extension,
     #[extension]
     pub weierstrass: WeierstrassExtension,
-    #[extension(generics = true)]
+    #[extension]
     pub pairing: PairingExtension,
 }
 
@@ -328,11 +328,11 @@ trait BenchExecutor {
 
 impl BenchExecutor for PureExecution {
     #[cfg(feature = "aot")]
-    type Instance = AotInstance<'static, BabyBear, ExecutionCtx>;
+    type Instance = AotInstance<'static, ExecutionCtx>;
     #[cfg(feature = "rvr")]
     type Instance = RvrPureInstance<'static, BabyBear>;
     #[cfg(all(not(feature = "aot"), not(feature = "rvr")))]
-    type Instance = InterpretedInstance<'static, BabyBear, ExecutionCtx>;
+    type Instance = InterpretedInstance<'static, ExecutionCtx>;
 
     fn execution_mode() -> &'static str {
         #[cfg(feature = "aot")]
@@ -359,14 +359,11 @@ impl BenchExecutor for PureExecution {
 
 impl BenchExecutor for MeteredExecution {
     #[cfg(feature = "aot")]
-    type Instance = (AotInstance<'static, BabyBear, MeteredCtx>, MeteredCtx);
+    type Instance = (AotInstance<'static, MeteredCtx>, MeteredCtx);
     #[cfg(feature = "rvr")]
     type Instance = (RvrMeteredInstance<'static, BabyBear>, MeteredCtx);
     #[cfg(all(not(feature = "aot"), not(feature = "rvr")))]
-    type Instance = (
-        InterpretedInstance<'static, BabyBear, MeteredCtx>,
-        MeteredCtx,
-    );
+    type Instance = (InterpretedInstance<'static, MeteredCtx>, MeteredCtx);
 
     fn execution_mode() -> &'static str {
         #[cfg(feature = "aot")]
@@ -399,7 +396,7 @@ impl BenchExecutor for MeteredCostExecution {
     #[cfg(feature = "rvr")]
     type Instance = RvrMeteredCostInstance<'static, BabyBear>;
     #[cfg(not(feature = "rvr"))]
-    type Instance = InterpretedInstance<'static, BabyBear, MeteredCostCtx>;
+    type Instance = InterpretedInstance<'static, MeteredCostCtx>;
 
     fn execution_mode() -> &'static str {
         #[cfg(feature = "rvr")]

@@ -15,7 +15,7 @@ use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_instructions::{LocalOpcode, PhantomDiscriminant, SysPhantom, SystemOpcode};
 use openvm_stark_backend::{
     interaction::{LookupBus, PermutationCheckBus},
-    p3_field::{Field, PrimeField32},
+    p3_field::PrimeField32,
     prover::{AirProvingContext, CommittedTraceData, ProverBackend},
     StarkEngine, StarkProtocolConfig, Val,
 };
@@ -117,8 +117,8 @@ pub type TouchedMemory<F> = TimestampedEquipartition<F, BLOCK_FE_WIDTH>;
 
 #[derive(Clone, AnyEnum, Executor, MeteredExecutor, PreflightExecutor, From)]
 #[cfg_attr(feature = "aot", derive(AotExecutor, AotMeteredExecutor))]
-pub enum SystemExecutor<F: Field> {
-    Phantom(PhantomExecutor<F>),
+pub enum SystemExecutor {
+    Phantom(PhantomExecutor),
 }
 
 /// SystemPort combines system resources needed by most extensions
@@ -188,7 +188,7 @@ impl SystemAirInventory {
 }
 
 impl<F: PrimeField32> VmExecutionConfig<F> for SystemConfig {
-    type Executor = SystemExecutor<F>;
+    type Executor = SystemExecutor;
 
     /// The only way to create an [ExecutorInventory] is from a [SystemConfig]. This will always
     /// add an executor for [PhantomChip], which handles all phantom sub-executors.
@@ -197,7 +197,7 @@ impl<F: PrimeField32> VmExecutionConfig<F> for SystemConfig {
     ) -> Result<ExecutorInventory<Self::Executor>, ExecutorInventoryError> {
         let mut inventory = ExecutorInventory::new(self.clone());
         let phantom_opcode = SystemOpcode::PHANTOM.global_opcode();
-        let mut phantom_executors: FxHashMap<PhantomDiscriminant, Arc<dyn PhantomSubExecutor<F>>> =
+        let mut phantom_executors: FxHashMap<PhantomDiscriminant, Arc<dyn PhantomSubExecutor>> =
             FxHashMap::default();
         // Use NopPhantomExecutor so the discriminant is set but `DebugPanic` is handled specially.
         phantom_executors.insert(
@@ -294,7 +294,7 @@ where
     Val<SC>: VmField,
 {
     pub program_chip: ProgramChip<SC>,
-    pub connector_chip: VmConnectorChip<Val<SC>>,
+    pub connector_chip: VmConnectorChip,
     /// Contains all memory chips
     pub memory_controller: MemoryController<Val<SC>>,
 }
@@ -314,7 +314,7 @@ where
         // We create an empty program chip: the program should be loaded later (and can be swapped
         // out). The execution frequencies are supplied only after execution.
         let program_chip = ProgramChip::unloaded();
-        let connector_chip = VmConnectorChip::<Val<SC>>::new(
+        let connector_chip = VmConnectorChip::new(
             range_checker.clone(),
             config.memory_config.timestamp_max_bits,
         );

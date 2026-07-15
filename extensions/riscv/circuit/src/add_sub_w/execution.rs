@@ -63,10 +63,10 @@ macro_rules! dispatch {
                 $is_imm,
                 BaseAluWOpcode::from_usize($opcode.local_opcode_idx($offset)),
             ) {
-                (true, BaseAluWOpcode::ADDW) => $execute_impl::<F, _, true, AddwOp>,
-                (false, BaseAluWOpcode::ADDW) => $execute_impl::<F, _, false, AddwOp>,
-                (true, BaseAluWOpcode::SUBW) => $execute_impl::<F, _, true, SubwOp>,
-                (false, BaseAluWOpcode::SUBW) => $execute_impl::<F, _, false, SubwOp>,
+                (true, BaseAluWOpcode::ADDW) => $execute_impl::<_, true, AddwOp>,
+                (false, BaseAluWOpcode::ADDW) => $execute_impl::<_, false, AddwOp>,
+                (true, BaseAluWOpcode::SUBW) => $execute_impl::<_, true, SubwOp>,
+                (false, BaseAluWOpcode::SUBW) => $execute_impl::<_, false, SubwOp>,
             },
         )
     };
@@ -103,7 +103,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
@@ -148,7 +148,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
@@ -191,12 +191,7 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_IMM: bool, OP: AluWO
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<
-    F: PrimeField32,
-    CTX: ExecutionCtxTrait,
-    const IS_IMM: bool,
-    OP: AluWOp,
->(
+unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, const IS_IMM: bool, OP: AluWOp>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
@@ -207,12 +202,7 @@ unsafe fn execute_e1_impl<
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e2_impl<
-    F: PrimeField32,
-    CTX: MeteredExecutionCtxTrait,
-    const IS_IMM: bool,
-    OP: AluWOp,
->(
+unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, const IS_IMM: bool, OP: AluWOp>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {

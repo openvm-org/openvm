@@ -92,34 +92,34 @@ macro_rules! dispatch {
         } {
             match ($is_setup, curve_type) {
                 (true, CurveType::K256) => {
-                    Ok($execute_impl::<F, _, BLOCKS, { CurveType::K256 as u8 }, true>)
+                    Ok($execute_impl::<_, BLOCKS, { CurveType::K256 as u8 }, true>)
                 }
                 (true, CurveType::P256) => {
-                    Ok($execute_impl::<F, _, BLOCKS, { CurveType::P256 as u8 }, true>)
+                    Ok($execute_impl::<_, BLOCKS, { CurveType::P256 as u8 }, true>)
                 }
                 (true, CurveType::BN254) => {
-                    Ok($execute_impl::<F, _, BLOCKS, { CurveType::BN254 as u8 }, true>)
+                    Ok($execute_impl::<_, BLOCKS, { CurveType::BN254 as u8 }, true>)
                 }
                 (true, CurveType::BLS12_381) => {
-                    Ok($execute_impl::<F, _, BLOCKS, { CurveType::BLS12_381 as u8 }, true>)
+                    Ok($execute_impl::<_, BLOCKS, { CurveType::BLS12_381 as u8 }, true>)
                 }
                 (false, CurveType::K256) => {
-                    Ok($execute_impl::<F, _, BLOCKS, { CurveType::K256 as u8 }, false>)
+                    Ok($execute_impl::<_, BLOCKS, { CurveType::K256 as u8 }, false>)
                 }
                 (false, CurveType::P256) => {
-                    Ok($execute_impl::<F, _, BLOCKS, { CurveType::P256 as u8 }, false>)
+                    Ok($execute_impl::<_, BLOCKS, { CurveType::P256 as u8 }, false>)
                 }
                 (false, CurveType::BN254) => {
-                    Ok($execute_impl::<F, _, BLOCKS, { CurveType::BN254 as u8 }, false>)
+                    Ok($execute_impl::<_, BLOCKS, { CurveType::BN254 as u8 }, false>)
                 }
                 (false, CurveType::BLS12_381) => {
-                    Ok($execute_impl::<F, _, BLOCKS, { CurveType::BLS12_381 as u8 }, false>)
+                    Ok($execute_impl::<_, BLOCKS, { CurveType::BLS12_381 as u8 }, false>)
                 }
             }
         } else if $is_setup {
-            Ok($execute_impl::<F, _, BLOCKS, { u8::MAX }, true>)
+            Ok($execute_impl::<_, BLOCKS, { u8::MAX }, true>)
         } else {
-            Ok($execute_impl::<F, _, BLOCKS, { u8::MAX }, false>)
+            Ok($execute_impl::<_, BLOCKS, { u8::MAX }, false>)
         }
     };
 }
@@ -152,7 +152,7 @@ impl<F: PrimeField32, const BLOCKS: usize> InterpreterExecutor<F> for EcDoubleEx
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
@@ -200,7 +200,7 @@ impl<F: PrimeField32, const BLOCKS: usize> InterpreterMeteredExecutor<F>
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
@@ -297,7 +297,6 @@ unsafe fn execute_e12_impl<
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_impl<
-    F: PrimeField32,
     CTX: ExecutionCtxTrait,
     const BLOCKS: usize,
     const CURVE_TYPE: u8,
@@ -314,7 +313,6 @@ unsafe fn execute_e1_impl<
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<
-    F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,
     const BLOCKS: usize,
     const CURVE_TYPE: u8,

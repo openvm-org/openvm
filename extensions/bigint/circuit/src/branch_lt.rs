@@ -38,10 +38,10 @@ struct BranchLtPreCompute {
 macro_rules! dispatch {
     ($execute_impl:ident, $local_opcode:ident) => {
         Ok(match $local_opcode {
-            BranchLessThanOpcode::BLT => $execute_impl::<F, _, BltOp>,
-            BranchLessThanOpcode::BLTU => $execute_impl::<F, _, BltuOp>,
-            BranchLessThanOpcode::BGE => $execute_impl::<F, _, BgeOp>,
-            BranchLessThanOpcode::BGEU => $execute_impl::<F, _, BgeuOp>,
+            BranchLessThanOpcode::BLT => $execute_impl::<_, BltOp>,
+            BranchLessThanOpcode::BLTU => $execute_impl::<_, BltuOp>,
+            BranchLessThanOpcode::BGE => $execute_impl::<_, BgeOp>,
+            BranchLessThanOpcode::BGEU => $execute_impl::<_, BgeuOp>,
         })
     };
 }
@@ -72,7 +72,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for Rv64BranchLessThan256Executor {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
@@ -114,7 +114,7 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv64BranchLessThan256Exe
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
@@ -151,7 +151,7 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: BranchLessThanOp>(
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: BranchLessThanOp>(
+unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, OP: BranchLessThanOp>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
@@ -162,7 +162,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: BranchLes
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, OP: BranchLessThanOp>(
+unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, OP: BranchLessThanOp>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {

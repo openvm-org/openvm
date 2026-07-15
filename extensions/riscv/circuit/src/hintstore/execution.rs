@@ -65,8 +65,8 @@ impl Rv64HintStoreExecutor {
 macro_rules! dispatch {
     ($execute_impl:ident, $local_opcode:ident) => {
         match $local_opcode {
-            HINT_STORED => Ok($execute_impl::<F, _, true>),
-            HINT_BUFFER => Ok($execute_impl::<F, _, false>),
+            HINT_STORED => Ok($execute_impl::<_, true>),
+            HINT_BUFFER => Ok($execute_impl::<_, false>),
         }
     };
 }
@@ -98,7 +98,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
@@ -143,7 +143,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
@@ -207,7 +207,7 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_HINT_STORED: bool>(
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_HINT_STORED: bool>(
+unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, const IS_HINT_STORED: bool>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
@@ -219,11 +219,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_HINT
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e2_impl<
-    F: PrimeField32,
-    CTX: MeteredExecutionCtxTrait,
-    const IS_HINT_STORED: bool,
->(
+unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, const IS_HINT_STORED: bool>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {

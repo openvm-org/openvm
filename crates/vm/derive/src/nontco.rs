@@ -3,7 +3,7 @@ use quote::quote;
 use syn::{parse_macro_input, ItemFn};
 
 use crate::common::{
-    build_generic_args, extract_f_and_ctx_types, handler_name_from_fn, returns_result_type,
+    build_generic_args, extract_ctx_type, handler_name_from_fn, returns_result_type,
 };
 
 /// Implementation of the non-TCO handler generation logic.
@@ -20,8 +20,10 @@ pub fn nontco_impl(item: TokenStream) -> TokenStream {
     // Check if function returns Result
     let returns_result = returns_result_type(&input_fn);
 
-    // Extract the first two generic type parameters (F and CTX)
-    let (_f_type, ctx_type) = extract_f_and_ctx_types(generics);
+    let ctx_type = match extract_ctx_type(&input_fn) {
+        Ok(ctx_type) => ctx_type,
+        Err(error) => return error.into_compile_error().into(),
+    };
 
     // Derive new function name:
     // If original ends with `_impl`, replace with `_handler`, else append suffix.
@@ -69,7 +71,6 @@ pub fn nontco_impl(item: TokenStream) -> TokenStream {
 
     // Return both the original function and the new handler
     let output = quote! {
-        #[allow(clippy::extra_unused_type_parameters)]
         #input_fn
 
         #handler_fn

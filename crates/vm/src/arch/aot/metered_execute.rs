@@ -1,4 +1,4 @@
-use std::{ffi::c_void, marker::PhantomData, mem::offset_of};
+use std::{ffi::c_void, mem::offset_of};
 
 use openvm_instructions::{exe::VmExe, program::DEFAULT_PC_STEP};
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -23,21 +23,19 @@ use crate::{
     system::memory::online::GuestMemory,
 };
 static_assertions::assert_impl_all!(
-    AotInstance<'static, p3_baby_bear::BabyBear, MeteredCtx>: Send,
+    AotInstance<'static, MeteredCtx>: Send,
     Sync
 );
 
-impl<'a, F> AotInstance<'a, F, MeteredCtx>
-where
-    F: PrimeField32,
-{
+impl<'a> AotInstance<'a, MeteredCtx> {
     /// Creates a new instance for metered execution.
-    pub fn new_metered<E>(
+    pub fn new_metered<F, E>(
         inventory: &'a ExecutorInventory<E>,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
     ) -> Result<Self, StaticProgramError>
     where
+        F: PrimeField32,
         E: MeteredExecutor<F>,
     {
         let start = std::time::Instant::now();
@@ -74,16 +72,16 @@ where
             pc_start: exe.pc_start,
             init_memory,
             lib,
-            _phantom: PhantomData,
         })
     }
-    fn create_metered_asm<E>(
+    fn create_metered_asm<F, E>(
         exe: &VmExe<F>,
         inventory: &ExecutorInventory<E>,
         executor_idx_to_air_idx: &[usize],
         pre_compute_insns_ptr: *const PreComputeInstruction<MeteredCtx>,
     ) -> Result<String, StaticProgramError>
     where
+        F: PrimeField32,
         E: MeteredExecutor<F>,
     {
         let mut asm_str = String::new();
@@ -424,12 +422,11 @@ where
 
         loop {
             exec_state = self.execute_metered_until_suspend(exec_state)?;
+            let exit_code = std::mem::replace(&mut exec_state.exit_code, Ok(None))?;
             // The execution has terminated.
-            if exec_state.exit_code.is_ok() && exec_state.exit_code.as_ref().unwrap().is_some() {
+            if exit_code.is_some() {
+                exec_state.exit_code = Ok(exit_code);
                 break;
-            }
-            if exec_state.exit_code.is_err() {
-                return Err(exec_state.exit_code.unwrap_err());
             }
         }
         check_termination(exec_state.exit_code)?;

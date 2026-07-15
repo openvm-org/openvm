@@ -107,15 +107,15 @@ pub struct PhantomRecord {
 /// `PhantomChip` is a special executor because it is stateful and stores all the phantom
 /// sub-executors.
 #[derive(Clone, derive_new::new)]
-pub struct PhantomExecutor<F> {
-    pub(crate) phantom_executors: FxHashMap<PhantomDiscriminant, Arc<dyn PhantomSubExecutor<F>>>,
+pub struct PhantomExecutor {
+    pub(crate) phantom_executors: FxHashMap<PhantomDiscriminant, Arc<dyn PhantomSubExecutor>>,
     phantom_opcode: VmOpcode,
 }
 
 pub struct PhantomFiller;
 pub type PhantomChip<F> = VmChipWrapper<F, PhantomFiller>;
 
-impl<F, RA> PreflightExecutor<F, RA> for PhantomExecutor<F>
+impl<F, RA> PreflightExecutor<F, RA> for PhantomExecutor
 where
     F: PrimeField32,
     for<'buf> RA: RecordArena<'buf, EmptyMultiRowLayout, &'buf mut PhantomRecord>,
@@ -222,7 +222,7 @@ pub struct NopPhantomExecutor;
 pub struct CycleStartPhantomExecutor;
 pub struct CycleEndPhantomExecutor;
 
-impl<F> PhantomSubExecutor<F> for NopPhantomExecutor {
+impl PhantomSubExecutor for NopPhantomExecutor {
     #[inline(always)]
     fn phantom_execute(
         &self,
@@ -238,7 +238,7 @@ impl<F> PhantomSubExecutor<F> for NopPhantomExecutor {
     }
 }
 
-impl<F> PhantomSubExecutor<F> for CycleStartPhantomExecutor {
+impl PhantomSubExecutor for CycleStartPhantomExecutor {
     #[inline(always)]
     fn phantom_execute(
         &self,
@@ -255,7 +255,7 @@ impl<F> PhantomSubExecutor<F> for CycleStartPhantomExecutor {
     }
 }
 
-impl<F> PhantomSubExecutor<F> for CycleEndPhantomExecutor {
+impl PhantomSubExecutor for CycleEndPhantomExecutor {
     #[inline(always)]
     fn phantom_execute(
         &self,

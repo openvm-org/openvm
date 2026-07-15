@@ -37,8 +37,8 @@ struct AddSubPreCompute {
 macro_rules! dispatch {
     ($execute_impl:ident, $local_opcode:ident) => {
         Ok(match $local_opcode {
-            BaseAluOpcode::ADD => $execute_impl::<F, _, AddOp>,
-            BaseAluOpcode::SUB => $execute_impl::<F, _, SubOp>,
+            BaseAluOpcode::ADD => $execute_impl::<_, AddOp>,
+            BaseAluOpcode::SUB => $execute_impl::<_, SubOp>,
             _ => unreachable!("Rv64AddSub256Executor received non-ADD/SUB opcode"),
         })
     };
@@ -71,7 +71,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for Rv64AddSub256Executor {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
@@ -115,7 +115,7 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv64AddSub256Executor {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
@@ -150,7 +150,7 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: AluOp>(
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: AluOp>(
+unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, OP: AluOp>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
@@ -161,7 +161,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: AluOp>(
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, OP: AluOp>(
+unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, OP: AluOp>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {

@@ -2,7 +2,6 @@ use std::{
     alloc::{alloc, dealloc, handle_alloc_error, Layout},
     borrow::{Borrow, BorrowMut},
     iter::repeat_n,
-    marker::PhantomData,
     ptr::NonNull,
 };
 
@@ -40,7 +39,7 @@ use crate::{
 // NOTE: the lifetime 'a represents the lifetime of borrowed ExecutorInventory, which must outlive
 // the InterpretedInstance because `pre_compute_buf` may contain pointers to references held by
 // executors.
-pub struct InterpretedInstance<'a, F, Ctx> {
+pub struct InterpretedInstance<'a, Ctx> {
     system_config: &'a SystemConfig,
     // SAFETY: this is not actually dead code, but `pre_compute_insns` contains raw pointer refers
     // to this buffer.
@@ -56,16 +55,11 @@ pub struct InterpretedInstance<'a, F, Ctx> {
     pre_compute_max_size: usize,
     /// Handler function pointers for tail call optimization.
     #[cfg(feature = "tco")]
-    handlers: Vec<Handler<F, Ctx>>,
+    handlers: Vec<Handler<Ctx>>,
 
     pc_start: u32,
 
     init_memory: SparseMemoryImage,
-
-    // `F` is the program's field type: used by `handlers` (recursively via `Handler` ->
-    // `InterpretedInstance<F>`) under tco and by the `Program<F>` construction methods, but no
-    // stored field references it non-recursively, so retain it here as a marker.
-    _phantom: PhantomData<F>,
 }
 
 #[repr(C)]
@@ -122,18 +116,18 @@ macro_rules! run {
 // pointers
 // - Generic in `Ctx`
 
-impl<'a, F, Ctx> InterpretedInstance<'a, F, Ctx>
+impl<'a, Ctx> InterpretedInstance<'a, Ctx>
 where
-    F: PrimeField32,
     Ctx: ExecutionCtxTrait,
 {
     /// Creates a new interpreter instance for pure execution.
     // (pure execution)
-    pub fn new<E>(
+    pub fn new<F, E>(
         inventory: &'a ExecutorInventory<E>,
         exe: &VmExe<F>,
     ) -> Result<Self, StaticProgramError>
     where
+        F: PrimeField32,
         E: Executor<F>,
     {
         let program = &exe.program;
@@ -155,7 +149,7 @@ where
             .zip_eq(split_pre_compute_buf.iter_mut())
             .enumerate()
             .map(
-                |(pc_idx, (inst_opt, pre_compute))| -> Result<Handler<F, Ctx>, StaticProgramError> {
+                |(pc_idx, (inst_opt, pre_compute))| -> Result<Handler<Ctx>, StaticProgramError> {
                     if let Some((inst, _)) = inst_opt {
                         let pc = pc_idx as u32 * DEFAULT_PC_STEP;
                         if get_system_opcode_handler::<F, Ctx>(inst, pre_compute).is_some() {
@@ -184,7 +178,6 @@ where
             pre_compute_max_size,
             #[cfg(feature = "tco")]
             handlers,
-            _phantom: PhantomData,
         })
     }
 
@@ -211,35 +204,33 @@ where
             (pc_idx + 1) * self.pre_compute_max_size <= self.pre_compute_buf.layout.size()
         );
         unsafe {
-            let ptr = self
-                .pre_compute_buf
+            self.pre_compute_buf
                 .ptr
-                .add(pc_idx * self.pre_compute_max_size);
-            ptr
+                .add(pc_idx * self.pre_compute_max_size)
         }
     }
 
     #[cfg(feature = "tco")]
     #[inline(always)]
-    pub fn get_handler(&self, pc: u32) -> Option<Handler<F, Ctx>> {
+    pub fn get_handler(&self, pc: u32) -> Option<Handler<Ctx>> {
         let pc_idx = get_pc_index(pc);
         self.handlers.get(pc_idx).copied()
     }
 }
 
-impl<'a, F, Ctx> InterpretedInstance<'a, F, Ctx>
+impl<'a, Ctx> InterpretedInstance<'a, Ctx>
 where
-    F: PrimeField32,
     Ctx: MeteredExecutionCtxTrait,
 {
     /// Creates a new interpreter instance for pure execution.
     // (metered execution)
-    pub fn new_metered<E>(
+    pub fn new_metered<F, E>(
         inventory: &'a ExecutorInventory<E>,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
     ) -> Result<Self, StaticProgramError>
     where
+        F: PrimeField32,
         E: MeteredExecutor<F>,
     {
         let program = &exe.program;
@@ -263,7 +254,7 @@ where
             .zip_eq(split_pre_compute_buf.iter_mut())
             .enumerate()
             .map(
-                |(pc_idx, (inst_opt, pre_compute))| -> Result<Handler<F, Ctx>, StaticProgramError> {
+                |(pc_idx, (inst_opt, pre_compute))| -> Result<Handler<Ctx>, StaticProgramError> {
                     if let Some((inst, _)) = inst_opt {
                         let pc = pc_idx as u32 * DEFAULT_PC_STEP;
                         if get_system_opcode_handler::<F, Ctx>(inst, pre_compute).is_some() {
@@ -294,17 +285,13 @@ where
             pre_compute_max_size,
             #[cfg(feature = "tco")]
             handlers,
-            _phantom: PhantomData,
         })
     }
 }
 
 // Execute functions specialize to relevant Ctx types to provide more streamlines APIs
 
-impl<'a, F> InterpretedInstance<'a, F, ExecutionCtx>
-where
-    F: PrimeField32,
-{
+impl InterpretedInstance<'_, ExecutionCtx> {
     /// Pure execution, without metering, for the given `inputs`. Execution begins from the initial
     /// state specified by the `VmExe`. This function executes the program until either termination
     /// if `num_insns` is `None` or for exactly `num_insns` instructions if `num_insns` is `Some`.
@@ -358,10 +345,7 @@ where
     }
 }
 
-impl<'a, F> InterpretedInstance<'a, F, MeteredCtx>
-where
-    F: PrimeField32,
-{
+impl InterpretedInstance<'_, MeteredCtx> {
     /// Metered execution for the given `inputs`. Execution begins from the initial
     /// state specified by the `VmExe`. This function executes the program until termination.
     ///
@@ -392,12 +376,11 @@ where
 
         loop {
             exec_state = self.execute_metered_until_suspend(exec_state)?;
+            let exit_code = std::mem::replace(&mut exec_state.exit_code, Ok(None))?;
             // The execution has terminated.
-            if exec_state.exit_code.is_ok() && exec_state.exit_code.as_ref().unwrap().is_some() {
+            if exit_code.is_some() {
+                exec_state.exit_code = Ok(exit_code);
                 break;
-            }
-            if exec_state.exit_code.is_err() {
-                return Err(exec_state.exit_code.unwrap_err());
             }
         }
         check_termination(exec_state.exit_code)?;
@@ -445,10 +428,7 @@ where
     }
 }
 
-impl<'a, F> InterpretedInstance<'a, F, MeteredCostCtx>
-where
-    F: PrimeField32,
-{
+impl InterpretedInstance<'_, MeteredCostCtx> {
     /// Metered cost execution for the given `inputs`. Execution begins from the initial
     /// state specified by the `VmExe`. This function executes the program until termination.
     ///
@@ -612,8 +592,8 @@ unsafe fn terminate_execute_impl<CTX: ExecutionCtxTrait>(
 }
 
 #[cfg(feature = "tco")]
-unsafe fn terminate_execute_tco_handler<F: PrimeField32, CTX: ExecutionCtxTrait>(
-    interpreter: &InterpretedInstance<'_, F, CTX>,
+unsafe fn terminate_execute_tco_handler<CTX: ExecutionCtxTrait>(
+    interpreter: &InterpretedInstance<'_, CTX>,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pre_compute = interpreter.get_pre_compute(exec_state.vm_state.pc());
@@ -621,8 +601,8 @@ unsafe fn terminate_execute_tco_handler<F: PrimeField32, CTX: ExecutionCtxTrait>
 }
 
 #[cfg(feature = "tco")]
-unsafe fn unreachable_tco_handler<F: PrimeField32, CTX>(
-    _: &InterpretedInstance<'_, F, CTX>,
+unsafe fn unreachable_tco_handler<CTX>(
+    _: &InterpretedInstance<'_, CTX>,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     exec_state.exit_code = Err(ExecutionError::Unreachable(exec_state.vm_state.pc()));

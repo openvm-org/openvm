@@ -91,12 +91,12 @@ pub enum ModularExtensionExecutor {
     ModularIsEqualRv64_48(VmModularIsEqualU16Executor<MODULAR_BLOCKS_48, NUM_LIMBS_48_U16>), /* ModularIsEqual */
 }
 
-impl<F: PrimeField32> VmExecutionExtension<F> for ModularExtension {
+impl VmExecutionExtension for ModularExtension {
     type Executor = ModularExtensionExecutor;
 
     fn extend_execution(
         &self,
-        inventory: &mut ExecutorInventoryBuilder<F, ModularExtensionExecutor>,
+        inventory: &mut ExecutorInventoryBuilder<ModularExtensionExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
         let byte_ptr_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
         // TODO: somehow get the range checker bus from `ExecutorInventory`
@@ -485,7 +485,6 @@ pub(crate) mod phantom {
         PhantomDiscriminant,
     };
     use openvm_riscv_circuit::adapters::read_rv64_register_as_u32;
-    use openvm_stark_backend::p3_field::PrimeField32;
     use rand::{rngs::StdRng, SeedableRng};
 
     use super::{find_non_qr, mod_sqrt, NQR_RNG_SEED};
@@ -504,7 +503,7 @@ pub(crate) mod phantom {
 
     // Given x returns either a sqrt of x or a sqrt of x * non_qr, whichever exists.
     // Note that non_qr is fixed for each modulus.
-    impl<F: PrimeField32> PhantomSubExecutor<F> for SqrtHintSubEx {
+    impl PhantomSubExecutor for SqrtHintSubEx {
         fn phantom_execute(
             &self,
             memory: &GuestMemory,
@@ -596,7 +595,7 @@ pub(crate) mod phantom {
         }
     }
 
-    impl<F: PrimeField32> PhantomSubExecutor<F> for NonQrHintSubEx {
+    impl PhantomSubExecutor for NonQrHintSubEx {
         fn phantom_execute(
             &self,
             _: &GuestMemory,

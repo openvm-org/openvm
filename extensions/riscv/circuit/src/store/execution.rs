@@ -5,11 +5,13 @@ use std::{
 
 #[cfg(feature = "tco")]
 use openvm_circuit::arch::execution::Handler;
+#[cfg(not(feature = "tco"))]
+use openvm_circuit::arch::ExecuteFunc;
 use openvm_circuit::{
     arch::{
-        create_handler, E2PreCompute, ExecuteFunc, ExecutionCtxTrait, ExecutionError,
-        InterpreterExecutor, InterpreterMeteredExecutor, MeteredExecutionCtxTrait,
-        StaticProgramError, VmExecState, RV64_MEMORY_BYTES,
+        create_handler, E2PreCompute, ExecutionCtxTrait, ExecutionError, InterpreterExecutor,
+        InterpreterMeteredExecutor, MeteredExecutionCtxTrait, StaticProgramError, VmExecState,
+        RV64_MEMORY_BYTES,
     },
     system::memory::online::GuestMemory,
 };
@@ -89,10 +91,10 @@ impl<A, const STORE_WIDTH: usize> StoreExecutor<A, STORE_WIDTH> {
 macro_rules! dispatch {
     ($execute_impl:ident, $local_opcode:ident) => {
         match $local_opcode {
-            STORED => Ok($execute_impl::<F, _, StoreDOp>),
-            STOREW => Ok($execute_impl::<F, _, StoreWOp>),
-            STOREH => Ok($execute_impl::<F, _, StoreHOp>),
-            STOREB => Ok($execute_impl::<F, _, StoreBOp>),
+            STORED => Ok($execute_impl::<_, StoreDOp>),
+            STOREW => Ok($execute_impl::<_, StoreWOp>),
+            STOREH => Ok($execute_impl::<_, StoreHOp>),
+            STOREB => Ok($execute_impl::<_, StoreBOp>),
             _ => Err(StaticProgramError::InvalidInstruction(0)),
         }
     };
@@ -126,7 +128,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
@@ -168,7 +170,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
@@ -217,7 +219,7 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: StoreOp>(
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: StoreOp>(
+unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, OP: StoreOp>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
@@ -228,7 +230,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: StoreOp>(
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, OP: StoreOp>(
+unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, OP: StoreOp>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {

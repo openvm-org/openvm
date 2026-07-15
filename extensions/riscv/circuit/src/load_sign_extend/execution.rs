@@ -5,11 +5,13 @@ use std::{
 
 #[cfg(feature = "tco")]
 use openvm_circuit::arch::execution::Handler;
+#[cfg(not(feature = "tco"))]
+use openvm_circuit::arch::ExecuteFunc;
 use openvm_circuit::{
     arch::{
-        create_handler, E2PreCompute, ExecuteFunc, ExecutionCtxTrait, ExecutionError,
-        InterpreterExecutor, InterpreterMeteredExecutor, MeteredExecutionCtxTrait,
-        StaticProgramError, VmExecState, RV64_MEMORY_BYTES,
+        create_handler, E2PreCompute, ExecutionCtxTrait, ExecutionError, InterpreterExecutor,
+        InterpreterMeteredExecutor, MeteredExecutionCtxTrait, StaticProgramError, VmExecState,
+        RV64_MEMORY_BYTES,
     },
     system::memory::online::GuestMemory,
 };
@@ -82,12 +84,12 @@ impl<A, const LOAD_WIDTH: usize> LoadSignExtendExecutor<A, LOAD_WIDTH> {
 macro_rules! dispatch {
     ($execute_impl:ident, $local_opcode:ident, $enabled:ident) => {
         match ($local_opcode, $enabled) {
-            (LOADW, true) => Ok($execute_impl::<F, _, LoadWOp, true>),
-            (LOADW, false) => Ok($execute_impl::<F, _, LoadWOp, false>),
-            (LOADH, true) => Ok($execute_impl::<F, _, LoadHOp, true>),
-            (LOADH, false) => Ok($execute_impl::<F, _, LoadHOp, false>),
-            (LOADB, true) => Ok($execute_impl::<F, _, LoadBOp, true>),
-            (LOADB, false) => Ok($execute_impl::<F, _, LoadBOp, false>),
+            (LOADW, true) => Ok($execute_impl::<_, LoadWOp, true>),
+            (LOADW, false) => Ok($execute_impl::<_, LoadWOp, false>),
+            (LOADH, true) => Ok($execute_impl::<_, LoadHOp, true>),
+            (LOADH, false) => Ok($execute_impl::<_, LoadHOp, false>),
+            (LOADB, true) => Ok($execute_impl::<_, LoadBOp, true>),
+            (LOADB, false) => Ok($execute_impl::<_, LoadBOp, false>),
             _ => Err(StaticProgramError::InvalidInstruction(0)),
         }
     };
@@ -121,7 +123,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
@@ -164,7 +166,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
@@ -211,12 +213,7 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: LoadSignExtendOp, const E
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<
-    F: PrimeField32,
-    CTX: ExecutionCtxTrait,
-    OP: LoadSignExtendOp,
-    const ENABLED: bool,
->(
+unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, OP: LoadSignExtendOp, const ENABLED: bool>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
@@ -228,7 +225,6 @@ unsafe fn execute_e1_impl<
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<
-    F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,
     OP: LoadSignExtendOp,
     const ENABLED: bool,

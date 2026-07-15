@@ -49,9 +49,9 @@ struct ShiftPreCompute {
 macro_rules! dispatch {
     ($execute_impl:ident, $local_opcode:ident) => {
         Ok(match $local_opcode {
-            ShiftOpcode::SLL => $execute_impl::<F, _, SllOp>,
-            ShiftOpcode::SRA => $execute_impl::<F, _, SraOp>,
-            ShiftOpcode::SRL => $execute_impl::<F, _, SrlOp>,
+            ShiftOpcode::SLL => $execute_impl::<_, SllOp>,
+            ShiftOpcode::SRA => $execute_impl::<_, SraOp>,
+            ShiftOpcode::SRL => $execute_impl::<_, SrlOp>,
         })
     };
 }
@@ -84,7 +84,7 @@ macro_rules! impl_shift256_executor {
                 pc: u32,
                 inst: &Instruction<F>,
                 data: &mut [u8],
-            ) -> Result<Handler<F, Ctx>, StaticProgramError>
+            ) -> Result<Handler<Ctx>, StaticProgramError>
             where
                 Ctx: ExecutionCtxTrait,
             {
@@ -126,7 +126,7 @@ macro_rules! impl_shift256_executor {
                 pc: u32,
                 inst: &Instruction<F>,
                 data: &mut [u8],
-            ) -> Result<Handler<F, Ctx>, StaticProgramError>
+            ) -> Result<Handler<Ctx>, StaticProgramError>
             where
                 Ctx: MeteredExecutionCtxTrait,
             {
@@ -201,7 +201,7 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: ShiftOp>(
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: ShiftOp>(
+unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, OP: ShiftOp>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
@@ -212,7 +212,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: ShiftOp>(
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, OP: ShiftOp>(
+unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, OP: ShiftOp>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {

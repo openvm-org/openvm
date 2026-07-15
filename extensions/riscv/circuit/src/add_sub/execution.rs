@@ -51,8 +51,8 @@ macro_rules! dispatch {
     ($execute_impl:ident, $opcode:expr, $offset:expr) => {
         Ok(
             match BaseAluOpcode::from_usize($opcode.local_opcode_idx($offset)) {
-                BaseAluOpcode::ADD => $execute_impl::<_, _, AddOp>,
-                BaseAluOpcode::SUB => $execute_impl::<_, _, SubOp>,
+                BaseAluOpcode::ADD => $execute_impl::<_, AddOp>,
+                BaseAluOpcode::SUB => $execute_impl::<_, SubOp>,
                 _ => unreachable!("AddSubExecutor received non-ADD/SUB opcode"),
             },
         )
@@ -91,7 +91,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
@@ -137,7 +137,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
@@ -249,7 +249,7 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: AluOp>(
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: AluOp>(
+unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, OP: AluOp>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
@@ -260,7 +260,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: AluOp>(
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, OP: AluOp>(
+unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, OP: AluOp>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {

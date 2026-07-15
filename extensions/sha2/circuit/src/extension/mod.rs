@@ -48,7 +48,7 @@ cfg_if::cfg_if! {
 
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
 pub struct Sha2Rv64Config {
-    #[config(executor = "SystemExecutor<F>")]
+    #[config(executor = "SystemExecutor")]
     pub system: SystemConfig,
     #[extension]
     pub rv64i: Rv64I,
@@ -143,12 +143,12 @@ pub enum Sha2Executor {
     Sha512(Sha2VmExecutor<Sha512Config>),
 }
 
-impl<F> VmExecutionExtension<F> for Sha2 {
+impl VmExecutionExtension for Sha2 {
     type Executor = Sha2Executor;
 
     fn extend_execution(
         &self,
-        inventory: &mut ExecutorInventoryBuilder<F, Sha2Executor>,
+        inventory: &mut ExecutorInventoryBuilder<Sha2Executor>,
     ) -> Result<(), ExecutorInventoryError> {
         let byte_ptr_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
 

@@ -26,7 +26,7 @@ use openvm_stark_backend::{
     interaction::BusIndex,
     keygen::{types::MultiStarkProvingKey, MultiStarkKeygenBuilder},
     prover::{AirProvingContext, MatrixDimensions, ProverBackend, ProvingContext},
-    AirRef, AnyAir, StarkEngine, StarkProtocolConfig, Val,
+    AirRef, AnyAir, StarkEngine, StarkProtocolConfig,
 };
 use rustc_hash::FxHashMap;
 use tracing::info_span;
@@ -80,13 +80,13 @@ pub type AirRefWithColumns<SC> = Arc<dyn AnyAirWithColumns<SC>>;
 
 /// Extension of VM execution. Allows registration of custom execution of new instructions by
 /// opcode.
-pub trait VmExecutionExtension<F> {
+pub trait VmExecutionExtension {
     /// Enum of executor variants
     type Executor: AnyEnum;
 
     fn extend_execution(
         &self,
-        inventory: &mut ExecutorInventoryBuilder<F, Self::Executor>,
+        inventory: &mut ExecutorInventoryBuilder<Self::Executor>,
     ) -> Result<(), ExecutorInventoryError>;
 }
 
@@ -104,7 +104,7 @@ pub trait VmCircuitExtension<SC: StarkProtocolConfig> {
 pub trait VmProverExtension<E, RA, EXT>
 where
     E: StarkEngine,
-    EXT: VmExecutionExtension<Val<E::SC>> + VmCircuitExtension<E::SC>,
+    EXT: VmExecutionExtension + VmCircuitExtension<E::SC>,
 {
     /// The chips added to `inventory` should exactly match the order of AIRs in the
     /// [VmCircuitExtension] implementation of `EXT`.
@@ -135,13 +135,13 @@ pub struct ExecutorInventory<E> {
 // @dev: We need ExecutorInventoryBuilder separate from ExecutorInventory because extension
 // composition builds a combined executor enum while each extension only knows its own executor
 // enum. The builder keeps access to existing executors without naming the final combined enum.
-pub struct ExecutorInventoryBuilder<'a, F, E> {
+pub struct ExecutorInventoryBuilder<'a, E> {
     /// Chips that are already included in the chipset and may be used
     /// as dependencies. The order should be that depended-on chips are ordered
     /// **before** their dependents.
     old_executors: Vec<&'a dyn AnyEnum>,
     new_inventory: ExecutorInventory<E>,
-    phantom_executors: FxHashMap<PhantomDiscriminant, Arc<dyn PhantomSubExecutor<F>>>,
+    phantom_executors: FxHashMap<PhantomDiscriminant, Arc<dyn PhantomSubExecutor>>,
 }
 
 #[derive(Clone, Getters, CopyGetters)]
@@ -253,24 +253,23 @@ impl<E> ExecutorInventory<E> {
 
     /// Extend the inventory with a new extension.
     /// A new inventory with different type generics is returned with the combined inventory.
-    pub fn extend<F, CombinedE, EXT>(
+    pub fn extend<CombinedE, EXT>(
         self,
         other: &EXT,
     ) -> Result<ExecutorInventory<CombinedE>, ExecutorInventoryError>
     where
-        F: 'static,
         E: Into<CombinedE> + AnyEnum,
         CombinedE: AnyEnum,
-        EXT: VmExecutionExtension<F>,
+        EXT: VmExecutionExtension,
         EXT::Executor: Into<CombinedE>,
     {
-        let mut builder: ExecutorInventoryBuilder<F, EXT::Executor> = self.builder();
+        let mut builder: ExecutorInventoryBuilder<EXT::Executor> = self.builder();
         other.extend_execution(&mut builder)?;
         let other_inventory = builder.new_inventory;
         let other_phantom_executors = builder.phantom_executors;
         let mut inventory_ext = self.transmute();
         inventory_ext.append(other_inventory.transmute())?;
-        let phantom_chip: &mut PhantomExecutor<F> = inventory_ext
+        let phantom_chip: &mut PhantomExecutor = inventory_ext
             .find_executor_mut()
             .next()
             .expect("system always has phantom chip");
@@ -287,9 +286,8 @@ impl<E> ExecutorInventory<E> {
         Ok(inventory_ext)
     }
 
-    pub fn builder<F, NewE>(&self) -> ExecutorInventoryBuilder<'_, F, NewE>
+    pub fn builder<NewE>(&self) -> ExecutorInventoryBuilder<'_, NewE>
     where
-        F: 'static,
         E: AnyEnum,
     {
         let old_executors = self.executors.iter().map(|e| e as &dyn AnyEnum).collect();
@@ -368,7 +366,7 @@ impl<E> ExecutorInventory<E> {
     }
 }
 
-impl<F, E> ExecutorInventoryBuilder<'_, F, E> {
+impl<E> ExecutorInventoryBuilder<'_, E> {
     pub fn add_executor(
         &mut self,
         executor: impl Into<E>,
@@ -384,8 +382,7 @@ impl<F, E> ExecutorInventoryBuilder<'_, F, E> {
     ) -> Result<(), ExecutorInventoryError>
     where
         E: AnyEnum,
-        F: 'static,
-        PE: PhantomSubExecutor<F> + 'static,
+        PE: PhantomSubExecutor + 'static,
     {
         let existing = self
             .phantom_executors
@@ -767,12 +764,12 @@ where
 
 // ============ Blanket implementation of VM extension traits for Option<E> ===========
 
-impl<F, EXT: VmExecutionExtension<F>> VmExecutionExtension<F> for Option<EXT> {
+impl<EXT: VmExecutionExtension> VmExecutionExtension for Option<EXT> {
     type Executor = EXT::Executor;
 
     fn extend_execution(
         &self,
-        inventory: &mut ExecutorInventoryBuilder<F, Self::Executor>,
+        inventory: &mut ExecutorInventoryBuilder<Self::Executor>,
     ) -> Result<(), ExecutorInventoryError> {
         if let Some(extension) = self {
             extension.extend_execution(inventory)

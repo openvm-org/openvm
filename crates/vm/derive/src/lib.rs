@@ -171,7 +171,7 @@ pub fn executor_derive(input: TokenStream) -> TokenStream {
                     pc: u32,
                     inst: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
                     data: &mut [u8],
-                ) -> Result<::openvm_circuit::arch::Handler<F, Ctx>, ::openvm_circuit::arch::StaticProgramError>
+                ) -> Result<::openvm_circuit::arch::Handler<Ctx>, ::openvm_circuit::arch::StaticProgramError>
                 where
                     Ctx: ::openvm_circuit::arch::execution_mode::ExecutionCtxTrait, {
                     self.0.handler(pc, inst, data)
@@ -262,7 +262,7 @@ pub fn executor_derive(input: TokenStream) -> TokenStream {
                     pc: u32,
                     instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
                     data: &mut [u8],
-                ) -> Result<::openvm_circuit::arch::Handler<F, Ctx>, ::openvm_circuit::arch::StaticProgramError>
+                ) -> Result<::openvm_circuit::arch::Handler<Ctx>, ::openvm_circuit::arch::StaticProgramError>
                 where
                     Ctx: ::openvm_circuit::arch::execution_mode::ExecutionCtxTrait, {
                     match self {
@@ -482,7 +482,7 @@ pub fn metered_executor_derive(input: TokenStream) -> TokenStream {
                     pc: u32,
                     inst: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
                     data: &mut [u8],
-                ) -> Result<::openvm_circuit::arch::Handler<F, Ctx>, ::openvm_circuit::arch::StaticProgramError>
+                ) -> Result<::openvm_circuit::arch::Handler<Ctx>, ::openvm_circuit::arch::StaticProgramError>
                 where
                     Ctx: ::openvm_circuit::arch::execution_mode::MeteredExecutionCtxTrait, {
                     self.0.metered_handler(chip_idx, pc, inst, data)
@@ -577,7 +577,7 @@ pub fn metered_executor_derive(input: TokenStream) -> TokenStream {
                     pc: u32,
                     instruction: &::openvm_circuit::arch::instructions::instruction::Instruction<F>,
                     data: &mut [u8],
-                ) -> Result<::openvm_circuit::arch::Handler<F, Ctx>, ::openvm_circuit::arch::StaticProgramError>
+                ) -> Result<::openvm_circuit::arch::Handler<Ctx>, ::openvm_circuit::arch::StaticProgramError>
                 where
                     Ctx: ::openvm_circuit::arch::execution_mode::MeteredExecutionCtxTrait,
                 {
@@ -910,17 +910,17 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
     for e in extensions.iter() {
         let (ext_field_name, ext_name_upper) =
             gen_name_with_uppercase_idents(e.ident.as_ref().expect("field must be named"));
-        let executor_type = parse_executor_type(e, false)?;
+        let executor_type = parse_executor_type(e)?;
         executor_enum_fields.push(quote! {
             #[any_enum]
             #ext_name_upper(#executor_type),
         });
         create_executors.push(quote! {
-            let inventory: ::openvm_circuit::arch::ExecutorInventory<Self::Executor> = inventory.extend::<F, _, _>(&self.#ext_field_name)?;
+            let inventory: ::openvm_circuit::arch::ExecutorInventory<Self::Executor> = inventory.extend::<_, _>(&self.#ext_field_name)?;
         });
         let extension_ty = e.ty.clone();
         execution_where_predicates.push(parse_quote! {
-            #extension_ty: ::openvm_circuit::arch::VmExecutionExtension<F, Executor = #executor_type>
+            #extension_ty: ::openvm_circuit::arch::VmExecutionExtension<Executor = #executor_type>
         });
         extend_rvr.push(quote! {
             <#extension_ty as ::rvr_openvm_lift::VmRvrExtension<F>>::extend_rvr(
@@ -938,8 +938,7 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
         });
     }
 
-    // The config type always needs <F> due to SystemExecutor
-    let source_executor_type = parse_executor_type(source_field, true)?;
+    let source_executor_type = parse_executor_type(source_field)?;
     execution_where_predicates.push(parse_quote! {
         #source_field_ty: ::openvm_circuit::arch::VmExecutionConfig<F, Executor = #source_executor_type>
     });
@@ -950,7 +949,6 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
     let circuit_where_clause = quote! { where #(#circuit_where_predicates),* };
 
     let executor_type = Ident::new(&format!("{name}Executor"), name.span());
-
     let token_stream = TokenStream::from(quote! {
         #[derive(
             Clone,
@@ -961,14 +959,14 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
             ::openvm_circuit::derive::PreflightExecutor,
         )]
         #[cfg_attr(feature = "aot", derive(::openvm_circuit::derive::AotExecutor, ::openvm_circuit::derive::AotMeteredExecutor))]
-        pub enum #executor_type<F: ::openvm_circuit::arch::VmField> #execution_where_clause {
+        pub enum #executor_type {
             #[any_enum]
             #source_name_upper(#source_executor_type),
             #(#executor_enum_fields)*
         }
 
         impl<F: ::openvm_circuit::arch::VmField> ::openvm_circuit::arch::VmExecutionConfig<F> for #name #execution_where_clause {
-            type Executor = #executor_type<F>;
+            type Executor = #executor_type;
 
             fn create_executors(
                 &self,
@@ -1030,12 +1028,9 @@ fn generate_config_traits_impl(name: &Ident, inner: &DataStruct) -> syn::Result<
 // Parse the executor name as either
 // `{type_name}Executor` or whatever the attribute `executor = ` specifies
 // Also determines whether the executor type needs generic parameters
-fn parse_executor_type(
-    f: &Field,
-    default_needs_generics: bool,
-) -> syn::Result<proc_macro2::TokenStream> {
+fn parse_executor_type(f: &Field) -> syn::Result<proc_macro2::TokenStream> {
     // TRACKING ISSUE:
-    // We cannot just use <e.ty.to_token_stream() as VmExecutionExtension<F>>::Executor because of this: <https://github.com/rust-lang/rust/issues/85576>
+    // We cannot just use <e.ty.to_token_stream() as VmExecutionExtension>::Executor because of this: <https://github.com/rust-lang/rust/issues/85576>
     let mut executor_type = None;
     // Do not unwrap the Result until needed
     let executor_name = syn::parse_str::<Ident>(&format!("{}Executor", f.ty.to_token_stream()));
@@ -1078,25 +1073,11 @@ fn parse_executor_type(
                                         ));
                                     }
                                 };
-                            } else if nv.path.is_ident("generics") {
-                                // Parse boolean value for generics
-                                let value_str = nv.value.to_token_stream().to_string();
-                                let needs_generics = match value_str.as_str() {
-                                    "true" => true,
-                                    "false" => false,
-                                    _ => return Err(syn::Error::new(
-                                        nv.value.span(),
-                                        "generics attribute must be either true or false"
-                                    ))
-                                };
-                                let executor_name = executor_name.clone()?;
-                                executor_type = Some(if needs_generics {
-                                    quote! { #executor_name<F> }
-                                } else {
-                                    quote! { #executor_name }
-                                });
                             } else {
-                                return Err(syn::Error::new(nv.span(), "only executor and generics keys are supported"));
+                                return Err(syn::Error::new(
+                                    nv.span(),
+                                    "only the executor key is supported",
+                                ));
                             }
                         }
                         _ => {
@@ -1111,11 +1092,7 @@ fn parse_executor_type(
         Ok(executor_type)
     } else {
         let executor_name = executor_name?;
-        Ok(if default_needs_generics {
-            quote! { #executor_name<F> }
-        } else {
-            quote! { #executor_name }
-        })
+        Ok(quote! { #executor_name })
     }
 }
 
@@ -1128,8 +1105,8 @@ fn parse_executor_type(
 /// # Usage
 ///
 /// Place this attribute above a function definition:
-/// ```
-/// #[create_tco_handler]
+/// ```ignore
+/// #[create_handler]
 /// unsafe fn execute_e1_impl<F: PrimeField32, CTX, const B_IS_IMM: bool>(
 ///     pre_compute: *const u8,
 ///     state: &mut VmExecState<GuestMemory, CTX>,

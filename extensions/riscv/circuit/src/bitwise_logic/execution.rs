@@ -67,12 +67,12 @@ macro_rules! dispatch {
                 $is_imm,
                 BaseAluOpcode::from_usize($opcode.local_opcode_idx($offset)),
             ) {
-                (true, BaseAluOpcode::XOR) => $execute_impl::<F, _, true, XorOp>,
-                (false, BaseAluOpcode::XOR) => $execute_impl::<F, _, false, XorOp>,
-                (true, BaseAluOpcode::OR) => $execute_impl::<F, _, true, OrOp>,
-                (false, BaseAluOpcode::OR) => $execute_impl::<F, _, false, OrOp>,
-                (true, BaseAluOpcode::AND) => $execute_impl::<F, _, true, AndOp>,
-                (false, BaseAluOpcode::AND) => $execute_impl::<F, _, false, AndOp>,
+                (true, BaseAluOpcode::XOR) => $execute_impl::<_, true, XorOp>,
+                (false, BaseAluOpcode::XOR) => $execute_impl::<_, false, XorOp>,
+                (true, BaseAluOpcode::OR) => $execute_impl::<_, true, OrOp>,
+                (false, BaseAluOpcode::OR) => $execute_impl::<_, false, OrOp>,
+                (true, BaseAluOpcode::AND) => $execute_impl::<_, true, AndOp>,
+                (false, BaseAluOpcode::AND) => $execute_impl::<_, false, AndOp>,
                 _ => unreachable!("BitwiseLogicExecutor received non-XOR/OR/AND opcode"),
             },
         )
@@ -111,7 +111,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
@@ -157,7 +157,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
@@ -277,12 +277,7 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_IMM: bool, OP: AluOp
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<
-    F: PrimeField32,
-    CTX: ExecutionCtxTrait,
-    const IS_IMM: bool,
-    OP: AluOp,
->(
+unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, const IS_IMM: bool, OP: AluOp>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
@@ -293,12 +288,7 @@ unsafe fn execute_e1_impl<
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e2_impl<
-    F: PrimeField32,
-    CTX: MeteredExecutionCtxTrait,
-    const IS_IMM: bool,
-    OP: AluOp,
->(
+unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, const IS_IMM: bool, OP: AluOp>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {

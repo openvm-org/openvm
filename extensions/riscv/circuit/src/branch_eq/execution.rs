@@ -58,9 +58,9 @@ impl<A, const NUM_LIMBS: usize> BranchEqualExecutor<A, NUM_LIMBS> {
 macro_rules! dispatch {
     ($execute_impl:ident, $is_bne:ident) => {
         if $is_bne {
-            Ok($execute_impl::<F, _, true>)
+            Ok($execute_impl::<_, true>)
         } else {
-            Ok($execute_impl::<F, _, false>)
+            Ok($execute_impl::<_, false>)
         }
     };
 }
@@ -93,7 +93,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
@@ -190,7 +190,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
@@ -242,7 +242,7 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_NE: bool>(
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_NE: bool>(
+unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, const IS_NE: bool>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
@@ -253,7 +253,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_NE: 
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, const IS_NE: bool>(
+unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, const IS_NE: bool>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {

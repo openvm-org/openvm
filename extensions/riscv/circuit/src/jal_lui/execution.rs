@@ -45,10 +45,10 @@ impl<A> Rv64JalLuiExecutor<A> {
 macro_rules! dispatch {
     ($execute_impl:ident, $is_jal:ident, $enabled:ident) => {
         match ($is_jal, $enabled) {
-            (true, true) => Ok($execute_impl::<F, _, true, true>),
-            (true, false) => Ok($execute_impl::<F, _, true, false>),
-            (false, true) => Ok($execute_impl::<F, _, false, true>),
-            (false, false) => Ok($execute_impl::<F, _, false, false>),
+            (true, true) => Ok($execute_impl::<_, true, true>),
+            (true, false) => Ok($execute_impl::<_, true, false>),
+            (false, true) => Ok($execute_impl::<_, false, true>),
+            (false, false) => Ok($execute_impl::<_, false, false>),
         }
     };
 }
@@ -80,7 +80,7 @@ where
         _pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
@@ -170,7 +170,7 @@ where
         _pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
@@ -219,12 +219,7 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_JAL: bool, const ENA
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<
-    F: PrimeField32,
-    CTX: ExecutionCtxTrait,
-    const IS_JAL: bool,
-    const ENABLED: bool,
->(
+unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, const IS_JAL: bool, const ENABLED: bool>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
@@ -236,7 +231,6 @@ unsafe fn execute_e1_impl<
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<
-    F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,
     const IS_JAL: bool,
     const ENABLED: bool,

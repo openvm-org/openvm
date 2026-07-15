@@ -85,7 +85,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for DeferralOutputExecutor {
     {
         let pre_compute: &mut DeferralOutputPrecompute = data.borrow_mut();
         self.pre_compute_impl(pc, inst, pre_compute)?;
-        Ok(execute_e1_impl::<F, _>)
+        Ok(execute_e1_impl::<_>)
     }
 
     #[cfg(feature = "tco")]
@@ -94,13 +94,13 @@ impl<F: PrimeField32> InterpreterExecutor<F> for DeferralOutputExecutor {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
         let pre_compute: &mut DeferralOutputPrecompute = data.borrow_mut();
         self.pre_compute_impl(pc, inst, pre_compute)?;
-        Ok(execute_e1_handler::<F, _>)
+        Ok(execute_e1_handler::<_>)
     }
 }
 
@@ -126,7 +126,7 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for DeferralOutputExecutor {
         let pre_compute: &mut E2PreCompute<DeferralOutputPrecompute> = data.borrow_mut();
         pre_compute.chip_idx = air_idx as u32;
         self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
-        Ok(execute_e2_impl::<F, _>)
+        Ok(execute_e2_impl::<_>)
     }
 
     #[cfg(feature = "tco")]
@@ -136,14 +136,14 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for DeferralOutputExecutor {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
         let pre_compute: &mut E2PreCompute<DeferralOutputPrecompute> = data.borrow_mut();
         pre_compute.chip_idx = air_idx as u32;
         self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
-        Ok(execute_e2_handler::<F, _>)
+        Ok(execute_e2_handler::<_>)
     }
 }
 
@@ -195,7 +195,7 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait>(
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
+unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
@@ -206,7 +206,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
+unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {

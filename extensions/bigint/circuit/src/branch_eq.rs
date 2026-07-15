@@ -35,8 +35,8 @@ struct BranchEqPreCompute {
 macro_rules! dispatch {
     ($execute_impl:ident, $local_opcode:ident) => {
         match $local_opcode {
-            BranchEqualOpcode::BEQ => Ok($execute_impl::<F, _, false>),
-            BranchEqualOpcode::BNE => Ok($execute_impl::<F, _, true>),
+            BranchEqualOpcode::BEQ => Ok($execute_impl::<_, false>),
+            BranchEqualOpcode::BNE => Ok($execute_impl::<_, true>),
         }
     };
 }
@@ -67,7 +67,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for Rv64BranchEqual256Executor {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
@@ -109,7 +109,7 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv64BranchEqual256Execut
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
@@ -146,7 +146,7 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_NE: bool>(
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_NE: bool>(
+unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, const IS_NE: bool>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
@@ -157,7 +157,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_NE: 
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, const IS_NE: bool>(
+unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, const IS_NE: bool>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {

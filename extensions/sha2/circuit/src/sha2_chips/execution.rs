@@ -39,7 +39,7 @@ impl<F: PrimeField32, C: Sha2Config> InterpreterExecutor<F> for Sha2VmExecutor<C
     {
         let data: &mut Sha2PreCompute = data.borrow_mut();
         self.pre_compute_impl(pc, inst, data)?;
-        Ok(execute_e1_impl::<F, _, C>)
+        Ok(execute_e1_impl::<_, C>)
     }
 
     #[cfg(feature = "tco")]
@@ -48,13 +48,13 @@ impl<F: PrimeField32, C: Sha2Config> InterpreterExecutor<F> for Sha2VmExecutor<C
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
         let data: &mut Sha2PreCompute = data.borrow_mut();
         self.pre_compute_impl(pc, inst, data)?;
-        Ok(execute_e1_handler::<F, _, C>)
+        Ok(execute_e1_handler::<_, C>)
     }
 }
 
@@ -77,7 +77,7 @@ impl<F: PrimeField32, C: Sha2Config> InterpreterMeteredExecutor<F> for Sha2VmExe
         let data: &mut E2PreCompute<Sha2PreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         self.pre_compute_impl(pc, inst, &mut data.data)?;
-        Ok(execute_e2_impl::<F, _, C>)
+        Ok(execute_e2_impl::<_, C>)
     }
 
     #[cfg(feature = "tco")]
@@ -87,14 +87,14 @@ impl<F: PrimeField32, C: Sha2Config> InterpreterMeteredExecutor<F> for Sha2VmExe
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
         let data: &mut E2PreCompute<Sha2PreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         self.pre_compute_impl(pc, inst, &mut data.data)?;
-        Ok(execute_e2_handler::<F, _, C>)
+        Ok(execute_e2_handler::<_, C>)
     }
 }
 
@@ -150,7 +150,7 @@ unsafe fn execute_e12_impl<C: Sha2Config, CTX: ExecutionCtxTrait, const IS_E1: b
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, C: Sha2Config>(
+unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, C: Sha2Config>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
@@ -161,7 +161,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, C: Sha2Config
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, C: Sha2Config>(
+unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, C: Sha2Config>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {

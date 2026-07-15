@@ -47,9 +47,9 @@ impl<A, const LIMB_BITS: usize> MulHExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIM
 macro_rules! dispatch {
     ($execute_impl:ident, $local_opcode:ident) => {
         match $local_opcode {
-            MulHOpcode::MULH => Ok($execute_impl::<F, _, MulHOp>),
-            MulHOpcode::MULHSU => Ok($execute_impl::<F, _, MulHSuOp>),
-            MulHOpcode::MULHU => Ok($execute_impl::<F, _, MulHUOp>),
+            MulHOpcode::MULH => Ok($execute_impl::<_, MulHOp>),
+            MulHOpcode::MULHSU => Ok($execute_impl::<_, MulHSuOp>),
+            MulHOpcode::MULHU => Ok($execute_impl::<_, MulHUOp>),
         }
     };
 }
@@ -83,7 +83,7 @@ where
         _pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
@@ -191,7 +191,7 @@ where
         _pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
@@ -250,7 +250,7 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: MulHOperation>(
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: MulHOperation>(
+unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, OP: MulHOperation>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
@@ -261,7 +261,7 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: MulHOpera
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, OP: MulHOperation>(
+unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, OP: MulHOperation>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
