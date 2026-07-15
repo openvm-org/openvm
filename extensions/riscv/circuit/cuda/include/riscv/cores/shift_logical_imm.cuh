@@ -58,8 +58,7 @@ template <size_t NUM_LIMBS, size_t LIMB_BITS> struct ShiftLogicalImmCore {
             );
         }
 
-        // NOTE: no shamt-quotient range check here (unlike ShiftLogicalCore) — the immediate is
-        // bound by the marker-sum constraints instead.
+        // The marker-sum constraints bind the immediate without a separate quotient range check.
 
         size_t aux_bits = LIMB_BITS - bit_shift;
         uint16_t carry_arr[NUM_LIMBS];

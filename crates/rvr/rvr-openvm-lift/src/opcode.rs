@@ -687,15 +687,11 @@ mod tests {
     #[test]
     fn addi_requires_canonical_immediate_encoding() {
         let extensions = ExtensionRegistry::new();
-        let valid = Instruction::<BabyBear>::from_usize(
+        let valid = alu_instruction(
             BaseAluImmOpcode::ADDI.global_opcode(),
-            [
-                8,
-                16,
-                0xff_ffff,
-                RV64_REGISTER_AS as usize,
-                RV64_IMM_AS as usize,
-            ],
+            0xff_ffff,
+            RV64_REGISTER_AS,
+            RV64_IMM_AS,
         );
 
         match lift_babybear(&valid, 0x100, &extensions) {
@@ -712,27 +708,19 @@ mod tests {
             other => panic!("unexpected lift: {other:?}"),
         }
 
-        let register_operand = Instruction::<BabyBear>::from_usize(
+        let register_operand = alu_instruction(
             BaseAluImmOpcode::ADDI.global_opcode(),
-            [
-                8,
-                16,
-                24,
-                RV64_REGISTER_AS as usize,
-                RV64_REGISTER_AS as usize,
-            ],
+            3 * RV64_REGISTER_NUM_LIMBS,
+            RV64_REGISTER_AS,
+            RV64_REGISTER_AS,
         );
         assert!(lift_babybear(&register_operand, 0x100, &extensions).is_none());
 
-        let noncanonical_immediate = Instruction::<BabyBear>::from_usize(
+        let noncanonical_immediate = alu_instruction(
             BaseAluImmOpcode::ADDI.global_opcode(),
-            [
-                8,
-                16,
-                0xffff,
-                RV64_REGISTER_AS as usize,
-                RV64_IMM_AS as usize,
-            ],
+            0xffff,
+            RV64_REGISTER_AS,
+            RV64_IMM_AS,
         );
         assert!(lift_babybear(&noncanonical_immediate, 0x100, &extensions).is_none());
     }

@@ -20,9 +20,9 @@ use crate::adapters::{imm_to_rv64_u64, is_canonical_i12};
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
 pub(super) struct BitwiseLogicImmPreCompute {
-    c: u64,
-    a: u8,
-    b: u8,
+    imm: u64,
+    rd_ptr: u8,
+    rs1_ptr: u8,
 }
 
 impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
@@ -52,9 +52,9 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         *data = BitwiseLogicImmPreCompute {
-            c: imm_to_rv64_u64(c),
-            a: a.as_canonical_u32() as u8,
-            b: b.as_canonical_u32() as u8,
+            imm: imm_to_rv64_u64(c),
+            rd_ptr: a.as_canonical_u32() as u8,
+            rs1_ptr: b.as_canonical_u32() as u8,
         };
         Ok(BitwiseImmOpcode::from_usize(
             opcode.local_opcode_idx(self.offset),
@@ -169,14 +169,13 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: ImmOp>(
     pre_compute: &BitwiseLogicImmPreCompute,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
-    let rs1 =
-        exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.b as u32);
+    let rs1 = exec_state
+        .vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.rs1_ptr as u32);
     let rs1 = u64::from_le_bytes(rs1);
-    let rs2 = pre_compute.c;
-    let rd = <OP as ImmOp>::compute(rs1, rs2);
+    let rd = <OP as ImmOp>::compute(rs1, pre_compute.imm);
     exec_state.vm_write_bytes::<RV64_REGISTER_NUM_LIMBS>(
         RV64_REGISTER_AS,
-        pre_compute.a as u32,
+        pre_compute.rd_ptr as u32,
         &rd.to_le_bytes(),
     );
     let pc = exec_state.pc();
@@ -212,26 +211,26 @@ unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, OP: ImmOp>(
 }
 
 trait ImmOp {
-    fn compute(rs1: u64, rs2: u64) -> u64;
+    fn compute(rs1: u64, imm: u64) -> u64;
 }
 struct XorOp;
 impl ImmOp for XorOp {
     #[inline(always)]
-    fn compute(rs1: u64, rs2: u64) -> u64 {
-        rs1 ^ rs2
+    fn compute(rs1: u64, imm: u64) -> u64 {
+        rs1 ^ imm
     }
 }
 struct OrOp;
 impl ImmOp for OrOp {
     #[inline(always)]
-    fn compute(rs1: u64, rs2: u64) -> u64 {
-        rs1 | rs2
+    fn compute(rs1: u64, imm: u64) -> u64 {
+        rs1 | imm
     }
 }
 struct AndOp;
 impl ImmOp for AndOp {
     #[inline(always)]
-    fn compute(rs1: u64, rs2: u64) -> u64 {
-        rs1 & rs2
+    fn compute(rs1: u64, imm: u64) -> u64 {
+        rs1 & imm
     }
 }

@@ -171,19 +171,24 @@ This circuit proves that:
 - `compose(a) == compose(b) - compose(c)` for `sub`, modulo the register width
 - Each limb of `a` is within the range `[0, 2^U16_BITS)`
 
-#### 2. [Bitwise Logic](./bitwise_logic/core.rs)
+#### 2. Bitwise Logic
+
+- [Register operands](./bitwise_logic/core.rs)
+- [Immediate operand](./bitwise_logic_imm/core.rs)
 
 Given:
 
-- `b` and `c` are byte decompositions of the operands, with their limbs range-checked by the bitwise lookup
+- `b` is the byte decomposition of `rs1`
+- `c` is the byte decomposition of `rs2` for register instructions
+- `c_low` and `imm_sign` encode the signed 12-bit immediate for immediate instructions
 - `a` is the byte decomposition of the result
 - `opcode_xor_flag`, `opcode_or_flag`, and `opcode_and_flag` indicate if the instruction is `xor`, `or`, or `and`
 
 This circuit proves that:
 
-- `a[i] == b[i] ^ c[i]` for `xor`
-- `a[i] == b[i] | c[i]` for `or`
-- `a[i] == b[i] & c[i]` for `and`
+- `a[i] == b[i] ^ c[i]` for `xor`, and the equivalent operation with the sign-extended immediate for `xori`
+- `a[i] == b[i] | c[i]` for `or`, and the equivalent operation with the sign-extended immediate for `ori`
+- `a[i] == b[i] & c[i]` for `and`, and the equivalent operation with the sign-extended immediate for `andi`
 
 #### 3. [Branch Eq](./branch_eq/core.rs)
 
@@ -289,11 +294,16 @@ This circuit proves that:
 - Each limb of `rd`, `imm_limbs`, and `pc_limbs` is in the range `[0, 2^RV64_BYTE_BITS)`
 - The most significant limb of `pc_limbs` is in the range `[0, 2^(PC_BITS - RV64_BYTE_BITS * (RV64_WORD_NUM_LIMBS - 1))`
 
-#### 9. [Less than](./less_than/core.rs)
+#### 9. Less Than
+
+- [Register operands](./less_than/core.rs)
+- [Immediate operand](./less_than_imm/core.rs)
 
 Given:
 
-- `b`, `c` are decompositions of the operands, with their limbs assumed to be in the range `[0, 2^RV64_BYTE_BITS)`
+- `b` is the decomposition of `rs1`
+- `c` is the decomposition of `rs2` for register instructions
+- `imm_low11` and `imm_sign` encode the signed 12-bit immediate for immediate instructions
 - `a` is the result
 - `opcode` indicates the operation to be performed
 
@@ -301,6 +311,7 @@ This circuit proves that:
 
 - If `opcode` is `slt` and `compose(b) < compose(c)` (signed comparison), then `a` is 1.
 - If `opcode` is `sltu` and `compose(b) < compose(c)` (unsigned comparison), then `a` is 1.
+- `slti` and `sltiu` perform the corresponding comparison against the sign-extended immediate.
 - Otherwise, `a` is 0.
 
 #### 10. [Load](./load/mod.rs)
@@ -379,11 +390,16 @@ This circuit proves that:
 - If `opcode` is `mulhu`, then `compose(a) = floor((u64(b) * u64(c)) / 2^64)`.
 - Each limb of `a` is in the range `[0, 2^RV64_BYTE_BITS)`
 
-#### 13. [Shift Logical](./shift_logical/core.rs)
+#### 15. Shift Logical
+
+- [Register operand](./shift_logical/core.rs)
+- [Immediate operand](./shift_logical_imm/core.rs)
 
 Given:
 
-- `b`, `c` are decompositions of the operands, with their limbs assumed to be in the range `[0, 2^LIMB_BITS)`
+- `b` is the decomposition of `rs1`
+- `c` is the decomposition of the register shift amount for `sll` and `srl`
+- The shift-marker columns encode the immediate shift amount for `slli` and `srli`
 - `a` is the decomposition of the result
 - `opcode_sll_flag` and `opcode_srl_flag` indicate if the instruction is `sll` or `srl`
 
@@ -391,24 +407,31 @@ This circuit proves that:
 
 - If the instruction is `sll`, then `compose(a) == compose(b) << (compose(c) % (NUM_LIMBS * LIMB_BITS))`, modulo the register width
 - If the instruction is `srl`, then `compose(a) == compose(b) >> (compose(c) % (NUM_LIMBS * LIMB_BITS))`
+- `slli` and `srli` perform the corresponding shift by the immediate amount bound by the marker columns.
 - Each limb of `a` is in the range `[0, 2^LIMB_BITS)`
 
 To stay sound at `LIMB_BITS = 16` over BabyBear, each limb of `b` is decomposed into the part that crosses the limb boundary (`carry`) and the part that stays (`aux`); both parts are range checked, and each limb of `a` is recombined additively from them so that no constraint term reaches the field modulus.
 
-#### 14. [Shift Right Arithmetic](./shift_right_arithmetic/core.rs)
+#### 16. Shift Right Arithmetic
+
+- [Register operand](./shift_right_arithmetic/core.rs)
+- [Immediate operand](./shift_right_arithmetic_imm/core.rs)
 
 Given:
 
-- `b`, `c` are decompositions of the operands, with their limbs assumed to be in the range `[0, 2^LIMB_BITS)`
+- `b` is the decomposition of `rs1`
+- `c` is the decomposition of the register shift amount for `sra`
+- The shift-marker columns encode the immediate shift amount for `srai`
 - `a` is the decomposition of the result
-- `is_valid` indicates if the row corresponds to a real instruction (this chip only handles `sra`)
+- `is_valid` indicates if the row corresponds to a real instruction
 
 This circuit proves that:
 
 - `compose(a) == sign_extend(compose(b) >> (compose(c) % (NUM_LIMBS * LIMB_BITS)))`, where the vacated high bits are filled with the sign bit of `b`
+- `srai` performs the same arithmetic shift using the immediate amount bound by the marker columns.
 - The sign column `b_sign` equals the most significant bit of `b`
 - Each limb of `a` is in the range `[0, 2^LIMB_BITS)`
 
 The same carry/aux decomposition as the shift logical chip is used to keep every constraint term below the field modulus at `LIMB_BITS = 16`.
 
-Both shift chips are instantiated over u16 limbs (`NUM_LIMBS = 4`, `LIMB_BITS = 16` for 64-bit registers) with the ALU u16 adapter. The W-instruction variants `sllw`/`srlw`/`sraw` ([shift_w](./shift_w/mod.rs)) reuse these same cores over 32-bit words (`NUM_LIMBS = 2`) with the ALU W u16 adapter.
+The full-width register and immediate shift chips use the corresponding u16 ALU adapters. The W-instruction variants `sllw`/`srlw`/`sraw` ([shift_w](./shift_w/mod.rs)) reuse the register cores over 32-bit words (`NUM_LIMBS = 2`) with the ALU W u16 adapter.
