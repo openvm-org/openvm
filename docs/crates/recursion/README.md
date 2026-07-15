@@ -15,7 +15,7 @@ For the formal correspondence claim and correctness argument, see [verifier-mapp
 
 Unless noted otherwise, this documentation uses the following constants:
 
-- `D_EF = 4` — extension field degree (the BabyBear quartic extension)
+- `D_EF = 5` — extension field degree (the BabyBear quintic extension)
 - `DIGEST_SIZE = 8` — Poseidon2 digest size in base-field elements
 - `CHUNK = 8` — Poseidon2 sponge rate
 

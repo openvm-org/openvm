@@ -15,10 +15,10 @@ use openvm_stark_sdk::{
 
 use crate::{
     chip_traits::{
-        BabyBearExt4Inst, BabyBearInst, GateInst, PopulateInputs, Poseidon2Inst, TranscriptInst,
+        BabyBearExt5Inst, BabyBearInst, GateInst, PopulateInputs, Poseidon2Inst, TranscriptInst,
     },
     field::baby_bear::{
-        BabyBearExt4Wire, BabyBearExtWire, BabyBearWire, ReducedBabyBearExtWire,
+        BabyBearExt5Wire, BabyBearExtWire, BabyBearWire, ReducedBabyBearExtWire,
         ReducedBabyBearWire, BABY_BEAR_EXT_DEGREE,
     },
     profiling::CellProfiler,
@@ -179,7 +179,7 @@ fn digest_to_fr(digest: RootDigest) -> Fr {
     biguint_to_fe(&digest[0].as_canonical_biguint())
 }
 
-fn eval_mobius_eq_mle_assigned<B: BabyBearExt4Inst>(
+fn eval_mobius_eq_mle_assigned<B: BabyBearExt5Inst>(
     b: &mut B,
     u: &[BabyBearExtWire<B::F>],
     x: &[BabyBearExtWire<B::F>],
@@ -201,7 +201,7 @@ fn eval_mobius_eq_mle_assigned<B: BabyBearExt4Inst>(
     acc
 }
 
-fn eval_mle_evals_at_point_assigned<B: BabyBearExt4Inst>(
+fn eval_mle_evals_at_point_assigned<B: BabyBearExt5Inst>(
     b: &mut B,
     evals: &[BabyBearExtWire<B::F>],
     x: &[BabyBearExtWire<B::F>],
@@ -260,7 +260,7 @@ fn query_root_from_bits_assigned<B: BabyBearInst>(
     root.unwrap()
 }
 
-fn binary_k_fold_assigned<B: BabyBearExt4Inst>(
+fn binary_k_fold_assigned<B: BabyBearExt5Inst>(
     b: &mut B,
     mut values: Vec<BabyBearExtWire<B::F>>,
     alphas: &[BabyBearExtWire<B::F>],
@@ -559,7 +559,7 @@ pub(crate) fn constrain_whir_verification<B: TranscriptInst + Poseidon2Inst>(
                 let opened_values = merkle_path
                     .leaf_values
                     .iter()
-                    .map(|row| BabyBearExt4Wire(core::array::from_fn(|idx| row[idx].into())))
+                    .map(|row| BabyBearExt5Wire(core::array::from_fn(|idx| row[idx].into())))
                     .collect::<Vec<_>>();
                 binary_k_fold_assigned(b, opened_values, &alphas_round, zi_root)
             };

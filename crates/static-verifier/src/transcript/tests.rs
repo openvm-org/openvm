@@ -78,7 +78,7 @@ fn ext_to_u64(ext: RootEF) -> [u64; NATIVE_EF_DEGREE] {
 
 #[test]
 fn transcript_outputs_match_native_interleaved_flow() {
-    let observed_ext_coeffs = [5, 7, 11, 13];
+    let observed_ext_coeffs = [5, 7, 11, 13, 17];
     let digest = [Bn254Scalar::from_u64(0x1234_5678)];
 
     // Convenience alias for trait method disambiguation.

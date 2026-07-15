@@ -11,9 +11,9 @@ use openvm_sdk_config::{
 use openvm_stark_backend::{codec::Encode, StarkEngine, SystemParams};
 use openvm_stark_sdk::{
     config::{
-        app_params_with_100_bits_security, hook_params_with_100_bits_security,
-        internal_params_with_100_bits_security, leaf_params_with_100_bits_security,
-        root_params_with_100_bits_security,
+        app_params_with_128_bits_field_security, hook_params_with_128_bits_field_security,
+        internal_params_with_128_bits_field_security, leaf_params_with_128_bits_field_security,
+        root_params_with_128_bits_field_security,
     },
     utils::setup_tracing,
 };
@@ -61,17 +61,22 @@ fn get_params() -> (SystemParams, AggregationSystemParams, SystemParams) {
     let n_stack = 19;
     let app_params = get_params_from_env(
         "APP_PARAMS_OVERRIDE",
-        app_params_with_100_bits_security(DEFAULT_APP_L_SKIP + n_stack),
+        app_params_with_128_bits_field_security(DEFAULT_APP_L_SKIP + n_stack),
     );
     let agg_params = AggregationSystemParams {
-        leaf: get_params_from_env("LEAF_PARAMS_OVERRIDE", leaf_params_with_100_bits_security()),
+        leaf: get_params_from_env(
+            "LEAF_PARAMS_OVERRIDE",
+            leaf_params_with_128_bits_field_security(),
+        ),
         internal: get_params_from_env(
             "INTERNAL_PARAMS_OVERRIDE",
-            internal_params_with_100_bits_security(),
+            internal_params_with_128_bits_field_security(),
         ),
     };
-    let root_params =
-        get_params_from_env("ROOT_PARAMS_OVERRIDE", root_params_with_100_bits_security());
+    let root_params = get_params_from_env(
+        "ROOT_PARAMS_OVERRIDE",
+        root_params_with_128_bits_field_security(),
+    );
 
     (app_params, agg_params, root_params)
 }
@@ -166,7 +171,7 @@ fn make_multi_deferral_circuit_prover_with_count(
         def_circuit_params.clone(),
         DEFAULT_VERIFY_STARK_DEF_IDX,
     );
-    let hook_params = hook_params_with_100_bits_security();
+    let hook_params = hook_params_with_128_bits_field_security();
     let agg_config = AggregationConfig {
         params: agg_params.clone(),
     };
@@ -232,7 +237,7 @@ fn make_recursive_verify_stark_sdk(
     let num_user_pvs = vm_config.system.config.num_public_values;
     let deferral_agg_prover = DeferralAggProver::verify_stark(
         &agg_params,
-        hook_params_with_100_bits_security(),
+        hook_params_with_128_bits_field_security(),
         memory_dimensions,
         num_user_pvs,
     );
@@ -419,7 +424,7 @@ fn test_verify_many_deferrals() -> Result<()> {
     let (fib_sdk, app_params, agg_params) = make_fib_sdk();
     let (fib_proof, fib_baseline) = generate_fib_vm_stark_proof(&fib_sdk)?;
     // Use non-default params for better test coverage
-    let def_circuit_params = leaf_params_with_100_bits_security();
+    let def_circuit_params = leaf_params_with_128_bits_field_security();
     let vs_sdk = make_verify_stark_sdk_with_count(
         &fib_sdk,
         app_params,
@@ -618,10 +623,12 @@ fn test_sdk_compiled_metered_cost_execute() -> Result<()> {
 fn test_deferral_aware_sdk_with_odd_children() -> Result<()> {
     setup_tracing();
     let n_stack = 16;
-    let app_params = app_params_with_100_bits_security(DEFAULT_APP_L_SKIP + n_stack);
+    let app_params = app_params_with_128_bits_field_security(DEFAULT_APP_L_SKIP + n_stack);
     let agg_params = AggregationSystemParams::default();
-    let hook_commits =
-        DeferralHookCommits::from_system_params(&agg_params, hook_params_with_100_bits_security());
+    let hook_commits = DeferralHookCommits::from_system_params(
+        &agg_params,
+        hook_params_with_128_bits_field_security(),
+    );
     let mut app_config = AppConfig::riscv64(app_params);
     app_config
         .app_vm_config
@@ -787,7 +794,7 @@ fn test_prove_mixed_vm_def_depth_mismatch() -> Result<()> {
 fn test_deferral_aware_and_active_have_equivalent_vks() -> Result<()> {
     setup_tracing();
     let n_stack = 19;
-    let app_params = app_params_with_100_bits_security(DEFAULT_APP_L_SKIP + n_stack);
+    let app_params = app_params_with_128_bits_field_security(DEFAULT_APP_L_SKIP + n_stack);
     let agg_params = AggregationSystemParams::default();
     let active_sdk = make_recursive_verify_stark_sdk(app_params.clone(), agg_params.clone())?;
     let hook_commits = DeferralHookCommits {

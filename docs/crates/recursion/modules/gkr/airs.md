@@ -193,12 +193,12 @@ For a proof where n_logup=3 and n_max=5 (needs 2 extra challenges), starting at 
 ```
 Row | is_enabled | proof_idx | idx | tidx | xi
 ----|------------|-----------|-----|------|------------------
- 0  |     1      |     0     | 11  |  400 | [x0, x1, x2, x3]
- 1  |     1      |     0     | 12  |  404 | [y0, y1, y2, y3]
+ 0  |     1      |     0     | 11  |  400 | [x0, x1, x2, x3, x4]
+ 1  |     1      |     0     | 12  |  405 | [y0, y1, y2, y3, y4]
 ```
 
 - **Row 0:** Receives `(idx=11, tidx=400)` from GkrXiSamplerBus (sent by GkrInputAir). Samples `xi` and publishes on XiRandomnessBus.
-- **Row 1:** idx increments, tidx advances by D_EF=4. After this row, sends `(idx=12, tidx=408)` back to GkrInputAir.
+- **Row 1:** idx increments, tidx advances by D_EF=5. After this row, sends `(idx=12, tidx=410)` back to GkrInputAir.
 
 ---
 

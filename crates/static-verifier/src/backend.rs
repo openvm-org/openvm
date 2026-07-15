@@ -14,12 +14,12 @@ use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 use crate::{
     chip_traits::{
-        BabyBearExt4Inst, BabyBearInst, ChipBase, GateInst, PopulateInputs, Poseidon2Inst,
+        BabyBearExt5Inst, BabyBearInst, ChipBase, GateInst, PopulateInputs, Poseidon2Inst,
         TranscriptInst,
     },
     field::baby_bear::{
-        BabyBearChip, BabyBearExt4, BabyBearExt4Chip, BabyBearExt4Wire, BabyBearWire,
-        ReducedBabyBearExt4Wire, ReducedBabyBearWire,
+        BabyBearChip, BabyBearExt5, BabyBearExt5Chip, BabyBearExt5Wire, BabyBearWire,
+        ReducedBabyBearExt5Wire, ReducedBabyBearWire,
     },
     hash::poseidon2::{compress_bn254_digests, hash_babybear_slice_to_digest},
     transcript::{DigestWire, TranscriptChip},
@@ -30,16 +30,16 @@ use crate::{
 /// `TranscriptChip::new` at the start of `constrained_verify`.
 pub struct Halo2Backend<'ctx> {
     ctx: &'ctx mut Context<Fr>,
-    ext: BabyBearExt4Chip,
+    ext: BabyBearExt5Chip,
     transcript: Option<TranscriptChip>,
 }
 
 impl<'ctx> Halo2Backend<'ctx> {
     pub fn new(range: Arc<RangeChip<Fr>>, ctx: &'ctx mut Context<Fr>) -> Self {
-        Self::from_ext_chip(BabyBearExt4Chip::new(BabyBearChip::new(range)), ctx)
+        Self::from_ext_chip(BabyBearExt5Chip::new(BabyBearChip::new(range)), ctx)
     }
 
-    pub fn from_ext_chip(ext: BabyBearExt4Chip, ctx: &'ctx mut Context<Fr>) -> Self {
+    pub fn from_ext_chip(ext: BabyBearExt5Chip, ctx: &'ctx mut Context<Fr>) -> Self {
         Self {
             ctx,
             ext,
@@ -47,7 +47,7 @@ impl<'ctx> Halo2Backend<'ctx> {
         }
     }
 
-    pub fn ext_chip(&self) -> &BabyBearExt4Chip {
+    pub fn ext_chip(&self) -> &BabyBearExt5Chip {
         &self.ext
     }
 
@@ -57,7 +57,7 @@ impl<'ctx> Halo2Backend<'ctx> {
     }
 
     /// Disjoint borrows of the extension chip and the context.
-    fn ext_parts(&mut self) -> (&BabyBearExt4Chip, &mut Context<Fr>) {
+    fn ext_parts(&mut self) -> (&BabyBearExt5Chip, &mut Context<Fr>) {
         (&self.ext, &mut *self.ctx)
     }
 
@@ -91,7 +91,7 @@ impl PopulateInputs for Halo2Backend<'_> {
         bb.load_reduced_witness(ctx, value)
     }
 
-    fn ext_load_reduced_witness(&mut self, value: BabyBearExt4) -> ReducedBabyBearExt4Wire {
+    fn ext_load_reduced_witness(&mut self, value: BabyBearExt5) -> ReducedBabyBearExt5Wire {
         let (ext, ctx) = self.ext_parts();
         ext.load_reduced_witness(ctx, value)
     }
@@ -241,98 +241,98 @@ impl BabyBearInst for Halo2Backend<'_> {
     }
 }
 
-impl BabyBearExt4Inst for Halo2Backend<'_> {
-    fn ext_load_constant(&mut self, value: BabyBearExt4) -> BabyBearExt4Wire {
+impl BabyBearExt5Inst for Halo2Backend<'_> {
+    fn ext_load_constant(&mut self, value: BabyBearExt5) -> BabyBearExt5Wire {
         let (ext, ctx) = self.ext_parts();
         ext.load_constant(ctx, value)
     }
 
-    fn ext_load_reduced_constant(&mut self, value: BabyBearExt4) -> ReducedBabyBearExt4Wire {
+    fn ext_load_reduced_constant(&mut self, value: BabyBearExt5) -> ReducedBabyBearExt5Wire {
         let (ext, ctx) = self.ext_parts();
         ext.load_reduced_constant(ctx, value)
     }
 
-    fn ext_add(&mut self, a: BabyBearExt4Wire, b: BabyBearExt4Wire) -> BabyBearExt4Wire {
+    fn ext_add(&mut self, a: BabyBearExt5Wire, b: BabyBearExt5Wire) -> BabyBearExt5Wire {
         let (ext, ctx) = self.ext_parts();
         ext.add(ctx, a, b)
     }
 
-    fn ext_neg(&mut self, a: BabyBearExt4Wire) -> BabyBearExt4Wire {
+    fn ext_neg(&mut self, a: BabyBearExt5Wire) -> BabyBearExt5Wire {
         let (ext, ctx) = self.ext_parts();
         ext.neg(ctx, a)
     }
 
-    fn ext_sub(&mut self, a: BabyBearExt4Wire, b: BabyBearExt4Wire) -> BabyBearExt4Wire {
+    fn ext_sub(&mut self, a: BabyBearExt5Wire, b: BabyBearExt5Wire) -> BabyBearExt5Wire {
         let (ext, ctx) = self.ext_parts();
         ext.sub(ctx, a, b)
     }
 
-    fn ext_scalar_mul(&mut self, a: BabyBearExt4Wire, b: BabyBearWire) -> BabyBearExt4Wire {
+    fn ext_scalar_mul(&mut self, a: BabyBearExt5Wire, b: BabyBearWire) -> BabyBearExt5Wire {
         let (ext, ctx) = self.ext_parts();
         ext.scalar_mul(ctx, a, b)
     }
 
     fn ext_scalar_mul_add(
         &mut self,
-        a: BabyBearExt4Wire,
+        a: BabyBearExt5Wire,
         b: BabyBearWire,
-        c: BabyBearExt4Wire,
-    ) -> BabyBearExt4Wire {
+        c: BabyBearExt5Wire,
+    ) -> BabyBearExt5Wire {
         let (ext, ctx) = self.ext_parts();
         ext.scalar_mul_add(ctx, a, b, c)
     }
 
-    fn ext_assert_zero(&mut self, a: BabyBearExt4Wire) {
+    fn ext_assert_zero(&mut self, a: BabyBearExt5Wire) {
         let (ext, ctx) = self.ext_parts();
         ext.assert_zero(ctx, a)
     }
 
-    fn ext_assert_equal(&mut self, a: BabyBearExt4Wire, b: BabyBearExt4Wire) {
+    fn ext_assert_equal(&mut self, a: BabyBearExt5Wire, b: BabyBearExt5Wire) {
         let (ext, ctx) = self.ext_parts();
         ext.assert_equal(ctx, a, b)
     }
 
-    fn ext_mul(&mut self, a: BabyBearExt4Wire, b: BabyBearExt4Wire) -> BabyBearExt4Wire {
+    fn ext_mul(&mut self, a: BabyBearExt5Wire, b: BabyBearExt5Wire) -> BabyBearExt5Wire {
         let (ext, ctx) = self.ext_parts();
         ext.mul(ctx, a, b)
     }
 
-    fn ext_div(&mut self, a: BabyBearExt4Wire, b: BabyBearExt4Wire) -> BabyBearExt4Wire {
+    fn ext_div(&mut self, a: BabyBearExt5Wire, b: BabyBearExt5Wire) -> BabyBearExt5Wire {
         let (ext, ctx) = self.ext_parts();
         ext.div(ctx, a, b)
     }
 
-    fn ext_reduce_max_bits(&mut self, a: BabyBearExt4Wire) -> BabyBearExt4Wire {
+    fn ext_reduce_max_bits(&mut self, a: BabyBearExt5Wire) -> BabyBearExt5Wire {
         let (ext, ctx) = self.ext_parts();
         ext.reduce_max_bits(ctx, a)
     }
 
-    fn ext_zero(&mut self) -> BabyBearExt4Wire {
+    fn ext_zero(&mut self) -> BabyBearExt5Wire {
         let (ext, ctx) = self.ext_parts();
         ext.zero(ctx)
     }
 
-    fn ext_from_base_const(&mut self, value: BabyBear) -> BabyBearExt4Wire {
+    fn ext_from_base_const(&mut self, value: BabyBear) -> BabyBearExt5Wire {
         let (ext, ctx) = self.ext_parts();
         ext.from_base_const(ctx, value)
     }
 
-    fn ext_from_base_var(&mut self, value: BabyBearWire) -> BabyBearExt4Wire {
+    fn ext_from_base_var(&mut self, value: BabyBearWire) -> BabyBearExt5Wire {
         let (ext, ctx) = self.ext_parts();
         ext.from_base_var(ctx, value)
     }
 
-    fn ext_mul_base_const(&mut self, a: BabyBearExt4Wire, c: BabyBear) -> BabyBearExt4Wire {
+    fn ext_mul_base_const(&mut self, a: BabyBearExt5Wire, c: BabyBear) -> BabyBearExt5Wire {
         let (ext, ctx) = self.ext_parts();
         ext.mul_base_const(ctx, a, c)
     }
 
-    fn ext_square(&mut self, a: BabyBearExt4Wire) -> BabyBearExt4Wire {
+    fn ext_square(&mut self, a: BabyBearExt5Wire) -> BabyBearExt5Wire {
         let (ext, ctx) = self.ext_parts();
         ext.square(ctx, a)
     }
 
-    fn ext_pow_power_of_two(&mut self, a: BabyBearExt4Wire, n: usize) -> BabyBearExt4Wire {
+    fn ext_pow_power_of_two(&mut self, a: BabyBearExt5Wire, n: usize) -> BabyBearExt5Wire {
         let (ext, ctx) = self.ext_parts();
         ext.pow_power_of_two(ctx, a, n)
     }
@@ -367,7 +367,7 @@ impl TranscriptInst for Halo2Backend<'_> {
         transcript.observe(ctx, value)
     }
 
-    fn observe_ext(&mut self, value: &ReducedBabyBearExt4Wire) {
+    fn observe_ext(&mut self, value: &ReducedBabyBearExt5Wire) {
         let (transcript, ctx) = self.transcript_parts();
         transcript.observe_ext(ctx, value)
     }
@@ -382,7 +382,7 @@ impl TranscriptInst for Halo2Backend<'_> {
         transcript.sample(ctx)
     }
 
-    fn sample_ext(&mut self) -> BabyBearExt4Wire {
+    fn sample_ext(&mut self) -> BabyBearExt5Wire {
         let (transcript, ctx) = self.transcript_parts();
         transcript.sample_ext(ctx)
     }

@@ -7,6 +7,11 @@ homepage = "https://openvm.dev"
 repository = "https://github.com/openvm-org/"
 license = "MIT OR Apache-2.0"
 
+# M2 DEGREE-5 BINDING PLACEHOLDER: the committed stark-backend v2.0.0 pins are degree-4.
+# Degree-5 validation requires the non-committed local [patch] overlay documented in the M2
+# implementation report. Do not treat these pins as the final degree-5 binding; a published
+# shadow-stark-backend revision is pending the conductor's decision.
+
 [workspace]
 members = [
   "benchmarks/utils",
@@ -142,12 +147,12 @@ lto = "thin"
 
 [workspace.dependencies]
 # Stark Backend
-openvm-stark-backend = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "main", default-features = false }
-openvm-stark-sdk = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "main", default-features = false }
-openvm-cpu-backend = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "main", default-features = false }
-openvm-cuda-backend = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "main", default-features = false }
-openvm-cuda-builder = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "main", default-features = false }
-openvm-cuda-common = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "main", default-features = false }
+openvm-stark-backend = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", tag = "v2.0.0", default-features = false }
+openvm-stark-sdk = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", tag = "v2.0.0", default-features = false }
+openvm-cpu-backend = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", tag = "v2.0.0", default-features = false }
+openvm-cuda-backend = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", tag = "v2.0.0", default-features = false }
+openvm-cuda-builder = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", tag = "v2.0.0", default-features = false }
+openvm-cuda-common = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", tag = "v2.0.0", default-features = false }
 
 # OpenVM
 openvm-decoder = { version = "2.0.0", path = "crates/toolchain/decoder", default-features = false }
@@ -252,7 +257,7 @@ p3-poseidon2-air = { version = "=0.4.3", default-features = false }
 p3-symmetric = { version = "=0.4.3", default-features = false }
 
 zkhash = { package = "zkhash-axiom", version = "0.2.0" }
-snark-verifier-sdk = { version = "0.2.6", git = "https://github.com/axiom-crypto/snark-verifier.git", branch = "main", default-features = false, features = [
+snark-verifier-sdk = { version = "0.2.6", git = "https://github.com/axiom-crypto/snark-verifier.git", tag = "v0.2.6", default-features = false, features = [
   "loader_halo2",
 ] }
 halo2-base = { version = "0.5.4", git = "https://github.com/axiom-crypto/halo2-lib.git", tag = "v0.5.4", default-features = false }

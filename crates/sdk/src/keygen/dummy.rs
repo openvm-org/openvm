@@ -12,7 +12,9 @@ use openvm_sdk_config::SdkVmBuilder;
 use openvm_stark_backend::{
     keygen::types::MultiStarkProvingKey, prover::ProvingContext, StarkEngine, SystemParams,
 };
-use openvm_stark_sdk::config::{app_params_with_100_bits_security, MAX_APP_LOG_STACKED_HEIGHT};
+use openvm_stark_sdk::config::{
+    app_params_with_128_bits_field_security, MAX_APP_LOG_STACKED_HEIGHT,
+};
 #[cfg(feature = "evm-prove")]
 use {
     crate::{
@@ -67,7 +69,7 @@ pub(crate) fn compute_root_proof_heights(
     let memory_dimensions = system_config.memory_config.memory_dimensions();
     let num_user_pvs = system_config.num_public_values;
 
-    let mut app_config = AppConfig::riscv64(app_params_with_100_bits_security(
+    let mut app_config = AppConfig::riscv64(app_params_with_128_bits_field_security(
         MAX_APP_LOG_STACKED_HEIGHT,
     ));
     app_config.app_vm_config.system.config = system_config;

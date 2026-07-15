@@ -18,9 +18,9 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::{
     config::{
-        app_params_with_100_bits_security,
+        app_params_with_128_bits_field_security,
         baby_bear_poseidon2::{DIGEST_SIZE, F},
-        internal_params_with_100_bits_security, leaf_params_with_100_bits_security,
+        internal_params_with_128_bits_field_security, leaf_params_with_128_bits_field_security,
     },
     utils::setup_tracing_with_log_level,
 };
@@ -88,27 +88,29 @@ cfg_if::cfg_if! {
 const DEFAULT_MAX_NUM_PROOFS: usize = 4;
 
 pub(in crate::tests) fn app_system_params() -> SystemParams {
-    app_params_with_100_bits_security(21)
+    app_params_with_128_bits_field_security(21)
 }
 
 pub(in crate::tests) fn leaf_system_params() -> SystemParams {
-    leaf_params_with_100_bits_security()
+    leaf_params_with_128_bits_field_security()
 }
 
 pub(in crate::tests) fn internal_system_params() -> SystemParams {
-    internal_params_with_100_bits_security()
+    internal_params_with_128_bits_field_security()
 }
 
 #[cfg(all(feature = "cuda", feature = "root-prover"))]
 pub(in crate::tests) fn root_system_params() -> SystemParams {
-    use openvm_stark_sdk::config::root_params_with_100_bits_security;
-    root_params_with_100_bits_security()
+    use openvm_stark_sdk::config::root_params_with_128_bits_field_security;
+    let mut params = root_params_with_128_bits_field_security();
+    params.w_stack = 32;
+    params
 }
 
 #[cfg(all(feature = "cuda", feature = "root-prover"))]
 pub(in crate::tests) fn hook_system_params() -> SystemParams {
-    use openvm_stark_sdk::config::hook_params_with_100_bits_security;
-    hook_params_with_100_bits_security()
+    use openvm_stark_sdk::config::hook_params_with_128_bits_field_security;
+    hook_params_with_128_bits_field_security()
 }
 
 pub(in crate::tests) fn test_rv64im_config() -> Rv64ImConfig {

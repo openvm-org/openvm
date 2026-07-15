@@ -6,7 +6,7 @@ use p3_field::{BasedVectorSpace, PrimeCharacteristicRing};
 use p3_matrix::dense::RowMajorMatrix;
 
 use super::GkrLayerSumcheckCols;
-use crate::tracegen::RowMajorChip;
+use crate::{tracegen::RowMajorChip, utils::base_to_ext};
 
 #[derive(Default, Debug, Clone)]
 pub struct GkrSumcheckRecord {
@@ -131,10 +131,10 @@ impl RowMajorChip<F> for GkrSumcheckTraceGenerator {
                     cols.is_proof_start = F::ONE;
                     cols.is_last_layer = F::ONE;
                     cols.is_dummy = F::ONE;
-                    cols.eq_in = [F::ONE, F::ZERO, F::ZERO, F::ZERO];
-                    cols.eq_out = [F::ONE, F::ZERO, F::ZERO, F::ZERO];
-                    cols.claim_in = [F::ONE, F::ZERO, F::ZERO, F::ZERO];
-                    cols.claim_out = [F::ONE, F::ZERO, F::ZERO, F::ZERO];
+                    cols.eq_in = base_to_ext(F::ONE);
+                    cols.eq_out = base_to_ext(F::ONE);
+                    cols.claim_in = base_to_ext(F::ONE);
+                    cols.claim_out = base_to_ext(F::ONE);
                     return;
                 }
 

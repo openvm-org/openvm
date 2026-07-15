@@ -7,7 +7,7 @@ use openvm_stark_sdk::{
 };
 
 use crate::{
-    chip_traits::{BabyBearExt4Inst, PopulateInputs, TranscriptInst},
+    chip_traits::{BabyBearExt5Inst, PopulateInputs, TranscriptInst},
     field::baby_bear::{BabyBearExtWire, ReducedBabyBearExtWire},
     profiling::CellProfiler,
     stages::{
@@ -70,7 +70,7 @@ pub(crate) fn load_stacking_proof_wire<B: PopulateInputs>(
     }
 }
 
-fn eval_in_uni_assigned<B: BabyBearExt4Inst>(
+fn eval_in_uni_assigned<B: BabyBearExt5Inst>(
     b: &mut B,
     l_skip: usize,
     n: isize,

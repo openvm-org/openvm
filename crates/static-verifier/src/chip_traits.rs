@@ -2,7 +2,7 @@
 //!
 //! Each trait mirrors one concrete chip used by the static verifier:
 //! [`GateInst`] ↔ `GateChip` (plus raw `Context` cell operations), [`BabyBearInst`] ↔
-//! `BabyBearChip`, [`BabyBearExt4Inst`] ↔ `BabyBearExt4Chip`, [`TranscriptInst`] ↔
+//! `BabyBearChip`, [`BabyBearExt5Inst`] ↔ `BabyBearExt5Chip`, [`TranscriptInst`] ↔
 //! `TranscriptChip`, and [`Poseidon2Inst`] ↔ the Poseidon2 digest hashing helpers.
 //! [`PopulateInputs`] is the exception: it groups the witness-loading methods used by
 //! `load_proof_wire` and inherits only from [`ChipBase`].
@@ -24,7 +24,7 @@ use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 use crate::{
     field::baby_bear::{
-        BabyBearExt4, BabyBearExt4Wire, BabyBearWire, ReducedBabyBearExt4Wire, ReducedBabyBearWire,
+        BabyBearExt5, BabyBearExt5Wire, BabyBearWire, ReducedBabyBearExt5Wire, ReducedBabyBearWire,
     },
     transcript::DigestWire,
 };
@@ -40,8 +40,8 @@ pub trait ChipBase {
 pub trait PopulateInputs: ChipBase {
     fn load_witness(&mut self, value: Fr) -> Self::F;
     fn bb_load_reduced_witness(&mut self, value: BabyBear) -> ReducedBabyBearWire<Self::F>;
-    fn ext_load_reduced_witness(&mut self, value: BabyBearExt4)
-        -> ReducedBabyBearExt4Wire<Self::F>;
+    fn ext_load_reduced_witness(&mut self, value: BabyBearExt5)
+        -> ReducedBabyBearExt5Wire<Self::F>;
 }
 
 /// Raw `Fr`-cell operations mirroring `GateChip` and direct `Context` usage.
@@ -104,64 +104,64 @@ pub trait BabyBearInst: GateInst {
     fn bb_pow_power_of_two(&mut self, a: BabyBearWire<Self::F>, n: usize) -> BabyBearWire<Self::F>;
 }
 
-/// BabyBear quartic-extension operations mirroring `BabyBearExt4Chip`.
-pub trait BabyBearExt4Inst: BabyBearInst {
-    fn ext_load_constant(&mut self, value: BabyBearExt4) -> BabyBearExt4Wire<Self::F>;
+/// BabyBear quintic-extension operations mirroring `BabyBearExt5Chip`.
+pub trait BabyBearExt5Inst: BabyBearInst {
+    fn ext_load_constant(&mut self, value: BabyBearExt5) -> BabyBearExt5Wire<Self::F>;
     fn ext_load_reduced_constant(
         &mut self,
-        value: BabyBearExt4,
-    ) -> ReducedBabyBearExt4Wire<Self::F>;
+        value: BabyBearExt5,
+    ) -> ReducedBabyBearExt5Wire<Self::F>;
     fn ext_add(
         &mut self,
-        a: BabyBearExt4Wire<Self::F>,
-        b: BabyBearExt4Wire<Self::F>,
-    ) -> BabyBearExt4Wire<Self::F>;
-    fn ext_neg(&mut self, a: BabyBearExt4Wire<Self::F>) -> BabyBearExt4Wire<Self::F>;
+        a: BabyBearExt5Wire<Self::F>,
+        b: BabyBearExt5Wire<Self::F>,
+    ) -> BabyBearExt5Wire<Self::F>;
+    fn ext_neg(&mut self, a: BabyBearExt5Wire<Self::F>) -> BabyBearExt5Wire<Self::F>;
     fn ext_sub(
         &mut self,
-        a: BabyBearExt4Wire<Self::F>,
-        b: BabyBearExt4Wire<Self::F>,
-    ) -> BabyBearExt4Wire<Self::F>;
+        a: BabyBearExt5Wire<Self::F>,
+        b: BabyBearExt5Wire<Self::F>,
+    ) -> BabyBearExt5Wire<Self::F>;
     fn ext_scalar_mul(
         &mut self,
-        a: BabyBearExt4Wire<Self::F>,
+        a: BabyBearExt5Wire<Self::F>,
         b: BabyBearWire<Self::F>,
-    ) -> BabyBearExt4Wire<Self::F>;
+    ) -> BabyBearExt5Wire<Self::F>;
     /// `a * b + c` where `b` is a base-field scalar.
     fn ext_scalar_mul_add(
         &mut self,
-        a: BabyBearExt4Wire<Self::F>,
+        a: BabyBearExt5Wire<Self::F>,
         b: BabyBearWire<Self::F>,
-        c: BabyBearExt4Wire<Self::F>,
-    ) -> BabyBearExt4Wire<Self::F>;
-    fn ext_assert_zero(&mut self, a: BabyBearExt4Wire<Self::F>);
-    fn ext_assert_equal(&mut self, a: BabyBearExt4Wire<Self::F>, b: BabyBearExt4Wire<Self::F>);
+        c: BabyBearExt5Wire<Self::F>,
+    ) -> BabyBearExt5Wire<Self::F>;
+    fn ext_assert_zero(&mut self, a: BabyBearExt5Wire<Self::F>);
+    fn ext_assert_equal(&mut self, a: BabyBearExt5Wire<Self::F>, b: BabyBearExt5Wire<Self::F>);
     fn ext_mul(
         &mut self,
-        a: BabyBearExt4Wire<Self::F>,
-        b: BabyBearExt4Wire<Self::F>,
-    ) -> BabyBearExt4Wire<Self::F>;
+        a: BabyBearExt5Wire<Self::F>,
+        b: BabyBearExt5Wire<Self::F>,
+    ) -> BabyBearExt5Wire<Self::F>;
     fn ext_div(
         &mut self,
-        a: BabyBearExt4Wire<Self::F>,
-        b: BabyBearExt4Wire<Self::F>,
-    ) -> BabyBearExt4Wire<Self::F>;
-    fn ext_reduce_max_bits(&mut self, a: BabyBearExt4Wire<Self::F>) -> BabyBearExt4Wire<Self::F>;
-    fn ext_zero(&mut self) -> BabyBearExt4Wire<Self::F>;
-    fn ext_from_base_const(&mut self, value: BabyBear) -> BabyBearExt4Wire<Self::F>;
-    fn ext_from_base_var(&mut self, value: BabyBearWire<Self::F>) -> BabyBearExt4Wire<Self::F>;
+        a: BabyBearExt5Wire<Self::F>,
+        b: BabyBearExt5Wire<Self::F>,
+    ) -> BabyBearExt5Wire<Self::F>;
+    fn ext_reduce_max_bits(&mut self, a: BabyBearExt5Wire<Self::F>) -> BabyBearExt5Wire<Self::F>;
+    fn ext_zero(&mut self) -> BabyBearExt5Wire<Self::F>;
+    fn ext_from_base_const(&mut self, value: BabyBear) -> BabyBearExt5Wire<Self::F>;
+    fn ext_from_base_var(&mut self, value: BabyBearWire<Self::F>) -> BabyBearExt5Wire<Self::F>;
     fn ext_mul_base_const(
         &mut self,
-        a: BabyBearExt4Wire<Self::F>,
+        a: BabyBearExt5Wire<Self::F>,
         c: BabyBear,
-    ) -> BabyBearExt4Wire<Self::F>;
-    fn ext_square(&mut self, a: BabyBearExt4Wire<Self::F>) -> BabyBearExt4Wire<Self::F>;
+    ) -> BabyBearExt5Wire<Self::F>;
+    fn ext_square(&mut self, a: BabyBearExt5Wire<Self::F>) -> BabyBearExt5Wire<Self::F>;
     /// `a^(2^n)`
     fn ext_pow_power_of_two(
         &mut self,
-        a: BabyBearExt4Wire<Self::F>,
+        a: BabyBearExt5Wire<Self::F>,
         n: usize,
-    ) -> BabyBearExt4Wire<Self::F>;
+    ) -> BabyBearExt5Wire<Self::F>;
 }
 
 /// Poseidon2 digest hashing/compression mirroring the helpers in `hash::poseidon2`.
@@ -174,14 +174,14 @@ pub trait Poseidon2Inst: ChipBase {
 }
 
 /// Stateful Fiat–Shamir transcript mirroring `TranscriptChip`.
-pub trait TranscriptInst: BabyBearExt4Inst {
+pub trait TranscriptInst: BabyBearExt5Inst {
     /// (Re)initialize the transcript sponge to the all-zero state.
     fn init_transcript(&mut self);
     fn observe(&mut self, value: &ReducedBabyBearWire<Self::F>);
-    fn observe_ext(&mut self, value: &ReducedBabyBearExt4Wire<Self::F>);
+    fn observe_ext(&mut self, value: &ReducedBabyBearExt5Wire<Self::F>);
     fn observe_commit(&mut self, digest: &DigestWire<Self::F>);
     fn sample(&mut self) -> BabyBearWire<Self::F>;
-    fn sample_ext(&mut self) -> BabyBearExt4Wire<Self::F>;
+    fn sample_ext(&mut self) -> BabyBearExt5Wire<Self::F>;
     /// Sample and truncate to `bits` bits; returns a raw cell in `[0, 2^bits)`.
     fn sample_bits(&mut self, bits: usize) -> Self::F;
     /// Asserts that the proof-of-work `witness` passes with `bits` leading zero bits.

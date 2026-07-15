@@ -22,7 +22,7 @@ Most buses are **per-proof**: the recursion circuit verifies multiple child proo
 
 Throughout this document:
 - `F` denotes a base field element (BabyBear).
-- `[F; D_EF]` denotes an extension field element represented as `D_EF = 4` base field elements.
+- `[F; D_EF]` denotes an extension field element represented as `D_EF = 5` base field elements.
 - `[F; DIGEST_SIZE]` denotes a Poseidon2 hash digest (`DIGEST_SIZE = 8`).
 - `[F; POSEIDON2_WIDTH]` denotes a full Poseidon2 state (`POSEIDON2_WIDTH = 16`).
 
@@ -126,7 +126,7 @@ Handoff from the BatchConstraint sumcheck to the Stacking module. Signals that t
 |---|---|
 | **Type** | Permutation, per-proof |
 | **Source** | `bus.rs` |
-| **Message** | `{tidx: F, claim: [F; 4]}` |
+| **Message** | `{tidx: F, claim: [F; D_EF]}` |
 
 Handoff from the Stacking module to the WHIR module. Carries the batched opening claim after mu-folding, which WHIR will verify via its FRI-like protocol.
 

@@ -225,15 +225,15 @@ fn pipeline_cell_count_profiling() {
     use openvm_stark_backend::{SystemParams, WhirProximityStrategy};
     use openvm_stark_sdk::{
         config::{
-            log_up_params::log_up_security_params_baby_bear_100_bits,
-            root_params_with_100_bits_security,
+            log_up_params::log_up_security_params_baby_bear_128_bits_field_security,
+            root_params_with_128_bits_field_security,
         },
         openvm_stark_backend::test_utils::MixtureFixture,
     };
 
     use crate::chip_traits::GateInst;
 
-    let system_params = root_params_with_100_bits_security();
+    let system_params = root_params_with_128_bits_field_security();
     let (vk, proof) = {
         #[cfg(feature = "cuda")]
         {

@@ -15,7 +15,7 @@ use openvm_stark_sdk::{
 
 use crate::{
     field::baby_bear::{
-        BabyBearChip, BabyBearExt4Wire, BabyBearExtWire, BabyBearWire, ReducedBabyBearExtWire,
+        BabyBearChip, BabyBearExt5Wire, BabyBearExtWire, BabyBearWire, ReducedBabyBearExtWire,
         ReducedBabyBearWire, BABY_BEAR_BITS, BABY_BEAR_MODULUS_U64,
     },
     hash::{
@@ -31,7 +31,7 @@ pub(crate) const NUM_OBS_PER_WORD: usize = 8;
 
 /// Number of BabyBear samples extracted from one BN254 word (base-BabyBear decomposition).
 /// Must match `compute_num_samples_per_elem` in `MultiFieldTranscript`.
-pub(crate) const NUM_SAMPLES_PER_WORD: usize = 5;
+pub(crate) const NUM_SAMPLES_PER_WORD: usize = 4;
 
 /// Precomputed bounds for the base-BabyBear hint decomposition.
 ///
@@ -329,7 +329,7 @@ impl TranscriptChip {
 
     pub fn sample_ext(&mut self, ctx: &mut Context<Fr>) -> BabyBearExtWire {
         let coeffs = array::from_fn(|_| self.sample(ctx));
-        BabyBearExt4Wire(coeffs)
+        BabyBearExt5Wire(coeffs)
     }
 
     pub fn sample_bits(&mut self, ctx: &mut Context<Fr>, bits: usize) -> AssignedValue<Fr> {

@@ -15,7 +15,7 @@ use openvm_stark_sdk::{
 };
 
 use crate::{
-    chip_traits::{BabyBearExt4Inst, PopulateInputs, TranscriptInst},
+    chip_traits::{BabyBearExt5Inst, PopulateInputs, TranscriptInst},
     field::baby_bear::{
         BabyBearExtWire, BabyBearWire, ReducedBabyBearExtWire, ReducedBabyBearWire,
     },
@@ -133,7 +133,7 @@ pub(crate) fn load_batch_constraint_proof_wire<B: PopulateInputs>(
     }
 }
 
-fn eval_lagrange_on_integer_grid<B: BabyBearExt4Inst>(
+fn eval_lagrange_on_integer_grid<B: BabyBearExt5Inst>(
     b: &mut B,
     point: &BabyBearExtWire<B::F>,
     evals: &[BabyBearExtWire<B::F>],
@@ -171,7 +171,7 @@ fn eval_lagrange_on_integer_grid<B: BabyBearExt4Inst>(
     acc
 }
 
-fn progression_exp_2_assigned<B: BabyBearExt4Inst>(
+fn progression_exp_2_assigned<B: BabyBearExt5Inst>(
     b: &mut B,
     m: &BabyBearExtWire<B::F>,
     l: usize,
@@ -187,7 +187,7 @@ fn progression_exp_2_assigned<B: BabyBearExt4Inst>(
     sum
 }
 
-pub(crate) fn eval_eq_mle_assigned<B: BabyBearExt4Inst>(
+pub(crate) fn eval_eq_mle_assigned<B: BabyBearExt5Inst>(
     b: &mut B,
     x: &[BabyBearExtWire<B::F>],
     y: &[BabyBearExtWire<B::F>],
@@ -209,7 +209,7 @@ pub(crate) fn eval_eq_mle_assigned<B: BabyBearExt4Inst>(
     acc
 }
 
-pub(crate) fn eval_eq_mle_ef_f_assigned<B: BabyBearExt4Inst>(
+pub(crate) fn eval_eq_mle_ef_f_assigned<B: BabyBearExt5Inst>(
     b: &mut B,
     x: &[BabyBearExtWire<B::F>],
     y: &[BabyBearWire<B::F>],
@@ -232,7 +232,7 @@ pub(crate) fn eval_eq_mle_ef_f_assigned<B: BabyBearExt4Inst>(
     acc
 }
 
-pub(crate) fn eval_eq_mle_binary_assigned<B: BabyBearExt4Inst>(
+pub(crate) fn eval_eq_mle_binary_assigned<B: BabyBearExt5Inst>(
     b: &mut B,
     x: &[BabyBearExtWire<B::F>],
     y_bits: &[bool],
@@ -251,7 +251,7 @@ pub(crate) fn eval_eq_mle_binary_assigned<B: BabyBearExt4Inst>(
     acc
 }
 
-pub(crate) fn eval_eq_uni_assigned<B: BabyBearExt4Inst>(
+pub(crate) fn eval_eq_uni_assigned<B: BabyBearExt5Inst>(
     b: &mut B,
     l_skip: usize,
     x: &BabyBearExtWire<B::F>,
@@ -275,7 +275,7 @@ pub(crate) fn eval_eq_uni_assigned<B: BabyBearExt4Inst>(
     b.ext_mul_base_const(res, half_pow_l)
 }
 
-pub(crate) fn eval_eq_uni_at_one_assigned<B: BabyBearExt4Inst>(
+pub(crate) fn eval_eq_uni_at_one_assigned<B: BabyBearExt5Inst>(
     b: &mut B,
     l_skip: usize,
     x: &BabyBearExtWire<B::F>,
@@ -292,7 +292,7 @@ pub(crate) fn eval_eq_uni_at_one_assigned<B: BabyBearExt4Inst>(
     b.ext_mul_base_const(res, half_pow_l)
 }
 
-fn eval_eq_sharp_uni_assigned<B: BabyBearExt4Inst>(
+fn eval_eq_sharp_uni_assigned<B: BabyBearExt5Inst>(
     b: &mut B,
     omega_skip_pows: &[RootF],
     xi_1: &[BabyBearExtWire<B::F>],
@@ -334,7 +334,7 @@ fn eval_eq_sharp_uni_assigned<B: BabyBearExt4Inst>(
     res
 }
 
-pub(crate) fn eval_eq_prism_assigned<B: BabyBearExt4Inst>(
+pub(crate) fn eval_eq_prism_assigned<B: BabyBearExt5Inst>(
     b: &mut B,
     l_skip: usize,
     x: &[BabyBearExtWire<B::F>],
@@ -349,7 +349,7 @@ pub(crate) fn eval_eq_prism_assigned<B: BabyBearExt4Inst>(
     b.ext_mul(eq_uni, eq_mle)
 }
 
-fn eval_eq_rot_cube_assigned<B: BabyBearExt4Inst>(
+fn eval_eq_rot_cube_assigned<B: BabyBearExt5Inst>(
     b: &mut B,
     x: &[BabyBearExtWire<B::F>],
     y: &[BabyBearExtWire<B::F>],
@@ -375,7 +375,7 @@ fn eval_eq_rot_cube_assigned<B: BabyBearExt4Inst>(
     (eq, rot)
 }
 
-pub(crate) fn eval_rot_kernel_prism_assigned<B: BabyBearExt4Inst>(
+pub(crate) fn eval_rot_kernel_prism_assigned<B: BabyBearExt5Inst>(
     b: &mut B,
     l_skip: usize,
     x: &[BabyBearExtWire<B::F>],
@@ -399,7 +399,7 @@ pub(crate) fn eval_rot_kernel_prism_assigned<B: BabyBearExt4Inst>(
     b.ext_add(term_a, term_b)
 }
 
-fn interpolate_linear_at_01_assigned<B: BabyBearExt4Inst>(
+fn interpolate_linear_at_01_assigned<B: BabyBearExt5Inst>(
     b: &mut B,
     eval0: &BabyBearExtWire<B::F>,
     eval1: &BabyBearExtWire<B::F>,
@@ -410,7 +410,7 @@ fn interpolate_linear_at_01_assigned<B: BabyBearExt4Inst>(
     b.ext_add(scaled, *eval0)
 }
 
-fn interpolate_cubic_at_0123_assigned<B: BabyBearExt4Inst>(
+fn interpolate_cubic_at_0123_assigned<B: BabyBearExt5Inst>(
     b: &mut B,
     evals: [&BabyBearExtWire<B::F>; 4],
     x: &BabyBearExtWire<B::F>,
@@ -461,7 +461,7 @@ struct ConstraintEvaluatorWire<'a, F> {
 }
 
 impl<F: Copy> ConstraintEvaluatorWire<'_, F> {
-    fn eval_var<B: BabyBearExt4Inst<F = F>>(
+    fn eval_var<B: BabyBearExt5Inst<F = F>>(
         &self,
         b: &mut B,
         symbolic_var: SymbolicVariable<RootF>,
@@ -493,7 +493,7 @@ impl<F: Copy> ConstraintEvaluatorWire<'_, F> {
     }
 }
 
-fn eval_symbolic_nodes_assigned<B: BabyBearExt4Inst>(
+fn eval_symbolic_nodes_assigned<B: BabyBearExt5Inst>(
     b: &mut B,
     evaluator: &ConstraintEvaluatorWire<'_, B::F>,
     nodes: &[SymbolicExpressionNode<RootF>],
@@ -546,7 +546,7 @@ fn eval_symbolic_nodes_assigned<B: BabyBearExt4Inst>(
     exprs
 }
 
-fn local_next_opening_views<B: BabyBearExt4Inst>(
+fn local_next_opening_views<B: BabyBearExt5Inst>(
     b: &mut B,
     openings: &[ReducedBabyBearExtWire<B::F>],
     need_rot: bool,

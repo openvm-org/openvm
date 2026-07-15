@@ -1,7 +1,9 @@
 use std::path::Path;
 
 use openvm_stark_backend::{SystemParams, WhirProximityStrategy};
-use openvm_stark_sdk::config::{params_with_100_bits_security, RECURSION_MAX_CONSTRAINT_DEGREE};
+use openvm_stark_sdk::config::{
+    params_with_128_bits_field_security, RECURSION_MAX_CONSTRAINT_DEGREE,
+};
 use serde::Serialize;
 
 #[derive(Serialize, Default)]
@@ -26,7 +28,7 @@ fn generate_interesting_internal_params(output_dir: impl AsRef<Path>) {
         |max_log_height, k_whir, log_blowup, l_skip, pow_bits, folding_pow_bits| -> SystemParams {
             let n_stack = max_log_height - l_skip;
             let proximity = WhirProximityStrategy::ListDecoding { m: 2 };
-            params_with_100_bits_security(
+            params_with_128_bits_field_security(
                 log_blowup,
                 l_skip,
                 n_stack,
@@ -49,7 +51,7 @@ fn generate_interesting_internal_params(output_dir: impl AsRef<Path>) {
         let k_whir = 4;
         let proximity = WhirProximityStrategy::ListDecoding { m: 1 };
         let pow_bits = 20;
-        params_with_100_bits_security(
+        params_with_128_bits_field_security(
             log_blowup,
             l_skip,
             n_stack,
@@ -168,7 +170,7 @@ fn generate_interesting_root_params(output_dir: impl AsRef<Path>) {
     let make_param = |k_whir, log_blowup, l_skip, pow_bits| {
         let n_stack = max_log_height - l_skip;
         let proximity = WhirProximityStrategy::ListDecoding { m: 1 };
-        let root = params_with_100_bits_security(
+        let root = params_with_128_bits_field_security(
             log_blowup,
             l_skip,
             n_stack,

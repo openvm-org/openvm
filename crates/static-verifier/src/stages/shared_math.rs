@@ -1,13 +1,13 @@
 use openvm_stark_sdk::openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 
 use crate::{
-    chip_traits::BabyBearExt4Inst,
+    chip_traits::BabyBearExt5Inst,
     field::baby_bear::{BabyBearExtWire, BabyBearWire},
     RootF,
 };
 
 #[allow(clippy::type_complexity)]
-pub(crate) fn column_openings_by_rot_assigned<B: BabyBearExt4Inst>(
+pub(crate) fn column_openings_by_rot_assigned<B: BabyBearExt5Inst>(
     b: &mut B,
     openings: &[BabyBearExtWire<B::F>],
     need_rot: bool,
@@ -30,7 +30,7 @@ pub(crate) fn column_openings_by_rot_assigned<B: BabyBearExt4Inst>(
     }
 }
 
-pub(crate) fn horner_eval_ext_poly_assigned<B: BabyBearExt4Inst>(
+pub(crate) fn horner_eval_ext_poly_assigned<B: BabyBearExt5Inst>(
     b: &mut B,
     coeffs: &[BabyBearExtWire<B::F>],
     x: &BabyBearExtWire<B::F>,
@@ -49,7 +49,7 @@ pub(crate) fn horner_eval_ext_poly_assigned<B: BabyBearExt4Inst>(
     acc
 }
 
-pub(crate) fn horner_eval_ext_poly_f_assigned<B: BabyBearExt4Inst>(
+pub(crate) fn horner_eval_ext_poly_f_assigned<B: BabyBearExt5Inst>(
     b: &mut B,
     coeffs: &[BabyBearExtWire<B::F>],
     x: &BabyBearWire<B::F>,
@@ -67,7 +67,7 @@ pub(crate) fn horner_eval_ext_poly_f_assigned<B: BabyBearExt4Inst>(
     acc
 }
 
-pub(crate) fn interpolate_quadratic_at_012_assigned<B: BabyBearExt4Inst>(
+pub(crate) fn interpolate_quadratic_at_012_assigned<B: BabyBearExt5Inst>(
     b: &mut B,
     evals: [&BabyBearExtWire<B::F>; 3],
     x: &BabyBearExtWire<B::F>,

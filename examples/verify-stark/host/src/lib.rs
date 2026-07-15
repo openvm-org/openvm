@@ -14,8 +14,8 @@ use openvm_sdk::{
 use openvm_sdk_config::{deferral::SupportedDeferral, SdkSystemConfig, SdkVmConfig};
 use openvm_stark_backend::{keygen::types::MultiStarkVerifyingKey, StarkEngine};
 use openvm_stark_sdk::config::{
-    app_params_with_100_bits_security, baby_bear_poseidon2::Digest,
-    hook_params_with_100_bits_security, MAX_APP_LOG_STACKED_HEIGHT,
+    app_params_with_128_bits_field_security, baby_bear_poseidon2::Digest,
+    hook_params_with_128_bits_field_security, MAX_APP_LOG_STACKED_HEIGHT,
 };
 use openvm_verify_stark_circuit::{
     default_verify_stark_circuit_params,
@@ -69,7 +69,7 @@ pub fn keygen(
 
     // System parameters for VM proof aggregation. Deferral circuit proof aggregation reuses
     // agg_config.
-    let app_params = app_params_with_100_bits_security(MAX_APP_LOG_STACKED_HEIGHT);
+    let app_params = app_params_with_128_bits_field_security(MAX_APP_LOG_STACKED_HEIGHT);
     let agg_config = AggregationConfig::default();
 
     // Create the DeferralAggProver.
@@ -100,7 +100,7 @@ pub fn keygen(
         let mut multi_deferral_circuit_prover = MultiDeferralCircuitProver::new(
             verify_circuit_prover,
             agg_config.clone(),
-            hook_params_with_100_bits_security(),
+            hook_params_with_128_bits_field_security(),
         );
 
         for def_offset in 1..num_def_circuits as usize {

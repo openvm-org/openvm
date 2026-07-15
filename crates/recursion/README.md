@@ -36,7 +36,7 @@ In table form (where ✅ means the parent category can depend on the child categ
 
 ### Child System Parameter Dependencies
 
-By the table above, constant and dependent fields should not depend on child `SystemParams`. In practice, however, a few currently do: e.g. `WhirRoundAir` width depends on the child WHIR round encoder width, and the presence of some AIR interactions depend on whether child PoW parameters are zero or nonzero. `check_param_compatibility` records the subset of these dependencies that must agree between app, leaf, and internal params to keep the relevant verifier VKs stable.
+By the table above, constant and dependent fields should not depend on child `SystemParams`. In practice, however, a few currently do: e.g. `WhirRoundAir` width depends on the child WHIR round encoder width, and the presence of some AIR interactions depend on whether child PoW parameters are zero or nonzero. `check_param_compatibility` records the subset of these dependencies that must agree to keep the relevant verifier VKs stable. Leaf and internal parameters must agree on every shape-changing PoW toggle. App parameters must also agree except for folding PoW: its effect is confined to the app-specific leaf verifier VK, so the app preset may omit it while aggregation presets retain it.
 
 ## Non-Configurable Fields
 

@@ -2,7 +2,9 @@ use std::env;
 
 use openvm_sdk::config::AppConfig;
 use openvm_sdk_config::SdkVmConfig;
-use openvm_stark_sdk::config::{app_params_with_100_bits_security, MAX_APP_LOG_STACKED_HEIGHT};
+use openvm_stark_sdk::config::{
+    app_params_with_128_bits_field_security, MAX_APP_LOG_STACKED_HEIGHT,
+};
 
 pub const DEFAULT_MANIFEST_DIR: &str = ".";
 
@@ -52,6 +54,6 @@ pub fn default_app_config() -> AppConfig<SdkVmConfig> {
             .rv64m(Default::default())
             .io(Default::default())
             .build(),
-        system_params: app_params_with_100_bits_security(MAX_APP_LOG_STACKED_HEIGHT),
+        system_params: app_params_with_128_bits_field_security(MAX_APP_LOG_STACKED_HEIGHT),
     }
 }

@@ -7,7 +7,6 @@
 #include "scan.cuh"
 #include "stacking_blob.cuh"
 #include "switch_macro.h"
-#include "types.h"
 
 #include <cassert>
 #include <cstddef>

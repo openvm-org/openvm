@@ -18,7 +18,7 @@ use openvm_stark_sdk::{
 };
 
 use crate::{
-    field::baby_bear::{BabyBearChip, BabyBearWire, ReducedBabyBearWire},
+    field::baby_bear::{BabyBearChip, BabyBearWire, ReducedBabyBearWire, BABY_BEAR_EXT_DEGREE},
     utils::guarded_debug_assert_eq,
 };
 
@@ -43,54 +43,56 @@ pub(crate) fn take_recorded_ext_base_consts() -> Vec<RecordedExtBaseConst> {
     RECORDED_EXT_BASE_CONSTS.with(|records| records.borrow_mut().drain(..).collect())
 }
 
-// irred poly is x^4 - 11
+// Irreducible polynomial is x^5 - 2.
 #[derive(Clone)]
-pub struct BabyBearExt4Chip {
+pub struct BabyBearExt5Chip {
     pub base: BabyBearChip,
 }
 
 /// Generic over the cell representation `F`; see [`BabyBearWire`].
 #[derive(Copy, Clone, Debug)]
-pub struct BabyBearExt4Wire<F = AssignedValue<Fr>>(pub [BabyBearWire<F>; 4]);
+pub struct BabyBearExt5Wire<F = AssignedValue<Fr>>(pub [BabyBearWire<F>; BABY_BEAR_EXT_DEGREE]);
 
 /// An extension-field wire whose BabyBear basis coefficients are all reduced.
 ///
 /// This is the extension-field analogue of `ReducedBabyBearWire`: it is safe for
 /// transcript/hash absorption coefficient-by-coefficient. Converting via
-/// `BabyBearExt4Wire::from` drops that evidence when the value is used by arithmetic
+/// `BabyBearExt5Wire::from` drops that evidence when the value is used by arithmetic
 /// helpers.
 #[derive(Copy, Clone, Debug)]
-pub struct ReducedBabyBearExt4Wire<F = AssignedValue<Fr>>([ReducedBabyBearWire<F>; 4]);
-pub type BabyBearExt4 = BinomialExtensionField<BabyBear, 4>;
+pub struct ReducedBabyBearExt5Wire<F = AssignedValue<Fr>>(
+    [ReducedBabyBearWire<F>; BABY_BEAR_EXT_DEGREE],
+);
+pub type BabyBearExt5 = BinomialExtensionField<BabyBear, BABY_BEAR_EXT_DEGREE>;
 
-impl BabyBearExt4Wire {
-    pub fn to_extension_field(&self) -> BabyBearExt4 {
-        BabyBearExt4::from_basis_coefficients_fn(|i| self.0[i].to_baby_bear())
+impl BabyBearExt5Wire {
+    pub fn to_extension_field(&self) -> BabyBearExt5 {
+        BabyBearExt5::from_basis_coefficients_fn(|i| self.0[i].to_baby_bear())
     }
 }
 
-impl<F> ReducedBabyBearExt4Wire<F> {
-    pub fn coeffs(&self) -> &[ReducedBabyBearWire<F>; 4] {
+impl<F> ReducedBabyBearExt5Wire<F> {
+    pub fn coeffs(&self) -> &[ReducedBabyBearWire<F>; BABY_BEAR_EXT_DEGREE] {
         &self.0
     }
 }
 
-impl<F> From<ReducedBabyBearExt4Wire<F>> for BabyBearExt4Wire<F> {
+impl<F> From<ReducedBabyBearExt5Wire<F>> for BabyBearExt5Wire<F> {
     /// Drops the canonicality evidence and returns the underlying arithmetic wire.
-    fn from(wire: ReducedBabyBearExt4Wire<F>) -> Self {
-        BabyBearExt4Wire(wire.0.map(BabyBearWire::from))
+    fn from(wire: ReducedBabyBearExt5Wire<F>) -> Self {
+        BabyBearExt5Wire(wire.0.map(BabyBearWire::from))
     }
 }
 
-impl<F: Copy> From<&ReducedBabyBearExt4Wire<F>> for BabyBearExt4Wire<F> {
-    fn from(wire: &ReducedBabyBearExt4Wire<F>) -> Self {
+impl<F: Copy> From<&ReducedBabyBearExt5Wire<F>> for BabyBearExt5Wire<F> {
+    fn from(wire: &ReducedBabyBearExt5Wire<F>) -> Self {
         (*wire).into()
     }
 }
 
-impl BabyBearExt4Chip {
+impl BabyBearExt5Chip {
     pub fn new(base_chip: BabyBearChip) -> Self {
-        BabyBearExt4Chip { base: base_chip }
+        BabyBearExt5Chip { base: base_chip }
     }
 
     /// Loads each BabyBear coefficient and constrains only that its assigned
@@ -99,19 +101,19 @@ impl BabyBearExt4Chip {
     /// The Rust input is canonicalized for the honest witness assignment, but the
     /// circuit does not prove each advice cell is `< p`. Use
     /// `load_reduced_witness` for transcript/hash inputs.
-    pub fn load_witness(&self, ctx: &mut Context<Fr>, value: BabyBearExt4) -> BabyBearExt4Wire {
+    pub fn load_witness(&self, ctx: &mut Context<Fr>, value: BabyBearExt5) -> BabyBearExt5Wire {
         let coeffs = value.as_basis_coefficients_slice();
-        BabyBearExt4Wire(array::from_fn(|i| self.base.load_witness(ctx, coeffs[i])))
+        BabyBearExt5Wire(array::from_fn(|i| self.base.load_witness(ctx, coeffs[i])))
     }
 
     /// Loads each coefficient and constrains it to the canonical BabyBear range.
     pub fn load_reduced_witness(
         &self,
         ctx: &mut Context<Fr>,
-        value: BabyBearExt4,
-    ) -> ReducedBabyBearExt4Wire {
+        value: BabyBearExt5,
+    ) -> ReducedBabyBearExt5Wire {
         let coeffs = value.as_basis_coefficients_slice();
-        ReducedBabyBearExt4Wire(array::from_fn(|i| {
+        ReducedBabyBearExt5Wire(array::from_fn(|i| {
             self.base.load_reduced_witness(ctx, coeffs[i])
         }))
     }
@@ -121,25 +123,25 @@ impl BabyBearExt4Chip {
     pub fn load_reduced_constant(
         &self,
         ctx: &mut Context<Fr>,
-        value: BabyBearExt4,
-    ) -> ReducedBabyBearExt4Wire {
+        value: BabyBearExt5,
+    ) -> ReducedBabyBearExt5Wire {
         let coeffs = value.as_basis_coefficients_slice();
         // Constants are canonical by construction.
-        ReducedBabyBearExt4Wire(array::from_fn(|i| {
+        ReducedBabyBearExt5Wire(array::from_fn(|i| {
             self.base.load_reduced_constant(ctx, coeffs[i])
         }))
     }
-    pub fn load_constant(&self, ctx: &mut Context<Fr>, value: BabyBearExt4) -> BabyBearExt4Wire {
+    pub fn load_constant(&self, ctx: &mut Context<Fr>, value: BabyBearExt5) -> BabyBearExt5Wire {
         let coeffs = value.as_basis_coefficients_slice();
-        BabyBearExt4Wire(array::from_fn(|i| self.base.load_constant(ctx, coeffs[i])))
+        BabyBearExt5Wire(array::from_fn(|i| self.base.load_constant(ctx, coeffs[i])))
     }
     pub fn add(
         &self,
         ctx: &mut Context<Fr>,
-        a: BabyBearExt4Wire,
-        b: BabyBearExt4Wire,
-    ) -> BabyBearExt4Wire {
-        BabyBearExt4Wire(
+        a: BabyBearExt5Wire,
+        b: BabyBearExt5Wire,
+    ) -> BabyBearExt5Wire {
+        BabyBearExt5Wire(
             a.0.iter()
                 .zip(b.0.iter())
                 .map(|(a, b)| self.base.add(ctx, *a, *b))
@@ -149,8 +151,8 @@ impl BabyBearExt4Chip {
         )
     }
 
-    pub fn neg(&self, ctx: &mut Context<Fr>, a: BabyBearExt4Wire) -> BabyBearExt4Wire {
-        BabyBearExt4Wire(
+    pub fn neg(&self, ctx: &mut Context<Fr>, a: BabyBearExt5Wire) -> BabyBearExt5Wire {
+        BabyBearExt5Wire(
             a.0.iter()
                 .map(|x| self.base.neg(ctx, *x))
                 .collect_vec()
@@ -162,10 +164,10 @@ impl BabyBearExt4Chip {
     pub fn sub(
         &self,
         ctx: &mut Context<Fr>,
-        a: BabyBearExt4Wire,
-        b: BabyBearExt4Wire,
-    ) -> BabyBearExt4Wire {
-        BabyBearExt4Wire(
+        a: BabyBearExt5Wire,
+        b: BabyBearExt5Wire,
+    ) -> BabyBearExt5Wire {
+        BabyBearExt5Wire(
             a.0.iter()
                 .zip(b.0.iter())
                 .map(|(a, b)| self.base.sub(ctx, *a, *b))
@@ -178,10 +180,10 @@ impl BabyBearExt4Chip {
     pub fn scalar_mul(
         &self,
         ctx: &mut Context<Fr>,
-        a: BabyBearExt4Wire,
+        a: BabyBearExt5Wire,
         b: BabyBearWire,
-    ) -> BabyBearExt4Wire {
-        BabyBearExt4Wire(
+    ) -> BabyBearExt5Wire {
+        BabyBearExt5Wire(
             a.0.iter()
                 .map(|x| self.base.mul(ctx, *x, b))
                 .collect_vec()
@@ -195,11 +197,11 @@ impl BabyBearExt4Chip {
     pub fn scalar_mul_add(
         &self,
         ctx: &mut Context<Fr>,
-        a: BabyBearExt4Wire,
+        a: BabyBearExt5Wire,
         b: BabyBearWire,
-        c: BabyBearExt4Wire,
-    ) -> BabyBearExt4Wire {
-        BabyBearExt4Wire(
+        c: BabyBearExt5Wire,
+    ) -> BabyBearExt5Wire {
+        BabyBearExt5Wire(
             a.0.iter()
                 .zip(c.0.iter())
                 .map(|(ai, ci)| self.base.mul_add(ctx, *ai, b, *ci))
@@ -213,10 +215,10 @@ impl BabyBearExt4Chip {
         &self,
         ctx: &mut Context<Fr>,
         cond: SafeBool<Fr>,
-        a: BabyBearExt4Wire,
-        b: BabyBearExt4Wire,
-    ) -> BabyBearExt4Wire {
-        BabyBearExt4Wire(
+        a: BabyBearExt5Wire,
+        b: BabyBearExt5Wire,
+    ) -> BabyBearExt5Wire {
+        BabyBearExt5Wire(
             a.0.iter()
                 .zip(b.0.iter())
                 .map(|(a, b)| self.base.select(ctx, cond, *a, *b))
@@ -226,13 +228,13 @@ impl BabyBearExt4Chip {
         )
     }
 
-    pub fn assert_zero(&self, ctx: &mut Context<Fr>, a: BabyBearExt4Wire) {
+    pub fn assert_zero(&self, ctx: &mut Context<Fr>, a: BabyBearExt5Wire) {
         for x in a.0.iter() {
             self.base.assert_zero(ctx, *x);
         }
     }
 
-    pub fn assert_equal(&self, ctx: &mut Context<Fr>, a: BabyBearExt4Wire, b: BabyBearExt4Wire) {
+    pub fn assert_equal(&self, ctx: &mut Context<Fr>, a: BabyBearExt5Wire, b: BabyBearExt5Wire) {
         for (a, b) in a.0.iter().zip(b.0.iter()) {
             self.base.assert_equal(ctx, *a, *b);
         }
@@ -241,21 +243,25 @@ impl BabyBearExt4Chip {
     pub fn mul(
         &self,
         ctx: &mut Context<Fr>,
-        mut a: BabyBearExt4Wire,
-        mut b: BabyBearExt4Wire,
-    ) -> BabyBearExt4Wire {
-        let mut coeffs = Vec::with_capacity(7);
-        for s in 0..7 {
+        mut a: BabyBearExt5Wire,
+        mut b: BabyBearExt5Wire,
+    ) -> BabyBearExt5Wire {
+        const MAX_COEFFS: usize = BABY_BEAR_EXT_DEGREE * 2 - 1;
+        let mut coeffs = Vec::with_capacity(MAX_COEFFS);
+        for s in 0..MAX_COEFFS {
             coeffs.push(self.base.special_inner_product(ctx, &mut a.0, &mut b.0, s));
         }
-        let w = self
-            .base
-            .load_constant(ctx, <BabyBear as BinomiallyExtendable<4>>::W);
-        for i in 4..7 {
-            coeffs[i - 4] = self.base.mul_add(ctx, coeffs[i], w, coeffs[i - 4]);
+        let w = self.base.load_constant(
+            ctx,
+            <BabyBear as BinomiallyExtendable<BABY_BEAR_EXT_DEGREE>>::W,
+        );
+        for i in BABY_BEAR_EXT_DEGREE..MAX_COEFFS {
+            coeffs[i - BABY_BEAR_EXT_DEGREE] =
+                self.base
+                    .mul_add(ctx, coeffs[i], w, coeffs[i - BABY_BEAR_EXT_DEGREE]);
         }
-        coeffs.truncate(4);
-        let c = BabyBearExt4Wire(coeffs.try_into().unwrap());
+        coeffs.truncate(BABY_BEAR_EXT_DEGREE);
+        let c = BabyBearExt5Wire(coeffs.try_into().unwrap());
         guarded_debug_assert_eq!(
             c.to_extension_field(),
             a.to_extension_field() * b.to_extension_field()
@@ -266,14 +272,17 @@ impl BabyBearExt4Chip {
     pub fn div(
         &self,
         ctx: &mut Context<Fr>,
-        a: BabyBearExt4Wire,
-        b: BabyBearExt4Wire,
-    ) -> BabyBearExt4Wire {
+        a: BabyBearExt5Wire,
+        b: BabyBearExt5Wire,
+    ) -> BabyBearExt5Wire {
         let b_val = b.to_extension_field();
         let b_inv_val = b_val.try_inverse().unwrap();
         // Constrain b is non-zero by checking b * b_inv == 1
         let b_inv = self.load_witness(ctx, b_inv_val);
-        let one = self.load_constant(ctx, BinomialExtensionField::<BabyBear, 4>::ONE);
+        let one = self.load_constant(
+            ctx,
+            BinomialExtensionField::<BabyBear, BABY_BEAR_EXT_DEGREE>::ONE,
+        );
         let inv_prod = self.mul(ctx, b, b_inv);
         self.assert_equal(ctx, inv_prod, one);
 
@@ -289,8 +298,8 @@ impl BabyBearExt4Chip {
         c
     }
 
-    pub fn reduce_max_bits(&self, ctx: &mut Context<Fr>, a: BabyBearExt4Wire) -> BabyBearExt4Wire {
-        BabyBearExt4Wire(
+    pub fn reduce_max_bits(&self, ctx: &mut Context<Fr>, a: BabyBearExt5Wire) -> BabyBearExt5Wire {
+        BabyBearExt5Wire(
             a.0.into_iter()
                 .map(|x| self.base.reduce_max_bits(ctx, x))
                 .collect::<Vec<_>>()
@@ -307,11 +316,11 @@ impl BabyBearExt4Chip {
         self.base.range()
     }
 
-    pub fn zero(&self, ctx: &mut Context<Fr>) -> BabyBearExt4Wire {
+    pub fn zero(&self, ctx: &mut Context<Fr>) -> BabyBearExt5Wire {
         self.from_base_const(ctx, BabyBear::ZERO)
     }
 
-    pub fn from_base_const(&self, ctx: &mut Context<Fr>, value: BabyBear) -> BabyBearExt4Wire {
+    pub fn from_base_const(&self, ctx: &mut Context<Fr>, value: BabyBear) -> BabyBearExt5Wire {
         let base_val = self.base.load_constant(ctx, value);
         #[cfg(test)]
         RECORDED_EXT_BASE_CONSTS.with(|records| {
@@ -321,34 +330,34 @@ impl BabyBearExt4Chip {
             });
         });
         let z = self.base.load_constant(ctx, BabyBear::ZERO);
-        BabyBearExt4Wire([base_val, z, z, z])
+        BabyBearExt5Wire([base_val, z, z, z, z])
     }
 
-    pub fn from_base_var(&self, ctx: &mut Context<Fr>, value: BabyBearWire) -> BabyBearExt4Wire {
+    pub fn from_base_var(&self, ctx: &mut Context<Fr>, value: BabyBearWire) -> BabyBearExt5Wire {
         let z = self.base.load_constant(ctx, BabyBear::ZERO);
-        BabyBearExt4Wire([value, z, z, z])
+        BabyBearExt5Wire([value, z, z, z, z])
     }
 
     pub fn mul_base_const(
         &self,
         ctx: &mut Context<Fr>,
-        a: BabyBearExt4Wire,
+        a: BabyBearExt5Wire,
         c: BabyBear,
-    ) -> BabyBearExt4Wire {
+    ) -> BabyBearExt5Wire {
         let c_wire = self.base.load_constant(ctx, c);
         self.scalar_mul(ctx, a, c_wire)
     }
 
-    pub fn square(&self, ctx: &mut Context<Fr>, a: BabyBearExt4Wire) -> BabyBearExt4Wire {
+    pub fn square(&self, ctx: &mut Context<Fr>, a: BabyBearExt5Wire) -> BabyBearExt5Wire {
         self.mul(ctx, a, a)
     }
 
     pub fn pow_power_of_two(
         &self,
         ctx: &mut Context<Fr>,
-        a: BabyBearExt4Wire,
+        a: BabyBearExt5Wire,
         n: usize,
-    ) -> BabyBearExt4Wire {
+    ) -> BabyBearExt5Wire {
         let mut result = a;
         for _ in 0..n {
             result = self.square(ctx, result);

@@ -89,11 +89,11 @@ pub fn check_param_compatibility(
         leaf_params.whir.mu_pow_bits > 0,
         internal_params.whir.mu_pow_bits > 0
     );
-    // folding_pow_bits affects the number of interactions in SumcheckAir.
-    assert_eq!(
-        app_params.whir.folding_pow_bits > 0,
-        leaf_params.whir.folding_pow_bits > 0
-    );
+    // folding_pow_bits affects the number of interactions in SumcheckAir. The app preset may
+    // omit folding PoW even when aggregation presets use it: this changes the leaf verifier,
+    // whose VK is app-specific, but does not change the internal recursive VK. The leaf and
+    // internal presets must still agree so the internal-for-leaf and recursive verifier shapes
+    // remain compatible.
     assert_eq!(
         leaf_params.whir.folding_pow_bits > 0,
         internal_params.whir.folding_pow_bits > 0
