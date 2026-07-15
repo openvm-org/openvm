@@ -56,6 +56,21 @@ typedef struct ProgramLogEntry {
   uint64_t write_value;
 } ProgramLogEntry;
 
+/* L2: one compact descriptor per executed basic block. Device predecode
+ * expands the consecutive pcs into exact program order and frequencies. */
+typedef struct ProgramRunEntry {
+  uint32_t first_pc;
+  uint32_t instruction_count;
+  uint32_t chronology_offset;
+  uint32_t complete;
+} ProgramRunEntry;
+
+/* Oracle-only legacy per-instruction chronology. */
+typedef struct DeviceProgramEntry {
+  uint32_t pc;
+  uint32_t filtered_index;
+} DeviceProgramEntry;
+
 static constexpr uint32_t PREFLIGHT_PROGRAM_WRITE_COMPLETE = 1u;
 
 typedef struct MemoryLogEntry {
@@ -167,6 +182,7 @@ static constexpr uint32_t PREFLIGHT_RECORD_VARIABLE_ROW_STRIDE = 16u;
 static constexpr uint32_t PREFLIGHT_RECORD_COMPACT_RESIDUAL_MEMORY = 32u;
 static constexpr uint32_t PREFLIGHT_RECORD_DEVICE_AUX = 64u;
 static constexpr uint32_t PREFLIGHT_RECORD_DEVICE_AUX_ORACLE = 128u;
+static constexpr uint32_t PREFLIGHT_RECORD_DEVICE_CHRONOLOGY = 256u;
 
 typedef struct Tracer {
   ProgramLogEntry* program_log;
@@ -224,6 +240,13 @@ typedef struct Tracer {
   uint32_t device_aux_patches_cap;
   uint32_t device_aux_references_cap;
   uint32_t dirty_memory_pages_words;
+  ProgramRunEntry* program_runs;
+  DeviceProgramEntry* device_program_references;
+  uint32_t program_runs_len;
+  uint32_t program_runs_cap;
+  uint32_t program_instruction_len;
+  uint32_t device_program_references_len;
+  uint32_t device_program_references_cap;
 } Tracer;
 
 _Static_assert(sizeof(ProgramLogEntry) == PREFLIGHT_PROGRAM_LOG_ENTRY_SIZE,
@@ -236,6 +259,14 @@ _Static_assert(offsetof(ProgramLogEntry, pc_and_flags) == 4,
                "ProgramLogEntry pc_and_flags offset drift");
 _Static_assert(offsetof(ProgramLogEntry, write_value) == 8,
                "ProgramLogEntry write_value offset drift");
+_Static_assert(sizeof(ProgramRunEntry) == PREFLIGHT_PROGRAM_RUN_ENTRY_SIZE,
+               "ProgramRunEntry size drift");
+_Static_assert(_Alignof(ProgramRunEntry) == PREFLIGHT_PROGRAM_RUN_ENTRY_ALIGN,
+               "ProgramRunEntry align drift");
+_Static_assert(sizeof(DeviceProgramEntry) == PREFLIGHT_DEVICE_PROGRAM_ENTRY_SIZE,
+               "DeviceProgramEntry size drift");
+_Static_assert(_Alignof(DeviceProgramEntry) == PREFLIGHT_DEVICE_PROGRAM_ENTRY_ALIGN,
+               "DeviceProgramEntry align drift");
 _Static_assert(sizeof(MemoryLogEntry) == PREFLIGHT_MEMORY_LOG_ENTRY_SIZE,
                "MemoryLogEntry size drift");
 _Static_assert(_Alignof(MemoryLogEntry) == PREFLIGHT_MEMORY_LOG_ENTRY_ALIGN,
@@ -366,6 +397,20 @@ _Static_assert(offsetof(Tracer, device_aux_references_cap) == 216,
                "Tracer device_aux_references_cap offset drift");
 _Static_assert(offsetof(Tracer, dirty_memory_pages_words) == 220,
                "Tracer dirty_memory_pages_words offset drift");
+_Static_assert(offsetof(Tracer, program_runs) == 224,
+               "Tracer program_runs offset drift");
+_Static_assert(offsetof(Tracer, device_program_references) == 232,
+               "Tracer device_program_references offset drift");
+_Static_assert(offsetof(Tracer, program_runs_len) == 240,
+               "Tracer program_runs_len offset drift");
+_Static_assert(offsetof(Tracer, program_runs_cap) == 244,
+               "Tracer program_runs_cap offset drift");
+_Static_assert(offsetof(Tracer, program_instruction_len) == 248,
+               "Tracer program_instruction_len offset drift");
+_Static_assert(offsetof(Tracer, device_program_references_len) == 252,
+               "Tracer device_program_references_len offset drift");
+_Static_assert(offsetof(Tracer, device_program_references_cap) == 256,
+               "Tracer device_program_references_cap offset drift");
 _Static_assert(sizeof(ChipRecordBuf) == PREFLIGHT_CHIP_RECORD_BUF_SIZE,
                "ChipRecordBuf size drift");
 _Static_assert(_Alignof(ChipRecordBuf) == PREFLIGHT_CHIP_RECORD_BUF_ALIGN,
@@ -626,6 +671,12 @@ static __attribute__((always_inline)) inline bool
 preflight_device_aux_oracle(Tracer* restrict t) {
   return t->delta_records != NULL &&
          (t->delta_records->flags & PREFLIGHT_RECORD_DEVICE_AUX_ORACLE) != 0u;
+}
+
+static __attribute__((always_inline)) inline bool
+preflight_device_chronology(Tracer* restrict t) {
+  return t->delta_records != NULL &&
+         (t->delta_records->flags & PREFLIGHT_RECORD_DEVICE_CHRONOLOGY) != 0u;
 }
 
 static __attribute__((always_inline)) inline void
@@ -1678,6 +1729,22 @@ static __attribute__((always_inline)) inline void trace_pc_indexed(
     RvState* restrict state, uint64_t pc, uint32_t exec_idx,
     uint32_t inline_chip_idx, bool delta_inline, uint32_t detail_family) {
   Tracer* restrict t = state->tracer;
+  if (likely(preflight_device_chronology(t))) {
+    if (likely(!preflight_device_aux_oracle(t))) {
+      return;
+    }
+    uint32_t reference_idx = t->device_program_references_len++;
+    if (unlikely(t->device_program_references == NULL ||
+                 reference_idx >= t->device_program_references_cap ||
+                 pc > UINT32_MAX)) {
+      t->delta_records->flags |= PREFLIGHT_RECORD_OVERFLOW;
+      return;
+    }
+    t->device_program_references[reference_idx] = (DeviceProgramEntry){
+        .pc = (uint32_t)pc,
+        .filtered_index = exec_idx,
+    };
+  }
   preflight_detail_family(t, detail_family);
   uint64_t detail_started = preflight_detail_phase_begin(
       t, PREFLIGHT_DETAIL_PHASE_CHRONOLOGY, 0u);
@@ -1727,6 +1794,26 @@ static __attribute__((always_inline)) inline void trace_chip(
 }
 
 static __attribute__((always_inline)) inline void trace_block(
-    RvState* restrict state, uint64_t pc, uint32_t block_insn_count) {}
+    RvState* restrict state, uint64_t pc, uint32_t block_insn_count) {
+  Tracer* restrict t = state->tracer;
+  if (likely(!preflight_device_chronology(t))) {
+    return;
+  }
+  uint32_t run_idx = t->program_runs_len++;
+  uint32_t chronology_offset = t->program_instruction_len;
+  uint32_t next = chronology_offset + block_insn_count;
+  if (unlikely(t->program_runs == NULL || run_idx >= t->program_runs_cap ||
+               next < chronology_offset || pc > UINT32_MAX)) {
+    t->delta_records->flags |= PREFLIGHT_RECORD_OVERFLOW;
+    return;
+  }
+  t->program_runs[run_idx] = (ProgramRunEntry){
+      .first_pc = (uint32_t)pc,
+      .instruction_count = block_insn_count,
+      .chronology_offset = chronology_offset,
+      .complete = 1u,
+  };
+  t->program_instruction_len = next;
+}
 
 #endif /* OPENVM_TRACER_PREFLIGHT_H */

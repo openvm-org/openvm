@@ -1046,6 +1046,13 @@ impl CProject {
                 self.emit_metered_counter_check(out, pc, insn_count);
                 writeln!(out, "    check_counter -= {insn_count}u;").unwrap();
             }
+            RvrExecutionKind::Preflight => {
+                writeln!(
+                    out,
+                    "    trace_block(state, 0x{pc:08x}ull, {insn_count}u);"
+                )
+                .unwrap();
+            }
         }
     }
 
