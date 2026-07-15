@@ -710,7 +710,7 @@ impl ModularRvrExtension {
         let c_val = insn.c;
         let discriminant = (c_val & 0xffff) as u16;
         let mod_idx = (c_val >> 16) as usize;
-        let operands = [insn.a, insn.b, insn.c].map(|value| value.as_canonical_u32());
+        let operands = [insn.a, insn.b, insn.c];
 
         match ModularPhantom::from_repr(discriminant) {
             Some(ModularPhantom::HintNonQr) => {
