@@ -523,7 +523,6 @@ fn run_mul_program(instructions: Vec<Instruction<F>>) -> (VmState, VmState) {
     let program = Program::from_instructions(&instructions);
     let exe = VmExe::new(program);
     let config = Rv64ImConfig::default();
-    let memory_dimensions = config.rv64i.system.memory_config.memory_dimensions();
     let executor = VmExecutor::new(config.clone()).expect("failed to create Rv64IM executor");
 
     let interpreter_instance = executor
@@ -538,7 +537,7 @@ fn run_mul_program(instructions: Vec<Instruction<F>>) -> (VmState, VmState) {
         .execute(vec![], None)
         .expect("AOT execution must succeed");
 
-    assert_vm_states_equivalent::<F>(&interp_state, &aot_state, &memory_dimensions);
+    assert_vm_states_equivalent(&interp_state, &aot_state);
 
     // Also test metered execution (interpreter and AOT) produce identical final state
     let engine = BabyBearPoseidon2Engine::new(FriParameters::new_for_testing(3));
@@ -562,11 +561,7 @@ fn run_mul_program(instructions: Vec<Instruction<F>>) -> (VmState, VmState) {
     let (_, metered_aot_state) = metered_aot
         .execute_metered(vec![], metered_ctx.clone())
         .expect("metered AOT execution must succeed");
-    assert_vm_states_equivalent::<F>(
-        &metered_interp_state,
-        &metered_aot_state,
-        &memory_dimensions,
-    );
+    assert_vm_states_equivalent(&metered_interp_state, &metered_aot_state);
     (interp_state, aot_state)
 }
 

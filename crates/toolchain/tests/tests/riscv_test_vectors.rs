@@ -1,9 +1,9 @@
 use std::{fs::read_dir, path::PathBuf};
 
 use eyre::Result;
-use openvm_circuit::arch::{instructions::exe::VmExe, VmExecutor};
 #[cfg(any(feature = "aot", feature = "rvr"))]
-use openvm_circuit::arch::{testing::assert_vm_states_equivalent, SystemConfig};
+use openvm_circuit::arch::testing::assert_vm_states_equivalent;
+use openvm_circuit::arch::{instructions::exe::VmExe, VmExecutor};
 use openvm_riscv_circuit::Rv64ImConfig;
 use openvm_riscv_transpiler::{
     Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
@@ -47,12 +47,7 @@ fn test_rv64im_riscv_vector_runtime() -> Result<()> {
                 {
                     let interpreter_instance = executor.interpreter_instance(&exe)?;
                     let naive_state = interpreter_instance.execute(vec![], None)?;
-                    let system_config: &SystemConfig = config.as_ref();
-                    assert_vm_states_equivalent::<F>(
-                        &state,
-                        &naive_state,
-                        &system_config.memory_config.memory_dimensions(),
-                    );
+                    assert_vm_states_equivalent(&state, &naive_state);
                 }
 
                 Ok(())

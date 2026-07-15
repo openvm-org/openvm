@@ -11,11 +11,11 @@ use openvm_circuit_primitives::{
         SharedVariableRangeCheckerChip, VariableRangeCheckerBus, VariableRangeCheckerChip,
     },
 };
-use openvm_stark_backend::p3_field::{Field, PrimeField32};
+use openvm_stark_backend::p3_field::Field;
 
 use crate::{
-    arch::{hasher::poseidon2::vm_poseidon2_hasher, MemoryConfig, VmState},
-    system::memory::{dimensions::MemoryDimensions, merkle::MerkleTree, online::TracingMemory},
+    arch::{MemoryConfig, VmState},
+    system::memory::online::{LinearMemory, TracingMemory},
 };
 
 pub fn default_var_range_checker_bus() -> VariableRangeCheckerBus {
@@ -53,15 +53,57 @@ pub fn default_tracing_memory(mem_config: &MemoryConfig) -> TracingMemory {
 }
 
 /// Asserts that two final [`VmState`]s reached via different execution paths (e.g. interpreter
-/// vs AOT) are equivalent: same pc and same guest memory (compared via Merkle roots).
-pub fn assert_vm_states_equivalent<F: PrimeField32>(
-    state1: &VmState,
-    state2: &VmState,
-    memory_dimensions: &MemoryDimensions,
-) {
+/// vs AOT) have the same pc and guest memory.
+pub fn assert_vm_states_equivalent(state1: &VmState, state2: &VmState) {
     assert_eq!(state1.pc(), state2.pc(), "PCs differ");
-    let hasher = vm_poseidon2_hasher::<F>();
-    let root1 = MerkleTree::from_memory(&state1.memory.memory, memory_dimensions, &hasher).root();
-    let root2 = MerkleTree::from_memory(&state2.memory.memory, memory_dimensions, &hasher).root();
-    assert_eq!(root1, root2, "Memory states differ");
+
+    let memory1 = &state1.memory.memory;
+    let memory2 = &state2.memory.memory;
+    assert_eq!(
+        memory1.config.len(),
+        memory1.mem.len(),
+        "First memory state has inconsistent address-space metadata"
+    );
+    assert_eq!(
+        memory2.config.len(),
+        memory2.mem.len(),
+        "Second memory state has inconsistent address-space metadata"
+    );
+    assert_eq!(
+        memory1.config.len(),
+        memory2.config.len(),
+        "Memory address-space counts differ"
+    );
+
+    for (addr_space, ((config1, data1), (config2, data2))) in memory1
+        .config
+        .iter()
+        .zip(&memory1.mem)
+        .zip(memory2.config.iter().zip(&memory2.mem))
+        .enumerate()
+    {
+        assert_eq!(
+            config1.num_cells, config2.num_cells,
+            "Memory sizes differ in address space {addr_space}"
+        );
+        assert_eq!(
+            config1.layout, config2.layout,
+            "Memory layouts differ in address space {addr_space}"
+        );
+
+        let bytes1 = data1.as_slice();
+        let bytes2 = data2.as_slice();
+        assert_eq!(
+            bytes1.len(),
+            bytes2.len(),
+            "Memory byte lengths differ in address space {addr_space}"
+        );
+        if bytes1 != bytes2 {
+            let offset = bytes1.iter().zip(bytes2).position(|(a, b)| a != b).unwrap();
+            panic!(
+                "Memory states differ at address space {addr_space}, byte offset {offset}: {} != {}",
+                bytes1[offset], bytes2[offset]
+            );
+        }
+    }
 }
