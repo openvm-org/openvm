@@ -12,8 +12,8 @@ use openvm_circuit::{
     arch::{
         rvr::{
             preflight_compile_invocations_for_test, reset_preflight_compile_invocations_for_test,
-            DeltaMemoryLogEntry, LogNativeAssemblerRegistry, RvrPreflightEngine,
-            RvrPreflightOutput, RvrPreflightRoute, VmRvrLogNativeExtension,
+            LogNativeAssemblerRegistry, RvrPreflightEngine, RvrPreflightOutput, RvrPreflightRoute,
+            VmRvrLogNativeExtension,
         },
         verify_segments, AddressSpaceHostLayout, ContinuationVmProver, DenseRecordArena,
         ExecutionError, MatrixRecordArena, Streams, VirtualMachine, VmInstance,
@@ -483,8 +483,7 @@ fn rvr_preflight_inline_addsub_records_match_assembler() {
         .program_log
         .iter()
         .filter(|entry| {
-            let slot =
-                ((entry.pc - u64::from(exe.program.pc_base)) / u64::from(DEFAULT_PC_STEP)) as usize;
+            let slot = ((entry.pc() - exe.program.pc_base) / DEFAULT_PC_STEP) as usize;
             on_output
                 .inline_pc_slots
                 .get(slot)
@@ -2047,7 +2046,7 @@ fn program_ts_at_pc(output: &RvrPreflightOutput<F>, pc: u64, nth: usize) -> u32 
         .raw_logs
         .program_log
         .iter()
-        .filter(|entry| entry.pc == pc)
+        .filter(|entry| u64::from(entry.pc()) == pc)
         .nth(nth)
         .expect("pc must be in the program log")
         .timestamp
@@ -2155,7 +2154,7 @@ fn assert_load_to_x0_timestamp_tick(output: &RvrPreflightOutput<F>) {
         .raw_logs
         .program_log
         .iter()
-        .position(|entry| entry.pc == u64::from(load_pc))
+        .position(|entry| entry.pc() == load_pc)
         .expect("load-to-x0 instruction must be in program log");
     let load_timestamp = output.raw_logs.program_log[load_idx].timestamp;
     let next_timestamp = output.raw_logs.program_log[load_idx + 1].timestamp;
@@ -2190,13 +2189,13 @@ fn assert_phantom_timestamp_tick(
         .raw_logs
         .program_log
         .iter()
-        .find(|entry| entry.pc == u64::from(phantom_pc))
+        .find(|entry| entry.pc() == phantom_pc)
         .expect("phantom program-log entry");
     let next_entry = output
         .raw_logs
         .program_log
         .iter()
-        .find(|entry| entry.pc == u64::from(next_pc))
+        .find(|entry| entry.pc() == next_pc)
         .expect("post-phantom program-log entry");
     assert_eq!(
         next_entry.timestamp,
@@ -2210,7 +2209,7 @@ fn assert_phantom_timestamp_tick(
         .inline_records
         .iter()
         .flat_map(|chip| chip.bytes.chunks_exact(chip.record_size))
-        .find(|r| u64::from(u32::from_le_bytes(r[0..4].try_into().unwrap())) == next_entry.pc)
+        .find(|r| u32::from_le_bytes(r[0..4].try_into().unwrap()) == next_entry.pc())
         .map(|r| u32::from_le_bytes(r[4..8].try_into().unwrap()))
         .expect("instruction after the phantom must emit a compact record");
     assert_eq!(
@@ -3604,67 +3603,52 @@ fn rvr_preflight_hintstore_direct_final_matches_verbose_twice() {
             .expect("HintStore direct preflight");
         if pass == 1 {
             let full_memory_log = direct_output.raw_logs.memory_log.clone();
-            let (_compact_arena, compact_target) = DenseRecordArena::stage_arena_native(
+            let (mut compact_arena, compact_target) = DenseRecordArena::stage_arena_native(
                 heights[hint_air] as usize,
                 capacities[hint_air].1,
                 &geometry,
             );
             let compact_targets = BTreeMap::from([(hint_air, compact_target)]);
-            let mut compact_output = direct_instance
+            let compact_output = direct_instance
                 .execute_preflight_from_state_with_compact_delta_memory_for_test(
                     direct_vm.create_initial_state(&exe, streams.clone()),
                     Some(retired),
                     &heights,
                     &compact_targets,
                 )
-                .expect("HintStore compact residual-memory writer");
+                .expect("HintStore compact direct preflight");
             assert!(
-                compact_output.raw_logs.memory_log.is_empty(),
-                "compact residual arm must not retain the full memory schema"
+                !full_memory_log.is_empty(),
+                "HintStore regression fixture must exercise predecessor-bearing chronology"
             );
             assert!(
-                !compact_output.raw_logs.delta_memory_log.is_empty(),
-                "HintStore fixture must emit residual memory chronology"
+                compact_output.raw_logs.memory_log.is_empty()
+                    && !compact_output.raw_logs.delta_memory_log.is_empty(),
+                "HintStore compact route must retain only the 24-byte residual-memory wire"
             );
-            assert_eq!(
-                full_memory_log.len(),
-                compact_output.raw_logs.delta_memory_log.len(),
-                "compact residual writer must preserve record count"
-            );
-            for (index, (full, compact)) in full_memory_log
-                .iter()
-                .zip(&compact_output.raw_logs.delta_memory_log)
-                .enumerate()
-            {
-                assert_eq!(
-                    *compact,
-                    DeltaMemoryLogEntry {
-                        timestamp: full.timestamp,
-                        address: u32::try_from(full.address)
-                            .expect("OpenVM residual address must fit u32"),
-                        value: full.value,
-                        kind: full.kind,
-                        addr_space: full.addr_space,
-                        width: full.width,
-                        complete: 1,
-                        _reserved: 0,
-                    },
-                    "compact residual entry {index} must retain every decoded field"
-                );
-            }
             assert_system_records_eq(
-                "HintStore compact residual writer",
+                "HintStore compact direct",
                 &oracle_output.system_records,
                 &compact_output.system_records,
             );
-
-            // Decode the independently C-emitted compact chronology while
-            // retaining the normal arm's access replay for any non-direct
-            // residual records. This tests semantic arena equality without
-            // weakening the production fail-closed access-aux guard.
-            direct_output.raw_logs.memory_log.clear();
-            direct_output.raw_logs.delta_memory_log =
-                std::mem::take(&mut compact_output.raw_logs.delta_memory_log);
+            let compact_rows = compact_output
+                .arena_native_written
+                .iter()
+                .find(|&&(air, _)| air == hint_air)
+                .map(|&(_, rows)| rows as usize)
+                .expect("HintStore compact written rows");
+            let compact_bytes = compact_output
+                .arena_native_written_bytes
+                .iter()
+                .find(|&&(air, _)| air == hint_air)
+                .map(|&(_, bytes)| bytes as usize)
+                .expect("HintStore compact written bytes");
+            compact_arena.finish_arena_native_sized(compact_rows, compact_bytes, &geometry);
+            assert_eq!(
+                compact_arena.allocated(),
+                oracle_arenas[hint_air].allocated(),
+                "HintStore compact direct-final bytes must match the verbose assembler"
+            );
         }
         assert_system_records_eq(
             &format!("HintStore direct pass {pass}"),

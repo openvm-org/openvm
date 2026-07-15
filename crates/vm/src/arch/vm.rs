@@ -1416,8 +1416,7 @@ where
                     let pc_base = u64::from(exe.program.pc_base);
                     let pc_step = u64::from(openvm_instructions::program::DEFAULT_PC_STEP);
                     for entry in &rvr_output.raw_logs.program_log {
-                        let Some(slot) = entry
-                            .pc
+                        let Some(slot) = u64::from(entry.pc())
                             .checked_sub(pc_base)
                             .map(|offset| (offset / pc_step) as usize)
                         else {
@@ -2172,6 +2171,7 @@ where
                                 // backing, not the per-AIR G2 wire targets.
                                 wire_airs.clear();
                             }
+                            let compact_delta_memory = fully_direct_delta && has_device_delta_route;
                             wire_airs.sort_unstable();
                             CachedRvrPreflight::Rvr(Box::new(CachedRvrCompiledPreflight {
                                 compiled,
@@ -2182,7 +2182,7 @@ where
                                 wire_airs,
                                 build_access_aux: !(fully_direct_delta
                                     && (has_device_delta_route || all_custom_arena)),
-                                compact_delta_memory: fully_direct_delta && has_device_delta_route,
+                                compact_delta_memory,
                             }))
                         }
                         RvrPreflightRoute::Interpreter(_) => CachedRvrPreflight::Interpreter,

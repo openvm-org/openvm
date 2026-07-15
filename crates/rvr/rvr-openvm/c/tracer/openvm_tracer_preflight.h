@@ -50,12 +50,13 @@ static __attribute__((always_inline)) inline void nt_store_u32(
 }
 
 typedef struct ProgramLogEntry {
-  uint16_t opcode;
-  uint16_t write_complete;
   uint32_t timestamp;
-  uint64_t pc;
+  /* OpenVM pcs are 4-byte aligned; bit 0 is the writer-complete guard. */
+  uint32_t pc_and_flags;
   uint64_t write_value;
 } ProgramLogEntry;
+
+static constexpr uint32_t PREFLIGHT_PROGRAM_WRITE_COMPLETE = 1u;
 
 typedef struct MemoryLogEntry {
   uint32_t timestamp;
@@ -153,21 +154,23 @@ typedef struct Tracer {
    * cross-AIR stream, so record order makes prev-timestamps reconstructible
    * on the device. */
   ChipRecordBuf* delta_records;
+  /* Instruction-local full predecessor capture for custom direct-final
+   * emitters when memory_log points at compact 24-byte entries. UINT32_MAX
+   * means inactive. The Rust caller owns the bounded scratch backing. */
+  MemoryLogEntry* custom_memory_scratch;
+  uint32_t custom_memory_scratch_len;
+  uint32_t custom_memory_scratch_cap;
 } Tracer;
 
 _Static_assert(sizeof(ProgramLogEntry) == PREFLIGHT_PROGRAM_LOG_ENTRY_SIZE,
                "ProgramLogEntry size drift");
 _Static_assert(_Alignof(ProgramLogEntry) == PREFLIGHT_PROGRAM_LOG_ENTRY_ALIGN,
                "ProgramLogEntry align drift");
-_Static_assert(offsetof(ProgramLogEntry, opcode) == 0,
-               "ProgramLogEntry opcode offset drift");
-_Static_assert(offsetof(ProgramLogEntry, write_complete) == 2,
-               "ProgramLogEntry write_complete offset drift");
-_Static_assert(offsetof(ProgramLogEntry, timestamp) == 4,
+_Static_assert(offsetof(ProgramLogEntry, timestamp) == 0,
                "ProgramLogEntry timestamp offset drift");
-_Static_assert(offsetof(ProgramLogEntry, pc) == 8,
-               "ProgramLogEntry pc offset drift");
-_Static_assert(offsetof(ProgramLogEntry, write_value) == 16,
+_Static_assert(offsetof(ProgramLogEntry, pc_and_flags) == 4,
+               "ProgramLogEntry pc_and_flags offset drift");
+_Static_assert(offsetof(ProgramLogEntry, write_value) == 8,
                "ProgramLogEntry write_value offset drift");
 _Static_assert(sizeof(MemoryLogEntry) == PREFLIGHT_MEMORY_LOG_ENTRY_SIZE,
                "MemoryLogEntry size drift");
@@ -261,6 +264,12 @@ _Static_assert(offsetof(Tracer, chip_records) == 96,
                "Tracer chip_records offset drift");
 _Static_assert(offsetof(Tracer, delta_records) == 120,
                "Tracer delta_records offset drift");
+_Static_assert(offsetof(Tracer, custom_memory_scratch) == 128,
+               "Tracer custom_memory_scratch offset drift");
+_Static_assert(offsetof(Tracer, custom_memory_scratch_len) == 136,
+               "Tracer custom_memory_scratch_len offset drift");
+_Static_assert(offsetof(Tracer, custom_memory_scratch_cap) == 140,
+               "Tracer custom_memory_scratch_cap offset drift");
 _Static_assert(offsetof(Tracer, exec_frequencies) == 104,
                "Tracer exec_frequencies offset drift");
 _Static_assert(offsetof(Tracer, exec_frequencies_len) == 112,
@@ -352,13 +361,17 @@ static __attribute__((always_inline)) inline uint32_t* preflight_shadow_for(
 
 static __attribute__((always_inline)) inline void preflight_append_program(
     Tracer* restrict t, uint64_t pc) {
+  if (unlikely(pc > UINT32_MAX || (pc & 3u) != 0u)) {
+    if (t->delta_records != NULL) {
+      t->delta_records->flags |= PREFLIGHT_RECORD_OVERFLOW;
+    }
+    return;
+  }
   uint32_t idx = t->program_log_len++;
   if (likely(idx < t->program_log_cap)) {
     ProgramLogEntry entry = {
-        .opcode = 0,
-        .write_complete = 0,
-        .pc = pc,
         .timestamp = t->timestamp,
+        .pc_and_flags = (uint32_t)pc,
         .write_value = 0,
     };
     t->program_log[idx] = entry;
@@ -382,25 +395,28 @@ static __attribute__((always_inline)) inline uint64_t preflight_read_pv_block(
   return v;
 }
 
-/* Materialize a chronology seed only for the first access to a block. This
- * keeps touch-only extension records writer-complete without turning every
- * touch into another witness read. */
 static __attribute__((always_inline)) inline uint64_t
-preflight_first_touch_value(RvState* restrict state, uint8_t addr_space,
-                            uint64_t block_addr) {
-  Tracer* restrict t = state->tracer;
-  uint32_t block_idx = (uint32_t)(block_addr / WORD_SIZE);
-  if (preflight_shadow_for(t, addr_space)[block_idx] != 0u) {
-    return 0u;
-  }
+preflight_read_block_for_seed(RvState* restrict state, uint8_t addr_space,
+                              uint64_t block_addr) {
   if (addr_space == AS_REGISTER) {
     uint32_t reg = (uint32_t)(block_addr / WORD_SIZE);
     return reg == 0u ? 0u : state->regs[reg];
   }
   if (addr_space == AS_PUBLIC_VALUES) {
-    return preflight_read_pv_block(t, block_addr);
+    return preflight_read_pv_block(state->tracer, block_addr);
   }
   return preflight_read_mem_block(state, block_addr);
+}
+
+static __attribute__((always_inline)) inline void preflight_append_touched(
+    Tracer* restrict t, uint8_t addr_space, uint64_t block_addr,
+    uint64_t initial_value) {
+  uint32_t ti = t->touched_len++;
+  if (likely(ti < t->touched_cap)) {
+    t->touched[ti].addr_space = addr_space;
+    t->touched[ti].block_addr = (uint32_t)block_addr;
+    t->touched[ti].initial_value = initial_value;
+  }
 }
 
 static __attribute__((always_inline)) inline uint64_t preflight_patch_mem_block(
@@ -409,6 +425,50 @@ static __attribute__((always_inline)) inline uint64_t preflight_patch_mem_block(
   uint64_t mask = width == WORD_SIZE ? UINT64_MAX
                                      : ((1ull << (width * 8u)) - 1ull);
   return (block & ~(mask << shift)) | ((value & mask) << shift);
+}
+
+static __attribute__((always_inline)) inline bool
+preflight_compact_residual_memory(Tracer* restrict t) {
+  return t->delta_records != NULL &&
+         (t->delta_records->flags &
+          PREFLIGHT_RECORD_COMPACT_RESIDUAL_MEMORY) != 0u;
+}
+
+/* Custom VecHeap emitters run after their traced accesses, so compact residual
+ * entries no longer contain the predecessor fields they need. Capture only
+ * that instruction's events in bounded scratch; ordinary instructions pay a
+ * single predictable inactive check and write no side log. */
+static __attribute__((always_inline)) inline void
+preflight_begin_custom_memory_capture(RvState* restrict state) {
+  Tracer* restrict t = state->tracer;
+  if (preflight_compact_residual_memory(t)) {
+    if (unlikely(t->custom_memory_scratch == NULL ||
+                 t->custom_memory_scratch_cap == 0u)) {
+      t->delta_records->flags |= PREFLIGHT_RECORD_OVERFLOW;
+      t->custom_memory_scratch_len = UINT32_MAX;
+      return;
+    }
+    t->custom_memory_scratch_len = 0u;
+  }
+}
+
+static __attribute__((always_inline)) inline MemoryLogEntry*
+preflight_take_custom_memory_events(Tracer* restrict t, uint32_t event_count) {
+  if (!preflight_compact_residual_memory(t)) {
+    if (unlikely(t->memory_log_len < event_count ||
+                 t->memory_log_len > t->memory_log_cap)) {
+      return NULL;
+    }
+    return t->memory_log + t->memory_log_len - event_count;
+  }
+  uint32_t captured = t->custom_memory_scratch_len;
+  t->custom_memory_scratch_len = UINT32_MAX;
+  if (unlikely(captured != event_count ||
+               event_count > t->custom_memory_scratch_cap)) {
+    t->delta_records->flags |= PREFLIGHT_RECORD_OVERFLOW;
+    return NULL;
+  }
+  return t->custom_memory_scratch;
 }
 
 /* Advance the timestamp, update the block's shadow entry, and record the block
@@ -431,38 +491,72 @@ static __attribute__((always_inline)) inline uint32_t preflight_touch(
   uint32_t prev_timestamp = shadow[block_idx];
   shadow[block_idx] = timestamp;
   if (prev_timestamp == 0u) {
-    uint32_t ti = t->touched_len++;
-    if (likely(ti < t->touched_cap)) {
-      t->touched[ti].addr_space = addr_space;
-      t->touched[ti].block_addr = (uint32_t)block_addr;
-      t->touched[ti].initial_value = initial_value;
-    }
+    preflight_append_touched(t, addr_space, block_addr, initial_value);
   }
 
   *out_timestamp = timestamp;
   return prev_timestamp;
 }
 
-/* Append one self-contained memory event. `address` need not be block-aligned;
- * the shadow index and touched-block key are derived from the aligned block.
- * `prev_value` is the block's value before this access (only consumed for
- * writes) and is supplied by the caller, which holds the store pointer. */
-static __attribute__((always_inline)) inline uint32_t preflight_append_memory(
-    Tracer* restrict t, uint8_t kind, uint8_t addr_space, uint64_t address,
-    uint8_t width, uint64_t value, uint64_t prev_value) {
-  bool compact_residual =
-      t->delta_records != NULL &&
-      (t->delta_records->flags & PREFLIGHT_RECORD_COMPACT_RESIDUAL_MEMORY) != 0u;
-  if (unlikely(compact_residual && address > UINT32_MAX)) {
-    t->delta_records->flags |= PREFLIGHT_RECORD_OVERFLOW;
-    return 0;
-  }
-  uint32_t timestamp;
-  uint32_t prev_timestamp =
-      preflight_touch(t, addr_space, address, prev_value, &timestamp);
+/* Touch-only custom-family access. Resolve the first-touch seed after the
+ * shadow transition so the common path performs one shadow load, not the
+ * prior probe followed by a second lookup in `preflight_touch`. */
+static __attribute__((always_inline)) inline uint32_t
+preflight_touch_seed_from_state(RvState* restrict state, uint8_t addr_space,
+                                uint64_t address,
+                                uint64_t* restrict out_initial_value,
+                                uint32_t* restrict out_timestamp) {
+  Tracer* restrict t = state->tracer;
+  uint32_t timestamp = t->timestamp++;
+  uint64_t block_addr = preflight_block_addr(address);
+  uint32_t block_idx = (uint32_t)(block_addr / WORD_SIZE);
 
+  uint32_t* restrict shadow = preflight_shadow_for(t, addr_space);
+  uint32_t prev_timestamp = shadow[block_idx];
+  uint64_t initial_value = 0u;
+  if (prev_timestamp == 0u) {
+    initial_value =
+        preflight_read_block_for_seed(state, addr_space, block_addr);
+  }
+  shadow[block_idx] = timestamp;
+  if (prev_timestamp == 0u) {
+    preflight_append_touched(t, addr_space, block_addr, initial_value);
+  }
+
+  *out_initial_value = initial_value;
+  *out_timestamp = timestamp;
+  return prev_timestamp;
+}
+
+static __attribute__((always_inline)) inline void
+preflight_append_memory_record(Tracer* restrict t, uint8_t kind,
+                               uint8_t addr_space, uint64_t address,
+                               uint8_t width, uint64_t value,
+                               uint64_t prev_value, uint32_t timestamp,
+                               uint32_t prev_timestamp,
+                               bool compact_residual) {
   uint32_t idx = t->memory_log_len++;
   if (likely(idx < t->memory_log_cap)) {
+    if (unlikely(t->custom_memory_scratch_len != UINT32_MAX)) {
+      uint32_t scratch_idx = t->custom_memory_scratch_len++;
+      if (likely(scratch_idx < t->custom_memory_scratch_cap)) {
+        MemoryLogEntry scratch_entry = {
+            .timestamp = timestamp,
+            .prev_timestamp = prev_timestamp,
+            .kind = kind,
+            .addr_space = addr_space,
+            .width = width,
+            ._pad0 = 0,
+            ._pad1 = 0,
+            .address = address,
+            .value = value,
+            .prev_value = prev_value,
+        };
+        t->custom_memory_scratch[scratch_idx] = scratch_entry;
+      } else {
+        t->delta_records->flags |= PREFLIGHT_RECORD_OVERFLOW;
+      }
+    }
     if (compact_residual) {
       DeltaMemoryLogEntry entry = {
           .timestamp = timestamp,
@@ -475,7 +569,7 @@ static __attribute__((always_inline)) inline uint32_t preflight_append_memory(
           ._reserved = 0,
       };
       ((DeltaMemoryLogEntry*)t->memory_log)[idx] = entry;
-      return prev_timestamp;
+      return;
     }
     MemoryLogEntry entry = {
         .timestamp = timestamp,
@@ -491,6 +585,26 @@ static __attribute__((always_inline)) inline uint32_t preflight_append_memory(
     };
     t->memory_log[idx] = entry;
   }
+}
+
+/* Append one self-contained memory event. `address` need not be block-aligned;
+ * the shadow index and touched-block key are derived from the aligned block.
+ * `prev_value` is the block's value before this access (only consumed for
+ * writes) and is supplied by the caller, which holds the store pointer. */
+static __attribute__((always_inline)) inline uint32_t preflight_append_memory(
+    Tracer* restrict t, uint8_t kind, uint8_t addr_space, uint64_t address,
+    uint8_t width, uint64_t value, uint64_t prev_value) {
+  bool compact_residual = preflight_compact_residual_memory(t);
+  if (unlikely(compact_residual && address > UINT32_MAX)) {
+    t->delta_records->flags |= PREFLIGHT_RECORD_OVERFLOW;
+    return 0;
+  }
+  uint32_t timestamp;
+  uint32_t prev_timestamp =
+      preflight_touch(t, addr_space, address, prev_value, &timestamp);
+  preflight_append_memory_record(t, kind, addr_space, address, width, value,
+                                 prev_value, timestamp, prev_timestamp,
+                                 compact_residual);
   return prev_timestamp;
 }
 
@@ -525,9 +639,15 @@ static __attribute__((always_inline)) inline uint32_t trace_reg_write(
  * block's previous-access timestamp. */
 static __attribute__((always_inline)) inline uint32_t trace_mem_touch(
     RvState* restrict state, uint64_t block_addr, uint64_t block_value) {
-  uint32_t timestamp;
-  return preflight_touch(state->tracer, AS_MEMORY, block_addr, block_value,
-                         &timestamp);
+  Tracer* restrict t = state->tracer;
+  uint32_t timestamp = t->timestamp++;
+  uint32_t block_idx = (uint32_t)(block_addr / WORD_SIZE);
+  uint32_t prev_timestamp = t->shadow_memory[block_idx];
+  t->shadow_memory[block_idx] = timestamp;
+  if (prev_timestamp == 0u) {
+    preflight_append_touched(t, AS_MEMORY, block_addr, block_value);
+  }
+  return prev_timestamp;
 }
 
 /* Store-side variant: only read the pre-write block when it is the seed for
@@ -535,12 +655,18 @@ static __attribute__((always_inline)) inline uint32_t trace_mem_touch(
 static __attribute__((always_inline)) inline uint32_t trace_mem_store_touch(
     RvState* restrict state, uint64_t block_addr) {
   Tracer* restrict t = state->tracer;
+  uint32_t timestamp = t->timestamp++;
   uint32_t block_idx = (uint32_t)(block_addr / WORD_SIZE);
-  uint64_t initial_value = t->shadow_memory[block_idx] == 0u
-                               ? rd_mem_u64(state->memory, block_addr)
-                               : 0u;
-  uint32_t timestamp;
-  return preflight_touch(t, AS_MEMORY, block_addr, initial_value, &timestamp);
+  uint32_t prev_timestamp = t->shadow_memory[block_idx];
+  uint64_t initial_value = 0u;
+  if (prev_timestamp == 0u) {
+    initial_value = rd_mem_u64(state->memory, block_addr);
+  }
+  t->shadow_memory[block_idx] = timestamp;
+  if (prev_timestamp == 0u) {
+    preflight_append_touched(t, AS_MEMORY, block_addr, initial_value);
+  }
+  return prev_timestamp;
 }
 
 /* Touch-only public-values block access for inline REVEAL records. Mirrors
@@ -549,13 +675,18 @@ static __attribute__((always_inline)) inline uint32_t trace_mem_store_touch(
 static __attribute__((always_inline)) inline uint32_t trace_pv_touch(
     RvState* restrict state, uint64_t block_addr) {
   Tracer* restrict t = state->tracer;
+  uint32_t timestamp = t->timestamp++;
   uint32_t block_idx = (uint32_t)(block_addr / WORD_SIZE);
-  uint64_t initial_value = t->shadow_public_values[block_idx] == 0u
-                               ? preflight_read_pv_block(t, block_addr)
-                               : 0u;
-  uint32_t timestamp;
-  return preflight_touch(t, AS_PUBLIC_VALUES, block_addr, initial_value,
-                         &timestamp);
+  uint32_t prev_timestamp = t->shadow_public_values[block_idx];
+  uint64_t initial_value = 0u;
+  if (prev_timestamp == 0u) {
+    initial_value = preflight_read_pv_block(t, block_addr);
+  }
+  t->shadow_public_values[block_idx] = timestamp;
+  if (prev_timestamp == 0u) {
+    preflight_append_touched(t, AS_PUBLIC_VALUES, block_addr, initial_value);
+  }
+  return prev_timestamp;
 }
 
 /* Touch-only register access for opcodes migrated to inline compact records
@@ -567,12 +698,18 @@ static __attribute__((always_inline)) inline uint32_t trace_pv_touch(
 static __attribute__((always_inline)) inline uint32_t trace_reg_touch(
     RvState* restrict state, uint8_t idx) {
   Tracer* restrict t = state->tracer;
-  uint64_t initial_value = t->shadow_register[idx] == 0u
-                               ? (idx == 0 ? 0u : state->regs[idx])
-                               : 0u;
-  uint32_t timestamp;
-  return preflight_touch(t, AS_REGISTER, (uint32_t)idx * WORD_SIZE,
-                         initial_value, &timestamp);
+  uint32_t timestamp = t->timestamp++;
+  uint32_t prev_timestamp = t->shadow_register[idx];
+  uint64_t initial_value = 0u;
+  if (prev_timestamp == 0u) {
+    initial_value = idx == 0 ? 0u : state->regs[idx];
+  }
+  t->shadow_register[idx] = timestamp;
+  if (prev_timestamp == 0u) {
+    preflight_append_touched(t, AS_REGISTER, (uint32_t)idx * WORD_SIZE,
+                             initial_value);
+  }
+  return prev_timestamp;
 }
 
 static __attribute__((always_inline)) inline void
@@ -581,7 +718,7 @@ preflight_set_last_program_write_value(Tracer* restrict t, uint64_t value) {
              t->program_log_len <= t->program_log_cap)) {
     ProgramLogEntry* restrict entry = &t->program_log[t->program_log_len - 1u];
     entry->write_value = value;
-    entry->write_complete = 1u;
+    entry->pc_and_flags |= PREFLIGHT_PROGRAM_WRITE_COMPLETE;
   }
 }
 
@@ -936,23 +1073,41 @@ static __attribute__((always_inline)) inline void trace_wr_mem_u64_range(
 static __attribute__((always_inline)) inline void trace_mem_access(
     RvState* restrict state, uint64_t addr, uint32_t addr_space) {
   uint64_t block_addr = preflight_block_addr(addr);
-  uint64_t initial_value = preflight_first_touch_value(
-      state, (uint8_t)addr_space, block_addr);
-  preflight_append_memory(state->tracer, PREFLIGHT_MEMORY_KIND_TOUCH,
-                          (uint8_t)addr_space, block_addr, 0, 0,
-                          initial_value);
+  bool compact_residual =
+      preflight_compact_residual_memory(state->tracer);
+  if (unlikely(compact_residual && block_addr > UINT32_MAX)) {
+    state->tracer->delta_records->flags |= PREFLIGHT_RECORD_OVERFLOW;
+    return;
+  }
+  uint32_t timestamp;
+  uint64_t initial_value;
+  uint32_t prev_timestamp = preflight_touch_seed_from_state(
+      state, (uint8_t)addr_space, block_addr, &initial_value, &timestamp);
+  preflight_append_memory_record(
+      state->tracer, PREFLIGHT_MEMORY_KIND_TOUCH, (uint8_t)addr_space,
+      block_addr, 0, 0, initial_value, timestamp, prev_timestamp,
+      compact_residual);
 }
 
 static __attribute__((always_inline)) inline void trace_mem_access_u64_range(
     RvState* restrict state, uint64_t base_addr, uint32_t num_dwords,
     uint32_t addr_space) {
+  bool compact_residual =
+      preflight_compact_residual_memory(state->tracer);
   for (uint32_t i = 0; i < num_dwords; i++) {
     uint64_t block_addr = base_addr + i * WORD_SIZE;
-    uint64_t initial_value = preflight_first_touch_value(
-        state, (uint8_t)addr_space, block_addr);
-    preflight_append_memory(state->tracer, PREFLIGHT_MEMORY_KIND_TOUCH,
-                            (uint8_t)addr_space, block_addr, WORD_SIZE, 0,
-                            initial_value);
+    if (unlikely(compact_residual && block_addr > UINT32_MAX)) {
+      state->tracer->delta_records->flags |= PREFLIGHT_RECORD_OVERFLOW;
+      return;
+    }
+    uint32_t timestamp;
+    uint64_t initial_value;
+    uint32_t prev_timestamp = preflight_touch_seed_from_state(
+        state, (uint8_t)addr_space, block_addr, &initial_value, &timestamp);
+    preflight_append_memory_record(
+        state->tracer, PREFLIGHT_MEMORY_KIND_TOUCH, (uint8_t)addr_space,
+        block_addr, WORD_SIZE, 0, initial_value, timestamp, prev_timestamp,
+        compact_residual);
   }
 }
 

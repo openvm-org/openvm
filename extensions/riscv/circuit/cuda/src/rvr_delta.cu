@@ -68,13 +68,13 @@ struct ResidualMemoryEvent {
 };
 
 struct ProgramLogEntry {
-    uint16_t opcode;
-    uint16_t write_complete;
     uint32_t timestamp;
-    uint64_t pc;
+    uint32_t pc_and_flags;
     uint64_t write_value;
 };
-static_assert(sizeof(ProgramLogEntry) == 24, "program log size drift");
+static_assert(sizeof(ProgramLogEntry) == 16, "program log size drift");
+
+static constexpr uint32_t PROGRAM_WRITE_COMPLETE = 1u;
 
 struct TouchedBlock {
     uint32_t addr_space;
@@ -607,21 +607,21 @@ __global__ void build_events(
         size_t local = idx - program_begin;
         ProgramLogEntry program_entry = program[local / 3];
         uint32_t access_slot = local % 3;
-        if (program_entry.pc <= UINT32_MAX && program_entry.pc >= pc_base &&
-            ((uint32_t(program_entry.pc) - pc_base) % PC_STEP) == 0) {
-            size_t table_slot = (uint32_t(program_entry.pc) - pc_base) / PC_STEP;
+        uint32_t program_pc = program_entry.pc_and_flags & ~PROGRAM_WRITE_COMPLETE;
+        if (program_pc >= pc_base && ((program_pc - pc_base) % PC_STEP) == 0) {
+            size_t table_slot = (program_pc - pc_base) / PC_STEP;
             if (table_slot < operand_count) {
                 RvrOperandEntry entry = table[table_slot];
                 if (entry.air_idx < num_airs && entry.access_pattern <= DELTA_RW1 &&
                     arena_native_flags[entry.air_idx]) {
-                DeltaRecord synthetic{uint32_t(program_entry.pc), program_entry.timestamp, 0, 0};
+                DeltaRecord synthetic{program_pc, program_entry.timestamp, 0, 0};
                 uint8_t as;
                 uint64_t address;
                 if (delta_access(synthetic, entry, access_slot, as, address)) {
                     payload.address_key = address_key(as, address, error);
                     payload.timestamp = program_entry.timestamp + access_slot;
                     if (delta_write_access(entry, access_slot)) {
-                        if (program_entry.write_complete != 1) {
+                        if ((program_entry.pc_and_flags & PROGRAM_WRITE_COMPLETE) == 0) {
                             fail(error, 16);
                             return;
                         }

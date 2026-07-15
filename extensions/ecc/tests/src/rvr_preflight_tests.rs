@@ -120,7 +120,7 @@ fn assert_ecc_timestamp_deltas(
     output: &RvrPreflightOutput<F>,
 ) {
     for (idx, entry) in output.raw_logs.program_log.iter().enumerate() {
-        let pc = entry.pc as u32;
+        let pc = entry.pc();
         let instruction_idx = ((pc - exe.program.pc_base) / 4) as usize;
         let Some((instruction, _)) = &exe.program.instructions_and_debug_infos[instruction_idx]
         else {
@@ -424,6 +424,7 @@ fn ecc_dense_direct(
     exe: &VmExe<F>,
     config: &Rv64WeierstrassConfig,
     retired: u64,
+    compact_memory: bool,
 ) -> (SystemRecords<F>, Vec<DenseRecordArena>) {
     std::env::remove_var("OPENVM_RVR_INLINE_RECORDS");
     std::env::remove_var("OPENVM_RVR_ARENA_NATIVE");
@@ -473,24 +474,42 @@ fn ecc_dense_direct(
         targets.insert(air, target);
         staged.push((air, geometry, arena));
     }
-    let mut output = instance
-        .execute_preflight_from_state_with_arena_targets(
-            vm.create_initial_state(exe, Streams::default()),
-            Some(retired),
-            &heights,
-            &targets,
+    let state = vm.create_initial_state(exe, Streams::default());
+    let mut output = if compact_memory {
+        instance
+            .execute_preflight_from_state_with_compact_delta_memory_for_test(
+                state,
+                Some(retired),
+                &heights,
+                &targets,
+            )
+            .expect("compact direct-final ECC preflight")
+    } else {
+        instance
+            .execute_preflight_from_state_with_arena_targets(
+                state,
+                Some(retired),
+                &heights,
+                &targets,
+            )
+            .expect("direct-final ECC preflight")
+    };
+    let mut arenas = if compact_memory {
+        (0..capacities.len())
+            .map(|_| DenseRecordArena::with_byte_capacity(0))
+            .collect()
+    } else {
+        let mut registry = LogNativeAssemblerRegistry::new();
+        config.extend_rvr_log_native(&mut registry);
+        generate_record_arenas_from_logs::<F, DenseRecordArena>(
+            &registry,
+            exe,
+            &mut output,
+            &capacities,
+            &pc_to_air_idx,
         )
-        .expect("direct-final ECC preflight");
-    let mut registry = LogNativeAssemblerRegistry::new();
-    config.extend_rvr_log_native(&mut registry);
-    let mut arenas = generate_record_arenas_from_logs::<F, DenseRecordArena>(
-        &registry,
-        exe,
-        &mut output,
-        &capacities,
-        &pc_to_air_idx,
-    )
-    .expect("ECC direct residual record assembly");
+        .expect("ECC direct residual record assembly")
+    };
     for (air, geometry, mut arena) in staged {
         let written = output
             .arena_native_written
@@ -533,9 +552,13 @@ fn test_weierstrass_rvr_direct_final_bytes_match_verbose_twice() -> Result<()> {
         };
         let ecc_airs = ecc_air_ids(&exe, &pc_to_air_idx);
         for pass in 0..2 {
-            let (direct_system, direct_arenas) = ecc_dense_direct(&exe, &config, retired);
+            let compact_memory = pass == 1;
+            let (direct_system, direct_arenas) =
+                ecc_dense_direct(&exe, &config, retired, compact_memory);
             assert_system_records_eq(
-                &format!("{label} ECC direct-final byte oracle pass {pass}"),
+                &format!(
+                    "{label} ECC direct-final byte oracle compact={compact_memory} pass {pass}"
+                ),
                 &oracle_system,
                 &direct_system,
             );

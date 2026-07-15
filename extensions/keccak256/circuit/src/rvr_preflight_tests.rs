@@ -345,7 +345,7 @@ fn assert_keccakf_write_only_accesses(exe: &VmExe<F>, output: &RvrPreflightOutpu
     let mut checked = 0;
     for program_entry in &output.raw_logs.program_log {
         let instruction = &exe.program.instructions_and_debug_infos
-            [(program_entry.pc as u32 / DEFAULT_PC_STEP) as usize]
+            [(program_entry.pc() / DEFAULT_PC_STEP) as usize]
             .as_ref()
             .unwrap()
             .0;
