@@ -37,7 +37,7 @@ on:
         default: false
 
 concurrency:
-  group: benchmarks-${{ github.event.pull_request.number || github.sha }}
+  group: ${{ github.workflow_ref }}-benchmarks-${{ github.event.action == 'labeled' && github.event.label.name != 'run-benchmark' && github.event.label.name != 'run-benchmark-e2e' && github.run_id || github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
 env:

@@ -20,6 +20,7 @@ fn test_rv64im_riscv_vector_runtime() -> Result<()> {
     let skip_list = ["rv64ui-p-ma_data", "rv64ui-p-fence_i"];
     let config = Rv64ImConfig::default();
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("riscv-test-vectors/tests");
+    let mut failures = Vec::new();
     for entry in read_dir(dir)? {
         let entry = entry?;
         let path = entry.path();
@@ -55,12 +56,21 @@ fn test_rv64im_riscv_vector_runtime() -> Result<()> {
 
             match result {
                 Ok(Ok(_)) => println!("Passed!: {file_name}"),
-                Ok(Err(e)) => println!("Failed: {file_name} with error: {e}"),
-                Err(_) => panic!("Panic occurred while running: {file_name}"),
+                Ok(Err(e)) => {
+                    println!("Failed: {file_name} with error: {e}");
+                    failures.push(format!("{file_name}: {e:#}"));
+                }
+                Err(_) => {
+                    println!("Panic occurred while running: {file_name}");
+                    failures.push(format!("{file_name}: panicked"));
+                }
             }
         }
     }
 
+    if !failures.is_empty() {
+        eyre::bail!("RISC-V runtime vectors failed:\n{}", failures.join("\n"));
+    }
     Ok(())
 }
 
@@ -74,6 +84,7 @@ fn test_rv64im_riscv_vector_prove() -> Result<()> {
     let config = Rv64ImConfig::default();
     let skip_list = ["rv64ui-p-ma_data", "rv64ui-p-fence_i"];
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("riscv-test-vectors/tests");
+    let mut failures = Vec::new();
     for entry in read_dir(dir)? {
         let entry = entry?;
         let path = entry.path();
@@ -98,10 +109,16 @@ fn test_rv64im_riscv_vector_prove() -> Result<()> {
 
             match result {
                 Ok(_) => println!("Passed!: {file_name}"),
-                Err(_) => println!("Panic occurred while running: {file_name}"),
+                Err(_) => {
+                    println!("Panic occurred while running: {file_name}");
+                    failures.push(format!("{file_name}: panicked"));
+                }
             }
         }
     }
 
+    if !failures.is_empty() {
+        eyre::bail!("RISC-V proving vectors failed:\n{}", failures.join("\n"));
+    }
     Ok(())
 }

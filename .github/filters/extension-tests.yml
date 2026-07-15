@@ -4,6 +4,7 @@ shared: &shared
   - "crates/circuits/**"
   - "crates/vm/**"
   - "crates/toolchain/**"
+  - "crates/rvr/**"
   - "Cargo.toml"
   - "Cargo.lock"
   - "rust-toolchain.toml"
@@ -12,6 +13,7 @@ shared: &shared
   - ".github/filters/extension-tests.yml"
   - ".github/workflows/extension-tests.group.yml"
   - ".github/workflows/extension-tests.yml"
+  - "ci/install-openvm-toolchain.sh"
 cuda:
   - ".github/actions/rust-cache-cuda/**"
   - ".github/workflows/extension-tests.cuda.yml"

@@ -10,6 +10,7 @@ on:
       - "crates/toolchain/**"
       - "crates/sdk/**"
       - "crates/sdk-config/**"
+      - "crates/rvr/**"
       - "extensions/**"
       - "Cargo.toml"
       - "Cargo.lock"
@@ -19,6 +20,7 @@ on:
       - ".github/filters/extension-tests.yml"
       - ".github/workflows/extension-tests.group.yml"
       - ".github/workflows/extension-tests.yml"
+      - "ci/install-openvm-toolchain.sh"
   pull_request:
     branches: ["**"]
     paths: *extension_test_paths
