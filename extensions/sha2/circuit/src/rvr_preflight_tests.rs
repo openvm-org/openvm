@@ -346,10 +346,10 @@ fn assert_segment_trace_matches_interpreter(
     label: &str,
     exe: &VmExe<F>,
     config: &Sha2Rv64Config,
-    from_state: Option<VmState<F>>,
+    from_state: Option<VmState>,
     num_insns: Option<u64>,
     trace_heights: &[u32],
-) -> VmState<F> {
+) -> VmState {
     let (mut interp_vm, _) =
         VirtualMachine::new_with_keygen(test_cpu_engine(), Sha2Rv64CpuBuilder, config.clone())
             .expect("interpreter vm init");
@@ -431,7 +431,7 @@ fn expected_digest_state(message: &[u8]) -> [u8; Sha256Config::STATE_BYTES] {
         .unwrap()
 }
 
-fn assert_final_digest(label: &str, state: &VmState<F>, expected: &[u8]) {
+fn assert_final_digest(label: &str, state: &VmState, expected: &[u8]) {
     let digest = unsafe {
         state
             .memory
@@ -772,7 +772,6 @@ fn rvr_sha256_pure_and_metered_match_interpreter() {
     let message = (0..120).map(|i| (i * 7) as u8).collect::<Vec<_>>();
     let (exe, _) = sha256_message_exe(&message, true);
     let config = Sha2Rv64Config::default();
-    let dimensions = config.system.memory_config.memory_dimensions();
     let (vm, _) =
         VirtualMachine::new_with_keygen(test_cpu_engine(), Sha2Rv64CpuBuilder, config.clone())
             .expect("vm init");
@@ -788,7 +787,7 @@ fn rvr_sha256_pure_and_metered_match_interpreter() {
         .expect("pure interpreter")
         .execute(Streams::default(), None)
         .expect("pure interpreter execution");
-    assert_vm_states_equivalent(&pure_rvr, &pure_interpreter, &dimensions);
+    assert_vm_states_equivalent(&pure_rvr, &pure_interpreter);
     assert_final_digest("pure", &pure_rvr, &expected);
 
     let (rvr_segments, metered_rvr) = vm
@@ -801,7 +800,7 @@ fn rvr_sha256_pure_and_metered_match_interpreter() {
         .expect("metered interpreter")
         .execute_metered(Streams::default(), vm.build_metered_ctx(&exe))
         .expect("metered interpreter execution");
-    assert_vm_states_equivalent(&metered_rvr, &metered_interpreter, &dimensions);
+    assert_vm_states_equivalent(&metered_rvr, &metered_interpreter);
     assert_eq!(rvr_segments.len(), interpreter_segments.len());
     for (rvr, interpreter) in rvr_segments.iter().zip(&interpreter_segments) {
         assert_eq!(rvr.instret_start, interpreter.instret_start);

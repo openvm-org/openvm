@@ -224,10 +224,10 @@ fn assert_trace_segment_matches(
     label: &str,
     exe: &VmExe<F>,
     config: &Keccak256Rv64Config,
-    from_state: openvm_circuit::arch::VmState<F>,
+    from_state: openvm_circuit::arch::VmState,
     num_insns: Option<u64>,
     trace_heights: &[u32],
-) -> (openvm_circuit::arch::VmState<F>, Vec<String>) {
+) -> (openvm_circuit::arch::VmState, Vec<String>) {
     let (mut interp_vm, _) =
         VirtualMachine::new_with_keygen(test_cpu_engine(), Keccak256Rv64CpuBuilder, config.clone())
             .expect("interpreter vm init");
@@ -595,8 +595,6 @@ fn rvr_keccak_pure_and_metered_match_interpreter() {
     let (vm, _) =
         VirtualMachine::new_with_keygen(test_cpu_engine(), Keccak256Rv64CpuBuilder, config.clone())
             .expect("vm init");
-    let dimensions = config.system.memory_config.memory_dimensions();
-
     let pure_rvr = vm
         .interpreter(&exe)
         .expect("rvr pure instance")
@@ -607,7 +605,7 @@ fn rvr_keccak_pure_and_metered_match_interpreter() {
         .expect("pure interpreter")
         .execute(Streams::default(), None)
         .expect("pure interpreter execution");
-    assert_vm_states_equivalent(&pure_rvr, &pure_interpreter, &dimensions);
+    assert_vm_states_equivalent(&pure_rvr, &pure_interpreter);
 
     let (rvr_segments, metered_rvr) = vm
         .get_metered_rvr_instance(&exe)
@@ -619,7 +617,7 @@ fn rvr_keccak_pure_and_metered_match_interpreter() {
         .expect("metered interpreter")
         .execute_metered(Streams::default(), vm.build_metered_ctx(&exe))
         .expect("metered interpreter execution");
-    assert_vm_states_equivalent(&metered_rvr, &metered_interpreter, &dimensions);
+    assert_vm_states_equivalent(&metered_rvr, &metered_interpreter);
     assert_eq!(rvr_segments.len(), interpreter_segments.len());
     for (rvr, interpreter) in rvr_segments.iter().zip(&interpreter_segments) {
         assert_eq!(rvr.instret_start, interpreter.instret_start);

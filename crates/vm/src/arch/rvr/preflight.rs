@@ -2192,7 +2192,7 @@ mod tests {
     }
 
     impl TestShadows {
-        fn new(vm_state: &VmState<BabyBear>, touched_cap: usize) -> Self {
+        fn new(vm_state: &VmState, touched_cap: usize) -> Self {
             let blocks = |addr_space: u32| {
                 vm_state.memory.memory.config[addr_space as usize]
                     .num_cells
@@ -2207,7 +2207,7 @@ mod tests {
             }
         }
 
-        fn attach(&mut self, vm_state: &mut VmState<BabyBear>, tracer: &mut PreflightTracerData) {
+        fn attach(&mut self, vm_state: &mut VmState, tracer: &mut PreflightTracerData) {
             let pv_base = public_values_slice(&mut vm_state.memory.memory).as_mut_ptr();
             tracer.set_shadows(
                 &mut self.register,
@@ -2421,7 +2421,7 @@ mod tests {
         let compiled = compile_preflight(&exe, &chips, None).expect("compile preflight");
         assert!(compiled.artifact_dir().is_some());
 
-        let mut vm_state: VmState<BabyBear> = VmState::initial(
+        let mut vm_state: VmState = VmState::initial(
             &test_system_config(),
             &exe.init_memory,
             exe.pc_start,
@@ -2578,7 +2578,7 @@ mod tests {
         let chips = phantom_chip_mapping(&exe);
         let compiled = compile_preflight(&exe, &chips, None).expect("compile preflight");
 
-        let mut vm_state: VmState<BabyBear> = VmState::initial(
+        let mut vm_state: VmState = VmState::initial(
             &test_system_config(),
             &exe.init_memory,
             exe.pc_start,
