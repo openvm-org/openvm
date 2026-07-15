@@ -2,7 +2,7 @@
 
 use std::ffi::c_void;
 
-use halo2curves_axiom::ff::PrimeField;
+use halo2curves_axiom::ff::{Field, PrimeField};
 use num_bigint::{BigInt, BigUint};
 use num_integer::Integer;
 use rvr_openvm_ext_ffi_common::{rd_mem_words_traced, wr_mem_words_traced, WORD_SIZE};
@@ -35,6 +35,58 @@ pub trait FieldArith {
     fn mul(&self, a: Self::Elem, b: Self::Elem) -> Self::Elem;
     fn div(&self, a: Self::Elem, b: Self::Elem) -> Self::Elem;
     fn is_eq(&self, a: &Self::Elem, b: &Self::Elem) -> bool;
+}
+
+// ── KnownFieldArith trait ─────────────────────────────────────────────────────
+
+/// Narrower trait for known (native) field types whose element type supports
+/// standard arithmetic via operator overloads. Implementing this trait
+/// automatically provides a full [`FieldArith`] impl via a blanket impl —
+/// only `read_elem` and `write_elem` need to be supplied.
+pub trait KnownFieldArith {
+    type Elem: Field;
+
+    /// # Safety
+    /// `state` must be a valid pointer to the C `RvState` struct.
+    unsafe fn read_elem(&self, state: *mut c_void, ptr: u64) -> Self::Elem;
+    /// # Safety
+    /// `state` must be a valid pointer to the C `RvState` struct.
+    unsafe fn write_elem(&self, state: *mut c_void, ptr: u64, val: &Self::Elem);
+}
+
+impl<T: KnownFieldArith> FieldArith for T {
+    type Elem = T::Elem;
+
+    #[inline(always)]
+    unsafe fn read_elem(&self, state: *mut c_void, ptr: u64) -> Self::Elem {
+        KnownFieldArith::read_elem(self, state, ptr)
+    }
+
+    #[inline(always)]
+    unsafe fn write_elem(&self, state: *mut c_void, ptr: u64, val: &Self::Elem) {
+        KnownFieldArith::write_elem(self, state, ptr, val)
+    }
+
+    #[inline(always)]
+    fn add(&self, a: Self::Elem, b: Self::Elem) -> Self::Elem {
+        a + b
+    }
+    #[inline(always)]
+    fn sub(&self, a: Self::Elem, b: Self::Elem) -> Self::Elem {
+        a - b
+    }
+    #[inline(always)]
+    fn mul(&self, a: Self::Elem, b: Self::Elem) -> Self::Elem {
+        a * b
+    }
+    #[inline(always)]
+    fn div(&self, a: Self::Elem, b: Self::Elem) -> Self::Elem {
+        a * b.invert().unwrap()
+    }
+    #[inline(always)]
+    fn is_eq(&self, a: &Self::Elem, b: &Self::Elem) -> bool {
+        a == b
+    }
 }
 
 // ── 256-bit / 384-bit field I/O ─────────────────────────────────────────────
@@ -180,6 +232,61 @@ pub fn mod_inverse(a: &BigUint, p: &BigUint) -> BigUint {
         .mod_floor(&BigInt::from(p.clone()))
         .to_biguint()
         .unwrap()
+}
+
+// ── FFI generation macros (shared by modular and fp2) ───────────────────────
+
+/// Generate a known-field FFI function. `$wrapper` must be a
+/// `PhantomData`-newtype that implements [`KnownFieldArith`] for `$field`.
+#[macro_export]
+macro_rules! known_field_op_fn {
+    ($name:ident, $wrapper:ident, $field:ty, $op:ident) => {
+        /// # Safety
+        /// `state` must be a valid `RvState` pointer.
+        #[no_mangle]
+        pub unsafe extern "C" fn $name(
+            state: *mut ::std::ffi::c_void,
+            rd: u64,
+            rs1: u64,
+            rs2: u64,
+        ) {
+            let f = $wrapper::<$field>(::std::marker::PhantomData);
+            $crate::exec_op(&f, state, rd, rs1, rs2, |f, a, b| {
+                $crate::FieldArith::$op(f, a, b)
+            });
+        }
+    };
+}
+
+/// Generate a generic (unknown-modulus) field-op FFI function.
+///
+/// `$field_ty` must be a struct with `modulus: BigUint` and `num_limbs: u32`
+/// fields that implements [`FieldArith`].
+#[macro_export]
+macro_rules! unknown_field_op_fn {
+    ($name:ident, $field_ty:ident, $op:ident) => {
+        /// # Safety
+        /// `state` must be a valid `RvState` pointer. `modulus_ptr` must point
+        /// to `num_limbs` bytes.
+        #[no_mangle]
+        pub unsafe extern "C" fn $name(
+            state: *mut ::std::ffi::c_void,
+            rd_ptr: u64,
+            rs1_ptr: u64,
+            rs2_ptr: u64,
+            num_limbs: u32,
+            modulus_ptr: *const u8,
+        ) {
+            let modulus = ::num_bigint::BigUint::from_bytes_le(::std::slice::from_raw_parts(
+                modulus_ptr,
+                num_limbs as usize,
+            ));
+            let f = $field_ty { modulus, num_limbs };
+            $crate::exec_op(&f, state, rd_ptr, rs1_ptr, rs2_ptr, |f, a, b| {
+                $crate::FieldArith::$op(f, a, b)
+            });
+        }
+    };
 }
 
 // ── Instruction execution helper ─────────────────────────────────────────────
