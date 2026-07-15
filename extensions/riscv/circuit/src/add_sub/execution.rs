@@ -19,7 +19,7 @@ use crate::AddSubExecutor;
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
 pub(super) struct AddSubPreCompute {
-    rs2_ptr: u32,
+    rs2_ptr: u8,
     rd_ptr: u8,
     rs1_ptr: u8,
 }
@@ -38,7 +38,7 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> AddSubExecutor<A, NUM_LI
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         *data = AddSubPreCompute {
-            rs2_ptr: c.as_canonical_u32(),
+            rs2_ptr: c.as_canonical_u32() as u8,
             rd_ptr: a.as_canonical_u32() as u8,
             rs1_ptr: b.as_canonical_u32() as u8,
         };
@@ -155,8 +155,8 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: AluOp>(
 ) {
     let rs1 = exec_state
         .vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.rs1_ptr as u32);
-    let rs2 =
-        exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.rs2_ptr);
+    let rs2 = exec_state
+        .vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.rs2_ptr as u32);
     let rs1 = u64::from_le_bytes(rs1);
     let rs2 = u64::from_le_bytes(rs2);
     let rd = <OP as AluOp>::compute(rs1, rs2);

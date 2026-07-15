@@ -19,7 +19,7 @@ use super::core::LessThanExecutor;
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
 struct LessThanPreCompute {
-    c: u64,
+    rs2_ptr: u8,
     a: u8,
     b: u8,
 }
@@ -46,7 +46,7 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> LessThanExecutor<A, NUM_
         }
         let local_opcode = LessThanOpcode::from_usize(opcode.local_opcode_idx(self.offset));
         *data = LessThanPreCompute {
-            c: c.as_canonical_u32() as u64,
+            rs2_ptr: c.as_canonical_u32() as u8,
             a: a.as_canonical_u32() as u8,
             b: b.as_canonical_u32() as u8,
         };
@@ -151,7 +151,7 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_UNSIGNED: bool>(
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let rs1 = exec_state.vm_read_bytes::<8>(RV64_REGISTER_AS, pre_compute.b as u32);
-    let rs2 = exec_state.vm_read_bytes::<8>(RV64_REGISTER_AS, pre_compute.c as u32);
+    let rs2 = exec_state.vm_read_bytes::<8>(RV64_REGISTER_AS, pre_compute.rs2_ptr as u32);
     let cmp_result = if IS_UNSIGNED {
         u64::from_le_bytes(rs1) < u64::from_le_bytes(rs2)
     } else {

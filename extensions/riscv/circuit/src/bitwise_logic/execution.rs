@@ -19,7 +19,7 @@ use crate::BitwiseLogicExecutor;
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
 pub(super) struct BitwiseLogicPreCompute {
-    c: u64,
+    rs2_ptr: u8,
     a: u8,
     b: u8,
 }
@@ -37,7 +37,7 @@ impl<A, const LIMB_BITS: usize> BitwiseLogicExecutor<A, { RV64_REGISTER_NUM_LIMB
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         *data = BitwiseLogicPreCompute {
-            c: c.as_canonical_u32() as u64,
+            rs2_ptr: c.as_canonical_u32() as u8,
             a: a.as_canonical_u32() as u8,
             b: b.as_canonical_u32() as u8,
         };
@@ -150,7 +150,7 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: AluOp>(
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let rs1 = exec_state.vm_read_bytes::<8>(RV64_REGISTER_AS, pre_compute.b as u32);
-    let rs2: [u8; 8] = exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.c as u32);
+    let rs2: [u8; 8] = exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.rs2_ptr as u32);
     let rs1 = u64::from_le_bytes(rs1);
     let rs2 = u64::from_le_bytes(rs2);
     let rd = <OP as AluOp>::compute(rs1, rs2);
