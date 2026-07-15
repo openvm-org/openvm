@@ -205,12 +205,7 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: LoadSignExtendOp, const E
     }
     let mut write_data = [0u8; RV64_REGISTER_NUM_LIMBS];
 
-    if !OP::compute_write_data(&mut write_data, read_data, shift_amount as usize) {
-        return Err(ExecutionError::Fail {
-            pc,
-            msg: "Invalid signed load",
-        });
-    }
+    OP::compute_write_data(&mut write_data, read_data, shift_amount as usize);
 
     if ENABLED {
         exec_state.vm_write(RV64_REGISTER_AS, pre_compute.a as u32, &write_data);
@@ -256,12 +251,11 @@ trait LoadSignExtendOp {
     /// Access width in bytes.
     const WIDTH: usize;
 
-    /// Return if the operation is valid.
     fn compute_write_data(
         write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
         read_data: [u8; 2 * RV64_REGISTER_NUM_LIMBS],
         shift_amount: usize,
-    ) -> bool;
+    );
 }
 
 struct LoadWOp;
@@ -276,7 +270,7 @@ impl LoadSignExtendOp for LoadWOp {
         write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
         read_data: [u8; 2 * RV64_REGISTER_NUM_LIMBS],
         shift_amount: usize,
-    ) -> bool {
+    ) {
         let word = i32::from_le_bytes([
             read_data[shift_amount],
             read_data[shift_amount + 1],
@@ -284,7 +278,6 @@ impl LoadSignExtendOp for LoadWOp {
             read_data[shift_amount + 3],
         ]);
         *write_data = (word as i64).to_le_bytes();
-        true
     }
 }
 
@@ -296,10 +289,9 @@ impl LoadSignExtendOp for LoadHOp {
         write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
         read_data: [u8; 2 * RV64_REGISTER_NUM_LIMBS],
         shift_amount: usize,
-    ) -> bool {
+    ) {
         let half = i16::from_le_bytes([read_data[shift_amount], read_data[shift_amount + 1]]);
         *write_data = (half as i64).to_le_bytes();
-        true
     }
 }
 
@@ -311,9 +303,8 @@ impl LoadSignExtendOp for LoadBOp {
         write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
         read_data: [u8; 2 * RV64_REGISTER_NUM_LIMBS],
         shift_amount: usize,
-    ) -> bool {
+    ) {
         let byte = read_data[shift_amount] as i8;
         *write_data = (byte as i64).to_le_bytes();
-        true
     }
 }

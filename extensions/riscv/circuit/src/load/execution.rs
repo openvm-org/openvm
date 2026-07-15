@@ -206,12 +206,7 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: LoadOp, const ENABLED: bo
     }
     let mut write_data = [0u8; RV64_REGISTER_NUM_LIMBS];
 
-    if !OP::compute_write_data(&mut write_data, read_data, shift_amount as usize) {
-        return Err(ExecutionError::Fail {
-            pc,
-            msg: "Invalid load",
-        });
-    }
+    OP::compute_write_data(&mut write_data, read_data, shift_amount as usize);
 
     if ENABLED {
         exec_state.vm_write(RV64_REGISTER_AS, pre_compute.a as u32, &write_data);
@@ -250,12 +245,11 @@ trait LoadOp {
     /// Access width in bytes.
     const WIDTH: usize;
 
-    /// Return if the operation is valid.
     fn compute_write_data(
         write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
         read_data: [u8; 2 * RV64_REGISTER_NUM_LIMBS],
         shift_amount: usize,
-    ) -> bool;
+    );
 }
 
 struct LoadDOp;
@@ -271,9 +265,8 @@ impl LoadOp for LoadDOp {
         write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
         read_data: [u8; 2 * RV64_REGISTER_NUM_LIMBS],
         shift_amount: usize,
-    ) -> bool {
+    ) {
         write_data.copy_from_slice(&read_data[shift_amount..shift_amount + Self::WIDTH]);
-        true
     }
 }
 
@@ -285,12 +278,11 @@ impl LoadOp for LoadWUOp {
         write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
         read_data: [u8; 2 * RV64_REGISTER_NUM_LIMBS],
         shift_amount: usize,
-    ) -> bool {
+    ) {
         write_data[0] = read_data[shift_amount];
         write_data[1] = read_data[shift_amount + 1];
         write_data[2] = read_data[shift_amount + 2];
         write_data[3] = read_data[shift_amount + 3];
-        true
     }
 }
 
@@ -302,10 +294,9 @@ impl LoadOp for LoadHUOp {
         write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
         read_data: [u8; 2 * RV64_REGISTER_NUM_LIMBS],
         shift_amount: usize,
-    ) -> bool {
+    ) {
         write_data[0] = read_data[shift_amount];
         write_data[1] = read_data[shift_amount + 1];
-        true
     }
 }
 
@@ -317,8 +308,7 @@ impl LoadOp for LoadBUOp {
         write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
         read_data: [u8; 2 * RV64_REGISTER_NUM_LIMBS],
         shift_amount: usize,
-    ) -> bool {
+    ) {
         write_data[0] = read_data[shift_amount];
-        true
     }
 }

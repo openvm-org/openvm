@@ -213,12 +213,7 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: StoreOp>(
         write_data[RV64_REGISTER_NUM_LIMBS..].copy_from_slice(&block1);
     }
 
-    if !OP::compute_write_data(&mut write_data, read_data, shift_amount as usize) {
-        return Err(ExecutionError::Fail {
-            pc,
-            msg: "Invalid store",
-        });
-    }
+    OP::compute_write_data(&mut write_data, read_data, shift_amount as usize);
 
     exec_state.vm_write(
         pre_compute.e as u32,
@@ -267,12 +262,11 @@ trait StoreOp {
     /// Access width in bytes.
     const WIDTH: usize;
 
-    /// Return if the operation is valid.
     fn compute_write_data(
         write_data: &mut [u8; 2 * RV64_REGISTER_NUM_LIMBS],
         read_data: [u8; RV64_REGISTER_NUM_LIMBS],
         shift_amount: usize,
-    ) -> bool;
+    );
 }
 
 struct StoreDOp;
@@ -288,10 +282,9 @@ impl StoreOp for StoreDOp {
         write_data: &mut [u8; 2 * RV64_REGISTER_NUM_LIMBS],
         read_data: [u8; RV64_REGISTER_NUM_LIMBS],
         shift_amount: usize,
-    ) -> bool {
+    ) {
         write_data[shift_amount..shift_amount + RV64_REGISTER_NUM_LIMBS]
             .copy_from_slice(&read_data);
-        true
     }
 }
 
@@ -303,12 +296,11 @@ impl StoreOp for StoreWOp {
         write_data: &mut [u8; 2 * RV64_REGISTER_NUM_LIMBS],
         read_data: [u8; RV64_REGISTER_NUM_LIMBS],
         shift_amount: usize,
-    ) -> bool {
+    ) {
         write_data[shift_amount] = read_data[0];
         write_data[shift_amount + 1] = read_data[1];
         write_data[shift_amount + 2] = read_data[2];
         write_data[shift_amount + 3] = read_data[3];
-        true
     }
 }
 
@@ -320,10 +312,9 @@ impl StoreOp for StoreHOp {
         write_data: &mut [u8; 2 * RV64_REGISTER_NUM_LIMBS],
         read_data: [u8; RV64_REGISTER_NUM_LIMBS],
         shift_amount: usize,
-    ) -> bool {
+    ) {
         write_data[shift_amount] = read_data[0];
         write_data[shift_amount + 1] = read_data[1];
-        true
     }
 }
 
@@ -335,8 +326,7 @@ impl StoreOp for StoreBOp {
         write_data: &mut [u8; 2 * RV64_REGISTER_NUM_LIMBS],
         read_data: [u8; RV64_REGISTER_NUM_LIMBS],
         shift_amount: usize,
-    ) -> bool {
+    ) {
         write_data[shift_amount] = read_data[0];
-        true
     }
 }
