@@ -4,10 +4,13 @@ use std::{
 };
 
 use eyre::Result;
-use openvm_instructions::{LocalOpcode, SystemOpcode};
+use openvm_instructions::{
+    riscv::{RV64_IMM_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    LocalOpcode, SystemOpcode,
+};
 use openvm_platform::memory::MEM_SIZE;
 use openvm_riscv_transpiler::{
-    Rv64HintStoreOpcode, Rv64ITranspilerExtension, Rv64IoTranspilerExtension,
+    BaseAluImmOpcode, Rv64HintStoreOpcode, Rv64ITranspilerExtension, Rv64IoTranspilerExtension,
     Rv64MTranspilerExtension, Rv64Phantom,
 };
 use openvm_stark_sdk::{openvm_stark_backend::p3_field::PrimeField32, p3_baby_bear::BabyBear};
@@ -28,6 +31,36 @@ fn rv64_transpiler() -> Transpiler<F> {
         .with_extension(Rv64ITranspilerExtension)
         .with_extension(Rv64MTranspilerExtension)
         .with_extension(Rv64IoTranspilerExtension)
+}
+
+#[test_case(-2048, 0xff_f800; "minimum")]
+#[test_case(-1, 0xff_ffff; "negative_one")]
+#[test_case(0, 0; "zero")]
+#[test_case(2047, 0x7ff; "maximum")]
+fn test_transpile_addi_immediate_boundaries(imm: i32, expected_c: u32) -> Result<()> {
+    const OPCODE_OP_IMM: u32 = 0b0010011;
+    const RD: usize = 3;
+    const RS1: usize = 5;
+
+    let encoded =
+        (((imm as u32) & 0xfff) << 20) | ((RS1 as u32) << 15) | ((RD as u32) << 7) | OPCODE_OP_IMM;
+    let program = rv64_transpiler().transpile(&[encoded])?;
+    let instruction = program[0].as_ref().expect("ADDI should be emitted");
+
+    assert_eq!(instruction.opcode, BaseAluImmOpcode::ADDI.global_opcode());
+    assert_eq!(
+        instruction.a.as_canonical_u32(),
+        (RD * RV64_REGISTER_NUM_LIMBS) as u32
+    );
+    assert_eq!(
+        instruction.b.as_canonical_u32(),
+        (RS1 * RV64_REGISTER_NUM_LIMBS) as u32
+    );
+    assert_eq!(instruction.c.as_canonical_u32(), expected_c);
+    assert_eq!(instruction.d.as_canonical_u32(), RV64_REGISTER_AS);
+    assert_eq!(instruction.e.as_canonical_u32(), RV64_IMM_AS);
+
+    Ok(())
 }
 
 // To create ELF directly from .S file, `brew install riscv-gnu-toolchain` and run
