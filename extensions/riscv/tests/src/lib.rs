@@ -150,7 +150,7 @@ mod tests {
                 .with_extension(Rv64IoTranspilerExtension),
         )?;
         change_rv64m_insn_to_nop(&mut exe);
-        air_test_with_min_segments(Rv64IBuilder, config, exe, vec![], min_segments);
+        air_test_with_min_segments(Rv64IBuilder::new(), config, exe, vec![], min_segments);
         Ok(())
     }
 
@@ -207,7 +207,7 @@ mod tests {
                 .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension),
         )?;
-        air_test_with_min_segments(Rv64ImBuilder, config, exe, vec![], min_segments);
+        air_test_with_min_segments(Rv64ImBuilder::new(), config, exe, vec![], min_segments);
         Ok(())
     }
 
@@ -231,7 +231,7 @@ mod tests {
                 .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension),
         )?;
-        air_test_with_min_segments(Rv64ImBuilder, config, exe, vec![], min_segments);
+        air_test_with_min_segments(Rv64ImBuilder::new(), config, exe, vec![], min_segments);
         Ok(())
     }
 
@@ -247,7 +247,7 @@ mod tests {
                 .with_extension(Rv64IoTranspilerExtension),
         )?;
         let input = vec![vec![0u8, 1, 2, 3]];
-        air_test_with_min_segments(Rv64ImBuilder, config, exe, input, 1);
+        air_test_with_min_segments(Rv64ImBuilder::new(), config, exe, input, 1);
         Ok(())
     }
 
@@ -276,7 +276,7 @@ mod tests {
         let data: Vec<u8> = (0..expected_len).map(|i| (i % 256) as u8).collect();
 
         let input = vec![data];
-        air_test_with_min_segments(Rv64ImBuilder, config, exe, input, 1);
+        air_test_with_min_segments(Rv64ImBuilder::new(), config, exe, input, 1);
         Ok(())
     }
 
@@ -306,7 +306,7 @@ mod tests {
             .into_iter()
             .flat_map(|w| w.to_le_bytes())
             .collect();
-        air_test_with_min_segments(Rv64ImBuilder, config, exe, vec![input], 1);
+        air_test_with_min_segments(Rv64ImBuilder::new(), config, exe, vec![input], 1);
         Ok(())
     }
 
@@ -422,7 +422,7 @@ mod tests {
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension),
         )?;
-        air_test(Rv64ImBuilder, config, exe);
+        air_test(Rv64ImBuilder::new(), config, exe);
         Ok(())
     }
 
@@ -459,7 +459,7 @@ mod tests {
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension),
         )?;
-        air_test(Rv64ImBuilder, config, exe);
+        air_test(Rv64ImBuilder::new(), config, exe);
         Ok(())
     }
 
@@ -479,7 +479,7 @@ mod tests {
                 .with_extension(Rv64MTranspilerExtension)
                 .with_extension(Rv64IoTranspilerExtension),
         )?;
-        air_test(Rv64ImBuilder, config, exe);
+        air_test(Rv64ImBuilder::new(), config, exe);
         Ok(())
     }
 
@@ -574,7 +574,7 @@ mod tests {
                 .with_extension(Rv64IoTranspilerExtension),
         )
         .unwrap();
-        air_test(Rv64ImBuilder, config, exe);
+        air_test(Rv64ImBuilder::new(), config, exe);
     }
 
     // For testing programs that should only execute RV64I:

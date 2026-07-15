@@ -96,7 +96,7 @@ fn run_leaf_aggregation(
     let input = (1u64 << log_fib_input).to_le_bytes().to_vec();
 
     let engine = Engine::new(app_params_with_100_bits_security(21));
-    let (vm, app_pk) = VirtualMachine::new_with_keygen(engine, Rv64ImBuilder, config)?;
+    let (vm, app_pk) = VirtualMachine::new_with_keygen(engine, Rv64ImBuilder::new(), config)?;
     let cached_program_trace = vm.commit_program_on_device(&exe.program);
     let mut instance = VmInstance::new(vm, exe.into(), cached_program_trace)?;
     let app_proof = instance.prove(vec![input])?;
