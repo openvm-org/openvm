@@ -34,7 +34,7 @@ env:
 
 jobs:
   changes:
-    name: Select extension tests
+    name: Select affected extensions
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -51,7 +51,7 @@ jobs:
   extension-tests:
     needs: changes
     if: needs.changes.outputs.extensions != '[]'
-    name: "${{ format('extension: {0} ({1})', matrix.extension, matrix.mode) }}"
+    name: ${{ format('{0} ({1})', matrix.extension, matrix.mode) }}
     strategy:
       matrix:
         extension: ${{ fromJSON(needs.changes.outputs.extensions) }}

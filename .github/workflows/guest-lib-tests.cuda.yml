@@ -47,7 +47,7 @@ env:
 
 jobs:
   changes:
-    name: Select CUDA guest library tests
+    name: Select affected groups
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -69,7 +69,7 @@ jobs:
           filters: .github/filters/guest-lib-tests.yml
 
   hashes-cuda:
-    name: CUDA guest hashes
+    name: hashes
     needs: changes
     if: needs.changes.outputs.cuda == 'true' || needs.changes.outputs.sha2 == 'true' || needs.changes.outputs.keccak256 == 'true'
     uses: ./.github/workflows/guest-lib-tests.cuda.group.yml
@@ -80,7 +80,7 @@ jobs:
     secrets: inherit
 
   verify-stark-cuda:
-    name: CUDA guest verify-stark
+    name: verify-stark
     needs: changes
     if: needs.changes.outputs.cuda == 'true' || needs.changes.outputs.verify_stark == 'true'
     uses: ./.github/workflows/guest-lib-tests.cuda.group.yml
@@ -90,7 +90,7 @@ jobs:
     secrets: inherit
 
   curves-cuda:
-    name: CUDA guest curves
+    name: curves
     needs: changes
     if: needs.changes.outputs.cuda == 'true' || needs.changes.outputs.k256 == 'true' || needs.changes.outputs.p256 == 'true'
     uses: ./.github/workflows/guest-lib-tests.cuda.group.yml
@@ -101,7 +101,7 @@ jobs:
     secrets: inherit
 
   algebra-cuda:
-    name: CUDA guest algebra
+    name: algebra
     needs: changes
     if: needs.changes.outputs.cuda == 'true' || needs.changes.outputs.ff_derive == 'true' || needs.changes.outputs.pairing == 'true'
     uses: ./.github/workflows/guest-lib-tests.cuda.group.yml

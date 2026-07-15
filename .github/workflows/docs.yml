@@ -21,6 +21,7 @@ env:
 
 jobs:
   docs:
+    name: Build and publish
     permissions:
       contents: write
       packages: read

@@ -18,6 +18,7 @@ env:
 
 jobs:
   docs:
+    name: Check tags
     permissions:
       contents: write
       packages: read

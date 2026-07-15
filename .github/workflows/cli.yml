@@ -1,4 +1,4 @@
-name: OpenVM CLI Tests
+name: CLI Tests
 
 # Exercises `cargo-openvm` end-to-end:
 #   * Builds the CLI and puts it on PATH so the integration tests reuse it
@@ -41,6 +41,7 @@ env:
 
 jobs:
   cli-tests:
+    name: Integration and examples
     runs-on:
       - runs-on=${{ github.run_id }}/volume=80gb/family=c8i-flex.16xlarge+c8i.16xlarge+c8a.16xlarge+c7i.16xlarge+c7a.16xlarge/image=ubuntu24-full-x64/extras=s3-cache
 
@@ -138,7 +139,7 @@ jobs:
 
   # Smoke-test the stock tier-3 `riscv64im-unknown-none-elf` path.
   app-level-cli-none-elf:
-    name: app-level-cli (riscv64im-unknown-none-elf)
+    name: riscv64im-unknown-none-elf smoke test
     runs-on:
       - runs-on=${{ github.run_id }}/disk=large/family=c8i-flex.2xlarge+c8i.2xlarge+c8a.2xlarge+c7i.2xlarge+c7a.2xlarge/image=ubuntu24-full-x64/extras=s3-cache
     env:

@@ -1,4 +1,4 @@
-name: CUDA CLI Tests
+name: CLI Tests (CUDA)
 
 # Mirrors cli.yml but builds and runs `cargo-openvm` with the CUDA backend
 # (--features cuda) on a GPU runner. Exercises:
@@ -40,7 +40,7 @@ env:
 
 jobs:
   cli-cuda-tests:
-    name: cli cuda tests
+    name: Proving tests
     runs-on:
       - runs-on=${{ github.run_id }}/image=ubuntu24-gpu-x64/family=${{ inputs.instance_family || github.event.inputs.instance_family || 'g7.4xlarge+g6e.2xlarge' }}/volume=80gb/tag=cli-cuda-${{ github.run_id }}-${{ github.run_number }}-${{ github.run_attempt }}/extras=s3-cache/spot=false
 

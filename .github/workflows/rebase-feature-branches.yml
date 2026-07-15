@@ -14,6 +14,7 @@ permissions:
 
 jobs:
   rebase:
+    name: Rebase branches
     runs-on:
       - runs-on=${{ github.run_id }}/runner=1cpu-linux-x64
     steps:

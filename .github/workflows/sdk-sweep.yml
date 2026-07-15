@@ -60,7 +60,7 @@ jobs:
   # A dedicated job is needed because the `matrix` context isn't available in a
   # job-level `if:`, so we can't filter matrix entries by `inputs.arch` directly.
   matrix-config:
-    name: Select sweep modes
+    name: Select modes
     runs-on: ubuntu-latest
     outputs:
       modes: ${{ steps.set.outputs.modes }}
@@ -84,7 +84,7 @@ jobs:
           esac
 
   sweep:
-    name: ${{ format('sdk {0} ({1}, {2})', inputs.sweep_mode, matrix.mode, inputs.family) }}
+    name: ${{ format('{0} ({1}, {2})', inputs.sweep_mode, matrix.mode, inputs.family) }}
     needs: matrix-config
     strategy:
       fail-fast: false
