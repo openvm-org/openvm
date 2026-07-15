@@ -926,7 +926,7 @@ fn hard_chip_with_add_tail_exe(add_tail_count: usize) -> VmExe<F> {
     exe(&instructions)
 }
 
-fn hard_chip_streams(repeats: usize) -> Streams<F> {
+fn hard_chip_streams(repeats: usize) -> Streams {
     let mut streams = Streams::default();
     for repeat in 0..repeats {
         for word in 0..3u64 {
@@ -948,7 +948,7 @@ fn hintstore_direct_exe() -> VmExe<F> {
     ])
 }
 
-fn hintstore_direct_streams() -> Streams<F> {
+fn hintstore_direct_streams() -> Streams {
     let mut streams = Streams::default();
     for word in [
         0x0102_0304_0506_0708u64,
@@ -1060,7 +1060,7 @@ fn public_values_reveal_differential_exe() -> VmExe<F> {
     ])
 }
 
-fn hint_input_streams() -> Streams<F> {
+fn hint_input_streams() -> Streams {
     Streams::from(vec![vec![0x11, 0x22, 0x33]])
 }
 
@@ -1096,7 +1096,7 @@ fn assert_system_records_eq(label: &str, interp: &SystemRecords<F>, rvr: &System
 fn prove_rvr_preflight_and_verify_with_streams(
     exe: VmExe<F>,
     config: Rv64ImConfig,
-    streams: Streams<F>,
+    streams: Streams,
 ) -> usize {
     let engine = test_cpu_engine();
     let (vm, pk) =
@@ -1121,7 +1121,7 @@ fn assert_rvr_route_and_proves(
     label: &str,
     exe: VmExe<F>,
     config: Rv64ImConfig,
-    streams: Streams<F>,
+    streams: Streams,
 ) -> usize {
     let engine = test_cpu_engine();
     let (vm, pk) =
@@ -1152,7 +1152,7 @@ fn assert_preflight_matches_interpreter_with_streams(
     label: &str,
     exe: VmExe<F>,
     num_insns: Option<u64>,
-    streams: Streams<F>,
+    streams: Streams,
 ) -> RvrPreflightOutput<F> {
     // Direct execute without arena targets: compile compact (fused emission
     // is default-on and has no target-less fallback).
@@ -1238,7 +1238,7 @@ enum TraceCompareScope {
 fn assert_trace_matches_interpreter(
     label: &str,
     exe: VmExe<F>,
-    streams: Streams<F>,
+    streams: Streams,
     scope: TraceCompareScope,
 ) {
     // Direct execute without arena targets: compile compact (fused emission
@@ -1680,7 +1680,7 @@ fn assert_trace_maps_eq_for_air_ids(
 fn prove_gpu_rvr_preflight_and_verify_with_streams(
     exe: VmExe<F>,
     config: Rv64ImConfig,
-    streams: Streams<F>,
+    streams: Streams,
 ) -> usize {
     let engine = test_gpu_engine();
     let (vm, pk) = VirtualMachine::new_with_keygen(engine, Rv64ImGpuBuilder::default(), config)
@@ -1699,11 +1699,11 @@ fn assert_gpu_rvr_three_way_from_state(
     label: &str,
     exe: &VmExe<F>,
     config: &Rv64ImConfig,
-    from_state: VmState<F>,
+    from_state: VmState,
     num_insns: Option<u64>,
     trace_heights: &[u32],
     expected_active_instruction_air_count: Option<usize>,
-) -> VmState<F> {
+) -> VmState {
     let (mut cpu_vm, _) =
         VirtualMachine::new_with_keygen(test_cpu_engine(), Rv64ImCpuBuilder, config.clone())
             .expect("cpu vm init");
@@ -1936,7 +1936,7 @@ fn assert_gpu_rvr_three_way_from_state(
 fn assert_gpu_rvr_three_way_single_segment(
     label: &str,
     exe: VmExe<F>,
-    streams: Streams<F>,
+    streams: Streams,
     expected_active_instruction_air_count: Option<usize>,
 ) {
     assert_gpu_rvr_three_way_single_segment_with_config(
@@ -1952,7 +1952,7 @@ fn assert_gpu_rvr_three_way_single_segment(
 fn assert_gpu_rvr_three_way_single_segment_with_config(
     label: &str,
     exe: VmExe<F>,
-    streams: Streams<F>,
+    streams: Streams,
     expected_active_instruction_air_count: Option<usize>,
     config: Rv64ImConfig,
 ) {
@@ -1988,7 +1988,7 @@ fn assert_gpu_rvr_three_way_single_segment_with_config(
 }
 
 #[cfg(feature = "cuda")]
-fn assert_gpu_rvr_three_way_multi_segment(label: &str, exe: VmExe<F>, streams: Streams<F>) {
+fn assert_gpu_rvr_three_way_multi_segment(label: &str, exe: VmExe<F>, streams: Streams) {
     let mut config = Rv64ImConfig::default();
     config.rv64i.system.segmentation_max_memory = 1;
     let (vm, _) =
@@ -3070,7 +3070,7 @@ fn rvr_preflight_addsub_30ms_checkpoint() {
 /// shape): measures the verbose-log volume and host time attributable to
 /// HintStore-class instructions at a given word count. Manual; feeds the
 /// skip-vs-migrate decision for the multi-row shape.
-fn hintstore_residual_exe(bufs: usize, words_per_buf: usize) -> (VmExe<F>, Streams<F>, u64) {
+fn hintstore_residual_exe(bufs: usize, words_per_buf: usize) -> (VmExe<F>, Streams, u64) {
     let mut ins = vec![
         addi(1, 0, 1024),          // ptr base
         addi(2, 0, words_per_buf), // word count register

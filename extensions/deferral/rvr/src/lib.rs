@@ -173,11 +173,7 @@ impl RvrExtension for DeferralRvrExtension {
     fn codegen_fingerprint(&self) -> Option<Vec<u8>> {
         Some(air_index_codegen_fingerprint(
             b"openvm-deferral-rvr-v1",
-            &[
-                self.call_chip_idx,
-                self.output_chip_idx,
-                self.poseidon2_chip_idx,
-            ],
+            &[self.output_chip_idx, self.poseidon2_chip_idx],
         ))
     }
 
