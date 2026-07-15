@@ -439,8 +439,7 @@ mod tests {
         let system_config = crate::utils::test_system_config();
         let ctx = MemoryCtx::new(&system_config);
         let memory_page = ctx.leaf_id_range(RV64_MEMORY_AS, 0, 1).0 >> PAGE_MASK_LEAF_BITS;
-        let public_values_page =
-            ctx.leaf_id_range(PUBLIC_VALUES_AS, 0, 1).0 >> PAGE_MASK_LEAF_BITS;
+        let public_values_page = ctx.leaf_id_range(PUBLIC_VALUES_AS, 0, 1).0 >> PAGE_MASK_LEAF_BITS;
         let deferral_page = ctx.leaf_id_range(DEFERRAL_AS, 0, 1).0 >> PAGE_MASK_LEAF_BITS;
 
         assert_ne!(memory_page, public_values_page);
@@ -481,8 +480,7 @@ mod tests {
         let merkle_before = trace_heights[MERKLE_AIR_ID];
         let poseidon2_idx = trace_heights.len() - 2;
         let poseidon_before = trace_heights[poseidon2_idx];
-        let next_page_ptr =
-            ((1 << PAGE_MASK_LEAF_BITS) * U16_CELL_SIZE * VM_DIGEST_WIDTH) as u32;
+        let next_page_ptr = ((1 << PAGE_MASK_LEAF_BITS) * U16_CELL_SIZE * VM_DIGEST_WIDTH) as u32;
 
         ctx.update_boundary_merkle_heights(RV64_MEMORY_AS, next_page_ptr, 1);
         ctx.apply_height_updates(&mut trace_heights);
