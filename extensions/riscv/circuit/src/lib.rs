@@ -374,7 +374,10 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64IGpuBuilder {
 /// G2: the airs whose inline records the proving path should stage as compact
 /// wire targets for this shared decode `state` — the device-decodable set,
 /// bound per exe (taint keeps mixed programs correct). Empty unless
-/// `OPENVM_RVR_GPU_RECORDS=compact`. Shared by every wired GPU builder's
+/// `OPENVM_RVR_GPU_RECORDS=compact`. In delta mode the same whole-AIR set is
+/// returned as authoritative direct-device coverage; the VM cache consumes it
+/// for route classification and then suppresses per-AIR wire staging because
+/// delta owns one global backing. Shared by every wired GPU builder's
 /// `rvr_wire_record_airs` override, including composed-config builders.
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 pub fn rvr_gpu_wire_record_airs(
@@ -384,11 +387,9 @@ pub fn rvr_gpu_wire_record_airs(
 ) -> std::collections::HashSet<usize> {
     use crate::rvr_gpu_decode::{configured_emission_mode, InlineEmissionMode};
     match configured_emission_mode() {
-        Some(InlineEmissionMode::CompactWire) => {
+        Some(InlineEmissionMode::CompactWire | InlineEmissionMode::Delta) => {
             rvr_gpu_decode::RvrGpuDecodeState::compact_record_airs(exe, pc_to_air_idx)
         }
-        // Delta owns one global backing, not per-AIR host wire targets.
-        Some(InlineEmissionMode::Delta) => Default::default(),
         _ => Default::default(),
     }
 }
@@ -417,6 +418,9 @@ pub fn generate_gpu_rvr_record_arenas(
     use openvm_circuit::arch::rvr::generate_record_arenas_from_logs_with_compact;
 
     use crate::rvr_gpu_decode::{configured_emission_mode, InlineEmissionMode};
+    let detailed_profile =
+        std::env::var("OPENVM_RVR_PREFLIGHT_PROFILE_DETAIL").as_deref() == Ok("1");
+    let detail_started = std::time::Instant::now();
     if registry.is_empty() {
         return Ok(None);
     }
@@ -428,6 +432,7 @@ pub fn generate_gpu_rvr_record_arenas(
     if !delta_requested {
         state.clear_delta_segment();
     }
+    let mode_finished = std::time::Instant::now();
     let compact_airs = if compact_requested {
         state.bind_compact_segment(exe, pc_to_air_idx, &output.inline_pc_slots)
     } else if delta_requested {
@@ -435,6 +440,7 @@ pub fn generate_gpu_rvr_record_arenas(
     } else {
         Default::default()
     };
+    let air_bind_finished = std::time::Instant::now();
     let saved_delta = if delta_requested {
         Some(output.delta_records.take().ok_or_else(|| {
             openvm_circuit::arch::ExecutionError::RvrExecution(
@@ -445,6 +451,7 @@ pub fn generate_gpu_rvr_record_arenas(
     } else {
         None
     };
+    let delta_take_finished = std::time::Instant::now();
     let (mut arenas, wire_buffers) = generate_record_arenas_from_logs_with_compact(
         registry,
         exe,
@@ -453,6 +460,7 @@ pub fn generate_gpu_rvr_record_arenas(
         pc_to_air_idx,
         &compact_airs,
     )?;
+    let generic_finished = std::time::Instant::now();
     if delta_requested && !wire_buffers.is_empty() {
         return Err(openvm_circuit::arch::ExecutionError::RvrExecution(
             "GPU delta mode unexpectedly produced host compact buffers".to_string(),
@@ -478,6 +486,7 @@ pub fn generate_gpu_rvr_record_arenas(
             }
         }
     }
+    let wire_buffer_count = wire_buffers.len();
     for chip in wire_buffers {
         let arena = arenas.get_mut(chip.air_idx).ok_or_else(|| {
             openvm_circuit::arch::ExecutionError::RvrExecution(format!(
@@ -496,6 +505,8 @@ pub fn generate_gpu_rvr_record_arenas(
         dense.rvr_wire = true;
         *arena = dense;
     }
+    let adoption_finished = std::time::Instant::now();
+    let mut bound_airs_len = 0usize;
     if let Some(delta) = saved_delta {
         let memory_log = std::mem::take(&mut output.raw_logs.memory_log);
         let program_log = std::mem::take(&mut output.raw_logs.program_log);
@@ -515,6 +526,25 @@ pub fn generate_gpu_rvr_record_arenas(
                 "GPU delta bound AIR set drifted from the compiled decode set".to_string(),
             ));
         }
+        bound_airs_len = bound_airs.len();
+    }
+    let delta_bind_finished = std::time::Instant::now();
+    if detailed_profile {
+        eprintln!(
+            "OPENVM_RVR_GPU_FINALIZE_DETAIL mode_us={} air_bind_us={} delta_take_us={} \
+             generic_us={} adoption_us={} delta_bind_us={} compact_airs={} bound_airs={} \
+             wire_buffers={} delta_requested={}",
+            (mode_finished - detail_started).as_micros(),
+            (air_bind_finished - mode_finished).as_micros(),
+            (delta_take_finished - air_bind_finished).as_micros(),
+            (generic_finished - delta_take_finished).as_micros(),
+            (adoption_finished - generic_finished).as_micros(),
+            (delta_bind_finished - adoption_finished).as_micros(),
+            compact_airs.len(),
+            bound_airs_len,
+            wire_buffer_count,
+            delta_requested as u8,
+        );
     }
     Ok(Some(arenas))
 }
