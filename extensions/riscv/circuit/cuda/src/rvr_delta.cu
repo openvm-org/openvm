@@ -9,7 +9,7 @@ using namespace riscv;
 
 namespace {
 
-static constexpr uint32_t DELTA_STRIDE = 32;
+static constexpr uint32_t DELTA_STRIDE = 24;
 static constexpr uint32_t PC_STEP = 4;
 static constexpr uint8_t INVALID_AIR = UINT8_MAX;
 static constexpr uint64_t INVALID_ADDRESS = UINT64_MAX;
@@ -28,7 +28,6 @@ enum DeltaPattern : uint8_t {
 struct DeltaRecord {
     uint32_t from_pc;
     uint32_t from_timestamp;
-    uint64_t v0;
     uint64_t v1;
     uint64_t v2;
 };
@@ -47,6 +46,26 @@ struct MemoryLogEntry {
     uint64_t prev_value;
 };
 static_assert(sizeof(MemoryLogEntry) == 40, "memory log size drift");
+
+struct DeltaMemoryLogEntry {
+    uint32_t timestamp;
+    uint32_t address;
+    uint64_t value;
+    uint8_t kind;
+    uint8_t addr_space;
+    uint8_t width;
+    uint8_t complete;
+    uint32_t reserved;
+};
+static_assert(sizeof(DeltaMemoryLogEntry) == 24, "delta memory log size drift");
+
+struct ResidualMemoryEvent {
+    uint32_t timestamp;
+    uint8_t kind;
+    uint8_t addr_space;
+    uint64_t address;
+    uint64_t value;
+};
 
 struct ProgramLogEntry {
     uint16_t opcode;
@@ -89,9 +108,33 @@ struct DeltaAirOutputDesc {
     uint32_t count;
     uint32_t stride;
     uint32_t sorted_start;
-    uint32_t _reserved;
+    uint32_t kind;
 };
 static_assert(sizeof(DeltaAirOutputDesc) == 24, "delta output descriptor size drift");
+
+enum DeltaAirKind : uint32_t {
+    DELTA_KIND_ADD_SUB = 0,
+    DELTA_KIND_BITWISE = 1,
+    DELTA_KIND_LESS_THAN = 2,
+    DELTA_KIND_SHIFT_LOGICAL = 3,
+    DELTA_KIND_SHIFT_RIGHT_ARITHMETIC = 4,
+    DELTA_KIND_ADD_SUB_W = 5,
+    DELTA_KIND_SHIFT_W_LOGICAL = 6,
+    DELTA_KIND_SHIFT_W_RIGHT_ARITHMETIC = 7,
+    DELTA_KIND_LOAD_STORE = 8,
+    DELTA_KIND_LOAD_SIGN_EXTEND = 9,
+    DELTA_KIND_BRANCH_EQUAL = 10,
+    DELTA_KIND_BRANCH_LESS_THAN = 11,
+    DELTA_KIND_JAL_LUI = 12,
+    DELTA_KIND_JALR = 13,
+    DELTA_KIND_AUIPC = 14,
+    DELTA_KIND_MUL = 15,
+    DELTA_KIND_MULH = 16,
+    DELTA_KIND_MUL_W = 17,
+    DELTA_KIND_DIV_REM = 18,
+    DELTA_KIND_DIV_REM_W = 19,
+    DELTA_KIND_COUNT = 20,
+};
 
 __device__ __forceinline__ void fail(uint32_t *error, uint32_t code) {
     atomicCAS(error, 0u, code);
@@ -105,6 +148,54 @@ __device__ __forceinline__ uint64_t address_key(
         return INVALID_ADDRESS;
     }
     return (uint64_t(addr_space) << 56) | address;
+}
+
+__device__ __forceinline__ bool residual_memory_event(
+    uint8_t const *memory,
+    size_t index,
+    size_t stride,
+    ResidualMemoryEvent &event,
+    uint32_t *error
+) {
+    if (stride == sizeof(MemoryLogEntry)) {
+        MemoryLogEntry entry = reinterpret_cast<MemoryLogEntry const *>(memory)[index];
+        event = {entry.timestamp, entry.kind, entry.addr_space, entry.address, entry.value};
+        return true;
+    }
+    if (stride == sizeof(DeltaMemoryLogEntry)) {
+        DeltaMemoryLogEntry entry =
+            reinterpret_cast<DeltaMemoryLogEntry const *>(memory)[index];
+        bool valid_width =
+            entry.width == 1 || entry.width == 2 || entry.width == 4 || entry.width == 8 ||
+            (entry.kind == 2 && entry.width == 0);
+        if (entry.complete != 1 || entry.reserved != 0 || entry.kind > 2 ||
+            !valid_width) {
+            fail(error, 18);
+            return false;
+        }
+        event = {
+            entry.timestamp,
+            entry.kind,
+            entry.addr_space,
+            uint64_t(entry.address),
+            entry.value,
+        };
+        return true;
+    }
+    fail(error, 19);
+    return false;
+}
+
+__global__ void validate_residual_memory(
+    uint8_t const *memory,
+    size_t memory_count,
+    size_t memory_stride,
+    uint32_t *error
+) {
+    size_t idx = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+    if (idx >= memory_count) return;
+    ResidualMemoryEvent event;
+    residual_memory_event(memory, idx, memory_stride, event, error);
 }
 
 __device__ __forceinline__ bool operand_for_pc(
@@ -236,11 +327,211 @@ __device__ __forceinline__ uint8_t delta_store_width(
     }
 }
 
+__device__ __forceinline__ uint64_t sign_extend_word(uint32_t value) {
+    return uint64_t(int64_t(int32_t(value)));
+}
+
+__device__ __forceinline__ bool delta_divrem_result(
+    uint8_t local_opcode, uint64_t b, uint64_t c, uint64_t &result
+) {
+    switch (local_opcode) {
+    case 0: {
+        int64_t lhs = int64_t(b), rhs = int64_t(c);
+        if (rhs == 0)
+            result = UINT64_MAX;
+        else if (lhs == INT64_MIN && rhs == -1)
+            result = uint64_t(lhs);
+        else
+            result = uint64_t(lhs / rhs);
+        return true;
+    }
+    case 1:
+        result = c == 0 ? UINT64_MAX : b / c;
+        return true;
+    case 2: {
+        int64_t lhs = int64_t(b), rhs = int64_t(c);
+        if (rhs == 0)
+            result = b;
+        else if (lhs == INT64_MIN && rhs == -1)
+            result = 0;
+        else
+            result = uint64_t(lhs % rhs);
+        return true;
+    }
+    case 3:
+        result = c == 0 ? b : b % c;
+        return true;
+    default: return false;
+    }
+}
+
+__device__ __forceinline__ bool delta_divrem_w_result(
+    uint8_t local_opcode, uint64_t b64, uint64_t c64, uint64_t &result
+) {
+    uint32_t b = uint32_t(b64), c = uint32_t(c64), word;
+    switch (local_opcode) {
+    case 0: {
+        int32_t lhs = int32_t(b), rhs = int32_t(c);
+        if (rhs == 0)
+            word = UINT32_MAX;
+        else if (lhs == INT32_MIN && rhs == -1)
+            word = uint32_t(lhs);
+        else
+            word = uint32_t(lhs / rhs);
+        break;
+    }
+    case 1: word = c == 0 ? UINT32_MAX : b / c; break;
+    case 2: {
+        int32_t lhs = int32_t(b), rhs = int32_t(c);
+        if (rhs == 0)
+            word = b;
+        else if (lhs == INT32_MIN && rhs == -1)
+            word = 0;
+        else
+            word = uint32_t(lhs % rhs);
+        break;
+    }
+    case 3: word = c == 0 ? b : b % c; break;
+    default: return false;
+    }
+    result = sign_extend_word(word);
+    return true;
+}
+
+__device__ __forceinline__ bool delta_post_write_value(
+    DeltaRecord const &record,
+    RvrOperandEntry const &entry,
+    uint32_t kind,
+    uint64_t &result
+) {
+    switch (kind) {
+    case DELTA_KIND_ADD_SUB:
+        if (entry.local_opcode == 0)
+            result = record.v1 + record.v2;
+        else if (entry.local_opcode == 1)
+            result = record.v1 - record.v2;
+        else
+            return false;
+        return true;
+    case DELTA_KIND_BITWISE:
+        if (entry.local_opcode == 2)
+            result = record.v1 ^ record.v2;
+        else if (entry.local_opcode == 3)
+            result = record.v1 | record.v2;
+        else if (entry.local_opcode == 4)
+            result = record.v1 & record.v2;
+        else
+            return false;
+        return true;
+    case DELTA_KIND_LESS_THAN:
+        if (entry.local_opcode == 0)
+            result = int64_t(record.v1) < int64_t(record.v2);
+        else if (entry.local_opcode == 1)
+            result = record.v1 < record.v2;
+        else
+            return false;
+        return true;
+    case DELTA_KIND_SHIFT_LOGICAL: {
+        uint32_t shamt = uint32_t(record.v2 & 63u);
+        if (entry.local_opcode == 0)
+            result = record.v1 << shamt;
+        else if (entry.local_opcode == 1)
+            result = record.v1 >> shamt;
+        else
+            return false;
+        return true;
+    }
+    case DELTA_KIND_SHIFT_RIGHT_ARITHMETIC:
+        if (entry.local_opcode != 2) return false;
+        result = uint64_t(int64_t(record.v1) >> uint32_t(record.v2 & 63u));
+        return true;
+    case DELTA_KIND_ADD_SUB_W: {
+        uint32_t word;
+        if (entry.local_opcode == 0)
+            word = uint32_t(record.v1) + uint32_t(record.v2);
+        else if (entry.local_opcode == 1)
+            word = uint32_t(record.v1) - uint32_t(record.v2);
+        else
+            return false;
+        result = sign_extend_word(word);
+        return true;
+    }
+    case DELTA_KIND_SHIFT_W_LOGICAL: {
+        uint32_t shamt = uint32_t(record.v2 & 31u), word;
+        if (entry.local_opcode == 0)
+            word = uint32_t(record.v1) << shamt;
+        else if (entry.local_opcode == 1)
+            word = uint32_t(record.v1) >> shamt;
+        else
+            return false;
+        result = sign_extend_word(word);
+        return true;
+    }
+    case DELTA_KIND_SHIFT_W_RIGHT_ARITHMETIC:
+        if (entry.local_opcode != 0) return false;
+        result = sign_extend_word(
+            uint32_t(int32_t(uint32_t(record.v1)) >> uint32_t(record.v2 & 31u))
+        );
+        return true;
+    case DELTA_KIND_LOAD_STORE:
+    case DELTA_KIND_LOAD_SIGN_EXTEND: {
+        if (!(entry.flags & RVR_OPERAND_FLAG_WRITE_ENABLED)) return false;
+        uint32_t shift = (delta_memory_effective_address(record, entry) & 7u) * 8u;
+        uint64_t shifted = record.v2 >> shift;
+        switch (entry.local_opcode) {
+        case 0: result = shifted; break;
+        case 1: result = uint8_t(shifted); break;
+        case 2: result = uint16_t(shifted); break;
+        case 3: result = uint32_t(shifted); break;
+        case 8: result = uint64_t(int64_t(int8_t(shifted))); break;
+        case 9: result = uint64_t(int64_t(int16_t(shifted))); break;
+        case 10: result = uint64_t(int64_t(int32_t(shifted))); break;
+        default: return false;
+        }
+        return true;
+    }
+    case DELTA_KIND_JAL_LUI:
+        if (!(entry.flags & RVR_OPERAND_FLAG_WRITE_ENABLED)) return false;
+        result = (entry.flags & RVR_OPERAND_FLAG_IS_JAL)
+                     ? uint64_t(record.from_pc + PC_STEP)
+                     : uint64_t(int64_t(int32_t(entry.c << 12)));
+        return true;
+    case DELTA_KIND_JALR:
+        if (!(entry.flags & RVR_OPERAND_FLAG_WRITE_ENABLED)) return false;
+        result = uint64_t(record.from_pc + PC_STEP);
+        return true;
+    case DELTA_KIND_AUIPC:
+        result = uint64_t(record.from_pc) + uint64_t(int64_t(int32_t(entry.c << 8)));
+        return true;
+    case DELTA_KIND_MUL: result = record.v1 * record.v2; return true;
+    case DELTA_KIND_MULH:
+        if (entry.local_opcode == 0)
+            result = uint64_t(__mul64hi((long long)record.v1, (long long)record.v2));
+        else if (entry.local_opcode == 1)
+            result = __umul64hi(record.v1, record.v2) -
+                     (int64_t(record.v1) < 0 ? record.v2 : 0);
+        else if (entry.local_opcode == 2)
+            result = __umul64hi(record.v1, record.v2);
+        else
+            return false;
+        return true;
+    case DELTA_KIND_MUL_W:
+        result = sign_extend_word(uint32_t(record.v1) * uint32_t(record.v2));
+        return true;
+    case DELTA_KIND_DIV_REM:
+        return delta_divrem_result(entry.local_opcode, record.v1, record.v2, result);
+    case DELTA_KIND_DIV_REM_W:
+        return delta_divrem_w_result(entry.local_opcode, record.v1, record.v2, result);
+    default: return false;
+    }
+}
+
 __global__ void build_events(
     DeltaRecord const *delta,
     size_t delta_count,
-    MemoryLogEntry const *memory,
+    uint8_t const *memory,
     size_t memory_count,
+    size_t memory_stride,
     ProgramLogEntry const *program,
     size_t program_count,
     TouchedBlock const *touched,
@@ -249,6 +540,7 @@ __global__ void build_events(
     size_t operand_count,
     uint32_t pc_base,
     uint8_t const *arena_native_flags,
+    DeltaAirOutputDesc const *outputs,
     size_t num_airs,
     uint32_t *timestamp_keys,
     EventPayload *payloads,
@@ -285,19 +577,31 @@ __global__ void build_events(
                             delta_memory_effective_address(record, entry) & 7u
                         );
                     } else {
-                        payload.value = record.v0;
+                        if (entry.air_idx >= num_airs ||
+                            outputs[entry.air_idx].kind >= DELTA_KIND_COUNT ||
+                            !delta_post_write_value(
+                                record, entry, outputs[entry.air_idx].kind, payload.value
+                            )) {
+                            fail(error, 17);
+                            return;
+                        }
                         payload.value_update = VALUE_SET;
                     }
                 }
             }
         }
     } else if (idx < program_begin) {
-        MemoryLogEntry entry = memory[idx - memory_begin];
-        payload.address_key = address_key(entry.addr_space, entry.address & ~uint64_t(7), error);
-        payload.timestamp = entry.timestamp;
-        if (entry.kind == 1) {
-            payload.value = entry.value;
-            payload.value_update = VALUE_SET;
+        ResidualMemoryEvent event;
+        if (residual_memory_event(
+                memory, idx - memory_begin, memory_stride, event, error
+            )) {
+            payload.address_key =
+                address_key(event.addr_space, event.address & ~uint64_t(7), error);
+            payload.timestamp = event.timestamp;
+            if (event.kind == 1) {
+                payload.value = event.value;
+                payload.value_update = VALUE_SET;
+            }
         }
     } else if (idx < touched_begin) {
         size_t local = idx - program_begin;
@@ -310,9 +614,7 @@ __global__ void build_events(
                 RvrOperandEntry entry = table[table_slot];
                 if (entry.air_idx < num_airs && entry.access_pattern <= DELTA_RW1 &&
                     arena_native_flags[entry.air_idx]) {
-                DeltaRecord synthetic{
-                    uint32_t(program_entry.pc), program_entry.timestamp, 0, 0, 0
-                };
+                DeltaRecord synthetic{uint32_t(program_entry.pc), program_entry.timestamp, 0, 0};
                 uint8_t as;
                 uint64_t address;
                 if (delta_access(synthetic, entry, access_slot, as, address)) {
@@ -534,6 +836,7 @@ extern "C" int _rvr_delta_predecode(
     size_t delta_count,
     DeviceBufferConstView<uint8_t> d_memory_bytes,
     size_t memory_count,
+    size_t memory_stride,
     DeviceBufferConstView<uint8_t> d_program_bytes,
     size_t program_count,
     DeviceBufferConstView<uint8_t> d_touched_bytes,
@@ -549,15 +852,28 @@ extern "C" int _rvr_delta_predecode(
 ) {
     if (delta_count > UINT32_MAX / 3 ||
         d_delta_bytes.size != delta_count * sizeof(DeltaRecord) ||
-        d_memory_bytes.size != memory_count * sizeof(MemoryLogEntry) ||
+        (memory_stride != sizeof(MemoryLogEntry) &&
+         memory_stride != sizeof(DeltaMemoryLogEntry)) ||
+        d_memory_bytes.size != memory_count * memory_stride ||
         d_program_bytes.size != program_count * sizeof(ProgramLogEntry) ||
         d_touched_bytes.size != touched_count * sizeof(TouchedBlock)) {
         return int(cudaErrorInvalidValue);
     }
     // There is no compact output and no predecessor consumed by a later
-    // delta record. In particular, avoid zero-byte allocations when a segment
-    // contains only residual / arena-native instructions.
-    if (delta_count == 0) return 0;
+    // delta record. Still validate every compact residual-memory entry before
+    // avoiding the zero-byte allocations: completeness is fail-closed even
+    // for segments containing only residual / arena-native instructions.
+    if (delta_count == 0) {
+        if (memory_count != 0 && memory_stride == sizeof(DeltaMemoryLogEntry)) {
+            dim3 block(256);
+            dim3 grid((memory_count + block.x - 1) / block.x);
+            validate_residual_memory<<<grid, block, 0, stream>>>(
+                d_memory_bytes.ptr, memory_count, memory_stride, d_error
+            );
+            return int(cudaGetLastError());
+        }
+        return 0;
+    }
     size_t event_count =
         delta_count * 3 + memory_count + program_count * 3 + touched_count;
 
@@ -602,8 +918,9 @@ extern "C" int _rvr_delta_predecode(
         build_events<<<grid, block, 0, stream>>>(
             reinterpret_cast<DeltaRecord const *>(d_delta_bytes.ptr),
             delta_count,
-            reinterpret_cast<MemoryLogEntry const *>(d_memory_bytes.ptr),
+            d_memory_bytes.ptr,
             memory_count,
+            memory_stride,
             reinterpret_cast<ProgramLogEntry const *>(d_program_bytes.ptr),
             program_count,
             reinterpret_cast<TouchedBlock const *>(d_touched_bytes.ptr),
@@ -612,6 +929,7 @@ extern "C" int _rvr_delta_predecode(
             operand_count,
             pc_base,
             d_arena_native_flags,
+            d_outputs,
             num_airs,
             ts_a,
             events_a,

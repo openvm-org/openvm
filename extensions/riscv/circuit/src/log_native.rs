@@ -814,6 +814,7 @@ where
 {
     fn extend_rvr_log_native(&self, registry: &mut LogNativeAssemblerRegistry<F, RA>) {
         registry.register_delta_decode(crate::rvr_gpu_decode::gpu_decode_precompute::<F>);
+        registry.register_delta_write_value(crate::rvr_gpu_decode::delta_post_write_value::<F>);
         registry.register(
             [BaseAluOpcode::ADD, BaseAluOpcode::SUB].map(|opcode| opcode.global_opcode()),
             assemble_add_sub::<F, RA>,

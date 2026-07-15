@@ -8,8 +8,9 @@ use openvm_instructions::{
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::{
-    PreflightMemoryAccessAux, ProgramLogEntry, RvrDeltaRecords, RvrInlineChipRecords,
-    RvrPreflightOutput, PREFLIGHT_DELTA_RECORD_SIZE, PREFLIGHT_MEMORY_KIND_WRITE,
+    PreflightMemoryAccessAux, PreflightRawLogs, ProgramLogEntry, RvrDeltaRecords,
+    RvrInlineChipRecords, RvrPreflightOutput, PREFLIGHT_DELTA_RECORD_SIZE,
+    PREFLIGHT_MEMORY_KIND_READ, PREFLIGHT_MEMORY_KIND_TOUCH, PREFLIGHT_MEMORY_KIND_WRITE,
 };
 use crate::arch::{Arena, ExecutionError};
 
@@ -188,12 +189,14 @@ pub struct RvrDeltaDecodeInfo {
 }
 
 type RvrDeltaDecodeFn<F> = fn(&Instruction<F>) -> Option<RvrDeltaDecodeInfo>;
+type RvrDeltaWriteValueFn<F> = fn(&Instruction<F>, u32, u64, u64) -> Option<u64>;
 
 /// Opcode-keyed registry of log-native record assemblers.
 pub struct LogNativeAssemblerRegistry<F, RA> {
     assemblers: HashMap<VmOpcode, RegisteredAssembler<F, RA>>,
     inline_assemblers: HashMap<VmOpcode, RegisteredInlineAssembler<F, RA>>,
     delta_decode: Option<RvrDeltaDecodeFn<F>>,
+    delta_write_value: Option<RvrDeltaWriteValueFn<F>>,
 }
 
 impl<F, RA> LogNativeAssemblerRegistry<F, RA> {
@@ -202,6 +205,7 @@ impl<F, RA> LogNativeAssemblerRegistry<F, RA> {
             assemblers: HashMap::new(),
             inline_assemblers: HashMap::new(),
             delta_decode: None,
+            delta_write_value: None,
         }
     }
 
@@ -213,6 +217,16 @@ impl<F, RA> LogNativeAssemblerRegistry<F, RA> {
         assert!(
             self.delta_decode.replace(decode).is_none(),
             "multiple RVR delta decode classifiers registered"
+        );
+    }
+
+    /// Register the extension-owned post-write derivation used by the
+    /// 24-byte delta schema. It is separate from access reconstruction so the
+    /// extension that owns the opcodes also owns their execution semantics.
+    pub fn register_delta_write_value(&mut self, derive: RvrDeltaWriteValueFn<F>) {
+        assert!(
+            self.delta_write_value.replace(derive).is_none(),
+            "multiple RVR delta write-value derivations registered"
         );
     }
 
@@ -712,7 +726,6 @@ pub fn generate_record_arenas_from_logs_with_compact<F: PrimeField32, RA: Arena>
 struct DeltaRecord {
     from_pc: u32,
     from_timestamp: u32,
-    v0: u64,
     v1: u64,
     v2: u64,
 }
@@ -877,8 +890,67 @@ fn patch_delta_store<F: PrimeField32>(
     (previous & !(mask << shift)) | ((value & mask) << shift)
 }
 
+#[derive(Clone, Copy, Debug)]
+struct ResidualMemoryEvent {
+    timestamp: u32,
+    kind: u8,
+    addr_space: u8,
+    address: u64,
+    value: u64,
+}
+
+fn residual_memory_event(
+    logs: &PreflightRawLogs,
+    index: usize,
+) -> Result<Option<ResidualMemoryEvent>, ExecutionError> {
+    if !logs.memory_log.is_empty() && !logs.delta_memory_log.is_empty() {
+        return Err(rvr_error(
+            "delta residual memory logs populated both full and compact schemas".to_string(),
+        ));
+    }
+    if let Some(entry) = logs.memory_log.get(index) {
+        return Ok(Some(ResidualMemoryEvent {
+            timestamp: entry.timestamp,
+            kind: entry.kind,
+            addr_space: entry.addr_space,
+            address: entry.address,
+            value: entry.value,
+        }));
+    }
+    let Some(entry) = logs.delta_memory_log.get(index) else {
+        return Ok(None);
+    };
+    let valid_width = matches!(entry.width, 1 | 2 | 4 | 8)
+        || (entry.kind == PREFLIGHT_MEMORY_KIND_TOUCH && entry.width == 0);
+    if entry.complete != 1
+        || entry._reserved != 0
+        || !matches!(
+            entry.kind,
+            PREFLIGHT_MEMORY_KIND_READ | PREFLIGHT_MEMORY_KIND_WRITE | PREFLIGHT_MEMORY_KIND_TOUCH
+        )
+        || !valid_width
+    {
+        return Err(rvr_error(format!(
+            "invalid compact delta residual memory entry {index}/{}: complete={} reserved={} \
+             kind={} width={}",
+            logs.delta_memory_log.len(),
+            entry.complete,
+            entry._reserved,
+            entry.kind,
+            entry.width,
+        )));
+    }
+    Ok(Some(ResidualMemoryEvent {
+        timestamp: entry.timestamp,
+        kind: entry.kind,
+        addr_space: entry.addr_space,
+        address: u64::from(entry.address),
+        value: entry.value,
+    }))
+}
+
 /// CPU oracle for the Stage-2 device predecoder. It converts the global
-/// chronological 32-byte stream back into the established per-AIR compact
+/// chronological 24-byte stream back into the established per-AIR compact
 /// wires. The production GPU path will perform the same merge/partition on
 /// device; keeping this oracle here lets every existing arena/proof gate
 /// compare the reconstructed bytes before a sandbox is considered.
@@ -901,6 +973,17 @@ fn expand_delta_records<F: PrimeField32, RA: Arena>(
             PREFLIGHT_DELTA_RECORD_SIZE,
             delta_bytes.len()
         )));
+    }
+    // Validate the schema and every completeness guard up front. A trailing
+    // residual event may not be needed to reconstruct a later delta record,
+    // but it still must not let a partial compact write escape detection.
+    if !output.raw_logs.memory_log.is_empty() && !output.raw_logs.delta_memory_log.is_empty() {
+        return Err(rvr_error(
+            "delta residual memory logs populated both full and compact schemas".to_string(),
+        ));
+    }
+    for index in 0..output.raw_logs.delta_memory_log.len() {
+        let _ = residual_memory_event(&output.raw_logs, index)?;
     }
 
     if let Some((index, entry)) =
@@ -1000,7 +1083,7 @@ fn expand_delta_records<F: PrimeField32, RA: Arena>(
          residual: &mut usize,
          last_touch: &mut HashMap<(u8, u64), u32>,
          current_value: &mut HashMap<(u8, u64), u64>| {
-            while let Some(entry) = output.raw_logs.memory_log.get(*residual) {
+            while let Some(entry) = residual_memory_event(&output.raw_logs, *residual)? {
                 if entry.timestamp >= timestamp {
                     break;
                 }
@@ -1028,9 +1111,8 @@ fn expand_delta_records<F: PrimeField32, RA: Arena>(
         let record = DeltaRecord {
             from_pc: delta_u32(bytes, 0),
             from_timestamp: delta_u32(bytes, 4),
-            v0: delta_u64(bytes, 8),
-            v1: delta_u64(bytes, 16),
-            v2: delta_u64(bytes, 24),
+            v1: delta_u64(bytes, 8),
+            v2: delta_u64(bytes, 16),
         };
         if record.from_pc < exe.program.pc_base
             || !(record.from_pc - exe.program.pc_base).is_multiple_of(DEFAULT_PC_STEP)
@@ -1138,7 +1220,18 @@ fn expand_delta_records<F: PrimeField32, RA: Arena>(
                 })?;
                 patch_delta_store(instruction, width, write_prev_value, record.v1, record.v2)
             } else {
-                record.v0
+                let derive = registry.delta_write_value.ok_or_else(|| {
+                    rvr_error(format!(
+                        "delta pc {:#x} opcode {:?} has no registered write-value derivation",
+                        record.from_pc, instruction.opcode
+                    ))
+                })?;
+                derive(instruction, record.from_pc, record.v1, record.v2).ok_or_else(|| {
+                    rvr_error(format!(
+                        "delta pc {:#x} opcode {:?} could not derive its post-write value",
+                        record.from_pc, instruction.opcode
+                    ))
+                })?
             };
             current_value.insert(key, write_value);
         }
@@ -1277,4 +1370,67 @@ fn instruction_and_air_idx<'a, F: PrimeField32>(
 
 fn rvr_error(message: String) -> ExecutionError {
     ExecutionError::RvrExecution(message)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::arch::rvr::{DeltaMemoryLogEntry, MemoryLogEntry};
+
+    fn raw_logs(delta_memory_log: Vec<DeltaMemoryLogEntry>) -> PreflightRawLogs {
+        PreflightRawLogs {
+            program_log: Vec::new(),
+            memory_log: Vec::new(),
+            delta_memory_log,
+            chip_counts: Vec::new(),
+            touched: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn compact_residual_memory_completeness_fails_closed() {
+        let logs = raw_logs(vec![DeltaMemoryLogEntry {
+            timestamp: 9,
+            address: 16,
+            value: 7,
+            kind: PREFLIGHT_MEMORY_KIND_WRITE,
+            addr_space: 2,
+            width: 8,
+            complete: 0,
+            _reserved: 0,
+        }]);
+        let err = residual_memory_event(&logs, 0).unwrap_err();
+        assert!(err.to_string().contains("invalid compact delta residual"));
+    }
+
+    #[test]
+    fn compact_residual_memory_accepts_touch_only_zero_width() {
+        let logs = raw_logs(vec![DeltaMemoryLogEntry {
+            timestamp: 9,
+            address: 16,
+            kind: PREFLIGHT_MEMORY_KIND_TOUCH,
+            addr_space: 2,
+            width: 0,
+            complete: 1,
+            _reserved: 0,
+            ..Default::default()
+        }]);
+        let event = residual_memory_event(&logs, 0)
+            .expect("touch-only compact entry must decode")
+            .expect("touch-only compact entry must exist");
+        assert_eq!(event.kind, PREFLIGHT_MEMORY_KIND_TOUCH);
+        assert_eq!(event.address, 16);
+    }
+
+    #[test]
+    fn dual_residual_memory_schemas_fail_closed() {
+        let mut logs = raw_logs(vec![DeltaMemoryLogEntry {
+            complete: 1,
+            width: 8,
+            ..Default::default()
+        }]);
+        logs.memory_log.push(MemoryLogEntry::default());
+        let err = residual_memory_event(&logs, 0).unwrap_err();
+        assert!(err.to_string().contains("both full and compact"));
+    }
 }

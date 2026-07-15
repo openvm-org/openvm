@@ -181,7 +181,7 @@ pub enum InlineEmissionMode {
     /// Full in-arena records written by C, fed zero-copy (G1; requires the
     /// R4 batch-2 arena-native emitters).
     ArenaNative,
-    /// Global chronological 32-byte records. Previous timestamps and stable
+    /// Global chronological 24-byte records. Previous timestamps and stable
     /// per-AIR compact buffers are reconstructed by the shared CUDA predecode.
     Delta,
 }
@@ -216,6 +216,7 @@ struct HostOperandTable {
 struct HostDeltaSegment {
     delta: openvm_circuit::arch::rvr::RvrDeltaRecords,
     memory_log: Vec<openvm_circuit::arch::rvr::MemoryLogEntry>,
+    delta_memory_log: Vec<openvm_circuit::arch::rvr::DeltaMemoryLogEntry>,
     program_log: Vec<openvm_circuit::arch::rvr::ProgramLogEntry>,
     touched: Vec<openvm_circuit::arch::rvr::TouchedBlock>,
     arena_native_flags: Vec<u8>,
@@ -245,8 +246,15 @@ pub(crate) struct DeltaAirOutputDesc {
     count: u32,
     stride: u32,
     sorted_start: u32,
-    _reserved: u32,
+    kind: u32,
 }
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+const _: () = {
+    assert!(size_of::<DeltaAirOutputDesc>() == 24);
+    assert!(align_of::<DeltaAirOutputDesc>() == 8);
+    assert!(core::mem::offset_of!(DeltaAirOutputDesc, kind) == 20);
+};
 
 /// Shared producer/consumer state. The builder holds one `Arc` per VM and
 /// clones it into every migrated GPU chip at construction.
@@ -417,6 +425,7 @@ impl RvrGpuDecodeState {
         precomputed: Option<&RvrDeltaDecodePrecompute>,
         delta: openvm_circuit::arch::rvr::RvrDeltaRecords,
         memory_log: Vec<openvm_circuit::arch::rvr::MemoryLogEntry>,
+        delta_memory_log: Vec<openvm_circuit::arch::rvr::DeltaMemoryLogEntry>,
         program_log: Vec<openvm_circuit::arch::rvr::ProgramLogEntry>,
         touched: Vec<openvm_circuit::arch::rvr::TouchedBlock>,
         chip_counts: Vec<u32>,
@@ -471,6 +480,7 @@ impl RvrGpuDecodeState {
         let host = HostDeltaSegment {
             delta,
             memory_log,
+            delta_memory_log,
             program_log,
             touched,
             arena_native_flags,
@@ -527,7 +537,7 @@ impl RvrGpuDecodeState {
                     stride: stride as u32,
                     sorted_start: u32::try_from(sorted_start)
                         .expect("delta sorted offset exceeds u32"),
-                    _reserved: 0,
+                    kind: spec.kind as u32,
                 };
                 outputs.insert(spec.kind, buffer);
             }
@@ -539,11 +549,40 @@ impl RvrGpuDecodeState {
             .bytes()
             .to_device_on(device_ctx)
             .expect("delta H2D");
-        let d_memory = if host.memory_log.is_empty() {
+        if !host.memory_log.is_empty() && !host.delta_memory_log.is_empty() {
+            panic!("delta segment populated both full and compact residual-memory schemas");
+        }
+        let (memory_bytes, memory_count, memory_stride) = if !host.delta_memory_log.is_empty() {
+            let entries = host.delta_memory_log.as_slice();
+            let bytes = unsafe {
+                std::slice::from_raw_parts(
+                    entries.as_ptr().cast::<u8>(),
+                    std::mem::size_of_val(entries),
+                )
+            };
+            (
+                bytes,
+                entries.len(),
+                std::mem::size_of::<openvm_circuit::arch::rvr::DeltaMemoryLogEntry>(),
+            )
+        } else {
+            let entries = host.memory_log.as_slice();
+            let bytes = unsafe {
+                std::slice::from_raw_parts(
+                    entries.as_ptr().cast::<u8>(),
+                    std::mem::size_of_val(entries),
+                )
+            };
+            (
+                bytes,
+                entries.len(),
+                std::mem::size_of::<openvm_circuit::arch::rvr::MemoryLogEntry>(),
+            )
+        };
+        let d_memory = if memory_bytes.is_empty() {
             DeviceBuffer::new()
         } else {
-            host.memory_log
-                .as_slice()
+            memory_bytes
                 .to_device_on(device_ctx)
                 .expect("delta residual-memory H2D")
         };
@@ -579,7 +618,8 @@ impl RvrGpuDecodeState {
                 &d_delta,
                 host.delta.bytes().len() / openvm_circuit::arch::rvr::PREFLIGHT_DELTA_RECORD_SIZE,
                 &d_memory,
-                host.memory_log.len(),
+                memory_count,
+                memory_stride,
                 &d_program,
                 host.program_log.len(),
                 &d_touched,
@@ -598,9 +638,10 @@ impl RvrGpuDecodeState {
 
         let program_log = std::mem::take(&mut host.program_log);
         let memory_log = std::mem::take(&mut host.memory_log);
+        let delta_memory_log = std::mem::take(&mut host.delta_memory_log);
         let touched = std::mem::take(&mut host.touched);
         host.delta
-            .recycle_device_inputs(program_log, memory_log, touched);
+            .recycle_device_inputs(program_log, memory_log, delta_memory_log, touched);
         drop(host);
         let device = DeviceDeltaSegment { outputs };
         let result = device.outputs.get(&kind).cloned();
@@ -978,6 +1019,213 @@ pub(crate) fn gpu_decode_precompute<F: PrimeField32>(
     gpu_decode_entry(instruction).map(|(entry, kind)| RvrDeltaDecodeInfo {
         entry,
         kind: kind as u8,
+    })
+}
+
+#[cfg(feature = "rvr")]
+fn sign_extend_word(value: u32) -> u64 {
+    value as i32 as i64 as u64
+}
+
+#[cfg(feature = "rvr")]
+fn divrem_result(local_opcode: u8, b: u64, c: u64) -> Option<u64> {
+    Some(match local_opcode {
+        0 => {
+            let (b, c) = (b as i64, c as i64);
+            if c == 0 {
+                u64::MAX
+            } else if b == i64::MIN && c == -1 {
+                b as u64
+            } else {
+                (b / c) as u64
+            }
+        }
+        1 => {
+            if c == 0 {
+                u64::MAX
+            } else {
+                b / c
+            }
+        }
+        2 => {
+            let (b, c) = (b as i64, c as i64);
+            if c == 0 {
+                b as u64
+            } else if b == i64::MIN && c == -1 {
+                0
+            } else {
+                (b % c) as u64
+            }
+        }
+        3 => {
+            if c == 0 {
+                b
+            } else {
+                b % c
+            }
+        }
+        _ => return None,
+    })
+}
+
+#[cfg(feature = "rvr")]
+fn divrem_w_result(local_opcode: u8, b: u64, c: u64) -> Option<u64> {
+    let (b, c) = (b as u32, c as u32);
+    let result = match local_opcode {
+        0 => {
+            let (b, c) = (b as i32, c as i32);
+            if c == 0 {
+                u32::MAX
+            } else if b == i32::MIN && c == -1 {
+                b as u32
+            } else {
+                (b / c) as u32
+            }
+        }
+        1 => {
+            if c == 0 {
+                u32::MAX
+            } else {
+                b / c
+            }
+        }
+        2 => {
+            let (b, c) = (b as i32, c as i32);
+            if c == 0 {
+                b as u32
+            } else if b == i32::MIN && c == -1 {
+                0
+            } else {
+                (b % c) as u32
+            }
+        }
+        3 => {
+            if c == 0 {
+                b
+            } else {
+                b % c
+            }
+        }
+        _ => return None,
+    };
+    Some(sign_extend_word(result))
+}
+
+/// Extension-owned execution semantics for the 24-byte delta record. The CPU
+/// oracle and CUDA predecoder independently apply this same exhaustive kind
+/// table; unknown kinds/opcodes return `None` and fail the delta route closed.
+#[cfg(feature = "rvr")]
+pub(crate) fn delta_post_write_value<F: PrimeField32>(
+    instruction: &Instruction<F>,
+    pc: u32,
+    v1: u64,
+    v2: u64,
+) -> Option<u64> {
+    let (entry, kind) = gpu_decode_entry(instruction)?;
+    Some(match kind {
+        DeltaAirKind::AddSub => match entry.local_opcode {
+            0 => v1.wrapping_add(v2),
+            1 => v1.wrapping_sub(v2),
+            _ => return None,
+        },
+        DeltaAirKind::Bitwise => match entry.local_opcode {
+            2 => v1 ^ v2,
+            3 => v1 | v2,
+            4 => v1 & v2,
+            _ => return None,
+        },
+        DeltaAirKind::LessThan => match entry.local_opcode {
+            0 => u64::from((v1 as i64) < (v2 as i64)),
+            1 => u64::from(v1 < v2),
+            _ => return None,
+        },
+        DeltaAirKind::ShiftLogical => match entry.local_opcode {
+            0 => v1.wrapping_shl((v2 & 63) as u32),
+            1 => v1.wrapping_shr((v2 & 63) as u32),
+            _ => return None,
+        },
+        DeltaAirKind::ShiftRightArithmetic => {
+            if entry.local_opcode != 2 {
+                return None;
+            }
+            ((v1 as i64) >> (v2 & 63)) as u64
+        }
+        DeltaAirKind::AddSubW => {
+            let result = match entry.local_opcode {
+                0 => (v1 as u32).wrapping_add(v2 as u32),
+                1 => (v1 as u32).wrapping_sub(v2 as u32),
+                _ => return None,
+            };
+            sign_extend_word(result)
+        }
+        DeltaAirKind::ShiftWLogical => {
+            let result = match entry.local_opcode {
+                0 => (v1 as u32).wrapping_shl((v2 & 31) as u32),
+                1 => (v1 as u32).wrapping_shr((v2 & 31) as u32),
+                _ => return None,
+            };
+            sign_extend_word(result)
+        }
+        DeltaAirKind::ShiftWRightArithmetic => {
+            if entry.local_opcode != 0 {
+                return None;
+            }
+            sign_extend_word(((v1 as u32 as i32) >> (v2 & 31)) as u32)
+        }
+        DeltaAirKind::LoadStore | DeltaAirKind::LoadSignExtend => {
+            if entry.flags & OPERAND_FLAG_WRITE_ENABLED == 0 {
+                return None;
+            }
+            let imm = entry.c as u16;
+            let offset = if entry.flags & OPERAND_FLAG_LS_IMM_SIGN != 0 {
+                i32::from(imm as i16) as u32
+            } else {
+                u32::from(imm)
+            };
+            let shift = ((v1 as u32).wrapping_add(offset) & 7) * 8;
+            let shifted = v2 >> shift;
+            match entry.local_opcode {
+                0 => shifted,
+                1 => shifted as u8 as u64,
+                2 => shifted as u16 as u64,
+                3 => shifted as u32 as u64,
+                8 => shifted as u8 as i8 as i64 as u64,
+                9 => shifted as u16 as i16 as i64 as u64,
+                10 => shifted as u32 as i32 as i64 as u64,
+                _ => return None,
+            }
+        }
+        DeltaAirKind::BranchEqual | DeltaAirKind::BranchLessThan => return None,
+        DeltaAirKind::JalLui => {
+            if entry.flags & OPERAND_FLAG_WRITE_ENABLED == 0 {
+                return None;
+            }
+            if entry.flags & OPERAND_FLAG_IS_JAL != 0 {
+                u64::from(pc.wrapping_add(DEFAULT_PC_STEP))
+            } else {
+                (entry.c << 12) as i32 as i64 as u64
+            }
+        }
+        DeltaAirKind::Jalr => {
+            if entry.flags & OPERAND_FLAG_WRITE_ENABLED == 0 {
+                return None;
+            }
+            u64::from(pc.wrapping_add(DEFAULT_PC_STEP))
+        }
+        DeltaAirKind::Auipc => {
+            let offset = (entry.c << 8) as i32 as i64 as u64;
+            u64::from(pc).wrapping_add(offset)
+        }
+        DeltaAirKind::Mul => v1.wrapping_mul(v2),
+        DeltaAirKind::MulH => match entry.local_opcode {
+            0 => (((v1 as i64 as i128) * (v2 as i64 as i128)) >> 64) as u64,
+            1 => (((v1 as i64 as i128) * (v2 as u128 as i128)) >> 64) as u64,
+            2 => (((v1 as u128) * (v2 as u128)) >> 64) as u64,
+            _ => return None,
+        },
+        DeltaAirKind::MulW => sign_extend_word((v1 as u32).wrapping_mul(v2 as u32)),
+        DeltaAirKind::DivRem => divrem_result(entry.local_opcode, v1, v2)?,
+        DeltaAirKind::DivRemW => divrem_w_result(entry.local_opcode, v1, v2)?,
     })
 }
 
