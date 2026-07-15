@@ -85,6 +85,13 @@ impl MeteredCtx {
             "air_name={}",
             air_names[MERKLE_AIR_ID]
         );
+        debug_assert!(air_names.len() >= 2);
+        let poseidon2_idx = air_names.len() - 2;
+        debug_assert!(
+            air_names[poseidon2_idx].contains("Poseidon"),
+            "air_name={}",
+            air_names[poseidon2_idx]
+        );
         let mut ctx = Self {
             config: MeteredCtxConfig {
                 initial_trace_heights: trace_heights.clone(),

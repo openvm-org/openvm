@@ -5,10 +5,13 @@ use openvm_instructions::{
     riscv::{RV64_NUM_REGISTERS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     DEFERRAL_AS, DIGEST_WIDTH, MEMORY_PAGE_BITS,
 };
+#[cfg(test)]
+use openvm_instructions::{riscv::RV64_MEMORY_AS, PUBLIC_VALUES_AS};
 
-pub use super::memory_tracker::PageAccess;
+pub use super::memory_tracker::PageTouch;
 use super::memory_tracker::{
-    leaf_mask_range, GlobalFirstTouchCounts, GlobalMemoryTracker, SegmentMemoryTracker,
+    leaf_mask_range, BaselineMemoryTracker, DefaultPoseidonRowTracker, FirstTouchCounts,
+    SegmentMemoryTracker,
 };
 use crate::{
     arch::{SystemConfig, ADDR_SPACE_OFFSET, BOUNDARY_AIR_ID, MERKLE_AIR_ID, U16_CELL_SIZE},
@@ -16,7 +19,7 @@ use crate::{
 };
 
 /// Upper bound on number of memory pages accessed per instruction. Used for buffer allocation.
-pub const MAX_MEM_PAGE_OPS_PER_INSN: usize = 1 << 16;
+const MAX_MEM_PAGE_OPS_PER_INSN: usize = 1 << 16;
 // Initial allocation only. Correctness is preserved by `Vec::reserve` for large
 // range accesses; this avoids preallocating the worst-case per-instruction page
 // count for the common scalar-access path.
@@ -26,29 +29,35 @@ const BYTE_PTRS_PER_LEAF_BITS: u32 = (U16_CELL_SIZE * DIGEST_WIDTH).ilog2();
 const DEFERRAL_PTRS_PER_LEAF_BITS: u32 = DIGEST_WIDTH.ilog2();
 const FIELD_ELEMENT_BYTES: u32 = size_of::<u32>() as u32;
 
+/// Tracks which parts of memory contribute rows to the current segment.
+///
+/// It separately remembers what the current segment has used and what memory existed at the last
+/// safe checkpoint. If the segment ends at that checkpoint, later touches are replayed into the
+/// next segment. Repeated touches in one segment are counted only once.
 #[derive(Clone, Debug)]
 pub struct MemoryCtx {
     /// Memory tree dimensions used to map address-space ranges into global leaf ids.
     memory_dimensions: MemoryDimensions,
     /// Memory leaves and nodes already counted in the current segment.
     segment_memory: SegmentMemoryTracker,
-    /// Memory leaves and nodes present in the global baseline at the last checkpoint.
-    global_memory: GlobalMemoryTracker,
-    /// Page masks recorded since the last safe checkpoint by the normal metered path.
-    pub page_indices_since_checkpoint: Vec<PageAccess>,
+    /// Memory leaves and nodes present in the baseline at the last checkpoint.
+    baseline_memory: BaselineMemoryTracker,
+    /// Touches since the last safe checkpoint, kept so they can be replayed into a new segment.
+    pub page_indices_since_checkpoint: Vec<PageTouch>,
     /// Length mirror used by generated metered code that appends through the raw buffer.
     pub page_indices_since_checkpoint_len: usize,
-    /// Number of checkpoint-buffer entries already reflected in `trace_heights`.
+    /// Number of buffered touches already included in the current row estimates.
     page_indices_applied_len: usize,
-    /// New segment leaf masks queued for the next checkpoint. Segment
-    /// replay clears this queue and recomputes it from `page_indices_since_checkpoint`.
-    pending_global_updates: Vec<PageAccess>,
-    /// New segment leaves accumulated by direct page-buffer application.
+    /// Newly used leaves that will become part of the baseline at the next safe checkpoint.
+    pending_baseline_updates: Vec<PageTouch>,
+    /// Newly used leaves waiting to be added to the Boundary row estimate.
     pending_segment_leaves: u32,
-    /// New segment Merkle nodes accumulated by direct page-buffer application.
+    /// Newly needed tree nodes waiting to be added to the Merkle row estimate.
     pending_segment_merkle_nodes: u32,
-    /// Global first touches paired with the pending height deltas.
-    pending_global_first_touches: GlobalFirstTouchCounts,
+    /// Pending leaves and nodes that were absent at the last checkpoint.
+    pending_first_touches: FirstTouchCounts,
+    /// Reusable default-hash rows already charged in the current segment.
+    default_poseidon_rows: DefaultPoseidonRowTracker,
 }
 
 impl MemoryCtx {
@@ -62,14 +71,15 @@ impl MemoryCtx {
         Self {
             memory_dimensions,
             segment_memory: SegmentMemoryTracker::new(upper_height),
-            global_memory: GlobalMemoryTracker::new(upper_height),
+            baseline_memory: BaselineMemoryTracker::new(upper_height),
             page_indices_since_checkpoint: Vec::with_capacity(checkpoint_capacity),
             page_indices_since_checkpoint_len: 0,
             page_indices_applied_len: 0,
-            pending_global_updates: Vec::with_capacity(checkpoint_capacity),
+            pending_baseline_updates: Vec::with_capacity(checkpoint_capacity),
             pending_segment_leaves: 0,
             pending_segment_merkle_nodes: 0,
-            pending_global_first_touches: GlobalFirstTouchCounts::default(),
+            pending_first_touches: FirstTouchCounts::default(),
+            default_poseidon_rows: DefaultPoseidonRowTracker::default(),
         }
     }
 
@@ -137,7 +147,7 @@ impl MemoryCtx {
             let start = start_leaf_id.max(page_start) - page_start;
             let end = end_leaf_id.min(page_end) - page_start;
             let leaf_mask = leaf_mask_range(start, end);
-            self.global_memory
+            self.baseline_memory
                 .mark_existing_page(page_id as usize, leaf_mask);
         }
     }
@@ -157,7 +167,7 @@ impl MemoryCtx {
         let start_page_id = start_leaf_id >> MEMORY_PAGE_BITS;
 
         if num_leaves == 1 {
-            push_page_access(
+            push_page_touch(
                 &mut self.page_indices_since_checkpoint,
                 start_page_id,
                 1u64 << (start_leaf_id & ((1 << MEMORY_PAGE_BITS) - 1)),
@@ -182,38 +192,39 @@ impl MemoryCtx {
             let start = start_leaf_id.max(page_start) - page_start;
             let end = end_leaf_id.min(page_end) - page_start;
             let leaf_mask = leaf_mask_range(start, end);
-            push_page_access(&mut self.page_indices_since_checkpoint, page_id, leaf_mask);
+            push_page_touch(&mut self.page_indices_since_checkpoint, page_id, leaf_mask);
         }
         self.page_indices_since_checkpoint_len = self.page_indices_since_checkpoint.len();
     }
 
     #[cfg(feature = "rvr")]
     #[inline(always)]
-    pub(crate) fn apply_page_accesses_with_offset(
+    pub(crate) fn apply_page_touches_with_offset(
         &mut self,
         page_offset: u32,
-        accesses: &[PageAccess],
+        touches: &[PageTouch],
     ) {
-        let len = accesses.len();
-        let ptr = accesses.as_ptr();
+        let len = touches.len();
+        let ptr = touches.as_ptr();
         for i in 0..len {
-            // SAFETY: i is bounded by accesses.len().
-            let access = unsafe { *ptr.add(i) };
-            debug_assert!(access.leaf_mask != 0);
-            let page_id = page_offset + access.page_id;
-            let delta =
-                self.segment_memory
-                    .insert(page_id as usize, access.leaf_mask, &self.global_memory);
+            // SAFETY: i is bounded by touches.len().
+            let touch = unsafe { *ptr.add(i) };
+            debug_assert!(touch.leaf_mask != 0);
+            let page_id = page_offset + touch.page_id;
+            let delta = self.segment_memory.insert(
+                page_id as usize,
+                touch.leaf_mask,
+                &self.baseline_memory,
+            );
             if delta.new_segment_leaf_mask != 0 {
                 self.pending_segment_leaves += delta.segment_leaves;
                 self.pending_segment_merkle_nodes += delta.segment_merkle_nodes;
-                push_page_access(
-                    &mut self.pending_global_updates,
+                push_page_touch(
+                    &mut self.pending_baseline_updates,
                     page_id,
                     delta.new_segment_leaf_mask,
                 );
-                self.pending_global_first_touches
-                    .add(delta.global_first_touches);
+                self.pending_first_touches.add(delta.first_touches);
             }
         }
     }
@@ -225,10 +236,11 @@ impl MemoryCtx {
         self.page_indices_since_checkpoint.clear();
         self.page_indices_since_checkpoint_len = 0;
         self.page_indices_applied_len = 0;
-        self.pending_global_updates.clear();
+        self.pending_baseline_updates.clear();
         self.pending_segment_leaves = 0;
         self.pending_segment_merkle_nodes = 0;
-        self.pending_global_first_touches = GlobalFirstTouchCounts::default();
+        self.pending_first_touches = FirstTouchCounts::default();
+        self.default_poseidon_rows = DefaultPoseidonRowTracker::default();
 
         // Reset trace heights for memory chips as 0
         // SAFETY: BOUNDARY_AIR_ID and MERKLE_AIR_ID are compile-time constants within bounds
@@ -248,10 +260,11 @@ impl MemoryCtx {
     pub(crate) fn initialize_segment(&mut self, trace_heights: &mut [u32]) {
         self.segment_memory.clear();
         self.page_indices_applied_len = 0;
-        self.pending_global_updates.clear();
+        self.pending_baseline_updates.clear();
         self.pending_segment_leaves = 0;
         self.pending_segment_merkle_nodes = 0;
-        self.pending_global_first_touches = GlobalFirstTouchCounts::default();
+        self.pending_first_touches = FirstTouchCounts::default();
+        self.default_poseidon_rows = DefaultPoseidonRowTracker::default();
 
         // Reset trace heights for memory chips as 0
         // SAFETY: BOUNDARY_AIR_ID and MERKLE_AIR_ID are compile-time constants within bounds
@@ -272,18 +285,18 @@ impl MemoryCtx {
         self.apply_height_updates(trace_heights);
     }
 
-    /// Adds pending segment updates to the global memory baseline.
+    /// Adds pending segment updates to the baseline.
     #[inline(always)]
     pub(crate) fn update_checkpoint(&mut self) {
-        self.global_memory
-            .add_page_accesses(&self.pending_global_updates);
+        self.baseline_memory
+            .add_page_touches(&self.pending_baseline_updates);
         self.page_indices_since_checkpoint.clear();
         self.page_indices_since_checkpoint_len = 0;
         self.page_indices_applied_len = 0;
-        self.pending_global_updates.clear();
+        self.pending_baseline_updates.clear();
         self.pending_segment_leaves = 0;
         self.pending_segment_merkle_nodes = 0;
-        self.pending_global_first_touches = GlobalFirstTouchCounts::default();
+        self.pending_first_touches = FirstTouchCounts::default();
     }
 
     /// Applies memory height deltas recorded since the last checkpoint.
@@ -292,37 +305,37 @@ impl MemoryCtx {
     /// - MERKLE_AIR:   `2 * segment_merkle_nodes` rows
     /// - Poseidon2:    final-side hashes plus initial-side hashes
     ///
-    /// A global first touch means the initial-side value is canonical default.
+    /// A first touch relative to the baseline has a canonical default initial-side value.
     /// Default leaves share one Poseidon2 row. Default internal nodes share one
     /// Poseidon2 row per Merkle height.
     #[inline(always)]
     pub(crate) fn apply_height_updates(&mut self, trace_heights: &mut [u32]) {
         let mut leaves = self.pending_segment_leaves;
         let mut merkle_nodes = self.pending_segment_merkle_nodes;
-        let mut global_first_touches = self.pending_global_first_touches;
+        let mut first_touches = self.pending_first_touches;
         self.pending_segment_leaves = 0;
         self.pending_segment_merkle_nodes = 0;
-        self.pending_global_first_touches = GlobalFirstTouchCounts::default();
+        self.pending_first_touches = FirstTouchCounts::default();
 
         let len = self.page_indices_since_checkpoint.len();
         let ptr = self.page_indices_since_checkpoint.as_ptr();
         for i in self.page_indices_applied_len..len {
             // SAFETY: i is bounded by page_indices_since_checkpoint.len().
-            let access = unsafe { *ptr.add(i) };
+            let touch = unsafe { *ptr.add(i) };
             let delta = self.segment_memory.insert(
-                access.page_id as usize,
-                access.leaf_mask,
-                &self.global_memory,
+                touch.page_id as usize,
+                touch.leaf_mask,
+                &self.baseline_memory,
             );
             if delta.new_segment_leaf_mask != 0 {
                 leaves += delta.segment_leaves;
                 merkle_nodes += delta.segment_merkle_nodes;
-                push_page_access(
-                    &mut self.pending_global_updates,
-                    access.page_id,
+                push_page_touch(
+                    &mut self.pending_baseline_updates,
+                    touch.page_id,
                     delta.new_segment_leaf_mask,
                 );
-                global_first_touches.add(delta.global_first_touches);
+                first_touches.add(delta.first_touches);
             }
         }
         self.page_indices_applied_len = len;
@@ -333,9 +346,9 @@ impl MemoryCtx {
 
         debug_assert!(trace_heights.len() >= 2);
         let poseidon2_idx = trace_heights.len() - 2;
-        let initial_default_poseidon_rows = global_first_touches.estimated_default_poseidon_rows();
+        let initial_default_poseidon_rows = self.default_poseidon_rows.count_new(first_touches);
         let initial_nondefault_poseidon_rows = (leaves + merkle_nodes)
-            .saturating_sub(global_first_touches.leaves + global_first_touches.merkle_nodes);
+            .saturating_sub(first_touches.leaves + first_touches.merkle_nodes);
         let poseidon2_rows = leaves
             + merkle_nodes
             + initial_nondefault_poseidon_rows
@@ -351,29 +364,29 @@ impl MemoryCtx {
 }
 
 #[inline(always)]
-fn push_page_access(accesses: &mut Vec<PageAccess>, page_id: u32, leaf_mask: u64) {
+fn push_page_touch(touches: &mut Vec<PageTouch>, page_id: u32, leaf_mask: u64) {
     debug_assert!(leaf_mask != 0);
-    let len = accesses.len();
+    let len = touches.len();
     if len != 0 {
         // SAFETY: len is non-zero, so len - 1 is in bounds.
-        let prev = unsafe { accesses.get_unchecked_mut(len - 1) };
+        let prev = unsafe { touches.get_unchecked_mut(len - 1) };
         if prev.page_id == page_id {
             prev.leaf_mask |= leaf_mask;
             return;
         }
     }
 
-    if len == accesses.capacity() {
-        accesses.reserve(1);
+    if len == touches.capacity() {
+        touches.reserve(1);
     }
 
-    // SAFETY: capacity was checked above. PageAccess is Copy and has no drop glue.
+    // SAFETY: capacity was checked above. PageTouch is Copy and has no drop glue.
     unsafe {
-        accesses
+        touches
             .as_mut_ptr()
             .add(len)
-            .write(PageAccess { page_id, leaf_mask });
-        accesses.set_len(len + 1);
+            .write(PageTouch { page_id, leaf_mask });
+        touches.set_len(len + 1);
     }
 }
 
@@ -410,11 +423,24 @@ mod tests {
 
         let page_id = ((2 - ADDR_SPACE_OFFSET) << ctx.memory_dimensions.address_height) as usize
             >> MEMORY_PAGE_BITS;
-        assert_eq!(ctx.global_memory.page_mask(page_id), 0);
+        assert_eq!(ctx.baseline_memory.page_mask(page_id), 0);
     }
 
     #[test]
-    fn test_global_first_touches_poseidon_rows_dedup_by_default_bucket() {
+    fn test_address_spaces_map_to_distinct_pages() {
+        let system_config = crate::utils::test_system_config();
+        let ctx = MemoryCtx::new(&system_config, 1);
+        let memory_page = ctx.leaf_id_range(RV64_MEMORY_AS, 0, 1).0 >> MEMORY_PAGE_BITS;
+        let public_values_page = ctx.leaf_id_range(PUBLIC_VALUES_AS, 0, 1).0 >> MEMORY_PAGE_BITS;
+        let deferral_page = ctx.leaf_id_range(DEFERRAL_AS, 0, 1).0 >> MEMORY_PAGE_BITS;
+
+        assert_ne!(memory_page, public_values_page);
+        assert_ne!(memory_page, deferral_page);
+        assert_ne!(public_values_page, deferral_page);
+    }
+
+    #[test]
+    fn test_first_touches_poseidon_rows_dedup_by_default_bucket() {
         let system_config = crate::utils::test_system_config();
         let mut ctx = MemoryCtx::new(&system_config, 1);
         let height = ctx.memory_dimensions.overall_height() as u32;
@@ -430,6 +456,36 @@ mod tests {
         assert_eq!(trace_heights[BOUNDARY_AIR_ID], 4);
         assert_eq!(trace_heights[MERKLE_AIR_ID], 2 * height);
         assert_eq!(trace_heights[poseidon2_idx], 2 * height + 3);
+    }
+
+    #[test]
+    fn test_default_poseidon_rows_dedup_across_checkpoints() {
+        let system_config = crate::utils::test_system_config();
+        let mut ctx = MemoryCtx::new(&system_config, 1);
+        let mut trace_heights = vec![0; 6];
+
+        ctx.update_boundary_merkle_heights(RV64_MEMORY_AS, 0, 1);
+        ctx.apply_height_updates(&mut trace_heights);
+        ctx.update_checkpoint();
+
+        let boundary_before = trace_heights[BOUNDARY_AIR_ID];
+        let merkle_before = trace_heights[MERKLE_AIR_ID];
+        let poseidon2_idx = trace_heights.len() - 2;
+        let poseidon_before = trace_heights[poseidon2_idx];
+        let next_page_ptr = ((1 << MEMORY_PAGE_BITS) * U16_CELL_SIZE * DIGEST_WIDTH) as u32;
+
+        ctx.update_boundary_merkle_heights(RV64_MEMORY_AS, next_page_ptr, 1);
+        ctx.apply_height_updates(&mut trace_heights);
+
+        assert_eq!(trace_heights[BOUNDARY_AIR_ID] - boundary_before, 2);
+        assert_eq!(
+            trace_heights[MERKLE_AIR_ID] - merkle_before,
+            2 * MEMORY_PAGE_BITS as u32
+        );
+        assert_eq!(
+            trace_heights[poseidon2_idx] - poseidon_before,
+            1 + MEMORY_PAGE_BITS as u32
+        );
     }
 
     #[test]

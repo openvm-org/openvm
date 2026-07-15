@@ -22,12 +22,12 @@ use crate::{
     arch::{
         execution_mode::{
             metered::{
-                memory_ctx::{MemoryCtx, PageAccess},
+                memory_ctx::{MemoryCtx, PageTouch},
                 segment_ctx::Segment,
             },
             MeteredCtx,
         },
-        ExecutionError, Streams, SystemConfig, VmState,
+        ExecutionError, Streams, SystemConfig, VmState, ADDR_SPACE_OFFSET,
     },
     system::memory::online::GuestMemory,
 };
@@ -65,9 +65,9 @@ pub struct RvrMeteredResult {
 #[derive(Clone, Copy)]
 pub struct MeteredTracerData {
     pub trace_heights: *mut u32,
-    pub mem_page_buf: *mut PageAccess,
-    pub pv_page_buf: *mut PageAccess,
-    pub deferral_page_buf: *mut PageAccess,
+    pub mem_page_buf: *mut PageTouch,
+    pub pv_page_buf: *mut PageTouch,
+    pub deferral_page_buf: *mut PageTouch,
     /// Periodic-check callback. Always initialized; generated C calls it
     /// unconditionally to keep the hot metered path branch-free.
     pub on_check: unsafe extern "C" fn(*mut MeteredTracerData) -> u8,
@@ -117,9 +117,9 @@ pub struct SegmentationState {
     /// and segmentation logic.
     pub ctx: MeteredCtx,
     /// Per-address-space page buffers. Each entry = local page id + leaf mask.
-    mem_page_buf: Vec<PageAccess>,
-    pv_page_buf: Vec<PageAccess>,
-    deferral_page_buf: Vec<PageAccess>,
+    mem_page_buf: Vec<PageTouch>,
+    pv_page_buf: Vec<PageTouch>,
+    deferral_page_buf: Vec<PageTouch>,
     address_height: u32,
 }
 
@@ -129,9 +129,9 @@ impl SegmentationState {
         let address_height = memory_dimensions.address_height as u32;
         Self {
             ctx,
-            mem_page_buf: vec![PageAccess::default(); MEM_PAGE_BUF_CAP],
-            pv_page_buf: vec![PageAccess::default(); PV_PAGE_BUF_CAP],
-            deferral_page_buf: vec![PageAccess::default(); DEFERRAL_PAGE_BUF_CAP],
+            mem_page_buf: vec![PageTouch::default(); MEM_PAGE_BUF_CAP],
+            pv_page_buf: vec![PageTouch::default(); PV_PAGE_BUF_CAP],
+            deferral_page_buf: vec![PageTouch::default(); DEFERRAL_PAGE_BUF_CAP],
             address_height,
         }
     }
@@ -150,17 +150,17 @@ impl SegmentationState {
     }
 
     /// Get mutable pointer to the AS_MEMORY page buffer for the C tracer.
-    pub fn mem_page_buf_ptr(&mut self) -> *mut PageAccess {
+    pub fn mem_page_buf_ptr(&mut self) -> *mut PageTouch {
         self.mem_page_buf.as_mut_ptr()
     }
 
     /// Get mutable pointer to the AS_PUBLIC_VALUES page buffer for the C tracer.
-    pub fn pv_page_buf_ptr(&mut self) -> *mut PageAccess {
+    pub fn pv_page_buf_ptr(&mut self) -> *mut PageTouch {
         self.pv_page_buf.as_mut_ptr()
     }
 
     /// Get mutable pointer to the AS_DEFERRAL page buffer for the C tracer.
-    pub fn deferral_page_buf_ptr(&mut self) -> *mut PageAccess {
+    pub fn deferral_page_buf_ptr(&mut self) -> *mut PageTouch {
         self.deferral_page_buf.as_mut_ptr()
     }
 
@@ -169,7 +169,7 @@ impl SegmentationState {
         memory_ctx: &mut MemoryCtx,
         address_height: u32,
         addr_space: u32,
-        buffer: &[PageAccess],
+        buffer: &[PageTouch],
         len: u32,
     ) {
         if len == 0 {
@@ -179,8 +179,8 @@ impl SegmentationState {
         // deduplicates against one global memory tree, so convert to global
         // page ids before applying the leaf masks.
         let page_shift = address_height as usize - MEMORY_PAGE_BITS;
-        let page_offset = ((addr_space as usize - 1) << page_shift) as u32;
-        memory_ctx.apply_page_accesses_with_offset(page_offset, &buffer[..len as usize]);
+        let page_offset = ((addr_space as usize - ADDR_SPACE_OFFSET as usize) << page_shift) as u32;
+        memory_ctx.apply_page_touches_with_offset(page_offset, &buffer[..len as usize]);
     }
 
     /// Apply all page buffers: convert local pages to global ids and update
@@ -318,8 +318,7 @@ pub unsafe extern "C" fn metered_periodic_check(t: *mut MeteredTracerData) -> u8
     tracer.mem_page_buf_len = 0;
     tracer.pv_page_buf_len = 0;
     tracer.deferral_page_buf_len = 0;
-    // Reset dedup cache — required for correctness across segment boundaries
-    // that clear the global BitSet.
+    // The cleared buffer no longer contains the entry cached by last_mem_page.
     tracer.last_mem_page = NO_LAST_PAGE;
 
     let did_segment =
@@ -526,6 +525,7 @@ mod tests {
             .collect::<Vec<_>>();
         air_names[BOUNDARY_AIR_ID] = "Memory Boundary".to_string();
         air_names[MERKLE_AIR_ID] = "Memory Merkle".to_string();
+        air_names[num_airs - 2] = "Poseidon2".to_string();
         let constant_trace_heights = vec![None; num_airs];
         let widths = vec![1; num_airs];
         let interactions = vec![0; num_airs];
@@ -553,15 +553,15 @@ mod tests {
     #[test]
     fn test_initialize_segment_memory_replays_page_buffers() {
         let mut with_interval_buffer = make_segmentation_state();
-        with_interval_buffer.mem_page_buf[0] = PageAccess {
+        with_interval_buffer.mem_page_buf[0] = PageTouch {
             page_id: 7,
             leaf_mask: 1,
         };
-        with_interval_buffer.pv_page_buf[0] = PageAccess {
+        with_interval_buffer.pv_page_buf[0] = PageTouch {
             page_id: 3,
             leaf_mask: 1,
         };
-        with_interval_buffer.deferral_page_buf[0] = PageAccess {
+        with_interval_buffer.deferral_page_buf[0] = PageTouch {
             page_id: 2,
             leaf_mask: 1,
         };
@@ -586,9 +586,32 @@ mod tests {
     }
 
     #[test]
+    fn test_periodic_checks_share_default_poseidon_rows() {
+        let mut seg_state = make_segmentation_state();
+        seg_state.mem_page_buf[0] = PageTouch {
+            page_id: 0,
+            leaf_mask: 1,
+        };
+        assert!(!seg_state.on_periodic_check(1, 0, 0, 0));
+
+        let poseidon2_idx = seg_state.ctx.trace_heights.len() - 2;
+        let poseidon_before = seg_state.ctx.trace_heights[poseidon2_idx];
+        seg_state.mem_page_buf[0] = PageTouch {
+            page_id: 1,
+            leaf_mask: 1,
+        };
+        assert!(!seg_state.on_periodic_check(1, 0, 0, 0));
+
+        assert_eq!(
+            seg_state.ctx.trace_heights[poseidon2_idx] - poseidon_before,
+            1 + MEMORY_PAGE_BITS as u32
+        );
+    }
+
+    #[test]
     fn test_memory_page_buffer_applies_cross_leaf_mask() {
         let mut buffered = make_segmentation_state();
-        buffered.mem_page_buf[0] = PageAccess {
+        buffered.mem_page_buf[0] = PageTouch {
             page_id: 0,
             leaf_mask: 0b11,
         };
