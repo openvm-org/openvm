@@ -159,6 +159,9 @@ struct CachedRvrCompiledPreflight {
     /// device decoder. CPU and all-custom arena-only routes keep the full
     /// host memory schema even when they can safely omit access aux.
     compact_delta_memory: bool,
+    /// True only when the backend has bound the CUDA replay consumer that can
+    /// replace host touched-memory finalization.
+    device_touched_memory: bool,
 }
 
 #[cfg(feature = "rvr")]
@@ -183,6 +186,7 @@ impl<F: PrimeField32> CachedRvrPreflightExecutor<F> for CachedRvrCompiledPreflig
             arena_targets,
             self.build_access_aux,
             self.compact_delta_memory,
+            self.device_touched_memory,
         )
     }
 
@@ -1374,6 +1378,7 @@ where
             exit_code,
             filtered_exec_frequencies,
             touched_memory,
+            touched_memory_on_device: false,
         };
         let record_arenas = exec_state.ctx.arenas;
         let to_state = VmState::new(
@@ -2266,6 +2271,8 @@ where
                                 wire_airs.clear();
                             }
                             let compact_delta_memory = fully_direct_delta && has_device_delta_route;
+                            let device_touched_memory =
+                                fully_direct_delta && has_device_delta_route;
                             wire_airs.sort_unstable();
                             CachedRvrPreflight::Rvr(Box::new(CachedRvrCompiledPreflight {
                                 compiled,
@@ -2277,6 +2284,7 @@ where
                                 build_access_aux: !(fully_direct_delta
                                     && (has_device_delta_route || all_custom_arena)),
                                 compact_delta_memory,
+                                device_touched_memory,
                             }))
                         }
                         RvrPreflightRoute::Interpreter(_) => CachedRvrPreflight::Interpreter,
