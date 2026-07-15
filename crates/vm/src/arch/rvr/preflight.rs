@@ -32,6 +32,7 @@ use crate::{
 
 pub const PREFLIGHT_TRACER_KIND: u32 = rvr_openvm_ext_ffi_common::PREFLIGHT_TRACER_KIND;
 pub const PREFLIGHT_INITIAL_TIMESTAMP: u32 = rvr_openvm_ext_ffi_common::PREFLIGHT_INITIAL_TIMESTAMP;
+const PREFLIGHT_CUSTOM_MEMORY_SCRATCH_CAP: usize = 256;
 pub const PREFLIGHT_MEMORY_KIND_READ: u8 = rvr_openvm_ext_ffi_common::PREFLIGHT_MEMORY_KIND_READ;
 pub const PREFLIGHT_MEMORY_KIND_WRITE: u8 = rvr_openvm_ext_ffi_common::PREFLIGHT_MEMORY_KIND_WRITE;
 pub const PREFLIGHT_MEMORY_KIND_TOUCH: u8 = rvr_openvm_ext_ffi_common::PREFLIGHT_MEMORY_KIND_TOUCH;
@@ -62,19 +63,39 @@ pub const PREFLIGHT_DELTA_RECORD_SIZE: usize =
 /// C-compatible preflight program log entry.
 ///
 /// Layout matches `ProgramLogEntry` in `openvm_tracer_preflight.h`.
-/// `opcode` is reserved for a future richer emitted hook; M1 logs use `pc`
-/// and recover opcode metadata from the `VmExe`.
+/// OpenVM pcs are four-byte aligned, so bit 0 of `pc_and_flags` carries the
+/// writer-complete fail-closed guard without enlarging this side log.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ProgramLogEntry {
-    pub opcode: u16,
-    /// Set only when an arena-native instruction has supplied the complete
-    /// post-write value needed by delta chronology reconstruction.
-    pub write_complete: u16,
     pub timestamp: u32,
-    pub pc: u64,
+    pub pc_and_flags: u32,
     /// Post-write register block for arena-native W-family chronology.
     pub write_value: u64,
+}
+
+impl ProgramLogEntry {
+    const WRITE_COMPLETE: u32 = 1;
+
+    #[inline]
+    pub fn new(timestamp: u32, pc: u32) -> Self {
+        debug_assert_eq!(pc & 3, 0, "OpenVM pc must be four-byte aligned");
+        Self {
+            timestamp,
+            pc_and_flags: pc,
+            write_value: 0,
+        }
+    }
+
+    #[inline]
+    pub fn pc(&self) -> u32 {
+        self.pc_and_flags & !Self::WRITE_COMPLETE
+    }
+
+    #[inline]
+    pub fn write_complete(&self) -> bool {
+        self.pc_and_flags & Self::WRITE_COMPLETE != 0
+    }
 }
 
 /// C-compatible preflight memory log entry.
@@ -220,6 +241,13 @@ pub struct PreflightTracerData {
     /// from the per-AIR compact targets because its cross-AIR order is what
     /// makes previous timestamps implicit.
     pub delta_records: *mut ChipRecordBuf,
+    /// Bounded instruction-local predecessor capture for custom direct-final
+    /// emitters while the persistent residual-memory log uses its compact
+    /// 24-byte schema.
+    pub custom_memory_scratch: *mut MemoryLogEntry,
+    /// `u32::MAX` means inactive; otherwise this is the written scratch prefix.
+    pub custom_memory_scratch_len: u32,
+    pub custom_memory_scratch_cap: u32,
 }
 
 impl PreflightTracerData {
@@ -251,6 +279,9 @@ impl PreflightTracerData {
             exec_frequencies: std::ptr::null_mut(),
             exec_frequencies_len: 0,
             delta_records: std::ptr::null_mut(),
+            custom_memory_scratch: std::ptr::null_mut(),
+            custom_memory_scratch_len: u32::MAX,
+            custom_memory_scratch_cap: 0,
         }
     }
 
@@ -301,6 +332,12 @@ impl PreflightTracerData {
 
     pub fn set_delta_records(&mut self, delta_records: &mut ChipRecordBuf) {
         self.delta_records = delta_records;
+    }
+
+    fn set_custom_memory_scratch(&mut self, scratch: &mut [MaybeUninit<MemoryLogEntry>]) {
+        self.custom_memory_scratch = scratch.as_mut_ptr().cast();
+        self.custom_memory_scratch_len = u32::MAX;
+        self.custom_memory_scratch_cap = scratch.len() as u32;
     }
 
     /// Reuse the tracer's memory pointer/cursor for the delta-only compact
@@ -357,6 +394,9 @@ impl Default for PreflightTracerData {
             exec_frequencies: std::ptr::null_mut(),
             exec_frequencies_len: 0,
             delta_records: std::ptr::null_mut(),
+            custom_memory_scratch: std::ptr::null_mut(),
+            custom_memory_scratch_len: u32::MAX,
+            custom_memory_scratch_cap: 0,
         }
     }
 }
@@ -1048,6 +1088,8 @@ where
             };
         }
 
+        let mut custom_memory_scratch =
+            [MaybeUninit::<MemoryLogEntry>::uninit(); PREFLIGHT_CUSTOM_MEMORY_SCRATCH_CAP];
         let mut tracer =
             PreflightTracerData::new_uninit(&mut program_log, &mut memory_log, &mut chip_counts);
         if compact_delta_memory {
@@ -1063,6 +1105,7 @@ where
         tracer.set_touched_uninit(&mut touched);
         tracer.set_chip_records(&mut chip_records);
         tracer.set_exec_frequencies(&mut exec_frequencies);
+        tracer.set_custom_memory_scratch(&mut custom_memory_scratch);
         if inline_meta.delta_records {
             tracer.set_delta_records(&mut delta_record);
         }
@@ -1302,6 +1345,7 @@ where
                  scratch_take_us={} record_buffer_us={} delta_take_us={} descriptor_us={} \
                  native_us={} checks_us={} replay_us={} touched_pages_us={} scrub_recycle_us={} \
                  harvest_us={} program_records={} memory_records={} touched_blocks={} \
+                 program_log_bytes={} memory_log_bytes={} touched_log_bytes={} \
                  arena_native_airs={} access_aux_required={}",
                 (setup_finished - setup_started).as_micros(),
                 (logs_taken - setup_started).as_micros(),
@@ -1319,6 +1363,14 @@ where
                 program_len,
                 memory_len,
                 touched_len,
+                program_len * std::mem::size_of::<ProgramLogEntry>(),
+                memory_len
+                    * if compact_delta_memory {
+                        std::mem::size_of::<DeltaMemoryLogEntry>()
+                    } else {
+                        std::mem::size_of::<MemoryLogEntry>()
+                    },
+                touched_len * std::mem::size_of::<TouchedBlock>(),
                 arena_native_written.len(),
                 build_access_aux as u8,
             );
@@ -1691,18 +1743,22 @@ mod tests {
             .program
             .enumerate_by_pc()
             .into_iter()
-            .map(|(pc, _, _)| u64::from(pc))
+            .map(|(pc, _, _)| pc)
             .collect::<HashSet<_>>();
         for entry in &program_log[..program_len] {
-            assert!(valid_pcs.contains(&entry.pc), "invalid pc {:#x}", entry.pc);
+            assert!(
+                valid_pcs.contains(&entry.pc()),
+                "invalid pc {:#x}",
+                entry.pc()
+            );
         }
         assert_eq!(
             program_log[..program_len]
                 .iter()
-                .map(|entry| entry.pc)
+                .map(ProgramLogEntry::pc)
                 .collect::<Vec<_>>(),
-            (0..program_len as u64)
-                .map(|idx| idx * u64::from(DEFAULT_PC_STEP))
+            (0..program_len as u32)
+                .map(|idx| idx * DEFAULT_PC_STEP)
                 .collect::<Vec<_>>()
         );
         assert_eq!(
@@ -1844,10 +1900,10 @@ mod tests {
         assert_eq!(
             program_log[..program_len]
                 .iter()
-                .map(|entry| entry.pc)
+                .map(ProgramLogEntry::pc)
                 .collect::<Vec<_>>(),
             (0..program_len as u32)
-                .map(|idx| u64::from(idx * DEFAULT_PC_STEP))
+                .map(|idx| idx * DEFAULT_PC_STEP)
                 .collect::<Vec<_>>()
         );
         assert_eq!(

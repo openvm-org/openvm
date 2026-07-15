@@ -242,6 +242,10 @@ impl ExtInstr for ModIsEqSetupInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
+        let emit_inline = self.emit_inline && ctx.inline_record_enabled();
+        if emit_inline {
+            ctx.write_line("preflight_begin_custom_memory_capture(state);");
+        }
         let rs1 = ctx.read_reg(self.rs1_reg);
         let rs2 = ctx.read_reg(self.rs2_reg);
         let num_limbs = format!("{}u", self.num_limbs);
@@ -251,7 +255,7 @@ impl ExtInstr for ModIsEqSetupInstr {
             &["state", &rs1, &rs2, &num_limbs],
         );
         ctx.write_reg(self.rd_reg, &val);
-        if self.emit_inline && ctx.inline_record_enabled() {
+        if emit_inline {
             emit_mod_iseq_record(
                 ctx,
                 self.from_pc,

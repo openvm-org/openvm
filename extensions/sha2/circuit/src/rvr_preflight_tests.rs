@@ -201,7 +201,7 @@ fn assert_sha256_access_schedule(
     let program_log = &output.raw_logs.program_log;
     let mut num_sha256_entries = 0;
     for (idx, entry) in program_log.iter().enumerate() {
-        let instruction_idx = ((entry.pc as u32 - exe.program.pc_base) / 4) as usize;
+        let instruction_idx = ((entry.pc() - exe.program.pc_base) / 4) as usize;
         let Some((instruction, _)) =
             exe.program.instructions_and_debug_infos[instruction_idx].as_ref()
         else {
