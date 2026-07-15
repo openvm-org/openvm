@@ -951,7 +951,8 @@ fn residual_memory_event(
 /// wires. The production GPU path will perform the same merge/partition on
 /// device; keeping this oracle here lets every existing arena/proof gate
 /// compare the reconstructed bytes before a sandbox is considered.
-fn expand_delta_records<F: PrimeField32, RA: Arena>(
+#[doc(hidden)]
+pub fn expand_delta_records<F: PrimeField32, RA: Arena>(
     registry: &LogNativeAssemblerRegistry<F, RA>,
     exe: &VmExe<F>,
     output: &mut RvrPreflightOutput<F>,
@@ -1370,6 +1371,9 @@ mod tests {
             chip_counts: Vec::new(),
             chip_counts_touched: Vec::new(),
             touched: Vec::new(),
+            device_aux_patches: Vec::new(),
+            device_aux_references: Vec::new(),
+            device_aux_arena_references: Vec::new(),
         }
     }
 

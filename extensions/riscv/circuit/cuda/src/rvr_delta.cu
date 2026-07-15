@@ -78,12 +78,13 @@ static_assert(sizeof(ProgramLogEntry) == 16, "program log size drift");
 
 static constexpr uint32_t PROGRAM_WRITE_COMPLETE = 1u;
 
-struct TouchedBlock {
-    uint32_t addr_space;
-    uint32_t block_addr;
-    uint64_t initial_value;
+struct DeviceInitialMemory {
+    uint64_t base;
+    uint64_t len;
+    uint32_t cell_size;
+    uint32_t reserved;
 };
-static_assert(sizeof(TouchedBlock) == 16, "touched block size drift");
+static_assert(sizeof(DeviceInitialMemory) == 24, "initial memory descriptor size drift");
 
 struct TouchedMemoryRecord {
     uint32_t addr_space;
@@ -95,7 +96,6 @@ static_assert(sizeof(TouchedMemoryRecord) == 28, "touched-memory output size dri
 
 enum ValueUpdate : uint8_t {
     VALUE_NONE = 0,
-    VALUE_SEED = 1,
     VALUE_SET = 2,
     VALUE_STORE_PATCH = 3,
 };
@@ -106,12 +106,13 @@ struct EventPayload {
     uint32_t timestamp;
     uint32_t output_index_plus_one;
     uint32_t write_record_plus_one;
+    uint32_t residual_index_plus_one;
     uint8_t value_update;
     uint8_t width;
     uint8_t byte_offset;
     uint8_t _pad0;
 };
-static_assert(sizeof(EventPayload) == 32, "event payload size drift");
+static_assert(sizeof(EventPayload) == 40, "event payload size drift");
 
 struct DeltaAirOutputDesc {
     uint64_t base;
@@ -532,8 +533,6 @@ __global__ void build_events(
     size_t memory_stride,
     ProgramLogEntry const *program,
     size_t program_count,
-    TouchedBlock const *touched,
-    size_t touched_count,
     RvrOperandEntry const *table,
     size_t operand_count,
     uint32_t pc_base,
@@ -548,11 +547,10 @@ __global__ void build_events(
     size_t delta_events = delta_count * 3;
     size_t memory_begin = delta_events;
     size_t program_begin = memory_begin + memory_count;
-    size_t touched_begin = program_begin + program_count * 3;
-    size_t event_count = touched_begin + touched_count;
+    size_t event_count = program_begin + program_count * 3;
     if (idx >= event_count) return;
 
-    EventPayload payload{INVALID_ADDRESS, 0, UINT32_MAX, 0, 0, VALUE_NONE, 0, 0, 0};
+    EventPayload payload{INVALID_ADDRESS, 0, UINT32_MAX, 0, 0, 0, VALUE_NONE, 0, 0, 0};
     if (idx < delta_events) {
         size_t record_idx = idx / 3;
         uint32_t access_slot = idx % 3;
@@ -596,12 +594,13 @@ __global__ void build_events(
             payload.address_key =
                 address_key(event.addr_space, event.address & ~uint64_t(7), error);
             payload.timestamp = event.timestamp;
+            payload.residual_index_plus_one = uint32_t(idx - memory_begin + 1);
             if (event.kind == 1) {
                 payload.value = event.value;
                 payload.value_update = VALUE_SET;
             }
         }
-    } else if (idx < touched_begin) {
+    } else {
         size_t local = idx - program_begin;
         ProgramLogEntry program_entry = program[local / 3];
         uint32_t access_slot = local % 3;
@@ -612,32 +611,24 @@ __global__ void build_events(
                 RvrOperandEntry entry = table[table_slot];
                 if (entry.air_idx < num_airs && entry.access_pattern <= DELTA_RW1 &&
                     arena_native_flags[entry.air_idx]) {
-                DeltaRecord synthetic{program_pc, program_entry.timestamp, 0, 0};
-                uint8_t as;
-                uint64_t address;
-                if (delta_access(synthetic, entry, access_slot, as, address)) {
-                    payload.address_key = address_key(as, address, error);
-                    payload.timestamp = program_entry.timestamp + access_slot;
-                    if (delta_write_access(entry, access_slot)) {
-                        if ((program_entry.pc_and_flags & PROGRAM_WRITE_COMPLETE) == 0) {
-                            fail(error, 16);
-                            return;
+                    DeltaRecord synthetic{program_pc, program_entry.timestamp, 0, 0};
+                    uint8_t as;
+                    uint64_t address;
+                    if (delta_access(synthetic, entry, access_slot, as, address)) {
+                        payload.address_key = address_key(as, address, error);
+                        payload.timestamp = program_entry.timestamp + access_slot;
+                        if (delta_write_access(entry, access_slot)) {
+                            if ((program_entry.pc_and_flags & PROGRAM_WRITE_COMPLETE) == 0) {
+                                fail(error, 16);
+                                return;
+                            }
+                            payload.value = program_entry.write_value;
+                            payload.value_update = VALUE_SET;
                         }
-                        payload.value = program_entry.write_value;
-                        payload.value_update = VALUE_SET;
                     }
-                }
                 }
             }
         }
-    } else {
-        TouchedBlock seed = touched[idx - touched_begin];
-        payload.address_key = address_key(
-            uint8_t(seed.addr_space), uint64_t(seed.block_addr), error
-        );
-        payload.value = seed.initial_value;
-        payload.timestamp = 0;
-        payload.value_update = VALUE_SEED;
     }
     timestamp_keys[idx] = payload.timestamp;
     payloads[idx] = payload;
@@ -663,9 +654,9 @@ __global__ void mark_address_group_starts(
 }
 
 __global__ void validate_group_count(
-    uint32_t const *group_count, size_t expected, uint32_t *error
+    uint32_t const *group_count, size_t capacity, uint32_t *error
 ) {
-    if (blockIdx.x == 0 && threadIdx.x == 0 && size_t(*group_count) != expected) {
+    if (blockIdx.x == 0 && threadIdx.x == 0 && size_t(*group_count) > capacity) {
         fail(error, 20);
     }
 }
@@ -676,39 +667,50 @@ __global__ void replay_address_groups(
     size_t count,
     uint32_t const *group_starts,
     uint32_t const *actual_group_count,
-    size_t group_count,
+    size_t group_capacity,
+    DeviceInitialMemory const *initial_memory,
+    size_t initial_memory_count,
     TouchedMemoryRecord *touched_output,
     uint32_t *prev_timestamps,
     uint64_t *prev_values,
+    uint32_t *memory_prev_timestamps,
+    uint64_t *memory_prev_values,
     uint32_t *error
 ) {
     size_t group_idx = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
-    if (size_t(*actual_group_count) != group_count || group_idx >= group_count) return;
+    size_t group_count = size_t(*actual_group_count);
+    if (group_count > group_capacity || group_idx >= group_count) return;
     size_t idx = group_starts[group_idx];
 
     uint32_t previous_timestamp = 0;
-    uint64_t current_value = 0;
-    bool seeded = false;
+    uint64_t key = keys[idx];
+    uint32_t address_space = uint32_t(key >> 56);
+    uint64_t byte_address = key & ((uint64_t(1) << 56) - 1);
+    if (address_space >= initial_memory_count) {
+        fail(error, 22);
+        return;
+    }
+    DeviceInitialMemory image = initial_memory[address_space];
+    if (image.reserved != 0 || image.cell_size != 2 || image.base == 0 ||
+        byte_address > image.len || image.len - byte_address < sizeof(uint64_t)) {
+        fail(error, 23);
+        return;
+    }
+    uint64_t current_value = *reinterpret_cast<uint64_t const *>(
+        image.base + byte_address
+    );
     for (size_t cursor = idx; cursor < count && keys[cursor] == keys[idx]; ++cursor) {
         EventPayload event = events[cursor];
-        if (event.value_update == VALUE_SEED) {
-            if (seeded) {
-                fail(error, 14);
-                return;
-            }
-            seeded = true;
-            current_value = event.value;
-            continue;
-        }
-        if (!seeded) {
-            fail(error, 15);
-            return;
-        }
         if (event.output_index_plus_one != 0) {
             prev_timestamps[event.output_index_plus_one - 1] = previous_timestamp;
         }
         if (event.write_record_plus_one != 0) {
             prev_values[event.write_record_plus_one - 1] = current_value;
+        }
+        if (event.residual_index_plus_one != 0) {
+            size_t residual = event.residual_index_plus_one - 1;
+            memory_prev_timestamps[residual] = previous_timestamp;
+            memory_prev_values[residual] = current_value;
         }
         if (event.value_update == VALUE_SET) {
             current_value = event.value;
@@ -725,14 +727,12 @@ __global__ void replay_address_groups(
         }
         previous_timestamp = event.timestamp;
     }
-    uint64_t key = keys[idx];
-    uint64_t byte_address = key & ((uint64_t(1) << 56) - 1);
     if (byte_address > uint64_t(UINT32_MAX) * 2u + 1u) {
         fail(error, 21);
         return;
     }
     TouchedMemoryRecord record;
-    record.addr_space = uint32_t(key >> 56);
+    record.addr_space = address_space;
     record.block_ptr = uint32_t(byte_address / 2u);
     record.timestamp = previous_timestamp;
     record.values[0] = Fp(uint16_t(current_value)).asRaw();
@@ -873,9 +873,12 @@ extern "C" int _rvr_delta_predecode(
     size_t memory_stride,
     DeviceBufferConstView<uint8_t> d_program_bytes,
     size_t program_count,
-    DeviceBufferConstView<uint8_t> d_touched_bytes,
-    size_t touched_count,
+    DeviceBufferConstView<uint8_t> d_initial_memory_bytes,
+    size_t initial_memory_count,
     DeviceRawBufferConstView d_touched_output_bytes,
+    uint32_t *d_touched_count,
+    uint32_t *d_memory_prev_timestamps,
+    uint64_t *d_memory_prev_values,
     RvrOperandEntry const *d_operand_table,
     size_t operand_count,
     uint32_t pc_base,
@@ -891,18 +894,23 @@ extern "C" int _rvr_delta_predecode(
          memory_stride != sizeof(DeltaMemoryLogEntry)) ||
         d_memory_bytes.size != memory_count * memory_stride ||
         d_program_bytes.size != program_count * sizeof(ProgramLogEntry) ||
-        d_touched_bytes.size != touched_count * sizeof(TouchedBlock) ||
-        d_touched_output_bytes.size != touched_count * sizeof(TouchedMemoryRecord)) {
+        d_initial_memory_bytes.size != initial_memory_count * sizeof(DeviceInitialMemory) ||
+        d_touched_output_bytes.size <
+            (delta_count * 3 + memory_count + program_count * 3) *
+                sizeof(TouchedMemoryRecord) ||
+        (memory_count != 0 &&
+         (d_memory_prev_timestamps == nullptr || d_memory_prev_values == nullptr)) ||
+        d_touched_count == nullptr) {
         return int(cudaErrorInvalidValue);
     }
     size_t event_count =
-        delta_count * 3 + memory_count + program_count * 3 + touched_count;
+        delta_count * 3 + memory_count + program_count * 3;
     if (event_count == 0) {
-        return 0;
+        return int(cudaMemsetAsync(d_touched_count, 0, sizeof(uint32_t), stream));
     }
 
     uint32_t *ts_a = nullptr, *ts_b = nullptr, *indices_a = nullptr, *indices_b = nullptr;
-    uint32_t *event_indices = nullptr, *group_starts = nullptr, *group_count = nullptr;
+    uint32_t *event_indices = nullptr, *group_starts = nullptr;
     uint64_t *addr_a = nullptr, *addr_b = nullptr;
     uint8_t *air_a = nullptr, *air_b = nullptr, *group_flags = nullptr;
     EventPayload *events_a = nullptr, *events_b = nullptr;
@@ -931,7 +939,7 @@ extern "C" int _rvr_delta_predecode(
     CUDA_ALLOC(event_indices, event_count * sizeof(uint32_t));
     CUDA_ALLOC(group_starts, event_count * sizeof(uint32_t));
     CUDA_ALLOC(group_flags, event_count * sizeof(uint8_t));
-    CUDA_ALLOC(group_count, sizeof(uint32_t));
+    CUDA_TRY(cudaMemsetAsync(d_touched_count, 0, sizeof(uint32_t), stream));
     if (delta_count != 0) {
         CUDA_ALLOC(prev, delta_count * 3 * sizeof(uint32_t));
         CUDA_ALLOC(prev_values, delta_count * sizeof(uint64_t));
@@ -941,6 +949,14 @@ extern "C" int _rvr_delta_predecode(
         CUDA_ALLOC(indices_b, delta_count * sizeof(uint32_t));
         CUDA_TRY(cudaMemsetAsync(prev, 0, delta_count * 3 * sizeof(uint32_t), stream));
         CUDA_TRY(cudaMemsetAsync(prev_values, 0, delta_count * sizeof(uint64_t), stream));
+    }
+    if (memory_count != 0) {
+        CUDA_TRY(cudaMemsetAsync(
+            d_memory_prev_timestamps, 0, memory_count * sizeof(uint32_t), stream
+        ));
+        CUDA_TRY(cudaMemsetAsync(
+            d_memory_prev_values, 0, memory_count * sizeof(uint64_t), stream
+        ));
     }
 
     {
@@ -954,8 +970,6 @@ extern "C" int _rvr_delta_predecode(
             memory_stride,
             reinterpret_cast<ProgramLogEntry const *>(d_program_bytes.ptr),
             program_count,
-            reinterpret_cast<TouchedBlock const *>(d_touched_bytes.ptr),
-            touched_count,
             d_operand_table,
             operand_count,
             pc_base,
@@ -981,7 +995,7 @@ extern "C" int _rvr_delta_predecode(
         event_indices,
         group_flags,
         group_starts,
-        group_count,
+        d_touched_count,
         event_count,
         stream
     ));
@@ -1025,25 +1039,29 @@ extern "C" int _rvr_delta_predecode(
         event_indices,
         group_flags,
         group_starts,
-        group_count,
+        d_touched_count,
         event_count,
         stream
     ));
-    validate_group_count<<<1, 1, 0, stream>>>(group_count, touched_count, d_error);
+    validate_group_count<<<1, 1, 0, stream>>>(d_touched_count, event_count, d_error);
     CUDA_TRY(cudaGetLastError());
-    if (touched_count != 0) {
+    if (event_count != 0) {
         dim3 block(256);
-        dim3 grid((touched_count + block.x - 1) / block.x);
+        dim3 grid((event_count + block.x - 1) / block.x);
         replay_address_groups<<<grid, block, 0, stream>>>(
             addr_b,
             events_b,
             event_count,
             group_starts,
-            group_count,
-            touched_count,
+            d_touched_count,
+            event_count,
+            reinterpret_cast<DeviceInitialMemory const *>(d_initial_memory_bytes.ptr),
+            initial_memory_count,
             reinterpret_cast<TouchedMemoryRecord *>(d_touched_output_bytes.ptr),
             prev,
             prev_values,
+            d_memory_prev_timestamps,
+            d_memory_prev_values,
             d_error
         );
         CUDA_TRY(cudaGetLastError());
@@ -1090,7 +1108,6 @@ cleanup:
     if (temp) cudaFreeAsync(temp, stream);
     if (indices_b) cudaFreeAsync(indices_b, stream);
     if (indices_a) cudaFreeAsync(indices_a, stream);
-    if (group_count) cudaFreeAsync(group_count, stream);
     if (group_starts) cudaFreeAsync(group_starts, stream);
     if (event_indices) cudaFreeAsync(event_indices, stream);
     if (group_flags) cudaFreeAsync(group_flags, stream);

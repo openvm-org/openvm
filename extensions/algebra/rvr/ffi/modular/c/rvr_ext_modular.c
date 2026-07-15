@@ -105,24 +105,29 @@ void rvr_ext_emit_mod_iseq_record(RvState* state, uint32_t from_pc,
   for (uint32_t i = 0; i < 2u; i++) {
     *(uint32_t*)(record + 8u + 4u * i) = (uint32_t)events[i].address;
     *(uint32_t*)(record + 16u + 4u * i) = (uint32_t)events[i].value;
-    *(uint32_t*)(record + 24u + 4u * i) = events[i].prev_timestamp;
+    preflight_store_prev_timestamp(
+        tracer, (uint32_t*)(record + 24u + 4u * i),
+        events[i].prev_timestamp);
   }
   uint32_t heap_start = 2u;
   for (uint32_t read = 0; read < 2u; read++) {
     for (uint32_t block = 0; block < d.blocks; block++) {
       uint32_t idx = heap_start + read * d.blocks + block;
       uint32_t flat = read * d.blocks + block;
-      *(uint32_t*)(record + d.heap_read_aux + 4u * flat) =
-          events[idx].prev_timestamp;
-      rvr_mod_iseq_store_u64_unaligned_le(
-          core + 2u + 2u * d.u16_limbs * read + 8u * block,
-          events[idx].prev_value);
+      preflight_store_prev_timestamp(
+          tracer, (uint32_t*)(record + d.heap_read_aux + 4u * flat),
+          events[idx].prev_timestamp);
+      preflight_store_prev_value(
+          tracer, core + 2u + 2u * d.u16_limbs * read + 8u * block,
+          events[idx].prev_timestamp, events[idx].prev_value);
     }
   }
   MemoryLogEntry* write = &events[event_count - 1u];
   *(uint32_t*)(record + d.rd_ptr) = (uint32_t)write->address;
-  *(uint32_t*)(record + d.writes_aux) = write->prev_timestamp;
-  arena_store_u64_le(record + d.writes_aux + 4u, write->prev_value);
+  preflight_store_prev_timestamp(
+      tracer, (uint32_t*)(record + d.writes_aux), write->prev_timestamp);
+  preflight_store_prev_value(tracer, record + d.writes_aux + 4u,
+                             write->prev_timestamp, write->prev_value);
   *core = (uint8_t)(local_opcode == 7u);
 #endif
 }

@@ -288,7 +288,7 @@ impl RvrPreflightBufferPool {
         }
         #[cfg(feature = "cuda")]
         {
-            return crate::arch::cuda::pinned::take_with_prefault_status(min_len);
+            crate::arch::cuda::pinned::take_with_prefault_status(min_len)
         }
         #[cfg(not(feature = "cuda"))]
         {
@@ -416,7 +416,6 @@ impl RvrPreflightBufferPool {
             // registered size-class buffer for the next prepared segment.
             crate::arch::cuda::pinned::give_back(backing, _dirty_len);
             let _ = air;
-            return;
         }
         #[cfg(not(feature = "cuda"))]
         {
@@ -450,6 +449,9 @@ impl RvrPreflightBufferPool {
             chip_counts,
             chip_counts_touched,
             touched,
+            device_aux_patches: _,
+            device_aux_references: _,
+            device_aux_arena_references: _,
         } = raw_logs;
         let mut inner = self.lock();
         let PoolInner {

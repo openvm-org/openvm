@@ -86,6 +86,14 @@ const _: () = assert!(offset_of!(PreflightTracerData, chip_counts_touched_cap) =
 const _: () = assert!(offset_of!(PreflightTracerData, exec_frequencies_touched) == 160);
 const _: () = assert!(offset_of!(PreflightTracerData, exec_frequencies_touched_len) == 168);
 const _: () = assert!(offset_of!(PreflightTracerData, exec_frequencies_touched_cap) == 172);
+const _: () = assert!(offset_of!(PreflightTracerData, native_detail) == 176);
+const _: () = assert!(offset_of!(PreflightTracerData, device_aux_patches) == 184);
+const _: () = assert!(offset_of!(PreflightTracerData, device_aux_references) == 192);
+const _: () = assert!(offset_of!(PreflightTracerData, dirty_memory_pages) == 200);
+const _: () = assert!(offset_of!(PreflightTracerData, device_aux_patches_len) == 208);
+const _: () = assert!(offset_of!(PreflightTracerData, device_aux_patches_cap) == 212);
+const _: () = assert!(offset_of!(PreflightTracerData, device_aux_references_cap) == 216);
+const _: () = assert!(offset_of!(PreflightTracerData, dirty_memory_pages_words) == 220);
 const _: () = assert!(size_of::<ChipRecordBuf>() == ffi::PREFLIGHT_CHIP_RECORD_BUF_SIZE);
 const _: () = assert!(align_of::<ChipRecordBuf>() == ffi::PREFLIGHT_CHIP_RECORD_BUF_ALIGN);
 const _: () = assert!(offset_of!(ChipRecordBuf, base) == 0);

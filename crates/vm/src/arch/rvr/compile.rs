@@ -12,7 +12,8 @@ use std::{
 };
 
 use openvm_instructions::{
-    exe::VmExe, program::DEFAULT_PC_STEP, LocalOpcode, SystemOpcode, VmOpcode,
+    exe::VmExe, instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode, SystemOpcode,
+    VmOpcode,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm::{
@@ -351,7 +352,37 @@ fn pc_for_instruction_index(pc_base: u32, instruction_index: usize) -> Result<u3
         .ok_or(CompileError::ProgramCounterOutOfBounds { instruction_index })
 }
 
-/// Opcode classification for the rvr preflight routing seam.
+/// Coarse profiling family derived before lifting turns extension instructions
+/// into a shared `Ext`/phantom IR surface. Numeric ranges are the stable VM
+/// opcode class offsets; phantom discriminants distinguish IO and crypto
+/// hints that intentionally share `SystemOpcode::PHANTOM`.
+fn native_detail_family<F: PrimeField32>(instruction: &Instruction<F>) -> u8 {
+    let opcode = instruction.opcode.as_usize();
+    if instruction.opcode == SystemOpcode::PHANTOM.global_opcode() {
+        return match instruction.c.as_canonical_u32() as u16 {
+            0x20..=0x22 => 1, // RV64 IO hints
+            0x30 => 6,        // pairing final-exp hint
+            0x50..=0x51 => 5, // modular arithmetic hints
+            0..=3 => 0,       // system phantoms
+            _ => 8,
+        };
+    }
+    match opcode {
+        0x260..=0x261 => 1, // RV64 hint-store / hint-buffer
+        // REVEAL is encoded as RV64 STORED into the public-values address space.
+        0x214 if instruction.e.as_canonical_u32() == 3 => 1,
+        0x310..=0x311 => 2,               // Keccak-f / XORIN
+        0x320..=0x321 => 3,               // SHA-256 / SHA-512
+        0x400..0x500 => 4,                // bigint
+        0x500..0x600 | 0x700..0x800 => 5, // modular / Fp2 algebra
+        0x600..0x700 => 6,                // elliptic-curve / pairing operations
+        0x800..0x900 => 7,                // deferral
+        0x300.. => 8,                     // extension class not covered above
+        _ => 0,                           // system + RV64IM core
+    }
+}
+
+/// Opcode classification for rvr log-native preflight routing.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RvrPreflightOpcodeClass {
     Supported,
@@ -485,10 +516,6 @@ fn collect_inline_records_meta<F: PrimeField32>(
                     .filter(|_| arena_native_enabled)
                     .filter(|geometry| {
                         !delta_records_requested
-                            || matches!(
-                                geometry.layout,
-                                ArenaNativeLayout::Alu3(offsets) if offsets.w.is_some()
-                            )
                             || matches!(
                                 geometry.layout,
                                 ArenaNativeLayout::Custom {
@@ -708,9 +735,6 @@ fn validate_requested_inline_record_shape(
         || requested.as_deref() == Some("delta")
             && inline_meta.arena_native_airs.iter().any(|(_, geometry)| {
                 !matches!(
-                    geometry.layout,
-                    ArenaNativeLayout::Alu3(offsets) if offsets.w.is_some()
-                ) && !matches!(
                     geometry.layout,
                     ArenaNativeLayout::Custom {
                         residual_memory_chronology: true
@@ -1125,6 +1149,8 @@ fn compile_impl<F: PrimeField32>(
         .map(|(env, invalid_message)| native_opt_level(env, invalid_message))
         .transpose()?
         .flatten();
+    let native_detail = opts.tracer_mode == TracerMode::Preflight
+        && std::env::var("OPENVM_RVR_NATIVE_DETAIL").as_deref() == Ok("1");
 
     let ir_started = Instant::now();
     let ir = convert_vmexe_to_ir_with_debug(exe, opts.extensions, |pc| {
@@ -1170,6 +1196,7 @@ fn compile_impl<F: PrimeField32>(
             &base_name,
             disable_lto,
             inline_records,
+            native_detail,
             native_opt.as_deref(),
             &inline_meta,
             &toolchain,
@@ -1280,6 +1307,15 @@ fn compile_impl<F: PrimeField32>(
             }
         })
         .collect();
+    project.native_detail_pc_families = exe
+        .program
+        .instructions_and_debug_infos
+        .iter()
+        .map(|slot| {
+            slot.as_ref()
+                .map_or(8, |(instruction, _)| native_detail_family(instruction))
+        })
+        .collect();
 
     // R3: preflight compiles emit inline compact records (with memory-log
     // suppression) for migrated opcodes by default; OPENVM_RVR_INLINE_RECORDS
@@ -1339,6 +1375,7 @@ fn compile_impl<F: PrimeField32>(
     }
 
     project.native_debug_info = opts.native_debug_info;
+    project.native_detail = native_detail;
 
     let entry_point = u64::from(exe.pc_start);
     let text_start = u64::from(exe.program.pc_base);
@@ -1712,6 +1749,7 @@ fn generated_project_input_cache_key<F: PrimeField32>(
     base_name: &str,
     disable_lto: bool,
     inline_records: bool,
+    native_detail: bool,
     native_opt: Option<&str>,
     inline_meta: &RvrInlineRecordsMeta,
     toolchain: &rvr_openvm::RuntimeToolchain,
@@ -1730,6 +1768,7 @@ fn generated_project_input_cache_key<F: PrimeField32>(
         disable_lto as u8,
         inline_records as u8,
         opts.native_debug_info as u8,
+        native_detail as u8,
     ]);
     update_optional(&mut hasher, native_opt.map(str::as_bytes));
 

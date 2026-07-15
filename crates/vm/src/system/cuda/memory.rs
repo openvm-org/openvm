@@ -121,11 +121,30 @@ pub struct DeviceTouchedMemory {
     pub num_records: usize,
 }
 
+/// One segment-start address-space image already resident on device. RVR's
+/// chronological replay reads first-touch block values directly from these
+/// raw bytes; `cell_size` is carried as a fail-closed layout guard.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct DeviceInitialMemory {
+    pub base: u64,
+    pub len: u64,
+    pub cell_size: u32,
+    pub _reserved: u32,
+}
+
+const _: () = assert!(std::mem::size_of::<DeviceInitialMemory>() == 24);
+const _: () = assert!(std::mem::align_of::<DeviceInitialMemory>() == 8);
+
 /// Optional producer used by an all-direct GPU preflight route. Keeping this
 /// interface in the system CUDA layer lets extension-specific replay code feed
 /// the unchanged memory boundary without making the VM core depend on an ISA.
 pub trait DeviceTouchedMemoryProvider: Send + Sync {
-    fn take_device_touched_memory(&self, device_ctx: &GpuDeviceCtx) -> Option<DeviceTouchedMemory>;
+    fn take_device_touched_memory(
+        &self,
+        device_ctx: &GpuDeviceCtx,
+        initial_memory: &[DeviceInitialMemory],
+    ) -> Option<DeviceTouchedMemory>;
 }
 
 enum TouchedMemoryInput {
@@ -143,6 +162,19 @@ struct MemoryMerkleRecord {
 }
 
 impl MemoryInventoryGPU {
+    pub fn device_initial_memory(&self) -> Vec<DeviceInitialMemory> {
+        self.initial_memory
+            .iter()
+            .zip(&self.merkle_tree.mem_config().addr_spaces)
+            .map(|(memory, config)| DeviceInitialMemory {
+                base: memory.as_ptr() as u64,
+                len: memory.len() as u64,
+                cell_size: config.layout.size() as u32,
+                _reserved: 0,
+            })
+            .collect()
+    }
+
     #[inline]
     fn field_to_raw_u32(value: F) -> u32 {
         unsafe { std::mem::transmute::<F, u32>(value) }
@@ -270,10 +302,10 @@ impl MemoryInventoryGPU {
         &mut self,
         touched_memory: DeviceTouchedMemory,
     ) -> Vec<AirProvingContext<GpuBackend>> {
-        assert_eq!(
-            touched_memory.records.len(),
-            touched_memory.num_records * DEVICE_TOUCHED_RECORD_WORDS,
-            "device touched-memory buffer has a partial record"
+        assert!(
+            touched_memory.records.len()
+                >= touched_memory.num_records * DEVICE_TOUCHED_RECORD_WORDS,
+            "device touched-memory buffer is smaller than its complete-record prefix"
         );
         self.generate_proving_ctxs_from(TouchedMemoryInput::Device(touched_memory))
     }

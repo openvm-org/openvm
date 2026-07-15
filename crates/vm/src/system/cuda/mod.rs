@@ -124,7 +124,10 @@ impl SystemChipComplex<DenseRecordArena, GpuBackend> for SystemChipInventoryGPU 
                 .as_ref()
                 .expect("device touched-memory route has no provider");
             let device_touched = provider
-                .take_device_touched_memory(&self.memory_inventory.device_ctx)
+                .take_device_touched_memory(
+                    &self.memory_inventory.device_ctx,
+                    &self.memory_inventory.device_initial_memory(),
+                )
                 .expect("device touched-memory route has no bound segment");
             if std::env::var("OPENVM_RVR_DEVICE_REPLAY_ORACLE").as_deref() == Ok("1") {
                 let actual = device_touched
@@ -144,8 +147,13 @@ impl SystemChipComplex<DenseRecordArena, GpuBackend> for SystemChipInventoryGPU 
                     );
                 }
                 assert_eq!(
-                    actual, expected,
+                    &actual[..device_touched.num_records * DEVICE_TOUCHED_RECORD_WORDS],
+                    expected.as_slice(),
                     "device touched-memory replay differs byte-for-byte from host replay"
+                );
+                eprintln!(
+                    "OPENVM_RVR_DEVICE_REPLAY_ORACLE_PASS=1 touched_records={}",
+                    device_touched.num_records
                 );
             }
             self.memory_inventory

@@ -3201,14 +3201,18 @@ fn rvr_preflight_inline_addsub_net_timing() {
     );
 }
 
-/// Combined Stage-2 oracle: non-W migrated AIRs use the chronological delta
-/// stream while all converted RV64 W families write arena-native. Both arms
-/// must assemble to byte-identical full RV64IM arenas.
+/// Stage-2 oracle: every base RV64IM family, including the W families, uses
+/// the chronological delta stream. This is the device-aux ownership contract:
+/// W instructions may not retain an arena-native host predecessor path.
+/// Host expansion must still produce byte-identical full RV64IM arenas.
 #[test]
-fn rvr_preflight_delta_with_w_arena_native_full_rv64im_matrix_matches_assembler() {
+fn rvr_preflight_delta_with_w_generic_full_rv64im_matrix_matches_assembler() {
     use std::collections::BTreeMap;
 
-    use openvm_circuit::arch::{rvr::preflight::RvrArenaNativeTarget, MatrixRecordArena};
+    use openvm_circuit::arch::{
+        rvr::{preflight::RvrArenaNativeTarget, ChipRecordBuf},
+        MatrixRecordArena,
+    };
 
     let exe = full_rv64im_matrix_exe();
     let streams = hard_chip_streams(1);
@@ -3247,8 +3251,7 @@ fn rvr_preflight_delta_with_w_arena_native_full_rv64im_matrix_matches_assembler(
     >(&exe, &mut a_output, &capacities, &pc_to_air_idx)
     .expect("assembler-path record arena generation");
 
-    // Combined arm: only W-family records land directly in Matrix targets;
-    // every other migrated AIR stays in the chronological delta stream.
+    // Delta arm: all base families stay in the chronological delta stream.
     std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "1");
     std::env::set_var("OPENVM_RVR_GPU_RECORDS", "delta");
     let RvrPreflightRoute::Rvr(f_instance) = rvr_vm
@@ -3262,13 +3265,15 @@ fn rvr_preflight_delta_with_w_arena_native_full_rv64im_matrix_matches_assembler(
         .inline_records()
         .arena_native_airs
         .clone();
-    assert!(!arena_native.is_empty(), "arena-native airs must exist");
+    assert!(
+        arena_native.iter().all(|(_, geometry)| !matches!(
+            geometry.layout,
+            openvm_circuit::arch::rvr::ArenaNativeLayout::Alu3(offsets)
+                if offsets.w.is_some()
+        )),
+        "base RV64IM W delta must not retain arena-native host aux paths"
+    );
     assert!(f_instance.compiled().inline_records().delta_records);
-    assert!(arena_native.iter().any(|(_, geometry)| matches!(
-        geometry.layout,
-        openvm_circuit::arch::rvr::ArenaNativeLayout::Alu3(offsets)
-            if offsets.w.is_some()
-    )));
     for (family, opcodes) in [
         (
             "BaseAluW",
@@ -3311,10 +3316,14 @@ fn rvr_preflight_delta_with_w_arena_native_full_rv64im_matrix_matches_assembler(
             .unwrap_or_else(|| panic!("fixture must contain {family}"));
         let air = pc_to_air_idx[slot].unwrap_or_else(|| panic!("{family} must map to an AIR"));
         assert!(
+            f_instance.compiled().inline_records().pc_slots[slot],
+            "{family} AIR {air} must emit into the generic delta stream"
+        );
+        assert!(
             arena_native
                 .iter()
-                .any(|&(native_air, _)| native_air == air),
-            "{family} AIR {air} must be arena-native"
+                .all(|&(native_air, _)| native_air != air),
+            "{family} AIR {air} must not retain arena-native host aux"
         );
     }
     let mut fused_arenas: Vec<(
@@ -3322,7 +3331,7 @@ fn rvr_preflight_delta_with_w_arena_native_full_rv64im_matrix_matches_assembler(
         openvm_circuit::arch::rvr::ArenaNativeGeometry,
         MatrixRecordArena<F>,
     )> = Vec::new();
-    let mut targets = BTreeMap::new();
+    let mut targets: BTreeMap<usize, ChipRecordBuf> = BTreeMap::new();
     for &(air, geom) in &arena_native {
         let (arena, target) =
             MatrixRecordArena::<F>::stage_arena_native(capacities[air].0, capacities[air].1, &geom);
@@ -3338,8 +3347,8 @@ fn rvr_preflight_delta_with_w_arena_native_full_rv64im_matrix_matches_assembler(
             &targets,
         )
         .expect("fused preflight execution");
-    // The generation loop must accept the fused run (count oracle) and
-    // assemble every other air identically.
+    // The generation loop must accept the all-delta run and assemble every
+    // AIR identically.
     let f_arenas = crate::log_native::generate_rv64im_record_arenas_from_logs::<
         F,
         MatrixRecordArena<F>,
@@ -3355,8 +3364,8 @@ fn rvr_preflight_delta_with_w_arena_native_full_rv64im_matrix_matches_assembler(
         "execution frequencies must be identical across arms"
     );
 
-    // Byte-equality of every fused air's arena over every written row (both
-    // buffers start zero-filled, so trailing row bytes match trivially).
+    // Byte-equality of every custom fused air's arena over every written row.
+    // This fixture has none, but the loop keeps the mixed-route oracle intact.
     let fused_air_set: std::collections::BTreeSet<usize> =
         fused_arenas.iter().map(|&(air, _, _)| air).collect();
     for (fused_air, _, fused_arena) in &fused_arenas {
@@ -3545,7 +3554,9 @@ fn rvr_preflight_arena_native_proves_and_verifies() {
 /// to the established verbose assembler for both single and buffer records.
 #[test]
 fn rvr_preflight_hintstore_direct_final_matches_verbose_twice() {
-    use openvm_circuit::arch::rvr::preflight::RvrArenaNativeTarget;
+    use openvm_circuit::{
+        arch::rvr::preflight::RvrArenaNativeTarget, system::memory::online::LinearMemory,
+    };
 
     let exe = hintstore_direct_exe();
     let streams = hintstore_direct_streams();
@@ -3725,8 +3736,59 @@ fn rvr_preflight_hintstore_direct_final_matches_verbose_twice() {
                 "device-owned replay must retain byte-identical compact chronology"
             );
             assert_eq!(
-                device_output.raw_logs.touched, compact_output.raw_logs.touched,
-                "device-owned replay must retain every first-touch seed in order"
+                device_output.raw_logs.touched,
+                Vec::new(),
+                "production device-owned replay must emit no host first-touch seeds"
+            );
+            let memory = &device_output.to_state.memory.memory;
+            let memory_as = RV64_MEMORY_AS as usize;
+            let dirty_ranges =
+                memory.touched_pages[memory_as].touched_byte_ranges(memory.mem[memory_as].size());
+            for address in [64usize, 96, 104, 112] {
+                assert!(
+                    dirty_ranges
+                        .iter()
+                        .any(|&(start, end)| start <= address && address < end),
+                    "device-owned replay must stage the dirty HintStore page containing {address:#x}"
+                );
+            }
+            std::env::set_var("OPENVM_RVR_DEVICE_REPLAY_ORACLE", "1");
+            let (_oracle_device_arena, oracle_device_target) = DenseRecordArena::stage_arena_native(
+                heights[hint_air] as usize,
+                capacities[hint_air].1,
+                &geometry,
+            );
+            let oracle_device_base = oracle_device_target.base as u64;
+            let oracle_device_targets = BTreeMap::from([(hint_air, oracle_device_target)]);
+            let oracle_device_output = direct_instance
+                .execute_preflight_from_state_with_device_touched_memory_for_test(
+                    direct_vm.create_initial_state(&exe, streams.clone()),
+                    Some(retired),
+                    &heights,
+                    &oracle_device_targets,
+                )
+                .expect("HintStore device-replay oracle preflight");
+            std::env::remove_var("OPENVM_RVR_DEVICE_REPLAY_ORACLE");
+            assert_eq!(
+                oracle_device_output.raw_logs.device_aux_references.len(),
+                oracle_device_output.raw_logs.delta_memory_log.len(),
+                "device replay oracle must retain one predecessor per residual event"
+            );
+            let arena_reference = oracle_device_output
+                .raw_logs
+                .device_aux_arena_references
+                .iter()
+                .find(|reference| reference.air_idx == hint_air)
+                .expect("HintStore device replay oracle omitted its custom arena");
+            assert_eq!(arena_reference.base, oracle_device_base);
+            assert!(
+                !arena_reference.expected.is_empty(),
+                "custom full-arena oracle must not snapshot a placeholder"
+            );
+            assert_eq!(
+                arena_reference.expected.as_slice(),
+                oracle_arenas[hint_air].allocated(),
+                "custom full-arena oracle must retain the host direct-final bytes"
             );
             let compact_rows = compact_output
                 .arena_native_written
