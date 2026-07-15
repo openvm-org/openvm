@@ -1,14 +1,12 @@
 use clap::Parser;
 use k256::ecdsa::{SigningKey, VerifyingKey};
 use openvm_benchmarks_prove::BenchmarkCli;
-use openvm_sdk::F;
 use openvm_sdk_config::SdkVmConfig;
 use openvm_transpiler::{elf::Elf, openvm_platform::memory::MEM_SIZE};
-use p3_field::PrimeCharacteristicRing;
 use rand_chacha::{rand_core::SeedableRng, ChaCha8Rng};
 use tiny_keccak::{Hasher, Keccak};
 
-fn make_input(signing_key: &SigningKey, msg: &[u8]) -> Vec<F> {
+fn make_input(signing_key: &SigningKey, msg: &[u8]) -> Vec<u8> {
     let mut hasher = Keccak::v256();
     hasher.update(msg);
     let mut prehash = [0u8; 32];
@@ -21,7 +19,7 @@ fn make_input(signing_key: &SigningKey, msg: &[u8]) -> Vec<F> {
     input.push(v);
     input.extend_from_slice(signature.to_bytes().as_ref());
 
-    input.into_iter().map(F::from_u8).collect()
+    input
 }
 
 fn main() -> eyre::Result<()> {
@@ -45,10 +43,7 @@ fn main() -> eyre::Result<()> {
     );
     hasher.finalize(&mut expected_address);
     expected_address[..12].fill(0); // 20 bytes as the address.
-    let mut input_stream = vec![expected_address
-        .into_iter()
-        .map(F::from_u8)
-        .collect::<Vec<_>>()];
+    let mut input_stream = vec![expected_address.to_vec()];
     let msg = ["Elliptic", "Curve", "Digital", "Signature", "Algorithm"];
     input_stream.extend(
         msg.iter()
