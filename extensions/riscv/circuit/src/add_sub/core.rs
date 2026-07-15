@@ -32,27 +32,41 @@ pub struct AddSubCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub opcode_sub_flag: T,
 }
 
+/// If `RANGE_CHECK_TOP_LIMB` is false, the adapter must constrain the top output limb to
+/// `[0, 2^LIMB_BITS)`.
 #[derive(Copy, Clone, Debug, derive_new::new, ColumnsAir)]
 #[columns_via(AddSubCoreCols<u8, NUM_LIMBS, LIMB_BITS>)]
-pub struct AddSubCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct AddSubCoreAir<
+    const NUM_LIMBS: usize,
+    const LIMB_BITS: usize,
+    const RANGE_CHECK_TOP_LIMB: bool,
+> {
     pub range_bus: VariableRangeCheckerBus,
     pub offset: usize,
 }
 
-impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
-    for AddSubCoreAir<NUM_LIMBS, LIMB_BITS>
+impl<
+        F: Field,
+        const NUM_LIMBS: usize,
+        const LIMB_BITS: usize,
+        const RANGE_CHECK_TOP_LIMB: bool,
+    > BaseAir<F> for AddSubCoreAir<NUM_LIMBS, LIMB_BITS, RANGE_CHECK_TOP_LIMB>
 {
     fn width(&self) -> usize {
         AddSubCoreCols::<F, NUM_LIMBS, LIMB_BITS>::width()
     }
 }
-impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAirWithPublicValues<F>
-    for AddSubCoreAir<NUM_LIMBS, LIMB_BITS>
+impl<
+        F: Field,
+        const NUM_LIMBS: usize,
+        const LIMB_BITS: usize,
+        const RANGE_CHECK_TOP_LIMB: bool,
+    > BaseAirWithPublicValues<F> for AddSubCoreAir<NUM_LIMBS, LIMB_BITS, RANGE_CHECK_TOP_LIMB>
 {
 }
 
-impl<AB, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreAir<AB, I>
-    for AddSubCoreAir<NUM_LIMBS, LIMB_BITS>
+impl<AB, I, const NUM_LIMBS: usize, const LIMB_BITS: usize, const RANGE_CHECK_TOP_LIMB: bool>
+    VmCoreAir<AB, I> for AddSubCoreAir<NUM_LIMBS, LIMB_BITS, RANGE_CHECK_TOP_LIMB>
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
@@ -116,7 +130,8 @@ where
         // Range check a to [0, 2^LIMB_BITS): the carry constraints above only prove
         // a[i] = (b[i] op c[i]) mod 2^LIMB_BITS given this bound, and `a` is written to
         // memory, which requires canonical u16 cells.
-        for &a_limb in a.iter() {
+        let range_limb_count = NUM_LIMBS - usize::from(!RANGE_CHECK_TOP_LIMB);
+        for &a_limb in &a[..range_limb_count] {
             self.range_bus
                 .range_check(a_limb, LIMB_BITS)
                 .eval(builder, is_valid.clone());
@@ -161,7 +176,12 @@ pub struct AddSubExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 }
 
 #[derive(derive_new::new)]
-pub struct AddSubFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct AddSubFiller<
+    A,
+    const NUM_LIMBS: usize,
+    const LIMB_BITS: usize,
+    const RANGE_CHECK_TOP_LIMB: bool,
+> {
     adapter: A,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
@@ -220,8 +240,8 @@ where
     }
 }
 
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F>
-    for AddSubFiller<A, NUM_LIMBS, LIMB_BITS>
+impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize, const RANGE_CHECK_TOP_LIMB: bool>
+    TraceFiller<F> for AddSubFiller<A, NUM_LIMBS, LIMB_BITS, RANGE_CHECK_TOP_LIMB>
 where
     F: PrimeField32,
     A: 'static + AdapterTraceFiller<F>,
@@ -250,7 +270,8 @@ where
         core_row.opcode_sub_flag = F::from_bool(record.local_opcode == BaseAluOpcode::SUB as u8);
         core_row.opcode_add_flag = F::from_bool(record.local_opcode == BaseAluOpcode::ADD as u8);
 
-        for a_val in a {
+        let range_limb_count = NUM_LIMBS - usize::from(!RANGE_CHECK_TOP_LIMB);
+        for &a_val in &a[..range_limb_count] {
             self.range_checker_chip.add_count(a_val as u32, LIMB_BITS);
         }
         core_row.c = record.c.map(F::from_u16);

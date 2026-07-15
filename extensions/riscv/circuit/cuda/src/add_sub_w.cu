@@ -12,7 +12,7 @@ using namespace riscv;
 // Concrete type aliases for the 32-bit word variant on RV64. The low word is two u16 limbs and
 // reuses the add_sub core; the adapter rebuilds the sign-extended 64-bit register write.
 using Rv64AddSubWCoreRecord = AddSubCoreRecord<RV64_WORD_U16_LIMBS>;
-using Rv64AddSubWCore = AddSubCore<RV64_WORD_U16_LIMBS, U16_BITS>;
+using Rv64AddSubWCore = AddSubCore<RV64_WORD_U16_LIMBS, U16_BITS, false>;
 template <typename T> using Rv64AddSubWCoreCols = AddSubCoreCols<T, RV64_WORD_U16_LIMBS>;
 
 template <typename T> struct Rv64AddSubWCols {

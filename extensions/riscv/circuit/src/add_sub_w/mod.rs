@@ -12,8 +12,8 @@ mod execution;
 mod preflight;
 pub use preflight::*;
 
-pub type AddSubWCoreAir = AddSubCoreAir<RV64_WORD_U16_LIMBS, U16_BITS>;
-pub type AddSubWFiller<A> = AddSubFiller<A, RV64_WORD_U16_LIMBS, U16_BITS>;
+pub type AddSubWCoreAir = AddSubCoreAir<RV64_WORD_U16_LIMBS, U16_BITS, false>;
+pub type AddSubWFiller<A> = AddSubFiller<A, RV64_WORD_U16_LIMBS, U16_BITS, false>;
 
 #[cfg(feature = "cuda")]
 mod cuda;

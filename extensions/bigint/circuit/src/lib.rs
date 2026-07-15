@@ -125,7 +125,7 @@ type BranchAdapterExecutor = VecToFlatBranchAdapterExecutor<
 
 /// AddSub256 — u16 limbs, range checker (shares the AluU16 adapter with LessThan256)
 pub type Rv64AddSub256Air =
-    VmAirWrapper<AluU16AdapterAir, AddSubCoreAir<INT256_NUM_U16_LIMBS, U16_BITS>>;
+    VmAirWrapper<AluU16AdapterAir, AddSubCoreAir<INT256_NUM_U16_LIMBS, U16_BITS, true>>;
 #[derive(Clone, PreflightExecutor)]
 pub struct Rv64AddSub256Executor(
     AddSubExecutor<AluU16AdapterExecutor, INT256_NUM_U16_LIMBS, U16_BITS>,
@@ -136,6 +136,7 @@ pub type Rv64AddSub256Chip<F> = VmChipWrapper<
         Rv64VecHeapU16AdapterFiller<NUM_READS, INT256_NUM_MEMORY_BLOCKS, INT256_NUM_MEMORY_BLOCKS>,
         INT256_NUM_U16_LIMBS,
         U16_BITS,
+        true,
     >,
 >;
 
