@@ -115,19 +115,23 @@ pub enum GenerationError {
 
 #[derive(Clone)]
 pub struct Streams<F> {
-    pub input_stream: VecDeque<Vec<F>>,
-    pub hint_stream: VecDeque<F>,
+    pub input_stream: VecDeque<Vec<u8>>,
+    pub hint_stream: VecDeque<u8>,
     /// Cached deferred operation inputs and outputs. Each idx corresponds to a
     /// unique function that is constrained outside the VM in its own deferral circuit.
     pub deferrals: Vec<DeferralState>,
+    /// The input and hint streams are byte-backed; `F` is retained purely to thread the
+    /// field type through the execution state (`VmState<F>` and friends).
+    phantom: PhantomData<F>,
 }
 
 impl<F> Streams<F> {
-    pub fn new(input_stream: impl Into<VecDeque<Vec<F>>>) -> Self {
+    pub fn new(input_stream: impl Into<VecDeque<Vec<u8>>>) -> Self {
         Self {
             input_stream: input_stream.into(),
             hint_stream: VecDeque::default(),
             deferrals: Vec::default(),
+            phantom: PhantomData,
         }
     }
 }
@@ -138,14 +142,14 @@ impl<F> Default for Streams<F> {
     }
 }
 
-impl<F> From<VecDeque<Vec<F>>> for Streams<F> {
-    fn from(value: VecDeque<Vec<F>>) -> Self {
+impl<F> From<VecDeque<Vec<u8>>> for Streams<F> {
+    fn from(value: VecDeque<Vec<u8>>) -> Self {
         Streams::new(value)
     }
 }
 
-impl<F> From<Vec<Vec<F>>> for Streams<F> {
-    fn from(value: Vec<Vec<F>>) -> Self {
+impl<F> From<Vec<Vec<u8>>> for Streams<F> {
+    fn from(value: Vec<Vec<u8>>) -> Self {
         Streams::new(value)
     }
 }

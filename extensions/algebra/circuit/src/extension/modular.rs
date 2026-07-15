@@ -557,14 +557,13 @@ pub(crate) mod phantom {
                 }
             };
 
-            let hint_bytes = once(F::from_bool(success))
-                .chain(repeat(F::ZERO))
+            let hint_bytes = once(u8::from(success))
+                .chain(repeat(0u8))
                 .take(RV64_REGISTER_NUM_LIMBS)
                 .chain(
                     sqrt.to_bytes_le()
                         .into_iter()
-                        .map(F::from_u8)
-                        .chain(repeat(F::ZERO))
+                        .chain(repeat(0u8))
                         .take(num_limbs),
                 )
                 .collect();
@@ -629,8 +628,7 @@ pub(crate) mod phantom {
             let hint_bytes = self.non_qrs[mod_idx]
                 .to_bytes_le()
                 .into_iter()
-                .map(F::from_u8)
-                .chain(repeat(F::ZERO))
+                .chain(repeat(0u8))
                 .take(num_limbs)
                 .collect();
             streams.hint_stream = hint_bytes;

@@ -483,10 +483,8 @@ where
                 state.memory.increment_timestamp();
             }
 
-            let data_f: [F; RV64_REGISTER_NUM_LIMBS] =
-                std::array::from_fn(|_| state.streams.hint_stream.pop_front().unwrap());
             let data: [u8; RV64_REGISTER_NUM_LIMBS] =
-                data_f.map(|byte| byte.as_canonical_u32() as u8);
+                std::array::from_fn(|_| state.streams.hint_stream.pop_front().unwrap());
 
             record.var[idx].data = data;
 

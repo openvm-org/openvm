@@ -167,9 +167,9 @@ the invariants of those address spaces. In particular, all instructions must res
 To enable user input and non-determinism in OpenVM programs, the host state maintains the following data
 structures during runtime execution:
 
-- `input_stream`: a private non-interactive queue of vectors of field elements which is provided at the start of runtime
+- `input_stream`: a private non-interactive queue of byte vectors which is provided at the start of runtime
   execution
-- `hint_stream`: a queue of values populated during runtime execution
+- `hint_stream`: a queue of bytes populated during runtime execution
   via [phantom sub-instructions](#phantom-sub-instructions) such as `Rv64HintInput`.
 - `deferrals`: a list of `DeferralState` objects, one per [deferral function](/specs/architecture/deferral). Each
   `DeferralState` maps input commitments to raw inputs (or output commitments) and output commitments to raw outputs,
@@ -467,7 +467,7 @@ The RV64IM extension defines the following phantom sub-instructions.
 
 | Name              | Discriminant | Operands | Description                                                                                                                                                                                                                                                    |
 |-------------------| ------------ | -------- |----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Rv64HintInput     | 0x20         | `_`      | Pops a vector `hint` of field elements from the input stream and resets the hint stream to equal `[(hint.len() as u64).to_le_bytes(), hint, zero padding to 8-byte alignment].concat()`.                                                                       |
+| Rv64HintInput     | 0x20         | `_`      | Pops a byte vector `hint` from the input stream and resets the hint stream to equal `[(hint.len() as u64).to_le_bytes(), hint, zero padding to 8-byte alignment].concat()`.                                                                       |
 | Rv64PrintStr      | 0x21         | `a,b,_`  | Peeks at `[r64{0}(a)..r64{0}(a) + r64{0}(b)]_2`, tries to convert to byte array and then UTF-8 string and prints to host stdout. Prints error message if conversion fails. Does not change any VM state.                                                       |
 | Rv64HintRandom    | 0x22         | `a,_,_`  | Resets the hint stream to `8 * r64{0}(a)` random bytes. The source of randomness is deterministic using a fixed-seed RNG (`rand::rngs::StdRng`). Its result is not constrained in any way.                                                                     |
 
