@@ -316,14 +316,6 @@ pub enum BaseAluWImmOpcode {
     ADDIW,
 }
 
-impl From<BaseAluWImmOpcode> for BaseAluWOpcode {
-    fn from(opcode: BaseAluWImmOpcode) -> Self {
-        match opcode {
-            BaseAluWImmOpcode::ADDIW => Self::ADDW,
-        }
-    }
-}
-
 #[derive(
     Copy,
     Clone,
@@ -369,16 +361,6 @@ pub enum ShiftWImmOpcode {
     SLLIW,
     SRLIW,
     SRAIW,
-}
-
-impl From<ShiftWImmOpcode> for ShiftWOpcode {
-    fn from(opcode: ShiftWImmOpcode) -> Self {
-        match opcode {
-            ShiftWImmOpcode::SLLIW => Self::SLLW,
-            ShiftWImmOpcode::SRLIW => Self::SRLW,
-            ShiftWImmOpcode::SRAIW => Self::SRAW,
-        }
-    }
 }
 
 #[derive(

@@ -58,15 +58,16 @@ This circuit proves the following:
 
 Given
 
-- `rs1`, `rs2`, and `rd` are register addresses
-- `rs2_as` is a boolean indicating if `rs2` is an immediate value
+- `rs1` and `rd` are register addresses
+- The register adapter also receives the `rs2` register address
+- The immediate adapter receives the immediate operand from the core
 - `from_pc` is the current program address
 
 This circuit proves the following:
 
 - A u16-cell memory read from register `rs1` is performed and its upper 32 bits are preserved for the read interaction
-- If `rs2_as` is false, a u16-cell memory read from register `rs2` is performed and its upper 32 bits are preserved for the read interaction
-- If `rs2_as` is true, the low u16 immediate limb is range-checked and the high low-word u16 limb is constrained to the sign-extension value
+- The register adapter reads `rs2` and preserves its upper 32 bits for the read interaction
+- The immediate adapter binds the immediate supplied by the core to the instruction on the execution bus
 - The low 32-bit result is sign-extended to a full 64-bit u16-cell register write by constraining the result sign bit from the most significant low-word limb
 - The instruction is correctly fetched from the program ROM at address `from_pc` and the program counter is set to `from_pc + 4`
 
@@ -438,4 +439,4 @@ This circuit proves that:
 
 The same carry/aux decomposition as the shift logical chip is used to keep every constraint term below the field modulus at `LIMB_BITS = 16`.
 
-The full-width register and immediate shift chips use the corresponding u16 ALU adapters. The W-instruction variants `sllw`/`srlw`/`sraw` ([shift_w](./shift_w/mod.rs)) reuse the register cores over 32-bit words (`NUM_LIMBS = 2`) with the ALU W u16 adapter.
+The full-width register and immediate shift chips use the corresponding u16 ALU adapters. The W register variants `sllw`/`srlw`/`sraw` ([shift_w](./shift_w/mod.rs)) reuse the register cores over 32-bit words (`NUM_LIMBS = 2`) with the W register adapter. The immediate variants `slliw`/`srliw`/`sraiw` reuse the immediate cores with the W immediate adapter.
