@@ -17,6 +17,7 @@ use serde::{Deserialize, Serialize};
 pub mod adapters;
 mod add_sub;
 mod add_sub_w;
+mod addi;
 mod auipc;
 mod bitwise_logic;
 mod branch_eq;
@@ -40,6 +41,7 @@ mod store;
 
 pub use add_sub::*;
 pub use add_sub_w::*;
+pub use addi::*;
 pub use auipc::*;
 pub use bitwise_logic::*;
 pub use branch_eq::*;

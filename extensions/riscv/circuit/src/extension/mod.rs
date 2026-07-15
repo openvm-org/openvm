@@ -23,10 +23,10 @@ use openvm_circuit_primitives::{
 use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode, PhantomDiscriminant};
 use openvm_riscv_transpiler::{
-    BaseAluOpcode, BaseAluWOpcode, BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode,
-    DivRemWOpcode, LessThanOpcode, MulHOpcode, MulOpcode, MulWOpcode, Rv64AuipcOpcode,
-    Rv64HintStoreOpcode, Rv64JalLuiOpcode, Rv64JalrOpcode, Rv64LoadStoreOpcode, Rv64Phantom,
-    ShiftOpcode, ShiftWOpcode,
+    BaseAluImmOpcode, BaseAluOpcode, BaseAluWOpcode, BranchEqualOpcode, BranchLessThanOpcode,
+    DivRemOpcode, DivRemWOpcode, LessThanOpcode, MulHOpcode, MulOpcode, MulWOpcode,
+    Rv64AuipcOpcode, Rv64HintStoreOpcode, Rv64JalLuiOpcode, Rv64JalrOpcode, Rv64LoadStoreOpcode,
+    Rv64Phantom, ShiftOpcode, ShiftWOpcode,
 };
 use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, StarkProtocolConfig, Val};
 #[cfg(feature = "rvr")]
@@ -116,6 +116,7 @@ impl<F: PrimeField32> VmRvrExtension<F> for Rv64M {}
 )]
 pub enum Rv64IExecutor {
     AddSub(Rv64AddSubExecutor),
+    AddI(Rv64AddIExecutor),
     BitwiseLogic(Rv64BitwiseLogicExecutor),
     AddSubW(Rv64AddSubWExecutor),
     LessThan(Rv64LessThanExecutor),
@@ -354,6 +355,13 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
         let auipc = Rv64AuipcExecutor::new(Rv64RdWriteAdapterExecutor);
         inventory.add_executor(auipc, Rv64AuipcOpcode::iter().map(|x| x.global_opcode()))?;
 
+        let addi = Rv64AddIExecutor::new(
+            Rv64BaseAluImmU16AdapterExecutor,
+            BaseAluImmOpcode::CLASS_OFFSET,
+            BaseAluImmOpcode::ADDI as usize,
+        );
+        inventory.add_executor(addi, [BaseAluImmOpcode::ADDI].map(|x| x.global_opcode()))?;
+
         // There is no downside to adding phantom sub-executors, so we do it in the base extension.
         inventory.add_phantom_sub_executor(
             phantom::Rv64HintInputSubEx,
@@ -547,6 +555,16 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
             Rv64AuipcCoreAir::new(range_checker),
         );
         inventory.add_air(auipc);
+
+        let addi = Rv64AddIAir::new(
+            Rv64BaseAluImmU16AdapterAir::new(exec_bridge, memory_bridge),
+            AddICoreAir::new(
+                range_checker,
+                BaseAluImmOpcode::CLASS_OFFSET,
+                BaseAluImmOpcode::ADDI as usize,
+            ),
+        );
+        inventory.add_air(addi);
 
         Ok(())
     }
@@ -846,6 +864,13 @@ where
             mem_helper.clone(),
         );
         inventory.add_executor_chip(auipc);
+
+        inventory.next_air::<Rv64AddIAir>()?;
+        let addi = Rv64AddIChip::new(
+            AddIFiller::new(Rv64BaseAluImmU16AdapterFiller::new(), range_checker.clone()),
+            mem_helper.clone(),
+        );
+        inventory.add_executor_chip(addi);
 
         Ok(())
     }

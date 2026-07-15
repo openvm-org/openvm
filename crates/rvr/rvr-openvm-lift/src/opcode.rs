@@ -9,12 +9,15 @@
 //!   extensions.
 
 use openvm_instructions::{
-    instruction::Instruction, riscv::RV64_REGISTER_NUM_LIMBS, LocalOpcode, SysPhantom, SystemOpcode,
+    instruction::Instruction,
+    riscv::{RV64_IMM_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    LocalOpcode, SysPhantom, SystemOpcode,
 };
 use openvm_riscv_transpiler::{
-    BaseAluOpcode, BaseAluWOpcode, BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode,
-    DivRemWOpcode, LessThanOpcode, MulHOpcode, MulOpcode, MulWOpcode, Rv64AuipcOpcode,
-    Rv64JalLuiOpcode, Rv64JalrOpcode, Rv64LoadStoreOpcode, ShiftOpcode, ShiftWOpcode,
+    BaseAluImmOpcode, BaseAluOpcode, BaseAluWOpcode, BranchEqualOpcode, BranchLessThanOpcode,
+    DivRemOpcode, DivRemWOpcode, LessThanOpcode, MulHOpcode, MulOpcode, MulWOpcode,
+    Rv64AuipcOpcode, Rv64JalLuiOpcode, Rv64JalrOpcode, Rv64LoadStoreOpcode, ShiftOpcode,
+    ShiftWOpcode,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ext_ffi_common::{AS_MEMORY, AS_PUBLIC_VALUES, AS_REGISTER};
@@ -26,6 +29,8 @@ use crate::{
     helpers::{decode_imm_cg, sext32},
     ExtensionRegistry,
 };
+
+const U24_MASK: u32 = (1 << 24) - 1;
 
 /// Lift a single OpenVM instruction to the new IR types.
 ///
@@ -82,6 +87,10 @@ pub fn lift_instruction<F: PrimeField32>(
     }
     if opcode == BaseAluWOpcode::SUBW.global_opcode_usize() {
         return Some(lift_alu_w(insn, pc, e, AluOp::Sub));
+    }
+
+    if opcode == BaseAluImmOpcode::ADDI.global_opcode_usize() {
+        return lift_alu_imm(insn, pc, AluOp::Add);
     }
 
     // Shift: SLL=0x205, SRL=0x206, SRA=0x207, SLLW=0x275, SRLW=0x276, SRAW=0x277
@@ -317,13 +326,32 @@ fn lift_alu<F: PrimeField32>(insn: &Instruction<F>, pc: u64, e: u32, op: AluOp) 
         body(pc, Instr::AluReg { op, rd, rs1, rs2 })
     } else {
         // I-type: immediate in c as u24, sign-extend from 12 bits
-        let raw_imm = field_to_u32(insn.c) & 0xffffff;
+        let raw_imm = field_to_u32(insn.c) & U24_MASK;
         let imm = sign_extend_12(raw_imm);
         if rd == 0 {
             return body(pc, Instr::Nop);
         }
         body(pc, Instr::AluImm { op, rd, rs1, imm })
     }
+}
+
+fn lift_alu_imm<F: PrimeField32>(insn: &Instruction<F>, pc: u64, op: AluOp) -> Option<LiftedInstr> {
+    if field_to_u32(insn.d) != RV64_REGISTER_AS || field_to_u32(insn.e) != RV64_IMM_AS {
+        return None;
+    }
+
+    let raw_imm = field_to_u32(insn.c);
+    let imm = sign_extend_12(raw_imm);
+    if raw_imm != (imm as u32 & U24_MASK) {
+        return None;
+    }
+
+    let rd = decode_reg(insn.a);
+    let rs1 = decode_reg(insn.b);
+    if rd == 0 {
+        return Some(body(pc, Instr::Nop));
+    }
+    Some(body(pc, Instr::AluImm { op, rd, rs1, imm }))
 }
 
 /// Lift shift instruction (R-type when e!=0, I-type shamt when e==0).
@@ -527,7 +555,7 @@ fn lift_alu_w<F: PrimeField32>(insn: &Instruction<F>, pc: u64, e: u32, op: AluOp
         }
         body(pc, Instr::AluWReg { op, rd, rs1, rs2 })
     } else {
-        let raw_imm = field_to_u32(insn.c) & 0xffffff;
+        let raw_imm = field_to_u32(insn.c) & U24_MASK;
         let imm = sign_extend_12(raw_imm);
         if rd == 0 {
             return body(pc, Instr::Nop);
@@ -589,18 +617,73 @@ fn lift_phantom(sys: SysPhantom, pc: u64) -> LiftedInstr {
 #[cfg(test)]
 mod tests {
     use openvm_instructions::{
-        instruction::Instruction, LocalOpcode, DEFERRAL_AS, PUBLIC_VALUES_AS,
+        instruction::Instruction,
+        riscv::{RV64_IMM_AS, RV64_REGISTER_AS},
+        LocalOpcode, DEFERRAL_AS, PUBLIC_VALUES_AS,
     };
     use openvm_riscv_transpiler::{
-        Rv64AuipcOpcode,
+        BaseAluImmOpcode, Rv64AuipcOpcode,
         Rv64LoadStoreOpcode::{
             LOADB, LOADBU, LOADD, LOADH, LOADHU, LOADW, LOADWU, STOREB, STORED, STOREH, STOREW,
         },
     };
     use p3_baby_bear::BabyBear;
 
-    use super::{lift_instruction, Instr, InstrAt, LiftedInstr, AS_MEMORY, AS_REGISTER};
+    use super::{lift_instruction, AluOp, Instr, InstrAt, LiftedInstr, AS_MEMORY, AS_REGISTER};
     use crate::ExtensionRegistry;
+
+    #[test]
+    fn addi_requires_canonical_immediate_encoding() {
+        let extensions = ExtensionRegistry::<BabyBear>::new();
+        let valid = Instruction::<BabyBear>::from_usize(
+            BaseAluImmOpcode::ADDI.global_opcode(),
+            [
+                8,
+                16,
+                0xff_ffff,
+                RV64_REGISTER_AS as usize,
+                RV64_IMM_AS as usize,
+            ],
+        );
+
+        match lift_instruction(&valid, 0x100, &extensions) {
+            Some(LiftedInstr::Body(InstrAt {
+                instr:
+                    Instr::AluImm {
+                        op: AluOp::Add,
+                        rd: 1,
+                        rs1: 2,
+                        imm: -1,
+                    },
+                ..
+            })) => {}
+            other => panic!("unexpected lift: {other:?}"),
+        }
+
+        let register_operand = Instruction::<BabyBear>::from_usize(
+            BaseAluImmOpcode::ADDI.global_opcode(),
+            [
+                8,
+                16,
+                24,
+                RV64_REGISTER_AS as usize,
+                RV64_REGISTER_AS as usize,
+            ],
+        );
+        assert!(lift_instruction(&register_operand, 0x100, &extensions).is_none());
+
+        let noncanonical_immediate = Instruction::<BabyBear>::from_usize(
+            BaseAluImmOpcode::ADDI.global_opcode(),
+            [
+                8,
+                16,
+                0xffff,
+                RV64_REGISTER_AS as usize,
+                RV64_IMM_AS as usize,
+            ],
+        );
+        assert!(lift_instruction(&noncanonical_immediate, 0x100, &extensions).is_none());
+    }
 
     #[test]
     fn load_store_address_space_domain() {
