@@ -12,6 +12,10 @@ pub struct RvrInstruction {
     pub e: u32,
     pub f: u32,
     pub g: u32,
+    /// `c` interpreted as a signed integer in the source field.
+    ///
+    /// Branch and JAL offsets use this interpretation, while other opcodes
+    /// still need the canonical value in `c`.
     signed_c: i32,
 }
 
@@ -19,16 +23,17 @@ impl RvrInstruction {
     /// Lower an OpenVM instruction to its canonical integer representation.
     #[inline]
     pub fn from_field<F: PrimeField32>(insn: &Instruction<F>) -> Self {
+        let c = insn.c.as_canonical_u32();
         Self {
             opcode: insn.opcode,
             a: insn.a.as_canonical_u32(),
             b: insn.b.as_canonical_u32(),
-            c: insn.c.as_canonical_u32(),
+            c,
             d: insn.d.as_canonical_u32(),
             e: insn.e.as_canonical_u32(),
             f: insn.f.as_canonical_u32(),
             g: insn.g.as_canonical_u32(),
-            signed_c: decode_signed(insn.c.as_canonical_u32(), F::ORDER_U32),
+            signed_c: decode_signed(c, F::ORDER_U32),
         }
     }
 
