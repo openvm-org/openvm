@@ -146,7 +146,10 @@ fn cleaner() -> &'static Mutex<mpsc::Sender<ReturnedBuffer>> {
     })
 }
 
-pub(crate) fn take(min_size: usize) -> Vec<u8> {
+/// Returns a ready buffer and whether its freshly allocated pages still need
+/// to be faulted in by a latency-sensitive caller. Pool hits are registered,
+/// resident, and already zeroed by the cleaner.
+pub(crate) fn take_with_prefault_status(min_size: usize) -> (Vec<u8>, bool) {
     let size = min_size.next_power_of_two();
     if let Some(buffer) = pool()
         .lock()
@@ -155,11 +158,15 @@ pub(crate) fn take(min_size: usize) -> Vec<u8> {
         .and_then(|bufs| bufs.pop())
     {
         debug_assert_eq!(buffer.len(), size);
-        return buffer;
+        return (buffer, false);
     }
     // Pool miss: pageable memory, zeroed lazily by the kernel, exactly as
     // without the pool. The buffer becomes pinned when first given back.
-    vec![0u8; size]
+    (vec![0u8; size], true)
+}
+
+pub(crate) fn take(min_size: usize) -> Vec<u8> {
+    take_with_prefault_status(min_size).0
 }
 
 /// `dirty_len` is an upper bound on the prefix of `buffer` that may have

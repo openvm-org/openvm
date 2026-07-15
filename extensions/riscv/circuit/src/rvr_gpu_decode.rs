@@ -185,6 +185,11 @@ struct HostOperandTable {
     compiled_identity: Arc<Vec<bool>>,
     pc_base: u32,
     entries: Arc<Vec<DeviceOperandEntry>>,
+    /// Compiler-scope mixed-AIR classification. Building this walks the
+    /// entire program, so cache it with the operand table instead of repeating
+    /// the same immutable scan at both bind sites on every segment.
+    #[cfg_attr(not(feature = "rvr"), allow(dead_code))]
+    kind_to_air: HashMap<DeltaAirKind, usize>,
 }
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
@@ -244,26 +249,27 @@ impl RvrGpuDecodeState {
         pc_to_air_idx: &[Option<usize>],
         compiled_identity: &Arc<Vec<bool>>,
     ) -> HashMap<DeltaAirKind, usize> {
-        {
-            let mut table = self.table.lock().unwrap();
-            let rebuild = table
-                .as_ref()
-                .map(|t| !Arc::ptr_eq(&t.compiled_identity, compiled_identity))
-                .unwrap_or(true);
-            if rebuild {
-                *table = Some(build_operand_table(
-                    exe,
-                    Arc::clone(compiled_identity),
-                    pc_to_air_idx,
-                ));
-                #[cfg(feature = "cuda")]
-                {
-                    *self.device_table.lock().unwrap() = None;
-                }
+        let mut table = self.table.lock().unwrap();
+        let rebuild = table
+            .as_ref()
+            .map(|t| !Arc::ptr_eq(&t.compiled_identity, compiled_identity))
+            .unwrap_or(true);
+        if rebuild {
+            *table = Some(build_operand_table(
+                exe,
+                Arc::clone(compiled_identity),
+                pc_to_air_idx,
+            ));
+            #[cfg(feature = "cuda")]
+            {
+                *self.device_table.lock().unwrap() = None;
             }
         }
-
-        classify_kind_to_air(exe, pc_to_air_idx)
+        table
+            .as_ref()
+            .expect("operand table was just bound")
+            .kind_to_air
+            .clone()
     }
 
     /// The device operand table (uploaded once per bound exe) + its pc base.
@@ -929,6 +935,7 @@ fn build_operand_table<F: PrimeField32>(
         compiled_identity,
         pc_base: program.pc_base,
         entries: Arc::new(entries),
+        kind_to_air: classify_kind_to_air(exe, pc_to_air_idx),
     }
 }
 

@@ -83,8 +83,12 @@ pub fn build_preflight_replay<F: Field>(
     shadows: &PreflightShadowsView,
     touched: &[TouchedBlock],
     logs: &[MemoryLogEntry],
+    build_access_aux: bool,
 ) -> Result<PreflightMemoryReplay<F>, PreflightNormalizeError> {
-    let access_aux =
+    let detailed_profile =
+        std::env::var("OPENVM_RVR_PREFLIGHT_PROFILE_DETAIL").as_deref() == Ok("1");
+    let replay_started = std::time::Instant::now();
+    let access_aux = if build_access_aux {
         logs.iter()
             .enumerate()
             .map(|(index, entry)| {
@@ -120,7 +124,11 @@ pub fn build_preflight_replay<F: Field>(
                     ),
                 })
             })
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Result<Vec<_>, _>>()?
+    } else {
+        Vec::new()
+    };
+    let access_aux_finished = std::time::Instant::now();
 
     // Finalize touched_memory from the touched-block list: final value from live
     // memory, final timestamp from the shadow. Sorted by (addr_space, block_ptr)
@@ -152,7 +160,22 @@ pub fn build_preflight_replay<F: Field>(
             )
         })
         .collect();
+    let touched_collect_finished = std::time::Instant::now();
     touched_memory.sort_unstable_by_key(|(addr, _)| *addr);
+    let touched_sort_finished = std::time::Instant::now();
+
+    if detailed_profile {
+        eprintln!(
+            "OPENVM_RVR_REPLAY_DETAIL access_aux_us={} touched_collect_us={} touched_sort_us={} \
+             access_aux_required={} access_records={} touched_blocks={}",
+            (access_aux_finished - replay_started).as_micros(),
+            (touched_collect_finished - access_aux_finished).as_micros(),
+            (touched_sort_finished - touched_collect_finished).as_micros(),
+            build_access_aux as u8,
+            logs.len(),
+            touched.len(),
+        );
+    }
 
     Ok(PreflightMemoryReplay {
         touched_memory,
