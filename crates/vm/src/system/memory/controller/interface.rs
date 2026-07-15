@@ -1,9 +1,10 @@
+use openvm_instructions::DIGEST_WIDTH;
 use openvm_stark_backend::{interaction::PermutationCheckBus, p3_field::PrimeField32};
 
 use crate::system::memory::{
     merkle::{MemoryMerkleAir, MemoryMerkleChip},
     persistent::{PersistentBoundaryAir, PersistentBoundaryChip},
-    MemoryImage, DIGEST_WIDTH,
+    MemoryImage,
 };
 
 #[derive(Clone)]

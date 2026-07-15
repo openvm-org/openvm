@@ -2,14 +2,13 @@ use std::array;
 #[cfg(feature = "cuda")]
 use std::sync::Arc;
 
-use openvm_circuit::{
-    arch::{
-        testing::{memory::gen_pointer, TestBuilder},
-        Arena, MemoryConfig, PreflightExecutor,
-    },
-    system::memory::merkle::public_values::PUBLIC_VALUES_AS,
+use openvm_circuit::arch::{
+    testing::{memory::gen_pointer, TestBuilder},
+    Arena, MemoryConfig, PreflightExecutor,
 };
-use openvm_instructions::{instruction::Instruction, riscv::RV64_REGISTER_AS, LocalOpcode};
+use openvm_instructions::{
+    instruction::Instruction, riscv::RV64_REGISTER_AS, LocalOpcode, PUBLIC_VALUES_AS,
+};
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, LOADB, LOADH, LOADW};
 use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;

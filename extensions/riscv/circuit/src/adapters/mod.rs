@@ -2,15 +2,12 @@ use std::ops::Mul;
 
 use openvm_circuit::{
     arch::{execution_mode::ExecutionCtxTrait, VmStateMut, BLOCK_FE_WIDTH},
-    system::memory::{
-        merkle::public_values::PUBLIC_VALUES_AS,
-        online::{GuestMemory, TracingMemory},
-    },
+    system::memory::online::{GuestMemory, TracingMemory},
 };
 pub use openvm_circuit_primitives::U16_BITS;
 use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
-    DEFERRAL_AS,
+    DEFERRAL_AS, PUBLIC_VALUES_AS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,

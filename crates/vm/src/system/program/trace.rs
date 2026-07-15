@@ -6,7 +6,7 @@ use openvm_cpu_backend::CpuBackend;
 use openvm_instructions::{
     exe::VmExe,
     program::{Program, DEFAULT_PC_STEP},
-    LocalOpcode, SystemOpcode,
+    LocalOpcode, SystemOpcode, DIGEST_WIDTH,
 };
 use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
@@ -23,7 +23,7 @@ use crate::{
         MemoryConfig,
     },
     system::{
-        memory::{merkle::MerkleTree, AddressMap, DIGEST_WIDTH},
+        memory::{merkle::MerkleTree, AddressMap},
         program::ProgramChip,
     },
 };

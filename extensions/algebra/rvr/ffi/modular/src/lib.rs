@@ -15,13 +15,15 @@ use std::{ffi::c_void, marker::PhantomData};
 use halo2curves_axiom::ff::PrimeField;
 use num_bigint::BigUint;
 use num_traits::One;
+use openvm_instructions::riscv::RV64_MEMORY_AS;
+use openvm_platform::WORD_SIZE;
 use rvr_openvm_ext_algebra_ffi_common::{
     known_field_op_fn, mod_inverse, read_bigint, read_bls12_381_fq, read_field_256, write_bigint,
     write_bls12_381_fq, write_field_256, FieldArith, KnownFieldArith,
 };
 use rvr_openvm_ext_ffi_common::{
     ext_hint_stream_set, rd_mem_u64_range_wrapper, rd_mem_words_traced, trace_mem_access_range,
-    wr_mem_words_traced, AS_MEMORY, WORD_SIZE,
+    wr_mem_words_traced,
 };
 
 // ── Field structs ────────────────────────────────────────────────────────────
@@ -189,7 +191,7 @@ pub unsafe extern "C" fn rvr_ext_mod_setup(
 
     let mut input_words = vec![0u64; num_words as usize];
     rd_mem_words_traced(state, rs1_ptr, &mut input_words);
-    trace_mem_access_range(state, rs2_ptr, num_words, AS_MEMORY);
+    trace_mem_access_range(state, rs2_ptr, num_words, RV64_MEMORY_AS);
 
     // Setup validates that the guest-provided modulus and setup inputs match
     // the constants configured into this chip.

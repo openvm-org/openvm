@@ -7,7 +7,8 @@
 
 use std::ffi::c_void;
 
-use rvr_openvm_ext_ffi_common::{rd_mem_words_traced, wr_mem_words_traced, WORD_SIZE};
+use openvm_platform::WORD_SIZE;
+use rvr_openvm_ext_ffi_common::{rd_mem_words_traced, wr_mem_words_traced};
 
 /// Number of bytes in a 256-bit integer.
 const INT256_BYTES: usize = 32;

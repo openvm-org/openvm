@@ -8,8 +8,9 @@
 use std::ffi::c_void;
 
 use generic_array::GenericArray;
+use openvm_platform::WORD_SIZE;
 use rvr_openvm_ext_ffi_common::{
-    rd_mem_words_traced, trace_chip_wrapper, u64s_as_u32s_mut, wr_mem_words_traced, WORD_SIZE,
+    rd_mem_words_traced, trace_chip_wrapper, u64s_as_u32s_mut, wr_mem_words_traced,
 };
 use sha2::{compress256, compress512};
 

@@ -1,6 +1,6 @@
 use std::io::{self, Write};
 
-pub use openvm_instructions::PUBLIC_VALUES_AS;
+use openvm_instructions::PUBLIC_VALUES_AS;
 use openvm_stark_backend::{
     codec::{DecodableConfig, EncodableConfig},
     p3_util::log2_strict_usize,
@@ -266,17 +266,14 @@ fn extract_public_value_cells<F: Field>(
 
 #[cfg(test)]
 mod tests {
+    use openvm_instructions::{DIGEST_WIDTH, PUBLIC_VALUES_AS};
     use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
     use super::UserPublicValuesProof;
     use crate::{
         arch::{hasher::poseidon2::vm_poseidon2_hasher, MemoryConfig, SystemConfig},
-        system::memory::{
-            merkle::{public_values::PUBLIC_VALUES_AS, tree::MerkleTree},
-            online::GuestMemory,
-            AddressMap, DIGEST_WIDTH,
-        },
+        system::memory::{merkle::tree::MerkleTree, online::GuestMemory, AddressMap},
     };
 
     type F = BabyBear;

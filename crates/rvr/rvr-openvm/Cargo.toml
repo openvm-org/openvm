@@ -9,7 +9,6 @@ repository.workspace = true
 
 [dependencies]
 rvr-openvm-build.workspace = true
-rvr-openvm-ext-ffi-common.workspace = true
 rvr-openvm-ir.workspace = true
 rvr-openvm-lift.workspace = true
 
