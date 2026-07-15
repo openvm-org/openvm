@@ -611,12 +611,11 @@ fn jalr_x0_write_suppression_test() {
 }
 
 #[cfg(feature = "aot")]
-fn run_jalr_program(instructions: Vec<Instruction<F>>) -> (VmState<F>, VmState<F>) {
+fn run_jalr_program(instructions: Vec<Instruction<F>>) -> (VmState, VmState) {
     eprintln!("run_jalr_program called");
     let program = Program::from_instructions(&instructions);
     let exe = VmExe::new(program);
     let config = Rv64ImConfig::default();
-    let memory_dimensions = config.rv64i.system.memory_config.memory_dimensions();
     let executor = VmExecutor::new(config.clone()).expect("failed to create Rv64IM executor");
 
     let interpreter_instance = executor
@@ -631,12 +630,12 @@ fn run_jalr_program(instructions: Vec<Instruction<F>>) -> (VmState<F>, VmState<F
         .execute(vec![], None)
         .expect("AOT execution must succeed");
 
-    assert_vm_states_equivalent(&interp_state, &aot_state, &memory_dimensions);
+    assert_vm_states_equivalent(&interp_state, &aot_state);
     (interp_state, aot_state)
 }
 
 #[cfg(feature = "aot")]
-fn read_register(state: &VmState<F>, offset: usize) -> u32 {
+fn read_register(state: &VmState, offset: usize) -> u32 {
     let bytes = unsafe {
         state
             .memory

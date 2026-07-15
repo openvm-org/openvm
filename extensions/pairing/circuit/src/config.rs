@@ -21,13 +21,13 @@ use super::*;
 
 #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
 pub struct Rv64PairingConfig {
-    #[config(generics = true)]
+    #[config]
     pub modular: Rv64ModularConfig,
     #[extension]
     pub fp2: Fp2Extension,
     #[extension]
     pub weierstrass: WeierstrassExtension,
-    #[extension(generics = true)]
+    #[extension]
     pub pairing: PairingExtension,
 }
 

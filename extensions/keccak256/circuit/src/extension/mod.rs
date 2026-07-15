@@ -48,7 +48,7 @@ pub use cuda::*;
 
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
 pub struct Keccak256Rv64Config {
-    #[config(executor = "SystemExecutor<F>")]
+    #[config(executor = "SystemExecutor")]
     pub system: SystemConfig,
     #[extension]
     pub rv64i: Rv64I,
@@ -147,12 +147,12 @@ pub enum Keccak256Executor {
     Xorin(XorinVmExecutor),
 }
 
-impl<F> VmExecutionExtension<F> for Keccak256 {
+impl VmExecutionExtension for Keccak256 {
     type Executor = Keccak256Executor;
 
     fn extend_execution(
         &self,
-        inventory: &mut ExecutorInventoryBuilder<F, Keccak256Executor>,
+        inventory: &mut ExecutorInventoryBuilder<Keccak256Executor>,
     ) -> Result<(), ExecutorInventoryError> {
         let byte_ptr_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
 

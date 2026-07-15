@@ -591,8 +591,8 @@ pub fn tracing_write<const N: usize>(
 }
 
 #[inline(always)]
-pub fn memory_read_from_state<F, Ctx, const N: usize>(
-    state: &mut VmStateMut<F, GuestMemory, Ctx>,
+pub fn memory_read_from_state<Ctx, const N: usize>(
+    state: &mut VmStateMut<GuestMemory, Ctx>,
     address_space: u32,
     ptr: u32,
 ) -> [u8; N]
@@ -605,8 +605,8 @@ where
 }
 
 #[inline(always)]
-pub fn memory_write_from_state<F, Ctx, const N: usize>(
-    state: &mut VmStateMut<F, GuestMemory, Ctx>,
+pub fn memory_write_from_state<Ctx, const N: usize>(
+    state: &mut VmStateMut<GuestMemory, Ctx>,
     address_space: u32,
     ptr: u32,
     data: [u8; N],
@@ -619,10 +619,7 @@ pub fn memory_write_from_state<F, Ctx, const N: usize>(
 }
 
 #[inline(always)]
-pub fn read_rv64_register_from_state<F, Ctx>(
-    state: &mut VmStateMut<F, GuestMemory, Ctx>,
-    ptr: u32,
-) -> u64
+pub fn read_rv64_register_from_state<Ctx>(state: &mut VmStateMut<GuestMemory, Ctx>, ptr: u32) -> u64
 where
     Ctx: ExecutionCtxTrait,
 {

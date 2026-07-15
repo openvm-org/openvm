@@ -2,7 +2,6 @@ use openvm_circuit::{
     arch::{ExecutionCtxTrait, VmExecState, MEMORY_BLOCK_BYTES},
     system::memory::online::GuestMemory,
 };
-use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     INT256_NUM_MEMORY_BLOCKS, INT256_NUM_U32_LIMBS, INT256_NUM_U64_LIMBS, INT256_NUM_U8_LIMBS,
@@ -11,8 +10,8 @@ use crate::{
 
 /// Read a 256-bit integer as 4 separate 8-byte block reads.
 #[inline(always)]
-pub fn read_int256<F: PrimeField32, CTX: ExecutionCtxTrait>(
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+pub fn read_int256<CTX: ExecutionCtxTrait>(
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
     addr_space: u32,
     ptr: u32,
 ) -> [u8; INT256_NUM_U8_LIMBS] {
@@ -27,8 +26,8 @@ pub fn read_int256<F: PrimeField32, CTX: ExecutionCtxTrait>(
 
 /// Write a 256-bit integer as 4 separate 8-byte block writes.
 #[inline(always)]
-pub fn write_int256<F: PrimeField32, CTX: ExecutionCtxTrait>(
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+pub fn write_int256<CTX: ExecutionCtxTrait>(
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
     addr_space: u32,
     ptr: u32,
     data: &[u8; INT256_NUM_U8_LIMBS],

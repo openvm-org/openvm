@@ -97,68 +97,36 @@ macro_rules! dispatch {
             get_field_type(modulus)
         } {
             match ($is_setup, field_type) {
-                (true, FieldType::K256Coordinate) => Ok($execute_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    { FieldType::K256Coordinate as u8 },
-                    true,
-                >),
-                (true, FieldType::P256Coordinate) => Ok($execute_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    { FieldType::P256Coordinate as u8 },
-                    true,
-                >),
-                (true, FieldType::BN254Coordinate) => Ok($execute_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    { FieldType::BN254Coordinate as u8 },
-                    true,
-                >),
-                (true, FieldType::BLS12_381Coordinate) => Ok($execute_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    { FieldType::BLS12_381Coordinate as u8 },
-                    true,
-                >),
-                (false, FieldType::K256Coordinate) => Ok($execute_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    { FieldType::K256Coordinate as u8 },
-                    false,
-                >),
-                (false, FieldType::P256Coordinate) => Ok($execute_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    { FieldType::P256Coordinate as u8 },
-                    false,
-                >),
-                (false, FieldType::BN254Coordinate) => Ok($execute_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    { FieldType::BN254Coordinate as u8 },
-                    false,
-                >),
-                (false, FieldType::BLS12_381Coordinate) => Ok($execute_impl::<
-                    _,
-                    _,
-                    BLOCKS,
-                    { FieldType::BLS12_381Coordinate as u8 },
-                    false,
-                >),
+                (true, FieldType::K256Coordinate) => {
+                    Ok($execute_impl::<_, BLOCKS, { FieldType::K256Coordinate as u8 }, true>)
+                }
+                (true, FieldType::P256Coordinate) => {
+                    Ok($execute_impl::<_, BLOCKS, { FieldType::P256Coordinate as u8 }, true>)
+                }
+                (true, FieldType::BN254Coordinate) => {
+                    Ok($execute_impl::<_, BLOCKS, { FieldType::BN254Coordinate as u8 }, true>)
+                }
+                (true, FieldType::BLS12_381Coordinate) => {
+                    Ok($execute_impl::<_, BLOCKS, { FieldType::BLS12_381Coordinate as u8 }, true>)
+                }
+                (false, FieldType::K256Coordinate) => {
+                    Ok($execute_impl::<_, BLOCKS, { FieldType::K256Coordinate as u8 }, false>)
+                }
+                (false, FieldType::P256Coordinate) => {
+                    Ok($execute_impl::<_, BLOCKS, { FieldType::P256Coordinate as u8 }, false>)
+                }
+                (false, FieldType::BN254Coordinate) => {
+                    Ok($execute_impl::<_, BLOCKS, { FieldType::BN254Coordinate as u8 }, false>)
+                }
+                (false, FieldType::BLS12_381Coordinate) => {
+                    Ok($execute_impl::<_, BLOCKS, { FieldType::BLS12_381Coordinate as u8 }, false>)
+                }
                 _ => panic!("Unsupported field type"),
             }
         } else if $is_setup {
-            Ok($execute_impl::<_, _, BLOCKS, { u8::MAX }, true>)
+            Ok($execute_impl::<_, BLOCKS, { u8::MAX }, true>)
         } else {
-            Ok($execute_impl::<_, _, BLOCKS, { u8::MAX }, false>)
+            Ok($execute_impl::<_, BLOCKS, { u8::MAX }, false>)
         }
     };
 }
@@ -174,7 +142,7 @@ impl<F: PrimeField32, const BLOCKS: usize> InterpreterExecutor<F> for EcAddNeExe
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
@@ -190,7 +158,7 @@ impl<F: PrimeField32, const BLOCKS: usize> InterpreterExecutor<F> for EcAddNeExe
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
@@ -219,7 +187,7 @@ impl<F: PrimeField32, const BLOCKS: usize> InterpreterMeteredExecutor<F>
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
@@ -238,7 +206,7 @@ impl<F: PrimeField32, const BLOCKS: usize> InterpreterMeteredExecutor<F>
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
@@ -255,14 +223,13 @@ impl<F: PrimeField32, const BLOCKS: usize> AotMeteredExecutor<F> for EcAddNeExec
 
 #[inline(always)]
 unsafe fn execute_e12_impl<
-    F: PrimeField32,
     CTX: ExecutionCtxTrait,
     const BLOCKS: usize,
     const FIELD_TYPE: u8,
     const IS_SETUP: bool,
 >(
     pre_compute: &EcAddNePreCompute,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
     let pc = exec_state.pc();
     // Read register values
@@ -322,31 +289,29 @@ unsafe fn execute_e12_impl<
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_impl<
-    F: PrimeField32,
     CTX: ExecutionCtxTrait,
     const BLOCKS: usize,
     const FIELD_TYPE: u8,
     const IS_SETUP: bool,
 >(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
     let pre_compute: &EcAddNePreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<EcAddNePreCompute>()).borrow();
-    execute_e12_impl::<_, _, BLOCKS, FIELD_TYPE, IS_SETUP>(pre_compute, exec_state)
+    execute_e12_impl::<_, BLOCKS, FIELD_TYPE, IS_SETUP>(pre_compute, exec_state)
 }
 
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<
-    F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,
     const BLOCKS: usize,
     const FIELD_TYPE: u8,
     const IS_SETUP: bool,
 >(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
     let e2_pre_compute: &E2PreCompute<EcAddNePreCompute> =
         std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<EcAddNePreCompute>>())
@@ -354,5 +319,5 @@ unsafe fn execute_e2_impl<
     exec_state
         .ctx
         .on_height_change(e2_pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<_, _, BLOCKS, FIELD_TYPE, IS_SETUP>(&e2_pre_compute.data, exec_state)
+    execute_e12_impl::<_, BLOCKS, FIELD_TYPE, IS_SETUP>(&e2_pre_compute.data, exec_state)
 }

@@ -122,7 +122,7 @@ mod guest_tests {
 
         #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
         pub struct EcdsaConfig {
-            #[config(generics = true)]
+            #[config]
             pub weierstrass: Rv64WeierstrassConfig,
             #[extension]
             pub sha2: Sha2,

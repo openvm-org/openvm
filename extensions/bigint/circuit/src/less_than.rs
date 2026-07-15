@@ -38,8 +38,8 @@ struct LessThanPreCompute {
 macro_rules! dispatch {
     ($execute_impl:ident, $local_opcode:ident) => {
         Ok(match $local_opcode {
-            LessThanOpcode::SLT => $execute_impl::<_, _, false>,
-            LessThanOpcode::SLTU => $execute_impl::<_, _, true>,
+            LessThanOpcode::SLT => $execute_impl::<_, false>,
+            LessThanOpcode::SLTU => $execute_impl::<_, true>,
         })
     };
 }
@@ -55,7 +55,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for Rv64LessThan256Executor {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
@@ -70,7 +70,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for Rv64LessThan256Executor {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
@@ -95,7 +95,7 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv64LessThan256Executor 
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
@@ -112,7 +112,7 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv64LessThan256Executor 
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
@@ -127,9 +127,9 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv64LessThan256Executor 
 impl<F: PrimeField32> AotMeteredExecutor<F> for Rv64LessThan256Executor {}
 
 #[inline(always)]
-unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_U256: bool>(
+unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_U256: bool>(
     pre_compute: &LessThanPreCompute,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let rs1_ptr =
         exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.b as u32);
@@ -154,20 +154,20 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_U25
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_U256: bool>(
+unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, const IS_U256: bool>(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pre_compute: &LessThanPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<LessThanPreCompute>()).borrow();
-    execute_e12_impl::<F, CTX, IS_U256>(pre_compute, exec_state);
+    execute_e12_impl::<CTX, IS_U256>(pre_compute, exec_state);
 }
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, const IS_U256: bool>(
+unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, const IS_U256: bool>(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<LessThanPreCompute> =
         std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<LessThanPreCompute>>())
@@ -175,7 +175,7 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, const 
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<F, CTX, IS_U256>(&pre_compute.data, exec_state);
+    execute_e12_impl::<CTX, IS_U256>(&pre_compute.data, exec_state);
 }
 
 impl Rv64LessThan256Executor {

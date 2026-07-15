@@ -49,9 +49,9 @@ struct ShiftPreCompute {
 macro_rules! dispatch {
     ($execute_impl:ident, $local_opcode:ident) => {
         Ok(match $local_opcode {
-            ShiftOpcode::SLL => $execute_impl::<_, _, SllOp>,
-            ShiftOpcode::SRA => $execute_impl::<_, _, SraOp>,
-            ShiftOpcode::SRL => $execute_impl::<_, _, SrlOp>,
+            ShiftOpcode::SLL => $execute_impl::<_, SllOp>,
+            ShiftOpcode::SRA => $execute_impl::<_, SraOp>,
+            ShiftOpcode::SRL => $execute_impl::<_, SrlOp>,
         })
     };
 }
@@ -69,7 +69,7 @@ macro_rules! impl_shift256_executor {
                 pc: u32,
                 inst: &Instruction<F>,
                 data: &mut [u8],
-            ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+            ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
             where
                 Ctx: ExecutionCtxTrait,
             {
@@ -84,7 +84,7 @@ macro_rules! impl_shift256_executor {
                 pc: u32,
                 inst: &Instruction<F>,
                 data: &mut [u8],
-            ) -> Result<Handler<F, Ctx>, StaticProgramError>
+            ) -> Result<Handler<Ctx>, StaticProgramError>
             where
                 Ctx: ExecutionCtxTrait,
             {
@@ -109,7 +109,7 @@ macro_rules! impl_shift256_executor {
                 pc: u32,
                 inst: &Instruction<F>,
                 data: &mut [u8],
-            ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+            ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
             where
                 Ctx: MeteredExecutionCtxTrait,
             {
@@ -126,7 +126,7 @@ macro_rules! impl_shift256_executor {
                 pc: u32,
                 inst: &Instruction<F>,
                 data: &mut [u8],
-            ) -> Result<Handler<F, Ctx>, StaticProgramError>
+            ) -> Result<Handler<Ctx>, StaticProgramError>
             where
                 Ctx: MeteredExecutionCtxTrait,
             {
@@ -181,9 +181,9 @@ impl_shift256_executor!(Rv64ShiftLogical256Executor, false);
 impl_shift256_executor!(Rv64ShiftRightArithmetic256Executor, true);
 
 #[inline(always)]
-unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: ShiftOp>(
+unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: ShiftOp>(
     pre_compute: &ShiftPreCompute,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let rs1_ptr =
         exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.b as u32);
@@ -201,20 +201,20 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: ShiftOp>
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: ShiftOp>(
+unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, OP: ShiftOp>(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pre_compute: &ShiftPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<ShiftPreCompute>()).borrow();
-    execute_e12_impl::<F, CTX, OP>(pre_compute, exec_state);
+    execute_e12_impl::<CTX, OP>(pre_compute, exec_state);
 }
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, OP: ShiftOp>(
+unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, OP: ShiftOp>(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<ShiftPreCompute> =
         std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<ShiftPreCompute>>())
@@ -222,7 +222,7 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, OP: Sh
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<F, CTX, OP>(&pre_compute.data, exec_state);
+    execute_e12_impl::<CTX, OP>(&pre_compute.data, exec_state);
 }
 
 trait ShiftOp {

@@ -24,20 +24,18 @@ use crate::{
 };
 
 static_assertions::assert_impl_all!(
-    AotInstance<'static, p3_baby_bear::BabyBear, ExecutionCtx>: Send,
+    AotInstance<'static, ExecutionCtx>: Send,
     Sync
 );
 
-impl<'a, F> AotInstance<'a, F, ExecutionCtx>
-where
-    F: PrimeField32,
-{
-    fn create_pure_asm<E>(
+impl<'a> AotInstance<'a, ExecutionCtx> {
+    fn create_pure_asm<F, E>(
         exe: &VmExe<F>,
         inventory: &ExecutorInventory<E>,
-        pre_compute_insns_ptr: *const PreComputeInstruction<F, ExecutionCtx>,
+        pre_compute_insns_ptr: *const PreComputeInstruction<ExecutionCtx>,
     ) -> Result<String, StaticProgramError>
     where
+        F: PrimeField32,
         E: Executor<F>,
     {
         let mut asm_str = String::new();
@@ -60,10 +58,10 @@ where
 
         let get_vm_address_space_addr_ptr = format!(
             "{:p}",
-            get_vm_address_space_addr::<F, ExecutionCtx> as *const ()
+            get_vm_address_space_addr::<ExecutionCtx> as *const ()
         );
 
-        let get_vm_pc_ptr = format!("{:p}", get_vm_pc_ptr::<F, ExecutionCtx> as *const ());
+        let get_vm_pc_ptr = format!("{:p}", get_vm_pc_ptr::<ExecutionCtx> as *const ());
 
         asm_str += &Self::push_internal_registers();
 
@@ -113,11 +111,10 @@ where
         let base_idx = (pc_base / DEFAULT_PC_STEP) as usize;
         let num_pc_slots = base_idx + exe.program.instructions_and_debug_infos.len();
 
-        let extern_handler_ptr =
-            format!("{:p}", extern_handler::<F, ExecutionCtx, true> as *const ());
-        let set_pc_ptr = format!("{:p}", set_pc_shim::<F, ExecutionCtx> as *const ());
+        let extern_handler_ptr = format!("{:p}", extern_handler::<ExecutionCtx, true> as *const ());
+        let set_pc_ptr = format!("{:p}", set_pc_shim::<ExecutionCtx> as *const ());
         let pre_compute_insns_ptr = format!("{:p}", pre_compute_insns_ptr as *const ());
-        let instret_left_ptr = format!("{:p}", set_instret_left_shim::<F> as *const ());
+        let instret_left_ptr = format!("{:p}", set_instret_left_shim as *const ());
 
         for pc_idx in 0..num_pc_slots {
             /* Preprocessing step, to check if we should suspend or not */
@@ -313,11 +310,12 @@ where
     }
 
     /// Creates a new instance for pure execution
-    pub fn new<E>(
+    pub fn new<F, E>(
         inventory: &'a ExecutorInventory<E>,
         exe: &VmExe<F>,
     ) -> Result<Self, StaticProgramError>
     where
+        F: PrimeField32,
         E: Executor<F>,
     {
         let program = &exe.program;
@@ -351,9 +349,9 @@ where
     /// Returns the final VM state when execution stops.
     pub fn execute(
         &self,
-        inputs: impl Into<Streams<F>>,
+        inputs: impl Into<Streams>,
         num_insns: Option<u64>,
-    ) -> Result<VmState<F, GuestMemory>, ExecutionError> {
+    ) -> Result<VmState<GuestMemory>, ExecutionError> {
         let vm_state =
             VmState::initial(self.system_config, &self.init_memory, self.pc_start, inputs);
         self.execute_from_state(vm_state, num_insns)
@@ -364,9 +362,9 @@ where
     // Otherwise executes until termination
     pub fn execute_from_state(
         &self,
-        from_state: VmState<F, GuestMemory>,
+        from_state: VmState<GuestMemory>,
         num_insns: Option<u64>,
-    ) -> Result<VmState<F, GuestMemory>, ExecutionError> {
+    ) -> Result<VmState<GuestMemory>, ExecutionError> {
         let from_state_pc = from_state.pc();
         let ctx = ExecutionCtx::new(num_insns);
         let instret_left = ctx.instret_left;
@@ -376,7 +374,7 @@ where
         #[cfg(feature = "metrics")]
         let start_instret_left = instret_left;
 
-        let mut vm_exec_state: Box<VmExecState<F, GuestMemory, ExecutionCtx>> =
+        let mut vm_exec_state: Box<VmExecState<GuestMemory, ExecutionCtx>> =
             Box::new(VmExecState::new(from_state, ctx));
 
         tracing::info_span!("execute_pure").in_scope(|| unsafe {
@@ -386,7 +384,7 @@ where
                 .expect("Failed to get asm_run symbol");
 
             let vm_exec_state_ptr =
-                vm_exec_state.as_mut() as *mut VmExecState<F, GuestMemory, ExecutionCtx>;
+                vm_exec_state.as_mut() as *mut VmExecState<GuestMemory, ExecutionCtx>;
             let pre_compute_insns_ptr = self.pre_compute_insns.as_ptr();
 
             asm_run(

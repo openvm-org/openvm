@@ -23,21 +23,19 @@ use crate::{
     system::memory::online::GuestMemory,
 };
 static_assertions::assert_impl_all!(
-    AotInstance<'static, p3_baby_bear::BabyBear, MeteredCtx>: Send,
+    AotInstance<'static, MeteredCtx>: Send,
     Sync
 );
 
-impl<'a, F> AotInstance<'a, F, MeteredCtx>
-where
-    F: PrimeField32,
-{
+impl<'a> AotInstance<'a, MeteredCtx> {
     /// Creates a new instance for metered execution.
-    pub fn new_metered<E>(
+    pub fn new_metered<F, E>(
         inventory: &'a ExecutorInventory<E>,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
     ) -> Result<Self, StaticProgramError>
     where
+        F: PrimeField32,
         E: MeteredExecutor<F>,
     {
         let start = std::time::Instant::now();
@@ -76,17 +74,18 @@ where
             lib,
         })
     }
-    fn create_metered_asm<E>(
+    fn create_metered_asm<F, E>(
         exe: &VmExe<F>,
         inventory: &ExecutorInventory<E>,
         executor_idx_to_air_idx: &[usize],
-        pre_compute_insns_ptr: *const PreComputeInstruction<F, MeteredCtx>,
+        pre_compute_insns_ptr: *const PreComputeInstruction<MeteredCtx>,
     ) -> Result<String, StaticProgramError>
     where
+        F: PrimeField32,
         E: MeteredExecutor<F>,
     {
         let mut asm_str = String::new();
-        let instret_until_end_offset = offset_of!(VmExecState<F, GuestMemory, MeteredCtx>, ctx)
+        let instret_until_end_offset = offset_of!(VmExecState<GuestMemory, MeteredCtx>, ctx)
             + offset_of!(MeteredCtx, segmentation_ctx)
             + offset_of!(SegmentationCtx, instrets_until_check);
 
@@ -101,10 +100,9 @@ where
             )
         };
 
-        let extern_handler_ptr =
-            format!("{:p}", extern_handler::<F, MeteredCtx, true> as *const ());
-        let set_pc_ptr = format!("{:p}", set_pc_shim::<F, MeteredCtx> as *const ());
-        let should_suspend_ptr = format!("{:p}", should_suspend_shim::<F, MeteredCtx> as *const ()); //needs state_ptr
+        let extern_handler_ptr = format!("{:p}", extern_handler::<MeteredCtx, true> as *const ());
+        let set_pc_ptr = format!("{:p}", set_pc_shim::<MeteredCtx> as *const ());
+        let should_suspend_ptr = format!("{:p}", should_suspend_shim::<MeteredCtx> as *const ()); //needs state_ptr
         let pre_compute_insns_ptr = format!("{:p}", pre_compute_insns_ptr as *const ());
 
         // generate the assembly based on exe.program
@@ -125,12 +123,10 @@ where
         asm_str += &format!("   mov {REG_B}, {REG_THIRD_ARG}\n");
         asm_str += &format!("   mov {REG_INSTRET_END}, {REG_FOURTH_ARG}\n");
 
-        let get_vm_address_space_addr_ptr = format!(
-            "{:p}",
-            get_vm_address_space_addr::<F, MeteredCtx> as *const ()
-        );
+        let get_vm_address_space_addr_ptr =
+            format!("{:p}", get_vm_address_space_addr::<MeteredCtx> as *const ());
 
-        let get_vm_pc_ptr = format!("{:p}", get_vm_pc_ptr::<F, MeteredCtx> as *const ());
+        let get_vm_pc_ptr = format!("{:p}", get_vm_pc_ptr::<MeteredCtx> as *const ());
 
         asm_str += &Self::push_internal_registers();
 
@@ -404,9 +400,9 @@ where
     /// Assumes the program doesn't jump to out of bounds pc
     pub fn execute_metered(
         &self,
-        inputs: impl Into<Streams<F>>,
+        inputs: impl Into<Streams>,
         ctx: MeteredCtx,
-    ) -> Result<(Vec<Segment>, VmState<F, GuestMemory>), ExecutionError> {
+    ) -> Result<(Vec<Segment>, VmState<GuestMemory>), ExecutionError> {
         let vm_state = self.create_initial_vm_state(inputs);
         self.execute_metered_from_state(vm_state, ctx)
     }
@@ -419,19 +415,18 @@ where
     /// Assume program doesn't jump to out of bounds pc
     pub fn execute_metered_from_state(
         &self,
-        from_state: VmState<F, GuestMemory>,
+        from_state: VmState<GuestMemory>,
         ctx: MeteredCtx,
-    ) -> Result<(Vec<Segment>, VmState<F, GuestMemory>), ExecutionError> {
+    ) -> Result<(Vec<Segment>, VmState<GuestMemory>), ExecutionError> {
         let mut exec_state = VmExecState::new(from_state, ctx);
 
         loop {
             exec_state = self.execute_metered_until_suspend(exec_state)?;
+            let exit_code = std::mem::replace(&mut exec_state.exit_code, Ok(None))?;
             // The execution has terminated.
-            if exec_state.exit_code.is_ok() && exec_state.exit_code.as_ref().unwrap().is_some() {
+            if exit_code.is_some() {
+                exec_state.exit_code = Ok(exit_code);
                 break;
-            }
-            if exec_state.exit_code.is_err() {
-                return Err(exec_state.exit_code.unwrap_err());
             }
         }
         check_termination(exec_state.exit_code)?;
@@ -442,11 +437,10 @@ where
     // TODO: implement execute_metered_until_suspend for AOT if needed
     pub fn execute_metered_until_suspend(
         &self,
-        vm_exec_state: VmExecState<F, GuestMemory, MeteredCtx>,
-    ) -> Result<VmExecState<F, GuestMemory, MeteredCtx>, ExecutionError> {
+        vm_exec_state: VmExecState<GuestMemory, MeteredCtx>,
+    ) -> Result<VmExecState<GuestMemory, MeteredCtx>, ExecutionError> {
         let from_state_pc = vm_exec_state.vm_state.pc();
-        let mut vm_exec_state: Box<VmExecState<F, GuestMemory, MeteredCtx>> =
-            Box::new(vm_exec_state);
+        let mut vm_exec_state: Box<VmExecState<GuestMemory, MeteredCtx>> = Box::new(vm_exec_state);
 
         #[cfg(feature = "metrics")]
         let metrics = ExecutionMetricTimer::start(ExecutionMetric::Metered);
@@ -460,7 +454,7 @@ where
                 .expect("Failed to get asm_run symbol");
 
             let vm_exec_state_ptr =
-                vm_exec_state.as_mut() as *mut VmExecState<F, GuestMemory, MeteredCtx>;
+                vm_exec_state.as_mut() as *mut VmExecState<GuestMemory, MeteredCtx>;
             let trace_heights_ptr = vm_exec_state.ctx.trace_heights.as_mut_ptr();
 
             let instret_until_end = vm_exec_state.ctx.segmentation_ctx.instrets_until_check;

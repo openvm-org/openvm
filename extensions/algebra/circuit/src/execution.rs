@@ -33,7 +33,6 @@ macro_rules! generate_field_dispatch {
             $(
                 (FieldType::$curve, Operation::$operation) => Ok($execute_fn::<
                     _,
-                    _,
                     $blocks,
                     false,
                     { FieldType::$curve as u8 },
@@ -55,7 +54,6 @@ macro_rules! generate_fp2_dispatch {
         match ($field_type, $op) {
             $(
                 (FieldType::$curve, Operation::$operation) => Ok($execute_fn::<
-                    _,
                     _,
                     $blocks,
                     true,
@@ -91,7 +89,7 @@ macro_rules! dispatch {
                         ]
                     )
                 } else {
-                    Ok($execute_generic_impl::<_, _, BLOCKS, IS_FP2>)
+                    Ok($execute_generic_impl::<_, BLOCKS, IS_FP2>)
                 }
             } else if let Some(field_type) = get_field_type(modulus) {
                 generate_field_dispatch!(
@@ -135,10 +133,10 @@ macro_rules! dispatch {
                     ]
                 )
             } else {
-                Ok($execute_generic_impl::<_, _, BLOCKS, IS_FP2>)
+                Ok($execute_generic_impl::<_, BLOCKS, IS_FP2>)
             }
         } else {
-            Ok($execute_setup_impl::<_, _, BLOCKS, IS_FP2>)
+            Ok($execute_setup_impl::<_, BLOCKS, IS_FP2>)
         }
     };
 }
@@ -255,7 +253,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const IS_FP2: bool> InterpreterExecut
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
@@ -277,7 +275,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const IS_FP2: bool> InterpreterExecut
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
@@ -315,7 +313,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const IS_FP2: bool> InterpreterMetere
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
@@ -341,7 +339,7 @@ impl<F: PrimeField32, const BLOCKS: usize, const IS_FP2: bool> InterpreterMetere
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
@@ -369,7 +367,6 @@ impl<F: PrimeField32, const BLOCKS: usize, const IS_FP2: bool> AotMeteredExecuto
 
 #[inline(always)]
 unsafe fn execute_e12_impl<
-    F: PrimeField32,
     CTX: ExecutionCtxTrait,
     const BLOCKS: usize,
     const IS_FP2: bool,
@@ -377,7 +374,7 @@ unsafe fn execute_e12_impl<
     const OP: u8,
 >(
     pre_compute: &FieldExpressionPreCompute,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let rs_vals = pre_compute
         .rs_addrs
@@ -413,9 +410,9 @@ unsafe fn execute_e12_impl<
 }
 
 #[inline(always)]
-unsafe fn execute_e12_generic_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const BLOCKS: usize>(
+unsafe fn execute_e12_generic_impl<CTX: ExecutionCtxTrait, const BLOCKS: usize>(
     pre_compute: &FieldExpressionPreCompute,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let rs_vals = pre_compute
         .rs_addrs
@@ -454,13 +451,12 @@ unsafe fn execute_e12_generic_impl<F: PrimeField32, CTX: ExecutionCtxTrait, cons
 
 #[inline(always)]
 unsafe fn execute_e12_setup_impl<
-    F: PrimeField32,
     CTX: ExecutionCtxTrait,
     const BLOCKS: usize,
     const IS_FP2: bool,
 >(
     pre_compute: &FieldExpressionPreCompute,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
     let pc = exec_state.pc();
     // Read the first input (which should be the prime)
@@ -517,30 +513,24 @@ unsafe fn execute_e12_setup_impl<
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_setup_impl<
-    F: PrimeField32,
-    CTX: ExecutionCtxTrait,
-    const BLOCKS: usize,
-    const IS_FP2: bool,
->(
+unsafe fn execute_e1_setup_impl<CTX: ExecutionCtxTrait, const BLOCKS: usize, const IS_FP2: bool>(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
     let pre_compute: &FieldExpressionPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<FieldExpressionPreCompute>()).borrow();
-    execute_e12_setup_impl::<_, _, BLOCKS, IS_FP2>(pre_compute, exec_state)
+    execute_e12_setup_impl::<_, BLOCKS, IS_FP2>(pre_compute, exec_state)
 }
 
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_setup_impl<
-    F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,
     const BLOCKS: usize,
     const IS_FP2: bool,
 >(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
     let pre_compute: &E2PreCompute<FieldExpressionPreCompute> = std::slice::from_raw_parts(
         pre_compute,
@@ -550,13 +540,12 @@ unsafe fn execute_e2_setup_impl<
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_setup_impl::<_, _, BLOCKS, IS_FP2>(&pre_compute.data, exec_state)
+    execute_e12_setup_impl::<_, BLOCKS, IS_FP2>(&pre_compute.data, exec_state)
 }
 
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_impl<
-    F: PrimeField32,
     CTX: ExecutionCtxTrait,
     const BLOCKS: usize,
     const IS_FP2: bool,
@@ -564,17 +553,16 @@ unsafe fn execute_e1_impl<
     const OP: u8,
 >(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pre_compute: &FieldExpressionPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<FieldExpressionPreCompute>()).borrow();
-    execute_e12_impl::<_, _, BLOCKS, IS_FP2, FIELD_TYPE, OP>(pre_compute, exec_state);
+    execute_e12_impl::<_, BLOCKS, IS_FP2, FIELD_TYPE, OP>(pre_compute, exec_state);
 }
 
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_impl<
-    F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,
     const BLOCKS: usize,
     const IS_FP2: bool,
@@ -582,7 +570,7 @@ unsafe fn execute_e2_impl<
     const OP: u8,
 >(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<FieldExpressionPreCompute> = std::slice::from_raw_parts(
         pre_compute,
@@ -592,35 +580,33 @@ unsafe fn execute_e2_impl<
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<_, _, BLOCKS, IS_FP2, FIELD_TYPE, OP>(&pre_compute.data, exec_state);
+    execute_e12_impl::<_, BLOCKS, IS_FP2, FIELD_TYPE, OP>(&pre_compute.data, exec_state);
 }
 
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_generic_impl<
-    F: PrimeField32,
     CTX: ExecutionCtxTrait,
     const BLOCKS: usize,
     const IS_FP2: bool,
 >(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pre_compute: &FieldExpressionPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<FieldExpressionPreCompute>()).borrow();
-    execute_e12_generic_impl::<_, _, BLOCKS>(pre_compute, exec_state);
+    execute_e12_generic_impl::<_, BLOCKS>(pre_compute, exec_state);
 }
 
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e2_generic_impl<
-    F: PrimeField32,
     CTX: MeteredExecutionCtxTrait,
     const BLOCKS: usize,
     const IS_FP2: bool,
 >(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<FieldExpressionPreCompute> = std::slice::from_raw_parts(
         pre_compute,
@@ -630,5 +616,5 @@ unsafe fn execute_e2_generic_impl<
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_generic_impl::<_, _, BLOCKS>(&pre_compute.data, exec_state);
+    execute_e12_generic_impl::<_, BLOCKS>(&pre_compute.data, exec_state);
 }

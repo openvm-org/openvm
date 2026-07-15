@@ -17,6 +17,7 @@ use openvm_circuit::arch::{
 #[cfg(feature = "rvr")]
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "rvr")]
 use crate::F;
 
 cfg_if::cfg_if! {
@@ -24,33 +25,33 @@ cfg_if::cfg_if! {
         use openvm_circuit::arch::rvr::{
             RvrMeteredCostInstance, RvrMeteredInstance, RvrPureInstance,
         };
-        pub type CompiledExePure<'a, F> = RvrPureInstance<'a, F>;
-        pub type MeteredInstance<'a, F> = RvrMeteredInstance<'a, F>;
-        pub type MeteredCostInstance<'a, F> = RvrMeteredCostInstance<'a, F>;
+        pub type CompiledExePure<'a> = RvrPureInstance<'a, F>;
+        pub type MeteredInstance<'a> = RvrMeteredInstance<'a, F>;
+        pub type MeteredCostInstance<'a> = RvrMeteredCostInstance<'a, F>;
     } else if #[cfg(feature = "aot")] {
         use openvm_circuit::arch::AotInstance;
-        pub type CompiledExePure<'a, F> = AotInstance<'a, F, ExecutionCtx>;
-        pub type MeteredInstance<'a, F> = AotInstance<'a, F, MeteredCtx>;
+        pub type CompiledExePure<'a> = AotInstance<'a, ExecutionCtx>;
+        pub type MeteredInstance<'a> = AotInstance<'a, MeteredCtx>;
         // AOT has no dedicated metered-cost backend; fall back to the interpreter.
-        pub type MeteredCostInstance<'a, F> = InterpretedInstance<'a, F, MeteredCostCtx>;
+        pub type MeteredCostInstance<'a> = InterpretedInstance<'a, MeteredCostCtx>;
     } else {
-        pub type CompiledExePure<'a, F> = InterpretedInstance<'a, F, ExecutionCtx>;
-        pub type MeteredInstance<'a, F> = InterpretedInstance<'a, F, MeteredCtx>;
-        pub type MeteredCostInstance<'a, F> = InterpretedInstance<'a, F, MeteredCostCtx>;
+        pub type CompiledExePure<'a> = InterpretedInstance<'a, ExecutionCtx>;
+        pub type MeteredInstance<'a> = InterpretedInstance<'a, MeteredCtx>;
+        pub type MeteredCostInstance<'a> = InterpretedInstance<'a, MeteredCostCtx>;
     }
 }
 
 /// Bundles a [`MeteredInstance`] with a precomputed [`MeteredCtx`] so each execution
 /// just clones the ctx instead of rebuilding from the proving key.
 pub struct CompiledExeMetered<'a> {
-    pub instance: MeteredInstance<'a, F>,
+    pub instance: MeteredInstance<'a>,
     pub ctx: MeteredCtx,
     #[cfg(feature = "rvr")]
     pub executor_idx_to_air_idx: Vec<usize>,
 }
 
 pub struct CompiledExeMeteredCost<'a> {
-    pub instance: MeteredCostInstance<'a, F>,
+    pub instance: MeteredCostInstance<'a>,
     pub ctx: MeteredCostCtx,
 }
 

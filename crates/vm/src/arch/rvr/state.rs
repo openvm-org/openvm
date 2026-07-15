@@ -4,7 +4,6 @@
 //! by fixed offsets. It is built fresh per execution and points at VmState's
 //! existing memory buffer; we do not own a separate allocation.
 
-use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_state::{InstretSuspender, Rv64, RvState, TracerState};
 
 use super::{
@@ -75,10 +74,7 @@ impl<T> std::ops::DerefMut for TracerPtr<T> {
 ///
 /// The stored pointer is dereferenced later by the rvr C engine; the segment
 /// must stay alive and be uniquely accessed for the duration of rvr execution.
-pub fn init_rvr_state<F: PrimeField32>(
-    vm_state: &mut VmState<F, GuestMemory>,
-    pc: u32,
-) -> PureState {
+pub fn init_rvr_state(vm_state: &mut VmState<GuestMemory>, pc: u32) -> PureState {
     let memory_ptr = rv64_memory_ptr(vm_state);
     let mut state = PureState::new();
     state.set_memory(memory_ptr);
@@ -87,8 +83,8 @@ pub fn init_rvr_state<F: PrimeField32>(
     state
 }
 
-pub fn init_rvr_state_with_metered_cost<F: PrimeField32>(
-    vm_state: &mut VmState<F, GuestMemory>,
+pub fn init_rvr_state_with_metered_cost(
+    vm_state: &mut VmState<GuestMemory>,
     pc: u32,
 ) -> MeteredCostState {
     let memory_ptr = rv64_memory_ptr(vm_state);
@@ -99,10 +95,7 @@ pub fn init_rvr_state_with_metered_cost<F: PrimeField32>(
     state
 }
 
-pub fn init_rvr_state_with_metered<F: PrimeField32>(
-    vm_state: &mut VmState<F, GuestMemory>,
-    pc: u32,
-) -> MeteredState {
+pub fn init_rvr_state_with_metered(vm_state: &mut VmState<GuestMemory>, pc: u32) -> MeteredState {
     let memory_ptr = rv64_memory_ptr(vm_state);
     let mut state = MeteredState::new();
     state.set_memory(memory_ptr);

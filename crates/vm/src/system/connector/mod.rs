@@ -1,7 +1,4 @@
-use std::{
-    borrow::{Borrow, BorrowMut},
-    marker::PhantomData,
-};
+use std::borrow::{Borrow, BorrowMut};
 
 use openvm_circuit_primitives::{
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
@@ -226,14 +223,13 @@ impl<AB: InteractionBuilder + PairBuilder + AirBuilderWithPublicValues> Air<AB> 
     }
 }
 
-pub struct VmConnectorChip<F> {
+pub struct VmConnectorChip {
     pub range_checker: SharedVariableRangeCheckerChip,
     pub boundary_states: [Option<ConnectorCols<u32>>; 2],
     timestamp_max_bits: usize,
-    _marker: PhantomData<F>,
 }
 
-impl<F> VmConnectorChip<F> {
+impl VmConnectorChip {
     pub fn new(range_checker: SharedVariableRangeCheckerChip, timestamp_max_bits: usize) -> Self {
         let range_bus = range_checker.bus();
         assert!(
@@ -246,7 +242,6 @@ impl<F> VmConnectorChip<F> {
             range_checker,
             boundary_states: [None, None],
             timestamp_max_bits,
-            _marker: PhantomData,
         }
     }
 
@@ -282,7 +277,7 @@ impl<F> VmConnectorChip<F> {
     }
 }
 
-impl<RA, SC> Chip<RA, CpuBackend<SC>> for VmConnectorChip<Val<SC>>
+impl<RA, SC> Chip<RA, CpuBackend<SC>> for VmConnectorChip
 where
     SC: StarkProtocolConfig,
     Val<SC>: PrimeField32,

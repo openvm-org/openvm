@@ -135,7 +135,7 @@ fn test_rv64im_runtime(elf_path: &str) -> Result<()> {
 
 #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
 pub struct Rv64ModularFp2Int256Config {
-    #[config(executor = "SystemExecutor<F>")]
+    #[config(executor = "SystemExecutor")]
     pub system: SystemConfig,
     #[extension]
     pub base: Rv64I,

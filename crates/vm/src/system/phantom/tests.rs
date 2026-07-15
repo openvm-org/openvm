@@ -42,7 +42,7 @@ fn test_nops_and_terminate() {
     let phantom_opcode = SystemOpcode::PHANTOM.global_opcode();
 
     let mut tester = VmChipTestBuilder::default();
-    let executor = PhantomExecutor::<F>::new(Default::default(), phantom_opcode);
+    let executor = PhantomExecutor::new(Default::default(), phantom_opcode);
     let chip = PhantomChip::new(PhantomFiller, tester.memory_helper());
     let air = PhantomAir {
         execution_bridge: tester.execution_bridge(),
@@ -77,7 +77,7 @@ fn test_cuda_phantom_tracegen() {
     let phantom_opcode = SystemOpcode::PHANTOM.global_opcode();
     let mut tester = GpuChipTestBuilder::default();
 
-    let executor = PhantomExecutor::<F>::new(Default::default(), phantom_opcode);
+    let executor = PhantomExecutor::new(Default::default(), phantom_opcode);
     let air = PhantomAir {
         execution_bridge: tester.execution_bridge(),
         phantom_opcode,

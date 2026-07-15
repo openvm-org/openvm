@@ -1,11 +1,9 @@
 #![cfg_attr(feature = "tco", allow(incomplete_features))]
-#![cfg_attr(feature = "tco", feature(explicit_tail_calls))]
 
 #[cfg(feature = "rvr")]
 use std::path::PathBuf;
 use std::{
     fs::read,
-    marker::PhantomData,
     path::Path,
     sync::{Arc, OnceLock},
 };
@@ -177,8 +175,6 @@ where
     halo2_params_reader: CacheHalo2ParamsReader,
     #[cfg(feature = "evm-prove")]
     halo2_prover: OnceLock<Halo2Prover>,
-
-    _phantom: PhantomData<E>,
 }
 
 #[derive(Clone, Default)]
@@ -495,7 +491,7 @@ where
     pub fn compile(
         &self,
         app_exe: impl Into<ExecutableInput>,
-    ) -> Result<CompiledExePure<'_, F>, SdkError> {
+    ) -> Result<CompiledExePure<'_>, SdkError> {
         let input = self.compile_input(app_exe)?;
         let exe = self.convert_to_exe(input.executable)?;
         #[cfg(feature = "rvr")]
@@ -523,7 +519,7 @@ where
         &self,
         lib_path: &Path,
         app_exe: impl Into<ExecutableFormat>,
-    ) -> Result<CompiledExePure<'_, F>, SdkError> {
+    ) -> Result<CompiledExePure<'_>, SdkError> {
         let exe = self.convert_to_exe(app_exe)?;
         self.executor
             .load_instance(lib_path, &exe)
@@ -535,7 +531,7 @@ where
     #[tracing::instrument(name = "sdk.execute", level = "info", skip_all)]
     pub fn execute(
         &self,
-        compiled: &CompiledExePure<'_, F>,
+        compiled: &CompiledExePure<'_>,
         inputs: StdIn,
     ) -> Result<Vec<u8>, SdkError> {
         let final_memory = compiled
