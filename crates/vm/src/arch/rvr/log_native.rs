@@ -5,7 +5,7 @@ use std::{cell::Cell, collections::HashMap};
 use openvm_instructions::{
     exe::VmExe, instruction::Instruction, program::DEFAULT_PC_STEP, VmOpcode,
 };
-use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::{p3_field::PrimeField32, p3_maybe_rayon::prelude::*};
 
 use super::{
     PreflightMemoryAccessAux, PreflightRawLogs, ProgramLogEntry, RvrDeltaRecords,
@@ -48,8 +48,16 @@ impl<'a, F: PrimeField32> LogNativeAccessView<'a, F> {
         if i >= n || self.access_aux[i].entry.timestamp > timestamp {
             i = 0;
         }
-        while i < n && self.access_aux[i].entry.timestamp < timestamp {
+        // A per-AIR worker sees monotonically increasing timestamps but may
+        // jump across long runs owned by other AIRs. Scan a short local run,
+        // then binary-search the remainder instead of making every worker walk
+        // the complete global access stream.
+        let linear_end = (i + 8).min(n);
+        while i < linear_end && self.access_aux[i].entry.timestamp < timestamp {
             i += 1;
+        }
+        if i == linear_end && i < n && self.access_aux[i].entry.timestamp < timestamp {
+            i += self.access_aux[i..].partition_point(|aux| aux.entry.timestamp < timestamp);
         }
         if i < n && self.access_aux[i].entry.timestamp == timestamp {
             self.cursor.set(i);
@@ -502,7 +510,7 @@ impl<F> LogNativeOpcodeAdmitter<F> for () {
 /// be consumed exactly (cursor == written bytes), so a record dropped in C
 /// (buffer overflow, unmapped chip) fails loudly here rather than surfacing
 /// as a bus imbalance at proving.
-pub fn generate_record_arenas_from_logs<F: PrimeField32, RA: Arena>(
+pub fn generate_record_arenas_from_logs<F: PrimeField32, RA: Arena + Send>(
     registry: &LogNativeAssemblerRegistry<F, RA>,
     exe: &VmExe<F>,
     output: &mut RvrPreflightOutput<F>,
@@ -526,7 +534,7 @@ pub fn generate_record_arenas_from_logs<F: PrimeField32, RA: Arena>(
 /// in wire form and are returned as the second tuple element (those AIRs'
 /// arenas are left empty; the caller adopts the wire buffers into its concrete
 /// arena type, e.g. for GPU on-device decode or zero-copy full-record feeds).
-pub fn generate_record_arenas_from_logs_with_compact<F: PrimeField32, RA: Arena>(
+pub fn generate_record_arenas_from_logs_with_compact<F: PrimeField32, RA: Arena + Send>(
     registry: &LogNativeAssemblerRegistry<F, RA>,
     exe: &VmExe<F>,
     output: &mut RvrPreflightOutput<F>,
@@ -553,132 +561,80 @@ pub fn generate_record_arenas_from_logs_with_compact<F: PrimeField32, RA: Arena>
     // zeroed, never written, and dropped at substitution (the measured G2
     // "buffer #1" cost). A record wrongly routed at a placeholder still fails
     // loudly on its capacity assert instead of writing.
-    let mut arenas = capacities
-        .iter()
-        .enumerate()
-        .map(|(air_idx, &(height, width))| {
-            if arena_native_expected.contains_key(&air_idx) || compact_airs.contains(&air_idx) {
-                RA::with_capacity(0, width)
-            } else {
-                RA::with_capacity(height, width)
-            }
-        })
-        .collect::<Vec<_>>();
     let arena_alloc_finished = std::time::Instant::now();
-    let access = LogNativeAccessView::new(&output.access_aux)?;
-    let access_view_finished = std::time::Instant::now();
+    let access_view_finished = arena_alloc_finished;
 
-    // Per-air (compact bytes, cursor, compiled record stride).
-    let mut inline_bufs: HashMap<usize, (&[u8], usize, usize)> = inline_records
-        .iter()
-        .map(|chip| {
-            (
+    let mut inline_by_air = HashMap::with_capacity(inline_records.len());
+    for chip in &inline_records {
+        if chip.air_idx >= capacities.len() {
+            return Err(rvr_error(format!(
+                "compact record buffer air_idx {} is outside {} arenas",
                 chip.air_idx,
-                (chip.bytes.as_slice(), 0usize, chip.record_size),
-            )
-        })
-        .collect();
-    let inline_map_finished = std::time::Instant::now();
-    let mut arena_native_skipped = 0usize;
-    let mut compact_seen = 0usize;
-    let mut host_assembled = 0usize;
+                capacities.len()
+            )));
+        }
+        if inline_by_air.insert(chip.air_idx, chip).is_some() {
+            return Err(rvr_error(format!(
+                "duplicate compact record buffer for air_idx {}",
+                chip.air_idx
+            )));
+        }
+    }
 
-    for program_entry in &output.raw_logs.program_log {
+    // Stable routing is the deterministic merge contract: entries are pushed
+    // in global program-log order, so every AIR lane retains its canonical
+    // record order. Lanes own disjoint arenas and compact/access cursors; the
+    // indexed parallel collect below restores canonical AIR-index order.
+    let mut work_by_air = (0..capacities.len())
+        .map(|_| Vec::new())
+        .collect::<Vec<Vec<u32>>>();
+    let mut arena_native_skipped = 0usize;
+    for (program_index, program_entry) in output.raw_logs.program_log.iter().enumerate() {
         let pc = program_entry.pc();
-        let Some((instruction, air_idx, slot_idx)) =
-            instruction_and_air_idx(exe, pc_to_air_idx, pc)?
-        else {
+        let Some((_, air_idx, _)) = instruction_and_air_idx(exe, pc_to_air_idx, pc)? else {
             continue;
         };
-        // In combined delta + arena-native mode these entries exist only for
-        // device-side memory chronology. C already wrote the final record
-        // into its arena.
         if arena_native_expected.contains_key(&air_idx) {
             arena_native_skipped += 1;
             continue;
         }
-        if !output.access_aux_complete {
-            return Err(rvr_error(format!(
-                "host log-native record reached finalization at pc {pc:#x} after compiler-scope \
-                 direct coverage omitted its access replay"
-            )));
-        }
-        let num_arenas = arenas.len();
-        let arena = arenas.get_mut(air_idx).ok_or_else(|| {
+        let num_arenas = work_by_air.len();
+        let lane = work_by_air.get_mut(air_idx).ok_or_else(|| {
             rvr_error(format!(
-                "pc {:#x} maps to air_idx {} but only {} arenas exist",
-                program_entry.pc(),
-                air_idx,
-                num_arenas
+                "pc {pc:#x} maps to air_idx {air_idx} but only {num_arenas} arenas exist"
             ))
         })?;
-        if inline_pc_slots.get(slot_idx).copied().unwrap_or(false) {
-            let registered = registry
-                .inline_assemblers
-                .get(&instruction.opcode)
-                .ok_or_else(|| {
-                    rvr_error(format!(
-                        "no inline record assembler registered for opcode {:?} at pc {pc:#x}",
-                        instruction.opcode
-                    ))
-                })?;
-            let (bytes, cursor, compiled_size) =
-                inline_bufs.get_mut(&air_idx).ok_or_else(|| {
-                    rvr_error(format!(
-                        "pc {pc:#x} is inline but air_idx {air_idx} has no compact record buffer"
-                    ))
-                })?;
-            if registered.record_size != *compiled_size {
-                return Err(rvr_error(format!(
-                    "compact record size mismatch for air_idx {air_idx}: compiled \
-                     {compiled_size} vs registered {}",
-                    registered.record_size
-                )));
-            }
-            let end = *cursor + registered.record_size;
-            let compact = bytes.get(*cursor..end).ok_or_else(|| {
-                rvr_error(format!(
-                    "compact record buffer for air_idx {air_idx} exhausted at pc {pc:#x} \
-                     (cursor {cursor}, {} bytes written — record dropped in C?)",
-                    bytes.len()
-                ))
-            })?;
-            *cursor = end;
-            if compact_airs.contains(&air_idx) {
-                // Compact bypass: keep the order guard, skip host expansion. Every
-                // wire format leads with `from_pc: u32` (little-endian).
-                let from_pc = u32::from_le_bytes(compact[0..4].try_into().expect("4-byte from_pc"));
-                if from_pc != pc {
-                    return Err(rvr_error(format!(
-                        "inline record order mismatch (compact bypass): record from_pc \
-                         {from_pc:#x} vs program-log pc {pc:#x}"
-                    )));
-                }
-                compact_seen += 1;
-                continue;
-            }
-            (registered.assemble)(arena, instruction, compact, pc)?;
-            host_assembled += 1;
-            continue;
-        }
-        registry.assemble(arena, &access, instruction, pc, program_entry.timestamp)?;
-        host_assembled += 1;
+        lane.push(u32::try_from(program_index).map_err(|_| {
+            rvr_error("program log exceeds the u32 native cursor contract".to_string())
+        })?);
     }
+    let inline_map_finished = std::time::Instant::now();
+
+    let merge = |parallel| {
+        merge_record_arenas(
+            registry,
+            exe,
+            pc_to_air_idx,
+            &output.raw_logs.program_log,
+            &output.access_aux,
+            output.access_aux_complete,
+            &inline_pc_slots,
+            &inline_by_air,
+            &arena_native_expected,
+            compact_airs,
+            capacities,
+            &work_by_air,
+            arena_native_skipped,
+            parallel,
+        )
+    };
+    let (arenas, merge_stats) = merge(true)?;
     let program_walk_finished = std::time::Instant::now();
 
-    // Every compact buffer must be consumed exactly.
-    for chip in &inline_records {
-        let (bytes, cursor, _) = inline_bufs[&chip.air_idx];
-        if cursor != bytes.len() {
-            return Err(rvr_error(format!(
-                "compact record buffer for air_idx {} has {} bytes but the program log consumed \
-                 {cursor} (record count mismatch between C and the program log)",
-                chip.air_idx,
-                bytes.len()
-            )));
-        }
+    if std::env::var("OPENVM_RVR_PARALLEL_MERGE_ORACLE").as_deref() == Ok("1") {
+        let (serial_arenas, serial_stats) = merge(false)?;
+        assert_parallel_merge_identical(&arenas, &serial_arenas, merge_stats, serial_stats);
     }
-    drop(inline_bufs);
     let validation_finished = std::time::Instant::now();
 
     // Compact-air wire buffers are handed to the caller for adoption (GPU
@@ -709,9 +665,9 @@ pub fn generate_record_arenas_from_logs_with_compact<F: PrimeField32, RA: Arena>
             (validation_finished - program_walk_finished).as_micros(),
             (partition_finished - validation_finished).as_micros(),
             output.raw_logs.program_log.len(),
-            arena_native_skipped,
-            compact_seen,
-            host_assembled,
+            merge_stats.arena_native_skipped,
+            merge_stats.compact_seen,
+            merge_stats.host_assembled,
             arenas.len(),
             arena_native_expected.len(),
             compact_airs.len(),
@@ -720,6 +676,249 @@ pub fn generate_record_arenas_from_logs_with_compact<F: PrimeField32, RA: Arena>
     }
 
     Ok((arenas, wire_buffers))
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct RecordMergeStats {
+    arena_native_skipped: usize,
+    compact_seen: usize,
+    host_assembled: usize,
+    host_assembled_airs: usize,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn merge_record_arenas<F: PrimeField32, RA: Arena + Send>(
+    registry: &LogNativeAssemblerRegistry<F, RA>,
+    exe: &VmExe<F>,
+    pc_to_air_idx: &[Option<usize>],
+    program_log: &[ProgramLogEntry],
+    access_aux: &[PreflightMemoryAccessAux<F>],
+    access_aux_complete: bool,
+    inline_pc_slots: &[bool],
+    inline_by_air: &HashMap<usize, &RvrInlineChipRecords>,
+    arena_native_expected: &HashMap<usize, u32>,
+    compact_airs: &std::collections::HashSet<usize>,
+    capacities: &[(usize, usize)],
+    work_by_air: &[Vec<u32>],
+    arena_native_skipped: usize,
+    parallel: bool,
+) -> Result<(Vec<RA>, RecordMergeStats), ExecutionError> {
+    let merge_air = |air_idx: usize| {
+        merge_record_air(
+            registry,
+            exe,
+            pc_to_air_idx,
+            program_log,
+            access_aux,
+            access_aux_complete,
+            inline_pc_slots,
+            inline_by_air.get(&air_idx).copied(),
+            arena_native_expected,
+            compact_airs,
+            air_idx,
+            capacities[air_idx],
+            &work_by_air[air_idx],
+        )
+    };
+    let merged = if parallel {
+        (0..capacities.len())
+            .into_par_iter()
+            .map(merge_air)
+            .collect::<Vec<_>>()
+    } else {
+        (0..capacities.len()).map(merge_air).collect::<Vec<_>>()
+    };
+
+    // Resolve failures and merge lanes strictly by AIR index, independent of
+    // worker completion order. This also makes the selected error deterministic
+    // if more than one lane rejects malformed input.
+    let mut arenas = Vec::with_capacity(merged.len());
+    let mut stats = RecordMergeStats {
+        arena_native_skipped,
+        ..Default::default()
+    };
+    for result in merged {
+        let (arena, air_stats) = result?;
+        stats.arena_native_skipped += air_stats.arena_native_skipped;
+        stats.compact_seen += air_stats.compact_seen;
+        stats.host_assembled += air_stats.host_assembled;
+        stats.host_assembled_airs += usize::from(air_stats.host_assembled != 0);
+        arenas.push(arena);
+    }
+    Ok((arenas, stats))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn merge_record_air<F: PrimeField32, RA: Arena>(
+    registry: &LogNativeAssemblerRegistry<F, RA>,
+    exe: &VmExe<F>,
+    pc_to_air_idx: &[Option<usize>],
+    program_log: &[ProgramLogEntry],
+    access_aux: &[PreflightMemoryAccessAux<F>],
+    access_aux_complete: bool,
+    inline_pc_slots: &[bool],
+    inline_records: Option<&RvrInlineChipRecords>,
+    arena_native_expected: &HashMap<usize, u32>,
+    compact_airs: &std::collections::HashSet<usize>,
+    air_idx: usize,
+    (height, width): (usize, usize),
+    work: &[u32],
+) -> Result<(RA, RecordMergeStats), ExecutionError> {
+    let substituted =
+        arena_native_expected.contains_key(&air_idx) || compact_airs.contains(&air_idx);
+    let mut arena = RA::with_capacity(if substituted { 0 } else { height }, width);
+    let access = LogNativeAccessView::new(access_aux)?;
+    let mut cursor = 0usize;
+    let mut stats = RecordMergeStats::default();
+
+    for &program_index in work {
+        let program_entry = &program_log[program_index as usize];
+        let pc = program_entry.pc();
+        let Some((instruction, routed_air, slot_idx)) =
+            instruction_and_air_idx(exe, pc_to_air_idx, pc)?
+        else {
+            return Err(rvr_error(format!(
+                "routed record at program-log index {program_index} lost its AIR"
+            )));
+        };
+        if routed_air != air_idx {
+            return Err(rvr_error(format!(
+                "stable record partition drifted at program-log index {program_index}: \
+                 routed air {routed_air}, lane {air_idx}"
+            )));
+        }
+        if !access_aux_complete {
+            return Err(rvr_error(format!(
+                "host log-native record reached finalization at pc {:#x} after compiler-scope \
+                 direct coverage omitted its access replay",
+                pc
+            )));
+        }
+        if inline_pc_slots.get(slot_idx).copied().unwrap_or(false) {
+            let registered = registry
+                .inline_assemblers
+                .get(&instruction.opcode)
+                .ok_or_else(|| {
+                    rvr_error(format!(
+                        "no inline record assembler registered for opcode {:?} at pc {:#x}",
+                        instruction.opcode, pc
+                    ))
+                })?;
+            let chip = inline_records.ok_or_else(|| {
+                rvr_error(format!(
+                    "pc {:#x} is inline but air_idx {air_idx} has no compact record buffer",
+                    pc
+                ))
+            })?;
+            if registered.record_size != chip.record_size {
+                return Err(rvr_error(format!(
+                    "compact record size mismatch for air_idx {air_idx}: compiled {} vs registered {}",
+                    chip.record_size, registered.record_size
+                )));
+            }
+            let end = cursor + registered.record_size;
+            let compact = chip.bytes.get(cursor..end).ok_or_else(|| {
+                rvr_error(format!(
+                    "compact record buffer for air_idx {air_idx} exhausted at pc {:#x} \
+                     (cursor {cursor}, {} bytes written — record dropped in C?)",
+                    pc,
+                    chip.bytes.len()
+                ))
+            })?;
+            cursor = end;
+            if compact_airs.contains(&air_idx) {
+                // Compact bypass: keep the order guard, skip host expansion.
+                // Every wire format leads with `from_pc: u32` (little-endian).
+                let from_pc = u32::from_le_bytes(compact[0..4].try_into().expect("4-byte from_pc"));
+                if from_pc != pc {
+                    return Err(rvr_error(format!(
+                        "inline record order mismatch (compact bypass): record from_pc \
+                         {from_pc:#x} vs program-log pc {:#x}",
+                        pc
+                    )));
+                }
+                stats.compact_seen += 1;
+                continue;
+            }
+            (registered.assemble)(&mut arena, instruction, compact, pc)?;
+            stats.host_assembled += 1;
+            continue;
+        }
+        registry.assemble(
+            &mut arena,
+            &access,
+            instruction,
+            pc,
+            program_entry.timestamp,
+        )?;
+        stats.host_assembled += 1;
+    }
+
+    if let Some(chip) = inline_records {
+        if cursor != chip.bytes.len() {
+            return Err(rvr_error(format!(
+                "compact record buffer for air_idx {air_idx} has {} bytes but the program log \
+                 consumed {cursor} (record count mismatch between C and the program log)",
+                chip.bytes.len()
+            )));
+        }
+    }
+    Ok((arena, stats))
+}
+
+fn assert_parallel_merge_identical<RA: Arena>(
+    parallel: &[RA],
+    serial: &[RA],
+    parallel_stats: RecordMergeStats,
+    serial_stats: RecordMergeStats,
+) {
+    assert_eq!(
+        parallel_stats, serial_stats,
+        "parallel record merge routing/counts differ from the serial reference"
+    );
+    assert!(
+        parallel_stats.host_assembled_airs >= 2,
+        "parallel record merge oracle is vacuous: expected at least two non-empty host AIR lanes, got {}",
+        parallel_stats.host_assembled_airs
+    );
+    assert_eq!(
+        parallel.len(),
+        serial.len(),
+        "parallel record merge changed the canonical AIR vector length"
+    );
+
+    let mut compared_bytes = 0usize;
+    for (air_idx, (parallel_arena, serial_arena)) in parallel.iter().zip(serial.iter()).enumerate()
+    {
+        let parallel_bytes = parallel_arena
+            .canonical_record_bytes()
+            .unwrap_or_else(|| panic!("air {air_idx} does not expose canonical record bytes"));
+        let serial_bytes = serial_arena
+            .canonical_record_bytes()
+            .unwrap_or_else(|| panic!("air {air_idx} does not expose canonical record bytes"));
+        compared_bytes += parallel_bytes.len();
+        if parallel_bytes != serial_bytes {
+            let first_difference = parallel_bytes
+                .iter()
+                .zip(serial_bytes)
+                .position(|(parallel, serial)| parallel != serial)
+                .unwrap_or_else(|| parallel_bytes.len().min(serial_bytes.len()));
+            panic!(
+                "parallel record merge changed canonical bytes for air {air_idx}: \
+                 parallel_len={}, serial_len={}, first_difference={first_difference}",
+                parallel_bytes.len(),
+                serial_bytes.len()
+            );
+        }
+    }
+    assert!(
+        compared_bytes != 0,
+        "parallel record merge oracle compared an empty canonical stream"
+    );
+    eprintln!(
+        "OPENVM_RVR_PARALLEL_MERGE_ORACLE_OK host_airs={} host_records={} canonical_bytes={compared_bytes}",
+        parallel_stats.host_assembled_airs, parallel_stats.host_assembled
+    );
 }
 
 #[derive(Clone, Copy)]
