@@ -48,7 +48,7 @@ Each benchmark binary parses `BenchmarkCli` and calls `BenchmarkCli::run()` whic
 
 #### Providing Inputs
 
-Inputs are provided via `StdIn<F>` from the `openvm-sdk` crate. Use `stdin.write(&value)` to write serializable values, or `StdIn::from_bytes(&bytes)` for raw byte input.
+Inputs are provided via `StdIn` from the `openvm-sdk` crate. Use `stdin.write(&value)` to write serializable values, or `StdIn::from_bytes(&bytes)` for raw byte input.
 
 You can find an example of passing in a single `Vec<u8>` input in [base64_json](../../benchmarks/prove/src/bin/base64_json.rs).
 

@@ -39,7 +39,7 @@ use crate::{
 // NOTE: the lifetime 'a represents the lifetime of borrowed ExecutorInventory, which must outlive
 // the InterpretedInstance because `pre_compute_buf` may contain pointers to references held by
 // executors.
-pub struct InterpretedInstance<'a, F, Ctx> {
+pub struct InterpretedInstance<'a, Ctx> {
     system_config: &'a SystemConfig,
     // SAFETY: this is not actually dead code, but `pre_compute_insns` contains raw pointer refers
     // to this buffer.
@@ -50,12 +50,12 @@ pub struct InterpretedInstance<'a, F, Ctx> {
     /// SAFETY: The first `pc_base / DEFAULT_PC_STEP` entries will be unreachable. We do this to
     /// avoid needing to subtract `pc_base` during runtime.
     #[cfg(not(feature = "tco"))]
-    pre_compute_insns: Vec<PreComputeInstruction<F, Ctx>>,
+    pre_compute_insns: Vec<PreComputeInstruction<Ctx>>,
     #[cfg(feature = "tco")]
     pre_compute_max_size: usize,
     /// Handler function pointers for tail call optimization.
     #[cfg(feature = "tco")]
-    handlers: Vec<Handler<F, Ctx>>,
+    handlers: Vec<Handler<Ctx>>,
 
     pc_start: u32,
 
@@ -64,13 +64,13 @@ pub struct InterpretedInstance<'a, F, Ctx> {
 
 #[repr(C)]
 #[cfg_attr(feature = "tco", allow(dead_code))]
-pub(crate) struct PreComputeInstruction<F, Ctx> {
-    pub(crate) handler: ExecuteFunc<F, Ctx>,
+pub(crate) struct PreComputeInstruction<Ctx> {
+    pub(crate) handler: ExecuteFunc<Ctx>,
     pub(crate) pre_compute: *const u8,
 }
 
-unsafe impl<F, Ctx> Send for PreComputeInstruction<F, Ctx> {}
-unsafe impl<F, Ctx> Sync for PreComputeInstruction<F, Ctx> {}
+unsafe impl<Ctx> Send for PreComputeInstruction<Ctx> {}
+unsafe impl<Ctx> Sync for PreComputeInstruction<Ctx> {}
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -116,18 +116,18 @@ macro_rules! run {
 // pointers
 // - Generic in `Ctx`
 
-impl<'a, F, Ctx> InterpretedInstance<'a, F, Ctx>
+impl<'a, Ctx> InterpretedInstance<'a, Ctx>
 where
-    F: PrimeField32,
     Ctx: ExecutionCtxTrait,
 {
     /// Creates a new interpreter instance for pure execution.
     // (pure execution)
-    pub fn new<E>(
+    pub fn new<F, E>(
         inventory: &'a ExecutorInventory<E>,
         exe: &VmExe<F>,
     ) -> Result<Self, StaticProgramError>
     where
+        F: PrimeField32,
         E: Executor<F>,
     {
         let program = &exe.program;
@@ -149,7 +149,7 @@ where
             .zip_eq(split_pre_compute_buf.iter_mut())
             .enumerate()
             .map(
-                |(pc_idx, (inst_opt, pre_compute))| -> Result<Handler<F, Ctx>, StaticProgramError> {
+                |(pc_idx, (inst_opt, pre_compute))| -> Result<Handler<Ctx>, StaticProgramError> {
                     if let Some((inst, _)) = inst_opt {
                         let pc = pc_idx as u32 * DEFAULT_PC_STEP;
                         if get_system_opcode_handler::<F, Ctx>(inst, pre_compute).is_some() {
@@ -181,7 +181,7 @@ where
         })
     }
 
-    pub fn create_initial_vm_state(&self, inputs: impl Into<Streams<F>>) -> VmState<F> {
+    pub fn create_initial_vm_state(&self, inputs: impl Into<Streams>) -> VmState {
         VmState::initial(self.system_config, &self.init_memory, self.pc_start, inputs)
     }
 
@@ -204,35 +204,33 @@ where
             (pc_idx + 1) * self.pre_compute_max_size <= self.pre_compute_buf.layout.size()
         );
         unsafe {
-            let ptr = self
-                .pre_compute_buf
+            self.pre_compute_buf
                 .ptr
-                .add(pc_idx * self.pre_compute_max_size);
-            ptr
+                .add(pc_idx * self.pre_compute_max_size)
         }
     }
 
     #[cfg(feature = "tco")]
     #[inline(always)]
-    pub fn get_handler(&self, pc: u32) -> Option<Handler<F, Ctx>> {
+    pub fn get_handler(&self, pc: u32) -> Option<Handler<Ctx>> {
         let pc_idx = get_pc_index(pc);
         self.handlers.get(pc_idx).copied()
     }
 }
 
-impl<'a, F, Ctx> InterpretedInstance<'a, F, Ctx>
+impl<'a, Ctx> InterpretedInstance<'a, Ctx>
 where
-    F: PrimeField32,
     Ctx: MeteredExecutionCtxTrait,
 {
     /// Creates a new interpreter instance for pure execution.
     // (metered execution)
-    pub fn new_metered<E>(
+    pub fn new_metered<F, E>(
         inventory: &'a ExecutorInventory<E>,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
     ) -> Result<Self, StaticProgramError>
     where
+        F: PrimeField32,
         E: MeteredExecutor<F>,
     {
         let program = &exe.program;
@@ -256,7 +254,7 @@ where
             .zip_eq(split_pre_compute_buf.iter_mut())
             .enumerate()
             .map(
-                |(pc_idx, (inst_opt, pre_compute))| -> Result<Handler<F, Ctx>, StaticProgramError> {
+                |(pc_idx, (inst_opt, pre_compute))| -> Result<Handler<Ctx>, StaticProgramError> {
                     if let Some((inst, _)) = inst_opt {
                         let pc = pc_idx as u32 * DEFAULT_PC_STEP;
                         if get_system_opcode_handler::<F, Ctx>(inst, pre_compute).is_some() {
@@ -293,10 +291,7 @@ where
 
 // Execute functions specialize to relevant Ctx types to provide more streamlines APIs
 
-impl<'a, F> InterpretedInstance<'a, F, ExecutionCtx>
-where
-    F: PrimeField32,
-{
+impl InterpretedInstance<'_, ExecutionCtx> {
     /// Pure execution, without metering, for the given `inputs`. Execution begins from the initial
     /// state specified by the `VmExe`. This function executes the program until either termination
     /// if `num_insns` is `None` or for exactly `num_insns` instructions if `num_insns` is `Some`.
@@ -304,9 +299,9 @@ where
     /// Returns the final VM state when execution stops.
     pub fn execute(
         &self,
-        inputs: impl Into<Streams<F>>,
+        inputs: impl Into<Streams>,
         num_insns: Option<u64>,
-    ) -> Result<VmState<F, GuestMemory>, ExecutionError> {
+    ) -> Result<VmState<GuestMemory>, ExecutionError> {
         let vm_state =
             VmState::initial(self.system_config, &self.init_memory, self.pc_start, inputs);
         self.execute_from_state(vm_state, num_insns)
@@ -319,9 +314,9 @@ where
     /// Returns the final VM state when execution stops.
     pub fn execute_from_state(
         &self,
-        from_state: VmState<F, GuestMemory>,
+        from_state: VmState<GuestMemory>,
         num_insns: Option<u64>,
-    ) -> Result<VmState<F, GuestMemory>, ExecutionError> {
+    ) -> Result<VmState<GuestMemory>, ExecutionError> {
         let ctx = ExecutionCtx::new(num_insns);
         let mut exec_state = VmExecState::new(from_state, ctx);
 
@@ -350,19 +345,16 @@ where
     }
 }
 
-impl<'a, F> InterpretedInstance<'a, F, MeteredCtx>
-where
-    F: PrimeField32,
-{
+impl InterpretedInstance<'_, MeteredCtx> {
     /// Metered execution for the given `inputs`. Execution begins from the initial
     /// state specified by the `VmExe`. This function executes the program until termination.
     ///
     /// Returns the segmentation boundary data and the final VM state when execution stops.
     pub fn execute_metered(
         &self,
-        inputs: impl Into<Streams<F>>,
+        inputs: impl Into<Streams>,
         ctx: MeteredCtx,
-    ) -> Result<(Vec<Segment>, VmState<F, GuestMemory>), ExecutionError> {
+    ) -> Result<(Vec<Segment>, VmState<GuestMemory>), ExecutionError> {
         let vm_state = self.create_initial_vm_state(inputs);
         self.execute_metered_from_state(vm_state, ctx)
     }
@@ -377,19 +369,18 @@ where
     /// [VirtualMachine::build_metered_ctx](super::VirtualMachine::build_metered_ctx).
     pub fn execute_metered_from_state(
         &self,
-        from_state: VmState<F, GuestMemory>,
+        from_state: VmState<GuestMemory>,
         ctx: MeteredCtx,
-    ) -> Result<(Vec<Segment>, VmState<F, GuestMemory>), ExecutionError> {
+    ) -> Result<(Vec<Segment>, VmState<GuestMemory>), ExecutionError> {
         let mut exec_state = VmExecState::new(from_state, ctx);
 
         loop {
             exec_state = self.execute_metered_until_suspend(exec_state)?;
+            let exit_code = std::mem::replace(&mut exec_state.exit_code, Ok(None))?;
             // The execution has terminated.
-            if exec_state.exit_code.is_ok() && exec_state.exit_code.as_ref().unwrap().is_some() {
+            if exit_code.is_some() {
+                exec_state.exit_code = Ok(exit_code);
                 break;
-            }
-            if exec_state.exit_code.is_err() {
-                return Err(exec_state.exit_code.unwrap_err());
             }
         }
         check_termination(exec_state.exit_code)?;
@@ -407,19 +398,19 @@ where
     ///
     /// # Parameters
     /// - `self`: The reference to the current executor or VM context.
-    /// - `exec_state`: A mutable `VmExecState<F, GuestMemory, MeteredCtx>` which represents the
+    /// - `exec_state`: A mutable `VmExecState<GuestMemory, MeteredCtx>` which represents the
     ///   execution state of the virtual machine, including its program counter (`pc`), instruction
     ///   retirement (`instret`), and execution context (`MeteredCtx`).
     ///
     /// # Returns
-    /// - `Ok(VmExecState<F, GuestMemory, MeteredCtx>)`: The execution state after suspension or
-    ///   normal completion.
+    /// - `Ok(VmExecState<GuestMemory, MeteredCtx>)`: The execution state after suspension or normal
+    ///   completion.
     /// - `Err(ExecutionError)`: If there is an error during execution, such as an invalid state or
     ///   run-time error.
     pub fn execute_metered_until_suspend(
         &self,
-        mut exec_state: VmExecState<F, GuestMemory, MeteredCtx>,
-    ) -> Result<VmExecState<F, GuestMemory, MeteredCtx>, ExecutionError> {
+        mut exec_state: VmExecState<GuestMemory, MeteredCtx>,
+    ) -> Result<VmExecState<GuestMemory, MeteredCtx>, ExecutionError> {
         #[cfg(feature = "metrics")]
         let metrics = ExecutionMetricTimer::start(ExecutionMetric::Metered);
         #[cfg(feature = "metrics")]
@@ -437,19 +428,16 @@ where
     }
 }
 
-impl<'a, F> InterpretedInstance<'a, F, MeteredCostCtx>
-where
-    F: PrimeField32,
-{
+impl InterpretedInstance<'_, MeteredCostCtx> {
     /// Metered cost execution for the given `inputs`. Execution begins from the initial
     /// state specified by the `VmExe`. This function executes the program until termination.
     ///
     /// Returns the trace cost and final VM state when execution stops.
     pub fn execute_metered_cost(
         &self,
-        inputs: impl Into<Streams<F>>,
+        inputs: impl Into<Streams>,
         ctx: MeteredCostCtx,
-    ) -> Result<(MeteredCostCtx, VmState<F, GuestMemory>), ExecutionError> {
+    ) -> Result<(MeteredCostCtx, VmState<GuestMemory>), ExecutionError> {
         let vm_state = self.create_initial_vm_state(inputs);
         self.execute_metered_cost_from_state(vm_state, ctx)
     }
@@ -460,9 +448,9 @@ where
     /// Returns the trace cost and final VM state when execution stops.
     pub fn execute_metered_cost_from_state(
         &self,
-        from_state: VmState<F, GuestMemory>,
+        from_state: VmState<GuestMemory>,
         ctx: MeteredCostCtx,
-    ) -> Result<(MeteredCostCtx, VmState<F, GuestMemory>), ExecutionError> {
+    ) -> Result<(MeteredCostCtx, VmState<GuestMemory>), ExecutionError> {
         let mut exec_state = VmExecState::new(from_state, ctx);
 
         #[cfg(feature = "metrics")]
@@ -518,9 +506,9 @@ pub(crate) fn split_pre_compute_buf<'a, F>(
 /// The `fn_ptrs` pointer to pre-computed buffers that outlive this function.
 #[cfg(not(feature = "tco"))]
 #[inline(always)]
-unsafe fn execute_trampoline<F: PrimeField32, Ctx: ExecutionCtxTrait>(
-    exec_state: &mut VmExecState<F, GuestMemory, Ctx>,
-    fn_ptrs: &[PreComputeInstruction<F, Ctx>],
+unsafe fn execute_trampoline<Ctx: ExecutionCtxTrait>(
+    exec_state: &mut VmExecState<GuestMemory, Ctx>,
+    fn_ptrs: &[PreComputeInstruction<Ctx>],
 ) {
     while exec_state
         .exit_code
@@ -593,9 +581,9 @@ impl Drop for AlignedBuf {
 }
 
 #[inline(always)]
-unsafe fn terminate_execute_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
+unsafe fn terminate_execute_impl<CTX: ExecutionCtxTrait>(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pre_compute: &TerminatePreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<TerminatePreCompute>()).borrow();
@@ -604,18 +592,18 @@ unsafe fn terminate_execute_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
 }
 
 #[cfg(feature = "tco")]
-unsafe fn terminate_execute_tco_handler<F: PrimeField32, CTX: ExecutionCtxTrait>(
-    interpreter: &InterpretedInstance<'_, F, CTX>,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+unsafe fn terminate_execute_tco_handler<CTX: ExecutionCtxTrait>(
+    interpreter: &InterpretedInstance<'_, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pre_compute = interpreter.get_pre_compute(exec_state.vm_state.pc());
     terminate_execute_impl(pre_compute, exec_state);
 }
 
 #[cfg(feature = "tco")]
-unsafe fn unreachable_tco_handler<F: PrimeField32, CTX>(
-    _: &InterpretedInstance<'_, F, CTX>,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+unsafe fn unreachable_tco_handler<CTX>(
+    _: &InterpretedInstance<'_, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     exec_state.exit_code = Err(ExecutionError::Unreachable(exec_state.vm_state.pc()));
 }
@@ -684,13 +672,13 @@ pub(crate) fn get_pre_compute_instructions<F, Ctx, E>(
     program: &Program<F>,
     inventory: &ExecutorInventory<E>,
     pre_compute: &mut [&mut [u8]],
-) -> Result<Vec<PreComputeInstruction<F, Ctx>>, StaticProgramError>
+) -> Result<Vec<PreComputeInstruction<Ctx>>, StaticProgramError>
 where
     F: PrimeField32,
     Ctx: ExecutionCtxTrait,
     E: Executor<F>,
 {
-    let unreachable_handler: ExecuteFunc<F, Ctx> = |_, exec_state| {
+    let unreachable_handler: ExecuteFunc<Ctx> = |_, exec_state| {
         exec_state.exit_code = Err(ExecutionError::Unreachable(exec_state.pc()));
     };
 
@@ -741,13 +729,13 @@ pub(crate) fn get_metered_pre_compute_instructions<F, Ctx, E>(
     inventory: &ExecutorInventory<E>,
     executor_idx_to_air_idx: &[usize],
     pre_compute: &mut [&mut [u8]],
-) -> Result<Vec<PreComputeInstruction<F, Ctx>>, StaticProgramError>
+) -> Result<Vec<PreComputeInstruction<Ctx>>, StaticProgramError>
 where
     F: PrimeField32,
     Ctx: MeteredExecutionCtxTrait,
     E: MeteredExecutor<F>,
 {
-    let unreachable_handler: ExecuteFunc<F, Ctx> = |_, exec_state| {
+    let unreachable_handler: ExecuteFunc<Ctx> = |_, exec_state| {
         exec_state.exit_code = Err(ExecutionError::Unreachable(exec_state.pc()));
     };
     repeat_n(&None, get_pc_index(program.pc_base))
@@ -799,7 +787,7 @@ where
 fn get_system_opcode_handler<F: PrimeField32, Ctx: ExecutionCtxTrait>(
     inst: &Instruction<F>,
     buf: &mut [u8],
-) -> Option<ExecuteFunc<F, Ctx>> {
+) -> Option<ExecuteFunc<Ctx>> {
     if inst.opcode == SystemOpcode::TERMINATE.global_opcode() {
         let pre_compute: &mut TerminatePreCompute = buf.borrow_mut();
         pre_compute.exit_code = inst.c.as_canonical_u32();

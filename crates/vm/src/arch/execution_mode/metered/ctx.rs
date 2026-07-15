@@ -242,7 +242,7 @@ impl ExecutionCtxTrait for MeteredCtx {
     }
 
     #[inline(always)]
-    fn should_suspend<F>(exec_state: &mut VmExecState<F, GuestMemory, Self>) -> bool {
+    fn should_suspend(exec_state: &mut VmExecState<GuestMemory, Self>) -> bool {
         // ATTENTION: Please make sure to update the corresponding logic in the
         // `asm_bridge` crate and `aot.rs`` when you change this function.
         // If `segment_suspend` is set, suspend when a segment is determined (but the VM state might
@@ -261,7 +261,7 @@ impl ExecutionCtxTrait for MeteredCtx {
     }
 
     #[inline(always)]
-    fn on_terminate<F>(exec_state: &mut VmExecState<F, GuestMemory, Self>) {
+    fn on_terminate(exec_state: &mut VmExecState<GuestMemory, Self>) {
         exec_state
             .ctx
             .memory_ctx

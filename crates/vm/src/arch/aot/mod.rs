@@ -2,7 +2,6 @@ use std::{ffi::c_void, io::Write, process::Command};
 
 use libloading::Library;
 use openvm_instructions::{exe::SparseMemoryImage, program::DEFAULT_PC_STEP};
-use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     arch::{
@@ -24,7 +23,7 @@ mod pure;
 /// Verify installation by `as --version`, `ar --version` and `cargo --version`
 /// Refer to AOT.md for further clarification about AOT
 ///  
-pub struct AotInstance<'a, F, Ctx> {
+pub struct AotInstance<'a, Ctx> {
     init_memory: SparseMemoryImage,
     system_config: &'a SystemConfig,
     // SAFETY: this is not actually dead code, but `pre_compute_insns` contains raw pointer refers
@@ -32,7 +31,7 @@ pub struct AotInstance<'a, F, Ctx> {
     #[allow(dead_code)]
     pre_compute_buf: AlignedBuf,
     lib: Library,
-    pre_compute_insns: Vec<PreComputeInstruction<F, Ctx>>,
+    pre_compute_insns: Vec<PreComputeInstruction<Ctx>>,
     pc_start: u32,
 }
 
@@ -43,12 +42,11 @@ type AsmRunFn = unsafe extern "C" fn(
     instret_left: u64,
 );
 
-impl<'a, F, Ctx> AotInstance<'a, F, Ctx>
+impl<'a, Ctx> AotInstance<'a, Ctx>
 where
-    F: PrimeField32,
     Ctx: ExecutionCtxTrait,
 {
-    pub fn create_initial_vm_state(&self, inputs: impl Into<Streams<F>>) -> VmState<F> {
+    pub fn create_initial_vm_state(&self, inputs: impl Into<Streams>) -> VmState {
         VmState::initial(self.system_config, &self.init_memory, self.pc_start, inputs)
     }
 
@@ -230,12 +228,6 @@ where
 
         asm_str
     }
-
-    pub fn to_i16(c: F) -> i16 {
-        let c_u24 = (c.as_canonical_u64() & 0xFFFFFF) as u32;
-        let c_i24 = ((c_u24 << 8) as i32) >> 8;
-        c_i24 as i16
-    }
 }
 
 pub(crate) fn asm_to_lib(asm_source: &str) -> Result<Library, StaticProgramError> {
@@ -284,34 +276,32 @@ pub(crate) fn asm_to_lib(asm_source: &str) -> Result<Library, StaticProgramError
     Ok(lib)
 }
 
-unsafe extern "C" fn should_suspend_shim<F, Ctx: ExecutionCtxTrait>(
-    state_ptr: *mut c_void,
-) -> bool {
-    let state = &mut *(state_ptr as *mut VmExecState<F, GuestMemory, Ctx>);
-    VmExecState::<F, GuestMemory, Ctx>::should_suspend(state)
+unsafe extern "C" fn should_suspend_shim<Ctx: ExecutionCtxTrait>(state_ptr: *mut c_void) -> bool {
+    let state = &mut *(state_ptr as *mut VmExecState<GuestMemory, Ctx>);
+    VmExecState::<GuestMemory, Ctx>::should_suspend(state)
 }
 
-unsafe extern "C" fn set_pc_shim<F, Ctx: ExecutionCtxTrait>(state_ptr: *mut c_void, pc: u32) {
-    let state = &mut *(state_ptr as *mut VmExecState<F, GuestMemory, Ctx>);
+unsafe extern "C" fn set_pc_shim<Ctx: ExecutionCtxTrait>(state_ptr: *mut c_void, pc: u32) {
+    let state = &mut *(state_ptr as *mut VmExecState<GuestMemory, Ctx>);
     state.vm_state.set_pc(pc);
 }
 
 // only needed for pure execution
-unsafe extern "C" fn set_instret_left_shim<F>(state_ptr: *mut c_void, instret_left: u64) {
-    let state = &mut *(state_ptr as *mut VmExecState<F, GuestMemory, ExecutionCtx>);
+unsafe extern "C" fn set_instret_left_shim(state_ptr: *mut c_void, instret_left: u64) {
+    let state = &mut *(state_ptr as *mut VmExecState<GuestMemory, ExecutionCtx>);
     state.ctx.instret_left = instret_left;
 }
 
-pub(crate) extern "C" fn extern_handler<F, Ctx: ExecutionCtxTrait, const PURE_EXECUTION: bool>(
+pub(crate) extern "C" fn extern_handler<Ctx: ExecutionCtxTrait, const PURE_EXECUTION: bool>(
     state_ptr: *mut c_void,
     pre_compute_insns_ptr: *const c_void,
     cur_pc: u32,
 ) -> u32 {
-    let vm_exec_state_ref = unsafe { &mut *(state_ptr as *mut VmExecState<F, GuestMemory, Ctx>) };
+    let vm_exec_state_ref = unsafe { &mut *(state_ptr as *mut VmExecState<GuestMemory, Ctx>) };
     vm_exec_state_ref.set_pc(cur_pc);
 
     // pointer to the first element of `pre_compute_insns`
-    let pre_compute_insns_base_ptr = pre_compute_insns_ptr as *const PreComputeInstruction<F, Ctx>;
+    let pre_compute_insns_base_ptr = pre_compute_insns_ptr as *const PreComputeInstruction<Ctx>;
     let pc_idx = (cur_pc / DEFAULT_PC_STEP) as usize;
     let pre_compute_insns = unsafe { &*pre_compute_insns_base_ptr.add(pc_idx) };
     unsafe {
@@ -324,19 +314,17 @@ pub(crate) extern "C" fn extern_handler<F, Ctx: ExecutionCtxTrait, const PURE_EX
     }
 }
 
-extern "C" fn get_vm_address_space_addr<F, Ctx: ExecutionCtxTrait>(
+extern "C" fn get_vm_address_space_addr<Ctx: ExecutionCtxTrait>(
     exec_state_ptr: *mut c_void,
     addr_space: u64,
 ) -> *mut u64 {
-    let vm_exec_state_ref =
-        unsafe { &mut *(exec_state_ptr as *mut VmExecState<F, GuestMemory, Ctx>) };
+    let vm_exec_state_ref = unsafe { &mut *(exec_state_ptr as *mut VmExecState<GuestMemory, Ctx>) };
     let ptr = &vm_exec_state_ref.vm_state.memory.memory.mem[addr_space as usize];
     ptr.as_ptr() as *mut u64 // mut u64 because we want to write 8 bytes at a time
 }
 
-extern "C" fn get_vm_pc_ptr<F, Ctx: ExecutionCtxTrait>(exec_state_ptr: *mut c_void) -> *mut u64 {
-    let vm_exec_state_ref =
-        unsafe { &mut *(exec_state_ptr as *mut VmExecState<F, GuestMemory, Ctx>) };
+extern "C" fn get_vm_pc_ptr<Ctx: ExecutionCtxTrait>(exec_state_ptr: *mut c_void) -> *mut u64 {
+    let vm_exec_state_ref = unsafe { &mut *(exec_state_ptr as *mut VmExecState<GuestMemory, Ctx>) };
     // since pc is the first element of the vm_state field and we use `repr(C)`
     // hence `ptr` will be equal to the address of pc in vm_state
     let state = &mut vm_exec_state_ref.vm_state;

@@ -57,7 +57,7 @@ pub struct VmMetrics {
 #[allow(unused_variables)]
 #[inline(always)]
 pub fn update_instruction_metrics<F, RA, Executor>(
-    state: &mut VmExecState<F, TracingMemory, PreflightCtx<RA>>,
+    state: &mut VmExecState<TracingMemory, PreflightCtx<RA>>,
     executor: &Executor,
     prev_pc: u32, // the pc of the instruction executed, state.pc is next pc
     pc_entry: &PcEntry<F>,
@@ -103,9 +103,8 @@ pub fn update_instruction_metrics<F, RA, Executor>(
 // We clear the current trace cell counts so there aren't negative diffs at the start of the next
 // segment.
 #[cfg(feature = "perf-metrics")]
-pub fn end_segment_metrics<F, RA>(state: &mut VmExecState<F, TracingMemory, PreflightCtx<RA>>)
+pub fn end_segment_metrics<RA>(state: &mut VmExecState<TracingMemory, PreflightCtx<RA>>)
 where
-    F: Clone + Send + Sync,
     RA: Arena,
 {
     state.metrics.current_trace_cells.fill(0);

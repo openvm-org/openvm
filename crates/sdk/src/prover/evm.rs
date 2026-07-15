@@ -97,7 +97,7 @@ where
 
     pub fn prove_root(
         &mut self,
-        input: StdIn<Val<SC>>,
+        input: StdIn,
         def_inputs: &[DeferralInput],
     ) -> Result<Proof<RootSC>>
     where
@@ -112,7 +112,7 @@ where
     #[cfg(feature = "evm-prove")]
     pub fn prove_evm(
         &mut self,
-        input: StdIn<Val<SC>>,
+        input: StdIn,
         def_inputs: &[DeferralInput],
     ) -> Result<crate::types::EvmProof>
     where

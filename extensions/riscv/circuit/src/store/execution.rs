@@ -5,11 +5,13 @@ use std::{
 
 #[cfg(feature = "tco")]
 use openvm_circuit::arch::execution::Handler;
+#[cfg(not(feature = "tco"))]
+use openvm_circuit::arch::ExecuteFunc;
 use openvm_circuit::{
     arch::{
-        create_handler, E2PreCompute, ExecuteFunc, ExecutionCtxTrait, ExecutionError,
-        InterpreterExecutor, InterpreterMeteredExecutor, MeteredExecutionCtxTrait,
-        StaticProgramError, VmExecState, RV64_MEMORY_BYTES,
+        create_handler, E2PreCompute, ExecutionCtxTrait, ExecutionError, InterpreterExecutor,
+        InterpreterMeteredExecutor, MeteredExecutionCtxTrait, StaticProgramError, VmExecState,
+        RV64_MEMORY_BYTES,
     },
     system::memory::online::GuestMemory,
 };
@@ -89,10 +91,10 @@ impl<A, const STORE_WIDTH: usize> StoreExecutor<A, STORE_WIDTH> {
 macro_rules! dispatch {
     ($execute_impl:ident, $local_opcode:ident) => {
         match $local_opcode {
-            STORED => Ok($execute_impl::<_, _, StoreDOp>),
-            STOREW => Ok($execute_impl::<_, _, StoreWOp>),
-            STOREH => Ok($execute_impl::<_, _, StoreHOp>),
-            STOREB => Ok($execute_impl::<_, _, StoreBOp>),
+            STORED => Ok($execute_impl::<_, StoreDOp>),
+            STOREW => Ok($execute_impl::<_, StoreWOp>),
+            STOREH => Ok($execute_impl::<_, StoreHOp>),
+            STOREB => Ok($execute_impl::<_, StoreBOp>),
             _ => Err(StaticProgramError::InvalidInstruction(0)),
         }
     };
@@ -114,7 +116,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError> {
         let pre_compute: &mut StorePreCompute = data.borrow_mut();
         let local_opcode = self.pre_compute_impl(pc, inst, pre_compute)?;
         dispatch!(execute_e1_handler, local_opcode)
@@ -126,7 +128,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
@@ -151,7 +153,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
@@ -168,7 +170,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
@@ -180,9 +182,9 @@ where
 }
 
 #[inline(always)]
-unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: StoreOp>(
+unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: StoreOp>(
     pre_compute: &StorePreCompute,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
     let pc = exec_state.pc();
     let rs1_bytes: [u8; RV64_REGISTER_NUM_LIMBS] =
@@ -217,20 +219,20 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: StoreOp>
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: StoreOp>(
+unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, OP: StoreOp>(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
     let pre_compute: &StorePreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<StorePreCompute>()).borrow();
-    execute_e12_impl::<F, CTX, OP>(pre_compute, exec_state)
+    execute_e12_impl::<CTX, OP>(pre_compute, exec_state)
 }
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, OP: StoreOp>(
+unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, OP: StoreOp>(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
     let pre_compute: &E2PreCompute<StorePreCompute> =
         std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<StorePreCompute>>())
@@ -238,7 +240,7 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, OP: St
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<F, CTX, OP>(&pre_compute.data, exec_state)
+    execute_e12_impl::<CTX, OP>(&pre_compute.data, exec_state)
 }
 
 trait StoreOp {

@@ -36,18 +36,18 @@ pub(super) struct PhantomOperands {
 
 #[derive(Clone, AlignedBytesBorrow)]
 #[repr(C)]
-struct PhantomPreCompute<F> {
+struct PhantomPreCompute {
     operands: PhantomOperands,
-    sub_executor: *const dyn PhantomSubExecutor<F>,
+    sub_executor: *const dyn PhantomSubExecutor,
 }
 
-impl<F> InterpreterExecutor<F> for PhantomExecutor<F>
+impl<F> InterpreterExecutor<F> for PhantomExecutor
 where
     F: PrimeField32,
 {
     #[inline(always)]
     fn pre_compute_size(&self) -> usize {
-        size_of::<PhantomPreCompute<F>>()
+        size_of::<PhantomPreCompute>()
     }
     #[cfg(not(feature = "tco"))]
     #[inline(always)]
@@ -56,13 +56,13 @@ where
         _pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
-        let data: &mut PhantomPreCompute<F> = data.borrow_mut();
+        let data: &mut PhantomPreCompute = data.borrow_mut();
         self.pre_compute_impl(inst, data);
-        Ok(execute_e1_handler)
+        Ok(execute_e1_handler::<_>)
     }
 
     #[cfg(feature = "tco")]
@@ -71,32 +71,33 @@ where
         _pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
-        let data: &mut PhantomPreCompute<F> = data.borrow_mut();
+        let data: &mut PhantomPreCompute = data.borrow_mut();
         self.pre_compute_impl(inst, data);
-        Ok(execute_e1_handler)
+        Ok(execute_e1_handler::<_>)
     }
 }
 
 #[cfg(feature = "aot")]
-impl<F> AotExecutor<F> for PhantomExecutor<F> where F: PrimeField32 {}
+impl<F> AotExecutor<F> for PhantomExecutor where F: PrimeField32 {}
 
-pub(super) struct PhantomStateMut<'a, F> {
+pub(super) struct PhantomStateMut<'a> {
     pub(super) pc: u32,
     pub(super) memory: &'a mut GuestMemory,
-    pub(super) streams: &'a mut Streams<F>,
+    pub(super) streams: &'a mut Streams,
     pub(super) rng: &'a mut StdRng,
 }
 
-impl<F> PhantomExecutor<F>
-where
-    F: PrimeField32,
-{
+impl PhantomExecutor {
     #[inline(always)]
-    fn pre_compute_impl(&self, inst: &Instruction<F>, data: &mut PhantomPreCompute<F>) {
+    fn pre_compute_impl<F: PrimeField32>(
+        &self,
+        inst: &Instruction<F>,
+        data: &mut PhantomPreCompute,
+    ) {
         let c = inst.c.as_canonical_u32();
         *data = PhantomPreCompute {
             operands: PhantomOperands {
@@ -113,12 +114,12 @@ where
     }
 }
 
-impl<F> InterpreterMeteredExecutor<F> for PhantomExecutor<F>
+impl<F> InterpreterMeteredExecutor<F> for PhantomExecutor
 where
     F: PrimeField32,
 {
     fn metered_pre_compute_size(&self) -> usize {
-        size_of::<E2PreCompute<PhantomPreCompute<F>>>()
+        size_of::<E2PreCompute<PhantomPreCompute>>()
     }
 
     #[cfg(not(feature = "tco"))]
@@ -128,14 +129,14 @@ where
         _pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
-        let e2_data: &mut E2PreCompute<PhantomPreCompute<F>> = data.borrow_mut();
+        let e2_data: &mut E2PreCompute<PhantomPreCompute> = data.borrow_mut();
         e2_data.chip_idx = chip_idx as u32;
         self.pre_compute_impl(inst, &mut e2_data.data);
-        Ok(execute_e2_handler)
+        Ok(execute_e2_handler::<_>)
     }
 
     #[cfg(feature = "tco")]
@@ -145,25 +146,25 @@ where
         _pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
-        let e2_data: &mut E2PreCompute<PhantomPreCompute<F>> = data.borrow_mut();
+        let e2_data: &mut E2PreCompute<PhantomPreCompute> = data.borrow_mut();
         e2_data.chip_idx = chip_idx as u32;
         self.pre_compute_impl(inst, &mut e2_data.data);
-        Ok(execute_e2_handler)
+        Ok(execute_e2_handler::<_>)
     }
 }
 
 #[cfg(feature = "aot")]
-impl<F> AotMeteredExecutor<F> for PhantomExecutor<F> where F: PrimeField32 {}
+impl<F> AotMeteredExecutor<F> for PhantomExecutor where F: PrimeField32 {}
 
 #[inline(always)]
-fn execute_impl<F>(
-    state: PhantomStateMut<F>,
+fn execute_impl(
+    state: PhantomStateMut,
     operands: &PhantomOperands,
-    sub_executor: &dyn PhantomSubExecutor<F>,
+    sub_executor: &dyn PhantomSubExecutor,
 ) -> Result<(), ExecutionError> {
     let &PhantomOperands { a, b, c } = operands;
 
@@ -198,9 +199,9 @@ fn execute_impl<F>(
 }
 
 #[inline(always)]
-unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
-    pre_compute: &PhantomPreCompute<F>,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait>(
+    pre_compute: &PhantomPreCompute,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
     let sub_executor = &*pre_compute.sub_executor;
     let pc = exec_state.pc();
@@ -221,23 +222,23 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
+unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait>(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
-    let pre_compute: &PhantomPreCompute<F> =
-        std::slice::from_raw_parts(pre_compute, size_of::<PhantomPreCompute<F>>()).borrow();
+    let pre_compute: &PhantomPreCompute =
+        std::slice::from_raw_parts(pre_compute, size_of::<PhantomPreCompute>()).borrow();
     execute_e12_impl(pre_compute, exec_state)
 }
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
+unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait>(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
-    let pre_compute: &E2PreCompute<PhantomPreCompute<F>> =
-        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<PhantomPreCompute<F>>>())
+    let pre_compute: &E2PreCompute<PhantomPreCompute> =
+        std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<PhantomPreCompute>>())
             .borrow();
     exec_state
         .ctx

@@ -56,10 +56,10 @@ impl<A> DivRemWExecutor<A> {
 macro_rules! dispatch {
     ($execute_impl:ident, $local_opcode:ident) => {
         match $local_opcode {
-            DivRemWOpcode::DIVW => Ok($execute_impl::<_, _, DivwOp>),
-            DivRemWOpcode::DIVUW => Ok($execute_impl::<_, _, DivuwOp>),
-            DivRemWOpcode::REMW => Ok($execute_impl::<_, _, RemwOp>),
-            DivRemWOpcode::REMUW => Ok($execute_impl::<_, _, RemuwOp>),
+            DivRemWOpcode::DIVW => Ok($execute_impl::<_, DivwOp>),
+            DivRemWOpcode::DIVUW => Ok($execute_impl::<_, DivuwOp>),
+            DivRemWOpcode::REMW => Ok($execute_impl::<_, RemwOp>),
+            DivRemWOpcode::REMUW => Ok($execute_impl::<_, RemuwOp>),
         }
     };
 }
@@ -80,7 +80,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError> {
         let data: &mut DivRemWPreCompute = data.borrow_mut();
         let local_opcode = self.pre_compute_impl(pc, inst, data)?;
         dispatch!(execute_e1_handler, local_opcode)
@@ -92,7 +92,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
@@ -239,7 +239,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
@@ -256,7 +256,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
@@ -300,9 +300,9 @@ where
 }
 
 #[inline(always)]
-unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: DivRemWOp>(
+unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: DivRemWOp>(
     pre_compute: &DivRemWPreCompute,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let rs1: [u8; RV64_WORD_NUM_LIMBS] =
         exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.b as u32);
@@ -321,20 +321,20 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: DivRemWO
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, OP: DivRemWOp>(
+unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, OP: DivRemWOp>(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pre_compute: &DivRemWPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<DivRemWPreCompute>()).borrow();
-    execute_e12_impl::<F, CTX, OP>(pre_compute, exec_state);
+    execute_e12_impl::<CTX, OP>(pre_compute, exec_state);
 }
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, OP: DivRemWOp>(
+unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, OP: DivRemWOp>(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<DivRemWPreCompute> =
         std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<DivRemWPreCompute>>())
@@ -342,7 +342,7 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, OP: Di
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<F, CTX, OP>(&pre_compute.data, exec_state);
+    execute_e12_impl::<CTX, OP>(&pre_compute.data, exec_state);
 }
 
 trait DivRemWOp {

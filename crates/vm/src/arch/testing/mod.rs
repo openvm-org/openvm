@@ -97,7 +97,7 @@ pub trait TestBuilder<F> {
     fn last_from_pc(&self) -> F;
 
     fn execution_final_state(&self) -> ExecutionState<F>;
-    fn streams_mut(&mut self) -> &mut Streams<F>;
+    fn streams_mut(&mut self) -> &mut Streams;
 
     fn get_default_register(&mut self, increment: usize) -> usize;
     fn get_default_pointer(&mut self, increment: usize) -> usize;

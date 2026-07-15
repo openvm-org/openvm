@@ -35,7 +35,7 @@ pub struct EccCpuProverExt;
 
 #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
 pub struct Rv64WeierstrassConfig {
-    #[config(generics = true)]
+    #[config]
     pub modular: Rv64ModularConfig,
     #[extension]
     pub weierstrass: WeierstrassExtension,

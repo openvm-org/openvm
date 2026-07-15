@@ -5,7 +5,7 @@ mod tests {
     use eyre::Result;
     use hex::FromHex;
     #[cfg(any(feature = "aot", feature = "rvr"))]
-    use openvm_circuit::arch::{testing::assert_vm_states_equivalent, SystemConfig};
+    use openvm_circuit::arch::testing::assert_vm_states_equivalent;
     use openvm_circuit::{arch::VmExecutor, utils::air_test_with_min_segments};
     use openvm_instructions::exe::VmExe;
     use openvm_keccak256_circuit::Keccak256Rv64Config;
@@ -101,12 +101,7 @@ mod tests {
             {
                 let interpreter_instance = executor.interpreter_instance(&openvm_exe)?;
                 let naive_state = interpreter_instance.execute(stdin, None)?;
-                let system_config: &SystemConfig = config.as_ref();
-                assert_vm_states_equivalent(
-                    &state,
-                    &naive_state,
-                    &system_config.memory_config.memory_dimensions(),
-                );
+                assert_vm_states_equivalent(&state, &naive_state);
             }
         }
 

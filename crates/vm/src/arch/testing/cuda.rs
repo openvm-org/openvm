@@ -208,7 +208,7 @@ impl TestBuilder<F> for GpuChipTestBuilder {
         self.execution.0.records.last().unwrap().final_state
     }
 
-    fn streams_mut(&mut self) -> &mut Streams<F> {
+    fn streams_mut(&mut self) -> &mut Streams {
         &mut self.streams
     }
 
@@ -254,7 +254,7 @@ pub struct GpuChipTestBuilder {
     pub memory: DeviceMemoryTester,
     pub execution: DeviceExecutionTester,
     pub program: DeviceProgramTester,
-    pub streams: Streams<F>,
+    pub streams: Streams,
 
     var_range_checker: Arc<VariableRangeCheckerChipGPU>,
     bitwise_op_lookup: Option<Arc<BitwiseOperationLookupChipGPU<8>>>,

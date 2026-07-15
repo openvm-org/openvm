@@ -2,7 +2,7 @@
 //!
 //! Memory and public-values bytes are aliased via raw pointer; registers are
 //! the only field still copied (a 256-byte memcpy at execution boundaries).
-//! `Streams<F>` and the host RNG are borrowed directly into [`OpenVmIoState`]
+//! `Streams` and the host RNG are borrowed directly into [`OpenVmIoState`]
 //! and never converted upfront.
 
 use std::mem::{align_of, size_of};
@@ -25,7 +25,7 @@ use crate::{
 
 /// Mut pointer to the RV64 main memory address space inside `vm_state`.
 /// The pointer is stable for the lifetime of `vm_state.memory`'s backing.
-pub fn rv64_memory_ptr<F>(vm_state: &mut VmState<F, GuestMemory>) -> *mut u8 {
+pub fn rv64_memory_ptr(vm_state: &mut VmState<GuestMemory>) -> *mut u8 {
     vm_state.memory.memory.mem[RV64_MEMORY_AS as usize]
         .as_mut_slice()
         .as_mut_ptr()
@@ -48,7 +48,7 @@ pub fn deferral_memory_ptr<F>(memory: &mut AddressMap) -> (*mut F, usize) {
     (bytes.as_mut_ptr().cast::<F>(), bytes.len() / size_of::<F>())
 }
 
-pub fn read_rv64_registers<F>(vm_state: &VmState<F, GuestMemory>) -> [u64; NUM_REGS_I] {
+pub fn read_rv64_registers(vm_state: &VmState<GuestMemory>) -> [u64; NUM_REGS_I] {
     let bytes = vm_state.memory.memory.mem[RV64_REGISTER_AS as usize].as_slice();
     let mut regs = [0u64; NUM_REGS_I];
     for (reg, chunk) in regs.iter_mut().zip(bytes.chunks_exact(8)) {
@@ -57,7 +57,7 @@ pub fn read_rv64_registers<F>(vm_state: &VmState<F, GuestMemory>) -> [u64; NUM_R
     regs
 }
 
-pub fn write_rv64_registers<F>(vm_state: &mut VmState<F, GuestMemory>, regs: &[u64; NUM_REGS_I]) {
+pub fn write_rv64_registers(vm_state: &mut VmState<GuestMemory>, regs: &[u64; NUM_REGS_I]) {
     let bytes = vm_state.memory.memory.mem[RV64_REGISTER_AS as usize].as_mut_slice();
     for (reg, dst) in regs.iter().zip(bytes.chunks_exact_mut(8)) {
         dst.copy_from_slice(&reg.to_le_bytes());

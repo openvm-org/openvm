@@ -93,12 +93,12 @@ trait ShiftWPreComputeExt: ShiftWExecutorKind {
 macro_rules! dispatch {
     ($execute_impl:ident, $is_imm:ident, $shift_opcode:ident) => {
         match ($is_imm, $shift_opcode) {
-            (true, ShiftWOpcode::SLLW) => Ok($execute_impl::<_, _, true, SllwOp>),
-            (false, ShiftWOpcode::SLLW) => Ok($execute_impl::<_, _, false, SllwOp>),
-            (true, ShiftWOpcode::SRLW) => Ok($execute_impl::<_, _, true, SrlwOp>),
-            (false, ShiftWOpcode::SRLW) => Ok($execute_impl::<_, _, false, SrlwOp>),
-            (true, ShiftWOpcode::SRAW) => Ok($execute_impl::<_, _, true, SrawOp>),
-            (false, ShiftWOpcode::SRAW) => Ok($execute_impl::<_, _, false, SrawOp>),
+            (true, ShiftWOpcode::SLLW) => Ok($execute_impl::<_, true, SllwOp>),
+            (false, ShiftWOpcode::SLLW) => Ok($execute_impl::<_, false, SllwOp>),
+            (true, ShiftWOpcode::SRLW) => Ok($execute_impl::<_, true, SrlwOp>),
+            (false, ShiftWOpcode::SRLW) => Ok($execute_impl::<_, false, SrlwOp>),
+            (true, ShiftWOpcode::SRAW) => Ok($execute_impl::<_, true, SrawOp>),
+            (false, ShiftWOpcode::SRAW) => Ok($execute_impl::<_, false, SrawOp>),
         }
     };
 }
@@ -117,7 +117,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError> {
         let data: &mut ShiftWPreCompute = data.borrow_mut();
         let (is_imm, shift_opcode) = self.pre_compute_impl(pc, inst, data)?;
         // `d` is always expected to be RV64_REGISTER_AS.
@@ -130,7 +130,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
@@ -155,7 +155,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError> {
         let data: &mut ShiftWPreCompute = data.borrow_mut();
         let (is_imm, shift_opcode) = self.pre_compute_impl(pc, inst, data)?;
         // `d` is always expected to be RV64_REGISTER_AS.
@@ -168,7 +168,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
@@ -194,7 +194,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError> {
         let data: &mut E2PreCompute<ShiftWPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let (is_imm, shift_opcode) = self.pre_compute_impl(pc, inst, &mut data.data)?;
@@ -209,7 +209,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError> {
+    ) -> Result<Handler<Ctx>, StaticProgramError> {
         let data: &mut E2PreCompute<ShiftWPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let (is_imm, shift_opcode) = self.pre_compute_impl(pc, inst, &mut data.data)?;
@@ -233,7 +233,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError> {
         let data: &mut E2PreCompute<ShiftWPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let (is_imm, shift_opcode) = self.pre_compute_impl(pc, inst, &mut data.data)?;
@@ -248,7 +248,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError> {
+    ) -> Result<Handler<Ctx>, StaticProgramError> {
         let data: &mut E2PreCompute<ShiftWPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         let (is_imm, shift_opcode) = self.pre_compute_impl(pc, inst, &mut data.data)?;
@@ -258,14 +258,9 @@ where
 }
 
 #[inline(always)]
-unsafe fn execute_e12_impl<
-    F: PrimeField32,
-    CTX: ExecutionCtxTrait,
-    const IS_IMM: bool,
-    OP: ShiftWOp,
->(
+unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_IMM: bool, OP: ShiftWOp>(
     pre_compute: &ShiftWPreCompute,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let rs1 =
         exec_state.vm_read_bytes::<RV64_WORD_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.b as u32);
@@ -292,30 +287,20 @@ unsafe fn execute_e12_impl<
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<
-    F: PrimeField32,
-    CTX: ExecutionCtxTrait,
-    const IS_IMM: bool,
-    OP: ShiftWOp,
->(
+unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, const IS_IMM: bool, OP: ShiftWOp>(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pre_compute: &ShiftWPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<ShiftWPreCompute>()).borrow();
-    execute_e12_impl::<F, CTX, IS_IMM, OP>(pre_compute, exec_state);
+    execute_e12_impl::<CTX, IS_IMM, OP>(pre_compute, exec_state);
 }
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e2_impl<
-    F: PrimeField32,
-    CTX: MeteredExecutionCtxTrait,
-    const IS_IMM: bool,
-    OP: ShiftWOp,
->(
+unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, const IS_IMM: bool, OP: ShiftWOp>(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<ShiftWPreCompute> =
         std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<ShiftWPreCompute>>())
@@ -323,7 +308,7 @@ unsafe fn execute_e2_impl<
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<F, CTX, IS_IMM, OP>(&pre_compute.data, exec_state);
+    execute_e12_impl::<CTX, IS_IMM, OP>(&pre_compute.data, exec_state);
 }
 
 trait ShiftWOp {

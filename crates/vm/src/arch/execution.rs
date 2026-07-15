@@ -126,8 +126,8 @@ pub enum AotError {
 /// arg, exec_state)`. The `pre_compute: *const u8` is a pre-computed buffer of data
 /// corresponding to a single instruction. The contents of `pre_compute` are determined from the
 /// program code as specified by the [Executor] and [MeteredExecutor] traits.
-pub type ExecuteFunc<F, CTX> =
-    unsafe fn(pre_compute: *const u8, exec_state: &mut VmExecState<F, GuestMemory, CTX>);
+pub type ExecuteFunc<CTX> =
+    unsafe fn(pre_compute: *const u8, exec_state: &mut VmExecState<GuestMemory, CTX>);
 
 /// Handler for tail call elimination. The `CTX` is assumed to contain pointers to the pre-computed
 /// buffer and the function handler table.
@@ -136,9 +136,9 @@ pub type ExecuteFunc<F, CTX> =
 /// - `handlers` is the starting pointer of the table of function pointers of `Handler` type. The
 ///   pointer is typeless to avoid self-referential types.
 #[cfg(feature = "tco")]
-pub type Handler<F, CTX> = unsafe fn(
-    interpreter: &InterpretedInstance<'_, F, CTX>,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+pub type Handler<CTX> = unsafe fn(
+    interpreter: &InterpretedInstance<'_, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 );
 
 /// Trait for pure execution via a host interpreter. The trait methods provide the methods to
@@ -153,7 +153,7 @@ pub trait InterpreterExecutor<F> {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait;
 
@@ -167,7 +167,7 @@ pub trait InterpreterExecutor<F> {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait;
 }
@@ -216,7 +216,7 @@ pub trait InterpreterMeteredExecutor<F> {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait;
 
@@ -232,7 +232,7 @@ pub trait InterpreterMeteredExecutor<F> {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait;
 }
@@ -273,7 +273,7 @@ pub trait PreflightExecutor<F, RA = MatrixRecordArena<F>> {
     /// current instance. May internally store records of this call for later trace generation.
     fn execute(
         &self,
-        state: VmStateMut<F, TracingMemory, RA>,
+        state: VmStateMut<TracingMemory, RA>,
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError>;
 
@@ -286,10 +286,10 @@ pub trait PreflightExecutor<F, RA = MatrixRecordArena<F>> {
 /// The state is generic in guest memory `MEM` and additional record arena `RA`.
 /// The host state is execution context specific.
 #[derive(derive_new::new)]
-pub struct VmStateMut<'a, F, MEM, RA> {
+pub struct VmStateMut<'a, MEM, RA> {
     pub pc: &'a mut u32,
     pub memory: &'a mut MEM,
-    pub streams: &'a mut Streams<F>,
+    pub streams: &'a mut Streams,
     pub rng: &'a mut StdRng,
     pub ctx: &'a mut RA,
     #[cfg(feature = "metrics")]
@@ -517,11 +517,11 @@ impl<T: PrimeCharacteristicRing> From<(u32, Option<T>)> for PcIncOrSet<T> {
 /// Phantom sub-instructions are only allowed to use operands
 /// `a,b` and `c_upper = c.as_canonical_u32() >> 16`.
 #[allow(clippy::too_many_arguments)]
-pub trait PhantomSubExecutor<F>: Send + Sync {
+pub trait PhantomSubExecutor: Send + Sync {
     fn phantom_execute(
         &self,
         memory: &GuestMemory,
-        streams: &mut Streams<F>,
+        streams: &mut Streams,
         rng: &mut StdRng,
         discriminant: PhantomDiscriminant,
         a: u32,

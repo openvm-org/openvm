@@ -7,7 +7,9 @@
 //!
 //! [VirtualMachine] will similarly be the struct that has done all the setup so it can
 //! execute+prove an arbitrary program for a fixed config - it will internally still hold VmExecutor
-use std::{any::TypeId, borrow::Borrow, collections::VecDeque, marker::PhantomData, sync::Arc};
+#[cfg(feature = "rvr")]
+use std::marker::PhantomData;
+use std::{any::TypeId, borrow::Borrow, collections::VecDeque, sync::Arc};
 
 use getset::{Getters, MutGetters, Setters, WithSetters};
 use itertools::{zip_eq, Itertools};
@@ -113,42 +115,32 @@ pub enum GenerationError {
     },
 }
 
-#[derive(Clone)]
-pub struct Streams<F> {
+#[derive(Clone, Default)]
+pub struct Streams {
     pub input_stream: VecDeque<Vec<u8>>,
     pub hint_stream: VecDeque<u8>,
     /// Cached deferred operation inputs and outputs. Each idx corresponds to a
     /// unique function that is constrained outside the VM in its own deferral circuit.
     pub deferrals: Vec<DeferralState>,
-    /// The input and hint streams are byte-backed; `F` is retained purely to thread the
-    /// field type through the execution state (`VmState<F>` and friends).
-    phantom: PhantomData<F>,
 }
 
-impl<F> Streams<F> {
+impl Streams {
     pub fn new(input_stream: impl Into<VecDeque<Vec<u8>>>) -> Self {
         Self {
             input_stream: input_stream.into(),
             hint_stream: VecDeque::default(),
             deferrals: Vec::default(),
-            phantom: PhantomData,
         }
     }
 }
 
-impl<F> Default for Streams<F> {
-    fn default() -> Self {
-        Self::new(VecDeque::default())
-    }
-}
-
-impl<F> From<VecDeque<Vec<u8>>> for Streams<F> {
+impl From<VecDeque<Vec<u8>>> for Streams {
     fn from(value: VecDeque<Vec<u8>>) -> Self {
         Streams::new(value)
     }
 }
 
-impl<F> From<Vec<Vec<u8>>> for Streams<F> {
+impl From<Vec<Vec<u8>>> for Streams {
     fn from(value: Vec<Vec<u8>>) -> Self {
         Streams::new(value)
     }
@@ -170,7 +162,6 @@ where
 {
     pub config: VC,
     inventory: Arc<ExecutorInventory<VC::Executor>>,
-    phantom: PhantomData<F>,
 }
 
 #[repr(i32)]
@@ -183,7 +174,7 @@ pub enum ExitCode {
 pub struct PreflightExecutionOutput<F, RA> {
     pub system_records: SystemRecords<F>,
     pub record_arenas: Vec<RA>,
-    pub to_state: VmState<F, GuestMemory>,
+    pub to_state: VmState<GuestMemory>,
 }
 
 impl<F, VC> VmExecutor<F, VC>
@@ -198,7 +189,6 @@ where
         Ok(Self {
             config,
             inventory: Arc::new(inventory),
-            phantom: PhantomData,
         })
     }
 }
@@ -234,7 +224,7 @@ where
     pub fn instance(
         &self,
         exe: &VmExe<F>,
-    ) -> Result<InterpretedInstance<'_, F, ExecutionCtx>, StaticProgramError> {
+    ) -> Result<InterpretedInstance<'_, ExecutionCtx>, StaticProgramError> {
         #[cfg(feature = "metrics")]
         let _compilation_span =
             tracing::info_span!("compile_pure", backend = "interpreter").entered();
@@ -245,7 +235,7 @@ where
     pub fn interpreter_instance(
         &self,
         exe: &VmExe<F>,
-    ) -> Result<InterpretedInstance<'_, F, ExecutionCtx>, StaticProgramError> {
+    ) -> Result<InterpretedInstance<'_, ExecutionCtx>, StaticProgramError> {
         #[cfg(feature = "metrics")]
         let _compilation_span =
             tracing::info_span!("compile_pure", backend = "interpreter").entered();
@@ -256,7 +246,7 @@ where
     pub fn instance(
         &self,
         exe: &VmExe<F>,
-    ) -> Result<AotInstance<'_, F, ExecutionCtx>, StaticProgramError> {
+    ) -> Result<AotInstance<'_, ExecutionCtx>, StaticProgramError> {
         Self::aot_instance(self, exe)
     }
 
@@ -335,7 +325,7 @@ where
     pub fn aot_instance(
         &self,
         exe: &VmExe<F>,
-    ) -> Result<AotInstance<'_, F, ExecutionCtx>, StaticProgramError> {
+    ) -> Result<AotInstance<'_, ExecutionCtx>, StaticProgramError> {
         #[cfg(feature = "metrics")]
         let _compilation_span = tracing::info_span!("compile_pure", backend = "aot").entered();
         AotInstance::new(&self.inventory, exe)
@@ -354,7 +344,7 @@ where
         &self,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
-    ) -> Result<InterpretedInstance<'_, F, MeteredCtx>, StaticProgramError> {
+    ) -> Result<InterpretedInstance<'_, MeteredCtx>, StaticProgramError> {
         #[cfg(feature = "metrics")]
         let _compilation_span =
             tracing::info_span!("compile_metered", backend = "interpreter").entered();
@@ -366,7 +356,7 @@ where
         &self,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
-    ) -> Result<InterpretedInstance<'_, F, MeteredCtx>, StaticProgramError> {
+    ) -> Result<InterpretedInstance<'_, MeteredCtx>, StaticProgramError> {
         #[cfg(feature = "metrics")]
         let _compilation_span =
             tracing::info_span!("compile_metered", backend = "interpreter").entered();
@@ -378,7 +368,7 @@ where
         &self,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
-    ) -> Result<AotInstance<'_, F, MeteredCtx>, StaticProgramError> {
+    ) -> Result<AotInstance<'_, MeteredCtx>, StaticProgramError> {
         Self::metered_aot_instance(self, exe, executor_idx_to_air_idx)
     }
 
@@ -388,7 +378,7 @@ where
         &self,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
-    ) -> Result<AotInstance<'_, F, MeteredCtx>, StaticProgramError> {
+    ) -> Result<AotInstance<'_, MeteredCtx>, StaticProgramError> {
         #[cfg(feature = "metrics")]
         let _compilation_span = tracing::info_span!("compile_metered", backend = "aot").entered();
         AotInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
@@ -401,7 +391,7 @@ where
         &self,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
-    ) -> Result<InterpretedInstance<'_, F, MeteredCostCtx>, StaticProgramError> {
+    ) -> Result<InterpretedInstance<'_, MeteredCostCtx>, StaticProgramError> {
         #[cfg(feature = "metrics")]
         let _compilation_span =
             tracing::info_span!("compile_metered_cost", backend = "interpreter").entered();
@@ -413,7 +403,7 @@ where
         &self,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
-    ) -> Result<InterpretedInstance<'_, F, MeteredCostCtx>, StaticProgramError> {
+    ) -> Result<InterpretedInstance<'_, MeteredCostCtx>, StaticProgramError> {
         #[cfg(feature = "metrics")]
         let _compilation_span =
             tracing::info_span!("compile_metered_cost", backend = "interpreter").entered();
@@ -698,7 +688,7 @@ where
     pub fn instance(
         &self,
         exe: &VmExe<Val<E::SC>>,
-    ) -> Result<InterpretedInstance<'_, Val<E::SC>, ExecutionCtx>, StaticProgramError>
+    ) -> Result<InterpretedInstance<'_, ExecutionCtx>, StaticProgramError>
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
@@ -735,7 +725,7 @@ where
     pub fn interpreter_instance(
         &self,
         exe: &VmExe<Val<E::SC>>,
-    ) -> Result<InterpretedInstance<'_, Val<E::SC>, ExecutionCtx>, StaticProgramError>
+    ) -> Result<InterpretedInstance<'_, ExecutionCtx>, StaticProgramError>
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
@@ -748,7 +738,7 @@ where
     pub fn instance(
         &self,
         exe: &VmExe<Val<E::SC>>,
-    ) -> Result<AotInstance<'_, Val<E::SC>, ExecutionCtx>, StaticProgramError>
+    ) -> Result<AotInstance<'_, ExecutionCtx>, StaticProgramError>
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
@@ -760,7 +750,7 @@ where
     pub fn get_aot_instance(
         &self,
         exe: &VmExe<Val<E::SC>>,
-    ) -> Result<AotInstance<'_, Val<E::SC>, ExecutionCtx>, StaticProgramError>
+    ) -> Result<AotInstance<'_, ExecutionCtx>, StaticProgramError>
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
@@ -772,7 +762,7 @@ where
     pub fn metered_instance(
         &self,
         exe: &VmExe<Val<E::SC>>,
-    ) -> Result<InterpretedInstance<'_, Val<E::SC>, MeteredCtx>, StaticProgramError>
+    ) -> Result<InterpretedInstance<'_, MeteredCtx>, StaticProgramError>
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
@@ -843,7 +833,7 @@ where
     pub fn metered_instance(
         &self,
         exe: &VmExe<Val<E::SC>>,
-    ) -> Result<AotInstance<'_, Val<E::SC>, MeteredCtx>, StaticProgramError>
+    ) -> Result<AotInstance<'_, MeteredCtx>, StaticProgramError>
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
@@ -858,7 +848,7 @@ where
     pub fn get_metered_aot_instance(
         &self,
         exe: &VmExe<Val<E::SC>>,
-    ) -> Result<AotInstance<'_, Val<E::SC>, MeteredCtx>, StaticProgramError>
+    ) -> Result<AotInstance<'_, MeteredCtx>, StaticProgramError>
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
@@ -872,7 +862,7 @@ where
     pub fn metered_interpreter_instance(
         &self,
         exe: &VmExe<Val<E::SC>>,
-    ) -> Result<InterpretedInstance<'_, Val<E::SC>, MeteredCtx>, StaticProgramError>
+    ) -> Result<InterpretedInstance<'_, MeteredCtx>, StaticProgramError>
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
@@ -886,7 +876,7 @@ where
     pub fn metered_cost_instance(
         &self,
         exe: &VmExe<Val<E::SC>>,
-    ) -> Result<InterpretedInstance<'_, Val<E::SC>, MeteredCostCtx>, StaticProgramError>
+    ) -> Result<InterpretedInstance<'_, MeteredCostCtx>, StaticProgramError>
     where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
@@ -971,7 +961,7 @@ where
     pub fn execute_preflight(
         &self,
         interpreter: &mut PreflightInterpretedInstance2<Val<E::SC>, VB::VmConfig>,
-        state: VmState<Val<E::SC>, GuestMemory>,
+        state: VmState<GuestMemory>,
         num_insns: Option<u64>,
         trace_heights: &[u32],
     ) -> Result<PreflightExecutionOutput<Val<E::SC>, VB::RecordArena>, ExecutionError>
@@ -1063,8 +1053,8 @@ where
     pub fn create_initial_state(
         &self,
         exe: &VmExe<Val<E::SC>>,
-        inputs: impl Into<Streams<Val<E::SC>>>,
-    ) -> VmState<Val<E::SC>, GuestMemory> {
+        inputs: impl Into<Streams>,
+    ) -> VmState<GuestMemory> {
         #[allow(unused_mut)]
         let mut state = VmState::initial(
             self.config().as_ref(),
@@ -1179,7 +1169,7 @@ where
     pub fn prove(
         &mut self,
         interpreter: &mut PreflightInterpretedInstance2<Val<E::SC>, VB::VmConfig>,
-        state: VmState<Val<E::SC>, GuestMemory>,
+        state: VmState<GuestMemory>,
         num_insns: Option<u64>,
         trace_heights: &[u32],
     ) -> Result<(Proof<E::SC>, Option<GuestMemory>), VirtualMachineError>
@@ -1390,7 +1380,7 @@ pub struct ContinuationVmProof<SC: StarkProtocolConfig> {
 pub trait ContinuationVmProver<SC: StarkProtocolConfig> {
     fn prove(
         &mut self,
-        input: impl Into<Streams<Val<SC>>>,
+        input: impl Into<Streams>,
     ) -> Result<ContinuationVmProof<SC>, VirtualMachineError>;
 }
 
@@ -1412,7 +1402,7 @@ where
     #[getset(get = "pub")]
     exe: Arc<VmExe<Val<E::SC>>>,
     #[getset(get = "pub", get_mut = "pub")]
-    state: Option<VmState<Val<E::SC>, GuestMemory>>,
+    state: Option<VmState<GuestMemory>>,
 }
 
 impl<E, VB> VmInstance<E, VB>
@@ -1439,7 +1429,7 @@ where
     }
 
     #[instrument(name = "vm.reset_state", level = "debug", skip_all)]
-    pub fn reset_state(&mut self, inputs: impl Into<Streams<Val<E::SC>>>) {
+    pub fn reset_state(&mut self, inputs: impl Into<Streams>) {
         let state = self.state.as_mut().unwrap();
         state.reset(&self.exe.init_memory, self.exe.pc_start, inputs);
 
@@ -1465,7 +1455,7 @@ where
     /// the next segment does not start before the current proof finishes.
     fn prove(
         &mut self,
-        input: impl Into<Streams<Val<E::SC>>>,
+        input: impl Into<Streams>,
     ) -> Result<ContinuationVmProof<E::SC>, VirtualMachineError> {
         self.prove_continuations(input, |_, _| {})
     }
@@ -1485,7 +1475,7 @@ where
     /// The closure `modify_ctx(seg_idx, &mut ctx)` is called sequentially for each segment.
     pub fn prove_continuations(
         &mut self,
-        input: impl Into<Streams<Val<E::SC>>>,
+        input: impl Into<Streams>,
         mut modify_ctx: impl FnMut(usize, &mut ProvingContext<E::PB>),
     ) -> Result<ContinuationVmProof<E::SC>, VirtualMachineError> {
         let input = input.into();

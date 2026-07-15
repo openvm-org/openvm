@@ -85,7 +85,7 @@ where
 
     fn execute(
         &self,
-        state: VmStateMut<F, openvm_circuit::system::memory::online::TracingMemory, RA>,
+        state: VmStateMut<openvm_circuit::system::memory::online::TracingMemory, RA>,
         instruction: &openvm_instructions::instruction::Instruction<F>,
     ) -> Result<(), ExecutionError> {
         let openvm_instructions::instruction::Instruction { opcode, .. } = instruction;

@@ -2,7 +2,7 @@
 
 There is an `AotInstance` struct which stores the information generated during compile time to be used in execution time.
 ```
-pub struct AotInstance<'a, F, Ctx> {
+pub struct AotInstance<'a, Ctx> {
     init_memory: SparseMemoryImage,
     system_config: &'a SystemConfig,
     // SAFETY: this is not actually dead code, but `pre_compute_insns` contains raw pointer refers
@@ -10,7 +10,7 @@ pub struct AotInstance<'a, F, Ctx> {
     #[allow(dead_code)]
     pre_compute_buf: AlignedBuf,
     lib: Library,
-    pre_compute_insns: Vec<PreComputeInstruction<F, Ctx>>,
+    pre_compute_insns: Vec<PreComputeInstruction<Ctx>>,
     pc_start: u32,
 }
 ```
@@ -35,7 +35,7 @@ Finally it returns an `AotInstance` which completes the compilation part for thi
 - `execute_from_state`
 Important things to know about this:
 
-This function takes in `from_state: VmState<F, GuestMemory>` and `num_insns`. It will create a new `vm_exec_state` which is boxed and runs pure execution for `num_insns` instructions. Then it uses the information stored in `AotInstance`, specifically the `pre_compute_insns` and the dynamic library. We pass in the `VmExecState`, list of precompute instructions, initial pc and instret. We can potentially pass in more information by creating `Information` struct and passing in the pointer to that and then the assembly would "unpack" this information as it needs. Finally, we either return the `VmState` if the execution was successful or return some `ExecutionError` if it wasn't.
+This function takes in `from_state: VmState<GuestMemory>` and `num_insns`. It will create a new `vm_exec_state` which is boxed and runs pure execution for `num_insns` instructions. Then it uses the information stored in `AotInstance`, specifically the `pre_compute_insns` and the dynamic library. We pass in the `VmExecState`, list of precompute instructions, initial pc and instret. We can potentially pass in more information by creating `Information` struct and passing in the pointer to that and then the assembly would "unpack" this information as it needs. Finally, we either return the `VmState` if the execution was successful or return some `ExecutionError` if it wasn't.
 - `new_metered` creates a new instance for metered execution.
 Important things to know about this:
 
@@ -44,5 +44,3 @@ This function follows the same build pipeline as `new` — it generates metered 
 There are also `set_pc` which will be called once at the end of the execution to sync the `VmExecState`'s pc from the x86 register. And also there is `should_suspend` which is called in every instruction and returns `1` if we should suspend and `0` otherwise which is later checked by the assembly.
 
 Currently, the AOT feature is tested by executing on both interpreter and AOT in `air_test_impl` of `stark_utils.rs` and then asserting that the returned `instret`, `pc` `segments` and the register address space are equal.
-
-

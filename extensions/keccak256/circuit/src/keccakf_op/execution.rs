@@ -68,13 +68,13 @@ impl<F: PrimeField32> InterpreterExecutor<F> for KeccakfExecutor {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
         let data: &mut KeccakfPreCompute = data.borrow_mut();
         self.pre_compute_impl(pc, inst, data)?;
-        Ok(execute_e1_impl::<_, _>)
+        Ok(execute_e1_impl::<_>)
     }
 
     #[cfg(feature = "tco")]
@@ -83,13 +83,13 @@ impl<F: PrimeField32> InterpreterExecutor<F> for KeccakfExecutor {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
         let data: &mut KeccakfPreCompute = data.borrow_mut();
         self.pre_compute_impl(pc, inst, data)?;
-        Ok(execute_e1_handler)
+        Ok(execute_e1_handler::<_>)
     }
 }
 
@@ -108,14 +108,14 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for KeccakfExecutor {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
         let data: &mut E2PreCompute<KeccakfPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         self.pre_compute_impl(pc, inst, &mut data.data)?;
-        Ok(execute_e2_impl::<_, _>)
+        Ok(execute_e2_impl::<_>)
     }
 
     #[cfg(feature = "tco")]
@@ -125,14 +125,14 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for KeccakfExecutor {
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
         let data: &mut E2PreCompute<KeccakfPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         self.pre_compute_impl(pc, inst, &mut data.data)?;
-        Ok(execute_e2_handler)
+        Ok(execute_e2_handler::<_>)
     }
 }
 
@@ -141,19 +141,19 @@ impl<F: PrimeField32> AotMeteredExecutor<F> for KeccakfExecutor {}
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
+unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait>(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pre_compute: &KeccakfPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<KeccakfPreCompute>()).borrow();
-    execute_e12_impl::<F, CTX, true>(pre_compute, exec_state);
+    execute_e12_impl::<CTX, true>(pre_compute, exec_state);
 }
 
 #[inline(always)]
-unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1: bool>(
+unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_E1: bool>(
     pre_compute: &KeccakfPreCompute,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let rd_ptr = pre_compute.a as u32;
     let buffer_ptr = rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, rd_ptr));
@@ -180,9 +180,9 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_E1:
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
+unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait>(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<KeccakfPreCompute> =
         std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<KeccakfPreCompute>>())
@@ -205,5 +205,5 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
         .ctx
         .on_height_change(perm_air_idx, NUM_ROUNDS as u32);
 
-    execute_e12_impl::<F, CTX, false>(&pre_compute.data, exec_state);
+    execute_e12_impl::<CTX, false>(&pre_compute.data, exec_state);
 }

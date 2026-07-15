@@ -95,12 +95,12 @@ pub enum DeferralExecutor {
     Output(DeferralOutputExecutor),
 }
 
-impl<F: VmField> VmExecutionExtension<F> for DeferralExtension {
+impl VmExecutionExtension for DeferralExtension {
     type Executor = DeferralExecutor;
 
     fn extend_execution(
         &self,
-        inventory: &mut ExecutorInventoryBuilder<F, DeferralExecutor>,
+        inventory: &mut ExecutorInventoryBuilder<DeferralExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
         let call = DeferralCallExecutor::new(DeferralCallAdapterExecutor, self.fns.clone());
         inventory.add_executor(call, [DeferralOpcode::CALL.global_opcode()])?;
@@ -239,7 +239,7 @@ where
 
 #[derive(Clone, VmConfig, Serialize, Deserialize)]
 pub struct Rv64DeferralConfig {
-    #[config(executor = "SystemExecutor<F>")]
+    #[config(executor = "SystemExecutor")]
     pub system: SystemConfig,
     #[extension]
     pub rv64i: Rv64I,

@@ -1,7 +1,4 @@
-use std::{
-    marker::PhantomData,
-    sync::{Arc, OnceLock},
-};
+use std::sync::{Arc, OnceLock};
 
 use eyre::eyre;
 use openvm_circuit::arch::{VmBuilder, VmExecutionConfig, VmExecutor};
@@ -85,7 +82,6 @@ where
     halo2_source: Option<Halo2Source>,
     #[cfg(feature = "evm-prove")]
     halo2_params_reader: Option<CacheHalo2ParamsReader>,
-    _phantom: PhantomData<E>,
 }
 
 impl<E, VB> GenericSdkBuilder<E, VB>
@@ -348,7 +344,6 @@ where
                 halo2_source: _,
             #[cfg(feature = "evm-prove")]
             halo2_params_reader,
-            _phantom: _,
         } = self;
 
         let (app_config, app_pk_seed) = Self::normalize_app_source(app_source);
@@ -449,7 +444,6 @@ where
             halo2_params_reader,
             #[cfg(feature = "evm-prove")]
             halo2_prover: Self::init_once_lock(halo2_prover_seed, "halo2_prover"),
-            _phantom: PhantomData,
         })
     }
 
@@ -569,7 +563,6 @@ where
             halo2_source: None,
             #[cfg(feature = "evm-prove")]
             halo2_params_reader: None,
-            _phantom: PhantomData,
         }
     }
 }

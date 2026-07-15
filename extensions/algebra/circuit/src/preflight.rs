@@ -180,7 +180,7 @@ where
 {
     fn execute(
         &self,
-        state: VmStateMut<F, TracingMemory, RA>,
+        state: VmStateMut<TracingMemory, RA>,
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError> {
         use openvm_circuit::arch::AdapterTraceExecutor;

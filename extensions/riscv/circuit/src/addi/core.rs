@@ -176,7 +176,7 @@ where
 
     fn execute(
         &self,
-        state: VmStateMut<F, TracingMemory, RA>,
+        state: VmStateMut<TracingMemory, RA>,
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError> {
         debug_assert_eq!(

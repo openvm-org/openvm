@@ -43,7 +43,7 @@ pub struct AlgebraCpuProverExt;
 
 #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
 pub struct Rv64ModularConfig {
-    #[config(executor = "SystemExecutor<F>")]
+    #[config(executor = "SystemExecutor")]
     pub system: SystemConfig,
     #[extension]
     pub base: Rv64I,
@@ -78,7 +78,7 @@ impl Rv64ModularConfig {
 
 #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
 pub struct Rv64ModularWithFp2Config {
-    #[config(generics = true)]
+    #[config]
     pub modular: Rv64ModularConfig,
     #[extension]
     pub fp2: Fp2Extension,

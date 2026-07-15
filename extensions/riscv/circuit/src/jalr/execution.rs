@@ -50,9 +50,9 @@ impl<A> Rv64JalrExecutor<A> {
 macro_rules! dispatch {
     ($execute_impl:ident, $enabled:ident) => {
         if $enabled {
-            Ok($execute_impl::<_, _, true>)
+            Ok($execute_impl::<_, true>)
         } else {
-            Ok($execute_impl::<_, _, false>)
+            Ok($execute_impl::<_, false>)
         }
     };
 }
@@ -72,7 +72,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError> {
         let data: &mut JalrPreCompute = data.borrow_mut();
         let enabled = self.pre_compute_impl(pc, inst, data)?;
         dispatch!(execute_e1_handler, enabled)
@@ -84,7 +84,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
@@ -154,7 +154,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
@@ -171,7 +171,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
@@ -203,9 +203,9 @@ where
     }
 }
 #[inline(always)]
-unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const ENABLED: bool>(
+unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const ENABLED: bool>(
     pre_compute: &JalrPreCompute,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pc = exec_state.pc();
     let rs1 =
@@ -228,25 +228,25 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const ENABLE
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const ENABLED: bool>(
+unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, const ENABLED: bool>(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pre_compute: &JalrPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<JalrPreCompute>()).borrow();
-    execute_e12_impl::<F, CTX, ENABLED>(pre_compute, exec_state);
+    execute_e12_impl::<CTX, ENABLED>(pre_compute, exec_state);
 }
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait, const ENABLED: bool>(
+unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, const ENABLED: bool>(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<JalrPreCompute> =
         std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<JalrPreCompute>>()).borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<F, CTX, ENABLED>(&pre_compute.data, exec_state);
+    execute_e12_impl::<CTX, ENABLED>(&pre_compute.data, exec_state);
 }

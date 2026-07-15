@@ -28,7 +28,9 @@ use openvm_riscv_transpiler::{
     Rv64AuipcOpcode, Rv64HintStoreOpcode, Rv64JalLuiOpcode, Rv64JalrOpcode, Rv64LoadStoreOpcode,
     Rv64Phantom, ShiftOpcode, ShiftWOpcode,
 };
-use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, StarkProtocolConfig, Val};
+#[cfg(feature = "rvr")]
+use openvm_stark_backend::p3_field::PrimeField32;
+use openvm_stark_backend::{StarkEngine, StarkProtocolConfig, Val};
 #[cfg(feature = "rvr")]
 use rvr_openvm_ext_riscv::{Rv64IExtension, Rv64IoExtension};
 #[cfg(feature = "rvr")]
@@ -167,12 +169,12 @@ pub enum Rv64IoExecutor {
 
 // ============ VmExtension Implementations ============
 
-impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
+impl VmExecutionExtension for Rv64I {
     type Executor = Rv64IExecutor;
 
     fn extend_execution(
         &self,
-        inventory: &mut ExecutorInventoryBuilder<F, Rv64IExecutor>,
+        inventory: &mut ExecutorInventoryBuilder<Rv64IExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
         let byte_ptr_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
 
@@ -873,12 +875,12 @@ where
     }
 }
 
-impl<F> VmExecutionExtension<F> for Rv64M {
+impl VmExecutionExtension for Rv64M {
     type Executor = Rv64MExecutor;
 
     fn extend_execution(
         &self,
-        inventory: &mut ExecutorInventoryBuilder<F, Rv64MExecutor>,
+        inventory: &mut ExecutorInventoryBuilder<Rv64MExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
         let mult =
             Rv64MultiplicationExecutor::new(Rv64MultAdapterExecutor, MulOpcode::CLASS_OFFSET);
@@ -1097,12 +1099,12 @@ where
     }
 }
 
-impl<F: PrimeField32> VmExecutionExtension<F> for Rv64Io {
+impl VmExecutionExtension for Rv64Io {
     type Executor = Rv64IoExecutor;
 
     fn extend_execution(
         &self,
-        inventory: &mut ExecutorInventoryBuilder<F, Rv64IoExecutor>,
+        inventory: &mut ExecutorInventoryBuilder<Rv64IoExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
         let byte_ptr_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
         let hint_store =
@@ -1180,7 +1182,6 @@ mod phantom {
         system::memory::online::GuestMemory,
     };
     use openvm_instructions::PhantomDiscriminant;
-    use openvm_stark_backend::p3_field::{Field, PrimeField32};
     use rand::{rngs::StdRng, Rng};
 
     use crate::adapters::{memory_read, read_rv64_register_as_u32, RV64_REGISTER_NUM_LIMBS};
@@ -1191,11 +1192,11 @@ mod phantom {
     pub struct Rv64HintRandomSubEx;
     pub struct Rv64PrintStrSubEx;
 
-    impl<F: Field> PhantomSubExecutor<F> for Rv64HintInputSubEx {
+    impl PhantomSubExecutor for Rv64HintInputSubEx {
         fn phantom_execute(
             &self,
             _: &GuestMemory,
-            streams: &mut Streams<F>,
+            streams: &mut Streams,
             _: &mut StdRng,
             _: PhantomDiscriminant,
             _: u32,
@@ -1219,11 +1220,11 @@ mod phantom {
         }
     }
 
-    impl<F: PrimeField32> PhantomSubExecutor<F> for Rv64HintRandomSubEx {
+    impl PhantomSubExecutor for Rv64HintRandomSubEx {
         fn phantom_execute(
             &self,
             memory: &GuestMemory,
-            streams: &mut Streams<F>,
+            streams: &mut Streams,
             rng: &mut StdRng,
             _: PhantomDiscriminant,
             a: u32,
@@ -1244,11 +1245,11 @@ mod phantom {
         }
     }
 
-    impl<F: PrimeField32> PhantomSubExecutor<F> for Rv64PrintStrSubEx {
+    impl PhantomSubExecutor for Rv64PrintStrSubEx {
         fn phantom_execute(
             &self,
             memory: &GuestMemory,
-            _: &mut Streams<F>,
+            _: &mut Streams,
             _: &mut StdRng,
             _: PhantomDiscriminant,
             a: u32,

@@ -55,7 +55,7 @@ use crate::{
 
 pub struct VmChipTestBuilder<F: VmField> {
     pub memory: MemoryTester<F>,
-    pub streams: Streams<F>,
+    pub streams: Streams,
     pub rng: StdRng,
     pub execution: ExecutionTester<F>,
     pub program: ProgramTester<F>,
@@ -169,7 +169,7 @@ where
         self.execution.records.last().unwrap().final_state
     }
 
-    fn streams_mut(&mut self) -> &mut Streams<F> {
+    fn streams_mut(&mut self) -> &mut Streams {
         &mut self.streams
     }
 
@@ -217,7 +217,7 @@ impl<F: VmField> VmChipTestBuilder<F> {
     pub fn new(
         controller: MemoryController<F>,
         memory: TracingMemory,
-        streams: Streams<F>,
+        streams: Streams,
         rng: StdRng,
         execution_bus: ExecutionBus,
         program_bus: ProgramBus,

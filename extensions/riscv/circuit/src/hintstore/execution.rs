@@ -65,8 +65,8 @@ impl Rv64HintStoreExecutor {
 macro_rules! dispatch {
     ($execute_impl:ident, $local_opcode:ident) => {
         match $local_opcode {
-            HINT_STORED => Ok($execute_impl::<_, _, true>),
-            HINT_BUFFER => Ok($execute_impl::<_, _, false>),
+            HINT_STORED => Ok($execute_impl::<_, true>),
+            HINT_BUFFER => Ok($execute_impl::<_, false>),
         }
     };
 }
@@ -86,7 +86,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError> {
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError> {
         let pre_compute: &mut HintStorePreCompute = data.borrow_mut();
         let local_opcode = self.pre_compute_impl(pc, inst, pre_compute)?;
         dispatch!(execute_e1_handler, local_opcode)
@@ -98,7 +98,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
@@ -126,7 +126,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
@@ -143,7 +143,7 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
@@ -159,9 +159,9 @@ impl<F> AotMeteredExecutor<F> for Rv64HintStoreExecutor where F: PrimeField32 {}
 
 /// Return the number of used rows.
 #[inline(always)]
-unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_HINT_STORED: bool>(
+unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_HINT_STORED: bool>(
     pre_compute: &HintStorePreCompute,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) -> Result<u32, ExecutionError> {
     let pc = exec_state.pc();
     let mem_ptr_limbs =
@@ -207,30 +207,26 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_HIN
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_HINT_STORED: bool>(
+unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, const IS_HINT_STORED: bool>(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
     let pre_compute: &HintStorePreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<HintStorePreCompute>()).borrow();
-    execute_e12_impl::<F, CTX, IS_HINT_STORED>(pre_compute, exec_state)?;
+    execute_e12_impl::<CTX, IS_HINT_STORED>(pre_compute, exec_state)?;
     Ok(())
 }
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e2_impl<
-    F: PrimeField32,
-    CTX: MeteredExecutionCtxTrait,
-    const IS_HINT_STORED: bool,
->(
+unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, const IS_HINT_STORED: bool>(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
     let pre_compute: &E2PreCompute<HintStorePreCompute> =
         std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<HintStorePreCompute>>())
             .borrow();
-    let height_delta = execute_e12_impl::<F, CTX, IS_HINT_STORED>(&pre_compute.data, exec_state)?;
+    let height_delta = execute_e12_impl::<CTX, IS_HINT_STORED>(&pre_compute.data, exec_state)?;
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, height_delta);

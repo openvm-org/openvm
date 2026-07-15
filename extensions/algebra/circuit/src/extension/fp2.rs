@@ -94,12 +94,12 @@ pub enum Fp2ExtensionExecutor {
     Fp2MulDivRv64_48(Fp2Executor<FP2_BLOCKS_48>), // Fp2MulDiv
 }
 
-impl<F: PrimeField32> VmExecutionExtension<F> for Fp2Extension {
+impl VmExecutionExtension for Fp2Extension {
     type Executor = Fp2ExtensionExecutor;
 
     fn extend_execution(
         &self,
-        inventory: &mut ExecutorInventoryBuilder<F, Fp2ExtensionExecutor>,
+        inventory: &mut ExecutorInventoryBuilder<Fp2ExtensionExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
         let byte_ptr_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
         // TODO: somehow get the range checker bus from `ExecutorInventory`

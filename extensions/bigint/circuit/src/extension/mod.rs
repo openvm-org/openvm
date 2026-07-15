@@ -112,12 +112,12 @@ pub enum Int256Executor {
     ShiftRightArithmetic256(Rv64ShiftRightArithmetic256Executor),
 }
 
-impl<F: PrimeField32> VmExecutionExtension<F> for Int256 {
+impl VmExecutionExtension for Int256 {
     type Executor = Int256Executor;
 
     fn extend_execution(
         &self,
-        inventory: &mut ExecutorInventoryBuilder<F, Int256Executor>,
+        inventory: &mut ExecutorInventoryBuilder<Int256Executor>,
     ) -> Result<(), ExecutorInventoryError> {
         let byte_ptr_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
 
