@@ -222,6 +222,10 @@ impl<K: SetupKind> ExtInstr for FieldSetupInstr<K> {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
+        let inline_record = self.inline_record.filter(|_| ctx.inline_record_enabled());
+        if inline_record.is_some() {
+            ctx.write_line("preflight_begin_custom_memory_capture(state);");
+        }
         let rs1 = ctx.read_var(self.rs1_reg);
         let rs2 = ctx.read_var(self.rs2_reg);
         let rd = ctx.read_var(self.rd_reg);
@@ -232,7 +236,7 @@ impl<K: SetupKind> ExtInstr for FieldSetupInstr<K> {
         ctx.write_line(&format!("static constexpr uint8_t mod_[] = {mod_literal};"));
         ctx.emit_checked_call(&name, &["state", &rd, &rs1, &rs2, &num_limbs, "mod_"]);
         ctx.write_line("}");
-        if let Some(meta) = self.inline_record.filter(|_| ctx.inline_record_enabled()) {
+        if let Some(meta) = inline_record {
             K::emit_inline_record(
                 ctx,
                 meta.from_pc,
@@ -265,6 +269,10 @@ impl<K: IsEqKind> ExtInstr for FieldIsEqInstr<K> {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
+        let inline_record = self.inline_record.filter(|_| ctx.inline_record_enabled());
+        if inline_record.is_some() {
+            ctx.write_line("preflight_begin_custom_memory_capture(state);");
+        }
         let rs1 = ctx.read_var(self.rs1_reg);
         let rs2 = ctx.read_var(self.rs2_reg);
         let prefix = K::c_prefix();
@@ -283,7 +291,7 @@ impl<K: IsEqKind> ExtInstr for FieldIsEqInstr<K> {
             ctx.write_var(self.rd_reg, &val);
             ctx.write_line("}");
         }
-        if let Some(meta) = self.inline_record.filter(|_| ctx.inline_record_enabled()) {
+        if let Some(meta) = inline_record {
             <K as IsEqKind>::emit_inline_record(
                 ctx,
                 meta.from_pc,
@@ -316,6 +324,10 @@ impl<K: ArithKind> ExtInstr for FieldArithInstr<K> {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
+        let inline_record = self.inline_record.filter(|_| ctx.inline_record_enabled());
+        if inline_record.is_some() {
+            ctx.write_line("preflight_begin_custom_memory_capture(state);");
+        }
         let rs1 = ctx.read_var(self.rs1_reg);
         let rs2 = ctx.read_var(self.rs2_reg);
         let rd = ctx.read_var(self.rd_reg);
@@ -334,7 +346,7 @@ impl<K: ArithKind> ExtInstr for FieldArithInstr<K> {
             ctx.emit_call(&name, &["state", &rd, &rs1, &rs2, &num_limbs, "mod_"]);
             ctx.write_line("}");
         }
-        if let Some(meta) = self.inline_record.filter(|_| ctx.inline_record_enabled()) {
+        if let Some(meta) = inline_record {
             K::emit_inline_record(
                 ctx,
                 meta.from_pc,

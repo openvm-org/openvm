@@ -561,7 +561,7 @@ mod bls12_381 {
         let modular_count = Rv64ModularArithmeticOpcode::SETUP_ISEQ as usize + 1;
         let fp2_count = Fp2Opcode::SETUP_MULDIV as usize + 1;
         for (idx, entry) in output.raw_logs.program_log.iter().enumerate() {
-            let pc = entry.pc as u32;
+            let pc = entry.pc();
             let instruction_idx = ((pc - exe.program.pc_base) / 4) as usize;
             let Some((instruction, _)) = &exe.program.instructions_and_debug_infos[instruction_idx]
             else {
@@ -1264,7 +1264,7 @@ mod bls12_381 {
             .program_log
             .iter()
             .position(|entry| {
-                let pc = entry.pc as u32;
+                let pc = entry.pc();
                 let instruction_idx = ((pc - exe.program.pc_base) / 4) as usize;
                 let Some((instruction, _)) =
                     &exe.program.instructions_and_debug_infos[instruction_idx]

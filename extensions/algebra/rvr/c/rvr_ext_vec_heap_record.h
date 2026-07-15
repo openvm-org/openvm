@@ -71,12 +71,11 @@ static inline void rvr_ext_emit_vec_heap_record(
   uint32_t event_count = register_events +
                          d.num_reads * d.blocks + d.blocks;
   Tracer* tracer = state->tracer;
-  if (unlikely(tracer->memory_log_len < event_count ||
-               tracer->memory_log_len > tracer->memory_log_cap)) {
+  MemoryLogEntry* events =
+      preflight_take_custom_memory_events(tracer, event_count);
+  if (unlikely(events == NULL)) {
     return;
   }
-  MemoryLogEntry* events =
-      tracer->memory_log + tracer->memory_log_len - event_count;
   uint8_t* core;
   uint8_t* record = rvr_claim_vec_heap_record(
       state, chip_idx, d.adapter_size, d.record_size, &core);

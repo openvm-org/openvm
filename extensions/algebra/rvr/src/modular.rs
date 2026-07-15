@@ -247,6 +247,10 @@ impl ExtInstr for ModSetupIsEqInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
+        let emit_inline = self.emit_inline && ctx.inline_record_enabled();
+        if emit_inline {
+            ctx.write_line("preflight_begin_custom_memory_capture(state);");
+        }
         let rs1 = ctx.read_var(self.rs1_reg);
         let rs2 = ctx.read_var(self.rs2_reg);
         let mod_literal = format_c_byte_array(&self.modulus);
@@ -263,7 +267,7 @@ impl ExtInstr for ModSetupIsEqInstr {
         ctx.write_line("}");
         ctx.write_var(self.rd_reg, &result);
         ctx.write_line("}");
-        if self.emit_inline && ctx.inline_record_enabled() {
+        if emit_inline {
             emit_mod_iseq_record(
                 ctx,
                 self.from_pc,

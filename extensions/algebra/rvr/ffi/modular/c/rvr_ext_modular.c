@@ -88,12 +88,11 @@ void rvr_ext_emit_mod_iseq_record(RvState* state, uint32_t from_pc,
   RvrModIsEqRecordDescriptor d = rvr_mod_iseq_descriptor(num_limbs);
   uint32_t event_count = 3u + 2u * d.blocks;
   Tracer* tracer = state->tracer;
-  if (unlikely(tracer->memory_log_len < event_count ||
-               tracer->memory_log_len > tracer->memory_log_cap)) {
+  MemoryLogEntry* events =
+      preflight_take_custom_memory_events(tracer, event_count);
+  if (unlikely(events == NULL)) {
     return;
   }
-  MemoryLogEntry* events =
-      tracer->memory_log + tracer->memory_log_len - event_count;
   uint8_t* core;
   uint8_t* record = rvr_claim_mod_iseq_record(
       state, chip_idx, d.adapter_size, d.record_size, &core);

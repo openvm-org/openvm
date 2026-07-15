@@ -146,7 +146,7 @@ mod tests {
         use openvm_algebra_transpiler::Rv64ModularArithmeticOpcode as Op;
 
         for (idx, entry) in output.raw_logs.program_log.iter().enumerate() {
-            let pc = entry.pc as u32;
+            let pc = entry.pc();
             let instruction_idx = ((pc - exe.program.pc_base) / 4) as usize;
             let Some((instruction, _)) = &exe.program.instructions_and_debug_infos[instruction_idx]
             else {
@@ -438,6 +438,7 @@ mod tests {
         exe: &VmExe<F>,
         config: &Rv64ModularConfig,
         retired: u64,
+        compact_memory: bool,
     ) -> (SystemRecords<F>, Vec<DenseRecordArena>) {
         std::env::remove_var("OPENVM_RVR_INLINE_RECORDS");
         std::env::remove_var("OPENVM_RVR_ARENA_NATIVE");
@@ -490,24 +491,46 @@ mod tests {
             targets.insert(air, target);
             staged.push((air, geometry, arena));
         }
-        let mut output = instance
-            .execute_preflight_from_state_with_arena_targets(
-                vm.create_initial_state(exe, Streams::default()),
-                Some(retired),
-                &heights,
-                &targets,
+        let state = vm.create_initial_state(exe, Streams::default());
+        let mut output = if compact_memory {
+            instance
+                .execute_preflight_from_state_with_compact_delta_memory_for_test(
+                    state,
+                    Some(retired),
+                    &heights,
+                    &targets,
+                )
+                .expect("compact direct-final modular preflight")
+        } else {
+            instance
+                .execute_preflight_from_state_with_arena_targets(
+                    state,
+                    Some(retired),
+                    &heights,
+                    &targets,
+                )
+                .expect("direct-final modular preflight")
+        };
+        let mut arenas = if compact_memory {
+            // The CPU fixture has no CUDA delta decoder for the base-RV64
+            // wires. The custom arenas under test are already final-form, so
+            // leave unrelated AIRs empty and compare only the staged modular
+            // outputs below.
+            (0..capacities.len())
+                .map(|_| DenseRecordArena::with_byte_capacity(0))
+                .collect()
+        } else {
+            let mut registry = LogNativeAssemblerRegistry::new();
+            config.extend_rvr_log_native(&mut registry);
+            generate_record_arenas_from_logs::<F, DenseRecordArena>(
+                &registry,
+                exe,
+                &mut output,
+                &capacities,
+                &pc_to_air_idx,
             )
-            .expect("direct-final modular preflight");
-        let mut registry = LogNativeAssemblerRegistry::new();
-        config.extend_rvr_log_native(&mut registry);
-        let mut arenas = generate_record_arenas_from_logs::<F, DenseRecordArena>(
-            &registry,
-            exe,
-            &mut output,
-            &capacities,
-            &pc_to_air_idx,
-        )
-        .expect("direct residual record assembly");
+            .expect("direct residual record assembly")
+        };
         for (air, geometry, mut arena) in staged {
             let written = output
                 .arena_native_written
@@ -651,6 +674,7 @@ mod tests {
         exe: &VmExe<F>,
         config: &Rv64ModularWithFp2Config,
         retired: u64,
+        compact_memory: bool,
     ) -> (SystemRecords<F>, Vec<DenseRecordArena>) {
         std::env::remove_var("OPENVM_RVR_INLINE_RECORDS");
         std::env::remove_var("OPENVM_RVR_ARENA_NATIVE");
@@ -700,24 +724,42 @@ mod tests {
             targets.insert(air, target);
             staged.push((air, geometry, arena));
         }
-        let mut output = instance
-            .execute_preflight_from_state_with_arena_targets(
-                vm.create_initial_state(exe, Streams::default()),
-                Some(retired),
-                &heights,
-                &targets,
+        let state = vm.create_initial_state(exe, Streams::default());
+        let mut output = if compact_memory {
+            instance
+                .execute_preflight_from_state_with_compact_delta_memory_for_test(
+                    state,
+                    Some(retired),
+                    &heights,
+                    &targets,
+                )
+                .expect("compact direct-final Fp2 preflight")
+        } else {
+            instance
+                .execute_preflight_from_state_with_arena_targets(
+                    state,
+                    Some(retired),
+                    &heights,
+                    &targets,
+                )
+                .expect("direct-final Fp2 preflight")
+        };
+        let mut arenas = if compact_memory {
+            (0..capacities.len())
+                .map(|_| DenseRecordArena::with_byte_capacity(0))
+                .collect()
+        } else {
+            let mut registry = LogNativeAssemblerRegistry::new();
+            config.extend_rvr_log_native(&mut registry);
+            generate_record_arenas_from_logs::<F, DenseRecordArena>(
+                &registry,
+                exe,
+                &mut output,
+                &capacities,
+                &pc_to_air_idx,
             )
-            .expect("direct-final Fp2 preflight");
-        let mut registry = LogNativeAssemblerRegistry::new();
-        config.extend_rvr_log_native(&mut registry);
-        let mut arenas = generate_record_arenas_from_logs::<F, DenseRecordArena>(
-            &registry,
-            exe,
-            &mut output,
-            &capacities,
-            &pc_to_air_idx,
-        )
-        .expect("Fp2 direct residual record assembly");
+            .expect("Fp2 direct residual record assembly")
+        };
         for (air, geometry, mut arena) in staged {
             let written = output
                 .arena_native_written
@@ -941,20 +983,25 @@ mod tests {
                 "{label}: expected three modular AIRs"
             );
 
-            for pass in 0..2 {
-                let (direct_system, direct_arenas) = modular_dense_direct(&exe, &config, retired);
-                assert_system_records_eq(
-                    &format!("{label} modular direct-final byte oracle pass {pass}"),
-                    &oracle_system,
-                    &direct_system,
-                );
-                for &air in &modular_airs {
-                    assert_eq!(
-                        oracle_arenas[air].allocated(),
-                        direct_arenas[air].allocated(),
-                        "{label}, pass {pass}, air {air} ({}): direct-final bytes",
-                        air_names[air]
+            for compact_memory in [false, true] {
+                for pass in 0..2 {
+                    let (direct_system, direct_arenas) =
+                        modular_dense_direct(&exe, &config, retired, compact_memory);
+                    assert_system_records_eq(
+                        &format!(
+                            "{label} modular direct-final byte oracle compact={compact_memory} pass {pass}"
+                        ),
+                        &oracle_system,
+                        &direct_system,
                     );
+                    for &air in &modular_airs {
+                        assert_eq!(
+                            oracle_arenas[air].allocated(),
+                            direct_arenas[air].allocated(),
+                            "{label}, compact={compact_memory}, pass {pass}, air {air} ({}): direct-final bytes",
+                            air_names[air]
+                        );
+                    }
                 }
             }
             if label == "32-byte" {
@@ -1070,9 +1117,13 @@ mod tests {
             let exe = build_rvr_fp2_exe(&config, example)?;
             let (oracle_system, oracle_arenas, retired, fp2_airs) = fp2_dense_oracle(&exe, &config);
             for pass in 0..2 {
-                let (direct_system, direct_arenas) = fp2_dense_direct(&exe, &config, retired);
+                let compact_memory = pass == 1;
+                let (direct_system, direct_arenas) =
+                    fp2_dense_direct(&exe, &config, retired, compact_memory);
                 assert_system_records_eq(
-                    &format!("{label} Fp2 direct-final byte oracle pass {pass}"),
+                    &format!(
+                        "{label} Fp2 direct-final byte oracle compact={compact_memory} pass {pass}"
+                    ),
                     &oracle_system,
                     &direct_system,
                 );

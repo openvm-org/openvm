@@ -110,6 +110,10 @@ impl ExtInstr for EcAddNeInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
+        let emit_inline = self.emit_inline && ctx.inline_record_enabled();
+        if emit_inline {
+            ctx.write_line("preflight_begin_custom_memory_capture(state);");
+        }
         // Match Rv64VecHeapAdapter's memory-bus order: rs1, rs2, then rd.
         let rs1 = ctx.read_var(self.rs1_reg);
         let rs2 = ctx.read_var(self.rs2_reg);
@@ -122,7 +126,7 @@ impl ExtInstr for EcAddNeInstr {
         } else {
             ctx.emit_call(&name, &["state", &rd, &rs1, &rs2]);
         }
-        if self.emit_inline && ctx.inline_record_enabled() {
+        if emit_inline {
             emit_vec_heap_record(
                 ctx,
                 self.from_pc,
@@ -172,6 +176,10 @@ impl ExtInstr for EcDoubleInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
+        let emit_inline = self.emit_inline && ctx.inline_record_enabled();
+        if emit_inline {
+            ctx.write_line("preflight_begin_custom_memory_capture(state);");
+        }
         // Match Rv64VecHeapAdapter's memory-bus order: rs1, then rd.
         let rs1 = ctx.read_var(self.rs1_reg);
         let rd = ctx.read_var(self.rd_reg);
@@ -183,7 +191,7 @@ impl ExtInstr for EcDoubleInstr {
         } else {
             ctx.emit_call(&name, &["state", &rd, &rs1]);
         }
-        if self.emit_inline && ctx.inline_record_enabled() {
+        if emit_inline {
             emit_vec_heap_record(
                 ctx,
                 self.from_pc,

@@ -25,7 +25,10 @@ pub const PREFLIGHT_MEMORY_KIND_READ: u8 = 0;
 pub const PREFLIGHT_MEMORY_KIND_WRITE: u8 = 1;
 pub const PREFLIGHT_MEMORY_KIND_TOUCH: u8 = 2;
 
-pub const PREFLIGHT_PROGRAM_LOG_ENTRY_SIZE: usize = 24;
+/// Program chronology packs its writer-complete guard into bit 0 of the
+/// naturally four-byte-aligned OpenVM pc. The remaining fields are the
+/// timestamp and post-write value, giving a 16-byte side-log entry.
+pub const PREFLIGHT_PROGRAM_LOG_ENTRY_SIZE: usize = 16;
 pub const PREFLIGHT_PROGRAM_LOG_ENTRY_ALIGN: usize = 8;
 // R1: MemoryLogEntry is self-contained — it carries `prev_timestamp` (the
 // block's previous-access timestamp, from the C timestamp shadow) and
@@ -43,7 +46,7 @@ pub const PREFLIGHT_DELTA_MEMORY_LOG_ENTRY_ALIGN: usize = 8;
 // R3: the tracer gained a `chip_records` pointer for inline compact per-chip
 // record emission. ZG2 adds a direct execution-frequency buffer after it so
 // final-form records need no duplicate program-log row or host frequency scan.
-pub const PREFLIGHT_TRACER_DATA_SIZE: usize = 128;
+pub const PREFLIGHT_TRACER_DATA_SIZE: usize = 144;
 pub const PREFLIGHT_TRACER_DATA_ALIGN: usize = 8;
 /// One entry in the preflight touched-block buffer: the address space and the
 /// block-aligned byte address of a block touched (for the first time) this
