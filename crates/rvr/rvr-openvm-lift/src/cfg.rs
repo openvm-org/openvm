@@ -8,6 +8,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 
 use openvm_instructions::{
     program::DEFAULT_PC_STEP as INSTR_SIZE, riscv::RV64_NUM_REGISTERS as NUM_REGS,
+    DEFAULT_SEGMENT_CHECK_INSNS,
 };
 use rvr_openvm_ir::{AluOp, Block, Instr, InstrAt, LiftedInstr, MulDivOp, Terminator};
 
@@ -1296,7 +1297,7 @@ fn build_block_list(
 ) -> Vec<Block> {
     // Max block size; used to flush periodically so the segmentation check in
     // metered mode (which fires at block boundaries) stays granular enough.
-    const MAX_BLOCK_INSNS: u32 = rvr_openvm_ext_ffi_common::DEFAULT_SEGMENT_CHECK_INSNS;
+    const MAX_BLOCK_INSNS: u32 = DEFAULT_SEGMENT_CHECK_INSNS;
     let mut blocks: Vec<Block> = Vec::new();
 
     // Accumulate body instructions for the current block.

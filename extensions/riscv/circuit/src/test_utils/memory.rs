@@ -2,17 +2,14 @@ use std::array;
 #[cfg(feature = "cuda")]
 use std::sync::Arc;
 
-use openvm_circuit::{
-    arch::{
-        testing::{memory::gen_pointer, TestBuilder},
-        Arena, MemoryConfig, PreflightExecutor, BLOCK_FE_WIDTH,
-    },
-    system::memory::merkle::public_values::PUBLIC_VALUES_AS,
+use openvm_circuit::arch::{
+    testing::{memory::gen_pointer, TestBuilder},
+    Arena, MemoryConfig, PreflightExecutor, BLOCK_FE_WIDTH,
 };
 use openvm_instructions::{
     instruction::Instruction,
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
-    LocalOpcode,
+    LocalOpcode, PUBLIC_VALUES_AS,
 };
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{
     self, LOADBU, LOADD, LOADHU, LOADWU, STOREB, STORED, STOREH, STOREW,

@@ -76,8 +76,7 @@ static __attribute__((always_inline)) inline bool rv_pc_is_dispatchable(
 
 /* ── Guest memory pointer ────────────────────────────────────────── */
 
-/* GuardedMemory's mmap guard pages catch OOB. Buffer is page-aligned,
- * so guest multi-byte accesses are naturally aligned.
+/* Adjacent guard regions catch raw out-of-bounds accesses.
  * TODO: addr &= MEMORY_MASK for defense-in-depth. */
 static __attribute__((always_inline)) inline uint8_t* mem_ptr(
     uint8_t* restrict memory, uint64_t addr) {

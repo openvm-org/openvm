@@ -9,8 +9,9 @@ use derive_new::new;
 use getset::{Setters, WithSetters};
 use openvm_instructions::{
     riscv::{RV64_IMM_AS, RV64_MEMORY_AS, RV64_REGISTER_AS},
-    DEFERRAL_AS,
+    DEFERRAL_AS, DIGEST_WIDTH, PUBLIC_VALUES_AS,
 };
+use openvm_platform::memory::MEM_SIZE;
 use openvm_poseidon2_air::Poseidon2Config;
 #[cfg(feature = "rvr")]
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -29,10 +30,8 @@ use crate::{
     },
     system::{
         memory::{
-            merkle::public_values::{
-                assert_public_values_shape, public_values_cells_from_bytes, PUBLIC_VALUES_AS,
-            },
-            num_memory_airs, DIGEST_WIDTH, POINTER_MAX_BITS,
+            merkle::public_values::{assert_public_values_shape, public_values_cells_from_bytes},
+            num_memory_airs, POINTER_MAX_BITS,
         },
         SystemChipComplex,
     },
@@ -45,7 +44,7 @@ pub const DEFAULT_MAX_NUM_PUBLIC_VALUES: usize = 32;
 /// Max number of deferral address space cells
 pub const DEFAULT_DEFERRAL_ADDR_SPACE_CELLS: usize = 1 << 14;
 /// Width of Poseidon2 VM uses.
-pub const POSEIDON2_WIDTH: usize = 16;
+pub const POSEIDON2_WIDTH: usize = 2 * DIGEST_WIDTH;
 /// Offset for address space indices. This is used to distinguish between different memory spaces.
 pub const ADDR_SPACE_OFFSET: u32 = 1;
 
@@ -91,13 +90,8 @@ pub const BLOCK_FE_WIDTH: usize = 4;
 /// Bytes per memory-bus block.
 pub const MEMORY_BLOCK_BYTES: usize = BLOCK_FE_WIDTH * U16_CELL_SIZE;
 
-/// Default byte-pointer bit width.
-pub const BYTE_POINTER_MAX_BITS: usize = to_byte_ptr_bits(POINTER_MAX_BITS);
-
-/// Byte count for `RV64_MEMORY_AS`.
 // TODO: make executor debug bounds use `MemoryConfig::pointer_max_bits` once
 // execution state carries the memory config.
-pub const RV64_MEMORY_BYTES: usize = 1 << BYTE_POINTER_MAX_BITS;
 
 /// Number of registers in the RV64 register file.
 pub const NUM_RV64_REGISTERS: usize = 32;
@@ -250,7 +244,7 @@ impl Default for MemoryConfig {
         // RV64 register, memory, and public-values address spaces use u16 storage cells.
         addr_spaces[RV64_REGISTER_AS as usize].num_cells =
             NUM_RV64_REGISTERS * size_of::<u64>() / U16_CELL_SIZE;
-        addr_spaces[RV64_MEMORY_AS as usize].num_cells = RV64_MEMORY_BYTES / U16_CELL_SIZE;
+        addr_spaces[RV64_MEMORY_AS as usize].num_cells = MEM_SIZE / U16_CELL_SIZE;
         addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = DEFAULT_MAX_NUM_PUBLIC_VALUES;
         addr_spaces[DEFERRAL_AS as usize].num_cells = DEFAULT_DEFERRAL_ADDR_SPACE_CELLS;
         Self::new(3, addr_spaces, POINTER_MAX_BITS, 29, 17)

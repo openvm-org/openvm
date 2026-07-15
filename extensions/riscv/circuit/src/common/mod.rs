@@ -11,12 +11,12 @@ mod aot {
             execution_mode::{metered::memory_ctx::MemoryCtx, MeteredCtx},
             AotError, SystemConfig, VmExecState, ADDR_SPACE_OFFSET,
         },
-        system::memory::{
-            merkle::public_values::PUBLIC_VALUES_AS, online::GuestMemory, DIGEST_WIDTH,
-            DIGEST_WIDTH_BITS,
-        },
+        system::memory::{online::GuestMemory, DIGEST_WIDTH_BITS},
     };
-    use openvm_instructions::riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS};
+    use openvm_instructions::{
+        riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+        DIGEST_WIDTH, PUBLIC_VALUES_AS,
+    };
 
     /// The minimum block size is 4, but RISC-V `lb` only requires alignment of 1 and `lh` only
     /// requires alignment of 2 because the instructions are implemented by doing an access of

@@ -8,6 +8,7 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
+openvm-platform.workspace = true
 rvr-openvm-ext-ffi-common.workspace = true
 
 # `__private_bench` re-exports `blstrs::{Fp, Fp2, Fp12}`, which are otherwise

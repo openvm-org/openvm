@@ -9,8 +9,8 @@
 //!   extensions.
 
 use openvm_instructions::{
-    riscv::{RV64_IMM_AS, RV64_REGISTER_NUM_LIMBS},
-    LocalOpcode, SysPhantom, SystemOpcode,
+    riscv::{RV64_IMM_AS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    LocalOpcode, SysPhantom, SystemOpcode, PUBLIC_VALUES_AS,
 };
 use openvm_riscv_transpiler::{
     BaseAluImmOpcode, BaseAluOpcode, BaseAluWOpcode, BranchEqualOpcode, BranchLessThanOpcode,
@@ -18,7 +18,6 @@ use openvm_riscv_transpiler::{
     Rv64AuipcOpcode, Rv64JalLuiOpcode, Rv64JalrOpcode, Rv64LoadStoreOpcode, ShiftOpcode,
     ShiftWOpcode,
 };
-use rvr_openvm_ext_ffi_common::{AS_MEMORY, AS_PUBLIC_VALUES, AS_REGISTER};
 use rvr_openvm_ir::{
     AluOp, BranchCond, Instr, InstrAt, LiftedInstr, MemWidth, MulDivOp, Terminator,
 };
@@ -295,7 +294,7 @@ pub fn term(pc: u64, terminator: Terminator) -> LiftedInstr {
 }
 
 fn lift_alu_reg(insn: &RvrInstruction, pc: u64, op: AluOp) -> Option<LiftedInstr> {
-    if insn.d != AS_REGISTER || insn.e != AS_REGISTER {
+    if insn.d != RV64_REGISTER_AS || insn.e != RV64_REGISTER_AS {
         return None;
     }
 
@@ -332,7 +331,7 @@ fn lift_alu(insn: &RvrInstruction, pc: u64, e: u32, op: AluOp) -> LiftedInstr {
 }
 
 fn lift_alu_imm(insn: &RvrInstruction, pc: u64, op: AluOp) -> Option<LiftedInstr> {
-    if insn.d != AS_REGISTER || insn.e != RV64_IMM_AS {
+    if insn.d != RV64_REGISTER_AS || insn.e != RV64_IMM_AS {
         return None;
     }
 
@@ -385,12 +384,12 @@ fn lift_muldiv(insn: &RvrInstruction, pc: u64, op: MulDivOp) -> LiftedInstr {
 
 #[inline]
 fn is_memory_instruction(insn: &RvrInstruction) -> bool {
-    insn.d == AS_REGISTER && insn.e == AS_MEMORY
+    insn.d == RV64_REGISTER_AS && insn.e == RV64_MEMORY_AS
 }
 
 #[inline]
 fn is_public_values_instruction(insn: &RvrInstruction) -> bool {
-    insn.d == AS_REGISTER && insn.e == AS_PUBLIC_VALUES
+    insn.d == RV64_REGISTER_AS && insn.e == PUBLIC_VALUES_AS
 }
 
 fn lift_public_values_store(
@@ -605,7 +604,7 @@ fn lift_phantom(sys: SysPhantom, pc: u64) -> LiftedInstr {
 mod tests {
     use openvm_instructions::{
         instruction::Instruction,
-        riscv::{RV64_IMM_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+        riscv::{RV64_IMM_AS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
         LocalOpcode, DEFERRAL_AS, PUBLIC_VALUES_AS,
     };
     use openvm_riscv_transpiler::{
@@ -616,9 +615,7 @@ mod tests {
     };
     use p3_baby_bear::BabyBear;
 
-    use super::{
-        lift_instruction, AluOp, Instr, InstrAt, LiftedInstr, Terminator, AS_MEMORY, AS_REGISTER,
-    };
+    use super::{lift_instruction, AluOp, Instr, InstrAt, LiftedInstr, Terminator};
     use crate::{ExtensionRegistry, RvrInstruction};
 
     fn lift_babybear(
@@ -752,7 +749,15 @@ mod tests {
         for opcode in [LOADD, LOADBU, LOADHU, LOADWU, LOADB, LOADH, LOADW] {
             let inst = Instruction::<BabyBear>::from_usize(
                 opcode.global_opcode(),
-                [8, 16, 0, AS_MEMORY as usize, AS_MEMORY as usize, 1, 0],
+                [
+                    8,
+                    16,
+                    0,
+                    RV64_MEMORY_AS as usize,
+                    RV64_MEMORY_AS as usize,
+                    1,
+                    0,
+                ],
             );
 
             assert!(lift_babybear(&inst, 0x100, &extensions).is_none());
@@ -761,7 +766,15 @@ mod tests {
         for opcode in [STORED, STOREW, STOREH, STOREB] {
             let memory_inst = Instruction::<BabyBear>::from_usize(
                 opcode.global_opcode(),
-                [8, 16, 0, AS_MEMORY as usize, AS_MEMORY as usize, 1, 0],
+                [
+                    8,
+                    16,
+                    0,
+                    RV64_MEMORY_AS as usize,
+                    RV64_MEMORY_AS as usize,
+                    1,
+                    0,
+                ],
             );
             assert!(lift_babybear(&memory_inst, 0x100, &extensions).is_none());
 
@@ -771,7 +784,7 @@ mod tests {
                     8,
                     16,
                     0,
-                    AS_MEMORY as usize,
+                    RV64_MEMORY_AS as usize,
                     PUBLIC_VALUES_AS as usize,
                     1,
                     0,
@@ -781,7 +794,15 @@ mod tests {
 
             let valid_memory_inst = Instruction::<BabyBear>::from_usize(
                 opcode.global_opcode(),
-                [8, 16, 0, AS_REGISTER as usize, AS_MEMORY as usize, 1, 0],
+                [
+                    8,
+                    16,
+                    0,
+                    RV64_REGISTER_AS as usize,
+                    RV64_MEMORY_AS as usize,
+                    1,
+                    0,
+                ],
             );
             assert!(lift_babybear(&valid_memory_inst, 0x100, &extensions).is_some());
         }

@@ -11,4 +11,5 @@ repository.workspace = true
 crate-type = ["staticlib"]
 
 [dependencies]
+openvm-platform.workspace = true
 rvr-openvm-ext-ffi-common.workspace = true

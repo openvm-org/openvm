@@ -64,6 +64,8 @@ static __attribute__((always_inline)) inline void check_mem_bounds_range(
   if (unlikely(start > OPENVM_MEM_SIZE || size > OPENVM_MEM_SIZE - start)) {
     abort_oob(start, size, OPENVM_MEM_SIZE);
   }
+  assume(start <= OPENVM_MEM_SIZE);
+  assume(size <= OPENVM_MEM_SIZE - start);
 }
 
 static __attribute__((always_inline)) inline void check_mem_bounds_u64_range(

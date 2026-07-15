@@ -12,7 +12,9 @@ use openvm_circuit_primitives::{
     Chip,
 };
 use openvm_cpu_backend::{CpuBackend, CpuDevice};
-use openvm_instructions::{LocalOpcode, PhantomDiscriminant, SysPhantom, SystemOpcode};
+use openvm_instructions::{
+    LocalOpcode, PhantomDiscriminant, SysPhantom, SystemOpcode, DIGEST_WIDTH,
+};
 use openvm_stark_backend::{
     interaction::{LookupBus, PermutationCheckBus},
     p3_field::PrimeField32,
@@ -36,7 +38,7 @@ use crate::{
         memory::{
             offline_checker::{MemoryBridge, MemoryBus},
             online::GuestMemory,
-            MemoryAirInventory, MemoryController, TimestampedEquipartition, DIGEST_WIDTH,
+            MemoryAirInventory, MemoryController, TimestampedEquipartition,
         },
         phantom::{
             CycleEndPhantomExecutor, CycleStartPhantomExecutor, NopPhantomExecutor, PhantomAir,

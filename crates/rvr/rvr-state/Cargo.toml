@@ -6,7 +6,3 @@ authors.workspace = true
 edition.workspace = true
 homepage.workspace = true
 repository.workspace = true
-
-[dependencies]
-thiserror.workspace = true
-nix.workspace = true

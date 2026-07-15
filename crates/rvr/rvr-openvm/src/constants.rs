@@ -4,24 +4,24 @@
 //! both the C tracer struct layout and the Rust-side `SegmentationState`
 //! buffer allocations — they must match byte-for-byte.
 
-use openvm_platform::memory::MEM_SIZE;
-use openvm_riscv_guest::MAX_HINT_BUFFER_DWORDS;
-use rvr_openvm_ext_ffi_common::{
-    AS_MEMORY, AS_PUBLIC_VALUES, AS_REGISTER, DEFAULT_SEGMENT_CHECK_INSNS, DEFERRAL_AS,
-    DEFERRAL_DIGEST_SIZE, PAGE_BITS, WORD_SIZE,
+use openvm_instructions::{
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    DEFAULT_SEGMENT_CHECK_INSNS, DEFERRAL_AS, DIGEST_WIDTH, MEMORY_PAGE_BITS, PUBLIC_VALUES_AS,
 };
+use openvm_platform::{memory::MEM_SIZE, WORD_SIZE};
+use openvm_riscv_guest::MAX_HINT_BUFFER_DWORDS;
 
-const BYTE_SPACE_PTRS_PER_LEAF: usize = core::mem::size_of::<u16>() * DEFERRAL_DIGEST_SIZE;
-const DEFERRAL_PTRS_PER_LEAF: usize = DEFERRAL_DIGEST_SIZE;
+const BYTE_SPACE_PTRS_PER_LEAF: usize = core::mem::size_of::<u16>() * DIGEST_WIDTH;
+const DEFERRAL_PTRS_PER_LEAF: usize = DIGEST_WIDTH;
 
 /// Worst-case AS_MEMORY pages a single instruction can touch.
 ///
 /// Bound is set by `HINT_BUFFER`, which writes up to
 /// `MAX_HINT_BUFFER_DWORDS * WORD_SIZE` contiguous bytes. One AS_MEMORY page
-/// covers `BYTE_SPACE_PTRS_PER_LEAF * 2^PAGE_BITS` bytes. The `+1` covers worst-case
+/// covers `BYTE_SPACE_PTRS_PER_LEAF * 2^MEMORY_PAGE_BITS` bytes. The `+1` covers worst-case
 /// misalignment of the range across page boundaries.
 pub const MAX_MEM_PAGES_PER_INSN: usize = {
-    let page_bytes = BYTE_SPACE_PTRS_PER_LEAF * (1 << PAGE_BITS);
+    let page_bytes = BYTE_SPACE_PTRS_PER_LEAF * (1 << MEMORY_PAGE_BITS);
     let max_bytes = MAX_HINT_BUFFER_DWORDS * WORD_SIZE;
     max_bytes.div_ceil(page_bytes) + 1
 };
@@ -59,18 +59,18 @@ pub fn constants_header(text_start: u64, text_end: u64, dispatch_table_size: usi
 #include <stdint.h>
 
 static constexpr uint64_t MEMORY_MASK = 0x{memory_mask:x}ull;
-static constexpr uint32_t AS_REGISTER = {AS_REGISTER};
-static constexpr uint32_t AS_MEMORY = {AS_MEMORY};
-static constexpr uint32_t AS_PUBLIC_VALUES = {AS_PUBLIC_VALUES};
+static constexpr uint32_t AS_REGISTER = {RV64_REGISTER_AS};
+static constexpr uint32_t AS_MEMORY = {RV64_MEMORY_AS};
+static constexpr uint32_t AS_PUBLIC_VALUES = {PUBLIC_VALUES_AS};
 static constexpr uint32_t AS_DEFERRAL = {DEFERRAL_AS};
 static constexpr uint32_t WORD_SIZE = {WORD_SIZE};
-static constexpr uint32_t DEFERRAL_DIGEST_SIZE = {DEFERRAL_DIGEST_SIZE};
+static constexpr uint32_t DEFERRAL_DIGEST_SIZE = {DIGEST_WIDTH};
 static constexpr uint64_t RV_TEXT_START = 0x{text_start:08x}ull;
 static constexpr uint64_t RV_TEXT_END = 0x{text_end:08x}ull;
 static constexpr uint32_t RV_DISPATCH_TABLE_SIZE = {dispatch_table_size}u;
 static constexpr uint32_t TRACER_BYTE_SPACE_PTRS_PER_LEAF_BITS = {byte_space_ptrs_per_leaf_bits};
 static constexpr uint32_t TRACER_DEFERRAL_PTRS_PER_LEAF_BITS = {deferral_ptrs_per_leaf_bits};
-static constexpr uint32_t TRACER_PAGE_BITS = {PAGE_BITS};
+static constexpr uint32_t TRACER_PAGE_BITS = {MEMORY_PAGE_BITS};
 static constexpr uint32_t TRACER_MEM_PAGE_BUF_CAP = {MEM_PAGE_BUF_CAP};
 static constexpr uint32_t TRACER_PV_PAGE_BUF_CAP = {PV_PAGE_BUF_CAP};
 static constexpr uint32_t TRACER_DEFERRAL_PAGE_BUF_CAP = {DEFERRAL_PAGE_BUF_CAP};
