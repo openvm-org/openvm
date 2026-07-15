@@ -813,6 +813,7 @@ where
     RA: Rv64IRecordArena<F>,
 {
     fn extend_rvr_log_native(&self, registry: &mut LogNativeAssemblerRegistry<F, RA>) {
+        registry.register_delta_decode(crate::rvr_gpu_decode::gpu_decode_precompute::<F>);
         registry.register(
             [BaseAluOpcode::ADD, BaseAluOpcode::SUB].map(|opcode| opcode.global_opcode()),
             assemble_add_sub::<F, RA>,
@@ -1401,6 +1402,22 @@ where
             ]
             .map(|opcode| opcode.global_opcode()),
             DeltaAccessPattern::Store,
+        );
+        registry.register_delta_store_width(
+            [Rv64LoadStoreOpcode::STORED].map(|opcode| opcode.global_opcode()),
+            8,
+        );
+        registry.register_delta_store_width(
+            [Rv64LoadStoreOpcode::STOREW].map(|opcode| opcode.global_opcode()),
+            4,
+        );
+        registry.register_delta_store_width(
+            [Rv64LoadStoreOpcode::STOREH].map(|opcode| opcode.global_opcode()),
+            2,
+        );
+        registry.register_delta_store_width(
+            [Rv64LoadStoreOpcode::STOREB].map(|opcode| opcode.global_opcode()),
+            1,
         );
         registry.register(
             [BaseAluOpcode::XOR, BaseAluOpcode::OR, BaseAluOpcode::AND]

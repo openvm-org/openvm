@@ -9,7 +9,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::{
     PreflightMemoryAccessAux, ProgramLogEntry, RvrDeltaRecords, RvrInlineChipRecords,
-    RvrPreflightOutput, PREFLIGHT_DELTA_RECORD_SIZE,
+    RvrPreflightOutput, PREFLIGHT_DELTA_RECORD_SIZE, PREFLIGHT_MEMORY_KIND_WRITE,
 };
 use crate::arch::{Arena, ExecutionError};
 
@@ -138,6 +138,8 @@ struct RegisteredInlineAssembler<F, RA> {
     /// R3 compact wire + host expansion, so R4 rolls out shape by shape.
     arena_native: Option<ArenaNativeGeometry>,
     delta_pattern: Option<DeltaAccessPattern>,
+    /// Width used to reconstruct a Store-pattern block update from v2.
+    delta_store_width: Option<u8>,
 }
 
 /// How one chronological Stage-2 delta record touches timestamp-shadow
@@ -155,10 +157,43 @@ pub enum DeltaAccessPattern {
     Rw1,
 }
 
+/// One compiled-program operand-table entry for the CUDA delta decoder.
+///
+/// The owning extension derives these fields once during preflight AOT
+/// compilation. Keeping the ABI-shaped value in `openvm-circuit` lets the
+/// compiled artifact retain it without making the VM crate depend on a
+/// particular extension's opcode enum.
+#[repr(C)]
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
+pub struct RvrDeltaDecodeEntry {
+    pub a: u32,
+    pub b: u32,
+    pub c: u32,
+    pub flags: u8,
+    pub local_opcode: u8,
+    pub air_idx: u8,
+    pub access_pattern: u8,
+}
+
+const _: () = assert!(core::mem::size_of::<RvrDeltaDecodeEntry>() == 16);
+const _: () = assert!(core::mem::align_of::<RvrDeltaDecodeEntry>() == 4);
+
+/// Extension-independent result of classifying one program instruction for
+/// delta decode. `kind` is the owning extension's stable `repr(u8)` decoder
+/// discriminant.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RvrDeltaDecodeInfo {
+    pub entry: RvrDeltaDecodeEntry,
+    pub kind: u8,
+}
+
+type RvrDeltaDecodeFn<F> = fn(&Instruction<F>) -> Option<RvrDeltaDecodeInfo>;
+
 /// Opcode-keyed registry of log-native record assemblers.
 pub struct LogNativeAssemblerRegistry<F, RA> {
     assemblers: HashMap<VmOpcode, RegisteredAssembler<F, RA>>,
     inline_assemblers: HashMap<VmOpcode, RegisteredInlineAssembler<F, RA>>,
+    delta_decode: Option<RvrDeltaDecodeFn<F>>,
 }
 
 impl<F, RA> LogNativeAssemblerRegistry<F, RA> {
@@ -166,7 +201,19 @@ impl<F, RA> LogNativeAssemblerRegistry<F, RA> {
         Self {
             assemblers: HashMap::new(),
             inline_assemblers: HashMap::new(),
+            delta_decode: None,
         }
+    }
+
+    /// Register the program-only delta operand/classification derivation.
+    /// This is deliberately one callback for the composed RV64 decoder: AIR
+    /// taint must be computed across every opcode routed to the AIR, not from
+    /// a collection of independently partial family registries.
+    pub fn register_delta_decode(&mut self, decode: RvrDeltaDecodeFn<F>) {
+        assert!(
+            self.delta_decode.replace(decode).is_none(),
+            "multiple RVR delta decode classifiers registered"
+        );
     }
 
     /// Register the compact-record assembler for opcodes the preflight codegen
@@ -214,6 +261,7 @@ impl<F, RA> LogNativeAssemblerRegistry<F, RA> {
                             assemble: assembler,
                             arena_native,
                             delta_pattern: None,
+                            delta_store_width: None,
                         }
                     )
                     .is_none(),
@@ -239,6 +287,27 @@ impl<F, RA> LogNativeAssemblerRegistry<F, RA> {
             assert!(
                 registered.delta_pattern.replace(pattern).is_none(),
                 "multiple delta patterns registered for opcode {opcode:?}"
+            );
+        }
+    }
+
+    /// Attach the byte width for a Stage-2 Store-pattern opcode. The delta
+    /// record carries the scalar source while CPU/CUDA replay patches the
+    /// seeded pre-write block.
+    pub fn register_delta_store_width(
+        &mut self,
+        opcodes: impl IntoIterator<Item = VmOpcode>,
+        width: u8,
+    ) {
+        assert!(matches!(width, 1 | 2 | 4 | 8));
+        for opcode in opcodes {
+            let registered = self.inline_assemblers.get_mut(&opcode).unwrap_or_else(|| {
+                panic!("delta store width without inline assembler for {opcode:?}")
+            });
+            assert_eq!(registered.delta_pattern, Some(DeltaAccessPattern::Store));
+            assert!(
+                registered.delta_store_width.replace(width).is_none(),
+                "multiple delta store widths registered for opcode {opcode:?}"
             );
         }
     }
@@ -364,6 +433,17 @@ pub trait LogNativeOpcodeAdmitter<F> {
     ) -> Option<ArenaNativeGeometry> {
         None
     }
+
+    /// AOT-only operand/classification derivation for the CUDA delta decoder.
+    fn delta_decode_for(&self, _instruction: &Instruction<F>) -> Option<RvrDeltaDecodeInfo> {
+        None
+    }
+
+    /// Distinguishes an available classifier whose valid result is empty
+    /// from a registry that cannot precompute delta decode at all.
+    fn has_delta_decode(&self) -> bool {
+        false
+    }
 }
 
 impl<F, RA> LogNativeOpcodeAdmitter<F> for LogNativeAssemblerRegistry<F, RA> {
@@ -376,6 +456,14 @@ impl<F, RA> LogNativeOpcodeAdmitter<F> for LogNativeAssemblerRegistry<F, RA> {
         instruction: &Instruction<F>,
     ) -> Option<ArenaNativeGeometry> {
         self.inline_arena_geometry(&instruction.opcode)
+    }
+
+    fn delta_decode_for(&self, instruction: &Instruction<F>) -> Option<RvrDeltaDecodeInfo> {
+        self.delta_decode.and_then(|decode| decode(instruction))
+    }
+
+    fn has_delta_decode(&self) -> bool {
+        self.delta_decode.is_some()
     }
 }
 
@@ -750,6 +838,45 @@ fn replay_delta_touches(
     prev
 }
 
+fn delta_write_slot<F: PrimeField32>(
+    instruction: &Instruction<F>,
+    pattern: DeltaAccessPattern,
+) -> Option<usize> {
+    match pattern {
+        DeltaAccessPattern::Alu3 | DeltaAccessPattern::Alu3Reg | DeltaAccessPattern::Store => {
+            Some(2)
+        }
+        DeltaAccessPattern::Load => instruction.f.is_one().then_some(2),
+        DeltaAccessPattern::Branch2 => None,
+        DeltaAccessPattern::Wr1 => instruction.f.is_one().then_some(0),
+        DeltaAccessPattern::Wr1Always => Some(0),
+        DeltaAccessPattern::Rw1 => instruction.f.is_one().then_some(1),
+    }
+}
+
+fn patch_delta_store<F: PrimeField32>(
+    instruction: &Instruction<F>,
+    width: u8,
+    previous: u64,
+    base: u64,
+    value: u64,
+) -> u64 {
+    let imm = instruction.c.as_canonical_u32() as u16;
+    let offset = if instruction.g.is_one() {
+        i64::from(imm as i16)
+    } else {
+        i64::from(imm)
+    };
+    let address = (base as u32).wrapping_add(offset as u32);
+    let shift = (address & 7) * 8;
+    let mask = if width == 8 {
+        u64::MAX
+    } else {
+        (1u64 << (u32::from(width) * 8)) - 1
+    };
+    (previous & !(mask << shift)) | ((value & mask) << shift)
+}
+
 /// CPU oracle for the Stage-2 device predecoder. It converts the global
 /// chronological 32-byte stream back into the established per-AIR compact
 /// wires. The production GPU path will perform the same merge/partition on
@@ -801,6 +928,16 @@ fn expand_delta_records<F: PrimeField32, RA: Arena>(
     // record; inline accesses themselves never appear in that log.
     let mut residual = 0usize;
     let mut last_touch: HashMap<(u8, u64), u32> = HashMap::new();
+    let mut current_value = HashMap::with_capacity(output.raw_logs.touched.len());
+    for seed in &output.raw_logs.touched {
+        let key = (seed.addr_space as u8, u64::from(seed.block_addr));
+        if current_value.insert(key, seed.initial_value).is_some() {
+            return Err(rvr_error(format!(
+                "duplicate delta first-touch seed for address space {} block {:#x}",
+                seed.addr_space, seed.block_addr
+            )));
+        }
+    }
     let mut per_air: std::collections::BTreeMap<usize, (usize, Vec<u8>)> =
         std::collections::BTreeMap::new();
     let mut synthetic_program = Vec::with_capacity(delta_bytes.len() / PREFLIGHT_DELTA_RECORD_SIZE);
@@ -830,16 +967,16 @@ fn expand_delta_records<F: PrimeField32, RA: Arena>(
         if !arena_native_airs.contains(&air_idx) {
             continue;
         }
-        let pattern = registry
+        let Some(pattern) = registry
             .inline_assemblers
             .get(&instruction.opcode)
             .and_then(|registered| registered.delta_pattern)
-            .ok_or_else(|| {
-                rvr_error(format!(
-                    "arena-native chronology pc {pc:#x} opcode {:?} has no delta access pattern",
-                    instruction.opcode
-                ))
-            })?;
+        else {
+            // Custom direct-final records retain their own residual memory
+            // events when needed; only base W families use the synthetic
+            // program-log chronology decoded here.
+            continue;
+        };
         if !matches!(
             pattern,
             DeltaAccessPattern::Alu3 | DeltaAccessPattern::Alu3Reg
@@ -849,18 +986,38 @@ fn expand_delta_records<F: PrimeField32, RA: Arena>(
                 instruction.opcode
             )));
         }
-        arena_events.push((entry.timestamp, pc, pattern));
+        if entry.write_complete != 1 {
+            return Err(rvr_error(format!(
+                "arena-native chronology pc {pc:#x} opcode {:?} omitted its post-write value",
+                instruction.opcode
+            )));
+        }
+        arena_events.push((entry.timestamp, pc, pattern, entry.write_value));
     }
     let mut arena_event = 0usize;
     let merge_residual_before =
-        |timestamp: u32, residual: &mut usize, last_touch: &mut HashMap<(u8, u64), u32>| {
+        |timestamp: u32,
+         residual: &mut usize,
+         last_touch: &mut HashMap<(u8, u64), u32>,
+         current_value: &mut HashMap<(u8, u64), u64>| {
             while let Some(entry) = output.raw_logs.memory_log.get(*residual) {
                 if entry.timestamp >= timestamp {
                     break;
                 }
-                last_touch.insert((entry.addr_space, entry.address & !7u64), entry.timestamp);
+                let key = (entry.addr_space, entry.address & !7u64);
+                if !current_value.contains_key(&key) {
+                    return Err(rvr_error(format!(
+                        "delta residual event at timestamp {} has no first-touch seed",
+                        entry.timestamp
+                    )));
+                }
+                last_touch.insert(key, entry.timestamp);
+                if entry.kind == PREFLIGHT_MEMORY_KIND_WRITE {
+                    current_value.insert(key, entry.value);
+                }
                 *residual += 1;
             }
+            Ok(())
         };
 
     let delta_record_count = delta_bytes.len() / PREFLIGHT_DELTA_RECORD_SIZE;
@@ -883,25 +1040,49 @@ fn expand_delta_records<F: PrimeField32, RA: Arena>(
                 record.from_pc, record.from_timestamp
             )));
         }
-        while let Some(&(timestamp, pc, pattern)) = arena_events.get(arena_event) {
+        while let Some(&(timestamp, pc, pattern, write_value)) = arena_events.get(arena_event) {
             if timestamp >= record.from_timestamp {
                 break;
             }
-            merge_residual_before(timestamp, &mut residual, &mut last_touch);
+            merge_residual_before(
+                timestamp,
+                &mut residual,
+                &mut last_touch,
+                &mut current_value,
+            )?;
             let Some((instruction, _, _)) = instruction_and_air_idx(exe, pc_to_air_idx, pc)? else {
                 return Err(rvr_error(format!(
                     "arena-native chronology pc {pc:#x} has no routed AIR"
                 )));
             };
+            let accesses = delta_accesses(instruction, pattern, 0);
             replay_delta_touches(
                 &mut last_touch,
-                delta_accesses(instruction, pattern, 0),
+                accesses,
                 delta_access_count(pattern),
                 timestamp,
             );
+            if let Some(slot) = delta_write_slot(instruction, pattern) {
+                let key = accesses[slot].ok_or_else(|| {
+                    rvr_error(format!(
+                        "arena-native chronology pc {pc:#x} omitted its write address"
+                    ))
+                })?;
+                if !current_value.contains_key(&key) {
+                    return Err(rvr_error(format!(
+                        "arena-native chronology pc {pc:#x} has no first-touch seed"
+                    )));
+                }
+                current_value.insert(key, write_value);
+            }
             arena_event += 1;
         }
-        merge_residual_before(record.from_timestamp, &mut residual, &mut last_touch);
+        merge_residual_before(
+            record.from_timestamp,
+            &mut residual,
+            &mut last_touch,
+            &mut current_value,
+        )?;
 
         let Some((instruction, air_idx, _)) =
             instruction_and_air_idx(exe, pc_to_air_idx, record.from_pc)?
@@ -927,12 +1108,40 @@ fn expand_delta_records<F: PrimeField32, RA: Arena>(
             ))
         })?;
 
+        let accesses = delta_accesses(instruction, pattern, record.v1);
         let prev = replay_delta_touches(
             &mut last_touch,
-            delta_accesses(instruction, pattern, record.v1),
+            accesses,
             delta_access_count(pattern),
             record.from_timestamp,
         );
+        let mut write_prev_value = 0;
+        if let Some(slot) = delta_write_slot(instruction, pattern) {
+            let key = accesses[slot].ok_or_else(|| {
+                rvr_error(format!(
+                    "delta pc {:#x} omitted its write address",
+                    record.from_pc
+                ))
+            })?;
+            write_prev_value = current_value.get(&key).copied().ok_or_else(|| {
+                rvr_error(format!(
+                    "delta pc {:#x} has no first-touch seed for write {:?}",
+                    record.from_pc, key
+                ))
+            })?;
+            let write_value = if pattern == DeltaAccessPattern::Store {
+                let width = registered.delta_store_width.ok_or_else(|| {
+                    rvr_error(format!(
+                        "delta store pc {:#x} has no registered patch width",
+                        record.from_pc
+                    ))
+                })?;
+                patch_delta_store(instruction, width, write_prev_value, record.v1, record.v2)
+            } else {
+                record.v0
+            };
+            current_value.insert(key, write_value);
+        }
 
         let (stride, out) = per_air
             .entry(air_idx)
@@ -953,7 +1162,7 @@ fn expand_delta_records<F: PrimeField32, RA: Arena>(
                 append_u32(out, prev[0]);
                 append_u32(out, prev[1]);
                 append_u32(out, prev[2]);
-                append_u64(out, record.v0);
+                append_u64(out, write_prev_value);
                 append_u64(out, record.v1);
                 append_u64(out, record.v2);
             }
@@ -965,39 +1174,59 @@ fn expand_delta_records<F: PrimeField32, RA: Arena>(
             }
             DeltaAccessPattern::Wr1 | DeltaAccessPattern::Wr1Always => {
                 append_u32(out, prev[0]);
-                append_u64(out, record.v0);
+                append_u64(out, write_prev_value);
             }
             DeltaAccessPattern::Rw1 => {
                 append_u32(out, prev[0]);
                 append_u32(out, prev[1]);
                 append_u64(out, record.v1);
-                append_u64(out, record.v0);
+                append_u64(out, write_prev_value);
             }
         }
         synthetic_program.push(ProgramLogEntry {
             opcode: 0,
-            _pad0: 0,
+            write_complete: 0,
             timestamp: record.from_timestamp,
             pc: u64::from(record.from_pc),
+            write_value: 0,
         });
     }
 
     // No later delta record consumes these touches, but replay the suffix to
     // keep the CPU oracle's chronology complete and validate every retained
     // arena-native event against its compiled access pattern.
-    while let Some(&(timestamp, pc, pattern)) = arena_events.get(arena_event) {
-        merge_residual_before(timestamp, &mut residual, &mut last_touch);
+    while let Some(&(timestamp, pc, pattern, write_value)) = arena_events.get(arena_event) {
+        merge_residual_before(
+            timestamp,
+            &mut residual,
+            &mut last_touch,
+            &mut current_value,
+        )?;
         let Some((instruction, _, _)) = instruction_and_air_idx(exe, pc_to_air_idx, pc)? else {
             return Err(rvr_error(format!(
                 "arena-native chronology pc {pc:#x} has no routed AIR"
             )));
         };
+        let accesses = delta_accesses(instruction, pattern, 0);
         replay_delta_touches(
             &mut last_touch,
-            delta_accesses(instruction, pattern, 0),
+            accesses,
             delta_access_count(pattern),
             timestamp,
         );
+        if let Some(slot) = delta_write_slot(instruction, pattern) {
+            let key = accesses[slot].ok_or_else(|| {
+                rvr_error(format!(
+                    "arena-native chronology pc {pc:#x} omitted its write address"
+                ))
+            })?;
+            if !current_value.contains_key(&key) {
+                return Err(rvr_error(format!(
+                    "arena-native chronology pc {pc:#x} has no first-touch seed"
+                )));
+            }
+            current_value.insert(key, write_value);
+        }
         arena_event += 1;
     }
 

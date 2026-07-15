@@ -66,9 +66,13 @@ pub const PREFLIGHT_DELTA_RECORD_SIZE: usize =
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ProgramLogEntry {
     pub opcode: u16,
-    pub _pad0: u16,
+    /// Set only when an arena-native instruction has supplied the complete
+    /// post-write value needed by delta chronology reconstruction.
+    pub write_complete: u16,
     pub timestamp: u32,
     pub pc: u64,
+    /// Post-write register block for arena-native W-family chronology.
+    pub write_value: u64,
 }
 
 /// C-compatible preflight memory log entry.
@@ -106,6 +110,8 @@ pub struct MemoryLogEntry {
 pub struct TouchedBlock {
     pub addr_space: u32,
     pub block_addr: u32,
+    /// Block contents immediately before this segment's first access.
+    pub initial_value: u64,
 }
 
 /// C-compatible per-chip inline-record buffer descriptor (R3/R4).
@@ -338,6 +344,8 @@ pub struct PreflightRawLogs {
     pub program_log: Vec<ProgramLogEntry>,
     pub memory_log: Vec<MemoryLogEntry>,
     pub chip_counts: Vec<u32>,
+    /// First-touch seeds retained until delta replay has completed.
+    pub touched: Vec<TouchedBlock>,
 }
 
 /// One migrated chip's inline compact records for a segment, written by the
@@ -406,6 +414,29 @@ impl RvrDeltaRecords {
             .as_ref()
             .expect("delta backing already returned")[self.offset..self.offset + self.written]
     }
+
+    /// Return the host chronology inputs after a device decoder has
+    /// synchronized their H2D copies. They originate from the same compiled
+    /// executor pool as this delta backing and would otherwise be freed when
+    /// the device-bound segment is dropped.
+    #[doc(hidden)]
+    pub fn recycle_device_inputs(
+        &self,
+        program_log: Vec<ProgramLogEntry>,
+        memory_log: Vec<MemoryLogEntry>,
+        touched: Vec<TouchedBlock>,
+    ) {
+        self.pool.recycle_segment_buffers(
+            PreflightRawLogs {
+                program_log,
+                memory_log,
+                chip_counts: Vec::new(),
+                touched,
+            },
+            Vec::new(),
+            None,
+        );
+    }
 }
 
 impl Drop for RvrDeltaRecords {
@@ -439,6 +470,10 @@ pub struct RvrPreflightOutput<F> {
     /// record — its memory-log entries are suppressed, so record assembly must
     /// skip the log assembler for it and consume `inline_records` instead.
     pub inline_pc_slots: Arc<Vec<bool>>,
+    /// AOT-persisted operand table and whole-AIR classification for the CUDA
+    /// delta decoder. This shares the compiled metadata lifetime and is
+    /// loaded by pointer identity when the cached VM is constructed.
+    pub delta_decode_precomputed: Option<Arc<super::RvrDeltaDecodePrecompute>>,
     /// R4: `(air_idx, written_record_count)` for airs whose records the C
     /// wrote arena-native into caller-provided targets. Record assembly must
     /// skip BOTH the log assembler and the inline assembler for these airs
@@ -1081,7 +1116,12 @@ where
             &touched,
         );
         pool.recycle_shadows(shadow_register, shadow_memory, shadow_public_values);
-        pool.recycle_touched(touched);
+        let touched = if inline_meta.delta_records {
+            touched
+        } else {
+            pool.recycle_touched(touched);
+            Vec::new()
+        };
         let scratch_recycled = std::time::Instant::now();
         let filtered_exec_frequencies = exec_frequencies;
         let to_state = ExecutionState::new(run_state.pc(), tracer.timestamp);
@@ -1192,6 +1232,7 @@ where
                 program_log,
                 memory_log,
                 chip_counts,
+                touched,
             },
             access_aux: replay.access_aux,
             access_aux_complete: build_access_aux,
@@ -1201,6 +1242,7 @@ where
             inline_records,
             delta_records,
             inline_pc_slots: inline_meta.pc_slots.clone(),
+            delta_decode_precomputed: inline_meta.delta_decode.clone(),
             arena_native_written,
             arena_native_written_bytes,
         });

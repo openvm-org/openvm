@@ -11,8 +11,15 @@
 
 #[cfg(feature = "rvr")]
 use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, Mutex};
+use std::{
+    mem::{align_of, size_of},
+    sync::{Arc, Mutex},
+};
 
+#[cfg(feature = "rvr")]
+use openvm_circuit::arch::rvr::{
+    RvrDeltaDecodeEntry, RvrDeltaDecodeInfo, RvrDeltaDecodePrecompute,
+};
 #[cfg(feature = "cuda")]
 use openvm_cuda_common::{
     copy::{MemCopyD2H, MemCopyH2D},
@@ -41,20 +48,7 @@ use crate::log_native::derive_base_alu_u16_operands;
 /// `c` = rs2 (register ptr or immediate), flags carry rs2_as/imm-sign, and
 /// `local_opcode` is the class-local opcode index for the owning AIR.
 /// Mirrored by the CUDA `RvrOperandEntry` (static-asserted there).
-#[repr(C)]
-#[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
-pub struct DeviceOperandEntry {
-    pub a: u32,
-    pub b: u32,
-    pub c: u32,
-    pub flags: u8,
-    pub local_opcode: u8,
-    /// Global AIR index for this program slot. `u8::MAX` marks an unsupported
-    /// slot; the VM's AIR count is checked before binding a delta segment.
-    pub air_idx: u8,
-    /// [`DeviceDeltaAccessPattern`] used by the global delta predecoder.
-    pub access_pattern: u8,
-}
+pub type DeviceOperandEntry = RvrDeltaDecodeEntry;
 
 const _: () = assert!(size_of::<DeviceOperandEntry>() == 16);
 const _: () = assert!(align_of::<DeviceOperandEntry>() == 4);
@@ -125,6 +119,32 @@ pub enum DeltaAirKind {
 
 impl DeltaAirKind {
     pub const COUNT: usize = 20;
+
+    fn from_repr(value: u8) -> Option<Self> {
+        Some(match value {
+            0 => Self::AddSub,
+            1 => Self::Bitwise,
+            2 => Self::LessThan,
+            3 => Self::ShiftLogical,
+            4 => Self::ShiftRightArithmetic,
+            5 => Self::AddSubW,
+            6 => Self::ShiftWLogical,
+            7 => Self::ShiftWRightArithmetic,
+            8 => Self::LoadStore,
+            9 => Self::LoadSignExtend,
+            10 => Self::BranchEqual,
+            11 => Self::BranchLessThan,
+            12 => Self::JalLui,
+            13 => Self::Jalr,
+            14 => Self::Auipc,
+            15 => Self::Mul,
+            16 => Self::MulH,
+            17 => Self::MulW,
+            18 => Self::DivRem,
+            19 => Self::DivRemW,
+            _ => return None,
+        })
+    }
 
     pub const fn wire_size(self) -> usize {
         use openvm_circuit::arch::rvr::{
@@ -197,6 +217,7 @@ struct HostDeltaSegment {
     delta: openvm_circuit::arch::rvr::RvrDeltaRecords,
     memory_log: Vec<openvm_circuit::arch::rvr::MemoryLogEntry>,
     program_log: Vec<openvm_circuit::arch::rvr::ProgramLogEntry>,
+    touched: Vec<openvm_circuit::arch::rvr::TouchedBlock>,
     arena_native_flags: Vec<u8>,
     specs: Vec<DeltaAirSpec>,
 }
@@ -248,6 +269,7 @@ impl RvrGpuDecodeState {
         exe: &VmExe<F>,
         pc_to_air_idx: &[Option<usize>],
         compiled_identity: &Arc<Vec<bool>>,
+        precomputed: Option<&RvrDeltaDecodePrecompute>,
     ) -> HashMap<DeltaAirKind, usize> {
         let mut table = self.table.lock().unwrap();
         let rebuild = table
@@ -255,11 +277,20 @@ impl RvrGpuDecodeState {
             .map(|t| !Arc::ptr_eq(&t.compiled_identity, compiled_identity))
             .unwrap_or(true);
         if rebuild {
-            *table = Some(build_operand_table(
-                exe,
-                Arc::clone(compiled_identity),
-                pc_to_air_idx,
-            ));
+            let bound = if let Some(precomputed) = precomputed {
+                let precomputed =
+                    host_table_from_precomputed(Arc::clone(compiled_identity), precomputed);
+                #[cfg(debug_assertions)]
+                {
+                    let lazy =
+                        build_operand_table(exe, Arc::clone(compiled_identity), pc_to_air_idx);
+                    assert_host_tables_equal(&precomputed, &lazy);
+                }
+                precomputed
+            } else {
+                build_operand_table(exe, Arc::clone(compiled_identity), pc_to_air_idx)
+            };
+            *table = Some(bound);
             #[cfg(feature = "cuda")]
             {
                 *self.device_table.lock().unwrap() = None;
@@ -314,9 +345,10 @@ impl RvrGpuDecodeState {
         exe: &VmExe<F>,
         pc_to_air_idx: &[Option<usize>],
         compiled_identity: &Arc<Vec<bool>>,
+        precomputed: Option<&RvrDeltaDecodePrecompute>,
     ) -> HashSet<usize> {
         let airs = self
-            .bind_program(exe, pc_to_air_idx, compiled_identity)
+            .bind_program(exe, pc_to_air_idx, compiled_identity, precomputed)
             .into_values()
             .collect::<HashSet<_>>();
         // The supported formats map to at most the twenty decode-kernel
@@ -336,10 +368,27 @@ impl RvrGpuDecodeState {
     pub fn compact_record_airs<F: PrimeField32>(
         exe: &VmExe<F>,
         pc_to_air_idx: &[Option<usize>],
+        precomputed: Option<&RvrDeltaDecodePrecompute>,
     ) -> HashSet<usize> {
-        classify_kind_to_air(exe, pc_to_air_idx)
-            .into_values()
-            .collect()
+        if let Some(precomputed) = precomputed {
+            let airs = precomputed
+                .kind_to_air
+                .iter()
+                .map(|&(_, air)| air)
+                .collect();
+            #[cfg(debug_assertions)]
+            assert_eq!(
+                airs,
+                classify_kind_to_air(exe, pc_to_air_idx)
+                    .into_values()
+                    .collect()
+            );
+            airs
+        } else {
+            classify_kind_to_air(exe, pc_to_air_idx)
+                .into_values()
+                .collect()
+        }
     }
 
     #[cfg(feature = "rvr")]
@@ -348,8 +397,9 @@ impl RvrGpuDecodeState {
         exe: &VmExe<F>,
         pc_to_air_idx: &[Option<usize>],
         compiled_identity: &Arc<Vec<bool>>,
+        precomputed: Option<&RvrDeltaDecodePrecompute>,
     ) -> HashSet<usize> {
-        self.bind_program(exe, pc_to_air_idx, compiled_identity)
+        self.bind_program(exe, pc_to_air_idx, compiled_identity, precomputed)
             .into_values()
             .collect()
     }
@@ -364,15 +414,17 @@ impl RvrGpuDecodeState {
         exe: &VmExe<F>,
         pc_to_air_idx: &[Option<usize>],
         compiled_identity: &Arc<Vec<bool>>,
+        precomputed: Option<&RvrDeltaDecodePrecompute>,
         delta: openvm_circuit::arch::rvr::RvrDeltaRecords,
         memory_log: Vec<openvm_circuit::arch::rvr::MemoryLogEntry>,
         program_log: Vec<openvm_circuit::arch::rvr::ProgramLogEntry>,
+        touched: Vec<openvm_circuit::arch::rvr::TouchedBlock>,
         chip_counts: Vec<u32>,
         arena_native_written: &[(usize, u32)],
     ) -> Result<HashSet<usize>, openvm_circuit::arch::ExecutionError> {
         use openvm_circuit::arch::rvr::PREFLIGHT_DELTA_RECORD_SIZE;
 
-        let kind_to_air = self.bind_program(exe, pc_to_air_idx, compiled_identity);
+        let kind_to_air = self.bind_program(exe, pc_to_air_idx, compiled_identity, precomputed);
         let arena_native = arena_native_written
             .iter()
             .map(|&(air, _)| air)
@@ -420,6 +472,7 @@ impl RvrGpuDecodeState {
             delta,
             memory_log,
             program_log,
+            touched,
             arena_native_flags,
             specs,
         };
@@ -451,7 +504,7 @@ impl RvrGpuDecodeState {
         }
 
         let mut host_guard = self.delta_host.lock().unwrap();
-        let host = host_guard.take()?;
+        let mut host = host_guard.take()?;
         let (d_table, pc_base) = self
             .device_operand_table(device_ctx)
             .expect("delta segment without a bound operand table");
@@ -502,6 +555,14 @@ impl RvrGpuDecodeState {
                 .to_device_on(device_ctx)
                 .expect("delta W-chronology H2D")
         };
+        let d_touched = if host.touched.is_empty() {
+            DeviceBuffer::new()
+        } else {
+            host.touched
+                .as_slice()
+                .to_device_on(device_ctx)
+                .expect("delta first-touch seeds H2D")
+        };
         let d_flags = host
             .arena_native_flags
             .as_slice()
@@ -521,6 +582,8 @@ impl RvrGpuDecodeState {
                 host.memory_log.len(),
                 &d_program,
                 host.program_log.len(),
+                &d_touched,
+                host.touched.len(),
                 &d_table,
                 pc_base,
                 &d_flags,
@@ -533,6 +596,11 @@ impl RvrGpuDecodeState {
         let error = d_error.to_host_on(device_ctx).expect("delta error D2H")[0];
         assert_eq!(error, 0, "CUDA delta predecode fail-closed error {error}");
 
+        let program_log = std::mem::take(&mut host.program_log);
+        let memory_log = std::mem::take(&mut host.memory_log);
+        let touched = std::mem::take(&mut host.touched);
+        host.delta
+            .recycle_device_inputs(program_log, memory_log, touched);
         drop(host);
         let device = DeviceDeltaSegment { outputs };
         let result = device.outputs.get(&kind).cloned();
@@ -899,6 +967,49 @@ fn gpu_decode_entry<F: PrimeField32>(
     }
 
     None
+}
+
+/// Registry callback used by `compile_preflight` to persist the exact table
+/// input and decoder kind before the timed proving path begins.
+#[cfg(feature = "rvr")]
+pub(crate) fn gpu_decode_precompute<F: PrimeField32>(
+    instruction: &Instruction<F>,
+) -> Option<RvrDeltaDecodeInfo> {
+    gpu_decode_entry(instruction).map(|(entry, kind)| RvrDeltaDecodeInfo {
+        entry,
+        kind: kind as u8,
+    })
+}
+
+#[cfg(feature = "rvr")]
+fn host_table_from_precomputed(
+    compiled_identity: Arc<Vec<bool>>,
+    precomputed: &RvrDeltaDecodePrecompute,
+) -> HostOperandTable {
+    let kind_to_air = precomputed
+        .kind_to_air
+        .iter()
+        .map(|&(kind, air)| {
+            (
+                DeltaAirKind::from_repr(kind)
+                    .unwrap_or_else(|| panic!("unknown persisted delta decoder kind {kind}")),
+                air,
+            )
+        })
+        .collect();
+    HostOperandTable {
+        compiled_identity,
+        pc_base: precomputed.pc_base,
+        entries: Arc::clone(&precomputed.entries),
+        kind_to_air,
+    }
+}
+
+#[cfg(all(feature = "rvr", debug_assertions))]
+fn assert_host_tables_equal(precomputed: &HostOperandTable, lazy: &HostOperandTable) {
+    assert_eq!(precomputed.pc_base, lazy.pc_base);
+    assert_eq!(precomputed.entries, lazy.entries);
+    assert_eq!(precomputed.kind_to_air, lazy.kind_to_air);
 }
 
 #[cfg(feature = "rvr")]

@@ -25,9 +25,10 @@ const _: () = assert!(ffi::PREFLIGHT_MEMORY_KIND_TOUCH == PREFLIGHT_MEMORY_KIND_
 const _: () = assert!(size_of::<ProgramLogEntry>() == ffi::PREFLIGHT_PROGRAM_LOG_ENTRY_SIZE);
 const _: () = assert!(align_of::<ProgramLogEntry>() == ffi::PREFLIGHT_PROGRAM_LOG_ENTRY_ALIGN);
 const _: () = assert!(offset_of!(ProgramLogEntry, opcode) == 0);
-const _: () = assert!(offset_of!(ProgramLogEntry, _pad0) == 2);
+const _: () = assert!(offset_of!(ProgramLogEntry, write_complete) == 2);
 const _: () = assert!(offset_of!(ProgramLogEntry, timestamp) == 4);
 const _: () = assert!(offset_of!(ProgramLogEntry, pc) == 8);
+const _: () = assert!(offset_of!(ProgramLogEntry, write_value) == 16);
 const _: () = assert!(size_of::<MemoryLogEntry>() == ffi::PREFLIGHT_MEMORY_LOG_ENTRY_SIZE);
 const _: () = assert!(align_of::<MemoryLogEntry>() == ffi::PREFLIGHT_MEMORY_LOG_ENTRY_ALIGN);
 const _: () = assert!(offset_of!(MemoryLogEntry, timestamp) == 0);
@@ -43,6 +44,7 @@ const _: () = assert!(size_of::<TouchedBlock>() == ffi::PREFLIGHT_TOUCHED_BLOCK_
 const _: () = assert!(align_of::<TouchedBlock>() == ffi::PREFLIGHT_TOUCHED_BLOCK_ALIGN);
 const _: () = assert!(offset_of!(TouchedBlock, addr_space) == 0);
 const _: () = assert!(offset_of!(TouchedBlock, block_addr) == 4);
+const _: () = assert!(offset_of!(TouchedBlock, initial_value) == 8);
 const _: () = assert!(size_of::<PreflightTracerData>() == ffi::PREFLIGHT_TRACER_DATA_SIZE);
 const _: () = assert!(align_of::<PreflightTracerData>() == ffi::PREFLIGHT_TRACER_DATA_ALIGN);
 const _: () = assert!(offset_of!(PreflightTracerData, program_log) == 0);

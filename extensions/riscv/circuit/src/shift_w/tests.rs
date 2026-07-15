@@ -786,6 +786,7 @@ fn create_cuda_logical_harness(tester: &GpuChipTestBuilder) -> GpuLogicalHarness
     let gpu_chip = Rv64ShiftWLogicalChipGpu::new(
         tester.range_checker(),
         tester.timestamp_max_bits(),
+        #[cfg(feature = "rvr")]
         Default::default(),
     );
 
@@ -806,6 +807,7 @@ fn create_cuda_right_arithmetic_harness(tester: &GpuChipTestBuilder) -> GpuRight
     let gpu_chip = Rv64ShiftWRightArithmeticChipGpu::new(
         tester.range_checker(),
         tester.timestamp_max_bits(),
+        #[cfg(feature = "rvr")]
         Default::default(),
     );
 

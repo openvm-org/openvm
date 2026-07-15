@@ -25,7 +25,7 @@ pub const PREFLIGHT_MEMORY_KIND_READ: u8 = 0;
 pub const PREFLIGHT_MEMORY_KIND_WRITE: u8 = 1;
 pub const PREFLIGHT_MEMORY_KIND_TOUCH: u8 = 2;
 
-pub const PREFLIGHT_PROGRAM_LOG_ENTRY_SIZE: usize = 16;
+pub const PREFLIGHT_PROGRAM_LOG_ENTRY_SIZE: usize = 24;
 pub const PREFLIGHT_PROGRAM_LOG_ENTRY_ALIGN: usize = 8;
 // R1: MemoryLogEntry is self-contained — it carries `prev_timestamp` (the
 // block's previous-access timestamp, from the C timestamp shadow) and
@@ -44,8 +44,8 @@ pub const PREFLIGHT_TRACER_DATA_ALIGN: usize = 8;
 /// One entry in the preflight touched-block buffer: the address space and the
 /// block-aligned byte address of a block touched (for the first time) this
 /// segment. The host finalizes `touched_memory` from this list.
-pub const PREFLIGHT_TOUCHED_BLOCK_SIZE: usize = 8;
-pub const PREFLIGHT_TOUCHED_BLOCK_ALIGN: usize = 4;
+pub const PREFLIGHT_TOUCHED_BLOCK_SIZE: usize = 16;
+pub const PREFLIGHT_TOUCHED_BLOCK_ALIGN: usize = 8;
 
 // R3/R4: inline records. `ChipRecordBuf` is one per-chip record-buffer
 // descriptor (base pointer + byte cursor + byte capacity + record stride);
