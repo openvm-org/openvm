@@ -615,11 +615,17 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SdkVmGpuBuilder {
         _config: &Self::VmConfig,
         exe: &openvm_circuit::arch::instructions::exe::VmExe<Val<SC>>,
         pc_to_air_idx: &[Option<usize>],
+        inline_meta: &openvm_circuit::arch::rvr::RvrInlineRecordsMeta,
     ) -> std::collections::HashSet<usize>
     where
         Val<SC>: PrimeField32,
     {
-        openvm_riscv_circuit::rvr_gpu_wire_record_airs(&self.rvr_decode, exe, pc_to_air_idx)
+        openvm_riscv_circuit::rvr_gpu_wire_record_airs(
+            &self.rvr_decode,
+            exe,
+            pc_to_air_idx,
+            inline_meta,
+        )
     }
 
     /// GPU backend: default to the rvr inline preflight engine — the host
