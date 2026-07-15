@@ -1,4 +1,4 @@
-name: Docs Dependency Tags
+name: Documentation Checks
 
 on:
   workflow_call:
@@ -18,7 +18,7 @@ env:
 
 jobs:
   docs:
-    name: Check OpenVM references
+    name: OpenVM dependency tags
     permissions:
       contents: write
       packages: read
