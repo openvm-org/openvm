@@ -69,6 +69,7 @@ struct PoolInner {
     /// Stage-2 chronological backing. Kept separate because generated C
     /// requires a 32-byte-aligned interior pointer and CUDA builds source it
     /// from the page-locked arena pool.
+    #[cfg(not(feature = "cuda"))]
     delta_backing: Option<Vec<u8>>,
     /// Direct-final compact backings keyed by AIR. These leave the pool while
     /// tracegen owns the DenseRecordArena and return from its Drop impl.
@@ -172,20 +173,24 @@ impl RvrPreflightBufferPool {
     /// Take a backing with enough alignment slack for a `len`-byte delta
     /// stream. CUDA uses the #2990 page-locked pool; CPU keeps one grow-only
     /// allocation in this per-executor pool.
-    pub(crate) fn take_delta_backing(&self, len: usize) -> Vec<u8> {
+    /// Returns the delta backing and whether a fresh lazy allocation needs a
+    /// one-time prefault. Recycled CPU and CUDA-pinned buffers are already
+    /// resident; walking every page again would put scratch-pool maintenance
+    /// back on each segment's preflight critical path.
+    pub(crate) fn take_delta_backing(&self, len: usize) -> (Vec<u8>, bool) {
         let min_len = len.checked_add(31).expect("delta backing size overflow");
         if !self.enabled {
-            return vec![0u8; min_len];
+            return (vec![0u8; min_len], true);
         }
         #[cfg(feature = "cuda")]
         {
-            return crate::arch::cuda::pinned::take(min_len);
+            return crate::arch::cuda::pinned::take_with_prefault_status(min_len);
         }
         #[cfg(not(feature = "cuda"))]
         {
             match self.lock().delta_backing.take() {
-                Some(backing) if backing.len() >= min_len => backing,
-                _ => vec![0u8; min_len],
+                Some(backing) if backing.len() >= min_len => (backing, false),
+                _ => (vec![0u8; min_len], true),
             }
         }
     }
@@ -525,5 +530,26 @@ fn advise_hugepages(ptr: *const u8, len: usize) {
     #[cfg(not(target_os = "linux"))]
     {
         let _ = (ptr, len);
+    }
+}
+
+#[cfg(all(test, not(feature = "cuda")))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn recycled_delta_backing_skips_prefault() {
+        let pool = RvrPreflightBufferPool {
+            enabled: true,
+            inner: Arc::new(Mutex::new(PoolInner::default())),
+        };
+        let (first, first_needs_prefault) = pool.take_delta_backing(4096);
+        assert!(first_needs_prefault);
+        let first_ptr = first.as_ptr();
+        pool.recycle_delta_backing(first, 0);
+
+        let (recycled, recycled_needs_prefault) = pool.take_delta_backing(2048);
+        assert!(!recycled_needs_prefault);
+        assert_eq!(recycled.as_ptr(), first_ptr);
     }
 }

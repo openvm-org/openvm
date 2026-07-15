@@ -1174,9 +1174,20 @@ impl<'a> EmitContext<'a> {
                 ));
             }
         } else {
-            let (data_func, _, var_ty) = Self::read_mem_helper(width, signed);
             let val = self.next_var();
-            self.write_line(&format!("{var_ty} {val} = {data_func}(memory, {addr});"));
+            let (var_ty, cast_ty) = match (width, signed) {
+                (1, false) => ("uint32_t", "uint8_t"),
+                (1, true) => ("int32_t", "int8_t"),
+                (2, false) => ("uint32_t", "uint16_t"),
+                (2, true) => ("int32_t", "int16_t"),
+                (4, false) => ("uint32_t", "uint32_t"),
+                (4, true) => ("int32_t", "int32_t"),
+                (8, _) => ("uint64_t", "uint64_t"),
+                _ => unreachable!("invalid memory width {width}"),
+            };
+            self.write_line(&format!(
+                "{var_ty} {val} = ({cast_ty})({block} >> ((uint32_t)({addr} & 7u) * 8u));"
+            ));
             let rdprev = self.next_var();
             self.write_line(&format!("uint64_t {rdprev} = state->regs[{rd}];"));
             let pw = self.next_var();

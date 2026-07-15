@@ -74,22 +74,21 @@ __attribute__((preserve_most)) void rvr_ext_sha256(
     RvrSha256DirectRecord* restrict record =
         (RvrSha256DirectRecord*)preflight_claim_record(state, main_chip_idx);
     if (likely(record != NULL)) {
-      *record = (RvrSha256DirectRecord){
-          .variant = 0u,
-          .from_pc = from_pc,
-          .timestamp = from_timestamp,
-          .dst_reg_ptr = dst_reg_ptr,
-          .state_reg_ptr = state_reg_ptr,
-          .input_reg_ptr = input_reg_ptr,
-          .dst_ptr = (uint32_t)dst_ptr,
-          .state_ptr = (uint32_t)state_ptr,
-          .input_ptr = (uint32_t)input_ptr,
-          .register_reads_aux = {
-              {.prev_timestamp = dst_prev_timestamp},
-              {.prev_timestamp = state_prev_timestamp},
-              {.prev_timestamp = input_prev_timestamp},
-          },
-      };
+      /* Every byte is filled below. Scalar stores avoid lowering a mostly
+       * zero aggregate initializer into a 272-byte clear followed by the
+       * actual record writes. */
+      record->variant = 0u;
+      record->from_pc = from_pc;
+      record->timestamp = from_timestamp;
+      record->dst_reg_ptr = dst_reg_ptr;
+      record->state_reg_ptr = state_reg_ptr;
+      record->input_reg_ptr = input_reg_ptr;
+      record->dst_ptr = (uint32_t)dst_ptr;
+      record->state_ptr = (uint32_t)state_ptr;
+      record->input_ptr = (uint32_t)input_ptr;
+      record->register_reads_aux[0].prev_timestamp = dst_prev_timestamp;
+      record->register_reads_aux[1].prev_timestamp = state_prev_timestamp;
+      record->register_reads_aux[2].prev_timestamp = input_prev_timestamp;
       memcpy(record->message_bytes, block_words, sizeof(block_words));
       memcpy(record->prev_state, state_words, sizeof(state_words));
     }

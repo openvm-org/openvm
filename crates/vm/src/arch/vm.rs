@@ -151,6 +151,9 @@ struct CachedRvrCompiledPreflight {
     pool: RvrPreflightBufferPool,
     pc_to_air_idx: Vec<Option<usize>>,
     wire_airs: Vec<usize>,
+    /// False only when compiler metadata plus the builder's whole-AIR device
+    /// coverage prove that no program slot can reach the host log assembler.
+    build_access_aux: bool,
 }
 
 #[cfg(feature = "rvr")]
@@ -173,6 +176,7 @@ impl<F: PrimeField32> CachedRvrPreflightExecutor<F> for CachedRvrCompiledPreflig
             num_insns,
             record_capacity_rows,
             arena_targets,
+            self.build_access_aux,
         )
     }
 
@@ -1310,9 +1314,13 @@ where
                 // internally for its capacity-retry loop, and a guest-state
                 // clone is the dominant per-segment fixed cost (~hundreds of
                 // ms), so it must not be paid twice.
+                let detail_wrapper_started = std::time::Instant::now();
                 #[cfg(any(feature = "stark-debug", feature = "cuda"))]
                 let split_t0 = std::time::Instant::now();
+                let detailed_profile =
+                    std::env::var("OPENVM_RVR_PREFLIGHT_PROFILE_DETAIL").as_deref() == Ok("1");
                 let capacities = self.preflight_capacities(trace_heights);
+                let capacities_finished = std::time::Instant::now();
                 let pc_to_air_idx = rvr_preflight.pc_to_air_idx();
                 // R4: stage arena-native targets so the C writes those airs'
                 // full records directly into their final arena backings.
@@ -1328,6 +1336,7 @@ where
                     targets.insert(air, buf);
                     staged.push((air, geometry, arena));
                 }
+                let arena_staging_finished = std::time::Instant::now();
                 // G2: stage compact WIRE targets for the airs the builder
                 // requests — the C writes packed wire records straight into
                 // the adopted backing (one alloc, no copy); the chips decode
@@ -1370,6 +1379,13 @@ where
                         staged_wire.push((air, wire_size, arena));
                     }
                 }
+                let wire_staging_finished = std::time::Instant::now();
+                let staged_count = staged.len();
+                let staged_wire_count = staged_wire.len();
+                let staged_capacity_bytes = targets
+                    .values()
+                    .map(|target| u64::from(target.cap))
+                    .sum::<u64>();
                 let mut rvr_output = rvr_preflight.execute(
                     exe,
                     state,
@@ -1377,6 +1393,7 @@ where
                     Some(trace_heights),
                     (!targets.is_empty()).then_some(&targets),
                 )?;
+                let execute_call_finished = std::time::Instant::now();
                 #[cfg(any(feature = "stark-debug", feature = "cuda"))]
                 let split_t1 = std::time::Instant::now();
                 #[cfg(any(feature = "stark-debug", feature = "cuda"))]
@@ -1427,6 +1444,7 @@ where
                         );
                     }
                 }
+                let generic_assembly_started = std::time::Instant::now();
                 let mut record_arenas = self
                     .builder
                     .generate_rvr_record_arenas_from_logs(
@@ -1442,6 +1460,7 @@ where
                                 .to_string(),
                         )
                     })?;
+                let generic_assembly_finished = std::time::Instant::now();
                 for (air, geometry, mut arena) in staged {
                     let written = rvr_output
                         .arena_native_written
@@ -1466,6 +1485,7 @@ where
                     arena.finish_arena_native_sized(written, written_bytes, &geometry);
                     record_arenas[air] = arena;
                 }
+                let arena_finish_finished = std::time::Instant::now();
                 for (air, wire_size, mut arena) in staged_wire {
                     let written = rvr_output
                         .arena_native_written
@@ -1480,6 +1500,7 @@ where
                     arena.finish_rvr_wire(written, wire_size);
                     record_arenas[air] = arena;
                 }
+                let wire_finish_finished = std::time::Instant::now();
                 #[cfg(any(feature = "stark-debug", feature = "cuda"))]
                 if std::env::var("OPENVM_STARK_DEBUG_TRACE_ONLY").as_deref() == Ok("1")
                     || std::env::var("OPENVM_GPU_E2E_PROFILE").as_deref() == Ok("1")
@@ -1505,7 +1526,28 @@ where
                     delta_records,
                     ..
                 } = rvr_output;
+                let recycle_started = std::time::Instant::now();
                 rvr_preflight.recycle_segment_buffers(raw_logs, inline_records, delta_records);
+                let recycle_finished = std::time::Instant::now();
+                if detailed_profile {
+                    eprintln!(
+                        "OPENVM_RVR_WRAPPER_DETAIL capacities_us={} arena_stage_us={} \
+                         wire_stage_us={} execute_call_us={} generic_assembly_us={} \
+                         arena_finish_us={} wire_finish_us={} recycle_us={} staged_airs={} \
+                         staged_wire_airs={} staged_capacity_bytes={}",
+                        (capacities_finished - detail_wrapper_started).as_micros(),
+                        (arena_staging_finished - capacities_finished).as_micros(),
+                        (wire_staging_finished - arena_staging_finished).as_micros(),
+                        (execute_call_finished - wire_staging_finished).as_micros(),
+                        (generic_assembly_finished - generic_assembly_started).as_micros(),
+                        (arena_finish_finished - generic_assembly_finished).as_micros(),
+                        (wire_finish_finished - arena_finish_finished).as_micros(),
+                        (recycle_finished - recycle_started).as_micros(),
+                        staged_count,
+                        staged_wire_count,
+                        staged_capacity_bytes,
+                    );
+                }
 
                 Ok(PreflightExecutionOutput {
                     system_records,
@@ -2096,6 +2138,46 @@ where
                                 .rvr_wire_record_airs(vm.config(), &self.exe, &pc_to_air_idx)
                                 .into_iter()
                                 .collect::<Vec<_>>();
+                            let mut direct_airs = wire_airs
+                                .iter()
+                                .copied()
+                                .collect::<std::collections::HashSet<_>>();
+                            direct_airs.extend(
+                                compiled
+                                    .inline_records()
+                                    .arena_native_airs
+                                    .iter()
+                                    .map(|&(air, _)| air),
+                            );
+                            // Compiler-scope proof, including mixed-AIR taint:
+                            // every defined routed slot must both emit inline
+                            // and belong to a whole AIR owned by the device or
+                            // an arena-native consumer. Otherwise retain the
+                            // complete host access replay and fail-closed
+                            // generic assembly path.
+                            let fully_direct_delta = compiled.inline_records().delta_records
+                                && self
+                                    .exe
+                                    .program
+                                    .instructions_and_debug_infos
+                                    .iter()
+                                    .enumerate()
+                                    .all(|(slot, instruction)| {
+                                        if instruction.is_none() {
+                                            return true;
+                                        }
+                                        let Some(air) = pc_to_air_idx.get(slot).copied().flatten()
+                                        else {
+                                            return true;
+                                        };
+                                        compiled
+                                            .inline_records()
+                                            .pc_slots
+                                            .get(slot)
+                                            .copied()
+                                            .unwrap_or(false)
+                                            && direct_airs.contains(&air)
+                                    });
                             if compiled.inline_records().delta_records {
                                 // Stage-2 uses one cross-AIR chronological
                                 // backing, not the per-AIR G2 wire targets.
@@ -2109,6 +2191,7 @@ where
                                 pool,
                                 pc_to_air_idx,
                                 wire_airs,
+                                build_access_aux: !fully_direct_delta,
                             }))
                         }
                         RvrPreflightRoute::Interpreter(_) => CachedRvrPreflight::Interpreter,

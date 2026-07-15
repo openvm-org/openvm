@@ -200,7 +200,9 @@ __attribute__((preserve_most)) bool rvr_ext_xorin(RvState* restrict state,
   if (likely(emit_direct)) {
     for (uint32_t i = 0; i < num_words; i++) {
       uint64_t address = buffer_ptr + i * WORD_SIZE;
-      uint64_t prev_data = preflight_read_mem_block(state, address);
+      /* `buffer` was loaded before the XOR, so undoing the just-applied XOR
+       * recovers the exact pre-write word without rereading guest memory. */
+      uint64_t prev_data = buffer[i] ^ input[i];
       uint32_t prev_timestamp = preflight_append_memory(
           state->tracer, PREFLIGHT_MEMORY_KIND_WRITE, AS_MEMORY, address,
           WORD_SIZE, buffer[i], prev_data);
