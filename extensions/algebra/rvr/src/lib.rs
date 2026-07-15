@@ -11,7 +11,8 @@ mod modular;
 
 pub use fp2::{Fp2ArithInstr, Fp2RvrExtension, Fp2SetupInstr};
 pub use modular::{
-    HintNonQrInstr, HintSqrtInstr, ModArithInstr, ModIsEqInstr, ModSetupInstr, ModularRvrExtension,
+    HintNonQrInstr, HintSqrtInstr, ModArithInstr, ModIsEqInstr, ModIsEqRecordDescriptor,
+    ModSetupInstr, ModularRvrExtension, VecHeapRecordDescriptor,
 };
 
 // ── Modular arithmetic operations ────────────────────────────────────────────

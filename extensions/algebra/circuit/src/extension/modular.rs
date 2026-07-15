@@ -65,10 +65,11 @@ impl ModularExtension {
 
 #[cfg(feature = "rvr")]
 impl<F: PrimeField32> VmRvrExtension<F> for ModularExtension {
-    fn extend_rvr(&self, registry: &mut ExtensionRegistry<F>, _ctx: Option<&RvrExtensionCtx>) {
-        registry.register(rvr_openvm_ext_algebra::ModularRvrExtension::new(
-            self.supported_moduli.clone(),
-        ));
+    fn extend_rvr(&self, registry: &mut ExtensionRegistry<F>, ctx: Option<&RvrExtensionCtx>) {
+        let ext =
+            rvr_openvm_ext_algebra::ModularRvrExtension::new(self.supported_moduli.clone(), ctx)
+                .expect("failed to construct rvr ModularRvrExtension");
+        registry.register(ext);
     }
 }
 

@@ -3,13 +3,13 @@ use std::{collections::BTreeMap, sync::Arc};
 use openvm_circuit::{
     arch::{
         rvr::{
-            generate_record_arenas_from_logs, RvrPreflightEngine, RvrPreflightOutput,
-            RvrPreflightRoute, VmRvrLogNativeExtension, PREFLIGHT_MEMORY_KIND_READ,
-            PREFLIGHT_MEMORY_KIND_WRITE,
+            generate_record_arenas_from_logs, preflight::RvrArenaNativeTarget, RvrPreflightEngine,
+            RvrPreflightOutput, RvrPreflightRoute, VmRvrLogNativeExtension,
+            PREFLIGHT_MEMORY_KIND_READ, PREFLIGHT_MEMORY_KIND_WRITE,
         },
         testing::assert_vm_states_equivalent,
-        verify_segments, ContinuationVmProver, MatrixRecordArena, Streams, VirtualMachine,
-        VmInstance,
+        verify_segments, ContinuationVmProver, DenseRecordArena, MatrixRecordArena, Streams,
+        VirtualMachine, VmInstance,
     },
     system::SystemRecords,
     utils::test_cpu_engine,
@@ -106,6 +106,27 @@ fn keccak_exe(rounds: usize, branch_separated: bool) -> VmExe<F> {
             instructions.push(branch_boundary());
         }
     }
+    instructions.push(terminate());
+    VmExe::new(Program::from_instructions(&instructions))
+}
+
+fn keccak_dynamic_xorin_exe() -> VmExe<F> {
+    let mut instructions = vec![
+        addi(1, 0, 64),
+        addi(2, 0, 512),
+        addi(4, 0, 0x234),
+        addi(5, 0, 0x678),
+        store_d(4, 1, 0),
+        store_d(5, 1, 8),
+        store_d(5, 2, 0),
+        store_d(4, 2, 8),
+    ];
+    for len in [0, 8, 16, 136] {
+        instructions.push(addi(3, 0, len));
+        instructions.push(xorin(1, 2, 3));
+        instructions.push(branch_boundary());
+    }
+    instructions.push(keccakf(1));
     instructions.push(terminate());
     VmExe::new(Program::from_instructions(&instructions))
 }
@@ -387,6 +408,141 @@ fn rvr_preflight_keccak_single_segment_traces_match_interpreter() {
         3,
         "KeccakfOp, KeccakfPerm, and Xorin traces must all be active: {active_keccak_airs:?}"
     );
+}
+
+#[test]
+fn rvr_preflight_keccak_delta_direct_final_matches_host_assembler_bytes() {
+    let exe = keccak_dynamic_xorin_exe();
+    let config = Keccak256Rv64Config::default();
+
+    // Oracle arm: disable inline records and retain the established verbose
+    // log + host assembler path.
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
+    std::env::set_var("OPENVM_RVR_INLINE_RECORDS", "0");
+    std::env::remove_var("OPENVM_RVR_GPU_RECORDS");
+    let (oracle_vm, _) =
+        VirtualMachine::new_with_keygen(test_cpu_engine(), Keccak256Rv64CpuBuilder, config.clone())
+            .expect("oracle vm init");
+    let trace_heights = vec![4096u32; oracle_vm.num_airs()];
+    let capacities = trace_heights
+        .iter()
+        .zip(oracle_vm.pk().per_air.iter())
+        .map(|(&height, pk)| (height as usize, pk.vk.params.width.main_width()))
+        .collect::<Vec<_>>();
+    let pc_to_air_idx = oracle_vm.pc_to_air_idx(&exe).expect("oracle pc mapping");
+    let RvrPreflightRoute::Rvr(oracle_instance) = oracle_vm
+        .preflight_routed_instance(&exe)
+        .expect("oracle route")
+    else {
+        panic!("oracle program must route to rvr")
+    };
+    let mut oracle_output = oracle_instance
+        .execute_preflight_from_state(
+            oracle_vm.create_initial_state(&exe, Streams::default()),
+            None,
+        )
+        .expect("oracle preflight");
+    let oracle_instret = oracle_output.instret;
+    let mut oracle_registry = openvm_circuit::arch::rvr::LogNativeAssemblerRegistry::new();
+    config.extend_rvr_log_native(&mut oracle_registry);
+    let oracle_arenas = generate_record_arenas_from_logs::<F, DenseRecordArena>(
+        &oracle_registry,
+        &exe,
+        &mut oracle_output,
+        &capacities,
+        &pc_to_air_idx,
+    )
+    .expect("oracle record assembly");
+    let keccakf_air = oracle_vm
+        .air_names()
+        .position(|name| name.contains("KeccakfOp"))
+        .expect("KeccakfOp air");
+    let xorin_air = oracle_vm
+        .air_names()
+        .position(|name| name.contains("XorinVm"))
+        .expect("XorinVm air");
+
+    // Direct-final arm: delta remains enabled for the ordinary fixed-shape
+    // instructions while KeccakF writes its complete wide record into the
+    // consumer arena. Its accesses remain in the residual memory chronology.
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "1");
+    std::env::remove_var("OPENVM_RVR_INLINE_RECORDS");
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "delta");
+    let (direct_vm, _) =
+        VirtualMachine::new_with_keygen(test_cpu_engine(), Keccak256Rv64CpuBuilder, config.clone())
+            .expect("direct-final vm init");
+    let RvrPreflightRoute::Rvr(direct_instance) = direct_vm
+        .preflight_routed_instance(&exe)
+        .expect("direct-final route")
+    else {
+        panic!("direct-final program must route to rvr")
+    };
+    let native_airs = direct_instance
+        .compiled()
+        .inline_records()
+        .arena_native_airs
+        .clone();
+    assert_eq!(
+        native_airs.len(),
+        2,
+        "only the two Keccak AIRs are custom-native"
+    );
+    assert!(native_airs.iter().any(|&(air, _)| air == keccakf_air));
+    assert!(native_airs.iter().any(|&(air, _)| air == xorin_air));
+
+    let mut staged = Vec::new();
+    let mut targets = BTreeMap::new();
+    for &(air, geometry) in &native_airs {
+        let (arena, target) = DenseRecordArena::stage_arena_native(
+            trace_heights[air] as usize,
+            capacities[air].1,
+            &geometry,
+        );
+        targets.insert(air, target);
+        staged.push((air, geometry, arena));
+    }
+    let mut direct_output = direct_instance
+        .execute_preflight_from_state_with_arena_targets(
+            direct_vm.create_initial_state(&exe, Streams::default()),
+            Some(oracle_instret),
+            &trace_heights,
+            &targets,
+        )
+        .expect("direct-final preflight");
+    assert_system_records_eq(
+        "Keccakf direct-final",
+        &oracle_output.system_records,
+        &direct_output.system_records,
+    );
+
+    let mut direct_registry = openvm_circuit::arch::rvr::LogNativeAssemblerRegistry::new();
+    config.extend_rvr_log_native(&mut direct_registry);
+    generate_record_arenas_from_logs::<F, DenseRecordArena>(
+        &direct_registry,
+        &exe,
+        &mut direct_output,
+        &capacities,
+        &pc_to_air_idx,
+    )
+    .expect("direct-final residual assembly and delta decode");
+
+    let written = direct_output
+        .arena_native_written
+        .iter()
+        .copied()
+        .collect::<BTreeMap<_, _>>();
+    for (air, geometry, mut direct_arena) in staged {
+        direct_arena.finish_arena_native(written[&air] as usize, &geometry);
+        assert_eq!(
+            oracle_arenas[air].allocated(),
+            direct_arena.allocated(),
+            "air {air}: direct-final Keccak records must be byte-identical to host assembly"
+        );
+    }
+
+    std::env::remove_var("OPENVM_RVR_GPU_RECORDS");
+    std::env::remove_var("OPENVM_RVR_ARENA_NATIVE");
+    std::env::remove_var("OPENVM_RVR_INLINE_RECORDS");
 }
 
 #[test]
