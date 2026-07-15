@@ -31,6 +31,8 @@ enum MemoryAllocation {
 }
 
 /// Mmap-backed linear memory with inaccessible guards when the size is OS-page-aligned.
+///
+/// `[PROT_NONE guard][RW memory][PROT_NONE guard]`
 pub struct GuardedMemory {
     allocation: MemoryAllocation,
     memory_size: usize,
