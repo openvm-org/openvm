@@ -1,5 +1,5 @@
 use bytesize::ByteSize;
-use openvm_instructions::metering::DEFAULT_SEGMENT_CHECK_INSNS;
+use openvm_instructions::metering::SEGMENT_CHECK_INSNS;
 #[cfg(feature = "metrics")]
 use openvm_stark_backend::memory_metering::INTERACTION_MEMORY_OVERHEAD;
 use openvm_stark_backend::memory_metering::{ProvingMemoryConfig, ProvingMemoryCounts};
@@ -45,7 +45,6 @@ pub struct SegmentationConfig {
     max_interactions: u32,
     #[serde(with = "ProvingMemoryConfigSerde")]
     memory_config: ProvingMemoryConfig,
-    segment_check_insns: u64,
 }
 
 impl SegmentationConfig {
@@ -70,8 +69,8 @@ impl SegmentationConfig {
             .checked_shl(u32::from(limits.max_trace_height_bits))
             .expect("max_trace_height_bits must fit in u32 trace height");
         assert!(
-            u64::from(max_trace_height) >= 2 * u64::from(DEFAULT_SEGMENT_CHECK_INSNS),
-            "max_trace_height must be at least twice DEFAULT_SEGMENT_CHECK_INSNS"
+            u64::from(max_trace_height) >= 2 * u64::from(SEGMENT_CHECK_INSNS),
+            "max_trace_height must be at least twice SEGMENT_CHECK_INSNS"
         );
 
         Self {
@@ -83,7 +82,6 @@ impl SegmentationConfig {
             max_memory: limits.max_memory,
             max_interactions: limits.max_interactions,
             memory_config,
-            segment_check_insns: u64::from(DEFAULT_SEGMENT_CHECK_INSNS),
         }
     }
 
@@ -95,11 +93,6 @@ impl SegmentationConfig {
     #[inline(always)]
     pub fn widths(&self) -> &[usize] {
         &self.widths
-    }
-
-    #[inline(always)]
-    pub fn segment_check_insns(&self) -> u64 {
-        self.segment_check_insns
     }
 
     pub fn set_max_memory(&mut self, max_memory: usize) {
@@ -201,7 +194,7 @@ impl SegmentationCtx {
         );
         Self {
             segments: Vec::new(),
-            instrets_until_check: config.segment_check_insns,
+            instrets_until_check: u64::from(SEGMENT_CHECK_INSNS),
             config,
             instret: 0,
             checkpoint_trace_heights: vec![0; num_airs],
@@ -217,11 +210,6 @@ impl SegmentationCtx {
     #[inline(always)]
     pub(crate) fn widths(&self) -> &[usize] {
         &self.config.widths
-    }
-
-    #[inline(always)]
-    pub(crate) fn segment_check_insns(&self) -> u64 {
-        self.config.segment_check_insns
     }
 
     pub fn set_max_memory(&mut self, max_memory: usize) {
@@ -245,7 +233,7 @@ impl SegmentationCtx {
         let num_airs = config.air_names.len();
         Self {
             segments: Vec::new(),
-            instrets_until_check: config.segment_check_insns,
+            instrets_until_check: u64::from(SEGMENT_CHECK_INSNS),
             config,
             instret: 0,
             checkpoint_trace_heights: vec![0; num_airs],
@@ -620,8 +608,8 @@ impl SegmentationCtx {
     /// Try segment if there is at least one instruction
     #[inline(always)]
     pub fn create_final_segment(&mut self, trace_heights: &[u32]) {
-        self.instret += self.config.segment_check_insns - self.instrets_until_check;
-        self.instrets_until_check = self.config.segment_check_insns;
+        self.instret += u64::from(SEGMENT_CHECK_INSNS) - self.instrets_until_check;
+        self.instrets_until_check = u64::from(SEGMENT_CHECK_INSNS);
         let instret_start = self
             .segments
             .last()

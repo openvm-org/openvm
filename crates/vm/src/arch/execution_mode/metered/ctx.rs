@@ -1,6 +1,7 @@
 use itertools::Itertools;
 use openvm_instructions::{
     exe::SparseMemoryImage,
+    metering::SEGMENT_CHECK_INSNS,
     riscv::{RV64_IMM_AS, RV64_REGISTER_AS},
 };
 use openvm_stark_backend::memory_metering::ProvingMemoryConfig;
@@ -71,7 +72,7 @@ impl MeteredCtx {
             inputs.segmentation_limits,
             memory_config,
         );
-        let memory_ctx = MemoryCtx::new(config, segmentation_ctx.segment_check_insns());
+        let memory_ctx = MemoryCtx::new(config);
 
         // Assert that the indices are correct
         let air_names = segmentation_ctx.air_names();
@@ -141,7 +142,7 @@ impl MeteredCtx {
         system_config: &SystemConfig,
     ) -> Self {
         let segmentation_ctx = SegmentationCtx::from_config(segmentation_config);
-        let mut memory_ctx = MemoryCtx::new(system_config, segmentation_ctx.segment_check_insns());
+        let mut memory_ctx = MemoryCtx::new(system_config);
         let mut trace_heights = config.initial_trace_heights.clone();
         memory_ctx.add_register_merkle_heights();
         memory_ctx.apply_height_updates(&mut trace_heights);
@@ -182,9 +183,8 @@ impl MeteredCtx {
         if self.segmentation_ctx.instrets_until_check > 0 {
             return false;
         }
-        let segment_check_insns = self.segmentation_ctx.segment_check_insns();
-        self.segmentation_ctx.instrets_until_check = segment_check_insns;
-        self.segmentation_ctx.instret += segment_check_insns;
+        self.segmentation_ctx.instrets_until_check = u64::from(SEGMENT_CHECK_INSNS);
+        self.segmentation_ctx.instret += u64::from(SEGMENT_CHECK_INSNS);
 
         self.memory_ctx
             .apply_height_updates(&mut self.trace_heights);

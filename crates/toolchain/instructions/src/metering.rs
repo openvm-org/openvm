@@ -5,14 +5,15 @@ pub const PAGE_MASK_LEAF_BITS: usize = u64::BITS.ilog2() as usize;
 
 /// Maximum number of instructions in one generated metered RVR block.
 ///
-/// Segment checks happen only at block boundaries, so tracer buffer-capacity
-/// bounds must accommodate this many instructions beyond a check interval.
+/// Segment checks happen at block boundaries. This must not exceed
+/// [`SEGMENT_CHECK_INSNS`], so a freshly reset check interval can accommodate
+/// every generated block.
 pub const MAX_METERED_BLOCK_INSNS: u32 = 1000;
 
-/// Default interval between metered-execution segment checks.
+/// Interval between metered-execution segment checks.
 ///
-/// This currently matches [`MAX_METERED_BLOCK_INSNS`] so the default check
-/// interval and generated-block granularity share one source of truth. Buffer
-/// capacities must account for both values because a check can overshoot by
-/// one complete block.
-pub const DEFAULT_SEGMENT_CHECK_INSNS: u32 = MAX_METERED_BLOCK_INSNS;
+/// The tracer checks before executing a block that would cross the remaining
+/// interval. It therefore never starts a block with an insufficient countdown.
+pub const SEGMENT_CHECK_INSNS: u32 = 1000;
+
+const _: () = assert!(SEGMENT_CHECK_INSNS >= MAX_METERED_BLOCK_INSNS);

@@ -5,7 +5,7 @@
 //! buffer allocations — they must match byte-for-byte.
 
 use openvm_instructions::{
-    metering::{DEFAULT_SEGMENT_CHECK_INSNS, MAX_METERED_BLOCK_INSNS, PAGE_MASK_LEAF_BITS},
+    metering::{PAGE_MASK_LEAF_BITS, SEGMENT_CHECK_INSNS},
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
     DEFERRAL_AS, MEMORY_DIGEST_WIDTH, PUBLIC_VALUES_AS,
 };
@@ -31,11 +31,10 @@ pub const MAX_MEM_PAGES_PER_INSN: usize = {
 ///
 /// **No bounds checks in C — capacity must be sufficient.**
 ///
-/// Flushed after at most `DEFAULT_SEGMENT_CHECK_INSNS + MAX_METERED_BLOCK_INSNS`
-/// instructions because a block-granular check can overshoot its interval by
-/// one complete generated block.
+/// Flushed before a block that would cross `SEGMENT_CHECK_INSNS`, so buffered
+/// accesses cover at most one complete check interval.
 /// Worst-case unique pages per instruction: ~10 (ECC setup / HINT_BUFFER, HINT_BUFFER is taken as
-/// worst-case). 2000 insns × 10 pages = 20 000 — well under 65 536.
+/// worst-case). `SEGMENT_CHECK_INSNS * MAX_MEM_PAGES_PER_INSN` is well under 65 536.
 pub const MEM_PAGE_BUF_CAP: usize = 1 << 16;
 
 /// Maximum AS_PUBLIC_VALUES page buffer entries per segment check interval.
@@ -75,8 +74,7 @@ static constexpr uint32_t TRACER_PAGE_BITS = {PAGE_MASK_LEAF_BITS};
 static constexpr uint32_t TRACER_MEM_PAGE_BUF_CAP = {MEM_PAGE_BUF_CAP};
 static constexpr uint32_t TRACER_PV_PAGE_BUF_CAP = {PV_PAGE_BUF_CAP};
 static constexpr uint32_t TRACER_DEFERRAL_PAGE_BUF_CAP = {DEFERRAL_PAGE_BUF_CAP};
-static constexpr uint32_t TRACER_SEGMENT_CHECK_INSNS = {DEFAULT_SEGMENT_CHECK_INSNS};
-static constexpr uint32_t TRACER_MAX_BLOCK_INSNS = {MAX_METERED_BLOCK_INSNS};
+static constexpr uint32_t TRACER_SEGMENT_CHECK_INSNS = {SEGMENT_CHECK_INSNS};
 static constexpr uint32_t TRACER_MAX_MEM_PAGES_PER_INSN = {MAX_MEM_PAGES_PER_INSN};
 "
     )
