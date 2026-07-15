@@ -95,6 +95,22 @@ typedef struct TouchedBlock {
   uint64_t initial_value;
 } TouchedBlock;
 
+typedef struct DeviceAuxReference {
+  uint32_t prev_timestamp;
+  uint32_t _reserved;
+  uint64_t prev_value;
+} DeviceAuxReference;
+
+typedef struct DeviceAuxPatch {
+  uint64_t target;
+  uint32_t event_index;
+  uint32_t kind;
+  uint64_t expected;
+} DeviceAuxPatch;
+
+static constexpr uint32_t PREFLIGHT_DEVICE_AUX_PATCH_U32 = 0u;
+static constexpr uint32_t PREFLIGHT_DEVICE_AUX_PATCH_U64 = 1u;
+
 /* R3/R4: one per-chip inline-record buffer descriptor. `base` points at a
  * host-provided byte buffer for one chip; `len` is the byte cursor, advancing
  * by `stride` per record; `cap` the byte capacity (a multiple of `stride`).
@@ -114,12 +130,43 @@ typedef struct ChipRecordBuf {
   uint32_t flags;
 } ChipRecordBuf;
 
+static constexpr uint32_t PREFLIGHT_DETAIL_PHASE_TRANSLATE = 0u;
+static constexpr uint32_t PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE = 1u;
+static constexpr uint32_t PREFLIGHT_DETAIL_PHASE_FIRST_TOUCH = 2u;
+static constexpr uint32_t PREFLIGHT_DETAIL_PHASE_RESIDUAL_EMIT = 3u;
+static constexpr uint32_t PREFLIGHT_DETAIL_PHASE_DELTA_EMIT = 4u;
+static constexpr uint32_t PREFLIGHT_DETAIL_PHASE_ARENA_EMIT = 5u;
+static constexpr uint32_t PREFLIGHT_DETAIL_PHASE_CHRONOLOGY = 6u;
+static constexpr uint32_t PREFLIGHT_DETAIL_PHASE_COUNT = 7u;
+static constexpr uint32_t PREFLIGHT_DETAIL_FAMILY_COUNT = 9u;
+
+/* Profiling-only counters. A normal tracer carries a null pointer and generated
+ * code contains no detail hooks unless OPENVM_RVR_NATIVE_DETAIL selected the
+ * instrumented preflight project. */
+typedef struct RvrNativeDetail {
+  uint64_t family_cycles[PREFLIGHT_DETAIL_FAMILY_COUNT];
+  uint64_t family_instructions[PREFLIGHT_DETAIL_FAMILY_COUNT];
+  uint64_t phase_cycles[PREFLIGHT_DETAIL_PHASE_COUNT];
+  uint64_t phase_samples[PREFLIGHT_DETAIL_PHASE_COUNT];
+  uint64_t phase_events[PREFLIGHT_DETAIL_PHASE_COUNT];
+  uint64_t phase_bytes[PREFLIGHT_DETAIL_PHASE_COUNT];
+  uint64_t family_started;
+  uint64_t outer_started;
+  uint64_t timer_overhead;
+  uint32_t sample_state;
+  uint32_t sample_countdown;
+  uint32_t current_family;
+  uint32_t family_active;
+} RvrNativeDetail;
+
 static constexpr uint32_t PREFLIGHT_RECORD_DIRECT_FINAL = 1u;
 static constexpr uint32_t PREFLIGHT_RECORD_OVERFLOW = 2u;
 static constexpr uint32_t PREFLIGHT_RECORD_RESIDUAL_MEMORY_CHRONOLOGY = 4u;
 static constexpr uint32_t PREFLIGHT_RECORD_VARIABLE_ROWS = 8u;
 static constexpr uint32_t PREFLIGHT_RECORD_VARIABLE_ROW_STRIDE = 16u;
 static constexpr uint32_t PREFLIGHT_RECORD_COMPACT_RESIDUAL_MEMORY = 32u;
+static constexpr uint32_t PREFLIGHT_RECORD_DEVICE_AUX = 64u;
+static constexpr uint32_t PREFLIGHT_RECORD_DEVICE_AUX_ORACLE = 128u;
 
 typedef struct Tracer {
   ProgramLogEntry* program_log;
@@ -169,6 +216,14 @@ typedef struct Tracer {
   uint32_t* exec_frequencies_touched;
   uint32_t exec_frequencies_touched_len;
   uint32_t exec_frequencies_touched_cap;
+  RvrNativeDetail* native_detail;
+  DeviceAuxPatch* device_aux_patches;
+  DeviceAuxReference* device_aux_references;
+  uint64_t* dirty_memory_pages;
+  uint32_t device_aux_patches_len;
+  uint32_t device_aux_patches_cap;
+  uint32_t device_aux_references_cap;
+  uint32_t dirty_memory_pages_words;
 } Tracer;
 
 _Static_assert(sizeof(ProgramLogEntry) == PREFLIGHT_PROGRAM_LOG_ENTRY_SIZE,
@@ -295,6 +350,22 @@ _Static_assert(offsetof(Tracer, exec_frequencies_touched_len) == 168,
                "Tracer exec_frequencies_touched_len offset drift");
 _Static_assert(offsetof(Tracer, exec_frequencies_touched_cap) == 172,
                "Tracer exec_frequencies_touched_cap offset drift");
+_Static_assert(offsetof(Tracer, native_detail) == 176,
+               "Tracer native_detail offset drift");
+_Static_assert(offsetof(Tracer, device_aux_patches) == 184,
+               "Tracer device_aux_patches offset drift");
+_Static_assert(offsetof(Tracer, device_aux_references) == 192,
+               "Tracer device_aux_references offset drift");
+_Static_assert(offsetof(Tracer, dirty_memory_pages) == 200,
+               "Tracer dirty_memory_pages offset drift");
+_Static_assert(offsetof(Tracer, device_aux_patches_len) == 208,
+               "Tracer device_aux_patches_len offset drift");
+_Static_assert(offsetof(Tracer, device_aux_patches_cap) == 212,
+               "Tracer device_aux_patches_cap offset drift");
+_Static_assert(offsetof(Tracer, device_aux_references_cap) == 216,
+               "Tracer device_aux_references_cap offset drift");
+_Static_assert(offsetof(Tracer, dirty_memory_pages_words) == 220,
+               "Tracer dirty_memory_pages_words offset drift");
 _Static_assert(sizeof(ChipRecordBuf) == PREFLIGHT_CHIP_RECORD_BUF_SIZE,
                "ChipRecordBuf size drift");
 _Static_assert(_Alignof(ChipRecordBuf) == PREFLIGHT_CHIP_RECORD_BUF_ALIGN,
@@ -311,6 +382,94 @@ _Static_assert(offsetof(ChipRecordBuf, core_off) == 20,
                "ChipRecordBuf core_off offset drift");
 _Static_assert(offsetof(ChipRecordBuf, flags) == 24,
                "ChipRecordBuf flags offset drift");
+
+static __attribute__((always_inline)) inline uint64_t
+preflight_detail_clock(void) {
+#if defined(__x86_64__)
+  _mm_lfence();
+  return __rdtsc();
+#elif defined(__aarch64__)
+  uint64_t value;
+  __asm__ volatile("isb\n\tmrs %0, cntvct_el0" : "=r"(value));
+  return value;
+#else
+  return 0u;
+#endif
+}
+
+/* Sample one out of roughly 512-1535 phase events. The randomized countdown
+ * avoids locking onto a guest loop period while leaving unsampled operations
+ * with only a decrement and predictable branch in profiling builds. */
+static __attribute__((noinline)) bool preflight_detail_phase_select(
+    Tracer* restrict t, uint32_t phase, uint64_t bytes) {
+  RvrNativeDetail* restrict detail = t->native_detail;
+  if (unlikely(detail == NULL || phase >= PREFLIGHT_DETAIL_PHASE_COUNT)) {
+    return false;
+  }
+  detail->phase_events[phase]++;
+  detail->phase_bytes[phase] += bytes;
+  uint32_t countdown = detail->sample_countdown;
+  if (likely(countdown > 1u)) {
+    detail->sample_countdown = countdown - 1u;
+    return false;
+  }
+  uint32_t state = detail->sample_state * 1664525u + 1013904223u;
+  detail->sample_state = state;
+  detail->sample_countdown = 512u + (state & 1023u);
+  detail->phase_samples[phase]++;
+  return true;
+}
+
+static __attribute__((always_inline)) inline uint64_t
+preflight_detail_phase_begin(Tracer* restrict t, uint32_t phase,
+                             uint64_t bytes) {
+  if (!OPENVM_RVR_NATIVE_DETAIL_ENABLED) {
+    return 0u;
+  }
+  if (likely(!preflight_detail_phase_select(t, phase, bytes))) {
+    return 0u;
+  }
+  return preflight_detail_clock();
+}
+
+static __attribute__((always_inline)) inline void preflight_detail_phase_end(
+    Tracer* restrict t, uint32_t phase, uint64_t started) {
+  if (!OPENVM_RVR_NATIVE_DETAIL_ENABLED) {
+    return;
+  }
+  if (likely(started == 0u)) {
+    return;
+  }
+  uint64_t finished = preflight_detail_clock();
+  t->native_detail->phase_cycles[phase] += finished - started;
+}
+
+/* Inclusive opcode-family timing uses run boundaries instead of two clocks per
+ * instruction. Long RV64IM runs therefore pay no cycle-clock overhead; custom
+ * callbacks naturally include time spent across the host FFI boundary. */
+static __attribute__((always_inline)) inline void preflight_detail_family(
+    Tracer* restrict t, uint32_t family) {
+  if (!OPENVM_RVR_NATIVE_DETAIL_ENABLED) {
+    return;
+  }
+  RvrNativeDetail* restrict detail = t->native_detail;
+  if (unlikely(detail == NULL || family >= PREFLIGHT_DETAIL_FAMILY_COUNT)) {
+    return;
+  }
+  detail->family_instructions[family]++;
+  if (likely(detail->family_active != 0u &&
+             detail->current_family == family)) {
+    return;
+  }
+  uint64_t now = preflight_detail_clock();
+  if (detail->family_active != 0u) {
+    detail->family_cycles[detail->current_family] +=
+        now - detail->family_started;
+  }
+  detail->current_family = family;
+  detail->family_started = now;
+  detail->family_active = 1u;
+}
 
 /* R3 (L1+L5 compact): base-ALU AddSub record holding the dynamic witness
  * only. Program-redundant operands (rd_ptr/rs1_ptr/rs2/rs2_as/rs2_imm_sign/
@@ -455,6 +614,108 @@ preflight_compact_residual_memory(Tracer* restrict t) {
           PREFLIGHT_RECORD_COMPACT_RESIDUAL_MEMORY) != 0u;
 }
 
+static constexpr uint32_t PREFLIGHT_DEVICE_AUX_TOKEN = 1u << 31;
+
+static __attribute__((always_inline)) inline bool
+preflight_device_aux(Tracer* restrict t) {
+  return t->delta_records != NULL &&
+         (t->delta_records->flags & PREFLIGHT_RECORD_DEVICE_AUX) != 0u;
+}
+
+static __attribute__((always_inline)) inline bool
+preflight_device_aux_oracle(Tracer* restrict t) {
+  return t->delta_records != NULL &&
+         (t->delta_records->flags & PREFLIGHT_RECORD_DEVICE_AUX_ORACLE) != 0u;
+}
+
+static __attribute__((always_inline)) inline void
+preflight_mark_dirty_memory_page(Tracer* restrict t, uint64_t address) {
+  if (likely(!preflight_device_aux(t))) {
+    return;
+  }
+  uint64_t page = address >> 12;
+  uint64_t word = page >> 6;
+  if (unlikely(word >= t->dirty_memory_pages_words ||
+               t->dirty_memory_pages == NULL)) {
+    t->delta_records->flags |= PREFLIGHT_RECORD_OVERFLOW;
+    return;
+  }
+  t->dirty_memory_pages[word] |= UINT64_C(1) << (page & 63u);
+}
+
+static __attribute__((always_inline)) inline void preflight_append_device_patch(
+    Tracer* restrict t, void* target, uint32_t token, uint32_t kind) {
+  if (unlikely((token & PREFLIGHT_DEVICE_AUX_TOKEN) == 0u)) {
+    t->delta_records->flags |= PREFLIGHT_RECORD_OVERFLOW;
+    return;
+  }
+  uint32_t event_index = token & ~PREFLIGHT_DEVICE_AUX_TOKEN;
+  uint32_t patch_index = t->device_aux_patches_len++;
+  if (unlikely(t->device_aux_patches == NULL ||
+               patch_index >= t->device_aux_patches_cap ||
+               event_index >= t->memory_log_len)) {
+    t->delta_records->flags |= PREFLIGHT_RECORD_OVERFLOW;
+    return;
+  }
+  uint64_t expected = 0u;
+  if (unlikely(preflight_device_aux_oracle(t))) {
+    if (unlikely(t->device_aux_references == NULL ||
+                 event_index >= t->device_aux_references_cap)) {
+      t->delta_records->flags |= PREFLIGHT_RECORD_OVERFLOW;
+      return;
+    }
+    DeviceAuxReference reference = t->device_aux_references[event_index];
+    expected = kind == PREFLIGHT_DEVICE_AUX_PATCH_U32
+                   ? (uint64_t)reference.prev_timestamp
+                   : reference.prev_value;
+  }
+  t->device_aux_patches[patch_index] = (DeviceAuxPatch){
+      .target = (uint64_t)(uintptr_t)target,
+      .event_index = event_index,
+      .kind = kind,
+      .expected = expected,
+  };
+}
+
+/* Custom direct-final emitters use these stores for every predecessor field.
+ * Production records receive a placeholder and an explicit patch descriptor;
+ * oracle records receive the legacy-host value first, then the same device
+ * value overwrites it before trace generation. */
+static __attribute__((always_inline)) inline void
+preflight_store_prev_timestamp(Tracer* restrict t, uint32_t* target,
+                               uint32_t token_or_value) {
+  if (likely(!preflight_device_aux(t))) {
+    *target = token_or_value;
+    return;
+  }
+  preflight_append_device_patch(t, target, token_or_value,
+                                PREFLIGHT_DEVICE_AUX_PATCH_U32);
+  uint32_t event_index = token_or_value & ~PREFLIGHT_DEVICE_AUX_TOKEN;
+  *target = preflight_device_aux_oracle(t) &&
+                    likely(t->device_aux_references != NULL &&
+                           event_index < t->device_aux_references_cap)
+                ? t->device_aux_references[event_index].prev_timestamp
+                : 0u;
+}
+
+static __attribute__((always_inline)) inline void preflight_store_prev_value(
+    Tracer* restrict t, void* target, uint32_t token_or_timestamp,
+    uint64_t legacy_value) {
+  if (likely(!preflight_device_aux(t))) {
+    memcpy(target, &legacy_value, sizeof(legacy_value));
+    return;
+  }
+  preflight_append_device_patch(t, target, token_or_timestamp,
+                                PREFLIGHT_DEVICE_AUX_PATCH_U64);
+  uint32_t event_index = token_or_timestamp & ~PREFLIGHT_DEVICE_AUX_TOKEN;
+  uint64_t value = preflight_device_aux_oracle(t) &&
+                           likely(t->device_aux_references != NULL &&
+                                  event_index < t->device_aux_references_cap)
+                       ? t->device_aux_references[event_index].prev_value
+                       : 0u;
+  memcpy(target, &value, sizeof(value));
+}
+
 /* Custom VecHeap emitters run after their traced accesses, so compact residual
  * entries no longer contain the predecessor fields they need. Capture only
  * that instruction's events in bounded scratch; ordinary instructions pay a
@@ -504,15 +765,37 @@ preflight_take_custom_memory_events(Tracer* restrict t, uint32_t event_count) {
 static __attribute__((always_inline)) inline uint32_t preflight_touch(
     Tracer* restrict t, uint8_t addr_space, uint64_t address,
     uint64_t initial_value, uint32_t* restrict out_timestamp) {
+  uint64_t detail_started = preflight_detail_phase_begin(
+      t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE, 0u);
   uint32_t timestamp = t->timestamp++;
+  preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE,
+                             detail_started);
+
+  if (likely(preflight_device_aux(t) && !preflight_device_aux_oracle(t))) {
+    *out_timestamp = timestamp;
+    return 0u;
+  }
+
+  detail_started = preflight_detail_phase_begin(
+      t, PREFLIGHT_DETAIL_PHASE_TRANSLATE, 0u);
   uint64_t block_addr = address & ~(uint64_t)(WORD_SIZE - 1u);
   uint32_t block_idx = (uint32_t)(block_addr / WORD_SIZE);
-
   uint32_t* restrict shadow = preflight_shadow_for(t, addr_space);
+  preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_TRANSLATE,
+                             detail_started);
+
+  detail_started = preflight_detail_phase_begin(
+      t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE, 0u);
   uint32_t prev_timestamp = shadow[block_idx];
   shadow[block_idx] = timestamp;
+  preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE,
+                             detail_started);
   if (prev_timestamp == 0u) {
+    detail_started = preflight_detail_phase_begin(
+        t, PREFLIGHT_DETAIL_PHASE_FIRST_TOUCH, sizeof(TouchedBlock));
     preflight_append_touched(t, addr_space, block_addr, initial_value);
+    preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_FIRST_TOUCH,
+                               detail_started);
   }
 
   *out_timestamp = timestamp;
@@ -528,20 +811,52 @@ preflight_touch_seed_from_state(RvState* restrict state, uint8_t addr_space,
                                 uint64_t* restrict out_initial_value,
                                 uint32_t* restrict out_timestamp) {
   Tracer* restrict t = state->tracer;
+  uint64_t detail_started = preflight_detail_phase_begin(
+      t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE, 0u);
   uint32_t timestamp = t->timestamp++;
+  preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE,
+                             detail_started);
+
+  if (likely(preflight_device_aux(t) && !preflight_device_aux_oracle(t))) {
+    *out_initial_value = 0u;
+    *out_timestamp = timestamp;
+    return 0u;
+  }
+
+  detail_started = preflight_detail_phase_begin(
+      t, PREFLIGHT_DETAIL_PHASE_TRANSLATE, 0u);
   uint64_t block_addr = preflight_block_addr(address);
   uint32_t block_idx = (uint32_t)(block_addr / WORD_SIZE);
-
   uint32_t* restrict shadow = preflight_shadow_for(t, addr_space);
+  preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_TRANSLATE,
+                             detail_started);
+
+  detail_started = preflight_detail_phase_begin(
+      t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE, 0u);
   uint32_t prev_timestamp = shadow[block_idx];
+  preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE,
+                             detail_started);
   uint64_t initial_value = 0u;
-  if (prev_timestamp == 0u) {
+  if (prev_timestamp == 0u || preflight_device_aux_oracle(t)) {
+    /* First touch needs the boundary seed. The oracle additionally retains
+     * the actual predecessor for repeated TOUCH events so its full residual
+     * vector has the same semantics as chronological device replay. */
+    if (prev_timestamp == 0u) {
+      detail_started = preflight_detail_phase_begin(
+          t, PREFLIGHT_DETAIL_PHASE_FIRST_TOUCH, sizeof(TouchedBlock));
+    }
     initial_value =
         preflight_read_block_for_seed(state, addr_space, block_addr);
   }
+  uint64_t aux_started = preflight_detail_phase_begin(
+      t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE, 0u);
   shadow[block_idx] = timestamp;
+  preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE,
+                             aux_started);
   if (prev_timestamp == 0u) {
     preflight_append_touched(t, addr_space, block_addr, initial_value);
+    preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_FIRST_TOUCH,
+                               detail_started);
   }
 
   *out_initial_value = initial_value;
@@ -549,29 +864,53 @@ preflight_touch_seed_from_state(RvState* restrict state, uint8_t addr_space,
   return prev_timestamp;
 }
 
-static __attribute__((always_inline)) inline void
+static __attribute__((always_inline)) inline uint32_t
 preflight_append_memory_record(Tracer* restrict t, uint8_t kind,
                                uint8_t addr_space, uint64_t address,
                                uint8_t width, uint64_t value,
                                uint64_t prev_value, uint32_t timestamp,
                                uint32_t prev_timestamp,
                                bool compact_residual) {
+  uint64_t detail_bytes = compact_residual ? sizeof(DeltaMemoryLogEntry)
+                                           : sizeof(MemoryLogEntry);
+  if (unlikely(t->custom_memory_scratch_len != UINT32_MAX)) {
+    detail_bytes += sizeof(MemoryLogEntry);
+  }
+  uint64_t detail_started = preflight_detail_phase_begin(
+      t, PREFLIGHT_DETAIL_PHASE_RESIDUAL_EMIT, detail_bytes);
   uint32_t idx = t->memory_log_len++;
   if (likely(idx < t->memory_log_cap)) {
+    bool device_aux = preflight_device_aux(t);
+    if (unlikely(device_aux && idx >= PREFLIGHT_DEVICE_AUX_TOKEN)) {
+      t->delta_records->flags |= PREFLIGHT_RECORD_OVERFLOW;
+    }
+    if (unlikely(device_aux && preflight_device_aux_oracle(t))) {
+      if (likely(t->device_aux_references != NULL &&
+                 idx < t->device_aux_references_cap)) {
+        t->device_aux_references[idx] = (DeviceAuxReference){
+            .prev_timestamp = prev_timestamp,
+            ._reserved = 0u,
+            .prev_value = prev_value,
+        };
+      } else {
+        t->delta_records->flags |= PREFLIGHT_RECORD_OVERFLOW;
+      }
+    }
     if (unlikely(t->custom_memory_scratch_len != UINT32_MAX)) {
       uint32_t scratch_idx = t->custom_memory_scratch_len++;
       if (likely(scratch_idx < t->custom_memory_scratch_cap)) {
         MemoryLogEntry scratch_entry = {
             .timestamp = timestamp,
-            .prev_timestamp = prev_timestamp,
+            .prev_timestamp = device_aux ? (PREFLIGHT_DEVICE_AUX_TOKEN | idx)
+                                         : prev_timestamp,
             .kind = kind,
             .addr_space = addr_space,
             .width = width,
             ._pad0 = 0,
-            ._pad1 = 0,
+            ._pad1 = device_aux ? idx + 1u : 0u,
             .address = address,
             .value = value,
-            .prev_value = prev_value,
+            .prev_value = device_aux ? 0u : prev_value,
         };
         t->custom_memory_scratch[scratch_idx] = scratch_entry;
       } else {
@@ -590,7 +929,9 @@ preflight_append_memory_record(Tracer* restrict t, uint8_t kind,
           ._reserved = 0,
       };
       ((DeltaMemoryLogEntry*)t->memory_log)[idx] = entry;
-      return;
+      preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_RESIDUAL_EMIT,
+                                 detail_started);
+      return idx;
     }
     MemoryLogEntry entry = {
         .timestamp = timestamp,
@@ -606,6 +947,9 @@ preflight_append_memory_record(Tracer* restrict t, uint8_t kind,
     };
     t->memory_log[idx] = entry;
   }
+  preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_RESIDUAL_EMIT,
+                             detail_started);
+  return idx;
 }
 
 /* Append one self-contained memory event. `address` need not be block-aligned;
@@ -623,10 +967,14 @@ static __attribute__((always_inline)) inline uint32_t preflight_append_memory(
   uint32_t timestamp;
   uint32_t prev_timestamp =
       preflight_touch(t, addr_space, address, prev_value, &timestamp);
-  preflight_append_memory_record(t, kind, addr_space, address, width, value,
-                                 prev_value, timestamp, prev_timestamp,
-                                 compact_residual);
-  return prev_timestamp;
+  if (kind == PREFLIGHT_MEMORY_KIND_WRITE && addr_space == AS_MEMORY) {
+    preflight_mark_dirty_memory_page(t, address);
+  }
+  uint32_t event_index = preflight_append_memory_record(
+      t, kind, addr_space, address, width, value, prev_value, timestamp,
+      prev_timestamp, compact_residual);
+  return preflight_device_aux(t) ? (PREFLIGHT_DEVICE_AUX_TOKEN | event_index)
+                                 : prev_timestamp;
 }
 
 static __attribute__((always_inline)) inline void trace_timestamp(
@@ -649,9 +997,14 @@ static __attribute__((always_inline)) inline uint32_t trace_reg_read(
  * (consumed by inline record emission). */
 static __attribute__((always_inline)) inline uint32_t trace_reg_write(
     RvState* restrict state, uint8_t idx, uint64_t new_val) {
+  uint64_t prev_value =
+      preflight_device_aux(state->tracer) &&
+              !preflight_device_aux_oracle(state->tracer)
+          ? 0u
+          : state->regs[idx];
   return preflight_append_memory(state->tracer, PREFLIGHT_MEMORY_KIND_WRITE,
                                  AS_REGISTER, (uint32_t)idx * WORD_SIZE,
-                                 WORD_SIZE, new_val, state->regs[idx]);
+                                 WORD_SIZE, new_val, prev_value);
 }
 
 /* Touch-only main-memory block access for migrated load/store opcodes (R3):
@@ -661,12 +1014,32 @@ static __attribute__((always_inline)) inline uint32_t trace_reg_write(
 static __attribute__((always_inline)) inline uint32_t trace_mem_touch(
     RvState* restrict state, uint64_t block_addr, uint64_t block_value) {
   Tracer* restrict t = state->tracer;
+  if (likely(preflight_device_aux(t) && !preflight_device_aux_oracle(t))) {
+    t->timestamp++;
+    return 0u;
+  }
+  uint64_t detail_started = preflight_detail_phase_begin(
+      t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE, 0u);
   uint32_t timestamp = t->timestamp++;
+  preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE,
+                             detail_started);
+  detail_started = preflight_detail_phase_begin(
+      t, PREFLIGHT_DETAIL_PHASE_TRANSLATE, 0u);
   uint32_t block_idx = (uint32_t)(block_addr / WORD_SIZE);
+  preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_TRANSLATE,
+                             detail_started);
+  detail_started = preflight_detail_phase_begin(
+      t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE, 0u);
   uint32_t prev_timestamp = t->shadow_memory[block_idx];
   t->shadow_memory[block_idx] = timestamp;
+  preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE,
+                             detail_started);
   if (prev_timestamp == 0u) {
+    detail_started = preflight_detail_phase_begin(
+        t, PREFLIGHT_DETAIL_PHASE_FIRST_TOUCH, sizeof(TouchedBlock));
     preflight_append_touched(t, AS_MEMORY, block_addr, block_value);
+    preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_FIRST_TOUCH,
+                               detail_started);
   }
   return prev_timestamp;
 }
@@ -676,16 +1049,41 @@ static __attribute__((always_inline)) inline uint32_t trace_mem_touch(
 static __attribute__((always_inline)) inline uint32_t trace_mem_store_touch(
     RvState* restrict state, uint64_t block_addr) {
   Tracer* restrict t = state->tracer;
+  if (likely(preflight_device_aux(t) && !preflight_device_aux_oracle(t))) {
+    t->timestamp++;
+    preflight_mark_dirty_memory_page(t, block_addr);
+    return 0u;
+  }
+  uint64_t detail_started = preflight_detail_phase_begin(
+      t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE, 0u);
   uint32_t timestamp = t->timestamp++;
+  preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE,
+                             detail_started);
+  detail_started = preflight_detail_phase_begin(
+      t, PREFLIGHT_DETAIL_PHASE_TRANSLATE, 0u);
   uint32_t block_idx = (uint32_t)(block_addr / WORD_SIZE);
+  preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_TRANSLATE,
+                             detail_started);
+  detail_started = preflight_detail_phase_begin(
+      t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE, 0u);
   uint32_t prev_timestamp = t->shadow_memory[block_idx];
+  preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE,
+                             detail_started);
   uint64_t initial_value = 0u;
   if (prev_timestamp == 0u) {
+    detail_started = preflight_detail_phase_begin(
+        t, PREFLIGHT_DETAIL_PHASE_FIRST_TOUCH, sizeof(TouchedBlock));
     initial_value = rd_mem_u64(state->memory, block_addr);
   }
+  uint64_t aux_started = preflight_detail_phase_begin(
+      t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE, 0u);
   t->shadow_memory[block_idx] = timestamp;
+  preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE,
+                             aux_started);
   if (prev_timestamp == 0u) {
     preflight_append_touched(t, AS_MEMORY, block_addr, initial_value);
+    preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_FIRST_TOUCH,
+                               detail_started);
   }
   return prev_timestamp;
 }
@@ -696,16 +1094,40 @@ static __attribute__((always_inline)) inline uint32_t trace_mem_store_touch(
 static __attribute__((always_inline)) inline uint32_t trace_pv_touch(
     RvState* restrict state, uint64_t block_addr) {
   Tracer* restrict t = state->tracer;
+  if (likely(preflight_device_aux(t) && !preflight_device_aux_oracle(t))) {
+    t->timestamp++;
+    return 0u;
+  }
+  uint64_t detail_started = preflight_detail_phase_begin(
+      t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE, 0u);
   uint32_t timestamp = t->timestamp++;
+  preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE,
+                             detail_started);
+  detail_started = preflight_detail_phase_begin(
+      t, PREFLIGHT_DETAIL_PHASE_TRANSLATE, 0u);
   uint32_t block_idx = (uint32_t)(block_addr / WORD_SIZE);
+  preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_TRANSLATE,
+                             detail_started);
+  detail_started = preflight_detail_phase_begin(
+      t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE, 0u);
   uint32_t prev_timestamp = t->shadow_public_values[block_idx];
+  preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE,
+                             detail_started);
   uint64_t initial_value = 0u;
   if (prev_timestamp == 0u) {
+    detail_started = preflight_detail_phase_begin(
+        t, PREFLIGHT_DETAIL_PHASE_FIRST_TOUCH, sizeof(TouchedBlock));
     initial_value = preflight_read_pv_block(t, block_addr);
   }
+  uint64_t aux_started = preflight_detail_phase_begin(
+      t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE, 0u);
   t->shadow_public_values[block_idx] = timestamp;
+  preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE,
+                             aux_started);
   if (prev_timestamp == 0u) {
     preflight_append_touched(t, AS_PUBLIC_VALUES, block_addr, initial_value);
+    preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_FIRST_TOUCH,
+                               detail_started);
   }
   return prev_timestamp;
 }
@@ -719,16 +1141,41 @@ static __attribute__((always_inline)) inline uint32_t trace_pv_touch(
 static __attribute__((always_inline)) inline uint32_t trace_reg_touch(
     RvState* restrict state, uint8_t idx) {
   Tracer* restrict t = state->tracer;
+  if (likely(preflight_device_aux(t) && !preflight_device_aux_oracle(t))) {
+    t->timestamp++;
+    return 0u;
+  }
+  uint64_t detail_started = preflight_detail_phase_begin(
+      t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE, 0u);
   uint32_t timestamp = t->timestamp++;
-  uint32_t prev_timestamp = t->shadow_register[idx];
+  preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE,
+                             detail_started);
+  detail_started = preflight_detail_phase_begin(
+      t, PREFLIGHT_DETAIL_PHASE_TRANSLATE, 0u);
+  uint32_t block_idx = idx;
+  preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_TRANSLATE,
+                             detail_started);
+  detail_started = preflight_detail_phase_begin(
+      t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE, 0u);
+  uint32_t prev_timestamp = t->shadow_register[block_idx];
+  preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE,
+                             detail_started);
   uint64_t initial_value = 0u;
   if (prev_timestamp == 0u) {
+    detail_started = preflight_detail_phase_begin(
+        t, PREFLIGHT_DETAIL_PHASE_FIRST_TOUCH, sizeof(TouchedBlock));
     initial_value = idx == 0 ? 0u : state->regs[idx];
   }
-  t->shadow_register[idx] = timestamp;
+  uint64_t aux_started = preflight_detail_phase_begin(
+      t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE, 0u);
+  t->shadow_register[block_idx] = timestamp;
+  preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE,
+                             aux_started);
   if (prev_timestamp == 0u) {
     preflight_append_touched(t, AS_REGISTER, (uint32_t)idx * WORD_SIZE,
                              initial_value);
+    preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_FIRST_TOUCH,
+                               detail_started);
   }
   return prev_timestamp;
 }
@@ -814,7 +1261,8 @@ static __attribute__((always_inline)) inline uint32_t* preflight_claim_record(
     return NULL;
   }
   buf->len = off + buf->stride;
-  return (uint32_t*)(buf->base + off);
+  uint32_t* record = (uint32_t*)(buf->base + off);
+  return record;
 }
 
 /* Fixed PhantomRecord ABI: pc, three instruction operands, timestamp. The
@@ -868,9 +1316,14 @@ preflight_claim_variable_record(RvState* restrict state, uint32_t chip_idx,
     buf->flags |= PREFLIGHT_RECORD_OVERFLOW;
     return NULL;
   }
+  uint64_t detail_started = preflight_detail_phase_begin(
+      t, PREFLIGHT_DETAIL_PHASE_ARENA_EMIT, claim_bytes);
   buf->len = next;
   buf->core_off = next_rows;
-  return buf->base + off;
+  uint8_t* record = buf->base + off;
+  preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_ARENA_EMIT,
+                             detail_started);
+  return record;
 }
 
 /* Reserve one basic block's delta records with a single cursor/capacity
@@ -897,22 +1350,35 @@ preflight_claim_delta_records(RvState* restrict state, uint32_t count) {
     buf->flags |= PREFLIGHT_RECORD_OVERFLOW;
     return NULL;
   }
+  uint64_t detail_started = preflight_detail_phase_begin(
+      state->tracer, PREFLIGHT_DETAIL_PHASE_DELTA_EMIT, 0u);
   buf->len = off + bytes;
-  return (PreflightDeltaRecord*)(buf->base + off);
+  PreflightDeltaRecord* records = (PreflightDeltaRecord*)(buf->base + off);
+  preflight_detail_phase_end(state->tracer,
+                             PREFLIGHT_DETAIL_PHASE_DELTA_EMIT,
+                             detail_started);
+  return records;
 }
 
 static __attribute__((always_inline)) inline void preflight_write_delta2(
-    PreflightDeltaRecord* restrict record, uint32_t from_pc,
+    RvState* restrict state, PreflightDeltaRecord* restrict record,
+    uint32_t from_pc,
     uint32_t from_timestamp, uint64_t v1, uint64_t v2) {
   if (unlikely(record == NULL)) {
     return;
   }
+  uint64_t detail_started = preflight_detail_phase_begin(
+      state->tracer, PREFLIGHT_DETAIL_PHASE_DELTA_EMIT,
+      sizeof(PreflightDeltaRecord));
   *record = (PreflightDeltaRecord){
       .from_pc = from_pc,
       .from_timestamp = from_timestamp,
       .v1 = v1,
       .v2 = v2,
   };
+  preflight_detail_phase_end(state->tracer,
+                             PREFLIGHT_DETAIL_PHASE_DELTA_EMIT,
+                             detail_started);
 }
 
 /* R3: compact branch record (2 reads, no write); see PreflightBranch2 layout
@@ -1021,7 +1487,11 @@ static __attribute__((always_inline)) inline void trace_rd_mem_i32(
 static __attribute__((always_inline)) inline void trace_rd_mem_u64(
     RvState* restrict state, uint64_t addr, uint64_t val) {
   uint64_t block_addr = preflight_block_addr(addr);
-  uint64_t block = preflight_read_mem_block(state, block_addr);
+  uint64_t block = preflight_device_aux(state->tracer) &&
+                           !preflight_device_aux_oracle(state->tracer) &&
+                           addr == block_addr
+                       ? val
+                       : preflight_read_mem_block(state, block_addr);
   preflight_append_memory(state->tracer, PREFLIGHT_MEMORY_KIND_READ, AS_MEMORY,
                           block_addr, WORD_SIZE, block, block);
 }
@@ -1058,7 +1528,11 @@ static __attribute__((always_inline)) inline void trace_wr_mem_u32(
 static __attribute__((always_inline)) inline void trace_wr_mem_u64(
     RvState* restrict state, uint64_t addr, uint64_t new_val) {
   uint64_t block_addr = preflight_block_addr(addr);
-  uint64_t prev_block = preflight_read_mem_block(state, block_addr);
+  uint64_t prev_block =
+      preflight_device_aux(state->tracer) &&
+              !preflight_device_aux_oracle(state->tracer)
+          ? 0u
+          : preflight_read_mem_block(state, block_addr);
   preflight_append_memory(state->tracer, PREFLIGHT_MEMORY_KIND_WRITE, AS_MEMORY,
                           block_addr, WORD_SIZE, new_val, prev_block);
 }
@@ -1082,7 +1556,11 @@ static __attribute__((always_inline)) inline void trace_wr_mem_u64_range(
    * previous value is still readable from live memory. */
   for (uint32_t i = 0; i < num_words; i++) {
     uint64_t block_addr = base_addr + i * WORD_SIZE;
-    uint64_t prev_block = preflight_read_mem_block(state, block_addr);
+    uint64_t prev_block =
+        preflight_device_aux(state->tracer) &&
+                !preflight_device_aux_oracle(state->tracer)
+            ? 0u
+            : preflight_read_mem_block(state, block_addr);
     preflight_append_memory(state->tracer, PREFLIGHT_MEMORY_KIND_WRITE,
                             AS_MEMORY, block_addr, WORD_SIZE, vals[i],
                             prev_block);
@@ -1139,7 +1617,9 @@ static __attribute__((always_inline)) inline void trace_wr_as_u64(
   /* Public-values reveal writes are traced before the store, so the previous
    * value is still in the aliased public-values buffer. */
   uint64_t prev_block =
-      addr_space == AS_PUBLIC_VALUES
+      addr_space == AS_PUBLIC_VALUES &&
+              !(preflight_device_aux(state->tracer) &&
+                !preflight_device_aux_oracle(state->tracer))
           ? preflight_read_pv_block(state->tracer, block_addr)
           : 0u;
   preflight_append_memory(state->tracer, PREFLIGHT_MEMORY_KIND_WRITE,
@@ -1196,8 +1676,11 @@ static __attribute__((always_inline)) inline void preflight_add_counter(
  * compact records keep the log because host expansion still consumes it. */
 static __attribute__((always_inline)) inline void trace_pc_indexed(
     RvState* restrict state, uint64_t pc, uint32_t exec_idx,
-    uint32_t inline_chip_idx, bool delta_inline) {
+    uint32_t inline_chip_idx, bool delta_inline, uint32_t detail_family) {
   Tracer* restrict t = state->tracer;
+  preflight_detail_family(t, detail_family);
+  uint64_t detail_started = preflight_detail_phase_begin(
+      t, PREFLIGHT_DETAIL_PHASE_CHRONOLOGY, 0u);
   if (likely(t->exec_frequencies != NULL &&
              exec_idx < t->exec_frequencies_len)) {
     preflight_add_counter(
@@ -1230,6 +1713,8 @@ static __attribute__((always_inline)) inline void trace_pc_indexed(
   if (!direct_final || needs_delta_chronology) {
     preflight_append_program(t, pc);
   }
+  preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_CHRONOLOGY,
+                             detail_started);
 }
 
 static __attribute__((always_inline)) inline void trace_chip(

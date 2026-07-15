@@ -81,7 +81,9 @@ __attribute__((preserve_most)) void rvr_ext_keccakf(RvState* restrict state,
       record->timestamp = from_timestamp;
       record->rd_ptr = rd_ptr;
       record->buffer_ptr = (uint32_t)buffer_ptr;
-      record->rd_prev_timestamp = rd_prev_timestamp;
+      preflight_store_prev_timestamp(state->tracer,
+                                     &record->rd_prev_timestamp,
+                                     rd_prev_timestamp);
       memcpy(record->preimage_buffer_bytes, preimage, sizeof(preimage));
     }
   } else {
@@ -98,7 +100,9 @@ __attribute__((preserve_most)) void rvr_ext_keccakf(RvState* restrict state,
           state->tracer, PREFLIGHT_MEMORY_KIND_WRITE, AS_MEMORY,
           buffer_ptr + i * WORD_SIZE, WORD_SIZE, st[i], preimage[i]);
       if (likely(record != NULL)) {
-        record->buffer_word_prev_timestamps[i] = prev_timestamp;
+        preflight_store_prev_timestamp(
+            state->tracer, &record->buffer_word_prev_timestamps[i],
+            prev_timestamp);
       }
     }
     write_mem_u64_range_raw(state, buffer_ptr, st, KECCAK_WIDTH_WORDS);
@@ -155,9 +159,15 @@ __attribute__((preserve_most)) bool rvr_ext_xorin(RvState* restrict state,
     record->buffer = (uint32_t)buffer_ptr;
     record->input = (uint32_t)input_ptr;
     record->len = (uint32_t)len;
-    record->register_prev_timestamps[0] = rd_prev_timestamp;
-    record->register_prev_timestamps[1] = rs1_prev_timestamp;
-    record->register_prev_timestamps[2] = rs2_prev_timestamp;
+    preflight_store_prev_timestamp(
+        state->tracer, &record->register_prev_timestamps[0],
+        rd_prev_timestamp);
+    preflight_store_prev_timestamp(
+        state->tracer, &record->register_prev_timestamps[1],
+        rs1_prev_timestamp);
+    preflight_store_prev_timestamp(
+        state->tracer, &record->register_prev_timestamps[2],
+        rs2_prev_timestamp);
   }
   if (likely(num_words != 0) && likely(emit_direct)) {
     read_mem_u64_range_raw(state, buffer_ptr, buffer, num_words);
@@ -166,7 +176,9 @@ __attribute__((preserve_most)) bool rvr_ext_xorin(RvState* restrict state,
           state->tracer, PREFLIGHT_MEMORY_KIND_READ, AS_MEMORY,
           buffer_ptr + i * WORD_SIZE, WORD_SIZE, buffer[i], buffer[i]);
       if (likely(record != NULL)) {
-        record->buffer_read_prev_timestamps[i] = prev_timestamp;
+        preflight_store_prev_timestamp(
+            state->tracer, &record->buffer_read_prev_timestamps[i],
+            prev_timestamp);
       }
     }
     read_mem_u64_range_raw(state, input_ptr, input, num_words);
@@ -175,7 +187,9 @@ __attribute__((preserve_most)) bool rvr_ext_xorin(RvState* restrict state,
           state->tracer, PREFLIGHT_MEMORY_KIND_READ, AS_MEMORY,
           input_ptr + i * WORD_SIZE, WORD_SIZE, input[i], input[i]);
       if (likely(record != NULL)) {
-        record->input_read_prev_timestamps[i] = prev_timestamp;
+        preflight_store_prev_timestamp(
+            state->tracer, &record->input_read_prev_timestamps[i],
+            prev_timestamp);
       }
     }
     if (likely(record != NULL)) {
@@ -202,13 +216,21 @@ __attribute__((preserve_most)) bool rvr_ext_xorin(RvState* restrict state,
       uint64_t address = buffer_ptr + i * WORD_SIZE;
       /* `buffer` was loaded before the XOR, so undoing the just-applied XOR
        * recovers the exact pre-write word without rereading guest memory. */
-      uint64_t prev_data = buffer[i] ^ input[i];
+      uint64_t prev_data =
+          preflight_device_aux(state->tracer) &&
+                  !preflight_device_aux_oracle(state->tracer)
+              ? 0u
+              : buffer[i] ^ input[i];
       uint32_t prev_timestamp = preflight_append_memory(
           state->tracer, PREFLIGHT_MEMORY_KIND_WRITE, AS_MEMORY, address,
           WORD_SIZE, buffer[i], prev_data);
       if (likely(record != NULL)) {
-        record->buffer_write_aux[i].prev_timestamp = prev_timestamp;
-        memcpy(record->buffer_write_aux[i].prev_data, &prev_data, WORD_SIZE);
+        preflight_store_prev_timestamp(
+            state->tracer, &record->buffer_write_aux[i].prev_timestamp,
+            prev_timestamp);
+        preflight_store_prev_value(
+            state->tracer, record->buffer_write_aux[i].prev_data,
+            prev_timestamp, prev_data);
       }
     }
     write_mem_u64_range_raw(state, buffer_ptr, buffer, num_words);

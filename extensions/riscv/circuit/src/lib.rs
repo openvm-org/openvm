@@ -461,6 +461,38 @@ pub fn generate_gpu_rvr_record_arenas(
         Default::default()
     };
     let air_bind_finished = std::time::Instant::now();
+    let device_replay_oracle =
+        delta_requested && std::env::var("OPENVM_RVR_DEVICE_REPLAY_ORACLE").as_deref() == Ok("1");
+    let mut oracle_expected = std::collections::HashMap::new();
+    if device_replay_oracle {
+        let original_program_log = output.raw_logs.program_log.clone();
+        assert!(
+            output.inline_records.is_empty(),
+            "device delta oracle requires an unexpanded chronological stream"
+        );
+        let delta = openvm_circuit::arch::rvr::log_native::expand_delta_records(
+            registry,
+            exe,
+            output,
+            pc_to_air_idx,
+        )?
+        .ok_or_else(|| {
+            openvm_circuit::arch::ExecutionError::RvrExecution(
+                "device delta oracle found no chronological backing".to_string(),
+            )
+        })?;
+        for records in std::mem::take(&mut output.inline_records) {
+            assert!(
+                oracle_expected
+                    .insert(records.air_idx, records.bytes)
+                    .is_none(),
+                "device delta oracle produced duplicate AIR {}",
+                records.air_idx
+            );
+        }
+        output.raw_logs.program_log = original_program_log;
+        output.delta_records = Some(delta);
+    }
     let saved_delta = if delta_requested {
         Some(output.delta_records.take().ok_or_else(|| {
             openvm_circuit::arch::ExecutionError::RvrExecution(
@@ -532,6 +564,10 @@ pub fn generate_gpu_rvr_record_arenas(
         let delta_memory_log = std::mem::take(&mut output.raw_logs.delta_memory_log);
         let program_log = std::mem::take(&mut output.raw_logs.program_log);
         let touched = std::mem::take(&mut output.raw_logs.touched);
+        let device_aux_patches = std::mem::take(&mut output.raw_logs.device_aux_patches);
+        let device_aux_references = std::mem::take(&mut output.raw_logs.device_aux_references);
+        let device_aux_arena_references =
+            std::mem::take(&mut output.raw_logs.device_aux_arena_references);
         let bound_airs = state.bind_delta_segment(
             exe,
             pc_to_air_idx,
@@ -542,6 +578,10 @@ pub fn generate_gpu_rvr_record_arenas(
             delta_memory_log,
             program_log,
             touched,
+            device_aux_patches,
+            device_aux_references,
+            oracle_expected,
+            device_aux_arena_references,
             &output.raw_logs.chip_counts,
             &output.arena_native_written,
         )?;

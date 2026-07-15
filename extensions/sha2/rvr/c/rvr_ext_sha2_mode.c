@@ -86,9 +86,15 @@ __attribute__((preserve_most)) void rvr_ext_sha256(
       record->dst_ptr = (uint32_t)dst_ptr;
       record->state_ptr = (uint32_t)state_ptr;
       record->input_ptr = (uint32_t)input_ptr;
-      record->register_reads_aux[0].prev_timestamp = dst_prev_timestamp;
-      record->register_reads_aux[1].prev_timestamp = state_prev_timestamp;
-      record->register_reads_aux[2].prev_timestamp = input_prev_timestamp;
+      preflight_store_prev_timestamp(
+          state->tracer, &record->register_reads_aux[0].prev_timestamp,
+          dst_prev_timestamp);
+      preflight_store_prev_timestamp(
+          state->tracer, &record->register_reads_aux[1].prev_timestamp,
+          state_prev_timestamp);
+      preflight_store_prev_timestamp(
+          state->tracer, &record->register_reads_aux[2].prev_timestamp,
+          input_prev_timestamp);
       memcpy(record->message_bytes, block_words, sizeof(block_words));
       memcpy(record->prev_state, state_words, sizeof(state_words));
     }
@@ -98,7 +104,9 @@ __attribute__((preserve_most)) void rvr_ext_sha256(
           state->tracer, PREFLIGHT_MEMORY_KIND_READ, AS_MEMORY,
           input_ptr + i * WORD_SIZE, WORD_SIZE, block_words[i], block_words[i]);
       if (likely(record != NULL)) {
-        record->input_reads_aux[i].prev_timestamp = prev_timestamp;
+        preflight_store_prev_timestamp(
+            state->tracer, &record->input_reads_aux[i].prev_timestamp,
+            prev_timestamp);
       }
     }
     for (uint32_t i = 0; i < RVR_SHA256_STATE_WORDS; i++) {
@@ -106,7 +114,9 @@ __attribute__((preserve_most)) void rvr_ext_sha256(
           state->tracer, PREFLIGHT_MEMORY_KIND_READ, AS_MEMORY,
           state_ptr + i * WORD_SIZE, WORD_SIZE, state_words[i], state_words[i]);
       if (likely(record != NULL)) {
-        record->state_reads_aux[i].prev_timestamp = prev_timestamp;
+        preflight_store_prev_timestamp(
+            state->tracer, &record->state_reads_aux[i].prev_timestamp,
+            prev_timestamp);
       }
     }
 
@@ -116,13 +126,20 @@ __attribute__((preserve_most)) void rvr_ext_sha256(
     }
     for (uint32_t i = 0; i < RVR_SHA256_STATE_WORDS; i++) {
       uint64_t address = dst_ptr + i * WORD_SIZE;
-      uint64_t prev_data = preflight_read_mem_block(state, address);
+      uint64_t prev_data =
+          preflight_device_aux(state->tracer) &&
+                  !preflight_device_aux_oracle(state->tracer)
+              ? 0u
+              : preflight_read_mem_block(state, address);
       uint32_t prev_timestamp = preflight_append_memory(
           state->tracer, PREFLIGHT_MEMORY_KIND_WRITE, AS_MEMORY, address,
           WORD_SIZE, state_words[i], prev_data);
       if (likely(record != NULL)) {
-        record->write_aux[i].prev_timestamp = prev_timestamp;
-        memcpy(record->write_aux[i].prev_data, &prev_data, WORD_SIZE);
+        preflight_store_prev_timestamp(
+            state->tracer, &record->write_aux[i].prev_timestamp,
+            prev_timestamp);
+        preflight_store_prev_value(state->tracer, record->write_aux[i].prev_data,
+                                   prev_timestamp, prev_data);
       }
     }
     write_mem_u64_range_raw(state, dst_ptr, state_words,

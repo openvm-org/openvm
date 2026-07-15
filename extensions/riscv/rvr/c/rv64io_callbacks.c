@@ -70,8 +70,10 @@ static inline void rvr_hintstore_trace_word(RvState* state,
       state->tracer, PREFLIGHT_MEMORY_KIND_WRITE, AS_MEMORY, block_addr,
       WORD_SIZE, word, prev_data);
   if (likely(var != NULL)) {
-    var->prev_timestamp = prev_timestamp;
-    memcpy(var->prev_data, &prev_data, WORD_SIZE);
+    preflight_store_prev_timestamp(state->tracer, &var->prev_timestamp,
+                                   prev_timestamp);
+    preflight_store_prev_value(state->tracer, var->prev_data, prev_timestamp,
+                               prev_data);
     memcpy(var->data, &word, WORD_SIZE);
   }
 }
@@ -91,7 +93,11 @@ bool openvm_hint_storew(void* state, uint64_t dest_addr, uint32_t from_pc,
     return false;
   }
   RvState* rv_state = (RvState*)state;
-  uint64_t prev_data = read_mem_u64(rv_state->memory, dest_addr);
+  bool reconstruct_prev = chip_idx != UINT32_MAX &&
+                          preflight_device_aux(rv_state->tracer) &&
+                          !preflight_device_aux_oracle(rv_state->tracer);
+  uint64_t prev_data =
+      reconstruct_prev ? 0u : read_mem_u64(rv_state->memory, dest_addr);
 #endif
   bool ok =
       g_rv64io_host_callbacks.hint_storew(openvm_get_io_ctx(), dest_addr);
@@ -112,10 +118,13 @@ bool openvm_hint_storew(void* state, uint64_t dest_addr, uint32_t from_pc,
         .timestamp = from_timestamp,
         .mem_ptr_ptr = mem_ptr_ptr,
         .mem_ptr = (uint32_t)dest_addr,
-        .mem_ptr_aux_record = {.prev_timestamp = mem_ptr_prev_timestamp},
+        .mem_ptr_aux_record = {.prev_timestamp = 0u},
         .num_words_ptr = UINT32_MAX,
         .num_words_read = {.prev_timestamp = 0u},
     };
+    preflight_store_prev_timestamp(
+        rv_state->tracer, &record->mem_ptr_aux_record.prev_timestamp,
+        mem_ptr_prev_timestamp);
   }
   rvr_hintstore_trace_word(rv_state, dest_addr, prev_data, word, vars);
 #else
@@ -139,10 +148,15 @@ bool openvm_hint_buffer(void* state, uint64_t dest_addr, uint16_t num_words,
     return false;
   }
   RvState* rv_state = (RvState*)state;
+  bool reconstruct_prev = chip_idx != UINT32_MAX &&
+                          preflight_device_aux(rv_state->tracer) &&
+                          !preflight_device_aux_oracle(rv_state->tracer);
   uint64_t prev_words[RVR_HINT_MAX_BUFFER_DWORDS];
   for (uint32_t i = 0; i < num_words; i++) {
-    prev_words[i] = read_mem_u64(rv_state->memory,
-                                 dest_addr + (uint64_t)i * WORD_SIZE);
+    prev_words[i] = reconstruct_prev
+                        ? 0u
+                        : read_mem_u64(rv_state->memory,
+                                       dest_addr + (uint64_t)i * WORD_SIZE);
   }
 #endif
   bool ok = g_rv64io_host_callbacks.hint_buffer(openvm_get_io_ctx(), dest_addr,
@@ -163,10 +177,16 @@ bool openvm_hint_buffer(void* state, uint64_t dest_addr, uint16_t num_words,
         .timestamp = from_timestamp,
         .mem_ptr_ptr = mem_ptr_ptr,
         .mem_ptr = (uint32_t)dest_addr,
-        .mem_ptr_aux_record = {.prev_timestamp = mem_ptr_prev_timestamp},
+        .mem_ptr_aux_record = {.prev_timestamp = 0u},
         .num_words_ptr = num_words_ptr,
-        .num_words_read = {.prev_timestamp = num_words_prev_timestamp},
+        .num_words_read = {.prev_timestamp = 0u},
     };
+    preflight_store_prev_timestamp(
+        rv_state->tracer, &record->mem_ptr_aux_record.prev_timestamp,
+        mem_ptr_prev_timestamp);
+    preflight_store_prev_timestamp(
+        rv_state->tracer, &record->num_words_read.prev_timestamp,
+        num_words_prev_timestamp);
   }
 #endif
   for (uint32_t i = 0; i < num_words; i++) {

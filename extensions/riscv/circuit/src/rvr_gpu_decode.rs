@@ -22,7 +22,8 @@ use openvm_circuit::arch::rvr::{
 };
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use openvm_circuit::system::cuda::memory::{
-    DeviceTouchedMemory, DeviceTouchedMemoryProvider, DEVICE_TOUCHED_RECORD_WORDS,
+    DeviceInitialMemory, DeviceTouchedMemory, DeviceTouchedMemoryProvider,
+    DEVICE_TOUCHED_RECORD_WORDS,
 };
 #[cfg(feature = "cuda")]
 use openvm_cuda_common::{
@@ -162,18 +163,6 @@ impl DeltaAirKind {
             _ => PREFLIGHT_ADDSUB_RECORD_SIZE,
         }
     }
-
-    #[cfg(all(feature = "cuda", feature = "rvr"))]
-    const fn requires_arena_native(self) -> bool {
-        matches!(
-            self,
-            Self::AddSubW
-                | Self::ShiftWLogical
-                | Self::ShiftWRightArithmetic
-                | Self::MulW
-                | Self::DivRemW
-        )
-    }
 }
 
 /// How a migrated AIR's records are fed to the GPU this segment (naming
@@ -223,6 +212,10 @@ struct HostDeltaSegment {
     delta_memory_log: Vec<openvm_circuit::arch::rvr::DeltaMemoryLogEntry>,
     program_log: Vec<openvm_circuit::arch::rvr::ProgramLogEntry>,
     touched: Vec<openvm_circuit::arch::rvr::TouchedBlock>,
+    device_aux_patches: Vec<openvm_circuit::arch::rvr::DeviceAuxPatch>,
+    device_aux_references: Vec<openvm_circuit::arch::rvr::DeviceAuxReference>,
+    oracle_expected: HashMap<usize, Vec<u8>>,
+    oracle_arena_expected: Vec<openvm_circuit::arch::rvr::DeviceAuxArenaReference>,
     arena_native_flags: Vec<u8>,
     specs: Vec<DeltaAirSpec>,
 }
@@ -422,7 +415,7 @@ impl RvrGpuDecodeState {
     /// the first GPU chip launches the shared predecode.
     #[cfg(all(feature = "cuda", feature = "rvr"))]
     #[allow(clippy::too_many_arguments)]
-    pub fn bind_delta_segment<F: PrimeField32>(
+    pub(crate) fn bind_delta_segment<F: PrimeField32>(
         &self,
         exe: &VmExe<F>,
         pc_to_air_idx: &[Option<usize>],
@@ -433,6 +426,10 @@ impl RvrGpuDecodeState {
         delta_memory_log: Vec<openvm_circuit::arch::rvr::DeltaMemoryLogEntry>,
         program_log: Vec<openvm_circuit::arch::rvr::ProgramLogEntry>,
         touched: Vec<openvm_circuit::arch::rvr::TouchedBlock>,
+        device_aux_patches: Vec<openvm_circuit::arch::rvr::DeviceAuxPatch>,
+        device_aux_references: Vec<openvm_circuit::arch::rvr::DeviceAuxReference>,
+        oracle_expected: HashMap<usize, Vec<u8>>,
+        oracle_arena_expected: Vec<openvm_circuit::arch::rvr::DeviceAuxArenaReference>,
         chip_counts: &[u32],
         arena_native_written: &[(usize, u32)],
     ) -> Result<HashSet<usize>, openvm_circuit::arch::ExecutionError> {
@@ -446,11 +443,6 @@ impl RvrGpuDecodeState {
         let mut specs = Vec::new();
         let mut delta_airs = HashSet::new();
         for (kind, air_idx) in kind_to_air {
-            if kind.requires_arena_native() && !arena_native.contains(&air_idx) {
-                return Err(openvm_circuit::arch::ExecutionError::RvrExecution(format!(
-                    "device delta requires {kind:?} AIR {air_idx} to use its arena-native GPU consumer"
-                )));
-            }
             if arena_native.contains(&air_idx) {
                 continue;
             }
@@ -488,6 +480,10 @@ impl RvrGpuDecodeState {
             delta_memory_log,
             program_log,
             touched,
+            device_aux_patches,
+            device_aux_references,
+            oracle_expected,
+            oracle_arena_expected,
             arena_native_flags,
             specs,
         };
@@ -509,7 +505,11 @@ impl RvrGpuDecodeState {
     /// calls this first for device-replayed touched memory; compact-record
     /// consumers then clone their already-populated per-AIR outputs.
     #[cfg(all(feature = "cuda", feature = "rvr"))]
-    fn ensure_device_delta_segment(&self, device_ctx: &GpuDeviceCtx) -> bool {
+    fn ensure_device_delta_segment(
+        &self,
+        device_ctx: &GpuDeviceCtx,
+        initial_memory: Option<&[DeviceInitialMemory]>,
+    ) -> bool {
         if self.delta_device.lock().unwrap().is_some() {
             return true;
         }
@@ -518,7 +518,9 @@ impl RvrGpuDecodeState {
         let Some(mut host) = host_guard.take() else {
             return false;
         };
-        let touched_count = host.touched.len();
+        let initial_memory = initial_memory.expect(
+            "delta predecode must be initiated by the system memory inventory before chip tracegen",
+        );
         let (d_table, pc_base) = self
             .device_operand_table(device_ctx)
             .expect("delta segment without a bound operand table");
@@ -583,6 +585,13 @@ impl RvrGpuDecodeState {
                 std::mem::size_of::<openvm_circuit::arch::rvr::MemoryLogEntry>(),
             )
         };
+        let delta_count =
+            host.delta.bytes().len() / openvm_circuit::arch::rvr::PREFLIGHT_DELTA_RECORD_SIZE;
+        let event_capacity = delta_count
+            .checked_mul(3)
+            .and_then(|count| count.checked_add(memory_count))
+            .and_then(|count| count.checked_add(host.program_log.len().saturating_mul(3)))
+            .expect("delta event capacity overflow");
         let d_memory = if memory_bytes.is_empty() {
             DeviceBuffer::new()
         } else {
@@ -598,21 +607,27 @@ impl RvrGpuDecodeState {
                 .to_device_on(device_ctx)
                 .expect("delta W-chronology H2D")
         };
-        let d_touched = if host.touched.is_empty() {
-            DeviceBuffer::new()
-        } else {
-            host.touched
-                .as_slice()
-                .to_device_on(device_ctx)
-                .expect("delta first-touch seeds H2D")
-        };
-        let d_touched_output = if touched_count == 0 {
+        let d_initial_memory = initial_memory
+            .to_device_on(device_ctx)
+            .expect("delta initial-memory descriptors H2D");
+        let d_touched_output = if event_capacity == 0 {
             DeviceBuffer::new()
         } else {
             DeviceBuffer::<u32>::with_capacity_on(
-                touched_count * DEVICE_TOUCHED_RECORD_WORDS,
+                event_capacity * DEVICE_TOUCHED_RECORD_WORDS,
                 device_ctx,
             )
+        };
+        let d_touched_count = DeviceBuffer::<u32>::with_capacity_on(1, device_ctx);
+        let d_memory_prev_timestamps = if memory_count == 0 {
+            DeviceBuffer::new()
+        } else {
+            DeviceBuffer::<u32>::with_capacity_on(memory_count, device_ctx)
+        };
+        let d_memory_prev_values = if memory_count == 0 {
+            DeviceBuffer::new()
+        } else {
+            DeviceBuffer::<u64>::with_capacity_on(memory_count, device_ctx)
         };
         let d_flags = host
             .arena_native_flags
@@ -628,15 +643,17 @@ impl RvrGpuDecodeState {
         unsafe {
             crate::cuda_abi::rvr_delta_cuda::predecode(
                 &d_delta,
-                host.delta.bytes().len() / openvm_circuit::arch::rvr::PREFLIGHT_DELTA_RECORD_SIZE,
+                delta_count,
                 &d_memory,
                 memory_count,
                 memory_stride,
                 &d_program,
                 host.program_log.len(),
-                &d_touched,
-                touched_count,
+                &d_initial_memory,
                 &d_touched_output,
+                &d_touched_count,
+                &d_memory_prev_timestamps,
+                &d_memory_prev_values,
                 &d_table,
                 pc_base,
                 &d_flags,
@@ -648,6 +665,112 @@ impl RvrGpuDecodeState {
         }
         let error = d_error.to_host_on(device_ctx).expect("delta error D2H")[0];
         assert_eq!(error, 0, "CUDA delta predecode fail-closed error {error}");
+        let touched_count = d_touched_count
+            .to_host_on(device_ctx)
+            .expect("delta touched count D2H")[0] as usize;
+        assert!(
+            touched_count <= event_capacity,
+            "CUDA delta replay returned {touched_count} touched groups for {event_capacity} events"
+        );
+
+        let memory_prev_timestamps = d_memory_prev_timestamps
+            .to_host_on(device_ctx)
+            .expect("delta residual prev-timestamp D2H");
+        let memory_prev_values = d_memory_prev_values
+            .to_host_on(device_ctx)
+            .expect("delta residual prev-value D2H");
+        assert_eq!(memory_prev_timestamps.len(), memory_count);
+        assert_eq!(memory_prev_values.len(), memory_count);
+        if !host.device_aux_references.is_empty() {
+            assert_eq!(
+                host.device_aux_references.len(),
+                memory_count,
+                "device aux oracle reference count differs from residual chronology"
+            );
+            for (index, reference) in host.device_aux_references.iter().enumerate() {
+                assert_eq!(
+                    memory_prev_timestamps[index], reference.prev_timestamp,
+                    "device residual prev_timestamp differs from host at event {index}"
+                );
+                assert_eq!(
+                    memory_prev_values[index], reference.prev_value,
+                    "device residual prev_value differs from host at event {index}"
+                );
+            }
+        }
+        for (patch_index, patch) in host.device_aux_patches.iter().enumerate() {
+            let event_index = patch.event_index as usize;
+            assert!(
+                event_index < memory_count,
+                "device aux patch {patch_index} references event {event_index}/{memory_count}"
+            );
+            let value = match patch.kind {
+                openvm_circuit::arch::rvr::DEVICE_AUX_PATCH_U32 => {
+                    u64::from(memory_prev_timestamps[event_index])
+                }
+                openvm_circuit::arch::rvr::DEVICE_AUX_PATCH_U64 => memory_prev_values[event_index],
+                kind => panic!("device aux patch {patch_index} has invalid kind {kind}"),
+            };
+            if !host.device_aux_references.is_empty() {
+                assert_eq!(
+                    value, patch.expected,
+                    "device aux patch {patch_index} differs from its host field"
+                );
+            }
+            // SAFETY: native preflight validated every target and width against
+            // a live staged-arena backing. Those Vec allocations have moved by
+            // ownership only, so their data pointers remain stable until chip
+            // trace generation consumes them after this system-first replay.
+            unsafe {
+                match patch.kind {
+                    openvm_circuit::arch::rvr::DEVICE_AUX_PATCH_U32 => {
+                        (patch.target as *mut u32).write_unaligned(value as u32);
+                    }
+                    openvm_circuit::arch::rvr::DEVICE_AUX_PATCH_U64 => {
+                        (patch.target as *mut u64).write_unaligned(value);
+                    }
+                    _ => unreachable!(),
+                }
+            }
+        }
+
+        for arena in &host.oracle_arena_expected {
+            // SAFETY: this points into the live DenseRecordArena allocation
+            // whose aux fields were just patched above. Moving the arena Vec
+            // does not move its byte allocation.
+            let actual = unsafe {
+                std::slice::from_raw_parts(arena.base as *const u8, arena.expected.len())
+            };
+            assert_eq!(
+                actual,
+                arena.expected.as_slice(),
+                "device aux full-arena bytes differ from host for AIR {}",
+                arena.air_idx
+            );
+        }
+
+        if !host.oracle_expected.is_empty() {
+            for spec in &host.specs {
+                if spec.count == 0 {
+                    continue;
+                }
+                let expected = host.oracle_expected.get(&spec.air_idx).unwrap_or_else(|| {
+                    panic!("device delta oracle omitted expected AIR {}", spec.air_idx)
+                });
+                let actual = outputs
+                    .get(&spec.kind)
+                    .unwrap_or_else(|| panic!("device delta oracle omitted {:?}", spec.kind))
+                    .to_host_on(device_ctx)
+                    .expect("device delta compact oracle D2H");
+                assert_eq!(
+                    actual.as_slice(),
+                    expected.as_slice(),
+                    "device delta compact bytes differ from host for AIR {} ({:?})",
+                    spec.air_idx,
+                    spec.kind
+                );
+            }
+        }
 
         let program_log = std::mem::take(&mut host.program_log);
         let memory_log = std::mem::take(&mut host.memory_log);
@@ -674,7 +797,7 @@ impl RvrGpuDecodeState {
         kind: DeltaAirKind,
         device_ctx: &GpuDeviceCtx,
     ) -> Option<Arc<DeviceBuffer<u8>>> {
-        self.ensure_device_delta_segment(device_ctx);
+        self.ensure_device_delta_segment(device_ctx, None);
         self.delta_device
             .lock()
             .unwrap()
@@ -685,8 +808,12 @@ impl RvrGpuDecodeState {
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 impl DeviceTouchedMemoryProvider for RvrGpuDecodeState {
-    fn take_device_touched_memory(&self, device_ctx: &GpuDeviceCtx) -> Option<DeviceTouchedMemory> {
-        self.ensure_device_delta_segment(device_ctx);
+    fn take_device_touched_memory(
+        &self,
+        device_ctx: &GpuDeviceCtx,
+        initial_memory: &[DeviceInitialMemory],
+    ) -> Option<DeviceTouchedMemory> {
+        self.ensure_device_delta_segment(device_ctx, Some(initial_memory));
         self.delta_device
             .lock()
             .unwrap()
