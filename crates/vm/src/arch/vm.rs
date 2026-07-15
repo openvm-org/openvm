@@ -102,6 +102,26 @@ type VmRvrPreflightRoute<'a, F, VC> =
     RvrPreflightRoute<'a, F, <VC as VmExecutionConfig<F>>::Executor>;
 
 #[cfg(feature = "rvr")]
+trait CachedRvrMeteredExecutor: Send + Sync {
+    fn execute_metered(
+        &self,
+        inputs: Streams,
+        ctx: MeteredCtx,
+    ) -> Result<(Vec<Segment>, VmState<GuestMemory>), ExecutionError>;
+}
+
+#[cfg(feature = "rvr")]
+impl CachedRvrMeteredExecutor for RvrMeteredInstance<'static> {
+    fn execute_metered(
+        &self,
+        inputs: Streams,
+        ctx: MeteredCtx,
+    ) -> Result<(Vec<Segment>, VmState<GuestMemory>), ExecutionError> {
+        RvrMeteredInstance::execute_metered(self, inputs, ctx)
+    }
+}
+
+#[cfg(feature = "rvr")]
 trait CachedRvrPreflightExecutor<F>: Send + Sync {
     #[allow(clippy::too_many_arguments)]
     fn execute(
@@ -1977,6 +1997,8 @@ where
     pub vm: VirtualMachine<E, VB>,
     pub interpreter: PreflightInterpretedInstance2<Val<E::SC>, VB::VmConfig>,
     #[cfg(feature = "rvr")]
+    rvr_metered: Option<Box<dyn CachedRvrMeteredExecutor>>,
+    #[cfg(feature = "rvr")]
     rvr_preflight: Option<CachedRvrPreflight<Val<E::SC>>>,
     #[cfg(feature = "rvr")]
     rvr_preflight_engine: Option<RvrPreflightEngine>,
@@ -2006,6 +2028,8 @@ where
             vm,
             interpreter,
             #[cfg(feature = "rvr")]
+            rvr_metered: None,
+            #[cfg(feature = "rvr")]
             rvr_preflight: None,
             #[cfg(feature = "rvr")]
             rvr_preflight_engine: None,
@@ -2028,6 +2052,101 @@ where
             "preflight engine already resolved for this instance; set the override before proving"
         );
         self.rvr_preflight_engine = engine;
+    }
+
+    /// Compile and cache the program-specialized RVR executors used by app
+    /// proving. Callers can invoke this before entering a timed proving span;
+    /// repeated calls are no-ops.
+    #[cfg(feature = "rvr")]
+    pub fn warm_rvr_proving(&mut self) -> Result<(), VirtualMachineError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
+            MeteredExecutor<Val<E::SC>> + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
+    {
+        if self.rvr_metered.is_none() {
+            let metered = self.vm.metered_interpreter(&self.exe)?.into_owned();
+            self.rvr_metered = Some(Box::new(metered));
+        }
+        if self.rvr_preflight.is_some() {
+            return Ok(());
+        }
+
+        let vm = &mut self.vm;
+        // Engine resolution: per-instance override, then the
+        // OPENVM_RVR_PREFLIGHT_ENGINE environment override, then the
+        // builder's backend-keyed default (CPU → interpreter, GPU → rvr;
+        // rationale on `RvrPreflightEngine`). `Rvr` remains subject to
+        // opcode-capability routing.
+        let engine = self
+            .rvr_preflight_engine
+            .or_else(rvr_preflight_engine_env_override)
+            .unwrap_or_else(|| vm.builder.default_rvr_preflight_engine());
+        let cached = match engine {
+            RvrPreflightEngine::Interpreter => CachedRvrPreflight::Interpreter,
+            RvrPreflightEngine::Rvr => match vm.preflight_routed_instance(&self.exe)? {
+                RvrPreflightRoute::Rvr(RvrPreflightInstance {
+                    runtime_hooks,
+                    compiled,
+                    chip_counts_len,
+                    pool,
+                    ..
+                }) => {
+                    let pc_to_air_idx = vm.pc_to_air_idx(&self.exe)?;
+                    let mut wire_airs = vm
+                        .builder
+                        .rvr_wire_record_airs(
+                            vm.config(),
+                            &self.exe,
+                            &pc_to_air_idx,
+                            compiled.inline_records(),
+                        )
+                        .into_iter()
+                        .collect::<Vec<_>>();
+                    // Compiler-scope proof, including mixed-AIR taint: every
+                    // defined routed slot must both emit inline and belong to
+                    // a whole AIR owned by the device or an arena-native
+                    // consumer. Otherwise retain the complete host access
+                    // replay and fail-closed generic assembly path.
+                    let fully_direct_delta = compiled.inline_records().fully_direct_delta;
+                    // The AOT classification is backend-neutral. CPU builders
+                    // intentionally advertise no delta-wire AIRs and must
+                    // retain the full host replay. The only safe empty-wire
+                    // exception is an all-custom arena route, whose AOT decode
+                    // map is empty because no delta record can reach
+                    // finalization.
+                    let has_device_delta_route = !wire_airs.is_empty();
+                    let all_custom_arena = compiled
+                        .inline_records()
+                        .delta_decode
+                        .as_ref()
+                        .is_some_and(|precomputed| precomputed.kind_to_air.is_empty());
+                    if compiled.inline_records().delta_records {
+                        // Stage-2 uses one cross-AIR chronological backing,
+                        // not the per-AIR G2 wire targets.
+                        wire_airs.clear();
+                    }
+                    let compact_delta_memory = fully_direct_delta && has_device_delta_route;
+                    let device_touched_memory = fully_direct_delta && has_device_delta_route;
+                    wire_airs.sort_unstable();
+                    CachedRvrPreflight::Rvr(Box::new(CachedRvrCompiledPreflight {
+                        compiled,
+                        runtime_hooks,
+                        chip_counts_len,
+                        pool,
+                        pc_to_air_idx,
+                        wire_airs,
+                        build_access_aux: !(fully_direct_delta
+                            && (has_device_delta_route || all_custom_arena)),
+                        compact_delta_memory,
+                        device_touched_memory,
+                    }))
+                }
+                RvrPreflightRoute::Interpreter(_) => CachedRvrPreflight::Interpreter,
+            },
+        };
+        self.rvr_preflight = Some(cached);
+        Ok(())
     }
 
     #[instrument(name = "vm.reset_state", level = "debug", skip_all)]
@@ -2082,8 +2201,16 @@ where
     ) -> Result<ContinuationVmProof<E::SC>, VirtualMachineError> {
         let input = input.into();
         self.reset_state(input.clone());
+        #[cfg(feature = "rvr")]
+        self.warm_rvr_proving()?;
         let vm = &mut self.vm;
         let metered_ctx = vm.build_metered_ctx(&self.exe);
+        #[cfg(feature = "rvr")]
+        let metered_interpreter = self
+            .rvr_metered
+            .as_ref()
+            .expect("RVR metered executor must be warmed before proving");
+        #[cfg(not(feature = "rvr"))]
         let metered_interpreter = vm.metered_interpreter(&self.exe)?;
         let (segments, _) = metered_interpreter.execute_metered(input, metered_ctx)?;
         let num_segments = segments.len();
@@ -2124,85 +2251,10 @@ where
             #[cfg(feature = "cuda")]
             let init_memory_h2d_build_elapsed = init_h2d_started.elapsed();
             #[cfg(feature = "rvr")]
-            let rvr_preflight = if let Some(rvr_preflight) = self.rvr_preflight.as_ref() {
-                rvr_preflight
-            } else {
-                // Engine resolution: per-instance override, then the
-                // OPENVM_RVR_PREFLIGHT_ENGINE environment override, then the
-                // builder's backend-keyed default (CPU → interpreter, GPU →
-                // rvr; rationale on `RvrPreflightEngine`). `Rvr` remains
-                // subject to opcode-capability routing.
-                let engine = self
-                    .rvr_preflight_engine
-                    .or_else(rvr_preflight_engine_env_override)
-                    .unwrap_or_else(|| vm.builder.default_rvr_preflight_engine());
-                let cached = match engine {
-                    RvrPreflightEngine::Interpreter => CachedRvrPreflight::Interpreter,
-                    RvrPreflightEngine::Rvr => match vm.preflight_routed_instance(&self.exe)? {
-                        RvrPreflightRoute::Rvr(RvrPreflightInstance {
-                            runtime_hooks,
-                            compiled,
-                            chip_counts_len,
-                            pool,
-                            ..
-                        }) => {
-                            let pc_to_air_idx = vm.pc_to_air_idx(&self.exe)?;
-                            let mut wire_airs = vm
-                                .builder
-                                .rvr_wire_record_airs(
-                                    vm.config(),
-                                    &self.exe,
-                                    &pc_to_air_idx,
-                                    compiled.inline_records(),
-                                )
-                                .into_iter()
-                                .collect::<Vec<_>>();
-                            // Compiler-scope proof, including mixed-AIR taint:
-                            // every defined routed slot must both emit inline
-                            // and belong to a whole AIR owned by the device or
-                            // an arena-native consumer. Otherwise retain the
-                            // complete host access replay and fail-closed
-                            // generic assembly path.
-                            let fully_direct_delta = compiled.inline_records().fully_direct_delta;
-                            // The AOT classification is backend-neutral. CPU
-                            // builders intentionally advertise no delta-wire
-                            // AIRs and must retain the full host replay. The
-                            // only safe empty-wire exception is an all-custom
-                            // arena route, whose AOT decode map is empty
-                            // because no delta record can reach finalization.
-                            let has_device_delta_route = !wire_airs.is_empty();
-                            let all_custom_arena = compiled
-                                .inline_records()
-                                .delta_decode
-                                .as_ref()
-                                .is_some_and(|precomputed| precomputed.kind_to_air.is_empty());
-                            if compiled.inline_records().delta_records {
-                                // Stage-2 uses one cross-AIR chronological
-                                // backing, not the per-AIR G2 wire targets.
-                                wire_airs.clear();
-                            }
-                            let compact_delta_memory = fully_direct_delta && has_device_delta_route;
-                            let device_touched_memory =
-                                fully_direct_delta && has_device_delta_route;
-                            wire_airs.sort_unstable();
-                            CachedRvrPreflight::Rvr(Box::new(CachedRvrCompiledPreflight {
-                                compiled,
-                                runtime_hooks,
-                                chip_counts_len,
-                                pool,
-                                pc_to_air_idx,
-                                wire_airs,
-                                build_access_aux: !(fully_direct_delta
-                                    && (has_device_delta_route || all_custom_arena)),
-                                compact_delta_memory,
-                                device_touched_memory,
-                            }))
-                        }
-                        RvrPreflightRoute::Interpreter(_) => CachedRvrPreflight::Interpreter,
-                    },
-                };
-                self.rvr_preflight.insert(cached)
-            };
+            let rvr_preflight = self
+                .rvr_preflight
+                .as_ref()
+                .expect("RVR preflight executor must be warmed before proving");
             #[cfg(feature = "rvr")]
             if let CachedRvrPreflight::Rvr(rvr) = rvr_preflight {
                 rvr.prepare_wire_backings(&trace_heights);

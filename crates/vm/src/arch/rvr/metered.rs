@@ -1,7 +1,11 @@
 //! Per-chip metered execution: page tracking and segmentation
 //! matching OpenVM's `MeteredCtx`.
 
-use std::path::{Path, PathBuf};
+use std::{
+    borrow::Cow,
+    ffi::c_void,
+    path::{Path, PathBuf},
+};
 
 use openvm_instructions::{
     metering::{PAGE_MASK_LEAF_BITS, SEGMENT_CHECK_INSNS},
@@ -33,7 +37,7 @@ use crate::{
 };
 
 struct RvrMeteredInstanceInner<'a> {
-    system_config: &'a SystemConfig,
+    system_config: Cow<'a, SystemConfig>,
     initial_image: RvrInitialImage,
     runtime_hooks: Vec<Box<dyn RvrRuntimeExtension>>,
     compiled: RvrCompiled,
@@ -380,7 +384,7 @@ pub unsafe extern "C" fn metered_memory_buffer_flush(state: *mut MeteringState) 
 impl RvrMeteredInstanceInner<'_> {
     fn create_initial_vm_state(&self, inputs: impl Into<Streams>) -> VmState<GuestMemory> {
         self.initial_image
-            .create_vm_state(self.system_config, inputs)
+            .create_vm_state(&self.system_config, inputs)
     }
 
     /// Persist the compiled shared library into `dir`. Returns the path to
@@ -408,7 +412,7 @@ impl RvrMeteredInstance<'_> {
     ) -> RvrMeteredInstance<'_> {
         RvrMeteredInstance {
             inner: RvrMeteredInstanceInner {
-                system_config,
+                system_config: Cow::Borrowed(system_config),
                 initial_image,
                 runtime_hooks,
                 compiled,
@@ -430,6 +434,19 @@ impl RvrMeteredInstance<'_> {
     /// Persist generated C sources for inspection.
     pub fn save_generated_sources(&self, dir: &Path) -> Result<(), super::CompileError> {
         self.inner.save_generated_sources(dir)
+    }
+    /// Convert the instance into an owned form suitable for caching on a VM
+    /// prover instance. The compiled library and executable are already
+    /// owned; only the small system configuration needs to be cloned.
+    pub(crate) fn into_owned(self) -> RvrMeteredInstance<'static> {
+        RvrMeteredInstance {
+            inner: RvrMeteredInstanceInner {
+                system_config: Cow::Owned(self.inner.system_config.into_owned()),
+                initial_image: self.inner.initial_image,
+                runtime_hooks: self.inner.runtime_hooks,
+                compiled: self.inner.compiled,
+            },
+        }
     }
 
     pub fn execute_metered(
@@ -482,7 +499,7 @@ impl RvrMeteredSegmentInstance<'_> {
     ) -> RvrMeteredSegmentInstance<'_> {
         RvrMeteredSegmentInstance {
             inner: RvrMeteredInstanceInner {
-                system_config,
+                system_config: Cow::Borrowed(system_config),
                 initial_image,
                 runtime_hooks,
                 compiled,
@@ -525,7 +542,7 @@ impl RvrMeteredSegmentInstance<'_> {
         let metrics = ExecutionMetricTimer::start(ExecutionMetric::Metered);
         #[cfg(feature = "metrics")]
         let start_instret = ctx.segmentation_ctx.instret;
-        let seg_state = SegmentationState::new(ctx, self.inner.system_config);
+        let seg_state = SegmentationState::new(ctx, &self.inner.system_config);
 
         let result = tracing::info_span!("execute_metered").in_scope(|| {
             execute_metered_segment_boundary(

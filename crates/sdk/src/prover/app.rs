@@ -19,7 +19,7 @@ use openvm_stark_backend::{
     StarkEngine, Val,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::Digest;
-use tracing::instrument;
+use tracing::info_span;
 
 use crate::{
     keygen::AppVerifyingKey,
@@ -115,17 +115,16 @@ where
     }
 
     /// Generates proof for every continuation segment
-    #[instrument(
-        name = "app_prove",
-        skip_all,
-        fields(group = self.program_name.as_ref().unwrap_or(&"app_proof".to_string()))
-    )]
     pub fn prove(&mut self, input: StdIn) -> Result<ContinuationVmProof<E::SC>, VirtualMachineError>
     where
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
             + MeteredExecutor<Val<E::SC>>
             + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
     {
+        #[cfg(feature = "rvr")]
+        self.instance.warm_rvr_proving()?;
+        let group = self.program_name.as_deref().unwrap_or("app_proof");
+        let _app_prove_span = info_span!("app_prove", group).entered();
         check_max_constraint_degrees(
             self.vm_config().as_ref(),
             self.app_vm_vk.inner.max_constraint_degree(),
