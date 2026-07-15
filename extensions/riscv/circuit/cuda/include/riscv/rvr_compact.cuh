@@ -6,7 +6,8 @@
 #include "riscv/adapters/jalr.cuh"
 #include "riscv/adapters/rdwrite.cuh"
 #include "riscv/adapters/alu.cuh"
-#include "riscv/adapters/loadstore.cuh"
+#include "riscv/adapters/load.cuh"
+#include "riscv/adapters/store.cuh"
 #include "riscv/adapters/mul.cuh"
 #include "riscv/adapters/mul_w.cuh"
 
@@ -344,35 +345,43 @@ rvr_decode_alu3_bytes(RvrAlu3Compact const &rec, RvrOperandEntry const &entry) {
     return out;
 }
 
-// Device mirror of the host sign_extend_imm16.
-__device__ __forceinline__ uint32_t rvr_sign_extend_imm16(uint32_t imm, bool sign) {
-    return imm + (sign ? (UINT32_MAX << 16) : 0u);
-}
-
-// Device mirror of fill_loadstore_adapter_from_compact (the common start):
-// entry a = rd_rs2_ptr, b = rs1_ptr, c = 16-bit imm; rs1_val is the runtime
-// low word of the wire `b` field. Fills everything except the conditional
-// rd_rs2/write side, which is load/store/sign-extend-specific in the kernel.
-// Returns the alignment shift via `shift_amount`.
-__device__ __forceinline__ Rv64LoadStoreAdapterRecord rvr_decode_alu3_loadstore_start(
-    RvrAlu3Compact const &rec, RvrOperandEntry const &entry, uint8_t &shift_amount
-) {
-    Rv64LoadStoreAdapterRecord out;
+// Device mirrors of the width-specific load and store adapter reconstruction.
+// The compact record contains chronological values; the operand table supplies
+// the instruction-static pointers, immediate, and address-space selector.
+__device__ __forceinline__ Rv64LoadAdapterRecord
+rvr_decode_alu3_load(RvrAlu3Compact const &rec, RvrOperandEntry const &entry) {
+    Rv64LoadAdapterRecord out;
     out.from_pc = rec.from_pc;
     out.from_timestamp = rec.from_timestamp;
     out.rs1_ptr = entry.b;
     out.rs1_aux_record.prev_timestamp = rec.reads_prev_timestamp[0];
-    uint32_t const rs1_val = rec.b[0];
-    out.rs1_val = rs1_val;
-    out.imm = (uint16_t)entry.c;
-    bool const imm_sign = (entry.flags & RVR_OPERAND_FLAG_LS_IMM_SIGN) != 0;
-    out.imm_sign = imm_sign;
-    uint32_t const ptr = rs1_val + rvr_sign_extend_imm16(out.imm, imm_sign);
-    shift_amount = (uint8_t)(ptr & (RV64_REGISTER_NUM_LIMBS - 1));
+    out.rs1_val = rec.b[0];
+    out.rd_ptr = (entry.flags & RVR_OPERAND_FLAG_WRITE_ENABLED) ? entry.a : UINT32_MAX;
     out.read_data_aux.prev_timestamp = rec.reads_prev_timestamp[1];
+    out.imm = (uint16_t)entry.c;
+    out.imm_sign = (entry.flags & RVR_OPERAND_FLAG_LS_IMM_SIGN) != 0;
+    out.write_prev_timestamp = rec.write_prev_timestamp;
+#pragma unroll
+    for (size_t i = 0; i < BLOCK_FE_WIDTH; i++) {
+        out.write_prev_data[i] = rvr_u16_limb(rec.write_prev_data, i);
+    }
+    return out;
+}
+
+__device__ __forceinline__ Rv64StoreAdapterRecord
+rvr_decode_alu3_store(RvrAlu3Compact const &rec, RvrOperandEntry const &entry) {
+    Rv64StoreAdapterRecord out;
+    out.from_pc = rec.from_pc;
+    out.from_timestamp = rec.from_timestamp;
+    out.rs1_ptr = entry.b;
+    out.rs1_aux_record.prev_timestamp = rec.reads_prev_timestamp[0];
+    out.rs1_val = rec.b[0];
+    out.rs2_ptr = entry.a;
+    out.read_data_aux.prev_timestamp = rec.reads_prev_timestamp[1];
+    out.imm = (uint16_t)entry.c;
+    out.imm_sign = (entry.flags & RVR_OPERAND_FLAG_LS_IMM_SIGN) != 0;
     out.mem_as = (entry.flags & RVR_OPERAND_FLAG_LS_PUBLIC_VALUES) ? 3 : 2;
-    out.rd_rs2_ptr = UINT32_MAX;
-    out.write_prev_timestamp = 0;
+    out.write_prev_timestamp = rec.write_prev_timestamp;
     return out;
 }
 

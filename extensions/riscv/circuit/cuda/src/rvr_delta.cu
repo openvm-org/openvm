@@ -146,8 +146,8 @@ enum DeltaAirKind : uint32_t {
     DELTA_KIND_ADD_SUB_W = 5,
     DELTA_KIND_SHIFT_W_LOGICAL = 6,
     DELTA_KIND_SHIFT_W_RIGHT_ARITHMETIC = 7,
-    DELTA_KIND_LOAD_STORE = 8,
-    DELTA_KIND_LOAD_SIGN_EXTEND = 9,
+    DELTA_KIND_LOAD_BYTE = 8,
+    DELTA_KIND_LOAD_SIGN_EXTEND_BYTE = 9,
     DELTA_KIND_BRANCH_EQUAL = 10,
     DELTA_KIND_BRANCH_LESS_THAN = 11,
     DELTA_KIND_JAL_LUI = 12,
@@ -158,7 +158,16 @@ enum DeltaAirKind : uint32_t {
     DELTA_KIND_MUL_W = 17,
     DELTA_KIND_DIV_REM = 18,
     DELTA_KIND_DIV_REM_W = 19,
-    DELTA_KIND_COUNT = 20,
+    DELTA_KIND_LOAD_HALFWORD = 20,
+    DELTA_KIND_LOAD_WORD = 21,
+    DELTA_KIND_LOAD_DOUBLEWORD = 22,
+    DELTA_KIND_STORE_BYTE = 23,
+    DELTA_KIND_STORE_HALFWORD = 24,
+    DELTA_KIND_STORE_WORD = 25,
+    DELTA_KIND_STORE_DOUBLEWORD = 26,
+    DELTA_KIND_LOAD_SIGN_EXTEND_HALFWORD = 27,
+    DELTA_KIND_LOAD_SIGN_EXTEND_WORD = 28,
+    DELTA_KIND_COUNT = 29,
 };
 
 __device__ __forceinline__ void fail(uint32_t *error, uint32_t code) {
@@ -534,8 +543,17 @@ __device__ __forceinline__ bool delta_post_write_value(
             uint32_t(int32_t(uint32_t(record.v1)) >> uint32_t(record.v2 & 31u))
         );
         return true;
-    case DELTA_KIND_LOAD_STORE:
-    case DELTA_KIND_LOAD_SIGN_EXTEND: {
+    case DELTA_KIND_LOAD_BYTE:
+    case DELTA_KIND_LOAD_HALFWORD:
+    case DELTA_KIND_LOAD_WORD:
+    case DELTA_KIND_LOAD_DOUBLEWORD:
+    case DELTA_KIND_STORE_BYTE:
+    case DELTA_KIND_STORE_HALFWORD:
+    case DELTA_KIND_STORE_WORD:
+    case DELTA_KIND_STORE_DOUBLEWORD:
+    case DELTA_KIND_LOAD_SIGN_EXTEND_BYTE:
+    case DELTA_KIND_LOAD_SIGN_EXTEND_HALFWORD:
+    case DELTA_KIND_LOAD_SIGN_EXTEND_WORD: {
         if (!(entry.flags & RVR_OPERAND_FLAG_WRITE_ENABLED)) return false;
         uint32_t shift = (delta_memory_effective_address(record, entry) & 7u) * 8u;
         uint64_t shifted = record.v2 >> shift;
