@@ -111,6 +111,29 @@ struct MemoryInventoryRecord<const CHUNK: usize, const BLOCKS: usize> {
     values: [u32; CHUNK],
 }
 
+/// Canonical device representation of one sorted touched-memory block:
+/// `(address_space, ptr, is_dirty, timestamp, [BabyBear; BLOCK_FE_WIDTH])` as
+/// raw u32 words. It is exactly the input ABI consumed by the CUDA memory
+/// inventory.
+pub const DEVICE_TOUCHED_RECORD_WORDS: usize = 4 + BLOCK_FE_WIDTH;
+
+pub struct DeviceTouchedMemory {
+    pub records: DeviceBuffer<u32>,
+    pub num_records: usize,
+}
+
+/// Optional producer used by an all-direct GPU preflight route. Keeping this
+/// interface in the system CUDA layer lets extension-specific replay code feed
+/// the unchanged memory boundary without making the VM core depend on an ISA.
+pub trait DeviceTouchedMemoryProvider: Send + Sync {
+    fn take_device_touched_memory(&self, device_ctx: &GpuDeviceCtx) -> Option<DeviceTouchedMemory>;
+}
+
+enum TouchedMemoryInput {
+    Host(TouchedMemory<F>),
+    Device(DeviceTouchedMemory),
+}
+
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct MemoryMerkleRecord {
@@ -240,12 +263,41 @@ impl MemoryInventoryGPU {
         &mut self,
         touched_memory: TouchedMemory<F>,
     ) -> Vec<AirProvingContext<GpuBackend>> {
+        self.generate_proving_ctxs_from(TouchedMemoryInput::Host(touched_memory))
+    }
+
+    #[instrument(name = "generate_proving_ctxs_device", skip_all)]
+    pub fn generate_proving_ctxs_device(
+        &mut self,
+        touched_memory: DeviceTouchedMemory,
+    ) -> Vec<AirProvingContext<GpuBackend>> {
+        assert_eq!(
+            touched_memory.records.len(),
+            touched_memory.num_records * DEVICE_TOUCHED_RECORD_WORDS,
+            "device touched-memory buffer has a partial record"
+        );
+        self.generate_proving_ctxs_from(TouchedMemoryInput::Device(touched_memory))
+    }
+
+    fn generate_proving_ctxs_from(
+        &mut self,
+        touched_memory: TouchedMemoryInput,
+    ) -> Vec<AirProvingContext<GpuBackend>> {
         let mem = MemTracker::start("generate mem proving ctxs");
-        let partition = touched_memory;
+        let (host_partition, device_partition, partition_is_empty) = match touched_memory {
+            TouchedMemoryInput::Host(partition) => {
+                let is_empty = partition.is_empty();
+                (Some(partition), None, is_empty)
+            }
+            TouchedMemoryInput::Device(partition) => {
+                let is_empty = partition.num_records == 0;
+                (None, Some(partition), is_empty)
+            }
+        };
         // Exact merkle trace rows: one initial row per touched-spanning node, one final
         // row per dirty-spanning node (or just the forced root final row when nothing
         // is dirty).
-        let merkle_rows = if partition.is_empty() {
+        let merkle_rows = if partition_is_empty {
             let leftmost_values = 'left: {
                 let mut res = [F::ZERO; VM_DIGEST_WIDTH];
                 if self.initial_memory[ADDR_SPACE_OFFSET as usize].is_empty() {
@@ -305,29 +357,39 @@ impl MemoryInventoryGPU {
             merkle_rows
         } else {
             let _span = tracing::info_span!("mem_merge_records").entered();
-            let in_num_records = partition.len();
-            let in_bytes = in_num_records * std::mem::size_of::<TouchedBlock<F>>();
-            let mut h_in = pinned::take(in_bytes + 4);
-            let align_offset = h_in.as_ptr().align_offset(std::mem::size_of::<u32>());
-            let dirty_len = align_offset + in_bytes;
-            let src: &[u8] =
-                unsafe { std::slice::from_raw_parts(partition.as_ptr() as *const u8, in_bytes) };
-            let dst = &mut h_in[align_offset..align_offset + in_bytes];
-            dst.par_chunks_mut(UPLOAD_PACK_CHUNK)
-                .zip(src.par_chunks(UPLOAD_PACK_CHUNK))
-                .for_each(|(d, s)| d.copy_from_slice(s));
-            // SAFETY: 4-aligned by `align_offset`, within the buffer.
-            let in_words: &[u32] = unsafe {
-                std::slice::from_raw_parts(
-                    h_in.as_ptr().add(align_offset) as *const u32,
-                    in_bytes / std::mem::size_of::<u32>(),
-                )
+            // `inventory.cu` merges 4-cell block records into 8-cell leaf records.
+            let (d_in_records, in_num_records) = if let Some(device) = device_partition {
+                (device.records, device.num_records)
+            } else {
+                let partition = host_partition
+                    .as_ref()
+                    .expect("non-device touched memory must have a host partition");
+                let in_num_records = partition.len();
+                let in_bytes = in_num_records * std::mem::size_of::<TouchedBlock<F>>();
+                let mut h_in = pinned::take(in_bytes + 4);
+                let align_offset = h_in.as_ptr().align_offset(std::mem::size_of::<u32>());
+                let dirty_len = align_offset + in_bytes;
+                let src: &[u8] = unsafe {
+                    std::slice::from_raw_parts(partition.as_ptr() as *const u8, in_bytes)
+                };
+                let dst = &mut h_in[align_offset..align_offset + in_bytes];
+                dst.par_chunks_mut(UPLOAD_PACK_CHUNK)
+                    .zip(src.par_chunks(UPLOAD_PACK_CHUNK))
+                    .for_each(|(d, s)| d.copy_from_slice(s));
+                // SAFETY: 4-aligned by `align_offset`, within the buffer.
+                let in_words: &[u32] = unsafe {
+                    std::slice::from_raw_parts(
+                        h_in.as_ptr().add(align_offset) as *const u32,
+                        in_bytes / std::mem::size_of::<u32>(),
+                    )
+                };
+                let records = in_words.to_device_on(&self.device_ctx).unwrap();
+                pinned::give_back(h_in, dirty_len);
+                (records, in_num_records)
             };
             let out_words = in_num_records
                 * (std::mem::size_of::<MemoryInventoryRecord<VM_DIGEST_WIDTH, BLOCKS_PER_LEAF>>()
                     / std::mem::size_of::<u32>());
-            let d_in_records = in_words.to_device_on(&self.device_ctx).unwrap();
-            pinned::give_back(h_in, dirty_len);
             let d_tmp_records = DeviceBuffer::<u32>::with_capacity_on(out_words, &self.device_ctx);
             let d_out_records = DeviceBuffer::<u32>::with_capacity_on(out_words, &self.device_ctx);
             let d_out_num_records = DeviceBuffer::<usize>::with_capacity_on(1, &self.device_ctx);
@@ -371,55 +433,61 @@ impl MemoryInventoryGPU {
                 .expect("merge_records failed");
             }
 
-            // Host work overlapping the merge kernels: the compacted leaf keys and
-            // their dirty bits are pure functions of the sorted partition (the same
-            // dedup rule the device merge uses; a leaf is dirty iff some of its blocks
-            // was written), so the exact merkle trace shape and Poseidon2 record count
-            // are computed here with no device synchronization.
-            let memory_dimensions = self.merkle_tree.mem_config().memory_dimensions();
-            let tree_height = memory_dimensions.overall_height();
-            let mut touched_nodes = SpanningNodeCounter::default();
-            let mut dirty_nodes = SpanningNodeCounter::default();
-            let mut num_touched_leaves = 0usize;
-            let mut num_dirty_leaves = 0usize;
-            for leaf_blocks in partition.chunk_by(|a, b| {
-                (a.address_space, a.ptr / VM_DIGEST_WIDTH as u32)
-                    == (b.address_space, b.ptr / VM_DIGEST_WIDTH as u32)
-            }) {
-                let block = &leaf_blocks[0];
-                let key = (block.address_space, block.ptr / VM_DIGEST_WIDTH as u32);
-                let leaf_index = memory_dimensions.label_to_index(key);
-                touched_nodes.push(leaf_index, tree_height);
-                num_touched_leaves += 1;
-                if leaf_blocks.iter().any(|b| b.is_dirty != 0) {
-                    dirty_nodes.push(leaf_index, tree_height);
-                    num_dirty_leaves += 1;
-                }
-            }
-            // The GPU merge groups records the same way, so this count avoids a
-            // device-to-host copy before the next kernels are queued.
-            let out_num_records = num_touched_leaves;
-            // One initial row per touched node, one final row per dirty node; the
-            // final root row exists even when nothing is dirty.
-            let merkle_rows = touched_nodes.nodes
-                + if num_dirty_leaves == 0 {
-                    1
+            // Host input already exposes sorted labels, so retain develop's
+            // no-sync count/height path. Device replay has no host labels, so
+            // read back the merged Merkle records after conversion and derive
+            // both touched and dirty spanning-node counts from them.
+            let (out_num_records, host_merkle_shape) =
+                if let Some(partition) = host_partition.as_ref() {
+                    let memory_dimensions = self.merkle_tree.mem_config().memory_dimensions();
+                    let tree_height = memory_dimensions.overall_height();
+                    let mut touched_nodes = SpanningNodeCounter::default();
+                    let mut dirty_nodes = SpanningNodeCounter::default();
+                    let mut num_touched_leaves = 0usize;
+                    let mut num_dirty_leaves = 0usize;
+                    for leaf_blocks in partition.chunk_by(|a, b| {
+                        (a.address_space, a.ptr / VM_DIGEST_WIDTH as u32)
+                            == (b.address_space, b.ptr / VM_DIGEST_WIDTH as u32)
+                    }) {
+                        let block = &leaf_blocks[0];
+                        let key = (block.address_space, block.ptr / VM_DIGEST_WIDTH as u32);
+                        let leaf_index = memory_dimensions.label_to_index(key);
+                        touched_nodes.push(leaf_index, tree_height);
+                        num_touched_leaves += 1;
+                        if leaf_blocks.iter().any(|b| b.is_dirty != 0) {
+                            dirty_nodes.push(leaf_index, tree_height);
+                            num_dirty_leaves += 1;
+                        }
+                    }
+                    let merkle_rows = touched_nodes.nodes
+                        + if num_dirty_leaves == 0 {
+                            1
+                        } else {
+                            dirty_nodes.nodes
+                        };
+                    {
+                        let _span = tracing::info_span!("poseidon2_prepare").entered();
+                        self.prepare_poseidon2_records(
+                            num_touched_leaves,
+                            num_dirty_leaves,
+                            merkle_rows,
+                        );
+                    }
+                    (
+                        num_touched_leaves,
+                        Some((merkle_rows, num_dirty_leaves)),
+                    )
                 } else {
-                    dirty_nodes.nodes
+                    (
+                        d_out_num_records.to_host_on(&self.device_ctx).unwrap()[0],
+                        None,
+                    )
                 };
-            #[cfg(feature = "metrics")]
-            {
-                self.unpadded_merkle_height = merkle_rows;
-            }
-            {
-                let _span = tracing::info_span!("poseidon2_prepare").entered();
-                self.prepare_poseidon2_records(out_num_records, num_dirty_leaves, merkle_rows);
-            }
 
             // Cross-check the host-computed count against the device merge in
             // debug builds (a mismatch would corrupt the boundary trace).
             #[cfg(debug_assertions)]
-            {
+            if host_partition.is_some() {
                 let device_count = d_out_num_records.to_host_on(&self.device_ctx).unwrap()[0];
                 assert_eq!(device_count, out_num_records, "merged-count mismatch");
             }
@@ -445,6 +513,51 @@ impl MemoryInventoryGPU {
                 )
                 .expect("inventory_to_merkle_records failed");
             }
+            let merkle_rows = if let Some((merkle_rows, _)) = host_merkle_shape {
+                merkle_rows
+            } else {
+                let merkle_words = d_merkle_records.to_host_on(&self.device_ctx).unwrap();
+                assert_eq!(
+                    merkle_words.len(),
+                    out_num_records * MERKLE_TOUCHED_BLOCK_WIDTH,
+                    "device Merkle records have a partial record"
+                );
+                let memory_dimensions = self.merkle_tree.mem_config().memory_dimensions();
+                let tree_height = memory_dimensions.overall_height();
+                let mut touched_nodes = SpanningNodeCounter::default();
+                let mut dirty_nodes = SpanningNodeCounter::default();
+                let mut num_dirty_leaves = 0usize;
+                for record in merkle_words.chunks_exact(MERKLE_TOUCHED_BLOCK_WIDTH) {
+                    let leaf_index = memory_dimensions.label_to_index((
+                        record[0],
+                        record[1] / VM_DIGEST_WIDTH as u32,
+                    ));
+                    touched_nodes.push(leaf_index, tree_height);
+                    if record[2] != 0 {
+                        dirty_nodes.push(leaf_index, tree_height);
+                        num_dirty_leaves += 1;
+                    }
+                }
+                let merkle_rows = touched_nodes.nodes
+                    + if num_dirty_leaves == 0 {
+                        1
+                    } else {
+                        dirty_nodes.nodes
+                    };
+                {
+                    let _span = tracing::info_span!("poseidon2_prepare").entered();
+                    self.prepare_poseidon2_records(
+                        out_num_records,
+                        num_dirty_leaves,
+                        merkle_rows,
+                    );
+                }
+                merkle_rows
+            };
+            #[cfg(feature = "metrics")]
+            {
+                self.unpadded_merkle_height = merkle_rows;
+            }
             self.merkle_records = Some(d_merkle_records);
             merkle_rows
         };
@@ -458,7 +571,7 @@ impl MemoryInventoryGPU {
                 self.merkle_records
                     .as_ref()
                     .expect("missing merkle records"),
-                partition.is_empty(),
+                partition_is_empty,
             )
         };
         mem.tracing_info("boundary tracegen");

@@ -20,6 +20,10 @@ use std::{
 use openvm_circuit::arch::rvr::{
     RvrDeltaDecodeEntry, RvrDeltaDecodeInfo, RvrDeltaDecodePrecompute,
 };
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use openvm_circuit::system::cuda::memory::{
+    DeviceTouchedMemory, DeviceTouchedMemoryProvider, DEVICE_TOUCHED_RECORD_WORDS,
+};
 #[cfg(feature = "cuda")]
 use openvm_cuda_common::{
     copy::{MemCopyD2H, MemCopyH2D},
@@ -234,6 +238,7 @@ struct DeltaAirSpec {
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 struct DeviceDeltaSegment {
     outputs: HashMap<DeltaAirKind, Arc<DeviceBuffer<u8>>>,
+    touched_memory: Option<DeviceTouchedMemory>,
 }
 
 /// Device descriptor indexed by global AIR. CUDA writes each stable partition
@@ -500,21 +505,20 @@ impl RvrGpuDecodeState {
         *self.delta_device.lock().unwrap() = None;
     }
 
-    /// Return the device-resident compact buffer for one chip. The first call
-    /// performs the whole segment predecode exactly once; subsequent chips
-    /// only clone their output buffer.
+    /// Perform the whole segment predecode exactly once. The system inventory
+    /// calls this first for device-replayed touched memory; compact-record
+    /// consumers then clone their already-populated per-AIR outputs.
     #[cfg(all(feature = "cuda", feature = "rvr"))]
-    pub fn device_delta_records(
-        &self,
-        kind: DeltaAirKind,
-        device_ctx: &GpuDeviceCtx,
-    ) -> Option<Arc<DeviceBuffer<u8>>> {
-        if let Some(device) = self.delta_device.lock().unwrap().as_ref() {
-            return device.outputs.get(&kind).cloned();
+    fn ensure_device_delta_segment(&self, device_ctx: &GpuDeviceCtx) -> bool {
+        if self.delta_device.lock().unwrap().is_some() {
+            return true;
         }
 
         let mut host_guard = self.delta_host.lock().unwrap();
-        let mut host = host_guard.take()?;
+        let Some(mut host) = host_guard.take() else {
+            return false;
+        };
+        let touched_count = host.touched.len();
         let (d_table, pc_base) = self
             .device_operand_table(device_ctx)
             .expect("delta segment without a bound operand table");
@@ -602,6 +606,14 @@ impl RvrGpuDecodeState {
                 .to_device_on(device_ctx)
                 .expect("delta first-touch seeds H2D")
         };
+        let d_touched_output = if touched_count == 0 {
+            DeviceBuffer::new()
+        } else {
+            DeviceBuffer::<u32>::with_capacity_on(
+                touched_count * DEVICE_TOUCHED_RECORD_WORDS,
+                device_ctx,
+            )
+        };
         let d_flags = host
             .arena_native_flags
             .as_slice()
@@ -623,7 +635,8 @@ impl RvrGpuDecodeState {
                 &d_program,
                 host.program_log.len(),
                 &d_touched,
-                host.touched.len(),
+                touched_count,
+                &d_touched_output,
                 &d_table,
                 pc_base,
                 &d_flags,
@@ -643,10 +656,42 @@ impl RvrGpuDecodeState {
         host.delta
             .recycle_device_inputs(program_log, memory_log, delta_memory_log, touched);
         drop(host);
-        let device = DeviceDeltaSegment { outputs };
-        let result = device.outputs.get(&kind).cloned();
+        let device = DeviceDeltaSegment {
+            outputs,
+            touched_memory: Some(DeviceTouchedMemory {
+                records: d_touched_output,
+                num_records: touched_count,
+            }),
+        };
         *self.delta_device.lock().unwrap() = Some(device);
-        result
+        true
+    }
+
+    /// Return the device-resident compact buffer for one chip.
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    pub fn device_delta_records(
+        &self,
+        kind: DeltaAirKind,
+        device_ctx: &GpuDeviceCtx,
+    ) -> Option<Arc<DeviceBuffer<u8>>> {
+        self.ensure_device_delta_segment(device_ctx);
+        self.delta_device
+            .lock()
+            .unwrap()
+            .as_ref()
+            .and_then(|device| device.outputs.get(&kind).cloned())
+    }
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+impl DeviceTouchedMemoryProvider for RvrGpuDecodeState {
+    fn take_device_touched_memory(&self, device_ctx: &GpuDeviceCtx) -> Option<DeviceTouchedMemory> {
+        self.ensure_device_delta_segment(device_ctx);
+        self.delta_device
+            .lock()
+            .unwrap()
+            .as_mut()
+            .and_then(|device| device.touched_memory.take())
     }
 }
 

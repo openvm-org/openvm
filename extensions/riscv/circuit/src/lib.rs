@@ -295,6 +295,10 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64IGpuBuilder {
             circuit,
             device_ctx,
         )?;
+        #[cfg(feature = "rvr")]
+        chip_complex
+            .system
+            .set_device_touched_memory_provider(self.rvr_decode.clone());
         let inventory = &mut chip_complex.inventory;
         let prover_ext = Rv64ImGpuProverExt {
             #[cfg(all(feature = "cuda", feature = "rvr"))]
