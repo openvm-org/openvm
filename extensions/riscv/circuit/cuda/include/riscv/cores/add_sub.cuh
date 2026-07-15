@@ -57,7 +57,7 @@ template <typename T, size_t NUM_LIMBS> struct AddSubCoreCols {
     T opcode_sub_flag;
 };
 
-template <size_t NUM_LIMBS, size_t LIMB_BITS> struct AddSubCore {
+template <size_t NUM_LIMBS, size_t LIMB_BITS, bool RANGE_CHECK_TOP_LIMB> struct AddSubCore {
     VariableRangeChecker range_checker;
 
     template <typename T> using Cols = AddSubCoreCols<T, NUM_LIMBS>;
@@ -82,9 +82,9 @@ template <size_t NUM_LIMBS, size_t LIMB_BITS> struct AddSubCore {
         COL_WRITE_VALUE(row, Cols, opcode_sub_flag, record.local_opcode == 1);
 
 #pragma unroll
-        for (size_t i = 0; i < NUM_LIMBS; i++) {
-            // The carry constraints only bound a[i] mod 2^LIMB_BITS; the written cells
-            // must be canonical. b and c are pinned by the memory bus.
+        for (size_t i = 0; i < NUM_LIMBS - !RANGE_CHECK_TOP_LIMB; i++) {
+            // The carry constraints only bound a[i] mod 2^LIMB_BITS. Every output limb not
+            // constrained by the adapter must be canonicalized here.
             range_checker.add_count(a[i], LIMB_BITS);
         }
     }

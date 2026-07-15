@@ -18,8 +18,8 @@ pub use cuda::*;
 mod tests;
 
 pub type Rv64AddSubAir =
-    VmAirWrapper<Rv64BaseAluRegU16AdapterAir, AddSubCoreAir<BLOCK_FE_WIDTH, U16_BITS>>;
+    VmAirWrapper<Rv64BaseAluRegU16AdapterAir, AddSubCoreAir<BLOCK_FE_WIDTH, U16_BITS, true>>;
 pub type Rv64AddSubExecutor =
     AddSubExecutor<Rv64BaseAluRegU16AdapterExecutor, BLOCK_FE_WIDTH, U16_BITS>;
 pub type Rv64AddSubChip<F> =
-    VmChipWrapper<F, AddSubFiller<Rv64BaseAluRegU16AdapterFiller, BLOCK_FE_WIDTH, U16_BITS>>;
+    VmChipWrapper<F, AddSubFiller<Rv64BaseAluRegU16AdapterFiller, BLOCK_FE_WIDTH, U16_BITS, true>>;

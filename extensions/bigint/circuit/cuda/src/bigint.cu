@@ -289,7 +289,7 @@ extern "C" int _less_than256_tracegen(
 }
 
 using AddSub256CoreRecord = AddSubCoreRecord<INT256_NUM_U16_LIMBS>;
-using AddSub256Core = AddSubCore<INT256_NUM_U16_LIMBS, U16_BITS>;
+using AddSub256Core = AddSubCore<INT256_NUM_U16_LIMBS, U16_BITS, true>;
 template <typename T> using AddSub256CoreCols = AddSubCoreCols<T, INT256_NUM_U16_LIMBS>;
 
 template <typename T> struct AddSub256Cols {
