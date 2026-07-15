@@ -292,9 +292,7 @@ fn run_rv64w_shift_rand_test(opcode: ShiftWOpcode, num_ops: usize) {
 struct LogicalShiftPrankValues<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub a: Option<[u32; NUM_LIMBS]>,
     pub bit_multiplier_left: Option<u32>,
-    pub bit_multiplier_right: Option<u32>,
     pub carry_multiplier_left: Option<u32>,
-    pub carry_multiplier_right: Option<u32>,
     /// Adapter sign bit of the low-word result.
     pub result_sign: Option<u32>,
     pub bit_shift_marker: Option<[u32; LIMB_BITS]>,
@@ -337,14 +335,8 @@ fn run_negative_shift_logical_test(
         if let Some(bit_multiplier_left) = prank_vals.bit_multiplier_left {
             cols.bit_multiplier_left = F::from_u32(bit_multiplier_left);
         }
-        if let Some(bit_multiplier_right) = prank_vals.bit_multiplier_right {
-            cols.bit_multiplier_right = F::from_u32(bit_multiplier_right);
-        }
         if let Some(carry_multiplier_left) = prank_vals.carry_multiplier_left {
             cols.carry_multiplier_left = F::from_u32(carry_multiplier_left);
-        }
-        if let Some(carry_multiplier_right) = prank_vals.carry_multiplier_right {
-            cols.carry_multiplier_right = F::from_u32(carry_multiplier_right);
         }
         if let Some(result_sign) = prank_vals.result_sign {
             adapter_cols.result_sign = F::from_u32(result_sign);
@@ -426,12 +418,12 @@ fn rv64_sllw_wrong_limb_shift_negative_test() {
 
 #[test]
 fn rv64_sllw_wrong_bit_mult_side_negative_test() {
-    // For an SLLW row, force the multipliers onto the right-shift side: output constraint fails.
+    // For an SLLW row, force the multipliers onto the right-shift side: zeroing the SLL-gated
+    // column makes the derived SRL-side multiplier become 2^9, and the output constraint fails.
     let b = [1, 1, 1, 1, 0, 0, 0, 0];
     let c = [9, 0, 0, 0, 0, 0, 0, 0];
     let prank_vals = LogicalShiftPrankValues {
         bit_multiplier_left: Some(0),
-        bit_multiplier_right: Some(1 << 9),
         ..Default::default()
     };
     run_negative_shift_logical_test(SLLW, b, c, prank_vals);
@@ -450,11 +442,12 @@ fn rv64_srlw_wrong_bit_carry_negative_test() {
 
 #[test]
 fn rv64_srlw_wrong_bit_mult_side_negative_test() {
+    // For an SRLW row, setting the SLL-gated column to 2^9 zeroes the derived SRL-side
+    // multiplier, so the multiplier-definition constraint fails.
     let b = [0, 0, 0, 128, 0, 0, 0, 0];
     let c = [9, 0, 0, 0, 0, 0, 0, 0];
     let prank_vals = LogicalShiftPrankValues {
         bit_multiplier_left: Some(1 << 9),
-        bit_multiplier_right: Some(0),
         ..Default::default()
     };
     run_negative_shift_logical_test(SRLW, b, c, prank_vals);
