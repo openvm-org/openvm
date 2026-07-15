@@ -6,8 +6,16 @@
 /* Forwarding stubs owned by the RISC-V IO (Rv64Io) extension: the hint-store
  * consumers (HINT_STOREW, HINT_BUFFER) and REVEAL. Backed by a dispatch table
  * installed at execution time by `Rv64IoRuntimeHooks`. */
-void openvm_hint_storew(void* state, uint64_t dest_addr);
-void openvm_hint_buffer(void* state, uint64_t dest_addr, uint32_t num_words);
+void openvm_hint_storew(void* state, uint64_t dest_addr, uint32_t from_pc,
+                        uint32_t from_timestamp, uint32_t mem_ptr_ptr,
+                        uint32_t mem_ptr_prev_timestamp, uint32_t chip_idx);
+void openvm_hint_buffer(void* state, uint64_t dest_addr, uint32_t num_words,
+                        uint32_t from_pc, uint32_t from_timestamp,
+                        uint32_t mem_ptr_ptr,
+                        uint32_t mem_ptr_prev_timestamp,
+                        uint32_t num_words_ptr,
+                        uint32_t num_words_prev_timestamp,
+                        uint32_t chip_idx);
 void openvm_reveal(uint64_t src_val, uint64_t ptr, uint32_t offset,
                    uint32_t width);
 

@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+#include "rvr_ext_vec_heap_record.h"
+
 struct RvState;
 
 /* ── Generic fallback FFI (for unknown moduli, uses BigUint) ───────────── */

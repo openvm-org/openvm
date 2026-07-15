@@ -549,7 +549,7 @@ fn simple_process_instr(instr: &Instr, regs: &mut [Option<u64>; NUM_REGS]) {
             regs[rd as usize] = val;
         }
         // IO / system instructions: most don't write general registers
-        Instr::Store { .. } | Instr::Nop | Instr::Ext(_) => {}
+        Instr::Store { .. } | Instr::Nop | Instr::Phantom { .. } | Instr::Ext(_) => {}
     }
 }
 
@@ -934,7 +934,7 @@ fn transfer_instr(instr: &Instr, state: &mut RegisterState) {
             }
         }
         // IO / system instructions: most don't write general registers
-        Instr::Store { .. } | Instr::Nop | Instr::Ext(_) => {}
+        Instr::Store { .. } | Instr::Nop | Instr::Phantom { .. } | Instr::Ext(_) => {}
     }
 }
 

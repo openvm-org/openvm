@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+#include "rvr_ext_vec_heap_record.h"
+
 struct RvState;
 
 /* k256 add_ne/double are C-implemented (rvr_ext_k256.c + rvr_ext_k256_ec.h)
