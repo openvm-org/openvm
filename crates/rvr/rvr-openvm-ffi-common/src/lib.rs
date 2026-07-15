@@ -2,9 +2,7 @@
 //!
 //! Extension staticlibs call these non-inline wrappers (defined in
 //! `rvr_ext_wrappers.c`) for traced memory access and chip cost tracking.
-//! Register access is handled in
-//! the generated C code; resolved register values are passed to extension
-//! FFI entry points as parameters.
+//! Register access stays in generated C; resolved values are passed to extension FFI entry points.
 //!
 //! The `state` parameter is always an opaque `*mut c_void` pointing
 //! to the C `RvState` struct.

@@ -14,9 +14,7 @@
 
 #include "openvm.h"
 
-/* DEFERRAL_DIGEST_SIZE (digest size in field elements) and WORD_SIZE come from
- * openvm_constants.h via openvm.h. The byte-layout constants are derived here
- * to match rvr-openvm-ext-deferral. */
+/* Byte-layout constants derived from the generated digest and word sizes. */
 // TODO(rvr): update to better formula/solution instead of defining field element size here
 static constexpr uint32_t F_NUM_BYTES = 4;
 static constexpr uint32_t DEFERRAL_COMMIT_NUM_BYTES =

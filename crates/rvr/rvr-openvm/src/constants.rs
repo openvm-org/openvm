@@ -1,8 +1,4 @@
-//! Compile-time constants emitted into generated native tracer headers.
-//!
-//! The buffer-capacity constants here are the single source of truth for
-//! both the C tracer struct layout and the Rust-side `SegmentationState`
-//! buffer allocations — they must match byte-for-byte.
+//! Constants shared by Rust metering state and generated C tracers.
 
 use openvm_instructions::{
     metering::{PAGE_MASK_LEAF_BITS, SEGMENT_CHECK_INSNS},
@@ -29,12 +25,8 @@ pub const MAX_MEM_PAGES_PER_INSN: usize = {
 
 /// Maximum AS_MEMORY page buffer entries per segment check interval.
 ///
-/// **No bounds checks in C — capacity must be sufficient.**
-///
-/// Flushed before a block that would cross `SEGMENT_CHECK_INSNS`, so buffered
-/// accesses cover at most one complete check interval.
-/// Worst-case unique pages per instruction: ~10 (ECC setup / HINT_BUFFER, HINT_BUFFER is taken as
-/// worst-case). `SEGMENT_CHECK_INSNS * MAX_MEM_PAGES_PER_INSN` is well under 65 536.
+/// The C tracer flushes before crossing `SEGMENT_CHECK_INSNS` and statically
+/// verifies this capacity against `MAX_MEM_PAGES_PER_INSN`.
 pub const MEM_PAGE_BUF_CAP: usize = 1 << 16;
 
 /// Maximum AS_PUBLIC_VALUES page buffer entries per segment check interval.

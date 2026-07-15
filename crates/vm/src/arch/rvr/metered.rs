@@ -233,9 +233,7 @@ impl SegmentationState {
             .apply_height_updates(&mut self.ctx.trace_heights);
     }
 
-    /// Called on each periodic check (approximately every `SEGMENT_CHECK_INSNS` instructions).
-    /// Invoked from the C tracer's `trace_block` callback when the block-level
-    /// countdown crosses zero. Returns true if a segment boundary was created.
+    /// Applies a periodic block-boundary check and returns whether a segment was created.
     pub fn on_periodic_check(
         &mut self,
         mem_len: u32,
