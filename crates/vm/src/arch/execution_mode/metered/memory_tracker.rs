@@ -12,6 +12,11 @@ const FIRST_LEAF_PER_64_LEAVES: u64 = 0x0000_0000_0000_0001;
 /// Leaves touched within one 64-leaf page.
 ///
 /// `page_id` selects the page and bit `i` in `leaf_mask` selects leaf `i` in that page.
+///
+/// ```text
+/// leaf in page:  0  1  2  3  ... 63
+/// mask bit:      1  0  1  0  ...  0
+/// ```
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct PageTouch {

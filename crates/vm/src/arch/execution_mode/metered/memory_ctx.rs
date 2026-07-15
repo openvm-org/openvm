@@ -97,6 +97,7 @@ impl MemoryCtx {
         );
     }
 
+    /// Marks leaves containing nonzero program data as present before execution starts.
     pub(crate) fn seed_initial_memory(&mut self, initial_memory: &SparseMemoryImage) {
         for (&(addr_space, ptr), &byte) in initial_memory {
             if byte == 0 {
@@ -303,11 +304,17 @@ impl MemoryCtx {
     ///
     /// - BOUNDARY_AIR: `2 * segment_leaves` rows
     /// - MERKLE_AIR:   `2 * segment_merkle_nodes` rows
-    /// - Poseidon2:    final-side hashes plus initial-side hashes
+    /// - Poseidon2:    hashes at the end of the segment plus hashes at its start
     ///
-    /// A first touch relative to the baseline has a canonical default initial-side value.
-    /// Default leaves share one Poseidon2 row. Default internal nodes share one
-    /// Poseidon2 row per Merkle height.
+    /// A leaf or node absent at the checkpoint starts from the hash of zero-filled memory. Equal
+    /// starting hashes share a row: one for all zero leaves and one for each internal-node height.
+    /// Therefore:
+    ///
+    /// ```text
+    /// Poseidon2 rows = end-of-segment hashes
+    ///                + nonzero checkpoint hashes
+    ///                + shared zero-filled hashes
+    /// ```
     #[inline(always)]
     pub(crate) fn apply_height_updates(&mut self, trace_heights: &mut [u32]) {
         let mut leaves = self.pending_segment_leaves;
