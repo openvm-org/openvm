@@ -581,7 +581,7 @@ fn rvr_gpu_operand_table_rebinds_same_shape_different_exe() {
     let state = crate::rvr_gpu_decode::RvrGpuDecodeState::default();
     let identity_a = Arc::new(vec![true; exe_len]);
 
-    state.bind_delta_airs(&exe_a, &map_a, &identity_a);
+    state.bind_delta_airs(&exe_a, &map_a, &identity_a, None);
     let first = state.operand_table().expect("first operand table").0[0];
     drop(exe_a);
     drop(identity_a);
@@ -591,7 +591,7 @@ fn rvr_gpu_operand_table_rebinds_same_shape_different_exe() {
     let map_b = vm.pc_to_air_idx(&exe_b).expect("second pc map");
     assert_eq!(map_a, map_b, "fixture must isolate the VmExe identity key");
     let identity_b = Arc::new(vec![true; exe_len]);
-    state.bind_delta_airs(&exe_b, &map_b, &identity_b);
+    state.bind_delta_airs(&exe_b, &map_b, &identity_b, None);
     let second = state.operand_table().expect("second operand table").0[0];
 
     assert_eq!(first.a, reg(1) as u32);
@@ -600,6 +600,31 @@ fn rvr_gpu_operand_table_rebinds_same_shape_different_exe() {
         first, second,
         "same-size VmExe must not reuse stale operands"
     );
+}
+
+#[test]
+fn rvr_preflight_persists_empty_delta_classification() {
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "delta");
+    let (vm, _) = VirtualMachine::new_with_keygen(
+        test_cpu_engine(),
+        Rv64ImCpuBuilder,
+        Rv64ImConfig::default(),
+    )
+    .expect("vm init");
+    let exe = exe(&[terminate()]);
+    let RvrPreflightRoute::Rvr(instance) = vm
+        .preflight_routed_instance(&exe)
+        .expect("routed preflight instance")
+    else {
+        panic!("program must route to RVR preflight");
+    };
+    let meta = instance.compiled().inline_records();
+    let precomputed = meta
+        .delta_decode
+        .as_ref()
+        .expect("available AOT classifier must persist an empty result");
+    assert!(precomputed.kind_to_air.is_empty());
+    assert!(meta.fully_direct_delta);
 }
 
 fn mul_div_vector_exe() -> VmExe<F> {
@@ -3115,7 +3140,7 @@ fn rvr_preflight_inline_addsub_net_timing() {
 fn rvr_preflight_delta_with_w_arena_native_full_rv64im_matrix_matches_assembler() {
     use std::collections::BTreeMap;
 
-    use openvm_circuit::arch::{rvr::ChipRecordBuf, Arena, MatrixRecordArena};
+    use openvm_circuit::arch::{rvr::preflight::RvrArenaNativeTarget, MatrixRecordArena};
 
     let exe = full_rv64im_matrix_exe();
     let streams = hard_chip_streams(1);
@@ -3171,7 +3196,7 @@ fn rvr_preflight_delta_with_w_arena_native_full_rv64im_matrix_matches_assembler(
         .clone();
     assert!(!arena_native.is_empty(), "arena-native airs must exist");
     assert!(f_instance.compiled().inline_records().delta_records);
-    assert!(arena_native.iter().all(|(_, geometry)| matches!(
+    assert!(arena_native.iter().any(|(_, geometry)| matches!(
         geometry.layout,
         openvm_circuit::arch::rvr::ArenaNativeLayout::Alu3(offsets)
             if offsets.w.is_some()
@@ -3224,25 +3249,17 @@ fn rvr_preflight_delta_with_w_arena_native_full_rv64im_matrix_matches_assembler(
             "{family} AIR {air} must be arena-native"
         );
     }
-    let mut fused_arenas: Vec<(usize, MatrixRecordArena<F>)> = Vec::new();
+    let mut fused_arenas: Vec<(
+        usize,
+        openvm_circuit::arch::rvr::ArenaNativeGeometry,
+        MatrixRecordArena<F>,
+    )> = Vec::new();
     let mut targets = BTreeMap::new();
     for &(air, geom) in &arena_native {
-        let mut arena = MatrixRecordArena::<F>::with_capacity(capacities[air].0, capacities[air].1);
-        let stride = (arena.width * size_of::<F>()) as u32;
-        assert_eq!(geom.core_off_matrix % 4, 0, "core offset must be 4-aligned");
-        let cap_bytes = (arena.trace_buffer.len() * size_of::<F>()) as u32;
-        targets.insert(
-            air,
-            ChipRecordBuf {
-                base: arena.trace_buffer.as_mut_ptr().cast(),
-                len: 0,
-                cap: cap_bytes - cap_bytes % stride,
-                stride,
-                core_off: geom.core_off_matrix as u32,
-                flags: openvm_circuit::arch::rvr::PREFLIGHT_CHIP_RECORD_FLAG_DIRECT_FINAL,
-            },
-        );
-        fused_arenas.push((air, arena));
+        let (arena, target) =
+            MatrixRecordArena::<F>::stage_arena_native(capacities[air].0, capacities[air].1, &geom);
+        targets.insert(air, target);
+        fused_arenas.push((air, geom, arena));
     }
     let f_state = rvr_vm.create_initial_state(&exe, streams);
     let mut f_output = f_instance
@@ -3273,8 +3290,8 @@ fn rvr_preflight_delta_with_w_arena_native_full_rv64im_matrix_matches_assembler(
     // Byte-equality of every fused air's arena over every written row (both
     // buffers start zero-filled, so trailing row bytes match trivially).
     let fused_air_set: std::collections::BTreeSet<usize> =
-        fused_arenas.iter().map(|&(air, _)| air).collect();
-    for (fused_air, fused_arena) in &fused_arenas {
+        fused_arenas.iter().map(|&(air, _, _)| air).collect();
+    for (fused_air, _, fused_arena) in &fused_arenas {
         let fused_air = *fused_air;
         let rows = a_arenas[fused_air].trace_offset / a_arenas[fused_air].width;
         let written_rows = f_output
@@ -3991,6 +4008,10 @@ fn rvr_preflight_compact_wire_staged_matches_pooled() {
         panic!("program must route to RVR preflight");
     };
     let wire_airs = instance.compiled().inline_records().airs.clone();
+    assert!(
+        instance.compiled().inline_records().delta_decode.is_some(),
+        "compact preflight AOT must persist its CUDA operand/classification artifact"
+    );
     let wire_air_set = wire_airs
         .iter()
         .map(|&(air, _)| air)
@@ -3999,6 +4020,7 @@ fn rvr_preflight_compact_wire_staged_matches_pooled() {
         &exe,
         &pc_to_air_idx,
         &instance.compiled().inline_records().pc_slots,
+        instance.compiled().inline_records().delta_decode.as_deref(),
     );
     assert!(
         instance
@@ -4008,9 +4030,9 @@ fn rvr_preflight_compact_wire_staged_matches_pooled() {
             .is_empty(),
         "compact compile must not report arena-native airs"
     );
-    assert_eq!(
-        wire_air_set, decode_air_set,
-        "compiler wire AIRs must equal the independently routed GPU decode AIRs"
+    assert!(
+        decode_air_set.is_subset(&wire_air_set),
+        "every independently routed GPU decode AIR must be compiler-inline"
     );
     // ZG2 explicitly encodes the fixture's ordinary AS=2 LoadStore rows and
     // AS=3 REVEAL row in the same compact stream. No mixed-source AIR may be

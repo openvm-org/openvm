@@ -222,6 +222,7 @@ pub trait VmBuilder<E: StarkEngine>: Sized {
         config: &Self::VmConfig,
         exe: &VmExe<Val<E::SC>>,
         pc_to_air_idx: &[Option<usize>],
+        inline_meta: &crate::arch::rvr::RvrInlineRecordsMeta,
     ) -> std::collections::HashSet<usize>
     where
         Val<E::SC>: PrimeField32,

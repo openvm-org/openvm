@@ -50,24 +50,39 @@ static_assert(sizeof(MemoryLogEntry) == 40, "memory log size drift");
 
 struct ProgramLogEntry {
     uint16_t opcode;
-    uint16_t _pad0;
+    uint16_t write_complete;
     uint32_t timestamp;
     uint64_t pc;
+    uint64_t write_value;
 };
-static_assert(sizeof(ProgramLogEntry) == 16, "program log size drift");
+static_assert(sizeof(ProgramLogEntry) == 24, "program log size drift");
+
+struct TouchedBlock {
+    uint32_t addr_space;
+    uint32_t block_addr;
+    uint64_t initial_value;
+};
+static_assert(sizeof(TouchedBlock) == 16, "touched block size drift");
+
+enum ValueUpdate : uint8_t {
+    VALUE_NONE = 0,
+    VALUE_SEED = 1,
+    VALUE_SET = 2,
+    VALUE_STORE_PATCH = 3,
+};
 
 struct EventPayload {
     uint64_t address_key;
+    uint64_t value;
     uint32_t timestamp;
     uint32_t output_index_plus_one;
+    uint32_t write_record_plus_one;
+    uint8_t value_update;
+    uint8_t width;
+    uint8_t byte_offset;
+    uint8_t _pad0;
 };
-static_assert(sizeof(EventPayload) == 16, "event payload size drift");
-
-struct PredPayload {
-    uint32_t timestamp;
-    uint32_t output_index_plus_one;
-};
-static_assert(sizeof(PredPayload) == 8, "predecessor payload size drift");
+static_assert(sizeof(EventPayload) == 32, "event payload size drift");
 
 struct DeltaAirOutputDesc {
     uint64_t base;
@@ -117,6 +132,16 @@ __device__ __forceinline__ bool operand_for_pc(
     return true;
 }
 
+__device__ __forceinline__ uint32_t delta_memory_effective_address(
+    DeltaRecord const &record, RvrOperandEntry const &entry
+) {
+    int32_t imm = int32_t(entry.c & 0xffffu);
+    if (entry.flags & RVR_OPERAND_FLAG_LS_IMM_SIGN) {
+        imm = int32_t(int16_t(imm));
+    }
+    return uint32_t(record.v1) + uint32_t(imm);
+}
+
 __device__ __forceinline__ bool delta_access(
     DeltaRecord const &record,
     RvrOperandEntry const &entry,
@@ -130,11 +155,7 @@ __device__ __forceinline__ bool delta_access(
         return true;
     };
     auto memory = [&]() {
-        int32_t imm = int32_t(entry.c & 0xffffu);
-        if (entry.flags & RVR_OPERAND_FLAG_LS_IMM_SIGN) {
-            imm = int32_t(int16_t(imm));
-        }
-        uint32_t effective = uint32_t(record.v1) + uint32_t(imm);
+        uint32_t effective = delta_memory_effective_address(record, entry);
         addr_space =
             (entry.flags & RVR_OPERAND_FLAG_LS_PUBLIC_VALUES) ? uint8_t(3) : uint8_t(2);
         address = uint64_t(effective & ~uint32_t(7));
@@ -180,6 +201,41 @@ __device__ __forceinline__ bool delta_access(
     }
 }
 
+__device__ __forceinline__ bool delta_write_access(
+    RvrOperandEntry const &entry, uint32_t slot
+) {
+    switch (entry.access_pattern) {
+    case DELTA_ALU3:
+    case DELTA_ALU3_REG:
+    case DELTA_STORE:
+        return slot == 2;
+    case DELTA_LOAD:
+        return slot == 2 && (entry.flags & RVR_OPERAND_FLAG_WRITE_ENABLED);
+    case DELTA_WR1:
+        return slot == 0 && (entry.flags & RVR_OPERAND_FLAG_WRITE_ENABLED);
+    case DELTA_WR1_ALWAYS:
+        return slot == 0;
+    case DELTA_RW1:
+        return slot == 1 && (entry.flags & RVR_OPERAND_FLAG_WRITE_ENABLED);
+    default:
+        return false;
+    }
+}
+
+__device__ __forceinline__ uint8_t delta_store_width(
+    RvrOperandEntry const &entry, uint32_t *error
+) {
+    switch (entry.local_opcode) {
+    case 4: return 8;
+    case 5: return 4;
+    case 6: return 2;
+    case 7: return 1;
+    default:
+        fail(error, 13);
+        return 0;
+    }
+}
+
 __global__ void build_events(
     DeltaRecord const *delta,
     size_t delta_count,
@@ -187,6 +243,8 @@ __global__ void build_events(
     size_t memory_count,
     ProgramLogEntry const *program,
     size_t program_count,
+    TouchedBlock const *touched,
+    size_t touched_count,
     RvrOperandEntry const *table,
     size_t operand_count,
     uint32_t pc_base,
@@ -200,10 +258,11 @@ __global__ void build_events(
     size_t delta_events = delta_count * 3;
     size_t memory_begin = delta_events;
     size_t program_begin = memory_begin + memory_count;
-    size_t event_count = program_begin + program_count * 3;
+    size_t touched_begin = program_begin + program_count * 3;
+    size_t event_count = touched_begin + touched_count;
     if (idx >= event_count) return;
 
-    EventPayload payload{INVALID_ADDRESS, UINT32_MAX, 0};
+    EventPayload payload{INVALID_ADDRESS, 0, UINT32_MAX, 0, 0, VALUE_NONE, 0, 0, 0};
     if (idx < delta_events) {
         size_t record_idx = idx / 3;
         uint32_t access_slot = idx % 3;
@@ -216,13 +275,31 @@ __global__ void build_events(
                 payload.address_key = address_key(as, address, error);
                 payload.timestamp = record.from_timestamp + access_slot;
                 payload.output_index_plus_one = uint32_t(idx + 1);
+                if (delta_write_access(entry, access_slot)) {
+                    payload.write_record_plus_one = uint32_t(record_idx + 1);
+                    if (entry.access_pattern == DELTA_STORE) {
+                        payload.value = record.v2;
+                        payload.value_update = VALUE_STORE_PATCH;
+                        payload.width = delta_store_width(entry, error);
+                        payload.byte_offset = uint8_t(
+                            delta_memory_effective_address(record, entry) & 7u
+                        );
+                    } else {
+                        payload.value = record.v0;
+                        payload.value_update = VALUE_SET;
+                    }
+                }
             }
         }
     } else if (idx < program_begin) {
         MemoryLogEntry entry = memory[idx - memory_begin];
         payload.address_key = address_key(entry.addr_space, entry.address & ~uint64_t(7), error);
         payload.timestamp = entry.timestamp;
-    } else {
+        if (entry.kind == 1) {
+            payload.value = entry.value;
+            payload.value_update = VALUE_SET;
+        }
+    } else if (idx < touched_begin) {
         size_t local = idx - program_begin;
         ProgramLogEntry program_entry = program[local / 3];
         uint32_t access_slot = local % 3;
@@ -241,40 +318,92 @@ __global__ void build_events(
                 if (delta_access(synthetic, entry, access_slot, as, address)) {
                     payload.address_key = address_key(as, address, error);
                     payload.timestamp = program_entry.timestamp + access_slot;
+                    if (delta_write_access(entry, access_slot)) {
+                        if (program_entry.write_complete != 1) {
+                            fail(error, 16);
+                            return;
+                        }
+                        payload.value = program_entry.write_value;
+                        payload.value_update = VALUE_SET;
+                    }
                 }
                 }
             }
         }
+    } else {
+        TouchedBlock seed = touched[idx - touched_begin];
+        payload.address_key = address_key(
+            uint8_t(seed.addr_space), uint64_t(seed.block_addr), error
+        );
+        payload.value = seed.initial_value;
+        payload.timestamp = 0;
+        payload.value_update = VALUE_SEED;
     }
     timestamp_keys[idx] = payload.timestamp;
     payloads[idx] = payload;
 }
 
 __global__ void extract_address_keys(
-    EventPayload const *events, uint64_t *keys, PredPayload *payloads, size_t count
+    EventPayload const *events, uint64_t *keys, EventPayload *payloads, size_t count
 ) {
     size_t idx = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
     if (idx >= count) return;
     EventPayload event = events[idx];
     keys[idx] = event.address_key;
-    payloads[idx] = PredPayload{event.timestamp, event.output_index_plus_one};
+    payloads[idx] = event;
 }
 
-__global__ void scatter_predecessors(
+__global__ void replay_address_groups(
     uint64_t const *keys,
-    PredPayload const *events,
+    EventPayload const *events,
     size_t count,
-    uint32_t *prev_timestamps
+    uint32_t *prev_timestamps,
+    uint64_t *prev_values,
+    uint32_t *error
 ) {
     size_t idx = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
     if (idx >= count) return;
-    PredPayload event = events[idx];
-    if (event.output_index_plus_one == 0) return;
-    uint32_t prev = 0;
-    if (idx != 0 && keys[idx] != INVALID_ADDRESS && keys[idx - 1] == keys[idx]) {
-        prev = events[idx - 1].timestamp;
+    if (keys[idx] == INVALID_ADDRESS || (idx != 0 && keys[idx - 1] == keys[idx])) return;
+
+    uint32_t previous_timestamp = 0;
+    uint64_t current_value = 0;
+    bool seeded = false;
+    for (size_t cursor = idx; cursor < count && keys[cursor] == keys[idx]; ++cursor) {
+        EventPayload event = events[cursor];
+        if (event.value_update == VALUE_SEED) {
+            if (seeded) {
+                fail(error, 14);
+                return;
+            }
+            seeded = true;
+            current_value = event.value;
+            continue;
+        }
+        if (!seeded) {
+            fail(error, 15);
+            return;
+        }
+        if (event.output_index_plus_one != 0) {
+            prev_timestamps[event.output_index_plus_one - 1] = previous_timestamp;
+        }
+        if (event.write_record_plus_one != 0) {
+            prev_values[event.write_record_plus_one - 1] = current_value;
+        }
+        if (event.value_update == VALUE_SET) {
+            current_value = event.value;
+        } else if (event.value_update == VALUE_STORE_PATCH) {
+            uint32_t shift = uint32_t(event.byte_offset) * 8u;
+            uint64_t mask = event.width == 8
+                                ? UINT64_MAX
+                                : ((uint64_t(1) << (uint32_t(event.width) * 8u)) - 1u);
+            current_value = (current_value & ~(mask << shift)) |
+                            ((event.value & mask) << shift);
+        } else if (event.value_update != VALUE_NONE) {
+            fail(error, 16);
+            return;
+        }
+        previous_timestamp = event.timestamp;
     }
-    prev_timestamps[event.output_index_plus_one - 1] = prev;
 }
 
 __global__ void build_air_keys(
@@ -310,6 +439,7 @@ __device__ __forceinline__ void store_u64_words(uint8_t *dst, uint64_t value) {
 __global__ void partition_records(
     DeltaRecord const *delta,
     uint32_t const *prev,
+    uint64_t const *prev_values,
     uint8_t const *sorted_airs,
     uint32_t const *sorted_indices,
     size_t count,
@@ -344,6 +474,7 @@ __global__ void partition_records(
     uint8_t *dst = reinterpret_cast<uint8_t *>(desc.base) +
                    (sorted_idx - desc.sorted_start) * desc.stride;
     uint32_t const *record_prev = prev + size_t(record_idx) * 3;
+    uint64_t write_prev_value = prev_values[record_idx];
     store_u32(dst, record.from_pc);
     store_u32(dst + 4, record.from_timestamp);
     switch (entry.access_pattern) {
@@ -358,7 +489,7 @@ __global__ void partition_records(
         store_u32(dst + 8, record_prev[0]);
         store_u32(dst + 12, record_prev[1]);
         store_u32(dst + 16, record_prev[2]);
-        store_u64_words(dst + 20, record.v0);
+        store_u64_words(dst + 20, write_prev_value);
         store_u64_words(dst + 28, record.v1);
         store_u64_words(dst + 36, record.v2);
         break;
@@ -379,7 +510,7 @@ __global__ void partition_records(
             return;
         }
         store_u32(dst + 8, record_prev[0]);
-        store_u64_words(dst + 12, record.v0);
+        store_u64_words(dst + 12, write_prev_value);
         break;
     case DELTA_RW1:
         if (desc.stride != sizeof(RvrRw1Compact)) {
@@ -389,7 +520,7 @@ __global__ void partition_records(
         store_u32(dst + 8, record_prev[0]);
         store_u32(dst + 12, record_prev[1]);
         store_u64_words(dst + 16, record.v1);
-        store_u64_words(dst + 24, record.v0);
+        store_u64_words(dst + 24, write_prev_value);
         break;
     default:
         fail(error, 12);
@@ -405,6 +536,8 @@ extern "C" int _rvr_delta_predecode(
     size_t memory_count,
     DeviceBufferConstView<uint8_t> d_program_bytes,
     size_t program_count,
+    DeviceBufferConstView<uint8_t> d_touched_bytes,
+    size_t touched_count,
     RvrOperandEntry const *d_operand_table,
     size_t operand_count,
     uint32_t pc_base,
@@ -417,21 +550,23 @@ extern "C" int _rvr_delta_predecode(
     if (delta_count > UINT32_MAX / 3 ||
         d_delta_bytes.size != delta_count * sizeof(DeltaRecord) ||
         d_memory_bytes.size != memory_count * sizeof(MemoryLogEntry) ||
-        d_program_bytes.size != program_count * sizeof(ProgramLogEntry)) {
+        d_program_bytes.size != program_count * sizeof(ProgramLogEntry) ||
+        d_touched_bytes.size != touched_count * sizeof(TouchedBlock)) {
         return int(cudaErrorInvalidValue);
     }
     // There is no compact output and no predecessor consumed by a later
     // delta record. In particular, avoid zero-byte allocations when a segment
     // contains only residual / arena-native instructions.
     if (delta_count == 0) return 0;
-    size_t event_count = delta_count * 3 + memory_count + program_count * 3;
+    size_t event_count =
+        delta_count * 3 + memory_count + program_count * 3 + touched_count;
 
     uint32_t *ts_a = nullptr, *ts_b = nullptr, *indices_a = nullptr, *indices_b = nullptr;
     uint64_t *addr_a = nullptr, *addr_b = nullptr;
     uint8_t *air_a = nullptr, *air_b = nullptr;
     EventPayload *events_a = nullptr, *events_b = nullptr;
-    PredPayload *pred_a = nullptr, *pred_b = nullptr;
     uint32_t *prev = nullptr;
+    uint64_t *prev_values = nullptr;
     void *temp = nullptr;
     size_t ts_temp = 0, addr_temp = 0, air_temp = 0;
     int result = 0;
@@ -452,14 +587,14 @@ extern "C" int _rvr_delta_predecode(
     CUDA_ALLOC(events_b, event_count * sizeof(EventPayload));
     CUDA_ALLOC(addr_a, event_count * sizeof(uint64_t));
     CUDA_ALLOC(addr_b, event_count * sizeof(uint64_t));
-    CUDA_ALLOC(pred_a, event_count * sizeof(PredPayload));
-    CUDA_ALLOC(pred_b, event_count * sizeof(PredPayload));
     CUDA_ALLOC(prev, delta_count * 3 * sizeof(uint32_t));
+    CUDA_ALLOC(prev_values, delta_count * sizeof(uint64_t));
     CUDA_ALLOC(air_a, delta_count * sizeof(uint8_t));
     CUDA_ALLOC(air_b, delta_count * sizeof(uint8_t));
     CUDA_ALLOC(indices_a, delta_count * sizeof(uint32_t));
     CUDA_ALLOC(indices_b, delta_count * sizeof(uint32_t));
     CUDA_TRY(cudaMemsetAsync(prev, 0, delta_count * 3 * sizeof(uint32_t), stream));
+    CUDA_TRY(cudaMemsetAsync(prev_values, 0, delta_count * sizeof(uint64_t), stream));
 
     {
         dim3 block(256);
@@ -471,6 +606,8 @@ extern "C" int _rvr_delta_predecode(
             memory_count,
             reinterpret_cast<ProgramLogEntry const *>(d_program_bytes.ptr),
             program_count,
+            reinterpret_cast<TouchedBlock const *>(d_touched_bytes.ptr),
+            touched_count,
             d_operand_table,
             operand_count,
             pc_base,
@@ -487,7 +624,7 @@ extern "C" int _rvr_delta_predecode(
         nullptr, ts_temp, ts_a, ts_b, events_a, events_b, event_count, 0, 32, stream
     ));
     CUDA_TRY(cub::DeviceRadixSort::SortPairs(
-        nullptr, addr_temp, addr_a, addr_b, pred_a, pred_b, event_count, 0, 64, stream
+        nullptr, addr_temp, addr_a, addr_b, events_a, events_b, event_count, 0, 64, stream
     ));
     CUDA_TRY(cub::DeviceRadixSort::SortPairs(
         nullptr, air_temp, air_a, air_b, indices_a, indices_b, delta_count, 0, 8, stream
@@ -505,17 +642,19 @@ extern "C" int _rvr_delta_predecode(
         dim3 block(256);
         dim3 grid((event_count + block.x - 1) / block.x);
         extract_address_keys<<<grid, block, 0, stream>>>(
-            events_b, addr_a, pred_a, event_count
+            events_b, addr_a, events_a, event_count
         );
         CUDA_TRY(cudaGetLastError());
     }
     CUDA_TRY(cub::DeviceRadixSort::SortPairs(
-        temp, addr_temp, addr_a, addr_b, pred_a, pred_b, event_count, 0, 64, stream
+        temp, addr_temp, addr_a, addr_b, events_a, events_b, event_count, 0, 64, stream
     ));
     {
         dim3 block(256);
         dim3 grid((event_count + block.x - 1) / block.x);
-        scatter_predecessors<<<grid, block, 0, stream>>>(addr_b, pred_b, event_count, prev);
+        replay_address_groups<<<grid, block, 0, stream>>>(
+            addr_b, events_b, event_count, prev, prev_values, d_error
+        );
         CUDA_TRY(cudaGetLastError());
     }
     {
@@ -542,6 +681,7 @@ extern "C" int _rvr_delta_predecode(
         partition_records<<<grid, block, 0, stream>>>(
             reinterpret_cast<DeltaRecord const *>(d_delta_bytes.ptr),
             prev,
+            prev_values,
             air_b,
             indices_b,
             delta_count,
@@ -562,8 +702,7 @@ cleanup:
     if (air_b) cudaFreeAsync(air_b, stream);
     if (air_a) cudaFreeAsync(air_a, stream);
     if (prev) cudaFreeAsync(prev, stream);
-    if (pred_b) cudaFreeAsync(pred_b, stream);
-    if (pred_a) cudaFreeAsync(pred_a, stream);
+    if (prev_values) cudaFreeAsync(prev_values, stream);
     if (events_b) cudaFreeAsync(events_b, stream);
     if (events_a) cudaFreeAsync(events_a, stream);
     if (addr_b) cudaFreeAsync(addr_b, stream);
