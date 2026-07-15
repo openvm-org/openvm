@@ -174,9 +174,12 @@ pub struct RvrDeltaDecodeEntry {
     pub local_opcode: u8,
     pub air_idx: u8,
     pub access_pattern: u8,
+    /// Row in the gap-filtered program trace. This is populated for every
+    /// defined program slot, including slots that are not delta-decodable.
+    pub filtered_index: u32,
 }
 
-const _: () = assert!(core::mem::size_of::<RvrDeltaDecodeEntry>() == 16);
+const _: () = assert!(core::mem::size_of::<RvrDeltaDecodeEntry>() == 20);
 const _: () = assert!(core::mem::align_of::<RvrDeltaDecodeEntry>() == 4);
 
 /// Extension-independent result of classifying one program instruction for
@@ -1366,6 +1369,8 @@ mod tests {
     fn raw_logs(delta_memory_log: Vec<DeltaMemoryLogEntry>) -> PreflightRawLogs {
         PreflightRawLogs {
             program_log: Vec::new(),
+            program_runs: Vec::new(),
+            device_program_references: Vec::new(),
             memory_log: Vec::new(),
             delta_memory_log,
             chip_counts: Vec::new(),

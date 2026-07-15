@@ -56,6 +56,8 @@ pub const PREFLIGHT_CHIP_RECORD_FLAG_DEVICE_AUX: u32 =
     rvr_openvm_ext_ffi_common::PREFLIGHT_CHIP_RECORD_FLAG_DEVICE_AUX;
 pub const PREFLIGHT_CHIP_RECORD_FLAG_DEVICE_AUX_ORACLE: u32 =
     rvr_openvm_ext_ffi_common::PREFLIGHT_CHIP_RECORD_FLAG_DEVICE_AUX_ORACLE;
+pub const PREFLIGHT_CHIP_RECORD_FLAG_DEVICE_CHRONOLOGY: u32 =
+    rvr_openvm_ext_ffi_common::PREFLIGHT_CHIP_RECORD_FLAG_DEVICE_CHRONOLOGY;
 /// R3: byte size of one compact AddSub inline record (see the C
 /// `PreflightAddSubRecord`). Used to size the per-chip inline-record buffers.
 pub const PREFLIGHT_ADDSUB_RECORD_SIZE: usize =
@@ -190,6 +192,29 @@ impl ProgramLogEntry {
     pub fn write_complete(&self) -> bool {
         self.pc_and_flags & Self::WRITE_COMPLETE != 0
     }
+}
+
+/// One all-direct device-chronology descriptor emitted at basic-block entry.
+/// The device expands `instruction_count` consecutive program counters into
+/// `chronology_offset..` and derives their filtered program indices from the
+/// immutable operand table. `complete == 1` is a fail-closed ABI guard.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ProgramRunEntry {
+    pub first_pc: u32,
+    pub instruction_count: u32,
+    pub chronology_offset: u32,
+    pub complete: u32,
+}
+
+/// Oracle-only host expansion of one executed instruction. Production writes
+/// no entries; CUDA reconstructs this complete vector from [`ProgramRunEntry`]
+/// and uses it to build the execution-frequency table.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct DeviceProgramEntry {
+    pub pc: u32,
+    pub filtered_index: u32,
 }
 
 /// C-compatible preflight memory log entry.
@@ -401,6 +426,15 @@ pub struct PreflightTracerData {
     pub device_aux_patches_cap: u32,
     pub device_aux_references_cap: u32,
     pub dirty_memory_pages_words: u32,
+    /// L2 block-run chronology, present only on the all-direct device route.
+    pub program_runs: *mut ProgramRunEntry,
+    /// Legacy per-instruction chronology retained only by the equality oracle.
+    pub device_program_references: *mut DeviceProgramEntry,
+    pub program_runs_len: u32,
+    pub program_runs_cap: u32,
+    pub program_instruction_len: u32,
+    pub device_program_references_len: u32,
+    pub device_program_references_cap: u32,
 }
 
 impl PreflightTracerData {
@@ -449,6 +483,13 @@ impl PreflightTracerData {
             device_aux_patches_cap: 0,
             device_aux_references_cap: 0,
             dirty_memory_pages_words: 0,
+            program_runs: std::ptr::null_mut(),
+            device_program_references: std::ptr::null_mut(),
+            program_runs_len: 0,
+            program_runs_cap: 0,
+            program_instruction_len: 0,
+            device_program_references_len: 0,
+            device_program_references_cap: 0,
         }
     }
 
@@ -547,6 +588,20 @@ impl PreflightTracerData {
         self.dirty_memory_pages_words = dirty_memory_pages.len() as u32;
     }
 
+    fn set_device_chronology(
+        &mut self,
+        runs: &mut [MaybeUninit<ProgramRunEntry>],
+        references: &mut [MaybeUninit<DeviceProgramEntry>],
+    ) {
+        self.program_runs = runs.as_mut_ptr().cast();
+        self.device_program_references = references.as_mut_ptr().cast();
+        self.program_runs_len = 0;
+        self.program_runs_cap = runs.len() as u32;
+        self.program_instruction_len = 0;
+        self.device_program_references_len = 0;
+        self.device_program_references_cap = references.len() as u32;
+    }
+
     /// Reuse the tracer's memory pointer/cursor for the delta-only compact
     /// residual schema. Generated C selects this layout only when the delta
     /// target also carries `COMPACT_RESIDUAL_MEMORY`.
@@ -618,6 +673,13 @@ impl Default for PreflightTracerData {
             device_aux_patches_cap: 0,
             device_aux_references_cap: 0,
             dirty_memory_pages_words: 0,
+            program_runs: std::ptr::null_mut(),
+            device_program_references: std::ptr::null_mut(),
+            program_runs_len: 0,
+            program_runs_cap: 0,
+            program_instruction_len: 0,
+            device_program_references_len: 0,
+            device_program_references_cap: 0,
         }
     }
 }
@@ -631,6 +693,10 @@ pub type PreflightTracer = TracerPtr<PreflightTracerData>;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PreflightRawLogs {
     pub program_log: Vec<ProgramLogEntry>,
+    /// All-direct device chronology: one descriptor per executed basic block.
+    pub program_runs: Vec<ProgramRunEntry>,
+    /// Oracle-only full per-instruction host chronology.
+    pub device_program_references: Vec<DeviceProgramEntry>,
     pub memory_log: Vec<MemoryLogEntry>,
     /// Populated only by the all-direct CUDA delta route. Mutually exclusive
     /// with `memory_log`; all other callers keep the full host schema.
@@ -725,6 +791,8 @@ impl RvrDeltaRecords {
     pub fn recycle_device_inputs(
         &self,
         program_log: Vec<ProgramLogEntry>,
+        program_runs: Vec<ProgramRunEntry>,
+        device_program_references: Vec<DeviceProgramEntry>,
         memory_log: Vec<MemoryLogEntry>,
         delta_memory_log: Vec<DeltaMemoryLogEntry>,
         touched: Vec<TouchedBlock>,
@@ -732,6 +800,8 @@ impl RvrDeltaRecords {
         self.pool.recycle_segment_buffers(
             PreflightRawLogs {
                 program_log,
+                program_runs,
+                device_program_references,
                 memory_log,
                 delta_memory_log,
                 chip_counts: Vec::new(),
@@ -1233,6 +1303,17 @@ where
         // hundreds of MB of fresh mappings per segment was the other measured
         // per-call cost.
         let mut program_log = pool.take_program_log(program_log_cap);
+        let mut program_runs = pool.take_program_runs(if device_touched_memory {
+            program_log_cap
+        } else {
+            0
+        });
+        let mut device_program_references =
+            pool.take_device_program_references(if device_aux_oracle {
+                program_log_cap
+            } else {
+                0
+            });
         let mut memory_log = if compact_delta_memory {
             Vec::new()
         } else {
@@ -1375,6 +1456,11 @@ where
                         PREFLIGHT_CHIP_RECORD_FLAG_DEVICE_AUX_ORACLE
                     } else {
                         0
+                    }
+                    | if device_touched_memory {
+                        PREFLIGHT_CHIP_RECORD_FLAG_DEVICE_CHRONOLOGY
+                    } else {
+                        0
                     },
             };
         }
@@ -1444,6 +1530,7 @@ where
                 &mut device_aux_references,
                 &mut dirty_memory_pages,
             );
+            tracer.set_device_chronology(&mut program_runs, &mut device_program_references);
         }
         tracer.set_counter_touched_uninit(&mut chip_counts_touched, &mut exec_frequencies_touched);
         if inline_meta.delta_records {
@@ -1533,6 +1620,9 @@ where
         }
 
         let program_len = tracer.program_log_len as usize;
+        let program_runs_len = tracer.program_runs_len as usize;
+        let program_instruction_len = tracer.program_instruction_len as usize;
+        let device_program_references_len = tracer.device_program_references_len as usize;
         let memory_len = tracer.memory_log_len as usize;
         let touched_len = tracer.touched_len as usize;
         let device_aux_patches_len = tracer.device_aux_patches_len as usize;
@@ -1561,6 +1651,9 @@ where
             || memory_len > memory_log_cap
             || touched_len > touched.len()
             || device_aux_patches_len > device_aux_patches.len()
+            || program_runs_len > program_runs.len()
+            || program_instruction_len > program_log_cap
+            || device_program_references_len > device_program_references.len()
             || delta_record.len as usize > delta_capacity
         {
             if single_shot {
@@ -1571,8 +1664,10 @@ where
                     "metered-derived preflight log capacity exceeded: \
                      program {program_len}/{program_log_cap}, \
                      memory {memory_len}/{memory_log_cap}, \
-                     touched {touched_len}/{}, delta {}/{} — capacity-model bug",
+                     touched {touched_len}/{}, runs {program_runs_len}/{}, chronology \
+                     {program_instruction_len}/{program_log_cap}, delta {}/{} — capacity-model bug",
                     touched.len(),
+                    program_runs.len(),
                     delta_record.len,
                     delta_capacity
                 )));
@@ -1585,7 +1680,14 @@ where
             // height-sized and still fit. The shadows are dirty and the
             // touched list that would scrub them may itself have overflowed,
             // so they drop here and the retry takes fresh zeroed ones.
-            pool.recycle_raw_uninit(program_log, memory_log, delta_memory_log, touched);
+            pool.recycle_raw_uninit(
+                program_log,
+                program_runs,
+                device_program_references,
+                memory_log,
+                delta_memory_log,
+                touched,
+            );
             pool.recycle_chip_counts(chip_counts, chip_counts_touched);
             pool.recycle_exec_frequencies(exec_frequencies, exec_frequencies_touched);
             for buf in record_bufs {
@@ -1598,6 +1700,38 @@ where
         // log (its append helpers bounds-check against the caps, and the
         // overflow check above rejected any run whose counters passed them).
         let program_log = unsafe { assume_init_prefix(program_log, program_len) };
+        let program_runs = unsafe { assume_init_prefix(program_runs, program_runs_len) };
+        let device_program_references =
+            unsafe { assume_init_prefix(device_program_references, device_program_references_len) };
+        if device_touched_memory {
+            if program_instruction_len != run_result.state.instret as usize {
+                return Err(ExecutionError::RvrExecution(format!(
+                    "device chronology covered {program_instruction_len} instructions but native execution retired {}",
+                    run_result.state.instret
+                )));
+            }
+            if program_instruction_len != 0 && program_runs.is_empty() {
+                return Err(ExecutionError::RvrExecution(
+                    "non-empty device chronology emitted no block runs".to_string(),
+                ));
+            }
+            if let Some((index, run)) = program_runs
+                .iter()
+                .enumerate()
+                .find(|(_, run)| run.complete != 1)
+            {
+                return Err(ExecutionError::RvrExecution(format!(
+                    "device chronology run {index} is incomplete ({})",
+                    run.complete
+                )));
+            }
+            if device_aux_oracle && device_program_references.len() != program_instruction_len {
+                return Err(ExecutionError::RvrExecution(format!(
+                    "device chronology oracle retained {} instructions for {program_instruction_len} reconstructed entries",
+                    device_program_references.len()
+                )));
+            }
+        }
         let memory_log = if compact_delta_memory {
             Vec::new()
         } else {
@@ -1742,6 +1876,7 @@ where
             to_state,
             exit_code: run_result.exit_code,
             filtered_exec_frequencies,
+            program_frequencies_on_device: device_touched_memory,
             touched_memory: replay.touched_memory,
             touched_memory_on_device: device_touched_memory,
             #[cfg(feature = "rvr")]
@@ -1885,6 +2020,8 @@ where
             system_records,
             raw_logs: PreflightRawLogs {
                 program_log,
+                program_runs,
+                device_program_references,
                 memory_log,
                 delta_memory_log,
                 chip_counts,

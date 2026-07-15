@@ -25,6 +25,10 @@ use openvm_circuit::system::cuda::memory::{
     DeviceInitialMemory, DeviceTouchedMemory, DeviceTouchedMemoryProvider,
     DEVICE_TOUCHED_RECORD_WORDS,
 };
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use openvm_circuit::system::cuda::program::{
+    DeviceProgramFrequencies, DeviceProgramFrequenciesProvider,
+};
 #[cfg(feature = "cuda")]
 use openvm_cuda_common::{
     copy::{MemCopyD2H, MemCopyH2D},
@@ -47,7 +51,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 #[cfg(feature = "rvr")]
 use crate::log_native::derive_base_alu_u16_operands;
 
-/// One 16-byte operand-table entry per program slot, indexed by
+/// One 20-byte operand-table entry per program slot, indexed by
 /// `(from_pc - pc_base) / DEFAULT_PC_STEP`. Field meanings are per wire
 /// format; for alu3 over the BaseAluU16 adapter: `a` = rd_ptr, `b` = rs1_ptr,
 /// `c` = rs2 (register ptr or immediate), flags carry rs2_as/imm-sign, and
@@ -55,7 +59,7 @@ use crate::log_native::derive_base_alu_u16_operands;
 /// Mirrored by the CUDA `RvrOperandEntry` (static-asserted there).
 pub type DeviceOperandEntry = RvrDeltaDecodeEntry;
 
-const _: () = assert!(size_of::<DeviceOperandEntry>() == 16);
+const _: () = assert!(size_of::<DeviceOperandEntry>() == 20);
 const _: () = assert!(align_of::<DeviceOperandEntry>() == 4);
 
 /// `rs2` is an immediate (else a register pointer).
@@ -211,6 +215,11 @@ struct HostDeltaSegment {
     memory_log: Vec<openvm_circuit::arch::rvr::MemoryLogEntry>,
     delta_memory_log: Vec<openvm_circuit::arch::rvr::DeltaMemoryLogEntry>,
     program_log: Vec<openvm_circuit::arch::rvr::ProgramLogEntry>,
+    program_runs: Vec<openvm_circuit::arch::rvr::ProgramRunEntry>,
+    device_program_references: Vec<openvm_circuit::arch::rvr::DeviceProgramEntry>,
+    program_instruction_count: usize,
+    program_frequency_count: usize,
+    program_frequency_reference: Vec<u32>,
     touched: Vec<openvm_circuit::arch::rvr::TouchedBlock>,
     device_aux_patches: Vec<openvm_circuit::arch::rvr::DeviceAuxPatch>,
     device_aux_references: Vec<openvm_circuit::arch::rvr::DeviceAuxReference>,
@@ -232,6 +241,7 @@ struct DeltaAirSpec {
 struct DeviceDeltaSegment {
     outputs: HashMap<DeltaAirKind, Arc<DeviceBuffer<u8>>>,
     touched_memory: Option<DeviceTouchedMemory>,
+    program_frequencies: Option<DeviceProgramFrequencies>,
 }
 
 /// Device descriptor indexed by global AIR. CUDA writes each stable partition
@@ -323,7 +333,7 @@ impl RvrGpuDecodeState {
                 return Some((Arc::clone(buf), pc_base));
             }
         }
-        // SAFETY: DeviceOperandEntry is repr(C), size 16, no padding invariants
+        // SAFETY: DeviceOperandEntry is repr(C), size 20, no padding invariants
         // beyond the static asserts; reinterpreting as bytes for H2D is sound.
         let bytes: &[u8] = unsafe {
             std::slice::from_raw_parts(
@@ -425,6 +435,10 @@ impl RvrGpuDecodeState {
         memory_log: Vec<openvm_circuit::arch::rvr::MemoryLogEntry>,
         delta_memory_log: Vec<openvm_circuit::arch::rvr::DeltaMemoryLogEntry>,
         program_log: Vec<openvm_circuit::arch::rvr::ProgramLogEntry>,
+        program_runs: Vec<openvm_circuit::arch::rvr::ProgramRunEntry>,
+        device_program_references: Vec<openvm_circuit::arch::rvr::DeviceProgramEntry>,
+        program_frequency_count: usize,
+        program_frequency_reference: Vec<u32>,
         touched: Vec<openvm_circuit::arch::rvr::TouchedBlock>,
         device_aux_patches: Vec<openvm_circuit::arch::rvr::DeviceAuxPatch>,
         device_aux_references: Vec<openvm_circuit::arch::rvr::DeviceAuxReference>,
@@ -465,6 +479,37 @@ impl RvrGpuDecodeState {
                 "device delta count mismatch: {records} chronological records but per-AIR counts sum to {expected}"
             )));
         }
+        let mut program_instruction_count = 0usize;
+        for (run_index, run) in program_runs.iter().enumerate() {
+            if run.complete != 1
+                || run.instruction_count == 0
+                || run.chronology_offset as usize != program_instruction_count
+            {
+                return Err(openvm_circuit::arch::ExecutionError::RvrExecution(format!(
+                    "device chronology run {run_index} is not a complete contiguous block"
+                )));
+            }
+            program_instruction_count = program_instruction_count
+                .checked_add(run.instruction_count as usize)
+                .ok_or_else(|| {
+                    openvm_circuit::arch::ExecutionError::RvrExecution(
+                        "device chronology instruction count overflow".to_string(),
+                    )
+                })?;
+        }
+        if program_instruction_count == 0
+            || program_frequency_count == 0
+            || (!device_program_references.is_empty()
+                && device_program_references.len() != program_instruction_count)
+            || (!program_frequency_reference.is_empty()
+                && program_frequency_reference.len() != program_frequency_count)
+        {
+            return Err(openvm_circuit::arch::ExecutionError::RvrExecution(format!(
+                "invalid device chronology dimensions: instructions={program_instruction_count}, frequencies={program_frequency_count}, chronology_reference={}, frequency_reference={}",
+                device_program_references.len(),
+                program_frequency_reference.len(),
+            )));
+        }
         let mut arena_native_flags = vec![0u8; chip_counts.len()];
         for &air in &arena_native {
             let Some(flag) = arena_native_flags.get_mut(air) else {
@@ -479,6 +524,11 @@ impl RvrGpuDecodeState {
             memory_log,
             delta_memory_log,
             program_log,
+            program_runs,
+            device_program_references,
+            program_instruction_count,
+            program_frequency_count,
+            program_frequency_reference,
             touched,
             device_aux_patches,
             device_aux_references,
@@ -607,6 +657,18 @@ impl RvrGpuDecodeState {
                 .to_device_on(device_ctx)
                 .expect("delta W-chronology H2D")
         };
+        let d_program_runs = host
+            .program_runs
+            .as_slice()
+            .to_device_on(device_ctx)
+            .expect("device program runs H2D");
+        let d_program_frequencies =
+            DeviceBuffer::<u32>::with_capacity_on(host.program_frequency_count, device_ctx);
+        let d_program_chronology =
+            DeviceBuffer::<openvm_circuit::arch::rvr::DeviceProgramEntry>::with_capacity_on(
+                host.program_instruction_count,
+                device_ctx,
+            );
         let d_initial_memory = initial_memory
             .to_device_on(device_ctx)
             .expect("delta initial-memory descriptors H2D");
@@ -649,6 +711,10 @@ impl RvrGpuDecodeState {
                 memory_stride,
                 &d_program,
                 host.program_log.len(),
+                &d_program_runs,
+                host.program_instruction_count,
+                &d_program_frequencies,
+                &d_program_chronology,
                 &d_initial_memory,
                 &d_touched_output,
                 &d_touched_count,
@@ -665,6 +731,54 @@ impl RvrGpuDecodeState {
         }
         let error = d_error.to_host_on(device_ctx).expect("delta error D2H")[0];
         assert_eq!(error, 0, "CUDA delta predecode fail-closed error {error}");
+        if !host.device_program_references.is_empty()
+            || !host.program_frequency_reference.is_empty()
+        {
+            assert!(
+                !host.device_program_references.is_empty()
+                    && !host.program_frequency_reference.is_empty()
+                    && host
+                        .program_frequency_reference
+                        .iter()
+                        .any(|&count| count != 0),
+                "device chronology oracle references must be non-vacuous"
+            );
+            let actual_chronology = d_program_chronology
+                .to_host_on(device_ctx)
+                .expect("device chronology oracle D2H");
+            let actual_frequencies = d_program_frequencies
+                .to_host_on(device_ctx)
+                .expect("device program-frequency oracle D2H");
+            let chronology_bytes = |entries: &[openvm_circuit::arch::rvr::DeviceProgramEntry]| {
+                // SAFETY: DeviceProgramEntry is a fully initialized repr(C)
+                // pair of u32s with no padding.
+                unsafe {
+                    std::slice::from_raw_parts(
+                        entries.as_ptr().cast::<u8>(),
+                        std::mem::size_of_val(entries),
+                    )
+                }
+            };
+            assert_eq!(
+                chronology_bytes(&actual_chronology),
+                chronology_bytes(&host.device_program_references),
+                "device program chronology differs byte-for-byte from host chronology"
+            );
+            let frequency_bytes = |entries: &[u32]| {
+                // SAFETY: u32 has no padding and both slices are initialized.
+                unsafe {
+                    std::slice::from_raw_parts(
+                        entries.as_ptr().cast::<u8>(),
+                        std::mem::size_of_val(entries),
+                    )
+                }
+            };
+            assert_eq!(
+                frequency_bytes(&actual_frequencies),
+                frequency_bytes(&host.program_frequency_reference),
+                "device program frequencies differ byte-for-byte from host frequencies"
+            );
+        }
         let touched_count = d_touched_count
             .to_host_on(device_ctx)
             .expect("delta touched count D2H")[0] as usize;
@@ -773,17 +887,28 @@ impl RvrGpuDecodeState {
         }
 
         let program_log = std::mem::take(&mut host.program_log);
+        let program_runs = std::mem::take(&mut host.program_runs);
+        let device_program_references = std::mem::take(&mut host.device_program_references);
         let memory_log = std::mem::take(&mut host.memory_log);
         let delta_memory_log = std::mem::take(&mut host.delta_memory_log);
         let touched = std::mem::take(&mut host.touched);
-        host.delta
-            .recycle_device_inputs(program_log, memory_log, delta_memory_log, touched);
+        host.delta.recycle_device_inputs(
+            program_log,
+            program_runs,
+            device_program_references,
+            memory_log,
+            delta_memory_log,
+            touched,
+        );
         drop(host);
         let device = DeviceDeltaSegment {
             outputs,
             touched_memory: Some(DeviceTouchedMemory {
                 records: d_touched_output,
                 num_records: touched_count,
+            }),
+            program_frequencies: Some(DeviceProgramFrequencies {
+                frequencies: d_program_frequencies,
             }),
         };
         *self.delta_device.lock().unwrap() = Some(device);
@@ -819,6 +944,22 @@ impl DeviceTouchedMemoryProvider for RvrGpuDecodeState {
             .unwrap()
             .as_mut()
             .and_then(|device| device.touched_memory.take())
+    }
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+impl DeviceProgramFrequenciesProvider for RvrGpuDecodeState {
+    fn take_device_program_frequencies(
+        &self,
+        device_ctx: &GpuDeviceCtx,
+        initial_memory: &[DeviceInitialMemory],
+    ) -> Option<DeviceProgramFrequencies> {
+        self.ensure_device_delta_segment(device_ctx, Some(initial_memory));
+        self.delta_device
+            .lock()
+            .unwrap()
+            .as_mut()
+            .and_then(|device| device.program_frequencies.take())
     }
 }
 
@@ -882,6 +1023,7 @@ fn gpu_decode_entry<F: PrimeField32>(
                 local_opcode,
                 air_idx: u8::MAX,
                 access_pattern: DeviceDeltaAccessPattern::Alu3 as u8,
+                filtered_index: u32::MAX,
             },
             kind,
         ));
@@ -930,6 +1072,7 @@ fn gpu_decode_entry<F: PrimeField32>(
                 local_opcode,
                 air_idx: u8::MAX,
                 access_pattern: DeviceDeltaAccessPattern::Alu3 as u8,
+                filtered_index: u32::MAX,
             },
             kind,
         ));
@@ -966,6 +1109,7 @@ fn gpu_decode_entry<F: PrimeField32>(
                 local_opcode,
                 air_idx: u8::MAX,
                 access_pattern: DeviceDeltaAccessPattern::Branch2 as u8,
+                filtered_index: u32::MAX,
             },
             kind,
         ));
@@ -991,6 +1135,7 @@ fn gpu_decode_entry<F: PrimeField32>(
                 local_opcode: 0,
                 air_idx: u8::MAX,
                 access_pattern: DeviceDeltaAccessPattern::Wr1 as u8,
+                filtered_index: u32::MAX,
             },
             DeltaAirKind::JalLui,
         ));
@@ -1005,6 +1150,7 @@ fn gpu_decode_entry<F: PrimeField32>(
                 local_opcode: 0,
                 air_idx: u8::MAX,
                 access_pattern: DeviceDeltaAccessPattern::Wr1Always as u8,
+                filtered_index: u32::MAX,
             },
             DeltaAirKind::Auipc,
         ));
@@ -1062,6 +1208,7 @@ fn gpu_decode_entry<F: PrimeField32>(
                 local_opcode,
                 air_idx: u8::MAX,
                 access_pattern: DeviceDeltaAccessPattern::Alu3Reg as u8,
+                filtered_index: u32::MAX,
             },
             kind,
         ));
@@ -1085,6 +1232,7 @@ fn gpu_decode_entry<F: PrimeField32>(
                 local_opcode: (opcode - BaseAluOpcode::CLASS_OFFSET) as u8,
                 air_idx: u8::MAX,
                 access_pattern: DeviceDeltaAccessPattern::Alu3 as u8,
+                filtered_index: u32::MAX,
             },
             DeltaAirKind::Bitwise,
         ));
@@ -1151,6 +1299,7 @@ fn gpu_decode_entry<F: PrimeField32>(
                 local_opcode,
                 air_idx: u8::MAX,
                 access_pattern: pattern as u8,
+                filtered_index: u32::MAX,
             },
             kind,
         ));
@@ -1174,6 +1323,7 @@ fn gpu_decode_entry<F: PrimeField32>(
                 local_opcode: 0,
                 air_idx: u8::MAX,
                 access_pattern: DeviceDeltaAccessPattern::Rw1 as u8,
+                filtered_index: u32::MAX,
             },
             DeltaAirKind::Jalr,
         ));
@@ -1443,14 +1593,20 @@ fn build_operand_table<F: PrimeField32>(
         DeviceOperandEntry {
             air_idx: u8::MAX,
             access_pattern: u8::MAX,
+            filtered_index: u32::MAX,
             ..DeviceOperandEntry::default()
         };
         program.instructions_and_debug_infos.len()
     ];
+    let mut filtered_index = 0u32;
     for (slot_idx, slot) in program.instructions_and_debug_infos.iter().enumerate() {
         let Some((instruction, _)) = slot else {
             continue;
         };
+        entries[slot_idx].filtered_index = filtered_index;
+        filtered_index = filtered_index
+            .checked_add(1)
+            .expect("filtered program index exceeds u32 ABI");
         if let Some((mut entry, _)) = gpu_decode_entry(instruction) {
             let air_idx = pc_to_air_idx
                 .get(slot_idx)
@@ -1458,6 +1614,7 @@ fn build_operand_table<F: PrimeField32>(
                 .flatten()
                 .expect("device-decodable instruction must map to an AIR");
             entry.air_idx = u8::try_from(air_idx).expect("delta device AIR index exceeds u8");
+            entry.filtered_index = entries[slot_idx].filtered_index;
             entries[slot_idx] = entry;
         }
     }

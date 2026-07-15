@@ -1283,6 +1283,7 @@ where
             to_state,
             exit_code,
             filtered_exec_frequencies,
+            program_frequencies_on_device: false,
             #[cfg(feature = "rvr")]
             rvr_exec_frequencies_touched: Vec::new(),
             #[cfg(feature = "rvr")]

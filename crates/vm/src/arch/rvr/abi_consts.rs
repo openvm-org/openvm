@@ -7,9 +7,10 @@ use openvm_instructions::VM_DIGEST_WIDTH;
 use rvr_openvm_ext_ffi_common as ffi;
 
 use crate::arch::rvr::preflight::{
-    ChipRecordBuf, DeltaMemoryLogEntry, MemoryLogEntry, PreflightTracerData, ProgramLogEntry,
-    TouchedBlock, PREFLIGHT_INITIAL_TIMESTAMP, PREFLIGHT_MEMORY_KIND_READ,
-    PREFLIGHT_MEMORY_KIND_TOUCH, PREFLIGHT_MEMORY_KIND_WRITE, PREFLIGHT_TRACER_KIND,
+    ChipRecordBuf, DeltaMemoryLogEntry, DeviceProgramEntry, MemoryLogEntry, PreflightTracerData,
+    ProgramLogEntry, ProgramRunEntry, TouchedBlock, PREFLIGHT_INITIAL_TIMESTAMP,
+    PREFLIGHT_MEMORY_KIND_READ, PREFLIGHT_MEMORY_KIND_TOUCH, PREFLIGHT_MEMORY_KIND_WRITE,
+    PREFLIGHT_TRACER_KIND,
 };
 
 #[cfg(any(feature = "test-utils", feature = "cuda"))]
@@ -27,6 +28,17 @@ const _: () = assert!(align_of::<ProgramLogEntry>() == ffi::PREFLIGHT_PROGRAM_LO
 const _: () = assert!(offset_of!(ProgramLogEntry, timestamp) == 0);
 const _: () = assert!(offset_of!(ProgramLogEntry, pc_and_flags) == 4);
 const _: () = assert!(offset_of!(ProgramLogEntry, write_value) == 8);
+const _: () = assert!(size_of::<ProgramRunEntry>() == ffi::PREFLIGHT_PROGRAM_RUN_ENTRY_SIZE);
+const _: () = assert!(align_of::<ProgramRunEntry>() == ffi::PREFLIGHT_PROGRAM_RUN_ENTRY_ALIGN);
+const _: () = assert!(offset_of!(ProgramRunEntry, first_pc) == 0);
+const _: () = assert!(offset_of!(ProgramRunEntry, instruction_count) == 4);
+const _: () = assert!(offset_of!(ProgramRunEntry, chronology_offset) == 8);
+const _: () = assert!(offset_of!(ProgramRunEntry, complete) == 12);
+const _: () = assert!(size_of::<DeviceProgramEntry>() == ffi::PREFLIGHT_DEVICE_PROGRAM_ENTRY_SIZE);
+const _: () =
+    assert!(align_of::<DeviceProgramEntry>() == ffi::PREFLIGHT_DEVICE_PROGRAM_ENTRY_ALIGN);
+const _: () = assert!(offset_of!(DeviceProgramEntry, pc) == 0);
+const _: () = assert!(offset_of!(DeviceProgramEntry, filtered_index) == 4);
 const _: () = assert!(size_of::<MemoryLogEntry>() == ffi::PREFLIGHT_MEMORY_LOG_ENTRY_SIZE);
 const _: () = assert!(align_of::<MemoryLogEntry>() == ffi::PREFLIGHT_MEMORY_LOG_ENTRY_ALIGN);
 const _: () = assert!(offset_of!(MemoryLogEntry, timestamp) == 0);
@@ -94,6 +106,13 @@ const _: () = assert!(offset_of!(PreflightTracerData, device_aux_patches_len) ==
 const _: () = assert!(offset_of!(PreflightTracerData, device_aux_patches_cap) == 212);
 const _: () = assert!(offset_of!(PreflightTracerData, device_aux_references_cap) == 216);
 const _: () = assert!(offset_of!(PreflightTracerData, dirty_memory_pages_words) == 220);
+const _: () = assert!(offset_of!(PreflightTracerData, program_runs) == 224);
+const _: () = assert!(offset_of!(PreflightTracerData, device_program_references) == 232);
+const _: () = assert!(offset_of!(PreflightTracerData, program_runs_len) == 240);
+const _: () = assert!(offset_of!(PreflightTracerData, program_runs_cap) == 244);
+const _: () = assert!(offset_of!(PreflightTracerData, program_instruction_len) == 248);
+const _: () = assert!(offset_of!(PreflightTracerData, device_program_references_len) == 252);
+const _: () = assert!(offset_of!(PreflightTracerData, device_program_references_cap) == 256);
 const _: () = assert!(size_of::<ChipRecordBuf>() == ffi::PREFLIGHT_CHIP_RECORD_BUF_SIZE);
 const _: () = assert!(align_of::<ChipRecordBuf>() == ffi::PREFLIGHT_CHIP_RECORD_BUF_ALIGN);
 const _: () = assert!(offset_of!(ChipRecordBuf, base) == 0);

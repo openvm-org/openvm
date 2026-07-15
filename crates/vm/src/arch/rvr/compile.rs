@@ -678,6 +678,7 @@ fn build_delta_decode_precompute<F: PrimeField32>(
         RvrDeltaDecodeEntry {
             air_idx: u8::MAX,
             access_pattern: u8::MAX,
+            filtered_index: u32::MAX,
             ..RvrDeltaDecodeEntry::default()
         };
         program.instructions_and_debug_infos.len()
@@ -686,10 +687,15 @@ fn build_delta_decode_precompute<F: PrimeField32>(
     let mut air_to_kind = BTreeMap::new();
     let mut tainted = BTreeSet::new();
 
+    let mut filtered_index = 0u32;
     for (slot, program_entry) in program.instructions_and_debug_infos.iter().enumerate() {
         let Some((instruction, _)) = program_entry else {
             continue;
         };
+        entries[slot].filtered_index = filtered_index;
+        filtered_index = filtered_index
+            .checked_add(1)
+            .expect("filtered program index exceeds u32 ABI");
         let Some(TraceChipIndex::Chip(air)) = chips.pc_to_chip.get(slot) else {
             continue;
         };
@@ -700,6 +706,7 @@ fn build_delta_decode_precompute<F: PrimeField32>(
         };
         decoded.entry.air_idx =
             u8::try_from(air_idx).expect("delta device AIR index exceeds the persisted u8 ABI");
+        decoded.entry.filtered_index = entries[slot].filtered_index;
         entries[slot] = decoded.entry;
         if let Some(previous) = kind_to_air.insert(decoded.kind, air_idx) {
             assert_eq!(

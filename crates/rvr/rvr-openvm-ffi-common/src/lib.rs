@@ -52,7 +52,9 @@ pub const PREFLIGHT_DELTA_MEMORY_LOG_ENTRY_ALIGN: usize = 8;
 // profiling-only OPENVM_RVR_NATIVE_DETAIL route is selected. L1 appends
 // device-aux patch/reference side logs and a dirty-page bitmap for the
 // all-direct delta route; their host counterparts remain absent elsewhere.
-pub const PREFLIGHT_TRACER_DATA_SIZE: usize = 224;
+// L2 appends block-run/device-chronology buffers used to reconstruct the
+// filtered program frequencies without per-instruction host accounting.
+pub const PREFLIGHT_TRACER_DATA_SIZE: usize = 264;
 pub const PREFLIGHT_TRACER_DATA_ALIGN: usize = 8;
 /// One entry in the preflight touched-block buffer: the address space and the
 /// block-aligned byte address of a block touched (for the first time) this
@@ -95,6 +97,16 @@ pub const PREFLIGHT_CHIP_RECORD_FLAG_DEVICE_AUX: u32 = 64;
 /// Test/oracle mode: retain the legacy host predecessor computation solely for
 /// a fail-hard full-vector comparison with the device reconstruction.
 pub const PREFLIGHT_CHIP_RECORD_FLAG_DEVICE_AUX_ORACLE: u32 = 128;
+/// The all-direct CUDA delta route emits one compact descriptor per executed
+/// basic block. Device predecode expands those runs into exact program order
+/// and filtered execution frequencies.
+pub const PREFLIGHT_CHIP_RECORD_FLAG_DEVICE_CHRONOLOGY: u32 = 256;
+/// One device-chronology block-run descriptor.
+pub const PREFLIGHT_PROGRAM_RUN_ENTRY_SIZE: usize = 16;
+pub const PREFLIGHT_PROGRAM_RUN_ENTRY_ALIGN: usize = 4;
+/// One oracle-only expanded program-chronology entry `(pc, filtered_index)`.
+pub const PREFLIGHT_DEVICE_PROGRAM_ENTRY_SIZE: usize = 8;
+pub const PREFLIGHT_DEVICE_PROGRAM_ENTRY_ALIGN: usize = 4;
 /// Byte size of one compact base-ALU AddSub record as stored by the preflight
 /// tracer (R3 L1+L5): the dynamic witness only — from_pc, from_timestamp, the
 /// three access prev_timestamps, the old rd block, and the b/c operand limbs.
