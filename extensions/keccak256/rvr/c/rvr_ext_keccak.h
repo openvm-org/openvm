@@ -11,13 +11,22 @@ struct RvState;
  * caller convention. */
 
 extern __attribute__((preserve_most)) void rvr_ext_keccakf(
-    RvState* state, uint64_t buffer_ptr, uint32_t op_chip_idx,
-    uint32_t perm_chip_idx);
+    RvState* state, uint64_t buffer_ptr, uint32_t from_pc,
+    uint32_t from_timestamp, uint32_t rd_ptr, uint32_t rd_prev_timestamp,
+    uint32_t op_chip_idx, uint32_t perm_chip_idx);
 
 extern __attribute__((preserve_most)) void rvr_ext_xorin(RvState* state,
                                                          uint64_t buffer_ptr,
                                                          uint64_t input_ptr,
                                                          uint32_t len,
+                                                         uint32_t from_pc,
+                                                         uint32_t from_timestamp,
+                                                         uint32_t rd_ptr,
+                                                         uint32_t rs1_ptr,
+                                                         uint32_t rs2_ptr,
+                                                         uint32_t rd_prev_timestamp,
+                                                         uint32_t rs1_prev_timestamp,
+                                                         uint32_t rs2_prev_timestamp,
                                                          uint32_t chip_idx);
 
 #endif /* RVR_EXT_KECCAK_H */
