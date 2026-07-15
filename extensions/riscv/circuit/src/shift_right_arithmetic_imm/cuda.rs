@@ -10,10 +10,10 @@ use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_stark_backend::prover::AirProvingContext;
 
+use super::{ShiftRightArithmeticImmCoreCols, ShiftRightArithmeticImmCoreRecord};
 use crate::{
     adapters::{Rv64BaseAluImmU16AdapterCols, Rv64BaseAluImmU16AdapterRecord, U16_BITS},
     cuda_abi::shift_right_arithmetic_imm_cuda::tracegen,
-    ShiftRightArithmeticImmCoreCols, ShiftRightArithmeticImmCoreRecord,
 };
 
 #[derive(new)]

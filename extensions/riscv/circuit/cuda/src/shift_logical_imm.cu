@@ -10,7 +10,7 @@
 using namespace riscv;
 using namespace program;
 
-// SLLI/SRLI use u16 limbs (4 limbs of 16 bits) and the single-read ADDI adapter; the shift
+// SLLI/SRLI use u16 limbs (4 limbs of 16 bits) and the immediate u16 ALU adapter; the shift
 // amount lives in the core record and the immediate operand is reconstructed from the core's
 // marker columns.
 using Rv64ShiftLogicalImmCore = ShiftLogicalImmCore<BLOCK_FE_WIDTH, U16_BITS>;

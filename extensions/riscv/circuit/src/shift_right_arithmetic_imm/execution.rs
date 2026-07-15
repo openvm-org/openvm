@@ -20,8 +20,8 @@ use super::ShiftRightArithmeticImmExecutor;
 #[repr(C)]
 struct ShiftRightArithmeticImmPreCompute {
     shamt: u8,
-    rd: u8,
-    rs1: u8,
+    rd_ptr: u8,
+    rs1_ptr: u8,
 }
 
 impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
@@ -53,8 +53,8 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
         }
         *data = ShiftRightArithmeticImmPreCompute {
             shamt: shamt as u8,
-            rd: a.as_canonical_u32() as u8,
-            rs1: b.as_canonical_u32() as u8,
+            rd_ptr: a.as_canonical_u32() as u8,
+            rs1_ptr: b.as_canonical_u32() as u8,
         };
         Ok(())
     }
@@ -138,9 +138,9 @@ unsafe fn execute_e12_impl<Ctx: ExecutionCtxTrait>(
     exec_state: &mut VmExecState<GuestMemory, Ctx>,
 ) {
     let rs1 = exec_state
-        .vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.rs1 as u32);
+        .vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.rs1_ptr as u32);
     let rd = (i64::from_le_bytes(rs1) >> pre_compute.shamt).to_le_bytes();
-    exec_state.vm_write_bytes(RV64_REGISTER_AS, pre_compute.rd as u32, &rd);
+    exec_state.vm_write_bytes(RV64_REGISTER_AS, pre_compute.rd_ptr as u32, &rd);
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
 }
