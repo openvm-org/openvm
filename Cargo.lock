@@ -7481,6 +7481,7 @@ dependencies = [
  "openvm-instructions",
  "openvm-riscv-transpiler",
  "openvm-stark-backend",
+ "p3-baby-bear",
  "rvr-openvm-ir",
  "thiserror 1.0.69",
 ]
