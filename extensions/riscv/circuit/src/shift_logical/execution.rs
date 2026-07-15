@@ -8,14 +8,13 @@ use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_IMM_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    riscv::{RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::ShiftOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::ShiftLogicalExecutor;
-use crate::adapters::imm_to_rv64_u64;
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
 struct ShiftLogicalPreCompute {
@@ -33,7 +32,7 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
         pc: u32,
         inst: &Instruction<F>,
         data: &mut ShiftLogicalPreCompute,
-    ) -> Result<(bool, ShiftOpcode), StaticProgramError> {
+    ) -> Result<ShiftOpcode, StaticProgramError> {
         let Instruction {
             opcode, a, b, c, e, ..
         } = inst;
@@ -41,36 +40,25 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
         if shift_opcode == ShiftOpcode::SRA {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
-        let e_u32 = e.as_canonical_u32();
-        if inst.d.as_canonical_u32() != RV64_REGISTER_AS
-            || !(e_u32 == RV64_IMM_AS || e_u32 == RV64_REGISTER_AS)
+        if inst.d.as_canonical_u32() != RV64_REGISTER_AS || e.as_canonical_u32() != RV64_REGISTER_AS
         {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
-        let is_imm = e_u32 == RV64_IMM_AS;
-        let c_u32 = c.as_canonical_u32();
         *data = ShiftLogicalPreCompute {
-            c: if is_imm {
-                imm_to_rv64_u64(c_u32)
-            } else {
-                c_u32 as u64
-            },
+            c: c.as_canonical_u32() as u64,
             a: a.as_canonical_u32() as u8,
             b: b.as_canonical_u32() as u8,
         };
-        // `d` is always expected to be RV64_REGISTER_AS.
-        Ok((is_imm, shift_opcode))
+        Ok(shift_opcode)
     }
 }
 
 macro_rules! dispatch {
-    ($execute_impl:ident, $is_imm:ident, $shift_opcode:ident, $pc:ident) => {
-        match ($is_imm, $shift_opcode) {
-            (true, ShiftOpcode::SLL) => Ok($execute_impl::<_, true, SllOp>),
-            (false, ShiftOpcode::SLL) => Ok($execute_impl::<_, false, SllOp>),
-            (true, ShiftOpcode::SRL) => Ok($execute_impl::<_, true, SrlOp>),
-            (false, ShiftOpcode::SRL) => Ok($execute_impl::<_, false, SrlOp>),
-            (_, ShiftOpcode::SRA) => Err(StaticProgramError::InvalidInstruction($pc)),
+    ($execute_impl:ident, $shift_opcode:ident, $pc:ident) => {
+        match $shift_opcode {
+            ShiftOpcode::SLL => Ok($execute_impl::<_, false, SllOp>),
+            ShiftOpcode::SRL => Ok($execute_impl::<_, false, SrlOp>),
+            ShiftOpcode::SRA => Err(StaticProgramError::InvalidInstruction($pc)),
         }
     };
 }
@@ -92,9 +80,8 @@ where
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError> {
         let data: &mut ShiftLogicalPreCompute = data.borrow_mut();
-        let (is_imm, shift_opcode) = self.pre_compute_impl(pc, inst, data)?;
-        // `d` is always expected to be RV64_REGISTER_AS.
-        dispatch!(execute_e1_handler, is_imm, shift_opcode, pc)
+        let shift_opcode = self.pre_compute_impl(pc, inst, data)?;
+        dispatch!(execute_e1_handler, shift_opcode, pc)
     }
 
     #[cfg(feature = "tco")]
@@ -108,9 +95,8 @@ where
         Ctx: ExecutionCtxTrait,
     {
         let data: &mut ShiftLogicalPreCompute = data.borrow_mut();
-        let (is_imm, shift_opcode) = self.pre_compute_impl(pc, inst, data)?;
-        // `d` is always expected to be RV64_REGISTER_AS.
-        dispatch!(execute_e1_handler, is_imm, shift_opcode, pc)
+        let shift_opcode = self.pre_compute_impl(pc, inst, data)?;
+        dispatch!(execute_e1_handler, shift_opcode, pc)
     }
 }
 
@@ -133,9 +119,8 @@ where
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError> {
         let data: &mut E2PreCompute<ShiftLogicalPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
-        let (is_imm, shift_opcode) = self.pre_compute_impl(pc, inst, &mut data.data)?;
-        // `d` is always expected to be RV64_REGISTER_AS.
-        dispatch!(execute_e2_handler, is_imm, shift_opcode, pc)
+        let shift_opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
+        dispatch!(execute_e2_handler, shift_opcode, pc)
     }
 
     #[cfg(feature = "tco")]
@@ -148,9 +133,8 @@ where
     ) -> Result<Handler<Ctx>, StaticProgramError> {
         let data: &mut E2PreCompute<ShiftLogicalPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
-        let (is_imm, shift_opcode) = self.pre_compute_impl(pc, inst, &mut data.data)?;
-        // `d` is always expected to be RV64_REGISTER_AS.
-        dispatch!(execute_e2_handler, is_imm, shift_opcode, pc)
+        let shift_opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
+        dispatch!(execute_e2_handler, shift_opcode, pc)
     }
 }
 

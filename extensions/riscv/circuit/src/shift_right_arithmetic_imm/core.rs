@@ -10,7 +10,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
-use openvm_riscv_transpiler::{ShiftImmOpcode, ShiftOpcode};
+use openvm_riscv_transpiler::ShiftImmOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
@@ -18,53 +18,52 @@ use openvm_stark_backend::{
     BaseAirWithPublicValues,
 };
 
-use crate::shift_logical::run_shift_logical;
+use crate::shift_right_arithmetic::run_shift_right_arithmetic;
 
-/// Core columns for logical shifts with an immediate shift amount.
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection, Clone, Copy, Debug)]
-pub struct ShiftLogicalImmCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct ShiftRightArithmeticImmCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub a: [T; NUM_LIMBS],
     pub b: [T; NUM_LIMBS],
 
-    pub opcode_sll_flag: T,
-    pub opcode_srl_flag: T,
-
-    pub bit_multiplier_left: T,
-    pub carry_multiplier_left: T,
+    pub is_valid: T,
+    pub bit_multiplier: T,
+    pub carry_multiplier: T,
+    pub b_sign: T,
 
     pub bit_shift_marker: [T; LIMB_BITS],
     pub limb_shift_marker: [T; NUM_LIMBS],
-
     pub bit_shift_carry: [T; NUM_LIMBS],
     pub bit_shift_aux: [T; NUM_LIMBS],
 }
 
-/// Logical shift-by-immediate AIR (SLLI/SRLI) over u16 limbs.
+/// Arithmetic shift-right-by-immediate AIR over u16 limbs.
 ///
-/// The marker columns uniquely encode `shamt`, and the execution bridge binds
-/// `limb_shift * LIMB_BITS + bit_shift` to the immediate operand.
+/// The marker columns uniquely encode a shift in `0..NUM_LIMBS * LIMB_BITS`; the execution
+/// bridge binds that encoding directly to the instruction immediate. Consequently this core
+/// needs neither immediate limbs nor the quotient range check used by the register SRA core.
 #[derive(Copy, Clone, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(ShiftLogicalImmCoreCols<u8, NUM_LIMBS, LIMB_BITS>)]
-pub struct ShiftLogicalImmCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+#[columns_via(ShiftRightArithmeticImmCoreCols<u8, NUM_LIMBS, LIMB_BITS>)]
+pub struct ShiftRightArithmeticImmCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub range_bus: VariableRangeCheckerBus,
     pub offset: usize,
 }
 
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
-    for ShiftLogicalImmCoreAir<NUM_LIMBS, LIMB_BITS>
+    for ShiftRightArithmeticImmCoreAir<NUM_LIMBS, LIMB_BITS>
 {
     fn width(&self) -> usize {
-        ShiftLogicalImmCoreCols::<F, NUM_LIMBS, LIMB_BITS>::width()
+        ShiftRightArithmeticImmCoreCols::<F, NUM_LIMBS, LIMB_BITS>::width()
     }
 }
+
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAirWithPublicValues<F>
-    for ShiftLogicalImmCoreAir<NUM_LIMBS, LIMB_BITS>
+    for ShiftRightArithmeticImmCoreAir<NUM_LIMBS, LIMB_BITS>
 {
 }
 
 impl<AB, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreAir<AB, I>
-    for ShiftLogicalImmCoreAir<NUM_LIMBS, LIMB_BITS>
+    for ShiftRightArithmeticImmCoreAir<NUM_LIMBS, LIMB_BITS>
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
@@ -78,59 +77,36 @@ where
         local_core: &[AB::Var],
         _from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
-        let cols: &ShiftLogicalImmCoreCols<_, NUM_LIMBS, LIMB_BITS> = local_core.borrow();
-        let flags = [cols.opcode_sll_flag, cols.opcode_srl_flag];
+        let cols: &ShiftRightArithmeticImmCoreCols<_, NUM_LIMBS, LIMB_BITS> = local_core.borrow();
+        builder.assert_bool(cols.is_valid);
+        let is_valid: AB::Expr = cols.is_valid.into();
 
-        let is_valid = flags.iter().fold(AB::Expr::ZERO, |acc, &flag| {
-            builder.assert_bool(flag);
-            acc + flag.into()
-        });
-        builder.assert_bool(is_valid.clone());
-
-        let a = &cols.a;
-        let b = &cols.b;
-
-        // Constrain that bit_shift and the (bit/carry) multipliers are correct.
         let mut bit_marker_sum = AB::Expr::ZERO;
         let mut bit_shift = AB::Expr::ZERO;
-        let mut bit_multiplier = AB::Expr::ZERO;
-        let mut carry_multiplier = AB::Expr::ZERO;
-
         for i in 0..LIMB_BITS {
             builder.assert_bool(cols.bit_shift_marker[i]);
             bit_marker_sum += cols.bit_shift_marker[i].into();
             bit_shift += AB::Expr::from_usize(i) * cols.bit_shift_marker[i];
-            bit_multiplier += AB::Expr::from_usize(1 << i) * cols.bit_shift_marker[i];
-            carry_multiplier +=
-                AB::Expr::from_usize(1 << (LIMB_BITS - i)) * cols.bit_shift_marker[i];
 
             let mut when_bit_shift = builder.when(cols.bit_shift_marker[i]);
             when_bit_shift.assert_eq(
-                cols.bit_multiplier_left,
-                AB::Expr::from_usize(1 << i) * cols.opcode_sll_flag,
+                cols.bit_multiplier,
+                AB::Expr::from_usize(1 << i) * is_valid.clone(),
             );
             when_bit_shift.assert_eq(
-                cols.carry_multiplier_left,
-                AB::Expr::from_usize(1 << (LIMB_BITS - i)) * cols.opcode_sll_flag,
+                cols.carry_multiplier,
+                AB::Expr::from_usize(1 << (LIMB_BITS - i)) * is_valid.clone(),
             );
         }
-        builder.when(is_valid.clone()).assert_one(bit_marker_sum);
+        builder.assert_eq(bit_marker_sum, is_valid.clone());
 
-        // Decompose each b[k] into carry/aux parts (see ShiftLogicalCoreAir).
-        for (k, &b_limb) in b.iter().enumerate() {
+        for (k, &b_limb) in cols.b.iter().enumerate() {
             builder.assert_eq(
-                b_limb * cols.opcode_sll_flag,
-                cols.bit_shift_aux[k] * cols.opcode_sll_flag
-                    + cols.bit_shift_carry[k] * cols.carry_multiplier_left,
-            );
-            builder.assert_eq(
-                b_limb * cols.opcode_srl_flag,
-                cols.bit_shift_carry[k] * cols.opcode_srl_flag
-                    + cols.bit_shift_aux[k] * (bit_multiplier.clone() - cols.bit_multiplier_left),
+                b_limb,
+                cols.bit_shift_carry[k] + cols.bit_shift_aux[k] * cols.bit_multiplier,
             );
         }
 
-        // Check that a[i] = b[i] <</>> shamt both on the bit and limb shift level.
         let mut limb_marker_sum = AB::Expr::ZERO;
         let mut limb_shift = AB::Expr::ZERO;
         for i in 0..NUM_LIMBS {
@@ -139,47 +115,34 @@ where
             limb_shift += AB::Expr::from_usize(i) * cols.limb_shift_marker[i];
 
             let mut when_limb_shift = builder.when(cols.limb_shift_marker[i]);
-
-            for (j, &a_limb) in a.iter().enumerate() {
-                // SLL: a[j] = aux[j-i] * 2^bit_shift + carry[j-i-1]
-                if j < i {
-                    when_limb_shift.assert_zero(a_limb * cols.opcode_sll_flag);
-                } else {
-                    let carry_in = if j - i == 0 {
-                        AB::Expr::ZERO
-                    } else {
-                        cols.bit_shift_carry[j - i - 1].into() * cols.opcode_sll_flag
-                    };
-                    when_limb_shift.assert_eq(
-                        a_limb * cols.opcode_sll_flag,
-                        cols.bit_shift_aux[j - i] * cols.bit_multiplier_left + carry_in,
-                    );
-                }
-
-                // SRL: a[j] = aux[j+i] + carry[j+i+1] * 2^(LIMB_BITS - bit_shift)
+            let carry_multiplier: AB::Expr = cols.carry_multiplier.into();
+            for (j, &a_limb) in cols.a.iter().enumerate() {
                 if j + i > NUM_LIMBS - 1 {
-                    when_limb_shift.assert_zero(a_limb * cols.opcode_srl_flag);
+                    when_limb_shift.assert_eq(
+                        a_limb,
+                        cols.b_sign * AB::F::from_usize((1 << LIMB_BITS) - 1),
+                    );
                 } else {
                     let carry_in = if j + i == NUM_LIMBS - 1 {
-                        AB::Expr::ZERO
+                        (AB::Expr::from_usize(1 << LIMB_BITS) - carry_multiplier.clone())
+                            * cols.b_sign
                     } else {
-                        cols.bit_shift_carry[j + i + 1].into()
-                            * (carry_multiplier.clone() - cols.carry_multiplier_left)
+                        carry_multiplier.clone() * cols.bit_shift_carry[j + i + 1]
                     };
-                    when_limb_shift.assert_eq(
-                        a_limb * cols.opcode_srl_flag,
-                        cols.bit_shift_aux[j + i] * cols.opcode_srl_flag + carry_in,
-                    );
+                    when_limb_shift.assert_eq(a_limb, carry_in + cols.bit_shift_aux[j + i]);
                 }
             }
         }
-        builder.when(is_valid.clone()).assert_one(limb_marker_sum);
+        builder.assert_eq(limb_marker_sum, is_valid.clone());
 
-        // The immediate operand is exactly limb_shift * LIMB_BITS + bit_shift; both parts are
-        // bounded by the marker-sum constraints, so no range check is needed.
-        let imm = limb_shift * AB::Expr::from_usize(LIMB_BITS) + bit_shift.clone();
+        builder.assert_bool(cols.b_sign);
+        self.range_bus
+            .range_check(
+                cols.b[NUM_LIMBS - 1] - cols.b_sign * AB::F::from_u32(1 << (LIMB_BITS - 1)),
+                LIMB_BITS - 1,
+            )
+            .eval(builder, is_valid.clone());
 
-        // Range check the carry/aux decomposition of each b limb.
         let aux_bits = AB::Expr::from_usize(LIMB_BITS) - bit_shift.clone();
         for k in 0..NUM_LIMBS {
             self.range_bus
@@ -190,16 +153,10 @@ where
                 .eval(builder, is_valid.clone());
         }
 
+        let immediate = limb_shift * AB::Expr::from_usize(LIMB_BITS) + bit_shift;
         let expected_opcode = VmCoreAir::<AB, I>::expr_to_global_expr(
             self,
-            [
-                (cols.opcode_sll_flag, ShiftImmOpcode::SLLI),
-                (cols.opcode_srl_flag, ShiftImmOpcode::SRLI),
-            ]
-            .iter()
-            .fold(AB::Expr::ZERO, |acc, (flag, opcode)| {
-                acc + (*flag).into() * AB::Expr::from_u8(*opcode as u8)
-            }),
+            AB::Expr::from_u8(ShiftImmOpcode::SRAI as u8),
         );
 
         AdapterAirContext {
@@ -209,7 +166,7 @@ where
             instruction: ImmInstruction {
                 is_valid,
                 opcode: expected_opcode,
-                immediate: imm,
+                immediate,
             }
             .into(),
         }
@@ -222,26 +179,25 @@ where
 
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
-pub struct ShiftLogicalImmCoreRecord<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct ShiftRightArithmeticImmCoreRecord<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub b: [u16; NUM_LIMBS],
     pub shamt: u8,
-    pub local_opcode: u8,
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct ShiftLogicalImmExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct ShiftRightArithmeticImmExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub offset: usize,
 }
 
 #[derive(Clone, derive_new::new)]
-pub struct ShiftLogicalImmFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct ShiftRightArithmeticImmFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
 impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> PreflightExecutor<F, RA>
-    for ShiftLogicalImmExecutor<A, NUM_LIMBS, LIMB_BITS>
+    for ShiftRightArithmeticImmExecutor<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
     A: 'static
@@ -255,7 +211,7 @@ where
         EmptyAdapterCoreLayout<F, A>,
         (
             A::RecordMut<'buf>,
-            &'buf mut ShiftLogicalImmCoreRecord<NUM_LIMBS, LIMB_BITS>,
+            &'buf mut ShiftRightArithmeticImmCoreRecord<NUM_LIMBS, LIMB_BITS>,
         ),
     >,
 {
@@ -269,34 +225,31 @@ where
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError> {
         let Instruction { opcode, c, .. } = instruction;
+        debug_assert_eq!(
+            ShiftImmOpcode::from_usize(opcode.local_opcode_idx(self.offset)),
+            ShiftImmOpcode::SRAI
+        );
 
-        let local_opcode = ShiftImmOpcode::from_usize(opcode.local_opcode_idx(self.offset));
-        debug_assert_ne!(local_opcode, ShiftImmOpcode::SRAI);
+        let shamt = c.as_canonical_u32();
+        if shamt >= (NUM_LIMBS * LIMB_BITS) as u32 {
+            return Err(ExecutionError::Fail {
+                pc: *state.pc,
+                msg: "SRAI shift amount out of range",
+            });
+        }
 
         let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
-
         A::start(*state.pc, state.memory, &mut adapter_record);
-
         [core_record.b] = self
             .adapter
             .read(state.memory, instruction, &mut adapter_record)
             .into();
-
-        let shamt = c.as_canonical_u32();
-        debug_assert!(shamt < (NUM_LIMBS * LIMB_BITS) as u32);
         core_record.shamt = shamt as u8;
-        core_record.local_opcode = local_opcode as u8;
 
-        let reg_opcode = if local_opcode == ShiftImmOpcode::SLLI {
-            ShiftOpcode::SLL
-        } else {
-            ShiftOpcode::SRL
-        };
         let mut shamt_limbs = [0u16; NUM_LIMBS];
         shamt_limbs[0] = shamt as u16;
         let (output, _, _) =
-            run_shift_logical::<NUM_LIMBS, LIMB_BITS>(reg_opcode, &core_record.b, &shamt_limbs);
-
+            run_shift_right_arithmetic::<NUM_LIMBS, LIMB_BITS>(&core_record.b, &shamt_limbs);
         self.adapter.write(
             state.memory,
             instruction,
@@ -304,13 +257,12 @@ where
             &mut adapter_record,
         );
         *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
-
         Ok(())
     }
 }
 
 impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F>
-    for ShiftLogicalImmFiller<A, NUM_LIMBS, LIMB_BITS>
+    for ShiftRightArithmeticImmFiller<A, NUM_LIMBS, LIMB_BITS>
 where
     F: PrimeField32,
     A: 'static + AdapterTraceFiller<F>,
@@ -318,30 +270,21 @@ where
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, row_slice: &mut [F]) {
         let (adapter_row, mut core_row) = unsafe { row_slice.split_at_mut_unchecked(A::WIDTH) };
         self.adapter.fill_trace_row(mem_helper, adapter_row);
-        let record: &ShiftLogicalImmCoreRecord<NUM_LIMBS, LIMB_BITS> =
+        let record: &ShiftRightArithmeticImmCoreRecord<NUM_LIMBS, LIMB_BITS> =
             unsafe { get_record_from_slice(&mut core_row, ()) };
 
-        let is_sll = record.local_opcode == ShiftImmOpcode::SLLI as u8;
-        let reg_opcode = if is_sll {
-            ShiftOpcode::SLL
-        } else {
-            ShiftOpcode::SRL
-        };
         let mut shamt_limbs = [0u16; NUM_LIMBS];
         shamt_limbs[0] = record.shamt as u16;
         let (a, limb_shift, bit_shift) =
-            run_shift_logical::<NUM_LIMBS, LIMB_BITS>(reg_opcode, &record.b, &shamt_limbs);
+            run_shift_right_arithmetic::<NUM_LIMBS, LIMB_BITS>(&record.b, &shamt_limbs);
 
         let aux_bits = LIMB_BITS - bit_shift;
         let mut bit_shift_carry = [F::ZERO; NUM_LIMBS];
         let mut bit_shift_aux = [F::ZERO; NUM_LIMBS];
         for k in 0..NUM_LIMBS {
             let limb = record.b[k] as u32;
-            let (carry, aux) = if is_sll {
-                (limb >> aux_bits, limb & ((1u32 << aux_bits) - 1))
-            } else {
-                (limb & ((1u32 << bit_shift) - 1), limb >> bit_shift)
-            };
+            let carry = limb & ((1u32 << bit_shift) - 1);
+            let aux = limb >> bit_shift;
             self.range_checker_chip.add_count(carry, bit_shift);
             self.range_checker_chip.add_count(aux, aux_bits);
             bit_shift_carry[k] = F::from_u32(carry);
@@ -353,19 +296,23 @@ where
         let mut bit_shift_marker = [F::ZERO; LIMB_BITS];
         bit_shift_marker[bit_shift] = F::ONE;
 
-        let b = record.b;
-        let core_row: &mut ShiftLogicalImmCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
-        let bit_mult = F::from_u32(1 << bit_shift);
-        let carry_mult = F::from_u32(1 << aux_bits);
+        let b_sign = record.b[NUM_LIMBS - 1] >> (LIMB_BITS - 1);
+        self.range_checker_chip.add_count(
+            (record.b[NUM_LIMBS - 1] as u32) - ((b_sign as u32) << (LIMB_BITS - 1)),
+            LIMB_BITS - 1,
+        );
+
+        let core_row: &mut ShiftRightArithmeticImmCoreCols<F, NUM_LIMBS, LIMB_BITS> =
+            core_row.borrow_mut();
+        core_row.is_valid = F::ONE;
+        core_row.bit_multiplier = F::from_u32(1 << bit_shift);
+        core_row.carry_multiplier = F::from_u32(1 << aux_bits);
+        core_row.b_sign = F::from_u16(b_sign);
+        core_row.bit_shift_marker = bit_shift_marker;
+        core_row.limb_shift_marker = limb_shift_marker;
         core_row.bit_shift_aux = bit_shift_aux;
         core_row.bit_shift_carry = bit_shift_carry;
-        core_row.limb_shift_marker = limb_shift_marker;
-        core_row.bit_shift_marker = bit_shift_marker;
-        core_row.carry_multiplier_left = if is_sll { carry_mult } else { F::ZERO };
-        core_row.bit_multiplier_left = if is_sll { bit_mult } else { F::ZERO };
-        core_row.opcode_srl_flag = F::from_bool(!is_sll);
-        core_row.opcode_sll_flag = F::from_bool(is_sll);
-        core_row.b = b.map(F::from_u16);
+        core_row.b = record.b.map(F::from_u16);
         core_row.a = a.map(F::from_u16);
     }
 }

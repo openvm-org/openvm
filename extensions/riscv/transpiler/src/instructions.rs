@@ -420,10 +420,9 @@ pub enum LessThanImmOpcode {
     SLTIU,
 }
 
-/// Immediate variants of the bitwise BaseAlu opcodes. Local indices mirror
-/// [`BaseAluOpcode`]'s layout (XOR = 2, OR = 3, AND = 4) so the shared
-/// `BitwiseLogicCoreAir` can be reused with `BitwiseImmOpcode::CLASS_OFFSET`;
-/// local slots 0 and 1 (the ADD/SUB positions) are intentionally unused.
+/// Immediate variants of the bitwise base ALU opcodes.
+///
+/// Local indices mirror [`BaseAluOpcode`]; slots 0 and 1 are unused.
 #[derive(
     Copy,
     Clone,
@@ -446,6 +445,12 @@ pub enum BitwiseImmOpcode {
     ORI = 3,
     ANDI = 4,
 }
+
+const _: () = {
+    assert!(BitwiseImmOpcode::XORI as usize == BaseAluOpcode::XOR as usize);
+    assert!(BitwiseImmOpcode::ORI as usize == BaseAluOpcode::OR as usize);
+    assert!(BitwiseImmOpcode::ANDI as usize == BaseAluOpcode::AND as usize);
+};
 
 // =================================================================================================
 // Phantom opcodes

@@ -3,7 +3,7 @@
 #include "primitives/constants.h"
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
-#include "riscv/adapters/imm_alu_u16.cuh"
+#include "riscv/adapters/alu_imm_u16.cuh"
 #include "riscv/cores/shift_logical_imm.cuh"
 #include "system/memory/params.cuh"
 
@@ -19,16 +19,19 @@ template <typename T>
 using Rv64ShiftLogicalImmCoreCols = ShiftLogicalImmCoreCols<T, BLOCK_FE_WIDTH, U16_BITS>;
 
 template <typename T> struct ShiftLogicalImmCols {
-    Rv64ImmBaseAluU16AdapterCols<T> adapter;
+    Rv64BaseAluImmU16AdapterCols<T> adapter;
     Rv64ShiftLogicalImmCoreCols<T> core;
 };
 
 struct ShiftLogicalImmRecord {
-    Rv64ImmBaseAluU16AdapterRecord adapter;
+    Rv64BaseAluImmU16AdapterRecord adapter;
     Rv64ShiftLogicalImmCoreRecord core;
 };
 
-__global__ void rv64_shift_logical_imm_tracegen(
+static_assert(sizeof(ShiftLogicalImmRecord) == 44);
+static_assert(offsetof(ShiftLogicalImmRecord, core) == 32);
+
+__global__ void shift_logical_imm_tracegen(
     Fp *trace,
     size_t height,
     size_t width,
@@ -41,7 +44,7 @@ __global__ void rv64_shift_logical_imm_tracegen(
     RowSlice row(trace + idx, height);
     if (idx < records.len()) {
         auto const &rec = records[idx];
-        auto adapter = Rv64ImmBaseAluU16Adapter(
+        auto adapter = Rv64BaseAluImmU16Adapter(
             VariableRangeChecker(range_ptr, range_bins), timestamp_max_bits);
         adapter.fill_trace_row(row, rec.adapter);
         auto core = Rv64ShiftLogicalImmCore(VariableRangeChecker(range_ptr, range_bins));
@@ -51,7 +54,7 @@ __global__ void rv64_shift_logical_imm_tracegen(
     }
 }
 
-extern "C" int _rv64_shift_logical_imm_tracegen(
+extern "C" int _shift_logical_imm_tracegen(
     Fp *__restrict__ d_trace,
     size_t height,
     size_t width,
@@ -64,7 +67,7 @@ extern "C" int _rv64_shift_logical_imm_tracegen(
     assert(width == sizeof(ShiftLogicalImmCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height, 512);
 
-    rv64_shift_logical_imm_tracegen<<<grid, block, 0, stream>>>(
+    shift_logical_imm_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
         height,
         width,

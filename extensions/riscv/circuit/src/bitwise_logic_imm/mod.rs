@@ -14,8 +14,7 @@ mod cuda;
 #[cfg(feature = "cuda")]
 pub use cuda::*;
 
-// Immediate-only variant of the bitwise_logic chip (XORI/ORI/ANDI): single-read immediate
-// adapter plus a forked core holding just the two low immediate bytes and a sign bit.
+// Immediate-only bitwise chip with one register read.
 pub type Rv64BitwiseLogicImmAir = VmAirWrapper<
     Rv64BaseAluImmAdapterAir,
     BitwiseLogicImmCoreAir<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>,

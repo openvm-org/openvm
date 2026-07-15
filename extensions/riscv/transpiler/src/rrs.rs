@@ -13,9 +13,9 @@ use openvm_transpiler::util::{
 
 use crate::{
     BaseAluImmOpcode, BaseAluOpcode, BaseAluWOpcode, BitwiseImmOpcode, BranchEqualOpcode,
-    BranchLessThanOpcode, DivRemOpcode, DivRemWOpcode, LessThanImmOpcode, LessThanOpcode, MulHOpcode,
-    MulOpcode, MulWOpcode, Rv64AuipcOpcode, Rv64JalLuiOpcode, Rv64JalrOpcode, Rv64LoadStoreOpcode,
-    ShiftImmOpcode, ShiftOpcode, ShiftWOpcode,
+    BranchLessThanOpcode, DivRemOpcode, DivRemWOpcode, LessThanImmOpcode, LessThanOpcode,
+    MulHOpcode, MulOpcode, MulWOpcode, Rv64AuipcOpcode, Rv64JalLuiOpcode, Rv64JalrOpcode,
+    Rv64LoadStoreOpcode, ShiftImmOpcode, ShiftOpcode, ShiftWOpcode,
 };
 
 /// A transpiler that converts the 32-bit encoded instructions into instructions.

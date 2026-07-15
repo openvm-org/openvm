@@ -7,11 +7,7 @@
 
 using namespace riscv;
 
-// ----------------------------------------------------------------------------
-// Immediate-only fork of LessThanCore (SLTI/SLTIU): the `c` limbs are replaced by the ADDI-style
-// two-column immediate encoding (imm_low11 + imm_sign); the sign-extended limbs are reconstructed
-// here for the comparison, and imm_low11 is additionally range checked to 11 bits.
-// ----------------------------------------------------------------------------
+// Core columns for comparisons with a signed 12-bit immediate.
 
 // Must match LessThanImmCoreRecord in src/less_than_imm/core.rs (repr(C)).
 template <size_t NUM_LIMBS, size_t LIMB_BITS> struct LessThanImmCoreRecord {
@@ -67,15 +63,12 @@ template <size_t NUM_LIMBS, size_t LIMB_BITS> struct LessThanImmCore {
         uint32_t c_raw_msb = c[NUM_LIMBS - 1];
 
         uint32_t b_msb_f = b_sign ? (Fp::P - ((1u << LIMB_BITS) - b_raw_msb)) : b_raw_msb;
-        uint32_t c_msb_f = c_sign ? (Fp::P - ((1u << LIMB_BITS) - c_raw_msb)) : c_raw_msb;
+        uint32_t c_msb_f = c_sign && is_slt ? Fp::P - 1 : c_raw_msb;
 
         // Shift signed MSBs into the same [0, 2^LIMB_BITS) range as unsigned MSBs.
         uint32_t b_msb_range =
             b_sign ? (b_raw_msb - (1u << (LIMB_BITS - 1)))
                    : (b_raw_msb + ((is_slt ? 1u : 0u) << (LIMB_BITS - 1)));
-        uint32_t c_msb_range =
-            c_sign ? (c_raw_msb - (1u << (LIMB_BITS - 1)))
-                   : (c_raw_msb + ((is_slt ? 1u : 0u) << (LIMB_BITS - 1)));
 
         uint32_t diff_val = 0;
         if (diff_idx == NUM_LIMBS) {
@@ -92,7 +85,6 @@ template <size_t NUM_LIMBS, size_t LIMB_BITS> struct LessThanImmCore {
         // Range check the low 11 bits of the immediate (unique decomposition of the operand).
         range_checker.add_count(record.imm_low11, 11);
         range_checker.add_count(b_msb_range, LIMB_BITS);
-        range_checker.add_count(c_msb_range, LIMB_BITS);
 
         uint16_t diff_marker[NUM_LIMBS] = {0};
         if (diff_idx != NUM_LIMBS) {

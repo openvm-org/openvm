@@ -27,7 +27,9 @@ use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 #[cfg(feature = "cuda")]
 use {
-    crate::{adapters::Rv64BaseAluAdapterRecord, BitwiseLogicCoreRecord, Rv64BitwiseLogicChipGpu},
+    crate::{
+        adapters::Rv64BaseAluRegAdapterRecord, BitwiseLogicCoreRecord, Rv64BitwiseLogicChipGpu,
+    },
     openvm_circuit::arch::{
         testing::{default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness},
         EmptyAdapterCoreLayout,
@@ -39,11 +41,11 @@ use super::{
 };
 use crate::{
     adapters::{
-        Rv64BaseAluAdapterAir, Rv64BaseAluAdapterExecutor, Rv64BaseAluAdapterFiller,
+        Rv64BaseAluRegAdapterAir, Rv64BaseAluRegAdapterExecutor, Rv64BaseAluRegAdapterFiller,
         RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS,
     },
     bitwise_logic::BitwiseLogicCoreCols,
-    test_utils::{generate_rv64_is_type_immediate, rv64_rand_write_register_or_imm},
+    test_utils::rv64_rand_write_register_or_imm,
     BitwiseLogicFiller, Rv64BitwiseLogicAir,
 };
 
@@ -63,16 +65,16 @@ fn create_harness_fields(
     Rv64BitwiseLogicChip<F>,
 ) {
     let air = Rv64BitwiseLogicAir::new(
-        Rv64BaseAluAdapterAir::new(execution_bridge, memory_bridge, bitwise_chip.bus()),
+        Rv64BaseAluRegAdapterAir::new(execution_bridge, memory_bridge),
         BitwiseLogicCoreAir::new(bitwise_chip.bus(), BaseAluOpcode::CLASS_OFFSET),
     );
     let executor = Rv64BitwiseLogicExecutor::new(
-        Rv64BaseAluAdapterExecutor::new(),
+        Rv64BaseAluRegAdapterExecutor::new(),
         BaseAluOpcode::CLASS_OFFSET,
     );
     let chip = Rv64BitwiseLogicChip::new(
         BitwiseLogicFiller::new(
-            Rv64BaseAluAdapterFiller::new(bitwise_chip.clone()),
+            Rv64BaseAluRegAdapterFiller,
             bitwise_chip,
             BaseAluOpcode::CLASS_OFFSET,
         ),
@@ -114,32 +116,13 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     rng: &mut StdRng,
     opcode: BaseAluOpcode,
     b: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
-    is_imm: Option<bool>,
     c: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
 ) {
     let b = b.unwrap_or(array::from_fn(|_| rng.random_range(0..=u8::MAX)));
-    let (c_imm, c) = if is_imm.unwrap_or(rng.random_bool(0.5)) {
-        let (imm, c) = if let Some(c) = c {
-            ((u64::from_le_bytes(c) & 0xFFFFFF) as usize, c)
-        } else {
-            generate_rv64_is_type_immediate(rng)
-        };
-        (Some(imm), c)
-    } else {
-        (
-            None,
-            c.unwrap_or(array::from_fn(|_| rng.random_range(0..=u8::MAX))),
-        )
-    };
+    let c = c.unwrap_or(array::from_fn(|_| rng.random_range(0..=u8::MAX)));
 
-    let (instruction, rd) = rv64_rand_write_register_or_imm(
-        tester,
-        b,
-        c,
-        c_imm,
-        opcode.global_opcode().as_usize(),
-        rng,
-    );
+    let (instruction, rd) =
+        rv64_rand_write_register_or_imm(tester, b, c, None, opcode.global_opcode().as_usize(), rng);
     tester.execute(executor, arena, &instruction);
 
     let a = run_bitwise_logic::<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>(opcode, &b, &c)
@@ -180,7 +163,6 @@ fn rand_rv64_bitwise_logic_test(opcode: BaseAluOpcode, num_ops: usize) {
             opcode,
             None,
             None,
-            None,
         );
     }
 
@@ -206,7 +188,6 @@ fn run_negative_bitwise_logic_test(
     b: [u8; RV64_REGISTER_NUM_LIMBS],
     c: [u8; RV64_REGISTER_NUM_LIMBS],
     prank_opcode_flags: Option<[bool; 3]>,
-    is_imm: Option<bool>,
     _interaction_error: bool,
 ) {
     let mut rng = create_seeded_rng();
@@ -220,7 +201,6 @@ fn run_negative_bitwise_logic_test(
         &mut rng,
         opcode,
         Some(b),
-        is_imm,
         Some(c),
     );
 
@@ -257,7 +237,6 @@ fn rv64_bitwise_logic_xor_wrong_negative_test() {
         [0, 0, 1, 0, 0, 0, 0, 0],
         [255, 255, 255, 255, 255, 255, 255, 255],
         None,
-        None,
         true,
     );
 }
@@ -270,7 +249,6 @@ fn rv64_bitwise_logic_or_wrong_negative_test() {
         [255, 255, 255, 254, 255, 255, 255, 255],
         [0, 0, 0, 0, 0, 0, 0, 0],
         None,
-        None,
         true,
     );
 }
@@ -282,7 +260,6 @@ fn rv64_bitwise_logic_and_wrong_negative_test() {
         [255, 255, 255, 255, 255, 255, 255, 255],
         [0, 0, 1, 0, 0, 0, 0, 0],
         [0, 0, 0, 0, 0, 0, 0, 0],
-        None,
         None,
         true,
     );
@@ -383,12 +360,11 @@ fn test_cuda_rand_bitwise_logic_tracegen(opcode: BaseAluOpcode, num_ops: usize) 
             opcode,
             None,
             None,
-            None,
         );
     }
 
     type Record<'a> = (
-        &'a mut Rv64BaseAluAdapterRecord,
+        &'a mut Rv64BaseAluRegAdapterRecord,
         &'a mut BitwiseLogicCoreRecord<RV64_REGISTER_NUM_LIMBS>,
     );
 
@@ -397,7 +373,7 @@ fn test_cuda_rand_bitwise_logic_tracegen(opcode: BaseAluOpcode, num_ops: usize) 
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64BaseAluAdapterExecutor<RV64_BYTE_BITS>>::new(),
+            EmptyAdapterCoreLayout::<F, Rv64BaseAluRegAdapterExecutor>::new(),
         );
 
     tester

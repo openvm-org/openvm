@@ -13,17 +13,7 @@ use openvm_instructions::{
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::core::AddIExecutor;
-use crate::adapters::{imm_to_rv64_u64, U16_BITS};
-
-const IMM_LOW11_MASK: u32 = (1 << 11) - 1;
-const IMM_NEGATIVE_PREFIX: u32 = ((1 << 24) - 1) ^ IMM_LOW11_MASK;
-
-#[inline(always)]
-fn canonical_i12_to_u24(imm: u32) -> u32 {
-    let low11 = imm & IMM_LOW11_MASK;
-    let sign = (imm >> 11) & 1;
-    low11 + sign * IMM_NEGATIVE_PREFIX
-}
+use crate::adapters::{imm_to_rv64_u64, is_canonical_i12, U16_BITS};
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -45,7 +35,7 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> AddIExecutor<A, NUM_LIMB
         let c = c.as_canonical_u32();
         if d.as_canonical_u32() != RV64_REGISTER_AS
             || e.as_canonical_u32() != RV64_IMM_AS
-            || c != canonical_i12_to_u24(c)
+            || !is_canonical_i12(c)
         {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }

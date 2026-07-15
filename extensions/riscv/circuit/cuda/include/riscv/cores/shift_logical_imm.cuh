@@ -7,13 +7,7 @@
 
 using namespace riscv;
 
-// ----------------------------------------------------------------------------
-// Immediate-only fork of ShiftLogicalCore (SLLI/SRLI): the shift amount comes from the
-// instruction, so there are no `c` limbs at all — the bit/limb shift markers already encode the
-// amount, and the immediate operand is reconstructed from them on the execution bus. Unlike the
-// register core there is no shamt-quotient range check; only the per-limb carry/aux
-// decompositions are range checked.
-// ----------------------------------------------------------------------------
+// Core columns for logical shifts with an immediate shift amount.
 
 // Must match ShiftLogicalImmCoreRecord in src/shift_logical_imm/core.rs (repr(C)).
 template <size_t NUM_LIMBS, size_t LIMB_BITS> struct ShiftLogicalImmCoreRecord {
@@ -30,9 +24,7 @@ template <typename T, size_t NUM_LIMBS, size_t LIMB_BITS> struct ShiftLogicalImm
     T opcode_srl_flag;
 
     T bit_multiplier_left;
-    T bit_multiplier_right;
     T carry_multiplier_left;
-    T carry_multiplier_right;
 
     T bit_shift_marker[LIMB_BITS];
     T limb_shift_marker[NUM_LIMBS];
@@ -99,9 +91,7 @@ template <size_t NUM_LIMBS, size_t LIMB_BITS> struct ShiftLogicalImmCore {
 
         uint32_t bit_mult = 1u << bit_shift;
         uint32_t carry_mult = 1u << aux_bits;
-        COL_WRITE_VALUE(row, Cols, carry_multiplier_right, is_sll ? 0u : carry_mult);
         COL_WRITE_VALUE(row, Cols, carry_multiplier_left, is_sll ? carry_mult : 0u);
-        COL_WRITE_VALUE(row, Cols, bit_multiplier_right, is_sll ? 0u : bit_mult);
         COL_WRITE_VALUE(row, Cols, bit_multiplier_left, is_sll ? bit_mult : 0u);
 
         COL_WRITE_VALUE(row, Cols, opcode_srl_flag, is_sll ? 0u : 1u);
