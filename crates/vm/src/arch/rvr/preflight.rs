@@ -26,7 +26,10 @@ use crate::{
         Streams, SystemConfig, VmState, BLOCK_FE_WIDTH,
     },
     system::{
-        memory::{merkle::public_values::PUBLIC_VALUES_AS, online::GuestMemory},
+        memory::{
+            merkle::public_values::PUBLIC_VALUES_AS,
+            online::{GuestMemory, LinearMemory, PAGE_SIZE},
+        },
         SystemRecords,
     },
 };
@@ -49,6 +52,10 @@ pub const PREFLIGHT_CHIP_RECORD_FLAG_VARIABLE_ROW_STRIDE: u32 =
     rvr_openvm_ext_ffi_common::PREFLIGHT_CHIP_RECORD_FLAG_VARIABLE_ROW_STRIDE;
 pub const PREFLIGHT_CHIP_RECORD_FLAG_COMPACT_RESIDUAL_MEMORY: u32 =
     rvr_openvm_ext_ffi_common::PREFLIGHT_CHIP_RECORD_FLAG_COMPACT_RESIDUAL_MEMORY;
+pub const PREFLIGHT_CHIP_RECORD_FLAG_DEVICE_AUX: u32 =
+    rvr_openvm_ext_ffi_common::PREFLIGHT_CHIP_RECORD_FLAG_DEVICE_AUX;
+pub const PREFLIGHT_CHIP_RECORD_FLAG_DEVICE_AUX_ORACLE: u32 =
+    rvr_openvm_ext_ffi_common::PREFLIGHT_CHIP_RECORD_FLAG_DEVICE_AUX_ORACLE;
 /// R3: byte size of one compact AddSub inline record (see the C
 /// `PreflightAddSubRecord`). Used to size the per-chip inline-record buffers.
 pub const PREFLIGHT_ADDSUB_RECORD_SIZE: usize =
@@ -60,6 +67,92 @@ pub const PREFLIGHT_WR1_RECORD_SIZE: usize = rvr_openvm_ext_ffi_common::PREFLIGH
 pub const PREFLIGHT_RW1_RECORD_SIZE: usize = rvr_openvm_ext_ffi_common::PREFLIGHT_RW1_RECORD_SIZE;
 pub const PREFLIGHT_DELTA_RECORD_SIZE: usize =
     rvr_openvm_ext_ffi_common::PREFLIGHT_DELTA_RECORD_SIZE;
+
+const RVR_NATIVE_DETAIL_PHASES: usize = 7;
+const RVR_NATIVE_DETAIL_FAMILIES: usize = 9;
+
+/// Profiling-only counters shared with the generated preflight C. The pointer
+/// in [`PreflightTracerData`] is null on every normal execution route.
+#[repr(C)]
+#[derive(Clone, Debug, Default)]
+pub struct RvrNativeDetail {
+    pub family_cycles: [u64; RVR_NATIVE_DETAIL_FAMILIES],
+    pub family_instructions: [u64; RVR_NATIVE_DETAIL_FAMILIES],
+    pub phase_cycles: [u64; RVR_NATIVE_DETAIL_PHASES],
+    pub phase_samples: [u64; RVR_NATIVE_DETAIL_PHASES],
+    pub phase_events: [u64; RVR_NATIVE_DETAIL_PHASES],
+    pub phase_bytes: [u64; RVR_NATIVE_DETAIL_PHASES],
+    pub family_started: u64,
+    pub outer_started: u64,
+    pub timer_overhead: u64,
+    pub sample_state: u32,
+    pub sample_countdown: u32,
+    pub current_family: u32,
+    pub family_active: u32,
+}
+
+impl RvrNativeDetail {
+    fn new() -> Self {
+        Self {
+            timer_overhead: calibrate_native_detail_clock(),
+            sample_state: 0x9e37_79b9,
+            sample_countdown: 769,
+            current_family: u32::MAX,
+            ..Self::default()
+        }
+    }
+
+    fn start(&mut self) {
+        let started = native_detail_clock();
+        self.sample_state ^= started as u32;
+        self.sample_countdown = 512 + (self.sample_state & 1023);
+        self.outer_started = started;
+    }
+
+    fn finish(&mut self) -> u64 {
+        let finished = native_detail_clock();
+        if self.family_active != 0 {
+            let family = self.current_family as usize;
+            if family < self.family_cycles.len() {
+                self.family_cycles[family] = self.family_cycles[family]
+                    .saturating_add(finished.saturating_sub(self.family_started));
+            }
+            self.family_active = 0;
+        }
+        finished.saturating_sub(self.outer_started)
+    }
+}
+
+#[inline]
+fn native_detail_clock() -> u64 {
+    #[cfg(target_arch = "x86_64")]
+    unsafe {
+        core::arch::x86_64::_mm_lfence();
+        core::arch::x86_64::_rdtsc()
+    }
+    #[cfg(target_arch = "aarch64")]
+    {
+        let value: u64;
+        unsafe {
+            core::arch::asm!("isb", "mrs {value}, cntvct_el0", value = out(reg) value);
+        }
+        value
+    }
+    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+    {
+        0
+    }
+}
+
+fn calibrate_native_detail_clock() -> u64 {
+    (0..10_000)
+        .map(|_| {
+            let started = native_detail_clock();
+            native_detail_clock().saturating_sub(started)
+        })
+        .min()
+        .unwrap_or(0)
+}
 
 /// C-compatible preflight program log entry.
 ///
@@ -144,8 +237,9 @@ pub struct DeltaMemoryLogEntry {
 ///
 /// Layout matches `TouchedBlock` in `openvm_tracer_preflight.h`. Records a block
 /// touched for the first time this segment. Host routes finalize
-/// `touched_memory` from the live memory + shadow; the all-direct CUDA delta
-/// route uses the same seeds in its chronological device replay.
+/// `touched_memory` from the live memory + shadow. The production all-direct
+/// CUDA delta route leaves this empty and seeds replay from device-resident
+/// segment-start memory; its equality oracle retains these host references.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct TouchedBlock {
@@ -154,6 +248,42 @@ pub struct TouchedBlock {
     /// Block contents immediately before this segment's first access.
     pub initial_value: u64,
 }
+
+/// Legacy-host predecessor values retained only by the device replay oracle.
+/// There is one entry per compact residual-memory event.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct DeviceAuxReference {
+    pub prev_timestamp: u32,
+    pub _reserved: u32,
+    pub prev_value: u64,
+}
+
+/// One custom direct-final field that must consume a device-reconstructed
+/// predecessor. `target` points into a staged dense-arena backing whose
+/// allocation remains stable until system trace generation runs the replay.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct DeviceAuxPatch {
+    pub target: u64,
+    pub event_index: u32,
+    pub kind: u32,
+    /// Legacy-host value in oracle mode, zero in production.
+    pub expected: u64,
+}
+
+/// Complete C-written custom arena retained only by the device replay oracle.
+/// `base` stays valid until the staged arena is installed into the returned
+/// record-arena vector and consumed after system-first device replay.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DeviceAuxArenaReference {
+    pub air_idx: usize,
+    pub base: u64,
+    pub expected: Vec<u8>,
+}
+
+pub const DEVICE_AUX_PATCH_U32: u32 = 0;
+pub const DEVICE_AUX_PATCH_U64: u32 = 1;
 
 /// C-compatible per-chip inline-record buffer descriptor (R3/R4).
 ///
@@ -258,6 +388,19 @@ pub struct PreflightTracerData {
     pub exec_frequencies_touched: *mut u32,
     pub exec_frequencies_touched_len: u32,
     pub exec_frequencies_touched_cap: u32,
+    /// Profiling-only detailed counters. Null unless explicitly enabled.
+    pub native_detail: *mut RvrNativeDetail,
+    /// Custom direct-final predecessor fields to patch after device replay.
+    pub device_aux_patches: *mut DeviceAuxPatch,
+    /// Legacy-host predecessor vector, present only in fail-hard oracle mode.
+    pub device_aux_references: *mut DeviceAuxReference,
+    /// Per-segment main-memory dirty-page bitmap. This preserves sparse H2D
+    /// completeness without retaining the host first-touch shadow.
+    pub dirty_memory_pages: *mut u64,
+    pub device_aux_patches_len: u32,
+    pub device_aux_patches_cap: u32,
+    pub device_aux_references_cap: u32,
+    pub dirty_memory_pages_words: u32,
 }
 
 impl PreflightTracerData {
@@ -298,6 +441,14 @@ impl PreflightTracerData {
             exec_frequencies_touched: std::ptr::null_mut(),
             exec_frequencies_touched_len: 0,
             exec_frequencies_touched_cap: 0,
+            native_detail: std::ptr::null_mut(),
+            device_aux_patches: std::ptr::null_mut(),
+            device_aux_references: std::ptr::null_mut(),
+            dirty_memory_pages: std::ptr::null_mut(),
+            device_aux_patches_len: 0,
+            device_aux_patches_cap: 0,
+            device_aux_references_cap: 0,
+            dirty_memory_pages_words: 0,
         }
     }
 
@@ -377,6 +528,25 @@ impl PreflightTracerData {
         self.custom_memory_scratch_cap = scratch.len() as u32;
     }
 
+    fn set_native_detail(&mut self, detail: &mut RvrNativeDetail) {
+        self.native_detail = detail;
+    }
+
+    fn set_device_aux(
+        &mut self,
+        patches: &mut [MaybeUninit<DeviceAuxPatch>],
+        references: &mut [MaybeUninit<DeviceAuxReference>],
+        dirty_memory_pages: &mut [u64],
+    ) {
+        self.device_aux_patches = patches.as_mut_ptr().cast();
+        self.device_aux_references = references.as_mut_ptr().cast();
+        self.dirty_memory_pages = dirty_memory_pages.as_mut_ptr();
+        self.device_aux_patches_len = 0;
+        self.device_aux_patches_cap = patches.len() as u32;
+        self.device_aux_references_cap = references.len() as u32;
+        self.dirty_memory_pages_words = dirty_memory_pages.len() as u32;
+    }
+
     /// Reuse the tracer's memory pointer/cursor for the delta-only compact
     /// residual schema. Generated C selects this layout only when the delta
     /// target also carries `COMPACT_RESIDUAL_MEMORY`.
@@ -440,6 +610,14 @@ impl Default for PreflightTracerData {
             exec_frequencies_touched: std::ptr::null_mut(),
             exec_frequencies_touched_len: 0,
             exec_frequencies_touched_cap: 0,
+            native_detail: std::ptr::null_mut(),
+            device_aux_patches: std::ptr::null_mut(),
+            device_aux_references: std::ptr::null_mut(),
+            dirty_memory_pages: std::ptr::null_mut(),
+            device_aux_patches_len: 0,
+            device_aux_patches_cap: 0,
+            device_aux_references_cap: 0,
+            dirty_memory_pages_words: 0,
         }
     }
 }
@@ -463,6 +641,13 @@ pub struct PreflightRawLogs {
     pub chip_counts_touched: Vec<u32>,
     /// First-touch seeds retained until delta replay has completed.
     pub touched: Vec<TouchedBlock>,
+    /// Custom direct-final predecessor fields that must be populated from the
+    /// device replay before extension trace generation consumes their arenas.
+    pub device_aux_patches: Vec<DeviceAuxPatch>,
+    /// Legacy-host predecessor vector, populated only by the equality oracle.
+    pub device_aux_references: Vec<DeviceAuxReference>,
+    /// Full custom arenas before their predecessor fields are device-patched.
+    pub device_aux_arena_references: Vec<DeviceAuxArenaReference>,
 }
 
 /// One migrated chip's inline compact records for a segment, written by the
@@ -552,6 +737,9 @@ impl RvrDeltaRecords {
                 chip_counts: Vec::new(),
                 chip_counts_touched: Vec::new(),
                 touched,
+                device_aux_patches: Vec::new(),
+                device_aux_references: Vec::new(),
+                device_aux_arena_references: Vec::new(),
             },
             Vec::new(),
             None,
@@ -862,14 +1050,14 @@ where
     #[doc(hidden)]
     pub fn execute_preflight_from_state_with_compact_delta_memory_for_test(
         &self,
-        state: VmState<F, GuestMemory>,
+        state: VmState<GuestMemory>,
         num_insns: Option<u64>,
         record_capacity_rows: &[u32],
         arena_targets: &BTreeMap<usize, ChipRecordBuf>,
     ) -> Result<RvrPreflightOutput<F>, ExecutionError> {
         execute_rvr_preflight(
             &self.exe,
-            &self.extensions,
+            &self.runtime_hooks,
             &self.compiled,
             self.chip_counts_len,
             &self.pool,
@@ -890,14 +1078,14 @@ where
     #[doc(hidden)]
     pub fn execute_preflight_from_state_with_device_touched_memory_for_test(
         &self,
-        state: VmState<F, GuestMemory>,
+        state: VmState<GuestMemory>,
         num_insns: Option<u64>,
         record_capacity_rows: &[u32],
         arena_targets: &BTreeMap<usize, ChipRecordBuf>,
     ) -> Result<RvrPreflightOutput<F>, ExecutionError> {
         execute_rvr_preflight(
             &self.exe,
-            &self.extensions,
+            &self.runtime_hooks,
             &self.compiled,
             self.chip_counts_len,
             &self.pool,
@@ -949,6 +1137,8 @@ where
         !device_touched_memory || compact_delta_memory,
         "device touched-memory replay requires compact delta chronology"
     );
+    let device_aux_oracle = device_touched_memory
+        && std::env::var("OPENVM_RVR_DEVICE_REPLAY_ORACLE").as_deref() == Ok("1");
     // A fused-compiled library has NO compact fallback for its arena-native
     // airs: executing without a target would write full records at the
     // compact stride into scratch (garbage). Fail deterministically here
@@ -1034,6 +1224,7 @@ where
         };
         let detailed_profile =
             std::env::var("OPENVM_RVR_PREFLIGHT_PROFILE_DETAIL").as_deref() == Ok("1");
+        let native_detailed = std::env::var("OPENVM_RVR_NATIVE_DETAIL").as_deref() == Ok("1");
         let setup_started = std::time::Instant::now();
         // The log buffers are write-only from the C tracer and prefix-read by
         // the host, so they are allocated uninitialized: the zero-fill of
@@ -1067,8 +1258,15 @@ where
         // Distinct touched blocks are bounded by the number of memory-log
         // entries, so sizing `touched` to `memory_log_cap` guarantees it
         // never overflows.
+        let shadow_sizes = if device_touched_memory && !device_aux_oracle {
+            // Non-null ABI sentinels only: production device aux never indexes
+            // a host timestamp shadow.
+            (1, 1, 1)
+        } else {
+            (reg_shadow_blocks, mem_shadow_blocks, pv_shadow_blocks)
+        };
         let (mut shadow_register, mut shadow_memory, mut shadow_public_values) =
-            pool.take_shadows(reg_shadow_blocks, mem_shadow_blocks, pv_shadow_blocks);
+            pool.take_shadows(shadow_sizes.0, shadow_sizes.1, shadow_sizes.2);
         // Inline (migrated) instructions touch without logging: register
         // touches are bounded by the register file, and each migrated
         // load/store row first-touches at most one memory block, bounded by
@@ -1085,7 +1283,12 @@ where
             })
             .sum::<usize>()
             + 64;
-        let mut touched = pool.take_touched(memory_log_cap + inline_touch_slack);
+        let touched_cap = if device_touched_memory && !device_aux_oracle {
+            0
+        } else {
+            memory_log_cap + inline_touch_slack
+        };
+        let mut touched = pool.take_touched(touched_cap);
         let pv_base = public_values_slice(&mut run_state.memory.memory).as_mut_ptr();
         let scratch_ready = std::time::Instant::now();
 
@@ -1162,6 +1365,16 @@ where
                         PREFLIGHT_CHIP_RECORD_FLAG_COMPACT_RESIDUAL_MEMORY
                     } else {
                         0
+                    }
+                    | if device_touched_memory {
+                        PREFLIGHT_CHIP_RECORD_FLAG_DEVICE_AUX
+                    } else {
+                        0
+                    }
+                    | if device_aux_oracle {
+                        PREFLIGHT_CHIP_RECORD_FLAG_DEVICE_AUX_ORACLE
+                    } else {
+                        0
                     },
             };
         }
@@ -1193,6 +1406,22 @@ where
 
         let mut custom_memory_scratch =
             [MaybeUninit::<MemoryLogEntry>::uninit(); PREFLIGHT_CUSTOM_MEMORY_SCRATCH_CAP];
+        let device_patch_cap = if device_touched_memory {
+            memory_log_cap
+                .checked_mul(2)
+                .expect("device aux patch capacity overflow")
+        } else {
+            0
+        };
+        let mut device_aux_patches =
+            vec![MaybeUninit::<DeviceAuxPatch>::uninit(); device_patch_cap];
+        let mut device_aux_references = vec![
+            MaybeUninit::<DeviceAuxReference>::uninit();
+            if device_aux_oracle { memory_log_cap } else { 0 }
+        ];
+        let memory_bytes = run_state.memory.memory.mem[RV64_MEMORY_AS as usize].size();
+        let memory_pages = memory_bytes.div_ceil(PAGE_SIZE);
+        let mut dirty_memory_pages = vec![0u64; memory_pages.div_ceil(64)];
         let mut tracer =
             PreflightTracerData::new_uninit(&mut program_log, &mut memory_log, &mut chip_counts);
         if compact_delta_memory {
@@ -1209,13 +1438,27 @@ where
         tracer.set_chip_records(&mut chip_records);
         tracer.set_exec_frequencies(&mut exec_frequencies);
         tracer.set_custom_memory_scratch(&mut custom_memory_scratch);
+        if device_touched_memory {
+            tracer.set_device_aux(
+                &mut device_aux_patches,
+                &mut device_aux_references,
+                &mut dirty_memory_pages,
+            );
+        }
         tracer.set_counter_touched_uninit(&mut chip_counts_touched, &mut exec_frequencies_touched);
         if inline_meta.delta_records {
             tracer.set_delta_records(&mut delta_record);
         }
+        let mut native_detail = native_detailed.then(RvrNativeDetail::new);
+        if let Some(detail) = native_detail.as_mut() {
+            tracer.set_native_detail(detail);
+        }
 
         let setup_finished = std::time::Instant::now();
         let native_execute_started = std::time::Instant::now();
+        if let Some(detail) = native_detail.as_mut() {
+            detail.start();
+        }
         let run_result = execute_preflight_raw(
             compiled,
             runtime_hooks,
@@ -1223,7 +1466,24 @@ where
             &mut tracer,
             num_insns,
         );
+        let native_detail_outer_cycles = native_detail.as_mut().map(RvrNativeDetail::finish);
         let native_execute_elapsed = native_execute_started.elapsed();
+        if let (Some(detail), Some(outer_cycles)) =
+            (native_detail.as_ref(), native_detail_outer_cycles)
+        {
+            eprintln!(
+                "OPENVM_RVR_NATIVE_DETAIL outer_cycles={outer_cycles} timer_overhead={} \
+                 family_cycles={:?} family_instructions={:?} phase_cycles={:?} \
+                 phase_samples={:?} phase_events={:?} phase_bytes={:?}",
+                detail.timer_overhead,
+                detail.family_cycles,
+                detail.family_instructions,
+                detail.phase_cycles,
+                detail.phase_samples,
+                detail.phase_events,
+                detail.phase_bytes,
+            );
+        }
         // Drain non-temporal record stores before either consuming the
         // buffers or propagating an execution error. On error, propagation
         // drops the RAII delta lease and may queue its pinned backing for
@@ -1275,6 +1535,7 @@ where
         let program_len = tracer.program_log_len as usize;
         let memory_len = tracer.memory_log_len as usize;
         let touched_len = tracer.touched_len as usize;
+        let device_aux_patches_len = tracer.device_aux_patches_len as usize;
         let chip_counts_touched_len = tracer.chip_counts_touched_len as usize;
         let exec_frequencies_touched_len = tracer.exec_frequencies_touched_len as usize;
         if chip_counts_touched_len > chip_counts_touched.len()
@@ -1299,6 +1560,7 @@ where
         if program_len > program_log_cap
             || memory_len > memory_log_cap
             || touched_len > touched.len()
+            || device_aux_patches_len > device_aux_patches.len()
             || delta_record.len as usize > delta_capacity
         {
             if single_shot {
@@ -1347,6 +1609,51 @@ where
             Vec::new()
         };
         let touched = unsafe { assume_init_prefix(touched, touched_len) };
+        // SAFETY: each custom predecessor store writes a complete descriptor
+        // before incrementing no further than the checked C-side capacity.
+        let device_aux_patches =
+            unsafe { assume_init_prefix(device_aux_patches, device_aux_patches_len) };
+        let device_aux_references = if device_aux_oracle {
+            // The oracle writes one complete reference per compact residual
+            // event at the same event index.
+            unsafe { assume_init_prefix(device_aux_references, memory_len) }
+        } else {
+            Vec::new()
+        };
+        if device_touched_memory {
+            for (patch_index, patch) in device_aux_patches.iter().enumerate() {
+                let width = match patch.kind {
+                    DEVICE_AUX_PATCH_U32 => 4usize,
+                    DEVICE_AUX_PATCH_U64 => 8usize,
+                    kind => {
+                        return Err(ExecutionError::RvrExecution(format!(
+                            "device aux patch {patch_index} has invalid kind {kind}"
+                        )));
+                    }
+                };
+                if patch.event_index as usize >= memory_len {
+                    return Err(ExecutionError::RvrExecution(format!(
+                        "device aux patch {patch_index} references residual event {} of {memory_len}",
+                        patch.event_index
+                    )));
+                }
+                let target = patch.target as usize;
+                let in_staged_arena = arena_targets.is_some_and(|targets| {
+                    targets.values().any(|arena| {
+                        let begin = arena.base as usize;
+                        target >= begin
+                            && target
+                                .checked_add(width)
+                                .is_some_and(|end| end <= begin + arena.cap as usize)
+                    })
+                });
+                if !in_staged_arena {
+                    return Err(ExecutionError::RvrExecution(format!(
+                        "device aux patch {patch_index} target {target:#x} is outside staged arenas"
+                    )));
+                }
+            }
+        }
         let logs_ready = std::time::Instant::now();
 
         let shadows = PreflightShadowsView {
@@ -1354,9 +1661,7 @@ where
             memory: &shadow_memory,
             public_values: &shadow_public_values,
         };
-        let device_touched_oracle = device_touched_memory
-            && std::env::var("OPENVM_RVR_DEVICE_REPLAY_ORACLE").as_deref() == Ok("1");
-        let replay = if device_touched_memory && !device_touched_oracle {
+        let replay = if device_touched_memory && !device_aux_oracle {
             // The all-direct CUDA route already replays these chronological
             // inputs. It also emits the canonical sorted final touched blocks,
             // so avoid repeating the O(touched) collect + sort on the host.
@@ -1375,12 +1680,34 @@ where
             .map_err(|err| ExecutionError::RvrExecution(err.to_string()))?
         };
         let replay_ready = std::time::Instant::now();
-        if device_touched_memory {
-            // Continuation H2D only needs a conservative page set. The raw
-            // first-touch list is already unique and complete, so mark it
-            // directly while the memory boundary consumes the sorted device
-            // records in place.
+        if device_touched_memory && device_aux_oracle {
             extend_touched_pages_from_raw(&mut run_state.memory, &touched);
+        } else if device_touched_memory {
+            // Sparse continuation transport needs only dirty pages, not the
+            // first-touch set. Writes mark this tiny bitmap in the native loop
+            // without timestamp shadows or address-to-block translation.
+            let pages = &mut run_state.memory.memory.touched_pages[RV64_MEMORY_AS as usize];
+            for (word_index, &word) in dirty_memory_pages.iter().enumerate() {
+                let mut pending = word;
+                while pending != 0 {
+                    let bit = pending.trailing_zeros() as usize;
+                    let page = word_index * 64 + bit;
+                    pages.mark_byte_range(page * PAGE_SIZE, 1);
+                    pending &= pending - 1;
+                }
+            }
+            for addr_space in [RV64_REGISTER_AS, PUBLIC_VALUES_AS] {
+                let index = addr_space as usize;
+                let size = run_state.memory.memory.mem[index].size();
+                if size != 0 {
+                    // Both spaces are small in production (registers are one
+                    // page; public values are normally tens of bytes). Mark
+                    // the complete space so non-default larger public-value
+                    // configurations remain continuation-safe without a
+                    // second per-address-space native dirty bitmap.
+                    run_state.memory.memory.touched_pages[index].mark_byte_range(0, size);
+                }
+            }
         } else {
             run_state
                 .memory
@@ -1449,7 +1776,7 @@ where
                 }
             })
             .collect();
-        let arena_native_written_bytes = inline_meta
+        let arena_native_written_bytes: Vec<(usize, u32)> = inline_meta
             .airs
             .iter()
             .filter(|&&(air_idx, _)| {
@@ -1457,6 +1784,35 @@ where
             })
             .map(|&(air_idx, _)| (air_idx, chip_records[air_idx].len))
             .collect();
+        let device_aux_arena_references = if device_aux_oracle {
+            let targets = arena_targets.expect("device replay oracle requires staged arenas");
+            arena_native_written_bytes
+                .iter()
+                .map(|&(air_idx, written)| {
+                    let target = targets
+                        .get(&air_idx)
+                        .expect("arena-native oracle target disappeared");
+                    let written = written as usize;
+                    assert!(
+                        written <= target.cap as usize,
+                        "arena-native oracle cursor exceeds target for air {air_idx}"
+                    );
+                    // SAFETY: the target is a live staged arena allocation,
+                    // and the native writer cap-checked and initialized this
+                    // complete prefix before returning.
+                    let expected = unsafe {
+                        std::slice::from_raw_parts(target.base.cast_const(), written).to_vec()
+                    };
+                    DeviceAuxArenaReference {
+                        air_idx,
+                        base: target.base as u64,
+                        expected,
+                    }
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
         let inline_records: Vec<RvrInlineChipRecords> = if inline_meta.delta_records {
             Vec::new()
         } else {
@@ -1534,6 +1890,9 @@ where
                 chip_counts,
                 chip_counts_touched,
                 touched,
+                device_aux_patches,
+                device_aux_references,
+                device_aux_arena_references,
             },
             access_aux: replay.access_aux,
             access_aux_complete: build_access_aux,

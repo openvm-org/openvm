@@ -66,13 +66,19 @@ static inline void rvr_hintstore_write_word(RvState* state, uint64_t dest_addr,
                                             Rv64HintStoreVar* var) {
   if (likely(emit_direct)) {
     uint64_t block_addr = preflight_block_addr(dest_addr);
-    uint64_t prev_data = preflight_read_mem_block(state, block_addr);
+    uint64_t prev_data =
+        preflight_device_aux(state->tracer) &&
+                !preflight_device_aux_oracle(state->tracer)
+            ? 0u
+            : preflight_read_mem_block(state, block_addr);
     uint32_t prev_timestamp = preflight_append_memory(
         state->tracer, PREFLIGHT_MEMORY_KIND_WRITE, AS_MEMORY, block_addr,
         WORD_SIZE, word, prev_data);
     if (likely(var != NULL)) {
-      var->prev_timestamp = prev_timestamp;
-      memcpy(var->prev_data, &prev_data, WORD_SIZE);
+      preflight_store_prev_timestamp(state->tracer, &var->prev_timestamp,
+                                     prev_timestamp);
+      preflight_store_prev_value(state->tracer, var->prev_data, prev_timestamp,
+                                 prev_data);
       memcpy(var->data, &word, WORD_SIZE);
     }
     wr_mem_u64(state->memory, dest_addr, word);
@@ -112,10 +118,13 @@ void openvm_hint_storew(void* state, uint64_t dest_addr, uint32_t from_pc,
         .timestamp = from_timestamp,
         .mem_ptr_ptr = mem_ptr_ptr,
         .mem_ptr = (uint32_t)dest_addr,
-        .mem_ptr_aux_record = {.prev_timestamp = mem_ptr_prev_timestamp},
+        .mem_ptr_aux_record = {.prev_timestamp = 0u},
         .num_words_ptr = UINT32_MAX,
         .num_words_read = {.prev_timestamp = 0u},
     };
+    preflight_store_prev_timestamp(
+        rv_state->tracer, &record->mem_ptr_aux_record.prev_timestamp,
+        mem_ptr_prev_timestamp);
   }
   rvr_hintstore_write_word(rv_state, dest_addr, word, emit_direct, vars);
 #else
@@ -144,10 +153,16 @@ void openvm_hint_buffer(void* state, uint64_t dest_addr, uint32_t num_words,
         .timestamp = from_timestamp,
         .mem_ptr_ptr = mem_ptr_ptr,
         .mem_ptr = (uint32_t)dest_addr,
-        .mem_ptr_aux_record = {.prev_timestamp = mem_ptr_prev_timestamp},
+        .mem_ptr_aux_record = {.prev_timestamp = 0u},
         .num_words_ptr = num_words_ptr,
-        .num_words_read = {.prev_timestamp = num_words_prev_timestamp},
+        .num_words_read = {.prev_timestamp = 0u},
     };
+    preflight_store_prev_timestamp(
+        rv_state->tracer, &record->mem_ptr_aux_record.prev_timestamp,
+        mem_ptr_prev_timestamp);
+    preflight_store_prev_timestamp(
+        rv_state->tracer, &record->num_words_read.prev_timestamp,
+        num_words_prev_timestamp);
   }
 #endif
   for (uint32_t i = 0; i < num_words; i++) {
