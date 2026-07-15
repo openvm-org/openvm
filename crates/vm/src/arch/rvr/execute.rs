@@ -8,7 +8,7 @@
 use std::ffi::c_void;
 
 use rvr_openvm_lift::{ExtensionError, RvrRuntimeExtension};
-use rvr_state::{ExecutionStatus, MemoryError, Rv64, RvState, SuspenderState, TracerState};
+use rvr_state::{ExecutionStatus, Rv64, RvState, SuspenderState, TracerState};
 
 use super::{
     bridge::{
@@ -43,8 +43,6 @@ pub enum ExecuteError {
     ExecutionFailed(i32),
     #[error("guest exited with non-zero exit code: {0}")]
     GuestExit(u8),
-    #[error("memory allocation failed: {0}")]
-    MemoryAlloc(#[from] MemoryError),
     #[error("extension host callback registration failed: {0}")]
     ExtensionRegistration(#[from] ExtensionError),
     #[error("invalid metered context: {0}")]

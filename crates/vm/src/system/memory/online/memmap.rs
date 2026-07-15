@@ -3,6 +3,8 @@ use std::{
     mem::{align_of, size_of, size_of_val},
 };
 
+#[cfg(target_os = "linux")]
+use libc::{madvise, MADV_DONTNEED};
 use memmap2::MmapMut;
 
 use super::{LinearMemory, PAGE_SIZE};
@@ -87,8 +89,6 @@ impl LinearMemory for MmapMemory {
 
     #[cfg(target_os = "linux")]
     fn fill_zero(&mut self) {
-        use libc::{madvise, MADV_DONTNEED};
-
         let mmap = &mut self.mmap;
         // SAFETY: our mmap is a memory-backed (not file-backed) anonymous private mapping.
         // When we madvise MADV_DONTNEED, according to https://man7.org/linux/man-pages/man2/madvise.2.html
@@ -193,6 +193,7 @@ impl LinearMemory for MmapMemory {
     }
 }
 
+#[cfg(not(feature = "unprotected"))]
 #[cold]
 #[inline(never)]
 fn panic_oob(start: usize, size: usize, memory_size: usize) -> ! {

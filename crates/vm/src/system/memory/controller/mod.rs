@@ -10,6 +10,7 @@ use openvm_circuit_primitives::{
     Chip, TraceSubRowGenerator,
 };
 use openvm_cpu_backend::CpuBackend;
+use openvm_instructions::DIGEST_WIDTH;
 use openvm_stark_backend::{
     interaction::PermutationCheckBus, p3_field::PrimeField32, prover::AirProvingContext,
     StarkProtocolConfig,
@@ -19,7 +20,7 @@ use serde::{Deserialize, Serialize};
 use self::interface::MemoryInterface;
 use super::AddressMap;
 use crate::{
-    arch::{const_log2_strict_usize, MemoryConfig, VmField, BLOCK_FE_WIDTH, POSEIDON2_WIDTH},
+    arch::{const_log2_strict_usize, MemoryConfig, VmField, BLOCK_FE_WIDTH},
     system::{
         memory::{
             merkle::MemoryMerkleChip,
@@ -34,11 +35,6 @@ use crate::{
 pub mod dimensions;
 pub mod interface;
 
-/// Field elements per merkle leaf and per Poseidon2 half. The merkle
-/// compression takes two `DIGEST_WIDTH`-cell children through one
-/// `POSEIDON2_WIDTH`-wide permutation, so the digest is half the permutation
-/// state.
-pub const DIGEST_WIDTH: usize = POSEIDON2_WIDTH / 2;
 pub const DIGEST_WIDTH_BITS: usize = const_log2_strict_usize(DIGEST_WIDTH);
 
 const _: () = assert!(

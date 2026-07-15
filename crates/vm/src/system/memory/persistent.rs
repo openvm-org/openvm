@@ -7,6 +7,7 @@ use std::{
 use openvm_circuit_primitives::{ColumnsAir, StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_cpu_backend::CpuBackend;
+use openvm_instructions::DIGEST_WIDTH;
 use openvm_stark_backend::{
     interaction::{InteractionBuilder, PermutationCheckBus},
     p3_air::{Air, AirBuilder, BaseAir},
@@ -23,8 +24,7 @@ use crate::{
     arch::{hasher::Hasher, ADDR_SPACE_OFFSET, BLOCK_FE_WIDTH},
     primitives::Chip,
     system::memory::{
-        controller::DIGEST_WIDTH, offline_checker::MemoryBus, MemoryAddress, MemoryImage,
-        TimestampedEquipartition,
+        offline_checker::MemoryBus, MemoryAddress, MemoryImage, TimestampedEquipartition,
     },
 };
 

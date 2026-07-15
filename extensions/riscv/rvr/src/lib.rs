@@ -9,12 +9,11 @@ use std::{ffi::c_void, io::Write};
 
 use openvm_circuit::arch::rvr::io::{check_mem_bounds_range, OpenVmIoState};
 use openvm_instructions::{
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_NUM_LIMBS},
-    LocalOpcode, SystemOpcode,
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    LocalOpcode, SystemOpcode, PUBLIC_VALUES_AS,
 };
 use openvm_riscv_transpiler::{Rv64HintStoreOpcode, Rv64LoadStoreOpcode, Rv64Phantom};
 use rand::Rng;
-use rvr_openvm_ext_ffi_common::{AS_PUBLIC_VALUES, AS_REGISTER};
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, MemWidth, Reg};
 use rvr_openvm_lift::{
     air_index_to_c, decode_imm_cg, decode_reg, opcode_air_idx, AirIndex, ExtensionError,
@@ -104,7 +103,7 @@ impl ExtInstr for RevealInstr {
         } else {
             format!("({ptr} + 0x{:08x}u)", self.offset)
         };
-        ctx.trace_mem_access(&addr, AS_PUBLIC_VALUES);
+        ctx.trace_mem_access(&addr, PUBLIC_VALUES_AS);
         let offset = format!("0x{:08x}u", self.offset);
         let width = self.width.bytes().to_string();
         ctx.extern_call("openvm_reveal", &[&src, &ptr, &offset, &width]);
@@ -278,7 +277,7 @@ impl RvrRuntimeExtension for Rv64IoRuntimeHooks {
 }
 
 fn public_values_store_width(insn: &RvrInstruction) -> Option<MemWidth> {
-    if insn.d != AS_REGISTER || insn.e != AS_PUBLIC_VALUES {
+    if insn.d != RV64_REGISTER_AS || insn.e != PUBLIC_VALUES_AS {
         return None;
     }
 
@@ -579,8 +578,8 @@ mod tests {
                     8,
                     16,
                     0,
-                    AS_REGISTER as usize,
-                    AS_PUBLIC_VALUES as usize,
+                    RV64_REGISTER_AS as usize,
+                    PUBLIC_VALUES_AS as usize,
                     1,
                     0,
                 ],
@@ -612,8 +611,8 @@ mod tests {
                 8,
                 16,
                 0,
-                AS_PUBLIC_VALUES as usize,
-                AS_PUBLIC_VALUES as usize,
+                PUBLIC_VALUES_AS as usize,
+                PUBLIC_VALUES_AS as usize,
                 1,
                 0,
             ],
@@ -631,8 +630,8 @@ mod tests {
                 8,
                 16,
                 0,
-                AS_REGISTER as usize,
-                AS_PUBLIC_VALUES as usize,
+                RV64_REGISTER_AS as usize,
+                PUBLIC_VALUES_AS as usize,
                 1,
                 0,
             ],
@@ -654,7 +653,7 @@ mod tests {
 
         assert_eq!(
             ctx.lines[0],
-            format!("trace_mem_access(state, (r10 + 0x0000000cu), {AS_PUBLIC_VALUES}u);")
+            format!("trace_mem_access(state, (r10 + 0x0000000cu), {PUBLIC_VALUES_AS}u);")
         );
         assert_eq!(ctx.lines[1], "openvm_reveal(r5, r10, 0x0000000cu, 4);");
     }

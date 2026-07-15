@@ -26,6 +26,7 @@ use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
+use openvm_platform::memory::MEM_SIZE;
 use openvm_riscv_adapters::Rv64IsEqualModU16AdapterExecutor;
 use openvm_riscv_circuit::adapters::{rv64_bytes_to_u16_block, rv64_bytes_to_u32};
 use openvm_stark_backend::{
@@ -699,7 +700,7 @@ unsafe fn execute_e12_impl<
 
     // Read memory values
     let [b, c]: [[u16; TOTAL_READ_SIZE]; 2] = rs_vals.map(|address| {
-        debug_assert!(address as usize + TOTAL_READ_SIZE * U16_CELL_SIZE - 1 < RV64_MEMORY_BYTES);
+        debug_assert!(address as usize + TOTAL_READ_SIZE * U16_CELL_SIZE - 1 < MEM_SIZE);
         let mut limbs = [0u16; TOTAL_READ_SIZE];
         for i in 0..NUM_LANES {
             let block = rv64_bytes_to_u16_block(exec_state.vm_read_bytes::<MEMORY_BLOCK_BYTES>(

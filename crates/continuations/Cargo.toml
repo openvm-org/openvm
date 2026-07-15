@@ -22,6 +22,7 @@ openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
 openvm-cpu-backend = { workspace = true }
 openvm-circuit-primitives = { workspace = true }
 openvm-circuit = { workspace = true }
+openvm-instructions = { workspace = true }
 openvm-poseidon2-air = { workspace = true }
 
 itertools.workspace = true

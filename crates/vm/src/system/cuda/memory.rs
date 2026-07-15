@@ -15,13 +15,14 @@ use openvm_cuda_common::{
     memory_manager::MemTracker,
     stream::GpuDeviceCtx,
 };
+use openvm_instructions::DIGEST_WIDTH;
 use openvm_stark_backend::{p3_field::PrimeCharacteristicRing, prover::AirProvingContext};
 use tracing::instrument;
 
 use super::{
     boundary::BoundaryChipGPU,
     merkle_tree::{MemoryMerkleTree, MERKLE_TOUCHED_BLOCK_WIDTH},
-    Poseidon2PeripheryChipGPU, DIGEST_WIDTH,
+    Poseidon2PeripheryChipGPU,
 };
 use crate::{cuda_abi::inventory, system::memory::online::LinearMemory};
 

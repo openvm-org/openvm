@@ -1,14 +1,13 @@
 use std::borrow::BorrowMut;
 
-use openvm_circuit::arch::testing::{TestBuilder, TestChipHarness, VmChipTestBuilder};
 #[cfg(feature = "cuda")]
-use openvm_circuit::{
-    arch::testing::{default_var_range_checker_bus, GpuChipTestBuilder, GpuTestChipHarness},
-    system::memory::merkle::public_values::PUBLIC_VALUES_AS,
+use openvm_circuit::arch::testing::{
+    default_var_range_checker_bus, GpuChipTestBuilder, GpuTestChipHarness,
 };
-#[cfg(feature = "cuda")]
-use openvm_instructions::riscv::RV64_MEMORY_AS;
+use openvm_circuit::arch::testing::{TestBuilder, TestChipHarness, VmChipTestBuilder};
 use openvm_instructions::LocalOpcode;
+#[cfg(feature = "cuda")]
+use openvm_instructions::{riscv::RV64_MEMORY_AS, PUBLIC_VALUES_AS};
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, STOREH};
 use openvm_stark_backend::{
     p3_air::BaseAir,

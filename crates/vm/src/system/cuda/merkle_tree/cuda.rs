@@ -7,9 +7,10 @@ use openvm_cuda_common::{
     error::CudaError,
     stream::{cudaStream_t, GpuDeviceCtx},
 };
+use openvm_instructions::DIGEST_WIDTH;
 use tracing::instrument;
 
-use super::{SharedBuffer, DIGEST_WIDTH, MERKLE_TOUCHED_BLOCK_WIDTH};
+use super::{SharedBuffer, MERKLE_TOUCHED_BLOCK_WIDTH};
 
 pub mod merkle_tree {
     use super::*;

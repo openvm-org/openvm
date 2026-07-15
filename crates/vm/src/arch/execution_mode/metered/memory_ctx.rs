@@ -1,15 +1,12 @@
 use openvm_instructions::{
     riscv::{RV64_NUM_REGISTERS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
-    DEFERRAL_AS,
+    DEFERRAL_AS, DIGEST_WIDTH, MEMORY_PAGE_BITS,
 };
 
 use crate::{
     arch::{SystemConfig, ADDR_SPACE_OFFSET, BOUNDARY_AIR_ID, MERKLE_AIR_ID, U16_CELL_SIZE},
-    system::memory::{dimensions::MemoryDimensions, DIGEST_WIDTH},
+    system::memory::dimensions::MemoryDimensions,
 };
-
-/// Number of bits needed to index the leaves represented by one `u64` page mask.
-pub const PAGE_BITS: usize = u64::BITS.ilog2() as usize;
 
 /// Upper bound on number of memory pages accessed per instruction. Used for buffer allocation.
 pub const MAX_MEM_PAGE_OPS_PER_INSN: usize = 1 << 16;
@@ -301,7 +298,7 @@ fn local_merkle_nodes_added_leaf(old_mask: u64, leaf: u32) -> u32 {
     debug_assert!(leaf < u64::BITS);
 
     if old_mask == 0 {
-        return PAGE_BITS as u32;
+        return MEMORY_PAGE_BITS as u32;
     }
 
     let mut nodes = 0;
@@ -331,7 +328,7 @@ impl MemoryCtx {
         let memory_dimensions = config.memory_config.memory_dimensions();
         let merkle_height = memory_dimensions.overall_height();
 
-        let upper_height = merkle_height.saturating_sub(PAGE_BITS);
+        let upper_height = merkle_height.saturating_sub(MEMORY_PAGE_BITS);
         let checkpoint_capacity = Self::initial_checkpoint_capacity(segment_check_insns);
 
         Self {
@@ -387,18 +384,18 @@ impl MemoryCtx {
             << self.memory_dimensions.address_height) as u32;
         let start_leaf_id = address_space_offset + leaf_label;
         let end_leaf_id = start_leaf_id + num_leaves;
-        let start_page_id = start_leaf_id >> PAGE_BITS;
+        let start_page_id = start_leaf_id >> MEMORY_PAGE_BITS;
 
         if num_leaves == 1 {
             self.record_page_access_no_len_update(
                 start_page_id,
-                1u64 << (start_leaf_id & ((1 << PAGE_BITS) - 1)),
+                1u64 << (start_leaf_id & ((1 << MEMORY_PAGE_BITS) - 1)),
             );
             self.page_indices_since_checkpoint_len = self.page_indices_since_checkpoint.len();
             return;
         }
 
-        let end_page_id = ((end_leaf_id - 1) >> PAGE_BITS) + 1;
+        let end_page_id = ((end_leaf_id - 1) >> MEMORY_PAGE_BITS) + 1;
         let num_pages = (end_page_id - start_page_id) as usize;
         assert!(
             num_pages <= MAX_MEM_PAGE_OPS_PER_INSN,
@@ -409,8 +406,8 @@ impl MemoryCtx {
         }
 
         for page_id in start_page_id..end_page_id {
-            let page_start = page_id << PAGE_BITS;
-            let page_end = page_start + (1 << PAGE_BITS);
+            let page_start = page_id << MEMORY_PAGE_BITS;
+            let page_end = page_start + (1 << MEMORY_PAGE_BITS);
             let start = start_leaf_id.max(page_start) - page_start;
             let end = end_leaf_id.min(page_end) - page_start;
             let leaf_mask = leaf_mask_range(start, end);
@@ -543,9 +540,9 @@ impl MemoryCtx {
     ///        /    \
     ///      ...    ...
     ///      /        \
-    ///   [page]    [page]         (h - PAGE_BITS) nodes above each page
+    ///   [page]    [page]         (h - MEMORY_PAGE_BITS) nodes above each page
     ///   / .. \
-    ///  L  ..  L                  PAGE_BITS levels inside a 64-leaf page
+    ///  L  ..  L                  MEMORY_PAGE_BITS levels inside a 64-leaf page
     /// ```
     ///
     /// `MemoryPageTracker` counts each newly touched leaf once, each newly
@@ -606,7 +603,7 @@ mod tests {
     fn reference_local_merkle_nodes(mask: u64) -> u32 {
         let mut nodes = 0;
         let mut level_mask = mask;
-        for _ in 0..PAGE_BITS {
+        for _ in 0..MEMORY_PAGE_BITS {
             level_mask = reference_parent_mask(level_mask);
             nodes += level_mask.count_ones();
         }
@@ -752,7 +749,7 @@ mod tests {
         tracker.insert(0, 1);
         let first = tracker.merkle_nodes;
         tracker.insert(1, 1);
-        assert_eq!(tracker.merkle_nodes - first, PAGE_BITS as u32);
+        assert_eq!(tracker.merkle_nodes - first, MEMORY_PAGE_BITS as u32);
     }
 
     #[test]

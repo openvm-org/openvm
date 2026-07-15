@@ -3,12 +3,11 @@ use openvm_circuit::{
         aot::common::{convert_x86_reg, Width, RISCV_TO_X86_OVERRIDE_MAP},
         AotError, AotExecutor, AotMeteredExecutor, SystemConfig,
     },
-    system::memory::merkle::public_values::PUBLIC_VALUES_AS,
 };
 use openvm_instructions::{
     instruction::Instruction,
     riscv::{RV32_IMM_AS, RV32_REGISTER_AS, RV32_REGISTER_NUM_LIMBS},
-    LocalOpcode,
+    LocalOpcode, PUBLIC_VALUES_AS,
 };
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;

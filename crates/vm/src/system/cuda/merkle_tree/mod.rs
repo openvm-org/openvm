@@ -11,6 +11,7 @@ use openvm_cuda_common::{
     d_buffer::DeviceBuffer,
     stream::{CudaEvent, GpuDeviceCtx},
 };
+use openvm_instructions::DIGEST_WIDTH;
 use openvm_stark_backend::{
     p3_maybe_rayon::prelude::{IntoParallelIterator, ParallelIterator},
     p3_util::log2_ceil_usize,
@@ -18,7 +19,7 @@ use openvm_stark_backend::{
 };
 use p3_field::PrimeCharacteristicRing;
 
-use super::{poseidon2::SharedBuffer, Poseidon2PeripheryChipGPU, DIGEST_WIDTH};
+use super::{poseidon2::SharedBuffer, Poseidon2PeripheryChipGPU};
 
 pub mod cuda;
 use cuda::merkle_tree::*;
@@ -506,7 +507,7 @@ mod tests {
     };
     use openvm_instructions::{
         riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
-        DEFERRAL_AS,
+        DEFERRAL_AS, DIGEST_WIDTH,
     };
     use openvm_stark_backend::{interaction::PermutationCheckBus, prover::MatrixDimensions};
     use openvm_stark_sdk::utils::create_seeded_rng;
@@ -518,7 +519,7 @@ mod tests {
     };
     use crate::{
         arch::testing::{MEMORY_MERKLE_BUS, POSEIDON2_DIRECT_BUS},
-        system::cuda::{Poseidon2PeripheryChipGPU, DIGEST_WIDTH},
+        system::cuda::Poseidon2PeripheryChipGPU,
     };
 
     #[test]

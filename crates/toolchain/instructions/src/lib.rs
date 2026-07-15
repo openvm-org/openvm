@@ -22,6 +22,12 @@ pub use phantom::*;
 pub const PUBLIC_VALUES_AS: u32 = 3;
 /// Deferral output address space.
 pub const DEFERRAL_AS: u32 = 4;
+/// Field elements in an OpenVM memory Merkle digest and deferral commitment.
+pub const DIGEST_WIDTH: usize = 8;
+/// Number of bits needed to index the leaves represented by one `u64` page mask.
+pub const MEMORY_PAGE_BITS: usize = u64::BITS.ilog2() as usize;
+/// Default interval between metered-execution segment checks.
+pub const DEFAULT_SEGMENT_CHECK_INSNS: u32 = 1000;
 
 pub trait LocalOpcode {
     const CLASS_OFFSET: usize;

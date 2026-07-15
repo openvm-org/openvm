@@ -1,11 +1,14 @@
 use std::array;
 
 use openvm_circuit::arch::{MemoryConfig, SystemConfig};
-use openvm_instructions::riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS};
+use openvm_instructions::{
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    PUBLIC_VALUES_AS,
+};
 use openvm_stark_backend::p3_field::PrimeField32;
 use rand::{rngs::StdRng, Rng};
 
-use crate::system::memory::{merkle::public_values::PUBLIC_VALUES_AS, online::PAGE_SIZE};
+use crate::system::memory::online::PAGE_SIZE;
 
 pub fn i32_to_f<F: PrimeField32>(val: i32) -> F {
     if val.signum() == -1 {

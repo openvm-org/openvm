@@ -1,7 +1,9 @@
-use std::sync::Arc;
+use std::{mem::size_of, sync::Arc};
 
 use openvm_circuit_primitives::{StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
+use openvm_instructions::DIGEST_WIDTH;
+use openvm_platform::memory::MEM_BITS;
 use openvm_stark_backend::{interaction::PermutationCheckBus, StarkProtocolConfig};
 
 mod controller;
@@ -28,7 +30,7 @@ use crate::{
 // TODO: Currently this is only used for debug assertions, but we may switch to making it constant
 // and removing from MemoryConfig.
 // This is the max bit width of AS-native OpenVM memory pointers.
-pub const POINTER_MAX_BITS: usize = 28;
+pub const POINTER_MAX_BITS: usize = MEM_BITS - size_of::<u16>().ilog2() as usize;
 
 #[derive(PartialEq, Copy, Clone, Debug, Eq)]
 pub enum OpType {

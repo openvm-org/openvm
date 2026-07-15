@@ -8,5 +8,4 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-openvm-platform.workspace = true
 openvm-instructions.workspace = true
