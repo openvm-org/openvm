@@ -367,6 +367,31 @@ impl<'a> EmitContext<'a> {
         self.read_reg_impl(idx, RegisterReadKind::Peek)
     }
 
+    pub fn read_var_with_trace(&mut self, var: Variable) -> (String, String, String) {
+        let idx = reg_index(var);
+        if self.mode != EmitMode::ValueTrace || !self.inline_records_enabled() {
+            return (self.read_reg(idx), "0u".to_string(), "0u".to_string());
+        }
+        let from_timestamp = self.next_var();
+        self.write_line(&format!(
+            "uint32_t {from_timestamp} = state->tracer->timestamp;"
+        ));
+        let value = if idx == 0 {
+            "0".to_string()
+        } else if self.hot_regs.contains(&idx) {
+            Self::abi_name(idx).to_string()
+        } else {
+            let value = self.next_var();
+            self.write_line(&format!("uint64_t {value} = reg_read(state, {idx});"));
+            value
+        };
+        let previous_timestamp = self.next_var();
+        self.write_line(&format!(
+            "uint32_t {previous_timestamp} = trace_reg_read(state, {idx}, {value});"
+        ));
+        (value, from_timestamp, previous_timestamp)
+    }
+
     /// Read a variable without emitting a trace event.
     pub fn read_var_raw(&self, var: Variable) -> String {
         let idx = reg_index(var);
@@ -1679,8 +1704,16 @@ impl<'a> EmitContext<'a> {
 }
 
 impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
+    fn inline_record_enabled(&self) -> bool {
+        self.inline_records_enabled()
+    }
+
     fn read_var(&mut self, var: Variable) -> String {
         EmitContext::read_reg(self, reg_index(var))
+    }
+
+    fn read_var_with_trace(&mut self, var: Variable) -> (String, String, String) {
+        EmitContext::read_var_with_trace(self, var)
     }
 
     fn peek_var(&mut self, var: Variable) -> String {

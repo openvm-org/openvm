@@ -70,4 +70,7 @@ struct XorinVmRecord {
         buffer_write_aux_cols[keccak256::KECCAK_RATE_MEM_OPS];
 };
 
+static_assert(sizeof(XorinVmRecord) == 656,
+              "XorinVmRecord must match the direct-final host ABI");
+
 } // namespace xorin

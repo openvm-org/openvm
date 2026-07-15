@@ -48,6 +48,13 @@ pub enum ArenaNativeLayout {
     LoadStore(LoadStoreArenaFieldOffsets),
     Wr1(Wr1ArenaFieldOffsets),
     Rw1(Rw1ArenaFieldOffsets),
+    /// The extension emits the complete record through its own C shim. When
+    /// `residual_memory_chronology` is true, all timestamp-bearing accesses
+    /// remain in the memory log, so delta mode needs no duplicate program-log
+    /// entry for chronology replay.
+    Custom {
+        residual_memory_chronology: bool,
+    },
 }
 
 /// Field offsets for a conditional one-write JAL/LUI/AUIPC record.

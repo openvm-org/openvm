@@ -39,6 +39,8 @@ pub const PREFLIGHT_CHIP_RECORD_FLAG_DIRECT_FINAL: u32 =
     rvr_openvm_ext_ffi_common::PREFLIGHT_CHIP_RECORD_FLAG_DIRECT_FINAL;
 pub const PREFLIGHT_CHIP_RECORD_FLAG_OVERFLOW: u32 =
     rvr_openvm_ext_ffi_common::PREFLIGHT_CHIP_RECORD_FLAG_OVERFLOW;
+pub const PREFLIGHT_CHIP_RECORD_FLAG_RESIDUAL_MEMORY_CHRONOLOGY: u32 =
+    rvr_openvm_ext_ffi_common::PREFLIGHT_CHIP_RECORD_FLAG_RESIDUAL_MEMORY_CHRONOLOGY;
 /// R3: byte size of one compact AddSub inline record (see the C
 /// `PreflightAddSubRecord`). Used to size the per-chip inline-record buffers.
 pub const PREFLIGHT_ADDSUB_RECORD_SIZE: usize =
@@ -1680,6 +1682,19 @@ pub trait RvrArenaNativeTarget: crate::arch::Arena + Sized {
     fn finish_rvr_wire(&mut self, written_records: usize, wire_size: usize);
 }
 
+fn arena_native_flags(geometry: &super::ArenaNativeGeometry) -> u32 {
+    let mut flags = PREFLIGHT_CHIP_RECORD_FLAG_DIRECT_FINAL;
+    if matches!(
+        geometry.layout,
+        super::ArenaNativeLayout::Custom {
+            residual_memory_chronology: true
+        }
+    ) {
+        flags |= PREFLIGHT_CHIP_RECORD_FLAG_RESIDUAL_MEMORY_CHRONOLOGY;
+    }
+    flags
+}
+
 impl<F: openvm_stark_backend::p3_field::Field> RvrArenaNativeTarget
     for crate::arch::MatrixRecordArena<F>
 {
@@ -1698,7 +1713,7 @@ impl<F: openvm_stark_backend::p3_field::Field> RvrArenaNativeTarget
             cap: cap_bytes - cap_bytes % stride,
             stride,
             core_off: geometry.core_off_matrix as u32,
-            flags: PREFLIGHT_CHIP_RECORD_FLAG_DIRECT_FINAL,
+            flags: arena_native_flags(geometry),
         };
         (arena, buf)
     }
@@ -1742,7 +1757,7 @@ impl RvrArenaNativeTarget for crate::arch::DenseRecordArena {
             cap: (height * stride) as u32,
             stride: stride as u32,
             core_off: geometry.core_off_dense() as u32,
-            flags: PREFLIGHT_CHIP_RECORD_FLAG_DIRECT_FINAL,
+            flags: arena_native_flags(geometry),
         };
         (arena, buf)
     }

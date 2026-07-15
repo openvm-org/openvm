@@ -1,15 +1,17 @@
 //! Log-native record assembly for modular and quadratic-extension arithmetic.
 
+use std::mem::{align_of, offset_of, size_of};
+
 use openvm_algebra_transpiler::{Fp2Opcode, Rv64ModularArithmeticOpcode};
 use openvm_circuit::{
     arch::{
         rvr::{
-            LogNativeAccessView, LogNativeAssemblerRegistry, PreflightMemoryAccessAux,
-            VmRvrLogNativeExtension, PREFLIGHT_MEMORY_KIND_READ, PREFLIGHT_MEMORY_KIND_TOUCH,
-            PREFLIGHT_MEMORY_KIND_WRITE,
+            ArenaNativeGeometry, ArenaNativeLayout, LogNativeAccessView,
+            LogNativeAssemblerRegistry, PreflightMemoryAccessAux, VmRvrLogNativeExtension,
+            PREFLIGHT_MEMORY_KIND_READ, PREFLIGHT_MEMORY_KIND_TOUCH, PREFLIGHT_MEMORY_KIND_WRITE,
         },
-        AdapterCoreLayout, Arena, EmptyAdapterCoreLayout, ExecutionError, RecordArena,
-        BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
+        AdapterCoreLayout, AdapterTraceExecutor, Arena, EmptyAdapterCoreLayout, ExecutionError,
+        RecordArena, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
     },
     system::memory::offline_checker::{
         MemoryReadAuxRecord, MemoryWriteBytesAuxRecord, MemoryWriteU16AuxRecord,
@@ -29,6 +31,7 @@ use openvm_riscv_adapters::{
 };
 use openvm_riscv_circuit::log_native::{Rv64IRecordArena, Rv64IoRecordArena, Rv64MRecordArena};
 use openvm_stark_backend::p3_field::PrimeField32;
+use rvr_openvm_ext_algebra::{ModIsEqRecordDescriptor, VecHeapRecordDescriptor};
 use strum::EnumCount;
 
 use crate::{
@@ -223,35 +226,115 @@ fn register_modulus<F: PrimeField32, RA, const BLOCKS: usize, const U16_LIMBS: u
             ),
         >,
 {
+    let addsub_opcodes = [
+        Rv64ModularArithmeticOpcode::ADD,
+        Rv64ModularArithmeticOpcode::SUB,
+        Rv64ModularArithmeticOpcode::SETUP_ADDSUB,
+    ]
+    .map(|opcode| modular_opcode(offset, opcode));
     registry.register_if(
-        [
-            Rv64ModularArithmeticOpcode::ADD,
-            Rv64ModularArithmeticOpcode::SUB,
-            Rv64ModularArithmeticOpcode::SETUP_ADDSUB,
-        ]
-        .map(|opcode| modular_opcode(offset, opcode)),
+        addsub_opcodes,
         is_modular_instruction,
         assemble_addsub::<F, RA, BLOCKS>,
     );
+    let vec_heap = vec_heap_geometry::<F, BLOCKS>();
+    registry.register_inline_arena_native(
+        addsub_opcodes,
+        VecHeapRecordDescriptor::new(BLOCKS * MEMORY_BLOCK_BYTES).record_size,
+        assemble_vec_heap_inline::<F, RA, BLOCKS>,
+        vec_heap,
+    );
+    let muldiv_opcodes = [
+        Rv64ModularArithmeticOpcode::MUL,
+        Rv64ModularArithmeticOpcode::DIV,
+        Rv64ModularArithmeticOpcode::SETUP_MULDIV,
+    ]
+    .map(|opcode| modular_opcode(offset, opcode));
     registry.register_if(
-        [
-            Rv64ModularArithmeticOpcode::MUL,
-            Rv64ModularArithmeticOpcode::DIV,
-            Rv64ModularArithmeticOpcode::SETUP_MULDIV,
-        ]
-        .map(|opcode| modular_opcode(offset, opcode)),
+        muldiv_opcodes,
         is_modular_instruction,
         assemble_muldiv::<F, RA, BLOCKS>,
     );
+    registry.register_inline_arena_native(
+        muldiv_opcodes,
+        VecHeapRecordDescriptor::new(BLOCKS * MEMORY_BLOCK_BYTES).record_size,
+        assemble_vec_heap_inline::<F, RA, BLOCKS>,
+        vec_heap,
+    );
+    let iseq_opcodes = [
+        Rv64ModularArithmeticOpcode::IS_EQ,
+        Rv64ModularArithmeticOpcode::SETUP_ISEQ,
+    ]
+    .map(|opcode| modular_opcode(offset, opcode));
     registry.register_if(
-        [
-            Rv64ModularArithmeticOpcode::IS_EQ,
-            Rv64ModularArithmeticOpcode::SETUP_ISEQ,
-        ]
-        .map(|opcode| modular_opcode(offset, opcode)),
+        iseq_opcodes,
         is_modular_is_eq_instruction,
         assemble_is_eq::<F, RA, BLOCKS, U16_LIMBS>,
     );
+    let iseq = mod_iseq_geometry::<F, BLOCKS, U16_LIMBS>();
+    registry.register_inline_arena_native(
+        iseq_opcodes,
+        ModIsEqRecordDescriptor::new(BLOCKS * MEMORY_BLOCK_BYTES).record_size,
+        assemble_mod_iseq_inline::<F, RA, BLOCKS, U16_LIMBS>,
+        iseq,
+    );
+}
+
+fn vec_heap_geometry<F: PrimeField32, const BLOCKS: usize>() -> ArenaNativeGeometry {
+    type Adapter<const B: usize> = Rv64VecHeapAdapterRecord<2, B, B>;
+    let descriptor = VecHeapRecordDescriptor::new(BLOCKS * MEMORY_BLOCK_BYTES);
+    assert_eq!(size_of::<Adapter<BLOCKS>>(), descriptor.adapter_size);
+    assert_eq!(align_of::<Adapter<BLOCKS>>(), descriptor.adapter_align);
+    assert_eq!(offset_of!(Adapter<BLOCKS>, reads_aux), descriptor.reads_aux);
+    assert_eq!(
+        offset_of!(Adapter<BLOCKS>, writes_aux),
+        descriptor.writes_aux
+    );
+    ArenaNativeGeometry {
+        adapter_size: descriptor.adapter_size,
+        adapter_align: descriptor.adapter_align,
+        core_size: descriptor.core_size,
+        core_align: descriptor.core_align,
+        core_off_matrix: <Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS> as AdapterTraceExecutor<
+            F,
+        >>::WIDTH
+            * size_of::<F>(),
+        layout: ArenaNativeLayout::Custom {
+            residual_memory_chronology: true,
+        },
+    }
+}
+
+fn mod_iseq_geometry<F: PrimeField32, const BLOCKS: usize, const U16_LIMBS: usize>(
+) -> ArenaNativeGeometry {
+    type Adapter<const B: usize> = Rv64IsEqualModU16AdapterRecord<2, B>;
+    type Core<const L: usize> = ModularIsEqualRecord<L>;
+    let descriptor = ModIsEqRecordDescriptor::new(BLOCKS * MEMORY_BLOCK_BYTES);
+    assert_eq!(U16_LIMBS, descriptor.u16_limbs);
+    assert_eq!(size_of::<Adapter<BLOCKS>>(), descriptor.adapter_size);
+    assert_eq!(align_of::<Adapter<BLOCKS>>(), descriptor.adapter_align);
+    assert_eq!(size_of::<Core<U16_LIMBS>>(), descriptor.core_size);
+    assert_eq!(align_of::<Core<U16_LIMBS>>(), descriptor.core_align);
+    assert_eq!(
+        offset_of!(Adapter<BLOCKS>, heap_read_aux),
+        descriptor.heap_read_aux
+    );
+    assert_eq!(offset_of!(Adapter<BLOCKS>, rd_ptr), descriptor.rd_ptr);
+    assert_eq!(
+        offset_of!(Adapter<BLOCKS>, writes_aux),
+        descriptor.writes_aux
+    );
+    ArenaNativeGeometry {
+        adapter_size: descriptor.adapter_size,
+        adapter_align: descriptor.adapter_align,
+        core_size: descriptor.core_size,
+        core_align: descriptor.core_align,
+        core_off_matrix: <Rv64IsEqualModU16AdapterExecutor<2, BLOCKS, U16_LIMBS> as AdapterTraceExecutor<F>>::WIDTH
+            * size_of::<F>(),
+        layout: ArenaNativeLayout::Custom {
+            residual_memory_chronology: true,
+        },
+    }
 }
 
 fn register_fp2<F: PrimeField32, RA, const BLOCKS: usize>(
@@ -298,6 +381,110 @@ fn is_vec_heap_instruction<F: PrimeField32>(instruction: &Instruction<F>) -> boo
 
 fn is_modular_is_eq_instruction<F: PrimeField32>(instruction: &Instruction<F>) -> bool {
     is_modular_instruction(instruction) && !instruction.a.is_zero()
+}
+
+fn assemble_vec_heap_inline<F: PrimeField32, RA, const BLOCKS: usize>(
+    arena: &mut RA,
+    _instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError>
+where
+    RA: Arena
+        + for<'a> RecordArena<
+            'a,
+            VecHeapLayout<F, 2, BLOCKS, BLOCKS>,
+            VecHeapRecordMut<'a, 2, BLOCKS, BLOCKS>,
+        >,
+{
+    let descriptor = VecHeapRecordDescriptor::new(BLOCKS * MEMORY_BLOCK_BYTES);
+    if compact.len() != descriptor.record_size {
+        return Err(rvr_error(format!(
+            "invalid VecHeap inline record size {} at pc {pc:#x}; expected {}",
+            compact.len(),
+            descriptor.record_size
+        )));
+    }
+    let layout = AdapterCoreLayout::with_metadata(FieldExpressionMetadata::<
+        F,
+        Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS>,
+    >::new(2 * BLOCKS * MEMORY_BLOCK_BYTES));
+    let (adapter, core): (
+        &mut Rv64VecHeapAdapterRecord<2, BLOCKS, BLOCKS>,
+        FieldExpressionCoreRecordMut<'_>,
+    ) = arena.alloc(layout);
+    unsafe {
+        std::ptr::copy_nonoverlapping(
+            compact.as_ptr(),
+            (adapter as *mut Rv64VecHeapAdapterRecord<2, BLOCKS, BLOCKS>).cast::<u8>(),
+            descriptor.adapter_size,
+        );
+        std::ptr::copy_nonoverlapping(
+            compact.as_ptr().add(descriptor.core_off_dense),
+            (core.opcode as *mut u8).cast::<u8>(),
+            descriptor.core_size,
+        );
+    }
+    if adapter.from_pc != pc {
+        return Err(rvr_error(format!(
+            "VecHeap inline record pc mismatch: record={:#x}, program={pc:#x}",
+            adapter.from_pc
+        )));
+    }
+    Ok(())
+}
+
+fn assemble_mod_iseq_inline<F: PrimeField32, RA, const BLOCKS: usize, const U16_LIMBS: usize>(
+    arena: &mut RA,
+    _instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError>
+where
+    RA: Arena
+        + for<'a> RecordArena<
+            'a,
+            EmptyAdapterCoreLayout<F, Rv64IsEqualModU16AdapterExecutor<2, BLOCKS, U16_LIMBS>>,
+            (
+                &'a mut Rv64IsEqualModU16AdapterRecord<2, BLOCKS>,
+                &'a mut ModularIsEqualRecord<U16_LIMBS>,
+            ),
+        >,
+{
+    let descriptor = ModIsEqRecordDescriptor::new(BLOCKS * MEMORY_BLOCK_BYTES);
+    if compact.len() != descriptor.record_size {
+        return Err(rvr_error(format!(
+            "invalid modular IS_EQ inline record size {} at pc {pc:#x}; expected {}",
+            compact.len(),
+            descriptor.record_size
+        )));
+    }
+    let (adapter, core): (
+        &mut Rv64IsEqualModU16AdapterRecord<2, BLOCKS>,
+        &mut ModularIsEqualRecord<U16_LIMBS>,
+    ) = arena.alloc(EmptyAdapterCoreLayout::<
+        F,
+        Rv64IsEqualModU16AdapterExecutor<2, BLOCKS, U16_LIMBS>,
+    >::new());
+    unsafe {
+        std::ptr::copy_nonoverlapping(
+            compact.as_ptr(),
+            (adapter as *mut Rv64IsEqualModU16AdapterRecord<2, BLOCKS>).cast::<u8>(),
+            descriptor.adapter_size,
+        );
+        std::ptr::copy_nonoverlapping(
+            compact.as_ptr().add(descriptor.core_off_dense),
+            (core as *mut ModularIsEqualRecord<U16_LIMBS>).cast::<u8>(),
+            descriptor.core_size,
+        );
+    }
+    if adapter.from_pc != pc {
+        return Err(rvr_error(format!(
+            "modular IS_EQ inline record pc mismatch: record={:#x}, program={pc:#x}",
+            adapter.from_pc
+        )));
+    }
+    Ok(())
 }
 
 fn assemble_addsub<F: PrimeField32, RA, const BLOCKS: usize>(
@@ -737,4 +924,8 @@ fn prev_bytes<F: PrimeField32>(aux: &PreflightMemoryAccessAux<F>) -> [u8; MEMORY
         chunk.copy_from_slice(&limb.to_le_bytes());
     }
     bytes
+}
+
+fn rvr_error(message: String) -> ExecutionError {
+    ExecutionError::RvrExecution(message)
 }

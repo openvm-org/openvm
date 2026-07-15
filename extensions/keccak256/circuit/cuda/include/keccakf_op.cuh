@@ -25,6 +25,9 @@ struct KeccakfOpRecord {
     uint8_t preimage_buffer_bytes[KECCAK_WIDTH_BYTES];
 };
 
+static_assert(sizeof(KeccakfOpRecord) == 320,
+              "KeccakfOpRecord must match the direct-final host ABI");
+
 // Column structure matching Rust KeccakfOpCols (from columns.rs)
 template <typename T> struct KeccakfOpCols {
     T pc;
