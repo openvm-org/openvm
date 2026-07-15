@@ -1,8 +1,8 @@
 //! Prover extension for the GPU backend; FieldExpr chips do trace generation on GPU.
 
 #[cfg(feature = "rvr")]
-use std::mem::{align_of, offset_of};
-use std::{mem::size_of, sync::Arc};
+use std::mem::{align_of, offset_of, size_of};
+use std::sync::Arc;
 
 use openvm_circuit::{
     arch::*,
@@ -24,10 +24,9 @@ use openvm_cuda_backend::{
 use openvm_mod_circuit_builder::{
     cuda::FieldExprChipGpu, ExprBuilderConfig, FieldExpressionMetadata,
 };
-use openvm_riscv_adapters::{
-    Rv64IsEqualModU16AdapterRecord, Rv64VecHeapAdapterCols, Rv64VecHeapAdapterExecutor,
-    Rv64VecHeapAdapterRecord,
-};
+#[cfg(feature = "rvr")]
+use openvm_riscv_adapters::{Rv64IsEqualModU16AdapterRecord, Rv64VecHeapAdapterRecord};
+use openvm_riscv_adapters::{Rv64VecHeapAdapterCols, Rv64VecHeapAdapterExecutor};
 use openvm_riscv_circuit::{adapters::U16_BITS, Rv64ImGpuProverExt};
 use openvm_stark_backend::prover::AirProvingContext;
 #[cfg(feature = "rvr")]
