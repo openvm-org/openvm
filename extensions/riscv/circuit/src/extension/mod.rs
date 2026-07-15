@@ -23,8 +23,8 @@ use openvm_circuit_primitives::{
 use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode, PhantomDiscriminant};
 use openvm_riscv_transpiler::{
-    BaseAluOpcode, BaseAluWOpcode, BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode,
-    DivRemWOpcode, ImmBaseAluOpcode, LessThanOpcode, MulHOpcode, MulOpcode, MulWOpcode,
+    BaseAluImmOpcode, BaseAluOpcode, BaseAluWOpcode, BranchEqualOpcode, BranchLessThanOpcode,
+    DivRemOpcode, DivRemWOpcode, LessThanOpcode, MulHOpcode, MulOpcode, MulWOpcode,
     Rv64AuipcOpcode, Rv64HintStoreOpcode, Rv64JalLuiOpcode, Rv64JalrOpcode, Rv64LoadStoreOpcode,
     Rv64Phantom, ShiftOpcode, ShiftWOpcode,
 };
@@ -356,10 +356,10 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
         inventory.add_executor(auipc, Rv64AuipcOpcode::iter().map(|x| x.global_opcode()))?;
 
         let addi = Rv64AddIExecutor::new(
-            Rv64ImmBaseAluU16AdapterExecutor,
-            ImmBaseAluOpcode::CLASS_OFFSET,
+            Rv64BaseAluImmU16AdapterExecutor,
+            BaseAluImmOpcode::CLASS_OFFSET,
         );
-        inventory.add_executor(addi, [ImmBaseAluOpcode::ADDI].map(|x| x.global_opcode()))?;
+        inventory.add_executor(addi, [BaseAluImmOpcode::ADDI].map(|x| x.global_opcode()))?;
 
         // There is no downside to adding phantom sub-executors, so we do it in the base extension.
         inventory.add_phantom_sub_executor(
@@ -556,8 +556,8 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
         inventory.add_air(auipc);
 
         let addi = Rv64AddIAir::new(
-            Rv64ImmBaseAluU16AdapterAir::new(exec_bridge, memory_bridge, range_checker),
-            AddICoreAir::new(range_checker, ImmBaseAluOpcode::CLASS_OFFSET),
+            Rv64BaseAluImmU16AdapterAir::new(exec_bridge, memory_bridge, range_checker),
+            AddICoreAir::new(range_checker, BaseAluImmOpcode::CLASS_OFFSET),
         );
         inventory.add_air(addi);
 
@@ -863,9 +863,9 @@ where
         inventory.next_air::<Rv64AddIAir>()?;
         let addi = Rv64AddIChip::new(
             AddIFiller::new(
-                Rv64ImmBaseAluU16AdapterFiller::new(range_checker.clone()),
+                Rv64BaseAluImmU16AdapterFiller::new(range_checker.clone()),
                 range_checker.clone(),
-                ImmBaseAluOpcode::CLASS_OFFSET,
+                BaseAluImmOpcode::CLASS_OFFSET,
             ),
             mem_helper.clone(),
         );

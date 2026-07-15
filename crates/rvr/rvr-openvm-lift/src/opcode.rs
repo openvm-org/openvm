@@ -12,8 +12,8 @@ use openvm_instructions::{
     instruction::Instruction, riscv::RV64_REGISTER_NUM_LIMBS, LocalOpcode, SysPhantom, SystemOpcode,
 };
 use openvm_riscv_transpiler::{
-    BaseAluOpcode, BaseAluWOpcode, BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode,
-    DivRemWOpcode, ImmBaseAluOpcode, LessThanOpcode, MulHOpcode, MulOpcode, MulWOpcode,
+    BaseAluImmOpcode, BaseAluOpcode, BaseAluWOpcode, BranchEqualOpcode, BranchLessThanOpcode,
+    DivRemOpcode, DivRemWOpcode, LessThanOpcode, MulHOpcode, MulOpcode, MulWOpcode,
     Rv64AuipcOpcode, Rv64JalLuiOpcode, Rv64JalrOpcode, Rv64LoadStoreOpcode, ShiftOpcode,
     ShiftWOpcode,
 };
@@ -86,7 +86,7 @@ pub fn lift_instruction<F: PrimeField32>(
     }
 
     // AddI: ADDI — always immediate (e == 0 from the transpiler)
-    if opcode == ImmBaseAluOpcode::ADDI.global_opcode_usize() {
+    if opcode == BaseAluImmOpcode::ADDI.global_opcode_usize() {
         return Some(lift_alu(insn, pc, e, AluOp::Add));
     }
 

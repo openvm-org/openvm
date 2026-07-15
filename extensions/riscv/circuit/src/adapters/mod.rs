@@ -18,11 +18,11 @@ use openvm_stark_backend::{
 };
 
 mod alu;
+mod alu_imm_u16;
 mod alu_u16;
 mod alu_w;
 mod alu_w_u16;
 mod branch;
-mod imm_alu_u16;
 mod jalr;
 mod load;
 mod mul;
@@ -31,11 +31,11 @@ mod rdwrite;
 mod store;
 
 pub use alu::*;
+pub use alu_imm_u16::*;
 pub use alu_u16::*;
 pub use alu_w::*;
 pub use alu_w_u16::*;
 pub use branch::*;
-pub use imm_alu_u16::*;
 pub use jalr::*;
 pub use load::*;
 pub use mul::*;

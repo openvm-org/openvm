@@ -13,7 +13,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
-use openvm_riscv_transpiler::ImmBaseAluOpcode;
+use openvm_riscv_transpiler::BaseAluImmOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
@@ -101,7 +101,7 @@ where
 
         let expected_opcode = VmCoreAir::<AB, I>::expr_to_global_expr(
             self,
-            AB::Expr::from_u8(ImmBaseAluOpcode::ADDI as u8),
+            AB::Expr::from_u8(BaseAluImmOpcode::ADDI as u8),
         );
 
         AdapterAirContext {
@@ -160,7 +160,7 @@ where
     >,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {
-        format!("{:?}", ImmBaseAluOpcode::from_usize(opcode - self.offset))
+        format!("{:?}", BaseAluImmOpcode::from_usize(opcode - self.offset))
     }
 
     fn execute(
@@ -169,8 +169,8 @@ where
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError> {
         debug_assert_eq!(
-            ImmBaseAluOpcode::from_usize(instruction.opcode.local_opcode_idx(self.offset)),
-            ImmBaseAluOpcode::ADDI
+            BaseAluImmOpcode::from_usize(instruction.opcode.local_opcode_idx(self.offset)),
+            BaseAluImmOpcode::ADDI
         );
 
         let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());

@@ -12,8 +12,8 @@ use openvm_transpiler::util::{
 };
 
 use crate::{
-    BaseAluOpcode, BaseAluWOpcode, BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode,
-    DivRemWOpcode, ImmBaseAluOpcode, LessThanOpcode, MulHOpcode, MulOpcode, MulWOpcode,
+    BaseAluImmOpcode, BaseAluOpcode, BaseAluWOpcode, BranchEqualOpcode, BranchLessThanOpcode,
+    DivRemOpcode, DivRemWOpcode, LessThanOpcode, MulHOpcode, MulOpcode, MulWOpcode,
     Rv64AuipcOpcode, Rv64JalLuiOpcode, Rv64JalrOpcode, Rv64LoadStoreOpcode, ShiftOpcode,
     ShiftWOpcode,
 };
@@ -34,7 +34,7 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     }
 
     fn process_addi(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        from_i_type(ImmBaseAluOpcode::ADDI.global_opcode().as_usize(), &dec_insn)
+        from_i_type(BaseAluImmOpcode::ADDI.global_opcode().as_usize(), &dec_insn)
     }
 
     fn process_sub(&mut self, dec_insn: RType) -> Self::InstructionResult {
