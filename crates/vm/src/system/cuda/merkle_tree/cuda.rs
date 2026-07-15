@@ -7,7 +7,7 @@ use openvm_cuda_common::{
     error::CudaError,
     stream::{cudaStream_t, GpuDeviceCtx},
 };
-use openvm_instructions::DIGEST_WIDTH;
+use openvm_instructions::MEMORY_DIGEST_WIDTH as DIGEST_WIDTH;
 use tracing::instrument;
 
 use super::{SharedBuffer, MERKLE_TOUCHED_BLOCK_WIDTH};

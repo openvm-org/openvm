@@ -1,5 +1,5 @@
 use bytesize::ByteSize;
-use openvm_instructions::DEFAULT_SEGMENT_CHECK_INSNS;
+use openvm_instructions::metering::DEFAULT_SEGMENT_CHECK_INSNS;
 #[cfg(feature = "metrics")]
 use openvm_stark_backend::memory_metering::INTERACTION_MEMORY_OVERHEAD;
 use openvm_stark_backend::memory_metering::{ProvingMemoryConfig, ProvingMemoryCounts};

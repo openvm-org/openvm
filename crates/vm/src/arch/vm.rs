@@ -15,7 +15,7 @@ use openvm_circuit::system::program::trace::compute_exe_commit;
 use openvm_instructions::{
     exe::{SparseMemoryImage, VmExe},
     program::Program,
-    DIGEST_WIDTH,
+    MEMORY_DIGEST_WIDTH as DIGEST_WIDTH,
 };
 #[cfg(any(debug_assertions, feature = "test-utils", feature = "stark-debug"))]
 use openvm_stark_backend::AirRef;

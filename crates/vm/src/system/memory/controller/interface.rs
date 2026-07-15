@@ -1,4 +1,4 @@
-use openvm_instructions::DIGEST_WIDTH;
+use openvm_instructions::MEMORY_DIGEST_WIDTH as DIGEST_WIDTH;
 use openvm_stark_backend::{interaction::PermutationCheckBus, p3_field::PrimeField32};
 
 use crate::system::memory::{

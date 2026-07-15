@@ -9,7 +9,7 @@ use derive_new::new;
 use getset::{Setters, WithSetters};
 use openvm_instructions::{
     riscv::{RV64_IMM_AS, RV64_MEMORY_AS, RV64_REGISTER_AS},
-    DEFERRAL_AS, DIGEST_WIDTH, PUBLIC_VALUES_AS,
+    DEFERRAL_AS, MEMORY_DIGEST_WIDTH as DIGEST_WIDTH, PUBLIC_VALUES_AS,
 };
 use openvm_platform::memory::MEM_SIZE;
 use openvm_poseidon2_air::Poseidon2Config;

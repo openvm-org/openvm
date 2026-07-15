@@ -10,7 +10,7 @@ use openvm_circuit_primitives::{
     Chip, TraceSubRowGenerator,
 };
 use openvm_cpu_backend::CpuBackend;
-use openvm_instructions::DIGEST_WIDTH;
+use openvm_instructions::MEMORY_DIGEST_WIDTH as DIGEST_WIDTH;
 use openvm_stark_backend::{
     interaction::PermutationCheckBus, p3_field::PrimeField32, prover::AirProvingContext,
     StarkProtocolConfig,

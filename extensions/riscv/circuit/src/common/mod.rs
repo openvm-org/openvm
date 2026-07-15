@@ -15,7 +15,7 @@ mod aot {
     };
     use openvm_instructions::{
         riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
-        DIGEST_WIDTH, PUBLIC_VALUES_AS,
+        MEMORY_DIGEST_WIDTH as DIGEST_WIDTH, PUBLIC_VALUES_AS,
     };
 
     /// The minimum block size is 4, but RISC-V `lb` only requires alignment of 1 and `lh` only

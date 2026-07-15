@@ -7,7 +7,7 @@ use std::{
 use openvm_circuit_primitives::{ColumnsAir, StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_cpu_backend::CpuBackend;
-use openvm_instructions::DIGEST_WIDTH;
+use openvm_instructions::MEMORY_DIGEST_WIDTH as DIGEST_WIDTH;
 use openvm_stark_backend::{
     interaction::{InteractionBuilder, PermutationCheckBus},
     p3_air::{Air, AirBuilder, BaseAir},

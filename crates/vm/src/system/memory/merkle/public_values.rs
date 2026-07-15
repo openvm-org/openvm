@@ -266,7 +266,7 @@ fn extract_public_value_cells<F: Field>(
 
 #[cfg(test)]
 mod tests {
-    use openvm_instructions::{DIGEST_WIDTH, PUBLIC_VALUES_AS};
+    use openvm_instructions::{MEMORY_DIGEST_WIDTH as DIGEST_WIDTH, PUBLIC_VALUES_AS};
     use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
 

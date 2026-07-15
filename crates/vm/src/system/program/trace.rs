@@ -6,7 +6,7 @@ use openvm_cpu_backend::CpuBackend;
 use openvm_instructions::{
     exe::VmExe,
     program::{Program, DEFAULT_PC_STEP},
-    LocalOpcode, SystemOpcode, DIGEST_WIDTH,
+    LocalOpcode, SystemOpcode, MEMORY_DIGEST_WIDTH as DIGEST_WIDTH,
 };
 use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},

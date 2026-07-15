@@ -3,7 +3,7 @@ use std::{
     marker::PhantomData,
 };
 
-use openvm_instructions::DIGEST_WIDTH;
+use openvm_instructions::MEMORY_DIGEST_WIDTH as DIGEST_WIDTH;
 use openvm_poseidon2_air::p3_symmetric::Permutation;
 use openvm_stark_backend::p3_field::{PrimeCharacteristicRing, PrimeField32};
 use p3_baby_bear::{BabyBear, Poseidon2BabyBear};

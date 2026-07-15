@@ -13,7 +13,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_instructions::{
-    LocalOpcode, PhantomDiscriminant, SysPhantom, SystemOpcode, DIGEST_WIDTH,
+    LocalOpcode, PhantomDiscriminant, SysPhantom, SystemOpcode, MEMORY_DIGEST_WIDTH as DIGEST_WIDTH,
 };
 use openvm_stark_backend::{
     interaction::{LookupBus, PermutationCheckBus},

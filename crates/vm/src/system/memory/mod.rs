@@ -2,7 +2,7 @@ use std::{mem::size_of, sync::Arc};
 
 use openvm_circuit_primitives::{StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::DIGEST_WIDTH;
+use openvm_instructions::MEMORY_DIGEST_WIDTH as DIGEST_WIDTH;
 use openvm_platform::memory::MEM_BITS;
 use openvm_stark_backend::{interaction::PermutationCheckBus, StarkProtocolConfig};
 

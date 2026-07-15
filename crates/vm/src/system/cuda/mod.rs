@@ -11,7 +11,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives::{var_range::VariableRangeCheckerChipGPU, Chip};
 use openvm_cuda_backend::{prelude::F, GpuBackend};
 use openvm_cuda_common::stream::GpuDeviceCtx;
-use openvm_instructions::DIGEST_WIDTH;
+use openvm_instructions::MEMORY_DIGEST_WIDTH as DIGEST_WIDTH;
 use openvm_stark_backend::prover::{AirProvingContext, CommittedTraceData};
 use poseidon2::Poseidon2PeripheryChipGPU;
 use program::ProgramChipGPU;

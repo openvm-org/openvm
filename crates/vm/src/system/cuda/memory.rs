@@ -15,7 +15,7 @@ use openvm_cuda_common::{
     memory_manager::MemTracker,
     stream::GpuDeviceCtx,
 };
-use openvm_instructions::DIGEST_WIDTH;
+use openvm_instructions::MEMORY_DIGEST_WIDTH as DIGEST_WIDTH;
 use openvm_stark_backend::{p3_field::PrimeCharacteristicRing, prover::AirProvingContext};
 use tracing::instrument;
 

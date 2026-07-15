@@ -11,7 +11,7 @@ use openvm_cuda_common::{
     d_buffer::DeviceBuffer,
     stream::{CudaEvent, GpuDeviceCtx},
 };
-use openvm_instructions::DIGEST_WIDTH;
+use openvm_instructions::MEMORY_DIGEST_WIDTH as DIGEST_WIDTH;
 use openvm_stark_backend::{
     p3_maybe_rayon::prelude::{IntoParallelIterator, ParallelIterator},
     p3_util::log2_ceil_usize,
@@ -507,7 +507,7 @@ mod tests {
     };
     use openvm_instructions::{
         riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
-        DEFERRAL_AS, DIGEST_WIDTH,
+        DEFERRAL_AS, MEMORY_DIGEST_WIDTH as DIGEST_WIDTH,
     };
     use openvm_stark_backend::{interaction::PermutationCheckBus, prover::MatrixDimensions};
     use openvm_stark_sdk::utils::create_seeded_rng;

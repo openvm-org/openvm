@@ -5,7 +5,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives::Chip;
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::GpuDeviceCtx};
-use openvm_instructions::DIGEST_WIDTH;
+use openvm_instructions::MEMORY_DIGEST_WIDTH as DIGEST_WIDTH;
 use openvm_stark_backend::prover::{AirProvingContext, MatrixDimensions};
 
 use super::poseidon2::SharedBuffer;
