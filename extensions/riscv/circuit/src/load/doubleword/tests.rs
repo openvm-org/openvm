@@ -182,6 +182,8 @@ fn create_cuda_doubleword_harness(tester: &GpuChipTestBuilder) -> GpuDoublewordH
         tester.range_checker(),
         tester.address_bits(),
         tester.timestamp_max_bits(),
+        #[cfg(all(feature = "cuda", feature = "rvr"))]
+        Default::default(),
     );
 
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)

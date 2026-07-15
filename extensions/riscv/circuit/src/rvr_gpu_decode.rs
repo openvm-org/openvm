@@ -112,8 +112,8 @@ pub enum DeltaAirKind {
     AddSubW = 5,
     ShiftWLogical = 6,
     ShiftWRightArithmetic = 7,
-    LoadStore = 8,
-    LoadSignExtend = 9,
+    LoadByte = 8,
+    LoadSignExtendByte = 9,
     BranchEqual = 10,
     BranchLessThan = 11,
     JalLui = 12,
@@ -124,10 +124,19 @@ pub enum DeltaAirKind {
     MulW = 17,
     DivRem = 18,
     DivRemW = 19,
+    LoadHalfword = 20,
+    LoadWord = 21,
+    LoadDoubleword = 22,
+    StoreByte = 23,
+    StoreHalfword = 24,
+    StoreWord = 25,
+    StoreDoubleword = 26,
+    LoadSignExtendHalfword = 27,
+    LoadSignExtendWord = 28,
 }
 
 impl DeltaAirKind {
-    pub const COUNT: usize = 20;
+    pub const COUNT: usize = 29;
 
     fn from_repr(value: u8) -> Option<Self> {
         Some(match value {
@@ -139,8 +148,8 @@ impl DeltaAirKind {
             5 => Self::AddSubW,
             6 => Self::ShiftWLogical,
             7 => Self::ShiftWRightArithmetic,
-            8 => Self::LoadStore,
-            9 => Self::LoadSignExtend,
+            8 => Self::LoadByte,
+            9 => Self::LoadSignExtendByte,
             10 => Self::BranchEqual,
             11 => Self::BranchLessThan,
             12 => Self::JalLui,
@@ -151,6 +160,15 @@ impl DeltaAirKind {
             17 => Self::MulW,
             18 => Self::DivRem,
             19 => Self::DivRemW,
+            20 => Self::LoadHalfword,
+            21 => Self::LoadWord,
+            22 => Self::LoadDoubleword,
+            23 => Self::StoreByte,
+            24 => Self::StoreHalfword,
+            25 => Self::StoreWord,
+            26 => Self::StoreDoubleword,
+            27 => Self::LoadSignExtendHalfword,
+            28 => Self::LoadSignExtendWord,
             _ => return None,
         })
     }
@@ -367,12 +385,13 @@ impl RvrGpuDecodeState {
             .bind_program(exe, pc_to_air_idx, compiled_identity, precomputed)
             .into_values()
             .collect::<HashSet<_>>();
-        // The supported formats map to at most the twenty decode-kernel
+        // Each supported format maps to at most one decode-kernel
         // AIRs; more means opcode->air routing changed under us.
         assert!(
-            airs.len() <= 20,
-            "gpu-decode formats mapped to {} AIRs (expected <= 20)",
-            airs.len()
+            airs.len() <= DeltaAirKind::COUNT,
+            "gpu-decode formats mapped to {} AIRs (expected <= {})",
+            airs.len(),
+            DeltaAirKind::COUNT,
         );
         airs
     }
@@ -1271,13 +1290,18 @@ fn gpu_decode_entry<F: PrimeField32>(
             Rv64LoadStoreOpcode::LOADW => flags |= OPERAND_FLAG_LS_IS_WORD,
             _ => {}
         }
-        let kind = if matches!(
-            op,
-            Rv64LoadStoreOpcode::LOADB | Rv64LoadStoreOpcode::LOADH | Rv64LoadStoreOpcode::LOADW
-        ) {
-            DeltaAirKind::LoadSignExtend
-        } else {
-            DeltaAirKind::LoadStore
+        let kind = match op {
+            Rv64LoadStoreOpcode::LOADBU => DeltaAirKind::LoadByte,
+            Rv64LoadStoreOpcode::LOADHU => DeltaAirKind::LoadHalfword,
+            Rv64LoadStoreOpcode::LOADWU => DeltaAirKind::LoadWord,
+            Rv64LoadStoreOpcode::LOADD => DeltaAirKind::LoadDoubleword,
+            Rv64LoadStoreOpcode::STOREB => DeltaAirKind::StoreByte,
+            Rv64LoadStoreOpcode::STOREH => DeltaAirKind::StoreHalfword,
+            Rv64LoadStoreOpcode::STOREW => DeltaAirKind::StoreWord,
+            Rv64LoadStoreOpcode::STORED => DeltaAirKind::StoreDoubleword,
+            Rv64LoadStoreOpcode::LOADB => DeltaAirKind::LoadSignExtendByte,
+            Rv64LoadStoreOpcode::LOADH => DeltaAirKind::LoadSignExtendHalfword,
+            Rv64LoadStoreOpcode::LOADW => DeltaAirKind::LoadSignExtendWord,
         };
         let pattern = if matches!(
             op,
@@ -1494,7 +1518,17 @@ pub(crate) fn delta_post_write_value<F: PrimeField32>(
             }
             sign_extend_word(((v1 as u32 as i32) >> (v2 & 31)) as u32)
         }
-        DeltaAirKind::LoadStore | DeltaAirKind::LoadSignExtend => {
+        DeltaAirKind::LoadByte
+        | DeltaAirKind::LoadHalfword
+        | DeltaAirKind::LoadWord
+        | DeltaAirKind::LoadDoubleword
+        | DeltaAirKind::StoreByte
+        | DeltaAirKind::StoreHalfword
+        | DeltaAirKind::StoreWord
+        | DeltaAirKind::StoreDoubleword
+        | DeltaAirKind::LoadSignExtendByte
+        | DeltaAirKind::LoadSignExtendHalfword
+        | DeltaAirKind::LoadSignExtendWord => {
             if entry.flags & OPERAND_FLAG_WRITE_ENABLED == 0 {
                 return None;
             }
