@@ -604,7 +604,7 @@ fn lift_phantom(sys: SysPhantom, pc: u64) -> LiftedInstr {
 mod tests {
     use openvm_instructions::{
         instruction::Instruction,
-        riscv::{RV64_IMM_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+        riscv::{RV64_IMM_AS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
         LocalOpcode, DEFERRAL_AS, PUBLIC_VALUES_AS,
     };
     use openvm_riscv_transpiler::{

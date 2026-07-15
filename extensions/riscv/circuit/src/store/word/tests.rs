@@ -6,8 +6,8 @@ use openvm_circuit::arch::testing::{
 };
 use openvm_circuit::arch::testing::{TestBuilder, TestChipHarness, VmChipTestBuilder};
 #[cfg(feature = "cuda")]
-use openvm_instructions::{riscv::RV64_MEMORY_AS, PUBLIC_VALUES_AS};
-use openvm_instructions::{LocalOpcode, DEFERRAL_AS};
+use openvm_instructions::riscv::RV64_MEMORY_AS;
+use openvm_instructions::{LocalOpcode, DEFERRAL_AS, PUBLIC_VALUES_AS};
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, STOREW};
 use openvm_stark_backend::{
     p3_air::BaseAir,
