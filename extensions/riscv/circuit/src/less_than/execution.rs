@@ -150,8 +150,10 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_UNSIGNED: bool>(
     pre_compute: &LessThanPreCompute,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
-    let rs1 = exec_state.vm_read_bytes::<8>(RV64_REGISTER_AS, pre_compute.b as u32);
-    let rs2 = exec_state.vm_read_bytes::<8>(RV64_REGISTER_AS, pre_compute.rs2_ptr as u32);
+    let rs1 =
+        exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.b as u32);
+    let rs2 = exec_state
+        .vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.rs2_ptr as u32);
     let cmp_result = if IS_UNSIGNED {
         u64::from_le_bytes(rs1) < u64::from_le_bytes(rs2)
     } else {
