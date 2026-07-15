@@ -161,10 +161,9 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluWU16AdapterAir {
             )
             .eval(builder, local.rs2_as);
 
-        // Sign-extend the 32-bit result to 64 bits: `result_sign` is bit 15 of the most
-        // significant low-word limb. Decompose that limb as `low15 + result_sign * 2^15` and
-        // range-check `low15` to 15 bits; combined with the core's per-limb 16-bit range check,
-        // this forces `result_sign` to equal the limb's top bit.
+        // Sign-extend the 32-bit result to 64 bits. Decomposing the top result limb as
+        // `low15 + result_sign * 2^15`, with a 15-bit range check on `low15`, both proves that
+        // the limb is a canonical u16 and forces `result_sign` to equal its top bit.
         builder.assert_bool(local.result_sign);
         let result_high = ctx.writes[0][RV64_WORD_U16_LIMBS - 1].clone();
         let sign_weight = AB::Expr::from_u32(1 << (U16_BITS - 1));
