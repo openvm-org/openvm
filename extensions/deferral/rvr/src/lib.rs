@@ -27,11 +27,8 @@ pub type DeferralHashFn = Box<dyn Fn(u32, &[u8]) -> [u8; DEFERRAL_COMMIT_NUM_BYT
 
 /// Poseidon2 compression over deferral accumulator field elements.
 /// Values cross the crate boundary as canonical u32s.
-pub type DeferralCompressFn = Box<
-    dyn Fn([u32; DIGEST_WIDTH], [u32; DIGEST_WIDTH]) -> [u32; DIGEST_WIDTH]
-        + Send
-        + Sync,
->;
+pub type DeferralCompressFn =
+    Box<dyn Fn([u32; DIGEST_WIDTH], [u32; DIGEST_WIDTH]) -> [u32; DIGEST_WIDTH] + Send + Sync>;
 
 pub struct DeferralCtx {
     pub fns: Vec<Arc<DeferralFn>>,
@@ -258,9 +255,7 @@ impl RvrRuntimeExtension for DeferralRuntimeHooks {
 //
 // CALL writes new `(input_acc, output_acc)` values to DEFERRAL_AS.
 
-fn commit_bytes_to_field_values(
-    bytes: &[u8; DEFERRAL_COMMIT_NUM_BYTES],
-) -> [u32; DIGEST_WIDTH] {
+fn commit_bytes_to_field_values(bytes: &[u8; DEFERRAL_COMMIT_NUM_BYTES]) -> [u32; DIGEST_WIDTH] {
     let mut out = [0u32; DIGEST_WIDTH];
     for (dst, chunk) in out.iter_mut().zip(bytes.chunks_exact(4)) {
         *dst = u32::from_le_bytes(chunk.try_into().unwrap());
@@ -287,10 +282,7 @@ unsafe fn deferral_memory<'a, F: PrimeField32>(io: &'a mut OpenVmIoState<'_>) ->
     }
 }
 
-fn read_deferral_digest<F: PrimeField32>(
-    memory: &[F],
-    ptr: usize,
-) -> Option<[u32; DIGEST_WIDTH]> {
+fn read_deferral_digest<F: PrimeField32>(memory: &[F], ptr: usize) -> Option<[u32; DIGEST_WIDTH]> {
     let end = ptr.checked_add(DIGEST_WIDTH)?;
     let values = memory.get(ptr..end)?;
     Some(std::array::from_fn(|i| values[i].as_canonical_u32()))

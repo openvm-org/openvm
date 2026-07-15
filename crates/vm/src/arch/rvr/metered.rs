@@ -6,9 +6,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use openvm_instructions::{
-    riscv::RV64_MEMORY_AS, DEFERRAL_AS, MEMORY_PAGE_BITS, PUBLIC_VALUES_AS,
-};
+use openvm_instructions::{riscv::RV64_MEMORY_AS, DEFERRAL_AS, MEMORY_PAGE_BITS, PUBLIC_VALUES_AS};
 use rvr_openvm::{DEFERRAL_PAGE_BUF_CAP, MEM_PAGE_BUF_CAP, PV_PAGE_BUF_CAP};
 use rvr_openvm_lift::RvrRuntimeExtension;
 

@@ -10,7 +10,7 @@ use std::ffi::c_void;
 use openvm_instructions::riscv::RV64_MEMORY_AS;
 use openvm_platform::memory::MEM_SIZE;
 use rvr_openvm_lift::{ExtensionError, RvrRuntimeExtension};
-use rvr_state::{ExecutionStatus, MemoryError, Rv64, RvState, SuspenderState, TracerState};
+use rvr_state::{ExecutionStatus, Rv64, RvState, SuspenderState, TracerState};
 
 use super::{
     bridge::{
