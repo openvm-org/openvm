@@ -450,7 +450,11 @@ mod bn254 {
 #[cfg(feature = "bls12_381")]
 mod bls12_381 {
     #[cfg(feature = "rvr")]
-    use std::collections::{BTreeMap, BTreeSet};
+    use std::{
+        collections::{BTreeMap, BTreeSet},
+        ffi::OsString,
+        sync::Mutex,
+    };
 
     use eyre::Result;
     use halo2curves_axiom::{
@@ -519,6 +523,32 @@ mod bls12_381 {
     use rand08::SeedableRng;
 
     type F = BabyBear;
+
+    #[cfg(feature = "rvr")]
+    static RVR_COMPILE_ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    #[cfg(feature = "rvr")]
+    struct ArenaNativeEnvGuard(Option<OsString>);
+
+    #[cfg(feature = "rvr")]
+    impl ArenaNativeEnvGuard {
+        fn disable() -> Self {
+            let previous = std::env::var_os("OPENVM_RVR_ARENA_NATIVE");
+            std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
+            Self(previous)
+        }
+    }
+
+    #[cfg(feature = "rvr")]
+    impl Drop for ArenaNativeEnvGuard {
+        fn drop(&mut self) {
+            if let Some(previous) = self.0.take() {
+                std::env::set_var("OPENVM_RVR_ARENA_NATIVE", previous);
+            } else {
+                std::env::remove_var("OPENVM_RVR_ARENA_NATIVE");
+            }
+        }
+    }
 
     #[cfg(test)]
     pub fn get_testing_config() -> Rv64PairingConfig {
@@ -1123,6 +1153,9 @@ mod bls12_381 {
     #[cfg(feature = "rvr")]
     #[test]
     fn test_bls12_381_rvr_miller_loop_differential() -> Result<()> {
+        let _compile_env_lock = RVR_COMPILE_ENV_LOCK
+            .lock()
+            .expect("RVR compile environment lock poisoned");
         let mut config = get_testing_config();
         *config.as_mut() = test_system_config();
         config.as_mut().segmentation_max_memory = 512 * 1024 * 1024;
@@ -1181,6 +1214,9 @@ mod bls12_381 {
     #[cfg(feature = "rvr")]
     #[test]
     fn test_bls12_381_rvr_final_exp_hint_system_records() -> Result<()> {
+        let _compile_env_lock = RVR_COMPILE_ENV_LOCK
+            .lock()
+            .expect("RVR compile environment lock poisoned");
         let mut config = get_testing_config();
         *config.as_mut() = test_system_config();
         let elf = build_example_program_at_path_with_features(
@@ -1236,6 +1272,10 @@ mod bls12_381 {
             .flat_map(|word| word.to_le_bytes())
             .collect::<Vec<_>>();
 
+        // This fixture inspects the compact program and memory logs directly.
+        // Arena-native custom-family emission intentionally bypasses those log
+        // entries, so compile the target-less diagnostic route explicitly.
+        let _arena_native_env = ArenaNativeEnvGuard::disable();
         let (interp_vm, _) = VirtualMachine::new_with_keygen(
             test_cpu_engine(),
             Rv64PairingCpuBuilder,
