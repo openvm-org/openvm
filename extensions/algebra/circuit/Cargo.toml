@@ -51,6 +51,9 @@ openvm-riscv-adapters = { workspace = true, features = ["test-utils"] }
 openvm-pairing-guest = { workspace = true, features = ["halo2curves"] }
 test-case = { workspace = true }
 
+[build-dependencies]
+openvm-cuda-builder = { workspace = true, optional = true }
+
 [features]
 default = []
 tco = ["openvm-riscv-circuit/tco"]
@@ -60,8 +63,10 @@ rvr = [
     "openvm-riscv-circuit/rvr",
 ]
 cuda = [
+    "dep:openvm-cuda-builder",
     "dep:openvm-cuda-common",
     "dep:openvm-cuda-backend",
+    "openvm-mod-circuit-builder/cuda",
     "openvm-circuit-primitives/cuda",
     "openvm-circuit/cuda",
     "openvm-riscv-circuit/cuda",
