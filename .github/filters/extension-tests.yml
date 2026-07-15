@@ -1,3 +1,5 @@
+# Add an extension by defining a filter with the same name as its directory.
+# CPU and CUDA jobs are selected from these filters.
 shared: &shared
   - "crates/circuits/**"
   - "crates/vm/**"
@@ -9,11 +11,12 @@ shared: &shared
   - ".cargo/config.toml"
   - ".github/actions/sccache/**"
   - ".github/filters/extension-tests.yml"
+  - ".github/workflows/extension-tests.group.yml"
   - ".github/workflows/extension-tests.yml"
   - "ci/install-openvm-toolchain.sh"
 cuda:
   - ".github/actions/rust-cache-cuda/**"
-  - ".github/workflows/extension-tests.cuda*.yml"
+  - ".github/workflows/extension-tests.cuda.yml"
   - "scripts/gpu_driver_setup.sh"
 riscv: &riscv
   - *shared

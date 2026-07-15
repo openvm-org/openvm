@@ -29,7 +29,8 @@ on:
       - ".github/actions/sccache/**"
       - ".github/actions/rust-cache-cuda/**"
       - ".github/filters/guest-lib-tests.yml"
-      - ".github/workflows/guest-lib-tests.cuda*.yml"
+      - ".github/workflows/guest-lib-tests.group.yml"
+      - ".github/workflows/guest-lib-tests.cuda.yml"
       - "crates/sdk/guest/fib/**"
       - "ci/install-openvm-toolchain.sh"
       - "scripts/gpu_driver_setup.sh"
@@ -53,14 +54,8 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
+      crates: ${{ steps.tests.outputs.changes }}
       cuda: ${{ steps.tests.outputs.cuda }}
-      sha2: ${{ steps.tests.outputs.sha2 }}
-      keccak256: ${{ steps.tests.outputs.keccak256 }}
-      ff_derive: ${{ steps.tests.outputs.ff_derive }}
-      k256: ${{ steps.tests.outputs.k256 }}
-      p256: ${{ steps.tests.outputs.p256 }}
-      pairing: ${{ steps.tests.outputs.pairing }}
-      verify_stark: ${{ steps.tests.outputs['verify-stark'] }}
     steps:
       - uses: actions/checkout@v5
       - uses: dorny/paths-filter@v3
@@ -71,42 +66,47 @@ jobs:
   hashes-cuda:
     name: hashes
     needs: changes
-    if: needs.changes.outputs.cuda == 'true' || needs.changes.outputs.sha2 == 'true' || needs.changes.outputs.keccak256 == 'true'
-    uses: ./.github/workflows/guest-lib-tests.cuda.group.yml
+    if: needs.changes.outputs.cuda == 'true' || contains(fromJSON(needs.changes.outputs.crates), 'sha2') || contains(fromJSON(needs.changes.outputs.crates), 'keccak256')
+    uses: ./.github/workflows/guest-lib-tests.group.yml
     with:
-      group: hashes
-      sha2: ${{ needs.changes.outputs.cuda == 'true' || needs.changes.outputs.sha2 == 'true' }}
-      keccak256: ${{ needs.changes.outputs.cuda == 'true' || needs.changes.outputs.keccak256 == 'true' }}
+      runner_id: cuda-hashes
+      crates: ${{ needs.changes.outputs.cuda == 'true' && 'all' || join(fromJSON(needs.changes.outputs.crates), ' ') }}
+      mode: cuda
+      group_crates: sha2 keccak256
     secrets: inherit
 
   verify-stark-cuda:
     name: verify-stark
     needs: changes
-    if: needs.changes.outputs.cuda == 'true' || needs.changes.outputs.verify_stark == 'true'
-    uses: ./.github/workflows/guest-lib-tests.cuda.group.yml
+    if: needs.changes.outputs.cuda == 'true' || contains(fromJSON(needs.changes.outputs.crates), 'verify-stark')
+    uses: ./.github/workflows/guest-lib-tests.group.yml
     with:
-      group: verify-stark
-      verify_stark: true
+      runner_id: cuda-verify-stark
+      crates: ${{ needs.changes.outputs.cuda == 'true' && 'all' || join(fromJSON(needs.changes.outputs.crates), ' ') }}
+      mode: cuda
+      group_crates: verify-stark
     secrets: inherit
 
   curves-cuda:
     name: curves
     needs: changes
-    if: needs.changes.outputs.cuda == 'true' || needs.changes.outputs.k256 == 'true' || needs.changes.outputs.p256 == 'true'
-    uses: ./.github/workflows/guest-lib-tests.cuda.group.yml
+    if: needs.changes.outputs.cuda == 'true' || contains(fromJSON(needs.changes.outputs.crates), 'k256') || contains(fromJSON(needs.changes.outputs.crates), 'p256')
+    uses: ./.github/workflows/guest-lib-tests.group.yml
     with:
-      group: curves
-      k256: ${{ needs.changes.outputs.cuda == 'true' || needs.changes.outputs.k256 == 'true' }}
-      p256: ${{ needs.changes.outputs.cuda == 'true' || needs.changes.outputs.p256 == 'true' }}
+      runner_id: cuda-curves
+      crates: ${{ needs.changes.outputs.cuda == 'true' && 'all' || join(fromJSON(needs.changes.outputs.crates), ' ') }}
+      mode: cuda
+      group_crates: k256 p256
     secrets: inherit
 
   algebra-cuda:
     name: algebra
     needs: changes
-    if: needs.changes.outputs.cuda == 'true' || needs.changes.outputs.ff_derive == 'true' || needs.changes.outputs.pairing == 'true'
-    uses: ./.github/workflows/guest-lib-tests.cuda.group.yml
+    if: needs.changes.outputs.cuda == 'true' || contains(fromJSON(needs.changes.outputs.crates), 'ff_derive') || contains(fromJSON(needs.changes.outputs.crates), 'pairing')
+    uses: ./.github/workflows/guest-lib-tests.group.yml
     with:
-      group: algebra
-      ff_derive: ${{ needs.changes.outputs.cuda == 'true' || needs.changes.outputs.ff_derive == 'true' }}
-      pairing: ${{ needs.changes.outputs.cuda == 'true' || needs.changes.outputs.pairing == 'true' }}
+      runner_id: cuda-algebra
+      crates: ${{ needs.changes.outputs.cuda == 'true' && 'all' || join(fromJSON(needs.changes.outputs.crates), ' ') }}
+      mode: cuda
+      group_crates: ff_derive pairing
     secrets: inherit

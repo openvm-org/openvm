@@ -1,0 +1,171 @@
+name: Extension Test Group
+
+on:
+  workflow_call:
+    inputs:
+      runner_id:
+        required: true
+        type: string
+      machine_type:
+        required: true
+        type: string
+      extensions:
+        required: true
+        type: string
+      mode:
+        type: string
+        default: default
+      cuda_group:
+        type: string
+        default: ""
+
+env:
+  CARGO_TERM_COLOR: always
+  OPENVM_SKIP_DEBUG: "1"
+
+jobs:
+  tests:
+    name: Run tests
+    runs-on:
+      - runs-on=${{ github.run_id }}-extension-tests-${{ github.run_attempt }}-${{ inputs.runner_id }}/${{ inputs.machine_type }}/extras=s3-cache
+
+    steps:
+      - uses: runs-on/action@v2
+        with:
+          sccache: s3
+      - name: Load SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: |
+            ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
+      - uses: actions/checkout@v5
+      - name: Init rvr FFI submodules
+        if: ${{ inputs.mode != 'cuda' && inputs.mode != 'default' }}
+        run: |
+          git submodule update --init --depth 1 extensions/keccak256/rvr/ffi/openssl
+          git submodule update --init --depth 1 extensions/algebra/rvr/ffi/modular/secp256k1
+      - uses: dtolnay/rust-toolchain@stable
+        env:
+          RUSTUP_PERMIT_COPY_RENAME: "1"
+      - uses: ./.github/actions/sccache
+
+      # TODO: remove once https://github.com/runs-on/runner-images-for-aws/issues/55 is fixed
+      - name: Setup GPU driver
+        if: inputs.mode == 'cuda'
+        run: bash ./scripts/gpu_driver_setup.sh
+
+      - uses: Swatinem/rust-cache@v2
+        if: inputs.mode != 'cuda'
+        with:
+          cache-on-failure: true
+      - uses: ./.github/actions/rust-cache-cuda
+        if: inputs.mode == 'cuda'
+        with:
+          cache-on-failure: true
+      - uses: taiki-e/install-action@nextest
+
+      - name: Install clang-22 and lld (required for rvr)
+        if: ${{ inputs.mode != 'cuda' && inputs.mode != 'default' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y lsb-release wget software-properties-common gnupg
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 22
+          sudo apt-get install -y lld
+
+      - name: Check CUDA status and set environment variables
+        if: inputs.mode == 'cuda'
+        run: |
+          nvidia-smi
+          nvidia-smi -L
+          nvcc --version
+          echo "CUDA_ARCH=86,89,120" >> $GITHUB_ENV
+          echo "VPMM_PAGES=1" >> $GITHUB_ENV
+
+      - name: Run extension tests
+        env:
+          SELECTED_EXTENSIONS: ${{ inputs.extensions }}
+        run: |
+          if [[ "$SELECTED_EXTENSIONS" == "all" ]]; then
+            extensions=()
+            for manifest in extensions/*/circuit/Cargo.toml; do
+              extension="${manifest#extensions/}"
+              extensions+=("${extension%%/*}")
+            done
+          else
+            read -r -a extensions <<< "$SELECTED_EXTENSIONS"
+          fi
+
+          for extension in "${extensions[@]}"; do
+            [[ -f "extensions/$extension/circuit/Cargo.toml" ]] || continue
+            if [[ "${{ inputs.cuda_group }}" == "riscv" && "$extension" != "riscv" ]]; then
+              continue
+            elif [[ "${{ inputs.cuda_group }}" == "extensions" && "$extension" == "riscv" ]]; then
+              continue
+            fi
+
+            echo "::group::Running circuit tests for $extension"
+            pushd "extensions/$extension/circuit"
+            if [[ "${{ inputs.mode }}" == "cuda" ]]; then
+              CUDA_OPT_LEVEL=3 cargo nextest run --cargo-profile=fast cuda --features=cuda,touchemall --profile=heavy --no-tests=pass
+            else
+              test_threads=(--test-threads=32)
+              if [[ "$extension" == "algebra" ]]; then
+                test_threads=(--test-threads=4)
+              fi
+
+              case "${{ inputs.mode }}" in
+                unprotected)
+                  cargo nextest run --cargo-profile=fast --features=rvr,openvm-circuit/unprotected "${test_threads[@]}" --no-tests=pass --success-output=immediate
+                  ;;
+                rvr)
+                  cargo nextest run --cargo-profile=fast --features=rvr "${test_threads[@]}" --no-tests=pass --success-output=immediate
+                  ;;
+                default)
+                  cargo nextest run --cargo-profile=fast "${test_threads[@]}" --no-tests=pass --success-output=immediate
+                  ;;
+              esac
+            fi
+            popd
+            echo "::endgroup::"
+
+            if [[ "${{ inputs.mode }}" == "default" && -f "extensions/$extension/guest/Cargo.toml" ]]; then
+              echo "::group::Running guest tests for $extension"
+              guest_feature_args=()
+              if [[ "$extension" == "pairing" ]]; then
+                guest_feature_args=(--features=bn254,bls12_381,halo2curves)
+              fi
+              pushd "extensions/$extension/guest"
+              cargo nextest run --cargo-profile=fast "${guest_feature_args[@]}" --no-tests=pass
+              popd
+              echo "::endgroup::"
+            fi
+
+            if [[ -f "extensions/$extension/tests/Cargo.toml" ]]; then
+              echo "::group::Running integration tests for $extension"
+              pushd "extensions/$extension/tests"
+              "$GITHUB_WORKSPACE/ci/install-openvm-toolchain.sh"
+              if [[ "${{ inputs.mode }}" == "cuda" ]]; then
+                CUDA_OPT_LEVEL=3 cargo nextest run --cargo-profile=fast --features=cuda --profile=heavy --no-tests=pass
+              else
+                case "${{ inputs.mode }}" in
+                  unprotected)
+                    cargo nextest run --cargo-profile=fast --features=rvr,unprotected --profile=heavy --no-tests=pass --success-output=immediate
+                    ;;
+                  rvr)
+                    cargo nextest run --cargo-profile=fast --features=rvr --profile=heavy --no-tests=pass --success-output=immediate
+                    ;;
+                  default)
+                    cargo nextest run --cargo-profile=fast --profile=heavy --no-tests=pass --success-output=immediate
+                    ;;
+                esac
+              fi
+              popd
+              echo "::endgroup::"
+            fi
+          done
+
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true

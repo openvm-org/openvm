@@ -18,6 +18,7 @@ on:
       - ".cargo/config.toml"
       - ".github/actions/sccache/**"
       - ".github/filters/extension-tests.yml"
+      - ".github/workflows/extension-tests.group.yml"
       - ".github/workflows/extension-tests.yml"
       - "ci/install-openvm-toolchain.sh"
   pull_request:
@@ -55,99 +56,31 @@ jobs:
     strategy:
       matrix:
         extension: ${{ fromJSON(needs.changes.outputs.extensions) }}
-        mode: [default, rvr, unprotected]
+        mode: [default, rvr]
         exclude:
           - { extension: shared, mode: default }
           - { extension: shared, mode: rvr }
-          - { extension: shared, mode: unprotected }
           - { extension: cuda, mode: default }
           - { extension: cuda, mode: rvr }
-          - { extension: cuda, mode: unprotected }
-          - { extension: keccak256, mode: unprotected }
-          - { extension: sha2, mode: unprotected }
-          - { extension: bigint, mode: unprotected }
-          - { extension: algebra, mode: unprotected }
-          - { extension: ecc, mode: unprotected }
-          - { extension: pairing, mode: unprotected }
-          - { extension: deferral, mode: unprotected }
         # TODO(aot): re-enable AOT CI separately.
       # Ensure tests run in parallel even if one fails
       fail-fast: false
+    uses: ./.github/workflows/extension-tests.group.yml
+    with:
+      runner_id: cpu-${{ strategy.job-index }}
+      machine_type: family=c8i-flex.16xlarge+c8i.16xlarge+c8a.16xlarge+c7i.16xlarge+c7a.16xlarge/image=ubuntu24-full-x64/volume=80gb
+      extensions: ${{ matrix.extension }}
+      mode: ${{ matrix.mode }}
+    secrets: inherit
 
-    runs-on:
-      - runs-on=${{ github.run_id }}-extension-tests-${{ github.run_attempt }}-${{ strategy.job-index }}/family=c8i-flex.16xlarge+c8i.16xlarge+c8a.16xlarge+c7i.16xlarge+c7a.16xlarge/image=ubuntu24-full-x64/volume=80gb/extras=s3-cache
-
-    steps:
-      - uses: runs-on/action@v2
-        with:
-          sccache: s3
-      - name: Load SSH key
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: |
-            ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
-      - uses: actions/checkout@v5
-      - name: Init rvr FFI submodules
-        if: matrix.mode != 'default'
-        run: |
-          git submodule update --init --depth 1 extensions/keccak256/rvr/ffi/openssl
-          git submodule update --init --depth 1 extensions/algebra/rvr/ffi/modular/secp256k1
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: ./.github/actions/sccache
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-      - uses: taiki-e/install-action@nextest
-
-      - name: Install clang-22 and lld (required for rvr)
-        if: matrix.mode != 'default'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y lsb-release wget software-properties-common gnupg
-          wget https://apt.llvm.org/llvm.sh
-          chmod +x llvm.sh
-          sudo ./llvm.sh 22
-          sudo apt-get install -y lld
-
-      - name: Run ${{ format('{0}-{1}', matrix.extension, matrix.mode) }} circuit crate tests
-        working-directory: extensions/${{ matrix.extension }}/circuit
-        run: |
-          TEST_THREADS="--test-threads=32"
-          if [[ "${{ matrix.extension }}" == "algebra" ]]; then
-            TEST_THREADS="--test-threads=4"
-          fi
-          if [[ "${{ matrix.mode }}" == 'unprotected' ]]; then
-            cargo nextest run --cargo-profile=fast --features rvr,openvm-circuit/unprotected $TEST_THREADS --no-tests=pass --success-output=immediate
-          elif [[ "${{ matrix.mode }}" == 'rvr' ]]; then
-            cargo nextest run --cargo-profile=fast --features rvr $TEST_THREADS --no-tests=pass --success-output=immediate
-          else
-            cargo nextest run --cargo-profile=fast $TEST_THREADS --no-tests=pass --success-output=immediate
-          fi
-
-        # We only need to run guest crate tests on CPU since we are not testing prover functionality
-      - name: Run ${{ matrix.extension }} guest crate tests
-        if: matrix.mode == 'default' && hashFiles(format('extensions/{0}/guest/Cargo.toml', matrix.extension)) != ''
-        working-directory: extensions/${{ matrix.extension }}/guest
-        run: |
-          GUEST_FEATURE_ARGS=""
-          if [[ "${{ matrix.extension }}" == "pairing" ]]; then
-            GUEST_FEATURE_ARGS="--features=bn254,bls12_381,halo2curves"
-          fi
-          cargo nextest run --cargo-profile=fast  $GUEST_FEATURE_ARGS --no-tests=pass
-
-      - name: Run ${{ format('{0}-{1}', matrix.extension, matrix.mode) }} integration tests
-        if: hashFiles(format('extensions/{0}/tests/Cargo.toml', matrix.extension)) != ''
-        working-directory: extensions/${{ matrix.extension }}/tests
-        run: |
-          "$GITHUB_WORKSPACE/ci/install-openvm-toolchain.sh"
-          if [[ "${{ matrix.mode }}" == 'unprotected' ]]; then
-            cargo nextest run --cargo-profile=fast --features rvr,unprotected --profile=heavy --no-tests=pass --success-output=immediate
-          elif [[ "${{ matrix.mode }}" == 'rvr' ]]; then
-            cargo nextest run --cargo-profile=fast --features rvr --profile=heavy --no-tests=pass --success-output=immediate
-          else
-            cargo nextest run --cargo-profile=fast --profile=heavy --no-tests=pass --success-output=immediate
-          fi
-
-      - name: sccache stats
-        if: always()
-        run: sccache --show-stats || true
+  riscv-unprotected:
+    needs: changes
+    if: contains(fromJSON(needs.changes.outputs.extensions), 'riscv')
+    name: RISC-V (unprotected)
+    uses: ./.github/workflows/extension-tests.group.yml
+    with:
+      runner_id: cpu-riscv-unprotected
+      machine_type: family=c8i-flex.16xlarge+c8i.16xlarge+c8a.16xlarge+c7i.16xlarge+c7a.16xlarge/image=ubuntu24-full-x64/volume=80gb
+      extensions: riscv
+      mode: unprotected
+    secrets: inherit

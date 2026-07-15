@@ -1,3 +1,5 @@
+# Add a guest library by defining a filter with the same name as its directory.
+# CPU jobs are automatic; add CUDA libraries to one group in guest-lib-tests.cuda.yml.
 shared: &shared
   - "crates/circuits/**"
   - "crates/vm/**"
@@ -10,12 +12,13 @@ shared: &shared
   - ".cargo/config.toml"
   - ".github/actions/sccache/**"
   - ".github/filters/guest-lib-tests.yml"
+  - ".github/workflows/guest-lib-tests.group.yml"
   - ".github/workflows/guest-lib-tests.yml"
   - "crates/sdk/guest/fib/**"
   - "ci/install-openvm-toolchain.sh"
 cuda:
   - ".github/actions/rust-cache-cuda/**"
-  - ".github/workflows/guest-lib-tests.cuda*.yml"
+  - ".github/workflows/guest-lib-tests.cuda.yml"
   - "scripts/gpu_driver_setup.sh"
 sha2:
   - *shared

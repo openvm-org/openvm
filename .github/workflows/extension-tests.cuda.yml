@@ -19,7 +19,8 @@ on:
       - ".github/actions/sccache/**"
       - ".github/actions/rust-cache-cuda/**"
       - ".github/filters/extension-tests.yml"
-      - ".github/workflows/extension-tests.cuda*.yml"
+      - ".github/workflows/extension-tests.group.yml"
+      - ".github/workflows/extension-tests.cuda.yml"
       - "ci/install-openvm-toolchain.sh"
       - "scripts/gpu_driver_setup.sh"
   pull_request:
@@ -48,15 +49,9 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
+      extensions: ${{ steps.tests.outputs.changes }}
       cuda: ${{ steps.tests.outputs.cuda }}
       riscv: ${{ steps.tests.outputs.riscv }}
-      keccak256: ${{ steps.tests.outputs.keccak256 }}
-      sha2: ${{ steps.tests.outputs.sha2 }}
-      bigint: ${{ steps.tests.outputs.bigint }}
-      algebra: ${{ steps.tests.outputs.algebra }}
-      ecc: ${{ steps.tests.outputs.ecc }}
-      pairing: ${{ steps.tests.outputs.pairing }}
-      deferral: ${{ steps.tests.outputs.deferral }}
     steps:
       - uses: actions/checkout@v5
       - uses: dorny/paths-filter@v3
@@ -68,35 +63,24 @@ jobs:
     name: RISC-V
     needs: changes
     if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.cuda == 'true' || needs.changes.outputs.riscv == 'true'
-    uses: ./.github/workflows/extension-tests.cuda.group.yml
+    uses: ./.github/workflows/extension-tests.group.yml
     with:
-      group: riscv
+      runner_id: cuda-riscv
       machine_type: ${{ inputs.machine_type || 'image=ubuntu24-gpu-x64/family=g7.2xlarge+g6.2xlarge+g5.2xlarge/volume=40gb/spot=price-capacity-optimized' }}
-      riscv: true
+      extensions: ${{ (github.event_name == 'workflow_dispatch' || needs.changes.outputs.cuda == 'true') && 'all' || join(fromJSON(needs.changes.outputs.extensions), ' ') }}
+      mode: cuda
+      cuda_group: riscv
     secrets: inherit
 
   extensions-cuda:
     name: non-RISC-V
     needs: changes
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      needs.changes.outputs.cuda == 'true' ||
-      needs.changes.outputs.keccak256 == 'true' ||
-      needs.changes.outputs.sha2 == 'true' ||
-      needs.changes.outputs.bigint == 'true' ||
-      needs.changes.outputs.algebra == 'true' ||
-      needs.changes.outputs.ecc == 'true' ||
-      needs.changes.outputs.pairing == 'true' ||
-      needs.changes.outputs.deferral == 'true'
-    uses: ./.github/workflows/extension-tests.cuda.group.yml
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.cuda == 'true' || needs.changes.outputs.extensions != '[]'
+    uses: ./.github/workflows/extension-tests.group.yml
     with:
-      group: extensions
+      runner_id: cuda-extensions
       machine_type: ${{ inputs.machine_type || 'image=ubuntu24-gpu-x64/family=g7.2xlarge+g6.2xlarge+g5.2xlarge/volume=40gb/spot=price-capacity-optimized' }}
-      keccak256: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.cuda == 'true' || needs.changes.outputs.keccak256 == 'true' }}
-      sha2: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.cuda == 'true' || needs.changes.outputs.sha2 == 'true' }}
-      bigint: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.cuda == 'true' || needs.changes.outputs.bigint == 'true' }}
-      algebra: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.cuda == 'true' || needs.changes.outputs.algebra == 'true' }}
-      ecc: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.cuda == 'true' || needs.changes.outputs.ecc == 'true' }}
-      pairing: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.cuda == 'true' || needs.changes.outputs.pairing == 'true' }}
-      deferral: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.cuda == 'true' || needs.changes.outputs.deferral == 'true' }}
+      extensions: ${{ (github.event_name == 'workflow_dispatch' || needs.changes.outputs.cuda == 'true') && 'all' || join(fromJSON(needs.changes.outputs.extensions), ' ') }}
+      mode: cuda
+      cuda_group: extensions
     secrets: inherit

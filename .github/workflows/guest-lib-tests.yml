@@ -28,6 +28,7 @@ on:
       - ".cargo/config.toml"
       - ".github/actions/sccache/**"
       - ".github/filters/guest-lib-tests.yml"
+      - ".github/workflows/guest-lib-tests.group.yml"
       - ".github/workflows/guest-lib-tests.yml"
       - "crates/sdk/guest/fib/**"
       - "ci/install-openvm-toolchain.sh"
@@ -75,59 +76,10 @@ jobs:
           - { crate: verify-stark, mode: rvr }
       # Ensure tests run in parallel even if one fails
       fail-fast: false
-
-    runs-on:
-      - runs-on=${{ github.run_id }}-guest-lib-tests-${{ github.run_attempt }}-${{ strategy.job-index }}/family=c8i-flex.16xlarge+c8i.16xlarge+c8a.16xlarge+c7i.16xlarge+c7a.16xlarge/image=ubuntu24-full-x64/extras=s3-cache
-
-    steps:
-      - uses: runs-on/action@v2
-        with:
-          sccache: s3
-      - name: Load SSH key
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: |
-            ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
-      - uses: actions/checkout@v5
-      - name: Init rvr FFI submodules
-        if: matrix.mode == 'rvr'
-        run: |
-          git submodule update --init --depth 1 extensions/keccak256/rvr/ffi/openssl
-          git submodule update --init --depth 1 extensions/algebra/rvr/ffi/modular/secp256k1
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: ./.github/actions/sccache
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-      - uses: taiki-e/install-action@nextest
-
-      - name: Install clang-22 and lld (required for rvr)
-        if: matrix.mode == 'rvr'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y lsb-release wget software-properties-common gnupg
-          wget https://apt.llvm.org/llvm.sh
-          chmod +x llvm.sh
-          sudo ./llvm.sh 22
-          sudo apt-get install -y lld
-
-      - name: Run ${{ format('{0}-{1}', matrix.crate, matrix.mode) }} guest library tests
-        working-directory: guest-libs/${{ matrix.crate == 'verify-stark' && 'verify-stark/circuit' || matrix.crate }}
-        run: |
-          "$GITHUB_WORKSPACE/ci/install-openvm-toolchain.sh"
-          EXTRA_ARGS=()
-          if [[ "${{ matrix.mode }}" == 'rvr' ]]; then
-            if [[ "${{ matrix.crate }}" == "pairing" ]]; then
-              EXTRA_ARGS+=(--features=bn254,bls12_381,rvr -E 'not test(fallback)')
-            else
-              EXTRA_ARGS+=(--features=rvr)
-            fi
-          elif [[ "${{ matrix.crate }}" == "pairing" ]]; then
-            EXTRA_ARGS+=(--features=bn254,bls12_381 -E 'not test(fallback)')
-          fi
-
-          cargo nextest run --cargo-profile=fast "${EXTRA_ARGS[@]}" --no-tests=pass --test-threads=1
-
-      - name: sccache stats
-        if: always()
-        run: sccache --show-stats || true
+    uses: ./.github/workflows/guest-lib-tests.group.yml
+    with:
+      runner_id: cpu-${{ strategy.job-index }}
+      machine_type: family=c8i-flex.16xlarge+c8i.16xlarge+c8a.16xlarge+c7i.16xlarge+c7a.16xlarge/image=ubuntu24-full-x64
+      crates: ${{ matrix.crate }}
+      mode: ${{ matrix.mode }}
+    secrets: inherit
