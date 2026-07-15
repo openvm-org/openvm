@@ -545,7 +545,6 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
                 range_checker,
                 BaseAluWImmOpcode::CLASS_OFFSET,
                 BaseAluWImmOpcode::ADDIW as usize,
-                false,
             ),
         );
         inventory.add_air(addiw);
@@ -740,7 +739,6 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
                 range_checker,
                 BaseAluImmOpcode::CLASS_OFFSET,
                 BaseAluImmOpcode::ADDI as usize,
-                true,
             ),
         );
         inventory.add_air(addi);
@@ -892,7 +890,6 @@ where
             AddIFiller::new(
                 Rv64BaseAluWImmU16AdapterFiller::new(range_checker.clone()),
                 range_checker.clone(),
-                false,
             ),
             mem_helper.clone(),
         );
@@ -1091,11 +1088,7 @@ where
 
         inventory.next_air::<Rv64AddIAir>()?;
         let addi = Rv64AddIChip::new(
-            AddIFiller::new(
-                Rv64BaseAluImmU16AdapterFiller::new(),
-                range_checker.clone(),
-                true,
-            ),
+            AddIFiller::new(Rv64BaseAluImmU16AdapterFiller::new(), range_checker.clone()),
             mem_helper.clone(),
         );
         inventory.add_executor_chip(addi);

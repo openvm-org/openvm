@@ -40,27 +40,38 @@ pub struct AddICoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 
 #[derive(Copy, Clone, Debug, derive_new::new, ColumnsAir)]
 #[columns_via(AddICoreCols<u8, NUM_LIMBS, LIMB_BITS>)]
-pub struct AddICoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct AddICoreAir<
+    const NUM_LIMBS: usize,
+    const LIMB_BITS: usize,
+    const RANGE_CHECK_TOP_LIMB: bool,
+> {
     pub range_bus: VariableRangeCheckerBus,
     pub offset: usize,
     pub local_opcode: usize,
-    pub range_most_significant_limb: bool,
 }
 
-impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
-    for AddICoreAir<NUM_LIMBS, LIMB_BITS>
+impl<
+        F: Field,
+        const NUM_LIMBS: usize,
+        const LIMB_BITS: usize,
+        const RANGE_CHECK_TOP_LIMB: bool,
+    > BaseAir<F> for AddICoreAir<NUM_LIMBS, LIMB_BITS, RANGE_CHECK_TOP_LIMB>
 {
     fn width(&self) -> usize {
         AddICoreCols::<F, NUM_LIMBS, LIMB_BITS>::width()
     }
 }
-impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAirWithPublicValues<F>
-    for AddICoreAir<NUM_LIMBS, LIMB_BITS>
+impl<
+        F: Field,
+        const NUM_LIMBS: usize,
+        const LIMB_BITS: usize,
+        const RANGE_CHECK_TOP_LIMB: bool,
+    > BaseAirWithPublicValues<F> for AddICoreAir<NUM_LIMBS, LIMB_BITS, RANGE_CHECK_TOP_LIMB>
 {
 }
 
-impl<AB, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreAir<AB, I>
-    for AddICoreAir<NUM_LIMBS, LIMB_BITS>
+impl<AB, I, const NUM_LIMBS: usize, const LIMB_BITS: usize, const RANGE_CHECK_TOP_LIMB: bool>
+    VmCoreAir<AB, I> for AddICoreAir<NUM_LIMBS, LIMB_BITS, RANGE_CHECK_TOP_LIMB>
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
@@ -104,7 +115,7 @@ where
             builder.when(cols.is_valid).assert_bool(carry[i].clone());
         }
 
-        let range_limb_count = NUM_LIMBS - usize::from(!self.range_most_significant_limb);
+        let range_limb_count = NUM_LIMBS - usize::from(!RANGE_CHECK_TOP_LIMB);
         for &rd_limb in &cols.rd[..range_limb_count] {
             self.range_bus
                 .range_check(rd_limb, LIMB_BITS)
@@ -151,10 +162,14 @@ pub struct AddIExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 }
 
 #[derive(derive_new::new)]
-pub struct AddIFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct AddIFiller<
+    A,
+    const NUM_LIMBS: usize,
+    const LIMB_BITS: usize,
+    const RANGE_CHECK_TOP_LIMB: bool,
+> {
     adapter: A,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
-    pub range_most_significant_limb: bool,
 }
 
 impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> PreflightExecutor<F, RA>
@@ -220,8 +235,8 @@ where
     }
 }
 
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F>
-    for AddIFiller<A, NUM_LIMBS, LIMB_BITS>
+impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize, const RANGE_CHECK_TOP_LIMB: bool>
+    TraceFiller<F> for AddIFiller<A, NUM_LIMBS, LIMB_BITS, RANGE_CHECK_TOP_LIMB>
 where
     F: PrimeField32,
     A: 'static + AdapterTraceFiller<F>,
@@ -242,7 +257,7 @@ where
             .add_count(record.imm_low11 as u32, 11);
         core_row.rs1 = record.rs1.map(F::from_u16);
         core_row.rd = rd.map(F::from_u16);
-        let range_limb_count = NUM_LIMBS - usize::from(!self.range_most_significant_limb);
+        let range_limb_count = NUM_LIMBS - usize::from(!RANGE_CHECK_TOP_LIMB);
         for &rd_val in &rd[..range_limb_count] {
             self.range_checker_chip.add_count(rd_val as u32, LIMB_BITS);
         }

@@ -20,7 +20,7 @@ template <typename T, size_t NUM_LIMBS> struct AddICoreCols {
     T is_valid;
 };
 
-template <size_t NUM_LIMBS, size_t LIMB_BITS, bool RANGE_MOST_SIGNIFICANT_LIMB = true>
+template <size_t NUM_LIMBS, size_t LIMB_BITS, bool RANGE_CHECK_TOP_LIMB>
 struct AddICore {
     static_assert(NUM_LIMBS > 0 && LIMB_BITS >= 12 && LIMB_BITS <= sizeof(uint16_t) * 8);
     static constexpr uint32_t LIMB_BASE = 1u << LIMB_BITS;
@@ -60,7 +60,7 @@ struct AddICore {
 
         range_checker.add_count(record.imm_low11, 11);
 #pragma unroll
-        for (size_t i = 0; i < NUM_LIMBS - !RANGE_MOST_SIGNIFICANT_LIMB; i++) {
+        for (size_t i = 0; i < NUM_LIMBS - !RANGE_CHECK_TOP_LIMB; i++) {
             range_checker.add_count(rd[i], LIMB_BITS);
         }
     }
