@@ -8,7 +8,9 @@ mod tests {
         Fp2Extension, Rv64ModularBuilder, Rv64ModularConfig, Rv64ModularWithFp2Builder,
         Rv64ModularWithFp2Config,
     };
-    use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
+    use openvm_algebra_transpiler::{
+        Fp2Opcode, Fp2TranspilerExtension, ModularTranspilerExtension,
+    };
     use openvm_circuit::utils::{air_test, test_system_config};
     use openvm_ecc_circuit::SECP256K1_CONFIG;
     use openvm_instructions::exe::VmExe;
@@ -29,7 +31,7 @@ mod tests {
     use std::{collections::BTreeMap, sync::Arc};
 
     #[cfg(feature = "rvr")]
-    use openvm_algebra_circuit::Rv64ModularCpuBuilder;
+    use openvm_algebra_circuit::{Rv64ModularCpuBuilder, Rv64ModularWithFp2CpuBuilder};
     #[cfg(feature = "rvr")]
     use openvm_circuit::arch::rvr::preflight::RvrArenaNativeTarget;
     #[cfg(feature = "rvr")]
@@ -83,6 +85,20 @@ mod tests {
     }
 
     #[cfg(feature = "rvr")]
+    fn build_rvr_fp2_exe(config: &Rv64ModularWithFp2Config, example: &str) -> Result<VmExe<F>> {
+        let elf = build_example_program_at_path(get_programs_dir!(), example, config)?;
+        Ok(VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
+                .with_extension(Fp2TranspilerExtension)
+                .with_extension(ModularTranspilerExtension),
+        )?)
+    }
+
+    #[cfg(feature = "rvr")]
     fn assert_system_records_eq(label: &str, interp: &SystemRecords<F>, rvr: &SystemRecords<F>) {
         assert_eq!(interp.from_state, rvr.from_state, "{label}: from_state");
         assert_eq!(interp.to_state, rvr.to_state, "{label}: to_state");
@@ -95,6 +111,34 @@ mod tests {
             interp.touched_memory, rvr.touched_memory,
             "{label}: touched_memory"
         );
+    }
+
+    #[cfg(feature = "rvr")]
+    fn fp2_air_ids(
+        exe: &VmExe<F>,
+        pc_to_air_idx: &[Option<usize>],
+        num_moduli: usize,
+    ) -> Vec<usize> {
+        let mut ids = exe
+            .program
+            .instructions_and_debug_infos
+            .iter()
+            .zip(pc_to_air_idx)
+            .filter_map(|(slot, &air_idx)| {
+                let (instruction, _) = slot.as_ref()?;
+                let opcode = instruction.opcode.as_usize();
+                (opcode >= Fp2Opcode::CLASS_OFFSET).then_some(())?;
+                let relative = opcode - Fp2Opcode::CLASS_OFFSET;
+                let opcode_count = Fp2Opcode::SETUP_MULDIV as usize + 1;
+                (relative < num_moduli * opcode_count).then_some(())?;
+                let local = relative % opcode_count;
+                (local <= Fp2Opcode::SETUP_MULDIV as usize).then_some(air_idx?)
+            })
+            .collect::<Vec<_>>();
+        ids.sort_unstable();
+        ids.dedup();
+        assert_eq!(ids.len(), 2, "Fp2 AddSub and MulDiv AIRs must be mapped");
+        ids
     }
 
     #[cfg(feature = "rvr")]
@@ -546,6 +590,277 @@ mod tests {
         (output.system_records, arenas)
     }
 
+    #[cfg(feature = "rvr")]
+    fn fp2_dense_oracle(
+        exe: &VmExe<F>,
+        config: &Rv64ModularWithFp2Config,
+    ) -> (SystemRecords<F>, Vec<DenseRecordArena>, u64, Vec<usize>) {
+        std::env::set_var("OPENVM_RVR_INLINE_RECORDS", "0");
+        std::env::remove_var("OPENVM_RVR_ARENA_NATIVE");
+        std::env::remove_var("OPENVM_RVR_GPU_RECORDS");
+        let (vm, _) = VirtualMachine::new_with_keygen(
+            test_cpu_engine(),
+            Rv64ModularWithFp2CpuBuilder,
+            config.clone(),
+        )
+        .expect("Fp2 oracle vm init");
+        let widths = vm
+            .pk()
+            .per_air
+            .iter()
+            .map(|pk| pk.vk.params.width.main_width())
+            .collect::<Vec<_>>();
+        let heights = vec![32768u32; vm.num_airs()];
+        let capacities = heights
+            .iter()
+            .zip(&widths)
+            .map(|(&height, &width)| (height as usize, width))
+            .collect::<Vec<_>>();
+        let pc_to_air_idx = vm.pc_to_air_idx(exe).expect("Fp2 oracle pc-to-air mapping");
+        let fp2_airs = fp2_air_ids(exe, &pc_to_air_idx, config.fp2.supported_moduli.len());
+        let RvrPreflightRoute::Rvr(instance) = vm
+            .preflight_routed_instance(exe)
+            .expect("Fp2 oracle routed instance")
+        else {
+            panic!("Fp2 oracle must route to rvr")
+        };
+        let mut output = instance
+            .execute_preflight_from_state(vm.create_initial_state(exe, Streams::default()), None)
+            .expect("verbose Fp2 oracle preflight");
+        let retired = output
+            .system_records
+            .filtered_exec_frequencies
+            .iter()
+            .map(|&count| u64::from(count))
+            .sum();
+        let mut registry = LogNativeAssemblerRegistry::new();
+        config.extend_rvr_log_native(&mut registry);
+        let arenas = generate_record_arenas_from_logs::<F, DenseRecordArena>(
+            &registry,
+            exe,
+            &mut output,
+            &capacities,
+            &pc_to_air_idx,
+        )
+        .expect("verbose Fp2 record assembly");
+        (output.system_records, arenas, retired, fp2_airs)
+    }
+
+    #[cfg(feature = "rvr")]
+    fn fp2_dense_direct(
+        exe: &VmExe<F>,
+        config: &Rv64ModularWithFp2Config,
+        retired: u64,
+    ) -> (SystemRecords<F>, Vec<DenseRecordArena>) {
+        std::env::remove_var("OPENVM_RVR_INLINE_RECORDS");
+        std::env::remove_var("OPENVM_RVR_ARENA_NATIVE");
+        std::env::set_var("OPENVM_RVR_GPU_RECORDS", "delta");
+        let (vm, _) = VirtualMachine::new_with_keygen(
+            test_cpu_engine(),
+            Rv64ModularWithFp2CpuBuilder,
+            config.clone(),
+        )
+        .expect("Fp2 direct vm init");
+        let widths = vm
+            .pk()
+            .per_air
+            .iter()
+            .map(|pk| pk.vk.params.width.main_width())
+            .collect::<Vec<_>>();
+        let heights = vec![32768u32; vm.num_airs()];
+        let capacities = heights
+            .iter()
+            .zip(&widths)
+            .map(|(&height, &width)| (height as usize, width))
+            .collect::<Vec<_>>();
+        let pc_to_air_idx = vm.pc_to_air_idx(exe).expect("Fp2 direct pc-to-air mapping");
+        let fp2_airs = fp2_air_ids(exe, &pc_to_air_idx, config.fp2.supported_moduli.len());
+        let RvrPreflightRoute::Rvr(instance) = vm
+            .preflight_routed_instance(exe)
+            .expect("Fp2 direct routed instance")
+        else {
+            panic!("Fp2 direct arm must route to rvr")
+        };
+        let native_fp2_count = instance
+            .compiled()
+            .inline_records()
+            .arena_native_airs
+            .iter()
+            .filter(|&&(air, _)| fp2_airs.contains(&air))
+            .count();
+        assert_eq!(
+            native_fp2_count, 2,
+            "Fp2 Add/Sub/Setup and Mul/Div/Setup AIRs must migrate atomically"
+        );
+        let mut staged = Vec::new();
+        let mut targets = BTreeMap::new();
+        for &(air, geometry) in &instance.compiled().inline_records().arena_native_airs {
+            let (arena, target) =
+                DenseRecordArena::stage_arena_native(heights[air] as usize, widths[air], &geometry);
+            targets.insert(air, target);
+            staged.push((air, geometry, arena));
+        }
+        let mut output = instance
+            .execute_preflight_from_state_with_arena_targets(
+                vm.create_initial_state(exe, Streams::default()),
+                Some(retired),
+                &heights,
+                &targets,
+            )
+            .expect("direct-final Fp2 preflight");
+        let mut registry = LogNativeAssemblerRegistry::new();
+        config.extend_rvr_log_native(&mut registry);
+        let mut arenas = generate_record_arenas_from_logs::<F, DenseRecordArena>(
+            &registry,
+            exe,
+            &mut output,
+            &capacities,
+            &pc_to_air_idx,
+        )
+        .expect("Fp2 direct residual record assembly");
+        for (air, geometry, mut arena) in staged {
+            let written = output
+                .arena_native_written
+                .iter()
+                .find(|&&(written_air, _)| written_air == air)
+                .map(|&(_, count)| count as usize)
+                .expect("Fp2 direct AIR must report written records");
+            arena.finish_arena_native(written, &geometry);
+            arenas[air] = arena;
+        }
+        (output.system_records, arenas)
+    }
+
+    #[cfg(feature = "rvr")]
+    fn assert_fp2_rvr_interpreter_parity(exe: &VmExe<F>, config: &Rv64ModularWithFp2Config) {
+        std::env::remove_var("OPENVM_RVR_INLINE_RECORDS");
+        std::env::remove_var("OPENVM_RVR_ARENA_NATIVE");
+        std::env::set_var("OPENVM_RVR_GPU_RECORDS", "delta");
+        let (mut interp_vm, _) = VirtualMachine::new_with_keygen(
+            test_cpu_engine(),
+            Rv64ModularWithFp2CpuBuilder,
+            config.clone(),
+        )
+        .expect("Fp2 interpreter vm init");
+        let (mut rvr_vm, _) = VirtualMachine::new_with_keygen(
+            test_cpu_engine(),
+            Rv64ModularWithFp2CpuBuilder,
+            config.clone(),
+        )
+        .expect("Fp2 rvr vm init");
+        let widths = rvr_vm
+            .pk()
+            .per_air
+            .iter()
+            .map(|pk| pk.vk.params.width.main_width())
+            .collect::<Vec<_>>();
+        let heights = vec![32768u32; rvr_vm.num_airs()];
+        let capacities = heights
+            .iter()
+            .zip(&widths)
+            .map(|(&height, &width)| (height as usize, width))
+            .collect::<Vec<_>>();
+        let pc_to_air_idx = rvr_vm
+            .pc_to_air_idx(exe)
+            .expect("Fp2 parity pc-to-air mapping");
+        let fp2_airs = fp2_air_ids(exe, &pc_to_air_idx, config.fp2.supported_moduli.len());
+        let mut interpreter = interp_vm
+            .preflight_interpreter(exe)
+            .expect("Fp2 interpreter preflight");
+        let state = interp_vm.create_initial_state(exe, Streams::default());
+        let interp_output = interp_vm
+            .execute_preflight(&mut interpreter, state.clone(), None, &heights)
+            .expect("Fp2 interpreter execution");
+        let RvrPreflightRoute::Rvr(instance) = rvr_vm
+            .preflight_routed_instance(exe)
+            .expect("Fp2 parity routed instance")
+        else {
+            panic!("Fp2 parity must route to rvr")
+        };
+        let mut staged = Vec::new();
+        let mut targets = BTreeMap::new();
+        for &(air, geometry) in &instance.compiled().inline_records().arena_native_airs {
+            let (arena, target) = MatrixRecordArena::<F>::stage_arena_native(
+                heights[air] as usize,
+                widths[air],
+                &geometry,
+            );
+            targets.insert(air, target);
+            staged.push((air, geometry, arena));
+        }
+        let mut rvr_output = instance
+            .execute_preflight_from_state_with_arena_targets(
+                state.clone(),
+                Some(1_000_000),
+                &heights,
+                &targets,
+            )
+            .expect("Fp2 rvr execution");
+        assert_system_records_eq(
+            "Fp2 direct-final interpreter parity",
+            &interp_output.system_records,
+            &rvr_output.system_records,
+        );
+        let mut registry = LogNativeAssemblerRegistry::new();
+        config.extend_rvr_log_native(&mut registry);
+        let mut rvr_arenas = generate_record_arenas_from_logs::<F, MatrixRecordArena<F>>(
+            &registry,
+            exe,
+            &mut rvr_output,
+            &capacities,
+            &pc_to_air_idx,
+        )
+        .expect("Fp2 parity residual assembly");
+        for (air, geometry, mut arena) in staged {
+            let written = rvr_output
+                .arena_native_written
+                .iter()
+                .find(|&&(written_air, _)| written_air == air)
+                .map(|&(_, count)| count as usize)
+                .expect("Fp2 parity AIR must report written records");
+            arena.finish_arena_native(written, &geometry);
+            rvr_arenas[air] = arena;
+        }
+
+        let interp_program = interp_vm.commit_program_on_device(&exe.program);
+        interp_vm.load_program(interp_program);
+        let rvr_program = rvr_vm.commit_program_on_device(&exe.program);
+        rvr_vm.load_program(rvr_program);
+        interp_vm.transport_init_memory_to_device(&state.memory);
+        let interp_ctx = interp_vm
+            .generate_proving_ctx(interp_output.system_records, interp_output.record_arenas)
+            .expect("Fp2 interpreter tracegen");
+        rvr_vm.transport_init_memory_to_device(&state.memory);
+        let rvr_ctx = rvr_vm
+            .generate_proving_ctx(rvr_output.system_records, rvr_arenas)
+            .expect("Fp2 rvr tracegen");
+        let mut interp_traces = interp_ctx
+            .per_trace
+            .into_iter()
+            .filter(|(air, _)| fp2_airs.contains(air))
+            .collect::<BTreeMap<_, _>>();
+        let mut rvr_traces = rvr_ctx
+            .per_trace
+            .into_iter()
+            .filter(|(air, _)| fp2_airs.contains(air))
+            .collect::<BTreeMap<_, _>>();
+        assert_eq!(interp_traces.len(), 2, "both Fp2 AIRs must be active");
+        assert_eq!(
+            interp_traces.keys().collect::<Vec<_>>(),
+            rvr_traces.keys().collect::<Vec<_>>()
+        );
+        for air in fp2_airs {
+            let interp = interp_traces
+                .remove(&air)
+                .expect("active interpreter Fp2 AIR");
+            let rvr = rvr_traces.remove(&air).expect("active rvr Fp2 AIR");
+            assert_eq!(interp.common_main.width, rvr.common_main.width);
+            assert_eq!(interp.common_main.values, rvr.common_main.values);
+            assert_eq!(interp.public_values, rvr.public_values);
+        }
+        std::env::remove_var("OPENVM_RVR_GPU_RECORDS");
+    }
+
     #[test]
     fn test_moduli_setup() -> Result<()> {
         let moduli = ["4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787", "1000000000000000003", "2305843009213693951"]
@@ -727,6 +1042,93 @@ mod tests {
         );
         verify_segments(&instance.vm.engine, &vk, &proof.per_segment)
             .expect("verify modular proof segments");
+        std::env::remove_var("OPENVM_RVR_GPU_RECORDS");
+        Ok(())
+    }
+
+    #[cfg(feature = "rvr")]
+    #[test]
+    fn test_fp2_rvr_direct_final_bytes_match_verbose_twice_and_interpreter() -> Result<()> {
+        let bls12_381_fq = BigUint::from_str(
+            "4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787",
+        )?;
+        for (label, config, example) in [
+            (
+                "32-byte",
+                test_rv64modularwithfp2_config(vec![(
+                    "Complex".to_string(),
+                    SECP256K1_CONFIG.modulus.clone(),
+                )]),
+                "complex_secp256k1",
+            ),
+            (
+                "48-byte",
+                test_rv64modularwithfp2_config(vec![("BlsFp2".to_string(), bls12_381_fq)]),
+                "rvr_fp2_48",
+            ),
+        ] {
+            let exe = build_rvr_fp2_exe(&config, example)?;
+            let (oracle_system, oracle_arenas, retired, fp2_airs) = fp2_dense_oracle(&exe, &config);
+            for pass in 0..2 {
+                let (direct_system, direct_arenas) = fp2_dense_direct(&exe, &config, retired);
+                assert_system_records_eq(
+                    &format!("{label} Fp2 direct-final byte oracle pass {pass}"),
+                    &oracle_system,
+                    &direct_system,
+                );
+                for &air in &fp2_airs {
+                    assert_eq!(
+                        oracle_arenas[air].allocated(),
+                        direct_arenas[air].allocated(),
+                        "{label}, pass {pass}, Fp2 air {air}: direct-final bytes"
+                    );
+                }
+            }
+            assert_fp2_rvr_interpreter_parity(&exe, &config);
+        }
+        std::env::remove_var("OPENVM_RVR_INLINE_RECORDS");
+        std::env::remove_var("OPENVM_RVR_ARENA_NATIVE");
+        std::env::remove_var("OPENVM_RVR_GPU_RECORDS");
+        Ok(())
+    }
+
+    #[cfg(feature = "rvr")]
+    #[test]
+    fn test_fp2_rvr_multi_segment_proves_and_verifies() -> Result<()> {
+        std::env::remove_var("OPENVM_RVR_INLINE_RECORDS");
+        std::env::remove_var("OPENVM_RVR_ARENA_NATIVE");
+        std::env::set_var("OPENVM_RVR_GPU_RECORDS", "delta");
+        let mut config = test_rv64modularwithfp2_config(vec![(
+            "Complex".to_string(),
+            SECP256K1_CONFIG.modulus.clone(),
+        )]);
+        config.as_mut().segmentation_max_memory = 1;
+        let exe = build_rvr_fp2_exe(&config, "complex_secp256k1")?;
+        let (vm, pk) = VirtualMachine::new_with_keygen(
+            test_cpu_engine(),
+            Rv64ModularWithFp2CpuBuilder,
+            config,
+        )
+        .expect("Fp2 proof vm init");
+        assert!(
+            vm.preflight_routed_instance(&exe)
+                .expect("Fp2 proof route")
+                .is_rvr(),
+            "Fp2 proof must use rvr preflight"
+        );
+        let vk = pk.get_vk();
+        let cached_program_trace = vm.commit_program_on_device(&exe.program);
+        let mut instance =
+            VmInstance::new(vm, Arc::new(exe), cached_program_trace).expect("Fp2 proof instance");
+        instance.set_rvr_preflight_engine(Some(RvrPreflightEngine::Rvr));
+        let proof = ContinuationVmProver::prove(&mut instance, Streams::default())
+            .expect("Fp2 continuation prove");
+        assert!(
+            proof.per_segment.len() > 1,
+            "expected multiple Fp2 segments"
+        );
+        verify_segments(&instance.vm.engine, &vk, &proof.per_segment)
+            .expect("verify Fp2 proof segments");
         std::env::remove_var("OPENVM_RVR_GPU_RECORDS");
         Ok(())
     }

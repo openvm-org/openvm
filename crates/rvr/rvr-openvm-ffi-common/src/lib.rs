@@ -66,6 +66,13 @@ pub const PREFLIGHT_CHIP_RECORD_FLAG_OVERFLOW: u32 = 2;
 /// residual memory log. Delta chronology therefore needs no duplicate program
 /// log entry for the instruction.
 pub const PREFLIGHT_CHIP_RECORD_FLAG_RESIDUAL_MEMORY_CHRONOLOGY: u32 = 4;
+/// `ChipRecordBuf::len` is a packed byte cursor and `core_off` is repurposed
+/// as the emitted row count. Only custom variable-row direct-final targets
+/// set this flag.
+pub const PREFLIGHT_CHIP_RECORD_FLAG_VARIABLE_ROWS: u32 = 8;
+/// Variable-row records reserve `rows * stride` bytes (Matrix flavor) rather
+/// than their packed byte size (Dense flavor).
+pub const PREFLIGHT_CHIP_RECORD_FLAG_VARIABLE_ROW_STRIDE: u32 = 16;
 /// Byte size of one compact base-ALU AddSub record as stored by the preflight
 /// tracer (R3 L1+L5): the dynamic witness only — from_pc, from_timestamp, the
 /// three access prev_timestamps, the old rd block, and the b/c operand limbs.

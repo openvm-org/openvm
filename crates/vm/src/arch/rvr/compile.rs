@@ -476,13 +476,19 @@ fn collect_inline_records_meta<F: PrimeField32>(
                                     residual_memory_chronology: true
                                 }
                             )
+                            || matches!(
+                                geometry.layout,
+                                ArenaNativeLayout::CustomVariableRows {
+                                    residual_memory_chronology: true
+                                }
+                            )
                     });
             // Extension-owned custom records have no generic Stage-2 delta
             // encoding. Without their complete-record arena target, keep the
             // instruction on the verbose program-log/assembler route.
-            if delta_records_requested
-                && matches!(shape, InlineRecordShape::Custom { .. })
-                && geometry.is_none()
+            if geometry.is_none()
+                && (matches!(shape, InlineRecordShape::CustomVariableRows { .. })
+                    || delta_records_requested && matches!(shape, InlineRecordShape::Custom { .. }))
             {
                 return;
             }
@@ -539,7 +545,10 @@ fn collect_inline_records_meta<F: PrimeField32>(
             if delta_records_requested
                 && matches!(
                     removed.map(|geometry| geometry.layout),
-                    Some(ArenaNativeLayout::Custom { .. })
+                    Some(
+                        ArenaNativeLayout::Custom { .. }
+                            | ArenaNativeLayout::CustomVariableRows { .. }
+                    )
                 )
             {
                 tainted_custom_delta_airs.insert(air_idx);
@@ -597,6 +606,11 @@ fn validate_requested_inline_record_shape(
                     ArenaNativeLayout::Custom {
                         residual_memory_chronology: true
                     }
+                ) && !matches!(
+                    geometry.layout,
+                    ArenaNativeLayout::CustomVariableRows {
+                        residual_memory_chronology: true
+                    }
                 )
             });
     if invalid_arena && !inline_meta.arena_native_airs.is_empty() {
@@ -616,6 +630,7 @@ fn inline_record_shape_size(shape: InlineRecordShape) -> usize {
         InlineRecordShape::Wr1 => rvr_openvm_ext_ffi_common::PREFLIGHT_WR1_RECORD_SIZE,
         InlineRecordShape::Rw1 => rvr_openvm_ext_ffi_common::PREFLIGHT_RW1_RECORD_SIZE,
         InlineRecordShape::Custom { record_size } => record_size,
+        InlineRecordShape::CustomVariableRows { capacity_per_row } => capacity_per_row,
     }
 }
 

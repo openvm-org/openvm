@@ -41,6 +41,10 @@ pub const PREFLIGHT_CHIP_RECORD_FLAG_OVERFLOW: u32 =
     rvr_openvm_ext_ffi_common::PREFLIGHT_CHIP_RECORD_FLAG_OVERFLOW;
 pub const PREFLIGHT_CHIP_RECORD_FLAG_RESIDUAL_MEMORY_CHRONOLOGY: u32 =
     rvr_openvm_ext_ffi_common::PREFLIGHT_CHIP_RECORD_FLAG_RESIDUAL_MEMORY_CHRONOLOGY;
+pub const PREFLIGHT_CHIP_RECORD_FLAG_VARIABLE_ROWS: u32 =
+    rvr_openvm_ext_ffi_common::PREFLIGHT_CHIP_RECORD_FLAG_VARIABLE_ROWS;
+pub const PREFLIGHT_CHIP_RECORD_FLAG_VARIABLE_ROW_STRIDE: u32 =
+    rvr_openvm_ext_ffi_common::PREFLIGHT_CHIP_RECORD_FLAG_VARIABLE_ROW_STRIDE;
 /// R3: byte size of one compact AddSub inline record (see the C
 /// `PreflightAddSubRecord`). Used to size the per-chip inline-record buffers.
 pub const PREFLIGHT_ADDSUB_RECORD_SIZE: usize =
@@ -427,6 +431,9 @@ pub struct RvrPreflightOutput<F> {
     /// skip BOTH the log assembler and the inline assembler for these airs
     /// and only verify the count against the program log.
     pub arena_native_written: Vec<(usize, u32)>,
+    /// Exact byte cursor for every arena-native target. Fixed-shape targets
+    /// equal `written_count * stride`; packed variable-row targets do not.
+    pub arena_native_written_bytes: Vec<(usize, u32)>,
 }
 
 pub struct RvrPreflightInstance<'a, F: PrimeField32> {
@@ -952,6 +959,15 @@ where
                 "stage-2 delta record reservation overflow or ABI mismatch".to_string(),
             ));
         }
+        if let Some((air, _)) = chip_records
+            .iter()
+            .enumerate()
+            .find(|(_, buf)| buf.flags & PREFLIGHT_CHIP_RECORD_FLAG_OVERFLOW != 0)
+        {
+            return Err(ExecutionError::RvrExecution(format!(
+                "arena-native record reservation overflow or ABI mismatch for air {air}"
+            )));
+        }
 
         let program_len = tracer.program_log_len as usize;
         let memory_len = tracer.memory_log_len as usize;
@@ -1046,13 +1062,29 @@ where
             })
             .map(|&(air_idx, _)| {
                 let buf = &chip_records[air_idx];
-                assert_eq!(
-                    buf.len % buf.stride,
-                    0,
-                    "arena-native cursor for air {air_idx} is not a whole record count"
-                );
-                (air_idx, buf.len / buf.stride)
+                if buf.flags & PREFLIGHT_CHIP_RECORD_FLAG_VARIABLE_ROWS != 0 {
+                    assert_eq!(
+                        buf.core_off, chip_counts[air_idx],
+                        "variable-row arena count for air {air_idx} must match metered chip rows"
+                    );
+                    (air_idx, buf.core_off)
+                } else {
+                    assert_eq!(
+                        buf.len % buf.stride,
+                        0,
+                        "arena-native cursor for air {air_idx} is not a whole record count"
+                    );
+                    (air_idx, buf.len / buf.stride)
+                }
             })
+            .collect();
+        let arena_native_written_bytes = inline_meta
+            .airs
+            .iter()
+            .filter(|&&(air_idx, _)| {
+                arena_targets.is_some_and(|targets| targets.contains_key(&air_idx))
+            })
+            .map(|&(air_idx, _)| (air_idx, chip_records[air_idx].len))
             .collect();
         let inline_records: Vec<RvrInlineChipRecords> = if inline_meta.delta_records {
             Vec::new()
@@ -1099,6 +1131,7 @@ where
             delta_records,
             inline_pc_slots: inline_meta.pc_slots.clone(),
             arena_native_written,
+            arena_native_written_bytes,
         });
     }
 }
@@ -1658,6 +1691,23 @@ pub trait RvrArenaNativeTarget: crate::arch::Arena + Sized {
         geometry: &super::ArenaNativeGeometry,
     );
 
+    /// Commit a target when the generated C also reports its exact byte
+    /// cursor. Fixed-shape implementations inherit the count-based behavior;
+    /// packed variable-row arenas override it.
+    fn finish_arena_native_sized(
+        &mut self,
+        written_records: usize,
+        written_bytes: usize,
+        geometry: &super::ArenaNativeGeometry,
+    ) {
+        assert_eq!(
+            written_bytes,
+            written_records * geometry.stride_dense(),
+            "fixed-shape arena-native byte cursor mismatch"
+        );
+        self.finish_arena_native(written_records, geometry);
+    }
+
     /// G2: stage this arena as a compact WIRE record target — the C writes
     /// packed wire records (stride = `wire_size`) directly into the arena's
     /// aligned backing, so adoption is cursor bookkeeping instead of an
@@ -1688,9 +1738,17 @@ fn arena_native_flags(geometry: &super::ArenaNativeGeometry) -> u32 {
         geometry.layout,
         super::ArenaNativeLayout::Custom {
             residual_memory_chronology: true
+        } | super::ArenaNativeLayout::CustomVariableRows {
+            residual_memory_chronology: true
         }
     ) {
         flags |= PREFLIGHT_CHIP_RECORD_FLAG_RESIDUAL_MEMORY_CHRONOLOGY;
+    }
+    if matches!(
+        geometry.layout,
+        super::ArenaNativeLayout::CustomVariableRows { .. }
+    ) {
+        flags |= PREFLIGHT_CHIP_RECORD_FLAG_VARIABLE_ROWS;
     }
     flags
 }
@@ -1712,14 +1770,51 @@ impl<F: openvm_stark_backend::p3_field::Field> RvrArenaNativeTarget
             len: 0,
             cap: cap_bytes - cap_bytes % stride,
             stride,
-            core_off: geometry.core_off_matrix as u32,
-            flags: arena_native_flags(geometry),
+            core_off: if matches!(
+                geometry.layout,
+                super::ArenaNativeLayout::CustomVariableRows { .. }
+            ) {
+                0
+            } else {
+                geometry.core_off_matrix as u32
+            },
+            flags: arena_native_flags(geometry)
+                | if matches!(
+                    geometry.layout,
+                    super::ArenaNativeLayout::CustomVariableRows { .. }
+                ) {
+                    PREFLIGHT_CHIP_RECORD_FLAG_VARIABLE_ROW_STRIDE
+                } else {
+                    0
+                },
         };
         (arena, buf)
     }
 
     fn finish_arena_native(&mut self, written_records: usize, _: &super::ArenaNativeGeometry) {
         self.trace_offset = written_records * self.width;
+    }
+
+    fn finish_arena_native_sized(
+        &mut self,
+        written_records: usize,
+        written_bytes: usize,
+        geometry: &super::ArenaNativeGeometry,
+    ) {
+        if matches!(
+            geometry.layout,
+            super::ArenaNativeLayout::CustomVariableRows { .. }
+        ) {
+            assert_eq!(
+                written_bytes,
+                written_records * self.width * std::mem::size_of::<F>(),
+                "variable-row Matrix arena byte cursor mismatch"
+            );
+            self.trace_offset = written_records * self.width;
+        } else {
+            let _ = written_bytes;
+            self.finish_arena_native(written_records, geometry);
+        }
     }
 
     fn stage_rvr_wire(_records_cap: usize, _wire_size: usize) -> (Self, ChipRecordBuf) {
@@ -1756,7 +1851,14 @@ impl RvrArenaNativeTarget for crate::arch::DenseRecordArena {
             len: 0,
             cap: (height * stride) as u32,
             stride: stride as u32,
-            core_off: geometry.core_off_dense() as u32,
+            core_off: if matches!(
+                geometry.layout,
+                super::ArenaNativeLayout::CustomVariableRows { .. }
+            ) {
+                0
+            } else {
+                geometry.core_off_dense() as u32
+            },
             flags: arena_native_flags(geometry),
         };
         (arena, buf)
@@ -1773,6 +1875,37 @@ impl RvrArenaNativeTarget for crate::arch::DenseRecordArena {
         };
         self.records_buffer
             .set_position((offset + written_records * geometry.stride_dense()) as u64);
+    }
+
+    fn finish_arena_native_sized(
+        &mut self,
+        written_records: usize,
+        written_bytes: usize,
+        geometry: &super::ArenaNativeGeometry,
+    ) {
+        if matches!(
+            geometry.layout,
+            super::ArenaNativeLayout::CustomVariableRows { .. }
+        ) {
+            let offset = {
+                let ptr = self.records_buffer.get_ref().as_ptr() as usize;
+                (32 - ptr % 32) % 32
+            };
+            assert!(
+                offset + written_bytes <= self.records_buffer.get_ref().len(),
+                "variable-row arena-native byte cursor exceeds backing"
+            );
+            self.records_buffer
+                .set_position((offset + written_bytes) as u64);
+            self.rvr_variable_rows = Some(written_records);
+        } else {
+            assert_eq!(
+                written_bytes,
+                written_records * geometry.stride_dense(),
+                "fixed-shape arena-native byte cursor mismatch"
+            );
+            self.finish_arena_native(written_records, geometry);
+        }
     }
 
     fn stage_rvr_wire(records_cap: usize, wire_size: usize) -> (Self, ChipRecordBuf) {

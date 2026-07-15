@@ -1,13 +1,17 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::Arc};
 
+#[cfg(feature = "cuda")]
+use openvm_circuit::utils::test_gpu_engine;
 use openvm_circuit::{
     arch::{
         rvr::{
-            generate_record_arenas_from_logs, LogNativeAssemblerRegistry, RvrPreflightRoute,
-            VmRvrLogNativeExtension, PREFLIGHT_MEMORY_KIND_READ, PREFLIGHT_MEMORY_KIND_WRITE,
+            generate_record_arenas_from_logs, LogNativeAssemblerRegistry, RvrPreflightEngine,
+            RvrPreflightRoute, VmRvrLogNativeExtension, PREFLIGHT_MEMORY_KIND_READ,
+            PREFLIGHT_MEMORY_KIND_WRITE,
         },
         testing::assert_vm_states_equivalent,
-        Streams, VirtualMachine, VmState,
+        verify_segments, ContinuationVmProver, DenseRecordArena, Streams, VirtualMachine,
+        VmInstance, VmState,
     },
     system::SystemRecords,
     utils::test_cpu_engine,
@@ -32,6 +36,8 @@ use openvm_stark_sdk::{
 };
 use sha2::{Digest, Sha256};
 
+#[cfg(feature = "cuda")]
+use crate::Sha2Rv64GpuBuilder;
 use crate::{
     add_padding_to_message, Sha2Config, Sha2MainChipConfig, Sha2Rv64Config, Sha2Rv64CpuBuilder,
 };
@@ -460,6 +466,162 @@ fn rvr_preflight_sha256_single_and_multi_block_traces_match_interpreter() {
     }
 }
 
+/// The generated-C direct-final SHA-256 record must exactly match the
+/// established log assembler, including all register/memory aux chronology.
+#[test]
+fn rvr_preflight_sha256_direct_final_matches_verbose_twice() {
+    use openvm_circuit::arch::rvr::preflight::RvrArenaNativeTarget;
+
+    let message = (0..120).map(|i| (i * 17) as u8).collect::<Vec<_>>();
+    let (exe, num_blocks) = sha256_message_exe(&message, false);
+    assert_eq!(num_blocks, 3, "oracle fixture must cover multiple blocks");
+    let config = Sha2Rv64Config::default();
+
+    std::env::set_var("OPENVM_RVR_INLINE_RECORDS", "0");
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
+    std::env::remove_var("OPENVM_RVR_GPU_RECORDS");
+    let (oracle_vm, _) =
+        VirtualMachine::new_with_keygen(test_cpu_engine(), Sha2Rv64CpuBuilder, config.clone())
+            .expect("SHA-256 oracle vm init");
+    let heights = vec![8192u32; oracle_vm.num_airs()];
+    let capacities = heights
+        .iter()
+        .zip(oracle_vm.pk().per_air.iter())
+        .map(|(&height, pk)| (height as usize, pk.vk.params.width.main_width()))
+        .collect::<Vec<_>>();
+    let pc_to_air_idx = oracle_vm
+        .pc_to_air_idx(&exe)
+        .expect("SHA-256 pc-to-air mapping");
+    let sha_slots = exe
+        .program
+        .instructions_and_debug_infos
+        .iter()
+        .enumerate()
+        .filter_map(|(slot, entry)| {
+            entry.as_ref().and_then(|(instruction, _)| {
+                (instruction.opcode == Rv64Sha2Opcode::SHA256.global_opcode()).then_some(slot)
+            })
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(sha_slots.len(), num_blocks);
+    let sha_air = pc_to_air_idx[sha_slots[0]].expect("SHA-256 main AIR");
+    assert!(
+        sha_slots
+            .iter()
+            .all(|&slot| pc_to_air_idx[slot] == Some(sha_air)),
+        "all SHA-256 instructions must share the main AIR"
+    );
+    let RvrPreflightRoute::Rvr(oracle_instance) = oracle_vm
+        .preflight_routed_instance(&exe)
+        .expect("SHA-256 oracle route")
+    else {
+        panic!("SHA-256 oracle must route to rvr")
+    };
+    let mut oracle_output = oracle_instance
+        .execute_preflight_from_state(
+            oracle_vm.create_initial_state(&exe, Streams::default()),
+            None,
+        )
+        .expect("SHA-256 verbose preflight");
+    let retired = oracle_output.instret;
+    let mut registry = LogNativeAssemblerRegistry::new();
+    config.extend_rvr_log_native(&mut registry);
+    let oracle_arenas = generate_record_arenas_from_logs::<F, DenseRecordArena>(
+        &registry,
+        &exe,
+        &mut oracle_output,
+        &capacities,
+        &pc_to_air_idx,
+    )
+    .expect("SHA-256 verbose record assembly");
+
+    for pass in 0..2 {
+        std::env::remove_var("OPENVM_RVR_INLINE_RECORDS");
+        std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "1");
+        std::env::set_var("OPENVM_RVR_GPU_RECORDS", "delta");
+        let (direct_vm, _) =
+            VirtualMachine::new_with_keygen(test_cpu_engine(), Sha2Rv64CpuBuilder, config.clone())
+                .expect("SHA-256 direct vm init");
+        let RvrPreflightRoute::Rvr(direct_instance) = direct_vm
+            .preflight_routed_instance(&exe)
+            .expect("SHA-256 direct route")
+        else {
+            panic!("SHA-256 direct arm must route to rvr")
+        };
+        let inline = direct_instance.compiled().inline_records();
+        assert!(
+            sha_slots.iter().all(|&slot| inline.pc_slots[slot]),
+            "pass {pass}: every SHA-256 instruction must emit directly"
+        );
+        let geometry = inline
+            .arena_native_airs
+            .iter()
+            .find(|&&(air, _)| air == sha_air)
+            .map(|&(_, geometry)| geometry)
+            .expect("SHA-256 arena-native geometry");
+        assert!(matches!(
+            geometry.layout,
+            openvm_circuit::arch::rvr::ArenaNativeLayout::Custom {
+                residual_memory_chronology: true
+            }
+        ));
+        let (mut direct_arena, target) = DenseRecordArena::stage_arena_native(
+            heights[sha_air] as usize,
+            capacities[sha_air].1,
+            &geometry,
+        );
+        let targets = BTreeMap::from([(sha_air, target)]);
+        let mut direct_output = direct_instance
+            .execute_preflight_from_state_with_arena_targets(
+                direct_vm.create_initial_state(&exe, Streams::default()),
+                Some(retired),
+                &heights,
+                &targets,
+            )
+            .expect("SHA-256 direct preflight");
+        assert_system_records_eq(
+            &format!("SHA-256 direct pass {pass}"),
+            &oracle_output.system_records,
+            &direct_output.system_records,
+        );
+        generate_record_arenas_from_logs::<F, DenseRecordArena>(
+            &registry,
+            &exe,
+            &mut direct_output,
+            &capacities,
+            &pc_to_air_idx,
+        )
+        .expect("SHA-256 direct residual assembly");
+        let written = direct_output
+            .arena_native_written
+            .iter()
+            .find(|&&(air, _)| air == sha_air)
+            .map(|&(_, records)| records as usize)
+            .expect("SHA-256 written records");
+        let written_bytes = direct_output
+            .arena_native_written_bytes
+            .iter()
+            .find(|&&(air, _)| air == sha_air)
+            .map(|&(_, bytes)| bytes as usize)
+            .expect("SHA-256 written bytes");
+        assert_eq!(written, num_blocks);
+        assert_eq!(
+            written_bytes,
+            num_blocks * rvr_openvm_ext_sha2::SHA256_DIRECT_RECORD_SIZE
+        );
+        direct_arena.finish_arena_native_sized(written, written_bytes, &geometry);
+        assert_eq!(
+            direct_arena.allocated(),
+            oracle_arenas[sha_air].allocated(),
+            "pass {pass}: SHA-256 direct-final bytes must match verbose assembly"
+        );
+    }
+
+    std::env::remove_var("OPENVM_RVR_GPU_RECORDS");
+    std::env::remove_var("OPENVM_RVR_ARENA_NATIVE");
+    std::env::remove_var("OPENVM_RVR_INLINE_RECORDS");
+}
+
 #[test]
 fn rvr_preflight_sha256_multi_segment_traces_match_interpreter() {
     std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
@@ -501,6 +663,108 @@ fn rvr_preflight_sha256_multi_segment_traces_match_interpreter() {
         &state,
         &expected_digest_state(&message),
     );
+}
+
+#[test]
+fn rvr_preflight_sha256_direct_final_proves_and_verifies_multi_segment() {
+    std::env::remove_var("OPENVM_RVR_INLINE_RECORDS");
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "1");
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "delta");
+    let message = (0..25_000).map(|i| (i * 29) as u8).collect::<Vec<_>>();
+    let (exe, num_blocks) = sha256_message_exe(&message, true);
+    assert!(
+        num_blocks > 300,
+        "proof fixture must cross the generated-block instruction cap"
+    );
+    let mut config = Sha2Rv64Config::default();
+    config.system.segmentation_max_memory = 1;
+    let engine = test_cpu_engine();
+    let (vm, pk) =
+        VirtualMachine::new_with_keygen(engine, Sha2Rv64CpuBuilder, config).expect("proof vm init");
+    let vk = pk.get_vk();
+    let cached_program_trace = vm.commit_program_on_device(&exe.program);
+    let mut instance =
+        VmInstance::new(vm, Arc::new(exe), cached_program_trace).expect("proof instance init");
+    instance.set_rvr_preflight_engine(Some(RvrPreflightEngine::Rvr));
+    let proof = ContinuationVmProver::prove(&mut instance, Streams::default())
+        .expect("SHA-256 direct CPU prove");
+    assert!(
+        proof.per_segment.len() > 1,
+        "SHA-256 direct proof must span multiple segments"
+    );
+    verify_segments(&instance.vm.engine, &vk, &proof.per_segment)
+        .expect("SHA-256 direct CPU verify");
+    std::env::remove_var("OPENVM_RVR_GPU_RECORDS");
+    std::env::remove_var("OPENVM_RVR_ARENA_NATIVE");
+}
+
+#[cfg(feature = "cuda")]
+#[test]
+fn rvr_gpu_sha256_direct_final_proves_and_verifies() {
+    std::env::remove_var("OPENVM_RVR_INLINE_RECORDS");
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "1");
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "delta");
+    let message = (0..120).map(|i| (i * 11) as u8).collect::<Vec<_>>();
+    let (exe, num_blocks) = sha256_message_exe(&message, true);
+    assert_eq!(num_blocks, 3);
+    let engine = test_gpu_engine();
+    let (vm, pk) =
+        VirtualMachine::new_with_keygen(engine, Sha2Rv64GpuBuilder, Sha2Rv64Config::default())
+            .expect("SHA-256 GPU vm init");
+    let route = vm
+        .preflight_routed_instance(&exe)
+        .expect("SHA-256 GPU route");
+    let RvrPreflightRoute::Rvr(route) = route else {
+        panic!("SHA-256 GPU proof must route through rvr preflight")
+    };
+    let pc_to_air_idx = vm.pc_to_air_idx(&exe).expect("SHA-256 GPU pc map");
+    let sha_slots = exe
+        .program
+        .instructions_and_debug_infos
+        .iter()
+        .enumerate()
+        .filter_map(|(slot, entry)| {
+            entry.as_ref().and_then(|(instruction, _)| {
+                (instruction.opcode == Rv64Sha2Opcode::SHA256.global_opcode()).then_some(slot)
+            })
+        })
+        .collect::<Vec<_>>();
+    let sha_air = pc_to_air_idx[sha_slots[0]].expect("SHA-256 GPU main AIR");
+    assert!(
+        sha_slots
+            .iter()
+            .all(|&slot| route.compiled().inline_records().pc_slots[slot]),
+        "GPU proof must consume direct-final SHA-256 records"
+    );
+    assert!(
+        route
+            .compiled()
+            .inline_records()
+            .arena_native_airs
+            .iter()
+            .any(|&(air, geometry)| {
+                air == sha_air
+                    && matches!(
+                        geometry.layout,
+                        openvm_circuit::arch::rvr::ArenaNativeLayout::Custom {
+                            residual_memory_chronology: true
+                        }
+                    )
+            }),
+        "GPU proof must use the SHA-256 custom arena-native target"
+    );
+    drop(route);
+    let vk = pk.get_vk();
+    let cached_program_trace = vm.commit_program_on_device(&exe.program);
+    let mut instance =
+        VmInstance::new(vm, Arc::new(exe), cached_program_trace).expect("GPU proof instance init");
+    instance.set_rvr_preflight_engine(Some(RvrPreflightEngine::Rvr));
+    let proof = ContinuationVmProver::prove(&mut instance, Streams::default())
+        .expect("SHA-256 direct GPU prove");
+    verify_segments(&instance.vm.engine, &vk, &proof.per_segment)
+        .expect("SHA-256 direct GPU verify");
+    std::env::remove_var("OPENVM_RVR_GPU_RECORDS");
+    std::env::remove_var("OPENVM_RVR_ARENA_NATIVE");
 }
 
 #[test]

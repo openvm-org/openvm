@@ -41,6 +41,9 @@ fn pad_modulus(modulus: &BigUint) -> (Vec<u8>, u32) {
     (modulus_bytes, num_limbs)
 }
 
+/// Shared generated-C implementation for direct-final VecHeap records.
+pub const VEC_HEAP_RECORD_C_HEADER: &str = include_str!("../c/rvr_ext_vec_heap_record.h");
+
 // ── Modular arithmetic operations ────────────────────────────────────────────
 
 /// Operation type for modular arithmetic.

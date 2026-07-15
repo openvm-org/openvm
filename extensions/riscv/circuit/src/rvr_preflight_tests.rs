@@ -905,6 +905,44 @@ fn hard_chip_streams(repeats: usize) -> Streams<F> {
     streams
 }
 
+fn hintstore_direct_exe() -> VmExe<F> {
+    exe(&[
+        addi(7, 0, 64),
+        addi(8, 0, 3),
+        addi(20, 0, 96),
+        hint_store(Rv64HintStoreOpcode::HINT_STORED, 0, 7),
+        hint_store(Rv64HintStoreOpcode::HINT_BUFFER, 8, 20),
+        terminate(),
+    ])
+}
+
+fn hintstore_direct_streams() -> Streams<F> {
+    let mut streams = Streams::default();
+    for word in [
+        0x0102_0304_0506_0708u64,
+        0x1112_1314_1516_1718,
+        0x2122_2324_2526_2728,
+        0x3132_3334_3536_3738,
+    ] {
+        streams
+            .hint_stream
+            .extend(word.to_le_bytes().into_iter().map(F::from_u8));
+    }
+    streams
+}
+
+fn phantom_direct_exe() -> VmExe<F> {
+    exe(&[
+        phantom(SysPhantom::Nop),
+        phantom(SysPhantom::CtStart),
+        phantom(SysPhantom::CtEnd),
+        rv64_phantom(Rv64Phantom::HintInput),
+        rv64_phantom(Rv64Phantom::PrintStr),
+        rv64_phantom(Rv64Phantom::HintRandom),
+        terminate(),
+    ])
+}
+
 fn full_rv64im_matrix_exe() -> VmExe<F> {
     let mut instructions = vec![addi(1, 0, 9), addi(2, 0, 5)];
     push_standard_group_ops(&mut instructions);
@@ -2594,6 +2632,7 @@ fn rvr_preflight_proves_hard_chip_single_segment() {
         None,
         hard_chip_streams(1),
     );
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "1");
     let segments = prove_rvr_preflight_and_verify_with_streams(
         hard_chip_exe(1, false),
         Rv64ImConfig::default(),
@@ -3414,6 +3453,349 @@ fn rvr_preflight_arena_native_proves_and_verifies() {
     let exe = inline_addsub_differential_exe();
     let segments = prove_rvr_preflight_and_verify(exe, Rv64ImConfig::default());
     assert!(segments >= 1, "expected at least one proven segment");
+}
+
+/// HintStore's mixed AIR is a packed variable-row direct-final target: both
+/// opcodes migrate together, and the emitted prefix must stay byte-identical
+/// to the established verbose assembler for both single and buffer records.
+#[test]
+fn rvr_preflight_hintstore_direct_final_matches_verbose_twice() {
+    use openvm_circuit::arch::rvr::preflight::RvrArenaNativeTarget;
+
+    let exe = hintstore_direct_exe();
+    let streams = hintstore_direct_streams();
+    let config = Rv64ImConfig::default();
+
+    std::env::set_var("OPENVM_RVR_INLINE_RECORDS", "0");
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
+    std::env::remove_var("OPENVM_RVR_GPU_RECORDS");
+    let (oracle_vm, _) =
+        VirtualMachine::new_with_keygen(test_cpu_engine(), Rv64ImCpuBuilder, config.clone())
+            .expect("HintStore oracle vm init");
+    let heights = vec![4096u32; oracle_vm.num_airs()];
+    let capacities = heights
+        .iter()
+        .zip(oracle_vm.pk().per_air.iter())
+        .map(|(&height, pk)| (height as usize, pk.vk.params.width.main_width()))
+        .collect::<Vec<_>>();
+    let pc_to_air_idx = oracle_vm
+        .pc_to_air_idx(&exe)
+        .expect("HintStore pc-to-air mapping");
+    let hint_slots = exe
+        .program
+        .instructions_and_debug_infos
+        .iter()
+        .enumerate()
+        .filter_map(|(slot, entry)| {
+            entry.as_ref().and_then(|(instruction, _)| {
+                (instruction.opcode == Rv64HintStoreOpcode::HINT_STORED.global_opcode()
+                    || instruction.opcode == Rv64HintStoreOpcode::HINT_BUFFER.global_opcode())
+                .then_some(slot)
+            })
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        hint_slots.len(),
+        2,
+        "fixture must cover both HintStore opcodes"
+    );
+    let hint_air = pc_to_air_idx[hint_slots[0]].expect("HINT_STORED AIR");
+    assert_eq!(
+        pc_to_air_idx[hint_slots[1]],
+        Some(hint_air),
+        "HINT_STORED and HINT_BUFFER must share one AIR"
+    );
+    let RvrPreflightRoute::Rvr(oracle_instance) = oracle_vm
+        .preflight_routed_instance(&exe)
+        .expect("HintStore oracle route")
+    else {
+        panic!("HintStore oracle must route to rvr")
+    };
+    let mut oracle_output = oracle_instance
+        .execute_preflight_from_state(oracle_vm.create_initial_state(&exe, streams.clone()), None)
+        .expect("HintStore verbose preflight");
+    let retired = oracle_output.instret;
+    let oracle_arenas = crate::log_native::generate_rv64im_record_arenas_from_logs::<
+        F,
+        DenseRecordArena,
+    >(&exe, &mut oracle_output, &capacities, &pc_to_air_idx)
+    .expect("HintStore verbose record assembly");
+
+    // With no variable arena target, delta compilation must taint the entire
+    // mixed AIR back to verbose assembly rather than migrate either opcode.
+    std::env::remove_var("OPENVM_RVR_INLINE_RECORDS");
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "delta");
+    let (tainted_vm, _) =
+        VirtualMachine::new_with_keygen(test_cpu_engine(), Rv64ImCpuBuilder, config.clone())
+            .expect("HintStore taint vm init");
+    let RvrPreflightRoute::Rvr(tainted_instance) = tainted_vm
+        .preflight_routed_instance(&exe)
+        .expect("HintStore taint route")
+    else {
+        panic!("HintStore taint arm must route to rvr")
+    };
+    assert!(
+        hint_slots
+            .iter()
+            .all(|&slot| !tainted_instance.compiled().inline_records().pc_slots[slot]),
+        "missing variable target must taint both HintStore opcodes off inline emission"
+    );
+
+    for pass in 0..2 {
+        std::env::remove_var("OPENVM_RVR_INLINE_RECORDS");
+        std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "1");
+        std::env::set_var("OPENVM_RVR_GPU_RECORDS", "delta");
+        let (direct_vm, _) =
+            VirtualMachine::new_with_keygen(test_cpu_engine(), Rv64ImCpuBuilder, config.clone())
+                .expect("HintStore direct vm init");
+        let RvrPreflightRoute::Rvr(direct_instance) = direct_vm
+            .preflight_routed_instance(&exe)
+            .expect("HintStore direct route")
+        else {
+            panic!("HintStore direct arm must route to rvr")
+        };
+        let inline = direct_instance.compiled().inline_records();
+        assert!(
+            hint_slots.iter().all(|&slot| inline.pc_slots[slot]),
+            "pass {pass}: both HintStore opcodes must migrate atomically"
+        );
+        let geometry = inline
+            .arena_native_airs
+            .iter()
+            .find(|&&(air, _)| air == hint_air)
+            .map(|&(_, geometry)| geometry)
+            .expect("HintStore variable arena geometry");
+        assert!(matches!(
+            geometry.layout,
+            openvm_circuit::arch::rvr::ArenaNativeLayout::CustomVariableRows {
+                residual_memory_chronology: true
+            }
+        ));
+        let (mut direct_arena, target) = DenseRecordArena::stage_arena_native(
+            heights[hint_air] as usize,
+            capacities[hint_air].1,
+            &geometry,
+        );
+        let targets = BTreeMap::from([(hint_air, target)]);
+        let mut direct_output = direct_instance
+            .execute_preflight_from_state_with_arena_targets(
+                direct_vm.create_initial_state(&exe, streams.clone()),
+                Some(retired),
+                &heights,
+                &targets,
+            )
+            .expect("HintStore direct preflight");
+        assert_system_records_eq(
+            &format!("HintStore direct pass {pass}"),
+            &oracle_output.system_records,
+            &direct_output.system_records,
+        );
+        crate::log_native::generate_rv64im_record_arenas_from_logs::<F, DenseRecordArena>(
+            &exe,
+            &mut direct_output,
+            &capacities,
+            &pc_to_air_idx,
+        )
+        .expect("HintStore direct residual assembly");
+        let written_rows = direct_output
+            .arena_native_written
+            .iter()
+            .find(|&&(air, _)| air == hint_air)
+            .map(|&(_, rows)| rows as usize)
+            .expect("HintStore written rows");
+        let written_bytes = direct_output
+            .arena_native_written_bytes
+            .iter()
+            .find(|&&(air, _)| air == hint_air)
+            .map(|&(_, bytes)| bytes as usize)
+            .expect("HintStore written bytes");
+        assert_eq!(written_rows, 4, "one single row plus three buffer rows");
+        assert_eq!(written_bytes, 144, "52-byte single + 92-byte buffer");
+        direct_arena.finish_arena_native_sized(written_rows, written_bytes, &geometry);
+        assert_eq!(direct_arena.rvr_variable_rows, Some(4));
+        assert_eq!(
+            direct_arena.allocated(),
+            oracle_arenas[hint_air].allocated(),
+            "pass {pass}: HintStore direct-final bytes must match the verbose assembler"
+        );
+    }
+
+    std::env::remove_var("OPENVM_RVR_GPU_RECORDS");
+    std::env::remove_var("OPENVM_RVR_ARENA_NATIVE");
+    std::env::remove_var("OPENVM_RVR_INLINE_RECORDS");
+}
+
+/// PhantomAir is semantically mixed across every system and extension
+/// discriminant. All successful system phantoms and all Rv64I extension
+/// phantoms in this configuration must share the same complete-record target;
+/// their 20-byte records must exactly match the verbose assembler twice.
+#[test]
+fn rvr_preflight_phantom_direct_final_matches_verbose_twice() {
+    use openvm_circuit::arch::rvr::preflight::RvrArenaNativeTarget;
+
+    let exe = phantom_direct_exe();
+    let streams = hint_input_streams();
+    let config = Rv64ImConfig::default();
+
+    std::env::set_var("OPENVM_RVR_INLINE_RECORDS", "0");
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
+    std::env::remove_var("OPENVM_RVR_GPU_RECORDS");
+    let (oracle_vm, _) =
+        VirtualMachine::new_with_keygen(test_cpu_engine(), Rv64ImCpuBuilder, config.clone())
+            .expect("Phantom oracle vm init");
+    let heights = vec![4096u32; oracle_vm.num_airs()];
+    let capacities = heights
+        .iter()
+        .zip(oracle_vm.pk().per_air.iter())
+        .map(|(&height, pk)| (height as usize, pk.vk.params.width.main_width()))
+        .collect::<Vec<_>>();
+    let pc_to_air_idx = oracle_vm
+        .pc_to_air_idx(&exe)
+        .expect("Phantom pc-to-air mapping");
+    let phantom_slots = exe
+        .program
+        .instructions_and_debug_infos
+        .iter()
+        .enumerate()
+        .filter_map(|(slot, entry)| {
+            entry.as_ref().and_then(|(instruction, _)| {
+                (instruction.opcode == SystemOpcode::PHANTOM.global_opcode()).then_some(slot)
+            })
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(phantom_slots.len(), 6, "fixture discriminator coverage");
+    let phantom_air = pc_to_air_idx[phantom_slots[0]].expect("Phantom AIR");
+    assert!(
+        phantom_slots
+            .iter()
+            .all(|&slot| pc_to_air_idx[slot] == Some(phantom_air)),
+        "every phantom discriminator must share PhantomAir"
+    );
+    let RvrPreflightRoute::Rvr(oracle_instance) = oracle_vm
+        .preflight_routed_instance(&exe)
+        .expect("Phantom oracle route")
+    else {
+        panic!("Phantom oracle must route to rvr")
+    };
+    let mut oracle_output = oracle_instance
+        .execute_preflight_from_state(oracle_vm.create_initial_state(&exe, streams.clone()), None)
+        .expect("Phantom verbose preflight");
+    let retired = oracle_output.instret;
+    let oracle_arenas = crate::log_native::generate_rv64im_record_arenas_from_logs::<
+        F,
+        DenseRecordArena,
+    >(&exe, &mut oracle_output, &capacities, &pc_to_air_idx)
+    .expect("Phantom verbose record assembly");
+
+    for pass in 0..2 {
+        std::env::remove_var("OPENVM_RVR_INLINE_RECORDS");
+        std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "1");
+        std::env::set_var("OPENVM_RVR_GPU_RECORDS", "delta");
+        let (direct_vm, _) =
+            VirtualMachine::new_with_keygen(test_cpu_engine(), Rv64ImCpuBuilder, config.clone())
+                .expect("Phantom direct vm init");
+        let RvrPreflightRoute::Rvr(direct_instance) = direct_vm
+            .preflight_routed_instance(&exe)
+            .expect("Phantom direct route")
+        else {
+            panic!("Phantom direct arm must route to rvr")
+        };
+        let inline = direct_instance.compiled().inline_records();
+        assert!(
+            phantom_slots.iter().all(|&slot| inline.pc_slots[slot]),
+            "pass {pass}: every successful Phantom discriminator must migrate atomically"
+        );
+        let geometry = inline
+            .arena_native_airs
+            .iter()
+            .find(|&&(air, _)| air == phantom_air)
+            .map(|&(_, geometry)| geometry)
+            .expect("Phantom arena-native geometry");
+        assert_eq!(geometry.stride_dense(), 20);
+        assert!(matches!(
+            geometry.layout,
+            openvm_circuit::arch::rvr::ArenaNativeLayout::Custom {
+                residual_memory_chronology: true
+            }
+        ));
+        let (mut direct_arena, target) = DenseRecordArena::stage_arena_native(
+            heights[phantom_air] as usize,
+            capacities[phantom_air].1,
+            &geometry,
+        );
+        let targets = BTreeMap::from([(phantom_air, target)]);
+        let mut direct_output = direct_instance
+            .execute_preflight_from_state_with_arena_targets(
+                direct_vm.create_initial_state(&exe, streams.clone()),
+                Some(retired),
+                &heights,
+                &targets,
+            )
+            .expect("Phantom direct preflight");
+        assert_system_records_eq(
+            &format!("Phantom direct pass {pass}"),
+            &oracle_output.system_records,
+            &direct_output.system_records,
+        );
+        crate::log_native::generate_rv64im_record_arenas_from_logs::<F, DenseRecordArena>(
+            &exe,
+            &mut direct_output,
+            &capacities,
+            &pc_to_air_idx,
+        )
+        .expect("Phantom direct residual assembly");
+        let written = direct_output
+            .arena_native_written
+            .iter()
+            .find(|&&(air, _)| air == phantom_air)
+            .map(|&(_, rows)| rows as usize)
+            .expect("Phantom written rows");
+        assert_eq!(written, phantom_slots.len());
+        direct_arena.finish_arena_native(written, &geometry);
+        assert_eq!(
+            direct_arena.allocated(),
+            oracle_arenas[phantom_air].allocated(),
+            "pass {pass}: Phantom direct-final bytes must match the verbose assembler"
+        );
+    }
+
+    std::env::remove_var("OPENVM_RVR_GPU_RECORDS");
+    std::env::remove_var("OPENVM_RVR_ARENA_NATIVE");
+    std::env::remove_var("OPENVM_RVR_INLINE_RECORDS");
+}
+
+/// DebugPanic cannot produce a successful Phantom row. Merely having that
+/// discriminator in the program must therefore taint every PhantomAir slot
+/// back to verbose routing, even when the panic is unreachable at runtime.
+#[test]
+fn rvr_preflight_phantom_unshaped_discriminator_taints_whole_air() {
+    let exe = exe(&[
+        phantom(SysPhantom::Nop),
+        terminate(),
+        phantom(SysPhantom::DebugPanic),
+    ]);
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "1");
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "delta");
+    let (vm, _) = VirtualMachine::new_with_keygen(
+        test_cpu_engine(),
+        Rv64ImCpuBuilder,
+        Rv64ImConfig::default(),
+    )
+    .expect("Phantom taint vm init");
+    let RvrPreflightRoute::Rvr(instance) = vm
+        .preflight_routed_instance(&exe)
+        .expect("Phantom taint route")
+    else {
+        panic!("Phantom taint fixture must route to rvr")
+    };
+    let inline = instance.compiled().inline_records();
+    assert!(
+        !inline.pc_slots[0] && !inline.pc_slots[2],
+        "one unshaped Phantom discriminator must taint the whole AIR"
+    );
+    std::env::remove_var("OPENVM_RVR_GPU_RECORDS");
+    std::env::remove_var("OPENVM_RVR_ARENA_NATIVE");
 }
 
 /// R4 mixed-AIR regression: main-memory load/store instructions and REVEAL

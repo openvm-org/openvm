@@ -123,6 +123,14 @@ impl<const BLOCKS: usize> HybridModularChip<F, BLOCKS> {
             RecordSeeker::<DenseRecordArena, AlgebraRecord<2, BLOCKS>, _>::get_aligned_sizes(
                 &layout,
             );
+        #[cfg(feature = "rvr")]
+        {
+            let descriptor =
+                VecHeapRecordDescriptor::new(BLOCKS * openvm_circuit::arch::MEMORY_BLOCK_BYTES);
+            assert_eq!(adapter_size, descriptor.adapter_size);
+            assert_eq!(adapter_size + core_size, descriptor.record_size);
+            assert!(core_size >= descriptor.core_size);
+        }
         let gpu = FieldExprChipGpu::new(
             &cpu.inner,
             2,
@@ -305,6 +313,14 @@ impl<const BLOCKS: usize> HybridFp2Chip<F, BLOCKS> {
             RecordSeeker::<DenseRecordArena, AlgebraRecord<2, BLOCKS>, _>::get_aligned_sizes(
                 &layout,
             );
+        #[cfg(feature = "rvr")]
+        {
+            let descriptor =
+                VecHeapRecordDescriptor::new(BLOCKS * openvm_circuit::arch::MEMORY_BLOCK_BYTES);
+            assert_eq!(adapter_size, descriptor.adapter_size);
+            assert_eq!(adapter_size + core_size, descriptor.record_size);
+            assert!(core_size >= descriptor.core_size);
+        }
         let gpu = FieldExprChipGpu::new(
             &cpu.inner,
             2,

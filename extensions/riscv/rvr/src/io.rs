@@ -21,6 +21,38 @@ use rvr_openvm_lift::{
 
 use crate::instruction::{decode_imm_cg, decode_reg, Reg};
 
+/// Packed hint-store record geometry shared with the circuit consumer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HintStoreRecordDescriptor {
+    pub header_size: usize,
+    pub header_align: usize,
+    pub var_size: usize,
+    pub var_align: usize,
+    pub capacity_per_row: usize,
+}
+
+impl HintStoreRecordDescriptor {
+    pub const fn new() -> Self {
+        Self {
+            header_size: 32,
+            header_align: 4,
+            var_size: 20,
+            var_align: 4,
+            capacity_per_row: 52,
+        }
+    }
+
+    pub const fn record_size(self, rows: usize) -> usize {
+        self.header_size + self.var_size * rows
+    }
+}
+
+impl Default for HintStoreRecordDescriptor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 // HINT_BUFFER writes the maximum hint payload as one arbitrarily aligned range.
 const RV64_IO_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize =
     max_main_memory_pages_for_contiguous_range(MAX_HINT_BUFFER_DWORDS * WORD_SIZE);
@@ -28,7 +60,9 @@ const RV64_IO_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize =
 /// HINT_STORED: pop one register word (8 bytes) from the hint stream into `mem[reg[ptr_reg]]`.
 #[derive(Debug, Clone)]
 pub(crate) struct HintStoreWInstr {
+    pub(crate) from_pc: u32,
     pub(crate) ptr_reg: Reg,
+    pub(crate) chip_idx: Option<AirIndex>,
 }
 
 impl ExtInstr for HintStoreWInstr {
@@ -37,11 +71,37 @@ impl ExtInstr for HintStoreWInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let ptr = ctx.read_var(self.ptr_reg);
+        let (ptr, from_timestamp, ptr_prev_timestamp) =
+            ctx.read_var_with_trace(self.ptr_reg);
         // HINT_STORED has the same three-tick shape as HINT_BUFFER: pointer
         // read, row-count placeholder, and memory write.
         ctx.trace_timestamp();
-        ctx.emit_checked_call_without_page_flush("openvm_hint_storew", &["state", &ptr]);
+        let chip_idx = if ctx.inline_record_enabled() {
+            air_index_to_c(self.chip_idx)
+        } else {
+            u32::MAX
+        };
+        ctx.emit_checked_call_without_page_flush(
+            "openvm_hint_storew",
+            &[
+                "state",
+                &ptr,
+                &format!("{}u", self.from_pc),
+                &from_timestamp,
+                &format!(
+                    "{}u",
+                    self.ptr_reg.index() * RV64_REGISTER_NUM_LIMBS as u32
+                ),
+                &ptr_prev_timestamp,
+                &format!("{chip_idx}u"),
+            ],
+        );
+    }
+
+    fn inline_record_shape(&self) -> Option<InlineRecordShape> {
+        Some(InlineRecordShape::CustomVariableRows {
+            capacity_per_row: HintStoreRecordDescriptor::new().capacity_per_row,
+        })
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -57,6 +117,7 @@ impl ExtInstr for HintStoreWInstr {
 /// write them sequentially starting at `mem[reg[ptr_reg]]`.
 #[derive(Debug, Clone)]
 pub(crate) struct HintBufferInstr {
+    pub(crate) from_pc: u32,
     pub(crate) ptr_reg: Reg,
     pub(crate) num_words_reg: Reg,
     pub(crate) chip_idx: Option<AirIndex>,
@@ -68,8 +129,9 @@ impl ExtInstr for HintBufferInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let ptr = ctx.read_var(self.ptr_reg);
-        let n = ctx.read_var(self.num_words_reg);
+        let (ptr, from_timestamp, ptr_prev_timestamp) =
+            ctx.read_var_with_trace(self.ptr_reg);
+        let (n, _, count_prev_timestamp) = ctx.read_var_with_trace(self.num_words_reg);
         ctx.write_line(&format!(
             "if (unlikely(({n} - 1ull) >= {MAX_HINT_BUFFER_DWORDS}ull)) {{"
         ));
@@ -81,12 +143,40 @@ impl ExtInstr for HintBufferInstr {
         // After the check above, n - 1 is at most 1022.
         ctx.trace_chip_if_nonzero(chip_idx, &format!("(uint32_t)({n} - 1ull)"));
         ctx.write_line(&format!("if ({n} > 0) {{"));
+        let direct_chip_idx = if ctx.inline_record_enabled() {
+            chip_idx
+        } else {
+            u32::MAX
+        };
         let callback_count = format!("(uint16_t)({n})");
         ctx.emit_checked_call_without_page_flush(
             "openvm_hint_buffer",
-            &["state", &ptr, &callback_count],
+            &[
+                "state",
+                &ptr,
+                &callback_count,
+                &format!("{}u", self.from_pc),
+                &from_timestamp,
+                &format!(
+                    "{}u",
+                    self.ptr_reg.index() * RV64_REGISTER_NUM_LIMBS as u32
+                ),
+                &ptr_prev_timestamp,
+                &format!(
+                    "{}u",
+                    self.num_words_reg.index() * RV64_REGISTER_NUM_LIMBS as u32
+                ),
+                &count_prev_timestamp,
+                &format!("{direct_chip_idx}u"),
+            ],
         );
         ctx.write_line("}");
+    }
+
+    fn inline_record_shape(&self) -> Option<InlineRecordShape> {
+        Some(InlineRecordShape::CustomVariableRows {
+            capacity_per_row: HintStoreRecordDescriptor::new().capacity_per_row,
+        })
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -139,7 +229,7 @@ impl ExtInstr for RevealInstr {
             let src = ctx.read_var(self.src_reg);
             let addr = addr_from_ptr(&ptr);
             let width = self.width.bytes().to_string();
-            ctx.extern_call(
+            ctx.extern_call_without_page_flush(
                 "trace_wr_as",
                 &[
                     "state",
@@ -177,6 +267,15 @@ pub struct Rv64IoExtension {
 impl Rv64IoExtension {
     pub fn new(ctx: Option<&RvrExtensionCtx>) -> Result<Self, ExtensionError> {
         let hint_store_chip_idx = opcode_air_idx(ctx, Rv64HintStoreOpcode::HINT_STORED)?;
+        let hint_buffer_chip_idx = opcode_air_idx(ctx, Rv64HintStoreOpcode::HINT_BUFFER)?;
+        if hint_store_chip_idx != hint_buffer_chip_idx {
+            return Err(ExtensionError::SharedAirMismatch {
+                first_opcode: Rv64HintStoreOpcode::HINT_STORED.global_opcode(),
+                second_opcode: Rv64HintStoreOpcode::HINT_BUFFER.global_opcode(),
+                first_air: hint_store_chip_idx,
+                second_air: hint_buffer_chip_idx,
+            });
+        }
         Ok(Self {
             hint_store_chip_idx,
         })
@@ -186,7 +285,7 @@ impl Rv64IoExtension {
 impl RvrExtension for Rv64IoExtension {
     fn codegen_fingerprint(&self) -> Option<Vec<u8>> {
         Some(air_index_codegen_fingerprint(
-            b"openvm-rv64io-rvr-v1",
+            b"openvm-rv64io-rvr-v2",
             &[self.hint_store_chip_idx],
         ))
     }
@@ -198,7 +297,11 @@ impl RvrExtension for Rv64IoExtension {
             let ptr_reg = decode_reg(insn.b);
             return Some(LiftedInstr::Body(InstrAt {
                 pc,
-                instr: Box::new(HintStoreWInstr { ptr_reg }),
+                instr: Box::new(HintStoreWInstr {
+                    from_pc: pc as u32,
+                    ptr_reg,
+                    chip_idx: self.hint_store_chip_idx,
+                }),
                 source_loc: None,
             }));
         }
@@ -209,6 +312,7 @@ impl RvrExtension for Rv64IoExtension {
             return Some(LiftedInstr::Body(InstrAt {
                 pc,
                 instr: Box::new(HintBufferInstr {
+                    from_pc: pc as u32,
                     ptr_reg,
                     num_words_reg,
                     chip_idx: self.hint_store_chip_idx,

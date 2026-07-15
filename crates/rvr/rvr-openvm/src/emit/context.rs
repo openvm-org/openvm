@@ -1936,6 +1936,20 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
     fn trace_timestamp(&mut self) {
         EmitContext::trace_timestamp(self);
     }
+
+    fn trace_phantom_record(&mut self, operands: [u32; 3]) {
+        if self.inline_records_enabled() {
+            self.write_line(&format!(
+                "preflight_emit_phantom(state, {}u, 0x{:08x}u, state->tracer->timestamp, {}u, {}u, {}u);",
+                self.current_chip_idx,
+                self.current_pc as u32,
+                operands[0],
+                operands[1],
+                operands[2]
+            ));
+        }
+        self.trace_timestamp();
+    }
 }
 
 fn reg_index(var: Variable) -> u8 {

@@ -10,6 +10,7 @@ repository.workspace = true
 [dependencies]
 rvr-openvm-ir.workspace = true
 rvr-openvm-lift.workspace = true
+rvr-openvm-ext-algebra.workspace = true
 
 openvm-ecc-transpiler.workspace = true
 openvm-instructions.workspace = true

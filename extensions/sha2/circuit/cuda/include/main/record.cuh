@@ -19,6 +19,22 @@ template <typename V> struct Sha2RecordHeader {
     MemoryReadAuxRecord register_reads_aux[sha2::SHA2_REGISTER_READS];
 };
 
+struct Sha256DirectRecordAbi {
+    Sha2RecordHeader<Sha256Variant> header;
+    uint8_t message_bytes[Sha256Variant::BLOCK_U8S];
+    uint8_t prev_state[Sha256Variant::STATE_BYTES];
+    uint8_t new_state[Sha256Variant::STATE_BYTES];
+    MemoryReadAuxRecord input_reads_aux[Sha256Variant::BLOCK_READS];
+    MemoryReadAuxRecord state_reads_aux[Sha256Variant::STATE_READS];
+    MemoryWriteBytesAuxRecord<sha2::SHA2_WRITE_SIZE>
+        write_aux[Sha256Variant::STATE_WRITES];
+};
+
+static_assert(sizeof(Sha2RecordHeader<Sha256Variant>) == 48,
+              "SHA-256 header ABI drift");
+static_assert(sizeof(Sha256DirectRecordAbi) == 272,
+              "SHA-256 direct record ABI drift");
+
 template <typename V> struct Sha2RecordMut {
     Sha2RecordHeader<V> *header;
     uint8_t *message_bytes;

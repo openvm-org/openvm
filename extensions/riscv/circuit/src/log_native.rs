@@ -33,6 +33,7 @@ use openvm_riscv_transpiler::{
     ShiftWOpcode,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
+use rvr_openvm_ext_riscv::HintStoreRecordDescriptor;
 use strum::IntoEnumIterator;
 
 use crate::{
@@ -50,8 +51,9 @@ use crate::{
     AddSubCoreRecord, BitwiseLogicCoreRecord, BranchEqualCoreRecord, BranchLessThanCoreRecord,
     DivRemCoreRecord, LessThanCoreRecord, LoadSignExtendCoreRecord, LoadStoreCoreRecord,
     MulHCoreRecord, MultiplicationCoreRecord, Rv64AuipcCoreRecord, Rv64HintStoreLayout,
-    Rv64HintStoreMetadata, Rv64HintStoreRecordMut, Rv64JalLuiCoreRecord, Rv64JalrCoreRecord,
-    ShiftLogicalCoreRecord, ShiftRightArithmeticCoreRecord,
+    Rv64HintStoreMetadata, Rv64HintStoreRecordHeader, Rv64HintStoreRecordMut, Rv64HintStoreVar,
+    Rv64JalLuiCoreRecord, Rv64JalrCoreRecord, ShiftLogicalCoreRecord,
+    ShiftRightArithmeticCoreRecord,
 };
 
 const JAL: usize = Rv64JalLuiOpcode::JAL as usize;
@@ -1533,6 +1535,21 @@ where
             [SystemOpcode::PHANTOM.global_opcode()],
             assemble_phantom::<F, RA>,
         );
+        registry.register_inline_arena_native(
+            [SystemOpcode::PHANTOM.global_opcode()],
+            size_of::<PhantomRecord>(),
+            assemble_phantom_inline::<F, RA>,
+            ArenaNativeGeometry {
+                adapter_size: size_of::<PhantomRecord>(),
+                adapter_align: align_of::<PhantomRecord>(),
+                core_size: 0,
+                core_align: 1,
+                core_off_matrix: 0,
+                layout: ArenaNativeLayout::Custom {
+                    residual_memory_chronology: true,
+                },
+            },
+        );
     }
 }
 
@@ -1742,6 +1759,33 @@ where
         registry.register(
             Rv64HintStoreOpcode::iter().map(|opcode| opcode.global_opcode()),
             assemble_hintstore::<F, RA>,
+        );
+        let descriptor = HintStoreRecordDescriptor::new();
+        assert_eq!(
+            size_of::<Rv64HintStoreRecordHeader>(),
+            descriptor.header_size
+        );
+        assert_eq!(
+            align_of::<Rv64HintStoreRecordHeader>(),
+            descriptor.header_align
+        );
+        assert_eq!(size_of::<Rv64HintStoreVar>(), descriptor.var_size);
+        assert_eq!(align_of::<Rv64HintStoreVar>(), descriptor.var_align);
+        assert_eq!(descriptor.record_size(1), descriptor.capacity_per_row);
+        registry.register_inline_arena_native(
+            Rv64HintStoreOpcode::iter().map(|opcode| opcode.global_opcode()),
+            descriptor.capacity_per_row,
+            reject_hintstore_compact::<F, RA>,
+            ArenaNativeGeometry {
+                adapter_size: descriptor.header_size,
+                adapter_align: descriptor.header_align,
+                core_size: descriptor.var_size,
+                core_align: descriptor.var_align,
+                core_off_matrix: 0,
+                layout: ArenaNativeLayout::CustomVariableRows {
+                    residual_memory_chronology: true,
+                },
+            },
         );
     }
 }
@@ -2916,6 +2960,17 @@ fn assemble_hintstore<F: PrimeField32, RA: Rv64IoRecordArena<F>>(
     Ok(())
 }
 
+fn reject_hintstore_compact<F: PrimeField32, RA: Rv64IoRecordArena<F>>(
+    _arena: &mut RA,
+    _instruction: &Instruction<F>,
+    _compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError> {
+    Err(rvr_error(format!(
+        "HintStore at pc {pc:#x} requires its packed variable-row arena-native target"
+    )))
+}
+
 fn assemble_phantom<F: PrimeField32, RA: Rv64IRecordArena<F>>(
     arena: &mut RA,
     _access: &AccessView<'_, F>,
@@ -2927,6 +2982,34 @@ fn assemble_phantom<F: PrimeField32, RA: Rv64IRecordArena<F>>(
     record.pc = pc;
     record.timestamp = timestamp;
     record.operands = [instruction.a, instruction.b, instruction.c].map(|x| x.as_canonical_u32());
+    Ok(())
+}
+
+fn assemble_phantom_inline<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    _instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError> {
+    if compact.len() != size_of::<PhantomRecord>() {
+        return Err(rvr_error(format!(
+            "invalid Phantom inline record size {} at pc {pc:#x}; expected {}",
+            compact.len(),
+            size_of::<PhantomRecord>()
+        )));
+    }
+    let mut words = compact
+        .chunks_exact(size_of::<u32>())
+        .map(|word| u32::from_ne_bytes(word.try_into().unwrap()));
+    let record: &mut PhantomRecord = arena.alloc(EmptyMultiRowLayout::default());
+    record.pc = words.next().unwrap();
+    record.operands = [
+        words.next().unwrap(),
+        words.next().unwrap(),
+        words.next().unwrap(),
+    ];
+    record.timestamp = words.next().unwrap();
+    debug_assert!(words.next().is_none());
     Ok(())
 }
 

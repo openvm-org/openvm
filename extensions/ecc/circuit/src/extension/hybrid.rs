@@ -20,6 +20,8 @@ use openvm_mod_circuit_builder::{
 };
 use openvm_riscv_adapters::{Rv64VecHeapAdapterCols, Rv64VecHeapAdapterExecutor};
 use openvm_stark_backend::prover::AirProvingContext;
+#[cfg(feature = "rvr")]
+use rvr_openvm_ext_algebra::VecHeapRecordDescriptor;
 
 use crate::{
     get_ec_addne_chip, get_ec_double_chip, EccRecord, Rv64WeierstrassConfig, WeierstrassAir,
@@ -49,6 +51,14 @@ impl<const NUM_READS: usize, const BLOCKS: usize> HybridWeierstrassChip<F, NUM_R
             RecordSeeker::<DenseRecordArena, EccRecord<NUM_READS, BLOCKS>, _>::get_aligned_sizes(
                 &layout,
             );
+        #[cfg(feature = "rvr")]
+        {
+            let descriptor =
+                VecHeapRecordDescriptor::new_with_reads(BLOCKS * MEMORY_BLOCK_BYTES, NUM_READS);
+            assert_eq!(adapter_size, descriptor.adapter_size);
+            assert_eq!(adapter_size + core_size, descriptor.record_size);
+            assert!(core_size >= descriptor.core_size);
+        }
         let gpu = FieldExprChipGpu::new(
             &cpu.inner,
             NUM_READS,

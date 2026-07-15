@@ -1,7 +1,9 @@
 //! OpenVM system instruction lifting and RVR extension dispatch.
 
 use openvm_instructions::{LocalOpcode, SysPhantom, SystemOpcode};
-use rvr_openvm_ir::{CfgEffect, ExtEmitCtx, ExtInstr, InstrAt, LiftedInstr, Terminator};
+use rvr_openvm_ir::{
+    CfgEffect, ExtEmitCtx, ExtInstr, InlineRecordShape, InstrAt, LiftedInstr, Terminator,
+};
 
 use crate::{ExtensionError, ExtensionRegistry, RvrInstruction};
 
@@ -25,20 +27,21 @@ pub fn lift_instruction(
     }
 
     if opcode == SystemOpcode::PHANTOM.global_opcode_usize() {
+        let operands = [insn.a, insn.b, insn.c];
         let discriminant = (insn.c & 0xffff) as u16;
         if let Some(phantom) = SysPhantom::from_repr(discriminant) {
-            return Ok(Some(lift_system_phantom(pc, phantom)));
+            return Ok(Some(lift_system_phantom(pc, phantom, operands)));
         }
     }
 
     extensions.try_lift(insn, pc)
 }
 
-fn lift_system_phantom(pc: u64, phantom: SysPhantom) -> LiftedInstr {
+fn lift_system_phantom(pc: u64, phantom: SysPhantom, operands: [u32; 3]) -> LiftedInstr {
     match phantom {
         SysPhantom::Nop | SysPhantom::CtStart | SysPhantom::CtEnd => LiftedInstr::Body(InstrAt {
             pc,
-            instr: Box::new(NopInstr),
+            instr: Box::new(SystemPhantomInstr { operands }),
             source_loc: None,
         }),
         SysPhantom::DebugPanic => LiftedInstr::Term {
@@ -48,6 +51,37 @@ fn lift_system_phantom(pc: u64, phantom: SysPhantom) -> LiftedInstr {
             },
             source_loc: None,
         },
+    }
+}
+
+#[derive(Debug, Clone)]
+struct SystemPhantomInstr {
+    operands: [u32; 3],
+}
+
+impl ExtInstr for SystemPhantomInstr {
+    fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
+        ctx.trace_phantom_record(self.operands);
+    }
+
+    fn opname(&self) -> &str {
+        "phantom"
+    }
+
+    fn inline_record_shape(&self) -> Option<InlineRecordShape> {
+        Some(InlineRecordShape::Custom { record_size: 20 })
+    }
+
+    fn cfg_effect(&self) -> CfgEffect {
+        CfgEffect::None
+    }
+
+    fn accesses_memory(&self) -> bool {
+        false
+    }
+
+    fn clone_box(&self) -> Box<dyn ExtInstr> {
+        Box::new(self.clone())
     }
 }
 
