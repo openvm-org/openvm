@@ -48,8 +48,9 @@ use super::rvr::{
     classify_preflight_opcodes_with_extensions, compile_preflight_with_extensions,
     load_compiled_from_path, preflight::execute_rvr_preflight,
     preflight::{ChipRecordBuf, RvrArenaNativeTarget}, rvr_preflight_engine_env_override,
-    ArenaNativeGeometry, ChipMapping, GuestDebugMap, LogNativeOpcodeAdmitter, PreflightRawLogs,
-    RvrCompiled, RvrDeltaRecords, RvrExecutionKind, RvrInitialImage, RvrInlineChipRecords,
+    ArenaNativeGeometry, ChipMapping, GuestDebugMap, LogNativeOpcodeAdmitter,
+    PreflightMemoryAccessAux, PreflightRawLogs, RvrCompiled, RvrDeltaRecords, RvrExecutionKind,
+    RvrInitialImage, RvrInlineChipRecords,
     RvrMeteredCostInstance, RvrMeteredInstance, RvrMeteredSegmentInstance, RvrPreflightEngine,
     RvrPreflightBufferPool, RvrPreflightInstance, RvrPreflightOpcodeClass, RvrPureInstance,
     RvrPreflightOutput, RvrPreflightRoute, RvrPureWithInstretTrackingInstance,
@@ -142,6 +143,9 @@ trait CachedRvrPreflightExecutor<F>: Send + Sync {
         inline_records: Vec<RvrInlineChipRecords>,
         delta_records: Option<RvrDeltaRecords>,
     );
+    /// Return the final-layout access replay after log-native assembly has consumed it.
+    fn recycle_access_aux(&self, access_aux: Vec<PreflightMemoryAccessAux<F>>);
+
     /// R4: airs whose records the compiled library writes arena-native.
     fn arena_native_airs(&self) -> &[(usize, ArenaNativeGeometry)];
 
@@ -218,6 +222,10 @@ impl<F: PrimeField32> CachedRvrPreflightExecutor<F> for CachedRvrCompiledPreflig
         self.pool
             .recycle_segment_buffers(raw_logs, inline_records, delta_records);
     }
+    fn recycle_access_aux(&self, access_aux: Vec<PreflightMemoryAccessAux<F>>) {
+        self.pool.recycle_access_aux(access_aux);
+    }
+
     fn arena_native_airs(&self) -> &[(usize, ArenaNativeGeometry)] {
         &self.compiled.inline_records().arena_native_airs
     }
@@ -1560,11 +1568,13 @@ where
                     system_records,
                     to_state,
                     raw_logs,
+                    access_aux,
                     inline_records,
                     delta_records,
                     ..
                 } = rvr_output;
                 let recycle_started = std::time::Instant::now();
+                rvr_preflight.recycle_access_aux(access_aux);
                 rvr_preflight.recycle_segment_buffers(raw_logs, inline_records, delta_records);
                 let recycle_finished = std::time::Instant::now();
                 if detailed_profile {
