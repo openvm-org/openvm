@@ -20,7 +20,7 @@ pub use compile::{
     compile, compile_metered, compile_metered_cost, compile_metered_segment_boundary,
     compile_preflight, compile_preflight_with_extensions, compile_with_options,
     load_compiled_from_path, ChipMapping, CompileError, CompileOptions, RvrCompiled,
-    RvrInlineRecordsMeta, RvrPreflightOpcodeClass,
+    RvrDeltaDecodePrecompute, RvrInlineRecordsMeta, RvrPreflightOpcodeClass,
 };
 #[cfg(any(test, feature = "test-utils"))]
 pub use compile::{
@@ -36,7 +36,8 @@ pub use log_native::{
     Alu3ArenaFieldOffsets, Alu3WArenaFieldOffsets, ArenaNativeGeometry, ArenaNativeLayout,
     Branch2ArenaFieldOffsets, DeltaAccessPattern, LoadStoreArenaFieldOffsets, LogNativeAccessView,
     LogNativeAssembler, LogNativeAssemblerRegistry, LogNativeInlineAssembler,
-    LogNativeOpcodeAdmitter, Rw1ArenaFieldOffsets, VmRvrLogNativeExtension, Wr1ArenaFieldOffsets,
+    LogNativeOpcodeAdmitter, RvrDeltaDecodeEntry, RvrDeltaDecodeInfo, Rw1ArenaFieldOffsets,
+    VmRvrLogNativeExtension, Wr1ArenaFieldOffsets,
 };
 pub use metered::{
     RunToCompletion, RvrMeteredInstance, RvrMeteredInstanceWith, RvrMeteredResult,
