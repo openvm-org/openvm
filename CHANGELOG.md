@@ -7,6 +7,11 @@ and this project follows a versioning principles documented in [VERSIONING.md](.
 
 ## Unreleased
 
+## v2.0.1 (2026-07-15)
+
+### Changed
+- Updated Cargo manifests and yanked dependencies.
+
 ## v2.0.0 (2026-07-06)
 
 ### Added
