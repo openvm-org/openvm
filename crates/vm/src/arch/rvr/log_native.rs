@@ -429,7 +429,11 @@ pub fn generate_record_arenas_from_logs_with_compact<F: PrimeField32, RA: Arena>
     pc_to_air_idx: &[Option<usize>],
     compact_airs: &std::collections::HashSet<usize>,
 ) -> Result<(Vec<RA>, Vec<RvrInlineChipRecords>), ExecutionError> {
+    let detailed_profile =
+        std::env::var("OPENVM_RVR_PREFLIGHT_PROFILE_DETAIL").as_deref() == Ok("1");
+    let detail_started = std::time::Instant::now();
     let delta_recycle = expand_delta_records(registry, exe, output, pc_to_air_idx)?;
+    let delta_expand_finished = std::time::Instant::now();
     let inline_records = std::mem::take(&mut output.inline_records);
     let inline_pc_slots = output.inline_pc_slots.clone();
     // Airs whose records C already wrote into direct-final caller backings.
@@ -455,7 +459,9 @@ pub fn generate_record_arenas_from_logs_with_compact<F: PrimeField32, RA: Arena>
             }
         })
         .collect::<Vec<_>>();
+    let arena_alloc_finished = std::time::Instant::now();
     let access = LogNativeAccessView::new(&output.access_aux)?;
+    let access_view_finished = std::time::Instant::now();
 
     // Per-air (compact bytes, cursor, compiled record stride).
     let mut inline_bufs: HashMap<usize, (&[u8], usize, usize)> = inline_records
@@ -467,6 +473,10 @@ pub fn generate_record_arenas_from_logs_with_compact<F: PrimeField32, RA: Arena>
             )
         })
         .collect();
+    let inline_map_finished = std::time::Instant::now();
+    let mut arena_native_skipped = 0usize;
+    let mut compact_seen = 0usize;
+    let mut host_assembled = 0usize;
 
     for program_entry in &output.raw_logs.program_log {
         let pc = u32::try_from(program_entry.pc).map_err(|_| {
@@ -480,11 +490,18 @@ pub fn generate_record_arenas_from_logs_with_compact<F: PrimeField32, RA: Arena>
         else {
             continue;
         };
-        // In combined delta + arena-native mode these entries exist only so
-        // `expand_delta_records` can replay the arena-native instruction's
-        // memory chronology. C already wrote the final record into its arena.
+        // In combined delta + arena-native mode these entries exist only for
+        // device-side memory chronology. C already wrote the final record
+        // into its arena.
         if arena_native_expected.contains_key(&air_idx) {
+            arena_native_skipped += 1;
             continue;
+        }
+        if !output.access_aux_complete {
+            return Err(rvr_error(format!(
+                "host log-native record reached finalization at pc {pc:#x} after compiler-scope \
+                 direct coverage omitted its access replay"
+            )));
         }
         let num_arenas = arenas.len();
         let arena = arenas.get_mut(air_idx).ok_or_else(|| {
@@ -535,13 +552,17 @@ pub fn generate_record_arenas_from_logs_with_compact<F: PrimeField32, RA: Arena>
                          {from_pc:#x} vs program-log pc {pc:#x}"
                     )));
                 }
+                compact_seen += 1;
                 continue;
             }
             (registered.assemble)(arena, instruction, compact, pc)?;
+            host_assembled += 1;
             continue;
         }
         registry.assemble(arena, &access, instruction, pc, program_entry.timestamp)?;
+        host_assembled += 1;
     }
+    let program_walk_finished = std::time::Instant::now();
 
     // Every compact buffer must be consumed exactly.
     for chip in &inline_records {
@@ -556,6 +577,7 @@ pub fn generate_record_arenas_from_logs_with_compact<F: PrimeField32, RA: Arena>
         }
     }
     drop(inline_bufs);
+    let validation_finished = std::time::Instant::now();
 
     // Compact-air wire buffers are handed to the caller for adoption (GPU
     // on-device decode); every other chip's byte buffer goes back through the
@@ -568,6 +590,32 @@ pub fn generate_record_arenas_from_logs_with_compact<F: PrimeField32, RA: Arena>
     });
     output.inline_records = pooled;
     output.delta_records = delta_recycle;
+    let partition_finished = std::time::Instant::now();
+
+    if detailed_profile {
+        eprintln!(
+            "OPENVM_RVR_LOG_FINALIZE_DETAIL delta_expand_us={} arena_alloc_us={} \
+             access_view_us={} inline_map_us={} program_walk_us={} validation_us={} \
+             partition_us={} program_records={} arena_native_skipped={} compact_seen={} \
+             host_assembled={} arenas={} arena_native_airs={} compact_airs={} \
+             access_aux_complete={}",
+            (delta_expand_finished - detail_started).as_micros(),
+            (arena_alloc_finished - delta_expand_finished).as_micros(),
+            (access_view_finished - arena_alloc_finished).as_micros(),
+            (inline_map_finished - access_view_finished).as_micros(),
+            (program_walk_finished - inline_map_finished).as_micros(),
+            (validation_finished - program_walk_finished).as_micros(),
+            (partition_finished - validation_finished).as_micros(),
+            output.raw_logs.program_log.len(),
+            arena_native_skipped,
+            compact_seen,
+            host_assembled,
+            arenas.len(),
+            arena_native_expected.len(),
+            compact_airs.len(),
+            output.access_aux_complete as u8,
+        );
+    }
 
     Ok((arenas, wire_buffers))
 }

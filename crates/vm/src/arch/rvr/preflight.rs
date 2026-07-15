@@ -361,11 +361,18 @@ pub struct RvrDeltaRecords {
     pub(crate) offset: usize,
     pub(crate) written: usize,
     dirty_len: usize,
+    needs_prefault: bool,
     pool: RvrPreflightBufferPool,
 }
 
 impl RvrDeltaRecords {
-    fn new(backing: Vec<u8>, offset: usize, capacity: usize, pool: RvrPreflightBufferPool) -> Self {
+    fn new(
+        backing: Vec<u8>,
+        offset: usize,
+        capacity: usize,
+        pool: RvrPreflightBufferPool,
+        needs_prefault: bool,
+    ) -> Self {
         Self {
             backing: Some(backing),
             offset,
@@ -373,6 +380,7 @@ impl RvrDeltaRecords {
             // Until native execution returns, conservatively assume C may
             // have dirtied the complete target on an error path.
             dirty_len: offset + capacity,
+            needs_prefault,
             pool,
         }
     }
@@ -412,6 +420,11 @@ pub struct RvrPreflightOutput<F> {
     pub system_records: SystemRecords<F>,
     pub raw_logs: PreflightRawLogs,
     pub access_aux: Vec<PreflightMemoryAccessAux<F>>,
+    /// Whether `access_aux` contains the complete host log-native replay.
+    /// The all-direct CUDA delta route omits this otherwise-unused expansion;
+    /// generic finalization must fail rather than assemble a verbose record
+    /// when this is false.
+    pub access_aux_complete: bool,
     pub to_state: VmState<GuestMemory>,
     pub instret: u64,
     pub suspended: bool,
@@ -614,6 +627,7 @@ where
             num_insns,
             None,
             None,
+            true,
         )
     }
 
@@ -636,6 +650,7 @@ where
             num_insns,
             Some(record_capacity_rows),
             None,
+            true,
         )
     }
 
@@ -662,6 +677,7 @@ where
             num_insns,
             Some(record_capacity_rows),
             Some(arena_targets),
+            true,
         )
     }
 }
@@ -684,6 +700,7 @@ pub(crate) fn execute_rvr_preflight<F>(
     num_insns: Option<u64>,
     record_capacity_rows: Option<&[u32]>,
     arena_targets: Option<&BTreeMap<usize, ChipRecordBuf>>,
+    build_access_aux: bool,
 ) -> Result<RvrPreflightOutput<F>, ExecutionError>
 where
     F: PrimeField32,
@@ -771,6 +788,9 @@ where
                 .expect("retry keeps the pristine state")
                 .clone()
         };
+        let detailed_profile =
+            std::env::var("OPENVM_RVR_PREFLIGHT_PROFILE_DETAIL").as_deref() == Ok("1");
+        let setup_started = std::time::Instant::now();
         // The log buffers are write-only from the C tracer and prefix-read by
         // the host, so they are allocated uninitialized: the zero-fill of
         // multi-GB capacities was a real per-call cost on large segments.
@@ -779,8 +799,10 @@ where
         // per-call cost.
         let mut program_log = pool.take_program_log(program_log_cap);
         let mut memory_log = pool.take_memory_log(memory_log_cap);
+        let logs_taken = std::time::Instant::now();
         let mut chip_counts = vec![0u32; chip_counts_len.max(1)];
         let mut exec_frequencies = vec![0u32; exe.program.num_defined_instructions()];
+        let counters_ready = std::time::Instant::now();
         // Shadows are all-zero at segment start (0 = untouched this segment);
         // pooled reuse preserves that via the exact touched-list scrub below.
         // Distinct touched blocks are bounded by the number of memory-log
@@ -806,6 +828,7 @@ where
             + 64;
         let mut touched = pool.take_touched(memory_log_cap + inline_touch_slack);
         let pv_base = public_values_slice(&mut run_state.memory.memory).as_mut_ptr();
+        let scratch_ready = std::time::Instant::now();
 
         // R3: per migrated chip, an inline compact-record buffer. Sized by the
         // metered per-AIR trace heights when available, else by one record per
@@ -831,9 +854,10 @@ where
                 pool.take_record_buf(rows * record_size)
             })
             .collect();
+        let record_buffers_ready = std::time::Instant::now();
         let delta_capacity = program_log_cap.saturating_mul(PREFLIGHT_DELTA_RECORD_SIZE);
         let mut delta_output = if inline_meta.delta_records {
-            let backing = pool.take_delta_backing(delta_capacity);
+            let (backing, needs_prefault) = pool.take_delta_backing(delta_capacity);
             let offset = (32 - backing.as_ptr() as usize % 32) % 32;
             assert!(
                 offset + delta_capacity <= backing.len(),
@@ -844,6 +868,7 @@ where
                 offset,
                 delta_capacity,
                 pool.clone(),
+                needs_prefault,
             ))
         } else {
             None
@@ -856,15 +881,16 @@ where
                 0,
                 "delta record base must be 32-byte aligned"
             );
-            // The CUDA path sources this stream from the page-locked record
-            // pool. Mirror its ready-buffer contract on CPU: fault one byte
-            // per page before the native execute+emit clock starts, so lazy
-            // zero-page faults are never charged as record emission.
-            for page in (0..delta_capacity).step_by(4096) {
-                unsafe { std::ptr::write_volatile(aligned_base.add(page), 0) };
-            }
-            if delta_capacity != 0 {
-                unsafe { std::ptr::write_volatile(aligned_base.add(delta_capacity - 1), 0) };
+            // A fresh lazy allocation is faulted once, outside the native
+            // execute+emit clock. Recycled CPU and pinned CUDA buffers are
+            // already resident, so the pool hit skips this page walk.
+            if delta.needs_prefault {
+                for page in (0..delta_capacity).step_by(4096) {
+                    unsafe { std::ptr::write_volatile(aligned_base.add(page), 0) };
+                }
+                if delta_capacity != 0 {
+                    unsafe { std::ptr::write_volatile(aligned_base.add(delta_capacity - 1), 0) };
+                }
             }
             delta_record = ChipRecordBuf {
                 base: aligned_base.cast(),
@@ -875,6 +901,7 @@ where
                 flags: PREFLIGHT_CHIP_RECORD_FLAG_DIRECT_FINAL,
             };
         }
+        let delta_ready = std::time::Instant::now();
         let mut chip_records = vec![ChipRecordBuf::default(); chip_counts_len.max(1)];
         for (&(air, record_size), buffer) in inline_meta.airs.iter().zip(record_bufs.iter_mut()) {
             debug_assert!(air < chip_records.len(), "inline air {air} out of range");
@@ -916,6 +943,7 @@ where
             tracer.set_delta_records(&mut delta_record);
         }
 
+        let setup_finished = std::time::Instant::now();
         let native_execute_started = std::time::Instant::now();
         let run_result = execute_preflight_raw(
             compiled,
@@ -934,16 +962,20 @@ where
             core::arch::x86_64::_mm_sfence();
         }
         let run_result = run_result.map_err(map_rvr_execute_error)?;
+        let post_native_started = std::time::Instant::now();
         if let Some(delta) = delta_output.as_mut() {
             delta.set_written(delta_record.len as usize);
         }
         if std::env::var("OPENVM_RVR_PREFLIGHT_PROFILE").as_deref() == Ok("1") {
             eprintln!(
-                "OPENVM_RVR_NATIVE_EXEC_EMIT_US={} delta={} delta_records={} delta_bytes={}",
+                "OPENVM_RVR_NATIVE_EXEC_EMIT_US={} delta={} delta_records={} delta_bytes={} \
+                 memory_records={} touched_blocks={}",
                 native_execute_elapsed.as_micros(),
                 inline_meta.delta_records as u8,
                 delta_record.len / PREFLIGHT_DELTA_RECORD_SIZE as u32,
                 delta_record.len,
+                tracer.memory_log_len,
+                tracer.touched_len,
             );
         }
         if let Some(target_instret) = num_insns {
@@ -1015,19 +1047,27 @@ where
         let program_log = unsafe { assume_init_prefix(program_log, program_len) };
         let memory_log = unsafe { assume_init_prefix(memory_log, memory_len) };
         let touched = unsafe { assume_init_prefix(touched, touched_len) };
+        let logs_ready = std::time::Instant::now();
 
         let shadows = PreflightShadowsView {
             register: &shadow_register,
             memory: &shadow_memory,
             public_values: &shadow_public_values,
         };
-        let replay =
-            build_preflight_replay::<F>(&run_state.memory, &shadows, &touched, &memory_log)
-                .map_err(|err| ExecutionError::RvrExecution(err.to_string()))?;
+        let replay = build_preflight_replay::<F>(
+            &run_state.memory,
+            &shadows,
+            &touched,
+            &memory_log,
+            build_access_aux,
+        )
+        .map_err(|err| ExecutionError::RvrExecution(err.to_string()))?;
+        let replay_ready = std::time::Instant::now();
         run_state
             .memory
             .memory
             .extend_touched_pages_from_touched(&replay.touched_memory);
+        let touched_pages_ready = std::time::Instant::now();
         // The shadows and the touched list are segment-lifetime scratch: scrub
         // the shadows back to all-zero via the touched list (exact — every
         // nonzero slot was recorded once on its 0→nonzero transition, and the
@@ -1042,6 +1082,7 @@ where
         );
         pool.recycle_shadows(shadow_register, shadow_memory, shadow_public_values);
         pool.recycle_touched(touched);
+        let scratch_recycled = std::time::Instant::now();
         let filtered_exec_frequencies = exec_frequencies;
         let to_state = ExecutionState::new(run_state.pc(), tracer.timestamp);
         let system_records = SystemRecords {
@@ -1115,6 +1156,35 @@ where
                 .collect()
         };
         let delta_records = delta_output;
+        let harvest_ready = std::time::Instant::now();
+
+        if detailed_profile {
+            eprintln!(
+                "OPENVM_RVR_PREFLIGHT_DETAIL setup_us={} log_take_us={} counter_alloc_us={} \
+                 scratch_take_us={} record_buffer_us={} delta_take_us={} descriptor_us={} \
+                 native_us={} checks_us={} replay_us={} touched_pages_us={} scrub_recycle_us={} \
+                 harvest_us={} program_records={} memory_records={} touched_blocks={} \
+                 arena_native_airs={} access_aux_required={}",
+                (setup_finished - setup_started).as_micros(),
+                (logs_taken - setup_started).as_micros(),
+                (counters_ready - logs_taken).as_micros(),
+                (scratch_ready - counters_ready).as_micros(),
+                (record_buffers_ready - scratch_ready).as_micros(),
+                (delta_ready - record_buffers_ready).as_micros(),
+                (setup_finished - delta_ready).as_micros(),
+                native_execute_elapsed.as_micros(),
+                (logs_ready - post_native_started).as_micros(),
+                (replay_ready - logs_ready).as_micros(),
+                (touched_pages_ready - replay_ready).as_micros(),
+                (scratch_recycled - touched_pages_ready).as_micros(),
+                (harvest_ready - scratch_recycled).as_micros(),
+                program_len,
+                memory_len,
+                touched_len,
+                arena_native_written.len(),
+                build_access_aux as u8,
+            );
+        }
 
         return Ok(RvrPreflightOutput {
             system_records,
@@ -1124,6 +1194,7 @@ where
                 chip_counts,
             },
             access_aux: replay.access_aux,
+            access_aux_complete: build_access_aux,
             to_state: run_state,
             instret: run_result.state.instret,
             suspended: run_result.suspended,
