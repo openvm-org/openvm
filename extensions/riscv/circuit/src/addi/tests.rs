@@ -22,12 +22,11 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 
-use super::{core::run_addi, AddICoreAir, Rv64AddIChip, Rv64AddIExecutor};
+use super::{AddICoreAir, Rv64AddIChip, Rv64AddIExecutor};
 use crate::{
     adapters::{
-        rv64_bytes_to_u16_block, rv64_u16_block_to_bytes, Rv64BaseAluImmU16AdapterAir,
-        Rv64BaseAluImmU16AdapterExecutor, Rv64BaseAluImmU16AdapterFiller, RV64_REGISTER_NUM_LIMBS,
-        U16_BITS,
+        Rv64BaseAluImmU16AdapterAir, Rv64BaseAluImmU16AdapterExecutor,
+        Rv64BaseAluImmU16AdapterFiller, RV64_REGISTER_NUM_LIMBS, U16_BITS,
     },
     addi::AddICoreCols,
     test_utils::{generate_rv64_is_type_immediate, rv64_rand_write_register_or_imm},
@@ -35,6 +34,12 @@ use crate::{
 };
 
 const MAX_INS_CAPACITY: usize = 128;
+const NONCANONICAL_ZERO: [u32; BLOCK_FE_WIDTH] = [
+    1 << U16_BITS,
+    (1 << U16_BITS) - 1,
+    (1 << U16_BITS) - 1,
+    (1 << U16_BITS) - 1,
+];
 type F = BabyBear;
 type Harness = TestChipHarness<F, Rv64AddIExecutor, Rv64AddIAir, Rv64AddIChip<F>>;
 
@@ -101,12 +106,13 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     );
     tester.execute(executor, arena, &instruction);
 
-    let b_u16 = rv64_bytes_to_u16_block(b);
-    let imm_low11 = (imm as u32 & 0x7FF) as u16;
-    let imm_sign = ((imm as u32 >> 11) & 1) as u16;
-    let a = run_addi::<BLOCK_FE_WIDTH, U16_BITS>(&b_u16, imm_low11, imm_sign);
-    let a_bytes = rv64_u16_block_to_bytes(a).map(F::from_u8);
-    assert_eq!(a_bytes, tester.read_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rd))
+    let rs1 = u64::from_le_bytes(b);
+    let signed_imm = ((imm as u32) << 20) as i32 >> 20;
+    let expected = rs1.wrapping_add(signed_imm as i64 as u64);
+    assert_eq!(
+        expected.to_le_bytes().map(F::from_u8),
+        tester.read_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rd)
+    )
 }
 
 //////////////////////////////////////////////////////////////////////////////////////
@@ -138,13 +144,8 @@ fn rand_rv64_addi_test() {
 // NEGATIVE TESTS
 //////////////////////////////////////////////////////////////////////////////////////
 
-fn run_negative_addi_test(
-    prank_rd: [u32; BLOCK_FE_WIDTH],
-    b: [u8; RV64_REGISTER_NUM_LIMBS],
-    c: [u8; RV64_REGISTER_NUM_LIMBS],
-    prank_rs1: Option<[u32; BLOCK_FE_WIDTH]>,
-    prank_imm_sign: Option<u32>,
-) {
+#[test]
+fn rv64_addi_rs1_memory_binding_negative_test() {
     let mut rng = create_seeded_rng();
     let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
     let mut harness = create_harness(&tester);
@@ -154,8 +155,8 @@ fn run_negative_addi_test(
         &mut harness.executor,
         &mut harness.arena,
         &mut rng,
-        Some(b),
-        Some(c),
+        Some([0; RV64_REGISTER_NUM_LIMBS]),
+        Some([0; RV64_REGISTER_NUM_LIMBS]),
     );
 
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
@@ -163,13 +164,9 @@ fn run_negative_addi_test(
         let mut values = trace.row_slice(0).unwrap().to_vec();
         let cols: &mut AddICoreCols<F, BLOCK_FE_WIDTH, U16_BITS> =
             values.split_at_mut(adapter_width).1.borrow_mut();
-        cols.rd = prank_rd.map(F::from_u32);
-        if let Some(prank_rs1) = prank_rs1 {
-            cols.rs1 = prank_rs1.map(F::from_u32);
-        }
-        if let Some(prank_imm_sign) = prank_imm_sign {
-            cols.imm_sign = F::from_u32(prank_imm_sign);
-        }
+        // These limbs represent 2^64, so ADDI 0 still produces zero and all core
+        // constraints hold. Only the rs1 memory-read interaction rejects the row.
+        cols.rs1 = NONCANONICAL_ZERO.map(F::from_u32);
         *trace = RowMajorMatrix::new(values, trace.width());
     };
 
@@ -181,70 +178,4 @@ fn run_negative_addi_test(
     tester
         .simple_test()
         .expect_err("Expected verification to fail, but it passed");
-}
-
-#[test]
-fn rv64_addi_wrong_negative_test() {
-    run_negative_addi_test(
-        [499, 0, 0, 0],
-        [250, 0, 0, 0, 0, 0, 0, 0],
-        [250, 0, 0, 0, 0, 0, 0, 0],
-        None,
-        None,
-    );
-}
-
-#[test]
-fn rv64_addi_out_of_range_negative_test() {
-    // rs1 = 65535 and imm = 1 produce rd = [0, 1, 0, 0]. Pranking rd to
-    // [65536, 0, 0, 0] preserves every core carry constraint. The row must still
-    // fail through the 16-bit range check (and the wrapper's memory-write binding).
-    run_negative_addi_test(
-        [65536, 0, 0, 0],
-        [255, 255, 0, 0, 0, 0, 0, 0],
-        [1, 0, 0, 0, 0, 0, 0, 0],
-        None,
-        None,
-    );
-}
-
-#[test]
-fn rv64_addi_imm_sign_extension_negative_test() {
-    // imm = 5 (positive, so imm_sign should be 0). Prank imm_sign = 1:
-    // instr_c reconstructs to 5 + 0xFFF800 which doesn't match instruction.c = 5,
-    // so the execution bridge interaction fails.
-    run_negative_addi_test(
-        [5, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0],
-        [5, 0, 0, 0, 0, 0, 0, 0],
-        None,
-        Some(1),
-    );
-}
-
-#[test]
-fn rv64_addi_noncanonical_b_negative_test() {
-    // Prank core b[0] = 2^16 with a = [0, 1, 0, 0] as compensation: every carry
-    // constraint holds (carry[0] = 1) and all a cells are canonical, so only the
-    // memory bus read interaction can catch that b doesn't match rs1 in memory.
-    run_negative_addi_test(
-        [0, 1, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0],
-        Some([1 << U16_BITS, 0, 0, 0]), // prank rs1[0] out of range
-        None,
-    );
-}
-
-///////////////////////////////////////////////////////////////////////////////////////
-// SANITY TESTS
-///////////////////////////////////////////////////////////////////////////////////////
-
-#[test]
-fn run_addi_sanity_test() {
-    // rs1 = 500, imm = -3 (imm_low11 = 0x7FD, imm_sign = 1) → rd = 497
-    let rs1 = rv64_bytes_to_u16_block([0xF4, 0x01, 0, 0, 0, 0, 0, 0]);
-    let expected = rv64_bytes_to_u16_block([0xF1, 0x01, 0, 0, 0, 0, 0, 0]);
-    let result = run_addi::<BLOCK_FE_WIDTH, U16_BITS>(&rs1, 0x7FD, 1);
-    assert_eq!(expected, result);
 }

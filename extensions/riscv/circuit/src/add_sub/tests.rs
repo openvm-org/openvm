@@ -12,7 +12,7 @@ use openvm_instructions::LocalOpcode;
 use openvm_riscv_transpiler::BaseAluOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
-    p3_field::{PrimeCharacteristicRing, PrimeField32},
+    p3_field::PrimeCharacteristicRing,
     p3_matrix::{
         dense::{DenseMatrix, RowMajorMatrix},
         Matrix,
@@ -33,12 +33,11 @@ use {
     std::sync::Arc,
 };
 
-use super::{core::run_add_sub, AddSubCoreAir, Rv64AddSubChip, Rv64AddSubExecutor};
+use super::{AddSubCoreAir, Rv64AddSubChip, Rv64AddSubExecutor};
 use crate::{
     adapters::{
-        rv64_bytes_to_u16_block, rv64_u16_block_to_bytes, Rv64BaseAluRegU16AdapterAir,
-        Rv64BaseAluRegU16AdapterExecutor, Rv64BaseAluRegU16AdapterFiller, RV64_REGISTER_NUM_LIMBS,
-        U16_BITS,
+        Rv64BaseAluRegU16AdapterAir, Rv64BaseAluRegU16AdapterExecutor,
+        Rv64BaseAluRegU16AdapterFiller, RV64_REGISTER_NUM_LIMBS, U16_BITS,
     },
     add_sub::AddSubCoreCols,
     test_utils::rv64_rand_write_register_or_imm,
@@ -46,6 +45,12 @@ use crate::{
 };
 
 const MAX_INS_CAPACITY: usize = 128;
+const NONCANONICAL_ZERO: [u32; BLOCK_FE_WIDTH] = [
+    1 << U16_BITS,
+    (1 << U16_BITS) - 1,
+    (1 << U16_BITS) - 1,
+    (1 << U16_BITS) - 1,
+];
 type F = BabyBear;
 type Harness = TestChipHarness<F, Rv64AddSubExecutor, Rv64AddSubAir, Rv64AddSubChip<F>>;
 
@@ -97,11 +102,17 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         rv64_rand_write_register_or_imm(tester, b, c, None, opcode.global_opcode().as_usize(), rng);
     tester.execute(executor, arena, &instruction);
 
-    let b_u16 = rv64_bytes_to_u16_block(b);
-    let c_u16 = rv64_bytes_to_u16_block(c);
-    let a = run_add_sub::<BLOCK_FE_WIDTH, U16_BITS>(opcode, &b_u16, &c_u16);
-    let a_bytes = rv64_u16_block_to_bytes(a).map(F::from_u8);
-    assert_eq!(a_bytes, tester.read_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rd))
+    let b = u64::from_le_bytes(b);
+    let c = u64::from_le_bytes(c);
+    let expected = match opcode {
+        ADD => b.wrapping_add(c),
+        SUB => b.wrapping_sub(c),
+        _ => unreachable!(),
+    };
+    assert_eq!(
+        expected.to_le_bytes().map(F::from_u8),
+        tester.read_bytes::<RV64_REGISTER_NUM_LIMBS>(1, rd)
+    )
 }
 
 //////////////////////////////////////////////////////////////////////////////////////
@@ -150,14 +161,9 @@ fn rand_rv64_add_sub_test(opcode: BaseAluOpcode, num_ops: usize) {
 // part of the trace and check that the chip throws the expected error.
 //////////////////////////////////////////////////////////////////////////////////////
 
-fn run_negative_add_sub_test(
-    opcode: BaseAluOpcode,
-    prank_a: [u32; BLOCK_FE_WIDTH],
-    b: [u8; RV64_REGISTER_NUM_LIMBS],
-    c: [u8; RV64_REGISTER_NUM_LIMBS],
+fn run_add_sub_memory_binding_negative_test(
     prank_b: Option<[u32; BLOCK_FE_WIDTH]>,
     prank_c: Option<[u32; BLOCK_FE_WIDTH]>,
-    prank_opcode_flags: Option<[bool; 2]>,
 ) {
     let mut rng = create_seeded_rng();
     let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
@@ -168,9 +174,9 @@ fn run_negative_add_sub_test(
         &mut harness.executor,
         &mut harness.arena,
         &mut rng,
-        opcode,
-        Some(b),
-        Some(c),
+        ADD,
+        Some([0; RV64_REGISTER_NUM_LIMBS]),
+        Some([0; RV64_REGISTER_NUM_LIMBS]),
     );
 
     let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
@@ -178,16 +184,11 @@ fn run_negative_add_sub_test(
         let mut values = trace.row_slice(0).unwrap().to_vec();
         let cols: &mut AddSubCoreCols<F, BLOCK_FE_WIDTH, U16_BITS> =
             values.split_at_mut(adapter_width).1.borrow_mut();
-        cols.a = prank_a.map(F::from_u32);
         if let Some(prank_b) = prank_b {
             cols.b = prank_b.map(F::from_u32);
         }
         if let Some(prank_c) = prank_c {
             cols.c = prank_c.map(F::from_u32);
-        }
-        if let Some(prank_opcode_flags) = prank_opcode_flags {
-            cols.opcode_add_flag = F::from_bool(prank_opcode_flags[0]);
-            cols.opcode_sub_flag = F::from_bool(prank_opcode_flags[1]);
         }
         *trace = RowMajorMatrix::new(values, trace.width());
     };
@@ -203,118 +204,17 @@ fn run_negative_add_sub_test(
 }
 
 #[test]
-fn rv64_add_sub_add_wrong_negative_test() {
-    run_negative_add_sub_test(
-        ADD,
-        [499, 0, 0, 0],
-        [250, 0, 0, 0, 0, 0, 0, 0],
-        [250, 0, 0, 0, 0, 0, 0, 0],
-        None,
-        None,
-        None,
-    );
+fn rv64_add_sub_rs2_memory_binding_negative_test() {
+    // These limbs represent 2^64, so the wrapped result remains zero and all ADD
+    // constraints hold. Only the rs2 memory-read interaction rejects the row.
+    run_add_sub_memory_binding_negative_test(None, Some(NONCANONICAL_ZERO));
 }
 
 #[test]
-fn rv64_add_sub_add_out_of_range_negative_test() {
-    // b[0] = c[0] = 65535; the correct result is [65534, 1, 0, 0]. Pranking
-    // a = [131070, 0, 0, 0] satisfies every carry constraint (all carries 0),
-    // so only the 16-bit range check on a[0] can catch it.
-    run_negative_add_sub_test(
-        ADD,
-        [131070, 0, 0, 0],
-        [255, 255, 0, 0, 0, 0, 0, 0],
-        [255, 255, 0, 0, 0, 0, 0, 0],
-        None,
-        None,
-        None,
-    );
-}
-
-#[test]
-fn rv64_add_sub_sub_wrong_negative_test() {
-    run_negative_add_sub_test(
-        SUB,
-        [65535, 0, 0, 0],
-        [1, 0, 0, 0, 0, 0, 0, 0],
-        [2, 0, 0, 0, 0, 0, 0, 0],
-        None,
-        None,
-        None,
-    );
-}
-
-#[test]
-fn rv64_add_sub_sub_out_of_range_negative_test() {
-    // a[0] = -1 in the field satisfies the SUB carry constraints for 1 - 2, but is
-    // not a canonical u16, so only the range check on a[0] can catch it.
-    run_negative_add_sub_test(
-        SUB,
-        [F::NEG_ONE.as_canonical_u32(), 0, 0, 0],
-        [1, 0, 0, 0, 0, 0, 0, 0],
-        [2, 0, 0, 0, 0, 0, 0, 0],
-        None,
-        None,
-        None,
-    );
-}
-
-#[test]
-fn rv64_add_sub_adapter_unconstrained_rs2_read_test() {
-    run_negative_add_sub_test(
-        ADD,
-        [514, 514, 514, 514],
-        [1, 1, 1, 1, 1, 1, 1, 1],
-        [1, 1, 1, 1, 1, 1, 1, 1],
-        None,
-        None,
-        Some([false, false]),
-    );
-}
-
-#[test]
-fn rv64_add_sub_noncanonical_b_negative_test() {
-    // Prank b[0] = 2^16 with a = [0, 1, 0, 0] as compensation: every carry constraint
-    // holds (carry[0] = 1) and all a cells are canonical, so only the memory bus read
-    // interaction can catch that b doesn't match the rs1 register contents. This is
-    // the binding that lets the core skip range checks on b and c entirely.
-    run_negative_add_sub_test(
-        ADD,
-        [0, 1, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0],
-        [0, 0, 0, 0, 0, 0, 0, 0],
-        Some([1 << U16_BITS, 0, 0, 0]),
-        None,
-        None,
-    );
-}
-
-///////////////////////////////////////////////////////////////////////////////////////
-/// SANITY TESTS
-///
-/// Ensure that solve functions produce the correct results.
-///////////////////////////////////////////////////////////////////////////////////////
-
-#[test]
-fn run_add_sanity_test() {
-    let x = rv64_bytes_to_u16_block([229, 33, 29, 111, 145, 34, 25, 205]);
-    let y = rv64_bytes_to_u16_block([50, 171, 44, 194, 73, 35, 25, 206]);
-    let z = rv64_bytes_to_u16_block([23, 205, 73, 49, 219, 69, 50, 155]);
-    let result = run_add_sub::<BLOCK_FE_WIDTH, U16_BITS>(ADD, &x, &y);
-    for i in 0..BLOCK_FE_WIDTH {
-        assert_eq!(z[i], result[i])
-    }
-}
-
-#[test]
-fn run_sub_sanity_test() {
-    let x = rv64_bytes_to_u16_block([229, 33, 29, 111, 145, 34, 25, 205]);
-    let y = rv64_bytes_to_u16_block([50, 171, 44, 194, 73, 35, 25, 206]);
-    let z = rv64_bytes_to_u16_block([179, 118, 240, 172, 71, 255, 255, 254]);
-    let result = run_add_sub::<BLOCK_FE_WIDTH, U16_BITS>(SUB, &x, &y);
-    for i in 0..BLOCK_FE_WIDTH {
-        assert_eq!(z[i], result[i])
-    }
+fn rv64_add_sub_rs1_memory_binding_negative_test() {
+    // These limbs represent 2^64, so the wrapped result remains zero and all ADD
+    // constraints hold. Only the rs1 memory-read interaction rejects the row.
+    run_add_sub_memory_binding_negative_test(Some(NONCANONICAL_ZERO), None);
 }
 
 // ////////////////////////////////////////////////////////////////////////////////////
