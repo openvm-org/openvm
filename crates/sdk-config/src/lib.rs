@@ -313,6 +313,12 @@ impl SdkVmConfig {
 #[derive(Copy, Clone, Default)]
 pub struct SdkVmCpuBuilder;
 
+impl SdkVmCpuBuilder {
+    pub const fn new() -> Self {
+        Self
+    }
+}
+
 /// Internal struct to use for the VmConfig derive macro.
 /// Can be obtained via [`SdkVmConfig::to_inner`].
 #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]
@@ -497,6 +503,13 @@ pub struct SdkVmGpuBuilder {
     /// prover extension so a bound compact operand table reaches the chips.
     #[cfg(all(feature = "cuda", feature = "rvr"))]
     pub rvr_decode: std::sync::Arc<openvm_riscv_circuit::rvr_gpu_decode::RvrGpuDecodeState>,
+}
+
+#[cfg(feature = "cuda")]
+impl SdkVmGpuBuilder {
+    pub fn new() -> Self {
+        Self::default()
+    }
 }
 
 #[cfg(feature = "cuda")]
