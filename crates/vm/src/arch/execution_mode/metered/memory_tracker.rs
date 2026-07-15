@@ -74,8 +74,8 @@ pub(super) struct SegmentMemoryDelta {
     pub(super) first_touches: FirstTouchCounts,
 }
 
-/// Fixed-size bit set that can clear only the words changed during a segment.
-#[derive(Clone, Debug)]
+/// Fixed-size bit set that records which words are nonzero.
+#[derive(Debug)]
 struct BitSet {
     /// Packed occupancy bits.
     words: Box<[u64]>,
@@ -104,7 +104,7 @@ struct BitSet {
 /// The tracker counts each newly touched leaf once, each newly required
 /// page-local internal node once, and each upper-tree ancestor once across all
 /// pages in the segment.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub(super) struct SegmentMemoryTracker {
     /// Touched leaf masks by page for the current segment.
     segment_leaf_masks: Box<[u64]>,
@@ -121,10 +121,12 @@ pub(super) struct SegmentMemoryTracker {
 /// If execution must end the current segment at that checkpoint, the next segment starts from this
 /// state. Unlike `SegmentMemoryTracker`, this survives the segment change. It is updated only after
 /// a safe checkpoint and is initially populated from nonzero program memory.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub(super) struct BaselineMemoryTracker {
     /// Leaf masks present in the baseline, stored by page.
     baseline_leaf_masks: Box<[u64]>,
+    /// Indices of pages containing at least one baseline leaf.
+    nonempty_page_ids: Vec<usize>,
     /// Upper-tree ancestors present in the baseline.
     baseline_upper_nodes: BitSet,
     /// Number of Merkle levels above the 64-leaf page layer.
@@ -166,17 +168,17 @@ impl BitSet {
     fn insert_clearable(&mut self, index: usize) -> bool {
         // Segment-local sets use dirty-word tracking so `clear` only touches
         // words written in the segment.
-        self.insert_impl::<true>(index)
+        self.insert_impl(index)
     }
 
     #[inline(always)]
     fn insert_baseline(&mut self, index: usize) -> bool {
         // Baseline memory is monotonic and persists across checkpoints.
-        self.insert_impl::<false>(index)
+        self.insert_impl(index)
     }
 
     #[inline(always)]
-    fn insert_impl<const TRACK_DIRTY: bool>(&mut self, index: usize) -> bool {
+    fn insert_impl(&mut self, index: usize) -> bool {
         let word_index = index >> 6;
         let bit_index = index & 63;
         let mask = 1u64 << bit_index;
@@ -192,7 +194,7 @@ impl BitSet {
         if was_set {
             return false;
         }
-        if TRACK_DIRTY && previous_word == 0 {
+        if previous_word == 0 {
             self.dirty_words.push(word_index);
         }
         *word = previous_word | mask;
@@ -214,11 +216,59 @@ impl BitSet {
     #[inline(always)]
     fn clear(&mut self) {
         for word_index in self.dirty_words.drain(..) {
-            // SAFETY: dirty_words entries are word indices previously written by this BitSet.
+            // SAFETY: dirty_words contains indices previously written in this BitSet.
             unsafe {
                 *self.words.get_unchecked_mut(word_index) = 0;
             }
         }
+    }
+}
+
+impl BitSet {
+    fn clone_populated(&self) -> Self {
+        let mut cloned = Self {
+            words: vec![0; self.words.len()].into_boxed_slice(),
+            dirty_words: self.dirty_words.clone(),
+        };
+        for &word_index in &self.dirty_words {
+            // SAFETY: dirty_words contains indices previously written in this BitSet.
+            unsafe {
+                *cloned.words.get_unchecked_mut(word_index) = *self.words.get_unchecked(word_index);
+            }
+        }
+        cloned
+    }
+}
+
+impl Clone for SegmentMemoryTracker {
+    fn clone(&self) -> Self {
+        let mut cloned = Self::new(self.upper_height);
+        cloned.dirty_page_ids = self.dirty_page_ids.clone();
+        for &page_id in &self.dirty_page_ids {
+            // SAFETY: dirty_page_ids contains indices previously written in this tracker.
+            unsafe {
+                *cloned.segment_leaf_masks.get_unchecked_mut(page_id) =
+                    *self.segment_leaf_masks.get_unchecked(page_id);
+            }
+        }
+        cloned.segment_upper_nodes = self.segment_upper_nodes.clone_populated();
+        cloned
+    }
+}
+
+impl Clone for BaselineMemoryTracker {
+    fn clone(&self) -> Self {
+        let mut cloned = Self::new(self.upper_height);
+        cloned.nonempty_page_ids = self.nonempty_page_ids.clone();
+        for &page_id in &self.nonempty_page_ids {
+            // SAFETY: nonempty_page_ids contains indices previously written in this tracker.
+            unsafe {
+                *cloned.baseline_leaf_masks.get_unchecked_mut(page_id) =
+                    *self.baseline_leaf_masks.get_unchecked(page_id);
+            }
+        }
+        cloned.baseline_upper_nodes = self.baseline_upper_nodes.clone_populated();
+        cloned
     }
 }
 
@@ -372,6 +422,7 @@ impl BaselineMemoryTracker {
         let num_pages = 1 << upper_height;
         Self {
             baseline_leaf_masks: vec![0; num_pages].into_boxed_slice(),
+            nonempty_page_ids: Vec::new(),
             baseline_upper_nodes: BitSet::new(num_pages),
             upper_height,
         }
@@ -397,6 +448,7 @@ impl BaselineMemoryTracker {
         let baseline_leaf_mask_before = *baseline_leaf_mask;
         *baseline_leaf_mask = baseline_leaf_mask_before | leaf_mask;
         if baseline_leaf_mask_before == 0 {
+            self.nonempty_page_ids.push(page_id);
             self.mark_upper_path(page_id);
         }
     }
@@ -827,6 +879,47 @@ mod tests {
 
         assert!(first.leaves > 0);
         assert_eq!(second, FirstTouchCounts::default());
+    }
+
+    #[test]
+    fn test_segment_tracker_clone_preserves_populated_entries() {
+        let baseline_memory = BaselineMemoryTracker::new(3);
+        let mut tracker = SegmentMemoryTracker::new(3);
+        tracker.insert(0, 1, &baseline_memory);
+        tracker.insert(7, 1 << 63, &baseline_memory);
+
+        let mut cloned = tracker.clone();
+        assert_eq!(
+            cloned.insert(0, 1, &baseline_memory),
+            SegmentMemoryDelta::default()
+        );
+        assert_eq!(
+            cloned.insert(7, 1 << 63, &baseline_memory),
+            SegmentMemoryDelta::default()
+        );
+        assert_eq!(
+            cloned.insert(1, 1, &baseline_memory),
+            tracker.insert(1, 1, &baseline_memory)
+        );
+    }
+
+    #[test]
+    fn test_baseline_tracker_clone_preserves_populated_entries() {
+        let mut baseline_memory = BaselineMemoryTracker::new(1);
+        baseline_memory.mark_existing_page(0, 1);
+        baseline_memory.mark_existing_page(0, 2);
+        assert_eq!(baseline_memory.nonempty_page_ids, [0]);
+
+        let cloned = baseline_memory.clone();
+        let mut tracker = SegmentMemoryTracker::new(1);
+        assert_eq!(
+            tracker.insert(0, 0b11, &cloned).first_touches,
+            FirstTouchCounts::default()
+        );
+        assert_ne!(
+            tracker.insert(1, 1, &cloned).first_touches,
+            FirstTouchCounts::default()
+        );
     }
 
     #[test]
