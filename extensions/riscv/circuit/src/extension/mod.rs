@@ -358,6 +358,7 @@ impl<F: PrimeField32> VmExecutionExtension<F> for Rv64I {
         let addi = Rv64AddIExecutor::new(
             Rv64BaseAluImmU16AdapterExecutor,
             BaseAluImmOpcode::CLASS_OFFSET,
+            BaseAluImmOpcode::ADDI as usize,
         );
         inventory.add_executor(addi, [BaseAluImmOpcode::ADDI].map(|x| x.global_opcode()))?;
 
@@ -556,8 +557,12 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
         inventory.add_air(auipc);
 
         let addi = Rv64AddIAir::new(
-            Rv64BaseAluImmU16AdapterAir::new(exec_bridge, memory_bridge, range_checker),
-            AddICoreAir::new(range_checker, BaseAluImmOpcode::CLASS_OFFSET),
+            Rv64BaseAluImmU16AdapterAir::new(exec_bridge, memory_bridge),
+            AddICoreAir::new(
+                range_checker,
+                BaseAluImmOpcode::CLASS_OFFSET,
+                BaseAluImmOpcode::ADDI as usize,
+            ),
         );
         inventory.add_air(addi);
 
@@ -862,11 +867,7 @@ where
 
         inventory.next_air::<Rv64AddIAir>()?;
         let addi = Rv64AddIChip::new(
-            AddIFiller::new(
-                Rv64BaseAluImmU16AdapterFiller::new(range_checker.clone()),
-                range_checker.clone(),
-                BaseAluImmOpcode::CLASS_OFFSET,
-            ),
+            AddIFiller::new(Rv64BaseAluImmU16AdapterFiller::new(), range_checker.clone()),
             mem_helper.clone(),
         );
         inventory.add_executor_chip(addi);

@@ -45,19 +45,20 @@ fn create_harness_fields(
     memory_helper: SharedMemoryHelper<F>,
 ) -> (Rv64AddIAir, Rv64AddIExecutor, Rv64AddIChip<F>) {
     let air = Rv64AddIAir::new(
-        Rv64BaseAluImmU16AdapterAir::new(execution_bridge, memory_bridge, range_checker_chip.bus()),
-        AddICoreAir::new(range_checker_chip.bus(), BaseAluImmOpcode::CLASS_OFFSET),
+        Rv64BaseAluImmU16AdapterAir::new(execution_bridge, memory_bridge),
+        AddICoreAir::new(
+            range_checker_chip.bus(),
+            BaseAluImmOpcode::CLASS_OFFSET,
+            BaseAluImmOpcode::ADDI as usize,
+        ),
     );
     let executor = Rv64AddIExecutor::new(
         Rv64BaseAluImmU16AdapterExecutor,
         BaseAluImmOpcode::CLASS_OFFSET,
+        BaseAluImmOpcode::ADDI as usize,
     );
     let chip = Rv64AddIChip::new(
-        AddIFiller::new(
-            Rv64BaseAluImmU16AdapterFiller::new(range_checker_chip.clone()),
-            range_checker_chip,
-            BaseAluImmOpcode::CLASS_OFFSET,
-        ),
+        AddIFiller::new(Rv64BaseAluImmU16AdapterFiller::new(), range_checker_chip),
         memory_helper,
     );
     (air, executor, chip)
@@ -195,13 +196,13 @@ fn rv64_addi_wrong_negative_test() {
 
 #[test]
 fn rv64_addi_out_of_range_negative_test() {
-    // b[0] = c[0] = 65535; the correct result is [65534, 1, 0, 0]. Pranking
-    // a = [131070, 0, 0, 0] satisfies every carry constraint (carry[0] = 0),
-    // so only the 16-bit range check on a[0] can catch it.
+    // rs1 = 65535 and imm = 1 produce rd = [0, 1, 0, 0]. Pranking rd to
+    // [65536, 0, 0, 0] preserves every core carry constraint. The row must still
+    // fail through the 16-bit range check (and the wrapper's memory-write binding).
     run_negative_addi_test(
-        [131070, 0, 0, 0],
+        [65536, 0, 0, 0],
         [255, 255, 0, 0, 0, 0, 0, 0],
-        [255, 255, 0, 0, 0, 0, 0, 0],
+        [1, 0, 0, 0, 0, 0, 0, 0],
         None,
         None,
     );

@@ -21,6 +21,8 @@ use openvm_stark_backend::{
     BaseAirWithPublicValues,
 };
 
+use crate::adapters::U16_BITS;
+
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection, Debug)]
 pub struct AddICoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
@@ -36,6 +38,7 @@ pub struct AddICoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 pub struct AddICoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub range_bus: VariableRangeCheckerBus,
     pub offset: usize,
+    pub local_opcode: usize,
 }
 
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
@@ -65,6 +68,8 @@ where
         local_core: &[AB::Var],
         _from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
+        assert!(NUM_LIMBS > 0 && (12..=U16_BITS).contains(&LIMB_BITS));
+
         let cols: &AddICoreCols<_, NUM_LIMBS, LIMB_BITS> = local_core.borrow();
 
         builder.assert_bool(cols.is_valid);
@@ -74,11 +79,14 @@ where
             .range_check(cols.imm_low11, 11)
             .eval(builder, cols.is_valid.into());
 
+        let limb_base = 1usize << LIMB_BITS;
+        let limb_mask = limb_base - 1;
         let imm_sign: AB::Expr = cols.imm_sign.into();
-        let sign_u16: AB::Expr = imm_sign.clone() * AB::Expr::from_u32(0xFFFF);
-        let imm0: AB::Expr = cols.imm_low11 + imm_sign.clone() * AB::Expr::from_u32(0xF800);
+        let sign_limb: AB::Expr = imm_sign.clone() * AB::Expr::from_usize(limb_mask);
+        let imm0: AB::Expr =
+            cols.imm_low11 + imm_sign.clone() * AB::Expr::from_usize(limb_base - (1 << 11));
 
-        let carry_divide = AB::F::from_usize(1 << LIMB_BITS).inverse();
+        let carry_divide = AB::F::from_usize(limb_base).inverse();
         let mut carry: [AB::Expr; NUM_LIMBS] = array::from_fn(|_| AB::Expr::ZERO);
 
         carry[0] = AB::Expr::from(carry_divide) * (cols.rs1[0] + imm0 - cols.rd[0]);
@@ -86,7 +94,7 @@ where
 
         for i in 1..NUM_LIMBS {
             carry[i] = AB::Expr::from(carry_divide)
-                * (cols.rs1[i] + sign_u16.clone() - cols.rd[i] + carry[i - 1].clone());
+                * (cols.rs1[i] + sign_limb.clone() - cols.rd[i] + carry[i - 1].clone());
             builder.when(cols.is_valid).assert_bool(carry[i].clone());
         }
 
@@ -99,10 +107,8 @@ where
         // 24-bit encoding matching i12_to_u24 in the transpiler.
         let instr_c: AB::Expr = cols.imm_low11 + imm_sign * AB::Expr::from_u32(0xFFF800);
 
-        let expected_opcode = VmCoreAir::<AB, I>::expr_to_global_expr(
-            self,
-            AB::Expr::from_u8(BaseAluImmOpcode::ADDI as u8),
-        );
+        let expected_opcode =
+            VmCoreAir::<AB, I>::expr_to_global_expr(self, AB::Expr::from_usize(self.local_opcode));
 
         AdapterAirContext {
             to_pc: None,
@@ -134,13 +140,13 @@ pub struct AddICoreRecord<const NUM_LIMBS: usize> {
 pub struct AddIExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub offset: usize,
+    pub local_opcode: usize,
 }
 
 #[derive(derive_new::new)]
 pub struct AddIFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
-    pub offset: usize,
 }
 
 impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> PreflightExecutor<F, RA>
@@ -169,8 +175,8 @@ where
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError> {
         debug_assert_eq!(
-            BaseAluImmOpcode::from_usize(instruction.opcode.local_opcode_idx(self.offset)),
-            BaseAluImmOpcode::ADDI
+            instruction.opcode.local_opcode_idx(self.offset),
+            self.local_opcode
         );
 
         let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
@@ -235,18 +241,21 @@ pub(crate) fn run_addi<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     imm_low11: u16,
     imm_sign: u16,
 ) -> [u16; NUM_LIMBS] {
+    debug_assert!(NUM_LIMBS > 0 && (12..=U16_BITS).contains(&LIMB_BITS));
+
     let mut z = [0u16; NUM_LIMBS];
-    let mask = (1u32 << LIMB_BITS) - 1;
+    let limb_base = 1u32 << LIMB_BITS;
+    let limb_mask = limb_base - 1;
 
-    let mut overflow = rs1[0] as u32 + imm_low11 as u32 + imm_sign as u32 * 0xF800;
+    let mut overflow = rs1[0] as u32 + imm_low11 as u32 + imm_sign as u32 * (limb_base - (1 << 11));
     let mut carry = overflow >> LIMB_BITS;
-    z[0] = (overflow & mask) as u16;
+    z[0] = (overflow & limb_mask) as u16;
 
-    let sign_u16 = imm_sign as u32 * 0xFFFF;
+    let sign_limb = imm_sign as u32 * limb_mask;
     for i in 1..NUM_LIMBS {
-        overflow = rs1[i] as u32 + sign_u16 + carry;
+        overflow = rs1[i] as u32 + sign_limb + carry;
         carry = overflow >> LIMB_BITS;
-        z[i] = (overflow & mask) as u16;
+        z[i] = (overflow & limb_mask) as u16;
     }
     z
 }

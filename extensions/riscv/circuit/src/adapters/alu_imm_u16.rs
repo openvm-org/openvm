@@ -16,7 +16,6 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::{
-    var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
     AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
@@ -48,7 +47,6 @@ pub struct Rv64BaseAluImmU16AdapterCols<T> {
 pub struct Rv64BaseAluImmU16AdapterAir {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
-    pub range_bus: VariableRangeCheckerBus,
 }
 
 impl<F: Field> BaseAir<F> for Rv64BaseAluImmU16AdapterAir {
@@ -133,10 +131,8 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluImmU16AdapterAir {
 #[derive(Clone, derive_new::new)]
 pub struct Rv64BaseAluImmU16AdapterExecutor;
 
-#[derive(derive_new::new)]
-pub struct Rv64BaseAluImmU16AdapterFiller {
-    pub range_checker_chip: SharedVariableRangeCheckerChip,
-}
+#[derive(Clone, Copy, derive_new::new)]
+pub struct Rv64BaseAluImmU16AdapterFiller;
 
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]

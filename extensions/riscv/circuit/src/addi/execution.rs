@@ -13,7 +13,17 @@ use openvm_instructions::{
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::core::AddIExecutor;
-use crate::adapters::imm_to_rv64_u64;
+use crate::adapters::{imm_to_rv64_u64, U16_BITS};
+
+const IMM_LOW11_MASK: u32 = (1 << 11) - 1;
+const IMM_NEGATIVE_PREFIX: u32 = ((1 << 24) - 1) ^ IMM_LOW11_MASK;
+
+#[inline(always)]
+fn canonical_i12_to_u24(imm: u32) -> u32 {
+    let low11 = imm & IMM_LOW11_MASK;
+    let sign = (imm >> 11) & 1;
+    low11 + sign * IMM_NEGATIVE_PREFIX
+}
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -32,11 +42,15 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> AddIExecutor<A, NUM_LIMB
         data: &mut AddIPreCompute,
     ) -> Result<(), StaticProgramError> {
         let Instruction { a, b, c, d, e, .. } = inst;
-        if d.as_canonical_u32() != RV64_REGISTER_AS || e.as_canonical_u32() != RV64_IMM_AS {
+        let c = c.as_canonical_u32();
+        if d.as_canonical_u32() != RV64_REGISTER_AS
+            || e.as_canonical_u32() != RV64_IMM_AS
+            || c != canonical_i12_to_u24(c)
+        {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         *data = AddIPreCompute {
-            imm: imm_to_rv64_u64(c.as_canonical_u32()),
+            imm: imm_to_rv64_u64(c),
             rd_ptr: a.as_canonical_u32() as u8,
             rs1_ptr: b.as_canonical_u32() as u8,
         };
@@ -44,8 +58,7 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> AddIExecutor<A, NUM_LIMB
     }
 }
 
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterExecutor<F>
-    for AddIExecutor<A, NUM_LIMBS, LIMB_BITS>
+impl<F, A> InterpreterExecutor<F> for AddIExecutor<A, { BLOCK_FE_WIDTH }, U16_BITS>
 where
     F: PrimeField32,
 {
@@ -85,8 +98,7 @@ where
     }
 }
 
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
-    for AddIExecutor<A, NUM_LIMBS, LIMB_BITS>
+impl<F, A> InterpreterMeteredExecutor<F> for AddIExecutor<A, { BLOCK_FE_WIDTH }, U16_BITS>
 where
     F: PrimeField32,
 {
@@ -172,4 +184,54 @@ unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
     execute_e12_impl::<F, CTX>(&pre_compute.data, exec_state);
+}
+
+#[cfg(test)]
+mod tests {
+    use openvm_instructions::{riscv::RV64_REGISTER_NUM_LIMBS, LocalOpcode};
+    use openvm_riscv_transpiler::BaseAluImmOpcode;
+    use openvm_stark_sdk::p3_baby_bear::BabyBear;
+
+    use super::*;
+    use crate::{adapters::Rv64BaseAluImmU16AdapterExecutor, Rv64AddIExecutor};
+
+    fn addi_instruction(c: usize) -> Instruction<BabyBear> {
+        Instruction::from_usize(
+            BaseAluImmOpcode::ADDI.global_opcode(),
+            [
+                RV64_REGISTER_NUM_LIMBS,
+                2 * RV64_REGISTER_NUM_LIMBS,
+                c,
+                RV64_REGISTER_AS as usize,
+                RV64_IMM_AS as usize,
+            ],
+        )
+    }
+
+    #[test]
+    fn validates_canonical_i12_encoding() {
+        let executor = Rv64AddIExecutor::new(
+            Rv64BaseAluImmU16AdapterExecutor,
+            BaseAluImmOpcode::CLASS_OFFSET,
+            BaseAluImmOpcode::ADDI as usize,
+        );
+        let mut data = AddIPreCompute {
+            imm: 0,
+            rd_ptr: 0,
+            rs1_ptr: 0,
+        };
+
+        for c in [0, 0x7ff, 0xff_f800, 0xff_ffff] {
+            assert!(executor
+                .pre_compute_impl(0, &addi_instruction(c), &mut data)
+                .is_ok());
+        }
+
+        for c in [0x800, 0xffff, 0x80_0000, 0x100_0000] {
+            assert!(matches!(
+                executor.pre_compute_impl(0, &addi_instruction(c), &mut data),
+                Err(StaticProgramError::InvalidInstruction(0))
+            ));
+        }
+    }
 }
