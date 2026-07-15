@@ -300,30 +300,33 @@ mod tests {
     use crate::{adapters::Rv64BaseAluRegU16AdapterExecutor, Rv64AddSubExecutor};
 
     #[test]
-    fn rejects_immediate_operand() {
+    fn add_sub_reject_immediate_operand() {
         let executor = Rv64AddSubExecutor::new(
             Rv64BaseAluRegU16AdapterExecutor,
             BaseAluOpcode::CLASS_OFFSET,
         );
-        let instruction = Instruction::<BabyBear>::from_usize(
-            BaseAluOpcode::ADD.global_opcode(),
-            [
-                RV64_REGISTER_NUM_LIMBS,
-                2 * RV64_REGISTER_NUM_LIMBS,
-                1,
-                RV64_REGISTER_AS as usize,
-                RV64_IMM_AS as usize,
-            ],
-        );
-        let mut data = AddSubPreCompute {
-            rs2_ptr: 0,
-            rd_ptr: 0,
-            rs1_ptr: 0,
-        };
 
-        assert!(matches!(
-            executor.pre_compute_impl(0, &instruction, &mut data),
-            Err(StaticProgramError::InvalidInstruction(0))
-        ));
+        for opcode in [BaseAluOpcode::ADD, BaseAluOpcode::SUB] {
+            let instruction = Instruction::<BabyBear>::from_usize(
+                opcode.global_opcode(),
+                [
+                    RV64_REGISTER_NUM_LIMBS,
+                    2 * RV64_REGISTER_NUM_LIMBS,
+                    1,
+                    RV64_REGISTER_AS as usize,
+                    RV64_IMM_AS as usize,
+                ],
+            );
+            let mut data = AddSubPreCompute {
+                rs2_ptr: 0,
+                rd_ptr: 0,
+                rs1_ptr: 0,
+            };
+
+            assert!(matches!(
+                executor.pre_compute_impl(0, &instruction, &mut data),
+                Err(StaticProgramError::InvalidInstruction(0))
+            ));
+        }
     }
 }

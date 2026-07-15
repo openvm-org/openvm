@@ -611,11 +611,7 @@ where
         // safeguard to ensure that chip construction matches the circuit definition
         inventory.next_air::<Rv64AddSubAir>()?;
         let add_sub = Rv64AddSubChip::new(
-            AddSubFiller::new(
-                Rv64BaseAluRegU16AdapterFiller,
-                range_checker.clone(),
-                BaseAluOpcode::CLASS_OFFSET,
-            ),
+            AddSubFiller::new(Rv64BaseAluRegU16AdapterFiller, range_checker.clone()),
             mem_helper.clone(),
         );
         inventory.add_executor_chip(add_sub);
@@ -636,7 +632,6 @@ where
             crate::add_sub_w::AddSubWFiller::new(
                 Rv64BaseAluWU16AdapterFiller::new(range_checker.clone()),
                 range_checker.clone(),
-                BaseAluWOpcode::CLASS_OFFSET,
             ),
             mem_helper.clone(),
         );

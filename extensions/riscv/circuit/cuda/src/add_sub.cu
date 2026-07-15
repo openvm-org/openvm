@@ -24,6 +24,10 @@ struct Rv64AddSubRecord {
     Rv64AddSubCoreRecord core;
 };
 
+static_assert(sizeof(Rv64AddSubCoreRecord) == 18);
+static_assert(sizeof(Rv64AddSubRecord) == 60);
+static_assert(offsetof(Rv64AddSubRecord, core) == 40);
+
 __global__ void add_sub_tracegen(
     Fp *d_trace,
     size_t height,

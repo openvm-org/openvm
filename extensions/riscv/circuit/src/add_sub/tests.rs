@@ -64,11 +64,7 @@ fn create_harness_fields(
         BaseAluOpcode::CLASS_OFFSET,
     );
     let chip = Rv64AddSubChip::new(
-        AddSubFiller::new(
-            Rv64BaseAluRegU16AdapterFiller,
-            range_checker_chip,
-            BaseAluOpcode::CLASS_OFFSET,
-        ),
+        AddSubFiller::new(Rv64BaseAluRegU16AdapterFiller, range_checker_chip),
         memory_helper,
     );
     (air, executor, chip)
@@ -154,7 +150,6 @@ fn rand_rv64_add_sub_test(opcode: BaseAluOpcode, num_ops: usize) {
 // part of the trace and check that the chip throws the expected error.
 //////////////////////////////////////////////////////////////////////////////////////
 
-#[allow(clippy::too_many_arguments)]
 fn run_negative_add_sub_test(
     opcode: BaseAluOpcode,
     prank_a: [u32; BLOCK_FE_WIDTH],
@@ -163,7 +158,6 @@ fn run_negative_add_sub_test(
     prank_b: Option<[u32; BLOCK_FE_WIDTH]>,
     prank_c: Option<[u32; BLOCK_FE_WIDTH]>,
     prank_opcode_flags: Option<[bool; 2]>,
-    _interaction_error: bool,
 ) {
     let mut rng = create_seeded_rng();
     let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
@@ -218,7 +212,6 @@ fn rv64_add_sub_add_wrong_negative_test() {
         None,
         None,
         None,
-        false,
     );
 }
 
@@ -235,7 +228,6 @@ fn rv64_add_sub_add_out_of_range_negative_test() {
         None,
         None,
         None,
-        true,
     );
 }
 
@@ -249,7 +241,6 @@ fn rv64_add_sub_sub_wrong_negative_test() {
         None,
         None,
         None,
-        false,
     );
 }
 
@@ -265,7 +256,6 @@ fn rv64_add_sub_sub_out_of_range_negative_test() {
         None,
         None,
         None,
-        true,
     );
 }
 
@@ -279,7 +269,6 @@ fn rv64_add_sub_adapter_unconstrained_rs2_read_test() {
         None,
         None,
         Some([false, false]),
-        false,
     );
 }
 
@@ -297,7 +286,6 @@ fn rv64_add_sub_noncanonical_b_negative_test() {
         Some([1 << U16_BITS, 0, 0, 0]),
         None,
         None,
-        true,
     );
 }
 

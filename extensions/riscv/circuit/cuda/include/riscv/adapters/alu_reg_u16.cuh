@@ -29,6 +29,10 @@ struct Rv64BaseAluRegU16AdapterRecord {
     MemoryWriteU16AuxRecord<BLOCK_FE_WIDTH> writes_aux;
 };
 
+static_assert(sizeof(Rv64BaseAluRegU16AdapterRecord) == 40);
+static_assert(offsetof(Rv64BaseAluRegU16AdapterRecord, reads_aux) == 20);
+static_assert(offsetof(Rv64BaseAluRegU16AdapterRecord, writes_aux) == 28);
+
 struct Rv64BaseAluRegU16Adapter {
     MemoryAuxColsFactory mem_helper;
 
