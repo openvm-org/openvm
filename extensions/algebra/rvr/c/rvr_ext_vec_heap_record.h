@@ -96,30 +96,37 @@ static inline void rvr_ext_emit_vec_heap_record(
         (uint32_t)events[i].address;
     *(uint32_t*)(record + rs_vals + 4u * i) =
         (uint32_t)events[i].value;
-    *(uint32_t*)(record + rs_read_aux + 4u * i) =
-        events[i].prev_timestamp;
+    preflight_store_prev_timestamp(
+        tracer, (uint32_t*)(record + rs_read_aux + 4u * i),
+        events[i].prev_timestamp);
   }
   MemoryLogEntry* rd = &events[d.num_reads];
   *(uint32_t*)(record + rd_ptr) = (uint32_t)rd->address;
   *(uint32_t*)(record + rd_val) = (uint32_t)rd->value;
-  *(uint32_t*)(record + rd_read_aux) = rd->prev_timestamp;
+  preflight_store_prev_timestamp(
+      tracer, (uint32_t*)(record + rd_read_aux), rd->prev_timestamp);
 
   uint32_t heap_start = register_events;
   for (uint32_t read = 0; read < d.num_reads; read++) {
     for (uint32_t block = 0; block < d.blocks; block++) {
       uint32_t idx = heap_start + read * d.blocks + block;
       uint32_t flat = read * d.blocks + block;
-      *(uint32_t*)(record + d.reads_aux + 4u * flat) =
-          events[idx].prev_timestamp;
-      rvr_store_u64_unaligned_le(core + 1u + 8u * flat,
+      preflight_store_prev_timestamp(
+          tracer, (uint32_t*)(record + d.reads_aux + 4u * flat),
+          events[idx].prev_timestamp);
+      preflight_store_prev_value(tracer, core + 1u + 8u * flat,
+                                 events[idx].prev_timestamp,
                                  events[idx].prev_value);
     }
   }
   uint32_t write_start = heap_start + d.num_reads * d.blocks;
   for (uint32_t block = 0; block < d.blocks; block++) {
     uint8_t* aux = record + d.writes_aux + 12u * block;
-    *(uint32_t*)aux = events[write_start + block].prev_timestamp;
-    arena_store_u64_le(aux + 4u, events[write_start + block].prev_value);
+    MemoryLogEntry* write = &events[write_start + block];
+    preflight_store_prev_timestamp(tracer, (uint32_t*)aux,
+                                   write->prev_timestamp);
+    preflight_store_prev_value(tracer, aux + 4u, write->prev_timestamp,
+                               write->prev_value);
   }
   *core = (uint8_t)local_opcode;
 #endif

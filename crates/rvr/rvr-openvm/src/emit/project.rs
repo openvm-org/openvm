@@ -198,6 +198,11 @@ pub struct CProject {
     pub chip_widths: Option<Vec<u64>>,
     /// Compile with native debug info (`-g -fno-omit-frame-pointer`).
     pub native_debug_info: bool,
+    /// Emit profiling-only hot-loop hooks. Normal projects compile them away.
+    pub native_detail: bool,
+    /// Profiling family for each program slot, derived from the original VM
+    /// opcode before extension lifting erases that distinction.
+    pub native_detail_pc_families: Vec<u8>,
     /// R3: emit inline compact records (log-suppressed) for migrated opcodes.
     /// Preflight mode only; see [`Self::inline_records_enabled`].
     pub inline_records: bool,
@@ -235,6 +240,8 @@ impl CProject {
             pc_base: 0,
             chip_widths: None,
             native_debug_info: false,
+            native_detail: false,
+            native_detail_pc_families: Vec::new(),
             inline_records: false,
             inline_pc_slots: Vec::new(),
             delta_records: false,
@@ -519,6 +526,16 @@ impl CProject {
             .unwrap_or(false)
     }
 
+    fn native_detail_family(&self, pc: u64) -> u32 {
+        let Some(offset) = pc.checked_sub(self.pc_base) else {
+            return 8;
+        };
+        self.native_detail_pc_families
+            .get((offset / 4) as usize)
+            .copied()
+            .unwrap_or(8) as u32
+    }
+
     /// Write all C project files.
     pub fn write_all(
         &self,
@@ -550,7 +567,13 @@ impl CProject {
         text_end: u64,
         dispatch_table_size: usize,
     ) -> io::Result<()> {
-        let h = constants_header(text_start, text_end, dispatch_table_size);
+        let mut h = constants_header(text_start, text_end, dispatch_table_size);
+        writeln!(
+            h,
+            "static constexpr bool OPENVM_RVR_NATIVE_DETAIL_ENABLED = {};",
+            if self.native_detail { "true" } else { "false" }
+        )
+        .unwrap();
         let path = self.output_dir.join("openvm_constants.h");
         fs::write(&path, h)
     }
@@ -879,6 +902,7 @@ impl CProject {
                 instr_at.pc,
                 self.exec_idx_for_pc(instr_at.pc),
                 inline_records && self.pc_emits_inline_record(instr_at.pc),
+                self.native_detail_family(instr_at.pc),
             );
             instr_at.instr.emit_c(&mut ctx);
             Self::emit_context_scope(out, &mut ctx);
@@ -910,6 +934,7 @@ impl CProject {
                 block.terminator_pc,
                 self.exec_idx_for_pc(block.terminator_pc),
                 inline_records && self.pc_emits_inline_record(block.terminator_pc),
+                self.native_detail_family(block.terminator_pc),
             );
         }
         let tc = TermCtx { valid_blocks };
