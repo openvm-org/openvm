@@ -50,5 +50,9 @@ required-features = ["bls12_381"]
 name = "bls_ec"
 required-features = ["bls12_381"]
 
+[[example]]
+name = "rvr_pairing_miller_loop"
+required-features = ["bls12_381"]
+
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)', 'cfg(target_os, values("openvm"))'] }
