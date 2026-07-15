@@ -1,5 +1,9 @@
 //! Prover extension for the GPU backend which still does trace generation on CPU.
 
+use std::mem::size_of;
+#[cfg(feature = "rvr")]
+use std::mem::{align_of, offset_of};
+
 use openvm_algebra_transpiler::Rv64ModularArithmeticOpcode;
 use openvm_circuit::{
     arch::*,
@@ -26,9 +30,12 @@ use openvm_mod_circuit_builder::{ExprBuilderConfig, FieldExpressionMetadata};
 use openvm_riscv_adapters::{
     Rv64IsEqualModU16AdapterCols, Rv64IsEqualModU16AdapterExecutor, Rv64IsEqualModU16AdapterFiller,
     Rv64IsEqualModU16AdapterRecord, Rv64VecHeapAdapterCols, Rv64VecHeapAdapterExecutor,
+    Rv64VecHeapAdapterRecord,
 };
 use openvm_riscv_circuit::{adapters::U16_BITS, Rv64ImGpuProverExt};
 use openvm_stark_backend::{p3_air::BaseAir, prover::AirProvingContext};
+#[cfg(feature = "rvr")]
+use rvr_openvm_ext_algebra::{ModIsEqRecordDescriptor, VecHeapRecordDescriptor};
 use strum::EnumCount;
 
 use crate::{
@@ -37,6 +44,65 @@ use crate::{
     AlgebraRecord, Fp2Extension, ModularExtension, Rv64ModularConfig, Rv64ModularWithFp2Config,
     FP2_BLOCKS_32, FP2_BLOCKS_48, MODULAR_BLOCKS_32, MODULAR_BLOCKS_48, NUM_LIMBS_32,
     NUM_LIMBS_32_U16, NUM_LIMBS_48, NUM_LIMBS_48_U16,
+};
+
+#[cfg(feature = "rvr")]
+const VEC_HEAP_32_ABI: VecHeapRecordDescriptor = VecHeapRecordDescriptor::new(NUM_LIMBS_32);
+#[cfg(feature = "rvr")]
+const VEC_HEAP_48_ABI: VecHeapRecordDescriptor = VecHeapRecordDescriptor::new(NUM_LIMBS_48);
+#[cfg(feature = "rvr")]
+const MOD_ISEQ_32_ABI: ModIsEqRecordDescriptor = ModIsEqRecordDescriptor::new(NUM_LIMBS_32);
+#[cfg(feature = "rvr")]
+const MOD_ISEQ_48_ABI: ModIsEqRecordDescriptor = ModIsEqRecordDescriptor::new(NUM_LIMBS_48);
+
+#[cfg(feature = "rvr")]
+const _: () = {
+    assert!(
+        size_of::<Rv64VecHeapAdapterRecord<2, MODULAR_BLOCKS_32, MODULAR_BLOCKS_32>>()
+            == VEC_HEAP_32_ABI.adapter_size
+    );
+    assert!(
+        align_of::<Rv64VecHeapAdapterRecord<2, MODULAR_BLOCKS_32, MODULAR_BLOCKS_32>>()
+            == VEC_HEAP_32_ABI.adapter_align
+    );
+    assert!(
+        offset_of!(
+            Rv64VecHeapAdapterRecord<2, MODULAR_BLOCKS_32, MODULAR_BLOCKS_32>,
+            writes_aux
+        ) == VEC_HEAP_32_ABI.writes_aux
+    );
+    assert!(
+        size_of::<Rv64VecHeapAdapterRecord<2, MODULAR_BLOCKS_48, MODULAR_BLOCKS_48>>()
+            == VEC_HEAP_48_ABI.adapter_size
+    );
+    assert!(
+        offset_of!(
+            Rv64VecHeapAdapterRecord<2, MODULAR_BLOCKS_48, MODULAR_BLOCKS_48>,
+            writes_aux
+        ) == VEC_HEAP_48_ABI.writes_aux
+    );
+    assert!(
+        size_of::<Rv64IsEqualModU16AdapterRecord<2, MODULAR_BLOCKS_32>>()
+            == MOD_ISEQ_32_ABI.adapter_size
+    );
+    assert!(size_of::<ModularIsEqualRecord<NUM_LIMBS_32_U16>>() == MOD_ISEQ_32_ABI.core_size);
+    assert!(
+        size_of::<(
+            Rv64IsEqualModU16AdapterRecord<2, MODULAR_BLOCKS_32>,
+            ModularIsEqualRecord<NUM_LIMBS_32_U16>,
+        )>() == MOD_ISEQ_32_ABI.record_size
+    );
+    assert!(
+        size_of::<Rv64IsEqualModU16AdapterRecord<2, MODULAR_BLOCKS_48>>()
+            == MOD_ISEQ_48_ABI.adapter_size
+    );
+    assert!(size_of::<ModularIsEqualRecord<NUM_LIMBS_48_U16>>() == MOD_ISEQ_48_ABI.core_size);
+    assert!(
+        size_of::<(
+            Rv64IsEqualModU16AdapterRecord<2, MODULAR_BLOCKS_48>,
+            ModularIsEqualRecord<NUM_LIMBS_48_U16>,
+        )>() == MOD_ISEQ_48_ABI.record_size
+    );
 };
 
 #[derive(derive_new::new)]

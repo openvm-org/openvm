@@ -4,10 +4,16 @@
 use num_bigint::BigUint;
 use openvm_algebra_transpiler::{ModularPhantom, Rv64ModularArithmeticOpcode};
 use openvm_algebra_utils::{find_non_qr, NQR_RNG_SEED};
-use openvm_instructions::{LocalOpcode, SystemOpcode};
+use openvm_instructions::{
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    LocalOpcode, SystemOpcode, VmOpcode,
+};
 use rand::{rngs::StdRng, SeedableRng};
-use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
-use rvr_openvm_lift::{helpers::decode_reg, RvrExtension, RvrInstruction};
+use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, InlineRecordShape, Instr, InstrAt, LiftedInstr, Reg};
+use rvr_openvm_lift::{
+    air_index_codegen_fingerprint, air_index_to_c, helpers::decode_reg, AirIndex, ExtensionError,
+    RvrExtension, RvrExtensionCtx, RvrInstruction,
+};
 use strum::EnumCount;
 
 use crate::{
@@ -16,6 +22,93 @@ use crate::{
 };
 
 include!(concat!(env!("OUT_DIR"), "/secp256k1_files.rs"));
+
+const MODULAR_OPCODE_COUNT: usize = Rv64ModularArithmeticOpcode::COUNT;
+
+/// Dense-arena ABI for a two-input VecHeap field-expression record.
+///
+/// The adapter is a fixed prefix followed by arrays whose lengths are all
+/// derived from `blocks`; the core is one opcode byte plus the two input byte
+/// strings. Circuit-side ABI assertions pin every generated value to the real
+/// Rust record types.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct VecHeapRecordDescriptor {
+    pub blocks: usize,
+    pub adapter_size: usize,
+    pub adapter_align: usize,
+    pub core_size: usize,
+    pub core_align: usize,
+    pub core_off_dense: usize,
+    pub record_size: usize,
+    pub reads_aux: usize,
+    pub writes_aux: usize,
+}
+
+impl VecHeapRecordDescriptor {
+    pub const fn new(num_limbs: usize) -> Self {
+        assert!(num_limbs.is_multiple_of(8));
+        let blocks = num_limbs / 8;
+        let reads_aux = 44;
+        let writes_aux = reads_aux + 8 * blocks;
+        let adapter_size = writes_aux + 12 * blocks;
+        let core_size = 1 + 16 * blocks;
+        let record_size = (adapter_size + core_size + 3) & !3;
+        Self {
+            blocks,
+            adapter_size,
+            adapter_align: 4,
+            core_size,
+            core_align: 1,
+            core_off_dense: adapter_size,
+            record_size,
+            reads_aux,
+            writes_aux,
+        }
+    }
+}
+
+/// Dense-arena ABI for the modular equality adapter/core pair.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ModIsEqRecordDescriptor {
+    pub blocks: usize,
+    pub u16_limbs: usize,
+    pub adapter_size: usize,
+    pub adapter_align: usize,
+    pub core_size: usize,
+    pub core_align: usize,
+    pub core_off_dense: usize,
+    pub record_size: usize,
+    pub heap_read_aux: usize,
+    pub rd_ptr: usize,
+    pub writes_aux: usize,
+}
+
+impl ModIsEqRecordDescriptor {
+    pub const fn new(num_limbs: usize) -> Self {
+        assert!(num_limbs.is_multiple_of(8));
+        let blocks = num_limbs / 8;
+        let u16_limbs = num_limbs / 2;
+        let heap_read_aux = 32;
+        let rd_ptr = heap_read_aux + 8 * blocks;
+        let writes_aux = rd_ptr + 4;
+        let adapter_size = writes_aux + 12;
+        let core_size = 2 + 4 * u16_limbs;
+        let record_size = (adapter_size + core_size + 3) & !3;
+        Self {
+            blocks,
+            u16_limbs,
+            adapter_size,
+            adapter_align: 4,
+            core_size,
+            core_align: 2,
+            core_off_dense: adapter_size,
+            record_size,
+            heap_read_aux,
+            rd_ptr,
+            writes_aux,
+        }
+    }
+}
 
 /// Per-modulus info for the modular extension. Includes a precomputed non-QR
 /// for the `HintNonQr` / `HintSqrt` phantoms.
@@ -56,8 +149,23 @@ impl FieldKind for ModArithKind {
     fn c_prefix() -> &'static str {
         "mod"
     }
+
     fn known_suffix(field: KnownField) -> Option<&'static str> {
         Some(field.c_suffix())
+    }
+
+    fn inline_record_size(num_limbs: u32) -> Option<usize> {
+        Some(VecHeapRecordDescriptor::new(num_limbs as usize).record_size)
+    }
+
+    fn emit_inline_record(
+        ctx: &mut dyn ExtEmitCtx,
+        from_pc: u32,
+        local_opcode: u8,
+        num_limbs: u32,
+        chip_idx: Option<AirIndex>,
+    ) {
+        emit_vec_heap_record(ctx, from_pc, local_opcode, num_limbs, chip_idx);
     }
 }
 
@@ -77,6 +185,20 @@ impl IsEqKind for ModArithKind {
     fn opname() -> &'static str {
         "mod_iseq"
     }
+
+    fn inline_record_size(num_limbs: u32) -> Option<usize> {
+        Some(ModIsEqRecordDescriptor::new(num_limbs as usize).record_size)
+    }
+
+    fn emit_inline_record(
+        ctx: &mut dyn ExtEmitCtx,
+        from_pc: u32,
+        local_opcode: u8,
+        num_limbs: u32,
+        chip_idx: Option<AirIndex>,
+    ) {
+        emit_mod_iseq_record(ctx, from_pc, local_opcode, num_limbs, chip_idx);
+    }
 }
 
 /// IR node for modular arithmetic (ADD, SUB, MUL, DIV).
@@ -92,6 +214,10 @@ pub(crate) type ModSetupInstr = FieldSetupInstr<ModArithKind>;
 /// result to `rd` instead of treating `rd` as a heap pointer.
 #[derive(Debug, Clone)]
 struct ModIsEqSetupInstr {
+    from_pc: u32,
+    local_opcode: u8,
+    chip_idx: Option<AirIndex>,
+    emit_inline: bool,
     rd_reg: Reg,
     rs1_reg: Reg,
     rs2_reg: Reg,
@@ -113,6 +239,21 @@ impl ExtInstr for ModIsEqSetupInstr {
             &["state", &rs1, &rs2, &num_limbs],
         );
         ctx.write_reg(self.rd_reg, &val);
+        if self.emit_inline && ctx.inline_record_enabled() {
+            emit_mod_iseq_record(
+                ctx,
+                self.from_pc,
+                self.local_opcode,
+                self.num_limbs,
+                self.chip_idx,
+            );
+        }
+    }
+
+    fn inline_record_shape(&self) -> Option<InlineRecordShape> {
+        self.emit_inline.then(|| InlineRecordShape::Custom {
+            record_size: ModIsEqRecordDescriptor::new(self.num_limbs as usize).record_size,
+        })
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -122,6 +263,44 @@ impl ExtInstr for ModIsEqSetupInstr {
     fn is_block_end(&self) -> bool {
         false
     }
+}
+
+fn emit_vec_heap_record(
+    ctx: &mut dyn ExtEmitCtx,
+    from_pc: u32,
+    local_opcode: u8,
+    num_limbs: u32,
+    chip_idx: Option<AirIndex>,
+) {
+    ctx.extern_call(
+        "rvr_ext_emit_vec_heap_record",
+        &[
+            "state",
+            &format!("{from_pc}u"),
+            &format!("{local_opcode}u"),
+            &format!("{num_limbs}u"),
+            &format!("{}u", air_index_to_c(chip_idx)),
+        ],
+    );
+}
+
+fn emit_mod_iseq_record(
+    ctx: &mut dyn ExtEmitCtx,
+    from_pc: u32,
+    local_opcode: u8,
+    num_limbs: u32,
+    chip_idx: Option<AirIndex>,
+) {
+    ctx.extern_call(
+        "rvr_ext_emit_mod_iseq_record",
+        &[
+            "state",
+            &format!("{from_pc}u"),
+            &format!("{local_opcode}u"),
+            &format!("{num_limbs}u"),
+            &format!("{}u", air_index_to_c(chip_idx)),
+        ],
+    );
 }
 
 // ── Phantom instructions (HintNonQr, HintSqrt) ──────────────────────────────
@@ -213,19 +392,57 @@ impl ExtInstr for HintSqrtInstr {
 /// [`crate::Fp2RvrExtension`].
 pub struct ModularRvrExtension {
     moduli: Vec<ModulusInfo>,
+    air_indices: Vec<[Option<AirIndex>; MODULAR_OPCODE_COUNT]>,
 }
 
 impl ModularRvrExtension {
-    pub fn new(moduli: Vec<BigUint>) -> Self {
-        Self {
-            moduli: make_moduli(moduli),
+    pub fn new(
+        moduli: Vec<BigUint>,
+        ctx: Option<&RvrExtensionCtx>,
+    ) -> Result<Self, ExtensionError> {
+        let moduli = make_moduli(moduli);
+        let mut air_indices = Vec::with_capacity(moduli.len());
+        for mod_idx in 0..moduli.len() {
+            let mut indices = [None; MODULAR_OPCODE_COUNT];
+            for (local, index) in indices.iter_mut().enumerate() {
+                let opcode = VmOpcode::from_usize(
+                    Rv64ModularArithmeticOpcode::CLASS_OFFSET
+                        + mod_idx * MODULAR_OPCODE_COUNT
+                        + local,
+                );
+                *index = resolve_air_index(ctx, opcode)?;
+            }
+            air_indices.push(indices);
         }
+        Ok(Self {
+            moduli,
+            air_indices,
+        })
     }
+}
+
+fn resolve_air_index(
+    ctx: Option<&RvrExtensionCtx>,
+    opcode: VmOpcode,
+) -> Result<Option<AirIndex>, ExtensionError> {
+    let Some(ctx) = ctx else {
+        return Ok(None);
+    };
+    let executor_idx = ctx
+        .resolve_opcode_executor_idx(opcode)
+        .ok_or(ExtensionError::UnknownOpcode(opcode))?;
+    let air_idx = *ctx.executor_idx_to_air_idx.get(executor_idx).ok_or(
+        ExtensionError::ExecutorIndexOutOfBounds {
+            opcode,
+            executor_idx,
+        },
+    )?;
+    Ok(Some(AirIndex::new(air_idx as u32)))
 }
 
 impl RvrExtension for ModularRvrExtension {
     fn codegen_fingerprint(&self) -> Option<Vec<u8>> {
-        let mut fingerprint = b"openvm-modular-rvr-v1\0".to_vec();
+        let mut fingerprint = b"openvm-modular-rvr-v2\0".to_vec();
         fingerprint.extend_from_slice(&(self.moduli.len() as u64).to_le_bytes());
         for modulus in &self.moduli {
             fingerprint.extend_from_slice(&modulus.num_limbs.to_le_bytes());
@@ -234,6 +451,16 @@ impl RvrExtension for ModularRvrExtension {
             fingerprint.extend_from_slice(&(modulus.non_qr_bytes.len() as u64).to_le_bytes());
             fingerprint.extend_from_slice(&modulus.non_qr_bytes);
         }
+        let indices = self
+            .air_indices
+            .iter()
+            .flatten()
+            .copied()
+            .collect::<Vec<_>>();
+        fingerprint.extend_from_slice(&air_index_codegen_fingerprint(
+            b"openvm-modular-air-indices-v1",
+            &indices,
+        ));
         Some(fingerprint)
     }
 
@@ -327,68 +554,84 @@ impl ModularRvrExtension {
         }
 
         let info = &self.moduli[mod_idx];
+        let chip_idx = self.air_indices[mod_idx][local];
+        let from_pc = pc as u32;
+        let local_opcode = local as u8;
+        let vec_heap_inline = insn.d == RV64_REGISTER_AS && insn.e == RV64_MEMORY_AS;
+        let is_eq_inline = vec_heap_inline && insn.a != 0;
         let rd_reg = decode_reg(insn.a);
         let rs1_reg = decode_reg(insn.b);
         let rs2_reg = decode_reg(insn.c);
 
         let instr: Instr = match local {
-            x if x == Rv64ModularArithmeticOpcode::ADD as usize => {
-                Instr::Ext(Box::new(ModArithInstr::new(
+            x if x == Rv64ModularArithmeticOpcode::ADD as usize => Instr::Ext(Box::new(
+                ModArithInstr::new(
                     ModOp::Add,
                     rd_reg,
                     rs1_reg,
                     rs2_reg,
                     info.num_limbs,
                     info.modulus_bytes.clone(),
-                )))
-            }
-            x if x == Rv64ModularArithmeticOpcode::SUB as usize => {
-                Instr::Ext(Box::new(ModArithInstr::new(
+                )
+                .with_inline_record(from_pc, local_opcode, chip_idx, vec_heap_inline),
+            )),
+            x if x == Rv64ModularArithmeticOpcode::SUB as usize => Instr::Ext(Box::new(
+                ModArithInstr::new(
                     ModOp::Sub,
                     rd_reg,
                     rs1_reg,
                     rs2_reg,
                     info.num_limbs,
                     info.modulus_bytes.clone(),
-                )))
-            }
-            x if x == Rv64ModularArithmeticOpcode::SETUP_ADDSUB as usize => Instr::Ext(Box::new(
-                ModSetupInstr::new(rd_reg, rs1_reg, rs2_reg, info.num_limbs),
+                )
+                .with_inline_record(from_pc, local_opcode, chip_idx, vec_heap_inline),
             )),
-            x if x == Rv64ModularArithmeticOpcode::MUL as usize => {
-                Instr::Ext(Box::new(ModArithInstr::new(
+            x if x == Rv64ModularArithmeticOpcode::SETUP_ADDSUB as usize => Instr::Ext(Box::new(
+                ModSetupInstr::new(rd_reg, rs1_reg, rs2_reg, info.num_limbs)
+                    .with_inline_record(from_pc, local_opcode, chip_idx, vec_heap_inline),
+            )),
+            x if x == Rv64ModularArithmeticOpcode::MUL as usize => Instr::Ext(Box::new(
+                ModArithInstr::new(
                     ModOp::Mul,
                     rd_reg,
                     rs1_reg,
                     rs2_reg,
                     info.num_limbs,
                     info.modulus_bytes.clone(),
-                )))
-            }
-            x if x == Rv64ModularArithmeticOpcode::DIV as usize => {
-                Instr::Ext(Box::new(ModArithInstr::new(
+                )
+                .with_inline_record(from_pc, local_opcode, chip_idx, vec_heap_inline),
+            )),
+            x if x == Rv64ModularArithmeticOpcode::DIV as usize => Instr::Ext(Box::new(
+                ModArithInstr::new(
                     ModOp::Div,
                     rd_reg,
                     rs1_reg,
                     rs2_reg,
                     info.num_limbs,
                     info.modulus_bytes.clone(),
-                )))
-            }
-            x if x == Rv64ModularArithmeticOpcode::SETUP_MULDIV as usize => Instr::Ext(Box::new(
-                ModSetupInstr::new(rd_reg, rs1_reg, rs2_reg, info.num_limbs),
+                )
+                .with_inline_record(from_pc, local_opcode, chip_idx, vec_heap_inline),
             )),
-            x if x == Rv64ModularArithmeticOpcode::IS_EQ as usize => {
-                Instr::Ext(Box::new(ModIsEqInstr::new(
+            x if x == Rv64ModularArithmeticOpcode::SETUP_MULDIV as usize => Instr::Ext(Box::new(
+                ModSetupInstr::new(rd_reg, rs1_reg, rs2_reg, info.num_limbs)
+                    .with_inline_record(from_pc, local_opcode, chip_idx, vec_heap_inline),
+            )),
+            x if x == Rv64ModularArithmeticOpcode::IS_EQ as usize => Instr::Ext(Box::new(
+                ModIsEqInstr::new(
                     rd_reg,
                     rs1_reg,
                     rs2_reg,
                     info.num_limbs,
                     info.modulus_bytes.clone(),
-                )))
-            }
+                )
+                .with_inline_record(from_pc, local_opcode, chip_idx, is_eq_inline),
+            )),
             x if x == Rv64ModularArithmeticOpcode::SETUP_ISEQ as usize => {
                 Instr::Ext(Box::new(ModIsEqSetupInstr {
+                    from_pc,
+                    local_opcode,
+                    chip_idx,
+                    emit_inline: is_eq_inline,
                     rd_reg,
                     rs1_reg,
                     rs2_reg,
@@ -458,6 +701,9 @@ mod tests {
         fn read_reg(&mut self, idx: u8) -> String {
             self.lines.push(format!("trace_reg_read(state, {idx});"));
             format!("r{idx}")
+        }
+        fn read_reg_with_trace(&mut self, idx: u8) -> (String, String, String) {
+            (self.read_reg(idx), "0u".to_string(), "0u".to_string())
         }
         fn read_reg_raw(&mut self, idx: u8) -> String {
             format!("r{idx}")

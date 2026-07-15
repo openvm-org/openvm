@@ -332,6 +332,31 @@ impl EmitContext {
         }
     }
 
+    pub fn read_reg_with_trace(&mut self, idx: u8) -> (String, String, String) {
+        if self.mode != EmitMode::ValueTrace || !self.inline_records_enabled() {
+            return (self.read_reg(idx), "0u".to_string(), "0u".to_string());
+        }
+
+        let from_timestamp = self.next_var();
+        self.write_line(&format!(
+            "uint32_t {from_timestamp} = state->tracer->timestamp;"
+        ));
+        let value = if idx == 0 {
+            "0".to_string()
+        } else if self.hot_regs.contains(&idx) {
+            Self::abi_name(idx).to_string()
+        } else {
+            let value = self.next_var();
+            self.write_line(&format!("uint64_t {value} = reg_read(state, {idx});"));
+            value
+        };
+        let prev_timestamp = self.next_var();
+        self.write_line(&format!(
+            "uint32_t {prev_timestamp} = trace_reg_read(state, {idx}, {value});"
+        ));
+        (value, from_timestamp, prev_timestamp)
+    }
+
     /// Read a register WITHOUT tracing (for phantom instructions).
     pub fn read_reg_raw(&mut self, idx: u8) -> String {
         if idx == 0 {
@@ -1563,8 +1588,16 @@ impl EmitContext {
 }
 
 impl rvr_openvm_ir::ExtEmitCtx for EmitContext {
+    fn inline_record_enabled(&self) -> bool {
+        self.inline_records_enabled()
+    }
+
     fn read_reg(&mut self, idx: u8) -> String {
         EmitContext::read_reg(self, idx)
+    }
+
+    fn read_reg_with_trace(&mut self, idx: u8) -> (String, String, String) {
+        EmitContext::read_reg_with_trace(self, idx)
     }
 
     fn read_reg_raw(&mut self, idx: u8) -> String {

@@ -9,6 +9,10 @@ pub enum InlineRecordShape {
     Wr1,
     /// One read and one conditional write.
     Rw1,
+    /// Extension-owned record bytes. The extension emits the complete wire
+    /// record and its registered assembler defines how those bytes are
+    /// adopted by the consumer arena.
+    Custom { record_size: usize },
 }
 
 /// Trait abstracting the code-generation context for extension instructions.
@@ -18,8 +22,21 @@ pub enum InlineRecordShape {
 /// Register access stays on the C side so the FFI boundary only carries
 /// resolved values and memory.
 pub trait ExtEmitCtx {
+    /// Whether the current instruction is compiler-approved to emit its
+    /// extension-owned inline record. Custom record emitters must consult
+    /// this because whole-AIR tainting can fail a program slot back to logs.
+    fn inline_record_enabled(&self) -> bool {
+        false
+    }
+
     /// Read a register with tracing. Returns a C expression for the value.
     fn read_reg(&mut self, idx: u8) -> String;
+
+    /// Read a register while retaining the access in the ordinary memory
+    /// chronology, and return `(value, from_timestamp, prev_timestamp)`.
+    /// Custom direct-final records use the two timestamps in their record;
+    /// non-preflight emitters return zero timestamp expressions.
+    fn read_reg_with_trace(&mut self, idx: u8) -> (String, String, String);
 
     /// Read a register without tracing (for phantom instructions).
     fn read_reg_raw(&mut self, idx: u8) -> String;
