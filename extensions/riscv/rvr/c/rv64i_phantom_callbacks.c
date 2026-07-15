@@ -13,8 +13,7 @@ typedef struct {
   void (*hint_random)(void* ctx, uint32_t num_words);
 } Rv64IPhantomCallbacks;
 
-/* NOT thread-safe: installs one process-global callback table. */
-static Rv64IPhantomCallbacks g_rv64i_phantom_callbacks;
+static thread_local Rv64IPhantomCallbacks g_rv64i_phantom_callbacks;
 
 void register_rv64i_phantom_callbacks(const Rv64IPhantomCallbacks* cb) {
   g_rv64i_phantom_callbacks = *cb;

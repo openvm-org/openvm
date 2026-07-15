@@ -14,8 +14,7 @@ typedef struct {
   void (*reveal)(void* ctx, uint64_t src_val, uint64_t ptr, uint32_t offset, uint32_t width);
 } Rv64IoHostCallbacks;
 
-/* NOT thread-safe: installs one process-global callback table. */
-static Rv64IoHostCallbacks g_rv64io_callbacks;
+static thread_local Rv64IoHostCallbacks g_rv64io_callbacks;
 
 void register_rv64io_callbacks(const Rv64IoHostCallbacks* cb) { g_rv64io_callbacks = *cb; }
 
