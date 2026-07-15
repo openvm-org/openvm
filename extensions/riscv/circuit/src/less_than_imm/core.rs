@@ -32,7 +32,7 @@ use crate::less_than::run_less_than;
 #[derive(AlignedBorrow, StructReflection, Debug)]
 pub struct LessThanImmCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub b: [T; NUM_LIMBS],
-    /// Bits [10:0] of the 12-bit signed immediate.
+    /// Bits `[10:0]` of the 12-bit signed immediate.
     pub imm_low11: T,
     /// Sign bit (bit 11) of the immediate.
     pub imm_sign: T,
