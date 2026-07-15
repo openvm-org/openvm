@@ -6,7 +6,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use openvm_instructions::{riscv::RV64_MEMORY_AS, DEFERRAL_AS};
+use openvm_instructions::{
+    riscv::RV64_MEMORY_AS, DEFERRAL_AS, MEMORY_PAGE_BITS, PUBLIC_VALUES_AS,
+};
 use rvr_openvm::{DEFERRAL_PAGE_BUF_CAP, MEM_PAGE_BUF_CAP, PV_PAGE_BUF_CAP};
 use rvr_openvm_lift::RvrRuntimeExtension;
 
@@ -22,14 +24,14 @@ use crate::{
     arch::{
         execution_mode::{
             metered::{
-                memory_ctx::{MemoryCtx, PageAccess, PAGE_BITS},
+                memory_ctx::{MemoryCtx, PageAccess},
                 segment_ctx::Segment,
             },
             MeteredCtx,
         },
         ExecutionError, Streams, SystemConfig, VmState,
     },
-    system::memory::{merkle::public_values::PUBLIC_VALUES_AS, online::GuestMemory},
+    system::memory::online::GuestMemory,
 };
 
 struct RvrMeteredInstanceInner<'a> {
@@ -178,7 +180,7 @@ impl SegmentationState {
         // C buffers use page ids local to one address space. `MemoryCtx`
         // deduplicates against one global memory tree, so convert to global
         // page ids before applying the leaf masks.
-        let page_shift = address_height as usize - PAGE_BITS;
+        let page_shift = address_height as usize - MEMORY_PAGE_BITS;
         let page_offset = ((addr_space as usize - 1) << page_shift) as u32;
         memory_ctx.apply_page_accesses_with_offset(page_offset, &buffer[..len as usize]);
     }

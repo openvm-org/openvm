@@ -11,37 +11,14 @@
 
 use std::ffi::c_void;
 
-/// Memory access granularity in bytes (`sizeof(u64) == 8`).
-pub use openvm_platform::WORD_SIZE;
-
-// TODO(dedup): make a common crate that is imported by rvr and openvm-circuit
-// ── Deferral constants ───────────────────────────────────────────────────
-
-/// BabyBear Poseidon2 digest size in field elements.
-pub const DEFERRAL_DIGEST_SIZE: usize = 8;
+use openvm_instructions::DIGEST_WIDTH;
 
 /// Commit size in bytes.
 const F_NUM_BYTES: usize = 4;
-pub const DEFERRAL_COMMIT_NUM_BYTES: usize = DEFERRAL_DIGEST_SIZE * F_NUM_BYTES;
+pub const DEFERRAL_COMMIT_NUM_BYTES: usize = DIGEST_WIDTH * F_NUM_BYTES;
 
 /// Output key size in bytes (commit + u64 length).
 pub const DEFERRAL_OUTPUT_KEY_BYTES: usize = DEFERRAL_COMMIT_NUM_BYTES + 8;
-
-// ── OpenVM address space identifiers (mirror C `openvm_state.h`) ──
-pub use openvm_instructions::{
-    riscv::{RV64_MEMORY_AS as AS_MEMORY, RV64_REGISTER_AS as AS_REGISTER},
-    DEFERRAL_AS, PUBLIC_VALUES_AS as AS_PUBLIC_VALUES,
-};
-
-// TODO(dedup): make a common crate that is imported by rvr and openvm-circuit
-// ── OpenVM metered-execution layout ───────────────────────────────────
-// Redefined here to avoid a cycle with openvm-circuit. Checked against
-// upstream in `openvm-circuit`'s `arch::rvr::abi_consts`.
-
-/// Number of bits needed to index the leaves represented by one `u64` page mask.
-pub const PAGE_BITS: usize = 6;
-/// Default, not an invariant; see TODO in `abi_consts.rs`.
-pub const DEFAULT_SEGMENT_CHECK_INSNS: u32 = 1000;
 
 extern "C" {
     // ── Memory access (single u64 word, data) ─────────────────────────

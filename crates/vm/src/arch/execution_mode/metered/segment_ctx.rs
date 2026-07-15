@@ -1,12 +1,11 @@
 use bytesize::ByteSize;
+use openvm_instructions::DEFAULT_SEGMENT_CHECK_INSNS;
 #[cfg(feature = "metrics")]
 use openvm_stark_backend::memory_metering::INTERACTION_MEMORY_OVERHEAD;
 use openvm_stark_backend::memory_metering::{ProvingMemoryConfig, ProvingMemoryCounts};
 use serde::{Deserialize, Serialize};
 
 use crate::utils::{add_one_or_zero, next_power_of_two_or_zero};
-
-pub const DEFAULT_SEGMENT_CHECK_INSNS: u64 = 1000;
 
 pub const DEFAULT_MAX_MEMORY: usize = 15 << 30; // 15GiB
 
@@ -71,7 +70,7 @@ impl SegmentationConfig {
             .checked_shl(u32::from(limits.max_trace_height_bits))
             .expect("max_trace_height_bits must fit in u32 trace height");
         assert!(
-            u64::from(max_trace_height) >= 2 * DEFAULT_SEGMENT_CHECK_INSNS,
+            u64::from(max_trace_height) >= 2 * u64::from(DEFAULT_SEGMENT_CHECK_INSNS),
             "max_trace_height must be at least twice DEFAULT_SEGMENT_CHECK_INSNS"
         );
 
@@ -84,7 +83,7 @@ impl SegmentationConfig {
             max_memory: limits.max_memory,
             max_interactions: limits.max_interactions,
             memory_config,
-            segment_check_insns: DEFAULT_SEGMENT_CHECK_INSNS,
+            segment_check_insns: u64::from(DEFAULT_SEGMENT_CHECK_INSNS),
         }
     }
 

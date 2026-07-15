@@ -7,7 +7,7 @@
 
 use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
-    DEFERRAL_AS,
+    DEFERRAL_AS, PUBLIC_VALUES_AS,
 };
 use rvr_state::NUM_REGS_I;
 
@@ -15,7 +15,6 @@ use super::{compile::CompileError, ExecuteError};
 use crate::{
     arch::{ExecutionError, StaticProgramError, VmState},
     system::memory::{
-        merkle::public_values::PUBLIC_VALUES_AS,
         online::{GuestMemory, LinearMemory},
         AddressMap,
     },

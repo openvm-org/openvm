@@ -15,6 +15,7 @@ use openvm_circuit::system::program::trace::compute_exe_commit;
 use openvm_instructions::{
     exe::{SparseMemoryImage, VmExe},
     program::Program,
+    DIGEST_WIDTH,
 };
 #[cfg(any(debug_assertions, feature = "test-utils", feature = "stark-debug"))]
 use openvm_stark_backend::AirRef;
@@ -76,7 +77,7 @@ use crate::{
                 MemoryMerklePvs,
             },
             online::{GuestMemory, TracingMemory},
-            AddressMap, DIGEST_WIDTH,
+            AddressMap,
         },
         program::trace::generate_cached_trace,
         SystemChipComplex, SystemRecords, SystemWithFixedTraceHeights,

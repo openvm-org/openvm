@@ -1,23 +1,20 @@
 use std::{borrow::BorrowMut, sync::Arc};
 
+#[cfg(feature = "cuda")]
+use openvm_circuit::arch::testing::{
+    default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
+    GpuTestChipHarness,
+};
 use openvm_circuit::arch::testing::{
     TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
-};
-#[cfg(feature = "cuda")]
-use openvm_circuit::{
-    arch::testing::{
-        default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
-        GpuTestChipHarness,
-    },
-    system::memory::merkle::public_values::PUBLIC_VALUES_AS,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
     SharedBitwiseOperationLookupChip,
 };
-#[cfg(feature = "cuda")]
-use openvm_instructions::riscv::RV64_MEMORY_AS;
 use openvm_instructions::LocalOpcode;
+#[cfg(feature = "cuda")]
+use openvm_instructions::{riscv::RV64_MEMORY_AS, PUBLIC_VALUES_AS};
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, STOREB};
 use openvm_stark_backend::{
     p3_air::BaseAir,

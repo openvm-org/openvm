@@ -7,6 +7,8 @@
 
 use std::ffi::c_void;
 
+use openvm_instructions::riscv::RV64_MEMORY_AS;
+use openvm_platform::memory::MEM_SIZE;
 use rvr_openvm_lift::{ExtensionError, RvrRuntimeExtension};
 use rvr_state::{ExecutionStatus, MemoryError, Rv64, RvState, SuspenderState, TracerState};
 
@@ -27,7 +29,10 @@ use super::{
         init_rvr_state, init_rvr_state_with_metered, init_rvr_state_with_metered_cost, TracerPtr,
     },
 };
-use crate::{arch::VmState, system::memory::online::GuestMemory};
+use crate::{
+    arch::VmState,
+    system::memory::online::{GuestMemory, LinearMemory},
+};
 
 type RegisterIoCtxFn = unsafe extern "C" fn(*mut c_void);
 type RegisterHintStreamSetFn =
@@ -47,9 +52,29 @@ pub enum ExecuteError {
     ExtensionRegistration(#[from] ExtensionError),
     #[error("invalid metered context: {0}")]
     InvalidMeteredContext(String),
+    #[error("invalid RVR main memory size: got {actual} bytes, expected {expected} bytes")]
+    InvalidMemorySize { actual: usize, expected: usize },
+    #[error("RVR main memory address space is missing")]
+    MissingMemoryAddressSpace,
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+fn validate_rvr_memory_size(vm_state: &VmState<GuestMemory>) -> Result<(), ExecuteError> {
+    let memory = vm_state
+        .memory
+        .memory
+        .mem
+        .get(RV64_MEMORY_AS as usize)
+        .ok_or(ExecuteError::MissingMemoryAddressSpace)?;
+    if memory.size() != MEM_SIZE {
+        return Err(ExecuteError::InvalidMemorySize {
+            actual: memory.size(),
+            expected: MEM_SIZE,
+        });
+    }
+    Ok(())
+}
 
 fn build_io_state_borrowed(vm_state: &mut VmState<GuestMemory>) -> OpenVmIoState<'_> {
     let memory_ptr = rv64_memory_ptr(vm_state);
@@ -183,6 +208,7 @@ pub fn execute(
     vm_state: &mut VmState<GuestMemory>,
     num_insns: Option<u64>,
 ) -> Result<RvrPureResult, ExecuteError> {
+    validate_rvr_memory_size(vm_state)?;
     let pc = vm_state.pc();
     let initial_regs = read_rv64_registers(vm_state);
 
@@ -215,6 +241,7 @@ pub fn execute_metered_cost(
     vm_state: &mut VmState<GuestMemory>,
     widths: &[u64],
 ) -> Result<RvrMeteredCostResult, ExecuteError> {
+    validate_rvr_memory_size(vm_state)?;
     let pc = vm_state.pc();
     let initial_regs = read_rv64_registers(vm_state);
 
@@ -262,6 +289,7 @@ fn execute_metered_impl(
     mut seg_state: SegmentationState,
     allow_suspended: bool,
 ) -> Result<RvrMeteredResult, ExecuteError> {
+    validate_rvr_memory_size(vm_state)?;
     debug_assert!(
         !allow_suspended || seg_state.suspend_on_segment(),
         "segment-boundary rvr execution requires MeteredCtx::suspend_on_segment"
@@ -333,4 +361,39 @@ fn execute_metered_impl(
         suspended: !terminated,
         exit_code: terminated.then_some(state.result_code() as u32),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        arch::{MemoryConfig, Streams},
+        system::memory::online::AddressMap,
+    };
+
+    #[test]
+    fn rejects_wrong_main_memory_size() {
+        let mut memory_config = MemoryConfig::default();
+        memory_config.addr_spaces[RV64_MEMORY_AS as usize].num_cells = 1;
+        let memory = GuestMemory::new(AddressMap::from_mem_config(&memory_config));
+        let state = VmState::new_with_defaults(0, memory, Streams::default(), 0);
+
+        assert!(matches!(
+            validate_rvr_memory_size(&state),
+            Err(ExecuteError::InvalidMemorySize { .. })
+        ));
+    }
+
+    #[test]
+    fn rejects_missing_main_memory_address_space() {
+        let mut memory_config = MemoryConfig::default();
+        memory_config.addr_spaces.truncate(RV64_MEMORY_AS as usize);
+        let memory = GuestMemory::new(AddressMap::from_mem_config(&memory_config));
+        let state = VmState::new_with_defaults(0, memory, Streams::default(), 0);
+
+        assert!(matches!(
+            validate_rvr_memory_size(&state),
+            Err(ExecuteError::MissingMemoryAddressSpace)
+        ));
+    }
 }

@@ -1,8 +1,11 @@
 use std::array;
 
-use openvm_instructions::riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS};
 #[cfg(feature = "cuda")]
 use openvm_instructions::DEFERRAL_AS;
+use openvm_instructions::{
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    PUBLIC_VALUES_AS,
+};
 use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::Rng;
@@ -10,12 +13,9 @@ use test_case::test_case;
 
 #[cfg(feature = "cuda")]
 use crate::arch::testing::{default_var_range_checker_bus, GpuChipTestBuilder};
-use crate::{
-    arch::{
-        testing::{TestBuilder, VmChipTestBuilder},
-        MemoryConfig, BLOCK_FE_WIDTH,
-    },
-    system::memory::merkle::public_values::PUBLIC_VALUES_AS,
+use crate::arch::{
+    testing::{TestBuilder, VmChipTestBuilder},
+    MemoryConfig, BLOCK_FE_WIDTH,
 };
 
 type F = BabyBear;

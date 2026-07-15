@@ -3,14 +3,12 @@ use std::{
     marker::PhantomData,
 };
 
+use openvm_instructions::DIGEST_WIDTH;
 use openvm_poseidon2_air::p3_symmetric::Permutation;
 use openvm_stark_backend::p3_field::{PrimeCharacteristicRing, PrimeField32};
 use p3_baby_bear::{BabyBear, Poseidon2BabyBear};
 
-use crate::{
-    arch::{hasher::Hasher, vm_poseidon2_config, POSEIDON2_WIDTH},
-    system::memory::DIGEST_WIDTH,
-};
+use crate::arch::{hasher::Hasher, vm_poseidon2_config, POSEIDON2_WIDTH};
 
 pub fn vm_poseidon2_hasher<F: PrimeField32>() -> Poseidon2Hasher<F> {
     assert_eq!(F::ORDER_U32, BabyBear::ORDER_U32, "F must be BabyBear");

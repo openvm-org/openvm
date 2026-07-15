@@ -1,5 +1,5 @@
 use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
-use openvm_instructions::exe::VmExe;
+use openvm_instructions::{exe::VmExe, DIGEST_WIDTH};
 use openvm_stark_backend::{
     keygen::types::MultiStarkVerifyingKey, p3_field::PrimeField32, proof::Proof,
     prover::ProvingContext, Com, StarkEngine, SystemParams, Val,
@@ -18,7 +18,7 @@ use crate::{
         ExitCode, MeteredExecutor, PreflightExecutionOutput, PreflightExecutor, Streams, VmBuilder,
         VmCircuitConfig, VmConfig, VmExecutionConfig,
     },
-    system::memory::{MemoryImage, DIGEST_WIDTH},
+    system::memory::MemoryImage,
 };
 
 /// Supports `trace height <= 2^20`.

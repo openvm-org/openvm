@@ -24,7 +24,7 @@ mod touched_pages;
 #[cfg(not(any(unix, windows)))]
 pub use basic::*;
 #[cfg(all(unix, feature = "rvr", not(feature = "basic-memory")))]
-pub use guarded::*;
+pub use guarded::GuardedMemory;
 #[cfg(any(unix, windows))]
 pub use memmap::*;
 pub use paged_vec::PagedVec;

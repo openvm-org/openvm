@@ -14,6 +14,7 @@ openvm-circuit-primitives = { workspace = true }
 openvm-circuit-derive = { workspace = true }
 openvm-circuit = { workspace = true }
 openvm-instructions = { workspace = true }
+openvm-platform.workspace = true
 openvm-mod-circuit-builder = { workspace = true }
 openvm-stark-backend = { workspace = true }
 openvm-cpu-backend = { workspace = true }

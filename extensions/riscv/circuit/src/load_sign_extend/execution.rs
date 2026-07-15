@@ -11,7 +11,6 @@ use openvm_circuit::{
     arch::{
         create_handler, E2PreCompute, ExecutionCtxTrait, ExecutionError, InterpreterExecutor,
         InterpreterMeteredExecutor, MeteredExecutionCtxTrait, StaticProgramError, VmExecState,
-        RV64_MEMORY_BYTES,
     },
     system::memory::online::GuestMemory,
 };
@@ -22,6 +21,7 @@ use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
+use openvm_platform::memory::MEM_SIZE;
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, LOADB, LOADH, LOADW};
 use openvm_stark_backend::p3_field::PrimeField32;
 
@@ -187,7 +187,7 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: LoadSignExtendOp, const E
         exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.b as u32);
     let rs1_val = rv64_bytes_to_u32(rs1_bytes);
     let addr = rv64_address_add_imm(rs1_val, pre_compute.imm_extended);
-    debug_assert!((addr as usize) < RV64_MEMORY_BYTES);
+    debug_assert!((addr as usize) < MEM_SIZE);
     let ptr_val = addr as u32;
 
     let shift_amount = ptr_val % RV64_REGISTER_NUM_LIMBS as u32;
