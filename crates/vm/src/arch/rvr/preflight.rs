@@ -1862,6 +1862,7 @@ where
             &mut shadow_public_values,
             &touched,
         );
+        pool.prepare_shadow_locality(&mut shadow_memory, &touched);
         pool.recycle_shadows(shadow_register, shadow_memory, shadow_public_values);
         let touched = if inline_meta.delta_records {
             touched
