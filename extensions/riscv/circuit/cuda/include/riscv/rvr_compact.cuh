@@ -30,8 +30,9 @@ struct RvrOperandEntry {
     uint8_t local_opcode;
     uint8_t air_idx;
     uint8_t access_pattern;
+    uint32_t filtered_index;
 };
-static_assert(sizeof(RvrOperandEntry) == 16, "RvrOperandEntry size drift");
+static_assert(sizeof(RvrOperandEntry) == 20, "RvrOperandEntry size drift");
 static_assert(alignof(RvrOperandEntry) == 4, "RvrOperandEntry align drift");
 
 static constexpr uint8_t RVR_OPERAND_FLAG_RS2_IMM = 1 << 0;
