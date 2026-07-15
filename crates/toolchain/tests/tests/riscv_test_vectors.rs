@@ -104,7 +104,7 @@ fn test_rv64im_riscv_vector_prove() -> Result<()> {
             )?;
 
             let result = std::panic::catch_unwind(|| {
-                air_test(Rv64ImBuilder, config.clone(), exe);
+                air_test(Rv64ImBuilder::new(), config.clone(), exe);
             });
 
             match result {

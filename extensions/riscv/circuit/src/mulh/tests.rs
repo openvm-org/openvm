@@ -541,8 +541,8 @@ fn run_mul_program(instructions: Vec<Instruction<F>>) -> (VmState, VmState) {
 
     // Also test metered execution (interpreter and AOT) produce identical final state
     let engine = BabyBearPoseidon2Engine::new(FriParameters::new_for_testing(3));
-    let (vm, _) =
-        VirtualMachine::new_with_keygen(engine, Rv64ImBuilder, config.clone()).expect("vm init");
+    let (vm, _) = VirtualMachine::new_with_keygen(engine, Rv64ImBuilder::new(), config.clone())
+        .expect("vm init");
     let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
     let metered_ctx = vm.build_metered_ctx(&exe);
 
