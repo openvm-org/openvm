@@ -251,7 +251,9 @@ macro_rules! known_field_op_fn {
             rs2: u64,
         ) {
             let f = $wrapper::<$field>(::std::marker::PhantomData);
-            $crate::exec_op(&f, state, rd, rs1, rs2, |f, a, b| f.$op(a, b));
+            $crate::exec_op(&f, state, rd, rs1, rs2, |f, a, b| {
+                $crate::FieldArith::$op(f, a, b)
+            });
         }
     };
 }
@@ -280,7 +282,9 @@ macro_rules! unknown_field_op_fn {
                 num_limbs as usize,
             ));
             let f = $field_ty { modulus, num_limbs };
-            $crate::exec_op(&f, state, rd_ptr, rs1_ptr, rs2_ptr, |f, a, b| f.$op(a, b));
+            $crate::exec_op(&f, state, rd_ptr, rs1_ptr, rs2_ptr, |f, a, b| {
+                $crate::FieldArith::$op(f, a, b)
+            });
         }
     };
 }

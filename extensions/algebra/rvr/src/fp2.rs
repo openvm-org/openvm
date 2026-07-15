@@ -35,9 +35,9 @@ fn make_modulus_info(modulus: BigUint) -> ModulusInfo {
 // ── Fp2 arithmetic IR ────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone)]
-pub(crate) struct Fp2ArithKind;
+pub(crate) struct Fp2Kind;
 
-impl FieldKind for Fp2ArithKind {
+impl FieldKind for Fp2Kind {
     fn c_prefix() -> &'static str {
         "fp2"
     }
@@ -46,23 +46,23 @@ impl FieldKind for Fp2ArithKind {
     }
 }
 
-impl ArithKind for Fp2ArithKind {
+impl ArithKind for Fp2Kind {
     fn opname() -> &'static str {
         "fp2_arith"
     }
 }
 
-impl SetupKind for Fp2ArithKind {
+impl SetupKind for Fp2Kind {
     fn opname() -> &'static str {
         "fp2_setup"
     }
 }
 
 /// IR node for Fp2 arithmetic (ADD, SUB, MUL, DIV).
-pub(crate) type Fp2ArithInstr = FieldArithInstr<Fp2ArithKind>;
+pub(crate) type Fp2ArithInstr = FieldArithInstr<Fp2Kind>;
 
 /// IR node for Fp2 SETUP (SETUP_ADDSUB, SETUP_MULDIV).
-pub(crate) type Fp2SetupInstr = FieldSetupInstr<Fp2ArithKind>;
+pub(crate) type Fp2SetupInstr = FieldSetupInstr<Fp2Kind>;
 
 // ── Fp2 extension ────────────────────────────────────────────────────────────
 
