@@ -7,14 +7,26 @@ on:
   pull_request:
     branches: ["**"]
     paths:
-#     - "crates/circuits/primitives/**"
-#     - "crates/vm/**"
-#     - "crates/toolchain/**"
+      - "crates/circuits/primitives/**"
+      - "crates/vm/**"
+      - "crates/toolchain/build/**"
+      - "crates/toolchain/custom_insn/**"
+      - "crates/toolchain/decoder/**"
+      - "crates/toolchain/instructions/**"
+      - "crates/toolchain/platform/**"
+      - "crates/toolchain/tests/**"
+      - "crates/toolchain/transpiler/**"
       - "extensions/rv32im/circuit/**"
       - "extensions/rv32im/transpiler/**"
       - "extensions/rv32im/guest/**"
-#     - "Cargo.toml"
+      - "extensions/rv32-adapters/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - ".cargo/config.toml"
+      - ".github/actions/sccache/**"
       - ".github/workflows/riscv.yml"
+      - "scripts/gpu_driver_setup.sh"
 
 concurrency:
   group: ${{ github.workflow_ref }}-riscv-${{ github.event.pull_request.number || github.sha }}
@@ -30,16 +42,19 @@ jobs:
       matrix:
         platform:
           - {
-              labels: "runner=64cpu-linux-x64/image=ubuntu24-full-x64",
+              name: "runtime (AOT)",
+              labels: "family=c8i-flex.16xlarge+c8i.16xlarge+c8a.16xlarge+c7i.16xlarge+c7a.16xlarge/image=ubuntu24-full-x64/volume=80gb",
               image: "ubuntu24-full-x64",
               features: "aot",
             }
           - {
-              labels: "image=ubuntu24-gpu-x64/family=g6.*+g5+g6e/cpu=4+32/volume=40gb/spot=capacity-optimized",
+              name: "prover (CUDA)",
+              labels: "image=ubuntu24-gpu-x64/family=g7.2xlarge+g6.2xlarge+g5.2xlarge/volume=40gb/spot=price-capacity-optimized",
               image: "ubuntu24-gpu-x64",
               features: "cuda,touchemall",
             }
 
+    name: ${{ matrix.platform.name }}
     runs-on:
       - runs-on=${{ github.run_id }}-riscv-${{ github.run_attempt }}-${{ strategy.job-index }}/${{ matrix.platform.labels }}/extras=s3-cache
 
@@ -61,9 +76,13 @@ jobs:
           ssh-private-key: |
             ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
       - uses: actions/checkout@v5
-        with:
-          submodules: recursive
+      - name: Init RISC-V test-vector submodule
+        run: git submodule update --init --depth 1 crates/toolchain/tests/rv32im-test-vectors/riscv-tests
       - uses: ./.github/actions/sccache
+
+      - name: Setup GPU driver
+        if: contains(matrix.platform.features, 'cuda')
+        run: bash ./scripts/gpu_driver_setup.sh
 
       - name: Set feature flags
         run: |

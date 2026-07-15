@@ -4,17 +4,35 @@ on:
   workflow_call:
   push:
     branches: ["main"]
+    paths: &guest_lib_test_paths
+      - "crates/circuits/**"
+      - "crates/vm/**"
+      - "crates/toolchain/**"
+      - "crates/sdk/**"
+      - "crates/recursion/**"
+      - "crates/continuations/**"
+      - "crates/verify/**"
+      - "extensions/rv32im/**"
+      - "extensions/rv32-adapters/**"
+      - "extensions/deferral/**"
+      - "extensions/keccak256/**"
+      - "extensions/sha2/**"
+      - "extensions/algebra/**"
+      - "extensions/ecc/**"
+      - "extensions/pairing/**"
+      - "guest-libs/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - ".cargo/config.toml"
+      - ".github/actions/sccache/**"
+      - ".github/filters/guest-lib-tests.yml"
+      - ".github/workflows/guest-lib-tests.group.yml"
+      - ".github/workflows/guest-lib-tests.yml"
+      - "crates/sdk/guest/fib/**"
   pull_request:
     branches: ["**"]
-    paths:
-#      - "crates/circuits/**"
-#      - "crates/vm/**"
-#      - "crates/toolchain/**"
-#      - "extensions/**"
-      - "guest-libs/**"
-#      - "Cargo.toml"
-      - ".github/workflows/guest-lib-tests.yml"
-#      - "crates/sdk/guest/fib/**"
+    paths: *guest_lib_test_paths
 
 concurrency:
   group: ${{ github.workflow_ref }}-guest-lib-tests-${{ github.event.pull_request.number || github.sha }}
@@ -25,71 +43,38 @@ env:
   OPENVM_SKIP_DEBUG: "1"
 
 jobs:
-  integration-tests:
-    strategy:
-      matrix:
-        crate:
-          - { name: "sha2", path: "sha2" }
-          - { name: "keccak256", path: "keccak256" }
-          - { name: "ff_derive", path: "ff_derive" }
-          - { name: "k256", path: "k256" }
-          - { name: "p256", path: "p256" }
-          - { name: "pairing", path: "pairing" }
-          - { name: "verify-stark", path: "verify-stark/circuit" }
-        platform:
-          - { runner: "64cpu-linux-x64", image: "ubuntu24-full-x64" }
-      # Ensure tests run in parallel even if one fails
-      fail-fast: false
-
-    runs-on:
-      - runs-on=${{ github.run_id }}-guest-lib-tests-${{ github.run_attempt }}-${{ strategy.job-index }}/runner=${{ matrix.platform.runner }}/image=${{ matrix.platform.image }}/extras=s3-cache
-
+  changes:
+    name: Select affected libraries
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      crates: ${{ steps.filter.outputs.changes }}
     steps:
-      - uses: runs-on/action@v2
-        with:
-          sccache: s3
-      - name: Load SSH key
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: |
-            ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
       - uses: actions/checkout@v5
       - uses: dorny/paths-filter@v3
         id: filter
         with:
-          filters: |
-            - "crates/circuits/**"
-            - "crates/vm/**"
-            - "crates/toolchain/**"
-            - "extensions/**"
-            - "guest-libs/${{ matrix.crate.path }}/**"
-            - ".github/workflows/guest-lib-tests.yml"
-      - name: Skip if no changes
-        if: steps.filter.outputs.matched == 'false'
-        run: |
-          echo "No relevant changes, skipping tests."
-          exit 0
+          filters: .github/filters/guest-lib-tests.yml
 
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: ./.github/actions/sccache
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
-      - uses: taiki-e/install-action@nextest
-
-      - name: Run ${{ matrix.crate.name }} guest library tests
-        working-directory: guest-libs/${{ matrix.crate.path }}
-        run: |
-          rustup component add rust-src --toolchain nightly-2026-01-18
-          EXTRA_ARGS=()
-          if [[ "${{ matrix.crate.name }}" == "sha2" || "${{ matrix.crate.name }}" == "keccak256" ]]; then
-            EXTRA_ARGS+=(--features=aot)
-          elif [[ "${{ matrix.crate.name }}" == "pairing" ]]; then
-            EXTRA_ARGS+=(--features=bn254,bls12_381,aot -E 'not test(fallback)')
-          fi
-
-          cargo nextest run --cargo-profile=fast "${EXTRA_ARGS[@]}" --no-tests=pass --test-threads=1
-
-      - name: sccache stats
-        if: always()
-        run: sccache --show-stats || true
+  integration-tests:
+    needs: changes
+    if: needs.changes.outputs.crates != '[]'
+    name: ${{ matrix.crate }}
+    strategy:
+      matrix:
+        crate: ${{ fromJSON(needs.changes.outputs.crates) }}
+        mode: [default]
+        exclude:
+          - { crate: shared, mode: default }
+          - { crate: cuda, mode: default }
+      # Ensure tests run in parallel even if one fails
+      fail-fast: false
+    uses: ./.github/workflows/guest-lib-tests.group.yml
+    with:
+      runner_id: cpu-${{ strategy.job-index }}
+      machine_type: family=c8i-flex.16xlarge+c8i.16xlarge+c8a.16xlarge+c7i.16xlarge+c7a.16xlarge/image=ubuntu24-full-x64/volume=80gb
+      crates: ${{ matrix.crate }}
+      mode: ${{ matrix.mode }}
+    secrets: inherit

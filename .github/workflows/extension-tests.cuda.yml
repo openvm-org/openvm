@@ -4,21 +4,32 @@ on:
   workflow_call:
   push:
     branches: ["main"]
+    paths: &extension_cuda_test_paths
+      - "crates/circuits/**"
+      - "crates/vm/**"
+      - "crates/toolchain/**"
+      - "crates/sdk/**"
+      - "crates/sdk-config/**"
+      - "extensions/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - ".cargo/config.toml"
+      - ".github/actions/sccache/**"
+      - ".github/actions/rust-cache-cuda/**"
+      - ".github/filters/extension-tests.yml"
+      - ".github/workflows/extension-tests.group.yml"
+      - ".github/workflows/extension-tests.cuda.yml"
+      - "scripts/gpu_driver_setup.sh"
   pull_request:
     branches: ["**"]
-    paths:
-#     - "crates/circuits/**"
-#     - "crates/vm/**"
-#     - "crates/toolchain/**"
-      - "extensions/**"
-#     - "Cargo.toml"
-      - ".github/workflows/extension-tests.cuda.yml"
+    paths: *extension_cuda_test_paths
   workflow_dispatch:
     inputs:
       machine_type:
-        description: "Runner label fragment (e.g. image=ubuntu24-gpu-x64/family=g6.*+g6e/cpu=8+32/volume=40gb/spot=capacity-optimized)"
+        description: "Runner label fragment (e.g. image=ubuntu24-gpu-x64/family=g7.2xlarge+g6.2xlarge+g5.2xlarge/volume=40gb/spot=price-capacity-optimized)"
         required: false
-        default: image=ubuntu24-gpu-x64/family=g6+g6e/cpu=4+32/volume=40gb/spot=capacity-optimized
+        default: image=ubuntu24-gpu-x64/family=g7.2xlarge+g6.2xlarge+g5.2xlarge/volume=40gb/spot=price-capacity-optimized
 
 concurrency:
   group: ${{ github.workflow_ref }}-extension-tests-cuda-${{ github.event.pull_request.number || github.sha }}
@@ -29,124 +40,45 @@ env:
   OPENVM_SKIP_DEBUG: "1"
 
 jobs:
-  extension-tests-cuda:
-    strategy:
-      matrix:
-        extensions: # group extensions on the same runner based on test time
-          - "rv32im"
-          - "keccak256 sha2 bigint algebra ecc pairing deferral"
-    runs-on:
-      - runs-on=${{ github.run_id }}-extension-tests-cuda-${{ github.run_attempt }}-${{ strategy.job-index }}/${{ github.event_name == 'workflow_dispatch' && github.event.inputs.machine_type || 'image=ubuntu24-gpu-x64/family=g6.*+g6e/cpu=4+32/volume=40gb/spot=capacity-optimized' }}/extras=s3-cache
-
+  changes:
+    name: Select affected groups
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      extensions: ${{ steps.tests.outputs.changes }}
+      cuda: ${{ steps.tests.outputs.cuda }}
+      rv32im: ${{ steps.tests.outputs.rv32im }}
     steps:
-      - uses: runs-on/action@v2
-        with:
-          sccache: s3
-      - name: Load SSH key
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: |
-            ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
       - uses: actions/checkout@v5
       - uses: dorny/paths-filter@v3
-        id: filter
+        id: tests
         with:
-          filters: |
-            common:
-              - "crates/circuits/**"
-              - "crates/vm/**"
-              - "crates/toolchain/**"
-              - ".github/workflows/extension-tests.cuda.yml"
-            rv32im:
-              - "extensions/rv32im/**"
-            keccak256:
-              - "extensions/keccak256/**"
-            sha2:
-              - "extensions/sha2/**"
-            bigint:
-              - "extensions/bigint/**"
-            algebra:
-              - "extensions/algebra/**"
-            ecc:
-              - "extensions/ecc/**"
-            pairing:
-              - "extensions/pairing/**"
-            deferral:
-              - "extensions/deferral/**"
+          filters: .github/filters/extension-tests.yml
 
-      - name: Skip if no changes
-        env:
-          FILTER_OUTPUTS: ${{ toJSON(steps.filter.outputs) }}
-        run: |
-          # Check if common files changed
-          COMMON_CHANGED=$(echo $FILTER_OUTPUTS | jq -r .common)
+  rv32im-cuda:
+    name: RV32IM
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.cuda == 'true' || needs.changes.outputs.rv32im == 'true'
+    uses: ./.github/workflows/extension-tests.group.yml
+    with:
+      runner_id: cuda-rv32im
+      machine_type: ${{ inputs.machine_type || 'image=ubuntu24-gpu-x64/family=g7.2xlarge+g6.2xlarge+g5.2xlarge/volume=40gb/spot=price-capacity-optimized' }}
+      extensions: ${{ (github.event_name == 'workflow_dispatch' || needs.changes.outputs.cuda == 'true') && 'all' || join(fromJSON(needs.changes.outputs.extensions), ' ') }}
+      mode: cuda
+      cuda_group: rv32im
+    secrets: inherit
 
-          # Check if any extension in the current matrix group changed
-          ANY_EXT_CHANGED=false
-          for ext in ${{ matrix.extensions }}; do
-            ext_changed=$(echo $FILTER_OUTPUTS | jq -r --arg ext "$ext" '.[$ext]')
-            if [[ "$ext_changed" == "true" ]]; then
-              ANY_EXT_CHANGED=true
-              break
-            fi
-          done
-
-          # Skip if neither common nor any extension in this matrix group changed
-          if [[ "$COMMON_CHANGED" != "true" && "$ANY_EXT_CHANGED" != "true" ]]; then
-            echo "No relevant changes for extensions [${{ matrix.extensions }}], skipping tests."
-            exit 0
-          fi
-
-      - uses: dtolnay/rust-toolchain@stable
-        env:
-          RUSTUP_PERMIT_COPY_RENAME: "1"
-      - uses: ./.github/actions/sccache
-      - uses: ./.github/actions/rust-cache-cuda
-        with:
-          cache-on-failure: true
-      - uses: taiki-e/install-action@nextest
-
-      - name: Check CUDA status and set environment variables
-        run: |
-          nvidia-smi
-          nvidia-smi -L
-          nvcc --version
-          echo "CUDA_ARCH=86,89,120" >> $GITHUB_ENV
-          echo "NEXTEST_ENV=CUDA_OPT_LEVEL=3" >> $GITHUB_ENV
-          echo "FEATURE_ARGS=--features=cuda" >> $GITHUB_ENV
-          echo "VPMM_PAGES=1" >> $GITHUB_ENV
-
-      - name: Run extension tests
-        env:
-          FILTER_OUTPUTS: ${{ toJSON(steps.filter.outputs) }}
-        run: |
-          COMMON_CHANGED=$(echo $FILTER_OUTPUTS | jq -r .common)
-
-          for ext in ${{ matrix.extensions }}; do
-            ext_changed=$(echo $FILTER_OUTPUTS | jq -r --arg ext "$ext" '.[$ext]')
-            if [[ "$COMMON_CHANGED" == "true" || "$ext_changed" == "true" ]]; then
-              echo "::group::Running tests for $ext"
-
-              # Run circuit tests
-              if [ -d "extensions/$ext/circuit" ]; then
-                pushd extensions/$ext/circuit
-                ${{ env.NEXTEST_ENV }} cargo nextest run cuda ${{ env.FEATURE_ARGS }} --features=touchemall --profile=heavy --no-tests=pass
-                popd
-              fi
-
-              # Run integration tests
-              if [ -d "extensions/$ext/tests" ]; then
-                pushd extensions/$ext/tests
-                rustup component add rust-src --toolchain nightly-2026-01-18
-                ${{ env.NEXTEST_ENV }} cargo nextest run ${{ env.FEATURE_ARGS }} --profile=heavy --no-tests=pass
-                popd
-              fi
-              echo "::endgroup::"
-            else
-              echo "Skipping tests for $ext as no relevant files changed."
-            fi
-          done
-
-      - name: sccache stats
-        if: always()
-        run: sccache --show-stats || true
+  extensions-cuda:
+    name: non-RV32
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.cuda == 'true' || needs.changes.outputs.extensions != '[]'
+    uses: ./.github/workflows/extension-tests.group.yml
+    with:
+      runner_id: cuda-extensions
+      machine_type: ${{ inputs.machine_type || 'image=ubuntu24-gpu-x64/family=g7.2xlarge+g6.2xlarge+g5.2xlarge/volume=40gb/spot=price-capacity-optimized' }}
+      extensions: ${{ (github.event_name == 'workflow_dispatch' || needs.changes.outputs.cuda == 'true') && 'all' || join(fromJSON(needs.changes.outputs.extensions), ' ') }}
+      mode: cuda
+      cuda_group: extensions
+    secrets: inherit
