@@ -333,7 +333,10 @@ impl<F: PrimeField32> Rv64AccessView<F> for AccessView<'_, F> {
     }
 }
 
-pub fn generate_rv64im_record_arenas_from_logs<F: PrimeField32, RA: Rv64StandardRecordArena<F>>(
+pub fn generate_rv64im_record_arenas_from_logs<
+    F: PrimeField32,
+    RA: Rv64StandardRecordArena<F> + Send,
+>(
     exe: &VmExe<F>,
     output: &mut RvrPreflightOutput<F>,
     capacities: &[(usize, usize)],

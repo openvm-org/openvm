@@ -26,6 +26,17 @@ pub trait Arena {
 
     fn is_empty(&self) -> bool;
 
+    /// The initialized record prefix in canonical arena order.
+    ///
+    /// RVR's deterministic parallel-merge oracle uses this only when explicitly
+    /// enabled. Custom arenas may leave the default in place, in which case the
+    /// oracle fails closed instead of comparing allocation padding or an
+    /// implementation-specific backing representation.
+    #[cfg(feature = "rvr")]
+    fn canonical_record_bytes(&self) -> Option<&[u8]> {
+        None
+    }
+
     /// Only used for metric collection purposes. Intended usage is that for a record arena that
     /// corresponds to a single trace matrix, this function can extract the current number of used
     /// rows of the corresponding trace matrix. This is currently expected to work only for
@@ -135,6 +146,16 @@ impl<F: Field> Arena for MatrixRecordArena<F> {
 
     fn is_empty(&self) -> bool {
         self.trace_offset == 0
+    }
+
+    #[cfg(feature = "rvr")]
+    fn canonical_record_bytes(&self) -> Option<&[u8]> {
+        let values = &self.trace_buffer[..self.trace_offset];
+        // SAFETY: the byte view covers exactly the initialized field prefix;
+        // `u8` has alignment one and the lifetime remains tied to `self`.
+        Some(unsafe {
+            std::slice::from_raw_parts(values.as_ptr().cast(), std::mem::size_of_val(values))
+        })
     }
 
     #[cfg(feature = "metrics")]
@@ -401,6 +422,11 @@ impl Arena for DenseRecordArena {
 
     fn is_empty(&self) -> bool {
         self.allocated().is_empty()
+    }
+
+    #[cfg(feature = "rvr")]
+    fn canonical_record_bytes(&self) -> Option<&[u8]> {
+        Some(self.allocated())
     }
 
     #[cfg(feature = "metrics")]

@@ -15,7 +15,7 @@ use openvm_circuit::{
             LogNativeAssemblerRegistry, RvrPreflightEngine, RvrPreflightOutput, RvrPreflightRoute,
             VmRvrLogNativeExtension,
         },
-        verify_segments, AddressSpaceHostLayout, ContinuationVmProver, DenseRecordArena,
+        verify_segments, AddressSpaceHostLayout, Arena, ContinuationVmProver, DenseRecordArena,
         ExecutionError, MatrixRecordArena, Streams, VirtualMachine, VmInstance,
     },
     system::SystemRecords,
@@ -2667,6 +2667,61 @@ fn rvr_preflight_hard_chip_trace_matches_interpreter() {
         hard_chip_streams(1),
         TraceCompareScope::All,
     );
+}
+
+#[test]
+fn rvr_preflight_parallel_record_merge_matches_serial_bytes() {
+    // L4 fail-hard oracle: the production per-AIR parallel merge is compared
+    // byte-for-byte with an independent serial merge. This fixture exercises
+    // multiple AIR lanes plus HintStore/Phantom residual assembly; the oracle
+    // itself requires at least two non-empty lanes and a non-empty byte stream.
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
+    std::env::set_var("OPENVM_RVR_PARALLEL_MERGE_ORACLE", "1");
+    let exe = hard_chip_exe(1, false);
+    let streams = hard_chip_streams(1);
+    let (vm, _) = VirtualMachine::new_with_keygen(
+        test_cpu_engine(),
+        Rv64ImCpuBuilder,
+        Rv64ImConfig::default(),
+    )
+    .expect("rvr vm init");
+    let trace_heights = vec![4096u32; vm.num_airs()];
+    let capacities = trace_heights
+        .iter()
+        .zip(vm.pk().per_air.iter())
+        .map(|(&height, pk)| (height as usize, pk.vk.params.width.main_width()))
+        .collect::<Vec<_>>();
+    let pc_to_air_idx = vm.pc_to_air_idx(&exe).expect("pc to air mapping");
+    let route = vm
+        .preflight_routed_instance(&exe)
+        .expect("routed preflight instance");
+    let RvrPreflightRoute::Rvr(instance) = route else {
+        panic!("oracle fixture must route to RVR preflight");
+    };
+
+    let mut matrix_output = instance
+        .execute_preflight(streams.clone(), None)
+        .expect("matrix preflight execution");
+    let matrix = crate::log_native::generate_rv64im_record_arenas_from_logs::<
+        F,
+        MatrixRecordArena<F>,
+    >(&exe, &mut matrix_output, &capacities, &pc_to_air_idx)
+    .expect("matrix parallel record merge oracle");
+    assert!(matrix.iter().any(|arena| !arena.is_empty()));
+
+    let mut dense_output = instance
+        .execute_preflight(streams, None)
+        .expect("dense preflight execution");
+    let dense = crate::log_native::generate_rv64im_record_arenas_from_logs::<F, DenseRecordArena>(
+        &exe,
+        &mut dense_output,
+        &capacities,
+        &pc_to_air_idx,
+    )
+    .expect("dense parallel record merge oracle");
+    assert!(dense.iter().any(|arena| !arena.is_empty()));
+
+    std::env::remove_var("OPENVM_RVR_PARALLEL_MERGE_ORACLE");
 }
 
 #[test]
