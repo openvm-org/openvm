@@ -199,9 +199,25 @@ impl EmitContext {
             .map(|(base, index)| (base.clone(), *index))
             .expect("delta emission requires a block-reserved span");
         self.write_line(&format!(
-            "preflight_write_delta2({base} ? &{base}[{index}u] : NULL, {pc}, {fromts}, {v1}, {v2});"
+            "preflight_write_delta2(state, {base} ? &{base}[{index}u] : NULL, {pc}, {fromts}, {v1}, {v2});"
         ));
         self.delta_batch.as_mut().unwrap().1 += 1;
+    }
+
+    fn begin_arena_detail(&mut self, chip: u32) -> String {
+        let started = self.next_var();
+        self.write_line(&format!(
+            "uint64_t {started} = preflight_detail_phase_begin(state->tracer, \
+             PREFLIGHT_DETAIL_PHASE_ARENA_EMIT, state->tracer->chip_records[{chip}].stride);"
+        ));
+        started
+    }
+
+    fn end_arena_detail(&mut self, started: &str) {
+        self.write_line(&format!(
+            "preflight_detail_phase_end(state->tracer, PREFLIGHT_DETAIL_PHASE_ARENA_EMIT, \
+             {started});"
+        ));
     }
 
     fn next_var(&mut self) -> String {
@@ -497,6 +513,7 @@ impl EmitContext {
         let crate::ArenaNativeLayout::LoadStore(off) = geom.layout else {
             panic!("load/store air {chip} registered a non-loadstore layout");
         };
+        let detail_started = self.begin_arena_detail(chip);
         let rec = self.next_var();
         self.write_line(&format!(
             "uint8_t* {rec} = (uint8_t*)preflight_claim_record(state, {chip}u);"
@@ -570,6 +587,7 @@ impl EmitContext {
         }
         self.indent -= 1;
         self.write_line("}");
+        self.end_arena_detail(&detail_started);
     }
 
     /// R4: emit the arena-native alu3 full-record store sequence — claim one
@@ -599,6 +617,7 @@ impl EmitContext {
         let crate::ArenaNativeLayout::Alu3(off) = geom.layout else {
             panic!("alu3 air {chip} registered a non-alu3 layout");
         };
+        let detail_started = self.begin_arena_detail(chip);
         let rec = self.next_var();
         self.write_line(&format!(
             "uint8_t* {rec} = (uint8_t*)preflight_claim_record(state, {chip}u);"
@@ -701,6 +720,7 @@ impl EmitContext {
         }
         self.indent -= 1;
         self.write_line("}");
+        self.end_arena_detail(&detail_started);
     }
 
     /// R3: emit a register-immediate 2-read-1-write instruction with an
@@ -855,6 +875,7 @@ impl EmitContext {
         let crate::ArenaNativeLayout::Wr1(off) = geom.layout else {
             panic!("wr1 air {chip} registered a non-wr1 layout");
         };
+        let detail_started = self.begin_arena_detail(chip);
         let rec = self.next_var();
         self.write_line(&format!(
             "uint8_t* {rec} = (uint8_t*)preflight_claim_record(state, {chip}u);"
@@ -910,6 +931,7 @@ impl EmitContext {
         }
         self.indent -= 1;
         self.write_line("}");
+        self.end_arena_detail(&detail_started);
     }
 
     /// R3: emit the two touch-only branch operand reads plus the inline
@@ -933,6 +955,7 @@ impl EmitContext {
                 let crate::ArenaNativeLayout::Branch2(off) = geom.layout else {
                     panic!("branch2 air {chip} registered a non-branch2 layout");
                 };
+                let detail_started = self.begin_arena_detail(chip);
                 let rec = self.next_var();
                 self.write_line(&format!(
                     "uint8_t* {rec} = (uint8_t*)preflight_claim_record(state, {chip}u);"
@@ -971,6 +994,7 @@ impl EmitContext {
                 ));
                 self.indent -= 1;
                 self.write_line("}");
+                self.end_arena_detail(&detail_started);
             }
             None if self.delta_records => {
                 self.emit_delta2(&pc, &fromts, &v1, &v2);
@@ -1070,6 +1094,7 @@ impl EmitContext {
         let crate::ArenaNativeLayout::Rw1(off) = geom.layout else {
             panic!("rw1 air {chip} registered a non-rw1 layout");
         };
+        let detail_started = self.begin_arena_detail(chip);
         let rec = self.next_var();
         self.write_line(&format!(
             "uint8_t* {rec} = (uint8_t*)preflight_claim_record(state, {chip}u);"
@@ -1130,6 +1155,7 @@ impl EmitContext {
         ));
         self.indent -= 1;
         self.write_line("}");
+        self.end_arena_detail(&detail_started);
     }
 
     /// R3: emit a main-memory load with an inline compact alu3 record:
@@ -1519,7 +1545,13 @@ impl EmitContext {
     /// Emit a trace_pc call. Per-instruction chip accounting is rolled into
     /// the per-block chip update emitted at block entry by
     /// `CProject::emit_block_function`, not here.
-    pub fn trace_pc(&mut self, pc: u64, exec_idx: u32, single_pass_inline: bool) {
+    pub fn trace_pc(
+        &mut self,
+        pc: u64,
+        exec_idx: u32,
+        single_pass_inline: bool,
+        detail_family: u32,
+    ) {
         if self.mode == EmitMode::ValueTrace {
             let inline_chip = if single_pass_inline {
                 self.current_chip_idx
@@ -1530,7 +1562,7 @@ impl EmitContext {
                 && single_pass_inline
                 && !self.arena_native_airs.contains_key(&self.current_chip_idx);
             self.write_line(&format!(
-                "trace_pc_indexed(state, 0x{pc:08x}ull, {exec_idx}u, {inline_chip}u, {});",
+                "trace_pc_indexed(state, 0x{pc:08x}ull, {exec_idx}u, {inline_chip}u, {}, {detail_family}u);",
                 if delta_inline { "true" } else { "false" }
             ));
         } else {
