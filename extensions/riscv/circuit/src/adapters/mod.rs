@@ -19,6 +19,7 @@ use openvm_stark_backend::{
 
 mod alu;
 mod alu_imm_u16;
+mod alu_reg_u16;
 mod alu_u16;
 mod alu_w;
 mod alu_w_u16;
@@ -32,6 +33,7 @@ mod store;
 
 pub use alu::*;
 pub use alu_imm_u16::*;
+pub use alu_reg_u16::*;
 pub use alu_u16::*;
 pub use alu_w::*;
 pub use alu_w_u16::*;

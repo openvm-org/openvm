@@ -81,7 +81,6 @@ fn create_harness_fields(
         AddSubWFiller::new(
             Rv64BaseAluWU16AdapterFiller::new(range_checker_chip.clone()),
             range_checker_chip,
-            BaseAluWOpcode::CLASS_OFFSET,
         ),
         memory_helper,
     );
