@@ -8,9 +8,7 @@ mod tests {
         Fp2Extension, Rv64ModularBuilder, Rv64ModularConfig, Rv64ModularWithFp2Builder,
         Rv64ModularWithFp2Config,
     };
-    use openvm_algebra_transpiler::{
-        Fp2Opcode, Fp2TranspilerExtension, ModularTranspilerExtension,
-    };
+    use openvm_algebra_transpiler::{Fp2TranspilerExtension, ModularTranspilerExtension};
     use openvm_circuit::utils::{air_test, test_system_config};
     use openvm_ecc_circuit::SECP256K1_CONFIG;
     use openvm_instructions::exe::VmExe;
@@ -32,6 +30,8 @@ mod tests {
 
     #[cfg(feature = "rvr")]
     use openvm_algebra_circuit::{Rv64ModularCpuBuilder, Rv64ModularWithFp2CpuBuilder};
+    #[cfg(feature = "rvr")]
+    use openvm_algebra_transpiler::Fp2Opcode;
     #[cfg(feature = "rvr")]
     use openvm_circuit::arch::rvr::preflight::RvrArenaNativeTarget;
     #[cfg(feature = "rvr")]

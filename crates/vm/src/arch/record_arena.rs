@@ -338,7 +338,7 @@ impl DenseRecordArena {
 
     /// Allocates a backing for an external record writer (e.g. the
     /// rvr-generated C emitting arena-native records), returning the buffer
-    /// and the offset of its [`MAX_ALIGNMENT`]-aligned record start. The
+    /// and the offset of its `MAX_ALIGNMENT`-aligned record start. The
     /// writer must be handed exactly `backing.as_ptr() + offset` as its base;
     /// [`Self::from_prewritten`] later re-derives and verifies the same
     /// offset.
