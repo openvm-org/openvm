@@ -63,16 +63,15 @@ pub fn lift_instruction<F: PrimeField32>(
         return None;
     }
 
-    // Decode the e field to determine R-type vs I-type
-    let e = field_to_u32(insn.e);
-
     // BaseAlu: ADD=0x200, SUB=0x201, XOR=0x202, OR=0x203, AND=0x204, ADDW=0x270, SUBW=0x271
     if opcode == BaseAluOpcode::ADD.global_opcode_usize() {
-        return Some(lift_alu(insn, pc, e, AluOp::Add));
+        return lift_alu_reg(insn, pc, AluOp::Add);
     }
     if opcode == BaseAluOpcode::SUB.global_opcode_usize() {
-        return Some(lift_alu(insn, pc, e, AluOp::Sub));
+        return lift_alu_reg(insn, pc, AluOp::Sub);
     }
+
+    let e = field_to_u32(insn.e);
     if opcode == BaseAluOpcode::XOR.global_opcode_usize() {
         return Some(lift_alu(insn, pc, e, AluOp::Xor));
     }
@@ -310,6 +309,20 @@ pub fn term(pc: u64, terminator: Terminator) -> LiftedInstr {
         terminator,
         source_loc: None,
     }
+}
+
+fn lift_alu_reg<F: PrimeField32>(insn: &Instruction<F>, pc: u64, op: AluOp) -> Option<LiftedInstr> {
+    if field_to_u32(insn.d) != RV64_REGISTER_AS || field_to_u32(insn.e) != RV64_REGISTER_AS {
+        return None;
+    }
+
+    let rd = decode_reg(insn.a);
+    let rs1 = decode_reg(insn.b);
+    let rs2 = decode_reg(insn.c);
+    if rd == 0 {
+        return Some(body(pc, Instr::Nop));
+    }
+    Some(body(pc, Instr::AluReg { op, rd, rs1, rs2 }))
 }
 
 /// Lift ALU instruction (R-type when e!=0, I-type when e==0).
@@ -618,11 +631,11 @@ fn lift_phantom(sys: SysPhantom, pc: u64) -> LiftedInstr {
 mod tests {
     use openvm_instructions::{
         instruction::Instruction,
-        riscv::{RV64_IMM_AS, RV64_REGISTER_AS},
+        riscv::{RV64_IMM_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
         LocalOpcode, DEFERRAL_AS, PUBLIC_VALUES_AS,
     };
     use openvm_riscv_transpiler::{
-        BaseAluImmOpcode, Rv64AuipcOpcode,
+        BaseAluImmOpcode, BaseAluOpcode, Rv64AuipcOpcode,
         Rv64LoadStoreOpcode::{
             LOADB, LOADBU, LOADD, LOADH, LOADHU, LOADW, LOADWU, STOREB, STORED, STOREH, STOREW,
         },
@@ -631,6 +644,41 @@ mod tests {
 
     use super::{lift_instruction, AluOp, Instr, InstrAt, LiftedInstr, AS_MEMORY, AS_REGISTER};
     use crate::ExtensionRegistry;
+
+    fn base_alu_reg_instruction(opcode: BaseAluOpcode, e: u32) -> Instruction<BabyBear> {
+        Instruction::from_usize(
+            opcode.global_opcode(),
+            [
+                RV64_REGISTER_NUM_LIMBS,
+                2 * RV64_REGISTER_NUM_LIMBS,
+                3 * RV64_REGISTER_NUM_LIMBS,
+                RV64_REGISTER_AS as usize,
+                e as usize,
+            ],
+        )
+    }
+
+    #[test]
+    fn add_sub_require_register_operands() {
+        let extensions = ExtensionRegistry::<BabyBear>::new();
+
+        for (opcode, expected_op) in [
+            (BaseAluOpcode::ADD, AluOp::Add),
+            (BaseAluOpcode::SUB, AluOp::Sub),
+        ] {
+            let valid = base_alu_reg_instruction(opcode, RV64_REGISTER_AS);
+            match lift_instruction(&valid, 0x100, &extensions) {
+                Some(LiftedInstr::Body(InstrAt {
+                    instr: Instr::AluReg { op, .. },
+                    ..
+                })) => assert_eq!(op, expected_op),
+                other => panic!("unexpected lift: {other:?}"),
+            }
+
+            let immediate = base_alu_reg_instruction(opcode, RV64_IMM_AS);
+            assert!(lift_instruction(&immediate, 0x100, &extensions).is_none());
+        }
+    }
 
     #[test]
     fn addi_requires_canonical_immediate_encoding() {
