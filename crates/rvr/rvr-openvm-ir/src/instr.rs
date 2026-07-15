@@ -138,6 +138,11 @@ pub enum Instr {
 
     // OpenVM system/IO instructions.
     Nop,
+    /// A successfully executing system phantom. Unlike a generic NOP, this
+    /// carries the exact instruction operands consumed by `PhantomAir`.
+    Phantom {
+        operands: [u32; 3],
+    },
     /// Extension instruction (dispatched via trait object).
     Ext(Box<dyn ExtInstr>),
 }
@@ -227,6 +232,7 @@ impl Instr {
                 _ => unreachable!("no W variant for mul/div ops"),
             },
             Instr::Nop => "nop",
+            Instr::Phantom { .. } => "phantom",
             Instr::Ext(e) => e.opname(),
         }
     }

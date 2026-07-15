@@ -64,6 +64,13 @@ pub enum ArenaNativeLayout {
     Custom {
         residual_memory_chronology: bool,
     },
+    /// The extension writes byte-identical packed variable-row records. The
+    /// generated C owns both the byte cursor and row count; the dense arena
+    /// adopts only the used byte prefix, and its GPU consumer expands rows on
+    /// device. Matrix arenas cannot represent this packed layout directly.
+    CustomVariableRows {
+        residual_memory_chronology: bool,
+    },
 }
 
 /// Offsets for the wr1-class full record (JalLui / Auipc): a conditional
@@ -216,6 +223,7 @@ pub fn inline_record_shape_for_instr(instr: &Instr) -> Option<InlineRecordShape>
         // Main-memory loads/stores share the alu3 witness (rs1 value, block
         // read value / rs2 value, previous rd / block value).
         Instr::Load { .. } | Instr::Store { .. } => Some(InlineRecordShape::Alu3),
+        Instr::Phantom { .. } => Some(InlineRecordShape::Custom { record_size: 20 }),
         Instr::Ext(ext) => ext.inline_record_shape(),
         _ => None,
     }
@@ -476,6 +484,9 @@ pub fn emit_instr(ctx: &mut EmitContext, instr: &Instr) {
         // ── OpenVM system/IO instructions ────────────────────────────
         Instr::Nop => {
             ctx.trace_timestamp();
+        }
+        Instr::Phantom { operands } => {
+            rvr_openvm_ir::ExtEmitCtx::trace_phantom_record(ctx, *operands);
         }
 
         Instr::Ext(ext) => {

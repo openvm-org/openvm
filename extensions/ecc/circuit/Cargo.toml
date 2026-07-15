@@ -21,6 +21,7 @@ openvm-riscv-circuit = { workspace = true }
 openvm-ecc-transpiler = { workspace = true }
 rvr-openvm-lift = { workspace = true, optional = true }
 rvr-openvm-ext-ecc = { workspace = true, optional = true }
+rvr-openvm-ext-algebra = { workspace = true, optional = true }
 openvm-cuda-backend = { workspace = true, optional = true }
 openvm-stark-sdk = { workspace = true, optional = true, features = ["cpu-backend"] }
 
@@ -55,6 +56,7 @@ aot = ["openvm-circuit/aot", "openvm-algebra-circuit/aot", "halo2curves-axiom/as
 rvr = [
     "dep:rvr-openvm-lift",
     "dep:rvr-openvm-ext-ecc",
+    "dep:rvr-openvm-ext-algebra",
     "openvm-algebra-circuit/rvr",
 ]
 cuda = [

@@ -237,11 +237,11 @@ fn register_modulus<F: PrimeField32, RA, const BLOCKS: usize, const U16_LIMBS: u
         is_modular_instruction,
         assemble_addsub::<F, RA, BLOCKS>,
     );
-    let vec_heap = vec_heap_geometry::<F, BLOCKS>();
+    let vec_heap = vec_heap_geometry::<F, 2, BLOCKS>();
     registry.register_inline_arena_native(
         addsub_opcodes,
         VecHeapRecordDescriptor::new(BLOCKS * MEMORY_BLOCK_BYTES).record_size,
-        assemble_vec_heap_inline::<F, RA, BLOCKS>,
+        assemble_vec_heap_inline::<F, RA, 2, BLOCKS>,
         vec_heap,
     );
     let muldiv_opcodes = [
@@ -258,7 +258,7 @@ fn register_modulus<F: PrimeField32, RA, const BLOCKS: usize, const U16_LIMBS: u
     registry.register_inline_arena_native(
         muldiv_opcodes,
         VecHeapRecordDescriptor::new(BLOCKS * MEMORY_BLOCK_BYTES).record_size,
-        assemble_vec_heap_inline::<F, RA, BLOCKS>,
+        assemble_vec_heap_inline::<F, RA, 2, BLOCKS>,
         vec_heap,
     );
     let iseq_opcodes = [
@@ -280,14 +280,25 @@ fn register_modulus<F: PrimeField32, RA, const BLOCKS: usize, const U16_LIMBS: u
     );
 }
 
-fn vec_heap_geometry<F: PrimeField32, const BLOCKS: usize>() -> ArenaNativeGeometry {
-    type Adapter<const B: usize> = Rv64VecHeapAdapterRecord<2, B, B>;
-    let descriptor = VecHeapRecordDescriptor::new(BLOCKS * MEMORY_BLOCK_BYTES);
-    assert_eq!(size_of::<Adapter<BLOCKS>>(), descriptor.adapter_size);
-    assert_eq!(align_of::<Adapter<BLOCKS>>(), descriptor.adapter_align);
-    assert_eq!(offset_of!(Adapter<BLOCKS>, reads_aux), descriptor.reads_aux);
+pub fn vec_heap_geometry<F: PrimeField32, const NUM_READS: usize, const BLOCKS: usize>(
+) -> ArenaNativeGeometry {
+    type Adapter<const N: usize, const B: usize> = Rv64VecHeapAdapterRecord<N, B, B>;
+    let descriptor =
+        VecHeapRecordDescriptor::new_with_reads(BLOCKS * MEMORY_BLOCK_BYTES, NUM_READS);
     assert_eq!(
-        offset_of!(Adapter<BLOCKS>, writes_aux),
+        size_of::<Adapter<NUM_READS, BLOCKS>>(),
+        descriptor.adapter_size
+    );
+    assert_eq!(
+        align_of::<Adapter<NUM_READS, BLOCKS>>(),
+        descriptor.adapter_align
+    );
+    assert_eq!(
+        offset_of!(Adapter<NUM_READS, BLOCKS>, reads_aux),
+        descriptor.reads_aux
+    );
+    assert_eq!(
+        offset_of!(Adapter<NUM_READS, BLOCKS>, writes_aux),
         descriptor.writes_aux
     );
     ArenaNativeGeometry {
@@ -295,9 +306,7 @@ fn vec_heap_geometry<F: PrimeField32, const BLOCKS: usize>() -> ArenaNativeGeome
         adapter_align: descriptor.adapter_align,
         core_size: descriptor.core_size,
         core_align: descriptor.core_align,
-        core_off_matrix: <Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS> as AdapterTraceExecutor<
-            F,
-        >>::WIDTH
+        core_off_matrix: <Rv64VecHeapAdapterExecutor<NUM_READS, BLOCKS, BLOCKS> as AdapterTraceExecutor<F>>::WIDTH
             * size_of::<F>(),
         layout: ArenaNativeLayout::Custom {
             residual_memory_chronology: true,
@@ -348,17 +357,33 @@ fn register_fp2<F: PrimeField32, RA, const BLOCKS: usize>(
         VecHeapRecordMut<'a, 2, BLOCKS, BLOCKS>,
     >,
 {
+    let addsub_opcodes = [Fp2Opcode::ADD, Fp2Opcode::SUB, Fp2Opcode::SETUP_ADDSUB]
+        .map(|opcode| fp2_opcode(offset, opcode));
     registry.register_if(
-        [Fp2Opcode::ADD, Fp2Opcode::SUB, Fp2Opcode::SETUP_ADDSUB]
-            .map(|opcode| fp2_opcode(offset, opcode)),
+        addsub_opcodes,
         is_vec_heap_instruction,
         assemble_fp2_addsub::<F, RA, BLOCKS>,
     );
+    let descriptor = VecHeapRecordDescriptor::new(BLOCKS * MEMORY_BLOCK_BYTES);
+    let geometry = vec_heap_geometry::<F, 2, BLOCKS>();
+    registry.register_inline_arena_native(
+        addsub_opcodes,
+        descriptor.record_size,
+        assemble_vec_heap_inline::<F, RA, 2, BLOCKS>,
+        geometry,
+    );
+    let muldiv_opcodes = [Fp2Opcode::MUL, Fp2Opcode::DIV, Fp2Opcode::SETUP_MULDIV]
+        .map(|opcode| fp2_opcode(offset, opcode));
     registry.register_if(
-        [Fp2Opcode::MUL, Fp2Opcode::DIV, Fp2Opcode::SETUP_MULDIV]
-            .map(|opcode| fp2_opcode(offset, opcode)),
+        muldiv_opcodes,
         is_vec_heap_instruction,
         assemble_fp2_muldiv::<F, RA, BLOCKS>,
+    );
+    registry.register_inline_arena_native(
+        muldiv_opcodes,
+        descriptor.record_size,
+        assemble_vec_heap_inline::<F, RA, 2, BLOCKS>,
+        geometry,
     );
 }
 
@@ -383,7 +408,7 @@ fn is_modular_is_eq_instruction<F: PrimeField32>(instruction: &Instruction<F>) -
     is_modular_instruction(instruction) && !instruction.a.is_zero()
 }
 
-fn assemble_vec_heap_inline<F: PrimeField32, RA, const BLOCKS: usize>(
+pub fn assemble_vec_heap_inline<F: PrimeField32, RA, const NUM_READS: usize, const BLOCKS: usize>(
     arena: &mut RA,
     _instruction: &Instruction<F>,
     compact: &[u8],
@@ -393,11 +418,12 @@ where
     RA: Arena
         + for<'a> RecordArena<
             'a,
-            VecHeapLayout<F, 2, BLOCKS, BLOCKS>,
-            VecHeapRecordMut<'a, 2, BLOCKS, BLOCKS>,
+            VecHeapLayout<F, NUM_READS, BLOCKS, BLOCKS>,
+            VecHeapRecordMut<'a, NUM_READS, BLOCKS, BLOCKS>,
         >,
 {
-    let descriptor = VecHeapRecordDescriptor::new(BLOCKS * MEMORY_BLOCK_BYTES);
+    let descriptor =
+        VecHeapRecordDescriptor::new_with_reads(BLOCKS * MEMORY_BLOCK_BYTES, NUM_READS);
     if compact.len() != descriptor.record_size {
         return Err(rvr_error(format!(
             "invalid VecHeap inline record size {} at pc {pc:#x}; expected {}",
@@ -405,18 +431,19 @@ where
             descriptor.record_size
         )));
     }
-    let layout = AdapterCoreLayout::with_metadata(FieldExpressionMetadata::<
-        F,
-        Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS>,
-    >::new(2 * BLOCKS * MEMORY_BLOCK_BYTES));
+    let layout =
+        AdapterCoreLayout::with_metadata(FieldExpressionMetadata::<
+            F,
+            Rv64VecHeapAdapterExecutor<NUM_READS, BLOCKS, BLOCKS>,
+        >::new(NUM_READS * BLOCKS * MEMORY_BLOCK_BYTES));
     let (adapter, core): (
-        &mut Rv64VecHeapAdapterRecord<2, BLOCKS, BLOCKS>,
+        &mut Rv64VecHeapAdapterRecord<NUM_READS, BLOCKS, BLOCKS>,
         FieldExpressionCoreRecordMut<'_>,
     ) = arena.alloc(layout);
     unsafe {
         std::ptr::copy_nonoverlapping(
             compact.as_ptr(),
-            (adapter as *mut Rv64VecHeapAdapterRecord<2, BLOCKS, BLOCKS>).cast::<u8>(),
+            (adapter as *mut Rv64VecHeapAdapterRecord<NUM_READS, BLOCKS, BLOCKS>).cast::<u8>(),
             descriptor.adapter_size,
         );
         std::ptr::copy_nonoverlapping(

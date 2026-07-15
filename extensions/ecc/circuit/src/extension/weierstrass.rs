@@ -85,15 +85,16 @@ impl WeierstrassExtension {
 
 #[cfg(feature = "rvr")]
 impl<F: PrimeField32> VmRvrExtension<F> for WeierstrassExtension {
-    fn extend_rvr(&self, registry: &mut ExtensionRegistry<F>, _ctx: Option<&RvrExtensionCtx>) {
+    fn extend_rvr(&self, registry: &mut ExtensionRegistry<F>, ctx: Option<&RvrExtensionCtx>) {
         let struct_names = self
             .supported_curves
             .iter()
             .map(|c| c.struct_name.clone())
             .collect();
-        registry.register(rvr_openvm_ext_ecc::EccExtension::new_from_struct_names(
-            struct_names,
-        ));
+        let extension =
+            rvr_openvm_ext_ecc::EccExtension::new_from_struct_names_with_ctx(struct_names, ctx)
+                .expect("failed to construct rvr EccExtension");
+        registry.register(extension);
     }
 }
 

@@ -48,9 +48,11 @@ pub fn lift_instruction<F: PrimeField32>(
         });
     }
     if opcode == SystemOpcode::PHANTOM.global_opcode_usize() {
-        let discriminant = (field_to_u32(insn.c) & 0xffff) as u16;
+        let c = field_to_u32(insn.c);
+        let discriminant = (c & 0xffff) as u16;
         if let Some(sys) = SysPhantom::from_repr(discriminant) {
-            return Some(lift_phantom(sys, pc));
+            let operands = [field_to_u32(insn.a), field_to_u32(insn.b), c];
+            return Some(lift_phantom(sys, operands, pc));
         }
         if let Some(lifted) = extensions.try_lift(insn, pc) {
             return Some(lifted);
@@ -568,10 +570,12 @@ fn lift_muldiv_w<F: PrimeField32>(insn: &Instruction<F>, pc: u64, op: MulDivOp) 
 // ============= System / IO Instructions =============
 
 /// Lift a system PHANTOM sub-instruction.
-fn lift_phantom(sys: SysPhantom, pc: u64) -> LiftedInstr {
+fn lift_phantom(sys: SysPhantom, operands: [u32; 3], pc: u64) -> LiftedInstr {
     match sys {
         // Nop, CtStart, CtEnd — no-ops for execution
-        SysPhantom::Nop | SysPhantom::CtStart | SysPhantom::CtEnd => body(pc, Instr::Nop),
+        SysPhantom::Nop | SysPhantom::CtStart | SysPhantom::CtEnd => {
+            body(pc, Instr::Phantom { operands })
+        }
 
         // DebugPanic — trap on host
         SysPhantom::DebugPanic => term(
