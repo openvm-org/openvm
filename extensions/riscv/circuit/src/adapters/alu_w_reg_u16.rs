@@ -194,7 +194,6 @@ pub struct Rv64BaseAluWRegU16AdapterRecord {
     /// Most significant low-word limb of the result, used to recover the sign bit and its 15-bit
     /// range-check witness.
     pub result_high: u16,
-    pub result_sign: u8,
     pub reads_aux: [MemoryReadAuxRecord; 2],
     pub writes_aux: MemoryWriteU16AuxRecord<BLOCK_FE_WIDTH>,
 }
@@ -261,8 +260,8 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for Rv64BaseAluWRegU16AdapterExecu
         record.rd_ptr = a.as_canonical_u32();
         let write_low = data[0];
         record.result_high = write_low[RV64_WORD_U16_LIMBS - 1];
-        record.result_sign = (record.result_high >> (U16_BITS - 1)) as u8;
-        let sign_extend_limb = if record.result_sign != 0 { u16::MAX } else { 0 };
+        let result_sign = record.result_high >> (U16_BITS - 1);
+        let sign_extend_limb = if result_sign != 0 { u16::MAX } else { 0 };
         let write_data: [u16; BLOCK_FE_WIDTH] = array::from_fn(|i| {
             if i < RV64_WORD_U16_LIMBS {
                 write_low[i]
@@ -301,7 +300,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64BaseAluWRegU16AdapterFiller 
         let rs2_ptr = record.rs2_ptr;
         let rs2_high = record.rs2_high;
         let result_high = record.result_high;
-        let result_sign = record.result_sign;
+        let result_sign = result_high >> (U16_BITS - 1);
         let reads_aux_prev_ts = [
             record.reads_aux[0].prev_timestamp,
             record.reads_aux[1].prev_timestamp,
@@ -337,7 +336,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64BaseAluWRegU16AdapterFiller 
             adapter_row.reads_aux[0].as_mut(),
         );
 
-        adapter_row.result_sign = F::from_u8(result_sign);
+        adapter_row.result_sign = F::from_u16(result_sign);
         adapter_row.rs2_high = rs2_high.map(F::from_u16);
         adapter_row.rs2_ptr = F::from_u32(rs2_ptr);
         adapter_row.rs1_high = rs1_high.map(F::from_u16);

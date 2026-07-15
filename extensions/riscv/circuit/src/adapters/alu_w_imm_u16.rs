@@ -179,7 +179,6 @@ pub struct Rv64BaseAluWImmU16AdapterRecord {
     pub rs1_ptr: u32,
     pub rs1_high: [u16; RV64_WORD_U16_LIMBS],
     pub result_high: u16,
-    pub result_sign: u8,
     pub reads_aux: MemoryReadAuxRecord,
     pub writes_aux: MemoryWriteU16AuxRecord<BLOCK_FE_WIDTH>,
 }
@@ -234,8 +233,8 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for Rv64BaseAluWImmU16AdapterExecu
         record.rd_ptr = a.as_canonical_u32();
         let write_low = data[0];
         record.result_high = write_low[RV64_WORD_U16_LIMBS - 1];
-        record.result_sign = (record.result_high >> (U16_BITS - 1)) as u8;
-        let sign_extend_limb = if record.result_sign != 0 { u16::MAX } else { 0 };
+        let result_sign = record.result_high >> (U16_BITS - 1);
+        let sign_extend_limb = if result_sign != 0 { u16::MAX } else { 0 };
         let write_data: [u16; BLOCK_FE_WIDTH] = array::from_fn(|i| {
             if i < RV64_WORD_U16_LIMBS {
                 write_low[i]
@@ -268,7 +267,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64BaseAluWImmU16AdapterFiller 
         let rs1_ptr = record.rs1_ptr;
         let rs1_high = record.rs1_high;
         let result_high = record.result_high;
-        let result_sign = record.result_sign;
+        let result_sign = result_high >> (U16_BITS - 1);
         let reads_aux_prev_timestamp = record.reads_aux.prev_timestamp;
         let writes_aux_prev_timestamp = record.writes_aux.prev_timestamp;
         let writes_aux_prev_data = record.writes_aux.prev_data;
@@ -292,7 +291,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64BaseAluWImmU16AdapterFiller 
             adapter_row.reads_aux.as_mut(),
         );
 
-        adapter_row.result_sign = F::from_u8(result_sign);
+        adapter_row.result_sign = F::from_u16(result_sign);
         adapter_row.rs1_high = rs1_high.map(F::from_u16);
         adapter_row.rs1_ptr = F::from_u32(rs1_ptr);
         adapter_row.rd_ptr = F::from_u32(rd_ptr);

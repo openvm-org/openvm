@@ -256,14 +256,14 @@ mod word {
         std::sync::Arc,
     };
 
-    use super::super::{
-        Rv64ShiftWLogicalImmAir, Rv64ShiftWLogicalImmChip, Rv64ShiftWLogicalImmExecutor,
-        ShiftLogicalImmCoreAir, ShiftLogicalImmFiller,
-    };
     use crate::{
         adapters::{
             Rv64BaseAluWImmU16AdapterAir, Rv64BaseAluWImmU16AdapterExecutor,
             Rv64BaseAluWImmU16AdapterFiller,
+        },
+        shift_logical_imm::{
+            Rv64ShiftWLogicalImmAir, Rv64ShiftWLogicalImmChip, Rv64ShiftWLogicalImmExecutor,
+            ShiftLogicalImmCoreAir, ShiftLogicalImmFiller,
         },
         test_utils::rv64_rand_write_register_or_imm,
     };

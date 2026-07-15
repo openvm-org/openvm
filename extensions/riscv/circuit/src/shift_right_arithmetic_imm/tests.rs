@@ -247,15 +247,15 @@ mod word {
         std::sync::Arc,
     };
 
-    use super::super::{
-        Rv64ShiftWRightArithmeticImmAir, Rv64ShiftWRightArithmeticImmChip,
-        Rv64ShiftWRightArithmeticImmExecutor, ShiftRightArithmeticImmCoreAir,
-        ShiftRightArithmeticImmFiller,
-    };
     use crate::{
         adapters::{
             Rv64BaseAluWImmU16AdapterAir, Rv64BaseAluWImmU16AdapterExecutor,
             Rv64BaseAluWImmU16AdapterFiller,
+        },
+        shift_right_arithmetic_imm::{
+            Rv64ShiftWRightArithmeticImmAir, Rv64ShiftWRightArithmeticImmChip,
+            Rv64ShiftWRightArithmeticImmExecutor, ShiftRightArithmeticImmCoreAir,
+            ShiftRightArithmeticImmFiller,
         },
         test_utils::rv64_rand_write_register_or_imm,
     };

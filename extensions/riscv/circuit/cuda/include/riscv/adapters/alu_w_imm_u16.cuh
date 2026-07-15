@@ -28,7 +28,6 @@ struct Rv64BaseAluWImmU16AdapterRecord {
     uint32_t rs1_ptr;
     uint16_t rs1_high[RV64_WORD_U16_LIMBS];
     uint16_t result_high;
-    uint8_t result_sign;
     MemoryReadAuxRecord reads_aux;
     MemoryWriteU16AuxRecord<BLOCK_FE_WIDTH> writes_aux;
 };
@@ -63,7 +62,12 @@ struct Rv64BaseAluWImmU16Adapter {
 
         Fp rs1_high[RV64_WORD_U16_LIMBS];
         copy_u16_cells(rs1_high, record.rs1_high);
-        COL_WRITE_VALUE(row, Rv64BaseAluWImmU16AdapterCols, result_sign, record.result_sign);
+        COL_WRITE_VALUE(
+            row,
+            Rv64BaseAluWImmU16AdapterCols,
+            result_sign,
+            record.result_high >> (U16_BITS - 1)
+        );
         COL_WRITE_ARRAY(row, Rv64BaseAluWImmU16AdapterCols, rs1_high, rs1_high);
         COL_WRITE_VALUE(row, Rv64BaseAluWImmU16AdapterCols, rs1_ptr, record.rs1_ptr);
         COL_WRITE_VALUE(row, Rv64BaseAluWImmU16AdapterCols, rd_ptr, record.rd_ptr);
