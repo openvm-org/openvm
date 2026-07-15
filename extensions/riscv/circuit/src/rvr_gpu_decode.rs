@@ -41,15 +41,16 @@ use openvm_instructions::{
 };
 #[cfg(feature = "rvr")]
 use openvm_riscv_transpiler::{
-    BaseAluOpcode, BaseAluWOpcode, BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode,
-    DivRemWOpcode, LessThanOpcode, MulHOpcode, MulOpcode, MulWOpcode, Rv64AuipcOpcode,
-    Rv64JalLuiOpcode, Rv64JalrOpcode, Rv64LoadStoreOpcode, ShiftOpcode, ShiftWOpcode,
+    BaseAluImmOpcode, BaseAluOpcode, BaseAluWOpcode, BranchEqualOpcode, BranchLessThanOpcode,
+    DivRemOpcode, DivRemWOpcode, LessThanOpcode, MulHOpcode, MulOpcode, MulWOpcode,
+    Rv64AuipcOpcode, Rv64JalLuiOpcode, Rv64JalrOpcode, Rv64LoadStoreOpcode, ShiftOpcode,
+    ShiftWOpcode,
 };
 #[cfg(feature = "rvr")]
 use openvm_stark_backend::p3_field::PrimeField32;
 
 #[cfg(feature = "rvr")]
-use crate::log_native::derive_base_alu_u16_operands;
+use crate::log_native::{derive_addi_operands, derive_base_alu_u16_operands};
 
 /// One 20-byte operand-table entry per program slot, indexed by
 /// `(from_pc - pc_base) / DEFAULT_PC_STEP`. Field meanings are per wire
@@ -96,6 +97,7 @@ pub enum DeviceDeltaAccessPattern {
     Wr1 = 5,
     Wr1Always = 6,
     Rw1 = 7,
+    AddI = 8,
 }
 
 /// One unique compact-decoder consumer. This is independent of the global AIR
@@ -133,10 +135,11 @@ pub enum DeltaAirKind {
     StoreDoubleword = 26,
     LoadSignExtendHalfword = 27,
     LoadSignExtendWord = 28,
+    AddI = 29,
 }
 
 impl DeltaAirKind {
-    pub const COUNT: usize = 29;
+    pub const COUNT: usize = 30;
 
     fn from_repr(value: u8) -> Option<Self> {
         Some(match value {
@@ -169,6 +172,7 @@ impl DeltaAirKind {
             26 => Self::StoreDoubleword,
             27 => Self::LoadSignExtendHalfword,
             28 => Self::LoadSignExtendWord,
+            29 => Self::AddI,
             _ => return None,
         })
     }
@@ -994,6 +998,27 @@ fn gpu_decode_entry<F: PrimeField32>(
     use openvm_instructions::riscv::RV64_REGISTER_AS;
     let opcode = instruction.opcode.as_usize();
 
+    if opcode == BaseAluImmOpcode::ADDI.global_opcode_usize() {
+        let operands = derive_addi_operands(instruction);
+        let mut flags = OPERAND_FLAG_RS2_IMM;
+        if ((operands.immediate >> 11) & 1) != 0 {
+            flags |= OPERAND_FLAG_RS2_IMM_SIGN;
+        }
+        return Some((
+            DeviceOperandEntry {
+                a: operands.rd_ptr,
+                b: operands.rs1_ptr,
+                c: operands.immediate,
+                flags,
+                local_opcode: BaseAluImmOpcode::ADDI as u8,
+                air_idx: u8::MAX,
+                access_pattern: DeviceDeltaAccessPattern::AddI as u8,
+                filtered_index: u32::MAX,
+            },
+            DeltaAirKind::AddI,
+        ));
+    }
+
     // alu3 over the BaseAluU16 adapter: AddSub, LessThan, ShiftLogical, SRA.
     let alu_u16_local = if opcode == BaseAluOpcode::ADD.global_opcode_usize()
         || opcode == BaseAluOpcode::SUB.global_opcode_usize()
@@ -1033,6 +1058,11 @@ fn gpu_decode_entry<F: PrimeField32>(
         } else {
             DeltaAirKind::ShiftLogical
         };
+        let access_pattern = if kind == DeltaAirKind::AddSub {
+            DeviceDeltaAccessPattern::Alu3Reg
+        } else {
+            DeviceDeltaAccessPattern::Alu3
+        };
         return Some((
             DeviceOperandEntry {
                 a: operands.rd_ptr,
@@ -1041,7 +1071,7 @@ fn gpu_decode_entry<F: PrimeField32>(
                 flags,
                 local_opcode,
                 air_idx: u8::MAX,
-                access_pattern: DeviceDeltaAccessPattern::Alu3 as u8,
+                access_pattern: access_pattern as u8,
                 filtered_index: u32::MAX,
             },
             kind,
@@ -1469,6 +1499,12 @@ pub(crate) fn delta_post_write_value<F: PrimeField32>(
 ) -> Option<u64> {
     let (entry, kind) = gpu_decode_entry(instruction)?;
     Some(match kind {
+        DeltaAirKind::AddI => {
+            if entry.local_opcode != BaseAluImmOpcode::ADDI as u8 {
+                return None;
+            }
+            v1.wrapping_add(v2)
+        }
         DeltaAirKind::AddSub => match entry.local_opcode {
             0 => v1.wrapping_add(v2),
             1 => v1.wrapping_sub(v2),

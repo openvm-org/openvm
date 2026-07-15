@@ -35,10 +35,10 @@ use openvm_instructions::{
     LocalOpcode, SysPhantom, SystemOpcode, DEFERRAL_AS, PUBLIC_VALUES_AS,
 };
 use openvm_riscv_transpiler::{
-    BaseAluOpcode, BaseAluWOpcode, BranchEqualOpcode, BranchLessThanOpcode, DivRemOpcode,
-    DivRemWOpcode, LessThanOpcode, MulHOpcode, MulOpcode, MulWOpcode, Rv64AuipcOpcode,
-    Rv64HintStoreOpcode, Rv64JalLuiOpcode, Rv64JalrOpcode, Rv64LoadStoreOpcode, Rv64Phantom,
-    ShiftOpcode, ShiftWOpcode,
+    BaseAluImmOpcode, BaseAluOpcode, BaseAluWOpcode, BranchEqualOpcode, BranchLessThanOpcode,
+    DivRemOpcode, DivRemWOpcode, LessThanOpcode, MulHOpcode, MulOpcode, MulWOpcode,
+    Rv64AuipcOpcode, Rv64HintStoreOpcode, Rv64JalLuiOpcode, Rv64JalrOpcode, Rv64LoadStoreOpcode,
+    Rv64Phantom, ShiftOpcode, ShiftWOpcode,
 };
 use openvm_stark_backend::p3_field::{PrimeCharacteristicRing, PrimeField32};
 #[cfg(feature = "cuda")]
@@ -65,7 +65,7 @@ fn reg(idx: usize) -> usize {
 
 fn addi(rd: usize, rs1: usize, imm: usize) -> Instruction<F> {
     Instruction::from_usize(
-        BaseAluOpcode::ADD.global_opcode(),
+        BaseAluImmOpcode::ADDI.global_opcode(),
         [reg(rd), reg(rs1), imm, 1, 0],
     )
 }
@@ -475,10 +475,10 @@ fn rvr_preflight_inline_addsub_records_match_assembler() {
         &on_output.system_records,
     );
 
-    // The ON memory log is exactly the OFF log minus the suppressed AddSub
-    // entries: drop every OFF entry whose timestamp falls in an AddSub
-    // instruction's tick window [t, t+3).
-    let addsub_windows: Vec<(u32, u32)> = off_output
+    // The ON memory log is exactly the OFF log minus the suppressed inline
+    // entries. AddI has a two-access window; the remaining alu3 families use
+    // three accesses.
+    let inline_windows: Vec<(u32, u32)> = off_output
         .raw_logs
         .program_log
         .iter()
@@ -490,18 +490,29 @@ fn rvr_preflight_inline_addsub_records_match_assembler() {
                 .copied()
                 .unwrap_or(false)
         })
-        .map(|entry| (entry.timestamp, entry.timestamp + 3))
+        .map(|entry| {
+            let slot = ((entry.pc() - exe.program.pc_base) / DEFAULT_PC_STEP) as usize;
+            let (instruction, _) = exe.program.instructions_and_debug_infos[slot]
+                .as_ref()
+                .expect("executed pc must name an instruction");
+            let access_count = if instruction.opcode == BaseAluImmOpcode::ADDI.global_opcode() {
+                2
+            } else {
+                3
+            };
+            (entry.timestamp, entry.timestamp + access_count)
+        })
         .collect();
     assert!(
-        !addsub_windows.is_empty(),
-        "fixture must contain migrated AddSub instructions"
+        !inline_windows.is_empty(),
+        "fixture must contain migrated inline instructions"
     );
     let off_log_minus_addsub: Vec<_> = off_output
         .raw_logs
         .memory_log
         .iter()
         .filter(|entry| {
-            !addsub_windows
+            !inline_windows
                 .iter()
                 .any(|&(start, end)| entry.timestamp >= start && entry.timestamp < end)
         })
@@ -920,9 +931,7 @@ fn hard_chip_streams(repeats: usize) -> Streams<F> {
     for repeat in 0..repeats {
         for word in 0..3u64 {
             let value = 0x0102_0304_0506_0708u64 + (repeat as u64) * 0x100 + word;
-            streams
-                .hint_stream
-                .extend(value.to_le_bytes().into_iter().map(F::from_u8));
+            streams.hint_stream.extend(value.to_le_bytes());
         }
     }
     streams
@@ -947,9 +956,7 @@ fn hintstore_direct_streams() -> Streams<F> {
         0x2122_2324_2526_2728,
         0x3132_3334_3536_3738,
     ] {
-        streams
-            .hint_stream
-            .extend(word.to_le_bytes().into_iter().map(F::from_u8));
+        streams.hint_stream.extend(word.to_le_bytes());
     }
     streams
 }
@@ -1054,11 +1061,7 @@ fn public_values_reveal_differential_exe() -> VmExe<F> {
 }
 
 fn hint_input_streams() -> Streams<F> {
-    Streams::from(vec![vec![
-        F::from_u8(0x11),
-        F::from_u8(0x22),
-        F::from_u8(0x33),
-    ]])
+    Streams::from(vec![vec![0x11, 0x22, 0x33]])
 }
 
 fn repeated_adds_exe(count: usize) -> VmExe<F> {
@@ -1378,7 +1381,7 @@ fn assert_standard_group_trace_matches_interpreter() {
 }
 
 #[cfg(feature = "cuda")]
-const FULL_RV64IM_INSTRUCTION_AIR_COUNT: usize = 21;
+const FULL_RV64IM_INSTRUCTION_AIR_COUNT: usize = 22;
 
 #[cfg(feature = "cuda")]
 type CpuProvingCtx = ProvingContext<CpuBackend<BabyBearPoseidon2Config>>;
@@ -2519,7 +2522,9 @@ fn rvr_preflight_dense_arena_capacity_undercount_panics() {
     let air_names = vm.air_names().map(str::to_owned).collect::<Vec<_>>();
     let add_sub_air_idx = air_names
         .iter()
-        .position(|name| name.starts_with("VmAirWrapper<Rv64BaseAluU16AdapterAir, AddSubCoreAir<"))
+        .position(|name| {
+            name.starts_with("VmAirWrapper<Rv64BaseAluRegU16AdapterAir, AddSubCoreAir<")
+        })
         .expect("AddSub AIR present");
     let mut trace_heights = vec![4096u32; vm.num_airs()];
     trace_heights[add_sub_air_idx] = 0;
@@ -3076,7 +3081,7 @@ fn hintstore_residual_exe(bufs: usize, words_per_buf: usize) -> (VmExe<F>, Strea
     }
     ins.push(terminate());
     let dyn_insns = ins.len() as u64;
-    let hint = vec![F::from_u8(0xab); words_per_buf * 8];
+    let hint = vec![0xab; words_per_buf * 8];
     let streams = Streams::from(vec![hint; bufs]);
     (exe(&ins), streams, dyn_insns)
 }

@@ -935,9 +935,7 @@ mod bls12_381 {
     }
 
     #[cfg(feature = "rvr")]
-    fn build_bls12_381_miller_step_case(
-        config: &Rv64PairingConfig,
-    ) -> Result<(VmExe<F>, Vec<u8>)> {
+    fn build_bls12_381_miller_step_case(config: &Rv64PairingConfig) -> Result<(VmExe<F>, Vec<u8>)> {
         let elf = build_example_program_at_path_with_features(
             get_programs_dir!("tests/programs"),
             "pairing_miller_step",

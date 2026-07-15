@@ -22,7 +22,7 @@ use openvm_instructions::{
     LocalOpcode, SystemOpcode,
 };
 use openvm_keccak256_transpiler::{KeccakfOpcode, XorinOpcode};
-use openvm_riscv_transpiler::{BaseAluOpcode, BranchEqualOpcode, Rv64LoadStoreOpcode};
+use openvm_riscv_transpiler::{BaseAluImmOpcode, BranchEqualOpcode, Rv64LoadStoreOpcode};
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 use crate::{Keccak256Rv64Config, Keccak256Rv64CpuBuilder};
@@ -35,7 +35,7 @@ fn reg(idx: usize) -> usize {
 
 fn addi(rd: usize, rs1: usize, imm: usize) -> Instruction<F> {
     Instruction::from_usize(
-        BaseAluOpcode::ADD.global_opcode(),
+        BaseAluImmOpcode::ADDI.global_opcode(),
         [reg(rd), reg(rs1), imm, 1, 0],
     )
 }

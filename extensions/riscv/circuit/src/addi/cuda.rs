@@ -31,6 +31,8 @@ const _: () = assert!(
 pub struct Rv64AddIChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub timestamp_max_bits: usize,
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    pub rvr_decode: std::sync::Arc<crate::rvr_gpu_decode::RvrGpuDecodeState>,
 }
 
 #[derive(new)]
@@ -45,16 +47,65 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64AddIChipGpu {
             Rv64BaseAluImmU16AdapterRecord,
             AddICoreRecord<BLOCK_FE_WIDTH>,
         )>();
+        #[cfg(feature = "rvr")]
+        let rvr_wire = arena.rvr_wire;
         let records = arena.allocated();
-        if records.is_empty() {
+        #[cfg(feature = "rvr")]
+        let delta_records = self.rvr_decode.device_delta_records(
+            crate::rvr_gpu_decode::DeltaAirKind::AddI,
+            &self.range_checker.device_ctx,
+        );
+        #[cfg(feature = "rvr")]
+        let no_delta_records = delta_records.is_none();
+        #[cfg(not(feature = "rvr"))]
+        let no_delta_records = true;
+        if records.is_empty() && no_delta_records {
             return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
         }
-        debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
         let trace_width = Rv64BaseAluImmU16AdapterCols::<F>::width()
             + AddICoreCols::<F, BLOCK_FE_WIDTH, U16_BITS>::width();
-        let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
+
+        #[cfg(feature = "rvr")]
+        if rvr_wire || delta_records.is_some() {
+            use openvm_circuit::arch::rvr::PREFLIGHT_ADDSUB_RECORD_SIZE;
+            let compact_len = delta_records
+                .as_ref()
+                .map_or(records.len(), |buffer| buffer.len());
+            assert_eq!(
+                compact_len % PREFLIGHT_ADDSUB_RECORD_SIZE,
+                0,
+                "compact AddI arena stride mismatch"
+            );
+            let trace_height =
+                next_power_of_two_or_zero(compact_len / PREFLIGHT_ADDSUB_RECORD_SIZE);
+            let (d_table, pc_base) = self
+                .rvr_decode
+                .device_operand_table(device_ctx)
+                .expect("compact AddI segment without a bound operand table");
+            let d_records = delta_records
+                .unwrap_or_else(|| Arc::new(records.to_device_on(device_ctx).unwrap()));
+            let d_trace =
+                DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
+            unsafe {
+                crate::cuda_abi::addi_cuda::tracegen_compact(
+                    d_trace.buffer(),
+                    trace_height,
+                    &d_records,
+                    &d_table,
+                    pc_base,
+                    &self.range_checker.count,
+                    self.timestamp_max_bits as u32,
+                    device_ctx.stream.as_raw(),
+                )
+                .unwrap();
+            }
+            return AirProvingContext::simple_no_pis(d_trace);
+        }
+
+        debug_assert_eq!(records.len() % RECORD_SIZE, 0);
+        let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
 
         let d_records = records.to_device_on(device_ctx).unwrap();
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);

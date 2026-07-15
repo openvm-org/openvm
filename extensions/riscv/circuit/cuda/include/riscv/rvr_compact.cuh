@@ -1,6 +1,8 @@
 #pragma once
 
 #include "riscv/adapters/alu_u16.cuh"
+#include "riscv/adapters/alu_imm_u16.cuh"
+#include "riscv/adapters/alu_reg_u16.cuh"
 #include "riscv/adapters/alu_w_u16.cuh"
 #include "riscv/adapters/branch.cuh"
 #include "riscv/adapters/jalr.cuh"
@@ -76,6 +78,43 @@ rvr_decode_alu3_alu_u16(RvrAlu3Compact const &rec, RvrOperandEntry const &entry)
     out.rs2_imm_sign = (entry.flags & RVR_OPERAND_FLAG_RS2_IMM_SIGN) ? 1 : 0;
     out.reads_aux[0].prev_timestamp = rec.reads_prev_timestamp[0];
     out.reads_aux[1].prev_timestamp = rec.reads_prev_timestamp[1];
+    out.writes_aux.prev_timestamp = rec.write_prev_timestamp;
+#pragma unroll
+    for (size_t i = 0; i < BLOCK_FE_WIDTH; i++) {
+        out.writes_aux.prev_data[i] = rvr_u16_limb(rec.write_prev_data, i);
+    }
+    return out;
+}
+
+// Register-only AddSub adapter mirror.
+__device__ __forceinline__ Rv64BaseAluRegU16AdapterRecord
+rvr_decode_alu3_alu_reg_u16(RvrAlu3Compact const &rec, RvrOperandEntry const &entry) {
+    Rv64BaseAluRegU16AdapterRecord out;
+    out.from_pc = rec.from_pc;
+    out.from_timestamp = rec.from_timestamp;
+    out.rd_ptr = entry.a;
+    out.rs1_ptr = entry.b;
+    out.rs2_ptr = entry.c;
+    out.reads_aux[0].prev_timestamp = rec.reads_prev_timestamp[0];
+    out.reads_aux[1].prev_timestamp = rec.reads_prev_timestamp[1];
+    out.writes_aux.prev_timestamp = rec.write_prev_timestamp;
+#pragma unroll
+    for (size_t i = 0; i < BLOCK_FE_WIDTH; i++) {
+        out.writes_aux.prev_data[i] = rvr_u16_limb(rec.write_prev_data, i);
+    }
+    return out;
+}
+
+// Immediate-only AddI adapter mirror. The second compact read slot is
+// intentionally unused; AddI writes at timestamp + 1.
+__device__ __forceinline__ Rv64BaseAluImmU16AdapterRecord
+rvr_decode_alu3_alu_imm_u16(RvrAlu3Compact const &rec, RvrOperandEntry const &entry) {
+    Rv64BaseAluImmU16AdapterRecord out;
+    out.from_pc = rec.from_pc;
+    out.from_timestamp = rec.from_timestamp;
+    out.rd_ptr = entry.a;
+    out.rs1_ptr = entry.b;
+    out.reads_aux.prev_timestamp = rec.reads_prev_timestamp[0];
     out.writes_aux.prev_timestamp = rec.write_prev_timestamp;
 #pragma unroll
     for (size_t i = 0; i < BLOCK_FE_WIDTH; i++) {
