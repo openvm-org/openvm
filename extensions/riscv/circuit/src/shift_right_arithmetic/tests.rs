@@ -182,8 +182,6 @@ fn run_rv64_shift_right_arithmetic_rand_test(opcode: ShiftOpcode, num_ops: usize
 #[derive(Clone, Copy, Default, PartialEq)]
 struct ShiftPrankValues<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub a: Option<[u32; NUM_LIMBS]>,
-    pub bit_multiplier: Option<u32>,
-    pub carry_multiplier: Option<u32>,
     pub b_sign: Option<u32>,
     pub bit_shift_marker: Option<[u32; LIMB_BITS]>,
     pub limb_shift_marker: Option<[u32; NUM_LIMBS]>,
@@ -221,12 +219,6 @@ fn run_negative_shift_test(
 
         if let Some(a) = prank_vals.a {
             cols.a = a.map(F::from_u32);
-        }
-        if let Some(bit_multiplier) = prank_vals.bit_multiplier {
-            cols.bit_multiplier = F::from_u32(bit_multiplier);
-        }
-        if let Some(carry_multiplier) = prank_vals.carry_multiplier {
-            cols.carry_multiplier = F::from_u32(carry_multiplier);
         }
         if let Some(b_sign) = prank_vals.b_sign {
             cols.b_sign = F::from_u32(b_sign);
@@ -271,8 +263,8 @@ fn rv64_sra_wrong_a_negative_test() {
 
 #[test]
 fn rv64_sra_wrong_bit_shift_negative_test() {
-    // SRA([0,...,0,128], 9): prank bit_shift_marker to index 2 (bit_shift=2): the bit_multiplier
-    // constraint now expects 4, but the real bit_multiplier is 2, so verification fails.
+    // SRA([0,...,0,128], 9): pranking bit_shift_marker to index 2 binds the core to a shift of 2,
+    // which disagrees with the register operand bound by the execution interaction.
     let b = [0, 0, 0, 0, 0, 0, 0, 128];
     let c = [9, 0, 0, 0, 0, 0, 0, 0];
     let mut bit_shift_marker = [0u32; U16_BITS];
@@ -292,18 +284,6 @@ fn rv64_sra_wrong_limb_shift_negative_test() {
     let c = [16, 0, 0, 0, 0, 0, 0, 0];
     let prank_vals = ShiftPrankValues {
         limb_shift_marker: Some([0, 0, 1, 0]),
-        ..Default::default()
-    };
-    run_negative_shift_test(SRA, b, c, prank_vals, false);
-}
-
-#[test]
-fn rv64_sra_wrong_bit_mult_negative_test() {
-    // Prank bit_multiplier to a wrong value; the bit_multiplier marker constraint catches it.
-    let b = [0, 0, 0, 0, 0, 0, 0, 128];
-    let c = [9, 0, 0, 0, 0, 0, 0, 0];
-    let prank_vals = ShiftPrankValues {
-        bit_multiplier: Some(0),
         ..Default::default()
     };
     run_negative_shift_test(SRA, b, c, prank_vals, false);

@@ -57,8 +57,8 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> LessThanExecutor<A, NUM_
 macro_rules! dispatch {
     ($execute_impl:ident, $is_sltu:ident) => {
         match $is_sltu {
-            true => Ok($execute_impl::<_, false, true>),
-            false => Ok($execute_impl::<_, false, false>),
+            true => Ok($execute_impl::<_, true>),
+            false => Ok($execute_impl::<_, false>),
         }
     };
 }
@@ -146,20 +146,12 @@ where
     }
 }
 #[inline(always)]
-unsafe fn execute_e12_impl<
-    CTX: ExecutionCtxTrait,
-    const E_IS_IMM: bool,
-    const IS_UNSIGNED: bool,
->(
+unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_UNSIGNED: bool>(
     pre_compute: &LessThanPreCompute,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let rs1 = exec_state.vm_read_bytes::<8>(RV64_REGISTER_AS, pre_compute.b as u32);
-    let rs2 = if E_IS_IMM {
-        pre_compute.c.to_le_bytes()
-    } else {
-        exec_state.vm_read_bytes::<8>(RV64_REGISTER_AS, pre_compute.c as u32)
-    };
+    let rs2 = exec_state.vm_read_bytes::<8>(RV64_REGISTER_AS, pre_compute.c as u32);
     let cmp_result = if IS_UNSIGNED {
         u64::from_le_bytes(rs1) < u64::from_le_bytes(rs2)
     } else {
@@ -175,22 +167,18 @@ unsafe fn execute_e12_impl<
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, const E_IS_IMM: bool, const IS_UNSIGNED: bool>(
+unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, const IS_UNSIGNED: bool>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pre_compute: &LessThanPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<LessThanPreCompute>()).borrow();
-    execute_e12_impl::<CTX, E_IS_IMM, IS_UNSIGNED>(pre_compute, exec_state);
+    execute_e12_impl::<CTX, IS_UNSIGNED>(pre_compute, exec_state);
 }
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e2_impl<
-    CTX: MeteredExecutionCtxTrait,
-    const E_IS_IMM: bool,
-    const IS_UNSIGNED: bool,
->(
+unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, const IS_UNSIGNED: bool>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
@@ -200,5 +188,5 @@ unsafe fn execute_e2_impl<
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<CTX, E_IS_IMM, IS_UNSIGNED>(&pre_compute.data, exec_state);
+    execute_e12_impl::<CTX, IS_UNSIGNED>(&pre_compute.data, exec_state);
 }
