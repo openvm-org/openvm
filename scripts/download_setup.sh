@@ -7,7 +7,7 @@ mkdir -p ~/.openvm/$HALO2_DIR
 mkdir -p ~/.openvm/$HALO2_DIR/interfaces
 mkdir -p ~/.openvm/params
 
-BASE_URL="https://openvm-public-artifacts-us-east-1.s3.us-east-1.amazonaws.com/v2.0.0"
+BASE_URL="https://openvm-public-artifacts-us-east-1.s3.us-east-1.amazonaws.com/v2.0.1"
 
 for file in "internal_recursive.pk" "internal_recursive.vk" "root.pk" "halo2.pk"; do
     URL="$BASE_URL/$file"
