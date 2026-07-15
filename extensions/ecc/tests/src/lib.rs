@@ -22,8 +22,7 @@ mod tests {
     };
     use openvm_sdk::StdIn;
     use openvm_sdk_config::{SdkVmBuilder, SdkVmConfig, TranspilerConfig};
-    use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
-    use openvm_stark_sdk::{openvm_stark_backend, p3_baby_bear::BabyBear};
+    use openvm_stark_sdk::p3_baby_bear::BabyBear;
     use openvm_toolchain_tests::{
         build_example_program_at_path_with_features, get_programs_dir, NoInitFile,
     };
@@ -166,11 +165,7 @@ mod tests {
         let r_y: [u8; 32] =
             hex!("347E00859981D5446447075AA07543CDE6DF224CFB23F7B5886337BD00000000");
 
-        let coords = [p.x.to_bytes(), p.y.to_bytes(), q_x, q_y, r_x, r_y]
-            .concat()
-            .into_iter()
-            .map(PrimeCharacteristicRing::from_u8)
-            .collect();
+        let coords = [p.x.to_bytes(), p.y.to_bytes(), q_x, q_y, r_x, r_y].concat();
         air_test_with_min_segments(Rv64WeierstrassBuilder, config, openvm_exe, vec![coords], 1);
         Ok(())
     }

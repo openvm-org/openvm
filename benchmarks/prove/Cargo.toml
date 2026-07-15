@@ -22,7 +22,6 @@ eyre.workspace = true
 tracing.workspace = true
 metrics.workspace = true
 zstd.workspace = true
-p3-field = { workspace = true }
 
 # for ecrecover benchmark
 rand_chacha = { version = "0.3", default-features = false }

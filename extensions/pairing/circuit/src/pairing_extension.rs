@@ -166,9 +166,9 @@ pub(crate) mod phantom {
         }
     }
 
-    fn hint_pairing<F: Field>(
+    fn hint_pairing(
         memory: &GuestMemory,
-        hint_stream: &mut VecDeque<F>,
+        hint_stream: &mut VecDeque<u8>,
         rs1: u32,
         rs2: u32,
         c_upper: u16,
@@ -228,8 +228,7 @@ pub(crate) mod phantom {
                         .into_iter()
                         .chain(u.to_coeffs())
                         .flat_map(|fp2| fp2.to_coeffs())
-                        .flat_map(|fp| fp.to_bytes())
-                        .map(F::from_u8),
+                        .flat_map(|fp| fp.to_bytes()),
                 );
             }
             Some(PairingCurve::Bls12_381) => {
@@ -270,8 +269,7 @@ pub(crate) mod phantom {
                         .into_iter()
                         .chain(u.to_coeffs())
                         .flat_map(|fp2| fp2.to_coeffs())
-                        .flat_map(|fp| fp.to_bytes())
-                        .map(F::from_u8),
+                        .flat_map(|fp| fp.to_bytes()),
                 );
             }
             _ => {

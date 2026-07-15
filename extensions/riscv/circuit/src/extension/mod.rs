@@ -1210,12 +1210,10 @@ mod phantom {
             };
             streams.hint_stream.clear();
             let hint_len = hint.len() as u64;
-            streams
-                .hint_stream
-                .extend(hint_len.to_le_bytes().iter().map(|b| F::from_u8(*b)));
+            streams.hint_stream.extend(hint_len.to_le_bytes());
             // Pad the hint payload to full dwords so RV64 `HINT_BUFFER` reads can consume it.
             let capacity = hint.len().div_ceil(HINT_DWORD_BYTES) * HINT_DWORD_BYTES;
-            hint.resize(capacity, F::ZERO);
+            hint.resize(capacity, 0u8);
             streams.hint_stream.extend(hint);
             Ok(())
         }
@@ -1241,7 +1239,7 @@ mod phantom {
             streams.hint_stream.clear();
             streams
                 .hint_stream
-                .extend(std::iter::repeat_with(|| F::from_u8(rng.random::<u8>())).take(byte_len));
+                .extend(std::iter::repeat_with(|| rng.random::<u8>()).take(byte_len));
             Ok(())
         }
     }
