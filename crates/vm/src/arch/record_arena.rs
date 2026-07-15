@@ -107,6 +107,8 @@ pub struct MatrixRecordArena<F> {
     /// matrix will never be truncated. The latter is used if the trace matrix must have fixed
     /// dimensions (e.g., for a static verifier).
     pub(super) allow_truncate: bool,
+    #[cfg(feature = "rvr")]
+    pub(crate) rvr_recycle: Option<Box<dyn FnOnce(Vec<F>) + Send + Sync>>,
 }
 
 impl<F: Field> MatrixRecordArena<F> {
@@ -130,6 +132,39 @@ impl<F: Field> MatrixRecordArena<F> {
     pub fn force_matrix_dimensions(&mut self) {
         self.allow_truncate = false;
     }
+
+    #[cfg(feature = "rvr")]
+    pub(crate) fn with_recycled_rvr_capacity(
+        height: usize,
+        width: usize,
+        key: crate::arch::rvr::preflight_pool::ArenaNativeBackingKey,
+        pool: crate::arch::rvr::RvrPreflightBufferPool,
+    ) -> Self
+    where
+        F: Send + 'static,
+    {
+        let height = next_power_of_two_or_zero(height);
+        let expected_len = height * width;
+        let trace_buffer = pool
+            .take_arena_native_matrix_backing(key)
+            .unwrap_or_else(|| F::zero_vec(expected_len));
+        assert!(trace_buffer.len() >= expected_len);
+        let recycle_key = crate::arch::rvr::preflight_pool::ArenaNativeBackingKey::new(
+            key.air,
+            key.stride_bytes,
+            trace_buffer.len() * size_of::<F>(),
+        );
+        let recycle = Box::new(move |backing| {
+            pool.recycle_arena_native_matrix_backing(recycle_key, backing);
+        });
+        Self {
+            trace_buffer,
+            width,
+            trace_offset: 0,
+            allow_truncate: true,
+            rvr_recycle: Some(recycle),
+        }
+    }
 }
 
 impl<F: Field> Arena for MatrixRecordArena<F> {
@@ -141,6 +176,8 @@ impl<F: Field> Arena for MatrixRecordArena<F> {
             width,
             trace_offset: 0,
             allow_truncate: true,
+            #[cfg(feature = "rvr")]
+            rvr_recycle: None,
         }
     }
 
@@ -193,7 +230,23 @@ impl<F: Field> RowMajorMatrixArena<F> for MatrixRecordArena<F> {
             let height = self.trace_buffer.len() / width;
             assert!(height.is_power_of_two() || height == 0);
         }
-        RowMajorMatrix::new(self.trace_buffer, self.width)
+        #[cfg(feature = "rvr")]
+        {
+            // The CPU proving context owns this allocation from here through proof generation, so
+            // it is no longer an arena backing eligible for early recycling.
+            self.rvr_recycle = None;
+        }
+        let trace_buffer = std::mem::take(&mut self.trace_buffer);
+        RowMajorMatrix::new(trace_buffer, self.width)
+    }
+}
+
+impl<F> Drop for MatrixRecordArena<F> {
+    fn drop(&mut self) {
+        #[cfg(feature = "rvr")]
+        if let Some(recycle) = self.rvr_recycle.take() {
+            recycle(std::mem::take(&mut self.trace_buffer));
+        }
     }
 }
 
@@ -211,6 +264,11 @@ pub struct DenseRecordArena {
     pub rvr_variable_rows: Option<usize>,
     #[cfg(feature = "rvr")]
     pub(crate) rvr_recycle: Option<(usize, crate::arch::rvr::RvrPreflightBufferPool)>,
+    #[cfg(feature = "rvr")]
+    pub(crate) rvr_arena_native_recycle: Option<(
+        crate::arch::rvr::preflight_pool::ArenaNativeBackingKey,
+        crate::arch::rvr::RvrPreflightBufferPool,
+    )>,
 }
 
 const MAX_ALIGNMENT: usize = 32;
@@ -239,6 +297,8 @@ impl DenseRecordArena {
             rvr_variable_rows: None,
             #[cfg(feature = "rvr")]
             rvr_recycle: None,
+            #[cfg(feature = "rvr")]
+            rvr_arena_native_recycle: None,
         }
     }
 
@@ -256,6 +316,33 @@ impl DenseRecordArena {
             rvr_wire: false,
             rvr_variable_rows: None,
             rvr_recycle: Some((air, pool)),
+            rvr_arena_native_recycle: None,
+        }
+    }
+
+    #[cfg(feature = "rvr")]
+    pub(crate) fn with_recycled_rvr_arena_native_capacity(
+        size_bytes: usize,
+        key: crate::arch::rvr::preflight_pool::ArenaNativeBackingKey,
+        pool: crate::arch::rvr::RvrPreflightBufferPool,
+    ) -> Self {
+        let backing = pool
+            .take_arena_native_dense_backing(key)
+            .unwrap_or_else(|| Self::new_buffer(size_bytes));
+        let recycle_key = crate::arch::rvr::preflight_pool::ArenaNativeBackingKey::new(
+            key.air,
+            key.stride_bytes,
+            backing.len() - MAX_ALIGNMENT,
+        );
+        let offset = (MAX_ALIGNMENT - (backing.as_ptr() as usize % MAX_ALIGNMENT)) % MAX_ALIGNMENT;
+        let mut cursor = Cursor::new(backing);
+        cursor.set_position(offset as u64);
+        Self {
+            records_buffer: cursor,
+            rvr_wire: false,
+            rvr_variable_rows: None,
+            rvr_recycle: None,
+            rvr_arena_native_recycle: Some((recycle_key, pool)),
         }
     }
 
@@ -385,6 +472,8 @@ impl DenseRecordArena {
             rvr_variable_rows: None,
             #[cfg(feature = "rvr")]
             rvr_recycle: None,
+            #[cfg(feature = "rvr")]
+            rvr_arena_native_recycle: None,
         }
     }
 }
@@ -393,7 +482,11 @@ impl Drop for DenseRecordArena {
     fn drop(&mut self) {
         #[cfg(feature = "rvr")]
         {
-            if let Some((air, pool)) = self.rvr_recycle.take() {
+            if let Some((key, pool)) = self.rvr_arena_native_recycle.take() {
+                let dirty_len = self.records_buffer.position() as usize;
+                let backing = std::mem::take(self.records_buffer.get_mut());
+                pool.recycle_arena_native_dense_backing(key, backing, dirty_len);
+            } else if let Some((air, pool)) = self.rvr_recycle.take() {
                 let dirty_len = self.records_buffer.position() as usize;
                 let backing = std::mem::take(self.records_buffer.get_mut());
                 pool.recycle_wire_backing(air, backing, dirty_len);

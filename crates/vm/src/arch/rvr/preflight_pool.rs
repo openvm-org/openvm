@@ -25,16 +25,20 @@
 //!   never written and remain zero, so reuse avoids both a full scan and a full-buffer memset.
 //!
 //! `OPENVM_RVR_PREFLIGHT_POOL=0|false|off` disables pooling (fresh
-//! allocations per call, recycles drop). `OPENVM_RVR_PREFLIGHT_THP` gates the
-//! `MADV_HUGEPAGE` advice on the large buffers the same way. Both default on.
+//! allocations per call, recycles drop). `OPENVM_RVR_ARENA_NATIVE_POOL`
+//! independently gates arena-native backing reuse for controlled A/B runs.
+//! `OPENVM_RVR_PREFLIGHT_THP` gates the `MADV_HUGEPAGE` advice on the large
+//! buffers the same way. All default on.
 
 use std::{
+    any::Any,
     collections::HashMap,
     mem::{ManuallyDrop, MaybeUninit},
     sync::{Arc, LazyLock, Mutex, MutexGuard},
 };
 
 use openvm_instructions::riscv::RV64_REGISTER_AS;
+use openvm_stark_backend::p3_field::Field;
 
 use super::{
     compile::env_flag_is_off,
@@ -54,6 +58,7 @@ use crate::system::memory::merkle::public_values::PUBLIC_VALUES_AS;
 #[derive(Clone)]
 pub struct RvrPreflightBufferPool {
     enabled: bool,
+    arena_native_enabled: bool,
     // Boxed to keep the pool (and the instance/route types embedding it)
     // pointer-small; the pool is constructed once per compiled library.
     inner: Arc<Mutex<PoolInner>>,
@@ -92,6 +97,33 @@ struct PoolInner {
     /// Direct-final compact backings keyed by AIR. These leave the pool while
     /// tracegen owns the DenseRecordArena and return from its Drop impl.
     wire_backings: HashMap<usize, Vec<u8>>,
+    /// Arena-native matrix backings keyed by generated-C geometry and retained capacity. The field
+    /// type is builder-specific, so keep it type-erased inside the likewise builder-local pool and
+    /// downcast at the staging boundary.
+    arena_native_matrix_backings: HashMap<ArenaNativeBackingKey, Box<dyn Any + Send>>,
+    /// Arena-native dense backings on CPU. CUDA backings round-trip through the page-locked pool,
+    /// whose cleaner also waits for outstanding device copies before making a backing reusable.
+    arena_native_dense_backings: HashMap<ArenaNativeBackingKey, Vec<u8>>,
+}
+
+/// Identity of an arena-native generated-C target. Capacity participates in best-fit selection;
+/// the descriptor still exposes the current segment's exact bound to C. The stride captures the
+/// backing flavor's AIR geometry without depending on the generated-C metadata types here.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub(crate) struct ArenaNativeBackingKey {
+    pub air: usize,
+    pub stride_bytes: usize,
+    pub capacity_bytes: usize,
+}
+
+impl ArenaNativeBackingKey {
+    pub(crate) fn new(air: usize, stride_bytes: usize, capacity_bytes: usize) -> Self {
+        Self {
+            air,
+            stride_bytes,
+            capacity_bytes,
+        }
+    }
 }
 
 /// Steady-state spare bound for `record_bufs`; buffers round-trip 1:1 per
@@ -107,8 +139,10 @@ impl Default for RvrPreflightBufferPool {
 
 impl RvrPreflightBufferPool {
     pub fn from_env() -> Self {
+        let enabled = !env_flag_is_off("OPENVM_RVR_PREFLIGHT_POOL");
         Self {
-            enabled: !env_flag_is_off("OPENVM_RVR_PREFLIGHT_POOL"),
+            enabled,
+            arena_native_enabled: enabled && !env_flag_is_off("OPENVM_RVR_ARENA_NATIVE_POOL"),
             inner: Arc::new(Mutex::new(PoolInner::default())),
         }
     }
@@ -387,6 +421,173 @@ impl RvrPreflightBufferPool {
             return;
         }
         push_record_spare(&mut self.lock().record_bufs, buf);
+    }
+
+    /// Take the smallest resident matrix backing that fits this shape. Recycled values are
+    /// all-zero, matching
+    /// `MatrixRecordArena::with_capacity`; this is required because generated arena-native code
+    /// intentionally leaves some suppressed-write fields and padding untouched.
+    pub(crate) fn take_arena_native_matrix_backing<F>(
+        &self,
+        key: ArenaNativeBackingKey,
+    ) -> Option<Vec<F>>
+    where
+        F: Field + Send + 'static,
+    {
+        if !self.arena_native_enabled {
+            return None;
+        }
+        let mut inner = self.lock();
+        let pooled_key = inner
+            .arena_native_matrix_backings
+            .keys()
+            .filter(|candidate| {
+                candidate.air == key.air
+                    && candidate.stride_bytes == key.stride_bytes
+                    && candidate.capacity_bytes >= key.capacity_bytes
+            })
+            .min_by_key(|candidate| candidate.capacity_bytes)
+            .copied()?;
+        let erased = inner
+            .arena_native_matrix_backings
+            .remove(&pooled_key)
+            .expect("selected arena-native matrix backing disappeared");
+        drop(inner);
+        let backing = erased.downcast::<Vec<F>>().unwrap_or_else(|_| {
+            panic!(
+                "arena-native matrix backing type mismatch for air {}",
+                key.air
+            )
+        });
+        let backing = *backing;
+        assert_eq!(
+            backing.len() * size_of::<F>(),
+            pooled_key.capacity_bytes,
+            "arena-native matrix backing capacity mismatch for air {}",
+            key.air
+        );
+        Some(backing)
+    }
+
+    /// Scrub and retain a matrix backing after its consumer releases the arena. Clearing the full
+    /// allocation (used prefix plus padding) makes reuse byte-identical to a fresh zeroed arena.
+    pub(crate) fn recycle_arena_native_matrix_backing<F>(
+        &self,
+        key: ArenaNativeBackingKey,
+        mut backing: Vec<F>,
+    ) where
+        F: Field + Send + 'static,
+    {
+        if !self.arena_native_enabled {
+            return;
+        }
+        assert_eq!(
+            backing.len() * size_of::<F>(),
+            key.capacity_bytes,
+            "arena-native matrix backing capacity mismatch for air {}",
+            key.air
+        );
+        backing.fill(F::ZERO);
+        let mut inner = self.lock();
+        if inner.arena_native_matrix_backings.keys().any(|existing| {
+            existing.air == key.air
+                && existing.stride_bytes == key.stride_bytes
+                && existing.capacity_bytes >= key.capacity_bytes
+        }) {
+            return;
+        }
+        inner.arena_native_matrix_backings.retain(|existing, _| {
+            existing.air != key.air
+                || existing.stride_bytes != key.stride_bytes
+                || existing.capacity_bytes > key.capacity_bytes
+        });
+        inner
+            .arena_native_matrix_backings
+            .insert(key, Box::new(backing));
+    }
+
+    /// Take the smallest resident dense backing that fits this shape. CPU uses this executor-local
+    /// map; CUDA uses the
+    /// existing page-locked size-class pool so its cleaner can enforce the asynchronous H2D
+    /// lifetime before a backing is handed out again.
+    pub(crate) fn take_arena_native_dense_backing(
+        &self,
+        key: ArenaNativeBackingKey,
+    ) -> Option<Vec<u8>> {
+        if !self.arena_native_enabled {
+            return None;
+        }
+        #[cfg(feature = "cuda")]
+        {
+            Some(crate::arch::cuda::pinned::take(key.capacity_bytes + 32))
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let mut inner = self.lock();
+            let pooled_key = inner
+                .arena_native_dense_backings
+                .keys()
+                .filter(|candidate| {
+                    candidate.air == key.air
+                        && candidate.stride_bytes == key.stride_bytes
+                        && candidate.capacity_bytes >= key.capacity_bytes
+                })
+                .min_by_key(|candidate| candidate.capacity_bytes)
+                .copied()?;
+            let backing = inner
+                .arena_native_dense_backings
+                .remove(&pooled_key)
+                .expect("selected arena-native dense backing disappeared");
+            assert!(
+                backing.len() >= key.capacity_bytes + 32,
+                "arena-native dense backing capacity mismatch for air {}",
+                key.air
+            );
+            Some(backing)
+        }
+    }
+
+    /// Return a dense backing only after its arena consumer is done. CPU clears the entire backing
+    /// synchronously. CUDA delegates the same scrub to the pinned cleaner after recording the
+    /// outstanding copy lifetime.
+    pub(crate) fn recycle_arena_native_dense_backing(
+        &self,
+        key: ArenaNativeBackingKey,
+        backing: Vec<u8>,
+        dirty_len: usize,
+    ) {
+        if !self.arena_native_enabled {
+            return;
+        }
+        assert!(
+            backing.len() >= key.capacity_bytes + 32,
+            "arena-native dense backing capacity mismatch for air {}",
+            key.air
+        );
+        #[cfg(feature = "cuda")]
+        {
+            crate::arch::cuda::pinned::give_back(backing, dirty_len);
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let mut backing = backing;
+            backing.fill(0);
+            let mut inner = self.lock();
+            if inner.arena_native_dense_backings.keys().any(|existing| {
+                existing.air == key.air
+                    && existing.stride_bytes == key.stride_bytes
+                    && existing.capacity_bytes >= key.capacity_bytes
+            }) {
+                return;
+            }
+            inner.arena_native_dense_backings.retain(|existing, _| {
+                existing.air != key.air
+                    || existing.stride_bytes != key.stride_bytes
+                    || existing.capacity_bytes > key.capacity_bytes
+            });
+            inner.arena_native_dense_backings.insert(key, backing);
+            let _ = dirty_len;
+        }
     }
 
     /// Allocate and fault in a direct-final wire backing before the segment's
@@ -740,12 +941,16 @@ fn advise_hugepages(ptr: *const u8, len: usize) {
 
 #[cfg(all(test, not(feature = "cuda")))]
 mod tests {
+    use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
+    use openvm_stark_sdk::p3_baby_bear::BabyBear;
+
     use super::*;
 
     #[test]
     fn recycled_delta_backing_skips_prefault() {
         let pool = RvrPreflightBufferPool {
             enabled: true,
+            arena_native_enabled: true,
             inner: Arc::new(Mutex::new(PoolInner::default())),
         };
         let (first, first_needs_prefault) = pool.take_delta_backing(4096);
@@ -756,5 +961,69 @@ mod tests {
         let (recycled, recycled_needs_prefault) = pool.take_delta_backing(2048);
         assert!(!recycled_needs_prefault);
         assert_eq!(recycled.as_ptr(), first_ptr);
+    }
+
+    #[test]
+    fn arena_native_matrix_backing_is_reused_and_fully_zeroed() {
+        let pool = RvrPreflightBufferPool {
+            enabled: true,
+            arena_native_enabled: true,
+            inner: Arc::new(Mutex::new(PoolInner::default())),
+        };
+        let key = ArenaNativeBackingKey::new(7, 16, 4096);
+        let mut first = crate::arch::MatrixRecordArena::<BabyBear>::with_recycled_rvr_capacity(
+            256,
+            4,
+            key,
+            pool.clone(),
+        );
+        let first_ptr = first.trace_buffer.as_ptr();
+        first.trace_buffer.fill(BabyBear::ONE);
+        drop(first);
+
+        let smaller_key = ArenaNativeBackingKey::new(7, 16, 2048);
+        let recycled = crate::arch::MatrixRecordArena::<BabyBear>::with_recycled_rvr_capacity(
+            128,
+            4,
+            smaller_key,
+            pool,
+        );
+        assert_eq!(recycled.trace_buffer.as_ptr(), first_ptr);
+        assert!(recycled
+            .trace_buffer
+            .iter()
+            .all(|&value| value == BabyBear::ZERO));
+    }
+
+    #[test]
+    fn arena_native_dense_backing_is_reused_and_fully_zeroed() {
+        let pool = RvrPreflightBufferPool {
+            enabled: true,
+            arena_native_enabled: true,
+            inner: Arc::new(Mutex::new(PoolInner::default())),
+        };
+        let key = ArenaNativeBackingKey::new(11, 64, 4096);
+        let mut first = crate::arch::DenseRecordArena::with_recycled_rvr_arena_native_capacity(
+            4096,
+            key,
+            pool.clone(),
+        );
+        let first_ptr = first.records_buffer.get_ref().as_ptr();
+        first.records_buffer.get_mut().fill(0xa5);
+        first.records_buffer.set_position(4096);
+        drop(first);
+
+        let smaller_key = ArenaNativeBackingKey::new(11, 64, 2048);
+        let recycled = crate::arch::DenseRecordArena::with_recycled_rvr_arena_native_capacity(
+            2048,
+            smaller_key,
+            pool,
+        );
+        assert_eq!(recycled.records_buffer.get_ref().as_ptr(), first_ptr);
+        assert!(recycled
+            .records_buffer
+            .get_ref()
+            .iter()
+            .all(|&byte| byte == 0));
     }
 }

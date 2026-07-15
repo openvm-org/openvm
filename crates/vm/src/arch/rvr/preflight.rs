@@ -2,6 +2,7 @@
 
 use std::{collections::BTreeMap, mem::MaybeUninit, sync::Arc};
 
+use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
 use openvm_instructions::{
     exe::VmExe,
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
@@ -2657,6 +2658,18 @@ pub trait RvrArenaNativeTarget: crate::arch::Arena + Sized {
         geometry: &super::ArenaNativeGeometry,
     ) -> (Self, ChipRecordBuf);
 
+    /// Stage from the per-executor arena-native backing pool. Arena flavors keep the ordinary
+    /// allocation path for direct callers; the proving loop supplies the AIR identity and pool.
+    fn stage_arena_native_pooled(
+        height: usize,
+        width: usize,
+        geometry: &super::ArenaNativeGeometry,
+        _air: usize,
+        _pool: &RvrPreflightBufferPool,
+    ) -> (Self, ChipRecordBuf) {
+        Self::stage_arena_native(height, width, geometry)
+    }
+
     /// Commit `written_records` C-written records (cursor/offset bookkeeping
     /// only — the bytes are already in place).
     fn finish_arena_native(
@@ -2765,6 +2778,47 @@ impl<F: openvm_stark_backend::p3_field::Field> RvrArenaNativeTarget
         (arena, buf)
     }
 
+    fn stage_arena_native_pooled(
+        height: usize,
+        width: usize,
+        geometry: &super::ArenaNativeGeometry,
+        air: usize,
+        pool: &RvrPreflightBufferPool,
+    ) -> (Self, ChipRecordBuf) {
+        let padded_height = next_power_of_two_or_zero(height);
+        let stride_bytes = width * std::mem::size_of::<F>();
+        let capacity_bytes = padded_height * stride_bytes;
+        let key =
+            super::preflight_pool::ArenaNativeBackingKey::new(air, stride_bytes, capacity_bytes);
+        let mut arena = Self::with_recycled_rvr_capacity(height, width, key, pool.clone());
+        let stride = stride_bytes as u32;
+        let cap_bytes = capacity_bytes as u32;
+        let buf = ChipRecordBuf {
+            base: arena.trace_buffer.as_mut_ptr().cast(),
+            len: 0,
+            cap: cap_bytes,
+            stride,
+            core_off: if matches!(
+                geometry.layout,
+                super::ArenaNativeLayout::CustomVariableRows { .. }
+            ) {
+                0
+            } else {
+                geometry.core_off_matrix as u32
+            },
+            flags: arena_native_flags(geometry)
+                | if matches!(
+                    geometry.layout,
+                    super::ArenaNativeLayout::CustomVariableRows { .. }
+                ) {
+                    PREFLIGHT_CHIP_RECORD_FLAG_VARIABLE_ROW_STRIDE
+                } else {
+                    0
+                },
+        };
+        (arena, buf)
+    }
+
     fn finish_arena_native(&mut self, written_records: usize, _: &super::ArenaNativeGeometry) {
         self.trace_offset = written_records * self.width;
     }
@@ -2824,6 +2878,43 @@ impl RvrArenaNativeTarget for crate::arch::DenseRecordArena {
             base,
             len: 0,
             cap: (height * stride) as u32,
+            stride: stride as u32,
+            core_off: if matches!(
+                geometry.layout,
+                super::ArenaNativeLayout::CustomVariableRows { .. }
+            ) {
+                0
+            } else {
+                geometry.core_off_dense() as u32
+            },
+            flags: arena_native_flags(geometry),
+        };
+        (arena, buf)
+    }
+
+    fn stage_arena_native_pooled(
+        height: usize,
+        _width: usize,
+        geometry: &super::ArenaNativeGeometry,
+        air: usize,
+        pool: &RvrPreflightBufferPool,
+    ) -> (Self, ChipRecordBuf) {
+        let stride = geometry.stride_dense();
+        let capacity_bytes = height * stride;
+        let key = super::preflight_pool::ArenaNativeBackingKey::new(air, stride, capacity_bytes);
+        let mut arena =
+            Self::with_recycled_rvr_arena_native_capacity(capacity_bytes, key, pool.clone());
+        let offset = arena.records_buffer.position() as usize;
+        debug_assert_eq!(
+            (arena.records_buffer.get_ref().as_ptr() as usize + offset) % 32,
+            0,
+            "recycled dense arena-native base must be 32-aligned"
+        );
+        let base = unsafe { arena.records_buffer.get_mut().as_mut_ptr().add(offset) };
+        let buf = ChipRecordBuf {
+            base,
+            len: 0,
+            cap: capacity_bytes as u32,
             stride: stride as u32,
             core_off: if matches!(
                 geometry.layout,
