@@ -477,6 +477,7 @@ mod bls12_381 {
     #[cfg(feature = "rvr")]
     use openvm_circuit::{
         arch::{
+            rvr::preflight::RvrArenaNativeTarget,
             rvr::{
                 generate_record_arenas_from_logs, LogNativeAssemblerRegistry, RvrPreflightOutput,
                 RvrPreflightRoute, VmRvrLogNativeExtension,
@@ -585,6 +586,7 @@ mod bls12_381 {
     fn assert_pairing_timestamp_deltas(
         exe: &VmExe<F>,
         output: &RvrPreflightOutput<F>,
+        pc_to_air_idx: &[Option<usize>],
         saw_modular_48: &mut bool,
         saw_fp2_48: &mut bool,
     ) {
@@ -632,6 +634,39 @@ mod bls12_381 {
                 expected_delta,
                 "pairing arithmetic opcode {opcode:#x} at pc {pc:#x} timestamp delta"
             );
+        }
+
+        // Arena-native instructions intentionally bypass the compact program
+        // log. Their complete records, including adapter timestamps, are
+        // compared byte-for-byte with the interpreter trace below. Count an
+        // opcode family as exercised when its mapped direct arena wrote rows.
+        for (slot, entry) in exe.program.instructions_and_debug_infos.iter().enumerate() {
+            let Some((instruction, _)) = entry else {
+                continue;
+            };
+            let Some(air) = pc_to_air_idx[slot] else {
+                continue;
+            };
+            let direct_rows = output
+                .arena_native_written
+                .iter()
+                .find(|&&(written_air, _)| written_air == air)
+                .map(|&(_, rows)| rows)
+                .unwrap_or_default();
+            if direct_rows == 0 {
+                continue;
+            }
+            let opcode = instruction.opcode.as_usize();
+            if (Rv64ModularArithmeticOpcode::CLASS_OFFSET
+                ..Rv64ModularArithmeticOpcode::CLASS_OFFSET + modular_count)
+                .contains(&opcode)
+            {
+                *saw_modular_48 = true;
+            } else if (Fp2Opcode::CLASS_OFFSET..Fp2Opcode::CLASS_OFFSET + fp2_count)
+                .contains(&opcode)
+            {
+                *saw_fp2_48 = true;
+            }
         }
     }
 
@@ -702,8 +737,39 @@ mod bls12_381 {
                         &trace_heights,
                     )
                     .expect("interpreter execution");
+                let retired_instructions = interp_output
+                    .system_records
+                    .filtered_exec_frequencies
+                    .iter()
+                    .map(|&count| u64::from(count))
+                    .sum::<u64>();
+                if let Some(expected) = num_insns {
+                    assert_eq!(
+                        retired_instructions, expected,
+                        "{segment_label}: interpreter retired instruction count"
+                    );
+                }
+                let capacities = trace_heights
+                    .iter()
+                    .zip(&widths)
+                    .map(|(&height, &width)| (height as usize, width))
+                    .collect::<Vec<_>>();
+                let mut staged = Vec::new();
+                let mut targets = BTreeMap::new();
+                for &(air, geometry) in &instance.compiled().inline_records().arena_native_airs {
+                    let (height, width) = capacities[air];
+                    let (arena, target) =
+                        MatrixRecordArena::<F>::stage_arena_native(height, width, &geometry);
+                    targets.insert(air, target);
+                    staged.push((air, geometry, arena));
+                }
                 let mut rvr_output = instance
-                    .execute_preflight_from_state(from_state.clone(), num_insns)
+                    .execute_preflight_from_state_with_arena_targets(
+                        from_state.clone(),
+                        Some(retired_instructions),
+                        &trace_heights,
+                        &targets,
+                    )
                     .expect("rvr preflight execution");
                 assert_system_records_eq(
                     &segment_label,
@@ -713,15 +779,11 @@ mod bls12_381 {
                 assert_pairing_timestamp_deltas(
                     exe,
                     &rvr_output,
+                    &pc_to_air_idx,
                     &mut saw_modular_48,
                     &mut saw_fp2_48,
                 );
-                let capacities = trace_heights
-                    .iter()
-                    .zip(&widths)
-                    .map(|(&height, &width)| (height as usize, width))
-                    .collect::<Vec<_>>();
-                let rvr_arenas = generate_record_arenas_from_logs::<F, MatrixRecordArena<F>>(
+                let mut rvr_arenas = generate_record_arenas_from_logs::<F, MatrixRecordArena<F>>(
                     &registry,
                     exe,
                     &mut rvr_output,
@@ -729,6 +791,16 @@ mod bls12_381 {
                     &pc_to_air_idx,
                 )
                 .expect("rvr log-native record assembly");
+                for (air, geometry, mut arena) in staged {
+                    let written = rvr_output
+                        .arena_native_written
+                        .iter()
+                        .find(|&&(written_air, _)| written_air == air)
+                        .map(|&(_, count)| count as usize)
+                        .expect("arena-native AIR must report its written count");
+                    arena.finish_arena_native(written, &geometry);
+                    rvr_arenas[air] = arena;
+                }
                 state = rvr_output.to_state.clone();
                 outputs.push((
                     from_state,
