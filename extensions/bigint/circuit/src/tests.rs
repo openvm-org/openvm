@@ -116,7 +116,6 @@ fn create_add_sub_harness_fields(
         AddSubFiller::new(
             Rv64VecHeapU16AdapterFiller::new(address_bits, range_checker_chip.clone()),
             range_checker_chip,
-            Rv64BaseAlu256Opcode::CLASS_OFFSET,
         ),
         memory_helper,
     );
