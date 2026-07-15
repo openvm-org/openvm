@@ -5,6 +5,7 @@
 #include "primitives/trace_access.h"
 #include "riscv/adapters/alu_imm_u16.cuh"
 #include "riscv/cores/addi.cuh"
+#include "riscv/rvr_compact.cuh"
 #include "system/memory/params.cuh"
 
 using namespace riscv;
@@ -65,6 +66,72 @@ extern "C" int _addi_tracegen(
     auto [grid, block] = kernel_launch_params(height);
     addi_tracegen<<<grid, block, 0, stream>>>(
         d_trace, height, d_records, d_range_checker, range_checker_num_bins, timestamp_max_bits
+    );
+    return CHECK_KERNEL();
+}
+
+__global__ void addi_tracegen_compact(
+    Fp *d_trace,
+    size_t height,
+    DeviceBufferConstView<RvrAlu3Compact> d_records,
+    RvrOperandEntry const *d_operand_table,
+    uint32_t pc_base,
+    uint32_t *d_range_checker_ptr,
+    uint32_t range_checker_num_bins,
+    uint32_t timestamp_max_bits
+) {
+    uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    RowSlice row(d_trace + idx, height);
+    if (idx < d_records.len()) {
+        RvrAlu3Compact const rec = d_records[idx];
+        RvrOperandEntry const entry = rvr_operand_entry(d_operand_table, pc_base, rec.from_pc);
+
+        Rv64AddIRecord full;
+        full.adapter = rvr_decode_alu3_alu_imm_u16(rec, entry);
+#pragma unroll
+        for (size_t i = 0; i < BLOCK_FE_WIDTH; i++) {
+            full.core.rs1[i] = rvr_u16_limb(rec.b, i);
+        }
+        full.core.imm_low11 = uint16_t(entry.c & 0x7ffu);
+        full.core.imm_sign = uint16_t((entry.c >> 11) & 1u);
+
+        auto adapter = Rv64BaseAluImmU16Adapter(
+            VariableRangeChecker(d_range_checker_ptr, range_checker_num_bins),
+            timestamp_max_bits
+        );
+        adapter.fill_trace_row(row, full.adapter);
+
+        auto core =
+            Rv64AddICore(VariableRangeChecker(d_range_checker_ptr, range_checker_num_bins));
+        core.fill_trace_row(row.slice_from(COL_INDEX(Rv64AddICols, core)), full.core);
+    } else {
+        row.fill_zero(0, sizeof(Rv64AddICols<uint8_t>));
+    }
+}
+
+extern "C" int _addi_tracegen_compact(
+    Fp *d_trace,
+    size_t height,
+    size_t width,
+    DeviceBufferConstView<RvrAlu3Compact> d_records,
+    RvrOperandEntry const *d_operand_table,
+    uint32_t pc_base,
+    uint32_t *d_range_checker,
+    uint32_t range_checker_num_bins,
+    uint32_t timestamp_max_bits,
+    cudaStream_t stream
+) {
+    assert(width == sizeof(Rv64AddICols<uint8_t>));
+    auto [grid, block] = kernel_launch_params(height);
+    addi_tracegen_compact<<<grid, block, 0, stream>>>(
+        d_trace,
+        height,
+        d_records,
+        d_operand_table,
+        pc_base,
+        d_range_checker,
+        range_checker_num_bins,
+        timestamp_max_bits
     );
     return CHECK_KERNEL();
 }

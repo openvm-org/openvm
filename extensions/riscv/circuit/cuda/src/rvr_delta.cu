@@ -25,6 +25,7 @@ enum DeltaPattern : uint8_t {
     DELTA_WR1 = 5,
     DELTA_WR1_ALWAYS = 6,
     DELTA_RW1 = 7,
+    DELTA_ADDI = 8,
 };
 
 struct DeltaRecord {
@@ -167,7 +168,8 @@ enum DeltaAirKind : uint32_t {
     DELTA_KIND_STORE_DOUBLEWORD = 26,
     DELTA_KIND_LOAD_SIGN_EXTEND_HALFWORD = 27,
     DELTA_KIND_LOAD_SIGN_EXTEND_WORD = 28,
-    DELTA_KIND_COUNT = 29,
+    DELTA_KIND_ADDI = 29,
+    DELTA_KIND_COUNT = 30,
 };
 
 __device__ __forceinline__ void fail(uint32_t *error, uint32_t code) {
@@ -324,6 +326,10 @@ __device__ __forceinline__ bool delta_access(
     };
 
     switch (entry.access_pattern) {
+    case DELTA_ADDI:
+        if (slot == 0) return reg(entry.b);
+        if (slot == 1) return reg(entry.a);
+        return false;
     case DELTA_ALU3:
         if (slot == 0) return reg(entry.b);
         if (slot == 1)
@@ -366,6 +372,7 @@ __device__ __forceinline__ bool delta_write_access(
     RvrOperandEntry const &entry, uint32_t slot
 ) {
     switch (entry.access_pattern) {
+    case DELTA_ADDI: return slot == 1;
     case DELTA_ALU3:
     case DELTA_ALU3_REG:
     case DELTA_STORE:
@@ -475,6 +482,10 @@ __device__ __forceinline__ bool delta_post_write_value(
     uint64_t &result
 ) {
     switch (kind) {
+    case DELTA_KIND_ADDI:
+        if (entry.local_opcode != 0) return false;
+        result = record.v1 + record.v2;
+        return true;
     case DELTA_KIND_ADD_SUB:
         if (entry.local_opcode == 0)
             result = record.v1 + record.v2;
@@ -689,7 +700,7 @@ __global__ void build_events(
             size_t table_slot = (program_pc - pc_base) / PC_STEP;
             if (table_slot < operand_count) {
                 RvrOperandEntry entry = table[table_slot];
-                if (entry.air_idx < num_airs && entry.access_pattern <= DELTA_RW1 &&
+                if (entry.air_idx < num_airs && entry.access_pattern <= DELTA_ADDI &&
                     arena_native_flags[entry.air_idx]) {
                     DeltaRecord synthetic{program_pc, program_entry.timestamp, 0, 0};
                     uint8_t as;
@@ -894,6 +905,18 @@ __global__ void partition_records(
     store_u32(dst, record.from_pc);
     store_u32(dst + 4, record.from_timestamp);
     switch (entry.access_pattern) {
+    case DELTA_ADDI:
+        if (desc.stride != sizeof(RvrAlu3Compact)) {
+            fail(error, 8);
+            return;
+        }
+        store_u32(dst + 8, record_prev[0]);
+        store_u32(dst + 12, 0u);
+        store_u32(dst + 16, record_prev[1]);
+        store_u64_words(dst + 20, write_prev_value);
+        store_u64_words(dst + 28, record.v1);
+        store_u64_words(dst + 36, record.v2);
+        break;
     case DELTA_ALU3:
     case DELTA_ALU3_REG:
     case DELTA_LOAD:

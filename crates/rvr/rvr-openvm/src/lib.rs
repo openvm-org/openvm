@@ -13,9 +13,9 @@ pub mod toolchain;
 pub use constants::{DEFERRAL_PAGE_BUF_CAP, MEM_PAGE_BUF_CAP, PV_PAGE_BUF_CAP};
 pub use emit::{
     inline_record_shape_for_instr, inline_record_shape_for_terminator, instr_emits_inline_record,
-    Alu3ArenaFieldOffsets, Alu3WArenaFieldOffsets, ArenaNativeGeometry, ArenaNativeLayout,
-    Branch2ArenaFieldOffsets, CProject, EmitContext, InlineRecordShape, InstrCodegen,
-    LoadStoreArenaFieldOffsets, Rw1ArenaFieldOffsets, SuspendPolicy, TracerMode,
+    AddIArenaFieldOffsets, Alu3ArenaFieldOffsets, Alu3WArenaFieldOffsets, ArenaNativeGeometry,
+    ArenaNativeLayout, Branch2ArenaFieldOffsets, CProject, EmitContext, InlineRecordShape,
+    InstrCodegen, LoadStoreArenaFieldOffsets, Rw1ArenaFieldOffsets, SuspendPolicy, TracerMode,
     Wr1ArenaFieldOffsets,
 };
 pub use toolchain::{
