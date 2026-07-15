@@ -1086,7 +1086,7 @@ fn compile_impl<F: PrimeField32>(
     // It is needed only when a project must actually be regenerated.
     let cfg_started = Instant::now();
     let valid_pcs: std::collections::HashSet<u64> = ir.iter().map(|li| li.pc()).collect();
-    let extra_targets = scan_init_memory_for_code_pointers(exe, &valid_pcs);
+    let extra_targets = scan_init_memory_for_code_pointers(&exe.init_memory, &valid_pcs);
     let blocks = build_blocks(&ir, &extra_targets)?;
     let cfg_elapsed = cfg_started.elapsed();
 
