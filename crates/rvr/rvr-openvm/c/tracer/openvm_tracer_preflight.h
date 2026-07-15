@@ -160,6 +160,15 @@ typedef struct Tracer {
   MemoryLogEntry* custom_memory_scratch;
   uint32_t custom_memory_scratch_len;
   uint32_t custom_memory_scratch_cap;
+  /* Pooled counter reset metadata. Each index is appended exactly once, on
+   * its counter's 0→nonzero transition. The host later scrubs only this
+   * written prefix before returning both buffers to the cross-segment pool. */
+  uint32_t* chip_counts_touched;
+  uint32_t chip_counts_touched_len;
+  uint32_t chip_counts_touched_cap;
+  uint32_t* exec_frequencies_touched;
+  uint32_t exec_frequencies_touched_len;
+  uint32_t exec_frequencies_touched_cap;
 } Tracer;
 
 _Static_assert(sizeof(ProgramLogEntry) == PREFLIGHT_PROGRAM_LOG_ENTRY_SIZE,
@@ -274,6 +283,18 @@ _Static_assert(offsetof(Tracer, exec_frequencies) == 104,
                "Tracer exec_frequencies offset drift");
 _Static_assert(offsetof(Tracer, exec_frequencies_len) == 112,
                "Tracer exec_frequencies_len offset drift");
+_Static_assert(offsetof(Tracer, chip_counts_touched) == 144,
+               "Tracer chip_counts_touched offset drift");
+_Static_assert(offsetof(Tracer, chip_counts_touched_len) == 152,
+               "Tracer chip_counts_touched_len offset drift");
+_Static_assert(offsetof(Tracer, chip_counts_touched_cap) == 156,
+               "Tracer chip_counts_touched_cap offset drift");
+_Static_assert(offsetof(Tracer, exec_frequencies_touched) == 160,
+               "Tracer exec_frequencies_touched offset drift");
+_Static_assert(offsetof(Tracer, exec_frequencies_touched_len) == 168,
+               "Tracer exec_frequencies_touched_len offset drift");
+_Static_assert(offsetof(Tracer, exec_frequencies_touched_cap) == 172,
+               "Tracer exec_frequencies_touched_cap offset drift");
 _Static_assert(sizeof(ChipRecordBuf) == PREFLIGHT_CHIP_RECORD_BUF_SIZE,
                "ChipRecordBuf size drift");
 _Static_assert(_Alignof(ChipRecordBuf) == PREFLIGHT_CHIP_RECORD_BUF_ALIGN,
@@ -1146,6 +1167,28 @@ static __attribute__((always_inline)) inline void trace_pc(
   preflight_append_program(state->tracer, pc);
 }
 
+static __attribute__((always_inline)) inline void preflight_add_counter(
+    uint32_t* restrict values, uint32_t values_len,
+    uint32_t* restrict touched, uint32_t* restrict touched_len,
+    uint32_t touched_cap, uint32_t index, uint32_t count) {
+  if (unlikely(values == NULL || index >= values_len)) {
+    return;
+  }
+  uint32_t* restrict value = &values[index];
+  if (*value == 0u && count != 0u && touched != NULL) {
+    uint32_t len = *touched_len;
+    if (unlikely(len >= touched_cap)) {
+      /* UINT32_MAX is an impossible valid cursor and makes the Rust capacity
+       * check fail closed before any pooled counter can escape. */
+      *touched_len = UINT32_MAX;
+      return;
+    }
+    touched[len] = index;
+    *touched_len = len + 1u;
+  }
+  *value += count;
+}
+
 /* ZG2 single-pass dispatch accounting. Every instruction increments its
  * compile-time filtered program index. An inline instruction whose chip
  * target is DIRECT_FINAL already carries its pc/timestamp in the final wire
@@ -1157,7 +1200,10 @@ static __attribute__((always_inline)) inline void trace_pc_indexed(
   Tracer* restrict t = state->tracer;
   if (likely(t->exec_frequencies != NULL &&
              exec_idx < t->exec_frequencies_len)) {
-    t->exec_frequencies[exec_idx]++;
+    preflight_add_counter(
+        t->exec_frequencies, t->exec_frequencies_len,
+        t->exec_frequencies_touched, &t->exec_frequencies_touched_len,
+        t->exec_frequencies_touched_cap, exec_idx, 1u);
   }
   bool direct_final = delta_inline
       ? t->delta_records != NULL &&
@@ -1188,9 +1234,11 @@ static __attribute__((always_inline)) inline void trace_pc_indexed(
 
 static __attribute__((always_inline)) inline void trace_chip(
     RvState* restrict state, uint32_t chip_idx, uint32_t count) {
-  if (likely(chip_idx < state->tracer->chip_counts_len)) {
-    state->tracer->chip_counts[chip_idx] += count;
-  }
+  Tracer* restrict t = state->tracer;
+  preflight_add_counter(
+      t->chip_counts, t->chip_counts_len, t->chip_counts_touched,
+      &t->chip_counts_touched_len, t->chip_counts_touched_cap, chip_idx,
+      count);
 }
 
 static __attribute__((always_inline)) inline void trace_block(

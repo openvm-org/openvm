@@ -532,7 +532,6 @@ pub fn generate_gpu_rvr_record_arenas(
         let delta_memory_log = std::mem::take(&mut output.raw_logs.delta_memory_log);
         let program_log = std::mem::take(&mut output.raw_logs.program_log);
         let touched = std::mem::take(&mut output.raw_logs.touched);
-        let chip_counts = std::mem::take(&mut output.raw_logs.chip_counts);
         let bound_airs = state.bind_delta_segment(
             exe,
             pc_to_air_idx,
@@ -543,7 +542,7 @@ pub fn generate_gpu_rvr_record_arenas(
             delta_memory_log,
             program_log,
             touched,
-            chip_counts,
+            &output.raw_logs.chip_counts,
             &output.arena_native_written,
         )?;
         if !bound_airs.is_subset(&compact_airs) {

@@ -87,16 +87,11 @@ impl ProgramChipGPU {
             trace,
         }
     }
-}
 
-impl Default for ProgramChipGPU {
-    fn default() -> Self {
-        panic!("ProgramChipGPU requires an explicit GpuDeviceCtx")
-    }
-}
-
-impl Chip<Vec<u32>, GpuBackend> for ProgramChipGPU {
-    fn generate_proving_ctx(&self, filtered_exec_freqs: Vec<u32>) -> AirProvingContext<GpuBackend> {
+    pub(crate) fn generate_proving_ctx_from_frequencies(
+        &self,
+        filtered_exec_freqs: &[u32],
+    ) -> AirProvingContext<GpuBackend> {
         let cached = self.cached.clone().expect("Cached program must be loaded");
         let height = cached.height();
         let filtered_len = filtered_exec_freqs.len();
@@ -143,6 +138,18 @@ impl Chip<Vec<u32>, GpuBackend> for ProgramChipGPU {
             common_main,
             public_values: vec![],
         }
+    }
+}
+
+impl Default for ProgramChipGPU {
+    fn default() -> Self {
+        panic!("ProgramChipGPU requires an explicit GpuDeviceCtx")
+    }
+}
+
+impl Chip<Vec<u32>, GpuBackend> for ProgramChipGPU {
+    fn generate_proving_ctx(&self, filtered_exec_freqs: Vec<u32>) -> AirProvingContext<GpuBackend> {
+        self.generate_proving_ctx_from_frequencies(&filtered_exec_freqs)
     }
 }
 

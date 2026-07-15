@@ -19,6 +19,10 @@
 //! - The shadows must be all-zero at segment start (0 = untouched this segment). They re-enter the
 //!   pool only through [`RvrPreflightBufferPool::recycle_shadows`] after an exact O(touched) scrub,
 //!   and debug runs re-verify all-zero on reuse.
+//! - The counter arrays must likewise read as all-zero at segment start. Generated C records each
+//!   counter's first 0→nonzero transition in a write-only touched-index side buffer; consumers
+//!   scrub exactly that prefix before returning both buffers to the pool. Untouched counters are
+//!   never written and remain zero, so reuse avoids both a full scan and a full-buffer memset.
 //!
 //! `OPENVM_RVR_PREFLIGHT_POOL=0|false|off` disables pooling (fresh
 //! allocations per call, recycles drop). `OPENVM_RVR_PREFLIGHT_THP` gates the
@@ -65,6 +69,16 @@ struct PoolInner {
     shadow_register: Option<Vec<u32>>,
     shadow_memory: Option<Vec<u32>>,
     shadow_public_values: Option<Vec<u32>>,
+    /// All-zero between segments; only indices in the paired touched list are scrubbed on recycle.
+    chip_counts: Option<Vec<u32>>,
+    chip_counts_touched: Option<Vec<MaybeUninit<u32>>>,
+    /// Program-defined instruction count is invariant for this executor. Computing it scans the
+    /// whole (potentially sparse) program, so cache it with the pooled frequency table.
+    exec_frequencies_len: Option<usize>,
+    /// Returned after system trace generation consumes the program frequencies. Direct callers
+    /// that retain multiple outputs simply allocate until those outputs are consumed.
+    exec_frequencies: Option<Vec<u32>>,
+    exec_frequencies_touched: Option<Vec<MaybeUninit<u32>>>,
     /// Spare inline-record byte buffers, one per migrated chip in steady
     /// state (best-fit take, since per-air capacities differ).
     record_bufs: Vec<Vec<MaybeUninit<u8>>>,
@@ -132,6 +146,84 @@ impl RvrPreflightBufferPool {
             return vec_uninit(cap);
         }
         take_uninit_slot(&mut self.lock().touched, cap)
+    }
+
+    /// Take the two zero-valued counter tables plus write-only first-touch index buffers.
+    /// Recycled tables are already zero because [`Self::recycle_chip_counts`] and
+    /// [`Self::recycle_exec_frequencies`] scrub exactly the indices written in their segment.
+    #[allow(clippy::type_complexity)]
+    pub(crate) fn take_counters(
+        &self,
+        chip_counts_len: usize,
+        compute_exec_frequencies_len: impl FnOnce() -> usize,
+    ) -> (
+        Vec<u32>,
+        Vec<MaybeUninit<u32>>,
+        Vec<u32>,
+        Vec<MaybeUninit<u32>>,
+    ) {
+        if !self.enabled {
+            let exec_frequencies_len = compute_exec_frequencies_len();
+            return (
+                vec![0; chip_counts_len],
+                vec_uninit(chip_counts_len),
+                vec![0; exec_frequencies_len],
+                vec_uninit(exec_frequencies_len),
+            );
+        }
+        let mut inner = self.lock();
+        let exec_frequencies_len = match inner.exec_frequencies_len {
+            Some(len) => len,
+            None => {
+                let len = compute_exec_frequencies_len();
+                inner.exec_frequencies_len = Some(len);
+                len
+            }
+        };
+        (
+            take_zero_counter_slot(&mut inner.chip_counts, chip_counts_len),
+            take_uninit_slot(&mut inner.chip_counts_touched, chip_counts_len),
+            take_zero_counter_slot(&mut inner.exec_frequencies, exec_frequencies_len),
+            take_uninit_slot(&mut inner.exec_frequencies_touched, exec_frequencies_len),
+        )
+    }
+
+    pub(crate) fn recycle_chip_counts(&self, values: Vec<u32>, touched: Vec<u32>) {
+        if !self.enabled {
+            return;
+        }
+        let mut inner = self.lock();
+        let PoolInner {
+            chip_counts,
+            chip_counts_touched,
+            ..
+        } = &mut *inner;
+        recycle_counter_slot(
+            chip_counts,
+            chip_counts_touched,
+            values,
+            touched,
+            "chip_counts",
+        );
+    }
+
+    pub(crate) fn recycle_exec_frequencies(&self, values: Vec<u32>, touched: Vec<u32>) {
+        if !self.enabled {
+            return;
+        }
+        let mut inner = self.lock();
+        let PoolInner {
+            exec_frequencies,
+            exec_frequencies_touched,
+            ..
+        } = &mut *inner;
+        recycle_counter_slot(
+            exec_frequencies,
+            exec_frequencies_touched,
+            values,
+            touched,
+            "exec_frequencies",
+        );
     }
 
     /// All three timestamp shadows, all-zero, sized to the given block counts
@@ -355,10 +447,23 @@ impl RvrPreflightBufferPool {
             program_log,
             memory_log,
             delta_memory_log,
-            chip_counts: _,
+            chip_counts,
+            chip_counts_touched,
             touched,
         } = raw_logs;
         let mut inner = self.lock();
+        let PoolInner {
+            chip_counts: pooled_chip_counts,
+            chip_counts_touched: pooled_chip_counts_touched,
+            ..
+        } = &mut *inner;
+        recycle_counter_slot(
+            pooled_chip_counts,
+            pooled_chip_counts_touched,
+            chip_counts,
+            chip_counts_touched,
+            "chip_counts",
+        );
         recycle_uninit_slot(&mut inner.program_log, into_uninit_spare(program_log));
         recycle_uninit_slot(&mut inner.memory_log, into_uninit_spare(memory_log));
         recycle_uninit_slot(
@@ -456,6 +561,50 @@ fn take_shadow_slot(slot: &mut Option<Vec<u32>>, len: usize) -> Vec<u32> {
         }
         _ => vec_zeroed_advised(len),
     }
+}
+
+fn take_zero_counter_slot(slot: &mut Option<Vec<u32>>, len: usize) -> Vec<u32> {
+    match slot.take() {
+        Some(mut spare) if spare.capacity() >= len => {
+            // SAFETY: every element in the allocation was initialized when it was first created;
+            // recycling only changes initialized u32 values back to zero.
+            unsafe { spare.set_len(len) };
+            if *POOL_DEBUG_CHECKS {
+                assert!(
+                    spare.iter().all(|&value| value == 0),
+                    "pooled counter table not scrubbed to zero"
+                );
+            }
+            spare
+        }
+        _ => vec_zeroed_advised(len),
+    }
+}
+
+fn recycle_counter_slot(
+    values_slot: &mut Option<Vec<u32>>,
+    touched_slot: &mut Option<Vec<MaybeUninit<u32>>>,
+    mut values: Vec<u32>,
+    touched: Vec<u32>,
+    label: &str,
+) {
+    let values_len = values.len();
+    for &index in &touched {
+        let slot = values
+            .get_mut(index as usize)
+            .unwrap_or_else(|| panic!("{label} touched index {index} outside length {values_len}"));
+        *slot = 0;
+    }
+    if *POOL_DEBUG_CHECKS {
+        assert!(
+            values.iter().all(|&value| value == 0),
+            "{label} first-touch list did not cover every nonzero counter"
+        );
+    }
+    if !matches!(values_slot, Some(existing) if existing.capacity() >= values.capacity()) {
+        *values_slot = Some(values);
+    }
+    recycle_uninit_slot(touched_slot, into_uninit_spare(touched));
 }
 
 fn push_record_spare(spares: &mut Vec<Vec<MaybeUninit<u8>>>, mut buf: Vec<MaybeUninit<u8>>) {

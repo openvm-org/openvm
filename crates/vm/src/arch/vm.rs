@@ -1283,6 +1283,10 @@ where
             to_state,
             exit_code,
             filtered_exec_frequencies,
+            #[cfg(feature = "rvr")]
+            rvr_exec_frequencies_touched: Vec::new(),
+            #[cfg(feature = "rvr")]
+            rvr_exec_frequencies_pool: None,
             touched_memory,
             touched_memory_on_device: false,
         };
