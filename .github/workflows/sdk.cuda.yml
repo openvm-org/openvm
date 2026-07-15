@@ -29,7 +29,7 @@ jobs:
   cuda-backend:
     name: Root prover, EVM, and Halo2
     runs-on:
-      - runs-on=${{ github.run_id }}/image=ubuntu24-gpu-x64/family=g7e.2xlarge+g6e.2xlarge/volume=80gb/spot=capacity-optimized/extras=s3-cache
+      - runs-on=${{ github.run_id }}/image=ubuntu24-gpu-x64/family=g7e.2xlarge+g6e.2xlarge+g7.4xlarge/volume=80gb/spot=capacity-optimized/extras=s3-cache
     steps:
       - uses: runs-on/action@v2
         with:
@@ -64,6 +64,14 @@ jobs:
           nvidia-smi -L
           nvcc --version
           echo "CUDA_ARCH=86,89,120" >> $GITHUB_ENV
+          GPU_MEMORY_MIB=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits | head -1)
+          if (( GPU_MEMORY_MIB > 40000 )); then
+            SDK_TEST_THREADS=2
+          else
+            SDK_TEST_THREADS=1
+          fi
+          echo "SDK_TEST_THREADS=$SDK_TEST_THREADS" >> $GITHUB_ENV
+          echo "Using $SDK_TEST_THREADS test thread(s) with ${GPU_MEMORY_MIB} MiB of GPU memory"
 
       - name: Setup CUDA environment
         run: |
@@ -87,7 +95,7 @@ jobs:
         working-directory: crates/sdk
         run: |
           "$GITHUB_WORKSPACE/ci/install-openvm-toolchain.sh"
-          cargo nextest run --cargo-profile=fast --features cuda,root-prover,evm-verify,halo2-gpu --test-threads=2
+          cargo nextest run --cargo-profile=fast --features cuda,root-prover,evm-verify,halo2-gpu --test-threads="$SDK_TEST_THREADS"
 
       - name: sccache stats
         if: always()
