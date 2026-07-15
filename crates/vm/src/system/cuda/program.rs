@@ -9,7 +9,25 @@ use openvm_stark_backend::prover::{
 };
 use p3_field::PrimeCharacteristicRing;
 
+use super::memory::DeviceInitialMemory;
 use crate::cuda_abi::program;
+
+/// Gap-filtered program execution frequencies reconstructed on device from
+/// the native preflight block-run stream.
+pub struct DeviceProgramFrequencies {
+    pub frequencies: DeviceBuffer<u32>,
+}
+
+/// Optional producer for the CUDA all-direct chronology route. The initial
+/// memory descriptors are passed through because the shared RVR predecode
+/// reconstructs memory and program chronology in one launch sequence.
+pub trait DeviceProgramFrequenciesProvider: Send + Sync {
+    fn take_device_program_frequencies(
+        &self,
+        device_ctx: &GpuDeviceCtx,
+        initial_memory: &[DeviceInitialMemory],
+    ) -> Option<DeviceProgramFrequencies>;
+}
 
 pub struct ProgramChipGPU {
     pub cached: Option<CommittedTraceData<GpuBackend>>,
@@ -133,6 +151,35 @@ impl ProgramChipGPU {
 
         let common_main = DeviceMatrix::new(Arc::new(buffer), height, 1);
 
+        AirProvingContext {
+            cached_mains: vec![cached],
+            common_main,
+            public_values: vec![],
+        }
+    }
+
+    pub(crate) fn generate_proving_ctx_from_device_frequencies(
+        &self,
+        frequencies: DeviceProgramFrequencies,
+    ) -> AirProvingContext<GpuBackend> {
+        let cached = self.cached.clone().expect("Cached program must be loaded");
+        let height = cached.height();
+        assert!(
+            frequencies.frequencies.len() <= height,
+            "device program frequencies len={} > cached trace height={height}",
+            frequencies.frequencies.len()
+        );
+        let buffer = DeviceBuffer::<F>::with_capacity_on(height, &self.device_ctx);
+        unsafe {
+            program::frequency_tracegen(
+                &buffer,
+                height,
+                &frequencies.frequencies,
+                self.device_ctx.stream.as_raw(),
+            )
+            .expect("Failed to generate device program-frequency trace");
+        }
+        let common_main = DeviceMatrix::new(Arc::new(buffer), height, 1);
         AirProvingContext {
             cached_mains: vec![cached],
             common_main,

@@ -109,6 +109,11 @@ pub struct SystemRecords<F> {
     /// `i` -> frequency of instruction in `i`th row of trace matrix. This requires filtering
     /// `program.instructions_and_debug_infos` to remove gaps.
     pub filtered_exec_frequencies: Vec<u32>,
+    /// Prover-only routing bit for the CUDA all-direct delta path. When set,
+    /// execution frequencies are reconstructed from native block runs by the
+    /// device decoder. The host vector remains a pooled lease and is empty
+    /// except when the fail-hard replay oracle retains a reference result.
+    pub program_frequencies_on_device: bool,
     /// RVR-only first-touch metadata and owning pool for the execution-frequency table. System
     /// trace generation consumes the frequencies, scrubs exactly these indices, and returns both
     /// allocations to the compiled executor's cross-segment pool.
@@ -385,6 +390,7 @@ where
             to_state,
             exit_code,
             filtered_exec_frequencies,
+            program_frequencies_on_device,
             #[cfg(feature = "rvr")]
             rvr_exec_frequencies_touched,
             #[cfg(feature = "rvr")]
@@ -395,6 +401,10 @@ where
         assert!(
             !touched_memory_on_device,
             "CPU system inventory cannot consume device-replayed touched memory"
+        );
+        assert!(
+            !program_frequencies_on_device,
+            "CPU system inventory cannot consume device-reconstructed program frequencies"
         );
 
         self.program_chip.filtered_exec_frequencies = filtered_exec_frequencies;

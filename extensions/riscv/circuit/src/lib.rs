@@ -299,6 +299,10 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64IGpuBuilder {
         chip_complex
             .system
             .set_device_touched_memory_provider(self.rvr_decode.clone());
+        #[cfg(feature = "rvr")]
+        chip_complex
+            .system
+            .set_device_program_frequencies_provider(self.rvr_decode.clone());
         let inventory = &mut chip_complex.inventory;
         let prover_ext = Rv64ImGpuProverExt {
             #[cfg(all(feature = "cuda", feature = "rvr"))]
@@ -563,6 +567,13 @@ pub fn generate_gpu_rvr_record_arenas(
         let memory_log = std::mem::take(&mut output.raw_logs.memory_log);
         let delta_memory_log = std::mem::take(&mut output.raw_logs.delta_memory_log);
         let program_log = std::mem::take(&mut output.raw_logs.program_log);
+        let program_runs = std::mem::take(&mut output.raw_logs.program_runs);
+        let device_program_references =
+            std::mem::take(&mut output.raw_logs.device_program_references);
+        let program_frequency_count = output.system_records.filtered_exec_frequencies.len();
+        let program_frequency_reference = device_replay_oracle
+            .then(|| output.system_records.filtered_exec_frequencies.clone())
+            .unwrap_or_default();
         let touched = std::mem::take(&mut output.raw_logs.touched);
         let device_aux_patches = std::mem::take(&mut output.raw_logs.device_aux_patches);
         let device_aux_references = std::mem::take(&mut output.raw_logs.device_aux_references);
@@ -577,6 +588,10 @@ pub fn generate_gpu_rvr_record_arenas(
             memory_log,
             delta_memory_log,
             program_log,
+            program_runs,
+            device_program_references,
+            program_frequency_count,
+            program_frequency_reference,
             touched,
             device_aux_patches,
             device_aux_references,

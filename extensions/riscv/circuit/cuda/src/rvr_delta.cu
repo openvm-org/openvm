@@ -76,6 +76,20 @@ struct ProgramLogEntry {
 };
 static_assert(sizeof(ProgramLogEntry) == 16, "program log size drift");
 
+struct ProgramRunEntry {
+    uint32_t first_pc;
+    uint32_t instruction_count;
+    uint32_t chronology_offset;
+    uint32_t complete;
+};
+static_assert(sizeof(ProgramRunEntry) == 16, "program run size drift");
+
+struct DeviceProgramEntry {
+    uint32_t pc;
+    uint32_t filtered_index;
+};
+static_assert(sizeof(DeviceProgramEntry) == 8, "device program entry size drift");
+
 static constexpr uint32_t PROGRAM_WRITE_COMPLETE = 1u;
 
 struct DeviceInitialMemory {
@@ -220,6 +234,54 @@ __device__ __forceinline__ bool operand_for_pc(
         return false;
     }
     return true;
+}
+
+__global__ void expand_program_runs(
+    ProgramRunEntry const *runs,
+    size_t run_count,
+    size_t instruction_count,
+    RvrOperandEntry const *table,
+    size_t operand_count,
+    uint32_t pc_base,
+    uint32_t *frequencies,
+    size_t frequency_count,
+    DeviceProgramEntry *chronology,
+    uint32_t *error
+) {
+    size_t run_index = blockIdx.x;
+    if (run_index >= run_count) return;
+    ProgramRunEntry run = runs[run_index];
+    size_t begin = run.chronology_offset;
+    size_t end = begin + run.instruction_count;
+    if (run.complete != 1 || run.instruction_count == 0 || end < begin ||
+        end > instruction_count) {
+        fail(error, 24);
+        return;
+    }
+    for (size_t local = threadIdx.x; local < run.instruction_count;
+         local += blockDim.x) {
+        uint64_t pc64 = uint64_t(run.first_pc) + uint64_t(local) * PC_STEP;
+        if (pc64 > UINT32_MAX || pc64 < pc_base ||
+            ((uint32_t(pc64) - pc_base) % PC_STEP) != 0) {
+            fail(error, 25);
+            continue;
+        }
+        size_t slot = (uint32_t(pc64) - pc_base) / PC_STEP;
+        if (slot >= operand_count) {
+            fail(error, 26);
+            continue;
+        }
+        uint32_t filtered_index = table[slot].filtered_index;
+        if (filtered_index >= frequency_count) {
+            fail(error, 27);
+            continue;
+        }
+        chronology[begin + local] = {
+            uint32_t(pc64),
+            filtered_index,
+        };
+        atomicAdd(&frequencies[filtered_index], 1u);
+    }
 }
 
 __device__ __forceinline__ uint32_t delta_memory_effective_address(
@@ -873,6 +935,12 @@ extern "C" int _rvr_delta_predecode(
     size_t memory_stride,
     DeviceBufferConstView<uint8_t> d_program_bytes,
     size_t program_count,
+    ProgramRunEntry const *d_program_runs,
+    size_t program_run_count,
+    size_t program_instruction_count,
+    uint32_t *d_program_frequencies,
+    size_t program_frequency_count,
+    DeviceProgramEntry *d_program_chronology,
     DeviceBufferConstView<uint8_t> d_initial_memory_bytes,
     size_t initial_memory_count,
     DeviceRawBufferConstView d_touched_output_bytes,
@@ -894,6 +962,9 @@ extern "C" int _rvr_delta_predecode(
          memory_stride != sizeof(DeltaMemoryLogEntry)) ||
         d_memory_bytes.size != memory_count * memory_stride ||
         d_program_bytes.size != program_count * sizeof(ProgramLogEntry) ||
+        (program_run_count != 0 && d_program_runs == nullptr) ||
+        (program_frequency_count != 0 && d_program_frequencies == nullptr) ||
+        (program_instruction_count != 0 && d_program_chronology == nullptr) ||
         d_initial_memory_bytes.size != initial_memory_count * sizeof(DeviceInitialMemory) ||
         d_touched_output_bytes.size <
             (delta_count * 3 + memory_count + program_count * 3) *
@@ -901,6 +972,32 @@ extern "C" int _rvr_delta_predecode(
         (memory_count != 0 &&
          (d_memory_prev_timestamps == nullptr || d_memory_prev_values == nullptr)) ||
         d_touched_count == nullptr) {
+        return int(cudaErrorInvalidValue);
+    }
+    if (program_frequency_count != 0) {
+        cudaError_t error = cudaMemsetAsync(
+            d_program_frequencies, 0, program_frequency_count * sizeof(uint32_t), stream
+        );
+        if (error != cudaSuccess) return int(error);
+    }
+    if (program_run_count != 0) {
+        dim3 block(256);
+        dim3 grid(program_run_count);
+        expand_program_runs<<<grid, block, 0, stream>>>(
+            d_program_runs,
+            program_run_count,
+            program_instruction_count,
+            d_operand_table,
+            operand_count,
+            pc_base,
+            d_program_frequencies,
+            program_frequency_count,
+            d_program_chronology,
+            d_error
+        );
+        cudaError_t error = cudaGetLastError();
+        if (error != cudaSuccess) return int(error);
+    } else if (program_instruction_count != 0) {
         return int(cudaErrorInvalidValue);
     }
     size_t event_count =

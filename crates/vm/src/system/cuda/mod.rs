@@ -14,7 +14,7 @@ use openvm_cuda_common::{copy::MemCopyD2H, stream::GpuDeviceCtx};
 use openvm_instructions::VM_DIGEST_WIDTH;
 use openvm_stark_backend::prover::{AirProvingContext, CommittedTraceData};
 use poseidon2::Poseidon2PeripheryChipGPU;
-use program::ProgramChipGPU;
+use program::{DeviceProgramFrequenciesProvider, ProgramChipGPU};
 
 pub mod boundary;
 pub mod connector;
@@ -30,6 +30,7 @@ pub struct SystemChipInventoryGPU {
     pub connector: VmConnectorChipGPU,
     pub memory_inventory: MemoryInventoryGPU,
     device_touched_memory: Option<Arc<dyn DeviceTouchedMemoryProvider>>,
+    device_program_frequencies: Option<Arc<dyn DeviceProgramFrequenciesProvider>>,
 }
 
 impl SystemChipInventoryGPU {
@@ -63,6 +64,7 @@ impl SystemChipInventoryGPU {
             connector: connector_chip,
             memory_inventory,
             device_touched_memory: None,
+            device_program_frequencies: None,
         }
     }
 
@@ -71,6 +73,13 @@ impl SystemChipInventoryGPU {
         provider: Arc<dyn DeviceTouchedMemoryProvider>,
     ) {
         self.device_touched_memory = Some(provider);
+    }
+
+    pub fn set_device_program_frequencies_provider(
+        &mut self,
+        provider: Arc<dyn DeviceProgramFrequenciesProvider>,
+    ) {
+        self.device_program_frequencies = Some(provider);
     }
 }
 
@@ -93,6 +102,7 @@ impl SystemChipComplex<DenseRecordArena, GpuBackend> for SystemChipInventoryGPU 
             to_state,
             exit_code,
             filtered_exec_frequencies,
+            program_frequencies_on_device,
             #[cfg(feature = "rvr")]
             rvr_exec_frequencies_touched,
             #[cfg(feature = "rvr")]
@@ -103,8 +113,24 @@ impl SystemChipComplex<DenseRecordArena, GpuBackend> for SystemChipInventoryGPU 
 
         let program_ctx = {
             let _span = tracing::info_span!("program_trace_gen").entered();
-            self.program
-                .generate_proving_ctx_from_frequencies(&filtered_exec_frequencies)
+            if program_frequencies_on_device {
+                let provider = self
+                    .device_program_frequencies
+                    .as_ref()
+                    .expect("device program-frequency route has no provider");
+                let initial_memory = self.memory_inventory.device_initial_memory();
+                let frequencies = provider
+                    .take_device_program_frequencies(
+                        &self.memory_inventory.device_ctx,
+                        &initial_memory,
+                    )
+                    .expect("device program-frequency route has no bound segment");
+                self.program
+                    .generate_proving_ctx_from_device_frequencies(frequencies)
+            } else {
+                self.program
+                    .generate_proving_ctx_from_frequencies(&filtered_exec_frequencies)
+            }
         };
         #[cfg(feature = "rvr")]
         if let Some(pool) = rvr_exec_frequencies_pool {

@@ -41,6 +41,15 @@ __global__ void program_cached_tracegen(
     }
 }
 
+__global__ void program_frequency_tracegen(
+    Fp *trace, size_t height, DeviceBufferConstView<uint32_t> frequencies
+) {
+    size_t idx = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+    if (idx < height) {
+        trace[idx] = idx < frequencies.len() ? Fp(frequencies[idx]) : Fp::zero();
+    }
+}
+
 extern "C" int _program_cached_tracegen(
     Fp *d_trace,
     size_t height,
@@ -84,5 +93,19 @@ extern "C" int _program_fill_frequencies(
     }
     auto [grid, block] = grid_stride_launch_params(height, 256, 2048);
     program_fill_frequencies<<<grid, block, 0, stream>>>(d_freqs, filtered_len, d_out, height);
+    return CHECK_KERNEL();
+}
+
+extern "C" int _program_frequency_tracegen(
+    Fp *d_trace,
+    size_t height,
+    DeviceBufferConstView<uint32_t> d_frequencies,
+    cudaStream_t stream
+) {
+    if (d_frequencies.len() > height) return int(cudaErrorInvalidValue);
+    auto [grid, block] = kernel_launch_params(height);
+    program_frequency_tracegen<<<grid, block, 0, stream>>>(
+        d_trace, height, d_frequencies
+    );
     return CHECK_KERNEL();
 }
