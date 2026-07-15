@@ -45,6 +45,8 @@ pub const PREFLIGHT_CHIP_RECORD_FLAG_VARIABLE_ROWS: u32 =
     rvr_openvm_ext_ffi_common::PREFLIGHT_CHIP_RECORD_FLAG_VARIABLE_ROWS;
 pub const PREFLIGHT_CHIP_RECORD_FLAG_VARIABLE_ROW_STRIDE: u32 =
     rvr_openvm_ext_ffi_common::PREFLIGHT_CHIP_RECORD_FLAG_VARIABLE_ROW_STRIDE;
+pub const PREFLIGHT_CHIP_RECORD_FLAG_COMPACT_RESIDUAL_MEMORY: u32 =
+    rvr_openvm_ext_ffi_common::PREFLIGHT_CHIP_RECORD_FLAG_COMPACT_RESIDUAL_MEMORY;
 /// R3: byte size of one compact AddSub inline record (see the C
 /// `PreflightAddSubRecord`). Used to size the per-chip inline-record buffers.
 pub const PREFLIGHT_ADDSUB_RECORD_SIZE: usize =
@@ -97,6 +99,23 @@ pub struct MemoryLogEntry {
     pub address: u64,
     pub value: u64,
     pub prev_value: u64,
+}
+
+/// Delta-only residual-memory wire. Previous timestamp/value are reconstructed
+/// by the chronological decoder; address is narrowed to OpenVM's u32 pointer
+/// domain. `complete == 1` and `_reserved == 0` are fail-closed ABI guards.
+/// CPU, compact, partial-direct, and non-delta routes retain `MemoryLogEntry`.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct DeltaMemoryLogEntry {
+    pub timestamp: u32,
+    pub address: u32,
+    pub value: u64,
+    pub kind: u8,
+    pub addr_space: u8,
+    pub width: u8,
+    pub complete: u8,
+    pub _reserved: u32,
 }
 
 /// C-compatible preflight touched-block entry.
@@ -284,6 +303,15 @@ impl PreflightTracerData {
         self.delta_records = delta_records;
     }
 
+    /// Reuse the tracer's memory pointer/cursor for the delta-only compact
+    /// residual schema. Generated C selects this layout only when the delta
+    /// target also carries `COMPACT_RESIDUAL_MEMORY`.
+    pub fn set_delta_memory_log(&mut self, memory_log: &mut [MaybeUninit<DeltaMemoryLogEntry>]) {
+        self.memory_log = memory_log.as_mut_ptr().cast();
+        self.memory_log_len = 0;
+        self.memory_log_cap = memory_log.len() as u32;
+    }
+
     /// Attach the per-address-space timestamp shadows, the public-values base
     /// pointer, and the touched-block buffer. The shadow slices must be sized to
     /// each address space's block count and zero-initialized.
@@ -343,6 +371,9 @@ pub type PreflightTracer = TracerPtr<PreflightTracerData>;
 pub struct PreflightRawLogs {
     pub program_log: Vec<ProgramLogEntry>,
     pub memory_log: Vec<MemoryLogEntry>,
+    /// Populated only by the all-direct CUDA delta route. Mutually exclusive
+    /// with `memory_log`; all other callers keep the full host schema.
+    pub delta_memory_log: Vec<DeltaMemoryLogEntry>,
     pub chip_counts: Vec<u32>,
     /// First-touch seeds retained until delta replay has completed.
     pub touched: Vec<TouchedBlock>,
@@ -424,12 +455,14 @@ impl RvrDeltaRecords {
         &self,
         program_log: Vec<ProgramLogEntry>,
         memory_log: Vec<MemoryLogEntry>,
+        delta_memory_log: Vec<DeltaMemoryLogEntry>,
         touched: Vec<TouchedBlock>,
     ) {
         self.pool.recycle_segment_buffers(
             PreflightRawLogs {
                 program_log,
                 memory_log,
+                delta_memory_log,
                 chip_counts: Vec::new(),
                 touched,
             },
@@ -663,6 +696,7 @@ where
             None,
             None,
             true,
+            false,
         )
     }
 
@@ -686,6 +720,7 @@ where
             Some(record_capacity_rows),
             None,
             true,
+            false,
         )
     }
 
@@ -713,6 +748,34 @@ where
             Some(record_capacity_rows),
             Some(arena_targets),
             true,
+            false,
+        )
+    }
+
+    /// Test-only mirror of the proven all-direct CUDA route: omit host access
+    /// aux so generated C emits the compact residual-memory schema into the
+    /// arena-native execution fixture.
+    #[cfg(feature = "test-utils")]
+    #[doc(hidden)]
+    pub fn execute_preflight_from_state_with_compact_delta_memory_for_test(
+        &self,
+        state: VmState<F, GuestMemory>,
+        num_insns: Option<u64>,
+        record_capacity_rows: &[u32],
+        arena_targets: &BTreeMap<usize, ChipRecordBuf>,
+    ) -> Result<RvrPreflightOutput<F>, ExecutionError> {
+        execute_rvr_preflight(
+            &self.exe,
+            &self.extensions,
+            &self.compiled,
+            self.chip_counts_len,
+            &self.pool,
+            state,
+            num_insns,
+            Some(record_capacity_rows),
+            Some(arena_targets),
+            false,
+            true,
         )
     }
 }
@@ -736,6 +799,7 @@ pub(crate) fn execute_rvr_preflight<F>(
     record_capacity_rows: Option<&[u32]>,
     arena_targets: Option<&BTreeMap<usize, ChipRecordBuf>>,
     build_access_aux: bool,
+    compact_delta_memory: bool,
 ) -> Result<RvrPreflightOutput<F>, ExecutionError>
 where
     F: PrimeField32,
@@ -743,6 +807,10 @@ where
     assert!(
         arena_targets.is_none() || (num_insns.is_some() && record_capacity_rows.is_some()),
         "arena-native targets require the single-shot proving path"
+    );
+    assert!(
+        !compact_delta_memory || (compiled.inline_records().delta_records && !build_access_aux),
+        "compact residual memory requires a fully-direct delta consumer"
     );
     // A fused-compiled library has NO compact fallback for its arena-native
     // airs: executing without a target would write full records at the
@@ -812,6 +880,10 @@ where
     } else {
         initial_memory_log_cap(program_log_cap)
     };
+    // The cached proving route selects this only after the builder advertises
+    // a fully-direct device delta decoder. Access-aux omission alone is not a
+    // discriminator: CPU all-custom arena routes may also safely omit it and
+    // must retain the established 40-byte MemoryLogEntry schema.
     let mut state = Some(state);
 
     loop {
@@ -833,7 +905,16 @@ where
         // hundreds of MB of fresh mappings per segment was the other measured
         // per-call cost.
         let mut program_log = pool.take_program_log(program_log_cap);
-        let mut memory_log = pool.take_memory_log(memory_log_cap);
+        let mut memory_log = if compact_delta_memory {
+            Vec::new()
+        } else {
+            pool.take_memory_log(memory_log_cap)
+        };
+        let mut delta_memory_log = if compact_delta_memory {
+            pool.take_delta_memory_log(memory_log_cap)
+        } else {
+            Vec::new()
+        };
         let logs_taken = std::time::Instant::now();
         let mut chip_counts = vec![0u32; chip_counts_len.max(1)];
         let mut exec_frequencies = vec![0u32; exe.program.num_defined_instructions()];
@@ -933,7 +1014,12 @@ where
                 cap: u32::try_from(delta_capacity).expect("delta capacity exceeds u32"),
                 stride: PREFLIGHT_DELTA_RECORD_SIZE as u32,
                 core_off: 0,
-                flags: PREFLIGHT_CHIP_RECORD_FLAG_DIRECT_FINAL,
+                flags: PREFLIGHT_CHIP_RECORD_FLAG_DIRECT_FINAL
+                    | if compact_delta_memory {
+                        PREFLIGHT_CHIP_RECORD_FLAG_COMPACT_RESIDUAL_MEMORY
+                    } else {
+                        0
+                    },
             };
         }
         let delta_ready = std::time::Instant::now();
@@ -964,6 +1050,9 @@ where
 
         let mut tracer =
             PreflightTracerData::new_uninit(&mut program_log, &mut memory_log, &mut chip_counts);
+        if compact_delta_memory {
+            tracer.set_delta_memory_log(&mut delta_memory_log);
+        }
         tracer.set_shadows(
             &mut shadow_register,
             &mut shadow_memory,
@@ -1069,7 +1158,7 @@ where
             // height-sized and still fit. The shadows are dirty and the
             // touched list that would scrub them may itself have overflowed,
             // so they drop here and the retry takes fresh zeroed ones.
-            pool.recycle_raw_uninit(program_log, memory_log, touched);
+            pool.recycle_raw_uninit(program_log, memory_log, delta_memory_log, touched);
             for buf in record_bufs {
                 pool.recycle_record_buf(buf);
             }
@@ -1080,7 +1169,16 @@ where
         // log (its append helpers bounds-check against the caps, and the
         // overflow check above rejected any run whose counters passed them).
         let program_log = unsafe { assume_init_prefix(program_log, program_len) };
-        let memory_log = unsafe { assume_init_prefix(memory_log, memory_len) };
+        let memory_log = if compact_delta_memory {
+            Vec::new()
+        } else {
+            unsafe { assume_init_prefix(memory_log, memory_len) }
+        };
+        let delta_memory_log = if compact_delta_memory {
+            unsafe { assume_init_prefix(delta_memory_log, memory_len) }
+        } else {
+            Vec::new()
+        };
         let touched = unsafe { assume_init_prefix(touched, touched_len) };
         let logs_ready = std::time::Instant::now();
 
@@ -1231,6 +1329,7 @@ where
             raw_logs: PreflightRawLogs {
                 program_log,
                 memory_log,
+                delta_memory_log,
                 chip_counts,
                 touched,
             },

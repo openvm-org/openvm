@@ -88,7 +88,7 @@ pub struct EmitContext {
     /// preflight (`ValueTrace`) mode.
     inline_records: bool,
     /// Stage-2 chronological delta mode. Every routed instruction writes one
-    /// 32-byte record into a block-reserved span instead of a per-AIR wire.
+    /// 24-byte record into a block-reserved span instead of a per-AIR wire.
     delta_records: bool,
     delta_batch: Option<(String, u32)>,
     /// Chip (AIR) index of the instruction currently being emitted, or
@@ -218,14 +218,14 @@ impl EmitContext {
         self.inline_records && self.current_chip_idx != u32::MAX
     }
 
-    fn emit_delta3(&mut self, pc: &str, fromts: &str, v0: &str, v1: &str, v2: &str) {
+    fn emit_delta2(&mut self, pc: &str, fromts: &str, v1: &str, v2: &str) {
         let (base, index) = self
             .delta_batch
             .as_ref()
             .map(|(base, index)| (base.clone(), *index))
             .expect("delta emission requires a block-reserved span");
         self.write_line(&format!(
-            "preflight_write_delta3({base} ? &{base}[{index}u] : NULL, {pc}, {fromts}, {v0}, {v1}, {v2});"
+            "preflight_write_delta2({base} ? &{base}[{index}u] : NULL, {pc}, {fromts}, {v1}, {v2});"
         ));
         self.delta_batch.as_mut().unwrap().1 += 1;
     }
@@ -490,7 +490,7 @@ impl EmitContext {
                 ));
             }
         } else if self.delta_records {
-            self.emit_delta3(&pc, &fromts, &res, &v1, &v2);
+            self.emit_delta2(&pc, &fromts, &v1, &v2);
         } else {
             let rdprev = rdprev.as_deref().expect("compact record requires old rd");
             self.write_line(&format!(
@@ -792,7 +792,7 @@ impl EmitContext {
                 ));
             }
         } else if self.delta_records {
-            self.emit_delta3(&pc, &fromts, &res, &v1, &vimm);
+            self.emit_delta2(&pc, &fromts, &v1, &vimm);
         } else {
             let rdprev = rdprev.as_deref().expect("compact record requires old rd");
             self.write_line(&format!(
@@ -841,7 +841,7 @@ impl EmitContext {
                         )),
                     );
                 } else if self.delta_records {
-                    self.emit_delta3(&pc, &fromts, &tmp, "0ull", "0ull");
+                    self.emit_delta2(&pc, &fromts, "0ull", "0ull");
                 } else {
                     let rdprev = rdprev.as_deref().expect("compact record requires old rd");
                     self.write_line(&format!(
@@ -854,7 +854,7 @@ impl EmitContext {
                 if let Some(baked) = arena {
                     self.emit_arena_wr1_stores(baked, &pc, &fromts, None);
                 } else if self.delta_records {
-                    self.emit_delta3(&pc, &fromts, "0ull", "0ull", "0ull");
+                    self.emit_delta2(&pc, &fromts, "0ull", "0ull");
                 } else {
                     self.write_line(&format!(
                         "preflight_emit_wr1(state, {chip}u, {pc}, {fromts}, 0u, 0ull);"
@@ -999,7 +999,7 @@ impl EmitContext {
                 self.write_line("}");
             }
             None if self.delta_records => {
-                self.emit_delta3(&pc, &fromts, "0ull", &v1, &v2);
+                self.emit_delta2(&pc, &fromts, &v1, &v2);
             }
             None => {
                 self.write_line(&format!(
@@ -1055,7 +1055,7 @@ impl EmitContext {
                         )),
                     );
                 } else if self.delta_records {
-                    self.emit_delta3(&pc, &fromts, &tmp, &v1, "0ull");
+                    self.emit_delta2(&pc, &fromts, &v1, "0ull");
                 } else {
                     let rdprev = rdprev.as_deref().expect("compact record requires old rd");
                     self.write_line(&format!(
@@ -1069,7 +1069,7 @@ impl EmitContext {
                 if let Some(baked) = arena {
                     self.emit_arena_rw1_stores(baked, &pc, &fromts, &v1, &p1, None);
                 } else if self.delta_records {
-                    self.emit_delta3(&pc, &fromts, "0ull", &v1, "0ull");
+                    self.emit_delta2(&pc, &fromts, &v1, "0ull");
                 } else {
                     self.write_line(&format!(
                         "preflight_emit_rw1(state, {chip}u, {pc}, {fromts}, {p1}, 0u, {v1}, \
@@ -1213,7 +1213,7 @@ impl EmitContext {
                     geom, baked, &pc, &fromts, &v1, &p1, &p2, &addr, &block, None, None,
                 );
             } else if self.delta_records {
-                self.emit_delta3(&pc, &fromts, "0ull", &v1, &block);
+                self.emit_delta2(&pc, &fromts, &v1, &block);
             } else {
                 self.write_line(&format!(
                     "preflight_emit_alu3(state, {chip}u, {pc}, {fromts}, {p1}, {p2}, 0u, 0ull, \
@@ -1259,7 +1259,7 @@ impl EmitContext {
                     Some(rdprev.as_deref().expect("arena record requires old rd")),
                 );
             } else if self.delta_records {
-                self.emit_delta3(&pc, &fromts, &format!("(uint64_t){val}"), &v1, &block);
+                self.emit_delta2(&pc, &fromts, &v1, &block);
             } else {
                 let rdprev = rdprev.as_deref().expect("compact record requires old rd");
                 self.write_line(&format!(
@@ -1333,7 +1333,7 @@ impl EmitContext {
                 Some(prev.as_deref().expect("arena record requires old block")),
             );
         } else if self.delta_records {
-            self.emit_delta3(&pc, &fromts, "0ull", &v1, &v2);
+            self.emit_delta2(&pc, &fromts, &v1, &v2);
         } else {
             let prev = prev.as_deref().expect("compact record requires old block");
             self.write_line(&format!(
@@ -1423,7 +1423,7 @@ impl EmitContext {
                 Some(prev.as_deref().expect("arena record requires old block")),
             );
         } else if self.delta_records {
-            self.emit_delta3(&pc, &fromts, "0ull", &ptr, &src);
+            self.emit_delta2(&pc, &fromts, &ptr, &src);
         } else {
             let prev = prev.as_deref().expect("compact record requires old block");
             self.write_line(&format!(

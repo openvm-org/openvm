@@ -7,9 +7,9 @@ use openvm_instructions::VM_DIGEST_WIDTH;
 use rvr_openvm_ext_ffi_common as ffi;
 
 use crate::arch::rvr::preflight::{
-    ChipRecordBuf, MemoryLogEntry, PreflightTracerData, ProgramLogEntry, TouchedBlock,
-    PREFLIGHT_INITIAL_TIMESTAMP, PREFLIGHT_MEMORY_KIND_READ, PREFLIGHT_MEMORY_KIND_TOUCH,
-    PREFLIGHT_MEMORY_KIND_WRITE, PREFLIGHT_TRACER_KIND,
+    ChipRecordBuf, DeltaMemoryLogEntry, MemoryLogEntry, PreflightTracerData, ProgramLogEntry,
+    TouchedBlock, PREFLIGHT_INITIAL_TIMESTAMP, PREFLIGHT_MEMORY_KIND_READ,
+    PREFLIGHT_MEMORY_KIND_TOUCH, PREFLIGHT_MEMORY_KIND_WRITE, PREFLIGHT_TRACER_KIND,
 };
 
 #[cfg(any(feature = "test-utils", feature = "cuda"))]
@@ -40,6 +40,18 @@ const _: () = assert!(offset_of!(MemoryLogEntry, _pad0) == 11);
 const _: () = assert!(offset_of!(MemoryLogEntry, address) == 16);
 const _: () = assert!(offset_of!(MemoryLogEntry, value) == 24);
 const _: () = assert!(offset_of!(MemoryLogEntry, prev_value) == 32);
+const _: () =
+    assert!(size_of::<DeltaMemoryLogEntry>() == ffi::PREFLIGHT_DELTA_MEMORY_LOG_ENTRY_SIZE);
+const _: () =
+    assert!(align_of::<DeltaMemoryLogEntry>() == ffi::PREFLIGHT_DELTA_MEMORY_LOG_ENTRY_ALIGN);
+const _: () = assert!(offset_of!(DeltaMemoryLogEntry, timestamp) == 0);
+const _: () = assert!(offset_of!(DeltaMemoryLogEntry, address) == 4);
+const _: () = assert!(offset_of!(DeltaMemoryLogEntry, value) == 8);
+const _: () = assert!(offset_of!(DeltaMemoryLogEntry, kind) == 16);
+const _: () = assert!(offset_of!(DeltaMemoryLogEntry, addr_space) == 17);
+const _: () = assert!(offset_of!(DeltaMemoryLogEntry, width) == 18);
+const _: () = assert!(offset_of!(DeltaMemoryLogEntry, complete) == 19);
+const _: () = assert!(offset_of!(DeltaMemoryLogEntry, _reserved) == 20);
 const _: () = assert!(size_of::<TouchedBlock>() == ffi::PREFLIGHT_TOUCHED_BLOCK_SIZE);
 const _: () = assert!(align_of::<TouchedBlock>() == ffi::PREFLIGHT_TOUCHED_BLOCK_ALIGN);
 const _: () = assert!(offset_of!(TouchedBlock, addr_space) == 0);
