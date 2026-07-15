@@ -26,10 +26,15 @@ use crate::adapters::U16_BITS;
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection, Debug)]
 pub struct AddICoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+    /// Result limbs.
     pub rd: [T; NUM_LIMBS],
+    /// Source operand limbs.
     pub rs1: [T; NUM_LIMBS],
+    /// Low 11 bits (`imm[10:0]`) of the signed 12-bit immediate.
     pub imm_low11: T,
+    /// Sign bit (`imm[11]`), used to sign-extend the immediate across all limbs.
     pub imm_sign: T,
+    /// Whether this row contains an instruction.
     pub is_valid: T,
 }
 
