@@ -10,7 +10,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
-use openvm_riscv_transpiler::ShiftImmOpcode;
+use openvm_riscv_transpiler::{ShiftImmOpcode, ShiftWImmOpcode};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
@@ -44,6 +44,7 @@ pub struct ShiftRightArithmeticImmCoreCols<T, const NUM_LIMBS: usize, const LIMB
 pub struct ShiftRightArithmeticImmCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub range_bus: VariableRangeCheckerBus,
     pub offset: usize,
+    pub local_opcode: usize,
 }
 
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
@@ -143,10 +144,8 @@ where
         }
 
         let immediate = limb_shift * AB::Expr::from_usize(LIMB_BITS) + bit_shift;
-        let expected_opcode = VmCoreAir::<AB, I>::expr_to_global_expr(
-            self,
-            AB::Expr::from_u8(ShiftImmOpcode::SRAI as u8),
-        );
+        let expected_opcode =
+            VmCoreAir::<AB, I>::expr_to_global_expr(self, AB::Expr::from_usize(self.local_opcode));
 
         AdapterAirContext {
             to_pc: None,
@@ -177,6 +176,7 @@ pub struct ShiftRightArithmeticImmCoreRecord<const NUM_LIMBS: usize, const LIMB_
 pub struct ShiftRightArithmeticImmExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub offset: usize,
+    pub local_opcode: usize,
 }
 
 #[derive(Clone, derive_new::new)]
@@ -205,7 +205,11 @@ where
     >,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {
-        format!("{:?}", ShiftImmOpcode::from_usize(opcode - self.offset))
+        if NUM_LIMBS * LIMB_BITS == 32 {
+            format!("{:?}", ShiftWImmOpcode::from_usize(opcode - self.offset))
+        } else {
+            format!("{:?}", ShiftImmOpcode::from_usize(opcode - self.offset))
+        }
     }
 
     fn execute(
@@ -214,18 +218,10 @@ where
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError> {
         let Instruction { opcode, c, .. } = instruction;
-        debug_assert_eq!(
-            ShiftImmOpcode::from_usize(opcode.local_opcode_idx(self.offset)),
-            ShiftImmOpcode::SRAI
-        );
+        debug_assert_eq!(opcode.local_opcode_idx(self.offset), self.local_opcode);
 
         let shamt = c.as_canonical_u32();
-        if shamt >= (NUM_LIMBS * LIMB_BITS) as u32 {
-            return Err(ExecutionError::Fail {
-                pc: *state.pc,
-                msg: "SRAI shift amount out of range",
-            });
-        }
+        debug_assert!(shamt < (NUM_LIMBS * LIMB_BITS) as u32);
 
         let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
         A::start(*state.pc, state.memory, &mut adapter_record);

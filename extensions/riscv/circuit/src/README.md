@@ -51,7 +51,10 @@ This circuit proves the following:
 - The immediate supplied by the core is bound to the instruction on the execution bus
 - The instruction is correctly fetched from the program ROM at address `from_pc` and the program counter is set to `from_pc + 4`
 
-#### 3. [ALU W u16 adapter](./adapters/alu_w_u16.rs)
+#### 3. ALU W adapters
+
+- [Register operands](./adapters/alu_w_reg_u16.rs)
+- [Immediate operand](./adapters/alu_w_imm_u16.rs)
 
 Given
 

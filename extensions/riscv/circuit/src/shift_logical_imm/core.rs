@@ -10,7 +10,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
-use openvm_riscv_transpiler::{ShiftImmOpcode, ShiftOpcode};
+use openvm_riscv_transpiler::{ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
@@ -48,6 +48,8 @@ pub struct ShiftLogicalImmCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: u
 pub struct ShiftLogicalImmCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub range_bus: VariableRangeCheckerBus,
     pub offset: usize,
+    pub sll_local_opcode: usize,
+    pub srl_local_opcode: usize,
 }
 
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
@@ -190,12 +192,12 @@ where
         let expected_opcode = VmCoreAir::<AB, I>::expr_to_global_expr(
             self,
             [
-                (opcode_sll_flag, ShiftImmOpcode::SLLI),
-                (opcode_srl_flag, ShiftImmOpcode::SRLI),
+                (opcode_sll_flag, self.sll_local_opcode),
+                (opcode_srl_flag, self.srl_local_opcode),
             ]
             .iter()
             .fold(AB::Expr::ZERO, |acc, (flag, opcode)| {
-                acc + flag.clone() * AB::Expr::from_u8(*opcode as u8)
+                acc + flag.clone() * AB::Expr::from_usize(*opcode)
             }),
         );
 
@@ -229,12 +231,15 @@ pub struct ShiftLogicalImmCoreRecord<const NUM_LIMBS: usize, const LIMB_BITS: us
 pub struct ShiftLogicalImmExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub offset: usize,
+    pub sll_local_opcode: usize,
+    pub srl_local_opcode: usize,
 }
 
 #[derive(Clone, derive_new::new)]
 pub struct ShiftLogicalImmFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
+    pub sll_local_opcode: usize,
 }
 
 impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> PreflightExecutor<F, RA>
@@ -257,7 +262,11 @@ where
     >,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {
-        format!("{:?}", ShiftImmOpcode::from_usize(opcode - self.offset))
+        if NUM_LIMBS * LIMB_BITS == 32 {
+            format!("{:?}", ShiftWImmOpcode::from_usize(opcode - self.offset))
+        } else {
+            format!("{:?}", ShiftImmOpcode::from_usize(opcode - self.offset))
+        }
     }
 
     fn execute(
@@ -267,8 +276,12 @@ where
     ) -> Result<(), ExecutionError> {
         let Instruction { opcode, c, .. } = instruction;
 
-        let local_opcode = ShiftImmOpcode::from_usize(opcode.local_opcode_idx(self.offset));
-        debug_assert_ne!(local_opcode, ShiftImmOpcode::SRAI);
+        let local_opcode = opcode.local_opcode_idx(self.offset);
+        debug_assert!(
+            local_opcode == self.sll_local_opcode || local_opcode == self.srl_local_opcode
+        );
+        let shamt = c.as_canonical_u32();
+        debug_assert!(shamt < (NUM_LIMBS * LIMB_BITS) as u32);
 
         let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
 
@@ -279,12 +292,10 @@ where
             .read(state.memory, instruction, &mut adapter_record)
             .into();
 
-        let shamt = c.as_canonical_u32();
-        debug_assert!(shamt < (NUM_LIMBS * LIMB_BITS) as u32);
         core_record.shamt = shamt as u8;
         core_record.local_opcode = local_opcode as u8;
 
-        let reg_opcode = if local_opcode == ShiftImmOpcode::SLLI {
+        let reg_opcode = if local_opcode == self.sll_local_opcode {
             ShiftOpcode::SLL
         } else {
             ShiftOpcode::SRL
@@ -318,7 +329,7 @@ where
         let record: &ShiftLogicalImmCoreRecord<NUM_LIMBS, LIMB_BITS> =
             unsafe { get_record_from_slice(&mut core_row, ()) };
 
-        let is_sll = record.local_opcode == ShiftImmOpcode::SLLI as u8;
+        let is_sll = record.local_opcode as usize == self.sll_local_opcode;
         let reg_opcode = if is_sll {
             ShiftOpcode::SLL
         } else {
