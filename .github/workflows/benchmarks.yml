@@ -60,7 +60,7 @@ jobs:
     name: Select benchmarks
     if: ${{ github.event.action != 'labeled' || github.event.label.name == 'run-benchmark' || github.event.label.name == 'run-benchmark-e2e' }}
     runs-on:
-      - runs-on=${{ github.run_id }}/family=c8i-flex.2xlarge+c8i.2xlarge+c8a.2xlarge+c7i.2xlarge+c7a.2xlarge/image=ubuntu24-full-x64
+      - runs-on=${{ github.run_id }}/family=c8i-flex.2xlarge+c8i.2xlarge+c8a.2xlarge+c7i.2xlarge+c7a.2xlarge/image=ubuntu24-full-x64/volume=40gb
     outputs:
       matrix: ${{ steps.create-matrix.outputs.matrix }}
     steps:
@@ -133,7 +133,7 @@ jobs:
     name: Report results
     needs: [create-matrix, benchmark]
     runs-on:
-      - runs-on=${{ github.run_id }}/family=c8i-flex.2xlarge+c8i.2xlarge+c8a.2xlarge+c7i.2xlarge+c7a.2xlarge/image=ubuntu24-full-x64/extras=s3-cache
+      - runs-on=${{ github.run_id }}/family=c8i-flex.2xlarge+c8i.2xlarge+c8a.2xlarge+c7i.2xlarge+c7a.2xlarge/image=ubuntu24-full-x64/volume=40gb/extras=s3-cache
     steps:
       - uses: runs-on/action@v2
         with:

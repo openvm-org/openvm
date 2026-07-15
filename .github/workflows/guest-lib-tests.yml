@@ -79,7 +79,7 @@ jobs:
     uses: ./.github/workflows/guest-lib-tests.group.yml
     with:
       runner_id: cpu-${{ strategy.job-index }}
-      machine_type: family=c8i-flex.16xlarge+c8i.16xlarge+c8a.16xlarge+c7i.16xlarge+c7a.16xlarge/image=ubuntu24-full-x64
+      machine_type: family=c8i-flex.16xlarge+c8i.16xlarge+c8a.16xlarge+c7i.16xlarge+c7a.16xlarge/image=ubuntu24-full-x64/volume=80gb
       crates: ${{ matrix.crate }}
       mode: ${{ matrix.mode }}
     secrets: inherit

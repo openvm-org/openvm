@@ -46,13 +46,13 @@ jobs:
           # TODO(aot): restore `features: "aot"`
           - {
               name: "runtime (default)",
-              labels: "family=c8i-flex.16xlarge+c8i.16xlarge+c8a.16xlarge+c7i.16xlarge+c7a.16xlarge/image=ubuntu24-full-x64",
+              labels: "family=c8i-flex.16xlarge+c8i.16xlarge+c8a.16xlarge+c7i.16xlarge+c7a.16xlarge/image=ubuntu24-full-x64/volume=80gb",
               image: "ubuntu24-full-x64",
               features: "",
             }
           - {
               name: "runtime (RVR)",
-              labels: "family=c8i-flex.16xlarge+c8i.16xlarge+c8a.16xlarge+c7i.16xlarge+c7a.16xlarge/image=ubuntu24-full-x64",
+              labels: "family=c8i-flex.16xlarge+c8i.16xlarge+c8a.16xlarge+c7i.16xlarge+c7a.16xlarge/image=ubuntu24-full-x64/volume=80gb",
               image: "ubuntu24-full-x64",
               features: "rvr",
             }

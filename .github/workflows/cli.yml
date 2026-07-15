@@ -141,7 +141,7 @@ jobs:
   app-level-cli-none-elf:
     name: riscv64im-unknown-none-elf smoke test
     runs-on:
-      - runs-on=${{ github.run_id }}/disk=large/family=c8i-flex.2xlarge+c8i.2xlarge+c8a.2xlarge+c7i.2xlarge+c7a.2xlarge/image=ubuntu24-full-x64/extras=s3-cache
+      - runs-on=${{ github.run_id }}/volume=80gb/family=c8i-flex.2xlarge+c8i.2xlarge+c8a.2xlarge+c7i.2xlarge+c7a.2xlarge/image=ubuntu24-full-x64/extras=s3-cache
     env:
       OPENVM_RUST_TOOLCHAIN: nightly-2026-01-18
       OPENVM_RUSTC_TARGET: riscv64im-unknown-none-elf

@@ -25,7 +25,7 @@ jobs:
     concurrency:
       group: ${{ github.workflow_ref }}-docs-${{ github.ref }}
     runs-on:
-      - runs-on=${{ github.run_id }}/family=c8i-flex.2xlarge+c8i.2xlarge+c8a.2xlarge+c7i.2xlarge+c7a.2xlarge/image=ubuntu24-full-x64
+      - runs-on=${{ github.run_id }}/family=c8i-flex.2xlarge+c8i.2xlarge+c8a.2xlarge+c7i.2xlarge+c7a.2xlarge/image=ubuntu24-full-x64/volume=40gb
     steps:
       - uses: actions/checkout@v5
       - name: Check the tags
