@@ -398,7 +398,6 @@ where
             AddSubFiller::new(
                 Rv64VecHeapU16AdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
                 range_checker.clone(),
-                Rv64BaseAlu256Opcode::CLASS_OFFSET,
             ),
             mem_helper.clone(),
         );
