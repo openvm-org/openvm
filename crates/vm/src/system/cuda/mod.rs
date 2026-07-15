@@ -93,14 +93,23 @@ impl SystemChipComplex<DenseRecordArena, GpuBackend> for SystemChipInventoryGPU 
             to_state,
             exit_code,
             filtered_exec_frequencies,
+            #[cfg(feature = "rvr")]
+            rvr_exec_frequencies_touched,
+            #[cfg(feature = "rvr")]
+            rvr_exec_frequencies_pool,
             touched_memory,
             touched_memory_on_device,
         } = system_records;
 
         let program_ctx = {
             let _span = tracing::info_span!("program_trace_gen").entered();
-            self.program.generate_proving_ctx(filtered_exec_frequencies)
+            self.program
+                .generate_proving_ctx_from_frequencies(&filtered_exec_frequencies)
         };
+        #[cfg(feature = "rvr")]
+        if let Some(pool) = rvr_exec_frequencies_pool {
+            pool.recycle_exec_frequencies(filtered_exec_frequencies, rvr_exec_frequencies_touched);
+        }
 
         self.connector.cpu_chip.begin(from_state);
         self.connector.cpu_chip.end(to_state, exit_code);

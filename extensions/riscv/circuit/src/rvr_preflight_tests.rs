@@ -2821,6 +2821,54 @@ fn rvr_preflight_loop_fixture_matches_interpreter() {
     assert_eq!(output.instret, checkpoint_loop_dyn_insns(16, 0, 5));
 }
 
+/// The generated C records each counter's first 0→nonzero transition. Recycling must scrub
+/// exactly those slots before the same compiled instance executes its next segment; otherwise
+/// counts silently accumulate and corrupt both AIR heights and the program-frequency trace.
+#[test]
+fn rvr_preflight_pooled_counters_reset_between_segments() {
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
+    let exe = checkpoint_loop_exe(16, 0, 5);
+    let (rvr_vm, _) = VirtualMachine::new_with_keygen(
+        test_cpu_engine(),
+        Rv64ImCpuBuilder,
+        Rv64ImConfig::default(),
+    )
+    .expect("vm init");
+    let RvrPreflightRoute::Rvr(instance) = rvr_vm
+        .preflight_routed_instance(&exe)
+        .expect("routed preflight instance")
+    else {
+        panic!("program must route to RVR preflight")
+    };
+
+    let first = instance
+        .execute_preflight_from_state(instance.create_initial_state(Streams::default()), None)
+        .expect("first pooled-counter execution");
+    let expected_chip_counts = first.raw_logs.chip_counts.clone();
+    let expected_frequencies = first.system_records.filtered_exec_frequencies.clone();
+    assert!(expected_chip_counts.iter().any(|&count| count != 0));
+    assert!(expected_frequencies.iter().any(|&count| count != 0));
+    assert_eq!(
+        first.raw_logs.chip_counts_touched.len(),
+        expected_chip_counts
+            .iter()
+            .filter(|&&count| count != 0)
+            .count(),
+        "chip first-touch list must cover every and only nonzero counter"
+    );
+    instance.recycle_output(first);
+
+    let second = instance
+        .execute_preflight_from_state(instance.create_initial_state(Streams::default()), None)
+        .expect("second pooled-counter execution");
+    assert_eq!(second.raw_logs.chip_counts, expected_chip_counts);
+    assert_eq!(
+        second.system_records.filtered_exec_frequencies,
+        expected_frequencies
+    );
+    instance.recycle_output(second);
+}
+
 /// Phase-3 <30 ms checkpoint harness: preflight a large RV64IM-dominated
 /// segment (~8.2M retired instructions, ~8.2M inline AddSub records) on the
 /// single-shot proving path and report the wall time against the r4

@@ -46,7 +46,9 @@ pub const PREFLIGHT_DELTA_MEMORY_LOG_ENTRY_ALIGN: usize = 8;
 // R3: the tracer gained a `chip_records` pointer for inline compact per-chip
 // record emission. ZG2 adds a direct execution-frequency buffer after it so
 // final-form records need no duplicate program-log row or host frequency scan.
-pub const PREFLIGHT_TRACER_DATA_SIZE: usize = 144;
+// Device replay adds bounded custom-memory scratch metadata, and M-CPOOL
+// appends first-touch cursors for lazy counter-table reset.
+pub const PREFLIGHT_TRACER_DATA_SIZE: usize = 176;
 pub const PREFLIGHT_TRACER_DATA_ALIGN: usize = 8;
 /// One entry in the preflight touched-block buffer: the address space and the
 /// block-aligned byte address of a block touched (for the first time) this

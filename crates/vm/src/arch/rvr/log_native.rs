@@ -1368,6 +1368,7 @@ mod tests {
             memory_log: Vec::new(),
             delta_memory_log,
             chip_counts: Vec::new(),
+            chip_counts_touched: Vec::new(),
             touched: Vec::new(),
         }
     }

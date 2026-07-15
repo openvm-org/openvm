@@ -249,6 +249,15 @@ pub struct PreflightTracerData {
     /// `u32::MAX` means inactive; otherwise this is the written scratch prefix.
     pub custom_memory_scratch_len: u32,
     pub custom_memory_scratch_cap: u32,
+    /// Write-only lists of the indices whose counter changed 0→nonzero in
+    /// this segment. The consumer scrubs exactly these indices before pooled
+    /// reuse, avoiding a full counter-table memset or scan.
+    pub chip_counts_touched: *mut u32,
+    pub chip_counts_touched_len: u32,
+    pub chip_counts_touched_cap: u32,
+    pub exec_frequencies_touched: *mut u32,
+    pub exec_frequencies_touched_len: u32,
+    pub exec_frequencies_touched_cap: u32,
 }
 
 impl PreflightTracerData {
@@ -283,6 +292,12 @@ impl PreflightTracerData {
             custom_memory_scratch: std::ptr::null_mut(),
             custom_memory_scratch_len: u32::MAX,
             custom_memory_scratch_cap: 0,
+            chip_counts_touched: std::ptr::null_mut(),
+            chip_counts_touched_len: 0,
+            chip_counts_touched_cap: 0,
+            exec_frequencies_touched: std::ptr::null_mut(),
+            exec_frequencies_touched_len: 0,
+            exec_frequencies_touched_cap: 0,
         }
     }
 
@@ -329,6 +344,27 @@ impl PreflightTracerData {
     pub fn set_exec_frequencies(&mut self, frequencies: &mut [u32]) {
         self.exec_frequencies = frequencies.as_mut_ptr();
         self.exec_frequencies_len = frequencies.len() as u32;
+    }
+
+    /// Attach write-only first-touch index buffers for both counter arrays.
+    /// Each capacity equals its counter table length, so one entry per unique
+    /// 0→nonzero transition cannot overflow under the counter helper contract.
+    pub fn set_counter_touched_uninit(
+        &mut self,
+        chip_counts_touched: &mut [MaybeUninit<u32>],
+        exec_frequencies_touched: &mut [MaybeUninit<u32>],
+    ) {
+        debug_assert_eq!(chip_counts_touched.len() as u32, self.chip_counts_len);
+        debug_assert_eq!(
+            exec_frequencies_touched.len() as u32,
+            self.exec_frequencies_len
+        );
+        self.chip_counts_touched = chip_counts_touched.as_mut_ptr().cast();
+        self.chip_counts_touched_len = 0;
+        self.chip_counts_touched_cap = chip_counts_touched.len() as u32;
+        self.exec_frequencies_touched = exec_frequencies_touched.as_mut_ptr().cast();
+        self.exec_frequencies_touched_len = 0;
+        self.exec_frequencies_touched_cap = exec_frequencies_touched.len() as u32;
     }
 
     pub fn set_delta_records(&mut self, delta_records: &mut ChipRecordBuf) {
@@ -398,6 +434,12 @@ impl Default for PreflightTracerData {
             custom_memory_scratch: std::ptr::null_mut(),
             custom_memory_scratch_len: u32::MAX,
             custom_memory_scratch_cap: 0,
+            chip_counts_touched: std::ptr::null_mut(),
+            chip_counts_touched_len: 0,
+            chip_counts_touched_cap: 0,
+            exec_frequencies_touched: std::ptr::null_mut(),
+            exec_frequencies_touched_len: 0,
+            exec_frequencies_touched_cap: 0,
         }
     }
 }
@@ -416,6 +458,9 @@ pub struct PreflightRawLogs {
     /// with `memory_log`; all other callers keep the full host schema.
     pub delta_memory_log: Vec<DeltaMemoryLogEntry>,
     pub chip_counts: Vec<u32>,
+    /// Counter slots first touched this segment; used only to scrub the
+    /// pooled `chip_counts` allocation after its consumer is finished.
+    pub chip_counts_touched: Vec<u32>,
     /// First-touch seeds retained until delta replay has completed.
     pub touched: Vec<TouchedBlock>,
 }
@@ -505,6 +550,7 @@ impl RvrDeltaRecords {
                 memory_log,
                 delta_memory_log,
                 chip_counts: Vec::new(),
+                chip_counts_touched: Vec::new(),
                 touched,
             },
             Vec::new(),
@@ -656,6 +702,19 @@ where
     /// Callers that keep the output alive (differential tests) simply drop it
     /// instead; the pool then refills lazily.
     pub fn recycle_output(&self, output: RvrPreflightOutput<F>) {
+        #[cfg(feature = "rvr")]
+        if let Some(exec_pool) = output.system_records.rvr_exec_frequencies_pool.as_ref() {
+            exec_pool.recycle_exec_frequencies(
+                output.system_records.filtered_exec_frequencies,
+                output.system_records.rvr_exec_frequencies_touched,
+            );
+            self.pool.recycle_segment_buffers(
+                output.raw_logs,
+                output.inline_records,
+                output.delta_records,
+            );
+            return;
+        }
         self.pool.recycle_segment_buffers(
             output.raw_logs,
             output.inline_records,
@@ -994,8 +1053,14 @@ where
             Vec::new()
         };
         let logs_taken = std::time::Instant::now();
-        let mut chip_counts = vec![0u32; chip_counts_len.max(1)];
-        let mut exec_frequencies = vec![0u32; exe.program.num_defined_instructions()];
+        let (
+            mut chip_counts,
+            mut chip_counts_touched,
+            mut exec_frequencies,
+            mut exec_frequencies_touched,
+        ) = pool.take_counters(chip_counts_len.max(1), || {
+            exe.program.num_defined_instructions()
+        });
         let counters_ready = std::time::Instant::now();
         // Shadows are all-zero at segment start (0 = untouched this segment);
         // pooled reuse preserves that via the exact touched-list scrub below.
@@ -1144,6 +1209,7 @@ where
         tracer.set_chip_records(&mut chip_records);
         tracer.set_exec_frequencies(&mut exec_frequencies);
         tracer.set_custom_memory_scratch(&mut custom_memory_scratch);
+        tracer.set_counter_touched_uninit(&mut chip_counts_touched, &mut exec_frequencies_touched);
         if inline_meta.delta_records {
             tracer.set_delta_records(&mut delta_record);
         }
@@ -1209,6 +1275,24 @@ where
         let program_len = tracer.program_log_len as usize;
         let memory_len = tracer.memory_log_len as usize;
         let touched_len = tracer.touched_len as usize;
+        let chip_counts_touched_len = tracer.chip_counts_touched_len as usize;
+        let exec_frequencies_touched_len = tracer.exec_frequencies_touched_len as usize;
+        if chip_counts_touched_len > chip_counts_touched.len()
+            || exec_frequencies_touched_len > exec_frequencies_touched.len()
+        {
+            return Err(ExecutionError::RvrExecution(format!(
+                "preflight counter first-touch overflow: chip {chip_counts_touched_len}/{}, \
+                 execution {exec_frequencies_touched_len}/{}",
+                chip_counts_touched.len(),
+                exec_frequencies_touched.len(),
+            )));
+        }
+        // SAFETY: generated C writes an index before advancing each cursor;
+        // the capacity check above rejects any cursor outside the buffers.
+        let chip_counts_touched =
+            unsafe { assume_init_prefix(chip_counts_touched, chip_counts_touched_len) };
+        let exec_frequencies_touched =
+            unsafe { assume_init_prefix(exec_frequencies_touched, exec_frequencies_touched_len) };
         // With inline records (R3), migrated opcodes touch without logging, so
         // `touched` can outgrow the memory log; growing `memory_log_cap` grows
         // the touched buffer with it.
@@ -1240,6 +1324,8 @@ where
             // touched list that would scrub them may itself have overflowed,
             // so they drop here and the retry takes fresh zeroed ones.
             pool.recycle_raw_uninit(program_log, memory_log, delta_memory_log, touched);
+            pool.recycle_chip_counts(chip_counts, chip_counts_touched);
+            pool.recycle_exec_frequencies(exec_frequencies, exec_frequencies_touched);
             for buf in record_bufs {
                 pool.recycle_record_buf(buf);
             }
@@ -1331,6 +1417,10 @@ where
             filtered_exec_frequencies,
             touched_memory: replay.touched_memory,
             touched_memory_on_device: device_touched_memory,
+            #[cfg(feature = "rvr")]
+            rvr_exec_frequencies_touched: exec_frequencies_touched,
+            #[cfg(feature = "rvr")]
+            rvr_exec_frequencies_pool: Some(pool.clone()),
         };
 
         // R3: harvest each migrated chip's inline records (the C-advanced
@@ -1442,6 +1532,7 @@ where
                 memory_log,
                 delta_memory_log,
                 chip_counts,
+                chip_counts_touched,
                 touched,
             },
             access_aux: replay.access_aux,
