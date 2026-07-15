@@ -41,7 +41,6 @@ use openvm_transpiler::{
     elf::Elf, openvm_platform::memory::MEM_SIZE, transpiler::Transpiler, FromElf,
 };
 use openvm_verify_stark_host::pvs::{VerifierBasePvs, VmPvs, VERIFIER_PVS_AIR_ID, VM_PVS_AIR_ID};
-use p3_field::PrimeCharacteristicRing;
 use test_case::test_case;
 use tracing::Level;
 
@@ -94,10 +93,7 @@ fn run_leaf_aggregation(
             .with_extension(Rv64MTranspilerExtension)
             .with_extension(Rv64IoTranspilerExtension),
     )?;
-    let input = (1u64 << log_fib_input)
-        .to_le_bytes()
-        .map(F::from_u8)
-        .to_vec();
+    let input = (1u64 << log_fib_input).to_le_bytes().to_vec();
 
     let engine = Engine::new(app_params_with_100_bits_security(21));
     let (vm, app_pk) = VirtualMachine::new_with_keygen(engine, Rv64ImBuilder, config)?;

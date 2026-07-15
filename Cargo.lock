@@ -4476,7 +4476,6 @@ dependencies = [
  "openvm-stark-sdk",
  "openvm-transpiler",
  "openvm-verify-stark-host",
- "p3-field",
  "rand_chacha 0.3.1",
  "tiny-keccak",
  "tracing",

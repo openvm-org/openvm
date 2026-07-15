@@ -141,10 +141,7 @@ pub(in crate::tests) fn run_leaf_aggregation(
             .with_extension(Rv64MTranspilerExtension)
             .with_extension(Rv64IoTranspilerExtension),
     )?;
-    let input = (1u64 << log_fib_input)
-        .to_le_bytes()
-        .map(F::from_u8)
-        .to_vec();
+    let input = (1u64 << log_fib_input).to_le_bytes().to_vec();
 
     let engine = Engine::new(app_system_params());
     let (vm, app_pk) = VirtualMachine::new_with_keygen(engine, Rv64ImBuilder, config)?;

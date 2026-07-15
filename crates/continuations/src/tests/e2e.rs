@@ -116,11 +116,10 @@ fn input_commit_to_f(commit: &[u8; 32]) -> [F; DIGEST_SIZE] {
     })
 }
 
-fn commit_to_stdin_fields(commit: &[u8; 32]) -> Vec<F> {
+fn commit_to_stdin_bytes(commit: &[u8; 32]) -> Vec<u8> {
     commit
         .iter()
         .flat_map(|b| [*b, 0, 0, 0, 0, 0, 0, 0])
-        .map(F::from_u8)
         .collect()
 }
 
@@ -357,16 +356,12 @@ fn test_deferral_e2e() -> Result<()> {
     let mut state2 = DeferralState::new(Vec::<DeferralResult>::new());
     state2.store_input(in_commit_0_bytes.to_vec(), INPUT_RAW_0.to_vec());
 
-    let streams = Streams {
-        input_stream: vec![
-            commit_to_stdin_fields(&in_commit_0_bytes),
-            commit_to_stdin_fields(&in_commit_1_bytes),
-            commit_to_stdin_fields(&in_commit_2_bytes),
-        ]
-        .into(),
-        deferrals: vec![state_unused, state1, state2],
-        ..Default::default()
-    };
+    let mut streams = Streams::new(vec![
+        commit_to_stdin_bytes(&in_commit_0_bytes),
+        commit_to_stdin_bytes(&in_commit_1_bytes),
+        commit_to_stdin_bytes(&in_commit_2_bytes),
+    ]);
+    streams.deferrals = vec![state_unused, state1, state2];
 
     // =========================================================================
     // SECTION 2: Run the VM, capture merkle proofs before and after execution.

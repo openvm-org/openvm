@@ -287,10 +287,7 @@ trait BenchExecutor {
     fn execution_mode() -> &'static str;
     fn cache() -> &'static Cache<Self::Instance>;
     fn build_instance(exe: &VmExe<BabyBear>) -> Self::Instance;
-    fn run_execution(
-        instance: &Self::Instance,
-        input: Vec<Vec<BabyBear>>,
-    ) -> Result<(), ExecutionError>;
+    fn run_execution(instance: &Self::Instance, input: Vec<Vec<u8>>) -> Result<(), ExecutionError>;
 
     fn get_cached_instance(program: &str) -> Arc<Self::Instance> {
         let cache = Self::cache().get_or_init(|| Mutex::new(HashMap::new()));
@@ -318,7 +315,7 @@ trait BenchExecutor {
     fn benchmark(bencher: Bencher, program: &str) {
         let instance = Self::get_cached_instance(program);
         bencher
-            .with_inputs(Vec::<Vec<BabyBear>>::new)
+            .with_inputs(Vec::<Vec<u8>>::new)
             .bench_values(|input| match Self::run_execution(&instance, input) {
                 Ok(()) => report_program_success(Self::execution_mode(), program),
                 Err(err) => panic!(
@@ -355,10 +352,7 @@ impl BenchExecutor for PureExecution {
         Self::unwrap_instance(executor().instance(exe))
     }
 
-    fn run_execution(
-        instance: &Self::Instance,
-        input: Vec<Vec<BabyBear>>,
-    ) -> Result<(), ExecutionError> {
+    fn run_execution(instance: &Self::Instance, input: Vec<Vec<u8>>) -> Result<(), ExecutionError> {
         instance.execute(input, None).map(|_| ())
     }
 }
@@ -395,10 +389,7 @@ impl BenchExecutor for MeteredExecution {
         (instance, ctx)
     }
 
-    fn run_execution(
-        instance: &Self::Instance,
-        input: Vec<Vec<BabyBear>>,
-    ) -> Result<(), ExecutionError> {
+    fn run_execution(instance: &Self::Instance, input: Vec<Vec<u8>>) -> Result<(), ExecutionError> {
         let (instance, ctx) = instance;
         instance.execute_metered(input, ctx.clone()).map(|_| ())
     }
@@ -431,10 +422,7 @@ impl BenchExecutor for MeteredCostExecution {
         Self::unwrap_instance(result)
     }
 
-    fn run_execution(
-        instance: &Self::Instance,
-        input: Vec<Vec<BabyBear>>,
-    ) -> Result<(), ExecutionError> {
+    fn run_execution(instance: &Self::Instance, input: Vec<Vec<u8>>) -> Result<(), ExecutionError> {
         instance
             .execute_metered_cost(input, metered_cost_setup().0.clone())
             .map(|_| ())

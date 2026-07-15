@@ -192,14 +192,8 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait, const IS_HIN
     }
 
     for word_index in 0..num_words {
-        let data: [u8; RV64_REGISTER_NUM_LIMBS] = std::array::from_fn(|_| {
-            exec_state
-                .streams
-                .hint_stream
-                .pop_front()
-                .unwrap()
-                .as_canonical_u32() as u8
-        });
+        let data: [u8; RV64_REGISTER_NUM_LIMBS] =
+            std::array::from_fn(|_| exec_state.streams.hint_stream.pop_front().unwrap());
         exec_state.vm_write_bytes(
             RV64_MEMORY_AS,
             mem_ptr + (RV64_REGISTER_NUM_LIMBS as u32 * word_index),
