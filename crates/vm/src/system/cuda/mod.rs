@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use connector::VmConnectorChipGPU;
-use memory::MemoryInventoryGPU;
+use memory::{DeviceTouchedMemoryProvider, MemoryInventoryGPU, DEVICE_TOUCHED_RECORD_WORDS};
 use openvm_circuit::{
     arch::{DenseRecordArena, SystemConfig},
     system::{
@@ -10,7 +10,7 @@ use openvm_circuit::{
 };
 use openvm_circuit_primitives::{var_range::VariableRangeCheckerChipGPU, Chip};
 use openvm_cuda_backend::{prelude::F, GpuBackend};
-use openvm_cuda_common::stream::GpuDeviceCtx;
+use openvm_cuda_common::{copy::MemCopyD2H, stream::GpuDeviceCtx};
 use openvm_instructions::VM_DIGEST_WIDTH;
 use openvm_stark_backend::prover::{AirProvingContext, CommittedTraceData};
 use poseidon2::Poseidon2PeripheryChipGPU;
@@ -29,6 +29,7 @@ pub struct SystemChipInventoryGPU {
     pub program: ProgramChipGPU,
     pub connector: VmConnectorChipGPU,
     pub memory_inventory: MemoryInventoryGPU,
+    device_touched_memory: Option<Arc<dyn DeviceTouchedMemoryProvider>>,
 }
 
 impl SystemChipInventoryGPU {
@@ -61,7 +62,15 @@ impl SystemChipInventoryGPU {
             program: program_chip,
             connector: connector_chip,
             memory_inventory,
+            device_touched_memory: None,
         }
+    }
+
+    pub fn set_device_touched_memory_provider(
+        &mut self,
+        provider: Arc<dyn DeviceTouchedMemoryProvider>,
+    ) {
+        self.device_touched_memory = Some(provider);
     }
 }
 
@@ -85,6 +94,7 @@ impl SystemChipComplex<DenseRecordArena, GpuBackend> for SystemChipInventoryGPU 
             exit_code,
             filtered_exec_frequencies,
             touched_memory,
+            touched_memory_on_device,
         } = system_records;
 
         let program_ctx = {
@@ -99,7 +109,41 @@ impl SystemChipComplex<DenseRecordArena, GpuBackend> for SystemChipInventoryGPU 
             self.connector.generate_proving_ctx(())
         };
 
-        let memory_ctxs = self.memory_inventory.generate_proving_ctxs(touched_memory);
+        let memory_ctxs = if touched_memory_on_device {
+            let provider = self
+                .device_touched_memory
+                .as_ref()
+                .expect("device touched-memory route has no provider");
+            let device_touched = provider
+                .take_device_touched_memory(&self.memory_inventory.device_ctx)
+                .expect("device touched-memory route has no bound segment");
+            if std::env::var("OPENVM_RVR_DEVICE_REPLAY_ORACLE").as_deref() == Ok("1") {
+                let actual = device_touched
+                    .records
+                    .to_host_on(&self.memory_inventory.device_ctx)
+                    .expect("device touched-memory oracle D2H");
+                let mut expected =
+                    Vec::with_capacity(touched_memory.len() * DEVICE_TOUCHED_RECORD_WORDS);
+                for &((address_space, ptr), timestamped) in &touched_memory {
+                    expected.push(address_space);
+                    expected.push(ptr);
+                    expected.push(timestamped.timestamp);
+                    expected.extend(
+                        timestamped
+                            .values
+                            .map(|value| unsafe { std::mem::transmute::<F, u32>(value) }),
+                    );
+                }
+                assert_eq!(
+                    actual, expected,
+                    "device touched-memory replay differs byte-for-byte from host replay"
+                );
+            }
+            self.memory_inventory
+                .generate_proving_ctxs_device(device_touched)
+        } else {
+            self.memory_inventory.generate_proving_ctxs(touched_memory)
+        };
 
         [program_ctx, connector_ctx]
             .into_iter()

@@ -111,6 +111,10 @@ pub struct SystemRecords<F> {
     pub filtered_exec_frequencies: Vec<u32>,
     // Perf[jpw]: this should be computed on-device and changed to just touched blocks
     pub touched_memory: TouchedMemory<F>,
+    /// Prover-only routing bit for the CUDA all-direct delta path. When set,
+    /// the sorted final touched blocks are reconstructed by the device replay
+    /// instead of by the host preflight normalizer.
+    pub touched_memory_on_device: bool,
 }
 
 /// A memory block touched during a segment: final values and last-access
@@ -375,7 +379,12 @@ where
             exit_code,
             filtered_exec_frequencies,
             touched_memory,
+            touched_memory_on_device,
         } = system_records;
+        assert!(
+            !touched_memory_on_device,
+            "CPU system inventory cannot consume device-replayed touched memory"
+        );
 
         self.program_chip.filtered_exec_frequencies = filtered_exec_frequencies;
         let program_ctx = self.program_chip.generate_proving_ctx(());

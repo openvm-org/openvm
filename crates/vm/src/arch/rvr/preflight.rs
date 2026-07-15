@@ -14,7 +14,8 @@ use super::{
     compile::{ChipMapping, RvrCompiled},
     execute::execute_preflight as execute_preflight_raw,
     preflight_normalizer::{
-        build_preflight_replay, PreflightMemoryAccessAux, PreflightShadowsView,
+        build_preflight_replay, PreflightMemoryAccessAux, PreflightMemoryReplay,
+        PreflightShadowsView, WORD_BYTES,
     },
     preflight_pool::{scrub_shadows, RvrPreflightBufferPool},
     state::{TracerPayload, TracerPtr},
@@ -142,9 +143,9 @@ pub struct DeltaMemoryLogEntry {
 /// C-compatible preflight touched-block entry.
 ///
 /// Layout matches `TouchedBlock` in `openvm_tracer_preflight.h`. Records a block
-/// touched for the first time this segment; the host finalizes `touched_memory`
-/// from this list (final value from live memory, final timestamp from the
-/// shadow) in O(touched-blocks).
+/// touched for the first time this segment. Host routes finalize
+/// `touched_memory` from the live memory + shadow; the all-direct CUDA delta
+/// route uses the same seeds in its chronological device replay.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct TouchedBlock {
@@ -737,6 +738,7 @@ where
             None,
             true,
             false,
+            false,
         )
     }
 
@@ -760,6 +762,7 @@ where
             Some(record_capacity_rows),
             None,
             true,
+            false,
             false,
         )
     }
@@ -789,6 +792,7 @@ where
             Some(arena_targets),
             true,
             false,
+            false,
         )
     }
 
@@ -816,6 +820,35 @@ where
             Some(arena_targets),
             false,
             true,
+            false,
+        )
+    }
+
+    /// Test-only mirror of the complete CUDA ownership signal. Unlike the
+    /// compact-schema oracle above, this suppresses host touched-memory
+    /// finalization and leaves the chronological inputs for the device.
+    #[cfg(feature = "test-utils")]
+    #[doc(hidden)]
+    pub fn execute_preflight_from_state_with_device_touched_memory_for_test(
+        &self,
+        state: VmState<F, GuestMemory>,
+        num_insns: Option<u64>,
+        record_capacity_rows: &[u32],
+        arena_targets: &BTreeMap<usize, ChipRecordBuf>,
+    ) -> Result<RvrPreflightOutput<F>, ExecutionError> {
+        execute_rvr_preflight(
+            &self.exe,
+            &self.extensions,
+            &self.compiled,
+            self.chip_counts_len,
+            &self.pool,
+            state,
+            num_insns,
+            Some(record_capacity_rows),
+            Some(arena_targets),
+            false,
+            true,
+            true,
         )
     }
 }
@@ -840,6 +873,7 @@ pub(crate) fn execute_rvr_preflight<F>(
     arena_targets: Option<&BTreeMap<usize, ChipRecordBuf>>,
     build_access_aux: bool,
     compact_delta_memory: bool,
+    device_touched_memory: bool,
 ) -> Result<RvrPreflightOutput<F>, ExecutionError>
 where
     F: PrimeField32,
@@ -851,6 +885,10 @@ where
     assert!(
         !compact_delta_memory || (compiled.inline_records().delta_records && !build_access_aux),
         "compact residual memory requires a fully-direct delta consumer"
+    );
+    assert!(
+        !device_touched_memory || compact_delta_memory,
+        "device touched-memory replay requires compact delta chronology"
     );
     // A fused-compiled library has NO compact fallback for its arena-native
     // airs: executing without a target would write full records at the
@@ -1230,19 +1268,39 @@ where
             memory: &shadow_memory,
             public_values: &shadow_public_values,
         };
-        let replay = build_preflight_replay::<F>(
-            &run_state.memory,
-            &shadows,
-            &touched,
-            &memory_log,
-            build_access_aux,
-        )
-        .map_err(|err| ExecutionError::RvrExecution(err.to_string()))?;
+        let device_touched_oracle = device_touched_memory
+            && std::env::var("OPENVM_RVR_DEVICE_REPLAY_ORACLE").as_deref() == Ok("1");
+        let replay = if device_touched_memory && !device_touched_oracle {
+            // The all-direct CUDA route already replays these chronological
+            // inputs. It also emits the canonical sorted final touched blocks,
+            // so avoid repeating the O(touched) collect + sort on the host.
+            PreflightMemoryReplay {
+                touched_memory: Vec::new(),
+                access_aux: Vec::new(),
+            }
+        } else {
+            build_preflight_replay::<F>(
+                &run_state.memory,
+                &shadows,
+                &touched,
+                &memory_log,
+                build_access_aux,
+            )
+            .map_err(|err| ExecutionError::RvrExecution(err.to_string()))?
+        };
         let replay_ready = std::time::Instant::now();
-        run_state
-            .memory
-            .memory
-            .extend_touched_pages_from_touched(&replay.touched_memory);
+        if device_touched_memory {
+            // Continuation H2D only needs a conservative page set. The raw
+            // first-touch list is already unique and complete, so mark it
+            // directly while the memory boundary consumes the sorted device
+            // records in place.
+            extend_touched_pages_from_raw(&mut run_state.memory, &touched);
+        } else {
+            run_state
+                .memory
+                .memory
+                .extend_touched_pages_from_touched(&replay.touched_memory);
+        }
         let touched_pages_ready = std::time::Instant::now();
         // The shadows and the touched list are segment-lifetime scratch: scrub
         // the shadows back to all-zero via the touched list (exact — every
@@ -1272,6 +1330,7 @@ where
             exit_code: run_result.exit_code,
             filtered_exec_frequencies,
             touched_memory: replay.touched_memory,
+            touched_memory_on_device: device_touched_memory,
         };
 
         // R3: harvest each migrated chip's inline records (the C-advanced
@@ -1400,6 +1459,13 @@ where
     }
 }
 
+fn extend_touched_pages_from_raw(memory: &mut GuestMemory, touched: &[TouchedBlock]) {
+    for block in touched {
+        memory.memory.touched_pages[block.addr_space as usize]
+            .mark_byte_range(block.block_addr as usize, WORD_BYTES);
+    }
+}
+
 fn chip_counts_len(chips: &ChipMapping) -> usize {
     chips
         .pc_to_chip
@@ -1473,8 +1539,61 @@ mod tests {
             },
             Streams, VmState,
         },
+        system::memory::{online::PAGE_SIZE, AddressMap, TimestampedValues},
         utils::test_system_config,
     };
+
+    #[test]
+    fn raw_first_touches_mark_the_same_continuation_pages_as_finalized_records() {
+        let config = test_system_config();
+        let raw_touched = [
+            TouchedBlock {
+                addr_space: RV64_REGISTER_AS,
+                block_addr: 8,
+                initial_value: 0,
+            },
+            TouchedBlock {
+                addr_space: RV64_MEMORY_AS,
+                block_addr: (PAGE_SIZE - WORD_BYTES) as u32,
+                initial_value: 0,
+            },
+            TouchedBlock {
+                addr_space: RV64_MEMORY_AS,
+                block_addr: (3 * PAGE_SIZE + 8) as u32,
+                initial_value: 0,
+            },
+        ];
+        let mut raw_memory = GuestMemory::new(AddressMap::from_mem_config(&config.memory_config));
+        let mut finalized_memory = raw_memory.clone();
+        extend_touched_pages_from_raw(&mut raw_memory, &raw_touched);
+
+        let finalized = raw_touched
+            .iter()
+            .map(|block| {
+                (
+                    (block.addr_space, block.block_addr / 2),
+                    TimestampedValues {
+                        timestamp: 1,
+                        values: [BabyBear::default(); BLOCK_FE_WIDTH],
+                    },
+                )
+            })
+            .collect::<Vec<_>>();
+        finalized_memory
+            .memory
+            .extend_touched_pages_from_touched(&finalized);
+
+        for addr_space in [RV64_REGISTER_AS, RV64_MEMORY_AS] {
+            let total_bytes = raw_memory.memory.config[addr_space as usize].size();
+            assert_eq!(
+                raw_memory.memory.touched_pages[addr_space as usize]
+                    .touched_byte_ranges(total_bytes),
+                finalized_memory.memory.touched_pages[addr_space as usize]
+                    .touched_byte_ranges(total_bytes),
+                "raw and finalized touched blocks must stage identical continuation pages for AS {addr_space}"
+            );
+        }
+    }
 
     /// Owns the per-address-space timestamp shadows + touched buffer for a
     /// direct-`execute_preflight_for_test` call and attaches them to the tracer.
