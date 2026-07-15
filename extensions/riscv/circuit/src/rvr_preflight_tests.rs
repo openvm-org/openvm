@@ -2062,27 +2062,15 @@ fn assert_read_dominant_memory_aux(output: &RvrPreflightOutput<F>, exe: &VmExe<F
     // asserted on the verbose log is asserted on the records instead:
     // read-after-write chains to the store's write tick, read-after-read to
     // the previous read's tick.
-    let loadstore_air = {
+    let pc_to_air_idx = {
         let (vm, _) = VirtualMachine::new_with_keygen(
             test_cpu_engine(),
             Rv64ImCpuBuilder,
             Rv64ImConfig::default(),
         )
         .expect("vm init");
-        let pc_to_air_idx = vm.pc_to_air_idx(exe).expect("pc to air mapping");
-        let slot = exe
-            .program
-            .instructions_and_debug_infos
-            .iter()
-            .position(|s| {
-                s.as_ref().is_some_and(|(insn, _)| {
-                    insn.opcode == Rv64LoadStoreOpcode::STOREB.global_opcode()
-                })
-            })
-            .expect("fixture must contain STOREB");
-        pc_to_air_idx[slot].expect("STOREB maps to an air")
+        vm.pc_to_air_idx(exe).expect("pc to air mapping")
     };
-    let records = compact_alu3_records(output, loadstore_air);
     let pc_of = |opcode: openvm_instructions::VmOpcode, nth: usize| {
         exe.program
             .instructions_and_debug_infos
@@ -2097,8 +2085,10 @@ fn assert_read_dominant_memory_aux(output: &RvrPreflightOutput<F>, exe: &VmExe<F
     let read1_pc = pc_of(Rv64LoadStoreOpcode::LOADBU.global_opcode(), 0);
     let read2_pc = pc_of(Rv64LoadStoreOpcode::LOADBU.global_opcode(), 1);
     let record_at = |pc: u64| {
-        records
-            .iter()
+        let slot = ((pc - u64::from(exe.program.pc_base)) / 4) as usize;
+        let air_idx = pc_to_air_idx[slot].expect("memory opcode maps to an air");
+        compact_alu3_records(output, air_idx)
+            .into_iter()
             .find(|r| r.from_pc == pc)
             .expect("record at pc")
     };
@@ -4219,10 +4209,9 @@ fn rvr_preflight_phantom_unshaped_discriminator_taints_whole_air() {
     std::env::remove_var("OPENVM_RVR_ARENA_NATIVE");
 }
 
-/// R4 mixed-AIR regression: main-memory load/store instructions and REVEAL
-/// instructions sharing the same LoadStore AIR must all be arena-native. The
-/// four AS=3 rows may never become a secondary source that whole-AIR staging
-/// would overwrite.
+/// Main-memory STORED and REVEAL instructions sharing the doubleword-store AIR
+/// must all be arena-native. The four AS=3 rows may never become a secondary
+/// source that whole-AIR staging would overwrite.
 #[test]
 fn rvr_preflight_arena_native_reveal_mixed_air_proves_and_verifies() {
     std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "1");
@@ -4231,10 +4220,19 @@ fn rvr_preflight_arena_native_reveal_mixed_air_proves_and_verifies() {
     let (vm, _) =
         VirtualMachine::new_with_keygen(test_cpu_engine(), Rv64ImCpuBuilder, config.clone())
             .expect("rvr vm init");
-    let loadstore_air = vm
-        .air_names()
-        .position(|name| name.contains("Rv64LoadStoreAdapterAir, LoadStoreCoreAir<8>"))
-        .expect("LoadStore air");
+    let pc_to_air_idx = vm.pc_to_air_idx(&exe).expect("pc to air mapping");
+    let store_doubleword_air = exe
+        .program
+        .instructions_and_debug_infos
+        .iter()
+        .enumerate()
+        .find(|(_, entry)| {
+            entry.as_ref().is_some_and(|(instruction, _)| {
+                instruction.opcode == Rv64LoadStoreOpcode::STORED.global_opcode()
+            })
+        })
+        .and_then(|(slot, _)| pc_to_air_idx[slot])
+        .expect("STORED maps to an air");
     let RvrPreflightRoute::Rvr(instance) = vm
         .preflight_routed_instance(&exe)
         .expect("mixed reveal route")
@@ -4246,8 +4244,8 @@ fn rvr_preflight_arena_native_reveal_mixed_air_proves_and_verifies() {
         inline
             .arena_native_airs
             .iter()
-            .any(|&(air, _)| air == loadstore_air),
-        "LoadStore must remain arena-native when the program contains REVEAL"
+            .any(|&(air, _)| air == store_doubleword_air),
+        "doubleword stores must remain arena-native when the program contains REVEAL"
     );
     for (slot, (instruction, _)) in exe
         .program
@@ -4267,13 +4265,13 @@ fn rvr_preflight_arena_native_reveal_mixed_air_proves_and_verifies() {
     let segments = prove_rvr_preflight_and_verify(exe, config);
     assert_eq!(
         segments, 1,
-        "small mixed LoadStore/REVEAL program is single segment"
+        "small mixed STORED/REVEAL program is single segment"
     );
 }
 
 /// G2 precedence + mixed-source invariant: the explicit compact request wins
 /// over default-on arena-native emission, and every ordinary AS=2 and REVEAL
-/// AS=3 row sharing LoadStore remains inline in the compact stream. The host
+/// AS=3 row sharing the doubleword-store AIR remains inline in the compact stream. The host
 /// compact assembler is the CPU oracle for the device decoder's expanded
 /// arena shape, so proving and verification pin the full record semantics.
 #[test]
@@ -4286,11 +4284,19 @@ fn rvr_preflight_compact_request_reveal_mixed_air_proves_and_verifies() {
     let (vm, _) =
         VirtualMachine::new_with_keygen(test_cpu_engine(), Rv64ImCpuBuilder, config.clone())
             .expect("rvr vm init");
-    let loadstore_air = vm
-        .air_names()
-        .position(|name| name.contains("Rv64LoadStoreAdapterAir, LoadStoreCoreAir<8>"))
-        .expect("LoadStore air");
     let pc_to_air_idx = vm.pc_to_air_idx(&exe).expect("pc to air mapping");
+    let store_doubleword_air = exe
+        .program
+        .instructions_and_debug_infos
+        .iter()
+        .enumerate()
+        .find(|(_, entry)| {
+            entry.as_ref().is_some_and(|(instruction, _)| {
+                instruction.opcode == Rv64LoadStoreOpcode::STORED.global_opcode()
+            })
+        })
+        .and_then(|(slot, _)| pc_to_air_idx[slot])
+        .expect("STORED maps to an air");
     let RvrPreflightRoute::Rvr(instance) = vm
         .preflight_routed_instance(&exe)
         .expect("compact mixed reveal route")
@@ -4303,20 +4309,23 @@ fn rvr_preflight_compact_request_reveal_mixed_air_proves_and_verifies() {
         "compact request must override every arena-native AIR"
     );
     assert!(
-        inline.airs.iter().any(|&(air, _)| air == loadstore_air),
-        "LoadStore must emit compact wire records"
+        inline
+            .airs
+            .iter()
+            .any(|&(air, _)| air == store_doubleword_air),
+        "doubleword stores must emit compact wire records"
     );
     for (slot, &air) in pc_to_air_idx.iter().enumerate() {
-        if air == Some(loadstore_air) {
+        if air == Some(store_doubleword_air) {
             assert!(
                 inline.pc_slots[slot],
-                "AS=2/AS=3 LoadStore row at program slot {slot} must emit compact wire"
+                "AS=2/AS=3 doubleword-store row at program slot {slot} must emit compact wire"
             );
         }
     }
 
     let segments = prove_rvr_preflight_and_verify(exe, config);
-    assert_eq!(segments, 1, "mixed LoadStore/REVEAL fixture is one segment");
+    assert_eq!(segments, 1, "mixed STORED/REVEAL fixture is one segment");
 }
 
 /// Stage-2 CPU decoder oracle: the chronological 24-byte delta stream omits

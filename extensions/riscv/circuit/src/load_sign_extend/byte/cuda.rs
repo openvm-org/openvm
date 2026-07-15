@@ -31,17 +31,17 @@ pub struct Rv64LoadSignExtendByteChipGpu {
 impl Chip<DenseRecordArena, GpuBackend> for Rv64LoadSignExtendByteChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         const RECORD_SIZE: usize = size_of::<(Rv64LoadByteAdapterRecord, LoadByteRecord)>();
-        #[cfg(feature = "rvr")]
+        #[cfg(all(feature = "cuda", feature = "rvr"))]
         let rvr_wire = arena.rvr_wire;
         let records = arena.allocated();
-        #[cfg(feature = "rvr")]
+        #[cfg(all(feature = "cuda", feature = "rvr"))]
         let delta_records = self.rvr_decode.device_delta_records(
-            crate::rvr_gpu_decode::DeltaAirKind::LoadSignExtend,
+            crate::rvr_gpu_decode::DeltaAirKind::LoadSignExtendByte,
             &self.range_checker.device_ctx,
         );
-        #[cfg(feature = "rvr")]
+        #[cfg(all(feature = "cuda", feature = "rvr"))]
         let no_delta_records = delta_records.is_none();
-        #[cfg(not(feature = "rvr"))]
+        #[cfg(not(all(feature = "cuda", feature = "rvr")))]
         let no_delta_records = true;
         if records.is_empty() && no_delta_records {
             return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
@@ -53,7 +53,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64LoadSignExtendByteChipGpu {
         let device_ctx = &self.range_checker.device_ctx;
         // M-GPUDEC (G2): this segment's arena carries compact wire records —
         // decode them on device against the per-exe operand table.
-        #[cfg(feature = "rvr")]
+        #[cfg(all(feature = "cuda", feature = "rvr"))]
         if rvr_wire || delta_records.is_some() {
             use openvm_circuit::arch::rvr::PREFLIGHT_ADDSUB_RECORD_SIZE;
             assert_eq!(
@@ -78,10 +78,9 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64LoadSignExtendByteChipGpu {
             let d_trace =
                 DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
             unsafe {
-                crate::cuda_abi::load_sign_extend_cuda::tracegen_compact(
+                load_sign_extend_byte_cuda::tracegen_compact(
                     d_trace.buffer(),
                     trace_height,
-                    trace_width,
                     &d_records,
                     &d_table,
                     pc_base,

@@ -177,6 +177,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
             bitwise_lu.clone(),
             byte_ptr_max_bits,
             timestamp_max_bits,
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
+            self.rvr_decode.clone(),
         );
         inventory.add_executor_chip(store_byte);
 
@@ -186,6 +188,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
             bitwise_lu.clone(),
             byte_ptr_max_bits,
             timestamp_max_bits,
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
+            self.rvr_decode.clone(),
         );
         inventory.add_executor_chip(load_sign_extend_halfword);
 
@@ -195,6 +199,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
             bitwise_lu.clone(),
             byte_ptr_max_bits,
             timestamp_max_bits,
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
+            self.rvr_decode.clone(),
         );
         inventory.add_executor_chip(load_halfword);
 
@@ -204,6 +210,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
             bitwise_lu.clone(),
             byte_ptr_max_bits,
             timestamp_max_bits,
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
+            self.rvr_decode.clone(),
         );
         inventory.add_executor_chip(store_halfword);
 
@@ -213,6 +221,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
             bitwise_lu.clone(),
             byte_ptr_max_bits,
             timestamp_max_bits,
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
+            self.rvr_decode.clone(),
         );
         inventory.add_executor_chip(load_sign_extend_word);
 
@@ -222,6 +232,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
             bitwise_lu.clone(),
             byte_ptr_max_bits,
             timestamp_max_bits,
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
+            self.rvr_decode.clone(),
         );
         inventory.add_executor_chip(load_word);
 
@@ -231,6 +243,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
             bitwise_lu.clone(),
             byte_ptr_max_bits,
             timestamp_max_bits,
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
+            self.rvr_decode.clone(),
         );
         inventory.add_executor_chip(store_word);
 
@@ -240,6 +254,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
             bitwise_lu.clone(),
             byte_ptr_max_bits,
             timestamp_max_bits,
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
+            self.rvr_decode.clone(),
         );
         inventory.add_executor_chip(load_doubleword);
 
@@ -249,6 +265,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
             bitwise_lu.clone(),
             byte_ptr_max_bits,
             timestamp_max_bits,
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
+            self.rvr_decode.clone(),
         );
         inventory.add_executor_chip(store_doubleword);
 
