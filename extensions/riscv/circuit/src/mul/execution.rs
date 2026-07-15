@@ -64,13 +64,13 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
         let pre_compute: &mut MultiPreCompute = data.borrow_mut();
         self.pre_compute_impl(pc, inst, pre_compute)?;
-        Ok(execute_e1_impl)
+        Ok(execute_e1_impl::<_>)
     }
 
     #[cfg(feature = "tco")]
@@ -79,13 +79,13 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: ExecutionCtxTrait,
     {
         let pre_compute: &mut MultiPreCompute = data.borrow_mut();
         self.pre_compute_impl(pc, inst, pre_compute)?;
-        Ok(execute_e1_handler)
+        Ok(execute_e1_handler::<_>)
     }
 }
 
@@ -158,14 +158,14 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<ExecuteFunc<F, Ctx>, StaticProgramError>
+    ) -> Result<ExecuteFunc<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
         let pre_compute: &mut E2PreCompute<MultiPreCompute> = data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
         self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
-        Ok(execute_e2_impl)
+        Ok(execute_e2_impl::<_>)
     }
 
     #[cfg(feature = "tco")]
@@ -175,14 +175,14 @@ where
         pc: u32,
         inst: &Instruction<F>,
         data: &mut [u8],
-    ) -> Result<Handler<F, Ctx>, StaticProgramError>
+    ) -> Result<Handler<Ctx>, StaticProgramError>
     where
         Ctx: MeteredExecutionCtxTrait,
     {
         let pre_compute: &mut E2PreCompute<MultiPreCompute> = data.borrow_mut();
         pre_compute.chip_idx = chip_idx as u32;
         self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
-        Ok(execute_e2_handler)
+        Ok(execute_e2_handler::<_>)
     }
 }
 
@@ -216,9 +216,9 @@ where
     }
 }
 #[inline(always)]
-unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
+unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait>(
     pre_compute: &MultiPreCompute,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let rs1: [u8; RV64_REGISTER_NUM_LIMBS] =
         exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.b as u32);
@@ -235,9 +235,9 @@ unsafe fn execute_e12_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
+unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait>(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pre_compute: &MultiPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<MultiPreCompute>()).borrow();
@@ -246,9 +246,9 @@ unsafe fn execute_e1_impl<F: PrimeField32, CTX: ExecutionCtxTrait>(
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e2_impl<F: PrimeField32, CTX: MeteredExecutionCtxTrait>(
+unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait>(
     pre_compute: *const u8,
-    exec_state: &mut VmExecState<F, GuestMemory, CTX>,
+    exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pre_compute: &E2PreCompute<MultiPreCompute> =
         std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<MultiPreCompute>>())

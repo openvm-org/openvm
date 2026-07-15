@@ -346,10 +346,7 @@ pub unsafe extern "C" fn metered_periodic_check(t: *mut MeteredTracerData) -> u8
 }
 
 impl<F: PrimeField32, S> RvrMeteredInstanceWith<'_, F, S> {
-    pub fn create_initial_vm_state(
-        &self,
-        inputs: impl Into<Streams<F>>,
-    ) -> VmState<F, GuestMemory> {
+    pub fn create_initial_vm_state(&self, inputs: impl Into<Streams>) -> VmState<GuestMemory> {
         VmState::initial(
             self.system_config,
             &self.exe.init_memory,
@@ -375,18 +372,18 @@ impl<F: PrimeField32, S> RvrMeteredInstanceWith<'_, F, S> {
 impl<F: PrimeField32> RvrMeteredInstance<'_, F> {
     pub fn execute_metered(
         &self,
-        inputs: impl Into<Streams<F>>,
+        inputs: impl Into<Streams>,
         ctx: MeteredCtx,
-    ) -> Result<(Vec<Segment>, VmState<F, GuestMemory>), ExecutionError> {
+    ) -> Result<(Vec<Segment>, VmState<GuestMemory>), ExecutionError> {
         let vm_state = self.create_initial_vm_state(inputs);
         self.execute_metered_from_state(vm_state, ctx)
     }
 
     pub fn execute_metered_from_state(
         &self,
-        mut vm_state: VmState<F, GuestMemory>,
+        mut vm_state: VmState<GuestMemory>,
         ctx: MeteredCtx,
-    ) -> Result<(Vec<Segment>, VmState<F, GuestMemory>), ExecutionError> {
+    ) -> Result<(Vec<Segment>, VmState<GuestMemory>), ExecutionError> {
         let seg_state = SegmentationState::new(ctx, self.system_config);
 
         #[cfg(feature = "metrics")]
@@ -411,18 +408,18 @@ impl<F: PrimeField32> RvrMeteredSegmentInstance<'_, F> {
     /// Executes until termination or the next segment-boundary suspension.
     pub fn execute_metered_until_segment_boundary(
         &self,
-        inputs: impl Into<Streams<F>>,
+        inputs: impl Into<Streams>,
         ctx: MeteredCtx,
-    ) -> Result<(RvrMeteredResult, VmState<F, GuestMemory>), ExecutionError> {
+    ) -> Result<(RvrMeteredResult, VmState<GuestMemory>), ExecutionError> {
         let vm_state = self.create_initial_vm_state(inputs);
         self.execute_metered_from_state_until_segment_boundary(vm_state, ctx)
     }
 
     pub fn execute_metered_from_state_until_segment_boundary(
         &self,
-        mut vm_state: VmState<F, GuestMemory>,
+        mut vm_state: VmState<GuestMemory>,
         ctx: MeteredCtx,
-    ) -> Result<(RvrMeteredResult, VmState<F, GuestMemory>), ExecutionError> {
+    ) -> Result<(RvrMeteredResult, VmState<GuestMemory>), ExecutionError> {
         #[cfg(feature = "metrics")]
         let metrics = ExecutionMetricTimer::start(ExecutionMetric::Metered);
         #[cfg(feature = "metrics")]

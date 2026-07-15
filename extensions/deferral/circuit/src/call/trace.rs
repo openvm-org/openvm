@@ -93,7 +93,7 @@ where
 
     fn execute(
         &self,
-        state: VmStateMut<F, TracingMemory, RA>,
+        state: VmStateMut<TracingMemory, RA>,
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError> {
         let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());

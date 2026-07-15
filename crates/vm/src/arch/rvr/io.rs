@@ -1,4 +1,4 @@
-//! OpenVM IO runtime: ctx (`OpenVmIoState`) borrowed from `VmState<F>`.
+//! OpenVM IO runtime: ctx (`OpenVmIoState`) borrowed from `VmState`.
 
 use std::{collections::VecDeque, ffi::c_void};
 
@@ -9,7 +9,7 @@ use rand::rngs::StdRng;
 
 use crate::arch::deferral::DeferralState;
 
-/// IO execution state borrowed from the host `VmState<F>` for the duration of
+/// IO execution state borrowed from the host `VmState` for the duration of
 /// one rvr call. Streams, rng, and the public-values byte slice are mutable
 /// borrows; `memory_ptr` is a raw alias of VmState's main memory buffer
 /// (raw because the C engine accesses it directly via pointer).

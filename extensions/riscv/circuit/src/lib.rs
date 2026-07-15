@@ -90,7 +90,7 @@ mod test_utils;
 // Config for a VM with base extension and IO extension
 #[derive(Clone, Debug, derive_new::new, VmConfig, Serialize, Deserialize)]
 pub struct Rv64IConfig {
-    #[config(executor = "SystemExecutor<F>")]
+    #[config(executor = "SystemExecutor")]
     pub system: SystemConfig,
     #[extension]
     pub base: Rv64I,

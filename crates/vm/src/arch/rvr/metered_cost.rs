@@ -87,9 +87,9 @@ impl<F: PrimeField32> RvrMeteredCostInstance<'_, F> {
 
     pub fn execute_metered_cost(
         &self,
-        inputs: impl Into<Streams<F>>,
+        inputs: impl Into<Streams>,
         ctx: MeteredCostCtx,
-    ) -> Result<(MeteredCostCtx, VmState<F, GuestMemory>), ExecutionError> {
+    ) -> Result<(MeteredCostCtx, VmState<GuestMemory>), ExecutionError> {
         let vm_state = VmState::initial(
             self.system_config,
             &self.exe.init_memory,
@@ -101,9 +101,9 @@ impl<F: PrimeField32> RvrMeteredCostInstance<'_, F> {
 
     pub fn execute_metered_cost_from_state(
         &self,
-        mut vm_state: VmState<F, GuestMemory>,
+        mut vm_state: VmState<GuestMemory>,
         ctx: MeteredCostCtx,
-    ) -> Result<(MeteredCostCtx, VmState<F, GuestMemory>), ExecutionError> {
+    ) -> Result<(MeteredCostCtx, VmState<GuestMemory>), ExecutionError> {
         #[cfg(feature = "metrics")]
         let metrics = ExecutionMetricTimer::start(ExecutionMetric::MeteredCost);
         let result = tracing::info_span!("execute_metered_cost")

@@ -21,11 +21,11 @@ use crate::{
 /// Represents the core state of a VM.
 #[repr(C)]
 #[derive(derive_new::new, CopyGetters, MutGetters, Clone)]
-pub struct VmState<F, MEM = GuestMemory> {
+pub struct VmState<MEM = GuestMemory> {
     #[getset(get_copy = "pub", get_mut = "pub")]
     pc: u32,
     pub memory: MEM,
-    pub streams: Streams<F>,
+    pub streams: Streams,
     pub rng: StdRng,
     #[cfg(feature = "metrics")]
     pub metrics: VmMetrics,
@@ -33,20 +33,13 @@ pub struct VmState<F, MEM = GuestMemory> {
 
 pub(super) const DEFAULT_RNG_SEED: u64 = 0;
 
-impl<F, MEM> VmState<F, MEM> {
+impl<MEM> VmState<MEM> {
     #[inline(always)]
     pub fn set_pc(&mut self, pc: u32) {
         self.pc = pc;
     }
-}
 
-impl<F: Clone, MEM> VmState<F, MEM> {
-    pub fn new_with_defaults(
-        pc: u32,
-        memory: MEM,
-        streams: impl Into<Streams<F>>,
-        seed: u64,
-    ) -> Self {
+    pub fn new_with_defaults(pc: u32, memory: MEM, streams: impl Into<Streams>, seed: u64) -> Self {
         Self {
             pc,
             memory,
@@ -58,7 +51,7 @@ impl<F: Clone, MEM> VmState<F, MEM> {
     }
 
     #[inline(always)]
-    pub fn into_mut<'a, RA>(&'a mut self, ctx: &'a mut RA) -> VmStateMut<'a, F, MEM, RA> {
+    pub fn into_mut<'a, RA>(&'a mut self, ctx: &'a mut RA) -> VmStateMut<'a, MEM, RA> {
         VmStateMut {
             pc: &mut self.pc,
             memory: &mut self.memory,
@@ -71,13 +64,13 @@ impl<F: Clone, MEM> VmState<F, MEM> {
     }
 }
 
-impl<F: Clone> VmState<F, GuestMemory> {
+impl VmState<GuestMemory> {
     #[instrument(name = "VmState::initial", level = "debug", skip_all)]
     pub fn initial(
         system_config: &SystemConfig,
         init_memory: &SparseMemoryImage,
         pc_start: u32,
-        inputs: impl Into<Streams<F>>,
+        inputs: impl Into<Streams>,
     ) -> Self {
         let memory = create_memory_image(&system_config.memory_config, init_memory);
         VmState::new_with_defaults(pc_start, memory, inputs.into(), DEFAULT_RNG_SEED)
@@ -87,7 +80,7 @@ impl<F: Clone> VmState<F, GuestMemory> {
         &mut self,
         init_memory: &SparseMemoryImage,
         pc_start: u32,
-        streams: impl Into<Streams<F>>,
+        streams: impl Into<Streams>,
     ) {
         self.pc = pc_start;
         self.memory.memory.fill_zero();
@@ -102,23 +95,23 @@ impl<F: Clone> VmState<F, GuestMemory> {
 /// The host state is execution context specific.
 // @dev: Do not confuse with `ExecutionState` struct.
 #[repr(C)]
-pub struct VmExecState<F, MEM, CTX> {
+pub struct VmExecState<MEM, CTX> {
     /// Core VM state
-    pub vm_state: VmState<F, MEM>,
+    pub vm_state: VmState<MEM>,
     pub ctx: CTX,
     /// Execution-specific fields
     pub exit_code: Result<Option<u32>, ExecutionError>,
 }
 
-impl<F, CTX: ExecutionCtxTrait> VmExecState<F, GuestMemory, CTX> {
+impl<CTX: ExecutionCtxTrait> VmExecState<GuestMemory, CTX> {
     #[inline(always)]
     pub fn should_suspend(&mut self) -> bool {
         CTX::should_suspend(self)
     }
 }
 
-impl<F, MEM, CTX> VmExecState<F, MEM, CTX> {
-    pub fn new(vm_state: VmState<F, MEM>, ctx: CTX) -> Self {
+impl<MEM, CTX> VmExecState<MEM, CTX> {
+    pub fn new(vm_state: VmState<MEM>, ctx: CTX) -> Self {
         Self {
             vm_state,
             ctx,
@@ -130,7 +123,7 @@ impl<F, MEM, CTX> VmExecState<F, MEM, CTX> {
     /// cannot be cloned.
     pub fn try_clone(&self) -> eyre::Result<Self>
     where
-        VmState<F, MEM>: Clone,
+        VmState<MEM>: Clone,
         CTX: Clone,
     {
         if self.exit_code.is_err() {
@@ -146,21 +139,21 @@ impl<F, MEM, CTX> VmExecState<F, MEM, CTX> {
     }
 }
 
-impl<F, MEM, CTX> Deref for VmExecState<F, MEM, CTX> {
-    type Target = VmState<F, MEM>;
+impl<MEM, CTX> Deref for VmExecState<MEM, CTX> {
+    type Target = VmState<MEM>;
 
     fn deref(&self) -> &Self::Target {
         &self.vm_state
     }
 }
 
-impl<F, MEM, CTX> DerefMut for VmExecState<F, MEM, CTX> {
+impl<MEM, CTX> DerefMut for VmExecState<MEM, CTX> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.vm_state
     }
 }
 
-impl<F, CTX> VmExecState<F, GuestMemory, CTX>
+impl<CTX> VmExecState<GuestMemory, CTX>
 where
     CTX: ExecutionCtxTrait,
 {

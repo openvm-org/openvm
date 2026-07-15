@@ -66,7 +66,7 @@ where
 
     pub fn prove(
         &mut self,
-        vm_input: StdIn<Val<SC>>,
+        vm_input: StdIn,
         def_inputs: &[DeferralInput],
     ) -> Result<(VmStarkProof, InternalLayerMetadata)>
     where

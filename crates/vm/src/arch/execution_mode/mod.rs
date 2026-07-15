@@ -16,9 +16,9 @@ pub use pure::ExecutionCtx;
 pub trait ExecutionCtxTrait: Sized {
     fn on_memory_operation(&mut self, address_space: u32, ptr: u32, size: u32);
 
-    fn should_suspend<F>(exec_state: &mut VmExecState<F, GuestMemory, Self>) -> bool;
+    fn should_suspend(exec_state: &mut VmExecState<GuestMemory, Self>) -> bool;
 
-    fn on_terminate<F>(_exec_state: &mut VmExecState<F, GuestMemory, Self>) {}
+    fn on_terminate(_exec_state: &mut VmExecState<GuestMemory, Self>) {}
 }
 
 pub trait MeteredExecutionCtxTrait: ExecutionCtxTrait {

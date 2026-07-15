@@ -154,7 +154,7 @@ impl<F: PrimeField32, E> PreflightInterpretedInstance<F, E> {
     /// Stopping is triggered by should_stop() or if VM is terminated
     pub fn execute_from_state<RA>(
         &mut self,
-        state: &mut VmExecState<F, TracingMemory, PreflightCtx<RA>>,
+        state: &mut VmExecState<TracingMemory, PreflightCtx<RA>>,
     ) -> Result<(), ExecutionError>
     where
         RA: Arena,
@@ -182,7 +182,7 @@ impl<F: PrimeField32, E> PreflightInterpretedInstance<F, E> {
     #[inline(always)]
     fn execute_instruction<RA>(
         &mut self,
-        state: &mut VmExecState<F, TracingMemory, PreflightCtx<RA>>,
+        state: &mut VmExecState<TracingMemory, PreflightCtx<RA>>,
     ) -> Result<(), ExecutionError>
     where
         RA: Arena,
