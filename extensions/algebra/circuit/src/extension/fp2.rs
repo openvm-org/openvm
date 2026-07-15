@@ -75,8 +75,8 @@ impl<F: PrimeField32> VmRvrExtension<F> for Fp2Extension {
             .iter()
             .map(|(_, m)| m.clone())
             .collect();
-        let extension = Fp2RvrExtension::new(fp2_moduli, ctx)
-            .expect("failed to construct rvr Fp2RvrExtension");
+        let extension =
+            Fp2RvrExtension::new(fp2_moduli, ctx).expect("failed to construct rvr Fp2RvrExtension");
         extensions.register_lifter(extension);
     }
 }
