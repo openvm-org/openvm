@@ -13,7 +13,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_instructions::{
-    LocalOpcode, PhantomDiscriminant, SysPhantom, SystemOpcode, MEMORY_DIGEST_WIDTH as DIGEST_WIDTH,
+    LocalOpcode, PhantomDiscriminant, SysPhantom, SystemOpcode, VM_DIGEST_WIDTH,
 };
 use openvm_stark_backend::{
     interaction::{LookupBus, PermutationCheckBus},
@@ -94,7 +94,7 @@ pub trait SystemChipComplex<RA, PB: ProverBackend> {
     /// This function **must** return `Some` if called after
     /// [`generate_proving_ctx`](Self::generate_proving_ctx) and may return `None` if called before
     /// that.
-    fn memory_top_tree(&self) -> Option<&[[PB::Val; DIGEST_WIDTH]]>;
+    fn memory_top_tree(&self) -> Option<&[[PB::Val; VM_DIGEST_WIDTH]]>;
 }
 
 /// Trait meant to be implemented on a SystemChipComplex.
@@ -377,7 +377,7 @@ where
             .collect()
     }
 
-    fn memory_top_tree(&self) -> Option<&[[Val<SC>; DIGEST_WIDTH]]> {
+    fn memory_top_tree(&self) -> Option<&[[Val<SC>; VM_DIGEST_WIDTH]]> {
         let top_tree = &self.memory_controller.interface_chip.merkle_chip.top_tree;
         (!top_tree.is_empty()).then_some(top_tree.as_slice())
     }

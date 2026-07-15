@@ -10,7 +10,7 @@ use openvm_circuit_primitives::{
     Chip, TraceSubRowGenerator,
 };
 use openvm_cpu_backend::CpuBackend;
-use openvm_instructions::MEMORY_DIGEST_WIDTH as DIGEST_WIDTH;
+use openvm_instructions::VM_DIGEST_WIDTH;
 use openvm_stark_backend::{
     interaction::PermutationCheckBus, p3_field::PrimeField32, prover::AirProvingContext,
     StarkProtocolConfig,
@@ -35,11 +35,11 @@ use crate::{
 pub mod dimensions;
 pub mod interface;
 
-pub const DIGEST_WIDTH_BITS: usize = const_log2_strict_usize(DIGEST_WIDTH);
+pub const DIGEST_WIDTH_BITS: usize = const_log2_strict_usize(VM_DIGEST_WIDTH);
 
 const _: () = assert!(
-    DIGEST_WIDTH.is_multiple_of(BLOCK_FE_WIDTH),
-    "DIGEST_WIDTH must be divisible by BLOCK_FE_WIDTH so BLOCKS_PER_LEAF is integer-valued"
+    VM_DIGEST_WIDTH.is_multiple_of(BLOCK_FE_WIDTH),
+    "VM_DIGEST_WIDTH must be divisible by BLOCK_FE_WIDTH so BLOCKS_PER_LEAF is integer-valued"
 );
 
 /// The offset of the Merkle AIR in AIRs of MemoryController.
@@ -184,12 +184,12 @@ impl<F: VmField> MemoryController<F> {
         let final_memory_by_leaf = group_touched_memory_by_leaf(&final_memory);
         boundary_chip.finalize(initial_memory, &final_memory_by_leaf, hasher.as_ref());
 
-        // Regroup BLOCK_FE_WIDTH-cell blocks into DIGEST_WIDTH-cell leaves for merkle_chip.
+        // Regroup BLOCK_FE_WIDTH-cell blocks into VM_DIGEST_WIDTH-cell leaves for merkle_chip.
         // The equipartition key is (addr_space, ptr).
-        let final_memory_values: Equipartition<F, DIGEST_WIDTH> = final_memory_by_leaf
+        let final_memory_values: Equipartition<F, VM_DIGEST_WIDTH> = final_memory_by_leaf
             .iter()
             .map(|((addr_space, leaf_label), blocks)| {
-                let ptr = leaf_label * DIGEST_WIDTH as u32;
+                let ptr = leaf_label * VM_DIGEST_WIDTH as u32;
                 let mut values = std::array::from_fn(|i| unsafe {
                     initial_memory.get_f::<F>(*addr_space, ptr + i as u32)
                 });

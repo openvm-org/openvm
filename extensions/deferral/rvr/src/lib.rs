@@ -13,7 +13,7 @@ use openvm_circuit::arch::{
     rvr::io::OpenVmIoState,
 };
 use openvm_deferral_transpiler::DeferralOpcode;
-use openvm_instructions::{LocalOpcode, MEMORY_DIGEST_WIDTH};
+use openvm_instructions::{LocalOpcode, VM_DIGEST_WIDTH};
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
 use rvr_openvm_lift::{
@@ -22,7 +22,7 @@ use rvr_openvm_lift::{
 };
 
 /// Size in bytes of a serialized deferral commitment.
-pub const DEFERRAL_COMMIT_NUM_BYTES: usize = MEMORY_DIGEST_WIDTH * core::mem::size_of::<u32>();
+pub const DEFERRAL_COMMIT_NUM_BYTES: usize = VM_DIGEST_WIDTH * core::mem::size_of::<u32>();
 /// Size in bytes of a deferral output key: commitment followed by output length.
 pub const DEFERRAL_OUTPUT_KEY_BYTES: usize =
     DEFERRAL_COMMIT_NUM_BYTES + core::mem::size_of::<u64>();
@@ -33,9 +33,7 @@ pub type DeferralHashFn = Box<dyn Fn(u32, &[u8]) -> [u8; DEFERRAL_COMMIT_NUM_BYT
 /// Poseidon2 compression over deferral accumulator field elements.
 /// Values cross the crate boundary as canonical u32s.
 pub type DeferralCompressFn = Box<
-    dyn Fn([u32; MEMORY_DIGEST_WIDTH], [u32; MEMORY_DIGEST_WIDTH]) -> [u32; MEMORY_DIGEST_WIDTH]
-        + Send
-        + Sync,
+    dyn Fn([u32; VM_DIGEST_WIDTH], [u32; VM_DIGEST_WIDTH]) -> [u32; VM_DIGEST_WIDTH] + Send + Sync,
 >;
 
 pub struct DeferralCtx {
@@ -263,10 +261,8 @@ impl RvrRuntimeExtension for DeferralRuntimeHooks {
 //
 // CALL writes new `(input_acc, output_acc)` values to DEFERRAL_AS.
 
-fn commit_bytes_to_field_values(
-    bytes: &[u8; DEFERRAL_COMMIT_NUM_BYTES],
-) -> [u32; MEMORY_DIGEST_WIDTH] {
-    let mut out = [0u32; MEMORY_DIGEST_WIDTH];
+fn commit_bytes_to_field_values(bytes: &[u8; DEFERRAL_COMMIT_NUM_BYTES]) -> [u32; VM_DIGEST_WIDTH] {
+    let mut out = [0u32; VM_DIGEST_WIDTH];
     for (dst, chunk) in out.iter_mut().zip(bytes.chunks_exact(4)) {
         *dst = u32::from_le_bytes(chunk.try_into().unwrap());
     }
@@ -295,8 +291,8 @@ unsafe fn deferral_memory<'a, F: PrimeField32>(io: &'a mut OpenVmIoState<'_>) ->
 fn read_deferral_digest<F: PrimeField32>(
     memory: &[F],
     ptr: usize,
-) -> Option<[u32; MEMORY_DIGEST_WIDTH]> {
-    let end = ptr.checked_add(MEMORY_DIGEST_WIDTH)?;
+) -> Option<[u32; VM_DIGEST_WIDTH]> {
+    let end = ptr.checked_add(VM_DIGEST_WIDTH)?;
     let values = memory.get(ptr..end)?;
     Some(std::array::from_fn(|i| values[i].as_canonical_u32()))
 }
@@ -304,9 +300,9 @@ fn read_deferral_digest<F: PrimeField32>(
 fn write_deferral_digest<F: PrimeField32>(
     memory: &mut [F],
     ptr: usize,
-    values: [u32; MEMORY_DIGEST_WIDTH],
+    values: [u32; VM_DIGEST_WIDTH],
 ) -> bool {
-    let Some(end) = ptr.checked_add(MEMORY_DIGEST_WIDTH) else {
+    let Some(end) = ptr.checked_add(VM_DIGEST_WIDTH) else {
         return false;
     };
     let Some(dst) = memory.get_mut(ptr..end) else {
@@ -328,8 +324,8 @@ unsafe fn update_deferral_accumulators<F: PrimeField32>(
     output_commit: &[u8; DEFERRAL_COMMIT_NUM_BYTES],
 ) -> bool {
     let memory = unsafe { deferral_memory::<F>(io) };
-    let input_acc_ptr = 2 * def_idx as usize * MEMORY_DIGEST_WIDTH;
-    let output_acc_ptr = input_acc_ptr + MEMORY_DIGEST_WIDTH;
+    let input_acc_ptr = 2 * def_idx as usize * VM_DIGEST_WIDTH;
+    let output_acc_ptr = input_acc_ptr + VM_DIGEST_WIDTH;
     let Some(old_input_acc) = read_deferral_digest(memory, input_acc_ptr) else {
         return false;
     };

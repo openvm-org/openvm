@@ -3,13 +3,13 @@
 use openvm_instructions::{
     metering::{PAGE_MASK_LEAF_BITS, SEGMENT_CHECK_INSNS},
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
-    DEFERRAL_AS, MEMORY_DIGEST_WIDTH, PUBLIC_VALUES_AS,
+    DEFERRAL_AS, PUBLIC_VALUES_AS, VM_DIGEST_WIDTH,
 };
 use openvm_platform::{memory::MEM_SIZE, WORD_SIZE};
 use openvm_riscv_guest::MAX_HINT_BUFFER_DWORDS;
 
-const BYTE_SPACE_PTRS_PER_LEAF: usize = core::mem::size_of::<u16>() * MEMORY_DIGEST_WIDTH;
-const DEFERRAL_PTRS_PER_LEAF: usize = MEMORY_DIGEST_WIDTH;
+const BYTE_SPACE_PTRS_PER_LEAF: usize = core::mem::size_of::<u16>() * VM_DIGEST_WIDTH;
+const DEFERRAL_PTRS_PER_LEAF: usize = VM_DIGEST_WIDTH;
 
 /// Worst-case AS_MEMORY pages a single instruction can touch.
 ///
@@ -56,7 +56,7 @@ static constexpr uint32_t AS_MEMORY = {RV64_MEMORY_AS};
 static constexpr uint32_t AS_PUBLIC_VALUES = {PUBLIC_VALUES_AS};
 static constexpr uint32_t AS_DEFERRAL = {DEFERRAL_AS};
 static constexpr uint32_t WORD_SIZE = {WORD_SIZE};
-static constexpr uint32_t DEFERRAL_DIGEST_SIZE = {MEMORY_DIGEST_WIDTH};
+static constexpr uint32_t DEFERRAL_DIGEST_SIZE = {VM_DIGEST_WIDTH};
 static constexpr uint64_t RV_TEXT_START = 0x{text_start:08x}ull;
 static constexpr uint64_t RV_TEXT_END = 0x{text_end:08x}ull;
 static constexpr uint32_t RV_DISPATCH_TABLE_SIZE = {dispatch_table_size}u;

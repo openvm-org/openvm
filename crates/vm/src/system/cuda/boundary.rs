@@ -5,7 +5,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives::Chip;
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::GpuDeviceCtx};
-use openvm_instructions::MEMORY_DIGEST_WIDTH as DIGEST_WIDTH;
+use openvm_instructions::VM_DIGEST_WIDTH;
 use openvm_stark_backend::prover::{AirProvingContext, MatrixDimensions};
 
 use super::poseidon2::SharedBuffer;
@@ -23,7 +23,7 @@ pub struct BoundaryChipGPU {
     pub trace_width: Option<usize>,
 }
 
-const BLOCKS_PER_LEAF: usize = DIGEST_WIDTH / BLOCK_FE_WIDTH;
+const BLOCKS_PER_LEAF: usize = VM_DIGEST_WIDTH / BLOCK_FE_WIDTH;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -32,7 +32,7 @@ pub struct PersistentBoundaryRecord {
     /// AS-native pointer to the first cell of this Merkle leaf.
     pub ptr: u32,
     pub timestamps: [u32; BLOCKS_PER_LEAF],
-    pub values: [F; DIGEST_WIDTH],
+    pub values: [F; VM_DIGEST_WIDTH],
 }
 
 impl BoundaryChipGPU {

@@ -6,7 +6,7 @@ use openvm_cpu_backend::CpuBackend;
 use openvm_instructions::{
     exe::VmExe,
     program::{Program, DEFAULT_PC_STEP},
-    LocalOpcode, SystemOpcode, MEMORY_DIGEST_WIDTH as DIGEST_WIDTH,
+    LocalOpcode, SystemOpcode, VM_DIGEST_WIDTH,
 };
 use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
@@ -64,10 +64,10 @@ impl<SC: StarkProtocolConfig> Chip<(), CpuBackend<SC>> for ProgramChip<SC> {
 ///
 /// **Note**: This function recomputes the Merkle tree for the initial memory image.
 pub fn compute_exe_commit_from_mem_config<F: PrimeField32>(
-    program_commitment: &[F; DIGEST_WIDTH],
+    program_commitment: &[F; VM_DIGEST_WIDTH],
     exe: &VmExe<F>,
     memory_config: &MemoryConfig,
-) -> [F; DIGEST_WIDTH] {
+) -> [F; VM_DIGEST_WIDTH] {
     let hasher = vm_poseidon2_hasher();
     let memory_dimensions = memory_config.memory_dimensions();
     let mut memory_image = AddressMap::new(memory_config.addr_spaces.clone());
@@ -91,11 +91,11 @@ pub fn compute_exe_commit_from_mem_config<F: PrimeField32>(
 /// and a cryptographic compression function (for internal nodes).
 pub fn compute_exe_commit<F: PrimeField32>(
     hasher: &Poseidon2Hasher<F>,
-    program_commit: &[F; DIGEST_WIDTH],
-    init_memory_root: &[F; DIGEST_WIDTH],
+    program_commit: &[F; VM_DIGEST_WIDTH],
+    init_memory_root: &[F; VM_DIGEST_WIDTH],
     pc_start: F,
-) -> [F; DIGEST_WIDTH] {
-    let mut padded_pc_start = [F::ZERO; DIGEST_WIDTH];
+) -> [F; VM_DIGEST_WIDTH] {
+    let mut padded_pc_start = [F::ZERO; VM_DIGEST_WIDTH];
     padded_pc_start[0] = pc_start;
     let program_hash = hasher.hash(program_commit);
     let memory_hash = hasher.hash(init_memory_root);

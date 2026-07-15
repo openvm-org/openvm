@@ -9,7 +9,7 @@ use derive_new::new;
 use getset::{Setters, WithSetters};
 use openvm_instructions::{
     riscv::{RV64_IMM_AS, RV64_MEMORY_AS, RV64_REGISTER_AS},
-    DEFERRAL_AS, MEMORY_DIGEST_WIDTH as DIGEST_WIDTH, PUBLIC_VALUES_AS,
+    DEFERRAL_AS, PUBLIC_VALUES_AS, VM_DIGEST_WIDTH,
 };
 use openvm_platform::memory::MEM_SIZE;
 use openvm_poseidon2_air::Poseidon2Config;
@@ -44,7 +44,7 @@ pub const DEFAULT_MAX_NUM_PUBLIC_VALUES: usize = 32;
 /// Max number of deferral address space cells
 pub const DEFAULT_DEFERRAL_ADDR_SPACE_CELLS: usize = 1 << 14;
 /// Width of Poseidon2 VM uses.
-pub const POSEIDON2_WIDTH: usize = 2 * DIGEST_WIDTH;
+pub const POSEIDON2_WIDTH: usize = 2 * VM_DIGEST_WIDTH;
 /// Offset for address space indices. This is used to distinguish between different memory spaces.
 pub const ADDR_SPACE_OFFSET: u32 = 1;
 
@@ -63,7 +63,7 @@ pub const OPENVM_DEFAULT_INIT_FILE_NAME: &str = "openvm_init.rs";
 //   Cell    one storage word in an address space.
 //   Block   the unit of one memory-bus message: BLOCK_FE_WIDTH cells =
 //           MEMORY_BLOCK_BYTES bytes.
-//   Digest  the output of one Poseidon2 compression (DIGEST_WIDTH cells); also
+//   Digest  the output of one Poseidon2 compression (VM_DIGEST_WIDTH cells); also
 //           one merkle leaf.
 
 /// Host byte width of one u16-celled storage cell.
@@ -306,7 +306,7 @@ impl SystemConfig {
             memory_config.timestamp_max_bits <= 29,
             "Timestamp max bits must be <= 29 for LessThan to work in 31-bit field"
         );
-        assert_public_values_shape::<DIGEST_WIDTH>(num_public_values);
+        assert_public_values_shape::<VM_DIGEST_WIDTH>(num_public_values);
         memory_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = num_public_values;
         Self {
             max_constraint_degree,
@@ -325,7 +325,7 @@ impl SystemConfig {
     }
 
     pub fn with_public_values(mut self, num_public_values: usize) -> Self {
-        assert_public_values_shape::<DIGEST_WIDTH>(num_public_values);
+        assert_public_values_shape::<VM_DIGEST_WIDTH>(num_public_values);
         self.num_public_values = num_public_values;
         self.memory_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = num_public_values;
         self

@@ -266,7 +266,7 @@ fn extract_public_value_cells<F: Field>(
 
 #[cfg(test)]
 mod tests {
-    use openvm_instructions::{MEMORY_DIGEST_WIDTH as DIGEST_WIDTH, PUBLIC_VALUES_AS};
+    use openvm_instructions::{PUBLIC_VALUES_AS, VM_DIGEST_WIDTH};
     use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
@@ -284,7 +284,7 @@ mod tests {
         vm_config.memory_config.addr_space_height = addr_space_height;
         vm_config.memory_config.pointer_max_bits = 5;
         let memory_dimensions = vm_config.memory_config.memory_dimensions();
-        let num_public_values = DIGEST_WIDTH;
+        let num_public_values = VM_DIGEST_WIDTH;
         let vm_config = vm_config.with_public_values(num_public_values);
         let mut addr_spaces_config = MemoryConfig::empty_address_space_configs(4);
         addr_spaces_config[PUBLIC_VALUES_AS as usize].num_cells = num_public_values;
@@ -304,7 +304,7 @@ mod tests {
         let hasher = vm_poseidon2_hasher();
         let tree = MerkleTree::from_memory(&memory.memory, &memory_dimensions, &hasher);
         let top_tree = tree.top_tree(addr_space_height);
-        let pv_proof = UserPublicValuesProof::<{ DIGEST_WIDTH }, F>::compute(
+        let pv_proof = UserPublicValuesProof::<{ VM_DIGEST_WIDTH }, F>::compute(
             &vm_config,
             &hasher,
             &memory.memory,

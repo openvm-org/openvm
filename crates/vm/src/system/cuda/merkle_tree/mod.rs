@@ -11,7 +11,7 @@ use openvm_cuda_common::{
     d_buffer::DeviceBuffer,
     stream::{CudaEvent, GpuDeviceCtx},
 };
-use openvm_instructions::MEMORY_DIGEST_WIDTH as DIGEST_WIDTH;
+use openvm_instructions::VM_DIGEST_WIDTH;
 use openvm_stark_backend::{
     p3_maybe_rayon::prelude::{IntoParallelIterator, ParallelIterator},
     p3_util::log2_ceil_usize,
@@ -24,13 +24,13 @@ use super::{poseidon2::SharedBuffer, Poseidon2PeripheryChipGPU};
 pub mod cuda;
 use cuda::merkle_tree::*;
 
-type H = [F; DIGEST_WIDTH];
+type H = [F; VM_DIGEST_WIDTH];
 /// Width of `((u32, u32), TimestampedValues<F, BLOCK_FE_WIDTH>)` in u32 units.
 /// = 2 (key) + 1 (timestamp) + BLOCK_FE_WIDTH (values)
 pub const TIMESTAMPED_BLOCK_WIDTH: usize = 3 + BLOCK_FE_WIDTH;
-/// Width of `((u32, u32), TimestampedValues<F, DIGEST_WIDTH>)` in u32 units.
-/// = 2 (key) + 1 (timestamp) + DIGEST_WIDTH (values)
-pub const MERKLE_TOUCHED_BLOCK_WIDTH: usize = 3 + DIGEST_WIDTH;
+/// Width of `((u32, u32), TimestampedValues<F, VM_DIGEST_WIDTH>)` in u32 units.
+/// = 2 (key) + 1 (timestamp) + VM_DIGEST_WIDTH (values)
+pub const MERKLE_TOUCHED_BLOCK_WIDTH: usize = 3 + VM_DIGEST_WIDTH;
 pub(crate) const OMITTED_BOTTOM_LEVELS: usize = 3;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -263,10 +263,10 @@ impl MemoryMerkleTree {
             .iter()
             .map(|ashc| {
                 assert!(
-                    ashc.num_cells % DIGEST_WIDTH == 0,
-                    "the number of cells must be divisible by `DIGEST_WIDTH`"
+                    ashc.num_cells % VM_DIGEST_WIDTH == 0,
+                    "the number of cells must be divisible by `VM_DIGEST_WIDTH`"
                 );
-                ashc.num_cells / DIGEST_WIDTH
+                ashc.num_cells / VM_DIGEST_WIDTH
             })
             .collect::<Vec<_>>();
         assert!(!(addr_space_sizes.is_empty()), "Invalid config");
@@ -326,7 +326,7 @@ impl MemoryMerkleTree {
         let addr_space_idx = addr_space - ADDR_SPACE_OFFSET as usize;
         if addr_space < self.mem_config.addr_spaces.len() && addr_space_idx == self.subtrees.len() {
             let mut subtree = MemoryMerkleSubTree::new(
-                self.mem_config.addr_spaces[addr_space].num_cells / DIGEST_WIDTH,
+                self.mem_config.addr_spaces[addr_space].num_cells / VM_DIGEST_WIDTH,
                 1 << (self.zero_hash.len() - 1), /* label_max_bits */
                 &self.device_ctx,
             );
@@ -370,7 +370,7 @@ impl MemoryMerkleTree {
 
     /// Updates the tree and returns the merkle trace.
     ///
-    /// `d_touched_blocks` consists of `(as, ptr, ts, [F; DIGEST_WIDTH])`.
+    /// `d_touched_blocks` consists of `(as, ptr, ts, [F; VM_DIGEST_WIDTH])`.
     pub fn update_with_touched_blocks(
         &mut self,
         unpadded_height: usize,
@@ -384,7 +384,7 @@ impl MemoryMerkleTree {
             subtree.build_completion_event = None;
         }
         let merkle_trace = {
-            let width = MemoryMerkleCols::<u8, DIGEST_WIDTH>::width();
+            let width = MemoryMerkleCols::<u8, VM_DIGEST_WIDTH>::width();
             let padded_height = next_power_of_two_or_zero(unpadded_height);
             let output =
                 DeviceMatrix::<F>::with_capacity_on(padded_height, width, &self.device_ctx);
@@ -454,7 +454,7 @@ impl MemoryMerkleTree {
     ) -> usize {
         let md = self.mem_config.memory_dimensions();
         let tree_height = md.overall_height();
-        let shift_address = |(sp, ptr): (u32, u32)| (sp, ptr / DIGEST_WIDTH as u32);
+        let shift_address = |(sp, ptr): (u32, u32)| (sp, ptr / VM_DIGEST_WIDTH as u32);
         2 * if touched_memory.is_empty() {
             tree_height
         } else {
@@ -507,7 +507,7 @@ mod tests {
     };
     use openvm_instructions::{
         riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
-        DEFERRAL_AS, MEMORY_DIGEST_WIDTH as DIGEST_WIDTH,
+        DEFERRAL_AS, VM_DIGEST_WIDTH,
     };
     use openvm_stark_backend::{interaction::PermutationCheckBus, prover::MatrixDimensions};
     use openvm_stark_sdk::utils::create_seeded_rng;
@@ -646,7 +646,7 @@ mod tests {
         gpu_merkle_tree.finalize();
 
         let cpu_hasher_chip = Poseidon2PeripheryChip::new(vm_poseidon2_config(), 3);
-        let mut cpu_merkle_tree = MerkleTree::<F, DIGEST_WIDTH>::from_memory(
+        let mut cpu_merkle_tree = MerkleTree::<F, VM_DIGEST_WIDTH>::from_memory(
             &initial_memory.memory,
             &mem_config.memory_dimensions(),
             &cpu_hasher_chip,
@@ -677,9 +677,9 @@ mod tests {
             .enumerate()
             .flat_map(|(i, cnf)| {
                 let mut ptrs = Vec::new();
-                for j in 0..(cnf.num_cells / DIGEST_WIDTH) {
+                for j in 0..(cnf.num_cells / VM_DIGEST_WIDTH) {
                     if rng.random_bool(0.333) {
-                        ptrs.push((i as u32, (j * DIGEST_WIDTH) as u32));
+                        ptrs.push((i as u32, (j * VM_DIGEST_WIDTH) as u32));
                     }
                 }
                 ptrs
@@ -688,7 +688,7 @@ mod tests {
         let new_data = touched_ptrs
             .iter()
             .map(|_| std::array::from_fn(|_| F::from_u32(rng.random_range(0..F::ORDER_U32))))
-            .collect::<Vec<[F; DIGEST_WIDTH]>>();
+            .collect::<Vec<[F; VM_DIGEST_WIDTH]>>();
         assert!(!touched_ptrs.is_empty());
         cpu_merkle_tree.finalize(
             &cpu_hasher_chip,
@@ -842,9 +842,9 @@ mod tests {
             .enumerate()
             .flat_map(|(i, cnf)| {
                 let mut ptrs = Vec::new();
-                for j in 0..(cnf.num_cells / DIGEST_WIDTH) {
+                for j in 0..(cnf.num_cells / VM_DIGEST_WIDTH) {
                     if rng.random_bool(0.333) {
-                        ptrs.push((i as u32, (j * DIGEST_WIDTH) as u32));
+                        ptrs.push((i as u32, (j * VM_DIGEST_WIDTH) as u32));
                     }
                 }
                 ptrs
@@ -853,18 +853,18 @@ mod tests {
         let new_data = touched_ptrs
             .iter()
             .map(|_| std::array::from_fn(|_| F::from_u32(rng.random_range(0..F::ORDER_U32))))
-            .collect::<Vec<[F; DIGEST_WIDTH]>>();
+            .collect::<Vec<[F; VM_DIGEST_WIDTH]>>();
         assert!(!touched_ptrs.is_empty());
 
         // Build the canonical CPU trace from the same initial memory and touched blocks, using a
         // Poseidon2 hasher equivalent to the GPU one.
         let cpu_hasher_chip = Poseidon2PeripheryChip::new(vm_poseidon2_config(), 3);
-        let mut cpu_merkle_chip = MemoryMerkleChip::<DIGEST_WIDTH, F>::new(
+        let mut cpu_merkle_chip = MemoryMerkleChip::<VM_DIGEST_WIDTH, F>::new(
             mem_config.memory_dimensions(),
             PermutationCheckBus::new(MEMORY_MERKLE_BUS),
             PermutationCheckBus::new(POSEIDON2_DIRECT_BUS),
         );
-        let final_partition: BTreeMap<(u32, u32), [F; DIGEST_WIDTH]> = touched_ptrs
+        let final_partition: BTreeMap<(u32, u32), [F; VM_DIGEST_WIDTH]> = touched_ptrs
             .iter()
             .copied()
             .zip(new_data.iter().copied())

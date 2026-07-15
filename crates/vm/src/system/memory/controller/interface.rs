@@ -1,4 +1,4 @@
-use openvm_instructions::MEMORY_DIGEST_WIDTH as DIGEST_WIDTH;
+use openvm_instructions::VM_DIGEST_WIDTH;
 use openvm_stark_backend::{interaction::PermutationCheckBus, p3_field::PrimeField32};
 
 use crate::system::memory::{
@@ -9,13 +9,13 @@ use crate::system::memory::{
 
 #[derive(Clone)]
 pub struct MemoryInterfaceAirs {
-    pub boundary: PersistentBoundaryAir<DIGEST_WIDTH>,
-    pub merkle: MemoryMerkleAir<DIGEST_WIDTH>,
+    pub boundary: PersistentBoundaryAir<VM_DIGEST_WIDTH>,
+    pub merkle: MemoryMerkleAir<VM_DIGEST_WIDTH>,
 }
 
 pub struct MemoryInterface<F> {
-    pub boundary_chip: PersistentBoundaryChip<F, DIGEST_WIDTH>,
-    pub merkle_chip: MemoryMerkleChip<DIGEST_WIDTH, F>,
+    pub boundary_chip: PersistentBoundaryChip<F, VM_DIGEST_WIDTH>,
+    pub merkle_chip: MemoryMerkleChip<VM_DIGEST_WIDTH, F>,
     pub initial_memory: MemoryImage,
 }
 

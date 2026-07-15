@@ -23,8 +23,8 @@ pub use phantom::*;
 pub const PUBLIC_VALUES_AS: u32 = 3;
 /// Deferral output address space.
 pub const DEFERRAL_AS: u32 = 4;
-/// Field elements in an OpenVM memory Merkle digest and deferral commitment.
-pub const MEMORY_DIGEST_WIDTH: usize = 8;
+/// Field elements in an OpenVM VM-level digest, including memory roots and commitments.
+pub const VM_DIGEST_WIDTH: usize = 8;
 
 pub trait LocalOpcode {
     const CLASS_OFFSET: usize;

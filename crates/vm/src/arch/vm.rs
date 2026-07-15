@@ -15,7 +15,7 @@ use openvm_circuit::system::program::trace::compute_exe_commit;
 use openvm_instructions::{
     exe::{SparseMemoryImage, VmExe},
     program::Program,
-    MEMORY_DIGEST_WIDTH as DIGEST_WIDTH,
+    VM_DIGEST_WIDTH,
 };
 #[cfg(any(debug_assertions, feature = "test-utils", feature = "stark-debug"))]
 use openvm_stark_backend::AirRef;
@@ -573,8 +573,8 @@ pub enum VmVerificationError<SC: StarkProtocolConfig> {
 
     #[error("exe commit mismatch (expected: {expected:?}, actual: {actual:?})")]
     ExeCommitMismatch {
-        expected: [u32; DIGEST_WIDTH],
-        actual: [u32; DIGEST_WIDTH],
+        expected: [u32; VM_DIGEST_WIDTH],
+        actual: [u32; VM_DIGEST_WIDTH],
     },
 
     #[error("initial pc mismatch (initial: {initial}, prev_final: {prev_final})")]
@@ -1235,7 +1235,7 @@ where
     }
 
     /// See [`SystemChipComplex::memory_top_tree`].
-    pub fn memory_top_tree(&self) -> Option<&[[Val<E::SC>; DIGEST_WIDTH]]> {
+    pub fn memory_top_tree(&self) -> Option<&[[Val<E::SC>; VM_DIGEST_WIDTH]]> {
         self.chip_complex.system.memory_top_tree()
     }
 
@@ -1378,7 +1378,7 @@ mod tests {
 ))]
 pub struct ContinuationVmProof<SC: StarkProtocolConfig> {
     pub per_segment: Vec<Proof<SC>>,
-    pub user_public_values: UserPublicValuesProof<{ DIGEST_WIDTH }, Val<SC>>,
+    pub user_public_values: UserPublicValuesProof<{ VM_DIGEST_WIDTH }, Val<SC>>,
 }
 
 /// Prover for a specific exe in a specific continuation VM using a specific Stark config.
@@ -1545,9 +1545,9 @@ pub struct VerifiedExecutionPayload<F> {
     ///
     /// The Merklelization uses Poseidon2 as a cryptographic hash function (for the leaves)
     /// and a cryptographic compression function (for internal nodes).
-    pub exe_commit: [F; DIGEST_WIDTH],
+    pub exe_commit: [F; VM_DIGEST_WIDTH],
     /// The Merkle root of the final memory state.
-    pub final_memory_root: [F; DIGEST_WIDTH],
+    pub final_memory_root: [F; VM_DIGEST_WIDTH],
 }
 
 /// Verify segment proofs with boundary condition checks for continuation between segments.
@@ -1574,7 +1574,7 @@ pub fn verify_segments<E>(
 where
     E: StarkEngine,
     Val<E::SC>: PrimeField32,
-    Com<E::SC>: Into<[Val<E::SC>; DIGEST_WIDTH]>,
+    Com<E::SC>: Into<[Val<E::SC>; VM_DIGEST_WIDTH]>,
 {
     if proofs.is_empty() {
         return Err(VmVerificationError::ProofNotFound);
@@ -1661,7 +1661,7 @@ where
                 }
             } else if air_idx == MERKLE_AIR_ID {
                 merkle_air_present = true;
-                let pvs: &MemoryMerklePvs<_, DIGEST_WIDTH> = pvs.as_slice().borrow();
+                let pvs: &MemoryMerklePvs<_, VM_DIGEST_WIDTH> = pvs.as_slice().borrow();
 
                 // Check that initial root matches the previous final root.
                 if i != 0 {

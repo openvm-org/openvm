@@ -4,7 +4,7 @@ use openvm_instructions::{
     exe::SparseMemoryImage,
     metering::{PAGE_MASK_LEAF_BITS, SEGMENT_CHECK_INSNS},
     riscv::{RV64_NUM_REGISTERS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
-    DEFERRAL_AS, MEMORY_DIGEST_WIDTH as DIGEST_WIDTH,
+    DEFERRAL_AS, VM_DIGEST_WIDTH,
 };
 #[cfg(test)]
 use openvm_instructions::{riscv::RV64_MEMORY_AS, PUBLIC_VALUES_AS};
@@ -26,8 +26,8 @@ const MAX_MEM_PAGE_OPS_PER_INSN: usize = 1 << 16;
 // count for the common scalar-access path.
 const INITIAL_CHECKPOINT_PAGE_ACCESSES_PER_INSN: usize = 16;
 // Shift amounts from address-space pointer units to memory Merkle leaves.
-const BYTE_PTRS_PER_LEAF_BITS: u32 = (U16_CELL_SIZE * DIGEST_WIDTH).ilog2();
-const DEFERRAL_PTRS_PER_LEAF_BITS: u32 = DIGEST_WIDTH.ilog2();
+const BYTE_PTRS_PER_LEAF_BITS: u32 = (U16_CELL_SIZE * VM_DIGEST_WIDTH).ilog2();
+const DEFERRAL_PTRS_PER_LEAF_BITS: u32 = VM_DIGEST_WIDTH.ilog2();
 const FIELD_ELEMENT_BYTES: u32 = size_of::<u32>() as u32;
 
 /// Tracks which parts of memory contribute rows to the current segment.
@@ -453,7 +453,7 @@ mod tests {
         let system_config = crate::utils::test_system_config();
         let mut ctx = MemoryCtx::new(&system_config);
         let height = ctx.memory_dimensions.overall_height() as u32;
-        let second_leaf_ptr = (U16_CELL_SIZE * DIGEST_WIDTH) as u32;
+        let second_leaf_ptr = (U16_CELL_SIZE * VM_DIGEST_WIDTH) as u32;
 
         ctx.update_boundary_merkle_heights(2, 0, 1);
         ctx.update_boundary_merkle_heights(2, second_leaf_ptr, 1);
@@ -481,7 +481,8 @@ mod tests {
         let merkle_before = trace_heights[MERKLE_AIR_ID];
         let poseidon2_idx = trace_heights.len() - 2;
         let poseidon_before = trace_heights[poseidon2_idx];
-        let next_page_ptr = ((1 << PAGE_MASK_LEAF_BITS) * U16_CELL_SIZE * DIGEST_WIDTH) as u32;
+        let next_page_ptr =
+            ((1 << PAGE_MASK_LEAF_BITS) * U16_CELL_SIZE * VM_DIGEST_WIDTH) as u32;
 
         ctx.update_boundary_merkle_heights(RV64_MEMORY_AS, next_page_ptr, 1);
         ctx.apply_height_updates(&mut trace_heights);
@@ -503,7 +504,7 @@ mod tests {
         let mut ctx = MemoryCtx::new(&system_config);
         let height = ctx.memory_dimensions.overall_height() as u32;
         ctx.seed_initial_memory(&SparseMemoryImage::from([((2, 0), 0)]));
-        let second_leaf_ptr = (U16_CELL_SIZE * DIGEST_WIDTH) as u32;
+        let second_leaf_ptr = (U16_CELL_SIZE * VM_DIGEST_WIDTH) as u32;
 
         ctx.update_boundary_merkle_heights(2, 0, 1);
         ctx.update_boundary_merkle_heights(2, second_leaf_ptr, 1);
@@ -520,7 +521,7 @@ mod tests {
         let system_config = crate::utils::test_system_config();
         let mut ctx = MemoryCtx::new(&system_config);
         let height = ctx.memory_dimensions.overall_height() as u32;
-        let second_leaf_ptr = (U16_CELL_SIZE * DIGEST_WIDTH) as u32;
+        let second_leaf_ptr = (U16_CELL_SIZE * VM_DIGEST_WIDTH) as u32;
         ctx.seed_initial_memory(&SparseMemoryImage::from([
             ((2, 0), 1),
             ((2, second_leaf_ptr), 1),
@@ -541,7 +542,7 @@ mod tests {
         let system_config = crate::utils::test_system_config();
         let mut ctx = MemoryCtx::new(&system_config);
         let height = ctx.memory_dimensions.overall_height() as u32;
-        let second_leaf_ptr = DIGEST_WIDTH as u32;
+        let second_leaf_ptr = VM_DIGEST_WIDTH as u32;
         let second_leaf_byte_ptr = second_leaf_ptr * FIELD_ELEMENT_BYTES;
         ctx.seed_initial_memory(&SparseMemoryImage::from([
             ((DEFERRAL_AS, 0), 1),
