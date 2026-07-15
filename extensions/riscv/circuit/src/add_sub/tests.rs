@@ -242,6 +242,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     let gpu_chip = Rv64AddSubChipGpu::new(
         tester.range_checker(),
         tester.timestamp_max_bits(),
+        #[cfg(feature = "rvr")]
         Default::default(),
     );
 

@@ -2135,49 +2135,33 @@ where
                             let pc_to_air_idx = vm.pc_to_air_idx(&self.exe)?;
                             let mut wire_airs = vm
                                 .builder
-                                .rvr_wire_record_airs(vm.config(), &self.exe, &pc_to_air_idx)
+                                .rvr_wire_record_airs(
+                                    vm.config(),
+                                    &self.exe,
+                                    &pc_to_air_idx,
+                                    compiled.inline_records(),
+                                )
                                 .into_iter()
                                 .collect::<Vec<_>>();
-                            let mut direct_airs = wire_airs
-                                .iter()
-                                .copied()
-                                .collect::<std::collections::HashSet<_>>();
-                            direct_airs.extend(
-                                compiled
-                                    .inline_records()
-                                    .arena_native_airs
-                                    .iter()
-                                    .map(|&(air, _)| air),
-                            );
                             // Compiler-scope proof, including mixed-AIR taint:
                             // every defined routed slot must both emit inline
                             // and belong to a whole AIR owned by the device or
                             // an arena-native consumer. Otherwise retain the
                             // complete host access replay and fail-closed
                             // generic assembly path.
-                            let fully_direct_delta = compiled.inline_records().delta_records
-                                && self
-                                    .exe
-                                    .program
-                                    .instructions_and_debug_infos
-                                    .iter()
-                                    .enumerate()
-                                    .all(|(slot, instruction)| {
-                                        if instruction.is_none() {
-                                            return true;
-                                        }
-                                        let Some(air) = pc_to_air_idx.get(slot).copied().flatten()
-                                        else {
-                                            return true;
-                                        };
-                                        compiled
-                                            .inline_records()
-                                            .pc_slots
-                                            .get(slot)
-                                            .copied()
-                                            .unwrap_or(false)
-                                            && direct_airs.contains(&air)
-                                    });
+                            let fully_direct_delta = compiled.inline_records().fully_direct_delta;
+                            // The AOT classification is backend-neutral. CPU
+                            // builders intentionally advertise no delta-wire
+                            // AIRs and must retain the full host replay. The
+                            // only safe empty-wire exception is an all-custom
+                            // arena route, whose AOT decode map is empty
+                            // because no delta record can reach finalization.
+                            let has_device_delta_route = !wire_airs.is_empty();
+                            let all_custom_arena = compiled
+                                .inline_records()
+                                .delta_decode
+                                .as_ref()
+                                .is_some_and(|precomputed| precomputed.kind_to_air.is_empty());
                             if compiled.inline_records().delta_records {
                                 // Stage-2 uses one cross-AIR chronological
                                 // backing, not the per-AIR G2 wire targets.
@@ -2191,7 +2175,8 @@ where
                                 pool,
                                 pc_to_air_idx,
                                 wire_airs,
-                                build_access_aux: !fully_direct_delta,
+                                build_access_aux: !(fully_direct_delta
+                                    && (has_device_delta_route || all_custom_arena)),
                             }))
                         }
                         RvrPreflightRoute::Interpreter(_) => CachedRvrPreflight::Interpreter,

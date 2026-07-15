@@ -481,19 +481,41 @@ impl<'a> EmitContext<'a> {
         let res = self.next_var();
         let result_expr = result(&v1, &v2);
         self.write_line(&format!("uint64_t {res} = {result_expr};"));
-        let rdprev = self.next_var();
-        self.write_line(&format!("uint64_t {rdprev} = state->regs[{rd}];"));
+        let arena = arena.filter(|_| self.arena_native_airs.contains_key(&chip));
+        let rdprev = (!self.delta_records || arena.is_some()).then(|| {
+            let rdprev = self.next_var();
+            self.write_line(&format!("uint64_t {rdprev} = state->regs[{rd}];"));
+            rdprev
+        });
         let pw = self.next_var();
         self.write_line(&format!("uint32_t {pw} = trace_reg_touch(state, {rd});"));
         self.write_line(&format!("reg_write(state, {rd}, {res});"));
-        if let Some(baked) = arena.filter(|_| self.arena_native_airs.contains_key(&chip)) {
+        if let Some(baked) = arena {
             let geom = self.arena_native_airs[&chip];
             self.emit_arena_alu3_stores(
-                geom, baked, rd, rs1, &pc, &fromts, &p1, &p2, &pw, &rdprev, &v1, &v2, &res,
+                geom,
+                baked,
+                rd,
+                rs1,
+                &pc,
+                &fromts,
+                &p1,
+                &p2,
+                &pw,
+                rdprev.as_deref().expect("arena record requires old rd"),
+                &v1,
+                &v2,
+                &res,
             );
+            if self.delta_records {
+                self.write_line(&format!(
+                    "preflight_set_last_program_write_value(state->tracer, {res});"
+                ));
+            }
         } else if self.delta_records {
-            self.emit_delta3(&pc, &fromts, &rdprev, &v1, &v2);
+            self.emit_delta3(&pc, &fromts, &res, &v1, &v2);
         } else {
+            let rdprev = rdprev.as_deref().expect("compact record requires old rd");
             self.write_line(&format!(
                 "preflight_emit_alu3(state, {chip}u, {pc}, {fromts}, {p1}, {p2}, {pw}, {rdprev}, \
                  {v1}, {v2});"
@@ -758,22 +780,44 @@ impl<'a> EmitContext<'a> {
         let res = self.next_var();
         let result_expr = result(&v1, &vimm);
         self.write_line(&format!("uint64_t {res} = {result_expr};"));
-        let rdprev = self.next_var();
-        self.write_line(&format!("uint64_t {rdprev} = state->regs[{rd}];"));
+        let arena = arena.filter(|_| self.arena_native_airs.contains_key(&chip));
+        let rdprev = (!self.delta_records || arena.is_some()).then(|| {
+            let rdprev = self.next_var();
+            self.write_line(&format!("uint64_t {rdprev} = state->regs[{rd}];"));
+            rdprev
+        });
         let pw = self.next_var();
         self.write_line(&format!("uint32_t {pw} = trace_reg_touch(state, {rd});"));
         self.write_line(&format!("reg_write(state, {rd}, {res});"));
-        if let Some(baked) = arena.filter(|_| self.arena_native_airs.contains_key(&chip)) {
+        if let Some(baked) = arena {
             let geom = self.arena_native_airs[&chip];
             // The immediate's read slot has no block touch: prev_ts = 0, and
             // the core c operand is the sign-extended immediate value (the
             // same values the compact wire carries for the imm form).
             self.emit_arena_alu3_stores(
-                geom, baked, rd, rs1, &pc, &fromts, &p1, "0u", &pw, &rdprev, &v1, &vimm, &res,
+                geom,
+                baked,
+                rd,
+                rs1,
+                &pc,
+                &fromts,
+                &p1,
+                "0u",
+                &pw,
+                rdprev.as_deref().expect("arena record requires old rd"),
+                &v1,
+                &vimm,
+                &res,
             );
+            if self.delta_records {
+                self.write_line(&format!(
+                    "preflight_set_last_program_write_value(state->tracer, {res});"
+                ));
+            }
         } else if self.delta_records {
-            self.emit_delta3(&pc, &fromts, &rdprev, &v1, &vimm);
+            self.emit_delta3(&pc, &fromts, &res, &v1, &vimm);
         } else {
+            let rdprev = rdprev.as_deref().expect("compact record requires old rd");
             self.write_line(&format!(
                 "preflight_emit_alu3(state, {chip}u, {pc}, {fromts}, {p1}, 0u, {pw}, {rdprev}, \
                  {v1}, {vimm});"
@@ -801,16 +845,28 @@ impl<'a> EmitContext<'a> {
             Some(rd) if rd != 0 => {
                 let tmp = self.next_var();
                 self.write_line(&format!("uint64_t {tmp} = {value};"));
-                let rdprev = self.next_var();
-                self.write_line(&format!("uint64_t {rdprev} = state->regs[{rd}];"));
+                let rdprev = (!self.delta_records || arena.is_some()).then(|| {
+                    let rdprev = self.next_var();
+                    self.write_line(&format!("uint64_t {rdprev} = state->regs[{rd}];"));
+                    rdprev
+                });
                 let pw = self.next_var();
                 self.write_line(&format!("uint32_t {pw} = trace_reg_touch(state, {rd});"));
                 self.write_line(&format!("reg_write(state, {rd}, {tmp});"));
                 if let Some(baked) = arena {
-                    self.emit_arena_wr1_stores(baked, &pc, &fromts, Some((&pw, &rdprev)));
+                    self.emit_arena_wr1_stores(
+                        baked,
+                        &pc,
+                        &fromts,
+                        Some((
+                            &pw,
+                            rdprev.as_deref().expect("arena record requires old rd"),
+                        )),
+                    );
                 } else if self.delta_records {
-                    self.emit_delta3(&pc, &fromts, &rdprev, "0ull", "0ull");
+                    self.emit_delta3(&pc, &fromts, &tmp, "0ull", "0ull");
                 } else {
+                    let rdprev = rdprev.as_deref().expect("compact record requires old rd");
                     self.write_line(&format!(
                         "preflight_emit_wr1(state, {chip}u, {pc}, {fromts}, {pw}, {rdprev});"
                     ));
@@ -1001,16 +1057,30 @@ impl<'a> EmitContext<'a> {
             Some(rd) if rd != 0 => {
                 let tmp = self.next_var();
                 self.write_line(&format!("uint64_t {tmp} = {link_value};"));
-                let rdprev = self.next_var();
-                self.write_line(&format!("uint64_t {rdprev} = state->regs[{rd}];"));
+                let rdprev = (!self.delta_records || arena.is_some()).then(|| {
+                    let rdprev = self.next_var();
+                    self.write_line(&format!("uint64_t {rdprev} = state->regs[{rd}];"));
+                    rdprev
+                });
                 let pw = self.next_var();
                 self.write_line(&format!("uint32_t {pw} = trace_reg_touch(state, {rd});"));
                 self.write_line(&format!("reg_write(state, {rd}, {tmp});"));
                 if let Some(baked) = arena {
-                    self.emit_arena_rw1_stores(baked, &pc, &fromts, &v1, &p1, Some((&pw, &rdprev)));
+                    self.emit_arena_rw1_stores(
+                        baked,
+                        &pc,
+                        &fromts,
+                        &v1,
+                        &p1,
+                        Some((
+                            &pw,
+                            rdprev.as_deref().expect("arena record requires old rd"),
+                        )),
+                    );
                 } else if self.delta_records {
-                    self.emit_delta3(&pc, &fromts, &rdprev, &v1, "0ull");
+                    self.emit_delta3(&pc, &fromts, &tmp, &v1, "0ull");
                 } else {
+                    let rdprev = rdprev.as_deref().expect("compact record requires old rd");
                     self.write_line(&format!(
                         "preflight_emit_rw1(state, {chip}u, {pc}, {fromts}, {p1}, {pw}, {v1}, \
                          {rdprev});"
@@ -1137,7 +1207,7 @@ impl<'a> EmitContext<'a> {
         ));
         let p2 = self.next_var();
         self.write_line(&format!(
-            "uint32_t {p2} = trace_mem_touch(state, {blockaddr});"
+            "uint32_t {p2} = trace_mem_touch(state, {blockaddr}, {block});"
         ));
         let arena_geom = self.arena_native_airs.get(&chip).copied();
         let ls_baked = |rd_rs2_ptr: u32| ArenaLoadStoreBaked {
@@ -1188,8 +1258,11 @@ impl<'a> EmitContext<'a> {
             self.write_line(&format!(
                 "{var_ty} {val} = ({cast_ty})({block} >> ((uint32_t)({addr} & 7u) * 8u));"
             ));
-            let rdprev = self.next_var();
-            self.write_line(&format!("uint64_t {rdprev} = state->regs[{rd}];"));
+            let rdprev = (!self.delta_records || arena_geom.is_some()).then(|| {
+                let rdprev = self.next_var();
+                self.write_line(&format!("uint64_t {rdprev} = state->regs[{rd}];"));
+                rdprev
+            });
             let pw = self.next_var();
             self.write_line(&format!("uint32_t {pw} = trace_reg_touch(state, {rd});"));
             self.write_line(&format!("reg_write(state, {rd}, {val});"));
@@ -1206,11 +1279,12 @@ impl<'a> EmitContext<'a> {
                     &addr,
                     &block,
                     Some(&pw),
-                    Some(&rdprev),
+                    Some(rdprev.as_deref().expect("arena record requires old rd")),
                 );
             } else if self.delta_records {
-                self.emit_delta3(&pc, &fromts, &rdprev, &v1, &block);
+                self.emit_delta3(&pc, &fromts, &format!("(uint64_t){val}"), &v1, &block);
             } else {
+                let rdprev = rdprev.as_deref().expect("compact record requires old rd");
                 self.write_line(&format!(
                     "preflight_emit_alu3(state, {chip}u, {pc}, {fromts}, {p1}, {p2}, {pw}, \
                      {rdprev}, {v1}, {block});"
@@ -1232,17 +1306,27 @@ impl<'a> EmitContext<'a> {
         let (v2, p2) = self.reg_read_capture(rs2);
         let addr = self.materialize_u64(&Self::addr_expr(&v1, offset));
         let blockaddr = self.materialize_u64(&format!("preflight_block_addr({addr})"));
-        let prev = self.next_var();
-        self.write_line(&format!(
-            "uint64_t {prev} = rd_mem_u64(memory, {blockaddr});"
-        ));
+        let arena_geom = self.arena_native_airs.get(&chip).copied();
+        let prev = (!self.delta_records || arena_geom.is_some()).then(|| {
+            let prev = self.next_var();
+            self.write_line(&format!(
+                "uint64_t {prev} = rd_mem_u64(memory, {blockaddr});"
+            ));
+            prev
+        });
         let pw = self.next_var();
-        self.write_line(&format!(
-            "uint32_t {pw} = trace_mem_touch(state, {blockaddr});"
-        ));
+        if let Some(prev) = prev.as_deref() {
+            self.write_line(&format!(
+                "uint32_t {pw} = trace_mem_touch(state, {blockaddr}, {prev});"
+            ));
+        } else {
+            self.write_line(&format!(
+                "uint32_t {pw} = trace_mem_store_touch(state, {blockaddr});"
+            ));
+        }
         let (wr_func, _, cast_ty) = Self::write_mem_helper(width);
         self.write_line(&format!("{wr_func}(memory, {addr}, ({cast_ty})({v2}));"));
-        if let Some(geom) = self.arena_native_airs.get(&chip).copied() {
+        if let Some(geom) = arena_geom {
             let baked = ArenaLoadStoreBaked {
                 rs1_ptr: (rs1 as u32) * 8,
                 rd_rs2_ptr: (rs2 as u32) * 8,
@@ -1269,11 +1353,12 @@ impl<'a> EmitContext<'a> {
                 &addr,
                 &v2,
                 Some(&pw),
-                Some(&prev),
+                Some(prev.as_deref().expect("arena record requires old block")),
             );
         } else if self.delta_records {
-            self.emit_delta3(&pc, &fromts, &prev, &v1, &v2);
+            self.emit_delta3(&pc, &fromts, "0ull", &v1, &v2);
         } else {
+            let prev = prev.as_deref().expect("compact record requires old block");
             self.write_line(&format!(
                 "preflight_emit_alu3(state, {chip}u, {pc}, {fromts}, {p1}, {p2}, {pw}, {prev}, \
                  {v1}, {v2});"
@@ -1325,16 +1410,20 @@ impl<'a> EmitContext<'a> {
         };
         let addr = self.materialize_u64(&addr_expr);
         let block_addr = self.materialize_u64(&format!("preflight_block_addr({addr})"));
-        let prev = self.next_var();
-        self.write_line(&format!(
-            "uint64_t {prev} = preflight_read_pv_block(state->tracer, {block_addr});"
-        ));
+        let arena_geom = self.arena_native_airs.get(&chip).copied();
+        let prev = (!self.delta_records || arena_geom.is_some()).then(|| {
+            let prev = self.next_var();
+            self.write_line(&format!(
+                "uint64_t {prev} = preflight_read_pv_block(state->tracer, {block_addr});"
+            ));
+            prev
+        });
         let write_prev_ts = self.next_var();
         self.write_line(&format!(
             "uint32_t {write_prev_ts} = trace_pv_touch(state, {block_addr});"
         ));
 
-        if let Some(geom) = self.arena_native_airs.get(&chip).copied() {
+        if let Some(geom) = arena_geom {
             let baked = ArenaLoadStoreBaked {
                 rs1_ptr: u32::from(ptr_reg) * 8,
                 rd_rs2_ptr: u32::from(src_reg) * 8,
@@ -1356,11 +1445,12 @@ impl<'a> EmitContext<'a> {
                 &addr,
                 &src,
                 Some(&write_prev_ts),
-                Some(&prev),
+                Some(prev.as_deref().expect("arena record requires old block")),
             );
         } else if self.delta_records {
-            self.emit_delta3(&pc, &fromts, &prev, &ptr, &src);
+            self.emit_delta3(&pc, &fromts, "0ull", &ptr, &src);
         } else {
+            let prev = prev.as_deref().expect("compact record requires old block");
             self.write_line(&format!(
                 "preflight_emit_alu3(state, {chip}u, {pc}, {fromts}, {ptr_prev_ts}, \
                  {src_prev_ts}, {write_prev_ts}, {prev}, {ptr}, {src});"

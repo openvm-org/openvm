@@ -341,10 +341,12 @@ impl RvrPreflightBufferPool {
             program_log,
             memory_log,
             chip_counts: _,
+            touched,
         } = raw_logs;
         let mut inner = self.lock();
         recycle_uninit_slot(&mut inner.program_log, into_uninit_spare(program_log));
         recycle_uninit_slot(&mut inner.memory_log, into_uninit_spare(memory_log));
+        recycle_uninit_slot(&mut inner.touched, into_uninit_spare(touched));
         for chip in inline_records {
             push_record_spare(&mut inner.record_bufs, into_uninit_spare(chip.bytes));
         }

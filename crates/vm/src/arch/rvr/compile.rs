@@ -28,6 +28,7 @@ use sha2::{Digest, Sha256};
 
 use super::{
     debug::GuestDebugMap, ArenaNativeGeometry, ArenaNativeLayout, LogNativeOpcodeAdmitter,
+    RvrDeltaDecodeEntry,
 };
 use crate::arch::ExecutorInventory;
 
@@ -69,6 +70,24 @@ pub struct RvrInlineRecordsMeta {
     /// per-AIR compact wire. `airs` still describes the decoder's output
     /// shapes and is used for fail-closed route validation.
     pub delta_records: bool,
+    /// Program-only operand table and compiler-scope mixed-AIR
+    /// classification, built during untimed preflight AOT compilation. The
+    /// cached VM loads this directly; the first timed segment never rescans
+    /// the executable.
+    pub delta_decode: Option<Arc<RvrDeltaDecodePrecompute>>,
+    /// Compiler-authoritative proof that every defined routed slot is owned
+    /// by either the whole-AIR device decoder or an arena-native consumer.
+    /// This makes the access-aux omission decision O(1) at cached-VM load.
+    pub fully_direct_delta: bool,
+}
+
+/// Extension-neutral persisted input for the CUDA delta decoder.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RvrDeltaDecodePrecompute {
+    pub pc_base: u32,
+    pub entries: Arc<Vec<RvrDeltaDecodeEntry>>,
+    /// Sorted by the extension's stable `repr(u8)` decoder kind.
+    pub kind_to_air: Vec<(u8, usize)>,
 }
 
 impl RvrInlineRecordsMeta {
@@ -576,14 +595,104 @@ fn collect_inline_records_meta<F: PrimeField32>(
         airs.retain(|air, _| !tainted_custom_delta_airs.contains(air));
     }
 
+    let delta_decode = if compact_wire_requested || delta_records_requested {
+        admitter
+            .filter(|admitter| admitter.has_delta_decode())
+            .map(|admitter| build_delta_decode_precompute(exe, chips, admitter))
+    } else {
+        None
+    };
+    let arena_native_airs = arena_native
+        .into_iter()
+        .filter_map(|(air, geometry)| geometry.map(|g| (air, g)))
+        .collect::<Vec<_>>();
+    let mut direct_airs = delta_decode
+        .iter()
+        .flat_map(|precomputed| precomputed.kind_to_air.iter().map(|&(_, air)| air))
+        .collect::<BTreeSet<_>>();
+    direct_airs.extend(arena_native_airs.iter().map(|&(air, _)| air));
+    let fully_direct_delta = delta_records_requested
+        && exe
+            .program
+            .instructions_and_debug_infos
+            .iter()
+            .enumerate()
+            .all(|(slot, instruction)| {
+                if instruction.is_none() {
+                    return true;
+                }
+                let Some(TraceChipIndex::Chip(air)) = chips.pc_to_chip.get(slot) else {
+                    return true;
+                };
+                pc_slots.get(slot).copied().unwrap_or(false)
+                    && direct_airs.contains(&(air.as_u32() as usize))
+            });
+
     RvrInlineRecordsMeta {
         pc_slots: Arc::new(pc_slots),
         airs: airs.into_iter().collect(),
-        arena_native_airs: arena_native
-            .into_iter()
-            .filter_map(|(air, geometry)| geometry.map(|g| (air, g)))
-            .collect(),
+        arena_native_airs,
         delta_records: delta_records_requested,
+        delta_decode: delta_decode.map(Arc::new),
+        fully_direct_delta,
+    }
+}
+
+/// Build the operand table and whole-AIR classification while
+/// `compile_preflight` is already walking the immutable compiled program.
+/// Unsupported slots taint their entire AIR, matching the runtime oracle.
+fn build_delta_decode_precompute<F: PrimeField32>(
+    exe: &VmExe<F>,
+    chips: &ChipMapping,
+    admitter: &dyn LogNativeOpcodeAdmitter<F>,
+) -> RvrDeltaDecodePrecompute {
+    let program = &exe.program;
+    let mut entries = vec![
+        RvrDeltaDecodeEntry {
+            air_idx: u8::MAX,
+            access_pattern: u8::MAX,
+            ..RvrDeltaDecodeEntry::default()
+        };
+        program.instructions_and_debug_infos.len()
+    ];
+    let mut kind_to_air = BTreeMap::new();
+    let mut air_to_kind = BTreeMap::new();
+    let mut tainted = BTreeSet::new();
+
+    for (slot, program_entry) in program.instructions_and_debug_infos.iter().enumerate() {
+        let Some((instruction, _)) = program_entry else {
+            continue;
+        };
+        let Some(TraceChipIndex::Chip(air)) = chips.pc_to_chip.get(slot) else {
+            continue;
+        };
+        let air_idx = air.as_u32() as usize;
+        let Some(mut decoded) = admitter.delta_decode_for(instruction) else {
+            tainted.insert(air_idx);
+            continue;
+        };
+        decoded.entry.air_idx =
+            u8::try_from(air_idx).expect("delta device AIR index exceeds the persisted u8 ABI");
+        entries[slot] = decoded.entry;
+        if let Some(previous) = kind_to_air.insert(decoded.kind, air_idx) {
+            assert_eq!(
+                previous, air_idx,
+                "delta kind {} maps to multiple AIRs",
+                decoded.kind
+            );
+        }
+        if let Some(previous) = air_to_kind.insert(air_idx, decoded.kind) {
+            assert_eq!(
+                previous, decoded.kind,
+                "AIR {air_idx} maps to multiple delta kinds"
+            );
+        }
+    }
+    kind_to_air.retain(|_, air| !tainted.contains(air));
+    RvrDeltaDecodePrecompute {
+        pc_base: program.pc_base,
+        entries: Arc::new(entries),
+        kind_to_air: kind_to_air.into_iter().collect(),
     }
 }
 
@@ -1726,6 +1835,8 @@ fn generated_project_input_cache_key<F: PrimeField32>(
     update_debug(&mut hasher, &inline_meta.airs)?;
     update_debug(&mut hasher, &inline_meta.arena_native_airs)?;
     hasher.update([inline_meta.delta_records as u8]);
+    update_debug(&mut hasher, &inline_meta.delta_decode)?;
+    hasher.update([inline_meta.fully_direct_delta as u8]);
 
     // Registry selection and embedded assets can vary independently of the
     // VmExe. Hash their actual bytes so dynamically linked consumers retain

@@ -790,6 +790,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
         tester.range_tuple_checker(),
         tester.address_bits(),
         tester.timestamp_max_bits(),
+        #[cfg(feature = "rvr")]
         Default::default(),
     );
 

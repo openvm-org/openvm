@@ -355,11 +355,12 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64IGpuBuilder {
         _config: &Self::VmConfig,
         exe: &openvm_instructions::exe::VmExe<Val<BabyBearPoseidon2Config>>,
         pc_to_air_idx: &[Option<usize>],
+        inline_meta: &openvm_circuit::arch::rvr::RvrInlineRecordsMeta,
     ) -> std::collections::HashSet<usize>
     where
         Val<BabyBearPoseidon2Config>: openvm_stark_backend::p3_field::PrimeField32,
     {
-        rvr_gpu_wire_record_airs(&self.rvr_decode, exe, pc_to_air_idx)
+        rvr_gpu_wire_record_airs(&self.rvr_decode, exe, pc_to_air_idx, inline_meta)
     }
 
     /// GPU backend: default to the rvr inline preflight engine — the host
@@ -384,11 +385,16 @@ pub fn rvr_gpu_wire_record_airs(
     _state: &rvr_gpu_decode::RvrGpuDecodeState,
     exe: &openvm_instructions::exe::VmExe<Val<BabyBearPoseidon2Config>>,
     pc_to_air_idx: &[Option<usize>],
+    inline_meta: &openvm_circuit::arch::rvr::RvrInlineRecordsMeta,
 ) -> std::collections::HashSet<usize> {
     use crate::rvr_gpu_decode::{configured_emission_mode, InlineEmissionMode};
     match configured_emission_mode() {
         Some(InlineEmissionMode::CompactWire | InlineEmissionMode::Delta) => {
-            rvr_gpu_decode::RvrGpuDecodeState::compact_record_airs(exe, pc_to_air_idx)
+            rvr_gpu_decode::RvrGpuDecodeState::compact_record_airs(
+                exe,
+                pc_to_air_idx,
+                inline_meta.delta_decode.as_deref(),
+            )
         }
         _ => Default::default(),
     }
@@ -434,9 +440,19 @@ pub fn generate_gpu_rvr_record_arenas(
     }
     let mode_finished = std::time::Instant::now();
     let compact_airs = if compact_requested {
-        state.bind_compact_segment(exe, pc_to_air_idx, &output.inline_pc_slots)
+        state.bind_compact_segment(
+            exe,
+            pc_to_air_idx,
+            &output.inline_pc_slots,
+            output.delta_decode_precomputed.as_deref(),
+        )
     } else if delta_requested {
-        state.bind_delta_airs(exe, pc_to_air_idx, &output.inline_pc_slots)
+        state.bind_delta_airs(
+            exe,
+            pc_to_air_idx,
+            &output.inline_pc_slots,
+            output.delta_decode_precomputed.as_deref(),
+        )
     } else {
         Default::default()
     };
@@ -510,14 +526,17 @@ pub fn generate_gpu_rvr_record_arenas(
     if let Some(delta) = saved_delta {
         let memory_log = std::mem::take(&mut output.raw_logs.memory_log);
         let program_log = std::mem::take(&mut output.raw_logs.program_log);
+        let touched = std::mem::take(&mut output.raw_logs.touched);
         let chip_counts = std::mem::take(&mut output.raw_logs.chip_counts);
         let bound_airs = state.bind_delta_segment(
             exe,
             pc_to_air_idx,
             &output.inline_pc_slots,
+            output.delta_decode_precomputed.as_deref(),
             delta,
             memory_log,
             program_log,
+            touched,
             chip_counts,
             &output.arena_native_written,
         )?;
@@ -640,11 +659,12 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64ImGpuBuilder {
         _config: &Self::VmConfig,
         exe: &openvm_instructions::exe::VmExe<Val<BabyBearPoseidon2Config>>,
         pc_to_air_idx: &[Option<usize>],
+        inline_meta: &openvm_circuit::arch::rvr::RvrInlineRecordsMeta,
     ) -> std::collections::HashSet<usize>
     where
         Val<BabyBearPoseidon2Config>: openvm_stark_backend::p3_field::PrimeField32,
     {
-        rvr_gpu_wire_record_airs(&self.rvr_decode, exe, pc_to_air_idx)
+        rvr_gpu_wire_record_airs(&self.rvr_decode, exe, pc_to_air_idx, inline_meta)
     }
 
     /// GPU backend: default to the rvr inline preflight engine — the host
