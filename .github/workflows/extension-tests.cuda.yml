@@ -65,6 +65,7 @@ jobs:
           filters: .github/filters/extension-tests.yml
 
   riscv-cuda:
+    name: CUDA RISC-V extensions
     needs: changes
     if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.cuda == 'true' || needs.changes.outputs.riscv == 'true'
     uses: ./.github/workflows/extension-tests.cuda.group.yml
@@ -75,6 +76,7 @@ jobs:
     secrets: inherit
 
   extensions-cuda:
+    name: CUDA extensions
     needs: changes
     if: >-
       github.event_name == 'workflow_dispatch' ||

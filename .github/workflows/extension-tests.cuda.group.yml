@@ -40,7 +40,7 @@ env:
 
 jobs:
   tests:
-    name: CUDA (${{ inputs.group }})
+    name: Run tests
     runs-on:
       - runs-on=${{ github.run_id }}-extension-tests-cuda-${{ github.run_attempt }}-${{ inputs.group }}/${{ inputs.machine_type }}/extras=s3-cache
 

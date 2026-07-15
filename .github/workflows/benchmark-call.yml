@@ -1,4 +1,4 @@
-name: "Benchmark: running individual benchmarks"
+name: Run Benchmark
 
 on:
   workflow_dispatch:
@@ -86,7 +86,7 @@ permissions:
 
 jobs:
   bench-new:
-    name: Run benchmark on workflow ref/branch
+    name: Run benchmark
     runs-on:
       - runs-on=${{ github.run_id }}-benchcall-${{ github.run_attempt }}-${{ inputs.job_index || inputs.benchmark_id || inputs.benchmark_name || github.event.inputs.benchmark_name }}/family=${{ inputs.instance_type || github.event.inputs.instance_type }}/image=${{ startsWith(inputs.instance_type || github.event.inputs.instance_type, 'g') && 'ubuntu24-gpu-x64' || contains(inputs.instance_type || github.event.inputs.instance_type, 'g.') && 'ubuntu24-full-arm64' || 'ubuntu24-full-x64' }}/spot=capacity-optimized/extras=s3-cache
     steps:
