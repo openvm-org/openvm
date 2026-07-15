@@ -1,7 +1,9 @@
 #include "primitives/buffer_view.cuh"
 #include "riscv/rvr_compact.cuh"
+#include "fp.h"
 
 #include <cub/device/device_radix_sort.cuh>
+#include <cub/device/device_select.cuh>
 #include <cuda_runtime.h>
 #include <stdint.h>
 
@@ -82,6 +84,14 @@ struct TouchedBlock {
     uint64_t initial_value;
 };
 static_assert(sizeof(TouchedBlock) == 16, "touched block size drift");
+
+struct TouchedMemoryRecord {
+    uint32_t addr_space;
+    uint32_t block_ptr;
+    uint32_t timestamp;
+    uint32_t values[4];
+};
+static_assert(sizeof(TouchedMemoryRecord) == 28, "touched-memory output size drift");
 
 enum ValueUpdate : uint8_t {
     VALUE_NONE = 0,
@@ -184,18 +194,6 @@ __device__ __forceinline__ bool residual_memory_event(
     }
     fail(error, 19);
     return false;
-}
-
-__global__ void validate_residual_memory(
-    uint8_t const *memory,
-    size_t memory_count,
-    size_t memory_stride,
-    uint32_t *error
-) {
-    size_t idx = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
-    if (idx >= memory_count) return;
-    ResidualMemoryEvent event;
-    residual_memory_event(memory, idx, memory_stride, event, error);
 }
 
 __device__ __forceinline__ bool operand_for_pc(
@@ -655,17 +653,38 @@ __global__ void extract_address_keys(
     payloads[idx] = event;
 }
 
+__global__ void mark_address_group_starts(
+    uint64_t const *keys, uint32_t *indices, uint8_t *flags, size_t count
+) {
+    size_t idx = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+    if (idx >= count) return;
+    indices[idx] = uint32_t(idx);
+    flags[idx] = keys[idx] != INVALID_ADDRESS && (idx == 0 || keys[idx - 1] != keys[idx]);
+}
+
+__global__ void validate_group_count(
+    uint32_t const *group_count, size_t expected, uint32_t *error
+) {
+    if (blockIdx.x == 0 && threadIdx.x == 0 && size_t(*group_count) != expected) {
+        fail(error, 20);
+    }
+}
+
 __global__ void replay_address_groups(
     uint64_t const *keys,
     EventPayload const *events,
     size_t count,
+    uint32_t const *group_starts,
+    uint32_t const *actual_group_count,
+    size_t group_count,
+    TouchedMemoryRecord *touched_output,
     uint32_t *prev_timestamps,
     uint64_t *prev_values,
     uint32_t *error
 ) {
-    size_t idx = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
-    if (idx >= count) return;
-    if (keys[idx] == INVALID_ADDRESS || (idx != 0 && keys[idx - 1] == keys[idx])) return;
+    size_t group_idx = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+    if (size_t(*actual_group_count) != group_count || group_idx >= group_count) return;
+    size_t idx = group_starts[group_idx];
 
     uint32_t previous_timestamp = 0;
     uint64_t current_value = 0;
@@ -706,6 +725,21 @@ __global__ void replay_address_groups(
         }
         previous_timestamp = event.timestamp;
     }
+    uint64_t key = keys[idx];
+    uint64_t byte_address = key & ((uint64_t(1) << 56) - 1);
+    if (byte_address > uint64_t(UINT32_MAX) * 2u + 1u) {
+        fail(error, 21);
+        return;
+    }
+    TouchedMemoryRecord record;
+    record.addr_space = uint32_t(key >> 56);
+    record.block_ptr = uint32_t(byte_address / 2u);
+    record.timestamp = previous_timestamp;
+    record.values[0] = Fp(uint16_t(current_value)).asRaw();
+    record.values[1] = Fp(uint16_t(current_value >> 16)).asRaw();
+    record.values[2] = Fp(uint16_t(current_value >> 32)).asRaw();
+    record.values[3] = Fp(uint16_t(current_value >> 48)).asRaw();
+    touched_output[group_idx] = record;
 }
 
 __global__ void build_air_keys(
@@ -841,6 +875,7 @@ extern "C" int _rvr_delta_predecode(
     size_t program_count,
     DeviceBufferConstView<uint8_t> d_touched_bytes,
     size_t touched_count,
+    DeviceRawBufferConstView d_touched_output_bytes,
     RvrOperandEntry const *d_operand_table,
     size_t operand_count,
     uint32_t pc_base,
@@ -856,35 +891,25 @@ extern "C" int _rvr_delta_predecode(
          memory_stride != sizeof(DeltaMemoryLogEntry)) ||
         d_memory_bytes.size != memory_count * memory_stride ||
         d_program_bytes.size != program_count * sizeof(ProgramLogEntry) ||
-        d_touched_bytes.size != touched_count * sizeof(TouchedBlock)) {
+        d_touched_bytes.size != touched_count * sizeof(TouchedBlock) ||
+        d_touched_output_bytes.size != touched_count * sizeof(TouchedMemoryRecord)) {
         return int(cudaErrorInvalidValue);
-    }
-    // There is no compact output and no predecessor consumed by a later
-    // delta record. Still validate every compact residual-memory entry before
-    // avoiding the zero-byte allocations: completeness is fail-closed even
-    // for segments containing only residual / arena-native instructions.
-    if (delta_count == 0) {
-        if (memory_count != 0 && memory_stride == sizeof(DeltaMemoryLogEntry)) {
-            dim3 block(256);
-            dim3 grid((memory_count + block.x - 1) / block.x);
-            validate_residual_memory<<<grid, block, 0, stream>>>(
-                d_memory_bytes.ptr, memory_count, memory_stride, d_error
-            );
-            return int(cudaGetLastError());
-        }
-        return 0;
     }
     size_t event_count =
         delta_count * 3 + memory_count + program_count * 3 + touched_count;
+    if (event_count == 0) {
+        return 0;
+    }
 
     uint32_t *ts_a = nullptr, *ts_b = nullptr, *indices_a = nullptr, *indices_b = nullptr;
+    uint32_t *event_indices = nullptr, *group_starts = nullptr, *group_count = nullptr;
     uint64_t *addr_a = nullptr, *addr_b = nullptr;
-    uint8_t *air_a = nullptr, *air_b = nullptr;
+    uint8_t *air_a = nullptr, *air_b = nullptr, *group_flags = nullptr;
     EventPayload *events_a = nullptr, *events_b = nullptr;
     uint32_t *prev = nullptr;
     uint64_t *prev_values = nullptr;
     void *temp = nullptr;
-    size_t ts_temp = 0, addr_temp = 0, air_temp = 0;
+    size_t ts_temp = 0, addr_temp = 0, air_temp = 0, select_temp = 0;
     int result = 0;
 
 #define CUDA_TRY(expr)                                                                            \
@@ -903,14 +928,20 @@ extern "C" int _rvr_delta_predecode(
     CUDA_ALLOC(events_b, event_count * sizeof(EventPayload));
     CUDA_ALLOC(addr_a, event_count * sizeof(uint64_t));
     CUDA_ALLOC(addr_b, event_count * sizeof(uint64_t));
-    CUDA_ALLOC(prev, delta_count * 3 * sizeof(uint32_t));
-    CUDA_ALLOC(prev_values, delta_count * sizeof(uint64_t));
-    CUDA_ALLOC(air_a, delta_count * sizeof(uint8_t));
-    CUDA_ALLOC(air_b, delta_count * sizeof(uint8_t));
-    CUDA_ALLOC(indices_a, delta_count * sizeof(uint32_t));
-    CUDA_ALLOC(indices_b, delta_count * sizeof(uint32_t));
-    CUDA_TRY(cudaMemsetAsync(prev, 0, delta_count * 3 * sizeof(uint32_t), stream));
-    CUDA_TRY(cudaMemsetAsync(prev_values, 0, delta_count * sizeof(uint64_t), stream));
+    CUDA_ALLOC(event_indices, event_count * sizeof(uint32_t));
+    CUDA_ALLOC(group_starts, event_count * sizeof(uint32_t));
+    CUDA_ALLOC(group_flags, event_count * sizeof(uint8_t));
+    CUDA_ALLOC(group_count, sizeof(uint32_t));
+    if (delta_count != 0) {
+        CUDA_ALLOC(prev, delta_count * 3 * sizeof(uint32_t));
+        CUDA_ALLOC(prev_values, delta_count * sizeof(uint64_t));
+        CUDA_ALLOC(air_a, delta_count * sizeof(uint8_t));
+        CUDA_ALLOC(air_b, delta_count * sizeof(uint8_t));
+        CUDA_ALLOC(indices_a, delta_count * sizeof(uint32_t));
+        CUDA_ALLOC(indices_b, delta_count * sizeof(uint32_t));
+        CUDA_TRY(cudaMemsetAsync(prev, 0, delta_count * 3 * sizeof(uint32_t), stream));
+        CUDA_TRY(cudaMemsetAsync(prev_values, 0, delta_count * sizeof(uint64_t), stream));
+    }
 
     {
         dim3 block(256);
@@ -944,13 +975,26 @@ extern "C" int _rvr_delta_predecode(
     CUDA_TRY(cub::DeviceRadixSort::SortPairs(
         nullptr, addr_temp, addr_a, addr_b, events_a, events_b, event_count, 0, 64, stream
     ));
-    CUDA_TRY(cub::DeviceRadixSort::SortPairs(
-        nullptr, air_temp, air_a, air_b, indices_a, indices_b, delta_count, 0, 8, stream
+    CUDA_TRY(cub::DeviceSelect::Flagged(
+        nullptr,
+        select_temp,
+        event_indices,
+        group_flags,
+        group_starts,
+        group_count,
+        event_count,
+        stream
     ));
+    if (delta_count != 0) {
+        CUDA_TRY(cub::DeviceRadixSort::SortPairs(
+            nullptr, air_temp, air_a, air_b, indices_a, indices_b, delta_count, 0, 8, stream
+        ));
+    }
     {
         size_t temp_bytes = ts_temp;
         if (addr_temp > temp_bytes) temp_bytes = addr_temp;
         if (air_temp > temp_bytes) temp_bytes = air_temp;
+        if (select_temp > temp_bytes) temp_bytes = select_temp;
         CUDA_ALLOC(temp, temp_bytes);
     }
     CUDA_TRY(cub::DeviceRadixSort::SortPairs(
@@ -970,12 +1014,41 @@ extern "C" int _rvr_delta_predecode(
     {
         dim3 block(256);
         dim3 grid((event_count + block.x - 1) / block.x);
-        replay_address_groups<<<grid, block, 0, stream>>>(
-            addr_b, events_b, event_count, prev, prev_values, d_error
+        mark_address_group_starts<<<grid, block, 0, stream>>>(
+            addr_b, event_indices, group_flags, event_count
         );
         CUDA_TRY(cudaGetLastError());
     }
-    {
+    CUDA_TRY(cub::DeviceSelect::Flagged(
+        temp,
+        select_temp,
+        event_indices,
+        group_flags,
+        group_starts,
+        group_count,
+        event_count,
+        stream
+    ));
+    validate_group_count<<<1, 1, 0, stream>>>(group_count, touched_count, d_error);
+    CUDA_TRY(cudaGetLastError());
+    if (touched_count != 0) {
+        dim3 block(256);
+        dim3 grid((touched_count + block.x - 1) / block.x);
+        replay_address_groups<<<grid, block, 0, stream>>>(
+            addr_b,
+            events_b,
+            event_count,
+            group_starts,
+            group_count,
+            touched_count,
+            reinterpret_cast<TouchedMemoryRecord *>(d_touched_output_bytes.ptr),
+            prev,
+            prev_values,
+            d_error
+        );
+        CUDA_TRY(cudaGetLastError());
+    }
+    if (delta_count != 0) {
         dim3 block(256);
         dim3 grid((delta_count + block.x - 1) / block.x);
         build_air_keys<<<grid, block, 0, stream>>>(
@@ -990,10 +1063,10 @@ extern "C" int _rvr_delta_predecode(
         );
         CUDA_TRY(cudaGetLastError());
     }
-    CUDA_TRY(cub::DeviceRadixSort::SortPairs(
-        temp, air_temp, air_a, air_b, indices_a, indices_b, delta_count, 0, 8, stream
-    ));
-    {
+    if (delta_count != 0) {
+        CUDA_TRY(cub::DeviceRadixSort::SortPairs(
+            temp, air_temp, air_a, air_b, indices_a, indices_b, delta_count, 0, 8, stream
+        ));
         dim3 block(256);
         dim3 grid((delta_count + block.x - 1) / block.x);
         partition_records<<<grid, block, 0, stream>>>(
@@ -1017,6 +1090,10 @@ cleanup:
     if (temp) cudaFreeAsync(temp, stream);
     if (indices_b) cudaFreeAsync(indices_b, stream);
     if (indices_a) cudaFreeAsync(indices_a, stream);
+    if (group_count) cudaFreeAsync(group_count, stream);
+    if (group_starts) cudaFreeAsync(group_starts, stream);
+    if (event_indices) cudaFreeAsync(event_indices, stream);
+    if (group_flags) cudaFreeAsync(group_flags, stream);
     if (air_b) cudaFreeAsync(air_b, stream);
     if (air_a) cudaFreeAsync(air_a, stream);
     if (prev) cudaFreeAsync(prev, stream);

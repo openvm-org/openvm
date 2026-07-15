@@ -101,6 +101,28 @@ struct MemoryInventoryRecord<const CHUNK: usize, const BLOCKS: usize> {
     values: [u32; CHUNK],
 }
 
+/// Canonical device representation of one sorted touched-memory block:
+/// `(address_space, ptr, timestamp, [BabyBear; BLOCK_FE_WIDTH])` as raw u32
+/// words. It is exactly the input ABI consumed by the CUDA memory inventory.
+pub const DEVICE_TOUCHED_RECORD_WORDS: usize = 3 + BLOCK_FE_WIDTH;
+
+pub struct DeviceTouchedMemory {
+    pub records: DeviceBuffer<u32>,
+    pub num_records: usize,
+}
+
+/// Optional producer used by an all-direct GPU preflight route. Keeping this
+/// interface in the system CUDA layer lets extension-specific replay code feed
+/// the unchanged memory boundary without making the VM core depend on an ISA.
+pub trait DeviceTouchedMemoryProvider: Send + Sync {
+    fn take_device_touched_memory(&self, device_ctx: &GpuDeviceCtx) -> Option<DeviceTouchedMemory>;
+}
+
+enum TouchedMemoryInput {
+    Host(TouchedMemory<F>),
+    Device(DeviceTouchedMemory),
+}
+
 #[repr(C)]
 #[derive(Clone, Copy)]
 struct MemoryMerkleRecord {
@@ -239,9 +261,39 @@ impl MemoryInventoryGPU {
         &mut self,
         touched_memory: TouchedMemory<F>,
     ) -> Vec<AirProvingContext<GpuBackend>> {
+        self.generate_proving_ctxs_from(TouchedMemoryInput::Host(touched_memory))
+    }
+
+    #[instrument(name = "generate_proving_ctxs_device", skip_all)]
+    pub fn generate_proving_ctxs_device(
+        &mut self,
+        touched_memory: DeviceTouchedMemory,
+    ) -> Vec<AirProvingContext<GpuBackend>> {
+        assert_eq!(
+            touched_memory.records.len(),
+            touched_memory.num_records * DEVICE_TOUCHED_RECORD_WORDS,
+            "device touched-memory buffer has a partial record"
+        );
+        self.generate_proving_ctxs_from(TouchedMemoryInput::Device(touched_memory))
+    }
+
+    fn generate_proving_ctxs_from(
+        &mut self,
+        touched_memory: TouchedMemoryInput,
+    ) -> Vec<AirProvingContext<GpuBackend>> {
         let mem = MemTracker::start("generate mem proving ctxs");
-        let partition = touched_memory;
-        let boundary_records = if partition.is_empty() {
+        let (host_partition, device_partition, partition_is_empty) = match touched_memory {
+            TouchedMemoryInput::Host(partition) => {
+                let is_empty = partition.is_empty();
+                (Some(partition), None, is_empty)
+            }
+            TouchedMemoryInput::Device(partition) => {
+                let is_empty = partition.num_records == 0;
+                (None, Some(partition), is_empty)
+            }
+        };
+        let mut device_leaf_ptrs = None;
+        let boundary_records = if partition_is_empty {
             let leftmost_values = 'left: {
                 let mut res = [F::ZERO; DIGEST_WIDTH];
                 if self.initial_memory[ADDR_SPACE_OFFSET as usize].is_empty() {
@@ -287,23 +339,31 @@ impl MemoryInventoryGPU {
             0
         } else {
             // `inventory.cu` merges 4-cell block records into 8-cell leaf records.
-            let in_records: Vec<MemoryInventoryRecord<BLOCK_FE_WIDTH, 1>> = partition
-                .iter()
-                .map(|&((addr_space, ptr), ts_values)| MemoryInventoryRecord {
-                    address_space: addr_space,
-                    ptr,
-                    timestamps: [ts_values.timestamp],
-                    values: ts_values.values.map(Self::field_to_raw_u32),
-                })
-                .collect();
-            let in_num_records = in_records.len();
+            let (d_in_records, in_num_records) = if let Some(device) = device_partition {
+                (device.records, device.num_records)
+            } else {
+                let partition = host_partition
+                    .as_ref()
+                    .expect("non-device touched memory must have a host partition");
+                let in_records: Vec<MemoryInventoryRecord<BLOCK_FE_WIDTH, 1>> = partition
+                    .iter()
+                    .map(|&((addr_space, ptr), ts_values)| MemoryInventoryRecord {
+                        address_space: addr_space,
+                        ptr,
+                        timestamps: [ts_values.timestamp],
+                        values: ts_values.values.map(Self::field_to_raw_u32),
+                    })
+                    .collect();
+                let count = in_records.len();
+                let records = in_records
+                    .to_device_on(&self.device_ctx)
+                    .unwrap()
+                    .as_buffer::<u32>();
+                (records, count)
+            };
             let out_words = in_num_records
                 * (std::mem::size_of::<MemoryInventoryRecord<DIGEST_WIDTH, BLOCKS_PER_LEAF>>()
                     / std::mem::size_of::<u32>());
-            let d_in_records = in_records
-                .to_device_on(&self.device_ctx)
-                .unwrap()
-                .as_buffer::<u32>();
             let d_tmp_records = DeviceBuffer::<u32>::with_capacity_on(out_words, &self.device_ctx);
             let d_out_records = DeviceBuffer::<u32>::with_capacity_on(out_words, &self.device_ctx);
             let d_out_num_records = DeviceBuffer::<usize>::with_capacity_on(1, &self.device_ctx);
@@ -360,8 +420,14 @@ impl MemoryInventoryGPU {
                 .unwrap();
             let record_words = 2 + BLOCKS_PER_LEAF + DIGEST_WIDTH;
             let mut merkle_records = Vec::with_capacity(out_num_records);
+            let mut leaf_ptrs = host_partition
+                .is_none()
+                .then(|| Vec::with_capacity(out_num_records));
             for i in 0..out_num_records {
                 let base = i * record_words;
+                if let Some(ptrs) = leaf_ptrs.as_mut() {
+                    ptrs.push((out_records[base], out_records[base + 1]));
+                }
                 let mut values = [0u32; DIGEST_WIDTH];
                 values.copy_from_slice(
                     &out_records
@@ -379,6 +445,7 @@ impl MemoryInventoryGPU {
                 };
                 merkle_records.push(record);
             }
+            device_leaf_ptrs = leaf_ptrs;
             let merkle_words: &[u32] = unsafe {
                 std::slice::from_raw_parts(
                     merkle_records.as_ptr() as *const u32,
@@ -389,7 +456,15 @@ impl MemoryInventoryGPU {
             out_num_records
         };
 
-        let unpadded_merkle_height = self.merkle_tree.calculate_unpadded_height(&partition);
+        let unpadded_merkle_height = if let Some(partition) = host_partition.as_ref() {
+            self.merkle_tree.calculate_unpadded_height(partition)
+        } else if let Some(ptrs) = device_leaf_ptrs.as_ref() {
+            self.merkle_tree
+                .calculate_unpadded_height_from_leaf_ptrs(ptrs)
+        } else {
+            self.merkle_tree
+                .calculate_unpadded_height_from_leaf_ptrs(&[])
+        };
         #[cfg(feature = "metrics")]
         {
             self.unpadded_merkle_height = unpadded_merkle_height;
@@ -403,7 +478,7 @@ impl MemoryInventoryGPU {
             self.merkle_records
                 .as_ref()
                 .expect("missing merkle records"),
-            partition.is_empty(),
+            partition_is_empty,
         );
         mem.tracing_info("boundary tracegen");
         let ret = vec![self.boundary.generate_proving_ctx(()), merkle_proof_ctx];

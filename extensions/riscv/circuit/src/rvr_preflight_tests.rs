@@ -1084,6 +1084,10 @@ fn assert_system_records_eq(label: &str, interp: &SystemRecords<F>, rvr: &System
         interp.touched_memory, rvr.touched_memory,
         "{label}: touched_memory"
     );
+    assert_eq!(
+        interp.touched_memory_on_device, rvr.touched_memory_on_device,
+        "{label}: touched-memory route"
+    );
 }
 
 fn prove_rvr_preflight_and_verify_with_streams(
@@ -2637,6 +2641,24 @@ fn rvr_gpu_log_native_full_rv64im_proves_and_verifies() {
     assert_eq!(segments, 1);
 }
 
+/// Runtime oracle for the GPU-only replay route. The opt-in keeps the host
+/// reference alive solely for a byte-for-byte comparison inside the system
+/// inventory; trace generation still consumes the device-produced records.
+#[cfg(feature = "cuda")]
+#[test]
+fn rvr_gpu_delta_touched_memory_matches_host_across_continuations() {
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "delta");
+    std::env::set_var("OPENVM_RVR_DEVICE_REPLAY_ORACLE", "1");
+    let mut config = Rv64ImConfig::default();
+    config.rv64i.system.segmentation_max_memory = 1;
+    let segments = prove_gpu_rvr_preflight_and_verify_with_streams(
+        hard_chip_with_add_tail_exe(400),
+        config,
+        hard_chip_streams(1),
+    );
+    assert!(segments > 1, "oracle fixture must cross a continuation");
+}
+
 #[test]
 fn rvr_preflight_hard_chip_trace_matches_interpreter() {
     assert_trace_matches_interpreter(
@@ -3630,6 +3652,33 @@ fn rvr_preflight_hintstore_direct_final_matches_verbose_twice() {
                 "HintStore compact direct",
                 &oracle_output.system_records,
                 &compact_output.system_records,
+            );
+            let (_device_arena, device_target) = DenseRecordArena::stage_arena_native(
+                heights[hint_air] as usize,
+                capacities[hint_air].1,
+                &geometry,
+            );
+            let device_targets = BTreeMap::from([(hint_air, device_target)]);
+            let device_output = direct_instance
+                .execute_preflight_from_state_with_device_touched_memory_for_test(
+                    direct_vm.create_initial_state(&exe, streams.clone()),
+                    Some(retired),
+                    &heights,
+                    &device_targets,
+                )
+                .expect("HintStore device-replay routing preflight");
+            assert!(device_output.system_records.touched_memory_on_device);
+            assert!(
+                device_output.system_records.touched_memory.is_empty(),
+                "device-owned replay must not collect or sort host touched records"
+            );
+            assert_eq!(
+                device_output.raw_logs.delta_memory_log, compact_output.raw_logs.delta_memory_log,
+                "device-owned replay must retain byte-identical compact chronology"
+            );
+            assert_eq!(
+                device_output.raw_logs.touched, compact_output.raw_logs.touched,
+                "device-owned replay must retain every first-touch seed in order"
             );
             let compact_rows = compact_output
                 .arena_native_written
