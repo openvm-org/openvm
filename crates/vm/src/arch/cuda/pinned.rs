@@ -251,6 +251,7 @@ fn lock_unpoisoned<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
         .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
+#[cfg(feature = "rvr")]
 pub(crate) fn is_shutting_down() -> bool {
     SHUTTING_DOWN.load(Ordering::Acquire)
 }
