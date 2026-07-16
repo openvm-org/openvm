@@ -1,4 +1,4 @@
-use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
+use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper, U16_CELL_SIZE};
 
 use crate::{
     adapters::{
@@ -11,8 +11,8 @@ use crate::{
     },
 };
 
-/// Cells overlapped by an odd-shift halfword load: `HALFWORD_ACCESS_WIDTH / 2 + 1`.
-pub const LOAD_HALFWORD_OVERLAP_CELLS: usize = HALFWORD_ACCESS_WIDTH / 2 + 1;
+/// Cells overlapped by an odd-shift halfword load.
+pub const LOAD_HALFWORD_OVERLAP_CELLS: usize = HALFWORD_ACCESS_WIDTH / U16_CELL_SIZE + 1;
 
 pub type LoadHalfwordCoreAir = LoadCoreAir<HALFWORD_ACCESS_WIDTH, LOAD_HALFWORD_OVERLAP_CELLS>;
 pub type LoadHalfwordFiller =

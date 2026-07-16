@@ -47,8 +47,8 @@ pub struct LoadSignExtendCoreCols<T, const NUM_OVERLAP_CELLS: usize> {
     /// Two consecutive 8-byte memory blocks; the second is used only when the access crosses a
     /// block boundary.
     pub read_data: [[T; BLOCK_FE_WIDTH]; 2],
-    /// Low bytes of the `LOAD_WIDTH / 2 + 1` cells overlapped by an odd-shift load. All-zero on
-    /// even shifts. The corresponding high bytes are derived in the AIR.
+    /// Low bytes of the cells overlapped by an odd-shift load. All-zero on even shifts. The
+    /// corresponding high bytes are derived in the AIR.
     pub overlap_lo_bytes: [T; NUM_OVERLAP_CELLS],
 }
 
@@ -74,7 +74,7 @@ impl<const LOAD_WIDTH: usize, const NUM_OVERLAP_CELLS: usize>
     ) -> Self {
         const {
             assert!(is_signed_multi_byte_access_width(LOAD_WIDTH));
-            assert!(NUM_OVERLAP_CELLS == LOAD_WIDTH / 2 + 1);
+            assert!(NUM_OVERLAP_CELLS == LOAD_WIDTH / U16_CELL_SIZE + 1);
         }
         Self {
             offset,
@@ -114,7 +114,7 @@ where
         _from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
         let cols: &LoadSignExtendCoreCols<AB::Var, NUM_OVERLAP_CELLS> = (*local_core).borrow();
-        let width = LOAD_WIDTH / 2;
+        let width = LOAD_WIDTH / U16_CELL_SIZE;
 
         self.encoder.eval(builder, &cols.selector);
         let flags = self.encoder.flags::<AB>(&cols.selector);
@@ -251,7 +251,7 @@ impl<A, const LOAD_WIDTH: usize, const NUM_OVERLAP_CELLS: usize>
     ) -> Self {
         const {
             assert!(is_signed_multi_byte_access_width(LOAD_WIDTH));
-            assert!(NUM_OVERLAP_CELLS == LOAD_WIDTH / 2 + 1);
+            assert!(NUM_OVERLAP_CELLS == LOAD_WIDTH / U16_CELL_SIZE + 1);
         }
         Self {
             adapter,
@@ -288,7 +288,7 @@ where
         let core_row: &mut LoadSignExtendCoreCols<F, NUM_OVERLAP_CELLS> = core_row.borrow_mut();
         debug_assert!(shift < NUM_BYTE_SHIFTS, "invalid signed load shift {shift}");
 
-        let width = LOAD_WIDTH / 2;
+        let width = LOAD_WIDTH / U16_CELL_SIZE;
         let read_full: [u16; 2 * BLOCK_FE_WIDTH] =
             std::array::from_fn(|cell| read_data[cell / BLOCK_FE_WIDTH][cell % BLOCK_FE_WIDTH]);
         // The high bytes are derived in the AIR and only range checked here.

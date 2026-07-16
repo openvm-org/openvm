@@ -47,8 +47,8 @@ pub struct StoreCoreCols<T, const NUM_VALUE_CELLS: usize> {
     /// Previous contents of the two consecutive memory blocks; the second is used only when the
     /// access crosses a block boundary.
     pub prev_data: [[T; BLOCK_FE_WIDTH]; 2],
-    /// Low bytes of the low `STORE_WIDTH / 2` source register cells. Constrained and used only
-    /// on odd shifts.
+    /// Low bytes of the low source register cells covered by the store width. Constrained and
+    /// used only on odd shifts.
     pub value_lo_bytes: [T; NUM_VALUE_CELLS],
     /// The bytes preserved by an odd-shift store: the low byte of the first overlapped memory
     /// cell and the high byte of the last. Constrained and used only on odd shifts.
@@ -72,7 +72,7 @@ impl<const STORE_WIDTH: usize, const NUM_VALUE_CELLS: usize>
     pub fn new(offset: usize, bitwise_lookup_bus: BitwiseOperationLookupBus) -> Self {
         const {
             assert!(is_multi_byte_access_width(STORE_WIDTH));
-            assert!(NUM_VALUE_CELLS == STORE_WIDTH / 2);
+            assert!(NUM_VALUE_CELLS == STORE_WIDTH / U16_CELL_SIZE);
         }
         Self {
             offset,
@@ -111,7 +111,7 @@ where
         _from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
         let cols: &StoreCoreCols<AB::Var, NUM_VALUE_CELLS> = (*local_core).borrow();
-        let width = STORE_WIDTH / 2;
+        let width = STORE_WIDTH / U16_CELL_SIZE;
 
         self.encoder.eval(builder, &cols.selector);
         let flags = self.encoder.flags::<AB>(&cols.selector);
@@ -259,7 +259,7 @@ impl<A, const STORE_WIDTH: usize, const NUM_VALUE_CELLS: usize>
     ) -> Self {
         const {
             assert!(is_multi_byte_access_width(STORE_WIDTH));
-            assert!(NUM_VALUE_CELLS == STORE_WIDTH / 2);
+            assert!(NUM_VALUE_CELLS == STORE_WIDTH / U16_CELL_SIZE);
         }
         Self {
             adapter,
@@ -296,7 +296,7 @@ where
         let core_row: &mut StoreCoreCols<F, NUM_VALUE_CELLS> = core_row.borrow_mut();
         debug_assert!(shift < NUM_BYTE_SHIFTS, "invalid store shift {shift}");
 
-        let width = STORE_WIDTH / 2;
+        let width = STORE_WIDTH / U16_CELL_SIZE;
         let prev_full: [u16; 2 * BLOCK_FE_WIDTH] =
             std::array::from_fn(|cell| prev_data[cell / BLOCK_FE_WIDTH][cell % BLOCK_FE_WIDTH]);
         // The byte range checks are gated on the odd-shift indicator, so even shifts request no

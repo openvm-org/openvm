@@ -1,4 +1,4 @@
-use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
+use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper, U16_CELL_SIZE};
 
 use crate::{
     adapters::{
@@ -11,8 +11,8 @@ use crate::{
     },
 };
 
-/// Cells overlapped by an odd-shift doubleword load: `DOUBLEWORD_ACCESS_WIDTH / 2 + 1`.
-pub const LOAD_DOUBLEWORD_OVERLAP_CELLS: usize = DOUBLEWORD_ACCESS_WIDTH / 2 + 1;
+/// Cells overlapped by an odd-shift doubleword load.
+pub const LOAD_DOUBLEWORD_OVERLAP_CELLS: usize = DOUBLEWORD_ACCESS_WIDTH / U16_CELL_SIZE + 1;
 
 pub type LoadDoublewordCoreAir =
     LoadCoreAir<DOUBLEWORD_ACCESS_WIDTH, LOAD_DOUBLEWORD_OVERLAP_CELLS>;

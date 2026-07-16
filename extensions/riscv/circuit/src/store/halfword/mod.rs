@@ -1,4 +1,4 @@
-use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
+use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper, U16_CELL_SIZE};
 
 use crate::{
     adapters::{
@@ -11,8 +11,8 @@ use crate::{
     },
 };
 
-/// Source register cells decomposed on an odd-shift halfword store: `HALFWORD_ACCESS_WIDTH / 2`.
-pub const STORE_HALFWORD_VALUE_CELLS: usize = HALFWORD_ACCESS_WIDTH / 2;
+/// Source register cells decomposed on an odd-shift halfword store.
+pub const STORE_HALFWORD_VALUE_CELLS: usize = HALFWORD_ACCESS_WIDTH / U16_CELL_SIZE;
 
 pub type StoreHalfwordCoreAir = StoreCoreAir<HALFWORD_ACCESS_WIDTH, STORE_HALFWORD_VALUE_CELLS>;
 pub type StoreHalfwordFiller =
