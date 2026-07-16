@@ -73,11 +73,7 @@ fn create_harness_fields(
         BaseAluOpcode::CLASS_OFFSET,
     );
     let chip = Rv64BitwiseLogicChip::new(
-        BitwiseLogicFiller::new(
-            Rv64BaseAluRegAdapterFiller,
-            bitwise_chip,
-            BaseAluOpcode::CLASS_OFFSET,
-        ),
+        BitwiseLogicFiller::new(Rv64BaseAluRegAdapterFiller, bitwise_chip),
         memory_helper,
     );
     (air, executor, chip)
