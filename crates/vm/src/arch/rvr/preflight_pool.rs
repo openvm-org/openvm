@@ -119,6 +119,7 @@ struct PoolInner {
     arena_native_matrix_backings: HashMap<ArenaNativeBackingKey, Box<dyn Any + Send>>,
     /// Arena-native dense backings on CPU. CUDA backings round-trip through the page-locked pool,
     /// whose cleaner also waits for outstanding device copies before making a backing reusable.
+    #[cfg(not(feature = "cuda"))]
     arena_native_dense_backings: HashMap<ArenaNativeBackingKey, Vec<u8>>,
 }
 
