@@ -192,6 +192,16 @@ impl ExtInstr for RevealInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
+        if ctx.trace_reveal_compact(
+            self.src_reg,
+            self.ptr_reg,
+            self.offset,
+            self.width.bytes(),
+            PUBLIC_VALUES_AS,
+            4, // Rv64LoadStoreOpcode::STORED ordinal
+        ) {
+            return;
+        }
         // Full-word REVEAL uses the arena-native LoadStore record. Narrow
         // public-values stores retain the verbose, width-aware record path.
         let (src, ptr) = if self.width == MemWidth::Double {

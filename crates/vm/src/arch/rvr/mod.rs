@@ -34,7 +34,8 @@ pub use execute::{
     execute_preflight, rv_execute, ExecuteError, RvrPreflightRunResult,
 };
 pub use g2::{
-    decode_addi_reference_v1, RvrG2AddIReferenceV1, RvrG2BlockEntryV1, RvrG2MetaV1, RvrG2SegmentV1,
+    decode_addi_reference_v1, decode_reference_v1, RvrG2AddIReferenceV1, RvrG2AirBindingV1,
+    RvrG2BlockEntryV1, RvrG2CapacitiesV1, RvrG2MetaV1, RvrG2ReferenceV1, RvrG2SegmentV1,
 };
 pub use initial_image::RvrInitialImage;
 pub use log_native::{

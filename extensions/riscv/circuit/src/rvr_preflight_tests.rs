@@ -18,7 +18,7 @@ use openvm_circuit::{
         verify_segments, AddressSpaceHostLayout, Arena, ContinuationVmProver, DenseRecordArena,
         ExecutionError, MatrixRecordArena, Streams, VirtualMachine, VmInstance,
     },
-    system::SystemRecords,
+    system::{memory::online::LinearMemory, SystemRecords},
     utils::test_cpu_engine,
 };
 #[cfg(feature = "cuda")]
@@ -229,8 +229,17 @@ fn hint_store(opcode: Rv64HintStoreOpcode, num_words: usize, ptr: usize) -> Inst
 }
 
 fn extension_store(src: usize, ptr: usize, offset: usize) -> Instruction<F> {
+    extension_store_width(Rv64LoadStoreOpcode::STORED, src, ptr, offset)
+}
+
+fn extension_store_width(
+    opcode: Rv64LoadStoreOpcode,
+    src: usize,
+    ptr: usize,
+    offset: usize,
+) -> Instruction<F> {
     Instruction::from_usize(
-        Rv64LoadStoreOpcode::STORED.global_opcode(),
+        opcode.global_opcode(),
         [
             reg(src),
             reg(ptr),
@@ -709,6 +718,290 @@ fn rvr_preflight_g2_addi_is_byte_equal_to_compact_consumer() {
             "G2 final arena, including record padding, differs for AIR {air}"
         );
     }
+}
+
+#[test]
+fn rvr_preflight_g2_phase2a_load_store_reveal_is_byte_equal() {
+    let exe = g2_load_store_phase2a_exe();
+    let config = Rv64ImConfig::with_public_values_bytes(32);
+    let (rvr_vm, _) = VirtualMachine::new_with_keygen(test_cpu_engine(), Rv64ImCpuBuilder, config)
+        .expect("G2 Phase-2a oracle VM init");
+    let pc_to_air_idx = rvr_vm.pc_to_air_idx(&exe).expect("G2 Phase-2a pc mapping");
+    let mut exact_rows = vec![0u32; rvr_vm.num_airs()];
+    for air in pc_to_air_idx.iter().flatten() {
+        exact_rows[*air] += 1;
+    }
+    let capacities = exact_rows
+        .iter()
+        .zip(rvr_vm.pk().per_air.iter())
+        .map(|(&height, pk)| (height as usize, pk.vk.params.width.main_width()))
+        .collect::<Vec<_>>();
+    let instruction_count = exe.program.num_defined_instructions() as u64;
+
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
+    std::env::set_var("OPENVM_RVR_INLINE_RECORDS", "1");
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "compact");
+    let RvrPreflightRoute::Rvr(compact) = rvr_vm
+        .preflight_routed_instance(&exe)
+        .expect("compact Phase-2a routed preflight")
+    else {
+        panic!("Phase-2a program must route to RVR");
+    };
+    let mut compact_output = compact
+        .execute_preflight_from_state_with_capacities(
+            compact.create_initial_state(Streams::default()),
+            Some(instruction_count),
+            &exact_rows,
+        )
+        .expect("compact Phase-2a preflight");
+    let compact_program_log = compact_output.raw_logs.program_log.clone();
+    let compact_arenas = crate::log_native::generate_rv64im_record_arenas_from_logs::<
+        F,
+        DenseRecordArena,
+    >(&exe, &mut compact_output, &capacities, &pc_to_air_idx)
+    .expect("compact Phase-2a final arenas");
+
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "g2");
+    let RvrPreflightRoute::Rvr(g2) = rvr_vm
+        .preflight_routed_instance(&exe)
+        .expect("G2 Phase-2a routed preflight")
+    else {
+        panic!("Phase-2a program must route to G2 RVR");
+    };
+    let inline = g2.compiled().inline_records();
+    assert!(inline.g2.is_some(), "Phase-2a executable must negotiate G2");
+    assert!(pc_to_air_idx.iter().enumerate().all(|(slot, air)| {
+        air.is_none() || inline.pc_slots.get(slot).copied().unwrap_or(false)
+    }));
+    let mut g2_output = g2
+        .execute_preflight_from_state_with_device_touched_memory_for_test(
+            g2.create_initial_state(Streams::default()),
+            Some(instruction_count),
+            &exact_rows,
+            &BTreeMap::new(),
+        )
+        .expect("G2 Phase-2a preflight");
+    let segment = g2_output.g2_segment.take().expect("committed G2 segment");
+    let meta = g2_output.g2_meta.as_deref().expect("G2 Phase-2a metadata");
+    let decode = g2_output
+        .delta_decode_precomputed
+        .as_deref()
+        .expect("G2 Phase-2a operand table");
+    let mut initial_blocks = BTreeMap::new();
+    for address in [0u32, 8, 16, 24] {
+        initial_blocks.insert((PUBLIC_VALUES_AS as u8, address), 0);
+    }
+    let reference = openvm_circuit::arch::rvr::decode_reference_v1(
+        &segment,
+        meta,
+        decode,
+        [0; 32],
+        &initial_blocks,
+        openvm_circuit::arch::rvr::PREFLIGHT_INITIAL_TIMESTAMP,
+    )
+    .expect("G2 Phase-2a CPU reference decode");
+    assert_eq!(
+        segment.byte_len(),
+        4_480,
+        "Phase-2a fixture wire must contain only active lane prefixes plus frozen alignment"
+    );
+    assert_eq!(
+        segment.header_acquire().unwrap().residual_event_count,
+        9,
+        "three narrow REVEAL rows must contribute exactly nine residual events"
+    );
+    assert_eq!(
+        reference.final_registers[0], 0,
+        "x0 load must remain suppressed"
+    );
+    assert!(g2_output.raw_logs.program_log.is_empty());
+    assert!(g2_output.raw_logs.memory_log.is_empty());
+    assert!(g2_output.raw_logs.delta_memory_log.is_empty());
+    assert!(g2_output.access_aux.is_empty());
+    assert!(g2_output.inline_records.is_empty());
+    assert!(!g2_output.access_aux_complete);
+
+    let mut decoded_per_air = BTreeMap::<usize, Vec<u8>>::new();
+    for binding in meta.air_bindings.iter() {
+        if let Some(bytes) = reference.compact_records.get(&binding.kind) {
+            assert_eq!(
+                bytes.len() / openvm_circuit::arch::rvr::PREFLIGHT_ADDSUB_RECORD_SIZE,
+                exact_rows[binding.air_idx] as usize,
+                "compact plus residual rows must equal the metered AIR count for kind {}",
+                binding.kind
+            );
+            assert!(
+                decoded_per_air
+                    .insert(binding.air_idx, bytes.clone())
+                    .is_none(),
+                "one G2 kind must own each Phase-2a AIR"
+            );
+        }
+    }
+    g2_output.raw_logs.program_log = compact_program_log;
+    g2_output.inline_records = decoded_per_air
+        .into_iter()
+        .map(
+            |(air_idx, bytes)| openvm_circuit::arch::rvr::RvrInlineChipRecords {
+                air_idx,
+                record_size: openvm_circuit::arch::rvr::PREFLIGHT_ADDSUB_RECORD_SIZE,
+                bytes,
+            },
+        )
+        .collect();
+    g2_output.access_aux_complete = true;
+    let g2_arenas =
+        crate::log_native::generate_rv64im_record_arenas_from_logs::<F, DenseRecordArena>(
+            &exe,
+            &mut g2_output,
+            &capacities,
+            &pc_to_air_idx,
+        )
+        .expect("G2 Phase-2a oracle final arenas");
+    assert_eq!(compact_arenas.len(), g2_arenas.len());
+    for (air, (compact, g2)) in compact_arenas.iter().zip(&g2_arenas).enumerate() {
+        assert_eq!(
+            compact.allocated(),
+            g2.allocated(),
+            "G2 Phase-2a final arena including padding differs for AIR {air}"
+        );
+    }
+}
+
+#[test]
+fn rvr_preflight_g2_store_marks_sparse_continuation_page() {
+    let store_exe = exe(&[
+        addi(1, 0, 64),
+        addi(2, 0, 0x5a),
+        store(Rv64LoadStoreOpcode::STORED, 2, 1, 0),
+        terminate(),
+    ]);
+    let (store_vm, _) = VirtualMachine::new_with_keygen(
+        test_cpu_engine(),
+        Rv64ImCpuBuilder,
+        Rv64ImConfig::default(),
+    )
+    .expect("G2 continuation store VM init");
+    let store_pc_to_air = store_vm
+        .pc_to_air_idx(&store_exe)
+        .expect("G2 continuation store pc mapping");
+    let mut store_rows = vec![0u32; store_vm.num_airs()];
+    for air in store_pc_to_air.iter().flatten() {
+        store_rows[*air] += 1;
+    }
+
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
+    std::env::set_var("OPENVM_RVR_INLINE_RECORDS", "1");
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "g2");
+    let RvrPreflightRoute::Rvr(store) = store_vm
+        .preflight_routed_instance(&store_exe)
+        .expect("G2 continuation store route")
+    else {
+        panic!("continuation store program must route to G2 RVR");
+    };
+    let store_output = store
+        .execute_preflight_from_state_with_device_touched_memory_for_test(
+            store.create_initial_state(Streams::default()),
+            Some(store_exe.program.num_defined_instructions() as u64),
+            &store_rows,
+            &BTreeMap::new(),
+        )
+        .expect("G2 continuation store preflight");
+    let memory = &store_output.to_state.memory.memory;
+    let memory_as = RV64_MEMORY_AS as usize;
+    let dirty_ranges =
+        memory.touched_pages[memory_as].touched_byte_ranges(memory.mem[memory_as].size());
+    assert!(
+        dirty_ranges
+            .iter()
+            .any(|&(start, end)| start <= 64 && 64 < end),
+        "G2 store page must be staged for the next segment's sparse H2D transfer"
+    );
+
+    // Run the following load as a distinct preflight segment from the carried
+    // state. The page assertion above is the sparse-transport contract; this
+    // second execution checks the corresponding store-to-load state boundary.
+    let load_exe = exe(&[load(Rv64LoadStoreOpcode::LOADD, 3, 1, 0), terminate()]);
+    let (load_vm, _) = VirtualMachine::new_with_keygen(
+        test_cpu_engine(),
+        Rv64ImCpuBuilder,
+        Rv64ImConfig::default(),
+    )
+    .expect("G2 continuation load VM init");
+    let load_pc_to_air = load_vm
+        .pc_to_air_idx(&load_exe)
+        .expect("G2 continuation load pc mapping");
+    let mut load_rows = vec![0u32; load_vm.num_airs()];
+    for air in load_pc_to_air.iter().flatten() {
+        load_rows[*air] += 1;
+    }
+    let RvrPreflightRoute::Rvr(load) = load_vm
+        .preflight_routed_instance(&load_exe)
+        .expect("G2 continuation load route")
+    else {
+        panic!("continuation load program must route to G2 RVR");
+    };
+    let mut carried_state = store_output.to_state;
+    carried_state.set_pc(load_exe.pc_start);
+    let load_output = load
+        .execute_preflight_from_state_with_device_touched_memory_for_test(
+            carried_state,
+            Some(load_exe.program.num_defined_instructions() as u64),
+            &load_rows,
+            &BTreeMap::new(),
+        )
+        .expect("G2 continuation load preflight");
+    let registers = openvm_circuit::arch::rvr::bridge::read_rv64_registers(&load_output.to_state);
+    assert_eq!(registers[3], 0x5a, "next segment must observe the G2 store");
+}
+
+#[test]
+fn rvr_preflight_g2_rejects_high_pointer_before_memory_or_reveal_access() {
+    let exe = exe(&[
+        load(Rv64LoadStoreOpcode::LOADD, 3, 1, 0),
+        extension_store(2, 1, 0),
+        extension_store_width(Rv64LoadStoreOpcode::STOREW, 2, 1, 8),
+        terminate(),
+    ]);
+    let (vm, _) = VirtualMachine::new_with_keygen(
+        test_cpu_engine(),
+        Rv64ImCpuBuilder,
+        Rv64ImConfig::with_public_values_bytes(32),
+    )
+    .expect("G2 high-pointer VM init");
+    let pc_to_air = vm.pc_to_air_idx(&exe).expect("G2 high-pointer pc mapping");
+    let mut rows = vec![0u32; vm.num_airs()];
+    for air in pc_to_air.iter().flatten() {
+        rows[*air] += 1;
+    }
+
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
+    std::env::set_var("OPENVM_RVR_INLINE_RECORDS", "1");
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "g2");
+    let RvrPreflightRoute::Rvr(instance) = vm
+        .preflight_routed_instance(&exe)
+        .expect("G2 high-pointer route")
+    else {
+        panic!("high-pointer fixture must route to G2 RVR");
+    };
+    let mut state = instance.create_initial_state(Streams::default());
+    let mut registers = [0u64; 32];
+    registers[1] = u64::from(u32::MAX) + 1;
+    registers[2] = 0x5a;
+    openvm_circuit::arch::rvr::bridge::write_rv64_registers(&mut state, &registers);
+    let err = match instance.execute_preflight_from_state_with_device_touched_memory_for_test(
+        state,
+        Some(exe.program.num_defined_instructions() as u64),
+        &rows,
+        &BTreeMap::new(),
+    ) {
+        Ok(_) => panic!("G2 must reject a high pointer before dereferencing it"),
+        Err(err) => err,
+    };
+    assert!(
+        err.to_string().contains("G2 wire v1"),
+        "high-pointer rejection must fail closed through G2 wire validation: {err}"
+    );
 }
 
 #[test]
@@ -1318,6 +1611,31 @@ fn public_values_reveal_differential_exe() -> VmExe<F> {
         extension_store(1, 2, 8),                    // reveal A -> pv[8..16] (second AS=3 block)
         extension_store(0, 2, 16),                   // reveal x0 -> pv[16..24]
         load(Rv64LoadStoreOpcode::LOADD, 5, 4, 0),   // read back the AS=2 store
+        terminate(),
+    ])
+}
+
+fn g2_load_store_phase2a_exe() -> VmExe<F> {
+    exe(&[
+        addi(1, 0, 64),
+        addi(2, 0, 0x00ff_ffff), // -1: exercises every sign-extending load.
+        store(Rv64LoadStoreOpcode::STORED, 2, 1, 0),
+        store(Rv64LoadStoreOpcode::STOREW, 2, 1, 0),
+        store(Rv64LoadStoreOpcode::STOREH, 2, 1, 0),
+        store(Rv64LoadStoreOpcode::STOREB, 2, 1, 0),
+        load(Rv64LoadStoreOpcode::LOADD, 3, 1, 0),
+        load(Rv64LoadStoreOpcode::LOADWU, 4, 1, 0),
+        load(Rv64LoadStoreOpcode::LOADHU, 5, 1, 0),
+        load(Rv64LoadStoreOpcode::LOADBU, 6, 1, 0),
+        load(Rv64LoadStoreOpcode::LOADW, 7, 1, 0),
+        load(Rv64LoadStoreOpcode::LOADH, 8, 1, 0),
+        load(Rv64LoadStoreOpcode::LOADB, 9, 1, 0),
+        load(Rv64LoadStoreOpcode::LOADD, 0, 1, 0), // x0 still performs the read.
+        addi(10, 0, 0),
+        extension_store(2, 10, 0),
+        extension_store_width(Rv64LoadStoreOpcode::STOREW, 2, 10, 8),
+        extension_store_width(Rv64LoadStoreOpcode::STOREH, 2, 10, 16),
+        extension_store_width(Rv64LoadStoreOpcode::STOREB, 2, 10, 24),
         terminate(),
     ])
 }
