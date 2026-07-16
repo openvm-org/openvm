@@ -13,6 +13,10 @@
 #include "openvm_state.h"
 
 static constexpr uint32_t NO_LAST_PAGE = UINT32_MAX;
+static constexpr uint32_t TRACER_BYTES_PER_LEAF =
+    1u << TRACER_BYTE_SPACE_PTRS_PER_LEAF_BITS;
+static constexpr uint32_t TRACER_LEAF_BYTE_OFFSET_MASK =
+    TRACER_BYTES_PER_LEAF - 1u;
 
 static constexpr uint32_t MAX_PV_PAGES_PER_INSN = 1;
 static_assert(
@@ -292,19 +296,22 @@ static __attribute__((always_inline)) inline void trace_memory_access_leaf(
  * accesses are no wider than one leaf, so at most two leaves are touched. */
 static __attribute__((always_inline)) inline void trace_memory_access_span(
     TraceMemory* restrict memory, uint64_t addr, uint32_t size) {
-  assume(size != 0u &&
-         size <= (1u << TRACER_BYTE_SPACE_PTRS_PER_LEAF_BITS));
+  assume(size != 0u && size <= TRACER_BYTES_PER_LEAF);
   assume((size & (size - 1u)) == 0u);
-  /* A naturally aligned access cannot cross a leaf boundary because each
-   * supported access size divides the number of bytes in a leaf. */
   if (likely((addr & (size - 1u)) == 0u)) {
     trace_memory_access_leaf(memory, addr);
     return;
   }
 
-  uint64_t last_addr = addr + size - 1u;
+  uint32_t leaf_offset = addr & TRACER_LEAF_BYTE_OFFSET_MASK;
+  uint32_t bytes_until_next_leaf = TRACER_BYTES_PER_LEAF - leaf_offset;
+  if (likely(size <= bytes_until_next_leaf)) {
+    trace_memory_access_leaf(memory, addr);
+    return;
+  }
+
   uint32_t first_leaf = byte_addr_to_local_leaf(addr);
-  uint32_t last_leaf = byte_addr_to_local_leaf(last_addr);
+  uint32_t last_leaf = first_leaf + 1u;
   uint32_t first_page = first_leaf >> TRACER_PAGE_BITS;
   uint32_t last_page = last_leaf >> TRACER_PAGE_BITS;
   uint64_t first_mask = leaf_mask(first_leaf);
