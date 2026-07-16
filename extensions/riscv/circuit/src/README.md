@@ -401,7 +401,8 @@ Given:
 - `c` is the decomposition of the register shift amount for `sll` and `srl`
 - The shift-marker columns encode the immediate shift amount for `slli` and `srli`
 - `a` is the decomposition of the result
-- `opcode_sll_flag` and `opcode_srl_flag` indicate if the instruction is `sll` or `srl`
+- The shift-marker sum indicates whether the row is valid, and `opcode_sll_flag` distinguishes a
+  left shift from a right shift on valid rows
 
 This circuit proves that:
 
