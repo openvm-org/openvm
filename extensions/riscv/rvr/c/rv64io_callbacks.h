@@ -6,6 +6,7 @@
 typedef struct {
   bool (*hint_storew)(void* ctx, uint64_t dest_addr);
   bool (*hint_buffer)(void* ctx, uint64_t dest_addr, uint16_t num_words);
+  bool (*validate_reveal)(void* ctx, uint64_t addr, uint8_t width);
   bool (*reveal)(void* ctx, uint64_t src_val, uint64_t addr, uint8_t width);
 } Rv64IoHostCallbacks;
 
@@ -27,6 +28,7 @@ bool openvm_hint_buffer(void* state, uint64_t dest_addr, uint16_t num_words,
                         uint32_t num_words_ptr,
                         uint32_t num_words_prev_timestamp,
                         uint32_t chip_idx);
+bool openvm_validate_reveal(uint64_t addr, uint8_t width);
 bool openvm_reveal(uint64_t src_val, uint64_t addr, uint8_t width);
 
 #endif /* RV64IO_CALLBACKS_H */

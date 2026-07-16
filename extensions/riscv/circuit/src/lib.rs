@@ -506,7 +506,7 @@ pub fn generate_gpu_rvr_record_arenas(
             || !output.inline_records.is_empty()
         {
             return Err(openvm_circuit::arch::ExecutionError::RvrExecution(
-                "G2 Phase-1 route performed a forbidden host record pass".to_string(),
+                "G2 route performed a forbidden host record pass".to_string(),
             ));
         }
         if std::env::var("OPENVM_RVR_G2_ASSERT_ZERO_HOST_RECORD_PASS").as_deref() == Ok("1") {
@@ -543,8 +543,8 @@ pub fn generate_gpu_rvr_record_arenas(
                 "G2 bound AIR set drifted from its negotiated consumer".to_string(),
             ));
         }
-        // G2 owns the complete routed executable in Phase 1. Empty arenas are
-        // placeholders; AddI tracegen obtains its compact buffer from the
+        // G2 owns the complete negotiated executable. Empty arenas are
+        // placeholders; migrated tracegen obtains compact buffers from the
         // shared device predecode after the system inventory initiates it.
         let arenas = capacities
             .iter()

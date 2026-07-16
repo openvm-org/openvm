@@ -15,7 +15,7 @@ use super::{
     bridge::{map_rvr_execute_error, public_values_slice},
     compile::{ChipMapping, RvrCompiled},
     execute::execute_preflight as execute_preflight_raw,
-    g2::{next_segment_id, RvrG2PreparedV1, RvrG2SegmentV1},
+    g2::{next_segment_id, RvrG2CapacitiesV1, RvrG2PreparedV1, RvrG2SegmentV1},
     preflight_normalizer::{
         build_preflight_replay_with_scratch, PreflightMemoryAccessAux, PreflightMemoryReplay,
         PreflightShadowsView, WORD_BYTES,
@@ -1488,16 +1488,21 @@ where
         }
         let delta_ready = std::time::Instant::now();
         let mut g2_prepared = if let Some(g2) = g2_meta {
-            let addi_capacity = record_capacity_rows
-                .and_then(|rows| rows.get(g2.addi_air_idx))
-                .copied()
-                .unwrap_or_else(|| {
-                    u32::try_from(program_log_cap).expect("G2 AddI capacity exceeds u32")
-                });
-            Some(RvrG2PreparedV1::new(
-                addi_capacity,
-                u32::try_from(program_log_cap).expect("G2 run capacity exceeds u32"),
-            )?)
+            let fallback = u32::try_from(program_log_cap)
+                .expect("G2 per-kind capacity exceeds the frozen u32 schema");
+            let mut capacities = RvrG2CapacitiesV1 {
+                run: fallback,
+                residual: u32::try_from(memory_log_cap)
+                    .expect("G2 residual capacity exceeds the frozen u32 schema"),
+                ..Default::default()
+            };
+            for binding in g2.air_bindings.iter() {
+                capacities.kinds[binding.kind as usize] = record_capacity_rows
+                    .and_then(|rows| rows.get(binding.air_idx))
+                    .copied()
+                    .unwrap_or(fallback);
+            }
+            Some(RvrG2PreparedV1::new(&capacities)?)
         } else {
             None
         };
@@ -1636,18 +1641,7 @@ where
                     "G2 instruction count exceeds the frozen u32 header".to_string(),
                 )
                 })?;
-            let addi_count = chip_counts.get(g2.addi_air_idx).copied().ok_or_else(|| {
-                ExecutionError::RvrExecution(format!(
-                    "G2 AddI AIR {} has no chip-count slot",
-                    g2.addi_air_idx
-                ))
-            })?;
-            Some(prepared.finalize(
-                next_segment_id()?,
-                instruction_count,
-                addi_count,
-                g2.fingerprint,
-            )?)
+            Some(prepared.finalize(next_segment_id()?, instruction_count, g2.fingerprint)?)
         } else {
             None
         };

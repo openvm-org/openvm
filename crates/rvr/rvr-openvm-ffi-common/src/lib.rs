@@ -162,8 +162,41 @@ pub const G2_LANE_FLAG_OPAQUE_FINAL: u32 = 1 << 2;
 pub const G2_ENCODING_FIXED_LE: u8 = 0;
 pub const G2_ENCODING_OPAQUE_FINAL: u8 = 1;
 pub const G2_LANE_RUN_BLOCK_ID: u16 = 0x0001;
+pub const G2_LANE_RESIDUAL_CTRL: u16 = 0x0080;
+pub const G2_LANE_RESIDUAL_TAG: u16 = 0x0081;
+pub const G2_LANE_RESIDUAL_VALUE: u16 = 0x0082;
+pub const G2_GROUP_LOAD_STORE: u32 = 1;
+pub const G2_GROUP_RESIDUAL: u32 = 2;
+pub const G2_LOAD_STORE_KINDS: [u8; 11] = [8, 9, 20, 21, 22, 23, 24, 25, 26, 27, 28];
+pub const G2_PRODUCER_RUN_SLOT: usize = 0;
+pub const G2_PRODUCER_RESIDUAL_CTRL_SLOT: usize = 1;
+pub const G2_PRODUCER_RESIDUAL_TAG_SLOT: usize = 2;
+pub const G2_PRODUCER_RESIDUAL_VALUE_SLOT: usize = 3;
+pub const G2_PRODUCER_ADDI_SLOT: usize = 4;
+pub const G2_PRODUCER_LOAD_STORE_SLOT_BASE: usize = 5;
+pub const G2_PRODUCER_LANE_COUNT: usize =
+    G2_PRODUCER_LOAD_STORE_SLOT_BASE + G2_LOAD_STORE_KINDS.len() * 2;
 /// `0x0100 + 2 * DeltaAirKind::AddI`.
 pub const G2_LANE_ADDI_V0: u16 = 0x013a;
+
+pub const fn g2_lane_v0(kind: u8) -> u16 {
+    0x0100 + 2 * kind as u16
+}
+
+pub const fn g2_lane_v1(kind: u8) -> u16 {
+    g2_lane_v0(kind) + 1
+}
+
+pub const fn g2_load_store_producer_slot(kind: u8, value_lane: bool) -> Option<usize> {
+    let mut index = 0;
+    while index < G2_LOAD_STORE_KINDS.len() {
+        if G2_LOAD_STORE_KINDS[index] == kind {
+            return Some(G2_PRODUCER_LOAD_STORE_SLOT_BASE + index * 2 + value_lane as usize);
+        }
+        index += 1;
+    }
+    None
+}
 
 /// Frozen 64-byte segment header. Producers write this with `flags` lacking
 /// [`G2_FLAG_COMMITTED`], then publish that bit with a release store.
@@ -198,25 +231,34 @@ pub struct G2LaneDescV1 {
     pub reserved: u32,
 }
 
-/// Mutable lane cursors passed to generated C. Payloads are written directly
-/// into their final positions in one backing; Rust only validates these two
-/// cursors and publishes the header/descriptors after native execution.
+/// One mutable lane cursor passed to generated C. The slot order is fixed by
+/// the `G2_PRODUCER_*` constants; the committed descriptor table remains
+/// sorted by public lane kind and omits zero-count standard lanes.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct G2ProducerLaneV1 {
+    pub offset: u64,
+    pub len: u32,
+    pub cap: u32,
+}
+
+/// Mutable producer ABI passed to generated C. Payloads are written directly
+/// into their final backing positions; Rust only validates lane cursors and
+/// publishes the header/descriptors after native execution.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct G2ProducerV1 {
     pub base: *mut u8,
     pub capacity: u64,
-    pub run_offset: u64,
-    pub addi_offset: u64,
-    pub run_len: u32,
-    pub run_cap: u32,
-    pub addi_len: u32,
-    pub addi_cap: u32,
+    pub lanes: *mut G2ProducerLaneV1,
+    pub lane_count: u32,
     pub instruction_count: u32,
     pub overflow: u32,
+    pub reserved: u32,
 }
 
-pub const G2_PRODUCER_V1_SIZE: usize = 56;
+pub const G2_PRODUCER_LANE_V1_SIZE: usize = 16;
+pub const G2_PRODUCER_V1_SIZE: usize = 40;
 pub const G2_PRODUCER_V1_ALIGN: usize = 8;
 
 const _: () = {
@@ -227,6 +269,8 @@ const _: () = {
     assert!(std::mem::size_of::<G2LaneDescV1>() == G2_LANE_DESC_V1_SIZE);
     assert!(std::mem::align_of::<G2LaneDescV1>() == 8);
     assert!(std::mem::offset_of!(G2LaneDescV1, offset) == 16);
+    assert!(std::mem::size_of::<G2ProducerLaneV1>() == G2_PRODUCER_LANE_V1_SIZE);
+    assert!(std::mem::align_of::<G2ProducerLaneV1>() == 8);
     assert!(std::mem::size_of::<G2ProducerV1>() == G2_PRODUCER_V1_SIZE);
     assert!(std::mem::align_of::<G2ProducerV1>() == G2_PRODUCER_V1_ALIGN);
 };
