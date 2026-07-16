@@ -401,10 +401,11 @@ fn push_page_touch(touches: &mut Vec<PageTouch>, page_id: u32, leaf_mask: u64) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utils::test_system_config;
 
     #[test]
     fn test_range_insertion_matches_explicit_leaves() {
-        let system_config = crate::utils::test_system_config();
+        let system_config = test_system_config();
         let mut range_ctx = MemoryCtx::new(&system_config);
         let mut explicit_ctx = MemoryCtx::new(&system_config);
 
@@ -421,8 +422,32 @@ mod tests {
     }
 
     #[test]
+    fn exact_load_store_span_matches_aligned_memory_blocks() {
+        let system_config = test_system_config();
+        let ctx = MemoryCtx::new(&system_config);
+        let block_size = RV64_REGISTER_NUM_LIMBS as u32;
+
+        for width in [1, 2, 4, 8] {
+            for ptr in 0..2 * (1 << BYTE_PTRS_PER_LEAF_BITS) {
+                let block_ptr = ptr / block_size * block_size;
+                let block_span = if ptr - block_ptr + width > block_size {
+                    2 * block_size
+                } else {
+                    block_size
+                };
+
+                assert_eq!(
+                    ctx.leaf_id_range(RV64_MEMORY_AS, ptr, width),
+                    ctx.leaf_id_range(RV64_MEMORY_AS, block_ptr, block_span),
+                    "ptr={ptr}, width={width}"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn test_tentative_apply_does_not_commit_occupancy() {
-        let system_config = crate::utils::test_system_config();
+        let system_config = test_system_config();
         let mut ctx = MemoryCtx::new(&system_config);
         let mut trace_heights = vec![0; 6];
 
@@ -436,7 +461,7 @@ mod tests {
 
     #[test]
     fn test_address_spaces_map_to_distinct_pages() {
-        let system_config = crate::utils::test_system_config();
+        let system_config = test_system_config();
         let ctx = MemoryCtx::new(&system_config);
         let memory_page = ctx.leaf_id_range(RV64_MEMORY_AS, 0, 1).0 >> PAGE_MASK_LEAF_BITS;
         let public_values_page = ctx.leaf_id_range(PUBLIC_VALUES_AS, 0, 1).0 >> PAGE_MASK_LEAF_BITS;
@@ -449,7 +474,7 @@ mod tests {
 
     #[test]
     fn test_first_touches_poseidon_rows_dedup_by_default_bucket() {
-        let system_config = crate::utils::test_system_config();
+        let system_config = test_system_config();
         let mut ctx = MemoryCtx::new(&system_config);
         let height = ctx.memory_dimensions.overall_height() as u32;
         let second_leaf_ptr = (U16_CELL_SIZE * VM_DIGEST_WIDTH) as u32;
@@ -468,7 +493,7 @@ mod tests {
 
     #[test]
     fn test_default_poseidon_rows_dedup_across_checkpoints() {
-        let system_config = crate::utils::test_system_config();
+        let system_config = test_system_config();
         let mut ctx = MemoryCtx::new(&system_config);
         let mut trace_heights = vec![0; 6];
 
@@ -498,7 +523,7 @@ mod tests {
 
     #[test]
     fn test_initial_zero_bytes_do_not_seed_occupancy() {
-        let system_config = crate::utils::test_system_config();
+        let system_config = test_system_config();
         let mut ctx = MemoryCtx::new(&system_config);
         let height = ctx.memory_dimensions.overall_height() as u32;
         ctx.seed_initial_memory(&SparseMemoryImage::from([((2, 0), 0)]));
@@ -516,7 +541,7 @@ mod tests {
 
     #[test]
     fn test_initial_nonzero_bytes_seed_occupancy() {
-        let system_config = crate::utils::test_system_config();
+        let system_config = test_system_config();
         let mut ctx = MemoryCtx::new(&system_config);
         let height = ctx.memory_dimensions.overall_height() as u32;
         let second_leaf_ptr = (U16_CELL_SIZE * VM_DIGEST_WIDTH) as u32;
@@ -537,7 +562,7 @@ mod tests {
 
     #[test]
     fn test_initial_deferral_bytes_seed_occupancy() {
-        let system_config = crate::utils::test_system_config();
+        let system_config = test_system_config();
         let mut ctx = MemoryCtx::new(&system_config);
         let height = ctx.memory_dimensions.overall_height() as u32;
         let second_leaf_ptr = VM_DIGEST_WIDTH as u32;

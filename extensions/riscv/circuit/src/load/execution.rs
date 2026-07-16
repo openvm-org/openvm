@@ -190,25 +190,9 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: LoadOp, const ENABLED: bo
         exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.b as u32);
     let rs1_val = rv64_bytes_to_u32(rs1_bytes);
     let addr = rv64_address_add_imm(rs1_val, pre_compute.imm_extended);
-    debug_assert!((addr as usize) < MEM_SIZE);
+    debug_assert!(addr <= (MEM_SIZE - OP::WIDTH) as u64);
     let ptr_val = addr as u32;
-
-    let shift_amount = ptr_val % RV64_REGISTER_NUM_LIMBS as u32;
-    let ptr_val = ptr_val - shift_amount;
-    // read_data is the containing block followed by the next block, which is only read
-    // when the access spans both.
-    let mut read_data = [0u8; 2 * RV64_REGISTER_NUM_LIMBS];
-    let block0: [u8; RV64_REGISTER_NUM_LIMBS] = exec_state.vm_read_bytes(RV64_MEMORY_AS, ptr_val);
-    read_data[..RV64_REGISTER_NUM_LIMBS].copy_from_slice(&block0);
-    if shift_amount as usize + OP::WIDTH > RV64_REGISTER_NUM_LIMBS {
-        debug_assert!((ptr_val as usize) + 2 * RV64_REGISTER_NUM_LIMBS <= MEM_SIZE);
-        let block1: [u8; RV64_REGISTER_NUM_LIMBS] =
-            exec_state.vm_read_bytes(RV64_MEMORY_AS, ptr_val + RV64_REGISTER_NUM_LIMBS as u32);
-        read_data[RV64_REGISTER_NUM_LIMBS..].copy_from_slice(&block1);
-    }
-    let mut write_data = [0u8; RV64_REGISTER_NUM_LIMBS];
-
-    OP::compute_write_data(&mut write_data, read_data, shift_amount as usize);
+    let write_data = OP::read(exec_state, ptr_val);
 
     if ENABLED {
         exec_state.vm_write(RV64_REGISTER_AS, pre_compute.a as u32, &write_data);
@@ -247,11 +231,10 @@ trait LoadOp {
     /// Access width in bytes.
     const WIDTH: usize;
 
-    fn compute_write_data(
-        write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
-        read_data: [u8; 2 * RV64_REGISTER_NUM_LIMBS],
-        shift_amount: usize,
-    );
+    fn read<CTX: ExecutionCtxTrait>(
+        exec_state: &mut VmExecState<GuestMemory, CTX>,
+        ptr: u32,
+    ) -> [u8; RV64_REGISTER_NUM_LIMBS];
 }
 
 struct LoadDOp;
@@ -263,12 +246,11 @@ impl LoadOp for LoadDOp {
     const WIDTH: usize = 8;
 
     #[inline(always)]
-    fn compute_write_data(
-        write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
-        read_data: [u8; 2 * RV64_REGISTER_NUM_LIMBS],
-        shift_amount: usize,
-    ) {
-        write_data.copy_from_slice(&read_data[shift_amount..shift_amount + Self::WIDTH]);
+    fn read<CTX: ExecutionCtxTrait>(
+        exec_state: &mut VmExecState<GuestMemory, CTX>,
+        ptr: u32,
+    ) -> [u8; RV64_REGISTER_NUM_LIMBS] {
+        exec_state.vm_read_bytes(RV64_MEMORY_AS, ptr)
     }
 }
 
@@ -276,15 +258,12 @@ impl LoadOp for LoadWUOp {
     const WIDTH: usize = 4;
 
     #[inline(always)]
-    fn compute_write_data(
-        write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
-        read_data: [u8; 2 * RV64_REGISTER_NUM_LIMBS],
-        shift_amount: usize,
-    ) {
-        write_data[0] = read_data[shift_amount];
-        write_data[1] = read_data[shift_amount + 1];
-        write_data[2] = read_data[shift_amount + 2];
-        write_data[3] = read_data[shift_amount + 3];
+    fn read<CTX: ExecutionCtxTrait>(
+        exec_state: &mut VmExecState<GuestMemory, CTX>,
+        ptr: u32,
+    ) -> [u8; RV64_REGISTER_NUM_LIMBS] {
+        let [b0, b1, b2, b3] = exec_state.vm_read_bytes(RV64_MEMORY_AS, ptr);
+        [b0, b1, b2, b3, 0, 0, 0, 0]
     }
 }
 
@@ -292,13 +271,12 @@ impl LoadOp for LoadHUOp {
     const WIDTH: usize = 2;
 
     #[inline(always)]
-    fn compute_write_data(
-        write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
-        read_data: [u8; 2 * RV64_REGISTER_NUM_LIMBS],
-        shift_amount: usize,
-    ) {
-        write_data[0] = read_data[shift_amount];
-        write_data[1] = read_data[shift_amount + 1];
+    fn read<CTX: ExecutionCtxTrait>(
+        exec_state: &mut VmExecState<GuestMemory, CTX>,
+        ptr: u32,
+    ) -> [u8; RV64_REGISTER_NUM_LIMBS] {
+        let [b0, b1] = exec_state.vm_read_bytes(RV64_MEMORY_AS, ptr);
+        [b0, b1, 0, 0, 0, 0, 0, 0]
     }
 }
 
@@ -306,11 +284,11 @@ impl LoadOp for LoadBUOp {
     const WIDTH: usize = 1;
 
     #[inline(always)]
-    fn compute_write_data(
-        write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
-        read_data: [u8; 2 * RV64_REGISTER_NUM_LIMBS],
-        shift_amount: usize,
-    ) {
-        write_data[0] = read_data[shift_amount];
+    fn read<CTX: ExecutionCtxTrait>(
+        exec_state: &mut VmExecState<GuestMemory, CTX>,
+        ptr: u32,
+    ) -> [u8; RV64_REGISTER_NUM_LIMBS] {
+        let [byte] = exec_state.vm_read_bytes(RV64_MEMORY_AS, ptr);
+        [byte, 0, 0, 0, 0, 0, 0, 0]
     }
 }
