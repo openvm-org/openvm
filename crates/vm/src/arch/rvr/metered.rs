@@ -6,7 +6,11 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use openvm_instructions::{riscv::RV64_MEMORY_AS, DEFERRAL_AS, MEMORY_PAGE_BITS, PUBLIC_VALUES_AS};
+use openvm_instructions::{
+    metering::{PAGE_MASK_LEAF_BITS, SEGMENT_CHECK_INSNS},
+    riscv::RV64_MEMORY_AS,
+    DEFERRAL_AS, PUBLIC_VALUES_AS,
+};
 use rvr_openvm::{DEFERRAL_PAGE_BUF_CAP, MEM_PAGE_BUF_CAP, PV_PAGE_BUF_CAP};
 use rvr_openvm_lift::RvrRuntimeExtension;
 
@@ -178,7 +182,7 @@ impl SegmentationState {
         // C buffers use page ids local to one address space. `MemoryCtx`
         // deduplicates against one global memory tree, so convert to global
         // page ids before applying the leaf masks.
-        let page_shift = address_height as usize - MEMORY_PAGE_BITS;
+        let page_shift = address_height as usize - PAGE_MASK_LEAF_BITS;
         let page_offset = ((addr_space as usize - ADDR_SPACE_OFFSET as usize) << page_shift) as u32;
         memory_ctx.apply_page_touches_with_offset(page_offset, &buffer[..len as usize]);
     }
@@ -229,9 +233,7 @@ impl SegmentationState {
             .apply_height_updates(&mut self.ctx.trace_heights);
     }
 
-    /// Called on each periodic check (approximately every `segment_check_insns` instructions).
-    /// Invoked from the C tracer's `trace_block` callback when the block-level
-    /// countdown crosses zero. Returns true if a segment boundary was created.
+    /// Applies a periodic block-boundary check and returns whether a segment was created.
     pub fn on_periodic_check(
         &mut self,
         mem_len: u32,
@@ -239,7 +241,7 @@ impl SegmentationState {
         deferral_len: u32,
         remaining_counter: u32,
     ) -> bool {
-        let seg_check_insns = self.ctx.segmentation_ctx.segment_check_insns();
+        let seg_check_insns = u64::from(SEGMENT_CHECK_INSNS);
         let insns_since_last_check = seg_check_insns - remaining_counter as u64;
         let instret = self.ctx.segmentation_ctx.instret + insns_since_last_check;
         self.ctx.segmentation_ctx.instret = instret;
@@ -324,16 +326,10 @@ pub unsafe extern "C" fn metered_periodic_check(t: *mut MeteredTracerData) -> u8
     let did_segment =
         seg_state.on_periodic_check(mem_len, pv_len, deferral_len, tracer.check_counter);
 
-    let segment_check_insns = seg_state.ctx.segmentation_ctx.segment_check_insns() as u32;
-    debug_assert_eq!(
-        u64::from(segment_check_insns),
-        seg_state.ctx.segmentation_ctx.segment_check_insns()
-    );
-
     // We are at the start of a block that would cross the old countdown.
     // `remaining_counter` was used to record this block start as the metering
     // boundary, so the next interval starts here with a full countdown.
-    tracer.check_counter = segment_check_insns;
+    tracer.check_counter = SEGMENT_CHECK_INSNS;
     did_segment as u8
 }
 
@@ -604,7 +600,7 @@ mod tests {
 
         assert_eq!(
             seg_state.ctx.trace_heights[poseidon2_idx] - poseidon_before,
-            1 + MEMORY_PAGE_BITS as u32
+            1 + PAGE_MASK_LEAF_BITS as u32
         );
     }
 
@@ -645,19 +641,27 @@ mod tests {
 
     #[test]
     fn test_periodic_check_records_block_boundary_instret() {
+        let remaining = SEGMENT_CHECK_INSNS / 4;
         let mut seg_state = make_segmentation_state();
-        seg_state.ctx.segmentation_ctx.instrets_until_check = 1000;
+        seg_state.ctx.segmentation_ctx.instrets_until_check = u64::from(SEGMENT_CHECK_INSNS);
 
-        assert!(!seg_state.on_periodic_check(0, 0, 0, 250));
+        assert!(!seg_state.on_periodic_check(0, 0, 0, remaining));
 
-        assert_eq!(seg_state.ctx.segmentation_ctx.instret, 750);
-        assert_eq!(seg_state.ctx.segmentation_ctx.instrets_until_check, 1000);
+        assert_eq!(
+            seg_state.ctx.segmentation_ctx.instret,
+            u64::from(SEGMENT_CHECK_INSNS - remaining)
+        );
+        assert_eq!(
+            seg_state.ctx.segmentation_ctx.instrets_until_check,
+            u64::from(SEGMENT_CHECK_INSNS)
+        );
     }
 
     #[test]
     fn test_periodic_callback_starts_next_interval_at_block_boundary() {
+        let remaining = SEGMENT_CHECK_INSNS / 4;
         let mut seg_state = make_segmentation_state();
-        seg_state.ctx.segmentation_ctx.instrets_until_check = 1000;
+        seg_state.ctx.segmentation_ctx.instrets_until_check = u64::from(SEGMENT_CHECK_INSNS);
         let mut tracer = MeteredTracerData {
             trace_heights: seg_state.trace_heights_ptr(),
             mem_page_buf: seg_state.mem_page_buf_ptr(),
@@ -668,21 +672,25 @@ mod tests {
             mem_page_buf_len: 0,
             pv_page_buf_len: 0,
             deferral_page_buf_len: 0,
-            check_counter: 250,
+            check_counter: remaining,
             last_mem_page: NO_LAST_PAGE,
         };
 
         let did_segment = unsafe { metered_periodic_check(&mut tracer) };
 
         assert_eq!(did_segment, 0);
-        assert_eq!(tracer.check_counter, 1000);
-        assert_eq!(seg_state.ctx.segmentation_ctx.instret, 750);
+        assert_eq!(tracer.check_counter, SEGMENT_CHECK_INSNS);
+        assert_eq!(
+            seg_state.ctx.segmentation_ctx.instret,
+            u64::from(SEGMENT_CHECK_INSNS - remaining)
+        );
     }
 
     #[test]
     fn test_periodic_callback_starts_next_interval_when_suspending() {
+        let remaining = SEGMENT_CHECK_INSNS / 4;
         let mut seg_state = make_segmentation_state();
-        seg_state.ctx.segmentation_ctx.instrets_until_check = 1000;
+        seg_state.ctx.segmentation_ctx.instrets_until_check = u64::from(SEGMENT_CHECK_INSNS);
         *seg_state.ctx.trace_heights.last_mut().unwrap() = 4096;
         let mut tracer = MeteredTracerData {
             trace_heights: seg_state.trace_heights_ptr(),
@@ -694,14 +702,17 @@ mod tests {
             mem_page_buf_len: 0,
             pv_page_buf_len: 0,
             deferral_page_buf_len: 0,
-            check_counter: 250,
+            check_counter: remaining,
             last_mem_page: NO_LAST_PAGE,
         };
 
         let did_segment = unsafe { metered_periodic_check(&mut tracer) };
 
         assert_eq!(did_segment, 1);
-        assert_eq!(tracer.check_counter, 1000);
-        assert_eq!(seg_state.ctx.segmentation_ctx.instret, 750);
+        assert_eq!(tracer.check_counter, SEGMENT_CHECK_INSNS);
+        assert_eq!(
+            seg_state.ctx.segmentation_ctx.instret,
+            u64::from(SEGMENT_CHECK_INSNS - remaining)
+        );
     }
 }

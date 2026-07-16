@@ -1,4 +1,4 @@
-use openvm_instructions::MEMORY_PAGE_BITS;
+use openvm_instructions::metering::PAGE_MASK_LEAF_BITS;
 
 // Masks with the first bit set in each aligned group of leaves. These represent
 // group occupancy at each page-local Merkle level.
@@ -101,9 +101,9 @@ struct BitSet {
 ///        /    \
 ///      ...    ...
 ///      /        \
-///   [page]    [page]         h - MEMORY_PAGE_BITS nodes above each page
+///   [page]    [page]         h - PAGE_MASK_LEAF_BITS nodes above each page
 ///   / .. \
-///  L  ..  L                  MEMORY_PAGE_BITS levels inside a 64-leaf page
+///  L  ..  L                  PAGE_MASK_LEAF_BITS levels inside a 64-leaf page
 /// ```
 ///
 /// The tracker counts each newly touched leaf once, each newly required
@@ -389,7 +389,7 @@ impl SegmentMemoryTracker {
         let mut count = 0;
         let mut first_touches = FirstTouchCounts::default();
         let mut node = (1usize << self.upper_height) + page_id;
-        let mut height = MEMORY_PAGE_BITS + 1;
+        let mut height = PAGE_MASK_LEAF_BITS + 1;
         while node > 1 {
             node >>= 1;
             if self.segment_upper_nodes.insert_clearable(node) {
@@ -555,7 +555,7 @@ fn local_merkle_nodes_added_leaf(segment_leaf_mask: u64, leaf: u32) -> u32 {
     debug_assert!(leaf < u64::BITS);
 
     if segment_leaf_mask == 0 {
-        return MEMORY_PAGE_BITS as u32;
+        return PAGE_MASK_LEAF_BITS as u32;
     }
 
     // For one new leaf, each aligned group that was empty creates exactly one
@@ -597,11 +597,11 @@ fn local_merkle_nodes_added_leaf_with_first_touches(
 
     if segment_leaf_mask == 0 && baseline_leaf_mask == 0 {
         return (
-            MEMORY_PAGE_BITS as u32,
+            PAGE_MASK_LEAF_BITS as u32,
             FirstTouchCounts {
                 leaves: 0,
-                merkle_nodes: MEMORY_PAGE_BITS as u32,
-                max_merkle_height: MEMORY_PAGE_BITS as u32,
+                merkle_nodes: PAGE_MASK_LEAF_BITS as u32,
+                max_merkle_height: PAGE_MASK_LEAF_BITS as u32,
             },
         );
     }
@@ -643,7 +643,7 @@ fn local_merkle_nodes_added_leaf_with_first_touches(
         nodes += 1;
         if baseline_leaf_mask == 0 {
             first_touches.merkle_nodes += 1;
-            first_touches.max_merkle_height = MEMORY_PAGE_BITS as u32;
+            first_touches.max_merkle_height = PAGE_MASK_LEAF_BITS as u32;
         }
     }
 
@@ -737,7 +737,7 @@ mod tests {
     fn reference_local_merkle_nodes(mask: u64) -> u32 {
         let mut nodes = 0;
         let mut level_mask = mask;
-        for _ in 0..MEMORY_PAGE_BITS {
+        for _ in 0..PAGE_MASK_LEAF_BITS {
             level_mask = reference_parent_mask(level_mask);
             nodes += level_mask.count_ones();
         }
@@ -866,7 +866,7 @@ mod tests {
         let baseline_memory = BaselineMemoryTracker::new(3);
         tracker.insert(0, 1, &baseline_memory);
         let second = tracker.insert(1, 1, &baseline_memory);
-        assert_eq!(second.segment_merkle_nodes, MEMORY_PAGE_BITS as u32);
+        assert_eq!(second.segment_merkle_nodes, PAGE_MASK_LEAF_BITS as u32);
     }
 
     #[test]

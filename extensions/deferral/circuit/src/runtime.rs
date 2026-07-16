@@ -1,8 +1,7 @@
 //! F-typed builder for the rvr deferral output hasher.
 
 use openvm_circuit::arch::VmField;
-use rvr_openvm_ext_deferral::{DeferralCompressFn, DeferralHashFn};
-use rvr_openvm_ext_ffi_common::DEFERRAL_COMMIT_NUM_BYTES;
+use rvr_openvm_ext_deferral::{DeferralCompressFn, DeferralHashFn, DEFERRAL_COMMIT_NUM_BYTES};
 
 use crate::{def_fn::hash_output_raw, poseidon2::deferral_poseidon2_chip};
 
