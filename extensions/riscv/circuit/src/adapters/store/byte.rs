@@ -7,6 +7,7 @@ use openvm_circuit::{
     arch::{
         get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
         ExecutionBridge, ExecutionState, VmAdapterAir, VmAdapterInterface, BLOCK_FE_WIDTH,
+        MEMORY_BLOCK_BYTES,
     },
     system::memory::{
         offline_checker::{
@@ -38,14 +39,17 @@ use crate::adapters::{
     byte_ptr_to_u16_ptr, byte_ptr_to_u16_ptr_value, expand_to_rv64_block, memory_read_u16,
     ptr_to_field_u16_limbs, ptr_to_u16_limbs, rv64_address_add_imm, rv64_register_pointer,
     sign_extend_imm16, timed_write_u16, tracing_read, tracing_read_u16, try_rv64_bytes_to_u32,
-    RV64_PTR_BITS, RV64_PTR_U16_LIMBS, RV64_REGISTER_NUM_LIMBS, U16_BITS,
+    RV64_PTR_BITS, RV64_PTR_U16_LIMBS, U16_BITS,
 };
 
 // Byte stores never cross a memory block, so this adapter has no second-block columns.
 
 pub struct StoreByteInstruction<T> {
+    /// Boolean flag constrained by the core indicating whether this row is active.
     pub is_valid: T,
+    /// Absolute opcode number.
     pub opcode: T,
+    /// Byte offset of the effective pointer inside the 8-byte memory block.
     pub shift_amount: T,
 }
 
@@ -136,11 +140,12 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64StoreByteAdapterAir {
         let mem_ptr_hi = local_cols.rs1_data[1] + low_carry - local_cols.imm_sign;
 
         // Prevent mem_ptr overflow while allowing the adapter to write the containing 8-byte block.
+        let block_bytes = AB::F::from_u32(MEMORY_BLOCK_BYTES as u32);
+        let aligned_limb = local_cols.mem_ptr_low_limb - shift_amount.clone();
         self.range_bus
             .range_check(
-                // (limb[0] - shift_amount) / 8 < 2^13 => limb[0] - shift_amount < 2^16
-                (local_cols.mem_ptr_low_limb - shift_amount.clone())
-                    * AB::F::from_u32(RV64_REGISTER_NUM_LIMBS as u32).inverse(),
+                // aligned_limb / 8 < 2^13 => aligned_limb < 2^16
+                aligned_limb * block_bytes.inverse(),
                 U16_BITS - 3,
             )
             .eval(builder, is_valid.clone());
@@ -239,10 +244,12 @@ impl Rv64StoreByteAdapterRecord {
     }
 
     pub(crate) fn shift_amount(&self) -> usize {
-        (self.effective_ptr() & (RV64_REGISTER_NUM_LIMBS as u32 - 1)) as usize
+        (self.effective_ptr() & (MEMORY_BLOCK_BYTES as u32 - 1)) as usize
     }
 }
 
+/// Reads rs1, computes the effective memory pointer, reads rs2, and writes the containing memory
+/// block.
 #[derive(Clone, Copy, derive_new::new)]
 pub struct Rv64StoreByteAdapterExecutor {
     pointer_max_bits: usize,
@@ -309,7 +316,7 @@ where
                     || u64::from(ptr) < (1u64 << self.pointer_max_bits)
             })
             .expect("effective address exceeds implemented memory address space");
-        let shift_amount = ptr & (RV64_REGISTER_NUM_LIMBS as u32 - 1);
+        let shift_amount = ptr & (MEMORY_BLOCK_BYTES as u32 - 1);
         let aligned_ptr = ptr - shift_amount;
 
         record.rs2_ptr = rv64_register_pointer(a.as_canonical_u32());
@@ -319,12 +326,12 @@ where
             byte_ptr_to_u16_ptr_value(u32::from(record.rs2_ptr)),
             &mut record.read_data_aux.prev_timestamp,
         );
-        let prev_data0 = memory_read_u16(
+        let prev_data = memory_read_u16(
             memory.data(),
             mem_as,
             byte_ptr_to_u16_ptr_value(aligned_ptr),
         );
-        ((prev_data0, read_data), shift_amount as u8)
+        ((prev_data, read_data), shift_amount as u8)
     }
 
     #[inline(always)]
@@ -335,7 +342,7 @@ where
         data: Self::WriteData,
         record: &mut Self::RecordMut<'_>,
     ) {
-        let ptr = record.effective_ptr() & !(RV64_REGISTER_NUM_LIMBS as u32 - 1);
+        let ptr = record.effective_ptr() & !(MEMORY_BLOCK_BYTES as u32 - 1);
         record.write_prev_timestamp = timed_write_u16(
             memory,
             record.mem_as as u32,
@@ -359,6 +366,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64StoreByteAdapterFiller {
         // - `get_record_from_slice` returns the record representation at the start of the row
         let record: &Rv64StoreByteAdapterRecord =
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
+        // Copy the record before reusing its row buffer for columns.
         let from_pc = record.from_pc;
         let from_timestamp = record.from_timestamp;
         let rs1_ptr = record.rs1_ptr;

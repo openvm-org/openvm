@@ -2,11 +2,11 @@ use std::array;
 #[cfg(feature = "cuda")]
 use std::sync::Arc;
 
-use openvm_circuit::arch::{testing::TestBuilder, Arena, MemoryConfig, PreflightExecutor};
+use openvm_circuit::arch::{
+    testing::TestBuilder, Arena, MemoryConfig, PreflightExecutor, MEMORY_BLOCK_BYTES,
+};
 use openvm_instructions::{
-    instruction::Instruction,
-    riscv::{RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
-    LocalOpcode, PUBLIC_VALUES_AS,
+    instruction::Instruction, riscv::RV64_REGISTER_AS, LocalOpcode, PUBLIC_VALUES_AS,
 };
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, LOADB, LOADH, LOADW};
 use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
@@ -66,17 +66,18 @@ pub(crate) fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let min_ptr = imm_signed.max(0) as usize;
     // Signed loads support any byte shift. Leave room for a second block when the access crosses
     // the first one.
-    let ptr_val = rng.random_range(min_ptr..max_addr - RV64_REGISTER_NUM_LIMBS);
+    let ptr_val = rng.random_range(min_ptr..max_addr - MEMORY_BLOCK_BYTES);
     let rs1 = rs1.unwrap_or_else(|| {
         let low4 = (ptr_val as i64 - imm_signed).to_le_bytes();
         [low4[0], low4[1], low4[2], low4[3], 0, 0, 0, 0]
     });
     let ptr_val = imm_ext.wrapping_add(rv64_bytes_to_u32(rs1));
-    let shift_amount = ptr_val % 8;
+    let shift_amount = ptr_val % MEMORY_BLOCK_BYTES as u32;
     let a = random_register_pointer(rng);
     // Keep rs1 nonzero because this helper chooses its contents to produce the sampled address.
     let b = random_nonzero_register_pointer(rng);
-    let read_data: [[u8; 8]; 2] = array::from_fn(|_| array::from_fn(|_| rng.random()));
+    let read_data: [[u8; MEMORY_BLOCK_BYTES]; 2] =
+        array::from_fn(|_| array::from_fn(|_| rng.random()));
     let prev_data: [F; 8] = if a == b {
         rs1.map(F::from_u8)
     } else if a != 0 {
@@ -94,7 +95,7 @@ pub(crate) fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     );
     tester.write_bytes(
         2,
-        (ptr_val - shift_amount) as usize + RV64_REGISTER_NUM_LIMBS,
+        (ptr_val - shift_amount) as usize + MEMORY_BLOCK_BYTES,
         read_data[1].map(F::from_u8),
     );
 

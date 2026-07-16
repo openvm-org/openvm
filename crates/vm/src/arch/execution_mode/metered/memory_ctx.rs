@@ -401,7 +401,7 @@ fn push_page_touch(touches: &mut Vec<PageTouch>, page_id: u32, leaf_mask: u64) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::utils::test_system_config;
+    use crate::{arch::MEMORY_BLOCK_BYTES, utils::test_system_config};
 
     #[test]
     fn test_range_insertion_matches_explicit_leaves() {
@@ -425,7 +425,7 @@ mod tests {
     fn exact_load_store_span_matches_aligned_memory_blocks() {
         let system_config = test_system_config();
         let ctx = MemoryCtx::new(&system_config);
-        let block_size = RV64_REGISTER_NUM_LIMBS as u32;
+        let block_size = MEMORY_BLOCK_BYTES as u32;
 
         for width in [1, 2, 4, 8] {
             for ptr in 0..2 * (1 << BYTE_PTRS_PER_LEAF_BITS) {

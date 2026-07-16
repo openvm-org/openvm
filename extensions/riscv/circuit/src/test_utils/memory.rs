@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use openvm_circuit::arch::{
     testing::TestBuilder, Arena, MemoryConfig, PreflightExecutor, BLOCK_FE_WIDTH,
-    NUM_RV64_REGISTERS,
+    MEMORY_BLOCK_BYTES, NUM_RV64_REGISTERS,
 };
 use openvm_instructions::{
     instruction::Instruction,
@@ -88,8 +88,7 @@ fn random_memory_access(
     let alignment_mask = (1usize << alignment) - 1;
     let min_aligned_ptr = (min_ptr + alignment_mask) >> alignment;
     // Leave room for a second block when the access crosses the first one.
-    let ptr_val = rng
-        .random_range(min_aligned_ptr..((max_addr - RV64_REGISTER_NUM_LIMBS) >> alignment))
+    let ptr_val = rng.random_range(min_aligned_ptr..((max_addr - MEMORY_BLOCK_BYTES) >> alignment))
         << alignment;
     let rs1_low = (ptr_val as i64 - imm_signed) as u32;
     let ptr = rs1_low.to_le_bytes();
@@ -162,7 +161,7 @@ pub(crate) fn set_and_execute_load<RA: Arena, E: PreflightExecutor<F, RA>>(
     );
     tester.write_bytes(
         mem_as,
-        access.base_ptr + RV64_REGISTER_NUM_LIMBS,
+        access.base_ptr + MEMORY_BLOCK_BYTES,
         rv64_u16_block_to_bytes(read_data[1]).map(F::from_u8),
     );
 
@@ -243,7 +242,7 @@ pub(crate) fn set_and_execute_store<RA: Arena, E: PreflightExecutor<F, RA>>(
     );
     tester.write_bytes(
         mem_as,
-        access.base_ptr + RV64_REGISTER_NUM_LIMBS,
+        access.base_ptr + MEMORY_BLOCK_BYTES,
         rv64_u16_block_to_bytes(prev_data[1]).map(F::from_u8),
     );
     tester.write_bytes(
@@ -272,13 +271,13 @@ pub(crate) fn set_and_execute_store<RA: Arena, E: PreflightExecutor<F, RA>>(
     let write_data = store_write_data(opcode, read_data, prev_data, access.shift_amount);
     assert_eq!(
         rv64_u16_block_to_bytes(write_data[0]).map(F::from_u8),
-        tester.read_bytes::<8>(mem_as, access.base_ptr)
+        tester.read_bytes::<MEMORY_BLOCK_BYTES>(mem_as, access.base_ptr)
     );
     // The second block is either rewritten by the crossing store or untouched; both must match
     // the model.
     assert_eq!(
         rv64_u16_block_to_bytes(write_data[1]).map(F::from_u8),
-        tester.read_bytes::<8>(mem_as, access.base_ptr + RV64_REGISTER_NUM_LIMBS)
+        tester.read_bytes::<MEMORY_BLOCK_BYTES>(mem_as, access.base_ptr + MEMORY_BLOCK_BYTES)
     );
 }
 

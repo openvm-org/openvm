@@ -7,6 +7,7 @@ use openvm_circuit::{
     arch::{
         get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
         ExecutionBridge, ExecutionState, VmAdapterAir, VmAdapterInterface, BLOCK_FE_WIDTH,
+        MEMORY_BLOCK_BYTES,
     },
     system::memory::{
         offline_checker::{
@@ -36,19 +37,17 @@ use crate::adapters::{
     byte_ptr_to_u16_ptr, byte_ptr_to_u16_ptr_value, expand_to_rv64_block, memory_read_u16,
     ptr_to_field_u16_limbs, ptr_to_u16_limbs, rv64_address_add_imm, rv64_register_pointer,
     sign_extend_imm16, timed_write_u16, tracing_read, tracing_read_u16, try_rv64_bytes_to_u32,
-    RV64_PTR_BITS, RV64_PTR_U16_LIMBS, RV64_REGISTER_NUM_LIMBS, U16_BITS,
+    RV64_PTR_BITS, RV64_PTR_U16_LIMBS, U16_BITS,
 };
 
 pub struct LoadInstruction<T> {
-    /// Guaranteed boolean by the core selector; may be a degree-2 expression.
+    /// Boolean flag constrained by the core indicating whether this row is active.
     pub is_valid: T,
     /// Absolute opcode number.
     pub opcode: T,
     /// Byte offset of the effective pointer inside the 8-byte memory block.
     pub shift_amount: T,
-    /// Flag for accesses that span two consecutive memory blocks; guaranteed boolean by the core
-    /// as a sum of mutually exclusive selector flags matching the selected shift and access
-    /// width. May be a degree-2 expression.
+    /// Boolean flag constrained by the core indicating whether the access spans two blocks.
     pub load_cross: T,
 }
 
@@ -80,7 +79,7 @@ pub struct Rv64LoadMultiByteAdapterCols<T> {
     pub imm_sign: T,
     /// Low limb of the effective pointer for constraining rs1 + sign_extend(imm).
     pub mem_ptr_low_limb: T,
-    /// Carry into the high pointer limb when advancing to the second block wraps the low u16 limb.
+    /// Carry into the high pointer limb for the next block address.
     pub mem_ptr_carry: T,
     pub write_aux: MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>,
     /// Only writes to rd if the load is valid and rd is not x0.
@@ -157,12 +156,12 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadMultiByteAdapterAir {
         let mem_ptr_hi = local_cols.rs1_data[1] + low_carry - local_cols.imm_sign;
 
         // Prevent mem_ptr overflow while allowing the adapter to read the containing 8-byte block.
-        let block_bytes = AB::F::from_u32(RV64_REGISTER_NUM_LIMBS as u32);
-        let aligned_limb0 = local_cols.mem_ptr_low_limb - shift_amount.clone();
+        let block_bytes = AB::F::from_u32(MEMORY_BLOCK_BYTES as u32);
+        let aligned_limb = local_cols.mem_ptr_low_limb - shift_amount.clone();
         self.range_bus
             .range_check(
-                // (limb[0] - shift_amount) / 8 < 2^13 => limb[0] - shift_amount < 2^16
-                aligned_limb0.clone() * block_bytes.inverse(),
+                // aligned_limb / 8 < 2^13 => aligned_limb < 2^16
+                aligned_limb.clone() * block_bytes.inverse(),
                 U16_BITS - 3,
             )
             .eval(builder, is_valid.clone());
@@ -170,19 +169,14 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadMultiByteAdapterAir {
             .range_check(mem_ptr_hi.clone(), self.pointer_max_bits - U16_BITS)
             .eval(builder, is_valid.clone());
 
-        // When the access crosses, range check the next block address too. mem_ptr_carry claims
-        // whether adding one block wraps the low limb at 2^16; the low-limb check forces it.
+        // Range check the next block address when the access crosses a block boundary.
         builder.assert_bool(local_cols.mem_ptr_carry);
+        let next_aligned_limb = aligned_limb + block_bytes
+            - local_cols.mem_ptr_carry * AB::F::from_u32(1u32 << U16_BITS);
         self.range_bus
-            .range_check(
-                (aligned_limb0.clone() + block_bytes
-                    - local_cols.mem_ptr_carry * AB::F::from_u32(1u32 << U16_BITS))
-                    * block_bytes.inverse(),
-                U16_BITS - 3,
-            )
+            .range_check(next_aligned_limb * block_bytes.inverse(), U16_BITS - 3)
             .eval(builder, cross.clone());
-        // The high limb changes only when the low limb wraps; otherwise the effective pointer's
-        // high-limb check already covers the next block.
+        // The high limb only needs another range check when the carry increments it.
         self.range_bus
             .range_check(
                 mem_ptr_hi.clone() + local_cols.mem_ptr_carry,
@@ -213,7 +207,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadMultiByteAdapterAir {
                 MemoryAddress::new(
                     AB::F::from_u32(RV64_MEMORY_AS),
                     byte_ptr_to_u16_ptr::<AB>(
-                        mem_ptr - shift_amount + AB::F::from_u32(RV64_REGISTER_NUM_LIMBS as u32),
+                        mem_ptr - shift_amount + AB::F::from_u32(MEMORY_BLOCK_BYTES as u32),
                     ),
                 ),
                 read_data1,
@@ -273,8 +267,7 @@ pub struct Rv64LoadMultiByteAdapterRecord {
     pub rs1_val: u32,
     pub rs1_aux_record: MemoryReadAuxRecord,
     pub read_data_aux: MemoryReadAuxRecord,
-    /// Prev timestamp of the second block read; `u32::MAX` when the access does not cross a
-    /// block boundary.
+    /// Previous timestamp for the optional next-block read; `u32::MAX` marks no read.
     pub read_data1_aux: MemoryReadAuxRecord,
     pub imm: u16,
     pub imm_sign: bool,
@@ -295,7 +288,7 @@ impl Rv64LoadMultiByteAdapterRecord {
     }
 
     pub(crate) fn shift_amount(&self) -> usize {
-        (self.effective_ptr() & (RV64_REGISTER_NUM_LIMBS as u32 - 1)) as usize
+        (self.effective_ptr() & (MEMORY_BLOCK_BYTES as u32 - 1)) as usize
     }
 
     pub(crate) fn crosses(&self) -> bool {
@@ -303,8 +296,8 @@ impl Rv64LoadMultiByteAdapterRecord {
     }
 }
 
-/// Reads rs1, computes the effective memory pointer, reads the containing memory blocks, and writes
-/// the loaded value to rd.
+/// Reads rs1, computes the effective memory pointer, reads the one or two containing memory blocks,
+/// and writes the loaded value to rd.
 #[derive(Clone, Copy, derive_new::new)]
 pub struct Rv64LoadMultiByteAdapterExecutor<const LOAD_WIDTH: usize> {
     pointer_max_bits: usize,
@@ -368,7 +361,7 @@ where
                     || u64::from(ptr) < (1u64 << self.pointer_max_bits)
             })
             .expect("effective address exceeds implemented memory address space");
-        let shift_amount = ptr & (RV64_REGISTER_NUM_LIMBS as u32 - 1);
+        let shift_amount = ptr & (MEMORY_BLOCK_BYTES as u32 - 1);
         let aligned_ptr = ptr - shift_amount;
 
         let read_data0 = tracing_read_u16(
@@ -379,12 +372,12 @@ where
         );
         // The second block's timestamp slot is consumed either way so the instruction has a
         // static timestamp layout.
-        let crosses = shift_amount as usize + LOAD_WIDTH > RV64_REGISTER_NUM_LIMBS;
+        let crosses = shift_amount as usize + LOAD_WIDTH > MEMORY_BLOCK_BYTES;
         let read_data1 = if crosses {
-            let block1_ptr = aligned_ptr + RV64_REGISTER_NUM_LIMBS as u32;
+            let block1_ptr = aligned_ptr + MEMORY_BLOCK_BYTES as u32;
             assert!(
                 self.pointer_max_bits >= RV64_PTR_BITS
-                    || u64::from(block1_ptr) + RV64_REGISTER_NUM_LIMBS as u64
+                    || u64::from(block1_ptr) + MEMORY_BLOCK_BYTES as u64
                         <= (1u64 << self.pointer_max_bits),
                 "crossing access exceeds implemented memory address space"
             );
@@ -442,13 +435,12 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64LoadMultiByteAdapterFiller {
         debug_assert!(self.range_checker_chip.range_max_bits() >= 15);
 
         // SAFETY:
-        // - caller ensures `adapter_row` contains a valid record representation written by the
-        //   executor
-        // - get_record_from_slice correctly interprets the bytes as Rv64LoadMultiByteAdapterRecord
+        // - the executor wrote an `Rv64LoadMultiByteAdapterRecord` into this row buffer
+        // - the record fits within the multi-byte adapter's column layout
+        // - `get_record_from_slice` returns the record representation at the start of the row
         let record: &Rv64LoadMultiByteAdapterRecord =
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
-        // The record and columns share the same row buffer, so copy record data
-        // before writing columns.
+        // Copy the record before reusing its row buffer for columns.
         let from_pc = record.from_pc;
         let from_timestamp = record.from_timestamp;
         let rs1_ptr = record.rs1_ptr;
@@ -487,14 +479,14 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64LoadMultiByteAdapterFiller {
         }
 
         let ptr_limbs = ptr_to_u16_limbs(ptr).map(u32::from);
-        let aligned_limb0 = ptr_limbs[0] - shift_amount;
+        let aligned_limb = ptr_limbs[0] - shift_amount;
         self.range_checker_chip
-            .add_count(aligned_limb0 >> 3, U16_BITS - 3);
+            .add_count(aligned_limb >> 3, U16_BITS - 3);
         self.range_checker_chip
             .add_count(ptr_limbs[1], self.pointer_max_bits - U16_BITS);
         adapter_row.mem_ptr_low_limb = F::from_u32(ptr_limbs[0]);
 
-        let next_block_low_sum = aligned_limb0 + RV64_REGISTER_NUM_LIMBS as u32;
+        let next_block_low_sum = aligned_limb + MEMORY_BLOCK_BYTES as u32;
         let carry = crosses && next_block_low_sum == 1 << U16_BITS;
         adapter_row.mem_ptr_carry = F::from_bool(carry);
         if crosses {

@@ -50,7 +50,7 @@ static __device__ __forceinline__ uint32_t rv64_store_effective_ptr(Record recor
 
 template <typename Record>
 static __device__ __forceinline__ uint32_t rv64_store_shift_amount(Record record) {
-    return rv64_store_effective_ptr(record) & (RV64_REGISTER_NUM_LIMBS - 1);
+    return rv64_store_effective_ptr(record) & (MEMORY_BLOCK_BYTES - 1);
 }
 
 struct Rv64StoreAdapter {
@@ -113,11 +113,11 @@ struct Rv64StoreAdapter {
         COL_WRITE_VALUE(row, Rv64StoreMultiByteAdapterCols, mem_ptr_low_limb, ptr_limbs[0]);
 
         uint32_t shift_amount = rv64_store_shift_amount(record);
-        uint32_t aligned_limb0 = ptr_limbs[0] - shift_amount;
-        range_checker.add_count(aligned_limb0 >> 3, U16_BITS - 3);
+        uint32_t aligned_limb = ptr_limbs[0] - shift_amount;
+        range_checker.add_count(aligned_limb >> 3, U16_BITS - 3);
         range_checker.add_count(ptr_limbs[1], pointer_max_bits - U16_BITS);
 
-        uint32_t next_block_low_sum = aligned_limb0 + uint32_t(RV64_REGISTER_NUM_LIMBS);
+        uint32_t next_block_low_sum = aligned_limb + uint32_t(MEMORY_BLOCK_BYTES);
         bool carry = crosses && next_block_low_sum == (1u << U16_BITS);
         COL_WRITE_VALUE(row, Rv64StoreMultiByteAdapterCols, mem_ptr_carry, carry);
         if (crosses) {
