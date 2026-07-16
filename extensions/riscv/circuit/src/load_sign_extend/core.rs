@@ -372,7 +372,7 @@ where
         core_row.overlap_lo_bytes = overlap_lo_bytes.map(F::from_u16);
         core_row.read_data = read_data.map(|block| block.map(F::from_u16));
         core_row.data_most_sig_bit = F::from_bool(sign_bit);
-        let pt: [u32; SELECTOR_WIDTH] = self.encoder.get_flag_pt(shift).try_into().unwrap();
-        core_row.selector = pt.map(F::from_u32);
+        let pt: &[u32; SELECTOR_WIDTH] = self.encoder.flag_pt(shift).try_into().unwrap();
+        core_row.selector = (*pt).map(F::from_u32);
     }
 }

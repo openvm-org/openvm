@@ -31,7 +31,7 @@ use openvm_instructions::{
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
-    p3_air::{AirBuilder, BaseAir},
+    p3_air::BaseAir,
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 
@@ -80,8 +80,8 @@ pub struct Rv64StoreAdapterCols<T> {
     pub read_data_aux: MemoryReadAuxCols<T>,
     pub imm: T,
     pub imm_sign: T,
-    /// Intermediate effective pointer limbs for constraining rs1 + sign_extend(imm).
-    pub mem_ptr_limbs: [T; 2],
+    /// Low limb of the effective pointer for constraining rs1 + sign_extend(imm).
+    pub mem_ptr_low_limb: T,
     pub mem_as: T,
     /// Carry from the low into the high pointer limb when the crossing block starts at a
     /// multiple of 2^16; forced by the crossing range check below.
@@ -148,20 +148,15 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64StoreAdapterAir {
         // checks hold unconditionally (dummy rows are all-zero except `mem_as`), which keeps
         // their degree low since `is_valid` may be a degree-2 expression.
         let inv = AB::F::from_u32(1u32 << U16_BITS).inverse();
-        let carry = (local_cols.rs1_data[0] + local_cols.imm - local_cols.mem_ptr_limbs[0]) * inv;
-        builder.assert_bool(carry.clone());
+        let low_carry =
+            (local_cols.rs1_data[0] + local_cols.imm - local_cols.mem_ptr_low_limb) * inv;
+        builder.assert_bool(low_carry.clone());
         builder.assert_bool(local_cols.imm_sign);
-        let imm_extend_limb = local_cols.imm_sign * AB::F::from_u32(u16::MAX as u32);
-        let carry =
-            (local_cols.rs1_data[1] + imm_extend_limb + carry - local_cols.mem_ptr_limbs[1]) * inv;
-        builder.assert_bool(carry.clone());
-        builder
-            .when(is_valid.clone())
-            .assert_eq(carry, local_cols.imm_sign);
+        let mem_ptr_hi = local_cols.rs1_data[1] + low_carry - local_cols.imm_sign;
 
         // Prevent mem_ptr overflow while allowing the adapter to write the containing 8-byte block.
         let block_bytes = AB::F::from_u32(RV64_REGISTER_NUM_LIMBS as u32);
-        let aligned_limb0 = local_cols.mem_ptr_limbs[0] - shift_amount.clone();
+        let aligned_limb0 = local_cols.mem_ptr_low_limb - shift_amount.clone();
         self.range_bus
             .range_check(
                 // (limb[0] - shift_amount) / 8 < 2^13 => limb[0] - shift_amount < 2^16
@@ -170,10 +165,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64StoreAdapterAir {
             )
             .eval(builder, is_valid.clone());
         self.range_bus
-            .range_check(
-                local_cols.mem_ptr_limbs[1],
-                self.pointer_max_bits - U16_BITS,
-            )
+            .range_check(mem_ptr_hi.clone(), self.pointer_max_bits - U16_BITS)
             .eval(builder, is_valid.clone());
 
         // When the access crosses into the next block, additionally bound `aligned + 8` by
@@ -189,15 +181,16 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64StoreAdapterAir {
                 U16_BITS - 3,
             )
             .eval(builder, cross.clone());
+        // The high limb changes only when the low limb wraps; otherwise the effective pointer's
+        // high-limb check already covers the next block.
         self.range_bus
             .range_check(
-                local_cols.mem_ptr_limbs[1] + local_cols.mem_ptr_carry,
+                mem_ptr_hi.clone() + local_cols.mem_ptr_carry,
                 self.pointer_max_bits - U16_BITS,
             )
-            .eval(builder, cross.clone());
+            .eval(builder, local_cols.mem_ptr_carry);
 
-        let mem_ptr = local_cols.mem_ptr_limbs[0]
-            + local_cols.mem_ptr_limbs[1] * AB::F::from_u32(1u32 << U16_BITS);
+        let mem_ptr = local_cols.mem_ptr_low_limb + mem_ptr_hi * AB::F::from_u32(1u32 << U16_BITS);
 
         // Constrain stores to writable u16-celled address spaces.
         builder.assert_bool(local_cols.mem_as - AB::Expr::TWO);
@@ -502,7 +495,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64StoreAdapterFiller {
             .add_count(aligned_limb0 >> 3, U16_BITS - 3);
         self.range_checker_chip
             .add_count(ptr_limbs[1], self.pointer_max_bits - U16_BITS);
-        adapter_row.mem_ptr_limbs = ptr_limbs.map(F::from_u32);
+        adapter_row.mem_ptr_low_limb = F::from_u32(ptr_limbs[0]);
 
         let carry = crosses && aligned_limb0 + 8 == 1 << U16_BITS;
         adapter_row.mem_ptr_carry = F::from_bool(carry);
@@ -511,6 +504,8 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64StoreAdapterFiller {
                 (aligned_limb0 + 8 - ((carry as u32) << U16_BITS)) >> 3,
                 U16_BITS - 3,
             );
+        }
+        if carry {
             self.range_checker_chip.add_count(
                 ptr_limbs[1] + carry as u32,
                 self.pointer_max_bits - U16_BITS,

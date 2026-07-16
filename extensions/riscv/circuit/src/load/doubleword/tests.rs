@@ -82,7 +82,6 @@ fn create_doubleword_harness(
             Rv64LoadAdapterFiller::new(tester.address_bits(), range_checker.clone()),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
             bitwise_chip.clone(),
-            range_checker,
         ),
         tester.memory_helper(),
     );
@@ -120,7 +119,7 @@ fn rand_load_doubleword_test() {
 }
 
 #[test]
-fn positive_loadd_page_boundary_cross_test() {
+fn positive_loadd_pointer_limb_boundary_cross_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::from_config(load_memory_config());
     let (mut harness, bitwise) = create_doubleword_harness(&mut tester);
@@ -236,7 +235,6 @@ fn create_cuda_doubleword_harness(tester: &GpuChipTestBuilder) -> GpuDoublewordH
             Rv64LoadAdapterFiller::new(tester.address_bits(), range_checker.clone()),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
             bitwise_chip,
-            range_checker,
         ),
         tester.dummy_memory_helper(),
     );

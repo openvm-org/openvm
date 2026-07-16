@@ -740,7 +740,6 @@ where
                 Rv64LoadByteAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
                 Rv64LoadStoreOpcode::CLASS_OFFSET,
                 bitwise_lu.clone(),
-                range_checker.clone(),
             ),
             mem_helper.clone(),
         );
@@ -752,7 +751,6 @@ where
                 Rv64StoreByteAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
                 Rv64LoadStoreOpcode::CLASS_OFFSET,
                 bitwise_lu.clone(),
-                range_checker.clone(),
             ),
             mem_helper.clone(),
         );
@@ -776,7 +774,6 @@ where
                 Rv64LoadAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
                 Rv64LoadStoreOpcode::CLASS_OFFSET,
                 bitwise_lu.clone(),
-                range_checker.clone(),
             ),
             mem_helper.clone(),
         );
@@ -788,7 +785,6 @@ where
                 Rv64StoreAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
                 Rv64LoadStoreOpcode::CLASS_OFFSET,
                 bitwise_lu.clone(),
-                range_checker.clone(),
             ),
             mem_helper.clone(),
         );
@@ -812,7 +808,6 @@ where
                 Rv64LoadAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
                 Rv64LoadStoreOpcode::CLASS_OFFSET,
                 bitwise_lu.clone(),
-                range_checker.clone(),
             ),
             mem_helper.clone(),
         );
@@ -824,7 +819,6 @@ where
                 Rv64StoreAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
                 Rv64LoadStoreOpcode::CLASS_OFFSET,
                 bitwise_lu.clone(),
-                range_checker.clone(),
             ),
             mem_helper.clone(),
         );
@@ -836,7 +830,6 @@ where
                 Rv64LoadAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
                 Rv64LoadStoreOpcode::CLASS_OFFSET,
                 bitwise_lu.clone(),
-                range_checker.clone(),
             ),
             mem_helper.clone(),
         );
@@ -848,7 +841,6 @@ where
                 Rv64StoreAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
                 Rv64LoadStoreOpcode::CLASS_OFFSET,
                 bitwise_lu.clone(),
-                range_checker.clone(),
             ),
             mem_helper.clone(),
         );

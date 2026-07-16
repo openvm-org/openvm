@@ -80,7 +80,6 @@ fn create_store_halfword_harness(
             Rv64StoreAdapterFiller::new(tester.address_bits(), range_checker.clone()),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
             bitwise_chip.clone(),
-            range_checker,
         ),
         tester.memory_helper(),
     );
@@ -238,7 +237,6 @@ fn create_cuda_store_halfword_harness(tester: &GpuChipTestBuilder) -> GpuStoreHa
             Rv64StoreAdapterFiller::new(tester.address_bits(), range_checker.clone()),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
             bitwise_chip,
-            range_checker,
         ),
         tester.dummy_memory_helper(),
     );

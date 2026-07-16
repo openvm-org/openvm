@@ -4,7 +4,6 @@ use openvm_circuit::{arch::*, system::memory::MemoryAuxColsFactory};
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     encoder::Encoder,
-    var_range::SharedVariableRangeCheckerChip,
     AlignedBorrow, ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
 };
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, *};
@@ -244,7 +243,6 @@ impl<A, const LOAD_WIDTH: usize, const SELECTOR_WIDTH: usize, const NUM_OVERLAP_
         adapter: A,
         offset: usize,
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
-        _range_checker_chip: SharedVariableRangeCheckerChip,
     ) -> Self {
         Self {
             adapter,
@@ -302,7 +300,7 @@ where
 
         core_row.overlap_lo_bytes = overlap_lo_bytes.map(F::from_u16);
         core_row.read_data = read_data.map(|block| block.map(F::from_u16));
-        let pt: [u32; SELECTOR_WIDTH] = self.encoder.get_flag_pt(shift).try_into().unwrap();
-        core_row.selector = pt.map(F::from_u32);
+        let pt: &[u32; SELECTOR_WIDTH] = self.encoder.flag_pt(shift).try_into().unwrap();
+        core_row.selector = (*pt).map(F::from_u32);
     }
 }

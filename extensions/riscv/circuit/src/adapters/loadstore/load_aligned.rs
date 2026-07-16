@@ -53,8 +53,8 @@ pub struct Rv64LoadByteAdapterCols<T> {
     pub read_data_aux: MemoryReadAuxCols<T>,
     pub imm: T,
     pub imm_sign: T,
-    /// Intermediate effective pointer limbs for constraining rs1 + sign_extend(imm).
-    pub mem_ptr_limbs: [T; 2],
+    /// Low limb of the effective pointer for constraining rs1 + sign_extend(imm).
+    pub mem_ptr_low_limb: T,
     pub write_aux: MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>,
     /// Only writes to rd if the load is valid and rd is not x0.
     pub needs_write: T,
@@ -123,36 +123,27 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadByteAdapterAir {
         // checks hold unconditionally (dummy rows are all-zero), which keeps
         // their degree low since `is_valid` may be a degree-2 expression.
         let inv = AB::F::from_u32(1u32 << U16_BITS).inverse();
-        let carry = (local_cols.rs1_data[0] + local_cols.imm - local_cols.mem_ptr_limbs[0]) * inv;
-        builder.assert_bool(carry.clone());
+        let low_carry =
+            (local_cols.rs1_data[0] + local_cols.imm - local_cols.mem_ptr_low_limb) * inv;
+        builder.assert_bool(low_carry.clone());
 
         builder.assert_bool(local_cols.imm_sign);
-        let imm_extend_limb = local_cols.imm_sign * AB::F::from_u32(u16::MAX as u32);
-        let carry =
-            (local_cols.rs1_data[1] + imm_extend_limb + carry - local_cols.mem_ptr_limbs[1]) * inv;
-        builder.assert_bool(carry.clone());
-        builder
-            .when(is_valid.clone())
-            .assert_eq(carry, local_cols.imm_sign);
+        let mem_ptr_hi = local_cols.rs1_data[1] + low_carry - local_cols.imm_sign;
 
         // Prevent mem_ptr overflow while allowing the adapter to read the containing 8-byte block.
         self.range_bus
             .range_check(
                 // (limb[0] - shift_amount) / 8 < 2^13 => limb[0] - shift_amount < 2^16
-                (local_cols.mem_ptr_limbs[0] - shift_amount.clone())
+                (local_cols.mem_ptr_low_limb - shift_amount.clone())
                     * AB::F::from_u32(RV64_REGISTER_NUM_LIMBS as u32).inverse(),
                 U16_BITS - 3,
             )
             .eval(builder, is_valid.clone());
         self.range_bus
-            .range_check(
-                local_cols.mem_ptr_limbs[1],
-                self.pointer_max_bits - U16_BITS,
-            )
+            .range_check(mem_ptr_hi.clone(), self.pointer_max_bits - U16_BITS)
             .eval(builder, is_valid.clone());
 
-        let mem_ptr = local_cols.mem_ptr_limbs[0]
-            + local_cols.mem_ptr_limbs[1] * AB::F::from_u32(1u32 << U16_BITS);
+        let mem_ptr = local_cols.mem_ptr_low_limb + mem_ptr_hi * AB::F::from_u32(1u32 << U16_BITS);
 
         // The byte load never crosses a block, so only the containing block is read.
         let [read_data0, _read_data1] = ctx.reads;
@@ -372,7 +363,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64LoadByteAdapterFiller {
             .add_count((ptr_limbs[0] - shift_amount) >> 3, U16_BITS - 3);
         self.range_checker_chip
             .add_count(ptr_limbs[1], self.pointer_max_bits - U16_BITS);
-        adapter_row.mem_ptr_limbs = ptr_limbs.map(F::from_u32);
+        adapter_row.mem_ptr_low_limb = F::from_u32(ptr_limbs[0]);
 
         adapter_row.imm_sign = F::from_bool(imm_sign);
         adapter_row.imm = F::from_u16(imm);

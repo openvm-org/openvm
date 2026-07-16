@@ -18,7 +18,7 @@ template <typename T> struct Rv64LoadAdapterCols {
     MemoryReadAuxCols<T> read_data1_aux;
     T imm;
     T imm_sign;
-    T mem_ptr_limbs[2];
+    T mem_ptr_low_limb;
     T mem_ptr_carry;
     MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> write_aux;
     T needs_write;
@@ -119,7 +119,7 @@ struct Rv64LoadAdapter {
         uint32_t ptr = rv64_load_effective_ptr(record);
         uint32_t ptr_limbs[RV64_PTR_U16_LIMBS];
         ptr_to_u16_limbs(ptr_limbs, ptr);
-        COL_WRITE_ARRAY(row, Rv64LoadAdapterCols, mem_ptr_limbs, ptr_limbs);
+        COL_WRITE_VALUE(row, Rv64LoadAdapterCols, mem_ptr_low_limb, ptr_limbs[0]);
 
         uint32_t shift_amount = rv64_load_shift_amount(record);
         uint32_t aligned_limb0 = ptr_limbs[0] - shift_amount;
@@ -132,6 +132,8 @@ struct Rv64LoadAdapter {
             range_checker.add_count(
                 (aligned_limb0 + 8 - (uint32_t(carry) << U16_BITS)) >> 3, U16_BITS - 3
             );
+        }
+        if (carry) {
             range_checker.add_count(ptr_limbs[1] + carry, pointer_max_bits - U16_BITS);
         }
     }
@@ -149,7 +151,7 @@ template <typename T> struct Rv64LoadByteAdapterCols {
     MemoryReadAuxCols<T> read_data_aux;
     T imm;
     T imm_sign;
-    T mem_ptr_limbs[2];
+    T mem_ptr_low_limb;
     MemoryWriteAuxCols<T, BLOCK_FE_WIDTH> write_aux;
     T needs_write;
 };
@@ -214,7 +216,7 @@ struct Rv64LoadByteAdapter {
         uint32_t ptr = rv64_load_effective_ptr(record);
         uint32_t ptr_limbs[RV64_PTR_U16_LIMBS];
         ptr_to_u16_limbs(ptr_limbs, ptr);
-        COL_WRITE_ARRAY(row, Rv64LoadByteAdapterCols, mem_ptr_limbs, ptr_limbs);
+        COL_WRITE_VALUE(row, Rv64LoadByteAdapterCols, mem_ptr_low_limb, ptr_limbs[0]);
 
         uint32_t shift_amount = rv64_load_shift_amount(record);
         range_checker.add_count((ptr_limbs[0] - shift_amount) >> 3, U16_BITS - 3);

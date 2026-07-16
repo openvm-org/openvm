@@ -4,7 +4,6 @@ use openvm_circuit::{arch::*, system::memory::MemoryAuxColsFactory};
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     encoder::Encoder,
-    var_range::SharedVariableRangeCheckerChip,
     AlignedBorrow, ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
 };
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::*;
@@ -178,7 +177,6 @@ impl<A> StoreByteFiller<A> {
         adapter: A,
         offset: usize,
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
-        _range_checker_chip: SharedVariableRangeCheckerChip,
     ) -> Self {
         Self {
             adapter,
@@ -236,9 +234,8 @@ where
 
         core_row.read_data = read_data.map(F::from_u16);
         core_row.prev_data = prev_data.map(F::from_u16);
-        let pt: [u32; STORE_BYTE_SELECTOR_WIDTH] =
-            self.encoder.get_flag_pt(shift).try_into().unwrap();
-        core_row.selector = pt.map(F::from_u32);
+        let pt: &[u32; STORE_BYTE_SELECTOR_WIDTH] = self.encoder.flag_pt(shift).try_into().unwrap();
+        core_row.selector = (*pt).map(F::from_u32);
     }
 
     fn fill_dummy_trace_row(&self, row_slice: &mut [F]) {

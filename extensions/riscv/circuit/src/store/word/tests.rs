@@ -12,9 +12,11 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
     SharedBitwiseOperationLookupChip,
 };
-#[cfg(feature = "cuda")]
-use openvm_instructions::riscv::RV64_MEMORY_AS;
-use openvm_instructions::{LocalOpcode, DEFERRAL_AS, PUBLIC_VALUES_AS};
+use openvm_instructions::{
+    instruction::Instruction,
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    LocalOpcode, DEFERRAL_AS, PUBLIC_VALUES_AS,
+};
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, STOREW};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -79,7 +81,6 @@ fn create_store_word_harness(
             Rv64StoreAdapterFiller::new(tester.address_bits(), range_checker.clone()),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
             bitwise_chip.clone(),
-            range_checker,
         ),
         tester.memory_helper(),
     );
@@ -157,6 +158,32 @@ fn negative_store_address_wraparound_test() {
         Some(16),
         Some(0),
         Some(PUBLIC_VALUES_AS as usize),
+    );
+}
+
+#[test]
+#[should_panic(expected = "effective address exceeds implemented memory address space")]
+fn negative_store_address_underflow_test() {
+    let mut tester = VmChipTestBuilder::from_config(store_memory_config());
+    let (mut harness, _bitwise) = create_store_word_harness(&mut tester);
+    let rs1_ptr = 8;
+    tester.write_bytes(RV64_REGISTER_AS as usize, rs1_ptr, [F::ZERO; 8]);
+
+    tester.execute(
+        &mut harness.executor,
+        &mut harness.arena,
+        &Instruction::from_usize(
+            STOREW.global_opcode(),
+            [
+                0,
+                rs1_ptr,
+                u16::MAX as usize,
+                RV64_REGISTER_AS as usize,
+                RV64_MEMORY_AS as usize,
+                0,
+                1,
+            ],
+        ),
     );
 }
 
@@ -266,7 +293,6 @@ fn create_cuda_store_word_harness(tester: &GpuChipTestBuilder) -> GpuStoreWordHa
             Rv64StoreAdapterFiller::new(tester.address_bits(), range_checker.clone()),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
             bitwise_chip,
-            range_checker,
         ),
         tester.dummy_memory_helper(),
     );

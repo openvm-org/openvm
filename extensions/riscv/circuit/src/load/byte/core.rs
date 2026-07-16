@@ -4,7 +4,6 @@ use openvm_circuit::{arch::*, system::memory::MemoryAuxColsFactory};
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     encoder::Encoder,
-    var_range::SharedVariableRangeCheckerChip,
     AlignedBorrow, ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
 };
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::*;
@@ -160,7 +159,6 @@ impl<A> LoadByteFiller<A> {
         adapter: A,
         offset: usize,
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
-        _range_checker_chip: SharedVariableRangeCheckerChip,
     ) -> Self {
         Self {
             adapter,
@@ -199,8 +197,7 @@ where
             .request_range(read_cell_bytes[0] as u32, read_cell_bytes[1] as u32);
         core_row.read_cell_bytes = read_cell_bytes.map(F::from_u16);
         core_row.read_data = read_data.map(F::from_u16);
-        let pt: [u32; LOAD_BYTE_SELECTOR_WIDTH] =
-            self.encoder.get_flag_pt(shift).try_into().unwrap();
-        core_row.selector = pt.map(F::from_u32);
+        let pt: &[u32; LOAD_BYTE_SELECTOR_WIDTH] = self.encoder.flag_pt(shift).try_into().unwrap();
+        core_row.selector = (*pt).map(F::from_u32);
     }
 }

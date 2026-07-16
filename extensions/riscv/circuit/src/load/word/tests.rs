@@ -78,7 +78,6 @@ fn create_word_harness(
             Rv64LoadAdapterFiller::new(tester.address_bits(), range_checker.clone()),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
             bitwise_chip.clone(),
-            range_checker,
         ),
         tester.memory_helper(),
     );
@@ -258,7 +257,6 @@ fn create_cuda_word_harness(tester: &GpuChipTestBuilder) -> GpuWordHarness {
             Rv64LoadAdapterFiller::new(tester.address_bits(), range_checker.clone()),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
             bitwise_chip,
-            range_checker,
         ),
         tester.dummy_memory_helper(),
     );

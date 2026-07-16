@@ -74,7 +74,6 @@ fn create_store_doubleword_harness(
             Rv64StoreAdapterFiller::new(tester.address_bits(), range_checker.clone()),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
             bitwise_chip.clone(),
-            range_checker,
         ),
         tester.memory_helper(),
     );
@@ -112,7 +111,7 @@ fn rand_store_doubleword_test() {
 }
 
 #[test]
-fn positive_stored_page_boundary_cross_test() {
+fn positive_stored_pointer_limb_boundary_cross_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::from_config(store_memory_config());
     let (mut harness, bitwise) = create_store_doubleword_harness(&mut tester);
@@ -191,7 +190,6 @@ fn create_cuda_store_doubleword_harness(tester: &GpuChipTestBuilder) -> GpuStore
             Rv64StoreAdapterFiller::new(tester.address_bits(), range_checker.clone()),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
             bitwise_chip,
-            range_checker,
         ),
         tester.dummy_memory_helper(),
     );

@@ -227,8 +227,8 @@ where
             .add_count((byte - sign_bit) as u32, RV64_BYTE_BITS - 1);
         core_row.data_most_sig_bit = F::from_bool(sign_bit != 0);
         core_row.read_data = read_data.map(F::from_u16);
-        let pt: [u32; LOAD_SIGN_EXTEND_BYTE_SELECTOR_WIDTH] =
-            self.encoder.get_flag_pt(shift).try_into().unwrap();
-        core_row.selector = pt.map(F::from_u32);
+        let pt: &[u32; LOAD_SIGN_EXTEND_BYTE_SELECTOR_WIDTH] =
+            self.encoder.flag_pt(shift).try_into().unwrap();
+        core_row.selector = (*pt).map(F::from_u32);
     }
 }

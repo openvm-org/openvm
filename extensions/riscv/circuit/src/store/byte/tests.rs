@@ -81,7 +81,6 @@ fn create_store_byte_harness(
             Rv64StoreByteAdapterFiller::new(tester.address_bits(), range_checker.clone()),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
             bitwise_chip.clone(),
-            range_checker,
         ),
         tester.memory_helper(),
     );
@@ -250,7 +249,6 @@ fn create_cuda_store_byte_harness(tester: &GpuChipTestBuilder) -> GpuStoreByteHa
             Rv64StoreByteAdapterFiller::new(tester.address_bits(), range_checker.clone()),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
             bitwise_chip,
-            range_checker,
         ),
         tester.dummy_memory_helper(),
     );
