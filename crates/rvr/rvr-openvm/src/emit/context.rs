@@ -1,7 +1,6 @@
 use std::{collections::HashSet, fmt::Write, mem::size_of};
 
-use openvm_instructions::riscv::RV64_MEMORY_AS;
-use rvr_openvm_ext_ffi_common::AS_PUBLIC_VALUES;
+use openvm_instructions::{riscv::RV64_MEMORY_AS, PUBLIC_VALUES_AS as AS_PUBLIC_VALUES};
 
 use super::codegen::hex_u32;
 

@@ -6,6 +6,7 @@ use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
 use openvm_instructions::{
     exe::VmExe,
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    PUBLIC_VALUES_AS,
 };
 use openvm_stark_backend::p3_field::{Field, PrimeField32};
 use rvr_openvm_lift::{RvrRuntimeExtension, TraceChipIndex};
@@ -27,10 +28,7 @@ use crate::{
         Streams, SystemConfig, VmState, BLOCK_FE_WIDTH,
     },
     system::{
-        memory::{
-            merkle::public_values::PUBLIC_VALUES_AS,
-            online::{GuestMemory, LinearMemory, PAGE_SIZE},
-        },
+        memory::online::{GuestMemory, LinearMemory, PAGE_SIZE},
         SystemRecords,
     },
 };
@@ -2130,9 +2128,9 @@ mod tests {
         program::{Program, DEFAULT_PC_STEP},
         riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
         LocalOpcode, SysPhantom, SystemOpcode, VmOpcode, DEFERRAL_AS,
+        PUBLIC_VALUES_AS as AS_PUBLIC_VALUES,
     };
     use p3_baby_bear::BabyBear;
-    use rvr_openvm_ext_ffi_common::AS_PUBLIC_VALUES;
     use rvr_openvm_lift::{AirIndex, TraceChipIndex};
 
     use super::*;
