@@ -52,6 +52,6 @@ pub unsafe extern "C" fn host_hint_stream_set(ctx: *mut c_void, data: *const u8,
     io.hint_stream.clear();
     if len > 0 && !data.is_null() {
         let slice = unsafe { std::slice::from_raw_parts(data, len as usize) };
-        io.hint_stream.extend(slice.iter().copied());
+        io.hint_stream.extend(slice);
     }
 }

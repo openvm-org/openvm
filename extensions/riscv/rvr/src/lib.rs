@@ -5,7 +5,7 @@
 //! extensions.
 #![cfg(feature = "rvr")]
 
-use std::{ffi::c_void, io::Write};
+use std::{collections::VecDeque, ffi::c_void, io::Write};
 
 use openvm_circuit::arch::rvr::io::{check_mem_bounds_range, OpenVmIoState};
 use openvm_instructions::{
@@ -436,6 +436,23 @@ pub extern "C" fn host_hint_random(ctx: *mut c_void, num_words: u32) {
     }
 }
 
+#[inline]
+fn drain_hint_stream_into(hint_stream: &mut VecDeque<u8>, dst: &mut [u8]) {
+    debug_assert!(hint_stream.len() >= dst.len());
+    let nbytes = dst.len();
+    // A wrapped VecDeque exposes its logical contents as two contiguous chunks.
+    let (front_chunk, wrapped_chunk) = hint_stream.as_slices();
+    if nbytes <= front_chunk.len() {
+        dst.copy_from_slice(&front_chunk[..nbytes]);
+    } else {
+        let (dst_front, dst_wrapped) = dst.split_at_mut(front_chunk.len());
+        dst_front.copy_from_slice(front_chunk);
+        dst_wrapped.copy_from_slice(&wrapped_chunk[..dst_wrapped.len()]);
+    }
+    // Draining a prefix advances the deque after its bytes have been copied.
+    drop(hint_stream.drain(..nbytes));
+}
+
 /// HINT_STOREW: pop one rv64 register-width word (8 bytes) from the hint stream
 /// and write it to guest memory at `dest_addr`.
 pub extern "C" fn host_hint_storew(ctx: *mut c_void, dest_addr: u64) {
@@ -444,17 +461,13 @@ pub extern "C" fn host_hint_storew(ctx: *mut c_void, dest_addr: u64) {
         return;
     }
     check_mem_bounds_range(dest_addr, RV64_REGISTER_NUM_LIMBS);
-    let mut bytes = [0u8; RV64_REGISTER_NUM_LIMBS];
-    for byte in &mut bytes {
-        *byte = io.hint_stream.pop_front().unwrap();
-    }
-    unsafe {
-        std::ptr::copy_nonoverlapping(
-            bytes.as_ptr(),
+    let dst = unsafe {
+        std::slice::from_raw_parts_mut(
             io.memory_ptr.add(dest_addr as usize),
-            bytes.len(),
-        );
-    }
+            RV64_REGISTER_NUM_LIMBS,
+        )
+    };
+    drain_hint_stream_into(io.hint_stream, dst);
 }
 
 /// HINT_BUFFER: pop `num_words * RV64_REGISTER_NUM_LIMBS` bytes from the hint stream
@@ -466,11 +479,9 @@ pub extern "C" fn host_hint_buffer(ctx: *mut c_void, dest_addr: u64, num_words: 
         return;
     }
     check_mem_bounds_range(dest_addr, nbytes);
-    let dst = unsafe { io.memory_ptr.add(dest_addr as usize) };
-    for i in 0..nbytes {
-        let byte = io.hint_stream.pop_front().unwrap();
-        unsafe { *dst.add(i) = byte };
-    }
+    let dst =
+        unsafe { std::slice::from_raw_parts_mut(io.memory_ptr.add(dest_addr as usize), nbytes) };
+    drain_hint_stream_into(io.hint_stream, dst);
 }
 
 /// Host callback for stores to `PUBLIC_VALUES_AS`.
@@ -737,6 +748,40 @@ mod tests {
                 .any(|l| l.contains("trace_mem_access_u64_range")),
             "expected trace_mem_access_u64_range, got: {:#?}",
             ctx.lines
+        );
+    }
+
+    #[test]
+    fn host_hint_buffer_bulk_copies_wrapped_stream() {
+        let mut input_stream = VecDeque::new();
+        let mut hint_stream = VecDeque::with_capacity(16);
+        hint_stream.extend(0u8..14);
+        hint_stream.drain(..10);
+        hint_stream.extend(14u8..22);
+        let (first, second) = hint_stream.as_slices();
+        assert!(first.len() < RV64_REGISTER_NUM_LIMBS && !second.is_empty());
+
+        let mut rng = StdRng::seed_from_u64(0);
+        let mut memory = vec![0u8; 16];
+        let mut public_values = vec![];
+        let mut deferrals = Vec::new();
+        let mut io = OpenVmIoState {
+            input_stream: &mut input_stream,
+            hint_stream: &mut hint_stream,
+            rng: &mut rng,
+            memory_ptr: memory.as_mut_ptr(),
+            public_values: &mut public_values,
+            deferral_memory: std::ptr::null_mut(),
+            deferral_memory_len_bytes: 0,
+            deferrals: &mut deferrals,
+        };
+
+        host_hint_buffer(&mut io as *mut OpenVmIoState<'_> as *mut c_void, 3, 1);
+
+        assert_eq!(&memory[3..11], &(10u8..18).collect::<Vec<_>>());
+        assert_eq!(
+            io.hint_stream.iter().copied().collect::<Vec<_>>(),
+            (18u8..22).collect::<Vec<_>>()
         );
     }
 }
