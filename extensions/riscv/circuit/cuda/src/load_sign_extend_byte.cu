@@ -22,8 +22,8 @@ struct LoadSignExtendByteCore {
     )
         : range_checker(range_checker), bitwise_lookup(bitwise_lookup) {}
 
-    __device__ void fill_trace_row(RowSlice row, LoadSignExtendRecord record, uint8_t shift) {
-        uint16_t read_cell = record.read_data[0][shift >> 1];
+    __device__ void fill_trace_row(RowSlice row, LoadByteRecord record, uint8_t shift) {
+        uint16_t read_cell = record.read_data[shift >> 1];
         uint16_t read_cell_bytes[2] = {
             load_sign_extend_byte_from_cell(read_cell, 0),
             load_sign_extend_byte_from_cell(read_cell, 1),
@@ -43,7 +43,7 @@ struct LoadSignExtendByteCore {
         COL_WRITE_VALUE(
             row, LoadSignExtendByteCoreCols, read_cell_lo_byte, read_cell_bytes[0]
         );
-        COL_WRITE_ARRAY(row, LoadSignExtendByteCoreCols, read_data, record.read_data[0]);
+        COL_WRITE_ARRAY(row, LoadSignExtendByteCoreCols, read_data, record.read_data);
     }
 };
 
@@ -51,7 +51,7 @@ __global__ void rv64_load_sign_extend_byte_tracegen(
     Fp *trace,
     size_t height,
     size_t width,
-    DeviceBufferConstView<Rv64LoadSignExtendRecord> records,
+    DeviceBufferConstView<Rv64LoadByteRecord> records,
     size_t pointer_max_bits,
     uint32_t *range_checker_ptr,
     uint32_t range_checker_num_bins,
@@ -88,7 +88,7 @@ extern "C" int _rv64_load_sign_extend_byte_tracegen(
     Fp *d_trace,
     size_t height,
     size_t width,
-    DeviceBufferConstView<Rv64LoadSignExtendRecord> d_records,
+    DeviceBufferConstView<Rv64LoadByteRecord> d_records,
     size_t pointer_max_bits,
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,

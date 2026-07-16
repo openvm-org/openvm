@@ -11,9 +11,9 @@ use openvm_stark_backend::prover::AirProvingContext;
 
 use super::StoreByteCoreCols;
 use crate::{
-    adapters::{Rv64StoreByteAdapterCols, Rv64StoreMultiByteAdapterRecord, RV64_BYTE_BITS},
+    adapters::{Rv64StoreByteAdapterCols, Rv64StoreByteAdapterRecord, RV64_BYTE_BITS},
     cuda_abi::store_byte_cuda,
-    store::StoreRecord,
+    store::StoreByteRecord,
 };
 
 #[derive(new)]
@@ -26,7 +26,7 @@ pub struct Rv64StoreByteChipGpu {
 
 impl Chip<DenseRecordArena, GpuBackend> for Rv64StoreByteChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-        const RECORD_SIZE: usize = size_of::<(Rv64StoreMultiByteAdapterRecord, StoreRecord)>();
+        const RECORD_SIZE: usize = size_of::<(Rv64StoreByteAdapterRecord, StoreByteRecord)>();
         let records = arena.allocated();
         if records.is_empty() {
             return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());

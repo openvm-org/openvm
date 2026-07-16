@@ -1,12 +1,18 @@
 use std::borrow::{Borrow, BorrowMut};
 
-use openvm_circuit::{arch::*, system::memory::MemoryAuxColsFactory};
+use openvm_circuit::{
+    arch::{
+        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, TraceFiller,
+        VmAdapterInterface, VmCoreAir, BLOCK_FE_WIDTH,
+    },
+    system::memory::MemoryAuxColsFactory,
+};
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     encoder::Encoder,
     AlignedBorrow, ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
 };
-use openvm_riscv_transpiler::Rv64LoadStoreOpcode::*;
+use openvm_riscv_transpiler::Rv64LoadStoreOpcode::STOREB;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
@@ -17,10 +23,10 @@ use openvm_stark_backend::{
 use crate::{
     adapters::{
         set_u16_cell_byte, shift_encoder, u16_cell_byte, Rv64StoreByteAdapterCols,
-        Rv64StoreByteAdapterFiller, Rv64StoreMultiByteAdapterRecord, StoreInstruction,
+        Rv64StoreByteAdapterFiller, Rv64StoreByteAdapterRecord, StoreByteInstruction,
         RV64_BYTE_BITS,
     },
-    store::common::{store_write_data, StoreRecord},
+    store::common::{store_write_data, StoreByteRecord},
 };
 
 pub(crate) const STORE_BYTE_SELECTOR_WIDTH: usize = 3;
@@ -72,7 +78,7 @@ where
     I: VmAdapterInterface<AB::Expr>,
     I::Reads: From<([AB::Expr; BLOCK_FE_WIDTH], [AB::Expr; BLOCK_FE_WIDTH])>,
     I::Writes: From<[[AB::Expr; BLOCK_FE_WIDTH]; 1]>,
-    I::ProcessedInstruction: From<StoreInstruction<AB::Expr>>,
+    I::ProcessedInstruction: From<StoreByteInstruction<AB::Expr>>,
 {
     fn eval(
         &self,
@@ -131,11 +137,10 @@ where
             )
                 .into(),
             writes: [write_data].into(),
-            instruction: StoreInstruction {
+            instruction: StoreByteInstruction {
                 is_valid,
                 opcode: expected_opcode,
                 shift_amount,
-                store_cross: AB::Expr::ZERO,
             }
             .into(),
         }
@@ -181,16 +186,16 @@ where
                 <Rv64StoreByteAdapterFiller as AdapterTraceFiller<F>>::WIDTH,
             )
         };
-        let adapter_record: &Rv64StoreMultiByteAdapterRecord =
+        let adapter_record: &Rv64StoreByteAdapterRecord =
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
         let shift = adapter_record.shift_amount();
         self.adapter.fill_trace_row(mem_helper, adapter_row);
 
-        // SAFETY: core_row contains a valid StoreRecord written by the executor during trace
+        // SAFETY: core_row contains a valid StoreByteRecord written by the executor during trace
         // generation.
-        let record: &StoreRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
+        let record: &StoreByteRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
         let read_data = record.read_data;
-        let prev_data = record.prev_data[0];
+        let prev_data = record.prev_data;
         let core_row: &mut StoreByteCoreCols<F> = core_row.borrow_mut();
         let cell_shift = shift / 2;
         let byte_idx = shift % 2;

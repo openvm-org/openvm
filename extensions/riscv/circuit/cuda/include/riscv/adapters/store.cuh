@@ -42,14 +42,14 @@ struct Rv64StoreMultiByteAdapterRecord {
     uint8_t mem_as;
 };
 
-static __device__ __forceinline__ uint32_t
-rv64_store_effective_ptr(Rv64StoreMultiByteAdapterRecord record) {
+template <typename Record>
+static __device__ __forceinline__ uint32_t rv64_store_effective_ptr(Record record) {
     return record.rs1_val + uint32_t(record.imm) +
            uint32_t(record.imm_sign) * (uint32_t(UINT16_MAX) << U16_BITS);
 }
 
-static __device__ __forceinline__ uint32_t
-rv64_store_shift_amount(Rv64StoreMultiByteAdapterRecord record) {
+template <typename Record>
+static __device__ __forceinline__ uint32_t rv64_store_shift_amount(Record record) {
     return rv64_store_effective_ptr(record) & (RV64_REGISTER_NUM_LIMBS - 1);
 }
 
@@ -147,6 +147,20 @@ template <typename T> struct Rv64StoreByteAdapterCols {
     MemoryBaseAuxCols<T> write_base_aux;
 };
 
+struct Rv64StoreByteAdapterRecord {
+    uint32_t from_pc;
+    uint32_t from_timestamp;
+    uint32_t rs1_val;
+    MemoryReadAuxRecord rs1_aux_record;
+    MemoryReadAuxRecord read_data_aux;
+    uint32_t write_prev_timestamp;
+    uint16_t imm;
+    uint8_t rs1_ptr;
+    uint8_t rs2_ptr;
+    bool imm_sign;
+    uint8_t mem_as;
+};
+
 struct Rv64StoreByteAdapter {
     size_t pointer_max_bits;
     VariableRangeChecker range_checker;
@@ -160,7 +174,7 @@ struct Rv64StoreByteAdapter {
         : pointer_max_bits(pointer_max_bits), range_checker(range_checker),
           mem_helper(range_checker, timestamp_max_bits) {}
 
-    __device__ void fill_trace_row(RowSlice row, Rv64StoreMultiByteAdapterRecord record) {
+    __device__ void fill_trace_row(RowSlice row, Rv64StoreByteAdapterRecord record) {
         COL_WRITE_VALUE(row, Rv64StoreByteAdapterCols, from_state.pc, record.from_pc);
         COL_WRITE_VALUE(
             row, Rv64StoreByteAdapterCols, from_state.timestamp, record.from_timestamp

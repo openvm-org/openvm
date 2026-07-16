@@ -10,14 +10,16 @@ use openvm_circuit::{
         ExecutionBridge, ExecutionState, VmAdapterAir, VmAdapterInterface, BLOCK_FE_WIDTH,
     },
     system::memory::{
-        offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
+        offline_checker::{
+            MemoryBridge, MemoryReadAuxCols, MemoryReadAuxRecord, MemoryWriteAuxCols,
+        },
         online::TracingMemory,
         MemoryAddress, MemoryAuxColsFactory,
     },
 };
 use openvm_circuit_primitives::{
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
-    ColumnsAir, StructReflection, StructReflectionHelper,
+    AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
@@ -35,18 +37,23 @@ use crate::adapters::{
     byte_ptr_to_u16_ptr, byte_ptr_to_u16_ptr_value, expand_to_rv64_block, memory_read_u16,
     ptr_to_field_u16_limbs, ptr_to_u16_limbs, rv64_address_add_imm, rv64_register_pointer,
     sign_extend_imm16, timed_write_u16, tracing_read, tracing_read_u16, try_rv64_bytes_to_u32,
-    LoadInstruction, Rv64LoadMultiByteAdapterRecord, RV64_PTR_BITS, RV64_PTR_U16_LIMBS,
-    RV64_REGISTER_NUM_LIMBS, U16_BITS,
+    RV64_PTR_BITS, RV64_PTR_U16_LIMBS, RV64_REGISTER_NUM_LIMBS, U16_BITS,
 };
 
 // Byte loads never cross a memory block, so this adapter has no second-block columns.
+
+pub struct LoadByteInstruction<T> {
+    pub is_valid: T,
+    pub opcode: T,
+    pub shift_amount: T,
+}
 
 pub struct Rv64LoadByteAdapterAirInterface<AB: InteractionBuilder>(PhantomData<AB>);
 
 impl<AB: InteractionBuilder> VmAdapterInterface<AB::Expr> for Rv64LoadByteAdapterAirInterface<AB> {
     type Reads = [AB::Expr; BLOCK_FE_WIDTH];
     type Writes = [[AB::Expr; BLOCK_FE_WIDTH]; 1];
-    type ProcessedInstruction = LoadInstruction<AB::Expr>;
+    type ProcessedInstruction = LoadByteInstruction<AB::Expr>;
 }
 
 #[repr(C)]
@@ -209,6 +216,37 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadByteAdapterAir {
     }
 }
 
+#[repr(C)]
+#[derive(AlignedBytesBorrow, Debug)]
+pub struct Rv64LoadByteAdapterRecord {
+    pub from_pc: u32,
+    pub from_timestamp: u32,
+    pub rs1_val: u32,
+    pub rs1_aux_record: MemoryReadAuxRecord,
+    pub read_data_aux: MemoryReadAuxRecord,
+    pub imm: u16,
+    pub imm_sign: bool,
+    pub write_prev_timestamp: u32,
+    pub write_prev_data: [u16; BLOCK_FE_WIDTH],
+    pub rs1_ptr: u8,
+    /// `u8::MAX` when the load does not write a register.
+    pub rd_ptr: u8,
+}
+
+impl Rv64LoadByteAdapterRecord {
+    pub(crate) fn effective_ptr(&self) -> u32 {
+        let addr = rv64_address_add_imm(
+            self.rs1_val,
+            sign_extend_imm16(self.imm as u32, self.imm_sign as u32),
+        );
+        u32::try_from(addr).expect("effective address exceeds u32 range")
+    }
+
+    pub(crate) fn shift_amount(&self) -> usize {
+        (self.effective_ptr() & (RV64_REGISTER_NUM_LIMBS as u32 - 1)) as usize
+    }
+}
+
 #[derive(Clone, Copy, derive_new::new)]
 pub struct Rv64LoadByteAdapterExecutor {
     pointer_max_bits: usize,
@@ -225,9 +263,9 @@ where
     F: PrimeField32,
 {
     const WIDTH: usize = size_of::<Rv64LoadByteAdapterCols<u8>>();
-    type ReadData = (([u16; BLOCK_FE_WIDTH], [[u16; BLOCK_FE_WIDTH]; 2]), u8);
+    type ReadData = (([u16; BLOCK_FE_WIDTH], [u16; BLOCK_FE_WIDTH]), u8);
     type WriteData = [u16; BLOCK_FE_WIDTH];
-    type RecordMut<'a> = &'a mut Rv64LoadMultiByteAdapterRecord;
+    type RecordMut<'a> = &'a mut Rv64LoadByteAdapterRecord;
 
     #[inline(always)]
     fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
@@ -280,8 +318,6 @@ where
             byte_ptr_to_u16_ptr_value(aligned_ptr),
             &mut record.read_data_aux.prev_timestamp,
         );
-        // Mark the optional second read absent.
-        record.read_data1_aux.prev_timestamp = u32::MAX;
         let prev_data = memory_read_u16(
             memory.data(),
             RV64_REGISTER_AS,
@@ -289,10 +325,7 @@ where
         );
         record.write_prev_data = prev_data;
 
-        (
-            (prev_data, [read_data0, [0; BLOCK_FE_WIDTH]]),
-            shift_amount as u8,
-        )
+        ((prev_data, read_data0), shift_amount as u8)
     }
 
     #[inline(always)]
@@ -328,10 +361,10 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64LoadByteAdapterFiller {
         debug_assert!(self.range_checker_chip.range_max_bits() >= 15);
 
         // SAFETY:
-        // - the executor wrote an `Rv64LoadMultiByteAdapterRecord` into this row buffer
+        // - the executor wrote an `Rv64LoadByteAdapterRecord` into this row buffer
         // - the record fits within the byte adapter's column layout
         // - `get_record_from_slice` returns the record representation at the start of the row
-        let record: &Rv64LoadMultiByteAdapterRecord =
+        let record: &Rv64LoadByteAdapterRecord =
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
         let from_pc = record.from_pc;
         let from_timestamp = record.from_timestamp;

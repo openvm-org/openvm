@@ -44,13 +44,14 @@ struct Rv64LoadMultiByteAdapterRecord {
     uint8_t rd_ptr;
 };
 
-static __device__ __forceinline__ uint32_t
-rv64_load_effective_ptr(Rv64LoadMultiByteAdapterRecord record) {
+template <typename Record>
+static __device__ __forceinline__ uint32_t rv64_load_effective_ptr(Record record) {
     return record.rs1_val + uint32_t(record.imm) +
            uint32_t(record.imm_sign) * (uint32_t(UINT16_MAX) << U16_BITS);
 }
 
-static __device__ __forceinline__ uint32_t rv64_load_shift_amount(Rv64LoadMultiByteAdapterRecord record) {
+template <typename Record>
+static __device__ __forceinline__ uint32_t rv64_load_shift_amount(Record record) {
     return rv64_load_effective_ptr(record) & (RV64_REGISTER_NUM_LIMBS - 1);
 }
 
@@ -157,6 +158,21 @@ template <typename T> struct Rv64LoadByteAdapterCols {
     T needs_write;
 };
 
+struct Rv64LoadByteAdapterRecord {
+    uint32_t from_pc;
+    uint32_t from_timestamp;
+    uint32_t rs1_val;
+    MemoryReadAuxRecord rs1_aux_record;
+    MemoryReadAuxRecord read_data_aux;
+    uint16_t imm;
+    bool imm_sign;
+    uint32_t write_prev_timestamp;
+    uint16_t write_prev_data[BLOCK_FE_WIDTH];
+    uint8_t rs1_ptr;
+    // UINT8_MAX means the load does not write a register.
+    uint8_t rd_ptr;
+};
+
 struct Rv64LoadByteAdapter {
     size_t pointer_max_bits;
     VariableRangeChecker range_checker;
@@ -170,7 +186,7 @@ struct Rv64LoadByteAdapter {
         : pointer_max_bits(pointer_max_bits), range_checker(range_checker),
           mem_helper(range_checker, timestamp_max_bits) {}
 
-    __device__ void fill_trace_row(RowSlice row, Rv64LoadMultiByteAdapterRecord record) {
+    __device__ void fill_trace_row(RowSlice row, Rv64LoadByteAdapterRecord record) {
         COL_WRITE_VALUE(row, Rv64LoadByteAdapterCols, from_state.pc, record.from_pc);
         COL_WRITE_VALUE(
             row, Rv64LoadByteAdapterCols, from_state.timestamp, record.from_timestamp

@@ -36,7 +36,9 @@ struct LoadSignExtendPreCompute {
     b: u8,
 }
 
-impl<A, const LOAD_WIDTH: usize> LoadSignExtendExecutor<A, LOAD_WIDTH> {
+impl<A, const LOAD_WIDTH: usize, const NUM_BLOCKS: usize>
+    LoadSignExtendExecutor<A, LOAD_WIDTH, NUM_BLOCKS>
+{
     fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,
@@ -95,7 +97,8 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, A, const LOAD_WIDTH: usize> InterpreterExecutor<F> for LoadSignExtendExecutor<A, LOAD_WIDTH>
+impl<F, A, const LOAD_WIDTH: usize, const NUM_BLOCKS: usize> InterpreterExecutor<F>
+    for LoadSignExtendExecutor<A, LOAD_WIDTH, NUM_BLOCKS>
 where
     F: PrimeField32,
 {
@@ -133,8 +136,8 @@ where
     }
 }
 
-impl<F, A, const LOAD_WIDTH: usize> InterpreterMeteredExecutor<F>
-    for LoadSignExtendExecutor<A, LOAD_WIDTH>
+impl<F, A, const LOAD_WIDTH: usize, const NUM_BLOCKS: usize> InterpreterMeteredExecutor<F>
+    for LoadSignExtendExecutor<A, LOAD_WIDTH, NUM_BLOCKS>
 where
     F: PrimeField32,
 {

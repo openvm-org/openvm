@@ -23,9 +23,18 @@ struct LoadRecord {
     uint16_t read_data[2][BLOCK_FE_WIDTH];
 };
 
+struct LoadByteRecord {
+    uint16_t read_data[BLOCK_FE_WIDTH];
+};
+
 struct Rv64LoadRecord {
     Rv64LoadMultiByteAdapterRecord adapter;
     LoadRecord core;
+};
+
+struct Rv64LoadByteRecord {
+    Rv64LoadByteAdapterRecord adapter;
+    LoadByteRecord core;
 };
 
 static_assert(sizeof(Rv64LoadMultiByteAdapterRecord) == 44);
@@ -33,6 +42,10 @@ static_assert(sizeof(LoadRecord) == 16);
 static_assert(sizeof(Rv64LoadRecord) == 60);
 static_assert(offsetof(LoadRecord, read_data) == 0);
 static_assert(offsetof(Rv64LoadRecord, core) == 44);
+static_assert(sizeof(Rv64LoadByteAdapterRecord) == 40);
+static_assert(sizeof(LoadByteRecord) == 8);
+static_assert(sizeof(Rv64LoadByteRecord) == 48);
+static_assert(offsetof(Rv64LoadByteRecord, core) == 40);
 
 static __device__ __forceinline__ uint16_t load_byte_from_cell(uint16_t cell, uint8_t byte_idx) {
     return (cell >> (RV64_BYTE_BITS * byte_idx)) & RV64_BYTE_MASK;

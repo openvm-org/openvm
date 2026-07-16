@@ -1,13 +1,19 @@
 use std::borrow::{Borrow, BorrowMut};
 
-use openvm_circuit::{arch::*, system::memory::MemoryAuxColsFactory};
+use openvm_circuit::{
+    arch::{
+        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, TraceFiller,
+        VmAdapterInterface, VmCoreAir, BLOCK_FE_WIDTH,
+    },
+    system::memory::MemoryAuxColsFactory,
+};
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     encoder::Encoder,
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
     AlignedBorrow, ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
 };
-use openvm_riscv_transpiler::Rv64LoadStoreOpcode::*;
+use openvm_riscv_transpiler::Rv64LoadStoreOpcode::LOADB;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
@@ -17,10 +23,10 @@ use openvm_stark_backend::{
 
 use crate::{
     adapters::{
-        shift_encoder, u16_cell_byte, LoadInstruction, Rv64LoadByteAdapterFiller,
-        Rv64LoadMultiByteAdapterRecord, RV64_BYTE_BITS, RV64_BYTE_SIGN_BIT,
+        shift_encoder, u16_cell_byte, LoadByteInstruction, Rv64LoadByteAdapterFiller,
+        Rv64LoadByteAdapterRecord, RV64_BYTE_BITS, RV64_BYTE_SIGN_BIT,
     },
-    load::LoadRecord,
+    load::LoadByteRecord,
 };
 
 pub(crate) const LOAD_SIGN_EXTEND_BYTE_SELECTOR_WIDTH: usize = 3;
@@ -76,7 +82,7 @@ where
     I: VmAdapterInterface<AB::Expr>,
     I::Reads: From<[AB::Expr; BLOCK_FE_WIDTH]>,
     I::Writes: From<[[AB::Expr; BLOCK_FE_WIDTH]; 1]>,
-    I::ProcessedInstruction: From<LoadInstruction<AB::Expr>>,
+    I::ProcessedInstruction: From<LoadByteInstruction<AB::Expr>>,
 {
     fn eval(
         &self,
@@ -161,11 +167,10 @@ where
             to_pc: None,
             reads: cols.read_data.map(Into::into).into(),
             writes: [write_data].into(),
-            instruction: LoadInstruction {
+            instruction: LoadByteInstruction {
                 is_valid,
                 opcode: expected_opcode,
                 shift_amount: load_shift_amount,
-                load_cross: AB::Expr::ZERO,
             }
             .into(),
         }
@@ -213,15 +218,15 @@ where
             row_slice
                 .split_at_mut_unchecked(<Rv64LoadByteAdapterFiller as AdapterTraceFiller<F>>::WIDTH)
         };
-        let adapter_record: &Rv64LoadMultiByteAdapterRecord =
+        let adapter_record: &Rv64LoadByteAdapterRecord =
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
         let shift = adapter_record.shift_amount();
         self.adapter.fill_trace_row(mem_helper, adapter_row);
 
-        // SAFETY: core_row contains a valid LoadRecord written by the executor during trace
+        // SAFETY: core_row contains a valid LoadByteRecord written by the executor during trace
         // generation.
-        let record: &LoadRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
-        let read_data = record.read_data[0];
+        let record: &LoadByteRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
+        let read_data = record.read_data;
         let core_row: &mut LoadSignExtendByteCoreCols<F> = core_row.borrow_mut();
 
         let read_cell = read_data[shift / 2];

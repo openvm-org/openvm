@@ -11,9 +11,9 @@ use openvm_stark_backend::prover::AirProvingContext;
 
 use super::LoadSignExtendByteCoreCols;
 use crate::{
-    adapters::{Rv64LoadByteAdapterCols, Rv64LoadMultiByteAdapterRecord, RV64_BYTE_BITS},
+    adapters::{Rv64LoadByteAdapterCols, Rv64LoadByteAdapterRecord, RV64_BYTE_BITS},
     cuda_abi::load_sign_extend_byte_cuda,
-    load::LoadRecord,
+    load::LoadByteRecord,
 };
 
 #[derive(new)]
@@ -26,7 +26,7 @@ pub struct Rv64LoadSignExtendByteChipGpu {
 
 impl Chip<DenseRecordArena, GpuBackend> for Rv64LoadSignExtendByteChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-        const RECORD_SIZE: usize = size_of::<(Rv64LoadMultiByteAdapterRecord, LoadRecord)>();
+        const RECORD_SIZE: usize = size_of::<(Rv64LoadByteAdapterRecord, LoadByteRecord)>();
         let records = arena.allocated();
         if records.is_empty() {
             return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
