@@ -4,6 +4,7 @@ use openvm_circuit::{
     arch::{execution_mode::ExecutionCtxTrait, VmStateMut, BLOCK_FE_WIDTH},
     system::memory::online::{GuestMemory, TracingMemory},
 };
+use openvm_circuit_primitives::encoder::Encoder;
 pub use openvm_circuit_primitives::U16_BITS;
 use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
@@ -22,10 +23,11 @@ mod alu_w;
 mod alu_w_u16;
 mod branch;
 mod jalr;
-mod loadstore;
+mod load;
 mod mul;
 mod mul_w;
 mod rdwrite;
+mod store;
 
 pub use alu::*;
 pub use alu_imm_u16::*;
@@ -35,13 +37,14 @@ pub use alu_w::*;
 pub use alu_w_u16::*;
 pub use branch::*;
 pub use jalr::*;
-pub use loadstore::*;
+pub use load::*;
 pub use mul::*;
 pub use mul_w::*;
 pub use openvm_instructions::riscv::{
     RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
 };
 pub use rdwrite::*;
+pub use store::*;
 
 /// Number of u16 limbs needed for a low-32-bit RV64 pointer.
 pub const RV64_PTR_U16_LIMBS: usize = RV64_WORD_NUM_LIMBS / 2;
@@ -50,6 +53,18 @@ pub const RV64_PTR_BITS: usize = U16_BITS * RV64_PTR_U16_LIMBS;
 /// Number of u16 limbs in a 32-bit RV64 word (e.g. an `ADDW`/`SUBW` operand, or one half of a
 /// register). Numerically equal to [`RV64_PTR_U16_LIMBS`], but named for arithmetic-word use.
 pub const RV64_WORD_U16_LIMBS: usize = RV64_WORD_NUM_LIMBS / 2;
+
+/// Byte shifts of an effective pointer inside an 8-byte memory block. Every load/store core
+/// encodes shift `i` as selector case `i`.
+pub(crate) const NUM_BYTE_SHIFTS: usize = 2 * BLOCK_FE_WIDTH;
+const SHIFT_SELECTOR_MAX_DEGREE: u32 = 2;
+
+/// Encodes one selector case for each byte shift, reserving the zero point for invalid rows.
+pub(crate) fn shift_encoder<const SELECTOR_WIDTH: usize>() -> Encoder {
+    let encoder = Encoder::new(NUM_BYTE_SHIFTS, SHIFT_SELECTOR_MAX_DEGREE, true);
+    debug_assert_eq!(encoder.width(), SELECTOR_WIDTH);
+    encoder
+}
 
 /// Packs two little-endian u8 limbs into one u16-shaped field element.
 #[inline(always)]
