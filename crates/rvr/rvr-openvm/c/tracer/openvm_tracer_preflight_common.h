@@ -94,7 +94,7 @@ static constexpr uint32_t G2_PRODUCER_RESIDUAL_CTRL_SLOT = 1u;
 static constexpr uint32_t G2_PRODUCER_RESIDUAL_TAG_SLOT = 2u;
 static constexpr uint32_t G2_PRODUCER_RESIDUAL_VALUE_SLOT = 3u;
 static constexpr uint32_t G2_PRODUCER_ADDI_SLOT = 4u;
-static constexpr uint32_t G2_PRODUCER_LANE_COUNT = 27u;
+static constexpr uint32_t G2_PRODUCER_LANE_COUNT = 58u;
 
 static constexpr uint32_t PREFLIGHT_PROGRAM_WRITE_COMPLETE = 1u;
 static constexpr uint32_t PREFLIGHT_PROGRAM_CROSSING_RESIDUAL = 2u;
@@ -675,6 +675,30 @@ preflight_g2_load_store_slot(uint32_t kind) {
   }
 }
 
+static __attribute__((always_inline)) inline uint32_t
+preflight_g2_standard_slot(uint32_t kind) {
+  switch (kind) {
+    case 0u: return 27u;
+    case 1u: return 29u;
+    case 2u: return 31u;
+    case 3u: return 33u;
+    case 4u: return 35u;
+    case 5u: return 37u;
+    case 6u: return 39u;
+    case 7u: return 41u;
+    case 10u: return 43u;
+    case 11u: return 45u;
+    case 13u: return 57u;
+    case 15u: return 47u;
+    case 16u: return 49u;
+    case 17u: return 51u;
+    case 18u: return 53u;
+    case 19u: return 55u;
+    case 29u: return G2_PRODUCER_ADDI_SLOT;
+    default: return UINT32_MAX;
+  }
+}
+
 static __attribute__((always_inline)) inline void preflight_g2_emit_run(
     RvState* restrict state, uint32_t program_slot,
     uint32_t instruction_count) {
@@ -707,6 +731,46 @@ static __attribute__((always_inline)) inline void preflight_g2_emit_addi(
   G2ProducerLaneV1 const* restrict lane =
       &g2->lanes[G2_PRODUCER_ADDI_SLOT];
   ((uint64_t*)(g2->base + lane->offset))[index] = rs1_value;
+}
+
+static __attribute__((always_inline)) inline void preflight_g2_emit_standard1(
+    RvState* restrict state, uint32_t kind, uint64_t v0) {
+  G2ProducerV1* restrict g2 = state->tracer->g2;
+  uint32_t slot = preflight_g2_standard_slot(kind);
+  if (unlikely(slot == UINT32_MAX || kind == 12u || kind == 14u)) {
+    if (g2 != NULL) g2->overflow = 1u;
+    return;
+  }
+  uint32_t index = preflight_g2_claim(
+      g2, slot, kind == 13u ? sizeof(uint32_t) : sizeof(uint64_t));
+  if (unlikely(index == UINT32_MAX)) return;
+  G2ProducerLaneV1 const* restrict lane = &g2->lanes[slot];
+  if (kind == 13u) {
+    if (unlikely(v0 > UINT32_MAX)) {
+      g2->overflow = 1u;
+      return;
+    }
+    ((uint32_t*)(g2->base + lane->offset))[index] = (uint32_t)v0;
+  } else {
+    ((uint64_t*)(g2->base + lane->offset))[index] = v0;
+  }
+}
+
+static __attribute__((always_inline)) inline void preflight_g2_emit_standard2(
+    RvState* restrict state, uint32_t kind, uint64_t v0, uint64_t v1) {
+  G2ProducerV1* restrict g2 = state->tracer->g2;
+  uint32_t slot = preflight_g2_standard_slot(kind);
+  if (unlikely(slot == UINT32_MAX || kind == 13u || kind == 29u)) {
+    if (g2 != NULL) g2->overflow = 1u;
+    return;
+  }
+  uint32_t v0_index = preflight_g2_claim(g2, slot, sizeof(uint64_t));
+  uint32_t v1_index = preflight_g2_claim(g2, slot + 1u, sizeof(uint64_t));
+  if (unlikely(v0_index == UINT32_MAX || v1_index == UINT32_MAX)) return;
+  G2ProducerLaneV1 const* restrict v0_lane = &g2->lanes[slot];
+  G2ProducerLaneV1 const* restrict v1_lane = &g2->lanes[slot + 1u];
+  ((uint64_t*)(g2->base + v0_lane->offset))[v0_index] = v0;
+  ((uint64_t*)(g2->base + v1_lane->offset))[v1_index] = v1;
 }
 
 static __attribute__((always_inline)) inline bool

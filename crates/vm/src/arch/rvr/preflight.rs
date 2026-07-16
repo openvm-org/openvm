@@ -1629,6 +1629,14 @@ where
         unsafe {
             core::arch::x86_64::_mm_sfence();
         }
+        if g2_prepared
+            .as_ref()
+            .is_some_and(|prepared| prepared.producer.overflow != 0)
+        {
+            return Err(ExecutionError::RvrExecution(
+                "G2 wire v1: native lane producer rejected a value before publish".to_string(),
+            ));
+        }
         let run_result = run_result.map_err(map_rvr_execute_error)?;
         let post_native_started = std::time::Instant::now();
         if let Some(delta) = delta_output.as_mut() {

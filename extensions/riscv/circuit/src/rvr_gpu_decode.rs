@@ -1768,6 +1768,9 @@ fn gpu_decode_entry<F: PrimeField32>(
         let mut flags = 0u8;
         if instruction.e.as_canonical_u32() != RV64_REGISTER_AS {
             flags |= OPERAND_FLAG_RS2_IMM;
+            if instruction.c.as_canonical_u32() & (1 << 23) != 0 {
+                flags |= OPERAND_FLAG_RS2_IMM_SIGN;
+            }
         }
         return Some((
             DeviceOperandEntry {
