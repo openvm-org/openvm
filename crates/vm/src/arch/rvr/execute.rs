@@ -282,13 +282,6 @@ fn execute_metered_impl(
                 seg_state.ctx.segmentation_ctx.instrets_until_check
             ))
         })?;
-    let _ = u32::try_from(seg_state.ctx.segmentation_ctx.segment_check_insns()).map_err(|_| {
-        ExecuteError::InvalidMeteredContext(format!(
-            "segment_check_insns {} exceeds rvr tracer u32 counter",
-            seg_state.ctx.segmentation_ctx.segment_check_insns()
-        ))
-    })?;
-
     state.tracer.trace_heights = seg_state.trace_heights_ptr();
     state.tracer.mem_page_buf = seg_state.mem_page_buf_ptr();
     state.tracer.pv_page_buf = seg_state.pv_page_buf_ptr();

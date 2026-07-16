@@ -6,6 +6,3 @@ authors.workspace = true
 edition.workspace = true
 homepage.workspace = true
 repository.workspace = true
-
-[dependencies]
-openvm-instructions.workspace = true

@@ -7,7 +7,7 @@ use std::{
 use openvm_circuit_primitives::{ColumnsAir, StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_cpu_backend::CpuBackend;
-use openvm_instructions::DIGEST_WIDTH;
+use openvm_instructions::VM_DIGEST_WIDTH;
 use openvm_stark_backend::{
     interaction::{InteractionBuilder, PermutationCheckBus},
     p3_air::{Air, AirBuilder, BaseAir},
@@ -29,7 +29,7 @@ use crate::{
 };
 
 /// Number of memory-bus blocks covered by one merkle leaf.
-pub const BLOCKS_PER_LEAF: usize = DIGEST_WIDTH / BLOCK_FE_WIDTH;
+pub const BLOCKS_PER_LEAF: usize = VM_DIGEST_WIDTH / BLOCK_FE_WIDTH;
 
 /// The values describe one merkle leaf (`DIGEST_WIDTH` cells)---the data together with the
 /// last accessed timestamp---in either the initial or final memory state.
@@ -166,8 +166,8 @@ pub(crate) fn group_touched_memory_by_leaf<F: Copy + Send + Sync>(
     let mut enriched: Vec<EnrichedEntry<F>> = final_memory
         .par_iter()
         .map(|&((addr_space, ptr), ts_values)| {
-            let leaf_label = ptr / DIGEST_WIDTH as u32;
-            let block_idx = ((ptr % DIGEST_WIDTH as u32) / BLOCK_FE_WIDTH as u32) as usize;
+            let leaf_label = ptr / VM_DIGEST_WIDTH as u32;
+            let block_idx = ((ptr % VM_DIGEST_WIDTH as u32) / BLOCK_FE_WIDTH as u32) as usize;
             let key = (addr_space, leaf_label);
             let block_info = (block_idx, ts_values.timestamp, ts_values.values);
             (key, block_info)

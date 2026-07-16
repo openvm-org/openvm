@@ -15,7 +15,7 @@ use openvm_cuda_common::{
     memory_manager::MemTracker,
     stream::GpuDeviceCtx,
 };
-use openvm_instructions::DIGEST_WIDTH;
+use openvm_instructions::VM_DIGEST_WIDTH;
 use openvm_stark_backend::{p3_field::PrimeCharacteristicRing, prover::AirProvingContext};
 use tracing::instrument;
 
@@ -28,10 +28,10 @@ use crate::{cuda_abi::inventory, system::memory::online::LinearMemory};
 
 // The CUDA merge kernel in `inventory.cu` is hardcoded to a 2-way merge of
 // `<IN_BLOCK_SIZE=4, 1>` records into `<OUT_BLOCK_SIZE=8, 2>` records, so the only
-// supported `(BLOCK_FE_WIDTH, DIGEST_WIDTH)` shape is `(4, 8)`.
+// supported `(BLOCK_FE_WIDTH, VM_DIGEST_WIDTH)` shape is `(4, 8)`.
 const _: () = assert!(
-    BLOCK_FE_WIDTH == 4 && DIGEST_WIDTH == 8,
-    "CUDA memory inventory only supports (BLOCK_FE_WIDTH, DIGEST_WIDTH) == (4, 8)"
+    BLOCK_FE_WIDTH == 4 && VM_DIGEST_WIDTH == 8,
+    "CUDA memory inventory only supports (BLOCK_FE_WIDTH, VM_DIGEST_WIDTH) == (4, 8)"
 );
 
 pub struct MemoryInventoryGPU {
@@ -60,7 +60,7 @@ struct MemoryMerkleRecord {
     address_space: u32,
     ptr: u32,
     timestamp: u32,
-    values: [u32; DIGEST_WIDTH],
+    values: [u32; VM_DIGEST_WIDTH],
 }
 
 impl MemoryInventoryGPU {
@@ -149,14 +149,14 @@ impl MemoryInventoryGPU {
         let partition = touched_memory;
         let boundary_records = if partition.is_empty() {
             let leftmost_values = 'left: {
-                let mut res = [F::ZERO; DIGEST_WIDTH];
+                let mut res = [F::ZERO; VM_DIGEST_WIDTH];
                 if self.initial_memory[ADDR_SPACE_OFFSET as usize].is_empty() {
                     break 'left res;
                 }
                 let layout =
                     &self.merkle_tree.mem_config().addr_spaces[ADDR_SPACE_OFFSET as usize].layout;
                 let one_cell_size = layout.size();
-                let mut values = vec![0u8; one_cell_size * DIGEST_WIDTH];
+                let mut values = vec![0u8; one_cell_size * VM_DIGEST_WIDTH];
                 unsafe {
                     cuda_memcpy_on::<true, false>(
                         values.as_mut_ptr() as *mut std::ffi::c_void,
@@ -166,7 +166,7 @@ impl MemoryInventoryGPU {
                         &self.device_ctx,
                     )
                     .unwrap();
-                    for i in 0..DIGEST_WIDTH {
+                    for i in 0..VM_DIGEST_WIDTH {
                         res[i] = layout.to_field::<F>(&values[i * one_cell_size..]);
                     }
                 }
@@ -189,7 +189,8 @@ impl MemoryInventoryGPU {
             };
             self.merkle_records = Some(merkle_words.to_device_on(&self.device_ctx).unwrap());
 
-            self.boundary.finalize_records::<DIGEST_WIDTH>(Vec::new());
+            self.boundary
+                .finalize_records::<VM_DIGEST_WIDTH>(Vec::new());
             0
         } else {
             // `inventory.cu` merges 4-cell block records into 8-cell leaf records.
@@ -204,7 +205,7 @@ impl MemoryInventoryGPU {
                 .collect();
             let in_num_records = in_records.len();
             let out_words = in_num_records
-                * (std::mem::size_of::<MemoryInventoryRecord<DIGEST_WIDTH, BLOCKS_PER_LEAF>>()
+                * (std::mem::size_of::<MemoryInventoryRecord<VM_DIGEST_WIDTH, BLOCKS_PER_LEAF>>()
                     / std::mem::size_of::<u32>());
             let d_in_records = in_records
                 .to_device_on(&self.device_ctx)
@@ -256,7 +257,7 @@ impl MemoryInventoryGPU {
             // Send records to boundary chip
             let out_num_records = d_out_num_records.to_host_on(&self.device_ctx).unwrap()[0];
             self.boundary
-                .finalize_records_device::<DIGEST_WIDTH>(d_out_records, out_num_records);
+                .finalize_records_device::<VM_DIGEST_WIDTH>(d_out_records, out_num_records);
 
             // Send records to memory merkle tree
             let out_records = self
@@ -264,14 +265,14 @@ impl MemoryInventoryGPU {
                 .records()
                 .to_host_on(&self.device_ctx)
                 .unwrap();
-            let record_words = 2 + BLOCKS_PER_LEAF + DIGEST_WIDTH;
+            let record_words = 2 + BLOCKS_PER_LEAF + VM_DIGEST_WIDTH;
             let mut merkle_records = Vec::with_capacity(out_num_records);
             for i in 0..out_num_records {
                 let base = i * record_words;
-                let mut values = [0u32; DIGEST_WIDTH];
+                let mut values = [0u32; VM_DIGEST_WIDTH];
                 values.copy_from_slice(
                     &out_records
-                        [base + 2 + BLOCKS_PER_LEAF..base + 2 + BLOCKS_PER_LEAF + DIGEST_WIDTH],
+                        [base + 2 + BLOCKS_PER_LEAF..base + 2 + BLOCKS_PER_LEAF + VM_DIGEST_WIDTH],
                 );
                 let timestamp = *out_records[base + 2..base + 2 + BLOCKS_PER_LEAF]
                     .iter()
@@ -368,9 +369,9 @@ mod tests {
     use super::*;
 
     /// CPU reference Merkle root, for cross-checking the GPU root.
-    fn cpu_merkle_root(memory: &AddressMap, mem_config: &MemoryConfig) -> [F; DIGEST_WIDTH] {
+    fn cpu_merkle_root(memory: &AddressMap, mem_config: &MemoryConfig) -> [F; VM_DIGEST_WIDTH] {
         let cpu_hasher = Poseidon2PeripheryChip::new(vm_poseidon2_config(), 3);
-        let cpu_merkle_tree = MerkleTree::<F, DIGEST_WIDTH>::from_memory(
+        let cpu_merkle_tree = MerkleTree::<F, VM_DIGEST_WIDTH>::from_memory(
             memory,
             &mem_config.memory_dimensions(),
             &cpu_hasher,
@@ -397,13 +398,13 @@ mod tests {
 
     /// Extracts the Merkle root: the merkle chip is the one emitting at least two public-value
     /// digests, and the root is the last one.
-    fn gpu_merkle_root(ctxs: &[AirProvingContext<GpuBackend>]) -> [F; DIGEST_WIDTH] {
+    fn gpu_merkle_root(ctxs: &[AirProvingContext<GpuBackend>]) -> [F; VM_DIGEST_WIDTH] {
         let merkle_ctx = ctxs
             .iter()
-            .find(|ctx| ctx.public_values.len() >= 2 * DIGEST_WIDTH)
+            .find(|ctx| ctx.public_values.len() >= 2 * VM_DIGEST_WIDTH)
             .expect("missing merkle ctx");
         let gpu_root_slice =
-            &merkle_ctx.public_values[merkle_ctx.public_values.len() - DIGEST_WIDTH..];
+            &merkle_ctx.public_values[merkle_ctx.public_values.len() - VM_DIGEST_WIDTH..];
         gpu_root_slice.try_into().unwrap()
     }
 
@@ -411,8 +412,8 @@ mod tests {
     fn single_block_setup() -> (MemoryConfig, GuestMemory) {
         let mut addr_spaces = MemoryConfig::empty_address_space_configs(5);
         for addr_space in [RV64_REGISTER_AS, RV64_MEMORY_AS] {
-            // num_cells is in u16 cells; allocate 2 * DIGEST_WIDTH = 16 cells.
-            addr_spaces[addr_space as usize].num_cells = 2 * DIGEST_WIDTH;
+            // num_cells is in u16 cells; allocate 2 * VM_DIGEST_WIDTH = 16 cells.
+            addr_spaces[addr_space as usize].num_cells = 2 * VM_DIGEST_WIDTH;
         }
         let mem_config = MemoryConfig::new(2, addr_spaces, ptr_bits_from_address_height(1), 29, 17);
 
@@ -511,11 +512,11 @@ mod tests {
         const NUM_PAGES: usize = 4;
         // U16 memory cells (2 bytes), so one PAGE_SIZE-byte page is PAGE_SIZE / 2 cells.
         let num_cells = NUM_PAGES * (PAGE_SIZE / 2);
-        // 2^address_height leaf labels per AS must cover num_cells / DIGEST_WIDTH leaves.
-        let address_height = (num_cells / DIGEST_WIDTH).ilog2() as usize;
+        // 2^address_height leaf labels per AS must cover num_cells / VM_DIGEST_WIDTH leaves.
+        let address_height = (num_cells / VM_DIGEST_WIDTH).ilog2() as usize;
 
         let mut addr_spaces = MemoryConfig::empty_address_space_configs(5);
-        addr_spaces[RV64_REGISTER_AS as usize].num_cells = 2 * DIGEST_WIDTH;
+        addr_spaces[RV64_REGISTER_AS as usize].num_cells = 2 * VM_DIGEST_WIDTH;
         addr_spaces[RV64_MEMORY_AS as usize].num_cells = num_cells;
         let mem_config = MemoryConfig::new(
             2,

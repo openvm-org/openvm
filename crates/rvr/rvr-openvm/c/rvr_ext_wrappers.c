@@ -3,7 +3,7 @@
  * functions.
  *
  * Extension FFI code (implemented in Rust as staticlibs) calls these wrappers
- * for traced memory access, chip cost, and block metering. The wrappers
+ * for traced memory access and chip cost. The wrappers
  * delegate to the static inline functions defined in the tracer headers.
  * Register access stays in generated C; extensions receive resolved register
  * values as function parameters.
@@ -17,9 +17,6 @@
 
 uint64_t rd_mem_u64_wrapper(RvState* s, uint64_t addr) {
   return rd_mem_u64(s->memory, addr);
-}
-void trace_rd_mem_u64_wrapper(RvState* s, uint64_t addr, uint64_t val) {
-  trace_rd_mem_u64(s, addr, val);
 }
 
 void rd_mem_u64_range_wrapper(RvState* s, uint64_t base_addr, uint64_t* out,
@@ -48,9 +45,7 @@ void trace_mem_access_u64_range_wrapper(RvState* s, uint64_t base_addr,
   trace_mem_access_u64_range(s, base_addr, num_words, addr_space);
 }
 
-/* ── Instruction dispatch / chip cost ──────────────────────────────── */
-
-void trace_pc_wrapper(RvState* s, uint64_t pc) { trace_pc(s, pc); }
+/* ── Chip cost ─────────────────────────────────────────────────────── */
 
 /* Extension FFI staticlibs use this to add chip rows on top of what the
  * per-block chip accounting in the generated `block_*` functions has already
@@ -71,10 +66,4 @@ void trace_pc_wrapper(RvState* s, uint64_t pc) { trace_pc(s, pc); }
  * `crates/extensions/{sha2,deferral}/ffi/src/lib.rs`. */
 void trace_chip_wrapper(RvState* s, uint32_t chip_idx, uint32_t count) {
   trace_chip(s, chip_idx, count);
-}
-
-/* ── Block metering ────────────────────────────────────────────────── */
-
-void trace_block_wrapper(RvState* s, uint64_t pc, uint32_t block_insn_count) {
-  trace_block(s, pc, block_insn_count);
 }

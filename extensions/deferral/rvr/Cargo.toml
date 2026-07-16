@@ -8,7 +8,6 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-rvr-openvm-ext-ffi-common = { workspace = true, optional = true }
 rvr-openvm-ir = { workspace = true, optional = true }
 rvr-openvm-lift = { workspace = true, optional = true }
 
@@ -21,7 +20,6 @@ libloading = { workspace = true, optional = true }
 [features]
 default = []
 rvr = [
-    "dep:rvr-openvm-ext-ffi-common",
     "dep:rvr-openvm-ir",
     "dep:rvr-openvm-lift",
     "dep:openvm-circuit",

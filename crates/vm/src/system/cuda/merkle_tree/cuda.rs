@@ -7,7 +7,7 @@ use openvm_cuda_common::{
     error::CudaError,
     stream::{cudaStream_t, GpuDeviceCtx},
 };
-use openvm_instructions::DIGEST_WIDTH;
+use openvm_instructions::VM_DIGEST_WIDTH;
 use tracing::instrument;
 
 use super::{SharedBuffer, MERKLE_TOUCHED_BLOCK_WIDTH};
@@ -163,8 +163,8 @@ pub mod merkle_tree {
     pub unsafe fn update_merkle_tree<T>(
         trace: &DeviceMatrix<T>,
         subtree_ptrs: &DeviceBuffer<usize>,
-        top_roots: &DeviceBuffer<[T; DIGEST_WIDTH]>,
-        zero_hash: &DeviceBuffer<[T; DIGEST_WIDTH]>,
+        top_roots: &DeviceBuffer<[T; VM_DIGEST_WIDTH]>,
+        zero_hash: &DeviceBuffer<[T; VM_DIGEST_WIDTH]>,
         touched_blocks: &DeviceBuffer<u32>,
         subtree_height: usize,
         actual_heights: &[usize],
