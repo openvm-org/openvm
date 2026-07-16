@@ -261,8 +261,7 @@ impl StoreOp for StoreDOp {
         ptr: u32,
         rs2_ptr: u32,
     ) {
-        let value: [u8; RV64_REGISTER_NUM_LIMBS] =
-            exec_state.vm_read_bytes(RV64_REGISTER_AS, rs2_ptr);
+        let value: [u8; Self::WIDTH] = exec_state.vm_read_bytes(RV64_REGISTER_AS, rs2_ptr);
         exec_state.vm_write_bytes(address_space, ptr, &value);
     }
 }
@@ -277,7 +276,7 @@ impl StoreOp for StoreWOp {
         ptr: u32,
         rs2_ptr: u32,
     ) {
-        let value: [u8; 4] = exec_state.vm_read_bytes(RV64_REGISTER_AS, rs2_ptr);
+        let value: [u8; Self::WIDTH] = exec_state.vm_read_bytes(RV64_REGISTER_AS, rs2_ptr);
         exec_state.vm_write_bytes(address_space, ptr, &value);
     }
 }
@@ -292,7 +291,7 @@ impl StoreOp for StoreHOp {
         ptr: u32,
         rs2_ptr: u32,
     ) {
-        let value: [u8; 2] = exec_state.vm_read_bytes(RV64_REGISTER_AS, rs2_ptr);
+        let value: [u8; Self::WIDTH] = exec_state.vm_read_bytes(RV64_REGISTER_AS, rs2_ptr);
         exec_state.vm_write_bytes(address_space, ptr, &value);
     }
 }
@@ -307,7 +306,7 @@ impl StoreOp for StoreBOp {
         ptr: u32,
         rs2_ptr: u32,
     ) {
-        let value: [u8; 1] = exec_state.vm_read_bytes(RV64_REGISTER_AS, rs2_ptr);
+        let value: [u8; Self::WIDTH] = exec_state.vm_read_bytes(RV64_REGISTER_AS, rs2_ptr);
         exec_state.vm_write_bytes(address_space, ptr, &value);
     }
 }
