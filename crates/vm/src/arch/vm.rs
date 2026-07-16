@@ -1305,7 +1305,7 @@ where
             .log_stacked_height()
             .try_into()
             .expect("log_stacked_height must fit in u8");
-        self.executor().build_metered_ctx(
+        let mut ctx = self.executor().build_metered_ctx(
             MeteredCtxInputs {
                 constant_trace_heights: &constant_trace_heights,
                 air_names: &air_names,
@@ -1320,7 +1320,9 @@ where
                 },
             },
             self.engine.proving_memory_config(),
-        )
+        );
+        ctx.seed_initial_memory(&exe.init_memory);
+        ctx
     }
 
     /// Convenience method to construct a [MeteredCostCtx] using data from the stored proving key.

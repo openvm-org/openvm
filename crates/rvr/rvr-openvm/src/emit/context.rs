@@ -1,5 +1,7 @@
 use std::{collections::HashSet, fmt::Write};
 
+use openvm_instructions::riscv::RV64_MEMORY_AS;
+
 use super::codegen::hex_u32;
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -320,6 +322,11 @@ impl EmitContext {
         self.reload_page_locals();
     }
 
+    pub fn extern_call_without_page_flush(&mut self, name: &str, args: &[&str]) {
+        let args_str = args.join(", ");
+        self.write_line(&format!("{name}({args_str});"));
+    }
+
     pub fn extern_call_expr(&mut self, ret_ty: &str, name: &str, args: &[&str]) -> String {
         self.flush_page_locals();
         let tmp = self.next_var();
@@ -341,9 +348,14 @@ impl EmitContext {
     }
 
     pub fn trace_mem_access(&mut self, addr: &str, addr_space: u32) {
-        self.flush_page_locals();
+        let touches_memory = addr_space == RV64_MEMORY_AS;
+        if touches_memory {
+            self.flush_page_locals();
+        }
         self.write_line(&format!("trace_mem_access(state, {addr}, {addr_space}u);"));
-        self.reload_page_locals();
+        if touches_memory {
+            self.reload_page_locals();
+        }
     }
 
     pub fn trace_mem_access_u64_range(
@@ -352,11 +364,16 @@ impl EmitContext {
         num_dwords: &str,
         addr_space: u32,
     ) {
-        self.flush_page_locals();
+        let touches_memory = addr_space == RV64_MEMORY_AS;
+        if touches_memory {
+            self.flush_page_locals();
+        }
         self.write_line(&format!(
             "trace_mem_access_u64_range(state, {base_addr}, {num_dwords}, {addr_space}u);"
         ));
-        self.reload_page_locals();
+        if touches_memory {
+            self.reload_page_locals();
+        }
     }
 
     fn sorted_hot_regs(&self) -> Vec<u8> {
@@ -431,6 +448,10 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext {
         EmitContext::extern_call(self, name, args);
     }
 
+    fn extern_call_without_page_flush(&mut self, name: &str, args: &[&str]) {
+        EmitContext::extern_call_without_page_flush(self, name, args);
+    }
+
     fn extern_call_expr(&mut self, ret_ty: &str, name: &str, args: &[&str]) -> String {
         EmitContext::extern_call_expr(self, ret_ty, name, args)
     }
@@ -445,5 +466,31 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext {
 
     fn trace_mem_access_u64_range(&mut self, base_addr: &str, num_dwords: &str, addr_space: u32) {
         EmitContext::trace_mem_access_u64_range(self, base_addr, num_dwords, addr_space);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashSet;
+
+    use super::{EmitContext, EmitMode};
+
+    fn metered_memory_ctx() -> EmitContext {
+        EmitContext::new(
+            HashSet::new(),
+            EmitMode::Metered {
+                trace_memory_pages: true,
+            },
+        )
+    }
+
+    #[test]
+    fn aligned_memory_access_uses_single_leaf_trace() {
+        let mut ctx = metered_memory_ctx();
+        ctx.read_mem("addr", 0, 8, false);
+
+        assert!(ctx
+            .buf()
+            .contains("trace_memory_access_leaf(&trace_memory, addr);"));
     }
 }
