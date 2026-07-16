@@ -2,8 +2,9 @@ use std::mem::size_of;
 
 use openvm_instructions::{
     exe::SparseMemoryImage,
+    metering::{PAGE_MASK_LEAF_BITS, SEGMENT_CHECK_INSNS},
     riscv::{RV64_NUM_REGISTERS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
-    DEFERRAL_AS, DIGEST_WIDTH, MEMORY_PAGE_BITS,
+    DEFERRAL_AS, VM_DIGEST_WIDTH,
 };
 #[cfg(test)]
 use openvm_instructions::{riscv::RV64_MEMORY_AS, PUBLIC_VALUES_AS};
@@ -25,8 +26,8 @@ const MAX_MEM_PAGE_OPS_PER_INSN: usize = 1 << 16;
 // count for the common scalar-access path.
 const INITIAL_CHECKPOINT_PAGE_ACCESSES_PER_INSN: usize = 16;
 // Shift amounts from address-space pointer units to memory Merkle leaves.
-const BYTE_PTRS_PER_LEAF_BITS: u32 = (U16_CELL_SIZE * DIGEST_WIDTH).ilog2();
-const DEFERRAL_PTRS_PER_LEAF_BITS: u32 = DIGEST_WIDTH.ilog2();
+const BYTE_PTRS_PER_LEAF_BITS: u32 = (U16_CELL_SIZE * VM_DIGEST_WIDTH).ilog2();
+const DEFERRAL_PTRS_PER_LEAF_BITS: u32 = VM_DIGEST_WIDTH.ilog2();
 const FIELD_ELEMENT_BYTES: u32 = size_of::<u32>() as u32;
 
 /// Tracks which parts of memory contribute rows to the current segment.
@@ -61,12 +62,12 @@ pub struct MemoryCtx {
 }
 
 impl MemoryCtx {
-    pub fn new(config: &SystemConfig, segment_check_insns: u64) -> Self {
+    pub fn new(config: &SystemConfig) -> Self {
         let memory_dimensions = config.memory_config.memory_dimensions();
         let merkle_height = memory_dimensions.overall_height();
 
-        let upper_height = merkle_height.saturating_sub(MEMORY_PAGE_BITS);
-        let checkpoint_capacity = Self::initial_checkpoint_capacity(segment_check_insns);
+        let upper_height = merkle_height.saturating_sub(PAGE_MASK_LEAF_BITS);
+        let checkpoint_capacity = Self::initial_checkpoint_capacity();
 
         Self {
             memory_dimensions,
@@ -84,8 +85,8 @@ impl MemoryCtx {
     }
 
     #[inline(always)]
-    fn initial_checkpoint_capacity(segment_check_insns: u64) -> usize {
-        segment_check_insns as usize * INITIAL_CHECKPOINT_PAGE_ACCESSES_PER_INSN
+    fn initial_checkpoint_capacity() -> usize {
+        SEGMENT_CHECK_INSNS as usize * INITIAL_CHECKPOINT_PAGE_ACCESSES_PER_INSN
     }
 
     #[inline(always)]
@@ -139,12 +140,12 @@ impl MemoryCtx {
     #[inline(always)]
     fn mark_existing_memory_range(&mut self, address_space: u32, ptr: u32, size: u32) {
         let (start_leaf_id, end_leaf_id) = self.leaf_id_range(address_space, ptr, size);
-        let start_page_id = start_leaf_id >> MEMORY_PAGE_BITS;
-        let end_page_id = ((end_leaf_id - 1) >> MEMORY_PAGE_BITS) + 1;
+        let start_page_id = start_leaf_id >> PAGE_MASK_LEAF_BITS;
+        let end_page_id = ((end_leaf_id - 1) >> PAGE_MASK_LEAF_BITS) + 1;
 
         for page_id in start_page_id..end_page_id {
-            let page_start = page_id << MEMORY_PAGE_BITS;
-            let page_end = page_start + (1 << MEMORY_PAGE_BITS);
+            let page_start = page_id << PAGE_MASK_LEAF_BITS;
+            let page_end = page_start + (1 << PAGE_MASK_LEAF_BITS);
             let start = start_leaf_id.max(page_start) - page_start;
             let end = end_leaf_id.min(page_end) - page_start;
             let leaf_mask = leaf_mask_range(start, end);
@@ -165,19 +166,19 @@ impl MemoryCtx {
     ) {
         let (start_leaf_id, end_leaf_id) = self.leaf_id_range(address_space, ptr, size);
         let num_leaves = end_leaf_id - start_leaf_id;
-        let start_page_id = start_leaf_id >> MEMORY_PAGE_BITS;
+        let start_page_id = start_leaf_id >> PAGE_MASK_LEAF_BITS;
 
         if num_leaves == 1 {
             push_page_touch(
                 &mut self.page_indices_since_checkpoint,
                 start_page_id,
-                1u64 << (start_leaf_id & ((1 << MEMORY_PAGE_BITS) - 1)),
+                1u64 << (start_leaf_id & ((1 << PAGE_MASK_LEAF_BITS) - 1)),
             );
             self.page_indices_since_checkpoint_len = self.page_indices_since_checkpoint.len();
             return;
         }
 
-        let end_page_id = ((end_leaf_id - 1) >> MEMORY_PAGE_BITS) + 1;
+        let end_page_id = ((end_leaf_id - 1) >> PAGE_MASK_LEAF_BITS) + 1;
         let num_pages = (end_page_id - start_page_id) as usize;
         assert!(
             num_pages <= MAX_MEM_PAGE_OPS_PER_INSN,
@@ -188,8 +189,8 @@ impl MemoryCtx {
         }
 
         for page_id in start_page_id..end_page_id {
-            let page_start = page_id << MEMORY_PAGE_BITS;
-            let page_end = page_start + (1 << MEMORY_PAGE_BITS);
+            let page_start = page_id << PAGE_MASK_LEAF_BITS;
+            let page_end = page_start + (1 << PAGE_MASK_LEAF_BITS);
             let start = start_leaf_id.max(page_start) - page_start;
             let end = end_leaf_id.min(page_end) - page_start;
             let leaf_mask = leaf_mask_range(start, end);
@@ -404,8 +405,8 @@ mod tests {
     #[test]
     fn test_range_insertion_matches_explicit_leaves() {
         let system_config = crate::utils::test_system_config();
-        let mut range_ctx = MemoryCtx::new(&system_config, 1);
-        let mut explicit_ctx = MemoryCtx::new(&system_config, 1);
+        let mut range_ctx = MemoryCtx::new(&system_config);
+        let mut explicit_ctx = MemoryCtx::new(&system_config);
 
         range_ctx.update_boundary_merkle_heights(2, 0, 17);
         for ptr in [0, 16] {
@@ -422,24 +423,24 @@ mod tests {
     #[test]
     fn test_tentative_apply_does_not_commit_occupancy() {
         let system_config = crate::utils::test_system_config();
-        let mut ctx = MemoryCtx::new(&system_config, 1);
+        let mut ctx = MemoryCtx::new(&system_config);
         let mut trace_heights = vec![0; 6];
 
         ctx.update_boundary_merkle_heights(2, 0, 1);
         ctx.apply_height_updates(&mut trace_heights);
 
         let page_id = ((2 - ADDR_SPACE_OFFSET) << ctx.memory_dimensions.address_height) as usize
-            >> MEMORY_PAGE_BITS;
+            >> PAGE_MASK_LEAF_BITS;
         assert_eq!(ctx.baseline_memory.page_mask(page_id), 0);
     }
 
     #[test]
     fn test_address_spaces_map_to_distinct_pages() {
         let system_config = crate::utils::test_system_config();
-        let ctx = MemoryCtx::new(&system_config, 1);
-        let memory_page = ctx.leaf_id_range(RV64_MEMORY_AS, 0, 1).0 >> MEMORY_PAGE_BITS;
-        let public_values_page = ctx.leaf_id_range(PUBLIC_VALUES_AS, 0, 1).0 >> MEMORY_PAGE_BITS;
-        let deferral_page = ctx.leaf_id_range(DEFERRAL_AS, 0, 1).0 >> MEMORY_PAGE_BITS;
+        let ctx = MemoryCtx::new(&system_config);
+        let memory_page = ctx.leaf_id_range(RV64_MEMORY_AS, 0, 1).0 >> PAGE_MASK_LEAF_BITS;
+        let public_values_page = ctx.leaf_id_range(PUBLIC_VALUES_AS, 0, 1).0 >> PAGE_MASK_LEAF_BITS;
+        let deferral_page = ctx.leaf_id_range(DEFERRAL_AS, 0, 1).0 >> PAGE_MASK_LEAF_BITS;
 
         assert_ne!(memory_page, public_values_page);
         assert_ne!(memory_page, deferral_page);
@@ -449,9 +450,9 @@ mod tests {
     #[test]
     fn test_first_touches_poseidon_rows_dedup_by_default_bucket() {
         let system_config = crate::utils::test_system_config();
-        let mut ctx = MemoryCtx::new(&system_config, 1);
+        let mut ctx = MemoryCtx::new(&system_config);
         let height = ctx.memory_dimensions.overall_height() as u32;
-        let second_leaf_ptr = (U16_CELL_SIZE * DIGEST_WIDTH) as u32;
+        let second_leaf_ptr = (U16_CELL_SIZE * VM_DIGEST_WIDTH) as u32;
 
         ctx.update_boundary_merkle_heights(2, 0, 1);
         ctx.update_boundary_merkle_heights(2, second_leaf_ptr, 1);
@@ -468,7 +469,7 @@ mod tests {
     #[test]
     fn test_default_poseidon_rows_dedup_across_checkpoints() {
         let system_config = crate::utils::test_system_config();
-        let mut ctx = MemoryCtx::new(&system_config, 1);
+        let mut ctx = MemoryCtx::new(&system_config);
         let mut trace_heights = vec![0; 6];
 
         ctx.update_boundary_merkle_heights(RV64_MEMORY_AS, 0, 1);
@@ -479,7 +480,7 @@ mod tests {
         let merkle_before = trace_heights[MERKLE_AIR_ID];
         let poseidon2_idx = trace_heights.len() - 2;
         let poseidon_before = trace_heights[poseidon2_idx];
-        let next_page_ptr = ((1 << MEMORY_PAGE_BITS) * U16_CELL_SIZE * DIGEST_WIDTH) as u32;
+        let next_page_ptr = ((1 << PAGE_MASK_LEAF_BITS) * U16_CELL_SIZE * VM_DIGEST_WIDTH) as u32;
 
         ctx.update_boundary_merkle_heights(RV64_MEMORY_AS, next_page_ptr, 1);
         ctx.apply_height_updates(&mut trace_heights);
@@ -487,21 +488,21 @@ mod tests {
         assert_eq!(trace_heights[BOUNDARY_AIR_ID] - boundary_before, 2);
         assert_eq!(
             trace_heights[MERKLE_AIR_ID] - merkle_before,
-            2 * MEMORY_PAGE_BITS as u32
+            2 * PAGE_MASK_LEAF_BITS as u32
         );
         assert_eq!(
             trace_heights[poseidon2_idx] - poseidon_before,
-            1 + MEMORY_PAGE_BITS as u32
+            1 + PAGE_MASK_LEAF_BITS as u32
         );
     }
 
     #[test]
     fn test_initial_zero_bytes_do_not_seed_occupancy() {
         let system_config = crate::utils::test_system_config();
-        let mut ctx = MemoryCtx::new(&system_config, 1);
+        let mut ctx = MemoryCtx::new(&system_config);
         let height = ctx.memory_dimensions.overall_height() as u32;
         ctx.seed_initial_memory(&SparseMemoryImage::from([((2, 0), 0)]));
-        let second_leaf_ptr = (U16_CELL_SIZE * DIGEST_WIDTH) as u32;
+        let second_leaf_ptr = (U16_CELL_SIZE * VM_DIGEST_WIDTH) as u32;
 
         ctx.update_boundary_merkle_heights(2, 0, 1);
         ctx.update_boundary_merkle_heights(2, second_leaf_ptr, 1);
@@ -516,9 +517,9 @@ mod tests {
     #[test]
     fn test_initial_nonzero_bytes_seed_occupancy() {
         let system_config = crate::utils::test_system_config();
-        let mut ctx = MemoryCtx::new(&system_config, 1);
+        let mut ctx = MemoryCtx::new(&system_config);
         let height = ctx.memory_dimensions.overall_height() as u32;
-        let second_leaf_ptr = (U16_CELL_SIZE * DIGEST_WIDTH) as u32;
+        let second_leaf_ptr = (U16_CELL_SIZE * VM_DIGEST_WIDTH) as u32;
         ctx.seed_initial_memory(&SparseMemoryImage::from([
             ((2, 0), 1),
             ((2, second_leaf_ptr), 1),
@@ -537,9 +538,9 @@ mod tests {
     #[test]
     fn test_initial_deferral_bytes_seed_occupancy() {
         let system_config = crate::utils::test_system_config();
-        let mut ctx = MemoryCtx::new(&system_config, 1);
+        let mut ctx = MemoryCtx::new(&system_config);
         let height = ctx.memory_dimensions.overall_height() as u32;
-        let second_leaf_ptr = DIGEST_WIDTH as u32;
+        let second_leaf_ptr = VM_DIGEST_WIDTH as u32;
         let second_leaf_byte_ptr = second_leaf_ptr * FIELD_ELEMENT_BYTES;
         ctx.seed_initial_memory(&SparseMemoryImage::from([
             ((DEFERRAL_AS, 0), 1),

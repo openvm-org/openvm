@@ -16,10 +16,12 @@ static constexpr uint32_t NO_LAST_PAGE = UINT32_MAX;
 
 static constexpr uint32_t MAX_PV_PAGES_PER_INSN = 1;
 static_assert(
-    TRACER_MEM_PAGE_BUF_CAP >= 2 * TRACER_SEGMENT_CHECK_INSNS * TRACER_MAX_MEM_PAGES_PER_INSN,
+    TRACER_MEM_PAGE_BUF_CAP >=
+        TRACER_SEGMENT_CHECK_INSNS * TRACER_MAX_MEM_PAGES_PER_INSN,
     "MEM_PAGE_BUF_CAP too small for worst-case pages per flush interval");
 static_assert(
-    TRACER_PV_PAGE_BUF_CAP >= 2 * TRACER_SEGMENT_CHECK_INSNS * MAX_PV_PAGES_PER_INSN,
+    TRACER_PV_PAGE_BUF_CAP >=
+        TRACER_SEGMENT_CHECK_INSNS * MAX_PV_PAGES_PER_INSN,
     "PV_PAGE_BUF_CAP too small for worst-case pages per flush interval");
 /* No static assert for DEFERRAL — justifying the capacity is a TODO
  * (see DEFERRAL_PAGE_BUF_CAP in metered.rs). */

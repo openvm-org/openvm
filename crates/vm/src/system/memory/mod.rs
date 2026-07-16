@@ -2,7 +2,7 @@ use std::{mem::size_of, sync::Arc};
 
 use openvm_circuit_primitives::{StructReflection, StructReflectionHelper};
 use openvm_circuit_primitives_derive::AlignedBorrow;
-use openvm_instructions::DIGEST_WIDTH;
+use openvm_instructions::VM_DIGEST_WIDTH;
 use openvm_platform::memory::MEM_BITS;
 use openvm_stark_backend::{interaction::PermutationCheckBus, StarkProtocolConfig};
 
@@ -82,12 +82,12 @@ impl MemoryAirInventory {
     ) -> Self {
         let memory_bus = bridge.memory_bus();
         let memory_dims = mem_config.memory_dimensions();
-        let boundary = PersistentBoundaryAir::<DIGEST_WIDTH> {
+        let boundary = PersistentBoundaryAir::<VM_DIGEST_WIDTH> {
             memory_bus,
             merkle_bus,
             compression_bus,
         };
-        let merkle = MemoryMerkleAir::<DIGEST_WIDTH> {
+        let merkle = MemoryMerkleAir::<VM_DIGEST_WIDTH> {
             memory_dimensions: memory_dims,
             merkle_bus,
             compression_bus,

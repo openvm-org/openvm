@@ -1,31 +1,17 @@
 //! FFI declarations for the C tracing wrapper functions.
 //!
 //! Extension staticlibs call these non-inline wrappers (defined in
-//! `rvr_ext_wrappers.c`) for traced memory access, instruction dispatch,
-//! chip cost tracking, and block metering. Register access is handled in
-//! the generated C code; resolved register values are passed to extension
-//! FFI entry points as parameters.
+//! `rvr_ext_wrappers.c`) for traced memory access and chip cost tracking.
+//! Register access stays in generated C; resolved values are passed to extension FFI entry points.
 //!
 //! The `state` parameter is always an opaque `*mut c_void` pointing
 //! to the C `RvState` struct.
 
 use std::ffi::c_void;
 
-use openvm_instructions::DIGEST_WIDTH;
-
-/// Commit size in bytes.
-const F_NUM_BYTES: usize = 4;
-pub const DEFERRAL_COMMIT_NUM_BYTES: usize = DIGEST_WIDTH * F_NUM_BYTES;
-
-/// Output key size in bytes (commit + u64 length).
-pub const DEFERRAL_OUTPUT_KEY_BYTES: usize = DEFERRAL_COMMIT_NUM_BYTES + 8;
-
 extern "C" {
     // ── Memory access (single u64 word, data) ─────────────────────────
     pub fn rd_mem_u64_wrapper(state: *mut c_void, addr: u64) -> u64;
-
-    // ── Memory access (single u64 word, trace-only) ───────────────────
-    pub fn trace_rd_mem_u64_wrapper(state: *mut c_void, addr: u64, val: u64);
 
     // ── Memory access (u64-word ranges, data) ───────────────────────
     pub fn rd_mem_u64_range_wrapper(
@@ -61,12 +47,8 @@ extern "C" {
         num_words: u32,
     );
 
-    // ── Instruction dispatch / chip cost ──────────────────────────────
-    pub fn trace_pc_wrapper(state: *mut c_void, pc: u64);
+    // ── Chip cost ─────────────────────────────────────────────────────
     pub fn trace_chip_wrapper(state: *mut c_void, chip_idx: u32, count: u32);
-
-    // ── Block metering ────────────────────────────────────────────────
-    pub fn trace_block_wrapper(state: *mut c_void, pc: u64, block_insn_count: u32);
 
     // ── Hint stream (for extension phantom instructions) ──────────────
     /// Replace the hint stream contents. Forwarded through `openvm_io.c`

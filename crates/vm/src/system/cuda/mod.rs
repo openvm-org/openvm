@@ -11,7 +11,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives::{var_range::VariableRangeCheckerChipGPU, Chip};
 use openvm_cuda_backend::{prelude::F, GpuBackend};
 use openvm_cuda_common::stream::GpuDeviceCtx;
-use openvm_instructions::DIGEST_WIDTH;
+use openvm_instructions::VM_DIGEST_WIDTH;
 use openvm_stark_backend::prover::{AirProvingContext, CommittedTraceData};
 use poseidon2::Poseidon2PeripheryChipGPU;
 use program::ProgramChipGPU;
@@ -101,7 +101,7 @@ impl SystemChipComplex<DenseRecordArena, GpuBackend> for SystemChipInventoryGPU 
             .collect()
     }
 
-    fn memory_top_tree(&self) -> Option<&[[F; DIGEST_WIDTH]]> {
+    fn memory_top_tree(&self) -> Option<&[[F; VM_DIGEST_WIDTH]]> {
         let top_tree = &self.memory_inventory.merkle_tree.top_roots_host;
         (!top_tree.is_empty()).then_some(top_tree.as_slice())
     }

@@ -1,5 +1,5 @@
 use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
-use openvm_instructions::{exe::VmExe, DIGEST_WIDTH};
+use openvm_instructions::{exe::VmExe, VM_DIGEST_WIDTH};
 use openvm_stark_backend::{
     keygen::types::MultiStarkVerifyingKey, p3_field::PrimeField32, proof::Proof,
     prover::ProvingContext, Com, StarkEngine, SystemParams, Val,
@@ -122,7 +122,7 @@ where
     <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
         + MeteredExecutor<Val<E::SC>>
         + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
-    Com<E::SC>: Into<[Val<E::SC>; DIGEST_WIDTH]> + From<[Val<E::SC>; DIGEST_WIDTH]>,
+    Com<E::SC>: Into<[Val<E::SC>; VM_DIGEST_WIDTH]> + From<[Val<E::SC>; VM_DIGEST_WIDTH]>,
 {
     /*
     Assertions for Pure Execution AOT
@@ -223,7 +223,7 @@ where
     <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
         + MeteredExecutor<Val<E::SC>>
         + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
-    Com<E::SC>: Into<[Val<E::SC>; DIGEST_WIDTH]> + From<[Val<E::SC>; DIGEST_WIDTH]>,
+    Com<E::SC>: Into<[Val<E::SC>; VM_DIGEST_WIDTH]> + From<[Val<E::SC>; VM_DIGEST_WIDTH]>,
 {
     /*
     Assertions for Pure Execution RVR
@@ -357,7 +357,7 @@ where
     <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
         + MeteredExecutor<Val<E::SC>>
         + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
-    Com<E::SC>: Into<[Val<E::SC>; DIGEST_WIDTH]> + From<[Val<E::SC>; DIGEST_WIDTH]>,
+    Com<E::SC>: Into<[Val<E::SC>; VM_DIGEST_WIDTH]> + From<[Val<E::SC>; VM_DIGEST_WIDTH]>,
 {
     setup_tracing();
     let engine = E::new(params);
