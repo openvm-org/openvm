@@ -68,7 +68,8 @@ static inline void rvr_hintstore_write_word(RvState* state, uint64_t dest_addr,
     uint64_t block_addr = preflight_block_addr(dest_addr);
     uint64_t prev_data =
         preflight_device_aux(state->tracer) &&
-                !preflight_device_aux_oracle(state->tracer)
+                !preflight_device_aux_oracle(state->tracer) &&
+                state->tracer->g2 == NULL
             ? 0u
             : preflight_read_mem_block(state, block_addr);
     uint32_t prev_timestamp = preflight_append_memory(
@@ -106,7 +107,9 @@ void openvm_hint_storew(void* state, uint64_t dest_addr, uint32_t from_pc,
   uint64_t word = g_rv64io_callbacks.hint_storew(openvm_get_io_ctx(), dest_addr);
 #ifdef OPENVM_TRACER_PREFLIGHT_H
   RvState* rv_state = (RvState*)state;
-  bool emit_direct = chip_idx != UINT32_MAX;
+  bool event_replay = rv_state->tracer->g2 != NULL;
+  bool emit_direct = chip_idx != UINT32_MAX && !event_replay;
+  bool emit_events = chip_idx != UINT32_MAX;
   Rv64HintStoreVar* vars = NULL;
   Rv64HintStoreRecordHeader* record = emit_direct
       ? rvr_claim_hintstore_record(rv_state, chip_idx, 1u, &vars)
@@ -126,7 +129,7 @@ void openvm_hint_storew(void* state, uint64_t dest_addr, uint32_t from_pc,
         rv_state->tracer, &record->mem_ptr_aux_record.prev_timestamp,
         mem_ptr_prev_timestamp);
   }
-  rvr_hintstore_write_word(rv_state, dest_addr, word, emit_direct, vars);
+  rvr_hintstore_write_word(rv_state, dest_addr, word, emit_events, vars);
 #else
   wr_mem_u64_traced((RvState*)state, dest_addr, word);
 #endif
@@ -141,7 +144,9 @@ void openvm_hint_buffer(void* state, uint64_t dest_addr, uint32_t num_words,
                         uint32_t chip_idx) {
 #ifdef OPENVM_TRACER_PREFLIGHT_H
   RvState* rv_state = (RvState*)state;
-  bool emit_direct = chip_idx != UINT32_MAX;
+  bool event_replay = rv_state->tracer->g2 != NULL;
+  bool emit_direct = chip_idx != UINT32_MAX && !event_replay;
+  bool emit_events = chip_idx != UINT32_MAX;
   Rv64HintStoreVar* vars = NULL;
   Rv64HintStoreRecordHeader* record = emit_direct
       ? rvr_claim_hintstore_record(rv_state, chip_idx, num_words, &vars)
@@ -174,7 +179,7 @@ void openvm_hint_buffer(void* state, uint64_t dest_addr, uint32_t num_words,
         g_rv64io_callbacks.hint_buffer(openvm_get_io_ctx(), dest_addr, num_words, i);
 #ifdef OPENVM_TRACER_PREFLIGHT_H
     rvr_hintstore_write_word(rv_state, dest_addr + i * WORD_SIZE, word,
-                             emit_direct, vars == NULL ? NULL : &vars[i]);
+                             emit_events, vars == NULL ? NULL : &vars[i]);
 #else
     wr_mem_u64_traced((RvState*)state, dest_addr + i * WORD_SIZE, word);
 #endif
