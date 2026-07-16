@@ -30,8 +30,11 @@ use std::{
     sync::{mpsc, Mutex, OnceLock},
 };
 
-/// A dropped arena buffer together with its dirty-prefix length.
-type ReturnedBuffer = (Vec<u8>, usize);
+use crate::arch::pending_return::PendingReturn;
+
+/// A dropped arena buffer together with its dirty-prefix length, quarantined
+/// until the cleaner has synchronized the CUDA device.
+type ReturnedBuffer = PendingReturn<(Vec<u8>, usize)>;
 
 /// Page-locks `len` bytes at `ptr` in a single `cudaHostRegister` call.
 /// NOTE: registration must be one call per buffer: `cudaMemcpyAsync` rejects
@@ -108,15 +111,22 @@ fn cleaner() -> &'static Mutex<mpsc::Sender<ReturnedBuffer>> {
                     let rc = unsafe { cudaDeviceSynchronize() };
                     if rc != 0 {
                         // No usable CUDA context (teardown or no device):
-                        // the buffers cannot be proven idle; drop them.
+                        // the buffers cannot be proven idle. Dropping the
+                        // wrappers quarantines (leaks) their allocations
+                        // instead of risking a free while CUDA still owns a
+                        // registration or asynchronous read.
                         tracing::debug!(
                             "cudaDeviceSynchronize failed with {rc}; \
-                             dropping {} record arena buffers",
+                             quarantining {} record arena buffers",
                             batch.len()
                         );
                         continue;
                     }
-                    for (mut buffer, dirty_len) in batch {
+                    for returned in batch {
+                        let (mut buffer, dirty_len) = returned.release();
+                        if buffer.is_empty() || !buffer.len().is_power_of_two() {
+                            continue; // synchronized but not pool-shaped
+                        }
                         let ptr = buffer.as_mut_ptr();
                         let is_new = !registered().lock().unwrap().contains(&(ptr as usize));
                         if is_new {
@@ -172,12 +182,13 @@ pub(crate) fn take(min_size: usize) -> Vec<u8> {
 /// `dirty_len` is an upper bound on the prefix of `buffer` that may have
 /// been written since it left [`take`]; the rest must still be zero.
 pub(crate) fn give_back(buffer: Vec<u8>, dirty_len: usize) {
-    if buffer.is_empty() || !buffer.len().is_power_of_two() {
-        return; // not a pool-shaped buffer; drop normally
+    if buffer.is_empty() {
+        return;
     }
-    // The cleaner owning the receiver never exits, so send only fails if
-    // the buffer raced process teardown; dropping it then is fine.
-    let _ = cleaner().lock().unwrap().send((buffer, dirty_len));
+    // If the send races process teardown, `PendingReturn` deliberately leaks
+    // the backing: without the cleaner's sync, freeing it is not safe.
+    let returned = PendingReturn::new((buffer, dirty_len));
+    let _ = cleaner().lock().unwrap().send(returned);
 }
 
 /// Unregisters and frees all pooled buffers (test hygiene; optional).
