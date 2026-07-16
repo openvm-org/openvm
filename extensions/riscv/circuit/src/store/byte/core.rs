@@ -93,8 +93,8 @@ where
 
         // The stored byte is the low byte of the first source cell; the cell's high byte is
         // derived from it, and range checking the pair makes the decomposition unique.
-        let read_hi_byte = (cols.read_data[0] - cols.read_lo_byte)
-            * AB::F::from_u32(1 << RV64_BYTE_BITS).inverse();
+        let inv_2_pow_8 = AB::F::from_u32(1 << RV64_BYTE_BITS).inverse();
+        let read_hi_byte = (cols.read_data[0] - cols.read_lo_byte) * inv_2_pow_8;
         self.bitwise_lookup_bus
             .send_range(cols.read_lo_byte, read_hi_byte)
             .eval(builder, is_valid.clone());
@@ -104,8 +104,7 @@ where
             .fold(AB::Expr::ZERO, |acc, (shift, flag)| {
                 acc + flag.clone() * cols.prev_data[shift / 2]
             });
-        let prev_cell_hi_byte = (selected_prev_cell - cols.prev_cell_lo_byte)
-            * AB::F::from_u32(1 << RV64_BYTE_BITS).inverse();
+        let prev_cell_hi_byte = (selected_prev_cell - cols.prev_cell_lo_byte) * inv_2_pow_8;
         self.bitwise_lookup_bus
             .send_range(cols.prev_cell_lo_byte, prev_cell_hi_byte)
             .eval(builder, is_valid.clone());

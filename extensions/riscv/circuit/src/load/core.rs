@@ -45,7 +45,7 @@ pub struct LoadCoreCols<T, const SELECTOR_WIDTH: usize, const NUM_OVERLAP_CELLS:
     /// block boundary.
     pub read_data: [[T; BLOCK_FE_WIDTH]; 2],
     /// Low bytes of the `LOAD_WIDTH / 2 + 1` cells overlapped by an odd-shift load. All-zero on
-    /// even shifts.
+    /// even shifts. The corresponding high bytes are derived in the AIR.
     pub overlap_lo_bytes: [T; NUM_OVERLAP_CELLS],
 }
 
@@ -64,6 +64,9 @@ pub struct LoadCoreAir<
 impl<const LOAD_WIDTH: usize, const SELECTOR_WIDTH: usize, const NUM_OVERLAP_CELLS: usize>
     LoadCoreAir<LOAD_WIDTH, SELECTOR_WIDTH, NUM_OVERLAP_CELLS>
 {
+    // First byte offset at which the load reaches the next memory block.
+    const FIRST_CROSSING_SHIFT: usize = MEMORY_BLOCK_BYTES - LOAD_WIDTH + 1;
+
     pub fn new(offset: usize, bitwise_lookup_bus: BitwiseOperationLookupBus) -> Self {
         debug_assert_eq!(NUM_OVERLAP_CELLS, LOAD_WIDTH / 2 + 1);
         Self {
@@ -123,16 +126,9 @@ where
         let flags = self.encoder.flags::<AB>(&cols.selector);
         let is_valid = self.encoder.is_valid::<AB>(&cols.selector);
 
-        let cross = flags
+        let cross = flags[Self::FIRST_CROSSING_SHIFT..]
             .iter()
-            .enumerate()
-            .fold(AB::Expr::ZERO, |acc, (byte_shift, flag)| {
-                if byte_shift + LOAD_WIDTH > 2 * BLOCK_FE_WIDTH {
-                    acc + flag.clone()
-                } else {
-                    acc
-                }
-            });
+            .fold(AB::Expr::ZERO, |acc, flag| acc + flag.clone());
 
         // Cell `k` of the two consecutive memory blocks.
         let read_full = |cell: usize| {
@@ -143,27 +139,27 @@ where
             }
         };
         // The j-th cell overlapped by an odd-shift load; zero on even shifts and invalid rows.
-        let odd_cell = |j: usize| {
+        let odd_cells: [AB::Expr; NUM_OVERLAP_CELLS] = std::array::from_fn(|j| {
             flags
                 .iter()
+                .skip(1)
+                .step_by(2)
                 .enumerate()
-                .fold(AB::Expr::ZERO, |acc, (byte_shift, flag)| {
-                    if byte_shift % 2 == 1 {
-                        acc + flag.clone() * read_full(byte_shift / 2 + j)
-                    } else {
-                        acc
-                    }
+                .fold(AB::Expr::ZERO, |acc, (cell_offset, flag)| {
+                    acc + flag.clone() * read_full(cell_offset + j)
                 })
-        };
+        });
 
         // High byte of overlapped cell `j`, derived from its materialized low byte; range
         // checking the `(lo, hi)` pair makes the decomposition of every overlapped cell unique.
         // On even shifts the overlapped-cell sums are zero, which forces the low bytes to zero.
         let inv_2_pow_8 = AB::F::from_u32(1 << RV64_BYTE_BITS).inverse();
-        let overlap_hi_byte = |j: usize| (odd_cell(j) - cols.overlap_lo_bytes[j]) * inv_2_pow_8;
-        for j in 0..=width {
+        let overlap_hi_bytes: [AB::Expr; NUM_OVERLAP_CELLS] = std::array::from_fn(|j| {
+            (odd_cells[j].clone() - cols.overlap_lo_bytes[j]) * inv_2_pow_8
+        });
+        for (&lo, hi) in cols.overlap_lo_bytes.iter().zip(overlap_hi_bytes.iter()) {
             self.bitwise_lookup_bus
-                .send_range(cols.overlap_lo_bytes[j], overlap_hi_byte(j))
+                .send_range(lo, hi.clone())
                 .eval(builder, is_valid.clone());
         }
 
@@ -197,7 +193,7 @@ where
                         }
                     });
             even_term
-                + overlap_hi_byte(i)
+                + overlap_hi_bytes[i].clone()
                 + cols.overlap_lo_bytes[i + 1] * AB::Expr::from_u32(1 << RV64_BYTE_BITS)
         });
         AdapterAirContext {

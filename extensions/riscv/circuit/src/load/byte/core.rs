@@ -116,8 +116,9 @@ where
                 },
             );
         let inv_2_pow_8 = AB::F::from_u32(1 << RV64_BYTE_BITS).inverse();
-        let read_cell_hi_byte =
-            (even_selected_cell + odd_selected_cell.clone() - cols.read_cell_lo_byte) * inv_2_pow_8;
+        // Exactly one of the two expressions selects the source cell on a valid row.
+        let selected_cell = even_selected_cell + odd_selected_cell.clone();
+        let read_cell_hi_byte = (selected_cell - cols.read_cell_lo_byte) * inv_2_pow_8;
         self.bitwise_lookup_bus
             .send_range(cols.read_cell_lo_byte, read_cell_hi_byte)
             .eval(builder, is_valid.clone());

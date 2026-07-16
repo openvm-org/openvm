@@ -70,6 +70,9 @@ pub struct StoreCoreAir<
 impl<const STORE_WIDTH: usize, const SELECTOR_WIDTH: usize, const NUM_VALUE_CELLS: usize>
     StoreCoreAir<STORE_WIDTH, SELECTOR_WIDTH, NUM_VALUE_CELLS>
 {
+    // First byte offset at which the store reaches the next memory block.
+    const FIRST_CROSSING_SHIFT: usize = MEMORY_BLOCK_BYTES - STORE_WIDTH + 1;
+
     pub fn new(offset: usize, bitwise_lookup_bus: BitwiseOperationLookupBus) -> Self {
         debug_assert_eq!(NUM_VALUE_CELLS, STORE_WIDTH / 2);
         Self {
@@ -128,27 +131,15 @@ where
         let flags = self.encoder.flags::<AB>(&cols.selector);
         let is_valid = self.encoder.is_valid::<AB>(&cols.selector);
 
-        let cross = flags
+        let cross = flags[Self::FIRST_CROSSING_SHIFT..]
             .iter()
-            .enumerate()
-            .fold(AB::Expr::ZERO, |acc, (byte_shift, flag)| {
-                if byte_shift + STORE_WIDTH > 2 * BLOCK_FE_WIDTH {
-                    acc + flag.clone()
-                } else {
-                    acc
-                }
-            });
+            .fold(AB::Expr::ZERO, |acc, flag| acc + flag.clone());
 
         let odd_shift = flags
             .iter()
-            .enumerate()
-            .fold(AB::Expr::ZERO, |acc, (byte_shift, flag)| {
-                if byte_shift % 2 == 1 {
-                    acc + flag.clone()
-                } else {
-                    acc
-                }
-            });
+            .skip(1)
+            .step_by(2)
+            .fold(AB::Expr::ZERO, |acc, flag| acc + flag.clone());
 
         // Cell `k` of the two consecutive previous memory blocks.
         let prev_full = |cell: usize| {
@@ -163,31 +154,28 @@ where
         // High byte of source value cell `i`, derived from its materialized low byte. The range
         // checks are gated on the odd-shift indicator, so on even shifts the low-byte columns
         // are unconstrained; they only feed odd-shift selector terms, which are then zero.
-        let value_hi_byte = |i: usize| (cols.read_data[i] - cols.value_lo_bytes[i]) * inv_2_pow_8;
-        for i in 0..width {
+        let value_hi_bytes: [AB::Expr; NUM_VALUE_CELLS] =
+            std::array::from_fn(|i| (cols.read_data[i] - cols.value_lo_bytes[i]) * inv_2_pow_8);
+        for (&lo, hi) in cols.value_lo_bytes.iter().zip(value_hi_bytes.iter()) {
             self.bitwise_lookup_bus
-                .send_range(cols.value_lo_bytes[i], value_hi_byte(i))
+                .send_range(lo, hi.clone())
                 .eval(builder, odd_shift.clone());
         }
         // The first and last overlapped memory cells, flag-selected per odd shift; zero on even
         // shifts and invalid rows.
-        let prev_bound_cell = |which: usize| {
-            flags
-                .iter()
-                .enumerate()
-                .fold(AB::Expr::ZERO, |acc, (byte_shift, flag)| {
-                    if byte_shift % 2 == 1 {
-                        acc + flag.clone() * prev_full(byte_shift / 2 + which * width)
-                    } else {
-                        acc
-                    }
-                })
-        };
+        let prev_bound_cells: [AB::Expr; 2] = std::array::from_fn(|which| {
+            flags.iter().skip(1).step_by(2).enumerate().fold(
+                AB::Expr::ZERO,
+                |acc, (cell_offset, flag)| {
+                    acc + flag.clone() * prev_full(cell_offset + which * width)
+                },
+            )
+        });
         // The overwritten boundary-cell bytes are derived from the overlapped cells; range
         // checking them completes the decompositions of both boundary cells.
-        let first_cell_hi = (prev_bound_cell(0) - cols.prev_bound_bytes[0]) * inv_2_pow_8;
-        let last_cell_lo =
-            prev_bound_cell(1) - cols.prev_bound_bytes[1] * AB::Expr::from_u32(1 << RV64_BYTE_BITS);
+        let first_cell_hi = (prev_bound_cells[0].clone() - cols.prev_bound_bytes[0]) * inv_2_pow_8;
+        let last_cell_lo = prev_bound_cells[1].clone()
+            - cols.prev_bound_bytes[1] * AB::Expr::from_u32(1 << RV64_BYTE_BITS);
         self.bitwise_lookup_bus
             .send_range(cols.prev_bound_bytes[0], first_cell_hi)
             .eval(builder, odd_shift.clone());
@@ -229,10 +217,10 @@ where
                             cols.prev_bound_bytes[0]
                                 + cols.value_lo_bytes[0] * AB::Expr::from_u32(1 << RV64_BYTE_BITS)
                         } else if cell == first + width {
-                            value_hi_byte(width - 1)
+                            value_hi_bytes[width - 1].clone()
                                 + cols.prev_bound_bytes[1] * AB::Expr::from_u32(1 << RV64_BYTE_BITS)
                         } else {
-                            value_hi_byte(cell - first - 1)
+                            value_hi_bytes[cell - first - 1].clone()
                                 + cols.value_lo_bytes[cell - first]
                                     * AB::Expr::from_u32(1 << RV64_BYTE_BITS)
                         };
