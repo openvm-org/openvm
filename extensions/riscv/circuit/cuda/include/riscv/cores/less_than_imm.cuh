@@ -13,7 +13,7 @@ using namespace riscv;
 template <size_t NUM_LIMBS, size_t LIMB_BITS> struct LessThanImmCoreRecord {
     uint16_t b[NUM_LIMBS];
     uint16_t imm_low11;
-    uint16_t imm_sign;
+    uint8_t imm_sign;
     uint8_t local_opcode;
 };
 

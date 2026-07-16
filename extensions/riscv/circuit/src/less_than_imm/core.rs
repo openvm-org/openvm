@@ -182,7 +182,7 @@ where
 pub struct LessThanImmCoreRecord<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub b: [u16; NUM_LIMBS],
     pub imm_low11: u16,
-    pub imm_sign: u16,
+    pub imm_sign: u8,
     pub local_opcode: u8,
 }
 
@@ -200,8 +200,9 @@ pub struct LessThanImmFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> 
 
 pub(crate) fn imm_to_u16_limbs<const NUM_LIMBS: usize>(
     imm_low11: u16,
-    imm_sign: u16,
+    imm_sign: u8,
 ) -> [u16; NUM_LIMBS] {
+    let imm_sign = u16::from(imm_sign);
     let mut c = [imm_sign * 0xFFFF; NUM_LIMBS];
     c[0] = imm_low11 + imm_sign * 0xF800;
     c
@@ -247,7 +248,7 @@ where
 
         let c_u32 = c.as_canonical_u32();
         core_record.imm_low11 = (c_u32 & 0x7FF) as u16;
-        core_record.imm_sign = ((c_u32 >> 11) & 1) as u16;
+        core_record.imm_sign = ((c_u32 >> 11) & 1) as u8;
         core_record.local_opcode = opcode.local_opcode_idx(self.offset) as u8;
 
         let c_limbs = imm_to_u16_limbs::<NUM_LIMBS>(core_record.imm_low11, core_record.imm_sign);
@@ -342,7 +343,7 @@ where
         core_row.opcode_sltu_flag = F::from_bool(!is_slt);
         core_row.opcode_slt_flag = F::from_bool(is_slt);
         core_row.cmp_result = F::from_bool(cmp_result);
-        core_row.imm_sign = F::from_u16(imm_sign);
+        core_row.imm_sign = F::from_u8(imm_sign);
         core_row.imm_low11 = F::from_u16(imm_low11);
         core_row.b = b.map(F::from_u16);
     }

@@ -25,7 +25,7 @@ struct LessThanImmRecord {
     Rv64LessThanImmCoreRecord core;
 };
 
-static_assert(sizeof(LessThanImmRecord) == 48);
+static_assert(sizeof(LessThanImmRecord) == 44);
 static_assert(offsetof(LessThanImmRecord, core) == 32);
 
 __global__ void less_than_imm_tracegen(
