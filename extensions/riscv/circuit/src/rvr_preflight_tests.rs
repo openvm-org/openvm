@@ -18,7 +18,7 @@ use openvm_circuit::{
         verify_segments, AddressSpaceHostLayout, Arena, ContinuationVmProver, DenseRecordArena,
         ExecutionError, MatrixRecordArena, Streams, VirtualMachine, VmInstance,
     },
-    system::SystemRecords,
+    system::{memory::online::LinearMemory, SystemRecords},
     utils::test_cpu_engine,
 };
 #[cfg(feature = "cuda")]
@@ -239,8 +239,17 @@ fn hint_store(opcode: Rv64HintStoreOpcode, num_words: usize, ptr: usize) -> Inst
 }
 
 fn extension_store(src: usize, ptr: usize, offset: usize) -> Instruction<F> {
+    extension_store_width(Rv64LoadStoreOpcode::STORED, src, ptr, offset)
+}
+
+fn extension_store_width(
+    opcode: Rv64LoadStoreOpcode,
+    src: usize,
+    ptr: usize,
+    offset: usize,
+) -> Instruction<F> {
     Instruction::from_usize(
-        Rv64LoadStoreOpcode::STORED.global_opcode(),
+        opcode.global_opcode(),
         [
             reg(src),
             reg(ptr),
@@ -1696,6 +1705,31 @@ fn public_values_reveal_differential_exe() -> VmExe<F> {
         extension_store(1, 2, 8),                    // reveal A -> pv[8..16] (second AS=3 block)
         extension_store(0, 2, 16),                   // reveal x0 -> pv[16..24]
         load(Rv64LoadStoreOpcode::LOADD, 5, 4, 0),   // read back the AS=2 store
+        terminate(),
+    ])
+}
+
+fn g2_load_store_phase2a_exe() -> VmExe<F> {
+    exe(&[
+        addi(1, 0, 64),
+        addi(2, 0, 0x00ff_ffff), // -1: exercises every sign-extending load.
+        store(Rv64LoadStoreOpcode::STORED, 2, 1, 0),
+        store(Rv64LoadStoreOpcode::STOREW, 2, 1, 0),
+        store(Rv64LoadStoreOpcode::STOREH, 2, 1, 0),
+        store(Rv64LoadStoreOpcode::STOREB, 2, 1, 0),
+        load(Rv64LoadStoreOpcode::LOADD, 3, 1, 0),
+        load(Rv64LoadStoreOpcode::LOADWU, 4, 1, 0),
+        load(Rv64LoadStoreOpcode::LOADHU, 5, 1, 0),
+        load(Rv64LoadStoreOpcode::LOADBU, 6, 1, 0),
+        load(Rv64LoadStoreOpcode::LOADW, 7, 1, 0),
+        load(Rv64LoadStoreOpcode::LOADH, 8, 1, 0),
+        load(Rv64LoadStoreOpcode::LOADB, 9, 1, 0),
+        load(Rv64LoadStoreOpcode::LOADD, 0, 1, 0), // x0 still performs the read.
+        addi(10, 0, 0),
+        extension_store(2, 10, 0),
+        extension_store_width(Rv64LoadStoreOpcode::STOREW, 2, 10, 8),
+        extension_store_width(Rv64LoadStoreOpcode::STOREH, 2, 10, 16),
+        extension_store_width(Rv64LoadStoreOpcode::STOREB, 2, 10, 24),
         terminate(),
     ])
 }

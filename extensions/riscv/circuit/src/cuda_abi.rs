@@ -55,6 +55,8 @@ pub mod rvr_delta_cuda {
             d_arena_native_flags: *const u8,
             num_airs: usize,
             d_outputs: *const DeltaAirOutputDesc,
+            d_expected_blocks: DeviceBufferView,
+            d_expected_modes: DeviceBufferView,
             d_error: *mut u32,
             stream: cudaStream_t,
         ) -> i32;
@@ -95,6 +97,8 @@ pub mod rvr_delta_cuda {
         pc_base: u32,
         d_arena_native_flags: &DeviceBuffer<u8>,
         d_outputs: &DeviceBuffer<DeltaAirOutputDesc>,
+        d_expected_blocks: &DeviceBuffer<u64>,
+        d_expected_modes: &DeviceBuffer<u8>,
         d_error: &DeviceBuffer<u32>,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
@@ -124,6 +128,8 @@ pub mod rvr_delta_cuda {
             d_arena_native_flags.as_ptr(),
             d_arena_native_flags.len(),
             d_outputs.as_ptr(),
+            d_expected_blocks.view(),
+            d_expected_modes.view(),
             d_error.as_mut_ptr(),
             stream,
         ))
@@ -161,10 +167,10 @@ pub mod rvr_delta_cuda {
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 pub mod rvr_g2_cuda {
     use super::*;
-    use crate::rvr_gpu_decode::DeviceOperandEntry;
+    use crate::rvr_gpu_decode::{DeviceOperandEntry, G2ExpectedKindV1};
 
     extern "C" {
-        fn _rvr_g2_addi_predecode(
+        fn _rvr_g2_predecode(
             d_wire: DeviceBufferView,
             d_expected_fingerprint: *const u8,
             d_blocks: *const openvm_circuit::arch::rvr::RvrG2BlockEntryV1,
@@ -174,12 +180,13 @@ pub mod rvr_g2_cuda {
             pc_base: u32,
             d_initial_memory: DeviceBufferView,
             initial_timestamp: u32,
-            expected_addi_count: usize,
+            d_expected_kinds: *const G2ExpectedKindV1,
+            expected_kind_count: usize,
             d_program_frequencies: *mut u32,
             frequency_count: usize,
-            d_addi_output: DeviceBufferView,
-            d_touched_output: DeviceBufferView,
-            d_touched_count: *mut u32,
+            d_delta_output: DeviceBufferView,
+            d_expected_blocks: DeviceBufferView,
+            d_expected_modes: DeviceBufferView,
             d_error: *mut u32,
             stream: cudaStream_t,
         ) -> i32;
@@ -194,15 +201,15 @@ pub mod rvr_g2_cuda {
         pc_base: u32,
         d_initial_memory: &DeviceBuffer<openvm_circuit::system::cuda::memory::DeviceInitialMemory>,
         initial_timestamp: u32,
-        expected_addi_count: usize,
+        d_expected_kinds: &DeviceBuffer<G2ExpectedKindV1>,
         d_program_frequencies: &DeviceBuffer<u32>,
-        d_addi_output: &DeviceBuffer<u8>,
-        d_touched_output: &DeviceBuffer<u32>,
-        d_touched_count: &DeviceBuffer<u32>,
+        d_delta_output: &DeviceBuffer<u8>,
+        d_expected_blocks: &DeviceBuffer<u64>,
+        d_expected_modes: &DeviceBuffer<u8>,
         d_error: &DeviceBuffer<u32>,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
-        CudaError::from_result(_rvr_g2_addi_predecode(
+        CudaError::from_result(_rvr_g2_predecode(
             d_wire.view(),
             d_expected_fingerprint.as_ptr(),
             d_blocks.as_ptr(),
@@ -212,12 +219,13 @@ pub mod rvr_g2_cuda {
             pc_base,
             d_initial_memory.view(),
             initial_timestamp,
-            expected_addi_count,
+            d_expected_kinds.as_ptr(),
+            d_expected_kinds.len(),
             d_program_frequencies.as_mut_ptr(),
             d_program_frequencies.len(),
-            d_addi_output.view(),
-            d_touched_output.view(),
-            d_touched_count.as_mut_ptr(),
+            d_delta_output.view(),
+            d_expected_blocks.view(),
+            d_expected_modes.view(),
             d_error.as_mut_ptr(),
             stream,
         ))
