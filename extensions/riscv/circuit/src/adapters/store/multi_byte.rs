@@ -145,9 +145,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64StoreMultiByteAdapterAir {
             )
             .eval(builder, is_valid.clone());
 
-        // Constrain mem_ptr = rs1 + sign_extend(imm) as a 32-bit addition. The booleanity
-        // checks hold unconditionally (dummy rows are all-zero except `mem_as`), which keeps
-        // their degree low since `is_valid` may be a degree-2 expression.
+        // Constrain mem_ptr = rs1 + sign_extend(imm) as a 32-bit addition.
         let inv = AB::F::from_u32(1u32 << U16_BITS).inverse();
         let low_carry =
             (local_cols.rs1_data[0] + local_cols.imm - local_cols.mem_ptr_low_limb) * inv;
