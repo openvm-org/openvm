@@ -14,7 +14,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
-use openvm_riscv_transpiler::BaseAluImmOpcode;
+use openvm_riscv_transpiler::{BaseAluImmOpcode, BaseAluOpcode};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
@@ -212,8 +212,8 @@ where
         core_record.imm_sign = (c_bytes[2] != 0) as u8;
         core_record.local_opcode = local_opcode as u8;
 
-        let reg_opcode = local_opcode.into();
-        let rd = run_bitwise_logic::<NUM_LIMBS, LIMB_BITS>(reg_opcode, &core_record.b, &c_bytes);
+        let rd =
+            run_bitwise_logic_imm::<NUM_LIMBS, LIMB_BITS>(local_opcode, &core_record.b, &c_bytes);
 
         self.adapter
             .write(state.memory, instruction, [rd].into(), &mut adapter_record);
@@ -249,8 +249,8 @@ where
             _ => sign_byte,
         });
 
-        let reg_opcode = BaseAluImmOpcode::from_usize(local_opcode as usize).into();
-        let a = run_bitwise_logic::<NUM_LIMBS, LIMB_BITS>(reg_opcode, &b, &c);
+        let opcode = BaseAluImmOpcode::from_usize(local_opcode as usize);
+        let a = run_bitwise_logic_imm::<NUM_LIMBS, LIMB_BITS>(opcode, &b, &c);
 
         self.bitwise_lookup_chip
             .request_range(c_low[0] as u32, (c_low[1] + 0xf8) as u32);
@@ -267,4 +267,19 @@ where
         core_row.b = b.map(F::from_u8);
         core_row.a = a.map(F::from_u8);
     }
+}
+
+#[inline(always)]
+fn run_bitwise_logic_imm<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+    opcode: BaseAluImmOpcode,
+    x: &[u8; NUM_LIMBS],
+    y: &[u8; NUM_LIMBS],
+) -> [u8; NUM_LIMBS] {
+    let opcode = match opcode {
+        BaseAluImmOpcode::XORI => BaseAluOpcode::XOR,
+        BaseAluImmOpcode::ORI => BaseAluOpcode::OR,
+        BaseAluImmOpcode::ANDI => BaseAluOpcode::AND,
+        BaseAluImmOpcode::ADDI => unreachable!("bitwise core received ADDI"),
+    };
+    run_bitwise_logic::<NUM_LIMBS, LIMB_BITS>(opcode, x, y)
 }

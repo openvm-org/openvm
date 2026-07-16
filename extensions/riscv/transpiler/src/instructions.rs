@@ -422,17 +422,6 @@ pub enum BaseAluImmOpcode {
     ANDI,
 }
 
-impl From<BaseAluImmOpcode> for BaseAluOpcode {
-    fn from(opcode: BaseAluImmOpcode) -> Self {
-        match opcode {
-            BaseAluImmOpcode::ADDI => Self::ADD,
-            BaseAluImmOpcode::XORI => Self::XOR,
-            BaseAluImmOpcode::ORI => Self::OR,
-            BaseAluImmOpcode::ANDI => Self::AND,
-        }
-    }
-}
-
 #[derive(
     Copy,
     Clone,
