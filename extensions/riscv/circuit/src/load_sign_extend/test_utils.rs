@@ -3,7 +3,10 @@ use std::array;
 use std::sync::Arc;
 
 use openvm_circuit::arch::{
-    testing::{memory::gen_register_pointer, TestBuilder},
+    testing::{
+        memory::{gen_nonzero_register_pointer, gen_register_pointer},
+        TestBuilder,
+    },
     Arena, MemoryConfig, PreflightExecutor, MEMORY_BLOCK_BYTES,
 };
 use openvm_instructions::{
@@ -33,7 +36,6 @@ use crate::{
         rv64_bytes_to_u16_block, rv64_bytes_to_u32, rv64_u16_block_to_bytes, sign_extend_imm16,
     },
     load_sign_extend::common::load_sign_extend_write_data,
-    test_utils::memory::random_nonzero_register_pointer,
 };
 
 pub(crate) const IMM_BITS: usize = 16;
@@ -54,10 +56,10 @@ pub(crate) fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let imm = imm.unwrap_or_else(|| rng.random_range(0..(1 << IMM_BITS)));
     let imm_sign = imm_sign.unwrap_or_else(|| rng.random_range(0..2));
     let imm_ext = sign_extend_imm16(imm, imm_sign);
-    match opcode {
-        LOADB | LOADH | LOADW => {}
-        _ => unreachable!("signed load test only supports LOADB/LOADH/LOADW"),
-    }
+    assert!(
+        matches!(opcode, LOADB | LOADH | LOADW),
+        "unsupported signed load opcode: {opcode:?}"
+    );
     let max_addr = 1usize << tester.address_bits();
     let imm_signed = if imm_sign == 0 {
         imm as i64
@@ -76,7 +78,7 @@ pub(crate) fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     let shift_amount = ptr_val % MEMORY_BLOCK_BYTES as u32;
     let a = gen_register_pointer(rng, MEMORY_BLOCK_BYTES);
     // Keep rs1 nonzero because this helper chooses its contents to produce the sampled address.
-    let b = random_nonzero_register_pointer(rng);
+    let b = gen_nonzero_register_pointer(rng, MEMORY_BLOCK_BYTES);
     let read_data: [[u8; MEMORY_BLOCK_BYTES]; 2] =
         array::from_fn(|_| array::from_fn(|_| rng.random()));
     let prev_data: [F; 8] = if a == b {

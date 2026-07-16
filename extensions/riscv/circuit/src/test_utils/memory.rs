@@ -3,8 +3,11 @@ use std::array;
 use std::sync::Arc;
 
 use openvm_circuit::arch::{
-    testing::{memory::gen_register_pointer, TestBuilder},
-    Arena, MemoryConfig, PreflightExecutor, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES, NUM_RV64_REGISTERS,
+    testing::{
+        memory::{gen_nonzero_register_pointer, gen_register_pointer},
+        TestBuilder,
+    },
+    Arena, MemoryConfig, PreflightExecutor, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
 };
 use openvm_instructions::{
     instruction::Instruction,
@@ -49,10 +52,6 @@ pub(crate) const IMM_BITS: usize = 16;
 pub(crate) const MAX_INS_CAPACITY: usize = 128;
 pub(crate) type F = BabyBear;
 
-pub(crate) fn random_nonzero_register_pointer(rng: &mut StdRng) -> usize {
-    rng.random_range(1..NUM_RV64_REGISTERS) * RV64_REGISTER_NUM_LIMBS
-}
-
 struct MemoryAccess {
     a: usize,
     b: usize,
@@ -96,7 +95,7 @@ fn random_memory_access(
 
     let a = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
     // Keep rs1 nonzero because this helper chooses its contents to produce the sampled address.
-    let b = random_nonzero_register_pointer(rng);
+    let b = gen_nonzero_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
 
     MemoryAccess {
         a,
@@ -121,10 +120,10 @@ pub(crate) fn set_and_execute_load<RA: Arena, E: PreflightExecutor<F, RA>>(
     imm_sign: Option<u32>,
     mem_as: Option<usize>,
 ) {
-    match opcode {
-        LOADD | LOADWU | LOADHU | LOADBU => {}
-        _ => unreachable!("unsupported unsigned load opcode: {opcode:?}"),
-    }
+    assert!(
+        matches!(opcode, LOADD | LOADWU | LOADHU | LOADBU),
+        "unsupported unsigned load opcode: {opcode:?}"
+    );
     // Sample every byte offset within a memory block.
     let access = random_memory_access(tester, rng, 0, rs1, imm, imm_sign);
     let mem_as = mem_as.unwrap_or(RV64_MEMORY_AS as usize);
@@ -203,10 +202,10 @@ pub(crate) fn set_and_execute_store<RA: Arena, E: PreflightExecutor<F, RA>>(
     imm_sign: Option<u32>,
     mem_as: Option<usize>,
 ) {
-    match opcode {
-        STORED | STOREW | STOREH | STOREB => {}
-        _ => unreachable!("unsupported store opcode: {opcode:?}"),
-    }
+    assert!(
+        matches!(opcode, STORED | STOREW | STOREH | STOREB),
+        "unsupported store opcode: {opcode:?}"
+    );
     // Sample every byte offset within a memory block.
     let access = random_memory_access(tester, rng, 0, rs1, imm, imm_sign);
     let mem_as = mem_as.unwrap_or_else(|| {
@@ -277,24 +276,15 @@ pub(crate) fn set_and_execute_store<RA: Arena, E: PreflightExecutor<F, RA>>(
     );
 }
 
-pub(crate) fn load_memory_config() -> MemoryConfig {
-    MemoryConfig::default()
-}
-
 pub(crate) fn store_memory_config() -> MemoryConfig {
-    let mut mem_config = load_memory_config();
+    let mut mem_config = MemoryConfig::default();
     mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 29;
     mem_config
 }
 
 #[cfg(feature = "cuda")]
-pub(crate) fn load_gpu_memory_config() -> MemoryConfig {
-    MemoryConfig::default()
-}
-
-#[cfg(feature = "cuda")]
 pub(crate) fn store_gpu_memory_config() -> MemoryConfig {
-    let mut mem_config = load_gpu_memory_config();
+    let mut mem_config = MemoryConfig::default();
     mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << mem_config.pointer_max_bits;
     mem_config
 }

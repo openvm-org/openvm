@@ -162,3 +162,12 @@ where
     let num_aligned_regions = NUM_RV64_REGISTERS * size_of::<u64>() / len;
     rng.random_range(0..num_aligned_regions) * len
 }
+
+pub fn gen_nonzero_register_pointer<R>(rng: &mut R, len: usize) -> usize
+where
+    R: Rng + ?Sized,
+{
+    let num_aligned_regions = NUM_RV64_REGISTERS * size_of::<u64>() / len;
+    let first_nonzero_region = size_of::<u64>().div_ceil(len);
+    rng.random_range(first_nonzero_region..num_aligned_regions) * len
+}

@@ -5,8 +5,9 @@ use openvm_circuit::arch::testing::{
     default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
     GpuTestChipHarness,
 };
-use openvm_circuit::arch::testing::{
-    TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
+use openvm_circuit::arch::{
+    testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
+    MemoryConfig,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
@@ -35,12 +36,12 @@ use crate::{
         Rv64LoadHalfwordAir, Rv64LoadHalfwordChip, Rv64LoadHalfwordExecutor,
         LOAD_HALFWORD_OVERLAP_CELLS,
     },
-    test_utils::memory::{load_memory_config, set_and_execute_load, F, MAX_INS_CAPACITY},
+    test_utils::memory::{set_and_execute_load, F, MAX_INS_CAPACITY},
 };
 #[cfg(feature = "cuda")]
 use crate::{
     load::Rv64LoadHalfwordChipGpu,
-    test_utils::memory::{dummy_range_checker, load_gpu_memory_config, transfer_load_records},
+    test_utils::memory::{dummy_range_checker, transfer_load_records},
 };
 
 type HalfwordHarness =
@@ -90,7 +91,7 @@ fn create_halfword_harness(
 #[test]
 fn positive_loadhu_shift6_test() {
     let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::from_config(load_memory_config());
+    let mut tester = VmChipTestBuilder::from_config(MemoryConfig::default());
     let (mut harness, bitwise) = create_halfword_harness(&mut tester);
     set_and_execute_load(
         &mut tester,
@@ -115,7 +116,7 @@ fn positive_loadhu_shift6_test() {
 #[test]
 fn rand_load_halfword_test() {
     let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::from_config(load_memory_config());
+    let mut tester = VmChipTestBuilder::from_config(MemoryConfig::default());
     let (mut harness, bitwise) = create_halfword_harness(&mut tester);
     for _ in 0..100 {
         set_and_execute_load(
@@ -176,7 +177,7 @@ fn run_loadhu_sanity_test() {
 #[test]
 fn negative_split_write_data_test() {
     let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::from_config(load_memory_config());
+    let mut tester = VmChipTestBuilder::from_config(MemoryConfig::default());
     let (mut harness, bitwise) = create_halfword_harness(&mut tester);
     set_and_execute_load(
         &mut tester,
@@ -258,7 +259,7 @@ fn create_cuda_halfword_harness(tester: &GpuChipTestBuilder) -> GpuHalfwordHarne
 fn test_cuda_rand_load_halfword_tracegen() {
     let mut rng = create_seeded_rng();
     let mut tester =
-        GpuChipTestBuilder::new(load_gpu_memory_config(), default_var_range_checker_bus())
+        GpuChipTestBuilder::new(MemoryConfig::default(), default_var_range_checker_bus())
             .with_bitwise_op_lookup(default_bitwise_lookup_bus());
     let mut harness = create_cuda_halfword_harness(&tester);
     for _ in 0..100 {

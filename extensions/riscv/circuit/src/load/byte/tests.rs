@@ -5,8 +5,9 @@ use openvm_circuit::arch::testing::{
     default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
     GpuTestChipHarness,
 };
-use openvm_circuit::arch::testing::{
-    TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
+use openvm_circuit::arch::{
+    testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
+    MemoryConfig,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
@@ -38,12 +39,12 @@ use crate::{
         common::load_write_data, LoadByteCoreAir, LoadByteCoreCols, LoadByteFiller,
         Rv64LoadByteAir, Rv64LoadByteChip, Rv64LoadByteExecutor,
     },
-    test_utils::memory::{load_memory_config, set_and_execute_load, F, MAX_INS_CAPACITY},
+    test_utils::memory::{set_and_execute_load, F, MAX_INS_CAPACITY},
 };
 #[cfg(feature = "cuda")]
 use crate::{
     load::Rv64LoadByteChipGpu,
-    test_utils::memory::{dummy_range_checker, load_gpu_memory_config, transfer_load_byte_records},
+    test_utils::memory::{dummy_range_checker, transfer_load_byte_records},
 };
 
 type ByteHarness = TestChipHarness<F, Rv64LoadByteExecutor, Rv64LoadByteAir, Rv64LoadByteChip<F>>;
@@ -92,7 +93,7 @@ fn create_byte_harness(
 #[test]
 fn rand_load_byte_test() {
     let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::from_config(load_memory_config());
+    let mut tester = VmChipTestBuilder::from_config(MemoryConfig::default());
     let (mut harness, bitwise) = create_byte_harness(&mut tester);
     for _ in 0..100 {
         set_and_execute_load(
@@ -120,7 +121,7 @@ fn rand_load_byte_test() {
 #[should_panic(expected = "effective address exceeds implemented memory address space")]
 fn negative_load_address_wraparound_test() {
     let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::from_config(load_memory_config());
+    let mut tester = VmChipTestBuilder::from_config(MemoryConfig::default());
     let (mut harness, _) = create_byte_harness(&mut tester);
     set_and_execute_load(
         &mut tester,
@@ -138,7 +139,7 @@ fn negative_load_address_wraparound_test() {
 #[test]
 #[should_panic(expected = "effective address exceeds implemented memory address space")]
 fn negative_load_address_underflow_test() {
-    let mut tester = VmChipTestBuilder::from_config(load_memory_config());
+    let mut tester = VmChipTestBuilder::from_config(MemoryConfig::default());
     let (mut harness, _) = create_byte_harness(&mut tester);
     let rs1_ptr = 8;
     tester.write_bytes(RV64_REGISTER_AS as usize, rs1_ptr, [F::ZERO; 8]);
@@ -187,7 +188,7 @@ fn run_loadbu_sanity_test() {
 #[test]
 fn negative_split_opcode_role_test() {
     let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::from_config(load_memory_config());
+    let mut tester = VmChipTestBuilder::from_config(MemoryConfig::default());
     let (mut harness, bitwise) = create_byte_harness(&mut tester);
     set_and_execute_load(
         &mut tester,
@@ -269,7 +270,7 @@ fn create_cuda_byte_harness(tester: &GpuChipTestBuilder) -> GpuByteHarness {
 fn test_cuda_rand_load_byte_tracegen() {
     let mut rng = create_seeded_rng();
     let mut tester =
-        GpuChipTestBuilder::new(load_gpu_memory_config(), default_var_range_checker_bus())
+        GpuChipTestBuilder::new(MemoryConfig::default(), default_var_range_checker_bus())
             .with_bitwise_op_lookup(default_bitwise_lookup_bus());
     let mut harness = create_cuda_byte_harness(&tester);
     for _ in 0..100 {

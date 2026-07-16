@@ -5,8 +5,9 @@ use openvm_circuit::arch::testing::{
     default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
     GpuTestChipHarness,
 };
-use openvm_circuit::arch::testing::{
-    TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
+use openvm_circuit::arch::{
+    testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
+    MemoryConfig,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
@@ -35,12 +36,12 @@ use crate::{
         Rv64LoadDoublewordAir, Rv64LoadDoublewordChip, Rv64LoadDoublewordExecutor,
         LOAD_DOUBLEWORD_OVERLAP_CELLS,
     },
-    test_utils::memory::{load_memory_config, set_and_execute_load, F, MAX_INS_CAPACITY},
+    test_utils::memory::{set_and_execute_load, F, MAX_INS_CAPACITY},
 };
 #[cfg(feature = "cuda")]
 use crate::{
     load::Rv64LoadDoublewordChipGpu,
-    test_utils::memory::{dummy_range_checker, load_gpu_memory_config, transfer_load_records},
+    test_utils::memory::{dummy_range_checker, transfer_load_records},
 };
 
 type DoublewordHarness = TestChipHarness<
@@ -94,7 +95,7 @@ fn create_doubleword_harness(
 #[test]
 fn rand_load_doubleword_test() {
     let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::from_config(load_memory_config());
+    let mut tester = VmChipTestBuilder::from_config(MemoryConfig::default());
     let (mut harness, bitwise) = create_doubleword_harness(&mut tester);
     for _ in 0..100 {
         set_and_execute_load(
@@ -121,7 +122,7 @@ fn rand_load_doubleword_test() {
 #[test]
 fn positive_loadd_pointer_limb_boundary_cross_test() {
     let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::from_config(load_memory_config());
+    let mut tester = VmChipTestBuilder::from_config(MemoryConfig::default());
     let (mut harness, bitwise) = create_doubleword_harness(&mut tester);
     // ptr = 0xfff9: the crossing block starts at 0x10000, exercising the pointer limb carry.
     set_and_execute_load(
@@ -162,7 +163,7 @@ fn assert_pranked_load_doubleword_fails(
     prank: impl Fn(&mut LoadCoreCols<F, LOAD_DOUBLEWORD_OVERLAP_CELLS>),
 ) {
     let mut rng = create_seeded_rng();
-    let mut tester = VmChipTestBuilder::from_config(load_memory_config());
+    let mut tester = VmChipTestBuilder::from_config(MemoryConfig::default());
     let (mut harness, bitwise) = create_doubleword_harness(&mut tester);
     set_and_execute_load(
         &mut tester,
@@ -253,7 +254,7 @@ fn create_cuda_doubleword_harness(tester: &GpuChipTestBuilder) -> GpuDoublewordH
 fn test_cuda_rand_load_doubleword_tracegen() {
     let mut rng = create_seeded_rng();
     let mut tester =
-        GpuChipTestBuilder::new(load_gpu_memory_config(), default_var_range_checker_bus())
+        GpuChipTestBuilder::new(MemoryConfig::default(), default_var_range_checker_bus())
             .with_bitwise_op_lookup(default_bitwise_lookup_bus());
     let mut harness = create_cuda_doubleword_harness(&tester);
     for _ in 0..100 {
