@@ -3,7 +3,8 @@ use std::array;
 use std::sync::Arc;
 
 use openvm_circuit::arch::{
-    testing::TestBuilder, Arena, MemoryConfig, PreflightExecutor, MEMORY_BLOCK_BYTES,
+    testing::{memory::gen_register_pointer, TestBuilder},
+    Arena, MemoryConfig, PreflightExecutor, MEMORY_BLOCK_BYTES,
 };
 use openvm_instructions::{
     instruction::Instruction, riscv::RV64_REGISTER_AS, LocalOpcode, PUBLIC_VALUES_AS,
@@ -32,7 +33,7 @@ use crate::{
         rv64_bytes_to_u16_block, rv64_bytes_to_u32, rv64_u16_block_to_bytes, sign_extend_imm16,
     },
     load_sign_extend::common::load_sign_extend_write_data,
-    test_utils::memory::{random_nonzero_register_pointer, random_register_pointer},
+    test_utils::memory::random_nonzero_register_pointer,
 };
 
 pub(crate) const IMM_BITS: usize = 16;
@@ -73,7 +74,7 @@ pub(crate) fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     });
     let ptr_val = imm_ext.wrapping_add(rv64_bytes_to_u32(rs1));
     let shift_amount = ptr_val % MEMORY_BLOCK_BYTES as u32;
-    let a = random_register_pointer(rng);
+    let a = gen_register_pointer(rng, MEMORY_BLOCK_BYTES);
     // Keep rs1 nonzero because this helper chooses its contents to produce the sampled address.
     let b = random_nonzero_register_pointer(rng);
     let read_data: [[u8; MEMORY_BLOCK_BYTES]; 2] =

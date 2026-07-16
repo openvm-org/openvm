@@ -3,8 +3,8 @@ use std::array;
 use std::sync::Arc;
 
 use openvm_circuit::arch::{
-    testing::TestBuilder, Arena, MemoryConfig, PreflightExecutor, BLOCK_FE_WIDTH,
-    MEMORY_BLOCK_BYTES, NUM_RV64_REGISTERS,
+    testing::{memory::gen_register_pointer, TestBuilder},
+    Arena, MemoryConfig, PreflightExecutor, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES, NUM_RV64_REGISTERS,
 };
 use openvm_instructions::{
     instruction::Instruction,
@@ -48,10 +48,6 @@ use crate::{
 pub(crate) const IMM_BITS: usize = 16;
 pub(crate) const MAX_INS_CAPACITY: usize = 128;
 pub(crate) type F = BabyBear;
-
-pub(crate) fn random_register_pointer(rng: &mut StdRng) -> usize {
-    rng.random_range(0..NUM_RV64_REGISTERS) * RV64_REGISTER_NUM_LIMBS
-}
 
 pub(crate) fn random_nonzero_register_pointer(rng: &mut StdRng) -> usize {
     rng.random_range(1..NUM_RV64_REGISTERS) * RV64_REGISTER_NUM_LIMBS
@@ -98,7 +94,7 @@ fn random_memory_access(
     let shift_amount = (ptr_val as usize) & 7;
     let base_ptr = (ptr_val as usize) - shift_amount;
 
-    let a = random_register_pointer(rng);
+    let a = gen_register_pointer(rng, RV64_REGISTER_NUM_LIMBS);
     // Keep rs1 nonzero because this helper chooses its contents to produce the sampled address.
     let b = random_nonzero_register_pointer(rng);
 
