@@ -435,15 +435,16 @@ impl SegmentationCtx {
         let mut main_cnt_with_rot = 0usize;
         let mut main_cnt_no_rot = 0usize;
         let mut interaction_cells = 0usize;
-        for (i, ((((padded_height, width), interactions), is_constant), &need_rot)) in trace_heights
+        let mut total_interactions = 0u64;
+        for (i, ((((&height, &width), &interactions), is_constant), &need_rot)) in trace_heights
             .iter()
-            .map(|&height| next_power_of_two_or_zero(height as usize) as u32)
             .zip(self.config.widths.iter())
             .zip(self.config.interactions.iter())
             .zip(is_trace_height_constant.iter())
             .zip(self.config.need_rot.iter())
             .enumerate()
         {
+            let padded_height = next_power_of_two_or_zero(height as usize) as u32;
             // Only segment if the height is not constant and exceeds the maximum height after
             // padding
             if !is_constant && padded_height > self.config.max_trace_height {
@@ -468,6 +469,7 @@ impl SegmentationCtx {
                 main_cnt_no_rot += main_cells;
             }
             interaction_cells += padded_height as usize * interactions;
+            total_interactions += add_one_or_zero(height) as u64 * interactions as u64;
         }
 
         let (total_memory, main_memory, interaction_memory) =
@@ -484,7 +486,6 @@ impl SegmentationCtx {
             return Some(SegmentationTrigger::Memory);
         }
 
-        let total_interactions = self.calculate_total_interactions(trace_heights);
         if total_interactions > u64::from(self.config.max_interactions) {
             tracing::info!(
                 "overshoot: instret {:10} | total interactions ({:10}) > max ({:10})",

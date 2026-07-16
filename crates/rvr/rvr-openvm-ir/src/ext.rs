@@ -29,6 +29,11 @@ pub trait ExtEmitCtx {
     /// Emit an opaque C call that may update state observed by the tracer.
     fn extern_call(&mut self, name: &str, args: &[&str]);
 
+    /// Emit a C call that does not require flushing local page trace state.
+    fn extern_call_without_page_flush(&mut self, name: &str, args: &[&str]) {
+        self.extern_call(name, args);
+    }
+
     /// Emit an opaque C call that returns a value.
     fn extern_call_expr(&mut self, ret_ty: &str, name: &str, args: &[&str]) -> String;
 
