@@ -17,8 +17,8 @@ use openvm_instructions::{
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm::{
-    inline_record_shape_for_instr, inline_record_shape_for_terminator, CProject, InlineRecordShape,
-    RvrExecutionKind,
+    inline_record_shape_for_instr, inline_record_shape_for_terminator, CProject,
+    G2DsoManifestConfigV1, InlineRecordShape, RvrExecutionKind,
 };
 use rvr_openvm_ir::{LiftedInstr, SourceLoc};
 use rvr_openvm_lift::{
@@ -29,7 +29,7 @@ use sha2::{Digest, Sha256};
 
 use super::{
     debug::GuestDebugMap, ArenaNativeGeometry, ArenaNativeLayout, LogNativeOpcodeAdmitter,
-    RvrDeltaDecodeEntry,
+    RvrDeltaDecodeEntry, RvrG2BlockEntryV1, RvrG2MetaV1,
 };
 use crate::arch::ExecutorInventory;
 
@@ -80,6 +80,9 @@ pub struct RvrInlineRecordsMeta {
     /// by either the whole-AIR device decoder or an arena-native consumer.
     /// This makes the access-aux omission decision O(1) at cached-VM load.
     pub fully_direct_delta: bool,
+    /// Private G2 transport metadata. `None` means the request negotiated to
+    /// the established arena route before native execution.
+    pub g2: Option<Arc<RvrG2MetaV1>>,
 }
 
 /// Extension-neutral persisted input for the CUDA delta decoder.
@@ -197,6 +200,69 @@ impl RvrCompiled {
         &self.inline_records
     }
 
+    fn validate_g2_manifest(&self) -> Result<(), CompileError> {
+        let Some(g2) = self.inline_records.g2.as_deref() else {
+            return Ok(());
+        };
+        let manifest = unsafe {
+            let symbol = self
+                .lib
+                .get::<*const OpenVmRvrG2DsoManifestV1>(b"openvm_rvr_g2_manifest_v1\0")
+                .map_err(|err| {
+                    CompileError::LibLoad(format!(
+                        "G2 negotiation rejected DSO without manifest: {err}"
+                    ))
+                })?;
+            **symbol
+        };
+        let expected_lanes = [
+            OpenVmRvrG2DsoLaneManifestV1 {
+                kind: 0x0001,
+                elem_width: 4,
+                encoding: 0,
+                flags: 1,
+                group_id: 0,
+                arity: 0,
+                reserved: [0; 3],
+            },
+            OpenVmRvrG2DsoLaneManifestV1 {
+                kind: 0x013a,
+                elem_width: 8,
+                encoding: 0,
+                flags: 1,
+                group_id: 0,
+                arity: 1,
+                reserved: [0; 3],
+            },
+        ];
+        if manifest.magic != *b"OVMG2D1\0"
+            || manifest.version != 1
+            || manifest.manifest_bytes as usize != std::mem::size_of::<OpenVmRvrG2DsoManifestV1>()
+            || manifest.header_size != 64
+            || manifest.lane_desc_size != 32
+            || manifest.lane_count != 2
+            || manifest.wire_flags != 14
+            || manifest.fingerprint != g2.fingerprint
+            || manifest.program_fingerprint != g2.program_fingerprint
+            || manifest.block_fingerprint != g2.block_fingerprint
+            || manifest.air_manifest_fingerprint != g2.air_manifest_fingerprint
+            || self
+                .inline_records
+                .delta_decode
+                .as_deref()
+                .is_none_or(|decode| manifest.pc_base != decode.pc_base)
+            || manifest.block_count as usize != g2.blocks.len()
+            || manifest.addi_air_idx as usize != g2.addi_air_idx
+            || manifest.reserved != 0
+            || manifest.lanes != expected_lanes
+        {
+            return Err(CompileError::LibLoad(
+                "G2 DSO manifest differs from the VmExe/AIR binding".to_string(),
+            ));
+        }
+        Ok(())
+    }
+
     pub fn lib_file_name_with_suffix(&self, suffix: &str) -> Result<String, CompileError> {
         let stem = self
             .lib_path
@@ -280,6 +346,44 @@ impl RvrCompiled {
         Ok(())
     }
 }
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct OpenVmRvrG2DsoManifestV1 {
+    magic: [u8; 8],
+    version: u16,
+    manifest_bytes: u16,
+    header_size: u16,
+    lane_desc_size: u16,
+    lane_count: u32,
+    wire_flags: u32,
+    fingerprint: [u8; 32],
+    program_fingerprint: [u8; 32],
+    block_fingerprint: [u8; 32],
+    air_manifest_fingerprint: [u8; 32],
+    pc_base: u32,
+    block_count: u32,
+    addi_air_idx: u32,
+    reserved: u32,
+    lanes: [OpenVmRvrG2DsoLaneManifestV1; 2],
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct OpenVmRvrG2DsoLaneManifestV1 {
+    kind: u16,
+    elem_width: u8,
+    encoding: u8,
+    flags: u32,
+    group_id: u32,
+    arity: u8,
+    reserved: [u8; 3],
+}
+
+const _: () = {
+    assert!(std::mem::size_of::<OpenVmRvrG2DsoLaneManifestV1>() == 16);
+    assert!(std::mem::size_of::<OpenVmRvrG2DsoManifestV1>() == 200);
+};
 
 /// Error during compilation.
 #[derive(Debug, thiserror::Error)]
@@ -479,6 +583,17 @@ fn collect_inline_records_meta<F: PrimeField32>(
     chips: &ChipMapping,
     admitter: Option<&dyn LogNativeOpcodeAdmitter<F>>,
 ) -> RvrInlineRecordsMeta {
+    let gpu_records = std::env::var("OPENVM_RVR_GPU_RECORDS").ok();
+    collect_inline_records_meta_for_mode(exe, ir, chips, admitter, gpu_records.as_deref())
+}
+
+fn collect_inline_records_meta_for_mode<F: PrimeField32>(
+    exe: &VmExe<F>,
+    ir: &[LiftedInstr],
+    chips: &ChipMapping,
+    admitter: Option<&dyn LogNativeOpcodeAdmitter<F>>,
+    gpu_records: Option<&str>,
+) -> RvrInlineRecordsMeta {
     let num_slots = exe.program.instructions_and_debug_infos.len();
     let pc_base = u64::from(exe.program.pc_base);
     let mut pc_slots = vec![false; num_slots];
@@ -490,11 +605,12 @@ fn collect_inline_records_meta<F: PrimeField32>(
     // records to decode, so allowing arena-native metadata under a compact
     // request would make the GPU builder request one shape while generated C
     // emits another. Keep this decision in the shared host/codegen metadata.
-    let gpu_records = std::env::var("OPENVM_RVR_GPU_RECORDS").ok();
-    let compact_wire_requested = gpu_records.as_deref() == Some("compact");
-    let delta_records_requested = gpu_records.as_deref() == Some("delta");
-    let arena_native_enabled =
-        std::env::var("OPENVM_RVR_ARENA_NATIVE").as_deref() != Ok("0") && !compact_wire_requested;
+    let compact_wire_requested = matches!(gpu_records, Some("compact" | "g2"));
+    let delta_records_requested = gpu_records == Some("delta");
+    let g2_requested = gpu_records == Some("g2");
+    let arena_native_enabled = (gpu_records == Some("arena-native")
+        || std::env::var("OPENVM_RVR_ARENA_NATIVE").as_deref() != Ok("0"))
+        && !compact_wire_requested;
     {
         let mut record = |pc: u64, shape: InlineRecordShape| {
             let Some(offset) = pc.checked_sub(pc_base) else {
@@ -620,6 +736,52 @@ fn collect_inline_records_meta<F: PrimeField32>(
     } else {
         None
     };
+    let g2_supported = g2_requested
+        && delta_decode.as_ref().is_some_and(|precomputed| {
+            precomputed.kind_to_air.len() == 1
+                && precomputed.kind_to_air[0].0 == 29
+                && exe
+                    .program
+                    .instructions_and_debug_infos
+                    .iter()
+                    .enumerate()
+                    .all(|(slot, instruction)| {
+                        if instruction.is_none() {
+                            return true;
+                        }
+                        let Some(TraceChipIndex::Chip(_)) = chips.pc_to_chip.get(slot) else {
+                            return instruction.as_ref().is_some_and(|(instruction, _)| {
+                                instruction.opcode == SystemOpcode::TERMINATE.global_opcode()
+                            });
+                        };
+                        precomputed.entries.get(slot).is_some_and(|entry| {
+                            pc_slots.get(slot).copied().unwrap_or(false)
+                                && entry.access_pattern == 8
+                                && entry.air_idx != u8::MAX
+                                && instruction.as_ref().is_some_and(|(instruction, _)| {
+                                    admitter
+                                        .and_then(|admitter| {
+                                            admitter.inline_arena_geometry_for(instruction)
+                                        })
+                                        .is_some_and(|geometry| {
+                                            matches!(geometry.layout, ArenaNativeLayout::AddI(_))
+                                        })
+                                })
+                        })
+                    })
+        });
+    if g2_requested && !g2_supported {
+        tracing::info!(
+            "G2 Phase-1 AddI negotiation rejected this executable; selecting arena route before native execution"
+        );
+        return collect_inline_records_meta_for_mode(
+            exe,
+            ir,
+            chips,
+            admitter,
+            Some("arena-native"),
+        );
+    }
     let arena_native_airs = arena_native
         .into_iter()
         .filter_map(|(air, geometry)| geometry.map(|g| (air, g)))
@@ -653,6 +815,7 @@ fn collect_inline_records_meta<F: PrimeField32>(
         delta_records: delta_records_requested,
         delta_decode: delta_decode.map(Arc::new),
         fully_direct_delta,
+        g2: None,
     }
 }
 
@@ -726,6 +889,208 @@ fn build_delta_decode_precompute<F: PrimeField32>(
     }
 }
 
+fn build_g2_meta_v1<F: PrimeField32>(
+    exe: &VmExe<F>,
+    chips: &ChipMapping,
+    decode: &RvrDeltaDecodePrecompute,
+    blocks: &[rvr_openvm_ir::Block],
+    admitter: &dyn LogNativeOpcodeAdmitter<F>,
+) -> Result<RvrG2MetaV1, CompileError> {
+    let [(kind, addi_air_idx)] = decode.kind_to_air.as_slice() else {
+        return Err(CompileError::InvalidOptions(
+            "G2 Phase 1 requires exactly the AddI device-decode AIR",
+        ));
+    };
+    if *kind != 29 {
+        return Err(CompileError::InvalidOptions(
+            "G2 Phase 1 negotiated a non-AddI device-decode AIR",
+        ));
+    }
+    let mut addi_geometry = None;
+    for (slot, program_entry) in exe.program.instructions_and_debug_infos.iter().enumerate() {
+        let Some((instruction, _)) = program_entry else {
+            continue;
+        };
+        let Some(entry) = decode.entries.get(slot) else {
+            continue;
+        };
+        if entry.air_idx as usize != *addi_air_idx || entry.access_pattern != 8 {
+            continue;
+        }
+        let geometry =
+            admitter
+                .inline_arena_geometry_for(instruction)
+                .ok_or(CompileError::InvalidOptions(
+                    "G2 AddI AIR has no registry geometry",
+                ))?;
+        if !matches!(geometry.layout, ArenaNativeLayout::AddI(_))
+            || addi_geometry.is_some_and(|previous| previous != geometry)
+        {
+            return Err(CompileError::InvalidOptions(
+                "G2 AddI AIR registry geometry is inconsistent",
+            ));
+        }
+        addi_geometry = Some(geometry);
+    }
+    let addi_geometry = addi_geometry.ok_or(CompileError::InvalidOptions(
+        "G2 AddI AIR is absent from the registry manifest",
+    ))?;
+    let pc_base = u64::from(exe.program.pc_base);
+    let mut block_entries = Vec::with_capacity(blocks.len());
+    for block in blocks {
+        let offset = block
+            .start_pc
+            .checked_sub(pc_base)
+            .ok_or(CompileError::InvalidOptions(
+                "G2 block starts below the program pc base",
+            ))?;
+        if !offset.is_multiple_of(u64::from(DEFAULT_PC_STEP)) || block.insn_count() == 0 {
+            return Err(CompileError::InvalidOptions(
+                "G2 static block table contains an invalid entry",
+            ));
+        }
+        let program_slot = u32::try_from(offset / u64::from(DEFAULT_PC_STEP)).map_err(|_| {
+            CompileError::InvalidOptions("G2 program slot exceeds the frozen u32 schema")
+        })?;
+        if program_slot as usize >= exe.program.instructions_and_debug_infos.len() {
+            return Err(CompileError::InvalidOptions(
+                "G2 block entry exceeds the program table",
+            ));
+        }
+        block_entries.push(RvrG2BlockEntryV1 {
+            program_slot,
+            instruction_count: block.insn_count(),
+        });
+    }
+    block_entries.sort_unstable_by_key(|entry| entry.program_slot);
+    if block_entries
+        .windows(2)
+        .any(|pair| pair[0].program_slot == pair[1].program_slot)
+    {
+        return Err(CompileError::InvalidOptions(
+            "G2 static block table contains duplicate entries",
+        ));
+    }
+
+    let mut program_table = Sha256::new();
+    program_table.update(b"openvm-rvr-g2-program-table-v1\0");
+    program_table.update(exe.program.pc_base.to_le_bytes());
+    program_table.update(exe.pc_start.to_le_bytes());
+    program_table.update((exe.program.instructions_and_debug_infos.len() as u64).to_le_bytes());
+    for (slot, entry) in exe.program.instructions_and_debug_infos.iter().enumerate() {
+        let Some((instruction, _)) = entry else {
+            program_table.update([0]);
+            continue;
+        };
+        program_table.update([1]);
+        program_table.update((instruction.opcode.as_usize() as u64).to_le_bytes());
+        for operand in [
+            instruction.a,
+            instruction.b,
+            instruction.c,
+            instruction.d,
+            instruction.e,
+            instruction.f,
+            instruction.g,
+        ] {
+            program_table.update(operand.as_canonical_u32().to_le_bytes());
+        }
+        match chips.pc_to_chip.get(slot) {
+            Some(TraceChipIndex::Chip(air)) => {
+                program_table.update([1]);
+                program_table.update(air.as_u32().to_le_bytes());
+            }
+            _ => program_table.update([0]),
+        }
+        let operand = decode.entries.get(slot).copied().unwrap_or_default();
+        program_table.update(operand.a.to_le_bytes());
+        program_table.update(operand.b.to_le_bytes());
+        program_table.update(operand.c.to_le_bytes());
+        program_table.update(operand.filtered_index.to_le_bytes());
+        program_table.update([
+            operand.air_idx,
+            operand.local_opcode,
+            operand.flags,
+            operand.access_pattern,
+        ]);
+    }
+    let program_fingerprint: [u8; 32] = program_table.finalize().into();
+
+    let mut block_table = Sha256::new();
+    block_table.update(b"openvm-rvr-g2-static-block-table-v1\0");
+    block_table.update((block_entries.len() as u64).to_le_bytes());
+    for entry in &block_entries {
+        block_table.update(entry.program_slot.to_le_bytes());
+        block_table.update(entry.instruction_count.to_le_bytes());
+    }
+    let block_fingerprint: [u8; 32] = block_table.finalize().into();
+
+    let air_manifest_fingerprint = g2_air_manifest_fingerprint(*addi_air_idx, addi_geometry)?;
+
+    let mut fingerprint = Sha256::new();
+    fingerprint.update(b"openvm-rvr-g2-private-wire-v1\0");
+    fingerprint.update(1u16.to_le_bytes());
+    fingerprint.update(b"header:magic8,version2,header_bytes2,lane_count2,flags2,segment_id4,instruction_count4,run_count4,residual_count4,fingerprint32;");
+    fingerprint.update(
+        b"lane:kind2,width1,encoding1,flags4,count4,payload_bytes4,offset8,group4,reserved4;",
+    );
+    fingerprint.update(
+        b"lane:0001,width4,fixed,required,arity=run;lane:013a,width8,fixed,required,arity=addi;",
+    );
+    fingerprint.update(program_fingerprint);
+    fingerprint.update(block_fingerprint);
+    fingerprint.update(air_manifest_fingerprint);
+
+    Ok(RvrG2MetaV1 {
+        fingerprint: fingerprint.finalize().into(),
+        program_fingerprint,
+        block_fingerprint,
+        air_manifest_fingerprint,
+        blocks: Arc::new(block_entries),
+        addi_air_idx: *addi_air_idx,
+    })
+}
+
+fn g2_air_manifest_fingerprint(
+    addi_air_idx: usize,
+    geometry: ArenaNativeGeometry,
+) -> Result<[u8; 32], CompileError> {
+    let ArenaNativeLayout::AddI(offsets) = geometry.layout else {
+        return Err(CompileError::InvalidOptions(
+            "G2 Phase 1 registry manifest contains a non-AddI layout",
+        ));
+    };
+    let mut air_manifest = Sha256::new();
+    air_manifest.update(b"openvm-rvr-g2-air-registry-manifest-v1\0");
+    air_manifest.update(1u32.to_le_bytes());
+    air_manifest.update((addi_air_idx as u64).to_le_bytes());
+    air_manifest.update([1]); // Dense arena flavor.
+    for value in [
+        geometry.adapter_size,
+        geometry.adapter_align,
+        geometry.core_size,
+        geometry.core_align,
+        geometry.core_off_matrix,
+        geometry.core_off_dense(),
+        geometry.stride_dense(),
+        offsets.from_pc,
+        offsets.from_timestamp,
+        offsets.rd_ptr,
+        offsets.rs1_ptr,
+        offsets.read_prev_ts,
+        offsets.write_prev_ts,
+        offsets.write_prev_data,
+        offsets.core_rs1,
+        offsets.core_imm_low11,
+        offsets.core_imm_sign,
+    ] {
+        air_manifest.update((value as u64).to_le_bytes());
+    }
+    // No opaque custom layout is admitted in the Phase-1 AddI scaffold.
+    air_manifest.update([0u8; 32]);
+    Ok(air_manifest.finalize().into())
+}
+
 /// Fail cheaply during native-project preparation if the requested GPU
 /// record shape and the shape encoded in compile metadata diverge. Under a
 /// compact request every inline AIR (including mixed LoadStore/REVEAL) must
@@ -735,6 +1100,7 @@ fn validate_requested_inline_record_shape(
 ) -> Result<(), CompileError> {
     let requested = std::env::var("OPENVM_RVR_GPU_RECORDS").ok();
     let invalid_arena = requested.as_deref() == Some("compact")
+        || requested.as_deref() == Some("g2") && inline_meta.delta_decode.is_some()
         || requested.as_deref() == Some("delta")
             && inline_meta.arena_native_airs.iter().any(|(_, geometry)| {
                 !matches!(
@@ -1087,12 +1453,12 @@ fn compile_impl<F: PrimeField32>(
     if opts.execution_kind == RvrExecutionKind::Preflight
         && matches!(
             std::env::var("OPENVM_RVR_GPU_RECORDS").as_deref(),
-            Ok("compact" | "delta")
+            Ok("compact" | "delta" | "g2")
         )
         && !inline_records
     {
         return Err(CompileError::InvalidOptions(
-            "OPENVM_RVR_GPU_RECORDS=compact|delta requires inline record emission",
+            "OPENVM_RVR_GPU_RECORDS=compact|delta|g2 requires inline record emission",
         ));
     }
     let (chips, num_airs) = match opts.execution_kind {
@@ -1175,6 +1541,37 @@ fn compile_impl<F: PrimeField32>(
     }
     let inline_meta_elapsed = inline_meta_started.elapsed();
 
+    // G2 binds the exact generated basic-block table, so it performs CFG
+    // construction before a cache lookup. Established routes retain their
+    // fast cache-hit path and do not pay this scan.
+    let g2_negotiated = std::env::var("OPENVM_RVR_GPU_RECORDS").as_deref() == Ok("g2")
+        && inline_meta
+            .delta_decode
+            .as_ref()
+            .is_some_and(|precomputed| {
+                precomputed.kind_to_air.len() == 1 && precomputed.kind_to_air[0].0 == 29
+            });
+    let mut prebuilt_blocks = None;
+    if g2_negotiated {
+        let valid_pcs: std::collections::HashSet<u64> = ir.iter().map(|li| li.pc()).collect();
+        let extra_targets = opts
+            .extensions
+            .extra_cfg_targets(&exe.init_memory, &valid_pcs);
+        let blocks = build_blocks(&ir, &extra_targets);
+        inline_meta.g2 = Some(Arc::new(build_g2_meta_v1(
+            exe,
+            chips.expect("G2 preflight chip mapping checked above"),
+            inline_meta
+                .delta_decode
+                .as_deref()
+                .expect("G2 negotiation requires operand metadata"),
+            &blocks,
+            opts.preflight_assembler_admitter
+                .expect("G2 negotiation requires the assembler registry"),
+        )?));
+        prebuilt_blocks = Some(blocks);
+    }
+
     let cache_env = match opts.execution_kind {
         RvrExecutionKind::Metered | RvrExecutionKind::MeteredSegment => {
             Some("OPENVM_RVR_METERED_LIB")
@@ -1256,6 +1653,7 @@ fn compile_impl<F: PrimeField32>(
                     );
                 }
                 compiled.inline_records = inline_meta;
+                compiled.validate_g2_manifest()?;
                 return Ok(compiled);
             }
         }
@@ -1271,11 +1669,15 @@ fn compile_impl<F: PrimeField32>(
     // code pointers and dominates cache-hit preparation for large guests.
     // It is needed only when a project must actually be regenerated.
     let cfg_started = Instant::now();
-    let valid_pcs: std::collections::HashSet<u64> = ir.iter().map(|li| li.pc()).collect();
-    let extra_targets = opts
-        .extensions
-        .extra_cfg_targets(&exe.init_memory, &valid_pcs);
-    let blocks = build_blocks(&ir, &extra_targets);
+    let blocks = if let Some(blocks) = prebuilt_blocks {
+        blocks
+    } else {
+        let valid_pcs: std::collections::HashSet<u64> = ir.iter().map(|li| li.pc()).collect();
+        let extra_targets = opts
+            .extensions
+            .extra_cfg_targets(&exe.init_memory, &valid_pcs);
+        build_blocks(&ir, &extra_targets)
+    };
     let cfg_elapsed = cfg_started.elapsed();
 
     let temp_root = std::env::temp_dir();
@@ -1373,6 +1775,20 @@ fn compile_impl<F: PrimeField32>(
                     .iter()
                     .map(|&(air, geometry)| (air as u32, geometry))
                     .collect();
+                if let Some(g2) = inline_meta.g2.as_deref() {
+                    project.g2_records = true;
+                    project.g2_manifest = Some(G2DsoManifestConfigV1 {
+                        fingerprint: g2.fingerprint,
+                        program_fingerprint: g2.program_fingerprint,
+                        block_fingerprint: g2.block_fingerprint,
+                        air_manifest_fingerprint: g2.air_manifest_fingerprint,
+                        pc_base: exe.program.pc_base,
+                        block_count: u32::try_from(g2.blocks.len())
+                            .expect("G2 static block count exceeds u32"),
+                        addi_air_idx: u32::try_from(g2.addi_air_idx)
+                            .expect("G2 AddI AIR exceeds u32"),
+                    });
+                }
             }
         }
     }
@@ -1472,6 +1888,7 @@ fn compile_impl<F: PrimeField32>(
                     "loading project-validated rvr artifact and upgrading input cache"
                 );
                 compiled.inline_records = inline_meta;
+                compiled.validate_g2_manifest()?;
                 return Ok(compiled);
             }
         }
@@ -1517,6 +1934,7 @@ fn compile_impl<F: PrimeField32>(
         num_airs,
         inline_records: inline_meta,
     };
+    compiled.validate_g2_manifest()?;
     if let (Some(cache), Some(cache_key)) = (cache, project_key) {
         publish_preflight_cache(
             &compiled,
@@ -1879,6 +2297,14 @@ fn generated_project_input_cache_key<F: PrimeField32>(
     hasher.update([inline_meta.delta_records as u8]);
     update_debug(&mut hasher, &inline_meta.delta_decode)?;
     hasher.update([inline_meta.fully_direct_delta as u8]);
+    if let Some(g2) = inline_meta.g2.as_deref() {
+        hasher.update([1]);
+        hasher.update(g2.fingerprint);
+        update_debug(&mut hasher, &g2.blocks)?;
+        hasher.update((g2.addi_air_idx as u64).to_le_bytes());
+    } else {
+        hasher.update([0]);
+    }
 
     // Registry selection and embedded assets can vary independently of the
     // VmExe. Hash their actual bytes so dynamically linked consumers retain
@@ -2348,6 +2774,7 @@ mod tests {
     use rvr_openvm_lift::RvrExtension;
 
     use super::*;
+    use crate::arch::rvr::AddIArenaFieldOffsets;
 
     struct UnfingerprintedExtension;
 
@@ -2410,5 +2837,40 @@ mod tests {
             fs::write(&path, invalid).unwrap();
             assert_eq!(read_preflight_cache_manifest(&path), None);
         }
+    }
+
+    #[test]
+    fn g2_air_manifest_binds_registry_geometry_and_air_index() {
+        let geometry = ArenaNativeGeometry {
+            adapter_size: 101,
+            adapter_align: 8,
+            core_size: 37,
+            core_align: 4,
+            core_off_matrix: 104,
+            layout: ArenaNativeLayout::AddI(AddIArenaFieldOffsets {
+                from_pc: 1,
+                from_timestamp: 2,
+                rd_ptr: 3,
+                rs1_ptr: 4,
+                read_prev_ts: 5,
+                write_prev_ts: 6,
+                write_prev_data: 7,
+                core_rs1: 8,
+                core_imm_low11: 9,
+                core_imm_sign: 10,
+            }),
+        };
+        let fingerprint = g2_air_manifest_fingerprint(7, geometry).unwrap();
+
+        let mut changed_geometry = geometry;
+        changed_geometry.adapter_size += 1;
+        assert_ne!(
+            fingerprint,
+            g2_air_manifest_fingerprint(7, changed_geometry).unwrap()
+        );
+        assert_ne!(
+            fingerprint,
+            g2_air_manifest_fingerprint(8, geometry).unwrap()
+        );
     }
 }

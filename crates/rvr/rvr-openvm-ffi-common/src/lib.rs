@@ -54,7 +54,7 @@ pub const PREFLIGHT_DELTA_MEMORY_LOG_ENTRY_ALIGN: usize = 8;
 // all-direct delta route; their host counterparts remain absent elsewhere.
 // L2 appends block-run/device-chronology buffers used to reconstruct the
 // filtered program frequencies without per-instruction host accounting.
-pub const PREFLIGHT_TRACER_DATA_SIZE: usize = 264;
+pub const PREFLIGHT_TRACER_DATA_SIZE: usize = 272;
 pub const PREFLIGHT_TRACER_DATA_ALIGN: usize = 8;
 /// One entry in the preflight touched-block buffer: the address space and the
 /// block-aligned byte address of a block touched (for the first time) this
@@ -137,6 +137,99 @@ pub const PREFLIGHT_RW1_RECORD_SIZE: usize = 32;
 /// values. The three access previous-timestamps are implicit in chronological
 /// stream order and are reconstructed by the decoder.
 pub const PREFLIGHT_DELTA_RECORD_SIZE: usize = 24;
+
+// ── G2 private compact wire v1 ─────────────────────────────────────────
+
+/// Private transport version. This is a prover-side wire contract only; it is
+/// deliberately independent of AIR, VK, and public record schemas.
+pub const G2_WIRE_VERSION_V1: u16 = 1;
+pub const G2_SEGMENT_MAGIC_V1: [u8; 8] = *b"OVMG2W1\0";
+pub const G2_SEGMENT_HEADER_V1_SIZE: usize = 64;
+pub const G2_LANE_DESC_V1_SIZE: usize = 32;
+pub const G2_WIRE_ALIGNMENT: usize = 128;
+
+pub const G2_FLAG_COMMITTED: u16 = 1 << 0;
+pub const G2_FLAG_U32_POINTERS: u16 = 1 << 1;
+pub const G2_FLAG_SPLIT_RESIDUAL: u16 = 1 << 2;
+pub const G2_FLAG_STATIC_BLOCK_IDS: u16 = 1 << 3;
+pub const G2_FLAGS_V1: u16 =
+    G2_FLAG_U32_POINTERS | G2_FLAG_SPLIT_RESIDUAL | G2_FLAG_STATIC_BLOCK_IDS;
+
+pub const G2_LANE_FLAG_REQUIRED: u32 = 1 << 0;
+pub const G2_LANE_FLAG_ATOMIC_GROUP: u32 = 1 << 1;
+pub const G2_LANE_FLAG_OPAQUE_FINAL: u32 = 1 << 2;
+
+pub const G2_ENCODING_FIXED_LE: u8 = 0;
+pub const G2_ENCODING_OPAQUE_FINAL: u8 = 1;
+pub const G2_LANE_RUN_BLOCK_ID: u16 = 0x0001;
+/// `0x0100 + 2 * DeltaAirKind::AddI`.
+pub const G2_LANE_ADDI_V0: u16 = 0x013a;
+
+/// Frozen 64-byte segment header. Producers write this with `flags` lacking
+/// [`G2_FLAG_COMMITTED`], then publish that bit with a release store.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct G2SegmentHeaderV1 {
+    pub magic: [u8; 8],
+    pub version: u16,
+    pub header_bytes: u16,
+    pub lane_count: u16,
+    pub flags: u16,
+    pub segment_id: u32,
+    pub instruction_count: u32,
+    pub run_count: u32,
+    pub residual_event_count: u32,
+    pub schema_fingerprint: [u8; 32],
+}
+
+/// Frozen 32-byte lane descriptor. Descriptors are unique and sorted by
+/// `kind`; every payload offset and the total segment size are 128-aligned.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct G2LaneDescV1 {
+    pub kind: u16,
+    pub elem_width: u8,
+    pub encoding: u8,
+    pub flags: u32,
+    pub count: u32,
+    pub payload_bytes: u32,
+    pub offset: u64,
+    pub group_id: u32,
+    pub reserved: u32,
+}
+
+/// Mutable lane cursors passed to generated C. Payloads are written directly
+/// into their final positions in one backing; Rust only validates these two
+/// cursors and publishes the header/descriptors after native execution.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct G2ProducerV1 {
+    pub base: *mut u8,
+    pub capacity: u64,
+    pub run_offset: u64,
+    pub addi_offset: u64,
+    pub run_len: u32,
+    pub run_cap: u32,
+    pub addi_len: u32,
+    pub addi_cap: u32,
+    pub instruction_count: u32,
+    pub overflow: u32,
+}
+
+pub const G2_PRODUCER_V1_SIZE: usize = 56;
+pub const G2_PRODUCER_V1_ALIGN: usize = 8;
+
+const _: () = {
+    assert!(std::mem::size_of::<G2SegmentHeaderV1>() == G2_SEGMENT_HEADER_V1_SIZE);
+    assert!(std::mem::align_of::<G2SegmentHeaderV1>() == 4);
+    assert!(std::mem::offset_of!(G2SegmentHeaderV1, flags) == 14);
+    assert!(std::mem::offset_of!(G2SegmentHeaderV1, schema_fingerprint) == 32);
+    assert!(std::mem::size_of::<G2LaneDescV1>() == G2_LANE_DESC_V1_SIZE);
+    assert!(std::mem::align_of::<G2LaneDescV1>() == 8);
+    assert!(std::mem::offset_of!(G2LaneDescV1, offset) == 16);
+    assert!(std::mem::size_of::<G2ProducerV1>() == G2_PRODUCER_V1_SIZE);
+    assert!(std::mem::align_of::<G2ProducerV1>() == G2_PRODUCER_V1_ALIGN);
+};
 
 const _: () = assert!(MEM_SIZE / WORD_SIZE <= u32::MAX as usize);
 

@@ -158,6 +158,72 @@ pub mod rvr_delta_cuda {
     }
 }
 
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+pub mod rvr_g2_cuda {
+    use super::*;
+    use crate::rvr_gpu_decode::DeviceOperandEntry;
+
+    extern "C" {
+        fn _rvr_g2_addi_predecode(
+            d_wire: DeviceBufferView,
+            d_expected_fingerprint: *const u8,
+            d_blocks: *const openvm_circuit::arch::rvr::RvrG2BlockEntryV1,
+            block_count: usize,
+            d_operands: *const DeviceOperandEntry,
+            operand_count: usize,
+            pc_base: u32,
+            d_initial_memory: DeviceBufferView,
+            initial_timestamp: u32,
+            expected_addi_count: usize,
+            d_program_frequencies: *mut u32,
+            frequency_count: usize,
+            d_addi_output: DeviceBufferView,
+            d_touched_output: DeviceBufferView,
+            d_touched_count: *mut u32,
+            d_error: *mut u32,
+            stream: cudaStream_t,
+        ) -> i32;
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn predecode(
+        d_wire: &DeviceBuffer<u8>,
+        d_expected_fingerprint: &DeviceBuffer<u8>,
+        d_blocks: &DeviceBuffer<openvm_circuit::arch::rvr::RvrG2BlockEntryV1>,
+        d_operands: &DeviceBuffer<u8>,
+        pc_base: u32,
+        d_initial_memory: &DeviceBuffer<openvm_circuit::system::cuda::memory::DeviceInitialMemory>,
+        initial_timestamp: u32,
+        expected_addi_count: usize,
+        d_program_frequencies: &DeviceBuffer<u32>,
+        d_addi_output: &DeviceBuffer<u8>,
+        d_touched_output: &DeviceBuffer<u32>,
+        d_touched_count: &DeviceBuffer<u32>,
+        d_error: &DeviceBuffer<u32>,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_rvr_g2_addi_predecode(
+            d_wire.view(),
+            d_expected_fingerprint.as_ptr(),
+            d_blocks.as_ptr(),
+            d_blocks.len(),
+            d_operands.as_ptr().cast(),
+            d_operands.len() / std::mem::size_of::<DeviceOperandEntry>(),
+            pc_base,
+            d_initial_memory.view(),
+            initial_timestamp,
+            expected_addi_count,
+            d_program_frequencies.as_mut_ptr(),
+            d_program_frequencies.len(),
+            d_addi_output.view(),
+            d_touched_output.view(),
+            d_touched_count.as_mut_ptr(),
+            d_error.as_mut_ptr(),
+            stream,
+        ))
+    }
+}
+
 pub mod auipc_cuda {
     use super::*;
 

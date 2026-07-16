@@ -71,6 +71,21 @@ typedef struct DeviceProgramEntry {
   uint32_t filtered_index;
 } DeviceProgramEntry;
 
+/* G2 private wire cursors. Generated C writes the two payload lanes directly
+ * into their final positions. Rust owns and publishes the common header. */
+typedef struct G2ProducerV1 {
+  uint8_t* base;
+  uint64_t capacity;
+  uint64_t run_offset;
+  uint64_t addi_offset;
+  uint32_t run_len;
+  uint32_t run_cap;
+  uint32_t addi_len;
+  uint32_t addi_cap;
+  uint32_t instruction_count;
+  uint32_t overflow;
+} G2ProducerV1;
+
 static constexpr uint32_t PREFLIGHT_PROGRAM_WRITE_COMPLETE = 1u;
 static constexpr uint32_t PREFLIGHT_PROGRAM_CROSSING_RESIDUAL = 2u;
 
@@ -234,6 +249,7 @@ typedef struct Tracer {
   uint32_t program_instruction_len;
   uint32_t device_program_references_len;
   uint32_t device_program_references_cap;
+  G2ProducerV1* g2;
 } Tracer;
 
 _Static_assert(sizeof(ProgramLogEntry) == PREFLIGHT_PROGRAM_LOG_ENTRY_SIZE,
@@ -254,6 +270,8 @@ _Static_assert(sizeof(DeviceProgramEntry) == PREFLIGHT_DEVICE_PROGRAM_ENTRY_SIZE
                "DeviceProgramEntry size drift");
 _Static_assert(_Alignof(DeviceProgramEntry) == PREFLIGHT_DEVICE_PROGRAM_ENTRY_ALIGN,
                "DeviceProgramEntry align drift");
+_Static_assert(sizeof(G2ProducerV1) == 56, "G2ProducerV1 size drift");
+_Static_assert(_Alignof(G2ProducerV1) == 8, "G2ProducerV1 align drift");
 _Static_assert(sizeof(MemoryLogEntry) == PREFLIGHT_MEMORY_LOG_ENTRY_SIZE,
                "MemoryLogEntry size drift");
 _Static_assert(_Alignof(MemoryLogEntry) == PREFLIGHT_MEMORY_LOG_ENTRY_ALIGN,
@@ -372,6 +390,7 @@ _Static_assert(offsetof(Tracer, program_runs_len) == 240,
                "Tracer program_runs_len offset drift");
 _Static_assert(offsetof(Tracer, program_runs_cap) == 244,
                "Tracer program_runs_cap offset drift");
+_Static_assert(offsetof(Tracer, g2) == 264, "Tracer g2 offset drift");
 _Static_assert(offsetof(Tracer, program_instruction_len) == 248,
                "Tracer program_instruction_len offset drift");
 _Static_assert(offsetof(Tracer, device_program_references_len) == 252,
@@ -583,7 +602,43 @@ preflight_take_custom_memory_events(Tracer* restrict t, uint32_t event_count) {
 
 static __attribute__((always_inline)) inline bool preflight_device_trace_pc(
     Tracer* restrict t, uint64_t pc, uint32_t exec_idx) {
-  return false;
+  return t->g2 != NULL;
+}
+
+static __attribute__((always_inline)) inline void preflight_g2_emit_run(
+    RvState* restrict state, uint32_t program_slot,
+    uint32_t instruction_count) {
+  G2ProducerV1* restrict g2 = state->tracer->g2;
+  if (unlikely(g2 == NULL)) {
+    return;
+  }
+  uint32_t index = g2->run_len++;
+  uint32_t next = g2->instruction_count + instruction_count;
+  if (unlikely(g2->base == NULL || index >= g2->run_cap ||
+               next < g2->instruction_count ||
+               g2->run_offset + (uint64_t)(index + 1u) * sizeof(uint32_t) >
+                   g2->capacity)) {
+    g2->overflow = 1u;
+    return;
+  }
+  ((uint32_t*)(g2->base + g2->run_offset))[index] = program_slot;
+  g2->instruction_count = next;
+}
+
+static __attribute__((always_inline)) inline void preflight_g2_emit_addi(
+    RvState* restrict state, uint64_t rs1_value) {
+  G2ProducerV1* restrict g2 = state->tracer->g2;
+  if (unlikely(g2 == NULL)) {
+    return;
+  }
+  uint32_t index = g2->addi_len++;
+  if (unlikely(g2->base == NULL || index >= g2->addi_cap ||
+               g2->addi_offset + (uint64_t)(index + 1u) * sizeof(uint64_t) >
+                   g2->capacity)) {
+    g2->overflow = 1u;
+    return;
+  }
+  ((uint64_t*)(g2->base + g2->addi_offset))[index] = rs1_value;
 }
 
 /* The shared extension wrapper exports this symbol for every tracer mode.

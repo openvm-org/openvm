@@ -17,7 +17,8 @@ pub use emit::{
     inline_record_shape_for_instr, inline_record_shape_for_terminator,
     instr_emits_inline_record, AddIArenaFieldOffsets, Alu3ArenaFieldOffsets,
     Alu3WArenaFieldOffsets, ArenaNativeGeometry, ArenaNativeLayout, Branch2ArenaFieldOffsets,
-    CProject, EmitContext, InlineRecordShape, InvalidRvrExecutionKind, LoadStoreArenaFieldOffsets,
+    CProject, EmitContext, G2DsoManifestConfigV1, InlineRecordShape, InvalidRvrExecutionKind,
+    LoadStoreArenaFieldOffsets,
     RvrExecutionKind, Rw1ArenaFieldOffsets, Wr1ArenaFieldOffsets,
 };
 pub use toolchain::{

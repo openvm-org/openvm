@@ -2161,6 +2161,7 @@ where
                     // consumer. Otherwise retain the complete host access
                     // replay and fail-closed generic assembly path.
                     let fully_direct_delta = compiled.inline_records().fully_direct_delta;
+                    let g2 = compiled.inline_records().g2.is_some();
                     // The AOT classification is backend-neutral. CPU builders
                     // intentionally advertise no delta-wire AIRs and must
                     // retain the full host replay. The only safe empty-wire
@@ -2173,13 +2174,14 @@ where
                         .delta_decode
                         .as_ref()
                         .is_some_and(|precomputed| precomputed.kind_to_air.is_empty());
-                    if compiled.inline_records().delta_records {
+                    if compiled.inline_records().delta_records || g2 {
                         // Stage-2 uses one cross-AIR chronological backing,
                         // not the per-AIR G2 wire targets.
                         wire_airs.clear();
                     }
                     let compact_delta_memory = fully_direct_delta && has_device_delta_route;
-                    let device_touched_memory = fully_direct_delta && has_device_delta_route;
+                    let device_touched_memory =
+                        (fully_direct_delta || g2) && has_device_delta_route;
                     wire_airs.sort_unstable();
                     CachedRvrPreflight::Rvr(Box::new(CachedRvrCompiledPreflight {
                         compiled,
@@ -2188,7 +2190,7 @@ where
                         pool,
                         pc_to_air_idx,
                         wire_airs,
-                        build_access_aux: !(fully_direct_delta
+                        build_access_aux: !((fully_direct_delta || g2)
                             && (has_device_delta_route || all_custom_arena)),
                         compact_delta_memory,
                         device_touched_memory,

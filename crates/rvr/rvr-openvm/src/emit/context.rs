@@ -120,6 +120,9 @@ pub struct EmitContext<'a> {
     /// 24-byte record into a block-reserved span instead of a per-AIR wire.
     delta_records: bool,
     delta_batch: Option<(String, u32)>,
+    /// G2 v1 compact lanes. This is mutually exclusive with delta/arena and
+    /// currently admits only AddI at compile time.
+    g2_records: bool,
     /// Chip (AIR) index of the instruction currently being emitted, or
     /// `u32::MAX` if it maps to no chip. Set per instruction by the block emit
     /// loop before `emit_c`.
@@ -178,6 +181,7 @@ impl<'a> EmitContext<'a> {
             inline_records: false,
             delta_records: false,
             delta_batch: None,
+            g2_records: false,
             current_chip_idx: u32::MAX,
             current_pc: 0,
             arena_native_airs: std::collections::BTreeMap::new(),
@@ -192,6 +196,10 @@ impl<'a> EmitContext<'a> {
     pub(crate) fn set_delta_records(&mut self, enabled: bool, batch: Option<String>) {
         self.delta_records = enabled;
         self.delta_batch = batch.map(|base| (base, 0));
+    }
+
+    pub(crate) fn set_g2_records(&mut self, enabled: bool) {
+        self.g2_records = enabled;
     }
 
     /// R4: set the airs whose records are emitted arena-native.
@@ -846,6 +854,26 @@ impl<'a> EmitContext<'a> {
         imm_value: u64,
         arena: Option<ArenaAddIBaked>,
     ) {
+        if self.g2_records {
+            debug_assert!(!self.delta_records);
+            let v1 = if rs1 == 0 {
+                "0".to_string()
+            } else {
+                let value = self.next_var();
+                self.write_line(&format!("uint64_t {value} = reg_read(state, {rs1});"));
+                value
+            };
+            let result = self.next_var();
+            self.write_line(&format!(
+                "uint64_t {result} = {v1} + 0x{imm_value:016x}ull;"
+            ));
+            self.write_line(&format!("preflight_g2_emit_addi(state, {v1});"));
+            self.write_line("state->tracer->timestamp += 2u;");
+            if rd != 0 {
+                self.write_line(&format!("reg_write(state, {rd}, {result});"));
+            }
+            return;
+        }
         let chip = self.current_chip_idx;
         let pc = hex_u32(self.current_pc as u32);
         let fromts = self.next_var();
