@@ -28,7 +28,10 @@
 //! allocations per call, recycles drop). `OPENVM_RVR_ARENA_NATIVE_POOL`
 //! independently gates arena-native backing reuse for controlled A/B runs.
 //! `OPENVM_RVR_PREFLIGHT_THP` gates the `MADV_HUGEPAGE` advice on the large
-//! buffers the same way. All default on.
+//! buffers the same way. CUDA builds pre-stage a small pipeline-depth reserve of resident
+//! arena-native backings; `OPENVM_RVR_CUDA_ARENA_PREWARM_DEPTH=0` disables that reserve, while
+//! `OPENVM_RVR_CUDA_ARENA_POPULATE_MISS=0` restores lazy pages on a reserve/pool miss. All other
+//! switches default on.
 
 use std::{
     any::Any,
@@ -121,6 +124,23 @@ struct PoolInner {
     /// whose cleaner also waits for outstanding device copies before making a backing reusable.
     #[cfg(not(feature = "cuda"))]
     arena_native_dense_backings: HashMap<ArenaNativeBackingKey, Vec<u8>>,
+    /// CUDA startup reserve keyed by AIR geometry. Backings are populated before the segment loop
+    /// so a temporarily delayed page-locked cleaner cannot reintroduce demand faults in preflight.
+    #[cfg(feature = "cuda")]
+    arena_native_dense_prepared: HashMap<ArenaNativeBackingKey, Vec<Vec<u8>>>,
+}
+
+impl Drop for PoolInner {
+    fn drop(&mut self) {
+        #[cfg(feature = "cuda")]
+        for buffers in self.arena_native_dense_prepared.values_mut() {
+            for buffer in buffers.drain(..) {
+                // A prepared buffer may have come from the registered global pool. Returning it
+                // through the quarantine-aware cleaner is the only safe way to release it.
+                crate::arch::cuda::pinned::give_back(buffer, 0);
+            }
+        }
+    }
 }
 
 /// Identity of an arena-native generated-C target. Capacity participates in best-fit selection;
@@ -687,7 +707,41 @@ impl RvrPreflightBufferPool {
         }
         #[cfg(feature = "cuda")]
         {
-            Some(crate::arch::cuda::pinned::take(key.capacity_bytes + 32))
+            let prepared_key = {
+                let inner = self.lock();
+                inner
+                    .arena_native_dense_prepared
+                    .iter()
+                    .filter(|(candidate, buffers)| {
+                        !buffers.is_empty()
+                            && candidate.air == key.air
+                            && candidate.stride_bytes == key.stride_bytes
+                            && candidate.capacity_bytes >= key.capacity_bytes
+                    })
+                    .min_by_key(|(candidate, _)| candidate.capacity_bytes)
+                    .map(|(candidate, _)| *candidate)
+            };
+            if let Some(prepared_key) = prepared_key {
+                let mut inner = self.lock();
+                let buffers = inner
+                    .arena_native_dense_prepared
+                    .get_mut(&prepared_key)
+                    .expect("selected prepared arena-native backing disappeared");
+                let backing = buffers
+                    .pop()
+                    .expect("selected prepared arena-native backing list was empty");
+                if buffers.is_empty() {
+                    inner.arena_native_dense_prepared.remove(&prepared_key);
+                }
+                return Some(backing);
+            }
+
+            let (mut backing, needs_populate) =
+                crate::arch::cuda::pinned::take_with_prefault_status(key.capacity_bytes + 32);
+            if needs_populate && *CUDA_ARENA_POPULATE_MISS {
+                crate::arch::cuda::pinned::populate_write(&mut backing);
+            }
+            Some(backing)
         }
         #[cfg(not(feature = "cuda"))]
         {
@@ -712,6 +766,51 @@ impl RvrPreflightBufferPool {
                 key.air
             );
             Some(backing)
+        }
+    }
+
+    /// Build a resident CUDA reserve for one maximum arena-native AIR geometry. The continuation
+    /// prover calls this once from all metered segment shapes, before the segment loop starts. Two
+    /// backings per AIR provide a normal producer/consumer double buffer; the miss-population path
+    /// above remains the bounded fallback if the asynchronous cleaner falls farther behind.
+    #[cfg(feature = "cuda")]
+    pub(crate) fn prepare_arena_native_dense_backings(&self, key: ArenaNativeBackingKey) {
+        if !self.arena_native_enabled || key.capacity_bytes == 0 {
+            return;
+        }
+        let depth = *CUDA_ARENA_PREWARM_DEPTH;
+        if depth == 0 {
+            return;
+        }
+
+        loop {
+            let prepared = self
+                .lock()
+                .arena_native_dense_prepared
+                .iter()
+                .filter(|(candidate, _)| {
+                    candidate.air == key.air
+                        && candidate.stride_bytes == key.stride_bytes
+                        && candidate.capacity_bytes >= key.capacity_bytes
+                })
+                .map(|(_, buffers)| buffers.len())
+                .sum::<usize>();
+            if prepared >= depth {
+                return;
+            }
+
+            let (mut backing, needs_populate) =
+                crate::arch::cuda::pinned::take_with_prefault_status(key.capacity_bytes + 32);
+            if needs_populate {
+                crate::arch::cuda::pinned::populate_write(&mut backing);
+            }
+            let prepared_key =
+                ArenaNativeBackingKey::new(key.air, key.stride_bytes, backing.len() - 32);
+            self.lock()
+                .arena_native_dense_prepared
+                .entry(prepared_key)
+                .or_default()
+                .push(backing);
         }
     }
 
@@ -1093,6 +1192,22 @@ static SHADOW_LOCALITY: LazyLock<bool> =
 /// materialization and comparison sorting for controlled A/B measurements.
 static REPLAY_FUSION: LazyLock<bool> =
     LazyLock::new(|| !env_flag_is_off("OPENVM_RVR_REPLAY_FUSION"));
+
+/// CUDA Target-1 starvation controls. A double-buffered maximum-shape reserve covers the normal
+/// preflight/H2D overlap. The resident miss fallback preserves latency if cleanup falls farther
+/// behind without weakening the quarantine ownership rule.
+#[cfg(feature = "cuda")]
+static CUDA_ARENA_PREWARM_DEPTH: LazyLock<usize> = LazyLock::new(|| {
+    std::env::var("OPENVM_RVR_CUDA_ARENA_PREWARM_DEPTH")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(2)
+        .min(8)
+});
+
+#[cfg(feature = "cuda")]
+static CUDA_ARENA_POPULATE_MISS: LazyLock<bool> =
+    LazyLock::new(|| !env_flag_is_off("OPENVM_RVR_CUDA_ARENA_POPULATE_MISS"));
 
 /// Best-effort `MADV_HUGEPAGE` over the page-aligned interior of a buffer.
 /// Purely a performance hint; failures are ignored.

@@ -164,6 +164,10 @@ trait CachedRvrPreflightExecutor<F>: Send + Sync {
     /// Grow and fault in all direct-final compact backings before the timed
     /// per-segment preflight call.
     fn prepare_wire_backings(&self, trace_heights: &[u32]);
+
+    /// CUDA: reserve resident maximum-shape arena-native backings before the segment loop.
+    #[cfg(feature = "cuda")]
+    fn prepare_arena_native_backings(&self, trace_heights: &[u32]);
 }
 
 /// The program-dependent, owned pieces of an rvr preflight instance.
@@ -258,6 +262,39 @@ impl<F: PrimeField32> CachedRvrPreflightExecutor<F> for CachedRvrCompiledPreflig
                 .expect("cached wire air missing compiled record size");
             self.pool
                 .prepare_wire_backing(air, trace_heights[air] as usize * wire_size);
+        }
+    }
+
+    #[cfg(feature = "cuda")]
+    fn prepare_arena_native_backings(&self, trace_heights: &[u32]) {
+        let stats_enabled = crate::arch::cuda::pinned::stats_enabled();
+        let before = stats_enabled.then(crate::arch::cuda::pinned::PoolStatsSnapshot::capture);
+        for &(air, ref geometry) in &self.compiled.inline_records().arena_native_airs {
+            let capacity_bytes = trace_heights[air] as usize * geometry.stride_dense();
+            self.pool.prepare_arena_native_dense_backings(
+                crate::arch::rvr::preflight_pool::ArenaNativeBackingKey::new(
+                    air,
+                    geometry.stride_dense(),
+                    capacity_bytes,
+                ),
+            );
+        }
+        if let Some(before) = before {
+            let after = crate::arch::cuda::pinned::PoolStatsSnapshot::capture();
+            eprintln!(
+                "OPENVM_RVR_CUDA_POOL_PREWARM hits={} misses={} populate_calls={} \
+                 populate_bytes={} ready_buffers={} ready_bytes={} pending={} \
+                 quarantined_total={} sync_failures_total={}",
+                after.hits.saturating_sub(before.hits),
+                after.misses.saturating_sub(before.misses),
+                after.populate_calls.saturating_sub(before.populate_calls),
+                after.populate_bytes.saturating_sub(before.populate_bytes),
+                after.ready_buffers,
+                after.ready_bytes,
+                after.pending,
+                after.quarantined,
+                after.sync_failures,
+            );
         }
     }
 }
@@ -2228,6 +2265,24 @@ where
         let metered_interpreter = vm.metered_interpreter(&self.exe)?;
         let (segments, _) = metered_interpreter.execute_metered(input, metered_ctx)?;
         let num_segments = segments.len();
+        #[cfg(all(feature = "cuda", feature = "rvr"))]
+        if let Some(CachedRvrPreflight::Rvr(rvr)) = self.rvr_preflight.as_ref() {
+            let num_airs = segments
+                .first()
+                .map_or(0, |segment| segment.trace_heights.len());
+            let mut max_trace_heights = vec![0u32; num_airs];
+            for segment in &segments {
+                assert_eq!(
+                    segment.trace_heights.len(),
+                    num_airs,
+                    "metered segments disagree on AIR count"
+                );
+                for (maximum, &height) in max_trace_heights.iter_mut().zip(&segment.trace_heights) {
+                    *maximum = (*maximum).max(height);
+                }
+            }
+            rvr.prepare_arena_native_backings(&max_trace_heights);
+        }
         #[cfg(feature = "stark-debug")]
         if std::env::var("OPENVM_STARK_DEBUG_TRACE_ONLY").as_deref() == Ok("1") {
             eprintln!("OPENVM_STARK_DEBUG_TOTAL_SEGMENTS={num_segments}");
@@ -2273,6 +2328,9 @@ where
             if let CachedRvrPreflight::Rvr(rvr) = rvr_preflight {
                 rvr.prepare_wire_backings(&trace_heights);
             }
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
+            let arena_pool_before = crate::arch::cuda::pinned::stats_enabled()
+                .then(crate::arch::cuda::pinned::PoolStatsSnapshot::capture);
             #[cfg(any(feature = "stark-debug", feature = "cuda"))]
             let preflight_started = std::time::Instant::now();
             #[cfg(feature = "rvr")]
@@ -2301,6 +2359,10 @@ where
             )?;
             #[cfg(any(feature = "stark-debug", feature = "cuda"))]
             let preflight_elapsed = preflight_started.elapsed();
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
+            if let Some(before) = arena_pool_before {
+                crate::arch::cuda::pinned::emit_segment_stats(seg_idx, before);
+            }
             state = Some(to_state);
 
             #[cfg(any(feature = "stark-debug", feature = "cuda"))]
