@@ -72,7 +72,7 @@ pub struct Rv64LoadMultiByteAdapterCols<T> {
     /// Destination register pointer.
     pub rd_ptr: T,
     /// Auxiliary columns for the first and optional second block reads.
-    pub block_reads_aux: [MemoryReadAuxCols<T>; 2],
+    pub read_data_aux: [MemoryReadAuxCols<T>; 2],
     pub imm: T,
     pub imm_sign: T,
     /// Low limb of the effective pointer for constraining rs1 + sign_extend(imm).
@@ -194,7 +194,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadMultiByteAdapterAir {
                 ),
                 read_data0,
                 timestamp_pp(),
-                &local_cols.block_reads_aux[0],
+                &local_cols.read_data_aux[0],
             )
             .eval(builder, is_valid.clone());
 
@@ -210,7 +210,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadMultiByteAdapterAir {
                 ),
                 read_data1,
                 timestamp_pp(),
-                &local_cols.block_reads_aux[1],
+                &local_cols.read_data_aux[1],
             )
             .eval(builder, cross);
 
@@ -266,7 +266,7 @@ pub struct Rv64LoadMultiByteAdapterRecord {
     pub rs1_aux_record: MemoryReadAuxRecord,
     /// Auxiliary data for the first and optional second block reads. The second timestamp is
     /// `u32::MAX` when the access does not cross a block boundary.
-    pub block_reads_aux: [MemoryReadAuxRecord; 2],
+    pub read_data_aux: [MemoryReadAuxRecord; 2],
     pub imm: u16,
     pub imm_sign: bool,
     pub write_prev_timestamp: u32,
@@ -290,7 +290,7 @@ impl Rv64LoadMultiByteAdapterRecord {
     }
 
     pub(crate) fn crosses(&self) -> bool {
-        self.block_reads_aux[1].prev_timestamp != u32::MAX
+        self.read_data_aux[1].prev_timestamp != u32::MAX
     }
 }
 
@@ -367,7 +367,7 @@ where
             memory,
             RV64_MEMORY_AS,
             byte_ptr_to_u16_ptr_value(aligned_ptr),
-            &mut record.block_reads_aux[0].prev_timestamp,
+            &mut record.read_data_aux[0].prev_timestamp,
         );
         // The second block's timestamp slot is consumed either way so the instruction has a
         // static timestamp layout.
@@ -384,10 +384,10 @@ where
                 memory,
                 RV64_MEMORY_AS,
                 byte_ptr_to_u16_ptr_value(block1_ptr),
-                &mut record.block_reads_aux[1].prev_timestamp,
+                &mut record.read_data_aux[1].prev_timestamp,
             )
         } else {
-            record.block_reads_aux[1].prev_timestamp = u32::MAX;
+            record.read_data_aux[1].prev_timestamp = u32::MAX;
             memory.increment_timestamp();
             [0; BLOCK_FE_WIDTH]
         };
@@ -446,8 +446,8 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64LoadMultiByteAdapterFiller {
         let rs1_val = record.rs1_val;
         let rs1_prev_timestamp = record.rs1_aux_record.prev_timestamp;
         let rd_ptr = record.rd_ptr;
-        let block0_prev_timestamp = record.block_reads_aux[0].prev_timestamp;
-        let block1_prev_timestamp = record.block_reads_aux[1].prev_timestamp;
+        let block0_prev_timestamp = record.read_data_aux[0].prev_timestamp;
+        let block1_prev_timestamp = record.read_data_aux[1].prev_timestamp;
         let crosses = record.crosses();
         let imm = record.imm;
         let imm_sign = record.imm_sign;
@@ -508,15 +508,15 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64LoadMultiByteAdapterFiller {
             mem_helper.fill(
                 block1_prev_timestamp,
                 from_timestamp + 2,
-                adapter_row.block_reads_aux[1].as_mut(),
+                adapter_row.read_data_aux[1].as_mut(),
             );
         } else {
-            mem_helper.fill_zero(adapter_row.block_reads_aux[1].as_mut());
+            mem_helper.fill_zero(adapter_row.read_data_aux[1].as_mut());
         }
         mem_helper.fill(
             block0_prev_timestamp,
             from_timestamp + 1,
-            adapter_row.block_reads_aux[0].as_mut(),
+            adapter_row.read_data_aux[0].as_mut(),
         );
         mem_helper.fill(
             rs1_prev_timestamp,

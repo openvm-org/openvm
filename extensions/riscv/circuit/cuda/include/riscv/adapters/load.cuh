@@ -14,7 +14,7 @@ template <typename T> struct Rv64LoadMultiByteAdapterCols {
     T rs1_data[RV64_PTR_U16_LIMBS];
     MemoryReadAuxCols<T> rs1_aux_cols;
     T rd_ptr;
-    MemoryReadAuxCols<T> block_reads_aux[2];
+    MemoryReadAuxCols<T> read_data_aux[2];
     T imm;
     T imm_sign;
     T mem_ptr_low_limb;
@@ -31,7 +31,7 @@ struct Rv64LoadMultiByteAdapterRecord {
     MemoryReadAuxRecord rs1_aux_record;
 
     // The second timestamp is UINT32_MAX when the access does not cross a block boundary.
-    MemoryReadAuxRecord block_reads_aux[2];
+    MemoryReadAuxRecord read_data_aux[2];
     uint16_t imm;
     bool imm_sign;
 
@@ -81,19 +81,19 @@ struct Rv64LoadAdapter {
             record.from_timestamp
         );
         mem_helper.fill(
-            row.slice_from(COL_INDEX(Rv64LoadMultiByteAdapterCols, block_reads_aux[0])),
-            record.block_reads_aux[0].prev_timestamp,
+            row.slice_from(COL_INDEX(Rv64LoadMultiByteAdapterCols, read_data_aux[0])),
+            record.read_data_aux[0].prev_timestamp,
             record.from_timestamp + 1
         );
-        bool crosses = record.block_reads_aux[1].prev_timestamp != UINT32_MAX;
+        bool crosses = record.read_data_aux[1].prev_timestamp != UINT32_MAX;
         if (crosses) {
             mem_helper.fill(
-                row.slice_from(COL_INDEX(Rv64LoadMultiByteAdapterCols, block_reads_aux[1])),
-                record.block_reads_aux[1].prev_timestamp,
+                row.slice_from(COL_INDEX(Rv64LoadMultiByteAdapterCols, read_data_aux[1])),
+                record.read_data_aux[1].prev_timestamp,
                 record.from_timestamp + 2
             );
         } else {
-            mem_helper.fill_zero(row.slice_from(COL_INDEX(Rv64LoadMultiByteAdapterCols, block_reads_aux[1])));
+            mem_helper.fill_zero(row.slice_from(COL_INDEX(Rv64LoadMultiByteAdapterCols, read_data_aux[1])));
         }
 
         bool needs_write = record.rd_ptr != UINT8_MAX;

@@ -85,7 +85,7 @@ pub struct Rv64StoreMultiByteAdapterCols<T> {
     pub mem_ptr_carry: T,
     /// Timestamp auxiliary columns for the first and optional second block writes. Previous data
     /// is provided by the core chip.
-    pub block_writes_aux: [MemoryBaseAuxCols<T>; 2],
+    pub write_base_aux: [MemoryBaseAuxCols<T>; 2],
 }
 
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
@@ -209,7 +209,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64StoreMultiByteAdapterAir {
                 write_data0,
                 timestamp_pp(),
                 MemoryWriteAuxInput::from_prev_data_exprs(
-                    &local_cols.block_writes_aux[0],
+                    &local_cols.write_base_aux[0],
                     prev_data0,
                 ),
             )
@@ -228,7 +228,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64StoreMultiByteAdapterAir {
                 write_data1,
                 timestamp_pp(),
                 MemoryWriteAuxInput::from_prev_data_exprs(
-                    &local_cols.block_writes_aux[1],
+                    &local_cols.write_base_aux[1],
                     prev_data1,
                 ),
             )
@@ -274,7 +274,7 @@ pub struct Rv64StoreMultiByteAdapterRecord {
     pub read_data_aux: MemoryReadAuxRecord,
     /// Previous timestamps for the first and optional second block writes. The second timestamp is
     /// `u32::MAX` when the access does not cross a block boundary.
-    pub block_prev_timestamps: [u32; 2],
+    pub write_prev_timestamps: [u32; 2],
     pub imm: u16,
     pub rs1_ptr: u8,
     pub rs2_ptr: u8,
@@ -296,7 +296,7 @@ impl Rv64StoreMultiByteAdapterRecord {
     }
 
     pub(crate) fn crosses(&self) -> bool {
-        self.block_prev_timestamps[1] != u32::MAX
+        self.write_prev_timestamps[1] != u32::MAX
     }
 }
 
@@ -412,7 +412,7 @@ where
     ) {
         let shift_amount = record.shift_amount();
         let ptr = record.effective_ptr() & !(MEMORY_BLOCK_BYTES as u32 - 1);
-        record.block_prev_timestamps[0] = timed_write_u16(
+        record.write_prev_timestamps[0] = timed_write_u16(
             memory,
             record.mem_as as u32,
             byte_ptr_to_u16_ptr_value(ptr),
@@ -422,7 +422,7 @@ where
         // The second block's timestamp slot is consumed either way so the instruction has a
         // static timestamp layout.
         if shift_amount + STORE_WIDTH > MEMORY_BLOCK_BYTES {
-            record.block_prev_timestamps[1] = timed_write_u16(
+            record.write_prev_timestamps[1] = timed_write_u16(
                 memory,
                 record.mem_as as u32,
                 byte_ptr_to_u16_ptr_value(ptr + MEMORY_BLOCK_BYTES as u32),
@@ -430,7 +430,7 @@ where
             )
             .0;
         } else {
-            record.block_prev_timestamps[1] = u32::MAX;
+            record.write_prev_timestamps[1] = u32::MAX;
             memory.increment_timestamp();
         }
     }
@@ -460,7 +460,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64StoreMultiByteAdapterFiller 
         let imm = record.imm;
         let imm_sign = record.imm_sign;
         let mem_as = record.mem_as;
-        let [block0_prev_timestamp, block1_prev_timestamp] = record.block_prev_timestamps;
+        let [block0_prev_timestamp, block1_prev_timestamp] = record.write_prev_timestamps;
         let crosses = record.crosses();
         let ptr = record.effective_ptr();
         let shift_amount = record.shift_amount() as u32;
@@ -470,15 +470,15 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64StoreMultiByteAdapterFiller 
             mem_helper.fill(
                 block1_prev_timestamp,
                 from_timestamp + 3,
-                &mut adapter_row.block_writes_aux[1],
+                &mut adapter_row.write_base_aux[1],
             );
         } else {
-            mem_helper.fill_zero(&mut adapter_row.block_writes_aux[1]);
+            mem_helper.fill_zero(&mut adapter_row.write_base_aux[1]);
         }
         mem_helper.fill(
             block0_prev_timestamp,
             from_timestamp + 2,
-            &mut adapter_row.block_writes_aux[0],
+            &mut adapter_row.write_base_aux[0],
         );
 
         adapter_row.mem_as = F::from_u8(mem_as);
