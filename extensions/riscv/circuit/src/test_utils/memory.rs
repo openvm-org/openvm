@@ -38,7 +38,9 @@ use crate::adapters::{
     Rv64StoreMultiByteAdapterExecutor,
 };
 use crate::{
-    adapters::{rv64_bytes_to_u32, rv64_u16_block_to_bytes, sign_extend_imm16},
+    adapters::{
+        rv64_bytes_to_u16_block, rv64_bytes_to_u32, rv64_u16_block_to_bytes, sign_extend_imm16,
+    },
     load::common::load_write_data,
     store::common::store_write_data,
 };
@@ -139,7 +141,7 @@ pub(crate) fn set_and_execute_load<RA: Arena, E: PreflightExecutor<F, RA>>(
     );
 
     let mut prev_data: [u16; BLOCK_FE_WIDTH] = if access.a == access.b {
-        crate::adapters::rv64_bytes_to_u16_block(access.rs1)
+        rv64_bytes_to_u16_block(access.rs1)
     } else {
         array::from_fn(|_| rng.random())
     };
@@ -227,7 +229,7 @@ pub(crate) fn set_and_execute_store<RA: Arena, E: PreflightExecutor<F, RA>>(
     let prev_data: [[u16; BLOCK_FE_WIDTH]; 2] =
         array::from_fn(|_| array::from_fn(|_| rng.random()));
     let mut read_data: [u16; BLOCK_FE_WIDTH] = if access.a == access.b {
-        crate::adapters::rv64_bytes_to_u16_block(access.rs1)
+        rv64_bytes_to_u16_block(access.rs1)
     } else {
         array::from_fn(|_| rng.random())
     };
