@@ -178,7 +178,7 @@ impl ExtInstr for HintBufferInstr {
 pub struct RevealInstr {
     pub src_reg: Reg,
     pub ptr_reg: Reg,
-    pub offset: u32,
+    pub offset: i16,
     pub width: MemWidth,
 }
 
@@ -205,10 +205,14 @@ impl ExtInstr for RevealInstr {
         } else {
             let ptr = ctx.read_reg(self.ptr_reg);
             let src = ctx.read_reg(self.src_reg);
-            let addr = if self.offset == 0 {
-                ptr.clone()
-            } else {
-                format!("({ptr} + 0x{:08x}u)", self.offset)
+            let addr = match self.offset.cmp(&0) {
+                std::cmp::Ordering::Equal => ptr.clone(),
+                std::cmp::Ordering::Greater => {
+                    format!("({ptr} + 0x{:08x}u)", self.offset)
+                }
+                std::cmp::Ordering::Less => {
+                    format!("({ptr} - 0x{:08x}u)", -i32::from(self.offset))
+                }
             };
             let width = self.width.bytes().to_string();
             ctx.extern_call_without_page_flush(
@@ -223,7 +227,11 @@ impl ExtInstr for RevealInstr {
             );
             (src, ptr)
         };
-        let offset = format!("0x{:08x}u", self.offset);
+        let offset = if self.offset < 0 {
+            format!("(int32_t)0x{:08x}u", i32::from(self.offset) as u32)
+        } else {
+            format!("0x{:08x}u", self.offset)
+        };
         let width = self.width.bytes().to_string();
         ctx.extern_call_without_page_flush("openvm_reveal", &[&src, &ptr, &offset, &width]);
     }
@@ -385,7 +393,7 @@ impl RvrExtension for Rv64IoExtension {
         if let Some(width) = public_values_store_width(insn) {
             let src_reg = decode_reg(insn.a);
             let ptr_reg = decode_reg(insn.b);
-            let offset = decode_imm_cg(insn);
+            let offset = decode_imm_cg(insn) as i16;
             return Some(LiftedInstr::Body(InstrAt {
                 pc,
                 instr: Instr::Ext(Box::new(RevealInstr {
@@ -562,7 +570,7 @@ pub struct Rv64IPhantomCallbacks {
 pub struct Rv64IoHostCallbacks {
     pub hint_storew: extern "C" fn(*mut c_void, u64) -> u64,
     pub hint_buffer: extern "C" fn(*mut c_void, u64, u32, u32) -> u64,
-    pub reveal: extern "C" fn(*mut c_void, u64, u64, u32, u32),
+    pub reveal: extern "C" fn(*mut c_void, u64, u64, i32, u32),
 }
 
 // ── Callback implementations ────────────────────────────────────────────────
@@ -657,7 +665,7 @@ pub extern "C" fn host_hint_buffer(
 
 /// REVEAL: write public output bytes directly into the guest's `PUBLIC_VALUES_AS`
 /// byte slice. Cost corrections handled in C.
-pub extern "C" fn host_reveal(ctx: *mut c_void, src_val: u64, ptr: u64, offset: u32, width: u32) {
+pub extern "C" fn host_reveal(ctx: *mut c_void, src_val: u64, ptr: u64, offset: i32, width: u32) {
     let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_>) };
     let Some((start, end)) =
         reveal_public_values_bounds(ptr, offset, width, io.public_values.len())
@@ -672,14 +680,14 @@ pub extern "C" fn host_reveal(ctx: *mut c_void, src_val: u64, ptr: u64, offset: 
 
 fn reveal_public_values_bounds(
     ptr: u64,
-    offset: u32,
+    offset: i32,
     width: u32,
     public_values_len: usize,
 ) -> Option<(usize, usize)> {
     if width as usize > RV64_REGISTER_NUM_LIMBS {
         return None;
     }
-    let start = ptr.checked_add(u64::from(offset))?;
+    let start = ptr.checked_add_signed(i64::from(offset))?;
     let end = start.checked_add(u64::from(width))?;
     if end > u64::try_from(public_values_len).ok()? {
         return None;
@@ -817,6 +825,41 @@ mod tests {
     }
 
     #[test]
+    fn rv64io_sign_extends_negative_public_values_store_offset() {
+        let ext = Rv64IoExtension::new(None).unwrap();
+        let inst = RvrInstruction::from_field(&Instruction::<BabyBear>::from_usize(
+            Rv64LoadStoreOpcode::STOREW.global_opcode(),
+            [
+                8,
+                16,
+                0xfffc,
+                RV64_REGISTER_AS as usize,
+                PUBLIC_VALUES_AS as usize,
+                1,
+                1,
+            ],
+        ));
+        let LiftedInstr::Body(InstrAt {
+            instr: Instr::Ext(instr),
+            ..
+        }) = ext.try_lift(&inst, 0x100).unwrap()
+        else {
+            panic!("expected public-values store extension instruction");
+        };
+
+        let mut ctx = TestEmitCtx::default();
+        instr.emit_c(&mut ctx);
+        assert_eq!(
+            ctx.lines[2],
+            format!("trace_wr_as(state, (r2 - 0x00000004u), r1, 4, {PUBLIC_VALUES_AS}u);")
+        );
+        assert_eq!(
+            ctx.lines[3],
+            "openvm_reveal(r1, r2, (int32_t)0xfffffffcu, 4);"
+        );
+    }
+
+    #[test]
     fn rv64io_rejects_public_values_store_with_non_register_d() {
         let ext = Rv64IoExtension::new(None).unwrap();
         let inst = RvrInstruction::from_field(&Instruction::<BabyBear>::from_usize(
@@ -942,6 +985,7 @@ mod tests {
     #[test]
     fn reveal_public_values_bounds_accepts_valid_range() {
         assert_eq!(reveal_public_values_bounds(4, 2, 8, 16), Some((6, 14)));
+        assert_eq!(reveal_public_values_bounds(8, -4, 4, 16), Some((4, 8)));
     }
 
     #[test]
@@ -952,6 +996,7 @@ mod tests {
     #[test]
     fn reveal_public_values_bounds_rejects_out_of_range_write() {
         assert_eq!(reveal_public_values_bounds(9, 0, 8, 16), None);
+        assert_eq!(reveal_public_values_bounds(2, -4, 4, 16), None);
     }
 
     #[test]

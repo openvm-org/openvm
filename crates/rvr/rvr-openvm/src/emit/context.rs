@@ -1487,18 +1487,14 @@ impl EmitContext {
         &mut self,
         src_reg: u8,
         ptr_reg: u8,
-        offset: u32,
+        offset: i16,
         addr_space: u32,
         local_opcode: u8,
     ) -> (String, String) {
         if !self.inline_records_enabled() {
             let ptr = self.read_reg(ptr_reg);
             let src = self.read_reg(src_reg);
-            let addr = if offset == 0 {
-                ptr.clone()
-            } else {
-                format!("({ptr} + {})", hex_u32(offset))
-            };
+            let addr = Self::addr_expr(&ptr, offset);
             self.trace_wr_as_u64(&addr, &src, addr_space);
             return (src, ptr);
         }
@@ -1513,11 +1509,7 @@ impl EmitContext {
         self.write_line(&format!("uint32_t {fromts} = state->tracer->timestamp;"));
         let (ptr, ptr_prev_ts) = self.reg_read_capture(ptr_reg);
         let (src, src_prev_ts) = self.reg_read_capture(src_reg);
-        let addr_expr = if offset == 0 {
-            ptr.clone()
-        } else {
-            format!("{ptr} + {}", hex_u32(offset))
-        };
+        let addr_expr = Self::addr_expr(&ptr, offset);
         let addr = self.materialize_u64(&addr_expr);
         let block_addr = self.materialize_u64(&format!("preflight_block_addr({addr})"));
         let arena_geom = self.arena_native_airs.get(&chip).copied();
@@ -1538,7 +1530,7 @@ impl EmitContext {
                 rs1_ptr: (ptr_reg as u32) * 8,
                 rd_rs2_ptr: (src_reg as u32) * 8,
                 imm: offset as u16,
-                imm_sign: ((offset as i32) < 0) as u8,
+                imm_sign: (offset < 0) as u8,
                 mem_as: addr_space as u8,
                 local_opcode,
                 is_byte: 0,
@@ -1882,7 +1874,7 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext {
         &mut self,
         src_reg: u8,
         ptr_reg: u8,
-        offset: u32,
+        offset: i16,
         addr_space: u32,
         local_opcode: u8,
     ) -> (String, String) {
