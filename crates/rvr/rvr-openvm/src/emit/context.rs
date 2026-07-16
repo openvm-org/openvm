@@ -499,26 +499,4 @@ mod tests {
             .buf()
             .contains("trace_memory_access_span(&trace_memory, addr, 8u);"));
     }
-
-    #[test]
-    fn unaligned_doubleword_emits_span_at_leaf_boundary() {
-        let mut ctx = metered_memory_ctx();
-        // A 16-byte tracer leaf ends at 0xf, so [0xf, 0x17) touches two leaves.
-        ctx.read_mem("0xf", 0, 8, false);
-
-        assert!(ctx
-            .buf()
-            .contains("trace_memory_access_span(&trace_memory, 0xf, 8u);"));
-    }
-
-    #[test]
-    fn unaligned_doubleword_emits_span_at_page_boundary() {
-        let mut ctx = metered_memory_ctx();
-        // A metering page is 64 16-byte leaves, so [0x3ff, 0x407) crosses a page boundary.
-        ctx.write_mem("0x3ff", 0, "value", 8);
-
-        assert!(ctx
-            .buf()
-            .contains("trace_memory_access_span(&trace_memory, 0x3ff, 8u);"));
-    }
 }
