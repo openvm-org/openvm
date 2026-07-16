@@ -96,6 +96,17 @@ impl SuspendPolicy {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct G2DsoManifestConfigV1 {
+    pub fingerprint: [u8; 32],
+    pub program_fingerprint: [u8; 32],
+    pub block_fingerprint: [u8; 32],
+    pub air_manifest_fingerprint: [u8; 32],
+    pub pc_base: u32,
+    pub block_count: u32,
+    pub addi_air_idx: u32,
+}
+
 /// C project generator.
 pub struct CProject {
     output_dir: PathBuf,
@@ -136,6 +147,11 @@ pub struct CProject {
     /// mode: all inline AIRs share one execution-ordered backing and reserve
     /// their record slots once per basic-block entry.
     pub delta_records: bool,
+    /// Private G2 v1 lane producer. Phase 1 enables this only for AddI-only
+    /// routed programs, and leaves every existing route unchanged.
+    pub g2_records: bool,
+    /// Full schema/program/AIR binding exported by the generated DSO.
+    pub g2_manifest: Option<G2DsoManifestConfigV1>,
     /// R4: airs whose records the generated C writes arena-native — full
     /// records at final arena positions, field offsets baked as literals
     /// from the geometry's layout table. Airs absent here keep the compact
@@ -168,6 +184,8 @@ impl CProject {
             inline_records: false,
             inline_pc_slots: Vec::new(),
             delta_records: false,
+            g2_records: false,
+            g2_manifest: None,
             arena_native_airs: std::collections::BTreeMap::new(),
         }
     }
@@ -451,6 +469,7 @@ impl CProject {
         let table_size = Self::dispatch_table_size(text_start, text_end);
 
         self.write_constants(text_start, text_end, table_size)?;
+        self.write_g2_manifest()?;
         self.write_support_files()?;
         self.write_extension_files(extensions)?;
         let ext_headers = extensions.c_headers();
@@ -459,6 +478,94 @@ impl CProject {
         self.write_dispatch(blocks, entry_point, text_start)?;
         self.write_makefile()?;
         Ok(())
+    }
+
+    fn write_g2_manifest(&self) -> io::Result<()> {
+        let path = self.output_dir.join("openvm_g2_manifest.c");
+        let Some(manifest) = self.g2_manifest else {
+            let _ = fs::remove_file(path);
+            return Ok(());
+        };
+        let fingerprint = manifest
+            .fingerprint
+            .iter()
+            .map(|byte| format!("0x{byte:02x}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let program_fingerprint = manifest
+            .program_fingerprint
+            .iter()
+            .map(|byte| format!("0x{byte:02x}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let block_fingerprint = manifest
+            .block_fingerprint
+            .iter()
+            .map(|byte| format!("0x{byte:02x}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let air_manifest_fingerprint = manifest
+            .air_manifest_fingerprint
+            .iter()
+            .map(|byte| format!("0x{byte:02x}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let source = format!(
+            "#include <stdint.h>\n\n\
+             typedef struct OpenVmRvrG2DsoLaneManifestV1 {{\n\
+               uint16_t kind;\n\
+               uint8_t elem_width;\n\
+               uint8_t encoding;\n\
+               uint32_t flags;\n\
+               uint32_t group_id;\n\
+               uint8_t arity;\n\
+               uint8_t reserved[3];\n\
+             }} OpenVmRvrG2DsoLaneManifestV1;\n\n\
+             typedef struct OpenVmRvrG2DsoManifestV1 {{\n\
+               uint8_t magic[8];\n\
+               uint16_t version;\n\
+               uint16_t manifest_bytes;\n\
+               uint16_t header_size;\n\
+               uint16_t lane_desc_size;\n\
+               uint32_t lane_count;\n\
+               uint32_t wire_flags;\n\
+               uint8_t fingerprint[32];\n\
+               uint8_t program_fingerprint[32];\n\
+               uint8_t block_fingerprint[32];\n\
+               uint8_t air_manifest_fingerprint[32];\n\
+               uint32_t pc_base;\n\
+               uint32_t block_count;\n\
+               uint32_t addi_air_idx;\n\
+               uint32_t reserved;\n\
+               OpenVmRvrG2DsoLaneManifestV1 lanes[2];\n\
+             }} OpenVmRvrG2DsoManifestV1;\n\n\
+             _Static_assert(sizeof(OpenVmRvrG2DsoLaneManifestV1) == 16, \"G2 DSO lane manifest size drift\");\n\
+             _Static_assert(sizeof(OpenVmRvrG2DsoManifestV1) == 200, \"G2 DSO manifest size drift\");\n\n\
+             __attribute__((visibility(\"default\")))\n\
+             const OpenVmRvrG2DsoManifestV1 openvm_rvr_g2_manifest_v1 = {{\n\
+               .magic = {{'O','V','M','G','2','D','1','\\0'}},\n\
+               .version = 1,\n\
+               .manifest_bytes = 200,\n\
+               .header_size = 64,\n\
+               .lane_desc_size = 32,\n\
+               .lane_count = 2,\n\
+               .wire_flags = 14,\n\
+               .fingerprint = {{{fingerprint}}},\n\
+               .program_fingerprint = {{{program_fingerprint}}},\n\
+               .block_fingerprint = {{{block_fingerprint}}},\n\
+               .air_manifest_fingerprint = {{{air_manifest_fingerprint}}},\n\
+               .pc_base = {},\n\
+               .block_count = {},\n\
+               .addi_air_idx = {},\n\
+               .reserved = 0,\n\
+               .lanes = {{\n\
+                 {{.kind=0x0001, .elem_width=4, .encoding=0, .flags=1, .group_id=0, .arity=0, .reserved={{0,0,0}}}},\n\
+                 {{.kind=0x013a, .elem_width=8, .encoding=0, .flags=1, .group_id=0, .arity=1, .reserved={{0,0,0}}}},\n\
+               }},\n\
+             }};\n",
+            manifest.pc_base, manifest.block_count, manifest.addi_air_idx,
+        );
+        fs::write(path, source)
     }
 
     // ── Generated constants header ──────────────────────────────────────
@@ -804,6 +911,7 @@ impl CProject {
             .unwrap();
         }
         ctx.set_delta_records(self.delta_records, delta_batch);
+        ctx.set_g2_records(self.g2_records);
         self.emit_per_block_chip_updates(out, block);
 
         for instr_at in &block.instructions {
@@ -933,13 +1041,23 @@ impl CProject {
         )
         .unwrap();
         self.emit_instret_suspend_check(out, pc, insn_count);
-        if self.delta_records {
+        if self.delta_records || self.g2_records {
             // Commit the block-level trace only after an instret-limit
             // rejection has returned. Device chronology treats this hook as
             // an exact executed-block stream; recording it in begin_block
             // would also include the first unexecuted block of every
             // continuation boundary.
-            writeln!(out, "    trace_block(state, 0x{pc:08x}ull, {insn_count}u);").unwrap();
+            if self.delta_records {
+                writeln!(out, "    trace_block(state, 0x{pc:08x}ull, {insn_count}u);").unwrap();
+            }
+            if self.g2_records {
+                let slot = (pc - self.pc_base) / 4;
+                writeln!(
+                    out,
+                    "    preflight_g2_emit_run(state, {slot}u, {insn_count}u);"
+                )
+                .unwrap();
+            }
         }
     }
 

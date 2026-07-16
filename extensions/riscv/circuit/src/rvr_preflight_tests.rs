@@ -576,6 +576,268 @@ fn rvr_preflight_delta_full_rv64im_matrix_is_byte_equal_to_compact() {
     }
 }
 
+/// Phase-1 G2 gate: generated C writes only RUN_BLOCK_ID and AddI value
+/// lanes. The oracle-only CPU decoder must reconstruct the exact established
+/// 44-byte compact consumer records, including every initialized/padding
+/// byte, while the production-shaped preflight performs no host record pass.
+#[test]
+fn rvr_preflight_g2_addi_is_byte_equal_to_compact_consumer() {
+    let exe = exe(&[
+        addi(1, 0, 7),
+        addi(2, 1, 5),
+        addi(1, 2, 0x00ff_ffff),
+        terminate(),
+    ]);
+    let (rvr_vm, _) = VirtualMachine::new_with_keygen(
+        test_cpu_engine(),
+        Rv64ImCpuBuilder,
+        Rv64ImConfig::default(),
+    )
+    .expect("G2 oracle VM init");
+    let pc_to_air_idx = rvr_vm.pc_to_air_idx(&exe).expect("G2 pc mapping");
+    let addi_air_idx = pc_to_air_idx[0].expect("AddI must map to an AIR");
+    assert_eq!(pc_to_air_idx[1], Some(addi_air_idx));
+    assert_eq!(pc_to_air_idx[2], Some(addi_air_idx));
+    let mut exact_rows = vec![0u32; rvr_vm.num_airs()];
+    exact_rows[addi_air_idx] = 3;
+
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
+    std::env::set_var("OPENVM_RVR_INLINE_RECORDS", "1");
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "compact");
+    let RvrPreflightRoute::Rvr(compact) = rvr_vm
+        .preflight_routed_instance(&exe)
+        .expect("compact routed preflight")
+    else {
+        panic!("AddI program must route to RVR");
+    };
+    let mut compact_output = compact
+        .execute_preflight_from_state_with_capacities(
+            compact.create_initial_state(Streams::default()),
+            Some(4),
+            &exact_rows,
+        )
+        .expect("compact AddI preflight");
+    let compact_bytes = compact_output
+        .inline_records
+        .iter()
+        .find(|records| records.air_idx == addi_air_idx)
+        .expect("compact AddI consumer records");
+    assert_eq!(compact_bytes.record_size, 44);
+    assert_eq!(compact_bytes.bytes.len(), 3 * 44);
+    let compact_consumer_bytes = compact_bytes.bytes.clone();
+    let compact_program_log = compact_output.raw_logs.program_log.clone();
+    let capacities = exact_rows
+        .iter()
+        .zip(rvr_vm.pk().per_air.iter())
+        .map(|(&height, pk)| (height as usize, pk.vk.params.width.main_width()))
+        .collect::<Vec<_>>();
+    let compact_arenas = crate::log_native::generate_rv64im_record_arenas_from_logs::<
+        F,
+        DenseRecordArena,
+    >(&exe, &mut compact_output, &capacities, &pc_to_air_idx)
+    .expect("compact final-arena oracle");
+
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "g2");
+    let RvrPreflightRoute::Rvr(g2) = rvr_vm
+        .preflight_routed_instance(&exe)
+        .expect("G2 routed preflight")
+    else {
+        panic!("AddI program must route to G2 RVR");
+    };
+    assert!(g2.compiled().inline_records().g2.is_some());
+    let mut g2_output = g2
+        .execute_preflight_from_state_with_device_touched_memory_for_test(
+            g2.create_initial_state(Streams::default()),
+            Some(4),
+            &exact_rows,
+            &BTreeMap::new(),
+        )
+        .expect("G2 AddI preflight");
+    let segment = g2_output.g2_segment.take().expect("committed G2 segment");
+    let meta = g2_output.g2_meta.as_deref().expect("G2 schema metadata");
+    let decode = g2_output
+        .delta_decode_precomputed
+        .as_deref()
+        .expect("G2 static operand table");
+    let reference = openvm_circuit::arch::rvr::decode_addi_reference_v1(
+        &segment,
+        meta,
+        decode,
+        [0; 32],
+        openvm_circuit::arch::rvr::PREFLIGHT_INITIAL_TIMESTAMP,
+    )
+    .expect("G2 CPU reference decode");
+
+    assert_eq!(reference.compact_records, compact_consumer_bytes);
+    assert_eq!(reference.expanded_program_slots, [0, 1, 2, 3]);
+    assert_eq!(reference.final_registers[1], 11);
+    assert_eq!(reference.final_registers[2], 12);
+    assert_eq!(
+        reference.final_timestamp,
+        openvm_circuit::arch::rvr::PREFLIGHT_INITIAL_TIMESTAMP + 6
+    );
+    assert!(g2_output.raw_logs.program_log.is_empty());
+    assert!(g2_output.raw_logs.memory_log.is_empty());
+    assert!(g2_output.raw_logs.delta_memory_log.is_empty());
+    assert!(g2_output.access_aux.is_empty());
+    assert!(g2_output.inline_records.is_empty());
+    assert!(g2_output.delta_records.is_none());
+    assert!(!g2_output.access_aux_complete);
+    assert!(g2_output.system_records.program_frequencies_on_device);
+    assert!(g2_output.system_records.touched_memory_on_device);
+
+    // Oracle-only final materialization. Production never executes this
+    // block: it restores the compact arm's chronology solely to drive the
+    // established CPU assembler and compare the complete final arena bytes.
+    g2_output.raw_logs.program_log = compact_program_log;
+    g2_output.inline_records = vec![openvm_circuit::arch::rvr::RvrInlineChipRecords {
+        air_idx: addi_air_idx,
+        record_size: 44,
+        bytes: reference.compact_records,
+    }];
+    g2_output.access_aux_complete = true;
+    let g2_oracle_arenas = crate::log_native::generate_rv64im_record_arenas_from_logs::<
+        F,
+        DenseRecordArena,
+    >(&exe, &mut g2_output, &capacities, &pc_to_air_idx)
+    .expect("G2 oracle final-arena materialization");
+    assert_eq!(compact_arenas.len(), g2_oracle_arenas.len());
+    for (air, (compact, g2)) in compact_arenas.iter().zip(&g2_oracle_arenas).enumerate() {
+        assert_eq!(
+            compact.allocated(),
+            g2.allocated(),
+            "G2 final arena, including record padding, differs for AIR {air}"
+        );
+    }
+}
+
+#[test]
+fn rvr_preflight_g2_rejects_unsupported_family_before_execution() {
+    let exe = exe(&[
+        addi(1, 0, 3),
+        alu_r(BaseAluOpcode::ADD, 2, 1, 1),
+        terminate(),
+    ]);
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "g2");
+    // G2 negotiation owns fallback and must select the arena route even if a
+    // stale compact-only setting is present in the process environment.
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
+    let (vm, _) = VirtualMachine::new_with_keygen(
+        test_cpu_engine(),
+        Rv64ImCpuBuilder,
+        Rv64ImConfig::default(),
+    )
+    .expect("G2 fallback VM init");
+    let RvrPreflightRoute::Rvr(instance) = vm
+        .preflight_routed_instance(&exe)
+        .expect("G2 fallback negotiation")
+    else {
+        panic!("supported RV64 program must retain the RVR route");
+    };
+    let inline = instance.compiled().inline_records();
+    assert!(inline.g2.is_none());
+    assert!(inline.delta_decode.is_none());
+    assert!(
+        !inline.arena_native_airs.is_empty(),
+        "unsupported G2 executable must select arena-native before execution"
+    );
+}
+
+#[test]
+fn rvr_preflight_g2_rejects_lifted_nop_before_execution() {
+    let exe = exe(&[addi(0, 1, 3), terminate()]);
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "g2");
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
+    let (vm, _) = VirtualMachine::new_with_keygen(
+        test_cpu_engine(),
+        Rv64ImCpuBuilder,
+        Rv64ImConfig::default(),
+    )
+    .expect("G2 lifted-NOP fallback VM init");
+    let RvrPreflightRoute::Rvr(instance) = vm
+        .preflight_routed_instance(&exe)
+        .expect("G2 lifted-NOP fallback negotiation")
+    else {
+        panic!("supported RV64 program must retain the RVR route");
+    };
+    let inline = instance.compiled().inline_records();
+    assert!(inline.g2.is_none());
+    assert!(inline.delta_decode.is_none());
+    assert!(
+        !inline.pc_slots.iter().any(|&slot| slot),
+        "lifted NOP must retain the established host-record route"
+    );
+}
+
+#[test]
+fn rvr_preflight_g2_rejects_dso_bound_to_different_vmexe() {
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "g2");
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
+    let (vm, _) = VirtualMachine::new_with_keygen(
+        test_cpu_engine(),
+        Rv64ImCpuBuilder,
+        Rv64ImConfig::default(),
+    )
+    .expect("G2 manifest VM init");
+    let cache_dir = tempfile::tempdir().expect("G2 mismatch cache dir");
+    let cache_a = cache_dir.path().join("a.so");
+    let cache_b = cache_dir.path().join("b.so");
+    let mismatch = cache_dir.path().join("mismatch.so");
+
+    let exe_a = exe(&[addi(1, 0, 3), terminate()]);
+    std::env::set_var("OPENVM_RVR_PREFLIGHT_LIB", &cache_a);
+    let RvrPreflightRoute::Rvr(_instance_a) = vm
+        .preflight_routed_instance(&exe_a)
+        .expect("first G2 manifest build")
+    else {
+        panic!("AddI program must route to RVR");
+    };
+    let exe_b = exe(&[addi(1, 0, 4), terminate()]);
+    std::env::set_var("OPENVM_RVR_PREFLIGHT_LIB", &cache_b);
+    let RvrPreflightRoute::Rvr(_instance_b) = vm
+        .preflight_routed_instance(&exe_b)
+        .expect("second G2 manifest build")
+    else {
+        panic!("AddI program must route to RVR");
+    };
+
+    // Preserve B's input/project keys but A's artifact digest. The cache is
+    // therefore structurally valid and reaches the independent DSO-manifest
+    // comparison, which must reject the mismatched VmExe binding.
+    let manifest_path = |library: &std::path::Path| {
+        std::path::PathBuf::from(format!("{}.sha256", library.display()))
+    };
+    let value = |manifest: &str, key: &str| {
+        manifest
+            .lines()
+            .find_map(|line| line.strip_prefix(&format!("{key}=")))
+            .unwrap_or_else(|| panic!("missing {key} in native cache manifest"))
+            .to_string()
+    };
+    let manifest_a = std::fs::read_to_string(manifest_path(&cache_a)).expect("read A manifest");
+    let manifest_b = std::fs::read_to_string(manifest_path(&cache_b)).expect("read B manifest");
+    std::fs::copy(&cache_a, &mismatch).expect("copy mismatched G2 artifact");
+    std::fs::write(
+        manifest_path(&mismatch),
+        format!(
+            "project={}\nartifact={}\ninput={}\n",
+            value(&manifest_b, "project"),
+            value(&manifest_a, "artifact"),
+            value(&manifest_b, "input"),
+        ),
+    )
+    .expect("write mismatched G2 cache manifest");
+    std::env::set_var("OPENVM_RVR_PREFLIGHT_LIB", &mismatch);
+    let err = match vm.preflight_routed_instance(&exe_b) {
+        Ok(_) => panic!("a DSO bound to another VmExe must fail before native execution"),
+        Err(err) => err,
+    };
+    assert!(
+        err.to_string().contains("G2 DSO manifest"),
+        "unexpected G2 manifest rejection: {err}"
+    );
+}
+
 #[test]
 fn rvr_gpu_operand_table_rebinds_same_shape_different_exe() {
     let (vm, _) = VirtualMachine::new_with_keygen(
