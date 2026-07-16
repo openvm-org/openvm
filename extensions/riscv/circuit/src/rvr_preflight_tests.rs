@@ -74,6 +74,10 @@ fn alu_r(opcode: BaseAluOpcode, rd: usize, rs1: usize, rs2: usize) -> Instructio
     Instruction::from_usize(opcode.global_opcode(), [reg(rd), reg(rs1), reg(rs2), 1, 1])
 }
 
+fn alu_imm(opcode: BaseAluOpcode, rd: usize, rs1: usize, imm: usize) -> Instruction<F> {
+    Instruction::from_usize(opcode.global_opcode(), [reg(rd), reg(rs1), imm, 1, 0])
+}
+
 fn sltu(rd: usize, rs1: usize, rs2: usize) -> Instruction<F> {
     Instruction::from_usize(
         LessThanOpcode::SLTU.global_opcode(),
@@ -83,6 +87,10 @@ fn sltu(rd: usize, rs1: usize, rs2: usize) -> Instruction<F> {
 
 fn less_than(opcode: LessThanOpcode, rd: usize, rs1: usize, rs2: usize) -> Instruction<F> {
     Instruction::from_usize(opcode.global_opcode(), [reg(rd), reg(rs1), reg(rs2), 1, 1])
+}
+
+fn less_than_imm(opcode: LessThanOpcode, rd: usize, rs1: usize, imm: usize) -> Instruction<F> {
+    Instruction::from_usize(opcode.global_opcode(), [reg(rd), reg(rs1), imm, 1, 0])
 }
 
 fn alu_w(opcode: BaseAluWOpcode, rd: usize, rs1: usize, rs2: usize) -> Instruction<F> {
@@ -95,6 +103,10 @@ fn alu_w_imm(opcode: BaseAluWOpcode, rd: usize, rs1: usize, imm: usize) -> Instr
 
 fn shift(opcode: ShiftOpcode, rd: usize, rs1: usize, shamt: usize) -> Instruction<F> {
     Instruction::from_usize(opcode.global_opcode(), [reg(rd), reg(rs1), shamt, 1, 0])
+}
+
+fn shift_reg(opcode: ShiftOpcode, rd: usize, rs1: usize, rs2: usize) -> Instruction<F> {
+    Instruction::from_usize(opcode.global_opcode(), [reg(rd), reg(rs1), reg(rs2), 1, 1])
 }
 
 fn shift_w(opcode: ShiftWOpcode, rd: usize, rs1: usize, shamt: usize) -> Instruction<F> {
@@ -1005,35 +1017,260 @@ fn rvr_preflight_g2_rejects_high_pointer_before_memory_or_reveal_access() {
 }
 
 #[test]
-fn rvr_preflight_g2_rejects_unsupported_family_before_execution() {
-    let exe = exe(&[
-        addi(1, 0, 3),
-        alu_r(BaseAluOpcode::ADD, 2, 1, 1),
-        terminate(),
-    ]);
-    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "g2");
-    // G2 negotiation owns fallback and must select the arena route even if a
-    // stale compact-only setting is present in the process environment.
-    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
+fn rvr_preflight_g2_rejects_high_jalr_pointer_without_truncation() {
+    let exe = exe(&[jalr(2, 1, 0), terminate()]);
     let (vm, _) = VirtualMachine::new_with_keygen(
         test_cpu_engine(),
         Rv64ImCpuBuilder,
         Rv64ImConfig::default(),
     )
-    .expect("G2 fallback VM init");
+    .expect("G2 high-Jalr VM init");
+    let pc_to_air = vm.pc_to_air_idx(&exe).expect("G2 high-Jalr pc mapping");
+    let mut rows = vec![0u32; vm.num_airs()];
+    for air in pc_to_air.iter().flatten() {
+        rows[*air] += 1;
+    }
+
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
+    std::env::set_var("OPENVM_RVR_INLINE_RECORDS", "1");
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "g2");
     let RvrPreflightRoute::Rvr(instance) = vm
         .preflight_routed_instance(&exe)
-        .expect("G2 fallback negotiation")
+        .expect("G2 high-Jalr route")
     else {
-        panic!("supported RV64 program must retain the RVR route");
+        panic!("high-Jalr fixture must route to G2 RVR");
     };
-    let inline = instance.compiled().inline_records();
-    assert!(inline.g2.is_none());
-    assert!(inline.delta_decode.is_none());
+    assert!(instance.compiled().inline_records().g2.is_some());
+    let mut state = instance.create_initial_state(Streams::default());
+    let mut registers = [0u64; 32];
+    registers[1] = u64::from(u32::MAX) + 4;
+    openvm_circuit::arch::rvr::bridge::write_rv64_registers(&mut state, &registers);
+    let err = match instance.execute_preflight_from_state_with_device_touched_memory_for_test(
+        state,
+        Some(exe.program.num_defined_instructions() as u64),
+        &rows,
+        &BTreeMap::new(),
+    ) {
+        Ok(_) => panic!("G2 must reject a high JALR pointer instead of truncating it"),
+        Err(err) => err,
+    };
     assert!(
-        !inline.arena_native_airs.is_empty(),
-        "unsupported G2 executable must select arena-native before execution"
+        err.to_string().contains("G2 wire v1"),
+        "high-Jalr rejection must fail closed through G2 finalization: {err}"
     );
+}
+
+#[test]
+fn rvr_preflight_g2_phase2b_full_standard_matrix_is_byte_equal() {
+    let exe = g2_full_standard_matrix_exe();
+    let config = Rv64ImConfig::with_public_values_bytes(32);
+    let (rvr_vm, _) = VirtualMachine::new_with_keygen(test_cpu_engine(), Rv64ImCpuBuilder, config)
+        .expect("G2 Phase-2b oracle VM init");
+    let pc_to_air_idx = rvr_vm.pc_to_air_idx(&exe).expect("G2 Phase-2b pc mapping");
+    let mut exact_rows = vec![0u32; rvr_vm.num_airs()];
+    for air in pc_to_air_idx.iter().flatten() {
+        exact_rows[*air] += 1;
+    }
+    let capacities = exact_rows
+        .iter()
+        .zip(rvr_vm.pk().per_air.iter())
+        .map(|(&height, pk)| (height as usize, pk.vk.params.width.main_width()))
+        .collect::<Vec<_>>();
+    let instruction_count = exe.program.num_defined_instructions() as u64;
+
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
+    std::env::set_var("OPENVM_RVR_INLINE_RECORDS", "1");
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "compact");
+    let RvrPreflightRoute::Rvr(compact) = rvr_vm
+        .preflight_routed_instance(&exe)
+        .expect("compact Phase-2b routed preflight")
+    else {
+        panic!("Phase-2b matrix must route to compact RVR");
+    };
+    let mut compact_output = compact
+        .execute_preflight_from_state_with_capacities(
+            compact.create_initial_state(Streams::default()),
+            Some(instruction_count),
+            &exact_rows,
+        )
+        .expect("compact Phase-2b preflight");
+    let compact_program_log = compact_output.raw_logs.program_log.clone();
+    let compact_consumers = compact_output
+        .inline_records
+        .iter()
+        .map(|records| {
+            (
+                records.air_idx,
+                (records.record_size, records.bytes.clone()),
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
+    let compact_arenas = crate::log_native::generate_rv64im_record_arenas_from_logs::<
+        F,
+        DenseRecordArena,
+    >(&exe, &mut compact_output, &capacities, &pc_to_air_idx)
+    .expect("compact Phase-2b final arenas");
+
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "g2");
+    let RvrPreflightRoute::Rvr(g2) = rvr_vm
+        .preflight_routed_instance(&exe)
+        .expect("G2 Phase-2b routed preflight")
+    else {
+        panic!("Phase-2b matrix must route to G2 RVR");
+    };
+    let inline = g2.compiled().inline_records();
+    assert!(
+        inline.g2.is_some(),
+        "full standard matrix must negotiate G2"
+    );
+    assert!(pc_to_air_idx.iter().enumerate().all(|(slot, air)| {
+        air.is_none() || inline.pc_slots.get(slot).copied().unwrap_or(false)
+    }));
+    let mut g2_output = g2
+        .execute_preflight_from_state_with_device_touched_memory_for_test(
+            g2.create_initial_state(Streams::default()),
+            Some(instruction_count),
+            &exact_rows,
+            &BTreeMap::new(),
+        )
+        .expect("G2 Phase-2b preflight");
+    let segment = g2_output.g2_segment.take().expect("committed G2 segment");
+    let meta = g2_output.g2_meta.as_deref().expect("G2 Phase-2b metadata");
+    let decode = g2_output
+        .delta_decode_precomputed
+        .as_deref()
+        .expect("G2 Phase-2b operand table");
+    assert_eq!(
+        meta.air_bindings
+            .iter()
+            .map(|binding| binding.kind)
+            .collect::<Vec<_>>(),
+        (0u8..30).collect::<Vec<_>>(),
+        "Phase-2b matrix must bind every standard decoder kind"
+    );
+    let mut initial_blocks = BTreeMap::new();
+    initial_blocks.insert((PUBLIC_VALUES_AS as u8, 0), 0);
+    let reference = openvm_circuit::arch::rvr::decode_reference_v1(
+        &segment,
+        meta,
+        decode,
+        [0; 32],
+        &initial_blocks,
+        openvm_circuit::arch::rvr::PREFLIGHT_INITIAL_TIMESTAMP,
+    )
+    .expect("G2 Phase-2b CPU reference decode");
+
+    let descs = segment
+        .validate(&meta.fingerprint)
+        .expect("valid G2 descriptors");
+    for kind in 1u8..=7 {
+        let binding = meta
+            .air_bindings
+            .iter()
+            .find(|binding| binding.kind == kind)
+            .expect("variable-arity kind binding");
+        let mut total = 0usize;
+        let mut register = 0usize;
+        for &slot in &reference.expanded_program_slots {
+            let entry = decode.entries[slot as usize];
+            if entry.air_idx as usize == binding.air_idx {
+                total += 1;
+                register += usize::from(entry.flags & 1 == 0);
+            }
+        }
+        assert!(
+            total > register && register > 0,
+            "kind {kind} must cover both arities"
+        );
+        assert_eq!(
+            descs
+                .iter()
+                .find(|desc| desc.kind == 0x0100 + 2 * u16::from(kind))
+                .map_or(0, |desc| desc.count as usize),
+            total,
+            "kind {kind} V0 count"
+        );
+        assert_eq!(
+            descs
+                .iter()
+                .find(|desc| desc.kind == 0x0101 + 2 * u16::from(kind))
+                .map_or(0, |desc| desc.count as usize),
+            register,
+            "kind {kind} V1 register-only count"
+        );
+    }
+    for kind in [12u8, 14] {
+        assert!(descs
+            .iter()
+            .all(|desc| desc.kind != 0x0100 + 2 * u16::from(kind)
+                && desc.kind != 0x0101 + 2 * u16::from(kind)));
+    }
+
+    assert!(g2_output.raw_logs.program_log.is_empty());
+    assert!(g2_output.raw_logs.memory_log.is_empty());
+    assert!(g2_output.raw_logs.delta_memory_log.is_empty());
+    assert!(g2_output.access_aux.is_empty());
+    assert!(g2_output.inline_records.is_empty());
+    assert!(g2_output.delta_records.is_none());
+    assert!(!g2_output.access_aux_complete);
+    assert_eq!(
+        openvm_circuit::arch::rvr::bridge::read_rv64_registers(&g2_output.to_state),
+        reference.final_registers,
+        "G2 CPU execution and operand-table replay must finish with identical registers"
+    );
+
+    let mut decoded_per_air = BTreeMap::<usize, Vec<u8>>::new();
+    for binding in meta.air_bindings.iter() {
+        let bytes = reference
+            .compact_records
+            .get(&binding.kind)
+            .expect("every bound kind has decoded records");
+        let (stride, expected) = compact_consumers
+            .get(&binding.air_idx)
+            .expect("compact consumer for bound AIR");
+        assert_eq!(
+            bytes, expected,
+            "kind {} compact consumer bytes",
+            binding.kind
+        );
+        assert_eq!(
+            bytes.len() / *stride,
+            exact_rows[binding.air_idx] as usize,
+            "kind {} exact AIR count",
+            binding.kind
+        );
+        assert!(decoded_per_air
+            .insert(binding.air_idx, bytes.clone())
+            .is_none());
+    }
+    g2_output.raw_logs.program_log = compact_program_log;
+    g2_output.inline_records = decoded_per_air
+        .into_iter()
+        .map(
+            |(air_idx, bytes)| openvm_circuit::arch::rvr::RvrInlineChipRecords {
+                air_idx,
+                record_size: compact_consumers[&air_idx].0,
+                bytes,
+            },
+        )
+        .collect();
+    g2_output.access_aux_complete = true;
+    let g2_arenas =
+        crate::log_native::generate_rv64im_record_arenas_from_logs::<F, DenseRecordArena>(
+            &exe,
+            &mut g2_output,
+            &capacities,
+            &pc_to_air_idx,
+        )
+        .expect("G2 Phase-2b oracle final arenas");
+    assert_eq!(compact_arenas.len(), g2_arenas.len());
+    for (air, (compact, g2)) in compact_arenas.iter().zip(&g2_arenas).enumerate() {
+        assert_eq!(
+            compact.allocated(),
+            g2.allocated(),
+            "G2 Phase-2b final arena including padding differs for AIR {air}"
+        );
+    }
 }
 
 #[test]
@@ -1535,6 +1772,28 @@ fn full_rv64im_matrix_exe() -> VmExe<F> {
     // REVEAL row: STORED to PUBLIC_VALUES_AS (x0 as the AS3 pointer, r10 = 21
     // from the hard-chip group) so the loadstore mem_as=3 path is locked in the
     // CPU-vs-GPU three-way, not only in the reveal-specific tests.
+    instructions.push(extension_store(10, 0, 0));
+    instructions.push(terminate());
+    exe(&instructions)
+}
+
+fn g2_full_standard_matrix_exe() -> VmExe<F> {
+    let mut instructions = vec![addi(1, 0, 9), addi(2, 0, 5)];
+    push_standard_group_ops(&mut instructions);
+    instructions.extend([
+        alu_imm(BaseAluOpcode::XOR, 3, 1, 0xff_fffb),
+        less_than_imm(LessThanOpcode::SLT, 4, 1, 0xff_fffb),
+        shift_reg(ShiftOpcode::SLL, 5, 1, 2),
+        shift_reg(ShiftOpcode::SRL, 6, 1, 2),
+        shift_reg(ShiftOpcode::SRA, 7, 1, 2),
+    ]);
+    let standard_end = instructions.len();
+    push_hard_chip_ops(&mut instructions);
+    // The hard-chip fixture ends in three phantoms and two HintStore custom
+    // instructions. Phase 2b covers the complete fixed standard prefix;
+    // custom opaque/event-replay transport remains outside this oracle.
+    debug_assert!(instructions.len() - standard_end >= 5);
+    instructions.truncate(instructions.len() - 5);
     instructions.push(extension_store(10, 0, 0));
     instructions.push(terminate());
     exe(&instructions)

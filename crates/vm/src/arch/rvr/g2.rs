@@ -11,13 +11,14 @@ use std::{
 };
 
 use rvr_openvm_ext_ffi_common::{
-    g2_lane_v0, g2_lane_v1, g2_load_store_producer_slot, G2_ENCODING_FIXED_LE, G2_FLAGS_V1,
-    G2_FLAG_COMMITTED, G2_GROUP_LOAD_STORE, G2_GROUP_RESIDUAL, G2_LANE_ADDI_V0,
-    G2_LANE_DESC_V1_SIZE, G2_LANE_FLAG_ATOMIC_GROUP, G2_LANE_FLAG_REQUIRED, G2_LANE_RESIDUAL_CTRL,
-    G2_LANE_RESIDUAL_TAG, G2_LANE_RESIDUAL_VALUE, G2_LANE_RUN_BLOCK_ID, G2_LOAD_STORE_KINDS,
-    G2_PRODUCER_ADDI_SLOT, G2_PRODUCER_LANE_COUNT, G2_PRODUCER_RESIDUAL_CTRL_SLOT,
-    G2_PRODUCER_RESIDUAL_TAG_SLOT, G2_PRODUCER_RESIDUAL_VALUE_SLOT, G2_PRODUCER_RUN_SLOT,
-    G2_SEGMENT_HEADER_V1_SIZE, G2_SEGMENT_MAGIC_V1, G2_WIRE_ALIGNMENT, G2_WIRE_VERSION_V1,
+    g2_lane_v0, g2_lane_v1, g2_load_store_producer_slot, g2_standard_lane_width,
+    g2_standard_producer_slot, G2_ENCODING_FIXED_LE, G2_FLAGS_V1, G2_FLAG_COMMITTED,
+    G2_GROUP_LOAD_STORE, G2_GROUP_RESIDUAL, G2_LANE_ADDI_V0, G2_LANE_DESC_V1_SIZE,
+    G2_LANE_FLAG_ATOMIC_GROUP, G2_LANE_FLAG_REQUIRED, G2_LANE_RESIDUAL_CTRL, G2_LANE_RESIDUAL_TAG,
+    G2_LANE_RESIDUAL_VALUE, G2_LANE_RUN_BLOCK_ID, G2_LOAD_STORE_KINDS, G2_PRODUCER_LANE_COUNT,
+    G2_PRODUCER_RESIDUAL_CTRL_SLOT, G2_PRODUCER_RESIDUAL_TAG_SLOT, G2_PRODUCER_RESIDUAL_VALUE_SLOT,
+    G2_PRODUCER_RUN_SLOT, G2_SEGMENT_HEADER_V1_SIZE, G2_SEGMENT_MAGIC_V1, G2_WIRE_ALIGNMENT,
+    G2_WIRE_VERSION_V1,
 };
 pub use rvr_openvm_ext_ffi_common::{
     G2LaneDescV1, G2ProducerLaneV1, G2ProducerV1, G2SegmentHeaderV1,
@@ -51,7 +52,7 @@ pub struct RvrG2MetaV1 {
     pub air_manifest_fingerprint: [u8; 32],
     pub blocks: std::sync::Arc<Vec<RvrG2BlockEntryV1>>,
     /// Sorted stable decoder-kind to global AIR bindings admitted by this
-    /// executable. Phase 2a admits AddI and the complete LoadStore family.
+    /// executable. Phase 2b admits every fixed standard RV64 kind.
     pub air_bindings: std::sync::Arc<Vec<RvrG2AirBindingV1>>,
 }
 
@@ -396,9 +397,8 @@ pub fn decode_addi_reference_v1(
     })
 }
 
-/// Oracle-only Phase-2a decoder. It walks program chronology on the CPU only
-/// in tests and reconstructs the established 44-byte consumer records for
-/// AddI and every LoadStore kind, including residual narrow REVEAL rows.
+/// Oracle-only G2 decoder. It walks program chronology on the CPU only in
+/// tests and reconstructs the established compact consumer records.
 pub fn decode_reference_v1(
     segment: &RvrG2SegmentV1,
     meta: &RvrG2MetaV1,
@@ -422,7 +422,8 @@ pub fn decode_reference_v1(
     for (reg, &value) in registers.iter().enumerate() {
         blocks.insert((1, reg as u32 * 8), value);
     }
-    let mut kind_cursors = [0usize; 30];
+    let mut kind_v0_cursors = [0usize; 30];
+    let mut kind_v1_cursors = [0usize; 30];
     let mut residual_cursor = 0usize;
     let mut timestamp = initial_timestamp;
     let mut compact_records = BTreeMap::<u8, Vec<u8>>::new();
@@ -465,8 +466,8 @@ pub fn decode_reference_v1(
                     .ok_or_else(|| g2_error("missing AddI lane"))?;
                 let rs1 = register_index(entry.b)?;
                 let rd = register_index(entry.a)?;
-                let value = lane_u64(lane, kind_cursors[kind as usize], "AddI")?;
-                kind_cursors[kind as usize] += 1;
+                let value = lane_u64(lane, kind_v0_cursors[kind as usize], "AddI")?;
+                kind_v0_cursors[kind as usize] += 1;
                 if value != registers[rs1] {
                     return Err(g2_error(format!("AddI value mismatch at slot {slot}")));
                 }
@@ -490,6 +491,130 @@ pub fn decode_reference_v1(
                 append_u64(&mut record, write_prev_value);
                 append_u64(&mut record, value);
                 append_u64(&mut record, immediate);
+            } else if matches!(kind, 0..=7 | 15..=19) && matches!(entry.access_pattern, 0 | 1) {
+                let rs1 = register_index(entry.b)?;
+                let rd = register_index(entry.a)?;
+                let v0_lane = segment
+                    .lane(&descs, g2_lane_v0(kind))
+                    .ok_or_else(|| g2_error(format!("kind {kind} missing V0 lane")))?;
+                let v0 = lane_u64(v0_lane, kind_v0_cursors[kind as usize], "standard V0")?;
+                kind_v0_cursors[kind as usize] += 1;
+                if v0 != registers[rs1] {
+                    return Err(g2_error(format!("kind {kind} V0 mismatch at slot {slot}")));
+                }
+                let (v1, rs2_ptr) = if entry.flags & 1 != 0 {
+                    (standard_immediate(entry), None)
+                } else {
+                    let rs2 = register_index(entry.c)?;
+                    let v1_lane = segment
+                        .lane(&descs, g2_lane_v1(kind))
+                        .ok_or_else(|| g2_error(format!("kind {kind} missing V1 lane")))?;
+                    let v1 = lane_u64(v1_lane, kind_v1_cursors[kind as usize], "standard V1")?;
+                    kind_v1_cursors[kind as usize] += 1;
+                    if v1 != registers[rs2] {
+                        return Err(g2_error(format!("kind {kind} V1 mismatch at slot {slot}")));
+                    }
+                    (v1, Some(entry.c))
+                };
+                let read0_prev = touch(&mut timestamps, (1, entry.b), timestamp);
+                let read1_prev = rs2_ptr
+                    .map(|pointer| touch(&mut timestamps, (1, pointer), timestamp + 1))
+                    .unwrap_or(0);
+                let write_prev = touch(&mut timestamps, (1, entry.a), timestamp + 2);
+                let write_prev_value = registers[rd];
+                let result = standard_result(kind, entry.local_opcode, v0, v1)?;
+                if rd != 0 {
+                    registers[rd] = result;
+                    blocks.insert((1, entry.a), result);
+                }
+                timestamp = timestamp
+                    .checked_add(3)
+                    .ok_or_else(|| g2_error("timestamp overflow"))?;
+                append_u32(&mut record, read0_prev);
+                append_u32(&mut record, read1_prev);
+                append_u32(&mut record, write_prev);
+                append_u64(&mut record, write_prev_value);
+                append_u64(&mut record, v0);
+                append_u64(&mut record, v1);
+            } else if matches!(kind, 10 | 11) && entry.access_pattern == 4 {
+                let rs1 = register_index(entry.a)?;
+                let rs2 = register_index(entry.b)?;
+                let v0_lane = segment
+                    .lane(&descs, g2_lane_v0(kind))
+                    .ok_or_else(|| g2_error(format!("branch kind {kind} missing V0 lane")))?;
+                let v1_lane = segment
+                    .lane(&descs, g2_lane_v1(kind))
+                    .ok_or_else(|| g2_error(format!("branch kind {kind} missing V1 lane")))?;
+                let v0 = lane_u64(v0_lane, kind_v0_cursors[kind as usize], "branch V0")?;
+                let v1 = lane_u64(v1_lane, kind_v1_cursors[kind as usize], "branch V1")?;
+                kind_v0_cursors[kind as usize] += 1;
+                kind_v1_cursors[kind as usize] += 1;
+                if v0 != registers[rs1] || v1 != registers[rs2] {
+                    return Err(g2_error(format!(
+                        "branch kind {kind} value mismatch at slot {slot}"
+                    )));
+                }
+                let read0_prev = touch(&mut timestamps, (1, entry.a), timestamp);
+                let read1_prev = touch(&mut timestamps, (1, entry.b), timestamp + 1);
+                timestamp = timestamp
+                    .checked_add(2)
+                    .ok_or_else(|| g2_error("timestamp overflow"))?;
+                append_u32(&mut record, read0_prev);
+                append_u32(&mut record, read1_prev);
+                append_u64(&mut record, v0);
+                append_u64(&mut record, v1);
+            } else if matches!(kind, 12 | 14) && matches!(entry.access_pattern, 5 | 6) {
+                let write_enabled = entry.flags & (1 << 2) != 0;
+                let (write_prev, write_prev_value) = if write_enabled {
+                    let rd = register_index(entry.a)?;
+                    let previous = registers[rd];
+                    let write_prev = touch(&mut timestamps, (1, entry.a), timestamp);
+                    let result = wr1_result(kind, entry, decode.pc_base + slot * 4)?;
+                    if rd != 0 {
+                        registers[rd] = result;
+                        blocks.insert((1, entry.a), result);
+                    }
+                    (write_prev, previous)
+                } else {
+                    (0, 0)
+                };
+                timestamp = timestamp
+                    .checked_add(1)
+                    .ok_or_else(|| g2_error("timestamp overflow"))?;
+                append_u32(&mut record, write_prev);
+                append_u64(&mut record, write_prev_value);
+            } else if kind == 13 && entry.access_pattern == 7 {
+                let rs1 = register_index(entry.b)?;
+                let v0_lane = segment
+                    .lane(&descs, g2_lane_v0(kind))
+                    .ok_or_else(|| g2_error("Jalr missing V0 lane"))?;
+                let pointer = lane_u32(v0_lane, kind_v0_cursors[kind as usize], "Jalr pointer")?;
+                kind_v0_cursors[kind as usize] += 1;
+                if u64::from(pointer) != registers[rs1] {
+                    return Err(g2_error(format!("Jalr pointer mismatch at slot {slot}")));
+                }
+                let read_prev = touch(&mut timestamps, (1, entry.b), timestamp);
+                let write_enabled = entry.flags & (1 << 2) != 0;
+                let (write_prev, write_prev_value) = if write_enabled {
+                    let rd = register_index(entry.a)?;
+                    let previous = registers[rd];
+                    let write_prev = touch(&mut timestamps, (1, entry.a), timestamp + 1);
+                    if rd != 0 {
+                        let result = u64::from(decode.pc_base + slot * 4 + 4);
+                        registers[rd] = result;
+                        blocks.insert((1, entry.a), result);
+                    }
+                    (write_prev, previous)
+                } else {
+                    (0, 0)
+                };
+                timestamp = timestamp
+                    .checked_add(2)
+                    .ok_or_else(|| g2_error("timestamp overflow"))?;
+                append_u32(&mut record, read_prev);
+                append_u32(&mut record, write_prev);
+                append_u64(&mut record, u64::from(pointer));
+                append_u64(&mut record, write_prev_value);
             } else if G2_LOAD_STORE_KINDS.contains(&kind) && matches!(entry.access_pattern, 2 | 3) {
                 let a = register_index(entry.a)?;
                 let base = register_index(entry.b)?;
@@ -544,15 +669,16 @@ pub fn decode_reference_v1(
                     let v1 = segment
                         .lane(&descs, g2_lane_v1(kind))
                         .ok_or_else(|| g2_error(format!("kind {kind} missing V1 lane")))?;
-                    let cursor = kind_cursors[kind as usize];
-                    kind_cursors[kind as usize] += 1;
-                    let pointer = lane_u32(v0, cursor, "load/store pointer")?;
+                    let pointer =
+                        lane_u32(v0, kind_v0_cursors[kind as usize], "load/store pointer")?;
+                    let block = lane_u64(v1, kind_v1_cursors[kind as usize], "load/store block")?;
+                    kind_v0_cursors[kind as usize] += 1;
+                    kind_v1_cursors[kind as usize] += 1;
                     if u64::from(pointer) != registers[base] {
                         return Err(g2_error(format!(
                             "kind {kind} pointer mismatch at slot {slot}"
                         )));
                     }
-                    let block = lane_u64(v1, cursor, "load/store block")?;
                     (pointer, block, registers[a], None)
                 };
                 let address_space = if entry.flags & (1 << 4) != 0 { 3 } else { 2 };
@@ -610,10 +736,21 @@ pub fn decode_reference_v1(
                 append_u64(&mut record, u64::from(pointer));
                 append_u64(&mut record, if is_store { source } else { block_value });
             } else {
-                return Err(g2_error(format!("slot {slot} is outside Phase 2a")));
+                return Err(g2_error(format!(
+                    "slot {slot} is outside the fixed-standard G2 schema"
+                )));
             }
-            if record.len() != PREFLIGHT_ADDSUB_RECORD_SIZE {
-                return Err(g2_error("reference decoder produced a bad compact stride"));
+            let expected_stride = match entry.access_pattern {
+                0..=3 | 8 => PREFLIGHT_ADDSUB_RECORD_SIZE,
+                4 | 7 => 32,
+                5 | 6 => 20,
+                _ => return Err(g2_error("reference decoder saw an invalid access pattern")),
+            };
+            if record.len() != expected_stride {
+                return Err(g2_error(format!(
+                    "reference decoder produced stride {} instead of {expected_stride}",
+                    record.len()
+                )));
             }
             compact_records.entry(kind).or_default().extend(record);
         }
@@ -626,25 +763,21 @@ pub fn decode_reference_v1(
             "program or residual cursor did not finish exactly",
         ));
     }
-    for kind in G2_LOAD_STORE_KINDS {
-        let lane_count = descs
+    for kind in 0u8..30 {
+        let v0_count = descs
             .iter()
             .find(|desc| desc.kind == g2_lane_v0(kind))
-            .map(|desc| desc.count as usize)
-            .unwrap_or(0);
-        if kind_cursors[kind as usize] != lane_count {
+            .map_or(0, |desc| desc.count as usize);
+        let v1_count = descs
+            .iter()
+            .find(|desc| desc.kind == g2_lane_v1(kind))
+            .map_or(0, |desc| desc.count as usize);
+        if kind_v0_cursors[kind as usize] != v0_count || kind_v1_cursors[kind as usize] != v1_count
+        {
             return Err(g2_error(format!(
-                "kind {kind} cursor did not finish exactly"
+                "kind {kind} V0/V1 cursors did not finish exactly"
             )));
         }
-    }
-    let addi_count = descs
-        .iter()
-        .find(|desc| desc.kind == G2_LANE_ADDI_V0)
-        .map(|desc| desc.count as usize)
-        .unwrap_or(0);
-    if kind_cursors[29] != addi_count {
-        return Err(g2_error("AddI cursor did not finish exactly"));
     }
     Ok(RvrG2ReferenceV1 {
         compact_records,
@@ -764,6 +897,163 @@ fn register_index(pointer: u32) -> Result<usize, ExecutionError> {
 
 fn sign_extend_12(value: u32) -> u64 {
     ((value << 20) as i32 >> 20) as i64 as u64
+}
+
+fn standard_immediate(entry: &RvrDeltaDecodeEntry) -> u64 {
+    if entry.flags & (1 << 1) != 0 {
+        ((entry.c << 8) as i32 >> 8) as i64 as u64
+    } else {
+        u64::from(entry.c)
+    }
+}
+
+fn sign_extend_word(value: u32) -> u64 {
+    value as i32 as i64 as u64
+}
+
+fn standard_result(kind: u8, local_opcode: u8, v0: u64, v1: u64) -> Result<u64, ExecutionError> {
+    let invalid = || {
+        g2_error(format!(
+            "invalid local opcode {local_opcode} for kind {kind}"
+        ))
+    };
+    Ok(match kind {
+        0 => match local_opcode {
+            0 => v0.wrapping_add(v1),
+            1 => v0.wrapping_sub(v1),
+            _ => return Err(invalid()),
+        },
+        1 => match local_opcode {
+            2 => v0 ^ v1,
+            3 => v0 | v1,
+            4 => v0 & v1,
+            _ => return Err(invalid()),
+        },
+        2 => match local_opcode {
+            0 => u64::from((v0 as i64) < (v1 as i64)),
+            1 => u64::from(v0 < v1),
+            _ => return Err(invalid()),
+        },
+        3 => match local_opcode {
+            0 => v0.wrapping_shl((v1 & 63) as u32),
+            1 => v0.wrapping_shr((v1 & 63) as u32),
+            _ => return Err(invalid()),
+        },
+        4 if local_opcode == 2 => ((v0 as i64) >> (v1 & 63)) as u64,
+        5 => sign_extend_word(match local_opcode {
+            0 => (v0 as u32).wrapping_add(v1 as u32),
+            1 => (v0 as u32).wrapping_sub(v1 as u32),
+            _ => return Err(invalid()),
+        }),
+        6 => sign_extend_word(match local_opcode {
+            0 => (v0 as u32).wrapping_shl((v1 & 31) as u32),
+            1 => (v0 as u32).wrapping_shr((v1 & 31) as u32),
+            _ => return Err(invalid()),
+        }),
+        7 if local_opcode == 0 => sign_extend_word(((v0 as u32 as i32) >> (v1 & 31)) as u32),
+        15 => v0.wrapping_mul(v1),
+        16 => match local_opcode {
+            0 => (((v0 as i64 as i128) * (v1 as i64 as i128)) >> 64) as u64,
+            1 => (((v0 as i64 as i128) * (v1 as u128 as i128)) >> 64) as u64,
+            2 => (((v0 as u128) * (v1 as u128)) >> 64) as u64,
+            _ => return Err(invalid()),
+        },
+        17 => sign_extend_word((v0 as u32).wrapping_mul(v1 as u32)),
+        18 => divrem_result(local_opcode, v0, v1).ok_or_else(invalid)?,
+        19 => divrem_w_result(local_opcode, v0, v1).ok_or_else(invalid)?,
+        _ => return Err(invalid()),
+    })
+}
+
+fn divrem_result(local_opcode: u8, lhs: u64, rhs: u64) -> Option<u64> {
+    Some(match local_opcode {
+        0 => {
+            let (lhs, rhs) = (lhs as i64, rhs as i64);
+            if rhs == 0 {
+                u64::MAX
+            } else if lhs == i64::MIN && rhs == -1 {
+                lhs as u64
+            } else {
+                (lhs / rhs) as u64
+            }
+        }
+        1 => {
+            if rhs == 0 {
+                u64::MAX
+            } else {
+                lhs / rhs
+            }
+        }
+        2 => {
+            let (lhs, rhs) = (lhs as i64, rhs as i64);
+            if rhs == 0 {
+                lhs as u64
+            } else if lhs == i64::MIN && rhs == -1 {
+                0
+            } else {
+                (lhs % rhs) as u64
+            }
+        }
+        3 => {
+            if rhs == 0 {
+                lhs
+            } else {
+                lhs % rhs
+            }
+        }
+        _ => return None,
+    })
+}
+
+fn divrem_w_result(local_opcode: u8, lhs: u64, rhs: u64) -> Option<u64> {
+    let (lhs, rhs) = (lhs as u32, rhs as u32);
+    let word = match local_opcode {
+        0 => {
+            let (lhs, rhs) = (lhs as i32, rhs as i32);
+            if rhs == 0 {
+                u32::MAX
+            } else if lhs == i32::MIN && rhs == -1 {
+                lhs as u32
+            } else {
+                (lhs / rhs) as u32
+            }
+        }
+        1 => {
+            if rhs == 0 {
+                u32::MAX
+            } else {
+                lhs / rhs
+            }
+        }
+        2 => {
+            let (lhs, rhs) = (lhs as i32, rhs as i32);
+            if rhs == 0 {
+                lhs as u32
+            } else if lhs == i32::MIN && rhs == -1 {
+                0
+            } else {
+                (lhs % rhs) as u32
+            }
+        }
+        3 => {
+            if rhs == 0 {
+                lhs
+            } else {
+                lhs % rhs
+            }
+        }
+        _ => return None,
+    };
+    Some(sign_extend_word(word))
+}
+
+fn wr1_result(kind: u8, entry: &RvrDeltaDecodeEntry, pc: u32) -> Result<u64, ExecutionError> {
+    match kind {
+        12 if entry.flags & (1 << 3) != 0 => Ok(u64::from(pc.wrapping_add(4))),
+        12 => Ok((entry.c << 12) as i32 as i64 as u64),
+        14 => Ok(u64::from(pc).wrapping_add((entry.c << 8) as i32 as i64 as u64)),
+        _ => Err(g2_error(format!("kind {kind} is not a zero-arity write"))),
+    }
 }
 
 pub(crate) struct RvrG2PreparedV1 {
@@ -989,31 +1279,26 @@ fn producer_lane_specs() -> Vec<LaneSpec> {
             flags: atomic,
             group: G2_GROUP_RESIDUAL,
         },
-        LaneSpec {
-            slot: G2_PRODUCER_ADDI_SLOT,
-            kind: G2_LANE_ADDI_V0,
-            width: 8,
-            flags: required,
-            group: 0,
-        },
     ];
-    for kind in G2_LOAD_STORE_KINDS {
-        let pointer_slot =
-            g2_load_store_producer_slot(kind, false).expect("frozen kind has producer slot");
-        specs.push(LaneSpec {
-            slot: pointer_slot,
-            kind: g2_lane_v0(kind),
-            width: 4,
-            flags: atomic,
-            group: G2_GROUP_LOAD_STORE,
-        });
-        specs.push(LaneSpec {
-            slot: pointer_slot + 1,
-            kind: g2_lane_v1(kind),
-            width: 8,
-            flags: atomic,
-            group: G2_GROUP_LOAD_STORE,
-        });
+    for kind in 0u8..30 {
+        for value_lane in [false, true] {
+            let Some(width) = g2_standard_lane_width(kind, value_lane) else {
+                continue;
+            };
+            let load_store = G2_LOAD_STORE_KINDS.contains(&kind);
+            specs.push(LaneSpec {
+                slot: g2_standard_producer_slot(kind, value_lane)
+                    .expect("standard lane has a producer slot"),
+                kind: if value_lane {
+                    g2_lane_v1(kind)
+                } else {
+                    g2_lane_v0(kind)
+                },
+                width,
+                flags: if load_store { atomic } else { required },
+                group: if load_store { G2_GROUP_LOAD_STORE } else { 0 },
+            });
+        }
     }
     specs.sort_unstable_by_key(|spec| spec.slot);
     specs
@@ -1025,13 +1310,11 @@ fn lane_capacity(spec: LaneSpec, capacities: &RvrG2CapacitiesV1) -> u32 {
         G2_PRODUCER_RESIDUAL_CTRL_SLOT
         | G2_PRODUCER_RESIDUAL_TAG_SLOT
         | G2_PRODUCER_RESIDUAL_VALUE_SLOT => capacities.residual,
-        G2_PRODUCER_ADDI_SLOT => capacities.kinds[29],
-        _ => G2_LOAD_STORE_KINDS
-            .iter()
-            .copied()
+        _ => (0u8..30)
             .find(|&kind| {
-                g2_load_store_producer_slot(kind, false)
-                    .is_some_and(|slot| spec.slot == slot || spec.slot == slot + 1)
+                [false, true].into_iter().any(|value_lane| {
+                    g2_standard_producer_slot(kind, value_lane) == Some(spec.slot)
+                })
             })
             .map(|kind| capacities.kinds[kind as usize])
             .unwrap_or(0),
@@ -1117,6 +1400,8 @@ fn g2_error(message: impl Into<String>) -> ExecutionError {
 
 #[cfg(test)]
 mod tests {
+    use rvr_openvm_ext_ffi_common::G2_PRODUCER_ADDI_SLOT;
+
     use super::*;
 
     #[test]
