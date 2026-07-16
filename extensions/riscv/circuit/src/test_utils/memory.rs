@@ -127,7 +127,7 @@ pub(crate) fn set_and_execute_load<RA: Arena, E: PreflightExecutor<F, RA>>(
         LOADD | LOADWU | LOADHU | LOADBU => {}
         _ => unreachable!("unsupported unsigned load opcode: {opcode:?}"),
     }
-    // Unsigned loads support any byte shift, so sample fully misaligned pointers.
+    // Sample every byte offset within a memory block.
     let access = random_memory_access(tester, rng, 0, rs1, imm, imm_sign);
     let mem_as = mem_as.unwrap_or(RV64_MEMORY_AS as usize);
 
@@ -209,7 +209,7 @@ pub(crate) fn set_and_execute_store<RA: Arena, E: PreflightExecutor<F, RA>>(
         STORED | STOREW | STOREH | STOREB => {}
         _ => unreachable!("unsupported store opcode: {opcode:?}"),
     }
-    // Stores support any byte shift, so sample fully misaligned pointers.
+    // Sample every byte offset within a memory block.
     let access = random_memory_access(tester, rng, 0, rs1, imm, imm_sign);
     let mem_as = mem_as.unwrap_or_else(|| {
         *[RV64_MEMORY_AS as usize, PUBLIC_VALUES_AS as usize]
@@ -336,7 +336,8 @@ pub(crate) fn transfer_store_records<G, C, A, E>(harness: &mut GpuTestChipHarnes
         );
 }
 
-// Byte chips use lean aligned adapters, so their record layout differs from the width adapters.
+// Byte and multi-byte adapters have different row widths, so record transfer must use the
+// matching layout.
 #[cfg(feature = "cuda")]
 pub(crate) fn transfer_load_byte_records<G, C, A, E>(
     harness: &mut GpuTestChipHarness<F, E, A, G, C>,

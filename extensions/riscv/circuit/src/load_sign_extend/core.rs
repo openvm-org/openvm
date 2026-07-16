@@ -33,15 +33,10 @@ pub(crate) fn load_sign_extend_opcode<const LOAD_WIDTH: usize>() -> Rv64LoadStor
     }
 }
 
-/// Handles signed halfword and word loads. Each supported byte shift is encoded as a separate
-/// selector case.
+/// Handles signed halfword and word loads at any byte offset.
 ///
-/// Even shifts move whole u16 cells and take the sign from the high bit of the top cell. Odd
-/// shifts additionally use `overlap_lo_bytes`: the low bytes of the `LOAD_WIDTH / 2 + 1`
-/// consecutive cells overlapped by the load. Each overlapped cell's high byte is derived in the
-/// AIR as `(cell - lo) * 2^-8` and range checked together with the low byte, which makes every
-/// overlapped-cell decomposition unique; result cell `i` then recomposes as `hi_i + 2^8 *
-/// lo_{i+1}`, and the sign comes from the high bit of the last low byte (the top loaded byte).
+/// Even offsets select whole u16 cells. Odd offsets decompose the overlapped cells and recombine
+/// adjacent bytes. The last loaded byte supplies the sign.
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
 pub struct LoadSignExtendCoreCols<T, const SELECTOR_WIDTH: usize, const NUM_OVERLAP_CELLS: usize> {

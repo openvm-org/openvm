@@ -33,7 +33,7 @@ struct Rv64StoreAdapterRecord {
 
     MemoryReadAuxRecord read_data_aux;
     uint32_t write_prev_timestamp;
-    // UINT32_MAX means the access does not cross a block boundary.
+    // Previous timestamp for the optional next-block write; UINT32_MAX marks no write.
     uint32_t write1_prev_timestamp;
     uint16_t imm;
     uint8_t rs1_ptr;
@@ -132,8 +132,7 @@ struct Rv64StoreAdapter {
     }
 };
 
-// Byte-store adapter for `sb`. A byte access uses one memory block, so its trace has no
-// second-write or crossing columns. The shared adapter record's crossing field is unused.
+// Byte stores use one memory block and need no crossing-related trace columns.
 template <typename T> struct Rv64StoreByteAdapterCols {
     ExecutionState<T> from_state;
     T rs1_ptr;

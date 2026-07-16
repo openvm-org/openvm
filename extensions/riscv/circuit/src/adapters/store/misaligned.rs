@@ -83,8 +83,7 @@ pub struct Rv64StoreAdapterCols<T> {
     /// Low limb of the effective pointer for constraining rs1 + sign_extend(imm).
     pub mem_ptr_low_limb: T,
     pub mem_as: T,
-    /// Carry from the low into the high pointer limb when the crossing block starts at a
-    /// multiple of 2^16; forced by the crossing range check below.
+    /// Carry into the high pointer limb when advancing to the second block wraps the low u16 limb.
     pub mem_ptr_carry: T,
     /// Timestamp aux for the memory write; previous data is provided by the core chip.
     pub write_base_aux: MemoryBaseAuxCols<T>,

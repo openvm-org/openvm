@@ -70,10 +70,9 @@ struct StoreWidthCore {
         row.write_array(offsetof(Cols, read_data), BLOCK_FE_WIDTH, record.read_data);
         row.write_array(offsetof(Cols, prev_data), 2 * BLOCK_FE_WIDTH, &record.prev_data[0][0]);
 
-        // Only the value cells' low bytes and the preserved boundary bytes (the low byte of the
-        // first overlapped cell, the high byte of the last) are materialized; their counterparts
-        // are derived in the AIR and only range checked. The AIR's range checks are gated on the
-        // odd-shift selector sum, so even shifts request no lookups.
+        // Odd shifts materialize the value cells' low bytes and the two preserved boundary
+        // bytes. The AIR derives each paired byte; even shifts leave these columns zero and emit
+        // no byte lookups.
         uint16_t value_lo_bytes[NUM_VALUE_CELLS] = {};
         uint16_t prev_bound_bytes[2] = {};
         if (shift & 1) {

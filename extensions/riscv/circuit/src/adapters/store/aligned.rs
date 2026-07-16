@@ -41,7 +41,7 @@ use crate::adapters::{
     RV64_REGISTER_NUM_LIMBS, U16_BITS,
 };
 
-// Lean store adapter for `sb`, a single-byte access that can never cross a block boundary.
+// Byte stores never cross a memory block, so this adapter has no second-block columns.
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
@@ -285,7 +285,7 @@ where
             mem_as,
             byte_ptr_to_u16_ptr_value(aligned_ptr),
         );
-        // A byte store never crosses: no second block write and no wasted timestamp slot.
+        // Mark the optional second write absent.
         record.write1_prev_timestamp = u32::MAX;
 
         (

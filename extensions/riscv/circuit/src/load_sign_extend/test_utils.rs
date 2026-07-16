@@ -164,8 +164,8 @@ pub(crate) fn transfer_load_sign_extend_records<G, C, A, E>(
         );
 }
 
-// The byte chip uses the lean byte adapter, whose trace rows are narrower than the width
-// (misaligned) adapter's; the layout must match or the core record lands at the wrong offset.
+// Byte and multi-byte adapters have different row widths, so record transfer must use the
+// matching layout.
 #[cfg(feature = "cuda")]
 pub(crate) fn transfer_load_sign_extend_byte_records<G, C, A, E>(
     harness: &mut GpuTestChipHarness<F, E, A, G, C>,

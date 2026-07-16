@@ -38,7 +38,7 @@ use crate::adapters::{
     RV64_REGISTER_NUM_LIMBS, U16_BITS,
 };
 
-// Lean load adapter for `lb`/`lbu`, single-byte accesses that can never cross a block boundary.
+// Byte loads never cross a memory block, so this adapter has no second-block columns.
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
@@ -273,7 +273,7 @@ where
             byte_ptr_to_u16_ptr_value(aligned_ptr),
             &mut record.read_data_aux.prev_timestamp,
         );
-        // A byte load never crosses: no second block read and no wasted timestamp slot.
+        // Mark the optional second read absent.
         record.read_data1_aux.prev_timestamp = u32::MAX;
         let prev_data = memory_read_u16(
             memory.data(),

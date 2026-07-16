@@ -33,16 +33,11 @@ pub(crate) fn store_opcode<const STORE_WIDTH: usize>() -> Rv64LoadStoreOpcode {
     }
 }
 
-/// Handles halfword, word, and doubleword stores. The core combines source register data with the
-/// previous contents of the touched memory blocks so bytes outside the store width stay unchanged.
+/// Handles halfword, word, and doubleword stores at any byte offset.
 ///
-/// Even shifts move whole u16 cells. Odd shifts additionally use byte decompositions: the low
-/// bytes of all source value cells (`value_lo_bytes`, high bytes derived in the AIR) plus the two
-/// preserved bytes of the first and last overlapped memory cells (`prev_bound_bytes`, overwritten
-/// bytes derived in the AIR), from which every touched cell of the written blocks is a linear
-/// recombination that splices the value bytes between the preserved boundary bytes. All byte
-/// range checks are gated on the odd-shift selector sum, so on even shifts the byte columns are
-/// unconstrained and unused.
+/// Even offsets replace whole u16 cells. Odd offsets decompose the source and the two boundary
+/// cells into bytes so bytes outside the stored range remain unchanged. Byte columns and lookups
+/// are unused on even offsets.
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
 pub struct StoreCoreCols<T, const SELECTOR_WIDTH: usize, const NUM_VALUE_CELLS: usize> {

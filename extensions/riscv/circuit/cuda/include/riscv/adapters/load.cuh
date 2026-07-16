@@ -32,7 +32,7 @@ struct Rv64LoadAdapterRecord {
     MemoryReadAuxRecord rs1_aux_record;
 
     MemoryReadAuxRecord read_data_aux;
-    // prev_timestamp == UINT32_MAX means the access does not cross a block boundary.
+    // Auxiliary data for the optional next-block read; UINT32_MAX marks no read.
     MemoryReadAuxRecord read_data1_aux;
     uint16_t imm;
     bool imm_sign;
@@ -142,8 +142,7 @@ struct Rv64LoadAdapter {
     }
 };
 
-// Byte-load adapter for `lb`/`lbu`. A byte access uses one memory block, so its trace has no
-// second-read or crossing columns. The shared adapter record's crossing fields are unused.
+// Byte loads use one memory block and need no crossing-related trace columns.
 template <typename T> struct Rv64LoadByteAdapterCols {
     ExecutionState<T> from_state;
     T rs1_ptr;

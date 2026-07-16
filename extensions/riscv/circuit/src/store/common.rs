@@ -13,8 +13,8 @@ use crate::adapters::{
 #[derive(AlignedBytesBorrow, Clone, Copy, Debug)]
 pub struct StoreRecord {
     pub read_data: [u16; BLOCK_FE_WIDTH],
-    /// Previous contents of the two touched memory blocks; the second is all-zero unless the
-    /// access crosses a block boundary.
+    /// Previous contents of the containing and next memory blocks. The next-block entry is zero
+    /// when the access does not cross the first block.
     pub prev_data: [[u16; BLOCK_FE_WIDTH]; 2],
 }
 
@@ -75,9 +75,8 @@ where
     }
 }
 
-/// Returns the contents of the two written memory blocks for a store at any byte shift,
-/// preserving previous bytes outside the store width. The second block is written back
-/// unchanged unless the access crosses a block boundary.
+/// Returns the two block values supplied to the adapter for a store at any byte offset. The
+/// adapter writes the second block only when the access crosses the first one.
 pub(crate) fn store_write_data(
     opcode: Rv64LoadStoreOpcode,
     read_data: [u16; BLOCK_FE_WIDTH],
