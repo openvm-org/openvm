@@ -52,16 +52,11 @@ fn create_harness(tester: &VmChipTestBuilder<F>) -> Harness {
     let range_checker = tester.range_checker();
     let air = Rv64ShiftRightArithmeticImmAir::new(
         Rv64BaseAluImmU16AdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
-        ShiftRightArithmeticImmCoreAir::new(
-            range_checker.bus(),
-            ShiftImmOpcode::CLASS_OFFSET,
-            ShiftImmOpcode::SRAI as usize,
-        ),
+        ShiftRightArithmeticImmCoreAir::new(range_checker.bus(), ShiftImmOpcode::CLASS_OFFSET),
     );
     let executor = Rv64ShiftRightArithmeticImmExecutor::new(
         Rv64BaseAluImmU16AdapterExecutor::new(),
         ShiftImmOpcode::CLASS_OFFSET,
-        ShiftImmOpcode::SRAI as usize,
     );
     let chip = Rv64ShiftRightArithmeticImmChip::new(
         ShiftRightArithmeticImmFiller::new(Rv64BaseAluImmU16AdapterFiller::new(), range_checker),
@@ -154,16 +149,11 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     ));
     let air = Rv64ShiftRightArithmeticImmAir::new(
         Rv64BaseAluImmU16AdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
-        ShiftRightArithmeticImmCoreAir::new(
-            range_checker.bus(),
-            ShiftImmOpcode::CLASS_OFFSET,
-            ShiftImmOpcode::SRAI as usize,
-        ),
+        ShiftRightArithmeticImmCoreAir::new(range_checker.bus(), ShiftImmOpcode::CLASS_OFFSET),
     );
     let executor = Rv64ShiftRightArithmeticImmExecutor::new(
         Rv64BaseAluImmU16AdapterExecutor::new(),
         ShiftImmOpcode::CLASS_OFFSET,
-        ShiftImmOpcode::SRAI as usize,
     );
     let cpu_chip = Rv64ShiftRightArithmeticImmChip::new(
         ShiftRightArithmeticImmFiller::new(Rv64BaseAluImmU16AdapterFiller::new(), range_checker),
@@ -276,16 +266,11 @@ mod word {
                 tester.memory_bridge(),
                 range_checker.bus(),
             ),
-            ShiftRightArithmeticImmCoreAir::new(
-                range_checker.bus(),
-                ShiftWImmOpcode::CLASS_OFFSET,
-                ShiftWImmOpcode::SRAIW as usize,
-            ),
+            ShiftRightArithmeticImmCoreAir::new(range_checker.bus(), ShiftWImmOpcode::CLASS_OFFSET),
         );
         let executor = Rv64ShiftWRightArithmeticImmExecutor::new(
             Rv64BaseAluWImmU16AdapterExecutor,
             ShiftWImmOpcode::CLASS_OFFSET,
-            ShiftWImmOpcode::SRAIW as usize,
         );
         let chip = Rv64ShiftWRightArithmeticImmChip::new(
             ShiftRightArithmeticImmFiller::new(
@@ -358,16 +343,11 @@ mod word {
                 tester.memory_bridge(),
                 range_checker.bus(),
             ),
-            ShiftRightArithmeticImmCoreAir::new(
-                range_checker.bus(),
-                ShiftWImmOpcode::CLASS_OFFSET,
-                ShiftWImmOpcode::SRAIW as usize,
-            ),
+            ShiftRightArithmeticImmCoreAir::new(range_checker.bus(), ShiftWImmOpcode::CLASS_OFFSET),
         );
         let executor = Rv64ShiftWRightArithmeticImmExecutor::new(
             Rv64BaseAluWImmU16AdapterExecutor,
             ShiftWImmOpcode::CLASS_OFFSET,
-            ShiftWImmOpcode::SRAIW as usize,
         );
         let cpu_chip = Rv64ShiftWRightArithmeticImmChip::new(
             ShiftRightArithmeticImmFiller::new(

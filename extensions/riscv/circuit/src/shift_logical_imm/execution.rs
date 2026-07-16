@@ -10,6 +10,7 @@ use openvm_instructions::{
     program::DEFAULT_PC_STEP,
     riscv::{RV64_IMM_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
 };
+use openvm_riscv_transpiler::ShiftImmOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::core::ShiftLogicalImmExecutor;
@@ -49,7 +50,9 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         let local_opcode = opcode.local_opcode_idx(self.offset);
-        if local_opcode != self.sll_local_opcode && local_opcode != self.srl_local_opcode {
+        if local_opcode != ShiftImmOpcode::SLLI as usize
+            && local_opcode != ShiftImmOpcode::SRLI as usize
+        {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
         *data = ShiftLogicalImmPreCompute {
@@ -57,7 +60,7 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
             rd_ptr: a.as_canonical_u32() as u8,
             rs1_ptr: b.as_canonical_u32() as u8,
         };
-        Ok(local_opcode == self.sll_local_opcode)
+        Ok(local_opcode == ShiftImmOpcode::SLLI as usize)
     }
 }
 

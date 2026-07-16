@@ -10,6 +10,7 @@ use openvm_instructions::{
     program::DEFAULT_PC_STEP,
     riscv::{RV64_IMM_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
 };
+use openvm_riscv_transpiler::ShiftImmOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::ShiftRightArithmeticImmExecutor;
@@ -42,7 +43,7 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
             ..
         } = inst;
         let shamt = c.as_canonical_u32();
-        if opcode.local_opcode_idx(self.offset) != self.local_opcode
+        if opcode.local_opcode_idx(self.offset) != ShiftImmOpcode::SRAI as usize
             || d.as_canonical_u32() != RV64_REGISTER_AS
             || e.as_canonical_u32() != RV64_IMM_AS
             || shamt >= (NUM_LIMBS * LIMB_BITS) as u32

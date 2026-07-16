@@ -253,8 +253,6 @@ impl VmExecutionExtension for Rv64I {
         let shift_w_logical_imm = Rv64ShiftWLogicalImmExecutor::new(
             Rv64BaseAluWImmU16AdapterExecutor,
             ShiftWImmOpcode::CLASS_OFFSET,
-            ShiftWImmOpcode::SLLIW as usize,
-            ShiftWImmOpcode::SRLIW as usize,
         );
         inventory.add_executor(
             shift_w_logical_imm,
@@ -264,7 +262,6 @@ impl VmExecutionExtension for Rv64I {
         let shift_w_right_arithmetic_imm = Rv64ShiftWRightArithmeticImmExecutor::new(
             Rv64BaseAluWImmU16AdapterExecutor,
             ShiftWImmOpcode::CLASS_OFFSET,
-            ShiftWImmOpcode::SRAIW as usize,
         );
         inventory.add_executor(
             shift_w_right_arithmetic_imm,
@@ -404,8 +401,6 @@ impl VmExecutionExtension for Rv64I {
         let shift_logical_imm = Rv64ShiftLogicalImmExecutor::new(
             Rv64BaseAluImmU16AdapterExecutor,
             ShiftImmOpcode::CLASS_OFFSET,
-            ShiftImmOpcode::SLLI as usize,
-            ShiftImmOpcode::SRLI as usize,
         );
         inventory.add_executor(
             shift_logical_imm,
@@ -415,7 +410,6 @@ impl VmExecutionExtension for Rv64I {
         let shift_right_arithmetic_imm = Rv64ShiftRightArithmeticImmExecutor::new(
             Rv64BaseAluImmU16AdapterExecutor,
             ShiftImmOpcode::CLASS_OFFSET,
-            ShiftImmOpcode::SRAI as usize,
         );
         inventory.add_executor(
             shift_right_arithmetic_imm,
@@ -551,22 +545,13 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
 
         let shift_w_logical_imm = Rv64ShiftWLogicalImmAir::new(
             Rv64BaseAluWImmU16AdapterAir::new(exec_bridge, memory_bridge, range_checker),
-            ShiftLogicalImmCoreAir::new(
-                range_checker,
-                ShiftWImmOpcode::CLASS_OFFSET,
-                ShiftWImmOpcode::SLLIW as usize,
-                ShiftWImmOpcode::SRLIW as usize,
-            ),
+            ShiftLogicalImmCoreAir::new(range_checker, ShiftWImmOpcode::CLASS_OFFSET),
         );
         inventory.add_air(shift_w_logical_imm);
 
         let shift_w_right_arithmetic_imm = Rv64ShiftWRightArithmeticImmAir::new(
             Rv64BaseAluWImmU16AdapterAir::new(exec_bridge, memory_bridge, range_checker),
-            ShiftRightArithmeticImmCoreAir::new(
-                range_checker,
-                ShiftWImmOpcode::CLASS_OFFSET,
-                ShiftWImmOpcode::SRAIW as usize,
-            ),
+            ShiftRightArithmeticImmCoreAir::new(range_checker, ShiftWImmOpcode::CLASS_OFFSET),
         );
         inventory.add_air(shift_w_right_arithmetic_imm);
 
@@ -745,22 +730,13 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
 
         let shift_logical_imm = Rv64ShiftLogicalImmAir::new(
             Rv64BaseAluImmU16AdapterAir::new(exec_bridge, memory_bridge),
-            ShiftLogicalImmCoreAir::new(
-                range_checker,
-                ShiftImmOpcode::CLASS_OFFSET,
-                ShiftImmOpcode::SLLI as usize,
-                ShiftImmOpcode::SRLI as usize,
-            ),
+            ShiftLogicalImmCoreAir::new(range_checker, ShiftImmOpcode::CLASS_OFFSET),
         );
         inventory.add_air(shift_logical_imm);
 
         let shift_right_arithmetic_imm = Rv64ShiftRightArithmeticImmAir::new(
             Rv64BaseAluImmU16AdapterAir::new(exec_bridge, memory_bridge),
-            ShiftRightArithmeticImmCoreAir::new(
-                range_checker,
-                ShiftImmOpcode::CLASS_OFFSET,
-                ShiftImmOpcode::SRAI as usize,
-            ),
+            ShiftRightArithmeticImmCoreAir::new(range_checker, ShiftImmOpcode::CLASS_OFFSET),
         );
         inventory.add_air(shift_right_arithmetic_imm);
 
@@ -900,7 +876,6 @@ where
             ShiftLogicalImmFiller::new(
                 Rv64BaseAluWImmU16AdapterFiller::new(range_checker.clone()),
                 range_checker.clone(),
-                ShiftWImmOpcode::SLLIW as usize,
             ),
             mem_helper.clone(),
         );
@@ -1098,7 +1073,6 @@ where
             ShiftLogicalImmFiller::new(
                 Rv64BaseAluImmU16AdapterFiller::new(),
                 range_checker.clone(),
-                ShiftImmOpcode::SLLI as usize,
             ),
             mem_helper.clone(),
         );

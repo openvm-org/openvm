@@ -44,7 +44,6 @@ pub struct ShiftRightArithmeticImmCoreCols<T, const NUM_LIMBS: usize, const LIMB
 pub struct ShiftRightArithmeticImmCoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub range_bus: VariableRangeCheckerBus,
     pub offset: usize,
-    pub local_opcode: usize,
 }
 
 impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
@@ -144,8 +143,10 @@ where
         }
 
         let immediate = limb_shift * AB::Expr::from_usize(LIMB_BITS) + bit_shift;
-        let expected_opcode =
-            VmCoreAir::<AB, I>::expr_to_global_expr(self, AB::Expr::from_usize(self.local_opcode));
+        let expected_opcode = VmCoreAir::<AB, I>::expr_to_global_expr(
+            self,
+            AB::Expr::from_usize(ShiftImmOpcode::SRAI as usize),
+        );
 
         AdapterAirContext {
             to_pc: None,
@@ -176,7 +177,6 @@ pub struct ShiftRightArithmeticImmCoreRecord<const NUM_LIMBS: usize, const LIMB_
 pub struct ShiftRightArithmeticImmExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub offset: usize,
-    pub local_opcode: usize,
 }
 
 #[derive(Clone, derive_new::new)]
@@ -218,7 +218,10 @@ where
         instruction: &Instruction<F>,
     ) -> Result<(), ExecutionError> {
         let Instruction { opcode, c, .. } = instruction;
-        debug_assert_eq!(opcode.local_opcode_idx(self.offset), self.local_opcode);
+        debug_assert_eq!(
+            opcode.local_opcode_idx(self.offset),
+            ShiftImmOpcode::SRAI as usize
+        );
 
         let shamt = c.as_canonical_u32();
         debug_assert!(shamt < (NUM_LIMBS * LIMB_BITS) as u32);

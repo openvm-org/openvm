@@ -51,25 +51,14 @@ fn create_harness(tester: &VmChipTestBuilder<F>) -> Harness {
     let range_checker = tester.range_checker();
     let air = Rv64ShiftLogicalImmAir::new(
         Rv64BaseAluImmU16AdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
-        ShiftLogicalImmCoreAir::new(
-            range_checker.bus(),
-            ShiftImmOpcode::CLASS_OFFSET,
-            ShiftImmOpcode::SLLI as usize,
-            ShiftImmOpcode::SRLI as usize,
-        ),
+        ShiftLogicalImmCoreAir::new(range_checker.bus(), ShiftImmOpcode::CLASS_OFFSET),
     );
     let executor = Rv64ShiftLogicalImmExecutor::new(
         Rv64BaseAluImmU16AdapterExecutor::new(),
         ShiftImmOpcode::CLASS_OFFSET,
-        ShiftImmOpcode::SLLI as usize,
-        ShiftImmOpcode::SRLI as usize,
     );
     let chip = Rv64ShiftLogicalImmChip::new(
-        ShiftLogicalImmFiller::new(
-            Rv64BaseAluImmU16AdapterFiller::new(),
-            range_checker,
-            ShiftImmOpcode::SLLI as usize,
-        ),
+        ShiftLogicalImmFiller::new(Rv64BaseAluImmU16AdapterFiller::new(), range_checker),
         tester.memory_helper(),
     );
     Harness::with_capacity(executor, air, chip, 32)
@@ -165,25 +154,14 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
     ));
     let air = Rv64ShiftLogicalImmAir::new(
         Rv64BaseAluImmU16AdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
-        ShiftLogicalImmCoreAir::new(
-            range_checker.bus(),
-            ShiftImmOpcode::CLASS_OFFSET,
-            ShiftImmOpcode::SLLI as usize,
-            ShiftImmOpcode::SRLI as usize,
-        ),
+        ShiftLogicalImmCoreAir::new(range_checker.bus(), ShiftImmOpcode::CLASS_OFFSET),
     );
     let executor = Rv64ShiftLogicalImmExecutor::new(
         Rv64BaseAluImmU16AdapterExecutor::new(),
         ShiftImmOpcode::CLASS_OFFSET,
-        ShiftImmOpcode::SLLI as usize,
-        ShiftImmOpcode::SRLI as usize,
     );
     let cpu_chip = Rv64ShiftLogicalImmChip::new(
-        ShiftLogicalImmFiller::new(
-            Rv64BaseAluImmU16AdapterFiller::new(),
-            range_checker,
-            ShiftImmOpcode::SLLI as usize,
-        ),
+        ShiftLogicalImmFiller::new(Rv64BaseAluImmU16AdapterFiller::new(), range_checker),
         tester.dummy_memory_helper(),
     );
     let gpu_chip =
@@ -284,24 +262,16 @@ mod word {
                 tester.memory_bridge(),
                 range_checker.bus(),
             ),
-            ShiftLogicalImmCoreAir::new(
-                range_checker.bus(),
-                ShiftWImmOpcode::CLASS_OFFSET,
-                ShiftWImmOpcode::SLLIW as usize,
-                ShiftWImmOpcode::SRLIW as usize,
-            ),
+            ShiftLogicalImmCoreAir::new(range_checker.bus(), ShiftWImmOpcode::CLASS_OFFSET),
         );
         let executor = Rv64ShiftWLogicalImmExecutor::new(
             Rv64BaseAluWImmU16AdapterExecutor,
             ShiftWImmOpcode::CLASS_OFFSET,
-            ShiftWImmOpcode::SLLIW as usize,
-            ShiftWImmOpcode::SRLIW as usize,
         );
         let chip = Rv64ShiftWLogicalImmChip::new(
             ShiftLogicalImmFiller::new(
                 Rv64BaseAluWImmU16AdapterFiller::new(range_checker.clone()),
                 range_checker,
-                ShiftWImmOpcode::SLLIW as usize,
             ),
             tester.memory_helper(),
         );
@@ -371,24 +341,16 @@ mod word {
                 tester.memory_bridge(),
                 range_checker.bus(),
             ),
-            ShiftLogicalImmCoreAir::new(
-                range_checker.bus(),
-                ShiftWImmOpcode::CLASS_OFFSET,
-                ShiftWImmOpcode::SLLIW as usize,
-                ShiftWImmOpcode::SRLIW as usize,
-            ),
+            ShiftLogicalImmCoreAir::new(range_checker.bus(), ShiftWImmOpcode::CLASS_OFFSET),
         );
         let executor = Rv64ShiftWLogicalImmExecutor::new(
             Rv64BaseAluWImmU16AdapterExecutor,
             ShiftWImmOpcode::CLASS_OFFSET,
-            ShiftWImmOpcode::SLLIW as usize,
-            ShiftWImmOpcode::SRLIW as usize,
         );
         let cpu_chip = Rv64ShiftWLogicalImmChip::new(
             ShiftLogicalImmFiller::new(
                 Rv64BaseAluWImmU16AdapterFiller::new(range_checker.clone()),
                 range_checker,
-                ShiftWImmOpcode::SLLIW as usize,
             ),
             tester.dummy_memory_helper(),
         );
