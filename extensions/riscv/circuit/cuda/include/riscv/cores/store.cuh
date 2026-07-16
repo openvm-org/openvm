@@ -29,12 +29,12 @@ struct Rv64StoreRecord {
     StoreRecord core;
 };
 
-static_assert(sizeof(Rv64StoreAdapterRecord) == 40);
+static_assert(sizeof(Rv64StoreAdapterRecord) == 36);
 static_assert(sizeof(StoreRecord) == 24);
-static_assert(sizeof(Rv64StoreRecord) == 64);
+static_assert(sizeof(Rv64StoreRecord) == 60);
 static_assert(offsetof(StoreRecord, read_data) == 0);
 static_assert(offsetof(StoreRecord, prev_data) == 8);
-static_assert(offsetof(Rv64StoreRecord, core) == 40);
+static_assert(offsetof(Rv64StoreRecord, core) == 36);
 
 static __device__ __forceinline__ uint16_t store_byte_from_cell(uint16_t cell, uint8_t byte_idx) {
     return (cell >> (RV64_BYTE_BITS * byte_idx)) & 0xff;

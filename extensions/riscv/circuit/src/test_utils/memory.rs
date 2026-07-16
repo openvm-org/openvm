@@ -3,12 +3,12 @@ use std::array;
 use std::sync::Arc;
 
 use openvm_circuit::arch::{
-    testing::{memory::gen_pointer, TestBuilder},
-    Arena, MemoryConfig, PreflightExecutor, BLOCK_FE_WIDTH,
+    testing::TestBuilder, Arena, MemoryConfig, PreflightExecutor, BLOCK_FE_WIDTH,
+    NUM_RV64_REGISTERS,
 };
 use openvm_instructions::{
     instruction::Instruction,
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode, PUBLIC_VALUES_AS,
 };
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{
@@ -45,6 +45,14 @@ use crate::{
 pub(crate) const IMM_BITS: usize = 16;
 pub(crate) const MAX_INS_CAPACITY: usize = 128;
 pub(crate) type F = BabyBear;
+
+pub(crate) fn random_register_pointer(rng: &mut StdRng) -> usize {
+    rng.random_range(0..NUM_RV64_REGISTERS) * RV64_REGISTER_NUM_LIMBS
+}
+
+pub(crate) fn random_nonzero_register_pointer(rng: &mut StdRng) -> usize {
+    rng.random_range(1..NUM_RV64_REGISTERS) * RV64_REGISTER_NUM_LIMBS
+}
 
 struct MemoryAccess {
     a: usize,
@@ -87,8 +95,9 @@ fn random_memory_access(
     let shift_amount = (ptr_val as usize) & 7;
     let base_ptr = (ptr_val as usize) - shift_amount;
 
-    let a = gen_pointer(rng, 8);
-    let b = gen_pointer(rng, 8);
+    let a = random_register_pointer(rng);
+    // Keep rs1 nonzero because this helper chooses its contents to produce the sampled address.
+    let b = random_nonzero_register_pointer(rng);
 
     MemoryAccess {
         a,
@@ -127,7 +136,11 @@ pub(crate) fn set_and_execute_load<RA: Arena, E: PreflightExecutor<F, RA>>(
         access.rs1.map(F::from_u8),
     );
 
-    let mut prev_data: [u16; BLOCK_FE_WIDTH] = array::from_fn(|_| rng.random());
+    let mut prev_data: [u16; BLOCK_FE_WIDTH] = if access.a == access.b {
+        crate::adapters::rv64_bytes_to_u16_block(access.rs1)
+    } else {
+        array::from_fn(|_| rng.random())
+    };
     let read_data: [[u16; BLOCK_FE_WIDTH]; 2] =
         array::from_fn(|_| array::from_fn(|_| rng.random()));
     if access.a == 0 {
@@ -211,7 +224,11 @@ pub(crate) fn set_and_execute_store<RA: Arena, E: PreflightExecutor<F, RA>>(
 
     let prev_data: [[u16; BLOCK_FE_WIDTH]; 2] =
         array::from_fn(|_| array::from_fn(|_| rng.random()));
-    let mut read_data: [u16; BLOCK_FE_WIDTH] = array::from_fn(|_| rng.random());
+    let mut read_data: [u16; BLOCK_FE_WIDTH] = if access.a == access.b {
+        crate::adapters::rv64_bytes_to_u16_block(access.rs1)
+    } else {
+        array::from_fn(|_| rng.random())
+    };
     if access.a == 0 {
         read_data = [0; BLOCK_FE_WIDTH];
     }
@@ -262,9 +279,7 @@ pub(crate) fn set_and_execute_store<RA: Arena, E: PreflightExecutor<F, RA>>(
 }
 
 pub(crate) fn load_memory_config() -> MemoryConfig {
-    let mut mem_config = MemoryConfig::default();
-    mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 29;
-    mem_config
+    MemoryConfig::default()
 }
 
 pub(crate) fn store_memory_config() -> MemoryConfig {
@@ -275,9 +290,7 @@ pub(crate) fn store_memory_config() -> MemoryConfig {
 
 #[cfg(feature = "cuda")]
 pub(crate) fn load_gpu_memory_config() -> MemoryConfig {
-    let mut mem_config = MemoryConfig::default();
-    mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << mem_config.pointer_max_bits;
-    mem_config
+    MemoryConfig::default()
 }
 
 #[cfg(feature = "cuda")]

@@ -59,6 +59,13 @@ pub const RV64_WORD_U16_LIMBS: usize = RV64_WORD_NUM_LIMBS / 2;
 pub(crate) const NUM_BYTE_SHIFTS: usize = 2 * BLOCK_FE_WIDTH;
 const SHIFT_SELECTOR_MAX_DEGREE: u32 = 2;
 
+#[inline(always)]
+pub(crate) fn rv64_register_pointer(pointer: u32) -> u8 {
+    debug_assert!(pointer <= u32::from(u8::MAX));
+    debug_assert_eq!(pointer as usize % RV64_REGISTER_NUM_LIMBS, 0);
+    pointer as u8
+}
+
 /// Encodes one selector case for each byte shift, reserving the zero point for invalid rows.
 pub(crate) fn shift_encoder<const SELECTOR_WIDTH: usize>() -> Encoder {
     let encoder = Encoder::new(NUM_BYTE_SHIFTS, SHIFT_SELECTOR_MAX_DEGREE, true);

@@ -2,10 +2,7 @@ use std::array;
 #[cfg(feature = "cuda")]
 use std::sync::Arc;
 
-use openvm_circuit::arch::{
-    testing::{memory::gen_pointer, TestBuilder},
-    Arena, MemoryConfig, PreflightExecutor,
-};
+use openvm_circuit::arch::{testing::TestBuilder, Arena, MemoryConfig, PreflightExecutor};
 use openvm_instructions::{
     instruction::Instruction, riscv::RV64_REGISTER_AS, LocalOpcode, PUBLIC_VALUES_AS,
 };
@@ -33,6 +30,7 @@ use crate::{
         rv64_bytes_to_u16_block, rv64_bytes_to_u32, rv64_u16_block_to_bytes, sign_extend_imm16,
     },
     load_sign_extend::common::load_sign_extend_write_data,
+    test_utils::memory::{random_nonzero_register_pointer, random_register_pointer},
 };
 
 pub(crate) const IMM_BITS: usize = 16;
@@ -74,10 +72,13 @@ pub(crate) fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     });
     let ptr_val = imm_ext.wrapping_add(rv64_bytes_to_u32(rs1));
     let shift_amount = ptr_val % 8;
-    let a = gen_pointer(rng, 8);
-    let b = gen_pointer(rng, 8);
+    let a = random_register_pointer(rng);
+    // Keep rs1 nonzero because this helper chooses its contents to produce the sampled address.
+    let b = random_nonzero_register_pointer(rng);
     let read_data: [[u8; 8]; 2] = array::from_fn(|_| array::from_fn(|_| rng.random()));
-    let prev_data: [F; 8] = if a != 0 {
+    let prev_data: [F; 8] = if a == b {
+        rs1.map(F::from_u8)
+    } else if a != 0 {
         array::from_fn(|_| F::from_u8(rng.random()))
     } else {
         [F::ZERO; 8]
@@ -133,7 +134,6 @@ pub(crate) fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
 
 pub(crate) fn memory_config_for() -> MemoryConfig {
     let mut mem_config = MemoryConfig::default();
-    mem_config.addr_spaces[RV64_REGISTER_AS as usize].num_cells = 1 << 29;
     mem_config.addr_spaces[PUBLIC_VALUES_AS as usize].num_cells = 1 << 29;
     mem_config
 }

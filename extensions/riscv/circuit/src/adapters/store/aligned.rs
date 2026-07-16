@@ -35,8 +35,8 @@ use openvm_stark_backend::{
 
 use crate::adapters::{
     byte_ptr_to_u16_ptr, byte_ptr_to_u16_ptr_value, expand_to_rv64_block, memory_read_u16,
-    ptr_to_field_u16_limbs, ptr_to_u16_limbs, rv64_address_add_imm, sign_extend_imm16,
-    timed_write_u16, tracing_read, tracing_read_u16, try_rv64_bytes_to_u32,
+    ptr_to_field_u16_limbs, ptr_to_u16_limbs, rv64_address_add_imm, rv64_register_pointer,
+    sign_extend_imm16, timed_write_u16, tracing_read, tracing_read_u16, try_rv64_bytes_to_u32,
     Rv64StoreAdapterAirInterface, Rv64StoreAdapterRecord, RV64_PTR_BITS, RV64_PTR_U16_LIMBS,
     RV64_REGISTER_NUM_LIMBS, U16_BITS,
 };
@@ -247,11 +247,11 @@ where
         debug_assert_ne!(mem_as, RV64_REGISTER_AS);
         debug_assert!(mem_as == RV64_MEMORY_AS || mem_as == PUBLIC_VALUES_AS);
 
-        record.rs1_ptr = b.as_canonical_u32();
+        record.rs1_ptr = rv64_register_pointer(b.as_canonical_u32());
         let rs1_bytes = tracing_read(
             memory,
             RV64_REGISTER_AS,
-            record.rs1_ptr,
+            u32::from(record.rs1_ptr),
             &mut record.rs1_aux_record.prev_timestamp,
         );
         record.rs1_val = try_rv64_bytes_to_u32(rs1_bytes).expect("upper 4 bytes must be zero");
@@ -273,11 +273,11 @@ where
         let shift_amount = ptr & (RV64_REGISTER_NUM_LIMBS as u32 - 1);
         let aligned_ptr = ptr - shift_amount;
 
-        record.rs2_ptr = a.as_canonical_u32();
+        record.rs2_ptr = rv64_register_pointer(a.as_canonical_u32());
         let read_data = tracing_read_u16(
             memory,
             RV64_REGISTER_AS,
-            byte_ptr_to_u16_ptr_value(record.rs2_ptr),
+            byte_ptr_to_u16_ptr_value(u32::from(record.rs2_ptr)),
             &mut record.read_data_aux.prev_timestamp,
         );
         let prev_data0 = memory_read_u16(
@@ -320,8 +320,10 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64StoreByteAdapterFiller {
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         debug_assert!(self.range_checker_chip.range_max_bits() >= 15);
 
-        // SAFETY: as in `Rv64StoreAdapterFiller`; the byte adapter reuses `Rv64StoreAdapterRecord`,
-        // which fits within the narrower byte column layout.
+        // SAFETY:
+        // - the executor wrote an `Rv64StoreAdapterRecord` into this row buffer
+        // - the record fits within the byte adapter's column layout
+        // - `get_record_from_slice` returns the record representation at the start of the row
         let record: &Rv64StoreAdapterRecord =
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
         let from_pc = record.from_pc;
@@ -355,7 +357,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64StoreByteAdapterFiller {
 
         adapter_row.imm_sign = F::from_bool(imm_sign);
         adapter_row.imm = F::from_u16(imm);
-        adapter_row.rs2_ptr = F::from_u32(rs2_ptr);
+        adapter_row.rs2_ptr = F::from_u8(rs2_ptr);
 
         mem_helper.fill(
             read_data_prev_timestamp,
@@ -369,7 +371,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64StoreByteAdapterFiller {
         );
 
         adapter_row.rs1_data = ptr_to_field_u16_limbs(rs1_val);
-        adapter_row.rs1_ptr = F::from_u32(rs1_ptr);
+        adapter_row.rs1_ptr = F::from_u8(rs1_ptr);
         adapter_row.from_state.timestamp = F::from_u32(from_timestamp);
         adapter_row.from_state.pc = F::from_u32(from_pc);
     }

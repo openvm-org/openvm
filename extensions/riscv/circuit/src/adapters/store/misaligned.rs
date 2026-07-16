@@ -37,9 +37,9 @@ use openvm_stark_backend::{
 
 use crate::adapters::{
     byte_ptr_to_u16_ptr, byte_ptr_to_u16_ptr_value, expand_to_rv64_block, memory_read_u16,
-    ptr_to_field_u16_limbs, ptr_to_u16_limbs, rv64_address_add_imm, sign_extend_imm16,
-    timed_write_u16, tracing_read, tracing_read_u16, try_rv64_bytes_to_u32, RV64_PTR_BITS,
-    RV64_PTR_U16_LIMBS, RV64_REGISTER_NUM_LIMBS, U16_BITS,
+    ptr_to_field_u16_limbs, ptr_to_u16_limbs, rv64_address_add_imm, rv64_register_pointer,
+    sign_extend_imm16, timed_write_u16, tracing_read, tracing_read_u16, try_rv64_bytes_to_u32,
+    RV64_PTR_BITS, RV64_PTR_U16_LIMBS, RV64_REGISTER_NUM_LIMBS, U16_BITS,
 };
 
 pub struct StoreInstruction<T> {
@@ -277,18 +277,18 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64StoreAdapterAir {
 pub struct Rv64StoreAdapterRecord {
     pub from_pc: u32,
     pub from_timestamp: u32,
-    pub rs1_ptr: u32,
     pub rs1_val: u32,
     pub rs1_aux_record: MemoryReadAuxRecord,
-    pub rs2_ptr: u32,
     pub read_data_aux: MemoryReadAuxRecord,
-    pub imm: u16,
-    pub imm_sign: bool,
-    pub mem_as: u8,
     pub write_prev_timestamp: u32,
     /// Prev timestamp of the second block write; `u32::MAX` when the access does not cross a
     /// block boundary.
     pub write1_prev_timestamp: u32,
+    pub imm: u16,
+    pub rs1_ptr: u8,
+    pub rs2_ptr: u8,
+    pub imm_sign: bool,
+    pub mem_as: u8,
 }
 
 impl Rv64StoreAdapterRecord {
@@ -352,11 +352,11 @@ where
         debug_assert_ne!(mem_as, RV64_REGISTER_AS);
         debug_assert!(mem_as == RV64_MEMORY_AS || mem_as == PUBLIC_VALUES_AS);
 
-        record.rs1_ptr = b.as_canonical_u32();
+        record.rs1_ptr = rv64_register_pointer(b.as_canonical_u32());
         let rs1_bytes = tracing_read(
             memory,
             RV64_REGISTER_AS,
-            record.rs1_ptr,
+            u32::from(record.rs1_ptr),
             &mut record.rs1_aux_record.prev_timestamp,
         );
         record.rs1_val = try_rv64_bytes_to_u32(rs1_bytes).expect("upper 4 bytes must be zero");
@@ -378,11 +378,11 @@ where
         let shift_amount = ptr & (RV64_REGISTER_NUM_LIMBS as u32 - 1);
         let aligned_ptr = ptr - shift_amount;
 
-        record.rs2_ptr = a.as_canonical_u32();
+        record.rs2_ptr = rv64_register_pointer(a.as_canonical_u32());
         let read_data = tracing_read_u16(
             memory,
             RV64_REGISTER_AS,
-            byte_ptr_to_u16_ptr_value(record.rs2_ptr),
+            byte_ptr_to_u16_ptr_value(u32::from(record.rs2_ptr)),
             &mut record.read_data_aux.prev_timestamp,
         );
         let prev_data0 = memory_read_u16(
@@ -514,7 +514,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64StoreAdapterFiller {
 
         adapter_row.imm_sign = F::from_bool(imm_sign);
         adapter_row.imm = F::from_u16(imm);
-        adapter_row.rs2_ptr = F::from_u32(rs2_ptr);
+        adapter_row.rs2_ptr = F::from_u8(rs2_ptr);
 
         mem_helper.fill(
             read_data_prev_timestamp,
@@ -528,7 +528,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64StoreAdapterFiller {
         );
 
         adapter_row.rs1_data = ptr_to_field_u16_limbs(rs1_val);
-        adapter_row.rs1_ptr = F::from_u32(rs1_ptr);
+        adapter_row.rs1_ptr = F::from_u8(rs1_ptr);
         adapter_row.from_state.timestamp = F::from_u32(from_timestamp);
         adapter_row.from_state.pc = F::from_u32(from_pc);
     }

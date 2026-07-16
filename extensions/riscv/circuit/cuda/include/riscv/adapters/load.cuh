@@ -28,11 +28,9 @@ struct Rv64LoadAdapterRecord {
     uint32_t from_pc;
     uint32_t from_timestamp;
 
-    uint32_t rs1_ptr;
     uint32_t rs1_val;
     MemoryReadAuxRecord rs1_aux_record;
 
-    uint32_t rd_ptr;
     MemoryReadAuxRecord read_data_aux;
     // prev_timestamp == UINT32_MAX means the access does not cross a block boundary.
     MemoryReadAuxRecord read_data1_aux;
@@ -41,6 +39,9 @@ struct Rv64LoadAdapterRecord {
 
     uint32_t write_prev_timestamp;
     uint16_t write_prev_data[BLOCK_FE_WIDTH];
+    uint8_t rs1_ptr;
+    // UINT8_MAX means the load does not write a register.
+    uint8_t rd_ptr;
 };
 
 static __device__ __forceinline__ uint32_t
@@ -96,7 +97,7 @@ struct Rv64LoadAdapter {
             mem_helper.fill_zero(row.slice_from(COL_INDEX(Rv64LoadAdapterCols, read_data1_aux)));
         }
 
-        bool needs_write = record.rd_ptr != UINT32_MAX;
+        bool needs_write = record.rd_ptr != UINT8_MAX;
         COL_WRITE_VALUE(row, Rv64LoadAdapterCols, rd_ptr, needs_write ? record.rd_ptr : 0);
         COL_WRITE_VALUE(row, Rv64LoadAdapterCols, needs_write, needs_write);
         if (needs_write) {
@@ -139,9 +140,8 @@ struct Rv64LoadAdapter {
     }
 };
 
-// Lean byte-load adapter for `lb`/`lbu`, which never crosses a block boundary. Drops the crossing
-// columns (`read_data1_aux`, `mem_ptr_carry`) and the second read's timestamp slot. Reuses
-// `Rv64LoadAdapterRecord`; its crossing fields are ignored here.
+// Byte-load adapter for `lb`/`lbu`. A byte access uses one memory block, so its trace has no
+// second-read or crossing columns. The shared adapter record's crossing fields are unused.
 template <typename T> struct Rv64LoadByteAdapterCols {
     ExecutionState<T> from_state;
     T rs1_ptr;
@@ -191,7 +191,7 @@ struct Rv64LoadByteAdapter {
             record.from_timestamp + 1
         );
 
-        bool needs_write = record.rd_ptr != UINT32_MAX;
+        bool needs_write = record.rd_ptr != UINT8_MAX;
         COL_WRITE_VALUE(row, Rv64LoadByteAdapterCols, rd_ptr, needs_write ? record.rd_ptr : 0);
         COL_WRITE_VALUE(row, Rv64LoadByteAdapterCols, needs_write, needs_write);
         if (needs_write) {

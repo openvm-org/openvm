@@ -28,19 +28,18 @@ struct Rv64StoreAdapterRecord {
     uint32_t from_pc;
     uint32_t from_timestamp;
 
-    uint32_t rs1_ptr;
     uint32_t rs1_val;
     MemoryReadAuxRecord rs1_aux_record;
 
-    uint32_t rs2_ptr;
     MemoryReadAuxRecord read_data_aux;
-    uint16_t imm;
-    bool imm_sign;
-    uint8_t mem_as;
-
     uint32_t write_prev_timestamp;
     // UINT32_MAX means the access does not cross a block boundary.
     uint32_t write1_prev_timestamp;
+    uint16_t imm;
+    uint8_t rs1_ptr;
+    uint8_t rs2_ptr;
+    bool imm_sign;
+    uint8_t mem_as;
 };
 
 static __device__ __forceinline__ uint32_t
@@ -131,9 +130,8 @@ struct Rv64StoreAdapter {
     }
 };
 
-// Lean byte-store adapter for `sb`, which never crosses a block boundary. Drops the crossing
-// columns (`write1_base_aux`, `mem_ptr_carry`) and the second write's timestamp slot. Reuses
-// `Rv64StoreAdapterRecord`; its crossing field is ignored here.
+// Byte-store adapter for `sb`. A byte access uses one memory block, so its trace has no
+// second-write or crossing columns. The shared adapter record's crossing field is unused.
 template <typename T> struct Rv64StoreByteAdapterCols {
     ExecutionState<T> from_state;
     T rs1_ptr;

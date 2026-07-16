@@ -32,11 +32,11 @@ struct Rv64LoadSignExtendRecord {
     LoadSignExtendRecord core;
 };
 
-static_assert(sizeof(Rv64LoadAdapterRecord) == 48);
+static_assert(sizeof(Rv64LoadAdapterRecord) == 44);
 static_assert(sizeof(LoadSignExtendRecord) == 16);
-static_assert(sizeof(Rv64LoadSignExtendRecord) == 64);
+static_assert(sizeof(Rv64LoadSignExtendRecord) == 60);
 static_assert(offsetof(LoadSignExtendRecord, read_data) == 0);
-static_assert(offsetof(Rv64LoadSignExtendRecord, core) == 48);
+static_assert(offsetof(Rv64LoadSignExtendRecord, core) == 44);
 
 static __device__ __forceinline__ uint16_t load_sign_extend_byte_from_cell(
     uint16_t cell,

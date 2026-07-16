@@ -28,11 +28,11 @@ struct Rv64LoadRecord {
     LoadRecord core;
 };
 
-static_assert(sizeof(Rv64LoadAdapterRecord) == 48);
+static_assert(sizeof(Rv64LoadAdapterRecord) == 44);
 static_assert(sizeof(LoadRecord) == 16);
-static_assert(sizeof(Rv64LoadRecord) == 64);
+static_assert(sizeof(Rv64LoadRecord) == 60);
 static_assert(offsetof(LoadRecord, read_data) == 0);
-static_assert(offsetof(Rv64LoadRecord, core) == 48);
+static_assert(offsetof(Rv64LoadRecord, core) == 44);
 
 static __device__ __forceinline__ uint16_t load_byte_from_cell(uint16_t cell, uint8_t byte_idx) {
     return (cell >> (RV64_BYTE_BITS * byte_idx)) & 0xff;
