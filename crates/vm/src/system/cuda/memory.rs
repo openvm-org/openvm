@@ -79,7 +79,9 @@ impl PinnedStaging {
     fn ensure(&mut self, len: usize) -> &mut [u8] {
         if self.buf.len() < len {
             if self.registered {
-                crate::arch::cuda::pinned::unregister_region(self.buf.as_mut_ptr());
+                if !crate::arch::cuda::pinned::unregister_region(self.buf.as_mut_ptr()) {
+                    crate::arch::cuda::pinned::quarantine(std::mem::take(&mut self.buf));
+                }
                 self.registered = false;
             }
             self.buf = vec![0u8; len];
@@ -95,8 +97,8 @@ impl PinnedStaging {
 
 impl Drop for PinnedStaging {
     fn drop(&mut self) {
-        if self.registered {
-            crate::arch::cuda::pinned::unregister_region(self.buf.as_mut_ptr());
+        if self.registered && !crate::arch::cuda::pinned::unregister_region(self.buf.as_mut_ptr()) {
+            crate::arch::cuda::pinned::quarantine(std::mem::take(&mut self.buf));
         }
     }
 }

@@ -127,17 +127,27 @@ struct PoolInner {
     /// CUDA startup reserve keyed by AIR geometry. Backings are populated before the segment loop
     /// so a temporarily delayed page-locked cleaner cannot reintroduce demand faults in preflight.
     #[cfg(feature = "cuda")]
-    arena_native_dense_prepared: HashMap<ArenaNativeBackingKey, Vec<Vec<u8>>>,
+    arena_native_dense_prepared: HashMap<ArenaNativeBackingKey, Vec<PreparedDenseBacking>>,
+}
+
+#[cfg(feature = "cuda")]
+struct PreparedDenseBacking {
+    buffer: Vec<u8>,
+    /// Pool hits are CUDA-registered. Fresh prefaulted reserves have never
+    /// been registered or exposed to H2D and remain safe to free normally.
+    registered: bool,
 }
 
 impl Drop for PoolInner {
     fn drop(&mut self) {
         #[cfg(feature = "cuda")]
         for buffers in self.arena_native_dense_prepared.values_mut() {
-            for buffer in buffers.drain(..) {
-                // A prepared buffer may have come from the registered global pool. Returning it
-                // through the quarantine-aware cleaner is the only safe way to release it.
-                crate::arch::cuda::pinned::give_back(buffer, 0);
+            for prepared in buffers.drain(..) {
+                if prepared.registered {
+                    // Never start pool or CUDA work from Drop. A registered
+                    // allocation is quarantined for process reclamation.
+                    crate::arch::pending_return::quarantine(prepared.buffer);
+                }
             }
         }
     }
@@ -729,7 +739,8 @@ impl RvrPreflightBufferPool {
                     .expect("selected prepared arena-native backing disappeared");
                 let backing = buffers
                     .pop()
-                    .expect("selected prepared arena-native backing list was empty");
+                    .expect("selected prepared arena-native backing list was empty")
+                    .buffer;
                 if buffers.is_empty() {
                     inner.arena_native_dense_prepared.remove(&prepared_key);
                 }
@@ -775,7 +786,10 @@ impl RvrPreflightBufferPool {
     /// above remains the bounded fallback if the asynchronous cleaner falls farther behind.
     #[cfg(feature = "cuda")]
     pub(crate) fn prepare_arena_native_dense_backings(&self, key: ArenaNativeBackingKey) {
-        if !self.arena_native_enabled || key.capacity_bytes == 0 {
+        if !self.arena_native_enabled
+            || key.capacity_bytes == 0
+            || crate::arch::cuda::pinned::is_shutting_down()
+        {
             return;
         }
         let depth = *CUDA_ARENA_PREWARM_DEPTH;
@@ -810,7 +824,10 @@ impl RvrPreflightBufferPool {
                 .arena_native_dense_prepared
                 .entry(prepared_key)
                 .or_default()
-                .push(backing);
+                .push(PreparedDenseBacking {
+                    buffer: backing,
+                    registered: !needs_populate,
+                });
         }
     }
 
