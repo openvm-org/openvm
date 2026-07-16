@@ -55,7 +55,7 @@ pub struct Rv64LoadByteAdapterAirInterface;
 
 impl<T> VmAdapterInterface<T> for Rv64LoadByteAdapterAirInterface {
     type Reads = [T; BLOCK_FE_WIDTH];
-    type Writes = [[T; BLOCK_FE_WIDTH]; 1];
+    type Writes = [T; BLOCK_FE_WIDTH];
     type ProcessedInstruction = LoadByteInstruction<T>;
 }
 
@@ -182,7 +182,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadByteAdapterAir {
                     AB::F::from_u32(RV64_REGISTER_AS),
                     byte_ptr_to_u16_ptr::<AB>(local_cols.rd_ptr),
                 ),
-                ctx.writes[0].clone(),
+                ctx.writes.clone(),
                 timestamp_pp(),
                 &local_cols.write_aux,
             )

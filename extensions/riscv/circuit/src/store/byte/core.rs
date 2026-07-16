@@ -77,7 +77,7 @@ where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
     I::Reads: From<([AB::Expr; BLOCK_FE_WIDTH], [AB::Expr; BLOCK_FE_WIDTH])>,
-    I::Writes: From<[[AB::Expr; BLOCK_FE_WIDTH]; 1]>,
+    I::Writes: From<[AB::Expr; BLOCK_FE_WIDTH]>,
     I::ProcessedInstruction: From<StoreByteInstruction<AB::Expr>>,
 {
     fn eval(
@@ -137,7 +137,7 @@ where
                 cols.read_data.map(Into::into),
             )
                 .into(),
-            writes: [write_data].into(),
+            writes: write_data.into(),
             instruction: StoreByteInstruction {
                 is_valid,
                 opcode: expected_opcode,

@@ -57,7 +57,7 @@ pub struct Rv64StoreByteAdapterAirInterface;
 
 impl<T> VmAdapterInterface<T> for Rv64StoreByteAdapterAirInterface {
     type Reads = ([T; BLOCK_FE_WIDTH], [T; BLOCK_FE_WIDTH]);
-    type Writes = [[T; BLOCK_FE_WIDTH]; 1];
+    type Writes = [T; BLOCK_FE_WIDTH];
     type ProcessedInstruction = StoreByteInstruction<T>;
 }
 
@@ -159,7 +159,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64StoreByteAdapterAir {
         builder.assert_bool(local_cols.mem_as - AB::Expr::TWO);
 
         let (prev_data, read_data) = ctx.reads;
-        let [write_data] = ctx.writes;
+        let write_data = ctx.writes;
 
         // Read the source register data to be written into memory.
         self.memory_bridge

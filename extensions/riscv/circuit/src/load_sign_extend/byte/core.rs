@@ -81,7 +81,7 @@ where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
     I::Reads: From<[AB::Expr; BLOCK_FE_WIDTH]>,
-    I::Writes: From<[[AB::Expr; BLOCK_FE_WIDTH]; 1]>,
+    I::Writes: From<[AB::Expr; BLOCK_FE_WIDTH]>,
     I::ProcessedInstruction: From<LoadByteInstruction<AB::Expr>>,
 {
     fn eval(
@@ -168,7 +168,7 @@ where
         AdapterAirContext {
             to_pc: None,
             reads: cols.read_data.map(Into::into).into(),
-            writes: [write_data].into(),
+            writes: write_data.into(),
             instruction: LoadByteInstruction {
                 is_valid,
                 opcode: expected_opcode,
