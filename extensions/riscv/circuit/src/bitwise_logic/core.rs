@@ -143,7 +143,6 @@ pub struct BitwiseLogicExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: usiz
 pub struct BitwiseLogicFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub bitwise_lookup_chip: SharedBitwiseOperationLookupChip<LIMB_BITS>,
-    pub offset: usize,
 }
 
 impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> PreflightExecutor<F, RA>

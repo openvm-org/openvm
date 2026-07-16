@@ -55,6 +55,7 @@ use crate::{
 
 type F = BabyBear;
 const MAX_INS_CAPACITY: usize = 128;
+const REGISTER_SHIFT_AMOUNTS: [u8; 8] = [0, 1, 15, 16, 31, 32, 63, 64];
 type LogicalHarness =
     TestChipHarness<F, Rv64ShiftWLogicalExecutor, Rv64ShiftWLogicalAir, Rv64ShiftWLogicalChip<F>>;
 type RightArithmeticHarness = TestChipHarness<
@@ -114,7 +115,6 @@ fn create_logical_harness_fields(
         ShiftWLogicalFiller::new(
             Rv64BaseAluWU16AdapterFiller::new(range_checker_chip.clone()),
             range_checker_chip,
-            ShiftWOpcode::CLASS_OFFSET,
         ),
         memory_helper,
     );
@@ -143,7 +143,6 @@ fn create_right_arithmetic_harness_fields(
         ShiftWRightArithmeticFiller::new(
             Rv64BaseAluWU16AdapterFiller::new(range_checker_chip.clone()),
             range_checker_chip,
-            ShiftWOpcode::CLASS_OFFSET,
         ),
         memory_helper,
     );
@@ -215,6 +214,37 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     expected
 }
 
+fn execute_boundary_shifts<RA: Arena, E: PreflightExecutor<F, RA>>(
+    tester: &mut impl TestBuilder<F>,
+    executor: &mut E,
+    arena: &mut RA,
+    rng: &mut StdRng,
+    opcode: ShiftWOpcode,
+) {
+    let top_bytes: &[u8] = if opcode == SRAW {
+        &[0x34, 0xBC]
+    } else {
+        &[0x34]
+    };
+    for &top in top_bytes {
+        let b = [0x78, 0x56, 0x34, top, 0xA5, 0xA5, 0xA5, 0xA5];
+        for shift in REGISTER_SHIFT_AMOUNTS {
+            let mut c = [0u8; RV64_REGISTER_NUM_LIMBS];
+            c[0] = shift;
+            set_and_execute(
+                tester,
+                executor,
+                arena,
+                rng,
+                opcode,
+                Some(b),
+                Some(false),
+                Some(c),
+            );
+        }
+    }
+}
+
 //////////////////////////////////////////////////////////////////////////////////////
 // POSITIVE TESTS
 //////////////////////////////////////////////////////////////////////////////////////
@@ -240,6 +270,13 @@ fn run_rv64w_shift_rand_test(opcode: ShiftWOpcode, num_ops: usize) {
                 None,
             );
         }
+        execute_boundary_shifts(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.arena,
+            &mut rng,
+            opcode,
+        );
         let tester = tester.build().load(harness).finalize();
         tester.simple_test().expect("Verification failed");
     } else {
@@ -257,22 +294,13 @@ fn run_rv64w_shift_rand_test(opcode: ShiftWOpcode, num_ops: usize) {
             );
         }
 
-        // Edge cases: shift by 0, by exactly one u16 limb, and across the limb boundary.
-        for &shift in &[0u8, 1, 15, 16, 31] {
-            let b = [0xAB, 0xCD, 0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC];
-            let mut c = [0u8; RV64_REGISTER_NUM_LIMBS];
-            c[0] = shift;
-            set_and_execute(
-                &mut tester,
-                &mut harness.executor,
-                &mut harness.arena,
-                &mut rng,
-                opcode,
-                Some(b),
-                Some(false),
-                Some(c),
-            );
-        }
+        execute_boundary_shifts(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.arena,
+            &mut rng,
+            opcode,
+        );
 
         let tester = tester.build().load(harness).finalize();
         tester.simple_test().expect("Verification failed");
@@ -824,6 +852,14 @@ fn test_cuda_rand_shift_w_tracegen(opcode: ShiftWOpcode, num_ops: usize) {
             );
         }
 
+        execute_boundary_shifts(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.dense_arena,
+            &mut rng,
+            opcode,
+        );
+
         type Record<'a> = (
             &'a mut Rv64BaseAluWU16AdapterRecord,
             &'a mut ShiftRightArithmeticCoreRecord<RV64_WORD_U16_LIMBS, U16_BITS>,
@@ -857,6 +893,14 @@ fn test_cuda_rand_shift_w_tracegen(opcode: ShiftWOpcode, num_ops: usize) {
                 None,
             );
         }
+
+        execute_boundary_shifts(
+            &mut tester,
+            &mut harness.executor,
+            &mut harness.dense_arena,
+            &mut rng,
+            opcode,
+        );
 
         type Record<'a> = (
             &'a mut Rv64BaseAluWU16AdapterRecord,

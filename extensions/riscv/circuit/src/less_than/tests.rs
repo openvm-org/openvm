@@ -67,11 +67,7 @@ fn create_harness_fields(
         LessThanOpcode::CLASS_OFFSET,
     );
     let chip = Rv64LessThanChip::<F>::new(
-        LessThanFiller::new(
-            Rv64BaseAluRegU16AdapterFiller::new(),
-            range_checker_chip,
-            LessThanOpcode::CLASS_OFFSET,
-        ),
+        LessThanFiller::new(Rv64BaseAluRegU16AdapterFiller::new(), range_checker_chip),
         memory_helper,
     );
     (air, executor, chip)

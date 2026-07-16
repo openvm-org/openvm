@@ -744,11 +744,7 @@ where
 
         inventory.next_air::<Rv64BitwiseLogicAir>()?;
         let bitwise_logic = Rv64BitwiseLogicChip::new(
-            BitwiseLogicFiller::new(
-                Rv64BaseAluRegAdapterFiller,
-                bitwise_lu.clone(),
-                BaseAluOpcode::CLASS_OFFSET,
-            ),
+            BitwiseLogicFiller::new(Rv64BaseAluRegAdapterFiller, bitwise_lu.clone()),
             mem_helper.clone(),
         );
         inventory.add_executor_chip(bitwise_logic);
@@ -765,22 +761,14 @@ where
 
         inventory.next_air::<Rv64LessThanAir>()?;
         let lt = Rv64LessThanChip::new(
-            LessThanFiller::new(
-                Rv64BaseAluRegU16AdapterFiller::new(),
-                range_checker.clone(),
-                LessThanOpcode::CLASS_OFFSET,
-            ),
+            LessThanFiller::new(Rv64BaseAluRegU16AdapterFiller::new(), range_checker.clone()),
             mem_helper.clone(),
         );
         inventory.add_executor_chip(lt);
 
         inventory.next_air::<Rv64ShiftLogicalAir>()?;
         let shift_logical = Rv64ShiftLogicalChip::new(
-            ShiftLogicalFiller::new(
-                Rv64BaseAluRegU16AdapterFiller::new(),
-                range_checker.clone(),
-                ShiftOpcode::CLASS_OFFSET,
-            ),
+            ShiftLogicalFiller::new(Rv64BaseAluRegU16AdapterFiller::new(), range_checker.clone()),
             mem_helper.clone(),
         );
         inventory.add_executor_chip(shift_logical);
@@ -790,7 +778,6 @@ where
             ShiftRightArithmeticFiller::new(
                 Rv64BaseAluRegU16AdapterFiller::new(),
                 range_checker.clone(),
-                ShiftOpcode::CLASS_OFFSET,
             ),
             mem_helper.clone(),
         );
@@ -801,7 +788,6 @@ where
             crate::shift_w::ShiftWLogicalFiller::new(
                 Rv64BaseAluWU16AdapterFiller::new(range_checker.clone()),
                 range_checker.clone(),
-                ShiftWOpcode::CLASS_OFFSET,
             ),
             mem_helper.clone(),
         );
@@ -812,7 +798,6 @@ where
             crate::shift_w::ShiftWRightArithmeticFiller::new(
                 Rv64BaseAluWU16AdapterFiller::new(range_checker.clone()),
                 range_checker.clone(),
-                ShiftWOpcode::CLASS_OFFSET,
             ),
             mem_helper.clone(),
         );

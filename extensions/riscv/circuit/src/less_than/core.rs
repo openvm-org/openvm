@@ -180,7 +180,6 @@ pub struct LessThanExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 pub struct LessThanFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
-    pub offset: usize,
 }
 
 impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> PreflightExecutor<F, RA>
