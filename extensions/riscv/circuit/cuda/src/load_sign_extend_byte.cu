@@ -3,7 +3,7 @@
 template <typename T> struct LoadSignExtendByteCoreCols {
     T selector[LOAD_SIGN_EXTEND_BYTE_SELECTOR_WIDTH];
     T data_most_sig_bit;
-    T read_cell_bytes[2];
+    T read_cell_lo_byte;
     T read_data[BLOCK_FE_WIDTH];
 };
 
@@ -40,7 +40,9 @@ struct LoadSignExtendByteCore {
             shift
         );
         COL_WRITE_VALUE(row, LoadSignExtendByteCoreCols, data_most_sig_bit, sign_bit != 0);
-        COL_WRITE_ARRAY(row, LoadSignExtendByteCoreCols, read_cell_bytes, read_cell_bytes);
+        COL_WRITE_VALUE(
+            row, LoadSignExtendByteCoreCols, read_cell_lo_byte, read_cell_bytes[0]
+        );
         COL_WRITE_ARRAY(row, LoadSignExtendByteCoreCols, read_data, record.read_data[0]);
     }
 };

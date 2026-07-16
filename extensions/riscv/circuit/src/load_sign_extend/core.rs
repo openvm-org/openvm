@@ -182,19 +182,9 @@ where
                 .eval(builder, is_valid.clone());
         }
 
-        let (even_shift, odd_shift) = flags.iter().enumerate().fold(
-            (AB::Expr::ZERO, AB::Expr::ZERO),
-            |(even, odd), (byte_shift, flag)| {
-                if byte_shift % 2 == 0 {
-                    (even + flag.clone(), odd)
-                } else {
-                    (even, odd + flag.clone())
-                }
-            },
-        );
-
-        // On even shifts the top loaded byte is the high byte of the selected top cell:
-        // constrain the sign bit at u16 granularity.
+        // On even shifts the top loaded byte is the high byte of the selected top cell. On odd
+        // shifts it is the last overlapped cell's low byte; move that byte to the high half of a
+        // u16 so both cases share one 15-bit sign check.
         let even_sign_cell =
             flags
                 .iter()
@@ -206,22 +196,15 @@ where
                         acc
                     }
                 });
+        let sign_cell = even_sign_cell
+            + cols.overlap_lo_bytes[NUM_OVERLAP_CELLS - 1]
+                * AB::Expr::from_u32(1 << RV64_BYTE_BITS);
         self.range_bus
             .range_check(
-                even_sign_cell
-                    - cols.data_most_sig_bit * AB::Expr::from_u32(RV64_U16_SIGN_BIT as u32),
+                sign_cell - cols.data_most_sig_bit * AB::Expr::from_u32(RV64_U16_SIGN_BIT as u32),
                 U16_BITS - 1,
             )
-            .eval(builder, even_shift);
-        // On odd shifts the top loaded byte is the last overlapped cell's low byte: constrain
-        // the sign bit at byte granularity.
-        self.range_bus
-            .range_check(
-                cols.overlap_lo_bytes[NUM_OVERLAP_CELLS - 1]
-                    - cols.data_most_sig_bit * AB::Expr::from_u32(RV64_BYTE_SIGN_BIT as u32),
-                RV64_BYTE_BITS - 1,
-            )
-            .eval(builder, odd_shift.clone());
+            .eval(builder, is_valid.clone());
 
         let expected_opcode = VmCoreAir::<AB, I>::expr_to_global_expr(
             self,
@@ -365,7 +348,7 @@ where
             let sign_byte = overlap_lo_bytes[NUM_OVERLAP_CELLS - 1];
             let bit = sign_byte & RV64_BYTE_SIGN_BIT;
             self.range_checker_chip
-                .add_count((sign_byte - bit) as u32, RV64_BYTE_BITS - 1);
+                .add_count(((sign_byte - bit) as u32) << RV64_BYTE_BITS, U16_BITS - 1);
             bit != 0
         };
 

@@ -4,7 +4,8 @@ template <typename T> struct StoreByteCoreCols {
     T selector[STORE_BYTE_SELECTOR_WIDTH];
     // Low byte of the first source register cell; the high byte is derived in the AIR.
     T read_lo_byte;
-    T prev_cell_bytes[2];
+    // Low byte of the selected previous memory cell; the high byte is derived in the AIR.
+    T prev_cell_lo_byte;
     T read_data[BLOCK_FE_WIDTH];
     T prev_data[BLOCK_FE_WIDTH];
 };
@@ -34,7 +35,7 @@ struct StoreByteCore {
         Encoder encoder = shift_encoder(STORE_BYTE_SELECTOR_WIDTH);
         encoder.write_flag_pt(row.slice_from(COL_INDEX(StoreByteCoreCols, selector)), shift);
         COL_WRITE_VALUE(row, StoreByteCoreCols, read_lo_byte, read_lo_byte);
-        COL_WRITE_ARRAY(row, StoreByteCoreCols, prev_cell_bytes, prev_cell_bytes);
+        COL_WRITE_VALUE(row, StoreByteCoreCols, prev_cell_lo_byte, prev_cell_bytes[0]);
         COL_WRITE_ARRAY(row, StoreByteCoreCols, read_data, record.read_data);
         COL_WRITE_ARRAY(row, StoreByteCoreCols, prev_data, record.prev_data[0]);
     }

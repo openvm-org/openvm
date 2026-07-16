@@ -139,7 +139,7 @@ struct Rv64LoadAdapter {
     }
 };
 
-// Lean byte-load adapter for `lb`/`lbu`, which never cross a block boundary. Drops the crossing
+// Lean byte-load adapter for `lb`/`lbu`, which never crosses a block boundary. Drops the crossing
 // columns (`read_data1_aux`, `mem_ptr_carry`) and the second read's timestamp slot. Reuses
 // `Rv64LoadAdapterRecord`; its crossing fields are ignored here.
 template <typename T> struct Rv64LoadByteAdapterCols {

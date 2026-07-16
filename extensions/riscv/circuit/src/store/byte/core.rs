@@ -33,7 +33,8 @@ pub struct StoreByteCoreCols<T> {
     /// Low byte of the first source register cell — the stored byte. The cell's high byte is
     /// derived in the AIR.
     pub read_lo_byte: T,
-    pub prev_cell_bytes: [T; 2],
+    /// Low byte of the selected previous memory cell. The high byte is derived in the AIR.
+    pub prev_cell_lo_byte: T,
     pub read_data: [T; BLOCK_FE_WIDTH],
     pub prev_data: [T; BLOCK_FE_WIDTH],
 }
@@ -90,40 +91,25 @@ where
         self.bitwise_lookup_bus
             .send_range(cols.read_lo_byte, read_hi_byte)
             .eval(builder, is_valid.clone());
-        self.bitwise_lookup_bus
-            .send_range(cols.prev_cell_bytes[0], cols.prev_cell_bytes[1])
-            .eval(builder, is_valid.clone());
-
-        let prev_cell = cols.prev_cell_bytes[0]
-            + cols.prev_cell_bytes[1] * AB::Expr::from_u32(1 << RV64_BYTE_BITS);
-        let expected_prev_cell = flags
+        let selected_prev_cell = flags
             .iter()
             .enumerate()
             .fold(AB::Expr::ZERO, |acc, (shift, flag)| {
                 acc + flag.clone() * cols.prev_data[shift / 2]
             });
-        builder.assert_eq(prev_cell, expected_prev_cell);
+        let prev_cell_hi_byte = (selected_prev_cell - cols.prev_cell_lo_byte)
+            * AB::F::from_u32(1 << RV64_BYTE_BITS).inverse();
+        self.bitwise_lookup_bus
+            .send_range(cols.prev_cell_lo_byte, prev_cell_hi_byte)
+            .eval(builder, is_valid.clone());
 
         let write_data = std::array::from_fn(|i| {
-            flags
-                .iter()
-                .enumerate()
-                .fold(AB::Expr::ZERO, |acc, (shift, flag)| {
-                    let cell_shift = shift / 2;
-                    let byte_idx = shift % 2;
-                    let term = if i == cell_shift {
-                        if byte_idx == 0 {
-                            cols.read_lo_byte
-                                + cols.prev_cell_bytes[1] * AB::Expr::from_u32(1 << RV64_BYTE_BITS)
-                        } else {
-                            cols.prev_cell_bytes[0]
-                                + cols.read_lo_byte * AB::Expr::from_u32(1 << RV64_BYTE_BITS)
-                        }
-                    } else {
-                        cols.prev_data[i].into()
-                    };
-                    acc + flag.clone() * term
-                })
+            is_valid.clone() * cols.prev_data[i]
+                + flags[2 * i].clone() * (cols.read_lo_byte - cols.prev_cell_lo_byte)
+                + flags[2 * i + 1].clone()
+                    * (cols.read_lo_byte * AB::Expr::from_u32(1 << RV64_BYTE_BITS)
+                        - cols.prev_data[i]
+                        + cols.prev_cell_lo_byte)
         });
         let shift_amount = flags
             .iter()
@@ -225,7 +211,7 @@ where
         ];
         self.bitwise_lookup_chip
             .request_range(prev_cell_bytes[0] as u32, prev_cell_bytes[1] as u32);
-        core_row.prev_cell_bytes = prev_cell_bytes.map(F::from_u16);
+        core_row.prev_cell_lo_byte = F::from_u16(prev_cell_bytes[0]);
         debug_assert_eq!(
             store_write_data(STOREB, read_data, [prev_data, [0; BLOCK_FE_WIDTH]], shift)[0]
                 [cell_shift],

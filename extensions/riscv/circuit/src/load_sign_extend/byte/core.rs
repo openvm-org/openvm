@@ -33,7 +33,8 @@ pub struct LoadSignExtendByteCoreCols<T> {
     pub selector: [T; LOAD_SIGN_EXTEND_BYTE_SELECTOR_WIDTH],
     /// The sign bit that is extended to the remaining cells.
     pub data_most_sig_bit: T,
-    pub read_cell_bytes: [T; 2],
+    /// Low byte of the selected memory cell. The high byte is derived in the AIR.
+    pub read_cell_lo_byte: T,
     pub read_data: [T; BLOCK_FE_WIDTH],
 }
 
@@ -90,31 +91,44 @@ where
 
         builder.assert_bool(cols.data_most_sig_bit);
 
+        // Keep the even- and odd-shift selections separate so no expression multiplies two
+        // selector-derived values; selector flags have degree 2, and the resulting expressions
+        // stay within degree 3.
+        let (is_even_shift, is_odd_shift, even_selected_cell, odd_selected_cell) =
+            flags.iter().enumerate().fold(
+                (
+                    AB::Expr::ZERO,
+                    AB::Expr::ZERO,
+                    AB::Expr::ZERO,
+                    AB::Expr::ZERO,
+                ),
+                |(even, odd, even_cell, odd_cell), (shift, flag)| {
+                    if shift % 2 == 0 {
+                        (
+                            even + flag.clone(),
+                            odd,
+                            even_cell + flag.clone() * cols.read_data[shift / 2],
+                            odd_cell,
+                        )
+                    } else {
+                        (
+                            even,
+                            odd + flag.clone(),
+                            even_cell,
+                            odd_cell + flag.clone() * cols.read_data[shift / 2],
+                        )
+                    }
+                },
+            );
+        let inv_2_pow_8 = AB::F::from_u32(1 << RV64_BYTE_BITS).inverse();
+        let read_cell_hi_byte =
+            (even_selected_cell + odd_selected_cell.clone() - cols.read_cell_lo_byte) * inv_2_pow_8;
         self.bitwise_lookup_bus
-            .send_range(cols.read_cell_bytes[0], cols.read_cell_bytes[1])
+            .send_range(cols.read_cell_lo_byte, read_cell_hi_byte)
             .eval(builder, is_valid.clone());
 
-        let read_cell = cols.read_cell_bytes[0]
-            + cols.read_cell_bytes[1] * AB::Expr::from_u32(1 << RV64_BYTE_BITS);
-        let expected_read_cell = flags
-            .iter()
-            .enumerate()
-            .fold(AB::Expr::ZERO, |acc, (shift, flag)| {
-                acc + flag.clone() * cols.read_data[shift / 2]
-            });
-        builder.assert_eq(read_cell, expected_read_cell);
-
-        let selected_byte = flags
-            .iter()
-            .enumerate()
-            .fold(AB::Expr::ZERO, |acc, (shift, flag)| {
-                let byte = if shift % 2 == 0 {
-                    cols.read_cell_bytes[0].into()
-                } else {
-                    cols.read_cell_bytes[1].into()
-                };
-                acc + flag.clone() * byte
-            });
+        let selected_byte = is_even_shift * cols.read_cell_lo_byte
+            + (odd_selected_cell - is_odd_shift * cols.read_cell_lo_byte) * inv_2_pow_8;
         // Constrain that data_most_sig_bit matches the selected source byte.
         self.range_bus
             .range_check(
@@ -219,7 +233,7 @@ where
         let read_cell_bytes = [u16_cell_byte(read_cell, 0), u16_cell_byte(read_cell, 1)];
         self.bitwise_lookup_chip
             .request_range(read_cell_bytes[0] as u32, read_cell_bytes[1] as u32);
-        core_row.read_cell_bytes = read_cell_bytes.map(F::from_u16);
+        core_row.read_cell_lo_byte = F::from_u16(read_cell_bytes[0]);
 
         let byte = read_cell_bytes[shift % 2];
         let sign_bit = byte & RV64_BYTE_SIGN_BIT;

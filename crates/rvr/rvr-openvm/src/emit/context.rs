@@ -497,7 +497,7 @@ mod tests {
     }
 
     #[test]
-    fn unaligned_doubleword_records_cross_leaf_span() {
+    fn unaligned_doubleword_emits_span_at_leaf_boundary() {
         let mut ctx = metered_memory_ctx();
         // A 16-byte tracer leaf ends at 0xf, so [0xf, 0x17) touches two leaves.
         ctx.read_mem("0xf", 0, 8, false);
@@ -508,7 +508,7 @@ mod tests {
     }
 
     #[test]
-    fn unaligned_doubleword_records_cross_page_span() {
+    fn unaligned_doubleword_emits_span_at_page_boundary() {
         let mut ctx = metered_memory_ctx();
         // A metering page is 64 16-byte leaves, so [0x3ff, 0x407) crosses a page boundary.
         ctx.write_mem("0x3ff", 0, "value", 8);

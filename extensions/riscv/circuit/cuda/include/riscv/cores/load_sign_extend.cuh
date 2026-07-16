@@ -85,10 +85,11 @@ struct LoadSignExtendWidthCore {
 
         uint16_t sign_bit;
         if (shift & 1) {
-            // The top loaded byte is the last overlapped cell's low byte.
+            // The top loaded byte is the last overlapped cell's low byte. Shift the checked
+            // value into the high byte so odd and even shifts use the same 15-bit range check.
             uint16_t sign_byte = overlap_lo_bytes[NUM_OVERLAP_CELLS - 1];
             sign_bit = sign_byte & SIGN_BYTE;
-            range_checker.add_count(sign_byte - sign_bit, RV64_BYTE_BITS - 1);
+            range_checker.add_count((sign_byte - sign_bit) << RV64_BYTE_BITS, U16_BITS - 1);
         } else {
             // The top loaded byte is the high byte of the top cell.
             uint16_t sign_cell = load_read_full_cell(record, (shift >> 1) + WIDTH_CELLS - 1);
