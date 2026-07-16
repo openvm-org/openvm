@@ -92,6 +92,18 @@ __device__ __forceinline__ bool load_store_kind(uint32_t kind) {
     return kind == 8 || kind == 9 || (kind >= 20 && kind <= 28);
 }
 
+__device__ __forceinline__ bool zero_arity_kind(uint32_t kind) {
+    return kind == 12 || kind == 14;
+}
+
+__device__ __forceinline__ bool standard_v0_kind(uint32_t kind) {
+    return kind < 30 && !zero_arity_kind(kind);
+}
+
+__device__ __forceinline__ bool standard_v1_kind(uint32_t kind) {
+    return standard_v0_kind(kind) && kind != 13 && kind != 29;
+}
+
 __device__ __forceinline__ uint16_t lane_v0(uint32_t kind) {
     return uint16_t(0x0100u + 2u * kind);
 }
@@ -116,18 +128,14 @@ __device__ bool lane_spec(
         group = G2_RESIDUAL_GROUP;
         return true;
     }
-    if (kind == G2_ADDI_V0) {
-        width = 8;
-        flags = G2_REQUIRED;
-        group = 0;
-        return true;
-    }
     for (uint32_t delta_kind = 0; delta_kind < 30; ++delta_kind) {
-        if (!load_store_kind(delta_kind)) continue;
-        if (kind == lane_v0(delta_kind) || kind == lane_v1(delta_kind)) {
-            width = kind == lane_v0(delta_kind) ? 4 : 8;
-            flags = G2_REQUIRED_ATOMIC;
-            group = G2_LOAD_STORE_GROUP;
+        bool is_v0 = kind == lane_v0(delta_kind) && standard_v0_kind(delta_kind);
+        bool is_v1 = kind == lane_v1(delta_kind) && standard_v1_kind(delta_kind);
+        if (is_v0 || is_v1) {
+            width = is_v0 && (load_store_kind(delta_kind) || delta_kind == 13) ? 4 : 8;
+            bool atomic = load_store_kind(delta_kind);
+            flags = atomic ? G2_REQUIRED_ATOMIC : G2_REQUIRED;
+            group = atomic ? G2_LOAD_STORE_GROUP : 0;
             return true;
         }
     }
@@ -208,6 +216,163 @@ __device__ bool load_value(
     }
 }
 
+__device__ __forceinline__ uint64_t standard_immediate(RvrOperandEntry const &entry) {
+    return (entry.flags & RVR_OPERAND_FLAG_RS2_IMM_SIGN)
+               ? uint64_t(int64_t(int32_t(entry.c << 8) >> 8))
+               : uint64_t(entry.c);
+}
+
+__device__ __forceinline__ uint64_t sign_extend_word(uint32_t value) {
+    return uint64_t(int64_t(int32_t(value)));
+}
+
+__device__ bool divrem_result(
+    uint8_t local_opcode, uint64_t lhs_u, uint64_t rhs_u, uint64_t &result
+) {
+    switch (local_opcode) {
+    case 0: {
+        int64_t lhs = int64_t(lhs_u), rhs = int64_t(rhs_u);
+        if (rhs == 0)
+            result = UINT64_MAX;
+        else if (lhs == INT64_MIN && rhs == -1)
+            result = uint64_t(lhs);
+        else
+            result = uint64_t(lhs / rhs);
+        return true;
+    }
+    case 1: result = rhs_u == 0 ? UINT64_MAX : lhs_u / rhs_u; return true;
+    case 2: {
+        int64_t lhs = int64_t(lhs_u), rhs = int64_t(rhs_u);
+        if (rhs == 0)
+            result = lhs_u;
+        else if (lhs == INT64_MIN && rhs == -1)
+            result = 0;
+        else
+            result = uint64_t(lhs % rhs);
+        return true;
+    }
+    case 3: result = rhs_u == 0 ? lhs_u : lhs_u % rhs_u; return true;
+    default: return false;
+    }
+}
+
+__device__ bool divrem_w_result(
+    uint8_t local_opcode, uint64_t lhs_u, uint64_t rhs_u, uint64_t &result
+) {
+    uint32_t lhs = uint32_t(lhs_u), rhs = uint32_t(rhs_u), word;
+    switch (local_opcode) {
+    case 0: {
+        int32_t lhs_s = int32_t(lhs), rhs_s = int32_t(rhs);
+        if (rhs_s == 0)
+            word = UINT32_MAX;
+        else if (lhs_s == INT32_MIN && rhs_s == -1)
+            word = uint32_t(lhs_s);
+        else
+            word = uint32_t(lhs_s / rhs_s);
+        break;
+    }
+    case 1: word = rhs == 0 ? UINT32_MAX : lhs / rhs; break;
+    case 2: {
+        int32_t lhs_s = int32_t(lhs), rhs_s = int32_t(rhs);
+        if (rhs_s == 0)
+            word = lhs;
+        else if (lhs_s == INT32_MIN && rhs_s == -1)
+            word = 0;
+        else
+            word = uint32_t(lhs_s % rhs_s);
+        break;
+    }
+    case 3: word = rhs == 0 ? lhs : lhs % rhs; break;
+    default: return false;
+    }
+    result = sign_extend_word(word);
+    return true;
+}
+
+__device__ bool standard_post_write(
+    uint32_t kind,
+    RvrOperandEntry const &entry,
+    uint64_t v0,
+    uint64_t v1,
+    uint64_t &result
+) {
+    switch (kind) {
+    case 0:
+        if (entry.local_opcode == 0)
+            result = v0 + v1;
+        else if (entry.local_opcode == 1)
+            result = v0 - v1;
+        else
+            return false;
+        return true;
+    case 1:
+        if (entry.local_opcode == 2)
+            result = v0 ^ v1;
+        else if (entry.local_opcode == 3)
+            result = v0 | v1;
+        else if (entry.local_opcode == 4)
+            result = v0 & v1;
+        else
+            return false;
+        return true;
+    case 2:
+        if (entry.local_opcode == 0)
+            result = int64_t(v0) < int64_t(v1);
+        else if (entry.local_opcode == 1)
+            result = v0 < v1;
+        else
+            return false;
+        return true;
+    case 3:
+        if (entry.local_opcode == 0)
+            result = v0 << uint32_t(v1 & 63u);
+        else if (entry.local_opcode == 1)
+            result = v0 >> uint32_t(v1 & 63u);
+        else
+            return false;
+        return true;
+    case 4:
+        if (entry.local_opcode != 2) return false;
+        result = uint64_t(int64_t(v0) >> uint32_t(v1 & 63u));
+        return true;
+    case 5:
+        if (entry.local_opcode == 0)
+            result = sign_extend_word(uint32_t(v0) + uint32_t(v1));
+        else if (entry.local_opcode == 1)
+            result = sign_extend_word(uint32_t(v0) - uint32_t(v1));
+        else
+            return false;
+        return true;
+    case 6:
+        if (entry.local_opcode == 0)
+            result = sign_extend_word(uint32_t(v0) << uint32_t(v1 & 31u));
+        else if (entry.local_opcode == 1)
+            result = sign_extend_word(uint32_t(v0) >> uint32_t(v1 & 31u));
+        else
+            return false;
+        return true;
+    case 7:
+        if (entry.local_opcode != 0) return false;
+        result = sign_extend_word(uint32_t(int32_t(uint32_t(v0)) >> uint32_t(v1 & 31u)));
+        return true;
+    case 15: result = v0 * v1; return true;
+    case 16:
+        if (entry.local_opcode == 0)
+            result = uint64_t(__mul64hi((long long)v0, (long long)v1));
+        else if (entry.local_opcode == 1)
+            result = __umul64hi(v0, v1) - (int64_t(v0) < 0 ? v1 : 0);
+        else if (entry.local_opcode == 2)
+            result = __umul64hi(v0, v1);
+        else
+            return false;
+        return true;
+    case 17: result = sign_extend_word(uint32_t(v0) * uint32_t(v1)); return true;
+    case 18: return divrem_result(entry.local_opcode, v0, v1, result);
+    case 19: return divrem_w_result(entry.local_opcode, v0, v1, result);
+    default: return false;
+    }
+}
+
 __device__ bool residual_event(
     uint8_t const *wire,
     G2LaneDescV1 const &ctrl,
@@ -264,7 +429,7 @@ __global__ void g2_predecode(
             return;
         }
     }
-    if (header.version != 1 || header.lane_count == 0 || header.lane_count > 27 ||
+    if (header.version != 1 || header.lane_count == 0 || header.lane_count > 58 ||
         header.header_bytes != 64 + 32 * header.lane_count ||
         header.header_bytes > wire_bytes || header.flags != G2_FLAGS_COMMITTED_V1) {
         fail(error, 3);
@@ -335,7 +500,8 @@ __global__ void g2_predecode(
     for (size_t i = 0; i < 32; ++i)
         registers[i] = *reinterpret_cast<uint64_t const *>(registers_image.base + i * 8);
     registers[0] = 0;
-    size_t kind_cursors[30]{};
+    size_t kind_v0_cursors[30]{};
+    size_t kind_v1_cursors[30]{};
     size_t kind_counts[30]{};
     size_t residual_cursor = 0;
     size_t instruction_cursor = 0;
@@ -375,7 +541,7 @@ __global__ void g2_predecode(
             uint8_t expected_mode = EXPECT_NONE;
             if (kind == 29 && entry.access_pattern == G2_ADDI_PATTERN) {
                 G2LaneDescV1 const *lane = find_lane(descs, header.lane_count, G2_ADDI_V0);
-                size_t cursor = kind_cursors[kind]++;
+                size_t cursor = kind_v0_cursors[kind]++;
                 if (lane == nullptr || cursor >= lane->count || (entry.a & 7u) != 0 ||
                     (entry.b & 7u) != 0 || entry.a >= 32 * 8 || entry.b >= 32 * 8) {
                     fail(error, 14);
@@ -389,6 +555,103 @@ __global__ void g2_predecode(
                 }
                 record.v2 = uint64_t(int64_t(int32_t(entry.c << 20) >> 20));
                 if (rd != 0) registers[rd] = record.v1 + record.v2;
+                timestamp += 2;
+            } else if ((kind <= 7 || (kind >= 15 && kind <= 19)) &&
+                       (entry.access_pattern == 0 || entry.access_pattern == 1)) {
+                G2LaneDescV1 const *v0_lane = find_lane(descs, header.lane_count, lane_v0(kind));
+                size_t v0_cursor = kind_v0_cursors[kind]++;
+                if (v0_lane == nullptr || v0_cursor >= v0_lane->count ||
+                    (entry.a & 7u) != 0 || (entry.b & 7u) != 0 ||
+                    entry.a >= 32 * 8 || entry.b >= 32 * 8) {
+                    fail(error, 28);
+                    return;
+                }
+                uint32_t rd = entry.a / 8, rs1 = entry.b / 8;
+                record.v1 = lane_u64(wire, *v0_lane, v0_cursor);
+                if (record.v1 != registers[rs1]) {
+                    fail(error, 29);
+                    return;
+                }
+                if (entry.flags & RVR_OPERAND_FLAG_RS2_IMM) {
+                    record.v2 = standard_immediate(entry);
+                } else {
+                    G2LaneDescV1 const *v1_lane =
+                        find_lane(descs, header.lane_count, lane_v1(kind));
+                    size_t v1_cursor = kind_v1_cursors[kind]++;
+                    if (v1_lane == nullptr || v1_cursor >= v1_lane->count ||
+                        (entry.c & 7u) != 0 || entry.c >= 32 * 8) {
+                        fail(error, 30);
+                        return;
+                    }
+                    record.v2 = lane_u64(wire, *v1_lane, v1_cursor);
+                    if (record.v2 != registers[entry.c / 8]) {
+                        fail(error, 31);
+                        return;
+                    }
+                }
+                uint64_t result;
+                if (!standard_post_write(kind, entry, record.v1, record.v2, result)) {
+                    fail(error, 32);
+                    return;
+                }
+                if (rd != 0) registers[rd] = result;
+                timestamp += 3;
+            } else if ((kind == 10 || kind == 11) && entry.access_pattern == 4) {
+                G2LaneDescV1 const *v0_lane = find_lane(descs, header.lane_count, lane_v0(kind));
+                G2LaneDescV1 const *v1_lane = find_lane(descs, header.lane_count, lane_v1(kind));
+                size_t v0_cursor = kind_v0_cursors[kind]++;
+                size_t v1_cursor = kind_v1_cursors[kind]++;
+                if (v0_lane == nullptr || v1_lane == nullptr || v0_cursor >= v0_lane->count ||
+                    v1_cursor >= v1_lane->count || (entry.a & 7u) != 0 ||
+                    (entry.b & 7u) != 0 || entry.a >= 32 * 8 || entry.b >= 32 * 8) {
+                    fail(error, 33);
+                    return;
+                }
+                record.v1 = lane_u64(wire, *v0_lane, v0_cursor);
+                record.v2 = lane_u64(wire, *v1_lane, v1_cursor);
+                if (record.v1 != registers[entry.a / 8] || record.v2 != registers[entry.b / 8]) {
+                    fail(error, 34);
+                    return;
+                }
+                timestamp += 2;
+            } else if ((kind == 12 || kind == 14) &&
+                       (entry.access_pattern == 5 || entry.access_pattern == 6)) {
+                bool write_enabled = entry.flags & RVR_OPERAND_FLAG_WRITE_ENABLED;
+                if (write_enabled) {
+                    if ((entry.a & 7u) != 0 || entry.a >= 32 * 8) {
+                        fail(error, 35);
+                        return;
+                    }
+                    uint64_t result = kind == 14
+                                          ? uint64_t(record.from_pc) +
+                                                uint64_t(int64_t(int32_t(entry.c << 8)))
+                                          : ((entry.flags & RVR_OPERAND_FLAG_IS_JAL)
+                                                 ? uint64_t(record.from_pc + 4u)
+                                                 : uint64_t(int64_t(int32_t(entry.c << 12))));
+                    uint32_t rd = entry.a / 8;
+                    if (rd != 0) registers[rd] = result;
+                } else if (kind == 14) {
+                    fail(error, 36);
+                    return;
+                }
+                timestamp += 1;
+            } else if (kind == 13 && entry.access_pattern == 7) {
+                G2LaneDescV1 const *v0_lane = find_lane(descs, header.lane_count, lane_v0(kind));
+                size_t cursor = kind_v0_cursors[kind]++;
+                if (v0_lane == nullptr || cursor >= v0_lane->count || (entry.a & 7u) != 0 ||
+                    (entry.b & 7u) != 0 || entry.a >= 32 * 8 || entry.b >= 32 * 8) {
+                    fail(error, 37);
+                    return;
+                }
+                record.v1 = lane_u32(wire, *v0_lane, cursor);
+                if (record.v1 != registers[entry.b / 8]) {
+                    fail(error, 38);
+                    return;
+                }
+                if (entry.flags & RVR_OPERAND_FLAG_WRITE_ENABLED) {
+                    uint32_t rd = entry.a / 8;
+                    if (rd != 0) registers[rd] = uint64_t(record.from_pc + 4u);
+                }
                 timestamp += 2;
             } else if (load_store_kind(kind) &&
                        (entry.access_pattern == G2_LOAD_PATTERN ||
@@ -444,13 +707,15 @@ __global__ void g2_predecode(
                         find_lane(descs, header.lane_count, lane_v0(kind));
                     G2LaneDescV1 const *v1 =
                         find_lane(descs, header.lane_count, lane_v1(kind));
-                    size_t cursor = kind_cursors[kind]++;
-                    if (v0 == nullptr || v1 == nullptr || cursor >= v0->count) {
+                    size_t v0_cursor = kind_v0_cursors[kind]++;
+                    size_t v1_cursor = kind_v1_cursors[kind]++;
+                    if (v0 == nullptr || v1 == nullptr || v0_cursor >= v0->count ||
+                        v1_cursor >= v1->count) {
                         fail(error, 19);
                         return;
                     }
-                    pointer = lane_u32(wire, *v0, cursor);
-                    block_value = lane_u64(wire, *v1, cursor);
+                    pointer = lane_u32(wire, *v0, v0_cursor);
+                    block_value = lane_u64(wire, *v1, v1_cursor);
                     if (uint64_t(pointer) != registers[base_reg]) {
                         fail(error, 20);
                         return;
@@ -497,14 +762,15 @@ __global__ void g2_predecode(
         }
     }
     G2LaneDescV1 const *addi = find_lane(descs, header.lane_count, G2_ADDI_V0);
-    if ((addi == nullptr ? 0 : addi->count) != kind_cursors[29]) {
+    if ((addi == nullptr ? 0 : addi->count) != kind_v0_cursors[29]) {
         fail(error, 25);
         return;
     }
     for (uint32_t kind = 0; kind < 30; ++kind) {
-        if (!load_store_kind(kind)) continue;
         G2LaneDescV1 const *v0 = find_lane(descs, header.lane_count, lane_v0(kind));
-        if ((v0 == nullptr ? 0 : v0->count) != kind_cursors[kind]) {
+        G2LaneDescV1 const *v1 = find_lane(descs, header.lane_count, lane_v1(kind));
+        if ((v0 == nullptr ? 0 : v0->count) != kind_v0_cursors[kind] ||
+            (v1 == nullptr ? 0 : v1->count) != kind_v1_cursors[kind]) {
             fail(error, 26);
             return;
         }

@@ -74,6 +74,10 @@ fn alu_r(opcode: BaseAluOpcode, rd: usize, rs1: usize, rs2: usize) -> Instructio
     Instruction::from_usize(opcode.global_opcode(), [reg(rd), reg(rs1), reg(rs2), 1, 1])
 }
 
+fn alu_imm(opcode: BaseAluOpcode, rd: usize, rs1: usize, imm: usize) -> Instruction<F> {
+    Instruction::from_usize(opcode.global_opcode(), [reg(rd), reg(rs1), imm, 1, 0])
+}
+
 fn sltu(rd: usize, rs1: usize, rs2: usize) -> Instruction<F> {
     Instruction::from_usize(
         LessThanOpcode::SLTU.global_opcode(),
@@ -83,6 +87,10 @@ fn sltu(rd: usize, rs1: usize, rs2: usize) -> Instruction<F> {
 
 fn less_than(opcode: LessThanOpcode, rd: usize, rs1: usize, rs2: usize) -> Instruction<F> {
     Instruction::from_usize(opcode.global_opcode(), [reg(rd), reg(rs1), reg(rs2), 1, 1])
+}
+
+fn less_than_imm(opcode: LessThanOpcode, rd: usize, rs1: usize, imm: usize) -> Instruction<F> {
+    Instruction::from_usize(opcode.global_opcode(), [reg(rd), reg(rs1), imm, 1, 0])
 }
 
 fn alu_w(opcode: BaseAluWOpcode, rd: usize, rs1: usize, rs2: usize) -> Instruction<F> {
@@ -95,6 +103,10 @@ fn alu_w_imm(opcode: BaseAluWOpcode, rd: usize, rs1: usize, imm: usize) -> Instr
 
 fn shift(opcode: ShiftOpcode, rd: usize, rs1: usize, shamt: usize) -> Instruction<F> {
     Instruction::from_usize(opcode.global_opcode(), [reg(rd), reg(rs1), shamt, 1, 0])
+}
+
+fn shift_reg(opcode: ShiftOpcode, rd: usize, rs1: usize, rs2: usize) -> Instruction<F> {
+    Instruction::from_usize(opcode.global_opcode(), [reg(rd), reg(rs1), reg(rs2), 1, 1])
 }
 
 fn shift_w(opcode: ShiftWOpcode, rd: usize, rs1: usize, shamt: usize) -> Instruction<F> {
@@ -1629,6 +1641,28 @@ fn full_rv64im_matrix_exe() -> VmExe<F> {
     // REVEAL row: STORED to PUBLIC_VALUES_AS (x0 as the AS3 pointer, r10 = 21
     // from the hard-chip group) so the loadstore mem_as=3 path is locked in the
     // CPU-vs-GPU three-way, not only in the reveal-specific tests.
+    instructions.push(extension_store(10, 0, 0));
+    instructions.push(terminate());
+    exe(&instructions)
+}
+
+fn g2_full_standard_matrix_exe() -> VmExe<F> {
+    let mut instructions = vec![addi(1, 0, 9), addi(2, 0, 5)];
+    push_standard_group_ops(&mut instructions);
+    instructions.extend([
+        alu_imm(BaseAluOpcode::XOR, 3, 1, 0xff_fffb),
+        less_than_imm(LessThanOpcode::SLT, 4, 1, 0xff_fffb),
+        shift_reg(ShiftOpcode::SLL, 5, 1, 2),
+        shift_reg(ShiftOpcode::SRL, 6, 1, 2),
+        shift_reg(ShiftOpcode::SRA, 7, 1, 2),
+    ]);
+    let standard_end = instructions.len();
+    push_hard_chip_ops(&mut instructions);
+    // The hard-chip fixture ends in three phantoms and two HintStore custom
+    // instructions. Phase 2b covers the complete fixed standard prefix;
+    // custom opaque/event-replay transport remains outside this oracle.
+    debug_assert!(instructions.len() - standard_end >= 5);
+    instructions.truncate(instructions.len() - 5);
     instructions.push(extension_store(10, 0, 0));
     instructions.push(terminate());
     exe(&instructions)
