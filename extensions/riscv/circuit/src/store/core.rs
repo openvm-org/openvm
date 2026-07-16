@@ -131,10 +131,12 @@ where
         let flags = self.encoder.flags::<AB>(&cols.selector);
         let is_valid = self.encoder.is_valid::<AB>(&cols.selector);
 
+        // cross = Σ flag[s] over shifts `s` where `s + STORE_WIDTH > 8`.
         let cross = flags[Self::FIRST_CROSSING_SHIFT..]
             .iter()
             .fold(AB::Expr::ZERO, |acc, flag| acc + flag.clone());
 
+        // odd_shift = Σᵢ flag[2i + 1].
         let odd_shift = flags
             .iter()
             .skip(1)
@@ -151,9 +153,7 @@ where
         };
 
         let inv_2_pow_8 = AB::F::from_u32(1 << RV64_BYTE_BITS).inverse();
-        // High byte of source value cell `i`, derived from its materialized low byte. The range
-        // checks are gated on the odd-shift indicator, so on even shifts the low-byte columns
-        // are unconstrained; they only feed odd-shift selector terms, which are then zero.
+        // read_data[i] = value_lo_bytes[i] + 2^8 * value_hi_bytes[i] on odd shifts.
         let value_hi_bytes: [AB::Expr; NUM_VALUE_CELLS] =
             std::array::from_fn(|i| (cols.read_data[i] - cols.value_lo_bytes[i]) * inv_2_pow_8);
         for (&lo, hi) in cols.value_lo_bytes.iter().zip(value_hi_bytes.iter()) {
@@ -161,8 +161,7 @@ where
                 .send_range(lo, hi.clone())
                 .eval(builder, odd_shift.clone());
         }
-        // The first and last overlapped memory cells, flag-selected per odd shift; zero on even
-        // shifts and invalid rows.
+        // prev_bound_cells[b] = Σᵢ flag[2i + 1] * prev_full(i + b * width).
         let prev_bound_cells: [AB::Expr; 2] = std::array::from_fn(|which| {
             flags.iter().skip(1).step_by(2).enumerate().fold(
                 AB::Expr::ZERO,
@@ -171,8 +170,8 @@ where
                 },
             )
         });
-        // The overwritten boundary-cell bytes are derived from the overlapped cells; range
-        // checking them completes the decompositions of both boundary cells.
+        // prev_bound_cells[0] = preserved_lo + 2^8 * overwritten_hi.
+        // prev_bound_cells[1] = overwritten_lo + 2^8 * preserved_hi.
         let first_cell_hi = (prev_bound_cells[0].clone() - cols.prev_bound_bytes[0]) * inv_2_pow_8;
         let last_cell_lo = prev_bound_cells[1].clone()
             - cols.prev_bound_bytes[1] * AB::Expr::from_u32(1 << RV64_BYTE_BITS);
@@ -187,6 +186,7 @@ where
             self,
             is_valid.clone() * AB::Expr::from_u8(store_opcode::<STORE_WIDTH>() as u8),
         );
+        // shift_amount = Σₛ s * flag[s].
         let shift_amount = flags
             .iter()
             .enumerate()
@@ -194,9 +194,9 @@ where
                 acc + flag.clone() * AB::Expr::from_usize(byte_shift)
             });
 
-        // Contents of both written blocks. Even shifts splice whole value cells between
-        // preserved cells; odd shifts splice value bytes, with the two boundary cells mixing a
-        // preserved byte and a value byte.
+        // write_data[cell] = Σₛ flag[s] * candidate(s, cell).
+        // The branches below define `candidate`: even shifts splice whole cells; odd shifts
+        // splice bytes and preserve the two boundary bytes.
         let write_data: [[AB::Expr; BLOCK_FE_WIDTH]; 2] = std::array::from_fn(|block| {
             std::array::from_fn(|k| {
                 let cell = block * BLOCK_FE_WIDTH + k;

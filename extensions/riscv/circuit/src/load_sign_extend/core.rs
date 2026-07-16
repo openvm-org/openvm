@@ -136,6 +136,7 @@ where
         let is_valid = self.encoder.is_valid::<AB>(&cols.selector);
         builder.assert_bool(cols.data_most_sig_bit);
 
+        // cross = Σ flag[s] over shifts `s` where `s + LOAD_WIDTH > 8`.
         let cross = flags[Self::FIRST_CROSSING_SHIFT..]
             .iter()
             .fold(AB::Expr::ZERO, |acc, flag| acc + flag.clone());
@@ -148,7 +149,7 @@ where
                 cols.read_data[1][cell - BLOCK_FE_WIDTH]
             }
         };
-        // The j-th cell overlapped by an odd-shift load; zero on even shifts and invalid rows.
+        // odd_cells[j] = Σᵢ flag[2i + 1] * read_full(i + j).
         let odd_cells: [AB::Expr; NUM_OVERLAP_CELLS] = std::array::from_fn(|j| {
             flags
                 .iter()
@@ -160,9 +161,8 @@ where
                 })
         });
 
-        // High byte of overlapped cell `j`, derived from its materialized low byte; range
-        // checking the `(lo, hi)` pair makes the decomposition of every overlapped cell unique.
-        // On even shifts the overlapped-cell sums are zero, which forces the low bytes to zero.
+        // odd_cells[j] = overlap_lo_bytes[j] + 2^8 * overlap_hi_bytes[j].
+        // Both sides are zero on even shifts.
         let inv_2_pow_8 = AB::F::from_u32(1 << RV64_BYTE_BITS).inverse();
         let overlap_hi_bytes: [AB::Expr; NUM_OVERLAP_CELLS] = std::array::from_fn(|j| {
             (odd_cells[j].clone() - cols.overlap_lo_bytes[j]) * inv_2_pow_8
@@ -173,20 +173,15 @@ where
                 .eval(builder, is_valid.clone());
         }
 
-        // On even shifts the top loaded byte is the high byte of the selected top cell. On odd
-        // shifts it is the last overlapped cell's low byte; move that byte to the high half of a
-        // u16 so both cases share one 15-bit sign check.
-        let even_sign_cell =
-            flags
-                .iter()
-                .enumerate()
-                .fold(AB::Expr::ZERO, |acc, (byte_shift, flag)| {
-                    if byte_shift % 2 == 0 {
-                        acc + flag.clone() * read_full(byte_shift / 2 + width - 1)
-                    } else {
-                        acc
-                    }
-                });
+        // even_sign_cell = Σᵢ flag[2i] * read_full(i + width - 1).
+        let even_sign_cell = flags
+            .iter()
+            .step_by(2)
+            .enumerate()
+            .fold(AB::Expr::ZERO, |acc, (cell_offset, flag)| {
+                acc + flag.clone() * read_full(cell_offset + width - 1)
+            });
+        // sign_cell = even_sign_cell + 2^8 * overlap_lo_bytes[last].
         let sign_cell = even_sign_cell
             + cols.overlap_lo_bytes[NUM_OVERLAP_CELLS - 1]
                 * AB::Expr::from_u32(1 << RV64_BYTE_BITS);
@@ -201,6 +196,7 @@ where
             self,
             is_valid.clone() * AB::Expr::from_u8(load_sign_extend_opcode::<LOAD_WIDTH>() as u8),
         );
+        // load_shift_amount = Σₛ s * flag[s].
         let load_shift_amount = flags
             .iter()
             .enumerate()
@@ -213,20 +209,16 @@ where
             if i >= width {
                 return is_valid.clone() * sign_extend.clone();
             }
-            // Even shifts move whole cells. All odd shifts share one slot-indexed term: result
-            // cell `i` recomposes from the high byte of overlapped cell `i` and the low byte of
-            // overlapped cell `i + 1`; both vanish on even shifts.
-            let even_term =
-                flags
-                    .iter()
-                    .enumerate()
-                    .fold(AB::Expr::ZERO, |acc, (byte_shift, flag)| {
-                        if byte_shift % 2 == 0 {
-                            acc + flag.clone() * read_full(byte_shift / 2 + i)
-                        } else {
-                            acc
-                        }
-                    });
+            // even_term[i] = Σₖ flag[2k] * read_full(k + i).
+            let even_term = flags
+                .iter()
+                .step_by(2)
+                .enumerate()
+                .fold(AB::Expr::ZERO, |acc, (cell_offset, flag)| {
+                    acc + flag.clone() * read_full(cell_offset + i)
+                });
+            // result[i] = even_term[i] + overlap_hi_bytes[i]
+            //             + 2^8 * overlap_lo_bytes[i + 1].
             even_term
                 + overlap_hi_bytes[i].clone()
                 + cols.overlap_lo_bytes[i + 1] * AB::Expr::from_u32(1 << RV64_BYTE_BITS)

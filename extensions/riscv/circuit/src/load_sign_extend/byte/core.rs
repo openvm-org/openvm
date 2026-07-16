@@ -97,45 +97,45 @@ where
 
         builder.assert_bool(cols.data_most_sig_bit);
 
-        // Keep the even- and odd-shift selections separate so no expression multiplies two
-        // selector-derived values; selector flags have degree 2, and the resulting expressions
-        // stay within degree 3.
-        let (is_even_shift, is_odd_shift, even_selected_cell, odd_selected_cell) =
-            flags.iter().enumerate().fold(
+        // For cell `i`, flags `2i` and `2i + 1` select its low and high byte, respectively.
+        // even_shift_selector = Σᵢ flag[2i].
+        // odd_shift_selector = Σᵢ flag[2i + 1].
+        // even_selected_cell = Σᵢ flag[2i] * read_data[i].
+        // odd_selected_cell = Σᵢ flag[2i + 1] * read_data[i].
+        // Keeping the selections separate makes every flag (degree 2) * cell term degree 3.
+        let (even_shift_selector, odd_shift_selector, even_selected_cell, odd_selected_cell) =
+            flags.chunks_exact(2).enumerate().fold(
                 (
                     AB::Expr::ZERO,
                     AB::Expr::ZERO,
                     AB::Expr::ZERO,
                     AB::Expr::ZERO,
                 ),
-                |(even, odd, even_cell, odd_cell), (shift, flag)| {
-                    if shift % 2 == 0 {
-                        (
-                            even + flag.clone(),
-                            odd,
-                            even_cell + flag.clone() * cols.read_data[shift / 2],
-                            odd_cell,
-                        )
-                    } else {
-                        (
-                            even,
-                            odd + flag.clone(),
-                            even_cell,
-                            odd_cell + flag.clone() * cols.read_data[shift / 2],
-                        )
-                    }
+                |(even, odd, even_cell, odd_cell), (cell, flags)| {
+                    let even_flag = flags[0].clone();
+                    let odd_flag = flags[1].clone();
+                    let read_cell = cols.read_data[cell];
+                    (
+                        even + even_flag.clone(),
+                        odd + odd_flag.clone(),
+                        even_cell + even_flag * read_cell,
+                        odd_cell + odd_flag * read_cell,
+                    )
                 },
             );
         let inv_2_pow_8 = AB::F::from_u32(1 << RV64_BYTE_BITS).inverse();
-        // Exactly one of the two expressions selects the source cell on a valid row.
+        // selected_cell = lo + 2^8 * hi.
         let selected_cell = even_selected_cell + odd_selected_cell.clone();
         let read_cell_hi_byte = (selected_cell - cols.read_cell_lo_byte) * inv_2_pow_8;
         self.bitwise_lookup_bus
             .send_range(cols.read_cell_lo_byte, read_cell_hi_byte)
             .eval(builder, is_valid.clone());
 
-        let selected_byte = is_even_shift * cols.read_cell_lo_byte
-            + (odd_selected_cell - is_odd_shift * cols.read_cell_lo_byte) * inv_2_pow_8;
+        // selected_byte = even_shift_selector * lo
+        //               + (odd_selected_cell - odd_shift_selector * lo) / 2^8.
+        let odd_selected_hi_byte =
+            (odd_selected_cell - odd_shift_selector * cols.read_cell_lo_byte) * inv_2_pow_8;
+        let selected_byte = even_shift_selector * cols.read_cell_lo_byte + odd_selected_hi_byte;
         // Constrain that data_most_sig_bit matches the selected source byte.
         self.range_bus
             .range_check(
@@ -153,6 +153,7 @@ where
                 sign_cell.clone()
             }
         });
+        // load_shift_amount = Σₛ s * flag[s].
         let load_shift_amount = flags
             .iter()
             .enumerate()

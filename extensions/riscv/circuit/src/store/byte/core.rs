@@ -91,19 +91,20 @@ where
         let flags = self.encoder.flags::<AB>(&cols.selector);
         let is_valid = self.encoder.is_valid::<AB>(&cols.selector);
 
-        // The stored byte is the low byte of the first source cell; the cell's high byte is
-        // derived from it, and range checking the pair makes the decomposition unique.
+        // read_data[0] = read_lo_byte + 2^8 * read_hi_byte.
         let inv_2_pow_8 = AB::F::from_u32(1 << RV64_BYTE_BITS).inverse();
         let read_hi_byte = (cols.read_data[0] - cols.read_lo_byte) * inv_2_pow_8;
         self.bitwise_lookup_bus
             .send_range(cols.read_lo_byte, read_hi_byte)
             .eval(builder, is_valid.clone());
+        // selected_prev_cell = Σᵢ (flag[2i] + flag[2i + 1]) * prev_data[i].
         let selected_prev_cell = flags
-            .iter()
+            .chunks_exact(2)
             .enumerate()
-            .fold(AB::Expr::ZERO, |acc, (shift, flag)| {
-                acc + flag.clone() * cols.prev_data[shift / 2]
+            .fold(AB::Expr::ZERO, |acc, (cell, flags)| {
+                acc + (flags[0].clone() + flags[1].clone()) * cols.prev_data[cell]
             });
+        // selected_prev_cell = prev_cell_lo_byte + 2^8 * prev_cell_hi_byte.
         let prev_cell_hi_byte = (selected_prev_cell - cols.prev_cell_lo_byte) * inv_2_pow_8;
         self.bitwise_lookup_bus
             .send_range(cols.prev_cell_lo_byte, prev_cell_hi_byte)
@@ -117,6 +118,7 @@ where
                         - cols.prev_data[i]
                         + cols.prev_cell_lo_byte)
         });
+        // shift_amount = Σₛ s * flag[s].
         let shift_amount = flags
             .iter()
             .enumerate()
