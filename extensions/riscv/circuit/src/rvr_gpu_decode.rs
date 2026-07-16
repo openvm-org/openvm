@@ -231,6 +231,8 @@ pub enum InlineEmissionMode {
     /// Global chronological 24-byte records. Previous timestamps and stable
     /// per-AIR compact buffers are reconstructed by the shared CUDA predecode.
     Delta,
+    /// Program-run + opcode-arity private wire v1.
+    G2,
 }
 
 /// Env toggle for the staged G1/G2 measurement matrix. Unset (or any other
@@ -240,6 +242,7 @@ pub fn configured_emission_mode() -> Option<InlineEmissionMode> {
         Ok("compact") => Some(InlineEmissionMode::CompactWire),
         Ok("arena-native") => Some(InlineEmissionMode::ArenaNative),
         Ok("delta") => Some(InlineEmissionMode::Delta),
+        Ok("g2") => Some(InlineEmissionMode::G2),
         _ => None,
     }
 }
@@ -277,6 +280,15 @@ struct HostDeltaSegment {
     oracle_arena_expected: Vec<openvm_circuit::arch::rvr::DeviceAuxArenaReference>,
     arena_native_flags: Vec<u8>,
     specs: Vec<DeltaAirSpec>,
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+struct HostG2Segment {
+    segment: openvm_circuit::arch::rvr::RvrG2SegmentV1,
+    meta: Arc<openvm_circuit::arch::rvr::RvrG2MetaV1>,
+    initial_timestamp: u32,
+    addi_count: usize,
+    program_frequency_count: usize,
 }
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
@@ -339,6 +351,10 @@ pub struct RvrGpuDecodeState {
     compact_residual_host: Mutex<Option<Vec<openvm_circuit::arch::rvr::MemoryLogEntry>>>,
     #[cfg(all(feature = "cuda", feature = "rvr"))]
     compact_residual_device: Mutex<Option<DeviceCompactResidualSegment>>,
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    g2_host: Mutex<Option<HostG2Segment>>,
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    g2_device: Mutex<Option<DeviceDeltaSegment>>,
 }
 
 impl RvrGpuDecodeState {
@@ -706,6 +722,55 @@ impl RvrGpuDecodeState {
         Ok(delta_airs)
     }
 
+    /// Bind one G2 segment after its O(lanes) host finalizer. The complete
+    /// wire backing stays owned here until the system inventory initiates the
+    /// one-shot CUDA expansion.
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn bind_g2_segment<F: PrimeField32>(
+        &self,
+        exe: &VmExe<F>,
+        pc_to_air_idx: &[Option<usize>],
+        compiled_identity: &Arc<Vec<bool>>,
+        precomputed: &RvrDeltaDecodePrecompute,
+        segment: openvm_circuit::arch::rvr::RvrG2SegmentV1,
+        meta: Arc<openvm_circuit::arch::rvr::RvrG2MetaV1>,
+        initial_timestamp: u32,
+        chip_counts: &[u32],
+        program_frequency_count: usize,
+    ) -> Result<HashSet<usize>, openvm_circuit::arch::ExecutionError> {
+        let kind_to_air =
+            self.bind_program(exe, pc_to_air_idx, compiled_identity, Some(precomputed));
+        let Some(&addi_air) = kind_to_air.get(&DeltaAirKind::AddI) else {
+            return Err(openvm_circuit::arch::ExecutionError::RvrExecution(
+                "G2 segment has no AddI device consumer".to_string(),
+            ));
+        };
+        if kind_to_air.len() != 1 || addi_air != meta.addi_air_idx {
+            return Err(openvm_circuit::arch::ExecutionError::RvrExecution(
+                "G2 Phase-1 AIR binding is not AddI-only".to_string(),
+            ));
+        }
+        let descs = segment.validate(&meta.fingerprint)?;
+        let addi_count = descs[1].count as usize;
+        if chip_counts.get(addi_air).copied().map(|n| n as usize) != Some(addi_count) {
+            return Err(openvm_circuit::arch::ExecutionError::RvrExecution(
+                "G2 AddI lane count differs from the metered AIR count".to_string(),
+            ));
+        }
+        *self.delta_host.lock().unwrap() = None;
+        *self.delta_device.lock().unwrap() = None;
+        *self.g2_host.lock().unwrap() = Some(HostG2Segment {
+            segment,
+            meta,
+            initial_timestamp,
+            addi_count,
+            program_frequency_count,
+        });
+        *self.g2_device.lock().unwrap() = None;
+        Ok([addi_air].into_iter().collect())
+    }
+
     /// Drop any previous segment's delta state before entering a non-delta
     /// route. This prevents a builder reused across emission modes from
     /// exposing stale device buffers to a later segment.
@@ -713,6 +778,8 @@ impl RvrGpuDecodeState {
     pub fn clear_delta_segment(&self) {
         *self.delta_host.lock().unwrap() = None;
         *self.delta_device.lock().unwrap() = None;
+        *self.g2_host.lock().unwrap() = None;
+        *self.g2_device.lock().unwrap() = None;
     }
 
     /// Perform the whole segment predecode exactly once. The system inventory
@@ -1079,6 +1146,100 @@ impl RvrGpuDecodeState {
         true
     }
 
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    fn ensure_device_g2_segment(
+        &self,
+        device_ctx: &GpuDeviceCtx,
+        initial_memory: Option<&[DeviceInitialMemory]>,
+    ) -> bool {
+        if self.g2_device.lock().unwrap().is_some() {
+            return true;
+        }
+        let mut host_guard = self.g2_host.lock().unwrap();
+        let Some(host) = host_guard.take() else {
+            return false;
+        };
+        let initial_memory = initial_memory.expect(
+            "G2 predecode must be initiated by the system memory inventory before chip tracegen",
+        );
+        let (d_table, pc_base) = self
+            .device_operand_table(device_ctx)
+            .expect("G2 segment without a bound operand table");
+        let d_wire = host
+            .segment
+            .bytes()
+            .to_device_on(device_ctx)
+            .expect("G2 wire H2D");
+        let d_fingerprint = host
+            .meta
+            .fingerprint
+            .as_slice()
+            .to_device_on(device_ctx)
+            .expect("G2 fingerprint H2D");
+        let d_blocks = host
+            .meta
+            .blocks
+            .as_slice()
+            .to_device_on(device_ctx)
+            .expect("G2 static block table H2D");
+        let d_initial_memory = initial_memory
+            .to_device_on(device_ctx)
+            .expect("G2 initial-memory descriptors H2D");
+        let d_addi = Arc::new(DeviceBuffer::<u8>::with_capacity_on(
+            host.addi_count * openvm_circuit::arch::rvr::PREFLIGHT_ADDSUB_RECORD_SIZE,
+            device_ctx,
+        ));
+        let d_program_frequencies =
+            DeviceBuffer::<u32>::with_capacity_on(host.program_frequency_count, device_ctx);
+        d_program_frequencies
+            .fill_zero_on(device_ctx)
+            .expect("G2 program-frequency clear");
+        let d_touched_output =
+            DeviceBuffer::<u32>::with_capacity_on(32 * DEVICE_TOUCHED_RECORD_WORDS, device_ctx);
+        let d_touched_count = DeviceBuffer::<u32>::with_capacity_on(1, device_ctx);
+        let d_error = DeviceBuffer::<u32>::with_capacity_on(1, device_ctx);
+        d_error.fill_zero_on(device_ctx).expect("G2 error clear");
+        unsafe {
+            crate::cuda_abi::rvr_g2_cuda::predecode(
+                &d_wire,
+                &d_fingerprint,
+                &d_blocks,
+                &d_table,
+                pc_base,
+                &d_initial_memory,
+                host.initial_timestamp,
+                host.addi_count,
+                &d_program_frequencies,
+                &d_addi,
+                &d_touched_output,
+                &d_touched_count,
+                &d_error,
+                device_ctx.stream.as_raw(),
+            )
+            .expect("CUDA G2 AddI predecode launch");
+        }
+        let error = d_error.to_host_on(device_ctx).expect("G2 error D2H")[0];
+        assert_eq!(error, 0, "CUDA G2 predecode fail-closed error {error}");
+        let touched_count = d_touched_count
+            .to_host_on(device_ctx)
+            .expect("G2 touched count D2H")[0] as usize;
+        assert!(touched_count <= 32, "G2 touched-register count overflow");
+        drop(host);
+
+        let device = DeviceDeltaSegment {
+            outputs: [(DeltaAirKind::AddI, d_addi)].into_iter().collect(),
+            touched_memory: Some(DeviceTouchedMemory {
+                records: d_touched_output,
+                num_records: touched_count,
+            }),
+            program_frequencies: Some(DeviceProgramFrequencies {
+                frequencies: d_program_frequencies,
+            }),
+        };
+        *self.g2_device.lock().unwrap() = Some(device);
+        true
+    }
+
     /// Return the device-resident compact buffer for one chip.
     #[cfg(all(feature = "cuda", feature = "rvr"))]
     pub fn device_delta_records(
@@ -1087,11 +1248,21 @@ impl RvrGpuDecodeState {
         device_ctx: &GpuDeviceCtx,
     ) -> Option<Arc<DeviceBuffer<u8>>> {
         self.ensure_device_delta_segment(device_ctx, None);
+        if self.delta_device.lock().unwrap().is_none() {
+            self.ensure_device_g2_segment(device_ctx, None);
+        }
         self.delta_device
             .lock()
             .unwrap()
             .as_ref()
             .and_then(|device| device.outputs.get(&kind).cloned())
+            .or_else(|| {
+                self.g2_device
+                    .lock()
+                    .unwrap()
+                    .as_ref()
+                    .and_then(|device| device.outputs.get(&kind).cloned())
+            })
     }
 }
 
@@ -1103,11 +1274,21 @@ impl DeviceTouchedMemoryProvider for RvrGpuDecodeState {
         initial_memory: &[DeviceInitialMemory],
     ) -> Option<DeviceTouchedMemory> {
         self.ensure_device_delta_segment(device_ctx, Some(initial_memory));
+        if self.delta_device.lock().unwrap().is_none() {
+            self.ensure_device_g2_segment(device_ctx, Some(initial_memory));
+        }
         self.delta_device
             .lock()
             .unwrap()
             .as_mut()
             .and_then(|device| device.touched_memory.take())
+            .or_else(|| {
+                self.g2_device
+                    .lock()
+                    .unwrap()
+                    .as_mut()
+                    .and_then(|device| device.touched_memory.take())
+            })
     }
 }
 
@@ -1119,11 +1300,21 @@ impl DeviceProgramFrequenciesProvider for RvrGpuDecodeState {
         initial_memory: &[DeviceInitialMemory],
     ) -> Option<DeviceProgramFrequencies> {
         self.ensure_device_delta_segment(device_ctx, Some(initial_memory));
+        if self.delta_device.lock().unwrap().is_none() {
+            self.ensure_device_g2_segment(device_ctx, Some(initial_memory));
+        }
         self.delta_device
             .lock()
             .unwrap()
             .as_mut()
             .and_then(|device| device.program_frequencies.take())
+            .or_else(|| {
+                self.g2_device
+                    .lock()
+                    .unwrap()
+                    .as_mut()
+                    .and_then(|device| device.program_frequencies.take())
+            })
     }
 }
 

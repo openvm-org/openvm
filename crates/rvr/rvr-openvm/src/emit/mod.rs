@@ -9,4 +9,4 @@ pub use codegen::{
     LoadStoreArenaFieldOffsets, Rw1ArenaFieldOffsets, Wr1ArenaFieldOffsets,
 };
 pub use context::EmitContext;
-pub use project::{CProject, InvalidRvrExecutionKind, RvrExecutionKind};
+pub use project::{CProject, G2DsoManifestConfigV1, InvalidRvrExecutionKind, RvrExecutionKind};

@@ -113,6 +113,7 @@ const _: () = assert!(offset_of!(PreflightTracerData, program_runs_cap) == 244);
 const _: () = assert!(offset_of!(PreflightTracerData, program_instruction_len) == 248);
 const _: () = assert!(offset_of!(PreflightTracerData, device_program_references_len) == 252);
 const _: () = assert!(offset_of!(PreflightTracerData, device_program_references_cap) == 256);
+const _: () = assert!(offset_of!(PreflightTracerData, g2) == 264);
 const _: () = assert!(size_of::<ChipRecordBuf>() == ffi::PREFLIGHT_CHIP_RECORD_BUF_SIZE);
 const _: () = assert!(align_of::<ChipRecordBuf>() == ffi::PREFLIGHT_CHIP_RECORD_BUF_ALIGN);
 const _: () = assert!(offset_of!(ChipRecordBuf, base) == 0);
