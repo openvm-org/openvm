@@ -735,6 +735,7 @@ where
         executor_idx_to_air_idx: &[usize],
         guest_debug_map: Option<&GuestDebugMap>,
         assembler_admitter: &dyn LogNativeOpcodeAdmitter<F>,
+        gpu_records_default: Option<&str>,
     ) -> Result<RvrPreflightRoute<'_, F, VC::Executor>, StaticProgramError> {
         let extensions = self.build_rvr_extensions(Some(executor_idx_to_air_idx));
         // Pure capability routing: Rvr iff every opcode is on the rvr
@@ -756,12 +757,13 @@ where
                         .map_err(map_rvr_compile_error)?,
                     chip_widths: None,
                 };
-                let compiled = compile_preflight_with_extensions(
+                let compiled = super::rvr::compile::compile_preflight_with_extensions_and_default(
                     exe,
                     extensions.lifters(),
                     assembler_admitter,
                     &chips,
                     guest_debug_map,
+                    gpu_records_default,
                 )
                 .map_err(map_rvr_compile_error)?;
                 let runtime_hooks = extensions.into_runtime_hooks();
@@ -1272,6 +1274,19 @@ where
         Val<E::SC>: PrimeField32,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
     {
+        self.preflight_routed_instance_with_gpu_records_default(exe, None)
+    }
+
+    #[cfg(feature = "rvr")]
+    fn preflight_routed_instance_with_gpu_records_default(
+        &self,
+        exe: &VmExe<Val<E::SC>>,
+        gpu_records_default: Option<&str>,
+    ) -> Result<VmRvrPreflightRoute<'_, Val<E::SC>, VB::VmConfig>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
+    {
         let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
         let assembler_registry = self
             .builder
@@ -1281,6 +1296,7 @@ where
             &executor_idx_to_air_idx,
             None,
             &assembler_registry,
+            gpu_records_default,
         )
     }
 
@@ -2173,9 +2189,14 @@ where
             .rvr_preflight_engine
             .or_else(rvr_preflight_engine_env_override)
             .unwrap_or_else(|| vm.builder.default_rvr_preflight_engine());
+        let gpu_records_default =
+            (vm.builder.default_rvr_preflight_engine() == RvrPreflightEngine::Rvr).then_some("g2");
         let cached = match engine {
             RvrPreflightEngine::Interpreter => CachedRvrPreflight::Interpreter,
-            RvrPreflightEngine::Rvr => match vm.preflight_routed_instance(&self.exe)? {
+            RvrPreflightEngine::Rvr => match vm.preflight_routed_instance_with_gpu_records_default(
+                &self.exe,
+                gpu_records_default,
+            )? {
                 RvrPreflightRoute::Rvr(RvrPreflightInstance {
                     runtime_hooks,
                     compiled,

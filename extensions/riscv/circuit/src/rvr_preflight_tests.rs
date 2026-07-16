@@ -24,7 +24,9 @@ use openvm_circuit::{
 #[cfg(feature = "cuda")]
 use openvm_cpu_backend::CpuBackend;
 #[cfg(feature = "cuda")]
-use openvm_cuda_backend::{data_transporter::transport_matrix_d2h_col_major, GpuBackend};
+use openvm_cuda_backend::{
+    data_transporter::transport_matrix_d2h_col_major, BabyBearPoseidon2GpuEngine, GpuBackend,
+};
 #[cfg(feature = "cuda")]
 use openvm_cuda_common::stream::GpuDeviceCtx;
 use openvm_instructions::{
@@ -1137,6 +1139,85 @@ fn rvr_preflight_two_block_records_prove_and_verify() {
         Rv64ImConfig::with_public_values_bytes(32),
     );
     assert_eq!(segments, 1);
+}
+
+#[cfg(feature = "cuda")]
+#[test]
+fn rvr_preflight_gpu_default_negotiates_g2_falls_back_and_honors_override() {
+    std::env::set_var("OPENVM_RVR_INLINE_RECORDS", "1");
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
+    std::env::remove_var("OPENVM_RVR_GPU_RECORDS");
+    assert_eq!(
+        VmBuilder::<BabyBearPoseidon2GpuEngine>::default_rvr_preflight_engine(
+            &Rv64ImGpuBuilder::default(),
+        ),
+        RvrPreflightEngine::Rvr
+    );
+    assert_eq!(
+        crate::rvr_gpu_decode::configured_emission_mode(),
+        Some(crate::rvr_gpu_decode::InlineEmissionMode::G2)
+    );
+
+    let (vm, _) = VirtualMachine::new_with_keygen(
+        test_cpu_engine(),
+        Rv64ImCpuBuilder,
+        Rv64ImConfig::default(),
+    )
+    .expect("CUDA-default G2 VM init");
+    let supported = exe(&[addi(1, 0, 3), terminate()]);
+    let RvrPreflightRoute::Rvr(cpu_default) = vm
+        .preflight_routed_instance(&supported)
+        .expect("CPU default route")
+    else {
+        panic!("supported AddI program must retain the RVR route");
+    };
+    assert!(
+        cpu_default.compiled().inline_records().g2.is_none(),
+        "CUDA-enabled CPU builders must retain the arena route"
+    );
+
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "g2");
+    let RvrPreflightRoute::Rvr(g2) = vm
+        .preflight_routed_instance(&supported)
+        .expect("CUDA-default G2 negotiation")
+    else {
+        panic!("supported AddI program must retain the RVR route");
+    };
+    assert!(
+        g2.compiled().inline_records().g2.is_some(),
+        "negotiable executable must select G2 by default"
+    );
+
+    let unsupported = exe(&[addi(0, 1, 3), terminate()]);
+    let RvrPreflightRoute::Rvr(arena) = vm
+        .preflight_routed_instance(&unsupported)
+        .expect("CUDA-default arena fallback")
+    else {
+        panic!("supported RV64 program must retain the RVR route");
+    };
+    let fallback = arena.compiled().inline_records();
+    assert!(fallback.g2.is_none() && fallback.delta_decode.is_none());
+    assert!(
+        !fallback.pc_slots.iter().any(|&slot| slot),
+        "failed G2 negotiation must fall back before execution"
+    );
+
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "arena-native");
+    assert_eq!(
+        crate::rvr_gpu_decode::configured_emission_mode(),
+        Some(crate::rvr_gpu_decode::InlineEmissionMode::ArenaNative)
+    );
+    let RvrPreflightRoute::Rvr(explicit_arena) = vm
+        .preflight_routed_instance(&supported)
+        .expect("explicit arena override")
+    else {
+        panic!("supported AddI program must retain the RVR route");
+    };
+    assert!(explicit_arena.compiled().inline_records().g2.is_none());
+
+    std::env::remove_var("OPENVM_RVR_GPU_RECORDS");
+    std::env::remove_var("OPENVM_RVR_ARENA_NATIVE");
+    std::env::remove_var("OPENVM_RVR_INLINE_RECORDS");
 }
 
 #[test]
