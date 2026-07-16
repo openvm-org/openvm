@@ -248,15 +248,22 @@ pub enum InlineEmissionMode {
     G2,
 }
 
-/// Env toggle for the staged G1/G2 measurement matrix. Unset (or any other
-/// value) = expanded host records, the gate-validated default path.
+/// Env toggle for GPU record transport. An explicit setting always wins;
+/// CUDA builds default to G2, while non-CUDA builds retain the expanded host
+/// record path.
 pub fn configured_emission_mode() -> Option<InlineEmissionMode> {
-    match std::env::var("OPENVM_RVR_GPU_RECORDS").as_deref() {
-        Ok("compact") => Some(InlineEmissionMode::CompactWire),
-        Ok("arena-native") => Some(InlineEmissionMode::ArenaNative),
-        Ok("delta") => Some(InlineEmissionMode::Delta),
-        Ok("g2") => Some(InlineEmissionMode::G2),
-        _ => None,
+    match std::env::var("OPENVM_RVR_GPU_RECORDS") {
+        Ok(mode) => match mode.as_str() {
+            "compact" => Some(InlineEmissionMode::CompactWire),
+            "arena-native" => Some(InlineEmissionMode::ArenaNative),
+            "delta" => Some(InlineEmissionMode::Delta),
+            "g2" => Some(InlineEmissionMode::G2),
+            _ => None,
+        },
+        Err(std::env::VarError::NotPresent) if cfg!(feature = "cuda") => {
+            Some(InlineEmissionMode::G2)
+        }
+        Err(_) => None,
     }
 }
 

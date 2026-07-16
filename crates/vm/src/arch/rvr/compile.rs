@@ -623,9 +623,19 @@ fn collect_inline_records_meta<F: PrimeField32>(
     ir: &[LiftedInstr],
     chips: &ChipMapping,
     admitter: Option<&dyn LogNativeOpcodeAdmitter<F>>,
+    gpu_records_default: Option<&str>,
 ) -> RvrInlineRecordsMeta {
-    let gpu_records = std::env::var("OPENVM_RVR_GPU_RECORDS").ok();
+    let gpu_records = configured_gpu_records(gpu_records_default);
     collect_inline_records_meta_for_mode(exe, ir, chips, admitter, gpu_records.as_deref())
+}
+
+/// Explicit GPU record selection wins over the proving builder's default.
+fn configured_gpu_records(gpu_records_default: Option<&str>) -> Option<String> {
+    match std::env::var("OPENVM_RVR_GPU_RECORDS") {
+        Ok(mode) => Some(mode),
+        Err(std::env::VarError::NotPresent) => gpu_records_default.map(str::to_owned),
+        Err(_) => None,
+    }
 }
 
 fn collect_inline_records_meta_for_mode<F: PrimeField32>(
@@ -1636,7 +1646,7 @@ pub fn compile_with_options<F: PrimeField32>(
     exe: &VmExe<F>,
     opts: CompileOptions<'_, F>,
 ) -> Result<RvrCompiled, CompileError> {
-    compile_impl(exe, &opts)
+    compile_impl(exe, &opts, None)
 }
 
 /// Compile a VmExe into a shared library for unlimited pure execution.
@@ -1678,6 +1688,7 @@ pub fn compile_with_instret_tracking<F: PrimeField32>(
             native_debug_info: cfg!(feature = "profiling"),
             keep_artifacts: false,
         },
+        None,
     )
 }
 
@@ -1700,6 +1711,7 @@ pub fn compile_metered<F: PrimeField32>(
             native_debug_info: cfg!(feature = "profiling"),
             keep_artifacts: false,
         },
+        None,
     )
 }
 
@@ -1722,6 +1734,7 @@ pub fn compile_metered_segment_boundary<F: PrimeField32>(
             native_debug_info: cfg!(feature = "profiling"),
             keep_artifacts: false,
         },
+        None,
     )
 }
 
@@ -1744,6 +1757,7 @@ pub fn compile_metered_cost<F: PrimeField32>(
             native_debug_info: cfg!(feature = "profiling"),
             keep_artifacts: false,
         },
+        None,
     )
 }
 
@@ -1768,6 +1782,24 @@ pub fn compile_preflight_with_extensions<F: PrimeField32>(
     chips: &ChipMapping,
     guest_debug_map: Option<&GuestDebugMap>,
 ) -> Result<RvrCompiled, CompileError> {
+    compile_preflight_with_extensions_and_default(
+        exe,
+        extensions,
+        assembler_admitter,
+        chips,
+        guest_debug_map,
+        None,
+    )
+}
+
+pub(crate) fn compile_preflight_with_extensions_and_default<F: PrimeField32>(
+    exe: &VmExe<F>,
+    extensions: &ExtensionRegistry,
+    assembler_admitter: &dyn LogNativeOpcodeAdmitter<F>,
+    chips: &ChipMapping,
+    guest_debug_map: Option<&GuestDebugMap>,
+    gpu_records_default: Option<&str>,
+) -> Result<RvrCompiled, CompileError> {
     #[cfg(any(test, feature = "test-utils"))]
     PREFLIGHT_COMPILE_INVOCATIONS.with(|count| count.set(count.get() + 1));
     compile_impl(
@@ -1782,6 +1814,7 @@ pub fn compile_preflight_with_extensions<F: PrimeField32>(
             native_debug_info: cfg!(feature = "profiling"),
             keep_artifacts: false,
         },
+        gpu_records_default,
     )
 }
 
@@ -1891,6 +1924,7 @@ struct RvrNativeCacheManifest {
 fn compile_impl<F: PrimeField32>(
     exe: &VmExe<F>,
     opts: &CompileOptions<'_, F>,
+    gpu_records_default: Option<&str>,
 ) -> Result<RvrCompiled, CompileError> {
     let prepare_started = Instant::now();
     if opts.execution_kind == RvrExecutionKind::Preflight {
@@ -2015,6 +2049,7 @@ fn compile_impl<F: PrimeField32>(
             &ir,
             chips.expect("preflight chip mapping checked above"),
             opts.preflight_assembler_admitter,
+            gpu_records_default,
         );
         validate_requested_inline_record_shape(&inline_meta)?;
     }
@@ -2023,7 +2058,7 @@ fn compile_impl<F: PrimeField32>(
     // G2 binds the exact generated basic-block table, so it performs CFG
     // construction before a cache lookup. Established routes retain their
     // fast cache-hit path and do not pay this scan.
-    let g2_negotiated = std::env::var("OPENVM_RVR_GPU_RECORDS").as_deref() == Ok("g2")
+    let g2_negotiated = configured_gpu_records(gpu_records_default).as_deref() == Some("g2")
         && inline_meta
             .delta_decode
             .as_ref()
