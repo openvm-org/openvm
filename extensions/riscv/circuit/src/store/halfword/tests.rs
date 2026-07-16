@@ -29,8 +29,8 @@ use openvm_stark_sdk::utils::create_seeded_rng;
 
 use crate::{
     adapters::{
-        rv64_bytes_to_u16_block, Rv64StoreAdapterAir, Rv64StoreAdapterExecutor,
-        Rv64StoreAdapterFiller, RV64_BYTE_BITS,
+        rv64_bytes_to_u16_block, Rv64StoreMultiByteAdapterAir, Rv64StoreMultiByteAdapterExecutor,
+        Rv64StoreMultiByteAdapterFiller, RV64_BYTE_BITS,
     },
     store::{
         common::store_write_data, core::StoreCoreCols, Rv64StoreHalfwordAir, Rv64StoreHalfwordChip,
@@ -63,7 +63,7 @@ fn create_store_halfword_harness(
         bitwise_bus,
     ));
     let air = Rv64StoreHalfwordAir::new(
-        Rv64StoreAdapterAir::new(
+        Rv64StoreMultiByteAdapterAir::new(
             tester.memory_bridge(),
             tester.execution_bridge(),
             range_checker.bus(),
@@ -72,12 +72,12 @@ fn create_store_halfword_harness(
         StoreHalfwordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_chip.bus()),
     );
     let executor = Rv64StoreHalfwordExecutor::new(
-        Rv64StoreAdapterExecutor::new(tester.address_bits()),
+        Rv64StoreMultiByteAdapterExecutor::new(tester.address_bits()),
         Rv64LoadStoreOpcode::CLASS_OFFSET,
     );
     let chip = Rv64StoreHalfwordChip::<F>::new(
         StoreHalfwordFiller::new(
-            Rv64StoreAdapterFiller::new(tester.address_bits(), range_checker.clone()),
+            Rv64StoreMultiByteAdapterFiller::new(tester.address_bits(), range_checker.clone()),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
             bitwise_chip.clone(),
         ),
@@ -220,7 +220,7 @@ fn create_cuda_store_halfword_harness(tester: &GpuChipTestBuilder) -> GpuStoreHa
         default_bitwise_lookup_bus(),
     ));
     let air = Rv64StoreHalfwordAir::new(
-        Rv64StoreAdapterAir::new(
+        Rv64StoreMultiByteAdapterAir::new(
             tester.memory_bridge(),
             tester.execution_bridge(),
             range_checker.bus(),
@@ -229,12 +229,12 @@ fn create_cuda_store_halfword_harness(tester: &GpuChipTestBuilder) -> GpuStoreHa
         StoreHalfwordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_chip.bus()),
     );
     let executor = Rv64StoreHalfwordExecutor::new(
-        Rv64StoreAdapterExecutor::new(tester.address_bits()),
+        Rv64StoreMultiByteAdapterExecutor::new(tester.address_bits()),
         Rv64LoadStoreOpcode::CLASS_OFFSET,
     );
     let cpu_chip = Rv64StoreHalfwordChip::<F>::new(
         StoreHalfwordFiller::new(
-            Rv64StoreAdapterFiller::new(tester.address_bits(), range_checker.clone()),
+            Rv64StoreMultiByteAdapterFiller::new(tester.address_bits(), range_checker.clone()),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
             bitwise_chip,
         ),

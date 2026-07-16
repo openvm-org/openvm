@@ -16,8 +16,9 @@ use openvm_stark_backend::{
 
 use crate::{
     adapters::{
-        set_u16_cell_byte, shift_encoder, u16_cell_byte, Rv64StoreAdapterRecord,
-        Rv64StoreByteAdapterCols, Rv64StoreByteAdapterFiller, StoreInstruction, RV64_BYTE_BITS,
+        set_u16_cell_byte, shift_encoder, u16_cell_byte, Rv64StoreByteAdapterCols,
+        Rv64StoreByteAdapterFiller, Rv64StoreMultiByteAdapterRecord, StoreInstruction,
+        RV64_BYTE_BITS,
     },
     store::common::{store_write_data, StoreRecord},
 };
@@ -185,7 +186,7 @@ where
                 <Rv64StoreByteAdapterFiller as AdapterTraceFiller<F>>::WIDTH,
             )
         };
-        let adapter_record: &Rv64StoreAdapterRecord =
+        let adapter_record: &Rv64StoreMultiByteAdapterRecord =
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
         let shift = adapter_record.shift_amount();
         self.adapter.fill_trace_row(mem_helper, adapter_row);

@@ -25,11 +25,11 @@ struct StoreRecord {
 };
 
 struct Rv64StoreRecord {
-    Rv64StoreAdapterRecord adapter;
+    Rv64StoreMultiByteAdapterRecord adapter;
     StoreRecord core;
 };
 
-static_assert(sizeof(Rv64StoreAdapterRecord) == 36);
+static_assert(sizeof(Rv64StoreMultiByteAdapterRecord) == 36);
 static_assert(sizeof(StoreRecord) == 24);
 static_assert(sizeof(Rv64StoreRecord) == 60);
 static_assert(offsetof(StoreRecord, read_data) == 0);

@@ -4,7 +4,7 @@ using StoreDoublewordCore =
     StoreWidthCore<STORE_DOUBLEWORD_SELECTOR_WIDTH, 4, 8>;
 
 template <typename T> struct Rv64StoreDoublewordCols {
-    Rv64StoreAdapterCols<T> adapter;
+    Rv64StoreMultiByteAdapterCols<T> adapter;
     StoreWidthCoreCols<T, STORE_DOUBLEWORD_SELECTOR_WIDTH, 4> core;
 };
 

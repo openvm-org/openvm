@@ -4,7 +4,7 @@ using LoadHalfwordCore =
     LoadWidthCore<LOAD_HALFWORD_SELECTOR_WIDTH, 2, 2>;
 
 template <typename T> struct Rv64LoadHalfwordCols {
-    Rv64LoadAdapterCols<T> adapter;
+    Rv64LoadMultiByteAdapterCols<T> adapter;
     LoadWidthCoreCols<T, LOAD_HALFWORD_SELECTOR_WIDTH, 2> core;
 };
 

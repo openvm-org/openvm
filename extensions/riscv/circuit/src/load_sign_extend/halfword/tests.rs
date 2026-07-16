@@ -31,7 +31,8 @@ use crate::load_sign_extend::{
 };
 use crate::{
     adapters::{
-        Rv64LoadAdapterAir, Rv64LoadAdapterExecutor, Rv64LoadAdapterFiller, RV64_BYTE_BITS,
+        Rv64LoadMultiByteAdapterAir, Rv64LoadMultiByteAdapterExecutor,
+        Rv64LoadMultiByteAdapterFiller, RV64_BYTE_BITS,
     },
     load_sign_extend::{
         core::LoadSignExtendCoreCols,
@@ -67,7 +68,7 @@ fn create_halfword_harness(
         bitwise_bus,
     ));
     let air = Rv64LoadSignExtendHalfwordAir::new(
-        Rv64LoadAdapterAir::new(
+        Rv64LoadMultiByteAdapterAir::new(
             tester.memory_bridge(),
             tester.execution_bridge(),
             range_checker.bus(),
@@ -80,12 +81,12 @@ fn create_halfword_harness(
         ),
     );
     let executor = Rv64LoadSignExtendHalfwordExecutor::new(
-        Rv64LoadAdapterExecutor::new(tester.address_bits()),
+        Rv64LoadMultiByteAdapterExecutor::new(tester.address_bits()),
         Rv64LoadStoreOpcode::CLASS_OFFSET,
     );
     let chip = Rv64LoadSignExtendHalfwordChip::<F>::new(
         LoadSignExtendHalfwordFiller::new(
-            Rv64LoadAdapterFiller::new(tester.address_bits(), range_checker.clone()),
+            Rv64LoadMultiByteAdapterFiller::new(tester.address_bits(), range_checker.clone()),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
             bitwise_chip.clone(),
             range_checker,
@@ -210,7 +211,7 @@ fn create_cuda_halfword_harness(tester: &GpuChipTestBuilder) -> GpuHalfwordHarne
         default_bitwise_lookup_bus(),
     ));
     let air = Rv64LoadSignExtendHalfwordAir::new(
-        Rv64LoadAdapterAir::new(
+        Rv64LoadMultiByteAdapterAir::new(
             tester.memory_bridge(),
             tester.execution_bridge(),
             range_checker.bus(),
@@ -223,12 +224,12 @@ fn create_cuda_halfword_harness(tester: &GpuChipTestBuilder) -> GpuHalfwordHarne
         ),
     );
     let executor = Rv64LoadSignExtendHalfwordExecutor::new(
-        Rv64LoadAdapterExecutor::new(tester.address_bits()),
+        Rv64LoadMultiByteAdapterExecutor::new(tester.address_bits()),
         Rv64LoadStoreOpcode::CLASS_OFFSET,
     );
     let cpu_chip = Rv64LoadSignExtendHalfwordChip::<F>::new(
         LoadSignExtendHalfwordFiller::new(
-            Rv64LoadAdapterFiller::new(tester.address_bits(), range_checker.clone()),
+            Rv64LoadMultiByteAdapterFiller::new(tester.address_bits(), range_checker.clone()),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
             bitwise_chip,
             range_checker,

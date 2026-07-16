@@ -1,8 +1,8 @@
-mod aligned;
-mod misaligned;
+mod byte;
+mod multi_byte;
 
-pub use aligned::*;
-pub use misaligned::*;
+pub use byte::*;
+pub use multi_byte::*;
 
 pub(crate) const STORE_WIDTH_BYTE: usize = 1;
 pub(crate) const STORE_WIDTH_HALFWORD: usize = 2;

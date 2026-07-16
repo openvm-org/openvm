@@ -16,9 +16,10 @@ use openvm_stark_backend::{
 
 use crate::{
     adapters::{
-        shift_encoder, u16_cell_byte, Rv64StoreAdapterCols, Rv64StoreAdapterFiller,
-        Rv64StoreAdapterRecord, StoreInstruction, NUM_BYTE_SHIFTS, RV64_BYTE_BITS,
-        STORE_WIDTH_DOUBLEWORD, STORE_WIDTH_HALFWORD, STORE_WIDTH_WORD,
+        shift_encoder, u16_cell_byte, Rv64StoreMultiByteAdapterCols,
+        Rv64StoreMultiByteAdapterFiller, Rv64StoreMultiByteAdapterRecord, StoreInstruction,
+        NUM_BYTE_SHIFTS, RV64_BYTE_BITS, STORE_WIDTH_DOUBLEWORD, STORE_WIDTH_HALFWORD,
+        STORE_WIDTH_WORD,
     },
     store::common::StoreRecord,
 };
@@ -264,7 +265,7 @@ where
 
 #[derive(Clone)]
 pub struct StoreFiller<
-    A = Rv64StoreAdapterFiller,
+    A = Rv64StoreMultiByteAdapterFiller,
     const STORE_WIDTH: usize = STORE_WIDTH_WORD,
     const SELECTOR_WIDTH: usize = 3,
     const NUM_VALUE_CELLS: usize = 2,
@@ -294,7 +295,7 @@ impl<A, const STORE_WIDTH: usize, const SELECTOR_WIDTH: usize, const NUM_VALUE_C
 
 impl<F, const STORE_WIDTH: usize, const SELECTOR_WIDTH: usize, const NUM_VALUE_CELLS: usize>
     TraceFiller<F>
-    for StoreFiller<Rv64StoreAdapterFiller, STORE_WIDTH, SELECTOR_WIDTH, NUM_VALUE_CELLS>
+    for StoreFiller<Rv64StoreMultiByteAdapterFiller, STORE_WIDTH, SELECTOR_WIDTH, NUM_VALUE_CELLS>
 where
     F: PrimeField32,
 {
@@ -302,10 +303,11 @@ where
         // SAFETY: row_slice is guaranteed by the caller to have at least the adapter width plus
         // StoreCoreCols::width() elements.
         let (mut adapter_row, mut core_row) = unsafe {
-            row_slice
-                .split_at_mut_unchecked(<Rv64StoreAdapterFiller as AdapterTraceFiller<F>>::WIDTH)
+            row_slice.split_at_mut_unchecked(
+                <Rv64StoreMultiByteAdapterFiller as AdapterTraceFiller<F>>::WIDTH,
+            )
         };
-        let adapter_record: &Rv64StoreAdapterRecord =
+        let adapter_record: &Rv64StoreMultiByteAdapterRecord =
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
         let shift = adapter_record.shift_amount();
         self.adapter.fill_trace_row(mem_helper, adapter_row);
@@ -357,10 +359,11 @@ where
 
     fn fill_dummy_trace_row(&self, row_slice: &mut [F]) {
         let (adapter_row, _) = unsafe {
-            row_slice
-                .split_at_mut_unchecked(<Rv64StoreAdapterFiller as AdapterTraceFiller<F>>::WIDTH)
+            row_slice.split_at_mut_unchecked(
+                <Rv64StoreMultiByteAdapterFiller as AdapterTraceFiller<F>>::WIDTH,
+            )
         };
-        let adapter_row: &mut Rv64StoreAdapterCols<F> = adapter_row.borrow_mut();
+        let adapter_row: &mut Rv64StoreMultiByteAdapterCols<F> = adapter_row.borrow_mut();
         adapter_row.mem_as = F::from_u32(2);
     }
 }

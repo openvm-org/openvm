@@ -4,7 +4,7 @@ using LoadSignExtendHalfwordCore =
     LoadSignExtendWidthCore<LOAD_SIGN_EXTEND_HALFWORD_SELECTOR_WIDTH, 2, 2>;
 
 template <typename T> struct Rv64LoadSignExtendHalfwordCols {
-    Rv64LoadAdapterCols<T> adapter;
+    Rv64LoadMultiByteAdapterCols<T> adapter;
     LoadSignExtendWidthCoreCols<T, LOAD_SIGN_EXTEND_HALFWORD_SELECTOR_WIDTH, 2> core;
 };
 

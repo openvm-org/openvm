@@ -53,9 +53,11 @@ pub struct LoadInstruction<T> {
     pub load_cross: T,
 }
 
-pub struct Rv64LoadAdapterAirInterface<AB: InteractionBuilder>(PhantomData<AB>);
+pub struct Rv64LoadMultiByteAdapterAirInterface<AB: InteractionBuilder>(PhantomData<AB>);
 
-impl<AB: InteractionBuilder> VmAdapterInterface<AB::Expr> for Rv64LoadAdapterAirInterface<AB> {
+impl<AB: InteractionBuilder> VmAdapterInterface<AB::Expr>
+    for Rv64LoadMultiByteAdapterAirInterface<AB>
+{
     /// The memory block containing the effective address, followed by the next block, which is
     /// read only when the access crosses a block boundary.
     type Reads = [[AB::Expr; BLOCK_FE_WIDTH]; 2];
@@ -65,7 +67,7 @@ impl<AB: InteractionBuilder> VmAdapterInterface<AB::Expr> for Rv64LoadAdapterAir
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
-pub struct Rv64LoadAdapterCols<T> {
+pub struct Rv64LoadMultiByteAdapterCols<T> {
     pub from_state: ExecutionState<T>,
     pub rs1_ptr: T,
     /// Low 32 bits of the rs1 register, packed as two u16 cells.
@@ -89,22 +91,22 @@ pub struct Rv64LoadAdapterCols<T> {
 }
 
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(Rv64LoadAdapterCols<u8>)]
-pub struct Rv64LoadAdapterAir {
+#[columns_via(Rv64LoadMultiByteAdapterCols<u8>)]
+pub struct Rv64LoadMultiByteAdapterAir {
     pub(super) memory_bridge: MemoryBridge,
     pub(super) execution_bridge: ExecutionBridge,
     pub range_bus: VariableRangeCheckerBus,
     pointer_max_bits: usize,
 }
 
-impl<F: Field> BaseAir<F> for Rv64LoadAdapterAir {
+impl<F: Field> BaseAir<F> for Rv64LoadMultiByteAdapterAir {
     fn width(&self) -> usize {
-        Rv64LoadAdapterCols::<F>::width()
+        Rv64LoadMultiByteAdapterCols::<F>::width()
     }
 }
 
-impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadAdapterAir {
-    type Interface = Rv64LoadAdapterAirInterface<AB>;
+impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadMultiByteAdapterAir {
+    type Interface = Rv64LoadMultiByteAdapterAirInterface<AB>;
 
     fn eval(
         &self,
@@ -112,7 +114,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadAdapterAir {
         local: &[AB::Var],
         ctx: AdapterAirContext<AB::Expr, Self::Interface>,
     ) {
-        let local_cols: &Rv64LoadAdapterCols<AB::Var> = local.borrow();
+        let local_cols: &Rv64LoadMultiByteAdapterCols<AB::Var> = local.borrow();
 
         let timestamp: AB::Var = local_cols.from_state.timestamp;
         let mut timestamp_delta: usize = 0;
@@ -263,14 +265,14 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadAdapterAir {
     }
 
     fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
-        let local_cols: &Rv64LoadAdapterCols<AB::Var> = local.borrow();
+        let local_cols: &Rv64LoadMultiByteAdapterCols<AB::Var> = local.borrow();
         local_cols.from_state.pc
     }
 }
 
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
-pub struct Rv64LoadAdapterRecord {
+pub struct Rv64LoadMultiByteAdapterRecord {
     pub from_pc: u32,
     pub from_timestamp: u32,
     pub rs1_val: u32,
@@ -288,7 +290,7 @@ pub struct Rv64LoadAdapterRecord {
     pub rd_ptr: u8,
 }
 
-impl Rv64LoadAdapterRecord {
+impl Rv64LoadMultiByteAdapterRecord {
     pub(crate) fn effective_ptr(&self) -> u32 {
         let addr = rv64_address_add_imm(
             self.rs1_val,
@@ -307,24 +309,25 @@ impl Rv64LoadAdapterRecord {
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct Rv64LoadAdapterExecutor<const LOAD_WIDTH: usize> {
+pub struct Rv64LoadMultiByteAdapterExecutor<const LOAD_WIDTH: usize> {
     pointer_max_bits: usize,
 }
 
 #[derive(derive_new::new)]
-pub struct Rv64LoadAdapterFiller {
+pub struct Rv64LoadMultiByteAdapterFiller {
     pointer_max_bits: usize,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
-impl<F, const LOAD_WIDTH: usize> AdapterTraceExecutor<F> for Rv64LoadAdapterExecutor<LOAD_WIDTH>
+impl<F, const LOAD_WIDTH: usize> AdapterTraceExecutor<F>
+    for Rv64LoadMultiByteAdapterExecutor<LOAD_WIDTH>
 where
     F: PrimeField32,
 {
-    const WIDTH: usize = size_of::<Rv64LoadAdapterCols<u8>>();
+    const WIDTH: usize = size_of::<Rv64LoadMultiByteAdapterCols<u8>>();
     type ReadData = (([u16; BLOCK_FE_WIDTH], [[u16; BLOCK_FE_WIDTH]; 2]), u8);
     type WriteData = [u16; BLOCK_FE_WIDTH];
-    type RecordMut<'a> = &'a mut Rv64LoadAdapterRecord;
+    type RecordMut<'a> = &'a mut Rv64LoadMultiByteAdapterRecord;
 
     #[inline(always)]
     fn start(pc: u32, memory: &TracingMemory, record: &mut Self::RecordMut<'_>) {
@@ -434,8 +437,8 @@ where
     }
 }
 
-impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64LoadAdapterFiller {
-    const WIDTH: usize = size_of::<Rv64LoadAdapterCols<u8>>();
+impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64LoadMultiByteAdapterFiller {
+    const WIDTH: usize = size_of::<Rv64LoadMultiByteAdapterCols<u8>>();
 
     #[inline(always)]
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
@@ -444,8 +447,9 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64LoadAdapterFiller {
         // SAFETY:
         // - caller ensures `adapter_row` contains a valid record representation written by the
         //   executor
-        // - get_record_from_slice correctly interprets the bytes as Rv64LoadAdapterRecord
-        let record: &Rv64LoadAdapterRecord = unsafe { get_record_from_slice(&mut adapter_row, ()) };
+        // - get_record_from_slice correctly interprets the bytes as Rv64LoadMultiByteAdapterRecord
+        let record: &Rv64LoadMultiByteAdapterRecord =
+            unsafe { get_record_from_slice(&mut adapter_row, ()) };
         // The record and columns share the same row buffer, so copy record data
         // before writing columns.
         let from_pc = record.from_pc;
@@ -463,7 +467,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64LoadAdapterFiller {
         let write_prev_data = record.write_prev_data;
         let ptr = record.effective_ptr();
         let shift_amount = record.shift_amount() as u32;
-        let adapter_row: &mut Rv64LoadAdapterCols<F> = adapter_row.borrow_mut();
+        let adapter_row: &mut Rv64LoadMultiByteAdapterCols<F> = adapter_row.borrow_mut();
 
         let needs_write = rd_ptr != u8::MAX;
         adapter_row.needs_write = F::from_bool(needs_write);

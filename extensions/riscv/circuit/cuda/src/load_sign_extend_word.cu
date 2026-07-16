@@ -4,7 +4,7 @@ using LoadSignExtendWordCore =
     LoadSignExtendWidthCore<LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH, 3, 4>;
 
 template <typename T> struct Rv64LoadSignExtendWordCols {
-    Rv64LoadAdapterCols<T> adapter;
+    Rv64LoadMultiByteAdapterCols<T> adapter;
     LoadSignExtendWidthCoreCols<T, LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH, 3> core;
 };
 

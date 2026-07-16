@@ -17,8 +17,8 @@ use openvm_stark_backend::{
 
 use crate::{
     adapters::{
-        shift_encoder, u16_cell_byte, LoadInstruction, Rv64LoadAdapterFiller,
-        Rv64LoadAdapterRecord, LOAD_WIDTH_HALFWORD, LOAD_WIDTH_WORD, NUM_BYTE_SHIFTS,
+        shift_encoder, u16_cell_byte, LoadInstruction, Rv64LoadMultiByteAdapterFiller,
+        Rv64LoadMultiByteAdapterRecord, LOAD_WIDTH_HALFWORD, LOAD_WIDTH_WORD, NUM_BYTE_SHIFTS,
         RV64_BYTE_BITS, RV64_BYTE_SIGN_BIT, RV64_U16_SIGN_BIT, U16_BITS,
     },
     load::LoadRecord,
@@ -256,7 +256,7 @@ where
 
 #[derive(Clone)]
 pub struct LoadSignExtendFiller<
-    A = Rv64LoadAdapterFiller,
+    A = Rv64LoadMultiByteAdapterFiller,
     const LOAD_WIDTH: usize = LOAD_WIDTH_WORD,
     const SELECTOR_WIDTH: usize = 3,
     const NUM_OVERLAP_CELLS: usize = 3,
@@ -289,7 +289,12 @@ impl<A, const LOAD_WIDTH: usize, const SELECTOR_WIDTH: usize, const NUM_OVERLAP_
 
 impl<F, const LOAD_WIDTH: usize, const SELECTOR_WIDTH: usize, const NUM_OVERLAP_CELLS: usize>
     TraceFiller<F>
-    for LoadSignExtendFiller<Rv64LoadAdapterFiller, LOAD_WIDTH, SELECTOR_WIDTH, NUM_OVERLAP_CELLS>
+    for LoadSignExtendFiller<
+        Rv64LoadMultiByteAdapterFiller,
+        LOAD_WIDTH,
+        SELECTOR_WIDTH,
+        NUM_OVERLAP_CELLS,
+    >
 where
     F: PrimeField32,
 {
@@ -297,10 +302,11 @@ where
         // SAFETY: row_slice is guaranteed by the caller to have at least the adapter width plus
         // LoadSignExtendCoreCols::width() elements.
         let (mut adapter_row, mut core_row) = unsafe {
-            row_slice
-                .split_at_mut_unchecked(<Rv64LoadAdapterFiller as AdapterTraceFiller<F>>::WIDTH)
+            row_slice.split_at_mut_unchecked(
+                <Rv64LoadMultiByteAdapterFiller as AdapterTraceFiller<F>>::WIDTH,
+            )
         };
-        let adapter_record: &Rv64LoadAdapterRecord =
+        let adapter_record: &Rv64LoadMultiByteAdapterRecord =
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
         let shift = adapter_record.shift_amount();
         self.adapter.fill_trace_row(mem_helper, adapter_row);

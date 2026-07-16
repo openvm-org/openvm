@@ -11,7 +11,7 @@ use openvm_stark_backend::prover::AirProvingContext;
 
 use super::{LOAD_DOUBLEWORD_OVERLAP_CELLS, LOAD_DOUBLEWORD_SELECTOR_WIDTH};
 use crate::{
-    adapters::{Rv64LoadAdapterCols, Rv64LoadAdapterRecord, RV64_BYTE_BITS},
+    adapters::{Rv64LoadMultiByteAdapterCols, Rv64LoadMultiByteAdapterRecord, RV64_BYTE_BITS},
     cuda_abi::load_doubleword_cuda,
     load::{core::LoadCoreCols, LoadRecord},
 };
@@ -26,14 +26,14 @@ pub struct Rv64LoadDoublewordChipGpu {
 
 impl Chip<DenseRecordArena, GpuBackend> for Rv64LoadDoublewordChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-        const RECORD_SIZE: usize = size_of::<(Rv64LoadAdapterRecord, LoadRecord)>();
+        const RECORD_SIZE: usize = size_of::<(Rv64LoadMultiByteAdapterRecord, LoadRecord)>();
         let records = arena.allocated();
         if records.is_empty() {
             return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
         }
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
-        let trace_width = Rv64LoadAdapterCols::<F>::width()
+        let trace_width = Rv64LoadMultiByteAdapterCols::<F>::width()
             + LoadCoreCols::<F, LOAD_DOUBLEWORD_SELECTOR_WIDTH, LOAD_DOUBLEWORD_OVERLAP_CELLS>::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;

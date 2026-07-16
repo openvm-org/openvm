@@ -2,7 +2,8 @@ use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 
 use crate::{
     adapters::{
-        Rv64LoadAdapterAir, Rv64LoadAdapterExecutor, Rv64LoadAdapterFiller, LOAD_WIDTH_DOUBLEWORD,
+        Rv64LoadMultiByteAdapterAir, Rv64LoadMultiByteAdapterExecutor,
+        Rv64LoadMultiByteAdapterFiller, LOAD_WIDTH_DOUBLEWORD,
     },
     load::{
         common::LoadExecutor,
@@ -20,15 +21,15 @@ pub type LoadDoublewordCoreAir = LoadCoreAir<
     LOAD_DOUBLEWORD_OVERLAP_CELLS,
 >;
 pub type LoadDoublewordFiller = LoadFiller<
-    Rv64LoadAdapterFiller,
+    Rv64LoadMultiByteAdapterFiller,
     LOAD_WIDTH_DOUBLEWORD,
     LOAD_DOUBLEWORD_SELECTOR_WIDTH,
     LOAD_DOUBLEWORD_OVERLAP_CELLS,
 >;
 
-pub type Rv64LoadDoublewordAir = VmAirWrapper<Rv64LoadAdapterAir, LoadDoublewordCoreAir>;
+pub type Rv64LoadDoublewordAir = VmAirWrapper<Rv64LoadMultiByteAdapterAir, LoadDoublewordCoreAir>;
 pub type Rv64LoadDoublewordExecutor =
-    LoadExecutor<Rv64LoadAdapterExecutor<LOAD_WIDTH_DOUBLEWORD>, LOAD_WIDTH_DOUBLEWORD>;
+    LoadExecutor<Rv64LoadMultiByteAdapterExecutor<LOAD_WIDTH_DOUBLEWORD>, LOAD_WIDTH_DOUBLEWORD>;
 pub type Rv64LoadDoublewordChip<F> = VmChipWrapper<F, LoadDoublewordFiller>;
 
 #[cfg(feature = "cuda")]

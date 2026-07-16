@@ -15,7 +15,7 @@ use rand::{rngs::StdRng, Rng};
 #[cfg(feature = "cuda")]
 use {
     crate::{
-        adapters::{Rv64LoadAdapterRecord, LOAD_WIDTH_WORD},
+        adapters::{Rv64LoadMultiByteAdapterRecord, LOAD_WIDTH_WORD},
         load::LoadRecord,
     },
     openvm_circuit::arch::{
@@ -26,7 +26,7 @@ use {
 };
 
 #[cfg(feature = "cuda")]
-use crate::adapters::{Rv64LoadAdapterExecutor, Rv64LoadByteAdapterExecutor};
+use crate::adapters::{Rv64LoadByteAdapterExecutor, Rv64LoadMultiByteAdapterExecutor};
 use crate::{
     adapters::{
         rv64_bytes_to_u16_block, rv64_bytes_to_u32, rv64_u16_block_to_bytes, sign_extend_imm16,
@@ -154,13 +154,13 @@ pub(crate) fn dummy_range_checker() -> Arc<VariableRangeCheckerChip> {
 pub(crate) fn transfer_load_sign_extend_records<G, C, A, E>(
     harness: &mut GpuTestChipHarness<F, E, A, G, C>,
 ) {
-    type Record<'a> = (&'a mut Rv64LoadAdapterRecord, &'a mut LoadRecord);
+    type Record<'a> = (&'a mut Rv64LoadMultiByteAdapterRecord, &'a mut LoadRecord);
     harness
         .dense_arena
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64LoadAdapterExecutor<LOAD_WIDTH_WORD>>::new(),
+            EmptyAdapterCoreLayout::<F, Rv64LoadMultiByteAdapterExecutor<LOAD_WIDTH_WORD>>::new(),
         );
 }
 
@@ -170,7 +170,7 @@ pub(crate) fn transfer_load_sign_extend_records<G, C, A, E>(
 pub(crate) fn transfer_load_sign_extend_byte_records<G, C, A, E>(
     harness: &mut GpuTestChipHarness<F, E, A, G, C>,
 ) {
-    type Record<'a> = (&'a mut Rv64LoadAdapterRecord, &'a mut LoadRecord);
+    type Record<'a> = (&'a mut Rv64LoadMultiByteAdapterRecord, &'a mut LoadRecord);
     harness
         .dense_arena
         .get_record_seeker::<Record, _>()

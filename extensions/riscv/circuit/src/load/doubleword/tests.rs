@@ -27,8 +27,8 @@ use openvm_stark_sdk::utils::create_seeded_rng;
 
 use crate::{
     adapters::{
-        rv64_bytes_to_u16_block, Rv64LoadAdapterAir, Rv64LoadAdapterExecutor,
-        Rv64LoadAdapterFiller, RV64_BYTE_BITS,
+        rv64_bytes_to_u16_block, Rv64LoadMultiByteAdapterAir, Rv64LoadMultiByteAdapterExecutor,
+        Rv64LoadMultiByteAdapterFiller, RV64_BYTE_BITS,
     },
     load::{
         common::load_write_data, core::LoadCoreCols, LoadDoublewordCoreAir, LoadDoublewordFiller,
@@ -65,7 +65,7 @@ fn create_doubleword_harness(
         bitwise_bus,
     ));
     let air = Rv64LoadDoublewordAir::new(
-        Rv64LoadAdapterAir::new(
+        Rv64LoadMultiByteAdapterAir::new(
             tester.memory_bridge(),
             tester.execution_bridge(),
             range_checker.bus(),
@@ -74,12 +74,12 @@ fn create_doubleword_harness(
         LoadDoublewordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_chip.bus()),
     );
     let executor = Rv64LoadDoublewordExecutor::new(
-        Rv64LoadAdapterExecutor::new(tester.address_bits()),
+        Rv64LoadMultiByteAdapterExecutor::new(tester.address_bits()),
         Rv64LoadStoreOpcode::CLASS_OFFSET,
     );
     let chip = Rv64LoadDoublewordChip::<F>::new(
         LoadDoublewordFiller::new(
-            Rv64LoadAdapterFiller::new(tester.address_bits(), range_checker.clone()),
+            Rv64LoadMultiByteAdapterFiller::new(tester.address_bits(), range_checker.clone()),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
             bitwise_chip.clone(),
         ),
@@ -218,7 +218,7 @@ fn create_cuda_doubleword_harness(tester: &GpuChipTestBuilder) -> GpuDoublewordH
         default_bitwise_lookup_bus(),
     ));
     let air = Rv64LoadDoublewordAir::new(
-        Rv64LoadAdapterAir::new(
+        Rv64LoadMultiByteAdapterAir::new(
             tester.memory_bridge(),
             tester.execution_bridge(),
             range_checker.bus(),
@@ -227,12 +227,12 @@ fn create_cuda_doubleword_harness(tester: &GpuChipTestBuilder) -> GpuDoublewordH
         LoadDoublewordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_chip.bus()),
     );
     let executor = Rv64LoadDoublewordExecutor::new(
-        Rv64LoadAdapterExecutor::new(tester.address_bits()),
+        Rv64LoadMultiByteAdapterExecutor::new(tester.address_bits()),
         Rv64LoadStoreOpcode::CLASS_OFFSET,
     );
     let cpu_chip = Rv64LoadDoublewordChip::<F>::new(
         LoadDoublewordFiller::new(
-            Rv64LoadAdapterFiller::new(tester.address_bits(), range_checker.clone()),
+            Rv64LoadMultiByteAdapterFiller::new(tester.address_bits(), range_checker.clone()),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
             bitwise_chip,
         ),

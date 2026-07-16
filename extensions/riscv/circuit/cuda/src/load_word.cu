@@ -4,7 +4,7 @@ using LoadWordCore =
     LoadWidthCore<LOAD_WORD_SELECTOR_WIDTH, 3, 4>;
 
 template <typename T> struct Rv64LoadWordCols {
-    Rv64LoadAdapterCols<T> adapter;
+    Rv64LoadMultiByteAdapterCols<T> adapter;
     LoadWidthCoreCols<T, LOAD_WORD_SELECTOR_WIDTH, 3> core;
 };
 

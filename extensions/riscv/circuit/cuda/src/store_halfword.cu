@@ -4,7 +4,7 @@ using StoreHalfwordCore =
     StoreWidthCore<STORE_HALFWORD_SELECTOR_WIDTH, 1, 2>;
 
 template <typename T> struct Rv64StoreHalfwordCols {
-    Rv64StoreAdapterCols<T> adapter;
+    Rv64StoreMultiByteAdapterCols<T> adapter;
     StoreWidthCoreCols<T, STORE_HALFWORD_SELECTOR_WIDTH, 1> core;
 };
 

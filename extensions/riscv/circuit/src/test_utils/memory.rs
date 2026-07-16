@@ -20,7 +20,8 @@ use rand::{rngs::StdRng, seq::IndexedRandom, Rng};
 #[cfg(feature = "cuda")]
 use {
     crate::adapters::{
-        Rv64LoadAdapterRecord, Rv64StoreAdapterRecord, LOAD_WIDTH_WORD, STORE_WIDTH_WORD,
+        Rv64LoadMultiByteAdapterRecord, Rv64StoreMultiByteAdapterRecord, LOAD_WIDTH_WORD,
+        STORE_WIDTH_WORD,
     },
     crate::load::LoadRecord,
     crate::store::StoreRecord,
@@ -33,8 +34,8 @@ use {
 
 #[cfg(feature = "cuda")]
 use crate::adapters::{
-    Rv64LoadAdapterExecutor, Rv64LoadByteAdapterExecutor, Rv64StoreAdapterExecutor,
-    Rv64StoreByteAdapterExecutor,
+    Rv64LoadByteAdapterExecutor, Rv64LoadMultiByteAdapterExecutor, Rv64StoreByteAdapterExecutor,
+    Rv64StoreMultiByteAdapterExecutor,
 };
 use crate::{
     adapters::{rv64_bytes_to_u32, rv64_u16_block_to_bytes, sign_extend_imm16},
@@ -314,25 +315,25 @@ pub(crate) fn dummy_range_checker() -> Arc<VariableRangeCheckerChip> {
 }
 #[cfg(feature = "cuda")]
 pub(crate) fn transfer_load_records<G, C, A, E>(harness: &mut GpuTestChipHarness<F, E, A, G, C>) {
-    type Record<'a> = (&'a mut Rv64LoadAdapterRecord, &'a mut LoadRecord);
+    type Record<'a> = (&'a mut Rv64LoadMultiByteAdapterRecord, &'a mut LoadRecord);
     harness
         .dense_arena
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64LoadAdapterExecutor<LOAD_WIDTH_WORD>>::new(),
+            EmptyAdapterCoreLayout::<F, Rv64LoadMultiByteAdapterExecutor<LOAD_WIDTH_WORD>>::new(),
         );
 }
 
 #[cfg(feature = "cuda")]
 pub(crate) fn transfer_store_records<G, C, A, E>(harness: &mut GpuTestChipHarness<F, E, A, G, C>) {
-    type Record<'a> = (&'a mut Rv64StoreAdapterRecord, &'a mut StoreRecord);
+    type Record<'a> = (&'a mut Rv64StoreMultiByteAdapterRecord, &'a mut StoreRecord);
     harness
         .dense_arena
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64StoreAdapterExecutor<STORE_WIDTH_WORD>>::new(),
+            EmptyAdapterCoreLayout::<F, Rv64StoreMultiByteAdapterExecutor<STORE_WIDTH_WORD>>::new(),
         );
 }
 
@@ -342,7 +343,7 @@ pub(crate) fn transfer_store_records<G, C, A, E>(harness: &mut GpuTestChipHarnes
 pub(crate) fn transfer_load_byte_records<G, C, A, E>(
     harness: &mut GpuTestChipHarness<F, E, A, G, C>,
 ) {
-    type Record<'a> = (&'a mut Rv64LoadAdapterRecord, &'a mut LoadRecord);
+    type Record<'a> = (&'a mut Rv64LoadMultiByteAdapterRecord, &'a mut LoadRecord);
     harness
         .dense_arena
         .get_record_seeker::<Record, _>()
@@ -356,7 +357,7 @@ pub(crate) fn transfer_load_byte_records<G, C, A, E>(
 pub(crate) fn transfer_store_byte_records<G, C, A, E>(
     harness: &mut GpuTestChipHarness<F, E, A, G, C>,
 ) {
-    type Record<'a> = (&'a mut Rv64StoreAdapterRecord, &'a mut StoreRecord);
+    type Record<'a> = (&'a mut Rv64StoreMultiByteAdapterRecord, &'a mut StoreRecord);
     harness
         .dense_arena
         .get_record_seeker::<Record, _>()

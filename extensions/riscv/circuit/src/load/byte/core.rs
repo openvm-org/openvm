@@ -16,8 +16,8 @@ use openvm_stark_backend::{
 
 use crate::{
     adapters::{
-        shift_encoder, u16_cell_byte, LoadInstruction, Rv64LoadAdapterRecord,
-        Rv64LoadByteAdapterFiller, RV64_BYTE_BITS,
+        shift_encoder, u16_cell_byte, LoadInstruction, Rv64LoadByteAdapterFiller,
+        Rv64LoadMultiByteAdapterRecord, RV64_BYTE_BITS,
     },
     load::common::LoadRecord,
 };
@@ -194,7 +194,7 @@ where
             row_slice
                 .split_at_mut_unchecked(<Rv64LoadByteAdapterFiller as AdapterTraceFiller<F>>::WIDTH)
         };
-        let adapter_record: &Rv64LoadAdapterRecord =
+        let adapter_record: &Rv64LoadMultiByteAdapterRecord =
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
         let shift = adapter_record.shift_amount();
         self.adapter.fill_trace_row(mem_helper, adapter_row);

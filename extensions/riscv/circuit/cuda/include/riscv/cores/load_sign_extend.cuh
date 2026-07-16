@@ -28,11 +28,11 @@ struct LoadSignExtendWidthCoreCols {
 };
 
 struct Rv64LoadSignExtendRecord {
-    Rv64LoadAdapterRecord adapter;
+    Rv64LoadMultiByteAdapterRecord adapter;
     LoadSignExtendRecord core;
 };
 
-static_assert(sizeof(Rv64LoadAdapterRecord) == 44);
+static_assert(sizeof(Rv64LoadMultiByteAdapterRecord) == 44);
 static_assert(sizeof(LoadSignExtendRecord) == 16);
 static_assert(sizeof(Rv64LoadSignExtendRecord) == 60);
 static_assert(offsetof(LoadSignExtendRecord, read_data) == 0);

@@ -11,7 +11,7 @@ use openvm_stark_backend::prover::AirProvingContext;
 
 use super::{LOAD_SIGN_EXTEND_HALFWORD_OVERLAP_CELLS, LOAD_SIGN_EXTEND_HALFWORD_SELECTOR_WIDTH};
 use crate::{
-    adapters::{Rv64LoadAdapterCols, Rv64LoadAdapterRecord, RV64_BYTE_BITS},
+    adapters::{Rv64LoadMultiByteAdapterCols, Rv64LoadMultiByteAdapterRecord, RV64_BYTE_BITS},
     cuda_abi::load_sign_extend_halfword_cuda,
     load::LoadRecord,
     load_sign_extend::core::LoadSignExtendCoreCols,
@@ -27,14 +27,14 @@ pub struct Rv64LoadSignExtendHalfwordChipGpu {
 
 impl Chip<DenseRecordArena, GpuBackend> for Rv64LoadSignExtendHalfwordChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-        const RECORD_SIZE: usize = size_of::<(Rv64LoadAdapterRecord, LoadRecord)>();
+        const RECORD_SIZE: usize = size_of::<(Rv64LoadMultiByteAdapterRecord, LoadRecord)>();
         let records = arena.allocated();
         if records.is_empty() {
             return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
         }
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
-        let trace_width = Rv64LoadAdapterCols::<F>::width()
+        let trace_width = Rv64LoadMultiByteAdapterCols::<F>::width()
             + LoadSignExtendCoreCols::<
                 F,
                 LOAD_SIGN_EXTEND_HALFWORD_SELECTOR_WIDTH,

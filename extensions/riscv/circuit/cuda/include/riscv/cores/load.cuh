@@ -24,11 +24,11 @@ struct LoadRecord {
 };
 
 struct Rv64LoadRecord {
-    Rv64LoadAdapterRecord adapter;
+    Rv64LoadMultiByteAdapterRecord adapter;
     LoadRecord core;
 };
 
-static_assert(sizeof(Rv64LoadAdapterRecord) == 44);
+static_assert(sizeof(Rv64LoadMultiByteAdapterRecord) == 44);
 static_assert(sizeof(LoadRecord) == 16);
 static_assert(sizeof(Rv64LoadRecord) == 60);
 static_assert(offsetof(LoadRecord, read_data) == 0);
