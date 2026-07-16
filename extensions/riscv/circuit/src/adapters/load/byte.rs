@@ -1,6 +1,5 @@
 use std::{
     borrow::{Borrow, BorrowMut},
-    marker::PhantomData,
     mem::size_of,
 };
 
@@ -48,12 +47,12 @@ pub struct LoadByteInstruction<T> {
     pub shift_amount: T,
 }
 
-pub struct Rv64LoadByteAdapterAirInterface<AB: InteractionBuilder>(PhantomData<AB>);
+pub struct Rv64LoadByteAdapterAirInterface;
 
-impl<AB: InteractionBuilder> VmAdapterInterface<AB::Expr> for Rv64LoadByteAdapterAirInterface<AB> {
-    type Reads = [AB::Expr; BLOCK_FE_WIDTH];
-    type Writes = [[AB::Expr; BLOCK_FE_WIDTH]; 1];
-    type ProcessedInstruction = LoadByteInstruction<AB::Expr>;
+impl<T> VmAdapterInterface<T> for Rv64LoadByteAdapterAirInterface {
+    type Reads = [T; BLOCK_FE_WIDTH];
+    type Writes = [[T; BLOCK_FE_WIDTH]; 1];
+    type ProcessedInstruction = LoadByteInstruction<T>;
 }
 
 #[repr(C)]
@@ -92,7 +91,7 @@ impl<F: Field> BaseAir<F> for Rv64LoadByteAdapterAir {
 }
 
 impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadByteAdapterAir {
-    type Interface = Rv64LoadByteAdapterAirInterface<AB>;
+    type Interface = Rv64LoadByteAdapterAirInterface;
 
     fn eval(
         &self,

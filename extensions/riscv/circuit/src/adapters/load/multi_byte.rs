@@ -1,6 +1,5 @@
 use std::{
     borrow::{Borrow, BorrowMut},
-    marker::PhantomData,
     mem::size_of,
 };
 
@@ -53,16 +52,14 @@ pub struct LoadInstruction<T> {
     pub load_cross: T,
 }
 
-pub struct Rv64LoadMultiByteAdapterAirInterface<AB: InteractionBuilder>(PhantomData<AB>);
+pub struct Rv64LoadMultiByteAdapterAirInterface;
 
-impl<AB: InteractionBuilder> VmAdapterInterface<AB::Expr>
-    for Rv64LoadMultiByteAdapterAirInterface<AB>
-{
+impl<T> VmAdapterInterface<T> for Rv64LoadMultiByteAdapterAirInterface {
     /// The memory block containing the effective address, followed by the next block, which is
     /// read only when the access crosses a block boundary.
-    type Reads = [[AB::Expr; BLOCK_FE_WIDTH]; 2];
-    type Writes = [[AB::Expr; BLOCK_FE_WIDTH]; 1];
-    type ProcessedInstruction = LoadInstruction<AB::Expr>;
+    type Reads = [[T; BLOCK_FE_WIDTH]; 2];
+    type Writes = [[T; BLOCK_FE_WIDTH]; 1];
+    type ProcessedInstruction = LoadInstruction<T>;
 }
 
 #[repr(C)]
@@ -106,7 +103,7 @@ impl<F: Field> BaseAir<F> for Rv64LoadMultiByteAdapterAir {
 }
 
 impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadMultiByteAdapterAir {
-    type Interface = Rv64LoadMultiByteAdapterAirInterface<AB>;
+    type Interface = Rv64LoadMultiByteAdapterAirInterface;
 
     fn eval(
         &self,

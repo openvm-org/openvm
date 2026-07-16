@@ -1,6 +1,5 @@
 use std::{
     borrow::{Borrow, BorrowMut},
-    marker::PhantomData,
     mem::size_of,
 };
 
@@ -55,18 +54,16 @@ pub struct StoreInstruction<T> {
     pub store_cross: T,
 }
 
-pub struct Rv64StoreMultiByteAdapterAirInterface<AB: InteractionBuilder>(PhantomData<AB>);
+pub struct Rv64StoreMultiByteAdapterAirInterface;
 
 /// The previous contents of the two consecutive memory blocks (the second is used only when the
 /// access crosses a block boundary), followed by the source register data. The previous contents
 /// feed both write auxes, so the core's read-modify-write inputs and the offline checker's
 /// receive-side data are the same expressions by construction.
-impl<AB: InteractionBuilder> VmAdapterInterface<AB::Expr>
-    for Rv64StoreMultiByteAdapterAirInterface<AB>
-{
-    type Reads = ([[AB::Expr; BLOCK_FE_WIDTH]; 2], [AB::Expr; BLOCK_FE_WIDTH]);
-    type Writes = [[AB::Expr; BLOCK_FE_WIDTH]; 2];
-    type ProcessedInstruction = StoreInstruction<AB::Expr>;
+impl<T> VmAdapterInterface<T> for Rv64StoreMultiByteAdapterAirInterface {
+    type Reads = ([[T; BLOCK_FE_WIDTH]; 2], [T; BLOCK_FE_WIDTH]);
+    type Writes = [[T; BLOCK_FE_WIDTH]; 2];
+    type ProcessedInstruction = StoreInstruction<T>;
 }
 
 #[repr(C)]
@@ -110,7 +107,7 @@ impl<F: Field> BaseAir<F> for Rv64StoreMultiByteAdapterAir {
 }
 
 impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64StoreMultiByteAdapterAir {
-    type Interface = Rv64StoreMultiByteAdapterAirInterface<AB>;
+    type Interface = Rv64StoreMultiByteAdapterAirInterface;
 
     fn eval(
         &self,
