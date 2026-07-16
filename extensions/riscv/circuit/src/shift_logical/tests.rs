@@ -293,7 +293,7 @@ fn rv64_sll_wrong_limb_shift_negative_test() {
 }
 
 #[test]
-fn rv64_sll_wrong_bit_mult_side_negative_test() {
+fn rv64_sll_wrong_bit_multiplier_negative_test() {
     // For an SLL row, force the multipliers onto the right-shift side: zeroing the SLL-gated
     // column makes the derived SRL-side multiplier become 2^9, and the output constraint fails.
     let b = [1, 1, 1, 1, 0, 0, 0, 0];
@@ -317,7 +317,7 @@ fn rv64_srl_wrong_bit_carry_negative_test() {
 }
 
 #[test]
-fn rv64_srl_wrong_bit_mult_side_negative_test() {
+fn rv64_srl_wrong_bit_multiplier_negative_test() {
     // For an SRL row, setting the SLL-gated column to 2^9 zeroes the derived SRL-side
     // multiplier, so the multiplier-definition constraint fails.
     let b = [0, 0, 0, 0, 0, 0, 0, 128];
