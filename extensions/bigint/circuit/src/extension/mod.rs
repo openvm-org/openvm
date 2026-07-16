@@ -398,7 +398,6 @@ where
             BitwiseLogicFiller::new(
                 Rv64VecHeapAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
                 bitwise_lu.clone(),
-                Rv64BaseAlu256Opcode::CLASS_OFFSET,
             ),
             mem_helper.clone(),
         );
@@ -409,7 +408,6 @@ where
             LessThanFiller::new(
                 Rv64VecHeapU16AdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
                 range_checker.clone(),
-                Rv64LessThan256Opcode::CLASS_OFFSET,
             ),
             mem_helper.clone(),
         );
@@ -454,7 +452,6 @@ where
             ShiftLogicalFiller::new(
                 Rv64VecHeapU16AdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
                 range_checker.clone(),
-                Rv64Shift256Opcode::CLASS_OFFSET,
             ),
             mem_helper.clone(),
         );
@@ -465,7 +462,6 @@ where
             ShiftRightArithmeticFiller::new(
                 Rv64VecHeapU16AdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
                 range_checker.clone(),
-                Rv64Shift256Opcode::CLASS_OFFSET,
             ),
             mem_helper.clone(),
         );
