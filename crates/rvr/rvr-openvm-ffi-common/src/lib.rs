@@ -168,14 +168,20 @@ pub const G2_LANE_RESIDUAL_VALUE: u16 = 0x0082;
 pub const G2_GROUP_LOAD_STORE: u32 = 1;
 pub const G2_GROUP_RESIDUAL: u32 = 2;
 pub const G2_LOAD_STORE_KINDS: [u8; 11] = [8, 9, 20, 21, 22, 23, 24, 25, 26, 27, 28];
+pub const G2_PHASE2B_TWO_LANE_KINDS: [u8; 15] =
+    [0, 1, 2, 3, 4, 5, 6, 7, 10, 11, 15, 16, 17, 18, 19];
+pub const G2_ZERO_ARITY_KINDS: [u8; 2] = [12, 14];
 pub const G2_PRODUCER_RUN_SLOT: usize = 0;
 pub const G2_PRODUCER_RESIDUAL_CTRL_SLOT: usize = 1;
 pub const G2_PRODUCER_RESIDUAL_TAG_SLOT: usize = 2;
 pub const G2_PRODUCER_RESIDUAL_VALUE_SLOT: usize = 3;
 pub const G2_PRODUCER_ADDI_SLOT: usize = 4;
 pub const G2_PRODUCER_LOAD_STORE_SLOT_BASE: usize = 5;
-pub const G2_PRODUCER_LANE_COUNT: usize =
+pub const G2_PRODUCER_PHASE2B_SLOT_BASE: usize =
     G2_PRODUCER_LOAD_STORE_SLOT_BASE + G2_LOAD_STORE_KINDS.len() * 2;
+pub const G2_PRODUCER_JALR_SLOT: usize =
+    G2_PRODUCER_PHASE2B_SLOT_BASE + G2_PHASE2B_TWO_LANE_KINDS.len() * 2;
+pub const G2_PRODUCER_LANE_COUNT: usize = G2_PRODUCER_JALR_SLOT + 1;
 /// `0x0100 + 2 * DeltaAirKind::AddI`.
 pub const G2_LANE_ADDI_V0: u16 = 0x013a;
 
@@ -196,6 +202,42 @@ pub const fn g2_load_store_producer_slot(kind: u8, value_lane: bool) -> Option<u
         index += 1;
     }
     None
+}
+
+pub const fn g2_standard_producer_slot(kind: u8, value_lane: bool) -> Option<usize> {
+    if kind == 29 {
+        return if value_lane {
+            None
+        } else {
+            Some(G2_PRODUCER_ADDI_SLOT)
+        };
+    }
+    if let Some(slot) = g2_load_store_producer_slot(kind, value_lane) {
+        return Some(slot);
+    }
+    let mut index = 0;
+    while index < G2_PHASE2B_TWO_LANE_KINDS.len() {
+        if G2_PHASE2B_TWO_LANE_KINDS[index] == kind {
+            return Some(G2_PRODUCER_PHASE2B_SLOT_BASE + index * 2 + value_lane as usize);
+        }
+        index += 1;
+    }
+    if kind == 13 && !value_lane {
+        return Some(G2_PRODUCER_JALR_SLOT);
+    }
+    None
+}
+
+pub const fn g2_standard_lane_width(kind: u8, value_lane: bool) -> Option<u8> {
+    let _slot = match g2_standard_producer_slot(kind, value_lane) {
+        Some(slot) => slot,
+        None => return None,
+    };
+    if !value_lane && (kind == 13 || g2_load_store_producer_slot(kind, false).is_some()) {
+        Some(4)
+    } else {
+        Some(8)
+    }
 }
 
 /// Frozen 64-byte segment header. Producers write this with `flags` lacking

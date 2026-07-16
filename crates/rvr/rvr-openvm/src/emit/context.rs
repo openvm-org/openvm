@@ -120,13 +120,15 @@ pub struct EmitContext<'a> {
     /// 24-byte record into a block-reserved span instead of a per-AIR wire.
     delta_records: bool,
     delta_batch: Option<(String, u32)>,
-    /// G2 v1 compact lanes. This is mutually exclusive with delta/arena and
-    /// currently admits only AddI at compile time.
+    /// G2 v1 compact lanes. This is mutually exclusive with delta/arena.
     g2_records: bool,
     /// Chip (AIR) index of the instruction currently being emitted, or
     /// `u32::MAX` if it maps to no chip. Set per instruction by the block emit
     /// loop before `emit_c`.
     current_chip_idx: u32,
+    /// Stable `DeltaAirKind` selected by the frozen operand table for the
+    /// current instruction, or `u8::MAX` when it has no G2 payload.
+    current_g2_kind: u8,
     /// Program counter of the instruction currently being emitted.
     current_pc: u64,
     /// R4: airs emitting arena-native full records (baked-offset stores at
@@ -183,6 +185,7 @@ impl<'a> EmitContext<'a> {
             delta_batch: None,
             g2_records: false,
             current_chip_idx: u32::MAX,
+            current_g2_kind: u8::MAX,
             current_pc: 0,
             arena_native_airs: std::collections::BTreeMap::new(),
         }
@@ -211,9 +214,10 @@ impl<'a> EmitContext<'a> {
     }
 
     /// Set the chip index and pc of the instruction about to be emitted.
-    pub(crate) fn set_current_instr(&mut self, chip_idx: u32, pc: u64) {
+    pub(crate) fn set_current_instr(&mut self, chip_idx: u32, pc: u64, g2_kind: u8) {
         self.current_chip_idx = chip_idx;
         self.current_pc = pc;
+        self.current_g2_kind = g2_kind;
     }
 
     /// PC of the instruction currently being emitted, as u32.
@@ -510,6 +514,39 @@ impl<'a> EmitContext<'a> {
         arena: Option<ArenaAlu3Baked>,
         result: impl FnOnce(&str, &str) -> String,
     ) {
+        if self.g2_records {
+            debug_assert!(!self.delta_records);
+            debug_assert!(matches!(
+                self.current_g2_kind,
+                0..=7 | 15..=19
+            ));
+            let v1 = if rs1 == 0 {
+                "0".to_string()
+            } else {
+                let value = self.next_var();
+                self.write_line(&format!("uint64_t {value} = reg_read(state, {rs1});"));
+                value
+            };
+            let v2 = if rs2 == 0 {
+                "0".to_string()
+            } else {
+                let value = self.next_var();
+                self.write_line(&format!("uint64_t {value} = reg_read(state, {rs2});"));
+                value
+            };
+            let res = self.next_var();
+            let result_expr = result(&v1, &v2);
+            self.write_line(&format!("uint64_t {res} = {result_expr};"));
+            self.write_line(&format!(
+                "preflight_g2_emit_standard2(state, {}u, {v1}, {v2});",
+                self.current_g2_kind
+            ));
+            self.write_line("state->tracer->timestamp += 3u;");
+            if rd != 0 {
+                self.write_line(&format!("reg_write(state, {rd}, {res});"));
+            }
+            return;
+        }
         let chip = self.current_chip_idx;
         let pc = hex_u32(self.current_pc as u32);
         let fromts = self.next_var();
@@ -856,6 +893,7 @@ impl<'a> EmitContext<'a> {
     ) {
         if self.g2_records {
             debug_assert!(!self.delta_records);
+            debug_assert_eq!(self.current_g2_kind, 29);
             let v1 = if rs1 == 0 {
                 "0".to_string()
             } else {
@@ -996,6 +1034,31 @@ impl<'a> EmitContext<'a> {
         arena: Option<ArenaAlu3Baked>,
         result: impl FnOnce(&str, &str) -> String,
     ) {
+        if self.g2_records {
+            debug_assert!(!self.delta_records);
+            debug_assert!(matches!(self.current_g2_kind, 1..=7));
+            let v1 = if rs1 == 0 {
+                "0".to_string()
+            } else {
+                let value = self.next_var();
+                self.write_line(&format!("uint64_t {value} = reg_read(state, {rs1});"));
+                value
+            };
+            let vimm = self.next_var();
+            self.write_line(&format!("uint64_t {vimm} = 0x{imm_value:016x}ull;"));
+            let res = self.next_var();
+            let result_expr = result(&v1, &vimm);
+            self.write_line(&format!("uint64_t {res} = {result_expr};"));
+            self.write_line(&format!(
+                "preflight_g2_emit_standard1(state, {}u, {v1});",
+                self.current_g2_kind
+            ));
+            self.write_line("state->tracer->timestamp += 3u;");
+            if rd != 0 {
+                self.write_line(&format!("reg_write(state, {rd}, {res});"));
+            }
+            return;
+        }
         let chip = self.current_chip_idx;
         let pc = hex_u32(self.current_pc as u32);
         let fromts = self.next_var();
@@ -1064,6 +1127,17 @@ impl<'a> EmitContext<'a> {
         value: &str,
         arena: Option<ArenaWr1Baked>,
     ) {
+        if self.g2_records {
+            debug_assert!(!self.delta_records);
+            debug_assert!(matches!(self.current_g2_kind, 12 | 14));
+            if let Some(rd) = rd.filter(|&rd| rd != 0) {
+                let tmp = self.next_var();
+                self.write_line(&format!("uint64_t {tmp} = {value};"));
+                self.write_line(&format!("reg_write(state, {rd}, {tmp});"));
+            }
+            self.write_line("state->tracer->timestamp += 1u;");
+            return;
+        }
         let chip = self.current_chip_idx;
         let pc = hex_u32(self.current_pc as u32);
         let fromts = self.next_var();
@@ -1200,6 +1274,30 @@ impl<'a> EmitContext<'a> {
         rs2: u8,
         arena: Option<ArenaBranch2Baked>,
     ) -> (String, String) {
+        if self.g2_records {
+            debug_assert!(!self.delta_records);
+            debug_assert!(matches!(self.current_g2_kind, 10 | 11));
+            let v1 = if rs1 == 0 {
+                "0".to_string()
+            } else {
+                let value = self.next_var();
+                self.write_line(&format!("uint64_t {value} = reg_read(state, {rs1});"));
+                value
+            };
+            let v2 = if rs2 == 0 {
+                "0".to_string()
+            } else {
+                let value = self.next_var();
+                self.write_line(&format!("uint64_t {value} = reg_read(state, {rs2});"));
+                value
+            };
+            self.write_line(&format!(
+                "preflight_g2_emit_standard2(state, {}u, {v1}, {v2});",
+                self.current_g2_kind
+            ));
+            self.write_line("state->tracer->timestamp += 2u;");
+            return (v1, v2);
+        }
         let chip = self.current_chip_idx;
         let pc = hex_u32(self.current_pc as u32);
         let fromts = self.next_var();
@@ -1276,6 +1374,26 @@ impl<'a> EmitContext<'a> {
         link_value: &str,
         arena: Option<ArenaRw1Baked>,
     ) -> String {
+        if self.g2_records {
+            debug_assert!(!self.delta_records);
+            debug_assert_eq!(self.current_g2_kind, 13);
+            let v1 = if rs1 == 0 {
+                "0".to_string()
+            } else {
+                let value = self.next_var();
+                self.write_line(&format!("uint64_t {value} = reg_read(state, {rs1});"));
+                value
+            };
+            let v1 = self.materialize_u64(&v1);
+            self.write_line(&format!("preflight_g2_emit_standard1(state, 13u, {v1});"));
+            if let Some(rd) = link_rd.filter(|&rd| rd != 0) {
+                let tmp = self.next_var();
+                self.write_line(&format!("uint64_t {tmp} = {link_value};"));
+                self.write_line(&format!("reg_write(state, {rd}, {tmp});"));
+            }
+            self.write_line("state->tracer->timestamp += 2u;");
+            return v1;
+        }
         let chip = self.current_chip_idx;
         let pc = hex_u32(self.current_pc as u32);
         let fromts = self.next_var();

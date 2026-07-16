@@ -208,8 +208,8 @@ pub struct G2DsoManifestConfigV1 {
     pub pc_base: u32,
     pub block_count: u32,
     pub air_count: u32,
-    pub air_kinds: [u8; 12],
-    pub air_indices: [u32; 12],
+    pub air_kinds: [u8; 30],
+    pub air_indices: [u32; 30],
 }
 
 /// C project generator.
@@ -256,6 +256,9 @@ pub struct CProject {
     /// Private G2 v1 lane producer for the currently negotiated compact
     /// families. Every existing route remains unchanged when this is false.
     pub g2_records: bool,
+    /// Stable decoder kind per program slot. G2 codegen uses this to select
+    /// the final V0/V1 lane without re-deriving opcode families in C.
+    pub g2_pc_kinds: Vec<u8>,
     /// Full schema/program/AIR binding exported by the generated DSO.
     pub g2_manifest: Option<G2DsoManifestConfigV1>,
     /// R4: airs whose records the generated C writes arena-native — full
@@ -291,6 +294,7 @@ impl CProject {
             inline_pc_slots: Vec::new(),
             delta_records: false,
             g2_records: false,
+            g2_pc_kinds: Vec::new(),
             g2_manifest: None,
             arena_native_airs: std::collections::BTreeMap::new(),
         }
@@ -599,6 +603,16 @@ impl CProject {
             .unwrap_or(false)
     }
 
+    fn g2_kind_for_pc(&self, pc: u64) -> u8 {
+        let Some(offset) = pc.checked_sub(self.pc_base) else {
+            return u8::MAX;
+        };
+        self.g2_pc_kinds
+            .get((offset / 4) as usize)
+            .copied()
+            .unwrap_or(u8::MAX)
+    }
+
     fn native_detail_family(&self, pc: u64) -> u32 {
         let Some(offset) = pc.checked_sub(self.pc_base) else {
             return 8;
@@ -696,11 +710,31 @@ impl CProject {
             (0x0081, 1, 3, 2, 1),
             (0x0082, 8, 3, 2, 1),
         ]);
-        for kind in rvr_openvm_ext_ffi_common::G2_LOAD_STORE_KINDS {
-            lanes.push((rvr_openvm_ext_ffi_common::g2_lane_v0(kind), 4, 3, 1, 2));
-            lanes.push((rvr_openvm_ext_ffi_common::g2_lane_v1(kind), 8, 3, 1, 2));
+        for kind in 0u8..30 {
+            for value_lane in [false, true] {
+                let Some(width) =
+                    rvr_openvm_ext_ffi_common::g2_standard_lane_width(kind, value_lane)
+                else {
+                    continue;
+                };
+                let load_store = rvr_openvm_ext_ffi_common::G2_LOAD_STORE_KINDS.contains(&kind);
+                lanes.push((
+                    if value_lane {
+                        rvr_openvm_ext_ffi_common::g2_lane_v1(kind)
+                    } else {
+                        rvr_openvm_ext_ffi_common::g2_lane_v0(kind)
+                    },
+                    width,
+                    if load_store { 3 } else { 1 },
+                    if load_store { 1 } else { 0 },
+                    match kind {
+                        13 | 29 => 1,
+                        1..=7 => u8::MAX,
+                        _ => 2,
+                    },
+                ));
+            }
         }
-        lanes.push((rvr_openvm_ext_ffi_common::G2_LANE_ADDI_V0, 8, 1, 0, 1));
         lanes.sort_unstable_by_key(|lane| lane.0);
         let lane_source = lanes
             .iter()
@@ -738,20 +772,20 @@ impl CProject {
                uint32_t block_count;\n\
                uint32_t air_count;\n\
                uint32_t reserved;\n\
-               uint8_t air_kinds[12];\n\
-               uint32_t air_indices[12];\n\
-               OpenVmRvrG2DsoLaneManifestV1 lanes[27];\n\
+               uint8_t air_kinds[30];\n\
+               uint32_t air_indices[30];\n\
+               OpenVmRvrG2DsoLaneManifestV1 lanes[58];\n\
              }} OpenVmRvrG2DsoManifestV1;\n\n\
              _Static_assert(sizeof(OpenVmRvrG2DsoLaneManifestV1) == 16, \"G2 DSO lane manifest size drift\");\n\
-             _Static_assert(sizeof(OpenVmRvrG2DsoManifestV1) == 660, \"G2 DSO manifest size drift\");\n\n\
+             _Static_assert(sizeof(OpenVmRvrG2DsoManifestV1) == 1248, \"G2 DSO manifest size drift\");\n\n\
              __attribute__((visibility(\"default\")))\n\
              const OpenVmRvrG2DsoManifestV1 openvm_rvr_g2_manifest_v1 = {{\n\
                .magic = {{'O','V','M','G','2','D','1','\\0'}},\n\
                .version = 1,\n\
-               .manifest_bytes = 660,\n\
+               .manifest_bytes = 1248,\n\
                .header_size = 64,\n\
                .lane_desc_size = 32,\n\
-               .lane_count = 27,\n\
+               .lane_count = 58,\n\
                .wire_flags = 14,\n\
                .fingerprint = {{{fingerprint}}},\n\
                .program_fingerprint = {{{program_fingerprint}}},\n\
@@ -1158,7 +1192,7 @@ impl CProject {
                     (true, TraceChipIndex::Chip(air)) => air.as_u32(),
                     _ => u32::MAX,
                 };
-                ctx.set_current_instr(chip_idx, instr_at.pc);
+                ctx.set_current_instr(chip_idx, instr_at.pc, self.g2_kind_for_pc(instr_at.pc));
             }
             ctx.trace_pc(
                 instr_at.pc,
@@ -1190,7 +1224,11 @@ impl CProject {
                     (true, TraceChipIndex::Chip(air)) => air.as_u32(),
                     _ => u32::MAX,
                 };
-                ctx.set_current_instr(chip_idx, block.terminator_pc);
+                ctx.set_current_instr(
+                    chip_idx,
+                    block.terminator_pc,
+                    self.g2_kind_for_pc(block.terminator_pc),
+                );
             }
             ctx.trace_pc(
                 block.terminator_pc,

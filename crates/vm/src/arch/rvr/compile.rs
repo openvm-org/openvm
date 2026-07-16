@@ -215,7 +215,8 @@ impl RvrCompiled {
                 })?;
             **symbol
         };
-        let mut expected_lanes = Vec::with_capacity(27);
+        let mut expected_lanes =
+            Vec::with_capacity(rvr_openvm_ext_ffi_common::G2_PRODUCER_LANE_COUNT);
         expected_lanes.push(OpenVmRvrG2DsoLaneManifestV1 {
             kind: 0x0001,
             elem_width: 4,
@@ -236,37 +237,36 @@ impl RvrCompiled {
                 reserved: [0; 3],
             });
         }
-        for kind in rvr_openvm_ext_ffi_common::G2_LOAD_STORE_KINDS {
-            for (lane, width) in [
-                (rvr_openvm_ext_ffi_common::g2_lane_v0(kind), 4),
-                (rvr_openvm_ext_ffi_common::g2_lane_v1(kind), 8),
-            ] {
+        for kind in 0u8..30 {
+            for value_lane in [false, true] {
+                let Some(width) =
+                    rvr_openvm_ext_ffi_common::g2_standard_lane_width(kind, value_lane)
+                else {
+                    continue;
+                };
+                let load_store = rvr_openvm_ext_ffi_common::G2_LOAD_STORE_KINDS.contains(&kind);
                 expected_lanes.push(OpenVmRvrG2DsoLaneManifestV1 {
-                    kind: lane,
+                    kind: if value_lane {
+                        rvr_openvm_ext_ffi_common::g2_lane_v1(kind)
+                    } else {
+                        rvr_openvm_ext_ffi_common::g2_lane_v0(kind)
+                    },
                     elem_width: width,
                     encoding: 0,
-                    flags: 3,
-                    group_id: 1,
-                    arity: 2,
+                    flags: if load_store { 3 } else { 1 },
+                    group_id: if load_store { 1 } else { 0 },
+                    arity: g2_kind_arity(kind),
                     reserved: [0; 3],
                 });
             }
         }
-        expected_lanes.push(OpenVmRvrG2DsoLaneManifestV1 {
-            kind: rvr_openvm_ext_ffi_common::G2_LANE_ADDI_V0,
-            elem_width: 8,
-            encoding: 0,
-            flags: 1,
-            group_id: 0,
-            arity: 1,
-            reserved: [0; 3],
-        });
         expected_lanes.sort_unstable_by_key(|lane| lane.kind);
-        let expected_lanes: [OpenVmRvrG2DsoLaneManifestV1; 27] = expected_lanes
+        let expected_lanes: [OpenVmRvrG2DsoLaneManifestV1;
+            rvr_openvm_ext_ffi_common::G2_PRODUCER_LANE_COUNT] = expected_lanes
             .try_into()
             .expect("frozen G2 capability lane count");
-        let mut expected_air_kinds = [u8::MAX; 12];
-        let mut expected_air_indices = [u32::MAX; 12];
+        let mut expected_air_kinds = [u8::MAX; 30];
+        let mut expected_air_indices = [u32::MAX; 30];
         for (index, binding) in g2.air_bindings.iter().enumerate() {
             expected_air_kinds[index] = binding.kind;
             expected_air_indices[index] = u32::try_from(binding.air_idx)
@@ -277,7 +277,7 @@ impl RvrCompiled {
             || manifest.manifest_bytes as usize != std::mem::size_of::<OpenVmRvrG2DsoManifestV1>()
             || manifest.header_size != 64
             || manifest.lane_desc_size != 32
-            || manifest.lane_count != 27
+            || manifest.lane_count as usize != rvr_openvm_ext_ffi_common::G2_PRODUCER_LANE_COUNT
             || manifest.wire_flags != 14
             || manifest.fingerprint != g2.fingerprint
             || manifest.program_fingerprint != g2.program_fingerprint
@@ -404,9 +404,9 @@ struct OpenVmRvrG2DsoManifestV1 {
     block_count: u32,
     air_count: u32,
     reserved: u32,
-    air_kinds: [u8; 12],
-    air_indices: [u32; 12],
-    lanes: [OpenVmRvrG2DsoLaneManifestV1; 27],
+    air_kinds: [u8; 30],
+    air_indices: [u32; 30],
+    lanes: [OpenVmRvrG2DsoLaneManifestV1; rvr_openvm_ext_ffi_common::G2_PRODUCER_LANE_COUNT],
 }
 
 #[repr(C)]
@@ -423,7 +423,7 @@ struct OpenVmRvrG2DsoLaneManifestV1 {
 
 const _: () = {
     assert!(std::mem::size_of::<OpenVmRvrG2DsoLaneManifestV1>() == 16);
-    assert!(std::mem::size_of::<OpenVmRvrG2DsoManifestV1>() == 660);
+    assert!(std::mem::size_of::<OpenVmRvrG2DsoManifestV1>() == 1248);
 };
 
 /// Error during compilation.
@@ -783,7 +783,7 @@ fn collect_inline_records_meta_for_mode<F: PrimeField32>(
                 && precomputed
                     .kind_to_air
                     .iter()
-                    .all(|&(kind, _)| g2_phase2a_kind(kind))
+                    .all(|&(kind, _)| g2_fixed_standard_kind(kind))
                 && exe
                     .program
                     .instructions_and_debug_infos
@@ -815,22 +815,14 @@ fn collect_inline_records_meta_for_mode<F: PrimeField32>(
                             let inline_ok =
                                 pc_slots.get(slot).copied().unwrap_or(false) || narrow_reveal;
                             inline_ok
-                                && g2_phase2a_kind(*kind)
-                                && matches!(entry.access_pattern, 2 | 3 | 8)
+                                && g2_access_pattern_matches(*kind, entry.access_pattern)
                                 && instruction.as_ref().is_some_and(|(instruction, _)| {
                                     admitter
                                         .and_then(|admitter| {
                                             admitter.inline_arena_geometry_for(instruction)
                                         })
-                                        .is_some_and(|geometry| match *kind {
-                                            29 => matches!(
-                                                geometry.layout,
-                                                ArenaNativeLayout::AddI(_)
-                                            ),
-                                            _ => matches!(
-                                                geometry.layout,
-                                                ArenaNativeLayout::LoadStore(_)
-                                            ),
+                                        .is_some_and(|geometry| {
+                                            g2_layout_matches(*kind, geometry.layout)
                                         })
                                 })
                         })
@@ -838,7 +830,7 @@ fn collect_inline_records_meta_for_mode<F: PrimeField32>(
         });
     if g2_requested && !g2_supported {
         tracing::info!(
-            "G2 Phase-2a negotiation rejected this executable; selecting arena route before native execution"
+            "G2 fixed-standard negotiation rejected this executable; selecting arena route before native execution"
         );
         return collect_inline_records_meta_for_mode(
             exe,
@@ -908,8 +900,34 @@ fn collect_inline_records_meta_for_mode<F: PrimeField32>(
     }
 }
 
-fn g2_phase2a_kind(kind: u8) -> bool {
-    kind == 29 || rvr_openvm_ext_ffi_common::G2_LOAD_STORE_KINDS.contains(&kind)
+fn g2_fixed_standard_kind(kind: u8) -> bool {
+    kind < 30
+}
+
+fn g2_access_pattern_matches(kind: u8, pattern: u8) -> bool {
+    match kind {
+        0 | 15..=19 => pattern == 1,
+        1..=7 => pattern == 0,
+        8 | 9 | 20..=28 => matches!(pattern, 2 | 3),
+        10 | 11 => pattern == 4,
+        12 => pattern == 5,
+        13 => pattern == 7,
+        14 => pattern == 6,
+        29 => pattern == 8,
+        _ => false,
+    }
+}
+
+fn g2_layout_matches(kind: u8, layout: ArenaNativeLayout) -> bool {
+    match kind {
+        0..=7 | 15..=19 => matches!(layout, ArenaNativeLayout::Alu3(_)),
+        8 | 9 | 20..=28 => matches!(layout, ArenaNativeLayout::LoadStore(_)),
+        10 | 11 => matches!(layout, ArenaNativeLayout::Branch2(_)),
+        12 | 14 => matches!(layout, ArenaNativeLayout::Wr1(_)),
+        13 => matches!(layout, ArenaNativeLayout::Rw1(_)),
+        29 => matches!(layout, ArenaNativeLayout::AddI(_)),
+        _ => false,
+    }
 }
 
 /// Build the operand table and whole-AIR classification while
@@ -993,10 +1011,10 @@ fn build_g2_meta_v1<F: PrimeField32>(
         || decode
             .kind_to_air
             .iter()
-            .any(|&(kind, _)| !g2_phase2a_kind(kind))
+            .any(|&(kind, _)| !g2_fixed_standard_kind(kind))
     {
         return Err(CompileError::InvalidOptions(
-            "G2 Phase 2a requires only AddI and LoadStore device-decode AIRs",
+            "G2 Phase 2b requires fixed standard RV64 device-decode AIRs",
         ));
     }
     let mut geometries = BTreeMap::new();
@@ -1020,12 +1038,8 @@ fn build_g2_meta_v1<F: PrimeField32>(
                 .ok_or(CompileError::InvalidOptions(
                     "G2 AIR has no registry geometry",
                 ))?;
-        let valid_layout = if kind == 29 {
-            entry.access_pattern == 8 && matches!(geometry.layout, ArenaNativeLayout::AddI(_))
-        } else {
-            matches!(entry.access_pattern, 2 | 3)
-                && matches!(geometry.layout, ArenaNativeLayout::LoadStore(_))
-        };
+        let valid_layout = g2_access_pattern_matches(kind, entry.access_pattern)
+            && g2_layout_matches(kind, geometry.layout);
         if !valid_layout
             || geometries
                 .insert(kind, (air_idx, geometry))
@@ -1144,14 +1158,30 @@ fn build_g2_meta_v1<F: PrimeField32>(
     fingerprint.update(
         b"lane:kind2,width1,encoding1,flags4,count4,payload_bytes4,offset8,group4,reserved4;",
     );
-    fingerprint.update(b"lane:0001,width4,fixed,required,arity=run;lane:0080,width8,fixed,required+atomic,group=2;lane:0081,width1,fixed,required+atomic,group=2;lane:0082,width8,fixed,required+atomic,group=2;lane:013a,width8,fixed,required,arity=addi;");
-    for kind in rvr_openvm_ext_ffi_common::G2_LOAD_STORE_KINDS {
-        fingerprint.update(rvr_openvm_ext_ffi_common::g2_lane_v0(kind).to_le_bytes());
-        fingerprint.update([4, 3]);
-        fingerprint.update(1u32.to_le_bytes());
-        fingerprint.update(rvr_openvm_ext_ffi_common::g2_lane_v1(kind).to_le_bytes());
-        fingerprint.update([8, 3]);
-        fingerprint.update(1u32.to_le_bytes());
+    fingerprint.update(b"lane:0001,width4,fixed,required,arity=run;lane:0080,width8,fixed,required+atomic,group=2;lane:0081,width1,fixed,required+atomic,group=2;lane:0082,width8,fixed,required+atomic,group=2;");
+    for kind in 0u8..30 {
+        fingerprint.update([kind, g2_kind_arity(kind)]);
+        for value_lane in [false, true] {
+            let Some(width) = rvr_openvm_ext_ffi_common::g2_standard_lane_width(kind, value_lane)
+            else {
+                continue;
+            };
+            fingerprint.update(if value_lane {
+                rvr_openvm_ext_ffi_common::g2_lane_v1(kind).to_le_bytes()
+            } else {
+                rvr_openvm_ext_ffi_common::g2_lane_v0(kind).to_le_bytes()
+            });
+            let load_store = rvr_openvm_ext_ffi_common::G2_LOAD_STORE_KINDS.contains(&kind);
+            fingerprint.update([width, 0, if load_store { 3 } else { 1 }]);
+            fingerprint.update(
+                if load_store {
+                    rvr_openvm_ext_ffi_common::G2_GROUP_LOAD_STORE
+                } else {
+                    0
+                }
+                .to_le_bytes(),
+            );
+        }
     }
     fingerprint.update(program_fingerprint);
     fingerprint.update(block_fingerprint);
@@ -1171,6 +1201,16 @@ fn build_g2_meta_v1<F: PrimeField32>(
                 .collect(),
         ),
     })
+}
+
+fn g2_kind_arity(kind: u8) -> u8 {
+    match kind {
+        12 | 14 => 0,
+        13 | 29 => 1,
+        1..=7 => u8::MAX,
+        0..=28 => 2,
+        _ => u8::MAX,
+    }
 }
 
 fn g2_air_manifest_fingerprint(
@@ -1212,6 +1252,88 @@ fn g2_air_manifest_fingerprint(
                     air_manifest.update((value as u64).to_le_bytes());
                 }
             }
+            ArenaNativeLayout::Alu3(offsets) if matches!(kind, 0..=7 | 15..=19) => {
+                air_manifest.update([2]);
+                for value in [
+                    offsets.from_pc,
+                    offsets.from_timestamp,
+                    offsets.rd_ptr,
+                    offsets.rs1_ptr,
+                    offsets.rs2,
+                    offsets.rs2_as,
+                    offsets.rs2_imm_sign,
+                    offsets.reads_aux0_prev_ts,
+                    offsets.reads_aux1_prev_ts,
+                    offsets.write_prev_ts,
+                    offsets.write_prev_data,
+                    offsets.core_b,
+                    offsets.core_c,
+                    offsets.core_local_opcode,
+                ] {
+                    air_manifest.update((value as u64).to_le_bytes());
+                }
+                match offsets.w {
+                    Some(w) => {
+                        air_manifest.update([1]);
+                        for value in [w.rs1_high, w.rs2_high, w.result_word_msl, w.result_sign] {
+                            air_manifest.update((value as u64).to_le_bytes());
+                        }
+                        air_manifest.update([w.result_word_msl_shift, w.result_word_msl_bytes]);
+                    }
+                    None => air_manifest.update([0]),
+                }
+            }
+            ArenaNativeLayout::Branch2(offsets) if matches!(kind, 10 | 11) => {
+                air_manifest.update([3]);
+                for value in [
+                    offsets.from_pc,
+                    offsets.from_timestamp,
+                    offsets.rs1_ptr,
+                    offsets.rs2_ptr,
+                    offsets.reads_aux0_prev_ts,
+                    offsets.reads_aux1_prev_ts,
+                    offsets.core_a,
+                    offsets.core_b,
+                    offsets.core_imm,
+                    offsets.core_local_opcode,
+                ] {
+                    air_manifest.update((value as u64).to_le_bytes());
+                }
+            }
+            ArenaNativeLayout::Wr1(offsets) if matches!(kind, 12 | 14) => {
+                air_manifest.update([4]);
+                for value in [
+                    offsets.from_pc,
+                    offsets.from_timestamp,
+                    offsets.rd_ptr,
+                    offsets.rd_prev_ts,
+                    offsets.rd_prev_data,
+                    offsets.core_imm,
+                    offsets.core_rd_data,
+                    offsets.core_is_jal,
+                    offsets.core_from_pc,
+                ] {
+                    air_manifest.update((value as u64).to_le_bytes());
+                }
+            }
+            ArenaNativeLayout::Rw1(offsets) if kind == 13 => {
+                air_manifest.update([5]);
+                for value in [
+                    offsets.from_pc,
+                    offsets.from_timestamp,
+                    offsets.rs1_ptr,
+                    offsets.rd_ptr,
+                    offsets.read_prev_ts,
+                    offsets.write_prev_ts,
+                    offsets.write_prev_data,
+                    offsets.core_imm,
+                    offsets.core_from_pc,
+                    offsets.core_rs1_val,
+                    offsets.core_imm_sign,
+                ] {
+                    air_manifest.update((value as u64).to_le_bytes());
+                }
+            }
             ArenaNativeLayout::LoadStore(offsets) if kind != 29 => {
                 air_manifest.update([1]);
                 for value in [
@@ -1244,7 +1366,7 @@ fn g2_air_manifest_fingerprint(
             }
         }
     }
-    // No opaque custom layout is admitted in Phase 2a.
+    // No opaque custom layout is admitted in Phase 2b.
     air_manifest.update([0u8; 32]);
     Ok(air_manifest.finalize().into())
 }
@@ -1711,7 +1833,7 @@ fn compile_impl<F: PrimeField32>(
                     && precomputed
                         .kind_to_air
                         .iter()
-                        .all(|&(kind, _)| g2_phase2a_kind(kind))
+                        .all(|&(kind, _)| g2_fixed_standard_kind(kind))
             });
     let mut prebuilt_blocks = None;
     if g2_negotiated {
@@ -1938,14 +2060,28 @@ fn compile_impl<F: PrimeField32>(
                     .map(|&(air, geometry)| (air as u32, geometry))
                     .collect();
                 if let Some(g2) = inline_meta.g2.as_deref() {
-                    let mut air_kinds = [u8::MAX; 12];
-                    let mut air_indices = [u32::MAX; 12];
+                    let mut air_kinds = [u8::MAX; 30];
+                    let mut air_indices = [u32::MAX; 30];
                     for (index, binding) in g2.air_bindings.iter().enumerate() {
                         air_kinds[index] = binding.kind;
                         air_indices[index] =
                             u32::try_from(binding.air_idx).expect("G2 AIR index exceeds u32");
                     }
                     project.g2_records = true;
+                    let decode = inline_meta
+                        .delta_decode
+                        .as_deref()
+                        .expect("G2 metadata requires a persisted operand table");
+                    project.g2_pc_kinds = decode
+                        .entries
+                        .iter()
+                        .map(|entry| {
+                            g2.air_bindings
+                                .iter()
+                                .find(|binding| binding.air_idx == entry.air_idx as usize)
+                                .map_or(u8::MAX, |binding| binding.kind)
+                        })
+                        .collect();
                     project.g2_manifest = Some(G2DsoManifestConfigV1 {
                         fingerprint: g2.fingerprint,
                         program_fingerprint: g2.program_fingerprint,
