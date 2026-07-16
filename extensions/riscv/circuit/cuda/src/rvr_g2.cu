@@ -14,6 +14,7 @@ static constexpr uint16_t G2_RUN_BLOCK_ID = 0x0001u;
 static constexpr uint16_t G2_RESIDUAL_CTRL = 0x0080u;
 static constexpr uint16_t G2_RESIDUAL_TAG = 0x0081u;
 static constexpr uint16_t G2_RESIDUAL_VALUE = 0x0082u;
+static constexpr uint16_t G2_OPAQUE_EVENT_COUNT = 0x0083u;
 static constexpr uint16_t G2_ADDI_V0 = 0x013au;
 static constexpr uint32_t G2_REQUIRED = 1u;
 static constexpr uint32_t G2_REQUIRED_ATOMIC = 3u;
@@ -22,6 +23,9 @@ static constexpr uint32_t G2_RESIDUAL_GROUP = 2u;
 static constexpr uint8_t G2_ADDI_PATTERN = 8u;
 static constexpr uint8_t G2_LOAD_PATTERN = 2u;
 static constexpr uint8_t G2_STORE_PATTERN = 3u;
+static constexpr uint8_t G2_HINT_PATTERN = 9u;
+static constexpr uint8_t G2_OPAQUE_PATTERN = 10u;
+static constexpr uint8_t G2_OPAQUE_TIMESTAMP_PATTERN = 11u;
 static constexpr uint8_t INVALID_AIR = UINT8_MAX;
 static constexpr uint8_t EXPECT_NONE = 0u;
 static constexpr uint8_t EXPECT_BEFORE_LOAD = 1u;
@@ -68,6 +72,15 @@ struct G2ExpectedKindV1 {
 };
 static_assert(sizeof(G2ExpectedKindV1) == 12, "G2 expected-kind size drift");
 
+struct G2ExpectedOpaqueV1 {
+    uint32_t lane_kind;
+    uint32_t air_idx;
+    uint32_t count;
+    uint32_t payload_bytes;
+    uint32_t stride;
+};
+static_assert(sizeof(G2ExpectedOpaqueV1) == 20, "G2 expected-opaque size drift");
+
 struct DeviceInitialMemory {
     uint64_t base;
     uint64_t len;
@@ -83,6 +96,18 @@ struct DeltaRecord {
     uint64_t v2;
 };
 static_assert(sizeof(DeltaRecord) == 24, "delta record size drift");
+
+struct DeltaMemoryLogEntry {
+    uint32_t timestamp;
+    uint32_t address;
+    uint64_t value;
+    uint8_t kind;
+    uint8_t addr_space;
+    uint8_t width;
+    uint8_t complete;
+    uint32_t reserved;
+};
+static_assert(sizeof(DeltaMemoryLogEntry) == 24, "delta memory-log size drift");
 
 __device__ __forceinline__ void fail(uint32_t *error, uint32_t code) {
     if (*error == 0) *error = code;
@@ -122,8 +147,8 @@ __device__ bool lane_spec(
         return true;
     }
     if (kind == G2_RESIDUAL_CTRL || kind == G2_RESIDUAL_TAG ||
-        kind == G2_RESIDUAL_VALUE) {
-        width = kind == G2_RESIDUAL_TAG ? 1 : 8;
+        kind == G2_RESIDUAL_VALUE || kind == G2_OPAQUE_EVENT_COUNT) {
+        width = kind == G2_RESIDUAL_TAG ? 1 : (kind == G2_OPAQUE_EVENT_COUNT ? 4 : 8);
         flags = G2_REQUIRED_ATOMIC;
         group = G2_RESIDUAL_GROUP;
         return true;
@@ -175,6 +200,15 @@ __device__ G2ExpectedKindV1 const *find_expected(
 ) {
     for (size_t i = 0; i < count; ++i) {
         if (expected[i].air_idx == air_idx) return &expected[i];
+    }
+    return nullptr;
+}
+
+__device__ G2ExpectedOpaqueV1 const *find_expected_opaque(
+    G2ExpectedOpaqueV1 const *expected, size_t count, uint32_t lane_kind
+) {
+    for (size_t i = 0; i < count; ++i) {
+        if (expected[i].lane_kind == lane_kind) return &expected[i];
     }
     return nullptr;
 }
@@ -393,9 +427,54 @@ __device__ bool residual_event(
            actual_tag == expected_tag && (!check_value || actual_value == expected_value);
 }
 
+__device__ bool append_opaque_residual(
+    uint8_t const *wire,
+    G2LaneDescV1 const &ctrl,
+    G2LaneDescV1 const &tag,
+    G2LaneDescV1 const &value,
+    size_t index,
+    DeltaMemoryLogEntry *output,
+    size_t output_capacity,
+    size_t &output_count,
+    uint64_t *registers
+) {
+    if (output_count >= output_capacity) return false;
+    uint64_t control = lane_u64(wire, ctrl, index);
+    uint8_t encoded = (wire + tag.offset)[index];
+    uint64_t event_value = lane_u64(wire, value, index);
+    uint8_t kind = encoded & 3u;
+    uint8_t address_space_code = (encoded >> 2) & 3u;
+    uint8_t width_code = (encoded >> 4) & 7u;
+    static constexpr uint8_t widths[5] = {0, 1, 2, 4, 8};
+    if ((encoded & 0x80u) || kind == 3 || address_space_code == 3 || width_code > 4 ||
+        (kind != 2 && width_code == 0)) {
+        return false;
+    }
+    uint32_t address = uint32_t(control >> 32);
+    uint8_t address_space = address_space_code + 1u;
+    if (address_space == 1u) {
+        if (width_code != 4 || (address & 7u) != 0 || address >= 32u * 8u) return false;
+        uint32_t reg = address / 8u;
+        if (kind == 0 && registers[reg] != event_value) return false;
+        if (kind == 1 && reg != 0) registers[reg] = event_value;
+    }
+    output[output_count++] = {
+        uint32_t(control),
+        address,
+        event_value,
+        kind,
+        address_space,
+        widths[width_code],
+        1u,
+        0u,
+    };
+    return true;
+}
+
 __global__ void g2_predecode(
     uint8_t const *wire,
-    size_t wire_bytes,
+    size_t wire_storage_bytes,
+    size_t logical_wire_bytes,
     uint8_t const *expected_fingerprint,
     G2BlockEntryV1 const *blocks,
     size_t block_count,
@@ -407,17 +486,23 @@ __global__ void g2_predecode(
     uint32_t initial_timestamp,
     G2ExpectedKindV1 const *expected_kinds,
     size_t expected_kind_count,
+    G2ExpectedOpaqueV1 const *expected_opaque,
+    size_t expected_opaque_count,
     uint32_t *program_frequencies,
     size_t frequency_count,
     DeltaRecord *delta_output,
     size_t delta_count,
     uint64_t *expected_blocks,
     uint8_t *expected_modes,
+    DeltaMemoryLogEntry *opaque_residual_output,
+    size_t opaque_residual_capacity,
+    uint32_t *opaque_residual_count,
     uint32_t *error
 ) {
     if (blockIdx.x != 0 || threadIdx.x != 0) return;
-    if (wire_bytes < 128 || (wire_bytes & 127u) != 0 || block_count == 0 ||
-        initial_memory_count <= 1 || expected_kind_count == 0) {
+    if (wire_storage_bytes < 128 || (wire_storage_bytes & 127u) != 0 ||
+        logical_wire_bytes < wire_storage_bytes || (logical_wire_bytes & 127u) != 0 ||
+        block_count == 0 || initial_memory_count <= 1 || expected_kind_count == 0) {
         fail(error, 1);
         return;
     }
@@ -429,9 +514,10 @@ __global__ void g2_predecode(
             return;
         }
     }
-    if (header.version != 1 || header.lane_count == 0 || header.lane_count > 58 ||
+    if (header.version != 1 || header.lane_count == 0 ||
+        header.lane_count > 59 + expected_opaque_count ||
         header.header_bytes != 64 + 32 * header.lane_count ||
-        header.header_bytes > wire_bytes || header.flags != G2_FLAGS_COMMITTED_V1) {
+        header.header_bytes > wire_storage_bytes || header.flags != G2_FLAGS_COMMITTED_V1) {
         fail(error, 3);
         return;
     }
@@ -444,15 +530,27 @@ __global__ void g2_predecode(
     G2LaneDescV1 const *descs = reinterpret_cast<G2LaneDescV1 const *>(wire + 64);
     for (size_t i = 0; i < header.lane_count; ++i) {
         G2LaneDescV1 const &desc = descs[i];
-        uint8_t width;
-        uint32_t flags, group;
+        uint8_t width = 0;
+        uint32_t flags = 0, group = 0;
+        G2ExpectedOpaqueV1 const *opaque =
+            find_expected_opaque(expected_opaque, expected_opaque_count, desc.kind);
+        bool standard = lane_spec(desc.kind, width, flags, group);
         uint64_t end = desc.offset + desc.payload_bytes;
         if ((i != 0 && descs[i - 1].kind >= desc.kind) ||
-            !lane_spec(desc.kind, width, flags, group) || desc.elem_width != width ||
-            desc.encoding != 0 || desc.flags != flags || desc.group_id != group ||
-            desc.reserved != 0 || desc.payload_bytes != uint64_t(desc.count) * width ||
+            (!standard && opaque == nullptr) ||
+            (standard &&
+             (desc.elem_width != width || desc.encoding != 0 || desc.flags != flags ||
+              desc.group_id != group ||
+              desc.payload_bytes != uint64_t(desc.count) * width)) ||
+            (opaque != nullptr &&
+             (standard || desc.elem_width != 0 || desc.encoding != 1 || desc.flags != 4 ||
+              desc.group_id != 0 || desc.count != opaque->count ||
+              desc.payload_bytes != opaque->payload_bytes ||
+              uint64_t(desc.count) * opaque->stride != desc.payload_bytes)) ||
+            desc.reserved != 0 ||
             desc.offset < header.header_bytes || (desc.offset & 127u) != 0 ||
-            end < desc.offset || end > wire_bytes) {
+            end < desc.offset ||
+            (opaque == nullptr ? end > wire_storage_bytes : end > logical_wire_bytes)) {
             fail(error, 5);
             return;
         }
@@ -464,10 +562,19 @@ __global__ void g2_predecode(
             }
         }
     }
+    for (size_t i = 0; i < expected_opaque_count; ++i) {
+        if (find_lane(descs, header.lane_count, uint16_t(expected_opaque[i].lane_kind)) ==
+            nullptr) {
+            fail(error, 39);
+            return;
+        }
+    }
     G2LaneDescV1 const *run = find_lane(descs, header.lane_count, G2_RUN_BLOCK_ID);
     G2LaneDescV1 const *residual_ctrl = find_lane(descs, header.lane_count, G2_RESIDUAL_CTRL);
     G2LaneDescV1 const *residual_tag = find_lane(descs, header.lane_count, G2_RESIDUAL_TAG);
     G2LaneDescV1 const *residual_value = find_lane(descs, header.lane_count, G2_RESIDUAL_VALUE);
+    G2LaneDescV1 const *opaque_event_counts =
+        find_lane(descs, header.lane_count, G2_OPAQUE_EVENT_COUNT);
     if (run == nullptr || run->count != header.run_count ||
         (header.instruction_count != 0 && run->count == 0) ||
         (header.residual_event_count != 0) != (residual_ctrl != nullptr) ||
@@ -500,10 +607,12 @@ __global__ void g2_predecode(
     for (size_t i = 0; i < 32; ++i)
         registers[i] = *reinterpret_cast<uint64_t const *>(registers_image.base + i * 8);
     registers[0] = 0;
-    size_t kind_v0_cursors[30]{};
-    size_t kind_v1_cursors[30]{};
-    size_t kind_counts[30]{};
+    size_t kind_v0_cursors[31]{};
+    size_t kind_v1_cursors[31]{};
+    size_t kind_counts[31]{};
     size_t residual_cursor = 0;
+    size_t opaque_residual_cursor = 0;
+    size_t opaque_event_cursor = 0;
     size_t instruction_cursor = 0;
     size_t output_cursor = 0;
     uint32_t timestamp = initial_timestamp;
@@ -531,7 +640,45 @@ __global__ void g2_predecode(
             if (entry.air_idx == INVALID_AIR) continue;
             G2ExpectedKindV1 const *expected =
                 find_expected(expected_kinds, expected_kind_count, entry.air_idx);
-            if (expected == nullptr || expected->kind >= 30 || output_cursor >= delta_count) {
+            if (expected == nullptr && entry.access_pattern == G2_OPAQUE_TIMESTAMP_PATTERN) {
+                ++timestamp;
+                continue;
+            }
+            if (expected == nullptr && entry.access_pattern == G2_OPAQUE_PATTERN) {
+                if (residual_ctrl == nullptr || opaque_event_counts == nullptr ||
+                    opaque_event_cursor >= opaque_event_counts->count) {
+                    fail(error, 40);
+                    return;
+                }
+                uint32_t event_count =
+                    lane_u32(wire, *opaque_event_counts, opaque_event_cursor++);
+                if (event_count == 0 || residual_cursor + size_t(event_count) < residual_cursor ||
+                    residual_cursor + size_t(event_count) > residual_ctrl->count) {
+                    fail(error, 47);
+                    return;
+                }
+                for (uint32_t event = 0; event < event_count; ++event) {
+                    uint64_t control = lane_u64(wire, *residual_ctrl, residual_cursor);
+                    if (uint32_t(control) != timestamp || !append_opaque_residual(
+                            wire,
+                            *residual_ctrl,
+                            *residual_tag,
+                            *residual_value,
+                            residual_cursor,
+                            opaque_residual_output,
+                            opaque_residual_capacity,
+                            opaque_residual_cursor,
+                            registers
+                        )) {
+                        fail(error, 41);
+                        return;
+                    }
+                    ++residual_cursor;
+                    ++timestamp;
+                }
+                continue;
+            }
+            if (expected == nullptr || expected->kind >= 31 || output_cursor >= delta_count) {
                 fail(error, 13);
                 return;
             }
@@ -539,7 +686,94 @@ __global__ void g2_predecode(
             DeltaRecord record{pc_base + slot * 4u, timestamp, 0, 0};
             uint64_t expected_block = 0;
             uint8_t expected_mode = EXPECT_NONE;
-            if (kind == 29 && entry.access_pattern == G2_ADDI_PATTERN) {
+            if (kind == 30 && entry.access_pattern == G2_HINT_PATTERN) {
+                if (residual_ctrl == nullptr || (entry.b & 7u) != 0 || entry.b >= 32u * 8u ||
+                    (entry.local_opcode != 0 &&
+                     ((entry.a & 7u) != 0 || entry.a >= 32u * 8u))) {
+                    fail(error, 42);
+                    return;
+                }
+                uint32_t num_words =
+                    entry.local_opcode == 0 ? 1u : uint32_t(registers[entry.a / 8u]);
+                if (num_words == 0 || num_words > 1023 ||
+                    residual_cursor + size_t(num_words) + 1u + entry.local_opcode >
+                        residual_ctrl->count ||
+                    output_cursor + num_words > delta_count || registers[entry.b / 8u] > UINT32_MAX) {
+                    fail(error, 43);
+                    return;
+                }
+                uint64_t actual;
+                uint32_t memory_pointer = uint32_t(registers[entry.b / 8u]);
+                if (!residual_event(
+                        wire,
+                        *residual_ctrl,
+                        *residual_tag,
+                        *residual_value,
+                        residual_cursor++,
+                        timestamp,
+                        entry.b,
+                        0x40u,
+                        memory_pointer,
+                        true,
+                        actual
+                    )) {
+                    fail(error, 44);
+                    return;
+                }
+                if (entry.local_opcode != 0 &&
+                    !residual_event(
+                        wire,
+                        *residual_ctrl,
+                        *residual_tag,
+                        *residual_value,
+                        residual_cursor++,
+                        timestamp + 1u,
+                        entry.a,
+                        0x40u,
+                        num_words,
+                        true,
+                        actual
+                    )) {
+                    fail(error, 45);
+                    return;
+                }
+                for (uint32_t row = 0; row < num_words; ++row) {
+                    uint64_t word;
+                    uint32_t row_timestamp = timestamp + 3u * row;
+                    uint32_t address = memory_pointer + 8u * row;
+                    if (address < memory_pointer ||
+                        !residual_event(
+                            wire,
+                            *residual_ctrl,
+                            *residual_tag,
+                            *residual_value,
+                            residual_cursor++,
+                            row_timestamp + 2u,
+                            address,
+                            0x45u,
+                            0,
+                            false,
+                            word
+                        )) {
+                        fail(error, 46);
+                        return;
+                    }
+                    DeltaRecord hint_record{
+                        pc_base + slot * 4u,
+                        row_timestamp,
+                        uint64_t(address) | (uint64_t(row) << 32) |
+                            (uint64_t(num_words) << 42),
+                        word,
+                    };
+                    delta_output[output_cursor] = hint_record;
+                    expected_blocks[output_cursor] = 0;
+                    expected_modes[output_cursor] = EXPECT_NONE;
+                    ++output_cursor;
+                    ++kind_counts[kind];
+                }
+                timestamp += 3u * num_words;
+                continue;
+            } else if (kind == 29 && entry.access_pattern == G2_ADDI_PATTERN) {
                 G2LaneDescV1 const *lane = find_lane(descs, header.lane_count, G2_ADDI_V0);
                 size_t cursor = kind_v0_cursors[kind]++;
                 if (lane == nullptr || cursor >= lane->count || (entry.a & 7u) != 0 ||
@@ -750,13 +984,15 @@ __global__ void g2_predecode(
         }
     }
     if (instruction_cursor != header.instruction_count || output_cursor != delta_count ||
-        residual_cursor != header.residual_event_count) {
+        residual_cursor != header.residual_event_count ||
+        opaque_event_cursor != (opaque_event_counts == nullptr ? 0 : opaque_event_counts->count)) {
         fail(error, 23);
         return;
     }
+    *opaque_residual_count = uint32_t(opaque_residual_cursor);
     for (size_t i = 0; i < expected_kind_count; ++i) {
         G2ExpectedKindV1 const &expected = expected_kinds[i];
-        if (expected.kind >= 30 || kind_counts[expected.kind] != expected.count) {
+        if (expected.kind >= 31 || kind_counts[expected.kind] != expected.count) {
             fail(error, 24);
             return;
         }
@@ -781,6 +1017,7 @@ __global__ void g2_predecode(
 
 extern "C" int _rvr_g2_predecode(
     DeviceBufferConstView<uint8_t> d_wire,
+    size_t logical_wire_bytes,
     uint8_t const *d_expected_fingerprint,
     G2BlockEntryV1 const *d_blocks,
     size_t block_count,
@@ -791,11 +1028,15 @@ extern "C" int _rvr_g2_predecode(
     uint32_t initial_timestamp,
     G2ExpectedKindV1 const *d_expected_kinds,
     size_t expected_kind_count,
+    G2ExpectedOpaqueV1 const *d_expected_opaque,
+    size_t expected_opaque_count,
     uint32_t *d_program_frequencies,
     size_t frequency_count,
     DeviceRawBufferConstView d_delta_output,
     DeviceRawBufferConstView d_expected_blocks,
     DeviceRawBufferConstView d_expected_modes,
+    DeviceRawBufferConstView d_opaque_residual_output,
+    uint32_t *d_opaque_residual_count,
     uint32_t *d_error,
     cudaStream_t stream
 ) {
@@ -809,6 +1050,7 @@ extern "C" int _rvr_g2_predecode(
     g2_predecode<<<1, 1, 0, stream>>>(
         d_wire.ptr,
         d_wire.size,
+        logical_wire_bytes,
         d_expected_fingerprint,
         d_blocks,
         block_count,
@@ -820,12 +1062,17 @@ extern "C" int _rvr_g2_predecode(
         initial_timestamp,
         d_expected_kinds,
         expected_kind_count,
+        d_expected_opaque,
+        expected_opaque_count,
         d_program_frequencies,
         frequency_count,
         reinterpret_cast<DeltaRecord *>(d_delta_output.ptr),
         d_delta_output.size / sizeof(DeltaRecord),
         reinterpret_cast<uint64_t *>(d_expected_blocks.ptr),
         reinterpret_cast<uint8_t *>(d_expected_modes.ptr),
+        reinterpret_cast<DeltaMemoryLogEntry *>(d_opaque_residual_output.ptr),
+        d_opaque_residual_output.size / sizeof(DeltaMemoryLogEntry),
+        d_opaque_residual_count,
         d_error
     );
     return CHECK_KERNEL();

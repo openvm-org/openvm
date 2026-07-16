@@ -165,6 +165,9 @@ pub const G2_LANE_RUN_BLOCK_ID: u16 = 0x0001;
 pub const G2_LANE_RESIDUAL_CTRL: u16 = 0x0080;
 pub const G2_LANE_RESIDUAL_TAG: u16 = 0x0081;
 pub const G2_LANE_RESIDUAL_VALUE: u16 = 0x0082;
+/// Exact residual-event span for each opaque custom instruction, in program
+/// order. This removes any need to infer custom boundaries from event values.
+pub const G2_LANE_OPAQUE_EVENT_COUNT: u16 = 0x0083;
 pub const G2_GROUP_LOAD_STORE: u32 = 1;
 pub const G2_GROUP_RESIDUAL: u32 = 2;
 pub const G2_LOAD_STORE_KINDS: [u8; 11] = [8, 9, 20, 21, 22, 23, 24, 25, 26, 27, 28];
@@ -181,7 +184,8 @@ pub const G2_PRODUCER_PHASE2B_SLOT_BASE: usize =
     G2_PRODUCER_LOAD_STORE_SLOT_BASE + G2_LOAD_STORE_KINDS.len() * 2;
 pub const G2_PRODUCER_JALR_SLOT: usize =
     G2_PRODUCER_PHASE2B_SLOT_BASE + G2_PHASE2B_TWO_LANE_KINDS.len() * 2;
-pub const G2_PRODUCER_LANE_COUNT: usize = G2_PRODUCER_JALR_SLOT + 1;
+pub const G2_PRODUCER_OPAQUE_EVENT_COUNT_SLOT: usize = G2_PRODUCER_JALR_SLOT + 1;
+pub const G2_PRODUCER_LANE_COUNT: usize = G2_PRODUCER_OPAQUE_EVENT_COUNT_SLOT + 1;
 /// `0x0100 + 2 * DeltaAirKind::AddI`.
 pub const G2_LANE_ADDI_V0: u16 = 0x013a;
 

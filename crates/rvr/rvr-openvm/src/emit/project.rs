@@ -208,8 +208,8 @@ pub struct G2DsoManifestConfigV1 {
     pub pc_base: u32,
     pub block_count: u32,
     pub air_count: u32,
-    pub air_kinds: [u8; 30],
-    pub air_indices: [u32; 30],
+    pub air_kinds: [u8; 31],
+    pub air_indices: [u32; 31],
 }
 
 /// C project generator.
@@ -709,6 +709,7 @@ impl CProject {
             (0x0080, 8, 3, 2, 1),
             (0x0081, 1, 3, 2, 1),
             (0x0082, 8, 3, 2, 1),
+            (0x0083, 4, 3, 2, 1),
         ]);
         for kind in 0u8..30 {
             for value_lane in [false, true] {
@@ -772,20 +773,20 @@ impl CProject {
                uint32_t block_count;\n\
                uint32_t air_count;\n\
                uint32_t reserved;\n\
-               uint8_t air_kinds[30];\n\
-               uint32_t air_indices[30];\n\
-               OpenVmRvrG2DsoLaneManifestV1 lanes[58];\n\
+               uint8_t air_kinds[31];\n\
+               uint32_t air_indices[31];\n\
+               OpenVmRvrG2DsoLaneManifestV1 lanes[59];\n\
              }} OpenVmRvrG2DsoManifestV1;\n\n\
              _Static_assert(sizeof(OpenVmRvrG2DsoLaneManifestV1) == 16, \"G2 DSO lane manifest size drift\");\n\
-             _Static_assert(sizeof(OpenVmRvrG2DsoManifestV1) == 1248, \"G2 DSO manifest size drift\");\n\n\
+             _Static_assert(sizeof(OpenVmRvrG2DsoManifestV1) == 1268, \"G2 DSO manifest size drift\");\n\n\
              __attribute__((visibility(\"default\")))\n\
              const OpenVmRvrG2DsoManifestV1 openvm_rvr_g2_manifest_v1 = {{\n\
                .magic = {{'O','V','M','G','2','D','1','\\0'}},\n\
                .version = 1,\n\
-               .manifest_bytes = 1248,\n\
+               .manifest_bytes = 1268,\n\
                .header_size = 64,\n\
                .lane_desc_size = 32,\n\
-               .lane_count = 58,\n\
+               .lane_count = 59,\n\
                .wire_flags = 14,\n\
                .fingerprint = {{{fingerprint}}},\n\
                .program_fingerprint = {{{program_fingerprint}}},\n\

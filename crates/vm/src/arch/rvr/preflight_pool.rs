@@ -177,6 +177,7 @@ impl ArenaNativeBackingKey {
 /// inline air (RV64IM has ~17 migrated AIRs), so this only trims
 /// pathological accumulation, never the steady-state working set.
 const MAX_RECORD_SPARES: usize = 32;
+const G2_BACKING_AIR: usize = usize::MAX;
 
 impl Default for RvrPreflightBufferPool {
     fn default() -> Self {
@@ -874,6 +875,27 @@ impl RvrPreflightBufferPool {
         }
     }
 
+    pub(crate) fn take_g2_backing(&self, capacity_bytes: usize) -> Vec<u8> {
+        let key = ArenaNativeBackingKey::new(G2_BACKING_AIR, 1, capacity_bytes);
+        self.take_arena_native_dense_backing(key)
+            .unwrap_or_else(|| vec![0u8; capacity_bytes + 32])
+    }
+
+    pub(crate) fn recycle_g2_backing(&self, backing: Vec<u8>, capacity_bytes: usize) {
+        let key = ArenaNativeBackingKey::new(G2_BACKING_AIR, 1, backing.len() - 32);
+        assert!(key.capacity_bytes >= capacity_bytes);
+        self.recycle_arena_native_dense_backing(key, backing, key.capacity_bytes + 32);
+    }
+
+    #[cfg(feature = "cuda")]
+    pub(crate) fn prepare_g2_backings(&self, capacity_bytes: usize) {
+        self.prepare_arena_native_dense_backings(ArenaNativeBackingKey::new(
+            G2_BACKING_AIR,
+            1,
+            capacity_bytes,
+        ));
+    }
+
     /// Allocate and fault in a direct-final wire backing before the segment's
     /// preflight clock starts. Repeated calls are grow-only no-ops.
     pub fn prepare_wire_backing(&self, air: usize, len: usize) {
@@ -1273,6 +1295,23 @@ mod tests {
         let (recycled, recycled_needs_prefault) = pool.take_delta_backing(2048);
         assert!(!recycled_needs_prefault);
         assert_eq!(recycled.as_ptr(), first_ptr);
+    }
+
+    #[test]
+    fn g2_backing_reuses_resident_max_shape_and_scrubs_it() {
+        let pool = RvrPreflightBufferPool {
+            enabled: true,
+            arena_native_enabled: true,
+            inner: Arc::new(Mutex::new(PoolInner::default())),
+        };
+        let mut first = pool.take_g2_backing(4096);
+        let first_ptr = first.as_ptr();
+        first.fill(0xa5);
+        pool.recycle_g2_backing(first, 4096);
+
+        let recycled = pool.take_g2_backing(2048);
+        assert_eq!(recycled.as_ptr(), first_ptr);
+        assert!(recycled.iter().all(|&byte| byte == 0));
     }
 
     #[test]

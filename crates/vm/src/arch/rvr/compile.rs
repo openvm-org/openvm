@@ -29,7 +29,7 @@ use sha2::{Digest, Sha256};
 
 use super::{
     debug::GuestDebugMap, ArenaNativeGeometry, ArenaNativeLayout, LogNativeOpcodeAdmitter,
-    RvrDeltaDecodeEntry, RvrG2AirBindingV1, RvrG2BlockEntryV1, RvrG2MetaV1,
+    RvrDeltaDecodeEntry, RvrG2AirBindingV1, RvrG2BlockEntryV1, RvrG2MetaV1, RvrG2OpaqueBindingV1,
 };
 use crate::arch::ExecutorInventory;
 
@@ -226,7 +226,7 @@ impl RvrCompiled {
             arity: 0,
             reserved: [0; 3],
         });
-        for (kind, width) in [(0x0080, 8), (0x0081, 1), (0x0082, 8)] {
+        for (kind, width) in [(0x0080, 8), (0x0081, 1), (0x0082, 8), (0x0083, 4)] {
             expected_lanes.push(OpenVmRvrG2DsoLaneManifestV1 {
                 kind,
                 elem_width: width,
@@ -265,8 +265,8 @@ impl RvrCompiled {
             rvr_openvm_ext_ffi_common::G2_PRODUCER_LANE_COUNT] = expected_lanes
             .try_into()
             .expect("frozen G2 capability lane count");
-        let mut expected_air_kinds = [u8::MAX; 30];
-        let mut expected_air_indices = [u32::MAX; 30];
+        let mut expected_air_kinds = [u8::MAX; 31];
+        let mut expected_air_indices = [u32::MAX; 31];
         for (index, binding) in g2.air_bindings.iter().enumerate() {
             expected_air_kinds[index] = binding.kind;
             expected_air_indices[index] = u32::try_from(binding.air_idx)
@@ -404,8 +404,8 @@ struct OpenVmRvrG2DsoManifestV1 {
     block_count: u32,
     air_count: u32,
     reserved: u32,
-    air_kinds: [u8; 30],
-    air_indices: [u32; 30],
+    air_kinds: [u8; 31],
+    air_indices: [u32; 31],
     lanes: [OpenVmRvrG2DsoLaneManifestV1; rvr_openvm_ext_ffi_common::G2_PRODUCER_LANE_COUNT],
 }
 
@@ -423,7 +423,7 @@ struct OpenVmRvrG2DsoLaneManifestV1 {
 
 const _: () = {
     assert!(std::mem::size_of::<OpenVmRvrG2DsoLaneManifestV1>() == 16);
-    assert!(std::mem::size_of::<OpenVmRvrG2DsoManifestV1>() == 1248);
+    assert!(std::mem::size_of::<OpenVmRvrG2DsoManifestV1>() == 1268);
 };
 
 /// Error during compilation.
@@ -668,24 +668,32 @@ fn collect_inline_records_meta_for_mode<F: PrimeField32>(
                     .and_then(|entry| entry.as_ref())
                     .and_then(|(instruction, _)| admitter.inline_arena_geometry_for(instruction))
             });
-            let geometry =
-                registered_geometry
-                    .filter(|_| arena_native_enabled)
-                    .filter(|geometry| {
-                        !delta_records_requested
-                            || matches!(
+            let geometry = registered_geometry
+                .filter(|geometry| {
+                    arena_native_enabled
+                        || g2_requested
+                            && matches!(
                                 geometry.layout,
-                                ArenaNativeLayout::Custom {
-                                    residual_memory_chronology: true
-                                }
+                                ArenaNativeLayout::Custom { .. }
+                                    | ArenaNativeLayout::CustomVariableRows { .. }
                             )
-                            || matches!(
-                                geometry.layout,
-                                ArenaNativeLayout::CustomVariableRows {
-                                    residual_memory_chronology: true
-                                }
-                            )
-                    });
+                })
+                .filter(|geometry| {
+                    !delta_records_requested
+                        || matches!(
+                            geometry.layout,
+                            ArenaNativeLayout::Custom {
+                                residual_memory_chronology: true,
+                                ..
+                            }
+                        )
+                        || matches!(
+                            geometry.layout,
+                            ArenaNativeLayout::CustomVariableRows {
+                                residual_memory_chronology: true
+                            }
+                        )
+                });
             // Extension-owned custom records have no generic Stage-2 delta
             // encoding. Without their complete-record arena target, keep the
             // instruction on the verbose program-log/assembler route.
@@ -770,20 +778,25 @@ fn collect_inline_records_meta_for_mode<F: PrimeField32>(
         airs.retain(|air, _| !tainted_delta_airs.contains(air));
     }
 
-    let delta_decode = if compact_wire_requested || delta_records_requested {
+    let mut delta_decode = if compact_wire_requested || delta_records_requested {
         admitter
             .filter(|admitter| admitter.has_delta_decode())
             .map(|admitter| build_delta_decode_precompute(exe, chips, admitter, &pc_slots))
     } else {
         None
     };
+    if g2_requested {
+        if let (Some(decode), Some(admitter)) = (delta_decode.as_mut(), admitter) {
+            augment_g2_custom_decode(exe, chips, admitter, decode);
+        }
+    }
     let g2_supported = g2_requested
         && delta_decode.as_ref().is_some_and(|precomputed| {
             !precomputed.kind_to_air.is_empty()
                 && precomputed
                     .kind_to_air
                     .iter()
-                    .all(|&(kind, _)| g2_fixed_standard_kind(kind))
+                    .all(|&(kind, _)| g2_decoder_kind(kind))
                 && exe
                     .program
                     .instructions_and_debug_infos
@@ -802,27 +815,39 @@ fn collect_inline_records_meta_for_mode<F: PrimeField32>(
                             if entry.air_idx == u8::MAX {
                                 return false;
                             }
-                            let Some((kind, _)) = precomputed
+                            let kind = precomputed
                                 .kind_to_air
                                 .iter()
                                 .find(|(_, air)| *air == entry.air_idx as usize)
-                            else {
-                                return false;
-                            };
+                                .map(|(kind, _)| *kind);
                             let narrow_reveal = entry.flags & (1 << 4) != 0
                                 && entry.access_pattern == 3
                                 && entry.local_opcode != 4;
                             let inline_ok =
                                 pc_slots.get(slot).copied().unwrap_or(false) || narrow_reveal;
                             inline_ok
-                                && g2_access_pattern_matches(*kind, entry.access_pattern)
                                 && instruction.as_ref().is_some_and(|(instruction, _)| {
                                     admitter
                                         .and_then(|admitter| {
                                             admitter.inline_arena_geometry_for(instruction)
                                         })
-                                        .is_some_and(|geometry| {
-                                            g2_layout_matches(*kind, geometry.layout)
+                                        .is_some_and(|geometry| match kind {
+                                            Some(kind) => {
+                                                g2_access_pattern_matches(
+                                                    kind,
+                                                    entry.access_pattern,
+                                                ) && g2_layout_matches(kind, geometry.layout)
+                                            }
+                                            None => {
+                                                matches!(entry.access_pattern, 10 | 11)
+                                                    && matches!(
+                                                        geometry.layout,
+                                                        ArenaNativeLayout::Custom {
+                                                            residual_memory_chronology: true,
+                                                            ..
+                                                        }
+                                                    )
+                                            }
                                         })
                                 })
                         })
@@ -854,9 +879,17 @@ fn collect_inline_records_meta_for_mode<F: PrimeField32>(
             }
         }
     }
+    let hintstore_air = g2_supported.then_some(()).and_then(|()| {
+        delta_decode
+            .as_ref()
+            .and_then(|decode| decode.kind_to_air.iter().find(|&&(kind, _)| kind == 30))
+            .map(|&(_, air)| air)
+    });
     let arena_native_airs = arena_native
         .into_iter()
-        .filter_map(|(air, geometry)| geometry.map(|g| (air, g)))
+        .filter_map(|(air, geometry)| {
+            (Some(air) != hintstore_air).then(|| geometry.map(|g| (air, g)))?
+        })
         .collect::<Vec<_>>();
     if g2_supported {
         for &(_, air) in &delta_decode
@@ -864,7 +897,8 @@ fn collect_inline_records_meta_for_mode<F: PrimeField32>(
             .expect("supported G2 route has a decode table")
             .kind_to_air
         {
-            airs.insert(air, rvr_openvm_ext_ffi_common::PREFLIGHT_ADDSUB_RECORD_SIZE);
+            airs.entry(air)
+                .or_insert(rvr_openvm_ext_ffi_common::PREFLIGHT_ADDSUB_RECORD_SIZE);
         }
     }
     let mut direct_airs = delta_decode
@@ -900,8 +934,71 @@ fn collect_inline_records_meta_for_mode<F: PrimeField32>(
     }
 }
 
-fn g2_fixed_standard_kind(kind: u8) -> bool {
-    kind < 30
+fn g2_decoder_kind(kind: u8) -> bool {
+    kind <= 30
+}
+
+fn augment_g2_custom_decode<F: PrimeField32>(
+    exe: &VmExe<F>,
+    chips: &ChipMapping,
+    admitter: &dyn LogNativeOpcodeAdmitter<F>,
+    decode: &mut RvrDeltaDecodePrecompute,
+) {
+    let mut entries = (*decode.entries).clone();
+    let mut hintstore_air = None;
+    for (slot, program_entry) in exe.program.instructions_and_debug_infos.iter().enumerate() {
+        let Some((instruction, _)) = program_entry else {
+            continue;
+        };
+        let Some(TraceChipIndex::Chip(air)) = chips.pc_to_chip.get(slot) else {
+            continue;
+        };
+        let air_idx = air.as_u32() as usize;
+        if decode
+            .kind_to_air
+            .iter()
+            .any(|&(_, bound)| bound == air_idx)
+        {
+            continue;
+        }
+        let Some(geometry) = admitter.inline_arena_geometry_for(instruction) else {
+            continue;
+        };
+        let entry = &mut entries[slot];
+        entry.a = instruction.a.as_canonical_u32();
+        entry.b = instruction.b.as_canonical_u32();
+        entry.c = instruction.c.as_canonical_u32();
+        entry.air_idx = u8::try_from(air_idx)
+            .expect("G2 custom AIR index exceeds the persisted u8 operand ABI");
+        match geometry.layout {
+            ArenaNativeLayout::CustomVariableRows {
+                residual_memory_chronology: true,
+            } => {
+                entry.local_opcode = u8::from(!instruction.a.is_zero());
+                entry.access_pattern = 9;
+                if let Some(previous) = hintstore_air.replace(air_idx) {
+                    assert_eq!(previous, air_idx, "HintStore maps to multiple AIRs");
+                }
+            }
+            ArenaNativeLayout::Custom {
+                residual_memory_chronology: true,
+                ..
+            } => {
+                entry.access_pattern =
+                    if instruction.opcode == SystemOpcode::PHANTOM.global_opcode() {
+                        11
+                    } else {
+                        10
+                    };
+            }
+            _ => entry.air_idx = u8::MAX,
+        }
+    }
+    if let Some(air) = hintstore_air {
+        decode.kind_to_air.push((30, air));
+        decode.kind_to_air.sort_unstable_by_key(|&(kind, _)| kind);
+    }
+    decode.entries = Arc::new(entries);
 }
 
 fn g2_access_pattern_matches(kind: u8, pattern: u8) -> bool {
@@ -914,6 +1011,7 @@ fn g2_access_pattern_matches(kind: u8, pattern: u8) -> bool {
         13 => pattern == 7,
         14 => pattern == 6,
         29 => pattern == 8,
+        30 => pattern == 9,
         _ => false,
     }
 }
@@ -926,6 +1024,12 @@ fn g2_layout_matches(kind: u8, layout: ArenaNativeLayout) -> bool {
         12 | 14 => matches!(layout, ArenaNativeLayout::Wr1(_)),
         13 => matches!(layout, ArenaNativeLayout::Rw1(_)),
         29 => matches!(layout, ArenaNativeLayout::AddI(_)),
+        30 => matches!(
+            layout,
+            ArenaNativeLayout::CustomVariableRows {
+                residual_memory_chronology: true
+            }
+        ),
         _ => false,
     }
 }
@@ -1011,13 +1115,15 @@ fn build_g2_meta_v1<F: PrimeField32>(
         || decode
             .kind_to_air
             .iter()
-            .any(|&(kind, _)| !g2_fixed_standard_kind(kind))
+            .any(|&(kind, _)| !g2_decoder_kind(kind))
     {
         return Err(CompileError::InvalidOptions(
-            "G2 Phase 2b requires fixed standard RV64 device-decode AIRs",
+            "G2 requires fixed standard RV64 plus HintStore device-decode AIRs",
         ));
     }
     let mut geometries = BTreeMap::new();
+    let mut opaque_geometries = BTreeMap::<usize, ArenaNativeGeometry>::new();
+    let mut opaque_opcodes = BTreeMap::<usize, BTreeSet<usize>>::new();
     for (slot, program_entry) in exe.program.instructions_and_debug_infos.iter().enumerate() {
         let Some((instruction, _)) = program_entry else {
             continue;
@@ -1025,11 +1131,37 @@ fn build_g2_meta_v1<F: PrimeField32>(
         let Some(entry) = decode.entries.get(slot) else {
             continue;
         };
-        let Some(&(kind, air_idx)) = decode
+        let binding = decode
             .kind_to_air
             .iter()
             .find(|(_, air)| *air == entry.air_idx as usize)
-        else {
+            .copied();
+        if binding.is_none() && matches!(entry.access_pattern, 10 | 11) {
+            let air_idx = entry.air_idx as usize;
+            let geometry = admitter.inline_arena_geometry_for(instruction).ok_or(
+                CompileError::InvalidOptions("G2 opaque AIR has no registry geometry"),
+            )?;
+            if !matches!(
+                geometry.layout,
+                ArenaNativeLayout::Custom {
+                    residual_memory_chronology: true,
+                    ..
+                }
+            ) || opaque_geometries
+                .insert(air_idx, geometry)
+                .is_some_and(|previous| previous != geometry)
+            {
+                return Err(CompileError::InvalidOptions(
+                    "G2 opaque AIR registry geometry is inconsistent",
+                ));
+            }
+            opaque_opcodes
+                .entry(air_idx)
+                .or_default()
+                .insert(instruction.opcode.as_usize());
+            continue;
+        }
+        let Some((kind, air_idx)) = binding else {
             continue;
         };
         let geometry =
@@ -1149,7 +1281,31 @@ fn build_g2_meta_v1<F: PrimeField32>(
         .iter()
         .map(|(&kind, &(air_idx, geometry))| (kind, air_idx, geometry))
         .collect::<Vec<_>>();
-    let air_manifest_fingerprint = g2_air_manifest_fingerprint(&air_manifest)?;
+    let opaque_bindings = opaque_geometries
+        .into_iter()
+        .map(|(air_idx, geometry)| {
+            let layout_id = match geometry.layout {
+                ArenaNativeLayout::Custom { layout_id, .. } => layout_id,
+                _ => unreachable!("opaque G2 binding must have a custom layout"),
+            };
+            let mut identity = Sha256::new();
+            identity.update(b"openvm-rvr-g2-custom-air-identity-v1\0");
+            identity.update(layout_id.as_bytes());
+            for opcode in opaque_opcodes.get(&air_idx).into_iter().flatten() {
+                identity.update((*opcode as u64).to_le_bytes());
+            }
+            let mut layout = Sha256::new();
+            layout.update(b"openvm-rvr-g2-custom-layout-v1\0");
+            layout.update(layout_id.as_bytes());
+            RvrG2OpaqueBindingV1 {
+                air_idx,
+                geometry,
+                air_identity_digest: identity.finalize().into(),
+                layout_digest: layout.finalize().into(),
+            }
+        })
+        .collect::<Vec<_>>();
+    let air_manifest_fingerprint = g2_air_manifest_fingerprint(&air_manifest, &opaque_bindings)?;
 
     let mut fingerprint = Sha256::new();
     fingerprint.update(b"openvm-rvr-g2-private-wire-v1\0");
@@ -1158,7 +1314,7 @@ fn build_g2_meta_v1<F: PrimeField32>(
     fingerprint.update(
         b"lane:kind2,width1,encoding1,flags4,count4,payload_bytes4,offset8,group4,reserved4;",
     );
-    fingerprint.update(b"lane:0001,width4,fixed,required,arity=run;lane:0080,width8,fixed,required+atomic,group=2;lane:0081,width1,fixed,required+atomic,group=2;lane:0082,width8,fixed,required+atomic,group=2;");
+    fingerprint.update(b"lane:0001,width4,fixed,required,arity=run;lane:0080,width8,fixed,required+atomic,group=2;lane:0081,width1,fixed,required+atomic,group=2;lane:0082,width8,fixed,required+atomic,group=2;lane:0083,width4,fixed,required+atomic,group=2,arity=opaque-occurrence;");
     for kind in 0u8..30 {
         fingerprint.update([kind, g2_kind_arity(kind)]);
         for value_lane in [false, true] {
@@ -1183,6 +1339,14 @@ fn build_g2_meta_v1<F: PrimeField32>(
             );
         }
     }
+    for opaque in &opaque_bindings {
+        fingerprint.update(opaque.lane_kind().to_le_bytes());
+        fingerprint.update([0, rvr_openvm_ext_ffi_common::G2_ENCODING_OPAQUE_FINAL]);
+        fingerprint.update(rvr_openvm_ext_ffi_common::G2_LANE_FLAG_OPAQUE_FINAL.to_le_bytes());
+        fingerprint.update((opaque.air_idx as u64).to_le_bytes());
+        fingerprint.update(opaque.air_identity_digest);
+        fingerprint.update(opaque.layout_digest);
+    }
     fingerprint.update(program_fingerprint);
     fingerprint.update(block_fingerprint);
     fingerprint.update(air_manifest_fingerprint);
@@ -1200,6 +1364,7 @@ fn build_g2_meta_v1<F: PrimeField32>(
                 .map(|&(kind, air_idx)| RvrG2AirBindingV1 { kind, air_idx })
                 .collect(),
         ),
+        opaque_bindings: Arc::new(opaque_bindings),
     })
 }
 
@@ -1215,10 +1380,11 @@ fn g2_kind_arity(kind: u8) -> u8 {
 
 fn g2_air_manifest_fingerprint(
     airs: &[(u8, usize, ArenaNativeGeometry)],
+    opaque: &[RvrG2OpaqueBindingV1],
 ) -> Result<[u8; 32], CompileError> {
     let mut air_manifest = Sha256::new();
     air_manifest.update(b"openvm-rvr-g2-air-registry-manifest-v1\0");
-    air_manifest.update((airs.len() as u32).to_le_bytes());
+    air_manifest.update(((airs.len() + opaque.len()) as u32).to_le_bytes());
     for &(kind, air_idx, geometry) in airs {
         air_manifest.update([kind]);
         air_manifest.update((air_idx as u64).to_le_bytes());
@@ -1359,6 +1525,11 @@ fn g2_air_manifest_fingerprint(
                     air_manifest.update((value as u64).to_le_bytes());
                 }
             }
+            ArenaNativeLayout::CustomVariableRows {
+                residual_memory_chronology: true,
+            } if kind == 30 => {
+                air_manifest.update([6]);
+            }
             _ => {
                 return Err(CompileError::InvalidOptions(
                     "G2 registry manifest contains an unsupported layout",
@@ -1366,8 +1537,24 @@ fn g2_air_manifest_fingerprint(
             }
         }
     }
-    // No opaque custom layout is admitted in Phase 2b.
-    air_manifest.update([0u8; 32]);
+    for binding in opaque {
+        air_manifest.update([u8::MAX]);
+        air_manifest.update((binding.air_idx as u64).to_le_bytes());
+        air_manifest.update([1]); // Dense arena flavor.
+        for value in [
+            binding.geometry.adapter_size,
+            binding.geometry.adapter_align,
+            binding.geometry.core_size,
+            binding.geometry.core_align,
+            binding.geometry.core_off_matrix,
+            binding.geometry.core_off_dense(),
+            binding.geometry.stride_dense(),
+        ] {
+            air_manifest.update((value as u64).to_le_bytes());
+        }
+        air_manifest.update(binding.air_identity_digest);
+        air_manifest.update(binding.layout_digest);
+    }
     Ok(air_manifest.finalize().into())
 }
 
@@ -1379,14 +1566,26 @@ fn validate_requested_inline_record_shape(
     inline_meta: &RvrInlineRecordsMeta,
 ) -> Result<(), CompileError> {
     let requested = std::env::var("OPENVM_RVR_GPU_RECORDS").ok();
+    let custom_only = || {
+        inline_meta.arena_native_airs.iter().all(|(_, geometry)| {
+            matches!(
+                geometry.layout,
+                ArenaNativeLayout::Custom {
+                    residual_memory_chronology: true,
+                    ..
+                }
+            )
+        })
+    };
     let invalid_arena = requested.as_deref() == Some("compact")
-        || requested.as_deref() == Some("g2") && inline_meta.delta_decode.is_some()
+        || requested.as_deref() == Some("g2") && !custom_only()
         || requested.as_deref() == Some("delta")
             && inline_meta.arena_native_airs.iter().any(|(_, geometry)| {
                 !matches!(
                     geometry.layout,
                     ArenaNativeLayout::Custom {
-                        residual_memory_chronology: true
+                        residual_memory_chronology: true,
+                        ..
                     }
                 ) && !matches!(
                     geometry.layout,
@@ -1833,7 +2032,7 @@ fn compile_impl<F: PrimeField32>(
                     && precomputed
                         .kind_to_air
                         .iter()
-                        .all(|&(kind, _)| g2_fixed_standard_kind(kind))
+                        .all(|&(kind, _)| g2_decoder_kind(kind))
             });
     let mut prebuilt_blocks = None;
     if g2_negotiated {
@@ -2060,8 +2259,8 @@ fn compile_impl<F: PrimeField32>(
                     .map(|&(air, geometry)| (air as u32, geometry))
                     .collect();
                 if let Some(g2) = inline_meta.g2.as_deref() {
-                    let mut air_kinds = [u8::MAX; 30];
-                    let mut air_indices = [u32::MAX; 30];
+                    let mut air_kinds = [u8::MAX; 31];
+                    let mut air_indices = [u32::MAX; 31];
                     for (index, binding) in g2.air_bindings.iter().enumerate() {
                         air_kinds[index] = binding.kind;
                         air_indices[index] =
@@ -3167,17 +3366,58 @@ mod tests {
                 core_imm_sign: 10,
             }),
         };
-        let fingerprint = g2_air_manifest_fingerprint(&[(29, 7, geometry)]).unwrap();
+        let fingerprint = g2_air_manifest_fingerprint(&[(29, 7, geometry)], &[]).unwrap();
 
         let mut changed_geometry = geometry;
         changed_geometry.adapter_size += 1;
         assert_ne!(
             fingerprint,
-            g2_air_manifest_fingerprint(&[(29, 7, changed_geometry)]).unwrap()
+            g2_air_manifest_fingerprint(&[(29, 7, changed_geometry)], &[]).unwrap()
         );
         assert_ne!(
             fingerprint,
-            g2_air_manifest_fingerprint(&[(29, 8, geometry)]).unwrap()
+            g2_air_manifest_fingerprint(&[(29, 8, geometry)], &[]).unwrap()
+        );
+
+        let opaque = RvrG2OpaqueBindingV1 {
+            air_idx: 9,
+            geometry,
+            air_identity_digest: [0x3c; 32],
+            layout_digest: [0x5a; 32],
+        };
+        let opaque_fingerprint = g2_air_manifest_fingerprint(&[], &[opaque]).unwrap();
+        assert_ne!(
+            opaque_fingerprint,
+            g2_air_manifest_fingerprint(
+                &[],
+                &[RvrG2OpaqueBindingV1 {
+                    layout_digest: [0xa5; 32],
+                    ..opaque
+                }],
+            )
+            .unwrap()
+        );
+        assert_ne!(
+            opaque_fingerprint,
+            g2_air_manifest_fingerprint(
+                &[],
+                &[RvrG2OpaqueBindingV1 {
+                    air_identity_digest: [0xc3; 32],
+                    ..opaque
+                }],
+            )
+            .unwrap()
+        );
+        assert_ne!(
+            opaque_fingerprint,
+            g2_air_manifest_fingerprint(
+                &[],
+                &[RvrG2OpaqueBindingV1 {
+                    air_idx: 10,
+                    ..opaque
+                }],
+            )
+            .unwrap()
         );
     }
 }

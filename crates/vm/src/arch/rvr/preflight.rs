@@ -1361,13 +1361,15 @@ where
         // Distinct touched blocks are bounded by the number of memory-log
         // entries, so sizing `touched` to `memory_log_cap` guarantees it
         // never overflows.
-        let shadow_sizes = if device_touched_memory && !device_aux_oracle {
-            // Non-null ABI sentinels only: production device aux never indexes
-            // a host timestamp shadow.
-            (1, 1, 1)
-        } else {
-            (reg_shadow_blocks, mem_shadow_blocks, pv_shadow_blocks)
-        };
+        let g2_needs_custom_predecessors = g2_meta.is_some();
+        let shadow_sizes =
+            if device_touched_memory && !device_aux_oracle && !g2_needs_custom_predecessors {
+                // Non-null ABI sentinels only: production device aux never indexes
+                // a host timestamp shadow.
+                (1, 1, 1)
+            } else {
+                (reg_shadow_blocks, mem_shadow_blocks, pv_shadow_blocks)
+            };
         let (mut shadow_register, mut shadow_memory, mut shadow_public_values) =
             pool.take_shadows(shadow_sizes.0, shadow_sizes.1, shadow_sizes.2);
         // Inline (migrated) instructions touch without logging: register
@@ -1386,11 +1388,12 @@ where
             })
             .sum::<usize>()
             + 64;
-        let touched_cap = if device_touched_memory && !device_aux_oracle {
-            0
-        } else {
-            memory_log_cap + inline_touch_slack
-        };
+        let touched_cap =
+            if device_touched_memory && !device_aux_oracle && !g2_needs_custom_predecessors {
+                0
+            } else {
+                memory_log_cap + inline_touch_slack
+            };
         let mut touched = pool.take_touched(touched_cap);
         let pv_base = public_values_slice(&mut run_state.memory.memory).as_mut_ptr();
         let scratch_ready = std::time::Instant::now();
@@ -1494,6 +1497,7 @@ where
                 run: fallback,
                 residual: u32::try_from(memory_log_cap)
                     .expect("G2 residual capacity exceeds the frozen u32 schema"),
+                opaque_events: fallback,
                 ..Default::default()
             };
             for binding in g2.air_bindings.iter() {
@@ -1502,7 +1506,7 @@ where
                     .copied()
                     .unwrap_or(fallback);
             }
-            Some(RvrG2PreparedV1::new(&capacities)?)
+            Some(RvrG2PreparedV1::new_pooled(&capacities, pool)?)
         } else {
             None
         };
@@ -1572,7 +1576,11 @@ where
                 &mut dirty_memory_pages,
             );
             tracer.set_device_chronology(&mut program_runs, &mut device_program_references);
-        } else if device_touched_memory {
+        } else if device_touched_memory || g2_meta.is_some() {
+            // G2 generated C always marks main-memory writes so the same
+            // single-pass producer is valid on CPU oracle/measurement routes
+            // and on CUDA. CPU does not publish the bitmap, but still supplies
+            // its bounds-checked scratch instead of weakening the native ABI.
             tracer.set_device_aux(
                 &mut device_aux_patches,
                 &mut device_aux_references,
@@ -1629,12 +1637,15 @@ where
         unsafe {
             core::arch::x86_64::_mm_sfence();
         }
-        if g2_prepared
+        if let Some(rejection) = g2_prepared
             .as_ref()
-            .is_some_and(|prepared| prepared.producer.overflow != 0)
+            .map(|prepared| prepared.producer.overflow)
+            .filter(|&rejection| rejection != 0)
         {
             return Err(ExecutionError::RvrExecution(
-                "G2 wire v1: native lane producer rejected a value before publish".to_string(),
+                format!(
+                    "G2 wire v1: native lane producer rejected a value before publish (code {rejection})"
+                ),
             ));
         }
         let run_result = run_result.map_err(map_rvr_execute_error)?;
@@ -1649,7 +1660,33 @@ where
                     "G2 instruction count exceeds the frozen u32 header".to_string(),
                 )
                 })?;
-            Some(prepared.finalize(next_segment_id()?, instruction_count, g2.fingerprint)?)
+            let opaque_written = g2
+                .opaque_bindings
+                .iter()
+                .map(|&binding| {
+                    let buf = chip_records.get(binding.air_idx).ok_or_else(|| {
+                        ExecutionError::RvrExecution(format!(
+                            "G2 opaque AIR {} exceeds the record target table",
+                            binding.air_idx
+                        ))
+                    })?;
+                    if buf.stride as usize != binding.geometry.stride_dense()
+                        || buf.len % buf.stride != 0
+                    {
+                        return Err(ExecutionError::RvrExecution(format!(
+                            "G2 opaque AIR {} target geometry drifted",
+                            binding.air_idx
+                        )));
+                    }
+                    Ok((binding, buf.len / buf.stride, buf.len))
+                })
+                .collect::<Result<Vec<_>, ExecutionError>>()?;
+            Some(prepared.finalize(
+                next_segment_id()?,
+                instruction_count,
+                g2.fingerprint,
+                &opaque_written,
+            )?)
         } else {
             None
         };
@@ -2809,7 +2846,8 @@ fn arena_native_flags(geometry: &super::ArenaNativeGeometry) -> u32 {
     if matches!(
         geometry.layout,
         super::ArenaNativeLayout::Custom {
-            residual_memory_chronology: true
+            residual_memory_chronology: true,
+            ..
         } | super::ArenaNativeLayout::CustomVariableRows {
             residual_memory_chronology: true
         }

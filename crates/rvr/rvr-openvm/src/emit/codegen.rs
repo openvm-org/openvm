@@ -52,9 +52,12 @@ pub enum ArenaNativeLayout {
     /// The extension emits the complete record through its own C shim. When
     /// `residual_memory_chronology` is true, all timestamp-bearing accesses
     /// remain in the memory log, so delta mode needs no duplicate program-log
-    /// entry for chronology replay.
+    /// entry for chronology replay. `layout_id` is an explicit, versioned
+    /// extension-owned identity; changing the final record layout requires a
+    /// new value and therefore a new G2 schema fingerprint.
     Custom {
         residual_memory_chronology: bool,
+        layout_id: &'static str,
     },
     /// Extension-owned packed records with runtime row counts.
     CustomVariableRows {

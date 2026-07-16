@@ -168,7 +168,7 @@ trait CachedRvrPreflightExecutor<F>: Send + Sync {
 
     /// CUDA: reserve resident maximum-shape arena-native backings before the segment loop.
     #[cfg(feature = "cuda")]
-    fn prepare_arena_native_backings(&self, trace_heights: &[u32]);
+    fn prepare_arena_native_backings(&self, trace_heights: &[u32], max_num_insns: u64);
 }
 
 /// The program-dependent, owned pieces of an rvr preflight instance.
@@ -267,7 +267,7 @@ impl<F: PrimeField32> CachedRvrPreflightExecutor<F> for CachedRvrCompiledPreflig
     }
 
     #[cfg(feature = "cuda")]
-    fn prepare_arena_native_backings(&self, trace_heights: &[u32]) {
+    fn prepare_arena_native_backings(&self, trace_heights: &[u32], max_num_insns: u64) {
         let stats_enabled = crate::arch::cuda::pinned::stats_enabled();
         let before = stats_enabled.then(crate::arch::cuda::pinned::PoolStatsSnapshot::capture);
         for &(air, ref geometry) in &self.compiled.inline_records().arena_native_airs {
@@ -279,6 +279,45 @@ impl<F: PrimeField32> CachedRvrPreflightExecutor<F> for CachedRvrCompiledPreflig
                     capacity_bytes,
                 ),
             );
+        }
+        if let Some(g2) = self.compiled.inline_records().g2.as_deref() {
+            let program_capacity = usize::try_from(max_num_insns)
+                .expect("G2 maximum instruction count exceeds usize")
+                .saturating_add(16)
+                .max(64);
+            let non_inline_height_sum = trace_heights
+                .iter()
+                .enumerate()
+                .filter(|(air, _)| {
+                    !self
+                        .compiled
+                        .inline_records()
+                        .airs
+                        .iter()
+                        .any(|&(inline_air, _)| inline_air == *air)
+                })
+                .fold(0usize, |sum, (_, &height)| {
+                    sum.saturating_add(height as usize)
+                });
+            let residual_capacity = program_capacity
+                .saturating_mul(8)
+                .saturating_add(64)
+                .max(128)
+                .max(non_inline_height_sum.saturating_mul(32).saturating_add(64));
+            let mut capacities = super::rvr::g2::RvrG2CapacitiesV1 {
+                run: u32::try_from(program_capacity).expect("G2 run capacity exceeds u32"),
+                residual: u32::try_from(residual_capacity)
+                    .expect("G2 residual capacity exceeds u32"),
+                opaque_events: u32::try_from(program_capacity)
+                    .expect("G2 opaque-event capacity exceeds u32"),
+                ..Default::default()
+            };
+            for binding in g2.air_bindings.iter() {
+                capacities.kinds[binding.kind as usize] = trace_heights[binding.air_idx];
+            }
+            let capacity_bytes = super::rvr::g2::RvrG2PreparedV1::capacity_bytes(&capacities)
+                .expect("G2 maximum-shape capacity overflow");
+            self.pool.prepare_g2_backings(capacity_bytes);
         }
         if let Some(before) = before {
             let after = crate::arch::cuda::pinned::PoolStatsSnapshot::capture();
@@ -2284,7 +2323,12 @@ where
                     *maximum = (*maximum).max(height);
                 }
             }
-            rvr.prepare_arena_native_backings(&max_trace_heights);
+            let max_num_insns = segments
+                .iter()
+                .map(|segment| segment.num_insns)
+                .max()
+                .unwrap_or(0);
+            rvr.prepare_arena_native_backings(&max_trace_heights, max_num_insns);
         }
         #[cfg(feature = "stark-debug")]
         if std::env::var("OPENVM_STARK_DEBUG_TRACE_ONLY").as_deref() == Ok("1") {

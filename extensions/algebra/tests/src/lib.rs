@@ -44,11 +44,13 @@ mod tests {
             verify_segments, ContinuationVmProver, DenseRecordArena, MatrixRecordArena, Streams,
             VirtualMachine, VmInstance,
         },
-        system::SystemRecords,
+        system::{memory::TimestampedValues, SystemRecords},
         utils::test_cpu_engine,
     };
     #[cfg(feature = "rvr")]
     use openvm_instructions::LocalOpcode;
+    #[cfg(feature = "rvr")]
+    use openvm_stark_sdk::openvm_stark_backend::p3_field::PrimeCharacteristicRing;
 
     #[cfg(test)]
     fn test_rv64modular_config(moduli: Vec<BigUint>) -> Rv64ModularConfig {
@@ -439,10 +441,11 @@ mod tests {
         config: &Rv64ModularConfig,
         retired: u64,
         compact_memory: bool,
+        gpu_records: &str,
     ) -> (SystemRecords<F>, Vec<DenseRecordArena>) {
         std::env::remove_var("OPENVM_RVR_INLINE_RECORDS");
         std::env::remove_var("OPENVM_RVR_ARENA_NATIVE");
-        std::env::set_var("OPENVM_RVR_GPU_RECORDS", "delta");
+        std::env::set_var("OPENVM_RVR_GPU_RECORDS", gpu_records);
         let (vm, _) = VirtualMachine::new_with_keygen(
             test_cpu_engine(),
             Rv64ModularCpuBuilder,
@@ -483,6 +486,29 @@ mod tests {
             modular_native_count, 3,
             "all three modular mixed-opcode AIRs must migrate atomically"
         );
+        if gpu_records == "g2" {
+            assert!(
+                instance.compiled().inline_records().g2.is_some(),
+                "modular executable must negotiate G2"
+            );
+            assert_eq!(
+                instance
+                    .compiled()
+                    .inline_records()
+                    .g2
+                    .as_ref()
+                    .unwrap()
+                    .opaque_bindings
+                    .iter()
+                    .filter(|binding| {
+                        air_names[binding.air_idx].contains("FieldExpressionCoreAir")
+                            || air_names[binding.air_idx].contains("ModularIsEqualCoreAir")
+                    })
+                    .count(),
+                3,
+                "all modular direct-final AIRs must bind opaque G2 lanes"
+            );
+        }
         let mut staged = Vec::new();
         let mut targets = BTreeMap::new();
         for &(air, geometry) in &instance.compiled().inline_records().arena_native_airs {
@@ -492,7 +518,16 @@ mod tests {
             staged.push((air, geometry, arena));
         }
         let state = vm.create_initial_state(exe, Streams::default());
-        let mut output = if compact_memory {
+        let mut output = if gpu_records == "g2" {
+            instance
+                .execute_preflight_from_state_with_device_touched_memory_for_test(
+                    state,
+                    Some(retired),
+                    &heights,
+                    &targets,
+                )
+                .expect("G2 opaque modular preflight")
+        } else if compact_memory {
             instance
                 .execute_preflight_from_state_with_compact_delta_memory_for_test(
                     state,
@@ -511,7 +546,73 @@ mod tests {
                 )
                 .expect("direct-final modular preflight")
         };
-        let mut arenas = if compact_memory {
+        if gpu_records == "g2" {
+            let segment = output.g2_segment.take().expect("G2 opaque modular segment");
+            let meta = output
+                .g2_meta
+                .as_deref()
+                .expect("G2 opaque modular metadata");
+            let decode = output
+                .delta_decode_precomputed
+                .as_deref()
+                .expect("G2 opaque modular operand table");
+            let reference = openvm_circuit::arch::rvr::decode_reference_v1(
+                &segment,
+                meta,
+                decode,
+                [0; 32],
+                &BTreeMap::new(),
+                openvm_circuit::arch::rvr::PREFLIGHT_INITIAL_TIMESTAMP,
+            )
+            .expect("G2 opaque modular chronology replay");
+            assert_eq!(
+                openvm_circuit::arch::rvr::bridge::read_rv64_registers(&output.to_state),
+                reference.final_registers,
+                "G2 opaque modular register chronology"
+            );
+            assert_eq!(
+                output.system_records.to_state.timestamp, reference.final_timestamp,
+                "G2 opaque modular final timestamp"
+            );
+
+            let mut frequencies = vec![0u32; output.system_records.filtered_exec_frequencies.len()];
+            for &slot in &reference.expanded_program_slots {
+                let filtered = decode.entries[slot as usize].filtered_index as usize;
+                frequencies[filtered] = frequencies[filtered]
+                    .checked_add(1)
+                    .expect("G2 opaque modular program frequency overflow");
+            }
+            output.system_records.filtered_exec_frequencies = frequencies;
+
+            let mut touched_memory = Vec::with_capacity(reference.final_timestamps.len());
+            for (&(address_space, address), &timestamp) in &reference.final_timestamps {
+                let bytes = unsafe {
+                    output.to_state.memory.memory.get_u8_slice(
+                        u32::from(address_space),
+                        address as usize,
+                        8,
+                    )
+                };
+                let block = u64::from_le_bytes(bytes.try_into().expect("eight-byte memory block"));
+                if let Some(&expected) = reference.final_blocks.get(&(address_space, address)) {
+                    assert_eq!(block, expected, "G2 opaque modular final block value");
+                }
+                touched_memory.push((
+                    (u32::from(address_space), address / 2),
+                    TimestampedValues {
+                        timestamp,
+                        values: [0, 2, 4, 6].map(|offset| {
+                            F::from_u32(u32::from(u16::from_le_bytes([
+                                bytes[offset],
+                                bytes[offset + 1],
+                            ])))
+                        }),
+                    },
+                ));
+            }
+            output.system_records.touched_memory = touched_memory;
+        }
+        let mut arenas = if compact_memory || gpu_records == "g2" {
             // The CPU fixture has no CUDA delta decoder for the base-RV64
             // wires. The custom arenas under test are already final-form, so
             // leave unrelated AIRs empty and compare only the staged modular
@@ -964,7 +1065,9 @@ mod tests {
                 test_rv64modular_config(vec![bls12_381_fq]),
                 "rvr_modular_48",
             ),
-        ] {
+        ]
+        .into_iter()
+        {
             let exe = build_rvr_modular_exe_named(&config, example)?;
             let (oracle_system, oracle_arenas, retired, air_names) =
                 modular_dense_oracle(&exe, &config);
@@ -986,7 +1089,7 @@ mod tests {
             for compact_memory in [false, true] {
                 for pass in 0..2 {
                     let (direct_system, direct_arenas) =
-                        modular_dense_direct(&exe, &config, retired, compact_memory);
+                        modular_dense_direct(&exe, &config, retired, compact_memory, "delta");
                     assert_system_records_eq(
                         &format!(
                             "{label} modular direct-final byte oracle compact={compact_memory} pass {pass}"
@@ -1003,6 +1106,39 @@ mod tests {
                         );
                     }
                 }
+            }
+            let (g2_system, g2_arenas) = modular_dense_direct(&exe, &config, retired, true, "g2");
+            assert_system_records_eq(
+                &format!("{label} modular G2 opaque byte oracle"),
+                &oracle_system,
+                &g2_system,
+            );
+            for &air in &modular_airs {
+                let first_mismatch = oracle_arenas[air]
+                    .allocated()
+                    .iter()
+                    .zip(g2_arenas[air].allocated())
+                    .position(|(oracle, g2)| oracle != g2);
+                if let Some(index) = first_mismatch {
+                    let begin = index.saturating_sub(16);
+                    let end = (index + 16)
+                        .min(oracle_arenas[air].allocated().len())
+                        .min(g2_arenas[air].allocated().len());
+                    panic!(
+                        "{label}, G2 opaque, air {air} ({}): direct-final bytes, first mismatch {index}, oracle_len={}, g2_len={}, oracle={:?}, g2={:?}",
+                        air_names[air],
+                        oracle_arenas[air].allocated().len(),
+                        g2_arenas[air].allocated().len(),
+                        &oracle_arenas[air].allocated()[begin..end],
+                        &g2_arenas[air].allocated()[begin..end],
+                    );
+                }
+                assert_eq!(
+                    oracle_arenas[air].allocated().len(),
+                    g2_arenas[air].allocated().len(),
+                    "{label}, G2 opaque, air {air} ({}): direct-final length",
+                    air_names[air]
+                );
             }
             if label == "32-byte" {
                 let (fallback_system, fallback_arenas) =

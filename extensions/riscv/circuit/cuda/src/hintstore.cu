@@ -155,6 +155,23 @@ struct OffsetInfo {
     uint32_t local_idx;
 };
 
+struct HintReplayRow {
+    uint32_t from_pc;
+    uint32_t timestamp;
+    uint32_t local_idx;
+    uint32_t num_words;
+    uint32_t mem_ptr_ptr;
+    uint32_t mem_ptr;
+    uint32_t mem_ptr_prev_timestamp;
+    uint32_t num_words_ptr;
+    uint32_t num_words_prev_timestamp;
+    uint32_t write_prev_timestamp;
+    uint64_t write_prev_data;
+    uint64_t data;
+    uint64_t reserved;
+};
+static_assert(sizeof(HintReplayRow) == 64, "HintStore replay-row ABI drift");
+
 __global__ void hintstore_decode_offsets(
     const uint8_t *records,
     size_t records_len,
@@ -282,6 +299,82 @@ extern "C" int _hintstore_tracegen(
         d_range_checker,
         range_checker_num_bins,
         timestamp_max_bits
+    );
+    return CHECK_KERNEL();
+}
+
+__global__ void hintstore_replay_tracegen(
+    Fp *trace,
+    size_t height,
+    HintReplayRow const *rows,
+    uint32_t rows_used,
+    uint32_t pointer_max_bits,
+    uint32_t *range_checker_ptr,
+    uint32_t range_checker_num_bins,
+    uint32_t timestamp_max_bits,
+    uint32_t *error
+) {
+    uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    RowSlice row(trace + idx, height);
+    if (idx < rows_used) {
+        HintReplayRow replay = rows[idx];
+        if (replay.reserved != 0 || replay.local_idx >= replay.num_words) {
+            atomicCAS(error, 0u, 1u);
+            return;
+        }
+        Rv64HintStoreRecordHeader header{
+            replay.num_words,
+            replay.from_pc,
+            replay.timestamp,
+            replay.mem_ptr_ptr,
+            replay.mem_ptr,
+            {replay.mem_ptr_prev_timestamp},
+            replay.num_words_ptr,
+            {replay.num_words_prev_timestamp},
+        };
+        Rv64HintStoreVars write{};
+        write.write_aux.prev_timestamp = replay.write_prev_timestamp;
+        memcpy(write.write_aux.prev_data, &replay.write_prev_data, sizeof(replay.write_prev_data));
+        memcpy(write.data, &replay.data, sizeof(replay.data));
+        auto filler = Rv64HintStore(
+            pointer_max_bits,
+            VariableRangeChecker(range_checker_ptr, range_checker_num_bins),
+            timestamp_max_bits
+        );
+        filler.fill_trace_row(row, header, write, replay.local_idx);
+    } else {
+        row.fill_zero(0, sizeof(Rv64HintStoreCols<uint8_t>));
+    }
+}
+
+extern "C" int _hintstore_replay_tracegen(
+    Fp *__restrict__ d_trace,
+    size_t height,
+    size_t width,
+    uint8_t const *__restrict__ d_rows,
+    size_t rows_used,
+    uint32_t pointer_max_bits,
+    uint32_t *__restrict__ d_range_checker,
+    uint32_t range_checker_num_bins,
+    uint32_t timestamp_max_bits,
+    uint32_t *__restrict__ d_error,
+    cudaStream_t stream
+) {
+    if (width != sizeof(Rv64HintStoreCols<uint8_t>) ||
+        rows_used > UINT32_MAX) {
+        return int(cudaErrorInvalidValue);
+    }
+    auto [grid, block] = kernel_launch_params(height);
+    hintstore_replay_tracegen<<<grid, block, 0, stream>>>(
+        d_trace,
+        height,
+        reinterpret_cast<HintReplayRow const *>(d_rows),
+        uint32_t(rows_used),
+        pointer_max_bits,
+        d_range_checker,
+        range_checker_num_bins,
+        timestamp_max_bits,
+        d_error
     );
     return CHECK_KERNEL();
 }

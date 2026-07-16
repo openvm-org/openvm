@@ -4750,6 +4750,113 @@ fn rvr_preflight_hintstore_direct_final_matches_verbose_twice() {
     std::env::remove_var("OPENVM_RVR_INLINE_RECORDS");
 }
 
+#[test]
+fn rvr_preflight_g2_hintstore_event_replay_is_byte_equal() {
+    let exe = hintstore_direct_exe();
+    let streams = hintstore_direct_streams();
+    let config = Rv64ImConfig::default();
+
+    std::env::set_var("OPENVM_RVR_INLINE_RECORDS", "0");
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
+    std::env::remove_var("OPENVM_RVR_GPU_RECORDS");
+    let (vm, _) =
+        VirtualMachine::new_with_keygen(test_cpu_engine(), Rv64ImCpuBuilder, config.clone())
+            .expect("HintStore G2 oracle VM init");
+    let heights = vec![4096u32; vm.num_airs()];
+    let capacities = heights
+        .iter()
+        .zip(vm.pk().per_air.iter())
+        .map(|(&height, pk)| (height as usize, pk.vk.params.width.main_width()))
+        .collect::<Vec<_>>();
+    let pc_to_air_idx = vm.pc_to_air_idx(&exe).expect("HintStore G2 pc mapping");
+    let hint_air = pc_to_air_idx[3].expect("HINT_STORED AIR");
+    let RvrPreflightRoute::Rvr(oracle) = vm.preflight_routed_instance(&exe).expect("oracle route")
+    else {
+        panic!("HintStore oracle must route to RVR");
+    };
+    let mut oracle_output = oracle
+        .execute_preflight_from_state(oracle.create_initial_state(streams.clone()), None)
+        .expect("HintStore G2 oracle preflight");
+    let retired = oracle_output.instret;
+    let oracle_arenas = crate::log_native::generate_rv64im_record_arenas_from_logs::<
+        F,
+        DenseRecordArena,
+    >(&exe, &mut oracle_output, &capacities, &pc_to_air_idx)
+    .expect("HintStore G2 oracle arenas");
+
+    std::env::remove_var("OPENVM_RVR_INLINE_RECORDS");
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "1");
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "g2");
+    let (g2_vm, _) = VirtualMachine::new_with_keygen(test_cpu_engine(), Rv64ImCpuBuilder, config)
+        .expect("HintStore G2 VM init");
+    let RvrPreflightRoute::Rvr(g2) = g2_vm.preflight_routed_instance(&exe).expect("G2 route")
+    else {
+        panic!("HintStore fixture must route to G2 RVR");
+    };
+    assert!(g2.compiled().inline_records().g2.is_some());
+    assert!(g2
+        .compiled()
+        .inline_records()
+        .arena_native_airs
+        .iter()
+        .all(|&(air, _)| air != hint_air));
+    let mut output = g2
+        .execute_preflight_from_state_with_device_touched_memory_for_test(
+            g2.create_initial_state(streams),
+            Some(retired),
+            &heights,
+            &BTreeMap::new(),
+        )
+        .expect("HintStore G2 preflight");
+    let segment = output.g2_segment.take().expect("HintStore G2 segment");
+    let meta = output.g2_meta.as_deref().expect("HintStore G2 metadata");
+    let decode = output
+        .delta_decode_precomputed
+        .as_deref()
+        .expect("HintStore G2 operand table");
+    let reference = openvm_circuit::arch::rvr::decode_reference_v1(
+        &segment,
+        meta,
+        decode,
+        [0; 32],
+        &BTreeMap::new(),
+        openvm_circuit::arch::rvr::PREFLIGHT_INITIAL_TIMESTAMP,
+    )
+    .expect("HintStore G2 CPU event replay");
+    let replay = reference
+        .compact_records
+        .get(&30)
+        .expect("HintStore G2 replay rows");
+    assert_eq!(replay.len(), 4 * 64);
+    let mut dense = Vec::new();
+    for row in replay.chunks_exact(64) {
+        let local_idx = u32::from_le_bytes(row[8..12].try_into().unwrap());
+        if local_idx == 0 {
+            dense.extend_from_slice(&row[12..16]);
+            dense.extend_from_slice(&row[0..8]);
+            dense.extend_from_slice(&row[16..28]);
+            dense.extend_from_slice(&row[28..36]);
+        }
+        dense.extend_from_slice(&row[36..56]);
+    }
+    assert_eq!(
+        dense,
+        oracle_arenas[hint_air].allocated(),
+        "HintStore event replay must reconstruct the established packed consumer bytes"
+    );
+    assert_eq!(
+        openvm_circuit::arch::rvr::bridge::read_rv64_registers(&output.to_state),
+        reference.final_registers
+    );
+    assert!(output.raw_logs.program_log.is_empty());
+    assert!(output.raw_logs.memory_log.is_empty());
+    assert!(output.raw_logs.delta_memory_log.is_empty());
+
+    std::env::remove_var("OPENVM_RVR_GPU_RECORDS");
+    std::env::remove_var("OPENVM_RVR_ARENA_NATIVE");
+    std::env::remove_var("OPENVM_RVR_INLINE_RECORDS");
+}
+
 /// PhantomAir is semantically mixed across every system and extension
 /// discriminant. All successful system phantoms and all Rv64I extension
 /// phantoms in this configuration must share the same complete-record target;
@@ -4840,7 +4947,8 @@ fn rvr_preflight_phantom_direct_final_matches_verbose_twice() {
         assert!(matches!(
             geometry.layout,
             openvm_circuit::arch::rvr::ArenaNativeLayout::Custom {
-                residual_memory_chronology: true
+                residual_memory_chronology: true,
+                ..
             }
         ));
         let (mut direct_arena, target) = DenseRecordArena::stage_arena_native(
