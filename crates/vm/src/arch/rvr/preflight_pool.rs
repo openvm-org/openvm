@@ -37,7 +37,10 @@ use std::{
     sync::{Arc, LazyLock, Mutex, MutexGuard},
 };
 
-use openvm_instructions::riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS};
+use openvm_instructions::{
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    PUBLIC_VALUES_AS,
+};
 use openvm_stark_backend::p3_field::Field;
 
 use super::{
@@ -48,7 +51,6 @@ use super::{
     },
     preflight_normalizer::{PreflightMemoryAccessAux, TouchedOrderScratch, WORD_BYTES},
 };
-use crate::system::memory::merkle::public_values::PUBLIC_VALUES_AS;
 
 /// Reusable per-segment preflight scratch buffers (see module docs).
 ///

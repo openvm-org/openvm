@@ -221,7 +221,7 @@ pub unsafe extern "C" fn rvr_ext_mod_setup_iseq(
 
     let mut input_words = vec![0u64; num_words as usize];
     rd_mem_words_traced(state, rs1_ptr, &mut input_words);
-    trace_mem_access_range(state, rs2_ptr, num_words, AS_MEMORY);
+    trace_mem_access_range(state, rs2_ptr, num_words, RV64_MEMORY_AS);
     0
 }
 

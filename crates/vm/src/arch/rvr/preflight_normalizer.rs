@@ -9,14 +9,17 @@
 
 use std::array;
 
-use openvm_instructions::riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS};
+use openvm_instructions::{
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    PUBLIC_VALUES_AS,
+};
 use openvm_stark_backend::p3_field::Field;
 
 use super::preflight::{MemoryLogEntry, TouchedBlock};
 use crate::{
     arch::{AddressSpaceHostLayout, BLOCK_FE_WIDTH},
     system::{
-        memory::{merkle::public_values::PUBLIC_VALUES_AS, online::GuestMemory, TimestampedValues},
+        memory::{online::GuestMemory, TimestampedValues},
         TouchedMemory,
     },
 };

@@ -9,7 +9,7 @@ use std::{collections::VecDeque, ffi::c_void, io::Write};
 
 use openvm_circuit::arch::rvr::io::{check_mem_bounds_range, OpenVmIoState};
 use openvm_instructions::{
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    riscv::{RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode, SystemOpcode, PUBLIC_VALUES_AS,
 };
 use openvm_riscv_transpiler::{Rv64HintStoreOpcode, Rv64LoadStoreOpcode, Rv64Phantom};
@@ -918,6 +918,38 @@ mod tests {
         );
 
         assert_eq!(&io.public_values[6..10], &[0x44, 0x33, 0x22, 0x11]);
+    }
+
+    #[test]
+    fn host_reveal_honors_store_width() {
+        let mut input_stream = VecDeque::new();
+        let mut hint_stream = VecDeque::new();
+        let mut rng = StdRng::seed_from_u64(0);
+        let mut memory = vec![0u8; 16];
+        let mut public_values = vec![0u8; 16];
+        let mut deferrals = Vec::new();
+
+        let mut io = OpenVmIoState {
+            input_stream: &mut input_stream,
+            hint_stream: &mut hint_stream,
+            rng: &mut rng,
+            memory_ptr: memory.as_mut_ptr(),
+            public_values: &mut public_values,
+            deferral_memory: std::ptr::null_mut(),
+            deferral_memory_len_bytes: 0,
+            deferrals: &mut deferrals,
+        };
+
+        host_reveal(
+            &mut io as *mut OpenVmIoState<'_> as *mut c_void,
+            0x1122334455667788,
+            3,
+            0,
+            2,
+        );
+
+        assert_eq!(&io.public_values[3..5], &[0x88, 0x77]);
+        assert_eq!(io.public_values[5], 0);
     }
 
     #[test]
