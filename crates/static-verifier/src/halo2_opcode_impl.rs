@@ -13,7 +13,10 @@
 //! over the tape's cell type; ops that may reduce take [`BbWire`]s (value + bit
 //! bound) and pure gate ops take plain `Fr` values.
 
-use std::cmp::Ordering;
+use std::{
+    cmp::Ordering,
+    collections::{HashMap, HashSet},
+};
 
 use halo2_base::{
     halo2_proofs::{
@@ -97,37 +100,6 @@ impl TapeCell for OffsetCell {
 /// Constant cache mirroring `BabyBearChip`'s dedup: the first load of a
 /// constant pushes a cell, repeats reuse it. Only ZERO/ONE/W occur, so a fixed
 /// array with linear scan suffices.
-struct ConstCache<C> {
-    entries: [Option<(Fr, C)>; 4],
-}
-
-impl<C> Default for ConstCache<C> {
-    fn default() -> Self {
-        ConstCache {
-            entries: core::array::from_fn(|_| None),
-        }
-    }
-}
-
-impl<C: Copy> ConstCache<C> {
-    fn get(&self, value: Fr) -> Option<C> {
-        self.entries
-            .iter()
-            .flatten()
-            .find(|(v, _)| *v == value)
-            .map(|(_, c)| *c)
-    }
-
-    fn insert(&mut self, value: Fr, cell: C) {
-        let slot = self
-            .entries
-            .iter_mut()
-            .find(|e| e.is_none())
-            .expect("constant cache full");
-        *slot = Some((value, cell));
-    }
-}
-
 /// Replay target for opcode execution. Required methods define how cells land on
 /// the tapes; the provided methods implement the exact halo2 cell layouts.
 pub(crate) trait ReplayTape {
@@ -481,7 +453,7 @@ pub(crate) trait ReplayTape {
     }
 
     /// `load_constant`: assigns one cell on the first load of a constant; repeats
-    /// hit the [`ConstCache`] and contribute no cells.
+    /// hit the constant cache and contribute no cells.
     fn bb_load_constant(&mut self, value: BabyBear) -> BbWire<Self::TapeCell> {
         let key = value.as_canonical_u64();
         let cell = self.load_constant(Fr::from(key));
@@ -657,22 +629,24 @@ pub(crate) struct CalculateOffsetsTape {
     /// cell), in call order.
     pub skip_inds: Vec<u32>,
     lookup_bits: usize,
-    const_cache: ConstCache<OffsetCell>,
+    const_cache: HashMap<Fr, OffsetCell>,
     const_calls: u32,
 }
 
 impl CalculateOffsetsTape {
-    pub(crate) fn new(lookup_bits: usize, warm: &[Fr]) -> Self {
-        let mut const_cache = ConstCache::default();
-        for &value in warm {
-            const_cache.insert(
-                value,
-                OffsetCell {
+    pub(crate) fn new(lookup_bits: usize, warm: &HashSet<Fr>) -> Self {
+        let const_cache = warm
+            .iter()
+            .map(|&value| {
+                (
                     value,
-                    offset: UNMATERIALIZED,
-                },
-            );
-        }
+                    OffsetCell {
+                        value,
+                        offset: UNMATERIALIZED,
+                    },
+                )
+            })
+            .collect();
         CalculateOffsetsTape {
             advice: Vec::new(),
             lookups: Vec::new(),
@@ -712,7 +686,7 @@ impl ReplayTape for CalculateOffsetsTape {
     fn load_constant(&mut self, value: Fr) -> OffsetCell {
         let idx = self.const_calls;
         self.const_calls += 1;
-        if let Some(cell) = self.const_cache.get(value) {
+        if let Some(&cell) = self.const_cache.get(&value) {
             return cell;
         }
         self.skip_inds.push(idx);
@@ -1107,11 +1081,6 @@ pub(crate) fn run_op<T: ReplayTape>(t: &mut T, opcode: &Halo2Opcode, args: &[Fr]
         Halo2Opcode::CheckLessThanSafe => {
             t.check_less_than_safe(args[0], BABY_BEAR_MODULUS_U64);
         }
-        // Halo2Opcode::LoadBBReducedWitness => {
-        //     let out = t.push(args.first().copied().unwrap_or(Fr::ONE));
-        //     t.check_less_than_safe(out.value(), BABY_BEAR_MODULUS_U64);
-        //     t.output(out);
-        // }
         Halo2Opcode::InnerProduct(_) => {
             // Operands are interleaved `[v_0, c_0, v_1, c_1, ...]`; the gate starts
             // with one exactly when the first coefficient is the constant ONE.
@@ -1158,7 +1127,7 @@ pub(crate) fn derive_opcode_metadata(
     args: &[Fr],
     bits: &[u16],
     lookup_bits: usize,
-    warm: &[Fr],
+    warm: &HashSet<Fr>,
 ) -> OpcodeMeta {
     let mut tape = CalculateOffsetsTape::new(lookup_bits, warm);
     run_op(&mut tape, opcode, args, bits);
@@ -1263,6 +1232,7 @@ mod tests {
         let ctx = builder.main(0);
 
         let (ctx_start, range_start, outputs) = run_real(ctx, &range);
+        let warm: HashSet<Fr> = warm.iter().copied().collect();
         let name = opcode.name();
         let real_ctx: Vec<Fr> = ctx.advice[ctx_start..]
             .iter()
@@ -1270,7 +1240,7 @@ mod tests {
             .collect();
         let real_range: Vec<Fr> = lookup_tape(&range)[range_start..].to_vec();
 
-        let mut tape = CalculateOffsetsTape::new(lookup_bits, warm);
+        let mut tape = CalculateOffsetsTape::new(lookup_bits, &warm);
         run_op(&mut tape, &opcode, args, bits);
         assert_eq!(tape.advice, real_ctx, "{name}: context tape");
         assert_eq!(tape.lookups, real_range, "{name}: range tape");
@@ -1298,7 +1268,7 @@ mod tests {
             }
         }
 
-        let meta = derive_opcode_metadata(&opcode, args, bits, lookup_bits, warm);
+        let meta = derive_opcode_metadata(&opcode, args, bits, lookup_bits, &warm);
         assert_eq!(meta.ctx_len, real_ctx.len(), "{name}: meta ctx_len");
         assert_eq!(
             meta.lookups_len,
@@ -1741,7 +1711,7 @@ mod tests {
                 let chip = BabyBearChip::new(range.clone());
                 let start = ctx.advice.len() + 1; // first witness not assigned
                 let range_start = lookup_tape(range).len();
-                let out = chip.load_reduced_witness(ctx, v);
+                let _ = chip.load_reduced_witness(ctx, v);
                 (start, range_start, vec![])
             },
         );

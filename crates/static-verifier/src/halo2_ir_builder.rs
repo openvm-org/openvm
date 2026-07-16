@@ -35,12 +35,11 @@
 //! outputs; they appear as [`GraphCell::Const`] operands and write no advice cells.
 //!
 //! A few opcodes beyond the core arithmetic set are required to cover the full populate
-//! pipeline: witness loading (`LoadWitness`, `LoadBBReducedWitness`), inner products
-//! (`InnerProduct`), and the transcript hint decompositions (`DecomposeBn254ToBabyBear`,
-//! `RangeDiv`).
+//! pipeline: witness loading (`LoadWitness`), inner products (`InnerProduct`), and the
+//! transcript hint decompositions (`DecomposeBn254ToBabyBear`, `RangeDiv`).
 
 use core::{array, iter};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use halo2_base::{
     halo2_proofs::{
@@ -168,11 +167,6 @@ pub enum Halo2Opcode {
 }
 
 impl Halo2Opcode {
-    // is the witness tape dependent on the bits bound
-    pub fn is_witness_size_static(&self) -> bool {
-        todo!()
-    }
-
     pub fn num_operands(&self) -> usize {
         match self {
             Self::LoadWitness => 0,
@@ -293,8 +287,8 @@ pub struct Halo2IRBuilder {
     pub nodes: Vec<Halo2GraphNode>,
     /// Replay metadata of node `i`, in node-tape order.
     pub node_meta: Vec<NodeMeta>,
-    /// Proof-input witness stream, one entry per `LoadWitness`/`LoadBBReducedWitness`
-    /// node, in node-tape order.
+    /// Proof-input witness stream, one entry per `LoadWitness` node, in
+    /// node-tape order.
     pub input_values: Vec<Fr>,
     /// Range-check lookup bits of the target halo2 circuit (drives limb
     /// decompositions, so it is part of the tape shape).
@@ -309,6 +303,10 @@ pub struct Halo2IRBuilder {
     zero_cell: Option<GraphCell>,
     /// Mirrors `BabyBearChip::const_cache` (keyed by canonical u64).
     bb_const_cache: HashMap<u64, BabyBearWire<GraphCell>>,
+    /// Constants currently materialized in the mirrored caches (`zero_cell` +
+    /// `bb_const_cache`); in-op `load_constant` calls hit these without
+    /// assigning a cell.
+    warm_consts: HashSet<Fr>,
     transcript: Option<IrTranscript>,
 }
 
@@ -332,6 +330,7 @@ impl Halo2IRBuilder {
             levels: Vec::new(),
             zero_cell: None,
             bb_const_cache: HashMap::new(),
+            warm_consts: HashSet::new(),
             transcript: None,
         }
     }
@@ -354,27 +353,6 @@ impl Halo2IRBuilder {
     /// Dataflow depth of each node (0 for source nodes), indexed by [`NodeId`].
     pub fn node_levels(&self) -> &[u32] {
         &self.levels
-    }
-
-    /// Constants currently materialized in the mirrored chip caches that in-op
-    /// `load_constant` calls can hit (only ZERO/ONE/W ever occur inside ops).
-    fn warm_consts(&self) -> ([Fr; 3], usize) {
-        let mut warm = [Fr::ZERO; 3];
-        let mut n = 0;
-        if self.zero_cell.is_some() || self.bb_const_cache.contains_key(&0) {
-            warm[n] = Fr::ZERO;
-            n += 1;
-        }
-        if self.bb_const_cache.contains_key(&1) {
-            warm[n] = Fr::ONE;
-            n += 1;
-        }
-        let w_key = <BabyBear as BinomiallyExtendable<4>>::W.as_canonical_u64();
-        if self.bb_const_cache.contains_key(&w_key) {
-            warm[n] = Fr::from(w_key);
-            n += 1;
-        }
-        (warm, n)
     }
 
     /// Emits a node and deduces its [`NodeMeta`] by replaying the op against the
@@ -404,9 +382,8 @@ impl Halo2IRBuilder {
             })
             .collect();
         let bits: Vec<u16> = operands.iter().map(|cell| cell.bits() as u16).collect();
-        // FIXME: constants cache should support more constants
-        let (warm, n_warm) = self.warm_consts();
-        let meta = derive_opcode_metadata(&opcode, &args, &bits, self.lookup_bits, &warm[..n_warm]);
+        let meta =
+            derive_opcode_metadata(&opcode, &args, &bits, self.lookup_bits, &self.warm_consts);
 
         let ctx_offset = self.ctx_offset;
         let output_offsets: Vec<usize> = meta
@@ -459,6 +436,7 @@ impl Halo2IRBuilder {
         }
         let zero = self.emit1(Halo2Opcode::Const, vec![GraphCell::Const(Fr::ZERO)], 0);
         self.zero_cell = Some(zero);
+        self.warm_consts.insert(Fr::ZERO);
         zero
     }
 
@@ -487,6 +465,7 @@ impl Halo2IRBuilder {
             GraphCell::Cell(id, offset, max_bits as u16)
         };
         self.bb_const_cache.insert(key, bb_wire(cell, max_bits));
+        self.warm_consts.insert(Fr::from(key));
     }
 
     fn bb_reduce_wire(&mut self, a: BabyBearWire<GraphCell>) -> BabyBearWire<GraphCell> {
@@ -833,6 +812,7 @@ impl BabyBearInst for Halo2IRBuilder {
         };
         let wire = bb_wire(cell, max_bits);
         self.bb_const_cache.insert(key, wire);
+        self.warm_consts.insert(Fr::from(key));
         wire
     }
 

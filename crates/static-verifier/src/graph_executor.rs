@@ -10,22 +10,17 @@
 //!
 //! Execution is split in two phases:
 //! 1. **Input population**: `load_proof_wire` streams the proof witnesses into the tape through the
-//!    [`PopulateInputs`] impl, which replays the recorded `LoadWitness` / `LoadBBReducedWitness`
-//!    instructions in node order.
+//!    [`PopulateInputs`] impl, which replays the recorded `LoadWitness` instructions in node
+//!    order.
 //! 2. **[`GraphExecutor::run`]**: the remaining instructions, reordered by dataflow level, execute
 //!    level by level. Instructions on the same level are independent, so threads claim chunks of a
 //!    level off an atomic cursor; a barrier separates levels so operands are always fully written
 //!    before they are read. Input instructions are excluded from the schedule (no-ops at run time —
 //!    their cells were written during population).
 
-// `Instant` used only by the (currently commented-out) per-thread profiling
-// timers in `GraphExecutor::run`; kept imported so uncommenting them Just Works.
-#[allow(unused_imports)]
-use std::time::Instant;
 use std::{
     collections::HashMap,
     sync::atomic::{AtomicU8, AtomicUsize, Ordering},
-    time::Duration,
 };
 
 use halo2_base::halo2_proofs::{arithmetic::Field as _, halo2curves::bn256::Fr};
@@ -91,7 +86,7 @@ pub struct GraphExecutor {
     insts: Vec<GraphCoreInst>,
     /// Level `l` is `insts[level_starts[l]..level_starts[l + 1]]`.
     level_starts: Vec<u32>,
-    /// `LoadWitness`/`LoadBBReducedWitness` instructions, in node order.
+    /// `LoadWitness` instructions, in node order.
     input_insts: Vec<GraphCoreInst>,
     input_cursor: usize,
     lookup_bits: usize,
@@ -108,8 +103,9 @@ pub struct GraphExecutor {
     /// once the instruction finishes; workers spin on parent flags waiting for
     /// them to reach the current phase before executing.
     flags: Vec<AtomicU8>,
-    /// Monotonically-incrementing phase counter, wrapped to `u8`. Each
-    /// [`Self::run`] bumps it     
+    /// Wrapping run counter; each [`Self::run`] bumps it (skipping 0) and
+    /// stamps finished instructions' `flags` with it, so flags never need
+    /// resetting between runs.
     phase: u8,
 }
 
@@ -588,108 +584,6 @@ fn compute_break_points(
     let advice_bp = scan(&advice_write_level, advice_cells);
     let lookup_bp = scan(&lookup_write_level, lookup_cells);
     (advice_bp, lookup_bp)
-}
-
-/// Per-worker profiling data collected by [`GraphExecutor::run`]. Currently
-/// disabled — see the commented-out timers in `run` — but kept in the tree so
-/// re-enabling profiling is a one-line change.
-#[allow(dead_code)]
-struct WorkerStats {
-    /// Number of compute instructions this worker interpreted.
-    node_count: usize,
-    /// Time spent in `barrier.wait()` across all levels.
-    idle_time: Duration,
-    /// Nanoseconds spent doing work in each level (excludes barrier wait);
-    /// `per_level_work_ns.len() == n_levels`.
-    per_level_work_ns: Vec<u64>,
-}
-
-/// Logs global per-thread node counts / idle times AND intra-level work-time
-/// variance across threads at INFO level via `tracing`.
-///
-/// Intra-level statistics capture how balanced the per-level work split was:
-/// even if aggregate node counts are uniform across threads, individual levels
-/// can still be lumpy — the fastest thread then waits at the barrier. Reporting
-/// mean/median/max of the per-level standard deviation (across threads) of
-/// work time surfaces that imbalance.
-#[allow(dead_code)]
-fn log_worker_stats(stats: &[WorkerStats]) {
-    let n = stats.len();
-    if n == 0 {
-        return;
-    }
-    let n_levels = stats[0].per_level_work_ns.len();
-    debug_assert!(
-        stats.iter().all(|s| s.per_level_work_ns.len() == n_levels),
-        "workers disagree on level count"
-    );
-    let n_f = n as f64;
-
-    // ---- Global per-thread node counts ----------------------------------
-    let counts: Vec<usize> = stats.iter().map(|s| s.node_count).collect();
-    let total_nodes: usize = counts.iter().sum();
-    let mean_nodes = total_nodes as f64 / n_f;
-    let variance = counts
-        .iter()
-        .map(|&c| (c as f64 - mean_nodes).powi(2))
-        .sum::<f64>()
-        / n_f;
-    let std_nodes = variance.sqrt();
-    let mut sorted = counts.clone();
-    sorted.sort();
-    let median_nodes = if n % 2 == 1 {
-        sorted[n / 2] as f64
-    } else {
-        (sorted[n / 2 - 1] + sorted[n / 2]) as f64 / 2.0
-    };
-
-    // ---- Global idle time ------------------------------------------------
-    let total_idle: Duration = stats.iter().map(|s| s.idle_time).sum();
-    let avg_idle_ms = total_idle.as_secs_f64() * 1000.0 / n_f;
-    let total_idle_ms = total_idle.as_secs_f64() * 1000.0;
-
-    // ---- Intra-level work-time std across threads (ns → μs) -------------
-    let mut per_level_std_us: Vec<f64> = Vec::with_capacity(n_levels);
-    for level in 0..n_levels {
-        let sum: f64 = stats
-            .iter()
-            .map(|s| s.per_level_work_ns[level] as f64)
-            .sum();
-        let mean = sum / n_f;
-        let var: f64 = stats
-            .iter()
-            .map(|s| (s.per_level_work_ns[level] as f64 - mean).powi(2))
-            .sum::<f64>()
-            / n_f;
-        per_level_std_us.push(var.sqrt() / 1000.0);
-    }
-    let mean_lvl_std = per_level_std_us.iter().sum::<f64>() / per_level_std_us.len() as f64;
-    let max_lvl_std = per_level_std_us
-        .iter()
-        .cloned()
-        .fold(f64::NEG_INFINITY, f64::max);
-    let mut sorted_std = per_level_std_us.clone();
-    sorted_std.sort_by(|a, b| a.partial_cmp(b).unwrap());
-    let median_lvl_std = if n_levels % 2 == 1 {
-        sorted_std[n_levels / 2]
-    } else {
-        (sorted_std[n_levels / 2 - 1] + sorted_std[n_levels / 2]) / 2.0
-    };
-
-    tracing::info!(
-        num_threads = n,
-        n_levels,
-        total_nodes,
-        mean_nodes = mean_nodes as u64,
-        median_nodes = median_nodes as u64,
-        std_nodes = std_nodes as u64,
-        avg_idle_ms = format!("{avg_idle_ms:.2}"),
-        total_idle_ms = format!("{total_idle_ms:.2}"),
-        mean_per_level_work_std_us = format!("{mean_lvl_std:.2}"),
-        median_per_level_work_std_us = format!("{median_lvl_std:.2}"),
-        max_per_level_work_std_us = format!("{max_lvl_std:.2}"),
-        "graph_executor worker stats"
-    );
 }
 
 impl ChipBase for GraphExecutor {
