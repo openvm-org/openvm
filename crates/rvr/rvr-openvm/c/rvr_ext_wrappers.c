@@ -3,8 +3,8 @@
  * functions.
  *
  * Extension FFI code (implemented in Rust as staticlibs) calls these wrappers
- * for traced memory access and chip cost. The wrappers
- * delegate to the static inline functions defined in the tracer headers.
+ * for traced memory access and chip cost. The wrappers delegate to the static
+ * inline functions defined in the tracer headers.
  * Register access stays in generated C; extensions receive resolved register
  * values as function parameters.
  *

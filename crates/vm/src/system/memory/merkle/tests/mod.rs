@@ -912,7 +912,7 @@ fn real_vm_keygen_verifier_rejects_below_leaf_swap_counterexample() {
         record_arenas,
         ..
     } = vm
-        .execute_preflight(&mut interpreter, from_state, None, &max_trace_heights)
+        .execute_preflight(&mut interpreter, from_state, &max_trace_heights)
         .unwrap();
     let mut ctx = vm
         .generate_proving_ctx(system_records, record_arenas)

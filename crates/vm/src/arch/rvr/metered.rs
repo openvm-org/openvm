@@ -1,10 +1,7 @@
 //! Per-chip metered execution: page tracking and segmentation
 //! matching OpenVM's `MeteredCtx`.
 
-use std::{
-    ffi::c_void,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 use openvm_instructions::{
     metering::{PAGE_MASK_LEAF_BITS, SEGMENT_CHECK_INSNS},
@@ -16,8 +13,7 @@ use rvr_openvm_lift::RvrRuntimeExtension;
 
 use super::{
     bridge::map_rvr_execute_error,
-    execute_metered, execute_metered_segment_boundary,
-    state::{TracerPayload, TracerPtr},
+    execute::{execute_metered, execute_metered_segment_boundary},
     RvrCompiled, RvrInitialImage,
 };
 #[cfg(feature = "metrics")]
@@ -31,7 +27,7 @@ use crate::{
             },
             MeteredCtx,
         },
-        ExecutionError, Streams, SystemConfig, VmState, ADDR_SPACE_OFFSET,
+        ExecutionError, ExecutionOutcome, Streams, SystemConfig, VmState, ADDR_SPACE_OFFSET,
     },
     system::memory::online::GuestMemory,
 };
@@ -54,28 +50,25 @@ pub struct RvrMeteredSegmentInstance<'a> {
 static_assertions::assert_impl_all!(RvrMeteredInstance<'static>: Send, Sync);
 static_assertions::assert_impl_all!(RvrMeteredSegmentInstance<'static>: Send, Sync);
 
-pub struct RvrMeteredResult {
-    pub seg_state: SegmentationState,
-    pub suspended: bool,
-    pub exit_code: Option<u32>,
-}
+/// Result of metered execution that may stop at a segment boundary.
+pub type RvrMeteredExecutionOutcome = ExecutionOutcome<SegmentationState>;
 
-// ── C-compatible tracer struct ───────────────────────────────────────────────
+// ── C-compatible metering state ─────────────────────────────────────────────
 
-/// C-compatible metered tracer data.
+/// C-compatible state for metered execution.
 ///
-/// Layout must exactly match the C `Tracer` struct in `openvm_tracer_metered.h`.
+/// Layout must exactly match the generated C `MeteringState` struct.
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct MeteredTracerData {
+pub struct MeteringState {
     pub trace_heights: *mut u32,
     pub mem_page_buf: *mut PageTouch,
     pub pv_page_buf: *mut PageTouch,
     pub deferral_page_buf: *mut PageTouch,
     /// Periodic-check callback. Always initialized; generated C calls it
     /// unconditionally to keep the hot metered path branch-free.
-    pub on_check: unsafe extern "C" fn(*mut MeteredTracerData) -> u8,
-    pub seg_state: *mut c_void,
+    pub on_check: unsafe extern "C" fn(*mut MeteringState) -> u8,
+    pub seg_state: *mut SegmentationState,
     pub mem_page_buf_len: u32,
     pub pv_page_buf_len: u32,
     pub deferral_page_buf_len: u32,
@@ -87,7 +80,7 @@ pub struct MeteredTracerData {
 /// Sentinel indicating no last-seen page (matches `NO_LAST_PAGE` in C).
 pub const NO_LAST_PAGE: u32 = u32::MAX;
 
-impl Default for MeteredTracerData {
+impl Default for MeteringState {
     fn default() -> Self {
         Self {
             trace_heights: std::ptr::null_mut(),
@@ -104,12 +97,6 @@ impl Default for MeteredTracerData {
         }
     }
 }
-
-impl TracerPayload for MeteredTracerData {
-    const KIND: u32 = 11;
-}
-
-pub type MeteredTracer = TracerPtr<MeteredTracerData>;
 
 // ── Segmentation runtime ─────────────────────────────────────────────────────
 
@@ -148,22 +135,22 @@ impl SegmentationState {
         self.ctx.config.suspend_on_segment
     }
 
-    /// Get mutable pointer to trace_heights for the C tracer.
+    /// Get the trace-height storage used by generated C.
     pub fn trace_heights_ptr(&mut self) -> *mut u32 {
         self.ctx.trace_heights.as_mut_ptr()
     }
 
-    /// Get mutable pointer to the AS_MEMORY page buffer for the C tracer.
+    /// Get the AS_MEMORY page buffer used by generated C.
     pub fn mem_page_buf_ptr(&mut self) -> *mut PageTouch {
         self.mem_page_buf.as_mut_ptr()
     }
 
-    /// Get mutable pointer to the AS_PUBLIC_VALUES page buffer for the C tracer.
+    /// Get the AS_PUBLIC_VALUES page buffer used by generated C.
     pub fn pv_page_buf_ptr(&mut self) -> *mut PageTouch {
         self.pv_page_buf.as_mut_ptr()
     }
 
-    /// Get mutable pointer to the AS_DEFERRAL page buffer for the C tracer.
+    /// Get the AS_DEFERRAL page buffer used by generated C.
     pub fn deferral_page_buf_ptr(&mut self) -> *mut PageTouch {
         self.deferral_page_buf.as_mut_ptr()
     }
@@ -281,7 +268,7 @@ impl SegmentationState {
     }
 
     /// Called when execution terminates. Creates the final segment.
-    /// `remaining_counter` is the tracer's `check_counter` value at termination,
+    /// `remaining_counter` is the metering state's `check_counter` at termination,
     /// representing unaccounted instructions since the last periodic check.
     pub fn on_termination(
         &mut self,
@@ -302,34 +289,35 @@ impl SegmentationState {
     }
 }
 
-// ── Inline callback from C tracer ─────────────────────────────────────────────
+// ── Inline callback from generated C ─────────────────────────────────────────
 
-/// Callback invoked from the C tracer's `trace_block` when the
-/// segmentation counter is about to underflow. Called BEFORE the
+/// Callback invoked from the generated block checkpoint when the
+/// segmentation counter is about to underflow. Called before the
 /// decrement, so `check_counter` still holds the remaining count.
 ///
 /// # Safety
-/// `t` must point to a valid `MeteredTracerData` whose `seg_state` pointer
-/// references a live `SegmentationState`.
-pub unsafe extern "C" fn metered_periodic_check(t: *mut MeteredTracerData) -> u8 {
-    let tracer = &mut *t;
-    let seg_state = &mut *(tracer.seg_state as *mut SegmentationState);
-    let mem_len = tracer.mem_page_buf_len;
-    let pv_len = tracer.pv_page_buf_len;
-    let deferral_len = tracer.deferral_page_buf_len;
-    tracer.mem_page_buf_len = 0;
-    tracer.pv_page_buf_len = 0;
-    tracer.deferral_page_buf_len = 0;
+/// `state` must point to a valid `MeteringState` whose `seg_state` pointer
+/// references a live `SegmentationState`. Its page buffers and trace-height
+/// vector must not be reallocated while generated C retains their pointers.
+pub unsafe extern "C" fn metered_periodic_check(state: *mut MeteringState) -> u8 {
+    let metering = &mut *state;
+    let seg_state = &mut *metering.seg_state;
+    let mem_len = metering.mem_page_buf_len;
+    let pv_len = metering.pv_page_buf_len;
+    let deferral_len = metering.deferral_page_buf_len;
+    metering.mem_page_buf_len = 0;
+    metering.pv_page_buf_len = 0;
+    metering.deferral_page_buf_len = 0;
     // The cleared buffer no longer contains the entry cached by last_mem_page.
-    tracer.last_mem_page = NO_LAST_PAGE;
+    metering.last_mem_page = NO_LAST_PAGE;
 
     let did_segment =
-        seg_state.on_periodic_check(mem_len, pv_len, deferral_len, tracer.check_counter);
+        seg_state.on_periodic_check(mem_len, pv_len, deferral_len, metering.check_counter);
 
     // We are at the start of a block that would cross the old countdown.
     // `remaining_counter` was used to record this block start as the metering
     // boundary, so the next interval starts here with a full countdown.
-    tracer.check_counter = SEGMENT_CHECK_INSNS;
+    metering.check_counter = SEGMENT_CHECK_INSNS;
     did_segment as u8
 }
 
@@ -343,7 +331,9 @@ impl RvrMeteredInstanceInner<'_> {
     /// the copied artifact. The user must re-supply `exe`, `executor_idx_to_air_idx`,
     /// and any mode-specific data when loading.
     fn save(&self, dir: &Path) -> Result<PathBuf, super::CompileError> {
-        let dest_lib = self.compiled.lib_file_name_with_suffix("metered")?;
+        let dest_lib = self
+            .compiled
+            .lib_file_name_with_suffix(self.compiled.execution_kind().artifact_suffix())?;
         self.compiled.save_artifact(&dir.join(dest_lib))
     }
 
@@ -400,6 +390,8 @@ impl RvrMeteredInstance<'_> {
         mut vm_state: VmState<GuestMemory>,
         ctx: MeteredCtx,
     ) -> Result<(Vec<Segment>, VmState<GuestMemory>), ExecutionError> {
+        #[cfg(feature = "metrics")]
+        let start_instret = ctx.segmentation_ctx.instret;
         let seg_state = SegmentationState::new(ctx, self.inner.system_config);
 
         #[cfg(feature = "metrics")]
@@ -417,7 +409,7 @@ impl RvrMeteredInstance<'_> {
         let result_seg_ctx = result_seg_state.ctx.segmentation_ctx;
         #[cfg(feature = "metrics")]
         {
-            let insns = result_seg_ctx.instret;
+            let insns = result_seg_ctx.instret - start_instret;
             metrics.record(insns);
         }
 
@@ -463,7 +455,7 @@ impl RvrMeteredSegmentInstance<'_> {
         &self,
         inputs: impl Into<Streams>,
         ctx: MeteredCtx,
-    ) -> Result<(RvrMeteredResult, VmState<GuestMemory>), ExecutionError> {
+    ) -> Result<(RvrMeteredExecutionOutcome, VmState<GuestMemory>), ExecutionError> {
         let vm_state = self.create_initial_vm_state(inputs);
         self.execute_metered_from_state_until_segment_boundary(vm_state, ctx)
     }
@@ -472,7 +464,7 @@ impl RvrMeteredSegmentInstance<'_> {
         &self,
         mut vm_state: VmState<GuestMemory>,
         ctx: MeteredCtx,
-    ) -> Result<(RvrMeteredResult, VmState<GuestMemory>), ExecutionError> {
+    ) -> Result<(RvrMeteredExecutionOutcome, VmState<GuestMemory>), ExecutionError> {
         #[cfg(feature = "metrics")]
         let metrics = ExecutionMetricTimer::start(ExecutionMetric::Metered);
         #[cfg(feature = "metrics")]
@@ -490,7 +482,12 @@ impl RvrMeteredSegmentInstance<'_> {
         let result = result.map_err(map_rvr_execute_error)?;
         #[cfg(feature = "metrics")]
         {
-            let insns = result.seg_state.ctx.segmentation_ctx.instret - start_instret;
+            let insns = match &result {
+                RvrMeteredExecutionOutcome::Terminated(state)
+                | RvrMeteredExecutionOutcome::Suspended(state) => {
+                    state.ctx.segmentation_ctx.instret - start_instret
+                }
+            };
             metrics.record(insns);
         }
         Ok((result, vm_state))
@@ -662,13 +659,13 @@ mod tests {
         let remaining = SEGMENT_CHECK_INSNS / 4;
         let mut seg_state = make_segmentation_state();
         seg_state.ctx.segmentation_ctx.instrets_until_check = u64::from(SEGMENT_CHECK_INSNS);
-        let mut tracer = MeteredTracerData {
+        let mut metering = MeteringState {
             trace_heights: seg_state.trace_heights_ptr(),
             mem_page_buf: seg_state.mem_page_buf_ptr(),
             pv_page_buf: seg_state.pv_page_buf_ptr(),
             deferral_page_buf: seg_state.deferral_page_buf_ptr(),
             on_check: metered_periodic_check,
-            seg_state: &mut seg_state as *mut SegmentationState as *mut c_void,
+            seg_state: &mut seg_state,
             mem_page_buf_len: 0,
             pv_page_buf_len: 0,
             deferral_page_buf_len: 0,
@@ -676,10 +673,10 @@ mod tests {
             last_mem_page: NO_LAST_PAGE,
         };
 
-        let did_segment = unsafe { metered_periodic_check(&mut tracer) };
+        let did_segment = unsafe { metered_periodic_check(&mut metering) };
 
         assert_eq!(did_segment, 0);
-        assert_eq!(tracer.check_counter, SEGMENT_CHECK_INSNS);
+        assert_eq!(metering.check_counter, SEGMENT_CHECK_INSNS);
         assert_eq!(
             seg_state.ctx.segmentation_ctx.instret,
             u64::from(SEGMENT_CHECK_INSNS - remaining)
@@ -692,13 +689,13 @@ mod tests {
         let mut seg_state = make_segmentation_state();
         seg_state.ctx.segmentation_ctx.instrets_until_check = u64::from(SEGMENT_CHECK_INSNS);
         *seg_state.ctx.trace_heights.last_mut().unwrap() = 4096;
-        let mut tracer = MeteredTracerData {
+        let mut metering = MeteringState {
             trace_heights: seg_state.trace_heights_ptr(),
             mem_page_buf: seg_state.mem_page_buf_ptr(),
             pv_page_buf: seg_state.pv_page_buf_ptr(),
             deferral_page_buf: seg_state.deferral_page_buf_ptr(),
             on_check: metered_periodic_check,
-            seg_state: &mut seg_state as *mut SegmentationState as *mut c_void,
+            seg_state: &mut seg_state,
             mem_page_buf_len: 0,
             pv_page_buf_len: 0,
             deferral_page_buf_len: 0,
@@ -706,10 +703,10 @@ mod tests {
             last_mem_page: NO_LAST_PAGE,
         };
 
-        let did_segment = unsafe { metered_periodic_check(&mut tracer) };
+        let did_segment = unsafe { metered_periodic_check(&mut metering) };
 
         assert_eq!(did_segment, 1);
-        assert_eq!(tracer.check_counter, SEGMENT_CHECK_INSNS);
+        assert_eq!(metering.check_counter, SEGMENT_CHECK_INSNS);
         assert_eq!(
             seg_state.ctx.segmentation_ctx.instret,
             u64::from(SEGMENT_CHECK_INSNS - remaining)

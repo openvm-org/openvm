@@ -25,8 +25,8 @@ use crate::{
             ExecutionCtx, ExecutionCtxTrait, MeteredCostCtx, MeteredCtx, MeteredExecutionCtxTrait,
             Segment,
         },
-        ExecuteFunc, ExecutionError, Executor, ExecutorInventory, ExitCode, MeteredExecutor,
-        StaticProgramError, Streams, SystemConfig, VmExecState, VmState,
+        ExecuteFunc, ExecutionError, ExecutionOutcome, Executor, ExecutorInventory, ExitCode,
+        MeteredExecutor, StaticProgramError, Streams, SystemConfig, VmExecState, VmState,
     },
     system::memory::online::GuestMemory,
 };
@@ -292,31 +292,55 @@ where
 // Execute functions specialize to relevant Ctx types to provide more streamlines APIs
 
 impl InterpretedInstance<'_, ExecutionCtx> {
-    /// Pure execution, without metering, for the given `inputs`. Execution begins from the initial
-    /// state specified by the `VmExe`. This function executes the program until either termination
-    /// if `num_insns` is `None` or for exactly `num_insns` instructions if `num_insns` is `Some`.
-    ///
-    /// Returns the final VM state when execution stops.
+    /// Execute from the program's initial state until successful termination.
     pub fn execute(
         &self,
         inputs: impl Into<Streams>,
-        num_insns: Option<u64>,
     ) -> Result<VmState<GuestMemory>, ExecutionError> {
         let vm_state =
             VmState::initial(self.system_config, &self.init_memory, self.pc_start, inputs);
-        self.execute_from_state(vm_state, num_insns)
+        self.execute_from_state(vm_state)
     }
 
-    /// Pure execution, without metering, from the given `VmState`. This function executes the
-    /// program until either termination if `num_insns` is `None` or for exactly `num_insns`
-    /// instructions if `num_insns` is `Some`.
-    ///
-    /// Returns the final VM state when execution stops.
+    /// Execute for at most `num_insns` and report whether the program terminated or suspended.
+    pub fn execute_for(
+        &self,
+        inputs: impl Into<Streams>,
+        num_insns: u64,
+    ) -> Result<ExecutionOutcome<VmState<GuestMemory>>, ExecutionError> {
+        let vm_state =
+            VmState::initial(self.system_config, &self.init_memory, self.pc_start, inputs);
+        self.execute_from_state_for(vm_state, num_insns)
+    }
+
+    /// Continue from `from_state` until successful termination.
     pub fn execute_from_state(
         &self,
         from_state: VmState<GuestMemory>,
-        num_insns: Option<u64>,
     ) -> Result<VmState<GuestMemory>, ExecutionError> {
+        match self.execute_from_state_inner(from_state, None)? {
+            ExecutionOutcome::Terminated(state) => Ok(state),
+            ExecutionOutcome::Suspended(_) => {
+                unreachable!("unbounded interpreter execution cannot suspend")
+            }
+        }
+    }
+
+    /// Continue from `from_state` for at most `num_insns` and report whether the program
+    /// terminated or suspended.
+    pub fn execute_from_state_for(
+        &self,
+        from_state: VmState<GuestMemory>,
+        num_insns: u64,
+    ) -> Result<ExecutionOutcome<VmState<GuestMemory>>, ExecutionError> {
+        self.execute_from_state_inner(from_state, Some(num_insns))
+    }
+
+    fn execute_from_state_inner(
+        &self,
+        from_state: VmState<GuestMemory>,
+        num_insns: Option<u64>,
+    ) -> Result<ExecutionOutcome<VmState<GuestMemory>>, ExecutionError> {
         let ctx = ExecutionCtx::new(num_insns);
         let mut exec_state = VmExecState::new(from_state, ctx);
 
@@ -336,12 +360,17 @@ impl InterpretedInstance<'_, ExecutionCtx> {
         tracing::debug!("interpreter exit code {:?}", exec_state.exit_code);
         tracing::debug!("num_insns {:?}", num_insns);
 
+        let terminated = matches!(exec_state.exit_code.as_ref(), Ok(Some(_)));
         if num_insns.is_some() {
             check_exit_code(exec_state.exit_code)?;
         } else {
             check_termination(exec_state.exit_code)?;
         }
-        Ok(exec_state.vm_state)
+        Ok(if terminated {
+            ExecutionOutcome::Terminated(exec_state.vm_state)
+        } else {
+            ExecutionOutcome::Suspended(exec_state.vm_state)
+        })
     }
 }
 

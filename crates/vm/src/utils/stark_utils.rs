@@ -130,12 +130,12 @@ where
     {
         let interp_state_pure = vm
             .interpreter_instance(exe)?
-            .execute(input.clone(), None)
+            .execute(input.clone())
             .expect("Failed to execute");
 
         let aot_state_pure = vm
             .get_aot_instance(exe)?
-            .execute(input.clone(), None)
+            .execute(input.clone())
             .expect("Failed to execute");
 
         check_vm_state_eq(&interp_state_pure, &aot_state_pure)?;
@@ -231,12 +231,12 @@ where
     {
         let interp_state_pure = vm
             .interpreter_instance(exe)?
-            .execute(input.clone(), None)
+            .execute(input.clone())
             .expect("Failed to execute");
 
         let rvr_state_pure = vm
             .get_rvr_instance(exe)?
-            .execute(input.clone(), None)
+            .execute(input.clone())
             .expect("Failed to execute");
 
         check_vm_state_eq(&interp_state_pure, &rvr_state_pure)?;
@@ -396,10 +396,10 @@ where
             system_records,
             record_arenas,
             to_state,
-        } = vm.execute_preflight(
+        } = vm.execute_preflight_for(
             &mut preflight_interpreter,
             from_state,
-            Some(num_insns),
+            num_insns,
             &trace_heights,
         )?;
         state = Some(to_state);

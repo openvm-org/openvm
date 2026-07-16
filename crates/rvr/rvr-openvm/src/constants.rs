@@ -39,7 +39,7 @@ pub const PV_PAGE_BUF_CAP: usize = 1 << 12;
 pub const DEFERRAL_PAGE_BUF_CAP: usize = 1 << 16;
 
 /// Generate the `openvm_constants.h` content with compile-time constants
-/// for the C tracer headers.
+/// for the C tracing headers.
 pub fn constants_header(text_start: u64, text_end: u64, dispatch_table_size: usize) -> String {
     let memory_mask = MEM_SIZE as u64 - 1;
     let byte_space_ptrs_per_leaf_bits = BYTE_SPACE_PTRS_PER_LEAF.ilog2();

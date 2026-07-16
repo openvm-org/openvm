@@ -16,13 +16,15 @@ use openvm_build::{
 };
 // Re-exports
 pub use openvm_build::{cargo_command, get_rustup_toolchain_name};
-pub use openvm_circuit;
+#[cfg(feature = "rvr")]
+pub use openvm_circuit::arch::rvr::{RvrTrackedExecution, RvrTrackedExecutionOutcome};
 #[cfg(feature = "rvr")]
 use openvm_circuit::arch::{
     execution_mode::MeteredCtx,
     instructions::program::DEFAULT_PC_STEP,
     rvr::{default_addr2line_cmd, GuestDebugMap},
 };
+pub use openvm_circuit::{self, arch::ExecutionOutcome};
 use openvm_circuit::{
     arch::{
         execution_mode::Segment, instructions::exe::VmExe, Executor, InitFileGenerator,
@@ -97,6 +99,8 @@ mod tests;
 
 mod error;
 mod stdin;
+#[cfg(feature = "rvr")]
+pub use compiled::CompiledExePureWithInstretTracking;
 pub use compiled::{CompiledExeMetered, CompiledExeMeteredCost, CompiledExePure};
 pub use error::SdkError;
 pub use stdin::*;
@@ -507,17 +511,44 @@ where
                 .transpose()?;
             self.executor
                 .rvr_instance(&exe, guest_debug_map.as_ref())
+                .map(CompiledExePure::new)
                 .map_err(VirtualMachineError::from)
                 .map_err(SdkError::from)
         }
         #[cfg(not(feature = "rvr"))]
         self.executor
             .instance(&exe)
+            .map(CompiledExePure::new)
             .map_err(VirtualMachineError::from)
             .map_err(SdkError::from)
     }
 
-    /// Load a previously saved pure-mode rvr artifact. No compatibility validation is performed.
+    /// Compile `app_exe` for pure RVR execution with instret tracking and block-boundary
+    /// suspension.
+    #[cfg(feature = "rvr")]
+    #[tracing::instrument(name = "sdk.compile_with_instret_tracking", level = "info", skip_all)]
+    pub fn compile_with_instret_tracking(
+        &self,
+        app_exe: impl Into<ExecutableInput>,
+    ) -> Result<CompiledExePureWithInstretTracking<'_>, SdkError> {
+        let input = self.compile_input(app_exe)?;
+        let exe = self.convert_to_exe(input.executable)?;
+        let guest_debug_map = input
+            .elf_path
+            .as_deref()
+            .map(|elf_path| self.guest_debug_map(elf_path, &exe))
+            .transpose()?;
+        self.executor
+            .rvr_instret_tracking_instance(&exe, guest_debug_map.as_ref())
+            .map(CompiledExePureWithInstretTracking::new)
+            .map_err(VirtualMachineError::from)
+            .map_err(SdkError::from)
+    }
+
+    /// Load a previously saved pure-mode RVR artifact.
+    ///
+    /// Its generated execution kind is validated from the artifact marker,
+    /// but no general `exe`, config, or code-version validation is performed.
     #[cfg(feature = "rvr")]
     pub fn load_compiled(
         &self,
@@ -527,6 +558,22 @@ where
         let exe = self.convert_to_exe(app_exe)?;
         self.executor
             .load_instance(lib_path, &exe)
+            .map(CompiledExePure::new)
+            .map_err(VirtualMachineError::from)
+            .map_err(SdkError::from)
+    }
+
+    /// Load a previously saved pure RVR artifact with instret tracking.
+    #[cfg(feature = "rvr")]
+    pub fn load_compiled_with_instret_tracking(
+        &self,
+        lib_path: &Path,
+        app_exe: impl Into<ExecutableFormat>,
+    ) -> Result<CompiledExePureWithInstretTracking<'_>, SdkError> {
+        let exe = self.convert_to_exe(app_exe)?;
+        self.executor
+            .load_instret_tracking_instance(lib_path, &exe)
+            .map(CompiledExePureWithInstretTracking::new)
             .map_err(VirtualMachineError::from)
             .map_err(SdkError::from)
     }
@@ -539,7 +586,7 @@ where
         inputs: StdIn,
     ) -> Result<Vec<u8>, SdkError> {
         let final_memory = compiled
-            .execute(inputs, None)
+            .execute(inputs)
             .map_err(VirtualMachineError::from)?
             .memory;
         let public_values = extract_public_values(

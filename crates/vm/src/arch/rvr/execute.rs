@@ -7,8 +7,9 @@
 
 use std::ffi::c_void;
 
+use rvr_openvm::RvrExecutionKind;
 use rvr_openvm_lift::{ExtensionError, RvrRuntimeExtension};
-use rvr_state::{ExecutionStatus, Rv64, RvState, SuspenderState, TracerState};
+use rvr_state::{ExecutionStatus, InstretTrackingState, RvState};
 
 use super::{
     bridge::{
@@ -17,14 +18,11 @@ use super::{
     },
     compile::RvrCompiled,
     io::{host_hint_stream_set, OpenVmIoState},
-    metered::{
-        metered_periodic_check, MeteredTracerData, RvrMeteredResult, SegmentationState,
-        NO_LAST_PAGE,
-    },
-    metered_cost::{MeteredCostData, PureTracerData, RvrMeteredCostResult},
-    pure::RvrPureResult,
+    metered::{metered_periodic_check, RvrMeteredExecutionOutcome, SegmentationState},
+    metered_cost::RvrMeteredCostResult,
     state::{
-        init_rvr_state, init_rvr_state_with_metered, init_rvr_state_with_metered_cost, TracerPtr,
+        init_rvr_state, MeteredCostRvState, MeteredRvState, PureRvState,
+        PureWithInstretTrackingRvState,
     },
 };
 use crate::{arch::VmState, system::memory::online::GuestMemory};
@@ -47,6 +45,11 @@ pub enum ExecuteError {
     ExtensionRegistration(#[from] ExtensionError),
     #[error("invalid metered context: {0}")]
     InvalidMeteredContext(String),
+    #[error("RVR execution kind mismatch: expected {expected}, found {found:?}")]
+    ExecutionKindMismatch {
+        expected: &'static str,
+        found: RvrExecutionKind,
+    },
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -65,6 +68,19 @@ fn build_io_state_borrowed(vm_state: &mut VmState<GuestMemory>) -> OpenVmIoState
         deferral_memory,
         deferral_memory_len_bytes,
         deferrals: &mut streams.deferrals,
+    }
+}
+
+fn require_execution_kind(
+    compiled: &RvrCompiled,
+    expected: &'static str,
+    allowed: &[RvrExecutionKind],
+) -> Result<(), ExecuteError> {
+    let found = compiled.execution_kind();
+    if allowed.contains(&found) {
+        Ok(())
+    } else {
+        Err(ExecuteError::ExecutionKindMismatch { expected, found })
     }
 }
 
@@ -102,12 +118,8 @@ unsafe fn register_openvm_io_ctx(
 /// # Safety
 ///
 /// - `compiled` must contain a valid rvr-compiled shared library exporting the `rv_execute` symbol.
-/// - `state_ptr` must point to a valid, mutable RvState struct whose tracer variant matches the one
-///   compiled into the shared library.
-pub unsafe fn rv_execute(
-    compiled: &RvrCompiled,
-    state_ptr: *mut c_void,
-) -> Result<(), ExecuteError> {
+/// - `state_ptr` must point to the `RvState` layout selected by the compiled artifact.
+unsafe fn rv_execute(compiled: &RvrCompiled, state_ptr: *mut c_void) -> Result<(), ExecuteError> {
     let execute_fn: ExecuteFn = unsafe {
         let sym = compiled
             .lib
@@ -123,19 +135,15 @@ pub unsafe fn rv_execute(
 /// Run the FFI execute against `vm_state` + `state`, validate the outcome,
 /// and on success write the final pc/regs back into `vm_state`.
 ///
-/// `allow_suspended` permits `Suspended` as a successful outcome (the
-/// limit-armed callers pass `true`; unlimited callers pass `false`).
-fn run_and_finalize<T, S>(
+/// `allow_suspended` permits `Suspended` as a successful outcome for callers
+/// that stop at execution boundaries.
+fn run_and_finalize<ModeState>(
     compiled: &RvrCompiled,
     runtime_hooks: &[Box<dyn RvrRuntimeExtension>],
     vm_state: &mut VmState<GuestMemory>,
-    state: &mut RvState<Rv64, T, S>,
+    state: &mut RvState<ModeState>,
     allow_suspended: bool,
-) -> Result<ExecutionStatus, ExecuteError>
-where
-    T: TracerState,
-    S: SuspenderState,
-{
+) -> Result<ExecutionStatus, ExecuteError> {
     let mut io_state = build_io_state_borrowed(vm_state);
     unsafe {
         register_openvm_io_ctx(compiled, &mut io_state)?;
@@ -146,7 +154,7 @@ where
     }
 
     let status = state.execution_status();
-    let exit_code = state.result_code();
+    let exit_code = state.exit_code();
     match status {
         ExecutionStatus::Terminated if exit_code == 0 => {
             write_rv64_registers(vm_state, &state.regs);
@@ -172,86 +180,141 @@ where
 
 // ── Public execute functions ─────────────────────────────────────────────────
 
-/// Execute a VmExe using a compiled rvr shared library against `vm_state`.
-///
-/// If `num_insns` is `Some(n)`, the suspender is armed at `n` instructions and
-/// a `Suspended` outcome is accepted as success; otherwise only `Terminated`
-/// (with exit-code 0) succeeds.
-pub fn execute(
+pub(super) struct TrackedExecutionResult {
+    pub retired: u64,
+    pub status: ExecutionStatus,
+}
+
+/// Execute an untracked pure artifact until termination.
+pub(super) fn execute_pure(
     compiled: &RvrCompiled,
     runtime_hooks: &[Box<dyn RvrRuntimeExtension>],
     vm_state: &mut VmState<GuestMemory>,
-    num_insns: Option<u64>,
-) -> Result<RvrPureResult, ExecuteError> {
+) -> Result<(), ExecuteError> {
+    require_execution_kind(compiled, "Pure", &[RvrExecutionKind::Pure])?;
     let pc = vm_state.pc();
     let initial_regs = read_rv64_registers(vm_state);
-
-    let mut tracer_data = PureTracerData;
-    let mut state = init_rvr_state(vm_state, pc);
+    let mut state: PureRvState = init_rvr_state(vm_state, pc);
     state.regs = initial_regs;
-    state.tracer = TracerPtr(&mut tracer_data);
-    if let Some(n) = num_insns {
-        state.suspender.set_target(n);
-    }
+    run_and_finalize(compiled, runtime_hooks, vm_state, &mut state, false)
+        .inspect_err(|error| tracing::warn!(%error, "rvr pure execution failed"))?;
+    Ok(())
+}
 
+/// Execute an instret-tracking pure artifact until termination.
+pub(super) fn execute_pure_with_instret_tracking(
+    compiled: &RvrCompiled,
+    runtime_hooks: &[Box<dyn RvrRuntimeExtension>],
+    vm_state: &mut VmState<GuestMemory>,
+) -> Result<u64, ExecuteError> {
+    let result = execute_pure_with_instret_tracking_impl(
+        compiled,
+        runtime_hooks,
+        vm_state,
+        InstretTrackingState::unlimited(),
+        false,
+    )?;
+    debug_assert_eq!(result.status, ExecutionStatus::Terminated);
+    Ok(result.retired)
+}
+
+/// Execute an instret-tracking pure artifact up to an instruction boundary.
+pub(super) fn execute_pure_with_instret_limit(
+    compiled: &RvrCompiled,
+    runtime_hooks: &[Box<dyn RvrRuntimeExtension>],
+    vm_state: &mut VmState<GuestMemory>,
+    num_insns: u64,
+) -> Result<TrackedExecutionResult, ExecuteError> {
+    execute_pure_with_instret_tracking_impl(
+        compiled,
+        runtime_hooks,
+        vm_state,
+        InstretTrackingState::with_limit(num_insns),
+        true,
+    )
+}
+
+fn execute_pure_with_instret_tracking_impl(
+    compiled: &RvrCompiled,
+    runtime_hooks: &[Box<dyn RvrRuntimeExtension>],
+    vm_state: &mut VmState<GuestMemory>,
+    tracking: InstretTrackingState,
+    allow_suspended: bool,
+) -> Result<TrackedExecutionResult, ExecuteError> {
+    require_execution_kind(
+        compiled,
+        "PureWithInstretTracking",
+        &[RvrExecutionKind::PureWithInstretTracking],
+    )?;
+    let pc = vm_state.pc();
+    let mut state: PureWithInstretTrackingRvState = init_rvr_state(vm_state, pc);
+    state.regs = read_rv64_registers(vm_state);
+    state.mode_state = tracking;
     let status = run_and_finalize(
         compiled,
         runtime_hooks,
         vm_state,
         &mut state,
-        num_insns.is_some(),
+        allow_suspended,
     )
-    .inspect_err(|error| tracing::warn!(%error, "rvr pure execution failed"))?;
-    Ok(RvrPureResult {
-        state,
-        suspended: status == ExecutionStatus::Suspended,
+    .inspect_err(|error| tracing::warn!(%error, "rvr tracked pure execution failed"))?;
+    Ok(TrackedExecutionResult {
+        retired: state.mode_state.retired,
+        status,
     })
 }
 
 /// Execute a VmExe with metered cost tracking.
-pub fn execute_metered_cost(
+pub(super) fn execute_metered_cost(
     compiled: &RvrCompiled,
     runtime_hooks: &[Box<dyn RvrRuntimeExtension>],
     vm_state: &mut VmState<GuestMemory>,
     widths: &[u64],
 ) -> Result<RvrMeteredCostResult, ExecuteError> {
+    require_execution_kind(compiled, "MeteredCost", &[RvrExecutionKind::MeteredCost])?;
     let pc = vm_state.pc();
     let initial_regs = read_rv64_registers(vm_state);
 
-    let mut tracer_data = MeteredCostData::default();
-    let mut state = init_rvr_state_with_metered_cost(vm_state, pc);
+    let mut state: MeteredCostRvState = init_rvr_state(vm_state, pc);
     state.regs = initial_regs;
-    state.tracer = TracerPtr(&mut tracer_data);
-
-    state.tracer.chip_widths = widths.as_ptr();
-    state.tracer.cost = 0;
+    state.mode_state.chip_widths = widths.as_ptr();
 
     run_and_finalize(compiled, runtime_hooks, vm_state, &mut state, false)
         .inspect_err(|error| tracing::warn!(%error, "rvr metered-cost execution failed"))?;
-    let cost = state.tracer.cost;
-    Ok(RvrMeteredCostResult { state, cost })
+    Ok(RvrMeteredCostResult {
+        instret: state.mode_state.instret,
+        cost: state.mode_state.cost,
+    })
 }
 
 /// Execute a VmExe with per-chip metered execution and segmentation.
-pub fn execute_metered(
+pub(super) fn execute_metered(
     compiled: &RvrCompiled,
     runtime_hooks: &[Box<dyn RvrRuntimeExtension>],
     vm_state: &mut VmState<GuestMemory>,
     seg_state: SegmentationState,
 ) -> Result<SegmentationState, ExecuteError> {
-    execute_metered_impl(compiled, runtime_hooks, vm_state, seg_state, false).map(|result| {
-        debug_assert!(!result.suspended);
-        result.seg_state
-    })
+    require_execution_kind(compiled, "Metered", &[RvrExecutionKind::Metered])?;
+    match execute_metered_impl(compiled, runtime_hooks, vm_state, seg_state, false)? {
+        RvrMeteredExecutionOutcome::Terminated(state) => Ok(state),
+        RvrMeteredExecutionOutcome::Suspended(_) => {
+            unreachable!("unbounded metered execution cannot suspend")
+        }
+    }
 }
 
 /// Execute a VmExe with per-chip metered execution until termination or a segment boundary.
-pub fn execute_metered_segment_boundary(
+pub(super) fn execute_metered_segment_boundary(
     compiled: &RvrCompiled,
     runtime_hooks: &[Box<dyn RvrRuntimeExtension>],
     vm_state: &mut VmState<GuestMemory>,
     seg_state: SegmentationState,
-) -> Result<RvrMeteredResult, ExecuteError> {
+) -> Result<RvrMeteredExecutionOutcome, ExecuteError> {
+    require_execution_kind(
+        compiled,
+        "MeteredSegment",
+        &[RvrExecutionKind::MeteredSegment],
+    )?;
     execute_metered_impl(compiled, runtime_hooks, vm_state, seg_state, true)
 }
 
@@ -261,7 +324,7 @@ fn execute_metered_impl(
     vm_state: &mut VmState<GuestMemory>,
     mut seg_state: SegmentationState,
     allow_suspended: bool,
-) -> Result<RvrMeteredResult, ExecuteError> {
+) -> Result<RvrMeteredExecutionOutcome, ExecuteError> {
     debug_assert!(
         !allow_suspended || seg_state.suspend_on_segment(),
         "segment-boundary rvr execution requires MeteredCtx::suspend_on_segment"
@@ -270,29 +333,23 @@ fn execute_metered_impl(
     let pc = vm_state.pc();
     let initial_regs = read_rv64_registers(vm_state);
 
-    let mut tracer_data = MeteredTracerData::default();
-    let mut state = init_rvr_state_with_metered(vm_state, pc);
+    let mut state: MeteredRvState = init_rvr_state(vm_state, pc);
     state.regs = initial_regs;
-    state.tracer = TracerPtr(&mut tracer_data);
 
     let check_counter = u32::try_from(seg_state.ctx.segmentation_ctx.instrets_until_check)
         .map_err(|_| {
             ExecuteError::InvalidMeteredContext(format!(
-                "instrets_until_check {} exceeds rvr tracer u32 counter",
+                "instrets_until_check {} exceeds rvr metering u32 counter",
                 seg_state.ctx.segmentation_ctx.instrets_until_check
             ))
         })?;
-    state.tracer.trace_heights = seg_state.trace_heights_ptr();
-    state.tracer.mem_page_buf = seg_state.mem_page_buf_ptr();
-    state.tracer.pv_page_buf = seg_state.pv_page_buf_ptr();
-    state.tracer.deferral_page_buf = seg_state.deferral_page_buf_ptr();
-    state.tracer.mem_page_buf_len = 0;
-    state.tracer.pv_page_buf_len = 0;
-    state.tracer.deferral_page_buf_len = 0;
-    state.tracer.last_mem_page = NO_LAST_PAGE;
-    state.tracer.check_counter = check_counter;
-    state.tracer.on_check = metered_periodic_check;
-    state.tracer.seg_state = &mut seg_state as *mut SegmentationState as *mut c_void;
+    state.mode_state.trace_heights = seg_state.trace_heights_ptr();
+    state.mode_state.mem_page_buf = seg_state.mem_page_buf_ptr();
+    state.mode_state.pv_page_buf = seg_state.pv_page_buf_ptr();
+    state.mode_state.deferral_page_buf = seg_state.deferral_page_buf_ptr();
+    state.mode_state.check_counter = check_counter;
+    state.mode_state.on_check = metered_periodic_check;
+    state.mode_state.seg_state = &mut seg_state;
 
     let status = run_and_finalize(
         compiled,
@@ -310,20 +367,20 @@ fn execute_metered_impl(
     let terminated = status == ExecutionStatus::Terminated;
     if terminated {
         seg_state.on_termination(
-            state.tracer.mem_page_buf_len,
-            state.tracer.pv_page_buf_len,
-            state.tracer.deferral_page_buf_len,
-            state.tracer.check_counter,
+            state.mode_state.mem_page_buf_len,
+            state.mode_state.pv_page_buf_len,
+            state.mode_state.deferral_page_buf_len,
+            state.mode_state.check_counter,
         );
     } else {
-        // The segment-boundary suspender exits before executing the triggering block.
+        // The segment boundary exits before executing the triggering block.
         // The periodic check already flushed page buffers and initialized the next
         // segment; carry the bumped countdown forward for resume.
-        seg_state.ctx.segmentation_ctx.instrets_until_check = state.tracer.check_counter as u64;
+        seg_state.ctx.segmentation_ctx.instrets_until_check = state.mode_state.check_counter as u64;
     }
-    Ok(RvrMeteredResult {
-        seg_state,
-        suspended: !terminated,
-        exit_code: terminated.then_some(state.result_code() as u32),
+    Ok(if terminated {
+        RvrMeteredExecutionOutcome::Terminated(seg_state)
+    } else {
+        RvrMeteredExecutionOutcome::Suspended(seg_state)
     })
 }

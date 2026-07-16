@@ -42,12 +42,12 @@ fn test_rv64im_riscv_vector_runtime() -> Result<()> {
                 let executor = VmExecutor::new(config.clone())?;
                 let instance = executor.instance(&exe)?;
                 #[allow(unused_variables)]
-                let state = instance.execute(vec![], None)?;
+                let state = instance.execute(vec![])?;
 
                 #[cfg(any(feature = "aot", feature = "rvr"))]
                 {
                     let interpreter_instance = executor.interpreter_instance(&exe)?;
-                    let naive_state = interpreter_instance.execute(vec![], None)?;
+                    let naive_state = interpreter_instance.execute(vec![])?;
                     assert_vm_states_equivalent(&state, &naive_state);
                 }
 

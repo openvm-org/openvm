@@ -44,9 +44,10 @@ use super::aot::AotInstance;
 #[cfg(feature = "rvr")]
 use super::rvr::{
     bridge::map_rvr_compile_error, build_pc_to_chip, compile, compile_metered,
-    compile_metered_cost, compile_metered_segment_boundary, load_compiled_from_path, ChipMapping,
-    GuestDebugMap, RvrInitialImage, RvrMeteredCostInstance, RvrMeteredInstance,
-    RvrMeteredSegmentInstance, RvrPureInstance,
+    compile_metered_cost, compile_metered_segment_boundary, compile_with_instret_tracking,
+    load_compiled_from_path, ChipMapping, GuestDebugMap, RvrExecutionKind, RvrInitialImage,
+    RvrMeteredCostInstance, RvrMeteredInstance, RvrMeteredSegmentInstance, RvrPureInstance,
+    RvrPureWithInstretTrackingInstance,
 };
 use super::{
     execution_mode::{
@@ -283,33 +284,69 @@ where
         let extensions = self.build_rvr_extensions(None);
         let compiled =
             compile(exe, extensions.lifters(), guest_debug_map).map_err(map_rvr_compile_error)?;
-        let runtime_hooks = extensions.into_runtime_hooks();
-
-        Ok(RvrPureInstance {
-            system_config: self.inventory.config(),
-            initial_image: RvrInitialImage::from(exe),
+        Ok(RvrPureInstance::new(
+            self.inventory.config(),
+            RvrInitialImage::from(exe),
             compiled,
-            runtime_hooks,
-        })
+            extensions.into_runtime_hooks(),
+        ))
     }
 
-    /// Load a previously saved pure-mode artifact and return a ready-to-execute
-    /// [`RvrPureInstance`]. The caller is responsible for supplying the
-    /// matching `exe`; no compatibility validation is performed.
+    /// Compile a pure RVR instance with instret tracking and block-boundary suspension.
+    pub fn rvr_instret_tracking_instance(
+        &self,
+        exe: &VmExe<F>,
+        guest_debug_map: Option<&GuestDebugMap>,
+    ) -> Result<RvrPureWithInstretTrackingInstance<'_>, StaticProgramError> {
+        #[cfg(feature = "metrics")]
+        let _compilation_span = tracing::info_span!("compile_pure", backend = "rvr").entered();
+        let extensions = self.build_rvr_extensions(None);
+        let compiled = compile_with_instret_tracking(exe, extensions.lifters(), guest_debug_map)
+            .map_err(map_rvr_compile_error)?;
+        Ok(RvrPureWithInstretTrackingInstance::new(
+            self.inventory.config(),
+            RvrInitialImage::from(exe),
+            compiled,
+            extensions.into_runtime_hooks(),
+        ))
+    }
+
+    /// Load a previously saved unlimited-pure artifact.
     pub fn load_instance(
         &self,
         lib_path: &std::path::Path,
         exe: &VmExe<F>,
     ) -> Result<RvrPureInstance<'_>, StaticProgramError> {
-        let runtime_hooks = self.build_rvr_extensions(None).into_runtime_hooks();
+        let extensions = self.build_rvr_extensions(None);
         let compiled = load_compiled_from_path(lib_path).map_err(map_rvr_compile_error)?;
-
-        Ok(RvrPureInstance {
-            system_config: self.inventory.config(),
-            initial_image: RvrInitialImage::from(exe),
+        compiled
+            .require_execution_kind(&[RvrExecutionKind::Pure])
+            .map_err(map_rvr_compile_error)?;
+        Ok(RvrPureInstance::new(
+            self.inventory.config(),
+            RvrInitialImage::from(exe),
             compiled,
-            runtime_hooks,
-        })
+            extensions.into_runtime_hooks(),
+        ))
+    }
+
+    /// Load a previously saved pure artifact with instret tracking.
+    pub fn load_instret_tracking_instance(
+        &self,
+        lib_path: &std::path::Path,
+        exe: &VmExe<F>,
+    ) -> Result<RvrPureWithInstretTrackingInstance<'_>, StaticProgramError> {
+        let extensions = self.build_rvr_extensions(None);
+        let compiled = load_compiled_from_path(lib_path).map_err(map_rvr_compile_error)?;
+        compiled
+            .require_execution_kind(&[RvrExecutionKind::PureWithInstretTracking])
+            .map_err(map_rvr_compile_error)?;
+        Ok(RvrPureWithInstretTrackingInstance::new(
+            self.inventory.config(),
+            RvrInitialImage::from(exe),
+            compiled,
+            extensions.into_runtime_hooks(),
+        ))
     }
 }
 
@@ -487,8 +524,9 @@ where
         self.metered_cost_rvr_instance(exe, executor_idx_to_air_idx, widths, None)
     }
 
-    /// Load a previously saved metered-mode artifact. Caller supplies `exe` and
-    /// `executor_idx_to_air_idx`. No compatibility validation is performed.
+    /// Load a previously saved metered-mode artifact. Its generated execution
+    /// kind is validated; the caller supplies matching `exe` and
+    /// `executor_idx_to_air_idx`.
     pub fn load_metered_instance(
         &self,
         lib_path: &std::path::Path,
@@ -499,6 +537,9 @@ where
             .build_rvr_extensions(Some(executor_idx_to_air_idx))
             .into_runtime_hooks();
         let compiled = load_compiled_from_path(lib_path).map_err(map_rvr_compile_error)?;
+        compiled
+            .require_execution_kind(&[RvrExecutionKind::Metered])
+            .map_err(map_rvr_compile_error)?;
 
         Ok(RvrMeteredInstance::new(
             self.inventory.config(),
@@ -508,8 +549,34 @@ where
         ))
     }
 
-    /// Load a previously saved metered-cost-mode artifact. Caller supplies `exe`,
-    /// `executor_idx_to_air_idx`, and `widths`. No compatibility validation is performed.
+    /// Load a previously saved segment-boundary metered artifact. Its generated
+    /// execution kind is validated; the caller supplies matching `exe` and
+    /// `executor_idx_to_air_idx`.
+    pub fn load_metered_segment_instance(
+        &self,
+        lib_path: &std::path::Path,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+    ) -> Result<RvrMeteredSegmentInstance<'_>, StaticProgramError> {
+        let runtime_hooks = self
+            .build_rvr_extensions(Some(executor_idx_to_air_idx))
+            .into_runtime_hooks();
+        let compiled = load_compiled_from_path(lib_path).map_err(map_rvr_compile_error)?;
+        compiled
+            .require_execution_kind(&[RvrExecutionKind::MeteredSegment])
+            .map_err(map_rvr_compile_error)?;
+
+        Ok(RvrMeteredSegmentInstance::new(
+            self.inventory.config(),
+            RvrInitialImage::from(exe),
+            runtime_hooks,
+            compiled,
+        ))
+    }
+
+    /// Load a previously saved metered-cost-mode artifact. Its generated
+    /// execution kind is validated; the caller supplies matching `exe`,
+    /// `executor_idx_to_air_idx`, and `widths`.
     pub fn load_metered_cost_instance(
         &self,
         lib_path: &std::path::Path,
@@ -522,6 +589,9 @@ where
             .into_runtime_hooks();
         let widths: Vec<u64> = widths.iter().map(|&w| w as u64).collect();
         let compiled = load_compiled_from_path(lib_path).map_err(map_rvr_compile_error)?;
+        compiled
+            .require_execution_kind(&[RvrExecutionKind::MeteredCost])
+            .map_err(map_rvr_compile_error)?;
 
         Ok(RvrMeteredCostInstance {
             system_config: self.inventory.config(),
@@ -832,6 +902,21 @@ where
             .load_metered_instance(lib_path, exe, &executor_idx_to_air_idx)
     }
 
+    #[cfg(feature = "rvr")]
+    pub fn load_metered_segment_instance(
+        &self,
+        lib_path: &std::path::Path,
+        exe: &VmExe<Val<E::SC>>,
+    ) -> Result<RvrMeteredSegmentInstance<'_>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
+    {
+        let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
+        self.executor()
+            .load_metered_segment_instance(lib_path, exe, &executor_idx_to_air_idx)
+    }
+
     #[cfg(feature = "aot")]
     pub fn metered_instance(
         &self,
@@ -953,15 +1038,47 @@ where
         )
     }
 
-    /// Preflight execution for a single segment. Executes for exactly `num_insns` instructions
-    /// using an interpreter. Preflight execution must be provided with `trace_heights`
-    /// instrumentation data that was collected from a previous run of metered execution so that the
-    /// preflight execution knows how much memory to allocate for record arenas.
+    /// Preflight execution until termination using an interpreter. Preflight execution must be
+    /// provided with `trace_heights` instrumentation data collected from a previous metered run so
+    /// that it knows how much memory to allocate for record arenas.
     ///
     /// This function should rarely be called on its own. Users are advised to call
     /// [`prove`](Self::prove) directly.
     #[instrument(name = "execute_preflight", skip_all)]
     pub fn execute_preflight(
+        &self,
+        interpreter: &mut PreflightInterpretedInstance2<Val<E::SC>, VB::VmConfig>,
+        state: VmState<GuestMemory>,
+        trace_heights: &[u32],
+    ) -> Result<PreflightExecutionOutput<Val<E::SC>, VB::RecordArena>, ExecutionError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
+            PreflightExecutor<Val<E::SC>, VB::RecordArena>,
+    {
+        self.execute_preflight_inner(interpreter, state, None, trace_heights)
+    }
+
+    /// Preflight execution for at most `num_insns` instructions from the given state.
+    /// `system_records.exit_code` is `Some` when the program terminated and `None` when execution
+    /// stopped at the instruction limit.
+    #[instrument(name = "execute_preflight", skip_all)]
+    pub fn execute_preflight_for(
+        &self,
+        interpreter: &mut PreflightInterpretedInstance2<Val<E::SC>, VB::VmConfig>,
+        state: VmState<GuestMemory>,
+        num_insns: u64,
+        trace_heights: &[u32],
+    ) -> Result<PreflightExecutionOutput<Val<E::SC>, VB::RecordArena>, ExecutionError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
+            PreflightExecutor<Val<E::SC>, VB::RecordArena>,
+    {
+        self.execute_preflight_inner(interpreter, state, Some(num_insns), trace_heights)
+    }
+
+    fn execute_preflight_inner(
         &self,
         interpreter: &mut PreflightInterpretedInstance2<Val<E::SC>, VB::VmConfig>,
         state: VmState<GuestMemory>,
@@ -1187,7 +1304,7 @@ where
             system_records,
             record_arenas,
             to_state,
-        } = self.execute_preflight(interpreter, state, num_insns, trace_heights)?;
+        } = self.execute_preflight_inner(interpreter, state, num_insns, trace_heights)?;
         // drop final memory unless this is a terminal segment and the exit code is success
         let final_memory =
             (system_records.exit_code == Some(ExitCode::Success as u32)).then_some(to_state.memory);
@@ -1506,10 +1623,10 @@ where
                 system_records,
                 record_arenas,
                 to_state,
-            } = vm.execute_preflight(
+            } = vm.execute_preflight_for(
                 &mut self.interpreter,
                 from_state,
-                Some(num_insns),
+                num_insns,
                 &trace_heights,
             )?;
             state = Some(to_state);

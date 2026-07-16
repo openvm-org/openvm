@@ -12,78 +12,159 @@ use rvr_openvm_lift::{ExtensionRegistry, TraceChipIndex};
 
 use super::{
     codegen::{emit_terminator, InstrCodegen, TermCtx},
-    context::{EmitContext, EmitMode},
+    context::{BlockAbi, EmitContext, EmitMode},
 };
 use crate::constants::constants_header;
 
-/// Compile-time tracer selection.
+/// Complete execution behavior baked into a generated RVR artifact.
+///
+/// The numeric values are part of the dynamic-library ABI through the
+/// `rv_execution_kind` export.
+#[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TracerMode {
-    /// Pure execution with optional instruction-count suspension.
-    Pure,
-    /// Scalar metered cost accumulation (MeteredCostCtx).
-    MeteredCost,
-    /// Per-chip trace heights (MeteredCtx).
-    Metered,
+pub enum RvrExecutionKind {
+    Pure = 0,
+    PureWithInstretTracking = 1,
+    MeteredCost = 2,
+    Metered = 3,
+    MeteredSegment = 4,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SuspendPolicy {
-    Disabled,
-    InstretLimit,
-    SegmentBoundary,
-}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("unknown RVR execution kind {0}")]
+pub struct InvalidRvrExecutionKind(pub u32);
 
-impl TracerMode {
-    /// The tracer header filename (without directory).
-    pub fn header_filename(self) -> &'static str {
-        match self {
-            TracerMode::Pure => "openvm_tracer_pure.h",
-            TracerMode::MeteredCost => "openvm_tracer_metered_cost.h",
-            TracerMode::Metered => "openvm_tracer_metered.h",
-        }
-    }
+impl TryFrom<u32> for RvrExecutionKind {
+    type Error = InvalidRvrExecutionKind;
 
-    fn header_content(self) -> &'static str {
-        match self {
-            TracerMode::Pure => include_str!("../../c/tracer/openvm_tracer_pure.h"),
-            TracerMode::MeteredCost => {
-                include_str!("../../c/tracer/openvm_tracer_metered_cost.h")
-            }
-            TracerMode::Metered => include_str!("../../c/tracer/openvm_tracer_metered.h"),
-        }
-    }
-
-    pub fn default_suspend_policy(self) -> SuspendPolicy {
-        match self {
-            TracerMode::Pure | TracerMode::MeteredCost => SuspendPolicy::InstretLimit,
-            TracerMode::Metered => SuspendPolicy::Disabled,
-        }
-    }
-
-    fn block_header_content(self, suspend_policy: SuspendPolicy) -> &'static str {
-        match (self, suspend_policy) {
-            (TracerMode::Metered, SuspendPolicy::SegmentBoundary) => {
-                include_str!("../../c/block/openvm_block_metered_segment.h")
-            }
-            (TracerMode::Metered, _) => include_str!("../../c/block/openvm_block_metered.h"),
-            (TracerMode::Pure | TracerMode::MeteredCost, _) => {
-                include_str!("../../c/block/openvm_block_instret.h")
-            }
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(Self::Pure),
+            1 => Ok(Self::PureWithInstretTracking),
+            2 => Ok(Self::MeteredCost),
+            3 => Ok(Self::Metered),
+            4 => Ok(Self::MeteredSegment),
+            value => Err(InvalidRvrExecutionKind(value)),
         }
     }
 }
 
-impl SuspendPolicy {
-    fn header_content(self) -> &'static str {
+impl RvrExecutionKind {
+    pub const fn artifact_suffix(self) -> &'static str {
         match self {
-            SuspendPolicy::Disabled => include_str!("../../c/suspender/openvm_suspender_none.h"),
-            SuspendPolicy::InstretLimit => {
-                include_str!("../../c/suspender/openvm_suspender_instret_limit.h")
+            Self::Pure => "pure",
+            Self::PureWithInstretTracking => "pure-with-instret-tracking",
+            Self::MeteredCost => "metered-cost",
+            Self::Metered => "metered",
+            Self::MeteredSegment => "metered-segment",
+        }
+    }
+
+    fn trace_header_filename(self) -> &'static str {
+        match self {
+            Self::Pure | Self::PureWithInstretTracking => "openvm_tracer_pure.h",
+            Self::MeteredCost => "openvm_tracer_metered_cost.h",
+            Self::Metered | Self::MeteredSegment => "openvm_tracer_metered.h",
+        }
+    }
+
+    fn trace_header_content(self) -> &'static str {
+        match self {
+            Self::Pure | Self::PureWithInstretTracking => {
+                include_str!("../../c/tracer/openvm_tracer_pure.h")
             }
-            SuspendPolicy::SegmentBoundary => {
-                include_str!("../../c/suspender/openvm_suspender_segment_boundary.h")
+            Self::MeteredCost => include_str!("../../c/tracer/openvm_tracer_metered_cost.h"),
+            Self::Metered | Self::MeteredSegment => {
+                include_str!("../../c/tracer/openvm_tracer_metered.h")
             }
+        }
+    }
+
+    fn metered_block_header_content(self) -> Option<&'static str> {
+        match self {
+            Self::Metered => Some(include_str!("../../c/block/openvm_block_metered.h")),
+            Self::MeteredSegment => {
+                Some(include_str!("../../c/block/openvm_block_metered_segment.h"))
+            }
+            Self::Pure | Self::PureWithInstretTracking | Self::MeteredCost => None,
+        }
+    }
+
+    fn state_layout_header(self) -> String {
+        let mut out = String::new();
+        writeln!(out, "#ifndef OPENVM_STATE_LAYOUT_H").unwrap();
+        writeln!(out, "#define OPENVM_STATE_LAYOUT_H").unwrap();
+        writeln!(out).unwrap();
+        match self {
+            Self::Pure => {}
+            Self::PureWithInstretTracking => {
+                writeln!(out, "typedef struct InstretTrackingState {{").unwrap();
+                writeln!(out, "  uint64_t retired;").unwrap();
+                writeln!(out, "  uint64_t target;").unwrap();
+                writeln!(out, "}} InstretTrackingState;").unwrap();
+            }
+            Self::MeteredCost => {
+                writeln!(out, "typedef struct MeteredCostState {{").unwrap();
+                writeln!(out, "  uint64_t instret;").unwrap();
+                writeln!(out, "  uint64_t cost;").unwrap();
+                writeln!(out, "  const uint64_t* chip_widths;").unwrap();
+                writeln!(out, "}} MeteredCostState;").unwrap();
+            }
+            Self::Metered | Self::MeteredSegment => {
+                writeln!(out, "struct PageTouch;").unwrap();
+                writeln!(out, "struct SegmentationState;").unwrap();
+                writeln!(out, "typedef struct MeteringState {{").unwrap();
+                writeln!(out, "  uint32_t* trace_heights;").unwrap();
+                writeln!(out, "  struct PageTouch* mem_page_buf;").unwrap();
+                writeln!(out, "  struct PageTouch* pv_page_buf;").unwrap();
+                writeln!(out, "  struct PageTouch* deferral_page_buf;").unwrap();
+                writeln!(out, "  uint8_t (*on_check)(struct MeteringState*);").unwrap();
+                writeln!(out, "  struct SegmentationState* seg_state;").unwrap();
+                writeln!(out, "  uint32_t mem_page_buf_len;").unwrap();
+                writeln!(out, "  uint32_t pv_page_buf_len;").unwrap();
+                writeln!(out, "  uint32_t deferral_page_buf_len;").unwrap();
+                writeln!(out, "  uint32_t check_counter;").unwrap();
+                writeln!(out, "  uint32_t last_mem_page;").unwrap();
+                writeln!(out, "}} MeteringState;").unwrap();
+            }
+        }
+        writeln!(out).unwrap();
+        writeln!(out, "typedef struct RvState {{").unwrap();
+        writeln!(out, "  uint64_t regs[32];").unwrap();
+        writeln!(out, "  uint64_t pc;").unwrap();
+        writeln!(out, "  uint8_t status;").unwrap();
+        writeln!(out, "  uint8_t exit_code;").unwrap();
+        writeln!(out, "  uint8_t* memory;").unwrap();
+        match self {
+            Self::Pure => {}
+            Self::PureWithInstretTracking => {
+                writeln!(out, "  InstretTrackingState mode_state;").unwrap();
+            }
+            Self::MeteredCost => {
+                writeln!(out, "  MeteredCostState mode_state;").unwrap();
+            }
+            Self::Metered | Self::MeteredSegment => {
+                writeln!(out, "  MeteringState mode_state;").unwrap();
+            }
+        }
+        writeln!(out, "}} RvState;").unwrap();
+        writeln!(out).unwrap();
+        writeln!(out, "#endif /* OPENVM_STATE_LAYOUT_H */").unwrap();
+        out
+    }
+
+    fn write_execution_kind_marker(self, out: &mut String) {
+        writeln!(out, "__attribute__((visibility(\"default\"), used))").unwrap();
+        writeln!(out, "uint32_t rv_execution_kind(void) {{").unwrap();
+        writeln!(out, "  return {}u;", self as u32).unwrap();
+        writeln!(out, "}}").unwrap();
+    }
+
+    const fn block_abi(self) -> BlockAbi {
+        match self {
+            Self::Pure | Self::MeteredCost => BlockAbi::Plain,
+            Self::PureWithInstretTracking => BlockAbi::InstretCountdown,
+            Self::Metered | Self::MeteredSegment => BlockAbi::Metered,
         }
     }
 }
@@ -92,9 +173,8 @@ impl SuspendPolicy {
 pub struct CProject {
     output_dir: PathBuf,
     name: String,
-    pub tracer_mode: TracerMode,
-    pub suspend_policy: SuspendPolicy,
-    pub hot_regs: HashSet<u8>,
+    execution_kind: RvrExecutionKind,
+    hot_regs: HashSet<u8>,
     /// Maximum blocks per partition file.
     pub blocks_per_partition: usize,
     /// Enable thin LTO for the generated C code.
@@ -112,16 +192,15 @@ pub struct CProject {
 }
 
 impl CProject {
-    pub fn new(output_dir: &Path, name: &str, tracer_mode: TracerMode) -> Self {
+    pub fn new(output_dir: &Path, name: &str, execution_kind: RvrExecutionKind) -> Self {
         // Hot registers in priority order.
         // Limited by platform's preserve_none register capacity minus 1 (state ptr).
-        let hot_regs = Self::hot_regs_for_mode(tracer_mode);
+        let hot_regs = Self::hot_regs_for_kind(execution_kind);
 
         Self {
             output_dir: output_dir.to_path_buf(),
             name: name.to_string(),
-            tracer_mode,
-            suspend_policy: tracer_mode.default_suspend_policy(),
+            execution_kind,
             hot_regs,
             blocks_per_partition: 512,
             enable_lto: true,
@@ -144,34 +223,40 @@ impl CProject {
         3, 4, // gp, tp
     ];
 
-    /// Default hot registers, limited by platform's preserve_none register capacity.
-    ///
-    /// x86_64: 11 total preserve_none slots minus 1 (state) = 10 hot regs.
-    /// aarch64: 24 total preserve_none slots minus 1 (state) = 23 hot regs.
-    fn default_hot_regs() -> HashSet<u8> {
+    /// Maximum non-state arguments supported by the platform's `preserve_none` ABI.
+    const fn max_non_state_args() -> usize {
         #[cfg(target_arch = "aarch64")]
-        const NUM_HOT_REGS: usize = 23;
+        return 23;
         #[cfg(not(target_arch = "aarch64"))]
-        const NUM_HOT_REGS: usize = 10;
-
-        Self::REG_PRIORITY[..NUM_HOT_REGS].iter().copied().collect()
+        return 10;
     }
 
-    /// Metered mode carries `check_counter` and `trace_heights` through the
-    /// preserve_none ABI, so it reserves two argument registers that would
-    /// otherwise hold guest regs.
-    fn hot_regs_for_mode(mode: TracerMode) -> HashSet<u8> {
-        match mode {
-            TracerMode::Metered => {
-                #[cfg(target_arch = "aarch64")]
-                const NUM_HOT_REGS: usize = 21;
-                #[cfg(not(target_arch = "aarch64"))]
-                const NUM_HOT_REGS: usize = 8;
+    /// Reserve argument registers for values carried through the block ABI.
+    fn hot_regs_for_kind(kind: RvrExecutionKind) -> HashSet<u8> {
+        let count = Self::max_non_state_args() - kind.block_abi().extra_args();
+        Self::REG_PRIORITY[..count].iter().copied().collect()
+    }
 
-                Self::REG_PRIORITY[..NUM_HOT_REGS].iter().copied().collect()
-            }
-            TracerMode::Pure | TracerMode::MeteredCost => Self::default_hot_regs(),
+    pub const fn execution_kind(&self) -> RvrExecutionKind {
+        self.execution_kind
+    }
+
+    fn block_abi(&self) -> BlockAbi {
+        self.execution_kind.block_abi()
+    }
+
+    fn validate_block_abi(&self) -> io::Result<()> {
+        let used = self.hot_regs.len() + self.block_abi().extra_args();
+        if used > Self::max_non_state_args() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "generated block ABI needs {used} non-state arguments, but preserve_none supports {} on this target",
+                    Self::max_non_state_args()
+                ),
+            ));
         }
+        Ok(())
     }
 
     /// Sorted hot registers for deterministic signatures.
@@ -198,15 +283,23 @@ impl CProject {
         }
     }
 
-    fn append_metered_args_from_state(&self, out: &mut String) {
-        if self.tracer_mode == TracerMode::Metered {
-            out.push_str(", state->tracer->check_counter, state->tracer->trace_heights");
+    fn append_block_abi_args_from_state(&self, out: &mut String) {
+        match self.block_abi() {
+            BlockAbi::Plain => {}
+            BlockAbi::InstretCountdown => {
+                out.push_str(", state->mode_state.target - state->mode_state.retired");
+            }
+            BlockAbi::Metered => {
+                out.push_str(", state->mode_state.check_counter, state->mode_state.trace_heights");
+            }
         }
     }
 
-    fn append_metered_args_from_params(&self, out: &mut String) {
-        if self.tracer_mode == TracerMode::Metered {
-            out.push_str(", check_counter, trace_heights");
+    fn append_block_abi_args_from_params(&self, out: &mut String) {
+        match self.block_abi() {
+            BlockAbi::Plain => {}
+            BlockAbi::InstretCountdown => out.push_str(", instret_remaining"),
+            BlockAbi::Metered => out.push_str(", check_counter, trace_heights"),
         }
     }
 
@@ -233,17 +326,25 @@ impl CProject {
                 "uint64_t".to_string()
             });
         }
-        if self.tracer_mode == TracerMode::Metered {
-            params.push(if include_names {
-                "uint32_t check_counter".to_string()
+        match self.block_abi() {
+            BlockAbi::Plain => {}
+            BlockAbi::InstretCountdown => params.push(if include_names {
+                "uint64_t instret_remaining".to_string()
             } else {
-                "uint32_t".to_string()
-            });
-            params.push(if include_names {
-                "uint32_t* trace_heights".to_string()
-            } else {
-                "uint32_t*".to_string()
-            });
+                "uint64_t".to_string()
+            }),
+            BlockAbi::Metered => {
+                params.push(if include_names {
+                    "uint32_t check_counter".to_string()
+                } else {
+                    "uint32_t".to_string()
+                });
+                params.push(if include_names {
+                    "uint32_t* trace_heights".to_string()
+                } else {
+                    "uint32_t*".to_string()
+                });
+            }
         }
         params
     }
@@ -283,7 +384,7 @@ impl CProject {
     fn fn_args_from_state(&self) -> String {
         let mut s = "state".to_string();
         self.append_hot_reg_args_from_state(&mut s);
-        self.append_metered_args_from_state(&mut s);
+        self.append_block_abi_args_from_state(&mut s);
         s
     }
 
@@ -291,7 +392,7 @@ impl CProject {
     fn fn_args_from_params(&self) -> String {
         let mut s = "state".to_string();
         self.append_hot_reg_args_from_params(&mut s);
-        self.append_metered_args_from_params(&mut s);
+        self.append_block_abi_args_from_params(&mut s);
         s
     }
 
@@ -336,12 +437,13 @@ impl CProject {
     }
 
     fn emit_mode_for_block(&self, block: &Block) -> EmitMode {
-        match self.tracer_mode {
-            TracerMode::Pure => EmitMode::Direct,
-            TracerMode::Metered => EmitMode::Metered {
+        match self.execution_kind {
+            RvrExecutionKind::Metered | RvrExecutionKind::MeteredSegment => EmitMode::Metered {
                 trace_memory_pages: block_accesses_memory(block),
             },
-            TracerMode::MeteredCost => EmitMode::Direct,
+            RvrExecutionKind::Pure
+            | RvrExecutionKind::PureWithInstretTracking
+            | RvrExecutionKind::MeteredCost => EmitMode::Direct,
         }
     }
 
@@ -379,6 +481,7 @@ impl CProject {
         text_start: u64,
         extensions: &ExtensionRegistry,
     ) -> io::Result<()> {
+        self.validate_block_abi()?;
         let text_end = Self::dispatch_max_pc(blocks, entry_point, text_start);
         let table_size = Self::dispatch_table_size(text_start, text_end);
 
@@ -406,7 +509,7 @@ impl CProject {
         fs::write(&path, h)
     }
 
-    // ── Support files (tracer header, state header, IO) ─────────────────
+    // ── Support files (trace header, state header, IO) ──────────────────
 
     fn write_support_files(&self) -> io::Result<()> {
         fs::write(
@@ -414,24 +517,25 @@ impl CProject {
             include_str!("../../c/openvm_util.h"),
         )?;
 
-        // RvState struct definition (forward-declares Tracer).
+        // RvState definition specialized to this execution kind.
+        fs::write(
+            self.output_dir.join("openvm_state_layout.h"),
+            self.execution_kind.state_layout_header(),
+        )?;
         let state_path = self.output_dir.join("openvm_state.h");
         fs::write(&state_path, include_str!("../../c/openvm_state.h"))?;
 
-        // Tracer header (includes openvm_state.h, defines Tracer + inline functions).
-        let tracer_path = self.output_dir.join(self.tracer_mode.header_filename());
-        fs::write(&tracer_path, self.tracer_mode.header_content())?;
+        // Mode-specific tracing helpers include the generated state definition.
+        let trace_path = self
+            .output_dir
+            .join(self.execution_kind.trace_header_filename());
+        fs::write(&trace_path, self.execution_kind.trace_header_content())?;
 
-        // Block and suspender headers are selected like tracer headers, then
-        // copied under stable include names so generated block C does not
-        // depend on mode or policy.
-        let block_path = self.output_dir.join("openvm_block.h");
-        fs::write(
-            &block_path,
-            self.tracer_mode.block_header_content(self.suspend_policy),
-        )?;
-        let suspender_path = self.output_dir.join("openvm_suspender.h");
-        fs::write(&suspender_path, self.suspend_policy.header_content())?;
+        // Metered checkpoint helpers stay in a specialized header. Pure and
+        // metered-cost artifacts have no generic block-checking layer.
+        if let Some(content) = self.execution_kind.metered_block_header_content() {
+            fs::write(self.output_dir.join("openvm_block.h"), content)?;
+        }
 
         // RISC-V M-extension helpers.
         let muldiv_path = self.output_dir.join("rv_muldiv.h");
@@ -469,11 +573,12 @@ impl CProject {
         writeln!(
             openvm_h,
             "#include \"{}\"",
-            self.tracer_mode.header_filename()
+            self.execution_kind.trace_header_filename()
         )
         .unwrap();
-        writeln!(openvm_h, "#include \"openvm_block.h\"").unwrap();
-        writeln!(openvm_h, "#include \"openvm_suspender.h\"").unwrap();
+        if self.execution_kind.metered_block_header_content().is_some() {
+            writeln!(openvm_h, "#include \"openvm_block.h\"").unwrap();
+        }
         writeln!(openvm_h, "#include \"openvm_io.h\"").unwrap();
         fs::write(self.output_dir.join("openvm.h"), openvm_h)?;
 
@@ -527,13 +632,14 @@ impl CProject {
 
     fn write_header(&self, blocks: &[Block], ext_headers: &[(&str, &str)]) -> io::Result<()> {
         let name = &self.name;
-        let tracer_header = self.tracer_mode.header_filename();
+        let trace_header = self.execution_kind.trace_header_filename();
         let mut h = String::with_capacity(4096);
 
-        // Tracer header (includes openvm_state.h internally).
-        writeln!(h, "#include \"{tracer_header}\"").unwrap();
-        writeln!(h, "#include \"openvm_block.h\"").unwrap();
-        writeln!(h, "#include \"openvm_suspender.h\"").unwrap();
+        // Mode-specific tracing helpers include openvm_state.h internally.
+        writeln!(h, "#include \"{trace_header}\"").unwrap();
+        if self.execution_kind.metered_block_header_content().is_some() {
+            writeln!(h, "#include \"openvm_block.h\"").unwrap();
+        }
         writeln!(h).unwrap();
 
         // Block function type and dispatch table (for JumpDyn tail calls).
@@ -544,6 +650,13 @@ impl CProject {
         )
         .unwrap();
         self.emit_trap_declaration(&mut h);
+        if self.execution_kind == RvrExecutionKind::PureWithInstretTracking {
+            let signature = self.block_signature(
+                "__attribute__((preserve_none, noinline)) void",
+                "rv_suspend",
+            );
+            writeln!(h, "{signature};").unwrap();
+        }
         writeln!(h, "extern BlockFn dispatch_table[RV_DISPATCH_TABLE_SIZE];").unwrap();
         writeln!(h).unwrap();
 
@@ -636,7 +749,7 @@ impl CProject {
         writeln!(out, "{signature} {{").unwrap();
 
         // Body instructions (each in its own scope to avoid variable collisions).
-        let mut ctx = EmitContext::new(self.hot_regs.clone(), mode);
+        let mut ctx = EmitContext::new(self.hot_regs.clone(), mode, self.block_abi());
 
         writeln!(out, "    uint8_t* memory = state->memory;").unwrap();
 
@@ -648,7 +761,7 @@ impl CProject {
         ) {
             writeln!(
                 out,
-                "    TraceMemory trace_memory = trace_memory_setup(state->tracer);"
+                "    TraceMemory trace_memory = trace_memory_setup(&state->mode_state);"
             )
             .unwrap();
         }
@@ -690,8 +803,10 @@ impl CProject {
     }
 
     fn emit_block_checkpoint_function(&self, out: &mut String, block: &Block) {
-        if self.tracer_mode != TracerMode::Metered {
-            return;
+        match self.execution_kind {
+            RvrExecutionKind::PureWithInstretTracking => return,
+            RvrExecutionKind::Metered | RvrExecutionKind::MeteredSegment => {}
+            RvrExecutionKind::Pure | RvrExecutionKind::MeteredCost => return,
         }
 
         let pc = block.start_pc;
@@ -702,23 +817,47 @@ impl CProject {
             &format!("block_0x{pc:08x}_checkpoint"),
         );
         writeln!(out, "{signature} {{").unwrap();
-        match self.suspend_policy {
-            SuspendPolicy::SegmentBoundary => {
+        match self.execution_kind {
+            RvrExecutionKind::MeteredSegment => {
                 self.emit_segment_checkpoint(out, pc);
             }
-            _ => {
+            RvrExecutionKind::Metered => {
                 writeln!(
                     out,
                     "    check_counter = metered_checkpoint(state, check_counter);"
                 )
                 .unwrap();
             }
+            _ => unreachable!(),
         }
         writeln!(
             out,
             "    [[clang::musttail]] return block_0x{pc:08x}({args});"
         )
         .unwrap();
+        writeln!(out, "}}").unwrap();
+        writeln!(out).unwrap();
+    }
+
+    fn emit_instret_suspend_function(&self, out: &mut String) {
+        debug_assert_eq!(
+            self.execution_kind,
+            RvrExecutionKind::PureWithInstretTracking
+        );
+        let signature = self.block_signature(
+            "__attribute__((preserve_none, noinline)) void",
+            "rv_suspend",
+        );
+        writeln!(out, "{signature} {{").unwrap();
+        let save = self.save_hot_regs_call();
+        writeln!(out, "    {save}").unwrap();
+        writeln!(
+            out,
+            "    state->mode_state.retired = state->mode_state.target - instret_remaining;"
+        )
+        .unwrap();
+        writeln!(out, "    rv_set_status(state, OPENVM_EXEC_SUSPENDED, 0);").unwrap();
+        writeln!(out, "    return;").unwrap();
         writeln!(out, "}}").unwrap();
         writeln!(out).unwrap();
     }
@@ -738,20 +877,33 @@ impl CProject {
     fn emit_block_boundary(&self, out: &mut String, block: &Block) {
         let pc = block.start_pc;
         let insn_count = block.insn_count();
-        let is_metered = self.tracer_mode == TracerMode::Metered;
 
-        if is_metered {
-            self.emit_metered_counter_check(out, pc, insn_count);
-            writeln!(out, "    check_counter -= {insn_count}u;").unwrap();
-            return;
+        match self.execution_kind {
+            RvrExecutionKind::Pure => {}
+            RvrExecutionKind::PureWithInstretTracking => {
+                let args = self.fn_args_from_params();
+                writeln!(
+                    out,
+                    "    if (unlikely(instret_remaining < {insn_count}u)) {{"
+                )
+                .unwrap();
+                writeln!(out, "        state->pc = 0x{pc:08x}ull;").unwrap();
+                writeln!(
+                    out,
+                    "        [[clang::musttail]] return rv_suspend({args});"
+                )
+                .unwrap();
+                writeln!(out, "    }}").unwrap();
+                writeln!(out, "    instret_remaining -= {insn_count}u;").unwrap();
+            }
+            RvrExecutionKind::MeteredCost => {
+                writeln!(out, "    state->mode_state.instret += {insn_count}u;").unwrap();
+            }
+            RvrExecutionKind::Metered | RvrExecutionKind::MeteredSegment => {
+                self.emit_metered_counter_check(out, pc, insn_count);
+                writeln!(out, "    check_counter -= {insn_count}u;").unwrap();
+            }
         }
-
-        writeln!(
-            out,
-            "    uint8_t suspend_signal = begin_block(state, 0x{pc:08x}ull, {insn_count}u);"
-        )
-        .unwrap();
-        self.emit_instret_suspend_check(out, pc, insn_count);
     }
 
     fn emit_metered_counter_check(&self, out: &mut String, pc: u64, insn_count: u32) {
@@ -762,21 +914,6 @@ impl CProject {
             "        [[clang::musttail]] return block_0x{pc:08x}_checkpoint({args});"
         )
         .unwrap();
-        writeln!(out, "    }}").unwrap();
-    }
-
-    fn emit_instret_suspend_check(&self, out: &mut String, pc: u64, insn_count: u32) {
-        debug_assert_ne!(
-            self.tracer_mode,
-            TracerMode::Metered,
-            "metered instret-limit suspension is rejected in compile options"
-        );
-        writeln!(
-            out,
-            "    if (unlikely(should_suspend(state, 0x{pc:08x}ull, {insn_count}u, suspend_signal))) {{"
-        )
-        .unwrap();
-        self.emit_suspend_return(out, pc);
         writeln!(out, "    }}").unwrap();
     }
 
@@ -793,16 +930,20 @@ impl CProject {
 
     /// Sum the chip contributions for every instruction in `block` (body
     /// instructions plus the real terminator instruction, if any) and emit a
-    /// batched tracer update instead of per-instruction `trace_chip` calls.
+    /// batched metering update instead of per-instruction `trace_chip` calls.
     ///
     /// Mode-dependent emission:
     ///   - Pure: nothing (chip tracking is a no-op).
     ///   - Metered: `trace_heights[idx] += count;` per distinct chip, using the trace-heights
     ///     pointer carried through the block ABI.
-    ///   - MeteredCost: `state->tracer->cost += <constant>;` where the constant is `sum(width[chip]
+    ///   - MeteredCost: `state->mode_state.cost += <constant>;` where the constant is
+    ///     `sum(width[chip]
     ///     * count)` precomputed at emit time from `self.chip_widths`.
     fn emit_per_block_chip_updates(&self, out: &mut String, block: &Block) {
-        if matches!(self.tracer_mode, TracerMode::Pure) {
+        if matches!(
+            self.execution_kind,
+            RvrExecutionKind::Pure | RvrExecutionKind::PureWithInstretTracking
+        ) {
             return;
         }
 
@@ -822,21 +963,21 @@ impl CProject {
         }
 
         writeln!(out, "    {{").unwrap();
-        match self.tracer_mode {
-            TracerMode::Pure => unreachable!(),
-            TracerMode::Metered => {
+        match self.execution_kind {
+            RvrExecutionKind::Pure | RvrExecutionKind::PureWithInstretTracking => unreachable!(),
+            RvrExecutionKind::Metered | RvrExecutionKind::MeteredSegment => {
                 for (chip, count) in &chip_counts {
                     writeln!(out, "        trace_heights[{chip}] += {count}u;").unwrap();
                 }
             }
-            TracerMode::MeteredCost => {
+            RvrExecutionKind::MeteredCost => {
                 let widths = self.chip_widths.as_ref().unwrap();
                 let total: u64 = chip_counts
                     .iter()
                     .map(|(&chip, &count)| widths[chip as usize] * count as u64)
                     .sum();
                 if total > 0 {
-                    writeln!(out, "        state->tracer->cost += {total}u;").unwrap();
+                    writeln!(out, "        state->mode_state.cost += {total}u;").unwrap();
                 }
             }
         }
@@ -883,6 +1024,10 @@ impl CProject {
         writeln!(src, "#include \"{name}.h\"").unwrap();
         writeln!(src).unwrap();
 
+        if self.execution_kind == RvrExecutionKind::PureWithInstretTracking {
+            self.emit_instret_suspend_function(&mut src);
+        }
+
         let save = self.save_hot_regs_call();
         let trap_signature = self.trap_signature();
         writeln!(
@@ -897,8 +1042,18 @@ impl CProject {
         .unwrap();
         writeln!(src, "{trap_signature} {{").unwrap();
         writeln!(src, "    {save}").unwrap();
-        if self.tracer_mode == TracerMode::Metered {
-            writeln!(src, "    state->tracer->check_counter = check_counter;").unwrap();
+        match self.block_abi() {
+            BlockAbi::Plain => {}
+            BlockAbi::InstretCountdown => {
+                writeln!(
+                    src,
+                    "    state->mode_state.retired = state->mode_state.target - instret_remaining;"
+                )
+                .unwrap();
+            }
+            BlockAbi::Metered => {
+                writeln!(src, "    state->mode_state.check_counter = check_counter;").unwrap();
+            }
         }
         writeln!(src, "    rv_set_status(state, OPENVM_EXEC_TRAPPED, 0);").unwrap();
         writeln!(src, "    return;").unwrap();
@@ -925,7 +1080,11 @@ impl CProject {
         writeln!(src, "}};").unwrap();
         writeln!(src).unwrap();
 
-        // rv_execute — single entry call; tail calls chain blocks.
+        // Let loaders reject an artifact generated for a different execution kind.
+        self.execution_kind.write_execution_kind_marker(&mut src);
+        writeln!(src).unwrap();
+
+        // Execution entry point — single entry call; tail calls chain blocks.
         writeln!(
             src,
             "__attribute__((hot, nonnull)) void rv_execute(RvState* restrict state) {{"
@@ -1023,4 +1182,114 @@ fn block_accesses_memory(block: &Block) -> bool {
         .iter()
         .any(|instr_at| instr_accesses_memory(&instr_at.instr))
         || terminator_accesses_memory(&block.terminator)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{collections::HashSet, path::Path};
+
+    use rvr_openvm_ir::{Block, Terminator};
+
+    use super::{CProject, RvrExecutionKind};
+
+    fn single_instruction_block() -> Block {
+        Block {
+            start_pc: 0x100,
+            end_pc: 0x104,
+            instructions: Vec::new(),
+            terminator: Terminator::Exit { code: 0 },
+            terminator_pc: 0x100,
+            terminator_source_loc: None,
+        }
+    }
+
+    #[test]
+    fn unlimited_pure_has_plain_block_abi_and_no_boundary_code() {
+        let project = CProject::new(Path::new("unused"), "test", RvrExecutionKind::Pure);
+        let mut boundary = String::new();
+        project.emit_block_boundary(&mut boundary, &single_instruction_block());
+
+        assert!(boundary.is_empty());
+        assert!(!project.typedef_params().contains("instret"));
+
+        #[cfg(target_arch = "aarch64")]
+        assert_eq!(project.hot_regs.len(), 23);
+        #[cfg(not(target_arch = "aarch64"))]
+        assert_eq!(project.hot_regs.len(), 10);
+    }
+
+    #[test]
+    fn tracked_pure_carries_countdown_and_uses_shared_suspend_path() {
+        let project = CProject::new(
+            Path::new("unused"),
+            "test",
+            RvrExecutionKind::PureWithInstretTracking,
+        );
+        let block = single_instruction_block();
+        let mut boundary = String::new();
+        project.emit_block_boundary(&mut boundary, &block);
+        let mut checkpoint = String::new();
+        project.emit_block_checkpoint_function(&mut checkpoint, &block);
+        let mut suspend = String::new();
+        project.emit_instret_suspend_function(&mut suspend);
+
+        assert!(checkpoint.is_empty());
+        assert!(project.typedef_params().ends_with(", uint64_t"));
+        assert!(boundary.contains("if (unlikely(instret_remaining < 1u))"));
+        assert!(boundary.contains("state->pc = 0x00000100ull;"));
+        assert!(boundary.contains("[[clang::musttail]] return rv_suspend("));
+        assert!(boundary.contains("instret_remaining -= 1u;"));
+        assert!(suspend.contains("preserve_none, noinline"));
+        assert!(!suspend.contains("cold"));
+        assert!(suspend
+            .contains("state->mode_state.retired = state->mode_state.target - instret_remaining;"));
+
+        #[cfg(target_arch = "aarch64")]
+        assert_eq!(project.hot_regs.len(), 22);
+        #[cfg(not(target_arch = "aarch64"))]
+        assert_eq!(project.hot_regs.len(), 9);
+    }
+
+    #[test]
+    fn oversized_block_abi_is_rejected() {
+        let mut project = CProject::new(
+            Path::new("unused"),
+            "test",
+            RvrExecutionKind::PureWithInstretTracking,
+        );
+        project.hot_regs = CProject::hot_regs_for_kind(RvrExecutionKind::Pure);
+
+        let error = project.validate_block_abi().unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+        assert!(error.to_string().contains("preserve_none supports"));
+    }
+
+    #[test]
+    fn metered_cost_counts_without_suspension_layer() {
+        let project = CProject::new(Path::new("unused"), "test", RvrExecutionKind::MeteredCost);
+        let mut boundary = String::new();
+        project.emit_block_boundary(&mut boundary, &single_instruction_block());
+
+        assert_eq!(boundary, "    state->mode_state.instret += 1u;\n");
+        assert!(!project.typedef_params().contains("instret_remaining"));
+    }
+
+    #[test]
+    fn execution_kinds_have_distinct_markers_and_suffixes() {
+        let kinds = [
+            RvrExecutionKind::Pure,
+            RvrExecutionKind::PureWithInstretTracking,
+            RvrExecutionKind::MeteredCost,
+            RvrExecutionKind::Metered,
+            RvrExecutionKind::MeteredSegment,
+        ];
+        let mut markers = HashSet::new();
+        let mut suffixes = HashSet::new();
+        for kind in kinds {
+            assert!(markers.insert(kind as u32));
+            assert!(suffixes.insert(kind.artifact_suffix()));
+            assert_eq!(RvrExecutionKind::try_from(kind as u32), Ok(kind));
+        }
+        assert!(RvrExecutionKind::try_from(u32::MAX).is_err());
+    }
 }
