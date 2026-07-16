@@ -18,15 +18,18 @@ runs:
       id: gpu-arch
       shell: bash
       run: |
+        CUDA_ARCH=no-gpu
         if command -v nvidia-smi &> /dev/null; then
           # Get compute capability (e.g., "8.9" -> "89")
-          CUDA_ARCH=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -1 | tr -d '.' || echo "unknown")
-          echo "cuda_arch=$CUDA_ARCH" >> $GITHUB_OUTPUT
+          detected_arch=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -1 | tr -d '.' || true)
+          if [[ "$detected_arch" =~ ^[0-9]+$ ]]; then
+            CUDA_ARCH="$detected_arch"
+          fi
           echo "Detected CUDA architecture: $CUDA_ARCH"
         else
-          echo "cuda_arch=no-gpu" >> $GITHUB_OUTPUT
           echo "No GPU detected"
         fi
+        echo "cuda_arch=$CUDA_ARCH" >> "$GITHUB_OUTPUT"
 
     - name: Rust cache
       uses: Swatinem/rust-cache@v2

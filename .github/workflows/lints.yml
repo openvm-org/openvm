@@ -10,34 +10,36 @@ concurrency:
   cancel-in-progress: true
 jobs:
   changes:
-    name: Detect Changes
+    name: Detect CUDA changes
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       cuda: ${{ steps.filter.outputs.cuda }}
     steps:
-      - name: Load SSH key
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: |
-            ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
       - uses: actions/checkout@v5
       - uses: dorny/paths-filter@v3
         id: filter
         with:
           filters: |
             cuda:
+              - '**/*.rs'
               - '**/*.cu'
               - '**/*.cuh'
               - '**/cuda/**'
-              - '**/cuda*.rs'
-              - '**/cuda_abi.rs'
-              - '**/build.rs'
+              - '**/Cargo.toml'
+              - 'Cargo.lock'
+              - 'rust-toolchain.toml'
+              - '.cargo/config.toml'
+              - 'scripts/gpu_driver_setup.sh'
               - '.github/workflows/lints.yml'
+              - '.github/actions/sccache/**'
               - '.github/actions/rust-cache-cuda/**'
   lint:
     name: Lint
     runs-on:
-      - runs-on=${{ github.run_id }}-cpu/runner=64cpu-linux-x64/volume=80gb/extras=s3-cache
+      - runs-on=${{ github.run_id }}-cpu/family=c8i-flex.16xlarge+c8i.16xlarge+c8a.16xlarge+c7i.16xlarge+c7a.16xlarge/image=ubuntu24-full-x64/volume=80gb/extras=s3-cache
     steps:
       - uses: runs-on/action@v2
         with:
@@ -113,9 +115,9 @@ jobs:
         run: sccache --show-stats || true
 
   docs:
-    name: Check Docs
+    name: Check docs
     runs-on:
-      - runs-on=${{ github.run_id }}-docs/runner=32cpu-linux-x64/extras=s3-cache
+      - runs-on=${{ github.run_id }}-docs/family=c8i-flex.8xlarge+c8i.8xlarge+c8a.8xlarge+c7i.8xlarge+c7a.8xlarge/image=ubuntu24-full-x64/volume=80gb/extras=s3-cache
     steps:
       - uses: runs-on/action@v2
         with:
@@ -149,7 +151,7 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.cuda == 'true' }}
     runs-on:
-      - runs-on=${{ github.run_id }}-cuda/image=ubuntu24-gpu-x64/family=g6.*+g5+g6e/cpu=8/volume=40gb/spot=capacity-optimized/extras=s3-cache
+      - runs-on=${{ github.run_id }}-cuda/image=ubuntu24-gpu-x64/family=g7.2xlarge+g6.2xlarge+g5.2xlarge/volume=40gb/spot=price-capacity-optimized/extras=s3-cache
     steps:
       - uses: runs-on/action@v2
         with:
@@ -164,6 +166,9 @@ jobs:
         env:
           RUSTUP_PERMIT_COPY_RENAME: "1"
       - uses: ./.github/actions/sccache
+      # TODO: remove once https://github.com/runs-on/runner-images-for-aws/issues/55 is fixed
+      - name: Setup GPU driver
+        run: bash ./scripts/gpu_driver_setup.sh
       - uses: ./.github/actions/rust-cache-cuda
         with:
           cache-on-failure: true

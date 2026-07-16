@@ -14,7 +14,7 @@ on:
         type: boolean
 
 concurrency:
-  group: ${{ github.workflow_ref }}-release-binaries-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow_ref }}-release-binaries-${{ inputs.version }}
   cancel-in-progress: true
 
 permissions:
@@ -28,18 +28,18 @@ jobs:
   build-linux-release:
     name: Build ${{ matrix.target }}
     runs-on:
-      - runs-on=${{ github.run_id }}-${{ github.run_attempt }}-cargo-openvm-${{ matrix.arch }}/runner=${{ matrix.runner }}/image=${{ matrix.image }}/volume=80gb/extras=s3-cache
+      - runs-on=${{ github.run_id }}-${{ github.run_attempt }}-cargo-openvm-${{ matrix.arch }}/family=${{ matrix.family }}/image=${{ matrix.image }}/volume=80gb/extras=s3-cache
     strategy:
       fail-fast: false
       matrix:
         include:
           - target: x86_64-unknown-linux-gnu
             arch: linux-x64
-            runner: 64cpu-linux-x64
+            family: c8i-flex.16xlarge+c8i.16xlarge+c8a.16xlarge+c7i.16xlarge+c7a.16xlarge
             image: ubuntu24-full-x64
           - target: aarch64-unknown-linux-gnu
             arch: linux-arm64
-            runner: 16cpu-linux-arm64
+            family: c9g.4xlarge+c8g.4xlarge
             image: ubuntu24-full-arm64
     steps:
       - uses: runs-on/action@v2
@@ -104,7 +104,7 @@ jobs:
   build-linux-cuda-release:
     name: Build x86_64-unknown-linux-gnu CUDA ${{ matrix.cuda_version }}
     runs-on:
-      - runs-on=${{ github.run_id }}-${{ github.run_attempt }}-cargo-openvm-linux-x64-cuda-${{ matrix.cuda_package_version }}/image=ubuntu24-gpu-x64/family=g6.*+g5+g6e/cpu=4+32/volume=80gb/spot=capacity-optimized/extras=s3-cache
+      - runs-on=${{ github.run_id }}-${{ github.run_attempt }}-cargo-openvm-linux-x64-cuda-${{ matrix.cuda_package_version }}/image=ubuntu24-gpu-x64/family=g7.2xlarge+g6.2xlarge+g5.2xlarge/volume=80gb/spot=price-capacity-optimized/extras=s3-cache
     strategy:
       fail-fast: false
       matrix:
@@ -125,11 +125,23 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.version }}
+      - name: Check out release workflow tooling
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .ci-workflow
+          sparse-checkout: |
+            .github/actions
+            scripts
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-unknown-linux-gnu
-      - uses: ./.github/actions/sccache
-      - uses: Swatinem/rust-cache@v2
+      - uses: ./.ci-workflow/.github/actions/sccache
+      # TODO: remove once https://github.com/runs-on/runner-images-for-aws/issues/55 is fixed
+      - name: Setup GPU driver
+        run: bash ./.ci-workflow/scripts/gpu_driver_setup.sh
+
+      - uses: ./.ci-workflow/.github/actions/rust-cache-cuda
         with:
           cache-on-failure: true
           key: release-cuda-${{ matrix.cuda_version }}
@@ -165,6 +177,19 @@ jobs:
 
       - name: Smoke test binary
         run: ./target/x86_64-unknown-linux-gnu/release/${BINARY_NAME} openvm --version
+
+      - name: Install guest rust-src
+        run: rustup component add rust-src --toolchain nightly-2026-01-18
+
+      - name: Smoke test CUDA proving
+        working-directory: crates/cli
+        run: |
+          export PATH="$GITHUB_WORKSPACE/target/x86_64-unknown-linux-gnu/release:$PATH"
+          cargo openvm build \
+            --manifest-path tests/programs/fibonacci/Cargo.toml \
+            --config tests/programs/fibonacci/openvm.toml
+          EXE_PATH=tests/programs/fibonacci/openvm/release/openvm-cli-example-test.vmexe \
+            bash tests/scripts/cli_app_e2e.sh
 
       - name: Package binary
         id: package

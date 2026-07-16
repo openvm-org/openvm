@@ -17,8 +17,9 @@ env:
 
 jobs:
   upload-setup:
+    name: Generate and upload artifacts
     runs-on:
-      - runs-on=${{ github.run_id }}/runner=64cpu-linux-x64/extras=s3-cache/volume=80gb
+      - runs-on=${{ github.run_id }}/family=c8i-flex.16xlarge+c8i.16xlarge+c8a.16xlarge+c7i.16xlarge+c7a.16xlarge/extras=s3-cache/volume=80gb
     steps:
       - uses: runs-on/action@v2
         with:

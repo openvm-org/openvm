@@ -1,4 +1,4 @@
-name: OpenVM SDK Tests
+name: SDK Tests
 
 on:
   workflow_call:
@@ -14,7 +14,7 @@ on:
       family:
         description: "EC2 instance family (must match selected arch)"
         type: string
-        default: "m7a.24xlarge"
+        default: "m8a.24xlarge+m8i.24xlarge"
   push:
     branches: ["main"]
   pull_request:
@@ -22,7 +22,7 @@ on:
     branches: ["**"]
 
 concurrency:
-  group: ${{ github.workflow_ref }}-sdk-${{ github.event.pull_request.number || github.sha }}
+  group: ${{ github.workflow_ref }}-sdk-${{ github.event.action == 'labeled' && github.event.label.name != 'run-sdk-tests' && github.run_id || github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
 env:
@@ -30,13 +30,14 @@ env:
 
 jobs:
   tests:
-    if: ${{ github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'run-sdk-tests') }}
+    name: ${{ matrix.mode == 'aot' && 'AOT' || matrix.mode }}
+    if: ${{ github.event_name != 'pull_request' || (contains(github.event.pull_request.labels.*.name, 'run-sdk-tests') && (github.event.action != 'labeled' || github.event.label.name == 'run-sdk-tests')) }}
     strategy:
       matrix:
         mode: ["default", "ignored", "aot"]
 
     runs-on:
-      - runs-on=${{ github.run_id }}-sdk-${{ github.run_attempt }}-${{ strategy.job-index }}/family=${{ inputs.family || 'm7a.24xlarge' }}/image=${{ (inputs.arch || 'x86') == 'arm' && 'ubuntu24-full-arm64' || 'ubuntu24-full-x64' }}/volume=80gb/extras=s3-cache
+      - runs-on=${{ github.run_id }}-sdk-${{ github.run_attempt }}-${{ strategy.job-index }}/family=${{ inputs.family || 'm8a.24xlarge+m8i.24xlarge' }}/image=${{ (inputs.arch || 'x86') == 'arm' && 'ubuntu24-full-arm64' || 'ubuntu24-full-x64' }}/volume=80gb/extras=s3-cache
 
     steps:
       - uses: runs-on/action@v2
@@ -105,7 +106,7 @@ jobs:
           cargo build --release --examples --features parallel,root-prover,evm-verify
 
       - name: Run openvm-sdk crate tests (AOT)
-        if: ${{ matrix.mode == 'aot' && inputs.arch == 'x86' }}
+        if: ${{ matrix.mode == 'aot' && (inputs.arch || 'x86') == 'x86' }}
         working-directory: crates/sdk
         run: |
           export RUST_BACKTRACE=1

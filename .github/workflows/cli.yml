@@ -1,4 +1,4 @@
-name: OpenVM CLI Tests
+name: CLI Tests
 
 # Exercises `cargo-openvm` end-to-end:
 #   * Builds the CLI and puts it on PATH so the integration tests reuse it
@@ -17,6 +17,7 @@ on:
   pull_request:
     branches: ["**"]
     paths:
+      - "crates/toolchain/build/**"
       - "crates/cli/**"
       - ".github/workflows/cli.yml"
   workflow_call:
@@ -40,8 +41,9 @@ env:
 
 jobs:
   cli-tests:
+    name: Integration and examples
     runs-on:
-      - runs-on=${{ github.run_id }}/volume=80gb/runner=64cpu-linux-x64/image=ubuntu24-full-x64/extras=s3-cache
+      - runs-on=${{ github.run_id }}/volume=80gb/family=c8i-flex.16xlarge+c8i.16xlarge+c8a.16xlarge+c7i.16xlarge+c7a.16xlarge/image=ubuntu24-full-x64/extras=s3-cache
 
     steps:
       - uses: runs-on/action@v2
@@ -61,7 +63,7 @@ jobs:
       - uses: taiki-e/install-action@nextest
 
       - name: Install solc
-        # `cargo openvm setup --evm` and the stark/EVM e2e scripts shell out to solc.
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_evm_e2e }}
         run: |
           (hash svm 2>/dev/null || cargo install --locked --version 0.2.23 svm-rs) && svm install 0.8.19 && solc --version
 
@@ -71,6 +73,9 @@ jobs:
         run: |
           cargo build --locked --profile fast -p cargo-openvm
           echo "${{ github.workspace }}/target/fast" >> $GITHUB_PATH
+
+      - name: Install guest rust-src
+        run: rustup component add rust-src --toolchain nightly-2026-01-18
 
       - name: Build and run book examples
         working-directory: examples
@@ -95,11 +100,9 @@ jobs:
           cargo openvm build
           cmp app1.vmexe openvm/release/ecc-example.vmexe || (echo "Build is not deterministic!" && exit 1)
 
-      - name: Run app-level keygen
+      - name: Run default-config keygen
         working-directory: crates/cli
-        run: |
-          export RUST_BACKTRACE=1
-          cargo openvm keygen --config ./example/app_config.toml --output-dir .
+        run: cargo openvm keygen --output-dir .
 
       - name: Set USE_LOCAL_OPENVM
         # `cli_init_build.sh` reads USE_LOCAL_OPENVM to decide whether to patch the

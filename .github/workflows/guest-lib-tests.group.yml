@@ -1,0 +1,134 @@
+name: Guest Library Test Group
+
+on:
+  workflow_call:
+    inputs:
+      runner_id:
+        required: true
+        type: string
+      machine_type:
+        type: string
+        default: image=ubuntu24-gpu-x64/family=g7.2xlarge+g6.2xlarge+g5.2xlarge/volume=40gb/spot=price-capacity-optimized
+      crates:
+        required: true
+        type: string
+      mode:
+        type: string
+        default: default
+      group_crates:
+        type: string
+        default: ""
+
+env:
+  CARGO_TERM_COLOR: always
+  OPENVM_SKIP_DEBUG: "1"
+
+jobs:
+  tests:
+    name: Run tests
+    runs-on:
+      - runs-on=${{ github.run_id }}-guest-lib-tests-${{ github.run_attempt }}-${{ inputs.runner_id }}/${{ inputs.machine_type }}/extras=s3-cache
+
+    steps:
+      - uses: runs-on/action@v2
+        with:
+          sccache: s3
+      - name: Load SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: |
+            ${{ secrets.GH_ACTIONS_DEPLOY_PRIVATE_KEY }}
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        env:
+          RUSTUP_PERMIT_COPY_RENAME: "1"
+      - uses: ./.github/actions/sccache
+
+      # TODO: remove once https://github.com/runs-on/runner-images-for-aws/issues/55 is fixed
+      - name: Setup GPU driver
+        if: inputs.mode == 'cuda'
+        run: bash ./scripts/gpu_driver_setup.sh
+
+      - uses: Swatinem/rust-cache@v2
+        if: inputs.mode != 'cuda'
+        with:
+          cache-on-failure: true
+      - uses: ./.github/actions/rust-cache-cuda
+        if: inputs.mode == 'cuda'
+        with:
+          cache-on-failure: true
+      - uses: taiki-e/install-action@nextest
+
+      - name: Check CUDA status and set environment variables
+        if: inputs.mode == 'cuda'
+        run: |
+          nvidia-smi
+          nvidia-smi -L
+          nvcc --version
+          echo "CUDA_ARCH=86,89,120" >> $GITHUB_ENV
+
+      - name: Install guest rust-src
+        run: rustup component add rust-src --toolchain nightly-2026-01-18
+
+      - name: Run guest library tests
+        env:
+          GROUP_CRATES: ${{ inputs.group_crates }}
+          SELECTED_CRATES: ${{ inputs.crates }}
+        run: |
+          if [[ "$SELECTED_CRATES" == "all" ]]; then
+            crates=()
+            for directory in guest-libs/*; do
+              if [[ -f "$directory/Cargo.toml" || -f "$directory/circuit/Cargo.toml" ]]; then
+                crates+=("${directory#guest-libs/}")
+              fi
+            done
+          else
+            read -r -a crates <<< "$SELECTED_CRATES"
+          fi
+
+          read -r -a group_crates <<< "$GROUP_CRATES"
+          for crate in "${crates[@]}"; do
+            test_dir="guest-libs/$crate"
+            if [[ "$crate" == "verify-stark" ]]; then
+              test_dir="$test_dir/circuit"
+            fi
+            [[ -f "$test_dir/Cargo.toml" ]] || continue
+
+            if [[ ${#group_crates[@]} -gt 0 ]]; then
+              in_group=false
+              for group_crate in "${group_crates[@]}"; do
+                if [[ "$crate" == "$group_crate" ]]; then
+                  in_group=true
+                  break
+                fi
+              done
+              [[ "$in_group" == "true" ]] || continue
+            fi
+
+            echo "::group::Running tests for $crate"
+            extra_args=()
+            if [[ "${{ inputs.mode }}" == "cuda" ]]; then
+              if [[ "$crate" == "pairing" ]]; then
+                extra_args=(--features=bn254,bls12_381)
+              elif [[ "$crate" == "sha2" || "$crate" == "keccak256" ]]; then
+                extra_args=(--run-ignored=all)
+              fi
+            elif [[ "$crate" == "pairing" ]]; then
+              extra_args=(--features=bn254,bls12_381,aot -E 'not test(fallback)')
+            elif [[ "$crate" == "sha2" || "$crate" == "keccak256" ]]; then
+              extra_args=(--features=aot)
+            fi
+
+            pushd "$test_dir"
+            if [[ "${{ inputs.mode }}" == "cuda" ]]; then
+              CUDA_OPT_LEVEL=3 cargo nextest run --cargo-profile=fast --features=cuda "${extra_args[@]}" --no-tests=pass --test-threads=1
+            else
+              cargo nextest run --cargo-profile=fast "${extra_args[@]}" --no-tests=pass --test-threads=1
+            fi
+            popd
+            echo "::endgroup::"
+          done
+
+      - name: sccache stats
+        if: always()
+        run: sccache --show-stats || true
