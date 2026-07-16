@@ -129,7 +129,7 @@ fn rand_load_sign_extend_word_test() {
 fn negative_load_sign_extend_address_wraparound_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::from_config(memory_config_for());
-    let (mut harness, _bitwise) = create_word_harness(&mut tester);
+    let (mut harness, _) = create_word_harness(&mut tester);
     set_and_execute(
         &mut tester,
         &mut harness.executor,

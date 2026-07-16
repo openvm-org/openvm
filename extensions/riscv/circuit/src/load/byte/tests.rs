@@ -121,7 +121,7 @@ fn rand_load_byte_test() {
 fn negative_load_address_wraparound_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::from_config(load_memory_config());
-    let (mut harness, _bitwise) = create_byte_harness(&mut tester);
+    let (mut harness, _) = create_byte_harness(&mut tester);
     set_and_execute_load(
         &mut tester,
         &mut harness.executor,
@@ -139,7 +139,7 @@ fn negative_load_address_wraparound_test() {
 #[should_panic(expected = "effective address exceeds implemented memory address space")]
 fn negative_load_address_underflow_test() {
     let mut tester = VmChipTestBuilder::from_config(load_memory_config());
-    let (mut harness, _bitwise) = create_byte_harness(&mut tester);
+    let (mut harness, _) = create_byte_harness(&mut tester);
     let rs1_ptr = 8;
     tester.write_bytes(RV64_REGISTER_AS as usize, rs1_ptr, [F::ZERO; 8]);
 

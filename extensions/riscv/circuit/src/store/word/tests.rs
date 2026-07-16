@@ -147,7 +147,7 @@ fn rand_store_word_test() {
 fn negative_store_address_wraparound_test() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::from_config(store_memory_config());
-    let (mut harness, _bitwise) = create_store_word_harness(&mut tester);
+    let (mut harness, _) = create_store_word_harness(&mut tester);
     set_and_execute_store(
         &mut tester,
         &mut harness.executor,
@@ -165,7 +165,7 @@ fn negative_store_address_wraparound_test() {
 #[should_panic(expected = "effective address exceeds implemented memory address space")]
 fn negative_store_address_underflow_test() {
     let mut tester = VmChipTestBuilder::from_config(store_memory_config());
-    let (mut harness, _bitwise) = create_store_word_harness(&mut tester);
+    let (mut harness, _) = create_store_word_harness(&mut tester);
     let rs1_ptr = 8;
     tester.write_bytes(RV64_REGISTER_AS as usize, rs1_ptr, [F::ZERO; 8]);
 
