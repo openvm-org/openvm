@@ -168,10 +168,8 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64StoreAdapterAir {
             .range_check(mem_ptr_hi.clone(), self.pointer_max_bits - U16_BITS)
             .eval(builder, is_valid.clone());
 
-        // When the access crosses into the next block, additionally bound `aligned + 8` by
-        // range checking its limbs. mem_ptr_carry claims whether the +8 wraps the low limb at
-        // 2^16; the low-limb check forces it: with the wrong carry the argument is either 2^13
-        // or negative, and in both cases out of range.
+        // When the access crosses, range check the next block address too. mem_ptr_carry claims
+        // whether adding one block wraps the low limb at 2^16; the low-limb check forces it.
         builder.assert_bool(local_cols.mem_ptr_carry);
         self.range_bus
             .range_check(
@@ -497,11 +495,12 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64StoreAdapterFiller {
             .add_count(ptr_limbs[1], self.pointer_max_bits - U16_BITS);
         adapter_row.mem_ptr_low_limb = F::from_u32(ptr_limbs[0]);
 
-        let carry = crosses && aligned_limb0 + 8 == 1 << U16_BITS;
+        let next_block_low_sum = aligned_limb0 + RV64_REGISTER_NUM_LIMBS as u32;
+        let carry = crosses && next_block_low_sum == 1 << U16_BITS;
         adapter_row.mem_ptr_carry = F::from_bool(carry);
         if crosses {
             self.range_checker_chip.add_count(
-                (aligned_limb0 + 8 - ((carry as u32) << U16_BITS)) >> 3,
+                (next_block_low_sum - ((carry as u32) << U16_BITS)) >> 3,
                 U16_BITS - 3,
             );
         }

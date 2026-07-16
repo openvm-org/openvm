@@ -84,9 +84,10 @@ fn random_memory_access(
     let min_ptr = imm_signed.max(0) as usize;
     let alignment_mask = (1usize << alignment) - 1;
     let min_aligned_ptr = (min_ptr + alignment_mask) >> alignment;
-    // Stay 16 bytes clear of the top of the address space so a block-crossing access always
-    // has a valid second block.
-    let ptr_val = rng.random_range(min_aligned_ptr..((max_addr - 8) >> alignment)) << alignment;
+    // Leave room for a second block when the access crosses the first one.
+    let ptr_val = rng
+        .random_range(min_aligned_ptr..((max_addr - RV64_REGISTER_NUM_LIMBS) >> alignment))
+        << alignment;
     let rs1_low = (ptr_val as i64 - imm_signed) as u32;
     let ptr = rs1_low.to_le_bytes();
     let rs1 = rs1.unwrap_or([ptr[0], ptr[1], ptr[2], ptr[3], 0, 0, 0, 0]);
@@ -158,7 +159,7 @@ pub(crate) fn set_and_execute_load<RA: Arena, E: PreflightExecutor<F, RA>>(
     );
     tester.write_bytes(
         mem_as,
-        access.base_ptr + 8,
+        access.base_ptr + RV64_REGISTER_NUM_LIMBS,
         rv64_u16_block_to_bytes(read_data[1]).map(F::from_u8),
     );
 
@@ -239,7 +240,7 @@ pub(crate) fn set_and_execute_store<RA: Arena, E: PreflightExecutor<F, RA>>(
     );
     tester.write_bytes(
         mem_as,
-        access.base_ptr + 8,
+        access.base_ptr + RV64_REGISTER_NUM_LIMBS,
         rv64_u16_block_to_bytes(prev_data[1]).map(F::from_u8),
     );
     tester.write_bytes(
@@ -274,7 +275,7 @@ pub(crate) fn set_and_execute_store<RA: Arena, E: PreflightExecutor<F, RA>>(
     // the model.
     assert_eq!(
         rv64_u16_block_to_bytes(write_data[1]).map(F::from_u8),
-        tester.read_bytes::<8>(mem_as, access.base_ptr + 8)
+        tester.read_bytes::<8>(mem_as, access.base_ptr + RV64_REGISTER_NUM_LIMBS)
     );
 }
 

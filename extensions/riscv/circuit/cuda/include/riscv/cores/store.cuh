@@ -37,7 +37,7 @@ static_assert(offsetof(StoreRecord, prev_data) == 8);
 static_assert(offsetof(Rv64StoreRecord, core) == 36);
 
 static __device__ __forceinline__ uint16_t store_byte_from_cell(uint16_t cell, uint8_t byte_idx) {
-    return (cell >> (RV64_BYTE_BITS * byte_idx)) & 0xff;
+    return (cell >> (RV64_BYTE_BITS * byte_idx)) & RV64_BYTE_MASK;
 }
 
 static __device__ __forceinline__ uint16_t

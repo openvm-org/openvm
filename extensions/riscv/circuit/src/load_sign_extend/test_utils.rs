@@ -4,7 +4,9 @@ use std::sync::Arc;
 
 use openvm_circuit::arch::{testing::TestBuilder, Arena, MemoryConfig, PreflightExecutor};
 use openvm_instructions::{
-    instruction::Instruction, riscv::RV64_REGISTER_AS, LocalOpcode, PUBLIC_VALUES_AS,
+    instruction::Instruction,
+    riscv::{RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    LocalOpcode, PUBLIC_VALUES_AS,
 };
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, LOADB, LOADH, LOADW};
 use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
@@ -62,10 +64,9 @@ pub(crate) fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
         imm as i64 - (1 << IMM_BITS)
     };
     let min_ptr = imm_signed.max(0) as usize;
-    // Signed loads support any byte shift, so sample fully misaligned pointers, staying 16
-    // bytes clear of the top of the address space so a block-crossing access always has a
-    // valid second block.
-    let ptr_val = rng.random_range(min_ptr..max_addr - 8);
+    // Signed loads support any byte shift. Leave room for a second block when the access crosses
+    // the first one.
+    let ptr_val = rng.random_range(min_ptr..max_addr - RV64_REGISTER_NUM_LIMBS);
     let rs1 = rs1.unwrap_or_else(|| {
         let low4 = (ptr_val as i64 - imm_signed).to_le_bytes();
         [low4[0], low4[1], low4[2], low4[3], 0, 0, 0, 0]
@@ -93,7 +94,7 @@ pub(crate) fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     );
     tester.write_bytes(
         2,
-        (ptr_val - shift_amount) as usize + 8,
+        (ptr_val - shift_amount) as usize + RV64_REGISTER_NUM_LIMBS,
         read_data[1].map(F::from_u8),
     );
 

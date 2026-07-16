@@ -127,11 +127,13 @@ struct Rv64LoadAdapter {
         range_checker.add_count(aligned_limb0 >> 3, U16_BITS - 3);
         range_checker.add_count(ptr_limbs[1], pointer_max_bits - U16_BITS);
 
-        bool carry = crosses && (aligned_limb0 + 8 == (1u << U16_BITS));
+        uint32_t next_block_low_sum = aligned_limb0 + uint32_t(RV64_REGISTER_NUM_LIMBS);
+        bool carry = crosses && next_block_low_sum == (1u << U16_BITS);
         COL_WRITE_VALUE(row, Rv64LoadAdapterCols, mem_ptr_carry, carry);
         if (crosses) {
             range_checker.add_count(
-                (aligned_limb0 + 8 - (uint32_t(carry) << U16_BITS)) >> 3, U16_BITS - 3
+                (next_block_low_sum - (uint32_t(carry) << U16_BITS)) >> 3,
+                U16_BITS - 3
             );
         }
         if (carry) {
