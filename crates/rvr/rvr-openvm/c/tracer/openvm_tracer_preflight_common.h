@@ -94,7 +94,8 @@ static constexpr uint32_t G2_PRODUCER_RESIDUAL_CTRL_SLOT = 1u;
 static constexpr uint32_t G2_PRODUCER_RESIDUAL_TAG_SLOT = 2u;
 static constexpr uint32_t G2_PRODUCER_RESIDUAL_VALUE_SLOT = 3u;
 static constexpr uint32_t G2_PRODUCER_ADDI_SLOT = 4u;
-static constexpr uint32_t G2_PRODUCER_LANE_COUNT = 58u;
+static constexpr uint32_t G2_PRODUCER_OPAQUE_EVENT_COUNT_SLOT = 58u;
+static constexpr uint32_t G2_PRODUCER_LANE_COUNT = 59u;
 
 static constexpr uint32_t PREFLIGHT_PROGRAM_WRITE_COMPLETE = 1u;
 static constexpr uint32_t PREFLIGHT_PROGRAM_CROSSING_RESIDUAL = 2u;
@@ -564,6 +565,23 @@ static __attribute__((always_inline)) inline uint64_t preflight_patch_mem_block(
   return (block & ~(mask << shift)) | ((value & mask) << shift);
 }
 
+static constexpr uint32_t G2_REJECT_DIRTY_PAGE = 2u;
+static constexpr uint32_t G2_REJECT_CUSTOM_SCRATCH = 3u;
+static constexpr uint32_t G2_REJECT_CUSTOM_EVENT_COUNT = 4u;
+static constexpr uint32_t G2_REJECT_PRODUCER_ABI = 5u;
+static constexpr uint32_t G2_REJECT_LANE_CAPACITY = 6u;
+static constexpr uint32_t G2_REJECT_RUN_COUNT = 7u;
+static constexpr uint32_t G2_REJECT_STANDARD_KIND = 8u;
+static constexpr uint32_t G2_REJECT_NARROW_VALUE = 9u;
+static constexpr uint32_t G2_REJECT_STANDARD_PAIR = 10u;
+static constexpr uint32_t G2_REJECT_POINTER = 11u;
+static constexpr uint32_t G2_REJECT_LOAD_STORE_KIND = 12u;
+static constexpr uint32_t G2_REJECT_LOAD_STORE_PAIR = 13u;
+static constexpr uint32_t G2_REJECT_RESIDUAL_SHAPE = 14u;
+static constexpr uint32_t G2_REJECT_RESIDUAL_PAIR = 15u;
+static constexpr uint32_t G2_REJECT_CUSTOM_SCRATCH_CAPACITY = 16u;
+static constexpr uint32_t G2_REJECT_ADDRESS = 17u;
+
 #if defined(OPENVM_RVR_PREFLIGHT_DELTA)
 #include "openvm_tracer_preflight_delta.h"
 #else
@@ -588,6 +606,10 @@ preflight_device_chronology(Tracer* restrict t) {
 }
 
 static __attribute__((always_inline)) inline void
+preflight_g2_emit_opaque_event_count(Tracer* restrict t,
+                                     uint32_t event_count);
+
+static __attribute__((always_inline)) inline void
 preflight_mark_dirty_memory_page(Tracer* restrict t, uint64_t address) {
   if (likely(t->g2 == NULL)) {
     return;
@@ -596,7 +618,7 @@ preflight_mark_dirty_memory_page(Tracer* restrict t, uint64_t address) {
   uint64_t word = page >> 6;
   if (unlikely(word >= t->dirty_memory_pages_words ||
                t->dirty_memory_pages == NULL)) {
-    t->g2->overflow = 1u;
+    t->g2->overflow = G2_REJECT_DIRTY_PAGE;
     return;
   }
   t->dirty_memory_pages[word] |= UINT64_C(1) << (page & 63u);
@@ -615,10 +637,32 @@ static __attribute__((always_inline)) inline void preflight_store_prev_value(
 }
 
 static __attribute__((always_inline)) inline void
-preflight_begin_custom_memory_capture(RvState* restrict state) {}
+preflight_begin_custom_memory_capture(RvState* restrict state) {
+  Tracer* restrict t = state->tracer;
+  if (t->g2 != NULL) {
+    if (unlikely(t->custom_memory_scratch == NULL ||
+                 t->custom_memory_scratch_cap == 0u)) {
+      t->g2->overflow = G2_REJECT_CUSTOM_SCRATCH;
+      t->custom_memory_scratch_len = UINT32_MAX;
+      return;
+    }
+    t->custom_memory_scratch_len = 0u;
+  }
+}
 
 static __attribute__((always_inline)) inline MemoryLogEntry*
 preflight_take_custom_memory_events(Tracer* restrict t, uint32_t event_count) {
+  if (t->g2 != NULL) {
+    uint32_t captured = t->custom_memory_scratch_len;
+    t->custom_memory_scratch_len = UINT32_MAX;
+    if (unlikely(captured != event_count ||
+                 event_count > t->custom_memory_scratch_cap)) {
+      t->g2->overflow = G2_REJECT_CUSTOM_EVENT_COUNT;
+      return NULL;
+    }
+    preflight_g2_emit_opaque_event_count(t, event_count);
+    return t->custom_memory_scratch;
+  }
   if (unlikely(t->memory_log_len < event_count ||
                t->memory_log_len > t->memory_log_cap)) {
     return NULL;
@@ -636,7 +680,7 @@ preflight_g2_lane(G2ProducerV1* restrict g2, uint32_t slot) {
   if (unlikely(g2 == NULL || g2->base == NULL || g2->lanes == NULL ||
                g2->lane_count != G2_PRODUCER_LANE_COUNT ||
                slot >= g2->lane_count)) {
-    if (g2 != NULL) g2->overflow = 1u;
+    if (g2 != NULL) g2->overflow = G2_REJECT_PRODUCER_ABI;
     return NULL;
   }
   return &g2->lanes[slot];
@@ -651,10 +695,26 @@ preflight_g2_claim(G2ProducerV1* restrict g2, uint32_t slot,
   uint64_t end = lane->offset + (uint64_t)(index + 1u) * width;
   if (unlikely(index >= lane->cap || end < lane->offset ||
                end > g2->capacity)) {
-    g2->overflow = 1u;
+    g2->overflow = G2_REJECT_LANE_CAPACITY;
     return UINT32_MAX;
   }
   return index;
+}
+
+static __attribute__((always_inline)) inline void
+preflight_g2_emit_opaque_event_count(Tracer* restrict t,
+                                     uint32_t event_count) {
+  G2ProducerV1* restrict g2 = t->g2;
+  if (g2 == NULL) return;
+  uint32_t index = preflight_g2_claim(
+      g2, G2_PRODUCER_OPAQUE_EVENT_COUNT_SLOT, sizeof(uint32_t));
+  if (unlikely(index == UINT32_MAX || event_count == 0u)) {
+    if (event_count == 0u) g2->overflow = G2_REJECT_CUSTOM_EVENT_COUNT;
+    return;
+  }
+  G2ProducerLaneV1 const* restrict lane =
+      &g2->lanes[G2_PRODUCER_OPAQUE_EVENT_COUNT_SLOT];
+  ((uint32_t*)(g2->base + lane->offset))[index] = event_count;
 }
 
 static __attribute__((always_inline)) inline uint32_t
@@ -710,7 +770,7 @@ static __attribute__((always_inline)) inline void preflight_g2_emit_run(
                                       sizeof(uint32_t));
   uint32_t next = g2->instruction_count + instruction_count;
   if (unlikely(index == UINT32_MAX || next < g2->instruction_count)) {
-    g2->overflow = 1u;
+    g2->overflow = G2_REJECT_RUN_COUNT;
     return;
   }
   G2ProducerLaneV1 const* restrict lane =
@@ -738,7 +798,7 @@ static __attribute__((always_inline)) inline void preflight_g2_emit_standard1(
   G2ProducerV1* restrict g2 = state->tracer->g2;
   uint32_t slot = preflight_g2_standard_slot(kind);
   if (unlikely(slot == UINT32_MAX || kind == 12u || kind == 14u)) {
-    if (g2 != NULL) g2->overflow = 1u;
+    if (g2 != NULL) g2->overflow = G2_REJECT_STANDARD_KIND;
     return;
   }
   uint32_t index = preflight_g2_claim(
@@ -747,7 +807,7 @@ static __attribute__((always_inline)) inline void preflight_g2_emit_standard1(
   G2ProducerLaneV1 const* restrict lane = &g2->lanes[slot];
   if (kind == 13u) {
     if (unlikely(v0 > UINT32_MAX)) {
-      g2->overflow = 1u;
+      g2->overflow = G2_REJECT_NARROW_VALUE;
       return;
     }
     ((uint32_t*)(g2->base + lane->offset))[index] = (uint32_t)v0;
@@ -761,7 +821,7 @@ static __attribute__((always_inline)) inline void preflight_g2_emit_standard2(
   G2ProducerV1* restrict g2 = state->tracer->g2;
   uint32_t slot = preflight_g2_standard_slot(kind);
   if (unlikely(slot == UINT32_MAX || kind == 13u || kind == 29u)) {
-    if (g2 != NULL) g2->overflow = 1u;
+    if (g2 != NULL) g2->overflow = G2_REJECT_STANDARD_PAIR;
     return;
   }
   uint32_t v0_index = preflight_g2_claim(g2, slot, sizeof(uint64_t));
@@ -776,7 +836,7 @@ static __attribute__((always_inline)) inline void preflight_g2_emit_standard2(
 static __attribute__((always_inline)) inline bool
 preflight_g2_validate_pointer(RvState* restrict state, uint64_t pointer) {
   if (unlikely(pointer > UINT32_MAX && state->tracer->g2 != NULL)) {
-    state->tracer->g2->overflow = 1u;
+    state->tracer->g2->overflow = G2_REJECT_POINTER;
     return false;
   }
   return true;
@@ -788,14 +848,14 @@ preflight_g2_emit_load_store(RvState* restrict state, uint32_t kind,
   G2ProducerV1* restrict g2 = state->tracer->g2;
   uint32_t slot = preflight_g2_load_store_slot(kind);
   if (unlikely(slot == UINT32_MAX || base_pointer > UINT32_MAX)) {
-    if (g2 != NULL) g2->overflow = 1u;
+    if (g2 != NULL) g2->overflow = G2_REJECT_LOAD_STORE_KIND;
     return;
   }
   uint32_t pointer_index = preflight_g2_claim(g2, slot, sizeof(uint32_t));
   uint32_t block_index = preflight_g2_claim(g2, slot + 1u, sizeof(uint64_t));
   if (unlikely(pointer_index == UINT32_MAX || block_index == UINT32_MAX ||
                pointer_index != block_index)) {
-    if (g2 != NULL) g2->overflow = 1u;
+    if (g2 != NULL) g2->overflow = G2_REJECT_LOAD_STORE_PAIR;
     return;
   }
   G2ProducerLaneV1 const* restrict pointer_lane = &g2->lanes[slot];
@@ -820,7 +880,7 @@ static __attribute__((always_inline)) inline uint8_t preflight_g2_residual_tag(
                                      : 7u;
   if (unlikely(kind > PREFLIGHT_MEMORY_KIND_TOUCH || as_code == 3u ||
                width_code > 4u ||
-               (kind == PREFLIGHT_MEMORY_KIND_TOUCH) != (width == 0u))) {
+               (kind != PREFLIGHT_MEMORY_KIND_TOUCH && width == 0u))) {
     return UINT8_MAX;
   }
   return kind | (uint8_t)(as_code << 2u) | (uint8_t)(width_code << 4u);
@@ -833,7 +893,7 @@ preflight_g2_emit_residual(Tracer* restrict t, uint8_t kind,
   G2ProducerV1* restrict g2 = t->g2;
   uint8_t tag = preflight_g2_residual_tag(kind, addr_space, width);
   if (unlikely(g2 == NULL || address > UINT32_MAX || tag == UINT8_MAX)) {
-    if (g2 != NULL) g2->overflow = 1u;
+    if (g2 != NULL) g2->overflow = G2_REJECT_RESIDUAL_SHAPE;
     return UINT32_MAX;
   }
   uint32_t ctrl_index = preflight_g2_claim(
@@ -844,7 +904,7 @@ preflight_g2_emit_residual(Tracer* restrict t, uint8_t kind,
       g2, G2_PRODUCER_RESIDUAL_VALUE_SLOT, sizeof(uint64_t));
   if (unlikely(ctrl_index == UINT32_MAX || tag_index != ctrl_index ||
                value_index != ctrl_index)) {
-    g2->overflow = 1u;
+    g2->overflow = G2_REJECT_RESIDUAL_PAIR;
     return UINT32_MAX;
   }
   G2ProducerLaneV1 const* restrict ctrl_lane =
@@ -884,7 +944,8 @@ static __attribute__((always_inline)) inline uint32_t preflight_touch(
   preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE,
                              detail_started);
 
-  if (likely(preflight_device_aux(t) && !preflight_device_aux_oracle(t))) {
+  if (likely(preflight_device_aux(t) && !preflight_device_aux_oracle(t) &&
+             t->g2 == NULL)) {
     *out_timestamp = timestamp;
     return 0u;
   }
@@ -930,7 +991,8 @@ preflight_touch_seed_from_state(RvState* restrict state, uint8_t addr_space,
   preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE,
                              detail_started);
 
-  if (likely(preflight_device_aux(t) && !preflight_device_aux_oracle(t))) {
+  if (likely(preflight_device_aux(t) && !preflight_device_aux_oracle(t) &&
+             t->g2 == NULL)) {
     *out_initial_value = 0u;
     *out_timestamp = timestamp;
     return 0u;
@@ -950,10 +1012,9 @@ preflight_touch_seed_from_state(RvState* restrict state, uint8_t addr_space,
   preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE,
                              detail_started);
   uint64_t initial_value = 0u;
-  if (prev_timestamp == 0u || preflight_device_aux_oracle(t)) {
-    /* First touch needs the boundary seed. The oracle additionally retains
-     * the actual predecessor for repeated TOUCH events so its full residual
-     * vector has the same semantics as chronological device replay. */
+  if (prev_timestamp == 0u || preflight_device_aux_oracle(t) || t->g2 != NULL) {
+    /* First touch needs the boundary seed. The oracle and G2 direct-final
+     * custom arenas also retain the current block for repeated TOUCH events. */
     if (prev_timestamp == 0u) {
       detail_started = preflight_detail_phase_begin(
           t, PREFLIGHT_DETAIL_PHASE_FIRST_TOUCH, sizeof(TouchedBlock));
@@ -1015,16 +1076,17 @@ preflight_append_memory_record(Tracer* restrict t, uint8_t kind,
       if (likely(scratch_idx < t->custom_memory_scratch_cap)) {
         MemoryLogEntry scratch_entry = {
             .timestamp = timestamp,
-            .prev_timestamp = device_aux ? (PREFLIGHT_DEVICE_AUX_TOKEN | idx)
-                                         : prev_timestamp,
+            .prev_timestamp = device_aux && t->g2 == NULL
+                                  ? (PREFLIGHT_DEVICE_AUX_TOKEN | idx)
+                                  : prev_timestamp,
             .kind = kind,
             .addr_space = addr_space,
             .width = width,
             ._pad0 = 0,
-            ._pad1 = device_aux ? idx + 1u : 0u,
+            ._pad1 = device_aux && t->g2 == NULL ? idx + 1u : 0u,
             .address = address,
             .value = value,
-            .prev_value = device_aux ? 0u : prev_value,
+            .prev_value = device_aux && t->g2 == NULL ? 0u : prev_value,
         };
         t->custom_memory_scratch[scratch_idx] = scratch_entry;
       } else {
@@ -1078,6 +1140,25 @@ preflight_append_memory_record(Tracer* restrict t, uint8_t kind,
         t, PREFLIGHT_DETAIL_PHASE_RESIDUAL_EMIT, 17u);
     uint32_t index = preflight_g2_emit_residual(
         t, kind, addr_space, address, width, value, timestamp);
+    if (unlikely(t->custom_memory_scratch_len != UINT32_MAX)) {
+      uint32_t scratch_idx = t->custom_memory_scratch_len++;
+      if (likely(scratch_idx < t->custom_memory_scratch_cap)) {
+        t->custom_memory_scratch[scratch_idx] = (MemoryLogEntry){
+            .timestamp = timestamp,
+            .prev_timestamp = prev_timestamp,
+            .kind = kind,
+            .addr_space = addr_space,
+            .width = width,
+            ._pad0 = 0,
+            ._pad1 = 0,
+            .address = address,
+            .value = value,
+            .prev_value = prev_value,
+        };
+      } else {
+        t->g2->overflow = G2_REJECT_CUSTOM_SCRATCH_CAPACITY;
+      }
+    }
     preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_RESIDUAL_EMIT,
                                detail_started);
     return index;
@@ -1116,7 +1197,7 @@ static __attribute__((always_inline)) inline uint32_t preflight_append_memory(
   bool compact_residual = preflight_compact_residual_memory(t);
   if (unlikely(compact_residual && address > UINT32_MAX)) {
     if (t->g2 != NULL) {
-      t->g2->overflow = 1u;
+      t->g2->overflow = G2_REJECT_ADDRESS;
     } else if (t->delta_records != NULL) {
       t->delta_records->flags |= PREFLIGHT_RECORD_OVERFLOW;
     }
@@ -1132,8 +1213,9 @@ static __attribute__((always_inline)) inline uint32_t preflight_append_memory(
       t, kind, addr_space, address, width, value, prev_value, timestamp,
       prev_timestamp, compact_residual);
 #if defined(OPENVM_RVR_PREFLIGHT_DELTA)
-  return preflight_device_aux(t) ? (PREFLIGHT_DEVICE_AUX_TOKEN | event_index)
-                                 : prev_timestamp;
+  return preflight_device_aux(t) && t->g2 == NULL
+             ? (PREFLIGHT_DEVICE_AUX_TOKEN | event_index)
+             : prev_timestamp;
 #else
   return prev_timestamp;
 #endif
@@ -1142,6 +1224,44 @@ static __attribute__((always_inline)) inline uint32_t preflight_append_memory(
 static __attribute__((always_inline)) inline void trace_timestamp(
     RvState* restrict state) {
   state->tracer->timestamp++;
+}
+
+/* G2 standard rows are reconstructed from their value lanes on-device, so
+ * their accesses must advance the host predecessor shadow without being
+ * duplicated in the residual lanes. Custom and HintStore instructions keep
+ * using the trace_* helpers below because their events are residual-native. */
+static __attribute__((always_inline)) inline void preflight_g2_shadow_touch(
+    Tracer* restrict t, uint8_t addr_space, uint64_t address,
+    uint64_t current_value) {
+  uint32_t timestamp;
+  preflight_touch(t, addr_space, address, current_value, &timestamp);
+}
+
+static __attribute__((always_inline)) inline void
+preflight_g2_shadow_reg_touch(RvState* restrict state, uint8_t idx) {
+  uint64_t value = idx == 0 ? 0u : state->regs[idx];
+  preflight_g2_shadow_touch(state->tracer, AS_REGISTER,
+                            (uint32_t)idx * WORD_SIZE, value);
+}
+
+static __attribute__((always_inline)) inline void
+preflight_g2_shadow_mem_touch(RvState* restrict state, uint64_t block_addr,
+                              uint64_t block_value) {
+  preflight_g2_shadow_touch(state->tracer, AS_MEMORY, block_addr, block_value);
+}
+
+static __attribute__((always_inline)) inline void
+preflight_g2_shadow_mem_store_touch(RvState* restrict state,
+                                    uint64_t block_addr) {
+  preflight_g2_shadow_touch(state->tracer, AS_MEMORY, block_addr,
+                            preflight_read_mem_block(state, block_addr));
+  preflight_mark_dirty_memory_page(state->tracer, block_addr);
+}
+
+static __attribute__((always_inline)) inline void
+preflight_g2_shadow_pv_touch(RvState* restrict state, uint64_t block_addr) {
+  preflight_g2_shadow_touch(state->tracer, AS_PUBLIC_VALUES, block_addr,
+                            preflight_read_pv_block(state->tracer, block_addr));
 }
 
 /* ── Trace-only register access ──────────────────────────────────── */
@@ -1161,7 +1281,8 @@ static __attribute__((always_inline)) inline uint32_t trace_reg_write(
     RvState* restrict state, uint8_t idx, uint64_t new_val) {
   uint64_t prev_value =
       preflight_device_aux(state->tracer) &&
-              !preflight_device_aux_oracle(state->tracer)
+              !preflight_device_aux_oracle(state->tracer) &&
+              state->tracer->g2 == NULL
           ? 0u
           : state->regs[idx];
   return preflight_append_memory(state->tracer, PREFLIGHT_MEMORY_KIND_WRITE,
@@ -1176,7 +1297,8 @@ static __attribute__((always_inline)) inline uint32_t trace_reg_write(
 static __attribute__((always_inline)) inline uint32_t trace_mem_touch(
     RvState* restrict state, uint64_t block_addr, uint64_t block_value) {
   Tracer* restrict t = state->tracer;
-  if (likely(preflight_device_aux(t) && !preflight_device_aux_oracle(t))) {
+  if (likely(preflight_device_aux(t) && !preflight_device_aux_oracle(t) &&
+             t->g2 == NULL)) {
     t->timestamp++;
     return 0u;
   }
@@ -1211,7 +1333,8 @@ static __attribute__((always_inline)) inline uint32_t trace_mem_touch(
 static __attribute__((always_inline)) inline uint32_t trace_mem_store_touch(
     RvState* restrict state, uint64_t block_addr) {
   Tracer* restrict t = state->tracer;
-  if (likely(preflight_device_aux(t) && !preflight_device_aux_oracle(t))) {
+  if (likely(preflight_device_aux(t) && !preflight_device_aux_oracle(t) &&
+             t->g2 == NULL)) {
     t->timestamp++;
     preflight_mark_dirty_memory_page(t, block_addr);
     return 0u;
@@ -1247,6 +1370,7 @@ static __attribute__((always_inline)) inline uint32_t trace_mem_store_touch(
     preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_FIRST_TOUCH,
                                detail_started);
   }
+  preflight_mark_dirty_memory_page(t, block_addr);
   return prev_timestamp;
 }
 
@@ -1256,7 +1380,8 @@ static __attribute__((always_inline)) inline uint32_t trace_mem_store_touch(
 static __attribute__((always_inline)) inline uint32_t trace_pv_touch(
     RvState* restrict state, uint64_t block_addr) {
   Tracer* restrict t = state->tracer;
-  if (likely(preflight_device_aux(t) && !preflight_device_aux_oracle(t))) {
+  if (likely(preflight_device_aux(t) && !preflight_device_aux_oracle(t) &&
+             t->g2 == NULL)) {
     t->timestamp++;
     return 0u;
   }
@@ -1303,7 +1428,8 @@ static __attribute__((always_inline)) inline uint32_t trace_pv_touch(
 static __attribute__((always_inline)) inline uint32_t trace_reg_touch(
     RvState* restrict state, uint8_t idx) {
   Tracer* restrict t = state->tracer;
-  if (likely(preflight_device_aux(t) && !preflight_device_aux_oracle(t))) {
+  if (likely(preflight_device_aux(t) && !preflight_device_aux_oracle(t) &&
+             t->g2 == NULL)) {
     t->timestamp++;
     return 0u;
   }
@@ -1771,7 +1897,8 @@ static __attribute__((always_inline)) inline void trace_wr_mem_u64(
   uint64_t block_addr = preflight_block_addr(addr);
   uint64_t prev_block =
       preflight_device_aux(state->tracer) &&
-              !preflight_device_aux_oracle(state->tracer)
+              !preflight_device_aux_oracle(state->tracer) &&
+              state->tracer->g2 == NULL
           ? 0u
           : preflight_read_mem_block(state, block_addr);
   preflight_append_memory(state->tracer, PREFLIGHT_MEMORY_KIND_WRITE, AS_MEMORY,
@@ -1799,7 +1926,8 @@ static __attribute__((always_inline)) inline void trace_wr_mem_u64_range(
     uint64_t block_addr = base_addr + i * WORD_SIZE;
     uint64_t prev_block =
         preflight_device_aux(state->tracer) &&
-                !preflight_device_aux_oracle(state->tracer)
+                !preflight_device_aux_oracle(state->tracer) &&
+                state->tracer->g2 == NULL
             ? 0u
             : preflight_read_mem_block(state, block_addr);
     preflight_append_memory(state->tracer, PREFLIGHT_MEMORY_KIND_WRITE,
@@ -1817,7 +1945,7 @@ static __attribute__((always_inline)) inline void trace_mem_access(
       preflight_compact_residual_memory(state->tracer);
   if (unlikely(compact_residual && block_addr > UINT32_MAX)) {
     if (state->tracer->g2 != NULL) {
-      state->tracer->g2->overflow = 1u;
+      state->tracer->g2->overflow = G2_REJECT_ADDRESS;
     } else if (state->tracer->delta_records != NULL) {
       state->tracer->delta_records->flags |= PREFLIGHT_RECORD_OVERFLOW;
     }
@@ -1842,7 +1970,7 @@ static __attribute__((always_inline)) inline void trace_mem_access_u64_range(
     uint64_t block_addr = base_addr + i * WORD_SIZE;
     if (unlikely(compact_residual && block_addr > UINT32_MAX)) {
       if (state->tracer->g2 != NULL) {
-        state->tracer->g2->overflow = 1u;
+        state->tracer->g2->overflow = G2_REJECT_ADDRESS;
       } else if (state->tracer->delta_records != NULL) {
         state->tracer->delta_records->flags |= PREFLIGHT_RECORD_OVERFLOW;
       }
@@ -1875,7 +2003,8 @@ static __attribute__((always_inline)) inline void trace_wr_as_u64(
   uint64_t prev_block =
       addr_space == AS_PUBLIC_VALUES &&
               !(preflight_device_aux(state->tracer) &&
-                !preflight_device_aux_oracle(state->tracer))
+                !preflight_device_aux_oracle(state->tracer) &&
+                state->tracer->g2 == NULL)
           ? preflight_read_pv_block(state->tracer, block_addr)
           : 0u;
   preflight_append_memory(state->tracer, PREFLIGHT_MEMORY_KIND_WRITE,

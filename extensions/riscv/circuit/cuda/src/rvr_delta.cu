@@ -29,6 +29,7 @@ enum DeltaPattern : uint8_t {
     DELTA_WR1_ALWAYS = 6,
     DELTA_RW1 = 7,
     DELTA_ADDI = 8,
+    DELTA_HINT_STORE = 9,
 };
 
 struct DeltaRecord {
@@ -177,7 +178,8 @@ enum DeltaAirKind : uint32_t {
     DELTA_KIND_LOAD_SIGN_EXTEND_HALFWORD = 27,
     DELTA_KIND_LOAD_SIGN_EXTEND_WORD = 28,
     DELTA_KIND_ADDI = 29,
-    DELTA_KIND_COUNT = 30,
+    DELTA_KIND_HINT_STORE = 30,
+    DELTA_KIND_COUNT = 31,
 };
 
 __device__ __forceinline__ void fail(uint32_t *error, uint32_t code) {
@@ -248,7 +250,7 @@ __device__ __forceinline__ bool operand_for_pc(
         return false;
     }
     entry = table[slot];
-    if (entry.air_idx == INVALID_AIR || entry.access_pattern > DELTA_RW1) {
+    if (entry.air_idx == INVALID_AIR || entry.access_pattern > DELTA_HINT_STORE) {
         fail(error, 4);
         return false;
     }
@@ -405,6 +407,17 @@ __device__ __forceinline__ bool delta_access(
         if (slot == 0) return reg(entry.b);
         if (slot == 1 && (entry.flags & RVR_OPERAND_FLAG_WRITE_ENABLED)) return reg(entry.a);
         return false;
+    case DELTA_HINT_STORE: {
+        uint32_t row = uint32_t(record.v1 >> 32) & 0x3ffu;
+        if (slot == 0) return row == 0 && reg(entry.b);
+        if (slot == 1) return row == 0 && entry.local_opcode != 0 && reg(entry.a);
+        if (slot == 2) {
+            addr_space = 2;
+            address = uint32_t(record.v1);
+            return true;
+        }
+        return false;
+    }
     default:
         return false;
     }
@@ -428,6 +441,7 @@ __device__ __forceinline__ bool delta_write_access(
         return slot == 0;
     case DELTA_RW1:
         return slot == 1 && (entry.flags & RVR_OPERAND_FLAG_WRITE_ENABLED);
+    case DELTA_HINT_STORE: return slot == 2;
     default:
         return false;
     }
@@ -698,6 +712,9 @@ __global__ void build_events(
                         payload.byte_offset = uint8_t(
                             delta_memory_effective_address(record, entry) & 7u
                         );
+                    } else if (entry.access_pattern == DELTA_HINT_STORE) {
+                        payload.value = record.v2;
+                        payload.value_update = VALUE_SET;
                     } else {
                         if (entry.air_idx >= num_airs ||
                             outputs[entry.air_idx].kind >= DELTA_KIND_COUNT ||
@@ -1239,6 +1256,33 @@ __global__ void partition_records(
         store_u64_words(dst + 16, record.v1);
         store_u64_words(dst + 24, write_prev_value);
         break;
+    case DELTA_HINT_STORE: {
+        if (desc.stride != 64 || desc.kind != DELTA_KIND_HINT_STORE) {
+            fail(error, 13);
+            return;
+        }
+        uint32_t row = uint32_t(record.v1 >> 32) & 0x3ffu;
+        uint32_t num_words = uint32_t(record.v1 >> 42) & 0x3ffu;
+        uint32_t address = uint32_t(record.v1);
+        if (num_words == 0 || row >= num_words || address < row * 8u) {
+            fail(error, 14);
+            return;
+        }
+        store_u32(dst, record.from_pc);
+        store_u32(dst + 4, record.from_timestamp - row * 3u);
+        store_u32(dst + 8, row);
+        store_u32(dst + 12, num_words);
+        store_u32(dst + 16, entry.b);
+        store_u32(dst + 20, address - row * 8u);
+        store_u32(dst + 24, record_prev[0]);
+        store_u32(dst + 28, entry.local_opcode == 0 ? UINT32_MAX : entry.a);
+        store_u32(dst + 32, record_prev[1]);
+        store_u32(dst + 36, record_prev[2]);
+        store_u64_words(dst + 40, write_prev_value);
+        store_u64_words(dst + 48, record.v2);
+        store_u64_words(dst + 56, 0);
+        break;
+    }
     default:
         fail(error, 12);
     }

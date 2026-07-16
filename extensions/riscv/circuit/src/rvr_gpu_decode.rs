@@ -111,6 +111,14 @@ pub enum DeviceDeltaAccessPattern {
     Wr1Always = 6,
     Rw1 = 7,
     AddI = 8,
+    /// G2-only one-row HintStore replay record. This never participates in
+    /// the established 24-byte delta producer route.
+    HintStore = 9,
+    /// G2-only direct-final custom instruction. Its timestamp-bearing
+    /// accesses are carried exclusively by the residual lanes.
+    OpaqueFinal = 10,
+    /// G2-only timestamp-only custom instruction (system PHANTOM).
+    OpaqueTimestamp = 11,
 }
 
 /// One unique compact-decoder consumer. This is independent of the global AIR
@@ -149,10 +157,13 @@ pub enum DeltaAirKind {
     LoadSignExtendHalfword = 27,
     LoadSignExtendWord = 28,
     AddI = 29,
+    /// Private G2 HintStore event replay; there is deliberately no payload
+    /// lane for this kind.
+    HintStore = 30,
 }
 
 impl DeltaAirKind {
-    pub const COUNT: usize = 30;
+    pub const COUNT: usize = 31;
 
     fn from_repr(value: u8) -> Option<Self> {
         Some(match value {
@@ -186,6 +197,7 @@ impl DeltaAirKind {
             27 => Self::LoadSignExtendHalfword,
             28 => Self::LoadSignExtendWord,
             29 => Self::AddI,
+            30 => Self::HintStore,
             _ => return None,
         })
     }
@@ -214,6 +226,7 @@ impl DeltaAirKind {
             Self::BranchEqual | Self::BranchLessThan => PREFLIGHT_BRANCH2_RECORD_SIZE,
             Self::JalLui | Self::Auipc => PREFLIGHT_WR1_RECORD_SIZE,
             Self::Jalr => PREFLIGHT_RW1_RECORD_SIZE,
+            Self::HintStore => 64,
             _ => PREFLIGHT_ADDSUB_RECORD_SIZE,
         }
     }
@@ -288,6 +301,7 @@ struct HostG2Segment {
     meta: Arc<openvm_circuit::arch::rvr::RvrG2MetaV1>,
     initial_timestamp: u32,
     specs: Vec<DeltaAirSpec>,
+    opaque: Vec<G2ExpectedOpaqueV1>,
     total_record_count: usize,
     program_frequency_count: usize,
 }
@@ -300,6 +314,20 @@ pub(crate) struct G2ExpectedKindV1 {
     air_idx: u32,
     count: u32,
 }
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+pub(crate) struct G2ExpectedOpaqueV1 {
+    lane_kind: u32,
+    air_idx: u32,
+    count: u32,
+    payload_bytes: u32,
+    stride: u32,
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+const _: () = assert!(size_of::<G2ExpectedOpaqueV1>() == 20);
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 const _: () = assert!(size_of::<G2ExpectedKindV1>() == 12);
@@ -765,7 +793,7 @@ impl RvrGpuDecodeState {
                 "G2 Phase-2a AIR binding differs from the compiled manifest".to_string(),
             ));
         }
-        segment.validate(&meta.fingerprint)?;
+        let descs = segment.validate(&meta.fingerprint)?;
         let specs = meta
             .air_bindings
             .iter()
@@ -796,6 +824,51 @@ impl RvrGpuDecodeState {
                 )
             })
         })?;
+        let opaque = meta
+            .opaque_bindings
+            .iter()
+            .map(|binding| {
+                let count = chip_counts.get(binding.air_idx).copied().ok_or_else(|| {
+                    openvm_circuit::arch::ExecutionError::RvrExecution(format!(
+                        "G2 opaque AIR {} has no chip-count slot",
+                        binding.air_idx
+                    ))
+                })?;
+                let stride = u32::try_from(binding.geometry.stride_dense()).map_err(|_| {
+                    openvm_circuit::arch::ExecutionError::RvrExecution(
+                        "G2 opaque stride exceeds the frozen u32 descriptor".to_string(),
+                    )
+                })?;
+                let payload_bytes = count.checked_mul(stride).ok_or_else(|| {
+                    openvm_circuit::arch::ExecutionError::RvrExecution(
+                        "G2 opaque payload byte count overflow".to_string(),
+                    )
+                })?;
+                let lane_kind = u32::from(binding.lane_kind());
+                let desc = descs
+                    .iter()
+                    .find(|desc| u32::from(desc.kind) == lane_kind)
+                    .ok_or_else(|| {
+                        openvm_circuit::arch::ExecutionError::RvrExecution(format!(
+                            "G2 opaque AIR {} has no committed descriptor",
+                            binding.air_idx
+                        ))
+                    })?;
+                if desc.count != count || desc.payload_bytes != payload_bytes {
+                    return Err(openvm_circuit::arch::ExecutionError::RvrExecution(format!(
+                        "G2 opaque AIR {} descriptor count drifted",
+                        binding.air_idx
+                    )));
+                }
+                Ok(G2ExpectedOpaqueV1 {
+                    lane_kind,
+                    air_idx: binding.air_idx as u32,
+                    count,
+                    payload_bytes,
+                    stride,
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
         *self.delta_host.lock().unwrap() = None;
         *self.delta_device.lock().unwrap() = None;
         *self.g2_host.lock().unwrap() = Some(HostG2Segment {
@@ -803,6 +876,7 @@ impl RvrGpuDecodeState {
             meta,
             initial_timestamp,
             specs,
+            opaque,
             total_record_count,
             program_frequency_count,
         });
@@ -1208,7 +1282,8 @@ impl RvrGpuDecodeState {
         let (d_table, pc_base) = self
             .device_operand_table(device_ctx)
             .expect("G2 segment without a bound operand table");
-        let d_wire = DeviceBuffer::<u8>::with_capacity_on(host.segment.byte_len(), device_ctx);
+        let d_wire =
+            DeviceBuffer::<u8>::with_capacity_on(host.segment.transfer_byte_len(), device_ctx);
         d_wire
             .fill_zero_on(device_ctx)
             .expect("G2 wire padding clear");
@@ -1218,8 +1293,9 @@ impl RvrGpuDecodeState {
             }
             unsafe {
                 // SAFETY: finalization validated every compact wire range;
-                // the destination buffer has exactly `segment.byte_len()`
-                // bytes and remains alive through the queued decode.
+                // the compact destination covers every transferred range
+                // and remains alive through the queued decode. Opaque-final
+                // payloads stay in their separately owned custom arenas.
                 cuda_memcpy_on::<false, true>(
                     d_wire.as_mut_ptr().add(offset).cast(),
                     bytes.as_ptr().cast(),
@@ -1257,6 +1333,16 @@ impl RvrGpuDecodeState {
             .as_slice()
             .to_device_on(device_ctx)
             .expect("G2 expected-kind table H2D");
+        let d_expected_opaque = host
+            .opaque
+            .as_slice()
+            .to_device_on(device_ctx)
+            .expect("G2 expected opaque table H2D");
+        let residual_capacity = host
+            .segment
+            .header_acquire()
+            .expect("G2 committed header before device decode")
+            .residual_event_count as usize;
         let d_delta = DeviceBuffer::<u8>::with_capacity_on(
             host.total_record_count * openvm_circuit::arch::rvr::PREFLIGHT_DELTA_RECORD_SIZE,
             device_ctx,
@@ -1265,6 +1351,15 @@ impl RvrGpuDecodeState {
             DeviceBuffer::<u64>::with_capacity_on(host.total_record_count, device_ctx);
         let d_expected_modes =
             DeviceBuffer::<u8>::with_capacity_on(host.total_record_count, device_ctx);
+        let d_opaque_residual = DeviceBuffer::<u8>::with_capacity_on(
+            residual_capacity
+                * std::mem::size_of::<openvm_circuit::arch::rvr::DeltaMemoryLogEntry>(),
+            device_ctx,
+        );
+        let d_opaque_residual_count = DeviceBuffer::<u32>::with_capacity_on(1, device_ctx);
+        d_opaque_residual_count
+            .fill_zero_on(device_ctx)
+            .expect("G2 opaque-residual count clear");
         let d_program_frequencies =
             DeviceBuffer::<u32>::with_capacity_on(host.program_frequency_count, device_ctx);
         d_program_frequencies
@@ -1275,6 +1370,7 @@ impl RvrGpuDecodeState {
         unsafe {
             crate::cuda_abi::rvr_g2_cuda::predecode(
                 &d_wire,
+                host.segment.byte_len(),
                 &d_fingerprint,
                 &d_blocks,
                 &d_table,
@@ -1282,10 +1378,13 @@ impl RvrGpuDecodeState {
                 &d_initial_memory,
                 host.initial_timestamp,
                 &d_expected_kinds,
+                &d_expected_opaque,
                 &d_program_frequencies,
                 &d_delta,
                 &d_expected_blocks,
                 &d_expected_modes,
+                &d_opaque_residual,
+                &d_opaque_residual_count,
                 &d_error,
                 device_ctx.stream.as_raw(),
             )
@@ -1293,6 +1392,30 @@ impl RvrGpuDecodeState {
         }
         let error = d_error.to_host_on(device_ctx).expect("G2 error D2H")[0];
         assert_eq!(error, 0, "CUDA G2 wire validation error {error}");
+        let opaque_residual_count = d_opaque_residual_count
+            .to_host_on(device_ctx)
+            .expect("G2 opaque-residual count D2H")[0] as usize;
+        assert!(
+            opaque_residual_count <= residual_capacity,
+            "G2 opaque-residual count overflow"
+        );
+        let d_opaque_residual_exact = if opaque_residual_count == 0 {
+            DeviceBuffer::<u8>::new()
+        } else {
+            let byte_len = opaque_residual_count
+                * std::mem::size_of::<openvm_circuit::arch::rvr::DeltaMemoryLogEntry>();
+            let exact = DeviceBuffer::<u8>::with_capacity_on(byte_len, device_ctx);
+            unsafe {
+                cuda_memcpy_on::<true, true>(
+                    exact.as_mut_ptr().cast(),
+                    d_opaque_residual.as_ptr().cast(),
+                    byte_len,
+                    device_ctx,
+                )
+            }
+            .expect("G2 opaque-residual compact D2D");
+            exact
+        };
 
         let num_airs = host
             .specs
@@ -1332,7 +1455,10 @@ impl RvrGpuDecodeState {
             .as_slice()
             .to_device_on(device_ctx)
             .expect("G2 arena flags H2D");
-        let event_capacity = host.total_record_count.saturating_mul(3);
+        let event_capacity = host
+            .total_record_count
+            .saturating_mul(3)
+            .saturating_add(opaque_residual_count);
         let d_touched_output = if event_capacity == 0 {
             DeviceBuffer::new()
         } else {
@@ -1342,7 +1468,6 @@ impl RvrGpuDecodeState {
             )
         };
         let d_touched_count = DeviceBuffer::<u32>::with_capacity_on(1, device_ctx);
-        let empty_bytes = DeviceBuffer::<u8>::new();
         let empty_u32 = DeviceBuffer::<u32>::new();
         let empty_u64 = DeviceBuffer::<u64>::new();
         let empty_runs = DeviceBuffer::<openvm_circuit::arch::rvr::ProgramRunEntry>::new();
@@ -1355,8 +1480,8 @@ impl RvrGpuDecodeState {
             crate::cuda_abi::rvr_delta_cuda::predecode(
                 &d_delta,
                 host.total_record_count,
-                &empty_bytes,
-                0,
+                &d_opaque_residual_exact,
+                opaque_residual_count,
                 std::mem::size_of::<openvm_circuit::arch::rvr::DeltaMemoryLogEntry>(),
                 &empty_program_log,
                 0,
@@ -2129,6 +2254,7 @@ pub(crate) fn delta_post_write_value<F: PrimeField32>(
         DeltaAirKind::MulW => sign_extend_word((v1 as u32).wrapping_mul(v2 as u32)),
         DeltaAirKind::DivRem => divrem_result(entry.local_opcode, v1, v2)?,
         DeltaAirKind::DivRemW => divrem_w_result(entry.local_opcode, v1, v2)?,
+        DeltaAirKind::HintStore => return None,
     })
 }
 

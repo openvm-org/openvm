@@ -110,6 +110,8 @@ __attribute__((preserve_most)) void rvr_ext_keccakf(RvState* restrict state,
   } else {
     wr_mem_u64_range_traced(state, buffer_ptr, st, KECCAK_WIDTH_WORDS);
   }
+  preflight_g2_emit_opaque_event_count(state->tracer,
+                                       1u + KECCAK_WIDTH_WORDS);
 #else
   wr_mem_u64_range_traced(state, buffer_ptr, st, KECCAK_WIDTH_WORDS);
 #endif
@@ -221,7 +223,8 @@ __attribute__((preserve_most)) void rvr_ext_xorin(RvState* restrict state,
        * recovers the exact pre-write word without rereading guest memory. */
       uint64_t prev_data =
           preflight_device_aux(state->tracer) &&
-                  !preflight_device_aux_oracle(state->tracer)
+                  !preflight_device_aux_oracle(state->tracer) &&
+                  state->tracer->g2 == NULL
               ? 0u
               : buffer[i] ^ input[i];
       uint32_t prev_timestamp = preflight_append_memory(
@@ -239,6 +242,10 @@ __attribute__((preserve_most)) void rvr_ext_xorin(RvState* restrict state,
     wr_mem_u64_range(state, buffer_ptr, buffer, num_words);
   } else {
     wr_mem_u64_range_traced(state, buffer_ptr, buffer, num_words);
+  }
+  if (likely(emit_direct)) {
+    preflight_g2_emit_opaque_event_count(state->tracer,
+                                         3u + 3u * num_words);
   }
 #else
   wr_mem_u64_range_traced(state, buffer_ptr, buffer, num_words);

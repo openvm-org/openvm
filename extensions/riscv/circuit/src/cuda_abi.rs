@@ -167,11 +167,12 @@ pub mod rvr_delta_cuda {
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 pub mod rvr_g2_cuda {
     use super::*;
-    use crate::rvr_gpu_decode::{DeviceOperandEntry, G2ExpectedKindV1};
+    use crate::rvr_gpu_decode::{DeviceOperandEntry, G2ExpectedKindV1, G2ExpectedOpaqueV1};
 
     extern "C" {
         fn _rvr_g2_predecode(
             d_wire: DeviceBufferView,
+            logical_wire_bytes: usize,
             d_expected_fingerprint: *const u8,
             d_blocks: *const openvm_circuit::arch::rvr::RvrG2BlockEntryV1,
             block_count: usize,
@@ -182,11 +183,15 @@ pub mod rvr_g2_cuda {
             initial_timestamp: u32,
             d_expected_kinds: *const G2ExpectedKindV1,
             expected_kind_count: usize,
+            d_expected_opaque: *const G2ExpectedOpaqueV1,
+            expected_opaque_count: usize,
             d_program_frequencies: *mut u32,
             frequency_count: usize,
             d_delta_output: DeviceBufferView,
             d_expected_blocks: DeviceBufferView,
             d_expected_modes: DeviceBufferView,
+            d_opaque_residual_output: DeviceBufferView,
+            d_opaque_residual_count: *mut u32,
             d_error: *mut u32,
             stream: cudaStream_t,
         ) -> i32;
@@ -195,6 +200,7 @@ pub mod rvr_g2_cuda {
     #[allow(clippy::too_many_arguments)]
     pub unsafe fn predecode(
         d_wire: &DeviceBuffer<u8>,
+        logical_wire_bytes: usize,
         d_expected_fingerprint: &DeviceBuffer<u8>,
         d_blocks: &DeviceBuffer<openvm_circuit::arch::rvr::RvrG2BlockEntryV1>,
         d_operands: &DeviceBuffer<u8>,
@@ -202,15 +208,19 @@ pub mod rvr_g2_cuda {
         d_initial_memory: &DeviceBuffer<openvm_circuit::system::cuda::memory::DeviceInitialMemory>,
         initial_timestamp: u32,
         d_expected_kinds: &DeviceBuffer<G2ExpectedKindV1>,
+        d_expected_opaque: &DeviceBuffer<G2ExpectedOpaqueV1>,
         d_program_frequencies: &DeviceBuffer<u32>,
         d_delta_output: &DeviceBuffer<u8>,
         d_expected_blocks: &DeviceBuffer<u64>,
         d_expected_modes: &DeviceBuffer<u8>,
+        d_opaque_residual_output: &DeviceBuffer<u8>,
+        d_opaque_residual_count: &DeviceBuffer<u32>,
         d_error: &DeviceBuffer<u32>,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_rvr_g2_predecode(
             d_wire.view(),
+            logical_wire_bytes,
             d_expected_fingerprint.as_ptr(),
             d_blocks.as_ptr(),
             d_blocks.len(),
@@ -221,11 +231,15 @@ pub mod rvr_g2_cuda {
             initial_timestamp,
             d_expected_kinds.as_ptr(),
             d_expected_kinds.len(),
+            d_expected_opaque.as_ptr(),
+            d_expected_opaque.len(),
             d_program_frequencies.as_mut_ptr(),
             d_program_frequencies.len(),
             d_delta_output.view(),
             d_expected_blocks.view(),
             d_expected_modes.view(),
+            d_opaque_residual_output.view(),
+            d_opaque_residual_count.as_mut_ptr(),
             d_error.as_mut_ptr(),
             stream,
         ))
@@ -335,6 +349,20 @@ pub mod hintstore_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
+
+        fn _hintstore_replay_tracegen(
+            d_trace: *mut F,
+            height: usize,
+            width: usize,
+            d_rows: *const u8,
+            rows_used: usize,
+            pointer_max_bits: u32,
+            d_range_checker: *mut u32,
+            range_checker_num_bins: u32,
+            timestamp_max_bits: u32,
+            d_error: *mut u32,
+            stream: cudaStream_t,
+        ) -> i32;
     }
 
     pub unsafe fn decode_offsets(
@@ -378,6 +406,33 @@ pub mod hintstore_cuda {
             d_range_checker.as_mut_ptr() as *mut u32,
             d_range_checker.len() as u32,
             timestamp_max_bits,
+            stream,
+        ))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn tracegen_replay(
+        d_trace: &DeviceBuffer<F>,
+        height: usize,
+        d_rows: &DeviceBuffer<u8>,
+        rows_used: usize,
+        pointer_max_bits: u32,
+        d_range_checker: &DeviceBuffer<F>,
+        timestamp_max_bits: u32,
+        d_error: &DeviceBuffer<u32>,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_hintstore_replay_tracegen(
+            d_trace.as_mut_ptr(),
+            height,
+            d_trace.len() / height,
+            d_rows.as_ptr(),
+            rows_used,
+            pointer_max_bits,
+            d_range_checker.as_mut_ptr() as *mut u32,
+            d_range_checker.len() as u32,
+            timestamp_max_bits,
+            d_error.as_mut_ptr(),
             stream,
         ))
     }
