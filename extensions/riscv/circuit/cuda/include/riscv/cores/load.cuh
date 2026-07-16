@@ -18,7 +18,7 @@ constexpr size_t LOAD_WORD_SELECTOR_WIDTH = 3;
 constexpr size_t LOAD_DOUBLEWORD_SELECTOR_WIDTH = 3;
 
 struct LoadRecord {
-    // The block containing the effective address followed by the next block, which is all-zero
+    // The block containing the effective address followed by the second block, which is all-zero
     // unless the access crosses a block boundary.
     uint16_t read_data[2][BLOCK_FE_WIDTH];
 };

@@ -18,7 +18,7 @@ use crate::adapters::{
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Clone, Copy, Debug)]
 pub struct LoadRecord {
-    /// The memory block containing the effective address, followed by the next block, which is
+    /// The memory block containing the effective address, followed by the second block, which is
     /// all-zero unless the access crosses a block boundary.
     pub read_data: [[u16; BLOCK_FE_WIDTH]; 2],
 }

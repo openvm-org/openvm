@@ -81,13 +81,11 @@ pub struct Rv64StoreMultiByteAdapterCols<T> {
     /// Low limb of the effective pointer for constraining rs1 + sign_extend(imm).
     pub mem_ptr_low_limb: T,
     pub mem_as: T,
-    /// Carry into the high pointer limb for the next block address.
+    /// Carry into the high pointer limb for the second block address.
     pub mem_ptr_carry: T,
-    /// Timestamp aux for the memory write; previous data is provided by the core chip.
-    pub write_base_aux: MemoryBaseAuxCols<T>,
-    /// Timestamp aux for the second block write; only used when the access crosses a block
-    /// boundary. Previous data is provided by the core chip.
-    pub write1_base_aux: MemoryBaseAuxCols<T>,
+    /// Timestamp auxiliary columns for the first and optional second block writes. Previous data
+    /// is provided by the core chip.
+    pub block_writes_aux: [MemoryBaseAuxCols<T>; 2],
 }
 
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
@@ -163,12 +161,12 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64StoreMultiByteAdapterAir {
             .range_check(mem_ptr_hi.clone(), self.pointer_max_bits - U16_BITS)
             .eval(builder, is_valid.clone());
 
-        // Range check the next block address when the access crosses a block boundary.
+        // Range check the second block address when the access crosses a block boundary.
         builder.assert_bool(local_cols.mem_ptr_carry);
-        let next_aligned_limb = aligned_limb + block_bytes
+        let block1_aligned_limb = aligned_limb + block_bytes
             - local_cols.mem_ptr_carry * AB::F::from_u32(1u32 << U16_BITS);
         self.range_bus
-            .range_check(next_aligned_limb * block_bytes.inverse(), U16_BITS - 3)
+            .range_check(block1_aligned_limb * block_bytes.inverse(), U16_BITS - 3)
             .eval(builder, cross.clone());
         // The high limb only needs another range check when the carry increments it.
         self.range_bus
@@ -210,11 +208,14 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64StoreMultiByteAdapterAir {
                 ),
                 write_data0,
                 timestamp_pp(),
-                MemoryWriteAuxInput::from_prev_data_exprs(&local_cols.write_base_aux, prev_data0),
+                MemoryWriteAuxInput::from_prev_data_exprs(
+                    &local_cols.block_writes_aux[0],
+                    prev_data0,
+                ),
             )
             .eval(builder, is_valid.clone());
 
-        // Write the next block when the access crosses into it. The timestamp slot is consumed
+        // Write the second block when the access crosses into it. The timestamp slot is consumed
         // either way so the instruction has a static timestamp layout.
         self.memory_bridge
             .write(
@@ -226,7 +227,10 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64StoreMultiByteAdapterAir {
                 ),
                 write_data1,
                 timestamp_pp(),
-                MemoryWriteAuxInput::from_prev_data_exprs(&local_cols.write1_base_aux, prev_data1),
+                MemoryWriteAuxInput::from_prev_data_exprs(
+                    &local_cols.block_writes_aux[1],
+                    prev_data1,
+                ),
             )
             .eval(builder, cross);
 
@@ -268,9 +272,9 @@ pub struct Rv64StoreMultiByteAdapterRecord {
     pub rs1_val: u32,
     pub rs1_aux_record: MemoryReadAuxRecord,
     pub read_data_aux: MemoryReadAuxRecord,
-    pub write_prev_timestamp: u32,
-    /// Previous timestamp for the optional next-block write; `u32::MAX` marks no write.
-    pub write1_prev_timestamp: u32,
+    /// Previous timestamps for the first and optional second block writes. The second timestamp is
+    /// `u32::MAX` when the access does not cross a block boundary.
+    pub block_prev_timestamps: [u32; 2],
     pub imm: u16,
     pub rs1_ptr: u8,
     pub rs2_ptr: u8,
@@ -292,7 +296,7 @@ impl Rv64StoreMultiByteAdapterRecord {
     }
 
     pub(crate) fn crosses(&self) -> bool {
-        self.write1_prev_timestamp != u32::MAX
+        self.block_prev_timestamps[1] != u32::MAX
     }
 }
 
@@ -407,7 +411,7 @@ where
     ) {
         let shift_amount = record.shift_amount();
         let ptr = record.effective_ptr() & !(MEMORY_BLOCK_BYTES as u32 - 1);
-        record.write_prev_timestamp = timed_write_u16(
+        record.block_prev_timestamps[0] = timed_write_u16(
             memory,
             record.mem_as as u32,
             byte_ptr_to_u16_ptr_value(ptr),
@@ -417,7 +421,7 @@ where
         // The second block's timestamp slot is consumed either way so the instruction has a
         // static timestamp layout.
         if shift_amount + STORE_WIDTH > MEMORY_BLOCK_BYTES {
-            record.write1_prev_timestamp = timed_write_u16(
+            record.block_prev_timestamps[1] = timed_write_u16(
                 memory,
                 record.mem_as as u32,
                 byte_ptr_to_u16_ptr_value(ptr + MEMORY_BLOCK_BYTES as u32),
@@ -425,7 +429,7 @@ where
             )
             .0;
         } else {
-            record.write1_prev_timestamp = u32::MAX;
+            record.block_prev_timestamps[1] = u32::MAX;
             memory.increment_timestamp();
         }
     }
@@ -455,8 +459,7 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64StoreMultiByteAdapterFiller 
         let imm = record.imm;
         let imm_sign = record.imm_sign;
         let mem_as = record.mem_as;
-        let write_prev_timestamp = record.write_prev_timestamp;
-        let write1_prev_timestamp = record.write1_prev_timestamp;
+        let [block0_prev_timestamp, block1_prev_timestamp] = record.block_prev_timestamps;
         let crosses = record.crosses();
         let ptr = record.effective_ptr();
         let shift_amount = record.shift_amount() as u32;
@@ -464,17 +467,17 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64StoreMultiByteAdapterFiller 
 
         if crosses {
             mem_helper.fill(
-                write1_prev_timestamp,
+                block1_prev_timestamp,
                 from_timestamp + 3,
-                &mut adapter_row.write1_base_aux,
+                &mut adapter_row.block_writes_aux[1],
             );
         } else {
-            mem_helper.fill_zero(&mut adapter_row.write1_base_aux);
+            mem_helper.fill_zero(&mut adapter_row.block_writes_aux[1]);
         }
         mem_helper.fill(
-            write_prev_timestamp,
+            block0_prev_timestamp,
             from_timestamp + 2,
-            &mut adapter_row.write_base_aux,
+            &mut adapter_row.block_writes_aux[0],
         );
 
         adapter_row.mem_as = F::from_u8(mem_as);
@@ -486,12 +489,12 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64StoreMultiByteAdapterFiller 
             .add_count(ptr_limbs[1], self.pointer_max_bits - U16_BITS);
         adapter_row.mem_ptr_low_limb = F::from_u32(ptr_limbs[0]);
 
-        let next_block_low_sum = aligned_limb + MEMORY_BLOCK_BYTES as u32;
-        let carry = crosses && next_block_low_sum == 1 << U16_BITS;
+        let block1_low_sum = aligned_limb + MEMORY_BLOCK_BYTES as u32;
+        let carry = crosses && block1_low_sum == 1 << U16_BITS;
         adapter_row.mem_ptr_carry = F::from_bool(carry);
         if crosses {
             self.range_checker_chip.add_count(
-                (next_block_low_sum - ((carry as u32) << U16_BITS)) >> 3,
+                (block1_low_sum - ((carry as u32) << U16_BITS)) >> 3,
                 U16_BITS - 3,
             );
         }

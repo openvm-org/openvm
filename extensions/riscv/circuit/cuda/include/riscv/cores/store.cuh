@@ -19,7 +19,7 @@ constexpr size_t STORE_DOUBLEWORD_SELECTOR_WIDTH = 3;
 
 struct StoreRecord {
     uint16_t read_data[BLOCK_FE_WIDTH];
-    // Previous contents of the touched block followed by the next block, which is all-zero
+    // Previous contents of the first block followed by the second block, which is all-zero
     // unless the access crosses a block boundary.
     uint16_t prev_data[2][BLOCK_FE_WIDTH];
 };

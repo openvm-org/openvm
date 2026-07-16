@@ -19,7 +19,7 @@ use crate::adapters::{
 #[derive(AlignedBytesBorrow, Clone, Copy, Debug)]
 pub struct StoreRecord {
     pub read_data: [u16; BLOCK_FE_WIDTH],
-    /// Previous contents of the containing and next memory blocks. The next-block entry is zero
+    /// Previous contents of the first and second memory blocks. The second-block entry is zero
     /// when the access does not cross the first block.
     pub prev_data: [[u16; BLOCK_FE_WIDTH]; 2],
 }

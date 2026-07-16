@@ -14,8 +14,7 @@ template <typename T> struct Rv64LoadMultiByteAdapterCols {
     T rs1_data[RV64_PTR_U16_LIMBS];
     MemoryReadAuxCols<T> rs1_aux_cols;
     T rd_ptr;
-    MemoryReadAuxCols<T> read_data_aux;
-    MemoryReadAuxCols<T> read_data1_aux;
+    MemoryReadAuxCols<T> block_reads_aux[2];
     T imm;
     T imm_sign;
     T mem_ptr_low_limb;
@@ -31,9 +30,8 @@ struct Rv64LoadMultiByteAdapterRecord {
     uint32_t rs1_val;
     MemoryReadAuxRecord rs1_aux_record;
 
-    MemoryReadAuxRecord read_data_aux;
-    // Auxiliary data for the optional next-block read; UINT32_MAX marks no read.
-    MemoryReadAuxRecord read_data1_aux;
+    // The second timestamp is UINT32_MAX when the access does not cross a block boundary.
+    MemoryReadAuxRecord block_reads_aux[2];
     uint16_t imm;
     bool imm_sign;
 
@@ -83,19 +81,19 @@ struct Rv64LoadAdapter {
             record.from_timestamp
         );
         mem_helper.fill(
-            row.slice_from(COL_INDEX(Rv64LoadMultiByteAdapterCols, read_data_aux)),
-            record.read_data_aux.prev_timestamp,
+            row.slice_from(COL_INDEX(Rv64LoadMultiByteAdapterCols, block_reads_aux[0])),
+            record.block_reads_aux[0].prev_timestamp,
             record.from_timestamp + 1
         );
-        bool crosses = record.read_data1_aux.prev_timestamp != UINT32_MAX;
+        bool crosses = record.block_reads_aux[1].prev_timestamp != UINT32_MAX;
         if (crosses) {
             mem_helper.fill(
-                row.slice_from(COL_INDEX(Rv64LoadMultiByteAdapterCols, read_data1_aux)),
-                record.read_data1_aux.prev_timestamp,
+                row.slice_from(COL_INDEX(Rv64LoadMultiByteAdapterCols, block_reads_aux[1])),
+                record.block_reads_aux[1].prev_timestamp,
                 record.from_timestamp + 2
             );
         } else {
-            mem_helper.fill_zero(row.slice_from(COL_INDEX(Rv64LoadMultiByteAdapterCols, read_data1_aux)));
+            mem_helper.fill_zero(row.slice_from(COL_INDEX(Rv64LoadMultiByteAdapterCols, block_reads_aux[1])));
         }
 
         bool needs_write = record.rd_ptr != UINT8_MAX;
@@ -128,12 +126,12 @@ struct Rv64LoadAdapter {
         range_checker.add_count(aligned_limb >> 3, U16_BITS - 3);
         range_checker.add_count(ptr_limbs[1], pointer_max_bits - U16_BITS);
 
-        uint32_t next_block_low_sum = aligned_limb + uint32_t(MEMORY_BLOCK_BYTES);
-        bool carry = crosses && next_block_low_sum == (1u << U16_BITS);
+        uint32_t block1_low_sum = aligned_limb + uint32_t(MEMORY_BLOCK_BYTES);
+        bool carry = crosses && block1_low_sum == (1u << U16_BITS);
         COL_WRITE_VALUE(row, Rv64LoadMultiByteAdapterCols, mem_ptr_carry, carry);
         if (crosses) {
             range_checker.add_count(
-                (next_block_low_sum - (uint32_t(carry) << U16_BITS)) >> 3,
+                (block1_low_sum - (uint32_t(carry) << U16_BITS)) >> 3,
                 U16_BITS - 3
             );
         }

@@ -20,8 +20,7 @@ template <typename T> struct Rv64StoreMultiByteAdapterCols {
     T mem_ptr_low_limb;
     T mem_as;
     T mem_ptr_carry;
-    MemoryBaseAuxCols<T> write_base_aux;
-    MemoryBaseAuxCols<T> write1_base_aux;
+    MemoryBaseAuxCols<T> block_writes_aux[2];
 };
 
 struct Rv64StoreMultiByteAdapterRecord {
@@ -32,9 +31,8 @@ struct Rv64StoreMultiByteAdapterRecord {
     MemoryReadAuxRecord rs1_aux_record;
 
     MemoryReadAuxRecord read_data_aux;
-    uint32_t write_prev_timestamp;
-    // Previous timestamp for the optional next-block write; UINT32_MAX marks no write.
-    uint32_t write1_prev_timestamp;
+    // The second timestamp is UINT32_MAX when the access does not cross a block boundary.
+    uint32_t block_prev_timestamps[2];
     uint16_t imm;
     uint8_t rs1_ptr;
     uint8_t rs2_ptr;
@@ -86,19 +84,20 @@ struct Rv64StoreAdapter {
             record.from_timestamp + 1
         );
         mem_helper.fill(
-            row.slice_from(COL_INDEX(Rv64StoreMultiByteAdapterCols, write_base_aux)),
-            record.write_prev_timestamp,
+            row.slice_from(COL_INDEX(Rv64StoreMultiByteAdapterCols, block_writes_aux[0])),
+            record.block_prev_timestamps[0],
             record.from_timestamp + 2
         );
-        bool crosses = record.write1_prev_timestamp != UINT32_MAX;
+        bool crosses = record.block_prev_timestamps[1] != UINT32_MAX;
         if (crosses) {
             mem_helper.fill(
-                row.slice_from(COL_INDEX(Rv64StoreMultiByteAdapterCols, write1_base_aux)),
-                record.write1_prev_timestamp,
+                row.slice_from(COL_INDEX(Rv64StoreMultiByteAdapterCols, block_writes_aux[1])),
+                record.block_prev_timestamps[1],
                 record.from_timestamp + 3
             );
         } else {
-            mem_helper.fill_zero(row.slice_from(COL_INDEX(Rv64StoreMultiByteAdapterCols, write1_base_aux))
+            mem_helper.fill_zero(
+                row.slice_from(COL_INDEX(Rv64StoreMultiByteAdapterCols, block_writes_aux[1]))
             );
         }
 
@@ -117,12 +116,12 @@ struct Rv64StoreAdapter {
         range_checker.add_count(aligned_limb >> 3, U16_BITS - 3);
         range_checker.add_count(ptr_limbs[1], pointer_max_bits - U16_BITS);
 
-        uint32_t next_block_low_sum = aligned_limb + uint32_t(MEMORY_BLOCK_BYTES);
-        bool carry = crosses && next_block_low_sum == (1u << U16_BITS);
+        uint32_t block1_low_sum = aligned_limb + uint32_t(MEMORY_BLOCK_BYTES);
+        bool carry = crosses && block1_low_sum == (1u << U16_BITS);
         COL_WRITE_VALUE(row, Rv64StoreMultiByteAdapterCols, mem_ptr_carry, carry);
         if (crosses) {
             range_checker.add_count(
-                (next_block_low_sum - (uint32_t(carry) << U16_BITS)) >> 3,
+                (block1_low_sum - (uint32_t(carry) << U16_BITS)) >> 3,
                 U16_BITS - 3
             );
         }
