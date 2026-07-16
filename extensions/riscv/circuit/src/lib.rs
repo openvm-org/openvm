@@ -79,7 +79,7 @@ pub mod log_native;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
-        use openvm_circuit::arch::DenseRecordArena;
+        use openvm_circuit::arch::{Arena, DenseRecordArena};
         use openvm_circuit::system::cuda::{extensions::SystemGpuBuilder, SystemChipInventoryGPU};
         use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend};
         use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
@@ -424,6 +424,13 @@ pub fn rvr_gpu_wire_record_airs(
                 inline_meta.delta_decode.as_deref(),
             )
         }
+        Some(InlineEmissionMode::G2) if inline_meta.g2.is_some() => {
+            rvr_gpu_decode::RvrGpuDecodeState::compact_record_airs(
+                exe,
+                pc_to_air_idx,
+                inline_meta.delta_decode.as_deref(),
+            )
+        }
         _ => Default::default(),
     }
 }
@@ -463,14 +470,16 @@ pub fn generate_gpu_rvr_record_arenas(
         Some(InlineEmissionMode::CompactWire)
     );
     let delta_requested = matches!(configured_emission_mode(), Some(InlineEmissionMode::Delta));
-    if !delta_requested {
+    let g2_requested = matches!(configured_emission_mode(), Some(InlineEmissionMode::G2))
+        && output.g2_meta.is_some();
+    if !delta_requested && !g2_requested {
         state.clear_delta_segment();
     }
     if !compact_requested {
         state.clear_compact_residual_segment();
     }
     let mode_finished = std::time::Instant::now();
-    let compact_airs = if compact_requested {
+    let compact_airs = if compact_requested || g2_requested {
         state.bind_compact_segment(
             exe,
             pc_to_air_idx,
@@ -488,6 +497,68 @@ pub fn generate_gpu_rvr_record_arenas(
         Default::default()
     };
     let air_bind_finished = std::time::Instant::now();
+    if g2_requested {
+        if !output.raw_logs.program_log.is_empty()
+            || !output.raw_logs.program_runs.is_empty()
+            || !output.raw_logs.memory_log.is_empty()
+            || !output.raw_logs.delta_memory_log.is_empty()
+            || !output.access_aux.is_empty()
+            || !output.inline_records.is_empty()
+        {
+            return Err(openvm_circuit::arch::ExecutionError::RvrExecution(
+                "G2 Phase-1 route performed a forbidden host record pass".to_string(),
+            ));
+        }
+        if std::env::var("OPENVM_RVR_G2_ASSERT_ZERO_HOST_RECORD_PASS").as_deref() == Ok("1") {
+            eprintln!("OPENVM_RVR_G2_HOST_RECORD_PASSES=0");
+        }
+        let segment = output.g2_segment.take().ok_or_else(|| {
+            openvm_circuit::arch::ExecutionError::RvrExecution(
+                "G2 mode requested but native preflight emitted no segment".to_string(),
+            )
+        })?;
+        let meta = output.g2_meta.clone().ok_or_else(|| {
+            openvm_circuit::arch::ExecutionError::RvrExecution(
+                "G2 mode requested without compiled schema metadata".to_string(),
+            )
+        })?;
+        let precomputed = output.delta_decode_precomputed.as_deref().ok_or_else(|| {
+            openvm_circuit::arch::ExecutionError::RvrExecution(
+                "G2 mode requested without an operand table".to_string(),
+            )
+        })?;
+        let bound = state.bind_g2_segment(
+            exe,
+            pc_to_air_idx,
+            &output.inline_pc_slots,
+            precomputed,
+            segment,
+            meta,
+            output.system_records.from_state.timestamp,
+            &output.raw_logs.chip_counts,
+            output.system_records.filtered_exec_frequencies.len(),
+        )?;
+        if bound != compact_airs {
+            return Err(openvm_circuit::arch::ExecutionError::RvrExecution(
+                "G2 bound AIR set drifted from its negotiated consumer".to_string(),
+            ));
+        }
+        // G2 owns the complete routed executable in Phase 1. Empty arenas are
+        // placeholders; AddI tracegen obtains its compact buffer from the
+        // shared device predecode after the system inventory initiates it.
+        let arenas = capacities
+            .iter()
+            .enumerate()
+            .map(|(air, &(height, width))| {
+                if bound.contains(&air) {
+                    DenseRecordArena::with_capacity(0, width)
+                } else {
+                    DenseRecordArena::with_capacity(height, width)
+                }
+            })
+            .collect();
+        return Ok(Some(arenas));
+    }
     let device_replay_oracle =
         delta_requested && std::env::var("OPENVM_RVR_DEVICE_REPLAY_ORACLE").as_deref() == Ok("1");
     let mut oracle_expected = std::collections::HashMap::new();

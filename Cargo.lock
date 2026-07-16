@@ -5345,6 +5345,7 @@ dependencies = [
  "rvr-openvm-lift",
  "serde",
  "strum",
+ "tempfile",
  "test-case",
  "tracing",
 ]

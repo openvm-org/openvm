@@ -15,6 +15,7 @@ use super::{
     bridge::{map_rvr_execute_error, public_values_slice},
     compile::{ChipMapping, RvrCompiled},
     execute::execute_preflight as execute_preflight_raw,
+    g2::{next_segment_id, RvrG2PreparedV1, RvrG2SegmentV1},
     preflight_normalizer::{
         build_preflight_replay_with_scratch, PreflightMemoryAccessAux, PreflightMemoryReplay,
         PreflightShadowsView, WORD_BYTES,
@@ -442,6 +443,8 @@ pub struct PreflightTracerData {
     pub program_instruction_len: u32,
     pub device_program_references_len: u32,
     pub device_program_references_cap: u32,
+    /// G2 private compact-wire producer. Null on every established route.
+    pub g2: *mut rvr_openvm_ext_ffi_common::G2ProducerV1,
 }
 
 impl PreflightTracerData {
@@ -497,6 +500,7 @@ impl PreflightTracerData {
             program_instruction_len: 0,
             device_program_references_len: 0,
             device_program_references_cap: 0,
+            g2: std::ptr::null_mut(),
         }
     }
 
@@ -609,6 +613,10 @@ impl PreflightTracerData {
         self.device_program_references_cap = references.len() as u32;
     }
 
+    fn set_g2(&mut self, producer: &mut rvr_openvm_ext_ffi_common::G2ProducerV1) {
+        self.g2 = producer;
+    }
+
     /// Reuse the tracer's memory pointer/cursor for the delta-only compact
     /// residual schema. Generated C selects this layout only when the delta
     /// target also carries `COMPACT_RESIDUAL_MEMORY`.
@@ -687,6 +695,7 @@ impl Default for PreflightTracerData {
             program_instruction_len: 0,
             device_program_references_len: 0,
             device_program_references_cap: 0,
+            g2: std::ptr::null_mut(),
         }
     }
 }
@@ -847,6 +856,10 @@ pub struct RvrPreflightOutput<F> {
     /// Stage-2 cross-AIR chronological stream, kept separate so its aligned
     /// page-locked backing can survive decode and return to the right pool.
     pub delta_records: Option<RvrDeltaRecords>,
+    /// G2 private compact segment. Its generated-C payload is already in final
+    /// wire positions; no host record walk has occurred.
+    pub g2_segment: Option<RvrG2SegmentV1>,
+    pub g2_meta: Option<Arc<super::RvrG2MetaV1>>,
     /// R3: per program slot, whether that instruction emits an inline compact
     /// record — its memory-log entries are suppressed, so record assembly must
     /// skip the log assembler for it and consume `inline_records` instead.
@@ -1204,12 +1217,15 @@ where
         "arena-native targets require the single-shot proving path"
     );
     assert!(
-        !compact_delta_memory || (compiled.inline_records().delta_records && !build_access_aux),
-        "compact residual memory requires a fully-direct delta consumer"
+        !compact_delta_memory
+            || ((compiled.inline_records().delta_records
+                || compiled.inline_records().g2.is_some())
+                && !build_access_aux),
+        "compact residual memory requires a fully-direct delta or G2 consumer"
     );
     assert!(
-        !device_touched_memory || compact_delta_memory,
-        "device touched-memory replay requires compact delta chronology"
+        !device_touched_memory || compact_delta_memory || compiled.inline_records().g2.is_some(),
+        "device touched-memory replay requires compact delta or G2 chronology"
     );
     let device_aux_oracle = device_touched_memory
         && std::env::var("OPENVM_RVR_DEVICE_REPLAY_ORACLE").as_deref() == Ok("1");
@@ -1281,6 +1297,7 @@ where
     } else {
         initial_memory_log_cap(program_log_cap)
     };
+    let g2_meta = compiled.inline_records().g2.as_deref();
     // The cached proving route selects this only after the builder advertises
     // a fully-direct device delta decoder. Access-aux omission alone is not a
     // discriminator: CPU all-custom arena routes may also safely omit it and
@@ -1307,11 +1324,12 @@ where
         // hundreds of MB of fresh mappings per segment was the other measured
         // per-call cost.
         let mut program_log = pool.take_program_log(program_log_cap);
-        let mut program_runs = pool.take_program_runs(if device_touched_memory {
-            program_log_cap
-        } else {
-            0
-        });
+        let mut program_runs =
+            pool.take_program_runs(if device_touched_memory && g2_meta.is_none() {
+                program_log_cap
+            } else {
+                0
+            });
         let mut device_program_references =
             pool.take_device_program_references(if device_aux_oracle {
                 program_log_cap
@@ -1388,7 +1406,7 @@ where
             .airs
             .iter()
             .map(|&(air, record_size)| {
-                if inline_meta.delta_records {
+                if inline_meta.delta_records || g2_meta.is_some() {
                     return Vec::new();
                 }
                 if arena_targets.is_some_and(|targets| targets.contains_key(&air)) {
@@ -1469,6 +1487,20 @@ where
             };
         }
         let delta_ready = std::time::Instant::now();
+        let mut g2_prepared = if let Some(g2) = g2_meta {
+            let addi_capacity = record_capacity_rows
+                .and_then(|rows| rows.get(g2.addi_air_idx))
+                .copied()
+                .unwrap_or_else(|| {
+                    u32::try_from(program_log_cap).expect("G2 AddI capacity exceeds u32")
+                });
+            Some(RvrG2PreparedV1::new(
+                addi_capacity,
+                u32::try_from(program_log_cap).expect("G2 run capacity exceeds u32"),
+            )?)
+        } else {
+            None
+        };
         let mut chip_records = vec![ChipRecordBuf::default(); chip_counts_len.max(1)];
         for (&(air, record_size), buffer) in inline_meta.airs.iter().zip(record_bufs.iter_mut()) {
             debug_assert!(air < chip_records.len(), "inline air {air} out of range");
@@ -1528,17 +1560,26 @@ where
         tracer.set_chip_records(&mut chip_records);
         tracer.set_exec_frequencies(&mut exec_frequencies);
         tracer.set_custom_memory_scratch(&mut custom_memory_scratch);
-        if device_touched_memory {
+        if device_touched_memory && g2_meta.is_none() {
             tracer.set_device_aux(
                 &mut device_aux_patches,
                 &mut device_aux_references,
                 &mut dirty_memory_pages,
             );
             tracer.set_device_chronology(&mut program_runs, &mut device_program_references);
+        } else if device_touched_memory {
+            tracer.set_device_aux(
+                &mut device_aux_patches,
+                &mut device_aux_references,
+                &mut dirty_memory_pages,
+            );
         }
         tracer.set_counter_touched_uninit(&mut chip_counts_touched, &mut exec_frequencies_touched);
         if inline_meta.delta_records {
             tracer.set_delta_records(&mut delta_record);
+        }
+        if let Some(g2) = g2_prepared.as_mut() {
+            tracer.set_g2(&mut g2.producer);
         }
         let mut native_detail = native_detailed.then(RvrNativeDetail::new);
         if let Some(detail) = native_detail.as_mut() {
@@ -1588,6 +1629,28 @@ where
         if let Some(delta) = delta_output.as_mut() {
             delta.set_written(delta_record.len as usize);
         }
+        let g2_segment = if let (Some(prepared), Some(g2)) = (g2_prepared, g2_meta) {
+            let instruction_count =
+                u32::try_from(run_result.state.mode_state.instret).map_err(|_| {
+                ExecutionError::RvrExecution(
+                    "G2 instruction count exceeds the frozen u32 header".to_string(),
+                )
+                })?;
+            let addi_count = chip_counts.get(g2.addi_air_idx).copied().ok_or_else(|| {
+                ExecutionError::RvrExecution(format!(
+                    "G2 AddI AIR {} has no chip-count slot",
+                    g2.addi_air_idx
+                ))
+            })?;
+            Some(prepared.finalize(
+                next_segment_id()?,
+                instruction_count,
+                addi_count,
+                g2.fingerprint,
+            )?)
+        } else {
+            None
+        };
         if std::env::var("OPENVM_RVR_PREFLIGHT_PROFILE").as_deref() == Ok("1") {
             eprintln!(
                 "OPENVM_RVR_NATIVE_EXEC_EMIT_US={} delta={} delta_records={} delta_bytes={} \
@@ -1707,7 +1770,7 @@ where
         let program_runs = unsafe { assume_init_prefix(program_runs, program_runs_len) };
         let device_program_references =
             unsafe { assume_init_prefix(device_program_references, device_program_references_len) };
-        if device_touched_memory {
+        if device_touched_memory && g2_meta.is_none() {
             if program_instruction_len != run_result.state.mode_state.instret as usize {
                 return Err(ExecutionError::RvrExecution(format!(
                     "device chronology covered {program_instruction_len} instructions but native execution retired {}",
@@ -1968,34 +2031,35 @@ where
         } else {
             Vec::new()
         };
-        let inline_records: Vec<RvrInlineChipRecords> = if inline_meta.delta_records {
-            Vec::new()
-        } else {
-            inline_meta
-                .airs
-                .iter()
-                .zip(record_bufs.iter_mut())
-                .map(|(&(air_idx, record_size), buffer)| {
-                    if arena_targets.is_some_and(|targets| targets.contains_key(&air_idx)) {
-                        return RvrInlineChipRecords {
+        let inline_records: Vec<RvrInlineChipRecords> =
+            if inline_meta.delta_records || g2_meta.is_some() {
+                Vec::new()
+            } else {
+                inline_meta
+                    .airs
+                    .iter()
+                    .zip(record_bufs.iter_mut())
+                    .map(|(&(air_idx, record_size), buffer)| {
+                        if arena_targets.is_some_and(|targets| targets.contains_key(&air_idx)) {
+                            return RvrInlineChipRecords {
+                                air_idx,
+                                record_size,
+                                bytes: Vec::new(),
+                            };
+                        }
+                        let written = chip_records[air_idx].len as usize;
+                        // SAFETY: the C tracer fully writes each emitted record and
+                        // advances the cursor past it, so the first `written` bytes
+                        // are initialized (cap-checked on the C side).
+                        let bytes = unsafe { assume_init_prefix(std::mem::take(buffer), written) };
+                        RvrInlineChipRecords {
                             air_idx,
                             record_size,
-                            bytes: Vec::new(),
-                        };
-                    }
-                    let written = chip_records[air_idx].len as usize;
-                    // SAFETY: the C tracer fully writes each emitted record and
-                    // advances the cursor past it, so the first `written` bytes
-                    // are initialized (cap-checked on the C side).
-                    let bytes = unsafe { assume_init_prefix(std::mem::take(buffer), written) };
-                    RvrInlineChipRecords {
-                        air_idx,
-                        record_size,
-                        bytes,
-                    }
-                })
-                .collect()
-        };
+                            bytes,
+                        }
+                    })
+                    .collect()
+            };
         let delta_records = delta_output;
         let harvest_ready = std::time::Instant::now();
 
@@ -2052,12 +2116,14 @@ where
                 device_aux_arena_references,
             },
             access_aux: replay.access_aux,
-            access_aux_complete: build_access_aux,
+            access_aux_complete: build_access_aux && g2_meta.is_none(),
             to_state: run_state,
             instret: run_result.state.mode_state.instret,
             suspended: run_result.suspended,
             inline_records,
             delta_records,
+            g2_segment,
+            g2_meta: inline_meta.g2.clone(),
             inline_pc_slots: inline_meta.pc_slots.clone(),
             delta_decode_precomputed: inline_meta.delta_decode.clone(),
             arena_native_written,

@@ -5,6 +5,7 @@ pub mod bridge;
 pub mod compile;
 pub mod debug;
 mod execute;
+pub mod g2;
 mod initial_image;
 pub mod io;
 pub mod log_native;
@@ -29,6 +30,9 @@ pub use compile::{
 };
 pub use debug::{default_addr2line_cmd, GuestDebugMap};
 pub use execute::ExecuteError;
+pub use g2::{
+    decode_addi_reference_v1, RvrG2AddIReferenceV1, RvrG2BlockEntryV1, RvrG2MetaV1, RvrG2SegmentV1,
+};
 pub use initial_image::RvrInitialImage;
 pub use log_native::{
     generate_record_arenas_from_logs, generate_record_arenas_from_logs_with_compact,
