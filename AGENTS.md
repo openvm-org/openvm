@@ -22,7 +22,7 @@ OpenVM is a modular zkVM (zero-knowledge virtual machine) framework built on STA
 - Nightly is only needed for:
   - `rustfmt` (unstable formatting options)
   - some workflows that build `cargo-openvm` with experimental features (pinned nightly: `nightly-2026-01-18`)
-- Guest program compilation uses the prebuilt `openvm-1.94.0` (stable) toolchain from the [openvm-org/rust](https://github.com/openvm-org/rust) fork, installed via `cargo openvm toolchain install` (or `ci/install-openvm-toolchain.sh` in CI). The fork's tarball ships `std`/`core`/`alloc`/`panic_abort` rlibs for `riscv64im-unknown-openvm-elf`. Published nightly variants (`openvm-nightly-YYYY-MM-DD`) are available for users who need nightly Rust features in guest code; install one with `--version <tag>`.
+- Guest program compilation uses the prebuilt `openvm-1.97.1` (stable) toolchain from the [openvm-org/rust](https://github.com/openvm-org/rust) fork, installed via `cargo openvm toolchain install` (or `ci/install-openvm-toolchain.sh` in CI). The fork's tarball ships `std`/`core`/`alloc`/`panic_abort` rlibs for `riscv64im-unknown-openvm-elf`. Published nightly variants (`openvm-nightly-YYYY-MM-DD`) are available for users who need nightly Rust features in guest code; install one with `--version <tag>`.
 
 ### Building
 

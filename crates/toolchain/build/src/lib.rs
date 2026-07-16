@@ -32,7 +32,7 @@ pub const DEFAULT_RUSTC_TARGET: &str = "riscv64im-unknown-openvm-elf";
 /// Override with `OPENVM_RUST_TOOLCHAIN`.
 //
 // Keep in sync with the default `TAG` in `ci/install-openvm-toolchain.sh`.
-pub const DEFAULT_RUSTUP_TOOLCHAIN_NAME: &str = "openvm-1.94.0";
+pub const DEFAULT_RUSTUP_TOOLCHAIN_NAME: &str = "openvm-1.97.1";
 
 const BUILD_LOCKED_ENV: &str = "OPENVM_BUILD_LOCKED";
 const SKIP_BUILD_ENV: &str = "OPENVM_SKIP_BUILD";
