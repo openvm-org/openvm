@@ -20,11 +20,11 @@ use rand::{rngs::StdRng, seq::IndexedRandom, Rng};
 #[cfg(feature = "cuda")]
 use {
     crate::adapters::{
-        Rv64LoadMultiByteAdapterRecord, Rv64StoreMultiByteAdapterRecord, LOAD_WIDTH_WORD,
-        STORE_WIDTH_WORD,
+        Rv64LoadByteAdapterRecord, Rv64LoadMultiByteAdapterRecord, Rv64StoreByteAdapterRecord,
+        Rv64StoreMultiByteAdapterRecord, LOAD_WIDTH_WORD, STORE_WIDTH_WORD,
     },
-    crate::load::LoadRecord,
-    crate::store::StoreRecord,
+    crate::load::{LoadByteRecord, LoadRecord},
+    crate::store::{StoreByteRecord, StoreRecord},
     openvm_circuit::arch::{
         testing::{default_var_range_checker_bus, GpuTestChipHarness},
         EmptyAdapterCoreLayout,
@@ -343,7 +343,7 @@ pub(crate) fn transfer_store_records<G, C, A, E>(harness: &mut GpuTestChipHarnes
 pub(crate) fn transfer_load_byte_records<G, C, A, E>(
     harness: &mut GpuTestChipHarness<F, E, A, G, C>,
 ) {
-    type Record<'a> = (&'a mut Rv64LoadMultiByteAdapterRecord, &'a mut LoadRecord);
+    type Record<'a> = (&'a mut Rv64LoadByteAdapterRecord, &'a mut LoadByteRecord);
     harness
         .dense_arena
         .get_record_seeker::<Record, _>()
@@ -357,7 +357,7 @@ pub(crate) fn transfer_load_byte_records<G, C, A, E>(
 pub(crate) fn transfer_store_byte_records<G, C, A, E>(
     harness: &mut GpuTestChipHarness<F, E, A, G, C>,
 ) {
-    type Record<'a> = (&'a mut Rv64StoreMultiByteAdapterRecord, &'a mut StoreRecord);
+    type Record<'a> = (&'a mut Rv64StoreByteAdapterRecord, &'a mut StoreByteRecord);
     harness
         .dense_arena
         .get_record_seeker::<Record, _>()

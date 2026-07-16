@@ -15,8 +15,8 @@ use rand::{rngs::StdRng, Rng};
 #[cfg(feature = "cuda")]
 use {
     crate::{
-        adapters::{Rv64LoadMultiByteAdapterRecord, LOAD_WIDTH_WORD},
-        load::LoadRecord,
+        adapters::{Rv64LoadByteAdapterRecord, Rv64LoadMultiByteAdapterRecord, LOAD_WIDTH_WORD},
+        load::{LoadByteRecord, LoadRecord},
     },
     openvm_circuit::arch::{
         testing::{default_var_range_checker_bus, GpuTestChipHarness},
@@ -170,7 +170,7 @@ pub(crate) fn transfer_load_sign_extend_records<G, C, A, E>(
 pub(crate) fn transfer_load_sign_extend_byte_records<G, C, A, E>(
     harness: &mut GpuTestChipHarness<F, E, A, G, C>,
 ) {
-    type Record<'a> = (&'a mut Rv64LoadMultiByteAdapterRecord, &'a mut LoadRecord);
+    type Record<'a> = (&'a mut Rv64LoadByteAdapterRecord, &'a mut LoadByteRecord);
     harness
         .dense_arena
         .get_record_seeker::<Record, _>()
