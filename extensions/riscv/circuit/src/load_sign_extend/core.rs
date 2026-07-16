@@ -40,8 +40,8 @@ pub(crate) fn load_sign_extend_opcode<const LOAD_WIDTH: usize>() -> Rv64LoadStor
 /// adjacent bytes. The last loaded byte supplies the sign.
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
-pub struct LoadSignExtendCoreCols<T, const SELECTOR_WIDTH: usize, const NUM_OVERLAP_CELLS: usize> {
-    pub selector: [T; SELECTOR_WIDTH],
+pub struct LoadSignExtendCoreCols<T, const NUM_OVERLAP_CELLS: usize> {
+    pub selector: [T; BYTE_SHIFT_SELECTOR_WIDTH],
     /// The sign bit that is extended to the remaining cells.
     pub data_most_sig_bit: T,
     /// Two consecutive 8-byte memory blocks; the second is used only when the access crosses a
@@ -53,20 +53,16 @@ pub struct LoadSignExtendCoreCols<T, const SELECTOR_WIDTH: usize, const NUM_OVER
 }
 
 #[derive(Debug, Clone, ColumnsAir)]
-#[columns_via(LoadSignExtendCoreCols<u8, SELECTOR_WIDTH, NUM_OVERLAP_CELLS>)]
-pub struct LoadSignExtendCoreAir<
-    const LOAD_WIDTH: usize,
-    const SELECTOR_WIDTH: usize,
-    const NUM_OVERLAP_CELLS: usize,
-> {
+#[columns_via(LoadSignExtendCoreCols<u8, NUM_OVERLAP_CELLS>)]
+pub struct LoadSignExtendCoreAir<const LOAD_WIDTH: usize, const NUM_OVERLAP_CELLS: usize> {
     pub offset: usize,
     encoder: Encoder,
     bitwise_lookup_bus: BitwiseOperationLookupBus,
     range_bus: VariableRangeCheckerBus,
 }
 
-impl<const LOAD_WIDTH: usize, const SELECTOR_WIDTH: usize, const NUM_OVERLAP_CELLS: usize>
-    LoadSignExtendCoreAir<LOAD_WIDTH, SELECTOR_WIDTH, NUM_OVERLAP_CELLS>
+impl<const LOAD_WIDTH: usize, const NUM_OVERLAP_CELLS: usize>
+    LoadSignExtendCoreAir<LOAD_WIDTH, NUM_OVERLAP_CELLS>
 {
     // First byte offset at which the load reaches the next memory block.
     const FIRST_CROSSING_SHIFT: usize = MEMORY_BLOCK_BYTES - LOAD_WIDTH + 1;
@@ -76,45 +72,31 @@ impl<const LOAD_WIDTH: usize, const SELECTOR_WIDTH: usize, const NUM_OVERLAP_CEL
         bitwise_lookup_bus: BitwiseOperationLookupBus,
         range_bus: VariableRangeCheckerBus,
     ) -> Self {
-        debug_assert_eq!(NUM_OVERLAP_CELLS, LOAD_WIDTH / 2 + 1);
+        const { assert!(NUM_OVERLAP_CELLS == LOAD_WIDTH / 2 + 1) };
         Self {
             offset,
-            encoder: shift_encoder::<SELECTOR_WIDTH>(),
+            encoder: shift_encoder(),
             bitwise_lookup_bus,
             range_bus,
         }
     }
 }
 
-impl<
-        F: Field,
-        const LOAD_WIDTH: usize,
-        const SELECTOR_WIDTH: usize,
-        const NUM_OVERLAP_CELLS: usize,
-    > BaseAir<F> for LoadSignExtendCoreAir<LOAD_WIDTH, SELECTOR_WIDTH, NUM_OVERLAP_CELLS>
+impl<F: Field, const LOAD_WIDTH: usize, const NUM_OVERLAP_CELLS: usize> BaseAir<F>
+    for LoadSignExtendCoreAir<LOAD_WIDTH, NUM_OVERLAP_CELLS>
 {
     fn width(&self) -> usize {
-        LoadSignExtendCoreCols::<F, SELECTOR_WIDTH, NUM_OVERLAP_CELLS>::width()
+        LoadSignExtendCoreCols::<F, NUM_OVERLAP_CELLS>::width()
     }
 }
 
-impl<
-        F: Field,
-        const LOAD_WIDTH: usize,
-        const SELECTOR_WIDTH: usize,
-        const NUM_OVERLAP_CELLS: usize,
-    > BaseAirWithPublicValues<F>
-    for LoadSignExtendCoreAir<LOAD_WIDTH, SELECTOR_WIDTH, NUM_OVERLAP_CELLS>
+impl<F: Field, const LOAD_WIDTH: usize, const NUM_OVERLAP_CELLS: usize> BaseAirWithPublicValues<F>
+    for LoadSignExtendCoreAir<LOAD_WIDTH, NUM_OVERLAP_CELLS>
 {
 }
 
-impl<
-        AB,
-        I,
-        const LOAD_WIDTH: usize,
-        const SELECTOR_WIDTH: usize,
-        const NUM_OVERLAP_CELLS: usize,
-    > VmCoreAir<AB, I> for LoadSignExtendCoreAir<LOAD_WIDTH, SELECTOR_WIDTH, NUM_OVERLAP_CELLS>
+impl<AB, I, const LOAD_WIDTH: usize, const NUM_OVERLAP_CELLS: usize> VmCoreAir<AB, I>
+    for LoadSignExtendCoreAir<LOAD_WIDTH, NUM_OVERLAP_CELLS>
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
@@ -128,8 +110,7 @@ where
         local_core: &[AB::Var],
         _from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
-        let cols: &LoadSignExtendCoreCols<AB::Var, SELECTOR_WIDTH, NUM_OVERLAP_CELLS> =
-            (*local_core).borrow();
+        let cols: &LoadSignExtendCoreCols<AB::Var, NUM_OVERLAP_CELLS> = (*local_core).borrow();
         let width = LOAD_WIDTH / 2;
 
         self.encoder.eval(builder, &cols.selector);
@@ -247,7 +228,6 @@ where
 pub struct LoadSignExtendFiller<
     A = Rv64LoadMultiByteAdapterFiller,
     const LOAD_WIDTH: usize = LOAD_WIDTH_WORD,
-    const SELECTOR_WIDTH: usize = BYTE_SHIFT_SELECTOR_WIDTH,
     const NUM_OVERLAP_CELLS: usize = 3,
 > {
     adapter: A,
@@ -257,8 +237,8 @@ pub struct LoadSignExtendFiller<
     range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
-impl<A, const LOAD_WIDTH: usize, const SELECTOR_WIDTH: usize, const NUM_OVERLAP_CELLS: usize>
-    LoadSignExtendFiller<A, LOAD_WIDTH, SELECTOR_WIDTH, NUM_OVERLAP_CELLS>
+impl<A, const LOAD_WIDTH: usize, const NUM_OVERLAP_CELLS: usize>
+    LoadSignExtendFiller<A, LOAD_WIDTH, NUM_OVERLAP_CELLS>
 {
     pub fn new(
         adapter: A,
@@ -266,24 +246,19 @@ impl<A, const LOAD_WIDTH: usize, const SELECTOR_WIDTH: usize, const NUM_OVERLAP_
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
         range_checker_chip: SharedVariableRangeCheckerChip,
     ) -> Self {
+        const { assert!(NUM_OVERLAP_CELLS == LOAD_WIDTH / 2 + 1) };
         Self {
             adapter,
             offset,
-            encoder: shift_encoder::<SELECTOR_WIDTH>(),
+            encoder: shift_encoder(),
             bitwise_lookup_chip,
             range_checker_chip,
         }
     }
 }
 
-impl<F, const LOAD_WIDTH: usize, const SELECTOR_WIDTH: usize, const NUM_OVERLAP_CELLS: usize>
-    TraceFiller<F>
-    for LoadSignExtendFiller<
-        Rv64LoadMultiByteAdapterFiller,
-        LOAD_WIDTH,
-        SELECTOR_WIDTH,
-        NUM_OVERLAP_CELLS,
-    >
+impl<F, const LOAD_WIDTH: usize, const NUM_OVERLAP_CELLS: usize> TraceFiller<F>
+    for LoadSignExtendFiller<Rv64LoadMultiByteAdapterFiller, LOAD_WIDTH, NUM_OVERLAP_CELLS>
 where
     F: PrimeField32,
 {
@@ -304,8 +279,7 @@ where
         // generation.
         let record: &LoadRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
         let read_data = record.read_data;
-        let core_row: &mut LoadSignExtendCoreCols<F, SELECTOR_WIDTH, NUM_OVERLAP_CELLS> =
-            core_row.borrow_mut();
+        let core_row: &mut LoadSignExtendCoreCols<F, NUM_OVERLAP_CELLS> = core_row.borrow_mut();
         debug_assert!(shift < NUM_BYTE_SHIFTS, "invalid signed load shift {shift}");
 
         let width = LOAD_WIDTH / 2;
@@ -345,7 +319,7 @@ where
         core_row.overlap_lo_bytes = overlap_lo_bytes.map(F::from_u16);
         core_row.read_data = read_data.map(|block| block.map(F::from_u16));
         core_row.data_most_sig_bit = F::from_bool(sign_bit);
-        let pt: &[u32; SELECTOR_WIDTH] = self.encoder.flag_pt(shift).try_into().unwrap();
+        let pt: &[u32; BYTE_SHIFT_SELECTOR_WIDTH] = self.encoder.flag_pt(shift).try_into().unwrap();
         core_row.selector = (*pt).map(F::from_u32);
     }
 }

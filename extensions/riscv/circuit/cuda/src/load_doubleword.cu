@@ -1,11 +1,10 @@
 #include "riscv/cores/load.cuh"
 
-using LoadDoublewordCore =
-    LoadWidthCore<BYTE_SHIFT_SELECTOR_WIDTH, 5, 8>;
+using LoadDoublewordCore = LoadWidthCore<8>;
 
 template <typename T> struct Rv64LoadDoublewordCols {
     Rv64LoadMultiByteAdapterCols<T> adapter;
-    LoadWidthCoreCols<T, BYTE_SHIFT_SELECTOR_WIDTH, 5> core;
+    LoadWidthCoreCols<T, 8> core;
 };
 
 __global__ void rv64_load_doubleword_tracegen(

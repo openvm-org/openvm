@@ -32,7 +32,7 @@ use crate::load_sign_extend::{
 use crate::{
     adapters::{
         Rv64LoadMultiByteAdapterAir, Rv64LoadMultiByteAdapterExecutor,
-        Rv64LoadMultiByteAdapterFiller, BYTE_SHIFT_SELECTOR_WIDTH, RV64_BYTE_BITS,
+        Rv64LoadMultiByteAdapterFiller, RV64_BYTE_BITS,
     },
     load_sign_extend::{
         core::LoadSignExtendCoreCols,
@@ -167,13 +167,7 @@ fn positive_loadw_shift4_test() {
 }
 
 fn assert_pranked_word_fails(
-    prank: impl Fn(
-        &mut LoadSignExtendCoreCols<
-            F,
-            BYTE_SHIFT_SELECTOR_WIDTH,
-            LOAD_SIGN_EXTEND_WORD_OVERLAP_CELLS,
-        >,
-    ),
+    prank: impl Fn(&mut LoadSignExtendCoreCols<F, LOAD_SIGN_EXTEND_WORD_OVERLAP_CELLS>),
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::from_config(memory_config_for());

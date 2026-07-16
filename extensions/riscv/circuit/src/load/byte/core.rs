@@ -51,7 +51,7 @@ impl LoadByteCoreAir {
     pub fn new(offset: usize, bitwise_lookup_bus: BitwiseOperationLookupBus) -> Self {
         Self {
             offset,
-            encoder: shift_encoder::<BYTE_SHIFT_SELECTOR_WIDTH>(),
+            encoder: shift_encoder(),
             bitwise_lookup_bus,
         }
     }
@@ -177,7 +177,7 @@ impl<A> LoadByteFiller<A> {
         Self {
             adapter,
             offset,
-            encoder: shift_encoder::<BYTE_SHIFT_SELECTOR_WIDTH>(),
+            encoder: shift_encoder(),
             bitwise_lookup_chip,
         }
     }

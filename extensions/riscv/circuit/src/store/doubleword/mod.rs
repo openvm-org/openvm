@@ -3,7 +3,7 @@ use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 use crate::{
     adapters::{
         Rv64StoreMultiByteAdapterAir, Rv64StoreMultiByteAdapterExecutor,
-        Rv64StoreMultiByteAdapterFiller, BYTE_SHIFT_SELECTOR_WIDTH, STORE_WIDTH_DOUBLEWORD,
+        Rv64StoreMultiByteAdapterFiller, STORE_WIDTH_DOUBLEWORD,
     },
     store::{
         common::StoreExecutor,
@@ -12,14 +12,13 @@ use crate::{
 };
 
 /// Source register cells decomposed on an odd-shift doubleword store: `STORE_WIDTH_DOUBLEWORD / 2`.
-pub const STORE_DOUBLEWORD_VALUE_CELLS: usize = 4;
+pub const STORE_DOUBLEWORD_VALUE_CELLS: usize = STORE_WIDTH_DOUBLEWORD / 2;
 
 pub type StoreDoublewordCoreAir =
-    StoreCoreAir<STORE_WIDTH_DOUBLEWORD, BYTE_SHIFT_SELECTOR_WIDTH, STORE_DOUBLEWORD_VALUE_CELLS>;
+    StoreCoreAir<STORE_WIDTH_DOUBLEWORD, STORE_DOUBLEWORD_VALUE_CELLS>;
 pub type StoreDoublewordFiller = StoreFiller<
     Rv64StoreMultiByteAdapterFiller,
     STORE_WIDTH_DOUBLEWORD,
-    BYTE_SHIFT_SELECTOR_WIDTH,
     STORE_DOUBLEWORD_VALUE_CELLS,
 >;
 

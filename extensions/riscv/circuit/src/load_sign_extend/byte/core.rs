@@ -59,7 +59,7 @@ impl LoadSignExtendByteCoreAir {
     ) -> Self {
         Self {
             offset,
-            encoder: shift_encoder::<BYTE_SHIFT_SELECTOR_WIDTH>(),
+            encoder: shift_encoder(),
             bitwise_lookup_bus,
             range_bus,
         }
@@ -200,7 +200,7 @@ impl<A> LoadSignExtendByteFiller<A> {
         Self {
             adapter,
             offset,
-            encoder: shift_encoder::<BYTE_SHIFT_SELECTOR_WIDTH>(),
+            encoder: shift_encoder(),
             bitwise_lookup_chip,
             range_checker_chip,
         }

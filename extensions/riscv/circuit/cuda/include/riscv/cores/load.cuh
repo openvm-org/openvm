@@ -51,17 +51,18 @@ load_read_full_cell(LoadRecord const &record, uint32_t cell) {
     return record.read_data[cell / BLOCK_FE_WIDTH][cell % BLOCK_FE_WIDTH];
 }
 
-template <typename T, size_t SELECTOR_WIDTH, size_t NUM_OVERLAP_CELLS> struct LoadWidthCoreCols {
-    T selector[SELECTOR_WIDTH];
+template <typename T, size_t WIDTH_BYTES> struct LoadWidthCoreCols {
+    static constexpr size_t NUM_OVERLAP_CELLS = WIDTH_BYTES / 2 + 1;
+
+    T selector[BYTE_SHIFT_SELECTOR_WIDTH];
     T read_data[2][BLOCK_FE_WIDTH];
     T overlap_lo_bytes[NUM_OVERLAP_CELLS];
 };
 
-// Shared tracegen for the halfword/word/doubleword load cores. `WIDTH_BYTES` is the access
-// width; `NUM_OVERLAP_CELLS` must equal `WIDTH_BYTES / 2 + 1`.
-template <size_t SELECTOR_WIDTH, size_t NUM_OVERLAP_CELLS, size_t WIDTH_BYTES>
-struct LoadWidthCore {
-    using Cols = LoadWidthCoreCols<uint8_t, SELECTOR_WIDTH, NUM_OVERLAP_CELLS>;
+// Shared tracegen for the halfword/word/doubleword load cores.
+template <size_t WIDTH_BYTES> struct LoadWidthCore {
+    using Cols = LoadWidthCoreCols<uint8_t, WIDTH_BYTES>;
+    static constexpr size_t NUM_OVERLAP_CELLS = Cols::NUM_OVERLAP_CELLS;
 
     BitwiseOperationLookup bitwise_lookup;
 
@@ -69,7 +70,7 @@ struct LoadWidthCore {
         : bitwise_lookup(bitwise_lookup) {}
 
     __device__ void fill_trace_row(RowSlice row, LoadRecord record, uint8_t shift) {
-        Encoder encoder = shift_encoder(SELECTOR_WIDTH);
+        Encoder encoder = shift_encoder();
         encoder.write_flag_pt(row.slice_from(offsetof(Cols, selector)), shift);
         row.write_array(offsetof(Cols, read_data), 2 * BLOCK_FE_WIDTH, &record.read_data[0][0]);
 

@@ -41,8 +41,8 @@ pub(crate) fn store_opcode<const STORE_WIDTH: usize>() -> Rv64LoadStoreOpcode {
 /// are unused on even offsets.
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
-pub struct StoreCoreCols<T, const SELECTOR_WIDTH: usize, const NUM_VALUE_CELLS: usize> {
-    pub selector: [T; SELECTOR_WIDTH],
+pub struct StoreCoreCols<T, const NUM_VALUE_CELLS: usize> {
+    pub selector: [T; BYTE_SHIFT_SELECTOR_WIDTH],
     pub read_data: [T; BLOCK_FE_WIDTH],
     /// Previous contents of the two consecutive memory blocks; the second is used only when the
     /// access crosses a block boundary.
@@ -56,61 +56,44 @@ pub struct StoreCoreCols<T, const SELECTOR_WIDTH: usize, const NUM_VALUE_CELLS: 
 }
 
 #[derive(Debug, Clone, ColumnsAir)]
-#[columns_via(StoreCoreCols<u8, SELECTOR_WIDTH, NUM_VALUE_CELLS>)]
-pub struct StoreCoreAir<
-    const STORE_WIDTH: usize,
-    const SELECTOR_WIDTH: usize,
-    const NUM_VALUE_CELLS: usize,
-> {
+#[columns_via(StoreCoreCols<u8, NUM_VALUE_CELLS>)]
+pub struct StoreCoreAir<const STORE_WIDTH: usize, const NUM_VALUE_CELLS: usize> {
     pub offset: usize,
     encoder: Encoder,
     bitwise_lookup_bus: BitwiseOperationLookupBus,
 }
 
-impl<const STORE_WIDTH: usize, const SELECTOR_WIDTH: usize, const NUM_VALUE_CELLS: usize>
-    StoreCoreAir<STORE_WIDTH, SELECTOR_WIDTH, NUM_VALUE_CELLS>
+impl<const STORE_WIDTH: usize, const NUM_VALUE_CELLS: usize>
+    StoreCoreAir<STORE_WIDTH, NUM_VALUE_CELLS>
 {
     // First byte offset at which the store reaches the next memory block.
     const FIRST_CROSSING_SHIFT: usize = MEMORY_BLOCK_BYTES - STORE_WIDTH + 1;
 
     pub fn new(offset: usize, bitwise_lookup_bus: BitwiseOperationLookupBus) -> Self {
-        debug_assert_eq!(NUM_VALUE_CELLS, STORE_WIDTH / 2);
+        const { assert!(NUM_VALUE_CELLS == STORE_WIDTH / 2) };
         Self {
             offset,
-            encoder: shift_encoder::<SELECTOR_WIDTH>(),
+            encoder: shift_encoder(),
             bitwise_lookup_bus,
         }
     }
 }
 
-impl<
-        F: Field,
-        const STORE_WIDTH: usize,
-        const SELECTOR_WIDTH: usize,
-        const NUM_VALUE_CELLS: usize,
-    > BaseAir<F> for StoreCoreAir<STORE_WIDTH, SELECTOR_WIDTH, NUM_VALUE_CELLS>
+impl<F: Field, const STORE_WIDTH: usize, const NUM_VALUE_CELLS: usize> BaseAir<F>
+    for StoreCoreAir<STORE_WIDTH, NUM_VALUE_CELLS>
 {
     fn width(&self) -> usize {
-        StoreCoreCols::<F, SELECTOR_WIDTH, NUM_VALUE_CELLS>::width()
+        StoreCoreCols::<F, NUM_VALUE_CELLS>::width()
     }
 }
 
-impl<
-        F: Field,
-        const STORE_WIDTH: usize,
-        const SELECTOR_WIDTH: usize,
-        const NUM_VALUE_CELLS: usize,
-    > BaseAirWithPublicValues<F> for StoreCoreAir<STORE_WIDTH, SELECTOR_WIDTH, NUM_VALUE_CELLS>
+impl<F: Field, const STORE_WIDTH: usize, const NUM_VALUE_CELLS: usize> BaseAirWithPublicValues<F>
+    for StoreCoreAir<STORE_WIDTH, NUM_VALUE_CELLS>
 {
 }
 
-impl<
-        AB,
-        I,
-        const STORE_WIDTH: usize,
-        const SELECTOR_WIDTH: usize,
-        const NUM_VALUE_CELLS: usize,
-    > VmCoreAir<AB, I> for StoreCoreAir<STORE_WIDTH, SELECTOR_WIDTH, NUM_VALUE_CELLS>
+impl<AB, I, const STORE_WIDTH: usize, const NUM_VALUE_CELLS: usize> VmCoreAir<AB, I>
+    for StoreCoreAir<STORE_WIDTH, NUM_VALUE_CELLS>
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
@@ -124,7 +107,7 @@ where
         local_core: &[AB::Var],
         _from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
-        let cols: &StoreCoreCols<AB::Var, SELECTOR_WIDTH, NUM_VALUE_CELLS> = (*local_core).borrow();
+        let cols: &StoreCoreCols<AB::Var, NUM_VALUE_CELLS> = (*local_core).borrow();
         let width = STORE_WIDTH / 2;
 
         self.encoder.eval(builder, &cols.selector);
@@ -255,7 +238,6 @@ where
 pub struct StoreFiller<
     A = Rv64StoreMultiByteAdapterFiller,
     const STORE_WIDTH: usize = STORE_WIDTH_WORD,
-    const SELECTOR_WIDTH: usize = BYTE_SHIFT_SELECTOR_WIDTH,
     const NUM_VALUE_CELLS: usize = 2,
 > {
     adapter: A,
@@ -264,26 +246,26 @@ pub struct StoreFiller<
     bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
 }
 
-impl<A, const STORE_WIDTH: usize, const SELECTOR_WIDTH: usize, const NUM_VALUE_CELLS: usize>
-    StoreFiller<A, STORE_WIDTH, SELECTOR_WIDTH, NUM_VALUE_CELLS>
+impl<A, const STORE_WIDTH: usize, const NUM_VALUE_CELLS: usize>
+    StoreFiller<A, STORE_WIDTH, NUM_VALUE_CELLS>
 {
     pub fn new(
         adapter: A,
         offset: usize,
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
     ) -> Self {
+        const { assert!(NUM_VALUE_CELLS == STORE_WIDTH / 2) };
         Self {
             adapter,
             offset,
-            encoder: shift_encoder::<SELECTOR_WIDTH>(),
+            encoder: shift_encoder(),
             bitwise_lookup_chip,
         }
     }
 }
 
-impl<F, const STORE_WIDTH: usize, const SELECTOR_WIDTH: usize, const NUM_VALUE_CELLS: usize>
-    TraceFiller<F>
-    for StoreFiller<Rv64StoreMultiByteAdapterFiller, STORE_WIDTH, SELECTOR_WIDTH, NUM_VALUE_CELLS>
+impl<F, const STORE_WIDTH: usize, const NUM_VALUE_CELLS: usize> TraceFiller<F>
+    for StoreFiller<Rv64StoreMultiByteAdapterFiller, STORE_WIDTH, NUM_VALUE_CELLS>
 where
     F: PrimeField32,
 {
@@ -305,8 +287,7 @@ where
         let record: &StoreRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
         let read_data = record.read_data;
         let prev_data = record.prev_data;
-        let core_row: &mut StoreCoreCols<F, SELECTOR_WIDTH, NUM_VALUE_CELLS> =
-            core_row.borrow_mut();
+        let core_row: &mut StoreCoreCols<F, NUM_VALUE_CELLS> = core_row.borrow_mut();
         debug_assert!(shift < NUM_BYTE_SHIFTS, "invalid store shift {shift}");
 
         let width = STORE_WIDTH / 2;
@@ -341,7 +322,7 @@ where
             [prev_bound_cells[0][0], prev_bound_cells[1][1]].map(F::from_u16);
         core_row.read_data = read_data.map(F::from_u16);
         core_row.prev_data = prev_data.map(|block| block.map(F::from_u16));
-        let pt: &[u32; SELECTOR_WIDTH] = self.encoder.flag_pt(shift).try_into().unwrap();
+        let pt: &[u32; BYTE_SHIFT_SELECTOR_WIDTH] = self.encoder.flag_pt(shift).try_into().unwrap();
         core_row.selector = (*pt).map(F::from_u32);
     }
 

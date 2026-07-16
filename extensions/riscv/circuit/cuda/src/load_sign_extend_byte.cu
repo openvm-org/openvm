@@ -34,7 +34,7 @@ struct LoadSignExtendByteCore {
         bitwise_lookup.add_range(read_cell_bytes[0], read_cell_bytes[1]);
         range_checker.add_count(selected_byte - sign_bit, RV64_BYTE_BITS - 1);
 
-        Encoder encoder = shift_encoder(BYTE_SHIFT_SELECTOR_WIDTH);
+        Encoder encoder = shift_encoder();
         encoder.write_flag_pt(
             row.slice_from(COL_INDEX(LoadSignExtendByteCoreCols, selector)),
             shift

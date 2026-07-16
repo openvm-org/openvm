@@ -11,8 +11,8 @@ constexpr size_t BYTE_SHIFT_SELECTOR_WIDTH = 3;
 constexpr uint32_t SHIFT_SELECTOR_MAX_DEGREE = 2;
 
 // Encodes one selector case per byte offset; the zero point represents an invalid row.
-__device__ inline Encoder shift_encoder(size_t selector_width) {
+__device__ inline Encoder shift_encoder() {
     return Encoder(
-        NUM_BYTE_SHIFTS, SHIFT_SELECTOR_MAX_DEGREE, true, (uint32_t)selector_width
+        NUM_BYTE_SHIFTS, SHIFT_SELECTOR_MAX_DEGREE, true, BYTE_SHIFT_SELECTOR_WIDTH
     );
 }

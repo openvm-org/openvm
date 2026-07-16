@@ -16,9 +16,10 @@ constexpr uint16_t SIGN_U16 = 1 << (U16_BITS - 1);
 
 using LoadSignExtendRecord = LoadRecord;
 
-template <typename T, size_t SELECTOR_WIDTH, size_t NUM_OVERLAP_CELLS>
-struct LoadSignExtendWidthCoreCols {
-    T selector[SELECTOR_WIDTH];
+template <typename T, size_t WIDTH_BYTES> struct LoadSignExtendWidthCoreCols {
+    static constexpr size_t NUM_OVERLAP_CELLS = WIDTH_BYTES / 2 + 1;
+
+    T selector[BYTE_SHIFT_SELECTOR_WIDTH];
     T data_most_sig_bit;
     T read_data[2][BLOCK_FE_WIDTH];
     T overlap_lo_bytes[NUM_OVERLAP_CELLS];
@@ -42,11 +43,10 @@ static __device__ __forceinline__ uint16_t load_sign_extend_byte_from_cell(
     return (cell >> (RV64_BYTE_BITS * byte_idx)) & RV64_BYTE_MASK;
 }
 
-// Shared tracegen for the halfword/word signed load cores. `WIDTH_BYTES` is the access width;
-// `NUM_OVERLAP_CELLS` must equal `WIDTH_BYTES / 2 + 1`.
-template <size_t SELECTOR_WIDTH, size_t NUM_OVERLAP_CELLS, size_t WIDTH_BYTES>
-struct LoadSignExtendWidthCore {
-    using Cols = LoadSignExtendWidthCoreCols<uint8_t, SELECTOR_WIDTH, NUM_OVERLAP_CELLS>;
+// Shared tracegen for the halfword/word signed load cores.
+template <size_t WIDTH_BYTES> struct LoadSignExtendWidthCore {
+    using Cols = LoadSignExtendWidthCoreCols<uint8_t, WIDTH_BYTES>;
+    static constexpr size_t NUM_OVERLAP_CELLS = Cols::NUM_OVERLAP_CELLS;
 
     VariableRangeChecker range_checker;
     BitwiseOperationLookup bitwise_lookup;
@@ -60,7 +60,7 @@ struct LoadSignExtendWidthCore {
     __device__ void fill_trace_row(RowSlice row, LoadSignExtendRecord record, uint8_t shift) {
         constexpr size_t WIDTH_CELLS = WIDTH_BYTES / 2;
 
-        Encoder encoder = shift_encoder(SELECTOR_WIDTH);
+        Encoder encoder = shift_encoder();
         encoder.write_flag_pt(row.slice_from(offsetof(Cols, selector)), shift);
         row.write_array(offsetof(Cols, read_data), 2 * BLOCK_FE_WIDTH, &record.read_data[0][0]);
 

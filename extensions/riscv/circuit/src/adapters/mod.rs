@@ -69,9 +69,9 @@ pub(crate) fn rv64_register_pointer(pointer: u32) -> u8 {
 }
 
 /// Encodes one selector case for each byte shift, reserving the zero point for invalid rows.
-pub(crate) fn shift_encoder<const SELECTOR_WIDTH: usize>() -> Encoder {
+pub(crate) fn shift_encoder() -> Encoder {
     let encoder = Encoder::new(NUM_BYTE_SHIFTS, SHIFT_SELECTOR_MAX_DEGREE, true);
-    debug_assert_eq!(encoder.width(), SELECTOR_WIDTH);
+    assert_eq!(encoder.width(), BYTE_SHIFT_SELECTOR_WIDTH);
     encoder
 }
 

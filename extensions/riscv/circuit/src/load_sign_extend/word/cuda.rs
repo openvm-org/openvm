@@ -11,10 +11,7 @@ use openvm_stark_backend::prover::AirProvingContext;
 
 use super::LOAD_SIGN_EXTEND_WORD_OVERLAP_CELLS;
 use crate::{
-    adapters::{
-        Rv64LoadMultiByteAdapterCols, Rv64LoadMultiByteAdapterRecord, BYTE_SHIFT_SELECTOR_WIDTH,
-        RV64_BYTE_BITS,
-    },
+    adapters::{Rv64LoadMultiByteAdapterCols, Rv64LoadMultiByteAdapterRecord, RV64_BYTE_BITS},
     cuda_abi::load_sign_extend_word_cuda,
     load::LoadRecord,
     load_sign_extend::core::LoadSignExtendCoreCols,
@@ -38,11 +35,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64LoadSignExtendWordChipGpu {
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
         let trace_width = Rv64LoadMultiByteAdapterCols::<F>::width()
-            + LoadSignExtendCoreCols::<
-                F,
-                BYTE_SHIFT_SELECTOR_WIDTH,
-                LOAD_SIGN_EXTEND_WORD_OVERLAP_CELLS,
-            >::width();
+            + LoadSignExtendCoreCols::<F, LOAD_SIGN_EXTEND_WORD_OVERLAP_CELLS>::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
 
