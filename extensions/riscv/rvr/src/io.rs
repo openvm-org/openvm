@@ -324,7 +324,7 @@ impl RvrExtension for Rv64IoExtension {
         if let Some(width) = public_values_store_width(insn) {
             let src_reg = decode_reg(insn.a);
             let ptr_reg = decode_reg(insn.b);
-            let offset = decode_imm_cg(insn);
+            let offset = decode_imm_cg(insn) as i16;
             return Some(LiftedInstr::Body(InstrAt {
                 pc,
                 instr: Box::new(RevealInstr {
@@ -641,6 +641,33 @@ mod tests {
         ));
 
         assert!(ext.try_lift(&inst, 0x100).is_none());
+    }
+
+    #[test]
+    fn rv64io_sign_extends_negative_public_values_store_offset() {
+        let ext = Rv64IoExtension::new(None).unwrap();
+        let inst = RvrInstruction::from_field(&Instruction::<BabyBear>::from_usize(
+            Rv64LoadStoreOpcode::STOREW.global_opcode(),
+            [
+                8,
+                16,
+                0xfffc,
+                RV64_REGISTER_AS as usize,
+                PUBLIC_VALUES_AS as usize,
+                1,
+                1,
+            ],
+        ));
+        let LiftedInstr::Body(InstrAt { instr, .. }) = ext.try_lift(&inst, 0x100).unwrap() else {
+            panic!("expected public-values store body instruction");
+        };
+
+        let mut ctx = TestEmitCtx::default();
+        instr.emit_c(&mut ctx);
+        assert_eq!(
+            ctx.lines[0],
+            "if (unlikely(!openvm_reveal(r1, (r2 - 0x00000004ull), 4u))) {"
+        );
     }
 
     #[test]
