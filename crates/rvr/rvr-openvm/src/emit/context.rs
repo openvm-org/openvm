@@ -467,7 +467,7 @@ impl<'a> EmitContext<'a> {
     /// custom instructions, so the RV64 instruction emitter owns the absent
     /// non-crossing slot explicitly.
     pub fn trace_absent_second_block(&mut self, base: &str, offset: i16, width: u8) {
-        if self.mode.traces_memory_values() && width > 1 {
+        if self.mode.traces_values() && width > 1 {
             let addr = Self::addr_expr(base, offset);
             self.write_line(&format!(
                 "if (!preflight_crosses_block({addr}, {width}u)) trace_timestamp(state);"
@@ -1428,6 +1428,55 @@ impl<'a> EmitContext<'a> {
         rs1: u8,
         offset: i16,
     ) {
+        if self.g2_records {
+            debug_assert!(!self.delta_records);
+            let kind = match (signed, width) {
+                (false, 1) => 8,
+                (true, 1) => 9,
+                (false, 2) => 20,
+                (false, 4) => 21,
+                (false, 8) => 22,
+                (true, 2) => 27,
+                (true, 4) => 28,
+                _ => unreachable!("invalid G2 load width {width}"),
+            };
+            let base = self.next_var();
+            self.write_line(&format!("uint64_t {base} = reg_read(state, {rs1});"));
+            self.write_line(&format!(
+                "if (likely(preflight_g2_validate_pointer(state, {base}))) {{"
+            ));
+            self.indent += 1;
+            let addr = self.materialize_u64(&Self::addr_expr(&base, offset));
+            let block_addr = self.materialize_u64(&format!("preflight_block_addr({addr})"));
+            let block = self.next_var();
+            self.write_line(&format!(
+                "uint64_t {block} = rd_mem_u64(memory, {block_addr});"
+            ));
+            self.write_line(&format!(
+                "preflight_g2_emit_load_store(state, {kind}u, {base}, {block});"
+            ));
+            self.write_line("state->tracer->timestamp += 3u;");
+            if rd != 0 {
+                let value = self.next_var();
+                let (var_ty, cast_ty) = match (width, signed) {
+                    (1, false) => ("uint32_t", "uint8_t"),
+                    (1, true) => ("int32_t", "int8_t"),
+                    (2, false) => ("uint32_t", "uint16_t"),
+                    (2, true) => ("int32_t", "int16_t"),
+                    (4, false) => ("uint32_t", "uint32_t"),
+                    (4, true) => ("int32_t", "int32_t"),
+                    (8, _) => ("uint64_t", "uint64_t"),
+                    _ => unreachable!("invalid memory width {width}"),
+                };
+                self.write_line(&format!(
+                    "{var_ty} {value} = ({cast_ty})({block} >> ((uint32_t)({addr} & 7u) * 8u));"
+                ));
+                self.write_line(&format!("reg_write(state, {rd}, {value});"));
+            }
+            self.indent -= 1;
+            self.write_line("}");
+            return;
+        }
         let chip = self.current_chip_idx;
         let pc = hex_u32(self.current_pc as u32);
         let fromts = self.next_var();
@@ -1529,7 +1578,7 @@ impl<'a> EmitContext<'a> {
             }
         } else {
             let val = self.next_var();
-            let (read_func, var_ty) = Self::read_mem_helper(width, signed, false);
+            let (read_func, _, var_ty) = Self::read_mem_helper(width, signed);
             self.write_line(&format!("{var_ty} {val} = {read_func}(memory, {addr});"));
             let rdprev = (!self.delta_records || arena_geom.is_some()).then(|| {
                 let rdprev = self.next_var();
@@ -1579,6 +1628,42 @@ impl<'a> EmitContext<'a> {
     /// record's c value is the full rs2 value and prev is the block's value
     /// before the store (read here, before the raw write).
     pub(crate) fn emit_store_inline(&mut self, width: u8, rs1: u8, rs2: u8, offset: i16) {
+        if self.g2_records {
+            debug_assert!(!self.delta_records);
+            let kind = match width {
+                1 => 23,
+                2 => 24,
+                4 => 25,
+                8 => 26,
+                _ => unreachable!("invalid G2 store width {width}"),
+            };
+            let base = self.next_var();
+            let source = self.next_var();
+            self.write_line(&format!("uint64_t {base} = reg_read(state, {rs1});"));
+            self.write_line(&format!("uint64_t {source} = reg_read(state, {rs2});"));
+            self.write_line(&format!(
+                "if (likely(preflight_g2_validate_pointer(state, {base}))) {{"
+            ));
+            self.indent += 1;
+            let addr = self.materialize_u64(&Self::addr_expr(&base, offset));
+            let block_addr = self.materialize_u64(&format!("preflight_block_addr({addr})"));
+            let block = self.next_var();
+            self.write_line(&format!(
+                "uint64_t {block} = rd_mem_u64(memory, {block_addr});"
+            ));
+            self.write_line(&format!(
+                "preflight_g2_emit_load_store(state, {kind}u, {base}, {block});"
+            ));
+            self.write_line("state->tracer->timestamp += 3u;");
+            self.write_line(&format!(
+                "preflight_mark_dirty_memory_page(state->tracer, {addr});"
+            ));
+            let (write, _, cast) = Self::write_mem_helper(width);
+            self.write_line(&format!("{write}(memory, {addr}, ({cast})({source}));"));
+            self.indent -= 1;
+            self.write_line("}");
+            return;
+        }
         let chip = self.current_chip_idx;
         let pc = hex_u32(self.current_pc as u32);
         let fromts = self.next_var();
@@ -1709,6 +1794,33 @@ impl<'a> EmitContext<'a> {
     ) -> (String, String) {
         let src_reg = reg_index(src);
         let ptr_reg = reg_index(ptr);
+        if self.g2_records {
+            debug_assert_eq!(addr_space, PUBLIC_VALUES_AS);
+            debug_assert_eq!(local_opcode, 4);
+            let ptr = self.next_var();
+            let src = self.next_var();
+            self.write_line(&format!("uint64_t {ptr} = reg_read(state, {ptr_reg});"));
+            self.write_line(&format!("uint64_t {src} = reg_read(state, {src_reg});"));
+            self.write_line(&format!("preflight_g2_validate_pointer(state, {ptr});"));
+            let addr_expr = match offset.cmp(&0) {
+                std::cmp::Ordering::Less => {
+                    format!("{ptr} - {}", hex_u32(offset.unsigned_abs()))
+                }
+                std::cmp::Ordering::Equal => ptr.clone(),
+                std::cmp::Ordering::Greater => format!("{ptr} + {}", hex_u32(offset as u32)),
+            };
+            let addr = self.materialize_u64(&addr_expr);
+            let block_addr = self.materialize_u64(&format!("preflight_block_addr({addr})"));
+            let block = self.next_var();
+            self.write_line(&format!(
+                "uint64_t {block} = preflight_read_pv_block(state->tracer, {block_addr});"
+            ));
+            self.write_line(&format!(
+                "preflight_g2_emit_load_store(state, 26u, {ptr}, {block});"
+            ));
+            self.write_line("state->tracer->timestamp += 3u;");
+            return (src, ptr);
+        }
         if !self.inline_records_enabled() {
             let ptr = self.read_reg(ptr_reg);
             let src = self.read_reg(src_reg);
@@ -1817,6 +1929,87 @@ impl<'a> EmitContext<'a> {
             ));
         }
         (src, ptr)
+    }
+
+    fn trace_reveal_compact_inline(
+        &mut self,
+        src: Variable,
+        ptr: Variable,
+        offset: i32,
+        width: u8,
+        addr_space: u32,
+        full_word_local_opcode: u8,
+    ) -> bool {
+        if !self.g2_records {
+            return false;
+        }
+        let src_reg = reg_index(src);
+        let ptr_reg = reg_index(ptr);
+        debug_assert_eq!(addr_space, PUBLIC_VALUES_AS);
+        debug_assert_eq!(full_word_local_opcode, 4);
+        debug_assert!(matches!(width, 1 | 2 | 4 | 8));
+
+        let (ptr, src) = if width == 8 {
+            let ptr = self.next_var();
+            let src = self.next_var();
+            self.write_line(&format!("uint64_t {ptr} = reg_read(state, {ptr_reg});"));
+            self.write_line(&format!("uint64_t {src} = reg_read(state, {src_reg});"));
+            (ptr, src)
+        } else {
+            // Narrow REVEAL remains in the residual chronology: preserve its
+            // two register reads before the public-values write event.
+            let ptr = self.read_reg(ptr_reg);
+            let src = self.read_reg(src_reg);
+            (ptr, src)
+        };
+        let addr_expr = match offset.cmp(&0) {
+            std::cmp::Ordering::Less => {
+                format!("{ptr} - {}", hex_u32(offset.unsigned_abs()))
+            }
+            std::cmp::Ordering::Equal => ptr.clone(),
+            std::cmp::Ordering::Greater => format!("{ptr} + {}", hex_u32(offset as u32)),
+        };
+        let addr = self.materialize_u64(&addr_expr);
+        if width == 8 {
+            self.write_line(&format!(
+                "if (unlikely(!preflight_g2_validate_pointer(state, {ptr}))) {{"
+            ));
+            self.emit_trap();
+            self.write_line("}");
+        }
+        self.write_line(&format!(
+            "if (unlikely(!openvm_validate_reveal({addr}, {width}u))) {{"
+        ));
+        self.emit_trap();
+        self.write_line("}");
+        if width == 8 {
+            let block_addr = self.materialize_u64(&format!("preflight_block_addr({addr})"));
+            let block = self.next_var();
+            self.write_line(&format!(
+                "uint64_t {block} = preflight_read_pv_block(state->tracer, {block_addr});"
+            ));
+            self.write_line(&format!(
+                "preflight_g2_emit_load_store(state, 26u, {ptr}, {block});"
+            ));
+            self.write_line("state->tracer->timestamp += 3u;");
+        } else {
+            self.emit_call_without_page_flush(
+                "trace_wr_as",
+                &[
+                    "state",
+                    &addr,
+                    &src,
+                    &width.to_string(),
+                    &format!("{addr_space}u"),
+                ],
+            );
+        }
+        self.write_line(&format!(
+            "if (unlikely(!openvm_reveal({src}, {addr}, {width}u))) {{"
+        ));
+        self.emit_trap();
+        self.write_line("}");
+        true
     }
 
     fn write_reg_direct(&mut self, idx: u8, val: &str) {
@@ -2422,6 +2615,25 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
         local_opcode: u8,
     ) -> (String, String) {
         self.trace_store_u64_as_inline(src, ptr, offset, addr_space, local_opcode)
+    }
+
+    fn trace_reveal_compact(
+        &mut self,
+        src: Variable,
+        ptr: Variable,
+        offset: i32,
+        width: u8,
+        addr_space: u32,
+        full_word_local_opcode: u8,
+    ) -> bool {
+        self.trace_reveal_compact_inline(
+            src,
+            ptr,
+            offset,
+            width,
+            addr_space,
+            full_word_local_opcode,
+        )
     }
 
     fn trace_timestamp(&mut self) {

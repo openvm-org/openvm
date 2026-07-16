@@ -320,6 +320,21 @@ pub trait ExtEmitCtx {
         (src, ptr)
     }
 
+    /// Emit a compact, implementation-owned REVEAL when the active transport
+    /// can do so safely. Returning `true` means the complete instruction,
+    /// including the external reveal callback, has been emitted.
+    fn trace_reveal_compact(
+        &mut self,
+        _src: Variable,
+        _ptr: Variable,
+        _offset: i32,
+        _width: u8,
+        _addr_space: u32,
+        _full_word_local_opcode: u8,
+    ) -> bool {
+        false
+    }
+
     /// Emit a timestamp-only trace tick.
     fn trace_timestamp(&mut self);
 

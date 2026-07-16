@@ -208,6 +208,16 @@ impl ExtInstr for RevealInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
+        if ctx.trace_reveal_compact(
+            self.src_reg,
+            self.ptr_reg,
+            self.offset,
+            self.width.bytes(),
+            PUBLIC_VALUES_AS,
+            4,
+        ) {
+            return;
+        }
         let addr_from_ptr = |ptr: &str| match self.offset.cmp(&0) {
             std::cmp::Ordering::Less => {
                 format!("({ptr} - 0x{:08x}ull)", self.offset.unsigned_abs())
@@ -375,6 +385,7 @@ impl RvrRuntimeExtension for Rv64IoRuntimeHooks {
         let callbacks = Rv64IoHostCallbacks {
             hint_storew: host_hint_storew,
             hint_buffer: host_hint_buffer,
+            validate_reveal: host_validate_reveal,
             reveal: host_reveal,
         };
         unsafe { register_fn(&callbacks) };
@@ -411,6 +422,7 @@ type RegisterRv64IoHostCallbacksFn = unsafe extern "C" fn(*const Rv64IoHostCallb
 struct Rv64IoHostCallbacks {
     hint_storew: extern "C" fn(*mut c_void, u64) -> bool,
     hint_buffer: extern "C" fn(*mut c_void, u64, u16) -> bool,
+    validate_reveal: extern "C" fn(*mut c_void, u64, u8) -> bool,
     reveal: extern "C" fn(*mut c_void, u64, u64, u8) -> bool,
 }
 
@@ -451,21 +463,35 @@ extern "C" fn host_hint_buffer(ctx: *mut c_void, dest_addr: u64, num_words: u16)
 
 /// Host callback for stores to `PUBLIC_VALUES_AS`.
 /// Generated C adds the trace-row cost.
+extern "C" fn host_validate_reveal(ctx: *mut c_void, addr: u64, width: u8) -> bool {
+    let io = unsafe { &*(ctx as *const OpenVmIoState<'_>) };
+    checked_reveal_range(addr, width, io.public_values.len()).is_some()
+}
+
 extern "C" fn host_reveal(ctx: *mut c_void, src_val: u64, addr: u64, width: u8) -> bool {
     let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_>) };
-    let width = match width {
-        1 | 2 | 4 | 8 => usize::from(width),
-        _ => return false,
-    };
-    let Some(end) = addr.checked_add(width as u64) else {
+    let Some(range) = checked_reveal_range(addr, width, io.public_values.len()) else {
         return false;
     };
-    if end > io.public_values.len() as u64 {
-        return false;
-    }
-    let range = addr as usize..end as usize;
+    let width = range.len();
     io.public_values[range].copy_from_slice(&src_val.to_le_bytes()[..width]);
     true
+}
+
+fn checked_reveal_range(
+    addr: u64,
+    width: u8,
+    public_values_len: usize,
+) -> Option<std::ops::Range<usize>> {
+    let width = match width {
+        1 | 2 | 4 | 8 => usize::from(width),
+        _ => return None,
+    };
+    let end = addr.checked_add(width as u64)?;
+    if end > public_values_len as u64 {
+        return None;
+    }
+    Some(addr as usize..end as usize)
 }
 
 #[cfg(test)]

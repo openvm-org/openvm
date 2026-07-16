@@ -207,7 +207,9 @@ pub struct G2DsoManifestConfigV1 {
     pub air_manifest_fingerprint: [u8; 32],
     pub pc_base: u32,
     pub block_count: u32,
-    pub addi_air_idx: u32,
+    pub air_count: u32,
+    pub air_kinds: [u8; 12],
+    pub air_indices: [u32; 12],
 }
 
 /// C project generator.
@@ -251,8 +253,8 @@ pub struct CProject {
     /// mode: all inline AIRs share one execution-ordered backing and reserve
     /// their record slots once per basic-block entry.
     pub delta_records: bool,
-    /// Private G2 v1 lane producer. Phase 1 enables this only for AddI-only
-    /// routed programs, and leaves every existing route unchanged.
+    /// Private G2 v1 lane producer for the currently negotiated compact
+    /// families. Every existing route remains unchanged when this is false.
     pub g2_records: bool,
     /// Full schema/program/AIR binding exported by the generated DSO.
     pub g2_manifest: Option<G2DsoManifestConfigV1>,
@@ -676,6 +678,39 @@ impl CProject {
             .map(|byte| format!("0x{byte:02x}"))
             .collect::<Vec<_>>()
             .join(", ");
+        let air_kinds = manifest
+            .air_kinds
+            .iter()
+            .map(|kind| format!("{kind}u"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let air_indices = manifest
+            .air_indices
+            .iter()
+            .map(|index| format!("{index}u"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let mut lanes = vec![(0x0001u16, 4u8, 1u32, 0u32, 0u8)];
+        lanes.extend([
+            (0x0080, 8, 3, 2, 1),
+            (0x0081, 1, 3, 2, 1),
+            (0x0082, 8, 3, 2, 1),
+        ]);
+        for kind in rvr_openvm_ext_ffi_common::G2_LOAD_STORE_KINDS {
+            lanes.push((rvr_openvm_ext_ffi_common::g2_lane_v0(kind), 4, 3, 1, 2));
+            lanes.push((rvr_openvm_ext_ffi_common::g2_lane_v1(kind), 8, 3, 1, 2));
+        }
+        lanes.push((rvr_openvm_ext_ffi_common::G2_LANE_ADDI_V0, 8, 1, 0, 1));
+        lanes.sort_unstable_by_key(|lane| lane.0);
+        let lane_source = lanes
+            .iter()
+            .map(|&(kind, width, flags, group, arity)| {
+                format!(
+                    "                 {{.kind=0x{kind:04x}, .elem_width={width}, .encoding=0, .flags={flags}, .group_id={group}, .arity={arity}, .reserved={{0,0,0}}}},"
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
         let source = format!(
             "#include <stdint.h>\n\n\
              typedef struct OpenVmRvrG2DsoLaneManifestV1 {{\n\
@@ -701,20 +736,22 @@ impl CProject {
                uint8_t air_manifest_fingerprint[32];\n\
                uint32_t pc_base;\n\
                uint32_t block_count;\n\
-               uint32_t addi_air_idx;\n\
+               uint32_t air_count;\n\
                uint32_t reserved;\n\
-               OpenVmRvrG2DsoLaneManifestV1 lanes[2];\n\
+               uint8_t air_kinds[12];\n\
+               uint32_t air_indices[12];\n\
+               OpenVmRvrG2DsoLaneManifestV1 lanes[27];\n\
              }} OpenVmRvrG2DsoManifestV1;\n\n\
              _Static_assert(sizeof(OpenVmRvrG2DsoLaneManifestV1) == 16, \"G2 DSO lane manifest size drift\");\n\
-             _Static_assert(sizeof(OpenVmRvrG2DsoManifestV1) == 200, \"G2 DSO manifest size drift\");\n\n\
+             _Static_assert(sizeof(OpenVmRvrG2DsoManifestV1) == 660, \"G2 DSO manifest size drift\");\n\n\
              __attribute__((visibility(\"default\")))\n\
              const OpenVmRvrG2DsoManifestV1 openvm_rvr_g2_manifest_v1 = {{\n\
                .magic = {{'O','V','M','G','2','D','1','\\0'}},\n\
                .version = 1,\n\
-               .manifest_bytes = 200,\n\
+               .manifest_bytes = 660,\n\
                .header_size = 64,\n\
                .lane_desc_size = 32,\n\
-               .lane_count = 2,\n\
+               .lane_count = 27,\n\
                .wire_flags = 14,\n\
                .fingerprint = {{{fingerprint}}},\n\
                .program_fingerprint = {{{program_fingerprint}}},\n\
@@ -722,14 +759,15 @@ impl CProject {
                .air_manifest_fingerprint = {{{air_manifest_fingerprint}}},\n\
                .pc_base = {},\n\
                .block_count = {},\n\
-               .addi_air_idx = {},\n\
+               .air_count = {},\n\
                .reserved = 0,\n\
+               .air_kinds = {{{air_kinds}}},\n\
+               .air_indices = {{{air_indices}}},\n\
                .lanes = {{\n\
-                 {{.kind=0x0001, .elem_width=4, .encoding=0, .flags=1, .group_id=0, .arity=0, .reserved={{0,0,0}}}},\n\
-                 {{.kind=0x013a, .elem_width=8, .encoding=0, .flags=1, .group_id=0, .arity=1, .reserved={{0,0,0}}}},\n\
+{lane_source}\n\
                }},\n\
              }};\n",
-            manifest.pc_base, manifest.block_count, manifest.addi_air_idx,
+            manifest.pc_base, manifest.block_count, manifest.air_count,
         );
         fs::write(path, source)
     }

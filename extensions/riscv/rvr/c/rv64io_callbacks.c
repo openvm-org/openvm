@@ -206,6 +206,11 @@ bool openvm_hint_buffer(void* state, uint64_t dest_addr, uint16_t num_words,
   return true;
 }
 
+bool openvm_validate_reveal(uint64_t addr, uint8_t width) {
+  return g_rv64io_host_callbacks.validate_reveal(openvm_get_io_ctx(), addr,
+                                                 width);
+}
+
 bool openvm_reveal(uint64_t src_val, uint64_t addr, uint8_t width) {
   return g_rv64io_host_callbacks.reveal(openvm_get_io_ctx(), src_val, addr,
                                         width);

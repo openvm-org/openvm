@@ -133,6 +133,10 @@ struct EventPayload {
 };
 static_assert(sizeof(EventPayload) == 40, "event payload size drift");
 
+static constexpr uint8_t EXPECT_BEFORE_LOAD = 1;
+static constexpr uint8_t EXPECT_BEFORE_STORE = 2;
+static constexpr uint8_t EXPECT_AFTER_STORE = 3;
+
 struct DeltaAirOutputDesc {
     uint64_t base;
     uint32_t count;
@@ -670,7 +674,9 @@ __global__ void build_events(
     size_t event_count = program_begin + program_count * 3;
     if (idx >= event_count) return;
 
-    EventPayload payload{INVALID_ADDRESS, 0, UINT32_MAX, 0, 0, 0, VALUE_NONE, 0, 0, 0};
+    EventPayload payload{};
+    payload.address_key = INVALID_ADDRESS;
+    payload.timestamp = UINT32_MAX;
     if (idx < delta_events) {
         size_t record_idx = idx / 4;
         uint32_t access_slot = idx % 4;
@@ -796,6 +802,9 @@ __global__ void replay_address_groups(
     uint64_t *prev_values,
     uint32_t *memory_prev_timestamps,
     uint64_t *memory_prev_values,
+    uint64_t const *expected_blocks,
+    uint8_t const *expected_modes,
+    size_t expected_count,
     uint32_t *error
 ) {
     size_t group_idx = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
@@ -822,6 +831,26 @@ __global__ void replay_address_groups(
     );
     for (size_t cursor = idx; cursor < count && keys[cursor] == keys[idx]; ++cursor) {
         EventPayload event = events[cursor];
+        uint8_t expected_mode = 0;
+        uint32_t access_slot = UINT32_MAX;
+        size_t record_idx = SIZE_MAX;
+        if (event.output_index_plus_one != 0) {
+            size_t event_idx = event.output_index_plus_one - 1;
+            record_idx = event_idx / 3;
+            access_slot = uint32_t(event_idx % 3);
+            if (record_idx < expected_count) expected_mode = expected_modes[record_idx];
+        }
+        if (expected_mode > EXPECT_AFTER_STORE) {
+            fail(error, 24);
+            return;
+        }
+        bool check_before =
+            (expected_mode == EXPECT_BEFORE_LOAD && access_slot == 1) ||
+            (expected_mode == EXPECT_BEFORE_STORE && access_slot == 2);
+        if (check_before && current_value != expected_blocks[record_idx]) {
+            fail(error, 25);
+            return;
+        }
         if (event.output_index_plus_one != 0) {
             prev_timestamps[event.output_index_plus_one - 1] = previous_timestamp;
         }
@@ -844,6 +873,11 @@ __global__ void replay_address_groups(
                             ((event.value & mask) << shift);
         } else if (event.value_update != VALUE_NONE) {
             fail(error, 16);
+            return;
+        }
+        if (expected_mode == EXPECT_AFTER_STORE && access_slot == 2 &&
+            current_value != expected_blocks[record_idx]) {
+            fail(error, 26);
             return;
         }
         previous_timestamp = event.timestamp;
@@ -1373,6 +1407,8 @@ extern "C" int _rvr_delta_predecode(
     uint8_t const *d_arena_native_flags,
     size_t num_airs,
     DeltaAirOutputDesc const *d_outputs,
+    DeviceBufferConstView<uint64_t> d_expected_blocks,
+    DeviceBufferConstView<uint8_t> d_expected_modes,
     uint32_t *d_error,
     cudaStream_t stream
 ) {
@@ -1391,6 +1427,8 @@ extern "C" int _rvr_delta_predecode(
                 sizeof(TouchedMemoryRecord) ||
         (memory_count != 0 &&
          (d_memory_prev_timestamps == nullptr || d_memory_prev_values == nullptr)) ||
+        d_expected_blocks.size != d_expected_modes.size * sizeof(uint64_t) ||
+        (d_expected_modes.size != 0 && d_expected_modes.size != delta_count) ||
         d_touched_count == nullptr) {
         return int(cudaErrorInvalidValue);
     }
@@ -1579,6 +1617,9 @@ extern "C" int _rvr_delta_predecode(
             prev_values,
             d_memory_prev_timestamps,
             d_memory_prev_values,
+            d_expected_blocks.ptr,
+            d_expected_modes.ptr,
+            d_expected_modes.len(),
             d_error
         );
         CUDA_TRY(cudaGetLastError());

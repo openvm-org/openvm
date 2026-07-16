@@ -71,20 +71,30 @@ typedef struct DeviceProgramEntry {
   uint32_t filtered_index;
 } DeviceProgramEntry;
 
-/* G2 private wire cursors. Generated C writes the two payload lanes directly
- * into their final positions. Rust owns and publishes the common header. */
+/* G2 private wire cursors. Slot order is private producer ABI; Rust publishes
+ * the sorted public descriptor table only after every cursor validates. */
+typedef struct G2ProducerLaneV1 {
+  uint64_t offset;
+  uint32_t len;
+  uint32_t cap;
+} G2ProducerLaneV1;
+
 typedef struct G2ProducerV1 {
   uint8_t* base;
   uint64_t capacity;
-  uint64_t run_offset;
-  uint64_t addi_offset;
-  uint32_t run_len;
-  uint32_t run_cap;
-  uint32_t addi_len;
-  uint32_t addi_cap;
+  G2ProducerLaneV1* lanes;
+  uint32_t lane_count;
   uint32_t instruction_count;
   uint32_t overflow;
+  uint32_t reserved;
 } G2ProducerV1;
+
+static constexpr uint32_t G2_PRODUCER_RUN_SLOT = 0u;
+static constexpr uint32_t G2_PRODUCER_RESIDUAL_CTRL_SLOT = 1u;
+static constexpr uint32_t G2_PRODUCER_RESIDUAL_TAG_SLOT = 2u;
+static constexpr uint32_t G2_PRODUCER_RESIDUAL_VALUE_SLOT = 3u;
+static constexpr uint32_t G2_PRODUCER_ADDI_SLOT = 4u;
+static constexpr uint32_t G2_PRODUCER_LANE_COUNT = 27u;
 
 static constexpr uint32_t PREFLIGHT_PROGRAM_WRITE_COMPLETE = 1u;
 static constexpr uint32_t PREFLIGHT_PROGRAM_CROSSING_RESIDUAL = 2u;
@@ -270,7 +280,11 @@ _Static_assert(sizeof(DeviceProgramEntry) == PREFLIGHT_DEVICE_PROGRAM_ENTRY_SIZE
                "DeviceProgramEntry size drift");
 _Static_assert(_Alignof(DeviceProgramEntry) == PREFLIGHT_DEVICE_PROGRAM_ENTRY_ALIGN,
                "DeviceProgramEntry align drift");
-_Static_assert(sizeof(G2ProducerV1) == 56, "G2ProducerV1 size drift");
+_Static_assert(sizeof(G2ProducerLaneV1) == 16,
+               "G2ProducerLaneV1 size drift");
+_Static_assert(_Alignof(G2ProducerLaneV1) == 8,
+               "G2ProducerLaneV1 align drift");
+_Static_assert(sizeof(G2ProducerV1) == 40, "G2ProducerV1 size drift");
 _Static_assert(_Alignof(G2ProducerV1) == 8, "G2ProducerV1 align drift");
 _Static_assert(sizeof(MemoryLogEntry) == PREFLIGHT_MEMORY_LOG_ENTRY_SIZE,
                "MemoryLogEntry size drift");
@@ -555,12 +569,12 @@ static __attribute__((always_inline)) inline uint64_t preflight_patch_mem_block(
 #else
 static __attribute__((always_inline)) inline bool
 preflight_compact_residual_memory(Tracer* restrict t) {
-  return false;
+  return t->g2 != NULL;
 }
 
 static __attribute__((always_inline)) inline bool
 preflight_device_aux(Tracer* restrict t) {
-  return false;
+  return t->g2 != NULL;
 }
 
 static __attribute__((always_inline)) inline bool
@@ -574,7 +588,19 @@ preflight_device_chronology(Tracer* restrict t) {
 }
 
 static __attribute__((always_inline)) inline void
-preflight_mark_dirty_memory_page(Tracer* restrict t, uint64_t address) {}
+preflight_mark_dirty_memory_page(Tracer* restrict t, uint64_t address) {
+  if (likely(t->g2 == NULL)) {
+    return;
+  }
+  uint64_t page = address >> 12;
+  uint64_t word = page >> 6;
+  if (unlikely(word >= t->dirty_memory_pages_words ||
+               t->dirty_memory_pages == NULL)) {
+    t->g2->overflow = 1u;
+    return;
+  }
+  t->dirty_memory_pages[word] |= UINT64_C(1) << (page & 63u);
+}
 
 static __attribute__((always_inline)) inline void
 preflight_store_prev_timestamp(Tracer* restrict t, uint32_t* target,
@@ -605,6 +631,50 @@ static __attribute__((always_inline)) inline bool preflight_device_trace_pc(
   return t->g2 != NULL;
 }
 
+static __attribute__((always_inline)) inline G2ProducerLaneV1*
+preflight_g2_lane(G2ProducerV1* restrict g2, uint32_t slot) {
+  if (unlikely(g2 == NULL || g2->base == NULL || g2->lanes == NULL ||
+               g2->lane_count != G2_PRODUCER_LANE_COUNT ||
+               slot >= g2->lane_count)) {
+    if (g2 != NULL) g2->overflow = 1u;
+    return NULL;
+  }
+  return &g2->lanes[slot];
+}
+
+static __attribute__((always_inline)) inline uint32_t
+preflight_g2_claim(G2ProducerV1* restrict g2, uint32_t slot,
+                   uint32_t width) {
+  G2ProducerLaneV1* restrict lane = preflight_g2_lane(g2, slot);
+  if (unlikely(lane == NULL)) return UINT32_MAX;
+  uint32_t index = lane->len++;
+  uint64_t end = lane->offset + (uint64_t)(index + 1u) * width;
+  if (unlikely(index >= lane->cap || end < lane->offset ||
+               end > g2->capacity)) {
+    g2->overflow = 1u;
+    return UINT32_MAX;
+  }
+  return index;
+}
+
+static __attribute__((always_inline)) inline uint32_t
+preflight_g2_load_store_slot(uint32_t kind) {
+  switch (kind) {
+    case 8u: return 5u;
+    case 9u: return 7u;
+    case 20u: return 9u;
+    case 21u: return 11u;
+    case 22u: return 13u;
+    case 23u: return 15u;
+    case 24u: return 17u;
+    case 25u: return 19u;
+    case 26u: return 21u;
+    case 27u: return 23u;
+    case 28u: return 25u;
+    default: return UINT32_MAX;
+  }
+}
+
 static __attribute__((always_inline)) inline void preflight_g2_emit_run(
     RvState* restrict state, uint32_t program_slot,
     uint32_t instruction_count) {
@@ -612,16 +682,16 @@ static __attribute__((always_inline)) inline void preflight_g2_emit_run(
   if (unlikely(g2 == NULL)) {
     return;
   }
-  uint32_t index = g2->run_len++;
+  uint32_t index = preflight_g2_claim(g2, G2_PRODUCER_RUN_SLOT,
+                                      sizeof(uint32_t));
   uint32_t next = g2->instruction_count + instruction_count;
-  if (unlikely(g2->base == NULL || index >= g2->run_cap ||
-               next < g2->instruction_count ||
-               g2->run_offset + (uint64_t)(index + 1u) * sizeof(uint32_t) >
-                   g2->capacity)) {
+  if (unlikely(index == UINT32_MAX || next < g2->instruction_count)) {
     g2->overflow = 1u;
     return;
   }
-  ((uint32_t*)(g2->base + g2->run_offset))[index] = program_slot;
+  G2ProducerLaneV1 const* restrict lane =
+      &g2->lanes[G2_PRODUCER_RUN_SLOT];
+  ((uint32_t*)(g2->base + lane->offset))[index] = program_slot;
   g2->instruction_count = next;
 }
 
@@ -631,14 +701,99 @@ static __attribute__((always_inline)) inline void preflight_g2_emit_addi(
   if (unlikely(g2 == NULL)) {
     return;
   }
-  uint32_t index = g2->addi_len++;
-  if (unlikely(g2->base == NULL || index >= g2->addi_cap ||
-               g2->addi_offset + (uint64_t)(index + 1u) * sizeof(uint64_t) >
-                   g2->capacity)) {
-    g2->overflow = 1u;
+  uint32_t index = preflight_g2_claim(g2, G2_PRODUCER_ADDI_SLOT,
+                                      sizeof(uint64_t));
+  if (unlikely(index == UINT32_MAX)) return;
+  G2ProducerLaneV1 const* restrict lane =
+      &g2->lanes[G2_PRODUCER_ADDI_SLOT];
+  ((uint64_t*)(g2->base + lane->offset))[index] = rs1_value;
+}
+
+static __attribute__((always_inline)) inline bool
+preflight_g2_validate_pointer(RvState* restrict state, uint64_t pointer) {
+  if (unlikely(pointer > UINT32_MAX && state->tracer->g2 != NULL)) {
+    state->tracer->g2->overflow = 1u;
+    return false;
+  }
+  return true;
+}
+
+static __attribute__((always_inline)) inline void
+preflight_g2_emit_load_store(RvState* restrict state, uint32_t kind,
+                             uint64_t base_pointer, uint64_t block_value) {
+  G2ProducerV1* restrict g2 = state->tracer->g2;
+  uint32_t slot = preflight_g2_load_store_slot(kind);
+  if (unlikely(slot == UINT32_MAX || base_pointer > UINT32_MAX)) {
+    if (g2 != NULL) g2->overflow = 1u;
     return;
   }
-  ((uint64_t*)(g2->base + g2->addi_offset))[index] = rs1_value;
+  uint32_t pointer_index = preflight_g2_claim(g2, slot, sizeof(uint32_t));
+  uint32_t block_index = preflight_g2_claim(g2, slot + 1u, sizeof(uint64_t));
+  if (unlikely(pointer_index == UINT32_MAX || block_index == UINT32_MAX ||
+               pointer_index != block_index)) {
+    if (g2 != NULL) g2->overflow = 1u;
+    return;
+  }
+  G2ProducerLaneV1 const* restrict pointer_lane = &g2->lanes[slot];
+  G2ProducerLaneV1 const* restrict block_lane = &g2->lanes[slot + 1u];
+  ((uint32_t*)(g2->base + pointer_lane->offset))[pointer_index] =
+      (uint32_t)base_pointer;
+  ((uint64_t*)(g2->base + block_lane->offset))[block_index] = block_value;
+}
+
+static __attribute__((always_inline)) inline uint8_t preflight_g2_residual_tag(
+    uint8_t kind, uint8_t addr_space, uint8_t width) {
+  uint8_t as_code = addr_space == AS_REGISTER
+                        ? 0u
+                        : (addr_space == AS_MEMORY
+                               ? 1u
+                               : (addr_space == AS_PUBLIC_VALUES ? 2u : 3u));
+  uint8_t width_code = width == 0u   ? 0u
+                       : width == 1u ? 1u
+                       : width == 2u ? 2u
+                       : width == 4u ? 3u
+                       : width == 8u ? 4u
+                                     : 7u;
+  if (unlikely(kind > PREFLIGHT_MEMORY_KIND_TOUCH || as_code == 3u ||
+               width_code > 4u ||
+               (kind == PREFLIGHT_MEMORY_KIND_TOUCH) != (width == 0u))) {
+    return UINT8_MAX;
+  }
+  return kind | (uint8_t)(as_code << 2u) | (uint8_t)(width_code << 4u);
+}
+
+static __attribute__((always_inline)) inline uint32_t
+preflight_g2_emit_residual(Tracer* restrict t, uint8_t kind,
+                           uint8_t addr_space, uint64_t address, uint8_t width,
+                           uint64_t value, uint32_t timestamp) {
+  G2ProducerV1* restrict g2 = t->g2;
+  uint8_t tag = preflight_g2_residual_tag(kind, addr_space, width);
+  if (unlikely(g2 == NULL || address > UINT32_MAX || tag == UINT8_MAX)) {
+    if (g2 != NULL) g2->overflow = 1u;
+    return UINT32_MAX;
+  }
+  uint32_t ctrl_index = preflight_g2_claim(
+      g2, G2_PRODUCER_RESIDUAL_CTRL_SLOT, sizeof(uint64_t));
+  uint32_t tag_index = preflight_g2_claim(
+      g2, G2_PRODUCER_RESIDUAL_TAG_SLOT, sizeof(uint8_t));
+  uint32_t value_index = preflight_g2_claim(
+      g2, G2_PRODUCER_RESIDUAL_VALUE_SLOT, sizeof(uint64_t));
+  if (unlikely(ctrl_index == UINT32_MAX || tag_index != ctrl_index ||
+               value_index != ctrl_index)) {
+    g2->overflow = 1u;
+    return UINT32_MAX;
+  }
+  G2ProducerLaneV1 const* restrict ctrl_lane =
+      &g2->lanes[G2_PRODUCER_RESIDUAL_CTRL_SLOT];
+  G2ProducerLaneV1 const* restrict tag_lane =
+      &g2->lanes[G2_PRODUCER_RESIDUAL_TAG_SLOT];
+  G2ProducerLaneV1 const* restrict value_lane =
+      &g2->lanes[G2_PRODUCER_RESIDUAL_VALUE_SLOT];
+  ((uint64_t*)(g2->base + ctrl_lane->offset))[ctrl_index] =
+      (uint64_t)timestamp | (address << 32u);
+  (g2->base + tag_lane->offset)[tag_index] = tag;
+  ((uint64_t*)(g2->base + value_lane->offset))[value_index] = value;
+  return ctrl_index;
 }
 
 /* The shared extension wrapper exports this symbol for every tracer mode.
@@ -854,6 +1009,15 @@ preflight_append_memory_record(Tracer* restrict t, uint8_t kind,
                                uint64_t prev_value, uint32_t timestamp,
                                uint32_t prev_timestamp,
                                bool compact_residual) {
+  if (unlikely(compact_residual && t->g2 != NULL)) {
+    uint64_t detail_started = preflight_detail_phase_begin(
+        t, PREFLIGHT_DETAIL_PHASE_RESIDUAL_EMIT, 17u);
+    uint32_t index = preflight_g2_emit_residual(
+        t, kind, addr_space, address, width, value, timestamp);
+    preflight_detail_phase_end(t, PREFLIGHT_DETAIL_PHASE_RESIDUAL_EMIT,
+                               detail_started);
+    return index;
+  }
   uint64_t detail_started = preflight_detail_phase_begin(
       t, PREFLIGHT_DETAIL_PHASE_RESIDUAL_EMIT, sizeof(MemoryLogEntry));
   uint32_t idx = t->memory_log_len++;
@@ -887,7 +1051,11 @@ static __attribute__((always_inline)) inline uint32_t preflight_append_memory(
     uint8_t width, uint64_t value, uint64_t prev_value) {
   bool compact_residual = preflight_compact_residual_memory(t);
   if (unlikely(compact_residual && address > UINT32_MAX)) {
-    t->delta_records->flags |= PREFLIGHT_RECORD_OVERFLOW;
+    if (t->g2 != NULL) {
+      t->g2->overflow = 1u;
+    } else if (t->delta_records != NULL) {
+      t->delta_records->flags |= PREFLIGHT_RECORD_OVERFLOW;
+    }
     return 0;
   }
   uint32_t timestamp;
@@ -1584,7 +1752,11 @@ static __attribute__((always_inline)) inline void trace_mem_access(
   bool compact_residual =
       preflight_compact_residual_memory(state->tracer);
   if (unlikely(compact_residual && block_addr > UINT32_MAX)) {
-    state->tracer->delta_records->flags |= PREFLIGHT_RECORD_OVERFLOW;
+    if (state->tracer->g2 != NULL) {
+      state->tracer->g2->overflow = 1u;
+    } else if (state->tracer->delta_records != NULL) {
+      state->tracer->delta_records->flags |= PREFLIGHT_RECORD_OVERFLOW;
+    }
     return;
   }
   uint32_t timestamp;
@@ -1605,7 +1777,11 @@ static __attribute__((always_inline)) inline void trace_mem_access_u64_range(
   for (uint32_t i = 0; i < num_dwords; i++) {
     uint64_t block_addr = base_addr + i * WORD_SIZE;
     if (unlikely(compact_residual && block_addr > UINT32_MAX)) {
-      state->tracer->delta_records->flags |= PREFLIGHT_RECORD_OVERFLOW;
+      if (state->tracer->g2 != NULL) {
+        state->tracer->g2->overflow = 1u;
+      } else if (state->tracer->delta_records != NULL) {
+        state->tracer->delta_records->flags |= PREFLIGHT_RECORD_OVERFLOW;
+      }
       return;
     }
     uint32_t timestamp;
