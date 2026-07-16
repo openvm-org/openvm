@@ -64,18 +64,11 @@ struct GraphCoreInst {
     /// Offset into the lookup region the node writes at.
     lookup_offset: u32,
     lookups_len: u32,
-    /// `dep_inds[lo..hi]`: indices (into `insts`) of the compute instructions
-    /// whose output cells this instruction reads as operands. Input
-    /// instructions are excluded — they run before [`GraphExecutor::run`]
-    /// starts, so their flags are always considered "ready". Parents always
-    /// have strictly lower index than this instruction (insts are level-sorted
-    /// and dependencies point to strictly-lower levels).
+    /// dependencies
     dep_list: (u32, u32),
 }
 
-/// Shared mutable witness tape. Sound because every slot is written by exactly
-/// one instruction (disjoint precomputed ranges) and reads happen on a later
-/// level, ordered after the write by the level barrier.
+/// Shared mutable witness tape.
 #[derive(Clone, Copy)]
 struct TapePtr(*mut Fr);
 #[allow(unsafe_code)]
@@ -111,28 +104,12 @@ pub struct GraphExecutor {
     /// Flattened parent-instruction indices; `insts[i].dep_list` names a slice
     /// of this vector. See [`GraphCoreInst::dep_list`].
     dep_inds: Vec<u32>,
-    /// Per-instruction "done" flag. Set to the current `phase` (see below)
+    /// Per-instruction "done" flag. Set to the current `phase`
     /// once the instruction finishes; workers spin on parent flags waiting for
     /// them to reach the current phase before executing.
-    ///
-    /// Comparing against `phase` (rather than a `bool`) avoids having to reset
-    /// the buffer between runs — old runs left stale non-current values and
-    /// waiters ignore them.
-    ///
-    /// Unpadded 1-byte flags: the whole buffer is `n_insts` bytes (~500 KB for
-    /// the root proof), small enough to stay hot in L2. Adjacent flags share
-    /// cache lines, so worker writes can invalidate peers' spin-reads on the
-    /// same line — but with only ~1 flag write per line per run on average
-    /// (500k writes ÷ 8k lines ≈ 60 writes per line total, spread across the
-    /// entire run) the invalidation traffic is bounded and the L2 residency
-    /// win dominates.
     flags: Vec<AtomicU8>,
     /// Monotonically-incrementing phase counter, wrapped to `u8`. Each
-    /// [`Self::run`] bumps it and skips 0 (so an all-zeros `flags` buffer at
-    /// construction time appears "unfinished" to the first run). Wraps every
-    /// 255 runs (safe: every flag transitions from the previous phase to the
-    /// current one during a run, and 0 is never a valid phase value, so
-    /// wrap-around never confuses a stale flag with a current-phase one).
+    /// [`Self::run`] bumps it     
     phase: u8,
 }
 
@@ -189,9 +166,7 @@ impl GraphExecutor {
                 dep_list: (0, 0),
             };
             match node.opcode {
-                Halo2Opcode::LoadWitness | Halo2Opcode::LoadBBReducedWitness => {
-                    input_insts.push(inst)
-                }
+                Halo2Opcode::LoadWitness => input_insts.push(inst),
                 _ => compute.push((levels[node.id as usize], inst)),
             }
         }
@@ -259,9 +234,6 @@ impl GraphExecutor {
         }
         drop(cell_to_compute_inst);
 
-        // Per-instruction ready flags; initialized to 0 so the first run's
-        // phase (which starts at 1) sees them all as "not ready" for the
-        // current run.
         let flags: Vec<AtomicU8> = (0..insts.len()).map(|_| AtomicU8::new(0)).collect();
 
         GraphExecutor {
@@ -731,10 +703,8 @@ impl PopulateInputs for GraphExecutor {
     }
 
     fn bb_load_reduced_witness(&mut self, value: BabyBear) -> ReducedBabyBearWire<usize> {
-        let offset = self.populate_input(
-            Halo2Opcode::LoadBBReducedWitness,
-            Fr::from(value.as_canonical_u64()),
-        );
+        let offset =
+            self.populate_input(Halo2Opcode::LoadWitness, Fr::from(value.as_canonical_u64()));
         ReducedBabyBearWire::assume_reduced(BabyBearWire {
             value: offset,
             max_bits: BABYBEAR_MAX_BITS,
@@ -912,7 +882,7 @@ mod tests {
         circuit.populate_verify_stark_constraints(&mut backend, &proof);
         let real_advice: Vec<Fr> = backend
             .ctx_mut()
-            .advice_cells()
+            .advice
             .iter()
             .map(|a| a.evaluate())
             .collect();

@@ -1104,11 +1104,14 @@ pub(crate) fn run_op<T: ReplayTape>(t: &mut T, opcode: &Halo2Opcode, args: &[Fr]
             let out = t.push(args.first().copied().unwrap_or(Fr::ONE));
             t.output(out);
         }
-        Halo2Opcode::LoadBBReducedWitness => {
-            let out = t.push(args.first().copied().unwrap_or(Fr::ONE));
-            t.check_less_than_safe(out.value(), BABY_BEAR_MODULUS_U64);
-            t.output(out);
+        Halo2Opcode::CheckLessThanSafe => {
+            t.check_less_than_safe(args[0], BABY_BEAR_MODULUS_U64);
         }
+        // Halo2Opcode::LoadBBReducedWitness => {
+        //     let out = t.push(args.first().copied().unwrap_or(Fr::ONE));
+        //     t.check_less_than_safe(out.value(), BABY_BEAR_MODULUS_U64);
+        //     t.output(out);
+        // }
         Halo2Opcode::InnerProduct(_) => {
             // Operands are interleaved `[v_0, c_0, v_1, c_1, ...]`; the gate starts
             // with one exactly when the first coefficient is the constant ONE.
@@ -1261,7 +1264,7 @@ mod tests {
 
         let (ctx_start, range_start, outputs) = run_real(ctx, &range);
         let name = opcode.name();
-        let real_ctx: Vec<Fr> = ctx.advice_cells()[ctx_start..]
+        let real_ctx: Vec<Fr> = ctx.advice[ctx_start..]
             .iter()
             .map(|a| a.evaluate())
             .collect();
@@ -1328,7 +1331,7 @@ mod tests {
     fn const_matches_backend() {
         for v in [Fr::from(42u64), Fr::ZERO] {
             check_opcode(LOOKUP_BITS, Halo2Opcode::Const, &[v], &[], &[], |ctx, _| {
-                let start = ctx.advice_cells().len();
+                let start = ctx.advice.len();
                 let out = if v == Fr::ZERO {
                     ctx.load_zero()
                 } else {
@@ -1353,7 +1356,7 @@ mod tests {
                     let av = ctx.load_witness(a);
                     let bv = ctx.load_witness(b);
                     let sv = ctx.load_witness(sel);
-                    let start = ctx.advice_cells().len();
+                    let start = ctx.advice.len();
                     let out = range.gate().select(ctx, av, bv, sv);
                     (start, 0, vec![out])
                 },
@@ -1372,7 +1375,7 @@ mod tests {
                 &[],
                 |ctx, range| {
                     let a = ctx.load_witness(v);
-                    let start = ctx.advice_cells().len();
+                    let start = ctx.advice.len();
                     let outputs = range.gate().num_to_bits(ctx, a, n as usize);
                     (start, 0, outputs)
                 },
@@ -1390,7 +1393,7 @@ mod tests {
             |ctx, range| {
                 let chip = BabyBearChip::new(range.clone());
                 let wire = raw_wire(ctx, v, bits as usize);
-                let start = ctx.advice_cells().len();
+                let start = ctx.advice.len();
                 let range_start = lookup_tape(range).len();
                 let out = chip.reduce(ctx, wire);
                 (start, range_start, vec![out.value])
@@ -1422,7 +1425,7 @@ mod tests {
                 let chip = BabyBearChip::new(range.clone());
                 let a = raw_wire(ctx, va, 100);
                 let b = raw_wire(ctx, vb, 60);
-                let start = ctx.advice_cells().len();
+                let start = ctx.advice.len();
                 let out = chip.add(ctx, a, b);
                 (start, 0, vec![out.value])
             },
@@ -1441,7 +1444,7 @@ mod tests {
             |ctx, range| {
                 let chip = BabyBearChip::new(range.clone());
                 let a = raw_wire(ctx, va, 100);
-                let start = ctx.advice_cells().len();
+                let start = ctx.advice.len();
                 let out = chip.neg(ctx, a);
                 (start, 0, vec![out.value])
             },
@@ -1461,7 +1464,7 @@ mod tests {
                 let chip = BabyBearChip::new(range.clone());
                 let a = raw_wire(ctx, va, 100);
                 let b = raw_wire(ctx, vb, 60);
-                let start = ctx.advice_cells().len();
+                let start = ctx.advice.len();
                 let out = chip.sub(ctx, a, b);
                 (start, 0, vec![out.value])
             },
@@ -1482,7 +1485,7 @@ mod tests {
                 let chip = BabyBearChip::new(range.clone());
                 let a = raw_wire(ctx, va, 100);
                 let b = raw_wire(ctx, vb, 60);
-                let start = ctx.advice_cells().len();
+                let start = ctx.advice.len();
                 let out = chip.mul(ctx, a, b);
                 (start, 0, vec![out.value])
             },
@@ -1503,7 +1506,7 @@ mod tests {
                 let a = raw_wire(ctx, va, 100);
                 let b = raw_wire(ctx, vb, 60);
                 let c = raw_wire(ctx, vc, 90);
-                let start = ctx.advice_cells().len();
+                let start = ctx.advice.len();
                 let out = chip.mul_add(ctx, a, b, c);
                 (start, 0, vec![out.value])
             },
@@ -1525,7 +1528,7 @@ mod tests {
                 }
                 let a = raw_wire(ctx, va, a_bits as usize);
                 let b = raw_wire(ctx, vb, b_bits as usize);
-                let start = ctx.advice_cells().len();
+                let start = ctx.advice.len();
                 let range_start = lookup_tape(range).len();
                 let out = chip.div(ctx, a, b);
                 // Cache hit: recovers the ONE cell (assigned inside `div` when it
@@ -1557,7 +1560,7 @@ mod tests {
                 |ctx, range| {
                     let chip = BabyBearChip::new(range.clone());
                     let a = raw_wire(ctx, v, bits as usize);
-                    let start = ctx.advice_cells().len();
+                    let start = ctx.advice.len();
                     let range_start = lookup_tape(range).len();
                     chip.assert_zero(ctx, a);
                     (start, range_start, vec![])
@@ -1592,7 +1595,7 @@ mod tests {
                     raw_wire(ctx, a_vals[i], a_bits[i] as usize)
                 }));
                 let b = BabyBearExt4Wire(core::array::from_fn(|i| raw_wire(ctx, b_vals[i], 31)));
-                let start = ctx.advice_cells().len();
+                let start = ctx.advice.len();
                 let range_start = lookup_tape(range).len();
                 let out = chip.mul(ctx, a, b);
                 let mut outputs: Vec<AssignedValue<Fr>> = out.0.iter().map(|w| w.value).collect();
@@ -1651,7 +1654,7 @@ mod tests {
                 }
                 let a = chip.load_witness(ctx, a_ext);
                 let b = chip.load_witness(ctx, b_ext);
-                let start = ctx.advice_cells().len();
+                let start = ctx.advice.len();
                 let range_start = lookup_tape(range).len();
                 let out = chip.div(ctx, a, b);
                 let mut outputs: Vec<AssignedValue<Fr>> = out.0.iter().map(|w| w.value).collect();
@@ -1681,7 +1684,7 @@ mod tests {
             &[],
             |ctx, range| {
                 let s: [AssignedValue<Fr>; 3] = core::array::from_fn(|i| ctx.load_witness(vals[i]));
-                let start = ctx.advice_cells().len();
+                let start = ctx.advice.len();
                 let mut state = Poseidon2State::new(s);
                 state.permutation(ctx, range.gate(), &POSEIDON2_PARAMS);
                 (start, 0, state.s.to_vec())
@@ -1700,7 +1703,7 @@ mod tests {
             &[],
             |ctx, range| {
                 let s: [AssignedValue<Fr>; 2] = core::array::from_fn(|i| ctx.load_witness(vals[i]));
-                let start = ctx.advice_cells().len();
+                let start = ctx.advice.len();
                 let mut state = Poseidon2State::new(s);
                 state.permutation(ctx, range.gate(), &POSEIDON2_COMPRESS_PARAMS);
                 (start, 0, state.s.to_vec())
@@ -1718,7 +1721,7 @@ mod tests {
             &[],
             &[],
             |ctx, _| {
-                let start = ctx.advice_cells().len();
+                let start = ctx.advice.len();
                 let out = ctx.load_witness(v);
                 (start, 0, vec![out])
             },
@@ -1726,20 +1729,20 @@ mod tests {
     }
 
     #[test]
-    fn load_bb_reduced_witness_matches_backend() {
+    fn load_check_less_than_safe_matches_backend() {
         let v = BabyBear::from_u32(1234567);
         check_opcode(
             LOOKUP_BITS,
-            Halo2Opcode::LoadBBReducedWitness,
+            Halo2Opcode::CheckLessThanSafe,
             &[fr_from_bb(v)],
             &[],
             &[],
             |ctx, range| {
                 let chip = BabyBearChip::new(range.clone());
-                let start = ctx.advice_cells().len();
+                let start = ctx.advice.len() + 1; // first witness not assigned
                 let range_start = lookup_tape(range).len();
                 let out = chip.load_reduced_witness(ctx, v);
-                (start, range_start, vec![out.value()])
+                (start, range_start, vec![])
             },
         );
     }
@@ -1769,7 +1772,7 @@ mod tests {
             |ctx, range| {
                 let loaded: Vec<AssignedValue<Fr>> =
                     vals.iter().map(|&v| ctx.load_witness(v)).collect();
-                let start = ctx.advice_cells().len();
+                let start = ctx.advice.len();
                 let out = range.gate().inner_product(
                     ctx,
                     loaded.iter().map(|v| QuantumCell::Existing(*v)),
@@ -1798,7 +1801,7 @@ mod tests {
             |ctx, range| {
                 let chip = BabyBearChip::new(range.clone());
                 let packed = ctx.load_witness(v);
-                let start = ctx.advice_cells().len();
+                let start = ctx.advice.len();
                 let range_start = lookup_tape(range).len();
                 let wires = decompose_bn254_to_base_baby_bear_digits(ctx, &chip, packed);
                 let outputs = wires.iter().map(|w| w.value).collect();
@@ -1826,7 +1829,7 @@ mod tests {
             &[],
             |ctx, range| {
                 let a = ctx.load_witness(v);
-                let start = ctx.advice_cells().len();
+                let start = ctx.advice.len();
                 let range_start = lookup_tape(range).len();
                 let (_, rem) = range.div_mod(
                     ctx,

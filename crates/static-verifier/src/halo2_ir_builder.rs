@@ -154,7 +154,7 @@ pub enum Halo2Opcode {
     /// One proof-input advice cell; the value comes from the builder's input stream.
     LoadWitness,
     /// One proof-input advice cell constrained to `[0, p)` (`check_less_than_safe`).
-    LoadBBReducedWitness,
+    CheckLessThanSafe,
     /// Inner product of `n` `(value, coefficient)` operand pairs, interleaved
     /// `[v0, c0, v1, c1, ..]`; coefficients are [`GraphCell::Const`] in practice
     /// (`inner_product_const` and base-2^31 transcript/digest packing).
@@ -175,7 +175,8 @@ impl Halo2Opcode {
 
     pub fn num_operands(&self) -> usize {
         match self {
-            Self::LoadWitness | Self::LoadBBReducedWitness => 0,
+            Self::LoadWitness => 0,
+            Self::CheckLessThanSafe => 1,
             Self::Const
             | Self::Num2Bits(_)
             | Self::BBReduce
@@ -192,7 +193,7 @@ impl Halo2Opcode {
 
     pub fn num_results(&self) -> usize {
         match self {
-            Self::BBAssertZero => 0,
+            Self::BBAssertZero | Self::CheckLessThanSafe => 0,
             Self::Const
             | Self::Select
             | Self::BBReduce
@@ -202,7 +203,6 @@ impl Halo2Opcode {
             | Self::BBMul
             | Self::BBMulAdd
             | Self::LoadWitness
-            | Self::LoadBBReducedWitness
             | Self::InnerProduct(_)
             | Self::RangeDiv(_) => 1,
             Self::BBDiv | Self::PoseidonPermute2T2 => 2,
@@ -232,7 +232,7 @@ impl Halo2Opcode {
             Self::PoseidonPermute2T2 => "PoseidonPermute2T2",
             Self::PoseidonPermute2T3 => "PoseidonPermute2T3",
             Self::LoadWitness => "LoadWitness",
-            Self::LoadBBReducedWitness => "LoadBBReducedWitness",
+            Self::CheckLessThanSafe => "CheckLessThanSafe",
             Self::InnerProduct(_) => "InnerProduct",
             Self::DecomposeBn254ToBabyBear => "DecomposeBn254ToBabyBear",
             Self::RangeDiv(_) => "RangeDiv",
@@ -404,6 +404,7 @@ impl Halo2IRBuilder {
             })
             .collect();
         let bits: Vec<u16> = operands.iter().map(|cell| cell.bits() as u16).collect();
+        // FIXME: constants cache should support more constants
         let (warm, n_warm) = self.warm_consts();
         let meta = derive_opcode_metadata(&opcode, &args, &bits, self.lookup_bits, &warm[..n_warm]);
 
@@ -753,7 +754,8 @@ impl PopulateInputs for Halo2IRBuilder {
 
     fn bb_load_reduced_witness(&mut self, value: BabyBear) -> ReducedBabyBearWire<GraphCell> {
         self.input_values.push(Fr::from(value.as_canonical_u64()));
-        let cell = self.emit1(Halo2Opcode::LoadBBReducedWitness, vec![], BABYBEAR_MAX_BITS);
+        let cell = self.emit1(Halo2Opcode::LoadWitness, vec![], BABYBEAR_MAX_BITS);
+        self.emit(Halo2Opcode::CheckLessThanSafe, vec![cell]);
         ReducedBabyBearWire::assume_reduced(bb_wire(cell, BABYBEAR_MAX_BITS))
     }
 
