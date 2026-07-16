@@ -293,9 +293,13 @@ impl EmitContext {
     }
 
     fn emit_inline_page_record(&mut self, addr: &str, width: u8) {
-        self.write_line(&format!(
-            "trace_memory_access_span(&trace_memory, {addr}, {width}u);"
-        ));
+        if width == 1 {
+            self.write_line(&format!("trace_memory_access_leaf(&trace_memory, {addr});"));
+        } else {
+            self.write_line(&format!(
+                "trace_memory_access_span(&trace_memory, {addr}, {width}u);"
+            ));
+        }
     }
 
     pub fn flush_page_locals(&mut self) {

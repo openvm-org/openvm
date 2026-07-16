@@ -76,8 +76,8 @@ static __attribute__((always_inline)) inline bool rv_pc_is_dispatchable(
 
 /* ── Guest memory pointer ────────────────────────────────────────── */
 
-/* Adjacent guard regions catch raw out-of-bounds accesses. Multi-byte
- * accesses use memcpy so unaligned guest addresses are valid.
+/* Guard regions immediately before and after guest memory catch accesses
+ * that cross either boundary.
  * TODO: addr &= MEMORY_MASK for defense-in-depth. */
 static __attribute__((always_inline)) inline uint8_t* mem_ptr(
     uint8_t* restrict memory, uint64_t addr) {

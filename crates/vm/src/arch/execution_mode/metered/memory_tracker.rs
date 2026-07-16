@@ -477,17 +477,12 @@ impl BaselineMemoryTracker {
     }
 }
 
+/// Returns a mask with bits in `[start, end)` set.
 #[inline(always)]
 pub(super) fn leaf_mask_range(start: u32, end: u32) -> u64 {
     debug_assert!(start < end);
-    debug_assert!(end <= 64);
-    let width = end - start;
-    let mask = if width == 64 {
-        u64::MAX
-    } else {
-        (1u64 << width) - 1
-    };
-    mask << start
+    debug_assert!(end <= u64::BITS);
+    (u64::MAX << start) & (u64::MAX >> (u64::BITS - end))
 }
 
 #[inline(always)]
