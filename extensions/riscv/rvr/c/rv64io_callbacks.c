@@ -92,7 +92,7 @@ typedef struct {
   uint64_t (*hint_storew)(void* ctx, uint64_t dest_addr);
   uint64_t (*hint_buffer)(void* ctx, uint64_t dest_addr, uint32_t num_words,
                           uint32_t word_index);
-  void (*reveal)(void* ctx, uint64_t src_val, uint64_t ptr, uint32_t offset,
+  void (*reveal)(void* ctx, uint64_t src_val, uint64_t ptr, int32_t offset,
                  uint32_t width);
 } Rv64IoHostCallbacks;
 
@@ -181,7 +181,7 @@ void openvm_hint_buffer(void* state, uint64_t dest_addr, uint32_t num_words,
   }
 }
 
-void openvm_reveal(uint64_t src_val, uint64_t ptr, uint32_t offset,
+void openvm_reveal(uint64_t src_val, uint64_t ptr, int32_t offset,
                    uint32_t width) {
   g_rv64io_callbacks.reveal(openvm_get_io_ctx(), src_val, ptr, offset, width);
 }

@@ -94,16 +94,19 @@ pub trait ExtEmitCtx {
         &mut self,
         src_reg: u8,
         ptr_reg: u8,
-        offset: u32,
+        offset: i16,
         addr_space: u32,
         _local_opcode: u8,
     ) -> (String, String) {
         let ptr = self.read_reg(ptr_reg);
         let src = self.read_reg(src_reg);
-        let addr = if offset == 0 {
-            ptr.clone()
-        } else {
-            format!("({ptr} + 0x{offset:08x}u)")
+        let addr = match offset.cmp(&0) {
+            std::cmp::Ordering::Equal => ptr.clone(),
+            std::cmp::Ordering::Greater => format!("({ptr} + 0x{offset:08x}u)"),
+            std::cmp::Ordering::Less => {
+                let magnitude = -(i32::from(offset));
+                format!("({ptr} - 0x{magnitude:08x}u)")
+            }
         };
         self.trace_wr_as_u64(&addr, &src, addr_space);
         (src, ptr)
