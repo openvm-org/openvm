@@ -11,8 +11,8 @@ use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, LOADBU, LOADD, LOADHU, 
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::adapters::{
-    rv64_bytes_to_u16_block, rv64_u16_block_to_bytes, LOAD_WIDTH_BYTE, LOAD_WIDTH_DOUBLEWORD,
-    LOAD_WIDTH_HALFWORD, LOAD_WIDTH_WORD,
+    rv64_bytes_to_u16_block, rv64_u16_block_to_bytes, BYTE_ACCESS_WIDTH, DOUBLEWORD_ACCESS_WIDTH,
+    HALFWORD_ACCESS_WIDTH, WORD_ACCESS_WIDTH,
 };
 
 #[repr(C)]
@@ -79,7 +79,7 @@ where
     }
 }
 
-impl<F, A, RA> PreflightExecutor<F, RA> for LoadExecutor<A, LOAD_WIDTH_BYTE, 1>
+impl<F, A, RA> PreflightExecutor<F, RA> for LoadExecutor<A, BYTE_ACCESS_WIDTH, 1>
 where
     F: PrimeField32,
     A: 'static
@@ -153,10 +153,10 @@ pub(crate) fn load_write_data(
 
 pub(crate) fn load_width_for_opcode(opcode: Rv64LoadStoreOpcode) -> usize {
     match opcode {
-        LOADD => LOAD_WIDTH_DOUBLEWORD,
-        LOADWU => LOAD_WIDTH_WORD,
-        LOADHU => LOAD_WIDTH_HALFWORD,
-        LOADBU => LOAD_WIDTH_BYTE,
+        LOADD => DOUBLEWORD_ACCESS_WIDTH,
+        LOADWU => WORD_ACCESS_WIDTH,
+        LOADHU => HALFWORD_ACCESS_WIDTH,
+        LOADBU => BYTE_ACCESS_WIDTH,
         _ => unreachable!("unsupported unsigned load opcode: {opcode:?}"),
     }
 }

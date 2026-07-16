@@ -1,10 +1,10 @@
 #include "riscv/cores/store.cuh"
 
-using StoreDoublewordCore = StoreWidthCore<8>;
+using StoreDoublewordCore = StoreWidthCore<DOUBLEWORD_ACCESS_WIDTH>;
 
 template <typename T> struct Rv64StoreDoublewordCols {
     Rv64StoreMultiByteAdapterCols<T> adapter;
-    StoreWidthCoreCols<T, 8> core;
+    StoreWidthCoreCols<T, DOUBLEWORD_ACCESS_WIDTH> core;
 };
 
 __global__ void rv64_store_doubleword_tracegen(

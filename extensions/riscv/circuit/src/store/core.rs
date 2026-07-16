@@ -16,10 +16,10 @@ use openvm_stark_backend::{
 
 use crate::{
     adapters::{
-        shift_encoder, u16_cell_byte, Rv64StoreMultiByteAdapterCols,
+        is_multi_byte_access_width, shift_encoder, u16_cell_byte, Rv64StoreMultiByteAdapterCols,
         Rv64StoreMultiByteAdapterFiller, Rv64StoreMultiByteAdapterRecord, StoreInstruction,
-        BYTE_SHIFT_SELECTOR_WIDTH, NUM_BYTE_SHIFTS, RV64_BYTE_BITS, STORE_WIDTH_DOUBLEWORD,
-        STORE_WIDTH_HALFWORD, STORE_WIDTH_WORD,
+        BYTE_SHIFT_SELECTOR_WIDTH, DOUBLEWORD_ACCESS_WIDTH, HALFWORD_ACCESS_WIDTH, NUM_BYTE_SHIFTS,
+        RV64_BYTE_BITS, WORD_ACCESS_WIDTH,
     },
     store::common::StoreRecord,
 };
@@ -27,9 +27,9 @@ use crate::{
 /// The single opcode handled by the store chip of the given width.
 pub(crate) fn store_opcode<const STORE_WIDTH: usize>() -> Rv64LoadStoreOpcode {
     match STORE_WIDTH {
-        STORE_WIDTH_DOUBLEWORD => STORED,
-        STORE_WIDTH_WORD => STOREW,
-        STORE_WIDTH_HALFWORD => STOREH,
+        DOUBLEWORD_ACCESS_WIDTH => STORED,
+        WORD_ACCESS_WIDTH => STOREW,
+        HALFWORD_ACCESS_WIDTH => STOREH,
         _ => unreachable!("unsupported width for store"),
     }
 }
@@ -70,7 +70,10 @@ impl<const STORE_WIDTH: usize, const NUM_VALUE_CELLS: usize>
     const FIRST_CROSSING_SHIFT: usize = MEMORY_BLOCK_BYTES - STORE_WIDTH + 1;
 
     pub fn new(offset: usize, bitwise_lookup_bus: BitwiseOperationLookupBus) -> Self {
-        const { assert!(NUM_VALUE_CELLS == STORE_WIDTH / 2) };
+        const {
+            assert!(is_multi_byte_access_width(STORE_WIDTH));
+            assert!(NUM_VALUE_CELLS == STORE_WIDTH / 2);
+        }
         Self {
             offset,
             encoder: shift_encoder(),
@@ -237,7 +240,7 @@ where
 #[derive(Clone)]
 pub struct StoreFiller<
     A = Rv64StoreMultiByteAdapterFiller,
-    const STORE_WIDTH: usize = STORE_WIDTH_WORD,
+    const STORE_WIDTH: usize = WORD_ACCESS_WIDTH,
     const NUM_VALUE_CELLS: usize = 2,
 > {
     adapter: A,
@@ -254,7 +257,10 @@ impl<A, const STORE_WIDTH: usize, const NUM_VALUE_CELLS: usize>
         offset: usize,
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
     ) -> Self {
-        const { assert!(NUM_VALUE_CELLS == STORE_WIDTH / 2) };
+        const {
+            assert!(is_multi_byte_access_width(STORE_WIDTH));
+            assert!(NUM_VALUE_CELLS == STORE_WIDTH / 2);
+        }
         Self {
             adapter,
             offset,

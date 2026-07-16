@@ -36,10 +36,10 @@ use openvm_stark_backend::{
 };
 
 use crate::adapters::{
-    byte_ptr_to_u16_ptr, byte_ptr_to_u16_ptr_value, expand_to_rv64_block, memory_read_u16,
-    ptr_to_field_u16_limbs, ptr_to_u16_limbs, rv64_address_add_imm, rv64_register_pointer,
-    sign_extend_imm16, timed_write_u16, tracing_read, tracing_read_u16, try_rv64_bytes_to_u32,
-    RV64_PTR_BITS, RV64_PTR_U16_LIMBS, U16_BITS,
+    byte_ptr_to_u16_ptr, byte_ptr_to_u16_ptr_value, expand_to_rv64_block,
+    is_multi_byte_access_width, memory_read_u16, ptr_to_field_u16_limbs, ptr_to_u16_limbs,
+    rv64_address_add_imm, rv64_register_pointer, sign_extend_imm16, timed_write_u16, tracing_read,
+    tracing_read_u16, try_rv64_bytes_to_u32, RV64_PTR_BITS, RV64_PTR_U16_LIMBS, U16_BITS,
 };
 
 pub struct StoreInstruction<T> {
@@ -336,6 +336,7 @@ where
         instruction: &Instruction<F>,
         record: &mut Self::RecordMut<'_>,
     ) -> Self::ReadData {
+        const { assert!(is_multi_byte_access_width(STORE_WIDTH)) }
         let &Instruction {
             a, b, c, d, e, g, ..
         } = instruction;

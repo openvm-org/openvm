@@ -16,7 +16,7 @@ use rand::{rngs::StdRng, Rng};
 #[cfg(feature = "cuda")]
 use {
     crate::{
-        adapters::{Rv64LoadByteAdapterRecord, Rv64LoadMultiByteAdapterRecord, LOAD_WIDTH_WORD},
+        adapters::{Rv64LoadByteAdapterRecord, Rv64LoadMultiByteAdapterRecord, WORD_ACCESS_WIDTH},
         load::{LoadByteRecord, LoadRecord},
     },
     openvm_circuit::arch::{
@@ -162,7 +162,7 @@ pub(crate) fn transfer_load_sign_extend_records<G, C, A, E>(
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64LoadMultiByteAdapterExecutor<LOAD_WIDTH_WORD>>::new(),
+            EmptyAdapterCoreLayout::<F, Rv64LoadMultiByteAdapterExecutor<WORD_ACCESS_WIDTH>>::new(),
         );
 }
 

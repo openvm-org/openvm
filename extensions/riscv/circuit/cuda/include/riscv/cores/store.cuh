@@ -56,6 +56,10 @@ store_prev_full_cell(StoreRecord const &record, uint32_t cell) {
 }
 
 template <typename T, size_t WIDTH_BYTES> struct StoreWidthCoreCols {
+    static_assert(
+        WIDTH_BYTES == HALFWORD_ACCESS_WIDTH || WIDTH_BYTES == WORD_ACCESS_WIDTH ||
+        WIDTH_BYTES == DOUBLEWORD_ACCESS_WIDTH
+    );
     static constexpr size_t NUM_VALUE_CELLS = WIDTH_BYTES / 2;
 
     T selector[BYTE_SHIFT_SELECTOR_WIDTH];

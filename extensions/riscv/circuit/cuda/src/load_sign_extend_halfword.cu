@@ -1,10 +1,10 @@
 #include "riscv/cores/load_sign_extend.cuh"
 
-using LoadSignExtendHalfwordCore = LoadSignExtendWidthCore<2>;
+using LoadSignExtendHalfwordCore = LoadSignExtendWidthCore<HALFWORD_ACCESS_WIDTH>;
 
 template <typename T> struct Rv64LoadSignExtendHalfwordCols {
     Rv64LoadMultiByteAdapterCols<T> adapter;
-    LoadSignExtendWidthCoreCols<T, 2> core;
+    LoadSignExtendWidthCoreCols<T, HALFWORD_ACCESS_WIDTH> core;
 };
 
 __global__ void rv64_load_sign_extend_halfword_tracegen(

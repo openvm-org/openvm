@@ -3,7 +3,7 @@ use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 use crate::{
     adapters::{
         Rv64LoadMultiByteAdapterAir, Rv64LoadMultiByteAdapterExecutor,
-        Rv64LoadMultiByteAdapterFiller, LOAD_WIDTH_WORD,
+        Rv64LoadMultiByteAdapterFiller, WORD_ACCESS_WIDTH,
     },
     load::{
         common::LoadExecutor,
@@ -11,16 +11,16 @@ use crate::{
     },
 };
 
-/// Cells overlapped by an odd-shift word load: `LOAD_WIDTH_WORD / 2 + 1`.
-pub const LOAD_WORD_OVERLAP_CELLS: usize = LOAD_WIDTH_WORD / 2 + 1;
+/// Cells overlapped by an odd-shift word load: `WORD_ACCESS_WIDTH / 2 + 1`.
+pub const LOAD_WORD_OVERLAP_CELLS: usize = WORD_ACCESS_WIDTH / 2 + 1;
 
-pub type LoadWordCoreAir = LoadCoreAir<LOAD_WIDTH_WORD, LOAD_WORD_OVERLAP_CELLS>;
+pub type LoadWordCoreAir = LoadCoreAir<WORD_ACCESS_WIDTH, LOAD_WORD_OVERLAP_CELLS>;
 pub type LoadWordFiller =
-    LoadFiller<Rv64LoadMultiByteAdapterFiller, LOAD_WIDTH_WORD, LOAD_WORD_OVERLAP_CELLS>;
+    LoadFiller<Rv64LoadMultiByteAdapterFiller, WORD_ACCESS_WIDTH, LOAD_WORD_OVERLAP_CELLS>;
 
 pub type Rv64LoadWordAir = VmAirWrapper<Rv64LoadMultiByteAdapterAir, LoadWordCoreAir>;
 pub type Rv64LoadWordExecutor =
-    LoadExecutor<Rv64LoadMultiByteAdapterExecutor<LOAD_WIDTH_WORD>, LOAD_WIDTH_WORD>;
+    LoadExecutor<Rv64LoadMultiByteAdapterExecutor<WORD_ACCESS_WIDTH>, WORD_ACCESS_WIDTH>;
 pub type Rv64LoadWordChip<F> = VmChipWrapper<F, LoadWordFiller>;
 
 #[cfg(feature = "cuda")]

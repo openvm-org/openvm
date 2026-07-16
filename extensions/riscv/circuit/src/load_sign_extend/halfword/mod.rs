@@ -3,7 +3,7 @@ use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 use crate::{
     adapters::{
         Rv64LoadMultiByteAdapterAir, Rv64LoadMultiByteAdapterExecutor,
-        Rv64LoadMultiByteAdapterFiller, LOAD_WIDTH_HALFWORD,
+        Rv64LoadMultiByteAdapterFiller, HALFWORD_ACCESS_WIDTH,
     },
     load_sign_extend::{
         common::LoadSignExtendExecutor,
@@ -11,22 +11,22 @@ use crate::{
     },
 };
 
-/// Cells overlapped by an odd-shift halfword load: `LOAD_WIDTH_HALFWORD / 2 + 1`.
-pub const LOAD_SIGN_EXTEND_HALFWORD_OVERLAP_CELLS: usize = LOAD_WIDTH_HALFWORD / 2 + 1;
+/// Cells overlapped by an odd-shift halfword load: `HALFWORD_ACCESS_WIDTH / 2 + 1`.
+pub const LOAD_SIGN_EXTEND_HALFWORD_OVERLAP_CELLS: usize = HALFWORD_ACCESS_WIDTH / 2 + 1;
 
 pub type LoadSignExtendHalfwordCoreAir =
-    LoadSignExtendCoreAir<LOAD_WIDTH_HALFWORD, LOAD_SIGN_EXTEND_HALFWORD_OVERLAP_CELLS>;
+    LoadSignExtendCoreAir<HALFWORD_ACCESS_WIDTH, LOAD_SIGN_EXTEND_HALFWORD_OVERLAP_CELLS>;
 pub type LoadSignExtendHalfwordFiller = LoadSignExtendFiller<
     Rv64LoadMultiByteAdapterFiller,
-    LOAD_WIDTH_HALFWORD,
+    HALFWORD_ACCESS_WIDTH,
     LOAD_SIGN_EXTEND_HALFWORD_OVERLAP_CELLS,
 >;
 
 pub type Rv64LoadSignExtendHalfwordAir =
     VmAirWrapper<Rv64LoadMultiByteAdapterAir, LoadSignExtendHalfwordCoreAir>;
 pub type Rv64LoadSignExtendHalfwordExecutor = LoadSignExtendExecutor<
-    Rv64LoadMultiByteAdapterExecutor<LOAD_WIDTH_HALFWORD>,
-    LOAD_WIDTH_HALFWORD,
+    Rv64LoadMultiByteAdapterExecutor<HALFWORD_ACCESS_WIDTH>,
+    HALFWORD_ACCESS_WIDTH,
 >;
 pub type Rv64LoadSignExtendHalfwordChip<F> = VmChipWrapper<F, LoadSignExtendHalfwordFiller>;
 

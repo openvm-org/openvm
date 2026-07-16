@@ -3,7 +3,7 @@ use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 use crate::{
     adapters::{
         Rv64StoreMultiByteAdapterAir, Rv64StoreMultiByteAdapterExecutor,
-        Rv64StoreMultiByteAdapterFiller, STORE_WIDTH_DOUBLEWORD,
+        Rv64StoreMultiByteAdapterFiller, DOUBLEWORD_ACCESS_WIDTH,
     },
     store::{
         common::StoreExecutor,
@@ -11,22 +11,23 @@ use crate::{
     },
 };
 
-/// Source register cells decomposed on an odd-shift doubleword store: `STORE_WIDTH_DOUBLEWORD / 2`.
-pub const STORE_DOUBLEWORD_VALUE_CELLS: usize = STORE_WIDTH_DOUBLEWORD / 2;
+/// Source register cells decomposed on an odd-shift doubleword store: `DOUBLEWORD_ACCESS_WIDTH /
+/// 2`.
+pub const STORE_DOUBLEWORD_VALUE_CELLS: usize = DOUBLEWORD_ACCESS_WIDTH / 2;
 
 pub type StoreDoublewordCoreAir =
-    StoreCoreAir<STORE_WIDTH_DOUBLEWORD, STORE_DOUBLEWORD_VALUE_CELLS>;
+    StoreCoreAir<DOUBLEWORD_ACCESS_WIDTH, STORE_DOUBLEWORD_VALUE_CELLS>;
 pub type StoreDoublewordFiller = StoreFiller<
     Rv64StoreMultiByteAdapterFiller,
-    STORE_WIDTH_DOUBLEWORD,
+    DOUBLEWORD_ACCESS_WIDTH,
     STORE_DOUBLEWORD_VALUE_CELLS,
 >;
 
 pub type Rv64StoreDoublewordAir =
     VmAirWrapper<Rv64StoreMultiByteAdapterAir, StoreDoublewordCoreAir>;
 pub type Rv64StoreDoublewordExecutor = StoreExecutor<
-    Rv64StoreMultiByteAdapterExecutor<STORE_WIDTH_DOUBLEWORD>,
-    STORE_WIDTH_DOUBLEWORD,
+    Rv64StoreMultiByteAdapterExecutor<DOUBLEWORD_ACCESS_WIDTH>,
+    DOUBLEWORD_ACCESS_WIDTH,
 >;
 pub type Rv64StoreDoublewordChip<F> = VmChipWrapper<F, StoreDoublewordFiller>;
 

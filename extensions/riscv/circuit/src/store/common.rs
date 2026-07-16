@@ -11,8 +11,8 @@ use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, STOREB, STORED, STOREH,
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::adapters::{
-    rv64_bytes_to_u16_block, rv64_u16_block_to_bytes, STORE_WIDTH_BYTE, STORE_WIDTH_DOUBLEWORD,
-    STORE_WIDTH_HALFWORD, STORE_WIDTH_WORD,
+    rv64_bytes_to_u16_block, rv64_u16_block_to_bytes, BYTE_ACCESS_WIDTH, DOUBLEWORD_ACCESS_WIDTH,
+    HALFWORD_ACCESS_WIDTH, WORD_ACCESS_WIDTH,
 };
 
 #[repr(C)]
@@ -88,7 +88,7 @@ where
     }
 }
 
-impl<F, A, RA> PreflightExecutor<F, RA> for StoreExecutor<A, STORE_WIDTH_BYTE, 1>
+impl<F, A, RA> PreflightExecutor<F, RA> for StoreExecutor<A, BYTE_ACCESS_WIDTH, 1>
 where
     F: PrimeField32,
     A: 'static
@@ -163,10 +163,10 @@ pub(crate) fn store_write_data(
 
 pub(crate) fn store_width_for_opcode(opcode: Rv64LoadStoreOpcode) -> usize {
     match opcode {
-        STORED => STORE_WIDTH_DOUBLEWORD,
-        STOREW => STORE_WIDTH_WORD,
-        STOREH => STORE_WIDTH_HALFWORD,
-        STOREB => STORE_WIDTH_BYTE,
+        STORED => DOUBLEWORD_ACCESS_WIDTH,
+        STOREW => WORD_ACCESS_WIDTH,
+        STOREH => HALFWORD_ACCESS_WIDTH,
+        STOREB => BYTE_ACCESS_WIDTH,
         _ => unreachable!("unsupported store opcode: {opcode:?}"),
     }
 }

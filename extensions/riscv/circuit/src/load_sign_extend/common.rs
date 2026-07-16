@@ -11,8 +11,8 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::{
     adapters::{
-        rv64_bytes_to_u16_block, rv64_u16_block_to_bytes, LOAD_WIDTH_BYTE, LOAD_WIDTH_HALFWORD,
-        LOAD_WIDTH_WORD,
+        rv64_bytes_to_u16_block, rv64_u16_block_to_bytes, BYTE_ACCESS_WIDTH, HALFWORD_ACCESS_WIDTH,
+        WORD_ACCESS_WIDTH,
     },
     load::{LoadByteRecord, LoadRecord},
 };
@@ -43,9 +43,9 @@ pub(crate) fn load_sign_extend_write_data(
 
 pub(crate) fn load_sign_extend_width_for_opcode(opcode: Rv64LoadStoreOpcode) -> usize {
     match opcode {
-        LOADW => LOAD_WIDTH_WORD,
-        LOADH => LOAD_WIDTH_HALFWORD,
-        LOADB => LOAD_WIDTH_BYTE,
+        LOADW => WORD_ACCESS_WIDTH,
+        LOADH => HALFWORD_ACCESS_WIDTH,
+        LOADB => BYTE_ACCESS_WIDTH,
         _ => unreachable!("unsupported signed load opcode: {opcode:?}"),
     }
 }
@@ -96,7 +96,7 @@ where
     }
 }
 
-impl<F, A, RA> PreflightExecutor<F, RA> for LoadSignExtendExecutor<A, LOAD_WIDTH_BYTE, 1>
+impl<F, A, RA> PreflightExecutor<F, RA> for LoadSignExtendExecutor<A, BYTE_ACCESS_WIDTH, 1>
 where
     F: PrimeField32,
     A: 'static

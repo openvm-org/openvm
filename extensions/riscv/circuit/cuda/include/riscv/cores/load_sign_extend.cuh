@@ -17,6 +17,7 @@ constexpr uint16_t SIGN_U16 = 1 << (U16_BITS - 1);
 using LoadSignExtendRecord = LoadRecord;
 
 template <typename T, size_t WIDTH_BYTES> struct LoadSignExtendWidthCoreCols {
+    static_assert(WIDTH_BYTES == HALFWORD_ACCESS_WIDTH || WIDTH_BYTES == WORD_ACCESS_WIDTH);
     static constexpr size_t NUM_OVERLAP_CELLS = WIDTH_BYTES / 2 + 1;
 
     T selector[BYTE_SHIFT_SELECTOR_WIDTH];

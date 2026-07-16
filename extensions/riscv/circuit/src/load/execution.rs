@@ -26,7 +26,10 @@ use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, LOADBU, LOADD, LOADHU, 
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::common::{load_width_for_opcode, LoadExecutor};
-use crate::adapters::{rv64_address_add_imm, rv64_bytes_to_u32, sign_extend_imm16};
+use crate::adapters::{
+    rv64_address_add_imm, rv64_bytes_to_u32, sign_extend_imm16, BYTE_ACCESS_WIDTH,
+    DOUBLEWORD_ACCESS_WIDTH, HALFWORD_ACCESS_WIDTH, WORD_ACCESS_WIDTH,
+};
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -243,7 +246,7 @@ struct LoadHUOp;
 struct LoadBUOp;
 
 impl LoadOp for LoadDOp {
-    const WIDTH: usize = 8;
+    const WIDTH: usize = DOUBLEWORD_ACCESS_WIDTH;
 
     #[inline(always)]
     fn read<CTX: ExecutionCtxTrait>(
@@ -255,7 +258,7 @@ impl LoadOp for LoadDOp {
 }
 
 impl LoadOp for LoadWUOp {
-    const WIDTH: usize = 4;
+    const WIDTH: usize = WORD_ACCESS_WIDTH;
 
     #[inline(always)]
     fn read<CTX: ExecutionCtxTrait>(
@@ -268,7 +271,7 @@ impl LoadOp for LoadWUOp {
 }
 
 impl LoadOp for LoadHUOp {
-    const WIDTH: usize = 2;
+    const WIDTH: usize = HALFWORD_ACCESS_WIDTH;
 
     #[inline(always)]
     fn read<CTX: ExecutionCtxTrait>(
@@ -281,7 +284,7 @@ impl LoadOp for LoadHUOp {
 }
 
 impl LoadOp for LoadBUOp {
-    const WIDTH: usize = 1;
+    const WIDTH: usize = BYTE_ACCESS_WIDTH;
 
     #[inline(always)]
     fn read<CTX: ExecutionCtxTrait>(

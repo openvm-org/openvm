@@ -54,6 +54,20 @@ pub const RV64_PTR_BITS: usize = U16_BITS * RV64_PTR_U16_LIMBS;
 /// register). Numerically equal to [`RV64_PTR_U16_LIMBS`], but named for arithmetic-word use.
 pub const RV64_WORD_U16_LIMBS: usize = RV64_WORD_NUM_LIMBS / 2;
 
+/// Supported load/store access widths in bytes.
+pub(crate) const BYTE_ACCESS_WIDTH: usize = 1;
+pub(crate) const HALFWORD_ACCESS_WIDTH: usize = 2;
+pub(crate) const WORD_ACCESS_WIDTH: usize = 4;
+pub(crate) const DOUBLEWORD_ACCESS_WIDTH: usize = 8;
+
+pub(crate) const fn is_multi_byte_access_width(width: usize) -> bool {
+    width == HALFWORD_ACCESS_WIDTH || width == WORD_ACCESS_WIDTH || width == DOUBLEWORD_ACCESS_WIDTH
+}
+
+pub(crate) const fn is_signed_multi_byte_access_width(width: usize) -> bool {
+    width == HALFWORD_ACCESS_WIDTH || width == WORD_ACCESS_WIDTH
+}
+
 /// Byte shifts of an effective pointer inside an 8-byte memory block. Every load/store core
 /// encodes shift `i` as selector case `i`.
 pub(crate) const NUM_BYTE_SHIFTS: usize = 2 * BLOCK_FE_WIDTH;

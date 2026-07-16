@@ -17,10 +17,10 @@ use openvm_stark_backend::{
 
 use crate::{
     adapters::{
-        shift_encoder, u16_cell_byte, LoadInstruction, Rv64LoadMultiByteAdapterFiller,
-        Rv64LoadMultiByteAdapterRecord, BYTE_SHIFT_SELECTOR_WIDTH, LOAD_WIDTH_HALFWORD,
-        LOAD_WIDTH_WORD, NUM_BYTE_SHIFTS, RV64_BYTE_BITS, RV64_BYTE_SIGN_BIT, RV64_U16_SIGN_BIT,
-        U16_BITS,
+        is_signed_multi_byte_access_width, shift_encoder, u16_cell_byte, LoadInstruction,
+        Rv64LoadMultiByteAdapterFiller, Rv64LoadMultiByteAdapterRecord, BYTE_SHIFT_SELECTOR_WIDTH,
+        HALFWORD_ACCESS_WIDTH, NUM_BYTE_SHIFTS, RV64_BYTE_BITS, RV64_BYTE_SIGN_BIT,
+        RV64_U16_SIGN_BIT, U16_BITS, WORD_ACCESS_WIDTH,
     },
     load::LoadRecord,
 };
@@ -28,8 +28,8 @@ use crate::{
 /// The single opcode handled by the signed load chip of the given width.
 pub(crate) fn load_sign_extend_opcode<const LOAD_WIDTH: usize>() -> Rv64LoadStoreOpcode {
     match LOAD_WIDTH {
-        LOAD_WIDTH_WORD => LOADW,
-        LOAD_WIDTH_HALFWORD => LOADH,
+        WORD_ACCESS_WIDTH => LOADW,
+        HALFWORD_ACCESS_WIDTH => LOADH,
         _ => unreachable!("unsupported width for signed load"),
     }
 }
@@ -72,7 +72,10 @@ impl<const LOAD_WIDTH: usize, const NUM_OVERLAP_CELLS: usize>
         bitwise_lookup_bus: BitwiseOperationLookupBus,
         range_bus: VariableRangeCheckerBus,
     ) -> Self {
-        const { assert!(NUM_OVERLAP_CELLS == LOAD_WIDTH / 2 + 1) };
+        const {
+            assert!(is_signed_multi_byte_access_width(LOAD_WIDTH));
+            assert!(NUM_OVERLAP_CELLS == LOAD_WIDTH / 2 + 1);
+        }
         Self {
             offset,
             encoder: shift_encoder(),
@@ -227,7 +230,7 @@ where
 #[derive(Clone)]
 pub struct LoadSignExtendFiller<
     A = Rv64LoadMultiByteAdapterFiller,
-    const LOAD_WIDTH: usize = LOAD_WIDTH_WORD,
+    const LOAD_WIDTH: usize = WORD_ACCESS_WIDTH,
     const NUM_OVERLAP_CELLS: usize = 3,
 > {
     adapter: A,
@@ -246,7 +249,10 @@ impl<A, const LOAD_WIDTH: usize, const NUM_OVERLAP_CELLS: usize>
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
         range_checker_chip: SharedVariableRangeCheckerChip,
     ) -> Self {
-        const { assert!(NUM_OVERLAP_CELLS == LOAD_WIDTH / 2 + 1) };
+        const {
+            assert!(is_signed_multi_byte_access_width(LOAD_WIDTH));
+            assert!(NUM_OVERLAP_CELLS == LOAD_WIDTH / 2 + 1);
+        }
         Self {
             adapter,
             offset,

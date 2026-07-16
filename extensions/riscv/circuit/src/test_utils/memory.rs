@@ -21,7 +21,7 @@ use rand::{rngs::StdRng, seq::IndexedRandom, Rng};
 use {
     crate::adapters::{
         Rv64LoadByteAdapterRecord, Rv64LoadMultiByteAdapterRecord, Rv64StoreByteAdapterRecord,
-        Rv64StoreMultiByteAdapterRecord, LOAD_WIDTH_WORD, STORE_WIDTH_WORD,
+        Rv64StoreMultiByteAdapterRecord, WORD_ACCESS_WIDTH,
     },
     crate::load::{LoadByteRecord, LoadRecord},
     crate::store::{StoreByteRecord, StoreRecord},
@@ -318,7 +318,7 @@ pub(crate) fn transfer_load_records<G, C, A, E>(harness: &mut GpuTestChipHarness
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64LoadMultiByteAdapterExecutor<LOAD_WIDTH_WORD>>::new(),
+            EmptyAdapterCoreLayout::<F, Rv64LoadMultiByteAdapterExecutor<WORD_ACCESS_WIDTH>>::new(),
         );
 }
 
@@ -330,7 +330,8 @@ pub(crate) fn transfer_store_records<G, C, A, E>(harness: &mut GpuTestChipHarnes
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64StoreMultiByteAdapterExecutor<STORE_WIDTH_WORD>>::new(),
+            EmptyAdapterCoreLayout::<F, Rv64StoreMultiByteAdapterExecutor<WORD_ACCESS_WIDTH>>::new(
+            ),
         );
 }
 

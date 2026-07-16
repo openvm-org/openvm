@@ -3,6 +3,11 @@
 #include "primitives/encoder.cuh"
 #include "system/memory/params.cuh"
 
+// Supported multi-byte load/store access widths in bytes.
+constexpr size_t HALFWORD_ACCESS_WIDTH = 2;
+constexpr size_t WORD_ACCESS_WIDTH = 4;
+constexpr size_t DOUBLEWORD_ACCESS_WIDTH = 8;
+
 // Number of byte offsets within one memory block.
 constexpr uint32_t NUM_BYTE_SHIFTS = 2 * BLOCK_FE_WIDTH;
 // Number of columns in the byte-shift selector encoding.
