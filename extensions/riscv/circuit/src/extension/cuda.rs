@@ -463,8 +463,13 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64Io>
         let range_checker = get_inventory_range_checker(inventory);
 
         inventory.next_air::<Rv64HintStoreAir>()?;
-        let hint_store =
-            Rv64HintStoreChipGpu::new(range_checker.clone(), byte_ptr_max_bits, timestamp_max_bits);
+        let hint_store = Rv64HintStoreChipGpu::new(
+            range_checker.clone(),
+            byte_ptr_max_bits,
+            timestamp_max_bits,
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
+            self.rvr_decode.clone(),
+        );
         inventory.add_executor_chip(hint_store);
 
         Ok(())

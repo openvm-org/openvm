@@ -22,7 +22,9 @@ use openvm_instructions::{
     LocalOpcode, SystemOpcode,
 };
 use openvm_keccak256_transpiler::{KeccakfOpcode, XorinOpcode};
-use openvm_riscv_transpiler::{BaseAluImmOpcode, BranchEqualOpcode, Rv64LoadStoreOpcode};
+use openvm_riscv_transpiler::{
+    BaseAluImmOpcode, BranchEqualOpcode, Rv64HintStoreOpcode, Rv64LoadStoreOpcode,
+};
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 use crate::{Keccak256Rv64Config, Keccak256Rv64CpuBuilder};
@@ -124,11 +126,63 @@ fn keccak_dynamic_xorin_exe() -> VmExe<F> {
     for len in [0, 8, 16, 136] {
         instructions.push(addi(3, 0, len));
         instructions.push(xorin(1, 2, 3));
+        instructions.push(xorin(1, 2, 3));
         instructions.push(branch_boundary());
     }
     instructions.push(keccakf(1));
     instructions.push(terminate());
     VmExe::new(Program::from_instructions(&instructions))
+}
+
+fn hint_store(opcode: Rv64HintStoreOpcode, num_words: usize, ptr: usize) -> Instruction<F> {
+    Instruction::from_usize(
+        opcode.global_opcode(),
+        [
+            if opcode == Rv64HintStoreOpcode::HINT_BUFFER {
+                reg(num_words)
+            } else {
+                0
+            },
+            reg(ptr),
+            0,
+            RV64_REGISTER_AS as usize,
+            RV64_MEMORY_AS as usize,
+        ],
+    )
+}
+
+fn keccak_hintstore_interleaved_exe() -> VmExe<F> {
+    VmExe::new(Program::from_instructions(&[
+        addi(1, 0, 64),
+        addi(2, 0, 512),
+        addi(3, 0, 16),
+        addi(4, 0, 0x234),
+        addi(5, 0, 0x678),
+        addi(6, 0, 1024),
+        addi(7, 0, 2),
+        store_d(4, 1, 0),
+        store_d(5, 1, 8),
+        store_d(5, 2, 0),
+        store_d(4, 2, 8),
+        xorin(1, 2, 3),
+        hint_store(Rv64HintStoreOpcode::HINT_STORED, 0, 6),
+        keccakf(1),
+        hint_store(Rv64HintStoreOpcode::HINT_BUFFER, 7, 6),
+        xorin(1, 2, 3),
+        terminate(),
+    ]))
+}
+
+fn hintstore_streams() -> Streams {
+    let mut streams = Streams::default();
+    for word in [
+        0x0102_0304_0506_0708u64,
+        0x1112_1314_1516_1718,
+        0x2122_2324_2526_2728,
+    ] {
+        streams.hint_stream.extend(word.to_le_bytes());
+    }
+    streams
 }
 
 fn keccak_multi_segment_exe(rounds: usize, spacing: usize) -> VmExe<F> {
@@ -539,6 +593,172 @@ fn rvr_preflight_keccak_delta_direct_final_matches_host_assembler_bytes() {
             "air {air}: direct-final Keccak records must be byte-identical to host assembly"
         );
     }
+
+    std::env::remove_var("OPENVM_RVR_GPU_RECORDS");
+    std::env::remove_var("OPENVM_RVR_ARENA_NATIVE");
+    std::env::remove_var("OPENVM_RVR_INLINE_RECORDS");
+}
+
+#[test]
+fn rvr_preflight_g2_opaque_keccak_xorin_is_byte_equal() {
+    let exe = keccak_hintstore_interleaved_exe();
+    let streams = hintstore_streams();
+    let config = Keccak256Rv64Config::default();
+
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
+    std::env::set_var("OPENVM_RVR_INLINE_RECORDS", "0");
+    std::env::remove_var("OPENVM_RVR_GPU_RECORDS");
+    let (oracle_vm, _) =
+        VirtualMachine::new_with_keygen(test_cpu_engine(), Keccak256Rv64CpuBuilder, config.clone())
+            .expect("G2 opaque oracle VM init");
+    let heights = vec![4096u32; oracle_vm.num_airs()];
+    let capacities = heights
+        .iter()
+        .zip(oracle_vm.pk().per_air.iter())
+        .map(|(&height, pk)| (height as usize, pk.vk.params.width.main_width()))
+        .collect::<Vec<_>>();
+    let pc_to_air_idx = oracle_vm.pc_to_air_idx(&exe).expect("G2 opaque pc mapping");
+    let RvrPreflightRoute::Rvr(oracle) = oracle_vm
+        .preflight_routed_instance(&exe)
+        .expect("G2 opaque oracle route")
+    else {
+        panic!("G2 opaque oracle must route to RVR");
+    };
+    let mut oracle_output = oracle
+        .execute_preflight_from_state(oracle.create_initial_state(streams.clone()), None)
+        .expect("G2 opaque oracle preflight");
+    let retired = oracle_output.instret;
+    let oracle_arenas = generate_record_arenas_from_logs::<F, DenseRecordArena>(
+        &{
+            let mut registry = openvm_circuit::arch::rvr::LogNativeAssemblerRegistry::new();
+            config.extend_rvr_log_native(&mut registry);
+            registry
+        },
+        &exe,
+        &mut oracle_output,
+        &capacities,
+        &pc_to_air_idx,
+    )
+    .expect("G2 opaque oracle arenas");
+
+    std::env::remove_var("OPENVM_RVR_INLINE_RECORDS");
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "1");
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "g2");
+    let (g2_vm, _) =
+        VirtualMachine::new_with_keygen(test_cpu_engine(), Keccak256Rv64CpuBuilder, config)
+            .expect("G2 opaque VM init");
+    let RvrPreflightRoute::Rvr(g2) = g2_vm
+        .preflight_routed_instance(&exe)
+        .expect("G2 opaque route")
+    else {
+        panic!("Keccak/Xorin fixture must route to G2 RVR");
+    };
+    let inline = g2.compiled().inline_records();
+    let meta = inline.g2.as_deref().expect("G2 opaque negotiation");
+    assert_eq!(meta.opaque_bindings.len(), 2);
+    let mut staged = Vec::new();
+    let mut targets = BTreeMap::new();
+    for &(air, geometry) in &inline.arena_native_airs {
+        let (arena, target) = DenseRecordArena::stage_arena_native(
+            heights[air] as usize,
+            capacities[air].1,
+            &geometry,
+        );
+        targets.insert(air, target);
+        staged.push((air, geometry, arena));
+    }
+    let mut output = g2
+        .execute_preflight_from_state_with_device_touched_memory_for_test(
+            g2.create_initial_state(streams),
+            Some(retired),
+            &heights,
+            &targets,
+        )
+        .expect("G2 opaque preflight");
+    assert!(
+        output.raw_logs.device_aux_patches.is_empty(),
+        "G2 opaque direct-final records must not defer {} predecessor patches",
+        output.raw_logs.device_aux_patches.len()
+    );
+    let segment = output.g2_segment.take().expect("G2 opaque segment");
+    let decode = output
+        .delta_decode_precomputed
+        .as_deref()
+        .expect("G2 opaque operand table");
+    let reference = openvm_circuit::arch::rvr::decode_reference_v1(
+        &segment,
+        meta,
+        decode,
+        [0; 32],
+        &BTreeMap::new(),
+        openvm_circuit::arch::rvr::PREFLIGHT_INITIAL_TIMESTAMP,
+    )
+    .expect("G2 opaque chronology replay");
+    assert_eq!(
+        openvm_circuit::arch::rvr::bridge::read_rv64_registers(&output.to_state),
+        reference.final_registers
+    );
+    let hint_air = exe
+        .program
+        .instructions_and_debug_infos
+        .iter()
+        .zip(&pc_to_air_idx)
+        .find_map(|(instruction, &air)| {
+            instruction.as_ref().and_then(|(instruction, _)| {
+                (instruction.opcode == Rv64HintStoreOpcode::HINT_STORED.global_opcode())
+                    .then_some(air)
+            })
+        })
+        .flatten()
+        .expect("interleaved HINT_STORED AIR");
+    let replay = reference
+        .compact_records
+        .get(&30)
+        .expect("interleaved HintStore replay rows");
+    let mut hint_dense = Vec::new();
+    for row in replay.chunks_exact(64) {
+        let local_idx = u32::from_le_bytes(row[8..12].try_into().unwrap());
+        if local_idx == 0 {
+            hint_dense.extend_from_slice(&row[12..16]);
+            hint_dense.extend_from_slice(&row[0..8]);
+            hint_dense.extend_from_slice(&row[16..28]);
+            hint_dense.extend_from_slice(&row[28..36]);
+        }
+        hint_dense.extend_from_slice(&row[36..56]);
+    }
+    assert_eq!(
+        hint_dense,
+        oracle_arenas[hint_air].allocated(),
+        "interleaved HintStore replay must match the established packed consumer bytes"
+    );
+    for (air, geometry, mut arena) in staged {
+        let written = output
+            .arena_native_written
+            .iter()
+            .find(|&&(written_air, _)| written_air == air)
+            .map(|&(_, count)| count as usize)
+            .expect("G2 opaque written count");
+        let written_bytes = output
+            .arena_native_written_bytes
+            .iter()
+            .find(|&&(written_air, _)| written_air == air)
+            .map(|&(_, bytes)| bytes as usize)
+            .expect("G2 opaque written bytes");
+        arena.finish_arena_native_sized(written, written_bytes, &geometry);
+        let first_mismatch = arena
+            .allocated()
+            .iter()
+            .zip(oracle_arenas[air].allocated())
+            .position(|(g2, oracle)| g2 != oracle);
+        assert_eq!(
+            arena.allocated(),
+            oracle_arenas[air].allocated(),
+            "G2 opaque AIR {air} must pass final consumer bytes unchanged; first mismatch: {first_mismatch:?}"
+        );
+    }
+    assert!(output.raw_logs.program_log.is_empty());
+    assert!(output.raw_logs.memory_log.is_empty());
+    assert!(output.raw_logs.delta_memory_log.is_empty());
 
     std::env::remove_var("OPENVM_RVR_GPU_RECORDS");
     std::env::remove_var("OPENVM_RVR_ARENA_NATIVE");

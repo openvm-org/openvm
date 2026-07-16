@@ -95,7 +95,8 @@ bool openvm_hint_storew(void* state, uint64_t dest_addr, uint32_t from_pc,
   RvState* rv_state = (RvState*)state;
   bool reconstruct_prev = chip_idx != UINT32_MAX &&
                           preflight_device_aux(rv_state->tracer) &&
-                          !preflight_device_aux_oracle(rv_state->tracer);
+                          !preflight_device_aux_oracle(rv_state->tracer) &&
+                          rv_state->tracer->g2 == NULL;
   uint64_t prev_data =
       reconstruct_prev ? 0u : read_mem_u64(rv_state->memory, dest_addr);
 #endif
@@ -106,7 +107,8 @@ bool openvm_hint_storew(void* state, uint64_t dest_addr, uint32_t from_pc,
   }
   uint64_t word = read_mem_u64(((RvState*)state)->memory, dest_addr);
 #ifdef OPENVM_TRACER_PREFLIGHT_H
-  bool emit_direct = chip_idx != UINT32_MAX;
+  bool event_replay = rv_state->tracer->g2 != NULL;
+  bool emit_direct = chip_idx != UINT32_MAX && !event_replay;
   Rv64HintStoreVar* vars = NULL;
   Rv64HintStoreRecordHeader* record = emit_direct
       ? rvr_claim_hintstore_record(rv_state, chip_idx, 1u, &vars)
@@ -150,7 +152,8 @@ bool openvm_hint_buffer(void* state, uint64_t dest_addr, uint16_t num_words,
   RvState* rv_state = (RvState*)state;
   bool reconstruct_prev = chip_idx != UINT32_MAX &&
                           preflight_device_aux(rv_state->tracer) &&
-                          !preflight_device_aux_oracle(rv_state->tracer);
+                          !preflight_device_aux_oracle(rv_state->tracer) &&
+                          rv_state->tracer->g2 == NULL;
   uint64_t prev_words[RVR_HINT_MAX_BUFFER_DWORDS];
   for (uint32_t i = 0; i < num_words; i++) {
     prev_words[i] = reconstruct_prev
@@ -165,7 +168,8 @@ bool openvm_hint_buffer(void* state, uint64_t dest_addr, uint16_t num_words,
     return false;
   }
 #ifdef OPENVM_TRACER_PREFLIGHT_H
-  bool emit_direct = chip_idx != UINT32_MAX;
+  bool event_replay = rv_state->tracer->g2 != NULL;
+  bool emit_direct = chip_idx != UINT32_MAX && !event_replay;
   Rv64HintStoreVar* vars = NULL;
   Rv64HintStoreRecordHeader* record = emit_direct
       ? rvr_claim_hintstore_record(rv_state, chip_idx, num_words, &vars)

@@ -138,7 +138,7 @@ static __attribute__((always_inline)) inline void preflight_append_device_patch(
 static __attribute__((always_inline)) inline void
 preflight_store_prev_timestamp(Tracer* restrict t, uint32_t* target,
                                uint32_t token_or_value) {
-  if (likely(!preflight_device_aux(t))) {
+  if (likely(!preflight_device_aux(t) || t->g2 != NULL)) {
     *target = token_or_value;
     return;
   }
@@ -155,7 +155,7 @@ preflight_store_prev_timestamp(Tracer* restrict t, uint32_t* target,
 static __attribute__((always_inline)) inline void preflight_store_prev_value(
     Tracer* restrict t, void* target, uint32_t token_or_timestamp,
     uint64_t legacy_value) {
-  if (likely(!preflight_device_aux(t))) {
+  if (likely(!preflight_device_aux(t) || t->g2 != NULL)) {
     memcpy(target, &legacy_value, sizeof(legacy_value));
     return;
   }
@@ -168,6 +168,29 @@ static __attribute__((always_inline)) inline void preflight_store_prev_value(
                        ? t->device_aux_references[event_index].prev_value
                        : 0u;
   memcpy(target, &value, sizeof(value));
+}
+
+static __attribute__((always_inline)) inline void
+preflight_g2_emit_opaque_event_count(Tracer* restrict t,
+                                     uint32_t event_count) {
+  G2ProducerV1* restrict g2 = t->g2;
+  if (g2 == NULL) return;
+  if (unlikely(g2->base == NULL || g2->lanes == NULL ||
+               g2->lane_count != G2_PRODUCER_LANE_COUNT ||
+               event_count == 0u)) {
+    g2->overflow = G2_REJECT_CUSTOM_EVENT_COUNT;
+    return;
+  }
+  G2ProducerLaneV1* restrict lane =
+      &g2->lanes[G2_PRODUCER_OPAQUE_EVENT_COUNT_SLOT];
+  uint32_t index = lane->len++;
+  uint64_t end = lane->offset + (uint64_t)(index + 1u) * sizeof(uint32_t);
+  if (unlikely(index >= lane->cap || end < lane->offset ||
+               end > g2->capacity)) {
+    g2->overflow = G2_REJECT_LANE_CAPACITY;
+    return;
+  }
+  ((uint32_t*)(g2->base + lane->offset))[index] = event_count;
 }
 
 /* Custom VecHeap emitters run after their traced accesses, so compact residual
@@ -203,6 +226,7 @@ preflight_take_custom_memory_events(Tracer* restrict t, uint32_t event_count) {
     t->delta_records->flags |= PREFLIGHT_RECORD_OVERFLOW;
     return NULL;
   }
+  preflight_g2_emit_opaque_event_count(t, event_count);
   return t->custom_memory_scratch;
 }
 

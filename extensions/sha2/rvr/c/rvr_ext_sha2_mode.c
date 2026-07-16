@@ -128,7 +128,8 @@ __attribute__((preserve_most)) void rvr_ext_sha256(
       uint64_t address = dst_ptr + i * WORD_SIZE;
       uint64_t prev_data =
           preflight_device_aux(state->tracer) &&
-                  !preflight_device_aux_oracle(state->tracer)
+                  !preflight_device_aux_oracle(state->tracer) &&
+                  state->tracer->g2 == NULL
               ? 0u
               : preflight_read_mem_block(state, address);
       uint32_t prev_timestamp = preflight_append_memory(
@@ -144,6 +145,9 @@ __attribute__((preserve_most)) void rvr_ext_sha256(
     }
     write_mem_u64_range_raw(state, dst_ptr, state_words,
                             RVR_SHA256_STATE_WORDS);
+    preflight_g2_emit_opaque_event_count(
+        state->tracer,
+        3u + RVR_SHA256_BLOCK_WORDS + 2u * RVR_SHA256_STATE_WORDS);
     return;
   }
 #endif

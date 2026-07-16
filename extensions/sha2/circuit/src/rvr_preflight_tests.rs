@@ -562,7 +562,8 @@ fn rvr_preflight_sha256_direct_final_matches_verbose_twice() {
         assert!(matches!(
             geometry.layout,
             openvm_circuit::arch::rvr::ArenaNativeLayout::Custom {
-                residual_memory_chronology: true
+                residual_memory_chronology: true,
+                ..
             }
         ));
         let (mut direct_arena, target) = DenseRecordArena::stage_arena_native(
@@ -747,7 +748,8 @@ fn rvr_gpu_sha256_direct_final_proves_and_verifies() {
                     && matches!(
                         geometry.layout,
                         openvm_circuit::arch::rvr::ArenaNativeLayout::Custom {
-                            residual_memory_chronology: true
+                            residual_memory_chronology: true,
+                            ..
                         }
                     )
             }),

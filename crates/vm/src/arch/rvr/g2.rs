@@ -12,13 +12,14 @@ use std::{
 
 use rvr_openvm_ext_ffi_common::{
     g2_lane_v0, g2_lane_v1, g2_load_store_producer_slot, g2_standard_lane_width,
-    g2_standard_producer_slot, G2_ENCODING_FIXED_LE, G2_FLAGS_V1, G2_FLAG_COMMITTED,
-    G2_GROUP_LOAD_STORE, G2_GROUP_RESIDUAL, G2_LANE_ADDI_V0, G2_LANE_DESC_V1_SIZE,
-    G2_LANE_FLAG_ATOMIC_GROUP, G2_LANE_FLAG_REQUIRED, G2_LANE_RESIDUAL_CTRL, G2_LANE_RESIDUAL_TAG,
+    g2_standard_producer_slot, G2_ENCODING_FIXED_LE, G2_ENCODING_OPAQUE_FINAL, G2_FLAGS_V1,
+    G2_FLAG_COMMITTED, G2_GROUP_LOAD_STORE, G2_GROUP_RESIDUAL, G2_LANE_ADDI_V0,
+    G2_LANE_DESC_V1_SIZE, G2_LANE_FLAG_ATOMIC_GROUP, G2_LANE_FLAG_OPAQUE_FINAL,
+    G2_LANE_FLAG_REQUIRED, G2_LANE_OPAQUE_EVENT_COUNT, G2_LANE_RESIDUAL_CTRL, G2_LANE_RESIDUAL_TAG,
     G2_LANE_RESIDUAL_VALUE, G2_LANE_RUN_BLOCK_ID, G2_LOAD_STORE_KINDS, G2_PRODUCER_LANE_COUNT,
-    G2_PRODUCER_RESIDUAL_CTRL_SLOT, G2_PRODUCER_RESIDUAL_TAG_SLOT, G2_PRODUCER_RESIDUAL_VALUE_SLOT,
-    G2_PRODUCER_RUN_SLOT, G2_SEGMENT_HEADER_V1_SIZE, G2_SEGMENT_MAGIC_V1, G2_WIRE_ALIGNMENT,
-    G2_WIRE_VERSION_V1,
+    G2_PRODUCER_OPAQUE_EVENT_COUNT_SLOT, G2_PRODUCER_RESIDUAL_CTRL_SLOT,
+    G2_PRODUCER_RESIDUAL_TAG_SLOT, G2_PRODUCER_RESIDUAL_VALUE_SLOT, G2_PRODUCER_RUN_SLOT,
+    G2_SEGMENT_HEADER_V1_SIZE, G2_SEGMENT_MAGIC_V1, G2_WIRE_ALIGNMENT, G2_WIRE_VERSION_V1,
 };
 pub use rvr_openvm_ext_ffi_common::{
     G2LaneDescV1, G2ProducerLaneV1, G2ProducerV1, G2SegmentHeaderV1,
@@ -28,6 +29,7 @@ use super::{RvrDeltaDecodeEntry, RvrDeltaDecodePrecompute, PREFLIGHT_ADDSUB_RECO
 use crate::arch::ExecutionError;
 
 static NEXT_G2_SEGMENT_ID: AtomicU32 = AtomicU32::new(0);
+const G2_MAX_OPAQUE_LANES: usize = 128;
 
 pub(crate) fn next_segment_id() -> Result<u32, ExecutionError> {
     NEXT_G2_SEGMENT_ID
@@ -54,6 +56,10 @@ pub struct RvrG2MetaV1 {
     /// Sorted stable decoder-kind to global AIR bindings admitted by this
     /// executable. Phase 2b admits every fixed standard RV64 kind.
     pub air_bindings: std::sync::Arc<Vec<RvrG2AirBindingV1>>,
+    /// Custom AIRs whose generated-C emitters write the established final
+    /// dense record layout. Their payload is transported as an opaque lane
+    /// and consumed unchanged; only the fingerprinted geometry is generic.
+    pub opaque_bindings: std::sync::Arc<Vec<RvrG2OpaqueBindingV1>>,
 }
 
 impl RvrG2MetaV1 {
@@ -71,12 +77,29 @@ pub struct RvrG2AirBindingV1 {
     pub air_idx: usize,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RvrG2OpaqueBindingV1 {
+    pub air_idx: usize,
+    pub geometry: super::ArenaNativeGeometry,
+    pub air_identity_digest: [u8; 32],
+    pub layout_digest: [u8; 32],
+}
+
+impl RvrG2OpaqueBindingV1 {
+    pub fn lane_kind(self) -> u16 {
+        0x8000
+            | u16::try_from(self.air_idx)
+                .expect("G2 opaque AIR index must fit the frozen 15-bit lane namespace")
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct RvrG2CapacitiesV1 {
     pub run: u32,
     pub residual: u32,
+    pub opaque_events: u32,
     /// Per `DeltaAirKind`; unsupported entries must remain zero.
-    pub kinds: [u32; 30],
+    pub kinds: [u32; 31],
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -100,10 +123,13 @@ pub struct RvrG2ReferenceV1 {
     pub expanded_program_slots: Vec<u32>,
 }
 
-/// Committed compact segment. The u128 allocation gives native u64 lane
-/// stores sufficient alignment; all public offsets remain segment-relative.
+/// Committed compact segment. The pooled backing is aligned before native
+/// u64 lane stores; all public offsets remain segment-relative.
 pub struct RvrG2SegmentV1 {
-    backing: Vec<u128>,
+    backing: Option<Vec<u8>>,
+    backing_offset: usize,
+    backing_capacity: usize,
+    pool: super::RvrPreflightBufferPool,
     byte_len: usize,
     header_prefix_len: usize,
     committed_lanes: Vec<RvrG2CommittedLaneV1>,
@@ -112,7 +138,7 @@ pub struct RvrG2SegmentV1 {
 #[derive(Clone, Copy, Debug)]
 struct RvrG2CommittedLaneV1 {
     kind: u16,
-    source_offset: usize,
+    source_offset: Option<usize>,
     wire_offset: usize,
     payload_bytes: usize,
 }
@@ -130,17 +156,31 @@ impl RvrG2SegmentV1 {
         self.byte_len
     }
 
+    /// Bytes physically staged into the compact device wire. Opaque-final
+    /// payloads already live in their owning custom arenas, so only their
+    /// descriptors—not logical payload holes—are transferred here.
+    pub fn transfer_byte_len(&self) -> usize {
+        self.committed_lanes
+            .iter()
+            .filter(|lane| lane.source_offset.is_some())
+            .map(|lane| lane.wire_offset + lane.payload_bytes)
+            .fold(self.header_prefix_len, usize::max)
+            .next_multiple_of(G2_WIRE_ALIGNMENT)
+    }
+
     /// Return the compact wire as scatter/gather pieces. The generated C
     /// writes each lane once into its capacity-bounded staging range; the
     /// O(lanes) finalizer assigns tight wire offsets without copying payloads.
     /// CUDA uploads these pieces directly to their final device offsets.
     pub fn wire_parts(&self) -> impl Iterator<Item = (usize, &[u8])> {
         std::iter::once((0, self.backing_bytes_prefix(self.header_prefix_len))).chain(
-            self.committed_lanes.iter().map(|lane| {
-                (
-                    lane.wire_offset,
-                    self.backing_bytes_range(lane.source_offset, lane.payload_bytes),
-                )
+            self.committed_lanes.iter().filter_map(|lane| {
+                lane.source_offset.map(|source_offset| {
+                    (
+                        lane.wire_offset,
+                        self.backing_bytes_range(source_offset, lane.payload_bytes),
+                    )
+                })
             }),
         )
     }
@@ -150,11 +190,12 @@ impl RvrG2SegmentV1 {
     }
 
     fn backing_bytes_range(&self, offset: usize, len: usize) -> &[u8] {
-        debug_assert!(offset + len <= self.backing.len() * size_of::<u128>());
+        let backing = self.backing.as_ref().expect("G2 backing already recycled");
+        debug_assert!(offset + len <= self.backing_capacity);
         unsafe {
             // SAFETY: the backing is initialized before native execution and
             // every committed source range was bounds-checked by finalization.
-            std::slice::from_raw_parts(self.backing.as_ptr().cast::<u8>().add(offset), len)
+            std::slice::from_raw_parts(backing.as_ptr().add(self.backing_offset + offset), len)
         }
     }
 
@@ -194,7 +235,7 @@ impl RvrG2SegmentV1 {
             || header.header_bytes as usize
                 != G2_SEGMENT_HEADER_V1_SIZE + lane_count * G2_LANE_DESC_V1_SIZE
             || lane_count == 0
-            || lane_count > G2_PRODUCER_LANE_COUNT
+            || lane_count != self.committed_lanes.len()
             || header.flags != G2_FLAGS_V1 | G2_FLAG_COMMITTED
             || &header.schema_fingerprint != expected_fingerprint
             || !self.byte_len.is_multiple_of(G2_WIRE_ALIGNMENT)
@@ -218,14 +259,18 @@ impl RvrG2SegmentV1 {
             if index != 0 && descs[index - 1].kind >= desc.kind {
                 return Err(g2_error("lane descriptors are not unique and sorted"));
             }
-            let spec = lane_spec(desc.kind)
-                .ok_or_else(|| g2_error(format!("unknown lane kind {:#06x}", desc.kind)))?;
-            validate_desc(&desc, spec, self.byte_len, payload_begin)?;
             let committed = self
                 .committed_lanes
                 .iter()
                 .find(|lane| lane.kind == desc.kind)
                 .ok_or_else(|| g2_error("descriptor has no committed producer lane"))?;
+            if let Some(spec) = lane_spec(desc.kind) {
+                validate_desc(&desc, spec, self.byte_len, payload_begin)?;
+            } else if desc.kind & 0x8000 != 0 {
+                validate_opaque_desc(&desc, self.byte_len, payload_begin)?;
+            } else {
+                return Err(g2_error(format!("unknown lane kind {:#06x}", desc.kind)));
+            }
             if committed.wire_offset != desc.offset as usize
                 || committed.payload_bytes != desc.payload_bytes as usize
             {
@@ -277,7 +322,19 @@ impl RvrG2SegmentV1 {
             .iter()
             .find(|lane| lane.kind == desc.kind)
             .expect("validated descriptor must have a committed producer lane");
-        self.backing_bytes_range(lane.source_offset, lane.payload_bytes)
+        self.backing_bytes_range(
+            lane.source_offset
+                .expect("opaque-final lanes are consumed by their existing arena owner"),
+            lane.payload_bytes,
+        )
+    }
+}
+
+impl Drop for RvrG2SegmentV1 {
+    fn drop(&mut self) {
+        if let Some(backing) = self.backing.take() {
+            self.pool.recycle_g2_backing(backing, self.backing_capacity);
+        }
     }
 }
 
@@ -414,6 +471,7 @@ pub fn decode_reference_v1(
     let residual_ctrl = segment.lane(&descs, G2_LANE_RESIDUAL_CTRL);
     let residual_tag = segment.lane(&descs, G2_LANE_RESIDUAL_TAG);
     let residual_value = segment.lane(&descs, G2_LANE_RESIDUAL_VALUE);
+    let opaque_event_counts = segment.lane(&descs, G2_LANE_OPAQUE_EVENT_COUNT);
     let header = segment.header_acquire()?;
     let mut registers = initial_registers;
     registers[0] = 0;
@@ -422,9 +480,10 @@ pub fn decode_reference_v1(
     for (reg, &value) in registers.iter().enumerate() {
         blocks.insert((1, reg as u32 * 8), value);
     }
-    let mut kind_v0_cursors = [0usize; 30];
-    let mut kind_v1_cursors = [0usize; 30];
+    let mut kind_v0_cursors = [0usize; 31];
+    let mut kind_v1_cursors = [0usize; 31];
     let mut residual_cursor = 0usize;
+    let mut opaque_event_cursor = 0usize;
     let mut timestamp = initial_timestamp;
     let mut compact_records = BTreeMap::<u8, Vec<u8>>::new();
     let mut expanded_program_slots = Vec::with_capacity(header.instruction_count as usize);
@@ -452,10 +511,140 @@ pub fn decode_reference_v1(
             let binding = meta
                 .air_bindings
                 .iter()
-                .find(|binding| binding.air_idx == entry.air_idx as usize)
+                .find(|binding| binding.air_idx == entry.air_idx as usize);
+            if binding.is_none() && entry.access_pattern == 11 {
+                timestamp = timestamp
+                    .checked_add(1)
+                    .ok_or_else(|| g2_error("timestamp overflow"))?;
+                continue;
+            }
+            if binding.is_none() && entry.access_pattern == 10 {
+                let lanes = (
+                    residual_ctrl.ok_or_else(|| g2_error("missing residual CTRL lane"))?,
+                    residual_tag.ok_or_else(|| g2_error("missing residual TAG lane"))?,
+                    residual_value.ok_or_else(|| g2_error("missing residual VALUE lane"))?,
+                );
+                let event_count = lane_u32(
+                    opaque_event_counts
+                        .ok_or_else(|| g2_error("missing opaque event-count lane"))?,
+                    opaque_event_cursor,
+                    "opaque event count",
+                )? as usize;
+                opaque_event_cursor += 1;
+                if event_count == 0
+                    || residual_cursor
+                        .checked_add(event_count)
+                        .is_none_or(|end| end > header.residual_event_count as usize)
+                {
+                    return Err(g2_error("opaque residual span is invalid"));
+                }
+                for _ in 0..event_count {
+                    let (event_timestamp, address, tag, value) =
+                        read_residual(lanes, residual_cursor)?
+                            .ok_or_else(|| g2_error("opaque residual span over-consumed"))?;
+                    if event_timestamp != timestamp {
+                        return Err(g2_error("opaque residual timestamp is not contiguous"));
+                    }
+                    apply_residual_reference(
+                        event_timestamp,
+                        address,
+                        tag,
+                        value,
+                        &mut registers,
+                        &mut timestamps,
+                        &mut blocks,
+                    )?;
+                    residual_cursor += 1;
+                    timestamp = timestamp
+                        .checked_add(1)
+                        .ok_or_else(|| g2_error("timestamp overflow"))?;
+                }
+                continue;
+            }
+            let binding = binding
                 .ok_or_else(|| g2_error(format!("slot {slot} references an unbound AIR")))?;
             let kind = binding.kind;
             let from_timestamp = timestamp;
+            if kind == 30 && entry.access_pattern == 9 {
+                let lanes = (
+                    residual_ctrl.ok_or_else(|| g2_error("missing residual CTRL lane"))?,
+                    residual_tag.ok_or_else(|| g2_error("missing residual TAG lane"))?,
+                    residual_value.ok_or_else(|| g2_error("missing residual VALUE lane"))?,
+                );
+                let mem_ptr_reg = register_index(entry.b)?;
+                let mem_ptr = u32::try_from(registers[mem_ptr_reg])
+                    .map_err(|_| g2_error("HintStore memory pointer exceeds u32"))?;
+                validate_residual(
+                    lanes,
+                    residual_cursor,
+                    timestamp,
+                    entry.b,
+                    0x40,
+                    Some(u64::from(mem_ptr)),
+                )?;
+                let mem_ptr_prev = touch(&mut timestamps, (1, entry.b), timestamp);
+                residual_cursor += 1;
+                let (num_words, num_words_ptr, num_words_prev) = if entry.local_opcode == 0 {
+                    (1u32, u32::MAX, 0u32)
+                } else {
+                    let num_reg = register_index(entry.a)?;
+                    let num_words = u32::try_from(registers[num_reg])
+                        .map_err(|_| g2_error("HintStore word count exceeds u32"))?;
+                    validate_residual(
+                        lanes,
+                        residual_cursor,
+                        timestamp + 1,
+                        entry.a,
+                        0x40,
+                        Some(u64::from(num_words)),
+                    )?;
+                    let previous = touch(&mut timestamps, (1, entry.a), timestamp + 1);
+                    residual_cursor += 1;
+                    (num_words, entry.a, previous)
+                };
+                if !(1..=1023).contains(&num_words) {
+                    return Err(g2_error("HintStore word count is outside the frozen bound"));
+                }
+                for row in 0..num_words {
+                    let row_timestamp = timestamp
+                        .checked_add(3 * row)
+                        .ok_or_else(|| g2_error("HintStore timestamp overflow"))?;
+                    let address = mem_ptr
+                        .checked_add(8 * row)
+                        .ok_or_else(|| g2_error("HintStore address overflow"))?;
+                    let data = validate_residual(
+                        lanes,
+                        residual_cursor,
+                        row_timestamp + 2,
+                        address,
+                        0x45,
+                        None,
+                    )?;
+                    residual_cursor += 1;
+                    let key = (2, address);
+                    let previous = blocks.get(&key).copied().unwrap_or(0);
+                    let write_prev = touch(&mut timestamps, key, row_timestamp + 2);
+                    blocks.insert(key, data);
+                    let out = compact_records.entry(kind).or_default();
+                    append_u32(out, decode.pc_base + slot * 4);
+                    append_u32(out, timestamp);
+                    append_u32(out, row);
+                    append_u32(out, num_words);
+                    append_u32(out, entry.b);
+                    append_u32(out, mem_ptr);
+                    append_u32(out, if row == 0 { mem_ptr_prev } else { 0 });
+                    append_u32(out, num_words_ptr);
+                    append_u32(out, if row == 0 { num_words_prev } else { 0 });
+                    append_u32(out, write_prev);
+                    append_u64(out, previous);
+                    append_u64(out, data);
+                    append_u64(out, 0);
+                }
+                timestamp = timestamp
+                    .checked_add(3 * num_words)
+                    .ok_or_else(|| g2_error("HintStore timestamp overflow"))?;
+                continue;
+            }
             let mut record = Vec::with_capacity(PREFLIGHT_ADDSUB_RECORD_SIZE);
             append_u32(&mut record, decode.pc_base + slot * 4);
             append_u32(&mut record, from_timestamp);
@@ -756,8 +945,13 @@ pub fn decode_reference_v1(
         }
     }
 
+    let opaque_event_count = descs
+        .iter()
+        .find(|desc| desc.kind == G2_LANE_OPAQUE_EVENT_COUNT)
+        .map_or(0, |desc| desc.count as usize);
     if expanded_program_slots.len() != header.instruction_count as usize
         || residual_cursor != header.residual_event_count as usize
+        || opaque_event_cursor != opaque_event_count
     {
         return Err(g2_error(
             "program or residual cursor did not finish exactly",
@@ -884,6 +1078,76 @@ fn validate_residual(
         return Err(g2_error(format!("residual event {index} shape mismatch")));
     }
     Ok(actual_value)
+}
+
+fn read_residual(
+    lanes: (&[u8], &[u8], &[u8]),
+    index: usize,
+) -> Result<Option<(u32, u32, u8, u64)>, ExecutionError> {
+    let Some(ctrl_at) = index.checked_mul(8) else {
+        return Err(g2_error("residual CTRL cursor overflow"));
+    };
+    let Some(value_at) = index.checked_mul(8) else {
+        return Err(g2_error("residual VALUE cursor overflow"));
+    };
+    let Some(ctrl) = lanes.0.get(ctrl_at..ctrl_at + 8) else {
+        return Ok(None);
+    };
+    let tag = *lanes
+        .1
+        .get(index)
+        .ok_or_else(|| g2_error("residual TAG lanes have unequal lengths"))?;
+    let value = lanes
+        .2
+        .get(value_at..value_at + 8)
+        .ok_or_else(|| g2_error("residual VALUE lanes have unequal lengths"))?;
+    let ctrl = u64::from_le_bytes(ctrl.try_into().expect("eight-byte residual CTRL"));
+    Ok(Some((
+        ctrl as u32,
+        (ctrl >> 32) as u32,
+        tag,
+        u64::from_le_bytes(value.try_into().expect("eight-byte residual VALUE")),
+    )))
+}
+
+fn apply_residual_reference(
+    timestamp: u32,
+    address: u32,
+    tag: u8,
+    value: u64,
+    registers: &mut [u64; 32],
+    timestamps: &mut BTreeMap<(u8, u32), u32>,
+    blocks: &mut BTreeMap<(u8, u32), u64>,
+) -> Result<(), ExecutionError> {
+    let kind = tag & 3;
+    let address_space_code = (tag >> 2) & 3;
+    let width_code = (tag >> 4) & 7;
+    let valid_width = matches!(width_code, 0..=4);
+    if tag & 0x80 != 0
+        || kind == 3
+        || address_space_code == 3
+        || !valid_width
+        || (kind != 2 && width_code == 0)
+    {
+        return Err(g2_error("opaque residual tag is outside the frozen schema"));
+    }
+    let address_space = address_space_code + 1;
+    let key = (address_space, address & !7);
+    if address_space == 1 && (width_code != 4 || address >= 32 * 8 || address & 7 != 0) {
+        return Err(g2_error("opaque register residual is malformed"));
+    }
+    if kind == 0 {
+        if blocks.get(&key).is_some_and(|current| *current != value) {
+            return Err(g2_error("opaque residual read value mismatch"));
+        }
+    } else if kind == 1 {
+        blocks.insert(key, value);
+        if address_space == 1 && address != 0 {
+            registers[(address / 8) as usize] = value;
+        }
+    }
+    touch(timestamps, key, timestamp);
+    Ok(())
 }
 
 fn register_index(pointer: u32) -> Result<usize, ExecutionError> {
@@ -1057,21 +1321,56 @@ fn wr1_result(kind: u8, entry: &RvrDeltaDecodeEntry, pc: u32) -> Result<u64, Exe
 }
 
 pub(crate) struct RvrG2PreparedV1 {
-    backing: Vec<u128>,
+    backing: Option<Vec<u8>>,
+    backing_offset: usize,
     byte_capacity: usize,
     lanes: Vec<G2ProducerLaneV1>,
+    pool: super::RvrPreflightBufferPool,
     pub producer: G2ProducerV1,
 }
 
 impl RvrG2PreparedV1 {
+    #[cfg(test)]
     pub fn new(capacities: &RvrG2CapacitiesV1) -> Result<Self, ExecutionError> {
+        Self::new_pooled(capacities, &super::RvrPreflightBufferPool::default())
+    }
+
+    pub fn capacity_bytes(capacities: &RvrG2CapacitiesV1) -> Result<usize, ExecutionError> {
         let specs = producer_lane_specs();
         debug_assert_eq!(specs.len(), G2_PRODUCER_LANE_COUNT);
         let mut offset = align_up(
-            G2_SEGMENT_HEADER_V1_SIZE + G2_PRODUCER_LANE_COUNT * G2_LANE_DESC_V1_SIZE,
+            G2_SEGMENT_HEADER_V1_SIZE
+                + (G2_PRODUCER_LANE_COUNT + G2_MAX_OPAQUE_LANES) * G2_LANE_DESC_V1_SIZE,
             G2_WIRE_ALIGNMENT,
         )?;
+        for (slot, spec) in specs.iter().enumerate() {
+            debug_assert_eq!(slot, spec.slot);
+            let cap = lane_capacity(*spec, capacities);
+            let bytes = (cap as usize)
+                .checked_mul(spec.width as usize)
+                .ok_or_else(|| g2_error("lane capacity byte count overflow"))?;
+            offset = align_up(
+                offset
+                    .checked_add(bytes)
+                    .ok_or_else(|| g2_error("wire capacity overflow"))?,
+                G2_WIRE_ALIGNMENT,
+            )?;
+        }
+        Ok(offset)
+    }
+
+    pub fn new_pooled(
+        capacities: &RvrG2CapacitiesV1,
+        pool: &super::RvrPreflightBufferPool,
+    ) -> Result<Self, ExecutionError> {
+        let specs = producer_lane_specs();
+        let byte_capacity = Self::capacity_bytes(capacities)?;
         let mut lanes = Vec::with_capacity(specs.len());
+        let mut offset = align_up(
+            G2_SEGMENT_HEADER_V1_SIZE
+                + (G2_PRODUCER_LANE_COUNT + G2_MAX_OPAQUE_LANES) * G2_LANE_DESC_V1_SIZE,
+            G2_WIRE_ALIGNMENT,
+        )?;
         for (slot, spec) in specs.iter().enumerate() {
             debug_assert_eq!(slot, spec.slot);
             let cap = lane_capacity(*spec, capacities);
@@ -1090,11 +1389,13 @@ impl RvrG2PreparedV1 {
                 G2_WIRE_ALIGNMENT,
             )?;
         }
-        let byte_capacity = offset;
-        let words = byte_capacity.div_ceil(size_of::<u128>());
-        let mut backing = vec![0u128; words];
+        debug_assert_eq!(offset, byte_capacity);
+        let mut backing = pool.take_g2_backing(byte_capacity);
+        let backing_offset = (32 - backing.as_ptr() as usize % 32) % 32;
+        assert!(backing_offset + byte_capacity <= backing.len());
+        let base = unsafe { backing.as_mut_ptr().add(backing_offset) };
         let producer = G2ProducerV1 {
-            base: backing.as_mut_ptr().cast(),
+            base,
             capacity: byte_capacity as u64,
             lanes: lanes.as_mut_ptr(),
             lane_count: G2_PRODUCER_LANE_COUNT as u32,
@@ -1103,9 +1404,11 @@ impl RvrG2PreparedV1 {
             reserved: 0,
         };
         Ok(Self {
-            backing,
+            backing: Some(backing),
+            backing_offset,
             byte_capacity,
             lanes,
+            pool: pool.clone(),
             producer,
         })
     }
@@ -1115,10 +1418,18 @@ impl RvrG2PreparedV1 {
         segment_id: u32,
         expected_instruction_count: u32,
         fingerprint: [u8; 32],
+        opaque_written: &[(RvrG2OpaqueBindingV1, u32, u32)],
     ) -> Result<RvrG2SegmentV1, ExecutionError> {
         let p = self.producer;
         if p.overflow != 0
-            || p.base != self.backing.as_mut_ptr().cast()
+            || p.base
+                != unsafe {
+                    self.backing
+                        .as_mut()
+                        .expect("G2 backing already moved")
+                        .as_mut_ptr()
+                        .add(self.backing_offset)
+                }
             || p.capacity as usize != self.byte_capacity
             || p.lanes != self.lanes.as_mut_ptr()
             || p.lane_count as usize != self.lanes.len()
@@ -1155,7 +1466,13 @@ impl RvrG2PreparedV1 {
             })
             .collect::<Vec<_>>();
         active_lanes.sort_unstable_by_key(|(spec, _)| spec.kind);
-        let header_bytes = G2_SEGMENT_HEADER_V1_SIZE + active_lanes.len() * G2_LANE_DESC_V1_SIZE;
+        let header_bytes = G2_SEGMENT_HEADER_V1_SIZE
+            + (active_lanes.len() + opaque_written.len()) * G2_LANE_DESC_V1_SIZE;
+        if opaque_written.len() > G2_MAX_OPAQUE_LANES {
+            return Err(g2_error(
+                "opaque AIR count exceeds the producer descriptor reserve",
+            ));
+        }
         let payload_begin = align_up(header_bytes, G2_WIRE_ALIGNMENT)?;
         let mut wire_offset = payload_begin;
         let mut committed_lanes = Vec::with_capacity(active_lanes.len());
@@ -1186,7 +1503,7 @@ impl RvrG2PreparedV1 {
             });
             committed_lanes.push(RvrG2CommittedLaneV1 {
                 kind: spec.kind,
-                source_offset,
+                source_offset: Some(source_offset),
                 wire_offset,
                 payload_bytes: payload_bytes as usize,
             });
@@ -1197,6 +1514,44 @@ impl RvrG2PreparedV1 {
                 G2_WIRE_ALIGNMENT,
             )?;
         }
+        for &(binding, count, payload_bytes) in opaque_written {
+            let stride = u32::try_from(binding.geometry.stride_dense())
+                .map_err(|_| g2_error("opaque AIR stride exceeds the frozen u32 descriptor"))?;
+            let expected_payload_bytes = count
+                .checked_mul(stride)
+                .ok_or_else(|| g2_error("opaque AIR payload byte count overflow"))?;
+            if payload_bytes != expected_payload_bytes {
+                return Err(g2_error(format!(
+                    "opaque AIR {} cursor does not match its fingerprinted geometry",
+                    binding.air_idx
+                )));
+            }
+            descs.push(G2LaneDescV1 {
+                kind: binding.lane_kind(),
+                elem_width: 0,
+                encoding: G2_ENCODING_OPAQUE_FINAL,
+                flags: G2_LANE_FLAG_OPAQUE_FINAL,
+                count,
+                payload_bytes,
+                offset: wire_offset as u64,
+                group_id: 0,
+                reserved: 0,
+            });
+            committed_lanes.push(RvrG2CommittedLaneV1 {
+                kind: binding.lane_kind(),
+                source_offset: None,
+                wire_offset,
+                payload_bytes: payload_bytes as usize,
+            });
+            wire_offset = align_up(
+                wire_offset
+                    .checked_add(payload_bytes as usize)
+                    .ok_or_else(|| g2_error("opaque segment length overflow"))?,
+                G2_WIRE_ALIGNMENT,
+            )?;
+        }
+        descs.sort_unstable_by_key(|desc| desc.kind);
+        committed_lanes.sort_unstable_by_key(|lane| lane.kind);
         let byte_len = wire_offset;
         let header = G2SegmentHeaderV1 {
             magic: G2_SEGMENT_MAGIC_V1,
@@ -1212,10 +1567,15 @@ impl RvrG2PreparedV1 {
             schema_fingerprint: fingerprint,
         };
         unsafe {
-            // SAFETY: the u128 backing is aligned for both POD structs and the
-            // fixed layout reserves the maximum descriptor table before the
-            // first possible payload offset.
-            let base = self.backing.as_mut_ptr().cast::<u8>();
+            // SAFETY: the backing base is 32-byte aligned for both POD
+            // structs, and the fixed producer layout reserves the maximum
+            // opaque descriptor table before the first source payload.
+            let base = self
+                .backing
+                .as_mut()
+                .expect("G2 backing already moved")
+                .as_mut_ptr()
+                .add(self.backing_offset);
             base.cast::<G2SegmentHeaderV1>().write(header);
             let desc_base = base.add(G2_SEGMENT_HEADER_V1_SIZE);
             for (index, desc) in descs.iter().enumerate() {
@@ -1228,13 +1588,24 @@ impl RvrG2PreparedV1 {
                 .store(G2_FLAGS_V1 | G2_FLAG_COMMITTED, Ordering::Release);
         }
         let segment = RvrG2SegmentV1 {
-            backing: self.backing,
+            backing: self.backing.take(),
+            backing_offset: self.backing_offset,
+            backing_capacity: self.byte_capacity,
+            pool: self.pool.clone(),
             byte_len,
             header_prefix_len: payload_begin,
             committed_lanes,
         };
         segment.validate(&fingerprint)?;
         Ok(segment)
+    }
+}
+
+impl Drop for RvrG2PreparedV1 {
+    fn drop(&mut self) {
+        if let Some(backing) = self.backing.take() {
+            self.pool.recycle_g2_backing(backing, self.byte_capacity);
+        }
     }
 }
 
@@ -1279,6 +1650,13 @@ fn producer_lane_specs() -> Vec<LaneSpec> {
             flags: atomic,
             group: G2_GROUP_RESIDUAL,
         },
+        LaneSpec {
+            slot: G2_PRODUCER_OPAQUE_EVENT_COUNT_SLOT,
+            kind: G2_LANE_OPAQUE_EVENT_COUNT,
+            width: 4,
+            flags: atomic,
+            group: G2_GROUP_RESIDUAL,
+        },
     ];
     for kind in 0u8..30 {
         for value_lane in [false, true] {
@@ -1310,6 +1688,7 @@ fn lane_capacity(spec: LaneSpec, capacities: &RvrG2CapacitiesV1) -> u32 {
         G2_PRODUCER_RESIDUAL_CTRL_SLOT
         | G2_PRODUCER_RESIDUAL_TAG_SLOT
         | G2_PRODUCER_RESIDUAL_VALUE_SLOT => capacities.residual,
+        G2_PRODUCER_OPAQUE_EVENT_COUNT_SLOT => capacities.opaque_events,
         _ => (0u8..30)
             .find(|&kind| {
                 [false, true].into_iter().any(|value_lane| {
@@ -1352,6 +1731,28 @@ fn validate_desc(
             .is_none_or(|end| end > segment_len as u64)
     {
         return Err(g2_error("lane descriptor validation failed"));
+    }
+    Ok(())
+}
+
+fn validate_opaque_desc(
+    desc: &G2LaneDescV1,
+    segment_len: usize,
+    payload_begin: usize,
+) -> Result<(), ExecutionError> {
+    if desc.elem_width != 0
+        || desc.encoding != G2_ENCODING_OPAQUE_FINAL
+        || desc.flags != G2_LANE_FLAG_OPAQUE_FINAL
+        || desc.offset < payload_begin as u64
+        || !(desc.offset as usize).is_multiple_of(G2_WIRE_ALIGNMENT)
+        || desc.group_id != 0
+        || desc.reserved != 0
+        || desc
+            .offset
+            .checked_add(u64::from(desc.payload_bytes))
+            .is_none_or(|end| end > segment_len as u64)
+    {
+        return Err(g2_error("opaque lane descriptor validation failed"));
     }
     Ok(())
 }
@@ -1438,7 +1839,7 @@ mod tests {
         prepared.lanes[G2_PRODUCER_RUN_SLOT].len = 1;
         prepared.producer.instruction_count = 2;
         let fingerprint = [0x5a; 32];
-        let segment = prepared.finalize(9, 2, fingerprint).unwrap();
+        let segment = prepared.finalize(9, 2, fingerprint, &[]).unwrap();
         let descs = segment.validate(&fingerprint).unwrap();
         assert_eq!(segment.header_acquire().unwrap().segment_id, 9);
         assert_eq!(
@@ -1459,20 +1860,23 @@ mod tests {
         })
         .unwrap();
         let partial = RvrG2SegmentV1 {
-            backing: prepared.backing.clone(),
+            backing: Some(vec![0; prepared.byte_capacity + 32]),
+            backing_offset: 0,
+            backing_capacity: prepared.byte_capacity,
+            pool: crate::arch::rvr::RvrPreflightBufferPool::default(),
             byte_len: prepared.byte_capacity,
             header_prefix_len: G2_SEGMENT_HEADER_V1_SIZE,
             committed_lanes: Vec::new(),
         };
         assert!(partial.header_acquire().is_err());
-        assert!(prepared.finalize(0, 1, [0; 32]).is_err());
+        assert!(prepared.finalize(0, 1, [0; 32], &[]).is_err());
     }
 
     #[test]
     fn phase1_transport_rejects_schema_mismatch() {
         let mut prepared = RvrG2PreparedV1::new(&RvrG2CapacitiesV1::default()).unwrap();
         prepared.producer.instruction_count = 0;
-        let segment = prepared.finalize(0, 0, [1; 32]).unwrap();
+        let segment = prepared.finalize(0, 0, [1; 32], &[]).unwrap();
         assert!(segment.validate(&[2; 32]).is_err());
     }
 
@@ -1488,19 +1892,19 @@ mod tests {
         let mut load_store = RvrG2PreparedV1::new(&capacities).unwrap();
         let store_slot = g2_load_store_producer_slot(26, false).unwrap();
         load_store.lanes[store_slot].len = 1;
-        assert!(load_store.finalize(0, 0, [0; 32]).is_err());
+        assert!(load_store.finalize(0, 0, [0; 32], &[]).is_err());
 
         let mut residual = RvrG2PreparedV1::new(&capacities).unwrap();
         residual.lanes[G2_PRODUCER_RESIDUAL_CTRL_SLOT].len = 1;
         residual.lanes[G2_PRODUCER_RESIDUAL_VALUE_SLOT].len = 1;
-        assert!(residual.finalize(0, 0, [0; 32]).is_err());
+        assert!(residual.finalize(0, 0, [0; 32], &[]).is_err());
     }
 
     #[test]
     fn phase2a_transport_rejects_overflow_before_publish() {
         let mut prepared = RvrG2PreparedV1::new(&RvrG2CapacitiesV1::default()).unwrap();
         prepared.producer.overflow = 1;
-        assert!(prepared.finalize(0, 0, [0; 32]).is_err());
+        assert!(prepared.finalize(0, 0, [0; 32], &[]).is_err());
     }
 
     #[test]
@@ -1514,12 +1918,14 @@ mod tests {
         prepared.lanes[G2_PRODUCER_RESIDUAL_TAG_SLOT].len = 1;
         prepared.lanes[G2_PRODUCER_RESIDUAL_VALUE_SLOT].len = 1;
         let fingerprint = [3; 32];
-        let mut segment = prepared.finalize(0, 0, fingerprint).unwrap();
+        let mut segment = prepared.finalize(0, 0, fingerprint, &[]).unwrap();
         unsafe {
             // SAFETY: the test owns the segment and mutates its second POD
             // descriptor before exposing it to any consumer.
             let descriptor = segment
                 .backing
+                .as_mut()
+                .expect("test segment backing must still be owned")
                 .as_mut_ptr()
                 .cast::<u8>()
                 .add(G2_SEGMENT_HEADER_V1_SIZE + G2_LANE_DESC_V1_SIZE)
@@ -1549,7 +1955,7 @@ mod tests {
         prepared.lanes[store_slot + 1].len = 1;
         prepared.producer.instruction_count = 4;
         let fingerprint = [4; 32];
-        let segment = prepared.finalize(0, 4, fingerprint).unwrap();
+        let segment = prepared.finalize(0, 4, fingerprint, &[]).unwrap();
         let descs = segment.validate(&fingerprint).unwrap();
 
         let mut expected_len = align_up(
@@ -1569,6 +1975,41 @@ mod tests {
             segment.byte_len(),
             expected_len,
             "wire transfer must contain only active payload prefixes and frozen alignment"
+        );
+    }
+
+    #[test]
+    fn opaque_final_payload_is_logical_but_not_staged_twice() {
+        let mut prepared = RvrG2PreparedV1::new(&RvrG2CapacitiesV1::default()).unwrap();
+        prepared.producer.instruction_count = 0;
+        let binding = RvrG2OpaqueBindingV1 {
+            air_idx: 7,
+            geometry: super::super::ArenaNativeGeometry {
+                adapter_size: 16,
+                adapter_align: 8,
+                core_size: 0,
+                core_align: 1,
+                core_off_matrix: 0,
+                layout: super::super::ArenaNativeLayout::Custom {
+                    residual_memory_chronology: true,
+                    layout_id: "openvm.rvr.test-opaque-final.v1",
+                },
+            },
+            air_identity_digest: [0x3c; 32],
+            layout_digest: [0x5a; 32],
+        };
+        let fingerprint = [7; 32];
+        let segment = prepared
+            .finalize(0, 0, fingerprint, &[(binding, 4, 64)])
+            .unwrap();
+        segment.validate(&fingerprint).unwrap();
+        assert!(segment.transfer_byte_len() < segment.byte_len());
+        assert_eq!(
+            segment
+                .wire_parts()
+                .map(|(_, bytes)| bytes.len())
+                .sum::<usize>(),
+            128
         );
     }
 }
