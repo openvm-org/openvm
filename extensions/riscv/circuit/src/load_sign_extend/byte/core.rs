@@ -24,19 +24,17 @@ use openvm_stark_backend::{
 use crate::{
     adapters::{
         shift_encoder, u16_cell_byte, LoadByteInstruction, Rv64LoadByteAdapterFiller,
-        Rv64LoadByteAdapterRecord, RV64_BYTE_BITS, RV64_BYTE_SIGN_BIT,
+        Rv64LoadByteAdapterRecord, BYTE_SHIFT_SELECTOR_WIDTH, RV64_BYTE_BITS, RV64_BYTE_SIGN_BIT,
     },
     load::LoadByteRecord,
 };
-
-pub(crate) const LOAD_SIGN_EXTEND_BYTE_SELECTOR_WIDTH: usize = 3;
 
 /// Handles signed byte loads by decomposing the selected u16 cell and sign-extending the chosen
 /// byte.
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
 pub struct LoadSignExtendByteCoreCols<T> {
-    pub selector: [T; LOAD_SIGN_EXTEND_BYTE_SELECTOR_WIDTH],
+    pub selector: [T; BYTE_SHIFT_SELECTOR_WIDTH],
     /// The sign bit that is extended to the remaining cells.
     pub data_most_sig_bit: T,
     /// Low byte of the selected memory cell. The high byte is derived in the AIR.
@@ -61,7 +59,7 @@ impl LoadSignExtendByteCoreAir {
     ) -> Self {
         Self {
             offset,
-            encoder: shift_encoder::<LOAD_SIGN_EXTEND_BYTE_SELECTOR_WIDTH>(),
+            encoder: shift_encoder::<BYTE_SHIFT_SELECTOR_WIDTH>(),
             bitwise_lookup_bus,
             range_bus,
         }
@@ -202,7 +200,7 @@ impl<A> LoadSignExtendByteFiller<A> {
         Self {
             adapter,
             offset,
-            encoder: shift_encoder::<LOAD_SIGN_EXTEND_BYTE_SELECTOR_WIDTH>(),
+            encoder: shift_encoder::<BYTE_SHIFT_SELECTOR_WIDTH>(),
             bitwise_lookup_chip,
             range_checker_chip,
         }
@@ -243,8 +241,7 @@ where
             .add_count((byte - sign_bit) as u32, RV64_BYTE_BITS - 1);
         core_row.data_most_sig_bit = F::from_bool(sign_bit != 0);
         core_row.read_data = read_data.map(F::from_u16);
-        let pt: &[u32; LOAD_SIGN_EXTEND_BYTE_SELECTOR_WIDTH] =
-            self.encoder.flag_pt(shift).try_into().unwrap();
+        let pt: &[u32; BYTE_SHIFT_SELECTOR_WIDTH] = self.encoder.flag_pt(shift).try_into().unwrap();
         core_row.selector = (*pt).map(F::from_u32);
     }
 }

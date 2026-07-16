@@ -30,12 +30,12 @@ use openvm_stark_sdk::utils::create_seeded_rng;
 use crate::{
     adapters::{
         rv64_bytes_to_u16_block, Rv64StoreMultiByteAdapterAir, Rv64StoreMultiByteAdapterExecutor,
-        Rv64StoreMultiByteAdapterFiller, RV64_BYTE_BITS,
+        Rv64StoreMultiByteAdapterFiller, BYTE_SHIFT_SELECTOR_WIDTH, RV64_BYTE_BITS,
     },
     store::{
         common::store_write_data, core::StoreCoreCols, Rv64StoreHalfwordAir, Rv64StoreHalfwordChip,
         Rv64StoreHalfwordExecutor, StoreHalfwordCoreAir, StoreHalfwordFiller,
-        STORE_HALFWORD_SELECTOR_WIDTH, STORE_HALFWORD_VALUE_CELLS,
+        STORE_HALFWORD_VALUE_CELLS,
     },
     test_utils::memory::{set_and_execute_store, store_memory_config, F, MAX_INS_CAPACITY},
 };
@@ -189,7 +189,7 @@ fn negative_split_opcode_role_test() {
     let modify_trace = |trace: &mut DenseMatrix<F>| {
         let mut trace_row = trace.row_slice(0).unwrap().to_vec();
         let (_, core_row) = trace_row.split_at_mut(adapter_width);
-        let core: &mut StoreCoreCols<F, STORE_HALFWORD_SELECTOR_WIDTH, STORE_HALFWORD_VALUE_CELLS> =
+        let core: &mut StoreCoreCols<F, BYTE_SHIFT_SELECTOR_WIDTH, STORE_HALFWORD_VALUE_CELLS> =
             core_row.borrow_mut();
         core.selector[0] += F::ONE;
         *trace = RowMajorMatrix::new(trace_row, trace.width());

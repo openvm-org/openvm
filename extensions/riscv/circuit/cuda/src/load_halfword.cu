@@ -1,11 +1,11 @@
 #include "riscv/cores/load.cuh"
 
 using LoadHalfwordCore =
-    LoadWidthCore<LOAD_HALFWORD_SELECTOR_WIDTH, 2, 2>;
+    LoadWidthCore<BYTE_SHIFT_SELECTOR_WIDTH, 2, 2>;
 
 template <typename T> struct Rv64LoadHalfwordCols {
     Rv64LoadMultiByteAdapterCols<T> adapter;
-    LoadWidthCoreCols<T, LOAD_HALFWORD_SELECTOR_WIDTH, 2> core;
+    LoadWidthCoreCols<T, BYTE_SHIFT_SELECTOR_WIDTH, 2> core;
 };
 
 __global__ void rv64_load_halfword_tracegen(

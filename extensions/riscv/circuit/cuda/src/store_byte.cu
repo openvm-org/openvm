@@ -1,7 +1,7 @@
 #include "riscv/cores/store.cuh"
 
 template <typename T> struct StoreByteCoreCols {
-    T selector[STORE_BYTE_SELECTOR_WIDTH];
+    T selector[BYTE_SHIFT_SELECTOR_WIDTH];
     // Low byte of the first source register cell; the high byte is derived in the AIR.
     T read_lo_byte;
     // Low byte of the selected previous memory cell; the high byte is derived in the AIR.
@@ -32,7 +32,7 @@ struct StoreByteCore {
         bitwise_lookup.add_range(read_lo_byte, store_byte_from_cell(record.read_data[0], 1));
         bitwise_lookup.add_range(prev_cell_bytes[0], prev_cell_bytes[1]);
 
-        Encoder encoder = shift_encoder(STORE_BYTE_SELECTOR_WIDTH);
+        Encoder encoder = shift_encoder(BYTE_SHIFT_SELECTOR_WIDTH);
         encoder.write_flag_pt(row.slice_from(COL_INDEX(StoreByteCoreCols, selector)), shift);
         COL_WRITE_VALUE(row, StoreByteCoreCols, read_lo_byte, read_lo_byte);
         COL_WRITE_VALUE(row, StoreByteCoreCols, prev_cell_lo_byte, prev_cell_bytes[0]);

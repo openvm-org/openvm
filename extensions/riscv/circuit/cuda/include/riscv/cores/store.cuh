@@ -12,11 +12,6 @@
 using namespace riscv;
 using namespace program;
 
-constexpr size_t STORE_BYTE_SELECTOR_WIDTH = 3;
-constexpr size_t STORE_HALFWORD_SELECTOR_WIDTH = 3;
-constexpr size_t STORE_WORD_SELECTOR_WIDTH = 3;
-constexpr size_t STORE_DOUBLEWORD_SELECTOR_WIDTH = 3;
-
 struct StoreRecord {
     uint16_t read_data[BLOCK_FE_WIDTH];
     // Previous contents of the first block followed by the second block, which is all-zero

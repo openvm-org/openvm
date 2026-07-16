@@ -11,9 +11,6 @@
 using namespace riscv;
 using namespace program;
 
-constexpr size_t LOAD_SIGN_EXTEND_BYTE_SELECTOR_WIDTH = 3;
-constexpr size_t LOAD_SIGN_EXTEND_HALFWORD_SELECTOR_WIDTH = 3;
-constexpr size_t LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH = 3;
 constexpr uint16_t SIGN_BYTE = 1 << (RV64_BYTE_BITS - 1);
 constexpr uint16_t SIGN_U16 = 1 << (U16_BITS - 1);
 

@@ -28,12 +28,12 @@ use openvm_stark_sdk::utils::create_seeded_rng;
 use crate::{
     adapters::{
         rv64_bytes_to_u16_block, Rv64LoadMultiByteAdapterAir, Rv64LoadMultiByteAdapterExecutor,
-        Rv64LoadMultiByteAdapterFiller, RV64_BYTE_BITS,
+        Rv64LoadMultiByteAdapterFiller, BYTE_SHIFT_SELECTOR_WIDTH, RV64_BYTE_BITS,
     },
     load::{
         common::load_write_data, core::LoadCoreCols, LoadDoublewordCoreAir, LoadDoublewordFiller,
         Rv64LoadDoublewordAir, Rv64LoadDoublewordChip, Rv64LoadDoublewordExecutor,
-        LOAD_DOUBLEWORD_OVERLAP_CELLS, LOAD_DOUBLEWORD_SELECTOR_WIDTH,
+        LOAD_DOUBLEWORD_OVERLAP_CELLS,
     },
     test_utils::memory::{load_memory_config, set_and_execute_load, F, MAX_INS_CAPACITY},
 };
@@ -159,7 +159,7 @@ fn run_loadd_sanity_test() {
 }
 
 fn assert_pranked_load_doubleword_fails(
-    prank: impl Fn(&mut LoadCoreCols<F, LOAD_DOUBLEWORD_SELECTOR_WIDTH, LOAD_DOUBLEWORD_OVERLAP_CELLS>),
+    prank: impl Fn(&mut LoadCoreCols<F, BYTE_SHIFT_SELECTOR_WIDTH, LOAD_DOUBLEWORD_OVERLAP_CELLS>),
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::from_config(load_memory_config());

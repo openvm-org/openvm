@@ -32,7 +32,7 @@ use crate::load_sign_extend::{
 use crate::{
     adapters::{
         Rv64LoadMultiByteAdapterAir, Rv64LoadMultiByteAdapterExecutor,
-        Rv64LoadMultiByteAdapterFiller, RV64_BYTE_BITS,
+        Rv64LoadMultiByteAdapterFiller, BYTE_SHIFT_SELECTOR_WIDTH, RV64_BYTE_BITS,
     },
     load_sign_extend::{
         core::LoadSignExtendCoreCols,
@@ -40,7 +40,7 @@ use crate::{
         word::{
             LoadSignExtendWordCoreAir, LoadSignExtendWordFiller, Rv64LoadSignExtendWordAir,
             Rv64LoadSignExtendWordChip, Rv64LoadSignExtendWordExecutor,
-            LOAD_SIGN_EXTEND_WORD_OVERLAP_CELLS, LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH,
+            LOAD_SIGN_EXTEND_WORD_OVERLAP_CELLS,
         },
     },
 };
@@ -170,7 +170,7 @@ fn assert_pranked_word_fails(
     prank: impl Fn(
         &mut LoadSignExtendCoreCols<
             F,
-            LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH,
+            BYTE_SHIFT_SELECTOR_WIDTH,
             LOAD_SIGN_EXTEND_WORD_OVERLAP_CELLS,
         >,
     ),

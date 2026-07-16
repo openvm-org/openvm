@@ -3,7 +3,7 @@ use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 use crate::{
     adapters::{
         Rv64LoadMultiByteAdapterAir, Rv64LoadMultiByteAdapterExecutor,
-        Rv64LoadMultiByteAdapterFiller, LOAD_WIDTH_DOUBLEWORD,
+        Rv64LoadMultiByteAdapterFiller, BYTE_SHIFT_SELECTOR_WIDTH, LOAD_WIDTH_DOUBLEWORD,
     },
     load::{
         common::LoadExecutor,
@@ -11,19 +11,15 @@ use crate::{
     },
 };
 
-pub const LOAD_DOUBLEWORD_SELECTOR_WIDTH: usize = 3;
 /// Cells overlapped by an odd-shift doubleword load: `LOAD_WIDTH_DOUBLEWORD / 2 + 1`.
 pub const LOAD_DOUBLEWORD_OVERLAP_CELLS: usize = 5;
 
-pub type LoadDoublewordCoreAir = LoadCoreAir<
-    LOAD_WIDTH_DOUBLEWORD,
-    LOAD_DOUBLEWORD_SELECTOR_WIDTH,
-    LOAD_DOUBLEWORD_OVERLAP_CELLS,
->;
+pub type LoadDoublewordCoreAir =
+    LoadCoreAir<LOAD_WIDTH_DOUBLEWORD, BYTE_SHIFT_SELECTOR_WIDTH, LOAD_DOUBLEWORD_OVERLAP_CELLS>;
 pub type LoadDoublewordFiller = LoadFiller<
     Rv64LoadMultiByteAdapterFiller,
     LOAD_WIDTH_DOUBLEWORD,
-    LOAD_DOUBLEWORD_SELECTOR_WIDTH,
+    BYTE_SHIFT_SELECTOR_WIDTH,
     LOAD_DOUBLEWORD_OVERLAP_CELLS,
 >;
 

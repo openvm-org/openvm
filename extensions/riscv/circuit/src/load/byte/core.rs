@@ -23,19 +23,17 @@ use openvm_stark_backend::{
 use crate::{
     adapters::{
         shift_encoder, u16_cell_byte, LoadByteInstruction, Rv64LoadByteAdapterFiller,
-        Rv64LoadByteAdapterRecord, RV64_BYTE_BITS,
+        Rv64LoadByteAdapterRecord, BYTE_SHIFT_SELECTOR_WIDTH, RV64_BYTE_BITS,
     },
     load::common::LoadByteRecord,
 };
-
-pub(crate) const LOAD_BYTE_SELECTOR_WIDTH: usize = 3;
 
 /// Handles unsigned byte loads by decomposing the selected u16 cell and zero-extending the chosen
 /// byte.
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
 pub struct LoadByteCoreCols<T> {
-    pub selector: [T; LOAD_BYTE_SELECTOR_WIDTH],
+    pub selector: [T; BYTE_SHIFT_SELECTOR_WIDTH],
     /// Low byte of the selected memory cell. The high byte is derived in the AIR.
     pub read_cell_lo_byte: T,
     pub read_data: [T; BLOCK_FE_WIDTH],
@@ -53,7 +51,7 @@ impl LoadByteCoreAir {
     pub fn new(offset: usize, bitwise_lookup_bus: BitwiseOperationLookupBus) -> Self {
         Self {
             offset,
-            encoder: shift_encoder::<LOAD_BYTE_SELECTOR_WIDTH>(),
+            encoder: shift_encoder::<BYTE_SHIFT_SELECTOR_WIDTH>(),
             bitwise_lookup_bus,
         }
     }
@@ -179,7 +177,7 @@ impl<A> LoadByteFiller<A> {
         Self {
             adapter,
             offset,
-            encoder: shift_encoder::<LOAD_BYTE_SELECTOR_WIDTH>(),
+            encoder: shift_encoder::<BYTE_SHIFT_SELECTOR_WIDTH>(),
             bitwise_lookup_chip,
         }
     }
@@ -213,7 +211,7 @@ where
             .request_range(read_cell_bytes[0] as u32, read_cell_bytes[1] as u32);
         core_row.read_cell_lo_byte = F::from_u16(read_cell_bytes[0]);
         core_row.read_data = read_data.map(F::from_u16);
-        let pt: &[u32; LOAD_BYTE_SELECTOR_WIDTH] = self.encoder.flag_pt(shift).try_into().unwrap();
+        let pt: &[u32; BYTE_SHIFT_SELECTOR_WIDTH] = self.encoder.flag_pt(shift).try_into().unwrap();
         core_row.selector = (*pt).map(F::from_u32);
     }
 }

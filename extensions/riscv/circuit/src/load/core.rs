@@ -17,8 +17,8 @@ use openvm_stark_backend::{
 use crate::{
     adapters::{
         shift_encoder, u16_cell_byte, LoadInstruction, Rv64LoadMultiByteAdapterFiller,
-        Rv64LoadMultiByteAdapterRecord, LOAD_WIDTH_DOUBLEWORD, LOAD_WIDTH_HALFWORD,
-        LOAD_WIDTH_WORD, NUM_BYTE_SHIFTS, RV64_BYTE_BITS,
+        Rv64LoadMultiByteAdapterRecord, BYTE_SHIFT_SELECTOR_WIDTH, LOAD_WIDTH_DOUBLEWORD,
+        LOAD_WIDTH_HALFWORD, LOAD_WIDTH_WORD, NUM_BYTE_SHIFTS, RV64_BYTE_BITS,
     },
     load::common::LoadRecord,
 };
@@ -216,7 +216,7 @@ where
 pub struct LoadFiller<
     A = Rv64LoadMultiByteAdapterFiller,
     const LOAD_WIDTH: usize = LOAD_WIDTH_WORD,
-    const SELECTOR_WIDTH: usize = 3,
+    const SELECTOR_WIDTH: usize = BYTE_SHIFT_SELECTOR_WIDTH,
     const NUM_OVERLAP_CELLS: usize = 3,
 > {
     adapter: A,

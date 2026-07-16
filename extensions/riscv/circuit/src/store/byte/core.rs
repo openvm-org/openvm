@@ -24,19 +24,17 @@ use crate::{
     adapters::{
         set_u16_cell_byte, shift_encoder, u16_cell_byte, Rv64StoreByteAdapterCols,
         Rv64StoreByteAdapterFiller, Rv64StoreByteAdapterRecord, StoreByteInstruction,
-        RV64_BYTE_BITS,
+        BYTE_SHIFT_SELECTOR_WIDTH, RV64_BYTE_BITS,
     },
     store::common::{store_write_data, StoreByteRecord},
 };
-
-pub(crate) const STORE_BYTE_SELECTOR_WIDTH: usize = 3;
 
 /// Handles byte stores by replacing one byte in the previous memory block and preserving all other
 /// bytes.
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
 pub struct StoreByteCoreCols<T> {
-    pub selector: [T; STORE_BYTE_SELECTOR_WIDTH],
+    pub selector: [T; BYTE_SHIFT_SELECTOR_WIDTH],
     /// Low byte of the first source register cell — the stored byte. The cell's high byte is
     /// derived in the AIR.
     pub read_lo_byte: T,
@@ -58,7 +56,7 @@ impl StoreByteCoreAir {
     pub fn new(offset: usize, bitwise_lookup_bus: BitwiseOperationLookupBus) -> Self {
         Self {
             offset,
-            encoder: shift_encoder::<STORE_BYTE_SELECTOR_WIDTH>(),
+            encoder: shift_encoder::<BYTE_SHIFT_SELECTOR_WIDTH>(),
             bitwise_lookup_bus,
         }
     }
@@ -169,7 +167,7 @@ impl<A> StoreByteFiller<A> {
         Self {
             adapter,
             offset,
-            encoder: shift_encoder::<STORE_BYTE_SELECTOR_WIDTH>(),
+            encoder: shift_encoder::<BYTE_SHIFT_SELECTOR_WIDTH>(),
             bitwise_lookup_chip,
         }
     }
@@ -222,7 +220,7 @@ where
 
         core_row.read_data = read_data.map(F::from_u16);
         core_row.prev_data = prev_data.map(F::from_u16);
-        let pt: &[u32; STORE_BYTE_SELECTOR_WIDTH] = self.encoder.flag_pt(shift).try_into().unwrap();
+        let pt: &[u32; BYTE_SHIFT_SELECTOR_WIDTH] = self.encoder.flag_pt(shift).try_into().unwrap();
         core_row.selector = (*pt).map(F::from_u32);
     }
 

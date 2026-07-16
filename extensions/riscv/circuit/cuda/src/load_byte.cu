@@ -1,7 +1,7 @@
 #include "riscv/cores/load.cuh"
 
 template <typename T> struct LoadByteCoreCols {
-    T selector[LOAD_BYTE_SELECTOR_WIDTH];
+    T selector[BYTE_SHIFT_SELECTOR_WIDTH];
     T read_cell_lo_byte;
     T read_data[BLOCK_FE_WIDTH];
 };
@@ -25,7 +25,7 @@ struct LoadByteCore {
         };
         bitwise_lookup.add_range(read_cell_bytes[0], read_cell_bytes[1]);
 
-        Encoder encoder = shift_encoder(LOAD_BYTE_SELECTOR_WIDTH);
+        Encoder encoder = shift_encoder(BYTE_SHIFT_SELECTOR_WIDTH);
         encoder.write_flag_pt(row.slice_from(COL_INDEX(LoadByteCoreCols, selector)), shift);
         COL_WRITE_VALUE(row, LoadByteCoreCols, read_cell_lo_byte, read_cell_bytes[0]);
         COL_WRITE_ARRAY(row, LoadByteCoreCols, read_data, record.read_data);

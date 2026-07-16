@@ -5,6 +5,8 @@
 
 // Number of byte offsets within one memory block.
 constexpr uint32_t NUM_BYTE_SHIFTS = 2 * BLOCK_FE_WIDTH;
+// Number of columns in the byte-shift selector encoding.
+constexpr size_t BYTE_SHIFT_SELECTOR_WIDTH = 3;
 // Maximal degree of the load/store shift-selector flag expressions.
 constexpr uint32_t SHIFT_SELECTOR_MAX_DEGREE = 2;
 

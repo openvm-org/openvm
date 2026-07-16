@@ -18,8 +18,8 @@ use crate::{
     adapters::{
         shift_encoder, u16_cell_byte, Rv64StoreMultiByteAdapterCols,
         Rv64StoreMultiByteAdapterFiller, Rv64StoreMultiByteAdapterRecord, StoreInstruction,
-        NUM_BYTE_SHIFTS, RV64_BYTE_BITS, STORE_WIDTH_DOUBLEWORD, STORE_WIDTH_HALFWORD,
-        STORE_WIDTH_WORD,
+        BYTE_SHIFT_SELECTOR_WIDTH, NUM_BYTE_SHIFTS, RV64_BYTE_BITS, STORE_WIDTH_DOUBLEWORD,
+        STORE_WIDTH_HALFWORD, STORE_WIDTH_WORD,
     },
     store::common::StoreRecord,
 };
@@ -255,7 +255,7 @@ where
 pub struct StoreFiller<
     A = Rv64StoreMultiByteAdapterFiller,
     const STORE_WIDTH: usize = STORE_WIDTH_WORD,
-    const SELECTOR_WIDTH: usize = 3,
+    const SELECTOR_WIDTH: usize = BYTE_SHIFT_SELECTOR_WIDTH,
     const NUM_VALUE_CELLS: usize = 2,
 > {
     adapter: A,

@@ -57,6 +57,8 @@ pub const RV64_WORD_U16_LIMBS: usize = RV64_WORD_NUM_LIMBS / 2;
 /// Byte shifts of an effective pointer inside an 8-byte memory block. Every load/store core
 /// encodes shift `i` as selector case `i`.
 pub(crate) const NUM_BYTE_SHIFTS: usize = 2 * BLOCK_FE_WIDTH;
+/// Number of columns in the byte-shift selector encoding.
+pub(crate) const BYTE_SHIFT_SELECTOR_WIDTH: usize = 3;
 const SHIFT_SELECTOR_MAX_DEGREE: u32 = 2;
 
 #[inline(always)]

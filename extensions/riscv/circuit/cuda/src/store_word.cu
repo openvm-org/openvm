@@ -1,11 +1,11 @@
 #include "riscv/cores/store.cuh"
 
 using StoreWordCore =
-    StoreWidthCore<STORE_WORD_SELECTOR_WIDTH, 2, 4>;
+    StoreWidthCore<BYTE_SHIFT_SELECTOR_WIDTH, 2, 4>;
 
 template <typename T> struct Rv64StoreWordCols {
     Rv64StoreMultiByteAdapterCols<T> adapter;
-    StoreWidthCoreCols<T, STORE_WORD_SELECTOR_WIDTH, 2> core;
+    StoreWidthCoreCols<T, BYTE_SHIFT_SELECTOR_WIDTH, 2> core;
 };
 
 __global__ void rv64_store_word_tracegen(

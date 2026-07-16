@@ -28,12 +28,11 @@ use openvm_stark_sdk::utils::create_seeded_rng;
 use crate::{
     adapters::{
         rv64_bytes_to_u16_block, Rv64LoadMultiByteAdapterAir, Rv64LoadMultiByteAdapterExecutor,
-        Rv64LoadMultiByteAdapterFiller, RV64_BYTE_BITS,
+        Rv64LoadMultiByteAdapterFiller, BYTE_SHIFT_SELECTOR_WIDTH, RV64_BYTE_BITS,
     },
     load::{
         common::load_write_data, core::LoadCoreCols, LoadWordCoreAir, LoadWordFiller,
         Rv64LoadWordAir, Rv64LoadWordChip, Rv64LoadWordExecutor, LOAD_WORD_OVERLAP_CELLS,
-        LOAD_WORD_SELECTOR_WIDTH,
     },
     load_sign_extend::common::load_sign_extend_write_data,
     test_utils::memory::{load_memory_config, set_and_execute_load, F, MAX_INS_CAPACITY},
@@ -181,7 +180,7 @@ fn accepted_shift_sets() {
 }
 
 fn assert_pranked_load_word_fails(
-    prank: impl Fn(&mut LoadCoreCols<F, LOAD_WORD_SELECTOR_WIDTH, LOAD_WORD_OVERLAP_CELLS>),
+    prank: impl Fn(&mut LoadCoreCols<F, BYTE_SHIFT_SELECTOR_WIDTH, LOAD_WORD_OVERLAP_CELLS>),
 ) {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::from_config(load_memory_config());

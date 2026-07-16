@@ -32,7 +32,7 @@ use crate::load_sign_extend::{
 use crate::{
     adapters::{
         Rv64LoadMultiByteAdapterAir, Rv64LoadMultiByteAdapterExecutor,
-        Rv64LoadMultiByteAdapterFiller, RV64_BYTE_BITS,
+        Rv64LoadMultiByteAdapterFiller, BYTE_SHIFT_SELECTOR_WIDTH, RV64_BYTE_BITS,
     },
     load_sign_extend::{
         core::LoadSignExtendCoreCols,
@@ -40,7 +40,6 @@ use crate::{
             LoadSignExtendHalfwordCoreAir, LoadSignExtendHalfwordFiller,
             Rv64LoadSignExtendHalfwordAir, Rv64LoadSignExtendHalfwordChip,
             Rv64LoadSignExtendHalfwordExecutor, LOAD_SIGN_EXTEND_HALFWORD_OVERLAP_CELLS,
-            LOAD_SIGN_EXTEND_HALFWORD_SELECTOR_WIDTH,
         },
         test_utils::{memory_config_for, set_and_execute, F, MAX_INS_CAPACITY},
     },
@@ -153,7 +152,7 @@ fn assert_pranked_halfword_fails(
     prank: impl Fn(
         &mut LoadSignExtendCoreCols<
             F,
-            LOAD_SIGN_EXTEND_HALFWORD_SELECTOR_WIDTH,
+            BYTE_SHIFT_SELECTOR_WIDTH,
             LOAD_SIGN_EXTEND_HALFWORD_OVERLAP_CELLS,
         >,
     ),

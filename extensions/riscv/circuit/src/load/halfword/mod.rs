@@ -3,7 +3,7 @@ use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 use crate::{
     adapters::{
         Rv64LoadMultiByteAdapterAir, Rv64LoadMultiByteAdapterExecutor,
-        Rv64LoadMultiByteAdapterFiller, LOAD_WIDTH_HALFWORD,
+        Rv64LoadMultiByteAdapterFiller, BYTE_SHIFT_SELECTOR_WIDTH, LOAD_WIDTH_HALFWORD,
     },
     load::{
         common::LoadExecutor,
@@ -11,16 +11,15 @@ use crate::{
     },
 };
 
-pub const LOAD_HALFWORD_SELECTOR_WIDTH: usize = 3;
 /// Cells overlapped by an odd-shift halfword load: `LOAD_WIDTH_HALFWORD / 2 + 1`.
 pub const LOAD_HALFWORD_OVERLAP_CELLS: usize = 2;
 
 pub type LoadHalfwordCoreAir =
-    LoadCoreAir<LOAD_WIDTH_HALFWORD, LOAD_HALFWORD_SELECTOR_WIDTH, LOAD_HALFWORD_OVERLAP_CELLS>;
+    LoadCoreAir<LOAD_WIDTH_HALFWORD, BYTE_SHIFT_SELECTOR_WIDTH, LOAD_HALFWORD_OVERLAP_CELLS>;
 pub type LoadHalfwordFiller = LoadFiller<
     Rv64LoadMultiByteAdapterFiller,
     LOAD_WIDTH_HALFWORD,
-    LOAD_HALFWORD_SELECTOR_WIDTH,
+    BYTE_SHIFT_SELECTOR_WIDTH,
     LOAD_HALFWORD_OVERLAP_CELLS,
 >;
 
