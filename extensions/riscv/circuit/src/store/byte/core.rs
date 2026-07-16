@@ -70,8 +70,8 @@ impl<AB, I> VmCoreAir<AB, I> for StoreByteCoreAir
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
-    I::Reads: From<([[AB::Expr; BLOCK_FE_WIDTH]; 2], [AB::Expr; BLOCK_FE_WIDTH])>,
-    I::Writes: From<[[AB::Expr; BLOCK_FE_WIDTH]; 2]>,
+    I::Reads: From<([AB::Expr; BLOCK_FE_WIDTH], [AB::Expr; BLOCK_FE_WIDTH])>,
+    I::Writes: From<[[AB::Expr; BLOCK_FE_WIDTH]; 1]>,
     I::ProcessedInstruction: From<StoreInstruction<AB::Expr>>,
 {
     fn eval(
@@ -125,17 +125,12 @@ where
 
         AdapterAirContext {
             to_pc: None,
-            // A byte store never crosses a block boundary, so the second block is never
-            // touched.
             reads: (
-                [
-                    cols.prev_data.map(Into::into),
-                    std::array::from_fn(|_| AB::Expr::ZERO),
-                ],
+                cols.prev_data.map(Into::into),
                 cols.read_data.map(Into::into),
             )
                 .into(),
-            writes: [write_data, std::array::from_fn(|_| AB::Expr::ZERO)].into(),
+            writes: [write_data].into(),
             instruction: StoreInstruction {
                 is_valid,
                 opcode: expected_opcode,

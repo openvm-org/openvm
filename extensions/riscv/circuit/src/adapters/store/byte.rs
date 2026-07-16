@@ -1,12 +1,13 @@
 use std::{
     borrow::{Borrow, BorrowMut},
+    marker::PhantomData,
     mem::size_of,
 };
 
 use openvm_circuit::{
     arch::{
         get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
-        ExecutionBridge, ExecutionState, VmAdapterAir, BLOCK_FE_WIDTH,
+        ExecutionBridge, ExecutionState, VmAdapterAir, VmAdapterInterface, BLOCK_FE_WIDTH,
     },
     system::memory::{
         offline_checker::{
@@ -37,11 +38,19 @@ use crate::adapters::{
     byte_ptr_to_u16_ptr, byte_ptr_to_u16_ptr_value, expand_to_rv64_block, memory_read_u16,
     ptr_to_field_u16_limbs, ptr_to_u16_limbs, rv64_address_add_imm, rv64_register_pointer,
     sign_extend_imm16, timed_write_u16, tracing_read, tracing_read_u16, try_rv64_bytes_to_u32,
-    Rv64StoreMultiByteAdapterAirInterface, Rv64StoreMultiByteAdapterRecord, RV64_PTR_BITS,
-    RV64_PTR_U16_LIMBS, RV64_REGISTER_NUM_LIMBS, U16_BITS,
+    Rv64StoreMultiByteAdapterRecord, StoreInstruction, RV64_PTR_BITS, RV64_PTR_U16_LIMBS,
+    RV64_REGISTER_NUM_LIMBS, U16_BITS,
 };
 
 // Byte stores never cross a memory block, so this adapter has no second-block columns.
+
+pub struct Rv64StoreByteAdapterAirInterface<AB: InteractionBuilder>(PhantomData<AB>);
+
+impl<AB: InteractionBuilder> VmAdapterInterface<AB::Expr> for Rv64StoreByteAdapterAirInterface<AB> {
+    type Reads = ([AB::Expr; BLOCK_FE_WIDTH], [AB::Expr; BLOCK_FE_WIDTH]);
+    type Writes = [[AB::Expr; BLOCK_FE_WIDTH]; 1];
+    type ProcessedInstruction = StoreInstruction<AB::Expr>;
+}
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
@@ -79,7 +88,7 @@ impl<F: Field> BaseAir<F> for Rv64StoreByteAdapterAir {
 }
 
 impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64StoreByteAdapterAir {
-    type Interface = Rv64StoreMultiByteAdapterAirInterface<AB>;
+    type Interface = Rv64StoreByteAdapterAirInterface<AB>;
 
     fn eval(
         &self,
@@ -142,10 +151,7 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64StoreByteAdapterAir {
         builder.assert_bool(local_cols.mem_as - AB::Expr::TWO);
 
         let (prev_data, read_data) = ctx.reads;
-        // The byte store never crosses a block, so only the containing block's prev data and the
-        // first write are used.
-        let [prev_data0, _prev_data1] = prev_data;
-        let [write_data0, _write_data1] = ctx.writes;
+        let [write_data] = ctx.writes;
 
         // Read the source register data to be written into memory.
         self.memory_bridge
@@ -168,9 +174,9 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64StoreByteAdapterAir {
                     local_cols.mem_as,
                     byte_ptr_to_u16_ptr::<AB>(mem_ptr - shift_amount),
                 ),
-                write_data0,
+                write_data,
                 timestamp_pp(),
-                MemoryWriteAuxInput::from_prev_data_exprs(&local_cols.write_base_aux, prev_data0),
+                MemoryWriteAuxInput::from_prev_data_exprs(&local_cols.write_base_aux, prev_data),
             )
             .eval(builder, is_valid.clone());
 

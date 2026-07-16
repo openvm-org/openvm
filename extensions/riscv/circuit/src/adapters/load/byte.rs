@@ -1,12 +1,13 @@
 use std::{
     borrow::{Borrow, BorrowMut},
+    marker::PhantomData,
     mem::size_of,
 };
 
 use openvm_circuit::{
     arch::{
         get_record_from_slice, AdapterAirContext, AdapterTraceExecutor, AdapterTraceFiller,
-        ExecutionBridge, ExecutionState, VmAdapterAir, BLOCK_FE_WIDTH,
+        ExecutionBridge, ExecutionState, VmAdapterAir, VmAdapterInterface, BLOCK_FE_WIDTH,
     },
     system::memory::{
         offline_checker::{MemoryBridge, MemoryReadAuxCols, MemoryWriteAuxCols},
@@ -34,11 +35,19 @@ use crate::adapters::{
     byte_ptr_to_u16_ptr, byte_ptr_to_u16_ptr_value, expand_to_rv64_block, memory_read_u16,
     ptr_to_field_u16_limbs, ptr_to_u16_limbs, rv64_address_add_imm, rv64_register_pointer,
     sign_extend_imm16, timed_write_u16, tracing_read, tracing_read_u16, try_rv64_bytes_to_u32,
-    Rv64LoadMultiByteAdapterAirInterface, Rv64LoadMultiByteAdapterRecord, RV64_PTR_BITS,
-    RV64_PTR_U16_LIMBS, RV64_REGISTER_NUM_LIMBS, U16_BITS,
+    LoadInstruction, Rv64LoadMultiByteAdapterRecord, RV64_PTR_BITS, RV64_PTR_U16_LIMBS,
+    RV64_REGISTER_NUM_LIMBS, U16_BITS,
 };
 
 // Byte loads never cross a memory block, so this adapter has no second-block columns.
+
+pub struct Rv64LoadByteAdapterAirInterface<AB: InteractionBuilder>(PhantomData<AB>);
+
+impl<AB: InteractionBuilder> VmAdapterInterface<AB::Expr> for Rv64LoadByteAdapterAirInterface<AB> {
+    type Reads = [AB::Expr; BLOCK_FE_WIDTH];
+    type Writes = [[AB::Expr; BLOCK_FE_WIDTH]; 1];
+    type ProcessedInstruction = LoadInstruction<AB::Expr>;
+}
 
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
@@ -76,7 +85,7 @@ impl<F: Field> BaseAir<F> for Rv64LoadByteAdapterAir {
 }
 
 impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadByteAdapterAir {
-    type Interface = Rv64LoadMultiByteAdapterAirInterface<AB>;
+    type Interface = Rv64LoadByteAdapterAirInterface<AB>;
 
     fn eval(
         &self,
@@ -145,15 +154,13 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64LoadByteAdapterAir {
 
         let mem_ptr = local_cols.mem_ptr_low_limb + mem_ptr_hi * AB::F::from_u32(1u32 << U16_BITS);
 
-        // The byte load never crosses a block, so only the containing block is read.
-        let [read_data0, _read_data1] = ctx.reads;
         self.memory_bridge
             .read(
                 MemoryAddress::new(
                     AB::F::from_u32(RV64_MEMORY_AS),
                     byte_ptr_to_u16_ptr::<AB>(mem_ptr - shift_amount),
                 ),
-                read_data0,
+                ctx.reads,
                 timestamp_pp(),
                 &local_cols.read_data_aux,
             )

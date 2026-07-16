@@ -65,7 +65,7 @@ impl<AB, I> VmCoreAir<AB, I> for LoadByteCoreAir
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
-    I::Reads: From<[[AB::Expr; BLOCK_FE_WIDTH]; 2]>,
+    I::Reads: From<[AB::Expr; BLOCK_FE_WIDTH]>,
     I::Writes: From<[[AB::Expr; BLOCK_FE_WIDTH]; 1]>,
     I::ProcessedInstruction: From<LoadInstruction<AB::Expr>>,
 {
@@ -138,12 +138,7 @@ where
 
         AdapterAirContext {
             to_pc: None,
-            // A byte load never crosses a block boundary, so the second block is never read.
-            reads: [
-                cols.read_data.map(Into::into),
-                std::array::from_fn(|_| AB::Expr::ZERO),
-            ]
-            .into(),
+            reads: cols.read_data.map(Into::into).into(),
             writes: [write_data].into(),
             instruction: LoadInstruction {
                 is_valid,
