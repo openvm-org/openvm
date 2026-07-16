@@ -244,6 +244,8 @@ impl Rv64LoadByteAdapterRecord {
     }
 }
 
+/// Reads rs1, computes the effective memory pointer, reads the containing memory block, and writes
+/// the loaded value to rd.
 #[derive(Clone, Copy, derive_new::new)]
 pub struct Rv64LoadByteAdapterExecutor {
     pointer_max_bits: usize,

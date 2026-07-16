@@ -303,6 +303,8 @@ impl Rv64LoadMultiByteAdapterRecord {
     }
 }
 
+/// Reads rs1, computes the effective memory pointer, reads the containing memory blocks, and writes
+/// the loaded value to rd.
 #[derive(Clone, Copy, derive_new::new)]
 pub struct Rv64LoadMultiByteAdapterExecutor<const LOAD_WIDTH: usize> {
     pointer_max_bits: usize,
