@@ -56,6 +56,12 @@ impl<F: Copy> ReducedBabyBearWire<F> {
     pub fn value(&self) -> F {
         self.0.value
     }
+    
+    /// Wraps a wire in canonicality evidence. Callers must guarantee the wire is
+    /// constrained to `[0, p)`; this adds no constraints.
+    pub(crate) fn assume_reduced(wire: BabyBearWire<F>) -> Self {
+        ReducedBabyBearWire(wire)
+    }
 }
 
 impl<F> From<ReducedBabyBearWire<F>> for BabyBearWire<F> {

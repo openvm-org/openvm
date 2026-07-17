@@ -14,7 +14,7 @@
 //! values + symbolic DAG cached-commit pin) belong in `openvm-sdk` integration tests; this crate
 //! keeps a lighter FibFixture + KZG roundtrip via
 //! [`StaticVerifierCircuit::populate_verify_stark_constraints`].
-#![forbid(unsafe_code)]
+#![deny(unsafe_code)]
 
 #[cfg(feature = "cell-profiling")]
 mod context_tree;
@@ -26,8 +26,10 @@ mod circuit;
 pub mod codec;
 pub mod config;
 pub mod field;
+pub mod graph_executor;
 pub mod halo2_backend;
 pub mod halo2_ir_builder;
+pub mod halo2_opcode_impl;
 pub mod hash;
 pub mod keygen;
 pub mod prover;

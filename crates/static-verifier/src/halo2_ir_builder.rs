@@ -17,8 +17,13 @@
 //!   BabyBear constant cache (mirroring `BabyBearChip::const_cache`), so cached constant loads
 //!   insert no node/tape cells. Atomic ops that internally load cacheable constants (`BBDiv` loads
 //!   ONE, `ExtMul` loads W, `ExtDiv` loads ONE/ZERO/W) expose those cells as extra node outputs;
-//!   the outputs only materialize in the tape when the constant was not already cached, which an
-//!   executor replaying the node stream can determine by tracking the same cache.
+//!   whether each constant materializes is decided **at build time** and recorded per node in
+//!   [`NodeMeta::constant_skip_inds`], so executors replay nodes statelessly (and in parallel)
+//!   without tracking any cache.
+//! - **Per-node metadata**: every emitted node gets a [`NodeMeta`] (context/range tape offsets and
+//!   lengths, constant-skip indices, operand tape offsets) derived by replaying the op on a
+//!   [`CalculateOffsetsTape`](crate::halo2_opcode_impl::CalculateOffsetsTape) seeded with the
+//!   builder's current cache state.
 //! - **Copy constraints**: `constrain_equal` assigns no advice cells, so it produces no node.
 //! - **Transcript / digest hashing**: the builder re-implements `TranscriptChip`'s sponge and
 //!   buffer bookkeeping, emitting [`Halo2Opcode::PoseidonPermute2T3`] /
@@ -61,6 +66,7 @@ use crate::{
         BabyBearExt4, BabyBearExt4Wire, BabyBearWire, ReducedBabyBearExt4Wire, ReducedBabyBearWire,
         BABYBEAR_MAX_BITS, BABY_BEAR_MODULUS_U64, RESERVED_HIGH_BITS,
     },
+    halo2_opcode_impl::{derive_opcode_metadata, UNMATERIALIZED},
     hash::{
         poseidon2::{MULTI_FIELD32_NUM_F_ELMS, MULTI_FIELD32_RATE, POSEIDON2_RATE},
         POSEIDON2_WIDTH,
@@ -81,12 +87,12 @@ const _: () = assert!(POSEIDON2_WIDTH == 3);
 /// An IR operand/result: either a value produced by a node, or a fixed-column constant.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum GraphCell {
-    /// `(node id, output offset within the node, bits bound)`.
+    /// `(node id, absolute context-tape offset the cell is written at, bits bound)`.
     ///
     /// The bits bound is the `max_bits` invariant of [`BabyBearWire`]: the (signed) value
     /// is guaranteed `< 2^bits`. Executors use operand bit bounds to replay the chips'
     /// internal reduce decisions inside atomic ops.
-    Cell(NodeId, u16, u16),
+    Cell(NodeId, usize, u16),
     /// A constant operand assigned as a halo2 fixed-column `QuantumCell::Constant`;
     /// writes no advice cells.
     Const(Fr),
@@ -162,6 +168,11 @@ pub enum Halo2Opcode {
 }
 
 impl Halo2Opcode {
+    // is the witness tape dependent on the bits bound
+    pub fn is_witness_size_static(&self) -> bool {
+        todo!()
+    }
+
     pub fn num_operands(&self) -> usize {
         match self {
             Self::LoadWitness | Self::LoadBBReducedWitness => 0,
@@ -236,6 +247,36 @@ pub struct Halo2GraphNode {
     pub id: NodeId,
 }
 
+/// Per-node replay metadata deduced at build time, indexed by [`NodeId`]
+/// (see [`Halo2IRBuilder::node_meta`]).
+///
+/// Together with the operand values this is everything an executor needs to
+/// replay a node in isolation: no constant cache is consulted at runtime, so
+/// nodes can be interpreted in parallel.
+#[derive(Clone, Debug)]
+pub struct NodeMeta {
+    /// Number of context-tape (advice) slots the node writes.
+    pub ctx_len: usize,
+    /// Absolute context-tape offset the node begins writing at.
+    pub ctx_offset: usize,
+    /// Number of range-tape (lookup) slots the node writes.
+    pub lookups_len: usize,
+    /// Absolute range-tape offset the node begins writing at.
+    pub lookup_offset: usize,
+    /// Whether the node writes any constant cells, i.e. some internal
+    /// `load_constant` call missed the chips' caches at build time.
+    pub requires_constant_skip: bool,
+    /// Indices of the node's `load_constant` calls that write a cell, in call
+    /// order (e.g. `[1, 3]` when the second and fourth of five calls missed the
+    /// cache); calls not listed hit a cache and must not write. Drives
+    /// `WitnessTape` at replay time.
+    pub constant_skip_inds: Vec<u32>,
+    /// Absolute context-tape offset of each operand (`UNMATERIALIZED` for
+    /// [`GraphCell::Const`] operands, whose values live in the node's operand
+    /// list, not the context tape).
+    pub arg_offsets: Vec<usize>,
+}
+
 /// Transcript sponge/buffer state, mirroring `TranscriptChip`.
 #[derive(Clone, Debug)]
 struct IrTranscript {
@@ -247,13 +288,21 @@ struct IrTranscript {
 }
 
 /// Backend that records the circuit-population trace as a graph IR.
-#[derive(Default)]
 pub struct Halo2IRBuilder {
     /// Node tape, in exact witness-tape order.
     pub nodes: Vec<Halo2GraphNode>,
+    /// Replay metadata of node `i`, in node-tape order.
+    pub node_meta: Vec<NodeMeta>,
     /// Proof-input witness stream, one entry per `LoadWitness`/`LoadBBReducedWitness`
     /// node, in node-tape order.
     pub input_values: Vec<Fr>,
+    /// Range-check lookup bits of the target halo2 circuit (drives limb
+    /// decompositions, so it is part of the tape shape).
+    lookup_bits: usize,
+    /// Context-tape (advice) write cursor; the next node's `ctx_offset`.
+    ctx_offset: usize,
+    /// Range-tape (lookup) write cursor; the next node's `lookup_offset`.
+    lookup_offset: usize,
     /// `levels[i]` = dataflow depth of node `i` (0 for source nodes).
     levels: Vec<u32>,
     /// Mirrors `Context::zero_cell` caching in `Context::load_zero`.
@@ -272,11 +321,67 @@ fn bb_wire(value: GraphCell, max_bits: usize) -> BabyBearWire<GraphCell> {
 }
 
 impl Halo2IRBuilder {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(lookup_bits: usize) -> Self {
+        Halo2IRBuilder {
+            nodes: Vec::new(),
+            node_meta: Vec::new(),
+            input_values: Vec::new(),
+            lookup_bits,
+            ctx_offset: 0,
+            lookup_offset: 0,
+            levels: Vec::new(),
+            zero_cell: None,
+            bb_const_cache: HashMap::new(),
+            transcript: None,
+        }
     }
 
-    fn emit(&mut self, opcode: Halo2Opcode, operands: Vec<GraphCell>) -> NodeId {
+    /// Total number of context-tape (advice) cells written by all nodes.
+    pub fn total_ctx_len(&self) -> usize {
+        self.ctx_offset
+    }
+
+    /// Total number of range-tape (lookup) cells written by all nodes.
+    pub fn total_lookups_len(&self) -> usize {
+        self.lookup_offset
+    }
+
+    /// Range-check lookup bits the IR was built for.
+    pub fn lookup_bits(&self) -> usize {
+        self.lookup_bits
+    }
+
+    /// Dataflow depth of each node (0 for source nodes), indexed by [`NodeId`].
+    pub fn node_levels(&self) -> &[u32] {
+        &self.levels
+    }
+
+    /// Constants currently materialized in the mirrored chip caches that in-op
+    /// `load_constant` calls can hit (only ZERO/ONE/W ever occur inside ops).
+    fn warm_consts(&self) -> ([Fr; 3], usize) {
+        let mut warm = [Fr::ZERO; 3];
+        let mut n = 0;
+        if self.zero_cell.is_some() || self.bb_const_cache.contains_key(&0) {
+            warm[n] = Fr::ZERO;
+            n += 1;
+        }
+        if self.bb_const_cache.contains_key(&1) {
+            warm[n] = Fr::ONE;
+            n += 1;
+        }
+        let w_key = <BabyBear as BinomiallyExtendable<4>>::W.as_canonical_u64();
+        if self.bb_const_cache.contains_key(&w_key) {
+            warm[n] = Fr::from(w_key);
+            n += 1;
+        }
+        (warm, n)
+    }
+
+    /// Emits a node and deduces its [`NodeMeta`] by replaying the op against the
+    /// current cache state. Returns the node id and the **absolute** context-tape
+    /// offset of each logical output ([`UNMATERIALIZED`] for constants that hit a
+    /// cache and assigned no cell).
+    fn emit(&mut self, opcode: Halo2Opcode, operands: Vec<GraphCell>) -> (NodeId, Vec<usize>) {
         debug_assert_eq!(operands.len(), opcode.num_operands());
         let id = self.nodes.len() as NodeId;
         let level = operands
@@ -288,17 +393,62 @@ impl Halo2IRBuilder {
             .max()
             .unwrap_or(0);
         self.levels.push(level);
+
+        // Tape shape depends only on constant operand values, bit bounds,
+        // lookup_bits, and cache state — a nonzero dummy stands in for cell values.
+        let args: Vec<Fr> = operands
+            .iter()
+            .map(|cell| match cell {
+                GraphCell::Cell(..) => Fr::ONE,
+                GraphCell::Const(value) => *value,
+            })
+            .collect();
+        let bits: Vec<u16> = operands.iter().map(|cell| cell.bits() as u16).collect();
+        let (warm, n_warm) = self.warm_consts();
+        let meta = derive_opcode_metadata(&opcode, &args, &bits, self.lookup_bits, &warm[..n_warm]);
+
+        let ctx_offset = self.ctx_offset;
+        let output_offsets: Vec<usize> = meta
+            .output_offsets
+            .iter()
+            .map(|&rel| {
+                if rel == UNMATERIALIZED {
+                    UNMATERIALIZED
+                } else {
+                    ctx_offset + rel
+                }
+            })
+            .collect();
+        let arg_offsets = operands
+            .iter()
+            .map(|cell| match cell {
+                GraphCell::Cell(_, offset, _) => *offset,
+                GraphCell::Const(_) => UNMATERIALIZED,
+            })
+            .collect();
+        self.node_meta.push(NodeMeta {
+            ctx_len: meta.ctx_len,
+            ctx_offset,
+            lookups_len: meta.lookups_len,
+            lookup_offset: self.lookup_offset,
+            requires_constant_skip: !meta.constant_skip_inds.is_empty(),
+            constant_skip_inds: meta.constant_skip_inds,
+            arg_offsets,
+        });
+        self.ctx_offset += meta.ctx_len;
+        self.lookup_offset += meta.lookups_len;
+
         self.nodes.push(Halo2GraphNode {
             opcode,
             operands,
             id,
         });
-        id
+        (id, output_offsets)
     }
 
     fn emit1(&mut self, opcode: Halo2Opcode, operands: Vec<GraphCell>, bits: usize) -> GraphCell {
-        let id = self.emit(opcode, operands);
-        GraphCell::Cell(id, 0, bits as u16)
+        let (id, offsets) = self.emit(opcode, operands);
+        GraphCell::Cell(id, offsets[0], bits as u16)
     }
 
     /// Mirrors `Context::load_zero`.
@@ -312,9 +462,10 @@ impl Halo2IRBuilder {
     }
 
     /// Records the cache effect of a BabyBear constant loaded *inside* an atomic node
-    /// (`BBDiv`/`ExtMul`/`ExtDiv`), whose cell is node output `output` when it
-    /// materializes. Mirrors `BabyBearChip::load_constant` cache/zero-cell behavior.
-    fn note_internal_bb_const(&mut self, id: NodeId, output: u16, value: BabyBear) {
+    /// (`BBDiv`/`ExtMul`/`ExtDiv`), whose cell sits at absolute context-tape `offset`
+    /// when it materializes. Mirrors `BabyBearChip::load_constant` cache/zero-cell
+    /// behavior.
+    fn note_internal_bb_const(&mut self, id: NodeId, offset: usize, value: BabyBear) {
         let key = value.as_canonical_u64();
         if self.bb_const_cache.contains_key(&key) {
             return;
@@ -324,13 +475,15 @@ impl Halo2IRBuilder {
             match self.zero_cell {
                 Some(zero) => zero,
                 None => {
-                    let zero = GraphCell::Cell(id, output, 0);
+                    debug_assert_ne!(offset, UNMATERIALIZED);
+                    let zero = GraphCell::Cell(id, offset, 0);
                     self.zero_cell = Some(zero);
                     zero
                 }
             }
         } else {
-            GraphCell::Cell(id, output, max_bits as u16)
+            debug_assert_ne!(offset, UNMATERIALIZED);
+            GraphCell::Cell(id, offset, max_bits as u16)
         };
         self.bb_const_cache.insert(key, bb_wire(cell, max_bits));
     }
@@ -367,8 +520,8 @@ impl Halo2IRBuilder {
     }
 
     fn permute_t3(&mut self, state: &mut [GraphCell; POSEIDON2_WIDTH]) {
-        let id = self.emit(Halo2Opcode::PoseidonPermute2T3, state.to_vec());
-        *state = array::from_fn(|i| GraphCell::Cell(id, i as u16, RAW_MAX_BITS as u16));
+        let (id, offsets) = self.emit(Halo2Opcode::PoseidonPermute2T3, state.to_vec());
+        *state = array::from_fn(|i| GraphCell::Cell(id, offsets[i], RAW_MAX_BITS as u16));
     }
 
     // --- transcript internals mirroring `TranscriptChip` ---
@@ -421,11 +574,11 @@ impl Halo2IRBuilder {
         }
         self.flush_observe_buf(t);
         let squeezed = self.sponge_squeeze(t);
-        let id = self.emit(Halo2Opcode::DecomposeBn254ToBabyBear, vec![squeezed]);
+        let (id, offsets) = self.emit(Halo2Opcode::DecomposeBn254ToBabyBear, vec![squeezed]);
         t.sample_buf = (0..NUM_SAMPLES_PER_WORD)
             .map(|i| {
                 bb_wire(
-                    GraphCell::Cell(id, i as u16, BABYBEAR_MAX_BITS as u16),
+                    GraphCell::Cell(id, offsets[i], BABYBEAR_MAX_BITS as u16),
                     BABYBEAR_MAX_BITS,
                 )
             })
@@ -644,9 +797,9 @@ impl GateInst for Halo2IRBuilder {
     }
 
     fn num_to_bits(&mut self, a: GraphCell, range_bits: usize) -> Vec<GraphCell> {
-        let id = self.emit(Halo2Opcode::Num2Bits(range_bits as u16), vec![a]);
+        let (id, offsets) = self.emit(Halo2Opcode::Num2Bits(range_bits as u16), vec![a]);
         (0..range_bits)
-            .map(|i| GraphCell::Cell(id, i as u16, 1))
+            .map(|i| GraphCell::Cell(id, offsets[i], 1))
             .collect()
     }
 
@@ -786,11 +939,11 @@ impl BabyBearInst for Halo2IRBuilder {
         a: BabyBearWire<GraphCell>,
         b: BabyBearWire<GraphCell>,
     ) -> BabyBearWire<GraphCell> {
-        let id = self.emit(Halo2Opcode::BBDiv, vec![a.value, b.value]);
+        let (id, offsets) = self.emit(Halo2Opcode::BBDiv, vec![a.value, b.value]);
         // `BabyBearChip::div` internally loads the ONE constant (output 1 when uncached).
-        self.note_internal_bb_const(id, 1, BabyBear::new(1));
+        self.note_internal_bb_const(id, offsets[1], BabyBear::new(1));
         bb_wire(
-            GraphCell::Cell(id, 0, BABYBEAR_MAX_BITS as u16),
+            GraphCell::Cell(id, offsets[0], BABYBEAR_MAX_BITS as u16),
             BABYBEAR_MAX_BITS,
         )
     }
@@ -906,12 +1059,12 @@ impl BabyBearExt4Inst for Halo2IRBuilder {
         b: BabyBearExt4Wire<GraphCell>,
     ) -> BabyBearExt4Wire<GraphCell> {
         let operands = a.0.iter().chain(b.0.iter()).map(|w| w.value).collect_vec();
-        let id = self.emit(Halo2Opcode::ExtMul, operands);
+        let (id, offsets) = self.emit(Halo2Opcode::ExtMul, operands);
         // `BabyBearExt4Chip::mul` internally loads the W constant (output 4 when uncached).
-        self.note_internal_bb_const(id, 4, <BabyBear as BinomiallyExtendable<4>>::W);
+        self.note_internal_bb_const(id, offsets[4], <BabyBear as BinomiallyExtendable<4>>::W);
         let bits = ext_mul_result_bits(a.0.map(|w| w.max_bits), b.0.map(|w| w.max_bits));
         BabyBearExt4Wire(array::from_fn(|i| {
-            bb_wire(GraphCell::Cell(id, i as u16, bits[i] as u16), bits[i])
+            bb_wire(GraphCell::Cell(id, offsets[i], bits[i] as u16), bits[i])
         }))
     }
 
@@ -921,16 +1074,16 @@ impl BabyBearExt4Inst for Halo2IRBuilder {
         b: BabyBearExt4Wire<GraphCell>,
     ) -> BabyBearExt4Wire<GraphCell> {
         let operands = a.0.iter().chain(b.0.iter()).map(|w| w.value).collect_vec();
-        let id = self.emit(Halo2Opcode::ExtDiv, operands);
+        let (id, offsets) = self.emit(Halo2Opcode::ExtDiv, operands);
         // `BabyBearExt4Chip::div` internally loads ext ONE = bb [1, 0, 0, 0] (outputs 4/5
         // when uncached) and, via the internal ext mul, the W constant (output 6).
-        self.note_internal_bb_const(id, 4, BabyBear::new(1));
-        self.note_internal_bb_const(id, 5, BabyBear::new(0));
-        self.note_internal_bb_const(id, 6, <BabyBear as BinomiallyExtendable<4>>::W);
+        self.note_internal_bb_const(id, offsets[4], BabyBear::new(1));
+        self.note_internal_bb_const(id, offsets[5], BabyBear::new(0));
+        self.note_internal_bb_const(id, offsets[6], <BabyBear as BinomiallyExtendable<4>>::W);
         // The quotient is loaded as an ext witness: each coefficient is 31 bits.
         BabyBearExt4Wire(array::from_fn(|i| {
             bb_wire(
-                GraphCell::Cell(id, i as u16, BABYBEAR_MAX_BITS as u16),
+                GraphCell::Cell(id, offsets[i], BABYBEAR_MAX_BITS as u16),
                 BABYBEAR_MAX_BITS,
             )
         }))
@@ -1002,8 +1155,8 @@ impl DigestHashInst for Halo2IRBuilder {
     }
 
     fn compress_digests(&mut self, left: GraphCell, right: GraphCell) -> GraphCell {
-        let id = self.emit(Halo2Opcode::PoseidonPermute2T2, vec![left, right]);
-        GraphCell::Cell(id, 0, RAW_MAX_BITS as u16)
+        let (id, offsets) = self.emit(Halo2Opcode::PoseidonPermute2T2, vec![left, right]);
+        GraphCell::Cell(id, offsets[0], RAW_MAX_BITS as u16)
     }
 }
 
@@ -1104,35 +1257,36 @@ mod tests {
 
     /// Reads only the length-prefixed JSON `(circuit, shape)` header of a
     /// `StaticVerifierProvingKey` encoding, skipping the halo2 proving key bytes.
-    fn read_static_circuit(path: &std::path::Path) -> StaticVerifierCircuit {
+    fn read_static_circuit(path: &std::path::Path) -> (StaticVerifierCircuit, StaticVerifierShape) {
         let mut reader = BufReader::new(File::open(path).expect("open static verifier pk"));
         let mut len_bytes = [0u8; 8];
         reader.read_exact(&mut len_bytes).expect("read JSON length");
         let len = u64::from_le_bytes(len_bytes) as usize;
         let mut bytes = vec![0u8; len];
         reader.read_exact(&mut bytes).expect("read JSON section");
-        let (circuit, _shape): (StaticVerifierCircuit, StaticVerifierShape) =
-            serde_json::from_slice(&bytes).expect("deserialize (circuit, shape)");
-        circuit
+        serde_json::from_slice(&bytes).expect("deserialize (circuit, shape)")
     }
 
     #[test]
     #[ignore = "requires cached static verifier pk + root proof from bin/static-verifier-tracegen"]
     fn ir_generation_stats_for_root_proof() {
         let dir = cache_dir();
-        let circuit = read_static_circuit(&dir.join("static_verifier_pk.bin"));
+        let (circuit, shape) = read_static_circuit(&dir.join("static_verifier_pk.bin"));
         let proof: Proof<RootConfig> = bitcode::deserialize(
             &std::fs::read(dir.join("root_proof.bitcode")).expect("read root proof"),
         )
         .expect("deserialize root proof");
 
-        let mut builder = Halo2IRBuilder::new();
+        let mut builder = Halo2IRBuilder::new(shape.lookup_bits);
         circuit.populate_verify_stark_constraints(&mut builder, &proof);
 
         let stats = builder.stats();
         println!("=== static verifier IR stats ===");
         print!("{stats}");
+        println!("ctx cells: {}", builder.total_ctx_len());
+        println!("lookup cells: {}", builder.total_lookups_len());
         assert!(stats.num_nodes > 0);
         assert_eq!(builder.nodes.len(), builder.levels.len());
+        assert_eq!(builder.nodes.len(), builder.node_meta.len());
     }
 }

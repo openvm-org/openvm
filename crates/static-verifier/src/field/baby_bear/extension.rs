@@ -73,6 +73,12 @@ impl<F> ReducedBabyBearExt4Wire<F> {
     pub fn coeffs(&self) -> &[ReducedBabyBearWire<F>; 4] {
         &self.0
     }
+    
+    /// Wraps coefficient wires in canonicality evidence. Callers must guarantee each
+    /// coefficient is constrained to `[0, p)`; this adds no constraints.
+    pub(crate) fn assume_reduced(coeffs: [ReducedBabyBearWire<F>; 4]) -> Self {
+        ReducedBabyBearExt4Wire(coeffs)
+    }
 }
 
 impl<F> From<ReducedBabyBearExt4Wire<F>> for BabyBearExt4Wire<F> {

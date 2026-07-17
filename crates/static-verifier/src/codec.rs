@@ -34,6 +34,7 @@ impl Decode for StaticVerifierProvingKey {
             circuit,
             pinning,
             shape,
+            graph_prover: Default::default(),
         })
     }
 }
