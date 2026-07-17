@@ -204,9 +204,19 @@ fn load(opcode: Rv64LoadStoreOpcode, rd: usize, rs1: usize, offset: usize) -> In
 }
 
 fn store(opcode: Rv64LoadStoreOpcode, rs2: usize, rs1: usize, offset: usize) -> Instruction<F> {
+    store_as(opcode, rs2, rs1, offset, RV64_MEMORY_AS as usize)
+}
+
+fn store_as(
+    opcode: Rv64LoadStoreOpcode,
+    rs2: usize,
+    rs1: usize,
+    offset: usize,
+    address_space: usize,
+) -> Instruction<F> {
     Instruction::from_usize(
         opcode.global_opcode(),
-        [reg(rs2), reg(rs1), offset, 1, RV64_MEMORY_AS as usize, 1, 0],
+        [reg(rs2), reg(rs1), offset, 1, address_space, 1, 0],
     )
 }
 
@@ -371,6 +381,109 @@ fn inline_addsub_differential_exe() -> VmExe<F> {
     ])
 }
 
+/// Main-memory portion of the two-block fixture. Kept separate so CUDA/G2
+/// coverage is not whole-AIR-tainted by the deliberate AS=3 fallback rows.
+fn two_block_main_memory_instructions() -> Vec<Instruction<F>> {
+    vec![
+        addi(1, 0, 2044),
+        addi(1, 1, 2044), // x1 = 4088, the final block of a 4-KiB page
+        addi(2, 0, 0x5a5),
+        // Byte accesses are always single-block, including the last page byte.
+        store(Rv64LoadStoreOpcode::STOREB, 2, 1, 1),
+        load(Rv64LoadStoreOpcode::LOADBU, 3, 1, 1),
+        store(Rv64LoadStoreOpcode::STOREB, 2, 1, 7),
+        load(Rv64LoadStoreOpcode::LOADB, 3, 1, 7),
+        // Unaligned, non-crossing multi-byte accesses.
+        store(Rv64LoadStoreOpcode::STOREH, 2, 1, 1),
+        load(Rv64LoadStoreOpcode::LOADHU, 3, 1, 1),
+        load(Rv64LoadStoreOpcode::LOADH, 3, 1, 1),
+        store(Rv64LoadStoreOpcode::STOREW, 2, 1, 1),
+        load(Rv64LoadStoreOpcode::LOADWU, 3, 1, 1),
+        load(Rv64LoadStoreOpcode::LOADW, 3, 1, 1),
+        store(Rv64LoadStoreOpcode::STORED, 2, 1, 0),
+        load(Rv64LoadStoreOpcode::LOADD, 3, 1, 0),
+        // Each access below crosses both an 8-byte block and the 4-KiB page.
+        store(Rv64LoadStoreOpcode::STOREH, 2, 1, 7),
+        load(Rv64LoadStoreOpcode::LOADHU, 3, 1, 7),
+        load(Rv64LoadStoreOpcode::LOADH, 3, 1, 7),
+        store(Rv64LoadStoreOpcode::STOREW, 2, 1, 6),
+        load(Rv64LoadStoreOpcode::LOADWU, 3, 1, 6),
+        load(Rv64LoadStoreOpcode::LOADW, 3, 1, 6),
+        store(Rv64LoadStoreOpcode::STORED, 2, 1, 4),
+        load(Rv64LoadStoreOpcode::LOADD, 3, 1, 4),
+    ]
+}
+
+fn two_block_main_memory_exe() -> VmExe<F> {
+    let mut instructions = two_block_main_memory_instructions();
+    instructions.push(terminate());
+    exe(&instructions)
+}
+
+/// Two-block adaptation fixture. Main-memory accesses cover each byte width,
+/// unaligned non-crossing subword accesses, every possible crossing width,
+/// and crossings whose second block starts on the next 4-KiB page. Public
+/// values exercise AS=3 stores on both sides of an 8-byte block boundary.
+fn two_block_loadstore_exe() -> VmExe<F> {
+    let mut instructions = two_block_main_memory_instructions();
+    instructions.extend([
+        // AS=3 is store-only upstream. Narrow stores use the verbose helper;
+        // STORED shares the compact/residual route with ordinary stores.
+        addi(4, 0, 0),
+        store_as(
+            Rv64LoadStoreOpcode::STOREB,
+            2,
+            4,
+            0,
+            PUBLIC_VALUES_AS as usize,
+        ),
+        store_as(
+            Rv64LoadStoreOpcode::STOREH,
+            2,
+            4,
+            1,
+            PUBLIC_VALUES_AS as usize,
+        ),
+        store_as(
+            Rv64LoadStoreOpcode::STOREH,
+            2,
+            4,
+            7,
+            PUBLIC_VALUES_AS as usize,
+        ),
+        store_as(
+            Rv64LoadStoreOpcode::STOREW,
+            2,
+            4,
+            2,
+            PUBLIC_VALUES_AS as usize,
+        ),
+        store_as(
+            Rv64LoadStoreOpcode::STOREW,
+            2,
+            4,
+            7,
+            PUBLIC_VALUES_AS as usize,
+        ),
+        store_as(
+            Rv64LoadStoreOpcode::STORED,
+            2,
+            4,
+            0,
+            PUBLIC_VALUES_AS as usize,
+        ),
+        store_as(
+            Rv64LoadStoreOpcode::STORED,
+            2,
+            4,
+            7,
+            PUBLIC_VALUES_AS as usize,
+        ),
+        terminate(),
+    ]);
+    exe(&instructions)
+}
+
 /// Execute the fixture through the routed rvr preflight and assemble all
 /// record arenas via the standard generation path (which adopts inline C
 /// buffers for migrated chips and runs the log assembler for the rest).
@@ -420,6 +533,57 @@ fn run_inline_addsub_differential_arm(
     )
     .expect("record arena generation");
     (rvr_output, arenas, pc_to_air_idx)
+}
+
+type TwoBlockArm = (
+    RvrPreflightOutput<F>,
+    Vec<DenseRecordArena>,
+    Vec<Option<usize>>,
+    BTreeMap<usize, usize>,
+);
+
+fn run_two_block_loadstore_arm(exe: &VmExe<F>) -> TwoBlockArm {
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
+    let (rvr_vm, _) = VirtualMachine::new_with_keygen(
+        test_cpu_engine(),
+        Rv64ImCpuBuilder,
+        Rv64ImConfig::with_public_values_bytes(32),
+    )
+    .expect("two-block vm init");
+    let trace_heights = vec![4096u32; rvr_vm.num_airs()];
+    let capacities = trace_heights
+        .iter()
+        .zip(rvr_vm.pk().per_air.iter())
+        .map(|(&height, pk)| (height as usize, pk.vk.params.width.main_width()))
+        .collect::<Vec<_>>();
+    let pc_to_air_idx = rvr_vm.pc_to_air_idx(exe).expect("pc to air mapping");
+    let mut output = {
+        let RvrPreflightRoute::Rvr(instance) = rvr_vm
+            .preflight_routed_instance(exe)
+            .expect("routed two-block preflight instance")
+        else {
+            panic!("two-block program must route to RVR preflight");
+        };
+        instance
+            .execute_preflight(Streams::default(), None)
+            .expect("two-block rvr execution")
+    };
+    let compact_rows = output
+        .inline_records
+        .iter()
+        .map(|chip| {
+            assert_eq!(chip.bytes.len() % chip.record_size, 0);
+            (chip.air_idx, chip.bytes.len() / chip.record_size)
+        })
+        .collect();
+    let arenas = crate::log_native::generate_rv64im_record_arenas_from_logs::<F, DenseRecordArena>(
+        exe,
+        &mut output,
+        &capacities,
+        &pc_to_air_idx,
+    )
+    .expect("two-block record assembly");
+    (output, arenas, pc_to_air_idx, compact_rows)
 }
 
 /// R3 Phase-1 differential for the C-consumed record path: the same program is
@@ -497,6 +661,12 @@ fn rvr_preflight_inline_addsub_records_match_assembler() {
                 .expect("executed pc must name an instruction");
             let access_count = if instruction.opcode == BaseAluImmOpcode::ADDI.global_opcode() {
                 2
+            } else if is_loadstore_opcode(instruction.opcode)
+                && instruction.opcode != Rv64LoadStoreOpcode::LOADBU.global_opcode()
+                && instruction.opcode != Rv64LoadStoreOpcode::LOADB.global_opcode()
+                && instruction.opcode != Rv64LoadStoreOpcode::STOREB.global_opcode()
+            {
+                4
             } else {
                 3
             };
@@ -574,6 +744,476 @@ fn rvr_preflight_delta_full_rv64im_matrix_is_byte_equal_to_compact() {
             "delta-decoded arena differs from compact for AIR {air}"
         );
     }
+}
+
+fn is_loadstore_opcode(opcode: openvm_instructions::VmOpcode) -> bool {
+    [
+        Rv64LoadStoreOpcode::LOADD,
+        Rv64LoadStoreOpcode::LOADBU,
+        Rv64LoadStoreOpcode::LOADHU,
+        Rv64LoadStoreOpcode::LOADWU,
+        Rv64LoadStoreOpcode::STORED,
+        Rv64LoadStoreOpcode::STOREB,
+        Rv64LoadStoreOpcode::STOREH,
+        Rv64LoadStoreOpcode::STOREW,
+        Rv64LoadStoreOpcode::LOADB,
+        Rv64LoadStoreOpcode::LOADH,
+        Rv64LoadStoreOpcode::LOADW,
+    ]
+    .into_iter()
+    .any(|candidate| candidate.global_opcode() == opcode)
+}
+
+fn is_load_opcode(opcode: openvm_instructions::VmOpcode) -> bool {
+    [
+        Rv64LoadStoreOpcode::LOADD,
+        Rv64LoadStoreOpcode::LOADBU,
+        Rv64LoadStoreOpcode::LOADHU,
+        Rv64LoadStoreOpcode::LOADWU,
+        Rv64LoadStoreOpcode::LOADB,
+        Rv64LoadStoreOpcode::LOADH,
+        Rv64LoadStoreOpcode::LOADW,
+    ]
+    .into_iter()
+    .any(|candidate| candidate.global_opcode() == opcode)
+}
+
+/// Byte oracle for every decoded consumer: the compact CPU assembler and the
+/// chronological delta decoder must produce exactly the same upstream-native
+/// load/store records as the verbose memory-log route. The explicit row
+/// accounting pins `fast non-crossing + residual crossing == metered` per AIR.
+#[test]
+fn rvr_preflight_two_block_compact_and_delta_match_verbose_records() {
+    let exe = two_block_loadstore_exe();
+
+    std::env::set_var("OPENVM_RVR_INLINE_RECORDS", "0");
+    std::env::remove_var("OPENVM_RVR_GPU_RECORDS");
+    let (verbose, verbose_arenas, _, _) = run_two_block_loadstore_arm(&exe);
+
+    std::env::set_var("OPENVM_RVR_INLINE_RECORDS", "1");
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "compact");
+    let (compact, compact_arenas, pc_to_air_idx, compact_rows) = run_two_block_loadstore_arm(&exe);
+
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "delta");
+    let (delta, delta_arenas, _, _) = run_two_block_loadstore_arm(&exe);
+
+    assert_system_records_eq(
+        "two_block_verbose_compact",
+        &verbose.system_records,
+        &compact.system_records,
+    );
+    assert_system_records_eq(
+        "two_block_verbose_delta",
+        &verbose.system_records,
+        &delta.system_records,
+    );
+    assert_eq!(verbose_arenas.len(), compact_arenas.len());
+    assert_eq!(verbose_arenas.len(), delta_arenas.len());
+    for air in 0..verbose_arenas.len() {
+        assert_eq!(
+            verbose_arenas[air].allocated(),
+            compact_arenas[air].allocated(),
+            "compact two-block records differ from verbose for AIR {air}"
+        );
+        assert_eq!(
+            verbose_arenas[air].allocated(),
+            delta_arenas[air].allocated(),
+            "delta two-block records differ from verbose for AIR {air}"
+        );
+    }
+
+    let slot_for_pc = |pc: u32| {
+        assert!(pc >= exe.program.pc_base);
+        ((pc - exe.program.pc_base) / DEFAULT_PC_STEP) as usize
+    };
+    let mut metered_by_air = BTreeMap::<usize, usize>::new();
+    let mut inline_by_air = BTreeMap::<usize, usize>::new();
+    let mut crossing_by_air = BTreeMap::<usize, usize>::new();
+    for entry in &compact.raw_logs.program_log {
+        let slot = slot_for_pc(entry.pc());
+        let (instruction, _) = exe.program.instructions_and_debug_infos[slot]
+            .as_ref()
+            .expect("executed pc must name an instruction");
+        if !is_loadstore_opcode(instruction.opcode) {
+            continue;
+        }
+        let air = pc_to_air_idx[slot].expect("load/store pc must map to an AIR");
+        *metered_by_air.entry(air).or_default() += 1;
+        if compact.inline_pc_slots[slot] {
+            *inline_by_air.entry(air).or_default() += 1;
+        }
+        if entry.crossing_residual() {
+            *crossing_by_air.entry(air).or_default() += 1;
+            let is_load = is_load_opcode(instruction.opcode);
+            let first_timestamp = entry.timestamp + if is_load { 1 } else { 2 };
+            let kind = u8::from(!is_load);
+            let events = compact
+                .raw_logs
+                .memory_log
+                .iter()
+                .filter(|event| {
+                    event.kind == kind
+                        && (event.timestamp == first_timestamp
+                            || event.timestamp == first_timestamp + 1)
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(
+                events.len(),
+                2,
+                "crossing pc {:#x} must retain exactly two residual blocks",
+                entry.pc()
+            );
+            assert_eq!(events[0].width, 8);
+            assert_eq!(events[1].width, 8);
+            assert_eq!(events[1].address, events[0].address + 8);
+            assert_eq!(events[0].addr_space, events[1].addr_space);
+        }
+    }
+    assert_eq!(
+        crossing_by_air.values().sum::<usize>(),
+        9,
+        "fixture crossing marker count drifted"
+    );
+    for (&air, &inline_rows) in &inline_by_air {
+        let wire_rows = compact_rows.get(&air).copied().unwrap_or(0);
+        let residual_rows = crossing_by_air.get(&air).copied().unwrap_or(0);
+        assert_eq!(wire_rows, inline_rows, "AIR {air}: compact row count");
+        assert!(wire_rows >= residual_rows, "AIR {air}: residual overcount");
+        let fast_rows = wire_rows - residual_rows;
+        assert_eq!(
+            fast_rows + residual_rows,
+            inline_rows,
+            "AIR {air}: fast + residual must equal metered inline rows"
+        );
+    }
+    for (&air, &metered_rows) in &metered_by_air {
+        let inline_rows = inline_by_air.get(&air).copied().unwrap_or(0);
+        let crossing_rows = crossing_by_air.get(&air).copied().unwrap_or(0);
+        let fast_rows = inline_rows - crossing_rows;
+        let verbose_fallback_rows = metered_rows - inline_rows;
+        let residual_sourced_rows = crossing_rows + verbose_fallback_rows;
+        assert_eq!(
+            fast_rows + residual_sourced_rows,
+            metered_rows,
+            "AIR {air}: fast + residual-sourced rows must equal metered rows"
+        );
+        let bytes = verbose_arenas[air].allocated().len();
+        assert_eq!(bytes % metered_rows, 0, "AIR {air}: partial record row");
+        let stride = bytes / metered_rows;
+        assert!(
+            matches!(stride, 48 | 60),
+            "AIR {air}: record stride {stride}"
+        );
+        assert_eq!(
+            compact_arenas[air].allocated().len() / stride,
+            metered_rows,
+            "AIR {air}: compact decoded row count"
+        );
+        assert_eq!(
+            delta_arenas[air].allocated().len() / stride,
+            metered_rows,
+            "AIR {air}: delta decoded row count"
+        );
+    }
+}
+
+/// The AS=2-only fixture keeps every width in the device-candidate set. Its
+/// CPU compact/delta decoders remain byte oracles for the CUDA/G2 consumers.
+#[test]
+fn rvr_preflight_two_block_device_candidate_decoders_match_verbose_records() {
+    let exe = two_block_main_memory_exe();
+
+    std::env::set_var("OPENVM_RVR_INLINE_RECORDS", "0");
+    std::env::remove_var("OPENVM_RVR_GPU_RECORDS");
+    let (verbose, verbose_arenas, _, _) = run_two_block_loadstore_arm(&exe);
+
+    std::env::set_var("OPENVM_RVR_INLINE_RECORDS", "1");
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "compact");
+    let (compact, compact_arenas, pc_to_air_idx, _) = run_two_block_loadstore_arm(&exe);
+
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "delta");
+    let (delta, delta_arenas, _, _) = run_two_block_loadstore_arm(&exe);
+
+    assert_system_records_eq(
+        "two_block_device_verbose_compact",
+        &verbose.system_records,
+        &compact.system_records,
+    );
+    assert_system_records_eq(
+        "two_block_device_verbose_delta",
+        &verbose.system_records,
+        &delta.system_records,
+    );
+    for air in 0..verbose_arenas.len() {
+        assert_eq!(
+            verbose_arenas[air].allocated(),
+            compact_arenas[air].allocated(),
+            "compact device-candidate records differ for AIR {air}"
+        );
+        assert_eq!(
+            verbose_arenas[air].allocated(),
+            delta_arenas[air].allocated(),
+            "delta device-candidate records differ for AIR {air}"
+        );
+    }
+
+    let delta_airs = delta
+        .delta_decode_precomputed
+        .as_ref()
+        .expect("delta fixture must carry decode metadata")
+        .kind_to_air
+        .iter()
+        .map(|&(_, air)| air)
+        .collect::<std::collections::BTreeSet<_>>();
+    for (slot, entry) in exe.program.instructions_and_debug_infos.iter().enumerate() {
+        let Some((instruction, _)) = entry else {
+            continue;
+        };
+        if is_loadstore_opcode(instruction.opcode) {
+            let air = pc_to_air_idx[slot].expect("load/store pc must map to an AIR");
+            assert!(
+                delta_airs.contains(&air),
+                "AS=2 load/store AIR {air} must remain delta-device-decodable"
+            );
+        }
+    }
+}
+
+/// Byte oracle for the arena-native consumer. This stages every eligible AIR
+/// directly into its upstream record geometry and compares the written prefix
+/// with the verbose assembler, including both crossing and non-crossing rows.
+#[test]
+fn rvr_preflight_two_block_arena_native_matches_verbose_records() {
+    use openvm_circuit::arch::rvr::{ArenaNativeLayout, ChipRecordBuf};
+
+    let exe = two_block_loadstore_exe();
+    std::env::set_var("OPENVM_RVR_INLINE_RECORDS", "0");
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
+    std::env::remove_var("OPENVM_RVR_GPU_RECORDS");
+    let (oracle_output, oracle_arenas, _, _) = run_two_block_loadstore_arm(&exe);
+
+    std::env::set_var("OPENVM_RVR_INLINE_RECORDS", "1");
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "1");
+    let config = Rv64ImConfig::with_public_values_bytes(32);
+    let (vm, _) = VirtualMachine::new_with_keygen(test_cpu_engine(), Rv64ImCpuBuilder, config)
+        .expect("two-block arena-native vm init");
+    let heights = vec![4096u32; vm.num_airs()];
+    let capacities = heights
+        .iter()
+        .zip(vm.pk().per_air.iter())
+        .map(|(&height, pk)| (height as usize, pk.vk.params.width.main_width()))
+        .collect::<Vec<_>>();
+    let pc_to_air_idx = vm.pc_to_air_idx(&exe).expect("pc to air mapping");
+    let RvrPreflightRoute::Rvr(instance) = vm
+        .preflight_routed_instance(&exe)
+        .expect("two-block arena-native route")
+    else {
+        panic!("two-block program must route to RVR preflight");
+    };
+    let arena_native = instance
+        .compiled()
+        .inline_records()
+        .arena_native_airs
+        .clone();
+    assert!(!arena_native.is_empty());
+
+    let mut saw_byte_geometry = false;
+    let mut saw_multi_geometry = false;
+    let mut stagings = Vec::new();
+    let mut targets = BTreeMap::new();
+    for &(air, geometry) in &arena_native {
+        if let ArenaNativeLayout::LoadStore(offsets) = geometry.layout {
+            let is_multi = offsets.read_data_aux_prev_ts2 != usize::MAX
+                || offsets.write_prev_ts2 != usize::MAX;
+            if is_multi {
+                saw_multi_geometry = true;
+                assert_eq!(geometry.stride_dense(), 60);
+            } else {
+                saw_byte_geometry = true;
+                assert_eq!(geometry.stride_dense(), 48);
+            }
+        }
+        let stride = geometry.stride_dense();
+        let (mut backing, offset) =
+            DenseRecordArena::backing_with_capacity(heights[air] as usize * stride);
+        let base = unsafe { backing.as_mut_ptr().add(offset) };
+        targets.insert(
+            air,
+            ChipRecordBuf {
+                base,
+                len: 0,
+                cap: (heights[air] as usize * stride) as u32,
+                stride: stride as u32,
+                core_off: geometry.core_off_dense() as u32,
+                flags: openvm_circuit::arch::rvr::PREFLIGHT_CHIP_RECORD_FLAG_DIRECT_FINAL,
+            },
+        );
+        stagings.push((air, geometry, stride, backing, base));
+    }
+    assert!(
+        saw_byte_geometry,
+        "fixture must stage byte load/store records"
+    );
+    assert!(
+        saw_multi_geometry,
+        "fixture must stage multi-byte load/store records"
+    );
+
+    let state = vm.create_initial_state(&exe, Streams::default());
+    let mut direct_output = instance
+        .execute_preflight_from_state_with_arena_targets(
+            state,
+            Some(oracle_output.instret),
+            &heights,
+            &targets,
+        )
+        .expect("two-block arena-native execution");
+    let direct_arenas = crate::log_native::generate_rv64im_record_arenas_from_logs::<
+        F,
+        DenseRecordArena,
+    >(&exe, &mut direct_output, &capacities, &pc_to_air_idx)
+    .expect("two-block arena-native residual assembly");
+    assert_system_records_eq(
+        "two_block_verbose_arena_native",
+        &oracle_output.system_records,
+        &direct_output.system_records,
+    );
+
+    let direct_air_set = stagings
+        .iter()
+        .map(|&(air, ..)| air)
+        .collect::<std::collections::BTreeSet<_>>();
+    for (air, geometry, stride, backing, base) in stagings {
+        let written = direct_output
+            .arena_native_written
+            .iter()
+            .find(|&&(written_air, _)| written_air == air)
+            .map(|&(_, rows)| rows as usize)
+            .expect("arena-native AIR must report a written count");
+        let direct = DenseRecordArena::from_prewritten(backing, base, written * stride);
+        assert_eq!(
+            oracle_arenas[air].allocated(),
+            direct.allocated(),
+            "AIR {air}: arena-native records differ from verbose assembly ({geometry:?})"
+        );
+    }
+    for (air, (oracle, direct)) in oracle_arenas.iter().zip(&direct_arenas).enumerate() {
+        if !direct_air_set.contains(&air) {
+            assert_eq!(
+                oracle.allocated(),
+                direct.allocated(),
+                "AIR {air}: residual-assembled records differ from verbose assembly"
+            );
+        }
+    }
+}
+
+#[test]
+fn rvr_preflight_two_block_records_prove_and_verify() {
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "compact");
+    let segments = prove_rvr_preflight_and_verify(
+        two_block_loadstore_exe(),
+        Rv64ImConfig::with_public_values_bytes(32),
+    );
+    assert_eq!(segments, 1);
+}
+
+#[test]
+fn rvr_preflight_two_block_compact_bypass_preserves_wire_rows() {
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
+    std::env::set_var("OPENVM_RVR_INLINE_RECORDS", "1");
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "compact");
+    let exe = two_block_main_memory_exe();
+    let (vm, _) = VirtualMachine::new_with_keygen(
+        test_cpu_engine(),
+        Rv64ImCpuBuilder,
+        Rv64ImConfig::default(),
+    )
+    .expect("two-block compact-bypass vm init");
+    let capacities = vec![4096u32; vm.num_airs()]
+        .iter()
+        .zip(vm.pk().per_air.iter())
+        .map(|(&height, pk)| (height as usize, pk.vk.params.width.main_width()))
+        .collect::<Vec<_>>();
+    let pc_to_air_idx = vm.pc_to_air_idx(&exe).expect("pc to air mapping");
+    let mut output = {
+        let RvrPreflightRoute::Rvr(instance) = vm
+            .preflight_routed_instance(&exe)
+            .expect("routed compact-bypass instance")
+        else {
+            panic!("two-block program must route to RVR preflight");
+        };
+        instance
+            .execute_preflight(Streams::default(), None)
+            .expect("two-block compact-bypass execution")
+    };
+    let all_wire = output
+        .inline_records
+        .iter()
+        .map(|chip| (chip.air_idx, chip.bytes.clone()))
+        .collect::<BTreeMap<_, _>>();
+    let compact_airs = crate::rvr_gpu_decode::RvrGpuDecodeState::compact_record_airs(
+        &exe,
+        &pc_to_air_idx,
+        &output.inline_pc_slots,
+        output.delta_decode_precomputed.as_deref(),
+    );
+    for (slot, entry) in exe.program.instructions_and_debug_infos.iter().enumerate() {
+        let Some((instruction, _)) = entry else {
+            continue;
+        };
+        if is_loadstore_opcode(instruction.opcode) {
+            let air = pc_to_air_idx[slot].expect("load/store pc must map to an AIR");
+            assert!(
+                compact_airs.contains(&air),
+                "AS=2 load/store AIR {air} must remain device-expandable"
+            );
+        }
+    }
+    let expected = all_wire
+        .into_iter()
+        .filter(|(air, _)| compact_airs.contains(air))
+        .collect::<BTreeMap<_, _>>();
+    let mut registry = LogNativeAssemblerRegistry::<F, DenseRecordArena>::new();
+    Rv64ImConfig::default().extend_rvr_log_native(&mut registry);
+    let (arenas, wire) = openvm_circuit::arch::rvr::generate_record_arenas_from_logs_with_compact(
+        &registry,
+        &exe,
+        &mut output,
+        &capacities,
+        &pc_to_air_idx,
+        &compact_airs,
+    )
+    .expect("two-block compact bypass");
+    assert_eq!(wire.len(), expected.len());
+    for chip in wire {
+        assert_eq!(chip.bytes, expected[&chip.air_idx]);
+        assert!(arenas[chip.air_idx].allocated().is_empty());
+    }
+}
+
+#[cfg(feature = "cuda")]
+#[test]
+fn rvr_gpu_two_block_compact_residual_proves_and_verifies() {
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "compact");
+    let segments = prove_gpu_rvr_preflight_and_verify_with_streams(
+        two_block_main_memory_exe(),
+        Rv64ImConfig::default(),
+        Streams::default(),
+    );
+    assert_eq!(segments, 1);
+}
+
+#[cfg(feature = "cuda")]
+#[test]
+fn rvr_gpu_two_block_delta_residual_proves_and_verifies() {
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "delta");
+    let segments = prove_gpu_rvr_preflight_and_verify_with_streams(
+        two_block_main_memory_exe(),
+        Rv64ImConfig::default(),
+        Streams::default(),
+    );
+    assert_eq!(segments, 1);
 }
 
 #[test]

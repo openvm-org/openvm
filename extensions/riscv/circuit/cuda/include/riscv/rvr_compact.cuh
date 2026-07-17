@@ -387,15 +387,15 @@ rvr_decode_alu3_bytes(RvrAlu3Compact const &rec, RvrOperandEntry const &entry) {
 // Device mirrors of the width-specific load and store adapter reconstruction.
 // The compact record contains chronological values; the operand table supplies
 // the instruction-static pointers, immediate, and address-space selector.
-__device__ __forceinline__ Rv64LoadAdapterRecord
-rvr_decode_alu3_load(RvrAlu3Compact const &rec, RvrOperandEntry const &entry) {
-    Rv64LoadAdapterRecord out;
+__device__ __forceinline__ Rv64LoadByteAdapterRecord
+rvr_decode_alu3_load_byte(RvrAlu3Compact const &rec, RvrOperandEntry const &entry) {
+    Rv64LoadByteAdapterRecord out;
     out.from_pc = rec.from_pc;
     out.from_timestamp = rec.from_timestamp;
     out.rs1_ptr = entry.b;
     out.rs1_aux_record.prev_timestamp = rec.reads_prev_timestamp[0];
     out.rs1_val = rec.b[0];
-    out.rd_ptr = (entry.flags & RVR_OPERAND_FLAG_WRITE_ENABLED) ? entry.a : UINT32_MAX;
+    out.rd_ptr = (entry.flags & RVR_OPERAND_FLAG_WRITE_ENABLED) ? (uint8_t)entry.a : UINT8_MAX;
     out.read_data_aux.prev_timestamp = rec.reads_prev_timestamp[1];
     out.imm = (uint16_t)entry.c;
     out.imm_sign = (entry.flags & RVR_OPERAND_FLAG_LS_IMM_SIGN) != 0;
@@ -407,9 +407,30 @@ rvr_decode_alu3_load(RvrAlu3Compact const &rec, RvrOperandEntry const &entry) {
     return out;
 }
 
-__device__ __forceinline__ Rv64StoreAdapterRecord
-rvr_decode_alu3_store(RvrAlu3Compact const &rec, RvrOperandEntry const &entry) {
-    Rv64StoreAdapterRecord out;
+__device__ __forceinline__ Rv64LoadMultiByteAdapterRecord
+rvr_decode_alu3_load_multi(RvrAlu3Compact const &rec, RvrOperandEntry const &entry) {
+    Rv64LoadMultiByteAdapterRecord out;
+    out.from_pc = rec.from_pc;
+    out.from_timestamp = rec.from_timestamp;
+    out.rs1_ptr = (uint8_t)entry.b;
+    out.rs1_aux_record.prev_timestamp = rec.reads_prev_timestamp[0];
+    out.rs1_val = rec.b[0];
+    out.rd_ptr = (entry.flags & RVR_OPERAND_FLAG_WRITE_ENABLED) ? (uint8_t)entry.a : UINT8_MAX;
+    out.read_data_aux[0].prev_timestamp = rec.reads_prev_timestamp[1];
+    out.read_data_aux[1].prev_timestamp = UINT32_MAX;
+    out.imm = (uint16_t)entry.c;
+    out.imm_sign = (entry.flags & RVR_OPERAND_FLAG_LS_IMM_SIGN) != 0;
+    out.write_prev_timestamp = rec.write_prev_timestamp;
+#pragma unroll
+    for (size_t i = 0; i < BLOCK_FE_WIDTH; i++) {
+        out.write_prev_data[i] = rvr_u16_limb(rec.write_prev_data, i);
+    }
+    return out;
+}
+
+__device__ __forceinline__ Rv64StoreByteAdapterRecord
+rvr_decode_alu3_store_byte(RvrAlu3Compact const &rec, RvrOperandEntry const &entry) {
+    Rv64StoreByteAdapterRecord out;
     out.from_pc = rec.from_pc;
     out.from_timestamp = rec.from_timestamp;
     out.rs1_ptr = entry.b;
@@ -421,6 +442,24 @@ rvr_decode_alu3_store(RvrAlu3Compact const &rec, RvrOperandEntry const &entry) {
     out.imm_sign = (entry.flags & RVR_OPERAND_FLAG_LS_IMM_SIGN) != 0;
     out.mem_as = (entry.flags & RVR_OPERAND_FLAG_LS_PUBLIC_VALUES) ? 3 : 2;
     out.write_prev_timestamp = rec.write_prev_timestamp;
+    return out;
+}
+
+__device__ __forceinline__ Rv64StoreMultiByteAdapterRecord
+rvr_decode_alu3_store_multi(RvrAlu3Compact const &rec, RvrOperandEntry const &entry) {
+    Rv64StoreMultiByteAdapterRecord out;
+    out.from_pc = rec.from_pc;
+    out.from_timestamp = rec.from_timestamp;
+    out.rs1_ptr = (uint8_t)entry.b;
+    out.rs1_aux_record.prev_timestamp = rec.reads_prev_timestamp[0];
+    out.rs1_val = rec.b[0];
+    out.rs2_ptr = (uint8_t)entry.a;
+    out.read_data_aux.prev_timestamp = rec.reads_prev_timestamp[1];
+    out.imm = (uint16_t)entry.c;
+    out.imm_sign = (entry.flags & RVR_OPERAND_FLAG_LS_IMM_SIGN) != 0;
+    out.mem_as = (entry.flags & RVR_OPERAND_FLAG_LS_PUBLIC_VALUES) ? 3 : 2;
+    out.write_prev_timestamps[0] = rec.write_prev_timestamp;
+    out.write_prev_timestamps[1] = UINT32_MAX;
     return out;
 }
 

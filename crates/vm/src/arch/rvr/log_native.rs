@@ -127,6 +127,18 @@ struct RegisteredAssembler<F, RA> {
 pub type LogNativeInlineAssembler<F, RA> =
     fn(&mut RA, &Instruction<F>, &[u8], u32) -> Result<(), ExecutionError>;
 
+/// Rare crossing-row assembler. Register/predecessor data stays in the
+/// compact record while the two memory blocks and their predecessors are
+/// consumed from the residual access log.
+pub type LogNativeCrossingAssembler<F, RA> = for<'a> fn(
+    &mut RA,
+    &LogNativeAccessView<'a, F>,
+    &Instruction<F>,
+    &[u8],
+    u32,
+    u32,
+) -> Result<(), ExecutionError>;
+
 /// R4 arena-native geometry types live in `rvr_openvm` (codegen consumes
 /// them to bake literal store offsets); extensions supply the values from
 /// the real record types at registration. Re-exported here so extension
@@ -141,14 +153,15 @@ struct RegisteredInlineAssembler<F, RA> {
     /// Compact record stride in bytes; must match the compile metadata.
     record_size: usize,
     assemble: LogNativeInlineAssembler<F, RA>,
+    crossing_assemble: Option<LogNativeCrossingAssembler<F, RA>>,
     /// Present iff this family has an R4 arena-native emitter: the generated
     /// C then writes the full record at final arena positions and the host
     /// skips `assemble` for it entirely. Families without geometry keep the
     /// R3 compact wire + host expansion, so R4 rolls out shape by shape.
     arena_native: Option<ArenaNativeGeometry>,
     delta_pattern: Option<DeltaAccessPattern>,
-    /// Width used to reconstruct a Store-pattern block update from v2.
-    delta_store_width: Option<u8>,
+    /// Width used to reconstruct Load/Store timestamp geometry and writes.
+    delta_memory_width: Option<u8>,
 }
 
 /// How one chronological Stage-2 delta record touches timestamp-shadow
@@ -285,13 +298,33 @@ impl<F, RA> LogNativeAssemblerRegistry<F, RA> {
                         RegisteredInlineAssembler {
                             record_size,
                             assemble: assembler,
+                            crossing_assemble: None,
                             arena_native,
                             delta_pattern: None,
-                            delta_store_width: None,
+                            delta_memory_width: None,
                         }
                     )
                     .is_none(),
                 "multiple inline record assemblers registered for opcode {opcode:?}"
+            );
+        }
+    }
+
+    /// Attach the residual two-block assembler for an inline load/store
+    /// family. This is separate from registration so ordinary compact
+    /// families remain source-compatible.
+    pub fn register_inline_crossing(
+        &mut self,
+        opcodes: impl IntoIterator<Item = VmOpcode>,
+        assembler: LogNativeCrossingAssembler<F, RA>,
+    ) {
+        for opcode in opcodes {
+            let registered = self.inline_assemblers.get_mut(&opcode).unwrap_or_else(|| {
+                panic!("crossing assembler without inline assembler for {opcode:?}")
+            });
+            assert!(
+                registered.crossing_assemble.replace(assembler).is_none(),
+                "multiple crossing assemblers registered for opcode {opcode:?}"
             );
         }
     }
@@ -320,7 +353,7 @@ impl<F, RA> LogNativeAssemblerRegistry<F, RA> {
     /// Attach the byte width for a Stage-2 Store-pattern opcode. The delta
     /// record carries the scalar source while CPU/CUDA replay patches the
     /// seeded pre-write block.
-    pub fn register_delta_store_width(
+    pub fn register_delta_memory_width(
         &mut self,
         opcodes: impl IntoIterator<Item = VmOpcode>,
         width: u8,
@@ -328,12 +361,15 @@ impl<F, RA> LogNativeAssemblerRegistry<F, RA> {
         assert!(matches!(width, 1 | 2 | 4 | 8));
         for opcode in opcodes {
             let registered = self.inline_assemblers.get_mut(&opcode).unwrap_or_else(|| {
-                panic!("delta store width without inline assembler for {opcode:?}")
+                panic!("delta memory width without inline assembler for {opcode:?}")
             });
-            assert_eq!(registered.delta_pattern, Some(DeltaAccessPattern::Store));
+            assert!(matches!(
+                registered.delta_pattern,
+                Some(DeltaAccessPattern::Load | DeltaAccessPattern::Store)
+            ));
             assert!(
-                registered.delta_store_width.replace(width).is_none(),
-                "multiple delta store widths registered for opcode {opcode:?}"
+                registered.delta_memory_width.replace(width).is_none(),
+                "multiple delta memory widths registered for opcode {opcode:?}"
             );
         }
     }
@@ -599,6 +635,17 @@ pub fn generate_record_arenas_from_logs_with_compact<F: PrimeField32, RA: Arena 
             arena_native_skipped += 1;
             continue;
         }
+        // Device delta rows have no per-AIR compact buffer: the chronological
+        // delta stream and its crossing residuals are partitioned together on
+        // device. Keep the marker in `program_log` for that replay, but do not
+        // route it through host record assembly. Compact-wire fallback does
+        // have a buffer and still consumes the row below as an order guard.
+        if compact_airs.contains(&air_idx)
+            && program_entry.crossing_residual()
+            && !inline_by_air.contains_key(&air_idx)
+        {
+            continue;
+        }
         let num_arenas = work_by_air.len();
         let lane = work_by_air.get_mut(air_idx).ok_or_else(|| {
             rvr_error(format!(
@@ -841,6 +888,24 @@ fn merge_record_air<F: PrimeField32, RA: Arena>(
                 stats.compact_seen += 1;
                 continue;
             }
+            if program_entry.crossing_residual() {
+                let crossing_assemble = registered.crossing_assemble.ok_or_else(|| {
+                    rvr_error(format!(
+                        "pc {pc:#x} has a crossing residual marker but opcode {:?} has no crossing assembler",
+                        instruction.opcode
+                    ))
+                })?;
+                crossing_assemble(
+                    &mut arena,
+                    &access,
+                    instruction,
+                    compact,
+                    pc,
+                    program_entry.timestamp,
+                )?;
+                stats.host_assembled += 1;
+                continue;
+            }
             (registered.assemble)(&mut arena, instruction, compact, pc)?;
             stats.host_assembled += 1;
             continue;
@@ -946,8 +1011,13 @@ fn append_u64(out: &mut Vec<u8>, value: u64) {
     out.extend_from_slice(&value.to_le_bytes());
 }
 
-fn delta_access_count(pattern: DeltaAccessPattern) -> usize {
+fn delta_access_count(pattern: DeltaAccessPattern, memory_width: Option<u8>) -> usize {
     match pattern {
+        DeltaAccessPattern::Load | DeltaAccessPattern::Store
+            if memory_width.is_some_and(|width| width > 1) =>
+        {
+            4
+        }
         DeltaAccessPattern::Alu3
         | DeltaAccessPattern::Alu3Reg
         | DeltaAccessPattern::Load
@@ -961,7 +1031,8 @@ fn delta_accesses<F: PrimeField32>(
     instruction: &Instruction<F>,
     pattern: DeltaAccessPattern,
     v1: u64,
-) -> [Option<(u8, u64)>; 3] {
+    memory_width: Option<u8>,
+) -> [Option<(u8, u64)>; 4] {
     let reg = |ptr: u32| {
         Some((
             openvm_instructions::riscv::RV64_REGISTER_AS as u8,
@@ -976,12 +1047,13 @@ fn delta_accesses<F: PrimeField32>(
         } else {
             i64::from(imm)
         };
-        (v1 as u32).wrapping_add(offset as u32) as u64 & !7u64
+        (v1 as u32).wrapping_add(offset as u32) as u64
     };
     match pattern {
         DeltaAccessPattern::AddI => [
             reg(instruction.b.as_canonical_u32()),
             reg(instruction.a.as_canonical_u32()),
+            tick,
             tick,
         ],
         DeltaAccessPattern::Alu3 => [
@@ -992,29 +1064,62 @@ fn delta_accesses<F: PrimeField32>(
                 tick
             },
             reg(instruction.a.as_canonical_u32()),
+            tick,
         ],
         DeltaAccessPattern::Alu3Reg => [
             reg(instruction.b.as_canonical_u32()),
             reg(instruction.c.as_canonical_u32()),
             reg(instruction.a.as_canonical_u32()),
+            tick,
         ],
-        DeltaAccessPattern::Load => [
-            reg(instruction.b.as_canonical_u32()),
-            Some((instruction.e.as_canonical_u32() as u8, memory_address())),
-            if instruction.f.is_one() {
+        DeltaAccessPattern::Load => {
+            let rd = if instruction.f.is_one() {
                 reg(instruction.a.as_canonical_u32())
+            } else {
+                tick
+            };
+            let memory0 = Some((
+                instruction.e.as_canonical_u32() as u8,
+                memory_address() & !7,
+            ));
+            if memory_width.is_some_and(|width| width > 1) {
+                let memory1 = if memory_width
+                    .is_some_and(|width| (memory_address() & 7) + u64::from(width) > 8)
+                {
+                    Some((
+                        instruction.e.as_canonical_u32() as u8,
+                        (memory_address() & !7) + 8,
+                    ))
+                } else {
+                    tick
+                };
+                [reg(instruction.b.as_canonical_u32()), memory0, memory1, rd]
+            } else {
+                [reg(instruction.b.as_canonical_u32()), memory0, rd, tick]
+            }
+        }
+        DeltaAccessPattern::Store => [
+            reg(instruction.b.as_canonical_u32()),
+            reg(instruction.a.as_canonical_u32()),
+            Some((
+                instruction.e.as_canonical_u32() as u8,
+                memory_address() & !7,
+            )),
+            if memory_width
+                .is_some_and(|width| width > 1 && (memory_address() & 7) + u64::from(width) > 8)
+            {
+                Some((
+                    instruction.e.as_canonical_u32() as u8,
+                    (memory_address() & !7) + 8,
+                ))
             } else {
                 tick
             },
         ],
-        DeltaAccessPattern::Store => [
-            reg(instruction.b.as_canonical_u32()),
-            reg(instruction.a.as_canonical_u32()),
-            Some((instruction.e.as_canonical_u32() as u8, memory_address())),
-        ],
         DeltaAccessPattern::Branch2 => [
             reg(instruction.a.as_canonical_u32()),
             reg(instruction.b.as_canonical_u32()),
+            tick,
             tick,
         ],
         DeltaAccessPattern::Wr1 => [
@@ -1025,8 +1130,9 @@ fn delta_accesses<F: PrimeField32>(
             },
             tick,
             tick,
+            tick,
         ],
-        DeltaAccessPattern::Wr1Always => [reg(instruction.a.as_canonical_u32()), tick, tick],
+        DeltaAccessPattern::Wr1Always => [reg(instruction.a.as_canonical_u32()), tick, tick, tick],
         DeltaAccessPattern::Rw1 => [
             reg(instruction.b.as_canonical_u32()),
             if instruction.f.is_one() {
@@ -1035,17 +1141,18 @@ fn delta_accesses<F: PrimeField32>(
                 tick
             },
             tick,
+            tick,
         ],
     }
 }
 
 fn replay_delta_touches(
     last_touch: &mut HashMap<(u8, u64), u32>,
-    accesses: [Option<(u8, u64)>; 3],
+    accesses: [Option<(u8, u64)>; 4],
     access_count: usize,
     timestamp: u32,
-) -> [u32; 3] {
-    let mut prev = [0u32; 3];
+) -> [u32; 4] {
+    let mut prev = [0u32; 4];
     for (offset, access) in accesses.into_iter().take(access_count).enumerate() {
         if let Some((addr_space, address)) = access {
             let key = (addr_space, address & !7u64);
@@ -1059,13 +1166,23 @@ fn replay_delta_touches(
 fn delta_write_slot<F: PrimeField32>(
     instruction: &Instruction<F>,
     pattern: DeltaAccessPattern,
+    memory_width: Option<u8>,
 ) -> Option<usize> {
     match pattern {
         DeltaAccessPattern::AddI => Some(1),
         DeltaAccessPattern::Alu3 | DeltaAccessPattern::Alu3Reg | DeltaAccessPattern::Store => {
             Some(2)
         }
-        DeltaAccessPattern::Load => instruction.f.is_one().then_some(2),
+        DeltaAccessPattern::Load => {
+            instruction
+                .f
+                .is_one()
+                .then_some(if memory_width.is_some_and(|width| width > 1) {
+                    3
+                } else {
+                    2
+                })
+        }
         DeltaAccessPattern::Branch2 => None,
         DeltaAccessPattern::Wr1 => instruction.f.is_one().then_some(0),
         DeltaAccessPattern::Wr1Always => Some(0),
@@ -1087,6 +1204,11 @@ fn patch_delta_store<F: PrimeField32>(
         i64::from(imm)
     };
     let address = (base as u32).wrapping_add(offset as u32);
+    if (address & 7) + u32::from(width) > 8 {
+        // Both post-write blocks arrive in the residual stream. This value is
+        // only the ignored compact placeholder for the crossing row.
+        return previous;
+    }
     let shift = (address & 7) * 8;
     let mask = if width == 8 {
         u64::MAX
@@ -1211,6 +1333,13 @@ pub fn expand_delta_records<F: PrimeField32, RA: Arena>(
             entry.timestamp
         )));
     }
+    let crossing_rows = output
+        .raw_logs
+        .program_log
+        .iter()
+        .filter(|entry| entry.crossing_residual())
+        .map(|entry| ((entry.timestamp, entry.pc()), *entry))
+        .collect::<HashMap<_, _>>();
 
     // The residual memory log is already in timestamp order. Merge its
     // accesses into the same last-touch map before each chronological delta
@@ -1243,6 +1372,9 @@ pub fn expand_delta_records<F: PrimeField32, RA: Arena>(
         .collect::<std::collections::HashSet<_>>();
     let mut arena_events = Vec::new();
     for entry in &output.raw_logs.program_log {
+        if entry.crossing_residual() {
+            continue;
+        }
         let pc = entry.pc();
         let Some((instruction, air_idx, _)) = instruction_and_air_idx(exe, pc_to_air_idx, pc)?
         else {
@@ -1338,14 +1470,14 @@ pub fn expand_delta_records<F: PrimeField32, RA: Arena>(
                     "arena-native chronology pc {pc:#x} has no routed AIR"
                 )));
             };
-            let accesses = delta_accesses(instruction, pattern, 0);
+            let accesses = delta_accesses(instruction, pattern, 0, None);
             replay_delta_touches(
                 &mut last_touch,
                 accesses,
-                delta_access_count(pattern),
+                delta_access_count(pattern, None),
                 timestamp,
             );
-            if let Some(slot) = delta_write_slot(instruction, pattern) {
+            if let Some(slot) = delta_write_slot(instruction, pattern, None) {
                 let key = accesses[slot].ok_or_else(|| {
                     rvr_error(format!(
                         "arena-native chronology pc {pc:#x} omitted its write address"
@@ -1391,15 +1523,16 @@ pub fn expand_delta_records<F: PrimeField32, RA: Arena>(
             ))
         })?;
 
-        let accesses = delta_accesses(instruction, pattern, record.v1);
+        let memory_width = registered.delta_memory_width;
+        let accesses = delta_accesses(instruction, pattern, record.v1, memory_width);
         let prev = replay_delta_touches(
             &mut last_touch,
             accesses,
-            delta_access_count(pattern),
+            delta_access_count(pattern, memory_width),
             record.from_timestamp,
         );
         let mut write_prev_value = 0;
-        if let Some(slot) = delta_write_slot(instruction, pattern) {
+        if let Some(slot) = delta_write_slot(instruction, pattern, memory_width) {
             let key = accesses[slot].ok_or_else(|| {
                 rvr_error(format!(
                     "delta pc {:#x} omitted its write address",
@@ -1413,7 +1546,7 @@ pub fn expand_delta_records<F: PrimeField32, RA: Arena>(
                 ))
             })?;
             let write_value = if pattern == DeltaAccessPattern::Store {
-                let width = registered.delta_store_width.ok_or_else(|| {
+                let width = registered.delta_memory_width.ok_or_else(|| {
                     rvr_error(format!(
                         "delta store pc {:#x} has no registered patch width",
                         record.from_pc
@@ -1457,13 +1590,25 @@ pub fn expand_delta_records<F: PrimeField32, RA: Arena>(
                 append_u64(out, record.v1);
                 append_u64(out, record.v2);
             }
-            DeltaAccessPattern::Alu3
-            | DeltaAccessPattern::Alu3Reg
-            | DeltaAccessPattern::Load
-            | DeltaAccessPattern::Store => {
+            DeltaAccessPattern::Alu3 | DeltaAccessPattern::Alu3Reg | DeltaAccessPattern::Store => {
                 append_u32(out, prev[0]);
                 append_u32(out, prev[1]);
                 append_u32(out, prev[2]);
+                append_u64(out, write_prev_value);
+                append_u64(out, record.v1);
+                append_u64(out, record.v2);
+            }
+            DeltaAccessPattern::Load => {
+                append_u32(out, prev[0]);
+                append_u32(out, prev[1]);
+                append_u32(
+                    out,
+                    prev[if memory_width.is_some_and(|width| width > 1) {
+                        3
+                    } else {
+                        2
+                    }],
+                );
                 append_u64(out, write_prev_value);
                 append_u64(out, record.v1);
                 append_u64(out, record.v2);
@@ -1485,7 +1630,12 @@ pub fn expand_delta_records<F: PrimeField32, RA: Arena>(
                 append_u64(out, write_prev_value);
             }
         }
-        synthetic_program.push(ProgramLogEntry::new(record.from_timestamp, record.from_pc));
+        synthetic_program.push(
+            crossing_rows
+                .get(&(record.from_timestamp, record.from_pc))
+                .copied()
+                .unwrap_or_else(|| ProgramLogEntry::new(record.from_timestamp, record.from_pc)),
+        );
     }
 
     // No later delta record consumes these touches, but replay the suffix to
@@ -1503,14 +1653,14 @@ pub fn expand_delta_records<F: PrimeField32, RA: Arena>(
                 "arena-native chronology pc {pc:#x} has no routed AIR"
             )));
         };
-        let accesses = delta_accesses(instruction, pattern, 0);
+        let accesses = delta_accesses(instruction, pattern, 0, None);
         replay_delta_touches(
             &mut last_touch,
             accesses,
-            delta_access_count(pattern),
+            delta_access_count(pattern, None),
             timestamp,
         );
-        if let Some(slot) = delta_write_slot(instruction, pattern) {
+        if let Some(slot) = delta_write_slot(instruction, pattern, None) {
             let key = accesses[slot].ok_or_else(|| {
                 rvr_error(format!(
                     "arena-native chronology pc {pc:#x} omitted its write address"
@@ -1535,6 +1685,10 @@ pub fn expand_delta_records<F: PrimeField32, RA: Arena>(
         })
         .collect::<Vec<_>>();
     output.inline_records.append(&mut decoded);
+    output
+        .raw_logs
+        .program_log
+        .retain(|entry| !entry.crossing_residual());
     output.raw_logs.program_log.extend(synthetic_program);
     output
         .raw_logs

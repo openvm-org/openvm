@@ -285,7 +285,7 @@ impl Rv64IoExtension {
 impl RvrExtension for Rv64IoExtension {
     fn codegen_fingerprint(&self) -> Option<Vec<u8>> {
         Some(air_index_codegen_fingerprint(
-            b"openvm-rv64io-rvr-v2",
+            b"openvm-rv64io-rvr-v3-two-block",
             &[self.hint_store_chip_idx],
         ))
     }

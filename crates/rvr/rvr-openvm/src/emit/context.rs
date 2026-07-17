@@ -454,6 +454,19 @@ impl<'a> EmitContext<'a> {
         }
     }
 
+    /// Multi-byte RV64 load/store adapters reserve a timestamp slot for the
+    /// optional second block. Generic traced memory helpers are also used by
+    /// custom instructions, so the RV64 instruction emitter owns the absent
+    /// non-crossing slot explicitly.
+    pub fn trace_absent_second_block(&mut self, base: &str, offset: i16, width: u8) {
+        if self.mode.traces_memory_values() && width > 1 {
+            let addr = Self::addr_expr(base, offset);
+            self.write_line(&format!(
+                "if (!preflight_crosses_block({addr}, {width}u)) trace_timestamp(state);"
+            ));
+        }
+    }
+
     /// R3 helper: emit a touch-only register read for a migrated opcode and
     /// capture the block's `prev_timestamp`. Returns the C value expression and
     /// the prev-timestamp variable name. `trace_reg_touch` consumes the exact
@@ -554,10 +567,14 @@ impl<'a> EmitContext<'a> {
         v1: &str,
         p1: &str,
         p2: &str,
+        p2_second: Option<&str>,
         addr: &str,
         read_data: &str,
+        read_data_second: Option<&str>,
         write_prev_ts: Option<&str>,
+        write_prev_ts_second: Option<&str>,
         prev_data: Option<&str>,
+        prev_data_second: Option<&str>,
     ) {
         let chip = self.current_chip_idx;
         let crate::ArenaNativeLayout::LoadStore(off) = geom.layout else {
@@ -577,13 +594,24 @@ impl<'a> EmitContext<'a> {
         for (offset, value) in [
             (off.from_pc, pc.to_string()),
             (off.from_timestamp, fromts.to_string()),
-            (off.rs1_ptr, format!("{}u", baked.rs1_ptr)),
             (off.rs1_val, format!("(uint32_t){v1}")),
             (off.rs1_aux_prev_ts, p1.to_string()),
-            (off.rd_rs2_ptr, format!("{}u", baked.rd_rs2_ptr)),
             (off.read_data_aux_prev_ts, p2.to_string()),
         ] {
             self.write_line(&format!("*(uint32_t*)({rec} + {offset}) = {value};"));
+        }
+        if off.read_data_aux_prev_ts2 != usize::MAX {
+            let p2_second = p2_second.expect("multi-block load requires second read timestamp");
+            self.write_line(&format!(
+                "*(uint32_t*)({rec} + {}) = {p2_second};",
+                off.read_data_aux_prev_ts2
+            ));
+        }
+        for (offset, value) in [
+            (off.rs1_ptr, baked.rs1_ptr),
+            (off.rd_rs2_ptr, baked.rd_rs2_ptr),
+        ] {
+            self.write_line(&format!("*(uint8_t*)({rec} + {offset}) = {value}u;"));
         }
         self.write_line(&format!(
             "*(uint16_t*)({rec} + {}) = {}u;",
@@ -603,6 +631,14 @@ impl<'a> EmitContext<'a> {
             self.write_line(&format!(
                 "*(uint32_t*)({rec} + {}) = {pw};",
                 off.write_prev_ts
+            ));
+        }
+        if off.write_prev_ts2 != usize::MAX {
+            let pw_second =
+                write_prev_ts_second.expect("multi-block store requires second write timestamp");
+            self.write_line(&format!(
+                "*(uint32_t*)({rec} + {}) = {pw_second};",
+                off.write_prev_ts2
             ));
         }
         if off.core_local_opcode != usize::MAX {
@@ -633,6 +669,14 @@ impl<'a> EmitContext<'a> {
             "arena_store_u64_le({core} + {}, {read_data});",
             off.core_read_data
         ));
+        if off.core_read_data2 != usize::MAX {
+            let read_data_second =
+                read_data_second.expect("multi-block load requires second read block");
+            self.write_line(&format!(
+                "arena_store_u64_le({core} + {}, {read_data_second});",
+                off.core_read_data2
+            ));
+        }
         if let Some(prev) = prev_data {
             if off.write_prev_data != usize::MAX {
                 self.write_line(&format!(
@@ -646,6 +690,13 @@ impl<'a> EmitContext<'a> {
                     off.core_prev_data
                 ));
             }
+        }
+        if off.core_prev_data2 != usize::MAX {
+            let prev = prev_data_second.expect("multi-block store requires second previous block");
+            self.write_line(&format!(
+                "arena_store_u64_le({core} + {}, {prev});",
+                off.core_prev_data2
+            ));
         }
         self.indent -= 1;
         self.write_line("}");
@@ -1361,9 +1412,45 @@ impl<'a> EmitContext<'a> {
             "uint64_t {block} = rd_mem_u64(memory, {blockaddr});"
         ));
         let p2 = self.next_var();
-        self.write_line(&format!(
-            "uint32_t {p2} = trace_mem_touch(state, {blockaddr}, {block});"
-        ));
+        let mut crossing_flag = None;
+        let mut block_second = None;
+        let mut p2_second = None;
+        if width == 1 {
+            self.write_line(&format!(
+                "uint32_t {p2} = trace_mem_touch(state, {blockaddr}, {block});"
+            ));
+        } else {
+            let crosses = self.next_var();
+            crossing_flag = Some(crosses.clone());
+            let block1 = self.next_var();
+            let p2_1 = self.next_var();
+            block_second = Some(block1.clone());
+            p2_second = Some(p2_1.clone());
+            self.write_line(&format!(
+                "bool {crosses} = preflight_crosses_block({addr}, {width}u);"
+            ));
+            self.write_line(&format!("uint32_t {p2};"));
+            self.write_line(&format!("uint64_t {block1} = 0u;"));
+            self.write_line(&format!("uint32_t {p2_1} = UINT32_MAX;"));
+            self.write_line(&format!("if (unlikely({crosses})) {{"));
+            self.indent += 1;
+            self.write_line(&format!(
+                "{p2} = trace_crossing_mem_read_blocks(state, {blockaddr}, {block}, &{block1}, \
+                 &{p2_1});"
+            ));
+            self.write_line(&format!(
+                "preflight_mark_program_crossing_residual(state->tracer, {pc}, {fromts});"
+            ));
+            self.indent -= 1;
+            self.write_line("} else {");
+            self.indent += 1;
+            self.write_line(&format!(
+                "{p2} = trace_mem_touch(state, {blockaddr}, {block});"
+            ));
+            self.write_line("trace_timestamp(state);");
+            self.indent -= 1;
+            self.write_line("}");
+        }
         let arena_geom = self.arena_native_airs.get(&chip).copied();
         let ls_baked = |rd_rs2_ptr: u32| ArenaLoadStoreBaked {
             rs1_ptr: (rs1 as u32) * 8,
@@ -1386,9 +1473,23 @@ impl<'a> EmitContext<'a> {
             // the record already carries the full block value.
             self.write_line("trace_timestamp(state);");
             if let Some(geom) = arena_geom {
-                let baked = ls_baked(u32::MAX);
+                let baked = ls_baked(u32::from(u8::MAX));
                 self.emit_arena_loadstore_stores(
-                    geom, baked, &pc, &fromts, &v1, &p1, &p2, &addr, &block, None, None,
+                    geom,
+                    baked,
+                    &pc,
+                    &fromts,
+                    &v1,
+                    &p1,
+                    &p2,
+                    p2_second.as_deref(),
+                    &addr,
+                    &block,
+                    block_second.as_deref(),
+                    None,
+                    None,
+                    None,
+                    None,
                 );
             } else if self.delta_records {
                 self.emit_delta2(&pc, &fromts, &v1, &block);
@@ -1400,19 +1501,8 @@ impl<'a> EmitContext<'a> {
             }
         } else {
             let val = self.next_var();
-            let (var_ty, cast_ty) = match (width, signed) {
-                (1, false) => ("uint32_t", "uint8_t"),
-                (1, true) => ("int32_t", "int8_t"),
-                (2, false) => ("uint32_t", "uint16_t"),
-                (2, true) => ("int32_t", "int16_t"),
-                (4, false) => ("uint32_t", "uint32_t"),
-                (4, true) => ("int32_t", "int32_t"),
-                (8, _) => ("uint64_t", "uint64_t"),
-                _ => unreachable!("invalid memory width {width}"),
-            };
-            self.write_line(&format!(
-                "{var_ty} {val} = ({cast_ty})({block} >> ((uint32_t)({addr} & 7u) * 8u));"
-            ));
+            let (read_func, var_ty) = Self::read_mem_helper(width, signed, false);
+            self.write_line(&format!("{var_ty} {val} = {read_func}(memory, {addr});"));
             let rdprev = (!self.delta_records || arena_geom.is_some()).then(|| {
                 let rdprev = self.next_var();
                 self.write_line(&format!("uint64_t {rdprev} = state->regs[{rd}];"));
@@ -1431,13 +1521,21 @@ impl<'a> EmitContext<'a> {
                     &v1,
                     &p1,
                     &p2,
+                    p2_second.as_deref(),
                     &addr,
                     &block,
+                    block_second.as_deref(),
                     Some(&pw),
+                    None,
                     Some(rdprev.as_deref().expect("arena record requires old rd")),
+                    None,
                 );
             } else if self.delta_records {
-                self.emit_delta2(&pc, &fromts, &v1, &block);
+                let delta_value = crossing_flag.as_ref().map_or_else(
+                    || block.clone(),
+                    |crosses| format!("({crosses} ? (uint64_t){val} : {block})"),
+                );
+                self.emit_delta2(&pc, &fromts, &v1, &delta_value);
             } else {
                 let rdprev = rdprev.as_deref().expect("compact record requires old rd");
                 self.write_line(&format!(
@@ -1462,22 +1560,69 @@ impl<'a> EmitContext<'a> {
         let addr = self.materialize_u64(&Self::addr_expr(&v1, offset));
         let blockaddr = self.materialize_u64(&format!("preflight_block_addr({addr})"));
         let arena_geom = self.arena_native_airs.get(&chip).copied();
-        let prev = (!self.delta_records || arena_geom.is_some()).then(|| {
+        let prev = (width > 1 || !self.delta_records || arena_geom.is_some()).then(|| {
             let prev = self.next_var();
-            self.write_line(&format!(
-                "uint64_t {prev} = rd_mem_u64(memory, {blockaddr});"
-            ));
+            if width > 1 && self.delta_records && arena_geom.is_none() {
+                self.write_line(&format!("uint64_t {prev} = 0u;"));
+            } else {
+                self.write_line(&format!(
+                    "uint64_t {prev} = rd_mem_u64(memory, {blockaddr});"
+                ));
+            }
             prev
         });
         let pw = self.next_var();
-        if let Some(prev) = prev.as_deref() {
-            self.write_line(&format!(
-                "uint32_t {pw} = trace_mem_touch(state, {blockaddr}, {prev});"
-            ));
+        let mut prev_second = None;
+        let mut pw_second = None;
+        if width == 1 {
+            if let Some(prev) = prev.as_deref() {
+                self.write_line(&format!(
+                    "uint32_t {pw} = trace_mem_touch(state, {blockaddr}, {prev});"
+                ));
+            } else {
+                self.write_line(&format!(
+                    "uint32_t {pw} = trace_mem_store_touch(state, {blockaddr});"
+                ));
+            }
         } else {
+            let crosses = self.next_var();
+            let prev1 = self.next_var();
+            let pw1 = self.next_var();
+            prev_second = Some(prev1.clone());
+            pw_second = Some(pw1.clone());
+            let prev = prev
+                .as_deref()
+                .expect("multi-byte store declares block zero");
             self.write_line(&format!(
-                "uint32_t {pw} = trace_mem_store_touch(state, {blockaddr});"
+                "bool {crosses} = preflight_crosses_block({addr}, {width}u);"
             ));
+            self.write_line(&format!("uint32_t {pw};"));
+            self.write_line(&format!("uint64_t {prev1} = 0u;"));
+            self.write_line(&format!("uint32_t {pw1} = UINT32_MAX;"));
+            self.write_line(&format!("if (unlikely({crosses})) {{"));
+            self.indent += 1;
+            self.write_line(&format!(
+                "{pw} = trace_crossing_store_blocks(state, {addr}, {width}u, {v2}, AS_MEMORY, \
+                 &{prev}, &{prev1}, &{pw1});"
+            ));
+            self.write_line(&format!(
+                "preflight_mark_program_crossing_residual(state->tracer, {pc}, {fromts});"
+            ));
+            self.indent -= 1;
+            self.write_line("} else {");
+            self.indent += 1;
+            if self.delta_records && arena_geom.is_none() {
+                self.write_line(&format!(
+                    "{pw} = trace_mem_store_touch(state, {blockaddr});"
+                ));
+            } else {
+                self.write_line(&format!(
+                    "{pw} = trace_mem_touch(state, {blockaddr}, {prev});"
+                ));
+            }
+            self.write_line("trace_timestamp(state);");
+            self.indent -= 1;
+            self.write_line("}");
         }
         let (wr_func, _, cast_ty) = Self::write_mem_helper(width);
         self.write_line(&format!("{wr_func}(memory, {addr}, ({cast_ty})({v2}));"));
@@ -1505,10 +1650,14 @@ impl<'a> EmitContext<'a> {
                 &v1,
                 &p1,
                 &p2,
+                None,
                 &addr,
                 &v2,
+                None,
                 Some(&pw),
+                pw_second.as_deref(),
                 Some(prev.as_deref().expect("arena record requires old block")),
+                prev_second.as_deref(),
             );
         } else if self.delta_records {
             self.emit_delta2(&pc, &fromts, &v1, &v2);
@@ -1566,17 +1715,42 @@ impl<'a> EmitContext<'a> {
         let addr = self.materialize_u64(&addr_expr);
         let block_addr = self.materialize_u64(&format!("preflight_block_addr({addr})"));
         let arena_geom = self.arena_native_airs.get(&chip).copied();
-        let prev = (!self.delta_records || arena_geom.is_some()).then(|| {
-            let prev = self.next_var();
+        let prev = self.next_var();
+        if self.delta_records && arena_geom.is_none() {
+            self.write_line(&format!("uint64_t {prev} = 0u;"));
+        } else {
             self.write_line(&format!(
                 "uint64_t {prev} = preflight_read_pv_block(state->tracer, {block_addr});"
             ));
-            prev
-        });
+        }
         let write_prev_ts = self.next_var();
+        let write_prev_ts1 = self.next_var();
+        let crosses = self.next_var();
+        let prev1 = self.next_var();
         self.write_line(&format!(
-            "uint32_t {write_prev_ts} = trace_pv_touch(state, {block_addr});"
+            "bool {crosses} = preflight_crosses_block({addr}, 8u);"
         ));
+        self.write_line(&format!("uint32_t {write_prev_ts};"));
+        self.write_line(&format!("uint32_t {write_prev_ts1} = UINT32_MAX;"));
+        self.write_line(&format!("uint64_t {prev1} = 0u;"));
+        self.write_line(&format!("if (unlikely({crosses})) {{"));
+        self.indent += 1;
+        self.write_line(&format!(
+            "{write_prev_ts} = trace_crossing_store_blocks(state, {addr}, 8u, {src}, \
+             AS_PUBLIC_VALUES, &{prev}, &{prev1}, &{write_prev_ts1});"
+        ));
+        self.write_line(&format!(
+            "preflight_mark_program_crossing_residual(state->tracer, {pc}, {fromts});"
+        ));
+        self.indent -= 1;
+        self.write_line("} else {");
+        self.indent += 1;
+        self.write_line(&format!(
+            "{write_prev_ts} = trace_pv_touch(state, {block_addr});"
+        ));
+        self.write_line("trace_timestamp(state);");
+        self.indent -= 1;
+        self.write_line("}");
 
         if let Some(geom) = arena_geom {
             let baked = ArenaLoadStoreBaked {
@@ -1597,15 +1771,18 @@ impl<'a> EmitContext<'a> {
                 &ptr,
                 &ptr_prev_ts,
                 &src_prev_ts,
+                None,
                 &addr,
                 &src,
+                None,
                 Some(&write_prev_ts),
-                Some(prev.as_deref().expect("arena record requires old block")),
+                Some(&write_prev_ts1),
+                Some(&prev),
+                Some(&prev1),
             );
         } else if self.delta_records {
             self.emit_delta2(&pc, &fromts, &ptr, &src);
         } else {
-            let prev = prev.as_deref().expect("compact record requires old block");
             self.write_line(&format!(
                 "preflight_emit_alu3(state, {chip}u, {pc}, {fromts}, {ptr_prev_ts}, \
                  {src_prev_ts}, {write_prev_ts}, {prev}, {ptr}, {src});"
@@ -2135,6 +2312,10 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
 
     fn write_mem(&mut self, base: &str, offset: i16, val: &str, width: u8) {
         EmitContext::write_mem(self, base, offset, val, width);
+    }
+
+    fn trace_absent_second_block(&mut self, base: &str, offset: i16, width: u8) {
+        EmitContext::trace_absent_second_block(self, base, offset, width);
     }
 
     fn emit_call(&mut self, name: &str, args: &[&str]) {

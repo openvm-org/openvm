@@ -283,6 +283,7 @@ impl ExtInstr for Rv64IInstr {
                 }
                 let base = ctx.read_var(*base);
                 let value = ctx.read_mem(&base, *offset, width.bytes(), *signed);
+                ctx.trace_absent_second_block(&base, *offset, width.bytes());
                 if let Some(rd) = rd {
                     ctx.write_var(*rd, &value);
                 } else {
@@ -301,6 +302,7 @@ impl ExtInstr for Rv64IInstr {
                 let base = ctx.read_var(*base);
                 let value = ctx.read_var(*src);
                 ctx.write_mem(&base, *offset, &value, width.bytes());
+                ctx.trace_absent_second_block(&base, *offset, width.bytes());
             }
             Self::Const {
                 rd, value, arena, ..

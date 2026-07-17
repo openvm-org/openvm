@@ -209,6 +209,10 @@ pub trait ExtEmitCtx {
     /// Write guest memory.
     fn write_mem(&mut self, base: &str, offset: i16, val: &str, width: u8);
 
+    /// Reserve the optional second-block timestamp for a non-crossing RV64
+    /// multi-byte access. The RV64 instruction node owns this adapter detail.
+    fn trace_absent_second_block(&mut self, _base: &str, _offset: i16, _width: u8) {}
+
     /// Flush local page state, emit a C call, then reload the page state.
     fn emit_call(&mut self, name: &str, args: &[&str]);
 

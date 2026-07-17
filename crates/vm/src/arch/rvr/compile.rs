@@ -575,57 +575,48 @@ fn collect_inline_records_meta<F: PrimeField32>(
     // Arena-native targets replace an AIR's entire assembled arena after the
     // log walk. They are therefore sound only when every program instruction
     // routed to that AIR emits an inline record into the target. A REVEAL is
-    // the important mixed case: it shares the LoadStore AIR with inline
-    // main-memory loads/stores, but remains on the verbose log path because it
-    // writes PUBLIC_VALUES_AS. Staging that AIR would discard the log-assembled
-    // REVEAL rows at substitution. Taint mixed AIRs back to compact emission so
-    // the host assembler composes both record sources into one arena.
-    let mut tainted_custom_delta_airs = BTreeSet::new();
+    // the important mixed case: narrow REVEAL shares a LoadStore AIR with
+    // inline main-memory loads/stores, but remains on the verbose log path.
+    // Staging that AIR would discard the log-assembled REVEAL rows at
+    // substitution. Taint mixed AIRs back to compact emission so the host
+    // assembler composes both record sources into one arena.
+    let mut tainted_delta_airs = BTreeSet::new();
     for (slot, entry) in exe.program.instructions_and_debug_infos.iter().enumerate() {
         if entry.is_none() || pc_slots.get(slot).copied().unwrap_or(false) {
             continue;
         }
         if let Some(TraceChipIndex::Chip(air)) = chips.pc_to_chip.get(slot) {
             let air_idx = air.as_u32() as usize;
-            let removed = arena_native.remove(&air_idx).flatten();
-            if delta_records_requested
-                && matches!(
-                    removed.map(|geometry| geometry.layout),
-                    Some(
-                        ArenaNativeLayout::Custom { .. }
-                            | ArenaNativeLayout::CustomVariableRows { .. }
-                    )
-                )
-            {
-                tainted_custom_delta_airs.insert(air_idx);
+            arena_native.remove(&air_idx);
+            if delta_records_requested {
+                tainted_delta_airs.insert(air_idx);
             }
         }
     }
 
-    // Custom delta records have no generic chronological wire fallback: the
-    // owning extension writes complete consumer records into an arena target.
-    // If one non-inline program slot taints that AIR, clear every inline slot
-    // on the AIR so all instructions retain their program log and use the
-    // verbose assembler. This makes mixed-AIR safety a compiler property even
-    // for extension-owned custom schemas.
-    if !tainted_custom_delta_airs.is_empty() {
+    // Device delta partitioning owns a complete AIR. If one program slot on
+    // that AIR is not delta-inline (for example a narrow AS=3 REVEAL sharing a
+    // LoadStore AIR), clear every inline slot on the AIR so the entire family
+    // retains its program/access logs and uses host assembly. This also keeps
+    // extension-owned custom schemas fail closed.
+    if !tainted_delta_airs.is_empty() {
         for (slot, flag) in pc_slots.iter_mut().enumerate() {
             if !*flag {
                 continue;
             }
             if let Some(TraceChipIndex::Chip(air)) = chips.pc_to_chip.get(slot) {
-                if tainted_custom_delta_airs.contains(&(air.as_u32() as usize)) {
+                if tainted_delta_airs.contains(&(air.as_u32() as usize)) {
                     *flag = false;
                 }
             }
         }
-        airs.retain(|air, _| !tainted_custom_delta_airs.contains(air));
+        airs.retain(|air, _| !tainted_delta_airs.contains(air));
     }
 
     let delta_decode = if compact_wire_requested || delta_records_requested {
         admitter
             .filter(|admitter| admitter.has_delta_decode())
-            .map(|admitter| build_delta_decode_precompute(exe, chips, admitter))
+            .map(|admitter| build_delta_decode_precompute(exe, chips, admitter, &pc_slots))
     } else {
         None
     };
@@ -672,6 +663,7 @@ fn build_delta_decode_precompute<F: PrimeField32>(
     exe: &VmExe<F>,
     chips: &ChipMapping,
     admitter: &dyn LogNativeOpcodeAdmitter<F>,
+    inline_pc_slots: &[bool],
 ) -> RvrDeltaDecodePrecompute {
     let program = &exe.program;
     let mut entries = vec![
@@ -700,6 +692,10 @@ fn build_delta_decode_precompute<F: PrimeField32>(
             continue;
         };
         let air_idx = air.as_u32() as usize;
+        if !inline_pc_slots.get(slot).copied().unwrap_or(false) {
+            tainted.insert(air_idx);
+            continue;
+        }
         let Some(mut decoded) = admitter.delta_decode_for(instruction) else {
             tainted.insert(air_idx);
             continue;

@@ -420,6 +420,7 @@ pub fn rvr_gpu_wire_record_airs(
             rvr_gpu_decode::RvrGpuDecodeState::compact_record_airs(
                 exe,
                 pc_to_air_idx,
+                &inline_meta.pc_slots,
                 inline_meta.delta_decode.as_deref(),
             )
         }
@@ -464,6 +465,9 @@ pub fn generate_gpu_rvr_record_arenas(
     let delta_requested = matches!(configured_emission_mode(), Some(InlineEmissionMode::Delta));
     if !delta_requested {
         state.clear_delta_segment();
+    }
+    if !compact_requested {
+        state.clear_compact_residual_segment();
     }
     let mode_finished = std::time::Instant::now();
     let compact_airs = if compact_requested {
@@ -579,6 +583,9 @@ pub fn generate_gpu_rvr_record_arenas(
         // chip's compact-decode branch instead of the expanded-record kernel.
         dense.rvr_wire = true;
         *arena = dense;
+    }
+    if compact_requested {
+        state.bind_compact_residual_segment(std::mem::take(&mut output.raw_logs.memory_log));
     }
     let adoption_finished = std::time::Instant::now();
     let mut bound_airs_len = 0usize;

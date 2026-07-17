@@ -62,6 +62,19 @@ pub type DeviceOperandEntry = RvrDeltaDecodeEntry;
 
 const _: () = assert!(size_of::<DeviceOperandEntry>() == 20);
 const _: () = assert!(align_of::<DeviceOperandEntry>() == 4);
+const RVR_MULTI_BLOCK_RECORD_SIZE: usize = 60;
+const _: () = assert!(
+    size_of::<(
+        crate::adapters::Rv64LoadMultiByteAdapterRecord,
+        crate::load::LoadRecord,
+    )>() == RVR_MULTI_BLOCK_RECORD_SIZE
+);
+const _: () = assert!(
+    size_of::<(
+        crate::adapters::Rv64StoreMultiByteAdapterRecord,
+        crate::store::StoreRecord,
+    )>() == RVR_MULTI_BLOCK_RECORD_SIZE
+);
 
 /// `rs2` is an immediate (else a register pointer).
 pub const OPERAND_FLAG_RS2_IMM: u8 = 1 << 0;
@@ -177,12 +190,27 @@ impl DeltaAirKind {
         })
     }
 
+    const fn crossing_residual_capable(self) -> bool {
+        matches!(
+            self,
+            Self::LoadHalfword
+                | Self::LoadWord
+                | Self::LoadDoubleword
+                | Self::StoreHalfword
+                | Self::StoreWord
+                | Self::StoreDoubleword
+                | Self::LoadSignExtendHalfword
+                | Self::LoadSignExtendWord
+        )
+    }
+
     pub const fn wire_size(self) -> usize {
         use openvm_circuit::arch::rvr::{
             PREFLIGHT_ADDSUB_RECORD_SIZE, PREFLIGHT_BRANCH2_RECORD_SIZE, PREFLIGHT_RW1_RECORD_SIZE,
             PREFLIGHT_WR1_RECORD_SIZE,
         };
         match self {
+            kind if kind.crossing_residual_capable() => RVR_MULTI_BLOCK_RECORD_SIZE,
             Self::BranchEqual | Self::BranchLessThan => PREFLIGHT_BRANCH2_RECORD_SIZE,
             Self::JalLui | Self::Auipc => PREFLIGHT_WR1_RECORD_SIZE,
             Self::Jalr => PREFLIGHT_RW1_RECORD_SIZE,
@@ -266,6 +294,12 @@ struct DeviceDeltaSegment {
     program_frequencies: Option<DeviceProgramFrequencies>,
 }
 
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+struct DeviceCompactResidualSegment {
+    memory: Arc<DeviceBuffer<u8>>,
+    count: usize,
+}
+
 /// Device descriptor indexed by global AIR. CUDA writes each stable partition
 /// directly into the owning compact buffer.
 #[cfg(all(feature = "cuda", feature = "rvr"))]
@@ -298,6 +332,13 @@ pub struct RvrGpuDecodeState {
     delta_host: Mutex<Option<HostDeltaSegment>>,
     #[cfg(all(feature = "cuda", feature = "rvr"))]
     delta_device: Mutex<Option<DeviceDeltaSegment>>,
+    /// Full residual-memory events retained by compact mode. Multi-block
+    /// compact consumers upload this once and reconstruct only crossing rows
+    /// into the upstream-native 60-byte record geometry on the device.
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    compact_residual_host: Mutex<Option<Vec<openvm_circuit::arch::rvr::MemoryLogEntry>>>,
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    compact_residual_device: Mutex<Option<DeviceCompactResidualSegment>>,
 }
 
 impl RvrGpuDecodeState {
@@ -407,27 +448,127 @@ impl RvrGpuDecodeState {
     pub fn compact_record_airs<F: PrimeField32>(
         exe: &VmExe<F>,
         pc_to_air_idx: &[Option<usize>],
+        inline_pc_slots: &[bool],
         precomputed: Option<&RvrDeltaDecodePrecompute>,
     ) -> HashSet<usize> {
         if let Some(precomputed) = precomputed {
             let airs = precomputed
                 .kind_to_air
                 .iter()
-                .map(|&(_, air)| air)
+                .filter_map(|&(kind, air)| DeltaAirKind::from_repr(kind).map(|_| air))
                 .collect();
             #[cfg(debug_assertions)]
             assert_eq!(
                 airs,
-                classify_kind_to_air(exe, pc_to_air_idx)
+                classify_kind_to_air(exe, pc_to_air_idx, inline_pc_slots)
                     .into_values()
                     .collect()
             );
             airs
         } else {
-            classify_kind_to_air(exe, pc_to_air_idx)
+            classify_kind_to_air(exe, pc_to_air_idx, inline_pc_slots)
                 .into_values()
                 .collect()
         }
+    }
+
+    /// Bind the compact segment's residual events after host assembly has
+    /// consumed all non-compact AIRs. The vector is normally empty; crossing
+    /// multi-byte rows contribute exactly two complete block events apiece.
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    pub(crate) fn bind_compact_residual_segment(
+        &self,
+        memory_log: Vec<openvm_circuit::arch::rvr::MemoryLogEntry>,
+    ) {
+        *self.compact_residual_host.lock().unwrap() = Some(memory_log);
+        *self.compact_residual_device.lock().unwrap() = None;
+    }
+
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    pub(crate) fn clear_compact_residual_segment(&self) {
+        *self.compact_residual_host.lock().unwrap() = None;
+        *self.compact_residual_device.lock().unwrap() = None;
+    }
+
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    fn compact_residual_device(&self, device_ctx: &GpuDeviceCtx) -> (Arc<DeviceBuffer<u8>>, usize) {
+        let mut device = self.compact_residual_device.lock().unwrap();
+        if let Some(bound) = device.as_ref() {
+            return (Arc::clone(&bound.memory), bound.count);
+        }
+        let entries = self
+            .compact_residual_host
+            .lock()
+            .unwrap()
+            .take()
+            .expect("compact multi-block decode without a bound residual segment");
+        let bytes = unsafe {
+            std::slice::from_raw_parts(
+                entries.as_ptr().cast::<u8>(),
+                std::mem::size_of_val(entries.as_slice()),
+            )
+        };
+        let memory = Arc::new(if bytes.is_empty() {
+            DeviceBuffer::new()
+        } else {
+            bytes
+                .to_device_on(device_ctx)
+                .expect("compact residual-memory H2D")
+        });
+        let count = entries.len();
+        *device = Some(DeviceCompactResidualSegment {
+            memory: Arc::clone(&memory),
+            count,
+        });
+        (memory, count)
+    }
+
+    /// Expand one multi-byte compact AIR on the device. Non-crossing records
+    /// synthesize the absent second block; crossing records consume the two
+    /// full residual events at their fixed instruction-local timestamps.
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    pub fn expand_compact_multiblock(
+        &self,
+        kind: DeltaAirKind,
+        records: &DeviceBuffer<u8>,
+        device_ctx: &GpuDeviceCtx,
+    ) -> Arc<DeviceBuffer<u8>> {
+        assert!(kind.crossing_residual_capable());
+        use openvm_circuit::arch::rvr::PREFLIGHT_ADDSUB_RECORD_SIZE;
+        assert_eq!(records.len() % PREFLIGHT_ADDSUB_RECORD_SIZE, 0);
+        let count = records.len() / PREFLIGHT_ADDSUB_RECORD_SIZE;
+        let output = Arc::new(DeviceBuffer::<u8>::with_capacity_on(
+            count * RVR_MULTI_BLOCK_RECORD_SIZE,
+            device_ctx,
+        ));
+        let (memory, memory_count) = self.compact_residual_device(device_ctx);
+        let (table, pc_base) = self
+            .device_operand_table(device_ctx)
+            .expect("compact multi-block segment without an operand table");
+        let error = DeviceBuffer::<u32>::with_capacity_on(1, device_ctx);
+        error
+            .fill_zero_on(device_ctx)
+            .expect("compact multi-block error clear");
+        unsafe {
+            crate::cuda_abi::rvr_delta_cuda::expand_compact_multiblock(
+                records,
+                count,
+                &memory,
+                memory_count,
+                &table,
+                pc_base,
+                kind,
+                &output,
+                &error,
+                device_ctx.stream.as_raw(),
+            )
+            .expect("compact multi-block expansion launch");
+        }
+        let error = error
+            .to_host_on(device_ctx)
+            .expect("compact multi-block error D2H")[0];
+        assert_eq!(error, 0, "compact multi-block decode error {error}");
+        output
     }
 
     #[cfg(feature = "rvr")]
@@ -661,7 +802,7 @@ impl RvrGpuDecodeState {
         let delta_count =
             host.delta.bytes().len() / openvm_circuit::arch::rvr::PREFLIGHT_DELTA_RECORD_SIZE;
         let event_capacity = delta_count
-            .checked_mul(3)
+            .checked_mul(4)
             .and_then(|count| count.checked_add(memory_count))
             .and_then(|count| count.checked_add(host.program_log.len().saturating_mul(3)))
             .expect("delta event capacity overflow");
@@ -888,7 +1029,7 @@ impl RvrGpuDecodeState {
 
         if !host.oracle_expected.is_empty() {
             for spec in &host.specs {
-                if spec.count == 0 {
+                if spec.count == 0 || spec.kind.crossing_residual_capable() {
                     continue;
                 }
                 let expected = host.oracle_expected.get(&spec.air_idx).unwrap_or_else(|| {
@@ -1574,7 +1715,18 @@ pub(crate) fn delta_post_write_value<F: PrimeField32>(
             } else {
                 u32::from(imm)
             };
-            let shift = ((v1 as u32).wrapping_add(offset) & 7) * 8;
+            let byte_offset = (v1 as u32).wrapping_add(offset) & 7;
+            let load_width = match entry.local_opcode {
+                0 => 8,
+                1 | 8 => 1,
+                2 | 9 => 2,
+                3 | 10 => 4,
+                _ => return None,
+            };
+            if load_width > 1 && byte_offset + load_width > 8 {
+                return Some(v2);
+            }
+            let shift = byte_offset * 8;
             let shifted = v2 >> shift;
             match entry.local_opcode {
                 0 => shifted,
@@ -1677,23 +1829,26 @@ fn build_operand_table<F: PrimeField32>(
         filtered_index = filtered_index
             .checked_add(1)
             .expect("filtered program index exceeds u32 ABI");
-        if let Some((mut entry, _)) = gpu_decode_entry(instruction) {
-            let air_idx = pc_to_air_idx
-                .get(slot_idx)
-                .copied()
-                .flatten()
-                .expect("device-decodable instruction must map to an AIR");
-            entry.air_idx = u8::try_from(air_idx).expect("delta device AIR index exceeds u8");
-            entry.filtered_index = entries[slot_idx].filtered_index;
-            entries[slot_idx] = entry;
+        if compiled_identity.get(slot_idx).copied().unwrap_or(false) {
+            if let Some((mut entry, _)) = gpu_decode_entry(instruction) {
+                let air_idx = pc_to_air_idx
+                    .get(slot_idx)
+                    .copied()
+                    .flatten()
+                    .expect("device-decodable instruction must map to an AIR");
+                entry.air_idx = u8::try_from(air_idx).expect("delta device AIR index exceeds u8");
+                entry.filtered_index = entries[slot_idx].filtered_index;
+                entries[slot_idx] = entry;
+            }
         }
     }
     let _ = DEFAULT_PC_STEP; // index = (from_pc - pc_base) / DEFAULT_PC_STEP
+    let kind_to_air = classify_kind_to_air(exe, pc_to_air_idx, &compiled_identity);
     HostOperandTable {
         compiled_identity,
         pc_base: program.pc_base,
         entries: Arc::new(entries),
-        kind_to_air: classify_kind_to_air(exe, pc_to_air_idx),
+        kind_to_air,
     }
 }
 
@@ -1701,6 +1856,7 @@ fn build_operand_table<F: PrimeField32>(
 fn classify_kind_to_air<F: PrimeField32>(
     exe: &VmExe<F>,
     pc_to_air_idx: &[Option<usize>],
+    inline_pc_slots: &[bool],
 ) -> HashMap<DeltaAirKind, usize> {
     let mut kind_to_air = HashMap::new();
     let mut air_to_kind = HashMap::new();
@@ -1712,6 +1868,10 @@ fn classify_kind_to_air<F: PrimeField32>(
         let Some(air_idx) = pc_to_air_idx.get(slot_idx).copied().flatten() else {
             continue;
         };
+        if !inline_pc_slots.get(slot_idx).copied().unwrap_or(false) {
+            tainted.insert(air_idx);
+            continue;
+        }
         let Some((_, kind)) = gpu_decode_entry(instruction) else {
             tainted.insert(air_idx);
             continue;

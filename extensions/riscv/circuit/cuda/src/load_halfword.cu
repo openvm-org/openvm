@@ -77,6 +77,7 @@ __global__ void rv64_load_halfword_tracegen_compact(
     size_t pointer_max_bits,
     uint32_t *range_checker_ptr,
     uint32_t range_checker_num_bins,
+    uint32_t *bitwise_lookup_ptr,
     uint32_t timestamp_max_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -85,10 +86,11 @@ __global__ void rv64_load_halfword_tracegen_compact(
         auto const rec = records[idx];
         auto const entry = rvr_operand_entry(operand_table, pc_base, rec.from_pc);
         Rv64LoadRecord full;
-        full.adapter = rvr_decode_alu3_load(rec, entry);
+        full.adapter = rvr_decode_alu3_load_multi(rec, entry);
 #pragma unroll
         for (size_t i = 0; i < BLOCK_FE_WIDTH; i++) {
-            full.core.read_data[i] = rvr_u16_limb(rec.c, i);
+            full.core.read_data[0][i] = rvr_u16_limb(rec.c, i);
+            full.core.read_data[1][i] = 0;
         }
         auto adapter = Rv64LoadAdapter(
             pointer_max_bits,
@@ -96,7 +98,7 @@ __global__ void rv64_load_halfword_tracegen_compact(
             timestamp_max_bits
         );
         adapter.fill_trace_row(row, full.adapter);
-        LoadHalfwordCore core;
+        auto core = LoadHalfwordCore(BitwiseOperationLookup(bitwise_lookup_ptr));
         core.fill_trace_row(
             row.slice_from(COL_INDEX(Rv64LoadHalfwordCols, core)),
             full.core,
@@ -117,6 +119,7 @@ extern "C" int _rv64_load_halfword_tracegen_compact(
     size_t pointer_max_bits,
     uint32_t *range_checker,
     uint32_t range_checker_num_bins,
+    uint32_t *bitwise_lookup,
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
@@ -131,6 +134,7 @@ extern "C" int _rv64_load_halfword_tracegen_compact(
         pointer_max_bits,
         range_checker,
         range_checker_num_bins,
+        bitwise_lookup,
         timestamp_max_bits
     );
     return CHECK_KERNEL();

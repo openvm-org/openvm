@@ -1,4 +1,7 @@
 #include "primitives/buffer_view.cuh"
+#include "riscv/cores/load.cuh"
+#include "riscv/cores/load_sign_extend.cuh"
+#include "riscv/cores/store.cuh"
 #include "riscv/rvr_compact.cuh"
 #include "fp.h"
 
@@ -92,6 +95,7 @@ struct DeviceProgramEntry {
 static_assert(sizeof(DeviceProgramEntry) == 8, "device program entry size drift");
 
 static constexpr uint32_t PROGRAM_WRITE_COMPLETE = 1u;
+static constexpr uint32_t PROGRAM_CROSSING_RESIDUAL = 2u;
 
 struct DeviceInitialMemory {
     uint64_t base;
@@ -305,6 +309,34 @@ __device__ __forceinline__ uint32_t delta_memory_effective_address(
     return uint32_t(record.v1) + uint32_t(imm);
 }
 
+__device__ __forceinline__ uint8_t delta_memory_width(
+    RvrOperandEntry const &entry, uint32_t *error
+) {
+    switch (entry.local_opcode) {
+    case 0:
+    case 4: return 8;
+    case 3:
+    case 5:
+    case 10: return 4;
+    case 2:
+    case 6:
+    case 9: return 2;
+    case 1:
+    case 7:
+    case 8: return 1;
+    default:
+        if (error != nullptr) fail(error, 13);
+        return 0;
+    }
+}
+
+__device__ __forceinline__ bool delta_crosses(
+    DeltaRecord const &record, RvrOperandEntry const &entry, uint32_t *error
+) {
+    uint8_t width = delta_memory_width(entry, error);
+    return (delta_memory_effective_address(record, entry) & 7u) + width > 8u;
+}
+
 __device__ __forceinline__ bool delta_access(
     DeltaRecord const &record,
     RvrOperandEntry const &entry,
@@ -343,13 +375,19 @@ __device__ __forceinline__ bool delta_access(
         return false;
     case DELTA_LOAD:
         if (slot == 0) return reg(entry.b);
+        if (delta_crosses(record, entry, nullptr)) {
+            if (slot == 3 && (entry.flags & RVR_OPERAND_FLAG_WRITE_ENABLED)) return reg(entry.a);
+            return false;
+        }
         if (slot == 1) return memory();
-        if (slot == 2 && (entry.flags & RVR_OPERAND_FLAG_WRITE_ENABLED)) return reg(entry.a);
+        if (slot == (delta_memory_width(entry, nullptr) > 1 ? 3u : 2u) &&
+            (entry.flags & RVR_OPERAND_FLAG_WRITE_ENABLED))
+            return reg(entry.a);
         return false;
     case DELTA_STORE:
         if (slot == 0) return reg(entry.b);
         if (slot == 1) return reg(entry.a);
-        if (slot == 2) return memory();
+        if (slot == 2 && !delta_crosses(record, entry, nullptr)) return memory();
         return false;
     case DELTA_BRANCH2:
         if (slot == 0) return reg(entry.a);
@@ -369,16 +407,17 @@ __device__ __forceinline__ bool delta_access(
 }
 
 __device__ __forceinline__ bool delta_write_access(
-    RvrOperandEntry const &entry, uint32_t slot
+    DeltaRecord const &record, RvrOperandEntry const &entry, uint32_t slot,
+    uint32_t *error
 ) {
     switch (entry.access_pattern) {
     case DELTA_ADDI: return slot == 1;
     case DELTA_ALU3:
     case DELTA_ALU3_REG:
-    case DELTA_STORE:
-        return slot == 2;
+    case DELTA_STORE: return slot == 2 && !delta_crosses(record, entry, error);
     case DELTA_LOAD:
-        return slot == 2 && (entry.flags & RVR_OPERAND_FLAG_WRITE_ENABLED);
+        return slot == (delta_memory_width(entry, error) > 1 ? 3u : 2u) &&
+               (entry.flags & RVR_OPERAND_FLAG_WRITE_ENABLED);
     case DELTA_WR1:
         return slot == 0 && (entry.flags & RVR_OPERAND_FLAG_WRITE_ENABLED);
     case DELTA_WR1_ALWAYS:
@@ -387,20 +426,6 @@ __device__ __forceinline__ bool delta_write_access(
         return slot == 1 && (entry.flags & RVR_OPERAND_FLAG_WRITE_ENABLED);
     default:
         return false;
-    }
-}
-
-__device__ __forceinline__ uint8_t delta_store_width(
-    RvrOperandEntry const &entry, uint32_t *error
-) {
-    switch (entry.local_opcode) {
-    case 4: return 8;
-    case 5: return 4;
-    case 6: return 2;
-    case 7: return 1;
-    default:
-        fail(error, 13);
-        return 0;
     }
 }
 
@@ -566,6 +591,10 @@ __device__ __forceinline__ bool delta_post_write_value(
     case DELTA_KIND_LOAD_SIGN_EXTEND_HALFWORD:
     case DELTA_KIND_LOAD_SIGN_EXTEND_WORD: {
         if (!(entry.flags & RVR_OPERAND_FLAG_WRITE_ENABLED)) return false;
+        if (delta_crosses(record, entry, nullptr)) {
+            result = record.v2;
+            return true;
+        }
         uint32_t shift = (delta_memory_effective_address(record, entry) & 7u) * 8u;
         uint64_t shifted = record.v2 >> shift;
         switch (entry.local_opcode) {
@@ -635,7 +664,7 @@ __global__ void build_events(
     uint32_t *error
 ) {
     size_t idx = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
-    size_t delta_events = delta_count * 3;
+    size_t delta_events = delta_count * 4;
     size_t memory_begin = delta_events;
     size_t program_begin = memory_begin + memory_count;
     size_t event_count = program_begin + program_count * 3;
@@ -643,8 +672,8 @@ __global__ void build_events(
 
     EventPayload payload{INVALID_ADDRESS, 0, UINT32_MAX, 0, 0, 0, VALUE_NONE, 0, 0, 0};
     if (idx < delta_events) {
-        size_t record_idx = idx / 3;
-        uint32_t access_slot = idx % 3;
+        size_t record_idx = idx / 4;
+        uint32_t access_slot = idx % 4;
         DeltaRecord record = delta[record_idx];
         RvrOperandEntry entry;
         if (operand_for_pc(record.from_pc, pc_base, table, operand_count, entry, error)) {
@@ -654,12 +683,12 @@ __global__ void build_events(
                 payload.address_key = address_key(as, address, error);
                 payload.timestamp = record.from_timestamp + access_slot;
                 payload.output_index_plus_one = uint32_t(idx + 1);
-                if (delta_write_access(entry, access_slot)) {
+                if (delta_write_access(record, entry, access_slot, error)) {
                     payload.write_record_plus_one = uint32_t(record_idx + 1);
                     if (entry.access_pattern == DELTA_STORE) {
                         payload.value = record.v2;
                         payload.value_update = VALUE_STORE_PATCH;
-                        payload.width = delta_store_width(entry, error);
+                        payload.width = delta_memory_width(entry, error);
                         payload.byte_offset = uint8_t(
                             delta_memory_effective_address(record, entry) & 7u
                         );
@@ -695,12 +724,13 @@ __global__ void build_events(
         size_t local = idx - program_begin;
         ProgramLogEntry program_entry = program[local / 3];
         uint32_t access_slot = local % 3;
-        uint32_t program_pc = program_entry.pc_and_flags & ~PROGRAM_WRITE_COMPLETE;
+        uint32_t program_pc = program_entry.pc_and_flags & ~uint32_t(3);
         if (program_pc >= pc_base && ((program_pc - pc_base) % PC_STEP) == 0) {
             size_t table_slot = (program_pc - pc_base) / PC_STEP;
             if (table_slot < operand_count) {
                 RvrOperandEntry entry = table[table_slot];
-                if (entry.air_idx < num_airs && entry.access_pattern <= DELTA_ADDI &&
+                if ((program_entry.pc_and_flags & PROGRAM_CROSSING_RESIDUAL) == 0 &&
+                    entry.air_idx < num_airs && entry.access_pattern <= DELTA_ADDI &&
                     arena_native_flags[entry.air_idx]) {
                     DeltaRecord synthetic{program_pc, program_entry.timestamp, 0, 0};
                     uint8_t as;
@@ -708,7 +738,7 @@ __global__ void build_events(
                     if (delta_access(synthetic, entry, access_slot, as, address)) {
                         payload.address_key = address_key(as, address, error);
                         payload.timestamp = program_entry.timestamp + access_slot;
-                        if (delta_write_access(entry, access_slot)) {
+                        if (delta_write_access(synthetic, entry, access_slot, error)) {
                             if ((program_entry.pc_and_flags & PROGRAM_WRITE_COMPLETE) == 0) {
                                 fail(error, 16);
                                 return;
@@ -863,10 +893,130 @@ __device__ __forceinline__ void store_u64_words(uint8_t *dst, uint64_t value) {
     store_u32(dst + 4, uint32_t(value >> 32));
 }
 
+__device__ __forceinline__ bool multi_block_kind(uint32_t kind) {
+    return kind == DELTA_KIND_LOAD_HALFWORD || kind == DELTA_KIND_LOAD_WORD ||
+           kind == DELTA_KIND_LOAD_DOUBLEWORD || kind == DELTA_KIND_STORE_HALFWORD ||
+           kind == DELTA_KIND_STORE_WORD || kind == DELTA_KIND_STORE_DOUBLEWORD ||
+           kind == DELTA_KIND_LOAD_SIGN_EXTEND_HALFWORD ||
+           kind == DELTA_KIND_LOAD_SIGN_EXTEND_WORD;
+}
+
+__device__ __forceinline__ bool find_residual_block(
+    uint8_t const *memory,
+    size_t memory_count,
+    size_t memory_stride,
+    uint32_t timestamp,
+    uint8_t kind,
+    uint8_t addr_space,
+    uint64_t address,
+    uint32_t const *memory_prev_timestamps,
+    uint64_t const *memory_prev_values,
+    ResidualMemoryEvent &event,
+    uint32_t &prev_timestamp,
+    uint64_t &prev_value,
+    uint32_t *error
+) {
+    for (size_t i = 0; i < memory_count; ++i) {
+        ResidualMemoryEvent candidate;
+        if (!residual_memory_event(memory, i, memory_stride, candidate, error)) continue;
+        if (candidate.timestamp == timestamp && candidate.kind == kind &&
+            candidate.addr_space == addr_space && candidate.address == address) {
+            event = candidate;
+            prev_timestamp = memory_prev_timestamps[i];
+            prev_value = memory_prev_values[i];
+            return true;
+        }
+    }
+    fail(error, 28);
+    return false;
+}
+
+__device__ __forceinline__ void u64_to_u16(uint64_t value, uint16_t (&out)[BLOCK_FE_WIDTH]) {
+#pragma unroll
+    for (size_t i = 0; i < BLOCK_FE_WIDTH; ++i) out[i] = uint16_t(value >> (16 * i));
+}
+
+__device__ __forceinline__ uint64_t compact_u64(uint32_t const (&words)[2]) {
+    return uint64_t(words[0]) | (uint64_t(words[1]) << 32);
+}
+
+__device__ __forceinline__ bool find_full_memory_block(
+    MemoryLogEntry const *memory,
+    size_t memory_count,
+    uint32_t timestamp,
+    uint8_t kind,
+    uint8_t addr_space,
+    uint64_t address,
+    MemoryLogEntry &event,
+    uint32_t *error
+) {
+    for (size_t i = 0; i < memory_count; ++i) {
+        MemoryLogEntry candidate = memory[i];
+        if (candidate.timestamp == timestamp && candidate.kind == kind &&
+            candidate.addr_space == addr_space && candidate.address == address &&
+            candidate.width == 8) {
+            event = candidate;
+            return true;
+        }
+    }
+    fail(error, 31);
+    return false;
+}
+
+__device__ __forceinline__ Rv64LoadMultiByteAdapterRecord delta_load_adapter(
+    DeltaRecord const &record,
+    RvrOperandEntry const &entry,
+    uint32_t const *record_prev,
+    uint64_t write_prev_value
+) {
+    Rv64LoadMultiByteAdapterRecord out{};
+    out.from_pc = record.from_pc;
+    out.from_timestamp = record.from_timestamp;
+    out.rs1_val = uint32_t(record.v1);
+    out.rs1_aux_record.prev_timestamp = record_prev[0];
+    out.read_data_aux[0].prev_timestamp = record_prev[1];
+    out.read_data_aux[1].prev_timestamp = UINT32_MAX;
+    out.imm = uint16_t(entry.c);
+    out.imm_sign = (entry.flags & RVR_OPERAND_FLAG_LS_IMM_SIGN) != 0;
+    out.rs1_ptr = uint8_t(entry.b);
+    out.rd_ptr = (entry.flags & RVR_OPERAND_FLAG_WRITE_ENABLED) ? uint8_t(entry.a) : UINT8_MAX;
+    if (out.rd_ptr != UINT8_MAX) {
+        out.write_prev_timestamp = record_prev[3];
+        u64_to_u16(write_prev_value, out.write_prev_data);
+    }
+    return out;
+}
+
+__device__ __forceinline__ Rv64StoreMultiByteAdapterRecord delta_store_adapter(
+    DeltaRecord const &record,
+    RvrOperandEntry const &entry,
+    uint32_t const *record_prev
+) {
+    Rv64StoreMultiByteAdapterRecord out{};
+    out.from_pc = record.from_pc;
+    out.from_timestamp = record.from_timestamp;
+    out.rs1_val = uint32_t(record.v1);
+    out.rs1_aux_record.prev_timestamp = record_prev[0];
+    out.read_data_aux.prev_timestamp = record_prev[1];
+    out.write_prev_timestamps[0] = record_prev[2];
+    out.write_prev_timestamps[1] = UINT32_MAX;
+    out.imm = uint16_t(entry.c);
+    out.rs1_ptr = uint8_t(entry.b);
+    out.rs2_ptr = uint8_t(entry.a);
+    out.imm_sign = (entry.flags & RVR_OPERAND_FLAG_LS_IMM_SIGN) != 0;
+    out.mem_as = (entry.flags & RVR_OPERAND_FLAG_LS_PUBLIC_VALUES) ? 3 : 2;
+    return out;
+}
+
 __global__ void partition_records(
     DeltaRecord const *delta,
     uint32_t const *prev,
     uint64_t const *prev_values,
+    uint8_t const *memory,
+    size_t memory_count,
+    size_t memory_stride,
+    uint32_t const *memory_prev_timestamps,
+    uint64_t const *memory_prev_values,
     uint8_t const *sorted_airs,
     uint32_t const *sorted_indices,
     size_t count,
@@ -900,8 +1050,91 @@ __global__ void partition_records(
     }
     uint8_t *dst = reinterpret_cast<uint8_t *>(desc.base) +
                    (sorted_idx - desc.sorted_start) * desc.stride;
-    uint32_t const *record_prev = prev + size_t(record_idx) * 3;
+    uint32_t const *record_prev = prev + size_t(record_idx) * 4;
     uint64_t write_prev_value = prev_values[record_idx];
+    if (multi_block_kind(desc.kind)) {
+        if (desc.stride != 60) {
+            fail(error, 29);
+            return;
+        }
+        uint8_t access_width = delta_memory_width(entry, error);
+        uint32_t effective = delta_memory_effective_address(record, entry);
+        uint64_t block0_addr = uint64_t(effective & ~uint32_t(7));
+        bool crosses = (effective & 7u) + access_width > 8u;
+        uint8_t addr_space =
+            (entry.flags & RVR_OPERAND_FLAG_LS_PUBLIC_VALUES) ? uint8_t(3) : uint8_t(2);
+        if (entry.access_pattern == DELTA_LOAD) {
+            Rv64LoadMultiByteAdapterRecord adapter =
+                delta_load_adapter(record, entry, record_prev, write_prev_value);
+            uint64_t block0 = record.v2;
+            uint64_t block1 = 0;
+            if (crosses) {
+                ResidualMemoryEvent event0, event1;
+                uint32_t prev_ts0, prev_ts1;
+                uint64_t ignored0, ignored1;
+                if (!find_residual_block(
+                        memory, memory_count, memory_stride, record.from_timestamp + 1,
+                        0, addr_space, block0_addr, memory_prev_timestamps,
+                        memory_prev_values, event0, prev_ts0, ignored0, error
+                    ) ||
+                    !find_residual_block(
+                        memory, memory_count, memory_stride, record.from_timestamp + 2,
+                        0, addr_space, block0_addr + 8, memory_prev_timestamps,
+                        memory_prev_values, event1, prev_ts1, ignored1, error
+                    ))
+                    return;
+                adapter.read_data_aux[0].prev_timestamp = prev_ts0;
+                adapter.read_data_aux[1].prev_timestamp = prev_ts1;
+                block0 = event0.value;
+                block1 = event1.value;
+            }
+            if (desc.kind == DELTA_KIND_LOAD_SIGN_EXTEND_HALFWORD ||
+                desc.kind == DELTA_KIND_LOAD_SIGN_EXTEND_WORD) {
+                Rv64LoadSignExtendRecord full{};
+                full.adapter = adapter;
+                u64_to_u16(block0, full.core.read_data[0]);
+                u64_to_u16(block1, full.core.read_data[1]);
+                *reinterpret_cast<Rv64LoadSignExtendRecord *>(dst) = full;
+            } else {
+                Rv64LoadRecord full{};
+                full.adapter = adapter;
+                u64_to_u16(block0, full.core.read_data[0]);
+                u64_to_u16(block1, full.core.read_data[1]);
+                *reinterpret_cast<Rv64LoadRecord *>(dst) = full;
+            }
+        } else if (entry.access_pattern == DELTA_STORE) {
+            Rv64StoreMultiByteAdapterRecord adapter =
+                delta_store_adapter(record, entry, record_prev);
+            uint64_t prev0 = write_prev_value;
+            uint64_t prev1 = 0;
+            if (crosses) {
+                ResidualMemoryEvent event0, event1;
+                uint32_t prev_ts0, prev_ts1;
+                if (!find_residual_block(
+                        memory, memory_count, memory_stride, record.from_timestamp + 2,
+                        1, addr_space, block0_addr, memory_prev_timestamps,
+                        memory_prev_values, event0, prev_ts0, prev0, error
+                    ) ||
+                    !find_residual_block(
+                        memory, memory_count, memory_stride, record.from_timestamp + 3,
+                        1, addr_space, block0_addr + 8, memory_prev_timestamps,
+                        memory_prev_values, event1, prev_ts1, prev1, error
+                    ))
+                    return;
+                adapter.write_prev_timestamps[0] = prev_ts0;
+                adapter.write_prev_timestamps[1] = prev_ts1;
+            }
+            Rv64StoreRecord full{};
+            full.adapter = adapter;
+            u64_to_u16(record.v2, full.core.read_data);
+            u64_to_u16(prev0, full.core.prev_data[0]);
+            u64_to_u16(prev1, full.core.prev_data[1]);
+            *reinterpret_cast<Rv64StoreRecord *>(dst) = full;
+        } else {
+            fail(error, 30);
+        }
+        return;
+    }
     store_u32(dst, record.from_pc);
     store_u32(dst + 4, record.from_timestamp);
     switch (entry.access_pattern) {
@@ -919,7 +1152,6 @@ __global__ void partition_records(
         break;
     case DELTA_ALU3:
     case DELTA_ALU3_REG:
-    case DELTA_LOAD:
     case DELTA_STORE:
         if (desc.stride != sizeof(RvrAlu3Compact)) {
             fail(error, 8);
@@ -928,6 +1160,18 @@ __global__ void partition_records(
         store_u32(dst + 8, record_prev[0]);
         store_u32(dst + 12, record_prev[1]);
         store_u32(dst + 16, record_prev[2]);
+        store_u64_words(dst + 20, write_prev_value);
+        store_u64_words(dst + 28, record.v1);
+        store_u64_words(dst + 36, record.v2);
+        break;
+    case DELTA_LOAD:
+        if (desc.stride != sizeof(RvrAlu3Compact)) {
+            fail(error, 8);
+            return;
+        }
+        store_u32(dst + 8, record_prev[0]);
+        store_u32(dst + 12, record_prev[1]);
+        store_u32(dst + 16, record_prev[delta_memory_width(entry, error) > 1 ? 3 : 2]);
         store_u64_words(dst + 20, write_prev_value);
         store_u64_words(dst + 28, record.v1);
         store_u64_words(dst + 36, record.v2);
@@ -966,7 +1210,142 @@ __global__ void partition_records(
     }
 }
 
+__global__ void expand_compact_multiblock_records(
+    RvrAlu3Compact const *records,
+    size_t count,
+    MemoryLogEntry const *memory,
+    size_t memory_count,
+    RvrOperandEntry const *table,
+    size_t operand_count,
+    uint32_t pc_base,
+    uint32_t kind,
+    uint8_t *output,
+    uint32_t *error
+) {
+    size_t idx = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+    if (idx >= count) return;
+    RvrAlu3Compact record = records[idx];
+    RvrOperandEntry entry;
+    if (!operand_for_pc(record.from_pc, pc_base, table, operand_count, entry, error) ||
+        !multi_block_kind(kind)) {
+        fail(error, 32);
+        return;
+    }
+    uint8_t width = delta_memory_width(entry, error);
+    uint32_t rs1 = record.b[0];
+    int32_t offset = (entry.flags & RVR_OPERAND_FLAG_LS_IMM_SIGN)
+                         ? int32_t(int16_t(entry.c))
+                         : int32_t(entry.c);
+    uint32_t effective = rs1 + uint32_t(offset);
+    uint64_t block0_address = uint64_t(effective & ~uint32_t(7));
+    bool crosses = (effective & 7u) + width > 8u;
+    uint8_t addr_space =
+        (entry.flags & RVR_OPERAND_FLAG_LS_PUBLIC_VALUES) ? uint8_t(3) : uint8_t(2);
+    uint8_t *dst = output + idx * 60;
+    if (entry.access_pattern == DELTA_LOAD) {
+        Rv64LoadMultiByteAdapterRecord adapter = rvr_decode_alu3_load_multi(record, entry);
+        uint64_t block0 = compact_u64(record.c);
+        uint64_t block1 = 0;
+        if (crosses) {
+            MemoryLogEntry event0, event1;
+            if (!find_full_memory_block(
+                    memory, memory_count, record.from_timestamp + 1, 0, addr_space,
+                    block0_address, event0, error
+                ) ||
+                !find_full_memory_block(
+                    memory, memory_count, record.from_timestamp + 2, 0, addr_space,
+                    block0_address + 8, event1, error
+                ))
+                return;
+            adapter.read_data_aux[0].prev_timestamp = event0.prev_timestamp;
+            adapter.read_data_aux[1].prev_timestamp = event1.prev_timestamp;
+            block0 = event0.value;
+            block1 = event1.value;
+        }
+        if (kind == DELTA_KIND_LOAD_SIGN_EXTEND_HALFWORD ||
+            kind == DELTA_KIND_LOAD_SIGN_EXTEND_WORD) {
+            Rv64LoadSignExtendRecord full{};
+            full.adapter = adapter;
+            u64_to_u16(block0, full.core.read_data[0]);
+            u64_to_u16(block1, full.core.read_data[1]);
+            *reinterpret_cast<Rv64LoadSignExtendRecord *>(dst) = full;
+        } else {
+            Rv64LoadRecord full{};
+            full.adapter = adapter;
+            u64_to_u16(block0, full.core.read_data[0]);
+            u64_to_u16(block1, full.core.read_data[1]);
+            *reinterpret_cast<Rv64LoadRecord *>(dst) = full;
+        }
+    } else if (entry.access_pattern == DELTA_STORE) {
+        Rv64StoreMultiByteAdapterRecord adapter = rvr_decode_alu3_store_multi(record, entry);
+        uint64_t prev0 = compact_u64(record.write_prev_data);
+        uint64_t prev1 = 0;
+        if (crosses) {
+            MemoryLogEntry event0, event1;
+            if (!find_full_memory_block(
+                    memory, memory_count, record.from_timestamp + 2, 1, addr_space,
+                    block0_address, event0, error
+                ) ||
+                !find_full_memory_block(
+                    memory, memory_count, record.from_timestamp + 3, 1, addr_space,
+                    block0_address + 8, event1, error
+                ))
+                return;
+            adapter.write_prev_timestamps[0] = event0.prev_timestamp;
+            adapter.write_prev_timestamps[1] = event1.prev_timestamp;
+            prev0 = event0.prev_value;
+            prev1 = event1.prev_value;
+        }
+        Rv64StoreRecord full{};
+        full.adapter = adapter;
+        u64_to_u16(compact_u64(record.c), full.core.read_data);
+        u64_to_u16(prev0, full.core.prev_data[0]);
+        u64_to_u16(prev1, full.core.prev_data[1]);
+        *reinterpret_cast<Rv64StoreRecord *>(dst) = full;
+    } else {
+        fail(error, 33);
+    }
+}
+
 } // namespace
+
+extern "C" int _rvr_expand_compact_multiblock(
+    DeviceBufferConstView<uint8_t> d_records,
+    size_t record_count,
+    DeviceBufferConstView<uint8_t> d_memory,
+    size_t memory_count,
+    RvrOperandEntry const *d_operand_table,
+    size_t operand_count,
+    uint32_t pc_base,
+    uint32_t kind,
+    DeviceRawBufferConstView d_output,
+    uint32_t *d_error,
+    cudaStream_t stream
+) {
+    if (d_records.size != record_count * sizeof(RvrAlu3Compact) ||
+        d_memory.size != memory_count * sizeof(MemoryLogEntry) ||
+        d_output.size != record_count * 60 || d_error == nullptr ||
+        (record_count != 0 && (d_records.ptr == nullptr || d_output.ptr == 0)) ||
+        (memory_count != 0 && d_memory.ptr == nullptr)) {
+        return int(cudaErrorInvalidValue);
+    }
+    if (record_count == 0) return int(cudaSuccess);
+    dim3 block(256);
+    dim3 grid((record_count + block.x - 1) / block.x);
+    expand_compact_multiblock_records<<<grid, block, 0, stream>>>(
+        reinterpret_cast<RvrAlu3Compact const *>(d_records.ptr),
+        record_count,
+        reinterpret_cast<MemoryLogEntry const *>(d_memory.ptr),
+        memory_count,
+        d_operand_table,
+        operand_count,
+        pc_base,
+        kind,
+        reinterpret_cast<uint8_t *>(d_output.ptr),
+        d_error
+    );
+    return int(cudaGetLastError());
+}
 
 extern "C" int _rvr_delta_predecode(
     DeviceBufferConstView<uint8_t> d_delta_bytes,
@@ -997,7 +1376,7 @@ extern "C" int _rvr_delta_predecode(
     uint32_t *d_error,
     cudaStream_t stream
 ) {
-    if (delta_count > UINT32_MAX / 3 ||
+    if (delta_count > UINT32_MAX / 4 ||
         d_delta_bytes.size != delta_count * sizeof(DeltaRecord) ||
         (memory_stride != sizeof(MemoryLogEntry) &&
          memory_stride != sizeof(DeltaMemoryLogEntry)) ||
@@ -1008,7 +1387,7 @@ extern "C" int _rvr_delta_predecode(
         (program_instruction_count != 0 && d_program_chronology == nullptr) ||
         d_initial_memory_bytes.size != initial_memory_count * sizeof(DeviceInitialMemory) ||
         d_touched_output_bytes.size <
-            (delta_count * 3 + memory_count + program_count * 3) *
+            (delta_count * 4 + memory_count + program_count * 3) *
                 sizeof(TouchedMemoryRecord) ||
         (memory_count != 0 &&
          (d_memory_prev_timestamps == nullptr || d_memory_prev_values == nullptr)) ||
@@ -1042,7 +1421,7 @@ extern "C" int _rvr_delta_predecode(
         return int(cudaErrorInvalidValue);
     }
     size_t event_count =
-        delta_count * 3 + memory_count + program_count * 3;
+        delta_count * 4 + memory_count + program_count * 3;
     if (event_count == 0) {
         return int(cudaMemsetAsync(d_touched_count, 0, sizeof(uint32_t), stream));
     }
@@ -1079,13 +1458,13 @@ extern "C" int _rvr_delta_predecode(
     CUDA_ALLOC(group_flags, event_count * sizeof(uint8_t));
     CUDA_TRY(cudaMemsetAsync(d_touched_count, 0, sizeof(uint32_t), stream));
     if (delta_count != 0) {
-        CUDA_ALLOC(prev, delta_count * 3 * sizeof(uint32_t));
+        CUDA_ALLOC(prev, delta_count * 4 * sizeof(uint32_t));
         CUDA_ALLOC(prev_values, delta_count * sizeof(uint64_t));
         CUDA_ALLOC(air_a, delta_count * sizeof(uint8_t));
         CUDA_ALLOC(air_b, delta_count * sizeof(uint8_t));
         CUDA_ALLOC(indices_a, delta_count * sizeof(uint32_t));
         CUDA_ALLOC(indices_b, delta_count * sizeof(uint32_t));
-        CUDA_TRY(cudaMemsetAsync(prev, 0, delta_count * 3 * sizeof(uint32_t), stream));
+        CUDA_TRY(cudaMemsetAsync(prev, 0, delta_count * 4 * sizeof(uint32_t), stream));
         CUDA_TRY(cudaMemsetAsync(prev_values, 0, delta_count * sizeof(uint64_t), stream));
     }
     if (memory_count != 0) {
@@ -1229,6 +1608,11 @@ extern "C" int _rvr_delta_predecode(
             reinterpret_cast<DeltaRecord const *>(d_delta_bytes.ptr),
             prev,
             prev_values,
+            d_memory_bytes.ptr,
+            memory_count,
+            memory_stride,
+            d_memory_prev_timestamps,
+            d_memory_prev_values,
             air_b,
             indices_b,
             delta_count,
