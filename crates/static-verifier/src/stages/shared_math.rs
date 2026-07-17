@@ -6,6 +6,7 @@ use crate::{
     RootF,
 };
 
+#[allow(clippy::type_complexity)]
 pub(crate) fn column_openings_by_rot_assigned<B: BabyBearExt4Inst>(
     b: &mut B,
     openings: &[BabyBearExtWire<B::F>],

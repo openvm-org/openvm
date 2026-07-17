@@ -900,7 +900,7 @@ pub(crate) fn constrain_batch_constraints_verification<B: TranscriptInst>(
         };
 
         // Precompute per-bit factors: (x_i, 1-x_i) for tree product.
-        let factors: Vec<(BabyBearExtWire<B::F>, BabyBearExtWire<B::F>)> = xi_slice
+        let factors: Vec<_> = xi_slice
             .iter()
             .map(|x_i| {
                 let one_minus_x = b.ext_sub(one, *x_i);
