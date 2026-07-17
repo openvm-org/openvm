@@ -483,7 +483,7 @@ impl MemoryMerkleTree {
     pub fn calculate_unpadded_height_from_leaf_ptrs(&self, leaf_ptrs: &[(u32, u32)]) -> usize {
         let md = self.mem_config.memory_dimensions();
         let tree_height = md.overall_height();
-        let to_label = |(sp, ptr): (u32, u32)| (sp, ptr / DIGEST_WIDTH as u32);
+        let to_label = |(sp, ptr): (u32, u32)| (sp, ptr / VM_DIGEST_WIDTH as u32);
         2 * if leaf_ptrs.is_empty() {
             tree_height
         } else {
