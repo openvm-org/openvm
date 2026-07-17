@@ -63,6 +63,30 @@ fn test_transpile_addi_immediate_boundaries(imm: i32, expected_c: u32) -> Result
     Ok(())
 }
 
+#[test]
+fn test_transpile_rv64_undecodable_word_as_unimp() -> Result<()> {
+    const ADDI_X3_X0_1: u32 = 0x0010_0193;
+    const UNDECODABLE_WORD: u32 = 0x1000_0200;
+
+    let words = [ADDI_X3_X0_1, UNDECODABLE_WORD, ADDI_X3_X0_1];
+    let program = rv64_transpiler().transpile(&words)?;
+
+    assert_eq!(program.len(), words.len());
+    assert_eq!(
+        program[0].as_ref().unwrap().opcode,
+        BaseAluImmOpcode::ADDI.global_opcode()
+    );
+    assert_eq!(
+        program[2].as_ref().unwrap().opcode,
+        BaseAluImmOpcode::ADDI.global_opcode()
+    );
+    let unimp = program[1].as_ref().expect("UNIMP should be emitted");
+    assert_eq!(unimp.opcode, SystemOpcode::TERMINATE.global_opcode());
+    assert_eq!(unimp.c.as_canonical_u32(), 2);
+
+    Ok(())
+}
+
 // To create ELF directly from .S file, `brew install riscv-gnu-toolchain` and run
 // `riscv64-unknown-elf-gcc -march=rv64im -mabi=lp64 -nostartfiles -e _start -Ttext 0x00200800
 // -Wl,-N <name>.S -o <name>-from-as`
