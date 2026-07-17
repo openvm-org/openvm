@@ -18,11 +18,11 @@ on:
   push:
     branches: ["main"]
   pull_request:
-    types: [opened, synchronize, reopened, labeled]
+    types: [opened, synchronize, reopened]
     branches: ["**"]
 
 concurrency:
-  group: ${{ github.workflow_ref }}-sdk-${{ github.event.action == 'labeled' && github.event.label.name != 'run-sdk-tests' && github.run_id || github.event.pull_request.number || github.sha }}
+  group: sdk-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
 env:

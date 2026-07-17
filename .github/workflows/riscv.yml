@@ -43,7 +43,7 @@ jobs:
         platform:
           - {
               name: "runtime (AOT)",
-              labels: "family=c8i-flex.16xlarge+c8i.16xlarge+c8a.16xlarge+c7i.16xlarge+c7a.16xlarge/image=ubuntu24-full-x64/volume=80gb",
+              labels: "family=c8i-flex.8xlarge+c8i.8xlarge+c8a.8xlarge+m8i-flex.8xlarge+m8i.8xlarge+m8a.8xlarge+c7i.8xlarge+c7a.8xlarge+m7i.8xlarge+m7a.8xlarge/image=ubuntu24-full-x64/volume=80gb",
               image: "ubuntu24-full-x64",
               features: "aot",
             }
