@@ -561,11 +561,10 @@ fn configured_g2_emission_mode() -> Result<G2EmissionMode, CompileError> {
                 "OPENVM_RVR_G2_EMISSION must be checked or production",
             )),
         },
-        Err(std::env::VarError::NotPresent) => Ok(if cfg!(debug_assertions) {
-            G2EmissionMode::Checked
-        } else {
-            G2EmissionMode::Production
-        }),
+        // Conservative default: checked emission in both debug and release until
+        // the production (checks-elided) emission is validated on CI. Production
+        // remains available via OPENVM_RVR_G2_EMISSION=production.
+        Err(std::env::VarError::NotPresent) => Ok(G2EmissionMode::Checked),
         Err(_) => Err(CompileError::InvalidOptions(
             "OPENVM_RVR_G2_EMISSION must contain valid UTF-8",
         )),
