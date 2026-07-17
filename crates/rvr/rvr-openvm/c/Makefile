@@ -8,6 +8,12 @@ CFLAGS += $(LTO)
 LDFLAGS ?=
 LDFLAGS += -fuse-ld=$(LINKER)
 LDLIBS ?=
+THINLTO_JOBS ?= 1
+THINLTO_CACHE_DIR ?=
+THINLTO_LDFLAGS = -Wl,--thinlto-jobs=$(THINLTO_JOBS)
+ifneq ($(strip $(THINLTO_CACHE_DIR)),)
+THINLTO_LDFLAGS += -Wl,--thinlto-cache-dir="$(THINLTO_CACHE_DIR)"
+endif
 
 # On ELF platforms, force eager symbol binding to prevent the PLT lazy
 # resolver from clobbering preserve_none argument registers (r11 on x86_64).
@@ -33,7 +39,7 @@ $(EXT_OBJS): CFLAGS += $(EXT_CFLAGS)
 shared: $(LIB)
 
 $(LIB): $(ALL_OBJS)
-	$(CC) -shared $(CFLAGS) $(LDFLAGS) -Wl,--thinlto-jobs=1 -o $@ $^ $(EXT_LIBS) $(LDLIBS)
+	$(CC) -shared $(CFLAGS) $(LDFLAGS) $(THINLTO_LDFLAGS) -o $@ $^ $(EXT_LIBS) $(LDLIBS)
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c -o $@ $<
