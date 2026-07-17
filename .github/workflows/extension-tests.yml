@@ -62,7 +62,6 @@ jobs:
           - { extension: shared, mode: rvr }
           - { extension: cuda, mode: default }
           - { extension: cuda, mode: rvr }
-        # TODO(aot): re-enable AOT CI separately.
       # Ensure tests run in parallel even if one fails
       fail-fast: false
     uses: ./.github/workflows/extension-tests.group.yml

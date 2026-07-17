@@ -1,7 +1,7 @@
 use std::{fs::read_dir, path::PathBuf};
 
 use eyre::Result;
-#[cfg(any(feature = "aot", feature = "rvr"))]
+#[cfg(feature = "rvr")]
 use openvm_circuit::arch::testing::assert_vm_states_equivalent;
 use openvm_circuit::arch::{instructions::exe::VmExe, VmExecutor};
 use openvm_riscv_circuit::Rv64ImConfig;
@@ -44,7 +44,7 @@ fn test_rv64im_riscv_vector_runtime() -> Result<()> {
                 #[allow(unused_variables)]
                 let state = instance.execute(vec![])?;
 
-                #[cfg(any(feature = "aot", feature = "rvr"))]
+                #[cfg(feature = "rvr")]
                 {
                     let interpreter_instance = executor.interpreter_instance(&exe)?;
                     let naive_state = interpreter_instance.execute(vec![])?;

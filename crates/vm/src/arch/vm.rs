@@ -39,8 +39,6 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{info_span, instrument};
 
-#[cfg(feature = "aot")]
-use super::aot::AotInstance;
 #[cfg(feature = "rvr")]
 use super::rvr::{
     bridge::map_rvr_compile_error, build_pc_to_chip, compile, compile_metered,
@@ -220,7 +218,7 @@ where
     /// the given `exe`.
     ///
     /// For metered execution, use the [`metered_instance`](Self::metered_instance) constructor.
-    #[cfg(all(not(feature = "aot"), not(feature = "rvr")))]
+    #[cfg(not(feature = "rvr"))]
     pub fn instance(
         &self,
         exe: &VmExe<F>,
@@ -231,7 +229,7 @@ where
         InterpretedInstance::new(&self.inventory, exe)
     }
 
-    #[cfg(any(feature = "aot", feature = "rvr"))]
+    #[cfg(feature = "rvr")]
     pub fn interpreter_instance(
         &self,
         exe: &VmExe<F>,
@@ -240,14 +238,6 @@ where
         let _compilation_span =
             tracing::info_span!("compile_pure", backend = "interpreter").entered();
         InterpretedInstance::new(&self.inventory, exe)
-    }
-
-    #[cfg(feature = "aot")]
-    pub fn instance(
-        &self,
-        exe: &VmExe<F>,
-    ) -> Result<AotInstance<'_, ExecutionCtx>, StaticProgramError> {
-        Self::aot_instance(self, exe)
     }
 
     #[cfg(feature = "rvr")]
@@ -350,23 +340,6 @@ where
     }
 }
 
-#[cfg(feature = "aot")]
-impl<F, VC> VmExecutor<F, VC>
-where
-    F: PrimeField32,
-    VC: VmExecutionConfig<F>,
-    VC::Executor: Executor<F>,
-{
-    pub fn aot_instance(
-        &self,
-        exe: &VmExe<F>,
-    ) -> Result<AotInstance<'_, ExecutionCtx>, StaticProgramError> {
-        #[cfg(feature = "metrics")]
-        let _compilation_span = tracing::info_span!("compile_pure", backend = "aot").entered();
-        AotInstance::new(&self.inventory, exe)
-    }
-}
-
 impl<F, VC> VmExecutor<F, VC>
 where
     F: PrimeField32,
@@ -374,7 +347,7 @@ where
     VC::Executor: MeteredExecutor<F>,
 {
     /// Creates an instance of the interpreter specialized for metered execution of the given `exe`.
-    #[cfg(all(not(feature = "aot"), not(feature = "rvr")))]
+    #[cfg(not(feature = "rvr"))]
     pub fn metered_instance(
         &self,
         exe: &VmExe<F>,
@@ -386,7 +359,7 @@ where
         InterpretedInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
     }
 
-    #[cfg(any(feature = "aot", feature = "rvr"))]
+    #[cfg(feature = "rvr")]
     pub fn metered_interpreter_instance(
         &self,
         exe: &VmExe<F>,
@@ -396,27 +369,6 @@ where
         let _compilation_span =
             tracing::info_span!("compile_metered", backend = "interpreter").entered();
         InterpretedInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
-    }
-
-    #[cfg(feature = "aot")]
-    pub fn metered_instance(
-        &self,
-        exe: &VmExe<F>,
-        executor_idx_to_air_idx: &[usize],
-    ) -> Result<AotInstance<'_, MeteredCtx>, StaticProgramError> {
-        Self::metered_aot_instance(self, exe, executor_idx_to_air_idx)
-    }
-
-    // Crates an AOT instance for metered execution of the given `exe`.
-    #[cfg(feature = "aot")]
-    pub fn metered_aot_instance(
-        &self,
-        exe: &VmExe<F>,
-        executor_idx_to_air_idx: &[usize],
-    ) -> Result<AotInstance<'_, MeteredCtx>, StaticProgramError> {
-        #[cfg(feature = "metrics")]
-        let _compilation_span = tracing::info_span!("compile_metered", backend = "aot").entered();
-        AotInstance::new_metered(&self.inventory, exe, executor_idx_to_air_idx)
     }
 
     /// Creates an instance of the interpreter specialized for cost metering execution of the given
@@ -757,7 +709,7 @@ where
     }
 
     /// Pure execution instance.
-    #[cfg(all(not(feature = "aot"), not(feature = "rvr")))]
+    #[cfg(not(feature = "rvr"))]
     pub fn instance(
         &self,
         exe: &VmExe<Val<E::SC>>,
@@ -793,8 +745,8 @@ where
         self.executor().rvr_instance(exe, None)
     }
 
-    // Pure AOT / RVR execution
-    #[cfg(any(feature = "aot", feature = "rvr"))]
+    // Interpreter access when RVR is enabled.
+    #[cfg(feature = "rvr")]
     pub fn interpreter_instance(
         &self,
         exe: &VmExe<Val<E::SC>>,
@@ -806,32 +758,7 @@ where
         self.executor().interpreter_instance(exe)
     }
 
-    // Pure AOT execution
-    #[cfg(feature = "aot")]
-    pub fn instance(
-        &self,
-        exe: &VmExe<Val<E::SC>>,
-    ) -> Result<AotInstance<'_, ExecutionCtx>, StaticProgramError>
-    where
-        Val<E::SC>: PrimeField32,
-        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
-    {
-        Self::get_aot_instance(self, exe)
-    }
-
-    #[cfg(feature = "aot")]
-    pub fn get_aot_instance(
-        &self,
-        exe: &VmExe<Val<E::SC>>,
-    ) -> Result<AotInstance<'_, ExecutionCtx>, StaticProgramError>
-    where
-        Val<E::SC>: PrimeField32,
-        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>,
-    {
-        self.executor().aot_instance(exe)
-    }
-
-    #[cfg(all(not(feature = "aot"), not(feature = "rvr")))]
+    #[cfg(not(feature = "rvr"))]
     pub fn metered_instance(
         &self,
         exe: &VmExe<Val<E::SC>>,
@@ -917,36 +844,7 @@ where
             .load_metered_segment_instance(lib_path, exe, &executor_idx_to_air_idx)
     }
 
-    #[cfg(feature = "aot")]
-    pub fn metered_instance(
-        &self,
-        exe: &VmExe<Val<E::SC>>,
-    ) -> Result<AotInstance<'_, MeteredCtx>, StaticProgramError>
-    where
-        Val<E::SC>: PrimeField32,
-        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
-    {
-        let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
-        self.executor()
-            .metered_instance(exe, &executor_idx_to_air_idx)
-    }
-
-    // Metered AOT execution
-    #[cfg(feature = "aot")]
-    pub fn get_metered_aot_instance(
-        &self,
-        exe: &VmExe<Val<E::SC>>,
-    ) -> Result<AotInstance<'_, MeteredCtx>, StaticProgramError>
-    where
-        Val<E::SC>: PrimeField32,
-        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
-    {
-        let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
-        self.executor()
-            .metered_aot_instance(exe, &executor_idx_to_air_idx)
-    }
-
-    #[cfg(any(feature = "aot", feature = "rvr"))]
+    #[cfg(feature = "rvr")]
     pub fn metered_interpreter_instance(
         &self,
         exe: &VmExe<Val<E::SC>>,

@@ -87,13 +87,6 @@ impl<F: VmField> VmRvrExtension<F> for DeferralExtension {
 }
 
 #[derive(Clone, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
-#[cfg_attr(
-    feature = "aot",
-    derive(
-        openvm_circuit_derive::AotExecutor,
-        openvm_circuit_derive::AotMeteredExecutor
-    )
-)]
 pub enum DeferralExecutor {
     Call(DeferralCallExecutor),
     Output(DeferralOutputExecutor),

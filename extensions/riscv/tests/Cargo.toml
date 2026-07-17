@@ -27,7 +27,6 @@ tempfile.workspace = true
 default = ["parallel"]
 parallel = ["openvm-circuit/parallel"]
 tco = ["openvm-riscv-circuit/tco"]
-aot = ["openvm-riscv-circuit/aot"]
 rvr = ["openvm-riscv-circuit/rvr"]
 unprotected = ["openvm-circuit/unprotected"]
 cuda = ["openvm-riscv-circuit/cuda"]

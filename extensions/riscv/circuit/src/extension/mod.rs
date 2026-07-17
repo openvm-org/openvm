@@ -114,13 +114,6 @@ impl<F: PrimeField32> VmRvrExtension<F> for Rv64M {}
 
 /// RISC-V 64-bit Base (RV64I) Instruction Executors
 #[derive(Clone, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
-#[cfg_attr(
-    feature = "aot",
-    derive(
-        openvm_circuit_derive::AotExecutor,
-        openvm_circuit_derive::AotMeteredExecutor
-    )
-)]
 pub enum Rv64IExecutor {
     AddSub(Rv64AddSubExecutor),
     AddI(Rv64AddIExecutor),
@@ -151,13 +144,6 @@ pub enum Rv64IExecutor {
 
 /// RISC-V 64-bit Multiplication Extension (RV64M) Instruction Executors
 #[derive(Clone, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
-#[cfg_attr(
-    feature = "aot",
-    derive(
-        openvm_circuit_derive::AotExecutor,
-        openvm_circuit_derive::AotMeteredExecutor
-    )
-)]
 pub enum Rv64MExecutor {
     Multiplication(Rv64MultiplicationExecutor),
     MulW(Rv64MulWExecutor),

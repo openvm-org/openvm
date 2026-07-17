@@ -83,7 +83,6 @@ cuda = [
     "openvm-sha2-circuit/cuda",
 ]
 tco = ["openvm-circuit/tco"]
-aot = ["openvm-circuit/aot"]
 rvr = ["openvm-ecc-circuit/rvr", "openvm-sha2-circuit/rvr"]
 
 [package.metadata.cargo-shear]

@@ -104,9 +104,6 @@ impl<F: PrimeField32> InterpreterExecutor<F> for DeferralOutputExecutor {
     }
 }
 
-#[cfg(feature = "aot")]
-impl<F: PrimeField32> AotExecutor<F> for DeferralOutputExecutor {}
-
 impl<F: PrimeField32> InterpreterMeteredExecutor<F> for DeferralOutputExecutor {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<DeferralOutputPrecompute>>()
@@ -146,9 +143,6 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for DeferralOutputExecutor {
         Ok(execute_e2_handler::<_>)
     }
 }
-
-#[cfg(feature = "aot")]
-impl<F: PrimeField32> AotMeteredExecutor<F> for DeferralOutputExecutor {}
 
 #[inline(always)]
 unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait>(

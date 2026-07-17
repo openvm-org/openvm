@@ -440,9 +440,6 @@ where
     }
 }
 
-#[cfg(feature = "aot")]
-impl<F: PrimeField32, A> AotExecutor<F> for FieldExpressionExecutor<A> {}
-
 impl<F, A> TraceFiller<F> for FieldExpressionFiller<A>
 where
     F: PrimeField32 + Send + Sync + Clone,

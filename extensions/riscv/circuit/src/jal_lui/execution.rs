@@ -90,54 +90,6 @@ where
     }
 }
 
-#[cfg(feature = "aot")]
-impl<F, A> AotExecutor<F> for Rv64JalLuiExecutor<A>
-where
-    F: PrimeField32,
-{
-    fn generate_x86_asm(&self, inst: &Instruction<F>, pc: u32) -> Result<String, AotError> {
-        use crate::common::*;
-
-        let local_opcode = Rv64JalLuiOpcode::from_usize(
-            inst.opcode.local_opcode_idx(Rv64JalLuiOpcode::CLASS_OFFSET),
-        );
-        let is_jal = local_opcode == JAL;
-        let signed_imm = get_signed_imm(is_jal, inst.c);
-        let a = inst.a.as_canonical_u32() as u8;
-        let enabled = !inst.f.is_zero();
-
-        let mut asm_str = String::new();
-        let a_reg = a / 4;
-
-        let rd = if is_jal {
-            pc + DEFAULT_PC_STEP
-        } else {
-            let imm = signed_imm as u32;
-            imm << 12
-        };
-
-        if enabled {
-            if let Some(override_reg) = RISCV_TO_X86_OVERRIDE_MAP[a_reg as usize] {
-                asm_str += &format!("   mov {override_reg}, {rd}\n");
-            } else {
-                asm_str += &format!("   mov {REG_A_W}, {rd}\n");
-                asm_str += &gpr_to_xmm(REG_A_W, a_reg);
-            }
-        }
-        if is_jal {
-            let next_pc = pc as i32 + signed_imm;
-            debug_assert!(next_pc >= 0);
-            asm_str += &format!("   jmp asm_execute_pc_{next_pc}\n");
-        };
-
-        Ok(asm_str)
-    }
-
-    fn is_aot_supported(&self, _inst: &Instruction<F>) -> bool {
-        true
-    }
-}
-
 impl<F, A> InterpreterMeteredExecutor<F> for Rv64JalLuiExecutor<A>
 where
     F: PrimeField32,
@@ -178,28 +130,6 @@ where
         data.chip_idx = chip_idx as u32;
         let (is_jal, enabled) = self.pre_compute_impl(inst, &mut data.data)?;
         dispatch!(execute_e2_handler, is_jal, enabled)
-    }
-}
-
-#[cfg(feature = "aot")]
-impl<F, A> AotMeteredExecutor<F> for Rv64JalLuiExecutor<A>
-where
-    F: PrimeField32,
-{
-    fn is_aot_metered_supported(&self, _inst: &Instruction<F>) -> bool {
-        true
-    }
-    fn generate_x86_metered_asm(
-        &self,
-        inst: &Instruction<F>,
-        pc: u32,
-        chip_idx: usize,
-        _config: &SystemConfig,
-    ) -> Result<String, AotError> {
-        use crate::common::update_height_change_asm;
-        let mut asm_str = update_height_change_asm(chip_idx, 1)?;
-        asm_str += &self.generate_x86_asm(inst, pc)?;
-        Ok(asm_str)
     }
 }
 

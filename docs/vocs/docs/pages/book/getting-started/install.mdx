@@ -235,57 +235,6 @@ This will globally install `cargo-openvm`. You can validate a successful install
 cargo openvm --version
 ```
 
-## Installation with Ahead of Time Compilation
-
-On host machines with the `x86_64` architecture, the CLI may be installed with ahead of time (AOT) compilation of guest programs to host binaries. This feature provides the fastest execution performance. This feature may be enabled on top of the standard CPU installation as well as the Nvidia GPU installation. We provide installation instructions for both versions, assuming the prerequisites ([CPU](#installation-prerequisites), [GPU](#installation-prerequisites-cuda)) are already met.
-
-**Caution**: AOT execution currently runs in _unprotected_ mode, and it should only be used on trusted guest programs.
-
-### Option 1: Install Via Git URL (Recommended)
-
-Begin the installation:
-
-:::code-group
-```bash [Without GPU]
-cargo +1.91 install --locked --git https://github.com/openvm-org/openvm.git --tag v2.0.0 --features aot cargo-openvm
-```
-```bash [Nvidia GPU]
-cargo +1.91 install --locked --git https://github.com/openvm-org/openvm.git --tag v2.0.0 --features aot,cuda cargo-openvm
-```
-:::
-
-This will globally install `cargo-openvm`. You can validate a successful installation with:
-
-```bash
-cargo openvm --version
-```
-
-### Option 2: Build from source
-
-To build from source, first clone the repository.
-
-```bash
-git clone --branch v2.0.0 --single-branch https://github.com/openvm-org/openvm.git
-cd openvm
-```
-
-Then begin the installation:
-
-:::code-group
-```bash [Without GPU]
-cargo +1.91 install --locked --force --path crates/cli --features aot
-```
-```bash [Nvidia GPU]
-cargo +1.91 install --locked --force --path crates/cli --features aot,cuda
-```
-:::
-
-This will globally install `cargo-openvm`. You can validate a successful installation with:
-
-```bash
-cargo openvm --version
-```
-
 ## Install the OpenVM Rust Toolchain
 
 `cargo openvm build` cross-compiles guest programs with a custom Rust toolchain built from the [openvm-org/rust](https://github.com/openvm-org/rust) fork, which adds the `riscv64im-unknown-openvm-elf` tier-3 target with prebuilt `std`/`core`/`alloc`/`panic_abort` rlibs. Install it once after installing `cargo-openvm`:

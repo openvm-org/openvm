@@ -15,8 +15,7 @@ use openvm_riscv_transpiler::ShiftWOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::{ShiftWLogicalExecutor, ShiftWRightArithmeticExecutor};
-#[allow(unused_imports)]
-use crate::{adapters::imm_to_rv64_u64, common::*};
+use crate::adapters::imm_to_rv64_u64;
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]

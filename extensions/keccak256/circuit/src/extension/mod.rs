@@ -132,13 +132,6 @@ impl<F: PrimeField32> VmRvrExtension<F> for Keccak256 {
 }
 
 #[derive(Clone, Copy, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
-#[cfg_attr(
-    feature = "aot",
-    derive(
-        openvm_circuit_derive::AotExecutor,
-        openvm_circuit_derive::AotMeteredExecutor
-    )
-)]
 pub enum Keccak256Executor {
     Keccakf(KeccakfExecutor),
     Xorin(XorinVmExecutor),

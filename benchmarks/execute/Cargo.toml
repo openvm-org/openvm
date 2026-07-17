@@ -49,16 +49,6 @@ tco = [
     "openvm-riscv-circuit/tco",
     "openvm-sha2-circuit/tco",
 ]
-aot = [
-    "openvm-circuit/aot",
-    "openvm-algebra-circuit/aot",
-    "openvm-bigint-circuit/aot",
-    "openvm-ecc-circuit/aot",
-    "openvm-keccak256-circuit/aot",
-    "openvm-pairing-circuit/aot",
-    "openvm-riscv-circuit/aot",
-    "openvm-sha2-circuit/aot",
-]
 rvr = [
     "dep:rvr-openvm-lift",
     "openvm-circuit/rvr",

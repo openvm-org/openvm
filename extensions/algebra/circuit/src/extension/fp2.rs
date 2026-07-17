@@ -80,13 +80,6 @@ impl<F: PrimeField32> VmRvrExtension<F> for Fp2Extension {
 }
 
 #[derive(Clone, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
-#[cfg_attr(
-    feature = "aot",
-    derive(
-        openvm_circuit_derive::AotExecutor,
-        openvm_circuit_derive::AotMeteredExecutor
-    )
-)]
 pub enum Fp2ExtensionExecutor {
     // 32 limbs prime
     Fp2AddSubRv64_32(Fp2Executor<FP2_BLOCKS_32>), // Fp2AddSub
