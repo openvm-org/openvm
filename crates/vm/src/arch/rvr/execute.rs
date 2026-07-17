@@ -22,8 +22,8 @@ use super::{
     metered_cost::RvrMeteredCostResult,
     preflight::PreflightTracerData,
     state::{
-        init_rvr_state, MeteredCostRvState, MeteredRvState, PureRvState,
-        PureWithInstretTrackingRvState, PreflightRvState,
+        init_rvr_state, MeteredCostRvState, MeteredRvState, PreflightState, PureRvState,
+        PureWithInstretTrackingRvState,
     },
 };
 use crate::{arch::VmState, system::memory::online::GuestMemory};
@@ -218,7 +218,7 @@ fn run_preflight_and_finalize(
     }
 
     let status = state.execution_status();
-    let exit_code = state.result_code();
+    let exit_code = state.exit_code();
     match status {
         ExecutionStatus::Terminated => {
             write_rv64_registers(vm_state, &state.regs);
@@ -362,15 +362,14 @@ pub fn execute_preflight(
     tracer_data: &mut PreflightTracerData,
     num_insns: Option<u64>,
 ) -> Result<RvrPreflightRunResult, ExecuteError> {
+    require_execution_kind(compiled, "Preflight", &[RvrExecutionKind::Preflight])?;
     let pc = vm_state.pc();
     let initial_regs = read_rv64_registers(vm_state);
 
-    let mut state = init_rvr_state_with_preflight(vm_state, pc);
+    let mut state: PreflightState = init_rvr_state(vm_state, pc);
     state.regs = initial_regs;
-    state.tracer = TracerPtr(tracer_data);
-    if let Some(n) = num_insns {
-        state.suspender.set_target(n);
-    }
+    state.mode_state.tracer = tracer_data;
+    state.mode_state.target_instret = num_insns.unwrap_or(u64::MAX);
 
     let (status, exit_code) = run_preflight_and_finalize(
         compiled,

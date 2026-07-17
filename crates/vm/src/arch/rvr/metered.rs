@@ -3,7 +3,6 @@
 
 use std::{
     borrow::Cow,
-    ffi::c_void,
     path::{Path, PathBuf},
 };
 
@@ -465,7 +464,7 @@ impl RvrMeteredInstance<'_> {
     ) -> Result<(Vec<Segment>, VmState<GuestMemory>), ExecutionError> {
         #[cfg(feature = "metrics")]
         let start_instret = ctx.segmentation_ctx.instret;
-        let seg_state = SegmentationState::new(ctx, self.inner.system_config);
+        let seg_state = SegmentationState::new(ctx, &self.inner.system_config);
 
         #[cfg(feature = "metrics")]
         let metrics = ExecutionMetricTimer::start(ExecutionMetric::Metered);

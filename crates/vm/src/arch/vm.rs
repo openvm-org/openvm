@@ -43,17 +43,18 @@ use tracing::{info_span, instrument};
 
 #[cfg(feature = "rvr")]
 use super::rvr::{
-    bridge::map_rvr_compile_error, build_pc_to_chip, compile, compile_metered,
-    compile_metered_cost, compile_metered_segment_boundary, compile_with_instret_tracking,
-    classify_preflight_opcodes_with_extensions, compile_preflight_with_extensions,
-    load_compiled_from_path, preflight::execute_rvr_preflight,
-    preflight::{ChipRecordBuf, RvrArenaNativeTarget}, rvr_preflight_engine_env_override,
-    ArenaNativeGeometry, ChipMapping, GuestDebugMap, LogNativeOpcodeAdmitter,
-    PreflightMemoryAccessAux, PreflightRawLogs, RvrCompiled, RvrDeltaRecords, RvrExecutionKind,
-    RvrInitialImage, RvrInlineChipRecords,
-    RvrMeteredCostInstance, RvrMeteredInstance, RvrMeteredSegmentInstance, RvrPreflightEngine,
-    RvrPreflightBufferPool, RvrPreflightInstance, RvrPreflightOpcodeClass, RvrPureInstance,
-    RvrPreflightOutput, RvrPreflightRoute, RvrPureWithInstretTrackingInstance,
+    bridge::map_rvr_compile_error,
+    build_pc_to_chip, classify_preflight_opcodes_with_extensions, compile, compile_metered,
+    compile_metered_cost, compile_metered_segment_boundary, compile_preflight_with_extensions,
+    compile_with_instret_tracking, load_compiled_from_path,
+    preflight::execute_rvr_preflight,
+    preflight::{ChipRecordBuf, RvrArenaNativeTarget},
+    rvr_preflight_engine_env_override, ArenaNativeGeometry, ChipMapping, GuestDebugMap,
+    LogNativeOpcodeAdmitter, PreflightMemoryAccessAux, PreflightRawLogs, RvrCompiled,
+    RvrDeltaRecords, RvrExecutionKind, RvrInitialImage, RvrInlineChipRecords,
+    RvrMeteredCostInstance, RvrMeteredInstance, RvrMeteredSegmentInstance, RvrPreflightBufferPool,
+    RvrPreflightEngine, RvrPreflightInstance, RvrPreflightOpcodeClass, RvrPreflightOutput,
+    RvrPreflightRoute, RvrPureInstance, RvrPureWithInstretTrackingInstance,
 };
 use super::{
     execution_mode::{
@@ -1641,7 +1642,7 @@ where
                 })
             }
             CachedRvrPreflight::Interpreter => {
-                self.execute_preflight(interpreter, state, num_insns, trace_heights)
+                self.execute_preflight_inner(interpreter, state, num_insns, trace_heights)
             }
         }
     }
