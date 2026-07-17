@@ -6,7 +6,7 @@
 # in-tree DEFAULT_RUSTUP_TOOLCHAIN_NAME constant.
 set -euo pipefail
 
-TAG="${OPENVM_TOOLCHAIN:-openvm-1.94.0}"
+TAG="${OPENVM_TOOLCHAIN:-openvm-1.94.1}"
 
 case "$(uname -s)-$(uname -m)" in
   Linux-x86_64)   TRIPLE=x86_64-unknown-linux-gnu ;;

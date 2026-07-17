@@ -26,7 +26,10 @@ use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, LOADB, LOADH, LOADW};
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::common::{load_sign_extend_width_for_opcode, LoadSignExtendExecutor};
-use crate::adapters::{rv64_address_add_imm, rv64_bytes_to_u32, sign_extend_imm16};
+use crate::adapters::{
+    rv64_address_add_imm, rv64_bytes_to_u32, sign_extend_imm16, BYTE_ACCESS_WIDTH,
+    HALFWORD_ACCESS_WIDTH, WORD_ACCESS_WIDTH,
+};
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -36,7 +39,9 @@ struct LoadSignExtendPreCompute {
     b: u8,
 }
 
-impl<A, const LOAD_WIDTH: usize> LoadSignExtendExecutor<A, LOAD_WIDTH> {
+impl<A, const LOAD_WIDTH: usize, const NUM_BLOCKS: usize>
+    LoadSignExtendExecutor<A, LOAD_WIDTH, NUM_BLOCKS>
+{
     fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,
@@ -95,7 +100,8 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, A, const LOAD_WIDTH: usize> InterpreterExecutor<F> for LoadSignExtendExecutor<A, LOAD_WIDTH>
+impl<F, A, const LOAD_WIDTH: usize, const NUM_BLOCKS: usize> InterpreterExecutor<F>
+    for LoadSignExtendExecutor<A, LOAD_WIDTH, NUM_BLOCKS>
 where
     F: PrimeField32,
 {
@@ -133,8 +139,8 @@ where
     }
 }
 
-impl<F, A, const LOAD_WIDTH: usize> InterpreterMeteredExecutor<F>
-    for LoadSignExtendExecutor<A, LOAD_WIDTH>
+impl<F, A, const LOAD_WIDTH: usize, const NUM_BLOCKS: usize> InterpreterMeteredExecutor<F>
+    for LoadSignExtendExecutor<A, LOAD_WIDTH, NUM_BLOCKS>
 where
     F: PrimeField32,
 {
@@ -187,21 +193,9 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: LoadSignExtendOp, const E
         exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.b as u32);
     let rs1_val = rv64_bytes_to_u32(rs1_bytes);
     let addr = rv64_address_add_imm(rs1_val, pre_compute.imm_extended);
-    debug_assert!((addr as usize) < MEM_SIZE);
+    debug_assert!(addr <= (MEM_SIZE - OP::WIDTH) as u64);
     let ptr_val = addr as u32;
-
-    let shift_amount = ptr_val % RV64_REGISTER_NUM_LIMBS as u32;
-    let ptr_val = ptr_val - shift_amount;
-    let read_data: [u8; RV64_REGISTER_NUM_LIMBS] =
-        exec_state.vm_read_bytes(RV64_MEMORY_AS, ptr_val);
-    let mut write_data = [0u8; RV64_REGISTER_NUM_LIMBS];
-
-    if !OP::compute_write_data(&mut write_data, read_data, shift_amount as usize) {
-        return Err(ExecutionError::Fail {
-            pc,
-            msg: "Invalid signed load",
-        });
-    }
+    let write_data = OP::read(exec_state, ptr_val);
 
     if ENABLED {
         exec_state.vm_write(RV64_REGISTER_AS, pre_compute.a as u32, &write_data);
@@ -244,12 +238,13 @@ unsafe fn execute_e2_impl<
 }
 
 trait LoadSignExtendOp {
-    /// Return if the operation is valid.
-    fn compute_write_data(
-        write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
-        read_data: [u8; RV64_REGISTER_NUM_LIMBS],
-        shift_amount: usize,
-    ) -> bool;
+    /// Access width in bytes.
+    const WIDTH: usize;
+
+    fn read<CTX: ExecutionCtxTrait>(
+        exec_state: &mut VmExecState<GuestMemory, CTX>,
+        ptr: u32,
+    ) -> [u8; RV64_REGISTER_NUM_LIMBS];
 }
 
 struct LoadWOp;
@@ -257,51 +252,40 @@ struct LoadHOp;
 struct LoadBOp;
 
 impl LoadSignExtendOp for LoadWOp {
+    const WIDTH: usize = WORD_ACCESS_WIDTH;
+
     #[inline(always)]
-    fn compute_write_data(
-        write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
-        read_data: [u8; RV64_REGISTER_NUM_LIMBS],
-        shift_amount: usize,
-    ) -> bool {
-        if shift_amount != 0 && shift_amount != 4 {
-            return false;
-        }
-        let word = i32::from_le_bytes([
-            read_data[shift_amount],
-            read_data[shift_amount + 1],
-            read_data[shift_amount + 2],
-            read_data[shift_amount + 3],
-        ]);
-        *write_data = (word as i64).to_le_bytes();
-        true
+    fn read<CTX: ExecutionCtxTrait>(
+        exec_state: &mut VmExecState<GuestMemory, CTX>,
+        ptr: u32,
+    ) -> [u8; RV64_REGISTER_NUM_LIMBS] {
+        let word = i32::from_le_bytes(exec_state.vm_read_bytes(RV64_MEMORY_AS, ptr));
+        (word as i64).to_le_bytes()
     }
 }
 
 impl LoadSignExtendOp for LoadHOp {
+    const WIDTH: usize = HALFWORD_ACCESS_WIDTH;
+
     #[inline(always)]
-    fn compute_write_data(
-        write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
-        read_data: [u8; RV64_REGISTER_NUM_LIMBS],
-        shift_amount: usize,
-    ) -> bool {
-        if shift_amount != 0 && shift_amount != 2 && shift_amount != 4 && shift_amount != 6 {
-            return false;
-        }
-        let half = i16::from_le_bytes([read_data[shift_amount], read_data[shift_amount + 1]]);
-        *write_data = (half as i64).to_le_bytes();
-        true
+    fn read<CTX: ExecutionCtxTrait>(
+        exec_state: &mut VmExecState<GuestMemory, CTX>,
+        ptr: u32,
+    ) -> [u8; RV64_REGISTER_NUM_LIMBS] {
+        let half = i16::from_le_bytes(exec_state.vm_read_bytes(RV64_MEMORY_AS, ptr));
+        (half as i64).to_le_bytes()
     }
 }
 
 impl LoadSignExtendOp for LoadBOp {
+    const WIDTH: usize = BYTE_ACCESS_WIDTH;
+
     #[inline(always)]
-    fn compute_write_data(
-        write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
-        read_data: [u8; RV64_REGISTER_NUM_LIMBS],
-        shift_amount: usize,
-    ) -> bool {
-        let byte = read_data[shift_amount] as i8;
-        *write_data = (byte as i64).to_le_bytes();
-        true
+    fn read<CTX: ExecutionCtxTrait>(
+        exec_state: &mut VmExecState<GuestMemory, CTX>,
+        ptr: u32,
+    ) -> [u8; RV64_REGISTER_NUM_LIMBS] {
+        let [byte] = exec_state.vm_read_bytes(RV64_MEMORY_AS, ptr);
+        (byte as i8 as i64).to_le_bytes()
     }
 }

@@ -1,23 +1,38 @@
-use openvm_circuit::{arch::*, system::memory::online::TracingMemory};
+use openvm_circuit::{
+    arch::{
+        AdapterTraceExecutor, EmptyAdapterCoreLayout, ExecutionError, PreflightExecutor,
+        RecordArena, VmStateMut, BLOCK_FE_WIDTH,
+    },
+    system::memory::online::TracingMemory,
+};
 use openvm_circuit_primitives::AlignedBytesBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
-use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, *};
+use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, STOREB, STORED, STOREH, STOREW};
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use crate::adapters::{
-    set_u16_cell_byte, u16_cell_byte, STORE_WIDTH_BYTE, STORE_WIDTH_DOUBLEWORD,
-    STORE_WIDTH_HALFWORD, STORE_WIDTH_WORD,
+    rv64_bytes_to_u16_block, rv64_u16_block_to_bytes, BYTE_ACCESS_WIDTH, DOUBLEWORD_ACCESS_WIDTH,
+    HALFWORD_ACCESS_WIDTH, WORD_ACCESS_WIDTH,
 };
 
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Clone, Copy, Debug)]
 pub struct StoreRecord {
     pub read_data: [u16; BLOCK_FE_WIDTH],
+    /// Previous contents of the first and second memory blocks. The second-block entry is zero
+    /// when the access does not cross the first block.
+    pub prev_data: [[u16; BLOCK_FE_WIDTH]; 2],
+}
+
+#[repr(C)]
+#[derive(AlignedBytesBorrow, Clone, Copy, Debug)]
+pub struct StoreByteRecord {
+    pub read_data: [u16; BLOCK_FE_WIDTH],
     pub prev_data: [u16; BLOCK_FE_WIDTH],
 }
 
 #[derive(Clone, Copy, derive_new::new)]
-pub struct StoreExecutor<A, const STORE_WIDTH: usize> {
+pub struct StoreExecutor<A, const STORE_WIDTH: usize, const NUM_BLOCKS: usize = 2> {
     adapter: A,
     pub offset: usize,
 }
@@ -28,8 +43,8 @@ where
     A: 'static
         + AdapterTraceExecutor<
             F,
-            ReadData = (([u16; BLOCK_FE_WIDTH], [u16; BLOCK_FE_WIDTH]), u8),
-            WriteData = [u16; BLOCK_FE_WIDTH],
+            ReadData = (([[u16; BLOCK_FE_WIDTH]; 2], [u16; BLOCK_FE_WIDTH]), u8),
+            WriteData = [[u16; BLOCK_FE_WIDTH]; 2],
         >,
     for<'buf> RA: RecordArena<
         'buf,
@@ -73,45 +88,85 @@ where
     }
 }
 
-/// Returns the memory write data, preserving previous cells outside the store width.
+impl<F, A, RA> PreflightExecutor<F, RA> for StoreExecutor<A, BYTE_ACCESS_WIDTH, 1>
+where
+    F: PrimeField32,
+    A: 'static
+        + AdapterTraceExecutor<
+            F,
+            ReadData = (([u16; BLOCK_FE_WIDTH], [u16; BLOCK_FE_WIDTH]), u8),
+            WriteData = [u16; BLOCK_FE_WIDTH],
+        >,
+    for<'buf> RA: RecordArena<
+        'buf,
+        EmptyAdapterCoreLayout<F, A>,
+        (A::RecordMut<'buf>, &'buf mut StoreByteRecord),
+    >,
+{
+    fn get_opcode_name(&self, opcode: usize) -> String {
+        format!(
+            "{:?}",
+            Rv64LoadStoreOpcode::from_usize(opcode - self.offset)
+        )
+    }
+
+    fn execute(
+        &self,
+        state: VmStateMut<TracingMemory, RA>,
+        instruction: &Instruction<F>,
+    ) -> Result<(), ExecutionError> {
+        let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
+
+        A::start(*state.pc, state.memory, &mut adapter_record);
+        let ((prev_data, read_data), shift_amount) =
+            self.adapter
+                .read(state.memory, instruction, &mut adapter_record);
+
+        *core_record = StoreByteRecord {
+            read_data,
+            prev_data,
+        };
+        let write_data = store_write_data(
+            STOREB,
+            read_data,
+            [prev_data, [0; BLOCK_FE_WIDTH]],
+            shift_amount as usize,
+        )[0];
+        self.adapter
+            .write(state.memory, instruction, write_data, &mut adapter_record);
+
+        *state.pc = state.pc.wrapping_add(DEFAULT_PC_STEP);
+        Ok(())
+    }
+}
+
+/// Returns the two block values supplied to the adapter for a store at any byte offset. The
+/// adapter writes the second block only when the access crosses the first one.
 pub(crate) fn store_write_data(
     opcode: Rv64LoadStoreOpcode,
     read_data: [u16; BLOCK_FE_WIDTH],
-    prev_data: [u16; BLOCK_FE_WIDTH],
+    prev_data: [[u16; BLOCK_FE_WIDTH]; 2],
     byte_shift: usize,
-) -> [u16; BLOCK_FE_WIDTH] {
-    let cell_shift = byte_shift / 2;
-    match opcode {
-        STORED if byte_shift == 0 => read_data,
-        STOREW if byte_shift == 0 || byte_shift == 4 => {
-            let mut write_data = prev_data;
-            write_data[cell_shift] = read_data[0];
-            write_data[cell_shift + 1] = read_data[1];
-            write_data
-        }
-        STOREH if byte_shift == 0 || byte_shift == 2 || byte_shift == 4 || byte_shift == 6 => {
-            let mut write_data = prev_data;
-            write_data[cell_shift] = read_data[0];
-            write_data
-        }
-        STOREB if byte_shift < 8 => {
-            let mut write_data = prev_data;
-            let byte = u16_cell_byte(read_data[0], 0);
-            write_data[cell_shift] = set_u16_cell_byte(prev_data[cell_shift], byte_shift % 2, byte);
-            write_data
-        }
-        _ => unreachable!(
-            "unaligned store not supported by this execution environment: {opcode:?}, byte_shift: {byte_shift}"
-        ),
-    }
+) -> [[u16; BLOCK_FE_WIDTH]; 2] {
+    debug_assert!(byte_shift < 2 * BLOCK_FE_WIDTH);
+    let width = store_width_for_opcode(opcode);
+    let mut bytes = [0u8; 4 * BLOCK_FE_WIDTH];
+    bytes[..2 * BLOCK_FE_WIDTH].copy_from_slice(&rv64_u16_block_to_bytes(prev_data[0]));
+    bytes[2 * BLOCK_FE_WIDTH..].copy_from_slice(&rv64_u16_block_to_bytes(prev_data[1]));
+    let value = rv64_u16_block_to_bytes(read_data);
+    bytes[byte_shift..byte_shift + width].copy_from_slice(&value[..width]);
+    [
+        rv64_bytes_to_u16_block(bytes[..2 * BLOCK_FE_WIDTH].try_into().unwrap()),
+        rv64_bytes_to_u16_block(bytes[2 * BLOCK_FE_WIDTH..].try_into().unwrap()),
+    ]
 }
 
 pub(crate) fn store_width_for_opcode(opcode: Rv64LoadStoreOpcode) -> usize {
     match opcode {
-        STORED => STORE_WIDTH_DOUBLEWORD,
-        STOREW => STORE_WIDTH_WORD,
-        STOREH => STORE_WIDTH_HALFWORD,
-        STOREB => STORE_WIDTH_BYTE,
+        STORED => DOUBLEWORD_ACCESS_WIDTH,
+        STOREW => WORD_ACCESS_WIDTH,
+        STOREH => HALFWORD_ACCESS_WIDTH,
+        STOREB => BYTE_ACCESS_WIDTH,
         _ => unreachable!("unsupported store opcode: {opcode:?}"),
     }
 }

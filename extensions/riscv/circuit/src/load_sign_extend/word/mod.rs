@@ -1,8 +1,9 @@
-use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
+use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper, U16_CELL_SIZE};
 
 use crate::{
     adapters::{
-        Rv64LoadAdapterAir, Rv64LoadAdapterExecutor, Rv64LoadAdapterFiller, LOAD_WIDTH_WORD,
+        Rv64LoadMultiByteAdapterAir, Rv64LoadMultiByteAdapterExecutor,
+        Rv64LoadMultiByteAdapterFiller, WORD_ACCESS_WIDTH,
     },
     load_sign_extend::{
         common::LoadSignExtendExecutor,
@@ -10,19 +11,21 @@ use crate::{
     },
 };
 
-pub const LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH: usize = 1;
+/// Cells overlapped by an odd-shift word load.
+pub const LOAD_SIGN_EXTEND_WORD_OVERLAP_CELLS: usize = WORD_ACCESS_WIDTH / U16_CELL_SIZE + 1;
 
 pub type LoadSignExtendWordCoreAir =
-    LoadSignExtendCoreAir<LOAD_WIDTH_WORD, LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH>;
+    LoadSignExtendCoreAir<WORD_ACCESS_WIDTH, LOAD_SIGN_EXTEND_WORD_OVERLAP_CELLS>;
 pub type LoadSignExtendWordFiller = LoadSignExtendFiller<
-    Rv64LoadAdapterFiller,
-    LOAD_WIDTH_WORD,
-    LOAD_SIGN_EXTEND_WORD_SELECTOR_WIDTH,
+    Rv64LoadMultiByteAdapterFiller,
+    WORD_ACCESS_WIDTH,
+    LOAD_SIGN_EXTEND_WORD_OVERLAP_CELLS,
 >;
 
-pub type Rv64LoadSignExtendWordAir = VmAirWrapper<Rv64LoadAdapterAir, LoadSignExtendWordCoreAir>;
+pub type Rv64LoadSignExtendWordAir =
+    VmAirWrapper<Rv64LoadMultiByteAdapterAir, LoadSignExtendWordCoreAir>;
 pub type Rv64LoadSignExtendWordExecutor =
-    LoadSignExtendExecutor<Rv64LoadAdapterExecutor, LOAD_WIDTH_WORD>;
+    LoadSignExtendExecutor<Rv64LoadMultiByteAdapterExecutor<WORD_ACCESS_WIDTH>, WORD_ACCESS_WIDTH>;
 pub type Rv64LoadSignExtendWordChip<F> = VmChipWrapper<F, LoadSignExtendWordFiller>;
 
 #[cfg(feature = "cuda")]

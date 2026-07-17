@@ -1,8 +1,9 @@
-use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
+use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper, U16_CELL_SIZE};
 
 use crate::{
     adapters::{
-        Rv64StoreAdapterAir, Rv64StoreAdapterExecutor, Rv64StoreAdapterFiller, STORE_WIDTH_WORD,
+        Rv64StoreMultiByteAdapterAir, Rv64StoreMultiByteAdapterExecutor,
+        Rv64StoreMultiByteAdapterFiller, WORD_ACCESS_WIDTH,
     },
     store::{
         common::StoreExecutor,
@@ -10,14 +11,16 @@ use crate::{
     },
 };
 
-pub const STORE_WORD_SELECTOR_WIDTH: usize = 1;
+/// Source register cells decomposed on an odd-shift word store.
+pub const STORE_WORD_VALUE_CELLS: usize = WORD_ACCESS_WIDTH / U16_CELL_SIZE;
 
-pub type StoreWordCoreAir = StoreCoreAir<STORE_WIDTH_WORD, STORE_WORD_SELECTOR_WIDTH>;
+pub type StoreWordCoreAir = StoreCoreAir<WORD_ACCESS_WIDTH, STORE_WORD_VALUE_CELLS>;
 pub type StoreWordFiller =
-    StoreFiller<Rv64StoreAdapterFiller, STORE_WIDTH_WORD, STORE_WORD_SELECTOR_WIDTH>;
+    StoreFiller<Rv64StoreMultiByteAdapterFiller, WORD_ACCESS_WIDTH, STORE_WORD_VALUE_CELLS>;
 
-pub type Rv64StoreWordAir = VmAirWrapper<Rv64StoreAdapterAir, StoreWordCoreAir>;
-pub type Rv64StoreWordExecutor = StoreExecutor<Rv64StoreAdapterExecutor, STORE_WIDTH_WORD>;
+pub type Rv64StoreWordAir = VmAirWrapper<Rv64StoreMultiByteAdapterAir, StoreWordCoreAir>;
+pub type Rv64StoreWordExecutor =
+    StoreExecutor<Rv64StoreMultiByteAdapterExecutor<WORD_ACCESS_WIDTH>, WORD_ACCESS_WIDTH>;
 pub type Rv64StoreWordChip<F> = VmChipWrapper<F, StoreWordFiller>;
 
 #[cfg(feature = "cuda")]

@@ -1,13 +1,18 @@
 use std::borrow::{Borrow, BorrowMut};
 
-use openvm_circuit::{arch::*, system::memory::MemoryAuxColsFactory};
+use openvm_circuit::{
+    arch::{
+        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, TraceFiller,
+        VmAdapterInterface, VmCoreAir, BLOCK_FE_WIDTH,
+    },
+    system::memory::MemoryAuxColsFactory,
+};
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     encoder::Encoder,
-    var_range::SharedVariableRangeCheckerChip,
     AlignedBorrow, ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
 };
-use openvm_riscv_transpiler::Rv64LoadStoreOpcode::*;
+use openvm_riscv_transpiler::Rv64LoadStoreOpcode::STOREB;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
@@ -17,26 +22,24 @@ use openvm_stark_backend::{
 
 use crate::{
     adapters::{
-        set_u16_cell_byte, u16_cell_byte, Rv64StoreAdapterCols, Rv64StoreAdapterFiller,
-        Rv64StoreAdapterRecord, StoreInstruction, RV64_BYTE_BITS,
+        set_u16_cell_byte, shift_encoder, u16_cell_byte, Rv64StoreByteAdapterCols,
+        Rv64StoreByteAdapterFiller, Rv64StoreByteAdapterRecord, StoreByteInstruction,
+        BYTE_SHIFT_SELECTOR_WIDTH, RV64_BYTE_BITS,
     },
-    store::common::{store_write_data, StoreRecord},
+    store::common::{store_write_data, StoreByteRecord},
 };
-
-const BYTE_SELECTOR_MAX_DEGREE: u32 = 2;
-const STORE_BYTE_NUM_CASES: usize = 8;
-pub(crate) const STORE_BYTE_SELECTOR_WIDTH: usize = 3;
 
 /// Handles byte stores by replacing one byte in the previous memory block and preserving all other
 /// bytes.
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
 pub struct StoreByteCoreCols<T> {
-    pub selector: [T; STORE_BYTE_SELECTOR_WIDTH],
-    /// Kept as a degree-1 copy of the selector validity.
-    pub is_valid: T,
-    pub read_cell_bytes: [T; 2],
-    pub prev_cell_bytes: [T; 2],
+    pub selector: [T; BYTE_SHIFT_SELECTOR_WIDTH],
+    /// Low byte of the first source register cell — the stored byte. The cell's high byte is
+    /// derived in the AIR.
+    pub read_lo_byte: T,
+    /// Low byte of the selected previous memory cell. The high byte is derived in the AIR.
+    pub prev_cell_lo_byte: T,
     pub read_data: [T; BLOCK_FE_WIDTH],
     pub prev_data: [T; BLOCK_FE_WIDTH],
 }
@@ -53,7 +56,7 @@ impl StoreByteCoreAir {
     pub fn new(offset: usize, bitwise_lookup_bus: BitwiseOperationLookupBus) -> Self {
         Self {
             offset,
-            encoder: Encoder::new(STORE_BYTE_NUM_CASES, BYTE_SELECTOR_MAX_DEGREE, true),
+            encoder: shift_encoder(),
             bitwise_lookup_bus,
         }
     }
@@ -71,9 +74,9 @@ impl<AB, I> VmCoreAir<AB, I> for StoreByteCoreAir
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
-    I::Reads: From<([AB::Var; BLOCK_FE_WIDTH], [AB::Expr; BLOCK_FE_WIDTH])>,
-    I::Writes: From<[[AB::Expr; BLOCK_FE_WIDTH]; 1]>,
-    I::ProcessedInstruction: From<StoreInstruction<AB::Expr>>,
+    I::Reads: From<([AB::Expr; BLOCK_FE_WIDTH], [AB::Expr; BLOCK_FE_WIDTH])>,
+    I::Writes: From<[AB::Expr; BLOCK_FE_WIDTH]>,
+    I::ProcessedInstruction: From<StoreByteInstruction<AB::Expr>>,
 {
     fn eval(
         &self,
@@ -85,50 +88,35 @@ where
         self.encoder.eval(builder, &cols.selector);
         let flags = self.encoder.flags::<AB>(&cols.selector);
         let is_valid = self.encoder.is_valid::<AB>(&cols.selector);
-        builder.assert_eq(cols.is_valid, is_valid.clone());
 
+        // read_data[0] = read_lo_byte + 2^8 * read_hi_byte.
+        let inv_2_pow_8 = AB::F::from_u32(1 << RV64_BYTE_BITS).inverse();
+        let read_hi_byte = (cols.read_data[0] - cols.read_lo_byte) * inv_2_pow_8;
         self.bitwise_lookup_bus
-            .send_range(cols.read_cell_bytes[0], cols.read_cell_bytes[1])
+            .send_range(cols.read_lo_byte, read_hi_byte)
             .eval(builder, is_valid.clone());
-        self.bitwise_lookup_bus
-            .send_range(cols.prev_cell_bytes[0], cols.prev_cell_bytes[1])
-            .eval(builder, is_valid.clone());
-
-        let read_cell = cols.read_cell_bytes[0]
-            + cols.read_cell_bytes[1] * AB::Expr::from_u32(1 << RV64_BYTE_BITS);
-        builder.assert_eq(read_cell, cols.read_data[0]);
-
-        let prev_cell = cols.prev_cell_bytes[0]
-            + cols.prev_cell_bytes[1] * AB::Expr::from_u32(1 << RV64_BYTE_BITS);
-        let expected_prev_cell = flags
-            .iter()
+        // selected_prev_cell = Σᵢ (flag[2i] + flag[2i + 1]) * prev_data[i].
+        let selected_prev_cell = flags
+            .chunks_exact(2)
             .enumerate()
-            .fold(AB::Expr::ZERO, |acc, (shift, flag)| {
-                acc + flag.clone() * cols.prev_data[shift / 2]
+            .fold(AB::Expr::ZERO, |acc, (cell, flags)| {
+                acc + (flags[0].clone() + flags[1].clone()) * cols.prev_data[cell]
             });
-        builder.assert_eq(prev_cell, expected_prev_cell);
+        // selected_prev_cell = prev_cell_lo_byte + 2^8 * prev_cell_hi_byte.
+        let prev_cell_hi_byte = (selected_prev_cell - cols.prev_cell_lo_byte) * inv_2_pow_8;
+        self.bitwise_lookup_bus
+            .send_range(cols.prev_cell_lo_byte, prev_cell_hi_byte)
+            .eval(builder, is_valid.clone());
 
         let write_data = std::array::from_fn(|i| {
-            flags
-                .iter()
-                .enumerate()
-                .fold(AB::Expr::ZERO, |acc, (shift, flag)| {
-                    let cell_shift = shift / 2;
-                    let byte_idx = shift % 2;
-                    let term = if i == cell_shift {
-                        if byte_idx == 0 {
-                            cols.read_cell_bytes[0]
-                                + cols.prev_cell_bytes[1] * AB::Expr::from_u32(1 << RV64_BYTE_BITS)
-                        } else {
-                            cols.prev_cell_bytes[0]
-                                + cols.read_cell_bytes[0] * AB::Expr::from_u32(1 << RV64_BYTE_BITS)
-                        }
-                    } else {
-                        cols.prev_data[i].into()
-                    };
-                    acc + flag.clone() * term
-                })
+            is_valid.clone() * cols.prev_data[i]
+                + flags[2 * i].clone() * (cols.read_lo_byte - cols.prev_cell_lo_byte)
+                + flags[2 * i + 1].clone()
+                    * (cols.read_lo_byte * AB::Expr::from_u32(1 << RV64_BYTE_BITS)
+                        - cols.prev_data[i]
+                        + cols.prev_cell_lo_byte)
         });
+        // shift_amount = Σₛ s * flag[s].
         let shift_amount = flags
             .iter()
             .enumerate()
@@ -142,10 +130,14 @@ where
 
         AdapterAirContext {
             to_pc: None,
-            reads: (cols.prev_data, cols.read_data.map(Into::into)).into(),
-            writes: [write_data].into(),
-            instruction: StoreInstruction {
-                is_valid: cols.is_valid.into(),
+            reads: (
+                cols.prev_data.map(Into::into),
+                cols.read_data.map(Into::into),
+            )
+                .into(),
+            writes: write_data.into(),
+            instruction: StoreByteInstruction {
+                is_valid,
                 opcode: expected_opcode,
                 shift_amount,
             }
@@ -159,7 +151,7 @@ where
 }
 
 #[derive(Clone)]
-pub struct StoreByteFiller<A = Rv64StoreAdapterFiller> {
+pub struct StoreByteFiller<A = Rv64StoreByteAdapterFiller> {
     adapter: A,
     pub offset: usize,
     encoder: Encoder,
@@ -171,18 +163,17 @@ impl<A> StoreByteFiller<A> {
         adapter: A,
         offset: usize,
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
-        _range_checker_chip: SharedVariableRangeCheckerChip,
     ) -> Self {
         Self {
             adapter,
             offset,
-            encoder: Encoder::new(STORE_BYTE_NUM_CASES, BYTE_SELECTOR_MAX_DEGREE, true),
+            encoder: shift_encoder(),
             bitwise_lookup_chip,
         }
     }
 }
 
-impl<F> TraceFiller<F> for StoreByteFiller<Rv64StoreAdapterFiller>
+impl<F> TraceFiller<F> for StoreByteFiller<Rv64StoreByteAdapterFiller>
 where
     F: PrimeField32,
 {
@@ -190,30 +181,29 @@ where
         // SAFETY: row_slice is guaranteed by the caller to have at least the adapter width plus
         // StoreByteCoreCols::width() elements.
         let (mut adapter_row, mut core_row) = unsafe {
-            row_slice
-                .split_at_mut_unchecked(<Rv64StoreAdapterFiller as AdapterTraceFiller<F>>::WIDTH)
+            row_slice.split_at_mut_unchecked(
+                <Rv64StoreByteAdapterFiller as AdapterTraceFiller<F>>::WIDTH,
+            )
         };
-        let adapter_record: &Rv64StoreAdapterRecord =
+        let adapter_record: &Rv64StoreByteAdapterRecord =
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
         let shift = adapter_record.shift_amount();
         self.adapter.fill_trace_row(mem_helper, adapter_row);
 
-        // SAFETY: core_row contains a valid StoreRecord written by the executor during trace
+        // SAFETY: core_row contains a valid StoreByteRecord written by the executor during trace
         // generation.
-        let record: &StoreRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
+        let record: &StoreByteRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
         let read_data = record.read_data;
         let prev_data = record.prev_data;
         let core_row: &mut StoreByteCoreCols<F> = core_row.borrow_mut();
         let cell_shift = shift / 2;
         let byte_idx = shift % 2;
 
-        let read_cell_bytes = [
-            u16_cell_byte(read_data[0], 0),
-            u16_cell_byte(read_data[0], 1),
-        ];
+        // The cell's high byte is derived in the AIR and only range checked here.
+        let read_lo_byte = u16_cell_byte(read_data[0], 0);
         self.bitwise_lookup_chip
-            .request_range(read_cell_bytes[0] as u32, read_cell_bytes[1] as u32);
-        core_row.read_cell_bytes = read_cell_bytes.map(F::from_u16);
+            .request_range(read_lo_byte as u32, u16_cell_byte(read_data[0], 1) as u32);
+        core_row.read_lo_byte = F::from_u16(read_lo_byte);
 
         let prev_cell_bytes = [
             u16_cell_byte(prev_data[cell_shift], 0),
@@ -221,26 +211,26 @@ where
         ];
         self.bitwise_lookup_chip
             .request_range(prev_cell_bytes[0] as u32, prev_cell_bytes[1] as u32);
-        core_row.prev_cell_bytes = prev_cell_bytes.map(F::from_u16);
+        core_row.prev_cell_lo_byte = F::from_u16(prev_cell_bytes[0]);
         debug_assert_eq!(
-            store_write_data(STOREB, read_data, prev_data, shift)[cell_shift],
-            set_u16_cell_byte(prev_data[cell_shift], byte_idx, read_cell_bytes[0])
+            store_write_data(STOREB, read_data, [prev_data, [0; BLOCK_FE_WIDTH]], shift)[0]
+                [cell_shift],
+            set_u16_cell_byte(prev_data[cell_shift], byte_idx, read_lo_byte)
         );
 
         core_row.read_data = read_data.map(F::from_u16);
         core_row.prev_data = prev_data.map(F::from_u16);
-        core_row.is_valid = F::ONE;
-        let pt: [u32; STORE_BYTE_SELECTOR_WIDTH] =
-            self.encoder.get_flag_pt(shift).try_into().unwrap();
-        core_row.selector = pt.map(F::from_u32);
+        let pt: &[u32; BYTE_SHIFT_SELECTOR_WIDTH] = self.encoder.flag_pt(shift).try_into().unwrap();
+        core_row.selector = (*pt).map(F::from_u32);
     }
 
     fn fill_dummy_trace_row(&self, row_slice: &mut [F]) {
         let (adapter_row, _) = unsafe {
-            row_slice
-                .split_at_mut_unchecked(<Rv64StoreAdapterFiller as AdapterTraceFiller<F>>::WIDTH)
+            row_slice.split_at_mut_unchecked(
+                <Rv64StoreByteAdapterFiller as AdapterTraceFiller<F>>::WIDTH,
+            )
         };
-        let adapter_row: &mut Rv64StoreAdapterCols<F> = adapter_row.borrow_mut();
+        let adapter_row: &mut Rv64StoreByteAdapterCols<F> = adapter_row.borrow_mut();
         adapter_row.mem_as = F::from_u32(2);
     }
 }

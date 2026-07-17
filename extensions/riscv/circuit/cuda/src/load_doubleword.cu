@@ -1,27 +1,10 @@
 #include "riscv/cores/load.cuh"
 
-template <typename T> struct LoadDoublewordCoreCols {
-    T selector[LOAD_DOUBLEWORD_SELECTOR_WIDTH];
-    T is_valid;
-    T read_data[BLOCK_FE_WIDTH];
-};
+using LoadDoublewordCore = LoadWidthCore<DOUBLEWORD_ACCESS_WIDTH>;
 
 template <typename T> struct Rv64LoadDoublewordCols {
-    Rv64LoadAdapterCols<T> adapter;
-    LoadDoublewordCoreCols<T> core;
-};
-
-struct LoadDoublewordCore {
-    __device__ void fill_trace_row(RowSlice row, LoadRecord record, uint8_t shift) {
-        assert(shift == 0);
-
-        Encoder encoder(
-            LOAD_DOUBLEWORD_CASES, LOAD_SELECTOR_MAX_DEGREE, true, LOAD_DOUBLEWORD_SELECTOR_WIDTH
-        );
-        encoder.write_flag_pt(row, 0);
-        row[LOAD_DOUBLEWORD_SELECTOR_WIDTH] = 1;
-        row.write_array(LOAD_DOUBLEWORD_SELECTOR_WIDTH + 1, BLOCK_FE_WIDTH, record.read_data);
-    }
+    Rv64LoadMultiByteAdapterCols<T> adapter;
+    LoadWidthCoreCols<T, DOUBLEWORD_ACCESS_WIDTH> core;
 };
 
 __global__ void rv64_load_doubleword_tracegen(
@@ -32,6 +15,7 @@ __global__ void rv64_load_doubleword_tracegen(
     size_t pointer_max_bits,
     uint32_t *range_checker_ptr,
     uint32_t range_checker_num_bins,
+    uint32_t *bitwise_lookup_ptr,
     uint32_t timestamp_max_bits
 ) {
     uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -44,7 +28,7 @@ __global__ void rv64_load_doubleword_tracegen(
             timestamp_max_bits
         );
         adapter.fill_trace_row(row, record.adapter);
-        LoadDoublewordCore core;
+        auto core = LoadDoublewordCore(BitwiseOperationLookup(bitwise_lookup_ptr));
         core.fill_trace_row(
             row.slice_from(COL_INDEX(Rv64LoadDoublewordCols, core)),
             record.core,
@@ -63,6 +47,7 @@ extern "C" int _rv64_load_doubleword_tracegen(
     size_t pointer_max_bits,
     uint32_t *d_range_checker,
     uint32_t range_checker_num_bins,
+    uint32_t *d_bitwise_lookup,
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
@@ -76,6 +61,7 @@ extern "C" int _rv64_load_doubleword_tracegen(
         pointer_max_bits,
         d_range_checker,
         range_checker_num_bins,
+        d_bitwise_lookup,
         timestamp_max_bits
     );
     return CHECK_KERNEL();

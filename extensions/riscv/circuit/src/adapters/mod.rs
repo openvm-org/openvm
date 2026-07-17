@@ -4,6 +4,7 @@ use openvm_circuit::{
     arch::{execution_mode::ExecutionCtxTrait, VmStateMut, BLOCK_FE_WIDTH},
     system::memory::online::{GuestMemory, TracingMemory},
 };
+use openvm_circuit_primitives::encoder::Encoder;
 pub use openvm_circuit_primitives::U16_BITS;
 use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
@@ -53,15 +54,40 @@ pub const RV64_PTR_BITS: usize = U16_BITS * RV64_PTR_U16_LIMBS;
 /// register). Numerically equal to [`RV64_PTR_U16_LIMBS`], but named for arithmetic-word use.
 pub const RV64_WORD_U16_LIMBS: usize = RV64_WORD_NUM_LIMBS / 2;
 
-/// Load/store memory access widths in bytes.
-pub(crate) const LOAD_WIDTH_BYTE: usize = 1;
-pub(crate) const LOAD_WIDTH_HALFWORD: usize = 2;
-pub(crate) const LOAD_WIDTH_WORD: usize = 4;
-pub(crate) const LOAD_WIDTH_DOUBLEWORD: usize = 8;
-pub(crate) const STORE_WIDTH_BYTE: usize = 1;
-pub(crate) const STORE_WIDTH_HALFWORD: usize = 2;
-pub(crate) const STORE_WIDTH_WORD: usize = 4;
-pub(crate) const STORE_WIDTH_DOUBLEWORD: usize = 8;
+/// Supported load/store access widths in bytes.
+pub(crate) const BYTE_ACCESS_WIDTH: usize = 1;
+pub(crate) const HALFWORD_ACCESS_WIDTH: usize = 2;
+pub(crate) const WORD_ACCESS_WIDTH: usize = 4;
+pub(crate) const DOUBLEWORD_ACCESS_WIDTH: usize = 8;
+
+pub(crate) const fn is_multi_byte_access_width(width: usize) -> bool {
+    width == HALFWORD_ACCESS_WIDTH || width == WORD_ACCESS_WIDTH || width == DOUBLEWORD_ACCESS_WIDTH
+}
+
+pub(crate) const fn is_signed_multi_byte_access_width(width: usize) -> bool {
+    width == HALFWORD_ACCESS_WIDTH || width == WORD_ACCESS_WIDTH
+}
+
+/// Byte shifts of an effective pointer inside an 8-byte memory block. Every load/store core
+/// encodes shift `i` as selector case `i`.
+pub(crate) const NUM_BYTE_SHIFTS: usize = 2 * BLOCK_FE_WIDTH;
+/// Number of columns in the byte-shift selector encoding.
+pub(crate) const BYTE_SHIFT_SELECTOR_WIDTH: usize = 3;
+const SHIFT_SELECTOR_MAX_DEGREE: u32 = 2;
+
+#[inline(always)]
+pub(crate) fn rv64_register_pointer(pointer: u32) -> u8 {
+    debug_assert!(pointer <= u32::from(u8::MAX));
+    debug_assert_eq!(pointer as usize % RV64_REGISTER_NUM_LIMBS, 0);
+    pointer as u8
+}
+
+/// Encodes one selector case for each byte shift, reserving the zero point for invalid rows.
+pub(crate) fn shift_encoder() -> Encoder {
+    let encoder = Encoder::new(NUM_BYTE_SHIFTS, SHIFT_SELECTOR_MAX_DEGREE, true);
+    assert_eq!(encoder.width(), BYTE_SHIFT_SELECTOR_WIDTH);
+    encoder
+}
 
 /// Packs two little-endian u8 limbs into one u16-shaped field element.
 #[inline(always)]

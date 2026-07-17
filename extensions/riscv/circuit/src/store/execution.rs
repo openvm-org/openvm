@@ -26,7 +26,10 @@ use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, STOREB, STORED, STOREH,
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::common::{store_width_for_opcode, StoreExecutor};
-use crate::adapters::{rv64_address_add_imm, rv64_bytes_to_u32, sign_extend_imm16};
+use crate::adapters::{
+    rv64_address_add_imm, rv64_bytes_to_u32, sign_extend_imm16, BYTE_ACCESS_WIDTH,
+    DOUBLEWORD_ACCESS_WIDTH, HALFWORD_ACCESS_WIDTH, WORD_ACCESS_WIDTH,
+};
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -37,7 +40,9 @@ struct StorePreCompute {
     e: u8,
 }
 
-impl<A, const STORE_WIDTH: usize> StoreExecutor<A, STORE_WIDTH> {
+impl<A, const STORE_WIDTH: usize, const NUM_BLOCKS: usize>
+    StoreExecutor<A, STORE_WIDTH, NUM_BLOCKS>
+{
     fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,
@@ -100,7 +105,8 @@ macro_rules! dispatch {
     };
 }
 
-impl<F, A, const STORE_WIDTH: usize> InterpreterExecutor<F> for StoreExecutor<A, STORE_WIDTH>
+impl<F, A, const STORE_WIDTH: usize, const NUM_BLOCKS: usize> InterpreterExecutor<F>
+    for StoreExecutor<A, STORE_WIDTH, NUM_BLOCKS>
 where
     F: PrimeField32,
 {
@@ -138,7 +144,8 @@ where
     }
 }
 
-impl<F, A, const STORE_WIDTH: usize> InterpreterMeteredExecutor<F> for StoreExecutor<A, STORE_WIDTH>
+impl<F, A, const STORE_WIDTH: usize, const NUM_BLOCKS: usize> InterpreterMeteredExecutor<F>
+    for StoreExecutor<A, STORE_WIDTH, NUM_BLOCKS>
 where
     F: PrimeField32,
 {
@@ -191,27 +198,14 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: StoreOp>(
         exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.b as u32);
     let rs1_val = rv64_bytes_to_u32(rs1_bytes);
     let addr = rv64_address_add_imm(rs1_val, pre_compute.imm_extended);
-    debug_assert!((addr as usize) < MEM_SIZE);
+    debug_assert!(addr <= (MEM_SIZE - OP::WIDTH) as u64);
     let ptr_val = addr as u32;
-
-    let shift_amount = ptr_val % RV64_REGISTER_NUM_LIMBS as u32;
-    let ptr_val = ptr_val - shift_amount;
-    let read_data: [u8; RV64_REGISTER_NUM_LIMBS] =
-        exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.a as u32);
-    let mut write_data: [u8; RV64_REGISTER_NUM_LIMBS] = if OP::HOST_READ {
-        exec_state.host_read(pre_compute.e as u32, ptr_val)
-    } else {
-        [0u8; RV64_REGISTER_NUM_LIMBS]
-    };
-
-    if !OP::compute_write_data(&mut write_data, read_data, shift_amount as usize) {
-        return Err(ExecutionError::Fail {
-            pc,
-            msg: "Invalid store",
-        });
-    }
-
-    exec_state.vm_write(pre_compute.e as u32, ptr_val, &write_data);
+    OP::write(
+        exec_state,
+        pre_compute.e as u32,
+        ptr_val,
+        pre_compute.a as u32,
+    );
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
 
     Ok(())
@@ -244,14 +238,15 @@ unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, OP: StoreOp>(
 }
 
 trait StoreOp {
-    const HOST_READ: bool;
+    /// Access width in bytes.
+    const WIDTH: usize;
 
-    /// Return if the operation is valid.
-    fn compute_write_data(
-        write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
-        read_data: [u8; RV64_REGISTER_NUM_LIMBS],
-        shift_amount: usize,
-    ) -> bool;
+    fn write<CTX: ExecutionCtxTrait>(
+        exec_state: &mut VmExecState<GuestMemory, CTX>,
+        address_space: u32,
+        ptr: u32,
+        rs2_ptr: u32,
+    );
 }
 
 struct StoreDOp;
@@ -260,67 +255,61 @@ struct StoreHOp;
 struct StoreBOp;
 
 impl StoreOp for StoreDOp {
-    const HOST_READ: bool = false;
+    const WIDTH: usize = DOUBLEWORD_ACCESS_WIDTH;
 
     #[inline(always)]
-    fn compute_write_data(
-        write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
-        read_data: [u8; RV64_REGISTER_NUM_LIMBS],
-        _shift_amount: usize,
-    ) -> bool {
-        *write_data = read_data;
-        true
+    fn write<CTX: ExecutionCtxTrait>(
+        exec_state: &mut VmExecState<GuestMemory, CTX>,
+        address_space: u32,
+        ptr: u32,
+        rs2_ptr: u32,
+    ) {
+        let value: [u8; Self::WIDTH] = exec_state.vm_read_bytes(RV64_REGISTER_AS, rs2_ptr);
+        exec_state.vm_write_bytes(address_space, ptr, &value);
     }
 }
 
 impl StoreOp for StoreWOp {
-    const HOST_READ: bool = true;
+    const WIDTH: usize = WORD_ACCESS_WIDTH;
 
     #[inline(always)]
-    fn compute_write_data(
-        write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
-        read_data: [u8; RV64_REGISTER_NUM_LIMBS],
-        shift_amount: usize,
-    ) -> bool {
-        if shift_amount != 0 && shift_amount != 4 {
-            return false;
-        }
-        write_data[shift_amount] = read_data[0];
-        write_data[shift_amount + 1] = read_data[1];
-        write_data[shift_amount + 2] = read_data[2];
-        write_data[shift_amount + 3] = read_data[3];
-        true
+    fn write<CTX: ExecutionCtxTrait>(
+        exec_state: &mut VmExecState<GuestMemory, CTX>,
+        address_space: u32,
+        ptr: u32,
+        rs2_ptr: u32,
+    ) {
+        let value: [u8; Self::WIDTH] = exec_state.vm_read_bytes(RV64_REGISTER_AS, rs2_ptr);
+        exec_state.vm_write_bytes(address_space, ptr, &value);
     }
 }
 
 impl StoreOp for StoreHOp {
-    const HOST_READ: bool = true;
+    const WIDTH: usize = HALFWORD_ACCESS_WIDTH;
 
     #[inline(always)]
-    fn compute_write_data(
-        write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
-        read_data: [u8; RV64_REGISTER_NUM_LIMBS],
-        shift_amount: usize,
-    ) -> bool {
-        if shift_amount != 0 && shift_amount != 2 && shift_amount != 4 && shift_amount != 6 {
-            return false;
-        }
-        write_data[shift_amount] = read_data[0];
-        write_data[shift_amount + 1] = read_data[1];
-        true
+    fn write<CTX: ExecutionCtxTrait>(
+        exec_state: &mut VmExecState<GuestMemory, CTX>,
+        address_space: u32,
+        ptr: u32,
+        rs2_ptr: u32,
+    ) {
+        let value: [u8; Self::WIDTH] = exec_state.vm_read_bytes(RV64_REGISTER_AS, rs2_ptr);
+        exec_state.vm_write_bytes(address_space, ptr, &value);
     }
 }
 
 impl StoreOp for StoreBOp {
-    const HOST_READ: bool = true;
+    const WIDTH: usize = BYTE_ACCESS_WIDTH;
 
     #[inline(always)]
-    fn compute_write_data(
-        write_data: &mut [u8; RV64_REGISTER_NUM_LIMBS],
-        read_data: [u8; RV64_REGISTER_NUM_LIMBS],
-        shift_amount: usize,
-    ) -> bool {
-        write_data[shift_amount] = read_data[0];
-        true
+    fn write<CTX: ExecutionCtxTrait>(
+        exec_state: &mut VmExecState<GuestMemory, CTX>,
+        address_space: u32,
+        ptr: u32,
+        rs2_ptr: u32,
+    ) {
+        let value: [u8; Self::WIDTH] = exec_state.vm_read_bytes(RV64_REGISTER_AS, rs2_ptr);
+        exec_state.vm_write_bytes(address_space, ptr, &value);
     }
 }

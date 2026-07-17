@@ -242,7 +242,7 @@ impl VmExecutionExtension for Rv64I {
         )?;
 
         let load_sign_extend_byte = Rv64LoadSignExtendByteExecutor::new(
-            Rv64LoadAdapterExecutor::new(byte_ptr_max_bits),
+            Rv64LoadByteAdapterExecutor::new(byte_ptr_max_bits),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
         );
         inventory.add_executor(
@@ -251,7 +251,7 @@ impl VmExecutionExtension for Rv64I {
         )?;
 
         let load_byte = Rv64LoadByteExecutor::new(
-            Rv64LoadAdapterExecutor::new(byte_ptr_max_bits),
+            Rv64LoadByteAdapterExecutor::new(byte_ptr_max_bits),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
         );
         inventory.add_executor(
@@ -260,7 +260,7 @@ impl VmExecutionExtension for Rv64I {
         )?;
 
         let store_byte = Rv64StoreByteExecutor::new(
-            Rv64StoreAdapterExecutor::new(byte_ptr_max_bits),
+            Rv64StoreByteAdapterExecutor::new(byte_ptr_max_bits),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
         );
         inventory.add_executor(
@@ -269,7 +269,7 @@ impl VmExecutionExtension for Rv64I {
         )?;
 
         let load_sign_extend_halfword = Rv64LoadSignExtendHalfwordExecutor::new(
-            Rv64LoadAdapterExecutor::new(byte_ptr_max_bits),
+            Rv64LoadMultiByteAdapterExecutor::new(byte_ptr_max_bits),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
         );
         inventory.add_executor(
@@ -278,7 +278,7 @@ impl VmExecutionExtension for Rv64I {
         )?;
 
         let load_halfword = Rv64LoadHalfwordExecutor::new(
-            Rv64LoadAdapterExecutor::new(byte_ptr_max_bits),
+            Rv64LoadMultiByteAdapterExecutor::new(byte_ptr_max_bits),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
         );
         inventory.add_executor(
@@ -287,7 +287,7 @@ impl VmExecutionExtension for Rv64I {
         )?;
 
         let store_halfword = Rv64StoreHalfwordExecutor::new(
-            Rv64StoreAdapterExecutor::new(byte_ptr_max_bits),
+            Rv64StoreMultiByteAdapterExecutor::new(byte_ptr_max_bits),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
         );
         inventory.add_executor(
@@ -296,7 +296,7 @@ impl VmExecutionExtension for Rv64I {
         )?;
 
         let load_sign_extend_word = Rv64LoadSignExtendWordExecutor::new(
-            Rv64LoadAdapterExecutor::new(byte_ptr_max_bits),
+            Rv64LoadMultiByteAdapterExecutor::new(byte_ptr_max_bits),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
         );
         inventory.add_executor(
@@ -305,7 +305,7 @@ impl VmExecutionExtension for Rv64I {
         )?;
 
         let load_word = Rv64LoadWordExecutor::new(
-            Rv64LoadAdapterExecutor::new(byte_ptr_max_bits),
+            Rv64LoadMultiByteAdapterExecutor::new(byte_ptr_max_bits),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
         );
         inventory.add_executor(
@@ -314,7 +314,7 @@ impl VmExecutionExtension for Rv64I {
         )?;
 
         let store_word = Rv64StoreWordExecutor::new(
-            Rv64StoreAdapterExecutor::new(byte_ptr_max_bits),
+            Rv64StoreMultiByteAdapterExecutor::new(byte_ptr_max_bits),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
         );
         inventory.add_executor(
@@ -323,7 +323,7 @@ impl VmExecutionExtension for Rv64I {
         )?;
 
         let load_doubleword = Rv64LoadDoublewordExecutor::new(
-            Rv64LoadAdapterExecutor::new(byte_ptr_max_bits),
+            Rv64LoadMultiByteAdapterExecutor::new(byte_ptr_max_bits),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
         );
         inventory.add_executor(
@@ -332,7 +332,7 @@ impl VmExecutionExtension for Rv64I {
         )?;
 
         let store_doubleword = Rv64StoreDoublewordExecutor::new(
-            Rv64StoreAdapterExecutor::new(byte_ptr_max_bits),
+            Rv64StoreMultiByteAdapterExecutor::new(byte_ptr_max_bits),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
         );
         inventory.add_executor(
@@ -466,7 +466,12 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
         inventory.add_air(shift_w_right_arithmetic);
 
         let load_sign_extend_byte = Rv64LoadSignExtendByteAir::new(
-            Rv64LoadAdapterAir::new(memory_bridge, exec_bridge, range_checker, byte_ptr_max_bits),
+            Rv64LoadByteAdapterAir::new(
+                memory_bridge,
+                exec_bridge,
+                range_checker,
+                byte_ptr_max_bits,
+            ),
             LoadSignExtendByteCoreAir::new(
                 Rv64LoadStoreOpcode::CLASS_OFFSET,
                 bitwise_lu,
@@ -476,62 +481,120 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
         inventory.add_air(load_sign_extend_byte);
 
         let load_byte = Rv64LoadByteAir::new(
-            Rv64LoadAdapterAir::new(memory_bridge, exec_bridge, range_checker, byte_ptr_max_bits),
+            Rv64LoadByteAdapterAir::new(
+                memory_bridge,
+                exec_bridge,
+                range_checker,
+                byte_ptr_max_bits,
+            ),
             LoadByteCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_lu),
         );
         inventory.add_air(load_byte);
 
         let store_byte = Rv64StoreByteAir::new(
-            Rv64StoreAdapterAir::new(memory_bridge, exec_bridge, range_checker, byte_ptr_max_bits),
+            Rv64StoreByteAdapterAir::new(
+                memory_bridge,
+                exec_bridge,
+                range_checker,
+                byte_ptr_max_bits,
+            ),
             StoreByteCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_lu),
         );
         inventory.add_air(store_byte);
 
         let load_sign_extend_halfword = Rv64LoadSignExtendHalfwordAir::new(
-            Rv64LoadAdapterAir::new(memory_bridge, exec_bridge, range_checker, byte_ptr_max_bits),
-            LoadSignExtendHalfwordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, range_checker),
+            Rv64LoadMultiByteAdapterAir::new(
+                memory_bridge,
+                exec_bridge,
+                range_checker,
+                byte_ptr_max_bits,
+            ),
+            LoadSignExtendHalfwordCoreAir::new(
+                Rv64LoadStoreOpcode::CLASS_OFFSET,
+                bitwise_lu,
+                range_checker,
+            ),
         );
         inventory.add_air(load_sign_extend_halfword);
 
         let load_halfword = Rv64LoadHalfwordAir::new(
-            Rv64LoadAdapterAir::new(memory_bridge, exec_bridge, range_checker, byte_ptr_max_bits),
-            LoadHalfwordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET),
+            Rv64LoadMultiByteAdapterAir::new(
+                memory_bridge,
+                exec_bridge,
+                range_checker,
+                byte_ptr_max_bits,
+            ),
+            LoadHalfwordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_lu),
         );
         inventory.add_air(load_halfword);
 
         let store_halfword = Rv64StoreHalfwordAir::new(
-            Rv64StoreAdapterAir::new(memory_bridge, exec_bridge, range_checker, byte_ptr_max_bits),
-            StoreHalfwordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET),
+            Rv64StoreMultiByteAdapterAir::new(
+                memory_bridge,
+                exec_bridge,
+                range_checker,
+                byte_ptr_max_bits,
+            ),
+            StoreHalfwordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_lu),
         );
         inventory.add_air(store_halfword);
 
         let load_sign_extend_word = Rv64LoadSignExtendWordAir::new(
-            Rv64LoadAdapterAir::new(memory_bridge, exec_bridge, range_checker, byte_ptr_max_bits),
-            LoadSignExtendWordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, range_checker),
+            Rv64LoadMultiByteAdapterAir::new(
+                memory_bridge,
+                exec_bridge,
+                range_checker,
+                byte_ptr_max_bits,
+            ),
+            LoadSignExtendWordCoreAir::new(
+                Rv64LoadStoreOpcode::CLASS_OFFSET,
+                bitwise_lu,
+                range_checker,
+            ),
         );
         inventory.add_air(load_sign_extend_word);
 
         let load_word = Rv64LoadWordAir::new(
-            Rv64LoadAdapterAir::new(memory_bridge, exec_bridge, range_checker, byte_ptr_max_bits),
-            LoadWordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET),
+            Rv64LoadMultiByteAdapterAir::new(
+                memory_bridge,
+                exec_bridge,
+                range_checker,
+                byte_ptr_max_bits,
+            ),
+            LoadWordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_lu),
         );
         inventory.add_air(load_word);
 
         let store_word = Rv64StoreWordAir::new(
-            Rv64StoreAdapterAir::new(memory_bridge, exec_bridge, range_checker, byte_ptr_max_bits),
-            StoreWordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET),
+            Rv64StoreMultiByteAdapterAir::new(
+                memory_bridge,
+                exec_bridge,
+                range_checker,
+                byte_ptr_max_bits,
+            ),
+            StoreWordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_lu),
         );
         inventory.add_air(store_word);
 
         let load_doubleword = Rv64LoadDoublewordAir::new(
-            Rv64LoadAdapterAir::new(memory_bridge, exec_bridge, range_checker, byte_ptr_max_bits),
-            LoadDoublewordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET),
+            Rv64LoadMultiByteAdapterAir::new(
+                memory_bridge,
+                exec_bridge,
+                range_checker,
+                byte_ptr_max_bits,
+            ),
+            LoadDoublewordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_lu),
         );
         inventory.add_air(load_doubleword);
 
         let store_doubleword = Rv64StoreDoublewordAir::new(
-            Rv64StoreAdapterAir::new(memory_bridge, exec_bridge, range_checker, byte_ptr_max_bits),
-            StoreDoublewordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET),
+            Rv64StoreMultiByteAdapterAir::new(
+                memory_bridge,
+                exec_bridge,
+                range_checker,
+                byte_ptr_max_bits,
+            ),
+            StoreDoublewordCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_lu),
         );
         inventory.add_air(store_doubleword);
 
@@ -702,7 +765,7 @@ where
         inventory.next_air::<Rv64LoadSignExtendByteAir>()?;
         let load_sign_extend_byte_chip = Rv64LoadSignExtendByteChip::new(
             LoadSignExtendByteFiller::new(
-                Rv64LoadAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
+                Rv64LoadByteAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
                 Rv64LoadStoreOpcode::CLASS_OFFSET,
                 bitwise_lu.clone(),
                 range_checker.clone(),
@@ -714,10 +777,9 @@ where
         inventory.next_air::<Rv64LoadByteAir>()?;
         let load_byte_chip = Rv64LoadByteChip::new(
             LoadByteFiller::new(
-                Rv64LoadAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
+                Rv64LoadByteAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
                 Rv64LoadStoreOpcode::CLASS_OFFSET,
                 bitwise_lu.clone(),
-                range_checker.clone(),
             ),
             mem_helper.clone(),
         );
@@ -726,10 +788,9 @@ where
         inventory.next_air::<Rv64StoreByteAir>()?;
         let store_byte_chip = Rv64StoreByteChip::new(
             StoreByteFiller::new(
-                Rv64StoreAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
+                Rv64StoreByteAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
                 Rv64LoadStoreOpcode::CLASS_OFFSET,
                 bitwise_lu.clone(),
-                range_checker.clone(),
             ),
             mem_helper.clone(),
         );
@@ -738,8 +799,9 @@ where
         inventory.next_air::<Rv64LoadSignExtendHalfwordAir>()?;
         let load_sign_extend_halfword_chip = Rv64LoadSignExtendHalfwordChip::new(
             LoadSignExtendHalfwordFiller::new(
-                Rv64LoadAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
+                Rv64LoadMultiByteAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
                 Rv64LoadStoreOpcode::CLASS_OFFSET,
+                bitwise_lu.clone(),
                 range_checker.clone(),
             ),
             mem_helper.clone(),
@@ -749,9 +811,9 @@ where
         inventory.next_air::<Rv64LoadHalfwordAir>()?;
         let load_halfword_chip = Rv64LoadHalfwordChip::new(
             LoadHalfwordFiller::new(
-                Rv64LoadAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
+                Rv64LoadMultiByteAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
                 Rv64LoadStoreOpcode::CLASS_OFFSET,
-                range_checker.clone(),
+                bitwise_lu.clone(),
             ),
             mem_helper.clone(),
         );
@@ -760,9 +822,9 @@ where
         inventory.next_air::<Rv64StoreHalfwordAir>()?;
         let store_halfword_chip = Rv64StoreHalfwordChip::new(
             StoreHalfwordFiller::new(
-                Rv64StoreAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
+                Rv64StoreMultiByteAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
                 Rv64LoadStoreOpcode::CLASS_OFFSET,
-                range_checker.clone(),
+                bitwise_lu.clone(),
             ),
             mem_helper.clone(),
         );
@@ -771,8 +833,9 @@ where
         inventory.next_air::<Rv64LoadSignExtendWordAir>()?;
         let load_sign_extend_word_chip = Rv64LoadSignExtendWordChip::new(
             LoadSignExtendWordFiller::new(
-                Rv64LoadAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
+                Rv64LoadMultiByteAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
                 Rv64LoadStoreOpcode::CLASS_OFFSET,
+                bitwise_lu.clone(),
                 range_checker.clone(),
             ),
             mem_helper.clone(),
@@ -782,9 +845,9 @@ where
         inventory.next_air::<Rv64LoadWordAir>()?;
         let load_word_chip = Rv64LoadWordChip::new(
             LoadWordFiller::new(
-                Rv64LoadAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
+                Rv64LoadMultiByteAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
                 Rv64LoadStoreOpcode::CLASS_OFFSET,
-                range_checker.clone(),
+                bitwise_lu.clone(),
             ),
             mem_helper.clone(),
         );
@@ -793,9 +856,9 @@ where
         inventory.next_air::<Rv64StoreWordAir>()?;
         let store_word_chip = Rv64StoreWordChip::new(
             StoreWordFiller::new(
-                Rv64StoreAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
+                Rv64StoreMultiByteAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
                 Rv64LoadStoreOpcode::CLASS_OFFSET,
-                range_checker.clone(),
+                bitwise_lu.clone(),
             ),
             mem_helper.clone(),
         );
@@ -804,9 +867,9 @@ where
         inventory.next_air::<Rv64LoadDoublewordAir>()?;
         let load_doubleword_chip = Rv64LoadDoublewordChip::new(
             LoadDoublewordFiller::new(
-                Rv64LoadAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
+                Rv64LoadMultiByteAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
                 Rv64LoadStoreOpcode::CLASS_OFFSET,
-                range_checker.clone(),
+                bitwise_lu.clone(),
             ),
             mem_helper.clone(),
         );
@@ -815,9 +878,9 @@ where
         inventory.next_air::<Rv64StoreDoublewordAir>()?;
         let store_doubleword_chip = Rv64StoreDoublewordChip::new(
             StoreDoublewordFiller::new(
-                Rv64StoreAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
+                Rv64StoreMultiByteAdapterFiller::new(byte_ptr_max_bits, range_checker.clone()),
                 Rv64LoadStoreOpcode::CLASS_OFFSET,
-                range_checker.clone(),
+                bitwise_lu.clone(),
             ),
             mem_helper.clone(),
         );
