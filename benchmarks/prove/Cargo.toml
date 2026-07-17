@@ -34,7 +34,6 @@ tiny-keccak.workspace = true
 default = ["parallel", "jemalloc", "metrics"]
 metrics = ["openvm-sdk/metrics", "openvm-stark-sdk/metrics"]
 tco = ["openvm-sdk/tco"]
-aot = ["openvm-sdk/aot"]
 perf-metrics = ["openvm-sdk/perf-metrics", "metrics"]
 stark-debug = ["openvm-sdk/stark-debug"]
 evm = ["openvm-sdk/evm-verify"]

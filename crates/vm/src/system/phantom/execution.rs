@@ -14,8 +14,6 @@ use rand::rngs::StdRng;
 use crate::arch::ExecuteFunc;
 #[cfg(feature = "tco")]
 use crate::arch::Handler;
-#[cfg(feature = "aot")]
-use crate::arch::{AotExecutor, AotMeteredExecutor};
 use crate::{
     arch::{
         create_handler,
@@ -80,9 +78,6 @@ where
         Ok(execute_e1_handler::<_>)
     }
 }
-
-#[cfg(feature = "aot")]
-impl<F> AotExecutor<F> for PhantomExecutor where F: PrimeField32 {}
 
 pub(super) struct PhantomStateMut<'a> {
     pub(super) pc: u32,
@@ -156,9 +151,6 @@ where
         Ok(execute_e2_handler::<_>)
     }
 }
-
-#[cfg(feature = "aot")]
-impl<F> AotMeteredExecutor<F> for PhantomExecutor where F: PrimeField32 {}
 
 #[inline(always)]
 fn execute_impl(

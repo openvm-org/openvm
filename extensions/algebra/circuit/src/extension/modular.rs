@@ -73,13 +73,6 @@ impl<F: PrimeField32> VmRvrExtension<F> for ModularExtension {
 }
 
 #[derive(Clone, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
-#[cfg_attr(
-    feature = "aot",
-    derive(
-        openvm_circuit_derive::AotExecutor,
-        openvm_circuit_derive::AotMeteredExecutor
-    )
-)]
 pub enum ModularExtensionExecutor {
     // 32 limbs prime
     ModularAddSubRv64_32(ModularExecutor<MODULAR_BLOCKS_32>), // ModularAddSub

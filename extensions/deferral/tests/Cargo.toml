@@ -25,6 +25,5 @@ itertools.workspace = true
 default = ["parallel"]
 parallel = ["openvm-circuit/parallel"]
 tco = ["openvm-deferral-circuit/tco", "openvm-riscv-circuit/tco"]
-aot = ["openvm-deferral-circuit/aot", "openvm-riscv-circuit/aot"]
 rvr = ["openvm-deferral-circuit/rvr", "openvm-riscv-circuit/rvr"]
 cuda = ["openvm-deferral-circuit/cuda", "openvm-riscv-circuit/cuda"]

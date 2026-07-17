@@ -95,9 +95,6 @@ impl<F: PrimeField32> InterpreterExecutor<F> for XorinVmExecutor {
     }
 }
 
-#[cfg(feature = "aot")]
-impl<F: PrimeField32> AotExecutor<F> for XorinVmExecutor {}
-
 impl<F: PrimeField32> InterpreterMeteredExecutor<F> for XorinVmExecutor {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<XorinPreCompute>>()
@@ -137,9 +134,6 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for XorinVmExecutor {
         Ok(execute_e2_handler::<_>)
     }
 }
-
-#[cfg(feature = "aot")]
-impl<F: PrimeField32> AotMeteredExecutor<F> for XorinVmExecutor {}
 
 #[create_handler]
 #[inline(always)]

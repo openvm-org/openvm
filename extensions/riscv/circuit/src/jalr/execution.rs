@@ -14,9 +14,6 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::core::Rv64JalrExecutor;
 use crate::adapters::{rv64_address_add_imm, rv64_bytes_to_u32};
-#[cfg(feature = "aot")]
-use crate::common::*;
-
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
 struct JalrPreCompute {
@@ -94,51 +91,6 @@ where
     }
 }
 
-#[cfg(feature = "aot")]
-impl<F, A> AotExecutor<F> for Rv64JalrExecutor<A>
-where
-    F: PrimeField32,
-{
-    fn is_aot_supported(&self, _inst: &Instruction<F>) -> bool {
-        true
-    }
-
-    fn generate_x86_asm(&self, inst: &Instruction<F>, pc: u32) -> Result<String, AotError> {
-        let mut asm_str = String::new();
-        let to_i16 = |c: F| -> i16 {
-            let c_u24 = (c.as_canonical_u64() & 0xFFFFFF) as u32;
-            let c_i24 = ((c_u24 << 8) as i32) >> 8;
-            c_i24 as i16
-        };
-        let a = to_i16(inst.a);
-        let b = to_i16(inst.b);
-        if a % 4 != 0 || b % 4 != 0 {
-            return Err(AotError::InvalidInstruction);
-        }
-        let imm_extended = inst.c.as_canonical_u32() + inst.g.as_canonical_u32() * 0xffff0000;
-        let write_rd = !inst.f.is_zero();
-
-        let (gpr_reg_b, delta_b) = xmm_to_gpr((b / 4) as u8, REG_B_W, true);
-        asm_str += &delta_b;
-        asm_str += &format!("   add {gpr_reg_b}, {imm_extended}\n");
-        asm_str += &format!("   and {gpr_reg_b}, -2\n"); // clear bit 0 per RISC-V jalr
-
-        let gpr_reg_b_64 = convert_x86_reg(&gpr_reg_b, Width::W64).unwrap();
-
-        if write_rd {
-            let next_pc = pc.wrapping_add(DEFAULT_PC_STEP);
-            asm_str += &format!("   mov {REG_A_W}, {next_pc}\n");
-            asm_str += &gpr_to_xmm(REG_A_W, (a / 4) as u8);
-        }
-
-        asm_str += &format!("   lea {REG_C}, [rip + map_pc_base]\n");
-        asm_str += &format!("   movsxd {REG_A}, [{REG_C} + {gpr_reg_b_64}]\n");
-        asm_str += &format!("   add {REG_A}, {REG_C}\n");
-        asm_str += &format!("   jmp {REG_A}\n");
-        Ok(asm_str)
-    }
-}
-
 impl<F, A> InterpreterMeteredExecutor<F> for Rv64JalrExecutor<A>
 where
     F: PrimeField32,
@@ -182,26 +134,6 @@ where
     }
 }
 
-#[cfg(feature = "aot")]
-impl<F, A> AotMeteredExecutor<F> for Rv64JalrExecutor<A>
-where
-    F: PrimeField32,
-{
-    fn is_aot_metered_supported(&self, _inst: &Instruction<F>) -> bool {
-        true
-    }
-    fn generate_x86_metered_asm(
-        &self,
-        inst: &Instruction<F>,
-        pc: u32,
-        chip_idx: usize,
-        _config: &SystemConfig,
-    ) -> Result<String, AotError> {
-        let mut asm_str = update_height_change_asm(chip_idx, 1)?;
-        asm_str += &self.generate_x86_asm(inst, pc)?;
-        Ok(asm_str)
-    }
-}
 #[inline(always)]
 unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const ENABLED: bool>(
     pre_compute: &JalrPreCompute,

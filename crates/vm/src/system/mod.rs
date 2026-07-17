@@ -2,8 +2,6 @@ use std::sync::Arc;
 
 use derive_more::derive::From;
 use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor};
-#[cfg(feature = "aot")]
-use openvm_circuit_derive::{AotExecutor, AotMeteredExecutor};
 use openvm_circuit_primitives::{
     var_range::{
         SharedVariableRangeCheckerChip, VariableRangeCheckerAir, VariableRangeCheckerBus,
@@ -118,7 +116,6 @@ pub struct SystemRecords<F> {
 pub type TouchedMemory<F> = TimestampedEquipartition<F, BLOCK_FE_WIDTH>;
 
 #[derive(Clone, AnyEnum, Executor, MeteredExecutor, PreflightExecutor, From)]
-#[cfg_attr(feature = "aot", derive(AotExecutor, AotMeteredExecutor))]
 pub enum SystemExecutor {
     Phantom(PhantomExecutor),
 }

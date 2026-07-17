@@ -50,7 +50,6 @@ default = ["parallel", "jemalloc"]
 parallel = ["openvm-circuit/parallel"]
 test-utils = ["openvm-circuit/test-utils", "dep:openvm-stark-sdk"]
 tco = ["openvm-circuit/tco"]
-aot = ["openvm-circuit/aot", "openvm-circuit-derive/aot"]
 legacy-v1-3-mem-align = []
 rvr = [
     "dep:rvr-openvm-lift",

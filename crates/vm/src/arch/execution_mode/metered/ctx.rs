@@ -179,7 +179,7 @@ impl MeteredCtx {
     #[inline(always)]
     pub fn check_and_segment(&mut self) -> bool {
         // We track the segmentation check by instrets_until_check instead of instret in order to
-        // save a register in AOT mode.
+        // save a register in native execution modes.
         if self.segmentation_ctx.instrets_until_check > 0 {
             return false;
         }
@@ -259,8 +259,6 @@ impl ExecutionCtxTrait for MeteredCtx {
 
     #[inline(always)]
     fn should_suspend(exec_state: &mut VmExecState<GuestMemory, Self>) -> bool {
-        // ATTENTION: Please make sure to update the corresponding logic in the
-        // `asm_bridge` crate and `aot.rs`` when you change this function.
         // If `segment_suspend` is set, suspend when a segment is determined (but the VM state might
         // be after the segment boundary because the segment happens in the previous checkpoint).
         // Otherwise, execute until termination.

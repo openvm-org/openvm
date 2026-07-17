@@ -20,7 +20,7 @@ LOG_ROOT = TESTS_DIR / "logs" / "sdk_tests"
 
 
 def cargo_test_cmd(mode: str, evm=True, root=True) -> list[str]:
-    assert mode in ["default", "aot", "cuda", "ignored"]
+    assert mode in ["default", "cuda", "ignored"]
     flags = [
         "cargo",
         "nextest",
@@ -31,9 +31,6 @@ def cargo_test_cmd(mode: str, evm=True, root=True) -> list[str]:
         features += ",root-prover"
     if evm:
         features += ",evm-verify"
-    if mode == "aot":
-        features += ",aot"
-        flags.append("--release")
     if mode == "cuda":
         features += ",cuda,halo2-gpu"
         flags.extend(["--test-threads=1", "--cargo-profile=fast"])
@@ -112,7 +109,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--num-samples", type=int, default=None)
     parser.add_argument(
         "--mode",
-        choices=("default", "ignored", "aot", "cuda"),
+        choices=("default", "ignored", "cuda"),
         default="default",
         help="which SDK workflow test command to run",
     )

@@ -94,9 +94,6 @@ macro_rules! impl_shift256_executor {
             }
         }
 
-        #[cfg(feature = "aot")]
-        impl<F: PrimeField32> AotExecutor<F> for $executor {}
-
         impl<F: PrimeField32> InterpreterMeteredExecutor<F> for $executor {
             fn metered_pre_compute_size(&self) -> usize {
                 size_of::<E2PreCompute<ShiftPreCompute>>()
@@ -136,9 +133,6 @@ macro_rules! impl_shift256_executor {
                 dispatch!(execute_e2_handler, local_opcode)
             }
         }
-
-        #[cfg(feature = "aot")]
-        impl<F: PrimeField32> AotMeteredExecutor<F> for $executor {}
 
         impl $executor {
             fn pre_compute_impl<F: PrimeField32>(

@@ -12,9 +12,6 @@ use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::{run_auipc, Rv64AuipcExecutor};
 use crate::adapters::byte_ptr_to_u16_ptr_value;
-#[cfg(feature = "aot")]
-use crate::common::*;
-
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
 struct AuiPcPreCompute {
@@ -81,68 +78,6 @@ where
     }
 }
 
-#[cfg(feature = "aot")]
-impl<F, A> AotExecutor<F> for Rv64AuipcExecutor<A>
-where
-    F: PrimeField32,
-{
-    fn generate_x86_asm(&self, inst: &Instruction<F>, pc: u32) -> Result<String, AotError> {
-        use openvm_instructions::riscv::RV32_CELL_BITS;
-
-        let mut asm_str = String::new();
-        let a = inst.a.as_canonical_u32() as u8;
-        let c = inst.c.as_canonical_u32();
-        let d = inst.d.as_canonical_u32();
-        let rd = pc.wrapping_add(c << RV32_CELL_BITS);
-
-        if d != RV32_REGISTER_AS {
-            return Err(AotError::InvalidInstruction);
-        }
-
-        let a_reg = a / 4;
-
-        if let Some(override_reg) = RISCV_TO_X86_OVERRIDE_MAP[a_reg as usize] {
-            asm_str += &format!("   mov {override_reg}, {rd}\n");
-        } else {
-            asm_str += &format!("   mov {REG_A_W}, {rd}\n");
-            asm_str += &gpr_to_xmm(REG_A_W, a_reg);
-        }
-
-        Ok(asm_str)
-    }
-
-    fn is_aot_supported(&self, _inst: &Instruction<F>) -> bool {
-        true
-    }
-}
-
-#[cfg(all(test, feature = "aot"))]
-mod tests {
-    use openvm_instructions::{riscv::RV32_REGISTER_AS, LocalOpcode};
-    use openvm_riscv_transpiler::Rv32AuipcOpcode::AUIPC;
-    use openvm_stark_sdk::p3_baby_bear::BabyBear;
-
-    use super::*;
-
-    #[test]
-    fn aot_uses_full_24_bit_auipc_immediate() {
-        let executor = Rv32AuipcExecutor::new(());
-        let inst = Instruction::<BabyBear>::from_usize(
-            AUIPC.global_opcode(),
-            [4, 0, 0x10000, RV32_REGISTER_AS as usize, 0],
-        );
-
-        let asm = executor
-            .generate_x86_asm(&inst, 0)
-            .expect("valid AUIPC instruction should generate AOT assembly");
-
-        assert!(
-            asm.contains("16777216"),
-            "AUIPC AOT must shift the full raw 24-bit immediate"
-        );
-    }
-}
-
 impl<F, A> InterpreterMeteredExecutor<F> for Rv64AuipcExecutor<A>
 where
     F: PrimeField32,
@@ -183,27 +118,6 @@ where
         data.chip_idx = chip_idx as u32;
         self.pre_compute_impl(pc, inst, &mut data.data)?;
         Ok(execute_e2_handler::<_>)
-    }
-}
-
-#[cfg(feature = "aot")]
-impl<F, A> AotMeteredExecutor<F> for Rv64AuipcExecutor<A>
-where
-    F: PrimeField32,
-{
-    fn is_aot_metered_supported(&self, _inst: &Instruction<F>) -> bool {
-        true
-    }
-    fn generate_x86_metered_asm(
-        &self,
-        inst: &Instruction<F>,
-        pc: u32,
-        chip_idx: usize,
-        _config: &SystemConfig,
-    ) -> Result<String, AotError> {
-        let mut asm_str = update_height_change_asm(chip_idx, 1)?;
-        asm_str += &self.generate_x86_asm(inst, pc)?;
-        Ok(asm_str)
     }
 }
 

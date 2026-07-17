@@ -55,7 +55,6 @@ lazy_static = { workspace = true }
 [features]
 default = []
 tco = ["openvm-algebra-circuit/tco"]
-aot = ["openvm-circuit/aot", "openvm-algebra-circuit/aot", "halo2curves-axiom/asm"]
 rvr = [
     "dep:rvr-openvm-lift",
     "dep:rvr-openvm-ext-ecc",
