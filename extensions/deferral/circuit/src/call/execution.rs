@@ -120,9 +120,6 @@ impl<F: VmField> InterpreterExecutor<F> for DeferralCallExecutor {
     }
 }
 
-#[cfg(feature = "aot")]
-impl<F: VmField> AotExecutor<F> for DeferralCallExecutor {}
-
 impl<F: VmField> InterpreterMeteredExecutor<F> for DeferralCallExecutor {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<DeferralCallPrecompute>>()
@@ -162,9 +159,6 @@ impl<F: VmField> InterpreterMeteredExecutor<F> for DeferralCallExecutor {
         Ok(execute_e2_handler::<F, _>)
     }
 }
-
-#[cfg(feature = "aot")]
-impl<F: VmField> AotMeteredExecutor<F> for DeferralCallExecutor {}
 
 #[inline(always)]
 unsafe fn execute_e12_impl<F: VmField, CTX: ExecutionCtxTrait>(

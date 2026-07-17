@@ -1,9 +1,5 @@
 use std::{array, borrow::BorrowMut, sync::Arc};
 
-#[cfg(feature = "aot")]
-use openvm_circuit::arch::{
-    testing::assert_vm_states_equivalent, ExecutionError, VirtualMachine, VmExecutor, VmState,
-};
 use openvm_circuit::{
     arch::{
         testing::{TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS},
@@ -18,11 +14,7 @@ use openvm_circuit_primitives::{
     },
     var_range::VariableRangeCheckerChip,
 };
-#[cfg(feature = "aot")]
-use openvm_instructions::{exe::VmExe, program::Program, riscv::RV64_REGISTER_AS, SystemOpcode};
 use openvm_instructions::{instruction::Instruction, program::PC_BITS, LocalOpcode};
-#[cfg(feature = "aot")]
-use openvm_riscv_transpiler::BaseAluOpcode::ADD;
 use openvm_riscv_transpiler::Rv64JalrOpcode::{self, *};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -33,10 +25,6 @@ use openvm_stark_backend::{
     },
     utils::disable_debug_builder,
 };
-#[cfg(feature = "aot")]
-use openvm_stark_backend::{StarkEngine, SystemParams};
-#[cfg(feature = "aot")]
-use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2CpuEngine, DuplexSponge};
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 #[cfg(feature = "cuda")]
@@ -52,8 +40,6 @@ use {
 };
 
 use super::Rv64JalrCoreAir;
-#[cfg(feature = "aot")]
-use crate::Rv64ImConfig;
 use crate::{
     adapters::{
         rv64_limbs_to_u64, rv64_u16_block_to_bytes, Rv64JalrAdapterAir, Rv64JalrAdapterCols,
@@ -63,9 +49,6 @@ use crate::{
     jalr::{run_jalr, Rv64JalrChip, Rv64JalrCoreCols, Rv64JalrExecutor},
     Rv64JalrAir, Rv64JalrFiller,
 };
-#[cfg(feature = "aot")]
-use crate::{Rv32ImBuilder, Rv32ImConfig};
-
 const IMM_BITS: usize = 16;
 const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
@@ -608,262 +591,6 @@ fn jalr_x0_write_suppression_test() {
         Some(into_limbs(0x20000)),
         Some(0),
     );
-}
-
-#[cfg(feature = "aot")]
-fn run_jalr_program(instructions: Vec<Instruction<F>>) -> (VmState, VmState) {
-    eprintln!("run_jalr_program called");
-    let program = Program::from_instructions(&instructions);
-    let exe = VmExe::new(program);
-    let config = Rv64ImConfig::default();
-    let executor = VmExecutor::new(config.clone()).expect("failed to create Rv64IM executor");
-
-    let interpreter_instance = executor
-        .interpreter_instance(&exe)
-        .expect("interpreter build must succeed");
-    let interp_state = interpreter_instance
-        .execute(vec![])
-        .expect("interpreter execution must succeed");
-
-    let aot_instance = executor.aot_instance(&exe).expect("AOT build must succeed");
-    let aot_state = aot_instance
-        .execute(vec![])
-        .expect("AOT execution must succeed");
-
-    assert_vm_states_equivalent(&interp_state, &aot_state);
-    (interp_state, aot_state)
-}
-
-#[cfg(feature = "aot")]
-fn read_register(state: &VmState, offset: usize) -> u32 {
-    let bytes = unsafe {
-        state
-            .memory
-            .read_bytes::<RV64_WORD_NUM_LIMBS>(RV64_REGISTER_AS, offset as u32)
-    };
-    u32::from_le_bytes(bytes)
-}
-
-#[cfg(feature = "aot")]
-#[test]
-fn test_aot_dispatch_rejects_dead_pc_slots() {
-    let cases = [
-        (
-            VmExe::new(Program::new_without_debug_infos_with_option(
-                &[Some(terminate_instruction())],
-                4,
-            ))
-            .with_pc_start(0),
-            0,
-        ),
-        (
-            VmExe::new(Program::new_without_debug_infos_with_option(
-                &[Some(terminate_instruction())],
-                8,
-            ))
-            .with_pc_start(0),
-            0,
-        ),
-        (
-            VmExe::new(Program::new_without_debug_infos_with_option(
-                &[Some(terminate_instruction())],
-                4096,
-            ))
-            .with_pc_start(2048),
-            2048,
-        ),
-        (
-            VmExe::new(Program::new_without_debug_infos_with_option(
-                &[
-                    Some(add_instruction(4, 0, 4)),
-                    Some(jalr_instruction(4)),
-                    Some(terminate_instruction()),
-                ],
-                8,
-            ))
-            .with_pc_start(8),
-            4,
-        ),
-        (
-            VmExe::new(Program::new_without_debug_infos_with_option(
-                &[
-                    Some(terminate_instruction()),
-                    None,
-                    None,
-                    Some(terminate_instruction()),
-                ],
-                0,
-            ))
-            .with_pc_start(4),
-            4,
-        ),
-        (
-            VmExe::new(Program::new_without_debug_infos_with_option(
-                &[
-                    Some(add_instruction(4, 0, 1)),
-                    None,
-                    Some(terminate_instruction()),
-                ],
-                0,
-            ))
-            .with_pc_start(0),
-            4,
-        ),
-        (
-            VmExe::new(Program::new_without_debug_infos_with_option(
-                &[
-                    Some(add_instruction(4, 0, 8)),
-                    Some(jalr_instruction(4)),
-                    None,
-                    Some(terminate_instruction()),
-                ],
-                0,
-            ))
-            .with_pc_start(0),
-            8,
-        ),
-    ];
-
-    let config = Rv32ImConfig::default();
-    let executor = VmExecutor::new(config.clone()).expect("failed to create Rv32IM executor");
-    let engine = BabyBearPoseidon2CpuEngine::<DuplexSponge>::new(SystemParams::new_for_testing(20));
-    let (vm, _) = VirtualMachine::new_with_keygen(engine, Rv32ImBuilder, config).expect("vm init");
-    let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
-
-    for (exe, dead_pc) in cases {
-        assert_dead_pc_rejected_by_pure_aot(&executor, &exe, dead_pc);
-        assert_dead_pc_rejected_by_metered_aot(&vm, &executor_idx_to_air_idx, &exe, dead_pc);
-    }
-}
-
-#[cfg(feature = "aot")]
-fn terminate_instruction() -> Instruction<F> {
-    Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0)
-}
-
-#[cfg(feature = "aot")]
-fn add_instruction(rd: usize, rs1: usize, imm: usize) -> Instruction<F> {
-    Instruction::from_usize(
-        ADD.global_opcode(),
-        [rd, rs1, imm, RV64_REGISTER_AS as usize, 0],
-    )
-}
-
-#[cfg(feature = "aot")]
-fn jalr_instruction(rs1: usize) -> Instruction<F> {
-    Instruction::from_usize(
-        JALR.global_opcode(),
-        [0, rs1, 0, RV64_REGISTER_AS as usize, 0, 0, 0],
-    )
-}
-
-#[cfg(feature = "aot")]
-fn assert_dead_pc_rejected_by_pure_aot(
-    executor: &VmExecutor<F, Rv32ImConfig>,
-    exe: &VmExe<F>,
-    dead_pc: u32,
-) {
-    let interpreter = executor
-        .interpreter_instance(exe)
-        .expect("interpreter build must succeed");
-    let interp_err = match interpreter.execute(vec![]) {
-        Ok(_) => panic!("interpreter must reject the dead pc slot"),
-        Err(err) => err,
-    };
-    assert!(matches!(interp_err, ExecutionError::Unreachable(pc) if pc == dead_pc));
-
-    let aot_instance = executor.aot_instance(exe).expect("AOT build must succeed");
-    let aot_err = match aot_instance.execute(vec![]) {
-        Ok(_) => panic!("AOT must reject the dead pc slot"),
-        Err(err) => err,
-    };
-    assert!(matches!(aot_err, ExecutionError::Unreachable(pc) if pc == dead_pc));
-}
-
-#[cfg(feature = "aot")]
-fn assert_dead_pc_rejected_by_metered_aot(
-    vm: &VirtualMachine<BabyBearPoseidon2CpuEngine<DuplexSponge>, Rv32ImBuilder>,
-    executor_idx_to_air_idx: &[usize],
-    exe: &VmExe<F>,
-    dead_pc: u32,
-) {
-    let metered_ctx = vm.build_metered_ctx(exe);
-
-    let metered_interpreter = vm
-        .executor()
-        .metered_interpreter_instance(exe, executor_idx_to_air_idx)
-        .expect("metered interpreter build must succeed");
-    let interp_err = match metered_interpreter.execute_metered(vec![], metered_ctx.clone()) {
-        Ok(_) => panic!("metered interpreter must reject the dead pc slot"),
-        Err(err) => err,
-    };
-    assert!(matches!(interp_err, ExecutionError::Unreachable(pc) if pc == dead_pc));
-
-    let metered_aot = vm
-        .executor()
-        .metered_aot_instance(exe, executor_idx_to_air_idx)
-        .expect("metered AOT build must succeed");
-    let aot_err = match metered_aot.execute_metered(vec![], metered_ctx) {
-        Ok(_) => panic!("metered AOT must reject the dead pc slot"),
-        Err(err) => err,
-    };
-    assert!(matches!(aot_err, ExecutionError::Unreachable(pc) if pc == dead_pc));
-}
-
-#[cfg(feature = "aot")]
-#[test]
-fn test_jalr_aot_jump_forward() {
-    eprintln!("test_jalr_aot_jump_forward called");
-    let instructions = vec![
-        Instruction::from_usize(ADD.global_opcode(), [4, 0, 8, RV64_REGISTER_AS as usize, 0]),
-        Instruction::from_usize(
-            JALR.global_opcode(),
-            [0, 4, 0, RV64_REGISTER_AS as usize, 0, 0, 0],
-        ),
-        Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
-    ];
-
-    let (interp_state, aot_state) = run_jalr_program(instructions);
-
-    assert_eq!(interp_state.pc(), 8);
-    assert_eq!(aot_state.pc(), 8);
-
-    let interp_x1 = read_register(&interp_state, 4);
-    let aot_x1 = read_register(&aot_state, 4);
-    assert_eq!(interp_x1, 8);
-    assert_eq!(interp_x1, aot_x1);
-}
-
-#[cfg(feature = "aot")]
-#[test]
-fn test_jalr_aot_writes_return_address() {
-    eprintln!("test_jalr_aot_writes_return_address called");
-    let instructions = vec![
-        Instruction::from_usize(
-            ADD.global_opcode(),
-            [4, 0, 12, RV64_REGISTER_AS as usize, 0],
-        ),
-        Instruction::from_usize(
-            JALR.global_opcode(),
-            [12, 4, 0xfffc, RV64_REGISTER_AS as usize, 0, 1, 1],
-        ),
-        Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
-    ];
-
-    let (interp_state, aot_state) = run_jalr_program(instructions);
-
-    assert_eq!(interp_state.pc(), 8);
-    assert_eq!(aot_state.pc(), 8);
-
-    let interp_x1 = read_register(&interp_state, 4);
-    let aot_x1 = read_register(&aot_state, 4);
-    assert_eq!(interp_x1, 12);
-    assert_eq!(interp_x1, aot_x1);
-
-    let interp_x3 = read_register(&interp_state, 12);
-    let aot_x3 = read_register(&aot_state, 12);
-    assert_eq!(interp_x3, 8);
-    assert_eq!(interp_x3, aot_x3);
 }
 
 // ////////////////////////////////////////////////////////////////////////////////////

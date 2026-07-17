@@ -580,14 +580,6 @@ where
     }
 }
 
-#[cfg(feature = "aot")]
-impl<F, const NUM_LANES: usize, const TOTAL_READ_SIZE: usize> AotExecutor<F>
-    for VmModularIsEqualU16Executor<NUM_LANES, TOTAL_READ_SIZE>
-where
-    F: PrimeField32,
-{
-}
-
 impl<F, const NUM_LANES: usize, const TOTAL_READ_SIZE: usize> InterpreterMeteredExecutor<F>
     for VmModularIsEqualU16Executor<NUM_LANES, TOTAL_READ_SIZE>
 where
@@ -633,13 +625,6 @@ where
     }
 }
 
-#[cfg(feature = "aot")]
-impl<F, const NUM_LANES: usize, const TOTAL_READ_SIZE: usize> AotMeteredExecutor<F>
-    for VmModularIsEqualU16Executor<NUM_LANES, TOTAL_READ_SIZE>
-where
-    F: PrimeField32,
-{
-}
 #[create_handler]
 #[inline(always)]
 unsafe fn execute_e1_impl<

@@ -359,8 +359,6 @@ mod tests {
         Ok(())
     }
 
-    // AOT reaches the same check via fallback, but the panic aborts across its C ABI callback.
-    #[cfg_attr(feature = "aot", ignore)]
     #[test]
     #[should_panic(expected = "Memory access out of bounds")]
     #[cfg(not(feature = "rvr"))]
@@ -532,7 +530,6 @@ mod tests {
         Ok(())
     }
 
-    #[cfg(not(feature = "aot"))]
     #[test_case("misaligned_load", 1)]
     #[test_case("misaligned_signed_load", 1)]
     #[test_case("misaligned_store", 1)]
@@ -552,10 +549,10 @@ mod tests {
 
     #[test]
     #[should_panic]
-    // AOT and RVR skip this test since it is not a trusted program: both
-    // compile to native code without OpenVM's runtime memory bounds checks,
-    // so an out-of-bounds load doesn't surface as a Rust panic.
-    #[cfg(all(not(feature = "aot"), not(feature = "rvr")))]
+    // RVR skips this test since it is not a trusted program: it compiles to native code without
+    // OpenVM's runtime memory bounds checks, so an out-of-bounds load doesn't surface as a Rust
+    // panic.
+    #[cfg(not(feature = "rvr"))]
     fn test_load_x0() {
         let config = test_rv64im_config();
         let elf = build_example_program_at_path(get_programs_dir!(), "load_x0", &config).unwrap();

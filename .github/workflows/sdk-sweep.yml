@@ -3,7 +3,7 @@ name: SDK Parameter Sweep
 # Runs SDK parameter sweeps on demand. Exactly one of the sweep modes is
 # selected per invocation. The workflow uses a matrix over test modes and
 # filters entries by `arch`, so the CPU archs run the same test paths as
-# sdk.yml (default / ignored / aot) and the GPU arch runs the CUDA path from
+# sdk.yml (default / ignored) and the GPU arch runs the CUDA path from
 # sdk.cuda.yml.
 #
 # NOTE: `family` and `arch` must be consistent — `x86`/`arm` require a matching
@@ -55,8 +55,8 @@ env:
 jobs:
   # Compute the list of test modes to run based on the selected arch.
   #   - `x86-gpu` → `cuda`
-  #   - `x86`     → `default`, `aot`, `ignored`
-  #   - `arm`     → `default`, `ignored` (AOT tests are x86-only)
+  #   - `x86`     → `default`, `ignored`
+  #   - `arm`     → `default`, `ignored`
   # A dedicated job is needed because the `matrix` context isn't available in a
   # job-level `if:`, so we can't filter matrix entries by `inputs.arch` directly.
   matrix-config:
@@ -69,7 +69,7 @@ jobs:
         run: |
           case "${{ inputs.arch }}" in
             x86)
-              echo 'modes=["default","aot","ignored"]' >> "$GITHUB_OUTPUT"
+              echo 'modes=["default","ignored"]' >> "$GITHUB_OUTPUT"
               ;;
             arm)
               echo 'modes=["default","ignored"]' >> "$GITHUB_OUTPUT"

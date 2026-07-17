@@ -93,9 +93,6 @@ impl<F: PrimeField32> InterpreterExecutor<F> for KeccakfExecutor {
     }
 }
 
-#[cfg(feature = "aot")]
-impl<F: PrimeField32> AotExecutor<F> for KeccakfExecutor {}
-
 impl<F: PrimeField32> InterpreterMeteredExecutor<F> for KeccakfExecutor {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<KeccakfPreCompute>>()
@@ -135,9 +132,6 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for KeccakfExecutor {
         Ok(execute_e2_handler::<_>)
     }
 }
-
-#[cfg(feature = "aot")]
-impl<F: PrimeField32> AotMeteredExecutor<F> for KeccakfExecutor {}
 
 #[create_handler]
 #[inline(always)]

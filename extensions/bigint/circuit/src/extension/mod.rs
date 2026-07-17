@@ -91,13 +91,6 @@ impl<F: PrimeField32> VmRvrExtension<F> for Int256 {
 }
 
 #[derive(Clone, From, AnyEnum, Executor, MeteredExecutor, PreflightExecutor)]
-#[cfg_attr(
-    feature = "aot",
-    derive(
-        openvm_circuit_derive::AotExecutor,
-        openvm_circuit_derive::AotMeteredExecutor
-    )
-)]
 pub enum Int256Executor {
     AddSub256(Rv64AddSub256Executor),
     BitwiseLogic256(Rv64BitwiseLogic256Executor),

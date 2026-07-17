@@ -82,9 +82,6 @@ impl<F: PrimeField32> InterpreterExecutor<F> for Rv64BranchLessThan256Executor {
     }
 }
 
-#[cfg(feature = "aot")]
-impl<F: PrimeField32> AotExecutor<F> for Rv64BranchLessThan256Executor {}
-
 impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv64BranchLessThan256Executor {
     fn metered_pre_compute_size(&self) -> usize {
         size_of::<E2PreCompute<BranchLtPreCompute>>()
@@ -124,9 +121,6 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv64BranchLessThan256Exe
         dispatch!(execute_e2_handler, local_opcode)
     }
 }
-
-#[cfg(feature = "aot")]
-impl<F: PrimeField32> AotMeteredExecutor<F> for Rv64BranchLessThan256Executor {}
 
 #[inline(always)]
 unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: BranchLessThanOp>(

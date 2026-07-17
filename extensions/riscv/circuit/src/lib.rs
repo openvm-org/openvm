@@ -22,7 +22,6 @@ mod auipc;
 mod bitwise_logic;
 mod branch_eq;
 mod branch_lt;
-pub mod common;
 mod divrem;
 mod divrem_w;
 mod hintstore;

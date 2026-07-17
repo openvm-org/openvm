@@ -34,12 +34,6 @@ cfg_if::cfg_if! {
         type PureInstance<'a> = RvrPureInstance<'a>;
         pub type MeteredInstance<'a> = RvrMeteredInstance<'a>;
         pub type MeteredCostInstance<'a> = RvrMeteredCostInstance<'a>;
-    } else if #[cfg(feature = "aot")] {
-        use openvm_circuit::arch::AotInstance;
-        type PureInstance<'a> = AotInstance<'a, ExecutionCtx>;
-        pub type MeteredInstance<'a> = AotInstance<'a, MeteredCtx>;
-        // AOT has no dedicated metered-cost backend; fall back to the interpreter.
-        pub type MeteredCostInstance<'a> = InterpretedInstance<'a, MeteredCostCtx>;
     } else {
         type PureInstance<'a> = InterpretedInstance<'a, ExecutionCtx>;
         pub type MeteredInstance<'a> = InterpretedInstance<'a, MeteredCtx>;

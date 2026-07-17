@@ -64,57 +64,6 @@ fn test_generate_program(elf_path: &str) -> Result<()> {
     Ok(())
 }
 
-#[cfg(feature = "aot")]
-#[test_case("tests/data/rv64im-exp-from-as")]
-fn test_rv64im_aot_pure_runtime(elf_path: &str) -> Result<()> {
-    let elf = get_elf(elf_path)?;
-    let exe = VmExe::from_elf(
-        elf,
-        Transpiler::<F>::default()
-            .with_extension(Rv64ITranspilerExtension)
-            .with_extension(Rv64MTranspilerExtension)
-            .with_extension(Rv64IoTranspilerExtension),
-    )?;
-
-    let config = Rv64ImConfig::default();
-    let executor = VmExecutor::new(config.clone())?;
-
-    let instance = executor.instance(&exe)?;
-    let _interp_state = instance.execute(vec![])?;
-
-    Ok(())
-}
-/*
-#[cfg(feature = "aot")]
-#[test_case("tests/data/rv64im-exp-from-as")]
-fn test_rv64im_aot_pure_runtime_with_path(elf_path: &str) -> Result<()> {
-    let elf = get_elf(elf_path)?;
-    let exe = VmExe::from_elf(
-        elf,
-        Transpiler::<F>::default()
-            .with_extension(Rv64ITranspilerExtension)
-            .with_extension(Rv64MTranspilerExtension)
-            .with_extension(Rv64IoTranspilerExtension),
-    )?;
-
-    let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let config = Rv64ImConfig::default();
-    let executor = VmExecutor::new(config.clone())?;
-
-    let instance = executor.instance(&exe)?;
-    let interp_state = instance.execute(vec![])?;
-
-    let asm_name = String::from("asm_test_name");
-    let mut aot_instance = executor.aot_instance_with_asm_name(&exe, &asm_name)?;
-    let aot_state = aot_instance.execute(vec![])?;
-
-    assert_eq!(interp_state.instret(), aot_state.instret());
-    assert_eq!(interp_state.pc(), aot_state.pc());
-
-    Ok(())
-}
-    */
-
 #[test_case("tests/data/rv64im-exp-from-as")]
 #[test_case("tests/data/rv64im-fib-from-as")]
 fn test_rv64im_runtime(elf_path: &str) -> Result<()> {
