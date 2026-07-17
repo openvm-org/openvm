@@ -1370,14 +1370,6 @@ impl RvrGpuDecodeState {
             .header_acquire()
             .expect("G2 committed header before device decode")
             .residual_event_count as usize;
-        let d_delta = DeviceBuffer::<u8>::with_capacity_on(
-            host.total_record_count * openvm_circuit::arch::rvr::PREFLIGHT_DELTA_RECORD_SIZE,
-            device_ctx,
-        );
-        let d_expected_blocks =
-            DeviceBuffer::<u64>::with_capacity_on(host.total_record_count, device_ctx);
-        let d_expected_modes =
-            DeviceBuffer::<u8>::with_capacity_on(host.total_record_count, device_ctx);
         let d_opaque_residual = DeviceBuffer::<u8>::with_capacity_on(
             residual_capacity
                 * std::mem::size_of::<openvm_circuit::arch::rvr::DeltaMemoryLogEntry>(),
@@ -1392,74 +1384,6 @@ impl RvrGpuDecodeState {
         d_program_frequencies
             .fill_zero_on(device_ctx)
             .expect("G2 program-frequency clear");
-        let d_error = DeviceBuffer::<u32>::with_capacity_on(1, device_ctx);
-        d_error.fill_zero_on(device_ctx).expect("G2 error clear");
-        let g2_predecode_timer = CudaStageTimer::start(device_ctx);
-        unsafe {
-            crate::cuda_abi::rvr_g2_cuda::predecode(
-                &d_wire,
-                host.segment.byte_len(),
-                header.run_count as usize,
-                header.instruction_count as usize,
-                &d_fingerprint,
-                &d_blocks,
-                &d_table,
-                pc_base,
-                &d_initial_memory,
-                host.initial_timestamp,
-                &d_expected_kinds,
-                &d_expected_opaque,
-                &d_program_frequencies,
-                &d_delta,
-                &d_expected_blocks,
-                &d_expected_modes,
-                &d_opaque_residual,
-                &d_opaque_residual_count,
-                &d_error,
-                device_ctx.stream.as_raw(),
-            )
-            .expect("CUDA G2 wire expansion launch");
-        }
-        if let Some(timer) = g2_predecode_timer {
-            timer.finish("g2_predecode", segment_id, host.total_record_count);
-        }
-        let error = d_error.to_host_on(device_ctx).expect("G2 error D2H")[0];
-        assert_eq!(error, 0, "CUDA G2 wire validation error {error}");
-        if !host.program_frequency_reference.is_empty() {
-            let actual = d_program_frequencies
-                .to_host_on(device_ctx)
-                .expect("G2 program-frequency oracle D2H");
-            assert_eq!(
-                actual.as_slice(),
-                host.program_frequency_reference.as_slice(),
-                "G2 device program frequencies differ byte-for-byte from host execution"
-            );
-        }
-        let opaque_residual_count = d_opaque_residual_count
-            .to_host_on(device_ctx)
-            .expect("G2 opaque-residual count D2H")[0] as usize;
-        assert!(
-            opaque_residual_count <= residual_capacity,
-            "G2 opaque-residual count overflow"
-        );
-        let d_opaque_residual_exact = if opaque_residual_count == 0 {
-            DeviceBuffer::<u8>::new()
-        } else {
-            let byte_len = opaque_residual_count
-                * std::mem::size_of::<openvm_circuit::arch::rvr::DeltaMemoryLogEntry>();
-            let exact = DeviceBuffer::<u8>::with_capacity_on(byte_len, device_ctx);
-            unsafe {
-                cuda_memcpy_on::<true, true>(
-                    exact.as_mut_ptr().cast(),
-                    d_opaque_residual.as_ptr().cast(),
-                    byte_len,
-                    device_ctx,
-                )
-            }
-            .expect("G2 opaque-residual compact D2D");
-            exact
-        };
-
         let num_airs = host
             .specs
             .iter()
@@ -1494,77 +1418,88 @@ impl RvrGpuDecodeState {
             .as_slice()
             .to_device_on(device_ctx)
             .expect("G2 output descriptors H2D");
-        let d_flags = vec![0u8; num_airs]
-            .as_slice()
-            .to_device_on(device_ctx)
-            .expect("G2 arena flags H2D");
-        let event_capacity = host
+        let touched_capacity = host
             .total_record_count
             .saturating_mul(3)
-            .saturating_add(opaque_residual_count);
-        let d_touched_output = if event_capacity == 0 {
+            .saturating_add(residual_capacity)
+            .saturating_add(32);
+        let d_touched_output = if touched_capacity == 0 {
             DeviceBuffer::new()
         } else {
             DeviceBuffer::<u32>::with_capacity_on(
-                event_capacity * DEVICE_TOUCHED_RECORD_WORDS,
+                touched_capacity * DEVICE_TOUCHED_RECORD_WORDS,
                 device_ctx,
             )
         };
         let d_touched_count = DeviceBuffer::<u32>::with_capacity_on(1, device_ctx);
-        let empty_u32 = DeviceBuffer::<u32>::new();
-        let d_opaque_prev_timestamps = if opaque_residual_count == 0 {
+        let d_opaque_prev_timestamps = if residual_capacity == 0 {
             DeviceBuffer::<u32>::new()
         } else {
-            DeviceBuffer::<u32>::with_capacity_on(opaque_residual_count, device_ctx)
+            DeviceBuffer::<u32>::with_capacity_on(residual_capacity, device_ctx)
         };
-        let d_opaque_prev_values = if opaque_residual_count == 0 {
+        let d_opaque_prev_values = if residual_capacity == 0 {
             DeviceBuffer::<u64>::new()
         } else {
-            DeviceBuffer::<u64>::with_capacity_on(opaque_residual_count, device_ctx)
+            DeviceBuffer::<u64>::with_capacity_on(residual_capacity, device_ctx)
         };
-        let empty_runs = DeviceBuffer::<openvm_circuit::arch::rvr::ProgramRunEntry>::new();
-        let empty_program_log = DeviceBuffer::<openvm_circuit::arch::rvr::ProgramLogEntry>::new();
-        let empty_program = DeviceBuffer::<openvm_circuit::arch::rvr::DeviceProgramEntry>::new();
-        d_error
-            .fill_zero_on(device_ctx)
-            .expect("G2 replay error clear");
+        let d_error = DeviceBuffer::<u32>::with_capacity_on(1, device_ctx);
+        d_error.fill_zero_on(device_ctx).expect("G2 error clear");
+        let g2_predecode_timer = CudaStageTimer::start(device_ctx);
         unsafe {
-            crate::cuda_abi::rvr_delta_cuda::predecode(
-                &d_delta,
-                host.total_record_count,
-                &d_opaque_residual_exact,
-                opaque_residual_count,
-                std::mem::size_of::<openvm_circuit::arch::rvr::DeltaMemoryLogEntry>(),
-                &empty_program_log,
-                0,
-                &empty_runs,
-                0,
-                &empty_u32,
-                &empty_program,
+            crate::cuda_abi::rvr_g2_cuda::predecode(
+                &d_wire,
+                host.segment.byte_len(),
+                header.run_count as usize,
+                header.instruction_count as usize,
+                &d_fingerprint,
+                &d_blocks,
+                &d_table,
+                pc_base,
                 &d_initial_memory,
+                host.initial_timestamp,
+                &d_expected_kinds,
+                &d_expected_opaque,
+                &d_program_frequencies,
+                host.total_record_count,
+                &d_opaque_residual,
+                &d_opaque_residual_count,
+                &d_descs,
                 &d_touched_output,
                 &d_touched_count,
                 &d_opaque_prev_timestamps,
                 &d_opaque_prev_values,
-                &d_table,
-                pc_base,
-                &d_flags,
-                &d_descs,
-                &d_expected_blocks,
-                &d_expected_modes,
-                segment_id,
                 &d_error,
                 device_ctx.stream.as_raw(),
             )
-            .expect("CUDA G2 compact-to-trace replay launch");
+            .expect("CUDA G2 wire expansion launch");
         }
-        let error = d_error.to_host_on(device_ctx).expect("G2 replay error D2H")[0];
-        assert_eq!(error, 0, "CUDA G2 replay fail-closed error {error}");
+        if let Some(timer) = g2_predecode_timer {
+            timer.finish("g2_predecode", segment_id, host.total_record_count);
+        }
+        let error = d_error.to_host_on(device_ctx).expect("G2 error D2H")[0];
+        assert_eq!(error, 0, "CUDA G2 wire validation error {error}");
+        if !host.program_frequency_reference.is_empty() {
+            let actual = d_program_frequencies
+                .to_host_on(device_ctx)
+                .expect("G2 program-frequency oracle D2H");
+            assert_eq!(
+                actual.as_slice(),
+                host.program_frequency_reference.as_slice(),
+                "G2 device program frequencies differ byte-for-byte from host execution"
+            );
+        }
+        let opaque_residual_count = d_opaque_residual_count
+            .to_host_on(device_ctx)
+            .expect("G2 opaque-residual count D2H")[0] as usize;
+        assert!(
+            opaque_residual_count <= residual_capacity,
+            "G2 opaque-residual count overflow"
+        );
         let touched_count = d_touched_count
             .to_host_on(device_ctx)
             .expect("G2 touched count D2H")[0] as usize;
         assert!(
-            touched_count <= event_capacity,
+            touched_count <= touched_capacity,
             "G2 touched-memory count overflow"
         );
         if !host.oracle_expected.is_empty() {
