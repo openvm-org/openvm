@@ -170,7 +170,9 @@ pub mod rvr_delta_cuda {
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 pub mod rvr_g2_cuda {
     use super::*;
-    use crate::rvr_gpu_decode::{DeviceOperandEntry, G2ExpectedKindV1, G2ExpectedOpaqueV1};
+    use crate::rvr_gpu_decode::{
+        DeltaAirOutputDesc, DeviceOperandEntry, G2ExpectedKindV1, G2ExpectedOpaqueV1,
+    };
 
     extern "C" {
         fn _rvr_g2_predecode(
@@ -192,11 +194,15 @@ pub mod rvr_g2_cuda {
             expected_opaque_count: usize,
             d_program_frequencies: *mut u32,
             frequency_count: usize,
-            d_delta_output: DeviceBufferView,
-            d_expected_blocks: DeviceBufferView,
-            d_expected_modes: DeviceBufferView,
+            total_record_count: usize,
             d_opaque_residual_output: DeviceBufferView,
             d_opaque_residual_count: *mut u32,
+            d_outputs: *const DeltaAirOutputDesc,
+            num_airs: usize,
+            d_touched_output: DeviceBufferView,
+            d_touched_count: *mut u32,
+            d_opaque_prev_timestamps: *mut u32,
+            d_opaque_prev_values: *mut u64,
             d_error: *mut u32,
             stream: cudaStream_t,
         ) -> i32;
@@ -217,11 +223,14 @@ pub mod rvr_g2_cuda {
         d_expected_kinds: &DeviceBuffer<G2ExpectedKindV1>,
         d_expected_opaque: &DeviceBuffer<G2ExpectedOpaqueV1>,
         d_program_frequencies: &DeviceBuffer<u32>,
-        d_delta_output: &DeviceBuffer<u8>,
-        d_expected_blocks: &DeviceBuffer<u64>,
-        d_expected_modes: &DeviceBuffer<u8>,
+        total_record_count: usize,
         d_opaque_residual_output: &DeviceBuffer<u8>,
         d_opaque_residual_count: &DeviceBuffer<u32>,
+        d_outputs: &DeviceBuffer<DeltaAirOutputDesc>,
+        d_touched_output: &DeviceBuffer<u32>,
+        d_touched_count: &DeviceBuffer<u32>,
+        d_opaque_prev_timestamps: &DeviceBuffer<u32>,
+        d_opaque_prev_values: &DeviceBuffer<u64>,
         d_error: &DeviceBuffer<u32>,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
@@ -244,11 +253,15 @@ pub mod rvr_g2_cuda {
             d_expected_opaque.len(),
             d_program_frequencies.as_mut_ptr(),
             d_program_frequencies.len(),
-            d_delta_output.view(),
-            d_expected_blocks.view(),
-            d_expected_modes.view(),
+            total_record_count,
             d_opaque_residual_output.view(),
             d_opaque_residual_count.as_mut_ptr(),
+            d_outputs.as_ptr(),
+            d_outputs.len(),
+            d_touched_output.view(),
+            d_touched_count.as_mut_ptr(),
+            d_opaque_prev_timestamps.as_mut_ptr(),
+            d_opaque_prev_values.as_mut_ptr(),
             d_error.as_mut_ptr(),
             stream,
         ))
