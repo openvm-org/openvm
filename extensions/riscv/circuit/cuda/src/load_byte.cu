@@ -110,13 +110,13 @@ __global__ void rv64_load_byte_tracegen_compact(
     if (idx < records.len()) {
         auto const rec = records[idx];
         auto const entry = rvr_operand_entry(operand_table, pc_base, rec.from_pc);
-        Rv64LoadRecord full;
-        full.adapter = rvr_decode_alu3_load(rec, entry);
+        Rv64LoadByteRecord full;
+        full.adapter = rvr_decode_alu3_load_byte(rec, entry);
 #pragma unroll
         for (size_t i = 0; i < BLOCK_FE_WIDTH; i++) {
             full.core.read_data[i] = rvr_u16_limb(rec.c, i);
         }
-        auto adapter = Rv64LoadAdapter(
+        auto adapter = Rv64LoadByteAdapter(
             pointer_max_bits,
             VariableRangeChecker(range_checker_ptr, range_checker_num_bins),
             timestamp_max_bits

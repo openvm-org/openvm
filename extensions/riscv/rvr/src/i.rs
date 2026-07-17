@@ -45,7 +45,7 @@ impl Default for Rv64IExtension {
 
 impl RvrExtension for Rv64IExtension {
     fn codegen_fingerprint(&self) -> Option<Vec<u8>> {
-        Some(b"openvm-rv64i-rvr-v1".to_vec())
+        Some(b"openvm-rv64i-rvr-v2-two-block".to_vec())
     }
 
     fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {

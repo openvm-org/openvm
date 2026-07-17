@@ -51,31 +51,49 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64LoadHalfwordChipGpu {
         let device_ctx = &self.range_checker.device_ctx;
 
         #[cfg(all(feature = "cuda", feature = "rvr"))]
-        if rvr_wire || delta_records.is_some() {
+        if let Some(full_records) = delta_records {
+            assert_eq!(full_records.len() % RECORD_SIZE, 0);
+            let height = next_power_of_two_or_zero(full_records.len() / RECORD_SIZE);
+            let trace = DeviceMatrix::<F>::with_capacity_on(height, trace_width, device_ctx);
+            unsafe {
+                load_halfword_cuda::tracegen(
+                    trace.buffer(),
+                    height,
+                    &full_records,
+                    self.pointer_max_bits,
+                    &self.range_checker.count,
+                    &self.bitwise_lookup.count,
+                    self.timestamp_max_bits as u32,
+                    device_ctx.stream.as_raw(),
+                )
+                .unwrap();
+            }
+            return AirProvingContext::simple_no_pis(trace);
+        }
+
+        #[cfg(all(feature = "cuda", feature = "rvr"))]
+        if rvr_wire {
             use openvm_circuit::arch::rvr::PREFLIGHT_ADDSUB_RECORD_SIZE;
-            let compact_len = delta_records
-                .as_ref()
-                .map_or(records.len(), |buf| buf.len());
+            let compact_len = records.len();
             assert_eq!(compact_len % PREFLIGHT_ADDSUB_RECORD_SIZE, 0);
             let compact_height =
                 next_power_of_two_or_zero(compact_len / PREFLIGHT_ADDSUB_RECORD_SIZE);
-            let (table, pc_base) = self
-                .rvr_decode
-                .device_operand_table(device_ctx)
-                .expect("compact segment without a bound operand table");
-            let compact_records = delta_records
-                .unwrap_or_else(|| Arc::new(records.to_device_on(device_ctx).unwrap()));
+            let compact_records = records.to_device_on(device_ctx).unwrap();
+            let full_records = self.rvr_decode.expand_compact_multiblock(
+                crate::rvr_gpu_decode::DeltaAirKind::LoadHalfword,
+                &compact_records,
+                device_ctx,
+            );
             let trace =
                 DeviceMatrix::<F>::with_capacity_on(compact_height, trace_width, device_ctx);
             unsafe {
-                load_halfword_cuda::tracegen_compact(
+                load_halfword_cuda::tracegen(
                     trace.buffer(),
                     compact_height,
-                    &compact_records,
-                    &table,
-                    pc_base,
+                    &full_records,
                     self.pointer_max_bits,
                     &self.range_checker.count,
+                    &self.bitwise_lookup.count,
                     self.timestamp_max_bits as u32,
                     device_ctx.stream.as_raw(),
                 )

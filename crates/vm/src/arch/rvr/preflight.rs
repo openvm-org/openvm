@@ -158,8 +158,8 @@ fn calibrate_native_detail_clock() -> u64 {
 /// C-compatible preflight program log entry.
 ///
 /// Layout matches `ProgramLogEntry` in `openvm_tracer_preflight.h`.
-/// OpenVM pcs are four-byte aligned, so bit 0 of `pc_and_flags` carries the
-/// writer-complete fail-closed guard without enlarging this side log.
+/// OpenVM pcs are four-byte aligned, so the low two bits of `pc_and_flags`
+/// carry fail-closed side-band guards without enlarging this side log.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ProgramLogEntry {
@@ -171,6 +171,8 @@ pub struct ProgramLogEntry {
 
 impl ProgramLogEntry {
     const WRITE_COMPLETE: u32 = 1;
+    const CROSSING_RESIDUAL: u32 = 2;
+    const FLAGS: u32 = Self::WRITE_COMPLETE | Self::CROSSING_RESIDUAL;
 
     #[inline]
     pub fn new(timestamp: u32, pc: u32) -> Self {
@@ -184,12 +186,19 @@ impl ProgramLogEntry {
 
     #[inline]
     pub fn pc(&self) -> u32 {
-        self.pc_and_flags & !Self::WRITE_COMPLETE
+        self.pc_and_flags & !Self::FLAGS
     }
 
     #[inline]
     pub fn write_complete(&self) -> bool {
         self.pc_and_flags & Self::WRITE_COMPLETE != 0
+    }
+
+    /// The inline compact witness is only a chronology placeholder for this
+    /// row; both memory blocks are carried by residual memory events.
+    #[inline]
+    pub fn crossing_residual(&self) -> bool {
+        self.pc_and_flags & Self::CROSSING_RESIDUAL != 0
     }
 }
 

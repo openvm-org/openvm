@@ -119,11 +119,15 @@ pub struct LoadStoreArenaFieldOffsets {
     pub rs1_aux_prev_ts: usize,
     pub rd_rs2_ptr: usize,
     pub read_data_aux_prev_ts: usize,
+    /// Second block read timestamp for multi-byte accesses, or `usize::MAX`.
+    pub read_data_aux_prev_ts2: usize,
     /// Stored as a u16.
     pub imm: usize,
     pub imm_sign: usize,
     pub mem_as: usize,
     pub write_prev_ts: usize,
+    /// Second previous-write timestamp for multi-byte stores, or `usize::MAX`.
+    pub write_prev_ts2: usize,
     /// Adapter-relative previous-write data, or `usize::MAX` when the
     /// previous data lives in the core record.
     pub write_prev_data: usize,
@@ -132,7 +136,11 @@ pub struct LoadStoreArenaFieldOffsets {
     pub core_is_word: usize,
     pub core_shift_amount: usize,
     pub core_read_data: usize,
+    /// Second block read data for multi-byte loads, or `usize::MAX`.
+    pub core_read_data2: usize,
     pub core_prev_data: usize,
+    /// Second previous block for multi-byte stores, or `usize::MAX`.
+    pub core_prev_data2: usize,
 }
 
 /// BabyBear modulus used to field-canonicalize negative branch offsets.
