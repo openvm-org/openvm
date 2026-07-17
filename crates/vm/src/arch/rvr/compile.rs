@@ -1438,11 +1438,11 @@ fn g2_producer_schema_fingerprint(
     emission_mode: G2EmissionMode,
 ) -> [u8; 32] {
     let mut producer_schema = Sha256::new();
-    producer_schema.update(b"openvm-rvr-g2-block-span-producer-v2\0");
+    producer_schema.update(b"openvm-rvr-g2-block-span-producer-v3\0");
     producer_schema.update(wire_fingerprint);
     producer_schema.update([emission_mode as u8]);
     producer_schema.update(
-        b"producer-lane-24;exact-expected-cursors;static-run-standard-spans;exit-commit;grouped-custom-residual;",
+        b"producer-lane-24;exact-expected-cursors;static-run-standard-spans;exit-commit;grouped-custom-residual;branch-free-production-scratch;",
     );
     producer_schema.finalize().into()
 }
