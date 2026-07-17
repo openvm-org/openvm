@@ -65,7 +65,7 @@ jobs:
     uses: ./.github/workflows/extension-tests.group.yml
     with:
       runner_id: cpu-${{ strategy.job-index }}
-      machine_type: family=c8i-flex.16xlarge+c8i.16xlarge+c8a.16xlarge+c7i.16xlarge+c7a.16xlarge/image=ubuntu24-full-x64/volume=80gb
+      machine_type: ${{ matrix.extension == 'algebra' && (matrix.mode == 'aot' && 'family=c8i-flex.4xlarge+c8i.4xlarge+c8a.4xlarge+m8i-flex.4xlarge+m8i.4xlarge+m8a.4xlarge+c7i.4xlarge+c7a.4xlarge+m7i.4xlarge+m7a.4xlarge/image=ubuntu24-full-x64/volume=80gb' || 'family=c9g.4xlarge+c8g.4xlarge+m9g.4xlarge+m8g.4xlarge/image=ubuntu24-full-arm64/volume=80gb') || (matrix.mode == 'aot' && 'family=c8i-flex.8xlarge+c8i.8xlarge+c8a.8xlarge+m8i-flex.8xlarge+m8i.8xlarge+m8a.8xlarge+c7i.8xlarge+c7a.8xlarge+m7i.8xlarge+m7a.8xlarge/image=ubuntu24-full-x64/volume=80gb' || 'family=c9g.8xlarge+c8g.8xlarge+m9g.8xlarge+m8g.8xlarge/image=ubuntu24-full-arm64/volume=80gb') }}
       extensions: ${{ matrix.extension }}
       mode: ${{ matrix.mode }}
     secrets: inherit

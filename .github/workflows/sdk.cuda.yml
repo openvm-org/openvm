@@ -1,6 +1,7 @@
 name: SDK Tests (CUDA)
 
 on:
+  workflow_call:
   push:
     branches: ["main"]
   pull_request:
@@ -19,7 +20,7 @@ on:
       - ".github/workflows/sdk.cuda.yml"
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  group: sdk-cuda-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: true
 
 env:
