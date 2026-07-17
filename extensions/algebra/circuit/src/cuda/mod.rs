@@ -49,6 +49,8 @@ impl<const NUM_LANES: usize, const TOTAL_LIMBS: usize> Chip<DenseRecordArena, Gp
 {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         use openvm_cuda_common::copy::MemCopyH2D;
+        #[cfg(feature = "rvr")]
+        let g2_segment_id = arena.rvr_g2_segment_id;
         type ARec<const L: usize> = Rv64IsEqualModU16AdapterRecord<2, L>;
         let record_stride = size_of::<(ARec<NUM_LANES>, ModularIsEqualRecord<TOTAL_LIMBS>)>();
         let rec_core_offset = size_of::<ARec<NUM_LANES>>();
@@ -63,7 +65,15 @@ impl<const NUM_LANES: usize, const TOTAL_LIMBS: usize> Chip<DenseRecordArena, Gp
             + ModularIsEqualCoreCols::<F, TOTAL_LIMBS>::width();
 
         let device_ctx = &self.range_checker.device_ctx;
+        #[cfg(feature = "rvr")]
+        let h2d_timer = g2_segment_id.and_then(|_| {
+            openvm_circuit::arch::rvr::gpu_profile::CudaStageTimer::start(device_ctx)
+        });
         let d_records = records.to_device_on(device_ctx).unwrap();
+        #[cfg(feature = "rvr")]
+        if let (Some(timer), Some(segment_id)) = (h2d_timer, g2_segment_id) {
+            timer.finish("opaque_h2d", segment_id, records.len());
+        }
         let d_trace = DeviceMatrix::<F>::with_capacity_on(height, width, device_ctx);
         unsafe {
             cuda_abi::tracegen(

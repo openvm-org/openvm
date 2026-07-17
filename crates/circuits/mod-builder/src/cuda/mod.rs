@@ -80,7 +80,11 @@ impl FieldExprChipGpu {
     }
 
     /// Generates the full (adapter + core) trace on device from dense records.
-    pub fn generate_proving_ctx(&self, records: &[u8]) -> AirProvingContext<GpuBackend> {
+    pub fn generate_proving_ctx(
+        &self,
+        records: &[u8],
+        g2_segment_id: Option<u32>,
+    ) -> AirProvingContext<GpuBackend> {
         if records.is_empty() {
             return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
         }
@@ -90,7 +94,13 @@ impl FieldExprChipGpu {
         let width = self.adapter_width + self.core_width;
 
         let device_ctx = &self.range_checker.device_ctx;
+        let h2d_timer = g2_segment_id.and_then(|_| {
+            openvm_circuit::arch::rvr::gpu_profile::CudaStageTimer::start(device_ctx)
+        });
         let d_records = records.to_device_on(device_ctx).unwrap();
+        if let (Some(timer), Some(segment_id)) = (h2d_timer, g2_segment_id) {
+            timer.finish("opaque_h2d", segment_id, records.len());
+        }
         let d_trace = DeviceMatrix::<F>::with_capacity_on(height, width, device_ctx);
 
         let n_threads = height.div_ceil(256).min(512) * 256;

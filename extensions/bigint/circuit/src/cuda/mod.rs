@@ -7,7 +7,6 @@ use openvm_circuit_primitives::{
     range_tuple::RangeTupleCheckerChipGPU, var_range::VariableRangeCheckerChipGPU, Chip,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
-use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_riscv_adapters::{
     Rv64VecHeapAdapterCols, Rv64VecHeapAdapterRecord, Rv64VecHeapBranchU16AdapterCols,
     Rv64VecHeapBranchU16AdapterRecord, Rv64VecHeapU16AdapterCols, Rv64VecHeapU16AdapterRecord,
@@ -43,6 +42,7 @@ pub struct AddSub256ChipGpu {
 impl Chip<DenseRecordArena, GpuBackend> for AddSub256ChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         const RECORD_SIZE: usize = size_of::<(AddSub256AdapterRecord, AddSub256CoreRecord)>();
+        let g2_segment_id = arena.rvr_g2_segment_id();
         let records = arena.allocated();
         if records.is_empty() {
             return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
@@ -59,7 +59,8 @@ impl Chip<DenseRecordArena, GpuBackend> for AddSub256ChipGpu {
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
 
-        let d_records = records.to_device_on(device_ctx).unwrap();
+        let d_records =
+            openvm_circuit::arch::rvr::gpu_profile::opaque_h2d(records, g2_segment_id, device_ctx);
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
 
         unsafe {
@@ -98,6 +99,7 @@ impl Chip<DenseRecordArena, GpuBackend> for BitwiseLogic256ChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         const RECORD_SIZE: usize =
             size_of::<(BitwiseLogic256AdapterRecord, BitwiseLogic256CoreRecord)>();
+        let g2_segment_id = arena.rvr_g2_segment_id();
         let records = arena.allocated();
         if records.is_empty() {
             return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
@@ -114,7 +116,8 @@ impl Chip<DenseRecordArena, GpuBackend> for BitwiseLogic256ChipGpu {
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
 
-        let d_records = records.to_device_on(device_ctx).unwrap();
+        let d_records =
+            openvm_circuit::arch::rvr::gpu_profile::opaque_h2d(records, g2_segment_id, device_ctx);
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
 
         unsafe {
@@ -153,6 +156,7 @@ impl Chip<DenseRecordArena, GpuBackend> for BranchEqual256ChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         const RECORD_SIZE: usize =
             size_of::<(BranchEqual256AdapterRecord, BranchEqual256CoreRecord)>();
+        let g2_segment_id = arena.rvr_g2_segment_id();
         let records = arena.allocated();
         if records.is_empty() {
             return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
@@ -164,7 +168,8 @@ impl Chip<DenseRecordArena, GpuBackend> for BranchEqual256ChipGpu {
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
 
-        let d_records = records.to_device_on(device_ctx).unwrap();
+        let d_records =
+            openvm_circuit::arch::rvr::gpu_profile::opaque_h2d(records, g2_segment_id, device_ctx);
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
 
         unsafe {
@@ -204,6 +209,7 @@ pub struct LessThan256ChipGpu {
 impl Chip<DenseRecordArena, GpuBackend> for LessThan256ChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         const RECORD_SIZE: usize = size_of::<(LessThan256AdapterRecord, LessThan256CoreRecord)>();
+        let g2_segment_id = arena.rvr_g2_segment_id();
         let records = arena.allocated();
         if records.is_empty() {
             return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
@@ -220,7 +226,8 @@ impl Chip<DenseRecordArena, GpuBackend> for LessThan256ChipGpu {
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
 
-        let d_records = records.to_device_on(device_ctx).unwrap();
+        let d_records =
+            openvm_circuit::arch::rvr::gpu_profile::opaque_h2d(records, g2_segment_id, device_ctx);
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
 
         unsafe {
@@ -258,6 +265,7 @@ impl Chip<DenseRecordArena, GpuBackend> for BranchLessThan256ChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         const RECORD_SIZE: usize =
             size_of::<(BranchLessThan256AdapterRecord, BranchLessThan256CoreRecord)>();
+        let g2_segment_id = arena.rvr_g2_segment_id();
         let records = arena.allocated();
         if records.is_empty() {
             return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
@@ -269,7 +277,8 @@ impl Chip<DenseRecordArena, GpuBackend> for BranchLessThan256ChipGpu {
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
 
-        let d_records = records.to_device_on(device_ctx).unwrap();
+        let d_records =
+            openvm_circuit::arch::rvr::gpu_profile::opaque_h2d(records, g2_segment_id, device_ctx);
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
 
         unsafe {
@@ -317,6 +326,7 @@ impl Chip<DenseRecordArena, GpuBackend> for ShiftLogical256ChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         const RECORD_SIZE: usize =
             size_of::<(ShiftLogical256U16AdapterRecord, ShiftLogical256CoreRecord)>();
+        let g2_segment_id = arena.rvr_g2_segment_id();
         let records = arena.allocated();
         if records.is_empty() {
             return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
@@ -333,7 +343,8 @@ impl Chip<DenseRecordArena, GpuBackend> for ShiftLogical256ChipGpu {
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
 
-        let d_records = records.to_device_on(device_ctx).unwrap();
+        let d_records =
+            openvm_circuit::arch::rvr::gpu_profile::opaque_h2d(records, g2_segment_id, device_ctx);
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
 
         unsafe {
@@ -359,6 +370,7 @@ impl Chip<DenseRecordArena, GpuBackend> for ShiftRightArithmetic256ChipGpu {
             ShiftRightArithmetic256AdapterRecord,
             ShiftRightArithmetic256CoreRecord,
         )>();
+        let g2_segment_id = arena.rvr_g2_segment_id();
         let records = arena.allocated();
         if records.is_empty() {
             return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
@@ -376,7 +388,8 @@ impl Chip<DenseRecordArena, GpuBackend> for ShiftRightArithmetic256ChipGpu {
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
 
-        let d_records = records.to_device_on(device_ctx).unwrap();
+        let d_records =
+            openvm_circuit::arch::rvr::gpu_profile::opaque_h2d(records, g2_segment_id, device_ctx);
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
 
         unsafe {
@@ -417,6 +430,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Multiplication256ChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         const RECORD_SIZE: usize =
             size_of::<(Multiplication256AdapterRecord, Multiplication256CoreRecord)>();
+        let g2_segment_id = arena.rvr_g2_segment_id();
         let records = arena.allocated();
         if records.is_empty() {
             return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
@@ -433,7 +447,8 @@ impl Chip<DenseRecordArena, GpuBackend> for Multiplication256ChipGpu {
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
 
-        let d_records = records.to_device_on(device_ctx).unwrap();
+        let d_records =
+            openvm_circuit::arch::rvr::gpu_profile::opaque_h2d(records, g2_segment_id, device_ctx);
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
 
         let sizes = self.range_tuple_checker.sizes;

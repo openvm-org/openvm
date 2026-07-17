@@ -35,7 +35,9 @@ use openvm_circuit::{
 };
 use openvm_continuations::CommitBytes;
 use openvm_sdk_config::{SdkVmConfig, SdkVmCpuBuilder, TranspilerConfig};
-use openvm_stark_backend::{keygen::types::MultiStarkVerifyingKey, StarkEngine, SystemParams};
+use openvm_stark_backend::{
+    keygen::types::MultiStarkVerifyingKey, prover::ProverDevice, StarkEngine, SystemParams,
+};
 use openvm_stark_sdk::config::baby_bear_poseidon2::{
     BabyBearPoseidon2CpuEngine as BabyBearPoseidon2Engine, Digest,
 };
@@ -808,7 +810,10 @@ where
         app_exe: impl Into<ExecutableFormat>,
         inputs: StdIn,
         def_inputs: &[DeferralInput],
-    ) -> Result<(VmStarkProof, VerificationBaseline), SdkError> {
+    ) -> Result<(VmStarkProof, VerificationBaseline), SdkError>
+    where
+        <E::PD as ProverDevice<E::PB, E::TS>>::DeviceCtx: 'static,
+    {
         let mut prover = self.prover(app_exe)?;
         let proof = prover.prove(inputs, def_inputs)?.0;
         let baseline = prover.generate_baseline();

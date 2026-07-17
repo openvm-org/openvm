@@ -152,7 +152,12 @@ impl<const BLOCKS: usize> HybridModularChip<F, BLOCKS> {
 // the dense records (see openvm_mod_circuit_builder::cuda).
 impl<const BLOCKS: usize> Chip<DenseRecordArena, GpuBackend> for HybridModularChip<F, BLOCKS> {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-        self.gpu.generate_proving_ctx(arena.allocated())
+        #[cfg(feature = "rvr")]
+        let g2_segment_id = arena.rvr_g2_segment_id;
+        #[cfg(not(feature = "rvr"))]
+        let g2_segment_id = None;
+        self.gpu
+            .generate_proving_ctx(arena.allocated(), g2_segment_id)
     }
 }
 
@@ -342,7 +347,12 @@ impl<const BLOCKS: usize> HybridFp2Chip<F, BLOCKS> {
 // the dense records (see openvm_mod_circuit_builder::cuda).
 impl<const BLOCKS: usize> Chip<DenseRecordArena, GpuBackend> for HybridFp2Chip<F, BLOCKS> {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-        self.gpu.generate_proving_ctx(arena.allocated())
+        #[cfg(feature = "rvr")]
+        let g2_segment_id = arena.rvr_g2_segment_id;
+        #[cfg(not(feature = "rvr"))]
+        let g2_segment_id = None;
+        self.gpu
+            .generate_proving_ctx(arena.allocated(), g2_segment_id)
     }
 }
 

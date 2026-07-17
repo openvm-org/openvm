@@ -262,6 +262,9 @@ pub struct DenseRecordArena {
     /// count alongside the byte prefix. GPU consumers use this to allocate a
     /// device-side row index without scanning records on the host.
     pub rvr_variable_rows: Option<usize>,
+    /// G2 segment identity for CUDA timing of opaque-final custom-arena H2D.
+    #[cfg(feature = "rvr")]
+    pub rvr_g2_segment_id: Option<u32>,
     #[cfg(feature = "rvr")]
     pub(crate) rvr_recycle: Option<(usize, crate::arch::rvr::RvrPreflightBufferPool)>,
     #[cfg(feature = "rvr")]
@@ -274,6 +277,20 @@ pub struct DenseRecordArena {
 const MAX_ALIGNMENT: usize = 32;
 
 impl DenseRecordArena {
+    /// Committed G2 segment identity, when this is an opaque-final custom
+    /// arena. Available on all feature combinations so CUDA consumers need
+    /// no feature-dependent call signature.
+    pub fn rvr_g2_segment_id(&self) -> Option<u32> {
+        #[cfg(feature = "rvr")]
+        {
+            self.rvr_g2_segment_id
+        }
+        #[cfg(not(feature = "rvr"))]
+        {
+            None
+        }
+    }
+
     fn new_buffer(size_bytes: usize) -> Vec<u8> {
         #[cfg(feature = "cuda")]
         {
@@ -296,6 +313,8 @@ impl DenseRecordArena {
             rvr_wire: false,
             rvr_variable_rows: None,
             #[cfg(feature = "rvr")]
+            rvr_g2_segment_id: None,
+            #[cfg(feature = "rvr")]
             rvr_recycle: None,
             #[cfg(feature = "rvr")]
             rvr_arena_native_recycle: None,
@@ -315,6 +334,7 @@ impl DenseRecordArena {
             records_buffer: cursor,
             rvr_wire: false,
             rvr_variable_rows: None,
+            rvr_g2_segment_id: None,
             rvr_recycle: Some((air, pool)),
             rvr_arena_native_recycle: None,
         }
@@ -341,6 +361,7 @@ impl DenseRecordArena {
             records_buffer: cursor,
             rvr_wire: false,
             rvr_variable_rows: None,
+            rvr_g2_segment_id: None,
             rvr_recycle: None,
             rvr_arena_native_recycle: Some((recycle_key, pool)),
         }
@@ -359,6 +380,10 @@ impl DenseRecordArena {
         self.records_buffer = cursor;
         self.rvr_wire = false;
         self.rvr_variable_rows = None;
+        #[cfg(feature = "rvr")]
+        {
+            self.rvr_g2_segment_id = None;
+        }
     }
 
     /// Returns the allocated size of the arena in bytes.
@@ -470,6 +495,8 @@ impl DenseRecordArena {
             records_buffer: cursor,
             rvr_wire: false,
             rvr_variable_rows: None,
+            #[cfg(feature = "rvr")]
+            rvr_g2_segment_id: None,
             #[cfg(feature = "rvr")]
             rvr_recycle: None,
             #[cfg(feature = "rvr")]

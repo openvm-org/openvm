@@ -270,6 +270,7 @@ impl<F: PrimeField32> CachedRvrPreflightExecutor<F> for CachedRvrCompiledPreflig
     fn prepare_arena_native_backings(&self, trace_heights: &[u32], max_num_insns: u64) {
         let stats_enabled = crate::arch::cuda::pinned::stats_enabled();
         let before = stats_enabled.then(crate::arch::cuda::pinned::PoolStatsSnapshot::capture);
+        let prewarm_started = stats_enabled.then(std::time::Instant::now);
         for &(air, ref geometry) in &self.compiled.inline_records().arena_native_airs {
             let capacity_bytes = trace_heights[air] as usize * geometry.stride_dense();
             self.pool.prepare_arena_native_dense_backings(
@@ -322,9 +323,13 @@ impl<F: PrimeField32> CachedRvrPreflightExecutor<F> for CachedRvrCompiledPreflig
         if let Some(before) = before {
             let after = crate::arch::cuda::pinned::PoolStatsSnapshot::capture();
             eprintln!(
-                "OPENVM_RVR_CUDA_POOL_PREWARM hits={} misses={} populate_calls={} \
+                "OPENVM_RVR_CUDA_POOL_PREWARM elapsed_ms={} hits={} misses={} populate_calls={} \
                  populate_bytes={} ready_buffers={} ready_bytes={} pending={} \
                  quarantined_total={} sync_failures_total={}",
+                prewarm_started
+                    .expect("pool prewarm timer missing with stats enabled")
+                    .elapsed()
+                    .as_millis(),
                 after.hits.saturating_sub(before.hits),
                 after.misses.saturating_sub(before.misses),
                 after.populate_calls.saturating_sub(before.populate_calls),
@@ -1584,6 +1589,11 @@ where
                     }
                 }
                 let generic_assembly_started = std::time::Instant::now();
+                let rvr_g2_segment_id = rvr_output
+                    .g2_segment
+                    .as_ref()
+                    .map(|segment| segment.header_acquire().map(|header| header.segment_id))
+                    .transpose()?;
                 let mut record_arenas = self
                     .builder
                     .generate_rvr_record_arenas_from_logs(
@@ -1622,6 +1632,9 @@ where
                             ))
                         })?;
                     arena.finish_arena_native_sized(written, written_bytes, &geometry);
+                    if let Some(segment_id) = rvr_g2_segment_id {
+                        arena.set_rvr_g2_segment_id(segment_id);
+                    }
                     record_arenas[air] = arena;
                 }
                 let arena_finish_finished = std::time::Instant::now();
@@ -2281,6 +2294,7 @@ where
     E: StarkEngine,
     Val<E::SC>: PrimeField32,
     VB: VmBuilder<E>,
+    <E::PD as ProverDevice<E::PB, E::TS>>::DeviceCtx: 'static,
     <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
         + MeteredExecutor<Val<E::SC>>
         + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
@@ -2301,6 +2315,7 @@ where
     E: StarkEngine,
     Val<E::SC>: PrimeField32,
     VB: VmBuilder<E>,
+    <E::PD as ProverDevice<E::PB, E::TS>>::DeviceCtx: 'static,
     <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
         + MeteredExecutor<Val<E::SC>>
         + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
@@ -2435,7 +2450,20 @@ where
 
             #[cfg(any(feature = "stark-debug", feature = "cuda"))]
             let tracegen_started = std::time::Instant::now();
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
+            let tracegen_gpu_timer =
+                crate::arch::rvr::gpu_profile::CudaStageTimer::start_from_device_ctx(
+                    vm.engine.device().device_ctx(),
+                );
             let mut ctx = vm.generate_proving_ctx(system_records, record_arenas)?;
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
+            if let Some(timer) = tracegen_gpu_timer {
+                timer.finish(
+                    "tracegen",
+                    u32::try_from(seg_idx).expect("G2 tracegen segment index exceeds u32"),
+                    0,
+                );
+            }
             #[cfg(feature = "cuda")]
             if gpu_e2e_profile {
                 openvm_cuda_common::stream::device_synchronize().unwrap();

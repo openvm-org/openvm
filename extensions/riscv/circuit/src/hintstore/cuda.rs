@@ -44,6 +44,10 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64HintStoreChipGpu {
             .rvr_decode
             .device_delta_records(crate::rvr_gpu_decode::DeltaAirKind::HintStore, device_ctx)
         {
+            let segment_id = self
+                .rvr_decode
+                .g2_segment_id()
+                .expect("G2 HintStore replay without a bound segment id");
             const REPLAY_ROW_SIZE: usize = 64;
             assert_eq!(
                 replay.len() % REPLAY_ROW_SIZE,
@@ -60,6 +64,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64HintStoreChipGpu {
             d_error
                 .fill_zero_on(device_ctx)
                 .expect("G2 HintStore replay error clear");
+            let timer = openvm_circuit::arch::rvr::gpu_profile::CudaStageTimer::start(device_ctx);
             unsafe {
                 tracegen_replay(
                     d_trace.buffer(),
@@ -73,6 +78,9 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64HintStoreChipGpu {
                     device_ctx.stream.as_raw(),
                 )
                 .expect("G2 HintStore replay tracegen launch");
+            }
+            if let Some(timer) = timer {
+                timer.finish("hintstore_replay", segment_id, rows_used * REPLAY_ROW_SIZE);
             }
             let error = d_error
                 .to_host_on(device_ctx)

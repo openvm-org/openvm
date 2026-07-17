@@ -16,6 +16,8 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use openvm_circuit::arch::rvr::gpu_profile::CudaStageTimer;
 #[cfg(feature = "rvr")]
 use openvm_circuit::arch::rvr::{
     RvrDeltaDecodeEntry, RvrDeltaDecodeInfo, RvrDeltaDecodePrecompute,
@@ -311,6 +313,8 @@ struct HostG2Segment {
     opaque: Vec<G2ExpectedOpaqueV1>,
     total_record_count: usize,
     program_frequency_count: usize,
+    oracle_expected: HashMap<usize, Vec<u8>>,
+    program_frequency_reference: Vec<u32>,
 }
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
@@ -352,6 +356,7 @@ struct DeviceDeltaSegment {
     outputs: HashMap<DeltaAirKind, Arc<DeviceBuffer<u8>>>,
     touched_memory: Option<DeviceTouchedMemory>,
     program_frequencies: Option<DeviceProgramFrequencies>,
+    g2_segment_id: Option<u32>,
 }
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
@@ -786,6 +791,8 @@ impl RvrGpuDecodeState {
         initial_timestamp: u32,
         chip_counts: &[u32],
         program_frequency_count: usize,
+        oracle_expected: HashMap<usize, Vec<u8>>,
+        program_frequency_reference: Vec<u32>,
     ) -> Result<HashSet<usize>, openvm_circuit::arch::ExecutionError> {
         let kind_to_air =
             self.bind_program(exe, pc_to_air_idx, compiled_identity, Some(precomputed));
@@ -886,6 +893,8 @@ impl RvrGpuDecodeState {
             opaque,
             total_record_count,
             program_frequency_count,
+            oracle_expected,
+            program_frequency_reference,
         });
         *self.g2_device.lock().unwrap() = None;
         Ok(kind_to_air.into_values().collect())
@@ -1079,6 +1088,7 @@ impl RvrGpuDecodeState {
                 &d_descs,
                 &d_expected_blocks,
                 &d_expected_modes,
+                u32::MAX,
                 &d_error,
                 device_ctx.stream.as_raw(),
             )
@@ -1265,6 +1275,7 @@ impl RvrGpuDecodeState {
             program_frequencies: Some(DeviceProgramFrequencies {
                 frequencies: d_program_frequencies,
             }),
+            g2_segment_id: None,
         };
         *self.delta_device.lock().unwrap() = Some(device);
         true
@@ -1283,12 +1294,18 @@ impl RvrGpuDecodeState {
         let Some(host) = host_guard.take() else {
             return false;
         };
+        let header = host
+            .segment
+            .header_acquire()
+            .expect("G2 committed header before device decode");
+        let segment_id = header.segment_id;
         let initial_memory = initial_memory.expect(
             "G2 predecode must be initiated by the system memory inventory before chip tracegen",
         );
         let (d_table, pc_base) = self
             .device_operand_table(device_ctx)
             .expect("G2 segment without a bound operand table");
+        let h2d_timer = CudaStageTimer::start(device_ctx);
         let d_wire =
             DeviceBuffer::<u8>::with_capacity_on(host.segment.transfer_byte_len(), device_ctx);
         d_wire
@@ -1345,6 +1362,9 @@ impl RvrGpuDecodeState {
             .as_slice()
             .to_device_on(device_ctx)
             .expect("G2 expected opaque table H2D");
+        if let Some(timer) = h2d_timer {
+            timer.finish("wire_h2d", segment_id, host.segment.transfer_byte_len());
+        }
         let residual_capacity = host
             .segment
             .header_acquire()
@@ -1374,10 +1394,13 @@ impl RvrGpuDecodeState {
             .expect("G2 program-frequency clear");
         let d_error = DeviceBuffer::<u32>::with_capacity_on(1, device_ctx);
         d_error.fill_zero_on(device_ctx).expect("G2 error clear");
+        let g2_predecode_timer = CudaStageTimer::start(device_ctx);
         unsafe {
             crate::cuda_abi::rvr_g2_cuda::predecode(
                 &d_wire,
                 host.segment.byte_len(),
+                header.run_count as usize,
+                header.instruction_count as usize,
                 &d_fingerprint,
                 &d_blocks,
                 &d_table,
@@ -1397,8 +1420,21 @@ impl RvrGpuDecodeState {
             )
             .expect("CUDA G2 wire expansion launch");
         }
+        if let Some(timer) = g2_predecode_timer {
+            timer.finish("g2_predecode", segment_id, host.total_record_count);
+        }
         let error = d_error.to_host_on(device_ctx).expect("G2 error D2H")[0];
         assert_eq!(error, 0, "CUDA G2 wire validation error {error}");
+        if !host.program_frequency_reference.is_empty() {
+            let actual = d_program_frequencies
+                .to_host_on(device_ctx)
+                .expect("G2 program-frequency oracle D2H");
+            assert_eq!(
+                actual.as_slice(),
+                host.program_frequency_reference.as_slice(),
+                "G2 device program frequencies differ byte-for-byte from host execution"
+            );
+        }
         let opaque_residual_count = d_opaque_residual_count
             .to_host_on(device_ctx)
             .expect("G2 opaque-residual count D2H")[0] as usize;
@@ -1476,7 +1512,16 @@ impl RvrGpuDecodeState {
         };
         let d_touched_count = DeviceBuffer::<u32>::with_capacity_on(1, device_ctx);
         let empty_u32 = DeviceBuffer::<u32>::new();
-        let empty_u64 = DeviceBuffer::<u64>::new();
+        let d_opaque_prev_timestamps = if opaque_residual_count == 0 {
+            DeviceBuffer::<u32>::new()
+        } else {
+            DeviceBuffer::<u32>::with_capacity_on(opaque_residual_count, device_ctx)
+        };
+        let d_opaque_prev_values = if opaque_residual_count == 0 {
+            DeviceBuffer::<u64>::new()
+        } else {
+            DeviceBuffer::<u64>::with_capacity_on(opaque_residual_count, device_ctx)
+        };
         let empty_runs = DeviceBuffer::<openvm_circuit::arch::rvr::ProgramRunEntry>::new();
         let empty_program_log = DeviceBuffer::<openvm_circuit::arch::rvr::ProgramLogEntry>::new();
         let empty_program = DeviceBuffer::<openvm_circuit::arch::rvr::DeviceProgramEntry>::new();
@@ -1499,14 +1544,15 @@ impl RvrGpuDecodeState {
                 &d_initial_memory,
                 &d_touched_output,
                 &d_touched_count,
-                &empty_u32,
-                &empty_u64,
+                &d_opaque_prev_timestamps,
+                &d_opaque_prev_values,
                 &d_table,
                 pc_base,
                 &d_flags,
                 &d_descs,
                 &d_expected_blocks,
                 &d_expected_modes,
+                segment_id,
                 &d_error,
                 device_ctx.stream.as_raw(),
             )
@@ -1521,6 +1567,33 @@ impl RvrGpuDecodeState {
             touched_count <= event_capacity,
             "G2 touched-memory count overflow"
         );
+        if !host.oracle_expected.is_empty() {
+            for spec in &host.specs {
+                if spec.count == 0 {
+                    continue;
+                }
+                let expected = host.oracle_expected.get(&spec.air_idx).unwrap_or_else(|| {
+                    panic!("G2 device oracle omitted expected AIR {}", spec.air_idx)
+                });
+                let actual = outputs
+                    .get(&spec.kind)
+                    .unwrap_or_else(|| panic!("G2 device oracle omitted {:?}", spec.kind))
+                    .to_host_on(device_ctx)
+                    .expect("G2 consumer-byte oracle D2H");
+                assert_eq!(
+                    actual.as_slice(),
+                    expected.as_slice(),
+                    "G2 device consumer bytes differ from CPU reference for AIR {} ({:?})",
+                    spec.air_idx,
+                    spec.kind
+                );
+            }
+            eprintln!(
+                "OPENVM_RVR_G2_DEVICE_ORACLE_PASS=1 airs={} records={}",
+                host.oracle_expected.len(),
+                host.total_record_count
+            );
+        }
         drop(host);
 
         let device = DeviceDeltaSegment {
@@ -1532,6 +1605,7 @@ impl RvrGpuDecodeState {
             program_frequencies: Some(DeviceProgramFrequencies {
                 frequencies: d_program_frequencies,
             }),
+            g2_segment_id: Some(segment_id),
         };
         *self.g2_device.lock().unwrap() = Some(device);
         true
@@ -1560,6 +1634,15 @@ impl RvrGpuDecodeState {
                     .as_ref()
                     .and_then(|device| device.outputs.get(&kind).cloned())
             })
+    }
+
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    pub(crate) fn g2_segment_id(&self) -> Option<u32> {
+        self.g2_device
+            .lock()
+            .unwrap()
+            .as_ref()
+            .and_then(|device| device.g2_segment_id)
     }
 }
 
