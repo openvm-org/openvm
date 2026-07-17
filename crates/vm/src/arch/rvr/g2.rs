@@ -808,128 +808,188 @@ pub fn decode_reference_v1(
                 let a = register_index(entry.a)?;
                 let base = register_index(entry.b)?;
                 let is_store = entry.access_pattern == 3;
-                let narrow_reveal =
-                    is_store && entry.flags & (1 << 4) != 0 && entry.local_opcode != 4;
-                let (pointer, block_value, source, expected_post) = if narrow_reveal {
-                    let ctrl =
-                        residual_ctrl.ok_or_else(|| g2_error("missing residual CTRL lane"))?;
-                    let tags = residual_tag.ok_or_else(|| g2_error("missing residual TAG lane"))?;
-                    let values =
-                        residual_value.ok_or_else(|| g2_error("missing residual VALUE lane"))?;
-                    let pointer = u32::try_from(registers[base])
-                        .map_err(|_| g2_error("narrow REVEAL pointer exceeds u32"))?;
-                    let source = registers[a];
-                    let effective = effective_address(pointer, entry);
-                    let residual_lanes = (ctrl, tags, values);
-                    validate_residual(
-                        residual_lanes,
-                        residual_cursor,
-                        timestamp,
-                        entry.b,
-                        0x40,
-                        Some(u64::from(pointer)),
-                    )?;
-                    validate_residual(
-                        residual_lanes,
-                        residual_cursor + 1,
-                        timestamp + 1,
-                        entry.a,
-                        0x40,
-                        Some(source),
-                    )?;
-                    let post = validate_residual(
-                        residual_lanes,
-                        residual_cursor + 2,
-                        timestamp + 2,
-                        effective & !7,
-                        0x49,
-                        None,
-                    )?;
-                    residual_cursor += 3;
-                    let key = (3, effective & !7);
-                    let previous = *blocks.get(&key).ok_or_else(|| {
-                        g2_error(format!("narrow REVEAL has no initial block at {key:?}"))
-                    })?;
-                    (pointer, previous, source, Some(post))
-                } else {
-                    let v0 = segment
-                        .lane(&descs, g2_lane_v0(kind))
-                        .ok_or_else(|| g2_error(format!("kind {kind} missing V0 lane")))?;
-                    let v1 = segment
-                        .lane(&descs, g2_lane_v1(kind))
-                        .ok_or_else(|| g2_error(format!("kind {kind} missing V1 lane")))?;
-                    let pointer =
-                        lane_u32(v0, kind_v0_cursors[kind as usize], "load/store pointer")?;
-                    let block = lane_u64(v1, kind_v1_cursors[kind as usize], "load/store block")?;
-                    kind_v0_cursors[kind as usize] += 1;
-                    kind_v1_cursors[kind as usize] += 1;
-                    if u64::from(pointer) != registers[base] {
-                        return Err(g2_error(format!(
-                            "kind {kind} pointer mismatch at slot {slot}"
-                        )));
-                    }
-                    (pointer, block, registers[a], None)
-                };
+                let v0 = segment
+                    .lane(&descs, g2_lane_v0(kind))
+                    .ok_or_else(|| g2_error(format!("kind {kind} missing V0 lane")))?;
+                let v1 = segment
+                    .lane(&descs, g2_lane_v1(kind))
+                    .ok_or_else(|| g2_error(format!("kind {kind} missing V1 lane")))?;
+                let pointer = lane_u32(v0, kind_v0_cursors[kind as usize], "load/store pointer")?;
+                let block0 = lane_u64(v1, kind_v1_cursors[kind as usize], "load/store block")?;
+                kind_v0_cursors[kind as usize] += 1;
+                kind_v1_cursors[kind as usize] += 1;
+                if u64::from(pointer) != registers[base] {
+                    return Err(g2_error(format!(
+                        "kind {kind} pointer mismatch at slot {slot}"
+                    )));
+                }
+
+                let source = registers[a];
                 let address_space = if entry.flags & (1 << 4) != 0 { 3 } else { 2 };
                 let effective = effective_address(pointer, entry);
-                let memory_key = (address_space, effective & !7);
-                if let Some(current) = blocks.get(&memory_key) {
-                    if *current != block_value {
-                        return Err(g2_error(format!(
-                            "kind {kind} aligned block mismatch at slot {slot}"
-                        )));
-                    }
+                let width = if is_store {
+                    store_width(entry.local_opcode)?
                 } else {
-                    blocks.insert(memory_key, block_value);
-                }
-                let read0_prev = touch(&mut timestamps, (1, entry.b), timestamp);
-                let read1_key = if is_store { (1, entry.a) } else { memory_key };
-                let read1_prev = touch(&mut timestamps, read1_key, timestamp + 1);
-                let (write_prev, write_prev_value) = if is_store {
-                    let previous = *blocks
-                        .get(&memory_key)
-                        .ok_or_else(|| g2_error("store block disappeared during replay"))?;
-                    let write_prev = touch(&mut timestamps, memory_key, timestamp + 2);
-                    let patched = patch_store(
-                        previous,
-                        effective,
-                        store_width(entry.local_opcode)?,
-                        source,
-                    );
-                    if expected_post.is_some_and(|expected| expected != patched) {
-                        return Err(g2_error(format!(
-                            "narrow REVEAL post-block mismatch at slot {slot}"
-                        )));
-                    }
-                    blocks.insert(memory_key, patched);
-                    (write_prev, previous)
-                } else if entry.flags & (1 << 2) != 0 {
-                    let previous = registers[a];
-                    let write_prev = touch(&mut timestamps, (1, entry.a), timestamp + 2);
-                    let loaded = decode_load(entry.local_opcode, block_value, effective)?;
-                    if a != 0 {
-                        registers[a] = loaded;
-                        blocks.insert((1, entry.a), loaded);
-                    }
-                    (write_prev, previous)
-                } else {
-                    (0, 0)
+                    load_width(entry.local_opcode)?
                 };
+                let crossing = u32::from(width) + (effective & 7) > 8;
+                let memory_key0 = (address_space, effective & !7);
+                let memory_key1 = (address_space, (effective & !7) + 8);
+                let current0 = blocks.get(&memory_key0).copied().unwrap_or(0);
+                if current0 != block0 {
+                    return Err(g2_error(format!(
+                        "kind {kind} aligned block mismatch at slot {slot}"
+                    )));
+                }
+                blocks.entry(memory_key0).or_insert(block0);
+
+                let register0_prev = touch(&mut timestamps, (1, entry.b), timestamp);
+                let mut memory1_prev = u32::MAX;
+                let mut block1 = 0;
+                let mut write1_prev = u32::MAX;
+                let mut write_prev1_value = 0;
+                let (register1_or_memory0_prev, write0_prev, write_prev0_value) = if is_store {
+                    let register1_prev = touch(&mut timestamps, (1, entry.a), timestamp + 1);
+                    let previous0 = block0;
+                    if crossing {
+                        let lanes = (
+                            residual_ctrl.ok_or_else(|| g2_error("missing residual CTRL lane"))?,
+                            residual_tag.ok_or_else(|| g2_error("missing residual TAG lane"))?,
+                            residual_value
+                                .ok_or_else(|| g2_error("missing residual VALUE lane"))?,
+                        );
+                        let previous1 = blocks.get(&memory_key1).copied().unwrap_or(0);
+                        let (next0, next1) =
+                            patch_store_two_blocks(previous0, previous1, effective, width, source);
+                        validate_residual(
+                            lanes,
+                            residual_cursor,
+                            timestamp + 2,
+                            memory_key0.1,
+                            if address_space == 3 { 0x49 } else { 0x45 },
+                            Some(next0),
+                        )?;
+                        validate_residual(
+                            lanes,
+                            residual_cursor + 1,
+                            timestamp + 3,
+                            memory_key1.1,
+                            if address_space == 3 { 0x49 } else { 0x45 },
+                            Some(next1),
+                        )?;
+                        residual_cursor += 2;
+                        let previous_timestamp0 =
+                            touch(&mut timestamps, memory_key0, timestamp + 2);
+                        write1_prev = touch(&mut timestamps, memory_key1, timestamp + 3);
+                        write_prev1_value = previous1;
+                        blocks.insert(memory_key0, next0);
+                        blocks.insert(memory_key1, next1);
+                        (register1_prev, previous_timestamp0, previous0)
+                    } else {
+                        let previous_timestamp0 =
+                            touch(&mut timestamps, memory_key0, timestamp + 2);
+                        blocks.insert(
+                            memory_key0,
+                            patch_store(previous0, effective, width, source),
+                        );
+                        (register1_prev, previous_timestamp0, previous0)
+                    }
+                } else {
+                    let memory0_prev = touch(&mut timestamps, memory_key0, timestamp + 1);
+                    if crossing {
+                        let lanes = (
+                            residual_ctrl.ok_or_else(|| g2_error("missing residual CTRL lane"))?,
+                            residual_tag.ok_or_else(|| g2_error("missing residual TAG lane"))?,
+                            residual_value
+                                .ok_or_else(|| g2_error("missing residual VALUE lane"))?,
+                        );
+                        validate_residual(
+                            lanes,
+                            residual_cursor,
+                            timestamp + 1,
+                            memory_key0.1,
+                            0x44,
+                            Some(block0),
+                        )?;
+                        block1 = validate_residual(
+                            lanes,
+                            residual_cursor + 1,
+                            timestamp + 2,
+                            memory_key1.1,
+                            0x44,
+                            None,
+                        )?;
+                        residual_cursor += 2;
+                        memory1_prev = touch(&mut timestamps, memory_key1, timestamp + 2);
+                        blocks.entry(memory_key1).or_insert(block1);
+                    }
+                    let (write_prev, write_prev_value) = if entry.flags & (1 << 2) != 0 {
+                        let previous = registers[a];
+                        let write_timestamp =
+                            timestamp + if g2_multi_block_kind(kind) { 3 } else { 2 };
+                        let write_prev = touch(&mut timestamps, (1, entry.a), write_timestamp);
+                        let loaded =
+                            decode_load_two_blocks(entry.local_opcode, block0, block1, effective)?;
+                        if a != 0 {
+                            registers[a] = loaded;
+                            blocks.insert((1, entry.a), loaded);
+                        }
+                        (write_prev, previous)
+                    } else {
+                        (0, 0)
+                    };
+                    (memory0_prev, write_prev, write_prev_value)
+                };
+
                 timestamp = timestamp
-                    .checked_add(3)
+                    .checked_add(if g2_multi_block_kind(kind) { 4 } else { 3 })
                     .ok_or_else(|| g2_error("timestamp overflow"))?;
-                append_u32(&mut record, read0_prev);
-                append_u32(&mut record, read1_prev);
-                append_u32(&mut record, write_prev);
-                append_u64(&mut record, write_prev_value);
-                append_u64(&mut record, u64::from(pointer));
-                append_u64(&mut record, if is_store { source } else { block_value });
+                if g2_multi_block_kind(kind) {
+                    record = if is_store {
+                        native_store_record(
+                            decode.pc_base + slot * 4,
+                            from_timestamp,
+                            entry,
+                            pointer,
+                            register0_prev,
+                            register1_or_memory0_prev,
+                            write0_prev,
+                            write1_prev,
+                            source,
+                            write_prev0_value,
+                            write_prev1_value,
+                            address_space,
+                        )
+                    } else {
+                        native_load_record(
+                            decode.pc_base + slot * 4,
+                            from_timestamp,
+                            entry,
+                            pointer,
+                            register0_prev,
+                            register1_or_memory0_prev,
+                            memory1_prev,
+                            write0_prev,
+                            write_prev0_value,
+                            block0,
+                            block1,
+                        )
+                    };
+                } else {
+                    append_u32(&mut record, register0_prev);
+                    append_u32(&mut record, register1_or_memory0_prev);
+                    append_u32(&mut record, write0_prev);
+                    append_u64(&mut record, write_prev0_value);
+                    append_u64(&mut record, u64::from(pointer));
+                    append_u64(&mut record, if is_store { source } else { block0 });
+                }
             } else {
                 return Err(g2_error(format!(
                     "slot {slot} is outside the fixed-standard G2 schema"
                 )));
             }
             let expected_stride = match entry.access_pattern {
+                2 | 3 if g2_multi_block_kind(kind) => 60,
                 0..=3 | 8 => PREFLIGHT_ADDSUB_RECORD_SIZE,
                 4 | 7 => 32,
                 5 | 6 => 20,
@@ -991,6 +1051,92 @@ fn append_u64(out: &mut Vec<u8>, value: u64) {
     out.extend_from_slice(&value.to_le_bytes());
 }
 
+fn put_u16(out: &mut [u8], offset: usize, value: u16) {
+    out[offset..offset + 2].copy_from_slice(&value.to_le_bytes());
+}
+
+fn put_u32(out: &mut [u8], offset: usize, value: u32) {
+    out[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
+}
+
+fn put_u64(out: &mut [u8], offset: usize, value: u64) {
+    out[offset..offset + 8].copy_from_slice(&value.to_le_bytes());
+}
+
+fn g2_multi_block_kind(kind: u8) -> bool {
+    matches!(kind, 20..=22 | 24..=28)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn native_load_record(
+    pc: u32,
+    timestamp: u32,
+    entry: &RvrDeltaDecodeEntry,
+    pointer: u32,
+    rs1_prev: u32,
+    memory0_prev: u32,
+    memory1_prev: u32,
+    write_prev: u32,
+    write_prev_value: u64,
+    block0: u64,
+    block1: u64,
+) -> Vec<u8> {
+    let mut out = vec![0; 60];
+    put_u32(&mut out, 0, pc);
+    put_u32(&mut out, 4, timestamp);
+    put_u32(&mut out, 8, pointer);
+    put_u32(&mut out, 12, rs1_prev);
+    put_u32(&mut out, 16, memory0_prev);
+    put_u32(&mut out, 20, memory1_prev);
+    put_u16(&mut out, 24, entry.c as u16);
+    out[26] = u8::from(entry.flags & (1 << 5) != 0);
+    put_u32(&mut out, 28, write_prev);
+    put_u64(&mut out, 32, write_prev_value);
+    out[40] = entry.b as u8;
+    out[41] = if entry.flags & (1 << 2) != 0 {
+        entry.a as u8
+    } else {
+        u8::MAX
+    };
+    put_u64(&mut out, 44, block0);
+    put_u64(&mut out, 52, block1);
+    out
+}
+
+#[allow(clippy::too_many_arguments)]
+fn native_store_record(
+    pc: u32,
+    timestamp: u32,
+    entry: &RvrDeltaDecodeEntry,
+    pointer: u32,
+    rs1_prev: u32,
+    rs2_prev: u32,
+    write0_prev: u32,
+    write1_prev: u32,
+    source: u64,
+    previous0: u64,
+    previous1: u64,
+    address_space: u8,
+) -> Vec<u8> {
+    let mut out = vec![0; 60];
+    put_u32(&mut out, 0, pc);
+    put_u32(&mut out, 4, timestamp);
+    put_u32(&mut out, 8, pointer);
+    put_u32(&mut out, 12, rs1_prev);
+    put_u32(&mut out, 16, rs2_prev);
+    put_u32(&mut out, 20, write0_prev);
+    put_u32(&mut out, 24, write1_prev);
+    put_u16(&mut out, 28, entry.c as u16);
+    out[30] = entry.b as u8;
+    out[31] = entry.a as u8;
+    out[32] = u8::from(entry.flags & (1 << 5) != 0);
+    out[33] = address_space;
+    put_u64(&mut out, 36, source);
+    put_u64(&mut out, 44, previous0);
+    put_u64(&mut out, 52, previous1);
+    out
+}
+
 fn lane_u32(lane: &[u8], index: usize, label: &str) -> Result<u32, ExecutionError> {
     let at = index
         .checked_mul(4)
@@ -1032,6 +1178,16 @@ fn store_width(local_opcode: u8) -> Result<u8, ExecutionError> {
     }
 }
 
+fn load_width(local_opcode: u8) -> Result<u8, ExecutionError> {
+    match local_opcode {
+        0 => Ok(8),
+        1 | 8 => Ok(1),
+        2 | 9 => Ok(2),
+        3 | 10 => Ok(4),
+        _ => Err(g2_error(format!("invalid load opcode {local_opcode}"))),
+    }
+}
+
 fn patch_store(block: u64, address: u32, width: u8, source: u64) -> u64 {
     let shift = (address & 7) * 8;
     let mask = if width == 8 {
@@ -1042,8 +1198,39 @@ fn patch_store(block: u64, address: u32, width: u8, source: u64) -> u64 {
     (block & !(mask << shift)) | ((source & mask) << shift)
 }
 
-fn decode_load(local_opcode: u8, block: u64, address: u32) -> Result<u64, ExecutionError> {
-    let shifted = block >> ((address & 7) * 8);
+fn patch_store_two_blocks(
+    block0: u64,
+    block1: u64,
+    address: u32,
+    width: u8,
+    source: u64,
+) -> (u64, u64) {
+    let mut bytes = [0u8; 16];
+    bytes[..8].copy_from_slice(&block0.to_le_bytes());
+    bytes[8..].copy_from_slice(&block1.to_le_bytes());
+    let offset = (address & 7) as usize;
+    bytes[offset..offset + width as usize].copy_from_slice(&source.to_le_bytes()[..width as usize]);
+    (
+        u64::from_le_bytes(bytes[..8].try_into().expect("first memory block")),
+        u64::from_le_bytes(bytes[8..].try_into().expect("second memory block")),
+    )
+}
+
+fn decode_load_two_blocks(
+    local_opcode: u8,
+    block0: u64,
+    block1: u64,
+    address: u32,
+) -> Result<u64, ExecutionError> {
+    let mut bytes = [0u8; 16];
+    bytes[..8].copy_from_slice(&block0.to_le_bytes());
+    bytes[8..].copy_from_slice(&block1.to_le_bytes());
+    let offset = (address & 7) as usize;
+    let shifted = u64::from_le_bytes(
+        bytes[offset..offset + 8]
+            .try_into()
+            .expect("two-block load window"),
+    );
     match local_opcode {
         0 => Ok(shifted),
         1 => Ok(shifted as u8 as u64),

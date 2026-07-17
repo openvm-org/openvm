@@ -20,11 +20,11 @@ pub mod pure;
 pub mod state;
 
 pub use compile::{
-    build_pc_to_chip, classify_preflight_opcodes_with_extensions, compile, compile_metered,
-    compile_metered_cost, compile_metered_segment_boundary, compile_preflight,
-    compile_preflight_with_extensions, compile_with_instret_tracking, compile_with_options,
-    load_compiled_from_path, ChipMapping, CompileError, CompileOptions, RvrCompiled,
-    RvrDeltaDecodePrecompute, RvrInlineRecordsMeta, RvrPreflightOpcodeClass,
+    build_pc_to_chip, classify_preflight_opcodes, classify_preflight_opcodes_with_extensions,
+    compile, compile_metered, compile_metered_cost, compile_metered_segment_boundary,
+    compile_preflight, compile_preflight_with_extensions, compile_with_instret_tracking,
+    compile_with_options, load_compiled_from_path, ChipMapping, CompileError, CompileOptions,
+    RvrCompiled, RvrDeltaDecodePrecompute, RvrInlineRecordsMeta, RvrPreflightOpcodeClass,
 };
 #[cfg(any(test, feature = "test-utils"))]
 pub use compile::{

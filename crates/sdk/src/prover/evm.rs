@@ -6,7 +6,9 @@ use openvm_circuit::arch::{
     VmExecutionConfig,
 };
 use openvm_continuations::RootSC;
-use openvm_stark_backend::{p3_field::PrimeField32, proof::Proof, StarkEngine, Val};
+use openvm_stark_backend::{
+    p3_field::PrimeField32, proof::Proof, prover::ProverDevice, StarkEngine, Val,
+};
 use openvm_verify_stark_host::VmStarkProof;
 
 #[cfg(feature = "evm-prove")]
@@ -101,6 +103,7 @@ where
         def_inputs: &[DeferralInput],
     ) -> Result<Proof<RootSC>>
     where
+        <E::PD as ProverDevice<E::PB, E::TS>>::DeviceCtx: 'static,
         <VB::VmConfig as VmExecutionConfig<Val<SC>>>::Executor: Executor<Val<SC>>
             + MeteredExecutor<Val<SC>>
             + PreflightExecutor<Val<SC>, VB::RecordArena>,
@@ -116,6 +119,7 @@ where
         def_inputs: &[DeferralInput],
     ) -> Result<crate::types::EvmProof>
     where
+        <E::PD as ProverDevice<E::PB, E::TS>>::DeviceCtx: 'static,
         <VB::VmConfig as VmExecutionConfig<Val<SC>>>::Executor: Executor<Val<SC>>
             + MeteredExecutor<Val<SC>>
             + PreflightExecutor<Val<SC>, VB::RecordArena>,

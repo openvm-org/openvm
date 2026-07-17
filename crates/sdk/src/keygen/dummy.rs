@@ -22,7 +22,7 @@ use {
     openvm_circuit::arch::{
         Executor, MeteredExecutor, PreflightExecutor, VmBuilder, VmExecutionConfig,
     },
-    openvm_stark_backend::{p3_field::PrimeField32, proof::Proof, Val},
+    openvm_stark_backend::{p3_field::PrimeField32, proof::Proof, prover::ProverDevice, Val},
 };
 
 use crate::{
@@ -141,6 +141,7 @@ where
     E: StarkEngine<SC = SC>,
     VB: VmBuilder<E> + Clone,
     Val<SC>: PrimeField32,
+    <E::PD as ProverDevice<E::PB, E::TS>>::DeviceCtx: 'static,
     <VB::VmConfig as VmExecutionConfig<F>>::Executor:
         Executor<F> + MeteredExecutor<F> + PreflightExecutor<F, VB::RecordArena>,
 {
