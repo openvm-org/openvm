@@ -77,6 +77,8 @@ typedef struct G2ProducerLaneV1 {
   uint64_t offset;
   uint32_t len;
   uint32_t cap;
+  uint32_t expected_len;
+  uint32_t reserved;
 } G2ProducerLaneV1;
 
 typedef struct G2ProducerV1 {
@@ -281,7 +283,7 @@ _Static_assert(sizeof(DeviceProgramEntry) == PREFLIGHT_DEVICE_PROGRAM_ENTRY_SIZE
                "DeviceProgramEntry size drift");
 _Static_assert(_Alignof(DeviceProgramEntry) == PREFLIGHT_DEVICE_PROGRAM_ENTRY_ALIGN,
                "DeviceProgramEntry align drift");
-_Static_assert(sizeof(G2ProducerLaneV1) == 16,
+_Static_assert(sizeof(G2ProducerLaneV1) == 24,
                "G2ProducerLaneV1 size drift");
 _Static_assert(_Alignof(G2ProducerLaneV1) == 8,
                "G2ProducerLaneV1 align drift");
@@ -608,6 +610,12 @@ preflight_device_chronology(Tracer* restrict t) {
 static __attribute__((always_inline)) inline void
 preflight_g2_emit_opaque_event_count(Tracer* restrict t,
                                      uint32_t event_count);
+static __attribute__((always_inline)) inline void
+preflight_g2_emit_residual_group(Tracer* restrict t,
+                                 MemoryLogEntry const* restrict events,
+                                 uint32_t event_count);
+
+#include "openvm_g2_emission.h"
 
 static __attribute__((always_inline)) inline void
 preflight_mark_dirty_memory_page(Tracer* restrict t, uint64_t address) {
@@ -640,8 +648,9 @@ static __attribute__((always_inline)) inline void
 preflight_begin_custom_memory_capture(RvState* restrict state) {
   Tracer* restrict t = state->tracer;
   if (t->g2 != NULL) {
-    if (unlikely(t->custom_memory_scratch == NULL ||
-                 t->custom_memory_scratch_cap == 0u)) {
+    if (unlikely(OPENVM_G2_CHECKS_ENABLED &&
+                 (t->custom_memory_scratch == NULL ||
+                  t->custom_memory_scratch_cap == 0u))) {
       t->g2->overflow = G2_REJECT_CUSTOM_SCRATCH;
       t->custom_memory_scratch_len = UINT32_MAX;
       return;
@@ -656,10 +665,12 @@ preflight_take_custom_memory_events(Tracer* restrict t, uint32_t event_count) {
     uint32_t captured = t->custom_memory_scratch_len;
     t->custom_memory_scratch_len = UINT32_MAX;
     if (unlikely(captured != event_count ||
-                 event_count > t->custom_memory_scratch_cap)) {
+                 (OPENVM_G2_CHECKS_ENABLED &&
+                  event_count > t->custom_memory_scratch_cap))) {
       t->g2->overflow = G2_REJECT_CUSTOM_EVENT_COUNT;
       return NULL;
     }
+    preflight_g2_emit_residual_group(t, t->custom_memory_scratch, event_count);
     preflight_g2_emit_opaque_event_count(t, event_count);
     return t->custom_memory_scratch;
   }
@@ -675,32 +686,6 @@ static __attribute__((always_inline)) inline bool preflight_device_trace_pc(
   return t->g2 != NULL;
 }
 
-static __attribute__((always_inline)) inline G2ProducerLaneV1*
-preflight_g2_lane(G2ProducerV1* restrict g2, uint32_t slot) {
-  if (unlikely(g2 == NULL || g2->base == NULL || g2->lanes == NULL ||
-               g2->lane_count != G2_PRODUCER_LANE_COUNT ||
-               slot >= g2->lane_count)) {
-    if (g2 != NULL) g2->overflow = G2_REJECT_PRODUCER_ABI;
-    return NULL;
-  }
-  return &g2->lanes[slot];
-}
-
-static __attribute__((always_inline)) inline uint32_t
-preflight_g2_claim(G2ProducerV1* restrict g2, uint32_t slot,
-                   uint32_t width) {
-  G2ProducerLaneV1* restrict lane = preflight_g2_lane(g2, slot);
-  if (unlikely(lane == NULL)) return UINT32_MAX;
-  uint32_t index = lane->len++;
-  uint64_t end = lane->offset + (uint64_t)(index + 1u) * width;
-  if (unlikely(index >= lane->cap || end < lane->offset ||
-               end > g2->capacity)) {
-    g2->overflow = G2_REJECT_LANE_CAPACITY;
-    return UINT32_MAX;
-  }
-  return index;
-}
-
 static __attribute__((always_inline)) inline void
 preflight_g2_emit_opaque_event_count(Tracer* restrict t,
                                      uint32_t event_count) {
@@ -708,7 +693,8 @@ preflight_g2_emit_opaque_event_count(Tracer* restrict t,
   if (g2 == NULL) return;
   uint32_t index = preflight_g2_claim(
       g2, G2_PRODUCER_OPAQUE_EVENT_COUNT_SLOT, sizeof(uint32_t));
-  if (unlikely(index == UINT32_MAX || event_count == 0u)) {
+  if (unlikely(OPENVM_G2_CHECKS_ENABLED &&
+               (index == UINT32_MAX || event_count == 0u))) {
     if (event_count == 0u) g2->overflow = G2_REJECT_CUSTOM_EVENT_COUNT;
     return;
   }
@@ -835,7 +821,8 @@ static __attribute__((always_inline)) inline void preflight_g2_emit_standard2(
 
 static __attribute__((always_inline)) inline bool
 preflight_g2_validate_pointer(RvState* restrict state, uint64_t pointer) {
-  if (unlikely(pointer > UINT32_MAX && state->tracer->g2 != NULL)) {
+  if (unlikely(OPENVM_G2_CHECKS_ENABLED && pointer > UINT32_MAX &&
+               state->tracer->g2 != NULL)) {
     state->tracer->g2->overflow = G2_REJECT_POINTER;
     return false;
   }
@@ -878,9 +865,10 @@ static __attribute__((always_inline)) inline uint8_t preflight_g2_residual_tag(
                        : width == 4u ? 3u
                        : width == 8u ? 4u
                                      : 7u;
-  if (unlikely(kind > PREFLIGHT_MEMORY_KIND_TOUCH || as_code == 3u ||
-               width_code > 4u ||
-               (kind != PREFLIGHT_MEMORY_KIND_TOUCH && width == 0u))) {
+  if (unlikely(OPENVM_G2_CHECKS_ENABLED &&
+               (kind > PREFLIGHT_MEMORY_KIND_TOUCH || as_code == 3u ||
+                width_code > 4u ||
+                (kind != PREFLIGHT_MEMORY_KIND_TOUCH && width == 0u)))) {
     return UINT8_MAX;
   }
   return kind | (uint8_t)(as_code << 2u) | (uint8_t)(width_code << 4u);
@@ -892,7 +880,8 @@ preflight_g2_emit_residual(Tracer* restrict t, uint8_t kind,
                            uint64_t value, uint32_t timestamp) {
   G2ProducerV1* restrict g2 = t->g2;
   uint8_t tag = preflight_g2_residual_tag(kind, addr_space, width);
-  if (unlikely(g2 == NULL || address > UINT32_MAX || tag == UINT8_MAX)) {
+  if (unlikely(OPENVM_G2_CHECKS_ENABLED &&
+               (g2 == NULL || address > UINT32_MAX || tag == UINT8_MAX))) {
     if (g2 != NULL) g2->overflow = G2_REJECT_RESIDUAL_SHAPE;
     return UINT32_MAX;
   }
@@ -902,8 +891,9 @@ preflight_g2_emit_residual(Tracer* restrict t, uint8_t kind,
       g2, G2_PRODUCER_RESIDUAL_TAG_SLOT, sizeof(uint8_t));
   uint32_t value_index = preflight_g2_claim(
       g2, G2_PRODUCER_RESIDUAL_VALUE_SLOT, sizeof(uint64_t));
-  if (unlikely(ctrl_index == UINT32_MAX || tag_index != ctrl_index ||
-               value_index != ctrl_index)) {
+  if (unlikely(OPENVM_G2_CHECKS_ENABLED &&
+               (ctrl_index == UINT32_MAX || tag_index != ctrl_index ||
+                value_index != ctrl_index))) {
     g2->overflow = G2_REJECT_RESIDUAL_PAIR;
     return UINT32_MAX;
   }
@@ -918,6 +908,63 @@ preflight_g2_emit_residual(Tracer* restrict t, uint8_t kind,
   (g2->base + tag_lane->offset)[tag_index] = tag;
   ((uint64_t*)(g2->base + value_lane->offset))[value_index] = value;
   return ctrl_index;
+}
+
+/* Opaque/custom producers expose their exact event span only after the FFI
+ * returns. Claim the three residual lanes once and fill each lane linearly
+ * from the predecessor scratch captured in execution order. */
+static __attribute__((always_inline)) inline void
+preflight_g2_emit_residual_group(Tracer* restrict t,
+                                 MemoryLogEntry const* restrict events,
+                                 uint32_t event_count) {
+  G2ProducerV1* restrict g2 = t->g2;
+  if (unlikely(OPENVM_G2_CHECKS_ENABLED &&
+               (g2 == NULL || event_count == 0u))) {
+    if (g2 != NULL) g2->overflow = G2_REJECT_CUSTOM_EVENT_COUNT;
+    return;
+  }
+  uint32_t ctrl_index = preflight_g2_claim_span(
+      g2, G2_PRODUCER_RESIDUAL_CTRL_SLOT, event_count, sizeof(uint64_t));
+  uint32_t tag_index = preflight_g2_claim_span(
+      g2, G2_PRODUCER_RESIDUAL_TAG_SLOT, event_count, sizeof(uint8_t));
+  uint32_t value_index = preflight_g2_claim_span(
+      g2, G2_PRODUCER_RESIDUAL_VALUE_SLOT, event_count, sizeof(uint64_t));
+  if (unlikely(OPENVM_G2_CHECKS_ENABLED &&
+               (ctrl_index == UINT32_MAX || tag_index != ctrl_index ||
+                value_index != ctrl_index))) {
+    g2->overflow = G2_REJECT_RESIDUAL_PAIR;
+    return;
+  }
+  uint64_t* restrict ctrl =
+      (uint64_t*)(g2->base +
+                  g2->lanes[G2_PRODUCER_RESIDUAL_CTRL_SLOT].offset) +
+      ctrl_index;
+  uint8_t* restrict tag =
+      g2->base + g2->lanes[G2_PRODUCER_RESIDUAL_TAG_SLOT].offset + tag_index;
+  uint64_t* restrict value =
+      (uint64_t*)(g2->base +
+                  g2->lanes[G2_PRODUCER_RESIDUAL_VALUE_SLOT].offset) +
+      value_index;
+  for (uint32_t i = 0; i < event_count; ++i) {
+    MemoryLogEntry const* restrict event = &events[i];
+    if (unlikely(OPENVM_G2_CHECKS_ENABLED &&
+                 event->address > UINT32_MAX)) {
+      g2->overflow = G2_REJECT_RESIDUAL_SHAPE;
+    }
+    ctrl[i] = (uint64_t)event->timestamp | (event->address << 32u);
+  }
+  for (uint32_t i = 0; i < event_count; ++i) {
+    MemoryLogEntry const* restrict event = &events[i];
+    uint8_t encoded = preflight_g2_residual_tag(
+        event->kind, event->addr_space, event->width);
+    if (unlikely(OPENVM_G2_CHECKS_ENABLED && encoded == UINT8_MAX)) {
+      g2->overflow = G2_REJECT_RESIDUAL_SHAPE;
+    }
+    tag[i] = encoded;
+  }
+  for (uint32_t i = 0; i < event_count; ++i) {
+    value[i] = events[i].value;
+  }
 }
 
 /* The shared extension wrapper exports this symbol for every tracer mode.
@@ -1138,9 +1185,13 @@ preflight_append_memory_record(Tracer* restrict t, uint8_t kind,
   if (unlikely(compact_residual && t->g2 != NULL)) {
     uint64_t detail_started = preflight_detail_phase_begin(
         t, PREFLIGHT_DETAIL_PHASE_RESIDUAL_EMIT, 17u);
-    uint32_t index = preflight_g2_emit_residual(
-        t, kind, addr_space, address, width, value, timestamp);
-    if (unlikely(t->custom_memory_scratch_len != UINT32_MAX)) {
+    bool custom_capture = t->custom_memory_scratch_len != UINT32_MAX;
+    uint32_t index = custom_capture
+                         ? UINT32_MAX
+                         : preflight_g2_emit_residual(
+                               t, kind, addr_space, address, width, value,
+                               timestamp);
+    if (unlikely(custom_capture)) {
       uint32_t scratch_idx = t->custom_memory_scratch_len++;
       if (likely(scratch_idx < t->custom_memory_scratch_cap)) {
         t->custom_memory_scratch[scratch_idx] = (MemoryLogEntry){

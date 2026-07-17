@@ -1681,9 +1681,14 @@ where
                     Ok((binding, buf.len / buf.stride, buf.len))
                 })
                 .collect::<Result<Vec<_>, ExecutionError>>()?;
+            let mut expected_kind_counts = [0u32; 31];
+            for binding in g2.air_bindings.iter() {
+                expected_kind_counts[binding.kind as usize] = chip_counts[binding.air_idx];
+            }
             Some(prepared.finalize(
                 next_segment_id()?,
                 instruction_count,
+                Some(&expected_kind_counts),
                 g2.fingerprint,
                 &opaque_written,
             )?)

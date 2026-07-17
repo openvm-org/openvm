@@ -9,5 +9,7 @@ pub use codegen::{
     Wr1ArenaFieldOffsets,
 };
 pub use context::EmitContext;
-pub use project::{CProject, G2DsoManifestConfigV1, InvalidRvrExecutionKind, RvrExecutionKind};
+pub use project::{
+    CProject, G2DsoManifestConfigV2, G2EmissionMode, InvalidRvrExecutionKind, RvrExecutionKind,
+};
 pub use rvr_openvm_ir::InlineRecordShape;
