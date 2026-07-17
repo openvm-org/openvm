@@ -47,7 +47,6 @@ openvm-circuit = { path = "../../../crates/vm", default-features = false, featur
 [features]
 default = ["parallel", "jemalloc"]
 tco = ["openvm-circuit/tco"]
-aot = ["openvm-circuit/aot"]
 rvr = [
     "dep:rvr-openvm-lift",
     "dep:rvr-openvm-ext-deferral",

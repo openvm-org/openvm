@@ -40,13 +40,6 @@ default = ["parallel"]
 parallel = ["openvm-circuit/parallel"]
 cuda = ["openvm-riscv-circuit/cuda"]
 tco = ["openvm-circuit/tco"]
-aot = [
-    "openvm-circuit/aot",
-    "openvm-riscv-circuit/aot",
-    "openvm-algebra-circuit/aot",
-    "openvm-bigint-circuit/aot",
-    "openvm-ecc-circuit/aot",
-]
 rvr = [
     "dep:rvr-openvm-lift",
     "openvm-circuit/rvr",

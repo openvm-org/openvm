@@ -37,7 +37,6 @@ default = []
 cuda = [
     "openvm-circuit-primitives/cuda",
 ]
-aot = ["openvm-circuit/aot"]
 parallel = ["openvm-stark-backend/parallel", "openvm-circuit/parallel"]
 test-utils = [
     "dep:halo2curves-axiom",

@@ -14,8 +14,6 @@ use openvm_instructions::{
 use openvm_riscv_transpiler::MulHOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
-#[allow(unused_imports)]
-use crate::common::*;
 use crate::MulHExecutor;
 
 #[derive(AlignedBytesBorrow, Clone)]
@@ -93,71 +91,6 @@ where
     }
 }
 
-#[cfg(feature = "aot")]
-impl<F, A, const LIMB_BITS: usize> AotExecutor<F>
-    for MulHExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
-where
-    F: PrimeField32,
-{
-    fn is_aot_supported(&self, inst: &Instruction<F>) -> bool {
-        inst.opcode == MulHOpcode::MULH.global_opcode()
-            || inst.opcode == MulHOpcode::MULHSU.global_opcode()
-            || inst.opcode == MulHOpcode::MULHU.global_opcode()
-    }
-
-    fn generate_x86_asm(&self, inst: &Instruction<F>, _pc: u32) -> Result<String, AotError> {
-        let to_i16 = |c: F| -> i16 {
-            let c_u24 = (c.as_canonical_u64() & 0xFFFFFF) as u32;
-            let c_i24 = ((c_u24 << 8) as i32) >> 8;
-            c_i24 as i16
-        };
-
-        let a = to_i16(inst.a);
-        let b = to_i16(inst.b);
-        let c = to_i16(inst.c);
-
-        if a % 8 != 0 || b % 8 != 0 || c % 8 != 0 {
-            return Err(AotError::InvalidInstruction);
-        }
-
-        let opcode = MulHOpcode::from_usize(inst.opcode.local_opcode_idx(MulHOpcode::CLASS_OFFSET));
-
-        let mut asm = String::new();
-
-        /*
-            for implicit multiplication, we need to load the multiplicand into `eax`
-            result of hi bits are always stored in `edx`
-            can't use REG_C_W, because it is edx, and it gets overridden
-        */
-        let (_, delta_str_b) = &xmm_to_gpr((b / 8) as u8, "eax", true);
-        let (gpr_reg_c, delta_str_c) = &xmm_to_gpr((c / 8) as u8, REG_A_W, false);
-        asm += delta_str_b;
-        asm += delta_str_c;
-        match opcode {
-            MulHOpcode::MULH => {
-                asm += &format!("   imul {gpr_reg_c}\n");
-                asm += &gpr_to_xmm("edx", (a / 8) as u8);
-            }
-            MulHOpcode::MULHSU => {
-                // free to modify edx:eax, since mul and imul operations modify anyways
-                asm += &format!("   mov {REG_B_W}, eax\n");
-                asm += &format!("   imul {gpr_reg_c}\n");
-                asm += "   mov eax, edx\n";
-                asm += &format!("   mov edx, {gpr_reg_c}\n");
-                asm += "   sar edx, 31\n";
-                asm += &format!("   and edx, {REG_B_W}\n");
-                asm += "   add eax, edx\n";
-                asm += &gpr_to_xmm("eax", (a / 8) as u8);
-            }
-            MulHOpcode::MULHU => {
-                asm += &format!("   mul {gpr_reg_c}\n");
-                asm += &gpr_to_xmm("edx", (a / 8) as u8);
-            }
-        }
-        Ok(asm)
-    }
-}
-
 impl<F, A, const LIMB_BITS: usize> InterpreterMeteredExecutor<F>
     for MulHExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
 where
@@ -199,36 +132,6 @@ where
         pre_compute.chip_idx = chip_idx as u32;
         let local_opcode = self.pre_compute_impl(inst, &mut pre_compute.data)?;
         dispatch!(execute_e2_handler, local_opcode)
-    }
-}
-
-#[cfg(feature = "aot")]
-impl<F, A, const LIMB_BITS: usize> AotMeteredExecutor<F>
-    for MulHExecutor<A, { RV64_REGISTER_NUM_LIMBS }, LIMB_BITS>
-where
-    F: PrimeField32,
-{
-    fn is_aot_metered_supported(&self, _inst: &Instruction<F>) -> bool {
-        true
-    }
-    fn generate_x86_metered_asm(
-        &self,
-        inst: &Instruction<F>,
-        pc: u32,
-        chip_idx: usize,
-        _config: &SystemConfig,
-    ) -> Result<String, AotError> {
-        let mut asm_str = self.generate_x86_asm(inst, pc)?;
-
-        asm_str += &update_height_change_asm(chip_idx, 1)?;
-        // read [b:8]_1
-        asm_str += &update_adapter_heights_asm(config, RV64_REGISTER_AS)?;
-        // read [c:8]_1
-        asm_str += &update_adapter_heights_asm(config, RV64_REGISTER_AS)?;
-        // write [a:8]_1
-        asm_str += &update_adapter_heights_asm(config, RV64_REGISTER_AS)?;
-
-        Ok(asm_str)
     }
 }
 

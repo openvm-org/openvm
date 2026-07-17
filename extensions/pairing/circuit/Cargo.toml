@@ -18,7 +18,6 @@ openvm-pairing-guest = { workspace = true, features = [
     "halo2curves",
     "bls12_381",
     "bn254",
-    "aot",
     "blstrs"
 ] }
 openvm-instructions = { workspace = true }
@@ -62,7 +61,6 @@ rand08 = { package = "rand", version = "0.8.5", features = ["std_rng"] }
 [features]
 default = []
 tco = ["openvm-riscv-circuit/tco", "openvm-ecc-circuit/tco"]
-aot = ["openvm-circuit/aot", "openvm-riscv-circuit/aot", "openvm-ecc-circuit/aot", "halo2curves-axiom/asm"]
 rvr = [
     "dep:rvr-openvm-lift",
     "dep:rvr-openvm-ext-pairing",

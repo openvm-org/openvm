@@ -14,8 +14,6 @@ use thiserror::Error;
 use super::{execution_mode::ExecutionCtxTrait, Streams, VmExecState};
 #[cfg(feature = "tco")]
 use crate::arch::interpreter::InterpretedInstance;
-#[cfg(feature = "aot")]
-use crate::arch::SystemConfig;
 #[cfg(feature = "metrics")]
 use crate::metrics::VmMetrics;
 use crate::{
@@ -116,28 +114,8 @@ pub enum StaticProgramError {
     DisabledOperation { pc: u32, opcode: VmOpcode },
     #[error("Executor not found for opcode {opcode}")]
     ExecutorNotFound { opcode: VmOpcode },
-    #[error("Failed to create temporary file: {err}")]
-    FailToCreateTemporaryFile { err: String },
-    #[error("Failed to write into temporary file: {err}")]
-    FailToWriteTemporaryFile { err: String },
     #[error("Failed to generate dynamic library: {err}")]
     FailToGenerateDynamicLibrary { err: String },
-}
-
-#[cfg(feature = "aot")]
-#[derive(Error, Debug)]
-pub enum AotError {
-    #[error("AOT compilation not supported for this opcode")]
-    NotSupported,
-
-    #[error("No executor found for opcode {0}")]
-    NoExecutorFound(VmOpcode),
-
-    #[error("Invalid instruction format")]
-    InvalidInstruction,
-
-    #[error("Other AOT error: {0}")]
-    Other(String),
 }
 
 /// Function pointer for interpreter execution with function signature `(pre_compute,
@@ -190,35 +168,7 @@ pub trait InterpreterExecutor<F> {
         Ctx: ExecutionCtxTrait;
 }
 
-#[cfg(feature = "aot")]
-pub trait AotExecutor<F> {
-    fn is_aot_supported(&self, _inst: &Instruction<F>) -> bool {
-        false
-    }
-
-    /*
-    Function: Generate x86 assembly for the given RISC-V instruction, and transfer control to the next RISC-V instruction
-
-    Preconditions:
-    x86 Registers: rbx = vm_exec_state_ptr, rbp = pre_compute_insns_ptr,
-    - instruction: the instruction to be executed
-
-    Postcondition:
-    - x86's PC should be set to the label of the next RISC-V instruction, and transfers control to the next instruction
-    */
-    fn generate_x86_asm(&self, _inst: &Instruction<F>, _pc: u32) -> Result<String, AotError> {
-        unimplemented!()
-    }
-    // TODO: add air_idx:usize parameter to the function, for AotMeteredExecutor::generate_x86_asm
-}
-#[cfg(feature = "aot")]
-pub trait Executor<F>: InterpreterExecutor<F> + AotExecutor<F> {}
-#[cfg(feature = "aot")]
-impl<F, T> Executor<F> for T where T: InterpreterExecutor<F> + AotExecutor<F> {}
-
-#[cfg(not(feature = "aot"))]
 pub trait Executor<F>: InterpreterExecutor<F> {}
-#[cfg(not(feature = "aot"))]
 impl<F, T> Executor<F> for T where T: InterpreterExecutor<F> {}
 
 /// Trait for metered execution via a host interpreter. The trait methods provide the methods to
@@ -255,31 +205,7 @@ pub trait InterpreterMeteredExecutor<F> {
         Ctx: MeteredExecutionCtxTrait;
 }
 
-#[cfg(feature = "aot")]
-pub trait AotMeteredExecutor<F> {
-    fn is_aot_metered_supported(&self, _inst: &Instruction<F>) -> bool {
-        false
-    }
-
-    fn generate_x86_metered_asm(
-        &self,
-        _inst: &Instruction<F>,
-        _pc: u32,
-        _chip_idx: usize,
-        _config: &SystemConfig,
-    ) -> Result<String, AotError> {
-        unimplemented!()
-    }
-}
-
-#[cfg(feature = "aot")]
-pub trait MeteredExecutor<F>: InterpreterMeteredExecutor<F> + AotMeteredExecutor<F> {}
-#[cfg(feature = "aot")]
-impl<F, T> MeteredExecutor<F> for T where T: InterpreterMeteredExecutor<F> + AotMeteredExecutor<F> {}
-
-#[cfg(not(feature = "aot"))]
 pub trait MeteredExecutor<F>: InterpreterMeteredExecutor<F> {}
-#[cfg(not(feature = "aot"))]
 impl<F, T> MeteredExecutor<F> for T where T: InterpreterMeteredExecutor<F> {}
 
 /// Trait for preflight execution via a host interpreter. The trait methods allow execution of

@@ -327,19 +327,15 @@ trait BenchExecutor {
 }
 
 impl BenchExecutor for PureExecution {
-    #[cfg(feature = "aot")]
-    type Instance = AotInstance<'static, ExecutionCtx>;
     #[cfg(feature = "rvr")]
     type Instance = RvrPureInstance<'static>;
-    #[cfg(all(not(feature = "aot"), not(feature = "rvr")))]
+    #[cfg(not(feature = "rvr"))]
     type Instance = InterpretedInstance<'static, ExecutionCtx>;
 
     fn execution_mode() -> &'static str {
-        #[cfg(feature = "aot")]
-        return "AOT pure";
         #[cfg(feature = "rvr")]
         return "RVR pure";
-        #[cfg(all(not(feature = "aot"), not(feature = "rvr")))]
+        #[cfg(not(feature = "rvr"))]
         return "Interpreted pure";
     }
 
@@ -358,19 +354,15 @@ impl BenchExecutor for PureExecution {
 }
 
 impl BenchExecutor for MeteredExecution {
-    #[cfg(feature = "aot")]
-    type Instance = (AotInstance<'static, MeteredCtx>, MeteredCtx);
     #[cfg(feature = "rvr")]
     type Instance = (RvrMeteredInstance<'static>, MeteredCtx);
-    #[cfg(all(not(feature = "aot"), not(feature = "rvr")))]
+    #[cfg(not(feature = "rvr"))]
     type Instance = (InterpretedInstance<'static, MeteredCtx>, MeteredCtx);
 
     fn execution_mode() -> &'static str {
-        #[cfg(feature = "aot")]
-        return "AOT metered";
         #[cfg(feature = "rvr")]
         return "RVR metered";
-        #[cfg(all(not(feature = "aot"), not(feature = "rvr")))]
+        #[cfg(not(feature = "rvr"))]
         return "Interpreted metered";
     }
 

@@ -4,7 +4,7 @@ mod tests {
 
     use eyre::Result;
     use hex::FromHex;
-    #[cfg(any(feature = "aot", feature = "rvr"))]
+    #[cfg(feature = "rvr")]
     use openvm_circuit::arch::testing::assert_vm_states_equivalent;
     use openvm_circuit::{arch::VmExecutor, utils::air_test_with_min_segments};
     use openvm_instructions::exe::VmExe;
@@ -102,7 +102,7 @@ mod tests {
             #[allow(unused_variables)]
             let state = instance.execute(stdin.clone())?;
 
-            #[cfg(any(feature = "aot", feature = "rvr"))]
+            #[cfg(feature = "rvr")]
             {
                 let interpreter_instance = executor.interpreter_instance(&openvm_exe)?;
                 let naive_state = interpreter_instance.execute(stdin)?;
@@ -135,7 +135,7 @@ mod tests {
         #[allow(unused_variables)]
         let state = instance.execute(stdin.clone())?;
 
-        #[cfg(any(feature = "aot", feature = "rvr"))]
+        #[cfg(feature = "rvr")]
         {
             let interpreter_instance = executor.interpreter_instance(&openvm_exe)?;
             let naive_state = interpreter_instance.execute(stdin)?;

@@ -8,9 +8,9 @@ use openvm_stark_sdk::{
     config::baby_bear_poseidon2::*, p3_baby_bear::BabyBear, utils::setup_tracing,
 };
 
-#[cfg(any(feature = "aot", feature = "rvr"))]
+#[cfg(feature = "rvr")]
 use crate::arch::VmState;
-#[cfg(any(feature = "aot", feature = "rvr"))]
+#[cfg(feature = "rvr")]
 use crate::system::memory::online::{GuestMemory, LinearMemory};
 use crate::{
     arch::{
@@ -108,69 +108,10 @@ fn is_periphery_air(air_name: &str) -> bool {
         || air_name.contains("NativeAdapterAir")
 }
 
-// Compares the output of the interpreter and the AOT instance for pure and metered execution
-#[cfg(feature = "aot")]
-pub fn check_aot_equivalence<E, VB>(
-    vm: &VirtualMachine<E, VB>,
-    exe: &VmExe<Val<E::SC>>,
-    input: &Streams,
-) -> eyre::Result<()>
-where
-    E: StarkEngine,
-    Val<E::SC>: PrimeField32,
-    VB: VmBuilder<E>,
-    <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
-        + MeteredExecutor<Val<E::SC>>
-        + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
-    Com<E::SC>: Into<[Val<E::SC>; VM_DIGEST_WIDTH]> + From<[Val<E::SC>; VM_DIGEST_WIDTH]>,
-{
-    /*
-    Assertions for Pure Execution AOT
-    */
-    {
-        let interp_state_pure = vm
-            .interpreter_instance(exe)?
-            .execute(input.clone())
-            .expect("Failed to execute");
-
-        let aot_state_pure = vm
-            .get_aot_instance(exe)?
-            .execute(input.clone())
-            .expect("Failed to execute");
-
-        check_vm_state_eq(&interp_state_pure, &aot_state_pure)?;
-    }
-
-    /*
-    Assertions for Metered AOT
-    */
-    {
-        let metered_ctx = vm.build_metered_ctx(exe);
-        let (aot_segments, aot_state_metered) = vm
-            .get_metered_aot_instance(exe)?
-            .execute_metered(input.clone(), metered_ctx.clone())?;
-
-        let (segments, interp_state_metered) = vm
-            .metered_interpreter_instance(exe)?
-            .execute_metered(input.clone(), metered_ctx.clone())?;
-
-        check_vm_state_eq(&interp_state_metered, &aot_state_metered)?;
-
-        assert_eq!(segments.len(), aot_segments.len());
-        for i in 0..segments.len() {
-            assert_eq!(segments[i].instret_start, aot_segments[i].instret_start);
-            assert_eq!(segments[i].num_insns, aot_segments[i].num_insns);
-            assert_eq!(segments[i].trace_heights, aot_segments[i].trace_heights);
-        }
-    }
-
-    Ok(())
-}
-
 /// Checks that two `VmState`s are byte-identical: same `pc` and the same
 /// bytes in every guest address space. Reports the diverging AS, byte offset,
 /// and both byte values on failure. Short-circuits at the first mismatch.
-#[cfg(any(feature = "aot", feature = "rvr"))]
+#[cfg(feature = "rvr")]
 fn check_vm_state_eq(lhs: &VmState<GuestMemory>, rhs: &VmState<GuestMemory>) -> eyre::Result<()> {
     if lhs.pc() != rhs.pc() {
         eyre::bail!("pc mismatch: interp={}, rvr={}", lhs.pc(), rhs.pc());
@@ -366,9 +307,6 @@ where
     let exe = exe.into();
     let input = input.into();
     let metered_ctx = vm.build_metered_ctx(&exe);
-
-    #[cfg(feature = "aot")]
-    check_aot_equivalence(&vm, &exe, &input)?;
 
     #[cfg(feature = "rvr")]
     check_rvr_equivalence(&vm, &exe, &input)?;

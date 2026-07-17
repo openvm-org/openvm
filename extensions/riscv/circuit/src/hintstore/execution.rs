@@ -108,9 +108,6 @@ where
     }
 }
 
-#[cfg(feature = "aot")]
-impl<F> AotExecutor<F> for Rv64HintStoreExecutor where F: PrimeField32 {}
-
 impl<F> InterpreterMeteredExecutor<F> for Rv64HintStoreExecutor
 where
     F: PrimeField32,
@@ -153,9 +150,6 @@ where
         dispatch!(execute_e2_handler, local_opcode)
     }
 }
-
-#[cfg(feature = "aot")]
-impl<F> AotMeteredExecutor<F> for Rv64HintStoreExecutor where F: PrimeField32 {}
 
 /// Return the number of used rows.
 #[inline(always)]

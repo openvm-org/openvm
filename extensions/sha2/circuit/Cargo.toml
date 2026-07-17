@@ -49,7 +49,6 @@ default = ["parallel", "jemalloc"]
 parallel = ["openvm-circuit/parallel"]
 test-utils = ["openvm-circuit/test-utils"]
 tco = ["openvm-riscv-circuit/tco"]
-aot = ["openvm-circuit/aot", "openvm-riscv-circuit/aot"]
 rvr = [
     "dep:rvr-openvm-lift",
     "dep:rvr-openvm-ext-sha2",

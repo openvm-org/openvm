@@ -52,8 +52,8 @@ pub fn default_tracing_memory(mem_config: &MemoryConfig) -> TracingMemory {
     TracingMemory::new(mem_config)
 }
 
-/// Asserts that two final [`VmState`]s reached via different execution paths (e.g. interpreter
-/// vs AOT) have the same pc and guest memory.
+/// Asserts that two final [`VmState`]s reached via different execution paths have the same pc and
+/// guest memory.
 pub fn assert_vm_states_equivalent(state1: &VmState, state2: &VmState) {
     assert_eq!(state1.pc(), state2.pc(), "PCs differ");
 

@@ -54,7 +54,6 @@ test-case = { workspace = true }
 [features]
 default = []
 tco = ["openvm-riscv-circuit/tco"]
-aot = ["openvm-circuit/aot", "openvm-riscv-circuit/aot", "halo2curves-axiom/asm"]
 rvr = [
     "dep:rvr-openvm-lift",
     "dep:rvr-openvm-ext-algebra",

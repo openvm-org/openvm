@@ -293,12 +293,6 @@ impl<F: PrimeField32, const BLOCKS: usize, const IS_FP2: bool> InterpreterExecut
     }
 }
 
-#[cfg(feature = "aot")]
-impl<F: PrimeField32, const BLOCKS: usize, const IS_FP2: bool> AotExecutor<F>
-    for FieldExprVecHeapExecutor<BLOCKS, IS_FP2>
-{
-}
-
 impl<F: PrimeField32, const BLOCKS: usize, const IS_FP2: bool> InterpreterMeteredExecutor<F>
     for FieldExprVecHeapExecutor<BLOCKS, IS_FP2>
 {
@@ -358,12 +352,6 @@ impl<F: PrimeField32, const BLOCKS: usize, const IS_FP2: bool> InterpreterMetere
             op
         )
     }
-}
-
-#[cfg(feature = "aot")]
-impl<F: PrimeField32, const BLOCKS: usize, const IS_FP2: bool> AotMeteredExecutor<F>
-    for FieldExprVecHeapExecutor<BLOCKS, IS_FP2>
-{
 }
 
 #[inline(always)]

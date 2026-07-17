@@ -1,9 +1,5 @@
-#[cfg(feature = "aot")]
-use std::collections::HashMap;
 use std::{array, borrow::BorrowMut, sync::Arc};
 
-#[cfg(feature = "aot")]
-use openvm_circuit::arch::{testing::assert_vm_states_equivalent, VmExecutor, VmState};
 use openvm_circuit::{
     arch::{
         testing::{
@@ -25,16 +21,6 @@ use openvm_circuit_primitives::{
     },
 };
 use openvm_instructions::LocalOpcode;
-#[cfg(feature = "aot")]
-use openvm_instructions::{
-    exe::VmExe,
-    instruction::Instruction,
-    program::Program,
-    riscv::{RV64_IMM_AS, RV64_REGISTER_AS},
-    SystemOpcode,
-};
-#[cfg(feature = "aot")]
-use openvm_riscv_transpiler::BaseAluOpcode::ADD;
 use openvm_riscv_transpiler::MulWOpcode::{self, MULW};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -57,8 +43,6 @@ use {
 };
 
 use super::{MulWCoreAir, MulWFiller, Rv64MulWChip};
-#[cfg(feature = "aot")]
-use crate::Rv64ImConfig;
 use crate::{
     adapters::{
         pack_high_u16, Rv64MultWAdapterAir, Rv64MultWAdapterCols, Rv64MultWAdapterExecutor,
@@ -409,181 +393,6 @@ fn run_mulw_sign_extension_test() {
     let result = run_mulw(&[255, 255, 255, 255], &[255, 255, 255, 255]);
     assert_eq!(result, [1, 0, 0, 0, 0, 0, 0, 0]);
 }
-#[cfg(feature = "aot")]
-fn run_mul_program(instructions: Vec<Instruction<F>>) -> (VmState, VmState) {
-    let program = Program::from_instructions(&instructions);
-    let exe = VmExe::new(program);
-    let config = Rv64ImConfig::default();
-    let executor = VmExecutor::new(config.clone()).expect("failed to create Rv64IM executor");
-
-    let interpreter_instance = executor
-        .interpreter_instance(&exe)
-        .expect("interpreter build must succeed");
-    let interp_state = interpreter_instance
-        .execute(vec![])
-        .expect("interpreter execution must succeed");
-
-    let aot_instance = executor.aot_instance(&exe).expect("AOT build must succeed");
-    let aot_state = aot_instance
-        .execute(vec![])
-        .expect("AOT execution must succeed");
-
-    assert_vm_states_equivalent(&interp_state, &aot_state);
-
-    (interp_state, aot_state)
-}
-
-#[cfg(feature = "aot")]
-fn read_register(state: &VmState, offset: usize) -> u32 {
-    let bytes = unsafe {
-        state
-            .memory
-            .read_bytes::<RV64_WORD_NUM_LIMBS>(RV64_REGISTER_AS, offset as u32)
-    };
-    u32::from_le_bytes(bytes)
-}
-
-#[cfg(feature = "aot")]
-fn add_immediate(rd: usize, imm: u32) -> Instruction<F> {
-    Instruction::from_usize(
-        ADD.global_opcode(),
-        [
-            rd,
-            0,
-            imm as usize,
-            RV64_REGISTER_AS as usize,
-            RV64_IMM_AS as usize,
-        ],
-    )
-}
-
-#[cfg(feature = "aot")]
-fn mul_register(rd: usize, rs1: usize, rs2: usize) -> Instruction<F> {
-    Instruction::from_usize(
-        MulOpcode::MUL.global_opcode(),
-        [
-            rd,
-            rs1,
-            rs2,
-            RV64_REGISTER_AS as usize,
-            RV64_REGISTER_AS as usize,
-        ],
-    )
-}
-
-#[cfg(feature = "aot")]
-#[test]
-fn test_aot_mul_basic() {
-    let instructions = vec![
-        add_immediate(4, 7),
-        add_immediate(8, 11),
-        mul_register(12, 4, 8),
-        Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
-    ];
-
-    let (interp_state, aot_state) = run_mul_program(instructions);
-
-    let interp_x3 = read_register(&interp_state, 12);
-    let aot_x3 = read_register(&aot_state, 12);
-    assert_eq!(interp_x3, 77);
-    assert_eq!(interp_x3, aot_x3);
-}
-
-#[cfg(feature = "aot")]
-#[test]
-fn test_aot_mul_upper_xmm() {
-    let instructions = vec![
-        add_immediate(4, 5),
-        add_immediate(12, 9),
-        mul_register(4, 4, 12),
-        Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
-    ];
-
-    let (interp_state, aot_state) = run_mul_program(instructions);
-
-    let interp_x1 = read_register(&interp_state, 4);
-    let aot_x1 = read_register(&aot_state, 4);
-    assert_eq!(interp_x1, 45);
-    assert_eq!(interp_x1, aot_x1);
-}
-
-#[cfg(feature = "aot")]
-#[test]
-fn test_aot_mul_randomized_pairs() {
-    let offsets: [usize; 12] = [4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48];
-    let mut rng = create_seeded_rng();
-    let mut instructions = Vec::new();
-    let mut expected = HashMap::new();
-
-    for &offset in &offsets {
-        let value_i32 = rng.random_range(-(1i32 << 11)..(1i32 << 11));
-        let imm_field = (value_i32 as u32) & 0x00FF_FFFF;
-        instructions.push(add_immediate(offset, imm_field));
-        expected.insert(offset, value_i32 as u32);
-    }
-
-    for (i, &rd_offset) in offsets.iter().enumerate() {
-        let rs1_offset = offsets[i];
-        let rs2_offset = offsets[(i + 3) % offsets.len()];
-        instructions.push(mul_register(rd_offset, rs1_offset, rs2_offset));
-
-        let rs1_val = *expected.get(&rs1_offset).unwrap();
-        let rs2_val = *expected.get(&rs2_offset).unwrap();
-        expected.insert(rd_offset, rs1_val.wrapping_mul(rs2_val));
-    }
-
-    instructions.push(Instruction::from_isize(
-        SystemOpcode::TERMINATE.global_opcode(),
-        0,
-        0,
-        0,
-        0,
-        0,
-    ));
-
-    let (interp_state, aot_state) = run_mul_program(instructions);
-
-    for (offset, expected_val) in expected {
-        let interp_val = read_register(&interp_state, offset);
-        let aot_val = read_register(&aot_state, offset);
-        assert_eq!(
-            interp_val, expected_val,
-            "unexpected value at offset {offset}"
-        );
-        assert_eq!(interp_val, aot_val, "AOT mismatch at offset {offset}");
-    }
-}
-
-#[cfg(feature = "aot")]
-#[test]
-fn test_aot_mul_chained_dependencies() {
-    let instructions = vec![
-        add_immediate(4, 3),
-        add_immediate(8, 5),
-        mul_register(12, 4, 8),
-        mul_register(4, 12, 8),
-        mul_register(8, 4, 12),
-        Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
-    ];
-
-    let (interp_state, aot_state) = run_mul_program(instructions);
-
-    let interp_x3 = read_register(&interp_state, 12);
-    let aot_x3 = read_register(&aot_state, 12);
-    assert_eq!(interp_x3, 15);
-    assert_eq!(interp_x3, aot_x3);
-
-    let interp_x1 = read_register(&interp_state, 4);
-    let aot_x1 = read_register(&aot_state, 4);
-    assert_eq!(interp_x1, 75);
-    assert_eq!(interp_x1, aot_x1);
-
-    let interp_x2 = read_register(&interp_state, 8);
-    let aot_x2 = read_register(&aot_state, 8);
-    assert_eq!(interp_x2, 1125);
-    assert_eq!(interp_x2, aot_x2);
-}
-
 // ////////////////////////////////////////////////////////////////////////////////////
 //  CUDA TESTS
 //

@@ -185,12 +185,6 @@ unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, C: Sha2Config>(
         .on_height_change(block_hasher_air_idx, C::ROWS_PER_BLOCK as u32);
 }
 
-#[cfg(feature = "aot")]
-impl<F: PrimeField32, C: Sha2Config> AotExecutor<F> for Sha2VmExecutor<C> {}
-
-#[cfg(feature = "aot")]
-impl<F: PrimeField32, C: Sha2Config> AotMeteredExecutor<F> for Sha2VmExecutor<C> {}
-
 impl<C: Sha2Config> Sha2VmExecutor<C> {
     fn pre_compute_impl<F: PrimeField32>(
         &self,

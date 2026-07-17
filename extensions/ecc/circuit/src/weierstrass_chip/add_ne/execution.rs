@@ -170,9 +170,6 @@ impl<F: PrimeField32, const BLOCKS: usize> InterpreterExecutor<F> for EcAddNeExe
     }
 }
 
-#[cfg(feature = "aot")]
-impl<F: PrimeField32, const BLOCKS: usize> AotExecutor<F> for EcAddNeExecutor<BLOCKS> {}
-
 impl<F: PrimeField32, const BLOCKS: usize> InterpreterMeteredExecutor<F>
     for EcAddNeExecutor<BLOCKS>
 {
@@ -219,9 +216,6 @@ impl<F: PrimeField32, const BLOCKS: usize> InterpreterMeteredExecutor<F>
         dispatch!(execute_e2_handler, pre_compute_pure, is_setup)
     }
 }
-#[cfg(feature = "aot")]
-impl<F: PrimeField32, const BLOCKS: usize> AotMeteredExecutor<F> for EcAddNeExecutor<BLOCKS> {}
-
 #[inline(always)]
 unsafe fn execute_e12_impl<
     CTX: ExecutionCtxTrait,
