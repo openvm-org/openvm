@@ -1,4 +1,4 @@
-use std::{fmt, process::Command};
+use std::{ffi::OsStr, fmt, path::Path, process::Command};
 
 use rvr_openvm_build::{clang_version_suffix, is_clang_command};
 pub use rvr_openvm_build::{
@@ -107,6 +107,12 @@ pub fn default_make_command() -> String {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RuntimeToolchain {
+    /// Optional command prepended to the compiler invocation (currently
+    /// sccache when the environment has already configured it).
+    pub compiler_launcher: Option<String>,
+    /// Configured launcher that failed its availability probe. Compilation
+    /// falls back to the direct compiler when this is set.
+    pub unavailable_compiler_launcher: Option<String>,
     pub compiler: String,
     pub linker: String,
     pub make: String,
@@ -117,6 +123,8 @@ impl RuntimeToolchain {
     #[must_use]
     pub fn from_env() -> Self {
         Self {
+            compiler_launcher: default_compiler_launcher(),
+            unavailable_compiler_launcher: None,
             compiler: default_compiler_command(),
             linker: default_linker_or_lld(),
             make: default_make_command(),
@@ -124,8 +132,15 @@ impl RuntimeToolchain {
         }
     }
 
-    pub fn check(self) -> Result<Self, RuntimeToolchainError> {
+    pub fn check(mut self) -> Result<Self, RuntimeToolchainError> {
         let mut missing = Vec::new();
+        if let Some(launcher) = self.compiler_launcher.take() {
+            if compiler_launcher_available(&launcher) {
+                self.compiler_launcher = Some(launcher);
+            } else {
+                self.unavailable_compiler_launcher = Some(launcher);
+            }
+        }
         if let Err(message) = ensure_rvr_clang_compiler(&self.compiler) {
             missing.push(MissingTool {
                 role: "C compiler",
@@ -154,6 +169,48 @@ impl RuntimeToolchain {
             Err(RuntimeToolchainError::MissingTools(MissingTools(missing)))
         }
     }
+
+    #[must_use]
+    pub fn compiler_command(&self) -> String {
+        self.compiler_launcher.as_ref().map_or_else(
+            || self.compiler.clone(),
+            |launcher| format!("{launcher} {}", self.compiler),
+        )
+    }
+}
+
+fn default_compiler_launcher() -> Option<String> {
+    std::env::var_os("RUSTC_WRAPPER")
+        .as_deref()
+        .and_then(sccache_wrapper)
+        .or_else(|| sccache_environment_configured().then(|| "sccache".to_string()))
+}
+
+fn sccache_environment_configured() -> bool {
+    std::env::vars_os().any(|(name, value)| sccache_config_entry(&name, &value))
+}
+
+fn sccache_config_entry(name: &OsStr, value: &OsStr) -> bool {
+    !value.is_empty()
+        && name
+            .to_str()
+            .is_some_and(|name| name.starts_with("SCCACHE_"))
+}
+
+fn command_is_sccache(command: &OsStr) -> bool {
+    Path::new(command).file_stem() == Some(OsStr::new("sccache"))
+}
+
+fn sccache_wrapper(command: &OsStr) -> Option<String> {
+    command_is_sccache(command).then(|| command.to_str().map(str::to_string))?
+}
+
+fn compiler_launcher_available(launcher: &str) -> bool {
+    command_exists(launcher)
+        && Command::new(launcher)
+            .arg("--version")
+            .output()
+            .is_ok_and(|output| output.status.success())
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
@@ -298,4 +355,50 @@ fn dedup_preserve_order(candidates: Vec<String>) -> Vec<String> {
         }
     }
     deduped
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sccache_requires_existing_nonempty_configuration() {
+        assert!(sccache_config_entry(
+            OsStr::new("SCCACHE_CONF"),
+            OsStr::new("/tmp/sccache.conf")
+        ));
+        assert!(sccache_config_entry(
+            OsStr::new("SCCACHE_BUCKET"),
+            OsStr::new("cache-bucket")
+        ));
+        assert!(!sccache_config_entry(
+            OsStr::new("SCCACHE_CONF"),
+            OsStr::new("")
+        ));
+        assert!(!sccache_config_entry(
+            OsStr::new("CARGO_HOME"),
+            OsStr::new("/tmp/cargo")
+        ));
+        assert!(command_is_sccache(OsStr::new("/usr/local/bin/sccache")));
+        assert_eq!(
+            sccache_wrapper(OsStr::new("/opt/cache/bin/sccache")),
+            Some("/opt/cache/bin/sccache".into())
+        );
+        assert!(!command_is_sccache(OsStr::new("cachepot")));
+    }
+
+    #[test]
+    fn compiler_launcher_does_not_change_compiler_or_linker_selection() {
+        let toolchain = RuntimeToolchain {
+            compiler_launcher: Some("sccache".into()),
+            unavailable_compiler_launcher: None,
+            compiler: "clang-22".into(),
+            linker: "custom-lld".into(),
+            make: "make".into(),
+            host_os: "Linux",
+        };
+        assert_eq!(toolchain.compiler_command(), "sccache clang-22");
+        assert_eq!(toolchain.compiler, "clang-22");
+        assert_eq!(toolchain.linker, "custom-lld");
+    }
 }
