@@ -39,7 +39,7 @@ template <size_t NUM_LIMBS, size_t LIMB_BITS> struct BitwiseLogicImmCore {
         uint8_t sign_byte = record.imm_sign * uint8_t((1u << LIMB_BITS) - 1u);
         uint8_t c[NUM_LIMBS];
         c[0] = record.c_low[0];
-        c[1] = record.c_low[1] + record.imm_sign * 0xf8;
+        c[1] = record.c_low[1];
 #pragma unroll
         for (size_t i = 2; i < NUM_LIMBS; i++) {
             c[i] = sign_byte;
@@ -64,8 +64,7 @@ template <size_t NUM_LIMBS, size_t LIMB_BITS> struct BitwiseLogicImmCore {
             }
         }
 
-        // Adding 0xf8 forces c_low[1] into the 3-bit range.
-        bitwise_lookup.add_range(record.c_low[0], record.c_low[1] + 0xf8);
+        // The i = 0, 1 xor lookups also byte-range-check c_low; no dedicated range lookup.
 #pragma unroll
         for (size_t i = 0; i < NUM_LIMBS; i++) {
             bitwise_lookup.add_xor(record.b[i], c[i]);

@@ -30,9 +30,9 @@ use crate::{adapters::imm_to_rv64_bytes, bitwise_logic::run_bitwise_logic};
 pub struct BitwiseLogicImmCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     pub a: [T; NUM_LIMBS],
     pub b: [T; NUM_LIMBS],
-    /// The low byte and bits `[10:8]` of the signed 12-bit immediate.
+    /// The low two bytes of the sign-extended immediate.
     pub c_low: [T; 2],
-    /// Sign bit of the immediate.
+    /// Sign bit of the immediate; when set, every upper immediate limb equals `0xFF`.
     pub imm_sign: T,
 
     pub opcode_xor_flag: T,
@@ -88,17 +88,13 @@ where
         builder.assert_bool(is_valid.clone());
         builder.assert_bool(cols.imm_sign);
 
-        // Adding 0xf8 forces c_low[1] into the 3-bit range while the lookup also range-checks
-        // c_low[0].
-        self.bus
-            .send_range(cols.c_low[0], cols.c_low[1] + AB::Expr::from_u32(0xf8))
-            .eval(builder, is_valid.clone());
-
-        // Sign-extended byte limbs of the immediate, as expressions.
+        // Sign-extended byte limbs of the immediate, as expressions. c_low needs no dedicated
+        // range check: both bytes appear as the `y` argument of the i = 0, 1 xor lookups below,
+        // which already forces them into byte range.
         let sign_byte = cols.imm_sign * AB::Expr::from_u32((1 << LIMB_BITS) - 1);
         let c: [AB::Expr; NUM_LIMBS] = array::from_fn(|i| match i {
             0 => cols.c_low[0].into(),
-            1 => cols.c_low[1] + cols.imm_sign * AB::Expr::from_u32(0xf8),
+            1 => cols.c_low[1].into(),
             _ => sign_byte.clone(),
         });
 
@@ -121,10 +117,21 @@ where
                 + cols.opcode_and_flag * AB::Expr::from_u8(BitwiseImmOpcode::ANDI as u8),
         );
 
-        // Canonical 24-bit sign extension of the signed 12-bit immediate.
+        // 24-bit encoding of the sign-extended immediate: byte 2 of the committed operand is
+        // the replicated sign byte.
+        //
+        // Binding uniqueness: the program bus fixes `imm` to the committed 24-bit operand. The
+        // xor lookups above force c_low[0], c_low[1] into [0, 2^8) and imm_sign is boolean, so
+        // over the integers imm = c_low[0] + c_low[1] * 2^8 + imm_sign * 0xFF0000 is at most
+        // 2^24 - 1 < p, hence there is no wraparound. Encodings with imm_sign = 0 lie in
+        // [0, 2^16) and encodings with imm_sign = 1 lie in [0xFF0000, 0xFFFFFF]; the ranges are
+        // disjoint, so imm_sign is determined by the committed operand and then
+        // (c_low[0], c_low[1]) are its unique base-256 digits. The accepted encodings
+        // {0..0xFFFF} u {0xFF0000..0xFFFFFF} are a superset of the canonical i12 encodings
+        // emitted by the transpiler; the executors accept exactly this set.
         let imm = cols.c_low[0]
             + cols.c_low[1] * AB::Expr::from_u32(1 << LIMB_BITS)
-            + cols.imm_sign * AB::Expr::from_u32(0xff_f800);
+            + cols.imm_sign * AB::Expr::from_u32(0xff_0000);
 
         AdapterAirContext {
             to_pc: None,
@@ -205,10 +212,12 @@ where
             .read(state.memory, instruction, &mut adapter_record)
             .into();
 
-        let c_bytes_full = imm_to_rv64_bytes(c.as_canonical_u32());
+        let c_u32 = c.as_canonical_u32();
+        debug_assert!(c_u32 >> 16 == 0 || c_u32 >> 16 == 0xFF);
+        let c_bytes_full = imm_to_rv64_bytes(c_u32);
         let mut c_bytes = [0u8; NUM_LIMBS];
         c_bytes.copy_from_slice(&c_bytes_full[..NUM_LIMBS]);
-        core_record.c_low = [c_bytes[0], c_bytes[1] & 0x07];
+        core_record.c_low = [c_bytes[0], c_bytes[1]];
         core_record.imm_sign = (c_bytes[2] != 0) as u8;
         core_record.local_opcode = local_opcode as u8;
 
@@ -246,15 +255,13 @@ where
         let sign_byte = imm_sign * (((1u32 << LIMB_BITS) - 1) as u8);
         let c: [u8; NUM_LIMBS] = array::from_fn(|i| match i {
             0 => c_low[0],
-            1 => c_low[1] + imm_sign * 0xf8,
+            1 => c_low[1],
             _ => sign_byte,
         });
 
         let reg_opcode = BaseAluOpcode::from_usize(local_opcode as usize);
         let a = run_bitwise_logic::<NUM_LIMBS, LIMB_BITS>(reg_opcode, &b, &c);
 
-        self.bitwise_lookup_chip
-            .request_range(c_low[0] as u32, (c_low[1] + 0xf8) as u32);
         for (b_val, c_val) in zip(b, c) {
             self.bitwise_lookup_chip
                 .request_xor(b_val as u32, c_val as u32);

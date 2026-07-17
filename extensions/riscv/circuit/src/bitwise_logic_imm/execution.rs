@@ -15,7 +15,7 @@ use openvm_riscv_transpiler::BitwiseImmOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::core::BitwiseLogicImmExecutor;
-use crate::adapters::{imm_to_rv64_u64, is_canonical_i12};
+use crate::adapters::imm_to_rv64_u64;
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
@@ -45,9 +45,11 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
             ..
         } = inst;
         let c = c.as_canonical_u32();
+        // The circuit accepts any immediate whose byte 2 is the replicated sign byte (0x00 or
+        // 0xFF), a superset of the canonical i12 encodings emitted by the transpiler.
         if d.as_canonical_u32() != RV64_REGISTER_AS
             || e.as_canonical_u32() != RV64_IMM_AS
-            || !is_canonical_i12(c)
+            || !(c >> 16 == 0 || c >> 16 == 0xFF)
         {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }

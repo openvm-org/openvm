@@ -188,6 +188,55 @@ fn rv64_bitwise_immediate_binding_negative() {
         .expect_err("altered immediate witness should fail");
 }
 
+#[test]
+fn rv64_bitwise_immediate_sign_binding_negative() {
+    // Two ORI rows with an all-ones source and immediates 5 and -251, whose 24-bit encodings
+    // (0x000005 and 0xFFFF05) share the same low byte. Swapping imm_sign between the rows
+    // keeps every core constraint satisfied and every xor lookup balanced: the result limbs
+    // are all 0xFF either way, and the swap exchanges the derived (b, c) lookup pairs between
+    // the two rows. Only the program-bus binding of
+    // imm = c_low[0] + c_low[1] * 2^8 + imm_sign * 0xFF0000 can catch the altered witness.
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+    let (mut harness, bitwise) = create_harness(&tester);
+
+    for imm in [5, -251] {
+        let (instruction, _) = rv64_rand_write_register_or_imm(
+            &mut tester,
+            u64::MAX.to_le_bytes(),
+            [0; RV64_REGISTER_NUM_LIMBS],
+            Some(encode_i12(imm)),
+            BitwiseImmOpcode::ORI.global_opcode().as_usize(),
+            &mut rng,
+        );
+        tester.execute(&mut harness.executor, &mut harness.arena, &instruction);
+    }
+
+    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
+    let modify_trace = |trace: &mut RowMajorMatrix<F>| {
+        let width = trace.width();
+        let mut values = trace.values.clone();
+        for (row, imm_sign) in [(0, F::ONE), (1, F::ZERO)] {
+            let cols: &mut BitwiseLogicImmCoreCols<F, RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS> =
+                values[row * width..(row + 1) * width]
+                    .split_at_mut(adapter_width)
+                    .1
+                    .borrow_mut();
+            cols.imm_sign = imm_sign;
+        }
+        *trace = RowMajorMatrix::new(values, width);
+    };
+
+    disable_debug_builder();
+    tester
+        .build()
+        .load_and_prank_trace(harness, modify_trace)
+        .load_periphery(bitwise)
+        .finalize()
+        .simple_test()
+        .expect_err("altered immediate sign should fail the operand binding");
+}
+
 #[cfg(feature = "cuda")]
 type GpuHarness = GpuTestChipHarness<
     F,

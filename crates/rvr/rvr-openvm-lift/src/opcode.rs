@@ -92,13 +92,13 @@ pub fn lift_instruction(
     }
 
     if opcode == BitwiseImmOpcode::XORI.global_opcode_usize() {
-        return lift_alu_imm(insn, pc, AluOp::Xor);
+        return lift_bitwise_imm(insn, pc, AluOp::Xor);
     }
     if opcode == BitwiseImmOpcode::ORI.global_opcode_usize() {
-        return lift_alu_imm(insn, pc, AluOp::Or);
+        return lift_bitwise_imm(insn, pc, AluOp::Or);
     }
     if opcode == BitwiseImmOpcode::ANDI.global_opcode_usize() {
-        return lift_alu_imm(insn, pc, AluOp::And);
+        return lift_bitwise_imm(insn, pc, AluOp::And);
     }
 
     if opcode == LessThanImmOpcode::SLTI.global_opcode_usize() {
@@ -344,6 +344,30 @@ fn lift_alu_imm(insn: &RvrInstruction, pc: u64, op: AluOp) -> Option<LiftedInstr
     if raw_imm != (imm as u32 & U24_MASK) {
         return None;
     }
+
+    let rd = decode_reg(insn.a);
+    let rs1 = decode_reg(insn.b);
+    if rd == 0 {
+        return Some(body(pc, Instr::Nop));
+    }
+    Some(body(pc, Instr::AluImm { op, rd, rs1, imm }))
+}
+
+fn lift_bitwise_imm(insn: &RvrInstruction, pc: u64, op: AluOp) -> Option<LiftedInstr> {
+    if insn.d != RV64_REGISTER_AS || insn.e != RV64_IMM_AS {
+        return None;
+    }
+
+    // The BitwiseLogicImm circuit binds the committed operand as
+    // c_low[0] + c_low[1] * 2^8 + imm_sign * 0xFF0000, so byte 2 of the u24 encoding must be
+    // the replicated sign byte (0x00 or 0xFF); this is a superset of the canonical i12
+    // encodings emitted by the transpiler.
+    let raw_imm = insn.c;
+    let imm = match raw_imm >> 16 {
+        0 => raw_imm as i32,
+        0xFF => (raw_imm | 0xFF00_0000) as i32,
+        _ => return None,
+    };
 
     let rd = decode_reg(insn.a);
     let rs1 = decode_reg(insn.b);
@@ -726,12 +750,9 @@ mod tests {
     }
 
     #[test]
-    fn immediate_alu_families_require_canonical_i12_encoding() {
+    fn less_than_immediates_require_canonical_i12_encoding() {
         let extensions = ExtensionRegistry::new();
         let opcodes = [
-            (BitwiseImmOpcode::XORI.global_opcode(), AluOp::Xor),
-            (BitwiseImmOpcode::ORI.global_opcode(), AluOp::Or),
-            (BitwiseImmOpcode::ANDI.global_opcode(), AluOp::And),
             (LessThanImmOpcode::SLTI.global_opcode(), AluOp::Slt),
             (LessThanImmOpcode::SLTIU.global_opcode(), AluOp::Sltu),
         ];
@@ -754,6 +775,47 @@ mod tests {
                 alu_instruction(opcode, 0, RV64_REGISTER_AS, RV64_REGISTER_AS),
                 alu_instruction(opcode, 0x800, RV64_REGISTER_AS, RV64_IMM_AS),
                 alu_instruction(opcode, 0xffff, RV64_REGISTER_AS, RV64_IMM_AS),
+            ] {
+                assert!(lift_babybear(&instruction, 0x100, &extensions).is_none());
+            }
+        }
+    }
+
+    #[test]
+    fn bitwise_immediates_accept_sign_byte_replicated_encoding() {
+        let extensions = ExtensionRegistry::new();
+        let opcodes = [
+            (BitwiseImmOpcode::XORI.global_opcode(), AluOp::Xor),
+            (BitwiseImmOpcode::ORI.global_opcode(), AluOp::Or),
+            (BitwiseImmOpcode::ANDI.global_opcode(), AluOp::And),
+        ];
+
+        for (opcode, expected_op) in opcodes {
+            // Byte 2 of the u24 encoding must be the replicated sign byte (0x00 or 0xFF); the
+            // low 16 bits are unconstrained, matching the BitwiseLogicImm circuit.
+            for (c, expected_imm) in [
+                (0, 0),
+                (0x7ff, 0x7ff),
+                (0xffff, 0xffff),
+                (0xff_0000, -0x1_0000),
+                (0xff_f800, -0x800),
+                (0xff_ffff, -1),
+            ] {
+                let instruction = alu_instruction(opcode, c, RV64_REGISTER_AS, RV64_IMM_AS);
+                match lift_babybear(&instruction, 0x100, &extensions) {
+                    Some(LiftedInstr::Body(InstrAt {
+                        instr: Instr::AluImm { op, rd, rs1, imm },
+                        ..
+                    })) => assert_eq!((op, rd, rs1, imm), (expected_op, 1, 2, expected_imm)),
+                    other => panic!("unexpected lift: {other:?}"),
+                }
+            }
+
+            for instruction in [
+                alu_instruction(opcode, 0, RV64_IMM_AS, RV64_IMM_AS),
+                alu_instruction(opcode, 0, RV64_REGISTER_AS, RV64_REGISTER_AS),
+                alu_instruction(opcode, 0x01_0000, RV64_REGISTER_AS, RV64_IMM_AS),
+                alu_instruction(opcode, 0x7f_ffff, RV64_REGISTER_AS, RV64_IMM_AS),
             ] {
                 assert!(lift_babybear(&instruction, 0x100, &extensions).is_none());
             }
