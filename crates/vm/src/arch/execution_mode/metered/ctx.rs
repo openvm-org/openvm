@@ -24,7 +24,7 @@ pub struct MeteredCtxConfig {
     pub initial_trace_heights: Vec<u32>,
     pub is_trace_height_constant: Vec<bool>,
     // TODO: Remove this once segmented execution is selected by typed executor entry points across
-    // all backends. RVR already treats the compiled suspender policy as the source of truth.
+    // all backends. RVR already selects it through the compiled execution kind.
     pub suspend_on_segment: bool,
 }
 

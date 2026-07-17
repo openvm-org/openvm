@@ -1,8 +1,4 @@
-/* RvState struct, shared memory/register access, and common constants.
- *
- * The Tracer type is forward-declared; include the appropriate tracer
- * header to get the full definition and tracing functions.
- */
+/* RvState struct, shared memory/register access, and common constants. */
 
 #ifndef OPENVM_STATE_H
 #define OPENVM_STATE_H
@@ -13,8 +9,6 @@
 #include "openvm_check_mem_bounds.h"
 #include "openvm_constants.h"
 #include "openvm_util.h"
-
-struct Tracer;
 
 typedef enum OpenVmExecStatus : uint8_t {
   OPENVM_EXEC_RUNNING = 0,
@@ -32,25 +26,12 @@ static_assert(OPENVM_EXEC_SUSPENDED == 2,
 static_assert(OPENVM_EXEC_TRAPPED == 3,
               "must match rvr_state::ExecutionStatus::Trapped");
 
-typedef struct RvState {
-  uint64_t regs[32];
-  uint64_t pc;
-  uint64_t instret;
-  /* TODO(rvr-suspender): this generated ABI is currently hard-coded to
-   * InstretSuspender. Replace this flattened field with a generated suspender
-   * state layout once non-instret suspenders need runtime state. */
-  uint64_t target_instret;
-  /* Field name preserved for ABI compatibility with rvr's RvState.
-   * Semantically stores an OpenVmExecStatus value. */
-  uint8_t has_exited;
-  uint8_t exit_code;
-  uint8_t* memory;
-  struct Tracer* tracer;
-} RvState;
+/* Generated per execution kind before this header is compiled. */
+#include "openvm_state_layout.h"
 
 static __attribute__((always_inline)) inline void rv_set_status(
     RvState* restrict state, OpenVmExecStatus status, uint8_t exit_code) {
-  state->has_exited = status;
+  state->status = status;
   state->exit_code = exit_code;
 }
 

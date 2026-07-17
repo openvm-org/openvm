@@ -4,4 +4,4 @@ mod project;
 
 pub use codegen::InstrCodegen;
 pub use context::EmitContext;
-pub use project::{CProject, SuspendPolicy, TracerMode};
+pub use project::{CProject, InvalidRvrExecutionKind, RvrExecutionKind};

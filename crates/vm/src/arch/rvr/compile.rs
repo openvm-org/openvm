@@ -11,7 +11,7 @@ use openvm_instructions::{
     exe::VmExe, program::DEFAULT_PC_STEP, LocalOpcode, SystemOpcode, VmOpcode,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
-use rvr_openvm::{CProject, SuspendPolicy, TracerMode};
+use rvr_openvm::{CProject, RvrExecutionKind};
 use rvr_openvm_lift::{
     build_blocks, convert_vmexe_to_ir_with_debug, scan_init_memory_for_code_pointers, AirIndex,
     ExtensionRegistry, TraceChipIndex,
@@ -29,6 +29,8 @@ pub struct RvrCompiled {
     /// Directory holding generated C sources and build artifacts, if this
     /// library was compiled. `None` for libraries loaded from disk.
     artifact_dir: Option<ArtifactDir>,
+    /// Generated state, tracing, and block ABI family baked into this artifact.
+    execution_kind: RvrExecutionKind,
 }
 
 enum ArtifactDir {
@@ -46,6 +48,23 @@ impl ArtifactDir {
 }
 
 impl RvrCompiled {
+    pub(crate) const fn execution_kind(&self) -> RvrExecutionKind {
+        self.execution_kind
+    }
+
+    pub(crate) fn require_execution_kind(
+        &self,
+        expected: &[RvrExecutionKind],
+    ) -> Result<(), CompileError> {
+        if expected.contains(&self.execution_kind) {
+            return Ok(());
+        }
+        Err(CompileError::LibLoad(format!(
+            "RVR execution kind mismatch: expected one of {expected:?}, found {:?}",
+            self.execution_kind
+        )))
+    }
+
     /// Path to the directory holding generated C sources and build artifacts,
     /// if this library was compiled (rather than loaded from an existing path).
     /// Valid while the returned [`RvrCompiled`] is alive.
@@ -215,7 +234,7 @@ pub fn build_pc_to_chip<F, E>(
 pub struct CompileOptions<'a> {
     /// Base name for generated files and library artifact.
     pub base_name: Option<&'a str>,
-    pub tracer_mode: TracerMode,
+    pub execution_kind: RvrExecutionKind,
     pub extensions: &'a ExtensionRegistry,
     pub chips: Option<&'a ChipMapping>,
     /// Guest debug map: OpenVM PC -> SourceLoc.
@@ -224,7 +243,6 @@ pub struct CompileOptions<'a> {
     pub native_debug_info: bool,
     /// Keep the generated native project after the compiled library is dropped.
     pub keep_artifacts: bool,
-    pub suspend_policy: Option<SuspendPolicy>,
 }
 
 pub fn compile_with_options<F: PrimeField32>(
@@ -234,7 +252,7 @@ pub fn compile_with_options<F: PrimeField32>(
     compile_impl(exe, &opts)
 }
 
-/// Compile a VmExe into a shared library (pure execution, optional suspension).
+/// Compile a VmExe into a shared library for unlimited pure execution.
 pub fn compile<F: PrimeField32>(
     exe: &VmExe<F>,
     extensions: &ExtensionRegistry,
@@ -244,13 +262,32 @@ pub fn compile<F: PrimeField32>(
         exe,
         &CompileOptions {
             base_name: None,
-            tracer_mode: TracerMode::Pure,
+            execution_kind: RvrExecutionKind::Pure,
             extensions,
             chips: None,
             guest_debug_map,
             native_debug_info: cfg!(feature = "profiling"),
             keep_artifacts: false,
-            suspend_policy: None,
+        },
+    )
+}
+
+/// Compile a VmExe for pure execution with instret tracking and block-boundary suspension.
+pub fn compile_with_instret_tracking<F: PrimeField32>(
+    exe: &VmExe<F>,
+    extensions: &ExtensionRegistry,
+    guest_debug_map: Option<&GuestDebugMap>,
+) -> Result<RvrCompiled, CompileError> {
+    compile_impl(
+        exe,
+        &CompileOptions {
+            base_name: None,
+            execution_kind: RvrExecutionKind::PureWithInstretTracking,
+            extensions,
+            chips: None,
+            guest_debug_map,
+            native_debug_info: cfg!(feature = "profiling"),
+            keep_artifacts: false,
         },
     )
 }
@@ -266,13 +303,12 @@ pub fn compile_metered<F: PrimeField32>(
         exe,
         &CompileOptions {
             base_name: None,
-            tracer_mode: TracerMode::Metered,
+            execution_kind: RvrExecutionKind::Metered,
             extensions,
             chips: Some(chips),
             guest_debug_map,
             native_debug_info: cfg!(feature = "profiling"),
             keep_artifacts: false,
-            suspend_policy: None,
         },
     )
 }
@@ -288,18 +324,17 @@ pub fn compile_metered_segment_boundary<F: PrimeField32>(
         exe,
         &CompileOptions {
             base_name: None,
-            tracer_mode: TracerMode::Metered,
+            execution_kind: RvrExecutionKind::MeteredSegment,
             extensions,
             chips: Some(chips),
             guest_debug_map,
             native_debug_info: cfg!(feature = "profiling"),
             keep_artifacts: false,
-            suspend_policy: Some(SuspendPolicy::SegmentBoundary),
         },
     )
 }
 
-/// Compile a VmExe with metered cost tracer.
+/// Compile a VmExe with metered-cost tracking.
 pub fn compile_metered_cost<F: PrimeField32>(
     exe: &VmExe<F>,
     extensions: &ExtensionRegistry,
@@ -310,37 +345,52 @@ pub fn compile_metered_cost<F: PrimeField32>(
         exe,
         &CompileOptions {
             base_name: None,
-            tracer_mode: TracerMode::MeteredCost,
+            execution_kind: RvrExecutionKind::MeteredCost,
             extensions,
             chips: Some(chips),
             guest_debug_map,
             native_debug_info: cfg!(feature = "profiling"),
             keep_artifacts: false,
-            suspend_policy: None,
         },
     )
 }
 
 /// Open a previously saved `.so`/`.dylib` and wrap it in an [`RvrCompiled`].
 ///
-/// Note: no compatibility validation is performed — the caller must ensure
-/// the artifact was compiled for the current `exe`, config, and codebase
-/// version.
+/// The generated execution kind is validated before the artifact can be
+/// executed.
+/// The caller must still ensure the artifact matches the current `exe`, config,
+/// and codebase version.
 pub fn load_compiled_from_path(lib_path: &Path) -> Result<RvrCompiled, CompileError> {
     tracing::warn!(
         path = %lib_path.display(),
-        "loading rvr artifact without compatibility validation; \
-         caller is responsible for matching exe and config"
+        "loading rvr artifact with execution-kind validation only; \
+         caller is responsible for matching exe, config, and code version"
     );
     let lib = unsafe {
         libloading::Library::new(lib_path)
             .map_err(|e| CompileError::LibLoad(format!("{}: {}", lib_path.display(), e)))?
     };
+    let execution_kind = load_execution_kind(&lib)?;
     Ok(RvrCompiled {
         lib,
         lib_path: lib_path.to_path_buf(),
         artifact_dir: None,
+        execution_kind,
     })
+}
+
+fn load_execution_kind(lib: &libloading::Library) -> Result<RvrExecutionKind, CompileError> {
+    type ExecutionKindFn = unsafe extern "C" fn() -> u32;
+    let execution_kind_fn: ExecutionKindFn = unsafe {
+        *lib.get::<ExecutionKindFn>(b"rv_execution_kind")
+            .map_err(|error| {
+                CompileError::LibLoad(format!("missing rv_execution_kind marker: {error}"))
+            })?
+    };
+    let marker = unsafe { execution_kind_fn() };
+    RvrExecutionKind::try_from(marker)
+        .map_err(|_| CompileError::LibLoad(format!("unknown rv_execution_kind marker {marker}")))
 }
 
 fn compile_impl<F: PrimeField32>(
@@ -370,28 +420,14 @@ fn compile_impl<F: PrimeField32>(
         })?;
     let output_dir = temp_dir.path();
 
-    let mut project = CProject::new(output_dir, &base_name, opts.tracer_mode);
+    let mut project = CProject::new(output_dir, &base_name, opts.execution_kind);
     project.pc_base = u64::from(exe.program.pc_base);
-    if let Some(suspend_policy) = opts.suspend_policy {
-        project.suspend_policy = suspend_policy;
-    }
-    match (opts.tracer_mode, project.suspend_policy) {
-        (TracerMode::Metered, SuspendPolicy::InstretLimit) => {
-            return Err(CompileError::InvalidOptions(
-                "metered rvr cannot use instret-limit suspension",
-            ));
-        }
-        (TracerMode::Pure | TracerMode::MeteredCost, SuspendPolicy::SegmentBoundary) => {
-            return Err(CompileError::InvalidOptions(
-                "segment-boundary suspension requires metered rvr",
-            ));
-        }
-        _ => {}
-    }
 
-    match opts.tracer_mode {
-        TracerMode::Pure => {}
-        TracerMode::Metered | TracerMode::MeteredCost => {
+    match opts.execution_kind {
+        RvrExecutionKind::Pure | RvrExecutionKind::PureWithInstretTracking => {}
+        RvrExecutionKind::Metered
+        | RvrExecutionKind::MeteredSegment
+        | RvrExecutionKind::MeteredCost => {
             let chips = opts.chips.ok_or(CompileError::InvalidOptions(
                 "metered rvr compile requires ChipMapping",
             ))?;
@@ -448,6 +484,13 @@ fn compile_impl<F: PrimeField32>(
         libloading::Library::new(&lib_path)
             .map_err(|e| CompileError::LibLoad(format!("{}: {}", lib_path.display(), e)))?
     };
+    let execution_kind = load_execution_kind(&lib)?;
+    if execution_kind != opts.execution_kind {
+        return Err(CompileError::LibLoad(format!(
+            "generated RVR execution kind mismatch: expected {:?}, found {execution_kind:?}",
+            opts.execution_kind
+        )));
+    }
 
     let artifact_dir = if opts.keep_artifacts {
         let path = temp_dir.keep();
@@ -464,6 +507,7 @@ fn compile_impl<F: PrimeField32>(
         lib,
         lib_path,
         artifact_dir: Some(artifact_dir),
+        execution_kind,
     })
 }
 

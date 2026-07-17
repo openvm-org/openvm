@@ -17,8 +17,8 @@ use crate::{
             alloc_pre_compute_buf, get_pre_compute_instructions, get_pre_compute_max_size,
             split_pre_compute_buf, PreComputeInstruction,
         },
-        AotError, ExecutionError, Executor, ExecutorInventory, ExitCode, StaticProgramError,
-        Streams, VmExecState, VmState,
+        AotError, ExecutionError, ExecutionOutcome, Executor, ExecutorInventory, ExitCode,
+        StaticProgramError, Streams, VmExecState, VmState,
     },
     system::memory::online::GuestMemory,
 };
@@ -344,27 +344,55 @@ impl<'a> AotInstance<'a, ExecutionCtx> {
         })
     }
 
-    /// Pure AOT execution, without metering, for the given `inputs`.
-    /// this function executes the program until termination
-    /// Returns the final VM state when execution stops.
+    /// Execute from the program's initial state until successful termination.
     pub fn execute(
         &self,
         inputs: impl Into<Streams>,
-        num_insns: Option<u64>,
     ) -> Result<VmState<GuestMemory>, ExecutionError> {
         let vm_state =
             VmState::initial(self.system_config, &self.init_memory, self.pc_start, inputs);
-        self.execute_from_state(vm_state, num_insns)
+        self.execute_from_state(vm_state)
     }
 
-    // Runs pure execution with AOT starting with `from_state` VmState
-    // Runs for `num_insns` instructions if `num_insns` is not None
-    // Otherwise executes until termination
+    /// Execute for at most `num_insns` and report whether the program terminated or suspended.
+    pub fn execute_for(
+        &self,
+        inputs: impl Into<Streams>,
+        num_insns: u64,
+    ) -> Result<ExecutionOutcome<VmState<GuestMemory>>, ExecutionError> {
+        let vm_state =
+            VmState::initial(self.system_config, &self.init_memory, self.pc_start, inputs);
+        self.execute_from_state_for(vm_state, num_insns)
+    }
+
+    /// Continue from `from_state` until successful termination.
     pub fn execute_from_state(
         &self,
         from_state: VmState<GuestMemory>,
-        num_insns: Option<u64>,
     ) -> Result<VmState<GuestMemory>, ExecutionError> {
+        match self.execute_from_state_inner(from_state, None)? {
+            ExecutionOutcome::Terminated(state) => Ok(state),
+            ExecutionOutcome::Suspended(_) => {
+                unreachable!("unbounded AOT execution cannot suspend")
+            }
+        }
+    }
+
+    /// Continue from `from_state` for at most `num_insns` and report whether the program
+    /// terminated or suspended.
+    pub fn execute_from_state_for(
+        &self,
+        from_state: VmState<GuestMemory>,
+        num_insns: u64,
+    ) -> Result<ExecutionOutcome<VmState<GuestMemory>>, ExecutionError> {
+        self.execute_from_state_inner(from_state, Some(num_insns))
+    }
+
+    fn execute_from_state_inner(
+        &self,
+        from_state: VmState<GuestMemory>,
+        num_insns: Option<u64>,
+    ) -> Result<ExecutionOutcome<VmState<GuestMemory>>, ExecutionError> {
         let from_state_pc = from_state.pc();
         let ctx = ExecutionCtx::new(num_insns);
         let instret_left = ctx.instret_left;
@@ -401,13 +429,18 @@ impl<'a> AotInstance<'a, ExecutionCtx> {
             metrics.record(insns);
         }
 
+        let terminated = matches!(vm_exec_state.exit_code.as_ref(), Ok(Some(_)));
         if num_insns.is_some() {
             check_exit_code(vm_exec_state.exit_code)?;
         } else {
             check_termination(vm_exec_state.exit_code)?;
         }
 
-        Ok(vm_exec_state.vm_state)
+        Ok(if terminated {
+            ExecutionOutcome::Terminated(vm_exec_state.vm_state)
+        } else {
+            ExecutionOutcome::Suspended(vm_exec_state.vm_state)
+        })
     }
 }
 

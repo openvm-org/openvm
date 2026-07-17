@@ -1,7 +1,7 @@
-/* OpenVM pure tracer.
+/* OpenVM pure tracing helpers.
  *
- * All trace functions are identity/no-ops. Suspension is handled by
- * the RvState target_instret field, not the tracer.
+ * All trace functions are identity/no-ops. Pure instruction-limit handling,
+ * when selected, is emitted directly at generated block boundaries.
  */
 
 #ifndef OPENVM_TRACER_PURE_H
@@ -10,9 +10,6 @@
 #include <stdint.h>
 
 #include "openvm_state.h"
-
-typedef struct Tracer {
-} Tracer;
 
 /* ── Trace-only register access (no-ops in pure mode) ────────────── */
 
@@ -72,8 +69,5 @@ static __attribute__((always_inline)) inline void trace_pc(
 
 static __attribute__((always_inline)) inline void trace_chip(
     RvState* restrict state, uint32_t chip_idx, uint32_t count) {}
-
-static __attribute__((always_inline)) inline void trace_block(
-    RvState* restrict state, uint64_t pc, uint32_t block_insn_count) {}
 
 #endif /* OPENVM_TRACER_PURE_H */

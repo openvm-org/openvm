@@ -353,7 +353,7 @@ impl BenchExecutor for PureExecution {
     }
 
     fn run_execution(instance: &Self::Instance, input: Vec<Vec<u8>>) -> Result<(), ExecutionError> {
-        instance.execute(input, None).map(|_| ())
+        instance.execute(input).map(|_| ())
     }
 }
 

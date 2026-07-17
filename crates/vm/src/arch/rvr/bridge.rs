@@ -9,7 +9,7 @@ use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
     DEFERRAL_AS, PUBLIC_VALUES_AS,
 };
-use rvr_state::NUM_REGS_I;
+use rvr_state::NUM_REGS;
 
 use super::{compile::CompileError, ExecuteError};
 use crate::{
@@ -37,16 +37,16 @@ pub fn deferral_memory_ptr(memory: &mut AddressMap) -> (*mut u8, usize) {
     (bytes.as_mut_ptr(), bytes.len())
 }
 
-pub fn read_rv64_registers(vm_state: &VmState<GuestMemory>) -> [u64; NUM_REGS_I] {
+pub fn read_rv64_registers(vm_state: &VmState<GuestMemory>) -> [u64; NUM_REGS] {
     let bytes = vm_state.memory.memory.mem[RV64_REGISTER_AS as usize].as_slice();
-    let mut regs = [0u64; NUM_REGS_I];
+    let mut regs = [0u64; NUM_REGS];
     for (reg, chunk) in regs.iter_mut().zip(bytes.chunks_exact(8)) {
         *reg = u64::from_le_bytes(chunk.try_into().unwrap());
     }
     regs
 }
 
-pub fn write_rv64_registers(vm_state: &mut VmState<GuestMemory>, regs: &[u64; NUM_REGS_I]) {
+pub fn write_rv64_registers(vm_state: &mut VmState<GuestMemory>, regs: &[u64; NUM_REGS]) {
     let bytes = vm_state.memory.memory.mem[RV64_REGISTER_AS as usize].as_mut_slice();
     for (reg, dst) in regs.iter().zip(bytes.chunks_exact_mut(8)) {
         dst.copy_from_slice(&reg.to_le_bytes());

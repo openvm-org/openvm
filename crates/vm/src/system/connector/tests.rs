@@ -85,7 +85,7 @@ fn test_impl(should_pass: bool, exit_code: u32, f: impl FnOnce(&mut AirProvingCo
         record_arenas,
         ..
     } = vm
-        .execute_preflight(&mut interpreter, from_state, None, &max_trace_heights)
+        .execute_preflight(&mut interpreter, from_state, &max_trace_heights)
         .unwrap();
     let mut ctx = vm
         .generate_proving_ctx(system_records, record_arenas)

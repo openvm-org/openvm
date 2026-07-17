@@ -1,15 +1,7 @@
-//! RV64 machine state for the rvr-openvm runtime.
-//!
-//! Provides `RvState` (a Rust struct whose layout matches the generated C
-//! `RvState`) and the marker traits that let `rvr-openvm`
-//! plug in its own tracer/suspender types.
+//! RV64 machine state shared with the generated rvr-openvm runtime.
 
+mod instret;
 mod state;
-mod suspender;
-mod tracer;
-mod xlen;
 
-pub use state::{ExecutionStatus, Rv64State, RvState, NUM_REGS_I};
-pub use suspender::{InstretSuspender, SuspenderState};
-pub use tracer::TracerState;
-pub use xlen::{Rv64, Xlen};
+pub use instret::InstretTrackingState;
+pub use state::{ExecutionStatus, RvState, NUM_REGS};

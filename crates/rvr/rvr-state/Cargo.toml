@@ -1,6 +1,6 @@
 [package]
 name = "rvr-state"
-description = "Guest state types shared with the C tracer"
+description = "RV64 state shared with the generated RVR runtime"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
