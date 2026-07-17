@@ -40,7 +40,6 @@ pub struct LessThanImmCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize
     pub opcode_sltu_flag: T,
 
     pub b_msb_f: T,
-    pub c_msb_f: T,
 
     pub diff_marker: [T; NUM_LIMBS],
     pub diff_val: T,
@@ -113,23 +112,35 @@ where
 
         let b_diff = b[NUM_LIMBS - 1] - cols.b_msb_f;
         builder.assert_zero(b_diff.clone() * (AB::Expr::from_u32(1 << LIMB_BITS) - b_diff));
-        builder.assert_eq(
-            cols.c_msb_f,
-            cols.imm_sign
-                * (AB::Expr::from_u32((1 << LIMB_BITS) - 1)
-                    - cols.opcode_slt_flag * AB::Expr::from_u32(1 << LIMB_BITS)),
-        );
+
+        // The c-side comparison value at the top limb needs no dedicated column: it is fully
+        // determined by the boolean imm_sign and the opcode flag.
+        // - SLTI (signed): the sign-extended top limb is imm_sign * (2^LIMB_BITS - 1), whose signed
+        //   value is -imm_sign.
+        // - SLTIU (unsigned): the top limb is imm_sign * (2^LIMB_BITS - 1).
+        let c_msb: AB::Expr = cols.imm_sign
+            * (AB::Expr::from_u32((1 << LIMB_BITS) - 1)
+                - cols.opcode_slt_flag * AB::Expr::from_u32(1 << LIMB_BITS));
+
+        // cmp_sign is +1 if cmp_result == 1 and -1 otherwise; note cmp_sign^2 == 1.
+        let cmp_sign = AB::Expr::from_u8(2) * cols.cmp_result - AB::Expr::ONE;
 
         for i in (0..NUM_LIMBS).rev() {
-            let diff = (if i == NUM_LIMBS - 1 {
-                cols.c_msb_f - cols.b_msb_f
+            // raw_diff = c[i] - b[i], using the signedness-adjusted values at the top limb.
+            // c_msb has degree 2, so we constrain cmp_sign * diff_val == raw_diff (equivalent
+            // to diff_val == raw_diff * cmp_sign because cmp_sign^2 == 1) to keep the
+            // constraint degree at 3.
+            let raw_diff = if i == NUM_LIMBS - 1 {
+                c_msb.clone() - cols.b_msb_f
             } else {
                 c[i].clone() - b[i]
-            }) * (AB::Expr::from_u8(2) * cols.cmp_result - AB::Expr::ONE);
+            };
             prefix_sum += marker[i].into();
             builder.assert_bool(marker[i]);
-            builder.assert_zero(not::<AB::Expr>(prefix_sum.clone()) * diff.clone());
-            builder.when(marker[i]).assert_eq(cols.diff_val, diff);
+            builder.assert_zero(not::<AB::Expr>(prefix_sum.clone()) * raw_diff.clone());
+            builder
+                .when(marker[i])
+                .assert_eq(cmp_sign.clone() * cols.diff_val, raw_diff);
         }
 
         builder.assert_bool(prefix_sum.clone());
@@ -338,7 +349,6 @@ where
             core_row.diff_marker[diff_idx] = F::ONE;
         }
 
-        core_row.c_msb_f = c_msb_f;
         core_row.b_msb_f = b_msb_f;
         core_row.opcode_sltu_flag = F::from_bool(!is_slt);
         core_row.opcode_slt_flag = F::from_bool(is_slt);
