@@ -83,7 +83,8 @@ impl<const NUM_READS: usize, const BLOCKS: usize> Chip<DenseRecordArena, GpuBack
     for HybridWeierstrassChip<F, NUM_READS, BLOCKS>
 {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-        self.gpu.generate_proving_ctx(arena.allocated())
+        self.gpu
+            .generate_proving_ctx(arena.allocated(), arena.rvr_g2_segment_id())
     }
 }
 

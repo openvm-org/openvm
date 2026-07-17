@@ -15,7 +15,9 @@ use openvm_circuit::{
 };
 use openvm_continuations::CommitBytes;
 use openvm_stark_backend::{
-    keygen::types::MultiStarkVerifyingKey, p3_field::PrimeField32, prover::ProverBackend,
+    keygen::types::MultiStarkVerifyingKey,
+    p3_field::PrimeField32,
+    prover::{ProverBackend, ProverDevice},
     StarkEngine, Val,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::Digest;
@@ -117,6 +119,7 @@ where
     /// Generates proof for every continuation segment
     pub fn prove(&mut self, input: StdIn) -> Result<ContinuationVmProof<E::SC>, VirtualMachineError>
     where
+        <E::PD as ProverDevice<E::PB, E::TS>>::DeviceCtx: 'static,
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
             + MeteredExecutor<Val<E::SC>>
             + PreflightExecutor<Val<E::SC>, VB::RecordArena>,

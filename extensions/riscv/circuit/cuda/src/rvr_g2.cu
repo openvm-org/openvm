@@ -2,7 +2,10 @@
 #include "primitives/buffer_view.cuh"
 #include "riscv/rvr_compact.cuh"
 
+#include <cub/device/device_select.cuh>
+#include <cub/device/device_scan.cuh>
 #include <cuda_runtime.h>
+#include <cstdio>
 #include <stdint.h>
 
 using namespace riscv;
@@ -15,7 +18,6 @@ static constexpr uint16_t G2_RESIDUAL_CTRL = 0x0080u;
 static constexpr uint16_t G2_RESIDUAL_TAG = 0x0081u;
 static constexpr uint16_t G2_RESIDUAL_VALUE = 0x0082u;
 static constexpr uint16_t G2_OPAQUE_EVENT_COUNT = 0x0083u;
-static constexpr uint16_t G2_ADDI_V0 = 0x013au;
 static constexpr uint32_t G2_REQUIRED = 1u;
 static constexpr uint32_t G2_REQUIRED_ATOMIC = 3u;
 static constexpr uint32_t G2_LOAD_STORE_GROUP = 1u;
@@ -31,6 +33,7 @@ static constexpr uint8_t EXPECT_NONE = 0u;
 static constexpr uint8_t EXPECT_BEFORE_LOAD = 1u;
 static constexpr uint8_t EXPECT_BEFORE_STORE = 2u;
 static constexpr uint8_t EXPECT_AFTER_STORE = 3u;
+static constexpr size_t CUDA_GRID_X_MAX = 0x7fffffffu;
 
 struct G2SegmentHeaderV1 {
     uint8_t magic[8];
@@ -81,6 +84,16 @@ struct G2ExpectedOpaqueV1 {
 };
 static_assert(sizeof(G2ExpectedOpaqueV1) == 20, "G2 expected-opaque size drift");
 
+struct G2PreparedInstruction {
+    RvrOperandEntry entry;
+    uint32_t slot;
+    int32_t kind;
+    uint32_t v0_index;
+    uint32_t v1_index;
+    uint64_t v0;
+    uint64_t v1;
+};
+
 struct DeviceInitialMemory {
     uint64_t base;
     uint64_t len;
@@ -113,8 +126,34 @@ __device__ __forceinline__ void fail(uint32_t *error, uint32_t code) {
     if (*error == 0) *error = code;
 }
 
+__device__ __forceinline__ void fail_parallel(uint32_t *error, uint32_t code) {
+    atomicCAS(error, 0u, code);
+}
+
 __device__ __forceinline__ bool load_store_kind(uint32_t kind) {
     return kind == 8 || kind == 9 || (kind >= 20 && kind <= 28);
+}
+
+__device__ __forceinline__ void lane_consumption(
+    uint32_t kind, RvrOperandEntry const &entry, bool &v0, bool &v1
+) {
+    v0 = false;
+    v1 = false;
+    if (kind <= 7 || (kind >= 15 && kind <= 19)) {
+        v0 = true;
+        v1 = (entry.flags & RVR_OPERAND_FLAG_RS2_IMM) == 0;
+    } else if (kind == 10 || kind == 11) {
+        v0 = true;
+        v1 = true;
+    } else if (kind == 13 || kind == 29) {
+        v0 = true;
+    } else if (load_store_kind(kind)) {
+        bool narrow_reveal =
+            (entry.flags & RVR_OPERAND_FLAG_LS_PUBLIC_VALUES) &&
+            entry.access_pattern == G2_STORE_PATTERN && entry.local_opcode != 4;
+        v0 = !narrow_reveal;
+        v1 = !narrow_reveal;
+    }
 }
 
 __device__ __forceinline__ bool zero_arity_kind(uint32_t kind) {
@@ -193,15 +232,6 @@ __device__ G2BlockEntryV1 const *find_block(
             hi = mid;
     }
     return lo < count && blocks[lo].program_slot == slot ? &blocks[lo] : nullptr;
-}
-
-__device__ G2ExpectedKindV1 const *find_expected(
-    G2ExpectedKindV1 const *expected, size_t count, uint32_t air_idx
-) {
-    for (size_t i = 0; i < count; ++i) {
-        if (expected[i].air_idx == air_idx) return &expected[i];
-    }
-    return nullptr;
 }
 
 __device__ G2ExpectedOpaqueV1 const *find_expected_opaque(
@@ -452,7 +482,7 @@ __device__ bool append_opaque_residual(
     }
     uint32_t address = uint32_t(control >> 32);
     uint8_t address_space = address_space_code + 1u;
-    if (address_space == 1u) {
+    if (address_space == 1u && registers != nullptr) {
         if (width_code != 4 || (address & 7u) != 0 || address >= 32u * 8u) return false;
         uint32_t reg = address / 8u;
         if (kind == 0 && registers[reg] != event_value) return false;
@@ -471,6 +501,740 @@ __device__ bool append_opaque_residual(
     return true;
 }
 
+__global__ void g2_run_lengths(
+    uint8_t const *wire,
+    size_t wire_storage_bytes,
+    size_t run_count,
+    G2BlockEntryV1 const *blocks,
+    size_t block_count,
+    uint32_t *lengths,
+    uint32_t *error
+) {
+    if (*error != 0) return;
+    size_t run_index = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+    if (run_index >= run_count) return;
+    G2SegmentHeaderV1 const &header = *reinterpret_cast<G2SegmentHeaderV1 const *>(wire);
+    if (wire_storage_bytes < 128 || header.header_bytes != 64 + 32 * header.lane_count ||
+        header.header_bytes > wire_storage_bytes || header.run_count != run_count) {
+        fail_parallel(error, 49);
+        return;
+    }
+    G2LaneDescV1 const *descs = reinterpret_cast<G2LaneDescV1 const *>(wire + 64);
+    G2LaneDescV1 const *run = find_lane(descs, header.lane_count, G2_RUN_BLOCK_ID);
+    if (run == nullptr || run->count != run_count || run->elem_width != 4 ||
+        run->payload_bytes != run_count * sizeof(uint32_t) ||
+        run->offset > wire_storage_bytes ||
+        run->payload_bytes > wire_storage_bytes - run->offset) {
+        fail_parallel(error, 50);
+        return;
+    }
+    uint32_t run_slot = lane_u32(wire, *run, run_index);
+    G2BlockEntryV1 const *block = find_block(blocks, block_count, run_slot);
+    if (block == nullptr || block->instruction_count == 0) {
+        fail_parallel(error, 10);
+        return;
+    }
+    lengths[run_index] = block->instruction_count;
+}
+
+__global__ void g2_expand_runs(
+    uint8_t const *wire,
+    size_t run_count,
+    G2BlockEntryV1 const *blocks,
+    size_t block_count,
+    uint32_t const *offsets,
+    size_t instruction_count,
+    RvrOperandEntry const *operands,
+    size_t operand_count,
+    uint32_t *program_slots,
+    uint32_t *program_frequencies,
+    size_t frequency_count,
+    uint32_t *error
+) {
+    if (*error != 0) return;
+    if (offsets[run_count] != instruction_count) {
+        fail_parallel(error, 53);
+        return;
+    }
+    size_t run_index = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+    if (run_index >= run_count) return;
+    G2SegmentHeaderV1 const &header = *reinterpret_cast<G2SegmentHeaderV1 const *>(wire);
+    G2LaneDescV1 const *descs = reinterpret_cast<G2LaneDescV1 const *>(wire + 64);
+    G2LaneDescV1 const *run = find_lane(descs, header.lane_count, G2_RUN_BLOCK_ID);
+    if (run == nullptr) {
+        fail_parallel(error, 50);
+        return;
+    }
+    uint32_t run_slot = lane_u32(wire, *run, run_index);
+    G2BlockEntryV1 const *block = find_block(blocks, block_count, run_slot);
+    uint32_t begin = offsets[run_index], end = offsets[run_index + 1];
+    if (block == nullptr || end < begin || end - begin != block->instruction_count ||
+        end > instruction_count) {
+        fail_parallel(error, 51);
+        return;
+    }
+    for (uint32_t local = 0; local < block->instruction_count; ++local) {
+        uint32_t slot = run_slot + local;
+        if (slot < run_slot || slot >= operand_count) {
+            fail_parallel(error, 11);
+            return;
+        }
+        RvrOperandEntry const entry = operands[slot];
+        if (entry.filtered_index >= frequency_count) {
+            fail_parallel(error, 12);
+            return;
+        }
+        program_slots[begin + local] = slot;
+        atomicAdd(program_frequencies + entry.filtered_index, 1u);
+    }
+}
+
+__global__ void g2_build_kind_map(
+    G2ExpectedKindV1 const *expected,
+    size_t expected_count,
+    int8_t *kind_by_air,
+    uint32_t *error
+) {
+    if (blockIdx.x != 0 || threadIdx.x != 0) return;
+    for (size_t i = 0; i < 256; ++i) kind_by_air[i] = -1;
+    for (size_t i = 0; i < expected_count; ++i) {
+        G2ExpectedKindV1 entry = expected[i];
+        if (entry.air_idx >= 256 || entry.kind >= 31 || kind_by_air[entry.air_idx] != -1) {
+            fail_parallel(error, 48);
+            return;
+        }
+        kind_by_air[entry.air_idx] = int8_t(entry.kind);
+    }
+}
+
+__global__ void g2_count_lane_blocks(
+    uint32_t const *program_slots,
+    size_t instruction_count,
+    RvrOperandEntry const *operands,
+    size_t operand_count,
+    int8_t const *kind_by_air,
+    uint32_t *v0_counts,
+    uint32_t *v1_counts,
+    size_t count_stride,
+    uint32_t *error
+) {
+    if (*error != 0) return;
+    __shared__ uint32_t counts[62];
+    for (uint32_t i = threadIdx.x; i < 62; i += blockDim.x) counts[i] = 0;
+    __syncthreads();
+
+    size_t instruction = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+    if (instruction < instruction_count) {
+        uint32_t slot = program_slots[instruction];
+        if (slot >= operand_count) {
+            fail_parallel(error, 11);
+        } else {
+            RvrOperandEntry entry = operands[slot];
+            if (entry.air_idx >= 256) {
+                fail_parallel(error, 48);
+            } else {
+                int32_t kind = kind_by_air[entry.air_idx];
+                if (kind >= 0) {
+                    bool v0, v1;
+                    lane_consumption(uint32_t(kind), entry, v0, v1);
+                    if (v0) atomicAdd(&counts[kind], 1u);
+                    if (v1) atomicAdd(&counts[31 + kind], 1u);
+                }
+            }
+        }
+    }
+    __syncthreads();
+    for (uint32_t kind = threadIdx.x; kind < 31; kind += blockDim.x) {
+        v0_counts[size_t(kind) * count_stride + blockIdx.x] = counts[kind];
+        v1_counts[size_t(kind) * count_stride + blockIdx.x] = counts[31 + kind];
+    }
+}
+
+__global__ void g2_prepare_instructions(
+    uint8_t const *wire,
+    uint32_t const *program_slots,
+    size_t instruction_count,
+    RvrOperandEntry const *operands,
+    size_t operand_count,
+    int8_t const *kind_by_air,
+    uint32_t const *v0_offsets,
+    uint32_t const *v1_offsets,
+    size_t count_stride,
+    G2PreparedInstruction *prepared,
+    uint32_t *error
+) {
+    if (*error != 0) return;
+    __shared__ int8_t kinds[256];
+    __shared__ uint8_t consumption[256];
+    size_t instruction = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+    uint32_t slot = UINT32_MAX;
+    RvrOperandEntry entry{};
+    int32_t kind = -1;
+    bool v0 = false, v1 = false;
+    if (instruction < instruction_count) {
+        slot = program_slots[instruction];
+        if (slot >= operand_count) {
+            fail_parallel(error, 11);
+        } else {
+            entry = operands[slot];
+            if (entry.air_idx >= 256) {
+                fail_parallel(error, 48);
+            } else {
+                kind = kind_by_air[entry.air_idx];
+                if (kind >= 0) lane_consumption(uint32_t(kind), entry, v0, v1);
+            }
+        }
+    }
+    kinds[threadIdx.x] = int8_t(kind);
+    consumption[threadIdx.x] = uint8_t(v0) | (uint8_t(v1) << 1);
+    __syncthreads();
+    if (instruction >= instruction_count || slot >= operand_count) return;
+
+    uint32_t local_v0 = 0, local_v1 = 0;
+    for (uint32_t local = 0; local < threadIdx.x; ++local) {
+        if (kinds[local] != kind) continue;
+        local_v0 += consumption[local] & 1u;
+        local_v1 += consumption[local] >> 1;
+    }
+    G2PreparedInstruction output{};
+    output.entry = entry;
+    output.slot = slot;
+    output.kind = kind;
+    output.v0_index = UINT32_MAX;
+    output.v1_index = UINT32_MAX;
+    if (kind >= 0) {
+        G2SegmentHeaderV1 const &header = *reinterpret_cast<G2SegmentHeaderV1 const *>(wire);
+        G2LaneDescV1 const *descs = reinterpret_cast<G2LaneDescV1 const *>(wire + 64);
+        if (v0) {
+            uint32_t index =
+                v0_offsets[size_t(kind) * count_stride + blockIdx.x] + local_v0;
+            G2LaneDescV1 const *lane = find_lane(descs, header.lane_count, lane_v0(kind));
+            if (lane == nullptr || index >= lane->count) {
+                fail_parallel(error, 54);
+            } else {
+                output.v0_index = index;
+                output.v0 = lane->elem_width == 4 ? lane_u32(wire, *lane, index)
+                                                 : lane_u64(wire, *lane, index);
+            }
+        }
+        if (v1) {
+            uint32_t index =
+                v1_offsets[size_t(kind) * count_stride + blockIdx.x] + local_v1;
+            G2LaneDescV1 const *lane = find_lane(descs, header.lane_count, lane_v1(kind));
+            if (lane == nullptr || index >= lane->count) {
+                fail_parallel(error, 55);
+            } else {
+                output.v1_index = index;
+                output.v1 = lane_u64(wire, *lane, index);
+            }
+        }
+    }
+    prepared[instruction] = output;
+}
+
+__global__ void g2_classify_instructions(
+    G2PreparedInstruction const *prepared,
+    size_t instruction_count,
+    int8_t const *kind_by_air,
+    uint32_t *timestamp_counts,
+    uint32_t *output_counts,
+    uint32_t *residual_counts,
+    uint32_t *opaque_counts,
+    uint32_t *opaque_markers,
+    uint8_t *hint_flags,
+    uint32_t *instruction_indices,
+    uint32_t *error
+) {
+    if (*error != 0) return;
+    size_t instruction = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+    if (instruction >= instruction_count) return;
+    G2PreparedInstruction decoded = prepared[instruction];
+    RvrOperandEntry entry = decoded.entry;
+    instruction_indices[instruction] = uint32_t(instruction);
+    if (entry.air_idx == INVALID_AIR) {
+        if (decoded.kind != -1) fail_parallel(error, 56);
+        return;
+    }
+    if (entry.air_idx >= 256) {
+        fail_parallel(error, 48);
+        return;
+    }
+    int32_t kind_code = kind_by_air[entry.air_idx];
+    if (kind_code != decoded.kind) {
+        fail_parallel(error, 56);
+        return;
+    }
+    if (kind_code < 0) {
+        if (entry.access_pattern == G2_OPAQUE_TIMESTAMP_PATTERN) {
+            timestamp_counts[instruction] = 1;
+        } else if (entry.access_pattern == G2_OPAQUE_PATTERN) {
+            opaque_markers[instruction] = 1;
+        } else {
+            fail_parallel(error, 13);
+        }
+        return;
+    }
+    uint32_t kind = uint32_t(kind_code);
+    if (kind == 30 && entry.access_pattern == G2_HINT_PATTERN) {
+        if (entry.local_opcode > 1) {
+            fail_parallel(error, 42);
+            return;
+        }
+        hint_flags[instruction] = 1;
+        return;
+    }
+    output_counts[instruction] = 1;
+    if (kind == 29 && entry.access_pattern == G2_ADDI_PATTERN) {
+        timestamp_counts[instruction] = 2;
+    } else if ((kind <= 7 || (kind >= 15 && kind <= 19)) &&
+               (entry.access_pattern == 0 || entry.access_pattern == 1)) {
+        timestamp_counts[instruction] = 3;
+    } else if ((kind == 10 || kind == 11) && entry.access_pattern == 4) {
+        timestamp_counts[instruction] = 2;
+    } else if ((kind == 12 || kind == 14) &&
+               (entry.access_pattern == 5 || entry.access_pattern == 6)) {
+        timestamp_counts[instruction] = 1;
+    } else if (kind == 13 && entry.access_pattern == 7) {
+        timestamp_counts[instruction] = 2;
+    } else if (load_store_kind(kind) &&
+               (entry.access_pattern == G2_LOAD_PATTERN ||
+                entry.access_pattern == G2_STORE_PATTERN)) {
+        timestamp_counts[instruction] = 3;
+        bool narrow_reveal =
+            (entry.flags & RVR_OPERAND_FLAG_LS_PUBLIC_VALUES) &&
+            entry.access_pattern == G2_STORE_PATTERN && entry.local_opcode != 4;
+        residual_counts[instruction] = narrow_reveal ? 3 : 0;
+    } else {
+        fail_parallel(error, 22);
+    }
+}
+
+__global__ void g2_fill_opaque_shapes(
+    uint8_t const *wire,
+    uint32_t const *opaque_occurrences,
+    size_t instruction_count,
+    uint32_t *timestamp_counts,
+    uint32_t *residual_counts,
+    uint32_t *opaque_counts,
+    uint32_t *error
+) {
+    if (*error != 0) return;
+    size_t instruction = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+    if (instruction >= instruction_count ||
+        opaque_occurrences[instruction] == opaque_occurrences[instruction + 1])
+        return;
+    G2SegmentHeaderV1 const &header = *reinterpret_cast<G2SegmentHeaderV1 const *>(wire);
+    G2LaneDescV1 const *descs = reinterpret_cast<G2LaneDescV1 const *>(wire + 64);
+    G2LaneDescV1 const *events = find_lane(descs, header.lane_count, G2_OPAQUE_EVENT_COUNT);
+    uint32_t occurrence = opaque_occurrences[instruction];
+    if (events == nullptr || occurrence >= events->count) {
+        fail_parallel(error, 40);
+        return;
+    }
+    uint32_t count = lane_u32(wire, *events, occurrence);
+    if (count == 0) {
+        fail_parallel(error, 47);
+        return;
+    }
+    timestamp_counts[instruction] = count;
+    residual_counts[instruction] = count;
+    opaque_counts[instruction] = count;
+}
+
+__global__ void g2_plan_hints(
+    uint8_t const *wire,
+    G2PreparedInstruction const *prepared,
+    uint32_t const *hint_indices,
+    uint32_t const *hint_count,
+    uint32_t const *static_timestamp_offsets,
+    uint32_t const *static_residual_offsets,
+    uint32_t initial_timestamp,
+    uint32_t *timestamp_counts,
+    uint32_t *output_counts,
+    uint32_t *residual_counts,
+    uint32_t *error
+) {
+    if (blockIdx.x != 0 || threadIdx.x != 0 || *error != 0) return;
+    G2SegmentHeaderV1 const &header = *reinterpret_cast<G2SegmentHeaderV1 const *>(wire);
+    G2LaneDescV1 const *descs = reinterpret_cast<G2LaneDescV1 const *>(wire + 64);
+    G2LaneDescV1 const *ctrl = find_lane(descs, header.lane_count, G2_RESIDUAL_CTRL);
+    G2LaneDescV1 const *tag = find_lane(descs, header.lane_count, G2_RESIDUAL_TAG);
+    G2LaneDescV1 const *value = find_lane(descs, header.lane_count, G2_RESIDUAL_VALUE);
+    uint32_t dynamic_timestamp = 0;
+    uint32_t dynamic_residual = 0;
+    for (uint32_t hint = 0; hint < *hint_count; ++hint) {
+        uint32_t instruction = hint_indices[hint];
+        RvrOperandEntry entry = prepared[instruction].entry;
+        if (ctrl == nullptr || tag == nullptr || value == nullptr ||
+            entry.access_pattern != G2_HINT_PATTERN || (entry.b & 7u) != 0 ||
+            entry.b >= 32u * 8u ||
+            (entry.local_opcode != 0 && ((entry.a & 7u) != 0 || entry.a >= 32u * 8u))) {
+            fail(error, 42);
+            return;
+        }
+        uint32_t timestamp =
+            initial_timestamp + static_timestamp_offsets[instruction] + dynamic_timestamp;
+        size_t residual =
+            size_t(static_residual_offsets[instruction]) + dynamic_residual;
+        if (residual >= ctrl->count) {
+            fail(error, 43);
+            return;
+        }
+        uint64_t memory_pointer;
+        if (!residual_event(
+                wire,
+                *ctrl,
+                *tag,
+                *value,
+                residual,
+                timestamp,
+                entry.b,
+                0x40u,
+                0,
+                false,
+                memory_pointer
+            ) ||
+            memory_pointer > UINT32_MAX) {
+            fail(error, 44);
+            return;
+        }
+        uint32_t num_words = 1;
+        if (entry.local_opcode != 0) {
+            uint64_t words;
+            if (residual + 1 >= ctrl->count ||
+                !residual_event(
+                    wire,
+                    *ctrl,
+                    *tag,
+                    *value,
+                    residual + 1,
+                    timestamp + 1,
+                    entry.a,
+                    0x40u,
+                    0,
+                    false,
+                    words
+                ) ||
+                words == 0 || words > 1023) {
+                fail(error, 45);
+                return;
+            }
+            num_words = uint32_t(words);
+        }
+        uint32_t residual_count = num_words + 1u + entry.local_opcode;
+        if (residual_count < num_words || residual + residual_count > ctrl->count ||
+            dynamic_timestamp > UINT32_MAX - 3u * num_words ||
+            dynamic_residual > UINT32_MAX - residual_count) {
+            fail(error, 43);
+            return;
+        }
+        timestamp_counts[instruction] = 3u * num_words;
+        output_counts[instruction] = num_words;
+        residual_counts[instruction] = residual_count;
+        dynamic_timestamp += 3u * num_words;
+        dynamic_residual += residual_count;
+    }
+}
+
+__global__ void g2_emit_parallel(
+    uint8_t const *wire,
+    G2PreparedInstruction const *prepared,
+    size_t instruction_count,
+    int8_t const *kind_by_air,
+    uint32_t const *timestamp_offsets,
+    uint32_t const *output_offsets,
+    uint32_t const *residual_offsets,
+    uint32_t const *opaque_offsets,
+    uint32_t initial_timestamp,
+    uint32_t pc_base,
+    DeltaRecord *delta_output,
+    size_t delta_count,
+    uint64_t *expected_blocks,
+    uint8_t *expected_modes,
+    DeltaMemoryLogEntry *opaque_output,
+    size_t opaque_capacity,
+    uint32_t *kind_counts,
+    uint32_t *error
+) {
+    size_t instruction = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+    if (instruction >= instruction_count || *error != 0) return;
+    G2PreparedInstruction decoded = prepared[instruction];
+    RvrOperandEntry entry = decoded.entry;
+    if (entry.air_idx == INVALID_AIR) return;
+    if (entry.air_idx >= 256 || decoded.kind != kind_by_air[entry.air_idx]) {
+        fail_parallel(error, 56);
+        return;
+    }
+    uint32_t timestamp = initial_timestamp + timestamp_offsets[instruction];
+    size_t output_cursor = output_offsets[instruction];
+    size_t output_end = output_offsets[instruction + 1];
+    size_t residual_cursor = residual_offsets[instruction];
+    size_t residual_end = residual_offsets[instruction + 1];
+    size_t opaque_cursor = opaque_offsets[instruction];
+    size_t opaque_end = opaque_offsets[instruction + 1];
+    G2SegmentHeaderV1 const &header = *reinterpret_cast<G2SegmentHeaderV1 const *>(wire);
+    G2LaneDescV1 const *descs = reinterpret_cast<G2LaneDescV1 const *>(wire + 64);
+    // The scans use u32 cursors and dynamic HintStore/opaque counts.  Guard
+    // every assigned interval before dereferencing residual lanes or writing
+    // an output; the aggregate validator below then enforces exact exhaustion.
+    if (timestamp_offsets[instruction + 1] < timestamp_offsets[instruction] ||
+        initial_timestamp > UINT32_MAX - timestamp_offsets[instruction + 1] ||
+        output_end < output_cursor || output_end > delta_count ||
+        residual_end < residual_cursor || residual_end > header.residual_event_count ||
+        opaque_end < opaque_cursor || opaque_end > opaque_capacity) {
+        fail_parallel(error, 57);
+        return;
+    }
+
+    if (decoded.kind < 0) {
+        if (entry.access_pattern == G2_OPAQUE_TIMESTAMP_PATTERN) return;
+        G2LaneDescV1 const *ctrl = find_lane(descs, header.lane_count, G2_RESIDUAL_CTRL);
+        G2LaneDescV1 const *tag = find_lane(descs, header.lane_count, G2_RESIDUAL_TAG);
+        G2LaneDescV1 const *value = find_lane(descs, header.lane_count, G2_RESIDUAL_VALUE);
+        if (entry.access_pattern != G2_OPAQUE_PATTERN || ctrl == nullptr || tag == nullptr ||
+            value == nullptr || residual_end - residual_cursor != opaque_end - opaque_cursor) {
+            fail_parallel(error, 40);
+            return;
+        }
+        for (size_t event = 0; residual_cursor + event < residual_end; ++event) {
+            size_t output_count = opaque_cursor + event;
+            if (uint32_t(lane_u64(wire, *ctrl, residual_cursor + event)) != timestamp + event ||
+                !append_opaque_residual(
+                    wire,
+                    *ctrl,
+                    *tag,
+                    *value,
+                    residual_cursor + event,
+                    opaque_output,
+                    opaque_capacity,
+                    output_count,
+                    nullptr
+                ) ||
+                output_count != opaque_cursor + event + 1) {
+                fail_parallel(error, 41);
+                return;
+            }
+        }
+        return;
+    }
+
+    uint32_t kind = uint32_t(decoded.kind);
+    bool consumes_v0, consumes_v1;
+    lane_consumption(kind, entry, consumes_v0, consumes_v1);
+    if ((consumes_v0 && decoded.v0_index == UINT32_MAX) ||
+        (!consumes_v0 && decoded.v0_index != UINT32_MAX) ||
+        (consumes_v1 && decoded.v1_index == UINT32_MAX) ||
+        (!consumes_v1 && decoded.v1_index != UINT32_MAX)) {
+        fail_parallel(error, 54);
+        return;
+    }
+    if (kind == 30 && entry.access_pattern == G2_HINT_PATTERN) {
+        G2LaneDescV1 const *ctrl = find_lane(descs, header.lane_count, G2_RESIDUAL_CTRL);
+        G2LaneDescV1 const *tag = find_lane(descs, header.lane_count, G2_RESIDUAL_TAG);
+        G2LaneDescV1 const *value = find_lane(descs, header.lane_count, G2_RESIDUAL_VALUE);
+        uint32_t num_words = uint32_t(output_end - output_cursor);
+        size_t expected_residual = size_t(num_words) + 1u + entry.local_opcode;
+        if (ctrl == nullptr || tag == nullptr || value == nullptr || num_words == 0 ||
+            num_words > 1023 || residual_end - residual_cursor != expected_residual) {
+            fail_parallel(error, 43);
+            return;
+        }
+        uint64_t memory_pointer_value;
+        if (!residual_event(
+                wire,
+                *ctrl,
+                *tag,
+                *value,
+                residual_cursor++,
+                timestamp,
+                entry.b,
+                0x40u,
+                0,
+                false,
+                memory_pointer_value
+            ) ||
+            memory_pointer_value > UINT32_MAX) {
+            fail_parallel(error, 44);
+            return;
+        }
+        if (entry.local_opcode != 0) {
+            uint64_t words;
+            if (!residual_event(
+                    wire,
+                    *ctrl,
+                    *tag,
+                    *value,
+                    residual_cursor++,
+                    timestamp + 1,
+                    entry.a,
+                    0x40u,
+                    num_words,
+                    true,
+                    words
+                )) {
+                fail_parallel(error, 45);
+                return;
+            }
+        }
+        uint32_t memory_pointer = uint32_t(memory_pointer_value);
+        for (uint32_t row = 0; row < num_words; ++row) {
+            uint64_t word;
+            uint32_t row_timestamp = timestamp + 3u * row;
+            uint32_t address = memory_pointer + 8u * row;
+            if (address < memory_pointer ||
+                !residual_event(
+                    wire,
+                    *ctrl,
+                    *tag,
+                    *value,
+                    residual_cursor++,
+                    row_timestamp + 2,
+                    address,
+                    0x45u,
+                    0,
+                    false,
+                    word
+                )) {
+                fail_parallel(error, 46);
+                return;
+            }
+            delta_output[output_cursor + row] = {
+                pc_base + decoded.slot * 4u,
+                row_timestamp,
+                uint64_t(address) | (uint64_t(row) << 32) |
+                    (uint64_t(num_words) << 42),
+                word,
+            };
+            expected_blocks[output_cursor + row] = 0;
+            expected_modes[output_cursor + row] = EXPECT_NONE;
+        }
+        if (residual_cursor != residual_end) {
+            fail_parallel(error, 43);
+            return;
+        }
+        atomicAdd(&kind_counts[kind], num_words);
+        return;
+    }
+    if (output_end != output_cursor + 1 || output_cursor >= delta_count) {
+        fail_parallel(error, 13);
+        return;
+    }
+    DeltaRecord record{pc_base + decoded.slot * 4u, timestamp, 0, 0};
+    uint64_t expected_block = 0;
+    uint8_t expected_mode = EXPECT_NONE;
+    if (kind == 29 && entry.access_pattern == G2_ADDI_PATTERN) {
+        record.v1 = decoded.v0;
+        record.v2 = uint64_t(int64_t(int32_t(entry.c << 20) >> 20));
+    } else if ((kind <= 7 || (kind >= 15 && kind <= 19)) &&
+               (entry.access_pattern == 0 || entry.access_pattern == 1)) {
+        record.v1 = decoded.v0;
+        record.v2 = (entry.flags & RVR_OPERAND_FLAG_RS2_IMM)
+                        ? standard_immediate(entry)
+                        : decoded.v1;
+    } else if ((kind == 10 || kind == 11) && entry.access_pattern == 4) {
+        record.v1 = decoded.v0;
+        record.v2 = decoded.v1;
+    } else if ((kind == 12 || kind == 14) &&
+               (entry.access_pattern == 5 || entry.access_pattern == 6)) {
+    } else if (kind == 13 && entry.access_pattern == 7) {
+        record.v1 = decoded.v0;
+    } else if (load_store_kind(kind) &&
+               (entry.access_pattern == G2_LOAD_PATTERN ||
+                entry.access_pattern == G2_STORE_PATTERN)) {
+        bool narrow_reveal =
+            (entry.flags & RVR_OPERAND_FLAG_LS_PUBLIC_VALUES) &&
+            entry.access_pattern == G2_STORE_PATTERN && entry.local_opcode != 4;
+        if (narrow_reveal) {
+            G2LaneDescV1 const *ctrl = find_lane(descs, header.lane_count, G2_RESIDUAL_CTRL);
+            G2LaneDescV1 const *tag = find_lane(descs, header.lane_count, G2_RESIDUAL_TAG);
+            G2LaneDescV1 const *value = find_lane(descs, header.lane_count, G2_RESIDUAL_VALUE);
+            uint64_t pointer, source, post_block;
+            if (ctrl == nullptr || tag == nullptr || value == nullptr ||
+                residual_end - residual_cursor != 3 ||
+                !residual_event(wire, *ctrl, *tag, *value, residual_cursor, timestamp,
+                                entry.b, 0x40u, 0, false, pointer) ||
+                !residual_event(wire, *ctrl, *tag, *value, residual_cursor + 1,
+                                timestamp + 1, entry.a, 0x40u, 0, false, source) ||
+                !residual_event(wire, *ctrl, *tag, *value, residual_cursor + 2,
+                                timestamp + 2, effective_address(uint32_t(pointer), entry) & ~7u,
+                                0x49u, 0, false, post_block) ||
+                pointer > UINT32_MAX) {
+                fail_parallel(error, 18);
+                return;
+            }
+            record.v1 = pointer;
+            record.v2 = source;
+            expected_block = post_block;
+            expected_mode = EXPECT_AFTER_STORE;
+        } else {
+            record.v1 = uint32_t(decoded.v0);
+            expected_block = decoded.v1;
+            expected_mode = entry.access_pattern == G2_LOAD_PATTERN
+                                ? EXPECT_BEFORE_LOAD
+                                : EXPECT_BEFORE_STORE;
+            record.v2 = entry.access_pattern == G2_LOAD_PATTERN ? decoded.v1 : 0;
+        }
+    } else {
+        fail_parallel(error, 22);
+        return;
+    }
+    delta_output[output_cursor] = record;
+    expected_blocks[output_cursor] = expected_block;
+    expected_modes[output_cursor] = expected_mode;
+    atomicAdd(&kind_counts[kind], 1u);
+}
+
+__global__ void g2_validate_parallel_output(
+    uint8_t const *wire,
+    size_t instruction_count,
+    uint32_t const *timestamp_offsets,
+    uint32_t const *output_offsets,
+    uint32_t const *residual_offsets,
+    uint32_t const *opaque_offsets,
+    uint32_t const *opaque_occurrences,
+    uint32_t const *v0_offsets,
+    uint32_t const *v1_offsets,
+    size_t count_stride,
+    G2ExpectedKindV1 const *expected_kinds,
+    size_t expected_kind_count,
+    uint32_t const *kind_counts,
+    size_t delta_count,
+    size_t opaque_capacity,
+    uint32_t *opaque_residual_count,
+    uint32_t *error
+) {
+    if (blockIdx.x != 0 || threadIdx.x != 0 || *error != 0) return;
+    G2SegmentHeaderV1 const &header = *reinterpret_cast<G2SegmentHeaderV1 const *>(wire);
+    G2LaneDescV1 const *descs = reinterpret_cast<G2LaneDescV1 const *>(wire + 64);
+    G2LaneDescV1 const *opaque_events =
+        find_lane(descs, header.lane_count, G2_OPAQUE_EVENT_COUNT);
+    if (output_offsets[instruction_count] != delta_count ||
+        residual_offsets[instruction_count] != header.residual_event_count ||
+        opaque_offsets[instruction_count] > opaque_capacity ||
+        opaque_occurrences[instruction_count] !=
+            (opaque_events == nullptr ? 0 : opaque_events->count) ||
+        timestamp_offsets[instruction_count] < timestamp_offsets[0]) {
+        fail(error, 23);
+        return;
+    }
+    for (size_t i = 0; i < expected_kind_count; ++i) {
+        G2ExpectedKindV1 expected = expected_kinds[i];
+        if (expected.kind >= 31 || kind_counts[expected.kind] != expected.count) {
+            fail(error, 24);
+            return;
+        }
+        G2LaneDescV1 const *v0 = find_lane(descs, header.lane_count, lane_v0(expected.kind));
+        G2LaneDescV1 const *v1 = find_lane(descs, header.lane_count, lane_v1(expected.kind));
+        size_t offset = size_t(expected.kind) * count_stride + count_stride - 1;
+        if ((v0 == nullptr ? 0 : v0->count) != v0_offsets[offset] ||
+            (v1 == nullptr ? 0 : v1->count) != v1_offsets[offset]) {
+            fail(error, 26);
+            return;
+        }
+    }
+    *opaque_residual_count = opaque_offsets[instruction_count];
+}
+
 __global__ void g2_predecode(
     uint8_t const *wire,
     size_t wire_storage_bytes,
@@ -480,6 +1244,9 @@ __global__ void g2_predecode(
     size_t block_count,
     RvrOperandEntry const *operands,
     size_t operand_count,
+    G2PreparedInstruction const *prepared,
+    size_t program_instruction_count,
+    bool validate_only,
     uint32_t pc_base,
     DeviceInitialMemory const *initial_memory,
     size_t initial_memory_count,
@@ -499,10 +1266,12 @@ __global__ void g2_predecode(
     uint32_t *opaque_residual_count,
     uint32_t *error
 ) {
+    if (*error != 0) return;
     if (blockIdx.x != 0 || threadIdx.x != 0) return;
     if (wire_storage_bytes < 128 || (wire_storage_bytes & 127u) != 0 ||
         logical_wire_bytes < wire_storage_bytes || (logical_wire_bytes & 127u) != 0 ||
-        block_count == 0 || initial_memory_count <= 1 || expected_kind_count == 0) {
+        block_count == 0 || initial_memory_count <= 1 || expected_kind_count == 0 ||
+        program_instruction_count == 0 || prepared == nullptr) {
         fail(error, 1);
         return;
     }
@@ -586,16 +1355,36 @@ __global__ void g2_predecode(
         fail(error, 7);
         return;
     }
+    G2LaneDescV1 const *v0_lanes[31]{};
+    G2LaneDescV1 const *v1_lanes[31]{};
     for (uint32_t kind = 0; kind < 30; ++kind) {
+        v0_lanes[kind] = find_lane(descs, header.lane_count, lane_v0(kind));
+        v1_lanes[kind] = find_lane(descs, header.lane_count, lane_v1(kind));
         if (!load_store_kind(kind)) continue;
-        G2LaneDescV1 const *v0 = find_lane(descs, header.lane_count, lane_v0(kind));
-        G2LaneDescV1 const *v1 = find_lane(descs, header.lane_count, lane_v1(kind));
+        G2LaneDescV1 const *v0 = v0_lanes[kind];
+        G2LaneDescV1 const *v1 = v1_lanes[kind];
         if ((v0 == nullptr) != (v1 == nullptr) ||
             (v0 != nullptr && v0->count != v1->count)) {
             fail(error, 8);
             return;
         }
     }
+    int8_t kind_by_air[256];
+    for (size_t i = 0; i < 256; ++i) kind_by_air[i] = -1;
+    for (size_t i = 0; i < expected_kind_count; ++i) {
+        G2ExpectedKindV1 const &expected = expected_kinds[i];
+        if (expected.air_idx >= 256 || expected.kind >= 31 ||
+            kind_by_air[expected.air_idx] != -1) {
+            fail(error, 48);
+            return;
+        }
+        kind_by_air[expected.air_idx] = int8_t(expected.kind);
+    }
+    if (program_instruction_count != header.instruction_count) {
+        fail(error, 52);
+        return;
+    }
+    if (validate_only) return;
 
     DeviceInitialMemory registers_image = initial_memory[1];
     if (registers_image.reserved != 0 || registers_image.cell_size != 2 ||
@@ -617,34 +1406,37 @@ __global__ void g2_predecode(
     size_t output_cursor = 0;
     uint32_t timestamp = initial_timestamp;
 
-    for (size_t run_index = 0; run_index < run->count; ++run_index) {
-        uint32_t run_slot = lane_u32(wire, *run, run_index);
-        G2BlockEntryV1 const *block = find_block(blocks, block_count, run_slot);
-        if (block == nullptr || block->instruction_count == 0) {
-            fail(error, 10);
-            return;
-        }
-        for (uint32_t local = 0; local < block->instruction_count; ++local) {
-            uint32_t slot = run_slot + local;
-            if (slot < run_slot || slot >= operand_count) {
+    for (; instruction_cursor < program_instruction_count; ++instruction_cursor) {
+            if (instruction_cursor + 64 < program_instruction_count) {
+                G2PreparedInstruction const *future = prepared + instruction_cursor + 64;
+                asm volatile("prefetch.global.L2 [%0];" : : "l"(future));
+            }
+            G2PreparedInstruction const decoded = prepared[instruction_cursor];
+            uint32_t slot = decoded.slot;
+            if (slot >= operand_count) {
                 fail(error, 11);
                 return;
             }
-            RvrOperandEntry const entry = operands[slot];
+            RvrOperandEntry const entry = decoded.entry;
             if (entry.filtered_index >= frequency_count) {
                 fail(error, 12);
                 return;
             }
-            ++program_frequencies[entry.filtered_index];
-            ++instruction_cursor;
             if (entry.air_idx == INVALID_AIR) continue;
-            G2ExpectedKindV1 const *expected =
-                find_expected(expected_kinds, expected_kind_count, entry.air_idx);
-            if (expected == nullptr && entry.access_pattern == G2_OPAQUE_TIMESTAMP_PATTERN) {
+            if (entry.air_idx >= 256) {
+                fail(error, 48);
+                return;
+            }
+            int32_t kind_code = kind_by_air[entry.air_idx];
+            if (kind_code != decoded.kind) {
+                fail(error, 56);
+                return;
+            }
+            if (kind_code < 0 && entry.access_pattern == G2_OPAQUE_TIMESTAMP_PATTERN) {
                 ++timestamp;
                 continue;
             }
-            if (expected == nullptr && entry.access_pattern == G2_OPAQUE_PATTERN) {
+            if (kind_code < 0 && entry.access_pattern == G2_OPAQUE_PATTERN) {
                 if (residual_ctrl == nullptr || opaque_event_counts == nullptr ||
                     opaque_event_cursor >= opaque_event_counts->count) {
                     fail(error, 40);
@@ -678,11 +1470,36 @@ __global__ void g2_predecode(
                 }
                 continue;
             }
-            if (expected == nullptr || expected->kind >= 31 || output_cursor >= delta_count) {
+            if (kind_code < 0 || output_cursor >= delta_count) {
                 fail(error, 13);
                 return;
             }
-            uint32_t kind = expected->kind;
+            uint32_t kind = uint32_t(kind_code);
+            bool consumes_v0, consumes_v1;
+            lane_consumption(kind, entry, consumes_v0, consumes_v1);
+            uint64_t prepared_v0 = 0, prepared_v1 = 0;
+            if (consumes_v0) {
+                size_t cursor = kind_v0_cursors[kind]++;
+                if (cursor != decoded.v0_index) {
+                    fail(error, 54);
+                    return;
+                }
+                prepared_v0 = decoded.v0;
+            } else if (decoded.v0_index != UINT32_MAX) {
+                fail(error, 54);
+                return;
+            }
+            if (consumes_v1) {
+                size_t cursor = kind_v1_cursors[kind]++;
+                if (cursor != decoded.v1_index) {
+                    fail(error, 55);
+                    return;
+                }
+                prepared_v1 = decoded.v1;
+            } else if (decoded.v1_index != UINT32_MAX) {
+                fail(error, 55);
+                return;
+            }
             DeltaRecord record{pc_base + slot * 4u, timestamp, 0, 0};
             uint64_t expected_block = 0;
             uint8_t expected_mode = EXPECT_NONE;
@@ -774,15 +1591,13 @@ __global__ void g2_predecode(
                 timestamp += 3u * num_words;
                 continue;
             } else if (kind == 29 && entry.access_pattern == G2_ADDI_PATTERN) {
-                G2LaneDescV1 const *lane = find_lane(descs, header.lane_count, G2_ADDI_V0);
-                size_t cursor = kind_v0_cursors[kind]++;
-                if (lane == nullptr || cursor >= lane->count || (entry.a & 7u) != 0 ||
-                    (entry.b & 7u) != 0 || entry.a >= 32 * 8 || entry.b >= 32 * 8) {
+                if ((entry.a & 7u) != 0 || (entry.b & 7u) != 0 ||
+                    entry.a >= 32 * 8 || entry.b >= 32 * 8) {
                     fail(error, 14);
                     return;
                 }
                 uint32_t rd = entry.a / 8, rs1 = entry.b / 8;
-                record.v1 = lane_u64(wire, *lane, cursor);
+                record.v1 = prepared_v0;
                 if (record.v1 != registers[rs1]) {
                     fail(error, 15);
                     return;
@@ -792,16 +1607,13 @@ __global__ void g2_predecode(
                 timestamp += 2;
             } else if ((kind <= 7 || (kind >= 15 && kind <= 19)) &&
                        (entry.access_pattern == 0 || entry.access_pattern == 1)) {
-                G2LaneDescV1 const *v0_lane = find_lane(descs, header.lane_count, lane_v0(kind));
-                size_t v0_cursor = kind_v0_cursors[kind]++;
-                if (v0_lane == nullptr || v0_cursor >= v0_lane->count ||
-                    (entry.a & 7u) != 0 || (entry.b & 7u) != 0 ||
+                if ((entry.a & 7u) != 0 || (entry.b & 7u) != 0 ||
                     entry.a >= 32 * 8 || entry.b >= 32 * 8) {
                     fail(error, 28);
                     return;
                 }
                 uint32_t rd = entry.a / 8, rs1 = entry.b / 8;
-                record.v1 = lane_u64(wire, *v0_lane, v0_cursor);
+                record.v1 = prepared_v0;
                 if (record.v1 != registers[rs1]) {
                     fail(error, 29);
                     return;
@@ -809,15 +1621,11 @@ __global__ void g2_predecode(
                 if (entry.flags & RVR_OPERAND_FLAG_RS2_IMM) {
                     record.v2 = standard_immediate(entry);
                 } else {
-                    G2LaneDescV1 const *v1_lane =
-                        find_lane(descs, header.lane_count, lane_v1(kind));
-                    size_t v1_cursor = kind_v1_cursors[kind]++;
-                    if (v1_lane == nullptr || v1_cursor >= v1_lane->count ||
-                        (entry.c & 7u) != 0 || entry.c >= 32 * 8) {
+                    if ((entry.c & 7u) != 0 || entry.c >= 32 * 8) {
                         fail(error, 30);
                         return;
                     }
-                    record.v2 = lane_u64(wire, *v1_lane, v1_cursor);
+                    record.v2 = prepared_v1;
                     if (record.v2 != registers[entry.c / 8]) {
                         fail(error, 31);
                         return;
@@ -831,18 +1639,13 @@ __global__ void g2_predecode(
                 if (rd != 0) registers[rd] = result;
                 timestamp += 3;
             } else if ((kind == 10 || kind == 11) && entry.access_pattern == 4) {
-                G2LaneDescV1 const *v0_lane = find_lane(descs, header.lane_count, lane_v0(kind));
-                G2LaneDescV1 const *v1_lane = find_lane(descs, header.lane_count, lane_v1(kind));
-                size_t v0_cursor = kind_v0_cursors[kind]++;
-                size_t v1_cursor = kind_v1_cursors[kind]++;
-                if (v0_lane == nullptr || v1_lane == nullptr || v0_cursor >= v0_lane->count ||
-                    v1_cursor >= v1_lane->count || (entry.a & 7u) != 0 ||
-                    (entry.b & 7u) != 0 || entry.a >= 32 * 8 || entry.b >= 32 * 8) {
+                if ((entry.a & 7u) != 0 || (entry.b & 7u) != 0 ||
+                    entry.a >= 32 * 8 || entry.b >= 32 * 8) {
                     fail(error, 33);
                     return;
                 }
-                record.v1 = lane_u64(wire, *v0_lane, v0_cursor);
-                record.v2 = lane_u64(wire, *v1_lane, v1_cursor);
+                record.v1 = prepared_v0;
+                record.v2 = prepared_v1;
                 if (record.v1 != registers[entry.a / 8] || record.v2 != registers[entry.b / 8]) {
                     fail(error, 34);
                     return;
@@ -870,14 +1673,12 @@ __global__ void g2_predecode(
                 }
                 timestamp += 1;
             } else if (kind == 13 && entry.access_pattern == 7) {
-                G2LaneDescV1 const *v0_lane = find_lane(descs, header.lane_count, lane_v0(kind));
-                size_t cursor = kind_v0_cursors[kind]++;
-                if (v0_lane == nullptr || cursor >= v0_lane->count || (entry.a & 7u) != 0 ||
-                    (entry.b & 7u) != 0 || entry.a >= 32 * 8 || entry.b >= 32 * 8) {
+                if ((entry.a & 7u) != 0 || (entry.b & 7u) != 0 ||
+                    entry.a >= 32 * 8 || entry.b >= 32 * 8) {
                     fail(error, 37);
                     return;
                 }
-                record.v1 = lane_u32(wire, *v0_lane, cursor);
+                record.v1 = prepared_v0;
                 if (record.v1 != registers[entry.b / 8]) {
                     fail(error, 38);
                     return;
@@ -937,19 +1738,8 @@ __global__ void g2_predecode(
                     expected_mode = EXPECT_AFTER_STORE;
                     residual_cursor += 3;
                 } else {
-                    G2LaneDescV1 const *v0 =
-                        find_lane(descs, header.lane_count, lane_v0(kind));
-                    G2LaneDescV1 const *v1 =
-                        find_lane(descs, header.lane_count, lane_v1(kind));
-                    size_t v0_cursor = kind_v0_cursors[kind]++;
-                    size_t v1_cursor = kind_v1_cursors[kind]++;
-                    if (v0 == nullptr || v1 == nullptr || v0_cursor >= v0->count ||
-                        v1_cursor >= v1->count) {
-                        fail(error, 19);
-                        return;
-                    }
-                    pointer = lane_u32(wire, *v0, v0_cursor);
-                    block_value = lane_u64(wire, *v1, v1_cursor);
+                    pointer = uint32_t(prepared_v0);
+                    block_value = prepared_v1;
                     if (uint64_t(pointer) != registers[base_reg]) {
                         fail(error, 20);
                         return;
@@ -981,7 +1771,6 @@ __global__ void g2_predecode(
             expected_blocks[output_cursor] = expected_block;
             expected_modes[output_cursor] = expected_mode;
             ++output_cursor;
-        }
     }
     if (instruction_cursor != header.instruction_count || output_cursor != delta_count ||
         residual_cursor != header.residual_event_count ||
@@ -997,14 +1786,14 @@ __global__ void g2_predecode(
             return;
         }
     }
-    G2LaneDescV1 const *addi = find_lane(descs, header.lane_count, G2_ADDI_V0);
+    G2LaneDescV1 const *addi = v0_lanes[29];
     if ((addi == nullptr ? 0 : addi->count) != kind_v0_cursors[29]) {
         fail(error, 25);
         return;
     }
     for (uint32_t kind = 0; kind < 30; ++kind) {
-        G2LaneDescV1 const *v0 = find_lane(descs, header.lane_count, lane_v0(kind));
-        G2LaneDescV1 const *v1 = find_lane(descs, header.lane_count, lane_v1(kind));
+        G2LaneDescV1 const *v0 = v0_lanes[kind];
+        G2LaneDescV1 const *v1 = v1_lanes[kind];
         if ((v0 == nullptr ? 0 : v0->count) != kind_v0_cursors[kind] ||
             (v1 == nullptr ? 0 : v1->count) != kind_v1_cursors[kind]) {
             fail(error, 26);
@@ -1018,6 +1807,8 @@ __global__ void g2_predecode(
 extern "C" int _rvr_g2_predecode(
     DeviceBufferConstView<uint8_t> d_wire,
     size_t logical_wire_bytes,
+    size_t run_count,
+    size_t instruction_count,
     uint8_t const *d_expected_fingerprint,
     G2BlockEntryV1 const *d_blocks,
     size_t block_count,
@@ -1040,13 +1831,166 @@ extern "C" int _rvr_g2_predecode(
     uint32_t *d_error,
     cudaStream_t stream
 ) {
-    if (d_initial_memory_bytes.size % sizeof(DeviceInitialMemory) != 0 ||
+    size_t delta_count = d_delta_output.size / sizeof(DeltaRecord);
+    size_t opaque_capacity =
+        d_opaque_residual_output.size / sizeof(DeltaMemoryLogEntry);
+    bool timestamp_budget_overflow = delta_count > UINT32_MAX / 3;
+    size_t timestamp_budget = timestamp_budget_overflow ? 0 : delta_count * 3;
+    if (!timestamp_budget_overflow) {
+        timestamp_budget_overflow = opaque_capacity > UINT32_MAX - timestamp_budget;
+        if (!timestamp_budget_overflow) timestamp_budget += opaque_capacity;
+    }
+    if (!timestamp_budget_overflow) {
+        timestamp_budget_overflow = instruction_count > UINT32_MAX - timestamp_budget;
+    }
+    if (d_wire.ptr == nullptr || d_wire.size < 128 ||
+        d_expected_fingerprint == nullptr || d_blocks == nullptr || block_count == 0 ||
+        d_operands == nullptr || operand_count == 0 ||
+        d_initial_memory_bytes.ptr == nullptr ||
+        d_initial_memory_bytes.size % sizeof(DeviceInitialMemory) != 0 ||
+        d_expected_kinds == nullptr || expected_kind_count == 0 ||
+        (expected_opaque_count != 0 && d_expected_opaque == nullptr) ||
+        d_program_frequencies == nullptr || frequency_count == 0 ||
         d_delta_output.size % sizeof(DeltaRecord) != 0 ||
+        (d_delta_output.size != 0 &&
+         (d_delta_output.ptr == 0 || d_expected_blocks.ptr == 0 ||
+          d_expected_modes.ptr == 0)) ||
         d_expected_blocks.size != d_delta_output.size / sizeof(DeltaRecord) * sizeof(uint64_t) ||
         d_expected_modes.size != d_delta_output.size / sizeof(DeltaRecord) ||
-        expected_kind_count == 0 || d_expected_kinds == nullptr) {
+        (d_opaque_residual_output.size != 0 && d_opaque_residual_output.ptr == 0) ||
+        d_opaque_residual_count == nullptr || d_error == nullptr || run_count == 0 ||
+        run_count > CUDA_GRID_X_MAX || run_count > UINT32_MAX || run_count == SIZE_MAX ||
+        instruction_count == 0 || instruction_count > UINT32_MAX ||
+        delta_count > UINT32_MAX || opaque_capacity > UINT32_MAX ||
+        timestamp_budget_overflow) {
+        std::fprintf(stderr, "OPENVM_RVR_G2_CUDA_ERROR call=argument_validation code=%d\n", int(cudaErrorInvalidValue));
         return int(cudaErrorInvalidValue);
     }
+    size_t instruction_blocks = 1 + (instruction_count - 1) / 256;
+    size_t count_stride = instruction_blocks + 1;
+    if (instruction_blocks > CUDA_GRID_X_MAX || instruction_blocks == SIZE_MAX ||
+        count_stride > SIZE_MAX / 31 ||
+        instruction_count > SIZE_MAX / sizeof(G2PreparedInstruction)) {
+        std::fprintf(stderr, "OPENVM_RVR_G2_CUDA_ERROR call=launch_dimensions code=%d\n", int(cudaErrorInvalidValue));
+        return int(cudaErrorInvalidValue);
+    }
+    size_t lane_count_entries = 31 * count_stride;
+    size_t instruction_scan_entries = instruction_count + 1;
+    uint32_t *d_run_lengths = nullptr, *d_run_offsets = nullptr, *d_program_slots = nullptr;
+    uint32_t *d_v0_counts = nullptr, *d_v0_offsets = nullptr;
+    uint32_t *d_v1_counts = nullptr, *d_v1_offsets = nullptr;
+    uint32_t *d_timestamp_counts = nullptr, *d_timestamp_offsets = nullptr;
+    uint32_t *d_output_counts = nullptr, *d_output_offsets = nullptr;
+    uint32_t *d_residual_counts = nullptr, *d_residual_offsets = nullptr;
+    uint32_t *d_opaque_counts = nullptr, *d_opaque_offsets = nullptr;
+    uint32_t *d_opaque_markers = nullptr, *d_opaque_occurrences = nullptr;
+    uint32_t *d_instruction_indices = nullptr, *d_hint_indices = nullptr;
+    uint32_t *d_hint_count = nullptr, *d_kind_counts = nullptr;
+    uint8_t *d_hint_flags = nullptr;
+    int8_t *d_kind_by_air = nullptr;
+    G2PreparedInstruction *d_prepared = nullptr;
+    void *d_scan_temp = nullptr;
+    size_t scan_temp_bytes = 0, lane_scan_temp_bytes = 0;
+    size_t instruction_scan_temp_bytes = 0, select_temp_bytes = 0;
+    int result = 0;
+
+#define G2_TRY(expr)                                                                               \
+    do {                                                                                           \
+        cudaError_t _error = (expr);                                                               \
+        if (_error != cudaSuccess) {                                                               \
+            std::fprintf(                                                                          \
+                stderr,                                                                            \
+                "OPENVM_RVR_G2_CUDA_ERROR call=%s code=%d\n",                                    \
+                #expr,                                                                             \
+                int(_error)                                                                        \
+            );                                                                                     \
+            result = int(_error);                                                                  \
+            goto cleanup;                                                                          \
+        }                                                                                          \
+    } while (0)
+
+    G2_TRY(cudaMallocAsync(
+        reinterpret_cast<void **>(&d_run_lengths), (run_count + 1) * sizeof(uint32_t), stream
+    ));
+    G2_TRY(cudaMallocAsync(
+        reinterpret_cast<void **>(&d_run_offsets), (run_count + 1) * sizeof(uint32_t), stream
+    ));
+    G2_TRY(cudaMallocAsync(
+        reinterpret_cast<void **>(&d_program_slots), instruction_count * sizeof(uint32_t), stream
+    ));
+    G2_TRY(cudaMallocAsync(
+        reinterpret_cast<void **>(&d_v0_counts), lane_count_entries * sizeof(uint32_t), stream
+    ));
+    G2_TRY(cudaMallocAsync(
+        reinterpret_cast<void **>(&d_v0_offsets), lane_count_entries * sizeof(uint32_t), stream
+    ));
+    G2_TRY(cudaMallocAsync(
+        reinterpret_cast<void **>(&d_v1_counts), lane_count_entries * sizeof(uint32_t), stream
+    ));
+    G2_TRY(cudaMallocAsync(
+        reinterpret_cast<void **>(&d_v1_offsets), lane_count_entries * sizeof(uint32_t), stream
+    ));
+    G2_TRY(cudaMallocAsync(reinterpret_cast<void **>(&d_kind_by_air), 256, stream));
+    G2_TRY(cudaMallocAsync(
+        reinterpret_cast<void **>(&d_prepared),
+        instruction_count * sizeof(G2PreparedInstruction),
+        stream
+    ));
+#define G2_ALLOC_U32(ptr, count)                                                                  \
+    G2_TRY(cudaMallocAsync(                                                                       \
+        reinterpret_cast<void **>(&(ptr)), (count) * sizeof(uint32_t), stream                    \
+    ))
+    G2_ALLOC_U32(d_timestamp_counts, instruction_scan_entries);
+    G2_ALLOC_U32(d_timestamp_offsets, instruction_scan_entries);
+    G2_ALLOC_U32(d_output_counts, instruction_scan_entries);
+    G2_ALLOC_U32(d_output_offsets, instruction_scan_entries);
+    G2_ALLOC_U32(d_residual_counts, instruction_scan_entries);
+    G2_ALLOC_U32(d_residual_offsets, instruction_scan_entries);
+    G2_ALLOC_U32(d_opaque_counts, instruction_scan_entries);
+    G2_ALLOC_U32(d_opaque_offsets, instruction_scan_entries);
+    G2_ALLOC_U32(d_opaque_markers, instruction_scan_entries);
+    G2_ALLOC_U32(d_opaque_occurrences, instruction_scan_entries);
+    G2_ALLOC_U32(d_instruction_indices, instruction_count);
+    G2_ALLOC_U32(d_hint_indices, instruction_count);
+    G2_ALLOC_U32(d_hint_count, 1);
+    G2_ALLOC_U32(d_kind_counts, 31);
+    G2_TRY(cudaMallocAsync(
+        reinterpret_cast<void **>(&d_hint_flags), instruction_count, stream
+    ));
+#undef G2_ALLOC_U32
+    G2_TRY(cudaMemsetAsync(d_run_lengths, 0, (run_count + 1) * sizeof(uint32_t), stream));
+    G2_TRY(cudaMemsetAsync(
+        d_v0_counts, 0, lane_count_entries * sizeof(uint32_t), stream
+    ));
+    G2_TRY(cudaMemsetAsync(
+        d_v1_counts, 0, lane_count_entries * sizeof(uint32_t), stream
+    ));
+    G2_TRY(cudaMemsetAsync(
+        d_timestamp_counts, 0, instruction_scan_entries * sizeof(uint32_t), stream
+    ));
+    G2_TRY(cudaMemsetAsync(
+        d_output_counts, 0, instruction_scan_entries * sizeof(uint32_t), stream
+    ));
+    G2_TRY(cudaMemsetAsync(
+        d_residual_counts, 0, instruction_scan_entries * sizeof(uint32_t), stream
+    ));
+    G2_TRY(cudaMemsetAsync(
+        d_opaque_counts, 0, instruction_scan_entries * sizeof(uint32_t), stream
+    ));
+    G2_TRY(cudaMemsetAsync(
+        d_opaque_markers, 0, instruction_scan_entries * sizeof(uint32_t), stream
+    ));
+    G2_TRY(cudaMemsetAsync(d_hint_flags, 0, instruction_count, stream));
+    G2_TRY(cudaMemsetAsync(d_hint_count, 0, sizeof(uint32_t), stream));
+    G2_TRY(cudaMemsetAsync(d_kind_counts, 0, 31 * sizeof(uint32_t), stream));
+    g2_build_kind_map<<<1, 1, 0, stream>>>(
+        d_expected_kinds, expected_kind_count, d_kind_by_air, d_error
+    );
+    G2_TRY(cudaGetLastError());
+    // Validate every descriptor and device-visible schema binding before any
+    // parallel kernel dereferences a wire lane.  The host finalizer already
+    // enforces this contract, but the device decoder remains independently
+    // fail-closed for malformed or stale transport bytes.
     g2_predecode<<<1, 1, 0, stream>>>(
         d_wire.ptr,
         d_wire.size,
@@ -1056,6 +2000,9 @@ extern "C" int _rvr_g2_predecode(
         block_count,
         d_operands,
         operand_count,
+        d_prepared,
+        instruction_count,
+        true,
         pc_base,
         reinterpret_cast<DeviceInitialMemory const *>(d_initial_memory_bytes.ptr),
         d_initial_memory_bytes.size / sizeof(DeviceInitialMemory),
@@ -1075,5 +2022,286 @@ extern "C" int _rvr_g2_predecode(
         d_opaque_residual_count,
         d_error
     );
-    return CHECK_KERNEL();
+    G2_TRY(cudaGetLastError());
+    {
+        dim3 block(256);
+        dim3 grid((run_count + block.x - 1) / block.x);
+        g2_run_lengths<<<grid, block, 0, stream>>>(
+            d_wire.ptr,
+            d_wire.size,
+            run_count,
+            d_blocks,
+            block_count,
+            d_run_lengths,
+            d_error
+        );
+        G2_TRY(cudaGetLastError());
+    }
+    G2_TRY(cub::DeviceScan::ExclusiveSum(
+        nullptr,
+        scan_temp_bytes,
+        d_run_lengths,
+        d_run_offsets,
+        run_count + 1,
+        stream
+    ));
+    G2_TRY(cub::DeviceScan::ExclusiveSum(
+        nullptr,
+        lane_scan_temp_bytes,
+        d_v0_counts,
+        d_v0_offsets,
+        count_stride,
+        stream
+    ));
+    G2_TRY(cub::DeviceScan::ExclusiveSum(
+        nullptr,
+        instruction_scan_temp_bytes,
+        d_timestamp_counts,
+        d_timestamp_offsets,
+        instruction_scan_entries,
+        stream
+    ));
+    G2_TRY(cub::DeviceSelect::Flagged(
+        nullptr,
+        select_temp_bytes,
+        d_instruction_indices,
+        d_hint_flags,
+        d_hint_indices,
+        d_hint_count,
+        instruction_count,
+        stream
+    ));
+    if (lane_scan_temp_bytes > scan_temp_bytes) scan_temp_bytes = lane_scan_temp_bytes;
+    if (instruction_scan_temp_bytes > scan_temp_bytes)
+        scan_temp_bytes = instruction_scan_temp_bytes;
+    if (select_temp_bytes > scan_temp_bytes) scan_temp_bytes = select_temp_bytes;
+    G2_TRY(cudaMallocAsync(&d_scan_temp, scan_temp_bytes, stream));
+    G2_TRY(cub::DeviceScan::ExclusiveSum(
+        d_scan_temp,
+        scan_temp_bytes,
+        d_run_lengths,
+        d_run_offsets,
+        run_count + 1,
+        stream
+    ));
+    {
+        dim3 block(256);
+        dim3 grid((run_count + block.x - 1) / block.x);
+        g2_expand_runs<<<grid, block, 0, stream>>>(
+            d_wire.ptr,
+            run_count,
+            d_blocks,
+            block_count,
+            d_run_offsets,
+            instruction_count,
+            d_operands,
+            operand_count,
+            d_program_slots,
+            d_program_frequencies,
+            frequency_count,
+            d_error
+        );
+        G2_TRY(cudaGetLastError());
+    }
+    {
+        dim3 block(256);
+        dim3 grid(instruction_blocks);
+        g2_count_lane_blocks<<<grid, block, 0, stream>>>(
+            d_program_slots,
+            instruction_count,
+            d_operands,
+            operand_count,
+            d_kind_by_air,
+            d_v0_counts,
+            d_v1_counts,
+            count_stride,
+            d_error
+        );
+        G2_TRY(cudaGetLastError());
+    }
+    for (uint32_t kind = 0; kind < 31; ++kind) {
+        size_t offset = size_t(kind) * count_stride;
+        G2_TRY(cub::DeviceScan::ExclusiveSum(
+            d_scan_temp,
+            scan_temp_bytes,
+            d_v0_counts + offset,
+            d_v0_offsets + offset,
+            count_stride,
+            stream
+        ));
+        G2_TRY(cub::DeviceScan::ExclusiveSum(
+            d_scan_temp,
+            scan_temp_bytes,
+            d_v1_counts + offset,
+            d_v1_offsets + offset,
+            count_stride,
+            stream
+        ));
+    }
+    {
+        dim3 block(256);
+        dim3 grid(instruction_blocks);
+        g2_prepare_instructions<<<grid, block, 0, stream>>>(
+            d_wire.ptr,
+            d_program_slots,
+            instruction_count,
+            d_operands,
+            operand_count,
+            d_kind_by_air,
+            d_v0_offsets,
+            d_v1_offsets,
+            count_stride,
+            d_prepared,
+            d_error
+        );
+        G2_TRY(cudaGetLastError());
+    }
+    {
+        dim3 block(256);
+        dim3 grid(instruction_blocks);
+        g2_classify_instructions<<<grid, block, 0, stream>>>(
+            d_prepared,
+            instruction_count,
+            d_kind_by_air,
+            d_timestamp_counts,
+            d_output_counts,
+            d_residual_counts,
+            d_opaque_counts,
+            d_opaque_markers,
+            d_hint_flags,
+            d_instruction_indices,
+            d_error
+        );
+        G2_TRY(cudaGetLastError());
+    }
+#define G2_SCAN(input, output)                                                                    \
+    G2_TRY(cub::DeviceScan::ExclusiveSum(                                                         \
+        d_scan_temp,                                                                              \
+        scan_temp_bytes,                                                                          \
+        (input),                                                                                   \
+        (output),                                                                                  \
+        instruction_scan_entries,                                                                 \
+        stream                                                                                     \
+    ))
+    G2_SCAN(d_opaque_markers, d_opaque_occurrences);
+    {
+        dim3 block(256);
+        dim3 grid(instruction_blocks);
+        g2_fill_opaque_shapes<<<grid, block, 0, stream>>>(
+            d_wire.ptr,
+            d_opaque_occurrences,
+            instruction_count,
+            d_timestamp_counts,
+            d_residual_counts,
+            d_opaque_counts,
+            d_error
+        );
+        G2_TRY(cudaGetLastError());
+    }
+    G2_SCAN(d_timestamp_counts, d_timestamp_offsets);
+    G2_SCAN(d_residual_counts, d_residual_offsets);
+    G2_TRY(cub::DeviceSelect::Flagged(
+        d_scan_temp,
+        scan_temp_bytes,
+        d_instruction_indices,
+        d_hint_flags,
+        d_hint_indices,
+        d_hint_count,
+        instruction_count,
+        stream
+    ));
+    g2_plan_hints<<<1, 1, 0, stream>>>(
+        d_wire.ptr,
+        d_prepared,
+        d_hint_indices,
+        d_hint_count,
+        d_timestamp_offsets,
+        d_residual_offsets,
+        initial_timestamp,
+        d_timestamp_counts,
+        d_output_counts,
+        d_residual_counts,
+        d_error
+    );
+    G2_TRY(cudaGetLastError());
+    G2_SCAN(d_timestamp_counts, d_timestamp_offsets);
+    G2_SCAN(d_output_counts, d_output_offsets);
+    G2_SCAN(d_residual_counts, d_residual_offsets);
+    G2_SCAN(d_opaque_counts, d_opaque_offsets);
+#undef G2_SCAN
+    {
+        dim3 block(256);
+        dim3 grid(instruction_blocks);
+        g2_emit_parallel<<<grid, block, 0, stream>>>(
+            d_wire.ptr,
+            d_prepared,
+            instruction_count,
+            d_kind_by_air,
+            d_timestamp_offsets,
+            d_output_offsets,
+            d_residual_offsets,
+            d_opaque_offsets,
+            initial_timestamp,
+            pc_base,
+            reinterpret_cast<DeltaRecord *>(d_delta_output.ptr),
+            d_delta_output.size / sizeof(DeltaRecord),
+            reinterpret_cast<uint64_t *>(d_expected_blocks.ptr),
+            reinterpret_cast<uint8_t *>(d_expected_modes.ptr),
+            reinterpret_cast<DeltaMemoryLogEntry *>(d_opaque_residual_output.ptr),
+            d_opaque_residual_output.size / sizeof(DeltaMemoryLogEntry),
+            d_kind_counts,
+            d_error
+        );
+        G2_TRY(cudaGetLastError());
+    }
+    g2_validate_parallel_output<<<1, 1, 0, stream>>>(
+        d_wire.ptr,
+        instruction_count,
+        d_timestamp_offsets,
+        d_output_offsets,
+        d_residual_offsets,
+        d_opaque_offsets,
+        d_opaque_occurrences,
+        d_v0_offsets,
+        d_v1_offsets,
+        count_stride,
+        d_expected_kinds,
+        expected_kind_count,
+        d_kind_counts,
+        d_delta_output.size / sizeof(DeltaRecord),
+        d_opaque_residual_output.size / sizeof(DeltaMemoryLogEntry),
+        d_opaque_residual_count,
+        d_error
+    );
+    G2_TRY(cudaGetLastError());
+
+cleanup:
+    if (d_scan_temp) cudaFreeAsync(d_scan_temp, stream);
+    if (d_hint_flags) cudaFreeAsync(d_hint_flags, stream);
+    if (d_kind_counts) cudaFreeAsync(d_kind_counts, stream);
+    if (d_hint_count) cudaFreeAsync(d_hint_count, stream);
+    if (d_hint_indices) cudaFreeAsync(d_hint_indices, stream);
+    if (d_instruction_indices) cudaFreeAsync(d_instruction_indices, stream);
+    if (d_opaque_occurrences) cudaFreeAsync(d_opaque_occurrences, stream);
+    if (d_opaque_markers) cudaFreeAsync(d_opaque_markers, stream);
+    if (d_opaque_offsets) cudaFreeAsync(d_opaque_offsets, stream);
+    if (d_opaque_counts) cudaFreeAsync(d_opaque_counts, stream);
+    if (d_residual_offsets) cudaFreeAsync(d_residual_offsets, stream);
+    if (d_residual_counts) cudaFreeAsync(d_residual_counts, stream);
+    if (d_output_offsets) cudaFreeAsync(d_output_offsets, stream);
+    if (d_output_counts) cudaFreeAsync(d_output_counts, stream);
+    if (d_timestamp_offsets) cudaFreeAsync(d_timestamp_offsets, stream);
+    if (d_timestamp_counts) cudaFreeAsync(d_timestamp_counts, stream);
+    if (d_prepared) cudaFreeAsync(d_prepared, stream);
+    if (d_kind_by_air) cudaFreeAsync(d_kind_by_air, stream);
+    if (d_v1_offsets) cudaFreeAsync(d_v1_offsets, stream);
+    if (d_v1_counts) cudaFreeAsync(d_v1_counts, stream);
+    if (d_v0_offsets) cudaFreeAsync(d_v0_offsets, stream);
+    if (d_v0_counts) cudaFreeAsync(d_v0_counts, stream);
+    if (d_program_slots) cudaFreeAsync(d_program_slots, stream);
+    if (d_run_offsets) cudaFreeAsync(d_run_offsets, stream);
+    if (d_run_lengths) cudaFreeAsync(d_run_lengths, stream);
+    return result;
+
+#undef G2_TRY
 }

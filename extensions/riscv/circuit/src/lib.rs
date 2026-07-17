@@ -527,6 +527,78 @@ pub fn generate_gpu_rvr_record_arenas(
                 "G2 mode requested without an operand table".to_string(),
             )
         })?;
+        let device_replay_oracle =
+            std::env::var("OPENVM_RVR_DEVICE_REPLAY_ORACLE").as_deref() == Ok("1");
+        let (oracle_expected, program_frequency_reference) = if device_replay_oracle {
+            let mut initial_registers = [0u64; 32];
+            let mut initial_blocks = std::collections::BTreeMap::new();
+            for touched in &output.raw_logs.touched {
+                let address_space = u8::try_from(touched.addr_space).map_err(|_| {
+                    openvm_circuit::arch::ExecutionError::RvrExecution(format!(
+                        "G2 oracle address space {} exceeds u8",
+                        touched.addr_space
+                    ))
+                })?;
+                initial_blocks.insert((address_space, touched.block_addr), touched.initial_value);
+                if touched.addr_space == 1
+                    && touched.block_addr.is_multiple_of(8)
+                    && touched.block_addr < 32 * 8
+                {
+                    initial_registers[touched.block_addr as usize / 8] = touched.initial_value;
+                }
+            }
+            let reference = openvm_circuit::arch::rvr::decode_reference_v1(
+                &segment,
+                &meta,
+                precomputed,
+                initial_registers,
+                &initial_blocks,
+                output.system_records.from_state.timestamp,
+            )?;
+            if reference.final_timestamp != output.system_records.to_state.timestamp {
+                return Err(openvm_circuit::arch::ExecutionError::RvrExecution(format!(
+                    "G2 CPU reference ended at timestamp {} instead of {}",
+                    reference.final_timestamp, output.system_records.to_state.timestamp
+                )));
+            }
+            let mut expected = std::collections::HashMap::new();
+            for (kind, bytes) in reference.compact_records {
+                let air_idx = meta.air_idx(kind).ok_or_else(|| {
+                    openvm_circuit::arch::ExecutionError::RvrExecution(format!(
+                        "G2 CPU reference emitted unbound kind {kind}"
+                    ))
+                })?;
+                if expected.insert(air_idx, bytes).is_some() {
+                    return Err(openvm_circuit::arch::ExecutionError::RvrExecution(format!(
+                        "G2 CPU reference emitted duplicate AIR {air_idx}"
+                    )));
+                }
+            }
+            let mut frequencies = vec![0u32; output.system_records.filtered_exec_frequencies.len()];
+            for &slot in &reference.expanded_program_slots {
+                let entry = precomputed.entries.get(slot as usize).ok_or_else(|| {
+                    openvm_circuit::arch::ExecutionError::RvrExecution(format!(
+                        "G2 CPU reference program slot {slot} exceeds the operand table"
+                    ))
+                })?;
+                let frequency = frequencies
+                    .get_mut(entry.filtered_index as usize)
+                    .ok_or_else(|| {
+                        openvm_circuit::arch::ExecutionError::RvrExecution(format!(
+                            "G2 CPU reference filtered program index {} exceeds the trace",
+                            entry.filtered_index
+                        ))
+                    })?;
+                *frequency = frequency.checked_add(1).ok_or_else(|| {
+                    openvm_circuit::arch::ExecutionError::RvrExecution(
+                        "G2 CPU reference program frequency exceeds u32".to_string(),
+                    )
+                })?;
+            }
+            (expected, frequencies)
+        } else {
+            Default::default()
+        };
         let bound = state.bind_g2_segment(
             exe,
             pc_to_air_idx,
@@ -537,6 +609,8 @@ pub fn generate_gpu_rvr_record_arenas(
             output.system_records.from_state.timestamp,
             &output.raw_logs.chip_counts,
             output.system_records.filtered_exec_frequencies.len(),
+            oracle_expected,
+            program_frequency_reference,
         )?;
         if bound != compact_airs {
             return Err(openvm_circuit::arch::ExecutionError::RvrExecution(
@@ -668,9 +742,11 @@ pub fn generate_gpu_rvr_record_arenas(
         let device_program_references =
             std::mem::take(&mut output.raw_logs.device_program_references);
         let program_frequency_count = output.system_records.filtered_exec_frequencies.len();
-        let program_frequency_reference = device_replay_oracle
-            .then(|| output.system_records.filtered_exec_frequencies.clone())
-            .unwrap_or_default();
+        let program_frequency_reference = if device_replay_oracle {
+            output.system_records.filtered_exec_frequencies.clone()
+        } else {
+            Vec::new()
+        };
         let touched = std::mem::take(&mut output.raw_logs.touched);
         let device_aux_patches = std::mem::take(&mut output.raw_logs.device_aux_patches);
         let device_aux_references = std::mem::take(&mut output.raw_logs.device_aux_references);

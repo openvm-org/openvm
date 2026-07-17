@@ -57,6 +57,8 @@ where
     C: Sha2Config,
 {
     fn generate_proving_ctx(&self, mut arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
+        #[cfg(feature = "rvr")]
+        let g2_segment_id = arena.rvr_g2_segment_id;
         let records = arena.allocated_mut();
         if records.is_empty() {
             return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
@@ -91,7 +93,15 @@ where
         let trace =
             DeviceMatrix::<F>::with_capacity_on(trace_height, C::MAIN_CHIP_WIDTH, device_ctx);
 
+        #[cfg(feature = "rvr")]
+        let h2d_timer = g2_segment_id.and_then(|_| {
+            openvm_circuit::arch::rvr::gpu_profile::CudaStageTimer::start(device_ctx)
+        });
         let d_records = records.to_device_on(device_ctx).unwrap();
+        #[cfg(feature = "rvr")]
+        if let (Some(timer), Some(segment_id)) = (h2d_timer, g2_segment_id) {
+            timer.finish("opaque_h2d", segment_id, records.len());
+        }
         let d_record_offsets = record_offsets.to_device_on(device_ctx).unwrap();
 
         unsafe {

@@ -6,6 +6,8 @@ pub mod compile;
 pub mod debug;
 mod execute;
 pub mod g2;
+#[cfg(feature = "cuda")]
+pub mod gpu_profile;
 mod initial_image;
 pub mod io;
 pub mod log_native;
