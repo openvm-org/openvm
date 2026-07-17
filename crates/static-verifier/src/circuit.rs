@@ -257,12 +257,12 @@ impl StaticVerifierCircuit {
             profiler.write_flamegraph(
                 &format!("{dir}/populate.svg"),
                 "Static Verifier Populate",
-                ctx.get_offset(),
+                backend.cell_count(),
             );
             profiler.write_flamegraph_reversed(
                 &format!("{dir}/populate_rev.svg"),
                 "Static Verifier Populate (reversed)",
-                ctx.get_offset(),
+                backend.cell_count(),
             );
         }
 
