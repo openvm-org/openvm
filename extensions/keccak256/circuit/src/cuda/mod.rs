@@ -35,6 +35,8 @@ pub struct XorinVmChipGpu {
 impl Chip<DenseRecordArena, GpuBackend> for XorinVmChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         const RECORD_SIZE: usize = size_of::<XorinVmRecordHeader>();
+        #[cfg(feature = "rvr")]
+        let g2_segment_id = arena.rvr_g2_segment_id;
         let records = arena.allocated();
         if records.is_empty() {
             return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
@@ -45,7 +47,15 @@ impl Chip<DenseRecordArena, GpuBackend> for XorinVmChipGpu {
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
 
+        #[cfg(feature = "rvr")]
+        let h2d_timer = g2_segment_id.and_then(|_| {
+            openvm_circuit::arch::rvr::gpu_profile::CudaStageTimer::start(device_ctx)
+        });
         let d_records = records.to_device_on(device_ctx).unwrap();
+        #[cfg(feature = "rvr")]
+        if let (Some(timer), Some(segment_id)) = (h2d_timer, g2_segment_id) {
+            timer.finish("opaque_h2d", segment_id, records.len());
+        }
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
 
         unsafe {
@@ -93,6 +103,8 @@ pub struct KeccakfOpChipGpu {
 impl Chip<DenseRecordArena, GpuBackend> for KeccakfOpChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         const RECORD_SIZE: usize = size_of::<KeccakfRecord>();
+        #[cfg(feature = "rvr")]
+        let g2_segment_id = arena.rvr_g2_segment_id;
         let records = arena.allocated();
         if records.is_empty() {
             // Store empty state for PermChip
@@ -109,7 +121,15 @@ impl Chip<DenseRecordArena, GpuBackend> for KeccakfOpChipGpu {
         let device_ctx = &self.range_checker.device_ctx;
 
         // Transfer records to GPU
+        #[cfg(feature = "rvr")]
+        let h2d_timer = g2_segment_id.and_then(|_| {
+            openvm_circuit::arch::rvr::gpu_profile::CudaStageTimer::start(device_ctx)
+        });
         let d_records = records.to_device_on(device_ctx).unwrap();
+        #[cfg(feature = "rvr")]
+        if let (Some(timer), Some(segment_id)) = (h2d_timer, g2_segment_id) {
+            timer.finish("opaque_h2d", segment_id, records.len());
+        }
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
 
         unsafe {

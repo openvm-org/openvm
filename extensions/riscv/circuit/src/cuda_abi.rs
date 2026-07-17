@@ -57,6 +57,7 @@ pub mod rvr_delta_cuda {
             d_outputs: *const DeltaAirOutputDesc,
             d_expected_blocks: DeviceBufferView,
             d_expected_modes: DeviceBufferView,
+            profile_segment_id: u32,
             d_error: *mut u32,
             stream: cudaStream_t,
         ) -> i32;
@@ -86,6 +87,7 @@ pub mod rvr_delta_cuda {
         d_outputs: &DeviceBuffer<DeltaAirOutputDesc>,
         d_expected_blocks: &DeviceBuffer<u64>,
         d_expected_modes: &DeviceBuffer<u8>,
+        profile_segment_id: u32,
         d_error: &DeviceBuffer<u32>,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
@@ -117,6 +119,7 @@ pub mod rvr_delta_cuda {
             d_outputs.as_ptr(),
             d_expected_blocks.view(),
             d_expected_modes.view(),
+            profile_segment_id,
             d_error.as_mut_ptr(),
             stream,
         ))
@@ -132,6 +135,8 @@ pub mod rvr_g2_cuda {
         fn _rvr_g2_predecode(
             d_wire: DeviceBufferView,
             logical_wire_bytes: usize,
+            run_count: usize,
+            instruction_count: usize,
             d_expected_fingerprint: *const u8,
             d_blocks: *const openvm_circuit::arch::rvr::RvrG2BlockEntryV1,
             block_count: usize,
@@ -160,6 +165,8 @@ pub mod rvr_g2_cuda {
     pub unsafe fn predecode(
         d_wire: &DeviceBuffer<u8>,
         logical_wire_bytes: usize,
+        run_count: usize,
+        instruction_count: usize,
         d_expected_fingerprint: &DeviceBuffer<u8>,
         d_blocks: &DeviceBuffer<openvm_circuit::arch::rvr::RvrG2BlockEntryV1>,
         d_operands: &DeviceBuffer<u8>,
@@ -180,6 +187,8 @@ pub mod rvr_g2_cuda {
         CudaError::from_result(_rvr_g2_predecode(
             d_wire.view(),
             logical_wire_bytes,
+            run_count,
+            instruction_count,
             d_expected_fingerprint.as_ptr(),
             d_blocks.as_ptr(),
             d_blocks.len(),

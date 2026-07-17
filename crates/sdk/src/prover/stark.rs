@@ -8,7 +8,7 @@ use openvm_circuit::{
     },
     system::memory::merkle::MerkleTree,
 };
-use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, Val};
+use openvm_stark_backend::{p3_field::PrimeField32, prover::ProverDevice, StarkEngine, Val};
 use openvm_stark_sdk::config::baby_bear_poseidon2::{Digest, F};
 use openvm_verify_stark_host::{
     pvs::{DeferralPvs, DEF_PVS_AIR_ID},
@@ -70,6 +70,7 @@ where
         def_inputs: &[DeferralInput],
     ) -> Result<(VmStarkProof, InternalLayerMetadata)>
     where
+        <E::PD as ProverDevice<E::PB, E::TS>>::DeviceCtx: 'static,
         <VB::VmConfig as VmExecutionConfig<Val<SC>>>::Executor: Executor<Val<SC>>
             + MeteredExecutor<Val<SC>>
             + PreflightExecutor<Val<SC>, VB::RecordArena>,
