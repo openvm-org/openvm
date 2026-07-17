@@ -5,6 +5,8 @@ pub mod bridge;
 pub mod compile;
 pub mod debug;
 mod execute;
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+mod guest_profiler;
 mod initial_image;
 pub mod io;
 pub mod metered;

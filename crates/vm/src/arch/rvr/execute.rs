@@ -50,6 +50,8 @@ pub enum ExecuteError {
         expected: &'static str,
         found: RvrExecutionKind,
     },
+    #[error("guest call-stack profiling failed: {0}")]
+    GuestProfile(String),
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -215,8 +217,19 @@ pub(super) fn execute_pure(
     let initial_regs = read_rv64_registers(vm_state);
     let mut state: PureRvState = init_rvr_state(vm_state, pc);
     state.regs = initial_regs;
-    run_and_finalize(compiled, runtime_hooks, vm_state, &mut state, false)
-        .inspect_err(|error| tracing::warn!(%error, "rvr pure execution failed"))?;
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+    let profiler = super::guest_profiler::GuestProfiler::start_from_env(&state)
+        .map_err(ExecuteError::GuestProfile)?;
+    let execution_result = run_and_finalize(compiled, runtime_hooks, vm_state, &mut state, false)
+        .inspect_err(|error| tracing::warn!(%error, "rvr pure execution failed"));
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+    let profile_result = profiler
+        .map(super::guest_profiler::GuestProfiler::finish)
+        .transpose()
+        .map_err(ExecuteError::GuestProfile);
+    execution_result?;
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+    profile_result?;
     Ok(())
 }
 
