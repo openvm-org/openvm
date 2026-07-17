@@ -56,12 +56,6 @@ pub struct TimestampedValues<T, const N: usize> {
     pub values: [T; N],
 }
 
-/// A sorted equipartition of memory, with timestamps and values.
-///
-/// The "key" is a pair `(address_space, ptr)`, where `ptr` is the AS-native
-/// pointer of the block's first cell (always a multiple of `N`).
-pub type TimestampedEquipartition<F, const N: usize> = Vec<((u32, u32), TimestampedValues<F, N>)>;
-
 /// An equipartition of memory values.
 ///
 /// The key is a pair `(address_space, ptr)`, where `ptr` is the AS-native pointer
