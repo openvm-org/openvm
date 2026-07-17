@@ -5,7 +5,7 @@ use openvm_instructions::{exe::SparseMemoryImage, instruction::Instruction};
 use openvm_stark_backend::p3_field::PrimeField32;
 use thiserror::Error;
 
-use crate::TranspilerExtension;
+use crate::{util::unimp, TranspilerExtension, TranspilerOutput};
 
 /// Collection of [`TranspilerExtension`]s.
 /// The transpiler can be configured to transpile any ELF in 32-bit chunks.
@@ -53,8 +53,8 @@ impl<F: PrimeField32> Transpiler<F> {
     /// applies every processor in the [`Transpiler`] to determine if one of them knows how to
     /// transpile the current instruction (and possibly a contiguous section of following
     /// instructions). If so, it advances the iterator by the amount specified by the processor.
-    /// The transpiler will panic if two different processors claim to know how to transpile the
-    /// same instruction to avoid ambiguity.
+    /// If no processor recognizes a word, the transpiler emits an `unimp` instruction for it. If
+    /// multiple processors recognize the same word, the transpiler returns an error.
     pub fn transpile(
         &self,
         instructions_u32: &[u32],
@@ -65,16 +65,16 @@ impl<F: PrimeField32> Transpiler<F> {
             let mut options = self
                 .processors
                 .iter()
-                .map(|proc| proc.process_custom(&instructions_u32[ptr..]))
-                .filter(|opt| opt.is_some())
+                .filter_map(|proc| proc.process_custom(&instructions_u32[ptr..]))
                 .collect::<Vec<_>>();
-            if options.is_empty() {
-                return Err(TranspilerError::ParseError(instructions_u32[ptr]));
-            }
             if options.len() > 1 {
                 return Err(TranspilerError::AmbiguousNextInstruction);
             }
-            let transpiler_output = options.pop().unwrap().unwrap();
+            let transpiler_output = options.pop().unwrap_or_else(|| {
+                // Executable segments may contain embedded data. Preserve its program slot and
+                // trap only if execution reaches it.
+                TranspilerOutput::one_to_one(unimp())
+            });
             instructions.extend(transpiler_output.instructions);
             ptr += transpiler_output.used_u32s;
         }
