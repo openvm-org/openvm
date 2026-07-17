@@ -54,9 +54,10 @@ jobs:
         run: |
           git submodule update --init --depth 1 extensions/keccak256/rvr/ffi/openssl
           git submodule update --init --depth 1 extensions/algebra/rvr/ffi/modular/secp256k1
+          git submodule update --init --depth 1 extensions/algebra/rvr/ffi/modular/blst
       - uses: codespell-project/actions-codespell@v2
         with:
-          skip: Cargo.lock,./docs/vocs/pnpm-lock.yaml,*.txt,./crates/toolchain/openvm/src/memcpy.s,./crates/toolchain/openvm/src/memset.s,./audits/*.pdf,./crates/toolchain/tests/riscv-test-vectors/riscv-tests,./crates/sdk/contracts/lib/forge-std,./extensions/algebra/rvr/ffi/modular/secp256k1,./extensions/keccak256/rvr/ffi/openssl
+          skip: Cargo.lock,./docs/vocs/pnpm-lock.yaml,*.txt,./crates/toolchain/openvm/src/memcpy.s,./crates/toolchain/openvm/src/memset.s,./audits/*.pdf,./crates/toolchain/tests/riscv-test-vectors/riscv-tests,./crates/sdk/contracts/lib/forge-std,./extensions/algebra/rvr/ffi/modular/secp256k1,./extensions/algebra/rvr/ffi/modular/blst,./extensions/keccak256/rvr/ffi/openssl
           ignore_words_file: .codespellignore
       - uses: dtolnay/rust-toolchain@stable
       - uses: ./.github/actions/sccache
@@ -136,6 +137,7 @@ jobs:
         run: |
           git submodule update --init --depth 1 extensions/keccak256/rvr/ffi/openssl
           git submodule update --init --depth 1 extensions/algebra/rvr/ffi/modular/secp256k1
+          git submodule update --init --depth 1 extensions/algebra/rvr/ffi/modular/blst
       - uses: dtolnay/rust-toolchain@stable
       - uses: ./.github/actions/sccache
       - uses: Swatinem/rust-cache@v2
@@ -173,6 +175,7 @@ jobs:
         run: |
           git submodule update --init --depth 1 extensions/keccak256/rvr/ffi/openssl
           git submodule update --init --depth 1 extensions/algebra/rvr/ffi/modular/secp256k1
+          git submodule update --init --depth 1 extensions/algebra/rvr/ffi/modular/blst
       - uses: dtolnay/rust-toolchain@stable
         env:
           RUSTUP_PERMIT_COPY_RENAME: "1"

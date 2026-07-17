@@ -12,6 +12,10 @@ mod tests {
     use openvm_circuit::utils::{air_test, test_system_config};
     use openvm_ecc_circuit::SECP256K1_CONFIG;
     use openvm_instructions::exe::VmExe;
+    #[cfg(feature = "rvr")]
+    use openvm_pairing_guest::bls12_381::{
+        BLS12_381_COMPLEX_STRUCT_NAME, BLS12_381_MODULUS, BLS12_381_ORDER,
+    };
     use openvm_riscv_transpiler::{
         Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
     };
@@ -138,6 +142,33 @@ mod tests {
             SECP256K1_CONFIG.modulus.clone(),
         )]);
         let elf = build_example_program_at_path(get_programs_dir!(), "complex_secp256k1", &config)?;
+        let openvm_exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
+                .with_extension(Fp2TranspilerExtension)
+                .with_extension(ModularTranspilerExtension),
+        )?;
+        air_test(Rv64ModularWithFp2Builder, config, openvm_exe);
+        Ok(())
+    }
+
+    #[cfg(feature = "rvr")]
+    #[test]
+    fn test_bls12_381_rvr_equivalence() -> Result<()> {
+        let mut modular =
+            Rv64ModularConfig::new(vec![BLS12_381_MODULUS.clone(), BLS12_381_ORDER.clone()]);
+        modular.system = test_system_config().with_public_values_bytes(32);
+        let config = Rv64ModularWithFp2Config {
+            modular,
+            fp2: Fp2Extension::new(vec![(
+                BLS12_381_COMPLEX_STRUCT_NAME.to_string(),
+                BLS12_381_MODULUS.clone(),
+            )]),
+        };
+        let elf = build_example_program_at_path(get_programs_dir!(), "bls12_381_rvr", &config)?;
         let openvm_exe = VmExe::from_elf(
             elf,
             Transpiler::<F>::default()

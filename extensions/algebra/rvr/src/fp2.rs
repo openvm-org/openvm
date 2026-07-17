@@ -65,9 +65,7 @@ pub(crate) type Fp2SetupInstr = FieldSetupInstr<Fp2Kind>;
 
 // ── Fp2 extension ────────────────────────────────────────────────────────────
 
-/// Fp2 (complex extension field) arithmetic. Self-contained: owns its own
-/// Rust FFI staticlib and ships only `rvr_ext_fp2.h`. No lift-time C, no
-/// dependency on [`crate::ModularRvrExtension`].
+/// Fp2 arithmetic for the configured base fields.
 pub struct Fp2RvrExtension {
     fp2_moduli: Vec<ModulusInfo>,
 }
