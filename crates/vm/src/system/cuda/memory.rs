@@ -277,9 +277,8 @@ impl MemoryInventoryGPU {
             let mut h_in = openvm_cuda_common::pinned::take(in_bytes + 4);
             let align_offset = h_in.as_ptr().align_offset(std::mem::size_of::<u32>());
             let dirty_len = align_offset + in_bytes;
-            let src: &[u8] = unsafe {
-                std::slice::from_raw_parts(partition.as_ptr() as *const u8, in_bytes)
-            };
+            let src: &[u8] =
+                unsafe { std::slice::from_raw_parts(partition.as_ptr() as *const u8, in_bytes) };
             let dst = &mut h_in[align_offset..align_offset + in_bytes];
             dst.par_chunks_mut(UPLOAD_PACK_CHUNK)
                 .zip(src.par_chunks(UPLOAD_PACK_CHUNK))
