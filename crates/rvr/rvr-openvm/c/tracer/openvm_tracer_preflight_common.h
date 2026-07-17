@@ -1193,7 +1193,8 @@ preflight_append_memory_record(Tracer* restrict t, uint8_t kind,
                                timestamp);
     if (unlikely(custom_capture)) {
       uint32_t scratch_idx = t->custom_memory_scratch_len++;
-      if (likely(scratch_idx < t->custom_memory_scratch_cap)) {
+      if (likely(!OPENVM_G2_CHECKS_ENABLED ||
+                 scratch_idx < t->custom_memory_scratch_cap)) {
         t->custom_memory_scratch[scratch_idx] = (MemoryLogEntry){
             .timestamp = timestamp,
             .prev_timestamp = prev_timestamp,
