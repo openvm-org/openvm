@@ -13,7 +13,7 @@ pub(crate) use openvm_stark_sdk::config::baby_bear_bn254_poseidon2::{
 
 use crate::{field::baby_bear::ReducedBabyBearWire, Fr};
 
-const MULTI_FIELD32_NUM_F_ELMS: usize = MULTI_FIELD32_RATE / POSEIDON2_RATE;
+pub(crate) const MULTI_FIELD32_NUM_F_ELMS: usize = MULTI_FIELD32_RATE / POSEIDON2_RATE;
 
 #[derive(Clone, Debug)]
 pub struct Poseidon2State<F: ScalarField, const T: usize> {

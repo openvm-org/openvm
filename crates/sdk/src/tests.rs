@@ -692,8 +692,7 @@ fn sdk_static_verifier_cell_profiling() -> Result<()> {
         proof::Proof,
     };
     use openvm_static_verifier::{
-        compute_dag_onion_commit,
-        field::baby_bear::{BabyBearChip, BabyBearExtChip},
+        chip_traits::GateInst, compute_dag_onion_commit, halo2_backend::Halo2Backend,
         log_heights_per_air_from_proof, StaticVerifierCircuit,
     };
 
@@ -822,12 +821,12 @@ fn sdk_static_verifier_cell_profiling() -> Result<()> {
         .use_lookup_bits(21)
         .use_instance_columns(0);
     let range = builder.range_chip();
-    let ext_chip = BabyBearExtChip::new(BabyBearChip::new(std::sync::Arc::new(range)));
     let ctx = builder.main(0);
+    let mut backend = Halo2Backend::new(std::sync::Arc::new(range), ctx);
 
-    let initial_cells = ctx.advice.len();
-    circuit.populate_verify_stark_constraints(ctx, &ext_chip, &root_proof);
-    let final_cells = ctx.advice.len();
+    let initial_cells = backend.cell_count();
+    circuit.populate_verify_stark_constraints(&mut backend, &root_proof);
+    let final_cells = backend.cell_count();
     eprintln!(
         "Static verifier cell count: {} (delta: {})",
         final_cells,

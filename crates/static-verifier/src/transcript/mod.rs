@@ -27,11 +27,11 @@ use crate::{
 
 /// Number of BabyBear values bit-packed into one BN254 word (base-2^31).
 /// = floor(254 / 31) = 8
-const NUM_OBS_PER_WORD: usize = 8;
+pub(crate) const NUM_OBS_PER_WORD: usize = 8;
 
 /// Number of BabyBear samples extracted from one BN254 word (base-BabyBear decomposition).
 /// Must match `compute_num_samples_per_elem` in `MultiFieldTranscript`.
-const NUM_SAMPLES_PER_WORD: usize = 5;
+pub(crate) const NUM_SAMPLES_PER_WORD: usize = 5;
 
 /// Precomputed bounds for the base-BabyBear hint decomposition.
 ///
@@ -183,11 +183,11 @@ fn decompose_bn254_to_base_baby_bear_digits(
 }
 
 #[derive(Clone, Debug)]
-pub struct DigestWire {
-    pub elems: [AssignedValue<Fr>; DIGEST_WIDTH],
+pub struct DigestWire<F = AssignedValue<Fr>> {
+    pub elems: [F; DIGEST_WIDTH],
 }
 
-pub fn digest_wire_from_root(root: AssignedValue<Fr>) -> DigestWire {
+pub fn digest_wire_from_root<F: Copy>(root: F) -> DigestWire<F> {
     DigestWire {
         elems: array::from_fn(|_| root),
     }

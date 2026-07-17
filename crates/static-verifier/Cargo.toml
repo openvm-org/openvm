@@ -16,7 +16,7 @@ openvm-verify-stark-host.workspace = true
 openvm-recursion-circuit.workspace = true
 openvm-cpu-backend.workspace = true
 openvm-continuations = { workspace = true, features = ["root-prover"] }
-halo2-base = { workspace = true }
+halo2-base = { workspace = true, features = ["halo2-axiom", "cuda"] }
 snark-verifier-sdk = { workspace = true, features = ["loader_evm"], optional = true }
 
 rand_chacha.workspace = true
@@ -27,12 +27,15 @@ serde_with = { workspace = true, features = ["hex"], optional = true }
 itertools.workspace = true
 num-bigint.workspace = true
 num-integer.workspace = true
+rayon = "1.11"
 tracing.workspace = true
 inferno = { workspace = true, optional = true }
 
 [dev-dependencies]
 openvm-stark-backend = { workspace = true, features = ["test-utils"] }
 openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
+bitcode.workspace = true
+serde_json.workspace = true
 
 [features]
 default = []
