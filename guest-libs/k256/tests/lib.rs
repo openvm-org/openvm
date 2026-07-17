@@ -199,7 +199,7 @@ mod guest_tests {
                 &self,
                 config: &EcdsaConfig,
                 circuit: AirInventory<BabyBearPoseidon2Config>,
-                device_ctx: &openvm_stark_backend::EngineDeviceCtx<BabyBearPoseidon2GpuEngine>,
+                device_ctx: &openvm_stark_backend::EngineDeviceCtx<GpuBabyBearPoseidon2Engine>,
             ) -> Result<
                 VmChipComplex<
                     BabyBearPoseidon2Config,
@@ -210,7 +210,7 @@ mod guest_tests {
                 ChipInventoryError,
             > {
                 let mut chip_complex =
-                    VmBuilder::<BabyBearPoseidon2GpuEngine>::create_chip_complex(
+                    VmBuilder::<GpuBabyBearPoseidon2Engine>::create_chip_complex(
                         &Rv64WeierstrassBuilder,
                         &config.weierstrass,
                         circuit,
