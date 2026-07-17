@@ -21,7 +21,7 @@ use crate::{
     },
     profiling::CellProfiler,
     stages::shared_math::{
-        column_openings_by_rot_assigned, horner_eval_ext_poly_assigned, ExtWirePair,
+        column_openings_by_rot_assigned, horner_eval_ext_poly_assigned, 
     },
     Fr, RootEF, RootF,
 };
