@@ -27,6 +27,7 @@ pub mod codec;
 pub mod config;
 pub mod field;
 pub mod halo2_backend;
+pub mod halo2_ir_builder;
 pub mod hash;
 pub mod keygen;
 pub mod prover;
