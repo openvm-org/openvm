@@ -8,6 +8,8 @@
 #include <cub/device/device_radix_sort.cuh>
 #include <cub/device/device_select.cuh>
 #include <cuda_runtime.h>
+#include <cstdio>
+#include <cstdlib>
 #include <stdint.h>
 
 using namespace riscv;
@@ -18,6 +20,11 @@ static constexpr uint32_t DELTA_STRIDE = 24;
 static constexpr uint32_t PC_STEP = 4;
 static constexpr uint8_t INVALID_AIR = UINT8_MAX;
 static constexpr uint64_t INVALID_ADDRESS = UINT64_MAX;
+static constexpr size_t CUDA_GRID_X_MAX = 0x7fffffffu;
+
+__host__ __forceinline__ bool linear_grid_fits(size_t count, size_t block_size = 256) {
+    return count != 0 && 1 + (count - 1) / block_size <= CUDA_GRID_X_MAX;
+}
 
 enum DeltaPattern : uint8_t {
     DELTA_ALU3 = 0,
@@ -127,6 +134,7 @@ struct EventPayload {
     uint32_t output_index_plus_one;
     uint32_t write_record_plus_one;
     uint32_t residual_index_plus_one;
+    uint32_t store_source_record_plus_one;
     uint8_t value_update;
     uint8_t width;
     uint8_t byte_offset;
@@ -703,6 +711,9 @@ __global__ void build_events(
                 payload.address_key = address_key(as, address, error);
                 payload.timestamp = record.from_timestamp + access_slot;
                 payload.output_index_plus_one = uint32_t(idx + 1);
+                if (entry.access_pattern == DELTA_STORE && access_slot == 1) {
+                    payload.store_source_record_plus_one = uint32_t(record_idx + 1);
+                }
                 if (delta_write_access(record, entry, access_slot, error)) {
                     payload.write_record_plus_one = uint32_t(record_idx + 1);
                     if (entry.access_pattern == DELTA_STORE) {
@@ -819,9 +830,12 @@ __global__ void replay_address_groups(
     uint64_t *prev_values,
     uint32_t *memory_prev_timestamps,
     uint64_t *memory_prev_values,
+    DeltaRecord *delta,
+    size_t delta_count,
     uint64_t const *expected_blocks,
     uint8_t const *expected_modes,
     size_t expected_count,
+    bool register_phase,
     uint32_t *error
 ) {
     size_t group_idx = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
@@ -832,6 +846,7 @@ __global__ void replay_address_groups(
     uint32_t previous_timestamp = 0;
     uint64_t key = keys[idx];
     uint32_t address_space = uint32_t(key >> 56);
+    if ((address_space == 1u) != register_phase) return;
     uint64_t byte_address = key & ((uint64_t(1) << 56) - 1);
     if (address_space >= initial_memory_count) {
         fail(error, 22);
@@ -853,8 +868,8 @@ __global__ void replay_address_groups(
         size_t record_idx = SIZE_MAX;
         if (event.output_index_plus_one != 0) {
             size_t event_idx = event.output_index_plus_one - 1;
-            record_idx = event_idx / 3;
-            access_slot = uint32_t(event_idx % 3);
+            record_idx = event_idx / 4;
+            access_slot = uint32_t(event_idx % 4);
             if (record_idx < expected_count) expected_mode = expected_modes[record_idx];
         }
         if (expected_mode > EXPECT_AFTER_STORE) {
@@ -879,15 +894,29 @@ __global__ void replay_address_groups(
             memory_prev_timestamps[residual] = previous_timestamp;
             memory_prev_values[residual] = current_value;
         }
+        if (event.store_source_record_plus_one != 0) {
+            size_t record = event.store_source_record_plus_one - 1;
+            if (record >= delta_count) {
+                fail(error, 27);
+                return;
+            }
+            delta[record].v2 = current_value;
+        }
         if (event.value_update == VALUE_SET) {
             current_value = event.value;
         } else if (event.value_update == VALUE_STORE_PATCH) {
+            if (event.write_record_plus_one == 0 ||
+                size_t(event.write_record_plus_one - 1) >= delta_count) {
+                fail(error, 28);
+                return;
+            }
             uint32_t shift = uint32_t(event.byte_offset) * 8u;
             uint64_t mask = event.width == 8
                                 ? UINT64_MAX
                                 : ((uint64_t(1) << (uint32_t(event.width) * 8u)) - 1u);
+            uint64_t store_value = delta[event.write_record_plus_one - 1].v2;
             current_value = (current_value & ~(mask << shift)) |
-                            ((event.value & mask) << shift);
+                            ((store_value & mask) << shift);
         } else if (event.value_update != VALUE_NONE) {
             fail(error, 16);
             return;
@@ -1453,27 +1482,61 @@ extern "C" int _rvr_delta_predecode(
     DeltaAirOutputDesc const *d_outputs,
     DeviceBufferConstView<uint64_t> d_expected_blocks,
     DeviceBufferConstView<uint8_t> d_expected_modes,
+    uint32_t profile_segment_id,
     uint32_t *d_error,
     cudaStream_t stream
 ) {
-    if (delta_count > UINT32_MAX / 4 ||
+    bool event_count_overflow = program_count > (SIZE_MAX - memory_count) / 3;
+    size_t event_count = 0;
+    if (!event_count_overflow) {
+        event_count = memory_count + program_count * 3;
+        event_count_overflow = delta_count > (SIZE_MAX - event_count) / 4;
+        if (!event_count_overflow) event_count += delta_count * 4;
+    }
+    bool touched_bytes_overflow =
+        event_count_overflow || event_count > UINT32_MAX ||
+        event_count > SIZE_MAX / sizeof(TouchedMemoryRecord);
+    if (delta_count > UINT32_MAX / 4 || event_count_overflow || touched_bytes_overflow ||
         d_delta_bytes.size != delta_count * sizeof(DeltaRecord) ||
+        (delta_count != 0 && d_delta_bytes.ptr == nullptr) ||
         (memory_stride != sizeof(MemoryLogEntry) &&
          memory_stride != sizeof(DeltaMemoryLogEntry)) ||
         d_memory_bytes.size != memory_count * memory_stride ||
+        (memory_count != 0 && d_memory_bytes.ptr == nullptr) ||
         d_program_bytes.size != program_count * sizeof(ProgramLogEntry) ||
+        (program_count != 0 && d_program_bytes.ptr == nullptr) ||
         (program_run_count != 0 && d_program_runs == nullptr) ||
+        (program_run_count != 0 && !linear_grid_fits(program_run_count, 1)) ||
         (program_frequency_count != 0 && d_program_frequencies == nullptr) ||
         (program_instruction_count != 0 && d_program_chronology == nullptr) ||
         d_initial_memory_bytes.size != initial_memory_count * sizeof(DeviceInitialMemory) ||
-        d_touched_output_bytes.size <
-            (delta_count * 4 + memory_count + program_count * 3) *
-                sizeof(TouchedMemoryRecord) ||
+        (initial_memory_count != 0 && d_initial_memory_bytes.ptr == nullptr) ||
+        d_touched_output_bytes.size < event_count * sizeof(TouchedMemoryRecord) ||
+        (event_count != 0 && d_touched_output_bytes.ptr == 0) ||
+        (event_count != 0 && !linear_grid_fits(event_count)) ||
+        (delta_count != 0 && !linear_grid_fits(delta_count)) ||
         (memory_count != 0 &&
          (d_memory_prev_timestamps == nullptr || d_memory_prev_values == nullptr)) ||
+        (operand_count != 0 && d_operand_table == nullptr) ||
+        (num_airs != 0 &&
+         (d_arena_native_flags == nullptr || d_outputs == nullptr)) ||
         d_expected_blocks.size != d_expected_modes.size * sizeof(uint64_t) ||
         (d_expected_modes.size != 0 && d_expected_modes.size != delta_count) ||
-        d_touched_count == nullptr) {
+        (d_expected_blocks.size != 0 && d_expected_blocks.ptr == nullptr) ||
+        (d_expected_modes.size != 0 && d_expected_modes.ptr == nullptr) ||
+        d_touched_count == nullptr || d_error == nullptr) {
+        std::fprintf(
+            stderr,
+            "OPENVM_RVR_DELTA_CUDA_ERROR segment=%u call=argument_validation code=%d "
+            "delta=%zu memory=%zu program=%zu touched_bytes=%zu expected=%zu\n",
+            profile_segment_id,
+            int(cudaErrorInvalidValue),
+            delta_count,
+            memory_count,
+            program_count,
+            d_touched_output_bytes.size,
+            d_expected_modes.size
+        );
         return int(cudaErrorInvalidValue);
     }
     if (program_frequency_count != 0) {
@@ -1502,8 +1565,6 @@ extern "C" int _rvr_delta_predecode(
     } else if (program_instruction_count != 0) {
         return int(cudaErrorInvalidValue);
     }
-    size_t event_count =
-        delta_count * 4 + memory_count + program_count * 3;
     if (event_count == 0) {
         return int(cudaMemsetAsync(d_touched_count, 0, sizeof(uint32_t), stream));
     }
@@ -1518,16 +1579,36 @@ extern "C" int _rvr_delta_predecode(
     void *temp = nullptr;
     size_t ts_temp = 0, addr_temp = 0, air_temp = 0, select_temp = 0;
     int result = 0;
+    bool profile = profile_segment_id != UINT32_MAX;
+    if (profile) {
+        char const *enabled = std::getenv("OPENVM_RVR_G2_GPU_PROFILE");
+        profile = enabled != nullptr && enabled[0] == '1' && enabled[1] == '\0';
+    }
+    cudaEvent_t replay_start = nullptr, replay_end = nullptr, expansion_end = nullptr;
 
 #define CUDA_TRY(expr)                                                                            \
     do {                                                                                          \
         cudaError_t _err = (expr);                                                                \
         if (_err != cudaSuccess) {                                                                \
+            std::fprintf(                                                                          \
+                stderr,                                                                            \
+                "OPENVM_RVR_DELTA_CUDA_ERROR segment=%u call=%s code=%d\n",                       \
+                profile_segment_id,                                                                \
+                #expr,                                                                             \
+                int(_err)                                                                          \
+            );                                                                                     \
             result = int(_err);                                                                   \
             goto cleanup;                                                                         \
         }                                                                                         \
     } while (0)
 #define CUDA_ALLOC(ptr, bytes) CUDA_TRY(cudaMallocAsync(reinterpret_cast<void **>(&(ptr)), bytes, stream))
+
+    if (profile) {
+        CUDA_TRY(cudaEventCreate(&replay_start));
+        CUDA_TRY(cudaEventCreate(&replay_end));
+        CUDA_TRY(cudaEventCreate(&expansion_end));
+        CUDA_TRY(cudaEventRecord(replay_start, stream));
+    }
 
     CUDA_ALLOC(ts_a, event_count * sizeof(uint32_t));
     CUDA_ALLOC(ts_b, event_count * sizeof(uint32_t));
@@ -1647,27 +1728,33 @@ extern "C" int _rvr_delta_predecode(
     if (event_count != 0) {
         dim3 block(256);
         dim3 grid((event_count + block.x - 1) / block.x);
-        replay_address_groups<<<grid, block, 0, stream>>>(
-            addr_b,
-            events_b,
-            event_count,
-            group_starts,
-            d_touched_count,
-            event_count,
-            reinterpret_cast<DeviceInitialMemory const *>(d_initial_memory_bytes.ptr),
-            initial_memory_count,
-            reinterpret_cast<TouchedMemoryRecord *>(d_touched_output_bytes.ptr),
-            prev,
-            prev_values,
-            d_memory_prev_timestamps,
-            d_memory_prev_values,
-            d_expected_blocks.ptr,
-            d_expected_modes.ptr,
-            d_expected_modes.len(),
-            d_error
-        );
-        CUDA_TRY(cudaGetLastError());
+        for (int phase = 0; phase < 2; ++phase) {
+            replay_address_groups<<<grid, block, 0, stream>>>(
+                addr_b,
+                events_b,
+                event_count,
+                group_starts,
+                d_touched_count,
+                event_count,
+                reinterpret_cast<DeviceInitialMemory const *>(d_initial_memory_bytes.ptr),
+                initial_memory_count,
+                reinterpret_cast<TouchedMemoryRecord *>(d_touched_output_bytes.ptr),
+                prev,
+                prev_values,
+                d_memory_prev_timestamps,
+                d_memory_prev_values,
+                reinterpret_cast<DeltaRecord *>(const_cast<uint8_t *>(d_delta_bytes.ptr)),
+                delta_count,
+                d_expected_blocks.ptr,
+                d_expected_modes.ptr,
+                d_expected_modes.len(),
+                phase == 0,
+                d_error
+            );
+            CUDA_TRY(cudaGetLastError());
+        }
     }
+    if (profile) CUDA_TRY(cudaEventRecord(replay_end, stream));
     if (delta_count != 0) {
         dim3 block(256);
         dim3 grid((delta_count + block.x - 1) / block.x);
@@ -1710,8 +1797,30 @@ extern "C" int _rvr_delta_predecode(
         );
         CUDA_TRY(cudaGetLastError());
     }
+    if (profile) {
+        CUDA_TRY(cudaEventRecord(expansion_end, stream));
+        CUDA_TRY(cudaEventSynchronize(expansion_end));
+        float replay_ms = 0.0f, expansion_ms = 0.0f;
+        CUDA_TRY(cudaEventElapsedTime(&replay_ms, replay_start, replay_end));
+        CUDA_TRY(cudaEventElapsedTime(&expansion_ms, replay_end, expansion_end));
+        std::fprintf(
+            stderr,
+            "OPENVM_RVR_G2_GPU_STAGE segment=%u stage=delta_replay ms=%.6f bytes=0\n",
+            profile_segment_id,
+            replay_ms
+        );
+        std::fprintf(
+            stderr,
+            "OPENVM_RVR_G2_GPU_STAGE segment=%u stage=per_kind_expansion ms=%.6f bytes=0\n",
+            profile_segment_id,
+            expansion_ms
+        );
+    }
 
 cleanup:
+    if (expansion_end) cudaEventDestroy(expansion_end);
+    if (replay_end) cudaEventDestroy(replay_end);
+    if (replay_start) cudaEventDestroy(replay_start);
     if (temp) cudaFreeAsync(temp, stream);
     if (indices_b) cudaFreeAsync(indices_b, stream);
     if (indices_a) cudaFreeAsync(indices_a, stream);

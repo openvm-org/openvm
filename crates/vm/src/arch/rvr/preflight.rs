@@ -1984,7 +1984,7 @@ where
         );
         pool.prepare_shadow_locality(&mut shadow_memory, &touched);
         pool.recycle_shadows(shadow_register, shadow_memory, shadow_public_values);
-        let touched = if inline_meta.delta_records {
+        let touched = if inline_meta.delta_records || (g2_meta.is_some() && device_aux_oracle) {
             touched
         } else {
             pool.recycle_touched(touched);
@@ -2817,6 +2817,10 @@ pub trait RvrArenaNativeTarget: crate::arch::Arena + Sized {
         self.finish_arena_native(written_records, geometry);
     }
 
+    /// Attach the committed G2 segment identity to an opaque-final arena for
+    /// per-segment CUDA H2D timing. Non-dense arenas do not need the marker.
+    fn set_rvr_g2_segment_id(&mut self, _segment_id: u32) {}
+
     /// G2: stage this arena as a compact WIRE record target — the C writes
     /// packed wire records (stride = `wire_size`) directly into the arena's
     /// aligned backing, so adoption is cursor bookkeeping instead of an
@@ -3094,6 +3098,10 @@ impl RvrArenaNativeTarget for crate::arch::DenseRecordArena {
             );
             self.finish_arena_native(written_records, geometry);
         }
+    }
+
+    fn set_rvr_g2_segment_id(&mut self, segment_id: u32) {
+        self.rvr_g2_segment_id = Some(segment_id);
     }
 
     fn stage_rvr_wire(records_cap: usize, wire_size: usize) -> (Self, ChipRecordBuf) {

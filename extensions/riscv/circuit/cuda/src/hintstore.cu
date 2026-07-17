@@ -228,6 +228,13 @@ extern "C" int _hintstore_decode_offsets(
     uint32_t *__restrict__ d_error,
     cudaStream_t stream
 ) {
+    if (records_len == 0 || rows_used == 0) {
+        return records_len == 0 && rows_used == 0 ? int(cudaSuccess)
+                                                  : int(cudaErrorInvalidValue);
+    }
+    if (d_records == nullptr || d_record_offsets == nullptr || d_error == nullptr) {
+        return int(cudaErrorInvalidValue);
+    }
     hintstore_decode_offsets<<<1, 1, 0, stream>>>(
         d_records,
         records_len,
@@ -361,9 +368,12 @@ extern "C" int _hintstore_replay_tracegen(
     cudaStream_t stream
 ) {
     if (width != sizeof(Rv64HintStoreCols<uint8_t>) ||
-        rows_used > UINT32_MAX) {
+        rows_used > UINT32_MAX || rows_used > height ||
+        (height != 0 && d_trace == nullptr) ||
+        (rows_used != 0 && d_rows == nullptr) || d_error == nullptr) {
         return int(cudaErrorInvalidValue);
     }
+    if (height == 0) return int(cudaSuccess);
     auto [grid, block] = kernel_launch_params(height);
     hintstore_replay_tracegen<<<grid, block, 0, stream>>>(
         d_trace,
