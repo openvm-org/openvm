@@ -59,6 +59,7 @@ impl<F: Copy> ReducedBabyBearWire<F> {
     
     /// Wraps a wire in canonicality evidence. Callers must guarantee the wire is
     /// constrained to `[0, p)`; this adds no constraints.
+    #[cfg(feature = "halo2-gpu")]
     pub(crate) fn assume_reduced(wire: BabyBearWire<F>) -> Self {
         ReducedBabyBearWire(wire)
     }

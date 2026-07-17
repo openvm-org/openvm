@@ -1,3 +1,4 @@
+#[cfg(feature = "halo2-gpu")]
 use std::sync::{Arc, Mutex, OnceLock};
 
 use halo2_base::{
@@ -11,10 +12,11 @@ use openvm_stark_sdk::{
 #[cfg(feature = "evm-prove")]
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "halo2-gpu")]
+use crate::graph_executor::GraphProver;
 use crate::{
     circuit::StaticVerifierCircuit,
     config::StaticVerifierShape,
-    graph_executor::GraphProver,
     prover::{Halo2Params, Halo2ProvingMetadata, Halo2ProvingPinning, StaticVerifierProof},
 };
 
@@ -60,10 +62,11 @@ pub struct StaticVerifierProvingKey {
     pub circuit: StaticVerifierCircuit,
     pub pinning: Halo2ProvingPinning,
     pub shape: StaticVerifierShape,
-    /// Graph-based witness generator used by [`Self::prove_wrapped`]; built eagerly at
+    /// Graph-based witness generator used by `prove_wrapped`; built eagerly at
     /// keygen time and reused across proofs (the populate trace only depends on the
     /// static circuit shape). Decoded proving keys start empty and rebuild lazily on
-    /// the first call to [`Self::prove_wrapped`].
+    /// the first call to `prove_wrapped`.
+    #[cfg(feature = "halo2-gpu")]
     pub graph_prover: Arc<OnceLock<Mutex<GraphProver>>>,
 }
 
@@ -76,21 +79,26 @@ impl StaticVerifierProvingKey {
         representative_proof: &Proof<RootConfig>,
     ) -> Self {
         let pinning = circuit.keygen(params, &shape, representative_proof);
-        let graph_prover = Arc::new(OnceLock::new());
-        tracing::info_span!("build_graph_prover").in_scope(|| {
+        #[cfg(feature = "halo2-gpu")]
+        let graph_prover = {
+            let graph_prover = Arc::new(OnceLock::new());
+            tracing::info_span!("build_graph_prover").in_scope(|| {
+                graph_prover
+                    .set(Mutex::new(GraphProver::new(
+                        &circuit,
+                        shape.lookup_bits,
+                        representative_proof,
+                    )))
+                    .ok()
+                    .expect("OnceLock is fresh");
+            });
             graph_prover
-                .set(Mutex::new(GraphProver::new(
-                    &circuit,
-                    shape.lookup_bits,
-                    representative_proof,
-                )))
-                .ok()
-                .expect("OnceLock is fresh");
-        });
+        };
         Self {
             circuit,
             pinning,
             shape,
+            #[cfg(feature = "halo2-gpu")]
             graph_prover,
         }
     }
@@ -152,6 +160,7 @@ impl StaticVerifierProvingKey {
     /// Set `STATIC_VERIFIER_COMPARE_WITNESS=1` to additionally regenerate the witness
     /// through the legacy `BaseCircuitBuilder` + `synthesize_witness_shplonk` path and
     /// assert both advice layouts match.
+    #[cfg(feature = "halo2-gpu")]
     pub fn prove_wrapped(
         &self,
         params: &Halo2Params,
@@ -182,9 +191,31 @@ impl StaticVerifierProvingKey {
         )
     }
 
+    /// Produce a [`Snark`](snark_verifier_sdk::Snark) for consumption by the wrapper circuit.
+    ///
+    /// CPU witness generation through the halo2 `BaseCircuitBuilder`; enable the
+    /// `halo2-gpu` feature for the parallel graph-IR + GPU pipeline.
+    #[cfg(not(feature = "halo2-gpu"))]
+    pub fn prove_wrapped(
+        &self,
+        params: &Halo2Params,
+        proof: &Proof<RootConfig>,
+    ) -> snark_verifier_sdk::Snark {
+        let mut builder = BaseCircuitBuilder::prover(
+            self.pinning.metadata.config_params.clone(),
+            self.pinning.metadata.break_points.clone(),
+        )
+        .use_instance_columns(self.shape.instance_columns);
+
+        let _public_inputs = self.circuit.populate(&mut builder, proof);
+
+        snark_verifier_sdk::halo2::gen_snark_shplonk(params, &self.pinning.pk, builder, None::<&str>)
+    }
+
     /// Runs the full graph-executor + column-materialization pipeline: builds
     /// (or reuses) the [`GraphProver`], streams the level-by-level advice/lookup
-    /// deltas through a [`FusedColumnBuilder`] whose H2D copies land directly on
+    /// deltas through a [`FusedColumnBuilder`](crate::graph_executor::FusedColumnBuilder)
+    /// whose H2D copies land directly on
     /// device columns, and returns the finalized `Vec<DeviceBuffer<Fr>>` +
     /// instance columns ready to hand to
     /// [`gen_snark_from_base`](snark_verifier_sdk::halo2::gen_snark_from_base).
@@ -196,6 +227,7 @@ impl StaticVerifierProvingKey {
     /// `diagnostic_params` is only consulted when `STATIC_VERIFIER_COMPARE_WITNESS`
     /// is set — see [`Self::compare_witness_with_base_builder`]. Benchmarks
     /// should pass `None`.
+    #[cfg(feature = "halo2-gpu")]
     pub fn run_witness_gen_pipeline(
         &self,
         proof: &Proof<RootConfig>,
@@ -210,6 +242,8 @@ impl StaticVerifierProvingKey {
             halo2_proofs::{halo2curves::bn256::G1Affine, plonk::create_constraint_system},
         };
         use tracing::info_span;
+
+        use crate::graph_executor::FusedColumnBuilder;
 
         let graph_prover = self.graph_prover.get_or_init(|| {
             info_span!("build_graph_prover_lazy").in_scope(|| {
@@ -257,7 +291,9 @@ impl StaticVerifierProvingKey {
                 &self.circuit,
                 proof,
                 num_threads,
-                |advice_delta, lookup_delta| builder.append(advice_delta, lookup_delta),
+                |advice_offset, advice_delta, lookup_offset, lookup_delta| {
+                    builder.append(advice_offset, advice_delta, lookup_offset, lookup_delta)
+                },
             )
         });
         drop(graph_prover);
@@ -280,6 +316,7 @@ impl StaticVerifierProvingKey {
     /// populate + `synthesize_witness_shplonk` path and asserts the post-break-point,
     /// post-lookup advice matches the graph-executor path. Blinding rows are excluded
     /// (the synthesize path randomizes them; the materialized path leaves them zero).
+    #[cfg(feature = "halo2-gpu")]
     fn compare_witness_with_base_builder(
         &self,
         params: &Halo2Params,
@@ -388,179 +425,6 @@ impl StaticVerifierProvingKey {
             instances: instances_vec,
             proof: snark,
         }
-    }
-}
-
-/// Streaming builder for the physical advice column layout used by
-/// [`StaticVerifierProvingKey::prove_wrapped`].
-///
-/// The graph executor materializes advice/lookup values level by level; this builder
-/// consumes each level's *delta* slice (only the newly-materialized values, in
-/// strictly ascending offset order) via [`Self::append`], mirroring
-/// `PagedWitnessContext::push_advice` (the gate-column stream splits at pinned break
-/// points, duplicating the break-row value at row 0 of the next column so the
-/// gate-overlap copy constraint holds) and
-/// `BaseCircuitBuilder::assign_lookups_in_phase` (the range-check stream fills lookup
-/// advice columns round-robin: value `i` at column `i % L`, row `i / L`).
-///
-/// Column state lives directly on the GPU: on the first call to [`Self::append`] the
-/// builder allocates `num_advice_columns × n` [`DeviceBuffer`]s and zero-fills each
-/// (via `cudaMemsetAsync`). Subsequent calls copy each contiguous delta segment
-/// straight to the target row range of the target device column with
-/// `DeviceBufferExt::mut_slice` + `copy_from_host`, so no large host-side column
-/// buffer is ever materialized.
-#[cfg(feature = "evm-prove")]
-struct FusedColumnBuilder {
-    // ---- Config (immutable after `new`) ------------------------------------
-    n: usize,
-    num_advice_columns: usize,
-    /// Pinned break points, in order (consumed as columns split).
-    break_points: Vec<usize>,
-    /// Physical column indices of the range-check lookup advice columns.
-    lookup_col_indices: Vec<usize>,
-
-    // ---- Device columns (lazily allocated on first `append`) ---------------
-    device_columns: Vec<halo2_base::halo2_proofs::cuda::DeviceBuffer<Fr>>,
-
-    // ---- Gate-column stream cursor ----------------------------------------
-    col: usize,
-    row: usize,
-    /// Next pinned break-point row (`None` after the final gate column).
-    cur_break_point: Option<usize>,
-    break_idx: usize,
-
-    // ---- Round-robin lookup stream cursor ---------------------------------
-    /// Absolute index of the next lookup value within the round-robin schedule.
-    lookup_processed: usize,
-}
-
-#[cfg(feature = "evm-prove")]
-impl FusedColumnBuilder {
-    fn new(
-        n: usize,
-        num_advice_columns: usize,
-        break_points: Vec<usize>,
-        lookup_col_indices: Vec<usize>,
-    ) -> Self {
-        let cur_break_point = break_points.first().copied();
-        Self {
-            n,
-            num_advice_columns,
-            break_points,
-            lookup_col_indices,
-            device_columns: Vec::new(),
-            col: 0,
-            row: 0,
-            cur_break_point,
-            break_idx: 0,
-            lookup_processed: 0,
-        }
-    }
-
-    fn ensure_allocated(&mut self) {
-        use halo2_base::halo2_proofs::cuda::{utils::HALO2_GPU_CTX, DeviceBuffer};
-        if !self.device_columns.is_empty() {
-            return;
-        }
-        self.device_columns.reserve_exact(self.num_advice_columns);
-        for _ in 0..self.num_advice_columns {
-            let buf: DeviceBuffer<Fr> =
-                DeviceBuffer::<Fr>::with_capacity_on(self.n, &HALO2_GPU_CTX);
-            buf.fill_zero_on(&HALO2_GPU_CTX)
-                .expect("zero-fill advice column");
-            self.device_columns.push(buf);
-        }
-    }
-
-    /// Appends the next contiguous delta of advice and range-check values. Deltas
-    /// must arrive in strictly ascending order across successive calls.
-    fn append(&mut self, advice_delta: &[Fr], lookup_delta: &[Fr]) {
-        use halo2_base::halo2_proofs::cuda::{utils::HALO2_GPU_CTX, DeviceBufferExt as _};
-
-        self.ensure_allocated();
-
-        // --- Gate stream: contiguous H2D per (column, row-range) segment ----
-        //
-        // Rewind trick: when a segment ends on a break-point row we `delta_pos -= 1`
-        // so the break value re-appears as the first host source of the next
-        // column's copy — that fills row 0 of the new column "for free" and avoids
-        // a separate 1-element H2D.
-        let mut delta_pos = 0usize;
-        while delta_pos < advice_delta.len() {
-            let rows_until_break = match self.cur_break_point {
-                Some(bp) => {
-                    debug_assert!(bp >= self.row);
-                    bp - self.row + 1
-                }
-                None => usize::MAX,
-            };
-            let delta_remaining = advice_delta.len() - delta_pos;
-            let take = rows_until_break.min(delta_remaining);
-            let src = &advice_delta[delta_pos..delta_pos + take];
-            self.device_columns[self.col]
-                .mut_slice(self.row..self.row + take)
-                .copy_from_host(src, &HALO2_GPU_CTX)
-                .expect("H2D advice gate segment");
-            delta_pos += take;
-            if self.cur_break_point.is_some() && take == rows_until_break {
-                self.col += 1;
-                self.row = 0;
-                delta_pos -= 1; // Re-emit the break value as row 0 of the new column.
-                self.break_idx += 1;
-                self.cur_break_point = self.break_points.get(self.break_idx).copied();
-            } else {
-                self.row += take;
-            }
-        }
-
-        // --- Lookup stream: one gathered H2D per lookup column per call ------
-        //
-        // Value at absolute index `i` lands at column `L[i % L]`, row `i / L`.
-        // Within a single delta the indices bound for physical column `L[c]` are
-        // strided by `L` in delta space but consecutive in row space. Gather each
-        // such stride into a small host buffer (≤ ceil(delta_len / L) elements)
-        // and issue one contiguous H2D per lookup column per `append` call.
-        let l = self.lookup_col_indices.len();
-        let k = self.lookup_processed;
-        let n_l = lookup_delta.len();
-        if n_l > 0 {
-            for c in 0..l {
-                let start_j = (c + l - k % l) % l;
-                if start_j >= n_l {
-                    continue;
-                }
-                let n_values = (n_l - start_j).div_ceil(l);
-                let start_row = (k + start_j) / l;
-                let host_buf: Vec<Fr> = (0..n_values)
-                    .map(|i| lookup_delta[start_j + i * l])
-                    .collect();
-                self.device_columns[self.lookup_col_indices[c]]
-                    .mut_slice(start_row..start_row + n_values)
-                    .copy_from_host(&host_buf, &HALO2_GPU_CTX)
-                    .expect("H2D lookup column gather");
-            }
-        }
-        self.lookup_processed += n_l;
-    }
-
-    /// Consumes the device columns, leaving the builder empty.
-    fn take_device_columns(&mut self) -> Vec<halo2_base::halo2_proofs::cuda::DeviceBuffer<Fr>> {
-        assert!(
-            !self.device_columns.is_empty(),
-            "take_device_columns: no data was ever appended",
-        );
-        std::mem::take(&mut self.device_columns)
-    }
-
-    /// Diagnostic-only: D2H each device column back into host `Vec<Fr>`s so the
-    /// caller can byte-compare against the legacy `BaseCircuitBuilder` +
-    /// `synthesize_witness_shplonk` path. Not used on the hot prove path.
-    fn snapshot_columns_to_host(&self) -> Vec<Vec<Fr>> {
-        use halo2_base::halo2_proofs::cuda::{utils::HALO2_GPU_CTX, MemCopyD2H as _};
-        self.device_columns
-            .iter()
-            .map(|d| d.to_host_on(&HALO2_GPU_CTX).expect("D2H advice column"))
-            .collect()
     }
 }
 

@@ -63,6 +63,21 @@ struct GraphCoreInst {
     dep_list: (u32, u32),
 }
 
+/// One compute writer in the tape-emission-order release schedule (see
+/// [`GraphExecutor::release_order`]).
+#[derive(Copy, Clone)]
+struct ReleaseEntry {
+    /// Index into `insts`/`flags`.
+    inst: u32,
+    /// Exclusive end of the advice range this writer releases on completion.
+    /// The range starts at the previous entry's `advice_end` (0 for the
+    /// first), so input-populated gap cells between consecutive writers are
+    /// released together with the following writer.
+    advice_end: u32,
+    /// Same as `advice_end`, for the range-check (lookup) tape.
+    lookup_end: u32,
+}
+
 /// Shared mutable witness tape.
 #[derive(Clone, Copy)]
 struct TapePtr(*mut Fr);
@@ -84,18 +99,16 @@ pub struct GraphExecutor {
     const_inds: Vec<u32>,
     /// Compute instructions, reordered by dataflow level.
     insts: Vec<GraphCoreInst>,
-    /// Level `l` is `insts[level_starts[l]..level_starts[l + 1]]`.
-    level_starts: Vec<u32>,
     /// `LoadWitness` instructions, in node order.
     input_insts: Vec<GraphCoreInst>,
     input_cursor: usize,
     lookup_bits: usize,
-    /// After compute level `l` completes, `advice()[0..advice_break_points[l])` is
-    /// fully materialized: no future level or thread will write into that range.
-    /// Monotonically non-decreasing; the last entry equals `advice_cells`.
-    advice_break_points: Vec<usize>,
-    /// Same as `advice_break_points`, but for the range-check (lookup) tape.
-    lookup_break_points: Vec<usize>,
+    /// Compute writers sorted by tape-emission order (ascending write
+    /// offsets). Entry `i` releases `advice[prev.advice_end..advice_end)` /
+    /// `lookups[prev.lookup_end..lookup_end)` once its instruction's flag is
+    /// set; the ends tile both tapes, with the last entry extended to cover
+    /// any trailing input-populated cells.
+    release_order: Vec<ReleaseEntry>,
     /// Flattened parent-instruction indices; `insts[i].dep_list` names a slice
     /// of this vector. See [`GraphCoreInst::dep_list`].
     dep_inds: Vec<u32>,
@@ -167,30 +180,49 @@ impl GraphExecutor {
             }
         }
 
-        // Stable sort keeps node order within a level (write locality).
-        compute.sort_by_key(|&(level, _)| level);
-        let mut insts = Vec::with_capacity(compute.len());
-        let mut level_starts = vec![0u32];
-        for (level, inst) in compute {
-            while level_starts.len() <= level as usize {
-                level_starts.push(insts.len() as u32);
+        // Emission-order release schedule: `compute` is still in the IR's
+        // node-emission order here, where both write offsets are monotone, so
+        // the writers' (disjoint) write ranges tile each tape in order. Each
+        // writer releases its own range plus the input-populated gap before
+        // it. `inst` holds the emission index until the remap below.
+        let mut release_order: Vec<ReleaseEntry> = Vec::new();
+        let (mut prev_a, mut prev_l) = (0u32, 0u32);
+        for (i, (_, inst)) in compute.iter().enumerate() {
+            if inst.ctx_len == 0 && inst.lookups_len == 0 {
+                continue;
             }
-            insts.push(inst);
+            debug_assert!(inst.ctx_offset >= prev_a && inst.lookup_offset >= prev_l);
+            prev_a = inst.ctx_offset + inst.ctx_len;
+            prev_l = inst.lookup_offset + inst.lookups_len;
+            release_order.push(ReleaseEntry {
+                inst: i as u32,
+                advice_end: prev_a,
+                lookup_end: prev_l,
+            });
         }
-        level_starts.push(insts.len() as u32);
+        if let Some(last) = release_order.last_mut() {
+            last.advice_end = advice_cells as u32;
+            last.lookup_end = lookup_cells as u32;
+        }
+
+        // Stable sort by level keeps node order within a level (write
+        // locality); `order[sorted]` is the emission index of the instruction
+        // placed at sorted position `sorted`.
+        let mut order: Vec<u32> = (0..compute.len() as u32).collect();
+        order.sort_by_key(|&i| compute[i as usize].0);
+        let mut insts: Vec<GraphCoreInst> =
+            order.iter().map(|&i| compute[i as usize].1).collect();
+        let mut emission_to_sorted = vec![0u32; compute.len()];
+        for (sorted, &emission) in order.iter().enumerate() {
+            emission_to_sorted[emission as usize] = sorted as u32;
+        }
+        for e in &mut release_order {
+            e.inst = emission_to_sorted[e.inst as usize];
+        }
+        drop(compute);
 
         let mut tape = vec![Fr::ZERO; const_base + consts.len()];
         tape[const_base..].copy_from_slice(&consts);
-
-        let n_levels = level_starts.len() - 1;
-        let (advice_break_points, lookup_break_points) = compute_break_points(
-            advice_cells,
-            lookup_cells,
-            &input_insts,
-            &insts,
-            &level_starts,
-            n_levels,
-        );
 
         // Build the dependency graph: for each compute inst, list the indices
         // of parent compute insts (whose output cells this inst reads as
@@ -240,12 +272,10 @@ impl GraphExecutor {
             operand_bits,
             const_inds,
             insts,
-            level_starts,
             input_insts,
             input_cursor: 0,
             lookup_bits,
-            advice_break_points,
-            lookup_break_points,
+            release_order,
             dep_inds,
             flags,
             phase: 0,
@@ -263,21 +293,6 @@ impl GraphExecutor {
         &self.tape[self.advice_cells..self.advice_cells + self.lookup_cells]
     }
 
-    /// Number of dataflow levels in the compute schedule.
-    pub fn num_levels(&self) -> usize {
-        self.level_starts.len() - 1
-    }
-
-    /// Number of compute instructions in each level, in level order. Length
-    /// equals [`Self::num_levels`]. Excludes input instructions (which run
-    /// during population, not during `run`).
-    pub fn level_widths(&self) -> Vec<usize> {
-        self.level_starts
-            .windows(2)
-            .map(|w| (w[1] - w[0]) as usize)
-            .collect()
-    }
-
     /// Rewinds the input cursor so a new proof's witnesses can be populated. Every
     /// compute cell is fully overwritten by the next [`Self::run`], so no other state
     /// needs clearing.
@@ -288,29 +303,21 @@ impl GraphExecutor {
     /// Replays the next recorded input instruction with the proof `value`,
     /// writing its full tape footprint (witness cell plus any range-check cells).
     fn populate_input(&mut self, expected: Halo2Opcode, value: Fr) -> usize {
+        debug_assert!(matches!(expected, Halo2Opcode::LoadWitness));
         let inst = *self
             .input_insts
             .get(self.input_cursor)
             .expect("more input loads than recorded input instructions");
-        assert_eq!(
+        debug_assert_eq!(
             inst.opcode, expected,
             "input load {} kind mismatch",
             self.input_cursor
         );
         self.input_cursor += 1;
-        let (advice, rest) = self.tape.split_at_mut(self.advice_cells);
-        let ctx = &mut advice[inst.ctx_offset as usize..][..inst.ctx_len as usize];
-        let lookups = &mut rest[inst.lookup_offset as usize..][..inst.lookups_len as usize];
-        let (lo, hi) = inst.const_inds;
-        interpret_op(
-            &inst.opcode,
-            &[value],
-            &[],
-            ctx,
-            lookups,
-            self.lookup_bits,
-            &self.const_inds[lo as usize..hi as usize],
-        );
+        let advice = &mut self.tape[..self.advice_cells];
+        advice[inst.ctx_offset as usize] = value;
+        debug_assert!(inst.ctx_len == 1);
+        debug_assert!(inst.lookups_len == 0);
         inst.ctx_offset as usize
     }
 
@@ -324,15 +331,24 @@ impl GraphExecutor {
     /// monotonically increasing `phase` counter and threads compare flags
     /// against it. Stale values from previous runs are automatically ignored.
     ///
-    /// After every level completes, `on_level_complete(advice_delta, lookup_delta)`
-    /// is invoked on the callback thread with the newly-materialized slices —
-    /// the callback advances one flag at a time (spin-waiting on each) and
-    /// cascades through however many levels are now covered, batching
-    /// contiguous completed levels into a single callback call.
+    /// As instructions complete, `on_delta(advice_offset, advice_delta,
+    /// lookup_offset, lookup_delta)` is invoked on the calling thread (which
+    /// would otherwise idle until the workers join) with newly-materialized
+    /// tape ranges. It walks the writers in
+    /// tape-emission order ([`Self::release_order`]), spinning at most
+    /// `MAX_SPIN_TRIES` on each flag: a completed writer extends the pending
+    /// contiguous range, while a timeout flushes the pending range and defers
+    /// the writer to a retry list. Retry passes repeat the same bounded-spin
+    /// walk over the (still emission-ordered) leftovers, merging adjacent
+    /// ranges, until none remain — so a late-level writer at a low tape offset
+    /// only dams its own cells, not the whole prefix behind it. Flushes are
+    /// batched between `MIN_FLUSH_CELLS` (smaller pending ranges are deferred
+    /// for later merging rather than sent as tiny copies) and
+    /// `MAX_FLUSH_CELLS` (long completed runs stream out incrementally).
     #[allow(unsafe_code)]
-    pub fn run<F>(&mut self, num_threads: usize, mut on_level_complete: F)
+    pub fn run<F>(&mut self, num_threads: usize, mut on_delta: F)
     where
-        F: FnMut(&[Fr], &[Fr]) + Send,
+        F: FnMut(usize, &[Fr], usize, &[Fr]),
     {
         assert!(num_threads > 0);
         assert_eq!(
@@ -340,8 +356,6 @@ impl GraphExecutor {
             self.input_insts.len(),
             "all proof inputs must be populated before run"
         );
-        let n_levels = self.num_levels();
-        assert!(n_levels > 0, "run() called with no compute levels");
 
         // Bump phase. Skip 0 so a freshly-constructed executor (with `flags`
         // all zero) never accidentally reports flags as "ready" for phase 0.
@@ -356,8 +370,7 @@ impl GraphExecutor {
         let tape_ptr = TapePtr(tape.as_mut_ptr());
         let advice_cells = self.advice_cells;
         let this = &*self;
-        let advice_break_points = self.advice_break_points.as_slice();
-        let lookup_break_points = self.lookup_break_points.as_slice();
+        let release_order = self.release_order.as_slice();
         let n_insts = self.insts.len();
         // Global claim cursor: each worker `fetch_add(1)`s to grab the next
         // instruction index. Since `insts` is level-sorted, this hands them
@@ -398,64 +411,168 @@ impl GraphExecutor {
                 });
             }
 
-            // Callback thread: walks flags in inst-index order (which equals
-            // level order), waiting for each in turn. Whenever the cursor
-            // crosses one or more `level_starts` boundaries, those levels are
-            // fully complete and their break-point deltas can be fired.
-            //
-            // Force whole-value capture of `tape_ptr` (a `TapePtr` — `Send`)
-            // since Rust 2021 disjoint captures would otherwise pick up the
-            // `!Send` raw pointer field.
-            s.spawn(move || {
-                let tape_ptr = tape_ptr;
-                let mut cursor: usize = 0;
-                let mut processed_levels: usize = 0;
-                let mut prev_advice_bp = 0usize;
-                let mut prev_lookup_bp = 0usize;
-                while processed_levels < n_levels {
-                    // Wait for the next instruction to finish.
-                    while this.flags[cursor].load(Ordering::Acquire) != phase {
+            // Release walk, on the calling thread (it would otherwise idle
+            // until the workers join): walks `release_order` with a bounded
+            // spin per flag, flushing contiguous fully-materialized ranges and
+            // deferring stragglers to retry passes (see the `run` doc comment).
+            {
+                /// Flag-poll attempts before the walk gives up on a writer,
+                /// defers it to the next retry pass, and moves on.
+                const MAX_SPIN_TRIES: usize = 32;
+                /// Pending ranges smaller than this (advice + lookup cells)
+                /// are deferred (as already-ready entries) and re-merged with
+                /// neighbours in later passes instead of being flushed as tiny
+                /// H2D copies.
+                const MIN_FLUSH_CELLS: u32 = 8 * 1024;
+                /// Pending ranges flush once they reach this many advice
+                /// cells, so a long completed run streams out incrementally
+                /// instead of as one giant callback.
+                const MAX_FLUSH_CELLS: u32 = 1 << 20;
+                /// `inst` marker for a deferred, already-materialized range.
+                const READY_SENTINEL: u32 = u32::MAX;
+
+                /// `(a_start, a_end, l_start, l_end)` tape range.
+                type Range = (u32, u32, u32, u32);
+                /// A `Range` gated on `flags[inst]` (or none, for the
+                /// sentinel).
+                type Entry = (u32, u32, u32, u32, u32);
+
+                let try_wait = |inst: u32| {
+                    if inst == READY_SENTINEL {
+                        return true;
+                    }
+                    let flag = &this.flags[inst as usize];
+                    for _ in 0..MAX_SPIN_TRIES {
+                        if flag.load(Ordering::Acquire) == phase {
+                            return true;
+                        }
                         std::hint::spin_loop();
                     }
-                    cursor += 1;
-                    // Advance across any levels the cursor has now crossed.
-                    let mut newly_complete = processed_levels;
-                    while newly_complete < n_levels
-                        && this.level_starts[newly_complete + 1] as usize <= cursor
-                    {
-                        newly_complete += 1;
+                    false
+                };
+                // Fires `on_delta` for `advice[a_start..a_end)` +
+                // `lookups[l_start..l_end)` (skipping empty ranges) — unless
+                // the range is sub-`MIN_FLUSH_CELLS` and `defer_to` is given,
+                // in which case it is queued as a ready entry for a later
+                // merge instead.
+                //
+                // Safety: every writer into a flushed range has
+                // Release-stored its flag and the Acquire load in `try_wait`
+                // ordered those tape writes before this read; the remaining
+                // cells are input-populated before `run`. Writer ranges are
+                // disjoint, so no later instruction writes into a released
+                // range.
+                let mut flush_or_defer = |r: Range, defer_to: Option<&mut Vec<Entry>>| {
+                    let (a_start, a_end, l_start, l_end) = r;
+                    if a_start == a_end && l_start == l_end {
+                        return;
                     }
-                    if newly_complete > processed_levels {
-                        let last_l = newly_complete - 1;
-                        let curr_advice_bp = advice_break_points[last_l];
-                        let curr_lookup_bp = lookup_break_points[last_l];
-                        let advice_len = curr_advice_bp - prev_advice_bp;
-                        let lookup_len = curr_lookup_bp - prev_lookup_bp;
-                        // Safety: every instruction with index in
-                        // `[level_starts[processed_levels], level_starts[newly_complete])`
-                        // has Release-stored its flag, and the acquire load above
-                        // is ordered after those stores. Later-level insts only
-                        // write cells at offsets >= curr_advice_bp / curr_lookup_bp
-                        // by construction of the break points.
-                        let advice_delta: &[Fr] = unsafe {
-                            std::slice::from_raw_parts(
-                                (tape_ptr.0 as *const Fr).add(prev_advice_bp),
-                                advice_len,
-                            )
-                        };
-                        let lookup_delta: &[Fr] = unsafe {
-                            std::slice::from_raw_parts(
-                                (tape_ptr.0 as *const Fr).add(advice_cells + prev_lookup_bp),
-                                lookup_len,
-                            )
-                        };
-                        on_level_complete(advice_delta, lookup_delta);
-                        prev_advice_bp = curr_advice_bp;
-                        prev_lookup_bp = curr_lookup_bp;
-                        processed_levels = newly_complete;
+                    if let Some(defer) = defer_to {
+                        if (a_end - a_start) + (l_end - l_start) < MIN_FLUSH_CELLS {
+                            defer.push((READY_SENTINEL, a_start, a_end, l_start, l_end));
+                            return;
+                        }
+                    }
+                    let advice_delta: &[Fr] = unsafe {
+                        std::slice::from_raw_parts(
+                            (tape_ptr.0 as *const Fr).add(a_start as usize),
+                            (a_end - a_start) as usize,
+                        )
+                    };
+                    let lookup_delta: &[Fr] = unsafe {
+                        std::slice::from_raw_parts(
+                            (tape_ptr.0 as *const Fr).add(advice_cells + l_start as usize),
+                            (l_end - l_start) as usize,
+                        )
+                    };
+                    on_delta(
+                        a_start as usize,
+                        advice_delta,
+                        l_start as usize,
+                        lookup_delta,
+                    );
+                };
+
+                // Pass 0: walk every writer in emission order. The pending
+                // range's end always equals the next entry's release start, so
+                // completed writers extend it seamlessly; a timeout flushes
+                // (or defers) the pending range and queues the writer, with
+                // its release range, for retry. Deferred ranges are pushed in
+                // walk order, so `failed` stays emission-ordered.
+                let mut failed: Vec<Entry> = Vec::new();
+                let mut pend: Range = (0, 0, 0, 0);
+                for &ReleaseEntry {
+                    inst,
+                    advice_end,
+                    lookup_end,
+                } in release_order
+                {
+                    if try_wait(inst) {
+                        pend.1 = advice_end;
+                        pend.3 = lookup_end;
+                        if pend.1 - pend.0 >= MAX_FLUSH_CELLS {
+                            flush_or_defer(pend, None);
+                            pend = (advice_end, advice_end, lookup_end, lookup_end);
+                        }
+                    } else {
+                        flush_or_defer(pend, Some(&mut failed));
+                        failed.push((inst, pend.1, advice_end, pend.3, lookup_end));
+                        pend = (advice_end, advice_end, lookup_end, lookup_end);
                     }
                 }
-            });
+                if failed.is_empty() {
+                    flush_or_defer(pend, None);
+                } else {
+                    flush_or_defer(pend, Some(&mut failed));
+                }
+
+                // Retry passes: the same bounded-spin walk over the (still
+                // emission-ordered) leftovers, merging adjacent ranges, until
+                // none remain. Deferral is only allowed while flag-gated
+                // entries remain — once every entry is ready nothing new can
+                // ever merge, so the final pass flushes everything.
+                while !failed.is_empty() {
+                    let allow_defer = failed.iter().any(|&(inst, ..)| inst != READY_SENTINEL);
+                    let mut still: Vec<Entry> = Vec::new();
+                    let mut pend: Option<Range> = None;
+                    for &(inst, a_start, a_end, l_start, l_end) in &failed {
+                        if try_wait(inst) {
+                            let merged = match pend {
+                                Some(p) if p.1 == a_start && p.3 == l_start => {
+                                    (p.0, a_end, p.2, l_end)
+                                }
+                                Some(p) => {
+                                    flush_or_defer(
+                                        p,
+                                        if allow_defer { Some(&mut still) } else { None },
+                                    );
+                                    (a_start, a_end, l_start, l_end)
+                                }
+                                None => (a_start, a_end, l_start, l_end),
+                            };
+                            if merged.1 - merged.0 >= MAX_FLUSH_CELLS {
+                                flush_or_defer(merged, None);
+                                pend = None;
+                            } else {
+                                pend = Some(merged);
+                            }
+                        } else {
+                            if let Some(p) = pend.take() {
+                                flush_or_defer(p, Some(&mut still));
+                            }
+                            still.push((inst, a_start, a_end, l_start, l_end));
+                        }
+                    }
+                    if let Some(p) = pend {
+                        if allow_defer && !still.is_empty() {
+                            flush_or_defer(p, Some(&mut still));
+                        } else {
+                            flush_or_defer(p, None);
+                        }
+                    }
+                    failed = still;
+                }
+            }
         });
 
         self.tape = tape;
@@ -504,86 +621,6 @@ impl GraphExecutor {
             &self.const_inds[ci_lo as usize..ci_hi as usize],
         );
     }
-}
-
-/// Computes per-level break points: after level `l`, `advice[0..advice_bp[l])` and
-/// `lookup[0..lookup_bp[l])` are fully materialized (no future write lands there).
-///
-/// Each tape cell is written by exactly one instruction (input or compute). We first
-/// label every cell with the level at which it becomes final — `-1` for input-populated
-/// cells, `0..n_levels` for compute cells — then, since break points are monotonic in
-/// level, we walk both tapes with a single cursor that advances past every cell whose
-/// write level is `<= l`.
-fn compute_break_points(
-    advice_cells: usize,
-    lookup_cells: usize,
-    input_insts: &[GraphCoreInst],
-    insts: &[GraphCoreInst],
-    level_starts: &[u32],
-    n_levels: usize,
-) -> (Vec<usize>, Vec<usize>) {
-    const UNWRITTEN: i32 = i32::MAX;
-    const INPUT_LEVEL: i32 = -1;
-    let mut advice_write_level = vec![UNWRITTEN; advice_cells];
-    let mut lookup_write_level = vec![UNWRITTEN; lookup_cells];
-    let mark = |cells: &mut [i32], off: u32, len: u32, level: i32| {
-        let lo = off as usize;
-        let hi = lo + len as usize;
-        for slot in &mut cells[lo..hi] {
-            *slot = level;
-        }
-    };
-    for inst in input_insts {
-        mark(
-            &mut advice_write_level,
-            inst.ctx_offset,
-            inst.ctx_len,
-            INPUT_LEVEL,
-        );
-        mark(
-            &mut lookup_write_level,
-            inst.lookup_offset,
-            inst.lookups_len,
-            INPUT_LEVEL,
-        );
-    }
-    for level in 0..n_levels {
-        let start = level_starts[level] as usize;
-        let end = level_starts[level + 1] as usize;
-        for inst in &insts[start..end] {
-            mark(
-                &mut advice_write_level,
-                inst.ctx_offset,
-                inst.ctx_len,
-                level as i32,
-            );
-            mark(
-                &mut lookup_write_level,
-                inst.lookup_offset,
-                inst.lookups_len,
-                level as i32,
-            );
-        }
-    }
-    let scan = |write_level: &[i32], cells: usize| {
-        let mut break_points = Vec::with_capacity(n_levels);
-        let mut cursor = 0;
-        for l in 0..n_levels {
-            while cursor < cells && write_level[cursor] <= l as i32 {
-                cursor += 1;
-            }
-            break_points.push(cursor);
-        }
-        assert_eq!(
-            break_points.last().copied().unwrap_or(0),
-            cells,
-            "final break point must cover the whole tape (all cells written)",
-        );
-        break_points
-    };
-    let advice_bp = scan(&advice_write_level, advice_cells);
-    let lookup_bp = scan(&lookup_write_level, lookup_cells);
-    (advice_bp, lookup_bp)
 }
 
 impl ChipBase for GraphExecutor {
@@ -649,8 +686,8 @@ impl GraphProver {
     }
 
     /// Populates `proof`'s witnesses, evaluates the graph with `num_threads` compute
-    /// threads, and streams each level's newly-materialized advice/lookup deltas
-    /// through `on_level_complete` (see [`GraphExecutor::run`] for the closure
+    /// threads, and streams newly-materialized advice/lookup tape ranges (offset +
+    /// delta slice) through `on_delta` (see [`GraphExecutor::run`] for the closure
     /// contract). Returns the circuit's public values; any output from the callback
     /// itself must be plumbed out via shared state captured by the closure.
     pub fn witness_gen<F>(
@@ -658,17 +695,17 @@ impl GraphProver {
         circuit: &StaticVerifierCircuit,
         proof: &Proof<RootConfig>,
         num_threads: usize,
-        on_level_complete: F,
+        on_delta: F,
     ) -> Vec<Fr>
     where
-        F: FnMut(&[Fr], &[Fr]) + Send,
+        F: FnMut(usize, &[Fr], usize, &[Fr]),
     {
         self.executor.reset();
         tracing::info_span!("populate_inputs").in_scope(|| {
             load_proof_wire(&mut self.executor, proof, &circuit.log_heights_per_air);
         });
         tracing::info_span!("executor_run", num_threads)
-            .in_scope(|| self.executor.run(num_threads, on_level_complete));
+            .in_scope(|| self.executor.run(num_threads, on_delta));
         tracing::info_span!("collect_pvs").in_scope(|| {
             let advice = self.executor.advice();
             self.pv_offsets
@@ -681,12 +718,6 @@ impl GraphProver {
     /// Total number of advice-tape cells written per [`Self::witness_gen`].
     pub fn total_advice_cells(&self) -> usize {
         self.executor.advice().len()
-    }
-
-    /// Number of compute instructions per level in the underlying executor's
-    /// schedule. See [`GraphExecutor::level_widths`].
-    pub fn level_widths(&self) -> Vec<usize> {
-        self.executor.level_widths()
     }
 
     /// Total number of range-check tape cells written per [`Self::witness_gen`].
@@ -705,9 +736,199 @@ impl GraphProver {
     }
 }
 
+/// Streaming builder for the physical advice column layout; used by
+/// `StaticVerifierProvingKey::run_witness_gen_pipeline`.
+///
+/// The graph executor materializes advice/lookup values as offset-tagged *delta*
+/// slices; this builder consumes them via [`Self::append`]. Placement is a pure
+/// function of the tape offset, so disjoint deltas may arrive in any order. The
+/// layout mirrors `PagedWitnessContext::push_advice` (the gate-column stream splits
+/// at pinned break points, duplicating the break-row value at row 0 of the next
+/// column so the gate-overlap copy constraint holds) and
+/// `BaseCircuitBuilder::assign_lookups_in_phase` (the range-check stream fills lookup
+/// advice columns round-robin: value `i` at column `i % L`, row `i / L`).
+///
+/// Column state lives directly on the GPU: on the first call to [`Self::append`] the
+/// builder allocates `num_advice_columns × n` `DeviceBuffer`s and zero-fills each
+/// (via `cudaMemsetAsync`). Subsequent calls copy each contiguous delta segment
+/// straight to the target row range of the target device column with
+/// `DeviceBufferExt::mut_slice` + `copy_from_host`, so no large host-side column
+/// buffer is ever materialized.
+pub struct FusedColumnBuilder {
+    // ---- Config (immutable after `new`) ------------------------------------
+    n: usize,
+    num_advice_columns: usize,
+    /// Pinned break points, in order (`break_points[c]` is gate column `c`'s
+    /// break row).
+    break_points: Vec<usize>,
+    /// Absolute advice-tape offset of row 0 of each gate column. Row 0
+    /// duplicates the previous column's break-point value, so
+    /// `col_starts[c + 1] = col_starts[c] + break_points[c]`.
+    col_starts: Vec<usize>,
+    /// Physical column indices of the range-check lookup advice columns.
+    lookup_col_indices: Vec<usize>,
+
+    // ---- Device columns (lazily allocated on first `append`) ---------------
+    device_columns: Vec<halo2_base::halo2_proofs::cuda::DeviceBuffer<Fr>>,
+}
+
+impl FusedColumnBuilder {
+    pub fn new(
+        n: usize,
+        num_advice_columns: usize,
+        break_points: Vec<usize>,
+        lookup_col_indices: Vec<usize>,
+    ) -> Self {
+        let mut col_starts = Vec::with_capacity(break_points.len() + 1);
+        col_starts.push(0usize);
+        for &bp in &break_points {
+            col_starts.push(col_starts.last().unwrap() + bp);
+        }
+        Self {
+            n,
+            num_advice_columns,
+            break_points,
+            col_starts,
+            lookup_col_indices,
+            device_columns: Vec::new(),
+        }
+    }
+
+    fn ensure_allocated(&mut self) {
+        use halo2_base::halo2_proofs::cuda::{utils::HALO2_GPU_CTX, DeviceBuffer};
+        if !self.device_columns.is_empty() {
+            return;
+        }
+        self.device_columns.reserve_exact(self.num_advice_columns);
+        for _ in 0..self.num_advice_columns {
+            let buf: DeviceBuffer<Fr> =
+                DeviceBuffer::<Fr>::with_capacity_on(self.n, &HALO2_GPU_CTX);
+            buf.fill_zero_on(&HALO2_GPU_CTX)
+                .expect("zero-fill advice column");
+            self.device_columns.push(buf);
+        }
+    }
+
+    /// Copies `advice_delta` (advice-tape range starting at absolute offset
+    /// `advice_offset`) and `lookup_delta` (range-check-tape range starting at
+    /// `lookup_offset`) into the device columns. Placement is a pure function
+    /// of the offsets, so disjoint deltas may arrive in any order.
+    pub fn append(
+        &mut self,
+        advice_offset: usize,
+        advice_delta: &[Fr],
+        lookup_offset: usize,
+        lookup_delta: &[Fr],
+    ) {
+        use halo2_base::halo2_proofs::cuda::{utils::HALO2_GPU_CTX, DeviceBufferExt as _};
+
+        self.ensure_allocated();
+
+        // --- Gate stream: contiguous H2D per (column, row-range) segment ----
+        //
+        // Seek: gate column `c` covers tape offsets `[col_starts[c],
+        // col_starts[c + 1]]`, inclusive at both ends — the shared offset is
+        // the duplicated break value, present at `(c, break_points[c])` and
+        // `(c + 1, 0)`. A delta starting exactly on a column start begins at
+        // the *earlier* placement so the split/rewind below re-emits the
+        // duplicate. (If a previous delta already wrote it, this rewrites the
+        // same value — harmless.)
+        //
+        // Rewind trick: when a segment ends on a break-point row we `delta_pos -= 1`
+        // so the break value re-appears as the first host source of the next
+        // column's copy — that fills row 0 of the new column "for free" and avoids
+        // a separate 1-element H2D.
+        if !advice_delta.is_empty() {
+            let c = self.col_starts.partition_point(|&s| s <= advice_offset) - 1;
+            let (mut col, mut row) = if c > 0 && advice_offset == self.col_starts[c] {
+                (c - 1, self.break_points[c - 1])
+            } else {
+                (c, advice_offset - self.col_starts[c])
+            };
+            let mut delta_pos = 0usize;
+            while delta_pos < advice_delta.len() {
+                let cur_break_point = self.break_points.get(col).copied();
+                let rows_until_break = match cur_break_point {
+                    Some(bp) => {
+                        debug_assert!(bp >= row);
+                        bp - row + 1
+                    }
+                    None => usize::MAX,
+                };
+                let delta_remaining = advice_delta.len() - delta_pos;
+                let take = rows_until_break.min(delta_remaining);
+                let src = &advice_delta[delta_pos..delta_pos + take];
+                self.device_columns[col]
+                    .mut_slice(row..row + take)
+                    .copy_from_host(src, &HALO2_GPU_CTX)
+                    .expect("H2D advice gate segment");
+                delta_pos += take;
+                if cur_break_point.is_some() && take == rows_until_break {
+                    col += 1;
+                    row = 0;
+                    delta_pos -= 1; // Re-emit the break value as row 0 of the new column.
+                } else {
+                    row += take;
+                }
+            }
+        }
+
+        // --- Lookup stream: one gathered H2D per lookup column per call ------
+        //
+        // Value at absolute index `i` lands at column `L[i % L]`, row `i / L`.
+        // Within a single delta the indices bound for physical column `L[c]` are
+        // strided by `L` in delta space but consecutive in row space. Gather each
+        // such stride into a small host buffer (≤ ceil(delta_len / L) elements)
+        // and issue one contiguous H2D per lookup column per `append` call.
+        let l = self.lookup_col_indices.len();
+        let k = lookup_offset;
+        let n_l = lookup_delta.len();
+        if n_l > 0 {
+            for c in 0..l {
+                let start_j = (c + l - k % l) % l;
+                if start_j >= n_l {
+                    continue;
+                }
+                let n_values = (n_l - start_j).div_ceil(l);
+                let start_row = (k + start_j) / l;
+                let host_buf: Vec<Fr> = (0..n_values)
+                    .map(|i| lookup_delta[start_j + i * l])
+                    .collect();
+                self.device_columns[self.lookup_col_indices[c]]
+                    .mut_slice(start_row..start_row + n_values)
+                    .copy_from_host(&host_buf, &HALO2_GPU_CTX)
+                    .expect("H2D lookup column gather");
+            }
+        }
+    }
+
+    /// Consumes the device columns, leaving the builder empty.
+    pub fn take_device_columns(&mut self) -> Vec<halo2_base::halo2_proofs::cuda::DeviceBuffer<Fr>> {
+        assert!(
+            !self.device_columns.is_empty(),
+            "take_device_columns: no data was ever appended",
+        );
+        std::mem::take(&mut self.device_columns)
+    }
+
+    /// Diagnostic-only: D2H each device column back into host `Vec<Fr>`s so the
+    /// caller can byte-compare against the legacy `BaseCircuitBuilder` +
+    /// `synthesize_witness_shplonk` path. Not used on the hot prove path.
+    pub fn snapshot_columns_to_host(&self) -> Vec<Vec<Fr>> {
+        use halo2_base::halo2_proofs::cuda::{utils::HALO2_GPU_CTX, MemCopyD2H as _};
+        self.device_columns
+            .iter()
+            .map(|d| d.to_host_on(&HALO2_GPU_CTX).expect("D2H advice column"))
+            .collect()
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use std::{
+        sync::Arc,
+        time::{Duration, Instant},
+    };
 
     use halo2_base::gates::{
         circuit::{builder::BaseCircuitBuilder, CircuitBuilderStage},
@@ -753,7 +974,7 @@ mod tests {
         circuit.populate_verify_stark_constraints(&mut ir, proof);
         let mut executor = GraphExecutor::new(ir);
         load_proof_wire(&mut executor, proof, log_heights_per_air);
-        executor.run(num_threads, |_, _| ());
+        executor.run(num_threads, |_, _, _, _| ());
         executor
     }
 
@@ -793,70 +1014,43 @@ mod tests {
         assert_eq!(sequential.lookups(), executor.lookups());
     }
 
-    /// Prints summary stats (min/max/mean/median + percentiles) and a
-    /// log2-bucketed histogram of a per-level width distribution.
-    #[allow(dead_code)]
-    fn print_level_width_distribution(widths: &[usize]) {
-        let n = widths.len();
-        if n == 0 {
-            println!("layer widths: (empty)");
-            return;
-        }
-        let mut sorted = widths.to_vec();
-        sorted.sort_unstable();
-        let total: usize = widths.iter().sum();
-        let min = *sorted.first().unwrap();
-        let max = *sorted.last().unwrap();
-        let mean = total as f64 / n as f64;
-        let median = sorted[n / 2];
-        let pct = |q: f64| sorted[((n as f64 * q) as usize).min(n - 1)];
-        println!(
-            "layer widths: n_levels={n} total_insts={total} min={min} max={max} mean={mean:.1} median={median}"
+    /// Runs the executor, streaming each delta through `builder`; returns the
+    /// wall time of the combined run + fused H2D copies.
+    fn timed_run(
+        executor: &mut GraphExecutor,
+        builder: &mut FusedColumnBuilder,
+        num_threads: usize,
+    ) -> Duration {
+        let start = Instant::now();
+        executor.run(
+            num_threads,
+            |advice_offset, advice, lookup_offset, lookups| {
+                builder.append(advice_offset, advice, lookup_offset, lookups)
+            },
         );
-        println!(
-            "  p10={} p25={} p50={} p75={} p90={} p95={} p99={} p999={}",
-            pct(0.10),
-            pct(0.25),
-            pct(0.50),
-            pct(0.75),
-            pct(0.90),
-            pct(0.95),
-            pct(0.99),
-            pct(0.999),
-        );
-        // Log2-bucketed histogram: bucket `i` covers widths in [2^i, 2^(i+1)),
-        // with a special zero bucket for width == 0.
-        let max_bucket = ((max as f64).log2().floor() as usize + 1).min(32);
-        let mut buckets = vec![0usize; max_bucket + 1];
-        for &w in widths {
-            let b = if w == 0 {
-                0
-            } else {
-                (w as f64).log2().floor() as usize
-            };
-            let b = b.min(buckets.len() - 1);
-            buckets[b] += 1;
-        }
-        let bar_width = 60usize;
-        let max_count = buckets.iter().copied().max().unwrap_or(1).max(1);
-        println!("  histogram (log2 buckets, [lo, hi) width range):");
-        for (i, &count) in buckets.iter().enumerate() {
-            if count == 0 {
-                continue;
-            }
-            let lo = if i == 0 { 0 } else { 1usize << i };
-            let hi = 1usize << (i + 1);
-            let bar_len = (count * bar_width) / max_count;
-            let bar: String = "#".repeat(bar_len);
-            let pct = count as f64 / n as f64 * 100.0;
-            println!("    [{lo:>7}, {hi:>7}): {count:>6}  ({pct:>5.1}%) {bar}");
-        }
+        start.elapsed()
+    }
+
+    /// Reads the next length-prefixed JSON section of `static_verifier_pk.bin`
+    /// (layout: `(circuit, shape)` section, then `Halo2ProvingMetadata` section,
+    /// then raw pk bytes — see `crate::codec`).
+    fn read_json_section<T: serde::de::DeserializeOwned>(reader: &mut impl std::io::Read) -> T {
+        let mut len_bytes = [0u8; 8];
+        reader.read_exact(&mut len_bytes).unwrap();
+        let mut bytes = vec![0u8; u64::from_le_bytes(len_bytes) as usize];
+        reader.read_exact(&mut bytes).unwrap();
+        serde_json::from_slice(&bytes).unwrap()
     }
 
     #[test]
-    #[ignore = "requires cached static verifier pk + root proof from bin/static-verifier-tracegen"]
+    #[ignore = "requires cached static verifier pk + root proof from bin/static-verifier-tracegen + CUDA GPU"]
     fn graph_executor_root_proof() {
-        use std::time::Instant;
+        use halo2_base::{
+            gates::circuit::MaybeRangeConfig,
+            halo2_proofs::{halo2curves::bn256::G1Affine, plonk::create_constraint_system},
+        };
+
+        use crate::prover::Halo2ProvingMetadata;
 
         let dir = std::env::var("STATIC_VERIFIER_CACHE_DIR")
             .map(std::path::PathBuf::from)
@@ -864,20 +1058,40 @@ mod tests {
                 std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                     .join("../../../bin/static-verifier-tracegen/cache")
             });
-        let (circuit, shape): (StaticVerifierCircuit, crate::config::StaticVerifierShape) = {
-            use std::io::Read as _;
-            let mut reader = std::io::BufReader::new(
-                std::fs::File::open(dir.join("static_verifier_pk.bin")).unwrap(),
-            );
-            let mut len_bytes = [0u8; 8];
-            reader.read_exact(&mut len_bytes).unwrap();
-            let mut bytes = vec![0u8; u64::from_le_bytes(len_bytes) as usize];
-            reader.read_exact(&mut bytes).unwrap();
-            serde_json::from_slice(&bytes).unwrap()
-        };
+        let mut reader = std::io::BufReader::new(
+            std::fs::File::open(dir.join("static_verifier_pk.bin")).unwrap(),
+        );
+        let (circuit, shape): (StaticVerifierCircuit, crate::config::StaticVerifierShape) =
+            read_json_section(&mut reader);
+        let metadata: Halo2ProvingMetadata = read_json_section(&mut reader);
+        drop(reader);
         let proof: Proof<RootConfig> =
             bitcode::deserialize(&std::fs::read(dir.join("root_proof.bitcode")).unwrap()).unwrap();
         let log_heights_per_air = log_heights_per_air_from_proof(&proof);
+
+        // Physical column layout for the FusedColumnBuilder (mirrors
+        // `StaticVerifierProvingKey::run_witness_gen_pipeline`, minus the pk).
+        let n = 1usize << metadata.config_params.k;
+        let (cs, config) = create_constraint_system::<G1Affine, BaseCircuitBuilder<Fr>>(
+            metadata.config_params.clone(),
+        );
+        let num_advice_columns = cs.num_advice_columns();
+        let MaybeRangeConfig::WithRange(range_config) = &config.base else {
+            panic!("static verifier requires lookup advice columns");
+        };
+        let lookup_col_indices: Vec<usize> = range_config.lookup_advice[0]
+            .iter()
+            .map(|c| c.index())
+            .collect();
+        let break_points = metadata.break_points[0].clone();
+        let fused_builder = || {
+            FusedColumnBuilder::new(
+                n,
+                num_advice_columns,
+                break_points.clone(),
+                lookup_col_indices.clone(),
+            )
+        };
 
         let start = Instant::now();
         let mut ir = Halo2IRBuilder::new(shape.lookup_bits);
@@ -887,31 +1101,42 @@ mod tests {
         let start = Instant::now();
         let mut executor = GraphExecutor::new(ir);
         println!(
-            "lowering: {:?} ({} insts, {} levels)",
+            "lowering: {:?} ({} insts)",
             start.elapsed(),
-            executor.insts.len(),
-            executor.num_levels()
+            executor.insts.len()
         );
 
         let start = Instant::now();
         load_proof_wire(&mut executor, &proof, &log_heights_per_air);
         println!("input population: {:?}", start.elapsed());
 
-        let start = Instant::now();
-        executor.run(1, |_, _| ());
-        println!("run (1 thread): {:?}", start.elapsed());
+        let mut builder = fused_builder();
+        let total = timed_run(&mut executor, &mut builder, 1);
+        let reference_columns = builder.snapshot_columns_to_host();
+        drop(builder.take_device_columns());
+        println!("run + fused H2D (1 thread): {total:?}");
         let reference_advice = executor.advice().to_vec();
         let reference_lookups = executor.lookups().to_vec();
 
         // Reruns reuse the warm tape (fresh-tape correctness vs the real backend
         // is covered by `graph_executor_matches_halo2_backend`); these are timing
-        // plus write-offset consistency checks.
+        // plus consistency checks: thread count changes the delta chunking, so
+        // identical device columns show placement is chunking-independent.
         for num_threads in [4, 8, 12] {
-            let start = Instant::now();
-            executor.run(num_threads, |_, _| ());
-            println!("run ({num_threads} threads): {:?}", start.elapsed());
+            let mut builder = fused_builder();
+            let total = timed_run(&mut executor, &mut builder, num_threads);
+            let columns = builder.snapshot_columns_to_host();
+            drop(builder.take_device_columns());
+            println!("run + fused H2D ({num_threads} threads): {total:?}");
             assert_eq!(executor.advice(), &reference_advice[..]);
             assert_eq!(executor.lookups(), &reference_lookups[..]);
+            assert_eq!(columns.len(), reference_columns.len());
+            for (i, (col, reference)) in columns.iter().zip(&reference_columns).enumerate() {
+                assert!(
+                    col == reference,
+                    "device column {i} mismatch vs 1-thread reference ({num_threads} threads)"
+                );
+            }
         }
     }
 
@@ -938,7 +1163,7 @@ mod tests {
     #[cfg(feature = "evm-prove")]
     #[ignore = "requires cached static verifier pk + root proof + CUDA GPU"]
     fn graph_executor_prove_wrapped_pipeline() {
-        use std::{fs::File, io::BufReader, path::PathBuf, time::Instant};
+        use std::{fs::File, io::BufReader, path::PathBuf};
 
         use openvm_stark_sdk::openvm_stark_backend::codec::Decode as _;
 
@@ -975,17 +1200,8 @@ mod tests {
         );
         drop(warmup_advice);
 
-        let level_widths = pk
-            .graph_prover
-            .get()
-            .expect("graph prover initialized by warm-up call")
-            .lock()
-            .unwrap()
-            .level_widths();
-        print_level_width_distribution(&level_widths);
-
-        for &num_threads in &[12usize] {
-            for iter in 0..1 {
+        for num_threads in [4, 8, 12] {
+            for iter in 0..3 {
                 let start = Instant::now();
                 let (gpu_advice, _instances) =
                     pk.run_witness_gen_pipeline(&proof, num_threads, None);
