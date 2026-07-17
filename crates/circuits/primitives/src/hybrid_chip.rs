@@ -50,13 +50,10 @@ pub fn cpu_proving_ctx_to_gpu<HS: GpuHashScheme>(
         "CPU to GPU transfer of cached traces not supported"
     );
     let cm = ColMajorMatrix::from_row_major(&cpu_ctx.common_main);
-    // Copy without `transport_matrix_h2d_col_major`: that helper ends with a
-    // full stream sync, which stalls the host until every previously enqueued
-    // kernel and copy has drained (measured >1s per segment on reth-sized
-    // workloads when this runs mid-tracegen). The sync is unnecessary for the
-    // source's lifetime: an async copy from pageable memory returns only once
-    // the source has been consumed by the staging pipeline, and all later
-    // reads of the destination are ordered by the stream.
+    // Safety: sync_stream(...) is not needed because the source is pageable memory and the CUDA
+    // runtime guarantees that cudaMemcpyAsync from a pageable host buffer returns only after the
+    // data has been staged into the driver's internal pinned buffers which avoids any
+    // use-after-free issues.
     let (height, width) = (cm.height(), cm.width());
     let buffer = cm.values.to_device_on(device_ctx).unwrap();
     let trace = DeviceMatrix::new(std::sync::Arc::new(buffer), height, width);

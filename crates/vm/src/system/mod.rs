@@ -117,10 +117,10 @@ pub struct SystemRecords<F> {
 /// timestamp at [BLOCK_FE_WIDTH] granularity. The touched-memory list is
 /// sorted by `(address_space, ptr)`.
 ///
-/// `repr(C)` with 4-byte fields: for a 4-byte field type this is exactly the
-/// GPU memory-inventory input-record layout (7 u32 words), so the device path
-/// uploads the vector's bytes without repacking. Keep in sync with `InRec` in
-/// `inventory.cu`.
+/// `repr(C)` with 4-byte fields: for a 4-byte field type its bytes are plain
+/// data and the struct is exactly the GPU memory-inventory input-record
+/// layout (7 u32 words), so the device path uploads the vector's bytes
+/// without repacking. Keep in sync with `InRec` in `inventory.cu`.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TouchedBlock<F> {

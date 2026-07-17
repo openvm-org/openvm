@@ -108,9 +108,6 @@ impl Chip<Vec<u32>, GpuBackend> for ProgramChipGPU {
 
         // Upload the raw u32 frequencies through a pooled pinned buffer and
         // convert to field elements on device (also zero-filling the tail).
-        // The previous host-side serial map + pageable copy cost ~15 ms per
-        // segment on large programs. Returning the buffer routes through the
-        // arena cleaner, which synchronizes before reuse.
         let bytes = filtered_len * std::mem::size_of::<u32>();
         let mut h_freqs = openvm_cuda_common::pinned::take(bytes + std::mem::size_of::<u32>());
         let off = h_freqs.as_ptr().align_offset(std::mem::size_of::<u32>());

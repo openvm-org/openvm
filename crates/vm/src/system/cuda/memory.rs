@@ -271,37 +271,24 @@ impl MemoryInventoryGPU {
             unpadded_merkle_height
         } else {
             let _span = tracing::info_span!("mem_merge_records").entered();
-            // TouchedBlock is repr(C) with 4-byte fields and matches the
-            // device InRec layout exactly, so the partition uploads as raw
-            // bytes: bulk-copy into a pooled page-locked buffer so the copy
-            // takes the DMA fast path. Giving the buffer back routes through
-            // the arena cleaner, which synchronizes the device before reuse,
-            // so the in-flight copy is safe.
-            const IN_REC_WORDS: usize =
-                std::mem::size_of::<TouchedBlock<F>>() / std::mem::size_of::<u32>();
             const _: () = assert!(std::mem::size_of::<TouchedBlock<F>>() == 28);
             let in_num_records = partition.len();
-            let in_bytes = in_num_records * IN_REC_WORDS * std::mem::size_of::<u32>();
+            let in_bytes = in_num_records * std::mem::size_of::<TouchedBlock<F>>();
             let mut h_in = openvm_cuda_common::pinned::take(in_bytes + 4);
-            let align = h_in.as_ptr().align_offset(std::mem::size_of::<u32>());
-            let dirty_len = align + in_bytes;
-            {
-                // SAFETY: TouchedBlock is repr(C) with only 4-byte fields (F
-                // is the 4-byte BabyBear here), so its bytes are plain data;
-                // the destination is within the buffer.
-                let src: &[u8] = unsafe {
-                    std::slice::from_raw_parts(partition.as_ptr() as *const u8, in_bytes)
-                };
-                let dst = &mut h_in[align..align + in_bytes];
-                dst.par_chunks_mut(UPLOAD_PACK_CHUNK)
-                    .zip(src.par_chunks(UPLOAD_PACK_CHUNK))
-                    .for_each(|(d, s)| d.copy_from_slice(s));
-            }
-            // SAFETY: 4-aligned by `align`, within the buffer.
+            let align_offset = h_in.as_ptr().align_offset(std::mem::size_of::<u32>());
+            let dirty_len = align_offset + in_bytes;
+            let src: &[u8] = unsafe {
+                std::slice::from_raw_parts(partition.as_ptr() as *const u8, in_bytes)
+            };
+            let dst = &mut h_in[align_offset..align_offset + in_bytes];
+            dst.par_chunks_mut(UPLOAD_PACK_CHUNK)
+                .zip(src.par_chunks(UPLOAD_PACK_CHUNK))
+                .for_each(|(d, s)| d.copy_from_slice(s));
+            // SAFETY: 4-aligned by `align_offset`, within the buffer.
             let in_words: &[u32] = unsafe {
                 std::slice::from_raw_parts(
-                    h_in.as_ptr().add(align) as *const u32,
-                    in_num_records * IN_REC_WORDS,
+                    h_in.as_ptr().add(align_offset) as *const u32,
+                    in_bytes / std::mem::size_of::<u32>(),
                 )
             };
             let out_words = in_num_records

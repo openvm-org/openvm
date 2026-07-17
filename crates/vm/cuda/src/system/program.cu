@@ -58,8 +58,7 @@ extern "C" int _program_cached_tracegen(
 }
 
 /// Converts raw u32 execution frequencies to field elements in place on
-/// device, zero-filling [filtered_len, height). Replaces a host-side serial
-/// map + pageable copy that cost ~15 ms per segment on large programs.
+/// device, zero-filling [filtered_len, height).
 __global__ void program_fill_frequencies(
     const uint32_t *__restrict__ freqs,
     size_t filtered_len,
