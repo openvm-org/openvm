@@ -20,7 +20,6 @@ use super::{
         PreflightShadowsView, WORD_BYTES,
     },
     preflight_pool::{scrub_shadows, RvrPreflightBufferPool},
-    state::{TracerPayload, TracerPtr},
 };
 use crate::{
     arch::{
@@ -692,11 +691,7 @@ impl Default for PreflightTracerData {
     }
 }
 
-impl TracerPayload for PreflightTracerData {
-    const KIND: u32 = PREFLIGHT_TRACER_KIND;
-}
-
-pub type PreflightTracer = TracerPtr<PreflightTracerData>;
+pub type PreflightTracer = *mut PreflightTracerData;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PreflightRawLogs {
@@ -1606,10 +1601,10 @@ where
             );
         }
         if let Some(target_instret) = num_insns {
-            if run_result.suspended && run_result.state.instret != target_instret {
+            if run_result.suspended && run_result.state.mode_state.instret != target_instret {
                 return Err(ExecutionError::RvrExecution(format!(
                     "mid-block rvr preflight suspension unsupported: requested num_insns={target_instret}, retired instret={} at an rvr basic-block boundary",
-                    run_result.state.instret
+                    run_result.state.mode_state.instret
                 )));
             }
         }
@@ -1713,10 +1708,10 @@ where
         let device_program_references =
             unsafe { assume_init_prefix(device_program_references, device_program_references_len) };
         if device_touched_memory {
-            if program_instruction_len != run_result.state.instret as usize {
+            if program_instruction_len != run_result.state.mode_state.instret as usize {
                 return Err(ExecutionError::RvrExecution(format!(
                     "device chronology covered {program_instruction_len} instructions but native execution retired {}",
-                    run_result.state.instret
+                    run_result.state.mode_state.instret
                 )));
             }
             if program_instruction_len != 0 && program_runs.is_empty() {
@@ -2059,7 +2054,7 @@ where
             access_aux: replay.access_aux,
             access_aux_complete: build_access_aux,
             to_state: run_state,
-            instret: run_result.state.instret,
+            instret: run_result.state.mode_state.instret,
             suspended: run_result.suspended,
             inline_records,
             delta_records,
@@ -2465,7 +2460,7 @@ mod tests {
 
         let program_len = tracer.program_log_len as usize;
         let memory_len = tracer.memory_log_len as usize;
-        assert_eq!(program_len, state.instret as usize);
+        assert_eq!(program_len, state.mode_state.instret as usize);
         assert!(program_len > 0);
         assert!(memory_len > 0);
         assert_eq!(chip_counts[TEST_CHIP as usize], 15);
@@ -2620,7 +2615,7 @@ mod tests {
 
         let program_len = tracer.program_log_len as usize;
         let memory_len = tracer.memory_log_len as usize;
-        assert_eq!(program_len, state.instret as usize);
+        assert_eq!(program_len, state.mode_state.instret as usize);
         assert_eq!(program_len, 8);
         assert_eq!(memory_len, 10);
         assert_eq!(chip_counts[TEST_CHIP as usize], 4);

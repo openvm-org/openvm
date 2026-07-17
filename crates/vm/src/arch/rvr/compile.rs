@@ -1152,7 +1152,7 @@ fn compile_impl<F: PrimeField32>(
         .map(|(env, invalid_message)| native_opt_level(env, invalid_message))
         .transpose()?
         .flatten();
-    let native_detail = opts.tracer_mode == TracerMode::Preflight
+    let native_detail = opts.execution_kind == RvrExecutionKind::Preflight
         && std::env::var("OPENVM_RVR_NATIVE_DETAIL").as_deref() == Ok("1");
 
     let ir_started = Instant::now();

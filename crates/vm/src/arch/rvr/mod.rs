@@ -17,9 +17,9 @@ pub mod pure;
 pub mod state;
 
 pub use compile::{
-    build_pc_to_chip, compile, compile_metered, compile_metered_cost,
-    compile_metered_segment_boundary, compile_preflight, compile_preflight_with_extensions,
-    compile_with_instret_tracking, compile_with_options,
+    build_pc_to_chip, classify_preflight_opcodes_with_extensions, compile, compile_metered,
+    compile_metered_cost, compile_metered_segment_boundary, compile_preflight,
+    compile_preflight_with_extensions, compile_with_instret_tracking, compile_with_options,
     load_compiled_from_path, ChipMapping, CompileError, CompileOptions, RvrCompiled,
     RvrDeltaDecodePrecompute, RvrInlineRecordsMeta, RvrPreflightOpcodeClass,
 };
@@ -28,10 +28,7 @@ pub use compile::{
     preflight_compile_invocations_for_test, reset_preflight_compile_invocations_for_test,
 };
 pub use debug::{default_addr2line_cmd, GuestDebugMap};
-pub use execute::{
-    execute, execute_metered, execute_metered_cost, execute_metered_segment_boundary,
-    execute_preflight, rv_execute, ExecuteError, RvrPreflightRunResult,
-};
+pub use execute::ExecuteError;
 pub use initial_image::RvrInitialImage;
 pub use log_native::{
     generate_record_arenas_from_logs, generate_record_arenas_from_logs_with_compact,
@@ -43,10 +40,6 @@ pub use log_native::{
 };
 pub use metered::{RvrMeteredExecutionOutcome, RvrMeteredInstance, RvrMeteredSegmentInstance};
 pub use metered_cost::{MeteredCostState, RvrMeteredCostInstance};
-pub use pure::{
-    RvrPureInstance, RvrPureWithInstretTrackingInstance, RvrTrackedExecution,
-    RvrTrackedExecutionOutcome,
-};
 pub use preflight::{
     rvr_preflight_engine_env_override, ChipRecordBuf, DeltaMemoryLogEntry, DeviceAuxArenaReference,
     DeviceAuxPatch, DeviceAuxReference, DeviceProgramEntry, MemoryLogEntry, PreflightRawLogs,
@@ -68,6 +61,10 @@ pub use preflight_normalizer::{
     PreflightNormalizeError, PreflightShadowsView,
 };
 pub use preflight_pool::RvrPreflightBufferPool;
+pub use pure::{
+    RvrPureInstance, RvrPureWithInstretTrackingInstance, RvrTrackedExecution,
+    RvrTrackedExecutionOutcome,
+};
 pub use rvr_openvm::{
     default_compiler as default_native_compiler, default_compiler_command, default_dwarfdump_cmd,
     default_linker, runtime_toolchain, RuntimeToolchain, RuntimeToolchainError, RvrExecutionKind,
