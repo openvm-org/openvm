@@ -171,7 +171,7 @@ where
     */
     {
         let interp_state_pure = vm
-            .interpreter_instance(exe)?
+            .naive_interpreter(exe)?
             .execute(input.clone())
             .expect("Failed to execute");
 

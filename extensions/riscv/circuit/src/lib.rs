@@ -428,6 +428,7 @@ pub fn rvr_gpu_wire_record_airs(
             rvr_gpu_decode::RvrGpuDecodeState::compact_record_airs(
                 exe,
                 pc_to_air_idx,
+                &inline_meta.pc_slots,
                 inline_meta.delta_decode.as_deref(),
             )
         }

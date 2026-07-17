@@ -827,7 +827,10 @@ where
         app_exe: impl Into<ExecutableFormat>,
         inputs: StdIn,
         def_inputs: &[DeferralInput],
-    ) -> Result<types::EvmProof, SdkError> {
+    ) -> Result<types::EvmProof, SdkError>
+    where
+        <E::PD as ProverDevice<E::PB, E::TS>>::DeviceCtx: 'static,
+    {
         let app_exe = self.convert_to_exe(app_exe)?;
         let mut evm_prover = self.evm_prover(app_exe)?;
         let evm_proof = evm_prover.prove_evm(inputs, def_inputs)?;
@@ -894,19 +897,27 @@ where
         Ok(evm_prover)
     }
 
-    #[cfg(feature = "root-prover")]
+    #[cfg(all(feature = "root-prover", feature = "evm-prove"))]
+    /// Constructs an [`EvmProver`] for the given executable, generating prerequisite keys lazily.
+    pub fn evm_prover(
+        &self,
+        app_exe: impl Into<ExecutableFormat>,
+    ) -> Result<EvmProver<E, VB>, SdkError>
+    where
+        <E::PD as ProverDevice<E::PB, E::TS>>::DeviceCtx: 'static,
+    {
+        let mut evm_prover = self.evm_prover_without_halo2(app_exe)?;
+        evm_prover.halo2_prover = Some(self.halo2_prover());
+        Ok(evm_prover)
+    }
+
+    #[cfg(all(feature = "root-prover", not(feature = "evm-prove")))]
     /// Constructs an [`EvmProver`] for the given executable, generating prerequisite keys lazily.
     pub fn evm_prover(
         &self,
         app_exe: impl Into<ExecutableFormat>,
     ) -> Result<EvmProver<E, VB>, SdkError> {
-        #[allow(unused_mut)]
-        let mut evm_prover = self.evm_prover_without_halo2(app_exe)?;
-        #[cfg(feature = "evm-prove")]
-        {
-            evm_prover.halo2_prover = Some(self.halo2_prover());
-        }
-        Ok(evm_prover)
+        self.evm_prover_without_halo2(app_exe)
     }
 
     // ===================== Component Prover Constructors =====================
@@ -967,7 +978,10 @@ where
 
     #[cfg(feature = "evm-prove")]
     /// Returns the cached Halo2 prover, generating it on first use if needed.
-    pub fn halo2_prover(&self) -> Halo2Prover {
+    pub fn halo2_prover(&self) -> Halo2Prover
+    where
+        <E::PD as ProverDevice<E::PB, E::TS>>::DeviceCtx: 'static,
+    {
         self.halo2_prover
             .get_or_init(|| {
                 use crate::keygen::static_verifier::keygen_halo2;
@@ -1088,7 +1102,10 @@ where
     /// 4. Generate a dummy snark from the verifier
     /// 5. Keygen the wrapper circuit (auto-tuned or fixed k)
     #[cfg(feature = "evm-prove")]
-    pub fn halo2_pk(&self) -> Halo2ProvingKey {
+    pub fn halo2_pk(&self) -> Halo2ProvingKey
+    where
+        <E::PD as ProverDevice<E::PB, E::TS>>::DeviceCtx: 'static,
+    {
         self.halo2_prover().pk()
     }
 
@@ -1127,7 +1144,10 @@ where
 
     #[cfg(feature = "evm-verify")]
     /// Generates Solidity verifier artifacts for the cached Halo2 proving key.
-    pub fn generate_halo2_verifier_solidity(&self) -> Result<types::EvmHalo2Verifier, SdkError> {
+    pub fn generate_halo2_verifier_solidity(&self) -> Result<types::EvmHalo2Verifier, SdkError>
+    where
+        <E::PD as ProverDevice<E::PB, E::TS>>::DeviceCtx: 'static,
+    {
         solidity::generate_halo2_verifier_solidity(&self.halo2_pk(), &self.halo2_params_reader)
     }
 
@@ -1139,7 +1159,10 @@ where
     pub fn generate_halo2_verifier_solidity_with_version_name(
         &self,
         version_name: &str,
-    ) -> Result<types::EvmHalo2Verifier, SdkError> {
+    ) -> Result<types::EvmHalo2Verifier, SdkError>
+    where
+        <E::PD as ProverDevice<E::PB, E::TS>>::DeviceCtx: 'static,
+    {
         solidity::generate_halo2_verifier_solidity_with_version_name(
             &self.halo2_pk(),
             &self.halo2_params_reader,

@@ -1420,7 +1420,7 @@ impl RvrGpuDecodeState {
             .expect("G2 output descriptors H2D");
         let touched_capacity = host
             .total_record_count
-            .saturating_mul(3)
+            .saturating_mul(4)
             .saturating_add(residual_capacity)
             .saturating_add(32);
         let d_touched_output = if touched_capacity == 0 {

@@ -45,8 +45,8 @@ use tracing::{info_span, instrument};
 use super::rvr::{
     bridge::map_rvr_compile_error,
     build_pc_to_chip, classify_preflight_opcodes_with_extensions, compile, compile_metered,
-    compile_metered_cost, compile_metered_segment_boundary, compile_preflight_with_extensions,
-    compile_with_instret_tracking, load_compiled_from_path,
+    compile_metered_cost, compile_metered_segment_boundary, compile_with_instret_tracking,
+    load_compiled_from_path,
     preflight::execute_rvr_preflight,
     preflight::{ChipRecordBuf, RvrArenaNativeTarget},
     rvr_preflight_engine_env_override, ArenaNativeGeometry, ChipMapping, GuestDebugMap,

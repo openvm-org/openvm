@@ -255,7 +255,7 @@ fn execute_single_segment_differential(
         .preflight_interpreter(exe)
         .expect("interpreter preflight");
     let interp_output = vm
-        .execute_preflight(&mut interpreter, initial_state, None, &trace_heights)
+        .execute_preflight(&mut interpreter, initial_state, &trace_heights)
         .expect("interpreter execution");
     let route = vm
         .preflight_routed_instance(exe)
@@ -288,14 +288,16 @@ fn assert_trace_segment_matches(
     let mut interpreter = interp_vm
         .preflight_interpreter(exe)
         .expect("interpreter preflight");
-    let interp_output = interp_vm
-        .execute_preflight(
+    let interp_output = match num_insns {
+        Some(num_insns) => interp_vm.execute_preflight_for(
             &mut interpreter,
             from_state.clone(),
             num_insns,
             trace_heights,
-        )
-        .expect("interpreter execution");
+        ),
+        None => interp_vm.execute_preflight(&mut interpreter, from_state.clone(), trace_heights),
+    }
+    .expect("interpreter execution");
 
     let (mut rvr_vm, _) =
         VirtualMachine::new_with_keygen(test_cpu_engine(), Keccak256Rv64CpuBuilder, config.clone())
@@ -818,12 +820,12 @@ fn rvr_keccak_pure_and_metered_match_interpreter() {
     let pure_rvr = vm
         .interpreter(&exe)
         .expect("rvr pure instance")
-        .execute(Streams::default(), None)
+        .execute(Streams::default())
         .expect("rvr pure execution");
     let pure_interpreter = vm
         .naive_interpreter(&exe)
         .expect("pure interpreter")
-        .execute(Streams::default(), None)
+        .execute(Streams::default())
         .expect("pure interpreter execution");
     assert_vm_states_equivalent(&pure_rvr, &pure_interpreter);
 

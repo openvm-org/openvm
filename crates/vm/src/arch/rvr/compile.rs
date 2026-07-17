@@ -789,10 +789,35 @@ fn collect_inline_records_meta_for_mode<F: PrimeField32>(
         airs.retain(|air, _| !tainted_delta_airs.contains(air));
     }
 
+    // Narrow public-values stores are not part of the established compact or
+    // delta inline routes, but G2 owns them directly. Admit them to the decode
+    // table before whole-AIR tainting so a LoadStore AIR shared with ordinary
+    // memory accesses can negotiate G2 as one complete device-owned family.
+    let mut decode_pc_slots = pc_slots.clone();
+    if g2_requested {
+        for (slot, program_entry) in exe.program.instructions_and_debug_infos.iter().enumerate() {
+            if decode_pc_slots.get(slot).copied().unwrap_or(false) {
+                continue;
+            }
+            let Some((instruction, _)) = program_entry else {
+                continue;
+            };
+            let narrow_reveal = admitter
+                .and_then(|admitter| admitter.delta_decode_for(instruction))
+                .is_some_and(|decoded| {
+                    decoded.entry.flags & (1 << 4) != 0
+                        && decoded.entry.access_pattern == 3
+                        && decoded.entry.local_opcode != 4
+                });
+            if narrow_reveal {
+                decode_pc_slots[slot] = true;
+            }
+        }
+    }
     let mut delta_decode = if compact_wire_requested || delta_records_requested {
         admitter
             .filter(|admitter| admitter.has_delta_decode())
-            .map(|admitter| build_delta_decode_precompute(exe, chips, admitter, &pc_slots))
+            .map(|admitter| build_delta_decode_precompute(exe, chips, admitter, &decode_pc_slots))
     } else {
         None
     };
@@ -1319,13 +1344,16 @@ fn build_g2_meta_v1<F: PrimeField32>(
     let air_manifest_fingerprint = g2_air_manifest_fingerprint(&air_manifest, &opaque_bindings)?;
 
     let mut fingerprint = Sha256::new();
-    fingerprint.update(b"openvm-rvr-g2-private-wire-v1\0");
+    fingerprint.update(b"openvm-rvr-g2-private-wire-v3-two-block\0");
     fingerprint.update(1u16.to_le_bytes());
     fingerprint.update(b"header:magic8,version2,header_bytes2,lane_count2,flags2,segment_id4,instruction_count4,run_count4,residual_count4,fingerprint32;");
     fingerprint.update(
         b"lane:kind2,width1,encoding1,flags4,count4,payload_bytes4,offset8,group4,reserved4;",
     );
     fingerprint.update(b"lane:0001,width4,fixed,required,arity=run;lane:0080,width8,fixed,required+atomic,group=2;lane:0081,width1,fixed,required+atomic,group=2;lane:0082,width8,fixed,required+atomic,group=2;lane:0083,width4,fixed,required+atomic,group=2,arity=opaque-occurrence;");
+    fingerprint.update(
+        b"loadstore:v1-lanes=pointer4+block8;noncrossing=native60+absent-u32max;crossing=residual2x-full-block+native60;",
+    );
     for kind in 0u8..30 {
         fingerprint.update([kind, g2_kind_arity(kind)]);
         for value_lane in [false, true] {
@@ -1589,7 +1617,7 @@ fn validate_requested_inline_record_shape(
         })
     };
     let invalid_arena = requested.as_deref() == Some("compact")
-        || requested.as_deref() == Some("g2") && !custom_only()
+        || requested.as_deref() == Some("g2") && inline_meta.g2.is_some() && !custom_only()
         || requested.as_deref() == Some("delta")
             && inline_meta.arena_native_airs.iter().any(|(_, geometry)| {
                 !matches!(
@@ -1668,6 +1696,7 @@ pub fn compile<F: PrimeField32>(
             native_debug_info: cfg!(feature = "profiling"),
             keep_artifacts: false,
         },
+        None,
     )
 }
 

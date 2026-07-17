@@ -1402,12 +1402,12 @@ impl CProject {
                     writeln!(out, "    trace_block(state, 0x{pc:08x}ull, {insn_count}u);").unwrap();
                 }
                 if self.g2_records {
-                let slot = (pc - self.pc_base) / 4;
-                writeln!(
-                    out,
-                    "    preflight_g2_emit_run(state, {slot}u, {insn_count}u);"
-                )
-                .unwrap();
+                    let slot = (pc - self.pc_base) / 4;
+                    writeln!(
+                        out,
+                        "    preflight_g2_emit_run(state, {slot}u, {insn_count}u);"
+                    )
+                    .unwrap();
                 }
             }
         }
