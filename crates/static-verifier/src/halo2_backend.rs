@@ -396,4 +396,12 @@ impl TranscriptInst for Halo2Backend<'_> {
         let (transcript, ctx) = self.transcript_parts();
         transcript.check_witness(ctx, bits, witness)
     }
+
+    fn transcript_load_reduced_constant(
+        &mut self,
+        value: BabyBear,
+    ) -> ReducedBabyBearWire<Self::F> {
+        let (transcript, ctx) = self.transcript_parts();
+        transcript.baby_bear().load_reduced_constant(ctx, value)
+    }
 }

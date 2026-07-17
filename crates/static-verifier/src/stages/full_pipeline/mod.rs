@@ -125,7 +125,11 @@ fn observe_preamble<B: TranscriptInst>(
     for air_idx in 0..mvk.inner.per_air.len() {
         if !mvk.inner.per_air[air_idx].is_required {
             // Static verifier: every AIR in the child VK has a trace (see crate `lib.rs`).
-            let presence_flag = b.bb_load_reduced_constant(BabyBear::ONE);
+            // unfortunately transcript has it's own cloned BabyBear chip that has a separate
+            // constant cache compared to the BabyBear chip. To make vk the same as on main we need
+            // this.
+            // TODO: if vk ever can change then remove this
+            let presence_flag = b.transcript_load_reduced_constant(BabyBear::ONE);
             b.observe(&presence_flag);
         }
 
@@ -136,7 +140,7 @@ fn observe_preamble<B: TranscriptInst>(
             // Fixed circuit parameter (not loaded from the proof witness).
             let lh = u32::try_from(log_heights_per_air[air_idx])
                 .expect("log_height must fit in u32 for BabyBear constant");
-            let log_height = b.bb_load_reduced_constant(BabyBear::from_u32(lh));
+            let log_height = b.transcript_load_reduced_constant(BabyBear::from_u32(lh));
             b.observe(&log_height);
         }
 
