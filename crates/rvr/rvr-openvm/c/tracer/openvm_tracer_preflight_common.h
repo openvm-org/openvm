@@ -51,7 +51,7 @@ static __attribute__((always_inline)) inline void nt_store_u32(
 
 typedef struct ProgramLogEntry {
   uint32_t timestamp;
-  /* OpenVM pcs are 4-byte aligned; bit 0 is the writer-complete guard. */
+  /* OpenVM pcs are 4-byte aligned; the low bits are side-band guards. */
   uint32_t pc_and_flags;
   uint64_t write_value;
 } ProgramLogEntry;
@@ -72,6 +72,7 @@ typedef struct DeviceProgramEntry {
 } DeviceProgramEntry;
 
 static constexpr uint32_t PREFLIGHT_PROGRAM_WRITE_COMPLETE = 1u;
+static constexpr uint32_t PREFLIGHT_PROGRAM_CROSSING_RESIDUAL = 2u;
 
 typedef struct MemoryLogEntry {
   uint32_t timestamp;
@@ -1064,6 +1065,28 @@ preflight_set_last_program_write_value(Tracer* restrict t, uint64_t value) {
   }
 }
 
+static __attribute__((always_inline)) inline void
+preflight_mark_program_crossing_residual(Tracer* restrict t, uint32_t pc,
+                                         uint32_t timestamp) {
+  bool has_entry = t->program_log_len != 0u &&
+                   t->program_log_len <= t->program_log_cap;
+  if (!has_entry) {
+    preflight_append_program(t, pc);
+  } else {
+    ProgramLogEntry* restrict last = &t->program_log[t->program_log_len - 1u];
+    uint32_t last_pc = last->pc_and_flags & ~3u;
+    if (last->timestamp != timestamp || last_pc != pc) {
+      preflight_append_program(t, pc);
+    }
+  }
+  if (likely(t->program_log_len != 0u &&
+             t->program_log_len <= t->program_log_cap)) {
+    ProgramLogEntry* restrict entry = &t->program_log[t->program_log_len - 1u];
+    entry->timestamp = timestamp;
+    entry->pc_and_flags |= PREFLIGHT_PROGRAM_CROSSING_RESIDUAL;
+  }
+}
+
 /* R3: emit one compact base-ALU AddSub record into chip `chip_idx`'s inline
  * buffer: the dynamic witness the caller already holds — the two operand
  * values (`rs1_val`/`rs2_val`, split into the `b`/`c` u16 limbs), the three
@@ -1259,6 +1282,72 @@ static __attribute__((always_inline)) inline void preflight_emit_rw1(
   nt_store_u32(&words[7], (uint32_t)(rd_prev_value >> 32));
 }
 
+static __attribute__((always_inline)) inline bool
+preflight_crosses_block(uint64_t addr, uint8_t width) {
+  return (addr & (WORD_SIZE - 1u)) + width > WORD_SIZE;
+}
+
+static __attribute__((always_inline)) inline void preflight_patch_two_blocks(
+    uint64_t prev0, uint64_t prev1, uint64_t addr, uint8_t width,
+    uint64_t value, uint64_t* restrict next0, uint64_t* restrict next1) {
+  uint8_t bytes[2 * WORD_SIZE];
+  memcpy(bytes, &prev0, WORD_SIZE);
+  memcpy(bytes + WORD_SIZE, &prev1, WORD_SIZE);
+  memcpy(bytes + (addr & (WORD_SIZE - 1u)), &value, width);
+  memcpy(next0, bytes, WORD_SIZE);
+  memcpy(next1, bytes + WORD_SIZE, WORD_SIZE);
+}
+
+/* Rare crossing access: retain both complete block events in the residual
+ * stream. The first predecessor is returned only to keep the ordinary compact
+ * wire structurally complete; consumers select the residual row instead. */
+static __attribute__((always_inline)) inline uint32_t
+trace_crossing_mem_read_blocks(RvState* restrict state, uint64_t block_addr,
+                               uint64_t block0, uint64_t* restrict block1,
+                               uint32_t* restrict prev_timestamp1) {
+  *block1 = preflight_read_mem_block(state, block_addr + WORD_SIZE);
+  uint32_t prev0 = preflight_append_memory(
+      state->tracer, PREFLIGHT_MEMORY_KIND_READ, AS_MEMORY, block_addr,
+      WORD_SIZE, block0, block0);
+  uint32_t prev1 = preflight_append_memory(
+      state->tracer, PREFLIGHT_MEMORY_KIND_READ, AS_MEMORY,
+      block_addr + WORD_SIZE, WORD_SIZE, *block1, *block1);
+  if (prev_timestamp1 != NULL) {
+    *prev_timestamp1 = prev1;
+  }
+  return prev0;
+}
+
+static __attribute__((always_inline)) inline uint32_t
+trace_crossing_store_blocks(RvState* restrict state, uint64_t addr,
+                            uint8_t width, uint64_t value, uint8_t addr_space,
+                            uint64_t* restrict prev0,
+                            uint64_t* restrict prev1,
+                            uint32_t* restrict prev_timestamp1) {
+  uint64_t block_addr = preflight_block_addr(addr);
+  if (addr_space == AS_PUBLIC_VALUES) {
+    *prev0 = preflight_read_pv_block(state->tracer, block_addr);
+    *prev1 = preflight_read_pv_block(state->tracer, block_addr + WORD_SIZE);
+  } else {
+    *prev0 = preflight_read_mem_block(state, block_addr);
+    *prev1 = preflight_read_mem_block(state, block_addr + WORD_SIZE);
+  }
+  uint64_t next0;
+  uint64_t next1;
+  preflight_patch_two_blocks(*prev0, *prev1, addr, width, value, &next0,
+                             &next1);
+  uint32_t first = preflight_append_memory(
+      state->tracer, PREFLIGHT_MEMORY_KIND_WRITE, addr_space, block_addr,
+      WORD_SIZE, next0, *prev0);
+  uint32_t write_prev1 = preflight_append_memory(
+      state->tracer, PREFLIGHT_MEMORY_KIND_WRITE, addr_space,
+      block_addr + WORD_SIZE, WORD_SIZE, next1, *prev1);
+  if (prev_timestamp1 != NULL) {
+    *prev_timestamp1 = write_prev1;
+  }
+  return first;
+}
+
 /* ── Trace-only memory reads ─────────────────────────────────────── */
 
 static __attribute__((always_inline)) inline void trace_rd_mem_u8(
@@ -1279,29 +1368,49 @@ static __attribute__((always_inline)) inline void trace_rd_mem_u16(
     RvState* restrict state, uint64_t addr, uint16_t val) {
   uint64_t block_addr = preflight_block_addr(addr);
   uint64_t block = preflight_read_mem_block(state, block_addr);
-  preflight_append_memory(state->tracer, PREFLIGHT_MEMORY_KIND_READ, AS_MEMORY,
-                          block_addr, WORD_SIZE, block, block);
+  if (unlikely(preflight_crosses_block(addr, 2))) {
+    uint64_t block1;
+    trace_crossing_mem_read_blocks(state, block_addr, block, &block1, NULL);
+  } else {
+    preflight_append_memory(state->tracer, PREFLIGHT_MEMORY_KIND_READ,
+                            AS_MEMORY, block_addr, WORD_SIZE, block, block);
+  }
 }
 static __attribute__((always_inline)) inline void trace_rd_mem_i16(
     RvState* restrict state, uint64_t addr, int16_t val) {
   uint64_t block_addr = preflight_block_addr(addr);
   uint64_t block = preflight_read_mem_block(state, block_addr);
-  preflight_append_memory(state->tracer, PREFLIGHT_MEMORY_KIND_READ, AS_MEMORY,
-                          block_addr, WORD_SIZE, block, block);
+  if (unlikely(preflight_crosses_block(addr, 2))) {
+    uint64_t block1;
+    trace_crossing_mem_read_blocks(state, block_addr, block, &block1, NULL);
+  } else {
+    preflight_append_memory(state->tracer, PREFLIGHT_MEMORY_KIND_READ,
+                            AS_MEMORY, block_addr, WORD_SIZE, block, block);
+  }
 }
 static __attribute__((always_inline)) inline void trace_rd_mem_u32(
     RvState* restrict state, uint64_t addr, uint32_t val) {
   uint64_t block_addr = preflight_block_addr(addr);
   uint64_t block = preflight_read_mem_block(state, block_addr);
-  preflight_append_memory(state->tracer, PREFLIGHT_MEMORY_KIND_READ, AS_MEMORY,
-                          block_addr, WORD_SIZE, block, block);
+  if (unlikely(preflight_crosses_block(addr, 4))) {
+    uint64_t block1;
+    trace_crossing_mem_read_blocks(state, block_addr, block, &block1, NULL);
+  } else {
+    preflight_append_memory(state->tracer, PREFLIGHT_MEMORY_KIND_READ,
+                            AS_MEMORY, block_addr, WORD_SIZE, block, block);
+  }
 }
 static __attribute__((always_inline)) inline void trace_rd_mem_i32(
     RvState* restrict state, uint64_t addr, int32_t val) {
   uint64_t block_addr = preflight_block_addr(addr);
   uint64_t block = preflight_read_mem_block(state, block_addr);
-  preflight_append_memory(state->tracer, PREFLIGHT_MEMORY_KIND_READ, AS_MEMORY,
-                          block_addr, WORD_SIZE, block, block);
+  if (unlikely(preflight_crosses_block(addr, 4))) {
+    uint64_t block1;
+    trace_crossing_mem_read_blocks(state, block_addr, block, &block1, NULL);
+  } else {
+    preflight_append_memory(state->tracer, PREFLIGHT_MEMORY_KIND_READ,
+                            AS_MEMORY, block_addr, WORD_SIZE, block, block);
+  }
 }
 static __attribute__((always_inline)) inline void trace_rd_mem_u64(
     RvState* restrict state, uint64_t addr, uint64_t val) {
@@ -1311,8 +1420,13 @@ static __attribute__((always_inline)) inline void trace_rd_mem_u64(
                            addr == block_addr
                        ? val
                        : preflight_read_mem_block(state, block_addr);
-  preflight_append_memory(state->tracer, PREFLIGHT_MEMORY_KIND_READ, AS_MEMORY,
-                          block_addr, WORD_SIZE, block, block);
+  if (unlikely(preflight_crosses_block(addr, 8))) {
+    uint64_t block1;
+    trace_crossing_mem_read_blocks(state, block_addr, block, &block1, NULL);
+  } else {
+    preflight_append_memory(state->tracer, PREFLIGHT_MEMORY_KIND_READ,
+                            AS_MEMORY, block_addr, WORD_SIZE, block, block);
+  }
 }
 
 /* ── Trace-only memory writes ────────────────────────────────────── */
@@ -1328,6 +1442,13 @@ static __attribute__((always_inline)) inline void trace_wr_mem_u8(
 }
 static __attribute__((always_inline)) inline void trace_wr_mem_u16(
     RvState* restrict state, uint64_t addr, uint16_t new_val) {
+  if (unlikely(preflight_crosses_block(addr, 2))) {
+    uint64_t prev0;
+    uint64_t prev1;
+    trace_crossing_store_blocks(state, addr, 2, new_val, AS_MEMORY, &prev0,
+                                &prev1, NULL);
+    return;
+  }
   uint64_t block_addr = preflight_block_addr(addr);
   uint64_t prev_block = preflight_read_mem_block(state, block_addr);
   uint64_t block =
@@ -1337,6 +1458,13 @@ static __attribute__((always_inline)) inline void trace_wr_mem_u16(
 }
 static __attribute__((always_inline)) inline void trace_wr_mem_u32(
     RvState* restrict state, uint64_t addr, uint32_t new_val) {
+  if (unlikely(preflight_crosses_block(addr, 4))) {
+    uint64_t prev0;
+    uint64_t prev1;
+    trace_crossing_store_blocks(state, addr, 4, new_val, AS_MEMORY, &prev0,
+                                &prev1, NULL);
+    return;
+  }
   uint64_t block_addr = preflight_block_addr(addr);
   uint64_t prev_block = preflight_read_mem_block(state, block_addr);
   uint64_t block =
@@ -1346,6 +1474,13 @@ static __attribute__((always_inline)) inline void trace_wr_mem_u32(
 }
 static __attribute__((always_inline)) inline void trace_wr_mem_u64(
     RvState* restrict state, uint64_t addr, uint64_t new_val) {
+  if (unlikely(preflight_crosses_block(addr, 8))) {
+    uint64_t prev0;
+    uint64_t prev1;
+    trace_crossing_store_blocks(state, addr, 8, new_val, AS_MEMORY, &prev0,
+                                &prev1, NULL);
+    return;
+  }
   uint64_t block_addr = preflight_block_addr(addr);
   uint64_t prev_block =
       preflight_device_aux(state->tracer) &&
@@ -1432,6 +1567,13 @@ static __attribute__((always_inline)) inline void trace_mem_access_u64_range(
 static __attribute__((always_inline)) inline void trace_wr_as_u64(
     RvState* restrict state, uint64_t addr, uint64_t new_val,
     uint32_t addr_space) {
+  if (unlikely(preflight_crosses_block(addr, WORD_SIZE))) {
+    uint64_t prev0;
+    uint64_t prev1;
+    trace_crossing_store_blocks(state, addr, WORD_SIZE, new_val,
+                                (uint8_t)addr_space, &prev0, &prev1, NULL);
+    return;
+  }
   uint64_t block_addr = preflight_block_addr(addr);
   /* Public-values reveal writes are traced before the store, so the previous
    * value is still in the aliased public-values buffer. */
@@ -1444,11 +1586,19 @@ static __attribute__((always_inline)) inline void trace_wr_as_u64(
   preflight_append_memory(state->tracer, PREFLIGHT_MEMORY_KIND_WRITE,
                           (uint8_t)addr_space, block_addr, WORD_SIZE, new_val,
                           prev_block);
+  trace_timestamp(state);
 }
 
 static __attribute__((always_inline)) inline void trace_wr_as(
     RvState* restrict state, uint64_t addr, uint64_t new_val, uint32_t width,
     uint32_t addr_space) {
+  if (unlikely(width > 1u && preflight_crosses_block(addr, (uint8_t)width))) {
+    uint64_t prev0;
+    uint64_t prev1;
+    trace_crossing_store_blocks(state, addr, (uint8_t)width, new_val,
+                                (uint8_t)addr_space, &prev0, &prev1, NULL);
+    return;
+  }
   uint64_t block_addr = preflight_block_addr(addr);
   uint64_t prev_block =
       addr_space == AS_PUBLIC_VALUES
@@ -1459,6 +1609,9 @@ static __attribute__((always_inline)) inline void trace_wr_as(
   preflight_append_memory(state->tracer, PREFLIGHT_MEMORY_KIND_WRITE,
                           (uint8_t)addr_space, block_addr, WORD_SIZE, block,
                           prev_block);
+  if (width > 1u) {
+    trace_timestamp(state);
+  }
 }
 
 static __attribute__((always_inline)) inline void trace_pc(

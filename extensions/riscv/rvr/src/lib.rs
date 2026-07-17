@@ -354,7 +354,7 @@ impl Rv64IoExtension {
 impl RvrExtension for Rv64IoExtension {
     fn codegen_fingerprint(&self) -> Option<Vec<u8>> {
         Some(air_index_codegen_fingerprint(
-            b"openvm-rv64io-rvr-v2",
+            b"openvm-rv64io-rvr-v3-two-block",
             &[self.hint_store_chip_idx],
         ))
     }
@@ -487,7 +487,7 @@ impl Default for Rv64IExtension {
 
 impl RvrExtension for Rv64IExtension {
     fn codegen_fingerprint(&self) -> Option<Vec<u8>> {
-        Some(b"openvm-rv64i-rvr-v2".to_vec())
+        Some(b"openvm-rv64i-rvr-v3-two-block".to_vec())
     }
 
     fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
@@ -717,6 +717,28 @@ mod tests {
     use rand::{rngs::StdRng, SeedableRng};
 
     use super::*;
+
+    #[test]
+    fn two_block_record_schema_changes_codegen_fingerprints() {
+        let rv64i = Rv64IExtension::new()
+            .codegen_fingerprint()
+            .expect("RV64I cache fingerprint");
+        assert_eq!(rv64i, b"openvm-rv64i-rvr-v3-two-block");
+        assert_ne!(rv64i, b"openvm-rv64i-rvr-v2".to_vec());
+
+        let rv64io = Rv64IoExtension::new(None)
+            .expect("RV64IO extension")
+            .codegen_fingerprint()
+            .expect("RV64IO cache fingerprint");
+        assert_eq!(
+            rv64io,
+            air_index_codegen_fingerprint(b"openvm-rv64io-rvr-v3-two-block", &[None])
+        );
+        assert_ne!(
+            rv64io,
+            air_index_codegen_fingerprint(b"openvm-rv64io-rvr-v2", &[None])
+        );
+    }
 
     #[derive(Default)]
     struct TestEmitCtx {
@@ -1033,7 +1055,7 @@ mod tests {
     }
 
     #[test]
-    fn host_hint_buffer_bulk_copies_wrapped_stream() {
+    fn host_hint_buffer_returns_wrapped_stream_word() {
         let mut input_stream = VecDeque::new();
         let mut hint_stream = VecDeque::with_capacity(16);
         hint_stream.extend(0u8..14);
@@ -1057,9 +1079,10 @@ mod tests {
             deferrals: &mut deferrals,
         };
 
-        host_hint_buffer(&mut io as *mut OpenVmIoState<'_> as *mut c_void, 3, 1);
+        let word = host_hint_buffer(&mut io as *mut OpenVmIoState<'_> as *mut c_void, 3, 1, 0);
 
-        assert_eq!(&memory[3..11], &(10u8..18).collect::<Vec<_>>());
+        assert_eq!(word.to_le_bytes(), (10u8..18).collect::<Vec<_>>()[..]);
+        assert_eq!(memory, vec![0u8; 16]);
         assert_eq!(
             io.hint_stream.iter().copied().collect::<Vec<_>>(),
             (18u8..22).collect::<Vec<_>>()

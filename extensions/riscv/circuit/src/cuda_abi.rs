@@ -26,7 +26,7 @@ use openvm_cuda_common::{
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 pub mod rvr_delta_cuda {
     use super::*;
-    use crate::rvr_gpu_decode::{DeltaAirOutputDesc, DeviceOperandEntry};
+    use crate::rvr_gpu_decode::{DeltaAirKind, DeltaAirOutputDesc, DeviceOperandEntry};
 
     extern "C" {
         fn _rvr_delta_predecode(
@@ -55,6 +55,19 @@ pub mod rvr_delta_cuda {
             d_arena_native_flags: *const u8,
             num_airs: usize,
             d_outputs: *const DeltaAirOutputDesc,
+            d_error: *mut u32,
+            stream: cudaStream_t,
+        ) -> i32;
+        fn _rvr_expand_compact_multiblock(
+            d_records: DeviceBufferView,
+            record_count: usize,
+            d_memory: DeviceBufferView,
+            memory_count: usize,
+            d_operand_table: *const DeviceOperandEntry,
+            operand_count: usize,
+            pc_base: u32,
+            kind: u32,
+            d_output: DeviceBufferView,
             d_error: *mut u32,
             stream: cudaStream_t,
         ) -> i32;
@@ -111,6 +124,34 @@ pub mod rvr_delta_cuda {
             d_arena_native_flags.as_ptr(),
             d_arena_native_flags.len(),
             d_outputs.as_ptr(),
+            d_error.as_mut_ptr(),
+            stream,
+        ))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn expand_compact_multiblock(
+        d_records: &DeviceBuffer<u8>,
+        record_count: usize,
+        d_memory: &DeviceBuffer<u8>,
+        memory_count: usize,
+        d_operand_table: &DeviceBuffer<u8>,
+        pc_base: u32,
+        kind: DeltaAirKind,
+        d_output: &DeviceBuffer<u8>,
+        d_error: &DeviceBuffer<u32>,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_rvr_expand_compact_multiblock(
+            d_records.view(),
+            record_count,
+            d_memory.view(),
+            memory_count,
+            d_operand_table.as_ptr().cast(),
+            d_operand_table.len() / std::mem::size_of::<DeviceOperandEntry>(),
+            pc_base,
+            kind as u32,
+            d_output.view(),
             d_error.as_mut_ptr(),
             stream,
         ))
@@ -423,54 +464,6 @@ pub mod less_than_cuda {
     }
 }
 
-macro_rules! loadstore_compact_tracegen {
-    ($ffi:ident) => {
-        extern "C" {
-            fn $ffi(
-                d_trace: *mut F,
-                height: usize,
-                width: usize,
-                d_records: DeviceBufferView,
-                d_operand_table: *const u8,
-                pc_base: u32,
-                pointer_max_bits: usize,
-                d_range_checker: *mut u32,
-                range_checker_num_bins: u32,
-                timestamp_max_bits: u32,
-                stream: cudaStream_t,
-            ) -> i32;
-        }
-
-        #[allow(clippy::too_many_arguments)]
-        #[cfg(all(feature = "cuda", feature = "rvr"))]
-        pub unsafe fn tracegen_compact(
-            d_trace: &DeviceBuffer<F>,
-            height: usize,
-            d_records: &DeviceBuffer<u8>,
-            d_operand_table: &DeviceBuffer<u8>,
-            pc_base: u32,
-            pointer_max_bits: usize,
-            d_range_checker: &DeviceBuffer<F>,
-            timestamp_max_bits: u32,
-            stream: cudaStream_t,
-        ) -> Result<(), CudaError> {
-            CudaError::from_result($ffi(
-                d_trace.as_mut_ptr(),
-                height,
-                d_trace.len() / height,
-                d_records.view(),
-                d_operand_table.as_ptr(),
-                pc_base,
-                pointer_max_bits,
-                d_range_checker.as_mut_ptr() as *mut u32,
-                d_range_checker.len() as u32,
-                timestamp_max_bits,
-                stream,
-            ))
-        }
-    };
-}
-
 macro_rules! loadstore_compact_bitwise_tracegen {
     ($ffi:ident) => {
         extern "C" {
@@ -585,8 +578,6 @@ pub mod load_halfword_cuda {
         ) -> i32;
     }
 
-    loadstore_compact_tracegen!(_rv64_load_halfword_tracegen_compact);
-
     pub unsafe fn tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -630,8 +621,6 @@ pub mod load_word_cuda {
         ) -> i32;
     }
 
-    loadstore_compact_tracegen!(_rv64_load_word_tracegen_compact);
-
     pub unsafe fn tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -674,8 +663,6 @@ pub mod load_doubleword_cuda {
             stream: cudaStream_t,
         ) -> i32;
     }
-
-    loadstore_compact_tracegen!(_rv64_load_doubleword_tracegen_compact);
 
     pub unsafe fn tracegen(
         d_trace: &DeviceBuffer<F>,
@@ -765,8 +752,6 @@ pub mod store_halfword_cuda {
         ) -> i32;
     }
 
-    loadstore_compact_tracegen!(_rv64_store_halfword_tracegen_compact);
-
     pub unsafe fn tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -810,8 +795,6 @@ pub mod store_word_cuda {
         ) -> i32;
     }
 
-    loadstore_compact_tracegen!(_rv64_store_word_tracegen_compact);
-
     pub unsafe fn tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -854,8 +837,6 @@ pub mod store_doubleword_cuda {
             stream: cudaStream_t,
         ) -> i32;
     }
-
-    loadstore_compact_tracegen!(_rv64_store_doubleword_tracegen_compact);
 
     pub unsafe fn tracegen(
         d_trace: &DeviceBuffer<F>,
@@ -945,8 +926,6 @@ pub mod load_sign_extend_halfword_cuda {
         ) -> i32;
     }
 
-    loadstore_compact_tracegen!(_rv64_load_sign_extend_halfword_tracegen_compact);
-
     pub unsafe fn tracegen(
         d_trace: &DeviceBuffer<F>,
         height: usize,
@@ -989,8 +968,6 @@ pub mod load_sign_extend_word_cuda {
             stream: cudaStream_t,
         ) -> i32;
     }
-
-    loadstore_compact_tracegen!(_rv64_load_sign_extend_word_tracegen_compact);
 
     pub unsafe fn tracegen(
         d_trace: &DeviceBuffer<F>,

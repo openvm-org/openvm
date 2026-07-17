@@ -120,14 +120,14 @@ __global__ void rv64_store_byte_tracegen_compact(
     if (idx < records.len()) {
         auto const rec = records[idx];
         auto const entry = rvr_operand_entry(operand_table, pc_base, rec.from_pc);
-        Rv64StoreRecord full;
-        full.adapter = rvr_decode_alu3_store(rec, entry);
+        Rv64StoreByteRecord full;
+        full.adapter = rvr_decode_alu3_store_byte(rec, entry);
 #pragma unroll
         for (size_t i = 0; i < BLOCK_FE_WIDTH; i++) {
             full.core.read_data[i] = rvr_u16_limb(rec.c, i);
             full.core.prev_data[i] = rvr_u16_limb(rec.write_prev_data, i);
         }
-        auto adapter = Rv64StoreAdapter(
+        auto adapter = Rv64StoreByteAdapter(
             pointer_max_bits,
             VariableRangeChecker(range_checker_ptr, range_checker_num_bins),
             timestamp_max_bits

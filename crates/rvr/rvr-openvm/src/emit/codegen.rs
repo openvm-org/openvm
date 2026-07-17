@@ -135,11 +135,15 @@ pub struct LoadStoreArenaFieldOffsets {
     pub rs1_aux_prev_ts: usize,
     pub rd_rs2_ptr: usize,
     pub read_data_aux_prev_ts: usize,
+    /// Second block read timestamp for multi-byte loads, or `usize::MAX`.
+    pub read_data_aux_prev_ts2: usize,
     /// Stored as a u16.
     pub imm: usize,
     pub imm_sign: usize,
     pub mem_as: usize,
     pub write_prev_ts: usize,
+    /// Second block write timestamp for multi-byte stores, or `usize::MAX`.
+    pub write_prev_ts2: usize,
     /// Adapter-relative previous-write data, or `usize::MAX` when the
     /// previous data lives in the core record.
     pub write_prev_data: usize,
@@ -148,7 +152,11 @@ pub struct LoadStoreArenaFieldOffsets {
     pub core_is_word: usize,
     pub core_shift_amount: usize,
     pub core_read_data: usize,
+    /// Second block read data for multi-byte loads, or `usize::MAX`.
+    pub core_read_data2: usize,
     pub core_prev_data: usize,
+    /// Second previous block for multi-byte stores, or `usize::MAX`.
+    pub core_prev_data2: usize,
 }
 
 /// BabyBear modulus, for baking field-canonical immediates (negative branch
@@ -425,6 +433,7 @@ pub fn emit_instr(ctx: &mut EmitContext, instr: &Instr) {
             } else {
                 let base = ctx.read_reg(*rs1);
                 let val = ctx.read_mem(&base, *offset, width.bytes(), *signed);
+                ctx.trace_absent_second_block(&base, *offset, width.bytes());
                 ctx.write_reg(*rd, &val);
             }
         }
@@ -440,6 +449,7 @@ pub fn emit_instr(ctx: &mut EmitContext, instr: &Instr) {
                 let base = ctx.read_reg(*rs1);
                 let val = ctx.read_reg(*rs2);
                 ctx.write_mem(&base, *offset, &val, width.bytes());
+                ctx.trace_absent_second_block(&base, *offset, width.bytes());
             }
         }
         Instr::AluWReg { op, rd, rs1, rs2 } => {
