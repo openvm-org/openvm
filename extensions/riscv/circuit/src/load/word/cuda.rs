@@ -2,14 +2,16 @@ use std::{mem::size_of, sync::Arc};
 
 use derive_new::new;
 use openvm_circuit::{arch::DenseRecordArena, utils::next_power_of_two_or_zero};
-use openvm_circuit_primitives::{var_range::VariableRangeCheckerChipGPU, Chip};
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::BitwiseOperationLookupChipGPU, var_range::VariableRangeCheckerChipGPU, Chip,
+};
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_stark_backend::prover::AirProvingContext;
 
-use super::LOAD_WORD_SELECTOR_WIDTH;
+use super::LOAD_WORD_OVERLAP_CELLS;
 use crate::{
-    adapters::{Rv64LoadAdapterCols, Rv64LoadAdapterRecord},
+    adapters::{Rv64LoadMultiByteAdapterCols, Rv64LoadMultiByteAdapterRecord, RV64_BYTE_BITS},
     cuda_abi::load_word_cuda,
     load::{core::LoadCoreCols, LoadRecord},
 };
@@ -17,21 +19,22 @@ use crate::{
 #[derive(new)]
 pub struct Rv64LoadWordChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
+    pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_BYTE_BITS>>,
     pub pointer_max_bits: usize,
     pub timestamp_max_bits: usize,
 }
 
 impl Chip<DenseRecordArena, GpuBackend> for Rv64LoadWordChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-        const RECORD_SIZE: usize = size_of::<(Rv64LoadAdapterRecord, LoadRecord)>();
+        const RECORD_SIZE: usize = size_of::<(Rv64LoadMultiByteAdapterRecord, LoadRecord)>();
         let records = arena.allocated();
         if records.is_empty() {
             return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
         }
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
-        let trace_width = Rv64LoadAdapterCols::<F>::width()
-            + LoadCoreCols::<F, LOAD_WORD_SELECTOR_WIDTH>::width();
+        let trace_width = Rv64LoadMultiByteAdapterCols::<F>::width()
+            + LoadCoreCols::<F, LOAD_WORD_OVERLAP_CELLS>::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
 
@@ -47,6 +50,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64LoadWordChipGpu {
                 &d_records,
                 self.pointer_max_bits,
                 &self.range_checker.count,
+                &self.bitwise_lookup.count,
                 self.timestamp_max_bits as u32,
                 device_ctx.stream.as_raw(),
             )

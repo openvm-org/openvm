@@ -1,6 +1,6 @@
 Integration tests for the OpenVM toolchain: builds guest programs and exercises the transpiler/ELF decoder on the resulting binaries.
 
-Guest builds in these tests go through `openvm-build`'s `build_guest_package`, which invokes `cargo build` under the prebuilt `openvm-1.94.0` toolchain for the `riscv64im-unknown-openvm-elf` target. Install the toolchain first:
+Guest builds in these tests go through `openvm-build`'s `build_guest_package`, which invokes `cargo build` under the prebuilt `openvm-1.94.1` toolchain for the `riscv64im-unknown-openvm-elf` target. Install the toolchain first:
 
 ```bash
 cargo openvm toolchain install

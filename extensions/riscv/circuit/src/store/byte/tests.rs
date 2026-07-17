@@ -29,8 +29,8 @@ use openvm_stark_sdk::utils::create_seeded_rng;
 
 use crate::{
     adapters::{
-        rv64_bytes_to_u16_block, Rv64StoreAdapterAir, Rv64StoreAdapterExecutor,
-        Rv64StoreAdapterFiller, RV64_BYTE_BITS,
+        rv64_bytes_to_u16_block, Rv64StoreByteAdapterAir, Rv64StoreByteAdapterExecutor,
+        Rv64StoreByteAdapterFiller, RV64_BYTE_BITS,
     },
     store::{
         common::store_write_data, Rv64StoreByteAir, Rv64StoreByteChip, Rv64StoreByteExecutor,
@@ -41,7 +41,9 @@ use crate::{
 #[cfg(feature = "cuda")]
 use crate::{
     store::Rv64StoreByteChipGpu,
-    test_utils::memory::{dummy_range_checker, store_gpu_memory_config, transfer_store_records},
+    test_utils::memory::{
+        dummy_range_checker, store_gpu_memory_config, transfer_store_byte_records,
+    },
 };
 
 type StoreByteHarness =
@@ -62,7 +64,7 @@ fn create_store_byte_harness(
         bitwise_bus,
     ));
     let air = Rv64StoreByteAir::new(
-        Rv64StoreAdapterAir::new(
+        Rv64StoreByteAdapterAir::new(
             tester.memory_bridge(),
             tester.execution_bridge(),
             range_checker.bus(),
@@ -71,15 +73,14 @@ fn create_store_byte_harness(
         StoreByteCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_chip.bus()),
     );
     let executor = Rv64StoreByteExecutor::new(
-        Rv64StoreAdapterExecutor::new(tester.address_bits()),
+        Rv64StoreByteAdapterExecutor::new(tester.address_bits()),
         Rv64LoadStoreOpcode::CLASS_OFFSET,
     );
     let chip = Rv64StoreByteChip::<F>::new(
         StoreByteFiller::new(
-            Rv64StoreAdapterFiller::new(tester.address_bits(), range_checker.clone()),
+            Rv64StoreByteAdapterFiller::new(tester.address_bits(), range_checker.clone()),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
             bitwise_chip.clone(),
-            range_checker,
         ),
         tester.memory_helper(),
     );
@@ -119,38 +120,65 @@ fn rand_store_byte_test() {
 #[test]
 fn run_storeb_sanity_test() {
     let read_data = rv64_bytes_to_u16_block([221, 104, 58, 147, 175, 33, 198, 250]);
-    let prev_data = rv64_bytes_to_u16_block([199, 83, 243, 12, 90, 121, 64, 205]);
+    let prev_data = [
+        rv64_bytes_to_u16_block([199, 83, 243, 12, 90, 121, 64, 205]),
+        rv64_bytes_to_u16_block([61, 92, 17, 203, 44, 118, 240, 5]),
+    ];
     assert_eq!(
         store_write_data(STOREB, read_data, prev_data, 0),
-        rv64_bytes_to_u16_block([221, 83, 243, 12, 90, 121, 64, 205])
+        [
+            rv64_bytes_to_u16_block([221, 83, 243, 12, 90, 121, 64, 205]),
+            prev_data[1]
+        ]
     );
     assert_eq!(
         store_write_data(STOREB, read_data, prev_data, 1),
-        rv64_bytes_to_u16_block([199, 221, 243, 12, 90, 121, 64, 205])
+        [
+            rv64_bytes_to_u16_block([199, 221, 243, 12, 90, 121, 64, 205]),
+            prev_data[1]
+        ]
     );
     assert_eq!(
         store_write_data(STOREB, read_data, prev_data, 2),
-        rv64_bytes_to_u16_block([199, 83, 221, 12, 90, 121, 64, 205])
+        [
+            rv64_bytes_to_u16_block([199, 83, 221, 12, 90, 121, 64, 205]),
+            prev_data[1]
+        ]
     );
     assert_eq!(
         store_write_data(STOREB, read_data, prev_data, 3),
-        rv64_bytes_to_u16_block([199, 83, 243, 221, 90, 121, 64, 205])
+        [
+            rv64_bytes_to_u16_block([199, 83, 243, 221, 90, 121, 64, 205]),
+            prev_data[1]
+        ]
     );
     assert_eq!(
         store_write_data(STOREB, read_data, prev_data, 4),
-        rv64_bytes_to_u16_block([199, 83, 243, 12, 221, 121, 64, 205])
+        [
+            rv64_bytes_to_u16_block([199, 83, 243, 12, 221, 121, 64, 205]),
+            prev_data[1]
+        ]
     );
     assert_eq!(
         store_write_data(STOREB, read_data, prev_data, 5),
-        rv64_bytes_to_u16_block([199, 83, 243, 12, 90, 221, 64, 205])
+        [
+            rv64_bytes_to_u16_block([199, 83, 243, 12, 90, 221, 64, 205]),
+            prev_data[1]
+        ]
     );
     assert_eq!(
         store_write_data(STOREB, read_data, prev_data, 6),
-        rv64_bytes_to_u16_block([199, 83, 243, 12, 90, 121, 221, 205])
+        [
+            rv64_bytes_to_u16_block([199, 83, 243, 12, 90, 121, 221, 205]),
+            prev_data[1]
+        ]
     );
     assert_eq!(
         store_write_data(STOREB, read_data, prev_data, 7),
-        rv64_bytes_to_u16_block([199, 83, 243, 12, 90, 121, 64, 221])
+        [
+            rv64_bytes_to_u16_block([199, 83, 243, 12, 90, 121, 64, 221]),
+            prev_data[1]
+        ]
     );
 }
 
@@ -204,7 +232,7 @@ fn create_cuda_store_byte_harness(tester: &GpuChipTestBuilder) -> GpuStoreByteHa
         default_bitwise_lookup_bus(),
     ));
     let air = Rv64StoreByteAir::new(
-        Rv64StoreAdapterAir::new(
+        Rv64StoreByteAdapterAir::new(
             tester.memory_bridge(),
             tester.execution_bridge(),
             range_checker.bus(),
@@ -213,15 +241,14 @@ fn create_cuda_store_byte_harness(tester: &GpuChipTestBuilder) -> GpuStoreByteHa
         StoreByteCoreAir::new(Rv64LoadStoreOpcode::CLASS_OFFSET, bitwise_chip.bus()),
     );
     let executor = Rv64StoreByteExecutor::new(
-        Rv64StoreAdapterExecutor::new(tester.address_bits()),
+        Rv64StoreByteAdapterExecutor::new(tester.address_bits()),
         Rv64LoadStoreOpcode::CLASS_OFFSET,
     );
     let cpu_chip = Rv64StoreByteChip::<F>::new(
         StoreByteFiller::new(
-            Rv64StoreAdapterFiller::new(tester.address_bits(), range_checker.clone()),
+            Rv64StoreByteAdapterFiller::new(tester.address_bits(), range_checker.clone()),
             Rv64LoadStoreOpcode::CLASS_OFFSET,
             bitwise_chip,
-            range_checker,
         ),
         tester.dummy_memory_helper(),
     );
@@ -257,7 +284,7 @@ fn test_cuda_rand_store_byte_tracegen(mem_as: usize) {
             Some(mem_as),
         );
     }
-    transfer_store_records(&mut harness);
+    transfer_store_byte_records(&mut harness);
     tester
         .build()
         .load_gpu_harness(harness)

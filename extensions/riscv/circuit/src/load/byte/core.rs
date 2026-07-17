@@ -1,13 +1,18 @@
 use std::borrow::{Borrow, BorrowMut};
 
-use openvm_circuit::{arch::*, system::memory::MemoryAuxColsFactory};
+use openvm_circuit::{
+    arch::{
+        get_record_from_slice, AdapterAirContext, AdapterTraceFiller, TraceFiller,
+        VmAdapterInterface, VmCoreAir, BLOCK_FE_WIDTH,
+    },
+    system::memory::MemoryAuxColsFactory,
+};
 use openvm_circuit_primitives::{
     bitwise_op_lookup::{BitwiseOperationLookupBus, SharedBitwiseOperationLookupChip},
     encoder::Encoder,
-    var_range::SharedVariableRangeCheckerChip,
     AlignedBorrow, ColumnsAir, StructReflection, StructReflectionHelper, SubAir,
 };
-use openvm_riscv_transpiler::Rv64LoadStoreOpcode::*;
+use openvm_riscv_transpiler::Rv64LoadStoreOpcode::LOADBU;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
@@ -17,25 +22,20 @@ use openvm_stark_backend::{
 
 use crate::{
     adapters::{
-        u16_cell_byte, LoadInstruction, Rv64LoadAdapterFiller, Rv64LoadAdapterRecord,
-        RV64_BYTE_BITS,
+        shift_encoder, u16_cell_byte, LoadByteInstruction, Rv64LoadByteAdapterFiller,
+        Rv64LoadByteAdapterRecord, BYTE_SHIFT_SELECTOR_WIDTH, RV64_BYTE_BITS,
     },
-    load::common::LoadRecord,
+    load::common::LoadByteRecord,
 };
-
-const BYTE_SELECTOR_MAX_DEGREE: u32 = 2;
-const LOAD_BYTE_NUM_CASES: usize = 8;
-pub(crate) const LOAD_BYTE_SELECTOR_WIDTH: usize = 3;
 
 /// Handles unsigned byte loads by decomposing the selected u16 cell and zero-extending the chosen
 /// byte.
 #[repr(C)]
 #[derive(Debug, Clone, AlignedBorrow, StructReflection)]
 pub struct LoadByteCoreCols<T> {
-    pub selector: [T; LOAD_BYTE_SELECTOR_WIDTH],
-    /// Kept as a degree-1 copy of the selector validity.
-    pub is_valid: T,
-    pub read_cell_bytes: [T; 2],
+    pub selector: [T; BYTE_SHIFT_SELECTOR_WIDTH],
+    /// Low byte of the selected memory cell. The high byte is derived in the AIR.
+    pub read_cell_lo_byte: T,
     pub read_data: [T; BLOCK_FE_WIDTH],
 }
 
@@ -51,7 +51,7 @@ impl LoadByteCoreAir {
     pub fn new(offset: usize, bitwise_lookup_bus: BitwiseOperationLookupBus) -> Self {
         Self {
             offset,
-            encoder: Encoder::new(LOAD_BYTE_NUM_CASES, BYTE_SELECTOR_MAX_DEGREE, true),
+            encoder: shift_encoder(),
             bitwise_lookup_bus,
         }
     }
@@ -70,8 +70,8 @@ where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
     I::Reads: From<[AB::Expr; BLOCK_FE_WIDTH]>,
-    I::Writes: From<[[AB::Expr; BLOCK_FE_WIDTH]; 1]>,
-    I::ProcessedInstruction: From<LoadInstruction<AB::Expr>>,
+    I::Writes: From<[AB::Expr; BLOCK_FE_WIDTH]>,
+    I::ProcessedInstruction: From<LoadByteInstruction<AB::Expr>>,
 {
     fn eval(
         &self,
@@ -83,33 +83,46 @@ where
         self.encoder.eval(builder, &cols.selector);
         let flags = self.encoder.flags::<AB>(&cols.selector);
         let is_valid = self.encoder.is_valid::<AB>(&cols.selector);
-        builder.assert_eq(cols.is_valid, is_valid.clone());
 
+        // For cell `i`, flags `2i` and `2i + 1` select its low and high byte, respectively.
+        // even_shift_selector = Σᵢ flag[2i].
+        // odd_shift_selector = Σᵢ flag[2i + 1].
+        // even_selected_cell = Σᵢ flag[2i] * read_data[i].
+        // odd_selected_cell = Σᵢ flag[2i + 1] * read_data[i].
+        // Keeping the selections separate makes every flag (degree 2) * cell term degree 3.
+        let (even_shift_selector, odd_shift_selector, even_selected_cell, odd_selected_cell) =
+            flags.chunks_exact(2).enumerate().fold(
+                (
+                    AB::Expr::ZERO,
+                    AB::Expr::ZERO,
+                    AB::Expr::ZERO,
+                    AB::Expr::ZERO,
+                ),
+                |(even, odd, even_cell, odd_cell), (cell, flags)| {
+                    let even_flag = flags[0].clone();
+                    let odd_flag = flags[1].clone();
+                    let read_cell = cols.read_data[cell];
+                    (
+                        even + even_flag.clone(),
+                        odd + odd_flag.clone(),
+                        even_cell + even_flag * read_cell,
+                        odd_cell + odd_flag * read_cell,
+                    )
+                },
+            );
+        let inv_2_pow_8 = AB::F::from_u32(1 << RV64_BYTE_BITS).inverse();
+        // selected_cell = lo + 2^8 * hi.
+        let selected_cell = even_selected_cell + odd_selected_cell.clone();
+        let read_cell_hi_byte = (selected_cell - cols.read_cell_lo_byte) * inv_2_pow_8;
         self.bitwise_lookup_bus
-            .send_range(cols.read_cell_bytes[0], cols.read_cell_bytes[1])
+            .send_range(cols.read_cell_lo_byte, read_cell_hi_byte)
             .eval(builder, is_valid.clone());
 
-        let read_cell = cols.read_cell_bytes[0]
-            + cols.read_cell_bytes[1] * AB::Expr::from_u32(1 << RV64_BYTE_BITS);
-        let expected_read_cell = flags
-            .iter()
-            .enumerate()
-            .fold(AB::Expr::ZERO, |acc, (shift, flag)| {
-                acc + flag.clone() * cols.read_data[shift / 2]
-            });
-        builder.assert_eq(read_cell, expected_read_cell);
-
-        let selected_byte = flags
-            .iter()
-            .enumerate()
-            .fold(AB::Expr::ZERO, |acc, (shift, flag)| {
-                let byte = if shift % 2 == 0 {
-                    cols.read_cell_bytes[0].into()
-                } else {
-                    cols.read_cell_bytes[1].into()
-                };
-                acc + flag.clone() * byte
-            });
+        // selected_byte = even_shift_selector * lo
+        //               + (odd_selected_cell - odd_shift_selector * lo) / 2^8.
+        let odd_selected_hi_byte =
+            (odd_selected_cell - odd_shift_selector * cols.read_cell_lo_byte) * inv_2_pow_8;
+        let selected_byte = even_shift_selector * cols.read_cell_lo_byte + odd_selected_hi_byte;
         let write_data = std::array::from_fn(|i| {
             if i == 0 {
                 selected_byte.clone()
@@ -117,6 +130,7 @@ where
                 AB::Expr::ZERO
             }
         });
+        // shift_amount = Σₛ s * flag[s].
         let shift_amount = flags
             .iter()
             .enumerate()
@@ -131,9 +145,9 @@ where
         AdapterAirContext {
             to_pc: None,
             reads: cols.read_data.map(Into::into).into(),
-            writes: [write_data].into(),
-            instruction: LoadInstruction {
-                is_valid: cols.is_valid.into(),
+            writes: write_data.into(),
+            instruction: LoadByteInstruction {
+                is_valid,
                 opcode: expected_opcode,
                 shift_amount,
             }
@@ -147,7 +161,7 @@ where
 }
 
 #[derive(Clone)]
-pub struct LoadByteFiller<A = Rv64LoadAdapterFiller> {
+pub struct LoadByteFiller<A = Rv64LoadByteAdapterFiller> {
     adapter: A,
     pub offset: usize,
     encoder: Encoder,
@@ -159,18 +173,17 @@ impl<A> LoadByteFiller<A> {
         adapter: A,
         offset: usize,
         bitwise_lookup_chip: SharedBitwiseOperationLookupChip<RV64_BYTE_BITS>,
-        _range_checker_chip: SharedVariableRangeCheckerChip,
     ) -> Self {
         Self {
             adapter,
             offset,
-            encoder: Encoder::new(LOAD_BYTE_NUM_CASES, BYTE_SELECTOR_MAX_DEGREE, true),
+            encoder: shift_encoder(),
             bitwise_lookup_chip,
         }
     }
 }
 
-impl<F> TraceFiller<F> for LoadByteFiller<Rv64LoadAdapterFiller>
+impl<F> TraceFiller<F> for LoadByteFiller<Rv64LoadByteAdapterFiller>
 where
     F: PrimeField32,
 {
@@ -179,16 +192,16 @@ where
         // LoadByteCoreCols::width() elements.
         let (mut adapter_row, mut core_row) = unsafe {
             row_slice
-                .split_at_mut_unchecked(<Rv64LoadAdapterFiller as AdapterTraceFiller<F>>::WIDTH)
+                .split_at_mut_unchecked(<Rv64LoadByteAdapterFiller as AdapterTraceFiller<F>>::WIDTH)
         };
-        let adapter_record: &Rv64LoadAdapterRecord =
+        let adapter_record: &Rv64LoadByteAdapterRecord =
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
         let shift = adapter_record.shift_amount();
         self.adapter.fill_trace_row(mem_helper, adapter_row);
 
-        // SAFETY: core_row contains a valid LoadRecord written by the executor during trace
+        // SAFETY: core_row contains a valid LoadByteRecord written by the executor during trace
         // generation.
-        let record: &LoadRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
+        let record: &LoadByteRecord = unsafe { get_record_from_slice(&mut core_row, ()) };
         let read_data = record.read_data;
         let core_row: &mut LoadByteCoreCols<F> = core_row.borrow_mut();
 
@@ -196,11 +209,9 @@ where
         let read_cell_bytes = [u16_cell_byte(read_cell, 0), u16_cell_byte(read_cell, 1)];
         self.bitwise_lookup_chip
             .request_range(read_cell_bytes[0] as u32, read_cell_bytes[1] as u32);
-        core_row.read_cell_bytes = read_cell_bytes.map(F::from_u16);
+        core_row.read_cell_lo_byte = F::from_u16(read_cell_bytes[0]);
         core_row.read_data = read_data.map(F::from_u16);
-        core_row.is_valid = F::ONE;
-        let pt: [u32; LOAD_BYTE_SELECTOR_WIDTH] =
-            self.encoder.get_flag_pt(shift).try_into().unwrap();
-        core_row.selector = pt.map(F::from_u32);
+        let pt: &[u32; BYTE_SHIFT_SELECTOR_WIDTH] = self.encoder.flag_pt(shift).try_into().unwrap();
+        core_row.selector = (*pt).map(F::from_u32);
     }
 }
