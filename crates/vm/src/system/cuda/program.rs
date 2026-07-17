@@ -112,7 +112,7 @@ impl Chip<Vec<u32>, GpuBackend> for ProgramChipGPU {
         // segment on large programs. Returning the buffer routes through the
         // arena cleaner, which synchronizes before reuse.
         let bytes = filtered_len * std::mem::size_of::<u32>();
-        let mut h_freqs = crate::arch::cuda::pinned::take(bytes + std::mem::size_of::<u32>());
+        let mut h_freqs = openvm_cuda_common::pinned::take(bytes + std::mem::size_of::<u32>());
         let off = h_freqs.as_ptr().align_offset(std::mem::size_of::<u32>());
         // SAFETY: the ranges are in-bounds, disjoint allocations, and the
         // destination is 4-aligned by `off`.
@@ -127,7 +127,7 @@ impl Chip<Vec<u32>, GpuBackend> for ProgramChipGPU {
         let d_freqs = words
             .to_device_on(&self.device_ctx)
             .expect("failed to copy exec frequencies to device");
-        crate::arch::cuda::pinned::give_back(h_freqs, off + bytes);
+        openvm_cuda_common::pinned::give_back(h_freqs, off + bytes);
         unsafe {
             crate::cuda_abi::program::fill_frequencies(
                 &d_freqs,

@@ -78,12 +78,12 @@ impl PinnedStaging {
     fn ensure(&mut self, len: usize) -> &mut [u8] {
         if self.buf.len() < len {
             if self.registered {
-                crate::arch::cuda::pinned::unregister_region(self.buf.as_mut_ptr());
+                openvm_cuda_common::pinned::unregister_region(self.buf.as_mut_ptr());
                 self.registered = false;
             }
             self.buf = vec![0u8; len];
             self.registered =
-                crate::arch::cuda::pinned::register_region(self.buf.as_mut_ptr(), len);
+                openvm_cuda_common::pinned::register_region(self.buf.as_mut_ptr(), len);
             if !self.registered {
                 tracing::debug!("memory-image staging stays pageable ({len} bytes)");
             }
@@ -95,7 +95,7 @@ impl PinnedStaging {
 impl Drop for PinnedStaging {
     fn drop(&mut self) {
         if self.registered {
-            crate::arch::cuda::pinned::unregister_region(self.buf.as_mut_ptr());
+            openvm_cuda_common::pinned::unregister_region(self.buf.as_mut_ptr());
         }
     }
 }
@@ -282,7 +282,7 @@ impl MemoryInventoryGPU {
             const _: () = assert!(std::mem::size_of::<TouchedBlock<F>>() == 28);
             let in_num_records = partition.len();
             let in_bytes = in_num_records * IN_REC_WORDS * std::mem::size_of::<u32>();
-            let mut h_in = crate::arch::cuda::pinned::take(in_bytes + 4);
+            let mut h_in = openvm_cuda_common::pinned::take(in_bytes + 4);
             let align = h_in.as_ptr().align_offset(std::mem::size_of::<u32>());
             let dirty_len = align + in_bytes;
             {
@@ -308,7 +308,7 @@ impl MemoryInventoryGPU {
                 * (std::mem::size_of::<MemoryInventoryRecord<VM_DIGEST_WIDTH, BLOCKS_PER_LEAF>>()
                     / std::mem::size_of::<u32>());
             let d_in_records = in_words.to_device_on(&self.device_ctx).unwrap();
-            crate::arch::cuda::pinned::give_back(h_in, dirty_len);
+            openvm_cuda_common::pinned::give_back(h_in, dirty_len);
             let d_tmp_records = DeviceBuffer::<u32>::with_capacity_on(out_words, &self.device_ctx);
             let d_out_records = DeviceBuffer::<u32>::with_capacity_on(out_words, &self.device_ctx);
             let d_out_num_records = DeviceBuffer::<usize>::with_capacity_on(1, &self.device_ctx);
