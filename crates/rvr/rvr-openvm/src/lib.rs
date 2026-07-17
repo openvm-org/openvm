@@ -16,8 +16,7 @@ pub use emit::{
     AddIArenaFieldOffsets, Alu3ArenaFieldOffsets, Alu3WArenaFieldOffsets, ArenaNativeGeometry,
     ArenaNativeLayout, Branch2ArenaFieldOffsets, CProject, EmitContext, InlineRecordShape,
     InstrCodegen, InvalidRvrExecutionKind, LoadStoreArenaFieldOffsets, RvrExecutionKind,
-    Rw1ArenaFieldOffsets,
-    Wr1ArenaFieldOffsets,
+    Rw1ArenaFieldOffsets, Wr1ArenaFieldOffsets,
 };
 pub use toolchain::{
     default_addr2line_cmd, default_compiler, default_compiler_command, default_dwarfdump_cmd,

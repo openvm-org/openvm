@@ -7,9 +7,7 @@
 use rvr_state::{InstretTrackingState, RvState};
 
 use super::{
-    bridge::rv64_memory_ptr,
-    metered::MeteringState,
-    metered_cost::MeteredCostState,
+    bridge::rv64_memory_ptr, metered::MeteringState, metered_cost::MeteredCostState,
     preflight::PreflightTracerData,
 };
 use crate::{arch::VmState, system::memory::online::GuestMemory};
@@ -18,7 +16,28 @@ pub(crate) type PureRvState = RvState;
 pub(crate) type PureWithInstretTrackingRvState = RvState<InstretTrackingState>;
 pub(crate) type MeteredRvState = RvState<MeteringState>;
 pub(crate) type MeteredCostRvState = RvState<MeteredCostState>;
-pub(crate) type PreflightRvState = RvState<PreflightTracerData>;
+
+/// Preflight-specific execution state. The generated C layout keeps these
+/// fields flattened after the common `RvState` prefix; the nested Rust field
+/// is layout-equivalent under `repr(C)`.
+#[repr(C)]
+pub struct PreflightModeState {
+    pub instret: u64,
+    pub target_instret: u64,
+    pub tracer: *mut PreflightTracerData,
+}
+
+impl Default for PreflightModeState {
+    fn default() -> Self {
+        Self {
+            instret: 0,
+            target_instret: u64::MAX,
+            tracer: std::ptr::null_mut(),
+        }
+    }
+}
+
+pub type PreflightState = RvState<PreflightModeState>;
 
 /// Build the concrete scratch state selected by the generated artifact.
 ///

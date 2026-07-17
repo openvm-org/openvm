@@ -92,7 +92,9 @@ impl RvrExecutionKind {
             Self::MeteredSegment => {
                 Some(include_str!("../../c/block/openvm_block_metered_segment.h"))
             }
-            Self::Pure | Self::PureWithInstretTracking | Self::MeteredCost | Self::Preflight => None,
+            Self::Pure | Self::PureWithInstretTracking | Self::MeteredCost | Self::Preflight => {
+                None
+            }
         }
     }
 
@@ -102,7 +104,10 @@ impl RvrExecutionKind {
         writeln!(out, "#define OPENVM_STATE_LAYOUT_H").unwrap();
         writeln!(out).unwrap();
         match self {
-            Self::Pure | Self::Preflight => {}
+            Self::Pure => {}
+            Self::Preflight => {
+                writeln!(out, "struct Tracer;").unwrap();
+            }
             Self::PureWithInstretTracking => {
                 writeln!(out, "typedef struct InstretTrackingState {{").unwrap();
                 writeln!(out, "  uint64_t retired;").unwrap();
@@ -142,7 +147,12 @@ impl RvrExecutionKind {
         writeln!(out, "  uint8_t exit_code;").unwrap();
         writeln!(out, "  uint8_t* memory;").unwrap();
         match self {
-            Self::Pure | Self::Preflight => {}
+            Self::Pure => {}
+            Self::Preflight => {
+                writeln!(out, "  uint64_t instret;").unwrap();
+                writeln!(out, "  uint64_t target_instret;").unwrap();
+                writeln!(out, "  struct Tracer* tracer;").unwrap();
+            }
             Self::PureWithInstretTracking => {
                 writeln!(out, "  InstretTrackingState mode_state;").unwrap();
             }
@@ -487,7 +497,7 @@ impl CProject {
     /// also derives the matching host-side skip/adopt metadata) and only
     /// active in preflight mode, where `pc_to_chip` is set.
     fn inline_records_enabled(&self) -> bool {
-        self.tracer_mode == TracerMode::Preflight
+        self.execution_kind == RvrExecutionKind::Preflight
             && self.pc_to_chip.is_some()
             && self.inline_records
     }
@@ -752,7 +762,6 @@ impl CProject {
             "typedef __attribute__((preserve_none)) void (*BlockFn)({typedef_params});"
         )
         .unwrap();
-        self.emit_trap_declaration(&mut h);
         if self.execution_kind == RvrExecutionKind::PureWithInstretTracking {
             let signature = self.block_signature(
                 "__attribute__((preserve_none, noinline)) void",
@@ -983,7 +992,11 @@ impl CProject {
         match self.execution_kind {
             RvrExecutionKind::PureWithInstretTracking => return,
             RvrExecutionKind::Metered | RvrExecutionKind::MeteredSegment => {}
-            RvrExecutionKind::Pure | RvrExecutionKind::MeteredCost => return,
+            RvrExecutionKind::Pure
+            | RvrExecutionKind::MeteredCost
+            | RvrExecutionKind::Preflight => {
+                return;
+            }
         }
 
         let pc = block.start_pc;
@@ -1081,12 +1094,21 @@ impl CProject {
                 writeln!(out, "    check_counter -= {insn_count}u;").unwrap();
             }
             RvrExecutionKind::Preflight => {
+                writeln!(
+                    out,
+                    "    if (unlikely(state->target_instret != UINT64_MAX && (state->target_instret < {insn_count}u || state->instret > state->target_instret - {insn_count}u))) {{"
+                )
+                .unwrap();
+                writeln!(
+                    out,
+                    "        rv_set_status_at(state, 0x{pc:08x}ull, OPENVM_EXEC_SUSPENDED, 0);"
+                )
+                .unwrap();
+                writeln!(out, "        return;").unwrap();
+                writeln!(out, "    }}").unwrap();
+                writeln!(out, "    state->instret += {insn_count}u;").unwrap();
                 if self.delta_records {
-                    writeln!(
-                        out,
-                        "    trace_block(state, 0x{pc:08x}ull, {insn_count}u);"
-                    )
-                    .unwrap();
+                    writeln!(out, "    trace_block(state, 0x{pc:08x}ull, {insn_count}u);").unwrap();
                 }
             }
         }
@@ -1167,7 +1189,7 @@ impl CProject {
                     writeln!(out, "        state->mode_state.cost += {total}u;").unwrap();
                 }
             }
-            TracerMode::Preflight => {
+            RvrExecutionKind::Preflight => {
                 for (chip, count) in &chip_counts {
                     writeln!(out, "        trace_chip(state, {chip}u, {count}u);").unwrap();
                 }

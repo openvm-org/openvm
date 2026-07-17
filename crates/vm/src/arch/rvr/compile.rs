@@ -980,11 +980,9 @@ fn compile_impl<F: PrimeField32>(
         RvrExecutionKind::Metered
         | RvrExecutionKind::MeteredSegment
         | RvrExecutionKind::MeteredCost
-        | RvrExecutionKind::Preflight => {
-            Some(opts.chips.ok_or(CompileError::InvalidOptions(
-                "metered/preflight rvr compile requires ChipMapping",
-            ))?)
-        }
+        | RvrExecutionKind::Preflight => Some(opts.chips.ok_or(CompileError::InvalidOptions(
+            "metered/preflight rvr compile requires ChipMapping",
+        ))?),
     };
     let opt_env = match opts.execution_kind {
         RvrExecutionKind::Metered | RvrExecutionKind::MeteredSegment => Some((
@@ -1003,7 +1001,7 @@ fn compile_impl<F: PrimeField32>(
         .map(|(env, invalid_message)| native_opt_level(env, invalid_message))
         .transpose()?
         .flatten();
-    let native_detail = opts.tracer_mode == TracerMode::Preflight
+    let native_detail = opts.execution_kind == RvrExecutionKind::Preflight
         && std::env::var("OPENVM_RVR_NATIVE_DETAIL").as_deref() == Ok("1");
 
     let ir_started = Instant::now();
