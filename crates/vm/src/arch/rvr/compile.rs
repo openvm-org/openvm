@@ -2,6 +2,7 @@
 
 use std::{
     collections::{BTreeMap, BTreeSet},
+    ffi::OsStr,
     fmt::{self, Write as _},
     fs::{self, File},
     io::Read,
@@ -1921,6 +1922,15 @@ struct RvrNativeCacheManifest {
     input_key: Option<String>,
 }
 
+const DEFAULT_THINLTO_JOBS_MAX: usize = 32;
+const THINLTO_CACHE_VERSION: &str = "v1";
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct ThinLtoBuildOptions {
+    jobs: usize,
+    cache_dir: Option<PathBuf>,
+}
+
 fn compile_impl<F: PrimeField32>(
     exe: &VmExe<F>,
     opts: &CompileOptions<'_, F>,
@@ -1958,6 +1968,10 @@ fn compile_impl<F: PrimeField32>(
             "disabled ThinLTO for rvr native compilation"
         );
     }
+    let thinlto_jobs = (!disable_lto)
+        .then(configured_thinlto_jobs)
+        .transpose()?
+        .unwrap_or(1);
     // Preflight codegen emits inline records by default. The metadata is
     // reconstructed from the lifted instruction stream even on a cache hit;
     // only CFG/project generation and the recursive project hash are skipped.
@@ -2136,6 +2150,11 @@ fn compile_impl<F: PrimeField32>(
         })
     } else {
         None
+    };
+    let thinlto_cache_root = if disable_lto {
+        None
+    } else {
+        configured_thinlto_cache_root(cache.as_ref())?
     };
 
     if let Some(cache) = cache.as_ref() {
@@ -2389,12 +2408,11 @@ fn compile_impl<F: PrimeField32>(
     }
 
     let hash_started = Instant::now();
-    let project_key = cache
-        .as_ref()
-        .map(|_| generated_project_cache_key(output_dir, &make_args, &toolchain))
+    let project_key = (cache.is_some() || thinlto_cache_root.is_some())
+        .then(|| generated_project_cache_key(output_dir, &make_args, &toolchain))
         .transpose()?;
     let hash_elapsed = hash_started.elapsed();
-    if cache.is_some() {
+    if cache.is_some() || thinlto_cache_root.is_some() {
         tracing::info!(
             execution_kind = ?opts.execution_kind,
             ir_ms = ir_elapsed.as_millis(),
@@ -2441,7 +2459,13 @@ fn compile_impl<F: PrimeField32>(
         );
     }
 
-    compile_generated_project(output_dir, &make_args, &toolchain)?;
+    let thinlto = ThinLtoBuildOptions {
+        jobs: thinlto_jobs,
+        cache_dir: thinlto_cache_root
+            .zip(project_key.as_deref())
+            .map(|(root, key)| root.join(THINLTO_CACHE_VERSION).join(key)),
+    };
+    compile_generated_project(output_dir, &make_args, &toolchain, &thinlto)?;
 
     let lib_path = find_shared_lib(output_dir)?;
     let lib = unsafe {
@@ -2514,6 +2538,63 @@ fn native_opt_level(
         Ok(Some(value))
     } else {
         Err(CompileError::InvalidOptions(invalid_message))
+    }
+}
+
+fn configured_thinlto_jobs() -> Result<usize, CompileError> {
+    thinlto_jobs(
+        std::env::var_os("OPENVM_RVR_THINLTO_JOBS").as_deref(),
+        std::thread::available_parallelism().map_or(4, std::num::NonZeroUsize::get),
+    )
+}
+
+fn thinlto_jobs(
+    value: Option<&OsStr>,
+    available_parallelism: usize,
+) -> Result<usize, CompileError> {
+    let Some(value) = value else {
+        return Ok(available_parallelism.clamp(1, DEFAULT_THINLTO_JOBS_MAX));
+    };
+    value
+        .to_str()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|jobs| *jobs > 0)
+        .ok_or(CompileError::InvalidOptions(
+            "OPENVM_RVR_THINLTO_JOBS must be a positive integer",
+        ))
+}
+
+fn configured_thinlto_cache_root(
+    cache: Option<&RvrNativeCache>,
+) -> Result<Option<PathBuf>, CompileError> {
+    let configured = std::env::var_os("OPENVM_RVR_THINLTO_CACHE_DIR");
+    let cache_root = cache.and_then(|cache| cache.lib_path.parent());
+    thinlto_cache_root(configured.as_deref(), cache_root)
+        .map(|root| {
+            if root.is_absolute() {
+                Ok(root)
+            } else {
+                std::env::current_dir()
+                    .map(|cwd| resolve_cache_root(root.clone(), &cwd))
+                    .map_err(|source| CompileError::CProject { path: root, source })
+            }
+        })
+        .transpose()
+}
+
+fn thinlto_cache_root(configured: Option<&OsStr>, cache_root: Option<&Path>) -> Option<PathBuf> {
+    match configured {
+        Some(path) if path.is_empty() => None,
+        Some(path) => Some(PathBuf::from(path)),
+        None => cache_root.map(|root| root.join("thinlto-cache")),
+    }
+}
+
+fn resolve_cache_root(root: PathBuf, current_dir: &Path) -> PathBuf {
+    if root.is_absolute() {
+        root
+    } else {
+        current_dir.join(root)
     }
 }
 
@@ -3162,6 +3243,7 @@ fn compile_generated_project(
     output_dir: &Path,
     make_args: &[String],
     toolchain: &rvr_openvm::RuntimeToolchain,
+    thinlto: &ThinLtoBuildOptions,
 ) -> Result<(), CompileError> {
     let stdout_path = output_dir.join("make.stdout.log");
     let stderr_path = output_dir.join("make.stderr.log");
@@ -3182,10 +3264,18 @@ fn compile_generated_project(
         .filter(|jobs| *jobs > 0)
         .unwrap_or(default_jobs)
         .to_string();
+    if let Some(cache_dir) = thinlto.cache_dir.as_ref() {
+        fs::create_dir_all(cache_dir).map_err(|source| CompileError::CProject {
+            path: cache_dir.clone(),
+            source,
+        })?;
+    }
     tracing::info!(
         translation_units = total_objects,
         make = %toolchain.make,
         jobs = %jobs,
+        thinlto_jobs = thinlto.jobs,
+        thinlto_cache = thinlto.cache_dir.as_ref().map(|path| path.display().to_string()),
         "building rvr native library"
     );
 
@@ -3198,6 +3288,13 @@ fn compile_generated_project(
         .arg("shared")
         .args(make_args)
         .arg(format!("HOST_OS={}", toolchain.host_os))
+        .arg(format!("THINLTO_JOBS={}", thinlto.jobs))
+        .args(
+            thinlto
+                .cache_dir
+                .as_ref()
+                .map(|path| format!("THINLTO_CACHE_DIR={}", path.display())),
+        )
         .env("CC", &toolchain.compiler)
         .env("LINKER", &toolchain.linker)
         .stdout(Stdio::from(stdout_file))
@@ -3316,6 +3413,44 @@ mod tests {
 
     use super::*;
     use crate::arch::rvr::AddIArenaFieldOffsets;
+
+    #[test]
+    fn thinlto_jobs_use_a_bounded_host_default_and_allow_single_backend_fallback() {
+        assert_eq!(thinlto_jobs(None, 1).unwrap(), 1);
+        assert_eq!(thinlto_jobs(None, 16).unwrap(), 16);
+        assert_eq!(thinlto_jobs(None, 64).unwrap(), DEFAULT_THINLTO_JOBS_MAX);
+        assert_eq!(thinlto_jobs(Some(OsStr::new("1")), 64).unwrap(), 1);
+        assert_eq!(thinlto_jobs(Some(OsStr::new("48")), 8).unwrap(), 48);
+        assert!(thinlto_jobs(Some(OsStr::new("0")), 8).is_err());
+        assert!(thinlto_jobs(Some(OsStr::new("invalid")), 8).is_err());
+    }
+
+    #[test]
+    fn thinlto_cache_defaults_below_native_cache_and_honors_override() {
+        let native_root = Path::new("/cache/rvr");
+        assert_eq!(
+            thinlto_cache_root(None, Some(native_root)),
+            Some(native_root.join("thinlto-cache"))
+        );
+        assert_eq!(
+            thinlto_cache_root(Some(OsStr::new("/other/cache")), Some(native_root)),
+            Some(PathBuf::from("/other/cache"))
+        );
+        assert_eq!(
+            thinlto_cache_root(Some(OsStr::new("")), Some(native_root)),
+            None
+        );
+        assert_eq!(thinlto_cache_root(None, None), None);
+    }
+
+    #[test]
+    fn thinlto_relative_cache_root_is_resolved_before_make_changes_directory() {
+        let root = thinlto_cache_root(Some(OsStr::new("relative/cache")), None).unwrap();
+        assert_eq!(
+            resolve_cache_root(root, Path::new("/caller/worktree")),
+            PathBuf::from("/caller/worktree/relative/cache")
+        );
+    }
 
     struct UnfingerprintedExtension;
 
