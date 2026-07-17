@@ -150,7 +150,7 @@ impl GateInst for Halo2Backend<'_> {
     }
 
     fn cell_count(&self) -> usize {
-        self.ctx.get_offset()
+        self.ctx.advice.len()
     }
 }
 
