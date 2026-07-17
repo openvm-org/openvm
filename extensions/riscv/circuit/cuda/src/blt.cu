@@ -6,6 +6,7 @@
 #include "riscv/adapters/branch.cuh" // Rv64BranchAdapterCols, Rv64BranchAdapterRecord, Rv64BranchAdapter
 #include "riscv/cores/blt.cuh"
 #include "riscv/rvr_compact.cuh"
+#include "riscv/rvr_g2_trace.cuh"
 #include "system/memory/params.cuh" // BLOCK_FE_WIDTH
 
 using namespace riscv;
@@ -73,10 +74,11 @@ extern "C" int _blt_tracegen(
 // M-GPUDEC (G2): tracegen from compact wire records + the per-exe operand
 // table; materializes the same record structs in registers and calls the SAME
 // fill methods as blt_tracegen.
+template <typename RecordView>
 __global__ void blt_tracegen_compact(
     Fp *trace,
     size_t height,
-    DeviceBufferConstView<RvrBranch2Compact> records,
+    RecordView records,
     RvrOperandEntry const *operand_table,
     uint32_t pc_base,
     uint32_t *rc_ptr,
@@ -127,3 +129,8 @@ extern "C" int _blt_tracegen_compact(
     );
     return CHECK_KERNEL();
 }
+
+DEFINE_RVR_G2_TRACEGEN_LAUNCHER(
+    _blt_tracegen_g2, BranchLessThanCols, blt_tracegen_compact, RvrBranch2Compact, 256,
+    operand_table, pc_base, range_checker, range_checker_num_bins, timestamp_max_bits
+)

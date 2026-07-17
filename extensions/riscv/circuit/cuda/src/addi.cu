@@ -6,6 +6,7 @@
 #include "riscv/adapters/alu_imm_u16.cuh"
 #include "riscv/cores/addi.cuh"
 #include "riscv/rvr_compact.cuh"
+#include "riscv/rvr_g2_trace.cuh"
 #include "system/memory/params.cuh"
 
 using namespace riscv;
@@ -70,10 +71,11 @@ extern "C" int _addi_tracegen(
     return CHECK_KERNEL();
 }
 
+template <typename RecordView>
 __global__ void addi_tracegen_compact(
     Fp *d_trace,
     size_t height,
-    DeviceBufferConstView<RvrAlu3Compact> d_records,
+    RecordView d_records,
     RvrOperandEntry const *d_operand_table,
     uint32_t pc_base,
     uint32_t *d_range_checker_ptr,
@@ -135,3 +137,16 @@ extern "C" int _addi_tracegen_compact(
     );
     return CHECK_KERNEL();
 }
+
+DEFINE_RVR_G2_TRACEGEN_LAUNCHER(
+    _addi_tracegen_g2_common,
+    Rv64AddICols,
+    addi_tracegen_compact,
+    RvrAlu3Compact,
+    256,
+    operand_table,
+    pc_base,
+    range_checker,
+    range_checker_num_bins,
+    timestamp_max_bits
+)

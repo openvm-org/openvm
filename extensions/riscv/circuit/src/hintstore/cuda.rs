@@ -40,14 +40,26 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64HintStoreChipGpu {
         let width = Rv64HintStoreCols::<u8>::width();
         let device_ctx = &self.range_checker.device_ctx;
         #[cfg(feature = "rvr")]
+        if let Some(g2_records) = self
+            .rvr_decode
+            .device_g2_trace_input(crate::rvr_gpu_decode::DeltaAirKind::HintStore, device_ctx)
+        {
+            return AirProvingContext::simple_no_pis(g2_records.tracegen(
+                width,
+                self.pointer_max_bits,
+                &self.range_checker.count,
+                None,
+                None,
+                crate::cuda_abi::UInt2::new(0, 0),
+                self.timestamp_max_bits as u32,
+                device_ctx,
+            ));
+        }
+        #[cfg(feature = "rvr")]
         if let Some(replay) = self
             .rvr_decode
             .device_delta_records(crate::rvr_gpu_decode::DeltaAirKind::HintStore, device_ctx)
         {
-            let segment_id = self
-                .rvr_decode
-                .g2_segment_id()
-                .expect("G2 HintStore replay without a bound segment id");
             const REPLAY_ROW_SIZE: usize = 64;
             assert_eq!(
                 replay.len() % REPLAY_ROW_SIZE,
@@ -64,7 +76,6 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64HintStoreChipGpu {
             d_error
                 .fill_zero_on(device_ctx)
                 .expect("G2 HintStore replay error clear");
-            let timer = openvm_circuit::arch::rvr::gpu_profile::CudaStageTimer::start(device_ctx);
             unsafe {
                 tracegen_replay(
                     d_trace.buffer(),
@@ -78,9 +89,6 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64HintStoreChipGpu {
                     device_ctx.stream.as_raw(),
                 )
                 .expect("G2 HintStore replay tracegen launch");
-            }
-            if let Some(timer) = timer {
-                timer.finish("hintstore_replay", segment_id, rows_used * REPLAY_ROW_SIZE);
             }
             let error = d_error
                 .to_host_on(device_ctx)

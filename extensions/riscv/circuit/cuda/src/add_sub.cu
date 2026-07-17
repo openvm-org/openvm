@@ -6,6 +6,7 @@
 #include "riscv/adapters/alu_reg_u16.cuh"
 #include "riscv/cores/add_sub.cuh"
 #include "riscv/rvr_compact.cuh"
+#include "riscv/rvr_g2_trace.cuh"
 #include "system/memory/params.cuh"
 
 using namespace riscv;
@@ -78,10 +79,11 @@ extern "C" int _add_sub_tracegen(
 // table. Materializes the same record structs in registers and calls the SAME
 // fill methods as add_sub_tracegen — byte-equality by construction modulo the
 // decode, which the three-way differential validates on device.
+template <typename RecordView>
 __global__ void add_sub_tracegen_compact(
     Fp *d_trace,
     size_t height,
-    DeviceBufferConstView<RvrAlu3Compact> d_records,
+    RecordView d_records,
     RvrOperandEntry const *d_operand_table,
     uint32_t pc_base,
     uint32_t *d_range_checker_ptr,
@@ -143,3 +145,8 @@ extern "C" int _add_sub_tracegen_compact(
     );
     return CHECK_KERNEL();
 }
+
+DEFINE_RVR_G2_TRACEGEN_LAUNCHER(
+    _add_sub_tracegen_g2, Rv64AddSubCols, add_sub_tracegen_compact, RvrAlu3Compact, 256,
+    operand_table, pc_base, range_checker, range_checker_num_bins, timestamp_max_bits
+)

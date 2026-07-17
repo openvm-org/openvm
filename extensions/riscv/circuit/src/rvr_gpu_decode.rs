@@ -11,6 +11,8 @@
 
 #[cfg(feature = "rvr")]
 use std::collections::{HashMap, HashSet};
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::{
     mem::{align_of, size_of},
     sync::{Arc, Mutex},
@@ -31,6 +33,8 @@ use openvm_circuit::system::cuda::memory::{
 use openvm_circuit::system::cuda::program::{
     DeviceProgramFrequencies, DeviceProgramFrequenciesProvider,
 };
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use openvm_cuda_backend::{base::DeviceMatrix, prelude::F};
 #[cfg(feature = "cuda")]
 use openvm_cuda_common::{
     copy::{cuda_memcpy_on, MemCopyD2H, MemCopyH2D},
@@ -307,6 +311,7 @@ struct HostDeltaSegment {
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 struct HostG2Segment {
     segment: openvm_circuit::arch::rvr::RvrG2SegmentV1,
+    descs: Vec<openvm_circuit::arch::rvr::g2::G2LaneDescV1>,
     meta: Arc<openvm_circuit::arch::rvr::RvrG2MetaV1>,
     initial_timestamp: u32,
     specs: Vec<DeltaAirSpec>,
@@ -356,7 +361,254 @@ struct DeviceDeltaSegment {
     outputs: HashMap<DeltaAirKind, Arc<DeviceBuffer<u8>>>,
     touched_memory: Option<DeviceTouchedMemory>,
     program_frequencies: Option<DeviceProgramFrequencies>,
-    g2_segment_id: Option<u32>,
+    g2_trace: Option<Arc<DeviceG2TraceSegment>>,
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+const G2_PREPARED_INSTRUCTION_SIZE: usize = 20;
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+const G2_TIMELINE_EVENT_SIZE: usize = 32;
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+const G2_RESIDUAL_VALUE_LANE: u16 = 0x0082;
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct G2TraceSource {
+    prepared: u64,
+    row_instructions: u64,
+    timestamp_offsets: u64,
+    timeline: u64,
+    v0: u64,
+    v1: u64,
+    residual_values: u64,
+    error: u64,
+    instruction_count: u32,
+    row_start: u32,
+    row_count: u32,
+    timeline_capacity: u32,
+    operand_count: u32,
+    v0_count: u32,
+    v1_count: u32,
+    residual_count: u32,
+    pc_base: u32,
+    initial_timestamp: u32,
+    kind: u32,
+    v0_width: u8,
+    v1_width: u8,
+    reserved: u16,
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+const _: () = assert!(size_of::<G2TraceSource>() == 112);
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+#[derive(Clone)]
+struct DeviceG2TraceKind {
+    row_start: u32,
+    row_count: u32,
+    v0_offset: Option<usize>,
+    v0_count: u32,
+    v0_width: u8,
+    v1_offset: Option<usize>,
+    v1_count: u32,
+    v1_width: u8,
+    oracle_expected: Option<Arc<Vec<u8>>>,
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+struct DeviceG2TraceSegment {
+    wire: Arc<DeviceBuffer<u8>>,
+    operand_table: Arc<DeviceBuffer<u8>>,
+    prepared: Arc<DeviceBuffer<u8>>,
+    row_instructions: Arc<DeviceBuffer<u32>>,
+    timestamp_offsets: Arc<DeviceBuffer<u32>>,
+    timeline: Arc<DeviceBuffer<u8>>,
+    error: Arc<DeviceBuffer<u32>>,
+    instruction_count: u32,
+    timeline_capacity: u32,
+    operand_count: u32,
+    residual_values_offset: Option<usize>,
+    residual_count: u32,
+    pc_base: u32,
+    initial_timestamp: u32,
+    // Aggregate trace-helper validation into one fail-closed D2H boundary.
+    pending_trace_kinds: AtomicUsize,
+    kinds: HashMap<DeltaAirKind, DeviceG2TraceKind>,
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+#[derive(Clone)]
+pub(crate) struct DeviceG2TraceInput {
+    segment: Arc<DeviceG2TraceSegment>,
+    kind: DeltaAirKind,
+    state: DeviceG2TraceKind,
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+impl DeviceG2TraceInput {
+    pub(crate) fn row_count(&self) -> usize {
+        self.state.row_count as usize
+    }
+
+    pub(crate) fn source(&self) -> G2TraceSource {
+        let lane_ptr = |offset: Option<usize>| {
+            offset.map_or(0, |offset| unsafe {
+                self.segment.wire.as_ptr().add(offset) as u64
+            })
+        };
+        G2TraceSource {
+            prepared: self.segment.prepared.as_ptr() as u64,
+            row_instructions: self.segment.row_instructions.as_ptr() as u64,
+            timestamp_offsets: self.segment.timestamp_offsets.as_ptr() as u64,
+            timeline: self.segment.timeline.as_ptr() as u64,
+            v0: lane_ptr(self.state.v0_offset),
+            v1: lane_ptr(self.state.v1_offset),
+            residual_values: lane_ptr(self.segment.residual_values_offset),
+            error: self.segment.error.as_mut_ptr() as u64,
+            instruction_count: self.segment.instruction_count,
+            row_start: self.state.row_start,
+            row_count: self.state.row_count,
+            timeline_capacity: self.segment.timeline_capacity,
+            operand_count: self.segment.operand_count,
+            v0_count: self.state.v0_count,
+            v1_count: self.state.v1_count,
+            residual_count: self.segment.residual_count,
+            pc_base: self.segment.pc_base,
+            initial_timestamp: self.segment.initial_timestamp,
+            kind: self.kind as u32,
+            v0_width: self.state.v0_width,
+            v1_width: self.state.v1_width,
+            reserved: 0,
+        }
+    }
+
+    pub(crate) fn oracle_expected(&self) -> Option<&[u8]> {
+        self.state.oracle_expected.as_deref().map(Vec::as_slice)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn tracegen(
+        &self,
+        trace_width: usize,
+        pointer_max_bits: usize,
+        range_checker: &DeviceBuffer<F>,
+        bitwise_lookup: Option<&DeviceBuffer<F>>,
+        range_tuple_checker: Option<&DeviceBuffer<F>>,
+        range_tuple_checker_sizes: crate::cuda_abi::UInt2,
+        timestamp_max_bits: u32,
+        device_ctx: &GpuDeviceCtx,
+    ) -> DeviceMatrix<F> {
+        let trace_height = self.row_count().next_power_of_two();
+        let trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
+        unsafe {
+            crate::cuda_abi::rvr_g2_cuda::tracegen(
+                self.kind,
+                trace.buffer(),
+                trace_height,
+                self.source(),
+                &self.segment.operand_table,
+                self.segment.pc_base,
+                pointer_max_bits,
+                range_checker,
+                bitwise_lookup,
+                range_tuple_checker,
+                range_tuple_checker_sizes,
+                timestamp_max_bits,
+                device_ctx.stream.as_raw(),
+            )
+            .expect("CUDA G2 strict lane-to-trace launch");
+        }
+        let oracle_expected = self.oracle_expected();
+        if let Some(expected_records) = oracle_expected {
+            let reference_records = expected_records
+                .to_device_on(device_ctx)
+                .expect("G2 trace-oracle reference records H2D");
+            let reference_trace =
+                DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
+            let reference_range =
+                DeviceBuffer::<F>::with_capacity_on(range_checker.len(), device_ctx);
+            reference_range
+                .fill_zero_on(device_ctx)
+                .expect("G2 trace-oracle range counts clear");
+            let reference_bitwise = bitwise_lookup.map(|lookup| {
+                let buffer = DeviceBuffer::<F>::with_capacity_on(lookup.len(), device_ctx);
+                buffer
+                    .fill_zero_on(device_ctx)
+                    .expect("G2 trace-oracle bitwise counts clear");
+                buffer
+            });
+            let reference_tuple = range_tuple_checker.map(|lookup| {
+                let buffer = DeviceBuffer::<F>::with_capacity_on(lookup.len(), device_ctx);
+                buffer
+                    .fill_zero_on(device_ctx)
+                    .expect("G2 trace-oracle tuple counts clear");
+                buffer
+            });
+            unsafe {
+                crate::cuda_abi::rvr_g2_cuda::tracegen_reference(
+                    self.kind,
+                    reference_trace.buffer(),
+                    trace_height,
+                    &reference_records,
+                    &self.segment.operand_table,
+                    self.segment.pc_base,
+                    pointer_max_bits,
+                    &reference_range,
+                    reference_bitwise.as_ref(),
+                    reference_tuple.as_ref(),
+                    range_tuple_checker_sizes,
+                    timestamp_max_bits,
+                    device_ctx.stream.as_raw(),
+                )
+                .expect("CUDA G2 trace-oracle reference launch");
+            }
+            let error = self
+                .segment
+                .error
+                .to_host_on(device_ctx)
+                .expect("G2 trace error D2H")[0];
+            assert_eq!(error, 0, "CUDA G2 strict trace validation error {error}");
+            let actual = trace
+                .buffer()
+                .to_host_on(device_ctx)
+                .expect("G2 strict trace oracle D2H");
+            let expected = reference_trace
+                .buffer()
+                .to_host_on(device_ctx)
+                .expect("G2 reference trace oracle D2H");
+            assert_eq!(
+                actual, expected,
+                "G2 strict final trace differs byte-for-byte for {:?}",
+                self.kind
+            );
+            eprintln!(
+                "OPENVM_RVR_G2_TRACE_ORACLE_PASS=1 kind={:?} rows={}",
+                self.kind,
+                self.row_count()
+            );
+        }
+        let pending = self
+            .segment
+            .pending_trace_kinds
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |pending| {
+                pending.checked_sub(1)
+            })
+            .expect("G2 trace kind launched more than once");
+        // Every AIR uses the same stream. The last launch therefore observes
+        // all strict reconstruction errors without synchronizing per AIR.
+        if pending == 1 && oracle_expected.is_none() {
+            let error = self
+                .segment
+                .error
+                .to_host_on(device_ctx)
+                .expect("G2 final trace error D2H")[0];
+            assert_eq!(error, 0, "CUDA G2 strict trace validation error {error}");
+        }
+        trace
+    }
 }
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
@@ -887,6 +1139,7 @@ impl RvrGpuDecodeState {
         *self.delta_device.lock().unwrap() = None;
         *self.g2_host.lock().unwrap() = Some(HostG2Segment {
             segment,
+            descs,
             meta,
             initial_timestamp,
             specs,
@@ -1275,7 +1528,7 @@ impl RvrGpuDecodeState {
             program_frequencies: Some(DeviceProgramFrequencies {
                 frequencies: d_program_frequencies,
             }),
-            g2_segment_id: None,
+            g2_trace: None,
         };
         *self.delta_device.lock().unwrap() = Some(device);
         true
@@ -1306,8 +1559,10 @@ impl RvrGpuDecodeState {
             .device_operand_table(device_ctx)
             .expect("G2 segment without a bound operand table");
         let h2d_timer = CudaStageTimer::start(device_ctx);
-        let d_wire =
-            DeviceBuffer::<u8>::with_capacity_on(host.segment.transfer_byte_len(), device_ctx);
+        let d_wire = Arc::new(DeviceBuffer::<u8>::with_capacity_on(
+            host.segment.transfer_byte_len(),
+            device_ctx,
+        ));
         d_wire
             .fill_zero_on(device_ctx)
             .expect("G2 wire padding clear");
@@ -1390,26 +1645,62 @@ impl RvrGpuDecodeState {
             .map(|spec| spec.air_idx + 1)
             .max()
             .unwrap_or(0);
-        let mut outputs = HashMap::new();
+        let outputs = HashMap::new();
+        let mut g2_trace_kinds = HashMap::new();
         let mut descs = vec![DeltaAirOutputDesc::default(); num_airs];
         let mut sorted_specs = host.specs.clone();
         sorted_specs.sort_unstable_by_key(|spec| spec.air_idx);
+        if !host.oracle_expected.is_empty() {
+            for spec in host.specs.iter().filter(|spec| spec.count != 0) {
+                let expected = host.oracle_expected.get(&spec.air_idx).unwrap_or_else(|| {
+                    panic!("G2 final-trace oracle omitted AIR {}", spec.air_idx)
+                });
+                assert_eq!(
+                    expected.len(),
+                    spec.count * spec.kind.wire_size(),
+                    "G2 final-trace oracle record geometry differs for AIR {} ({:?})",
+                    spec.air_idx,
+                    spec.kind
+                );
+            }
+        }
         let mut sorted_start = 0usize;
         for spec in &sorted_specs {
             let stride = spec.kind.wire_size();
             if spec.count != 0 {
-                let buffer = Arc::new(DeviceBuffer::<u8>::with_capacity_on(
-                    spec.count * stride,
-                    device_ctx,
-                ));
                 descs[spec.air_idx] = DeltaAirOutputDesc {
-                    base: buffer.as_ptr() as u64,
+                    base: 0,
                     count: spec.count as u32,
                     stride: stride as u32,
                     sorted_start: sorted_start as u32,
                     kind: spec.kind as u32,
                 };
-                outputs.insert(spec.kind, buffer);
+                let lane = |second: bool| {
+                    let lane_kind = 0x0100u16 + 2 * spec.kind as u16 + u16::from(second);
+                    host.descs.iter().find(|desc| desc.kind == lane_kind)
+                };
+                let v0 = lane(false);
+                let v1 = lane(true);
+                g2_trace_kinds.insert(
+                    spec.kind,
+                    DeviceG2TraceKind {
+                        row_start: u32::try_from(sorted_start)
+                            .expect("G2 trace row start exceeds u32"),
+                        row_count: u32::try_from(spec.count)
+                            .expect("G2 trace row count exceeds u32"),
+                        v0_offset: v0.map(|desc| desc.offset as usize),
+                        v0_count: v0.map_or(0, |desc| desc.count),
+                        v0_width: v0.map_or(0, |desc| desc.elem_width),
+                        v1_offset: v1.map(|desc| desc.offset as usize),
+                        v1_count: v1.map_or(0, |desc| desc.count),
+                        v1_width: v1.map_or(0, |desc| desc.elem_width),
+                        oracle_expected: host
+                            .oracle_expected
+                            .get(&spec.air_idx)
+                            .cloned()
+                            .map(Arc::new),
+                    },
+                );
             }
             sorted_start += spec.count;
         }
@@ -1442,7 +1733,30 @@ impl RvrGpuDecodeState {
         } else {
             DeviceBuffer::<u64>::with_capacity_on(residual_capacity, device_ctx)
         };
-        let d_error = DeviceBuffer::<u32>::with_capacity_on(1, device_ctx);
+        let instruction_count = header.instruction_count as usize;
+        let timestamp_capacity = host
+            .total_record_count
+            .checked_mul(4)
+            .and_then(|count| count.checked_add(residual_capacity))
+            .and_then(|count| count.checked_add(instruction_count))
+            .expect("G2 timeline capacity overflow");
+        let d_prepared = Arc::new(DeviceBuffer::<u8>::with_capacity_on(
+            instruction_count * G2_PREPARED_INSTRUCTION_SIZE,
+            device_ctx,
+        ));
+        let d_row_instructions = Arc::new(DeviceBuffer::<u32>::with_capacity_on(
+            host.total_record_count,
+            device_ctx,
+        ));
+        let d_timestamp_offsets = Arc::new(DeviceBuffer::<u32>::with_capacity_on(
+            instruction_count + 1,
+            device_ctx,
+        ));
+        let d_timeline = Arc::new(DeviceBuffer::<u8>::with_capacity_on(
+            timestamp_capacity * G2_TIMELINE_EVENT_SIZE,
+            device_ctx,
+        ));
+        let d_error = Arc::new(DeviceBuffer::<u32>::with_capacity_on(1, device_ctx));
         d_error.fill_zero_on(device_ctx).expect("G2 error clear");
         let g2_predecode_timer = CudaStageTimer::start(device_ctx);
         unsafe {
@@ -1461,6 +1775,10 @@ impl RvrGpuDecodeState {
                 &d_expected_opaque,
                 &d_program_frequencies,
                 host.total_record_count,
+                &d_prepared,
+                &d_row_instructions,
+                &d_timestamp_offsets,
+                &d_timeline,
                 &d_opaque_residual,
                 &d_opaque_residual_count,
                 &d_descs,
@@ -1502,33 +1820,46 @@ impl RvrGpuDecodeState {
             touched_count <= touched_capacity,
             "G2 touched-memory count overflow"
         );
-        if !host.oracle_expected.is_empty() {
-            for spec in &host.specs {
-                if spec.count == 0 {
-                    continue;
-                }
-                let expected = host.oracle_expected.get(&spec.air_idx).unwrap_or_else(|| {
-                    panic!("G2 device oracle omitted expected AIR {}", spec.air_idx)
-                });
-                let actual = outputs
-                    .get(&spec.kind)
-                    .unwrap_or_else(|| panic!("G2 device oracle omitted {:?}", spec.kind))
-                    .to_host_on(device_ctx)
-                    .expect("G2 consumer-byte oracle D2H");
-                assert_eq!(
-                    actual.as_slice(),
-                    expected.as_slice(),
-                    "G2 device consumer bytes differ from CPU reference for AIR {} ({:?})",
-                    spec.air_idx,
-                    spec.kind
-                );
-            }
-            eprintln!(
-                "OPENVM_RVR_G2_DEVICE_ORACLE_PASS=1 airs={} records={}",
-                host.oracle_expected.len(),
-                host.total_record_count
-            );
+        let residual_values = host
+            .descs
+            .iter()
+            .find(|desc| desc.kind == G2_RESIDUAL_VALUE_LANE);
+        assert_eq!(
+            residual_values.map_or(0, |desc| desc.count as usize),
+            residual_capacity,
+            "G2 residual-value descriptor count drifted"
+        );
+        if let Some(desc) = residual_values {
+            assert_eq!(desc.elem_width, 8, "G2 residual-value width drifted");
         }
+        assert_eq!(
+            d_table.len() % size_of::<DeviceOperandEntry>(),
+            0,
+            "G2 operand-table byte geometry drifted"
+        );
+        let operand_count = u32::try_from(d_table.len() / size_of::<DeviceOperandEntry>())
+            .expect("G2 operand-table count exceeds u32");
+        let g2_trace = Arc::new(DeviceG2TraceSegment {
+            wire: Arc::clone(&d_wire),
+            operand_table: d_table,
+            prepared: d_prepared,
+            row_instructions: d_row_instructions,
+            timestamp_offsets: d_timestamp_offsets,
+            timeline: d_timeline,
+            error: Arc::clone(&d_error),
+            instruction_count: u32::try_from(instruction_count)
+                .expect("G2 instruction count exceeds u32"),
+            timeline_capacity: u32::try_from(timestamp_capacity)
+                .expect("G2 timeline capacity exceeds u32"),
+            operand_count,
+            residual_values_offset: residual_values.map(|desc| desc.offset as usize),
+            residual_count: u32::try_from(residual_capacity)
+                .expect("G2 residual-value count exceeds u32"),
+            pc_base,
+            initial_timestamp: host.initial_timestamp,
+            pending_trace_kinds: AtomicUsize::new(g2_trace_kinds.len()),
+            kinds: g2_trace_kinds,
+        });
         drop(host);
 
         let device = DeviceDeltaSegment {
@@ -1540,7 +1871,7 @@ impl RvrGpuDecodeState {
             program_frequencies: Some(DeviceProgramFrequencies {
                 frequencies: d_program_frequencies,
             }),
-            g2_segment_id: Some(segment_id),
+            g2_trace: Some(g2_trace),
         };
         *self.g2_device.lock().unwrap() = Some(device);
         true
@@ -1571,13 +1902,24 @@ impl RvrGpuDecodeState {
             })
     }
 
+    /// Return the strict G2 lane/prefix view for one AIR. The view
+    /// owns the shared device buffers so they outlive the asynchronous trace
+    /// kernel launch.
     #[cfg(all(feature = "cuda", feature = "rvr"))]
-    pub(crate) fn g2_segment_id(&self) -> Option<u32> {
-        self.g2_device
-            .lock()
-            .unwrap()
-            .as_ref()
-            .and_then(|device| device.g2_segment_id)
+    pub(crate) fn device_g2_trace_input(
+        &self,
+        kind: DeltaAirKind,
+        device_ctx: &GpuDeviceCtx,
+    ) -> Option<DeviceG2TraceInput> {
+        self.ensure_device_g2_segment(device_ctx, None);
+        let guard = self.g2_device.lock().unwrap();
+        let segment = Arc::clone(guard.as_ref()?.g2_trace.as_ref()?);
+        let state = segment.kinds.get(&kind)?.clone();
+        Some(DeviceG2TraceInput {
+            segment,
+            kind,
+            state,
+        })
     }
 }
 

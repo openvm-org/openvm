@@ -6,6 +6,7 @@
 #include "riscv/adapters/alu_w_reg_u16.cuh"
 #include "riscv/cores/shift_logical.cuh"
 #include "riscv/rvr_compact.cuh"
+#include "riscv/rvr_g2_trace.cuh"
 #include "system/memory/params.cuh"
 
 using namespace riscv;
@@ -69,10 +70,11 @@ extern "C" int _rv64_shift_w_logical_tracegen(
     return CHECK_KERNEL();
 }
 
+template <typename RecordView>
 __global__ void rv64_shift_w_logical_tracegen_compact(
     Fp *trace,
     size_t height,
-    DeviceBufferConstView<RvrAlu3Compact> records,
+    RecordView records,
     RvrOperandEntry const *operand_table,
     uint32_t pc_base,
     uint32_t *range_ptr,
@@ -132,3 +134,9 @@ extern "C" int _rv64_shift_w_logical_tracegen_compact(
     );
     return CHECK_KERNEL();
 }
+
+DEFINE_RVR_G2_TRACEGEN_LAUNCHER(
+    _rv64_shift_w_logical_tracegen_g2, ShiftWLogicalCols,
+    rv64_shift_w_logical_tracegen_compact, RvrAlu3Compact, 512, operand_table, pc_base,
+    range_checker, range_checker_num_bins, timestamp_max_bits
+)

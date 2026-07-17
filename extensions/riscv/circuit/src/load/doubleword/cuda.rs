@@ -38,7 +38,12 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64LoadDoublewordChipGpu {
             &self.range_checker.device_ctx,
         );
         #[cfg(all(feature = "cuda", feature = "rvr"))]
-        let no_delta_records = delta_records.is_none();
+        let g2_records = self.rvr_decode.device_g2_trace_input(
+            crate::rvr_gpu_decode::DeltaAirKind::LoadDoubleword,
+            &self.range_checker.device_ctx,
+        );
+        #[cfg(all(feature = "cuda", feature = "rvr"))]
+        let no_delta_records = delta_records.is_none() && g2_records.is_none();
         #[cfg(not(all(feature = "cuda", feature = "rvr")))]
         let no_delta_records = true;
         if records.is_empty() && no_delta_records {
@@ -49,6 +54,20 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64LoadDoublewordChipGpu {
             + LoadCoreCols::<F, LOAD_DOUBLEWORD_OVERLAP_CELLS>::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
+
+        #[cfg(all(feature = "cuda", feature = "rvr"))]
+        if let Some(g2_records) = g2_records {
+            return AirProvingContext::simple_no_pis(g2_records.tracegen(
+                trace_width,
+                self.pointer_max_bits,
+                &self.range_checker.count,
+                Some(&self.bitwise_lookup.count),
+                None,
+                crate::cuda_abi::UInt2::new(0, 0),
+                self.timestamp_max_bits as u32,
+                device_ctx,
+            ));
+        }
 
         #[cfg(all(feature = "cuda", feature = "rvr"))]
         if let Some(full_records) = delta_records {

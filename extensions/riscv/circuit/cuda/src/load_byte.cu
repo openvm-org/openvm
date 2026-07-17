@@ -1,5 +1,6 @@
 #include "riscv/cores/load.cuh"
 #include "riscv/rvr_compact.cuh"
+#include "riscv/rvr_g2_trace.cuh"
 
 template <typename T> struct LoadByteCoreCols {
     T selector[BYTE_SHIFT_SELECTOR_WIDTH];
@@ -93,10 +94,11 @@ extern "C" int _rv64_load_byte_tracegen(
     return CHECK_KERNEL();
 }
 
+template <typename RecordView>
 __global__ void rv64_load_byte_tracegen_compact(
     Fp *trace,
     size_t height,
-    DeviceBufferConstView<RvrAlu3Compact> records,
+    RecordView records,
     RvrOperandEntry const *operand_table,
     uint32_t pc_base,
     size_t pointer_max_bits,
@@ -163,3 +165,9 @@ extern "C" int _rv64_load_byte_tracegen_compact(
     );
     return CHECK_KERNEL();
 }
+
+DEFINE_RVR_G2_TRACEGEN_LAUNCHER(
+    _rv64_load_byte_tracegen_g2, Rv64LoadByteCols, rv64_load_byte_tracegen_compact,
+    RvrAlu3Compact, 512, operand_table, pc_base, pointer_max_bits, range_checker,
+    range_checker_num_bins, bitwise_lookup, timestamp_max_bits
+)
