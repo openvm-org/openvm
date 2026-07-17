@@ -11,7 +11,7 @@ pub(crate) fn column_openings_by_rot_assigned<B: BabyBearExt4Inst>(
     b: &mut B,
     openings: &[BabyBearExtWire<B::F>],
     need_rot: bool,
-) -> Vec<(BabyBearExtWire<B::F>, BabyBearExtWire<B::F>)> {
+) -> Vec<ExtWirePair<B::F>> {
     if need_rot {
         assert!(
             openings.len().is_multiple_of(2),

@@ -10,17 +10,15 @@
 //!
 //! Execution is split in two phases:
 //! 1. **Input population**: `load_proof_wire` streams the proof witnesses into the tape through the
-//!    [`PopulateInputs`] impl, which replays the recorded `LoadWitness` instructions in node
-//!    order.
-//! 2. **[`GraphExecutor::run`]**: the remaining instructions, reordered by dataflow level, execute
-//!    level by level. Instructions on the same level are independent, so threads claim chunks of a
-//!    level off an atomic cursor; a barrier separates levels so operands are always fully written
-//!    before they are read. Input instructions are excluded from the schedule (no-ops at run time —
-//!    their cells were written during population).
+//!    [`PopulateInputs`] impl, which replays the recorded `LoadWitness` instructions in node order.
+//! 2. **[`GraphExecutor::run`]**: the remaining instructions, sorted by dataflow level, are claimed
+//!    off a shared atomic cursor by worker threads. Synchronization is per-instruction: each worker
+//!    spin-waits on its parents' done flags before executing — there are no barriers. Input
+//!    instructions are excluded from the schedule; their cells were written during population.
 
 use std::{
     collections::HashMap,
-    sync::atomic::{AtomicU8, AtomicUsize, Ordering},
+    sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering},
 };
 
 use halo2_base::halo2_proofs::{arithmetic::Field as _, halo2curves::bn256::Fr};
@@ -59,7 +57,7 @@ struct GraphCoreInst {
     /// Offset into the lookup region the node writes at.
     lookup_offset: u32,
     lookups_len: u32,
-    /// dependencies
+    /// `dep_inds[lo..hi]`: parent instruction indices.
     dep_list: (u32, u32),
 }
 
@@ -210,8 +208,7 @@ impl GraphExecutor {
         // placed at sorted position `sorted`.
         let mut order: Vec<u32> = (0..compute.len() as u32).collect();
         order.sort_by_key(|&i| compute[i as usize].0);
-        let mut insts: Vec<GraphCoreInst> =
-            order.iter().map(|&i| compute[i as usize].1).collect();
+        let mut insts: Vec<GraphCoreInst> = order.iter().map(|&i| compute[i as usize].1).collect();
         let mut emission_to_sorted = vec![0u32; compute.len()];
         for (sorted, &emission) in order.iter().enumerate() {
             emission_to_sorted[emission as usize] = sorted as u32;
@@ -234,17 +231,15 @@ impl GraphExecutor {
         for (idx, inst) in insts.iter().enumerate() {
             let ctx_lo = inst.ctx_offset as usize;
             let ctx_hi = ctx_lo + inst.ctx_len as usize;
-            for offset in ctx_lo..ctx_hi {
-                cell_to_compute_inst[offset] = idx as i32;
-            }
+            cell_to_compute_inst[ctx_lo..ctx_hi].fill(idx as i32);
         }
         let mut dep_inds: Vec<u32> = Vec::new();
         let mut local_deps: Vec<u32> = Vec::new();
-        for i in 0..insts.len() {
+        for inst in &mut insts {
             local_deps.clear();
-            let (arg_lo, arg_hi) = insts[i].args;
-            for a in arg_lo as usize..arg_hi as usize {
-                let offset = operand_offsets[a] as usize;
+            let (arg_lo, arg_hi) = inst.args;
+            for &arg_offset in &operand_offsets[arg_lo as usize..arg_hi as usize] {
+                let offset = arg_offset as usize;
                 if offset < advice_cells {
                     let parent = cell_to_compute_inst[offset];
                     if parent >= 0 {
@@ -258,7 +253,7 @@ impl GraphExecutor {
             let dep_lo = dep_inds.len() as u32;
             dep_inds.extend_from_slice(&local_deps);
             let dep_hi = dep_inds.len() as u32;
-            insts[i].dep_list = (dep_lo, dep_hi);
+            inst.dep_list = (dep_lo, dep_hi);
         }
         drop(cell_to_compute_inst);
 
@@ -321,30 +316,19 @@ impl GraphExecutor {
         inst.ctx_offset as usize
     }
 
-    /// Evaluates the compute schedule with `num_threads` compute threads using
-    /// barrier-free, per-instruction dataflow synchronization: each worker
-    /// spin-waits on its parent instructions' ready flags, executes, and flips
-    /// its own flag. There is no per-level rendezvous — a thread can run ahead
-    /// into later levels as long as its dependencies are satisfied.
+    /// Evaluates the compute schedule with `num_threads` workers, barrier-free:
+    /// workers claim instructions off an atomic cursor (level-sorted, so roughly
+    /// topological), spin-wait on their parents' done flags, execute, and
+    /// Release-store their own flag. Flags are stamped with this run's `phase`
+    /// instead of being zeroed between runs; stale values are ignored.
     ///
-    /// The flag buffer is not zeroed between runs; instead each `run` bumps a
-    /// monotonically increasing `phase` counter and threads compare flags
-    /// against it. Stale values from previous runs are automatically ignored.
-    ///
-    /// As instructions complete, `on_delta(advice_offset, advice_delta,
-    /// lookup_offset, lookup_delta)` is invoked on the calling thread (which
-    /// would otherwise idle until the workers join) with newly-materialized
-    /// tape ranges. It walks the writers in
-    /// tape-emission order ([`Self::release_order`]), spinning at most
-    /// `MAX_SPIN_TRIES` on each flag: a completed writer extends the pending
-    /// contiguous range, while a timeout flushes the pending range and defers
-    /// the writer to a retry list. Retry passes repeat the same bounded-spin
-    /// walk over the (still emission-ordered) leftovers, merging adjacent
-    /// ranges, until none remain — so a late-level writer at a low tape offset
-    /// only dams its own cells, not the whole prefix behind it. Flushes are
-    /// batched between `MIN_FLUSH_CELLS` (smaller pending ranges are deferred
-    /// for later merging rather than sent as tiny copies) and
-    /// `MAX_FLUSH_CELLS` (long completed runs stream out incrementally).
+    /// Meanwhile the calling thread walks [`Self::release_order`] and streams
+    /// newly-materialized tape ranges through `on_delta(advice_offset,
+    /// advice_delta, lookup_offset, lookup_delta)`: a bounded spin per writer
+    /// flag extends the pending contiguous range on success and defers the
+    /// writer to a retry pass on timeout, so one slow writer only dams its own
+    /// cells, not the prefix behind it. Flushes are batched between
+    /// `MIN_FLUSH_CELLS` and `MAX_FLUSH_CELLS`.
     #[allow(unsafe_code)]
     pub fn run<F>(&mut self, num_threads: usize, mut on_delta: F)
     where
@@ -372,19 +356,29 @@ impl GraphExecutor {
         let this = &*self;
         let release_order = self.release_order.as_slice();
         let n_insts = self.insts.len();
-        // Global claim cursor: each worker `fetch_add(1)`s to grab the next
-        // instruction index. Since `insts` is level-sorted, this hands them
-        // out in (roughly) topological order — workers waiting on a parent
-        // typically wait for a peer that already claimed a slightly earlier
-        // index. Chunks of 1 keep the contention pattern simple; the fine-
-        // grained per-flag spin-wait absorbs the load-balancing role that
-        // per-level chunks used to play.
+        // Workers `fetch_add(1)` to claim instructions; the level-sorted order
+        // makes claims roughly topological, keeping parent spin-waits short.
         let claim_cursor = AtomicUsize::new(0);
+
+        // A panicked worker leaves its flag unset forever, which would livelock
+        // peer spin-waits and the release walk's retry passes. Workers set this
+        // on unwind; every unbounded wait checks it and panics instead.
+        let poisoned = AtomicBool::new(false);
+        struct PoisonOnPanic<'a>(&'a AtomicBool);
+        impl Drop for PoisonOnPanic<'_> {
+            fn drop(&mut self) {
+                if std::thread::panicking() {
+                    self.0.store(true, Ordering::Relaxed);
+                }
+            }
+        }
 
         std::thread::scope(|s| {
             for _ in 0..num_threads {
                 let claim_cursor = &claim_cursor;
+                let poisoned = &poisoned;
                 s.spawn(move || {
+                    let _poison = PoisonOnPanic(poisoned);
                     let mut args: Vec<Fr> = Vec::new();
                     let mut bits: Vec<u16> = Vec::new();
                     loop {
@@ -399,22 +393,22 @@ impl GraphExecutor {
                         for d in dep_lo as usize..dep_hi as usize {
                             let parent = this.dep_inds[d] as usize;
                             while this.flags[parent].load(Ordering::Acquire) != phase {
+                                assert!(
+                                    !poisoned.load(Ordering::Relaxed),
+                                    "graph executor worker panicked"
+                                );
                                 std::hint::spin_loop();
                             }
                         }
                         this.eval_inst(inst, tape_ptr, &mut args, &mut bits);
-                        // Release-publish this instruction's tape writes to
-                        // any downstream instruction (worker or callback) that
-                        // Acquire-loads this flag and observes `phase`.
+                        // Release-publishes this instruction's tape writes to
+                        // whoever Acquire-loads the flag and observes `phase`.
                         this.flags[idx].store(phase, Ordering::Release);
                     }
                 });
             }
 
-            // Release walk, on the calling thread (it would otherwise idle
-            // until the workers join): walks `release_order` with a bounded
-            // spin per flag, flushing contiguous fully-materialized ranges and
-            // deferring stragglers to retry passes (see the `run` doc comment).
+            // Release walk on the calling thread (see the `run` doc).
             {
                 /// Flag-poll attempts before the walk gives up on a writer,
                 /// defers it to the next retry pass, and moves on.
@@ -450,18 +444,15 @@ impl GraphExecutor {
                     }
                     false
                 };
-                // Fires `on_delta` for `advice[a_start..a_end)` +
-                // `lookups[l_start..l_end)` (skipping empty ranges) — unless
-                // the range is sub-`MIN_FLUSH_CELLS` and `defer_to` is given,
-                // in which case it is queued as a ready entry for a later
-                // merge instead.
+                // Fires `on_delta` for the range — unless it is
+                // sub-`MIN_FLUSH_CELLS` and `defer_to` is given, in which case
+                // it is queued as a ready entry for a later merge.
                 //
-                // Safety: every writer into a flushed range has
-                // Release-stored its flag and the Acquire load in `try_wait`
-                // ordered those tape writes before this read; the remaining
-                // cells are input-populated before `run`. Writer ranges are
-                // disjoint, so no later instruction writes into a released
-                // range.
+                // Safety: `try_wait`'s Acquire load pairs with each writer's
+                // Release store, ordering the tape writes before this read;
+                // the remaining cells were input-populated before `run`.
+                // Writer ranges are disjoint, so nothing writes into a
+                // released range.
                 let mut flush_or_defer = |r: Range, defer_to: Option<&mut Vec<Entry>>| {
                     let (a_start, a_end, l_start, l_end) = r;
                     if a_start == a_end && l_start == l_end {
@@ -493,12 +484,10 @@ impl GraphExecutor {
                     );
                 };
 
-                // Pass 0: walk every writer in emission order. The pending
-                // range's end always equals the next entry's release start, so
-                // completed writers extend it seamlessly; a timeout flushes
-                // (or defers) the pending range and queues the writer, with
-                // its release range, for retry. Deferred ranges are pushed in
-                // walk order, so `failed` stays emission-ordered.
+                // Pass 0: completed writers extend the pending range (its end
+                // is always the next entry's start); a timeout flushes the
+                // pending range and queues the writer for retry. Entries are
+                // pushed in walk order, so `failed` stays emission-ordered.
                 let mut failed: Vec<Entry> = Vec::new();
                 let mut pend: Range = (0, 0, 0, 0);
                 for &ReleaseEntry {
@@ -526,12 +515,15 @@ impl GraphExecutor {
                     flush_or_defer(pend, Some(&mut failed));
                 }
 
-                // Retry passes: the same bounded-spin walk over the (still
-                // emission-ordered) leftovers, merging adjacent ranges, until
-                // none remain. Deferral is only allowed while flag-gated
-                // entries remain — once every entry is ready nothing new can
-                // ever merge, so the final pass flushes everything.
+                // Retry passes: the same walk over the leftovers, merging
+                // adjacent ranges. Deferral is only allowed while flag-gated
+                // entries remain — once all are ready nothing new can merge,
+                // so the final pass flushes everything (ensuring termination).
                 while !failed.is_empty() {
+                    assert!(
+                        !poisoned.load(Ordering::Relaxed),
+                        "graph executor worker panicked"
+                    );
                     let allow_defer = failed.iter().any(|&(inst, ..)| inst != READY_SENTINEL);
                     let mut still: Vec<Entry> = Vec::new();
                     let mut pend: Option<Range> = None;
@@ -591,8 +583,9 @@ impl GraphExecutor {
         let (lo, hi) = inst.args;
         for i in lo as usize..hi as usize {
             let offset = self.operand_offsets[i] as usize;
-            // Safety: operands are outputs of strictly lower levels (or
-            // prefilled input/const cells), written before this level's barrier.
+            // Safety: operand cells are input/const (prefilled before `run`)
+            // or parent outputs, published by the parent-flag Acquire in `run`
+            // before this instruction executes.
             args.push(unsafe { *tape.0.add(offset) });
             bits.push(self.operand_bits[i]);
         }
@@ -736,24 +729,18 @@ impl GraphProver {
     }
 }
 
-/// Streaming builder for the physical advice column layout; used by
-/// `StaticVerifierProvingKey::run_witness_gen_pipeline`.
+/// Streams graph-executor tape deltas straight into device-resident advice columns.
 ///
-/// The graph executor materializes advice/lookup values as offset-tagged *delta*
-/// slices; this builder consumes them via [`Self::append`]. Placement is a pure
-/// function of the tape offset, so disjoint deltas may arrive in any order. The
-/// layout mirrors `PagedWitnessContext::push_advice` (the gate-column stream splits
-/// at pinned break points, duplicating the break-row value at row 0 of the next
-/// column so the gate-overlap copy constraint holds) and
-/// `BaseCircuitBuilder::assign_lookups_in_phase` (the range-check stream fills lookup
-/// advice columns round-robin: value `i` at column `i % L`, row `i / L`).
+/// Placement is a pure function of the tape offset, so disjoint deltas may arrive
+/// in any order. The layout mirrors `PagedWitnessContext::push_advice` (gate
+/// columns split at pinned break points, duplicating the break-row value at row 0
+/// of the next column so the gate-overlap copy constraint holds) and
+/// `BaseCircuitBuilder::assign_lookups_in_phase` (lookup columns fill round-robin:
+/// value `i` at column `i % L`, row `i / L`).
 ///
-/// Column state lives directly on the GPU: on the first call to [`Self::append`] the
-/// builder allocates `num_advice_columns × n` `DeviceBuffer`s and zero-fills each
-/// (via `cudaMemsetAsync`). Subsequent calls copy each contiguous delta segment
-/// straight to the target row range of the target device column with
-/// `DeviceBufferExt::mut_slice` + `copy_from_host`, so no large host-side column
-/// buffer is ever materialized.
+/// Columns are zero-filled `DeviceBuffer`s allocated on the first [`Self::append`];
+/// each contiguous delta segment is copied H2D directly into its row range, so no
+/// host-side column buffer is ever materialized.
 pub struct FusedColumnBuilder {
     // ---- Config (immutable after `new`) ------------------------------------
     n: usize,
@@ -826,18 +813,12 @@ impl FusedColumnBuilder {
 
         // --- Gate stream: contiguous H2D per (column, row-range) segment ----
         //
-        // Seek: gate column `c` covers tape offsets `[col_starts[c],
-        // col_starts[c + 1]]`, inclusive at both ends — the shared offset is
-        // the duplicated break value, present at `(c, break_points[c])` and
-        // `(c + 1, 0)`. A delta starting exactly on a column start begins at
-        // the *earlier* placement so the split/rewind below re-emits the
-        // duplicate. (If a previous delta already wrote it, this rewrites the
-        // same value — harmless.)
-        //
-        // Rewind trick: when a segment ends on a break-point row we `delta_pos -= 1`
-        // so the break value re-appears as the first host source of the next
-        // column's copy — that fills row 0 of the new column "for free" and avoids
-        // a separate 1-element H2D.
+        // Gate column `c` covers tape offsets `[col_starts[c], col_starts[c + 1]]`
+        // inclusive at both ends: the shared endpoint is the break value,
+        // duplicated at `(c, break_points[c])` and `(c + 1, 0)`. On crossing a
+        // break, `delta_pos -= 1` rewinds so the break value is re-emitted as
+        // row 0 of the next column; a delta starting exactly on a column start
+        // likewise begins at the earlier placement so the duplicate is written.
         if !advice_delta.is_empty() {
             let c = self.col_starts.partition_point(|&s| s <= advice_offset) - 1;
             let (mut col, mut row) = if c > 0 && advice_offset == self.col_starts[c] {
@@ -875,11 +856,9 @@ impl FusedColumnBuilder {
 
         // --- Lookup stream: one gathered H2D per lookup column per call ------
         //
-        // Value at absolute index `i` lands at column `L[i % L]`, row `i / L`.
-        // Within a single delta the indices bound for physical column `L[c]` are
-        // strided by `L` in delta space but consecutive in row space. Gather each
-        // such stride into a small host buffer (≤ ceil(delta_len / L) elements)
-        // and issue one contiguous H2D per lookup column per `append` call.
+        // Value `i` lands at column `L[i % L]`, row `i / L`: a delta's values
+        // for one column are strided in delta space but row-contiguous, so
+        // gather each stride into a host buffer and issue one H2D per column.
         let l = self.lookup_col_indices.len();
         let k = lookup_offset;
         let n_l = lookup_delta.len();
@@ -944,12 +923,14 @@ mod tests {
             StarkEngine,
         },
     };
+    use rand_chacha::{rand_core::SeedableRng, ChaCha20Rng};
 
     use super::*;
     use crate::{
         halo2_backend::Halo2Backend,
         stages::{full_pipeline::load_proof_wire, proof_shape::log_heights_per_air_from_proof},
-        StaticVerifierCircuit,
+        test_fixtures::{fixture_circuit_and_proof, FIXTURE_K},
+        Halo2Params, StaticVerifierCircuit, StaticVerifierProvingKey, StaticVerifierShape,
     };
 
     const K: usize = 22;
@@ -1031,42 +1012,38 @@ mod tests {
         start.elapsed()
     }
 
-    /// Reads the next length-prefixed JSON section of `static_verifier_pk.bin`
-    /// (layout: `(circuit, shape)` section, then `Halo2ProvingMetadata` section,
-    /// then raw pk bytes — see `crate::codec`).
-    fn read_json_section<T: serde::de::DeserializeOwned>(reader: &mut impl std::io::Read) -> T {
-        let mut len_bytes = [0u8; 8];
-        reader.read_exact(&mut len_bytes).unwrap();
-        let mut bytes = vec![0u8; u64::from_le_bytes(len_bytes) as usize];
-        reader.read_exact(&mut bytes).unwrap();
-        serde_json::from_slice(&bytes).unwrap()
+    /// Production-path setup with no cached artifacts: STARK-proves the shared
+    /// root-shaped fixture, then runs [`StaticVerifierProvingKey::keygen`] on an
+    /// in-memory SRS to get a real pinning (config params, break points, halo2 pk).
+    fn keygen_fixture_static_verifier() -> (StaticVerifierProvingKey, Proof<RootConfig>) {
+        let (circuit, proof) = fixture_circuit_and_proof();
+        let shape = StaticVerifierShape {
+            k: FIXTURE_K,
+            lookup_bits: FIXTURE_K - 1,
+            minimum_rows: 20,
+            instance_columns: 1,
+        };
+
+        let start = Instant::now();
+        let params = Halo2Params::setup(FIXTURE_K as u32, ChaCha20Rng::seed_from_u64(42));
+        println!("SRS setup (k={FIXTURE_K}): {:?}", start.elapsed());
+
+        let start = Instant::now();
+        let pk = StaticVerifierProvingKey::keygen(&params, shape, circuit, &proof);
+        println!("static verifier keygen: {:?}", start.elapsed());
+        (pk, proof)
     }
 
     #[test]
-    #[ignore = "requires cached static verifier pk + root proof from bin/static-verifier-tracegen + CUDA GPU"]
+    #[ignore = "requires CUDA GPU; slow (fixture STARK prove + halo2 keygen)"]
     fn graph_executor_root_proof() {
         use halo2_base::{
             gates::circuit::MaybeRangeConfig,
             halo2_proofs::{halo2curves::bn256::G1Affine, plonk::create_constraint_system},
         };
 
-        use crate::prover::Halo2ProvingMetadata;
-
-        let dir = std::env::var("STATIC_VERIFIER_CACHE_DIR")
-            .map(std::path::PathBuf::from)
-            .unwrap_or_else(|_| {
-                std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                    .join("../../../bin/static-verifier-tracegen/cache")
-            });
-        let mut reader = std::io::BufReader::new(
-            std::fs::File::open(dir.join("static_verifier_pk.bin")).unwrap(),
-        );
-        let (circuit, shape): (StaticVerifierCircuit, crate::config::StaticVerifierShape) =
-            read_json_section(&mut reader);
-        let metadata: Halo2ProvingMetadata = read_json_section(&mut reader);
-        drop(reader);
-        let proof: Proof<RootConfig> =
-            bitcode::deserialize(&std::fs::read(dir.join("root_proof.bitcode")).unwrap()).unwrap();
+        let (pk, proof) = keygen_fixture_static_verifier();
+        let metadata = &pk.pinning.metadata;
         let log_heights_per_air = log_heights_per_air_from_proof(&proof);
 
         // Physical column layout for the FusedColumnBuilder (mirrors
@@ -1094,8 +1071,8 @@ mod tests {
         };
 
         let start = Instant::now();
-        let mut ir = Halo2IRBuilder::new(shape.lookup_bits);
-        circuit.populate_verify_stark_constraints(&mut ir, &proof);
+        let mut ir = Halo2IRBuilder::new(pk.shape.lookup_bits);
+        pk.circuit.populate_pvs(&mut ir, &proof);
         println!("IR build: {:?}", start.elapsed());
 
         let start = Instant::now();
@@ -1147,57 +1124,30 @@ mod tests {
     /// copies. Stops after `builder.take_device_columns()` — SNARK generation
     /// itself is excluded.
     ///
-    /// Loads the full [`StaticVerifierProvingKey`] and root proof from
-    /// `bin/static-verifier-tracegen/cache/` (override with
-    /// `STATIC_VERIFIER_CACHE_DIR=…`). Runs the pipeline three times per thread
-    /// count so the first (cold) and subsequent (warm) numbers are visible.
+    /// Builds the proving key and root proof from [`RootShapedFixture`] (see
+    /// [`keygen_fixture_static_verifier`]). Runs the pipeline three times per
+    /// thread count so the first (cold) and subsequent (warm) numbers are
+    /// visible.
     ///
     /// Run with:
     /// ```text
     /// cargo test --profile fast -p openvm-static-verifier \
-    ///     --features evm-prove --release \
+    ///     --features evm-prove,halo2-gpu \
     ///     -- --ignored --nocapture \
     ///        graph_executor_prove_wrapped_pipeline
     /// ```
     #[test]
     #[cfg(feature = "evm-prove")]
-    #[ignore = "requires cached static verifier pk + root proof + CUDA GPU"]
+    #[ignore = "requires CUDA GPU; slow (fixture STARK prove + halo2 keygen)"]
     fn graph_executor_prove_wrapped_pipeline() {
-        use std::{fs::File, io::BufReader, path::PathBuf};
+        let (pk, proof) = keygen_fixture_static_verifier();
 
-        use openvm_stark_sdk::openvm_stark_backend::codec::Decode as _;
-
-        use crate::StaticVerifierProvingKey;
-
-        let dir = std::env::var("STATIC_VERIFIER_CACHE_DIR")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| {
-                PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                    .join("../../../bin/static-verifier-tracegen/cache")
-            });
-
-        let start = Instant::now();
-        let pk = {
-            let mut reader =
-                BufReader::new(File::open(dir.join("static_verifier_pk.bin")).unwrap());
-            StaticVerifierProvingKey::decode(&mut reader).expect("decode static verifier pk")
-        };
-        println!("static_verifier_pk decode: {:?}", start.elapsed());
-
-        let start = Instant::now();
-        let proof: Proof<RootConfig> =
-            bitcode::deserialize(&std::fs::read(dir.join("root_proof.bitcode")).unwrap()).unwrap();
-        println!("root_proof decode: {:?}", start.elapsed());
-
-        // Warm the GraphProver (IR build) so the timed loop measures only
-        // per-proof work. The first pipeline call otherwise pays the lazy IR
-        // build; subsequent calls reuse it.
+        // The GraphProver's IR tape is built eagerly at keygen; this warm-up
+        // pays the remaining one-time costs (device init, first fused-column
+        // allocation) so the timed loop measures only per-proof work.
         let start = Instant::now();
         let (warmup_advice, _) = pk.run_witness_gen_pipeline(&proof, 1, None);
-        println!(
-            "pipeline warm-up (1 thread, includes lazy IR build): {:?}",
-            start.elapsed()
-        );
+        println!("pipeline warm-up (1 thread): {:?}", start.elapsed());
         drop(warmup_advice);
 
         for num_threads in [4, 8, 12] {

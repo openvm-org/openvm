@@ -20,7 +20,9 @@ use crate::{
         BabyBearExtWire, BabyBearWire, ReducedBabyBearExtWire, ReducedBabyBearWire,
     },
     profiling::CellProfiler,
-    stages::shared_math::{column_openings_by_rot_assigned, horner_eval_ext_poly_assigned},
+    stages::shared_math::{
+        column_openings_by_rot_assigned, horner_eval_ext_poly_assigned, ExtWirePair,
+    },
     Fr, RootEF, RootF,
 };
 

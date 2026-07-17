@@ -37,6 +37,8 @@ pub mod hash;
 pub mod keygen;
 pub mod prover;
 pub mod stages;
+#[cfg(all(test, feature = "halo2-gpu"))]
+mod test_fixtures;
 pub mod transcript;
 mod utils;
 #[cfg(feature = "evm-prove")]

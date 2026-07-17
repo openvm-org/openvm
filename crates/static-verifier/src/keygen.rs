@@ -80,20 +80,13 @@ impl StaticVerifierProvingKey {
     ) -> Self {
         let pinning = circuit.keygen(params, &shape, representative_proof);
         #[cfg(feature = "halo2-gpu")]
-        let graph_prover = {
-            let graph_prover = Arc::new(OnceLock::new());
-            tracing::info_span!("build_graph_prover").in_scope(|| {
-                graph_prover
-                    .set(Mutex::new(GraphProver::new(
-                        &circuit,
-                        shape.lookup_bits,
-                        representative_proof,
-                    )))
-                    .ok()
-                    .expect("OnceLock is fresh");
-            });
-            graph_prover
-        };
+        let graph_prover = tracing::info_span!("build_graph_prover").in_scope(|| {
+            Arc::new(OnceLock::from(Mutex::new(GraphProver::new(
+                &circuit,
+                shape.lookup_bits,
+                representative_proof,
+            ))))
+        });
         Self {
             circuit,
             pinning,
@@ -157,19 +150,18 @@ impl StaticVerifierProvingKey {
     /// range-check tapes are then laid out into physical columns and copied to device
     /// for [`gen_snark_from_base`](snark_verifier_sdk::halo2::gen_snark_from_base).
     ///
-    /// Set `STATIC_VERIFIER_COMPARE_WITNESS=1` to additionally regenerate the witness
-    /// through the legacy `BaseCircuitBuilder` + `synthesize_witness_shplonk` path and
-    /// assert both advice layouts match.
+    /// The graph executor thread count defaults to available cores − 2; override
+    /// with `GRAPH_EXE_THREADS`. Set `STATIC_VERIFIER_COMPARE_WITNESS=1` to
+    /// additionally regenerate the witness through the legacy `BaseCircuitBuilder` +
+    /// `synthesize_witness_shplonk` path and assert both advice layouts match.
     #[cfg(feature = "halo2-gpu")]
     pub fn prove_wrapped(
         &self,
         params: &Halo2Params,
         proof: &Proof<RootConfig>,
     ) -> snark_verifier_sdk::Snark {
-        // Default to (visible cores − 2) so one core stays free for the callback
-        // thread + the rest of the runtime (proof-generation kernels launched
-        // from Halo2, tokio driver, etc.); leaves all cores busy without the
-        // graph executor stealing from them.
+        // Cores − 2 leaves one core for the release-walk callback and one for
+        // the rest of the runtime (GPU driver threads, tokio, etc.).
         let graph_prover_threads: usize = std::env::var("GRAPH_EXE_THREADS")
             .ok()
             .and_then(|s| s.parse().ok())
@@ -209,24 +201,25 @@ impl StaticVerifierProvingKey {
 
         let _public_inputs = self.circuit.populate(&mut builder, proof);
 
-        snark_verifier_sdk::halo2::gen_snark_shplonk(params, &self.pinning.pk, builder, None::<&str>)
+        snark_verifier_sdk::halo2::gen_snark_shplonk(
+            params,
+            &self.pinning.pk,
+            builder,
+            None::<&str>,
+        )
     }
 
-    /// Runs the full graph-executor + column-materialization pipeline: builds
-    /// (or reuses) the [`GraphProver`], streams the level-by-level advice/lookup
-    /// deltas through a [`FusedColumnBuilder`](crate::graph_executor::FusedColumnBuilder)
-    /// whose H2D copies land directly on
-    /// device columns, and returns the finalized `Vec<DeviceBuffer<Fr>>` +
-    /// instance columns ready to hand to
+    /// Runs the graph-executor witness pipeline: builds (or reuses) the
+    /// [`GraphProver`], streams its advice/lookup deltas through a
+    /// [`FusedColumnBuilder`](crate::graph_executor::FusedColumnBuilder) onto device
+    /// columns, and returns the `Vec<DeviceBuffer<Fr>>` + instance columns ready for
     /// [`gen_snark_from_base`](snark_verifier_sdk::halo2::gen_snark_from_base).
     ///
-    /// Exposed as a public entry point so downstream benchmarks (see the
-    /// `graph_executor_prove_wrapped_pipeline` `#[ignore]` test) can time the
-    /// prover-side witness path in isolation from SNARK generation.
+    /// Public so benchmarks (see the `graph_executor_prove_wrapped_pipeline` test)
+    /// can time the witness path in isolation from SNARK generation.
     ///
     /// `diagnostic_params` is only consulted when `STATIC_VERIFIER_COMPARE_WITNESS`
-    /// is set — see [`Self::compare_witness_with_base_builder`]. Benchmarks
-    /// should pass `None`.
+    /// is set — see [`Self::compare_witness_with_base_builder`].
     #[cfg(feature = "halo2-gpu")]
     pub fn run_witness_gen_pipeline(
         &self,

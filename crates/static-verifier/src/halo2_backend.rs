@@ -1,7 +1,7 @@
 //! Halo2 (`halo2-base`) implementation of the [`chip_traits`](crate::chip_traits) backend.
 //!
-//! Pure delegation to the concrete chips so that the generic circuit-construction code
-//! assigns exactly the same advice cells as the original non-generic code.
+//! Pure delegation to the concrete chips, so the generic circuit-construction code
+//! drives the same chip calls as the pre-refactor non-generic code.
 
 use std::sync::Arc;
 
@@ -56,17 +56,14 @@ impl<'ctx> Halo2Backend<'ctx> {
         self.ctx
     }
 
-    /// Disjoint borrows of the extension chip and the context.
     fn parts(&mut self) -> (&BabyBearExt4Chip, &mut Context<Fr>) {
         (&self.ext, &mut *self.ctx)
     }
 
-    /// Disjoint borrows of the base-field chip and the context.
     fn bb_parts(&mut self) -> (&BabyBearChip, &mut Context<Fr>) {
         (self.ext.base(), &mut *self.ctx)
     }
 
-    /// Disjoint borrows of the transcript chip and the context.
     fn transcript_parts(&mut self) -> (&mut TranscriptChip, &mut Context<Fr>) {
         (
             self.transcript

@@ -361,7 +361,7 @@ impl Halo2IRBuilder {
     /// cache and assigned no cell).
     fn emit(&mut self, opcode: Halo2Opcode, operands: Vec<GraphCell>) -> (NodeId, Vec<usize>) {
         debug_assert_eq!(operands.len(), opcode.num_operands());
-        let id = self.nodes.len() as NodeId;
+        let id = NodeId::try_from(self.nodes.len()).expect("node count exceeds NodeId range");
         let level = operands
             .iter()
             .filter_map(|cell| match cell {
@@ -1214,52 +1214,14 @@ impl TranscriptInst for Halo2IRBuilder {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        fs::File,
-        io::{BufReader, Read},
-        path::PathBuf,
-    };
-
-    use openvm_stark_sdk::{
-        config::baby_bear_bn254_poseidon2::BabyBearBn254Poseidon2Config as RootConfig,
-        openvm_stark_backend::proof::Proof,
-    };
-
     use super::*;
-    use crate::{config::StaticVerifierShape, StaticVerifierCircuit};
-
-    fn cache_dir() -> PathBuf {
-        std::env::var("STATIC_VERIFIER_CACHE_DIR")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| {
-                PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                    .join("../../../bin/static-verifier-tracegen/cache")
-            })
-    }
-
-    /// Reads only the length-prefixed JSON `(circuit, shape)` header of a
-    /// `StaticVerifierProvingKey` encoding, skipping the halo2 proving key bytes.
-    fn read_static_circuit(path: &std::path::Path) -> (StaticVerifierCircuit, StaticVerifierShape) {
-        let mut reader = BufReader::new(File::open(path).expect("open static verifier pk"));
-        let mut len_bytes = [0u8; 8];
-        reader.read_exact(&mut len_bytes).expect("read JSON length");
-        let len = u64::from_le_bytes(len_bytes) as usize;
-        let mut bytes = vec![0u8; len];
-        reader.read_exact(&mut bytes).expect("read JSON section");
-        serde_json::from_slice(&bytes).expect("deserialize (circuit, shape)")
-    }
+    use crate::test_fixtures::{fixture_circuit_and_proof, FIXTURE_K};
 
     #[test]
-    #[ignore = "requires cached static verifier pk + root proof from bin/static-verifier-tracegen"]
-    fn ir_generation_stats_for_root_proof() {
-        let dir = cache_dir();
-        let (circuit, shape) = read_static_circuit(&dir.join("static_verifier_pk.bin"));
-        let proof: Proof<RootConfig> = bitcode::deserialize(
-            &std::fs::read(dir.join("root_proof.bitcode")).expect("read root proof"),
-        )
-        .expect("deserialize root proof");
+    fn ir_generation_stats_for_fixture_proof() {
+        let (circuit, proof) = fixture_circuit_and_proof();
 
-        let mut builder = Halo2IRBuilder::new(shape.lookup_bits);
+        let mut builder = Halo2IRBuilder::new(FIXTURE_K - 1);
         circuit.populate_verify_stark_constraints(&mut builder, &proof);
 
         let stats = builder.stats();

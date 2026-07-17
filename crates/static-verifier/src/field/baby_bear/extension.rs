@@ -73,7 +73,7 @@ impl<F> ReducedBabyBearExt4Wire<F> {
     pub fn coeffs(&self) -> &[ReducedBabyBearWire<F>; 4] {
         &self.0
     }
-    
+
     /// Wraps coefficient wires in canonicality evidence. Callers must guarantee each
     /// coefficient is constrained to `[0, p)`; this adds no constraints.
     #[cfg(feature = "halo2-gpu")]

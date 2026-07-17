@@ -843,8 +843,8 @@ fn ext_div_run<T: ReplayTape>(t: &mut T, args: &[Fr], bits: &[u16]) {
     let _ = t.bb_load_constant(BabyBear::ZERO);
     let _ = t.bb_load_constant(BabyBear::ZERO);
     let one_ext = [one_c, zero_c, zero_c, zero_c];
-    // `mul` takes its ext operands by value, so pass copies; W materializes here
-    // (or hits a pre-seeded cache).
+    // Temporary copies so `ext_mul`'s reduce decisions don't persist to the
+    // outer arrays; W materializes here (or hits a pre-seeded cache).
     let (inv_prod, w) = t.ext_mul(&mut { b }, &mut { b_inv });
     for i in 0..4 {
         t.bb_assert_equal(inv_prod[i], one_ext[i]);
