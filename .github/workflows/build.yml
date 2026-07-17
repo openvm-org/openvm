@@ -15,7 +15,7 @@ jobs:
   lint:
     name: Cargo build
     runs-on:
-      - runs-on=${{ github.run_id }}/family=c9g.8xlarge+c8g.8xlarge+m9g.8xlarge+m8g.8xlarge/image=ubuntu24-full-arm64/volume=80gb/extras=s3-cache
+      - runs-on=${{ github.run_id }}/family=m9g.8xlarge+m8g.8xlarge/image=ubuntu24-full-arm64/volume=80gb/extras=s3-cache
     steps:
       - uses: runs-on/action@v2
       - name: Load SSH key
