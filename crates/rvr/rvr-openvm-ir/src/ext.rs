@@ -60,10 +60,19 @@ pub trait ExtEmitCtx {
     fn emit_trap(&mut self);
 
     /// Read guest memory and return a C expression for the loaded value.
-    fn read_mem(&mut self, base: &str, offset: i16, width: u8, signed: bool) -> String;
+    /// SP-relative accesses use a separate metering cache when requested.
+    fn read_mem(
+        &mut self,
+        base: &str,
+        offset: i16,
+        width: u8,
+        signed: bool,
+        sp_relative: bool,
+    ) -> String;
 
-    /// Write guest memory.
-    fn write_mem(&mut self, base: &str, offset: i16, val: &str, width: u8);
+    /// Write guest memory. SP-relative accesses use a separate metering cache
+    /// when requested.
+    fn write_mem(&mut self, base: &str, offset: i16, val: &str, width: u8, sp_relative: bool);
 
     /// Flush local page state, emit a C call, then reload the page state.
     fn emit_call(&mut self, name: &str, args: &[&str]);

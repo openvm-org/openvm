@@ -5,7 +5,7 @@ use rvr_openvm_ir::{
     ExtEmitCtx, ExtInstr, MemWidth,
 };
 
-use crate::instruction::{hex_u64, reg_operand, Reg, RA, ZERO};
+use crate::instruction::{hex_u64, reg_operand, Reg, RA, SP, ZERO};
 
 /// RV64I arithmetic or logical operation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -198,8 +198,9 @@ impl ExtInstr for Rv64IInstr {
                 base,
                 offset,
             } => {
+                let sp_relative = *base == SP;
                 let base = ctx.read_var(*base);
-                let value = ctx.read_mem(&base, *offset, width.bytes(), *signed);
+                let value = ctx.read_mem(&base, *offset, width.bytes(), *signed, sp_relative);
                 if let Some(rd) = rd {
                     ctx.write_var(*rd, &value);
                 } else {
@@ -212,9 +213,10 @@ impl ExtInstr for Rv64IInstr {
                 src,
                 offset,
             } => {
+                let sp_relative = *base == SP;
                 let base = ctx.read_var(*base);
                 let value = ctx.read_var(*src);
-                ctx.write_mem(&base, *offset, &value, width.bytes());
+                ctx.write_mem(&base, *offset, &value, width.bytes(), sp_relative);
             }
             Self::Const { rd, value, .. } => ctx.write_var(*rd, &hex_u64(*value)),
         }
