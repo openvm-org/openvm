@@ -35,8 +35,13 @@ runners:
         "c8i-flex.4xlarge",
         "c8i.4xlarge",
         "c8a.4xlarge",
+        "m8i-flex.4xlarge",
+        "m8i.4xlarge",
+        "m8a.4xlarge",
         "c7i.4xlarge",
         "c7a.4xlarge",
+        "m7i.4xlarge",
+        "m7a.4xlarge",
       ]
     image: ubuntu24-full-x64
     volume: 80gb
@@ -47,8 +52,13 @@ runners:
         "c8i-flex.8xlarge",
         "c8i.8xlarge",
         "c8a.8xlarge",
+        "m8i-flex.8xlarge",
+        "m8i.8xlarge",
+        "m8a.8xlarge",
         "c7i.8xlarge",
         "c7a.8xlarge",
+        "m7i.8xlarge",
+        "m7a.8xlarge",
       ]
     image: ubuntu24-full-x64
     volume: 80gb
