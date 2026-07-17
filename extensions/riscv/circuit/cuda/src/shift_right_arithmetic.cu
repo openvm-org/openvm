@@ -6,6 +6,7 @@
 #include "riscv/adapters/alu_reg_u16.cuh"
 #include "riscv/cores/shift_right_arithmetic.cuh"
 #include "riscv/rvr_compact.cuh"
+#include "riscv/rvr_g2_trace.cuh"
 #include "system/memory/params.cuh"
 
 using namespace riscv;
@@ -79,10 +80,11 @@ extern "C" int _rv64_shift_right_arithmetic_tracegen(
 // M-GPUDEC (G2): tracegen from compact alu3 wire records + the per-exe operand
 // table; materializes the same record structs in registers and calls the SAME
 // fill methods as the expanded kernel.
+template <typename RecordView>
 __global__ void rv64_shift_right_arithmetic_tracegen_compact(
     Fp *trace,
     size_t height,
-    DeviceBufferConstView<RvrAlu3Compact> records,
+    RecordView records,
     RvrOperandEntry const *operand_table,
     uint32_t pc_base,
     uint32_t *range_ptr,
@@ -134,3 +136,9 @@ extern "C" int _rv64_shift_right_arithmetic_tracegen_compact(
     );
     return CHECK_KERNEL();
 }
+
+DEFINE_RVR_G2_TRACEGEN_LAUNCHER(
+    _rv64_shift_right_arithmetic_tracegen_g2, ShiftRightArithmeticCols,
+    rv64_shift_right_arithmetic_tracegen_compact, RvrAlu3Compact, 256, operand_table,
+    pc_base, range_checker, range_checker_num_bins, timestamp_max_bits
+)

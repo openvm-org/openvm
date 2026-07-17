@@ -1,5 +1,6 @@
 #include "riscv/cores/load_sign_extend.cuh"
 #include "riscv/rvr_compact.cuh"
+#include "riscv/rvr_g2_trace.cuh"
 
 using LoadSignExtendWordCore = LoadSignExtendWidthCore<WORD_ACCESS_WIDTH>;
 
@@ -8,11 +9,12 @@ template <typename T> struct Rv64LoadSignExtendWordCols {
     LoadSignExtendWidthCoreCols<T, WORD_ACCESS_WIDTH> core;
 };
 
+template <typename RecordView>
 __global__ void rv64_load_sign_extend_word_tracegen(
     Fp *trace,
     size_t height,
     size_t width,
-    DeviceBufferConstView<Rv64LoadSignExtendRecord> records,
+    RecordView records,
     size_t pointer_max_bits,
     uint32_t *range_checker_ptr,
     uint32_t range_checker_num_bins,
@@ -145,3 +147,10 @@ extern "C" int _rv64_load_sign_extend_word_tracegen_compact(
     );
     return CHECK_KERNEL();
 }
+
+DEFINE_RVR_G2_TRACEGEN_LAUNCHER_WITH_WIDTH(
+    _rv64_load_sign_extend_word_tracegen_g2, Rv64LoadSignExtendWordCols,
+    rv64_load_sign_extend_word_tracegen, Rv64LoadSignExtendRecord, 512,
+    pointer_max_bits, range_checker, range_checker_num_bins, bitwise_lookup,
+    timestamp_max_bits
+)

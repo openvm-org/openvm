@@ -171,7 +171,8 @@ pub mod rvr_delta_cuda {
 pub mod rvr_g2_cuda {
     use super::*;
     use crate::rvr_gpu_decode::{
-        DeltaAirOutputDesc, DeviceOperandEntry, G2ExpectedKindV1, G2ExpectedOpaqueV1,
+        DeltaAirKind, DeltaAirOutputDesc, DeviceOperandEntry, G2ExpectedKindV1, G2ExpectedOpaqueV1,
+        G2TraceSource,
     };
 
     extern "C" {
@@ -195,6 +196,10 @@ pub mod rvr_g2_cuda {
             d_program_frequencies: *mut u32,
             frequency_count: usize,
             total_record_count: usize,
+            d_prepared: DeviceBufferView,
+            d_row_instructions: DeviceBufferView,
+            d_timestamp_offsets: DeviceBufferView,
+            d_timeline: DeviceBufferView,
             d_opaque_residual_output: DeviceBufferView,
             d_opaque_residual_count: *mut u32,
             d_outputs: *const DeltaAirOutputDesc,
@@ -204,6 +209,40 @@ pub mod rvr_g2_cuda {
             d_opaque_prev_timestamps: *mut u32,
             d_opaque_prev_values: *mut u64,
             d_error: *mut u32,
+            stream: cudaStream_t,
+        ) -> i32;
+        fn _rvr_g2_tracegen(
+            kind: u32,
+            d_trace: *mut F,
+            height: usize,
+            width: usize,
+            source: G2TraceSource,
+            d_operand_table: *const DeviceOperandEntry,
+            pc_base: u32,
+            pointer_max_bits: usize,
+            d_range_checker: *mut u32,
+            range_checker_num_bins: u32,
+            d_bitwise_lookup: *mut u32,
+            d_range_tuple_checker: *mut u32,
+            range_tuple_checker_sizes: UInt2,
+            timestamp_max_bits: u32,
+            stream: cudaStream_t,
+        ) -> i32;
+        fn _rvr_g2_tracegen_reference(
+            kind: u32,
+            d_trace: *mut F,
+            height: usize,
+            width: usize,
+            d_records: DeviceBufferView,
+            d_operand_table: *const DeviceOperandEntry,
+            pc_base: u32,
+            pointer_max_bits: usize,
+            d_range_checker: *mut u32,
+            range_checker_num_bins: u32,
+            d_bitwise_lookup: *mut u32,
+            d_range_tuple_checker: *mut u32,
+            range_tuple_checker_sizes: UInt2,
+            timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
     }
@@ -224,6 +263,10 @@ pub mod rvr_g2_cuda {
         d_expected_opaque: &DeviceBuffer<G2ExpectedOpaqueV1>,
         d_program_frequencies: &DeviceBuffer<u32>,
         total_record_count: usize,
+        d_prepared: &DeviceBuffer<u8>,
+        d_row_instructions: &DeviceBuffer<u32>,
+        d_timestamp_offsets: &DeviceBuffer<u32>,
+        d_timeline: &DeviceBuffer<u8>,
         d_opaque_residual_output: &DeviceBuffer<u8>,
         d_opaque_residual_count: &DeviceBuffer<u32>,
         d_outputs: &DeviceBuffer<DeltaAirOutputDesc>,
@@ -254,6 +297,10 @@ pub mod rvr_g2_cuda {
             d_program_frequencies.as_mut_ptr(),
             d_program_frequencies.len(),
             total_record_count,
+            d_prepared.view(),
+            d_row_instructions.view(),
+            d_timestamp_offsets.view(),
+            d_timeline.view(),
             d_opaque_residual_output.view(),
             d_opaque_residual_count.as_mut_ptr(),
             d_outputs.as_ptr(),
@@ -263,6 +310,76 @@ pub mod rvr_g2_cuda {
             d_opaque_prev_timestamps.as_mut_ptr(),
             d_opaque_prev_values.as_mut_ptr(),
             d_error.as_mut_ptr(),
+            stream,
+        ))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn tracegen(
+        kind: DeltaAirKind,
+        d_trace: &DeviceBuffer<F>,
+        height: usize,
+        source: G2TraceSource,
+        d_operand_table: &DeviceBuffer<u8>,
+        pc_base: u32,
+        pointer_max_bits: usize,
+        d_range_checker: &DeviceBuffer<F>,
+        d_bitwise_lookup: Option<&DeviceBuffer<F>>,
+        d_range_tuple_checker: Option<&DeviceBuffer<F>>,
+        range_tuple_checker_sizes: UInt2,
+        timestamp_max_bits: u32,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_rvr_g2_tracegen(
+            kind as u32,
+            d_trace.as_mut_ptr(),
+            height,
+            d_trace.len() / height,
+            source,
+            d_operand_table.as_ptr().cast(),
+            pc_base,
+            pointer_max_bits,
+            d_range_checker.as_mut_ptr().cast(),
+            d_range_checker.len() as u32,
+            d_bitwise_lookup.map_or(std::ptr::null_mut(), |buffer| buffer.as_mut_ptr().cast()),
+            d_range_tuple_checker.map_or(std::ptr::null_mut(), |buffer| buffer.as_mut_ptr().cast()),
+            range_tuple_checker_sizes,
+            timestamp_max_bits,
+            stream,
+        ))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn tracegen_reference(
+        kind: DeltaAirKind,
+        d_trace: &DeviceBuffer<F>,
+        height: usize,
+        d_records: &DeviceBuffer<u8>,
+        d_operand_table: &DeviceBuffer<u8>,
+        pc_base: u32,
+        pointer_max_bits: usize,
+        d_range_checker: &DeviceBuffer<F>,
+        d_bitwise_lookup: Option<&DeviceBuffer<F>>,
+        d_range_tuple_checker: Option<&DeviceBuffer<F>>,
+        range_tuple_checker_sizes: UInt2,
+        timestamp_max_bits: u32,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_rvr_g2_tracegen_reference(
+            kind as u32,
+            d_trace.as_mut_ptr(),
+            height,
+            d_trace.len() / height,
+            d_records.view(),
+            d_operand_table.as_ptr().cast(),
+            pc_base,
+            pointer_max_bits,
+            d_range_checker.as_mut_ptr().cast(),
+            d_range_checker.len() as u32,
+            d_bitwise_lookup.map_or(std::ptr::null_mut(), |buffer| buffer.as_mut_ptr().cast()),
+            d_range_tuple_checker.map_or(std::ptr::null_mut(), |buffer| buffer.as_mut_ptr().cast()),
+            range_tuple_checker_sizes,
+            timestamp_max_bits,
             stream,
         ))
     }

@@ -6,6 +6,7 @@
 #include "primitives/utils.cuh"
 #include "riscv/adapters/jalr.cuh"
 #include "riscv/rvr_compact.cuh"
+#include "riscv/rvr_g2_trace.cuh"
 
 using namespace riscv;
 using namespace program;
@@ -155,10 +156,11 @@ extern "C" int _jalr_tracegen(
 // M-GPUDEC (G2): tracegen from compact wire records + the per-exe operand
 // table; materializes the same record structs in registers and calls the SAME
 // fill methods as jalr_tracegen.
+template <typename RecordView>
 __global__ void jalr_tracegen_compact(
     Fp *trace,
     size_t height,
-    DeviceBufferConstView<RvrRw1Compact> records,
+    RecordView records,
     RvrOperandEntry const *operand_table,
     uint32_t pc_base,
     uint32_t *range_checker_ptr,
@@ -208,3 +210,8 @@ extern "C" int _jalr_tracegen_compact(
     );
     return CHECK_KERNEL();
 }
+
+DEFINE_RVR_G2_TRACEGEN_LAUNCHER(
+    _jalr_tracegen_g2, Rv64JalrCols, jalr_tracegen_compact, RvrRw1Compact, 256,
+    operand_table, pc_base, range_checker, range_checker_num_bins, timestamp_max_bits
+)
