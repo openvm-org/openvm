@@ -16,8 +16,8 @@ use rvr_openvm_ext_ffi_common::{
     G2_FLAG_COMMITTED, G2_GROUP_LOAD_STORE, G2_GROUP_RESIDUAL, G2_LANE_ADDI_V0,
     G2_LANE_DESC_V1_SIZE, G2_LANE_FLAG_ATOMIC_GROUP, G2_LANE_FLAG_OPAQUE_FINAL,
     G2_LANE_FLAG_REQUIRED, G2_LANE_OPAQUE_EVENT_COUNT, G2_LANE_RESIDUAL_CTRL, G2_LANE_RESIDUAL_TAG,
-    G2_LANE_RESIDUAL_VALUE, G2_LANE_RUN_BLOCK_ID, G2_LOAD_STORE_KINDS, G2_PRODUCER_LANE_COUNT,
-    G2_PRODUCER_OPAQUE_EVENT_COUNT_SLOT, G2_PRODUCER_RESIDUAL_CTRL_SLOT,
+    G2_LANE_RESIDUAL_VALUE, G2_LANE_RUN_BLOCK_ID, G2_LOAD_STORE_KINDS, G2_PRODUCER_ADDI_SLOT,
+    G2_PRODUCER_LANE_COUNT, G2_PRODUCER_OPAQUE_EVENT_COUNT_SLOT, G2_PRODUCER_RESIDUAL_CTRL_SLOT,
     G2_PRODUCER_RESIDUAL_TAG_SLOT, G2_PRODUCER_RESIDUAL_VALUE_SLOT, G2_PRODUCER_RUN_SLOT,
     G2_SEGMENT_HEADER_V1_SIZE, G2_SEGMENT_MAGIC_V1, G2_WIRE_ALIGNMENT, G2_WIRE_VERSION_V1,
 };
@@ -48,7 +48,13 @@ const _: () = assert!(size_of::<RvrG2BlockEntryV1>() == 8);
 
 #[derive(Clone, Debug)]
 pub struct RvrG2MetaV1 {
+    /// Frozen wire schema/program fingerprint published in every segment.
+    /// Deliberately independent of the generated producer's check policy.
     pub fingerprint: [u8; 32],
+    /// Generated-C producer schema. This binds the block-span algorithm and
+    /// checked/production policy without changing the G2 wire fingerprint.
+    pub producer_schema_fingerprint: [u8; 32],
+    pub emission_mode: u8,
     pub program_fingerprint: [u8; 32],
     pub block_fingerprint: [u8; 32],
     pub air_manifest_fingerprint: [u8; 32],
@@ -1546,7 +1552,7 @@ impl RvrG2PreparedV1 {
         Ok(offset)
     }
 
-    pub fn new_pooled(
+    pub(crate) fn new_pooled(
         capacities: &RvrG2CapacitiesV1,
         pool: &super::RvrPreflightBufferPool,
     ) -> Result<Self, ExecutionError> {
@@ -1565,6 +1571,8 @@ impl RvrG2PreparedV1 {
                 offset: offset as u64,
                 len: 0,
                 cap,
+                expected_len: 0,
+                reserved: 0,
             });
             let bytes = (cap as usize)
                 .checked_mul(spec.width as usize)
@@ -1604,6 +1612,7 @@ impl RvrG2PreparedV1 {
         mut self,
         segment_id: u32,
         expected_instruction_count: u32,
+        expected_kind_counts: Option<&[u32; 31]>,
         fingerprint: [u8; 32],
         opaque_written: &[(RvrG2OpaqueBindingV1, u32, u32)],
     ) -> Result<RvrG2SegmentV1, ExecutionError> {
@@ -1626,6 +1635,60 @@ impl RvrG2PreparedV1 {
             || (p.instruction_count != 0 && self.lanes[G2_PRODUCER_RUN_SLOT].len == 0)
         {
             return Err(g2_error("native lane cursor/count validation failed"));
+        }
+
+        // Production emission deliberately performs unchecked direct stores.
+        // Generated C independently accumulates each entered block's static
+        // lane spans in `expected_len`, so this O(lanes) boundary pass detects
+        // any missed store/commit without putting a branch in the hot loop.
+        // Dynamic residual/opaque lanes are validated by their group invariants
+        // below and therefore leave `expected_len` at zero.
+        if expected_kind_counts.is_some() {
+            for (slot, lane) in self.lanes.iter().enumerate() {
+                if slot == G2_PRODUCER_RUN_SLOT || (G2_PRODUCER_ADDI_SLOT..=57).contains(&slot) {
+                    if lane.len != lane.expected_len {
+                        return Err(g2_error(format!(
+                            "static lane cursor differs from entered block spans: slot {slot}, actual {}, expected {}",
+                            lane.len, lane.expected_len
+                        )));
+                    }
+                } else if lane.expected_len != 0 {
+                    return Err(g2_error(format!(
+                        "dynamic lane carries invalid static-span metadata: slot {slot}"
+                    )));
+                }
+                if lane.reserved != 0 {
+                    return Err(g2_error(format!(
+                        "lane carries nonzero reserved metadata: slot {slot}"
+                    )));
+                }
+            }
+        }
+
+        // Cross-check the independently accumulated static spans against the
+        // metered per-AIR totals. Kinds 1..=7 share one AIR between immediate
+        // and register forms, so V1 is necessarily bounded by that total;
+        // exactness for those lanes is supplied by `expected_len` above.
+        if let Some(expected_kind_counts) = expected_kind_counts {
+            for kind in 0u8..30 {
+                for value_lane in [false, true] {
+                    let Some(slot) = g2_standard_producer_slot(kind, value_lane) else {
+                        continue;
+                    };
+                    let expected = expected_kind_counts[kind as usize];
+                    let actual = self.lanes[slot].len;
+                    let valid = if value_lane && (1..=7).contains(&kind) {
+                        actual <= expected
+                    } else {
+                        actual == expected
+                    };
+                    if !valid {
+                        return Err(g2_error(format!(
+                            "standard lane cursor differs from metered count: kind {kind}, lane {value_lane}, actual {actual}, expected {expected}"
+                        )));
+                    }
+                }
+            }
         }
 
         let residual_count = self.lanes[G2_PRODUCER_RESIDUAL_CTRL_SLOT].len;
@@ -1993,6 +2056,44 @@ mod tests {
     use super::*;
 
     #[test]
+    fn metered_standard_cursor_mismatch_is_rejected_at_publish() {
+        let mut capacities = RvrG2CapacitiesV1::default();
+        capacities.kinds[29] = 2;
+        let pool = crate::arch::rvr::RvrPreflightBufferPool::default();
+        let mut prepared = RvrG2PreparedV1::new_pooled(&capacities, &pool).unwrap();
+        prepared.lanes[G2_PRODUCER_ADDI_SLOT].len = 1;
+        prepared.lanes[G2_PRODUCER_ADDI_SLOT].expected_len = 1;
+        let mut expected = [0u32; 31];
+        expected[29] = 2;
+
+        let error = prepared
+            .finalize(0, 0, Some(&expected), [0; 32], &[])
+            .unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("standard lane cursor differs from metered count"));
+    }
+
+    #[test]
+    fn entered_block_span_cursor_mismatch_is_rejected_at_publish() {
+        let mut capacities = RvrG2CapacitiesV1::default();
+        capacities.kinds[29] = 2;
+        let pool = crate::arch::rvr::RvrPreflightBufferPool::default();
+        let mut prepared = RvrG2PreparedV1::new_pooled(&capacities, &pool).unwrap();
+        prepared.lanes[G2_PRODUCER_ADDI_SLOT].len = 1;
+        prepared.lanes[G2_PRODUCER_ADDI_SLOT].expected_len = 2;
+        let mut expected = [0u32; 31];
+        expected[29] = 1;
+
+        let error = prepared
+            .finalize(0, 0, Some(&expected), [0; 32], &[])
+            .unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("static lane cursor differs from entered block spans"));
+    }
+
+    #[test]
     fn phase1_transport_release_acquire_and_exact_cursors() {
         let mut capacities = RvrG2CapacitiesV1 {
             run: 1,
@@ -2026,7 +2127,7 @@ mod tests {
         prepared.lanes[G2_PRODUCER_RUN_SLOT].len = 1;
         prepared.producer.instruction_count = 2;
         let fingerprint = [0x5a; 32];
-        let segment = prepared.finalize(9, 2, fingerprint, &[]).unwrap();
+        let segment = prepared.finalize(9, 2, None, fingerprint, &[]).unwrap();
         let descs = segment.validate(&fingerprint).unwrap();
         assert_eq!(segment.header_acquire().unwrap().segment_id, 9);
         assert_eq!(
@@ -2056,14 +2157,14 @@ mod tests {
             committed_lanes: Vec::new(),
         };
         assert!(partial.header_acquire().is_err());
-        assert!(prepared.finalize(0, 1, [0; 32], &[]).is_err());
+        assert!(prepared.finalize(0, 1, None, [0; 32], &[]).is_err());
     }
 
     #[test]
     fn phase1_transport_rejects_schema_mismatch() {
         let mut prepared = RvrG2PreparedV1::new(&RvrG2CapacitiesV1::default()).unwrap();
         prepared.producer.instruction_count = 0;
-        let segment = prepared.finalize(0, 0, [1; 32], &[]).unwrap();
+        let segment = prepared.finalize(0, 0, None, [1; 32], &[]).unwrap();
         assert!(segment.validate(&[2; 32]).is_err());
     }
 
@@ -2079,19 +2180,19 @@ mod tests {
         let mut load_store = RvrG2PreparedV1::new(&capacities).unwrap();
         let store_slot = g2_load_store_producer_slot(26, false).unwrap();
         load_store.lanes[store_slot].len = 1;
-        assert!(load_store.finalize(0, 0, [0; 32], &[]).is_err());
+        assert!(load_store.finalize(0, 0, None, [0; 32], &[]).is_err());
 
         let mut residual = RvrG2PreparedV1::new(&capacities).unwrap();
         residual.lanes[G2_PRODUCER_RESIDUAL_CTRL_SLOT].len = 1;
         residual.lanes[G2_PRODUCER_RESIDUAL_VALUE_SLOT].len = 1;
-        assert!(residual.finalize(0, 0, [0; 32], &[]).is_err());
+        assert!(residual.finalize(0, 0, None, [0; 32], &[]).is_err());
     }
 
     #[test]
     fn phase2a_transport_rejects_overflow_before_publish() {
         let mut prepared = RvrG2PreparedV1::new(&RvrG2CapacitiesV1::default()).unwrap();
         prepared.producer.overflow = 1;
-        assert!(prepared.finalize(0, 0, [0; 32], &[]).is_err());
+        assert!(prepared.finalize(0, 0, None, [0; 32], &[]).is_err());
     }
 
     #[test]
@@ -2105,7 +2206,7 @@ mod tests {
         prepared.lanes[G2_PRODUCER_RESIDUAL_TAG_SLOT].len = 1;
         prepared.lanes[G2_PRODUCER_RESIDUAL_VALUE_SLOT].len = 1;
         let fingerprint = [3; 32];
-        let mut segment = prepared.finalize(0, 0, fingerprint, &[]).unwrap();
+        let mut segment = prepared.finalize(0, 0, None, fingerprint, &[]).unwrap();
         unsafe {
             // SAFETY: the test owns the segment and mutates its second POD
             // descriptor before exposing it to any consumer.
@@ -2142,7 +2243,7 @@ mod tests {
         prepared.lanes[store_slot + 1].len = 1;
         prepared.producer.instruction_count = 4;
         let fingerprint = [4; 32];
-        let segment = prepared.finalize(0, 4, fingerprint, &[]).unwrap();
+        let segment = prepared.finalize(0, 4, None, fingerprint, &[]).unwrap();
         let descs = segment.validate(&fingerprint).unwrap();
 
         let mut expected_len = align_up(
@@ -2187,7 +2288,7 @@ mod tests {
         };
         let fingerprint = [7; 32];
         let segment = prepared
-            .finalize(0, 0, fingerprint, &[(binding, 4, 64)])
+            .finalize(0, 0, None, fingerprint, &[(binding, 4, 64)])
             .unwrap();
         segment.validate(&fingerprint).unwrap();
         assert!(segment.transfer_byte_len() < segment.byte_len());

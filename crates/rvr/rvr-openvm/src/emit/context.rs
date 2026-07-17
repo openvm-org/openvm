@@ -1,6 +1,7 @@
 use std::{collections::HashSet, fmt::Write, mem::size_of};
 
 use openvm_instructions::PUBLIC_VALUES_AS;
+use rvr_openvm_ext_ffi_common::G2_PRODUCER_LANE_COUNT;
 use rvr_openvm_ir::{
     ArenaAddIBaked, ArenaAlu3Baked, ArenaRw1Baked, ArenaWr1Baked, MemWidth, PageAddressSpace,
     Variable,
@@ -122,6 +123,15 @@ pub struct EmitContext<'a> {
     delta_batch: Option<(String, u32)>,
     /// G2 v1 compact lanes. This is mutually exclusive with delta/arena.
     g2_records: bool,
+    /// Whether generated G2 value-shape checks remain in the hot loop.
+    g2_checked: bool,
+    /// Per-basic-block G2 run/standard lane spans. The generated function
+    /// reserves these once at entry, writes through typed local bases, and
+    /// publishes the cursors on every control-flow exit.
+    g2_block_spans: Option<[u32; G2_PRODUCER_LANE_COUNT]>,
+    /// Compile-time offsets within each reserved span. These never become
+    /// runtime cursor increments in generated C.
+    g2_block_next: [u32; G2_PRODUCER_LANE_COUNT],
     /// Chip (AIR) index of the instruction currently being emitted, or
     /// `u32::MAX` if it maps to no chip. Set per instruction by the block emit
     /// loop before `emit_c`.
@@ -184,6 +194,9 @@ impl<'a> EmitContext<'a> {
             delta_records: false,
             delta_batch: None,
             g2_records: false,
+            g2_checked: true,
+            g2_block_spans: None,
+            g2_block_next: [0; G2_PRODUCER_LANE_COUNT],
             current_chip_idx: u32::MAX,
             current_g2_kind: u8::MAX,
             current_pc: 0,
@@ -203,6 +216,79 @@ impl<'a> EmitContext<'a> {
 
     pub(crate) fn set_g2_records(&mut self, enabled: bool) {
         self.g2_records = enabled;
+    }
+
+    pub(crate) fn set_g2_checked(&mut self, checked: bool) {
+        self.g2_checked = checked;
+    }
+
+    pub(crate) fn set_g2_block_spans(&mut self, spans: Option<[u32; G2_PRODUCER_LANE_COUNT]>) {
+        self.g2_block_spans = spans;
+        self.g2_block_next = [0; G2_PRODUCER_LANE_COUNT];
+    }
+
+    fn g2_block_index(&mut self, slot: usize) -> u32 {
+        let spans = self
+            .g2_block_spans
+            .as_ref()
+            .expect("G2 emission requires block-reserved lane spans");
+        let index = self.g2_block_next[slot];
+        assert!(
+            index < spans[slot],
+            "G2 lane {slot} emitted more values than its static block span"
+        );
+        self.g2_block_next[slot] += 1;
+        index
+    }
+
+    fn g2_store_u32(&mut self, slot: usize, value: &str) {
+        let index = self.g2_block_index(slot);
+        self.write_line(&format!(
+            "rvr_g2_lane_{slot}[{index}u] = (uint32_t)({value});"
+        ));
+    }
+
+    fn g2_store_u64(&mut self, slot: usize, value: &str) {
+        let index = self.g2_block_index(slot);
+        self.write_line(&format!("rvr_g2_lane_{slot}[{index}u] = {value};"));
+    }
+
+    pub(crate) fn emit_g2_run(&mut self, program_slot: u32, instruction_count: u32) {
+        if !self.g2_records {
+            return;
+        }
+        self.g2_store_u32(
+            rvr_openvm_ext_ffi_common::G2_PRODUCER_RUN_SLOT,
+            &format!("{program_slot}u"),
+        );
+        self.write_line(&format!(
+            "rvr_g2->instruction_count += {instruction_count}u;"
+        ));
+    }
+
+    /// Publish the block-local lane cursors before a tail call, suspension,
+    /// trap, or normal exit. Emitting this more than once is harmless because
+    /// every control-flow path writes the same statically computed endpoints.
+    pub(crate) fn commit_g2_block(&mut self) {
+        let Some(spans) = self.g2_block_spans else {
+            return;
+        };
+        for (slot, span) in spans.into_iter().enumerate() {
+            if span != 0 {
+                self.write_line(&format!(
+                    "rvr_g2_desc_{slot}->len = rvr_g2_base_{slot} + {span}u;"
+                ));
+            }
+        }
+    }
+
+    pub(crate) fn assert_g2_block_complete(&self) {
+        if let Some(spans) = self.g2_block_spans {
+            assert_eq!(
+                self.g2_block_next, spans,
+                "generated G2 stores differ from the statically reserved block spans"
+            );
+        }
     }
 
     /// R4: set the airs whose records are emitted arena-native.
@@ -537,10 +623,11 @@ impl<'a> EmitContext<'a> {
             let res = self.next_var();
             let result_expr = result(&v1, &v2);
             self.write_line(&format!("uint64_t {res} = {result_expr};"));
-            self.write_line(&format!(
-                "preflight_g2_emit_standard2(state, {}u, {v1}, {v2});",
-                self.current_g2_kind
-            ));
+            let slot =
+                rvr_openvm_ext_ffi_common::g2_standard_producer_slot(self.current_g2_kind, false)
+                    .expect("G2 two-value kind must have a first producer lane");
+            self.g2_store_u64(slot, &v1);
+            self.g2_store_u64(slot + 1, &v2);
             self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs1});"));
             self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs2});"));
             self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rd});"));
@@ -907,7 +994,7 @@ impl<'a> EmitContext<'a> {
             self.write_line(&format!(
                 "uint64_t {result} = {v1} + 0x{imm_value:016x}ull;"
             ));
-            self.write_line(&format!("preflight_g2_emit_addi(state, {v1});"));
+            self.g2_store_u64(rvr_openvm_ext_ffi_common::G2_PRODUCER_ADDI_SLOT, &v1);
             self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs1});"));
             self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rd});"));
             if rd != 0 {
@@ -1052,10 +1139,10 @@ impl<'a> EmitContext<'a> {
             let res = self.next_var();
             let result_expr = result(&v1, &vimm);
             self.write_line(&format!("uint64_t {res} = {result_expr};"));
-            self.write_line(&format!(
-                "preflight_g2_emit_standard1(state, {}u, {v1});",
-                self.current_g2_kind
-            ));
+            let slot =
+                rvr_openvm_ext_ffi_common::g2_standard_producer_slot(self.current_g2_kind, false)
+                    .expect("G2 one-value kind must have a producer lane");
+            self.g2_store_u64(slot, &v1);
             self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs1});"));
             self.write_line("trace_timestamp(state);");
             self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rd});"));
@@ -1303,10 +1390,11 @@ impl<'a> EmitContext<'a> {
                 self.write_line(&format!("uint64_t {value} = reg_read(state, {rs2});"));
                 value
             };
-            self.write_line(&format!(
-                "preflight_g2_emit_standard2(state, {}u, {v1}, {v2});",
-                self.current_g2_kind
-            ));
+            let slot =
+                rvr_openvm_ext_ffi_common::g2_standard_producer_slot(self.current_g2_kind, false)
+                    .expect("G2 branch kind must have a first producer lane");
+            self.g2_store_u64(slot, &v1);
+            self.g2_store_u64(slot + 1, &v2);
             self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs1});"));
             self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs2});"));
             return (v1, v2);
@@ -1398,7 +1486,14 @@ impl<'a> EmitContext<'a> {
                 value
             };
             let v1 = self.materialize_u64(&v1);
-            self.write_line(&format!("preflight_g2_emit_standard1(state, 13u, {v1});"));
+            if self.g2_checked {
+                self.write_line(&format!(
+                    "if (unlikely({v1} > UINT32_MAX)) rvr_g2->overflow = G2_REJECT_NARROW_VALUE;"
+                ));
+            }
+            let slot = rvr_openvm_ext_ffi_common::g2_standard_producer_slot(13, false)
+                .expect("G2 jalr kind must have a producer lane");
+            self.g2_store_u32(slot, &v1);
             self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs1});"));
             if let Some(rd) = link_rd.filter(|&rd| rd != 0) {
                 self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rd});"));
@@ -1588,9 +1683,10 @@ impl<'a> EmitContext<'a> {
             self.write_line(&format!(
                 "uint64_t {block} = rd_mem_u64(memory, {block_addr});"
             ));
-            self.write_line(&format!(
-                "preflight_g2_emit_load_store(state, {kind}u, {base}, {block});"
-            ));
+            let slot = rvr_openvm_ext_ffi_common::g2_standard_producer_slot(kind, false)
+                .expect("G2 load kind must have producer lanes");
+            self.g2_store_u32(slot, &base);
+            self.g2_store_u64(slot + 1, &block);
             self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs1});"));
             if width == 1 {
                 self.write_line(&format!(
@@ -1809,9 +1905,10 @@ impl<'a> EmitContext<'a> {
             self.write_line(&format!(
                 "uint64_t {block} = rd_mem_u64(memory, {block_addr});"
             ));
-            self.write_line(&format!(
-                "preflight_g2_emit_load_store(state, {kind}u, {base}, {block});"
-            ));
+            let slot = rvr_openvm_ext_ffi_common::g2_standard_producer_slot(kind, false)
+                .expect("G2 store kind must have producer lanes");
+            self.g2_store_u32(slot, &base);
+            self.g2_store_u64(slot + 1, &block);
             self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs1});"));
             self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs2});"));
             if width == 1 {
@@ -2001,9 +2098,10 @@ impl<'a> EmitContext<'a> {
             self.write_line(&format!(
                 "uint64_t {block} = preflight_read_pv_block(state->tracer, {block_addr});"
             ));
-            self.write_line(&format!(
-                "preflight_g2_emit_load_store(state, 26u, {ptr}, {block});"
-            ));
+            let slot = rvr_openvm_ext_ffi_common::g2_standard_producer_slot(26, false)
+                .expect("G2 store kind must have producer lanes");
+            self.g2_store_u32(slot, &ptr);
+            self.g2_store_u64(slot + 1, &block);
             self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {ptr_reg});"));
             self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {src_reg});"));
             let crosses = self.next_var();
@@ -2194,9 +2292,10 @@ impl<'a> EmitContext<'a> {
         self.write_line(&format!(
             "uint64_t {block} = preflight_read_pv_block(state->tracer, {block_addr});"
         ));
-        self.write_line(&format!(
-            "preflight_g2_emit_load_store(state, {kind}u, {ptr}, {block});"
-        ));
+        let slot = rvr_openvm_ext_ffi_common::g2_standard_producer_slot(kind, false)
+            .expect("G2 reveal kind must have producer lanes");
+        self.g2_store_u32(slot, &ptr);
+        self.g2_store_u64(slot + 1, &block);
         self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {ptr_reg});"));
         self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {src_reg});"));
         if width == 1 {

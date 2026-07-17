@@ -19,7 +19,7 @@ use openvm_instructions::{
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm::{
     inline_record_shape_for_instr, inline_record_shape_for_terminator, CProject,
-    G2DsoManifestConfigV1, InlineRecordShape, RvrExecutionKind,
+    G2DsoManifestConfigV2, G2EmissionMode, InlineRecordShape, RvrExecutionKind,
 };
 use rvr_openvm_ir::{LiftedInstr, SourceLoc};
 use rvr_openvm_lift::{
@@ -208,7 +208,7 @@ impl RvrCompiled {
         let manifest = unsafe {
             let symbol = self
                 .lib
-                .get::<*const OpenVmRvrG2DsoManifestV1>(b"openvm_rvr_g2_manifest_v1\0")
+                .get::<*const OpenVmRvrG2DsoManifestV2>(b"openvm_rvr_g2_manifest_v2\0")
                 .map_err(|err| {
                     CompileError::LibLoad(format!(
                         "G2 negotiation rejected DSO without manifest: {err}"
@@ -273,14 +273,15 @@ impl RvrCompiled {
             expected_air_indices[index] = u32::try_from(binding.air_idx)
                 .map_err(|_| CompileError::LibLoad("G2 AIR index exceeds u32".to_string()))?;
         }
-        if manifest.magic != *b"OVMG2D1\0"
-            || manifest.version != 1
-            || manifest.manifest_bytes as usize != std::mem::size_of::<OpenVmRvrG2DsoManifestV1>()
+        if manifest.magic != *b"OVMG2D2\0"
+            || manifest.version != 2
+            || manifest.manifest_bytes as usize != std::mem::size_of::<OpenVmRvrG2DsoManifestV2>()
             || manifest.header_size != 64
             || manifest.lane_desc_size != 32
             || manifest.lane_count as usize != rvr_openvm_ext_ffi_common::G2_PRODUCER_LANE_COUNT
             || manifest.wire_flags != 14
             || manifest.fingerprint != g2.fingerprint
+            || manifest.producer_schema_fingerprint != g2.producer_schema_fingerprint
             || manifest.program_fingerprint != g2.program_fingerprint
             || manifest.block_fingerprint != g2.block_fingerprint
             || manifest.air_manifest_fingerprint != g2.air_manifest_fingerprint
@@ -291,7 +292,7 @@ impl RvrCompiled {
                 .is_none_or(|decode| manifest.pc_base != decode.pc_base)
             || manifest.block_count as usize != g2.blocks.len()
             || manifest.air_count as usize != g2.air_bindings.len()
-            || manifest.reserved != 0
+            || manifest.emission_mode != u32::from(g2.emission_mode)
             || manifest.air_kinds != expected_air_kinds
             || manifest.air_indices != expected_air_indices
             || manifest.lanes != expected_lanes
@@ -389,7 +390,7 @@ impl RvrCompiled {
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-struct OpenVmRvrG2DsoManifestV1 {
+struct OpenVmRvrG2DsoManifestV2 {
     magic: [u8; 8],
     version: u16,
     manifest_bytes: u16,
@@ -398,13 +399,14 @@ struct OpenVmRvrG2DsoManifestV1 {
     lane_count: u32,
     wire_flags: u32,
     fingerprint: [u8; 32],
+    producer_schema_fingerprint: [u8; 32],
     program_fingerprint: [u8; 32],
     block_fingerprint: [u8; 32],
     air_manifest_fingerprint: [u8; 32],
     pc_base: u32,
     block_count: u32,
     air_count: u32,
-    reserved: u32,
+    emission_mode: u32,
     air_kinds: [u8; 31],
     air_indices: [u32; 31],
     lanes: [OpenVmRvrG2DsoLaneManifestV1; rvr_openvm_ext_ffi_common::G2_PRODUCER_LANE_COUNT],
@@ -424,7 +426,7 @@ struct OpenVmRvrG2DsoLaneManifestV1 {
 
 const _: () = {
     assert!(std::mem::size_of::<OpenVmRvrG2DsoLaneManifestV1>() == 16);
-    assert!(std::mem::size_of::<OpenVmRvrG2DsoManifestV1>() == 1268);
+    assert!(std::mem::size_of::<OpenVmRvrG2DsoManifestV2>() == 1300);
 };
 
 /// Error during compilation.
@@ -636,6 +638,26 @@ fn configured_gpu_records(gpu_records_default: Option<&str>) -> Option<String> {
         Ok(mode) => Some(mode),
         Err(std::env::VarError::NotPresent) => gpu_records_default.map(str::to_owned),
         Err(_) => None,
+    }
+}
+
+fn configured_g2_emission_mode() -> Result<G2EmissionMode, CompileError> {
+    match std::env::var("OPENVM_RVR_G2_EMISSION") {
+        Ok(value) => match value.to_ascii_lowercase().as_str() {
+            "checked" | "debug" => Ok(G2EmissionMode::Checked),
+            "production" | "prod" => Ok(G2EmissionMode::Production),
+            _ => Err(CompileError::InvalidOptions(
+                "OPENVM_RVR_G2_EMISSION must be checked or production",
+            )),
+        },
+        Err(std::env::VarError::NotPresent) => Ok(if cfg!(debug_assertions) {
+            G2EmissionMode::Checked
+        } else {
+            G2EmissionMode::Production
+        }),
+        Err(_) => Err(CompileError::InvalidOptions(
+            "OPENVM_RVR_G2_EMISSION must contain valid UTF-8",
+        )),
     }
 }
 
@@ -1146,6 +1168,7 @@ fn build_g2_meta_v1<F: PrimeField32>(
     decode: &RvrDeltaDecodePrecompute,
     blocks: &[rvr_openvm_ir::Block],
     admitter: &dyn LogNativeOpcodeAdmitter<F>,
+    emission_mode: G2EmissionMode,
 ) -> Result<RvrG2MetaV1, CompileError> {
     if decode.kind_to_air.is_empty()
         || decode
@@ -1390,8 +1413,11 @@ fn build_g2_meta_v1<F: PrimeField32>(
     fingerprint.update(block_fingerprint);
     fingerprint.update(air_manifest_fingerprint);
 
+    let fingerprint: [u8; 32] = fingerprint.finalize().into();
     Ok(RvrG2MetaV1 {
-        fingerprint: fingerprint.finalize().into(),
+        fingerprint,
+        producer_schema_fingerprint: g2_producer_schema_fingerprint(fingerprint, emission_mode),
+        emission_mode: emission_mode as u8,
         program_fingerprint,
         block_fingerprint,
         air_manifest_fingerprint,
@@ -1405,6 +1431,20 @@ fn build_g2_meta_v1<F: PrimeField32>(
         ),
         opaque_bindings: Arc::new(opaque_bindings),
     })
+}
+
+fn g2_producer_schema_fingerprint(
+    wire_fingerprint: [u8; 32],
+    emission_mode: G2EmissionMode,
+) -> [u8; 32] {
+    let mut producer_schema = Sha256::new();
+    producer_schema.update(b"openvm-rvr-g2-block-span-producer-v2\0");
+    producer_schema.update(wire_fingerprint);
+    producer_schema.update([emission_mode as u8]);
+    producer_schema.update(
+        b"producer-lane-24;exact-expected-cursors;static-run-standard-spans;exit-commit;grouped-custom-residual;",
+    );
+    producer_schema.finalize().into()
 }
 
 fn g2_kind_arity(kind: u8) -> u8 {
@@ -2121,6 +2161,7 @@ fn compile_impl<F: PrimeField32>(
             });
     let mut prebuilt_blocks = None;
     if g2_negotiated {
+        let emission_mode = configured_g2_emission_mode()?;
         let valid_pcs: std::collections::HashSet<u64> = ir.iter().map(|li| li.pc()).collect();
         let extra_targets = opts
             .extensions
@@ -2136,6 +2177,7 @@ fn compile_impl<F: PrimeField32>(
             &blocks,
             opts.preflight_assembler_admitter
                 .expect("G2 negotiation requires the assembler registry"),
+            emission_mode,
         )?));
         prebuilt_blocks = Some(blocks);
     }
@@ -2357,6 +2399,13 @@ fn compile_impl<F: PrimeField32>(
                             u32::try_from(binding.air_idx).expect("G2 AIR index exceeds u32");
                     }
                     project.g2_records = true;
+                    project.g2_emission_mode = match g2.emission_mode {
+                        value if value == G2EmissionMode::Checked as u8 => G2EmissionMode::Checked,
+                        value if value == G2EmissionMode::Production as u8 => {
+                            G2EmissionMode::Production
+                        }
+                        value => panic!("invalid persisted G2 emission mode {value}"),
+                    };
                     let decode = inline_meta
                         .delta_decode
                         .as_deref()
@@ -2371,8 +2420,26 @@ fn compile_impl<F: PrimeField32>(
                                 .map_or(u8::MAX, |binding| binding.kind)
                         })
                         .collect();
-                    project.g2_manifest = Some(G2DsoManifestConfigV1 {
+                    project.g2_pc_arities = decode
+                        .entries
+                        .iter()
+                        .map(|entry| {
+                            let kind = g2.air_bindings.iter().find_map(|binding| {
+                                (binding.air_idx == entry.air_idx as usize).then_some(binding.kind)
+                            });
+                            match kind {
+                                Some(12 | 14) | None => 0,
+                                Some(13 | 29) => 1,
+                                Some(1..=7) if entry.flags & 1 != 0 => 1,
+                                Some(0..=28) => 2,
+                                Some(_) => 0,
+                            }
+                        })
+                        .collect();
+                    project.g2_manifest = Some(G2DsoManifestConfigV2 {
                         fingerprint: g2.fingerprint,
+                        producer_schema_fingerprint: g2.producer_schema_fingerprint,
+                        emission_mode: u32::from(g2.emission_mode),
                         program_fingerprint: g2.program_fingerprint,
                         block_fingerprint: g2.block_fingerprint,
                         air_manifest_fingerprint: g2.air_manifest_fingerprint,
@@ -2958,6 +3025,8 @@ fn generated_project_input_cache_key<F: PrimeField32>(
     if let Some(g2) = inline_meta.g2.as_deref() {
         hasher.update([1]);
         hasher.update(g2.fingerprint);
+        hasher.update(g2.producer_schema_fingerprint);
+        hasher.update([g2.emission_mode]);
         update_debug(&mut hasher, &g2.blocks)?;
         update_debug(&mut hasher, &g2.air_bindings)?;
     } else {
@@ -3606,6 +3675,17 @@ mod tests {
 
     use super::*;
     use crate::arch::rvr::AddIArenaFieldOffsets;
+
+    #[test]
+    fn g2_emission_modes_share_wire_fingerprint_but_not_producer_schema() {
+        let wire_fingerprint = [0x5a; 32];
+        let checked = g2_producer_schema_fingerprint(wire_fingerprint, G2EmissionMode::Checked);
+        let production =
+            g2_producer_schema_fingerprint(wire_fingerprint, G2EmissionMode::Production);
+
+        assert_ne!(checked, production);
+        assert_eq!(wire_fingerprint, [0x5a; 32]);
+    }
 
     #[cfg(unix)]
     #[test]

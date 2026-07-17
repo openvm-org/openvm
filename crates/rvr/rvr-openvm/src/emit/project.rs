@@ -200,8 +200,10 @@ impl RvrExecutionKind {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct G2DsoManifestConfigV1 {
+pub struct G2DsoManifestConfigV2 {
     pub fingerprint: [u8; 32],
+    pub producer_schema_fingerprint: [u8; 32],
+    pub emission_mode: u32,
     pub program_fingerprint: [u8; 32],
     pub block_fingerprint: [u8; 32],
     pub air_manifest_fingerprint: [u8; 32],
@@ -210,6 +212,19 @@ pub struct G2DsoManifestConfigV1 {
     pub air_count: u32,
     pub air_kinds: [u8; 31],
     pub air_indices: [u32; 31],
+}
+
+/// Capacity-check policy baked into a generated G2 preflight DSO.
+///
+/// Checked emission validates each basic-block lane span before the first
+/// store. Production emission relies on host-prepared capacities and performs
+/// only direct stores; the host still validates exact cursors at segment
+/// publication.
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum G2EmissionMode {
+    Checked = 1,
+    Production = 2,
 }
 
 /// C project generator.
@@ -256,11 +271,16 @@ pub struct CProject {
     /// Private G2 v1 lane producer for the currently negotiated compact
     /// families. Every existing route remains unchanged when this is false.
     pub g2_records: bool,
+    /// Checked/debug versus branch-free production G2 block reservations.
+    pub g2_emission_mode: G2EmissionMode,
     /// Stable decoder kind per program slot. G2 codegen uses this to select
     /// the final V0/V1 lane without re-deriving opcode families in C.
     pub g2_pc_kinds: Vec<u8>,
+    /// Number of standard values emitted per program slot. Kinds 1 through 7
+    /// vary between immediate (one value) and register (two value) forms.
+    pub g2_pc_arities: Vec<u8>,
     /// Full schema/program/AIR binding exported by the generated DSO.
-    pub g2_manifest: Option<G2DsoManifestConfigV1>,
+    pub g2_manifest: Option<G2DsoManifestConfigV2>,
     /// R4: airs whose records the generated C writes arena-native — full
     /// records at final arena positions, field offsets baked as literals
     /// from the geometry's layout table. Airs absent here keep the compact
@@ -294,7 +314,13 @@ impl CProject {
             inline_pc_slots: Vec::new(),
             delta_records: false,
             g2_records: false,
+            g2_emission_mode: if cfg!(debug_assertions) {
+                G2EmissionMode::Checked
+            } else {
+                G2EmissionMode::Production
+            },
             g2_pc_kinds: Vec::new(),
+            g2_pc_arities: Vec::new(),
             g2_manifest: None,
             arena_native_airs: std::collections::BTreeMap::new(),
         }
@@ -613,6 +639,16 @@ impl CProject {
             .unwrap_or(u8::MAX)
     }
 
+    fn g2_arity_for_pc(&self, pc: u64) -> u8 {
+        let Some(offset) = pc.checked_sub(self.pc_base) else {
+            return 0;
+        };
+        self.g2_pc_arities
+            .get((offset / 4) as usize)
+            .copied()
+            .unwrap_or(0)
+    }
+
     fn native_detail_family(&self, pc: u64) -> u32 {
         let Some(offset) = pc.checked_sub(self.pc_base) else {
             return 8;
@@ -670,6 +706,12 @@ impl CProject {
         };
         let fingerprint = manifest
             .fingerprint
+            .iter()
+            .map(|byte| format!("0x{byte:02x}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let producer_schema_fingerprint = manifest
+            .producer_schema_fingerprint
             .iter()
             .map(|byte| format!("0x{byte:02x}"))
             .collect::<Vec<_>>()
@@ -757,7 +799,7 @@ impl CProject {
                uint8_t arity;\n\
                uint8_t reserved[3];\n\
              }} OpenVmRvrG2DsoLaneManifestV1;\n\n\
-             typedef struct OpenVmRvrG2DsoManifestV1 {{\n\
+             typedef struct OpenVmRvrG2DsoManifestV2 {{\n\
                uint8_t magic[8];\n\
                uint16_t version;\n\
                uint16_t manifest_bytes;\n\
@@ -766,43 +808,48 @@ impl CProject {
                uint32_t lane_count;\n\
                uint32_t wire_flags;\n\
                uint8_t fingerprint[32];\n\
+               uint8_t producer_schema_fingerprint[32];\n\
                uint8_t program_fingerprint[32];\n\
                uint8_t block_fingerprint[32];\n\
                uint8_t air_manifest_fingerprint[32];\n\
                uint32_t pc_base;\n\
                uint32_t block_count;\n\
                uint32_t air_count;\n\
-               uint32_t reserved;\n\
+               uint32_t emission_mode;\n\
                uint8_t air_kinds[31];\n\
                uint32_t air_indices[31];\n\
                OpenVmRvrG2DsoLaneManifestV1 lanes[59];\n\
-             }} OpenVmRvrG2DsoManifestV1;\n\n\
+             }} OpenVmRvrG2DsoManifestV2;\n\n\
              _Static_assert(sizeof(OpenVmRvrG2DsoLaneManifestV1) == 16, \"G2 DSO lane manifest size drift\");\n\
-             _Static_assert(sizeof(OpenVmRvrG2DsoManifestV1) == 1268, \"G2 DSO manifest size drift\");\n\n\
+             _Static_assert(sizeof(OpenVmRvrG2DsoManifestV2) == 1300, \"G2 DSO manifest size drift\");\n\n\
              __attribute__((visibility(\"default\")))\n\
-             const OpenVmRvrG2DsoManifestV1 openvm_rvr_g2_manifest_v1 = {{\n\
-               .magic = {{'O','V','M','G','2','D','1','\\0'}},\n\
-               .version = 1,\n\
-               .manifest_bytes = 1268,\n\
+             const OpenVmRvrG2DsoManifestV2 openvm_rvr_g2_manifest_v2 = {{\n\
+               .magic = {{'O','V','M','G','2','D','2','\\0'}},\n\
+               .version = 2,\n\
+               .manifest_bytes = 1300,\n\
                .header_size = 64,\n\
                .lane_desc_size = 32,\n\
                .lane_count = 59,\n\
                .wire_flags = 14,\n\
                .fingerprint = {{{fingerprint}}},\n\
+               .producer_schema_fingerprint = {{{producer_schema_fingerprint}}},\n\
                .program_fingerprint = {{{program_fingerprint}}},\n\
                .block_fingerprint = {{{block_fingerprint}}},\n\
                .air_manifest_fingerprint = {{{air_manifest_fingerprint}}},\n\
                .pc_base = {},\n\
                .block_count = {},\n\
                .air_count = {},\n\
-               .reserved = 0,\n\
+               .emission_mode = {},\n\
                .air_kinds = {{{air_kinds}}},\n\
                .air_indices = {{{air_indices}}},\n\
                .lanes = {{\n\
 {lane_source}\n\
                }},\n\
              }};\n",
-            manifest.pc_base, manifest.block_count, manifest.air_count,
+            manifest.pc_base,
+            manifest.block_count,
+            manifest.air_count,
+            manifest.emission_mode,
         );
         fs::write(path, source)
     }
@@ -840,6 +887,74 @@ impl CProject {
             self.output_dir.join("openvm_util.h"),
             include_str!("../../c/openvm_util.h"),
         )?;
+
+        let g2_emission = match self.g2_emission_mode {
+            G2EmissionMode::Checked => {
+                r#"#ifndef OPENVM_G2_EMISSION_H
+#define OPENVM_G2_EMISSION_H
+
+static constexpr bool OPENVM_G2_CHECKS_ENABLED = true;
+
+static __attribute__((always_inline)) inline uint32_t
+preflight_g2_claim_span(G2ProducerV1* restrict g2, uint32_t slot,
+                        uint32_t count, uint32_t width) {
+  if (unlikely(g2 == NULL || g2->base == NULL || g2->lanes == NULL ||
+               g2->lane_count != G2_PRODUCER_LANE_COUNT ||
+               slot >= g2->lane_count)) {
+    if (g2 != NULL) g2->overflow = G2_REJECT_PRODUCER_ABI;
+    return UINT32_MAX;
+  }
+  G2ProducerLaneV1* restrict lane = &g2->lanes[slot];
+  uint32_t index = lane->len;
+  if (unlikely(index > lane->cap || count > lane->cap - index ||
+               lane->offset > g2->capacity ||
+               ((uint64_t)index + count) * width >
+                   g2->capacity - lane->offset ||
+               lane->offset % width != 0u)) {
+    g2->overflow = G2_REJECT_LANE_CAPACITY;
+    return UINT32_MAX;
+  }
+  lane->len = index + count;
+  return index;
+}
+
+static __attribute__((always_inline)) inline uint32_t
+preflight_g2_claim(G2ProducerV1* restrict g2, uint32_t slot,
+                   uint32_t width) {
+  return preflight_g2_claim_span(g2, slot, 1u, width);
+}
+
+#endif /* OPENVM_G2_EMISSION_H */
+"#
+            }
+            G2EmissionMode::Production => {
+                r#"#ifndef OPENVM_G2_EMISSION_H
+#define OPENVM_G2_EMISSION_H
+
+/* Production trusts the host-prepared producer ABI and capacities. The only
+ * validation is the O(lanes) exact cursor/count check at segment publish. */
+static constexpr bool OPENVM_G2_CHECKS_ENABLED = false;
+
+static __attribute__((always_inline)) inline uint32_t
+preflight_g2_claim_span(G2ProducerV1* restrict g2, uint32_t slot,
+                        uint32_t count, uint32_t width) {
+  G2ProducerLaneV1* restrict lane = &g2->lanes[slot];
+  uint32_t index = lane->len;
+  lane->len = index + count;
+  return index;
+}
+
+static __attribute__((always_inline)) inline uint32_t
+preflight_g2_claim(G2ProducerV1* restrict g2, uint32_t slot,
+                   uint32_t width) {
+  return preflight_g2_claim_span(g2, slot, 1u, width);
+}
+
+#endif /* OPENVM_G2_EMISSION_H */
+"#
+            }
+        };
+        fs::write(self.output_dir.join("openvm_g2_emission.h"), g2_emission)?;
 
         // RvState definition specialized to this execution kind.
         fs::write(
@@ -1124,6 +1239,9 @@ impl CProject {
         let mut body = String::new();
         let inline_records = self.inline_records_enabled();
         ctx.set_inline_records(inline_records);
+        ctx.set_g2_checked(self.g2_emission_mode == G2EmissionMode::Checked);
+        let g2_spans = self.g2_block_spans(block);
+        ctx.set_g2_block_spans(g2_spans);
         if inline_records && !self.arena_native_airs.is_empty() {
             ctx.set_arena_native_airs(self.arena_native_airs.clone());
         }
@@ -1167,6 +1285,10 @@ impl CProject {
         }
 
         self.emit_block_boundary(&mut body, block);
+        if let Some(spans) = g2_spans.as_ref() {
+            self.emit_g2_block_reservation(&mut body, block.start_pc, spans);
+        }
+        self.emit_preflight_block_started(&mut body, block);
         if let Some(batch) = delta_batch.as_deref() {
             writeln!(
                 body,
@@ -1176,6 +1298,12 @@ impl CProject {
         }
         ctx.set_delta_records(self.delta_records, delta_batch);
         ctx.set_g2_records(self.g2_records);
+        if self.g2_records {
+            let slot =
+                u32::try_from((pc - self.pc_base) / 4).expect("G2 block program slot exceeds u32");
+            ctx.emit_g2_run(slot, insn_count);
+            Self::emit_context_scope(&mut body, &mut ctx);
+        }
         self.emit_per_block_chip_updates(&mut body, block)?;
 
         for instr_at in &block.instructions {
@@ -1240,6 +1368,7 @@ impl CProject {
         }
         let tc = TermCtx { valid_blocks };
         emit_terminator(&mut ctx, &block.terminator, block.terminator_pc, &tc);
+        ctx.assert_g2_block_complete();
         Self::emit_context_scope(&mut body, &mut ctx);
 
         if let Some(error) = ctx.invalid_chip_index() {
@@ -1277,6 +1406,132 @@ impl CProject {
         }
         writeln!(out).unwrap();
         Ok(())
+    }
+
+    fn g2_block_spans(
+        &self,
+        block: &Block,
+    ) -> Option<[u32; rvr_openvm_ext_ffi_common::G2_PRODUCER_LANE_COUNT]> {
+        if !self.g2_records {
+            return None;
+        }
+        let mut spans = [0u32; rvr_openvm_ext_ffi_common::G2_PRODUCER_LANE_COUNT];
+        spans[rvr_openvm_ext_ffi_common::G2_PRODUCER_RUN_SLOT] = 1;
+        let pcs = block.instructions.iter().map(|instr| instr.pc).chain(
+            (!matches!(block.terminator, Terminator::FallThrough)).then_some(block.terminator_pc),
+        );
+        for pc in pcs {
+            let kind = self.g2_kind_for_pc(pc);
+            let arity = self.g2_arity_for_pc(pc);
+            for value_lane in (0..arity).map(|index| index != 0) {
+                if let Some(slot) =
+                    rvr_openvm_ext_ffi_common::g2_standard_producer_slot(kind, value_lane)
+                {
+                    spans[slot] = spans[slot]
+                        .checked_add(1)
+                        .expect("G2 basic-block lane span exceeds u32");
+                }
+            }
+        }
+        Some(spans)
+    }
+
+    fn g2_lane_width(slot: usize) -> u8 {
+        if slot == rvr_openvm_ext_ffi_common::G2_PRODUCER_RUN_SLOT {
+            return 4;
+        }
+        for kind in 0u8..30 {
+            for value_lane in [false, true] {
+                if rvr_openvm_ext_ffi_common::g2_standard_producer_slot(kind, value_lane)
+                    == Some(slot)
+                {
+                    return rvr_openvm_ext_ffi_common::g2_standard_lane_width(kind, value_lane)
+                        .expect("G2 producer slot has no lane width");
+                }
+            }
+        }
+        panic!("G2 block reservation requested dynamic lane slot {slot}");
+    }
+
+    fn emit_g2_block_reservation(
+        &self,
+        out: &mut String,
+        pc: u64,
+        spans: &[u32; rvr_openvm_ext_ffi_common::G2_PRODUCER_LANE_COUNT],
+    ) {
+        writeln!(
+            out,
+            "    G2ProducerV1* restrict rvr_g2 = state->tracer->g2;"
+        )
+        .unwrap();
+        if self.g2_emission_mode == G2EmissionMode::Checked {
+            writeln!(
+                out,
+                "    if (unlikely(rvr_g2 == NULL || rvr_g2->base == NULL || rvr_g2->lanes == NULL || rvr_g2->lane_count != G2_PRODUCER_LANE_COUNT)) {{"
+            )
+            .unwrap();
+            writeln!(
+                out,
+                "        if (rvr_g2 != NULL) rvr_g2->overflow = G2_REJECT_PRODUCER_ABI;"
+            )
+            .unwrap();
+            writeln!(
+                out,
+                "        rv_set_status_at(state, 0x{pc:08x}ull, OPENVM_EXEC_SUSPENDED, 0);"
+            )
+            .unwrap();
+            writeln!(out, "        return;").unwrap();
+            writeln!(out, "    }}").unwrap();
+        }
+        for (slot, &span) in spans.iter().enumerate() {
+            if span == 0 {
+                continue;
+            }
+            let width = Self::g2_lane_width(slot);
+            let c_type = match width {
+                4 => "uint32_t",
+                8 => "uint64_t",
+                _ => panic!("unsupported static G2 lane width {width}"),
+            };
+            writeln!(
+                out,
+                "    G2ProducerLaneV1* restrict rvr_g2_desc_{slot} = &rvr_g2->lanes[{slot}u];"
+            )
+            .unwrap();
+            writeln!(
+                out,
+                "    uint32_t rvr_g2_base_{slot} = rvr_g2_desc_{slot}->len;"
+            )
+            .unwrap();
+            if self.g2_emission_mode == G2EmissionMode::Checked {
+                writeln!(
+                    out,
+                    "    if (unlikely(rvr_g2_desc_{slot}->expected_len != rvr_g2_base_{slot} || rvr_g2_desc_{slot}->reserved != 0u || rvr_g2_base_{slot} > rvr_g2_desc_{slot}->cap || {span}u > rvr_g2_desc_{slot}->cap - rvr_g2_base_{slot} || rvr_g2_desc_{slot}->offset > rvr_g2->capacity || ((uint64_t)rvr_g2_base_{slot} + {span}u) * {width}u > rvr_g2->capacity - rvr_g2_desc_{slot}->offset || rvr_g2_desc_{slot}->offset % {width}u != 0u)) {{"
+                )
+                .unwrap();
+                writeln!(out, "        rvr_g2->overflow = G2_REJECT_LANE_CAPACITY;").unwrap();
+                writeln!(
+                    out,
+                    "        rv_set_status_at(state, 0x{pc:08x}ull, OPENVM_EXEC_SUSPENDED, 0);"
+                )
+                .unwrap();
+                writeln!(out, "        return;").unwrap();
+                writeln!(out, "    }}").unwrap();
+            }
+            writeln!(
+                out,
+                "    {c_type}* restrict rvr_g2_lane_{slot} = ({c_type}*)(rvr_g2->base + rvr_g2_desc_{slot}->offset) + rvr_g2_base_{slot};"
+            )
+            .unwrap();
+        }
+        // This is independent of the published cursor. It lets the host's
+        // O(lanes) segment-boundary pass verify every entered block's static
+        // span exactly even when production stores are unchecked.
+        for (slot, &span) in spans.iter().enumerate() {
+            if span != 0 {
+                writeln!(out, "    rvr_g2_desc_{slot}->expected_len += {span}u;").unwrap();
+            }
+        }
     }
 
     fn emit_block_checkpoint_function(&self, out: &mut String, block: &Block) {
@@ -1397,19 +1652,19 @@ impl CProject {
                 .unwrap();
                 writeln!(out, "        return;").unwrap();
                 writeln!(out, "    }}").unwrap();
-                writeln!(out, "    state->instret += {insn_count}u;").unwrap();
-                if self.delta_records {
-                    writeln!(out, "    trace_block(state, 0x{pc:08x}ull, {insn_count}u);").unwrap();
-                }
-                if self.g2_records {
-                    let slot = (pc - self.pc_base) / 4;
-                    writeln!(
-                        out,
-                        "    preflight_g2_emit_run(state, {slot}u, {insn_count}u);"
-                    )
-                    .unwrap();
-                }
             }
+        }
+    }
+
+    fn emit_preflight_block_started(&self, out: &mut String, block: &Block) {
+        if self.execution_kind != RvrExecutionKind::Preflight {
+            return;
+        }
+        let pc = block.start_pc;
+        let insn_count = block.insn_count();
+        writeln!(out, "    state->instret += {insn_count}u;").unwrap();
+        if self.delta_records {
+            writeln!(out, "    trace_block(state, 0x{pc:08x}ull, {insn_count}u);").unwrap();
         }
     }
 
@@ -1756,7 +2011,7 @@ mod tests {
 
     use rvr_openvm_ir::{Block, CfgEffect, ExtEmitCtx, ExtInstr, InstrAt, Terminator};
 
-    use super::{CProject, RvrExecutionKind};
+    use super::{CProject, G2EmissionMode, RvrExecutionKind};
 
     #[test]
     fn metered_state_layout_includes_memory_flush_callback() {
@@ -1890,6 +2145,29 @@ mod tests {
 
         assert_eq!(boundary, "    state->mode_state.instret += 1u;\n");
         assert!(!project.typedef_params().contains("instret_remaining"));
+    }
+
+    #[test]
+    fn production_g2_block_reservation_has_no_capacity_branch() {
+        let mut spans = [0u32; rvr_openvm_ext_ffi_common::G2_PRODUCER_LANE_COUNT];
+        spans[rvr_openvm_ext_ffi_common::G2_PRODUCER_RUN_SLOT] = 1;
+        spans[rvr_openvm_ext_ffi_common::G2_PRODUCER_ADDI_SLOT] = 3;
+
+        let mut checked = CProject::new(Path::new("unused"), "test", RvrExecutionKind::Preflight);
+        checked.g2_emission_mode = G2EmissionMode::Checked;
+        let mut checked_source = String::new();
+        checked.emit_g2_block_reservation(&mut checked_source, 0x100, &spans);
+        assert!(checked_source.contains("rvr_g2_desc_4->cap"));
+        assert!(checked_source.contains("G2_REJECT_LANE_CAPACITY"));
+
+        let mut production = checked;
+        production.g2_emission_mode = G2EmissionMode::Production;
+        let mut production_source = String::new();
+        production.emit_g2_block_reservation(&mut production_source, 0x100, &spans);
+        assert!(!production_source.contains("->cap"));
+        assert!(!production_source.contains("G2_REJECT"));
+        assert!(!production_source.contains("unlikely"));
+        assert!(production_source.contains("uint64_t* restrict rvr_g2_lane_4"));
     }
 
     #[test]

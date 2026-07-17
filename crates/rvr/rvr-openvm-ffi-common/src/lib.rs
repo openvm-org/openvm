@@ -286,6 +286,11 @@ pub struct G2ProducerLaneV1 {
     pub offset: u64,
     pub len: u32,
     pub cap: u32,
+    /// Independently accumulated static span for this segment. Generated C
+    /// advances this once per entered basic block and publishes `len` only at
+    /// block exits, so the host can compare every static cursor exactly.
+    pub expected_len: u32,
+    pub reserved: u32,
 }
 
 /// Mutable producer ABI passed to generated C. Payloads are written directly
@@ -303,7 +308,7 @@ pub struct G2ProducerV1 {
     pub reserved: u32,
 }
 
-pub const G2_PRODUCER_LANE_V1_SIZE: usize = 16;
+pub const G2_PRODUCER_LANE_V1_SIZE: usize = 24;
 pub const G2_PRODUCER_V1_SIZE: usize = 40;
 pub const G2_PRODUCER_V1_ALIGN: usize = 8;
 
