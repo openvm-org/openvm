@@ -95,12 +95,12 @@ mod tests {
             let executor = VmExecutor::new(config.clone())?;
             let instance = executor.instance(&openvm_exe)?;
             #[allow(unused_variables)]
-            let state = instance.execute(stdin.clone(), None)?;
+            let state = instance.execute(stdin.clone())?;
 
             #[cfg(any(feature = "aot", feature = "rvr"))]
             {
                 let interpreter_instance = executor.interpreter_instance(&openvm_exe)?;
-                let naive_state = interpreter_instance.execute(stdin, None)?;
+                let naive_state = interpreter_instance.execute(stdin)?;
                 assert_vm_states_equivalent(&state, &naive_state);
             }
         }

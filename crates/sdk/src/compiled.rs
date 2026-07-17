@@ -6,13 +6,22 @@ use std::{
 
 #[cfg(feature = "rvr")]
 use eyre::{Context, Result};
-use openvm_circuit::arch::execution_mode::{MeteredCostCtx, MeteredCtx};
 #[cfg(not(feature = "rvr"))]
 use openvm_circuit::arch::{execution_mode::ExecutionCtx, InterpretedInstance};
 #[cfg(feature = "rvr")]
 use openvm_circuit::arch::{
     execution_mode::{MeteredCtxConfig, SegmentationConfig},
-    rvr::CompileError,
+    rvr::{
+        CompileError, RvrPureInstance, RvrPureWithInstretTrackingInstance, RvrTrackedExecution,
+        RvrTrackedExecutionOutcome,
+    },
+};
+use openvm_circuit::{
+    arch::{
+        execution_mode::{MeteredCostCtx, MeteredCtx},
+        ExecutionError, Streams, VmState,
+    },
+    system::memory::online::GuestMemory,
 };
 #[cfg(feature = "rvr")]
 use serde::{Deserialize, Serialize};
@@ -20,21 +29,123 @@ use serde::{Deserialize, Serialize};
 cfg_if::cfg_if! {
     if #[cfg(feature = "rvr")] {
         use openvm_circuit::arch::rvr::{
-            RvrMeteredCostInstance, RvrMeteredInstance, RvrPureInstance,
+            RvrMeteredCostInstance, RvrMeteredInstance,
         };
-        pub type CompiledExePure<'a> = RvrPureInstance<'a>;
+        type PureInstance<'a> = RvrPureInstance<'a>;
         pub type MeteredInstance<'a> = RvrMeteredInstance<'a>;
         pub type MeteredCostInstance<'a> = RvrMeteredCostInstance<'a>;
     } else if #[cfg(feature = "aot")] {
         use openvm_circuit::arch::AotInstance;
-        pub type CompiledExePure<'a> = AotInstance<'a, ExecutionCtx>;
+        type PureInstance<'a> = AotInstance<'a, ExecutionCtx>;
         pub type MeteredInstance<'a> = AotInstance<'a, MeteredCtx>;
         // AOT has no dedicated metered-cost backend; fall back to the interpreter.
         pub type MeteredCostInstance<'a> = InterpretedInstance<'a, MeteredCostCtx>;
     } else {
-        pub type CompiledExePure<'a> = InterpretedInstance<'a, ExecutionCtx>;
+        type PureInstance<'a> = InterpretedInstance<'a, ExecutionCtx>;
         pub type MeteredInstance<'a> = InterpretedInstance<'a, MeteredCtx>;
         pub type MeteredCostInstance<'a> = InterpretedInstance<'a, MeteredCostCtx>;
+    }
+}
+
+/// Compiled unlimited pure execution.
+///
+/// With RVR, this artifact has no instruction-retirement tracking or suspension path.
+pub struct CompiledExePure<'a> {
+    instance: PureInstance<'a>,
+}
+
+/// Compiled pure RVR execution with instruction-retirement tracking.
+#[cfg(feature = "rvr")]
+pub struct CompiledExePureWithInstretTracking<'a> {
+    instance: RvrPureWithInstretTrackingInstance<'a>,
+}
+
+impl<'a> CompiledExePure<'a> {
+    pub(crate) fn new(instance: PureInstance<'a>) -> Self {
+        Self { instance }
+    }
+
+    pub fn create_initial_vm_state(&self, inputs: impl Into<Streams>) -> VmState<GuestMemory> {
+        self.instance.create_initial_vm_state(inputs)
+    }
+
+    pub fn execute(
+        &self,
+        inputs: impl Into<Streams>,
+    ) -> Result<VmState<GuestMemory>, ExecutionError> {
+        self.instance.execute(inputs)
+    }
+
+    pub fn execute_from_state(
+        &self,
+        state: VmState<GuestMemory>,
+    ) -> Result<VmState<GuestMemory>, ExecutionError> {
+        self.instance.execute_from_state(state)
+    }
+
+    #[cfg(feature = "rvr")]
+    pub fn save(&self, dir: &Path) -> Result<PathBuf, CompileError> {
+        self.instance.save(dir)
+    }
+
+    #[cfg(feature = "rvr")]
+    pub fn save_generated_sources(&self, dir: &Path) -> Result<(), CompileError> {
+        self.instance.save_generated_sources(dir)
+    }
+}
+
+#[cfg(feature = "rvr")]
+impl<'a> CompiledExePureWithInstretTracking<'a> {
+    pub(crate) fn new(instance: RvrPureWithInstretTrackingInstance<'a>) -> Self {
+        Self { instance }
+    }
+
+    pub fn create_initial_vm_state(&self, inputs: impl Into<Streams>) -> VmState<GuestMemory> {
+        self.instance.create_initial_vm_state(inputs)
+    }
+
+    /// Execute for at most `num_insns`, stopping before a basic block that
+    /// would exceed the limit.
+    pub fn execute_for(
+        &self,
+        inputs: impl Into<Streams>,
+        num_insns: u64,
+    ) -> Result<RvrTrackedExecutionOutcome, ExecutionError> {
+        self.instance.execute_for(inputs, num_insns)
+    }
+
+    /// Continue from `state` for at most `num_insns`, stopping before a basic
+    /// block that would exceed the limit.
+    pub fn execute_from_state_for(
+        &self,
+        state: VmState<GuestMemory>,
+        num_insns: u64,
+    ) -> Result<RvrTrackedExecutionOutcome, ExecutionError> {
+        self.instance.execute_from_state_for(state, num_insns)
+    }
+
+    /// Execute until successful termination and return the instructions retired by this call.
+    pub fn execute(
+        &self,
+        inputs: impl Into<Streams>,
+    ) -> Result<RvrTrackedExecution, ExecutionError> {
+        self.instance.execute(inputs)
+    }
+
+    /// Continue until successful termination and return the instructions retired by this call.
+    pub fn execute_from_state(
+        &self,
+        state: VmState<GuestMemory>,
+    ) -> Result<RvrTrackedExecution, ExecutionError> {
+        self.instance.execute_from_state(state)
+    }
+
+    pub fn save(&self, dir: &Path) -> Result<PathBuf, CompileError> {
+        self.instance.save(dir)
+    }
+
+    pub fn save_generated_sources(&self, dir: &Path) -> Result<(), CompileError> {
+        self.instance.save_generated_sources(dir)
     }
 }
 

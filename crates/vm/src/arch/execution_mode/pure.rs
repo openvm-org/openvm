@@ -9,7 +9,7 @@ pub struct ExecutionCtx {
 }
 
 impl ExecutionCtx {
-    pub fn new(instret_left: Option<u64>) -> Self {
+    pub(crate) fn new(instret_left: Option<u64>) -> Self {
         ExecutionCtx {
             instret_left: instret_left.unwrap_or(u64::MAX),
         }

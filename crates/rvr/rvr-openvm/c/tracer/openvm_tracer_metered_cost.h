@@ -1,7 +1,7 @@
-/* OpenVM metered cost tracer.
+/* OpenVM metered-cost tracing helpers.
  *
  * Accumulates scalar trace cell cost matching OpenVM's MeteredCostCtx.
- * Suspension is handled by the RvState target_instret field, not the tracer.
+ * Instruction retirement is counted directly at generated block boundaries.
  *
  * All functions are static inline for zero-overhead inlining.
  */
@@ -12,11 +12,6 @@
 #include <stdint.h>
 
 #include "openvm_state.h"
-
-typedef struct Tracer {
-  uint64_t cost;
-  const uint64_t* chip_widths;
-} Tracer;
 
 /* ── Trace-only register access (no-ops in metered cost mode) ────── */
 
@@ -76,10 +71,7 @@ static __attribute__((always_inline)) inline void trace_pc(
 
 static __attribute__((always_inline)) inline void trace_chip(
     RvState* restrict state, uint32_t chip_idx, uint32_t count) {
-  state->tracer->cost += state->tracer->chip_widths[chip_idx] * (uint64_t)count;
+  state->mode_state.cost += state->mode_state.chip_widths[chip_idx] * (uint64_t)count;
 }
-
-static __attribute__((always_inline)) inline void trace_block(
-    RvState* restrict state, uint64_t pc, uint32_t block_insn_count) {}
 
 #endif /* OPENVM_TRACER_METERED_COST_H */
