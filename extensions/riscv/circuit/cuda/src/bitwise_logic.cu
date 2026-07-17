@@ -5,6 +5,7 @@
 #include "riscv/adapters/alu.cuh"
 #include "riscv/cores/bitwise_logic.cuh"
 #include "riscv/rvr_compact.cuh"
+#include "riscv/rvr_g2_trace.cuh"
 
 using namespace riscv;
 
@@ -78,10 +79,11 @@ extern "C" int _bitwise_logic_tracegen(
 
 // M-GPUDEC (G2): compact-wire twin of the kernel above; decodes in registers
 // and calls the SAME fill methods.
+template <typename RecordView>
 __global__ void bitwise_logic_tracegen_compact(
     Fp *d_trace,
     size_t height,
-    DeviceBufferConstView<RvrAlu3Compact> d_records,
+    RecordView d_records,
     RvrOperandEntry const *operand_table,
     uint32_t pc_base,
     uint32_t *d_range_checker_ptr,
@@ -145,3 +147,9 @@ extern "C" int _bitwise_logic_tracegen_compact(
     );
     return CHECK_KERNEL();
 }
+
+DEFINE_RVR_G2_TRACEGEN_LAUNCHER(
+    _bitwise_logic_tracegen_g2, Rv64BitwiseLogicCols, bitwise_logic_tracegen_compact,
+    RvrAlu3Compact, 256, operand_table, pc_base, range_checker,
+    size_t(range_checker_num_bins), bitwise_lookup, timestamp_max_bits
+)

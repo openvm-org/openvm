@@ -41,7 +41,12 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64BranchLessThanChipGpu {
             &self.range_checker.device_ctx,
         );
         #[cfg(feature = "rvr")]
-        let no_delta_records = delta_records.is_none();
+        let g2_records = self.rvr_decode.device_g2_trace_input(
+            crate::rvr_gpu_decode::DeltaAirKind::BranchLessThan,
+            &self.range_checker.device_ctx,
+        );
+        #[cfg(feature = "rvr")]
+        let no_delta_records = delta_records.is_none() && g2_records.is_none();
         #[cfg(not(feature = "rvr"))]
         let no_delta_records = true;
         if records.is_empty() && no_delta_records {
@@ -52,6 +57,20 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64BranchLessThanChipGpu {
             + Rv64BranchAdapterCols::<F>::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
+
+        #[cfg(feature = "rvr")]
+        if let Some(g2_records) = g2_records {
+            return AirProvingContext::simple_no_pis(g2_records.tracegen(
+                trace_width,
+                0,
+                &self.range_checker.count,
+                None,
+                None,
+                crate::cuda_abi::UInt2::new(0, 0),
+                self.timestamp_max_bits as u32,
+                device_ctx,
+            ));
+        }
         // M-GPUDEC (G2): this segment's arena carries compact wire records —
         // decode them on device against the per-exe operand table.
         #[cfg(feature = "rvr")]

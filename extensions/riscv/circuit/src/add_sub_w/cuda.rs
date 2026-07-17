@@ -38,7 +38,12 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64AddSubWChipGpu {
             &self.range_checker.device_ctx,
         );
         #[cfg(feature = "rvr")]
-        let no_delta_records = delta_records.is_none();
+        let g2_records = self.rvr_decode.device_g2_trace_input(
+            crate::rvr_gpu_decode::DeltaAirKind::AddSubW,
+            &self.range_checker.device_ctx,
+        );
+        #[cfg(feature = "rvr")]
+        let no_delta_records = delta_records.is_none() && g2_records.is_none();
         #[cfg(not(feature = "rvr"))]
         let no_delta_records = true;
         if records.is_empty() && no_delta_records {
@@ -47,6 +52,20 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64AddSubWChipGpu {
         let trace_width = AddSubCoreCols::<F, RV64_WORD_U16_LIMBS, U16_BITS>::width()
             + Rv64BaseAluWU16AdapterCols::<F>::width();
         let device_ctx = &self.range_checker.device_ctx;
+
+        #[cfg(feature = "rvr")]
+        if let Some(g2_records) = g2_records {
+            return AirProvingContext::simple_no_pis(g2_records.tracegen(
+                trace_width,
+                0,
+                &self.range_checker.count,
+                None,
+                None,
+                crate::cuda_abi::UInt2::new(0, 0),
+                self.timestamp_max_bits as u32,
+                device_ctx,
+            ));
+        }
 
         #[cfg(feature = "rvr")]
         if rvr_wire || delta_records.is_some() {
