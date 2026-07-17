@@ -1,0 +1,28 @@
+name: Label overrides
+
+on:
+  pull_request:
+    types: [labeled]
+
+jobs:
+  benchmarks:
+    if: ${{ github.event.label.name == 'run-benchmark' || github.event.label.name == 'run-benchmark-e2e' }}
+    permissions:
+      contents: write
+      pull-requests: write
+    uses: ./.github/workflows/benchmarks.yml
+    secrets: inherit
+
+  sdk:
+    if: ${{ github.event.label.name == 'run-sdk-tests' }}
+    permissions:
+      contents: read
+    uses: ./.github/workflows/sdk.yml
+    secrets: inherit
+
+  sdk-cuda:
+    if: ${{ github.event.label.name == 'run-sdk-tests' }}
+    permissions:
+      contents: read
+    uses: ./.github/workflows/sdk.cuda.yml
+    secrets: inherit
