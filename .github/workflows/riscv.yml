@@ -45,14 +45,14 @@ jobs:
         platform:
           - {
               name: "runtime (default)",
-              labels: "family=c8i-flex.16xlarge+c8i.16xlarge+c8a.16xlarge+c7i.16xlarge+c7a.16xlarge/image=ubuntu24-full-x64/volume=80gb",
-              image: "ubuntu24-full-x64",
+              labels: "family=c9g.8xlarge+c8g.8xlarge+m9g.8xlarge+m8g.8xlarge/image=arm64-rust-riscv-dev-32gb/volume=80gb",
+              image: "arm64-rust-riscv-dev-32gb",
               features: "",
             }
           - {
               name: "runtime (RVR)",
-              labels: "family=c8i-flex.16xlarge+c8i.16xlarge+c8a.16xlarge+c7i.16xlarge+c7a.16xlarge/image=ubuntu24-full-x64/volume=80gb",
-              image: "ubuntu24-full-x64",
+              labels: "family=c9g.8xlarge+c8g.8xlarge+m9g.8xlarge+m8g.8xlarge/image=arm64-rust-riscv-dev-32gb/volume=80gb",
+              image: "arm64-rust-riscv-dev-32gb",
               features: "rvr",
             }
           - {
@@ -124,6 +124,10 @@ jobs:
           tar -xJf gcc.tar.xz
           echo "$GITHUB_WORKSPACE/riscv/bin" >> $GITHUB_PATH
           rm gcc.tar.xz
+
+      - name: Add RISC-V toolchain to PATH
+        if: matrix.platform.image == 'arm64-rust-riscv-dev-32gb'
+        run: echo "/opt/riscv/bin" >> "$GITHUB_PATH"
 
       - name: Install clang-22 and lld (required for rvr)
         if: matrix.platform.features == 'rvr'
