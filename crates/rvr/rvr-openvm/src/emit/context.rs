@@ -1592,9 +1592,34 @@ impl<'a> EmitContext<'a> {
                 "preflight_g2_emit_load_store(state, {kind}u, {base}, {block});"
             ));
             self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs1});"));
-            self.write_line(&format!(
-                "preflight_g2_shadow_mem_touch(state, {block_addr}, {block});"
-            ));
+            if width == 1 {
+                self.write_line(&format!(
+                    "preflight_g2_shadow_mem_touch(state, {block_addr}, {block});"
+                ));
+            } else {
+                let crosses = self.next_var();
+                let block1 = self.next_var();
+                let prev1 = self.next_var();
+                self.write_line(&format!(
+                    "bool {crosses} = preflight_crosses_block({addr}, {width}u);"
+                ));
+                self.write_line(&format!("if (unlikely({crosses})) {{"));
+                self.indent += 1;
+                self.write_line(&format!("uint64_t {block1};"));
+                self.write_line(&format!("uint32_t {prev1};"));
+                self.write_line(&format!(
+                    "trace_crossing_mem_read_blocks(state, {block_addr}, {block}, &{block1}, &{prev1});"
+                ));
+                self.indent -= 1;
+                self.write_line("} else {");
+                self.indent += 1;
+                self.write_line(&format!(
+                    "preflight_g2_shadow_mem_touch(state, {block_addr}, {block});"
+                ));
+                self.write_line("trace_timestamp(state);");
+                self.indent -= 1;
+                self.write_line("}");
+            }
             if rd == 0 {
                 self.write_line("trace_timestamp(state);");
             } else {
@@ -1602,19 +1627,8 @@ impl<'a> EmitContext<'a> {
             }
             if rd != 0 {
                 let value = self.next_var();
-                let (var_ty, cast_ty) = match (width, signed) {
-                    (1, false) => ("uint32_t", "uint8_t"),
-                    (1, true) => ("int32_t", "int8_t"),
-                    (2, false) => ("uint32_t", "uint16_t"),
-                    (2, true) => ("int32_t", "int16_t"),
-                    (4, false) => ("uint32_t", "uint32_t"),
-                    (4, true) => ("int32_t", "int32_t"),
-                    (8, _) => ("uint64_t", "uint64_t"),
-                    _ => unreachable!("invalid memory width {width}"),
-                };
-                self.write_line(&format!(
-                    "{var_ty} {value} = ({cast_ty})({block} >> ((uint32_t)({addr} & 7u) * 8u));"
-                ));
+                let (read_func, _, var_ty) = Self::read_mem_helper(width, signed);
+                self.write_line(&format!("{var_ty} {value} = {read_func}(memory, {addr});"));
                 self.write_line(&format!("reg_write(state, {rd}, {value});"));
             }
             self.indent -= 1;
@@ -1800,9 +1814,36 @@ impl<'a> EmitContext<'a> {
             ));
             self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs1});"));
             self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs2});"));
-            self.write_line(&format!(
-                "preflight_g2_shadow_mem_store_touch(state, {block_addr});"
-            ));
+            if width == 1 {
+                self.write_line(&format!(
+                    "preflight_g2_shadow_mem_store_touch(state, {block_addr});"
+                ));
+            } else {
+                let crosses = self.next_var();
+                let prev0 = self.next_var();
+                let prev1 = self.next_var();
+                let prev_ts1 = self.next_var();
+                self.write_line(&format!(
+                    "bool {crosses} = preflight_crosses_block({addr}, {width}u);"
+                ));
+                self.write_line(&format!("if (unlikely({crosses})) {{"));
+                self.indent += 1;
+                self.write_line(&format!("uint64_t {prev0};"));
+                self.write_line(&format!("uint64_t {prev1};"));
+                self.write_line(&format!("uint32_t {prev_ts1};"));
+                self.write_line(&format!(
+                    "trace_crossing_store_blocks(state, {addr}, {width}u, {source}, AS_MEMORY, &{prev0}, &{prev1}, &{prev_ts1});"
+                ));
+                self.indent -= 1;
+                self.write_line("} else {");
+                self.indent += 1;
+                self.write_line(&format!(
+                    "preflight_g2_shadow_mem_store_touch(state, {block_addr});"
+                ));
+                self.write_line("trace_timestamp(state);");
+                self.indent -= 1;
+                self.write_line("}");
+            }
             let (write, _, cast) = Self::write_mem_helper(width);
             self.write_line(&format!("{write}(memory, {addr}, ({cast})({source}));"));
             self.indent -= 1;
@@ -1965,9 +2006,30 @@ impl<'a> EmitContext<'a> {
             ));
             self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {ptr_reg});"));
             self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {src_reg});"));
+            let crosses = self.next_var();
+            let prev0 = self.next_var();
+            let prev1 = self.next_var();
+            let prev_ts1 = self.next_var();
+            self.write_line(&format!(
+                "bool {crosses} = preflight_crosses_block({addr}, 8u);"
+            ));
+            self.write_line(&format!("if (unlikely({crosses})) {{"));
+            self.indent += 1;
+            self.write_line(&format!("uint64_t {prev0};"));
+            self.write_line(&format!("uint64_t {prev1};"));
+            self.write_line(&format!("uint32_t {prev_ts1};"));
+            self.write_line(&format!(
+                "trace_crossing_store_blocks(state, {addr}, 8u, {src}, AS_PUBLIC_VALUES, &{prev0}, &{prev1}, &{prev_ts1});"
+            ));
+            self.indent -= 1;
+            self.write_line("} else {");
+            self.indent += 1;
             self.write_line(&format!(
                 "preflight_g2_shadow_pv_touch(state, {block_addr});"
             ));
+            self.write_line("trace_timestamp(state);");
+            self.indent -= 1;
+            self.write_line("}");
             return (src, ptr);
         }
         if !self.inline_records_enabled() {
@@ -2097,20 +2159,18 @@ impl<'a> EmitContext<'a> {
         debug_assert_eq!(addr_space, PUBLIC_VALUES_AS);
         debug_assert_eq!(full_word_local_opcode, 4);
         debug_assert!(matches!(width, 1 | 2 | 4 | 8));
-
-        let (ptr, src) = if width == 8 {
-            let ptr = self.next_var();
-            let src = self.next_var();
-            self.write_line(&format!("uint64_t {ptr} = reg_read(state, {ptr_reg});"));
-            self.write_line(&format!("uint64_t {src} = reg_read(state, {src_reg});"));
-            (ptr, src)
-        } else {
-            // Narrow REVEAL remains in the residual chronology: preserve its
-            // two register reads before the public-values write event.
-            let ptr = self.read_reg(ptr_reg);
-            let src = self.read_reg(src_reg);
-            (ptr, src)
+        let kind = match width {
+            1 => 23,
+            2 => 24,
+            4 => 25,
+            8 => 26,
+            _ => unreachable!("validated REVEAL width"),
         };
+
+        let ptr = self.next_var();
+        let src = self.next_var();
+        self.write_line(&format!("uint64_t {ptr} = reg_read(state, {ptr_reg});"));
+        self.write_line(&format!("uint64_t {src} = reg_read(state, {src_reg});"));
         let addr_expr = match offset.cmp(&0) {
             std::cmp::Ordering::Less => {
                 format!("{ptr} - {}", hex_u32(offset.unsigned_abs()))
@@ -2119,43 +2179,55 @@ impl<'a> EmitContext<'a> {
             std::cmp::Ordering::Greater => format!("{ptr} + {}", hex_u32(offset as u32)),
         };
         let addr = self.materialize_u64(&addr_expr);
-        if width == 8 {
-            self.write_line(&format!(
-                "if (unlikely(!preflight_g2_validate_pointer(state, {ptr}))) {{"
-            ));
-            self.emit_trap();
-            self.write_line("}");
-        }
+        self.write_line(&format!(
+            "if (unlikely(!preflight_g2_validate_pointer(state, {ptr}))) {{"
+        ));
+        self.emit_trap();
+        self.write_line("}");
         self.write_line(&format!(
             "if (unlikely(!openvm_validate_reveal({addr}, {width}u))) {{"
         ));
         self.emit_trap();
         self.write_line("}");
-        if width == 8 {
-            let block_addr = self.materialize_u64(&format!("preflight_block_addr({addr})"));
-            let block = self.next_var();
-            self.write_line(&format!(
-                "uint64_t {block} = preflight_read_pv_block(state->tracer, {block_addr});"
-            ));
-            self.write_line(&format!(
-                "preflight_g2_emit_load_store(state, 26u, {ptr}, {block});"
-            ));
-            self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {ptr_reg});"));
-            self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {src_reg});"));
+        let block_addr = self.materialize_u64(&format!("preflight_block_addr({addr})"));
+        let block = self.next_var();
+        self.write_line(&format!(
+            "uint64_t {block} = preflight_read_pv_block(state->tracer, {block_addr});"
+        ));
+        self.write_line(&format!(
+            "preflight_g2_emit_load_store(state, {kind}u, {ptr}, {block});"
+        ));
+        self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {ptr_reg});"));
+        self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {src_reg});"));
+        if width == 1 {
             self.write_line(&format!(
                 "preflight_g2_shadow_pv_touch(state, {block_addr});"
             ));
         } else {
-            self.emit_call_without_page_flush(
-                "trace_wr_as",
-                &[
-                    "state",
-                    &addr,
-                    &src,
-                    &width.to_string(),
-                    &format!("{addr_space}u"),
-                ],
-            );
+            let crosses = self.next_var();
+            let prev0 = self.next_var();
+            let prev1 = self.next_var();
+            let prev_ts1 = self.next_var();
+            self.write_line(&format!(
+                "bool {crosses} = preflight_crosses_block({addr}, {width}u);"
+            ));
+            self.write_line(&format!("if (unlikely({crosses})) {{"));
+            self.indent += 1;
+            self.write_line(&format!("uint64_t {prev0};"));
+            self.write_line(&format!("uint64_t {prev1};"));
+            self.write_line(&format!("uint32_t {prev_ts1};"));
+            self.write_line(&format!(
+                "trace_crossing_store_blocks(state, {addr}, {width}u, {src}, AS_PUBLIC_VALUES, &{prev0}, &{prev1}, &{prev_ts1});"
+            ));
+            self.indent -= 1;
+            self.write_line("} else {");
+            self.indent += 1;
+            self.write_line(&format!(
+                "preflight_g2_shadow_pv_touch(state, {block_addr});"
+            ));
+            self.write_line("trace_timestamp(state);");
+            self.indent -= 1;
+            self.write_line("}");
         }
         self.write_line(&format!(
             "if (unlikely(!openvm_reveal({src}, {addr}, {width}u))) {{"

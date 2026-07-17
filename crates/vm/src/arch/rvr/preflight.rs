@@ -1656,9 +1656,9 @@ where
         let g2_segment = if let (Some(prepared), Some(g2)) = (g2_prepared, g2_meta) {
             let instruction_count =
                 u32::try_from(run_result.state.mode_state.instret).map_err(|_| {
-                ExecutionError::RvrExecution(
-                    "G2 instruction count exceeds the frozen u32 header".to_string(),
-                )
+                    ExecutionError::RvrExecution(
+                        "G2 instruction count exceeds the frozen u32 header".to_string(),
+                    )
                 })?;
             let opaque_written = g2
                 .opaque_bindings

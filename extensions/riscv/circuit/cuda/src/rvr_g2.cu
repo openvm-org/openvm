@@ -1,5 +1,8 @@
 #include "fp.h"
 #include "primitives/buffer_view.cuh"
+#include "riscv/cores/load.cuh"
+#include "riscv/cores/load_sign_extend.cuh"
+#include "riscv/cores/store.cuh"
 #include "riscv/rvr_compact.cuh"
 
 #include <cub/device/device_reduce.cuh>
@@ -113,6 +116,7 @@ enum G2TimelineAction : uint8_t {
     G2_EVENT_WRITE_SET = 3,
     G2_EVENT_STORE_PATCH = 4,
     G2_EVENT_READ_ANY = 5,
+    G2_EVENT_WRITE_SET_EXPECT = 6,
 };
 
 struct G2TimelineEvent {
@@ -307,11 +311,8 @@ __device__ __forceinline__ void lane_consumption(
     } else if (kind == 13 || kind == 29) {
         v0 = true;
     } else if (load_store_kind(kind)) {
-        bool narrow_reveal =
-            (entry.flags & RVR_OPERAND_FLAG_LS_PUBLIC_VALUES) &&
-            entry.access_pattern == G2_STORE_PATTERN && entry.local_opcode != 4;
-        v0 = !narrow_reveal;
-        v1 = !narrow_reveal;
+        v0 = true;
+        v1 = true;
     }
 }
 
@@ -422,6 +423,39 @@ __device__ __forceinline__ uint32_t effective_address(
     return pointer + uint32_t(offset);
 }
 
+__device__ __forceinline__ uint8_t g2_memory_width(
+    RvrOperandEntry const &entry, uint32_t *error
+) {
+    switch (entry.local_opcode) {
+    case 0:
+    case 4: return 8;
+    case 3:
+    case 5:
+    case 10: return 4;
+    case 2:
+    case 6:
+    case 9: return 2;
+    case 1:
+    case 7:
+    case 8: return 1;
+    default: fail_parallel(error, 62); return 0;
+    }
+}
+
+__device__ __forceinline__ bool g2_crosses(
+    uint32_t pointer, RvrOperandEntry const &entry, uint32_t *error
+) {
+    uint8_t width = g2_memory_width(entry, error);
+    return (effective_address(pointer, entry) & 7u) + width > 8u;
+}
+
+__device__ __forceinline__ void g2_u64_to_u16(
+    uint64_t value, uint16_t (&out)[BLOCK_FE_WIDTH]
+) {
+#pragma unroll
+    for (size_t i = 0; i < BLOCK_FE_WIDTH; ++i) out[i] = uint16_t(value >> (16 * i));
+}
+
 __device__ bool load_value(
     RvrOperandEntry const &entry, uint32_t pointer, uint64_t block, uint64_t &value
 ) {
@@ -435,6 +469,27 @@ __device__ bool load_value(
     case 8: value = uint64_t(int64_t(int8_t(shifted))); return true;
     case 9: value = uint64_t(int64_t(int16_t(shifted))); return true;
     case 10: value = uint64_t(int64_t(int32_t(shifted))); return true;
+    default: return false;
+    }
+}
+
+__device__ bool load_value_two_blocks(
+    RvrOperandEntry const &entry,
+    uint32_t pointer,
+    uint64_t block0,
+    uint64_t block1,
+    uint64_t &value
+) {
+    uint32_t shift = (effective_address(pointer, entry) & 7u) * 8u;
+    uint64_t joined = shift == 0 ? block0 : (block0 >> shift) | (block1 << (64u - shift));
+    switch (entry.local_opcode) {
+    case 0: value = joined; return true;
+    case 1: value = uint8_t(joined); return true;
+    case 2: value = uint16_t(joined); return true;
+    case 3: value = uint32_t(joined); return true;
+    case 8: value = uint64_t(int64_t(int8_t(joined))); return true;
+    case 9: value = uint64_t(int64_t(int16_t(joined))); return true;
+    case 10: value = uint64_t(int64_t(int32_t(joined))); return true;
     default: return false;
     }
 }
@@ -968,11 +1023,14 @@ __global__ void g2_classify_instructions(
     } else if (load_store_kind(kind) &&
                (entry.access_pattern == G2_LOAD_PATTERN ||
                 entry.access_pattern == G2_STORE_PATTERN)) {
-        timestamp_counts[instruction] = 3;
-        bool narrow_reveal =
-            (entry.flags & RVR_OPERAND_FLAG_LS_PUBLIC_VALUES) &&
-            entry.access_pattern == G2_STORE_PATTERN && entry.local_opcode != 4;
-        residual_counts[instruction] = narrow_reveal ? 3 : 0;
+        if (decoded.v0 > UINT32_MAX) {
+            fail_parallel(error, 27);
+            return;
+        }
+        uint8_t width = g2_memory_width(entry, error);
+        bool crossing = g2_crosses(uint32_t(decoded.v0), entry, error);
+        timestamp_counts[instruction] = width > 1 ? 4 : 3;
+        residual_counts[instruction] = crossing ? 2 : 0;
     } else {
         fail_parallel(error, 22);
     }
@@ -1129,6 +1187,9 @@ __device__ bool g2_emit_standard_direct(
     DeltaRecord const &record,
     uint64_t expected_block,
     uint8_t expected_mode,
+    bool crossing,
+    uint64_t crossing_value0,
+    uint64_t crossing_value1,
     RvrOperandEntry const &entry,
     uint32_t kind,
     uint32_t row_index,
@@ -1145,9 +1206,12 @@ __device__ bool g2_emit_standard_direct(
     switch (entry.access_pattern) {
     case G2_ADDI_PATTERN:
     case 0:
-    case 1:
+    case 1: stride = sizeof(RvrAlu3Compact); break;
     case G2_LOAD_PATTERN:
-    case G2_STORE_PATTERN: stride = sizeof(RvrAlu3Compact); break;
+    case G2_STORE_PATTERN:
+        stride = g2_memory_width(entry, error) == 1 ? sizeof(RvrAlu3Compact)
+                                                    : sizeof(Rv64LoadRecord);
+        break;
     case 4: stride = sizeof(RvrBranch2Compact); break;
     case 5:
     case 6: stride = sizeof(RvrWr1Compact); break;
@@ -1286,6 +1350,110 @@ __device__ bool g2_emit_standard_direct(
     }
     if (entry.access_pattern == G2_LOAD_PATTERN ||
         entry.access_pattern == G2_STORE_PATTERN) {
+        uint8_t width = g2_memory_width(entry, error);
+        uint32_t effective = effective_address(uint32_t(record.v1), entry);
+        uint8_t address_space =
+            (entry.flags & RVR_OPERAND_FLAG_LS_PUBLIC_VALUES) ? 3 : 2;
+        if (width > 1) {
+            if (entry.access_pattern == G2_LOAD_PATTERN) {
+                Rv64LoadRecord full{};
+                full.adapter.from_pc = record.from_pc;
+                full.adapter.from_timestamp = record.from_timestamp;
+                full.adapter.rs1_val = uint32_t(record.v1);
+                full.adapter.imm = uint16_t(entry.c);
+                full.adapter.imm_sign =
+                    (entry.flags & RVR_OPERAND_FLAG_LS_IMM_SIGN) != 0;
+                full.adapter.rs1_ptr = uint8_t(entry.b);
+                full.adapter.rd_ptr =
+                    (entry.flags & RVR_OPERAND_FLAG_WRITE_ENABLED) ? uint8_t(entry.a)
+                                                                   : UINT8_MAX;
+                full.adapter.read_data_aux[1].prev_timestamp = UINT32_MAX;
+                uint64_t block0 = crossing ? crossing_value0 : expected_block;
+                uint64_t block1 = crossing ? crossing_value1 : 0;
+                g2_u64_to_u16(block0, full.core.read_data[0]);
+                g2_u64_to_u16(block1, full.core.read_data[1]);
+                *reinterpret_cast<Rv64LoadRecord *>(row) = full;
+                reg_event(record.from_timestamp, entry.b, record.v1,
+                          G2_EVENT_READ_EXPECT, 12, G2_NO_OFFSET, G2_NO_OFFSET);
+                if (crossing) {
+                    g2_emit_timeline(
+                        timeline, timeline_capacity, initial_timestamp,
+                        record.from_timestamp + 1, address_space,
+                        uint64_t(effective) & ~uint64_t(7), block0, record_index,
+                        G2_NO_RECORD, G2_EVENT_READ_EXPECT, 16, G2_NO_OFFSET,
+                        G2_NO_OFFSET, 8, 0, EXPECT_NONE, error
+                    );
+                    g2_emit_timeline(
+                        timeline, timeline_capacity, initial_timestamp,
+                        record.from_timestamp + 2, address_space,
+                        (uint64_t(effective) & ~uint64_t(7)) + 8, block1,
+                        record_index, G2_NO_RECORD, G2_EVENT_READ_EXPECT, 20,
+                        G2_NO_OFFSET, G2_NO_OFFSET, 8, 0, EXPECT_NONE, error
+                    );
+                } else {
+                    memory_event(record.from_timestamp + 1, expected_block,
+                                 G2_EVENT_READ_EXPECT, 16, G2_NO_OFFSET,
+                                 G2_NO_OFFSET, 8, 0, expected_mode);
+                }
+                if (entry.flags & RVR_OPERAND_FLAG_WRITE_ENABLED) {
+                    uint64_t result;
+                    if (!load_value_two_blocks(
+                            entry, uint32_t(record.v1), block0, block1, result
+                        )) {
+                        fail_parallel(error, 65);
+                        return false;
+                    }
+                    reg_event(record.from_timestamp + 3, entry.a,
+                              result, G2_EVENT_WRITE_SET, 28, 32,
+                              G2_NO_OFFSET);
+                }
+            } else {
+                Rv64StoreRecord full{};
+                full.adapter.from_pc = record.from_pc;
+                full.adapter.from_timestamp = record.from_timestamp;
+                full.adapter.rs1_val = uint32_t(record.v1);
+                full.adapter.imm = uint16_t(entry.c);
+                full.adapter.rs1_ptr = uint8_t(entry.b);
+                full.adapter.rs2_ptr = uint8_t(entry.a);
+                full.adapter.imm_sign =
+                    (entry.flags & RVR_OPERAND_FLAG_LS_IMM_SIGN) != 0;
+                full.adapter.mem_as = address_space;
+                full.adapter.write_prev_timestamps[1] = UINT32_MAX;
+                if (crossing) {
+                    // The first previous-data slot temporarily carries the
+                    // V1 lane's pre-store block for fail-closed replay. The
+                    // replay overwrites it with the authoritative predecessor.
+                    g2_u64_to_u16(expected_block, full.core.prev_data[0]);
+                }
+                *reinterpret_cast<Rv64StoreRecord *>(row) = full;
+                reg_event(record.from_timestamp, entry.b, record.v1,
+                          G2_EVENT_READ_EXPECT, 12, G2_NO_OFFSET, G2_NO_OFFSET);
+                reg_event(record.from_timestamp + 1, entry.a, record.v2,
+                          G2_EVENT_READ_PATCH, 16, G2_NO_OFFSET, 36);
+                if (crossing) {
+                    g2_emit_timeline(
+                        timeline, timeline_capacity, initial_timestamp,
+                        record.from_timestamp + 2, address_space,
+                        uint64_t(effective) & ~uint64_t(7), crossing_value0,
+                        record_index, G2_NO_RECORD, G2_EVENT_WRITE_SET_EXPECT,
+                        20, 44, 44, 8, 0, EXPECT_BEFORE_STORE, error
+                    );
+                    g2_emit_timeline(
+                        timeline, timeline_capacity, initial_timestamp,
+                        record.from_timestamp + 3, address_space,
+                        (uint64_t(effective) & ~uint64_t(7)) + 8,
+                        crossing_value1, record_index, G2_NO_RECORD,
+                        G2_EVENT_WRITE_SET, 24, 52, G2_NO_OFFSET, 8, 0,
+                        EXPECT_NONE, error
+                    );
+                } else {
+                    memory_event(record.from_timestamp + 2, expected_block,
+                                 G2_EVENT_STORE_PATCH, 20, 44, 36, width,
+                                 uint8_t(effective & 7u), expected_mode);
+                }
+            }
+            return true;
+        }
         g2_store_u64(row + 28, record.v1);
         g2_store_u64(row + 36, record.v2);
         reg_event(record.from_timestamp, entry.b, record.v1, G2_EVENT_READ_EXPECT, 8,
@@ -1568,6 +1736,9 @@ __global__ void g2_emit_parallel(
     DeltaRecord record{pc_base + decoded.slot * 4u, timestamp, 0, 0};
     uint64_t expected_block = 0;
     uint8_t expected_mode = EXPECT_NONE;
+    bool crossing = false;
+    uint64_t crossing_value0 = 0;
+    uint64_t crossing_value1 = 0;
     if (kind == 29 && entry.access_pattern == G2_ADDI_PATTERN) {
         record.v1 = decoded.v0;
         record.v2 = uint64_t(int64_t(int32_t(entry.c << 20) >> 20));
@@ -1587,38 +1758,45 @@ __global__ void g2_emit_parallel(
     } else if (load_store_kind(kind) &&
                (entry.access_pattern == G2_LOAD_PATTERN ||
                 entry.access_pattern == G2_STORE_PATTERN)) {
-        bool narrow_reveal =
-            (entry.flags & RVR_OPERAND_FLAG_LS_PUBLIC_VALUES) &&
-            entry.access_pattern == G2_STORE_PATTERN && entry.local_opcode != 4;
-        if (narrow_reveal) {
+        if (decoded.v0 > UINT32_MAX) {
+            fail_parallel(error, 27);
+            return;
+        }
+        record.v1 = uint32_t(decoded.v0);
+        expected_block = decoded.v1;
+        expected_mode = entry.access_pattern == G2_LOAD_PATTERN
+                            ? EXPECT_BEFORE_LOAD
+                            : EXPECT_BEFORE_STORE;
+        record.v2 = entry.access_pattern == G2_LOAD_PATTERN ? decoded.v1 : 0;
+        crossing = g2_crosses(uint32_t(record.v1), entry, error);
+        if (crossing) {
             G2LaneDescV1 const *ctrl = find_lane(descs, header.lane_count, G2_RESIDUAL_CTRL);
             G2LaneDescV1 const *tag = find_lane(descs, header.lane_count, G2_RESIDUAL_TAG);
             G2LaneDescV1 const *value = find_lane(descs, header.lane_count, G2_RESIDUAL_VALUE);
-            uint64_t pointer, source, post_block;
+            uint32_t effective = effective_address(uint32_t(record.v1), entry);
+            uint32_t first_timestamp = timestamp +
+                (entry.access_pattern == G2_LOAD_PATTERN ? 1u : 2u);
+            uint8_t address_space_code =
+                (entry.flags & RVR_OPERAND_FLAG_LS_PUBLIC_VALUES) ? 2u : 1u;
+            uint8_t residual_tag =
+                uint8_t(entry.access_pattern == G2_STORE_PATTERN) |
+                uint8_t(address_space_code << 2u) | uint8_t(4u << 4u);
             if (ctrl == nullptr || tag == nullptr || value == nullptr ||
-                residual_end - residual_cursor != 3 ||
-                !residual_event(wire, *ctrl, *tag, *value, residual_cursor, timestamp,
-                                entry.b, 0x40u, 0, false, pointer) ||
-                !residual_event(wire, *ctrl, *tag, *value, residual_cursor + 1,
-                                timestamp + 1, entry.a, 0x40u, 0, false, source) ||
-                !residual_event(wire, *ctrl, *tag, *value, residual_cursor + 2,
-                                timestamp + 2, effective_address(uint32_t(pointer), entry) & ~7u,
-                                0x49u, 0, false, post_block) ||
-                pointer > UINT32_MAX) {
+                residual_end - residual_cursor != 2 ||
+                !residual_event(
+                    wire, *ctrl, *tag, *value, residual_cursor, first_timestamp,
+                    effective & ~7u, residual_tag, 0, false, crossing_value0
+                ) ||
+                !residual_event(
+                    wire, *ctrl, *tag, *value, residual_cursor + 1,
+                    first_timestamp + 1, (effective & ~7u) + 8u, residual_tag,
+                    0, false, crossing_value1
+                ) ||
+                (entry.access_pattern == G2_LOAD_PATTERN &&
+                 crossing_value0 != expected_block)) {
                 fail_parallel(error, 18);
                 return;
             }
-            record.v1 = pointer;
-            record.v2 = source;
-            expected_block = post_block;
-            expected_mode = EXPECT_AFTER_STORE;
-        } else {
-            record.v1 = uint32_t(decoded.v0);
-            expected_block = decoded.v1;
-            expected_mode = entry.access_pattern == G2_LOAD_PATTERN
-                                ? EXPECT_BEFORE_LOAD
-                                : EXPECT_BEFORE_STORE;
-            record.v2 = entry.access_pattern == G2_LOAD_PATTERN ? decoded.v1 : 0;
         }
     } else {
         fail_parallel(error, 22);
@@ -1628,6 +1806,9 @@ __global__ void g2_emit_parallel(
             record,
             expected_block,
             expected_mode,
+            crossing,
+            crossing_value0,
+            crossing_value1,
             entry,
             kind,
             decoded.row_index,
@@ -1988,7 +2169,8 @@ __global__ void g2_prepare_memory_transforms(
     if (index >= event_count || *error != 0) return;
     G2TimelineEvent event = timeline[event_indices[index]];
     G2MemoryTransform transform{UINT64_MAX, 0};
-    if (event.action == G2_EVENT_WRITE_SET) {
+    if (event.action == G2_EVENT_WRITE_SET ||
+        event.action == G2_EVENT_WRITE_SET_EXPECT) {
         transform = {0, event.value};
     } else if (event.action == G2_EVENT_STORE_PATCH) {
         if (event.record_index == G2_NO_RECORD || event.record_index >= record_count ||
@@ -2077,11 +2259,20 @@ __global__ void g2_replay_memory_events(
         }
         row = reinterpret_cast<uint8_t *>(record_ptrs[event.record_index]);
     }
-    if ((event.expected_mode == EXPECT_BEFORE_LOAD ||
-         event.expected_mode == EXPECT_BEFORE_STORE) &&
-        current_value != event.value) {
-        fail_parallel(error, 77);
-        return;
+    if (event.expected_mode == EXPECT_BEFORE_LOAD ||
+        event.expected_mode == EXPECT_BEFORE_STORE) {
+        uint64_t expected_value = event.value;
+        if (event.action == G2_EVENT_WRITE_SET_EXPECT) {
+            if (row == nullptr || event.value_offset == G2_NO_OFFSET) {
+                fail_parallel(error, 77);
+                return;
+            }
+            expected_value = g2_load_u64(row + event.value_offset);
+        }
+        if (current_value != expected_value) {
+            fail_parallel(error, 77);
+            return;
+        }
     }
     if (event.action == G2_EVENT_READ_EXPECT && event.expected_mode == EXPECT_NONE &&
         current_value != event.value) {
@@ -2781,8 +2972,8 @@ extern "C" int _rvr_g2_predecode(
     size_t opaque_capacity =
         d_opaque_residual_output.size / sizeof(DeltaMemoryLogEntry);
     size_t touched_capacity = d_touched_output.size / sizeof(G2TouchedMemoryRecord);
-    bool timestamp_budget_overflow = delta_count > UINT32_MAX / 3;
-    size_t timestamp_budget = timestamp_budget_overflow ? 0 : delta_count * 3;
+    bool timestamp_budget_overflow = delta_count > UINT32_MAX / 4;
+    size_t timestamp_budget = timestamp_budget_overflow ? 0 : delta_count * 4;
     if (!timestamp_budget_overflow) {
         timestamp_budget_overflow = opaque_capacity > UINT32_MAX - timestamp_budget;
         if (!timestamp_budget_overflow) timestamp_budget += opaque_capacity;

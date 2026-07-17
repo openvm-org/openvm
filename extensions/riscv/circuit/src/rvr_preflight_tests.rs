@@ -1141,6 +1141,839 @@ fn rvr_preflight_two_block_records_prove_and_verify() {
     assert_eq!(segments, 1);
 }
 
+/// Phase-1 G2 gate: generated C writes only RUN_BLOCK_ID and AddI value
+/// lanes. The oracle-only CPU decoder must reconstruct the exact established
+/// 44-byte compact consumer records, including every initialized/padding
+/// byte, while the production-shaped preflight performs no host record pass.
+#[test]
+fn rvr_preflight_g2_addi_is_byte_equal_to_compact_consumer() {
+    let exe = exe(&[
+        addi(1, 0, 7),
+        addi(2, 1, 5),
+        addi(1, 2, 0x00ff_ffff),
+        terminate(),
+    ]);
+    let (rvr_vm, _) = VirtualMachine::new_with_keygen(
+        test_cpu_engine(),
+        Rv64ImCpuBuilder,
+        Rv64ImConfig::default(),
+    )
+    .expect("G2 oracle VM init");
+    let pc_to_air_idx = rvr_vm.pc_to_air_idx(&exe).expect("G2 pc mapping");
+    let addi_air_idx = pc_to_air_idx[0].expect("AddI must map to an AIR");
+    assert_eq!(pc_to_air_idx[1], Some(addi_air_idx));
+    assert_eq!(pc_to_air_idx[2], Some(addi_air_idx));
+    let mut exact_rows = vec![0u32; rvr_vm.num_airs()];
+    exact_rows[addi_air_idx] = 3;
+
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
+    std::env::set_var("OPENVM_RVR_INLINE_RECORDS", "1");
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "compact");
+    let RvrPreflightRoute::Rvr(compact) = rvr_vm
+        .preflight_routed_instance(&exe)
+        .expect("compact routed preflight")
+    else {
+        panic!("AddI program must route to RVR");
+    };
+    let mut compact_output = compact
+        .execute_preflight_from_state_with_capacities(
+            compact.create_initial_state(Streams::default()),
+            Some(4),
+            &exact_rows,
+        )
+        .expect("compact AddI preflight");
+    let compact_bytes = compact_output
+        .inline_records
+        .iter()
+        .find(|records| records.air_idx == addi_air_idx)
+        .expect("compact AddI consumer records");
+    assert_eq!(compact_bytes.record_size, 44);
+    assert_eq!(compact_bytes.bytes.len(), 3 * 44);
+    let compact_consumer_bytes = compact_bytes.bytes.clone();
+    let compact_program_log = compact_output.raw_logs.program_log.clone();
+    let capacities = exact_rows
+        .iter()
+        .zip(rvr_vm.pk().per_air.iter())
+        .map(|(&height, pk)| (height as usize, pk.vk.params.width.main_width()))
+        .collect::<Vec<_>>();
+    let compact_arenas = crate::log_native::generate_rv64im_record_arenas_from_logs::<
+        F,
+        DenseRecordArena,
+    >(&exe, &mut compact_output, &capacities, &pc_to_air_idx)
+    .expect("compact final-arena oracle");
+
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "g2");
+    let RvrPreflightRoute::Rvr(g2) = rvr_vm
+        .preflight_routed_instance(&exe)
+        .expect("G2 routed preflight")
+    else {
+        panic!("AddI program must route to G2 RVR");
+    };
+    assert!(g2.compiled().inline_records().g2.is_some());
+    let mut g2_output = g2
+        .execute_preflight_from_state_with_device_touched_memory_for_test(
+            g2.create_initial_state(Streams::default()),
+            Some(4),
+            &exact_rows,
+            &BTreeMap::new(),
+        )
+        .expect("G2 AddI preflight");
+    let segment = g2_output.g2_segment.take().expect("committed G2 segment");
+    let meta = g2_output.g2_meta.as_deref().expect("G2 schema metadata");
+    let decode = g2_output
+        .delta_decode_precomputed
+        .as_deref()
+        .expect("G2 static operand table");
+    let reference = openvm_circuit::arch::rvr::decode_addi_reference_v1(
+        &segment,
+        meta,
+        decode,
+        [0; 32],
+        openvm_circuit::arch::rvr::PREFLIGHT_INITIAL_TIMESTAMP,
+    )
+    .expect("G2 CPU reference decode");
+
+    assert_eq!(
+        segment.header_acquire().unwrap().residual_event_count,
+        0,
+        "standard G2 rows must advance the predecessor shadow without duplicate residual events"
+    );
+    assert_eq!(reference.compact_records, compact_consumer_bytes);
+    assert_eq!(reference.expanded_program_slots, [0, 1, 2, 3]);
+    assert_eq!(reference.final_registers[1], 11);
+    assert_eq!(reference.final_registers[2], 12);
+    assert_eq!(
+        reference.final_timestamp,
+        openvm_circuit::arch::rvr::PREFLIGHT_INITIAL_TIMESTAMP + 6
+    );
+    assert!(g2_output.raw_logs.program_log.is_empty());
+    assert!(g2_output.raw_logs.memory_log.is_empty());
+    assert!(g2_output.raw_logs.delta_memory_log.is_empty());
+    assert!(g2_output.access_aux.is_empty());
+    assert!(g2_output.inline_records.is_empty());
+    assert!(g2_output.delta_records.is_none());
+    assert!(!g2_output.access_aux_complete);
+    assert!(g2_output.system_records.program_frequencies_on_device);
+    assert!(g2_output.system_records.touched_memory_on_device);
+
+    // Oracle-only final materialization. Production never executes this
+    // block: it restores the compact arm's chronology solely to drive the
+    // established CPU assembler and compare the complete final arena bytes.
+    g2_output.raw_logs.program_log = compact_program_log;
+    g2_output.inline_records = vec![openvm_circuit::arch::rvr::RvrInlineChipRecords {
+        air_idx: addi_air_idx,
+        record_size: 44,
+        bytes: reference.compact_records,
+    }];
+    g2_output.access_aux_complete = true;
+    let g2_oracle_arenas = crate::log_native::generate_rv64im_record_arenas_from_logs::<
+        F,
+        DenseRecordArena,
+    >(&exe, &mut g2_output, &capacities, &pc_to_air_idx)
+    .expect("G2 oracle final-arena materialization");
+    assert_eq!(compact_arenas.len(), g2_oracle_arenas.len());
+    for (air, (compact, g2)) in compact_arenas.iter().zip(&g2_oracle_arenas).enumerate() {
+        assert_eq!(
+            compact.allocated(),
+            g2.allocated(),
+            "G2 final arena, including record padding, differs for AIR {air}"
+        );
+    }
+}
+
+#[test]
+fn rvr_preflight_g2_phase2a_load_store_reveal_is_byte_equal() {
+    let exe = g2_load_store_phase2a_exe();
+    let config = Rv64ImConfig::with_public_values_bytes(32);
+    let (rvr_vm, _) = VirtualMachine::new_with_keygen(test_cpu_engine(), Rv64ImCpuBuilder, config)
+        .expect("G2 Phase-2a oracle VM init");
+    let pc_to_air_idx = rvr_vm.pc_to_air_idx(&exe).expect("G2 Phase-2a pc mapping");
+    let mut exact_rows = vec![0u32; rvr_vm.num_airs()];
+    for air in pc_to_air_idx.iter().flatten() {
+        exact_rows[*air] += 1;
+    }
+    let capacities = exact_rows
+        .iter()
+        .zip(rvr_vm.pk().per_air.iter())
+        .map(|(&height, pk)| (height as usize, pk.vk.params.width.main_width()))
+        .collect::<Vec<_>>();
+    let instruction_count = exe.program.num_defined_instructions() as u64;
+
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
+    std::env::set_var("OPENVM_RVR_INLINE_RECORDS", "1");
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "compact");
+    let RvrPreflightRoute::Rvr(compact) = rvr_vm
+        .preflight_routed_instance(&exe)
+        .expect("compact Phase-2a routed preflight")
+    else {
+        panic!("Phase-2a program must route to RVR");
+    };
+    let mut compact_output = compact
+        .execute_preflight_from_state_with_capacities(
+            compact.create_initial_state(Streams::default()),
+            Some(instruction_count),
+            &exact_rows,
+        )
+        .expect("compact Phase-2a preflight");
+    let compact_inline = compact_output
+        .inline_records
+        .iter()
+        .map(|records| (records.air_idx, records.bytes.clone()))
+        .collect::<BTreeMap<_, _>>();
+    let compact_arenas = crate::log_native::generate_rv64im_record_arenas_from_logs::<
+        F,
+        DenseRecordArena,
+    >(&exe, &mut compact_output, &capacities, &pc_to_air_idx)
+    .expect("compact Phase-2a final arenas");
+
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "g2");
+    let RvrPreflightRoute::Rvr(g2) = rvr_vm
+        .preflight_routed_instance(&exe)
+        .expect("G2 Phase-2a routed preflight")
+    else {
+        panic!("Phase-2a program must route to G2 RVR");
+    };
+    let inline = g2.compiled().inline_records();
+    assert!(inline.g2.is_some(), "Phase-2a executable must negotiate G2");
+    assert!(pc_to_air_idx.iter().enumerate().all(|(slot, air)| {
+        air.is_none() || inline.pc_slots.get(slot).copied().unwrap_or(false)
+    }));
+    let mut g2_output = g2
+        .execute_preflight_from_state_with_device_touched_memory_for_test(
+            g2.create_initial_state(Streams::default()),
+            Some(instruction_count),
+            &exact_rows,
+            &BTreeMap::new(),
+        )
+        .expect("G2 Phase-2a preflight");
+    let segment = g2_output.g2_segment.take().expect("committed G2 segment");
+    let meta = g2_output.g2_meta.as_deref().expect("G2 Phase-2a metadata");
+    let decode = g2_output
+        .delta_decode_precomputed
+        .as_deref()
+        .expect("G2 Phase-2a operand table");
+    let mut initial_blocks = BTreeMap::new();
+    for address in [0u32, 8, 16, 24] {
+        initial_blocks.insert((PUBLIC_VALUES_AS as u8, address), 0);
+    }
+    let reference = openvm_circuit::arch::rvr::decode_reference_v1(
+        &segment,
+        meta,
+        decode,
+        [0; 32],
+        &initial_blocks,
+        openvm_circuit::arch::rvr::PREFLIGHT_INITIAL_TIMESTAMP,
+    )
+    .expect("G2 Phase-2a CPU reference decode");
+    assert_eq!(
+        segment.byte_len(),
+        3_968,
+        "Phase-2a fixture wire must contain only active lane prefixes plus frozen alignment"
+    );
+    assert_eq!(
+        segment.header_acquire().unwrap().residual_event_count,
+        0,
+        "non-crossing load/store and REVEAL rows must stay entirely in fixed G2 lanes"
+    );
+    assert_eq!(
+        reference.final_registers[0], 0,
+        "x0 load must remain suppressed"
+    );
+    assert!(g2_output.raw_logs.program_log.is_empty());
+    assert!(g2_output.raw_logs.memory_log.is_empty());
+    assert!(g2_output.raw_logs.delta_memory_log.is_empty());
+    assert!(g2_output.access_aux.is_empty());
+    assert!(g2_output.inline_records.is_empty());
+    assert!(!g2_output.access_aux_complete);
+
+    for binding in meta.air_bindings.iter() {
+        if let Some(bytes) = reference.compact_records.get(&binding.kind) {
+            let native_multi = matches!(binding.kind, 20..=22 | 24..=28);
+            let stride = if native_multi {
+                60
+            } else {
+                openvm_circuit::arch::rvr::PREFLIGHT_ADDSUB_RECORD_SIZE
+            };
+            assert_eq!(
+                bytes.len() / stride,
+                exact_rows[binding.air_idx] as usize,
+                "decoded rows must equal the metered AIR count for kind {}",
+                binding.kind
+            );
+            if native_multi {
+                assert_eq!(
+                    bytes,
+                    compact_arenas[binding.air_idx].allocated(),
+                    "G2 load/store consumer bytes differ for kind {}",
+                    binding.kind
+                );
+            } else if binding.kind == 29 {
+                assert_eq!(
+                    bytes,
+                    compact_inline
+                        .get(&binding.air_idx)
+                        .expect("compact route must emit the same fixed consumer AIR"),
+                    "G2 fixed consumer bytes differ for kind {}",
+                    binding.kind
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn rvr_preflight_g2_two_block_crossings_match_verbose_native_records() {
+    let exe = two_block_main_memory_exe();
+
+    std::env::set_var("OPENVM_RVR_INLINE_RECORDS", "0");
+    std::env::remove_var("OPENVM_RVR_GPU_RECORDS");
+    let (_, verbose_arenas, verbose_pc_to_air, _) = run_two_block_loadstore_arm(&exe);
+
+    std::env::set_var("OPENVM_RVR_INLINE_RECORDS", "1");
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "g2");
+    let (vm, _) = VirtualMachine::new_with_keygen(
+        test_cpu_engine(),
+        Rv64ImCpuBuilder,
+        Rv64ImConfig::with_public_values_bytes(32),
+    )
+    .expect("G2 two-block VM init");
+    let pc_to_air = vm.pc_to_air_idx(&exe).expect("G2 two-block pc mapping");
+    assert_eq!(pc_to_air, verbose_pc_to_air);
+    let mut exact_rows = vec![0u32; vm.num_airs()];
+    for air in pc_to_air.iter().flatten() {
+        exact_rows[*air] += 1;
+    }
+    let retired = exe.program.num_defined_instructions() as u64;
+    let RvrPreflightRoute::Rvr(g2) = vm
+        .preflight_routed_instance(&exe)
+        .expect("G2 two-block route")
+    else {
+        panic!("two-block executable must route to G2 RVR");
+    };
+    assert!(g2.compiled().inline_records().g2.is_some());
+    let mut output = g2
+        .execute_preflight_from_state_with_device_touched_memory_for_test(
+            g2.create_initial_state(Streams::default()),
+            Some(retired),
+            &exact_rows,
+            &BTreeMap::new(),
+        )
+        .expect("G2 two-block preflight");
+    let segment = output.g2_segment.take().expect("G2 two-block segment");
+    let meta = output.g2_meta.as_deref().expect("G2 two-block metadata");
+    let decode = output
+        .delta_decode_precomputed
+        .as_deref()
+        .expect("G2 two-block operand table");
+    assert_eq!(
+        segment.header_acquire().unwrap().residual_event_count,
+        16,
+        "eight crossing accesses must contribute exactly two full-block residuals each"
+    );
+    let reference = openvm_circuit::arch::rvr::decode_reference_v1(
+        &segment,
+        meta,
+        decode,
+        [0; 32],
+        &BTreeMap::new(),
+        openvm_circuit::arch::rvr::PREFLIGHT_INITIAL_TIMESTAMP,
+    )
+    .expect("G2 two-block CPU reference decode");
+    assert_eq!(
+        reference.final_timestamp, output.system_records.to_state.timestamp,
+        "G2 two-block replay timestamp"
+    );
+    assert_eq!(
+        reference.final_registers,
+        openvm_circuit::arch::rvr::bridge::read_rv64_registers(&output.to_state),
+        "G2 two-block replay registers"
+    );
+    for binding in meta
+        .air_bindings
+        .iter()
+        .filter(|binding| matches!(binding.kind, 20..=22 | 24..=28))
+    {
+        let bytes = reference
+            .compact_records
+            .get(&binding.kind)
+            .expect("executed multi-block G2 kind");
+        assert_eq!(bytes.len() / 60, exact_rows[binding.air_idx] as usize);
+        assert_eq!(
+            bytes,
+            verbose_arenas[binding.air_idx].allocated(),
+            "G2 two-block native records differ for kind {}",
+            binding.kind
+        );
+    }
+}
+
+#[test]
+fn rvr_preflight_g2_store_marks_sparse_continuation_page() {
+    let store_exe = exe(&[
+        addi(1, 0, 64),
+        addi(2, 0, 0x5a),
+        store(Rv64LoadStoreOpcode::STORED, 2, 1, 0),
+        terminate(),
+    ]);
+    let (store_vm, _) = VirtualMachine::new_with_keygen(
+        test_cpu_engine(),
+        Rv64ImCpuBuilder,
+        Rv64ImConfig::default(),
+    )
+    .expect("G2 continuation store VM init");
+    let store_pc_to_air = store_vm
+        .pc_to_air_idx(&store_exe)
+        .expect("G2 continuation store pc mapping");
+    let mut store_rows = vec![0u32; store_vm.num_airs()];
+    for air in store_pc_to_air.iter().flatten() {
+        store_rows[*air] += 1;
+    }
+
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
+    std::env::set_var("OPENVM_RVR_INLINE_RECORDS", "1");
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "g2");
+    let RvrPreflightRoute::Rvr(store) = store_vm
+        .preflight_routed_instance(&store_exe)
+        .expect("G2 continuation store route")
+    else {
+        panic!("continuation store program must route to G2 RVR");
+    };
+    let store_output = store
+        .execute_preflight_from_state_with_device_touched_memory_for_test(
+            store.create_initial_state(Streams::default()),
+            Some(store_exe.program.num_defined_instructions() as u64),
+            &store_rows,
+            &BTreeMap::new(),
+        )
+        .expect("G2 continuation store preflight");
+    let memory = &store_output.to_state.memory.memory;
+    let memory_as = RV64_MEMORY_AS as usize;
+    let dirty_ranges =
+        memory.touched_pages[memory_as].touched_byte_ranges(memory.mem[memory_as].size());
+    assert!(
+        dirty_ranges
+            .iter()
+            .any(|&(start, end)| start <= 64 && 64 < end),
+        "G2 store page must be staged for the next segment's sparse H2D transfer"
+    );
+
+    // Run the following load as a distinct preflight segment from the carried
+    // state. The page assertion above is the sparse-transport contract; this
+    // second execution checks the corresponding store-to-load state boundary.
+    let load_exe = exe(&[load(Rv64LoadStoreOpcode::LOADD, 3, 1, 0), terminate()]);
+    let (load_vm, _) = VirtualMachine::new_with_keygen(
+        test_cpu_engine(),
+        Rv64ImCpuBuilder,
+        Rv64ImConfig::default(),
+    )
+    .expect("G2 continuation load VM init");
+    let load_pc_to_air = load_vm
+        .pc_to_air_idx(&load_exe)
+        .expect("G2 continuation load pc mapping");
+    let mut load_rows = vec![0u32; load_vm.num_airs()];
+    for air in load_pc_to_air.iter().flatten() {
+        load_rows[*air] += 1;
+    }
+    let RvrPreflightRoute::Rvr(load) = load_vm
+        .preflight_routed_instance(&load_exe)
+        .expect("G2 continuation load route")
+    else {
+        panic!("continuation load program must route to G2 RVR");
+    };
+    let mut carried_state = store_output.to_state;
+    carried_state.set_pc(load_exe.pc_start);
+    let load_output = load
+        .execute_preflight_from_state_with_device_touched_memory_for_test(
+            carried_state,
+            Some(load_exe.program.num_defined_instructions() as u64),
+            &load_rows,
+            &BTreeMap::new(),
+        )
+        .expect("G2 continuation load preflight");
+    let registers = openvm_circuit::arch::rvr::bridge::read_rv64_registers(&load_output.to_state);
+    assert_eq!(registers[3], 0x5a, "next segment must observe the G2 store");
+}
+
+#[test]
+fn rvr_preflight_g2_rejects_high_pointer_before_memory_or_reveal_access() {
+    let exe = exe(&[
+        load(Rv64LoadStoreOpcode::LOADD, 3, 1, 0),
+        extension_store(2, 1, 0),
+        extension_store_width(Rv64LoadStoreOpcode::STOREW, 2, 1, 8),
+        terminate(),
+    ]);
+    let (vm, _) = VirtualMachine::new_with_keygen(
+        test_cpu_engine(),
+        Rv64ImCpuBuilder,
+        Rv64ImConfig::with_public_values_bytes(32),
+    )
+    .expect("G2 high-pointer VM init");
+    let pc_to_air = vm.pc_to_air_idx(&exe).expect("G2 high-pointer pc mapping");
+    let mut rows = vec![0u32; vm.num_airs()];
+    for air in pc_to_air.iter().flatten() {
+        rows[*air] += 1;
+    }
+
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
+    std::env::set_var("OPENVM_RVR_INLINE_RECORDS", "1");
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "g2");
+    let RvrPreflightRoute::Rvr(instance) = vm
+        .preflight_routed_instance(&exe)
+        .expect("G2 high-pointer route")
+    else {
+        panic!("high-pointer fixture must route to G2 RVR");
+    };
+    let mut state = instance.create_initial_state(Streams::default());
+    let mut registers = [0u64; 32];
+    registers[1] = u64::from(u32::MAX) + 1;
+    registers[2] = 0x5a;
+    openvm_circuit::arch::rvr::bridge::write_rv64_registers(&mut state, &registers);
+    let err = match instance.execute_preflight_from_state_with_device_touched_memory_for_test(
+        state,
+        Some(exe.program.num_defined_instructions() as u64),
+        &rows,
+        &BTreeMap::new(),
+    ) {
+        Ok(_) => panic!("G2 must reject a high pointer before dereferencing it"),
+        Err(err) => err,
+    };
+    assert!(
+        err.to_string().contains("G2 wire v1"),
+        "high-pointer rejection must fail closed through G2 wire validation: {err}"
+    );
+}
+
+#[test]
+fn rvr_preflight_g2_rejects_high_jalr_pointer_without_truncation() {
+    let exe = exe(&[jalr(2, 1, 0), terminate()]);
+    let (vm, _) = VirtualMachine::new_with_keygen(
+        test_cpu_engine(),
+        Rv64ImCpuBuilder,
+        Rv64ImConfig::default(),
+    )
+    .expect("G2 high-Jalr VM init");
+    let pc_to_air = vm.pc_to_air_idx(&exe).expect("G2 high-Jalr pc mapping");
+    let mut rows = vec![0u32; vm.num_airs()];
+    for air in pc_to_air.iter().flatten() {
+        rows[*air] += 1;
+    }
+
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
+    std::env::set_var("OPENVM_RVR_INLINE_RECORDS", "1");
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "g2");
+    let RvrPreflightRoute::Rvr(instance) = vm
+        .preflight_routed_instance(&exe)
+        .expect("G2 high-Jalr route")
+    else {
+        panic!("high-Jalr fixture must route to G2 RVR");
+    };
+    assert!(instance.compiled().inline_records().g2.is_some());
+    let mut state = instance.create_initial_state(Streams::default());
+    let mut registers = [0u64; 32];
+    registers[1] = u64::from(u32::MAX) + 4;
+    openvm_circuit::arch::rvr::bridge::write_rv64_registers(&mut state, &registers);
+    let err = match instance.execute_preflight_from_state_with_device_touched_memory_for_test(
+        state,
+        Some(exe.program.num_defined_instructions() as u64),
+        &rows,
+        &BTreeMap::new(),
+    ) {
+        Ok(_) => panic!("G2 must reject a high JALR pointer instead of truncating it"),
+        Err(err) => err,
+    };
+    assert!(
+        err.to_string().contains("G2 wire v1"),
+        "high-Jalr rejection must fail closed through G2 finalization: {err}"
+    );
+}
+
+#[test]
+fn rvr_preflight_g2_phase2b_full_standard_matrix_is_byte_equal() {
+    let exe = g2_full_standard_matrix_exe();
+    let config = Rv64ImConfig::with_public_values_bytes(32);
+    let (rvr_vm, _) = VirtualMachine::new_with_keygen(test_cpu_engine(), Rv64ImCpuBuilder, config)
+        .expect("G2 Phase-2b oracle VM init");
+    let pc_to_air_idx = rvr_vm.pc_to_air_idx(&exe).expect("G2 Phase-2b pc mapping");
+    let mut exact_rows = vec![0u32; rvr_vm.num_airs()];
+    for air in pc_to_air_idx.iter().flatten() {
+        exact_rows[*air] += 1;
+    }
+    let capacities = exact_rows
+        .iter()
+        .zip(rvr_vm.pk().per_air.iter())
+        .map(|(&height, pk)| (height as usize, pk.vk.params.width.main_width()))
+        .collect::<Vec<_>>();
+    let instruction_count = exe.program.num_defined_instructions() as u64;
+
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
+    std::env::set_var("OPENVM_RVR_INLINE_RECORDS", "1");
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "compact");
+    let RvrPreflightRoute::Rvr(compact) = rvr_vm
+        .preflight_routed_instance(&exe)
+        .expect("compact Phase-2b routed preflight")
+    else {
+        panic!("Phase-2b matrix must route to compact RVR");
+    };
+    let mut compact_output = compact
+        .execute_preflight_from_state_with_capacities(
+            compact.create_initial_state(Streams::default()),
+            Some(instruction_count),
+            &exact_rows,
+        )
+        .expect("compact Phase-2b preflight");
+    let compact_consumers = compact_output
+        .inline_records
+        .iter()
+        .map(|records| {
+            (
+                records.air_idx,
+                (records.record_size, records.bytes.clone()),
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
+    let compact_arenas = crate::log_native::generate_rv64im_record_arenas_from_logs::<
+        F,
+        DenseRecordArena,
+    >(&exe, &mut compact_output, &capacities, &pc_to_air_idx)
+    .expect("compact Phase-2b final arenas");
+
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "g2");
+    let RvrPreflightRoute::Rvr(g2) = rvr_vm
+        .preflight_routed_instance(&exe)
+        .expect("G2 Phase-2b routed preflight")
+    else {
+        panic!("Phase-2b matrix must route to G2 RVR");
+    };
+    let inline = g2.compiled().inline_records();
+    assert!(
+        inline.g2.is_some(),
+        "full standard matrix must negotiate G2"
+    );
+    assert!(pc_to_air_idx.iter().enumerate().all(|(slot, air)| {
+        air.is_none() || inline.pc_slots.get(slot).copied().unwrap_or(false)
+    }));
+    let mut g2_output = g2
+        .execute_preflight_from_state_with_device_touched_memory_for_test(
+            g2.create_initial_state(Streams::default()),
+            Some(instruction_count),
+            &exact_rows,
+            &BTreeMap::new(),
+        )
+        .expect("G2 Phase-2b preflight");
+    let segment = g2_output.g2_segment.take().expect("committed G2 segment");
+    let meta = g2_output.g2_meta.as_deref().expect("G2 Phase-2b metadata");
+    let decode = g2_output
+        .delta_decode_precomputed
+        .as_deref()
+        .expect("G2 Phase-2b operand table");
+    assert_eq!(
+        meta.air_bindings
+            .iter()
+            .map(|binding| binding.kind)
+            .collect::<Vec<_>>(),
+        (0u8..30).collect::<Vec<_>>(),
+        "Phase-2b matrix must bind every standard decoder kind"
+    );
+    let mut initial_blocks = BTreeMap::new();
+    initial_blocks.insert((PUBLIC_VALUES_AS as u8, 0), 0);
+    let reference = openvm_circuit::arch::rvr::decode_reference_v1(
+        &segment,
+        meta,
+        decode,
+        [0; 32],
+        &initial_blocks,
+        openvm_circuit::arch::rvr::PREFLIGHT_INITIAL_TIMESTAMP,
+    )
+    .expect("G2 Phase-2b CPU reference decode");
+
+    let descs = segment
+        .validate(&meta.fingerprint)
+        .expect("valid G2 descriptors");
+    for kind in 1u8..=7 {
+        let binding = meta
+            .air_bindings
+            .iter()
+            .find(|binding| binding.kind == kind)
+            .expect("variable-arity kind binding");
+        let mut total = 0usize;
+        let mut register = 0usize;
+        for &slot in &reference.expanded_program_slots {
+            let entry = decode.entries[slot as usize];
+            if entry.air_idx as usize == binding.air_idx {
+                total += 1;
+                register += usize::from(entry.flags & 1 == 0);
+            }
+        }
+        assert!(
+            total > register && register > 0,
+            "kind {kind} must cover both arities"
+        );
+        assert_eq!(
+            descs
+                .iter()
+                .find(|desc| desc.kind == 0x0100 + 2 * u16::from(kind))
+                .map_or(0, |desc| desc.count as usize),
+            total,
+            "kind {kind} V0 count"
+        );
+        assert_eq!(
+            descs
+                .iter()
+                .find(|desc| desc.kind == 0x0101 + 2 * u16::from(kind))
+                .map_or(0, |desc| desc.count as usize),
+            register,
+            "kind {kind} V1 register-only count"
+        );
+    }
+    for kind in [12u8, 14] {
+        assert!(descs
+            .iter()
+            .all(|desc| desc.kind != 0x0100 + 2 * u16::from(kind)
+                && desc.kind != 0x0101 + 2 * u16::from(kind)));
+    }
+
+    assert!(g2_output.raw_logs.program_log.is_empty());
+    assert!(g2_output.raw_logs.memory_log.is_empty());
+    assert!(g2_output.raw_logs.delta_memory_log.is_empty());
+    assert!(g2_output.access_aux.is_empty());
+    assert!(g2_output.inline_records.is_empty());
+    assert!(g2_output.delta_records.is_none());
+    assert!(!g2_output.access_aux_complete);
+    assert_eq!(
+        openvm_circuit::arch::rvr::bridge::read_rv64_registers(&g2_output.to_state),
+        reference.final_registers,
+        "G2 CPU execution and operand-table replay must finish with identical registers"
+    );
+
+    for binding in meta.air_bindings.iter() {
+        let bytes = reference
+            .compact_records
+            .get(&binding.kind)
+            .expect("every bound kind has decoded records");
+        let native_multi = matches!(binding.kind, 20..=22 | 24..=28);
+        let stride = if native_multi {
+            assert_eq!(
+                bytes,
+                compact_arenas[binding.air_idx].allocated(),
+                "kind {} native two-block consumer bytes",
+                binding.kind
+            );
+            60
+        } else {
+            let (stride, expected) = compact_consumers
+                .get(&binding.air_idx)
+                .expect("compact consumer for bound AIR");
+            assert_eq!(
+                bytes, expected,
+                "kind {} compact consumer bytes",
+                binding.kind
+            );
+            *stride
+        };
+        assert_eq!(
+            bytes.len() / stride,
+            exact_rows[binding.air_idx] as usize,
+            "kind {} exact AIR count",
+            binding.kind
+        );
+    }
+}
+
+#[test]
+fn rvr_preflight_g2_rejects_lifted_nop_before_execution() {
+    let exe = exe(&[addi(0, 1, 3), terminate()]);
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "g2");
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
+    let (vm, _) = VirtualMachine::new_with_keygen(
+        test_cpu_engine(),
+        Rv64ImCpuBuilder,
+        Rv64ImConfig::default(),
+    )
+    .expect("G2 lifted-NOP fallback VM init");
+    let RvrPreflightRoute::Rvr(instance) = vm
+        .preflight_routed_instance(&exe)
+        .expect("G2 lifted-NOP fallback negotiation")
+    else {
+        panic!("supported RV64 program must retain the RVR route");
+    };
+    let inline = instance.compiled().inline_records();
+    assert!(inline.g2.is_none());
+    assert!(inline.delta_decode.is_none());
+    assert!(
+        !inline.pc_slots.iter().any(|&slot| slot),
+        "lifted NOP must retain the established host-record route"
+    );
+}
+
+#[test]
+fn rvr_preflight_g2_rejects_dso_bound_to_different_vmexe() {
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "g2");
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "0");
+    let (vm, _) = VirtualMachine::new_with_keygen(
+        test_cpu_engine(),
+        Rv64ImCpuBuilder,
+        Rv64ImConfig::default(),
+    )
+    .expect("G2 manifest VM init");
+    let cache_dir = tempfile::tempdir().expect("G2 mismatch cache dir");
+    let cache_a = cache_dir.path().join("a.so");
+    let cache_b = cache_dir.path().join("b.so");
+    let mismatch = cache_dir.path().join("mismatch.so");
+
+    let exe_a = exe(&[addi(1, 0, 3), terminate()]);
+    std::env::set_var("OPENVM_RVR_PREFLIGHT_LIB", &cache_a);
+    let RvrPreflightRoute::Rvr(_instance_a) = vm
+        .preflight_routed_instance(&exe_a)
+        .expect("first G2 manifest build")
+    else {
+        panic!("AddI program must route to RVR");
+    };
+    let exe_b = exe(&[addi(1, 0, 4), terminate()]);
+    std::env::set_var("OPENVM_RVR_PREFLIGHT_LIB", &cache_b);
+    let RvrPreflightRoute::Rvr(_instance_b) = vm
+        .preflight_routed_instance(&exe_b)
+        .expect("second G2 manifest build")
+    else {
+        panic!("AddI program must route to RVR");
+    };
+
+    // Preserve B's input/project keys but A's artifact digest. The cache is
+    // therefore structurally valid and reaches the independent DSO-manifest
+    // comparison, which must reject the mismatched VmExe binding.
+    let manifest_path = |library: &std::path::Path| {
+        std::path::PathBuf::from(format!("{}.sha256", library.display()))
+    };
+    let value = |manifest: &str, key: &str| {
+        manifest
+            .lines()
+            .find_map(|line| line.strip_prefix(&format!("{key}=")))
+            .unwrap_or_else(|| panic!("missing {key} in native cache manifest"))
+            .to_string()
+    };
+    let manifest_a = std::fs::read_to_string(manifest_path(&cache_a)).expect("read A manifest");
+    let manifest_b = std::fs::read_to_string(manifest_path(&cache_b)).expect("read B manifest");
+    std::fs::copy(&cache_a, &mismatch).expect("copy mismatched G2 artifact");
+    std::fs::write(
+        manifest_path(&mismatch),
+        format!(
+            "project={}\nartifact={}\ninput={}\n",
+            value(&manifest_b, "project"),
+            value(&manifest_a, "artifact"),
+            value(&manifest_b, "input"),
+        ),
+    )
+    .expect("write mismatched G2 cache manifest");
+    std::env::set_var("OPENVM_RVR_PREFLIGHT_LIB", &mismatch);
+    let err = match vm.preflight_routed_instance(&exe_b) {
+        Ok(_) => panic!("a DSO bound to another VmExe must fail before native execution"),
+        Err(err) => err,
+    };
+    assert!(
+        err.to_string().contains("G2 DSO manifest"),
+        "unexpected G2 manifest rejection: {err}"
+    );
+}
+
 #[cfg(feature = "cuda")]
 #[test]
 fn rvr_preflight_gpu_default_negotiates_g2_falls_back_and_honors_override() {
@@ -1432,7 +2265,7 @@ fn interpreter_preflight_marks_carried_memory_pages() {
         .expect("preflight interpreter");
 
     let output = vm
-        .execute_preflight(&mut interpreter, state, Some(1), &trace_heights)
+        .execute_preflight_for(&mut interpreter, state, 1, &trace_heights)
         .expect("segment preflight");
     let register_memory = &output.to_state.memory.memory;
     let register_config = &register_memory.config[RV64_REGISTER_AS as usize];
@@ -1958,9 +2791,13 @@ fn assert_preflight_matches_interpreter_with_streams(
         .preflight_interpreter(&exe)
         .expect("interpreter preflight");
     let interp_state = vm.create_initial_state(&exe, streams.clone());
-    let interp_output = vm
-        .execute_preflight(&mut interpreter, interp_state, num_insns, &trace_heights)
-        .expect("interpreter execution");
+    let interp_output = match num_insns {
+        Some(num_insns) => {
+            vm.execute_preflight_for(&mut interpreter, interp_state, num_insns, &trace_heights)
+        }
+        None => vm.execute_preflight(&mut interpreter, interp_state, &trace_heights),
+    }
+    .expect("interpreter execution");
 
     let route = vm
         .preflight_routed_instance(&exe)
@@ -2048,7 +2885,7 @@ fn assert_trace_matches_interpreter(
         .preflight_interpreter(&exe)
         .expect("interpreter preflight");
     let interp_output = interp_vm
-        .execute_preflight(&mut interpreter, interp_state, None, &trace_heights)
+        .execute_preflight(&mut interpreter, interp_state, &trace_heights)
         .expect("interpreter execution");
 
     let (mut rvr_vm, _) = VirtualMachine::new_with_keygen(
@@ -2500,14 +3337,16 @@ fn assert_gpu_rvr_three_way_from_state(
     let mut cpu_interpreter = cpu_vm
         .preflight_interpreter(exe)
         .expect("cpu interpreter preflight");
-    let cpu_output = cpu_vm
-        .execute_preflight(
+    let cpu_output = match num_insns {
+        Some(num_insns) => cpu_vm.execute_preflight_for(
             &mut cpu_interpreter,
             from_state.clone(),
             num_insns,
             trace_heights,
-        )
-        .expect("cpu interpreter execution");
+        ),
+        None => cpu_vm.execute_preflight(&mut cpu_interpreter, from_state.clone(), trace_heights),
+    }
+    .expect("cpu interpreter execution");
     let retired_instructions = cpu_output
         .system_records
         .filtered_exec_frequencies
@@ -2538,14 +3377,18 @@ fn assert_gpu_rvr_three_way_from_state(
     let mut gpu_interpreter = gpu_arena_vm
         .preflight_interpreter(exe)
         .expect("gpu interpreter preflight");
-    let gpu_arena_output = gpu_arena_vm
-        .execute_preflight(
+    let gpu_arena_output = match num_insns {
+        Some(num_insns) => gpu_arena_vm.execute_preflight_for(
             &mut gpu_interpreter,
             from_state.clone(),
             num_insns,
             trace_heights,
-        )
-        .expect("gpu interpreter execution");
+        ),
+        None => {
+            gpu_arena_vm.execute_preflight(&mut gpu_interpreter, from_state.clone(), trace_heights)
+        }
+    }
+    .expect("gpu interpreter execution");
 
     let gpu_log_builder = Rv64ImGpuBuilder::default();
     let (mut gpu_log_vm, _) =
@@ -5521,7 +6364,10 @@ fn rvr_preflight_wire_staged_host_write_checkpoint() {
         Rv64ImConfig::default(),
     )
     .expect("floor vm init");
-    let pure = floor_vm.interpreter(&exe).expect("pure rvr instance");
+    let pure = floor_vm
+        .executor()
+        .rvr_instret_tracking_instance(&exe, None)
+        .expect("tracked pure rvr instance");
     let metered = floor_vm
         .metered_interpreter(&exe)
         .expect("metered rvr instance");
@@ -5531,10 +6377,10 @@ fn rvr_preflight_wire_staged_host_write_checkpoint() {
         let state = pure.create_initial_vm_state(Streams::default());
         let t0 = Instant::now();
         let state = pure
-            .execute_from_state(state, Some(dyn_insns))
+            .execute_from_state_for(state, dyn_insns)
             .expect("pure rvr execution");
         pure_best = pure_best.min(t0.elapsed().as_secs_f64());
-        std::hint::black_box(state);
+        let _ = std::hint::black_box(state);
 
         let state = metered.create_initial_vm_state(Streams::default());
         let metered_ctx = floor_vm.build_metered_ctx(&exe);
