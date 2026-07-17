@@ -2,8 +2,10 @@
 #include "primitives/buffer_view.cuh"
 #include "riscv/rvr_compact.cuh"
 
-#include <cub/device/device_select.cuh>
+#include <cub/device/device_reduce.cuh>
+#include <cub/device/device_radix_sort.cuh>
 #include <cub/device/device_scan.cuh>
+#include <cub/device/device_select.cuh>
 #include <cuda_runtime.h>
 #include <cstdio>
 #include <stdint.h>
@@ -88,11 +90,54 @@ struct G2PreparedInstruction {
     RvrOperandEntry entry;
     uint32_t slot;
     int32_t kind;
+    uint32_t row_index;
     uint32_t v0_index;
     uint32_t v1_index;
     uint64_t v0;
     uint64_t v1;
 };
+
+struct DeltaAirOutputDesc {
+    uint64_t base;
+    uint32_t count;
+    uint32_t stride;
+    uint32_t sorted_start;
+    uint32_t kind;
+};
+static_assert(sizeof(DeltaAirOutputDesc) == 24, "G2 output descriptor size drift");
+
+enum G2TimelineAction : uint8_t {
+    G2_EVENT_NONE = 0,
+    G2_EVENT_READ_EXPECT = 1,
+    G2_EVENT_READ_PATCH = 2,
+    G2_EVENT_WRITE_SET = 3,
+    G2_EVENT_STORE_PATCH = 4,
+    G2_EVENT_READ_ANY = 5,
+};
+
+struct G2TimelineEvent {
+    uint64_t address_key;
+    uint64_t value;
+    uint32_t timestamp;
+    uint32_t record_index;
+    uint32_t residual_index;
+    uint8_t action;
+    uint8_t prev_timestamp_offset;
+    uint8_t prev_value_offset;
+    uint8_t value_offset;
+    uint8_t width;
+    uint8_t byte_offset;
+    uint8_t expected_mode;
+    uint8_t reserved;
+    uint32_t padding;
+};
+static_assert(sizeof(G2TimelineEvent) == 40, "G2 timeline-event size drift");
+
+static constexpr uint8_t G2_NO_OFFSET = UINT8_MAX;
+static constexpr uint32_t G2_NO_RECORD = UINT32_MAX;
+static constexpr uint64_t G2_INVALID_ADDRESS = UINT64_MAX;
+static constexpr uint32_t G2_REGISTER_COUNT = 32;
+static constexpr uint32_t G2_REGISTER_REPLAY_CHUNK = 4096;
 
 struct DeviceInitialMemory {
     uint64_t base;
@@ -128,6 +173,120 @@ __device__ __forceinline__ void fail(uint32_t *error, uint32_t code) {
 
 __device__ __forceinline__ void fail_parallel(uint32_t *error, uint32_t code) {
     atomicCAS(error, 0u, code);
+}
+
+__device__ __forceinline__ uint64_t g2_address_key(
+    uint8_t address_space, uint64_t address, uint32_t *error
+) {
+    if (address >> 56) {
+        fail_parallel(error, 58);
+        return G2_INVALID_ADDRESS;
+    }
+    return (uint64_t(address_space) << 56) | address;
+}
+
+__device__ __forceinline__ void g2_store_u32(uint8_t *dst, uint32_t value) {
+    *reinterpret_cast<uint32_t *>(dst) = value;
+}
+
+__device__ __forceinline__ void g2_store_u64(uint8_t *dst, uint64_t value) {
+    g2_store_u32(dst, uint32_t(value));
+    g2_store_u32(dst + sizeof(uint32_t), uint32_t(value >> 32));
+}
+
+__device__ __forceinline__ uint64_t g2_load_u64(uint8_t const *src) {
+    return uint64_t(*reinterpret_cast<uint32_t const *>(src)) |
+           (uint64_t(*reinterpret_cast<uint32_t const *>(src + sizeof(uint32_t))) << 32);
+}
+
+__device__ __forceinline__ uint8_t *g2_output_row(
+    DeltaAirOutputDesc const *outputs,
+    size_t num_airs,
+    RvrOperandEntry const &entry,
+    uint32_t kind,
+    uint32_t row_index,
+    uint32_t expected_stride,
+    uint32_t *error
+) {
+    if (entry.air_idx >= num_airs) {
+        fail_parallel(error, 59);
+        return nullptr;
+    }
+    DeltaAirOutputDesc desc = outputs[entry.air_idx];
+    if (desc.base == 0 || desc.kind != kind || desc.stride != expected_stride ||
+        row_index >= desc.count) {
+        fail_parallel(error, 59);
+        return nullptr;
+    }
+    return reinterpret_cast<uint8_t *>(desc.base) + size_t(row_index) * desc.stride;
+}
+
+__device__ __forceinline__ void g2_emit_timeline(
+    G2TimelineEvent *timeline,
+    size_t timeline_capacity,
+    uint32_t initial_timestamp,
+    uint32_t timestamp,
+    uint8_t address_space,
+    uint64_t address,
+    uint64_t value,
+    uint32_t record_index,
+    uint32_t residual_index,
+    uint8_t action,
+    uint8_t prev_timestamp_offset,
+    uint8_t prev_value_offset,
+    uint8_t value_offset,
+    uint8_t width,
+    uint8_t byte_offset,
+    uint8_t expected_mode,
+    uint32_t *error
+) {
+    if (timestamp < initial_timestamp ||
+        size_t(timestamp - initial_timestamp) >= timeline_capacity || action == G2_EVENT_NONE) {
+        fail_parallel(error, 60);
+        return;
+    }
+    size_t index = timestamp - initial_timestamp;
+    G2TimelineEvent event{
+        g2_address_key(address_space, address, error),
+        value,
+        timestamp,
+        record_index,
+        residual_index,
+        action,
+        prev_timestamp_offset,
+        prev_value_offset,
+        value_offset,
+        width,
+        byte_offset,
+        expected_mode,
+        0,
+        0,
+    };
+    if (event.address_key == G2_INVALID_ADDRESS) return;
+    // The execution timestamp discipline permits at most one memory-bus event
+    // at each timestamp. A duplicate indicates a malformed chronology rather
+    // than a benign race.
+    if (atomicCAS(
+            reinterpret_cast<unsigned long long *>(&timeline[index].address_key),
+            G2_INVALID_ADDRESS,
+            event.address_key
+        ) != G2_INVALID_ADDRESS) {
+        fail_parallel(error, 61);
+        return;
+    }
+    timeline[index].value = event.value;
+    timeline[index].timestamp = event.timestamp;
+    timeline[index].record_index = event.record_index;
+    timeline[index].residual_index = event.residual_index;
+    timeline[index].action = event.action;
+    timeline[index].prev_timestamp_offset = event.prev_timestamp_offset;
+    timeline[index].prev_value_offset = event.prev_value_offset;
+    timeline[index].value_offset = event.value_offset;
+    timeline[index].width = event.width;
+    timeline[index].byte_offset = event.byte_offset;
+    timeline[index].expected_mode = event.expected_mode;
+    timeline[index].reserved = 0;
+    timeline[index].padding = 0;
 }
 
 __device__ __forceinline__ bool load_store_kind(uint32_t kind) {
@@ -613,14 +772,15 @@ __global__ void g2_count_lane_blocks(
     RvrOperandEntry const *operands,
     size_t operand_count,
     int8_t const *kind_by_air,
+    uint32_t *row_counts,
     uint32_t *v0_counts,
     uint32_t *v1_counts,
     size_t count_stride,
     uint32_t *error
 ) {
     if (*error != 0) return;
-    __shared__ uint32_t counts[62];
-    for (uint32_t i = threadIdx.x; i < 62; i += blockDim.x) counts[i] = 0;
+    __shared__ uint32_t counts[93];
+    for (uint32_t i = threadIdx.x; i < 93; i += blockDim.x) counts[i] = 0;
     __syncthreads();
 
     size_t instruction = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
@@ -637,16 +797,18 @@ __global__ void g2_count_lane_blocks(
                 if (kind >= 0) {
                     bool v0, v1;
                     lane_consumption(uint32_t(kind), entry, v0, v1);
-                    if (v0) atomicAdd(&counts[kind], 1u);
-                    if (v1) atomicAdd(&counts[31 + kind], 1u);
+                    if (kind < 30) atomicAdd(&counts[kind], 1u);
+                    if (v0) atomicAdd(&counts[31 + kind], 1u);
+                    if (v1) atomicAdd(&counts[62 + kind], 1u);
                 }
             }
         }
     }
     __syncthreads();
     for (uint32_t kind = threadIdx.x; kind < 31; kind += blockDim.x) {
-        v0_counts[size_t(kind) * count_stride + blockIdx.x] = counts[kind];
-        v1_counts[size_t(kind) * count_stride + blockIdx.x] = counts[31 + kind];
+        row_counts[size_t(kind) * count_stride + blockIdx.x] = counts[kind];
+        v0_counts[size_t(kind) * count_stride + blockIdx.x] = counts[31 + kind];
+        v1_counts[size_t(kind) * count_stride + blockIdx.x] = counts[62 + kind];
     }
 }
 
@@ -657,6 +819,7 @@ __global__ void g2_prepare_instructions(
     RvrOperandEntry const *operands,
     size_t operand_count,
     int8_t const *kind_by_air,
+    uint32_t const *row_offsets,
     uint32_t const *v0_offsets,
     uint32_t const *v1_offsets,
     size_t count_stride,
@@ -690,9 +853,10 @@ __global__ void g2_prepare_instructions(
     __syncthreads();
     if (instruction >= instruction_count || slot >= operand_count) return;
 
-    uint32_t local_v0 = 0, local_v1 = 0;
+    uint32_t local_row = 0, local_v0 = 0, local_v1 = 0;
     for (uint32_t local = 0; local < threadIdx.x; ++local) {
         if (kinds[local] != kind) continue;
+        local_row += kind >= 0 && kind < 30;
         local_v0 += consumption[local] & 1u;
         local_v1 += consumption[local] >> 1;
     }
@@ -700,9 +864,14 @@ __global__ void g2_prepare_instructions(
     output.entry = entry;
     output.slot = slot;
     output.kind = kind;
+    output.row_index = UINT32_MAX;
     output.v0_index = UINT32_MAX;
     output.v1_index = UINT32_MAX;
     if (kind >= 0) {
+        if (kind < 30) {
+            output.row_index =
+                row_offsets[size_t(kind) * count_stride + blockIdx.x] + local_row;
+        }
         G2SegmentHeaderV1 const &header = *reinterpret_cast<G2SegmentHeaderV1 const *>(wire);
         G2LaneDescV1 const *descs = reinterpret_cast<G2LaneDescV1 const *>(wire + 64);
         if (v0) {
@@ -852,6 +1021,7 @@ __global__ void g2_plan_hints(
     uint32_t *timestamp_counts,
     uint32_t *output_counts,
     uint32_t *residual_counts,
+    uint32_t *hint_row_offsets,
     uint32_t *error
 ) {
     if (blockIdx.x != 0 || threadIdx.x != 0 || *error != 0) return;
@@ -862,6 +1032,7 @@ __global__ void g2_plan_hints(
     G2LaneDescV1 const *value = find_lane(descs, header.lane_count, G2_RESIDUAL_VALUE);
     uint32_t dynamic_timestamp = 0;
     uint32_t dynamic_residual = 0;
+    uint32_t hint_row_cursor = 0;
     for (uint32_t hint = 0; hint < *hint_count; ++hint) {
         uint32_t instruction = hint_indices[hint];
         RvrOperandEntry entry = prepared[instruction].entry;
@@ -931,9 +1102,221 @@ __global__ void g2_plan_hints(
         timestamp_counts[instruction] = 3u * num_words;
         output_counts[instruction] = num_words;
         residual_counts[instruction] = residual_count;
+        hint_row_offsets[instruction] = hint_row_cursor;
+        if (hint_row_cursor > UINT32_MAX - num_words) {
+            fail(error, 43);
+            return;
+        }
+        hint_row_cursor += num_words;
         dynamic_timestamp += 3u * num_words;
         dynamic_residual += residual_count;
     }
+}
+
+__device__ __forceinline__ uint8_t g2_store_width(
+    RvrOperandEntry const &entry, uint32_t *error
+) {
+    switch (entry.local_opcode) {
+    case 4: return 8;
+    case 5: return 4;
+    case 6: return 2;
+    case 7: return 1;
+    default: fail_parallel(error, 62); return 0;
+    }
+}
+
+__device__ bool g2_emit_standard_direct(
+    DeltaRecord const &record,
+    uint64_t expected_block,
+    uint8_t expected_mode,
+    RvrOperandEntry const &entry,
+    uint32_t kind,
+    uint32_t row_index,
+    uint32_t record_index,
+    DeltaAirOutputDesc const *outputs,
+    size_t num_airs,
+    uint64_t *record_ptrs,
+    G2TimelineEvent *timeline,
+    size_t timeline_capacity,
+    uint32_t initial_timestamp,
+    uint32_t *error
+) {
+    uint32_t stride;
+    switch (entry.access_pattern) {
+    case G2_ADDI_PATTERN:
+    case 0:
+    case 1:
+    case G2_LOAD_PATTERN:
+    case G2_STORE_PATTERN: stride = sizeof(RvrAlu3Compact); break;
+    case 4: stride = sizeof(RvrBranch2Compact); break;
+    case 5:
+    case 6: stride = sizeof(RvrWr1Compact); break;
+    case 7: stride = sizeof(RvrRw1Compact); break;
+    default: fail_parallel(error, 63); return false;
+    }
+    uint8_t *row = g2_output_row(
+        outputs, num_airs, entry, kind, row_index, stride, error
+    );
+    if (row == nullptr) return false;
+    for (uint32_t offset = 0; offset < stride; offset += sizeof(uint32_t)) {
+        g2_store_u32(row + offset, 0);
+    }
+    g2_store_u32(row, record.from_pc);
+    g2_store_u32(row + 4, record.from_timestamp);
+    record_ptrs[record_index] = reinterpret_cast<uint64_t>(row);
+
+    auto reg_event = [&](uint32_t timestamp,
+                         uint32_t pointer,
+                         uint64_t value,
+                         uint8_t action,
+                         uint8_t previous_timestamp_offset,
+                         uint8_t previous_value_offset,
+                         uint8_t value_offset) {
+        g2_emit_timeline(
+            timeline,
+            timeline_capacity,
+            initial_timestamp,
+            timestamp,
+            1,
+            uint64_t(pointer) & ~uint64_t(7),
+            value,
+            record_index,
+            G2_NO_RECORD,
+            action,
+            previous_timestamp_offset,
+            previous_value_offset,
+            value_offset,
+            8,
+            0,
+            EXPECT_NONE,
+            error
+        );
+    };
+    auto memory_event = [&](uint32_t timestamp,
+                            uint64_t value,
+                            uint8_t action,
+                            uint8_t previous_timestamp_offset,
+                            uint8_t previous_value_offset,
+                            uint8_t value_offset,
+                            uint8_t width,
+                            uint8_t byte_offset,
+                            uint8_t mode) {
+        uint8_t address_space =
+            (entry.flags & RVR_OPERAND_FLAG_LS_PUBLIC_VALUES) ? 3 : 2;
+        uint32_t effective = effective_address(uint32_t(record.v1), entry);
+        g2_emit_timeline(
+            timeline,
+            timeline_capacity,
+            initial_timestamp,
+            timestamp,
+            address_space,
+            uint64_t(effective) & ~uint64_t(7),
+            value,
+            record_index,
+            G2_NO_RECORD,
+            action,
+            previous_timestamp_offset,
+            previous_value_offset,
+            value_offset,
+            width,
+            byte_offset,
+            mode,
+            error
+        );
+    };
+
+    if (entry.access_pattern == G2_ADDI_PATTERN) {
+        g2_store_u64(row + 28, record.v1);
+        g2_store_u64(row + 36, record.v2);
+        reg_event(record.from_timestamp, entry.b, record.v1, G2_EVENT_READ_EXPECT, 8,
+                  G2_NO_OFFSET, G2_NO_OFFSET);
+        reg_event(record.from_timestamp + 1, entry.a, record.v1 + record.v2,
+                  G2_EVENT_WRITE_SET, 16, 20, G2_NO_OFFSET);
+        return true;
+    }
+    if (entry.access_pattern == 0 || entry.access_pattern == 1) {
+        g2_store_u64(row + 28, record.v1);
+        g2_store_u64(row + 36, record.v2);
+        reg_event(record.from_timestamp, entry.b, record.v1, G2_EVENT_READ_EXPECT, 8,
+                  G2_NO_OFFSET, G2_NO_OFFSET);
+        if ((entry.flags & RVR_OPERAND_FLAG_RS2_IMM) == 0) {
+            reg_event(record.from_timestamp + 1, entry.c, record.v2,
+                      G2_EVENT_READ_EXPECT, 12, G2_NO_OFFSET, G2_NO_OFFSET);
+        }
+        uint64_t result;
+        if (!standard_post_write(kind, entry, record.v1, record.v2, result)) {
+            fail_parallel(error, 64);
+            return false;
+        }
+        reg_event(record.from_timestamp + 2, entry.a, result, G2_EVENT_WRITE_SET, 16, 20,
+                  G2_NO_OFFSET);
+        return true;
+    }
+    if (entry.access_pattern == 4) {
+        g2_store_u64(row + 16, record.v1);
+        g2_store_u64(row + 24, record.v2);
+        reg_event(record.from_timestamp, entry.a, record.v1, G2_EVENT_READ_EXPECT, 8,
+                  G2_NO_OFFSET, G2_NO_OFFSET);
+        reg_event(record.from_timestamp + 1, entry.b, record.v2, G2_EVENT_READ_EXPECT, 12,
+                  G2_NO_OFFSET, G2_NO_OFFSET);
+        return true;
+    }
+    if (entry.access_pattern == 5 || entry.access_pattern == 6) {
+        if (entry.flags & RVR_OPERAND_FLAG_WRITE_ENABLED) {
+            uint64_t result = kind == 14
+                                  ? uint64_t(record.from_pc) +
+                                        uint64_t(int64_t(int32_t(entry.c << 8)))
+                                  : ((entry.flags & RVR_OPERAND_FLAG_IS_JAL)
+                                         ? uint64_t(record.from_pc + 4u)
+                                         : uint64_t(int64_t(int32_t(entry.c << 12))));
+            reg_event(record.from_timestamp, entry.a, result, G2_EVENT_WRITE_SET, 8, 12,
+                      G2_NO_OFFSET);
+        }
+        return true;
+    }
+    if (entry.access_pattern == 7) {
+        g2_store_u64(row + 16, record.v1);
+        reg_event(record.from_timestamp, entry.b, record.v1, G2_EVENT_READ_EXPECT, 8,
+                  G2_NO_OFFSET, G2_NO_OFFSET);
+        if (entry.flags & RVR_OPERAND_FLAG_WRITE_ENABLED) {
+            reg_event(record.from_timestamp + 1, entry.a, uint64_t(record.from_pc + 4u),
+                      G2_EVENT_WRITE_SET, 12, 24, G2_NO_OFFSET);
+        }
+        return true;
+    }
+    if (entry.access_pattern == G2_LOAD_PATTERN ||
+        entry.access_pattern == G2_STORE_PATTERN) {
+        g2_store_u64(row + 28, record.v1);
+        g2_store_u64(row + 36, record.v2);
+        reg_event(record.from_timestamp, entry.b, record.v1, G2_EVENT_READ_EXPECT, 8,
+                  G2_NO_OFFSET, G2_NO_OFFSET);
+        if (entry.access_pattern == G2_LOAD_PATTERN) {
+            memory_event(record.from_timestamp + 1, expected_block, G2_EVENT_READ_EXPECT, 12,
+                         G2_NO_OFFSET, G2_NO_OFFSET, 8, 0, expected_mode);
+            if (entry.flags & RVR_OPERAND_FLAG_WRITE_ENABLED) {
+                uint64_t result;
+                if (!load_value(entry, uint32_t(record.v1), record.v2, result)) {
+                    fail_parallel(error, 65);
+                    return false;
+                }
+                reg_event(record.from_timestamp + 2, entry.a, result, G2_EVENT_WRITE_SET, 16,
+                          20, G2_NO_OFFSET);
+            }
+        } else {
+            uint8_t source_action = expected_mode == EXPECT_AFTER_STORE
+                                        ? G2_EVENT_READ_EXPECT
+                                        : G2_EVENT_READ_PATCH;
+            reg_event(record.from_timestamp + 1, entry.a, record.v2, source_action, 12,
+                      G2_NO_OFFSET, 36);
+            uint8_t width = g2_store_width(entry, error);
+            uint8_t byte_offset = uint8_t(effective_address(uint32_t(record.v1), entry) & 7u);
+            memory_event(record.from_timestamp + 2, expected_block, G2_EVENT_STORE_PATCH, 16,
+                         20, 36, width, byte_offset, expected_mode);
+        }
+        return true;
+    }
+    fail_parallel(error, 63);
+    return false;
 }
 
 __global__ void g2_emit_parallel(
@@ -945,14 +1328,17 @@ __global__ void g2_emit_parallel(
     uint32_t const *output_offsets,
     uint32_t const *residual_offsets,
     uint32_t const *opaque_offsets,
+    uint32_t const *hint_row_offsets,
     uint32_t initial_timestamp,
     uint32_t pc_base,
-    DeltaRecord *delta_output,
     size_t delta_count,
-    uint64_t *expected_blocks,
-    uint8_t *expected_modes,
     DeltaMemoryLogEntry *opaque_output,
     size_t opaque_capacity,
+    DeltaAirOutputDesc const *outputs,
+    size_t num_airs,
+    uint64_t *record_ptrs,
+    G2TimelineEvent *timeline,
+    size_t timeline_capacity,
     uint32_t *kind_counts,
     uint32_t *error
 ) {
@@ -1014,6 +1400,30 @@ __global__ void g2_emit_parallel(
                 fail_parallel(error, 41);
                 return;
             }
+            DeltaMemoryLogEntry emitted = opaque_output[opaque_cursor + event];
+            uint8_t action = emitted.kind == 1
+                                 ? G2_EVENT_WRITE_SET
+                                 : (emitted.kind == 0 ? G2_EVENT_READ_EXPECT
+                                                      : G2_EVENT_READ_ANY);
+            g2_emit_timeline(
+                timeline,
+                timeline_capacity,
+                initial_timestamp,
+                emitted.timestamp,
+                emitted.addr_space,
+                uint64_t(emitted.address) & ~uint64_t(7),
+                emitted.value,
+                G2_NO_RECORD,
+                uint32_t(opaque_cursor + event),
+                action,
+                G2_NO_OFFSET,
+                G2_NO_OFFSET,
+                G2_NO_OFFSET,
+                emitted.width,
+                uint8_t(emitted.address & 7u),
+                EXPECT_NONE,
+                error
+            );
         }
         return;
     }
@@ -1077,6 +1487,7 @@ __global__ void g2_emit_parallel(
             }
         }
         uint32_t memory_pointer = uint32_t(memory_pointer_value);
+        uint32_t hint_row_start = hint_row_offsets[instruction];
         for (uint32_t row = 0; row < num_words; ++row) {
             uint64_t word;
             uint32_t row_timestamp = timestamp + 3u * row;
@@ -1098,15 +1509,50 @@ __global__ void g2_emit_parallel(
                 fail_parallel(error, 46);
                 return;
             }
-            delta_output[output_cursor + row] = {
-                pc_base + decoded.slot * 4u,
-                row_timestamp,
-                uint64_t(address) | (uint64_t(row) << 32) |
-                    (uint64_t(num_words) << 42),
-                word,
-            };
-            expected_blocks[output_cursor + row] = 0;
-            expected_modes[output_cursor + row] = EXPECT_NONE;
+            uint8_t *direct = g2_output_row(
+                outputs,
+                num_airs,
+                entry,
+                kind,
+                hint_row_start + row,
+                64,
+                error
+            );
+            if (direct == nullptr) return;
+            for (uint32_t offset = 0; offset < 64; offset += sizeof(uint32_t)) {
+                g2_store_u32(direct + offset, 0);
+            }
+            g2_store_u32(direct, pc_base + decoded.slot * 4u);
+            g2_store_u32(direct + 4, timestamp);
+            g2_store_u32(direct + 8, row);
+            g2_store_u32(direct + 12, num_words);
+            g2_store_u32(direct + 16, entry.b);
+            g2_store_u32(direct + 20, memory_pointer);
+            g2_store_u32(direct + 28, entry.local_opcode == 0 ? UINT32_MAX : entry.a);
+            g2_store_u64(direct + 48, word);
+            record_ptrs[output_cursor + row] = reinterpret_cast<uint64_t>(direct);
+            if (row == 0) {
+                g2_emit_timeline(
+                    timeline, timeline_capacity, initial_timestamp, row_timestamp, 1,
+                    uint64_t(entry.b) & ~uint64_t(7), memory_pointer, output_cursor + row,
+                    G2_NO_RECORD, G2_EVENT_READ_EXPECT, 24, G2_NO_OFFSET, G2_NO_OFFSET, 8,
+                    0, EXPECT_NONE, error
+                );
+                if (entry.local_opcode != 0) {
+                    g2_emit_timeline(
+                        timeline, timeline_capacity, initial_timestamp, row_timestamp + 1, 1,
+                        uint64_t(entry.a) & ~uint64_t(7), num_words, output_cursor + row,
+                        G2_NO_RECORD, G2_EVENT_READ_EXPECT, 32, G2_NO_OFFSET,
+                        G2_NO_OFFSET, 8, 0, EXPECT_NONE, error
+                    );
+                }
+            }
+            g2_emit_timeline(
+                timeline, timeline_capacity, initial_timestamp, row_timestamp + 2, 2,
+                uint64_t(address) & ~uint64_t(7), word, output_cursor + row,
+                G2_NO_RECORD, G2_EVENT_WRITE_SET, 36, 40, G2_NO_OFFSET, 8, 0,
+                EXPECT_NONE, error
+            );
         }
         if (residual_cursor != residual_end) {
             fail_parallel(error, 43);
@@ -1178,9 +1624,25 @@ __global__ void g2_emit_parallel(
         fail_parallel(error, 22);
         return;
     }
-    delta_output[output_cursor] = record;
-    expected_blocks[output_cursor] = expected_block;
-    expected_modes[output_cursor] = expected_mode;
+    if (decoded.row_index == UINT32_MAX || !g2_emit_standard_direct(
+            record,
+            expected_block,
+            expected_mode,
+            entry,
+            kind,
+            decoded.row_index,
+            uint32_t(output_cursor),
+            outputs,
+            num_airs,
+            record_ptrs,
+            timeline,
+            timeline_capacity,
+            initial_timestamp,
+            error
+        )) {
+        fail_parallel(error, 66);
+        return;
+    }
     atomicAdd(&kind_counts[kind], 1u);
 }
 
@@ -1192,6 +1654,7 @@ __global__ void g2_validate_parallel_output(
     uint32_t const *residual_offsets,
     uint32_t const *opaque_offsets,
     uint32_t const *opaque_occurrences,
+    uint32_t const *row_offsets,
     uint32_t const *v0_offsets,
     uint32_t const *v1_offsets,
     size_t count_stride,
@@ -1226,13 +1689,492 @@ __global__ void g2_validate_parallel_output(
         G2LaneDescV1 const *v0 = find_lane(descs, header.lane_count, lane_v0(expected.kind));
         G2LaneDescV1 const *v1 = find_lane(descs, header.lane_count, lane_v1(expected.kind));
         size_t offset = size_t(expected.kind) * count_stride + count_stride - 1;
-        if ((v0 == nullptr ? 0 : v0->count) != v0_offsets[offset] ||
+        if ((expected.kind < 30 && expected.count != row_offsets[offset]) ||
+            (v0 == nullptr ? 0 : v0->count) != v0_offsets[offset] ||
             (v1 == nullptr ? 0 : v1->count) != v1_offsets[offset]) {
             fail(error, 26);
             return;
         }
     }
     *opaque_residual_count = opaque_offsets[instruction_count];
+}
+
+struct G2RegisterSummary {
+    uint32_t last_timestamp;
+    uint32_t flags;
+    uint64_t last_write_value;
+};
+static_assert(sizeof(G2RegisterSummary) == 16, "G2 register-summary size drift");
+
+struct G2RegisterState {
+    uint32_t timestamp;
+    uint32_t reserved;
+    uint64_t value;
+};
+static_assert(sizeof(G2RegisterState) == 16, "G2 register-state size drift");
+
+struct G2TouchedMemoryRecord {
+    uint32_t addr_space;
+    uint32_t block_ptr;
+    uint32_t timestamp;
+    uint32_t values[4];
+};
+static_assert(sizeof(G2TouchedMemoryRecord) == 28, "G2 touched-record size drift");
+
+static constexpr uint32_t G2_SUMMARY_ACCESSED = 1u;
+static constexpr uint32_t G2_SUMMARY_WRITTEN = 2u;
+
+__global__ void g2_summarize_register_chunks(
+    G2TimelineEvent const *timeline,
+    size_t timeline_capacity,
+    uint32_t const *timeline_length,
+    uint32_t initial_timestamp,
+    G2RegisterSummary *summaries,
+    size_t chunk_capacity,
+    uint32_t *error
+) {
+    size_t chunk = blockIdx.x;
+    if (threadIdx.x != 0 || chunk >= chunk_capacity || *error != 0) return;
+    uint32_t length = *timeline_length;
+    size_t begin = chunk * G2_REGISTER_REPLAY_CHUNK;
+    if (begin >= length || length > timeline_capacity) {
+        if (length > timeline_capacity) fail_parallel(error, 67);
+        return;
+    }
+    size_t end = begin + G2_REGISTER_REPLAY_CHUNK;
+    if (end > length) end = length;
+    G2RegisterSummary local[G2_REGISTER_COUNT]{};
+    for (size_t index = begin; index < end; ++index) {
+        G2TimelineEvent event = timeline[index];
+        if (event.address_key == G2_INVALID_ADDRESS || uint8_t(event.address_key >> 56) != 1)
+            continue;
+        uint64_t address = event.address_key & ((uint64_t(1) << 56) - 1);
+        if ((address & 7u) != 0 || address >= G2_REGISTER_COUNT * sizeof(uint64_t)) {
+            fail_parallel(error, 68);
+            return;
+        }
+        uint32_t reg = uint32_t(address / sizeof(uint64_t));
+        G2RegisterSummary &summary = local[reg];
+        summary.last_timestamp = initial_timestamp + uint32_t(index);
+        summary.flags |= G2_SUMMARY_ACCESSED;
+        if (event.action == G2_EVENT_WRITE_SET) {
+            summary.last_write_value = event.value;
+            summary.flags |= G2_SUMMARY_WRITTEN;
+        } else if (event.action != G2_EVENT_READ_EXPECT &&
+                   event.action != G2_EVENT_READ_PATCH &&
+                   event.action != G2_EVENT_READ_ANY) {
+            fail_parallel(error, 69);
+            return;
+        }
+    }
+    for (uint32_t reg = 0; reg < G2_REGISTER_COUNT; ++reg) {
+        summaries[chunk * G2_REGISTER_COUNT + reg] = local[reg];
+    }
+}
+
+__global__ void g2_scan_register_chunks(
+    G2RegisterSummary const *summaries,
+    G2RegisterState *incoming,
+    size_t chunk_capacity,
+    uint32_t const *timeline_length,
+    DeviceInitialMemory const *initial_memory,
+    size_t initial_memory_count,
+    G2RegisterState *final_states,
+    uint32_t *error
+) {
+    uint32_t reg = threadIdx.x;
+    if (blockIdx.x != 0 || reg >= G2_REGISTER_COUNT || *error != 0) return;
+    if (initial_memory_count <= 1 || initial_memory[1].reserved != 0 ||
+        initial_memory[1].cell_size != 2 || initial_memory[1].base == 0 ||
+        initial_memory[1].len < G2_REGISTER_COUNT * sizeof(uint64_t)) {
+        fail_parallel(error, 70);
+        return;
+    }
+    G2RegisterState state{
+        0,
+        0,
+        *reinterpret_cast<uint64_t const *>(
+            initial_memory[1].base + size_t(reg) * sizeof(uint64_t)
+        ),
+    };
+    if (reg == 0) state.value = 0;
+    size_t chunks = (size_t(*timeline_length) + G2_REGISTER_REPLAY_CHUNK - 1) /
+                    G2_REGISTER_REPLAY_CHUNK;
+    if (chunks > chunk_capacity) {
+        fail_parallel(error, 67);
+        return;
+    }
+    for (size_t chunk = 0; chunk < chunks; ++chunk) {
+        incoming[chunk * G2_REGISTER_COUNT + reg] = state;
+        G2RegisterSummary summary = summaries[chunk * G2_REGISTER_COUNT + reg];
+        if (summary.flags & G2_SUMMARY_ACCESSED) state.timestamp = summary.last_timestamp;
+        if (summary.flags & G2_SUMMARY_WRITTEN) state.value = summary.last_write_value;
+    }
+    final_states[reg] = state;
+}
+
+__global__ void g2_fill_register_chunks(
+    G2TimelineEvent const *timeline,
+    size_t timeline_capacity,
+    uint32_t const *timeline_length,
+    uint32_t initial_timestamp,
+    uint64_t const *record_ptrs,
+    size_t record_count,
+    G2RegisterState const *incoming,
+    size_t chunk_capacity,
+    uint32_t *residual_prev_timestamps,
+    uint64_t *residual_prev_values,
+    size_t residual_count,
+    uint32_t *error
+) {
+    size_t chunk = blockIdx.x;
+    if (threadIdx.x != 0 || chunk >= chunk_capacity || *error != 0) return;
+    uint32_t length = *timeline_length;
+    size_t begin = chunk * G2_REGISTER_REPLAY_CHUNK;
+    if (begin >= length || length > timeline_capacity) return;
+    size_t end = begin + G2_REGISTER_REPLAY_CHUNK;
+    if (end > length) end = length;
+    G2RegisterState state[G2_REGISTER_COUNT];
+    for (uint32_t reg = 0; reg < G2_REGISTER_COUNT; ++reg) {
+        state[reg] = incoming[chunk * G2_REGISTER_COUNT + reg];
+    }
+    for (size_t index = begin; index < end; ++index) {
+        G2TimelineEvent event = timeline[index];
+        if (event.address_key == G2_INVALID_ADDRESS || uint8_t(event.address_key >> 56) != 1)
+            continue;
+        uint64_t address = event.address_key & ((uint64_t(1) << 56) - 1);
+        if ((address & 7u) != 0 || address >= G2_REGISTER_COUNT * sizeof(uint64_t)) {
+            fail_parallel(error, 68);
+            return;
+        }
+        uint32_t reg = uint32_t(address / sizeof(uint64_t));
+        uint8_t *row = nullptr;
+        if (event.record_index != G2_NO_RECORD) {
+            if (event.record_index >= record_count || record_ptrs[event.record_index] == 0) {
+                fail_parallel(error, 71);
+                return;
+            }
+            row = reinterpret_cast<uint8_t *>(record_ptrs[event.record_index]);
+        }
+        if (row != nullptr && event.prev_timestamp_offset != G2_NO_OFFSET) {
+            g2_store_u32(row + event.prev_timestamp_offset, state[reg].timestamp);
+        }
+        if (event.residual_index != G2_NO_RECORD) {
+            if (event.residual_index >= residual_count) {
+                fail_parallel(error, 72);
+                return;
+            }
+            residual_prev_timestamps[event.residual_index] = state[reg].timestamp;
+            residual_prev_values[event.residual_index] = state[reg].value;
+        }
+        if (event.action == G2_EVENT_READ_EXPECT) {
+            if (state[reg].value != event.value) {
+                fail_parallel(error, 73);
+                return;
+            }
+        } else if (event.action == G2_EVENT_READ_PATCH) {
+            if (row == nullptr || event.value_offset == G2_NO_OFFSET) {
+                fail_parallel(error, 74);
+                return;
+            }
+            g2_store_u64(row + event.value_offset, state[reg].value);
+        } else if (event.action == G2_EVENT_WRITE_SET) {
+            if (row != nullptr && event.prev_value_offset != G2_NO_OFFSET) {
+                g2_store_u64(row + event.prev_value_offset, state[reg].value);
+            }
+            state[reg].value = event.value;
+        } else if (event.action != G2_EVENT_READ_ANY) {
+            fail_parallel(error, 69);
+            return;
+        }
+        state[reg].timestamp = initial_timestamp + uint32_t(index);
+    }
+}
+
+__global__ void g2_pack_register_touched(
+    G2RegisterState const *states,
+    G2TouchedMemoryRecord *touched,
+    size_t touched_capacity,
+    uint32_t *register_touched_count,
+    uint32_t *error
+) {
+    if (blockIdx.x != 0 || threadIdx.x != 0 || *error != 0) return;
+    uint32_t count = 0;
+    for (uint32_t reg = 0; reg < G2_REGISTER_COUNT; ++reg) {
+        G2RegisterState state = states[reg];
+        if (state.timestamp == 0) continue;
+        if (count >= touched_capacity) {
+            fail_parallel(error, 75);
+            return;
+        }
+        G2TouchedMemoryRecord record{};
+        record.addr_space = 1;
+        record.block_ptr = reg * 4;
+        record.timestamp = state.timestamp;
+        record.values[0] = Fp(uint16_t(state.value)).asRaw();
+        record.values[1] = Fp(uint16_t(state.value >> 16)).asRaw();
+        record.values[2] = Fp(uint16_t(state.value >> 32)).asRaw();
+        record.values[3] = Fp(uint16_t(state.value >> 48)).asRaw();
+        touched[count++] = record;
+    }
+    *register_touched_count = count;
+}
+
+__global__ void g2_mark_memory_events(
+    G2TimelineEvent const *timeline,
+    uint32_t *indices,
+    uint8_t *flags,
+    size_t count
+) {
+    size_t index = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+    if (index >= count) return;
+    indices[index] = uint32_t(index);
+    uint64_t key = timeline[index].address_key;
+    flags[index] = key != G2_INVALID_ADDRESS && uint8_t(key >> 56) != 1;
+}
+
+__global__ void g2_extract_memory_keys(
+    G2TimelineEvent const *timeline,
+    uint32_t const *event_indices,
+    uint64_t *keys,
+    size_t count
+) {
+    size_t index = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+    if (index < count) keys[index] = timeline[event_indices[index]].address_key;
+}
+
+__global__ void g2_mark_memory_group_starts(
+    uint64_t const *keys, uint32_t *indices, uint8_t *flags, size_t count
+) {
+    size_t index = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+    if (index >= count) return;
+    indices[index] = uint32_t(index);
+    flags[index] = index == 0 || keys[index - 1] != keys[index];
+}
+
+struct G2MemoryTransform {
+    uint64_t keep;
+    uint64_t bits;
+};
+static_assert(sizeof(G2MemoryTransform) == 16, "G2 memory-transform size drift");
+
+struct G2ComposeMemoryTransform {
+    __host__ __device__ __forceinline__ G2MemoryTransform operator()(
+        G2MemoryTransform before, G2MemoryTransform after
+    ) const {
+        return {
+            before.keep & after.keep,
+            (before.bits & after.keep) | after.bits,
+        };
+    }
+};
+
+struct G2EqualAddressKey {
+    __host__ __device__ __forceinline__ bool operator()(uint64_t lhs, uint64_t rhs) const {
+        return lhs == rhs;
+    }
+};
+
+__global__ void g2_prepare_memory_transforms(
+    uint32_t const *event_indices,
+    G2TimelineEvent const *timeline,
+    size_t event_count,
+    uint64_t const *record_ptrs,
+    size_t record_count,
+    G2MemoryTransform *transforms,
+    uint32_t *error
+) {
+    size_t index = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+    if (index >= event_count || *error != 0) return;
+    G2TimelineEvent event = timeline[event_indices[index]];
+    G2MemoryTransform transform{UINT64_MAX, 0};
+    if (event.action == G2_EVENT_WRITE_SET) {
+        transform = {0, event.value};
+    } else if (event.action == G2_EVENT_STORE_PATCH) {
+        if (event.record_index == G2_NO_RECORD || event.record_index >= record_count ||
+            record_ptrs[event.record_index] == 0 || event.value_offset == G2_NO_OFFSET ||
+            event.width == 0 || event.width > 8 || event.byte_offset > 7 ||
+            uint32_t(event.byte_offset) + event.width > 8) {
+            fail_parallel(error, 78);
+            return;
+        }
+        uint8_t const *row = reinterpret_cast<uint8_t const *>(record_ptrs[event.record_index]);
+        uint64_t source = g2_load_u64(row + event.value_offset);
+        uint32_t shift = uint32_t(event.byte_offset) * 8u;
+        uint64_t mask = event.width == 8
+                            ? UINT64_MAX
+                            : (uint64_t(1) << (uint32_t(event.width) * 8u)) - 1u;
+        mask <<= shift;
+        transform = {~mask, (source << shift) & mask};
+    } else if (event.action != G2_EVENT_READ_EXPECT &&
+               event.action != G2_EVENT_READ_ANY) {
+        fail_parallel(error, 79);
+        return;
+    }
+    transforms[index] = transform;
+}
+
+__device__ __forceinline__ bool g2_load_initial_memory_value(
+    uint64_t key,
+    DeviceInitialMemory const *initial_memory,
+    size_t initial_memory_count,
+    uint64_t &value,
+    uint32_t *error
+) {
+    uint32_t address_space = uint32_t(key >> 56);
+    uint64_t byte_address = key & ((uint64_t(1) << 56) - 1);
+    if (address_space == 0 || address_space == 1 || address_space >= initial_memory_count ||
+        initial_memory[address_space].reserved != 0 ||
+        initial_memory[address_space].cell_size != 2 ||
+        initial_memory[address_space].base == 0 ||
+        byte_address > initial_memory[address_space].len ||
+        initial_memory[address_space].len - byte_address < sizeof(uint64_t)) {
+        fail_parallel(error, 76);
+        return false;
+    }
+    value = *reinterpret_cast<uint64_t const *>(
+        initial_memory[address_space].base + byte_address
+    );
+    return true;
+}
+
+__global__ void g2_replay_memory_events(
+    uint64_t const *keys,
+    uint32_t const *event_indices,
+    G2TimelineEvent const *timeline,
+    size_t event_count,
+    G2MemoryTransform const *inclusive_transforms,
+    uint64_t const *record_ptrs,
+    size_t record_count,
+    DeviceInitialMemory const *initial_memory,
+    size_t initial_memory_count,
+    uint32_t *residual_prev_timestamps,
+    uint64_t *residual_prev_values,
+    size_t residual_count,
+    uint32_t *error
+) {
+    size_t index = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+    if (index >= event_count || *error != 0) return;
+    uint64_t key = keys[index];
+    uint64_t initial_value;
+    if (!g2_load_initial_memory_value(
+            key, initial_memory, initial_memory_count, initial_value, error
+        ))
+        return;
+    G2MemoryTransform prefix{UINT64_MAX, 0};
+    uint32_t previous_timestamp = 0;
+    if (index != 0 && keys[index - 1] == key) {
+        prefix = inclusive_transforms[index - 1];
+        previous_timestamp = timeline[event_indices[index - 1]].timestamp;
+    }
+    uint64_t current_value = (initial_value & prefix.keep) | prefix.bits;
+    G2TimelineEvent event = timeline[event_indices[index]];
+    uint8_t *row = nullptr;
+    if (event.record_index != G2_NO_RECORD) {
+        if (event.record_index >= record_count || record_ptrs[event.record_index] == 0) {
+            fail_parallel(error, 71);
+            return;
+        }
+        row = reinterpret_cast<uint8_t *>(record_ptrs[event.record_index]);
+    }
+    if ((event.expected_mode == EXPECT_BEFORE_LOAD ||
+         event.expected_mode == EXPECT_BEFORE_STORE) &&
+        current_value != event.value) {
+        fail_parallel(error, 77);
+        return;
+    }
+    if (event.action == G2_EVENT_READ_EXPECT && event.expected_mode == EXPECT_NONE &&
+        current_value != event.value) {
+        fail_parallel(error, 77);
+        return;
+    }
+    if (row != nullptr && event.prev_timestamp_offset != G2_NO_OFFSET) {
+        g2_store_u32(row + event.prev_timestamp_offset, previous_timestamp);
+    }
+    if (row != nullptr && event.prev_value_offset != G2_NO_OFFSET) {
+        g2_store_u64(row + event.prev_value_offset, current_value);
+    }
+    if (event.residual_index != G2_NO_RECORD) {
+        if (event.residual_index >= residual_count) {
+            fail_parallel(error, 72);
+            return;
+        }
+        residual_prev_timestamps[event.residual_index] = previous_timestamp;
+        residual_prev_values[event.residual_index] = current_value;
+    }
+    G2MemoryTransform inclusive = inclusive_transforms[index];
+    uint64_t next_value = (initial_value & inclusive.keep) | inclusive.bits;
+    if (event.expected_mode == EXPECT_AFTER_STORE && next_value != event.value) {
+        fail_parallel(error, 80);
+    }
+}
+
+__global__ void g2_pack_memory_touched(
+    uint64_t const *keys,
+    uint32_t const *event_indices,
+    G2TimelineEvent const *timeline,
+    size_t event_count,
+    G2MemoryTransform const *inclusive_transforms,
+    uint32_t const *group_starts,
+    uint32_t const *group_count,
+    DeviceInitialMemory const *initial_memory,
+    size_t initial_memory_count,
+    G2TouchedMemoryRecord *touched,
+    size_t touched_capacity,
+    uint32_t const *register_touched_count,
+    uint32_t *error
+) {
+    size_t group = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+    size_t groups = *group_count;
+    if (group >= groups || *error != 0) return;
+    size_t begin = group_starts[group];
+    size_t end = group + 1 < groups ? group_starts[group + 1] : event_count;
+    if (begin >= end || end > event_count) {
+        fail_parallel(error, 81);
+        return;
+    }
+    size_t last = end - 1;
+    uint64_t key = keys[begin];
+    uint64_t initial_value;
+    if (!g2_load_initial_memory_value(
+            key, initial_memory, initial_memory_count, initial_value, error
+        ))
+        return;
+    G2MemoryTransform inclusive = inclusive_transforms[last];
+    uint64_t current_value = (initial_value & inclusive.keep) | inclusive.bits;
+    uint32_t address_space = uint32_t(key >> 56);
+    uint64_t byte_address = key & ((uint64_t(1) << 56) - 1);
+    uint32_t previous_timestamp = timeline[event_indices[last]].timestamp;
+    uint32_t output = *register_touched_count + uint32_t(group);
+    if (output >= touched_capacity || byte_address > uint64_t(UINT32_MAX) * 2u + 1u) {
+        fail_parallel(error, 75);
+        return;
+    }
+    G2TouchedMemoryRecord record{};
+    record.addr_space = address_space;
+    record.block_ptr = uint32_t(byte_address / 2u);
+    record.timestamp = previous_timestamp;
+    record.values[0] = Fp(uint16_t(current_value)).asRaw();
+    record.values[1] = Fp(uint16_t(current_value >> 16)).asRaw();
+    record.values[2] = Fp(uint16_t(current_value >> 32)).asRaw();
+    record.values[3] = Fp(uint16_t(current_value >> 48)).asRaw();
+    touched[output] = record;
+}
+
+__global__ void g2_finish_touched_count(
+    uint32_t const *register_count,
+    uint32_t const *memory_count,
+    size_t capacity,
+    uint32_t *total,
+    uint32_t *error
+) {
+    if (blockIdx.x != 0 || threadIdx.x != 0 || *error != 0) return;
+    uint64_t count = uint64_t(*register_count) + *memory_count;
+    if (count > capacity) {
+        fail_parallel(error, 75);
+        return;
+    }
+    *total = uint32_t(count);
 }
 
 __global__ void g2_predecode(
@@ -1823,17 +2765,22 @@ extern "C" int _rvr_g2_predecode(
     size_t expected_opaque_count,
     uint32_t *d_program_frequencies,
     size_t frequency_count,
-    DeviceRawBufferConstView d_delta_output,
-    DeviceRawBufferConstView d_expected_blocks,
-    DeviceRawBufferConstView d_expected_modes,
+    size_t total_record_count,
     DeviceRawBufferConstView d_opaque_residual_output,
     uint32_t *d_opaque_residual_count,
+    DeltaAirOutputDesc const *d_outputs,
+    size_t num_airs,
+    DeviceRawBufferConstView d_touched_output,
+    uint32_t *d_touched_count,
+    uint32_t *d_opaque_prev_timestamps,
+    uint64_t *d_opaque_prev_values,
     uint32_t *d_error,
     cudaStream_t stream
 ) {
-    size_t delta_count = d_delta_output.size / sizeof(DeltaRecord);
+    size_t delta_count = total_record_count;
     size_t opaque_capacity =
         d_opaque_residual_output.size / sizeof(DeltaMemoryLogEntry);
+    size_t touched_capacity = d_touched_output.size / sizeof(G2TouchedMemoryRecord);
     bool timestamp_budget_overflow = delta_count > UINT32_MAX / 3;
     size_t timestamp_budget = timestamp_budget_overflow ? 0 : delta_count * 3;
     if (!timestamp_budget_overflow) {
@@ -1842,6 +2789,7 @@ extern "C" int _rvr_g2_predecode(
     }
     if (!timestamp_budget_overflow) {
         timestamp_budget_overflow = instruction_count > UINT32_MAX - timestamp_budget;
+        if (!timestamp_budget_overflow) timestamp_budget += instruction_count;
     }
     if (d_wire.ptr == nullptr || d_wire.size < 128 ||
         d_expected_fingerprint == nullptr || d_blocks == nullptr || block_count == 0 ||
@@ -1851,14 +2799,14 @@ extern "C" int _rvr_g2_predecode(
         d_expected_kinds == nullptr || expected_kind_count == 0 ||
         (expected_opaque_count != 0 && d_expected_opaque == nullptr) ||
         d_program_frequencies == nullptr || frequency_count == 0 ||
-        d_delta_output.size % sizeof(DeltaRecord) != 0 ||
-        (d_delta_output.size != 0 &&
-         (d_delta_output.ptr == 0 || d_expected_blocks.ptr == 0 ||
-          d_expected_modes.ptr == 0)) ||
-        d_expected_blocks.size != d_delta_output.size / sizeof(DeltaRecord) * sizeof(uint64_t) ||
-        d_expected_modes.size != d_delta_output.size / sizeof(DeltaRecord) ||
         (d_opaque_residual_output.size != 0 && d_opaque_residual_output.ptr == 0) ||
-        d_opaque_residual_count == nullptr || d_error == nullptr || run_count == 0 ||
+        (opaque_capacity != 0 &&
+         (d_opaque_prev_timestamps == nullptr || d_opaque_prev_values == nullptr)) ||
+        d_outputs == nullptr || num_airs == 0 ||
+        d_touched_output.size % sizeof(G2TouchedMemoryRecord) != 0 ||
+        (touched_capacity != 0 && d_touched_output.ptr == 0) ||
+        d_touched_count == nullptr || d_opaque_residual_count == nullptr ||
+        d_error == nullptr || run_count == 0 ||
         run_count > CUDA_GRID_X_MAX || run_count > UINT32_MAX || run_count == SIZE_MAX ||
         instruction_count == 0 || instruction_count > UINT32_MAX ||
         delta_count > UINT32_MAX || opaque_capacity > UINT32_MAX ||
@@ -1868,15 +2816,21 @@ extern "C" int _rvr_g2_predecode(
     }
     size_t instruction_blocks = 1 + (instruction_count - 1) / 256;
     size_t count_stride = instruction_blocks + 1;
+    size_t chunk_capacity =
+        (timestamp_budget + G2_REGISTER_REPLAY_CHUNK - 1) / G2_REGISTER_REPLAY_CHUNK;
     if (instruction_blocks > CUDA_GRID_X_MAX || instruction_blocks == SIZE_MAX ||
         count_stride > SIZE_MAX / 31 ||
-        instruction_count > SIZE_MAX / sizeof(G2PreparedInstruction)) {
+        instruction_count > SIZE_MAX / sizeof(G2PreparedInstruction) ||
+        timestamp_budget > SIZE_MAX / sizeof(G2TimelineEvent) ||
+        chunk_capacity > SIZE_MAX / G2_REGISTER_COUNT ||
+        chunk_capacity * G2_REGISTER_COUNT > SIZE_MAX / sizeof(G2RegisterSummary)) {
         std::fprintf(stderr, "OPENVM_RVR_G2_CUDA_ERROR call=launch_dimensions code=%d\n", int(cudaErrorInvalidValue));
         return int(cudaErrorInvalidValue);
     }
     size_t lane_count_entries = 31 * count_stride;
     size_t instruction_scan_entries = instruction_count + 1;
     uint32_t *d_run_lengths = nullptr, *d_run_offsets = nullptr, *d_program_slots = nullptr;
+    uint32_t *d_row_counts = nullptr, *d_row_offsets = nullptr;
     uint32_t *d_v0_counts = nullptr, *d_v0_offsets = nullptr;
     uint32_t *d_v1_counts = nullptr, *d_v1_offsets = nullptr;
     uint32_t *d_timestamp_counts = nullptr, *d_timestamp_offsets = nullptr;
@@ -1886,12 +2840,31 @@ extern "C" int _rvr_g2_predecode(
     uint32_t *d_opaque_markers = nullptr, *d_opaque_occurrences = nullptr;
     uint32_t *d_instruction_indices = nullptr, *d_hint_indices = nullptr;
     uint32_t *d_hint_count = nullptr, *d_kind_counts = nullptr;
+    uint32_t *d_hint_row_offsets = nullptr;
     uint8_t *d_hint_flags = nullptr;
     int8_t *d_kind_by_air = nullptr;
     G2PreparedInstruction *d_prepared = nullptr;
+    uint64_t *d_record_ptrs = nullptr;
+    G2TimelineEvent *d_timeline = nullptr;
+    G2RegisterSummary *d_register_summaries = nullptr;
+    G2RegisterState *d_register_incoming = nullptr, *d_register_final = nullptr;
+    uint32_t *d_register_touched_count = nullptr;
+    uint32_t *d_memory_indices = nullptr, *d_memory_selected_a = nullptr;
+    uint32_t *d_memory_selected_b = nullptr, *d_memory_group_starts = nullptr;
+    uint32_t *d_memory_event_count = nullptr, *d_memory_group_count = nullptr;
+    uint8_t *d_memory_flags = nullptr, *d_memory_group_flags = nullptr;
+    uint64_t *d_memory_keys_a = nullptr, *d_memory_keys_b = nullptr;
+    G2MemoryTransform *d_memory_transforms_a = nullptr;
+    G2MemoryTransform *d_memory_transforms_b = nullptr;
+    void *d_memory_temp = nullptr;
     void *d_scan_temp = nullptr;
     size_t scan_temp_bytes = 0, lane_scan_temp_bytes = 0;
     size_t instruction_scan_temp_bytes = 0, select_temp_bytes = 0;
+    size_t memory_count_temp_bytes = 0, memory_select_temp_bytes = 0;
+    size_t memory_sort_temp_bytes = 0;
+    size_t memory_group_select_temp_bytes = 0, memory_scan_temp_bytes = 0;
+    size_t register_entries = chunk_capacity * G2_REGISTER_COUNT;
+    uint32_t memory_event_count = 0;
     int result = 0;
 
 #define G2_TRY(expr)                                                                               \
@@ -1919,6 +2892,12 @@ extern "C" int _rvr_g2_predecode(
         reinterpret_cast<void **>(&d_program_slots), instruction_count * sizeof(uint32_t), stream
     ));
     G2_TRY(cudaMallocAsync(
+        reinterpret_cast<void **>(&d_row_counts), lane_count_entries * sizeof(uint32_t), stream
+    ));
+    G2_TRY(cudaMallocAsync(
+        reinterpret_cast<void **>(&d_row_offsets), lane_count_entries * sizeof(uint32_t), stream
+    ));
+    G2_TRY(cudaMallocAsync(
         reinterpret_cast<void **>(&d_v0_counts), lane_count_entries * sizeof(uint32_t), stream
     ));
     G2_TRY(cudaMallocAsync(
@@ -1935,6 +2914,37 @@ extern "C" int _rvr_g2_predecode(
         reinterpret_cast<void **>(&d_prepared),
         instruction_count * sizeof(G2PreparedInstruction),
         stream
+    ));
+    if (delta_count != 0) {
+        G2_TRY(cudaMallocAsync(
+            reinterpret_cast<void **>(&d_record_ptrs), delta_count * sizeof(uint64_t), stream
+        ));
+    }
+    G2_TRY(cudaMallocAsync(
+        reinterpret_cast<void **>(&d_timeline),
+        timestamp_budget * sizeof(G2TimelineEvent),
+        stream
+    ));
+    G2_TRY(cudaMallocAsync(
+        reinterpret_cast<void **>(&d_register_summaries),
+        register_entries * sizeof(G2RegisterSummary),
+        stream
+    ));
+    G2_TRY(cudaMallocAsync(
+        reinterpret_cast<void **>(&d_register_incoming),
+        register_entries * sizeof(G2RegisterState),
+        stream
+    ));
+    G2_TRY(cudaMallocAsync(
+        reinterpret_cast<void **>(&d_register_final),
+        G2_REGISTER_COUNT * sizeof(G2RegisterState),
+        stream
+    ));
+    G2_TRY(cudaMallocAsync(
+        reinterpret_cast<void **>(&d_memory_indices), timestamp_budget * sizeof(uint32_t), stream
+    ));
+    G2_TRY(cudaMallocAsync(
+        reinterpret_cast<void **>(&d_memory_flags), timestamp_budget, stream
     ));
 #define G2_ALLOC_U32(ptr, count)                                                                  \
     G2_TRY(cudaMallocAsync(                                                                       \
@@ -1954,11 +2964,18 @@ extern "C" int _rvr_g2_predecode(
     G2_ALLOC_U32(d_hint_indices, instruction_count);
     G2_ALLOC_U32(d_hint_count, 1);
     G2_ALLOC_U32(d_kind_counts, 31);
+    G2_ALLOC_U32(d_hint_row_offsets, instruction_count);
+    G2_ALLOC_U32(d_register_touched_count, 1);
+    G2_ALLOC_U32(d_memory_event_count, 1);
+    G2_ALLOC_U32(d_memory_group_count, 1);
     G2_TRY(cudaMallocAsync(
         reinterpret_cast<void **>(&d_hint_flags), instruction_count, stream
     ));
 #undef G2_ALLOC_U32
     G2_TRY(cudaMemsetAsync(d_run_lengths, 0, (run_count + 1) * sizeof(uint32_t), stream));
+    G2_TRY(cudaMemsetAsync(
+        d_row_counts, 0, lane_count_entries * sizeof(uint32_t), stream
+    ));
     G2_TRY(cudaMemsetAsync(
         d_v0_counts, 0, lane_count_entries * sizeof(uint32_t), stream
     ));
@@ -1983,6 +3000,28 @@ extern "C" int _rvr_g2_predecode(
     G2_TRY(cudaMemsetAsync(d_hint_flags, 0, instruction_count, stream));
     G2_TRY(cudaMemsetAsync(d_hint_count, 0, sizeof(uint32_t), stream));
     G2_TRY(cudaMemsetAsync(d_kind_counts, 0, 31 * sizeof(uint32_t), stream));
+    G2_TRY(cudaMemsetAsync(d_hint_row_offsets, 0xff, instruction_count * sizeof(uint32_t), stream));
+    if (delta_count != 0) {
+        G2_TRY(cudaMemsetAsync(d_record_ptrs, 0, delta_count * sizeof(uint64_t), stream));
+    }
+    G2_TRY(cudaMemsetAsync(
+        d_timeline, 0xff, timestamp_budget * sizeof(G2TimelineEvent), stream
+    ));
+    G2_TRY(cudaMemsetAsync(
+        d_register_summaries, 0, register_entries * sizeof(G2RegisterSummary), stream
+    ));
+    G2_TRY(cudaMemsetAsync(d_register_touched_count, 0, sizeof(uint32_t), stream));
+    G2_TRY(cudaMemsetAsync(d_memory_event_count, 0, sizeof(uint32_t), stream));
+    G2_TRY(cudaMemsetAsync(d_memory_group_count, 0, sizeof(uint32_t), stream));
+    G2_TRY(cudaMemsetAsync(d_touched_count, 0, sizeof(uint32_t), stream));
+    if (opaque_capacity != 0) {
+        G2_TRY(cudaMemsetAsync(
+            d_opaque_prev_timestamps, 0, opaque_capacity * sizeof(uint32_t), stream
+        ));
+        G2_TRY(cudaMemsetAsync(
+            d_opaque_prev_values, 0, opaque_capacity * sizeof(uint64_t), stream
+        ));
+    }
     g2_build_kind_map<<<1, 1, 0, stream>>>(
         d_expected_kinds, expected_kind_count, d_kind_by_air, d_error
     );
@@ -2013,10 +3052,10 @@ extern "C" int _rvr_g2_predecode(
         expected_opaque_count,
         d_program_frequencies,
         frequency_count,
-        reinterpret_cast<DeltaRecord *>(d_delta_output.ptr),
-        d_delta_output.size / sizeof(DeltaRecord),
-        reinterpret_cast<uint64_t *>(d_expected_blocks.ptr),
-        reinterpret_cast<uint8_t *>(d_expected_modes.ptr),
+        nullptr,
+        delta_count,
+        nullptr,
+        nullptr,
         reinterpret_cast<DeltaMemoryLogEntry *>(d_opaque_residual_output.ptr),
         d_opaque_residual_output.size / sizeof(DeltaMemoryLogEntry),
         d_opaque_residual_count,
@@ -2112,6 +3151,7 @@ extern "C" int _rvr_g2_predecode(
             d_operands,
             operand_count,
             d_kind_by_air,
+            d_row_counts,
             d_v0_counts,
             d_v1_counts,
             count_stride,
@@ -2121,6 +3161,14 @@ extern "C" int _rvr_g2_predecode(
     }
     for (uint32_t kind = 0; kind < 31; ++kind) {
         size_t offset = size_t(kind) * count_stride;
+        G2_TRY(cub::DeviceScan::ExclusiveSum(
+            d_scan_temp,
+            scan_temp_bytes,
+            d_row_counts + offset,
+            d_row_offsets + offset,
+            count_stride,
+            stream
+        ));
         G2_TRY(cub::DeviceScan::ExclusiveSum(
             d_scan_temp,
             scan_temp_bytes,
@@ -2148,6 +3196,7 @@ extern "C" int _rvr_g2_predecode(
             d_operands,
             operand_count,
             d_kind_by_air,
+            d_row_offsets,
             d_v0_offsets,
             d_v1_offsets,
             count_stride,
@@ -2221,6 +3270,7 @@ extern "C" int _rvr_g2_predecode(
         d_timestamp_counts,
         d_output_counts,
         d_residual_counts,
+        d_hint_row_offsets,
         d_error
     );
     G2_TRY(cudaGetLastError());
@@ -2241,14 +3291,17 @@ extern "C" int _rvr_g2_predecode(
             d_output_offsets,
             d_residual_offsets,
             d_opaque_offsets,
+            d_hint_row_offsets,
             initial_timestamp,
             pc_base,
-            reinterpret_cast<DeltaRecord *>(d_delta_output.ptr),
-            d_delta_output.size / sizeof(DeltaRecord),
-            reinterpret_cast<uint64_t *>(d_expected_blocks.ptr),
-            reinterpret_cast<uint8_t *>(d_expected_modes.ptr),
+            delta_count,
             reinterpret_cast<DeltaMemoryLogEntry *>(d_opaque_residual_output.ptr),
             d_opaque_residual_output.size / sizeof(DeltaMemoryLogEntry),
+            d_outputs,
+            num_airs,
+            d_record_ptrs,
+            d_timeline,
+            timestamp_budget,
             d_kind_counts,
             d_error
         );
@@ -2262,23 +3315,339 @@ extern "C" int _rvr_g2_predecode(
         d_residual_offsets,
         d_opaque_offsets,
         d_opaque_occurrences,
+        d_row_offsets,
         d_v0_offsets,
         d_v1_offsets,
         count_stride,
         d_expected_kinds,
         expected_kind_count,
         d_kind_counts,
-        d_delta_output.size / sizeof(DeltaRecord),
+        delta_count,
         d_opaque_residual_output.size / sizeof(DeltaMemoryLogEntry),
         d_opaque_residual_count,
         d_error
     );
     G2_TRY(cudaGetLastError());
 
+    if (chunk_capacity != 0) {
+        g2_summarize_register_chunks<<<chunk_capacity, 1, 0, stream>>>(
+            d_timeline,
+            timestamp_budget,
+            d_timestamp_offsets + instruction_count,
+            initial_timestamp,
+            d_register_summaries,
+            chunk_capacity,
+            d_error
+        );
+        G2_TRY(cudaGetLastError());
+        g2_scan_register_chunks<<<1, G2_REGISTER_COUNT, 0, stream>>>(
+            d_register_summaries,
+            d_register_incoming,
+            chunk_capacity,
+            d_timestamp_offsets + instruction_count,
+            reinterpret_cast<DeviceInitialMemory const *>(d_initial_memory_bytes.ptr),
+            d_initial_memory_bytes.size / sizeof(DeviceInitialMemory),
+            d_register_final,
+            d_error
+        );
+        G2_TRY(cudaGetLastError());
+        g2_fill_register_chunks<<<chunk_capacity, 1, 0, stream>>>(
+            d_timeline,
+            timestamp_budget,
+            d_timestamp_offsets + instruction_count,
+            initial_timestamp,
+            d_record_ptrs,
+            delta_count,
+            d_register_incoming,
+            chunk_capacity,
+            d_opaque_prev_timestamps,
+            d_opaque_prev_values,
+            opaque_capacity,
+            d_error
+        );
+        G2_TRY(cudaGetLastError());
+    }
+    g2_pack_register_touched<<<1, 1, 0, stream>>>(
+        d_register_final,
+        reinterpret_cast<G2TouchedMemoryRecord *>(d_touched_output.ptr),
+        touched_capacity,
+        d_register_touched_count,
+        d_error
+    );
+    G2_TRY(cudaGetLastError());
+
+    {
+        dim3 block(256);
+        dim3 grid((timestamp_budget + block.x - 1) / block.x);
+        g2_mark_memory_events<<<grid, block, 0, stream>>>(
+            d_timeline, d_memory_indices, d_memory_flags, timestamp_budget
+        );
+        G2_TRY(cudaGetLastError());
+    }
+    G2_TRY(cub::DeviceReduce::Sum(
+        nullptr,
+        memory_count_temp_bytes,
+        d_memory_flags,
+        d_memory_event_count,
+        timestamp_budget,
+        stream
+    ));
+    G2_TRY(cudaMallocAsync(&d_memory_temp, memory_count_temp_bytes, stream));
+    G2_TRY(cub::DeviceReduce::Sum(
+        d_memory_temp,
+        memory_count_temp_bytes,
+        d_memory_flags,
+        d_memory_event_count,
+        timestamp_budget,
+        stream
+    ));
+    G2_TRY(cudaMemcpyAsync(
+        &memory_event_count,
+        d_memory_event_count,
+        sizeof(memory_event_count),
+        cudaMemcpyDeviceToHost,
+        stream
+    ));
+    G2_TRY(cudaStreamSynchronize(stream));
+    if (memory_event_count != 0) {
+        G2_TRY(cudaMallocAsync(
+            reinterpret_cast<void **>(&d_memory_selected_a),
+            size_t(memory_event_count) * sizeof(uint32_t),
+            stream
+        ));
+        G2_TRY(cudaMallocAsync(
+            reinterpret_cast<void **>(&d_memory_selected_b),
+            size_t(memory_event_count) * sizeof(uint32_t),
+            stream
+        ));
+        G2_TRY(cudaMallocAsync(
+            reinterpret_cast<void **>(&d_memory_keys_a),
+            size_t(memory_event_count) * sizeof(uint64_t),
+            stream
+        ));
+        G2_TRY(cudaMallocAsync(
+            reinterpret_cast<void **>(&d_memory_keys_b),
+            size_t(memory_event_count) * sizeof(uint64_t),
+            stream
+        ));
+        G2_TRY(cudaMallocAsync(
+            reinterpret_cast<void **>(&d_memory_group_starts),
+            size_t(memory_event_count) * sizeof(uint32_t),
+            stream
+        ));
+        G2_TRY(cudaMallocAsync(
+            reinterpret_cast<void **>(&d_memory_group_flags), memory_event_count, stream
+        ));
+        G2_TRY(cudaMallocAsync(
+            reinterpret_cast<void **>(&d_memory_transforms_a),
+            size_t(memory_event_count) * sizeof(G2MemoryTransform),
+            stream
+        ));
+        G2_TRY(cudaMallocAsync(
+            reinterpret_cast<void **>(&d_memory_transforms_b),
+            size_t(memory_event_count) * sizeof(G2MemoryTransform),
+            stream
+        ));
+        G2_TRY(cub::DeviceSelect::Flagged(
+            nullptr,
+            memory_select_temp_bytes,
+            d_memory_indices,
+            d_memory_flags,
+            d_memory_selected_a,
+            d_memory_event_count,
+            timestamp_budget,
+            stream
+        ));
+        G2_TRY(cub::DeviceRadixSort::SortPairs(
+            nullptr,
+            memory_sort_temp_bytes,
+            d_memory_keys_a,
+            d_memory_keys_b,
+            d_memory_selected_a,
+            d_memory_selected_b,
+            memory_event_count,
+            0,
+            64,
+            stream
+        ));
+        G2_TRY(cub::DeviceSelect::Flagged(
+            nullptr,
+            memory_group_select_temp_bytes,
+            d_memory_indices,
+            d_memory_group_flags,
+            d_memory_group_starts,
+            d_memory_group_count,
+            memory_event_count,
+            stream
+        ));
+        G2_TRY(cub::DeviceScan::InclusiveScanByKey(
+            nullptr,
+            memory_scan_temp_bytes,
+            d_memory_keys_b,
+            d_memory_transforms_a,
+            d_memory_transforms_b,
+            G2ComposeMemoryTransform{},
+            memory_event_count,
+            G2EqualAddressKey{},
+            stream
+        ));
+        size_t memory_temp_bytes = memory_select_temp_bytes;
+        if (memory_sort_temp_bytes > memory_temp_bytes)
+            memory_temp_bytes = memory_sort_temp_bytes;
+        if (memory_group_select_temp_bytes > memory_temp_bytes)
+            memory_temp_bytes = memory_group_select_temp_bytes;
+        if (memory_scan_temp_bytes > memory_temp_bytes)
+            memory_temp_bytes = memory_scan_temp_bytes;
+        G2_TRY(cudaFreeAsync(d_memory_temp, stream));
+        d_memory_temp = nullptr;
+        G2_TRY(cudaMallocAsync(&d_memory_temp, memory_temp_bytes, stream));
+        G2_TRY(cub::DeviceSelect::Flagged(
+            d_memory_temp,
+            memory_select_temp_bytes,
+            d_memory_indices,
+            d_memory_flags,
+            d_memory_selected_a,
+            d_memory_event_count,
+            timestamp_budget,
+            stream
+        ));
+        {
+            dim3 block(256);
+            dim3 grid((memory_event_count + block.x - 1) / block.x);
+            g2_extract_memory_keys<<<grid, block, 0, stream>>>(
+                d_timeline, d_memory_selected_a, d_memory_keys_a, memory_event_count
+            );
+            G2_TRY(cudaGetLastError());
+        }
+        G2_TRY(cub::DeviceRadixSort::SortPairs(
+            d_memory_temp,
+            memory_sort_temp_bytes,
+            d_memory_keys_a,
+            d_memory_keys_b,
+            d_memory_selected_a,
+            d_memory_selected_b,
+            memory_event_count,
+            0,
+            64,
+            stream
+        ));
+        {
+            dim3 block(256);
+            dim3 grid((memory_event_count + block.x - 1) / block.x);
+            g2_mark_memory_group_starts<<<grid, block, 0, stream>>>(
+                d_memory_keys_b, d_memory_indices, d_memory_group_flags, memory_event_count
+            );
+            G2_TRY(cudaGetLastError());
+        }
+        G2_TRY(cub::DeviceSelect::Flagged(
+            d_memory_temp,
+            memory_group_select_temp_bytes,
+            d_memory_indices,
+            d_memory_group_flags,
+            d_memory_group_starts,
+            d_memory_group_count,
+            memory_event_count,
+            stream
+        ));
+        {
+            dim3 block(256);
+            dim3 grid((memory_event_count + block.x - 1) / block.x);
+            g2_prepare_memory_transforms<<<grid, block, 0, stream>>>(
+                d_memory_selected_b,
+                d_timeline,
+                memory_event_count,
+                d_record_ptrs,
+                delta_count,
+                d_memory_transforms_a,
+                d_error
+            );
+            G2_TRY(cudaGetLastError());
+        }
+        G2_TRY(cub::DeviceScan::InclusiveScanByKey(
+            d_memory_temp,
+            memory_scan_temp_bytes,
+            d_memory_keys_b,
+            d_memory_transforms_a,
+            d_memory_transforms_b,
+            G2ComposeMemoryTransform{},
+            memory_event_count,
+            G2EqualAddressKey{},
+            stream
+        ));
+        {
+            dim3 block(256);
+            dim3 grid((memory_event_count + block.x - 1) / block.x);
+            g2_replay_memory_events<<<grid, block, 0, stream>>>(
+                d_memory_keys_b,
+                d_memory_selected_b,
+                d_timeline,
+                memory_event_count,
+                d_memory_transforms_b,
+                d_record_ptrs,
+                delta_count,
+                reinterpret_cast<DeviceInitialMemory const *>(d_initial_memory_bytes.ptr),
+                d_initial_memory_bytes.size / sizeof(DeviceInitialMemory),
+                d_opaque_prev_timestamps,
+                d_opaque_prev_values,
+                opaque_capacity,
+                d_error
+            );
+            G2_TRY(cudaGetLastError());
+        }
+        {
+            dim3 block(256);
+            dim3 grid((memory_event_count + block.x - 1) / block.x);
+            g2_pack_memory_touched<<<grid, block, 0, stream>>>(
+                d_memory_keys_b,
+                d_memory_selected_b,
+                d_timeline,
+                memory_event_count,
+                d_memory_transforms_b,
+                d_memory_group_starts,
+                d_memory_group_count,
+                reinterpret_cast<DeviceInitialMemory const *>(d_initial_memory_bytes.ptr),
+                d_initial_memory_bytes.size / sizeof(DeviceInitialMemory),
+                reinterpret_cast<G2TouchedMemoryRecord *>(d_touched_output.ptr),
+                touched_capacity,
+                d_register_touched_count,
+                d_error
+            );
+            G2_TRY(cudaGetLastError());
+        }
+    }
+    g2_finish_touched_count<<<1, 1, 0, stream>>>(
+        d_register_touched_count,
+        d_memory_group_count,
+        touched_capacity,
+        d_touched_count,
+        d_error
+    );
+    G2_TRY(cudaGetLastError());
+
 cleanup:
+    if (d_memory_temp) cudaFreeAsync(d_memory_temp, stream);
+    if (d_memory_transforms_b) cudaFreeAsync(d_memory_transforms_b, stream);
+    if (d_memory_transforms_a) cudaFreeAsync(d_memory_transforms_a, stream);
+    if (d_memory_selected_b) cudaFreeAsync(d_memory_selected_b, stream);
+    if (d_memory_selected_a) cudaFreeAsync(d_memory_selected_a, stream);
+    if (d_memory_keys_b) cudaFreeAsync(d_memory_keys_b, stream);
+    if (d_memory_keys_a) cudaFreeAsync(d_memory_keys_a, stream);
+    if (d_memory_group_flags) cudaFreeAsync(d_memory_group_flags, stream);
+    if (d_memory_flags) cudaFreeAsync(d_memory_flags, stream);
+    if (d_memory_group_starts) cudaFreeAsync(d_memory_group_starts, stream);
+    if (d_memory_indices) cudaFreeAsync(d_memory_indices, stream);
+    if (d_memory_group_count) cudaFreeAsync(d_memory_group_count, stream);
+    if (d_memory_event_count) cudaFreeAsync(d_memory_event_count, stream);
+    if (d_register_touched_count) cudaFreeAsync(d_register_touched_count, stream);
+    if (d_register_final) cudaFreeAsync(d_register_final, stream);
+    if (d_register_incoming) cudaFreeAsync(d_register_incoming, stream);
+    if (d_register_summaries) cudaFreeAsync(d_register_summaries, stream);
+    if (d_timeline) cudaFreeAsync(d_timeline, stream);
+    if (d_record_ptrs) cudaFreeAsync(d_record_ptrs, stream);
     if (d_scan_temp) cudaFreeAsync(d_scan_temp, stream);
     if (d_hint_flags) cudaFreeAsync(d_hint_flags, stream);
     if (d_kind_counts) cudaFreeAsync(d_kind_counts, stream);
+    if (d_hint_row_offsets) cudaFreeAsync(d_hint_row_offsets, stream);
     if (d_hint_count) cudaFreeAsync(d_hint_count, stream);
     if (d_hint_indices) cudaFreeAsync(d_hint_indices, stream);
     if (d_instruction_indices) cudaFreeAsync(d_instruction_indices, stream);
@@ -2298,6 +3667,8 @@ cleanup:
     if (d_v1_counts) cudaFreeAsync(d_v1_counts, stream);
     if (d_v0_offsets) cudaFreeAsync(d_v0_offsets, stream);
     if (d_v0_counts) cudaFreeAsync(d_v0_counts, stream);
+    if (d_row_offsets) cudaFreeAsync(d_row_offsets, stream);
+    if (d_row_counts) cudaFreeAsync(d_row_counts, stream);
     if (d_program_slots) cudaFreeAsync(d_program_slots, stream);
     if (d_run_offsets) cudaFreeAsync(d_run_offsets, stream);
     if (d_run_lengths) cudaFreeAsync(d_run_lengths, stream);
