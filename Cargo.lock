@@ -5442,6 +5442,7 @@ dependencies = [
  "openvm-transpiler",
  "serde",
  "strum",
+ "tempfile",
  "test-case",
 ]
 

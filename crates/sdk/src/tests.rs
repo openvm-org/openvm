@@ -2,6 +2,8 @@ use std::{slice::from_ref, sync::Arc};
 
 use eyre::Result;
 use openvm::platform::memory::MEM_SIZE;
+#[cfg(feature = "rvr")]
+use openvm_circuit::arch::ExecutionOutcome;
 use openvm_circuit::arch::{instructions::exe::VmExe, U16_CELL_SIZE};
 use openvm_continuations::prover::DeferralCircuitProver;
 use openvm_sdk_config::{
@@ -519,6 +521,44 @@ fn test_sdk_compiled_pure_save_load_roundtrip() -> Result<()> {
 
 #[cfg(feature = "rvr")]
 #[test]
+fn test_sdk_compiled_instret_tracking_save_load_roundtrip() -> Result<()> {
+    let (sdk, _, _) = make_fib_sdk();
+    let elf = Elf::decode(
+        include_bytes!("../programs/examples/fibonacci.elf"),
+        MEM_SIZE as u32,
+    )?;
+    let exe = sdk.convert_to_exe(elf)?;
+
+    let mut stdin = StdIn::default();
+    stdin.write(&100u64);
+
+    let compiled = sdk.compile_with_instret_tracking(exe.clone())?;
+    let initial_pc = exe.pc_start;
+    let state = compiled.create_initial_vm_state(stdin);
+    let state = match compiled.execute_from_state_for(state, 0)? {
+        ExecutionOutcome::Suspended(execution) => {
+            assert_eq!(execution.retired, 0);
+            execution.state
+        }
+        ExecutionOutcome::Terminated(_) => {
+            panic!("zero-budget execution unexpectedly terminated")
+        }
+    };
+    assert_eq!(state.pc(), initial_pc);
+
+    let tmp = tempfile::tempdir()?;
+    let lib_path = compiled.save(tmp.path())?;
+    drop(compiled);
+
+    assert!(sdk.load_compiled(&lib_path, exe.clone()).is_err());
+    let loaded = sdk.load_compiled_with_instret_tracking(&lib_path, exe)?;
+    let execution = loaded.execute_from_state(state)?;
+    assert!(execution.retired > 0);
+    Ok(())
+}
+
+#[cfg(feature = "rvr")]
+#[test]
 fn test_sdk_compiled_metered_save_load_roundtrip() -> Result<()> {
     let (sdk, _, _) = make_fib_sdk();
     let elf = Elf::decode(
@@ -536,6 +576,14 @@ fn test_sdk_compiled_metered_save_load_roundtrip() -> Result<()> {
     let tmp = tempfile::tempdir()?;
     let lib_path = compiled_a.save(tmp.path())?;
     drop(compiled_a);
+
+    let mismatch = sdk.load_compiled(&lib_path, exe.clone());
+    assert!(mismatch.is_err());
+    assert!(mismatch
+        .err()
+        .unwrap()
+        .to_string()
+        .contains("RVR execution kind mismatch"));
 
     let compiled_b = sdk.load_compiled_metered(&lib_path, exe)?;
     let (reloaded_pv, reloaded_segments) = sdk.execute_metered(&compiled_b, stdin)?;
@@ -569,6 +617,14 @@ fn test_sdk_compiled_metered_cost_save_load_roundtrip() -> Result<()> {
     let tmp = tempfile::tempdir()?;
     let lib_path = compiled_a.save(tmp.path())?;
     drop(compiled_a);
+
+    let mismatch = sdk.load_compiled(&lib_path, exe.clone());
+    assert!(mismatch.is_err());
+    assert!(mismatch
+        .err()
+        .unwrap()
+        .to_string()
+        .contains("RVR execution kind mismatch"));
 
     let compiled_b = sdk.load_compiled_metered_cost(&lib_path, exe)?;
     let (reloaded_pv, reloaded_cost) = sdk.execute_metered_cost(&compiled_b, stdin)?;

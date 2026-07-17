@@ -420,12 +420,12 @@ fn run_mul_program(instructions: Vec<Instruction<F>>) -> (VmState, VmState) {
         .interpreter_instance(&exe)
         .expect("interpreter build must succeed");
     let interp_state = interpreter_instance
-        .execute(vec![], None)
+        .execute(vec![])
         .expect("interpreter execution must succeed");
 
     let aot_instance = executor.aot_instance(&exe).expect("AOT build must succeed");
     let aot_state = aot_instance
-        .execute(vec![], None)
+        .execute(vec![])
         .expect("AOT execution must succeed");
 
     assert_vm_states_equivalent(&interp_state, &aot_state);

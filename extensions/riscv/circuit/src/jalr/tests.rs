@@ -622,12 +622,12 @@ fn run_jalr_program(instructions: Vec<Instruction<F>>) -> (VmState, VmState) {
         .interpreter_instance(&exe)
         .expect("interpreter build must succeed");
     let interp_state = interpreter_instance
-        .execute(vec![], None)
+        .execute(vec![])
         .expect("interpreter execution must succeed");
 
     let aot_instance = executor.aot_instance(&exe).expect("AOT build must succeed");
     let aot_state = aot_instance
-        .execute(vec![], None)
+        .execute(vec![])
         .expect("AOT execution must succeed");
 
     assert_vm_states_equivalent(&interp_state, &aot_state);
@@ -766,14 +766,14 @@ fn assert_dead_pc_rejected_by_pure_aot(
     let interpreter = executor
         .interpreter_instance(exe)
         .expect("interpreter build must succeed");
-    let interp_err = match interpreter.execute(vec![], None) {
+    let interp_err = match interpreter.execute(vec![]) {
         Ok(_) => panic!("interpreter must reject the dead pc slot"),
         Err(err) => err,
     };
     assert!(matches!(interp_err, ExecutionError::Unreachable(pc) if pc == dead_pc));
 
     let aot_instance = executor.aot_instance(exe).expect("AOT build must succeed");
-    let aot_err = match aot_instance.execute(vec![], None) {
+    let aot_err = match aot_instance.execute(vec![]) {
         Ok(_) => panic!("AOT must reject the dead pc slot"),
         Err(err) => err,
     };

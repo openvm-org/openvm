@@ -80,7 +80,7 @@ fn test_rv64im_aot_pure_runtime(elf_path: &str) -> Result<()> {
     let executor = VmExecutor::new(config.clone())?;
 
     let instance = executor.instance(&exe)?;
-    let _interp_state = instance.execute(vec![], None)?;
+    let _interp_state = instance.execute(vec![])?;
 
     Ok(())
 }
@@ -102,11 +102,11 @@ fn test_rv64im_aot_pure_runtime_with_path(elf_path: &str) -> Result<()> {
     let executor = VmExecutor::new(config.clone())?;
 
     let instance = executor.instance(&exe)?;
-    let interp_state = instance.execute(vec![], None)?;
+    let interp_state = instance.execute(vec![])?;
 
     let asm_name = String::from("asm_test_name");
     let mut aot_instance = executor.aot_instance_with_asm_name(&exe, &asm_name)?;
-    let aot_state = aot_instance.execute(vec![], None)?;
+    let aot_state = aot_instance.execute(vec![])?;
 
     assert_eq!(interp_state.instret(), aot_state.instret());
     assert_eq!(interp_state.pc(), aot_state.pc());
@@ -129,7 +129,7 @@ fn test_rv64im_runtime(elf_path: &str) -> Result<()> {
     let config = Rv64ImConfig::default();
     let executor = VmExecutor::new(config)?;
     let instance = executor.instance(&exe)?;
-    instance.execute(vec![], None)?;
+    instance.execute(vec![])?;
     Ok(())
 }
 
@@ -193,7 +193,7 @@ fn test_intrinsic_runtime(elf_path: &str) -> Result<()> {
     )?;
     let executor = VmExecutor::new(config)?;
     let instance = executor.instance(&openvm_exe)?;
-    instance.execute(vec![], None)?;
+    instance.execute(vec![])?;
     Ok(())
 }
 

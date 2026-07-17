@@ -5,10 +5,7 @@ use std::path::{Path, PathBuf};
 use rvr_openvm_lift::RvrRuntimeExtension;
 
 use super::{
-    bridge::map_rvr_execute_error,
-    execute_metered_cost,
-    state::{MeteredCostState, TracerPayload, TracerPtr},
-    RvrCompiled, RvrInitialImage,
+    bridge::map_rvr_execute_error, execute::execute_metered_cost, RvrCompiled, RvrInitialImage,
 };
 #[cfg(feature = "metrics")]
 use crate::arch::execution_metrics::{ExecutionMetric, ExecutionMetricTimer};
@@ -17,9 +14,9 @@ use crate::{
     system::memory::online::GuestMemory,
 };
 
-pub struct RvrMeteredCostResult {
-    pub state: MeteredCostState,
-    pub cost: u64,
+pub(super) struct RvrMeteredCostResult {
+    pub(super) instret: u64,
+    pub(super) cost: u64,
 }
 
 pub struct RvrMeteredCostInstance<'a> {
@@ -32,51 +29,35 @@ pub struct RvrMeteredCostInstance<'a> {
     pub(crate) widths: Vec<u64>,
 }
 
-/// C-compatible metered cost meter data.
+/// C-compatible state for metered-cost execution.
 ///
-/// Layout must exactly match the C `Tracer` struct in `openvm_tracer_metered_cost.h`.
+/// Layout must exactly match the generated C `MeteredCostState` struct.
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct MeteredCostData {
+pub struct MeteredCostState {
+    pub instret: u64,
     pub cost: u64,
     pub chip_widths: *const u64,
 }
 
-impl Default for MeteredCostData {
+impl Default for MeteredCostState {
     fn default() -> Self {
         Self {
+            instret: 0,
             cost: 0,
             chip_widths: std::ptr::null(),
         }
     }
 }
 
-impl TracerPayload for MeteredCostData {
-    const KIND: u32 = 10;
-}
-
-pub type MeteredCostMeter = TracerPtr<MeteredCostData>;
-
-/// C-compatible pure tracer data.
-///
-/// Layout must exactly match the C `Tracer` struct in `openvm_tracer_pure.h`.
-/// All tracing is no-op; suspension is handled by RvState's target_instret.
-#[repr(C)]
-#[derive(Clone, Copy, Default)]
-pub struct PureTracerData;
-
-impl TracerPayload for PureTracerData {
-    const KIND: u32 = 12;
-}
-
-pub type PureTracer = TracerPtr<PureTracerData>;
-
 impl RvrMeteredCostInstance<'_> {
     /// Persist the compiled shared library into `dir`. Returns the path to
     /// the copied artifact. The user must re-supply `exe`, `executor_idx_to_air_idx`,
     /// and `widths` when loading.
     pub fn save(&self, dir: &Path) -> Result<PathBuf, super::CompileError> {
-        let dest_lib = self.compiled.lib_file_name_with_suffix("metered-cost")?;
+        let dest_lib = self
+            .compiled
+            .lib_file_name_with_suffix(self.compiled.execution_kind().artifact_suffix())?;
         self.compiled.save_artifact(&dir.join(dest_lib))
     }
 
@@ -110,12 +91,11 @@ impl RvrMeteredCostInstance<'_> {
             .map_err(map_rvr_execute_error)?;
         #[cfg(feature = "metrics")]
         {
-            let insns = result.state.instret;
-            metrics.record(insns);
+            metrics.record(result.instret);
         }
 
         let mut output_ctx = ctx;
-        output_ctx.instret = result.state.instret;
+        output_ctx.instret = result.instret;
         output_ctx.cost = result.cost;
 
         Ok((output_ctx, vm_state))

@@ -6,6 +6,8 @@ mod tests {
     use std::{sync::Barrier, thread};
 
     use eyre::Result;
+    #[cfg(feature = "rvr")]
+    use openvm_circuit::arch::ExecutionOutcome;
     use openvm_circuit::{
         arch::{hasher::poseidon2::vm_poseidon2_hasher, ExecutionError, VmExecutor},
         system::memory::{
@@ -68,7 +70,7 @@ mod tests {
         .unwrap();
         let executor = VmExecutor::new(config).unwrap();
         let instance = executor.instance(&exe).unwrap();
-        instance.execute(vec![], None).unwrap();
+        instance.execute(vec![]).unwrap();
     }
 
     #[test]
@@ -103,7 +105,7 @@ mod tests {
                 scope.spawn(|| {
                     barrier.wait();
                     for _ in 0..NUM_RUNS {
-                        let state = instance.execute(vec![], None).unwrap();
+                        let state = instance.execute(vec![]).unwrap();
                         let public_values = extract_public_values(64, &state.memory.memory);
                         assert_eq!(&public_values[..32], &expected_prefix);
                         assert_eq!(
@@ -167,11 +169,58 @@ mod tests {
         )?;
 
         let executor = VmExecutor::new(config)?;
-        let instance = executor.instance(&exe)?;
-        let state = instance.execute(vec![], Some(10))?;
-        let state = instance.execute_from_state(state, Some(10))?;
-        let end_state1 = instance.execute_from_state(state, None)?;
-        let end_state2 = instance.execute(vec![], None)?;
+        #[cfg(feature = "rvr")]
+        let (end_state1, end_state2) = {
+            let tracking_instance = executor.rvr_instret_tracking_instance(&exe, None)?;
+
+            let initial_pc = exe.pc_start;
+            let zero_budget_state = match tracking_instance.execute_for(vec![], 0)? {
+                ExecutionOutcome::Suspended(execution) => execution.state,
+                ExecutionOutcome::Terminated(_) => {
+                    panic!("zero-budget execution unexpectedly terminated")
+                }
+            };
+            assert_eq!(zero_budget_state.pc(), initial_pc);
+
+            let artifact_dir = tempfile::tempdir()?;
+            let artifact_path = tracking_instance.save(artifact_dir.path())?;
+            assert!(artifact_path
+                .file_stem()
+                .unwrap()
+                .to_string_lossy()
+                .ends_with("-pure-with-instret-tracking"));
+            let loaded_tracking_instance =
+                executor.load_instret_tracking_instance(&artifact_path, &exe)?;
+            let loaded_zero_budget_state = match loaded_tracking_instance.execute_for(vec![], 0)? {
+                ExecutionOutcome::Suspended(execution) => execution.state,
+                ExecutionOutcome::Terminated(_) => {
+                    panic!("zero-budget execution unexpectedly terminated")
+                }
+            };
+            assert_eq!(loaded_zero_budget_state.pc(), initial_pc);
+
+            let unlimited_instance = executor.instance(&exe)?;
+            let state = tracking_instance
+                .execute_for(vec![], 10)?
+                .into_inner()
+                .state;
+            let state = tracking_instance
+                .execute_from_state_for(state, 10)?
+                .into_inner()
+                .state;
+            let end_state1 = tracking_instance.execute_from_state(state)?.state;
+            let end_state2 = unlimited_instance.execute(vec![])?;
+            (end_state1, end_state2)
+        };
+        #[cfg(not(feature = "rvr"))]
+        let (end_state1, end_state2) = {
+            let instance = executor.instance(&exe)?;
+            let state = instance.execute_for(vec![], 10)?.into_inner();
+            let state = instance.execute_from_state_for(state, 10)?.into_inner();
+            let end_state1 = instance.execute_from_state(state)?;
+            let end_state2 = instance.execute(vec![])?;
+            (end_state1, end_state2)
+        };
         assert_eq!(end_state1.pc(), end_state2.pc());
         for addr_space in 1..end_state1.memory.memory.mem.len() {
             assert_eq!(
@@ -330,7 +379,7 @@ mod tests {
 
         let executor = VmExecutor::new(config).unwrap();
         let instance = executor.instance(&exe).unwrap();
-        instance.execute(vec![], None).unwrap();
+        instance.execute(vec![]).unwrap();
     }
 
     #[test]
@@ -353,7 +402,7 @@ mod tests {
 
             let executor = VmExecutor::new(config).unwrap();
             let instance = executor.instance(&exe).unwrap();
-            instance.execute(vec![], None).unwrap();
+            instance.execute(vec![]).unwrap();
             return; // unreachable: abort fired
         }
 
@@ -375,7 +424,7 @@ mod tests {
 
         let executor = VmExecutor::new(config.clone())?;
         let instance = executor.instance(&exe)?;
-        let state = instance.execute(vec![], None)?;
+        let state = instance.execute(vec![])?;
         let final_memory = state.memory.memory;
         let hasher = vm_poseidon2_hasher::<F>();
         let md = config.as_ref().memory_config.memory_dimensions();
@@ -441,7 +490,7 @@ mod tests {
         let executor = VmExecutor::new(config)?;
         let instance = executor.instance(&exe)?;
         let input = vec![vec![0u8, 0, 0, 1]];
-        match instance.execute(input.clone(), None) {
+        match instance.execute(input.clone()) {
             Err(ExecutionError::FailedWithExitCode(_)) => Ok(()),
             Err(_) => panic!("should fail with `FailedWithExitCode`"),
             Ok(_) => panic!("should fail"),
@@ -520,7 +569,7 @@ mod tests {
         .unwrap();
         let executor = VmExecutor::new(config).unwrap();
         let instance = executor.instance(&exe).unwrap();
-        instance.execute(vec![], None).unwrap();
+        instance.execute(vec![]).unwrap();
     }
 
     #[test]

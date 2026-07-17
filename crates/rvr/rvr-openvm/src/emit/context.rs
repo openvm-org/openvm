@@ -6,7 +6,7 @@ use super::codegen::hex_u32;
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(crate) enum EmitMode {
-    /// Memory accesses go through `*_traced` helpers so the tracer sees values.
+    /// Memory accesses go through `*_traced` helpers so tracing sees values.
     #[allow(dead_code)]
     ValueTrace,
     /// Memory accesses use direct helpers and do not emit memory trace events.
@@ -14,6 +14,29 @@ pub(crate) enum EmitMode {
     Direct,
     /// Metered block ABI. Blocks with memory ops record AS_MEMORY pages locally.
     Metered { trace_memory_pages: bool },
+}
+
+/// Extra values carried between generated blocks through the `preserve_none`
+/// tail-call ABI.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) enum BlockAbi {
+    /// State pointer and hot guest registers only.
+    #[default]
+    Plain,
+    /// Pure execution with an instret countdown.
+    InstretCountdown,
+    /// Metered execution with its periodic-check counter and trace heights.
+    Metered,
+}
+
+impl BlockAbi {
+    pub(crate) const fn extra_args(self) -> usize {
+        match self {
+            Self::Plain => 0,
+            Self::InstretCountdown => 1,
+            Self::Metered => 2,
+        }
+    }
 }
 
 impl EmitMode {
@@ -54,16 +77,18 @@ pub struct EmitContext {
     /// Counter for unique variable names.
     var_counter: u32,
     mode: EmitMode,
+    block_abi: BlockAbi,
 }
 
 impl EmitContext {
-    pub(crate) fn new(hot_regs: HashSet<u8>, mode: EmitMode) -> Self {
+    pub(crate) fn new(hot_regs: HashSet<u8>, mode: EmitMode, block_abi: BlockAbi) -> Self {
         Self {
             buf: String::with_capacity(1024),
             hot_regs,
             indent: 2,
             var_counter: 0,
             mode,
+            block_abi,
         }
     }
 
@@ -178,7 +203,7 @@ impl EmitContext {
         }
     }
 
-    /// Write a register with tracing. Trace before write so tracer can read
+    /// Write a register with tracing. Trace before write so the helper can read
     /// the old value from state if needed.
     ///
     /// `val` is materialized into a temporary first so it is evaluated exactly
@@ -273,7 +298,7 @@ impl EmitContext {
 
     /// Emit a guest memory write. Metered hot blocks record the memory page
     /// through the block-local `TraceMemory` context, then use the raw memory
-    /// helper so the common path avoids tracer calls.
+    /// helper so the common path avoids tracing calls.
     pub fn write_mem(&mut self, base: &str, offset: i16, val: &str, width: u8) {
         assert!(
             !self.mode.is_metered_without_memory_pages(),
@@ -304,13 +329,13 @@ impl EmitContext {
 
     pub fn flush_page_locals(&mut self) {
         if self.mode.traces_memory_pages() {
-            self.write_line("trace_memory_flush(state->tracer, &trace_memory);");
+            self.write_line("trace_memory_flush(&state->mode_state, &trace_memory);");
         }
     }
 
     pub fn reload_page_locals(&mut self) {
         if self.mode.traces_memory_pages() {
-            self.write_line("trace_memory_reload(state->tracer, &trace_memory);");
+            self.write_line("trace_memory_reload(&state->mode_state, &trace_memory);");
         }
     }
 
@@ -394,8 +419,10 @@ impl EmitContext {
             let name = Self::abi_name(idx);
             write!(args, ", {name}").unwrap();
         }
-        if self.mode.has_metered_abi() {
-            args.push_str(", check_counter, trace_heights");
+        match self.block_abi {
+            BlockAbi::Plain => {}
+            BlockAbi::InstretCountdown => args.push_str(", instret_remaining"),
+            BlockAbi::Metered => args.push_str(", check_counter, trace_heights"),
         }
         args
     }
@@ -408,8 +435,16 @@ impl EmitContext {
             write!(args, ", {name}").unwrap();
         }
         self.write_line(&format!("rv_save_hot_regs({args});"));
-        if self.mode.has_metered_abi() {
-            self.write_line("state->tracer->check_counter = check_counter;");
+        match self.block_abi {
+            BlockAbi::Plain => {}
+            BlockAbi::InstretCountdown => {
+                self.write_line(
+                    "state->mode_state.retired = state->mode_state.target - instret_remaining;",
+                );
+            }
+            BlockAbi::Metered => {
+                self.write_line("state->mode_state.check_counter = check_counter;");
+            }
         }
     }
 
@@ -479,7 +514,7 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext {
 mod tests {
     use std::collections::HashSet;
 
-    use super::{EmitContext, EmitMode};
+    use super::{BlockAbi, EmitContext, EmitMode};
 
     fn metered_memory_ctx() -> EmitContext {
         EmitContext::new(
@@ -487,6 +522,7 @@ mod tests {
             EmitMode::Metered {
                 trace_memory_pages: true,
             },
+            BlockAbi::Metered,
         )
     }
 

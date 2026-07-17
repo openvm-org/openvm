@@ -26,6 +26,24 @@ use crate::{
     },
 };
 
+/// The reason an execution call returned, together with its mode-specific output.
+#[must_use]
+pub enum ExecutionOutcome<T> {
+    /// The program terminated successfully.
+    Terminated(T),
+    /// Execution stopped at a mode-specific boundary and can be resumed.
+    Suspended(T),
+}
+
+impl<T> ExecutionOutcome<T> {
+    /// Consume the outcome and return its inner value, regardless of why execution stopped.
+    pub fn into_inner(self) -> T {
+        match self {
+            Self::Terminated(output) | Self::Suspended(output) => output,
+        }
+    }
+}
+
 #[derive(Error, Debug)]
 pub enum ExecutionError {
     #[error("execution failed at pc {pc}, err: {msg}")]
