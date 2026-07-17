@@ -1950,6 +1950,13 @@ fn compile_impl<F: PrimeField32>(
     }
 
     let toolchain = ensure_toolchain_available()?;
+    if let Some(launcher) = toolchain.unavailable_compiler_launcher.as_deref() {
+        tracing::warn!(
+            launcher,
+            compiler = %toolchain.compiler,
+            "configured rvr compiler launcher is unavailable; using the compiler directly"
+        );
+    }
 
     let base_name = sanitize_base_name(opts.base_name.unwrap_or("openvm"));
     let lto_env = match opts.execution_kind {
@@ -3270,17 +3277,32 @@ fn compile_generated_project(
             source,
         })?;
     }
+    let requested_launcher = toolchain.compiler_launcher.as_deref();
+    let active_launcher = requested_launcher.filter(|launcher| sccache_liveness(launcher));
+    let sccache_before = active_launcher.and_then(sccache_stats);
+    if let Some(launcher) = requested_launcher.filter(|_| active_launcher.is_none()) {
+        tracing::warn!(
+            launcher,
+            compiler = %toolchain.compiler,
+            "rvr compiler launcher probe failed; using the compiler directly"
+        );
+    }
+    let compiler_command = active_launcher.map_or_else(
+        || toolchain.compiler.clone(),
+        |_| toolchain.compiler_command(),
+    );
     tracing::info!(
         translation_units = total_objects,
         make = %toolchain.make,
         jobs = %jobs,
         thinlto_jobs = thinlto.jobs,
         thinlto_cache = thinlto.cache_dir.as_ref().map(|path| path.display().to_string()),
+        compiler_launcher = ?active_launcher,
         "building rvr native library"
     );
 
-    let mut child = Command::new(&toolchain.make)
-        .arg("-C")
+    let mut make = Command::new(&toolchain.make);
+    make.arg("-C")
         .arg(output_dir)
         .arg("-j")
         .arg(&jobs)
@@ -3295,10 +3317,14 @@ fn compile_generated_project(
                 .as_ref()
                 .map(|path| format!("THINLTO_CACHE_DIR={}", path.display())),
         )
-        .env("CC", &toolchain.compiler)
+        .env("CC", &compiler_command)
         .env("LINKER", &toolchain.linker)
         .stdout(Stdio::from(stdout_file))
-        .stderr(Stdio::from(stderr_file))
+        .stderr(Stdio::from(stderr_file));
+    if active_launcher.is_some() {
+        make.env("SCCACHE_BASEDIR", output_dir);
+    }
+    let mut child = make
         .spawn()
         .map_err(|source| CompileError::ToolchainCommand {
             command: toolchain.make.clone(),
@@ -3340,15 +3366,153 @@ fn compile_generated_project(
                 source,
             })?
         {
+            report_sccache_stats(active_launcher, sccache_before);
             if status.success() {
                 return Ok(());
             }
 
-            return Err(CompileError::Make {
-                stderr: read_make_failure(&stdout_path, &stderr_path),
-            });
+            let failure = read_make_failure(&stdout_path, &stderr_path);
+            if let Some(launcher) = active_launcher {
+                tracing::warn!(
+                    launcher,
+                    compiler = %toolchain.compiler,
+                    "rvr compiler launcher build failed; cleaning and retrying directly"
+                );
+                clean_generated_project(output_dir, make_args, toolchain, &failure)?;
+                let mut direct_toolchain = toolchain.clone();
+                direct_toolchain.compiler_launcher = None;
+                return compile_generated_project(
+                    output_dir,
+                    make_args,
+                    &direct_toolchain,
+                    thinlto,
+                );
+            }
+
+            return Err(CompileError::Make { stderr: failure });
         }
         std::thread::sleep(std::time::Duration::from_secs(1));
+    }
+}
+
+fn clean_generated_project(
+    output_dir: &Path,
+    make_args: &[String],
+    toolchain: &rvr_openvm::RuntimeToolchain,
+    original_failure: &str,
+) -> Result<(), CompileError> {
+    let output = Command::new(&toolchain.make)
+        .arg("-C")
+        .arg(output_dir)
+        .arg("-s")
+        .arg("clean")
+        .args(make_args)
+        .arg(format!("HOST_OS={}", toolchain.host_os))
+        .env("CC", &toolchain.compiler)
+        .env("LINKER", &toolchain.linker)
+        .output()
+        .map_err(|source| CompileError::ToolchainCommand {
+            command: toolchain.make.clone(),
+            source,
+        })?;
+    if output.status.success() {
+        return Ok(());
+    }
+    Err(CompileError::Make {
+        stderr: format!(
+            "{original_failure}\n\nsccache fallback cleanup failed:\n{}\n{}",
+            String::from_utf8_lossy(&output.stderr),
+            String::from_utf8_lossy(&output.stdout),
+        ),
+    })
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct SccacheStats {
+    requests: u64,
+    hits: u64,
+    misses: u64,
+    errors: u64,
+}
+
+impl SccacheStats {
+    fn delta(self, before: Self) -> Self {
+        Self {
+            requests: self.requests.saturating_sub(before.requests),
+            hits: self.hits.saturating_sub(before.hits),
+            misses: self.misses.saturating_sub(before.misses),
+            errors: self.errors.saturating_sub(before.errors),
+        }
+    }
+}
+
+fn sccache_stats(launcher: &str) -> Option<SccacheStats> {
+    let output = Command::new(launcher)
+        .args(["--show-stats", "--stats-format=json"])
+        .output()
+        .ok()?;
+    output
+        .status
+        .success()
+        .then(|| sccache_stats_json(&output.stdout))
+        .flatten()
+}
+
+fn sccache_liveness(launcher: &str) -> bool {
+    Command::new(launcher)
+        .arg("--show-stats")
+        .output()
+        .is_ok_and(|output| output.status.success())
+}
+
+fn sccache_stats_json(json: &[u8]) -> Option<SccacheStats> {
+    let value: serde_json::Value = serde_json::from_slice(json).ok()?;
+    let stats = value.get("stats")?;
+    Some(SccacheStats {
+        requests: json_count(stats.get("compile_requests")?),
+        hits: sccache_event_count(stats.get("cache_hits")?),
+        misses: sccache_event_count(stats.get("cache_misses")?),
+        errors: sccache_event_count(stats.get("cache_errors")?),
+    })
+}
+
+fn sccache_event_count(value: &serde_json::Value) -> u64 {
+    let Some(value) = value.as_object() else {
+        return json_count(value);
+    };
+    let count = value.get("counts").map_or(0, json_count);
+    if count > 0 {
+        count
+    } else {
+        value.get("adv_counts").map_or(0, json_count)
+    }
+}
+
+fn json_count(value: &serde_json::Value) -> u64 {
+    match value {
+        serde_json::Value::Number(number) => number.as_u64().unwrap_or_default(),
+        serde_json::Value::Array(values) => values.iter().map(json_count).sum(),
+        serde_json::Value::Object(values) => values.values().map(json_count).sum(),
+        _ => 0,
+    }
+}
+
+fn report_sccache_stats(launcher: Option<&str>, before: Option<SccacheStats>) {
+    let Some(launcher) = launcher else {
+        return;
+    };
+    match (before, sccache_stats(launcher)) {
+        (Some(before), Some(after)) => {
+            let stats = after.delta(before);
+            tracing::info!(
+                requests = stats.requests,
+                hits = stats.hits,
+                misses = stats.misses,
+                errors = stats.errors,
+                "rvr sccache compile statistics"
+            );
+        }
+        _ => tracing::warn!("rvr sccache statistics unavailable"),
     }
 }
 
@@ -3413,6 +3577,93 @@ mod tests {
 
     use super::*;
     use crate::arch::rvr::AddIArenaFieldOffsets;
+
+    #[cfg(unix)]
+    #[test]
+    fn failed_sccache_build_cleans_and_retries_with_direct_compiler() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempfile::tempdir().unwrap();
+        let launcher = dir.path().join("sccache");
+        fs::write(
+            &launcher,
+            format!(
+                "#!/bin/sh\n\
+                 if [ \"$1\" = \"--show-stats\" ]; then\n\
+                   printf '%s' 'legacy text statistics'\n\
+                   exit 0\n\
+                 fi\n\
+                 touch '{}'\n\
+                 exit 1\n",
+                dir.path().join("launcher-ran").display()
+            ),
+        )
+        .unwrap();
+        let mut permissions = fs::metadata(&launcher).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&launcher, permissions).unwrap();
+        fs::write(
+            dir.path().join("Makefile"),
+            "shared:\n\t$(CC)\nclean:\n\ttouch clean-ran\n",
+        )
+        .unwrap();
+
+        let toolchain = rvr_openvm::RuntimeToolchain {
+            compiler_launcher: Some(launcher.display().to_string()),
+            unavailable_compiler_launcher: None,
+            compiler: "/usr/bin/true".into(),
+            linker: "true".into(),
+            make: "make".into(),
+            host_os: "Linux",
+        };
+        compile_generated_project(
+            dir.path(),
+            &[],
+            &toolchain,
+            &ThinLtoBuildOptions {
+                jobs: 1,
+                cache_dir: None,
+            },
+        )
+        .unwrap();
+        assert!(dir.path().join("launcher-ran").is_file());
+        assert!(dir.path().join("clean-ran").is_file());
+    }
+
+    #[test]
+    fn sccache_json_stats_are_summed_and_reported_as_a_delta() {
+        let before = sccache_stats_json(
+            br#"{
+                "stats": {
+                    "compile_requests": 41,
+                    "cache_hits": {"counts": {"C/C++": 7}, "adv_counts": {"c [clang]": 7}},
+                    "cache_misses": {"counts": {"C/C++": 31}, "adv_counts": {}},
+                    "cache_errors": {"counts": {"timeout": 2}, "adv_counts": {"remote": 2}}
+                }
+            }"#,
+        )
+        .unwrap();
+        let after = sccache_stats_json(
+            br#"{
+                "stats": {
+                    "compile_requests": 63,
+                    "cache_hits": {"counts": {"C/C++": 27}, "adv_counts": {"c [clang]": 27}},
+                    "cache_misses": {"counts": {}, "adv_counts": {"c [clang]": 32}},
+                    "cache_errors": {"counts": {"timeout": 2}, "adv_counts": {"remote": 2}}
+                }
+            }"#,
+        )
+        .unwrap();
+        assert_eq!(
+            after.delta(before),
+            SccacheStats {
+                requests: 22,
+                hits: 20,
+                misses: 1,
+                errors: 0,
+            }
+        );
+    }
 
     #[test]
     fn thinlto_jobs_use_a_bounded_host_default_and_allow_single_backend_fallback() {

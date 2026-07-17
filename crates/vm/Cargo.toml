@@ -40,6 +40,7 @@ rand.workspace = true
 serde.workspace = true
 serde-big-array.workspace = true
 sha2 = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
 metrics = { workspace = true, optional = true }
 thiserror.workspace = true
 rustc-hash.workspace = true
@@ -104,6 +105,7 @@ rvr = [
     "dep:tempfile",
     "dep:nix",
     "dep:sha2",
+    "dep:serde_json",
     "openvm-circuit-derive/rvr",
 ]
 # Disable bounds checking in memory operations for performance
