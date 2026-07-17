@@ -14,9 +14,9 @@ pub use constants::{DEFERRAL_PAGE_BUF_CAP, MEM_PAGE_BUF_CAP, PV_PAGE_BUF_CAP};
 pub use emit::{
     inline_record_shape_for_instr, inline_record_shape_for_terminator, instr_emits_inline_record,
     AddIArenaFieldOffsets, Alu3ArenaFieldOffsets, Alu3WArenaFieldOffsets, ArenaNativeGeometry,
-    ArenaNativeLayout, Branch2ArenaFieldOffsets, CProject, EmitContext, G2DsoManifestConfigV1,
-    InlineRecordShape, InstrCodegen, InvalidRvrExecutionKind, LoadStoreArenaFieldOffsets,
-    RvrExecutionKind, Rw1ArenaFieldOffsets, Wr1ArenaFieldOffsets,
+    ArenaNativeLayout, Branch2ArenaFieldOffsets, CProject, EmitContext, G2DsoManifestConfigV2,
+    G2EmissionMode, InlineRecordShape, InstrCodegen, InvalidRvrExecutionKind,
+    LoadStoreArenaFieldOffsets, RvrExecutionKind, Rw1ArenaFieldOffsets, Wr1ArenaFieldOffsets,
 };
 pub use toolchain::{
     default_addr2line_cmd, default_compiler, default_compiler_command, default_dwarfdump_cmd,

@@ -618,9 +618,11 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
             ctx.write_line(&format!(
                 "if (unlikely(!rv_pc_is_dispatchable({next_pc}))) {{"
             ));
+            ctx.commit_g2_block();
             ctx.write_line(&format!("  [[clang::musttail]] return rv_trap({args});"));
             ctx.write_line("}");
             ctx.write_line(&format!("state->pc = {next_pc};"));
+            ctx.commit_g2_block();
             ctx.write_line(&format!(
                 "[[clang::musttail]] return dispatch_table[rv_dispatch_index({next_pc})]({args});"
             ));
@@ -671,11 +673,13 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
                 )
             };
             ctx.write_line(&format!("if ({cmp}) {{"));
+            ctx.commit_g2_block();
             ctx.write_line(&format!("  {target_call}"));
             ctx.write_line("}");
             emit_tail_call(ctx, next_pc, &args, tc.valid_blocks);
         }
         Terminator::Exit { code } => {
+            ctx.commit_g2_block();
             ctx.sync_regs_to_state();
             ctx.write_line(&format!(
                 "rv_set_status_at(state, {}, OPENVM_EXEC_TERMINATED, {code});",
@@ -685,6 +689,7 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
         }
         Terminator::Trap { message } => {
             let escaped = message.replace('\\', "\\\\").replace('"', "\\\"");
+            ctx.commit_g2_block();
             ctx.sync_regs_to_state();
             ctx.write_line(&format!(
                 "rv_set_status_at(state, {}, OPENVM_EXEC_TRAPPED, 0);",
@@ -694,6 +699,10 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
             ctx.write_line("return;");
         }
         Terminator::Extension(ext) => {
+            // Extension terminators own their branch syntax. All standard G2
+            // stores in the block are complete before the opaque terminator
+            // runs, so publish their local cursors at this boundary.
+            ctx.commit_g2_block();
             let branch_to = |target: u64| -> String {
                 if tc.valid_blocks.contains(&target) {
                     format!("[[clang::musttail]] return block_0x{target:08x}({args});")
@@ -712,6 +721,7 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
 /// Emit a tail call to a known PC. Uses a direct call if the target is a valid
 /// block; otherwise falls back to the dispatch table.
 fn emit_tail_call(ctx: &mut EmitContext, target: u64, args: &str, valid_blocks: &HashSet<u64>) {
+    ctx.commit_g2_block();
     if valid_blocks.contains(&target) {
         ctx.write_line(&format!(
             "[[clang::musttail]] return block_0x{target:08x}({args});"

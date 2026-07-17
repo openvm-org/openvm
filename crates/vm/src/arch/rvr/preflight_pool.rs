@@ -29,9 +29,11 @@
 //! independently gates arena-native backing reuse for controlled A/B runs.
 //! `OPENVM_RVR_PREFLIGHT_THP` gates the `MADV_HUGEPAGE` advice on the large
 //! buffers the same way. CUDA builds pre-stage a small pipeline-depth reserve of resident
-//! arena-native backings; `OPENVM_RVR_CUDA_ARENA_PREWARM_DEPTH=0` disables that reserve, while
-//! `OPENVM_RVR_CUDA_ARENA_POPULATE_MISS=0` restores lazy pages on a reserve/pool miss. All other
-//! switches default on.
+//! arena-native backings; `OPENVM_RVR_CUDA_ARENA_PREWARM_DEPTH=0` disables that reserve.
+//! G2 uses the same populated-reserve mechanism with an independently tunable
+//! `OPENVM_RVR_CUDA_G2_PREWARM_DEPTH` (default 3, covering the producer plus
+//! two in-flight consumers). `OPENVM_RVR_CUDA_ARENA_POPULATE_MISS=0` restores
+//! lazy pages on a reserve/pool miss. All other switches default on.
 
 use std::{
     any::Any,
@@ -787,13 +789,21 @@ impl RvrPreflightBufferPool {
     /// above remains the bounded fallback if the asynchronous cleaner falls farther behind.
     #[cfg(feature = "cuda")]
     pub(crate) fn prepare_arena_native_dense_backings(&self, key: ArenaNativeBackingKey) {
+        self.prepare_arena_native_dense_backings_to_depth(key, *CUDA_ARENA_PREWARM_DEPTH);
+    }
+
+    #[cfg(feature = "cuda")]
+    fn prepare_arena_native_dense_backings_to_depth(
+        &self,
+        key: ArenaNativeBackingKey,
+        depth: usize,
+    ) {
         if !self.arena_native_enabled
             || key.capacity_bytes == 0
             || crate::arch::cuda::pinned::is_shutting_down()
         {
             return;
         }
-        let depth = *CUDA_ARENA_PREWARM_DEPTH;
         if depth == 0 {
             return;
         }
@@ -889,11 +899,10 @@ impl RvrPreflightBufferPool {
 
     #[cfg(feature = "cuda")]
     pub(crate) fn prepare_g2_backings(&self, capacity_bytes: usize) {
-        self.prepare_arena_native_dense_backings(ArenaNativeBackingKey::new(
-            G2_BACKING_AIR,
-            1,
-            capacity_bytes,
-        ));
+        self.prepare_arena_native_dense_backings_to_depth(
+            ArenaNativeBackingKey::new(G2_BACKING_AIR, 1, capacity_bytes),
+            *CUDA_G2_PREWARM_DEPTH,
+        );
     }
 
     /// Allocate and fault in a direct-final wire backing before the segment's
@@ -1241,6 +1250,18 @@ static CUDA_ARENA_PREWARM_DEPTH: LazyLock<usize> = LazyLock::new(|| {
         .ok()
         .and_then(|value| value.parse().ok())
         .unwrap_or(2)
+        .min(8)
+});
+
+/// G2 retains one host backing per in-flight compact segment. A depth of
+/// three prevents segment 1 from falling onto the populated-miss path when
+/// segment 0 and one asynchronous consumer still own the first two buffers.
+#[cfg(feature = "cuda")]
+static CUDA_G2_PREWARM_DEPTH: LazyLock<usize> = LazyLock::new(|| {
+    std::env::var("OPENVM_RVR_CUDA_G2_PREWARM_DEPTH")
+        .ok()
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(3)
         .min(8)
 });
 
