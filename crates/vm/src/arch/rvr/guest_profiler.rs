@@ -41,6 +41,7 @@ struct SignalContext {
     samples: *mut StackSample,
     capacity: usize,
     write_idx: AtomicUsize,
+    handlers_in_flight: AtomicUsize,
     active: AtomicBool,
 }
 
@@ -119,7 +120,9 @@ extern "C" fn sigprof_handler(_signal: libc::c_int) {
     }
     // SAFETY: the global pointer is cleared only after the timer is disarmed.
     let ctx = unsafe { &*ctx_ptr };
+    ctx.handlers_in_flight.fetch_add(1, Ordering::Acquire);
     if !ctx.active.load(Ordering::Acquire) {
+        ctx.handlers_in_flight.fetch_sub(1, Ordering::Release);
         return;
     }
 
@@ -128,6 +131,7 @@ extern "C" fn sigprof_handler(_signal: libc::c_int) {
     let idx = ctx.write_idx.fetch_add(1, Ordering::Relaxed) % ctx.capacity;
     // SAFETY: capacity is nonzero and idx is reduced modulo capacity.
     unsafe { ctx.samples.add(idx).write(sample) };
+    ctx.handlers_in_flight.fetch_sub(1, Ordering::Release);
 }
 
 pub(super) struct GuestProfiler {
@@ -170,6 +174,7 @@ impl GuestProfiler {
             samples: buffer.as_mut_ptr(),
             capacity: buffer.len(),
             write_idx: AtomicUsize::new(0),
+            handlers_in_flight: AtomicUsize::new(0),
             active: AtomicBool::new(false),
         });
 
@@ -275,6 +280,9 @@ impl GuestProfiler {
         unsafe { setitimer(libc::ITIMER_PROF, &zero, std::ptr::null_mut()) };
         self.ctx.active.store(false, Ordering::SeqCst);
         HANDLER_CTX.store(std::ptr::null_mut(), Ordering::SeqCst);
+        while self.ctx.handlers_in_flight.load(Ordering::Acquire) != 0 {
+            std::hint::spin_loop();
+        }
         // Restore process-global state even when execution or profile output
         // fails, so later work in this process is unaffected.
         // SAFETY: both values were captured before installing our state.
@@ -360,6 +368,7 @@ mod tests {
             samples: std::ptr::null_mut(),
             capacity: 0,
             write_idx: AtomicUsize::new(0),
+            handlers_in_flight: AtomicUsize::new(0),
             active: AtomicBool::new(false),
         };
 
@@ -386,6 +395,7 @@ mod tests {
             samples: std::ptr::null_mut(),
             capacity: 0,
             write_idx: AtomicUsize::new(0),
+            handlers_in_flight: AtomicUsize::new(0),
             active: AtomicBool::new(false),
         };
 
