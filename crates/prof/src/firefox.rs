@@ -1,6 +1,5 @@
 use std::{
     collections::BTreeSet,
-    ffi::OsString,
     fs,
     path::Path,
     time::{Duration, SystemTime},
@@ -16,77 +15,50 @@ use openvm_circuit::arch::rvr::{default_addr2line_cmd, GuestDebugMap};
 use reqwest::{blocking::Client, header::ACCEPT};
 use serde_json::Value;
 
-const PROFILE_PATH_ENV: &str = "OPENVM_RVR_GUEST_CALL_PROFILE";
-const PROFILE_HZ_ENV: &str = "OPENVM_RVR_GUEST_CALL_PROFILE_HZ";
-const PROFILE_FORMAT_ENV: &str = "OPENVM_RVR_GUEST_CALL_PROFILE_FORMAT";
 const DEFAULT_UPLOAD_URL: &str = "https://api.profiler.firefox.com/compressed-store";
 const FIREFOX_ACCEPT: &str = "application/vnd.firefox-profiler+json;version=1.0";
 
-/// Temporarily enables the low-overhead sampler owned by the RVR executor.
-pub struct GuestProfileGuard {
-    previous: [(OsString, Option<OsString>); 3],
+/// A generated, symbolicated Firefox Profiler artifact.
+pub struct FirefoxProfile {
+    compressed: Vec<u8>,
+    sample_count: usize,
 }
 
-impl GuestProfileGuard {
-    pub fn start(path: &Path, sample_hz: u32) -> Self {
-        let previous = [
-            (PROFILE_PATH_ENV.into(), std::env::var_os(PROFILE_PATH_ENV)),
-            (PROFILE_HZ_ENV.into(), std::env::var_os(PROFILE_HZ_ENV)),
-            (
-                PROFILE_FORMAT_ENV.into(),
-                std::env::var_os(PROFILE_FORMAT_ENV),
-            ),
-        ];
-        // The CLI performs a single execution. No other thread reads these
-        // private RVR configuration variables before the guard is dropped.
-        unsafe {
-            std::env::set_var(PROFILE_PATH_ENV, path);
-            std::env::set_var(PROFILE_HZ_ENV, sample_hz.to_string());
-            std::env::set_var(PROFILE_FORMAT_ENV, "raw");
-        }
-        Self { previous }
-    }
-}
-
-impl Drop for GuestProfileGuard {
-    fn drop(&mut self) {
-        for (key, value) in &self.previous {
-            // See the safety note in `start`.
-            unsafe {
-                if let Some(value) = value {
-                    std::env::set_var(key, value);
-                } else {
-                    std::env::remove_var(key);
-                }
-            }
-        }
-    }
-}
-
-pub fn create_upload_and_optionally_save(
-    raw_profile_path: &Path,
-    guest_elf_path: &Path,
-    sample_hz: u32,
-    output_path: Option<&Path>,
-) -> Result<String> {
-    let samples = parse_raw_samples(raw_profile_path)?;
-    let profile = build_firefox_profile(&samples, guest_elf_path, sample_hz)?;
-    let compressed = compress_profile(&profile)?;
-
-    if let Some(output_path) = output_path {
-        fs::write(output_path, &compressed).with_context(|| {
-            format!(
-                "failed to write Firefox profile to {}",
-                output_path.display()
-            )
-        })?;
-        eprintln!(
-            "[openvm] Saved execution profile to {}",
-            output_path.display()
-        );
+impl FirefoxProfile {
+    /// Convert ordered raw guest stacks into a symbolicated Firefox profile.
+    pub fn from_raw_guest_stacks(
+        raw_profile_path: &Path,
+        guest_elf_path: &Path,
+        sample_hz: u32,
+    ) -> Result<Self> {
+        let samples = parse_raw_samples(raw_profile_path)?;
+        let profile = build_firefox_profile(&samples, guest_elf_path, sample_hz)?;
+        Ok(Self {
+            compressed: compress_profile(&profile)?,
+            sample_count: samples.len(),
+        })
     }
 
-    upload_profile(&compressed)
+    /// Number of ordered guest call-stack samples in this profile.
+    pub fn sample_count(&self) -> usize {
+        self.sample_count
+    }
+
+    /// The gzip-compressed Firefox Profiler JSON payload.
+    pub fn compressed(&self) -> &[u8] {
+        &self.compressed
+    }
+
+    /// Save the gzip-compressed profile to `path`.
+    pub fn save(&self, path: &Path) -> Result<()> {
+        fs::write(path, &self.compressed)
+            .with_context(|| format!("failed to write Firefox profile to {}", path.display()))
+    }
+
+    /// Upload the profile using Firefox Profiler's compressed-store protocol.
+    pub fn upload(&self) -> Result<String> {
+        upload_profile(&self.compressed)
+    }
 }
 
 fn parse_raw_samples(path: &Path) -> Result<Vec<Vec<u32>>> {

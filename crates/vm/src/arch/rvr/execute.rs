@@ -199,6 +199,29 @@ fn run_and_finalize<ModeState>(
     }
 }
 
+/// Run one complete RVR execution while honoring the process-level guest
+/// profiling configuration. The profiler is finished even when execution
+/// fails, but the execution error remains primary.
+fn run_profiled<ModeState, T>(
+    state: &mut RvState<ModeState>,
+    execute: impl FnOnce(&mut RvState<ModeState>) -> Result<T, ExecuteError>,
+) -> Result<T, ExecuteError> {
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+    let profiler = super::guest_profiler::GuestProfiler::start_from_env(state)
+        .map_err(ExecuteError::GuestProfile)?;
+    let execution_result = execute(state);
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+    let profile_result = profiler
+        .map(super::guest_profiler::GuestProfiler::finish)
+        .transpose()
+        .map_err(ExecuteError::GuestProfile);
+
+    let output = execution_result?;
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+    profile_result?;
+    Ok(output)
+}
+
 // ── Public execute functions ─────────────────────────────────────────────────
 
 pub(super) struct TrackedExecutionResult {
@@ -217,19 +240,10 @@ pub(super) fn execute_pure(
     let initial_regs = read_rv64_registers(vm_state);
     let mut state: PureRvState = init_rvr_state(vm_state, pc);
     state.regs = initial_regs;
-    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-    let profiler = super::guest_profiler::GuestProfiler::start_from_env(&state)
-        .map_err(ExecuteError::GuestProfile)?;
-    let execution_result = run_and_finalize(compiled, runtime_hooks, vm_state, &mut state, false)
-        .inspect_err(|error| tracing::warn!(%error, "rvr pure execution failed"));
-    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-    let profile_result = profiler
-        .map(super::guest_profiler::GuestProfiler::finish)
-        .transpose()
-        .map_err(ExecuteError::GuestProfile);
-    execution_result?;
-    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-    profile_result?;
+    run_profiled(&mut state, |state| {
+        run_and_finalize(compiled, runtime_hooks, vm_state, state, false)
+            .inspect_err(|error| tracing::warn!(%error, "rvr pure execution failed"))
+    })?;
     Ok(())
 }
 
@@ -309,8 +323,10 @@ pub(super) fn execute_metered_cost(
     let mut state: MeteredCostRvState = init_rvr_state(vm_state, pc);
     state.regs = initial_regs;
 
-    run_and_finalize(compiled, runtime_hooks, vm_state, &mut state, false)
-        .inspect_err(|error| tracing::warn!(%error, "rvr metered-cost execution failed"))?;
+    run_profiled(&mut state, |state| {
+        run_and_finalize(compiled, runtime_hooks, vm_state, state, false)
+            .inspect_err(|error| tracing::warn!(%error, "rvr metered-cost execution failed"))
+    })?;
     Ok(RvrMeteredCostResult {
         instret: state.mode_state.instret,
         cost: state.mode_state.cost,
@@ -325,12 +341,24 @@ pub(super) fn execute_metered(
     seg_state: SegmentationState,
 ) -> Result<SegmentationState, ExecuteError> {
     require_execution_kind(compiled, "Metered", &[RvrExecutionKind::Metered])?;
-    match execute_metered_impl(compiled, runtime_hooks, vm_state, seg_state, false)? {
+    match execute_metered_profiled(compiled, runtime_hooks, vm_state, seg_state)? {
         RvrMeteredExecutionOutcome::Terminated(state) => Ok(state),
         RvrMeteredExecutionOutcome::Suspended(_) => {
             unreachable!("unbounded metered execution cannot suspend")
         }
     }
+}
+
+fn execute_metered_profiled(
+    compiled: &RvrCompiled,
+    runtime_hooks: &[Box<dyn RvrRuntimeExtension>],
+    vm_state: &mut VmState<GuestMemory>,
+    mut seg_state: SegmentationState,
+) -> Result<RvrMeteredExecutionOutcome, ExecuteError> {
+    let mut state = prepare_metered_state(vm_state, &mut seg_state)?;
+    run_profiled(&mut state, |state| {
+        run_metered_state(compiled, runtime_hooks, vm_state, state, seg_state, false)
+    })
 }
 
 /// Execute a VmExe with per-chip metered execution until termination or a segment boundary.
@@ -365,12 +393,24 @@ fn execute_metered_impl(
         "trace-height storage",
     )?;
 
+    let mut state = prepare_metered_state(vm_state, &mut seg_state)?;
+    run_metered_state(
+        compiled,
+        runtime_hooks,
+        vm_state,
+        &mut state,
+        seg_state,
+        allow_suspended,
+    )
+}
+
+fn prepare_metered_state(
+    vm_state: &mut VmState<GuestMemory>,
+    seg_state: &mut SegmentationState,
+) -> Result<MeteredRvState, ExecuteError> {
     let pc = vm_state.pc();
-    let initial_regs = read_rv64_registers(vm_state);
-
     let mut state: MeteredRvState = init_rvr_state(vm_state, pc);
-    state.regs = initial_regs;
-
+    state.regs = read_rv64_registers(vm_state);
     let check_counter = u32::try_from(seg_state.ctx.segmentation_ctx.instrets_until_check)
         .map_err(|_| {
             ExecuteError::InvalidMeteredContext(format!(
@@ -384,16 +424,21 @@ fn execute_metered_impl(
     state.mode_state.deferral_page_buf = seg_state.deferral_page_buf_ptr();
     state.mode_state.check_counter = check_counter;
     state.mode_state.on_check = metered_periodic_check;
-    state.mode_state.seg_state = &mut seg_state;
+    state.mode_state.seg_state = seg_state;
+    Ok(state)
+}
 
-    let status = run_and_finalize(
-        compiled,
-        runtime_hooks,
-        vm_state,
-        &mut state,
-        allow_suspended,
-    )
-    .inspect_err(|error| tracing::warn!(%error, "rvr metered execution failed"))?;
+fn run_metered_state(
+    compiled: &RvrCompiled,
+    runtime_hooks: &[Box<dyn RvrRuntimeExtension>],
+    vm_state: &mut VmState<GuestMemory>,
+    state: &mut MeteredRvState,
+    mut seg_state: SegmentationState,
+    allow_suspended: bool,
+) -> Result<RvrMeteredExecutionOutcome, ExecuteError> {
+    state.mode_state.seg_state = &mut seg_state;
+    let status = run_and_finalize(compiled, runtime_hooks, vm_state, state, allow_suspended)
+        .inspect_err(|error| tracing::warn!(%error, "rvr metered execution failed"))?;
 
     debug_assert!(matches!(
         status,

@@ -3,8 +3,6 @@
 pub mod args;
 pub mod commands;
 pub mod default;
-#[cfg(feature = "rvr")]
-pub mod execution_profile;
 pub mod input;
 pub mod util;
 

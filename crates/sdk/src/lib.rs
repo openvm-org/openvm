@@ -84,6 +84,8 @@ pub use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config 
 pub mod builder;
 pub mod compiled;
 pub mod config;
+#[cfg(feature = "rvr")]
+pub mod execution_profile;
 pub mod fs;
 #[cfg(feature = "evm-prove")]
 pub mod halo2_params;
