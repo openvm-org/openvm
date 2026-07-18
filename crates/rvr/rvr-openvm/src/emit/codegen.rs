@@ -101,7 +101,7 @@ pub struct TermCtx<'a> {
 
 /// Emit C code for a terminator using tail calls between blocks.
 ///
-/// Static targets use direct tail calls: `return block_0x...(args);`
+/// Static targets use direct tail calls or trap when no block exists.
 /// Dynamic targets go through the dispatch table: `return dispatch_table[idx](args);`
 /// Exit/suspend/trap save hot regs to state and return to `rv_execute`.
 pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &TermCtx) {
@@ -162,17 +162,19 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
             rs2,
             target,
         } => {
+            if rs1 == rs2 {
+                let destination = if same_register_branch_result(*cond) {
+                    *target
+                } else {
+                    next_pc
+                };
+                emit_tail_call(ctx, destination, &args, tc.valid_blocks);
+                return;
+            }
             let l = ctx.read_reg(*rs1);
             let r = ctx.read_reg(*rs2);
             let cmp = branch_cond_expr(*cond, &l, &r);
-            let target_call = if tc.valid_blocks.contains(target) {
-                format!("[[clang::musttail]] return block_0x{target:08x}({args});")
-            } else {
-                format!(
-                    "[[clang::musttail]] return dispatch_table[rv_dispatch_index({})]({args});",
-                    hex_u64(*target)
-                )
-            };
+            let target_call = static_tail_call(*target, &args, tc.valid_blocks);
             ctx.write_line(&format!("if ({cmp}) {{"));
             ctx.write_line(&format!("  {target_call}"));
             ctx.write_line("}");
@@ -197,34 +199,23 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
             ctx.write_line("return;");
         }
         Terminator::Extension(ext) => {
-            let branch_to = |target: u64| -> String {
-                if tc.valid_blocks.contains(&target) {
-                    format!("[[clang::musttail]] return block_0x{target:08x}({args});")
-                } else {
-                    format!(
-                        "[[clang::musttail]] return dispatch_table[rv_dispatch_index({})]({args});",
-                        hex_u64(target)
-                    )
-                }
-            };
+            let branch_to = |target| static_tail_call(target, &args, tc.valid_blocks);
             ext.emit_c_term(ctx, &branch_to);
         }
     }
 }
 
-/// Emit a tail call to a known PC. Uses a direct call if the target is a valid
-/// block; otherwise falls back to the dispatch table.
-fn emit_tail_call(ctx: &mut EmitContext, target: u64, args: &str, valid_blocks: &HashSet<u64>) {
+fn static_tail_call(target: u64, args: &str, valid_blocks: &HashSet<u64>) -> String {
     if valid_blocks.contains(&target) {
-        ctx.write_line(&format!(
-            "[[clang::musttail]] return block_0x{target:08x}({args});"
-        ));
+        format!("[[clang::musttail]] return block_0x{target:08x}({args});")
     } else {
-        ctx.write_line(&format!(
-            "[[clang::musttail]] return dispatch_table[rv_dispatch_index({})]({args});",
-            hex_u64(target)
-        ));
+        format!("[[clang::musttail]] return rv_trap({args});")
     }
+}
+
+/// Emit a tail call to a statically known PC.
+fn emit_tail_call(ctx: &mut EmitContext, target: u64, args: &str, valid_blocks: &HashSet<u64>) {
+    ctx.write_line(&static_tail_call(target, args, valid_blocks));
 }
 
 // ── ALU helpers ──────────────────────────────────────────────────────────────
@@ -309,6 +300,10 @@ fn branch_cond_expr(cond: BranchCond, left: &str, right: &str) -> String {
         BranchCond::Ltu => format!("{left} < {right}"),
         BranchCond::Geu => format!("{left} >= {right}"),
     }
+}
+
+fn same_register_branch_result(cond: BranchCond) -> bool {
+    matches!(cond, BranchCond::Eq | BranchCond::Ge | BranchCond::Geu)
 }
 
 // ── MulDiv ──────────────────────────────────────────────────────────────────
