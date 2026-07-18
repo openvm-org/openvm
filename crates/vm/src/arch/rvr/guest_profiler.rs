@@ -135,6 +135,12 @@ unsafe fn capture_sample(
         // SAFETY: both eight-byte reads were bounds checked above.
         let parent_fp =
             unsafe { (ctx.memory_base.add(parent_addr) as *const u64).read_unaligned() };
+        // A zero parent marks the ABI root frame. Its saved-RA slot is not a
+        // caller and may contain stale stack data that happens to look like a
+        // valid guest PC. Validate the chain before recording this frame.
+        if parent_fp == 0 || parent_fp <= fp {
+            break;
+        }
         // A frame pointer may temporarily contain ordinary guest data in code
         // that does not establish a frame. Stop before recording data as a
         // return address: OpenVM PCs are aligned and live in the program-PC
@@ -144,12 +150,6 @@ unsafe fn capture_sample(
         }
         sample.pcs[usize::from(sample.depth)] = u32::try_from(ra).unwrap_or_default();
         sample.depth += 1;
-
-        // RISC-V stacks grow down, so each caller frame pointer must be above
-        // the callee's. This also rejects cycles and corrupted chains.
-        if parent_fp == 0 || parent_fp <= fp {
-            break;
-        }
         fp = parent_fp;
     }
     sample.stack_truncated = usize::from(sample.depth) == MAX_STACK_DEPTH && fp != 0;
@@ -852,7 +852,9 @@ mod tests {
         put_u64(&mut memory, 120, TEXT_START + 0x100);
         put_u64(&mut memory, 112, 192);
         put_u64(&mut memory, 184, TEXT_START + 0x200);
-        put_u64(&mut memory, 176, 0);
+        put_u64(&mut memory, 176, 224);
+        put_u64(&mut memory, 216, TEXT_START + 0x300);
+        put_u64(&mut memory, 208, 0);
         let mut state = RvState {
             pc: TEXT_START,
             ..Default::default()
@@ -888,7 +890,27 @@ mod tests {
         let sample = unsafe { capture_sample(&ctx, 0, 10, 8) };
         assert_eq!(
             &sample.pcs[..usize::from(sample.depth)],
-            &[TEXT_START as u32, (TEXT_START + 0x100) as u32]
+            &[TEXT_START as u32]
+        );
+    }
+
+    #[test]
+    fn ignores_valid_looking_return_address_in_root_frame() {
+        let mut memory = vec![0u8; 256];
+        put_u64(&mut memory, 120, TEXT_START + 0x100);
+        put_u64(&mut memory, 112, 0);
+        let mut state = RvState {
+            pc: TEXT_START,
+            ..Default::default()
+        };
+        state.regs[GUEST_FP_REG] = 128;
+        let ctx = test_context(&state, &memory);
+
+        // SAFETY: state and memory live for the duration of the call.
+        let sample = unsafe { capture_sample(&ctx, 0, 10, 8) };
+        assert_eq!(
+            &sample.pcs[..usize::from(sample.depth)],
+            &[TEXT_START as u32]
         );
     }
 
