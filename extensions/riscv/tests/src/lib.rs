@@ -89,6 +89,7 @@ mod tests {
 
     #[test_case("rvr_invalid_branch_taken"; "invalid_branch_taken")]
     #[test_case("out_of_bound_reveal"; "out_of_bound_reveal")]
+    #[test_case("rvr_hint_buffer_zero"; "hint_buffer_zero")]
     #[cfg(feature = "rvr")]
     fn test_rvr_example_traps(program_name: &str) {
         assert_rvr_example_traps(program_name);
@@ -191,11 +192,25 @@ mod tests {
 
     #[cfg(feature = "rvr")]
     fn assert_rvr_example_traps(program_name: &str) {
-        assert_rvr_example_with_config_traps(program_name, test_rv64im_config());
+        assert_rvr_example_with_config_and_input_traps(program_name, test_rv64im_config(), vec![]);
     }
 
     #[cfg(feature = "rvr")]
     fn assert_rvr_example_with_config_traps(program_name: &str, config: Rv64ImConfig) {
+        assert_rvr_example_with_config_and_input_traps(program_name, config, vec![]);
+    }
+
+    #[cfg(feature = "rvr")]
+    fn assert_rvr_example_traps_with_input(program_name: &str, input: Vec<Vec<u8>>) {
+        assert_rvr_example_with_config_and_input_traps(program_name, test_rv64im_config(), input);
+    }
+
+    #[cfg(feature = "rvr")]
+    fn assert_rvr_example_with_config_and_input_traps(
+        program_name: &str,
+        config: Rv64ImConfig,
+        input: Vec<Vec<u8>>,
+    ) {
         let elf =
             build_example_program_at_path(get_programs_dir!(), program_name, &config).unwrap();
         let exe = VmExe::from_elf(
@@ -207,7 +222,7 @@ mod tests {
         )
         .unwrap();
         let executor = VmExecutor::new(config).unwrap();
-        let result = executor.instance(&exe).unwrap().execute(vec![]);
+        let result = executor.instance(&exe).unwrap().execute(input);
 
         match result {
             Err(ExecutionError::RvrExecution(message)) => {
@@ -644,12 +659,16 @@ mod tests {
         assert_child_aborts("tests::test_out_of_bound_mem_access");
     }
 
-    #[test_case("rvr_hint_buffer_zero"; "zero")]
-    #[test_case("rvr_hint_buffer_oversized"; "oversized")]
     #[test_case("out_of_bound_print_str"; "print_str_out_of_bounds")]
     #[cfg(all(feature = "rvr", not(feature = "unprotected")))]
     fn test_rvr_protected_execution_traps(program_name: &str) {
         assert_rvr_example_traps(program_name);
+    }
+
+    #[test]
+    #[cfg(feature = "rvr")]
+    fn test_rvr_hint_buffer_rejects_oversized_count() {
+        assert_rvr_example_traps_with_input("rvr_hint_buffer_oversized", vec![vec![0u8; 8192]]);
     }
 
     #[test_case("getrandom", vec!["getrandom", "getrandom-unsupported"])]
