@@ -12,12 +12,19 @@ use std::{
     sync::atomic::{AtomicBool, AtomicPtr, AtomicUsize, Ordering},
 };
 
+use openvm_instructions::program::{DEFAULT_PC_STEP, MAX_ALLOWED_PC};
+use openvm_platform::memory::TEXT_START;
 use rvr_state::RvState;
 
 const MAX_STACK_DEPTH: usize = 128;
 const DEFAULT_BUFFER_CAPACITY: usize = 1 << 18;
 const DEFAULT_SAMPLE_HZ: u32 = 1_000;
 const GUEST_FP_REG: usize = 8;
+
+fn is_valid_guest_pc(pc: u64) -> bool {
+    (TEXT_START..=u64::from(MAX_ALLOWED_PC)).contains(&pc)
+        && pc.is_multiple_of(u64::from(DEFAULT_PC_STEP))
+}
 
 #[derive(Clone, Copy)]
 enum OutputFormat {
@@ -105,14 +112,19 @@ unsafe fn capture_sample(ctx: &SignalContext) -> StackSample {
         // SAFETY: both eight-byte reads were bounds checked above.
         let parent_fp =
             unsafe { (ctx.memory_base.add(parent_addr) as *const u64).read_unaligned() };
-        if ra != 0 {
-            sample.pcs[usize::from(sample.depth)] = ra;
-            sample.depth += 1;
+        // A frame pointer may temporarily contain ordinary guest data in code
+        // that does not establish a frame. Stop before recording data as a
+        // return address: OpenVM PCs are aligned and live in the program-PC
+        // range.
+        if !is_valid_guest_pc(ra) {
+            break;
         }
+        sample.pcs[usize::from(sample.depth)] = ra;
+        sample.depth += 1;
 
         // RISC-V stacks grow down, so each caller frame pointer must be above
         // the callee's. This also rejects cycles and corrupted chains.
-        if parent_fp <= fp {
+        if parent_fp == 0 || parent_fp <= fp {
             break;
         }
         fp = parent_fp;
@@ -404,12 +416,14 @@ mod tests {
     #[test]
     fn walks_rv64_frame_chain() {
         let mut memory = vec![0u8; 256];
-        put_u64(&mut memory, 120, 0x200);
+        put_u64(&mut memory, 120, TEXT_START + 0x100);
         put_u64(&mut memory, 112, 192);
-        put_u64(&mut memory, 184, 0x300);
+        put_u64(&mut memory, 184, TEXT_START + 0x200);
         put_u64(&mut memory, 176, 0);
-        let mut state = RvState::default();
-        state.pc = 0x100;
+        let mut state = RvState {
+            pc: TEXT_START,
+            ..Default::default()
+        };
         state.regs[GUEST_FP_REG] = 128;
         let ctx = SignalContext {
             state_ptr: std::ptr::from_ref(&state),
@@ -426,17 +440,19 @@ mod tests {
         let sample = unsafe { capture_sample(&ctx) };
         assert_eq!(
             &sample.pcs[..usize::from(sample.depth)],
-            &[0x100, 0x200, 0x300]
+            &[TEXT_START, TEXT_START + 0x100, TEXT_START + 0x200]
         );
     }
 
     #[test]
     fn rejects_nonascending_parent_frame() {
         let mut memory = vec![0u8; 256];
-        put_u64(&mut memory, 120, 0x200);
+        put_u64(&mut memory, 120, TEXT_START + 0x100);
         put_u64(&mut memory, 112, 64);
-        let mut state = RvState::default();
-        state.pc = 0x100;
+        let mut state = RvState {
+            pc: TEXT_START,
+            ..Default::default()
+        };
         state.regs[GUEST_FP_REG] = 128;
         let ctx = SignalContext {
             state_ptr: std::ptr::from_ref(&state),
@@ -451,7 +467,39 @@ mod tests {
 
         // SAFETY: state and memory live for the duration of the call.
         let sample = unsafe { capture_sample(&ctx) };
-        assert_eq!(&sample.pcs[..usize::from(sample.depth)], &[0x100, 0x200]);
+        assert_eq!(
+            &sample.pcs[..usize::from(sample.depth)],
+            &[TEXT_START, TEXT_START + 0x100]
+        );
+    }
+
+    #[test]
+    fn stops_before_guest_data_masquerading_as_a_return_address() {
+        let mut memory = vec![0u8; 256];
+        put_u64(&mut memory, 120, 0x20);
+        put_u64(&mut memory, 112, 192);
+        let mut state = RvState {
+            pc: TEXT_START + 0x100,
+            ..Default::default()
+        };
+        state.regs[GUEST_FP_REG] = 128;
+        let ctx = SignalContext {
+            state_ptr: std::ptr::from_ref(&state),
+            memory_base: memory.as_ptr(),
+            memory_size: memory.len(),
+            samples: std::ptr::null_mut(),
+            capacity: 0,
+            write_idx: AtomicUsize::new(0),
+            handlers_in_flight: AtomicUsize::new(0),
+            active: AtomicBool::new(false),
+        };
+
+        // SAFETY: state and memory live for the duration of the call.
+        let sample = unsafe { capture_sample(&ctx) };
+        assert_eq!(
+            &sample.pcs[..usize::from(sample.depth)],
+            &[TEXT_START + 0x100]
+        );
     }
 
     #[test]
