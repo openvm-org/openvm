@@ -656,6 +656,18 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SdkVmGpuBuilder {
     fn default_rvr_preflight_engine(&self) -> openvm_circuit::arch::rvr::RvrPreflightEngine {
         openvm_circuit::arch::rvr::RvrPreflightEngine::Rvr
     }
+
+    #[cfg(feature = "rvr")]
+    fn rvr_cuda_device_prewarm_task(
+        &self,
+    ) -> Option<Box<dyn FnOnce() -> Result<(), String> + Send + 'static>> {
+        Some(openvm_riscv_circuit::rvr_gpu_decode::g2_device_prewarm_task())
+    }
+
+    #[cfg(feature = "rvr")]
+    fn finish_rvr_cuda_device_prewarm(&self, reserve_bytes: usize) -> Result<(), String> {
+        openvm_riscv_circuit::rvr_gpu_decode::finish_g2_device_prewarm(reserve_bytes)
+    }
 }
 
 // ======================= Boilerplate ====================

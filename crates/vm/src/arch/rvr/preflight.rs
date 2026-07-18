@@ -1495,21 +1495,29 @@ where
         let mut g2_prepared = if let Some(g2) = g2_meta {
             let fallback = u32::try_from(program_log_cap)
                 .expect("G2 per-kind capacity exceeds the frozen u32 schema");
-            let residual_capacity =
-                g2_residual_capacity(g2, program_log_cap, record_capacity_rows)?;
-            let mut capacities = RvrG2CapacitiesV1 {
-                run: fallback,
-                residual: u32::try_from(residual_capacity)
-                    .expect("G2 residual capacity exceeds the frozen u32 schema"),
-                opaque_events: fallback,
-                ..Default::default()
+            let capacities = match (num_insns, record_capacity_rows) {
+                (Some(num_insns), Some(trace_heights)) => {
+                    RvrG2CapacitiesV1::for_metered_segment(g2, trace_heights, num_insns)?
+                }
+                _ => {
+                    let residual_capacity =
+                        g2_residual_capacity(g2, program_log_cap, record_capacity_rows)?;
+                    let mut capacities = RvrG2CapacitiesV1 {
+                        run: fallback,
+                        residual: u32::try_from(residual_capacity)
+                            .expect("G2 residual capacity exceeds the frozen u32 schema"),
+                        opaque_events: fallback,
+                        ..Default::default()
+                    };
+                    for binding in g2.air_bindings.iter() {
+                        capacities.kinds[binding.kind as usize] = record_capacity_rows
+                            .and_then(|rows| rows.get(binding.air_idx))
+                            .copied()
+                            .unwrap_or(fallback);
+                    }
+                    capacities
+                }
             };
-            for binding in g2.air_bindings.iter() {
-                capacities.kinds[binding.kind as usize] = record_capacity_rows
-                    .and_then(|rows| rows.get(binding.air_idx))
-                    .copied()
-                    .unwrap_or(fallback);
-            }
             Some(RvrG2PreparedV1::new_pooled_for_mode(
                 &capacities,
                 pool,

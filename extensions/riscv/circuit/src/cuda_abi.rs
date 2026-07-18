@@ -176,6 +176,8 @@ pub mod rvr_g2_cuda {
     };
 
     extern "C" {
+        fn _rvr_g2_device_pool_configure(begin: i32, reserve_bytes: usize, stats: *mut u64) -> i32;
+        fn _rvr_g2_device_pool_stats(stats: *mut u64) -> i32;
         fn _rvr_g2_predecode(
             d_wire: DeviceBufferView,
             logical_wire_bytes: usize,
@@ -246,6 +248,25 @@ pub mod rvr_g2_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
+    }
+
+    pub unsafe fn configure_device_pool(
+        begin: bool,
+        reserve_bytes: usize,
+    ) -> Result<[u64; 8], CudaError> {
+        let mut stats = [0u64; 8];
+        CudaError::from_result(_rvr_g2_device_pool_configure(
+            i32::from(begin),
+            reserve_bytes,
+            stats.as_mut_ptr(),
+        ))?;
+        Ok(stats)
+    }
+
+    pub unsafe fn device_pool_stats() -> Result<[u64; 5], CudaError> {
+        let mut stats = [0u64; 5];
+        CudaError::from_result(_rvr_g2_device_pool_stats(stats.as_mut_ptr()))?;
+        Ok(stats)
     }
 
     #[allow(clippy::too_many_arguments)]

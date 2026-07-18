@@ -446,6 +446,17 @@ extern "C" int _hintstore_tracegen_g2(RVR_G2_TRACEGEN_PARAMETERS) {
     return CHECK_KERNEL();
 }
 
+extern "C" int _hintstore_tracegen_g2_preload(Fp *trace, cudaStream_t stream) {
+    cudaFuncAttributes attributes{};
+    cudaError_t status = cudaFuncGetAttributes(&attributes, hintstore_g2_tracegen);
+    if (status != cudaSuccess) return int(status);
+    riscv::G2TraceSource source{};
+    hintstore_g2_tracegen<<<1, 1, 0, stream>>>(
+        trace, 0, source, nullptr, 0, nullptr, 0, 0
+    );
+    return CHECK_KERNEL();
+}
+
 extern "C" int _hintstore_tracegen_g2_reference(RVR_G2_REFERENCE_PARAMETERS) {
     if (width != sizeof(Rv64HintStoreCols<uint8_t>) || records.size % sizeof(HintReplayRow) != 0 ||
         records.size / sizeof(HintReplayRow) > UINT32_MAX ||
