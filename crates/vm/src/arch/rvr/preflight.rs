@@ -1672,15 +1672,15 @@ where
                 ),
             ));
         }
-        let run_result = run_result.map_err(map_rvr_execute_error)?;
+        let mut run_result = run_result.map_err(map_rvr_execute_error)?;
         let post_native_started = std::time::Instant::now();
         if let Some(delta) = delta_output.as_mut() {
             delta.set_written(delta_record.len as usize);
         }
         let mut production_g2_counter_indices = None;
         let g2_segment = if let (Some(prepared), Some(g2)) = (g2_prepared, g2_meta) {
-            let instruction_count =
-                u32::try_from(run_result.state.mode_state.instret).map_err(|_| {
+            let mut instruction_count = u32::try_from(run_result.state.mode_state.instret)
+                .map_err(|_| {
                     ExecutionError::RvrExecution(
                         "G2 instruction count exceeds the frozen u32 header".to_string(),
                     )
@@ -1707,12 +1707,11 @@ where
                 })
                 .collect::<Result<Vec<_>, ExecutionError>>()?;
             if !g2.checked_emission() {
-                production_g2_counter_indices = Some(restore_g2_production_chip_counts(
-                    &prepared,
-                    g2,
-                    &opaque_written,
-                    &mut chip_counts,
-                )?);
+                let (counter_indices, derived_instruction_count) =
+                    restore_g2_production_counts(&prepared, g2, &opaque_written, &mut chip_counts)?;
+                production_g2_counter_indices = Some(counter_indices);
+                instruction_count = derived_instruction_count;
+                run_result.state.mode_state.instret = u64::from(derived_instruction_count);
             }
             let expected_kind_counts = g2.checked_emission().then(|| {
                 let mut counts = [0u32; 31];
@@ -2281,12 +2280,12 @@ fn initial_memory_log_cap(program_log_cap: usize) -> usize {
         .max(128)
 }
 
-fn restore_g2_production_chip_counts(
+fn restore_g2_production_counts(
     prepared: &RvrG2PreparedV1,
     meta: &super::RvrG2MetaV1,
     opaque_written: &[(super::RvrG2OpaqueBindingV1, u32, u32)],
     chip_counts: &mut [u32],
-) -> Result<Vec<usize>, ExecutionError> {
+) -> Result<(Vec<usize>, u32), ExecutionError> {
     let mut owned_airs = meta
         .air_bindings
         .iter()
@@ -2333,6 +2332,7 @@ fn restore_g2_production_chip_counts(
         ));
     }
     let mut host_counts = super::RvrG2BlockHostCountsV1::default();
+    let mut instruction_count = 0u32;
     for &program_slot in
         prepared.producer_u32_lane(rvr_openvm_ext_ffi_common::G2_PRODUCER_RUN_SLOT)?
     {
@@ -2343,6 +2343,12 @@ fn restore_g2_production_chip_counts(
                 ExecutionError::RvrExecution(format!(
                     "G2 production run references unknown block slot {program_slot}"
                 ))
+            })?;
+        let block_entry = meta.blocks[block_index];
+        instruction_count = instruction_count
+            .checked_add(block_entry.instruction_count)
+            .ok_or_else(|| {
+                ExecutionError::RvrExecution("G2 production instruction count overflow".to_string())
             })?;
         let block = meta.block_host_counts[block_index];
         host_counts.kind12 = host_counts
@@ -2390,7 +2396,7 @@ fn restore_g2_production_chip_counts(
     for &(binding, count, _) in opaque_written {
         chip_counts[binding.air_idx] = count;
     }
-    Ok(owned_airs)
+    Ok((owned_airs, instruction_count))
 }
 
 fn g2_residual_capacity(
