@@ -69,6 +69,11 @@ pub struct RvrG2MetaV1 {
 }
 
 impl RvrG2MetaV1 {
+    pub fn checked_emission(&self) -> bool {
+        // Frozen producer manifest value; see rvr_openvm::G2EmissionMode.
+        self.emission_mode == 1
+    }
+
     pub fn air_idx(&self, kind: u8) -> Option<usize> {
         self.air_bindings
             .binary_search_by_key(&kind, |binding| binding.kind)
@@ -87,6 +92,7 @@ pub struct RvrG2AirBindingV1 {
 pub struct RvrG2OpaqueBindingV1 {
     pub air_idx: usize,
     pub geometry: super::ArenaNativeGeometry,
+    pub max_residual_events_per_record: u32,
     pub air_identity_digest: [u8; 32],
     pub layout_digest: [u8; 32],
 }
@@ -1608,6 +1614,10 @@ impl RvrG2PreparedV1 {
         })
     }
 
+    pub(crate) fn residual_capacity(&self) -> usize {
+        self.lanes[G2_PRODUCER_RESIDUAL_VALUE_SLOT].cap as usize
+    }
+
     pub fn finalize(
         mut self,
         segment_id: u32,
@@ -2280,9 +2290,11 @@ mod tests {
                 core_off_matrix: 0,
                 layout: super::super::ArenaNativeLayout::Custom {
                     residual_memory_chronology: true,
+                    max_residual_events_per_record: 0,
                     layout_id: "openvm.rvr.test-opaque-final.v1",
                 },
             },
+            max_residual_events_per_record: 0,
             air_identity_digest: [0x3c; 32],
             layout_digest: [0x5a; 32],
         };

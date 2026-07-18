@@ -583,6 +583,7 @@ static constexpr uint32_t G2_REJECT_RESIDUAL_SHAPE = 14u;
 static constexpr uint32_t G2_REJECT_RESIDUAL_PAIR = 15u;
 static constexpr uint32_t G2_REJECT_CUSTOM_SCRATCH_CAPACITY = 16u;
 static constexpr uint32_t G2_REJECT_ADDRESS = 17u;
+static constexpr uint32_t G2_REJECT_DEVICE_AUX = 18u;
 
 #if defined(OPENVM_RVR_PREFLIGHT_DELTA)
 #include "openvm_tracer_preflight_delta.h"
@@ -598,11 +599,6 @@ preflight_device_aux(Tracer* restrict t) {
 }
 
 static __attribute__((always_inline)) inline bool
-preflight_device_aux_oracle(Tracer* restrict t) {
-  return false;
-}
-
-static __attribute__((always_inline)) inline bool
 preflight_device_chronology(Tracer* restrict t) {
   return false;
 }
@@ -610,12 +606,17 @@ preflight_device_chronology(Tracer* restrict t) {
 static __attribute__((always_inline)) inline void
 preflight_g2_emit_opaque_event_count(Tracer* restrict t,
                                      uint32_t event_count);
-static __attribute__((always_inline)) inline void
+static __attribute__((always_inline)) inline uint32_t
 preflight_g2_emit_residual_group(Tracer* restrict t,
                                  MemoryLogEntry const* restrict events,
                                  uint32_t event_count);
 
 #include "openvm_g2_emission.h"
+
+static __attribute__((always_inline)) inline bool
+preflight_device_aux_oracle(Tracer* restrict t) {
+  return t->g2 != NULL && OPENVM_G2_CHECKS_ENABLED;
+}
 
 static __attribute__((always_inline)) inline void
 preflight_mark_dirty_memory_page(Tracer* restrict t, uint64_t address) {
@@ -632,16 +633,97 @@ preflight_mark_dirty_memory_page(Tracer* restrict t, uint64_t address) {
   t->dirty_memory_pages[word] |= UINT64_C(1) << (page & 63u);
 }
 
+static constexpr uint32_t PREFLIGHT_DEVICE_AUX_TOKEN = 1u << 31;
+
+static __attribute__((always_inline)) inline bool
+preflight_g2_store_device_aux_reference(Tracer* restrict t,
+                                        uint32_t event_index,
+                                        uint32_t prev_timestamp,
+                                        uint64_t prev_value) {
+  if (likely(!preflight_device_aux_oracle(t))) {
+    return true;
+  }
+  if (unlikely(t->device_aux_references == NULL ||
+               event_index >= t->device_aux_references_cap)) {
+    t->g2->overflow = G2_REJECT_DEVICE_AUX;
+    return false;
+  }
+  t->device_aux_references[event_index] = (DeviceAuxReference){
+      .prev_timestamp = prev_timestamp,
+      ._reserved = 0u,
+      .prev_value = prev_value,
+  };
+  return true;
+}
+
+static __attribute__((always_inline)) inline void preflight_append_device_patch(
+    Tracer* restrict t, void* target, uint32_t token, uint32_t kind) {
+  uint32_t event_index = token & ~PREFLIGHT_DEVICE_AUX_TOKEN;
+  uint32_t patch_index = t->device_aux_patches_len++;
+  G2ProducerLaneV1 const* restrict residual_lane =
+      &t->g2->lanes[G2_PRODUCER_RESIDUAL_VALUE_SLOT];
+  if (unlikely((token & PREFLIGHT_DEVICE_AUX_TOKEN) == 0u ||
+               target == NULL || t->device_aux_patches == NULL ||
+               patch_index >= t->device_aux_patches_cap ||
+               event_index >= residual_lane->len ||
+               (kind != PREFLIGHT_DEVICE_AUX_PATCH_U32 &&
+                kind != PREFLIGHT_DEVICE_AUX_PATCH_U64))) {
+    t->g2->overflow = G2_REJECT_DEVICE_AUX;
+    return;
+  }
+  uint64_t expected = 0u;
+  if (unlikely(preflight_device_aux_oracle(t))) {
+    if (unlikely(t->device_aux_references == NULL ||
+                 event_index >= t->device_aux_references_cap)) {
+      t->g2->overflow = G2_REJECT_DEVICE_AUX;
+      return;
+    }
+    DeviceAuxReference reference = t->device_aux_references[event_index];
+    expected = kind == PREFLIGHT_DEVICE_AUX_PATCH_U32
+                   ? (uint64_t)reference.prev_timestamp
+                   : reference.prev_value;
+  }
+  t->device_aux_patches[patch_index] = (DeviceAuxPatch){
+      .target = (uint64_t)(uintptr_t)target,
+      .event_index = event_index,
+      .kind = kind,
+      .expected = expected,
+  };
+}
+
 static __attribute__((always_inline)) inline void
 preflight_store_prev_timestamp(Tracer* restrict t, uint32_t* target,
-                               uint32_t value) {
-  *target = value;
+                               uint32_t token) {
+  if (likely(!preflight_device_aux(t))) {
+    *target = token;
+    return;
+  }
+  preflight_append_device_patch(t, target, token,
+                                PREFLIGHT_DEVICE_AUX_PATCH_U32);
+  uint32_t event_index = token & ~PREFLIGHT_DEVICE_AUX_TOKEN;
+  *target = preflight_device_aux_oracle(t) &&
+                    likely(t->device_aux_references != NULL &&
+                           event_index < t->device_aux_references_cap)
+                ? t->device_aux_references[event_index].prev_timestamp
+                : 0u;
 }
 
 static __attribute__((always_inline)) inline void preflight_store_prev_value(
-    Tracer* restrict t, void* target, uint32_t timestamp,
+    Tracer* restrict t, void* target, uint32_t token,
     uint64_t legacy_value) {
-  memcpy(target, &legacy_value, sizeof(legacy_value));
+  if (likely(!preflight_device_aux(t))) {
+    memcpy(target, &legacy_value, sizeof(legacy_value));
+    return;
+  }
+  preflight_append_device_patch(t, target, token,
+                                PREFLIGHT_DEVICE_AUX_PATCH_U64);
+  uint32_t event_index = token & ~PREFLIGHT_DEVICE_AUX_TOKEN;
+  uint64_t value = preflight_device_aux_oracle(t) &&
+                           likely(t->device_aux_references != NULL &&
+                                  event_index < t->device_aux_references_cap)
+                       ? t->device_aux_references[event_index].prev_value
+                       : 0u;
+  memcpy(target, &value, sizeof(value));
 }
 
 static __attribute__((always_inline)) inline void
@@ -670,7 +752,20 @@ preflight_take_custom_memory_events(Tracer* restrict t, uint32_t event_count) {
       t->g2->overflow = G2_REJECT_CUSTOM_EVENT_COUNT;
       return NULL;
     }
-    preflight_g2_emit_residual_group(t, t->custom_memory_scratch, event_count);
+    uint32_t event_base = preflight_g2_emit_residual_group(
+        t, t->custom_memory_scratch, event_count);
+    if (unlikely(event_base == UINT32_MAX)) {
+      return NULL;
+    }
+    for (uint32_t i = 0; i < event_count; ++i) {
+      MemoryLogEntry* restrict event = &t->custom_memory_scratch[i];
+      if (unlikely(!preflight_g2_store_device_aux_reference(
+              t, event_base + i, event->prev_timestamp,
+              event->prev_value))) {
+        return NULL;
+      }
+      event->prev_timestamp = PREFLIGHT_DEVICE_AUX_TOKEN | (event_base + i);
+    }
     preflight_g2_emit_opaque_event_count(t, event_count);
     return t->custom_memory_scratch;
   }
@@ -913,7 +1008,7 @@ preflight_g2_emit_residual(Tracer* restrict t, uint8_t kind,
 /* Opaque/custom producers expose their exact event span only after the FFI
  * returns. Claim the three residual lanes once and fill each lane linearly
  * from the predecessor scratch captured in execution order. */
-static __attribute__((always_inline)) inline void
+static __attribute__((always_inline)) inline uint32_t
 preflight_g2_emit_residual_group(Tracer* restrict t,
                                  MemoryLogEntry const* restrict events,
                                  uint32_t event_count) {
@@ -921,7 +1016,7 @@ preflight_g2_emit_residual_group(Tracer* restrict t,
   if (unlikely(OPENVM_G2_CHECKS_ENABLED &&
                (g2 == NULL || event_count == 0u))) {
     if (g2 != NULL) g2->overflow = G2_REJECT_CUSTOM_EVENT_COUNT;
-    return;
+    return UINT32_MAX;
   }
   uint32_t ctrl_index = preflight_g2_claim_span(
       g2, G2_PRODUCER_RESIDUAL_CTRL_SLOT, event_count, sizeof(uint64_t));
@@ -933,7 +1028,7 @@ preflight_g2_emit_residual_group(Tracer* restrict t,
                (ctrl_index == UINT32_MAX || tag_index != ctrl_index ||
                 value_index != ctrl_index))) {
     g2->overflow = G2_REJECT_RESIDUAL_PAIR;
-    return;
+    return UINT32_MAX;
   }
   uint64_t* restrict ctrl =
       (uint64_t*)(g2->base +
@@ -965,6 +1060,7 @@ preflight_g2_emit_residual_group(Tracer* restrict t,
   for (uint32_t i = 0; i < event_count; ++i) {
     value[i] = events[i].value;
   }
+  return ctrl_index;
 }
 
 /* The shared extension wrapper exports this symbol for every tracer mode.
@@ -1191,6 +1287,10 @@ preflight_append_memory_record(Tracer* restrict t, uint8_t kind,
                          : preflight_g2_emit_residual(
                                t, kind, addr_space, address, width, value,
                                timestamp);
+    if (likely(!custom_capture && index != UINT32_MAX)) {
+      preflight_g2_store_device_aux_reference(t, index, prev_timestamp,
+                                              prev_value);
+    }
     if (unlikely(custom_capture)) {
       uint32_t scratch_idx = t->custom_memory_scratch_len++;
       if (likely(!OPENVM_G2_CHECKS_ENABLED ||
@@ -1261,6 +1361,8 @@ static __attribute__((always_inline)) inline uint32_t preflight_append_memory(
   if (kind == PREFLIGHT_MEMORY_KIND_WRITE && addr_space == AS_MEMORY) {
     preflight_mark_dirty_memory_page(t, address);
   }
+  bool g2_custom_capture =
+      t->g2 != NULL && t->custom_memory_scratch_len != UINT32_MAX;
   uint32_t event_index = preflight_append_memory_record(
       t, kind, addr_space, address, width, value, prev_value, timestamp,
       prev_timestamp, compact_residual);
@@ -1269,7 +1371,9 @@ static __attribute__((always_inline)) inline uint32_t preflight_append_memory(
              ? (PREFLIGHT_DEVICE_AUX_TOKEN | event_index)
              : prev_timestamp;
 #else
-  return prev_timestamp;
+  return preflight_device_aux(t) && !g2_custom_capture
+             ? (PREFLIGHT_DEVICE_AUX_TOKEN | event_index)
+             : prev_timestamp;
 #endif
 }
 

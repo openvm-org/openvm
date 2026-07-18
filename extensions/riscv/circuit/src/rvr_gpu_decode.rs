@@ -318,7 +318,10 @@ struct HostG2Segment {
     opaque: Vec<G2ExpectedOpaqueV1>,
     total_record_count: usize,
     program_frequency_count: usize,
+    device_aux_patches: Vec<openvm_circuit::arch::rvr::DeviceAuxPatch>,
+    device_aux_references: Vec<openvm_circuit::arch::rvr::DeviceAuxReference>,
     oracle_expected: HashMap<usize, Vec<u8>>,
+    oracle_arena_expected: Vec<openvm_circuit::arch::rvr::DeviceAuxArenaReference>,
     program_frequency_reference: Vec<u32>,
 }
 
@@ -1043,7 +1046,10 @@ impl RvrGpuDecodeState {
         initial_timestamp: u32,
         chip_counts: &[u32],
         program_frequency_count: usize,
+        device_aux_patches: Vec<openvm_circuit::arch::rvr::DeviceAuxPatch>,
+        device_aux_references: Vec<openvm_circuit::arch::rvr::DeviceAuxReference>,
         oracle_expected: HashMap<usize, Vec<u8>>,
+        oracle_arena_expected: Vec<openvm_circuit::arch::rvr::DeviceAuxArenaReference>,
         program_frequency_reference: Vec<u32>,
     ) -> Result<HashSet<usize>, openvm_circuit::arch::ExecutionError> {
         let kind_to_air =
@@ -1146,7 +1152,10 @@ impl RvrGpuDecodeState {
             opaque,
             total_record_count,
             program_frequency_count,
+            device_aux_patches,
+            device_aux_references,
             oracle_expected,
+            oracle_arena_expected,
             program_frequency_reference,
         });
         *self.g2_device.lock().unwrap() = None;
@@ -1831,6 +1840,84 @@ impl RvrGpuDecodeState {
         );
         if let Some(desc) = residual_values {
             assert_eq!(desc.elem_width, 8, "G2 residual-value width drifted");
+        }
+        if !host.device_aux_patches.is_empty() || !host.device_aux_references.is_empty() {
+            let residual_prev_timestamps = d_opaque_prev_timestamps
+                .to_host_on(device_ctx)
+                .expect("G2 residual prev-timestamp D2H");
+            let residual_prev_values = d_opaque_prev_values
+                .to_host_on(device_ctx)
+                .expect("G2 residual prev-value D2H");
+            assert_eq!(residual_prev_timestamps.len(), residual_capacity);
+            assert_eq!(residual_prev_values.len(), residual_capacity);
+            if !host.device_aux_references.is_empty() {
+                assert_eq!(
+                    host.device_aux_references.len(),
+                    residual_capacity,
+                    "G2 device aux oracle reference count differs from residual chronology"
+                );
+                for (index, reference) in host.device_aux_references.iter().enumerate() {
+                    assert_eq!(
+                        residual_prev_timestamps[index], reference.prev_timestamp,
+                        "G2 device residual prev_timestamp differs from host at event {index}"
+                    );
+                    assert_eq!(
+                        residual_prev_values[index], reference.prev_value,
+                        "G2 device residual prev_value differs from host at event {index}"
+                    );
+                }
+            }
+            for (patch_index, patch) in host.device_aux_patches.iter().enumerate() {
+                let event_index = patch.event_index as usize;
+                assert!(
+                    event_index < residual_capacity,
+                    "G2 device aux patch {patch_index} references event {event_index}/{residual_capacity}"
+                );
+                let value = match patch.kind {
+                    openvm_circuit::arch::rvr::DEVICE_AUX_PATCH_U32 => {
+                        u64::from(residual_prev_timestamps[event_index])
+                    }
+                    openvm_circuit::arch::rvr::DEVICE_AUX_PATCH_U64 => {
+                        residual_prev_values[event_index]
+                    }
+                    kind => panic!("G2 device aux patch {patch_index} has invalid kind {kind}"),
+                };
+                if !host.device_aux_references.is_empty() {
+                    assert_eq!(
+                        value, patch.expected,
+                        "G2 device aux patch {patch_index} differs from its host field"
+                    );
+                }
+                // SAFETY: native preflight validated every target and width
+                // against exactly one initialized staged-arena prefix and
+                // rejected overlaps. The arena allocations move by ownership
+                // only, so their data pointers remain stable through replay.
+                unsafe {
+                    match patch.kind {
+                        openvm_circuit::arch::rvr::DEVICE_AUX_PATCH_U32 => {
+                            (patch.target as *mut u32).write_unaligned(value as u32);
+                        }
+                        openvm_circuit::arch::rvr::DEVICE_AUX_PATCH_U64 => {
+                            (patch.target as *mut u64).write_unaligned(value);
+                        }
+                        _ => unreachable!(),
+                    }
+                }
+            }
+        }
+        for arena in &host.oracle_arena_expected {
+            // SAFETY: native validation proved this exact written prefix lies
+            // in its live staged allocation. The device patches above are the
+            // only writes between the snapshot and this comparison.
+            let actual = unsafe {
+                std::slice::from_raw_parts(arena.base as *const u8, arena.expected.len())
+            };
+            assert_eq!(
+                actual,
+                arena.expected.as_slice(),
+                "G2 device aux full-arena bytes differ from host for AIR {}",
+                arena.air_idx
+            );
         }
         assert_eq!(
             d_table.len() % size_of::<DeviceOperandEntry>(),

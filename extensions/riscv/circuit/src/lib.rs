@@ -528,8 +528,9 @@ pub fn generate_gpu_rvr_record_arenas(
                 "G2 mode requested without an operand table".to_string(),
             )
         })?;
-        let device_replay_oracle =
-            std::env::var("OPENVM_RVR_DEVICE_REPLAY_ORACLE").as_deref() == Ok("1");
+        let device_replay_oracle = std::env::var("OPENVM_RVR_DEVICE_REPLAY_ORACLE").as_deref()
+            == Ok("1")
+            || meta.checked_emission();
         let (oracle_expected, program_frequency_reference) = if device_replay_oracle {
             let mut initial_registers = [0u64; 32];
             let mut initial_blocks = std::collections::BTreeMap::new();
@@ -600,6 +601,10 @@ pub fn generate_gpu_rvr_record_arenas(
         } else {
             Default::default()
         };
+        let device_aux_patches = std::mem::take(&mut output.raw_logs.device_aux_patches);
+        let device_aux_references = std::mem::take(&mut output.raw_logs.device_aux_references);
+        let device_aux_arena_references =
+            std::mem::take(&mut output.raw_logs.device_aux_arena_references);
         let bound = state.bind_g2_segment(
             exe,
             pc_to_air_idx,
@@ -610,7 +615,10 @@ pub fn generate_gpu_rvr_record_arenas(
             output.system_records.from_state.timestamp,
             &output.raw_logs.chip_counts,
             output.system_records.filtered_exec_frequencies.len(),
+            device_aux_patches,
+            device_aux_references,
             oracle_expected,
+            device_aux_arena_references,
             program_frequency_reference,
         )?;
         if bound != compact_airs {

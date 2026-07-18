@@ -310,6 +310,9 @@ pub fn vec_heap_geometry<F: PrimeField32, const NUM_READS: usize, const BLOCKS: 
             * size_of::<F>(),
         layout: ArenaNativeLayout::Custom {
             residual_memory_chronology: true,
+            max_residual_events_per_record: (NUM_READS
+                + 1
+                + (NUM_READS + 1) * BLOCKS) as u32,
             layout_id: "openvm.rvr.vec-heap-final.v1",
         },
     }
@@ -343,6 +346,7 @@ fn mod_iseq_geometry<F: PrimeField32, const BLOCKS: usize, const U16_LIMBS: usiz
             * size_of::<F>(),
         layout: ArenaNativeLayout::Custom {
             residual_memory_chronology: true,
+            max_residual_events_per_record: (3 + 2 * BLOCKS) as u32,
             layout_id: "openvm.rvr.mod-is-equal-final.v1",
         },
     }

@@ -317,6 +317,7 @@ pub struct DeviceAuxArenaReference {
 
 pub const DEVICE_AUX_PATCH_U32: u32 = 0;
 pub const DEVICE_AUX_PATCH_U64: u32 = 1;
+const DEVICE_AUX_EVENT_INDEX_LIMIT: usize = 1usize << 31;
 
 /// C-compatible per-chip inline-record buffer descriptor (R3/R4).
 ///
@@ -1227,8 +1228,10 @@ where
         !device_touched_memory || compact_delta_memory || compiled.inline_records().g2.is_some(),
         "device touched-memory replay requires compact delta or G2 chronology"
     );
-    let device_aux_oracle = device_touched_memory
-        && std::env::var("OPENVM_RVR_DEVICE_REPLAY_ORACLE").as_deref() == Ok("1");
+    let g2_meta = compiled.inline_records().g2.as_deref();
+    let device_aux_oracle = (device_touched_memory
+        && std::env::var("OPENVM_RVR_DEVICE_REPLAY_ORACLE").as_deref() == Ok("1"))
+        || g2_meta.is_some_and(|meta| meta.checked_emission());
     // A fused-compiled library has NO compact fallback for its arena-native
     // airs: executing without a target would write full records at the
     // compact stride into scratch (garbage). Fail deterministically here
@@ -1297,7 +1300,6 @@ where
     } else {
         initial_memory_log_cap(program_log_cap)
     };
-    let g2_meta = compiled.inline_records().g2.as_deref();
     // The cached proving route selects this only after the builder advertises
     // a fully-direct device delta decoder. Access-aux omission alone is not a
     // discriminator: CPU all-custom arena routes may also safely omit it and
@@ -1493,9 +1495,11 @@ where
         let mut g2_prepared = if let Some(g2) = g2_meta {
             let fallback = u32::try_from(program_log_cap)
                 .expect("G2 per-kind capacity exceeds the frozen u32 schema");
+            let residual_capacity =
+                g2_residual_capacity(g2, program_log_cap, record_capacity_rows)?;
             let mut capacities = RvrG2CapacitiesV1 {
                 run: fallback,
-                residual: u32::try_from(memory_log_cap)
+                residual: u32::try_from(residual_capacity)
                     .expect("G2 residual capacity exceeds the frozen u32 schema"),
                 opaque_events: fallback,
                 ..Default::default()
@@ -1537,8 +1541,12 @@ where
 
         let mut custom_memory_scratch =
             [MaybeUninit::<MemoryLogEntry>::uninit(); PREFLIGHT_CUSTOM_MEMORY_SCRATCH_CAP];
-        let device_patch_cap = if device_touched_memory {
-            memory_log_cap
+        let device_aux_event_cap = g2_prepared
+            .as_ref()
+            .map(RvrG2PreparedV1::residual_capacity)
+            .unwrap_or(memory_log_cap);
+        let device_patch_cap = if device_touched_memory || g2_meta.is_some() {
+            device_aux_event_cap
                 .checked_mul(2)
                 .expect("device aux patch capacity overflow")
         } else {
@@ -1548,7 +1556,11 @@ where
             vec![MaybeUninit::<DeviceAuxPatch>::uninit(); device_patch_cap];
         let mut device_aux_references = vec![
             MaybeUninit::<DeviceAuxReference>::uninit();
-            if device_aux_oracle { memory_log_cap } else { 0 }
+            if device_aux_oracle {
+                device_aux_event_cap
+            } else {
+                0
+            }
         ];
         let memory_bytes = run_state.memory.memory.mem[RV64_MEMORY_AS as usize].size();
         let memory_pages = memory_bytes.div_ceil(PAGE_SIZE);
@@ -1735,6 +1747,11 @@ where
         let program_instruction_len = tracer.program_instruction_len as usize;
         let device_program_references_len = tracer.device_program_references_len as usize;
         let memory_len = tracer.memory_log_len as usize;
+        let device_aux_event_count = if let Some(segment) = g2_segment.as_ref() {
+            segment.header_acquire()?.residual_event_count as usize
+        } else {
+            memory_len
+        };
         let touched_len = tracer.touched_len as usize;
         let device_aux_patches_len = tracer.device_aux_patches_len as usize;
         let chip_counts_touched_len = tracer.chip_counts_touched_len as usize;
@@ -1861,11 +1878,17 @@ where
         let device_aux_references = if device_aux_oracle {
             // The oracle writes one complete reference per compact residual
             // event at the same event index.
-            unsafe { assume_init_prefix(device_aux_references, memory_len) }
+            unsafe { assume_init_prefix(device_aux_references, device_aux_event_count) }
         } else {
             Vec::new()
         };
-        if device_touched_memory {
+        if !device_aux_patches.is_empty() {
+            let targets = arena_targets.ok_or_else(|| {
+                ExecutionError::RvrExecution(
+                    "device aux patches require live staged arenas".to_string(),
+                )
+            })?;
+            let mut target_ranges = Vec::with_capacity(device_aux_patches.len());
             for (patch_index, patch) in device_aux_patches.iter().enumerate() {
                 let width = match patch.kind {
                     DEVICE_AUX_PATCH_U32 => 4usize,
@@ -1876,27 +1899,41 @@ where
                         )));
                     }
                 };
-                if patch.event_index as usize >= memory_len {
+                if patch.event_index as usize >= device_aux_event_count {
                     return Err(ExecutionError::RvrExecution(format!(
-                        "device aux patch {patch_index} references residual event {} of {memory_len}",
-                        patch.event_index
+                        "device aux patch {patch_index} references residual event {} of {device_aux_event_count}",
+                        patch.event_index,
                     )));
                 }
                 let target = patch.target as usize;
-                let in_staged_arena = arena_targets.is_some_and(|targets| {
-                    targets.values().any(|arena| {
+                let target_end = target.checked_add(width).ok_or_else(|| {
+                    ExecutionError::RvrExecution(format!(
+                        "device aux patch {patch_index} target range overflows"
+                    ))
+                })?;
+                let owners = targets
+                    .iter()
+                    .filter_map(|(&air_idx, arena)| {
                         let begin = arena.base as usize;
-                        target >= begin
-                            && target
-                                .checked_add(width)
-                                .is_some_and(|end| end <= begin + arena.cap as usize)
+                        let written = chip_records.get(air_idx)?.len as usize;
+                        let end = begin.checked_add(written)?;
+                        (target >= begin && target_end <= end).then_some(air_idx)
                     })
-                });
-                if !in_staged_arena {
+                    .collect::<Vec<_>>();
+                if owners.len() != 1 {
                     return Err(ExecutionError::RvrExecution(format!(
-                        "device aux patch {patch_index} target {target:#x} is outside staged arenas"
+                        "device aux patch {patch_index} target {target:#x} has {} written-arena owners",
+                        owners.len(),
                     )));
                 }
+                target_ranges.push((target, target_end, patch_index, owners[0]));
+            }
+            target_ranges.sort_unstable_by_key(|&(begin, _, _, _)| begin);
+            if let Some(pair) = target_ranges.windows(2).find(|pair| pair[0].1 > pair[1].0) {
+                return Err(ExecutionError::RvrExecution(format!(
+                    "device aux patches {} (AIR {}) and {} (AIR {}) overlap",
+                    pair[0].2, pair[0].3, pair[1].2, pair[1].3,
+                )));
             }
         }
         let logs_ready = std::time::Instant::now();
@@ -2207,6 +2244,58 @@ fn initial_memory_log_cap(program_log_cap: usize) -> usize {
         .saturating_mul(8)
         .saturating_add(64)
         .max(128)
+}
+
+fn g2_residual_capacity(
+    meta: &super::RvrG2MetaV1,
+    program_log_cap: usize,
+    record_capacity_rows: Option<&[u32]>,
+) -> Result<usize, ExecutionError> {
+    // Every standard crossing emits at most two residual block events. The
+    // HintStore decoder emits at most three events per metered row. Opaque
+    // extensions publish an exact per-record maximum with their frozen arena
+    // geometry, so a custom-heavy executable is not constrained by the
+    // legacy eight-events-per-instruction raw-log estimate.
+    let mut capacity = program_log_cap
+        .checked_mul(2)
+        .and_then(|value| value.checked_add(64))
+        .ok_or_else(|| ExecutionError::RvrExecution("G2 residual capacity overflow".to_string()))?;
+    if let Some(binding) = meta.air_bindings.iter().find(|binding| binding.kind == 30) {
+        let rows = record_capacity_rows
+            .and_then(|heights| heights.get(binding.air_idx))
+            .map_or(program_log_cap, |&height| height as usize);
+        capacity = capacity
+            .checked_add(rows.checked_mul(3).ok_or_else(|| {
+                ExecutionError::RvrExecution("G2 HintStore capacity overflow".to_string())
+            })?)
+            .ok_or_else(|| {
+                ExecutionError::RvrExecution("G2 residual capacity overflow".to_string())
+            })?;
+    }
+    for binding in meta.opaque_bindings.iter() {
+        let rows = record_capacity_rows
+            .and_then(|heights| heights.get(binding.air_idx))
+            .map_or(program_log_cap, |&height| height as usize);
+        capacity = capacity
+            .checked_add(
+                rows.checked_mul(binding.max_residual_events_per_record as usize)
+                    .ok_or_else(|| {
+                        ExecutionError::RvrExecution(
+                            "G2 opaque residual capacity overflow".to_string(),
+                        )
+                    })?,
+            )
+            .ok_or_else(|| {
+                ExecutionError::RvrExecution("G2 residual capacity overflow".to_string())
+            })?;
+    }
+    let capacity = capacity.max(128);
+    if capacity >= DEVICE_AUX_EVENT_INDEX_LIMIT {
+        return Err(ExecutionError::RvrExecution(
+            "G2 residual capacity exceeds device aux token space".to_string(),
+        ));
+    }
+    Ok(capacity)
 }
 
 fn grow_capacity(current: usize, needed: usize) -> usize {

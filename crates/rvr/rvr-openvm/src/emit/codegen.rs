@@ -57,6 +57,10 @@ pub enum ArenaNativeLayout {
     /// new value and therefore a new G2 schema fingerprint.
     Custom {
         residual_memory_chronology: bool,
+        /// Maximum residual memory events emitted by one record. G2 uses
+        /// this frozen extension-owned bound to provision its write-only
+        /// residual lanes and predecessor patch metadata before execution.
+        max_residual_events_per_record: u32,
         layout_id: &'static str,
     },
     /// Extension-owned packed records with runtime row counts.
