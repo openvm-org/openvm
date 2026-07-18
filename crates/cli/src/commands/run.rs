@@ -77,27 +77,24 @@ pub struct RunArgs {
 
     #[arg(
         long,
-        help = "Sample RVR guest call stacks, upload them, and print a Firefox Profiler link",
-        help_heading = "Execution Profiling"
-    )]
-    pub profile_execution: bool,
-
-    #[arg(
-        long,
         value_name = "PATH",
-        help = "Also save the uploaded execution profile (.json.gz) to PATH",
+        num_args = 0..=1,
+        require_equals = true,
+        help = "Profile RVR guest execution and print a Firefox Profiler link; optionally save the .json.gz to PATH",
         help_heading = "Execution Profiling"
     )]
-    pub profile_output: Option<PathBuf>,
+    pub execution_profile: Option<Option<PathBuf>>,
 
     #[arg(
         long,
+        short = 'r',
         value_name = "HZ",
         value_parser = clap::value_parser!(u32).range(1..=1_000_000),
-        help = "Guest call-stack sampling frequency (default: 1000)",
+        requires = "execution_profile",
+        help = "Sampling rate, in Hz (default: 1000)",
         help_heading = "Execution Profiling"
     )]
-    pub profile_hz: Option<u32>,
+    pub rate: Option<u32>,
 }
 
 impl From<RunArgs> for BuildArgs {
@@ -251,26 +248,25 @@ impl From<RunCargoArgs> for BuildCargoArgs {
 
 impl RunCmd {
     pub fn run(&self) -> Result<()> {
-        let profile_execution = self.run_args.profile_execution
-            || self.run_args.profile_output.is_some()
-            || self.run_args.profile_hz.is_some();
-        if profile_execution && !matches!(self.run_args.mode, ExecutionMode::Pure) {
+        let profile_enabled =
+            self.run_args.execution_profile.is_some() || self.run_args.rate.is_some();
+        if profile_enabled && !matches!(self.run_args.mode, ExecutionMode::Pure) {
             return Err(eyre!(
-                "--profile-execution is only supported with --mode pure"
+                "--execution-profile is only supported with --mode pure"
             ));
         }
-        if profile_execution && self.run_args.exe.is_some() {
+        if profile_enabled && self.run_args.exe.is_some() {
             return Err(eyre!(
-                "--profile-execution requires building the guest so frame pointers and debug info can be enabled; --exe is not supported"
+                "--execution-profile requires building the guest so frame pointers and debug info can be enabled; --exe is not supported"
             ));
         }
-        if profile_execution && !cfg!(feature = "rvr") {
+        if profile_enabled && !cfg!(feature = "rvr") {
             return Err(eyre!(
-                "--profile-execution requires cargo-openvm to be built with the `rvr` feature"
+                "--execution-profile requires cargo-openvm to be built with the `rvr` feature"
             ));
         }
-        if profile_execution && !cfg!(all(target_os = "linux", target_arch = "x86_64")) {
-            return Err(eyre!("--profile-execution currently requires Linux x86_64"));
+        if profile_enabled && !cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+            return Err(eyre!("--execution-profile currently requires Linux x86_64"));
         }
 
         #[cfg(feature = "rvr")]
@@ -284,7 +280,7 @@ impl RunCmd {
             #[cfg(feature = "rvr")]
             let mut build_args = build_args;
             #[cfg(feature = "rvr")]
-            if profile_execution {
+            if profile_enabled {
                 build_args
                     .rustc_flags
                     .extend(["-Cforce-frame-pointers=yes".to_string()]);
@@ -308,7 +304,7 @@ impl RunCmd {
             let cargo_args = self.cargo_args.clone().into();
             let output_dir = build(&build_args, &cargo_args)?;
             #[cfg(feature = "rvr")]
-            if profile_execution {
+            if profile_enabled {
                 let (manifest_path, _) =
                     get_manifest_path_and_dir(&self.cargo_args.manifest.manifest_path)?;
                 let target_dir =
@@ -363,7 +359,7 @@ impl RunCmd {
             Sdk::new(app_config, AggregationSystemParams::default())?
         };
 
-        if profile_execution {
+        if profile_enabled {
             #[cfg(feature = "rvr")]
             {
                 let guest_elf_path = guest_elf_path
@@ -371,10 +367,7 @@ impl RunCmd {
                     .ok_or_else(|| eyre!("guest ELF path is unavailable"))?;
                 let raw_profile = tempfile::NamedTempFile::new()
                     .map_err(|error| eyre!("failed to create temporary profile: {error}"))?;
-                let sample_hz = self
-                    .run_args
-                    .profile_hz
-                    .unwrap_or(DEFAULT_EXECUTION_PROFILE_HZ);
+                let sample_hz = self.run_args.rate.unwrap_or(DEFAULT_EXECUTION_PROFILE_HZ);
                 let guard = crate::execution_profile::GuestProfileGuard::start(
                     raw_profile.path(),
                     sample_hz,
@@ -386,7 +379,10 @@ impl RunCmd {
                     raw_profile.path(),
                     guest_elf_path,
                     sample_hz,
-                    self.run_args.profile_output.as_deref(),
+                    self.run_args
+                        .execution_profile
+                        .as_ref()
+                        .and_then(Option::as_deref),
                 )?;
                 println!("{url}");
                 return Ok(());
@@ -419,5 +415,39 @@ impl RunCmd {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn execution_profile_accepts_an_optional_output() {
+        let without_output = RunCmd::try_parse_from(["execute", "--execution-profile"]).unwrap();
+        assert_eq!(without_output.run_args.execution_profile, Some(None));
+        assert_eq!(without_output.run_args.rate, None);
+
+        let with_output = RunCmd::try_parse_from([
+            "execute",
+            "--execution-profile=profiling.json.gz",
+            "--rate",
+            "2000",
+        ])
+        .unwrap();
+        assert_eq!(
+            with_output.run_args.execution_profile,
+            Some(Some(PathBuf::from("profiling.json.gz")))
+        );
+        assert_eq!(with_output.run_args.rate, Some(2000));
+    }
+
+    #[test]
+    fn rate_requires_execution_profile() {
+        let error = RunCmd::try_parse_from(["execute", "--rate", "2000"]).unwrap_err();
+        assert_eq!(
+            error.kind(),
+            clap::error::ErrorKind::MissingRequiredArgument
+        );
     }
 }
