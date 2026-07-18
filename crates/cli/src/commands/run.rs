@@ -278,9 +278,23 @@ impl RunCmd {
             let target_name = get_single_target_name(&self.cargo_args)?;
             let mut build_args: BuildArgs = self.run_args.clone().into();
             if profile_execution {
-                build_args.rustc_flags.extend([
-                    "-Cforce-frame-pointers=yes".to_string(),
-                    "-Cdebuginfo=2".to_string(),
+                build_args
+                    .rustc_flags
+                    .extend(["-Cforce-frame-pointers=yes".to_string()]);
+                let cargo_profile = self
+                    .cargo_args
+                    .profile
+                    .to_ascii_uppercase()
+                    .replace('-', "_");
+                build_args.cargo_env.extend([
+                    (
+                        format!("CARGO_PROFILE_{cargo_profile}_DEBUG"),
+                        "2".to_string(),
+                    ),
+                    (
+                        format!("CARGO_PROFILE_{cargo_profile}_STRIP"),
+                        "none".to_string(),
+                    ),
                 ]);
                 build_args.quiet_status = true;
             }

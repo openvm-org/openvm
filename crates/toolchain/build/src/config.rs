@@ -18,6 +18,8 @@ pub struct GuestOptions {
     pub target_dir: Option<PathBuf>,
     /// Custom options to pass as args to `cargo build`.
     pub options: Vec<String>,
+    /// Environment variables to set for `cargo build`.
+    pub env: Vec<(String, String)>,
 }
 
 impl GuestOptions {
@@ -25,6 +27,18 @@ impl GuestOptions {
     pub fn with_options<S: AsRef<str>>(mut self, options: impl IntoIterator<Item = S>) -> Self {
         self.options
             .extend(options.into_iter().map(|s| s.as_ref().to_string()));
+        self
+    }
+
+    /// Add environment variables for the guest cargo build.
+    pub fn with_env<K: AsRef<str>, V: AsRef<str>>(
+        mut self,
+        env: impl IntoIterator<Item = (K, V)>,
+    ) -> Self {
+        self.env.extend(
+            env.into_iter()
+                .map(|(key, value)| (key.as_ref().to_string(), value.as_ref().to_string())),
+        );
         self
     }
 

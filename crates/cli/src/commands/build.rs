@@ -57,6 +57,10 @@ pub struct BuildArgs {
     #[arg(skip)]
     pub rustc_flags: Vec<String>,
 
+    /// Additional environment variables for the guest cargo build.
+    #[arg(skip)]
+    pub cargo_env: Vec<(String, String)>,
+
     /// Suppress OpenVM's build status messages on stdout.
     #[arg(skip)]
     pub quiet_status: bool,
@@ -273,7 +277,8 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Path
     let mut guest_options = GuestOptions::default()
         .with_features(cargo_args.features.clone())
         .with_profile(cargo_args.profile.clone())
-        .with_rustc_flags(rustc_flags);
+        .with_rustc_flags(rustc_flags)
+        .with_env(build_args.cargo_env.clone());
 
     guest_options.target_dir = Some(target_dir.clone());
     guest_options
