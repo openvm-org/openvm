@@ -1,14 +1,11 @@
 //! Signal-sampled guest call-stack profiling for the RVR backend.
 //!
-//! Set `OPENVM_RVR_GUEST_CALL_PROFILE` to a folded-stack output path to enable
-//! profiling for RVR execution. The optional
-//! `OPENVM_RVR_GUEST_CALL_PROFILE_HZ` variable controls the sampling rate and
-//! defaults to 1 kHz. `OPENVM_RVR_GUEST_CALL_PROFILE_FORMAT=raw` preserves
+//! Profiling is enabled explicitly for one RVR execution with a
+//! [`GuestProfileConfig`](super::GuestProfileConfig). Raw output preserves
 //! sample order for conversion to another profile format.
 
 use std::{
     collections::HashMap,
-    path::PathBuf,
     sync::atomic::{AtomicBool, AtomicPtr, AtomicUsize, Ordering},
 };
 
@@ -16,20 +13,15 @@ use openvm_instructions::program::{DEFAULT_PC_STEP, MAX_ALLOWED_PC};
 use openvm_platform::memory::TEXT_START;
 use rvr_state::RvState;
 
+use super::{GuestProfileConfig, GuestProfileFormat};
+
 const MAX_STACK_DEPTH: usize = 128;
 const DEFAULT_BUFFER_CAPACITY: usize = 1 << 18;
-const DEFAULT_SAMPLE_HZ: u32 = 1_000;
 const GUEST_FP_REG: usize = 8;
 
 fn is_valid_guest_pc(pc: u64) -> bool {
     (TEXT_START..=u64::from(MAX_ALLOWED_PC)).contains(&pc)
         && pc.is_multiple_of(u64::from(DEFAULT_PC_STEP))
-}
-
-#[derive(Clone, Copy)]
-enum OutputFormat {
-    Folded,
-    Raw,
 }
 
 #[derive(Clone, Copy)]
@@ -154,8 +146,7 @@ extern "C" fn sigprof_handler(_signal: libc::c_int) {
 }
 
 pub(super) struct GuestProfiler {
-    output: PathBuf,
-    output_format: OutputFormat,
+    config: GuestProfileConfig,
     buffer: Vec<StackSample>,
     ctx: Box<SignalContext>,
     old_action: libc::sigaction,
@@ -164,41 +155,10 @@ pub(super) struct GuestProfiler {
 }
 
 impl GuestProfiler {
-    pub(super) fn start_from_env<ModeState>(
+    pub(super) fn start<ModeState>(
         state: &RvState<ModeState>,
-    ) -> Result<Option<Self>, String> {
-        let Some(output) = std::env::var_os("OPENVM_RVR_GUEST_CALL_PROFILE") else {
-            return Ok(None);
-        };
-        let sample_hz = match std::env::var("OPENVM_RVR_GUEST_CALL_PROFILE_HZ") {
-            Ok(value) => value.parse::<u32>().map_err(|error| {
-                format!("invalid OPENVM_RVR_GUEST_CALL_PROFILE_HZ={value:?}: {error}")
-            })?,
-            Err(std::env::VarError::NotPresent) => DEFAULT_SAMPLE_HZ,
-            Err(error) => {
-                return Err(format!("invalid OPENVM_RVR_GUEST_CALL_PROFILE_HZ: {error}"));
-            }
-        };
-        if sample_hz == 0 || sample_hz > 1_000_000 {
-            return Err(format!(
-                "OPENVM_RVR_GUEST_CALL_PROFILE_HZ must be in 1..=1000000, got {sample_hz}"
-            ));
-        }
-        let output_format = match std::env::var("OPENVM_RVR_GUEST_CALL_PROFILE_FORMAT") {
-            Ok(value) if value == "folded" => OutputFormat::Folded,
-            Ok(value) if value == "raw" => OutputFormat::Raw,
-            Ok(value) => {
-                return Err(format!(
-                    "OPENVM_RVR_GUEST_CALL_PROFILE_FORMAT must be `folded` or `raw`, got {value:?}"
-                ));
-            }
-            Err(std::env::VarError::NotPresent) => OutputFormat::Folded,
-            Err(error) => {
-                return Err(format!(
-                    "invalid OPENVM_RVR_GUEST_CALL_PROFILE_FORMAT: {error}"
-                ));
-            }
-        };
+        config: &GuestProfileConfig,
+    ) -> Result<Self, String> {
         if state.memory.is_null() {
             return Err("cannot profile RVR execution with null guest memory".to_string());
         }
@@ -244,7 +204,7 @@ impl GuestProfiler {
             ));
         }
 
-        let interval_us = 1_000_000u64.div_ceil(u64::from(sample_hz));
+        let interval_us = 1_000_000u64.div_ceil(u64::from(config.sample_hz()));
         let timer = libc::itimerval {
             it_interval: libc::timeval {
                 tv_sec: (interval_us / 1_000_000) as libc::time_t,
@@ -270,28 +230,27 @@ impl GuestProfiler {
             ));
         }
 
-        Ok(Some(Self {
-            output: output.into(),
-            output_format,
+        Ok(Self {
+            config: config.clone(),
             buffer,
             ctx,
             old_action,
             old_timer,
             started: true,
-        }))
+        })
     }
 
     pub(super) fn finish(mut self) -> Result<(), String> {
         self.stop_sampling();
         let samples = self.samples();
-        let output = match self.output_format {
-            OutputFormat::Folded => emit_folded_stacks(&samples),
-            OutputFormat::Raw => emit_raw_stacks(&samples),
+        let output = match self.config.format() {
+            GuestProfileFormat::Folded => emit_folded_stacks(&samples),
+            GuestProfileFormat::Raw => emit_raw_stacks(&samples),
         };
-        std::fs::write(&self.output, output).map_err(|error| {
+        std::fs::write(self.config.output(), output).map_err(|error| {
             format!(
                 "failed to write guest profile {}: {error}",
-                self.output.display()
+                self.config.output().display()
             )
         })?;
 
@@ -307,7 +266,7 @@ impl GuestProfiler {
             "[rvr-openvm] guest call profile: samples={}, with_stack={}, avg_depth={average_depth:.2}, max_depth={max_depth}, output={}",
             samples.len(),
             with_stack,
-            self.output.display()
+            self.config.output().display()
         );
         Ok(())
     }

@@ -10,7 +10,7 @@ use super::{
         execute_pure, execute_pure_with_instret_limit, execute_pure_with_instret_tracking,
         TrackedExecutionResult,
     },
-    RvrCompiled, RvrInitialImage,
+    GuestProfileConfig, RvrCompiled, RvrInitialImage,
 };
 #[cfg(feature = "metrics")]
 use crate::arch::execution_metrics::{ExecutionMetric, ExecutionMetricTimer};
@@ -49,9 +49,10 @@ impl<'a> RvrPureInstanceInner<'a> {
     fn execute_pure_from_state(
         &self,
         mut vm_state: VmState<GuestMemory>,
+        profile: Option<&GuestProfileConfig>,
     ) -> Result<VmState<GuestMemory>, ExecutionError> {
         tracing::info_span!("execute_pure")
-            .in_scope(|| execute_pure(&self.compiled, &self.runtime_hooks, &mut vm_state))
+            .in_scope(|| execute_pure(&self.compiled, &self.runtime_hooks, &mut vm_state, profile))
             .map_err(map_rvr_execute_error)?;
         Ok(vm_state)
     }
@@ -161,7 +162,24 @@ impl<'a> RvrPureInstance<'a> {
         &self,
         vm_state: VmState<GuestMemory>,
     ) -> Result<VmState<GuestMemory>, ExecutionError> {
-        self.inner.execute_pure_from_state(vm_state)
+        self.inner.execute_pure_from_state(vm_state, None)
+    }
+
+    pub fn execute_profiled(
+        &self,
+        inputs: impl Into<Streams>,
+        profile: &GuestProfileConfig,
+    ) -> Result<VmState<GuestMemory>, ExecutionError> {
+        let vm_state = self.create_initial_vm_state(inputs);
+        self.execute_from_state_profiled(vm_state, profile)
+    }
+
+    pub fn execute_from_state_profiled(
+        &self,
+        vm_state: VmState<GuestMemory>,
+        profile: &GuestProfileConfig,
+    ) -> Result<VmState<GuestMemory>, ExecutionError> {
+        self.inner.execute_pure_from_state(vm_state, Some(profile))
     }
 
     pub fn save(&self, dir: &Path) -> Result<PathBuf, CompileError> {

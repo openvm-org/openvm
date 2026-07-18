@@ -26,6 +26,7 @@ pub mod io;
 pub mod metered;
 pub mod metered_cost;
 mod preflight;
+mod profile;
 pub mod pure;
 pub mod state;
 
@@ -42,6 +43,7 @@ pub use metered_cost::{MeteredCostState, RvrMeteredCostInstance};
 pub use preflight::{
     PreflightEndpoint, PreflightExecution, PreflightInstance, PreflightLimits, PreflightTranscript,
 };
+pub use profile::{GuestProfileConfig, GuestProfileFormat};
 pub use pure::{
     RvrPureInstance, RvrPureWithInstretTrackingInstance, RvrTrackedExecution,
     RvrTrackedExecutionOutcome,

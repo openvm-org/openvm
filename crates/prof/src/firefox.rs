@@ -1,7 +1,7 @@
 use std::{
     collections::BTreeSet,
     fs,
-    path::Path,
+    path::{Path, PathBuf},
     time::{Duration, SystemTime},
 };
 
@@ -11,12 +11,47 @@ use flate2::{write::GzEncoder, Compression};
 use fxprof_processed_profile::{
     CategoryHandle, CpuDelta, Frame, FrameFlags, FrameInfo, Profile, SamplingInterval, Timestamp,
 };
-use openvm_circuit::arch::rvr::{default_addr2line_cmd, GuestDebugMap};
+use openvm_circuit::arch::rvr::{default_addr2line_cmd, GuestDebugMap, GuestProfileConfig};
 use reqwest::{blocking::Client, header::ACCEPT};
 use serde_json::Value;
 
 const DEFAULT_UPLOAD_URL: &str = "https://api.profiler.firefox.com/compressed-store";
 const FIREFOX_ACCEPT: &str = "application/vnd.firefox-profiler+json;version=1.0";
+
+/// Owns the temporary raw sample file used for one Firefox profile capture.
+pub struct FirefoxProfiler {
+    guest_elf_path: PathBuf,
+    config: GuestProfileConfig,
+    _raw_profile: tempfile::NamedTempFile,
+}
+
+impl FirefoxProfiler {
+    pub fn new(guest_elf_path: impl Into<PathBuf>, sample_hz: u32) -> Result<Self> {
+        let raw_profile =
+            tempfile::NamedTempFile::new().context("failed to create temporary RVR profile")?;
+        let config =
+            GuestProfileConfig::raw(raw_profile.path(), sample_hz).map_err(|error| eyre!(error))?;
+        Ok(Self {
+            guest_elf_path: guest_elf_path.into(),
+            config,
+            _raw_profile: raw_profile,
+        })
+    }
+
+    /// Explicit VM/SDK configuration for the execution being profiled.
+    pub fn config(&self) -> &GuestProfileConfig {
+        &self.config
+    }
+
+    /// Convert the captured raw samples into a reusable Firefox artifact.
+    pub fn finish(self) -> Result<FirefoxProfile> {
+        FirefoxProfile::from_raw_guest_stacks(
+            self.config.output(),
+            &self.guest_elf_path,
+            self.config.sample_hz(),
+        )
+    }
+}
 
 /// A generated, symbolicated Firefox Profiler artifact.
 pub struct FirefoxProfile {
