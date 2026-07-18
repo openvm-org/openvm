@@ -2108,35 +2108,36 @@ where
             })
             .map(|&(air_idx, _)| (air_idx, chip_records[air_idx].len))
             .collect();
-        let device_aux_arena_references = if device_aux_oracle {
-            let targets = arena_targets.expect("device replay oracle requires staged arenas");
-            arena_native_written_bytes
-                .iter()
-                .map(|&(air_idx, written)| {
-                    let target = targets
-                        .get(&air_idx)
-                        .expect("arena-native oracle target disappeared");
-                    let written = written as usize;
-                    assert!(
-                        written <= target.cap as usize,
-                        "arena-native oracle cursor exceeds target for air {air_idx}"
-                    );
-                    // SAFETY: the target is a live staged arena allocation,
-                    // and the native writer cap-checked and initialized this
-                    // complete prefix before returning.
-                    let expected = unsafe {
-                        std::slice::from_raw_parts(target.base.cast_const(), written).to_vec()
-                    };
-                    DeviceAuxArenaReference {
-                        air_idx,
-                        base: target.base as u64,
-                        expected,
-                    }
-                })
-                .collect()
-        } else {
-            Vec::new()
-        };
+        let device_aux_arena_references =
+            if device_aux_oracle && !arena_native_written_bytes.is_empty() {
+                let targets = arena_targets.expect("device replay oracle requires staged arenas");
+                arena_native_written_bytes
+                    .iter()
+                    .map(|&(air_idx, written)| {
+                        let target = targets
+                            .get(&air_idx)
+                            .expect("arena-native oracle target disappeared");
+                        let written = written as usize;
+                        assert!(
+                            written <= target.cap as usize,
+                            "arena-native oracle cursor exceeds target for air {air_idx}"
+                        );
+                        // SAFETY: the target is a live staged arena allocation,
+                        // and the native writer cap-checked and initialized this
+                        // complete prefix before returning.
+                        let expected = unsafe {
+                            std::slice::from_raw_parts(target.base.cast_const(), written).to_vec()
+                        };
+                        DeviceAuxArenaReference {
+                            air_idx,
+                            base: target.base as u64,
+                            expected,
+                        }
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            };
         let inline_records: Vec<RvrInlineChipRecords> =
             if inline_meta.delta_records || g2_meta.is_some() {
                 Vec::new()
