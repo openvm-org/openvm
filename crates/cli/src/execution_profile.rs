@@ -10,7 +10,7 @@ use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use eyre::{bail, eyre, Context, Result};
 use flate2::{write::GzEncoder, Compression};
 use fxprof_processed_profile::{
-    CategoryHandle, CpuDelta, FrameFlags, Profile, SamplingInterval, SourceLocation, Timestamp,
+    CategoryHandle, CpuDelta, Frame, FrameFlags, FrameInfo, Profile, SamplingInterval, Timestamp,
 };
 use openvm_circuit::arch::rvr::{default_addr2line_cmd, GuestDebugMap};
 use reqwest::{blocking::Client, header::ACCEPT};
@@ -151,46 +151,32 @@ fn build_firefox_profile(
 
     let interval_ms = 1_000.0 / f64::from(sample_hz);
     for (sample_index, stack) in samples.iter().enumerate() {
-        let mut prefix = None;
-        for (frame_index, &pc) in stack.iter().enumerate() {
-            let lookup_pc = if frame_index + 1 == stack.len() {
-                pc
-            } else {
-                pc.saturating_sub(1)
-            };
-            let location = debug_map.get(lookup_pc);
-            let label = location
-                .filter(|location| !location.function.is_empty())
-                .map(|location| location.function.clone())
-                .unwrap_or_else(|| format!("0x{pc:08x}"));
-            let label = profile.handle_for_string(&label);
-            let frame = if let Some(location) = location.filter(|location| location.is_valid()) {
-                let file_path = profile.handle_for_string(&location.file);
-                profile.handle_for_frame_with_label_and_source_location(
-                    label,
-                    SourceLocation {
-                        file_path: Some(file_path),
-                        line: Some(location.line),
-                        col: None,
-                        function_start_line: None,
-                        function_start_col: None,
-                    },
-                    CategoryHandle::OTHER,
-                    FrameFlags::empty(),
-                )
-            } else {
-                profile.handle_for_frame_with_label(
-                    label,
-                    CategoryHandle::OTHER,
-                    FrameFlags::empty(),
-                )
-            };
-            prefix = Some(profile.handle_for_stack(frame, prefix));
-        }
+        let frames = stack
+            .iter()
+            .enumerate()
+            .map(|(frame_index, &pc)| {
+                let lookup_pc = if frame_index + 1 == stack.len() {
+                    pc
+                } else {
+                    pc.saturating_sub(1)
+                };
+                let label = debug_map
+                    .get(lookup_pc)
+                    .filter(|location| !location.function.is_empty())
+                    .map(|location| location.function.clone())
+                    .unwrap_or_else(|| format!("0x{pc:08x}"));
+                FrameInfo {
+                    frame: Frame::Label(profile.intern_string(&label)),
+                    category_pair: CategoryHandle::OTHER.into(),
+                    flags: FrameFlags::empty(),
+                }
+            })
+            .collect::<Vec<_>>();
+        let stack = profile.intern_stack_frames(thread, frames.into_iter());
         profile.add_sample(
             thread,
             Timestamp::from_millis_since_reference(sample_index as f64 * interval_ms),
-            prefix,
+            stack,
             CpuDelta::ZERO,
             1,
         );
