@@ -18,7 +18,7 @@ use serde_json::Value;
 const DEFAULT_UPLOAD_URL: &str = "https://api.profiler.firefox.com/compressed-store";
 const FIREFOX_ACCEPT: &str = "application/vnd.firefox-profiler+json;version=1.0";
 
-/// Owns the temporary raw sample file used for one Firefox profile capture.
+/// Coordinates one guest execution capture and its Firefox profile conversion.
 pub struct FirefoxProfiler {
     guest_elf_path: PathBuf,
     config: GuestProfileConfig,
@@ -223,9 +223,7 @@ fn upload_profile(compressed_profile: &[u8]) -> Result<String> {
 }
 
 fn upload_profile_blocking(compressed_profile: &[u8]) -> Result<String> {
-    let upload_url = std::env::var("FIREFOX_PROFILER_API_URL")
-        .unwrap_or_else(|_| DEFAULT_UPLOAD_URL.to_string());
-    upload_profile_blocking_to(&upload_url, compressed_profile)
+    upload_profile_blocking_to(DEFAULT_UPLOAD_URL, compressed_profile)
 }
 
 fn upload_profile_blocking_to(upload_url: &str, compressed_profile: &[u8]) -> Result<String> {

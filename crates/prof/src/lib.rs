@@ -13,8 +13,6 @@ use crate::{
 };
 
 pub mod aggregate;
-#[cfg(feature = "firefox")]
-pub mod firefox;
 pub mod instruction_count;
 pub mod summary;
 pub mod types;
