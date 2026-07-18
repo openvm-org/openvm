@@ -1636,9 +1636,14 @@ impl RvrGpuDecodeState {
             .as_slice()
             .to_device_on(device_ctx)
             .expect("G2 expected-kind table H2D");
-        let d_expected_opaque = host
-            .opaque
-            .as_slice()
+        let expected_opaque_count = host.opaque.len();
+        let expected_opaque_sentinel = [G2ExpectedOpaqueV1::default()];
+        let expected_opaque = if host.opaque.is_empty() {
+            expected_opaque_sentinel.as_slice()
+        } else {
+            host.opaque.as_slice()
+        };
+        let d_expected_opaque = expected_opaque
             .to_device_on(device_ctx)
             .expect("G2 expected opaque table H2D");
         if let Some(timer) = h2d_timer {
@@ -1819,6 +1824,7 @@ impl RvrGpuDecodeState {
                 host.initial_timestamp,
                 &d_expected_kinds,
                 &d_expected_opaque,
+                expected_opaque_count,
                 &d_program_frequencies,
                 host.total_record_count,
                 &d_prepared,
