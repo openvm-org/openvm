@@ -45,26 +45,3 @@ void trace_mem_access_u64_range_wrapper(RvState* s, uint64_t base_addr,
                                         uint32_t addr_space) {
   trace_mem_access_u64_range(s, base_addr, num_words, addr_space);
 }
-
-/* ── Chip cost ─────────────────────────────────────────────────────── */
-
-/* Extension FFI staticlibs use this to add chip rows on top of what the
- * per-block chip accounting in the generated `block_*` functions has already
- * counted.
- *
- * The block-entry update assigns +1 per instruction to that instruction's PC
- * chip (from `pc_to_chip`). So when an extension call needs to add MORE rows
- * to *its own* PC chip, it should pass `count - 1` (e.g. deferral OUTPUT).
- * When it needs to add rows to a DIFFERENT chip — which is the common case
- * for inner sub-chips like Sha2BlockHasher or the Poseidon2 chip used by
- * deferral CALL/OUTPUT — it should pass the full count for that other chip,
- * since the block-entry update never touched it.
- *
- * Extensions whose entry points are compiled directly into the generated
- * native project (e.g. `crates/extensions/keccak/c/rvr_ext_keccak.c`) call
- * the inline `trace_chip` directly; only out-of-line staticlib FFIs need
- * this wrapper. See callers in
- * `crates/extensions/{sha2,deferral}/ffi/src/lib.rs`. */
-void trace_chip_wrapper(RvState* s, uint32_t chip_idx, uint32_t count) {
-  trace_chip(s, chip_idx, count);
-}

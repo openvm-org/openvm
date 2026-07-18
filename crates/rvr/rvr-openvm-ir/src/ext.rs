@@ -1,3 +1,16 @@
+/// A fixed trace-height contribution made by an extension instruction.
+///
+/// The instruction's primary chip row is accounted for separately through its
+/// PC-to-chip mapping. This describes only additional rows whose count is known
+/// while generating the native artifact.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct FixedTraceRows {
+    /// AIR index whose trace height increases.
+    pub chip_idx: u32,
+    /// Number of additional rows contributed by one instruction.
+    pub count: u32,
+}
+
 /// Trait abstracting the code-generation context for extension instructions.
 ///
 /// Extensions use this to read/write registers (with tracing handled in the
@@ -39,6 +52,16 @@ pub trait ExtEmitCtx {
     /// Emit an opaque C call that returns a value, flushing page-local metering state around it.
     fn emit_call_expr(&mut self, ret_ty: &str, name: &str, args: &[&str]) -> String;
 
+    /// Emit a call and materialize its result only when chip tracing is active.
+    ///
+    /// Pure execution emits the call as a statement and returns `None`.
+    fn emit_call_with_trace_result(
+        &mut self,
+        ret_ty: &str,
+        name: &str,
+        args: &[&str],
+    ) -> Option<String>;
+
     /// Emit a no-flush call returning `bool` and trap when it reports failure.
     fn emit_checked_call_without_page_flush(&mut self, name: &str, args: &[&str]) {
         self.write_line(&format!("if (unlikely(!{name}({}))) {{", args.join(", ")));
@@ -48,6 +71,9 @@ pub trait ExtEmitCtx {
 
     /// Emit a chip-height update.
     fn trace_chip(&mut self, chip_idx: u32, count_expr: &str);
+
+    /// Emit a chip-height update only when `count_expr` is nonzero.
+    fn trace_chip_if_nonzero(&mut self, chip_idx: u32, count_expr: &str);
 
     /// Emit a single memory-page trace.
     fn trace_mem_access(&mut self, addr: &str, addr_space: u32);
@@ -90,6 +116,14 @@ pub trait ExtInstr: std::fmt::Debug + Send + Sync {
     /// extension FFIs read or write main memory through `state`.
     fn accesses_memory(&self) -> bool {
         true
+    }
+
+    /// Additional chip rows with a count fixed at artifact-generation time.
+    ///
+    /// These are folded into the block's batched metering update instead of
+    /// being recorded on the extension's runtime path.
+    fn fixed_trace_rows(&self) -> Vec<FixedTraceRows> {
+        Vec::new()
     }
 
     /// Clone into a new boxed trait object.

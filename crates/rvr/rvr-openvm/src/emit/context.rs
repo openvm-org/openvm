@@ -14,6 +14,8 @@ pub(crate) enum EmitMode {
     Direct,
     /// Metered block ABI. Blocks with memory ops record AS_MEMORY pages locally.
     Metered { trace_memory_pages: bool },
+    /// Metered-cost execution with chip widths specialized into generated C.
+    MeteredCost,
 }
 
 /// Extra values carried between generated blocks through the `preserve_none`
@@ -40,10 +42,6 @@ impl BlockAbi {
 }
 
 impl EmitMode {
-    fn has_metered_abi(self) -> bool {
-        matches!(self, Self::Metered { .. })
-    }
-
     fn traces_memory_values(self) -> bool {
         matches!(self, Self::ValueTrace)
     }
@@ -69,7 +67,7 @@ impl EmitMode {
 }
 
 /// Code generation context. Holds a mutable buffer and tracks hot registers.
-pub struct EmitContext {
+pub struct EmitContext<'a> {
     buf: String,
     hot_regs: HashSet<u8>,
     /// Base indentation level (in 4-space units) for emitted lines.
@@ -79,10 +77,17 @@ pub struct EmitContext {
     uses_raw_memory: bool,
     mode: EmitMode,
     block_abi: BlockAbi,
+    chip_widths: Option<&'a [u64]>,
 }
 
-impl EmitContext {
-    pub(crate) fn new(hot_regs: HashSet<u8>, mode: EmitMode, block_abi: BlockAbi) -> Self {
+impl<'a> EmitContext<'a> {
+    pub(crate) fn new(
+        hot_regs: HashSet<u8>,
+        mode: EmitMode,
+        block_abi: BlockAbi,
+        chip_widths: Option<&'a [u64]>,
+    ) -> Self {
+        debug_assert_eq!(matches!(mode, EmitMode::MeteredCost), chip_widths.is_some());
         Self {
             buf: String::with_capacity(1024),
             hot_regs,
@@ -91,6 +96,7 @@ impl EmitContext {
             uses_raw_memory: false,
             mode,
             block_abi,
+            chip_widths,
         }
     }
 
@@ -386,15 +392,52 @@ impl EmitContext {
         tmp
     }
 
+    pub fn emit_call_with_trace_result(
+        &mut self,
+        ret_ty: &str,
+        name: &str,
+        args: &[&str],
+    ) -> Option<String> {
+        if matches!(self.mode, EmitMode::ValueTrace | EmitMode::Direct) {
+            self.emit_call(name, args);
+            None
+        } else {
+            Some(self.emit_call_expr(ret_ty, name, args))
+        }
+    }
+
     pub fn trace_chip(&mut self, chip_idx: u32, count_expr: &str) {
         if chip_idx == u32::MAX {
             return;
         }
-        if self.mode.has_metered_abi() {
-            self.write_line(&format!("(*trace_heights)[{chip_idx}] += {count_expr};"));
-        } else {
-            self.write_line(&format!("trace_chip(state, {chip_idx}u, {count_expr});"));
+        match self.mode {
+            EmitMode::ValueTrace | EmitMode::Direct => {}
+            EmitMode::Metered { .. } => {
+                self.write_line(&format!("(*trace_heights)[{chip_idx}] += {count_expr};"));
+            }
+            EmitMode::MeteredCost => {
+                let width = self
+                    .chip_widths
+                    .unwrap()
+                    .get(chip_idx as usize)
+                    .copied()
+                    .expect("extension chip index exceeds chip-width table");
+                if width != 0 {
+                    self.write_line(&format!(
+                        "state->mode_state.cost += {width}ull * (uint64_t)({count_expr});"
+                    ));
+                }
+            }
         }
+    }
+
+    pub fn trace_chip_if_nonzero(&mut self, chip_idx: u32, count_expr: &str) {
+        if chip_idx == u32::MAX || matches!(self.mode, EmitMode::ValueTrace | EmitMode::Direct) {
+            return;
+        }
+        self.write_line(&format!("if (({count_expr}) != 0u) {{"));
+        self.trace_chip(chip_idx, count_expr);
+        self.write_line("}");
     }
 
     pub fn trace_mem_access(&mut self, addr: &str, addr_space: u32) {
@@ -475,7 +518,7 @@ impl EmitContext {
     }
 }
 
-impl rvr_openvm_ir::ExtEmitCtx for EmitContext {
+impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
     fn read_reg(&mut self, idx: u8) -> String {
         EmitContext::read_reg(self, idx)
     }
@@ -520,8 +563,21 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext {
         EmitContext::emit_call_expr(self, ret_ty, name, args)
     }
 
+    fn emit_call_with_trace_result(
+        &mut self,
+        ret_ty: &str,
+        name: &str,
+        args: &[&str],
+    ) -> Option<String> {
+        EmitContext::emit_call_with_trace_result(self, ret_ty, name, args)
+    }
+
     fn trace_chip(&mut self, chip_idx: u32, count_expr: &str) {
         EmitContext::trace_chip(self, chip_idx, count_expr);
+    }
+
+    fn trace_chip_if_nonzero(&mut self, chip_idx: u32, count_expr: &str) {
+        EmitContext::trace_chip_if_nonzero(self, chip_idx, count_expr);
     }
 
     fn trace_mem_access(&mut self, addr: &str, addr_space: u32) {
@@ -539,13 +595,14 @@ mod tests {
 
     use super::{BlockAbi, EmitContext, EmitMode};
 
-    fn metered_memory_ctx() -> EmitContext {
+    fn metered_memory_ctx() -> EmitContext<'static> {
         EmitContext::new(
             HashSet::new(),
             EmitMode::Metered {
                 trace_memory_pages: true,
             },
             BlockAbi::Metered,
+            None,
         )
     }
 

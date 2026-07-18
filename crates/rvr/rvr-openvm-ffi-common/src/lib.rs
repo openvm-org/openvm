@@ -1,7 +1,7 @@
 //! FFI declarations for the C tracing wrapper functions.
 //!
 //! Extension staticlibs call these non-inline wrappers (defined in
-//! `rvr_ext_wrappers.c`) for traced memory access and chip cost tracking.
+//! `rvr_ext_wrappers.c`) for traced memory access.
 //! Register access stays in generated C; resolved values are passed to extension FFI entry points.
 //!
 //! The `state` parameter is always an opaque `*mut c_void` pointing
@@ -46,9 +46,6 @@ extern "C" {
         vals: *const u64,
         num_words: u32,
     );
-
-    // ── Chip cost ─────────────────────────────────────────────────────
-    pub fn trace_chip_wrapper(state: *mut c_void, chip_idx: u32, count: u32);
 
     // ── Hint stream (for extension phantom instructions) ──────────────
     /// Replace the hint stream contents. Forwarded through `openvm_io.c`

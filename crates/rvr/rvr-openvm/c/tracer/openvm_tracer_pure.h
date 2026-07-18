@@ -81,8 +81,4 @@ static __attribute__((always_inline)) inline void trace_mem_access_u64_range(
 static __attribute__((always_inline)) inline void trace_pc(
     RvState* restrict state [[maybe_unused]], uint64_t pc [[maybe_unused]]) {}
 
-static __attribute__((always_inline)) inline void trace_chip(
-    RvState* restrict state [[maybe_unused]], uint32_t chip_idx [[maybe_unused]],
-    uint32_t count [[maybe_unused]]) {}
-
 #endif /* OPENVM_TRACER_PURE_H */

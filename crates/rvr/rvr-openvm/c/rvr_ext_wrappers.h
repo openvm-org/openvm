@@ -17,6 +17,4 @@ void trace_wr_mem_u64_range_wrapper(RvState* state, uint64_t base_addr,
 void trace_mem_access_u64_range_wrapper(RvState* state, uint64_t base_addr,
                                         uint32_t num_words,
                                         uint32_t addr_space);
-void trace_chip_wrapper(RvState* state, uint32_t chip_idx, uint32_t count);
-
 #endif /* RVR_EXT_WRAPPERS_H */

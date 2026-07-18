@@ -107,7 +107,6 @@ impl RvrExecutionKind {
                 writeln!(out, "typedef struct MeteredCostState {{").unwrap();
                 writeln!(out, "  uint64_t instret;").unwrap();
                 writeln!(out, "  uint64_t cost;").unwrap();
-                writeln!(out, "  const uint64_t* chip_widths;").unwrap();
                 writeln!(out, "}} MeteredCostState;").unwrap();
             }
             Self::Metered | Self::MeteredSegment => {
@@ -189,7 +188,7 @@ pub struct CProject {
     pub blocks_per_partition: usize,
     /// Enable thin LTO for the generated C code.
     pub enable_lto: bool,
-    /// Per-PC chip index for hardcoded trace_chip calls.
+    /// Per-PC primary chip index for emitted block-level row accounting.
     /// Index i = chip for PC = pc_base + i*4.
     /// `None` in pure mode (no chip metadata requested); must be set in metered modes.
     pub pc_to_chip: Option<Vec<TraceChipIndex>>,
@@ -454,9 +453,8 @@ impl CProject {
             RvrExecutionKind::Metered | RvrExecutionKind::MeteredSegment => EmitMode::Metered {
                 trace_memory_pages: block_accesses_memory(block),
             },
-            RvrExecutionKind::Pure
-            | RvrExecutionKind::PureWithInstretTracking
-            | RvrExecutionKind::MeteredCost => EmitMode::Direct,
+            RvrExecutionKind::MeteredCost => EmitMode::MeteredCost,
+            RvrExecutionKind::Pure | RvrExecutionKind::PureWithInstretTracking => EmitMode::Direct,
         }
     }
 
@@ -684,7 +682,12 @@ impl CProject {
             );
             writeln!(h, "{signature};").unwrap();
         }
-        writeln!(h, "extern BlockFn dispatch_table[RV_DISPATCH_TABLE_SIZE];").unwrap();
+        // Hidden visibility keeps this cross-TU dispatch table non-interposable.
+        writeln!(
+            h,
+            "extern __attribute__((visibility(\"hidden\"))) BlockFn const dispatch_table[RV_DISPATCH_TABLE_SIZE];"
+        )
+        .unwrap();
         writeln!(h).unwrap();
 
         // Block function declarations.
@@ -770,7 +773,11 @@ impl CProject {
         )
         .unwrap();
         // Body instructions (each in its own scope to avoid variable collisions).
-        let mut ctx = EmitContext::new(self.hot_regs.clone(), mode, self.block_abi());
+        let chip_widths = match mode {
+            EmitMode::MeteredCost => self.chip_widths.as_deref(),
+            _ => None,
+        };
+        let mut ctx = EmitContext::new(self.hot_regs.clone(), mode, self.block_abi(), chip_widths);
         let mut body = String::new();
 
         if matches!(
@@ -996,15 +1003,34 @@ impl CProject {
         }
 
         let mut chip_counts: BTreeMap<u32, u32> = BTreeMap::new();
-        let mut increment_chip_count = |pc: u64| match self.chip_idx_for_pc(pc) {
-            TraceChipIndex::Chip(chip) => *chip_counts.entry(chip.as_u32()).or_insert(0) += 1,
-            TraceChipIndex::NoChip => {}
+        let add_rows = |chip_counts: &mut BTreeMap<u32, u32>, chip_idx, count| {
+            let current = chip_counts.entry(chip_idx).or_default();
+            *current = current
+                .checked_add(count)
+                .expect("per-block trace-height increment overflow");
+        };
+        let add_base_row = |chip_counts: &mut BTreeMap<u32, u32>, pc: u64| {
+            if let TraceChipIndex::Chip(chip) = self.chip_idx_for_pc(pc) {
+                add_rows(chip_counts, chip.as_u32(), 1);
+            }
+        };
+        let add_extension_rows = |chip_counts: &mut BTreeMap<u32, u32>,
+                                  extension: &dyn ExtInstr| {
+            for rows in extension.fixed_trace_rows() {
+                add_rows(chip_counts, rows.chip_idx, rows.count);
+            }
         };
         for instr_at in &block.instructions {
-            increment_chip_count(instr_at.pc);
+            add_base_row(&mut chip_counts, instr_at.pc);
+            if let Instr::Ext(extension) = &instr_at.instr {
+                add_extension_rows(&mut chip_counts, extension.as_ref());
+            }
         }
         if !matches!(block.terminator, Terminator::FallThrough) {
-            increment_chip_count(block.terminator_pc);
+            add_base_row(&mut chip_counts, block.terminator_pc);
+            if let Terminator::Extension(extension) = &block.terminator {
+                add_extension_rows(&mut chip_counts, extension.as_ref());
+            }
         }
         if chip_counts.is_empty() {
             return;
@@ -1025,7 +1051,7 @@ impl CProject {
                     .map(|(&chip, &count)| widths[chip as usize] * count as u64)
                     .sum();
                 if total > 0 {
-                    writeln!(out, "        state->mode_state.cost += {total}u;").unwrap();
+                    writeln!(out, "        state->mode_state.cost += {total}ull;").unwrap();
                 }
             }
         }
@@ -1116,7 +1142,11 @@ impl CProject {
         let block_starts: std::collections::HashMap<u64, u64> =
             blocks.iter().map(|b| (b.start_pc, b.start_pc)).collect();
 
-        writeln!(src, "BlockFn dispatch_table[RV_DISPATCH_TABLE_SIZE] = {{").unwrap();
+        writeln!(
+            src,
+            "BlockFn const dispatch_table[RV_DISPATCH_TABLE_SIZE] = {{"
+        )
+        .unwrap();
         for i in 0..table_size {
             let pc = text_start + (i as u64) * 4;
             if block_starts.contains_key(&pc) {
@@ -1136,6 +1166,27 @@ impl CProject {
             writeln!(src, "__attribute__((visibility(\"default\"), used))").unwrap();
             writeln!(src, "uint32_t rv_num_airs(void) {{").unwrap();
             writeln!(src, "    return RV_NUM_AIRS;").unwrap();
+            writeln!(src, "}}").unwrap();
+            writeln!(src).unwrap();
+        }
+        if self.execution_kind == RvrExecutionKind::MeteredCost {
+            let widths = self
+                .chip_widths
+                .as_ref()
+                .expect("metered-cost artifact requires chip widths");
+            writeln!(
+                src,
+                "static constexpr uint64_t RV_CHIP_WIDTHS[RV_NUM_AIRS] = {{"
+            )
+            .unwrap();
+            for width in widths {
+                writeln!(src, "    {width}ull,").unwrap();
+            }
+            writeln!(src, "}};").unwrap();
+            writeln!(src, "const uint64_t* rv_chip_widths(void);").unwrap();
+            writeln!(src, "__attribute__((visibility(\"default\"), used))").unwrap();
+            writeln!(src, "const uint64_t* rv_chip_widths(void) {{").unwrap();
+            writeln!(src, "    return RV_CHIP_WIDTHS;").unwrap();
             writeln!(src, "}}").unwrap();
             writeln!(src).unwrap();
         }

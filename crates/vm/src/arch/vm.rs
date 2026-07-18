@@ -533,8 +533,8 @@ where
     }
 
     /// Load a previously saved metered-cost-mode artifact. Its generated
-    /// execution kind is validated; the caller supplies matching `exe`,
-    /// `executor_idx_to_air_idx`, and `widths`.
+    /// execution kind and emitted chip widths are validated; the caller
+    /// supplies matching `exe`, `executor_idx_to_air_idx`, and `widths`.
     pub fn load_metered_cost_instance(
         &self,
         lib_path: &std::path::Path,
@@ -542,21 +542,19 @@ where
         executor_idx_to_air_idx: &[usize],
         widths: &[usize],
     ) -> Result<RvrMeteredCostInstance<'_>, StaticProgramError> {
+        let compiled = load_compiled_from_path(lib_path).map_err(map_rvr_compile_error)?;
+        compiled
+            .require_chip_widths(widths)
+            .map_err(map_rvr_compile_error)?;
         let runtime_hooks = self
             .build_rvr_extensions(Some(executor_idx_to_air_idx))
             .into_runtime_hooks();
-        let widths: Vec<u64> = widths.iter().map(|&w| w as u64).collect();
-        let compiled = load_compiled_from_path(lib_path).map_err(map_rvr_compile_error)?;
-        compiled
-            .require_execution_kind(&[RvrExecutionKind::MeteredCost])
-            .map_err(map_rvr_compile_error)?;
 
         Ok(RvrMeteredCostInstance {
             system_config: self.inventory.config(),
             initial_image: RvrInitialImage::from(exe),
             runtime_hooks,
             compiled,
-            widths,
         })
     }
 
@@ -571,12 +569,12 @@ where
         let _compilation_span =
             tracing::info_span!("compile_metered_cost", backend = "rvr").entered();
         let extensions = self.build_rvr_extensions(Some(executor_idx_to_air_idx));
-        let widths: Vec<u64> = widths.iter().map(|&w| w as u64).collect();
+        let emitted_widths: Vec<u64> = widths.iter().map(|&width| width as u64).collect();
         let chips = ChipMapping {
-            num_airs: widths.len(),
+            num_airs: emitted_widths.len(),
             pc_to_chip: build_pc_to_chip(exe, &self.inventory, executor_idx_to_air_idx)
                 .map_err(map_rvr_compile_error)?,
-            chip_widths: Some(widths.clone()),
+            chip_widths: Some(emitted_widths),
         };
         let compiled = compile_metered_cost(exe, extensions.lifters(), &chips, guest_debug_map)
             .map_err(map_rvr_compile_error)?;
@@ -587,7 +585,6 @@ where
             initial_image: RvrInitialImage::from(exe),
             runtime_hooks,
             compiled,
-            widths,
         })
     }
 }

@@ -83,12 +83,4 @@ static __attribute__((always_inline)) inline void trace_mem_access_u64_range(
 static __attribute__((always_inline)) inline void trace_pc(
     RvState* restrict state [[maybe_unused]], uint64_t pc [[maybe_unused]]) {}
 
-/* chip_idx is assigned from the bounded executor-to-AIR mapping. */
-#pragma clang unsafe_buffer_usage begin
-static __attribute__((always_inline)) inline void trace_chip(
-    RvState* restrict state, uint32_t chip_idx, uint32_t count) {
-  state->mode_state.cost += state->mode_state.chip_widths[chip_idx] * (uint64_t)count;
-}
-#pragma clang unsafe_buffer_usage end
-
 #endif /* OPENVM_TRACER_METERED_COST_H */

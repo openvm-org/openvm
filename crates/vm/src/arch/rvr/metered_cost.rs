@@ -24,9 +24,6 @@ pub struct RvrMeteredCostInstance<'a> {
     pub(crate) initial_image: RvrInitialImage,
     pub(crate) runtime_hooks: Vec<Box<dyn RvrRuntimeExtension>>,
     pub(crate) compiled: RvrCompiled,
-    /// Must match the widths baked into `compiled` so per-block constants and
-    /// extension `trace_chip` calls compute cost against the same values.
-    pub(crate) widths: Vec<u64>,
 }
 
 /// C-compatible state for metered-cost execution.
@@ -37,7 +34,6 @@ pub struct RvrMeteredCostInstance<'a> {
 pub struct MeteredCostState {
     pub instret: u64,
     pub cost: u64,
-    pub chip_widths: *const u64,
 }
 
 impl Default for MeteredCostState {
@@ -45,7 +41,6 @@ impl Default for MeteredCostState {
         Self {
             instret: 0,
             cost: 0,
-            chip_widths: std::ptr::null(),
         }
     }
 }
@@ -80,14 +75,7 @@ impl RvrMeteredCostInstance<'_> {
         #[cfg(feature = "metrics")]
         let metrics = ExecutionMetricTimer::start(ExecutionMetric::MeteredCost);
         let result = tracing::info_span!("execute_metered_cost")
-            .in_scope(|| {
-                execute_metered_cost(
-                    &self.compiled,
-                    &self.runtime_hooks,
-                    &mut vm_state,
-                    &self.widths,
-                )
-            })
+            .in_scope(|| execute_metered_cost(&self.compiled, &self.runtime_hooks, &mut vm_state))
             .map_err(map_rvr_execute_error)?;
         #[cfg(feature = "metrics")]
         {

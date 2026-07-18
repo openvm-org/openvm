@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use openvm_instructions::{LocalOpcode, VmOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
-use rvr_openvm_ir::LiftedInstr;
+use rvr_openvm_ir::{FixedTraceRows, LiftedInstr};
 
 use crate::RvrInstruction;
 
@@ -48,6 +48,18 @@ pub enum TraceChipIndex {
 #[inline]
 pub fn air_index_to_c(idx: Option<AirIndex>) -> u32 {
     idx.map_or(u32::MAX, AirIndex::as_u32)
+}
+
+/// Build fixed-row metadata when AIR indices are available for metering.
+#[inline]
+pub fn fixed_trace_rows_for_chip(idx: Option<AirIndex>, count: u32) -> Vec<FixedTraceRows> {
+    idx.map(|idx| {
+        vec![FixedTraceRows {
+            chip_idx: idx.as_u32(),
+            count,
+        }]
+    })
+    .unwrap_or_default()
 }
 
 /// Data needed by extension crates to resolve opcode/chip metadata when
