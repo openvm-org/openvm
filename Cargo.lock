@@ -1467,7 +1467,7 @@ dependencies = [
  "openvm-build",
  "openvm-circuit",
  "openvm-continuations",
- "openvm-prof",
+ "openvm-execution-profile",
  "openvm-sdk",
  "openvm-sdk-config",
  "openvm-stark-backend",
@@ -4982,6 +4982,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvm-execution-profile"
+version = "2.0.0"
+dependencies = [
+ "base64 0.22.1",
+ "eyre",
+ "flate2",
+ "fxprof-processed-profile",
+ "openvm-circuit",
+ "reqwest",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "openvm-ff-derive"
 version = "2.0.0"
 dependencies = [
@@ -5270,16 +5284,11 @@ dependencies = [
 name = "openvm-prof"
 version = "2.0.0"
 dependencies = [
- "base64 0.22.1",
  "clap",
  "eyre",
- "flate2",
- "fxprof-processed-profile",
  "itertools 0.14.0",
  "memmap2",
  "num-format",
- "openvm-circuit",
- "reqwest",
  "serde",
  "serde_json",
  "tempfile",

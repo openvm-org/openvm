@@ -6,7 +6,7 @@ use clap::{Parser, ValueEnum};
 use eyre::{eyre, Result};
 use openvm_circuit::arch::instructions::exe::VmExe;
 #[cfg(feature = "rvr")]
-use openvm_prof::firefox::FirefoxProfiler;
+use openvm_execution_profile::FirefoxProfiler;
 use openvm_sdk::{
     config::AggregationSystemParams, fs::read_object_from_file, keygen::AppProvingKey, Sdk, F,
 };

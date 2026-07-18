@@ -26,7 +26,7 @@ openvm-stark-backend.workspace = true
 openvm-circuit = { workspace = true }
 openvm-continuations = { workspace = true, features = ["root-prover"] }
 openvm-sdk-config = { workspace = true }
-openvm-prof = { workspace = true, optional = true, features = ["firefox"] }
+openvm-execution-profile = { workspace = true, optional = true }
 
 aws-sdk-s3 = { version = "1.122", default-features = false, features = ["default-https-client", "rt-tokio", "sigv4a"] }
 aws-config = { version = "1.8.13", default-features = false, features = ["default-https-client", "rt-tokio"] }
@@ -57,7 +57,7 @@ evm-verify = ["evm-prove", "openvm-sdk/evm-verify"]
 metrics = ["openvm-sdk/metrics"]
 tco = ["openvm-sdk/tco"]
 rvr = [
-    "dep:openvm-prof",
+    "dep:openvm-execution-profile",
     "openvm-sdk/rvr",
     "openvm-circuit/rvr",
 ]
