@@ -34,8 +34,8 @@ pub use debug::{default_addr2line_cmd, GuestDebugMap};
 pub use execute::ExecuteError;
 pub use g2::{
     decode_addi_reference_v1, decode_reference_v1, RvrG2AddIReferenceV1, RvrG2AirBindingV1,
-    RvrG2BlockEntryV1, RvrG2CapacitiesV1, RvrG2MetaV1, RvrG2OpaqueBindingV1, RvrG2ReferenceV1,
-    RvrG2SegmentV1,
+    RvrG2BlockEntryV1, RvrG2BlockHostCountsV1, RvrG2CapacitiesV1, RvrG2MetaV1,
+    RvrG2OpaqueBindingV1, RvrG2ReferenceV1, RvrG2SegmentV1,
 };
 pub use initial_image::RvrInitialImage;
 pub use log_native::{

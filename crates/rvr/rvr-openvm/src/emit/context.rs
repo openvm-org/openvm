@@ -132,6 +132,9 @@ pub struct EmitContext<'a> {
     /// Compile-time offsets within each reserved span. These never become
     /// runtime cursor increments in generated C.
     g2_block_next: [u32; G2_PRODUCER_LANE_COUNT],
+    /// Generated production blocks publish their common cursor endpoints once,
+    /// before control-flow arms diverge.
+    g2_block_committed: bool,
     /// Chip (AIR) index of the instruction currently being emitted, or
     /// `u32::MAX` if it maps to no chip. Set per instruction by the block emit
     /// loop before `emit_c`.
@@ -197,6 +200,7 @@ impl<'a> EmitContext<'a> {
             g2_checked: true,
             g2_block_spans: None,
             g2_block_next: [0; G2_PRODUCER_LANE_COUNT],
+            g2_block_committed: false,
             current_chip_idx: u32::MAX,
             current_g2_kind: u8::MAX,
             current_pc: 0,
@@ -225,6 +229,22 @@ impl<'a> EmitContext<'a> {
     pub(crate) fn set_g2_block_spans(&mut self, spans: Option<[u32; G2_PRODUCER_LANE_COUNT]>) {
         self.g2_block_spans = spans;
         self.g2_block_next = [0; G2_PRODUCER_LANE_COUNT];
+        self.g2_block_committed = false;
+    }
+
+    fn g2_read_reg(&mut self, idx: u8) -> String {
+        if idx == 0 {
+            "0".to_string()
+        } else {
+            let value = self.next_var();
+            self.write_line(&format!("uint64_t {value} = reg_read(state, {idx});"));
+            value
+        }
+    }
+
+    fn g2_floor_timestamp(&mut self, static_count: u32) {
+        debug_assert!(self.g2_records && !self.g2_checked);
+        self.write_line(&format!("state->tracer->timestamp += {static_count}u;"));
     }
 
     fn g2_block_index(&mut self, slot: usize) -> u32 {
@@ -261,15 +281,20 @@ impl<'a> EmitContext<'a> {
             rvr_openvm_ext_ffi_common::G2_PRODUCER_RUN_SLOT,
             &format!("{program_slot}u"),
         );
-        self.write_line(&format!(
-            "rvr_g2->instruction_count += {instruction_count}u;"
-        ));
+        if self.g2_checked {
+            self.write_line(&format!(
+                "rvr_g2->instruction_count += {instruction_count}u;"
+            ));
+        }
     }
 
     /// Publish the block-local lane cursors before a tail call, suspension,
     /// trap, or normal exit. Emitting this more than once is harmless because
     /// every control-flow path writes the same statically computed endpoints.
     pub(crate) fn commit_g2_block(&mut self) {
+        if self.g2_block_committed {
+            return;
+        }
         let Some(spans) = self.g2_block_spans else {
             return;
         };
@@ -280,6 +305,7 @@ impl<'a> EmitContext<'a> {
                 ));
             }
         }
+        self.g2_block_committed = true;
     }
 
     pub(crate) fn assert_g2_block_complete(&self) {
@@ -606,20 +632,8 @@ impl<'a> EmitContext<'a> {
                 self.current_g2_kind,
                 0..=7 | 15..=19
             ));
-            let v1 = if rs1 == 0 {
-                "0".to_string()
-            } else {
-                let value = self.next_var();
-                self.write_line(&format!("uint64_t {value} = reg_read(state, {rs1});"));
-                value
-            };
-            let v2 = if rs2 == 0 {
-                "0".to_string()
-            } else {
-                let value = self.next_var();
-                self.write_line(&format!("uint64_t {value} = reg_read(state, {rs2});"));
-                value
-            };
+            let v1 = self.g2_read_reg(rs1);
+            let v2 = self.g2_read_reg(rs2);
             let res = self.next_var();
             let result_expr = result(&v1, &v2);
             self.write_line(&format!("uint64_t {res} = {result_expr};"));
@@ -628,9 +642,13 @@ impl<'a> EmitContext<'a> {
                     .expect("G2 two-value kind must have a first producer lane");
             self.g2_store_u64(slot, &v1);
             self.g2_store_u64(slot + 1, &v2);
-            self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs1});"));
-            self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs2});"));
-            self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rd});"));
+            if self.g2_checked {
+                self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs1});"));
+                self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs2});"));
+                self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rd});"));
+            } else {
+                self.g2_floor_timestamp(3);
+            }
             if rd != 0 {
                 self.write_line(&format!("reg_write(state, {rd}, {res});"));
             }
@@ -983,20 +1001,18 @@ impl<'a> EmitContext<'a> {
         if self.g2_records {
             debug_assert!(!self.delta_records);
             debug_assert_eq!(self.current_g2_kind, 29);
-            let v1 = if rs1 == 0 {
-                "0".to_string()
-            } else {
-                let value = self.next_var();
-                self.write_line(&format!("uint64_t {value} = reg_read(state, {rs1});"));
-                value
-            };
+            let v1 = self.g2_read_reg(rs1);
             let result = self.next_var();
             self.write_line(&format!(
                 "uint64_t {result} = {v1} + 0x{imm_value:016x}ull;"
             ));
             self.g2_store_u64(rvr_openvm_ext_ffi_common::G2_PRODUCER_ADDI_SLOT, &v1);
-            self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs1});"));
-            self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rd});"));
+            if self.g2_checked {
+                self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs1});"));
+                self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rd});"));
+            } else {
+                self.g2_floor_timestamp(2);
+            }
             if rd != 0 {
                 self.write_line(&format!("reg_write(state, {rd}, {result});"));
             }
@@ -1127,15 +1143,8 @@ impl<'a> EmitContext<'a> {
         if self.g2_records {
             debug_assert!(!self.delta_records);
             debug_assert!(matches!(self.current_g2_kind, 1..=7));
-            let v1 = if rs1 == 0 {
-                "0".to_string()
-            } else {
-                let value = self.next_var();
-                self.write_line(&format!("uint64_t {value} = reg_read(state, {rs1});"));
-                value
-            };
-            let vimm = self.next_var();
-            self.write_line(&format!("uint64_t {vimm} = 0x{imm_value:016x}ull;"));
+            let v1 = self.g2_read_reg(rs1);
+            let vimm = format!("0x{imm_value:016x}ull");
             let res = self.next_var();
             let result_expr = result(&v1, &vimm);
             self.write_line(&format!("uint64_t {res} = {result_expr};"));
@@ -1143,9 +1152,13 @@ impl<'a> EmitContext<'a> {
                 rvr_openvm_ext_ffi_common::g2_standard_producer_slot(self.current_g2_kind, false)
                     .expect("G2 one-value kind must have a producer lane");
             self.g2_store_u64(slot, &v1);
-            self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs1});"));
-            self.write_line("trace_timestamp(state);");
-            self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rd});"));
+            if self.g2_checked {
+                self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs1});"));
+                self.write_line("trace_timestamp(state);");
+                self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rd});"));
+            } else {
+                self.g2_floor_timestamp(3);
+            }
             if rd != 0 {
                 self.write_line(&format!("reg_write(state, {rd}, {res});"));
             }
@@ -1222,13 +1235,17 @@ impl<'a> EmitContext<'a> {
         if self.g2_records {
             debug_assert!(!self.delta_records);
             debug_assert!(matches!(self.current_g2_kind, 12 | 14));
-            if self.current_g2_kind == 14 || rd.is_some_and(|rd| rd != 0) {
-                self.write_line(&format!(
-                    "preflight_g2_shadow_reg_touch(state, {});",
-                    rd.unwrap_or(0)
-                ));
+            if self.g2_checked {
+                if self.current_g2_kind == 14 || rd.is_some_and(|rd| rd != 0) {
+                    self.write_line(&format!(
+                        "preflight_g2_shadow_reg_touch(state, {});",
+                        rd.unwrap_or(0)
+                    ));
+                } else {
+                    self.write_line("trace_timestamp(state);");
+                }
             } else {
-                self.write_line("trace_timestamp(state);");
+                self.g2_floor_timestamp(1);
             }
             if let Some(rd) = rd.filter(|&rd| rd != 0) {
                 let tmp = self.next_var();
@@ -1376,27 +1393,19 @@ impl<'a> EmitContext<'a> {
         if self.g2_records {
             debug_assert!(!self.delta_records);
             debug_assert!(matches!(self.current_g2_kind, 10 | 11));
-            let v1 = if rs1 == 0 {
-                "0".to_string()
-            } else {
-                let value = self.next_var();
-                self.write_line(&format!("uint64_t {value} = reg_read(state, {rs1});"));
-                value
-            };
-            let v2 = if rs2 == 0 {
-                "0".to_string()
-            } else {
-                let value = self.next_var();
-                self.write_line(&format!("uint64_t {value} = reg_read(state, {rs2});"));
-                value
-            };
+            let v1 = self.g2_read_reg(rs1);
+            let v2 = self.g2_read_reg(rs2);
             let slot =
                 rvr_openvm_ext_ffi_common::g2_standard_producer_slot(self.current_g2_kind, false)
                     .expect("G2 branch kind must have a first producer lane");
             self.g2_store_u64(slot, &v1);
             self.g2_store_u64(slot + 1, &v2);
-            self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs1});"));
-            self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs2});"));
+            if self.g2_checked {
+                self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs1});"));
+                self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs2});"));
+            } else {
+                self.g2_floor_timestamp(2);
+            }
             return (v1, v2);
         }
         let chip = self.current_chip_idx;
@@ -1478,13 +1487,7 @@ impl<'a> EmitContext<'a> {
         if self.g2_records {
             debug_assert!(!self.delta_records);
             debug_assert_eq!(self.current_g2_kind, 13);
-            let v1 = if rs1 == 0 {
-                "0".to_string()
-            } else {
-                let value = self.next_var();
-                self.write_line(&format!("uint64_t {value} = reg_read(state, {rs1});"));
-                value
-            };
+            let v1 = self.g2_read_reg(rs1);
             let v1 = self.materialize_u64(&v1);
             if self.g2_checked {
                 self.write_line(&format!(
@@ -1494,11 +1497,15 @@ impl<'a> EmitContext<'a> {
             let slot = rvr_openvm_ext_ffi_common::g2_standard_producer_slot(13, false)
                 .expect("G2 jalr kind must have a producer lane");
             self.g2_store_u32(slot, &v1);
-            self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs1});"));
-            if let Some(rd) = link_rd.filter(|&rd| rd != 0) {
-                self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rd});"));
+            if self.g2_checked {
+                self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs1});"));
+                if let Some(rd) = link_rd.filter(|&rd| rd != 0) {
+                    self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rd});"));
+                } else {
+                    self.write_line("trace_timestamp(state);");
+                }
             } else {
-                self.write_line("trace_timestamp(state);");
+                self.g2_floor_timestamp(2);
             }
             if let Some(rd) = link_rd.filter(|&rd| rd != 0) {
                 let tmp = self.next_var();
@@ -1671,12 +1678,13 @@ impl<'a> EmitContext<'a> {
                 (true, 4) => 28,
                 _ => unreachable!("invalid G2 load width {width}"),
             };
-            let base = self.next_var();
-            self.write_line(&format!("uint64_t {base} = reg_read(state, {rs1});"));
-            self.write_line(&format!(
-                "if (likely(preflight_g2_validate_pointer(state, {base}))) {{"
-            ));
-            self.indent += 1;
+            let base = self.g2_read_reg(rs1);
+            if self.g2_checked {
+                self.write_line(&format!(
+                    "if (likely(preflight_g2_validate_pointer(state, {base}))) {{"
+                ));
+                self.indent += 1;
+            }
             let addr = self.materialize_u64(&Self::addr_expr(&base, offset));
             let block_addr = self.materialize_u64(&format!("preflight_block_addr({addr})"));
             let block = self.next_var();
@@ -1687,48 +1695,88 @@ impl<'a> EmitContext<'a> {
                 .expect("G2 load kind must have producer lanes");
             self.g2_store_u32(slot, &base);
             self.g2_store_u64(slot + 1, &block);
-            self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs1});"));
-            if width == 1 {
-                self.write_line(&format!(
-                    "preflight_g2_shadow_mem_touch(state, {block_addr}, {block});"
-                ));
+            let mut floor_block1 = None;
+            if self.g2_checked {
+                self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs1});"));
+                if width == 1 {
+                    self.write_line(&format!(
+                        "preflight_g2_shadow_mem_touch(state, {block_addr}, {block});"
+                    ));
+                } else {
+                    let crosses = self.next_var();
+                    let block1 = self.next_var();
+                    let prev1 = self.next_var();
+                    self.write_line(&format!(
+                        "bool {crosses} = preflight_crosses_block({addr}, {width}u);"
+                    ));
+                    self.write_line(&format!("if (unlikely({crosses})) {{"));
+                    self.indent += 1;
+                    self.write_line(&format!("uint64_t {block1};"));
+                    self.write_line(&format!("uint32_t {prev1};"));
+                    self.write_line(&format!(
+                        "trace_crossing_mem_read_blocks(state, {block_addr}, {block}, &{block1}, &{prev1});"
+                    ));
+                    self.indent -= 1;
+                    self.write_line("} else {");
+                    self.indent += 1;
+                    self.write_line(&format!(
+                        "preflight_g2_shadow_mem_touch(state, {block_addr}, {block});"
+                    ));
+                    self.write_line("trace_timestamp(state);");
+                    self.indent -= 1;
+                    self.write_line("}");
+                }
+                if rd == 0 {
+                    self.write_line("trace_timestamp(state);");
+                } else {
+                    self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rd});"));
+                }
+            } else if width == 1 {
+                self.g2_floor_timestamp(3);
             } else {
                 let crosses = self.next_var();
                 let block1 = self.next_var();
-                let prev1 = self.next_var();
                 self.write_line(&format!(
                     "bool {crosses} = preflight_crosses_block({addr}, {width}u);"
                 ));
+                self.write_line(&format!("uint64_t {block1} = 0u;"));
                 self.write_line(&format!("if (unlikely({crosses})) {{"));
                 self.indent += 1;
-                self.write_line(&format!("uint64_t {block1};"));
-                self.write_line(&format!("uint32_t {prev1};"));
                 self.write_line(&format!(
-                    "trace_crossing_mem_read_blocks(state, {block_addr}, {block}, &{block1}, &{prev1});"
+                    "preflight_g2_floor_crossing_load(state, {block_addr}, {block}, &{block1});"
                 ));
-                self.indent -= 1;
-                self.write_line("} else {");
-                self.indent += 1;
-                self.write_line(&format!(
-                    "preflight_g2_shadow_mem_touch(state, {block_addr}, {block});"
-                ));
-                self.write_line("trace_timestamp(state);");
                 self.indent -= 1;
                 self.write_line("}");
-            }
-            if rd == 0 {
-                self.write_line("trace_timestamp(state);");
-            } else {
-                self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rd});"));
+                self.g2_floor_timestamp(4);
+                floor_block1 = Some(block1);
             }
             if rd != 0 {
                 let value = self.next_var();
                 let (read_func, _, var_ty) = Self::read_mem_helper(width, signed);
-                self.write_line(&format!("{var_ty} {value} = {read_func}(memory, {addr});"));
+                if self.g2_checked {
+                    self.write_line(&format!("{var_ty} {value} = {read_func}(memory, {addr});"));
+                } else {
+                    let cast_ty = match (width, signed) {
+                        (1, false) => "uint8_t",
+                        (1, true) => "int8_t",
+                        (2, false) => "uint16_t",
+                        (2, true) => "int16_t",
+                        (4, false) => "uint32_t",
+                        (4, true) => "int32_t",
+                        (8, _) => "uint64_t",
+                        _ => unreachable!("invalid G2 load width {width}"),
+                    };
+                    self.write_line(&format!(
+                        "{var_ty} {value} = ({cast_ty})preflight_g2_floor_load_value({block}, {}, {addr});",
+                        floor_block1.as_deref().unwrap_or("0u")
+                    ));
+                }
                 self.write_line(&format!("reg_write(state, {rd}, {value});"));
             }
-            self.indent -= 1;
-            self.write_line("}");
+            if self.g2_checked {
+                self.indent -= 1;
+                self.write_line("}");
+            }
             return;
         }
         let chip = self.current_chip_idx;
@@ -1891,14 +1939,14 @@ impl<'a> EmitContext<'a> {
                 8 => 26,
                 _ => unreachable!("invalid G2 store width {width}"),
             };
-            let base = self.next_var();
-            let source = self.next_var();
-            self.write_line(&format!("uint64_t {base} = reg_read(state, {rs1});"));
-            self.write_line(&format!("uint64_t {source} = reg_read(state, {rs2});"));
-            self.write_line(&format!(
-                "if (likely(preflight_g2_validate_pointer(state, {base}))) {{"
-            ));
-            self.indent += 1;
+            let base = self.g2_read_reg(rs1);
+            let source = self.g2_read_reg(rs2);
+            if self.g2_checked {
+                self.write_line(&format!(
+                    "if (likely(preflight_g2_validate_pointer(state, {base}))) {{"
+                ));
+                self.indent += 1;
+            }
             let addr = self.materialize_u64(&Self::addr_expr(&base, offset));
             let block_addr = self.materialize_u64(&format!("preflight_block_addr({addr})"));
             let block = self.next_var();
@@ -1909,42 +1957,61 @@ impl<'a> EmitContext<'a> {
                 .expect("G2 store kind must have producer lanes");
             self.g2_store_u32(slot, &base);
             self.g2_store_u64(slot + 1, &block);
-            self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs1});"));
-            self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs2});"));
-            if width == 1 {
-                self.write_line(&format!(
-                    "preflight_g2_shadow_mem_store_touch(state, {block_addr});"
-                ));
+            if self.g2_checked {
+                self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs1});"));
+                self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs2});"));
+                if width == 1 {
+                    self.write_line(&format!(
+                        "preflight_g2_shadow_mem_store_touch(state, {block_addr});"
+                    ));
+                } else {
+                    let crosses = self.next_var();
+                    let prev0 = self.next_var();
+                    let prev1 = self.next_var();
+                    let prev_ts1 = self.next_var();
+                    self.write_line(&format!(
+                        "bool {crosses} = preflight_crosses_block({addr}, {width}u);"
+                    ));
+                    self.write_line(&format!("if (unlikely({crosses})) {{"));
+                    self.indent += 1;
+                    self.write_line(&format!("uint64_t {prev0};"));
+                    self.write_line(&format!("uint64_t {prev1};"));
+                    self.write_line(&format!("uint32_t {prev_ts1};"));
+                    self.write_line(&format!(
+                        "trace_crossing_store_blocks(state, {addr}, {width}u, {source}, AS_MEMORY, &{prev0}, &{prev1}, &{prev_ts1});"
+                    ));
+                    self.indent -= 1;
+                    self.write_line("} else {");
+                    self.indent += 1;
+                    self.write_line(&format!(
+                        "preflight_g2_shadow_mem_store_touch(state, {block_addr});"
+                    ));
+                    self.write_line("trace_timestamp(state);");
+                    self.indent -= 1;
+                    self.write_line("}");
+                }
+            } else if width == 1 {
+                self.g2_floor_timestamp(3);
             } else {
                 let crosses = self.next_var();
-                let prev0 = self.next_var();
-                let prev1 = self.next_var();
-                let prev_ts1 = self.next_var();
                 self.write_line(&format!(
                     "bool {crosses} = preflight_crosses_block({addr}, {width}u);"
                 ));
                 self.write_line(&format!("if (unlikely({crosses})) {{"));
                 self.indent += 1;
-                self.write_line(&format!("uint64_t {prev0};"));
-                self.write_line(&format!("uint64_t {prev1};"));
-                self.write_line(&format!("uint32_t {prev_ts1};"));
                 self.write_line(&format!(
-                    "trace_crossing_store_blocks(state, {addr}, {width}u, {source}, AS_MEMORY, &{prev0}, &{prev1}, &{prev_ts1});"
+                    "preflight_g2_floor_crossing_store(state, {addr}, {width}u, {source}, AS_MEMORY, {block});"
                 ));
-                self.indent -= 1;
-                self.write_line("} else {");
-                self.indent += 1;
-                self.write_line(&format!(
-                    "preflight_g2_shadow_mem_store_touch(state, {block_addr});"
-                ));
-                self.write_line("trace_timestamp(state);");
                 self.indent -= 1;
                 self.write_line("}");
+                self.g2_floor_timestamp(4);
             }
             let (write, _, cast) = Self::write_mem_helper(width);
             self.write_line(&format!("{write}(memory, {addr}, ({cast})({source}));"));
-            self.indent -= 1;
-            self.write_line("}");
+            if self.g2_checked {
+                self.indent -= 1;
+                self.write_line("}");
+            }
             return;
         }
         let chip = self.current_chip_idx;
@@ -2080,11 +2147,11 @@ impl<'a> EmitContext<'a> {
         if self.g2_records {
             debug_assert_eq!(addr_space, PUBLIC_VALUES_AS);
             debug_assert_eq!(local_opcode, 4);
-            let ptr = self.next_var();
-            let src = self.next_var();
-            self.write_line(&format!("uint64_t {ptr} = reg_read(state, {ptr_reg});"));
-            self.write_line(&format!("uint64_t {src} = reg_read(state, {src_reg});"));
-            self.write_line(&format!("preflight_g2_validate_pointer(state, {ptr});"));
+            let ptr = self.g2_read_reg(ptr_reg);
+            let src = self.g2_read_reg(src_reg);
+            if self.g2_checked {
+                self.write_line(&format!("preflight_g2_validate_pointer(state, {ptr});"));
+            }
             let addr_expr = match offset.cmp(&0) {
                 std::cmp::Ordering::Less => {
                     format!("{ptr} - {}", hex_u32(offset.unsigned_abs()))
@@ -2102,32 +2169,43 @@ impl<'a> EmitContext<'a> {
                 .expect("G2 store kind must have producer lanes");
             self.g2_store_u32(slot, &ptr);
             self.g2_store_u64(slot + 1, &block);
-            self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {ptr_reg});"));
-            self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {src_reg});"));
             let crosses = self.next_var();
-            let prev0 = self.next_var();
-            let prev1 = self.next_var();
-            let prev_ts1 = self.next_var();
             self.write_line(&format!(
                 "bool {crosses} = preflight_crosses_block({addr}, 8u);"
             ));
-            self.write_line(&format!("if (unlikely({crosses})) {{"));
-            self.indent += 1;
-            self.write_line(&format!("uint64_t {prev0};"));
-            self.write_line(&format!("uint64_t {prev1};"));
-            self.write_line(&format!("uint32_t {prev_ts1};"));
-            self.write_line(&format!(
-                "trace_crossing_store_blocks(state, {addr}, 8u, {src}, AS_PUBLIC_VALUES, &{prev0}, &{prev1}, &{prev_ts1});"
-            ));
-            self.indent -= 1;
-            self.write_line("} else {");
-            self.indent += 1;
-            self.write_line(&format!(
-                "preflight_g2_shadow_pv_touch(state, {block_addr});"
-            ));
-            self.write_line("trace_timestamp(state);");
-            self.indent -= 1;
-            self.write_line("}");
+            if self.g2_checked {
+                self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {ptr_reg});"));
+                self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {src_reg});"));
+                let prev0 = self.next_var();
+                let prev1 = self.next_var();
+                let prev_ts1 = self.next_var();
+                self.write_line(&format!("if (unlikely({crosses})) {{"));
+                self.indent += 1;
+                self.write_line(&format!("uint64_t {prev0};"));
+                self.write_line(&format!("uint64_t {prev1};"));
+                self.write_line(&format!("uint32_t {prev_ts1};"));
+                self.write_line(&format!(
+                    "trace_crossing_store_blocks(state, {addr}, 8u, {src}, AS_PUBLIC_VALUES, &{prev0}, &{prev1}, &{prev_ts1});"
+                ));
+                self.indent -= 1;
+                self.write_line("} else {");
+                self.indent += 1;
+                self.write_line(&format!(
+                    "preflight_g2_shadow_pv_touch(state, {block_addr});"
+                ));
+                self.write_line("trace_timestamp(state);");
+                self.indent -= 1;
+                self.write_line("}");
+            } else {
+                self.write_line(&format!("if (unlikely({crosses})) {{"));
+                self.indent += 1;
+                self.write_line(&format!(
+                    "preflight_g2_floor_crossing_store(state, {addr}, 8u, {src}, AS_PUBLIC_VALUES, {block});"
+                ));
+                self.indent -= 1;
+                self.write_line("}");
+                self.g2_floor_timestamp(4);
+            }
             return (src, ptr);
         }
         if !self.inline_records_enabled() {
@@ -2265,10 +2343,8 @@ impl<'a> EmitContext<'a> {
             _ => unreachable!("validated REVEAL width"),
         };
 
-        let ptr = self.next_var();
-        let src = self.next_var();
-        self.write_line(&format!("uint64_t {ptr} = reg_read(state, {ptr_reg});"));
-        self.write_line(&format!("uint64_t {src} = reg_read(state, {src_reg});"));
+        let ptr = self.g2_read_reg(ptr_reg);
+        let src = self.g2_read_reg(src_reg);
         let addr_expr = match offset.cmp(&0) {
             std::cmp::Ordering::Less => {
                 format!("{ptr} - {}", hex_u32(offset.unsigned_abs()))
@@ -2277,11 +2353,13 @@ impl<'a> EmitContext<'a> {
             std::cmp::Ordering::Greater => format!("{ptr} + {}", hex_u32(offset as u32)),
         };
         let addr = self.materialize_u64(&addr_expr);
-        self.write_line(&format!(
-            "if (unlikely(!preflight_g2_validate_pointer(state, {ptr}))) {{"
-        ));
-        self.emit_trap();
-        self.write_line("}");
+        if self.g2_checked {
+            self.write_line(&format!(
+                "if (unlikely(!preflight_g2_validate_pointer(state, {ptr}))) {{"
+            ));
+            self.emit_trap();
+            self.write_line("}");
+        }
         self.write_line(&format!(
             "if (unlikely(!openvm_validate_reveal({addr}, {width}u))) {{"
         ));
@@ -2296,37 +2374,54 @@ impl<'a> EmitContext<'a> {
             .expect("G2 reveal kind must have producer lanes");
         self.g2_store_u32(slot, &ptr);
         self.g2_store_u64(slot + 1, &block);
-        self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {ptr_reg});"));
-        self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {src_reg});"));
-        if width == 1 {
-            self.write_line(&format!(
-                "preflight_g2_shadow_pv_touch(state, {block_addr});"
-            ));
+        if self.g2_checked {
+            self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {ptr_reg});"));
+            self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {src_reg});"));
+            if width == 1 {
+                self.write_line(&format!(
+                    "preflight_g2_shadow_pv_touch(state, {block_addr});"
+                ));
+            } else {
+                let crosses = self.next_var();
+                let prev0 = self.next_var();
+                let prev1 = self.next_var();
+                let prev_ts1 = self.next_var();
+                self.write_line(&format!(
+                    "bool {crosses} = preflight_crosses_block({addr}, {width}u);"
+                ));
+                self.write_line(&format!("if (unlikely({crosses})) {{"));
+                self.indent += 1;
+                self.write_line(&format!("uint64_t {prev0};"));
+                self.write_line(&format!("uint64_t {prev1};"));
+                self.write_line(&format!("uint32_t {prev_ts1};"));
+                self.write_line(&format!(
+                    "trace_crossing_store_blocks(state, {addr}, {width}u, {src}, AS_PUBLIC_VALUES, &{prev0}, &{prev1}, &{prev_ts1});"
+                ));
+                self.indent -= 1;
+                self.write_line("} else {");
+                self.indent += 1;
+                self.write_line(&format!(
+                    "preflight_g2_shadow_pv_touch(state, {block_addr});"
+                ));
+                self.write_line("trace_timestamp(state);");
+                self.indent -= 1;
+                self.write_line("}");
+            }
+        } else if width == 1 {
+            self.g2_floor_timestamp(3);
         } else {
             let crosses = self.next_var();
-            let prev0 = self.next_var();
-            let prev1 = self.next_var();
-            let prev_ts1 = self.next_var();
             self.write_line(&format!(
                 "bool {crosses} = preflight_crosses_block({addr}, {width}u);"
             ));
             self.write_line(&format!("if (unlikely({crosses})) {{"));
             self.indent += 1;
-            self.write_line(&format!("uint64_t {prev0};"));
-            self.write_line(&format!("uint64_t {prev1};"));
-            self.write_line(&format!("uint32_t {prev_ts1};"));
             self.write_line(&format!(
-                "trace_crossing_store_blocks(state, {addr}, {width}u, {src}, AS_PUBLIC_VALUES, &{prev0}, &{prev1}, &{prev_ts1});"
+                "preflight_g2_floor_crossing_store(state, {addr}, {width}u, {src}, AS_PUBLIC_VALUES, {block});"
             ));
-            self.indent -= 1;
-            self.write_line("} else {");
-            self.indent += 1;
-            self.write_line(&format!(
-                "preflight_g2_shadow_pv_touch(state, {block_addr});"
-            ));
-            self.write_line("trace_timestamp(state);");
             self.indent -= 1;
             self.write_line("}");
+            self.g2_floor_timestamp(4);
         }
         self.write_line(&format!(
             "if (unlikely(!openvm_reveal({src}, {addr}, {width}u))) {{"
@@ -2466,6 +2561,9 @@ impl<'a> EmitContext<'a> {
         single_pass_inline: bool,
         detail_family: u32,
     ) {
+        if self.g2_records {
+            return;
+        }
         if self.mode == EmitMode::ValueTrace {
             let inline_chip = if single_pass_inline {
                 self.current_chip_idx

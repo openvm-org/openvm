@@ -1524,12 +1524,13 @@ preflight_g2_claim(G2ProducerV1* restrict g2, uint32_t slot,
             )
             .unwrap();
         }
-        // This is independent of the published cursor. It lets the host's
-        // O(lanes) segment-boundary pass verify every entered block's static
-        // span exactly even when production stores are unchecked.
-        for (slot, &span) in spans.iter().enumerate() {
-            if span != 0 {
-                writeln!(out, "    rvr_g2_desc_{slot}->expected_len += {span}u;").unwrap();
+        if self.g2_emission_mode == G2EmissionMode::Checked {
+            // Checked emission keeps an independent host cursor oracle. The
+            // production floor defers exact run/lane replay to the device.
+            for (slot, &span) in spans.iter().enumerate() {
+                if span != 0 {
+                    writeln!(out, "    rvr_g2_desc_{slot}->expected_len += {span}u;").unwrap();
+                }
             }
         }
     }
@@ -1707,6 +1708,12 @@ preflight_g2_claim(G2ProducerV1* restrict g2, uint32_t slot,
         out: &mut String,
         block: &Block,
     ) -> Result<(), InvalidChipIndex> {
+        if self.execution_kind == RvrExecutionKind::Preflight
+            && self.g2_records
+            && self.g2_emission_mode == G2EmissionMode::Production
+        {
+            return Ok(());
+        }
         if matches!(
             self.execution_kind,
             RvrExecutionKind::Pure | RvrExecutionKind::PureWithInstretTracking

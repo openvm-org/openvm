@@ -1510,7 +1510,11 @@ where
                     .copied()
                     .unwrap_or(fallback);
             }
-            Some(RvrG2PreparedV1::new_pooled(&capacities, pool)?)
+            Some(RvrG2PreparedV1::new_pooled_for_mode(
+                &capacities,
+                pool,
+                g2.checked_emission(),
+            )?)
         } else {
             None
         };
@@ -1665,6 +1669,7 @@ where
         if let Some(delta) = delta_output.as_mut() {
             delta.set_written(delta_record.len as usize);
         }
+        let mut production_g2_counter_indices = None;
         let g2_segment = if let (Some(prepared), Some(g2)) = (g2_prepared, g2_meta) {
             let instruction_count =
                 u32::try_from(run_result.state.mode_state.instret).map_err(|_| {
@@ -1693,14 +1698,25 @@ where
                     Ok((binding, buf.len / buf.stride, buf.len))
                 })
                 .collect::<Result<Vec<_>, ExecutionError>>()?;
-            let mut expected_kind_counts = [0u32; 31];
-            for binding in g2.air_bindings.iter() {
-                expected_kind_counts[binding.kind as usize] = chip_counts[binding.air_idx];
+            if !g2.checked_emission() {
+                production_g2_counter_indices = Some(restore_g2_production_chip_counts(
+                    &prepared,
+                    g2,
+                    &opaque_written,
+                    &mut chip_counts,
+                )?);
             }
+            let expected_kind_counts = g2.checked_emission().then(|| {
+                let mut counts = [0u32; 31];
+                for binding in g2.air_bindings.iter() {
+                    counts[binding.kind as usize] = chip_counts[binding.air_idx];
+                }
+                counts
+            });
             Some(prepared.finalize(
                 next_segment_id()?,
                 instruction_count,
-                Some(&expected_kind_counts),
+                expected_kind_counts.as_ref(),
                 g2.fingerprint,
                 &opaque_written,
             )?)
@@ -1768,8 +1784,17 @@ where
         }
         // SAFETY: generated C writes an index before advancing each cursor;
         // the capacity check above rejects any cursor outside the buffers.
-        let chip_counts_touched =
+        let mut chip_counts_touched =
             unsafe { assume_init_prefix(chip_counts_touched, chip_counts_touched_len) };
+        if let Some(indices) = production_g2_counter_indices {
+            chip_counts_touched.clear();
+            chip_counts_touched.extend(
+                indices
+                    .into_iter()
+                    .filter(|&air_idx| chip_counts[air_idx] != 0)
+                    .map(|air_idx| air_idx as u32),
+            );
+        }
         let exec_frequencies_touched =
             unsafe { assume_init_prefix(exec_frequencies_touched, exec_frequencies_touched_len) };
         // With inline records (R3), migrated opcodes touch without logging, so
@@ -2244,6 +2269,118 @@ fn initial_memory_log_cap(program_log_cap: usize) -> usize {
         .saturating_mul(8)
         .saturating_add(64)
         .max(128)
+}
+
+fn restore_g2_production_chip_counts(
+    prepared: &RvrG2PreparedV1,
+    meta: &super::RvrG2MetaV1,
+    opaque_written: &[(super::RvrG2OpaqueBindingV1, u32, u32)],
+    chip_counts: &mut [u32],
+) -> Result<Vec<usize>, ExecutionError> {
+    let mut owned_airs = meta
+        .air_bindings
+        .iter()
+        .map(|binding| binding.air_idx)
+        .chain(meta.opaque_bindings.iter().map(|binding| binding.air_idx))
+        .collect::<Vec<_>>();
+    owned_airs.sort_unstable();
+    owned_airs.dedup();
+    if owned_airs
+        .iter()
+        .any(|&air_idx| air_idx >= chip_counts.len())
+    {
+        return Err(ExecutionError::RvrExecution(
+            "G2 production AIR exceeds the chip-count table".to_string(),
+        ));
+    }
+
+    // HintBuffer's custom emitter contributes only its dynamic (n - 1)
+    // correction. Preserve that rare value while replacing every per-block
+    // base count with lane/run-derived totals outside the generated hot loop.
+    let hint_dynamic_extra = meta.air_idx(30).map_or(0, |air_idx| chip_counts[air_idx]);
+    for &air_idx in &owned_airs {
+        chip_counts[air_idx] = 0;
+    }
+
+    for binding in meta.air_bindings.iter().filter(|binding| binding.kind < 30) {
+        if let Some(slot) =
+            rvr_openvm_ext_ffi_common::g2_standard_producer_slot(binding.kind, false)
+        {
+            let count = prepared.producer_lane_len(slot)?;
+            chip_counts[binding.air_idx] = chip_counts[binding.air_idx]
+                .checked_add(count)
+                .ok_or_else(|| {
+                    ExecutionError::RvrExecution(
+                        "G2 production standard chip count overflow".to_string(),
+                    )
+                })?;
+        }
+    }
+
+    if meta.blocks.len() != meta.block_host_counts.len() {
+        return Err(ExecutionError::RvrExecution(
+            "G2 host block-count table drifted from the device table".to_string(),
+        ));
+    }
+    let mut host_counts = super::RvrG2BlockHostCountsV1::default();
+    for &program_slot in
+        prepared.producer_u32_lane(rvr_openvm_ext_ffi_common::G2_PRODUCER_RUN_SLOT)?
+    {
+        let block_index = meta
+            .blocks
+            .binary_search_by_key(&program_slot, |block| block.program_slot)
+            .map_err(|_| {
+                ExecutionError::RvrExecution(format!(
+                    "G2 production run references unknown block slot {program_slot}"
+                ))
+            })?;
+        let block = meta.block_host_counts[block_index];
+        host_counts.kind12 = host_counts
+            .kind12
+            .checked_add(block.kind12)
+            .ok_or_else(|| ExecutionError::RvrExecution("G2 kind 12 count overflow".to_string()))?;
+        host_counts.kind14 = host_counts
+            .kind14
+            .checked_add(block.kind14)
+            .ok_or_else(|| ExecutionError::RvrExecution("G2 kind 14 count overflow".to_string()))?;
+        host_counts.kind30 = host_counts
+            .kind30
+            .checked_add(block.kind30)
+            .ok_or_else(|| ExecutionError::RvrExecution("G2 kind 30 count overflow".to_string()))?;
+    }
+    for (kind, count) in [
+        (12, host_counts.kind12),
+        (14, host_counts.kind14),
+        (30, host_counts.kind30),
+    ] {
+        if let Some(air_idx) = meta.air_idx(kind) {
+            chip_counts[air_idx] = chip_counts[air_idx].checked_add(count).ok_or_else(|| {
+                ExecutionError::RvrExecution(format!(
+                    "G2 production kind {kind} chip count overflow"
+                ))
+            })?;
+        } else if count != 0 {
+            return Err(ExecutionError::RvrExecution(format!(
+                "G2 production counted unbound kind {kind}"
+            )));
+        }
+    }
+    if let Some(air_idx) = meta.air_idx(30) {
+        chip_counts[air_idx] = chip_counts[air_idx]
+            .checked_add(hint_dynamic_extra)
+            .ok_or_else(|| {
+                ExecutionError::RvrExecution("G2 dynamic hint count overflow".to_string())
+            })?;
+    } else if hint_dynamic_extra != 0 {
+        return Err(ExecutionError::RvrExecution(
+            "G2 dynamic hint count has no AIR binding".to_string(),
+        ));
+    }
+
+    for &(binding, count, _) in opaque_written {
+        chip_counts[binding.air_idx] = count;
+    }
+    Ok(owned_airs)
 }
 
 fn g2_residual_capacity(

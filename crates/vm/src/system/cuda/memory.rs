@@ -147,6 +147,14 @@ pub trait DeviceTouchedMemoryProvider: Send + Sync {
         device_ctx: &GpuDeviceCtx,
         initial_memory: &[DeviceInitialMemory],
     ) -> Option<DeviceTouchedMemory>;
+
+    /// Take the host-synchronized write-only page bitmap produced by device
+    /// replay for the just-finished segment. Bit `i` owns main-memory page
+    /// `i`; callers must merge it into the carried `GuestMemory` before that
+    /// state can be transported for a continuation segment.
+    fn take_continuation_dirty_pages(&self) -> Option<Vec<u64>> {
+        None
+    }
 }
 
 enum TouchedMemoryInput {

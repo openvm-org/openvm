@@ -85,6 +85,11 @@ pub trait SystemChipComplex<RA, PB: ProverBackend> {
         record_arenas: Vec<RA>,
     ) -> Vec<AirProvingContext<PB>>;
 
+    /// Merge any device-owned continuation write set into the state that will
+    /// become the next segment's initial memory. CPU inventories and device
+    /// routes without such a side channel have nothing to do.
+    fn merge_device_continuation_dirty_pages(&mut self, _memory: &mut GuestMemory) {}
+
     /// Returns the top merkle sub-tree of the memory merkle tree
     /// as a segment tree with `2 * (2^addr_space_height) - 1` nodes, representing the Merkle
     /// tree formed from the roots of the sub-trees for each address space.

@@ -318,7 +318,12 @@ impl<F: PrimeField32> CachedRvrPreflightExecutor<F> for CachedRvrCompiledPreflig
             }
             let capacity_bytes = super::rvr::g2::RvrG2PreparedV1::capacity_bytes(&capacities)
                 .expect("G2 maximum-shape capacity overflow");
-            self.pool.prepare_g2_backings(capacity_bytes);
+            let route = if g2.checked_emission() {
+                super::rvr::preflight_pool::G2BackingRoute::Checked
+            } else {
+                super::rvr::preflight_pool::G2BackingRoute::Production
+            };
+            self.pool.prepare_g2_backings(capacity_bytes, route);
         }
         if let Some(before) = before {
             let after = crate::arch::cuda::pinned::PoolStatsSnapshot::capture();
@@ -1948,6 +1953,15 @@ where
             .transport_init_memory_to_device(memory);
     }
 
+    /// Consume the device-replayed write-only page bitmap into the carried
+    /// state. The segment loop calls this immediately after trace generation,
+    /// before any subsequent initial-memory H2D can observe the state.
+    pub fn merge_device_continuation_dirty_pages(&mut self, memory: &mut GuestMemory) {
+        self.chip_complex
+            .system
+            .merge_device_continuation_dirty_pages(memory);
+    }
+
     /// See [`SystemChipComplex::memory_top_tree`].
     pub fn memory_top_tree(&self) -> Option<&[[Val<E::SC>; VM_DIGEST_WIDTH]]> {
         self.chip_complex.system.memory_top_tree()
@@ -2456,6 +2470,12 @@ where
                     vm.engine.device().device_ctx(),
                 );
             let mut ctx = vm.generate_proving_ctx(system_records, record_arenas)?;
+            vm.merge_device_continuation_dirty_pages(
+                &mut state
+                    .as_mut()
+                    .expect("preflight produced no continuation state")
+                    .memory,
+            );
             #[cfg(all(feature = "cuda", feature = "rvr"))]
             if let Some(timer) = tracegen_gpu_timer {
                 timer.finish(

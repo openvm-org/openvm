@@ -11,7 +11,7 @@ use openvm_circuit::{
 use openvm_circuit_primitives::{var_range::VariableRangeCheckerChipGPU, Chip};
 use openvm_cuda_backend::{prelude::F, GpuBackend};
 use openvm_cuda_common::{copy::MemCopyD2H, stream::GpuDeviceCtx};
-use openvm_instructions::VM_DIGEST_WIDTH;
+use openvm_instructions::{riscv::RV64_MEMORY_AS, VM_DIGEST_WIDTH};
 use openvm_stark_backend::prover::{AirProvingContext, CommittedTraceData};
 use poseidon2::Poseidon2PeripheryChipGPU;
 use program::{DeviceProgramFrequenciesProvider, ProgramChipGPU};
@@ -192,6 +192,55 @@ impl SystemChipComplex<DenseRecordArena, GpuBackend> for SystemChipInventoryGPU 
             .into_iter()
             .chain(memory_ctxs)
             .collect()
+    }
+
+    fn merge_device_continuation_dirty_pages(&mut self, memory: &mut GuestMemory) {
+        let Some(words) = self
+            .device_touched_memory
+            .as_ref()
+            .and_then(|provider| provider.take_continuation_dirty_pages())
+        else {
+            return;
+        };
+        use openvm_circuit::system::memory::online::{LinearMemory, PAGE_SIZE};
+
+        let address_space = RV64_MEMORY_AS as usize;
+        let memory_bytes = memory
+            .memory
+            .mem
+            .get(address_space)
+            .expect("continuation dirty pages require main memory")
+            .size();
+        let page_count = memory_bytes.div_ceil(PAGE_SIZE);
+        let expected_words = page_count.div_ceil(u64::BITS as usize);
+        assert_eq!(
+            words.len(),
+            expected_words,
+            "device continuation dirty-page bitmap geometry differs from carried memory"
+        );
+        if let Some(&last) = words.last() {
+            let used = page_count % u64::BITS as usize;
+            if used != 0 {
+                assert_eq!(
+                    last >> used,
+                    0,
+                    "device continuation dirty-page bitmap marks an out-of-range page"
+                );
+            }
+        }
+        let pages = &mut memory.memory.touched_pages[address_space];
+        for (word_index, mut word) in words.into_iter().enumerate() {
+            while word != 0 {
+                let bit = word.trailing_zeros() as usize;
+                let page = word_index * u64::BITS as usize + bit;
+                assert!(
+                    page < page_count,
+                    "device continuation page exceeds main memory"
+                );
+                pages.mark_byte_range(page * PAGE_SIZE, 1);
+                word &= word - 1;
+            }
+        }
     }
 
     fn memory_top_tree(&self) -> Option<&[[F; VM_DIGEST_WIDTH]]> {

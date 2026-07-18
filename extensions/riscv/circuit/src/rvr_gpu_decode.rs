@@ -663,6 +663,12 @@ pub struct RvrGpuDecodeState {
     g2_host: Mutex<Option<HostG2Segment>>,
     #[cfg(all(feature = "cuda", feature = "rvr"))]
     g2_device: Mutex<Option<DeviceDeltaSegment>>,
+    /// Host copy of the device-owned write-only continuation-page bitmap.
+    /// A new segment may not bind until the proving loop consumes this into
+    /// the carried `GuestMemory`, which makes the pre-next-segment D2H seam
+    /// fail closed instead of silently dropping sparse H2D state.
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    continuation_dirty_pages: Mutex<Option<Vec<u64>>>,
 }
 
 impl RvrGpuDecodeState {
@@ -937,6 +943,11 @@ impl RvrGpuDecodeState {
     ) -> Result<HashSet<usize>, openvm_circuit::arch::ExecutionError> {
         use openvm_circuit::arch::rvr::PREFLIGHT_DELTA_RECORD_SIZE;
 
+        assert!(
+            self.continuation_dirty_pages.lock().unwrap().is_none(),
+            "previous G2 continuation dirty-page bitmap was not merged before binding the next segment"
+        );
+
         let kind_to_air = self.bind_program(exe, pc_to_air_idx, compiled_identity, precomputed);
         let arena_native = arena_native_written
             .iter()
@@ -1052,6 +1063,10 @@ impl RvrGpuDecodeState {
         oracle_arena_expected: Vec<openvm_circuit::arch::rvr::DeviceAuxArenaReference>,
         program_frequency_reference: Vec<u32>,
     ) -> Result<HashSet<usize>, openvm_circuit::arch::ExecutionError> {
+        assert!(
+            self.continuation_dirty_pages.lock().unwrap().is_none(),
+            "previous G2 continuation dirty-page bitmap was not merged before binding the next segment"
+        );
         let kind_to_air =
             self.bind_program(exe, pc_to_air_idx, compiled_identity, Some(precomputed));
         if kind_to_air.len() != meta.air_bindings.len()
@@ -1732,6 +1747,28 @@ impl RvrGpuDecodeState {
             )
         };
         let d_touched_count = DeviceBuffer::<u32>::with_capacity_on(1, device_ctx);
+        let main_memory_bytes = initial_memory
+            .get(openvm_instructions::riscv::RV64_MEMORY_AS as usize)
+            .map(|memory| {
+                assert_eq!(
+                    memory.cell_size, 2,
+                    "G2 main-memory continuation bitmap requires the frozen U16 layout"
+                );
+                usize::try_from(memory.len).expect("G2 main-memory byte length exceeds usize")
+            })
+            .expect("G2 initial-memory descriptors omit the main-memory address space");
+        let dirty_page_words = main_memory_bytes
+            .div_ceil(openvm_circuit::system::memory::online::PAGE_SIZE)
+            .div_ceil(u64::BITS as usize);
+        let d_dirty_pages = if dirty_page_words == 0 {
+            DeviceBuffer::<u64>::new()
+        } else {
+            let words = DeviceBuffer::<u64>::with_capacity_on(dirty_page_words, device_ctx);
+            words
+                .fill_zero_on(device_ctx)
+                .expect("G2 continuation dirty-page clear");
+            words
+        };
         let d_opaque_prev_timestamps = if residual_capacity == 0 {
             DeviceBuffer::<u32>::new()
         } else {
@@ -1793,6 +1830,7 @@ impl RvrGpuDecodeState {
                 &d_descs,
                 &d_touched_output,
                 &d_touched_count,
+                &d_dirty_pages,
                 &d_opaque_prev_timestamps,
                 &d_opaque_prev_values,
                 &d_error,
@@ -1805,6 +1843,14 @@ impl RvrGpuDecodeState {
         }
         let error = d_error.to_host_on(device_ctx).expect("G2 error D2H")[0];
         assert_eq!(error, 0, "CUDA G2 wire validation error {error}");
+        let continuation_dirty_pages = if dirty_page_words == 0 {
+            Vec::new()
+        } else {
+            d_dirty_pages
+                .to_host_on(device_ctx)
+                .expect("G2 continuation dirty-page D2H")
+        };
+        assert_eq!(continuation_dirty_pages.len(), dirty_page_words);
         if !host.program_frequency_reference.is_empty() {
             let actual = d_program_frequencies
                 .to_host_on(device_ctx)
@@ -1960,6 +2006,15 @@ impl RvrGpuDecodeState {
             }),
             g2_trace: Some(g2_trace),
         };
+        let previous = self
+            .continuation_dirty_pages
+            .lock()
+            .unwrap()
+            .replace(continuation_dirty_pages);
+        assert!(
+            previous.is_none(),
+            "G2 continuation dirty-page result overlapped"
+        );
         *self.g2_device.lock().unwrap() = Some(device);
         true
     }
@@ -2033,6 +2088,10 @@ impl DeviceTouchedMemoryProvider for RvrGpuDecodeState {
                     .as_mut()
                     .and_then(|device| device.touched_memory.take())
             })
+    }
+
+    fn take_continuation_dirty_pages(&self) -> Option<Vec<u64>> {
+        self.continuation_dirty_pages.lock().unwrap().take()
     }
 }
 

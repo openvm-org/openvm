@@ -1,5 +1,7 @@
 use std::{collections::BTreeMap, sync::Arc};
 
+#[cfg(feature = "cuda")]
+use openvm_circuit::utils::test_gpu_engine;
 use openvm_circuit::{
     arch::{
         rvr::{
@@ -27,6 +29,8 @@ use openvm_riscv_transpiler::{
 };
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
+#[cfg(feature = "cuda")]
+use crate::Keccak256Rv64GpuBuilder;
 use crate::{Keccak256Rv64Config, Keccak256Rv64CpuBuilder};
 
 type F = BabyBear;
@@ -683,10 +687,14 @@ fn rvr_preflight_g2_opaque_keccak_xorin_is_byte_equal() {
         !output.raw_logs.device_aux_patches.is_empty(),
         "G2 opaque direct-final predecessor fields must use the device patch seam"
     );
-    assert!(
-        !output.raw_logs.device_aux_arena_references.is_empty(),
-        "checked G2 emission must retain full opaque-arena references"
-    );
+    if meta.checked_emission() {
+        assert!(
+            !output.raw_logs.device_aux_arena_references.is_empty(),
+            "checked G2 emission must retain full opaque-arena references"
+        );
+    } else {
+        assert!(output.raw_logs.device_aux_arena_references.is_empty());
+    }
     let segment = output.g2_segment.take().expect("G2 opaque segment");
     let residual_event_count = segment
         .header_acquire()
@@ -698,19 +706,25 @@ fn rvr_preflight_g2_opaque_keccak_xorin_is_byte_equal() {
         residual_event_count > legacy_memory_log_cap,
         "fixture must exceed the legacy raw-log-derived residual capacity"
     );
-    assert_eq!(
-        output.raw_logs.device_aux_references.len(),
-        residual_event_count,
-        "checked G2 emission must retain one predecessor reference per residual event"
-    );
-    for patch in &output.raw_logs.device_aux_patches {
-        let reference = output.raw_logs.device_aux_references[patch.event_index as usize];
-        let expected = match patch.kind {
-            openvm_circuit::arch::rvr::DEVICE_AUX_PATCH_U32 => u64::from(reference.prev_timestamp),
-            openvm_circuit::arch::rvr::DEVICE_AUX_PATCH_U64 => reference.prev_value,
-            kind => panic!("invalid G2 opaque device patch kind {kind}"),
-        };
-        assert_eq!(patch.expected, expected);
+    if meta.checked_emission() {
+        assert_eq!(
+            output.raw_logs.device_aux_references.len(),
+            residual_event_count,
+            "checked G2 emission must retain one predecessor reference per residual event"
+        );
+        for patch in &output.raw_logs.device_aux_patches {
+            let reference = output.raw_logs.device_aux_references[patch.event_index as usize];
+            let expected = match patch.kind {
+                openvm_circuit::arch::rvr::DEVICE_AUX_PATCH_U32 => {
+                    u64::from(reference.prev_timestamp)
+                }
+                openvm_circuit::arch::rvr::DEVICE_AUX_PATCH_U64 => reference.prev_value,
+                kind => panic!("invalid G2 opaque device patch kind {kind}"),
+            };
+            assert_eq!(patch.expected, expected);
+        }
+    } else {
+        assert!(output.raw_logs.device_aux_references.is_empty());
     }
     let decode = output
         .delta_decode_precomputed
@@ -776,20 +790,56 @@ fn rvr_preflight_g2_opaque_keccak_xorin_is_byte_equal() {
             .map(|&(_, bytes)| bytes as usize)
             .expect("G2 opaque written bytes");
         arena.finish_arena_native_sized(written, written_bytes, &geometry);
-        let first_mismatch = arena
-            .allocated()
-            .iter()
-            .zip(oracle_arenas[air].allocated())
-            .position(|(g2, oracle)| g2 != oracle);
-        assert_eq!(
-            arena.allocated(),
-            oracle_arenas[air].allocated(),
-            "G2 opaque AIR {air} must pass final consumer bytes unchanged; first mismatch: {first_mismatch:?}"
-        );
+        if meta.checked_emission() {
+            let first_mismatch = arena
+                .allocated()
+                .iter()
+                .zip(oracle_arenas[air].allocated())
+                .position(|(g2, oracle)| g2 != oracle);
+            assert_eq!(
+                arena.allocated(),
+                oracle_arenas[air].allocated(),
+                "checked G2 opaque AIR {air} must match final consumer bytes; first mismatch: {first_mismatch:?}"
+            );
+        } else {
+            assert_eq!(
+                arena.allocated().len(),
+                oracle_arenas[air].allocated().len(),
+                "production G2 opaque AIR {air} staged geometry"
+            );
+        }
     }
     assert!(output.raw_logs.program_log.is_empty());
     assert!(output.raw_logs.memory_log.is_empty());
     assert!(output.raw_logs.delta_memory_log.is_empty());
+
+    std::env::remove_var("OPENVM_RVR_GPU_RECORDS");
+    std::env::remove_var("OPENVM_RVR_ARENA_NATIVE");
+    std::env::remove_var("OPENVM_RVR_INLINE_RECORDS");
+}
+
+#[cfg(feature = "cuda")]
+#[test]
+fn rvr_preflight_g2_opaque_keccak_xorin_gpu_patch_seam_proves() {
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "1");
+    std::env::set_var("OPENVM_RVR_INLINE_RECORDS", "1");
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "g2");
+
+    let exe = keccak_hintstore_interleaved_exe();
+    let (vm, pk) = VirtualMachine::new_with_keygen(
+        test_gpu_engine(),
+        Keccak256Rv64GpuBuilder,
+        Keccak256Rv64Config::default(),
+    )
+    .expect("G2 opaque GPU VM init");
+    let vk = pk.get_vk();
+    let cached_program_trace = vm.commit_program_on_device(&exe.program);
+    let mut instance = VmInstance::new(vm, Arc::new(exe), cached_program_trace)
+        .expect("G2 opaque GPU instance init");
+    let proof = ContinuationVmProver::prove(&mut instance, hintstore_streams())
+        .expect("G2 opaque GPU prove");
+    verify_segments(&instance.vm.engine, &vk, &proof.per_segment)
+        .expect("G2 opaque GPU verify segments");
 
     std::env::remove_var("OPENVM_RVR_GPU_RECORDS");
     std::env::remove_var("OPENVM_RVR_ARENA_NATIVE");

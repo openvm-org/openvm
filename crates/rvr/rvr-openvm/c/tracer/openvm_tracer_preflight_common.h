@@ -924,6 +924,17 @@ preflight_g2_validate_pointer(RvState* restrict state, uint64_t pointer) {
   return true;
 }
 
+/* Production-floor semantic load: reuse the block already emitted to the G2
+ * current-value lane. `block1` is nonzero only for the exceptional crossing
+ * residual path. */
+static __attribute__((always_inline)) inline uint64_t
+preflight_g2_floor_load_value(uint64_t block0, uint64_t block1,
+                              uint64_t address) {
+  uint32_t shift = (uint32_t)(address & (WORD_SIZE - 1u)) * 8u;
+  return shift == 0u ? block0
+                     : (block0 >> shift) | (block1 << (64u - shift));
+}
+
 static __attribute__((always_inline)) inline void
 preflight_g2_emit_load_store(RvState* restrict state, uint32_t kind,
                              uint64_t base_pointer, uint64_t block_value) {
@@ -1915,6 +1926,48 @@ trace_crossing_store_blocks(RvState* restrict state, uint64_t addr,
     *prev_timestamp1 = write_prev1;
   }
   return first;
+}
+
+/* Production-floor crossing residuals carry only current values. Device
+ * replay reconstructs predecessor timestamps/values and touched-memory from
+ * the segment-start state, so these helpers neither touch host shadows nor
+ * advance the timestamp. */
+static __attribute__((always_inline)) inline void
+preflight_g2_floor_crossing_load(RvState* restrict state, uint64_t block_addr,
+                                 uint64_t block0,
+                                 uint64_t* restrict block1) {
+  Tracer* restrict t = state->tracer;
+  *block1 = preflight_read_mem_block(state, block_addr + WORD_SIZE);
+  uint32_t first_timestamp = t->timestamp + 1u;
+  preflight_append_memory_record(t, PREFLIGHT_MEMORY_KIND_READ, AS_MEMORY,
+                                 block_addr, WORD_SIZE, block0, block0,
+                                 first_timestamp, 0u, true);
+  preflight_append_memory_record(t, PREFLIGHT_MEMORY_KIND_READ, AS_MEMORY,
+                                 block_addr + WORD_SIZE, WORD_SIZE, *block1,
+                                 *block1, first_timestamp + 1u, 0u, true);
+}
+
+static __attribute__((always_inline)) inline void
+preflight_g2_floor_crossing_store(RvState* restrict state, uint64_t addr,
+                                  uint8_t width, uint64_t value,
+                                  uint8_t addr_space, uint64_t block0) {
+  Tracer* restrict t = state->tracer;
+  uint64_t block_addr = preflight_block_addr(addr);
+  uint64_t block1 = addr_space == AS_PUBLIC_VALUES
+                        ? preflight_read_pv_block(t, block_addr + WORD_SIZE)
+                        : preflight_read_mem_block(state,
+                                                   block_addr + WORD_SIZE);
+  uint64_t next0;
+  uint64_t next1;
+  preflight_patch_two_blocks(block0, block1, addr, width, value, &next0,
+                             &next1);
+  uint32_t first_timestamp = t->timestamp + 2u;
+  preflight_append_memory_record(t, PREFLIGHT_MEMORY_KIND_WRITE, addr_space,
+                                 block_addr, WORD_SIZE, next0, block0,
+                                 first_timestamp, 0u, true);
+  preflight_append_memory_record(t, PREFLIGHT_MEMORY_KIND_WRITE, addr_space,
+                                 block_addr + WORD_SIZE, WORD_SIZE, next1,
+                                 block1, first_timestamp + 1u, 0u, true);
 }
 
 /* ── Trace-only memory reads ─────────────────────────────────────── */
