@@ -2573,17 +2573,15 @@ where
                 if g2_airs.is_empty() {
                     Vec::new()
                 } else {
-                    // One real segment exercises the G2 decoder, trace
-                    // assembly, and proving buffer pipelines. Every standard
-                    // per-kind trace kernel is launched directly by the
-                    // module preloader, so replaying a longer prefix would
-                    // duplicate measured application work without warming a
-                    // new kernel. Maximum-shape pages are reserved below.
-                    let selected = if segments.is_empty() {
-                        Vec::new()
-                    } else {
-                        vec![0]
-                    };
+                    // The direct module preloader covers every standard
+                    // per-kind trace kernel, while real prefix segments cover
+                    // the decoder, trace assembly, and proving-buffer shapes
+                    // that otherwise appear as the early cold tail. Keep the
+                    // configured depth literal: a single representative proof
+                    // does not populate every proving-side shape even when the
+                    // async allocator has already reserved its maximum pages.
+                    let selected =
+                        (0..segments.len().min(device_prewarm_depth)).collect::<Vec<_>>();
                     let mut uncovered = g2_airs
                         .into_iter()
                         .filter(|&air| {

@@ -34,8 +34,8 @@
 //! `OPENVM_RVR_CUDA_G2_PREWARM_DEPTH` (default 3, covering the producer plus
 //! two in-flight consumers). The CUDA device-path pass uses
 //! `OPENVM_RVR_CUDA_DEVICE_PREWARM_DEPTH`, falling back to that G2 depth when
-//! unset; zero disables it and any positive value enables one representative
-//! real-shape pass (all trace kernels are pre-launched directly). The
+//! unset; zero disables it and a positive value warms that many real prefix
+//! shapes (all standard trace kernels are also pre-launched directly). The
 //! corresponding device async pool reserve defaults to three times the
 //! tightened maximum G2 backing and can be set directly with
 //! `OPENVM_RVR_CUDA_DEVICE_POOL_PREWARM_BYTES`.
