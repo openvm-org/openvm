@@ -75,6 +75,7 @@ where
                 core_off_matrix: 0,
                 layout: ArenaNativeLayout::Custom {
                     residual_memory_chronology: true,
+                    max_residual_events_per_record: 26,
                     layout_id: "openvm.rvr.keccakf-final.v1",
                 },
             },
@@ -95,6 +96,7 @@ where
                 core_off_matrix: 0,
                 layout: ArenaNativeLayout::Custom {
                     residual_memory_chronology: true,
+                    max_residual_events_per_record: 54,
                     layout_id: "openvm.rvr.xorin-final.v1",
                 },
             },

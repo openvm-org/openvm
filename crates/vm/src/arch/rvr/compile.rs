@@ -1343,8 +1343,12 @@ fn build_g2_meta_v1<F: PrimeField32>(
     let opaque_bindings = opaque_geometries
         .into_iter()
         .map(|(air_idx, geometry)| {
-            let layout_id = match geometry.layout {
-                ArenaNativeLayout::Custom { layout_id, .. } => layout_id,
+            let (layout_id, max_residual_events_per_record) = match geometry.layout {
+                ArenaNativeLayout::Custom {
+                    layout_id,
+                    max_residual_events_per_record,
+                    ..
+                } => (layout_id, max_residual_events_per_record),
                 _ => unreachable!("opaque G2 binding must have a custom layout"),
             };
             let mut identity = Sha256::new();
@@ -1359,6 +1363,7 @@ fn build_g2_meta_v1<F: PrimeField32>(
             RvrG2OpaqueBindingV1 {
                 air_idx,
                 geometry,
+                max_residual_events_per_record,
                 air_identity_digest: identity.finalize().into(),
                 layout_digest: layout.finalize().into(),
             }
@@ -1633,6 +1638,7 @@ fn g2_air_manifest_fingerprint(
         }
         air_manifest.update(binding.air_identity_digest);
         air_manifest.update(binding.layout_digest);
+        air_manifest.update(binding.max_residual_events_per_record.to_le_bytes());
     }
     Ok(air_manifest.finalize().into())
 }
@@ -3912,6 +3918,7 @@ mod tests {
         let opaque = RvrG2OpaqueBindingV1 {
             air_idx: 9,
             geometry,
+            max_residual_events_per_record: 7,
             air_identity_digest: [0x3c; 32],
             layout_digest: [0x5a; 32],
         };
@@ -3922,6 +3929,17 @@ mod tests {
                 &[],
                 &[RvrG2OpaqueBindingV1 {
                     layout_digest: [0xa5; 32],
+                    ..opaque
+                }],
+            )
+            .unwrap()
+        );
+        assert_ne!(
+            opaque_fingerprint,
+            g2_air_manifest_fingerprint(
+                &[],
+                &[RvrG2OpaqueBindingV1 {
+                    max_residual_events_per_record: 8,
                     ..opaque
                 }],
             )

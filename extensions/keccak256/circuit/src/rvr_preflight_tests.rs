@@ -152,7 +152,7 @@ fn hint_store(opcode: Rv64HintStoreOpcode, num_words: usize, ptr: usize) -> Inst
 }
 
 fn keccak_hintstore_interleaved_exe() -> VmExe<F> {
-    VmExe::new(Program::from_instructions(&[
+    let mut instructions = vec![
         addi(1, 0, 64),
         addi(2, 0, 512),
         addi(3, 0, 16),
@@ -169,8 +169,10 @@ fn keccak_hintstore_interleaved_exe() -> VmExe<F> {
         keccakf(1),
         hint_store(Rv64HintStoreOpcode::HINT_BUFFER, 7, 6),
         xorin(1, 2, 3),
-        terminate(),
-    ]))
+    ];
+    instructions.extend(std::iter::repeat_n(keccakf(1), 24));
+    instructions.push(terminate());
+    VmExe::new(Program::from_instructions(&instructions))
 }
 
 fn hintstore_streams() -> Streams {
@@ -678,11 +680,38 @@ fn rvr_preflight_g2_opaque_keccak_xorin_is_byte_equal() {
         )
         .expect("G2 opaque preflight");
     assert!(
-        output.raw_logs.device_aux_patches.is_empty(),
-        "G2 opaque direct-final records must not defer {} predecessor patches",
-        output.raw_logs.device_aux_patches.len()
+        !output.raw_logs.device_aux_patches.is_empty(),
+        "G2 opaque direct-final predecessor fields must use the device patch seam"
+    );
+    assert!(
+        !output.raw_logs.device_aux_arena_references.is_empty(),
+        "checked G2 emission must retain full opaque-arena references"
     );
     let segment = output.g2_segment.take().expect("G2 opaque segment");
+    let residual_event_count = segment
+        .header_acquire()
+        .expect("G2 opaque committed header")
+        .residual_event_count as usize;
+    let legacy_program_log_cap = (retired as usize + 16).max(64);
+    let legacy_memory_log_cap = legacy_program_log_cap * 8 + 64;
+    assert!(
+        residual_event_count > legacy_memory_log_cap,
+        "fixture must exceed the legacy raw-log-derived residual capacity"
+    );
+    assert_eq!(
+        output.raw_logs.device_aux_references.len(),
+        residual_event_count,
+        "checked G2 emission must retain one predecessor reference per residual event"
+    );
+    for patch in &output.raw_logs.device_aux_patches {
+        let reference = output.raw_logs.device_aux_references[patch.event_index as usize];
+        let expected = match patch.kind {
+            openvm_circuit::arch::rvr::DEVICE_AUX_PATCH_U32 => u64::from(reference.prev_timestamp),
+            openvm_circuit::arch::rvr::DEVICE_AUX_PATCH_U64 => reference.prev_value,
+            kind => panic!("invalid G2 opaque device patch kind {kind}"),
+        };
+        assert_eq!(patch.expected, expected);
+    }
     let decode = output
         .delta_decode_precomputed
         .as_deref()

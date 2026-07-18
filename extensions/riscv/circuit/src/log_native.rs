@@ -1872,6 +1872,7 @@ where
                 core_off_matrix: 0,
                 layout: ArenaNativeLayout::Custom {
                     residual_memory_chronology: true,
+                    max_residual_events_per_record: 0,
                     layout_id: "openvm.rvr.phantom-final.v1",
                 },
             },
