@@ -55,6 +55,9 @@ impl CommitCmd {
             openvm_config: self.openvm_config.clone(),
             input: None,
             mode: ExecutionMode::Pure,
+            profile_execution: false,
+            profile_output: None,
+            profile_hz: None,
         };
         let (exe, target_name_stem) = load_or_build_exe(&run_args, &self.cargo_args)?;
         let (manifest_path, _) =
