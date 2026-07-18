@@ -1,3 +1,5 @@
+#[cfg(feature = "rvr")]
+use std::fs;
 use std::{slice::from_ref, sync::Arc};
 
 use eyre::Result;
@@ -29,9 +31,6 @@ use openvm_verify_stark_host::{
     VmStarkProof,
 };
 
-#[cfg(feature = "rvr")]
-use crate::ExecutableInput;
-
 use crate::{
     builder::GenericSdkBuilder,
     config::{
@@ -40,6 +39,11 @@ use crate::{
     },
     prover::{DeferralAggProver, DeferralHookCommits, DeferralProof, MultiDeferralCircuitProver},
     DeferralInput, Sdk, StdIn, F,
+};
+#[cfg(feature = "rvr")]
+use crate::{
+    compiled::{load_metered_artifact_metadata, metered_artifact_metadata_path},
+    ExecutableInput,
 };
 
 cfg_if::cfg_if! {
@@ -582,25 +586,25 @@ fn test_sdk_compiled_metered_save_load_roundtrip() -> Result<()> {
         lib_path.file_stem().and_then(|stem| stem.to_str()),
         Some("libopenvm-metered")
     );
-    let mut metadata = crate::compiled::load_metered_artifact_metadata(&lib_path)?;
+    let mut metadata = load_metered_artifact_metadata(&lib_path)?;
     assert!(!metadata.profile_compatible);
-    let metadata_path = crate::compiled::metered_artifact_metadata_path(&lib_path);
+    let metadata_path = metered_artifact_metadata_path(&lib_path);
 
     let mut metadata_without_compatibility = serde_json::to_value(&metadata)?;
     metadata_without_compatibility
         .as_object_mut()
         .unwrap()
         .remove("profile_compatible");
-    std::fs::write(
+    fs::write(
         &metadata_path,
         serde_json::to_vec_pretty(&metadata_without_compatibility)?,
     )?;
-    let missing_compatibility = crate::compiled::load_metered_artifact_metadata(&lib_path)
+    let missing_compatibility = load_metered_artifact_metadata(&lib_path)
         .expect_err("metadata without profile_compatible must be rejected");
     assert!(format!("{missing_compatibility:?}").contains("missing field `profile_compatible`"));
 
     metadata.profile_compatible = true;
-    std::fs::write(&metadata_path, serde_json::to_vec_pretty(&metadata)?)?;
+    fs::write(&metadata_path, serde_json::to_vec_pretty(&metadata)?)?;
     drop(compiled_a);
 
     let profile_mismatch = sdk
@@ -611,7 +615,7 @@ fn test_sdk_compiled_metered_save_load_roundtrip() -> Result<()> {
         .to_string()
         .contains("artifact profile compatibility mismatch"));
     metadata.profile_compatible = false;
-    std::fs::write(&metadata_path, serde_json::to_vec_pretty(&metadata)?)?;
+    fs::write(&metadata_path, serde_json::to_vec_pretty(&metadata)?)?;
 
     let mismatch = sdk.load_compiled(&lib_path, exe.clone());
     assert!(mismatch.is_err());
@@ -644,7 +648,7 @@ fn test_sdk_profiled_artifact_save_load_and_unprofiled_execution() -> Result<()>
 
     let tmp = tempfile::tempdir()?;
     let elf_path = tmp.path().join("fibonacci.elf");
-    std::fs::write(&elf_path, elf_bytes)?;
+    fs::write(&elf_path, elf_bytes)?;
 
     let mut stdin = StdIn::default();
     stdin.write(&100u64);
