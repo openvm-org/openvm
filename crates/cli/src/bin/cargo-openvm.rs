@@ -29,6 +29,7 @@ pub enum VmCliCommands {
     Keygen(KeygenCmd),
     Init(InitCmd),
     Prove(ProveCmd),
+    #[command(visible_alias = "execute")]
     Run(RunCmd),
     Setup(SetupCmd),
     Toolchain(ToolchainCmd),

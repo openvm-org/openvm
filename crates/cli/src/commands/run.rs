@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use clap::{Parser, ValueEnum};
 use eyre::{eyre, Result};
@@ -18,6 +18,8 @@ use crate::{
         read_config_toml_or_default,
     },
 };
+
+const DEFAULT_EXECUTION_PROFILE_HZ: u32 = 1_000;
 
 #[derive(Clone, Debug, ValueEnum)]
 pub enum ExecutionMode {
@@ -69,6 +71,30 @@ pub struct RunArgs {
         help_heading = "OpenVM Options"
     )]
     pub mode: ExecutionMode,
+
+    #[arg(
+        long,
+        help = "Sample RVR guest call stacks, upload them, and print a Firefox Profiler link",
+        help_heading = "Execution Profiling"
+    )]
+    pub profile_execution: bool,
+
+    #[arg(
+        long,
+        value_name = "PATH",
+        help = "Also save the uploaded execution profile as profiling.json.gz",
+        help_heading = "Execution Profiling"
+    )]
+    pub profile_output: Option<PathBuf>,
+
+    #[arg(
+        long,
+        value_name = "HZ",
+        value_parser = clap::value_parser!(u32).range(1..=1_000_000),
+        help = "Guest call-stack sampling frequency (default: 1000)",
+        help_heading = "Execution Profiling"
+    )]
+    pub profile_hz: Option<u32>,
 }
 
 impl From<RunArgs> for BuildArgs {
@@ -222,20 +248,68 @@ impl From<RunCargoArgs> for BuildCargoArgs {
 
 impl RunCmd {
     pub fn run(&self) -> Result<()> {
+        let profile_execution = self.run_args.profile_execution
+            || self.run_args.profile_output.is_some()
+            || self.run_args.profile_hz.is_some();
+        if profile_execution && !matches!(self.run_args.mode, ExecutionMode::Pure) {
+            return Err(eyre!(
+                "--profile-execution is only supported with --mode pure"
+            ));
+        }
+        if profile_execution && self.run_args.exe.is_some() {
+            return Err(eyre!(
+                "--profile-execution requires building the guest so frame pointers and debug info can be enabled; --exe is not supported"
+            ));
+        }
+        if profile_execution && !cfg!(feature = "rvr") {
+            return Err(eyre!(
+                "--profile-execution requires cargo-openvm to be built with the `rvr` feature"
+            ));
+        }
+        if profile_execution && !cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+            return Err(eyre!("--profile-execution currently requires Linux x86_64"));
+        }
+
+        let mut guest_elf_path = None;
         let exe_path = if let Some(exe) = &self.run_args.exe {
-            exe
+            exe.clone()
         } else {
             // Build and get the executable name
             let target_name = get_single_target_name(&self.cargo_args)?;
-            let build_args = self.run_args.clone().into();
+            let mut build_args: BuildArgs = self.run_args.clone().into();
+            if profile_execution {
+                build_args.rustc_flags.extend([
+                    "-Cforce-frame-pointers=yes".to_string(),
+                    "-Cdebuginfo=2".to_string(),
+                ]);
+                build_args.quiet_status = true;
+            }
             let cargo_args = self.cargo_args.clone().into();
             let output_dir = build(&build_args, &cargo_args)?;
-            &output_dir.join(target_name.with_extension(VMEXE_EXT))
+            if profile_execution {
+                let (manifest_path, _) =
+                    get_manifest_path_and_dir(&self.cargo_args.manifest.manifest_path)?;
+                let target_dir =
+                    get_target_dir(&self.cargo_args.manifest.target_dir, &manifest_path);
+                let is_example = target_name.parent() == Some(Path::new("examples"));
+                let file_name = target_name
+                    .file_name()
+                    .ok_or_else(|| eyre!("invalid guest target name"))?;
+                guest_elf_path = Some(
+                    openvm_build::get_dir_with_profile(
+                        target_dir,
+                        &self.cargo_args.profile,
+                        is_example,
+                    )
+                    .join(file_name),
+                );
+            }
+            output_dir.join(target_name.with_extension(VMEXE_EXT))
         };
 
         let (manifest_path, manifest_dir) =
             get_manifest_path_and_dir(&self.cargo_args.manifest.manifest_path)?;
-        let exe: VmExe<F> = read_object_from_file(exe_path)?;
+        let exe: VmExe<F> = read_object_from_file(&exe_path)?;
         let inputs = read_to_stdin(&self.run_args.input)?;
 
         let sdk = if matches!(
@@ -266,6 +340,38 @@ impl RunCmd {
             let app_config = read_config_toml_or_default(&config_path)?;
             Sdk::new(app_config, AggregationSystemParams::default())?
         };
+
+        if profile_execution {
+            #[cfg(feature = "rvr")]
+            {
+                let guest_elf_path = guest_elf_path
+                    .as_deref()
+                    .ok_or_else(|| eyre!("guest ELF path is unavailable"))?;
+                let raw_profile = tempfile::NamedTempFile::new()
+                    .map_err(|error| eyre!("failed to create temporary profile: {error}"))?;
+                let sample_hz = self
+                    .run_args
+                    .profile_hz
+                    .unwrap_or(DEFAULT_EXECUTION_PROFILE_HZ);
+                let guard = crate::execution_profile::GuestProfileGuard::start(
+                    raw_profile.path(),
+                    sample_hz,
+                );
+                let output = sdk.compile_and_execute(exe, inputs)?;
+                drop(guard);
+                eprintln!("[openvm] Execution output: {output:?}");
+                let url = crate::execution_profile::create_upload_and_optionally_save(
+                    raw_profile.path(),
+                    guest_elf_path,
+                    sample_hz,
+                    self.run_args.profile_output.as_deref(),
+                )?;
+                println!("{url}");
+                return Ok(());
+            }
+            #[cfg(not(feature = "rvr"))]
+            unreachable!("profile feature check above must reject this configuration");
+        }
 
         match self.run_args.mode {
             ExecutionMode::Pure => {
