@@ -360,7 +360,14 @@ impl CProject {
     }
 
     fn block_abi(&self) -> BlockAbi {
-        self.execution_kind.block_abi()
+        if self.execution_kind == RvrExecutionKind::Preflight
+            && self.g2_records
+            && self.g2_emission_mode == G2EmissionMode::Production
+        {
+            BlockAbi::PreflightInstretCountdown
+        } else {
+            self.execution_kind.block_abi()
+        }
     }
 
     fn validate_block_abi(&self) -> io::Result<()> {
@@ -407,6 +414,9 @@ impl CProject {
             BlockAbi::InstretCountdown => {
                 out.push_str(", state->mode_state.target - state->mode_state.retired");
             }
+            BlockAbi::PreflightInstretCountdown => {
+                out.push_str(", state->target_instret");
+            }
             BlockAbi::Metered => {
                 out.push_str(", state->mode_state.check_counter, state->mode_state.trace_heights");
             }
@@ -416,7 +426,9 @@ impl CProject {
     fn append_block_abi_args_from_params(&self, out: &mut String) {
         match self.block_abi() {
             BlockAbi::Plain => {}
-            BlockAbi::InstretCountdown => out.push_str(", instret_remaining"),
+            BlockAbi::InstretCountdown | BlockAbi::PreflightInstretCountdown => {
+                out.push_str(", instret_remaining");
+            }
             BlockAbi::Metered => out.push_str(", check_counter, trace_heights"),
         }
     }
@@ -446,11 +458,13 @@ impl CProject {
         }
         match self.block_abi() {
             BlockAbi::Plain => {}
-            BlockAbi::InstretCountdown => params.push(if include_names {
-                "uint64_t instret_remaining".to_string()
-            } else {
-                "uint64_t".to_string()
-            }),
+            BlockAbi::InstretCountdown | BlockAbi::PreflightInstretCountdown => {
+                params.push(if include_names {
+                    "uint64_t instret_remaining".to_string()
+                } else {
+                    "uint64_t".to_string()
+                })
+            }
             BlockAbi::Metered => {
                 params.push(if include_names {
                     "uint32_t check_counter".to_string()
@@ -1642,11 +1656,19 @@ preflight_g2_claim(G2ProducerV1* restrict g2, uint32_t slot,
                 writeln!(out, "    check_counter -= {insn_count}u;").unwrap();
             }
             RvrExecutionKind::Preflight => {
-                writeln!(
-                    out,
-                    "    if (unlikely(state->target_instret != UINT64_MAX && (state->target_instret < {insn_count}u || state->instret > state->target_instret - {insn_count}u))) {{"
-                )
-                .unwrap();
+                if self.block_abi() == BlockAbi::PreflightInstretCountdown {
+                    writeln!(
+                        out,
+                        "    if (unlikely(instret_remaining < {insn_count}u)) {{"
+                    )
+                    .unwrap();
+                } else {
+                    writeln!(
+                        out,
+                        "    if (unlikely(state->target_instret != UINT64_MAX && (state->target_instret < {insn_count}u || state->instret > state->target_instret - {insn_count}u))) {{"
+                    )
+                    .unwrap();
+                }
                 writeln!(
                     out,
                     "        rv_set_status_at(state, 0x{pc:08x}ull, OPENVM_EXEC_SUSPENDED, 0);"
@@ -1654,6 +1676,9 @@ preflight_g2_claim(G2ProducerV1* restrict g2, uint32_t slot,
                 .unwrap();
                 writeln!(out, "        return;").unwrap();
                 writeln!(out, "    }}").unwrap();
+                if self.block_abi() == BlockAbi::PreflightInstretCountdown {
+                    writeln!(out, "    instret_remaining -= {insn_count}u;").unwrap();
+                }
             }
         }
     }
@@ -1664,7 +1689,9 @@ preflight_g2_claim(G2ProducerV1* restrict g2, uint32_t slot,
         }
         let pc = block.start_pc;
         let insn_count = block.insn_count();
-        writeln!(out, "    state->instret += {insn_count}u;").unwrap();
+        if self.block_abi() != BlockAbi::PreflightInstretCountdown {
+            writeln!(out, "    state->instret += {insn_count}u;").unwrap();
+        }
         if self.delta_records {
             writeln!(out, "    trace_block(state, 0x{pc:08x}ull, {insn_count}u);").unwrap();
         }
@@ -1850,6 +1877,7 @@ preflight_g2_claim(G2ProducerV1* restrict g2, uint32_t slot,
                 )
                 .unwrap();
             }
+            BlockAbi::PreflightInstretCountdown => {}
             BlockAbi::Metered => {
                 writeln!(src, "    state->mode_state.check_counter = check_counter;").unwrap();
             }
@@ -2153,6 +2181,28 @@ mod tests {
 
         assert_eq!(boundary, "    state->mode_state.instret += 1u;\n");
         assert!(!project.typedef_params().contains("instret_remaining"));
+    }
+
+    #[test]
+    fn production_g2_carries_preflight_countdown_without_state_rmw() {
+        let mut project = CProject::new(Path::new("unused"), "test", RvrExecutionKind::Preflight);
+        project.g2_records = true;
+        project.g2_emission_mode = G2EmissionMode::Production;
+        let block = single_instruction_block();
+
+        let mut boundary = String::new();
+        project.emit_block_boundary(&mut boundary, &block);
+        let mut started = String::new();
+        project.emit_preflight_block_started(&mut started, &block);
+
+        assert!(project.typedef_params().ends_with(", uint64_t"));
+        assert!(project
+            .fn_args_from_state()
+            .ends_with(", state->target_instret"));
+        assert!(boundary.contains("if (unlikely(instret_remaining < 1u))"));
+        assert!(boundary.contains("instret_remaining -= 1u;"));
+        assert!(!boundary.contains("state->instret"));
+        assert!(!started.contains("state->instret"));
     }
 
     #[test]

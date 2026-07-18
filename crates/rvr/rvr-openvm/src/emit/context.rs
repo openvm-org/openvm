@@ -50,6 +50,8 @@ pub(crate) enum BlockAbi {
     Plain,
     /// Pure execution with an instret countdown.
     InstretCountdown,
+    /// Production G2 preflight with a register-carried instret countdown.
+    PreflightInstretCountdown,
     /// Metered execution with its periodic-check counter and trace heights.
     Metered,
 }
@@ -58,7 +60,7 @@ impl BlockAbi {
     pub(crate) const fn extra_args(self) -> usize {
         match self {
             Self::Plain => 0,
-            Self::InstretCountdown => 1,
+            Self::InstretCountdown | Self::PreflightInstretCountdown => 1,
             Self::Metered => 2,
         }
     }
@@ -2750,7 +2752,9 @@ impl<'a> EmitContext<'a> {
         }
         match self.block_abi {
             BlockAbi::Plain => {}
-            BlockAbi::InstretCountdown => args.push_str(", instret_remaining"),
+            BlockAbi::InstretCountdown | BlockAbi::PreflightInstretCountdown => {
+                args.push_str(", instret_remaining");
+            }
             BlockAbi::Metered => args.push_str(", check_counter, trace_heights"),
         }
         args
@@ -2771,6 +2775,7 @@ impl<'a> EmitContext<'a> {
                     "state->mode_state.retired = state->mode_state.target - instret_remaining;",
                 );
             }
+            BlockAbi::PreflightInstretCountdown => {}
             BlockAbi::Metered => {
                 self.write_line("state->mode_state.check_counter = check_counter;");
             }
