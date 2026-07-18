@@ -1230,6 +1230,8 @@ where
 
 /// Phantom sub-executors
 mod phantom {
+    use std::{iter::repeat_with, sync::Once};
+
     use eyre::bail;
     use openvm_circuit::{
         arch::{PhantomSubExecutor, Streams},
@@ -1257,19 +1259,13 @@ mod phantom {
             _: u32,
             _: u16,
         ) -> eyre::Result<()> {
-            let mut hint = match streams.input_stream.pop_front() {
-                Some(hint) => hint,
+            let input = match streams.input_stream.pop_front() {
+                Some(input) => input,
                 None => {
                     bail!("EndOfInputStream");
                 }
             };
-            streams.hint_stream.clear();
-            let hint_len = hint.len() as u64;
-            streams.hint_stream.extend(hint_len.to_le_bytes());
-            // Pad the hint payload to full dwords so RV64 `HINT_BUFFER` reads can consume it.
-            let capacity = hint.len().div_ceil(HINT_DWORD_BYTES) * HINT_DWORD_BYTES;
-            hint.resize(capacity, 0u8);
-            streams.hint_stream.extend(hint);
+            streams.hint_stream.set_input(input);
             Ok(())
         }
     }
@@ -1285,16 +1281,15 @@ mod phantom {
             _: u32,
             _: u16,
         ) -> eyre::Result<()> {
-            static WARN_ONCE: std::sync::Once = std::sync::Once::new();
+            static WARN_ONCE: Once = Once::new();
             WARN_ONCE.call_once(|| {
                 eprintln!("WARNING: Using fixed-seed RNG for deterministic randomness. Consider security implications for your use case.");
             });
 
             let byte_len = read_rv64_register_as_u32(memory, a) as usize * HINT_DWORD_BYTES;
-            streams.hint_stream.clear();
             streams
                 .hint_stream
-                .extend(std::iter::repeat_with(|| rng.random::<u8>()).take(byte_len));
+                .set_hint_from_iter(repeat_with(|| rng.random::<u8>()).take(byte_len));
             Ok(())
         }
     }

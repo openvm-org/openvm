@@ -5,7 +5,7 @@
 //! extensions.
 #![cfg(feature = "rvr")]
 
-use std::{collections::VecDeque, ffi::c_void, io::Write};
+use std::{ffi::c_void, io::Write, iter::repeat_with};
 
 use openvm_circuit::arch::rvr::io::{check_mem_bounds_range, OpenVmIoState};
 use openvm_instructions::{
@@ -397,19 +397,13 @@ pub struct Rv64IoHostCallbacks {
 
 // ── Callback implementations ────────────────────────────────────────────────
 
-/// HintInput: pop next input record from VmState's input_stream and overwrite
-/// the active hint stream with `[len: u64 LE][data][padding to 8-byte align]`,
-/// stored directly as bytes.
+/// Makes the next input record available without copying its payload.
 pub extern "C" fn host_hint_input(ctx: *mut c_void) {
     let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_>) };
-    io.hint_stream.clear();
-    if let Some(mut vec) = io.input_stream.pop_front() {
-        let data_len = vec.len();
-        let len_bytes = (data_len as u64).to_le_bytes();
-        io.hint_stream.extend(len_bytes);
-        let padded_len = data_len.div_ceil(RV64_REGISTER_NUM_LIMBS) * RV64_REGISTER_NUM_LIMBS;
-        vec.resize(padded_len, 0u8);
-        io.hint_stream.extend(vec);
+    if let Some(bytes) = io.input_stream.pop_front() {
+        io.hint_stream.set_input(bytes);
+    } else {
+        io.hint_stream.clear();
     }
 }
 
@@ -430,34 +424,15 @@ pub extern "C" fn host_print_str(ctx: *mut c_void, ptr: u64, len: u32) {
 pub extern "C" fn host_hint_random(ctx: *mut c_void, num_words: u32) {
     let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_>) };
     let nbytes = num_words as usize * RV64_REGISTER_NUM_LIMBS;
-    io.hint_stream.clear();
-    for _ in 0..nbytes {
-        io.hint_stream.push_back(io.rng.random::<u8>());
-    }
-}
-
-#[inline]
-fn drain_hint_stream_into(hint_stream: &mut VecDeque<u8>, dst: &mut [u8]) {
-    debug_assert!(hint_stream.len() >= dst.len());
-    let nbytes = dst.len();
-    // A wrapped VecDeque exposes its logical contents as two contiguous chunks.
-    let (front_chunk, wrapped_chunk) = hint_stream.as_slices();
-    if nbytes <= front_chunk.len() {
-        dst.copy_from_slice(&front_chunk[..nbytes]);
-    } else {
-        let (dst_front, dst_wrapped) = dst.split_at_mut(front_chunk.len());
-        dst_front.copy_from_slice(front_chunk);
-        dst_wrapped.copy_from_slice(&wrapped_chunk[..dst_wrapped.len()]);
-    }
-    // Draining a prefix advances the deque after its bytes have been copied.
-    drop(hint_stream.drain(..nbytes));
+    io.hint_stream
+        .set_hint_from_iter(repeat_with(|| io.rng.random::<u8>()).take(nbytes));
 }
 
 /// HINT_STOREW: pop one rv64 register-width word (8 bytes) from the hint stream
 /// and write it to guest memory at `dest_addr`.
 pub extern "C" fn host_hint_storew(ctx: *mut c_void, dest_addr: u64) {
     let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_>) };
-    if io.hint_stream.len() < RV64_REGISTER_NUM_LIMBS || io.memory_ptr.is_null() {
+    if io.hint_stream.remaining() < RV64_REGISTER_NUM_LIMBS || io.memory_ptr.is_null() {
         return;
     }
     check_mem_bounds_range(dest_addr, RV64_REGISTER_NUM_LIMBS);
@@ -467,7 +442,7 @@ pub extern "C" fn host_hint_storew(ctx: *mut c_void, dest_addr: u64) {
             RV64_REGISTER_NUM_LIMBS,
         )
     };
-    drain_hint_stream_into(io.hint_stream, dst);
+    io.hint_stream.copy_to_slice(dst);
 }
 
 /// HINT_BUFFER: pop `num_words * RV64_REGISTER_NUM_LIMBS` bytes from the hint stream
@@ -475,13 +450,13 @@ pub extern "C" fn host_hint_storew(ctx: *mut c_void, dest_addr: u64) {
 pub extern "C" fn host_hint_buffer(ctx: *mut c_void, dest_addr: u64, num_words: u32) {
     let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_>) };
     let nbytes = num_words as usize * RV64_REGISTER_NUM_LIMBS;
-    if io.hint_stream.len() < nbytes || io.memory_ptr.is_null() {
+    if io.hint_stream.remaining() < nbytes || io.memory_ptr.is_null() {
         return;
     }
     check_mem_bounds_range(dest_addr, nbytes);
     let dst =
         unsafe { std::slice::from_raw_parts_mut(io.memory_ptr.add(dest_addr as usize), nbytes) };
-    drain_hint_stream_into(io.hint_stream, dst);
+    io.hint_stream.copy_to_slice(dst);
 }
 
 /// Host callback for stores to `PUBLIC_VALUES_AS`.
@@ -501,8 +476,9 @@ pub extern "C" fn host_reveal(ctx: *mut c_void, src_val: u64, ptr: u64, offset: 
 
 #[cfg(test)]
 mod tests {
-    use std::collections::VecDeque;
+    use std::{collections::VecDeque, ptr::null_mut};
 
+    use openvm_circuit::arch::HintStream;
     use openvm_instructions::instruction::Instruction;
     use p3_baby_bear::BabyBear;
     use rand::{rngs::StdRng, SeedableRng};
@@ -672,7 +648,7 @@ mod tests {
     #[test]
     fn host_reveal_writes_public_values_slice() {
         let mut input_stream = VecDeque::new();
-        let mut hint_stream = VecDeque::new();
+        let mut hint_stream = HintStream::default();
         let mut rng = StdRng::seed_from_u64(0);
         let mut memory = vec![0u8; 16];
         let mut public_values = vec![0u8; 16];
@@ -684,7 +660,7 @@ mod tests {
             rng: &mut rng,
             memory_ptr: memory.as_mut_ptr(),
             public_values: &mut public_values,
-            deferral_memory: std::ptr::null_mut(),
+            deferral_memory: null_mut(),
             deferral_memory_len_bytes: 0,
             deferrals: &mut deferrals,
         };
@@ -703,7 +679,7 @@ mod tests {
     #[test]
     fn host_reveal_honors_store_width() {
         let mut input_stream = VecDeque::new();
-        let mut hint_stream = VecDeque::new();
+        let mut hint_stream = HintStream::default();
         let mut rng = StdRng::seed_from_u64(0);
         let mut memory = vec![0u8; 16];
         let mut public_values = vec![0u8; 16];
@@ -715,7 +691,7 @@ mod tests {
             rng: &mut rng,
             memory_ptr: memory.as_mut_ptr(),
             public_values: &mut public_values,
-            deferral_memory: std::ptr::null_mut(),
+            deferral_memory: null_mut(),
             deferral_memory_len_bytes: 0,
             deferrals: &mut deferrals,
         };
@@ -752,14 +728,10 @@ mod tests {
     }
 
     #[test]
-    fn host_hint_buffer_bulk_copies_wrapped_stream() {
+    fn host_hint_buffer_copies_to_guest_memory() {
         let mut input_stream = VecDeque::new();
-        let mut hint_stream = VecDeque::with_capacity(16);
-        hint_stream.extend(0u8..14);
-        hint_stream.drain(..10);
-        hint_stream.extend(14u8..22);
-        let (first, second) = hint_stream.as_slices();
-        assert!(first.len() < RV64_REGISTER_NUM_LIMBS && !second.is_empty());
+        let mut hint_stream = HintStream::default();
+        hint_stream.set_hint((10u8..22).collect());
 
         let mut rng = StdRng::seed_from_u64(0);
         let mut memory = vec![0u8; 16];
@@ -771,7 +743,7 @@ mod tests {
             rng: &mut rng,
             memory_ptr: memory.as_mut_ptr(),
             public_values: &mut public_values,
-            deferral_memory: std::ptr::null_mut(),
+            deferral_memory: null_mut(),
             deferral_memory_len_bytes: 0,
             deferrals: &mut deferrals,
         };
@@ -779,9 +751,38 @@ mod tests {
         host_hint_buffer(&mut io as *mut OpenVmIoState<'_> as *mut c_void, 3, 1);
 
         assert_eq!(&memory[3..11], &(10u8..18).collect::<Vec<_>>());
-        assert_eq!(
-            io.hint_stream.iter().copied().collect::<Vec<_>>(),
-            (18u8..22).collect::<Vec<_>>()
-        );
+        assert_eq!(io.hint_stream.remaining(), 4);
+    }
+
+    #[test]
+    fn host_input_callbacks_expose_length_payload_and_padding() {
+        let payload = (1u8..=9).collect::<Vec<_>>();
+        let mut input_stream = VecDeque::from([payload.clone()]);
+        let mut hint_stream = HintStream::default();
+        let mut rng = StdRng::seed_from_u64(0);
+        let mut memory = vec![0xa5; 24];
+        let mut public_values = vec![];
+        let mut deferrals = Vec::new();
+        let mut io = OpenVmIoState {
+            input_stream: &mut input_stream,
+            hint_stream: &mut hint_stream,
+            rng: &mut rng,
+            memory_ptr: memory.as_mut_ptr(),
+            public_values: &mut public_values,
+            deferral_memory: null_mut(),
+            deferral_memory_len_bytes: 0,
+            deferrals: &mut deferrals,
+        };
+        let ctx = &mut io as *mut OpenVmIoState<'_> as *mut c_void;
+
+        host_hint_input(ctx);
+        host_hint_storew(ctx, 0);
+        host_hint_buffer(ctx, 8, 2);
+
+        assert_eq!(&memory[..8], &(payload.len() as u64).to_le_bytes());
+        assert_eq!(&memory[8..17], payload);
+        assert_eq!(&memory[17..], &[0; 7]);
+        assert_eq!(io.hint_stream.remaining(), 0);
+        assert!(io.input_stream.is_empty());
     }
 }
