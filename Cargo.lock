@@ -1457,11 +1457,9 @@ version = "2.0.0"
 dependencies = [
  "aws-config",
  "aws-sdk-s3",
- "base64 0.22.1",
  "clap",
  "eyre",
  "flate2",
- "fxprof-processed-profile",
  "hex",
  "include_dir",
  "indicatif",
@@ -5271,13 +5269,19 @@ dependencies = [
 name = "openvm-prof"
 version = "2.0.0"
 dependencies = [
+ "base64 0.22.1",
  "clap",
  "eyre",
+ "flate2",
+ "fxprof-processed-profile",
  "itertools 0.14.0",
  "memmap2",
  "num-format",
+ "openvm-circuit",
+ "reqwest",
  "serde",
  "serde_json",
+ "tempfile",
 ]
 
 [[package]]
@@ -5446,6 +5450,7 @@ dependencies = [
  "openvm-continuations",
  "openvm-cuda-backend",
  "openvm-deferral-circuit",
+ "openvm-prof",
  "openvm-recursion-circuit",
  "openvm-sdk-config",
  "openvm-stark-backend",
