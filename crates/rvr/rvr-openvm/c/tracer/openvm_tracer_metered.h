@@ -350,15 +350,15 @@ static __attribute__((always_inline)) inline void write_mem_u64_range(
   write_mem_u64_range_raw(state, base_addr, vals, num_words);
 }
 
-/* Execution inputs do not create VM memory accesses. */
-static __attribute__((always_inline)) inline uint64_t
-read_mem_u64_execution_input(RvState* restrict state, uint64_t addr) {
+/* Peeking at a value does not create a VM memory access. */
+static __attribute__((always_inline)) inline uint64_t peek_mem_u64(
+    RvState* restrict state, uint64_t addr) {
   return read_mem_u64(state->memory, addr);
 }
 
-static __attribute__((always_inline)) inline void
-read_mem_u64_range_execution_input(RvState* restrict state, uint64_t base_addr,
-                                   uint64_t* restrict out, uint32_t num_words) {
+static __attribute__((always_inline)) inline void peek_mem_u64_range(
+    RvState* restrict state, uint64_t base_addr, uint64_t* restrict out,
+    uint32_t num_words) {
   read_mem_u64_range_raw(state, base_addr, out, num_words);
 }
 

@@ -52,8 +52,8 @@ impl ExtInstr for HintFinalExpInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rs1 = ctx.read_reg_execution_input(self.rs1_reg);
-        let rs2 = ctx.read_reg_execution_input(self.rs2_reg);
+        let rs1 = ctx.peek_reg(self.rs1_reg);
+        let rs2 = ctx.peek_reg(self.rs2_reg);
         ctx.emit_call(self.curve.ffi_symbol(), &["state", &rs1, &rs2]);
     }
 

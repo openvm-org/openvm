@@ -93,10 +93,7 @@ pub struct Int256AluInstr {
     pub rs2_reg: Reg,
     /// The ALU operation to perform (selects the FFI function at codegen time).
     pub op: Int256AluOp,
-    /// Chip index for metering. Currently not consumed by the FFI (each
-    /// instruction is one row already counted by the per-block chip update
-    /// emitted at block entry), kept on the IR for parity with other
-    /// extensions and future trace-chip use.
+    /// AIR index associated with this instruction.
     pub chip_idx: Option<AirIndex>,
 }
 

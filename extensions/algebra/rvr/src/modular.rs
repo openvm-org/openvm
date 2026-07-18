@@ -177,7 +177,7 @@ impl ExtInstr for HintSqrtInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rs1 = ctx.read_reg_execution_input(self.rs1_reg);
+        let rs1 = ctx.peek_reg(self.rs1_reg);
         let mod_literal = format_c_byte_array(&self.modulus);
         let nqr_literal = format_c_byte_array(&self.non_qr_bytes);
         ctx.write_line("{");

@@ -1,3 +1,5 @@
+use crate::MemWidth;
+
 /// Extra trace rows added by one extension instruction.
 ///
 /// The PC-to-chip mapping already counts the instruction's main row. This
@@ -20,10 +22,9 @@ pub trait ExtEmitCtx {
     /// Read a register as an AIR-visible memory access.
     fn read_reg(&mut self, idx: u8) -> String;
 
-    /// Read a register whose value affects execution but is not an AIR memory
-    /// access. Value tracing records the value without advancing the memory
-    /// timestamp.
-    fn read_reg_execution_input(&mut self, idx: u8) -> String;
+    /// Get a register value without creating an AIR memory access. Value
+    /// tracing records the value without advancing the memory timestamp.
+    fn peek_reg(&mut self, idx: u8) -> String;
 
     /// Write a register, tracing it when required by the emission mode.
     fn write_reg(&mut self, idx: u8, val: &str);
@@ -84,7 +85,7 @@ pub trait ExtEmitCtx {
     /// Record the pages containing one fixed-width access for metering.
     ///
     /// This records the address, not the accessed value.
-    fn trace_page_access(&mut self, addr: &str, size: u8, addr_space: u32);
+    fn trace_page_access(&mut self, addr: &str, width: MemWidth, addr_space: u32);
 
     /// Record pages touched by a dword range for metering (one dword is 8 bytes).
     ///

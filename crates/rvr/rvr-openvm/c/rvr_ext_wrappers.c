@@ -16,15 +16,13 @@
 
 /* ── Extension memory boundary ─────────────────────────────────────── */
 
-uint64_t read_mem_u64_execution_input_wrapper(RvState* state, uint64_t addr) {
-  return read_mem_u64_execution_input(state, addr);
+uint64_t peek_mem_u64_wrapper(RvState* state, uint64_t addr) {
+  return peek_mem_u64(state, addr);
 }
 
-void read_mem_u64_range_execution_input_wrapper(RvState* state,
-                                                uint64_t base_addr,
-                                                uint64_t* out,
-                                                uint32_t num_words) {
-  read_mem_u64_range_execution_input(state, base_addr, out, num_words);
+void peek_mem_u64_range_wrapper(RvState* state, uint64_t base_addr,
+                                uint64_t* out, uint32_t num_words) {
+  peek_mem_u64_range(state, base_addr, out, num_words);
 }
 
 void read_mem_u64_range_wrapper(RvState* state, uint64_t base_addr,

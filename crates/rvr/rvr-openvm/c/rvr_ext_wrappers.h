@@ -5,11 +5,9 @@
 
 #include "openvm_state.h"
 
-uint64_t read_mem_u64_execution_input_wrapper(RvState* state, uint64_t addr);
-void read_mem_u64_range_execution_input_wrapper(RvState* state,
-                                                uint64_t base_addr,
-                                                uint64_t* out,
-                                                uint32_t num_words);
+uint64_t peek_mem_u64_wrapper(RvState* state, uint64_t addr);
+void peek_mem_u64_range_wrapper(RvState* state, uint64_t base_addr,
+                                uint64_t* out, uint32_t num_words);
 void read_mem_u64_range_wrapper(RvState* state, uint64_t base_addr,
                                 uint64_t* out, uint32_t num_words);
 void write_mem_u64_range_wrapper(RvState* state, uint64_t base_addr,

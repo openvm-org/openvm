@@ -37,7 +37,7 @@ impl ExtInstr for HintStoreWInstr {
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         let ptr = ctx.read_reg(self.ptr_reg);
         ctx.emit_checked_call_without_page_flush("openvm_hint_storew", &[&ptr]);
-        ctx.trace_page_access(&ptr, RV64_REGISTER_BYTES as u8, RV64_MEMORY_AS);
+        ctx.trace_page_access(&ptr, MemWidth::Double, RV64_MEMORY_AS);
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -113,7 +113,7 @@ impl ExtInstr for RevealInstr {
         };
         let width = format!("{}u", self.width.bytes());
         ctx.emit_checked_call_without_page_flush("openvm_reveal", &[&src, &addr, &width]);
-        ctx.trace_page_access(&addr, self.width.bytes(), PUBLIC_VALUES_AS);
+        ctx.trace_page_access(&addr, self.width, PUBLIC_VALUES_AS);
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -152,8 +152,8 @@ impl ExtInstr for PrintStrInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let ptr = ctx.read_reg_execution_input(self.ptr_reg);
-        let len = ctx.read_reg_execution_input(self.len_reg);
+        let ptr = ctx.peek_reg(self.ptr_reg);
+        let len = ctx.peek_reg(self.len_reg);
         ctx.emit_checked_call_without_page_flush("openvm_print_str", &[&ptr, &len]);
     }
 
@@ -175,7 +175,7 @@ impl ExtInstr for HintRandomInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let n = ctx.read_reg_execution_input(self.num_words_reg);
+        let n = ctx.peek_reg(self.num_words_reg);
         ctx.emit_checked_call_without_page_flush("openvm_hint_random", &[&n]);
     }
 
@@ -538,7 +538,7 @@ mod tests {
             format!("r{idx}")
         }
 
-        fn read_reg_execution_input(&mut self, idx: u8) -> String {
+        fn peek_reg(&mut self, idx: u8) -> String {
             format!("r{idx}")
         }
 
@@ -597,7 +597,8 @@ mod tests {
             self.write_line("}");
         }
 
-        fn trace_page_access(&mut self, addr: &str, size: u8, addr_space: u32) {
+        fn trace_page_access(&mut self, addr: &str, width: MemWidth, addr_space: u32) {
+            let size = width.bytes();
             self.write_line(&format!(
                 "trace_page_access(state, {addr}, {size}u, {addr_space}u);"
             ));

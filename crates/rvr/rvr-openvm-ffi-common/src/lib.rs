@@ -9,9 +9,13 @@
 
 use std::ffi::c_void;
 
+use openvm_platform::{memory::MEM_SIZE, WORD_SIZE};
+
+const _: () = assert!(MEM_SIZE / WORD_SIZE <= u32::MAX as usize);
+
 extern "C" {
-    fn read_mem_u64_execution_input_wrapper(state: *mut c_void, addr: u64) -> u64;
-    fn read_mem_u64_range_execution_input_wrapper(
+    fn peek_mem_u64_wrapper(state: *mut c_void, addr: u64) -> u64;
+    fn peek_mem_u64_range_wrapper(
         state: *mut c_void,
         base_addr: u64,
         out: *mut u64,
@@ -86,7 +90,10 @@ pub fn u64s_as_bytes_mut(words: &mut [u64]) -> &mut [u8] {
 #[inline(always)]
 fn memory_word_count(len: usize) -> u32 {
     debug_assert!(len > 0, "memory word range must be non-empty");
-    debug_assert!(u32::try_from(len).is_ok());
+    debug_assert!(
+        len <= MEM_SIZE / WORD_SIZE,
+        "memory word range must fit in guest memory"
+    );
     len as u32
 }
 
@@ -99,7 +106,7 @@ fn memory_word_count(len: usize) -> u32 {
 ///
 /// # Safety
 ///
-/// `state` must point to a valid `RvState`. `out.len()` must fit in `u32`, and
+/// `state` must point to a valid `RvState`, and
 /// `[base_addr, base_addr + out.len() * WORD_SIZE)` must fit in guest memory.
 pub unsafe fn read_mem_words(state: *mut c_void, base_addr: u64, out: &mut [u64]) {
     let num_words = memory_word_count(out.len());
@@ -112,7 +119,7 @@ pub unsafe fn read_mem_words(state: *mut c_void, base_addr: u64, out: &mut [u64]
 ///
 /// # Safety
 ///
-/// `state` must point to a valid `RvState`. `vals.len()` must fit in `u32`, and
+/// `state` must point to a valid `RvState`, and
 /// `[base_addr, base_addr + vals.len() * WORD_SIZE)` must fit in guest memory.
 pub unsafe fn write_mem_words(state: *mut c_void, base_addr: u64, vals: &[u64]) {
     let num_words = memory_word_count(vals.len());
@@ -124,8 +131,8 @@ pub unsafe fn write_mem_words(state: *mut c_void, base_addr: u64, vals: &[u64]) 
 /// # Safety
 /// `state` must point to a valid `RvState`, and `addr` must address one u64 in
 /// guest memory.
-pub unsafe fn read_mem_u64_execution_input(state: *mut c_void, addr: u64) -> u64 {
-    read_mem_u64_execution_input_wrapper(state, addr)
+pub unsafe fn peek_mem_u64(state: *mut c_void, addr: u64) -> u64 {
+    peek_mem_u64_wrapper(state, addr)
 }
 
 /// Read guest words whose values affect execution but are not VM memory
@@ -134,9 +141,9 @@ pub unsafe fn read_mem_u64_execution_input(state: *mut c_void, addr: u64) -> u64
 /// # Safety
 /// `state` must point to a valid `RvState`. `out` must be non-empty, and its
 /// guest-memory range must be valid.
-pub unsafe fn read_mem_words_execution_input(state: *mut c_void, base_addr: u64, out: &mut [u64]) {
+pub unsafe fn peek_mem_words(state: *mut c_void, base_addr: u64, out: &mut [u64]) {
     let num_words = memory_word_count(out.len());
-    read_mem_u64_range_execution_input_wrapper(state, base_addr, out.as_mut_ptr(), num_words);
+    peek_mem_u64_range_wrapper(state, base_addr, out.as_mut_ptr(), num_words);
 }
 
 /// Record the pages touched by `num_words` consecutive words in `addr_space`.

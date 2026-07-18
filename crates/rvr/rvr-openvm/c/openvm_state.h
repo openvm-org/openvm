@@ -59,6 +59,7 @@ static __attribute__((always_inline)) inline bool rv_pc_is_dispatchable(
 
 /* Guard regions immediately before and after guest memory catch accesses
  * that cross either boundary.
+ * TODO: Mask addr with MEMORY_MASK as an extra safety measure.
  * Clang cannot prove the bounds used by these low-level memory and fixed-size
  * register-array helpers. */
 #pragma clang unsafe_buffer_usage begin

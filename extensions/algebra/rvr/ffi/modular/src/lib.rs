@@ -17,8 +17,7 @@ use rvr_openvm_ext_algebra_ffi_common::{
     write_field_256, FieldArith, KnownFieldArith,
 };
 use rvr_openvm_ext_ffi_common::{
-    ext_hint_stream_set, read_mem_words, read_mem_words_execution_input, u64s_as_bytes,
-    write_mem_words,
+    ext_hint_stream_set, peek_mem_words, read_mem_words, u64s_as_bytes, write_mem_words,
 };
 
 // ── Field structs ────────────────────────────────────────────────────────────
@@ -276,7 +275,7 @@ pub unsafe extern "C" fn rvr_ext_algebra_hint_sqrt(
 
     let num_words = limb_bytes_to_words(num_limbs);
     let mut words = vec![0u64; num_words as usize];
-    read_mem_words_execution_input(state, rs1_ptr, &mut words);
+    peek_mem_words(state, rs1_ptr, &mut words);
     let mut x_bytes = vec![0u8; num_limbs_usize];
     for (i, &w) in words.iter().enumerate() {
         x_bytes[i * WORD_SIZE..(i + 1) * WORD_SIZE].copy_from_slice(&w.to_le_bytes());

@@ -1,6 +1,7 @@
 use std::{collections::HashSet, fmt::Write};
 
 use openvm_instructions::riscv::RV64_MEMORY_AS;
+use rvr_openvm_ir::MemWidth;
 
 use super::codegen::hex_u32;
 
@@ -9,8 +10,6 @@ pub(crate) enum EmitMode {
     /// Emit ordered register, PC, and memory-value hooks.
     ///
     /// Page hooks are separate because they record only addresses for metering.
-    /// No current artifact kind selects this mode; selecting it also requires a
-    /// tracer header that defines the emitted hooks.
     #[allow(dead_code)]
     ValueTrace,
     /// Memory accesses use direct helpers and do not emit memory trace events.
@@ -73,7 +72,7 @@ impl EmitMode {
 #[derive(Clone, Copy)]
 enum RegisterReadKind {
     MemoryAccess,
-    ExecutionInput,
+    Peek,
 }
 
 /// Code generation context. Holds a mutable buffer and tracks hot registers.
@@ -224,7 +223,7 @@ impl<'a> EmitContext<'a> {
         if self.mode.traces_values() {
             let trace_fn = match kind {
                 RegisterReadKind::MemoryAccess => "trace_reg_read",
-                RegisterReadKind::ExecutionInput => "trace_reg_execution_input",
+                RegisterReadKind::Peek => "trace_reg_peek",
             };
             self.write_line(&format!("{trace_fn}(state, {idx}, {value});"));
         }
@@ -237,9 +236,9 @@ impl<'a> EmitContext<'a> {
         self.read_reg_impl(idx, RegisterReadKind::MemoryAccess)
     }
 
-    /// Read a register used by execution without creating a VM memory access.
-    pub fn read_reg_execution_input(&mut self, idx: u8) -> String {
-        self.read_reg_impl(idx, RegisterReadKind::ExecutionInput)
+    /// Get a register value without creating a VM memory access.
+    pub fn peek_reg(&mut self, idx: u8) -> String {
+        self.read_reg_impl(idx, RegisterReadKind::Peek)
     }
 
     /// Write a register with tracing when value tracing is enabled.
@@ -453,7 +452,7 @@ impl<'a> EmitContext<'a> {
         self.write_line("}");
     }
 
-    pub fn trace_page_access(&mut self, addr: &str, size: u8, addr_space: u32) {
+    pub fn trace_page_access(&mut self, addr: &str, width: MemWidth, addr_space: u32) {
         assert!(
             !self.mode.traces_values(),
             "page-only access is invalid when values are being traced"
@@ -465,6 +464,7 @@ impl<'a> EmitContext<'a> {
         if touches_memory {
             self.flush_page_locals();
         }
+        let size = width.bytes();
         self.write_line(&format!(
             "trace_page_access(state, {addr}, {size}u, {addr_space}u);"
         ));
@@ -552,8 +552,8 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
         EmitContext::read_reg(self, idx)
     }
 
-    fn read_reg_execution_input(&mut self, idx: u8) -> String {
-        EmitContext::read_reg_execution_input(self, idx)
+    fn peek_reg(&mut self, idx: u8) -> String {
+        EmitContext::peek_reg(self, idx)
     }
 
     fn write_reg(&mut self, idx: u8, val: &str) {
@@ -605,8 +605,8 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
         EmitContext::trace_chip_if_nonzero(self, chip_idx, count_expr);
     }
 
-    fn trace_page_access(&mut self, addr: &str, size: u8, addr_space: u32) {
-        EmitContext::trace_page_access(self, addr, size, addr_space);
+    fn trace_page_access(&mut self, addr: &str, width: MemWidth, addr_space: u32) {
+        EmitContext::trace_page_access(self, addr, width, addr_space);
     }
 
     fn trace_page_access_u64_range(&mut self, base_addr: &str, num_dwords: &str, addr_space: u32) {
