@@ -727,6 +727,8 @@ impl CProject {
         writeln!(h, "}}").unwrap();
         writeln!(h).unwrap();
 
+        self.emit_profile_guest_pc_helper(&mut h);
+
         // Runtime and extension headers.
         writeln!(h, "#include \"openvm_io.h\"").unwrap();
         for &(filename, _) in ext_headers {
@@ -741,6 +743,22 @@ impl CProject {
 
         let path = self.output_dir.join(format!("{name}.h"));
         fs::write(&path, h)
+    }
+
+    fn emit_profile_guest_pc_helper(&self, out: &mut String) {
+        if !self.profile_execution {
+            return;
+        }
+        out.push_str(
+            r#"static __attribute__((always_inline)) inline void rv_profile_guest_pc(RvState* state, uint64_t pc) {
+    // The profiling signal handler observes this field asynchronously, outside the
+    // generated C's visible call graph. Use a volatile access so the callsite
+    // snapshot remains a compiler-visible side effect sequenced before the host call.
+    *(volatile uint64_t*)&state->pc = pc;
+}
+
+"#,
+        );
     }
 
     // ── Block files ──────────────────────────────────────────────────────
@@ -908,7 +926,7 @@ impl CProject {
         );
         writeln!(out, "{signature} {{").unwrap();
         if self.profile_execution {
-            writeln!(out, "    *(volatile uint64_t*)&state->pc = 0x{pc:08x}ull;").unwrap();
+            writeln!(out, "    rv_profile_guest_pc(state, 0x{pc:08x}ull);").unwrap();
         }
         match self.execution_kind {
             RvrExecutionKind::MeteredSegment => {
@@ -1474,6 +1492,28 @@ mod tests {
             .unwrap_err();
 
         assert_eq!(error.to_string(), "chip index 1 is outside AIR count 1");
+    }
+
+    #[test]
+    fn profile_guest_pc_helper_is_absent_without_profiling() {
+        let project = CProject::new(Path::new("unused"), "test", RvrExecutionKind::Pure);
+        let mut header = String::new();
+
+        project.emit_profile_guest_pc_helper(&mut header);
+
+        assert!(header.is_empty());
+    }
+
+    #[test]
+    fn profile_guest_pc_helper_uses_volatile_store_when_enabled() {
+        let mut project = CProject::new(Path::new("unused"), "test", RvrExecutionKind::Pure);
+        project.profile_execution = true;
+        let mut header = String::new();
+
+        project.emit_profile_guest_pc_helper(&mut header);
+
+        assert!(header.contains("inline void rv_profile_guest_pc"));
+        assert!(header.contains("*(volatile uint64_t*)&state->pc = pc;"));
     }
 
     #[test]

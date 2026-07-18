@@ -79,7 +79,7 @@ struct SignalContext {
 }
 
 // The context and its backing allocations outlive the armed timer. Access is
-// restricted to the executing thread and SIGPROF handlers.
+// restricted to the executing thread and profiling-signal handlers.
 unsafe impl Send for SignalContext {}
 unsafe impl Sync for SignalContext {}
 
@@ -93,18 +93,28 @@ unsafe fn capture_sample(
     wall_time_ns: u64,
     cpu_time_ns: u64,
 ) -> StackSample {
-    // SAFETY: start() requires a live RvState until the timer is disarmed.
-    let state = unsafe { &*ctx.state_ptr };
     let mut sample = StackSample {
         host_rip,
         wall_time_ns,
         cpu_time_ns,
         ..Default::default()
     };
-    sample.pcs[0] = u32::try_from(state.pc).unwrap_or_default();
+    // SAFETY: start() requires a live RvState until the timer is disarmed. The
+    // generated C updates these fields concurrently with the signal handler,
+    // so read them through raw pointers without creating a shared Rust
+    // reference to the actively mutated state.
+    let pc = unsafe { std::ptr::addr_of!((*ctx.state_ptr).pc).read_volatile() };
+    sample.pcs[0] = u32::try_from(pc).unwrap_or_default();
     sample.depth = 1;
 
-    let mut fp = state.regs[GUEST_FP_REG];
+    // SAFETY: same live-state requirement as the PC read. `regs` is an inline
+    // array, and GUEST_FP_REG is within its fixed 32-element bounds.
+    let mut fp = unsafe {
+        std::ptr::addr_of!((*ctx.state_ptr).regs)
+            .cast::<u64>()
+            .add(GUEST_FP_REG)
+            .read_volatile()
+    };
     while usize::from(sample.depth) < MAX_STACK_DEPTH && fp != 0 {
         // RV64 frame-pointer layout with frame pointers enabled:
         // saved return address at fp - 8, parent frame pointer at fp - 16.

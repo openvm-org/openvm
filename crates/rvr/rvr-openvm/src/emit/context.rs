@@ -417,9 +417,7 @@ impl<'a> EmitContext<'a> {
             let pc = self
                 .current_pc
                 .expect("external call emitted before instruction PC was recorded");
-            // The asynchronous sampler is invisible to the optimizer. A
-            // volatile store keeps the callsite observable under -O3/LTO.
-            self.write_line(&format!("*(volatile uint64_t*)&state->pc = 0x{pc:08x}ull;"));
+            self.write_line(&format!("rv_profile_guest_pc(state, 0x{pc:08x}ull);"));
         }
     }
 
@@ -716,19 +714,43 @@ mod tests {
     }
 
     #[test]
-    fn profiled_external_call_emits_volatile_guest_pc_before_call() {
-        let mut ctx = EmitContext::new(HashSet::new(), EmitMode::Direct, BlockAbi::Plain, true);
+    fn profiled_external_call_records_guest_pc_before_call() {
+        let mut ctx = EmitContext::new(
+            HashSet::new(),
+            EmitMode::Direct,
+            BlockAbi::Plain,
+            None,
+            None,
+            true,
+        );
         ctx.trace_pc(0x20_1234);
         ctx.extern_call_without_page_flush("host_callback", &["value"]);
 
-        let pc_store = ctx
+        let pc_snapshot = ctx
             .buf()
-            .find("*(volatile uint64_t*)&state->pc = 0x00201234ull;")
-            .expect("volatile profile callsite store");
+            .find("rv_profile_guest_pc(state, 0x00201234ull);")
+            .expect("profile callsite snapshot");
         let callback = ctx
             .buf()
             .find("host_callback(value);")
             .expect("host callback");
-        assert!(pc_store < callback);
+        assert!(pc_snapshot < callback);
+    }
+
+    #[test]
+    fn unprofiled_external_call_emits_no_profile_snapshot() {
+        let mut ctx = EmitContext::new(
+            HashSet::new(),
+            EmitMode::Direct,
+            BlockAbi::Plain,
+            None,
+            None,
+            false,
+        );
+        ctx.trace_pc(0x20_1234);
+        ctx.extern_call_without_page_flush("host_callback", &["value"]);
+
+        assert!(ctx.buf().contains("host_callback(value);"));
+        assert!(!ctx.buf().contains("rv_profile_guest_pc"));
     }
 }
