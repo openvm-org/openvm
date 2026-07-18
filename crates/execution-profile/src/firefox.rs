@@ -705,6 +705,17 @@ fn sanitize_source_path(path: &str) -> String {
             .display()
             .to_string();
     }
+    if let Some(index) = components
+        .windows(3)
+        .position(|window| window[0] == "target" && window[2] == "build")
+    {
+        return components[index + 2..]
+            .iter()
+            .cloned()
+            .collect::<PathBuf>()
+            .display()
+            .to_string();
+    }
     if let Some(index) = components.iter().position(|component| {
         matches!(
             component.as_str(),
@@ -717,6 +728,12 @@ fn sanitize_source_path(path: &str) -> String {
             .collect::<PathBuf>()
             .display()
             .to_string();
+    }
+    if let Some(index) = components
+        .iter()
+        .position(|component| component == ".worktrees")
+    {
+        return join_sanitized_tail(&components, index + 2, "worktree-source");
     }
     if matches!(
         components.first().map(String::as_str),
@@ -1088,6 +1105,16 @@ mod tests {
             "private/generated/block_0x10.c"
         );
         assert_eq!(sanitize_source_path("/home/alice/main.rs"), "main.rs");
+        assert_eq!(
+            sanitize_source_path(
+                "/home/alice/.worktrees/private-branch/target/profiling/build/native-abc/out/src/file.c"
+            ),
+            "build/native-abc/out/src/file.c"
+        );
+        assert_eq!(
+            sanitize_source_path("/home/alice/.worktrees/private-branch/vendor/file.c"),
+            "vendor/file.c"
+        );
         assert_eq!(
             sanitize_source_path("/Users/alice/project/src/main.rs"),
             "project/src/main.rs"
