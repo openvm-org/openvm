@@ -227,7 +227,10 @@ fn build_firefox_profile(
         previous_cpu_time = sample.cpu_time_ns;
         let mut frame_handles = Vec::new();
 
-        for &return_pc in &sample.guest_return_pcs {
+        // The outermost frame's saved return address is zero by ABI convention.
+        // It is a stack terminator, not guest address zero; resolving it would
+        // incorrectly attribute every sample to whichever symbol starts at 0.
+        for &return_pc in sample.guest_return_pcs.iter().filter(|&&pc| pc != 0) {
             let lookup_pc = return_pc.saturating_sub(1);
             emit_resolved_pc(
                 &mut profile,
@@ -1036,6 +1039,36 @@ mod tests {
         assert_eq!(library["path"], library["name"]);
         assert!(!library["path"].as_str().unwrap().contains('/'));
         assert_eq!(library["arch"], "riscv64");
+    }
+
+    #[test]
+    fn zero_return_pc_is_treated_as_a_stack_terminator() {
+        let executable = std::env::current_exe().unwrap();
+        let raw: openvm_circuit::arch::rvr::RawGuestProfile = serde_json::from_str(
+            r#"{
+                "version":3,
+                "requested_sample_hz":1000,
+                "owner_tid":7,
+                "start_unix_time_ns":1000000000,
+                "start_wall_time_ns":1000000,
+                "end_wall_time_ns":2000000,
+                "start_cpu_time_ns":500000,
+                "end_cpu_time_ns":1500000,
+                "delivered_samples":1,
+                "dropped_samples":0,
+                "timer_overruns":0,
+                "timer_arm_failures":0,
+                "clock_failures":0,
+                "native_modules":[],
+                "samples":[
+                    {"wall_time_ns":1500000,"cpu_time_ns":1000000,"native_leaf":null,"guest_callsite_pc":null,"guest_return_pcs":[0],"stack_truncated":false}
+                ]
+            }"#,
+        )
+        .unwrap();
+        let profile = build_firefox_profile(&raw, &executable, None).unwrap();
+        let json = serde_json::to_value(profile).unwrap();
+        assert!(json["threads"][0]["samples"]["stack"][0].is_null());
     }
 
     #[test]

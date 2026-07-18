@@ -908,11 +908,7 @@ impl CProject {
         );
         writeln!(out, "{signature} {{").unwrap();
         if self.profile_execution {
-            writeln!(
-                out,
-                "    *(volatile uint64_t*)&state->pc = 0x{pc:08x}ull;"
-            )
-            .unwrap();
+            writeln!(out, "    *(volatile uint64_t*)&state->pc = 0x{pc:08x}ull;").unwrap();
         }
         match self.execution_kind {
             RvrExecutionKind::MeteredSegment => {
