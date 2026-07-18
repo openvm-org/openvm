@@ -13,7 +13,7 @@ use openvm_instructions::{
     program::DEFAULT_PC_STEP,
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
 };
-use openvm_mod_circuit_builder::{run_field_expression_precomputed, FieldExpr};
+use openvm_mod_circuit_builder::{run_field_expression_precomputed, FieldExpressionProgram};
 use openvm_platform::memory::MEM_SIZE;
 use openvm_riscv_circuit::adapters::rv64_bytes_to_u32;
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -24,7 +24,7 @@ use crate::weierstrass_chip::curves::{ec_double, get_curve_type, CurveType};
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
 struct EcDoublePreCompute<'a> {
-    expr: &'a FieldExpr,
+    program: &'a FieldExpressionProgram,
     rs_addrs: [u8; 1],
     a: u8,
     flag_idx: u8,
@@ -53,8 +53,8 @@ impl<'a, const BLOCKS: usize> EcDoubleExecutor<BLOCKS> {
         let local_opcode = opcode.local_opcode_idx(self.offset);
 
         // Pre-compute flag_idx
-        let needs_setup = self.expr.needs_setup();
-        let mut flag_idx = self.expr.num_flags() as u8;
+        let needs_setup = self.program().needs_setup();
+        let mut flag_idx = self.program().num_flags() as u8;
         if needs_setup {
             // Find which opcode this is in our local_opcode_idx list
             if let Some(opcode_position) = self
@@ -71,7 +71,7 @@ impl<'a, const BLOCKS: usize> EcDoubleExecutor<BLOCKS> {
 
         let rs_addrs = [b as u8];
         *data = EcDoublePreCompute {
-            expr: &self.expr,
+            program: self.program(),
             rs_addrs,
             a: a as u8,
             flag_idx,
@@ -87,8 +87,8 @@ impl<'a, const BLOCKS: usize> EcDoubleExecutor<BLOCKS> {
 macro_rules! dispatch {
     ($execute_impl:ident,$pre_compute:ident,$is_setup:ident) => {
         if let Some(curve_type) = {
-            let modulus = &$pre_compute.expr.builder.prime;
-            let a_coeff = &$pre_compute.expr.setup_values[0];
+            let modulus = $pre_compute.program.prime();
+            let a_coeff = &$pre_compute.program.setup_values()[0];
             get_curve_type(modulus, a_coeff)
         } {
             match ($is_setup, curve_type) {
@@ -239,7 +239,7 @@ unsafe fn execute_e12_impl<
     if IS_SETUP {
         let input_prime = BigUint::from_bytes_le(read_data[..BLOCKS / 2].as_flattened());
 
-        if input_prime != pre_compute.expr.builder.prime {
+        if &input_prime != pre_compute.program.prime() {
             let err = ExecutionError::Fail {
                 pc,
                 msg: "EcDouble: mismatched prime",
@@ -249,7 +249,7 @@ unsafe fn execute_e12_impl<
 
         // Extract second field element as the a coefficient
         let input_a = BigUint::from_bytes_le(read_data[BLOCKS / 2..].as_flattened());
-        let coeff_a = &pre_compute.expr.setup_values[0];
+        let coeff_a = &pre_compute.program.setup_values()[0];
         if input_a != *coeff_a {
             let err = ExecutionError::Fail {
                 pc,
@@ -262,7 +262,7 @@ unsafe fn execute_e12_impl<
     let output_data = if CURVE_TYPE == u8::MAX || IS_SETUP {
         let read_data: DynArray<u8> = read_data.into();
         run_field_expression_precomputed::<true>(
-            pre_compute.expr,
+            pre_compute.program,
             pre_compute.flag_idx as usize,
             &read_data.0,
         )

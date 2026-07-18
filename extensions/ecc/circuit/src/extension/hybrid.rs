@@ -39,7 +39,7 @@ impl<const NUM_READS: usize, const BLOCKS: usize> Chip<DenseRecordArena, GpuBack
 {
     fn generate_proving_ctx(&self, mut arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         let total_input_limbs =
-            self.cpu.inner.num_inputs() * self.cpu.inner.expr.canonical_num_limbs();
+            self.cpu.inner.num_inputs() * self.cpu.inner.expr.program().canonical_num_limbs();
         let layout = AdapterCoreLayout::with_metadata(FieldExpressionMetadata::<
             F,
             Rv64VecHeapAdapterExecutor<NUM_READS, BLOCKS, BLOCKS>,

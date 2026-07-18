@@ -14,9 +14,7 @@ use openvm_circuit::{
     system::{memory::SharedMemoryHelper, SystemPort},
 };
 use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor};
-use openvm_circuit_primitives::{
-    bigint::utils::big_uint_to_limbs, var_range::VariableRangeCheckerBus,
-};
+use openvm_circuit_primitives::bigint::utils::big_uint_to_limbs;
 use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_instructions::{LocalOpcode, PhantomDiscriminant, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
@@ -92,8 +90,6 @@ impl VmExecutionExtension for ModularExtension {
         inventory: &mut ExecutorInventoryBuilder<ModularExtensionExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
         let byte_ptr_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
-        // TODO: somehow get the range checker bus from `ExecutorInventory`
-        let dummy_range_checker_bus = VariableRangeCheckerBus::new(u16::MAX, U16_BITS);
         for (i, modulus) in self.supported_moduli.iter().enumerate() {
             // determine the number of bytes needed to represent a prime field element
             let bytes = modulus.bits().div_ceil(8) as usize;
@@ -108,7 +104,7 @@ impl VmExecutionExtension for ModularExtension {
                 };
                 let addsub = get_modular_addsub_executor::<MODULAR_BLOCKS_32>(
                     config.clone(),
-                    dummy_range_checker_bus,
+                    U16_BITS,
                     byte_ptr_max_bits,
                     start_offset,
                 );
@@ -122,7 +118,7 @@ impl VmExecutionExtension for ModularExtension {
 
                 let muldiv = get_modular_muldiv_executor::<MODULAR_BLOCKS_32>(
                     config,
-                    dummy_range_checker_bus,
+                    U16_BITS,
                     byte_ptr_max_bits,
                     start_offset,
                 );
@@ -162,7 +158,7 @@ impl VmExecutionExtension for ModularExtension {
                 };
                 let addsub = get_modular_addsub_executor::<MODULAR_BLOCKS_48>(
                     config.clone(),
-                    dummy_range_checker_bus,
+                    U16_BITS,
                     byte_ptr_max_bits,
                     start_offset,
                 );
@@ -176,7 +172,7 @@ impl VmExecutionExtension for ModularExtension {
 
                 let muldiv = get_modular_muldiv_executor::<MODULAR_BLOCKS_48>(
                     config,
-                    dummy_range_checker_bus,
+                    U16_BITS,
                     byte_ptr_max_bits,
                     start_offset,
                 );
