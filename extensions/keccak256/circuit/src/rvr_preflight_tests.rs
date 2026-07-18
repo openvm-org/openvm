@@ -168,11 +168,13 @@ fn keccak_hintstore_interleaved_exe() -> VmExe<F> {
         store_d(5, 1, 8),
         store_d(5, 2, 0),
         store_d(4, 2, 8),
+        store_d(4, 1, 4), // crossing write immediately before custom chronology
         xorin(1, 2, 3),
         hint_store(Rv64HintStoreOpcode::HINT_STORED, 0, 6),
         keccakf(1),
         hint_store(Rv64HintStoreOpcode::HINT_BUFFER, 7, 6),
         xorin(1, 2, 3),
+        store_d(5, 1, 4), // crossing write immediately after custom chronology
     ];
     instructions.extend(std::iter::repeat_n(keccakf(1), 24));
     instructions.push(terminate());
