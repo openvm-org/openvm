@@ -22,8 +22,8 @@ on:
     branches: ["**"]
 
 concurrency:
-  group: sdk-${{ github.event.pull_request.number || github.sha }}
-  cancel-in-progress: true
+  group: sdk-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 
 env:
   CARGO_TERM_COLOR: always
