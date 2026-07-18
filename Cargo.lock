@@ -7291,7 +7291,6 @@ dependencies = [
  "halo2curves-axiom 0.7.3",
  "num-bigint 0.4.6",
  "openvm-instructions",
- "openvm-platform",
  "paste",
  "rvr-openvm-ext-algebra-ffi-common",
  "rvr-openvm-ext-ffi-common",

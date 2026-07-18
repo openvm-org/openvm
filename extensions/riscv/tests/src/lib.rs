@@ -191,7 +191,11 @@ mod tests {
 
     #[cfg(feature = "rvr")]
     fn assert_rvr_example_traps(program_name: &str) {
-        let config = test_rv64im_config();
+        assert_rvr_example_with_config_traps(program_name, test_rv64im_config());
+    }
+
+    #[cfg(feature = "rvr")]
+    fn assert_rvr_example_with_config_traps(program_name: &str, config: Rv64ImConfig) {
         let elf =
             build_example_program_at_path(get_programs_dir!(), program_name, &config).unwrap();
         let exe = VmExe::from_elf(
@@ -205,7 +209,13 @@ mod tests {
         let executor = VmExecutor::new(config).unwrap();
         let result = executor.instance(&exe).unwrap().execute(vec![]);
 
-        assert!(matches!(result, Err(ExecutionError::RvrExecution(_))));
+        match result {
+            Err(ExecutionError::RvrExecution(message)) => {
+                assert_eq!(message, "execution returned error code: 3");
+            }
+            Err(error) => panic!("expected an RVR execution error, got {error}"),
+            Ok(_) => panic!("expected RVR execution to fail"),
+        }
     }
 
     #[test_case("fibonacci", 1)]
@@ -449,30 +459,11 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "reveal out of bounds")]
     #[cfg(all(feature = "rvr", not(feature = "unprotected")))]
     fn test_reveal_beyond_num_public_values_errors() {
-        if env::var(RVR_OOB_CHILD_ENV).is_ok() {
-            let mut config = test_rv64im_config();
-            config.rv64i.system = config.rv64i.system.with_public_values_bytes(32);
-            let elf =
-                build_example_program_at_path(get_programs_dir!(), "reveal", &config).unwrap();
-            let exe = VmExe::from_elf(
-                elf,
-                Transpiler::<F>::default()
-                    .with_extension(Rv64ITranspilerExtension)
-                    .with_extension(Rv64MTranspilerExtension)
-                    .with_extension(Rv64IoTranspilerExtension),
-            )
-            .unwrap();
-
-            let executor = VmExecutor::new(config).unwrap();
-            let instance = executor.instance(&exe).unwrap();
-            instance.execute(vec![]).unwrap();
-            return; // unreachable: abort fired
-        }
-
-        assert_child_aborts("tests::test_reveal_beyond_num_public_values_errors");
+        let mut config = test_rv64im_config();
+        config.rv64i.system = config.rv64i.system.with_public_values_bytes(32);
+        assert_rvr_example_with_config_traps("reveal", config);
     }
 
     #[test]

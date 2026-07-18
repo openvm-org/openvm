@@ -51,8 +51,8 @@ static __attribute__((always_inline)) inline uint64_t rv_dispatch_index(
  * check prevents an unaligned pc from aliasing to a neighboring slot. */
 static __attribute__((always_inline)) inline bool rv_pc_is_dispatchable(
     uint64_t pc) {
-  return pc >= RV_TEXT_START && pc <= RV_TEXT_END &&
-         ((pc - RV_TEXT_START) & 3ull) == 0;
+  uint64_t offset = pc - RV_TEXT_START;
+  return offset <= RV_TEXT_END - RV_TEXT_START && (offset & 3ull) == 0;
 }
 
 /* ── Guest memory pointer ────────────────────────────────────────── */

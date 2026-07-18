@@ -23,7 +23,7 @@ pub struct PageTouch {
     /// Index of the 64-leaf page in the memory tree.
     pub page_id: u32,
     /// Aligns `leaf_mask` and makes the shared 16-byte Rust/C layout explicit.
-    pub padding: u32,
+    pub _padding: u32,
     /// Leaves touched in this page, with one bit per leaf.
     pub leaf_mask: u64,
 }
@@ -874,7 +874,7 @@ mod tests {
         let first = tracker.insert(0, 1, &baseline_memory).first_touches;
         baseline_memory.add_page_touches(&[PageTouch {
             page_id: 0,
-            padding: 0,
+            _padding: 0,
             leaf_mask: 1,
         }]);
         tracker.clear();

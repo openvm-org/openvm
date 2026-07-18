@@ -195,7 +195,13 @@ impl RvrExtension for ModularRvrExtension {
     }
 
     fn c_headers(&self) -> Vec<(&'static str, &'static str)> {
-        vec![("rvr_ext_mod.h", include_str!("../c/rvr_ext_mod.h"))]
+        vec![
+            (
+                "rvr_ext_bls12_381.h",
+                include_str!("../c/rvr_ext_bls12_381.h"),
+            ),
+            ("rvr_ext_mod.h", include_str!("../c/rvr_ext_mod.h")),
+        ]
     }
 
     fn c_sources(&self) -> Vec<(&'static str, &'static str)> {
@@ -241,11 +247,11 @@ impl RvrExtension for ModularRvrExtension {
         let mut files = SECP256K1_C_FILES.to_vec();
         files.extend([
             (
-                "blst.h",
+                "blst/blst.h",
                 include_str!("../ffi/modular/blst/bindings/blst.h"),
             ),
             (
-                "blst_aux.h",
+                "blst/blst_aux.h",
                 include_str!("../ffi/modular/blst/bindings/blst_aux.h"),
             ),
         ]);
@@ -258,6 +264,8 @@ impl RvrExtension for ModularRvrExtension {
             "secp256k1/src".to_string(),
             "-isystem".to_string(),
             "secp256k1".to_string(),
+            "-isystem".to_string(),
+            "blst".to_string(),
             // ENABLE_MODULE_RECOVERY keeps the ECC modules compiled in so the
             // k256 EC ops in rvr_ext_modular.c can call into libsecp256k1.
             // (-DSECP256K1_BUILD is not set here — secp256k1.c defines it

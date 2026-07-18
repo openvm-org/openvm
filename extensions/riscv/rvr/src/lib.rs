@@ -443,10 +443,7 @@ pub extern "C" fn host_hint_random(ctx: *mut c_void, num_words: u64) -> bool {
     };
     if io
         .hint_stream
-        .try_set_hint_from_iter(
-            nbytes,
-            repeat_with(|| io.rng.random::<u8>()).take(nbytes),
-        )
+        .try_set_hint_from_iter(nbytes, repeat_with(|| io.rng.random::<u8>()).take(nbytes))
         .is_err()
     {
         return false;

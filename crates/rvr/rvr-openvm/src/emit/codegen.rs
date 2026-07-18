@@ -25,12 +25,18 @@ pub fn emit_instr(ctx: &mut EmitContext, instr: &Instr) {
         Instr::AluReg { op, rd, rs1, rs2 } => {
             let l = ctx.read_reg(*rs1);
             let r = ctx.read_reg(*rs2);
-            ctx.write_reg(*rd, &alu_expr(*op, &l, &r));
+            let value = constant_alu_reg_result(*op, *rs1, *rs2)
+                .map(hex_u64)
+                .unwrap_or_else(|| alu_expr(*op, &l, &r));
+            ctx.write_reg(*rd, &value);
         }
         Instr::AluImm { op, rd, rs1, imm } => {
             let l = ctx.read_reg(*rs1);
             let r = imm_literal(*imm);
-            ctx.write_reg(*rd, &alu_expr(*op, &l, &r));
+            let value = constant_alu_imm_result(*op, *rs1, *imm)
+                .map(hex_u64)
+                .unwrap_or_else(|| alu_expr(*op, &l, &r));
+            ctx.write_reg(*rd, &value);
         }
         Instr::ShiftImm { op, rd, rs1, shamt } => {
             let v = ctx.read_reg(*rs1);
@@ -162,12 +168,8 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
             rs2,
             target,
         } => {
-            if rs1 == rs2 {
-                let destination = if same_register_branch_result(*cond) {
-                    *target
-                } else {
-                    next_pc
-                };
+            if let Some(taken) = constant_branch_result(*cond, *rs1, *rs2) {
+                let destination = if taken { *target } else { next_pc };
                 emit_tail_call(ctx, destination, &args, tc.valid_blocks);
                 return;
             }
@@ -225,8 +227,8 @@ fn alu_expr(op: AluOp, left: &str, right: &str) -> String {
         AluOp::Add => format!("{left} + {right}"),
         AluOp::Sub => format!("{left} - {right}"),
         AluOp::Sll => format!("{left} << ({right} & 0x3fu)"),
-        AluOp::Slt => format!("((int64_t){left} < (int64_t){right}) ? 1u : 0u"),
-        AluOp::Sltu => format!("({left} < {right}) ? 1u : 0u"),
+        AluOp::Slt => format!("(int64_t){left} < (int64_t){right}"),
+        AluOp::Sltu => format!("{left} < {right}"),
         AluOp::Xor => format!("{left} ^ {right}"),
         AluOp::Srl => format!("{left} >> ({right} & 0x3fu)"),
         AluOp::Sra => format!("(uint64_t)((int64_t){left} >> ({right} & 0x3fu))"),
@@ -302,8 +304,35 @@ fn branch_cond_expr(cond: BranchCond, left: &str, right: &str) -> String {
     }
 }
 
-fn same_register_branch_result(cond: BranchCond) -> bool {
-    matches!(cond, BranchCond::Eq | BranchCond::Ge | BranchCond::Geu)
+fn constant_branch_result(cond: BranchCond, rs1: u8, rs2: u8) -> Option<bool> {
+    if rs1 == rs2 {
+        return Some(matches!(
+            cond,
+            BranchCond::Eq | BranchCond::Ge | BranchCond::Geu
+        ));
+    }
+    match cond {
+        BranchCond::Ltu if rs2 == 0 => Some(false),
+        BranchCond::Geu if rs2 == 0 => Some(true),
+        _ => None,
+    }
+}
+
+fn constant_alu_reg_result(op: AluOp, rs1: u8, rs2: u8) -> Option<u64> {
+    match op {
+        AluOp::Slt | AluOp::Sltu if rs1 == rs2 => Some(0),
+        AluOp::Sltu if rs2 == 0 => Some(0),
+        _ => None,
+    }
+}
+
+fn constant_alu_imm_result(op: AluOp, rs1: u8, imm: i32) -> Option<u64> {
+    match op {
+        AluOp::Slt if rs1 == 0 => Some(u64::from(0 < imm)),
+        AluOp::Sltu if rs1 == 0 => Some(u64::from(imm != 0)),
+        AluOp::Sltu if imm == 0 => Some(0),
+        _ => None,
+    }
 }
 
 // ── MulDiv ──────────────────────────────────────────────────────────────────

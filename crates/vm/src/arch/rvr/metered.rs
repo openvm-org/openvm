@@ -561,17 +561,17 @@ mod tests {
         let mut with_interval_buffer = make_segmentation_state();
         with_interval_buffer.mem_page_buf[0] = PageTouch {
             page_id: 7,
-            padding: 0,
+            _padding: 0,
             leaf_mask: 1,
         };
         with_interval_buffer.pv_page_buf[0] = PageTouch {
             page_id: 3,
-            padding: 0,
+            _padding: 0,
             leaf_mask: 1,
         };
         with_interval_buffer.deferral_page_buf[0] = PageTouch {
             page_id: 2,
-            padding: 0,
+            _padding: 0,
             leaf_mask: 1,
         };
         with_interval_buffer.initialize_segment_memory(1, 1, 1);
@@ -599,7 +599,7 @@ mod tests {
         let mut seg_state = make_segmentation_state();
         seg_state.mem_page_buf[0] = PageTouch {
             page_id: 0,
-            padding: 0,
+            _padding: 0,
             leaf_mask: 1,
         };
         assert!(!seg_state.on_periodic_check(1, 0, 0, 0));
@@ -608,7 +608,7 @@ mod tests {
         let poseidon_before = seg_state.ctx.trace_heights[poseidon2_idx];
         seg_state.mem_page_buf[0] = PageTouch {
             page_id: 1,
-            padding: 0,
+            _padding: 0,
             leaf_mask: 1,
         };
         assert!(!seg_state.on_periodic_check(1, 0, 0, 0));
@@ -624,7 +624,7 @@ mod tests {
         let mut buffered = make_segmentation_state();
         buffered.mem_page_buf[0] = PageTouch {
             page_id: 0,
-            padding: 0,
+            _padding: 0,
             leaf_mask: 0b11,
         };
         buffered.on_termination(1, 0, 0, 0);

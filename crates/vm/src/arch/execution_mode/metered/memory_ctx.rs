@@ -392,7 +392,7 @@ fn push_page_touch(touches: &mut Vec<PageTouch>, page_id: u32, leaf_mask: u64) {
     unsafe {
         touches.as_mut_ptr().add(len).write(PageTouch {
             page_id,
-            padding: 0,
+            _padding: 0,
             leaf_mask,
         });
         touches.set_len(len + 1);
