@@ -6,7 +6,7 @@
 
 use std::{
     collections::BTreeMap,
-    mem::size_of,
+    mem::{align_of, size_of},
     sync::atomic::{AtomicU16, AtomicU32, Ordering},
 };
 
@@ -46,6 +46,16 @@ pub struct RvrG2BlockEntryV1 {
 
 const _: () = assert!(size_of::<RvrG2BlockEntryV1>() == 8);
 
+/// Host-only counts for standard kinds without a current-value lane. These
+/// are summed once per entered run after native execution; they never expand
+/// the generated block or the device block-table ABI.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct RvrG2BlockHostCountsV1 {
+    pub kind12: u32,
+    pub kind14: u32,
+    pub kind30: u32,
+}
+
 #[derive(Clone, Debug)]
 pub struct RvrG2MetaV1 {
     /// Frozen wire schema/program fingerprint published in every segment.
@@ -59,6 +69,8 @@ pub struct RvrG2MetaV1 {
     pub block_fingerprint: [u8; 32],
     pub air_manifest_fingerprint: [u8; 32],
     pub blocks: std::sync::Arc<Vec<RvrG2BlockEntryV1>>,
+    /// Aligned one-for-one with `blocks` after its program-slot sort.
+    pub block_host_counts: std::sync::Arc<Vec<RvrG2BlockHostCountsV1>>,
     /// Sorted stable decoder-kind to global AIR bindings admitted by this
     /// executable. Phase 2b admits every fixed standard RV64 kind.
     pub air_bindings: std::sync::Arc<Vec<RvrG2AirBindingV1>>,
@@ -142,6 +154,7 @@ pub struct RvrG2SegmentV1 {
     backing_offset: usize,
     backing_capacity: usize,
     pool: super::RvrPreflightBufferPool,
+    backing_route: super::preflight_pool::G2BackingRoute,
     byte_len: usize,
     header_prefix_len: usize,
     committed_lanes: Vec<RvrG2CommittedLaneV1>,
@@ -345,7 +358,8 @@ impl RvrG2SegmentV1 {
 impl Drop for RvrG2SegmentV1 {
     fn drop(&mut self) {
         if let Some(backing) = self.backing.take() {
-            self.pool.recycle_g2_backing(backing, self.backing_capacity);
+            self.pool
+                .recycle_g2_backing(backing, self.backing_capacity, self.backing_route);
         }
     }
 }
@@ -1525,6 +1539,7 @@ pub(crate) struct RvrG2PreparedV1 {
     byte_capacity: usize,
     lanes: Vec<G2ProducerLaneV1>,
     pool: super::RvrPreflightBufferPool,
+    backing_route: super::preflight_pool::G2BackingRoute,
     pub producer: G2ProducerV1,
 }
 
@@ -1558,10 +1573,24 @@ impl RvrG2PreparedV1 {
         Ok(offset)
     }
 
+    #[cfg(test)]
     pub(crate) fn new_pooled(
         capacities: &RvrG2CapacitiesV1,
         pool: &super::RvrPreflightBufferPool,
     ) -> Result<Self, ExecutionError> {
+        Self::new_pooled_for_mode(capacities, pool, true)
+    }
+
+    pub(crate) fn new_pooled_for_mode(
+        capacities: &RvrG2CapacitiesV1,
+        pool: &super::RvrPreflightBufferPool,
+        checked_emission: bool,
+    ) -> Result<Self, ExecutionError> {
+        let backing_route = if checked_emission {
+            super::preflight_pool::G2BackingRoute::Checked
+        } else {
+            super::preflight_pool::G2BackingRoute::Production
+        };
         let specs = producer_lane_specs();
         let byte_capacity = Self::capacity_bytes(capacities)?;
         let mut lanes = Vec::with_capacity(specs.len());
@@ -1591,7 +1620,7 @@ impl RvrG2PreparedV1 {
             )?;
         }
         debug_assert_eq!(offset, byte_capacity);
-        let mut backing = pool.take_g2_backing(byte_capacity);
+        let mut backing = pool.take_g2_backing(byte_capacity, backing_route);
         let backing_offset = (32 - backing.as_ptr() as usize % 32) % 32;
         assert!(backing_offset + byte_capacity <= backing.len());
         let base = unsafe { backing.as_mut_ptr().add(backing_offset) };
@@ -1610,12 +1639,53 @@ impl RvrG2PreparedV1 {
             byte_capacity,
             lanes,
             pool: pool.clone(),
+            backing_route,
             producer,
         })
     }
 
     pub(crate) fn residual_capacity(&self) -> usize {
         self.lanes[G2_PRODUCER_RESIDUAL_VALUE_SLOT].cap as usize
+    }
+
+    pub(crate) fn producer_lane_len(&self, slot: usize) -> Result<u32, ExecutionError> {
+        self.lanes
+            .get(slot)
+            .map(|lane| lane.len)
+            .ok_or_else(|| g2_error(format!("producer lane slot {slot} is out of range")))
+    }
+
+    pub(crate) fn producer_u32_lane(&self, slot: usize) -> Result<&[u32], ExecutionError> {
+        let lane = self
+            .lanes
+            .get(slot)
+            .ok_or_else(|| g2_error(format!("producer lane slot {slot} is out of range")))?;
+        let offset = usize::try_from(lane.offset)
+            .map_err(|_| g2_error("producer u32 lane offset exceeds usize"))?;
+        let bytes = (lane.len as usize)
+            .checked_mul(size_of::<u32>())
+            .ok_or_else(|| g2_error("producer u32 lane byte count overflow"))?;
+        if offset % align_of::<u32>() != 0
+            || offset
+                .checked_add(bytes)
+                .is_none_or(|end| end > self.byte_capacity)
+        {
+            return Err(g2_error("producer u32 lane exceeds its backing"));
+        }
+        let base = self
+            .backing
+            .as_ref()
+            .expect("G2 backing already moved")
+            .as_ptr();
+        unsafe {
+            // SAFETY: the producer layout aligns every fixed lane, the range
+            // was checked above, and native execution initialized its written
+            // prefix before this read.
+            Ok(std::slice::from_raw_parts(
+                base.add(self.backing_offset + offset).cast::<u32>(),
+                lane.len as usize,
+            ))
+        }
     }
 
     pub fn finalize(
@@ -1627,6 +1697,7 @@ impl RvrG2PreparedV1 {
         opaque_written: &[(RvrG2OpaqueBindingV1, u32, u32)],
     ) -> Result<RvrG2SegmentV1, ExecutionError> {
         let p = self.producer;
+        let checked_emission = expected_kind_counts.is_some();
         if p.overflow != 0
             || p.base
                 != unsafe {
@@ -1639,21 +1710,19 @@ impl RvrG2PreparedV1 {
             || p.capacity as usize != self.byte_capacity
             || p.lanes != self.lanes.as_mut_ptr()
             || p.lane_count as usize != self.lanes.len()
-            || p.instruction_count != expected_instruction_count
+            || (checked_emission && p.instruction_count != expected_instruction_count)
+            || (!checked_emission && p.instruction_count != 0)
             || p.reserved != 0
             || self.lanes.iter().any(|lane| lane.len > lane.cap)
-            || (p.instruction_count != 0 && self.lanes[G2_PRODUCER_RUN_SLOT].len == 0)
+            || (expected_instruction_count != 0 && self.lanes[G2_PRODUCER_RUN_SLOT].len == 0)
         {
             return Err(g2_error("native lane cursor/count validation failed"));
         }
 
-        // Production emission deliberately performs unchecked direct stores.
-        // Generated C independently accumulates each entered block's static
-        // lane spans in `expected_len`, so this O(lanes) boundary pass detects
-        // any missed store/commit without putting a branch in the hot loop.
-        // Dynamic residual/opaque lanes are validated by their group invariants
-        // below and therefore leave `expected_len` at zero.
-        if expected_kind_counts.is_some() {
+        // Checked emission retains an independent host cursor oracle.
+        // Production leaves all expected cursors at zero and delegates exact
+        // run/lane exhaustion to the fail-hard device replay.
+        if checked_emission {
             for (slot, lane) in self.lanes.iter().enumerate() {
                 if slot == G2_PRODUCER_RUN_SLOT || (G2_PRODUCER_ADDI_SLOT..=57).contains(&slot) {
                     if lane.len != lane.expected_len {
@@ -1673,6 +1742,10 @@ impl RvrG2PreparedV1 {
                     )));
                 }
             }
+        } else if self.lanes.iter().any(|lane| lane.expected_len != 0) {
+            return Err(g2_error(
+                "production lane carries checked-emission cursor metadata",
+            ));
         }
 
         // Cross-check the independently accumulated static spans against the
@@ -1821,7 +1894,7 @@ impl RvrG2PreparedV1 {
             lane_count: descs.len() as u16,
             flags: G2_FLAGS_V1,
             segment_id,
-            instruction_count: p.instruction_count,
+            instruction_count: expected_instruction_count,
             run_count: self.lanes[G2_PRODUCER_RUN_SLOT].len,
             residual_event_count: residual_count,
             schema_fingerprint: fingerprint,
@@ -1852,6 +1925,7 @@ impl RvrG2PreparedV1 {
             backing_offset: self.backing_offset,
             backing_capacity: self.byte_capacity,
             pool: self.pool.clone(),
+            backing_route: self.backing_route,
             byte_len,
             header_prefix_len: payload_begin,
             committed_lanes,
@@ -1864,7 +1938,8 @@ impl RvrG2PreparedV1 {
 impl Drop for RvrG2PreparedV1 {
     fn drop(&mut self) {
         if let Some(backing) = self.backing.take() {
-            self.pool.recycle_g2_backing(backing, self.byte_capacity);
+            self.pool
+                .recycle_g2_backing(backing, self.byte_capacity, self.backing_route);
         }
     }
 }
@@ -2162,6 +2237,7 @@ mod tests {
             backing_offset: 0,
             backing_capacity: prepared.byte_capacity,
             pool: crate::arch::rvr::RvrPreflightBufferPool::default(),
+            backing_route: crate::arch::rvr::preflight_pool::G2BackingRoute::Checked,
             byte_len: prepared.byte_capacity,
             header_prefix_len: G2_SEGMENT_HEADER_V1_SIZE,
             committed_lanes: Vec::new(),

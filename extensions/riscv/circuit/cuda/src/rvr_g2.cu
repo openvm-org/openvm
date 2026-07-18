@@ -113,6 +113,8 @@ static constexpr uint32_t G2_NO_RECORD = UINT32_MAX;
 static constexpr uint64_t G2_INVALID_ADDRESS = UINT64_MAX;
 static constexpr uint32_t G2_REGISTER_COUNT = 32;
 static constexpr uint32_t G2_REGISTER_REPLAY_CHUNK = 4096;
+static constexpr uint32_t G2_MAIN_MEMORY_ADDRESS_SPACE = 2;
+static constexpr uint64_t G2_CONTINUATION_PAGE_BYTES = 4096;
 
 struct DeviceInitialMemory {
     uint64_t base;
@@ -2207,6 +2209,8 @@ __global__ void g2_pack_memory_touched(
     size_t initial_memory_count,
     G2TouchedMemoryRecord *touched,
     size_t touched_capacity,
+    uint64_t *dirty_pages,
+    size_t dirty_page_words,
     uint32_t const *register_touched_count,
     uint32_t initial_timestamp,
     uint32_t *error
@@ -2231,6 +2235,19 @@ __global__ void g2_pack_memory_touched(
     uint64_t current_value = (initial_value & inclusive.keep) | inclusive.bits;
     uint32_t address_space = uint32_t(key >> 56);
     uint64_t byte_address = key & ((uint64_t(1) << 56) - 1);
+    if (address_space == G2_MAIN_MEMORY_ADDRESS_SPACE &&
+        (inclusive.keep != UINT64_MAX || inclusive.bits != 0)) {
+        uint64_t page = byte_address / G2_CONTINUATION_PAGE_BYTES;
+        uint64_t word = page / 64;
+        if (dirty_pages == nullptr || word >= dirty_page_words) {
+            fail_parallel(error, 82);
+            return;
+        }
+        atomicOr(
+            reinterpret_cast<unsigned long long *>(&dirty_pages[word]),
+            1ull << (page % 64)
+        );
+    }
     uint32_t previous_timestamp = initial_timestamp + event_indices[last];
     uint32_t output = *register_touched_count + uint32_t(group);
     if (output >= touched_capacity || byte_address > uint64_t(UINT32_MAX) * 2u + 1u) {
@@ -2959,6 +2976,7 @@ extern "C" int _rvr_g2_predecode(
     size_t num_airs,
     DeviceRawBufferConstView d_touched_output,
     uint32_t *d_touched_count,
+    DeviceRawBufferConstView d_dirty_pages,
     uint32_t *d_opaque_prev_timestamps,
     uint64_t *d_opaque_prev_values,
     uint32_t *d_error,
@@ -2968,6 +2986,7 @@ extern "C" int _rvr_g2_predecode(
     size_t opaque_capacity =
         d_opaque_residual_output.size / sizeof(DeltaMemoryLogEntry);
     size_t touched_capacity = d_touched_output.size / sizeof(G2TouchedMemoryRecord);
+    size_t dirty_page_words = d_dirty_pages.size / sizeof(uint64_t);
     bool timestamp_budget_overflow = delta_count > UINT32_MAX / 4;
     size_t timestamp_budget = timestamp_budget_overflow ? 0 : delta_count * 4;
     if (!timestamp_budget_overflow) {
@@ -2983,6 +3002,8 @@ extern "C" int _rvr_g2_predecode(
         d_operands == nullptr || operand_count == 0 ||
         d_initial_memory_bytes.ptr == nullptr ||
         d_initial_memory_bytes.size % sizeof(DeviceInitialMemory) != 0 ||
+        d_dirty_pages.size % sizeof(uint64_t) != 0 ||
+        (d_dirty_pages.size != 0 && d_dirty_pages.ptr == 0) ||
         d_expected_kinds == nullptr || expected_kind_count == 0 ||
         (expected_opaque_count != 0 && d_expected_opaque == nullptr) ||
         d_program_frequencies == nullptr || frequency_count == 0 ||
@@ -3818,6 +3839,8 @@ extern "C" int _rvr_g2_predecode(
                 d_initial_memory_bytes.size / sizeof(DeviceInitialMemory),
                 reinterpret_cast<G2TouchedMemoryRecord *>(d_touched_output.ptr),
                 touched_capacity,
+                reinterpret_cast<uint64_t *>(d_dirty_pages.ptr),
+                dirty_page_words,
                 d_register_touched_count,
                 initial_timestamp,
                 d_error

@@ -179,7 +179,24 @@ impl ArenaNativeBackingKey {
 /// inline air (RV64IM has ~17 migrated AIRs), so this only trims
 /// pathological accumulation, never the steady-state working set.
 const MAX_RECORD_SPARES: usize = 32;
-const G2_BACKING_AIR: usize = usize::MAX;
+
+/// Pool identity for the two statically generated G2 producer contracts.
+/// Their sentinel metadata has different meanings, so a backing may only
+/// return to the route that created it even when byte capacities match.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum G2BackingRoute {
+    Checked,
+    Production,
+}
+
+impl G2BackingRoute {
+    fn pool_air(self) -> usize {
+        match self {
+            Self::Checked => usize::MAX,
+            Self::Production => usize::MAX - 1,
+        }
+    }
+}
 
 impl Default for RvrPreflightBufferPool {
     fn default() -> Self {
@@ -885,22 +902,27 @@ impl RvrPreflightBufferPool {
         }
     }
 
-    pub(crate) fn take_g2_backing(&self, capacity_bytes: usize) -> Vec<u8> {
-        let key = ArenaNativeBackingKey::new(G2_BACKING_AIR, 1, capacity_bytes);
+    pub(crate) fn take_g2_backing(&self, capacity_bytes: usize, route: G2BackingRoute) -> Vec<u8> {
+        let key = ArenaNativeBackingKey::new(route.pool_air(), 1, capacity_bytes);
         self.take_arena_native_dense_backing(key)
             .unwrap_or_else(|| vec![0u8; capacity_bytes + 32])
     }
 
-    pub(crate) fn recycle_g2_backing(&self, backing: Vec<u8>, capacity_bytes: usize) {
-        let key = ArenaNativeBackingKey::new(G2_BACKING_AIR, 1, backing.len() - 32);
+    pub(crate) fn recycle_g2_backing(
+        &self,
+        backing: Vec<u8>,
+        capacity_bytes: usize,
+        route: G2BackingRoute,
+    ) {
+        let key = ArenaNativeBackingKey::new(route.pool_air(), 1, backing.len() - 32);
         assert!(key.capacity_bytes >= capacity_bytes);
         self.recycle_arena_native_dense_backing(key, backing, key.capacity_bytes + 32);
     }
 
     #[cfg(feature = "cuda")]
-    pub(crate) fn prepare_g2_backings(&self, capacity_bytes: usize) {
+    pub(crate) fn prepare_g2_backings(&self, capacity_bytes: usize, route: G2BackingRoute) {
         self.prepare_arena_native_dense_backings_to_depth(
-            ArenaNativeBackingKey::new(G2_BACKING_AIR, 1, capacity_bytes),
+            ArenaNativeBackingKey::new(route.pool_air(), 1, capacity_bytes),
             *CUDA_G2_PREWARM_DEPTH,
         );
     }
@@ -1325,14 +1347,33 @@ mod tests {
             arena_native_enabled: true,
             inner: Arc::new(Mutex::new(PoolInner::default())),
         };
-        let mut first = pool.take_g2_backing(4096);
+        let mut first = pool.take_g2_backing(4096, G2BackingRoute::Checked);
         let first_ptr = first.as_ptr();
         first.fill(0xa5);
-        pool.recycle_g2_backing(first, 4096);
+        pool.recycle_g2_backing(first, 4096, G2BackingRoute::Checked);
 
-        let recycled = pool.take_g2_backing(2048);
+        let recycled = pool.take_g2_backing(2048, G2BackingRoute::Checked);
         assert_eq!(recycled.as_ptr(), first_ptr);
         assert!(recycled.iter().all(|&byte| byte == 0));
+    }
+
+    #[test]
+    fn g2_backing_routes_never_cross_reuse() {
+        let pool = RvrPreflightBufferPool {
+            enabled: true,
+            arena_native_enabled: true,
+            inner: Arc::new(Mutex::new(PoolInner::default())),
+        };
+        let checked = pool.take_g2_backing(4096, G2BackingRoute::Checked);
+        let checked_ptr = checked.as_ptr();
+        pool.recycle_g2_backing(checked, 4096, G2BackingRoute::Checked);
+
+        let production = pool.take_g2_backing(4096, G2BackingRoute::Production);
+        assert_ne!(production.as_ptr(), checked_ptr);
+        pool.recycle_g2_backing(production, 4096, G2BackingRoute::Production);
+
+        let checked_again = pool.take_g2_backing(2048, G2BackingRoute::Checked);
+        assert_eq!(checked_again.as_ptr(), checked_ptr);
     }
 
     #[test]

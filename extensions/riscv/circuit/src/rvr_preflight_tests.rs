@@ -1538,6 +1538,13 @@ fn rvr_preflight_g2_store_marks_sparse_continuation_page() {
     else {
         panic!("continuation store program must route to G2 RVR");
     };
+    let checked_emission = store
+        .compiled()
+        .inline_records()
+        .g2
+        .as_deref()
+        .expect("G2 continuation metadata")
+        .checked_emission();
     let store_output = store
         .execute_preflight_from_state_with_device_touched_memory_for_test(
             store.create_initial_state(Streams::default()),
@@ -1550,12 +1557,20 @@ fn rvr_preflight_g2_store_marks_sparse_continuation_page() {
     let memory_as = RV64_MEMORY_AS as usize;
     let dirty_ranges =
         memory.touched_pages[memory_as].touched_byte_ranges(memory.mem[memory_as].size());
-    assert!(
-        dirty_ranges
-            .iter()
-            .any(|&(start, end)| start <= 64 && 64 < end),
-        "G2 store page must be staged for the next segment's sparse H2D transfer"
-    );
+    let host_marked = dirty_ranges
+        .iter()
+        .any(|&(start, end)| start <= 64 && 64 < end);
+    if checked_emission {
+        assert!(
+            host_marked,
+            "checked G2 host oracle must retain continuation page ownership"
+        );
+    } else {
+        assert!(
+            !host_marked,
+            "production G2 host preflight must delegate continuation pages to device replay"
+        );
+    }
 
     // Run the following load as a distinct preflight segment from the carried
     // state. The page assertion above is the sparse-transport contract; this
@@ -1623,6 +1638,18 @@ fn rvr_preflight_g2_rejects_high_pointer_before_memory_or_reveal_access() {
     else {
         panic!("high-pointer fixture must route to G2 RVR");
     };
+    if !instance
+        .compiled()
+        .inline_records()
+        .g2
+        .as_deref()
+        .expect("G2 high-pointer metadata")
+        .checked_emission()
+    {
+        // The floor producer deliberately carries no duplicate pointer check;
+        // malformed-pointer validation remains a checked-mode oracle gate.
+        return;
+    }
     let mut state = instance.create_initial_state(Streams::default());
     let mut registers = [0u64; 32];
     registers[1] = u64::from(u32::MAX) + 1;
@@ -1668,6 +1695,18 @@ fn rvr_preflight_g2_rejects_high_jalr_pointer_without_truncation() {
         panic!("high-Jalr fixture must route to G2 RVR");
     };
     assert!(instance.compiled().inline_records().g2.is_some());
+    if !instance
+        .compiled()
+        .inline_records()
+        .g2
+        .as_deref()
+        .expect("G2 high-Jalr metadata")
+        .checked_emission()
+    {
+        // Production emits the semantic transition only; checked mode owns
+        // the independent high-pointer fail-closed oracle.
+        return;
+    }
     let mut state = instance.create_initial_state(Streams::default());
     let mut registers = [0u64; 32];
     registers[1] = u64::from(u32::MAX) + 4;
@@ -3446,7 +3485,7 @@ fn assert_gpu_rvr_three_way_from_state(
         &rvr_output.system_records,
     );
 
-    let rvr_to_state = rvr_output.to_state.clone();
+    let mut rvr_to_state = rvr_output.to_state.clone();
     let pc_to_air_idx = gpu_log_vm.pc_to_air_idx(exe).expect("pc to air mapping");
     let mut gpu_log_record_arenas = gpu_log_builder
         .generate_rvr_record_arenas_from_logs(
@@ -3493,6 +3532,7 @@ fn assert_gpu_rvr_three_way_from_state(
     let gpu_log_ctx = gpu_log_vm
         .generate_proving_ctx(rvr_output.system_records, gpu_log_record_arenas)
         .expect("gpu rvr-log trace generation");
+    gpu_log_vm.merge_device_continuation_dirty_pages(&mut rvr_to_state.memory);
     let gpu_log_device_ctx = gpu_log_vm.engine.device().device_ctx.clone();
 
     let cpu_traces = collect_cpu_trace_map(cpu_ctx);

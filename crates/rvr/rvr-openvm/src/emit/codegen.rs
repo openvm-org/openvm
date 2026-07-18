@@ -313,14 +313,13 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
                 }
             }
             let target = indirect_target_expr(ctx, &base_value, offset, target_mask);
+            ctx.commit_g2_block();
             ctx.write_line(&format!(
                 "if (unlikely(!rv_pc_is_dispatchable({target}))) {{"
             ));
-            ctx.commit_g2_block();
             ctx.write_line(&format!("  [[clang::musttail]] return rv_trap({args});"));
             ctx.write_line("}");
             ctx.write_line(&format!("state->pc = {target};"));
-            ctx.commit_g2_block();
             ctx.write_line(&format!(
                 "[[clang::musttail]] return dispatch_table[rv_dispatch_index({target})]({args});"
             ));
@@ -384,8 +383,8 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
                 (ctx.read_var(lhs), ctx.read_var(rhs))
             };
             let cmp = branch_cond_expr(cond, width, &lhs, &rhs);
-            ctx.write_line(&format!("if ({cmp}) {{"));
             ctx.commit_g2_block();
+            ctx.write_line(&format!("if ({cmp}) {{"));
             ctx.write_line(&format!(
                 "  {}",
                 static_tail_call(target, &args, tc.valid_blocks)

@@ -30,7 +30,8 @@ use sha2::{Digest, Sha256};
 
 use super::{
     debug::GuestDebugMap, ArenaNativeGeometry, ArenaNativeLayout, LogNativeOpcodeAdmitter,
-    RvrDeltaDecodeEntry, RvrG2AirBindingV1, RvrG2BlockEntryV1, RvrG2MetaV1, RvrG2OpaqueBindingV1,
+    RvrDeltaDecodeEntry, RvrG2AirBindingV1, RvrG2BlockEntryV1, RvrG2BlockHostCountsV1, RvrG2MetaV1,
+    RvrG2OpaqueBindingV1,
 };
 use crate::arch::ExecutorInventory;
 
@@ -1247,6 +1248,10 @@ fn build_g2_meta_v1<F: PrimeField32>(
         ));
     }
     let pc_base = u64::from(exe.program.pc_base);
+    let mut kind_by_air = [u8::MAX; 256];
+    for &(kind, air_idx) in &decode.kind_to_air {
+        kind_by_air[air_idx] = kind;
+    }
     let mut block_entries = Vec::with_capacity(blocks.len());
     for block in blocks {
         let offset = block
@@ -1268,20 +1273,39 @@ fn build_g2_meta_v1<F: PrimeField32>(
                 "G2 block entry exceeds the program table",
             ));
         }
-        block_entries.push(RvrG2BlockEntryV1 {
-            program_slot,
-            instruction_count: block.insn_count(),
-        });
+        let mut host_counts = RvrG2BlockHostCountsV1::default();
+        for local in 0..block.insn_count() {
+            let entry = decode
+                .entries
+                .get(program_slot as usize + local as usize)
+                .ok_or(CompileError::InvalidOptions(
+                    "G2 block instruction exceeds the operand table",
+                ))?;
+            match kind_by_air[entry.air_idx as usize] {
+                12 => host_counts.kind12 += 1,
+                14 => host_counts.kind14 += 1,
+                30 => host_counts.kind30 += 1,
+                _ => {}
+            }
+        }
+        block_entries.push((
+            RvrG2BlockEntryV1 {
+                program_slot,
+                instruction_count: block.insn_count(),
+            },
+            host_counts,
+        ));
     }
-    block_entries.sort_unstable_by_key(|entry| entry.program_slot);
+    block_entries.sort_unstable_by_key(|(entry, _)| entry.program_slot);
     if block_entries
         .windows(2)
-        .any(|pair| pair[0].program_slot == pair[1].program_slot)
+        .any(|pair| pair[0].0.program_slot == pair[1].0.program_slot)
     {
         return Err(CompileError::InvalidOptions(
             "G2 static block table contains duplicate entries",
         ));
     }
+    let (block_entries, block_host_counts): (Vec<_>, Vec<_>) = block_entries.into_iter().unzip();
 
     let mut program_table = Sha256::new();
     program_table.update(b"openvm-rvr-g2-program-table-v1\0");
@@ -1427,6 +1451,7 @@ fn build_g2_meta_v1<F: PrimeField32>(
         block_fingerprint,
         air_manifest_fingerprint,
         blocks: Arc::new(block_entries),
+        block_host_counts: Arc::new(block_host_counts),
         air_bindings: Arc::new(
             decode
                 .kind_to_air
@@ -1447,7 +1472,7 @@ fn g2_producer_schema_fingerprint(
     producer_schema.update(wire_fingerprint);
     producer_schema.update([emission_mode as u8]);
     producer_schema.update(
-        b"producer-lane-24;exact-expected-cursors;static-run-standard-spans;exit-commit;grouped-custom-residual;branch-free-production-scratch;",
+        b"producer-lane-24;checked-expected-cursors;production-device-replay-cursors;static-run-standard-spans;single-exit-commit;floor-static-timestamp;no-hot-chip-counters;grouped-custom-residual;",
     );
     producer_schema.finalize().into()
 }
