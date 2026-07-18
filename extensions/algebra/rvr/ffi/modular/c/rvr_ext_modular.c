@@ -15,7 +15,6 @@
 #endif
 
 static constexpr uint32_t SECP256K1_ELEM_BYTES = 32;
-static_assert(WORD_SIZE == sizeof(uint64_t), "OpenVM word size must match uint64_t");
 static constexpr uint32_t SECP256K1_ELEM_WORDS =
     SECP256K1_ELEM_BYTES / WORD_SIZE;
 

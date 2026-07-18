@@ -33,7 +33,7 @@ pub const MEM_PAGE_BUF_CAP: usize = 1 << 16;
 const MAX_PV_PAGES_PER_INSN: usize = 2;
 
 /// Maximum AS_PUBLIC_VALUES page buffer entries per segment check interval.
-/// No bounds checks in C. An unaligned reveal can cross one page boundary.
+/// The C tracer does not bounds-check this buffer. A reveal can span two pages.
 pub const PV_PAGE_BUF_CAP: usize = 1 << 12;
 
 /// Maximum AS_DEFERRAL page buffer entries per segment check interval.
@@ -64,6 +64,7 @@ static constexpr uint32_t AS_MEMORY = {RV64_MEMORY_AS};
 static constexpr uint32_t AS_PUBLIC_VALUES = {PUBLIC_VALUES_AS};
 static constexpr uint32_t AS_DEFERRAL = {DEFERRAL_AS};
 static constexpr uint32_t WORD_SIZE = {WORD_SIZE};
+static_assert(WORD_SIZE == sizeof(uint64_t), \"OpenVM word size must match uint64_t\");
 static constexpr uint32_t DEFERRAL_DIGEST_SIZE = {VM_DIGEST_WIDTH};
 static constexpr uint64_t RV_TEXT_START = 0x{text_start:08x}ull;
 static constexpr uint64_t RV_TEXT_END = 0x{text_end:08x}ull;

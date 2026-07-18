@@ -9,9 +9,7 @@
 
 typedef struct MeteredSegmentCheckpointResult {
   uint32_t check_counter;
-  uint8_t suspend_signal;
-  /* Keep the returned aggregate fully initialized. */
-  uint8_t reserved[3];
+  uint32_t suspend_signal;
 } MeteredSegmentCheckpointResult;
 
 static __attribute__((preserve_most, cold,
@@ -19,11 +17,10 @@ static __attribute__((preserve_most, cold,
 metered_segment_checkpoint(RvState* restrict state, uint32_t check_counter) {
   MeteringState* metering = &state->mode_state;
   metering->check_counter = check_counter;
-  uint8_t suspend_signal = metering->on_check(metering);
+  uint32_t suspend_signal = metering->on_check(metering);
   return (MeteredSegmentCheckpointResult){
       .check_counter = metering->check_counter,
       .suspend_signal = suspend_signal,
-      .reserved = {0},
   };
 }
 
