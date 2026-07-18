@@ -33,7 +33,7 @@ pub enum ExecutionMode {
 }
 
 #[derive(Parser)]
-#[command(name = "run", about = "Run an OpenVM program")]
+#[command(name = "execute", about = "Run an OpenVM program")]
 pub struct RunCmd {
     #[clap(flatten)]
     run_args: RunArgs,
