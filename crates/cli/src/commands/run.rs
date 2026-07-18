@@ -82,7 +82,7 @@ pub struct RunArgs {
     #[arg(
         long,
         value_name = "PATH",
-        help = "Also save the uploaded execution profile as profiling.json.gz",
+        help = "Also save the uploaded execution profile (.json.gz) to PATH",
         help_heading = "Execution Profiling"
     )]
     pub profile_output: Option<PathBuf>,
