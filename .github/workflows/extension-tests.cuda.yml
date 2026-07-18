@@ -34,8 +34,8 @@ on:
         default: image=ubuntu24-gpu-x64/family=g7.2xlarge+g6.2xlarge+g5.2xlarge/volume=40gb/spot=price-capacity-optimized
 
 concurrency:
-  group: ${{ github.workflow_ref }}-extension-tests-cuda-${{ github.event.pull_request.number || github.sha }}
-  cancel-in-progress: true
+  group: ${{ github.workflow_ref }}-extension-tests-cuda-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 
 env:
   CARGO_TERM_COLOR: always
