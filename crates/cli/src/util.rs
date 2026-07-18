@@ -134,7 +134,7 @@ pub fn get_single_target_name_raw(
     let num_targets = bin.len() + example.len();
     let single_target_name = if num_targets > 1 {
         return Err(eyre::eyre!(
-            "`cargo openvm run` can run at most one executable, but multiple were specified"
+            "`cargo openvm execute` can run at most one executable, but multiple were specified"
         ));
     } else if num_targets == 0 {
         let (_, manifest_dir) = get_manifest_path_and_dir(manifest_path)?;
