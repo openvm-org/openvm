@@ -438,6 +438,7 @@ pub fn build_generic(guest_opts: &GuestOptions) -> Result<PathBuf, Option<i32>> 
     let rust_flags: Vec<_> = guest_opts.rustc_flags.iter().map(|s| s.as_str()).collect();
 
     let mut cmd = cargo_command("build", &rust_flags);
+    cmd.envs(&guest_opts.env);
 
     if !guest_opts.features.is_empty() {
         cmd.args(["--features", guest_opts.features.join(",").as_str()]);
