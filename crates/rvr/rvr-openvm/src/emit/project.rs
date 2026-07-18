@@ -341,6 +341,8 @@ pub struct CProject {
     pub native_debug_info: bool,
     /// Compile the generated C with trap-mode UBSan and bounds sanitizers.
     pub sanitize: bool,
+    /// Emit exact guest-PC stores at host-call boundaries for sampling.
+    pub profile_execution: bool,
 }
 
 impl CProject {
@@ -362,6 +364,7 @@ impl CProject {
             num_airs: None,
             native_debug_info: false,
             sanitize: false,
+            profile_execution: false,
         }
     }
 
@@ -979,6 +982,7 @@ impl CProject {
             self.block_abi(),
             chip_widths,
             self.num_airs,
+            self.profile_execution,
         );
         let mut body = String::new();
 
@@ -1034,6 +1038,7 @@ impl CProject {
                 instr_at.instr.opname(),
                 instr_at.source_loc.as_ref(),
             );
+            ctx.trace_pc(instr_at.pc);
             instr_at.instr.emit_c(&mut ctx);
             Self::emit_context_scope(&mut body, &mut ctx);
             body.push('\n');
@@ -1049,6 +1054,7 @@ impl CProject {
                 block.terminator.opname(),
                 block.terminator_source_loc.as_ref(),
             );
+            ctx.trace_pc(block.terminator_pc);
         }
         let tc = TermCtx { valid_blocks };
         emit_terminator(&mut ctx, &block.terminator, block.terminator_pc, &tc);
@@ -1139,6 +1145,9 @@ impl CProject {
             &format!("block_0x{pc:08x}_checkpoint"),
         );
         writeln!(out, "{signature} {{").unwrap();
+        if self.profile_execution {
+            writeln!(out, "    state->pc = 0x{pc:08x}ull;").unwrap();
+        }
         match self.execution_kind {
             RvrExecutionKind::MeteredSegment => {
                 self.emit_segment_checkpoint(out, pc);
@@ -1475,6 +1484,11 @@ impl CProject {
             writeln!(src, "}}").unwrap();
             writeln!(src).unwrap();
         }
+        writeln!(src, "__attribute__((visibility(\"default\"), used))").unwrap();
+        writeln!(src, "uint32_t rv_profile_compatible(void) {{").unwrap();
+        writeln!(src, "  return {}u;", u32::from(self.profile_execution)).unwrap();
+        writeln!(src, "}}").unwrap();
+        writeln!(src).unwrap();
 
         // Execution entry point — single entry call; tail calls chain blocks.
         writeln!(

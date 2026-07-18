@@ -161,7 +161,7 @@ fn parse_addr2line_chunk(
         };
 
         let loc = parse_addr2line_location(func_line.trim(), loc_line.trim());
-        if loc.is_valid() {
+        if loc.is_valid() || !loc.function.is_empty() {
             map.locations.insert(pc, loc);
         }
     }
@@ -219,5 +219,15 @@ mod tests {
     fn test_parse_addr2line_location_unknown() {
         let loc = parse_addr2line_location("??", "??:0");
         assert!(!loc.is_valid());
+    }
+
+    #[test]
+    fn keeps_function_symbol_when_source_location_is_unknown() {
+        let mut map = GuestDebugMap::new();
+        parse_addr2line_chunk(&mut map, &[0x20_0d10], "_start\n??:0\n", 1, 0);
+
+        let location = map.get(0x20_0d10).expect("function-only symbol");
+        assert_eq!(location.function, "_start");
+        assert_eq!(location.line, 0);
     }
 }

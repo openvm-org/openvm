@@ -2,19 +2,38 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-const MAX_SAMPLE_HZ: u32 = 1_000_000;
+const MAX_SAMPLE_HZ: u32 = 20_000;
+const DEFAULT_MAX_SAMPLES: usize = 1 << 18;
 
 /// On-disk representation produced by RVR guest sampling.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum GuestProfileFormat {
-    /// Collapsed stacks with sample counts, suitable for flamegraph tools.
-    Folded,
-    /// One ordered, semicolon-separated stack per sample.
+    /// Ordered samples with timing, module, and stack-quality metadata.
     Raw,
 }
 
 /// Current version of the ordered RVR sampling format.
-pub const RAW_GUEST_PROFILE_VERSION: u32 = 2;
+pub const RAW_GUEST_PROFILE_VERSION: u32 = 3;
+
+/// A native module observed while the guest was executing.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct RawNativeModule {
+    /// Stable display name, usually the module's file name.
+    pub name: String,
+    /// On-host path used only for immediate local symbolication.
+    pub path: String,
+    /// Whether this is the generated OpenVM execution artifact.
+    pub generated: bool,
+}
+
+/// Exact interrupted native instruction pointer.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct RawNativeFrame {
+    /// Index into [`RawGuestProfile::native_modules`], when `dladdr` resolved it.
+    pub module_index: Option<u32>,
+    /// Module-relative PC when resolved, otherwise the absolute interrupted PC.
+    pub pc: u64,
+}
 
 /// One RVR sample. Guest PCs are ordered root-to-leaf and contain caller
 /// return addresses; `host_pc` is the interrupted instruction pointer,
@@ -23,14 +42,33 @@ pub const RAW_GUEST_PROFILE_VERSION: u32 = 2;
 pub struct RawGuestProfileSample {
     pub wall_time_ns: u64,
     pub cpu_time_ns: u64,
-    pub host_pc: Option<u64>,
-    pub guest_pcs: Vec<u64>,
+    /// Exact native leaf captured from the signal ucontext.
+    pub native_leaf: Option<RawNativeFrame>,
+    /// Exact guest instruction stored immediately before entering host code.
+    pub guest_callsite_pc: Option<u64>,
+    /// Guest caller return addresses in root-to-leaf order.
+    pub guest_return_pcs: Vec<u64>,
+    /// Whether the guest frame walk reached the fixed maximum depth.
+    pub stack_truncated: bool,
 }
 
 /// Versioned, ordered RVR sampling output consumed by execution-profile tools.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct RawGuestProfile {
     pub version: u32,
+    pub requested_sample_hz: u32,
+    pub owner_tid: i32,
+    pub start_unix_time_ns: u64,
+    pub start_wall_time_ns: u64,
+    pub end_wall_time_ns: u64,
+    pub start_cpu_time_ns: u64,
+    pub end_cpu_time_ns: u64,
+    pub delivered_samples: u64,
+    pub dropped_samples: u64,
+    pub timer_overruns: u64,
+    pub timer_arm_failures: u64,
+    pub clock_failures: u64,
+    pub native_modules: Vec<RawNativeModule>,
     pub samples: Vec<RawGuestProfileSample>,
 }
 
@@ -41,6 +79,7 @@ pub struct GuestProfileConfig {
     sample_hz: u32,
     format: GuestProfileFormat,
     native_artifact_output: Option<PathBuf>,
+    max_samples: usize,
 }
 
 impl GuestProfileConfig {
@@ -59,6 +98,7 @@ impl GuestProfileConfig {
             sample_hz,
             format,
             native_artifact_output: None,
+            max_samples: DEFAULT_MAX_SAMPLES,
         })
     }
 
@@ -78,10 +118,6 @@ impl GuestProfileConfig {
         Ok(config)
     }
 
-    pub fn folded(output: impl Into<PathBuf>, sample_hz: u32) -> Result<Self, String> {
-        Self::new(output, sample_hz, GuestProfileFormat::Folded)
-    }
-
     pub fn output(&self) -> &Path {
         &self.output
     }
@@ -96,6 +132,21 @@ impl GuestProfileConfig {
 
     pub(crate) fn native_artifact_output(&self) -> Option<&Path> {
         self.native_artifact_output.as_deref()
+    }
+
+    /// Set the maximum number of complete samples retained in memory.
+    /// Additional samples are counted as dropped rather than silently replacing
+    /// earlier timeline data.
+    pub fn with_max_samples(mut self, max_samples: usize) -> Result<Self, String> {
+        if max_samples == 0 {
+            return Err("guest profile max_samples must be nonzero".to_string());
+        }
+        self.max_samples = max_samples;
+        Ok(self)
+    }
+
+    pub(crate) fn max_samples(&self) -> usize {
+        self.max_samples
     }
 }
 

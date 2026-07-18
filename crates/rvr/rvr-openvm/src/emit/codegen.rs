@@ -249,6 +249,7 @@ mod tests {
             BlockAbi::Plain,
             None,
             None,
+            false,
         );
         emit_terminator(&mut direct, &term, 0, &tc);
         assert!(!direct.buf().contains("reg_read"));
@@ -259,6 +260,7 @@ mod tests {
             BlockAbi::Plain,
             None,
             None,
+            false,
         );
         emit_terminator(&mut preflight, &term, 0, &tc);
         assert!(!preflight.buf().contains("preflight_local_reg_read"));

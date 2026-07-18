@@ -125,6 +125,8 @@ pub struct EmitContext<'a> {
     fixed_replay_values: u32,
     dynamic_timestamp_slots: DynamicTimestampSlots,
     replay_values_reserved: bool,
+    profile_execution: bool,
+    current_pc: Option<u64>,
 }
 
 impl<'a> EmitContext<'a> {
@@ -134,6 +136,7 @@ impl<'a> EmitContext<'a> {
         block_abi: BlockAbi,
         chip_widths: Option<&'a [u64]>,
         num_airs: Option<u32>,
+        profile_execution: bool,
     ) -> Self {
         debug_assert_eq!(matches!(mode, EmitMode::MeteredCost), chip_widths.is_some());
         Self {
@@ -151,6 +154,8 @@ impl<'a> EmitContext<'a> {
             fixed_replay_values: 0,
             dynamic_timestamp_slots: DynamicTimestampSlots::None,
             replay_values_reserved: false,
+            profile_execution,
+            current_pc: None,
         }
     }
 
@@ -687,15 +692,34 @@ impl<'a> EmitContext<'a> {
         }
     }
 
+    /// Emit a PC read when value tracing is enabled.
+    pub fn trace_pc(&mut self, pc: u64) {
+        self.current_pc = Some(pc);
+        if self.mode.traces_values() {
+            self.write_line(&format!("trace_pc(state, 0x{pc:08x}ull);"));
+        }
+    }
+
+    fn emit_profile_callsite(&mut self) {
+        if self.profile_execution {
+            let pc = self
+                .current_pc
+                .expect("external call emitted before instruction PC was recorded");
+            self.write_line(&format!("state->pc = 0x{pc:08x}ull;"));
+        }
+    }
+
     pub fn emit_call(&mut self, name: &str, args: &[&str]) {
         self.flush_page_locals();
         self.apply_reserved_timestamp_slots();
+        self.emit_profile_callsite();
         let args_str = args.join(", ");
         self.write_line(&format!("{name}({args_str});"));
         self.reload_page_locals();
     }
 
     pub fn emit_call_without_page_flush(&mut self, name: &str, args: &[&str]) {
+        self.emit_profile_callsite();
         let args_str = args.join(", ");
         self.write_line(&format!("{name}({args_str});"));
     }
@@ -703,6 +727,7 @@ impl<'a> EmitContext<'a> {
     pub fn emit_call_expr(&mut self, ret_ty: &str, name: &str, args: &[&str]) -> String {
         self.flush_page_locals();
         self.apply_reserved_timestamp_slots();
+        self.emit_profile_callsite();
         let tmp = self.next_var();
         let args_str = args.join(", ");
         self.write_line(&format!("{ret_ty} {tmp} = {name}({args_str});"));
@@ -1007,6 +1032,7 @@ mod tests {
             BlockAbi::Plain,
             None,
             None,
+            false,
         )
     }
 
@@ -1030,7 +1056,8 @@ mod tests {
             } else {
                 BlockAbi::Plain
             };
-            let mut ctx = EmitContext::new(HashSet::new(), mode, block_abi, chip_widths, Some(0));
+            let mut ctx =
+                EmitContext::new(HashSet::new(), mode, block_abi, chip_widths, Some(0), false);
             ctx.advance_timestamp(3);
             assert!(ctx.buf().is_empty());
         }
@@ -1062,7 +1089,8 @@ mod tests {
             } else {
                 BlockAbi::Plain
             };
-            let mut ctx = EmitContext::new(HashSet::new(), mode, block_abi, chip_widths, Some(0));
+            let mut ctx =
+                EmitContext::new(HashSet::new(), mode, block_abi, chip_widths, Some(0), false);
             ctx.flush_before_control_transfer();
             assert!(ctx.buf().is_empty(), "mode {mode:?} changed codegen");
         }
@@ -1193,6 +1221,7 @@ mod tests {
             BlockAbi::Metered,
             None,
             Some(0),
+            false,
         );
         metered.reserve_replay_values("words");
         metered.append_replay_memory_u64_range("buffer", "words");
@@ -1208,7 +1237,8 @@ mod tests {
             } else {
                 BlockAbi::Plain
             };
-            let mut ctx = EmitContext::new(HashSet::new(), mode, block_abi, chip_widths, Some(0));
+            let mut ctx =
+                EmitContext::new(HashSet::new(), mode, block_abi, chip_widths, Some(0), false);
             ctx.reserve_replay_values("words");
             ctx.append_replay_memory_u64_range("buffer", "words");
             assert!(ctx.buf().is_empty());
@@ -1256,6 +1286,7 @@ mod tests {
             BlockAbi::Plain,
             None,
             Some(0),
+            false,
         );
         ctx.write_aligned_mem_block("addr", "value");
         ctx.reserve_preflight_timestamp_slots("13u");
@@ -1281,6 +1312,7 @@ mod tests {
             BlockAbi::Plain,
             None,
             Some(0),
+            false,
         );
         ctx.read_mem("addr", 3, 4, false);
 
@@ -1323,6 +1355,7 @@ mod tests {
             BlockAbi::Metered,
             None,
             Some(1),
+            false,
         )
     }
 

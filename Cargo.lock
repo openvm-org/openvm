@@ -5109,6 +5109,7 @@ dependencies = [
  "eyre",
  "flate2",
  "fxprof-processed-profile",
+ "object",
  "openvm-circuit",
  "reqwest",
  "serde_json",
