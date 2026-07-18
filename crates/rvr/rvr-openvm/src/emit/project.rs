@@ -202,6 +202,8 @@ pub struct CProject {
     pub num_airs: Option<u32>,
     /// Compile with native debug info (`-g -fno-omit-frame-pointer`).
     pub native_debug_info: bool,
+    /// Emit exact guest-PC stores at host-call boundaries for sampling.
+    pub profile_execution: bool,
 }
 
 impl CProject {
@@ -222,6 +224,7 @@ impl CProject {
             chip_widths: None,
             num_airs: None,
             native_debug_info: false,
+            profile_execution: false,
         }
     }
 
@@ -803,6 +806,7 @@ impl CProject {
             self.block_abi(),
             chip_widths,
             self.num_airs,
+            self.profile_execution,
         );
         let mut body = String::new();
 
@@ -903,6 +907,9 @@ impl CProject {
             &format!("block_0x{pc:08x}_checkpoint"),
         );
         writeln!(out, "{signature} {{").unwrap();
+        if self.profile_execution {
+            writeln!(out, "    state->pc = 0x{pc:08x}ull;").unwrap();
+        }
         match self.execution_kind {
             RvrExecutionKind::MeteredSegment => {
                 self.emit_segment_checkpoint(out, pc);
@@ -1234,6 +1241,11 @@ impl CProject {
             writeln!(src, "}}").unwrap();
             writeln!(src).unwrap();
         }
+        writeln!(src, "__attribute__((visibility(\"default\"), used))").unwrap();
+        writeln!(src, "uint32_t rv_profile_compatible(void) {{").unwrap();
+        writeln!(src, "  return {}u;", u32::from(self.profile_execution)).unwrap();
+        writeln!(src, "}}").unwrap();
+        writeln!(src).unwrap();
 
         // Execution entry point — single entry call; tail calls chain blocks.
         writeln!(

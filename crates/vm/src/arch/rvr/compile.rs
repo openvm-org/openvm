@@ -32,6 +32,8 @@ pub struct RvrCompiled {
     execution_kind: RvrExecutionKind,
     /// Number of AIRs stored in a metered artifact.
     num_airs: Option<u32>,
+    /// Whether host-call boundaries preserve exact guest profiling callsites.
+    profile_compatible: bool,
 }
 
 enum ArtifactDir {
@@ -119,6 +121,15 @@ impl RvrCompiled {
             }
         }
         Ok(())
+    }
+
+    pub(crate) fn require_profile_compatible(&self) -> Result<(), CompileError> {
+        if self.profile_compatible {
+            return Ok(());
+        }
+        Err(CompileError::LibLoad(
+            "RVR artifact was not compiled with a profiled compile API".to_string(),
+        ))
     }
 
     /// Path to the directory holding generated C sources and build artifacts,
@@ -321,8 +332,11 @@ pub struct CompileOptions<'a> {
     pub chips: Option<&'a ChipMapping>,
     /// Guest debug map: OpenVM PC -> SourceLoc.
     pub guest_debug_map: Option<&'a GuestDebugMap>,
-    /// Compile with `-g -fno-omit-frame-pointer` for profiling.
+    /// Compile with native debug information for profiling.
     pub native_debug_info: bool,
+    /// Preserve exact guest PCs at host-call boundaries and mark the artifact
+    /// as safe for sampled execution profiling.
+    pub profile_execution: bool,
     /// Keep the generated native project after the compiled library is dropped.
     pub keep_artifacts: bool,
 }
@@ -349,6 +363,7 @@ pub fn compile<F: PrimeField32>(
             chips: None,
             guest_debug_map,
             native_debug_info: cfg!(feature = "profiling"),
+            profile_execution: false,
             keep_artifacts: false,
         },
     )
@@ -370,6 +385,7 @@ pub fn compile_profiled<F: PrimeField32>(
             chips: None,
             guest_debug_map,
             native_debug_info: true,
+            profile_execution: true,
             keep_artifacts: false,
         },
     )
@@ -390,6 +406,7 @@ pub fn compile_with_instret_tracking<F: PrimeField32>(
             chips: None,
             guest_debug_map,
             native_debug_info: cfg!(feature = "profiling"),
+            profile_execution: false,
             keep_artifacts: false,
         },
     )
@@ -411,6 +428,7 @@ pub fn compile_metered<F: PrimeField32>(
             chips: Some(chips),
             guest_debug_map,
             native_debug_info: cfg!(feature = "profiling"),
+            profile_execution: false,
             keep_artifacts: false,
         },
     )
@@ -433,6 +451,7 @@ pub fn compile_metered_profiled<F: PrimeField32>(
             chips: Some(chips),
             guest_debug_map,
             native_debug_info: true,
+            profile_execution: true,
             keep_artifacts: false,
         },
     )
@@ -454,6 +473,7 @@ pub fn compile_metered_segment_boundary<F: PrimeField32>(
             chips: Some(chips),
             guest_debug_map,
             native_debug_info: cfg!(feature = "profiling"),
+            profile_execution: false,
             keep_artifacts: false,
         },
     )
@@ -475,6 +495,7 @@ pub fn compile_metered_cost<F: PrimeField32>(
             chips: Some(chips),
             guest_debug_map,
             native_debug_info: cfg!(feature = "profiling"),
+            profile_execution: false,
             keep_artifacts: false,
         },
     )
@@ -497,6 +518,7 @@ pub fn compile_metered_cost_profiled<F: PrimeField32>(
             chips: Some(chips),
             guest_debug_map,
             native_debug_info: true,
+            profile_execution: true,
             keep_artifacts: false,
         },
     )
@@ -520,12 +542,14 @@ pub fn load_compiled_from_path(lib_path: &Path) -> Result<RvrCompiled, CompileEr
     };
     let execution_kind = load_execution_kind(&lib)?;
     let num_airs = load_num_airs(&lib, execution_kind)?;
+    let profile_compatible = load_profile_compatible(&lib)?;
     Ok(RvrCompiled {
         lib,
         lib_path: lib_path.to_path_buf(),
         artifact_dir: None,
         execution_kind,
         num_airs,
+        profile_compatible,
     })
 }
 
@@ -566,6 +590,23 @@ fn load_num_airs(
         ));
     }
     Ok(Some(num_airs))
+}
+
+fn load_profile_compatible(lib: &libloading::Library) -> Result<bool, CompileError> {
+    type ProfileCompatibleFn = unsafe extern "C" fn() -> u32;
+    let marker_fn: ProfileCompatibleFn = unsafe {
+        *lib.get::<ProfileCompatibleFn>(b"rv_profile_compatible")
+            .map_err(|error| {
+                CompileError::LibLoad(format!("missing rv_profile_compatible marker: {error}"))
+            })?
+    };
+    match unsafe { marker_fn() } {
+        0 => Ok(false),
+        1 => Ok(true),
+        marker => Err(CompileError::LibLoad(format!(
+            "unknown rv_profile_compatible marker {marker}"
+        ))),
+    }
 }
 
 fn compile_impl<F: PrimeField32>(
@@ -669,6 +710,7 @@ fn compile_impl<F: PrimeField32>(
     }
 
     project.native_debug_info = opts.native_debug_info;
+    project.profile_execution = opts.profile_execution;
 
     let entry_point = u64::from(exe.pc_start);
     let text_start = u64::from(exe.program.pc_base);
@@ -722,6 +764,7 @@ fn compile_impl<F: PrimeField32>(
             .map_err(|e| CompileError::LibLoad(format!("{}: {}", lib_path.display(), e)))?
     };
     let execution_kind = load_execution_kind(&lib)?;
+    let profile_compatible = load_profile_compatible(&lib)?;
     if execution_kind != opts.execution_kind {
         return Err(CompileError::LibLoad(format!(
             "generated RVR execution kind mismatch: expected {:?}, found {execution_kind:?}",
@@ -729,6 +772,12 @@ fn compile_impl<F: PrimeField32>(
         )));
     }
     let num_airs = load_num_airs(&lib, execution_kind)?;
+    if profile_compatible != opts.profile_execution {
+        return Err(CompileError::LibLoad(format!(
+            "generated RVR profile marker mismatch: expected {}, found {profile_compatible}",
+            opts.profile_execution
+        )));
+    }
     let artifact_dir = if opts.keep_artifacts {
         let path = temp_dir.keep();
         tracing::info!(
@@ -746,6 +795,7 @@ fn compile_impl<F: PrimeField32>(
         artifact_dir: Some(artifact_dir),
         execution_kind,
         num_airs,
+        profile_compatible,
     })
 }
 

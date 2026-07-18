@@ -240,6 +240,7 @@ mod tests {
             BlockAbi::Plain,
             None,
             None,
+            false,
         );
         emit_terminator(&mut direct, &term, 0, &tc);
         assert!(!direct.buf().contains("reg_read"));
@@ -250,6 +251,7 @@ mod tests {
             BlockAbi::Plain,
             None,
             None,
+            false,
         );
         emit_terminator(&mut tracing, &term, 0, &tc);
         assert_eq!(tracing.buf().matches("trace_reg_read").count(), 2);

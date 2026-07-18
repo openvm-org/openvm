@@ -211,9 +211,14 @@ fn run_profiled<ModeState, T>(
     profile: Option<&GuestProfileConfig>,
     execute: impl FnOnce(&mut RvState<ModeState>) -> Result<T, ExecuteError>,
 ) -> Result<T, ExecuteError> {
+    if profile.is_some() {
+        compiled
+            .require_profile_compatible()
+            .map_err(|error| ExecuteError::GuestProfile(error.to_string()))?;
+    }
     #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
     let profiler = profile
-        .map(|config| GuestProfiler::start(state, config))
+        .map(|config| unsafe { GuestProfiler::start(state, config) })
         .transpose()
         .map_err(ExecuteError::GuestProfile)?;
     #[cfg(not(all(target_os = "linux", target_arch = "x86_64")))]

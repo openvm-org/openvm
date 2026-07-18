@@ -27,8 +27,8 @@ pub use initial_image::RvrInitialImage;
 pub use metered::{RvrMeteredExecutionOutcome, RvrMeteredInstance, RvrMeteredSegmentInstance};
 pub use metered_cost::{MeteredCostState, RvrMeteredCostInstance};
 pub use profile::{
-    GuestProfileConfig, GuestProfileFormat, RawGuestProfile, RawGuestProfileSample,
-    RAW_GUEST_PROFILE_VERSION,
+    GuestProfileConfig, GuestProfileFormat, RawGuestProfile, RawGuestProfileSample, RawNativeFrame,
+    RawNativeModule, RAW_GUEST_PROFILE_VERSION,
 };
 pub use pure::{
     RvrPureInstance, RvrPureWithInstretTrackingInstance, RvrTrackedExecution,
