@@ -2068,6 +2068,7 @@ where
             program_frequencies_on_device: device_touched_memory,
             touched_memory: replay.touched_memory,
             touched_memory_on_device: device_touched_memory,
+            device_replay_oracle: device_touched_memory && device_aux_oracle,
             #[cfg(feature = "rvr")]
             rvr_exec_frequencies_touched: exec_frequencies_touched,
             #[cfg(feature = "rvr")]

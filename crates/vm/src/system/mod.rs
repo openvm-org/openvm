@@ -132,6 +132,10 @@ pub struct SystemRecords<F> {
     /// the sorted final touched blocks are reconstructed by the device replay
     /// instead of by the host preflight normalizer.
     pub touched_memory_on_device: bool,
+    /// Fail-hard routing bit for byte-equal device-versus-host replay checks.
+    /// Checked G2 emission sets this unconditionally; production may opt in
+    /// through its explicit diagnostic environment switch.
+    pub device_replay_oracle: bool,
 }
 
 /// A memory block touched during a segment: final values and last-access
@@ -402,6 +406,7 @@ where
             rvr_exec_frequencies_pool,
             touched_memory,
             touched_memory_on_device,
+            device_replay_oracle,
         } = system_records;
         assert!(
             !touched_memory_on_device,
@@ -410,6 +415,10 @@ where
         assert!(
             !program_frequencies_on_device,
             "CPU system inventory cannot consume device-reconstructed program frequencies"
+        );
+        assert!(
+            !device_replay_oracle,
+            "CPU system inventory cannot consume the device replay oracle"
         );
 
         self.program_chip.filtered_exec_frequencies = filtered_exec_frequencies;

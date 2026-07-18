@@ -1421,6 +1421,7 @@ where
             rvr_exec_frequencies_pool: None,
             touched_memory,
             touched_memory_on_device: false,
+            device_replay_oracle: false,
         };
         let record_arenas = exec_state.ctx.arenas;
         let to_state = VmState::new(

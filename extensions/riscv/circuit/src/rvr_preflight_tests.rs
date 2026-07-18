@@ -1255,6 +1255,11 @@ fn rvr_preflight_g2_addi_is_byte_equal_to_compact_consumer() {
     assert!(!g2_output.access_aux_complete);
     assert!(g2_output.system_records.program_frequencies_on_device);
     assert!(g2_output.system_records.touched_memory_on_device);
+    assert_eq!(
+        g2_output.system_records.device_replay_oracle,
+        meta.checked_emission(),
+        "checked G2 must enable the system touched-memory oracle without a second environment flag"
+    );
 
     // Oracle-only final materialization. Production never executes this
     // block: it restores the compact arm's chronology solely to drive the
