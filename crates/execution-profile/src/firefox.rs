@@ -203,12 +203,13 @@ fn build_firefox_profile(
     profile.set_thread_name(thread, "RV64 guest execution");
     profile.add_initial_selected_thread(thread);
 
-    let guest_lib = add_library(&mut profile, guest_elf_path, Some("riscv64"));
+    let guest_lib = add_library(&mut profile, guest_elf_path, None, Some("riscv64"));
     let host_resolver = native_artifact_path
         .filter(|path| path.metadata().is_ok_and(|metadata| metadata.len() != 0))
         .map(HostResolver::new)
         .transpose()?;
-    let host_lib = native_artifact_path.map(|path| add_library(&mut profile, path, None));
+    let host_lib = native_artifact_path
+        .map(|path| add_library(&mut profile, path, Some("libopenvm.so"), None));
     let guest_category: SubcategoryHandle = profile
         .handle_for_category(Category("Guest", CategoryColor::Yellow))
         .into();
@@ -410,13 +411,15 @@ fn replace_block_frame(chain: &mut [ResolvedFrame], debug_map: &GuestDebugMap) {
 fn add_library(
     profile: &mut Profile,
     path: &Path,
+    name_override: Option<&str>,
     arch: Option<&str>,
 ) -> fxprof_processed_profile::LibraryHandle {
-    let name = path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or("openvm-profile")
-        .to_string();
+    let name = name_override.map(str::to_string).unwrap_or_else(|| {
+        path.file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("openvm-profile")
+            .to_string()
+    });
     profile.add_lib(LibraryInfo {
         name: name.clone(),
         debug_name: name,
