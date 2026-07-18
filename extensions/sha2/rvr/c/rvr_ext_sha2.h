@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-struct RvState;
+typedef struct RvState RvState;
 
 /* SHA-256 compress extension FFI entry point (implemented in Rust). */
 extern void rvr_ext_sha256(RvState* state, uint64_t dst_ptr,

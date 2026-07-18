@@ -188,7 +188,7 @@ pub struct CProject {
     pub blocks_per_partition: usize,
     /// Enable thin LTO for the generated C code.
     pub enable_lto: bool,
-    /// Per-PC primary chip index for emitted block-level row accounting.
+    /// Main chip index for each PC, used to count rows once per block.
     /// Index i = chip for PC = pc_base + i*4.
     /// `None` in pure mode (no chip metadata requested); must be set in metered modes.
     pub pc_to_chip: Option<Vec<TraceChipIndex>>,
@@ -196,7 +196,7 @@ pub struct CProject {
     pub pc_base: u64,
     /// Per-AIR widths for MeteredCost precomputation. Indexed by chip index.
     pub chip_widths: Option<Vec<u64>>,
-    /// Number of AIRs in metered artifacts. Emitted into the generated C ABI.
+    /// Number of AIRs written into a metered artifact's C ABI.
     pub num_airs: Option<u32>,
     /// Compile with native debug info (`-g -fno-omit-frame-pointer`).
     pub native_debug_info: bool,
@@ -325,15 +325,15 @@ impl CProject {
     }
 
     /// C function parameter list entries.
-    fn param_list_items(&self, include_names: bool) -> Vec<String> {
+    fn param_list_items(&self, include_names: bool, unused_trace_heights: bool) -> Vec<String> {
         let mut params = vec![if include_names {
-            "RvState* restrict state [[maybe_unused]]".to_string()
+            "RvState* restrict state".to_string()
         } else {
             "RvState* restrict".to_string()
         }];
         for &(_, name) in &self.sorted_hot_regs() {
             params.push(if include_names {
-                format!("uint64_t {name} [[maybe_unused]]")
+                format!("uint64_t {name}")
             } else {
                 "uint64_t".to_string()
             });
@@ -341,18 +341,23 @@ impl CProject {
         match self.block_abi() {
             BlockAbi::Plain => {}
             BlockAbi::InstretCountdown => params.push(if include_names {
-                "uint64_t instret_remaining [[maybe_unused]]".to_string()
+                "uint64_t instret_remaining".to_string()
             } else {
                 "uint64_t".to_string()
             }),
             BlockAbi::Metered => {
                 params.push(if include_names {
-                    "uint32_t check_counter [[maybe_unused]]".to_string()
+                    "uint32_t check_counter".to_string()
                 } else {
                     "uint32_t".to_string()
                 });
                 params.push(if include_names {
-                    "TraceHeights* restrict trace_heights [[maybe_unused]]".to_string()
+                    let attribute = if unused_trace_heights {
+                        " [[maybe_unused]]"
+                    } else {
+                        ""
+                    };
+                    format!("TraceHeights* restrict trace_heights{attribute}")
                 } else {
                     "TraceHeights* restrict".to_string()
                 });
@@ -361,8 +366,8 @@ impl CProject {
         params
     }
 
-    fn block_signature(&self, prefix: &str, name: &str) -> String {
-        let params = self.param_list_items(true);
+    fn function_signature(&self, prefix: &str, name: &str, unused_trace_heights: bool) -> String {
+        let params = self.param_list_items(true, unused_trace_heights);
         let mut out = format!("{prefix} {name}(\n");
         for (idx, param) in params.iter().enumerate() {
             let suffix = if idx + 1 == params.len() { "" } else { "," };
@@ -372,8 +377,12 @@ impl CProject {
         out
     }
 
+    fn block_signature(&self, prefix: &str, name: &str) -> String {
+        self.function_signature(prefix, name, false)
+    }
+
     fn trap_signature(&self) -> String {
-        self.block_signature("__attribute__((preserve_none, cold)) void", "rv_trap")
+        self.function_signature("__attribute__((preserve_none, cold)) void", "rv_trap", true)
     }
 
     fn emit_trap_declaration(&self, out: &mut String) {
@@ -410,7 +419,7 @@ impl CProject {
 
     /// C typedef parameter types: "RvState*, uint32_t, uint32_t".
     fn typedef_params(&self) -> String {
-        self.param_list_items(false).join(", ")
+        self.param_list_items(false, false).join(", ")
     }
 
     /// Call to save hot registers back to state before returning.
@@ -597,9 +606,6 @@ impl CProject {
             self.execution_kind.trace_header_filename()
         )
         .unwrap();
-        if self.execution_kind.metered_block_header_content().is_some() {
-            writeln!(openvm_h, "#include \"openvm_block.h\"").unwrap();
-        }
         writeln!(openvm_h, "#include \"openvm_io.h\"").unwrap();
         fs::write(self.output_dir.join("openvm.h"), openvm_h)?;
 
@@ -615,8 +621,7 @@ impl CProject {
         self.write_embedded_files(extensions.vendored_c_sources(), &mut created_dirs)?;
         self.write_embedded_files(extensions.extra_c_include_files(), &mut created_dirs)?;
 
-        // Write wrapper functions if any extensions are registered
-        if !extensions.is_empty() {
+        if extensions.uses_memory_wrappers() {
             self.write_ext_wrappers()?;
         }
 
@@ -662,9 +667,6 @@ impl CProject {
 
         // Mode-specific tracing helpers include openvm_state.h internally.
         writeln!(h, "#include \"{trace_header}\"").unwrap();
-        if self.execution_kind.metered_block_header_content().is_some() {
-            writeln!(h, "#include \"openvm_block.h\"").unwrap();
-        }
         writeln!(h).unwrap();
 
         // Block function type and dispatch table (for JumpDyn tail calls).
@@ -682,7 +684,7 @@ impl CProject {
             );
             writeln!(h, "{signature};").unwrap();
         }
-        // Hidden visibility keeps this cross-TU dispatch table non-interposable.
+        // Keep this table private to the library so the linker can address it directly.
         writeln!(
             h,
             "extern __attribute__((visibility(\"hidden\"))) BlockFn const dispatch_table[RV_DISPATCH_TABLE_SIZE];"
@@ -746,6 +748,9 @@ impl CProject {
             let first_pc = partition[0].start_pc;
             let mut src = String::with_capacity(64 * 1024);
             writeln!(src, "#include \"{name}.h\"").unwrap();
+            if self.execution_kind.metered_block_header_content().is_some() {
+                writeln!(src, "#include \"openvm_block.h\"").unwrap();
+            }
             writeln!(src).unwrap();
 
             for block in partition {
@@ -1258,11 +1263,8 @@ impl CProject {
             args.push(format!("VENDOR_SRCS={}", vendor_sources.join(" ")));
         }
         if !ext_staticlibs.is_empty() {
-            // `make` receives `VAR=value` assignments as single argv entries,
-            // but `$(EXT_LIBS)` and `$(EXT_CFLAGS)` are later expanded by
-            // splitting on spaces. Static library paths, `-I...` paths, and
-            // copied source filenames in `$(EXT_SRCS)` and `$(VENDOR_SRCS)`
-            // therefore must not contain spaces.
+            // Make expands these space-separated paths, so extension filenames
+            // cannot contain spaces.
             let libs: Vec<String> = ext_staticlibs
                 .iter()
                 .map(|p| p.display().to_string())
@@ -1390,7 +1392,7 @@ mod tests {
     }
 
     #[test]
-    fn execution_kinds_have_distinct_markers_and_suffixes() {
+    fn execution_kinds_have_distinct_suffixes_and_round_trip_markers() {
         let kinds = [
             RvrExecutionKind::Pure,
             RvrExecutionKind::PureWithInstretTracking,
@@ -1398,10 +1400,8 @@ mod tests {
             RvrExecutionKind::Metered,
             RvrExecutionKind::MeteredSegment,
         ];
-        let mut markers = HashSet::new();
         let mut suffixes = HashSet::new();
         for kind in kinds {
-            assert!(markers.insert(kind as u32));
             assert!(suffixes.insert(kind.artifact_suffix()));
             assert_eq!(RvrExecutionKind::try_from(kind as u32), Ok(kind));
         }

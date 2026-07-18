@@ -37,7 +37,7 @@ impl ExtInstr for HintStoreWInstr {
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         let ptr = ctx.read_reg(self.ptr_reg);
         ctx.emit_checked_call_without_page_flush("openvm_hint_storew", &[&ptr]);
-        ctx.trace_mem_access(&ptr, RV64_MEMORY_AS);
+        ctx.trace_page_access(&ptr, RV64_REGISTER_BYTES as u8, RV64_MEMORY_AS);
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -72,9 +72,9 @@ impl ExtInstr for HintBufferInstr {
         // Block-entry already credits a static +1; emit the runtime
         // `(n - 1)` correction only when there is more than one row.
         let chip_idx = air_index_to_c(self.chip_idx);
-        // The guard above proves this correction is at most 1022.
+        // After the check above, n - 1 is at most 1022.
         ctx.trace_chip_if_nonzero(chip_idx, &format!("(uint32_t)({n} - 1ull)"));
-        ctx.trace_mem_access_u64_range(&ptr, &n, RV64_MEMORY_AS);
+        ctx.trace_page_access_u64_range(&ptr, &n, RV64_MEMORY_AS);
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -113,7 +113,7 @@ impl ExtInstr for RevealInstr {
         };
         let width = format!("{}u", self.width.bytes());
         ctx.emit_checked_call_without_page_flush("openvm_reveal", &[&src, &addr, &width]);
-        ctx.trace_mem_access(&addr, PUBLIC_VALUES_AS);
+        ctx.trace_page_access(&addr, self.width.bytes(), PUBLIC_VALUES_AS);
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -152,8 +152,8 @@ impl ExtInstr for PrintStrInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let ptr = ctx.read_reg_raw(self.ptr_reg);
-        let len = ctx.read_reg_raw(self.len_reg);
+        let ptr = ctx.read_reg_execution_input(self.ptr_reg);
+        let len = ctx.read_reg_execution_input(self.len_reg);
         ctx.emit_checked_call_without_page_flush("openvm_print_str", &[&ptr, &len]);
     }
 
@@ -175,7 +175,7 @@ impl ExtInstr for HintRandomInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let n = ctx.read_reg_raw(self.num_words_reg);
+        let n = ctx.read_reg_execution_input(self.num_words_reg);
         ctx.emit_checked_call_without_page_flush("openvm_hint_random", &[&n]);
     }
 
@@ -498,7 +498,7 @@ pub extern "C" fn host_hint_buffer(ctx: *mut c_void, dest_addr: u64, num_words: 
 }
 
 /// Host callback for stores to `PUBLIC_VALUES_AS`.
-/// Cost corrections are handled in generated C.
+/// Generated C adds the trace-row cost.
 pub extern "C" fn host_reveal(ctx: *mut c_void, src_val: u64, addr: u64, width: u8) -> bool {
     let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_>) };
     let width = match width {
@@ -538,13 +538,11 @@ mod tests {
             format!("r{idx}")
         }
 
-        fn read_reg_raw(&mut self, idx: u8) -> String {
+        fn read_reg_execution_input(&mut self, idx: u8) -> String {
             format!("r{idx}")
         }
 
         fn write_reg(&mut self, _idx: u8, _val: &str) {}
-
-        fn write_reg_raw(&mut self, _idx: u8, _val: &str) {}
 
         fn write_line(&mut self, s: &str) {
             self.lines.push(s.to_string());
@@ -599,18 +597,20 @@ mod tests {
             self.write_line("}");
         }
 
-        fn trace_mem_access(&mut self, addr: &str, addr_space: u32) {
-            self.write_line(&format!("trace_mem_access(state, {addr}, {addr_space}u);"));
+        fn trace_page_access(&mut self, addr: &str, size: u8, addr_space: u32) {
+            self.write_line(&format!(
+                "trace_page_access(state, {addr}, {size}u, {addr_space}u);"
+            ));
         }
 
-        fn trace_mem_access_u64_range(
+        fn trace_page_access_u64_range(
             &mut self,
             base_addr: &str,
             num_dwords: &str,
             addr_space: u32,
         ) {
             self.write_line(&format!(
-                "trace_mem_access_u64_range(state, {base_addr}, {num_dwords}, {addr_space}u);"
+                "trace_page_access_u64_range(state, {base_addr}, {num_dwords}, {addr_space}u);"
             ));
         }
     }
@@ -689,7 +689,7 @@ mod tests {
     }
 
     #[test]
-    fn reveal_traces_the_offset_public_values_address() {
+    fn reveal_accounts_for_the_offset_public_values_page() {
         let mut ctx = TestEmitCtx::default();
         RevealInstr {
             src_reg: 5,
@@ -705,7 +705,7 @@ mod tests {
         );
         assert_eq!(
             ctx.lines[3],
-            format!("trace_mem_access(state, (r10 + 0x0000000cull), {PUBLIC_VALUES_AS}u);")
+            format!("trace_page_access(state, (r10 + 0x0000000cull), 4u, {PUBLIC_VALUES_AS}u);")
         );
     }
 

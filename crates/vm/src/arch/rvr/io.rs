@@ -23,8 +23,8 @@ pub struct OpenVmIoState<'a> {
     pub deferrals: &'a mut Vec<DeferralState>,
 }
 
-/// Convert an RV64 memory range to host indices if it fits within AS_MEMORY
-/// (`MEM_SIZE` bytes).
+/// Return host indices for an RV64 range that fits in `AS_MEMORY` (`MEM_SIZE`
+/// bytes).
 #[cfg(not(feature = "unprotected"))]
 #[inline(always)]
 pub fn checked_mem_bounds_range(start: u64, num_bytes: u64) -> Option<Range<usize>> {
@@ -52,5 +52,28 @@ pub unsafe extern "C" fn host_hint_stream_set(ctx: *mut c_void, data: *const u8,
         io.hint_stream.set_hint_from_slice(slice);
     } else {
         io.hint_stream.clear();
+    }
+}
+
+#[cfg(all(test, not(feature = "unprotected")))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn checked_memory_range_accepts_end_boundary() {
+        assert_eq!(
+            checked_mem_bounds_range(MEM_SIZE as u64 - 8, 8),
+            Some(MEM_SIZE - 8..MEM_SIZE)
+        );
+        assert_eq!(
+            checked_mem_bounds_range(MEM_SIZE as u64, 0),
+            Some(MEM_SIZE..MEM_SIZE)
+        );
+    }
+
+    #[test]
+    fn checked_memory_range_rejects_out_of_bounds_and_overflow() {
+        assert_eq!(checked_mem_bounds_range(MEM_SIZE as u64, 1), None);
+        assert_eq!(checked_mem_bounds_range(u64::MAX, 1), None);
     }
 }

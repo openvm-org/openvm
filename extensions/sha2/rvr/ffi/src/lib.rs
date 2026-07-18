@@ -1,15 +1,14 @@
 //! FFI functions for the SHA-2 extension (SHA-256 + SHA-512).
 //!
-//! These Rust functions are called from generated C code. They receive resolved
-//! register values and the state as an opaque pointer. Memory reads/writes,
-//! and SHA-2 computation go through double FFI; register access stays on the C
-//! side. Fixed chip-row accounting is folded into generated block metering.
+//! Generated C calls these Rust functions, which call back into C for memory
+//! access. Register access stays in generated C. The generator adds fixed chip
+//! rows to each block's metering update.
 
 use std::ffi::c_void;
 
 use generic_array::GenericArray;
 use openvm_platform::WORD_SIZE;
-use rvr_openvm_ext_ffi_common::{rd_mem_words_traced, u64s_as_u32s_mut, wr_mem_words_traced};
+use rvr_openvm_ext_ffi_common::{read_mem_words, u64s_as_u32s_mut, write_mem_words};
 use sha2::{compress256, compress512};
 
 // SHA-256: 32-byte state (4 u64s / 8 u32s), 64-byte block (8 u64s)
@@ -49,19 +48,19 @@ pub unsafe extern "C" fn rvr_ext_sha256(
 ) {
     // Read state as 4 u64s (32 bytes); view as [u32; 8] for compress256.
     let mut state_words = [0u64; SHA256_STATE_WORDS];
-    rd_mem_words_traced(state, state_ptr, &mut state_words);
+    read_mem_words(state, state_ptr, &mut state_words);
     let state_u32s: &mut [u32; 8] = u64s_as_u32s_mut(&mut state_words).try_into().unwrap();
 
     // Read block as 8 u64s (64 bytes); view as bytes for compress256.
     let mut block_words = [0u64; SHA256_BLOCK_WORDS];
-    rd_mem_words_traced(state, input_ptr, &mut block_words);
+    read_mem_words(state, input_ptr, &mut block_words);
     let block_array: &GenericArray<u8, _> =
         GenericArray::from_slice(u64_words_as_bytes(&block_words));
 
     compress256(state_u32s, &[*block_array]);
     // state_u32s borrow ends here; state_words now holds the compressed state.
 
-    wr_mem_words_traced(state, dst_ptr, &state_words);
+    write_mem_words(state, dst_ptr, &state_words);
 }
 
 /// SHA-512 compress FFI entry point.
@@ -81,15 +80,15 @@ pub unsafe extern "C" fn rvr_ext_sha512(
 ) {
     // SHA-512 state is naturally [u64; 8]; read directly.
     let mut state_u64s = [0u64; SHA512_STATE_WORDS];
-    rd_mem_words_traced(state, state_ptr, &mut state_u64s);
+    read_mem_words(state, state_ptr, &mut state_u64s);
 
     // Read block as 16 u64s (128 bytes); view as bytes for compress512.
     let mut block_words = [0u64; SHA512_BLOCK_WORDS];
-    rd_mem_words_traced(state, input_ptr, &mut block_words);
+    read_mem_words(state, input_ptr, &mut block_words);
     let block_array: &GenericArray<u8, _> =
         GenericArray::from_slice(u64_words_as_bytes(&block_words));
 
     compress512(&mut state_u64s, &[*block_array]);
 
-    wr_mem_words_traced(state, dst_ptr, &state_u64s);
+    write_mem_words(state, dst_ptr, &state_u64s);
 }

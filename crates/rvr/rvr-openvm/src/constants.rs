@@ -29,14 +29,17 @@ pub const MAX_MEM_PAGES_PER_INSN: usize = {
 /// verifies this capacity against `MAX_MEM_PAGES_PER_INSN`.
 pub const MEM_PAGE_BUF_CAP: usize = 1 << 16;
 
+/// Worst-case AS_PUBLIC_VALUES pages a fixed-width reveal can touch.
+const MAX_PV_PAGES_PER_INSN: usize = 2;
+
 /// Maximum AS_PUBLIC_VALUES page buffer entries per segment check interval.
-/// No bounds checks in C. At most 1 page per instruction (reveal/publish).
+/// No bounds checks in C. An unaligned reveal can cross one page boundary.
 pub const PV_PAGE_BUF_CAP: usize = 1 << 12;
 
 /// Maximum AS_DEFERRAL page buffer entries per segment check interval.
-/// No bounds checks in C.
-// TODO: justify this bound (audit max deferral pages per instruction).
-pub const DEFERRAL_PAGE_BUF_CAP: usize = 1 << 16;
+/// No bounds checks in C. Deferral CALL records two reads and two writes.
+const MAX_DEFERRAL_PAGES_PER_INSN: usize = 4;
+pub const DEFERRAL_PAGE_BUF_CAP: usize = 1 << 12;
 
 /// Generate the `openvm_constants.h` content with compile-time constants
 /// for the C tracing headers.
@@ -73,6 +76,8 @@ static constexpr uint32_t TRACER_PV_PAGE_BUF_CAP = {PV_PAGE_BUF_CAP};
 static constexpr uint32_t TRACER_DEFERRAL_PAGE_BUF_CAP = {DEFERRAL_PAGE_BUF_CAP};
 static constexpr uint32_t TRACER_SEGMENT_CHECK_INSNS = {SEGMENT_CHECK_INSNS};
 static constexpr uint32_t TRACER_MAX_MEM_PAGES_PER_INSN = {MAX_MEM_PAGES_PER_INSN};
+static constexpr uint32_t TRACER_MAX_PV_PAGES_PER_INSN = {MAX_PV_PAGES_PER_INSN};
+static constexpr uint32_t TRACER_MAX_DEFERRAL_PAGES_PER_INSN = {MAX_DEFERRAL_PAGES_PER_INSN};
 "
     );
     if let Some(num_airs) = num_airs {

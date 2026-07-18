@@ -178,4 +178,8 @@ impl RvrExtension for Sha2Extension {
             include_bytes!(env!("RVR_SHA2_FFI_STATICLIB")),
         )]
     }
+
+    fn uses_memory_wrappers(&self) -> bool {
+        true
+    }
 }

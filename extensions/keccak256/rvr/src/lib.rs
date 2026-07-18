@@ -83,7 +83,7 @@ pub struct KeccakExtension {
 
 impl KeccakExtension {
     pub fn new(ctx: Option<&RvrExtensionCtx>) -> Result<Self, ExtensionError> {
-        let _ = opcode_air_idx(ctx, XorinOpcode::XORIN)?;
+        opcode_air_idx(ctx, XorinOpcode::XORIN)?;
         let keccakf_op_chip_idx = opcode_air_idx(ctx, KeccakfOpcode::KECCAKF)?;
         // KeccakfPerm is registered adjacent to KeccakfOp and assigned the next
         // AIR index (keccakf_op_chip_idx + 1) due to reverse registration order.

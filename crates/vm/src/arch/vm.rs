@@ -532,9 +532,9 @@ where
         ))
     }
 
-    /// Load a previously saved metered-cost-mode artifact. Its generated
-    /// execution kind and emitted chip widths are validated; the caller
-    /// supplies matching `exe`, `executor_idx_to_air_idx`, and `widths`.
+    /// Load a saved metered-cost artifact and check its execution kind and chip
+    /// widths. The caller must provide matching `exe`,
+    /// `executor_idx_to_air_idx`, and `widths`.
     pub fn load_metered_cost_instance(
         &self,
         lib_path: &std::path::Path,

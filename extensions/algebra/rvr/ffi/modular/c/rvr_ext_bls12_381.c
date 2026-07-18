@@ -19,7 +19,7 @@ static constexpr uint32_t BLS12_381_FR_WORDS = BLS12_381_FR_BYTES / RVR_WORD_SIZ
 
 static inline blst_fp fp_read(RvState *restrict state, uint64_t ptr) {
     uint64_t words[BLS12_381_FP_WORDS];
-    rd_mem_u64_range_traced(state, ptr, words, BLS12_381_FP_WORDS);
+    read_mem_u64_range(state, ptr, words, BLS12_381_FP_WORDS);
     blst_fp r;
     blst_fp_from_lendian(&r, (const uint8_t *)words);
     return r;
@@ -28,7 +28,7 @@ static inline blst_fp fp_read(RvState *restrict state, uint64_t ptr) {
 static inline void fp_write(RvState *restrict state, uint64_t ptr, const blst_fp *val) {
     uint64_t words[BLS12_381_FP_WORDS];
     blst_lendian_from_fp((uint8_t *)words, val);
-    wr_mem_u64_range_traced(state, ptr, words, BLS12_381_FP_WORDS);
+    write_mem_u64_range(state, ptr, words, BLS12_381_FP_WORDS);
 }
 
 static inline blst_fp fp_add(const blst_fp *a, const blst_fp *b) {
@@ -87,7 +87,7 @@ static inline int fp2_is_zero(const blst_fp2 *a) {
 
 static inline blst_fr fr_read(RvState *restrict state, uint64_t ptr) {
     uint64_t words[BLS12_381_FR_WORDS];
-    rd_mem_u64_range_traced(state, ptr, words, BLS12_381_FR_WORDS);
+    read_mem_u64_range(state, ptr, words, BLS12_381_FR_WORDS);
     blst_scalar s;
     blst_scalar_from_lendian(&s, (const uint8_t *)words);
     blst_fr r;
@@ -100,7 +100,7 @@ static inline void fr_write(RvState *restrict state, uint64_t ptr, const blst_fr
     blst_scalar_from_fr(&s, val);
     uint64_t words[BLS12_381_FR_WORDS];
     blst_lendian_from_scalar((uint8_t *)words, &s);
-    wr_mem_u64_range_traced(state, ptr, words, BLS12_381_FR_WORDS);
+    write_mem_u64_range(state, ptr, words, BLS12_381_FR_WORDS);
 }
 
 static inline int fr_eq(const blst_fr *a, const blst_fr *b) {

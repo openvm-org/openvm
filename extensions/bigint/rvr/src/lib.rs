@@ -419,6 +419,10 @@ impl RvrExtension for Int256Extension {
             include_bytes!(env!("RVR_BIGINT_FFI_STATICLIB")),
         )]
     }
+
+    fn uses_memory_wrappers(&self) -> bool {
+        true
+    }
 }
 
 impl Int256Extension {

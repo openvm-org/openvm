@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-struct RvState;
+typedef struct RvState RvState;
 
 /* Cold FFI entry points use the preserve_most calling convention so that
  * hot block callers keep their live state in registers across the call.

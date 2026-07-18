@@ -17,15 +17,17 @@ use openvm_pairing_guest::{
 use openvm_platform::WORD_SIZE;
 use rvr_openvm_ext_algebra_ffi_common::{BLS12_381_ELEM_BYTES, FIELD_256_BYTES};
 use rvr_openvm_ext_ffi_common::{
-    ext_hint_stream_set, rd_mem_u64_range_wrapper, rd_mem_u64_wrapper,
+    ext_hint_stream_set, read_mem_u64_execution_input, read_mem_words_execution_input,
 };
 
 /// BN254 base field element size in bytes.
 const BN254_FQ_BYTES: u64 = FIELD_256_BYTES as u64;
 const BN254_FQ_BYTES_USIZE: usize = FIELD_256_BYTES;
+const BN254_FQ_WORDS: usize = BN254_FQ_BYTES_USIZE / WORD_SIZE;
 /// BLS12-381 base field element size in bytes.
 const BLS12_381_FQ_BYTES: u64 = BLS12_381_ELEM_BYTES as u64;
 const BLS12_381_FQ_BYTES_USIZE: usize = BLS12_381_ELEM_BYTES;
+const BLS12_381_FQ_WORDS: usize = BLS12_381_FQ_BYTES_USIZE / WORD_SIZE;
 /// G1 affine point: two field coordinates (x, y).
 const G1_AFFINE_COORDS: u64 = 2;
 /// G2 affine point: two Fp2 coordinates, each containing two Fp elements.
@@ -44,22 +46,13 @@ unsafe fn clear_hint_stream() {
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
-/// Read `N` bytes from guest memory (untraced, word-aligned reads).
-unsafe fn read_bytes<const N: usize>(state: *mut c_void, ptr: u64) -> [u8; N] {
+/// Read `N` execution-input bytes from guest memory.
+unsafe fn read_bytes<const N: usize, const WORDS: usize>(state: *mut c_void, ptr: u64) -> [u8; N] {
     const {
-        assert!(
-            N.is_multiple_of(WORD_SIZE),
-            "N must be a multiple of WORD_SIZE"
-        );
+        assert!(N == WORDS * WORD_SIZE, "word count must cover N bytes");
     }
-    let num_words = N / WORD_SIZE;
-    let mut words = vec![0u64; num_words];
-    rd_mem_u64_range_wrapper(
-        state,
-        ptr,
-        words.as_mut_ptr(),
-        u32::try_from(num_words).unwrap(),
-    );
+    let mut words = [0u64; WORDS];
+    read_mem_words_execution_input(state, ptr, &mut words);
     let mut bytes = [0u8; N];
     for (i, &w) in words.iter().enumerate() {
         bytes[i * WORD_SIZE..(i + 1) * WORD_SIZE].copy_from_slice(&w.to_le_bytes());
@@ -69,13 +62,13 @@ unsafe fn read_bytes<const N: usize>(state: *mut c_void, ptr: u64) -> [u8; N] {
 
 /// Read an Fq element from guest memory for BN254.
 unsafe fn read_bn254_fq(state: *mut c_void, ptr: u64) -> Option<bn256::Fq> {
-    let bytes = read_bytes::<BN254_FQ_BYTES_USIZE>(state, ptr);
+    let bytes = read_bytes::<BN254_FQ_BYTES_USIZE, BN254_FQ_WORDS>(state, ptr);
     Option::from(bn256::Fq::from_repr(bytes))
 }
 
 /// Read an Fq element from guest memory for BLS12-381.
 unsafe fn read_bls12_381_fq(state: *mut c_void, ptr: u64) -> Option<bls12_381::Fq> {
-    let bytes = read_bytes::<BLS12_381_FQ_BYTES_USIZE>(state, ptr);
+    let bytes = read_bytes::<BLS12_381_FQ_BYTES_USIZE, BLS12_381_FQ_WORDS>(state, ptr);
     Option::from(bls12_381::Fq::from_repr(bytes.into()))
 }
 
@@ -101,10 +94,10 @@ unsafe fn read_pairing_points<Fq: Field, Fq2: Field>(
     read_fq: impl Fn(*mut c_void, u64) -> Option<Fq>,
     make_fq2: impl Fn(Fq, Fq) -> Fq2,
 ) -> Option<PairingPoints<Fq, Fq2>> {
-    let p_ptr = rd_mem_u64_wrapper(state, rs1_val);
-    let p_len = rd_mem_u64_wrapper(state, rs1_val + SLICE_LEN_OFFSET);
-    let q_ptr = rd_mem_u64_wrapper(state, rs2_val);
-    let q_len = rd_mem_u64_wrapper(state, rs2_val + SLICE_LEN_OFFSET);
+    let p_ptr = read_mem_u64_execution_input(state, rs1_val);
+    let p_len = read_mem_u64_execution_input(state, rs1_val + SLICE_LEN_OFFSET);
+    let q_ptr = read_mem_u64_execution_input(state, rs2_val);
+    let q_len = read_mem_u64_execution_input(state, rs2_val + SLICE_LEN_OFFSET);
 
     if p_len != q_len {
         return None;

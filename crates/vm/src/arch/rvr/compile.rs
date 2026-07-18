@@ -31,7 +31,7 @@ pub struct RvrCompiled {
     artifact_dir: Option<ArtifactDir>,
     /// Generated state, tracing, and block ABI family baked into this artifact.
     execution_kind: RvrExecutionKind,
-    /// Number of AIRs baked into metered artifacts.
+    /// Number of AIRs stored in a metered artifact.
     num_airs: Option<u32>,
 }
 
@@ -71,7 +71,7 @@ impl RvrCompiled {
         )))
     }
 
-    /// Verify the exact chip widths specialized into a metered-cost artifact.
+    /// Check that a metered-cost artifact contains the expected chip widths.
     pub(crate) fn require_chip_widths(&self, expected: &[usize]) -> Result<(), CompileError> {
         self.require_execution_kind(&[RvrExecutionKind::MeteredCost])?;
         let num_airs = self.num_airs.ok_or_else(|| {
@@ -104,8 +104,8 @@ impl RvrCompiled {
                 "rv_chip_widths marker returned null".to_string(),
             ));
         }
-        // SAFETY: the artifact exports a static RV_NUM_AIRS-element array, and
-        // its declared AIR count was checked against `expected` above.
+        // SAFETY: the symbol points to `RV_NUM_AIRS` elements, and that count
+        // was checked against `expected` above.
         let actual = unsafe { std::slice::from_raw_parts(actual_ptr, num_airs) };
         for (chip_idx, (&actual, &expected)) in actual.iter().zip(expected).enumerate() {
             let expected = u64::try_from(expected).map_err(|_| {
@@ -248,6 +248,14 @@ pub enum CompileError {
     AirIndexOutOfBounds { pc: u32, air_idx: usize },
     #[error("AIR count {num_airs} exceeds the generated C u32 domain")]
     AirCountOutOfBounds { num_airs: usize },
+    #[error("chip mapping has {actual} entries, but the program has {expected} instruction slots")]
+    ChipMappingLengthMismatch { expected: usize, actual: usize },
+    #[error("chip index {chip_idx} at pc {pc:#x} is outside the {num_airs} AIRs")]
+    ChipIndexOutOfBounds {
+        pc: u64,
+        chip_idx: u32,
+        num_airs: usize,
+    },
     #[error("invalid compile options: {0}")]
     InvalidOptions(&'static str),
 }
@@ -259,9 +267,9 @@ pub struct ChipMapping {
     pub num_airs: usize,
     /// Per-PC chip index. Index i = chip for PC = pc_base + i*4.
     pub pc_to_chip: Vec<TraceChipIndex>,
-    /// Per-AIR widths (MeteredCost mode only). The emitter specializes these
-    /// into cost updates and records them as artifact metadata for load-time
-    /// compatibility validation. Generated execution performs no table lookup.
+    /// Width of each AIR in metered-cost mode. The generator writes each width
+    /// into its cost update and stores the list in the artifact for validation
+    /// when it is loaded. Execution does not look up widths at runtime.
     pub chip_widths: Option<Vec<u64>>,
 }
 
@@ -545,6 +553,26 @@ fn compile_impl<F: PrimeField32>(
                 return Err(CompileError::InvalidOptions(
                     "metered rvr compile requires at least one AIR",
                 ));
+            }
+            let expected_slots = exe.program.instructions_and_debug_infos.len();
+            if chips.pc_to_chip.len() != expected_slots {
+                return Err(CompileError::ChipMappingLengthMismatch {
+                    expected: expected_slots,
+                    actual: chips.pc_to_chip.len(),
+                });
+            }
+            for (slot, chip) in chips.pc_to_chip.iter().copied().enumerate() {
+                let TraceChipIndex::Chip(chip) = chip else {
+                    continue;
+                };
+                if chip.as_u32() as usize >= chips.num_airs {
+                    return Err(CompileError::ChipIndexOutOfBounds {
+                        pc: u64::from(exe.program.pc_base)
+                            + slot as u64 * u64::from(DEFAULT_PC_STEP),
+                        chip_idx: chip.as_u32(),
+                        num_airs: chips.num_airs,
+                    });
+                }
             }
             project.pc_to_chip = Some(chips.pc_to_chip.clone());
             project.chip_widths = chips.chip_widths.clone();

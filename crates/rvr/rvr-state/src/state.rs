@@ -23,7 +23,7 @@ pub struct RvState<ModeState = ()> {
     pub pc: u64,
     pub status: u8,
     pub exit_code: u8,
-    /// Keeps `memory` naturally aligned and makes the shared Rust/C layout explicit.
+    /// Keeps `memory` aligned and matches the C layout.
     pub padding: [u8; 6],
     pub memory: *mut u8,
     pub mode_state: ModeState,

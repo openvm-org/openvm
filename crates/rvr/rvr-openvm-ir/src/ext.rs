@@ -1,8 +1,7 @@
-/// A fixed trace-height contribution made by an extension instruction.
+/// Extra trace rows added by one extension instruction.
 ///
-/// The instruction's primary chip row is accounted for separately through its
-/// PC-to-chip mapping. This describes only additional rows whose count is known
-/// while generating the native artifact.
+/// The PC-to-chip mapping already counts the instruction's main row. This
+/// records any other rows whose count is known when the C code is generated.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct FixedTraceRows {
     /// AIR index whose trace height increases.
@@ -13,28 +12,26 @@ pub struct FixedTraceRows {
 
 /// Trait abstracting the code-generation context for extension instructions.
 ///
-/// Extensions use this to read/write registers (with tracing handled in the
-/// generated C code) and emit C lines, instead of writing raw C into a buffer.
+/// Extensions use this context to read or write registers and emit C. The
+/// emission mode decides whether register accesses are traced.
 /// Register access stays on the C side so the FFI boundary only carries
 /// resolved values and memory.
 pub trait ExtEmitCtx {
-    /// Read a register with tracing. Returns a C expression for the value.
+    /// Read a register as an AIR-visible memory access.
     fn read_reg(&mut self, idx: u8) -> String;
 
-    /// Read a register without tracing (for phantom instructions).
-    fn read_reg_raw(&mut self, idx: u8) -> String;
+    /// Read a register whose value affects execution but is not an AIR memory
+    /// access. Value tracing records the value without advancing the memory
+    /// timestamp.
+    fn read_reg_execution_input(&mut self, idx: u8) -> String;
 
-    /// Write a register with tracing.
+    /// Write a register, tracing it when required by the emission mode.
     fn write_reg(&mut self, idx: u8, val: &str);
-
-    /// Write a register without tracing (for phantom instructions).
-    fn write_reg_raw(&mut self, idx: u8, val: &str);
 
     /// Append a line of C code (indented).
     fn write_line(&mut self, s: &str);
 
-    /// End the current block through the RVR trap path while preserving
-    /// execution-mode state.
+    /// Save execution-mode state and end the block through the shared RVR trap.
     fn emit_trap(&mut self);
 
     /// Read guest memory and return a C expression for the loaded value.
@@ -43,16 +40,17 @@ pub trait ExtEmitCtx {
     /// Write guest memory.
     fn write_mem(&mut self, base: &str, offset: i16, val: &str, width: u8);
 
-    /// Emit an opaque C call, flushing page-local metering state around it.
+    /// Flush local page state, emit a C call, then reload the page state.
     fn emit_call(&mut self, name: &str, args: &[&str]);
 
-    /// Emit a C call that cannot access RVR state and needs no page-local flush.
+    /// Emit a C call that cannot access RVR state, without flushing page state.
     fn emit_call_without_page_flush(&mut self, name: &str, args: &[&str]);
 
-    /// Emit an opaque C call that returns a value, flushing page-local metering state around it.
+    /// Flush local page state, emit a C call that returns a value, then reload
+    /// the page state.
     fn emit_call_expr(&mut self, ret_ty: &str, name: &str, args: &[&str]) -> String;
 
-    /// Emit a call and materialize its result only when chip tracing is active.
+    /// Emit a call and save its result only when chip tracing needs it.
     ///
     /// Pure execution emits the call as a statement and returns `None`.
     fn emit_call_with_trace_result(
@@ -62,7 +60,7 @@ pub trait ExtEmitCtx {
         args: &[&str],
     ) -> Option<String>;
 
-    /// Emit a stateful call returning `bool` and trap when it reports failure.
+    /// Emit a call that can access RVR state and trap if it returns `false`.
     fn emit_checked_call(&mut self, name: &str, args: &[&str]) {
         let result = self.emit_call_expr("bool", name, args);
         self.write_line(&format!("if (unlikely(!{result})) {{"));
@@ -70,7 +68,7 @@ pub trait ExtEmitCtx {
         self.write_line("}");
     }
 
-    /// Emit a no-flush call returning `bool` and trap when it reports failure.
+    /// Emit a call without flushing page state and trap if it returns `false`.
     fn emit_checked_call_without_page_flush(&mut self, name: &str, args: &[&str]) {
         self.write_line(&format!("if (unlikely(!{name}({}))) {{", args.join(", ")));
         self.emit_trap();
@@ -83,11 +81,15 @@ pub trait ExtEmitCtx {
     /// Emit a chip-height update only when `count_expr` is nonzero.
     fn trace_chip_if_nonzero(&mut self, chip_idx: u32, count_expr: &str);
 
-    /// Emit a single memory-page trace.
-    fn trace_mem_access(&mut self, addr: &str, addr_space: u32);
+    /// Record the pages containing one fixed-width access for metering.
+    ///
+    /// This records the address, not the accessed value.
+    fn trace_page_access(&mut self, addr: &str, size: u8, addr_space: u32);
 
-    /// Emit a dword-range memory-page trace (rv64: each unit is 8 bytes).
-    fn trace_mem_access_u64_range(&mut self, base_addr: &str, num_dwords: &str, addr_space: u32);
+    /// Record pages touched by a dword range for metering (one dword is 8 bytes).
+    ///
+    /// This records the address range, not the accessed values.
+    fn trace_page_access_u64_range(&mut self, base_addr: &str, num_dwords: &str, addr_space: u32);
 }
 
 /// Trait for extension IR nodes. Implemented by each extension's instruction types.
@@ -126,10 +128,10 @@ pub trait ExtInstr: std::fmt::Debug + Send + Sync {
         true
     }
 
-    /// Additional chip rows with a count fixed at artifact-generation time.
+    /// Extra chip rows whose count is known when the artifact is generated.
     ///
-    /// These are folded into the block's batched metering update instead of
-    /// being recorded on the extension's runtime path.
+    /// The generator adds them to the block's metering update, so the extension
+    /// does not record them at runtime.
     fn fixed_trace_rows(&self) -> Vec<FixedTraceRows> {
         Vec::new()
     }

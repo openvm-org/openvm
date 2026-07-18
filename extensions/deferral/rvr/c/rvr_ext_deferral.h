@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-struct RvState;
+typedef struct RvState RvState;
 
 typedef struct DeferralHostCallbacks {
   void* ctx;
