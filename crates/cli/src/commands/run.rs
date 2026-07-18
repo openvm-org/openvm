@@ -1,4 +1,6 @@
-use std::path::{Path, PathBuf};
+#[cfg(feature = "rvr")]
+use std::path::Path;
+use std::path::PathBuf;
 
 use clap::{Parser, ValueEnum};
 use eyre::{eyre, Result};
@@ -19,6 +21,7 @@ use crate::{
     },
 };
 
+#[cfg(feature = "rvr")]
 const DEFAULT_EXECUTION_PROFILE_HZ: u32 = 1_000;
 
 #[derive(Clone, Debug, ValueEnum)]
@@ -270,13 +273,17 @@ impl RunCmd {
             return Err(eyre!("--profile-execution currently requires Linux x86_64"));
         }
 
+        #[cfg(feature = "rvr")]
         let mut guest_elf_path = None;
         let exe_path = if let Some(exe) = &self.run_args.exe {
             exe.clone()
         } else {
             // Build and get the executable name
             let target_name = get_single_target_name(&self.cargo_args)?;
-            let mut build_args: BuildArgs = self.run_args.clone().into();
+            let build_args: BuildArgs = self.run_args.clone().into();
+            #[cfg(feature = "rvr")]
+            let mut build_args = build_args;
+            #[cfg(feature = "rvr")]
             if profile_execution {
                 build_args
                     .rustc_flags
@@ -300,6 +307,7 @@ impl RunCmd {
             }
             let cargo_args = self.cargo_args.clone().into();
             let output_dir = build(&build_args, &cargo_args)?;
+            #[cfg(feature = "rvr")]
             if profile_execution {
                 let (manifest_path, _) =
                     get_manifest_path_and_dir(&self.cargo_args.manifest.manifest_path)?;
