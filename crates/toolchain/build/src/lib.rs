@@ -218,7 +218,12 @@ pub fn is_skip_build() -> bool {
 }
 
 fn get_env_var(name: &str) -> String {
-    println!("cargo:rerun-if-env-changed={name}");
+    // Cargo directives are meaningful only while this library is running in a
+    // build script. Emitting them from `cargo openvm execute` pollutes the
+    // command's machine-readable stdout.
+    if env::var_os("OUT_DIR").is_some() {
+        println!("cargo:rerun-if-env-changed={name}");
+    }
     env::var(name).unwrap_or_default()
 }
 
@@ -288,7 +293,7 @@ pub fn cargo_command(subcmd: &str, rust_flags: &[&str]) -> Command {
 
     let rustc = String::from_utf8(rustc).unwrap();
     let rustc = rustc.trim();
-    println!("Using rustc: {rustc}");
+    eprintln!("Using rustc: {rustc}");
 
     let mut cmd = sanitized_cmd("cargo");
     let mut args = vec![toolchain.as_str(), subcmd, "--target", target.as_str()];
@@ -307,7 +312,7 @@ pub fn cargo_command(subcmd: &str, rust_flags: &[&str]) -> Command {
         ]);
     }
 
-    println!("Building guest package: cargo {}", args.join(" "));
+    eprintln!("Building guest package: cargo {}", args.join(" "));
 
     let encoded_rust_flags = encode_rust_flags(rust_flags);
 
