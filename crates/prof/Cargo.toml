@@ -22,6 +22,7 @@ base64 = { version = "0.22", optional = true }
 flate2 = { version = "1", optional = true }
 fxprof-processed-profile = { version = "0.8", optional = true }
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"], optional = true }
+tempfile = { workspace = true, optional = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
@@ -34,5 +35,6 @@ firefox = [
     "dep:fxprof-processed-profile",
     "dep:openvm-circuit",
     "dep:reqwest",
+    "dep:tempfile",
     "openvm-circuit/rvr",
 ]

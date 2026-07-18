@@ -6,7 +6,7 @@ use clap::{Parser, ValueEnum};
 use eyre::{eyre, Result};
 use openvm_circuit::arch::instructions::exe::VmExe;
 #[cfg(feature = "rvr")]
-use openvm_sdk::execution_profile::profile_execution;
+use openvm_prof::firefox::FirefoxProfiler;
 use openvm_sdk::{
     config::AggregationSystemParams, fs::read_object_from_file, keygen::AppProvingKey, Sdk, F,
 };
@@ -363,38 +363,38 @@ impl RunCmd {
                     .as_deref()
                     .ok_or_else(|| eyre!("guest ELF path is unavailable"))?;
                 let sample_hz = self.run_args.rate.unwrap_or(DEFAULT_EXECUTION_PROFILE_HZ);
-                let profile = match self.run_args.mode {
+                let profiler = FirefoxProfiler::new(guest_elf_path, sample_hz)?;
+                match self.run_args.mode {
                     ExecutionMode::Pure => {
-                        let (output, profile) =
-                            profile_execution(guest_elf_path, sample_hz, || {
-                                sdk.compile_and_execute(exe, inputs)
-                            })?;
+                        let output =
+                            sdk.compile_and_execute_profiled(exe, inputs, profiler.config())?;
                         eprintln!("[openvm] Execution output: {output:?}");
-                        profile
                     }
                     ExecutionMode::Meter => {
-                        let ((output, (cost, instret)), profile) =
-                            profile_execution(guest_elf_path, sample_hz, || {
-                                sdk.compile_and_execute_metered_cost(exe, inputs)
-                            })?;
+                        let (output, (cost, instret)) = sdk
+                            .compile_and_execute_metered_cost_profiled(
+                                exe,
+                                inputs,
+                                profiler.config(),
+                            )?;
                         eprintln!("[openvm] Execution output: {output:?}");
                         eprintln!("[openvm] Number of instructions executed: {instret}");
                         eprintln!("[openvm] Total cost: {cost}");
-                        profile
                     }
                     ExecutionMode::Segment => {
-                        let ((output, segments), profile) =
-                            profile_execution(guest_elf_path, sample_hz, || {
-                                sdk.compile_and_execute_metered(exe, inputs)
-                            })?;
+                        let (output, segments) = sdk.compile_and_execute_metered_profiled(
+                            exe,
+                            inputs,
+                            profiler.config(),
+                        )?;
                         let total_instructions: u64 =
                             segments.iter().map(|segment| segment.num_insns).sum();
                         eprintln!("[openvm] Execution output: {output:?}");
                         eprintln!("[openvm] Number of instructions executed: {total_instructions}");
                         eprintln!("[openvm] Total segments: {}", segments.len());
-                        profile
                     }
-                };
+                }
+                let profile = profiler.finish()?;
                 if let Some(output_path) = self
                     .run_args
                     .execution_profile

@@ -17,7 +17,9 @@ use openvm_build::{
 // Re-exports
 pub use openvm_build::{cargo_command, get_rustup_toolchain_name};
 #[cfg(feature = "rvr")]
-pub use openvm_circuit::arch::rvr::{RvrTrackedExecution, RvrTrackedExecutionOutcome};
+pub use openvm_circuit::arch::rvr::{
+    GuestProfileConfig, RvrTrackedExecution, RvrTrackedExecutionOutcome,
+};
 #[cfg(feature = "rvr")]
 use openvm_circuit::arch::{
     execution_mode::MeteredCtx,
@@ -84,8 +86,6 @@ pub use openvm_stark_sdk::config::baby_bear_poseidon2::{BabyBearPoseidon2Config 
 pub mod builder;
 pub mod compiled;
 pub mod config;
-#[cfg(feature = "rvr")]
-pub mod execution_profile;
 pub mod fs;
 #[cfg(feature = "evm-prove")]
 pub mod halo2_params;
@@ -496,6 +496,18 @@ where
         self.execute(&compiled, inputs)
     }
 
+    /// Compile and execute with explicit RVR guest profiling.
+    #[cfg(feature = "rvr")]
+    pub fn compile_and_execute_profiled(
+        &self,
+        app_exe: impl Into<ExecutableInput>,
+        inputs: StdIn,
+        profile: &GuestProfileConfig,
+    ) -> Result<Vec<u8>, SdkError> {
+        let compiled = self.compile(app_exe)?;
+        self.execute_profiled(&compiled, inputs, profile)
+    }
+
     /// Compile `app_exe` for pure execution.
     #[tracing::instrument(name = "sdk.compile", level = "info", skip_all)]
     pub fn compile(
@@ -598,6 +610,25 @@ where
         Ok(public_values)
     }
 
+    /// Run a [`CompiledExePure`] with explicit RVR guest profiling.
+    #[cfg(feature = "rvr")]
+    #[tracing::instrument(name = "sdk.execute_profiled", level = "info", skip_all)]
+    pub fn execute_profiled(
+        &self,
+        compiled: &CompiledExePure<'_>,
+        inputs: StdIn,
+        profile: &GuestProfileConfig,
+    ) -> Result<Vec<u8>, SdkError> {
+        let final_memory = compiled
+            .execute_profiled(inputs, profile)
+            .map_err(VirtualMachineError::from)?
+            .memory;
+        Ok(extract_public_values(
+            self.executor.config.as_ref().num_public_values * U16_CELL_SIZE,
+            &final_memory.memory,
+        ))
+    }
+
     /// Executes with segmentation for proof generation.
     /// Returns both user public values and segments with instruction counts and trace heights.
     pub fn compile_and_execute_metered(
@@ -607,6 +638,18 @@ where
     ) -> Result<(Vec<u8>, Vec<Segment>), SdkError> {
         let compiled = self.compile_metered(app_exe)?;
         self.execute_metered(&compiled, inputs)
+    }
+
+    /// Compile and execute with segmentation and explicit RVR guest profiling.
+    #[cfg(feature = "rvr")]
+    pub fn compile_and_execute_metered_profiled(
+        &self,
+        app_exe: impl Into<ExecutableInput>,
+        inputs: StdIn,
+        profile: &GuestProfileConfig,
+    ) -> Result<(Vec<u8>, Vec<Segment>), SdkError> {
+        let compiled = self.compile_metered(app_exe)?;
+        self.execute_metered_profiled(&compiled, inputs, profile)
     }
 
     /// Compile `app_exe` for metered execution. The returned [`CompiledExeMetered`] bundles
@@ -699,6 +742,26 @@ where
         Ok((public_values, segments))
     }
 
+    /// Run a [`CompiledExeMetered`] with explicit RVR guest profiling.
+    #[cfg(feature = "rvr")]
+    #[tracing::instrument(name = "sdk.execute_metered_profiled", level = "info", skip_all)]
+    pub fn execute_metered_profiled(
+        &self,
+        compiled: &CompiledExeMetered<'_>,
+        inputs: StdIn,
+        profile: &GuestProfileConfig,
+    ) -> Result<(Vec<u8>, Vec<Segment>), SdkError> {
+        let (segments, final_state) = compiled
+            .instance
+            .execute_metered_profiled(inputs, compiled.ctx.clone(), profile)
+            .map_err(VirtualMachineError::from)?;
+        let public_values = extract_public_values(
+            self.executor.config.as_ref().num_public_values * U16_CELL_SIZE,
+            &final_state.memory.memory,
+        );
+        Ok((public_values, segments))
+    }
+
     /// Executes with cost metering to measure computational cost in trace cells.
     /// Returns both user public values, and cost along with instruction count.
     pub fn compile_and_execute_metered_cost(
@@ -708,6 +771,18 @@ where
     ) -> Result<(Vec<u8>, (u64, u64)), SdkError> {
         let compiled = self.compile_metered_cost(app_exe)?;
         self.execute_metered_cost(&compiled, inputs)
+    }
+
+    /// Compile and execute with cost metering and explicit RVR guest profiling.
+    #[cfg(feature = "rvr")]
+    pub fn compile_and_execute_metered_cost_profiled(
+        &self,
+        app_exe: impl Into<ExecutableInput>,
+        inputs: StdIn,
+        profile: &GuestProfileConfig,
+    ) -> Result<(Vec<u8>, (u64, u64)), SdkError> {
+        let compiled = self.compile_metered_cost(app_exe)?;
+        self.execute_metered_cost_profiled(&compiled, inputs, profile)
     }
 
     /// Compile `app_exe` for metered-cost execution. See [`Self::compile_metered`].
@@ -788,6 +863,28 @@ where
             &final_state.memory.memory,
         );
 
+        Ok((public_values, (cost, instret)))
+    }
+
+    /// Run a [`CompiledExeMeteredCost`] with explicit RVR guest profiling.
+    #[cfg(feature = "rvr")]
+    #[tracing::instrument(name = "sdk.execute_metered_cost_profiled", level = "info", skip_all)]
+    pub fn execute_metered_cost_profiled(
+        &self,
+        compiled: &CompiledExeMeteredCost<'_>,
+        inputs: StdIn,
+        profile: &GuestProfileConfig,
+    ) -> Result<(Vec<u8>, (u64, u64)), SdkError> {
+        let (ctx, final_state) = compiled
+            .instance
+            .execute_metered_cost_profiled(inputs, compiled.ctx.clone(), profile)
+            .map_err(VirtualMachineError::from)?;
+        let instret = ctx.instret;
+        let cost = ctx.cost;
+        let public_values = extract_public_values(
+            self.executor.config.as_ref().num_public_values * U16_CELL_SIZE,
+            &final_state.memory.memory,
+        );
         Ok((public_values, (cost, instret)))
     }
 

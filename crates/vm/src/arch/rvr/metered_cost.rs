@@ -5,7 +5,8 @@ use std::path::{Path, PathBuf};
 use rvr_openvm_lift::RvrRuntimeExtension;
 
 use super::{
-    bridge::map_rvr_execute_error, execute::execute_metered_cost, RvrCompiled, RvrInitialImage,
+    bridge::map_rvr_execute_error, execute::execute_metered_cost, GuestProfileConfig, RvrCompiled,
+    RvrInitialImage,
 };
 #[cfg(feature = "metrics")]
 use crate::arch::execution_metrics::{ExecutionMetric, ExecutionMetricTimer};
@@ -60,13 +61,41 @@ impl RvrMeteredCostInstance<'_> {
 
     pub fn execute_metered_cost_from_state(
         &self,
+        vm_state: VmState<GuestMemory>,
+        ctx: MeteredCostCtx,
+    ) -> Result<(MeteredCostCtx, VmState<GuestMemory>), ExecutionError> {
+        self.execute_metered_cost_from_state_with_profile(vm_state, ctx, None)
+    }
+
+    pub fn execute_metered_cost_profiled(
+        &self,
+        inputs: impl Into<Streams>,
+        ctx: MeteredCostCtx,
+        profile: &GuestProfileConfig,
+    ) -> Result<(MeteredCostCtx, VmState<GuestMemory>), ExecutionError> {
+        let vm_state = self
+            .initial_image
+            .create_vm_state(self.system_config, inputs);
+        self.execute_metered_cost_from_state_with_profile(vm_state, ctx, Some(profile))
+    }
+
+    fn execute_metered_cost_from_state_with_profile(
+        &self,
         mut vm_state: VmState<GuestMemory>,
         ctx: MeteredCostCtx,
+        profile: Option<&GuestProfileConfig>,
     ) -> Result<(MeteredCostCtx, VmState<GuestMemory>), ExecutionError> {
         #[cfg(feature = "metrics")]
         let metrics = ExecutionMetricTimer::start(ExecutionMetric::MeteredCost);
         let result = tracing::info_span!("execute_metered_cost")
-            .in_scope(|| execute_metered_cost(&self.compiled, &self.runtime_hooks, &mut vm_state))
+            .in_scope(|| {
+                execute_metered_cost(
+                    &self.compiled,
+                    &self.runtime_hooks,
+                    &mut vm_state,
+                    profile,
+                )
+            })
             .map_err(map_rvr_execute_error)?;
         #[cfg(feature = "metrics")]
         {

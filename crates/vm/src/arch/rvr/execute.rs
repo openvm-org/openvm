@@ -26,6 +26,7 @@ use super::{
         init_rvr_state, MeteredCostRvState, MeteredRvState, PureRvState,
         PureWithInstretTrackingRvState,
     },
+    GuestProfileConfig,
 };
 use crate::{arch::VmState, system::memory::online::GuestMemory};
 
@@ -201,15 +202,25 @@ fn run_and_finalize<ModeState>(
     }
 }
 
-/// Run one complete RVR execution while honoring the process-level guest
-/// profiling configuration. The profiler is finished even when execution
-/// fails, but the execution error remains primary.
+/// Run one complete RVR execution with optional guest profiling. The profiler
+/// is finished even when execution fails, but the execution error remains
+/// primary.
 fn run_profiled<ModeState, T>(
     state: &mut RvState<ModeState>,
+    profile: Option<&GuestProfileConfig>,
     execute: impl FnOnce(&mut RvState<ModeState>) -> Result<T, ExecuteError>,
 ) -> Result<T, ExecuteError> {
     #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-    let profiler = GuestProfiler::start_from_env(state).map_err(ExecuteError::GuestProfile)?;
+    let profiler = profile
+        .map(|config| GuestProfiler::start(state, config))
+        .transpose()
+        .map_err(ExecuteError::GuestProfile)?;
+    #[cfg(not(all(target_os = "linux", target_arch = "x86_64")))]
+    if profile.is_some() {
+        return Err(ExecuteError::GuestProfile(
+            "RVR guest profiling currently requires Linux x86_64".to_string(),
+        ));
+    }
     let execution_result = execute(state);
     #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
     let profile_result = profiler
@@ -235,13 +246,14 @@ pub(super) fn execute_pure(
     compiled: &RvrCompiled,
     runtime_hooks: &[Box<dyn RvrRuntimeExtension>],
     vm_state: &mut VmState<GuestMemory>,
+    profile: Option<&GuestProfileConfig>,
 ) -> Result<(), ExecuteError> {
     require_execution_kind(compiled, "Pure", &[RvrExecutionKind::Pure])?;
     let pc = vm_state.pc();
     let initial_regs = read_rv64_registers(vm_state);
     let mut state: PureRvState = init_rvr_state(vm_state, pc);
     state.regs = initial_regs;
-    run_profiled(&mut state, |state| {
+    run_profiled(&mut state, profile, |state| {
         run_and_finalize(compiled, runtime_hooks, vm_state, state, false)
             .inspect_err(|error| tracing::warn!(%error, "rvr pure execution failed"))
     })?;
@@ -316,6 +328,7 @@ pub(super) fn execute_metered_cost(
     compiled: &RvrCompiled,
     runtime_hooks: &[Box<dyn RvrRuntimeExtension>],
     vm_state: &mut VmState<GuestMemory>,
+    profile: Option<&GuestProfileConfig>,
 ) -> Result<RvrMeteredCostResult, ExecuteError> {
     require_execution_kind(compiled, "MeteredCost", &[RvrExecutionKind::MeteredCost])?;
     let pc = vm_state.pc();
@@ -324,7 +337,7 @@ pub(super) fn execute_metered_cost(
     let mut state: MeteredCostRvState = init_rvr_state(vm_state, pc);
     state.regs = initial_regs;
 
-    run_profiled(&mut state, |state| {
+    run_profiled(&mut state, profile, |state| {
         run_and_finalize(compiled, runtime_hooks, vm_state, state, false)
             .inspect_err(|error| tracing::warn!(%error, "rvr metered-cost execution failed"))
     })?;
@@ -340,9 +353,10 @@ pub(super) fn execute_metered(
     runtime_hooks: &[Box<dyn RvrRuntimeExtension>],
     vm_state: &mut VmState<GuestMemory>,
     seg_state: SegmentationState,
+    profile: Option<&GuestProfileConfig>,
 ) -> Result<SegmentationState, ExecuteError> {
     require_execution_kind(compiled, "Metered", &[RvrExecutionKind::Metered])?;
-    match execute_metered_profiled(compiled, runtime_hooks, vm_state, seg_state)? {
+    match execute_metered_profiled(compiled, runtime_hooks, vm_state, seg_state, profile)? {
         RvrMeteredExecutionOutcome::Terminated(state) => Ok(state),
         RvrMeteredExecutionOutcome::Suspended(_) => {
             unreachable!("unbounded metered execution cannot suspend")
@@ -355,9 +369,10 @@ fn execute_metered_profiled(
     runtime_hooks: &[Box<dyn RvrRuntimeExtension>],
     vm_state: &mut VmState<GuestMemory>,
     mut seg_state: SegmentationState,
+    profile: Option<&GuestProfileConfig>,
 ) -> Result<RvrMeteredExecutionOutcome, ExecuteError> {
     let mut state = prepare_metered_state(vm_state, &mut seg_state)?;
-    run_profiled(&mut state, |state| {
+    run_profiled(&mut state, profile, |state| {
         run_metered_state(compiled, runtime_hooks, vm_state, state, seg_state, false)
     })
 }

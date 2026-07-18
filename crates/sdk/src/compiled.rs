@@ -12,8 +12,8 @@ use openvm_circuit::arch::{execution_mode::ExecutionCtx, InterpretedInstance};
 use openvm_circuit::arch::{
     execution_mode::{MeteredCtxConfig, SegmentationConfig},
     rvr::{
-        CompileError, RvrPureInstance, RvrPureWithInstretTrackingInstance, RvrTrackedExecution,
-        RvrTrackedExecutionOutcome,
+        CompileError, GuestProfileConfig, RvrPureInstance, RvrPureWithInstretTrackingInstance,
+        RvrTrackedExecution, RvrTrackedExecutionOutcome,
     },
 };
 use openvm_circuit::{
@@ -75,6 +75,24 @@ impl<'a> CompiledExePure<'a> {
         state: VmState<GuestMemory>,
     ) -> Result<VmState<GuestMemory>, ExecutionError> {
         self.instance.execute_from_state(state)
+    }
+
+    #[cfg(feature = "rvr")]
+    pub fn execute_profiled(
+        &self,
+        inputs: impl Into<Streams>,
+        profile: &GuestProfileConfig,
+    ) -> Result<VmState<GuestMemory>, ExecutionError> {
+        self.instance.execute_profiled(inputs, profile)
+    }
+
+    #[cfg(feature = "rvr")]
+    pub fn execute_from_state_profiled(
+        &self,
+        state: VmState<GuestMemory>,
+        profile: &GuestProfileConfig,
+    ) -> Result<VmState<GuestMemory>, ExecutionError> {
+        self.instance.execute_from_state_profiled(state, profile)
     }
 
     #[cfg(feature = "rvr")]

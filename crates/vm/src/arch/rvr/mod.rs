@@ -11,6 +11,7 @@ mod initial_image;
 pub mod io;
 pub mod metered;
 pub mod metered_cost;
+mod profile;
 pub mod pure;
 pub mod state;
 
@@ -24,6 +25,7 @@ pub use execute::ExecuteError;
 pub use initial_image::RvrInitialImage;
 pub use metered::{RvrMeteredExecutionOutcome, RvrMeteredInstance, RvrMeteredSegmentInstance};
 pub use metered_cost::{MeteredCostState, RvrMeteredCostInstance};
+pub use profile::{GuestProfileConfig, GuestProfileFormat};
 pub use pure::{
     RvrPureInstance, RvrPureWithInstretTrackingInstance, RvrTrackedExecution,
     RvrTrackedExecutionOutcome,

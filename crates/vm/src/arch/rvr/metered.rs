@@ -14,7 +14,7 @@ use rvr_openvm_lift::RvrRuntimeExtension;
 use super::{
     bridge::map_rvr_execute_error,
     execute::{execute_metered, execute_metered_segment_boundary},
-    RvrCompiled, RvrInitialImage,
+    GuestProfileConfig, RvrCompiled, RvrInitialImage,
 };
 #[cfg(feature = "metrics")]
 use crate::arch::execution_metrics::{ExecutionMetric, ExecutionMetricTimer};
@@ -443,8 +443,27 @@ impl RvrMeteredInstance<'_> {
 
     pub fn execute_metered_from_state(
         &self,
+        vm_state: VmState<GuestMemory>,
+        ctx: MeteredCtx,
+    ) -> Result<(Vec<Segment>, VmState<GuestMemory>), ExecutionError> {
+        self.execute_metered_from_state_with_profile(vm_state, ctx, None)
+    }
+
+    pub fn execute_metered_profiled(
+        &self,
+        inputs: impl Into<Streams>,
+        ctx: MeteredCtx,
+        profile: &GuestProfileConfig,
+    ) -> Result<(Vec<Segment>, VmState<GuestMemory>), ExecutionError> {
+        let vm_state = self.create_initial_vm_state(inputs);
+        self.execute_metered_from_state_with_profile(vm_state, ctx, Some(profile))
+    }
+
+    fn execute_metered_from_state_with_profile(
+        &self,
         mut vm_state: VmState<GuestMemory>,
         ctx: MeteredCtx,
+        profile: Option<&GuestProfileConfig>,
     ) -> Result<(Vec<Segment>, VmState<GuestMemory>), ExecutionError> {
         #[cfg(feature = "metrics")]
         let start_instret = ctx.segmentation_ctx.instret;
@@ -459,6 +478,7 @@ impl RvrMeteredInstance<'_> {
                     &self.inner.runtime_hooks,
                     &mut vm_state,
                     seg_state,
+                    profile,
                 )
             })
             .map_err(map_rvr_execute_error)?;
