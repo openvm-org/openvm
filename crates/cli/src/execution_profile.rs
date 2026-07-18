@@ -193,6 +193,16 @@ fn compress_profile(profile: &Profile) -> Result<Vec<u8>> {
 }
 
 fn upload_profile(compressed_profile: &[u8]) -> Result<String> {
+    let compressed_profile = compressed_profile.to_vec();
+    std::thread::Builder::new()
+        .name("firefox-profile-upload".to_string())
+        .spawn(move || upload_profile_blocking(&compressed_profile))
+        .context("failed to start Firefox Profiler upload thread")?
+        .join()
+        .map_err(|_| eyre!("Firefox Profiler upload thread panicked"))?
+}
+
+fn upload_profile_blocking(compressed_profile: &[u8]) -> Result<String> {
     let upload_url = std::env::var("FIREFOX_PROFILER_API_URL")
         .unwrap_or_else(|_| DEFAULT_UPLOAD_URL.to_string());
     let client = Client::builder()
