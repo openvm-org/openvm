@@ -12,7 +12,7 @@ use rvr_openvm_lift::{ExtensionRegistry, TraceChipIndex};
 
 use super::{
     codegen::{emit_terminator, InstrCodegen, TermCtx},
-    context::{BlockAbi, EmitContext, EmitMode},
+    context::{validate_chip_index, BlockAbi, EmitContext, EmitMode, InvalidChipIndex},
 };
 use crate::constants::constants_header;
 
@@ -755,7 +755,8 @@ impl CProject {
 
             for block in partition {
                 self.emit_block_checkpoint_function(&mut src, block);
-                self.emit_block_function(&mut src, block, &valid_blocks);
+                self.emit_block_function(&mut src, block, &valid_blocks)
+                    .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
             }
 
             let path = self.output_dir.join(format!("{name}_0x{first_pc:08x}.c"));
@@ -765,7 +766,12 @@ impl CProject {
         Ok(())
     }
 
-    fn emit_block_function(&self, out: &mut String, block: &Block, valid_blocks: &HashSet<u64>) {
+    fn emit_block_function(
+        &self,
+        out: &mut String,
+        block: &Block,
+        valid_blocks: &HashSet<u64>,
+    ) -> Result<(), InvalidChipIndex> {
         let pc = block.start_pc;
         let end_pc = self.block_end_pc(block);
         let insn_count = block.insn_count();
@@ -782,7 +788,13 @@ impl CProject {
             EmitMode::MeteredCost => self.chip_widths.as_deref(),
             _ => None,
         };
-        let mut ctx = EmitContext::new(self.hot_regs.clone(), mode, self.block_abi(), chip_widths);
+        let mut ctx = EmitContext::new(
+            self.hot_regs.clone(),
+            mode,
+            self.block_abi(),
+            chip_widths,
+            self.num_airs,
+        );
         let mut body = String::new();
 
         if matches!(
@@ -799,7 +811,7 @@ impl CProject {
         }
 
         self.emit_block_boundary(&mut body, block);
-        self.emit_per_block_chip_updates(&mut body, block);
+        self.emit_per_block_chip_updates(&mut body, block)?;
 
         for instr_at in &block.instructions {
             self.emit_source_annotation(
@@ -829,6 +841,10 @@ impl CProject {
         let tc = TermCtx { valid_blocks };
         emit_terminator(&mut ctx, &block.terminator, block.terminator_pc, &tc);
         Self::emit_context_scope(&mut body, &mut ctx);
+
+        if let Some(error) = ctx.invalid_chip_index() {
+            return Err(error);
+        }
 
         let self_tail_call = format!("return block_0x{pc:08x}(");
         let has_direct_self_tail_call = body.contains(&self_tail_call);
@@ -860,6 +876,7 @@ impl CProject {
             writeln!(out, "#pragma clang diagnostic pop").unwrap();
         }
         writeln!(out).unwrap();
+        Ok(())
     }
 
     fn emit_block_checkpoint_function(&self, out: &mut String, block: &Block) {
@@ -999,46 +1016,57 @@ impl CProject {
     ///   - MeteredCost: `state->mode_state.cost += <constant>;` where the constant is
     ///     `sum(width[chip]
     ///     * count)` precomputed at emit time from `self.chip_widths`.
-    fn emit_per_block_chip_updates(&self, out: &mut String, block: &Block) {
+    fn emit_per_block_chip_updates(
+        &self,
+        out: &mut String,
+        block: &Block,
+    ) -> Result<(), InvalidChipIndex> {
         if matches!(
             self.execution_kind,
             RvrExecutionKind::Pure | RvrExecutionKind::PureWithInstretTracking
         ) {
-            return;
+            return Ok(());
         }
 
+        let num_airs = self
+            .num_airs
+            .expect("metered code generation requires the AIR count");
         let mut chip_counts: BTreeMap<u32, u32> = BTreeMap::new();
         let add_rows = |chip_counts: &mut BTreeMap<u32, u32>, chip_idx, count| {
+            validate_chip_index(chip_idx, num_airs)?;
             let current = chip_counts.entry(chip_idx).or_default();
             *current = current
                 .checked_add(count)
                 .expect("per-block trace-height increment overflow");
+            Ok::<(), InvalidChipIndex>(())
         };
         let add_base_row = |chip_counts: &mut BTreeMap<u32, u32>, pc: u64| {
             if let TraceChipIndex::Chip(chip) = self.chip_idx_for_pc(pc) {
-                add_rows(chip_counts, chip.as_u32(), 1);
+                add_rows(chip_counts, chip.as_u32(), 1)?;
             }
+            Ok::<(), InvalidChipIndex>(())
         };
         let add_extension_rows = |chip_counts: &mut BTreeMap<u32, u32>,
                                   extension: &dyn ExtInstr| {
             for rows in extension.fixed_trace_rows() {
-                add_rows(chip_counts, rows.chip_idx, rows.count);
+                add_rows(chip_counts, rows.chip_idx, rows.count)?;
             }
+            Ok::<(), InvalidChipIndex>(())
         };
         for instr_at in &block.instructions {
-            add_base_row(&mut chip_counts, instr_at.pc);
+            add_base_row(&mut chip_counts, instr_at.pc)?;
             if let Instr::Ext(extension) = &instr_at.instr {
-                add_extension_rows(&mut chip_counts, extension.as_ref());
+                add_extension_rows(&mut chip_counts, extension.as_ref())?;
             }
         }
         if !matches!(block.terminator, Terminator::FallThrough) {
-            add_base_row(&mut chip_counts, block.terminator_pc);
+            add_base_row(&mut chip_counts, block.terminator_pc)?;
             if let Terminator::Extension(extension) = &block.terminator {
-                add_extension_rows(&mut chip_counts, extension.as_ref());
+                add_extension_rows(&mut chip_counts, extension.as_ref())?;
             }
         }
         if chip_counts.is_empty() {
-            return;
+            return Ok(());
         }
 
         writeln!(out, "    {{").unwrap();
@@ -1065,6 +1093,7 @@ impl CProject {
             }
         }
         writeln!(out, "    }}").unwrap();
+        Ok(())
     }
 
     /// Emit PC/opname comment and `#line` directive for source attribution.
@@ -1305,7 +1334,7 @@ fn block_accesses_memory(block: &Block) -> bool {
 mod tests {
     use std::{collections::HashSet, path::Path};
 
-    use rvr_openvm_ir::{Block, Terminator};
+    use rvr_openvm_ir::{Block, ExtEmitCtx, ExtInstr, Instr, InstrAt, Terminator};
 
     use super::{CProject, RvrExecutionKind};
 
@@ -1317,6 +1346,19 @@ mod tests {
             terminator: Terminator::Exit { code: 0 },
             terminator_pc: 0x100,
             terminator_source_loc: None,
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    struct InvalidTraceChipInstr;
+
+    impl ExtInstr for InvalidTraceChipInstr {
+        fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
+            ctx.trace_chip(1, "1u");
+        }
+
+        fn clone_box(&self) -> Box<dyn ExtInstr> {
+            Box::new(self.clone())
         }
     }
 
@@ -1379,6 +1421,35 @@ mod tests {
         let error = project.validate_block_abi().unwrap_err();
         assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
         assert!(error.to_string().contains("preserve_none supports"));
+    }
+
+    #[test]
+    fn metered_codegen_rejects_extension_chip_outside_air_count() {
+        let mut project = CProject::new(Path::new("unused"), "test", RvrExecutionKind::Metered);
+        project.pc_base = 0x100;
+        project.num_airs = Some(1);
+        project.pc_to_chip = Some(vec![
+            rvr_openvm_lift::TraceChipIndex::NoChip,
+            rvr_openvm_lift::TraceChipIndex::NoChip,
+        ]);
+        let block = Block {
+            start_pc: 0x100,
+            end_pc: 0x108,
+            instructions: vec![InstrAt {
+                pc: 0x100,
+                instr: Instr::Ext(Box::new(InvalidTraceChipInstr)),
+                source_loc: None,
+            }],
+            terminator: Terminator::Exit { code: 0 },
+            terminator_pc: 0x104,
+            terminator_source_loc: None,
+        };
+
+        let error = project
+            .emit_block_function(&mut String::new(), &block, &HashSet::new())
+            .unwrap_err();
+
+        assert_eq!(error.to_string(), "chip index 1 is outside AIR count 1");
     }
 
     #[test]

@@ -252,9 +252,9 @@ pub enum CompileError {
     ChipMappingLengthMismatch { expected: usize, actual: usize },
     #[error("chip index {chip_idx} at pc {pc:#x} is outside the {num_airs} AIRs")]
     ChipIndexOutOfBounds {
-        pc: u64,
+        pc: u32,
         chip_idx: u32,
-        num_airs: usize,
+        num_airs: u32,
     },
     #[error("invalid compile options: {0}")]
     InvalidOptions(&'static str),
@@ -273,6 +273,15 @@ pub struct ChipMapping {
     pub chip_widths: Option<Vec<u64>>,
 }
 
+fn pc_for_instruction_index(pc_base: u32, instruction_index: usize) -> Result<u32, CompileError> {
+    let instruction_index_u32 = u32::try_from(instruction_index)
+        .map_err(|_| CompileError::ProgramCounterOutOfBounds { instruction_index })?;
+    instruction_index_u32
+        .checked_mul(DEFAULT_PC_STEP)
+        .and_then(|offset| pc_base.checked_add(offset))
+        .ok_or(CompileError::ProgramCounterOutOfBounds { instruction_index })
+}
+
 pub fn build_pc_to_chip<F, E>(
     exe: &VmExe<F>,
     inventory: &ExecutorInventory<E>,
@@ -284,16 +293,7 @@ pub fn build_pc_to_chip<F, E>(
         .iter()
         .enumerate()
         .map(|(i, slot)| {
-            let instruction_index =
-                u32::try_from(i).map_err(|_| CompileError::ProgramCounterOutOfBounds {
-                    instruction_index: i,
-                })?;
-            let pc = instruction_index
-                .checked_mul(DEFAULT_PC_STEP)
-                .and_then(|offset| exe.program.pc_base.checked_add(offset))
-                .ok_or(CompileError::ProgramCounterOutOfBounds {
-                    instruction_index: i,
-                })?;
+            let pc = pc_for_instruction_index(exe.program.pc_base, i)?;
             let Some((inst, _)) = slot else {
                 return Ok(TraceChipIndex::NoChip);
             };
@@ -544,16 +544,16 @@ fn compile_impl<F: PrimeField32>(
             let chips = opts.chips.ok_or(CompileError::InvalidOptions(
                 "metered rvr compile requires ChipMapping",
             ))?;
-            project.num_airs = Some(u32::try_from(chips.num_airs).map_err(|_| {
-                CompileError::AirCountOutOfBounds {
+            let num_airs =
+                u32::try_from(chips.num_airs).map_err(|_| CompileError::AirCountOutOfBounds {
                     num_airs: chips.num_airs,
-                }
-            })?);
-            if project.num_airs == Some(0) {
+                })?;
+            if num_airs == 0 {
                 return Err(CompileError::InvalidOptions(
                     "metered rvr compile requires at least one AIR",
                 ));
             }
+            project.num_airs = Some(num_airs);
             let expected_slots = exe.program.instructions_and_debug_infos.len();
             if chips.pc_to_chip.len() != expected_slots {
                 return Err(CompileError::ChipMappingLengthMismatch {
@@ -565,12 +565,11 @@ fn compile_impl<F: PrimeField32>(
                 let TraceChipIndex::Chip(chip) = chip else {
                     continue;
                 };
-                if chip.as_u32() as usize >= chips.num_airs {
+                if chip.as_u32() >= num_airs {
                     return Err(CompileError::ChipIndexOutOfBounds {
-                        pc: u64::from(exe.program.pc_base)
-                            + slot as u64 * u64::from(DEFAULT_PC_STEP),
+                        pc: pc_for_instruction_index(exe.program.pc_base, slot)?,
                         chip_idx: chip.as_u32(),
-                        num_airs: chips.num_airs,
+                        num_airs,
                     });
                 }
             }

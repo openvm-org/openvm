@@ -5,6 +5,21 @@ use rvr_openvm_ir::MemWidth;
 
 use super::codegen::hex_u32;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
+#[error("chip index {chip_idx} is outside AIR count {num_airs}")]
+pub(crate) struct InvalidChipIndex {
+    pub chip_idx: u32,
+    pub num_airs: u32,
+}
+
+pub(crate) fn validate_chip_index(chip_idx: u32, num_airs: u32) -> Result<(), InvalidChipIndex> {
+    if chip_idx < num_airs {
+        Ok(())
+    } else {
+        Err(InvalidChipIndex { chip_idx, num_airs })
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(crate) enum EmitMode {
     /// Emit ordered register, PC, and memory-value hooks.
@@ -87,6 +102,8 @@ pub struct EmitContext<'a> {
     mode: EmitMode,
     block_abi: BlockAbi,
     chip_widths: Option<&'a [u64]>,
+    num_airs: Option<u32>,
+    invalid_chip_index: Option<InvalidChipIndex>,
 }
 
 impl<'a> EmitContext<'a> {
@@ -95,6 +112,7 @@ impl<'a> EmitContext<'a> {
         mode: EmitMode,
         block_abi: BlockAbi,
         chip_widths: Option<&'a [u64]>,
+        num_airs: Option<u32>,
     ) -> Self {
         debug_assert_eq!(matches!(mode, EmitMode::MeteredCost), chip_widths.is_some());
         Self {
@@ -106,6 +124,8 @@ impl<'a> EmitContext<'a> {
             mode,
             block_abi,
             chip_widths,
+            num_airs,
+            invalid_chip_index: None,
         }
     }
 
@@ -422,6 +442,15 @@ impl<'a> EmitContext<'a> {
         if chip_idx == u32::MAX {
             return;
         }
+        if !matches!(self.mode, EmitMode::ValueTrace | EmitMode::Direct) {
+            let num_airs = self
+                .num_airs
+                .expect("metered code generation requires the AIR count");
+            if let Err(error) = validate_chip_index(chip_idx, num_airs) {
+                self.invalid_chip_index.get_or_insert(error);
+                return;
+            }
+        }
         match self.mode {
             EmitMode::ValueTrace | EmitMode::Direct => {}
             EmitMode::Metered { .. } => {
@@ -441,6 +470,10 @@ impl<'a> EmitContext<'a> {
                 }
             }
         }
+    }
+
+    pub(crate) fn invalid_chip_index(&self) -> Option<InvalidChipIndex> {
+        self.invalid_chip_index
     }
 
     pub fn trace_chip_if_nonzero(&mut self, chip_idx: u32, count_expr: &str) {
@@ -628,6 +661,7 @@ mod tests {
             },
             BlockAbi::Metered,
             None,
+            Some(1),
         )
     }
 
