@@ -707,9 +707,7 @@ impl<'a> EmitContext<'a> {
                 .expect("external call emitted before instruction PC was recorded");
             // The asynchronous sampler is invisible to the optimizer. A
             // volatile store keeps the callsite observable under -O3/LTO.
-            self.write_line(&format!(
-                "*(volatile uint64_t*)&state->pc = 0x{pc:08x}ull;"
-            ));
+            self.write_line(&format!("*(volatile uint64_t*)&state->pc = 0x{pc:08x}ull;"));
         }
     }
 
