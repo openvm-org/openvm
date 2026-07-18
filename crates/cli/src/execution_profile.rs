@@ -111,7 +111,7 @@ fn parse_raw_samples(path: &Path) -> Result<Vec<Vec<u32>>> {
     }
     if samples.is_empty() {
         bail!(
-            "RVR execution completed before any profile samples were captured; try a larger workload or a higher --profile-hz"
+            "RVR execution completed before any profile samples were captured; try a larger workload or a higher --rate"
         );
     }
     Ok(samples)
