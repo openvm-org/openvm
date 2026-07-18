@@ -78,6 +78,12 @@ impl<'a> CompiledExePure<'a> {
     }
 
     #[cfg(feature = "rvr")]
+    /// Whether this artifact can be passed to the profiled execution APIs.
+    pub const fn is_profile_compatible(&self) -> bool {
+        self.instance.is_profile_compatible()
+    }
+
+    #[cfg(feature = "rvr")]
     pub fn execute_profiled(
         &self,
         inputs: impl Into<Streams>,
@@ -181,6 +187,9 @@ pub struct MeteredArtifactMetadata {
     pub metered_ctx_config: MeteredCtxConfig,
     pub segmentation_config: SegmentationConfig,
     pub executor_idx_to_air_idx: Vec<usize>,
+    /// `None` only for artifacts saved before profile compatibility was recorded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile_compatible: Option<bool>,
 }
 
 #[cfg(feature = "rvr")]
@@ -197,6 +206,11 @@ pub fn load_metered_artifact_metadata(lib_path: &Path) -> Result<MeteredArtifact
 
 #[cfg(feature = "rvr")]
 impl CompiledExeMetered<'_> {
+    /// Whether this artifact can be passed to the profiled execution APIs.
+    pub const fn is_profile_compatible(&self) -> bool {
+        self.instance.is_profile_compatible()
+    }
+
     /// Persist the compiled shared library and static metering metadata into `dir`.
     /// Returns the path of the copied `.so`/`.dylib`.
     pub fn save(&self, dir: &Path) -> Result<PathBuf> {
@@ -205,6 +219,7 @@ impl CompiledExeMetered<'_> {
             metered_ctx_config: self.ctx.config.clone(),
             segmentation_config: self.ctx.segmentation_ctx.config().clone(),
             executor_idx_to_air_idx: self.executor_idx_to_air_idx.clone(),
+            profile_compatible: Some(self.is_profile_compatible()),
         };
         let metadata_path = metered_artifact_metadata_path(&lib_path);
         let data = serde_json::to_vec_pretty(&metadata)?;
@@ -221,6 +236,11 @@ impl CompiledExeMetered<'_> {
 
 #[cfg(feature = "rvr")]
 impl CompiledExeMeteredCost<'_> {
+    /// Whether this artifact can be passed to the profiled execution APIs.
+    pub const fn is_profile_compatible(&self) -> bool {
+        self.instance.is_profile_compatible()
+    }
+
     /// Persist the compiled shared library into `dir`. Returns the path of
     /// the copied `.so`/`.dylib`. The `MeteredCostCtx` is not persisted — it
     /// is rebuilt on load via

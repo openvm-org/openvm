@@ -100,8 +100,7 @@ impl<'a> RvrPureInstanceInner<'a> {
     }
 
     fn save(&self, dir: &Path) -> Result<PathBuf, CompileError> {
-        let suffix = self.compiled.execution_kind().artifact_suffix();
-        let dest_lib = self.compiled.lib_file_name_with_suffix(suffix)?;
+        let dest_lib = self.compiled.artifact_file_name()?;
         self.compiled.save_artifact(&dir.join(dest_lib))
     }
 
@@ -148,6 +147,11 @@ impl<'a> RvrPureInstance<'a> {
 
     pub fn create_initial_vm_state(&self, inputs: impl Into<Streams>) -> VmState<GuestMemory> {
         self.inner.create_initial_vm_state(inputs)
+    }
+
+    /// Whether this artifact can be used for guest sampling.
+    pub const fn is_profile_compatible(&self) -> bool {
+        self.inner.compiled.is_profile_compatible()
     }
 
     pub fn execute(
@@ -205,6 +209,11 @@ impl<'a> RvrPureWithInstretTrackingInstance<'a> {
 
     pub fn create_initial_vm_state(&self, inputs: impl Into<Streams>) -> VmState<GuestMemory> {
         self.inner.create_initial_vm_state(inputs)
+    }
+
+    /// Whether this artifact can be used for guest sampling.
+    pub const fn is_profile_compatible(&self) -> bool {
+        self.inner.compiled.is_profile_compatible()
     }
 
     pub fn execute(

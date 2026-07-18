@@ -59,6 +59,11 @@ impl RvrCompiled {
         self.num_airs
     }
 
+    /// Whether this artifact preserves the state required by guest sampling.
+    pub const fn is_profile_compatible(&self) -> bool {
+        self.profile_compatible
+    }
+
     pub(crate) fn require_execution_kind(
         &self,
         expected: &[RvrExecutionKind],
@@ -165,6 +170,16 @@ impl RvrCompiled {
         } else {
             format!("{stem}-{suffix}.{ext}")
         })
+    }
+
+    pub(crate) fn artifact_file_name(&self) -> Result<String, CompileError> {
+        let execution_kind = self.execution_kind.artifact_suffix();
+        let suffix = if self.profile_compatible {
+            format!("{execution_kind}-profiled")
+        } else {
+            execution_kind.to_string()
+        };
+        self.lib_file_name_with_suffix(&suffix)
     }
 
     /// Copy the compiled shared library into `dest_lib`, creating parent

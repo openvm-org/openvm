@@ -387,9 +387,7 @@ impl RvrMeteredInstanceInner<'_> {
     /// the copied artifact. The user must re-supply `exe`, `executor_idx_to_air_idx`,
     /// and any mode-specific data when loading.
     fn save(&self, dir: &Path) -> Result<PathBuf, super::CompileError> {
-        let dest_lib = self
-            .compiled
-            .lib_file_name_with_suffix(self.compiled.execution_kind().artifact_suffix())?;
+        let dest_lib = self.compiled.artifact_file_name()?;
         self.compiled.save_artifact(&dir.join(dest_lib))
     }
 
@@ -418,6 +416,11 @@ impl RvrMeteredInstance<'_> {
 
     pub fn create_initial_vm_state(&self, inputs: impl Into<Streams>) -> VmState<GuestMemory> {
         self.inner.create_initial_vm_state(inputs)
+    }
+
+    /// Whether this artifact can be used for guest sampling.
+    pub const fn is_profile_compatible(&self) -> bool {
+        self.inner.compiled.is_profile_compatible()
     }
 
     /// Persist the compiled shared library into `dir`. Returns the path to

@@ -29,6 +29,9 @@ use openvm_verify_stark_host::{
     VmStarkProof,
 };
 
+#[cfg(feature = "rvr")]
+use crate::ExecutableInput;
+
 use crate::{
     builder::GenericSdkBuilder,
     config::{
@@ -575,7 +578,26 @@ fn test_sdk_compiled_metered_save_load_roundtrip() -> Result<()> {
 
     let tmp = tempfile::tempdir()?;
     let lib_path = compiled_a.save(tmp.path())?;
+    assert_eq!(
+        lib_path.file_stem().and_then(|stem| stem.to_str()),
+        Some("libopenvm-metered")
+    );
+    let mut metadata = crate::compiled::load_metered_artifact_metadata(&lib_path)?;
+    assert_eq!(metadata.profile_compatible, Some(false));
+    metadata.profile_compatible = Some(true);
+    let metadata_path = crate::compiled::metered_artifact_metadata_path(&lib_path);
+    std::fs::write(&metadata_path, serde_json::to_vec_pretty(&metadata)?)?;
     drop(compiled_a);
+
+    let profile_mismatch = sdk
+        .load_compiled_metered(&lib_path, exe.clone())
+        .err()
+        .expect("tampered profile compatibility metadata must be rejected");
+    assert!(profile_mismatch
+        .to_string()
+        .contains("artifact profile compatibility mismatch"));
+    metadata.profile_compatible = Some(false);
+    std::fs::write(&metadata_path, serde_json::to_vec_pretty(&metadata)?)?;
 
     let mismatch = sdk.load_compiled(&lib_path, exe.clone());
     assert!(mismatch.is_err());
@@ -595,6 +617,38 @@ fn test_sdk_compiled_metered_save_load_roundtrip() -> Result<()> {
         assert_eq!(a.num_insns, b.num_insns);
         assert_eq!(a.trace_heights, b.trace_heights);
     }
+    Ok(())
+}
+
+#[cfg(feature = "rvr")]
+#[test]
+fn test_sdk_profiled_artifact_save_load_and_unprofiled_execution() -> Result<()> {
+    let (sdk, _, _) = make_fib_sdk();
+    let elf_bytes = include_bytes!("../programs/examples/fibonacci.elf");
+    let elf = Elf::decode(elf_bytes, MEM_SIZE as u32)?;
+    let exe = sdk.convert_to_exe(elf)?;
+
+    let tmp = tempfile::tempdir()?;
+    let elf_path = tmp.path().join("fibonacci.elf");
+    std::fs::write(&elf_path, elf_bytes)?;
+
+    let mut stdin = StdIn::default();
+    stdin.write(&100u64);
+
+    let compiled = sdk.compile_profiled(ExecutableInput::with_elf_path(exe.clone(), &elf_path))?;
+    assert!(compiled.is_profile_compatible());
+    let baseline = sdk.execute(&compiled, stdin.clone())?;
+
+    let lib_path = compiled.save(tmp.path())?;
+    assert_eq!(
+        lib_path.file_stem().and_then(|stem| stem.to_str()),
+        Some("libopenvm-pure-profiled")
+    );
+    drop(compiled);
+
+    let loaded = sdk.load_compiled(&lib_path, exe)?;
+    assert!(loaded.is_profile_compatible());
+    assert_eq!(baseline, sdk.execute(&loaded, stdin)?);
     Ok(())
 }
 
