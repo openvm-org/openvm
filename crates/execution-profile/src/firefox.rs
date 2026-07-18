@@ -438,9 +438,32 @@ impl BinaryResolver {
             .with_context(|| format!("failed to read symbols from {}", path.display()))?;
         let object = object::File::parse(&*data)
             .with_context(|| format!("failed to parse symbols from {}", path.display()))?;
-        let mut symbols = object
+        let debug_path = object
+            .build_id()
+            .ok()
+            .flatten()
+            .and_then(build_id_debug_path)
+            .filter(|path| path.is_file());
+        let resolver_path = debug_path.as_deref().unwrap_or(path);
+        let resolver_data = if debug_path.is_some() {
+            fs::read(resolver_path).with_context(|| {
+                format!(
+                    "failed to read debug symbols from {}",
+                    resolver_path.display()
+                )
+            })?
+        } else {
+            data
+        };
+        let resolver_object = object::File::parse(&*resolver_data).with_context(|| {
+            format!(
+                "failed to parse debug symbols from {}",
+                resolver_path.display()
+            )
+        })?;
+        let mut symbols = resolver_object
             .symbols()
-            .chain(object.dynamic_symbols())
+            .chain(resolver_object.dynamic_symbols())
             .filter(|symbol| symbol.kind() == SymbolKind::Text && symbol.size() != 0)
             .filter_map(|symbol| {
                 let name = symbol.name().ok()?;
@@ -456,20 +479,22 @@ impl BinaryResolver {
             left.address == right.address && left.size == right.size && left.name == right.name
         });
         Ok(Self {
-            loader: addr2line::Loader::new(path).map_err(|error| {
-                eyre!("failed to load symbols from {}: {error}", path.display())
+            loader: addr2line::Loader::new(resolver_path).map_err(|error| {
+                eyre!(
+                    "failed to load symbols from {}: {error}",
+                    resolver_path.display()
+                )
             })?,
             symbols,
         })
     }
 
     fn resolve(&self, pc: u64) -> Vec<ResolvedFrame> {
-        let fallback_name = self
-            .loader
-            .find_symbol(pc)
-            .filter(|name| !name.starts_with(".L"))
-            .map(str::to_string)
-            .or_else(|| self.containing_symbol(pc).map(str::to_string));
+        // `addr2line::Loader::find_symbol` returns the nearest preceding
+        // symbol, even when that symbol does not contain `pc`. On stripped
+        // DSOs this can assign an unrelated public name to an internal
+        // function. Only use a sized symbol whose range contains the PC.
+        let fallback_name = self.containing_symbol(pc).map(str::to_string);
         let mut chain = Vec::new();
         if let Ok(mut frames) = self.loader.find_frames(pc) {
             while let Ok(Some(frame)) = frames.next() {
@@ -558,11 +583,22 @@ impl BinaryResolver {
             .last()
             .is_some_and(|frame| is_guest_execution_symbol(&frame.name))
             || self
-                .loader
-                .find_symbol(pc)
-                .or_else(|| self.containing_symbol(pc))
+                .containing_symbol(pc)
                 .is_some_and(is_guest_execution_symbol)
     }
+}
+
+fn build_id_debug_path(build_id: &[u8]) -> Option<PathBuf> {
+    let (&first, rest) = build_id.split_first()?;
+    let file = rest
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    Some(
+        Path::new("/usr/lib/debug/.build-id")
+            .join(format!("{first:02x}"))
+            .join(format!("{file}.debug")),
+    )
 }
 
 fn is_guest_execution_symbol(name: &str) -> bool {
@@ -955,9 +991,9 @@ mod tests {
     use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 
     use super::{
-        build_firefox_profile, debug_id_from_build_id, is_guest_execution_symbol,
-        observed_interval_ns, parse_raw_profile, public_url_from_response, sanitize_source_path,
-        upload_profile_blocking_to, FIREFOX_ACCEPT,
+        build_firefox_profile, build_id_debug_path, debug_id_from_build_id,
+        is_guest_execution_symbol, observed_interval_ns, parse_raw_profile,
+        public_url_from_response, sanitize_source_path, upload_profile_blocking_to, FIREFOX_ACCEPT,
     };
 
     #[test]
@@ -1151,6 +1187,15 @@ mod tests {
                 .to_string(),
             "0102030405060708090A0B0C0D0E0F100"
         );
+    }
+
+    #[test]
+    fn build_id_maps_to_the_standard_debug_file_path() {
+        assert_eq!(
+            build_id_debug_path(&[0x8e, 0x9f, 0xd8, 0x27]).unwrap(),
+            std::path::PathBuf::from("/usr/lib/debug/.build-id/8e/9fd827.debug")
+        );
+        assert_eq!(build_id_debug_path(&[]), None);
     }
 
     #[test]
