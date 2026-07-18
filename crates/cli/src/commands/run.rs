@@ -5,6 +5,8 @@ use std::path::PathBuf;
 use clap::{Parser, ValueEnum};
 use eyre::{eyre, Result};
 use openvm_circuit::arch::instructions::exe::VmExe;
+#[cfg(feature = "rvr")]
+use openvm_sdk::execution_profile::profile_execution;
 use openvm_sdk::{
     config::AggregationSystemParams, fs::read_object_from_file, keygen::AppProvingKey, Sdk, F,
 };
@@ -363,21 +365,18 @@ impl RunCmd {
                 let sample_hz = self.run_args.rate.unwrap_or(DEFAULT_EXECUTION_PROFILE_HZ);
                 let profile = match self.run_args.mode {
                     ExecutionMode::Pure => {
-                        let (output, profile) = openvm_sdk::execution_profile::profile_execution(
-                            guest_elf_path,
-                            sample_hz,
-                            || sdk.compile_and_execute(exe, inputs),
-                        )?;
+                        let (output, profile) =
+                            profile_execution(guest_elf_path, sample_hz, || {
+                                sdk.compile_and_execute(exe, inputs)
+                            })?;
                         eprintln!("[openvm] Execution output: {output:?}");
                         profile
                     }
                     ExecutionMode::Meter => {
                         let ((output, (cost, instret)), profile) =
-                            openvm_sdk::execution_profile::profile_execution(
-                                guest_elf_path,
-                                sample_hz,
-                                || sdk.compile_and_execute_metered_cost(exe, inputs),
-                            )?;
+                            profile_execution(guest_elf_path, sample_hz, || {
+                                sdk.compile_and_execute_metered_cost(exe, inputs)
+                            })?;
                         eprintln!("[openvm] Execution output: {output:?}");
                         eprintln!("[openvm] Number of instructions executed: {instret}");
                         eprintln!("[openvm] Total cost: {cost}");
@@ -385,11 +384,9 @@ impl RunCmd {
                     }
                     ExecutionMode::Segment => {
                         let ((output, segments), profile) =
-                            openvm_sdk::execution_profile::profile_execution(
-                                guest_elf_path,
-                                sample_hz,
-                                || sdk.compile_and_execute_metered(exe, inputs),
-                            )?;
+                            profile_execution(guest_elf_path, sample_hz, || {
+                                sdk.compile_and_execute_metered(exe, inputs)
+                            })?;
                         let total_instructions: u64 =
                             segments.iter().map(|segment| segment.num_insns).sum();
                         eprintln!("[openvm] Execution output: {output:?}");

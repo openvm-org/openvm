@@ -11,6 +11,8 @@ use rvr_openvm::RvrExecutionKind;
 use rvr_openvm_lift::{ExtensionError, RvrRuntimeExtension};
 use rvr_state::{ExecutionStatus, InstretTrackingState, RvState};
 
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+use super::guest_profiler::GuestProfiler;
 use super::{
     bridge::{
         deferral_memory_ptr, public_values_slice, read_rv64_registers, rv64_memory_ptr,
@@ -207,12 +209,11 @@ fn run_profiled<ModeState, T>(
     execute: impl FnOnce(&mut RvState<ModeState>) -> Result<T, ExecuteError>,
 ) -> Result<T, ExecuteError> {
     #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-    let profiler = super::guest_profiler::GuestProfiler::start_from_env(state)
-        .map_err(ExecuteError::GuestProfile)?;
+    let profiler = GuestProfiler::start_from_env(state).map_err(ExecuteError::GuestProfile)?;
     let execution_result = execute(state);
     #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
     let profile_result = profiler
-        .map(super::guest_profiler::GuestProfiler::finish)
+        .map(GuestProfiler::finish)
         .transpose()
         .map_err(ExecuteError::GuestProfile);
 
