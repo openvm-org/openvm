@@ -13,7 +13,10 @@ use openvm_instructions::program::{DEFAULT_PC_STEP, MAX_ALLOWED_PC};
 use openvm_platform::memory::TEXT_START;
 use rvr_state::RvState;
 
-use super::{GuestProfileConfig, GuestProfileFormat};
+use super::{
+    GuestProfileConfig, GuestProfileFormat, RawGuestProfile, RawGuestProfileSample, RvrCompiled,
+    RAW_GUEST_PROFILE_VERSION,
+};
 
 const MAX_STACK_DEPTH: usize = 128;
 const DEFAULT_BUFFER_CAPACITY: usize = 1 << 18;
@@ -27,6 +30,9 @@ fn is_valid_guest_pc(pc: u64) -> bool {
 #[derive(Clone, Copy)]
 #[repr(C)]
 struct StackSample {
+    host_rip: u64,
+    wall_time_ns: u64,
+    cpu_time_ns: u64,
     pcs: [u64; MAX_STACK_DEPTH],
     depth: u16,
 }
@@ -34,6 +40,9 @@ struct StackSample {
 impl Default for StackSample {
     fn default() -> Self {
         Self {
+            host_rip: 0,
+            wall_time_ns: 0,
+            cpu_time_ns: 0,
             pcs: [0; MAX_STACK_DEPTH],
             depth: 0,
         }
@@ -66,10 +75,20 @@ unsafe extern "C" {
     ) -> libc::c_int;
 }
 
-unsafe fn capture_sample(ctx: &SignalContext) -> StackSample {
+unsafe fn capture_sample(
+    ctx: &SignalContext,
+    host_rip: u64,
+    wall_time_ns: u64,
+    cpu_time_ns: u64,
+) -> StackSample {
     // SAFETY: start() requires a live RvState until the timer is disarmed.
     let state = unsafe { &*ctx.state_ptr };
-    let mut sample = StackSample::default();
+    let mut sample = StackSample {
+        host_rip,
+        wall_time_ns,
+        cpu_time_ns,
+        ..Default::default()
+    };
     sample.pcs[0] = state.pc;
     sample.depth = 1;
 
@@ -124,7 +143,11 @@ unsafe fn capture_sample(ctx: &SignalContext) -> StackSample {
     sample
 }
 
-extern "C" fn sigprof_handler(_signal: libc::c_int) {
+extern "C" fn sigprof_handler(
+    _signal: libc::c_int,
+    _info: *mut libc::siginfo_t,
+    ucontext: *mut libc::c_void,
+) {
     let ctx_ptr = HANDLER_CTX.load(Ordering::Acquire);
     if ctx_ptr.is_null() {
         return;
@@ -137,12 +160,34 @@ extern "C" fn sigprof_handler(_signal: libc::c_int) {
         return;
     }
 
+    let host_rip = if ucontext.is_null() {
+        0
+    } else {
+        // SAFETY: SA_SIGINFO supplies a live ucontext for this handler call.
+        let context = unsafe { &*(ucontext as *const libc::ucontext_t) };
+        context.uc_mcontext.gregs[libc::REG_RIP as usize] as u64
+    };
+    let wall_time_ns = clock_time_ns(libc::CLOCK_MONOTONIC);
+    let cpu_time_ns = clock_time_ns(libc::CLOCK_THREAD_CPUTIME_ID);
     // SAFETY: the active context owns live state and guest-memory pointers.
-    let sample = unsafe { capture_sample(ctx) };
+    let sample = unsafe { capture_sample(ctx, host_rip, wall_time_ns, cpu_time_ns) };
     let idx = ctx.write_idx.fetch_add(1, Ordering::Relaxed) % ctx.capacity;
     // SAFETY: capacity is nonzero and idx is reduced modulo capacity.
     unsafe { ctx.samples.add(idx).write(sample) };
     ctx.handlers_in_flight.fetch_sub(1, Ordering::Release);
+}
+
+#[inline]
+fn clock_time_ns(clock: libc::clockid_t) -> u64 {
+    // clock_gettime is async-signal-safe on supported Linux targets.
+    let mut time: libc::timespec = unsafe { std::mem::zeroed() };
+    // SAFETY: `time` points to initialized writable storage.
+    if unsafe { libc::clock_gettime(clock, &mut time) } != 0 {
+        return 0;
+    }
+    (time.tv_sec as u64)
+        .saturating_mul(1_000_000_000)
+        .saturating_add(time.tv_nsec as u64)
 }
 
 pub(super) struct GuestProfiler {
@@ -190,7 +235,7 @@ impl GuestProfiler {
         // SAFETY: sigaction is a plain C struct and all-zero is a valid base.
         let mut action: libc::sigaction = unsafe { std::mem::zeroed() };
         action.sa_sigaction = sigprof_handler as *const () as usize;
-        action.sa_flags = libc::SA_RESTART;
+        action.sa_flags = libc::SA_RESTART | libc::SA_SIGINFO;
         // SAFETY: action and old_action are valid sigaction objects.
         unsafe { libc::sigemptyset(&mut action.sa_mask) };
         // SAFETY: an all-zero sigaction is valid storage for the old action.
@@ -240,12 +285,13 @@ impl GuestProfiler {
         })
     }
 
-    pub(super) fn finish(mut self) -> Result<(), String> {
+    pub(super) fn finish(mut self, compiled: &RvrCompiled) -> Result<(), String> {
         self.stop_sampling();
         let samples = self.samples();
+        let native_base = native_library_base(compiled)?;
         let output = match self.config.format() {
             GuestProfileFormat::Folded => emit_folded_stacks(&samples),
-            GuestProfileFormat::Raw => emit_raw_stacks(&samples),
+            GuestProfileFormat::Raw => emit_raw_profile(&samples, native_base)?,
         };
         std::fs::write(self.config.output(), output).map_err(|error| {
             format!(
@@ -253,6 +299,11 @@ impl GuestProfiler {
                 self.config.output().display()
             )
         })?;
+        if let Some(output) = self.config.native_artifact_output() {
+            compiled
+                .save_artifact(output)
+                .map_err(|error| format!("failed to preserve native profile artifact: {error}"))?;
+        }
 
         let with_stack = samples.iter().filter(|sample| sample.depth > 1).count();
         let max_depth = samples.iter().map(|sample| sample.depth).max().unwrap_or(0);
@@ -309,6 +360,24 @@ impl GuestProfiler {
     }
 }
 
+fn native_library_base(compiled: &RvrCompiled) -> Result<u64, String> {
+    // Use an exported function from the loaded artifact as an ASLR anchor.
+    let execute: libloading::Symbol<unsafe extern "C" fn()> = unsafe {
+        compiled
+            .lib
+            .get(b"rv_execute")
+            .map_err(|error| format!("failed to locate rv_execute for profiling: {error}"))?
+    };
+    let mut info: libc::Dl_info = unsafe { std::mem::zeroed() };
+    // SAFETY: the function pointer belongs to the loaded library and `info` is writable.
+    if unsafe { libc::dladdr(*execute as *const () as *const libc::c_void, &mut info) } == 0
+        || info.dli_fbase.is_null()
+    {
+        return Err("failed to determine native artifact load address".to_string());
+    }
+    Ok(info.dli_fbase as usize as u64)
+}
+
 impl Drop for GuestProfiler {
     fn drop(&mut self) {
         self.stop_sampling();
@@ -345,23 +414,33 @@ fn emit_folded_stacks(samples: &[StackSample]) -> String {
     output
 }
 
-fn emit_raw_stacks(samples: &[StackSample]) -> String {
-    let mut output = String::new();
-    for sample in samples {
-        use std::fmt::Write;
-        for (idx, pc) in sample.pcs[..usize::from(sample.depth)]
-            .iter()
-            .rev()
-            .enumerate()
-        {
-            if idx != 0 {
-                output.push(';');
+fn emit_raw_profile(samples: &[StackSample], native_base: u64) -> Result<String, String> {
+    let samples = samples
+        .iter()
+        .map(|sample| {
+            // Exclude state.pc when a current native IP was captured: state.pc
+            // is only updated at selected RVR control-flow boundaries and is
+            // not the interrupted instruction. The remaining entries are
+            // frame-pointer-derived caller return addresses.
+            let first_guest_pc = usize::from(sample.host_rip != 0);
+            let guest_pcs = sample.pcs[first_guest_pc..usize::from(sample.depth)]
+                .iter()
+                .rev()
+                .copied()
+                .collect();
+            RawGuestProfileSample {
+                wall_time_ns: sample.wall_time_ns,
+                cpu_time_ns: sample.cpu_time_ns,
+                host_pc: sample.host_rip.checked_sub(native_base),
+                guest_pcs,
             }
-            let _ = write!(output, "{pc:#018x}");
-        }
-        output.push('\n');
-    }
-    output
+        })
+        .collect();
+    serde_json::to_string(&RawGuestProfile {
+        version: RAW_GUEST_PROFILE_VERSION,
+        samples,
+    })
+    .map_err(|error| format!("failed to serialize raw guest profile: {error}"))
 }
 
 #[cfg(test)]
@@ -396,7 +475,7 @@ mod tests {
         };
 
         // SAFETY: state and memory live for the duration of the call.
-        let sample = unsafe { capture_sample(&ctx) };
+        let sample = unsafe { capture_sample(&ctx, 0, 10, 8) };
         assert_eq!(
             &sample.pcs[..usize::from(sample.depth)],
             &[TEXT_START, TEXT_START + 0x100, TEXT_START + 0x200]
@@ -425,7 +504,7 @@ mod tests {
         };
 
         // SAFETY: state and memory live for the duration of the call.
-        let sample = unsafe { capture_sample(&ctx) };
+        let sample = unsafe { capture_sample(&ctx, 0, 10, 8) };
         assert_eq!(
             &sample.pcs[..usize::from(sample.depth)],
             &[TEXT_START, TEXT_START + 0x100]
@@ -454,7 +533,7 @@ mod tests {
         };
 
         // SAFETY: state and memory live for the duration of the call.
-        let sample = unsafe { capture_sample(&ctx) };
+        let sample = unsafe { capture_sample(&ctx, 0, 10, 8) };
         assert_eq!(
             &sample.pcs[..usize::from(sample.depth)],
             &[TEXT_START + 0x100]
@@ -474,17 +553,32 @@ mod tests {
     }
 
     #[test]
-    fn emits_raw_stacks_in_sample_order() {
-        let mut first = StackSample::default();
+    fn emits_versioned_raw_samples_with_native_ip_and_real_clocks() {
+        let mut first = StackSample {
+            host_rip: 0x10_1234,
+            wall_time_ns: 20_000,
+            cpu_time_ns: 15_000,
+            ..Default::default()
+        };
         first.pcs[..3].copy_from_slice(&[0x100, 0x200, 0x300]);
         first.depth = 3;
-        let mut second = StackSample::default();
+        let mut second = StackSample {
+            wall_time_ns: 30_000,
+            cpu_time_ns: 25_000,
+            ..Default::default()
+        };
         second.pcs[..2].copy_from_slice(&[0x400, 0x500]);
         second.depth = 2;
-        assert_eq!(
-            emit_raw_stacks(&[first, second]),
-            "0x0000000000000300;0x0000000000000200;0x0000000000000100\n\
-             0x0000000000000500;0x0000000000000400\n"
-        );
+
+        let raw: RawGuestProfile =
+            serde_json::from_str(&emit_raw_profile(&[first, second], 0x10_0000).unwrap()).unwrap();
+        assert_eq!(raw.version, RAW_GUEST_PROFILE_VERSION);
+        assert_eq!(raw.samples.len(), 2);
+        assert_eq!(raw.samples[0].host_pc, Some(0x1234));
+        assert_eq!(raw.samples[0].guest_pcs, vec![0x300, 0x200]);
+        assert_eq!(raw.samples[0].wall_time_ns, 20_000);
+        assert_eq!(raw.samples[0].cpu_time_ns, 15_000);
+        assert_eq!(raw.samples[1].host_pc, None);
+        assert_eq!(raw.samples[1].guest_pcs, vec![0x500, 0x400]);
     }
 }

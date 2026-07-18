@@ -38,6 +38,7 @@ backtrace.workspace = true
 bytemuck = { workspace = true, features = ["extern_crate_alloc"] }
 rand.workspace = true
 serde.workspace = true
+serde_json = { workspace = true, optional = true }
 serde-big-array.workspace = true
 metrics = { workspace = true, optional = true }
 thiserror.workspace = true
@@ -102,6 +103,7 @@ rvr = [
     "dep:tempfile",
     "dep:sha2",
     "dep:nix",
+    "dep:serde_json",
     "openvm-circuit-derive/rvr",
 ]
 # Disable bounds checking in memory operations for performance
