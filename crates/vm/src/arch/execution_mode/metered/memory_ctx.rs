@@ -390,16 +390,19 @@ fn push_page_touch(touches: &mut Vec<PageTouch>, page_id: u32, leaf_mask: u64) {
 
     // SAFETY: capacity was checked above. PageTouch is Copy and has no drop glue.
     unsafe {
-        touches
-            .as_mut_ptr()
-            .add(len)
-            .write(PageTouch { page_id, leaf_mask });
+        touches.as_mut_ptr().add(len).write(PageTouch {
+            page_id,
+            padding: 0,
+            leaf_mask,
+        });
         touches.set_len(len + 1);
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use openvm_instructions::metering::PAGE_MASK_LEAF_BITS_U32;
+
     use super::*;
     use crate::{arch::MEMORY_BLOCK_BYTES, utils::test_system_config};
 
@@ -513,11 +516,11 @@ mod tests {
         assert_eq!(trace_heights[BOUNDARY_AIR_ID] - boundary_before, 2);
         assert_eq!(
             trace_heights[MERKLE_AIR_ID] - merkle_before,
-            2 * PAGE_MASK_LEAF_BITS as u32
+            2 * PAGE_MASK_LEAF_BITS_U32
         );
         assert_eq!(
             trace_heights[poseidon2_idx] - poseidon_before,
-            1 + PAGE_MASK_LEAF_BITS as u32
+            1 + PAGE_MASK_LEAF_BITS_U32
         );
     }
 

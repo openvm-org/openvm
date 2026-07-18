@@ -14,11 +14,10 @@ use openvm_instructions::{
 use openvm_riscv_transpiler::{
     Rv64HintStoreOpcode,
     Rv64HintStoreOpcode::{HINT_BUFFER, HINT_STORED},
-    MAX_HINT_BUFFER_DWORDS,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::Rv64HintStoreExecutor;
+use super::{validate_hint_buffer_num_words, Rv64HintStoreExecutor};
 use crate::adapters::rv64_bytes_to_u32;
 
 #[derive(AlignedBytesBorrow, Clone)]
@@ -163,22 +162,13 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_HINT_STORED: bool>(
     let mem_ptr = rv64_bytes_to_u32(mem_ptr_limbs);
 
     let num_words = if IS_HINT_STORED {
-        1
+        1u64
     } else {
         let num_words_limbs = exec_state
             .vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.a as u32);
-        rv64_bytes_to_u32(num_words_limbs)
+        u64::from_le_bytes(num_words_limbs)
     };
-    debug_assert_ne!(num_words, 0);
-
-    // Bounds check: num_words must not exceed MAX_HINT_BUFFER_DWORDS
-    if num_words > MAX_HINT_BUFFER_DWORDS as u32 {
-        return Err(ExecutionError::HintBufferTooLarge {
-            pc,
-            num_words,
-            max_hint_buffer_words: MAX_HINT_BUFFER_DWORDS as u32,
-        });
-    }
+    let num_words = u32::from(validate_hint_buffer_num_words(pc, num_words)?);
 
     let num_bytes = RV64_REGISTER_NUM_LIMBS * num_words as usize;
     if exec_state.streams.hint_stream.remaining() < num_bytes {

@@ -53,7 +53,7 @@ extern "C" {
     // ── Hint stream (for extension phantom instructions) ──────────────
     /// Replace the hint stream contents. Forwarded through `openvm_io.c`
     /// to `OpenVmIoState.hint_stream` via the host callback mechanism.
-    pub fn ext_hint_stream_set(data: *const u8, len: u32);
+    pub fn ext_hint_stream_set(data: *const u8, len: u64);
 }
 
 // ── Zero-copy lane reinterpretation ─────────────────────────────────────
@@ -88,13 +88,14 @@ pub fn u64s_as_u32s_mut(lanes: &mut [u64]) -> &mut [u32] {
 /// the empty case themselves.
 ///
 /// # Safety
-/// `state` must be a valid `RvState` pointer; the byte range
-/// `[base_addr, base_addr + out.len() * WORD_SIZE)` must lie within guest memory.
+/// `state` must be a valid `RvState` pointer; `out.len()` must fit in `u32`, and
+/// the byte range `[base_addr, base_addr + out.len() * WORD_SIZE)` must lie within guest memory.
 pub unsafe fn rd_mem_words_traced(state: *mut c_void, base_addr: u64, out: &mut [u64]) {
     debug_assert!(
         !out.is_empty(),
         "rd_mem_words_traced requires a non-empty range"
     );
+    debug_assert!(u32::try_from(out.len()).is_ok());
     let n = out.len() as u32;
     rd_mem_u64_range_wrapper(state, base_addr, out.as_mut_ptr(), n);
     trace_rd_mem_u64_range_wrapper(state, base_addr, out.as_ptr(), n);
@@ -107,13 +108,14 @@ pub unsafe fn rd_mem_words_traced(state: *mut c_void, base_addr: u64, out: &mut 
 /// `vals` must be non-empty; see [`rd_mem_words_traced`] for rationale.
 ///
 /// # Safety
-/// `state` must be a valid `RvState` pointer; the byte range
-/// `[base_addr, base_addr + vals.len() * WORD_SIZE)` must lie within guest memory.
+/// `state` must be a valid `RvState` pointer; `vals.len()` must fit in `u32`, and
+/// the byte range `[base_addr, base_addr + vals.len() * WORD_SIZE)` must lie within guest memory.
 pub unsafe fn wr_mem_words_traced(state: *mut c_void, base_addr: u64, vals: &[u64]) {
     debug_assert!(
         !vals.is_empty(),
         "wr_mem_words_traced requires a non-empty range"
     );
+    debug_assert!(u32::try_from(vals.len()).is_ok());
     let n = vals.len() as u32;
     trace_wr_mem_u64_range_wrapper(state, base_addr, vals.as_ptr(), n);
     wr_mem_u64_range_wrapper(state, base_addr, vals.as_ptr(), n);

@@ -75,6 +75,8 @@ pub struct MeteringState {
     pub check_counter: u32,
     /// Dedup cache for AS_MEMORY pages. `u32::MAX` = none. Reset on flush.
     pub last_mem_page: u32,
+    /// Fills the otherwise implicit tail padding required by the struct's pointer alignment.
+    pub padding: u32,
 }
 
 /// Sentinel indicating no last-seen page (matches `NO_LAST_PAGE` in C).
@@ -94,6 +96,7 @@ impl Default for MeteringState {
             deferral_page_buf_len: 0,
             check_counter: 0,
             last_mem_page: NO_LAST_PAGE,
+            padding: 0,
         }
     }
 }
@@ -111,19 +114,18 @@ pub struct SegmentationState {
     mem_page_buf: Vec<PageTouch>,
     pv_page_buf: Vec<PageTouch>,
     deferral_page_buf: Vec<PageTouch>,
-    address_height: u32,
+    address_height: usize,
 }
 
 impl SegmentationState {
     pub fn new(ctx: MeteredCtx, system_config: &SystemConfig) -> Self {
         let memory_dimensions = system_config.memory_config.memory_dimensions();
-        let address_height = memory_dimensions.address_height as u32;
         Self {
             ctx,
             mem_page_buf: vec![PageTouch::default(); MEM_PAGE_BUF_CAP],
             pv_page_buf: vec![PageTouch::default(); PV_PAGE_BUF_CAP],
             deferral_page_buf: vec![PageTouch::default(); DEFERRAL_PAGE_BUF_CAP],
-            address_height,
+            address_height: memory_dimensions.address_height,
         }
     }
 
@@ -158,7 +160,7 @@ impl SegmentationState {
     #[inline(always)]
     fn apply_addr_space_buffer(
         memory_ctx: &mut MemoryCtx,
-        address_height: u32,
+        address_height: usize,
         addr_space: u32,
         buffer: &[PageTouch],
         len: u32,
@@ -169,9 +171,19 @@ impl SegmentationState {
         // C buffers use page ids local to one address space. `MemoryCtx`
         // deduplicates against one global memory tree, so convert to global
         // page ids before applying the leaf masks.
-        let page_shift = address_height as usize - PAGE_MASK_LEAF_BITS;
-        let page_offset = ((addr_space as usize - ADDR_SPACE_OFFSET as usize) << page_shift) as u32;
-        memory_ctx.apply_page_touches_with_offset(page_offset, &buffer[..len as usize]);
+        let page_shift = address_height
+            .checked_sub(PAGE_MASK_LEAF_BITS)
+            .expect("memory address height must cover a metering page");
+        let relative_address_space = addr_space
+            .checked_sub(ADDR_SPACE_OFFSET)
+            .expect("metered address space must be in the memory tree");
+        let addr_space_offset = relative_address_space as usize;
+        let page_offset = addr_space_offset
+            .checked_shl(page_shift as u32)
+            .and_then(|offset| u32::try_from(offset).ok())
+            .expect("global metering page offset must fit in u32");
+        let len = len as usize;
+        memory_ctx.apply_page_touches_with_offset(page_offset, &buffer[..len]);
     }
 
     /// Apply all page buffers: convert local pages to global ids and update
@@ -496,6 +508,7 @@ impl RvrMeteredSegmentInstance<'_> {
 
 #[cfg(all(test, feature = "rvr"))]
 mod tests {
+    use openvm_instructions::metering::PAGE_MASK_LEAF_BITS_U32;
     use openvm_stark_backend::StarkEngine;
 
     use super::*;
@@ -548,14 +561,17 @@ mod tests {
         let mut with_interval_buffer = make_segmentation_state();
         with_interval_buffer.mem_page_buf[0] = PageTouch {
             page_id: 7,
+            padding: 0,
             leaf_mask: 1,
         };
         with_interval_buffer.pv_page_buf[0] = PageTouch {
             page_id: 3,
+            padding: 0,
             leaf_mask: 1,
         };
         with_interval_buffer.deferral_page_buf[0] = PageTouch {
             page_id: 2,
+            padding: 0,
             leaf_mask: 1,
         };
         with_interval_buffer.initialize_segment_memory(1, 1, 1);
@@ -583,6 +599,7 @@ mod tests {
         let mut seg_state = make_segmentation_state();
         seg_state.mem_page_buf[0] = PageTouch {
             page_id: 0,
+            padding: 0,
             leaf_mask: 1,
         };
         assert!(!seg_state.on_periodic_check(1, 0, 0, 0));
@@ -591,13 +608,14 @@ mod tests {
         let poseidon_before = seg_state.ctx.trace_heights[poseidon2_idx];
         seg_state.mem_page_buf[0] = PageTouch {
             page_id: 1,
+            padding: 0,
             leaf_mask: 1,
         };
         assert!(!seg_state.on_periodic_check(1, 0, 0, 0));
 
         assert_eq!(
             seg_state.ctx.trace_heights[poseidon2_idx] - poseidon_before,
-            1 + PAGE_MASK_LEAF_BITS as u32
+            1 + PAGE_MASK_LEAF_BITS_U32
         );
     }
 
@@ -606,6 +624,7 @@ mod tests {
         let mut buffered = make_segmentation_state();
         buffered.mem_page_buf[0] = PageTouch {
             page_id: 0,
+            padding: 0,
             leaf_mask: 0b11,
         };
         buffered.on_termination(1, 0, 0, 0);
@@ -671,6 +690,7 @@ mod tests {
             deferral_page_buf_len: 0,
             check_counter: remaining,
             last_mem_page: NO_LAST_PAGE,
+            padding: 0,
         };
 
         let did_segment = unsafe { metered_periodic_check(&mut metering) };
@@ -701,6 +721,7 @@ mod tests {
             deferral_page_buf_len: 0,
             check_counter: remaining,
             last_mem_page: NO_LAST_PAGE,
+            padding: 0,
         };
 
         let did_segment = unsafe { metered_periodic_check(&mut metering) };

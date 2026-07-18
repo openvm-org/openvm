@@ -109,7 +109,7 @@ impl ExtInstr for Int256AluInstr {
         let rd = ctx.read_reg(self.rd_reg);
         let rs1 = ctx.read_reg(self.rs1_reg);
         let rs2 = ctx.read_reg(self.rs2_reg);
-        ctx.extern_call(self.op.ffi_name(), &["state", &rd, &rs1, &rs2]);
+        ctx.emit_call(self.op.ffi_name(), &["state", &rd, &rs1, &rs2]);
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -155,7 +155,7 @@ impl ExtInstr for Int256BranchEqInstr {
         } else {
             "rvr_ext_int256_beq"
         };
-        let cond = ctx.extern_call_expr("uint8_t", fn_name, &["state", &rs1, &rs2]);
+        let cond = ctx.emit_call_expr("bool", fn_name, &["state", &rs1, &rs2]);
         ctx.write_line(&format!("if ({cond}) {{"));
         ctx.write_line(&format!("  {}", branch_to(self.target_pc)));
         ctx.write_line("} else {");
@@ -205,7 +205,7 @@ impl ExtInstr for Int256BranchLtInstr {
     fn emit_c_term(&self, ctx: &mut dyn ExtEmitCtx, branch_to: &dyn Fn(u64) -> String) {
         let rs1 = ctx.read_reg(self.rs1_reg);
         let rs2 = ctx.read_reg(self.rs2_reg);
-        let cond = ctx.extern_call_expr("uint8_t", self.op.ffi_name(), &["state", &rs1, &rs2]);
+        let cond = ctx.emit_call_expr("bool", self.op.ffi_name(), &["state", &rs1, &rs2]);
         ctx.write_line(&format!("if ({cond}) {{"));
         ctx.write_line(&format!("  {}", branch_to(self.target_pc)));
         ctx.write_line("} else {");

@@ -1,4 +1,4 @@
-use openvm_instructions::metering::PAGE_MASK_LEAF_BITS;
+use openvm_instructions::metering::{PAGE_MASK_LEAF_BITS, PAGE_MASK_LEAF_BITS_U32};
 
 // Masks with the first bit set in each aligned group of leaves. These represent
 // group occupancy at each page-local Merkle level.
@@ -22,6 +22,8 @@ const FIRST_LEAF_PER_64_LEAVES: u64 = 0x0000_0000_0000_0001;
 pub struct PageTouch {
     /// Index of the 64-leaf page in the memory tree.
     pub page_id: u32,
+    /// Aligns `leaf_mask` and makes the shared 16-byte Rust/C layout explicit.
+    pub padding: u32,
     /// Leaves touched in this page, with one bit per leaf.
     pub leaf_mask: u64,
 }
@@ -550,7 +552,7 @@ fn local_merkle_nodes_added_leaf(segment_leaf_mask: u64, leaf: u32) -> u32 {
     debug_assert!(leaf < u64::BITS);
 
     if segment_leaf_mask == 0 {
-        return PAGE_MASK_LEAF_BITS as u32;
+        return PAGE_MASK_LEAF_BITS_U32;
     }
 
     // For one new leaf, each aligned group that was empty creates exactly one
@@ -592,11 +594,11 @@ fn local_merkle_nodes_added_leaf_with_first_touches(
 
     if segment_leaf_mask == 0 && baseline_leaf_mask == 0 {
         return (
-            PAGE_MASK_LEAF_BITS as u32,
+            PAGE_MASK_LEAF_BITS_U32,
             FirstTouchCounts {
                 leaves: 0,
-                merkle_nodes: PAGE_MASK_LEAF_BITS as u32,
-                max_merkle_height: PAGE_MASK_LEAF_BITS as u32,
+                merkle_nodes: PAGE_MASK_LEAF_BITS_U32,
+                max_merkle_height: PAGE_MASK_LEAF_BITS_U32,
             },
         );
     }
@@ -638,7 +640,7 @@ fn local_merkle_nodes_added_leaf_with_first_touches(
         nodes += 1;
         if baseline_leaf_mask == 0 {
             first_touches.merkle_nodes += 1;
-            first_touches.max_merkle_height = PAGE_MASK_LEAF_BITS as u32;
+            first_touches.max_merkle_height = PAGE_MASK_LEAF_BITS_U32;
         }
     }
 
@@ -861,7 +863,7 @@ mod tests {
         let baseline_memory = BaselineMemoryTracker::new(3);
         tracker.insert(0, 1, &baseline_memory);
         let second = tracker.insert(1, 1, &baseline_memory);
-        assert_eq!(second.segment_merkle_nodes, PAGE_MASK_LEAF_BITS as u32);
+        assert_eq!(second.segment_merkle_nodes, PAGE_MASK_LEAF_BITS_U32);
     }
 
     #[test]
@@ -872,6 +874,7 @@ mod tests {
         let first = tracker.insert(0, 1, &baseline_memory).first_touches;
         baseline_memory.add_page_touches(&[PageTouch {
             page_id: 0,
+            padding: 0,
             leaf_mask: 1,
         }]);
         tracker.clear();

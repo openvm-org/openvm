@@ -236,6 +236,50 @@ fn test_hint_buffer_exceeds_max_words() {
 }
 
 #[test]
+#[should_panic(expected = "HintBufferZeroWords")]
+fn test_hint_buffer_rejects_zero_words() {
+    execute_invalid_hint_buffer(0, false);
+}
+
+#[test]
+#[should_panic(expected = "num_words: 4294967297")]
+fn test_hint_buffer_checks_full_rv64_count() {
+    // The low 32 bits encode one word, so truncating before validation would accept this.
+    execute_invalid_hint_buffer((1u64 << 32) | 1, true);
+}
+
+fn execute_invalid_hint_buffer(num_words: u64, provide_one_word: bool) {
+    let mut rng = create_seeded_rng();
+    let mut tester = VmChipTestBuilder::default();
+    let mut harness = create_harness::<MatrixRecordArena<F>>(&mut tester);
+
+    let a = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
+    tester.write_bytes(RV64_REGISTER_AS as usize, a, u64_to_rv64_limbs(num_words));
+
+    let b = gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS);
+    tester.write_bytes(
+        RV64_REGISTER_AS as usize,
+        b,
+        u64_to_rv64_limbs(gen_pointer(&mut rng, RV64_REGISTER_NUM_LIMBS) as u64),
+    );
+    if provide_one_word {
+        tester
+            .streams_mut()
+            .hint_stream
+            .extend([0; RV64_REGISTER_NUM_LIMBS]);
+    }
+
+    tester.execute(
+        &mut harness.executor,
+        &mut harness.arena,
+        &Instruction::from_usize(
+            HINT_BUFFER.global_opcode(),
+            [a, b, 0, RV64_REGISTER_AS as usize, RV64_MEMORY_AS as usize],
+        ),
+    );
+}
+
+#[test]
 fn test_hint_buffer_rem_words_range_check() {
     let mut rng = create_seeded_rng();
     let mut tester = VmChipTestBuilder::default();

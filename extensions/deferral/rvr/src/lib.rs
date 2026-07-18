@@ -78,7 +78,7 @@ impl ExtInstr for DeferralCallInstr {
         let poseidon2 = air_index_to_c(self.poseidon2_chip_idx);
         let def_idx = format!("{}u", self.def_idx);
         let poseidon2 = format!("{poseidon2}u");
-        ctx.extern_call(
+        ctx.emit_call(
             "rvr_ext_deferral_call",
             &["state", &rd, &rs, &def_idx, &poseidon2],
         );
@@ -116,7 +116,7 @@ impl ExtInstr for DeferralOutputInstr {
         let def_idx = format!("{}u", self.def_idx);
         let output = format!("{output}u");
         let poseidon2 = format!("{poseidon2}u");
-        ctx.extern_call(
+        ctx.emit_call(
             "rvr_ext_deferral_output",
             &["state", &rd, &rs, &def_idx, &output, &poseidon2],
         );
@@ -344,7 +344,7 @@ unsafe fn update_deferral_accumulators<F: PrimeField32>(
 
 type RegisterFn = unsafe extern "C" fn(*const DeferralHostCallbacks);
 
-/// Must match the C `DeferralHostCallbacks` layout in `rvr_ext_deferral.c`.
+/// Must match the C `DeferralHostCallbacks` layout in `rvr_ext_deferral.h`.
 #[repr(C)]
 pub struct DeferralHostCallbacks {
     pub ctx: *mut c_void,

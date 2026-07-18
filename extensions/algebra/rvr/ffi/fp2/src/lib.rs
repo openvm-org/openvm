@@ -9,10 +9,9 @@ use std::{ffi::c_void, marker::PhantomData};
 
 use num_bigint::BigUint;
 use openvm_instructions::riscv::RV64_MEMORY_AS;
-use openvm_platform::WORD_SIZE;
 use rvr_openvm_ext_algebra_ffi_common::{
-    known_field_op_fn, mod_inverse, read_bigint, read_field_256, write_bigint, write_field_256,
-    FieldArith, KnownFieldArith,
+    known_field_op_fn, limb_bytes_to_words, mod_inverse, read_bigint, read_field_256, write_bigint,
+    write_field_256, FieldArith, KnownFieldArith,
 };
 use rvr_openvm_ext_ffi_common::{rd_mem_words_traced, trace_mem_access_range, wr_mem_words_traced};
 
@@ -54,13 +53,18 @@ impl FieldArith for UnknownComplexField {
 
     unsafe fn read_elem(&self, state: *mut c_void, ptr: u64) -> Self::Elem {
         let c0 = read_bigint(state, ptr, self.num_limbs);
-        let c1 = read_bigint(state, ptr + self.num_limbs as u64, self.num_limbs);
+        let c1 = read_bigint(state, ptr + u64::from(self.num_limbs), self.num_limbs);
         (c0, c1)
     }
 
     unsafe fn write_elem(&self, state: *mut c_void, ptr: u64, val: &Self::Elem) {
         write_bigint(state, ptr, &val.0, self.num_limbs);
-        write_bigint(state, ptr + self.num_limbs as u64, &val.1, self.num_limbs);
+        write_bigint(
+            state,
+            ptr + u64::from(self.num_limbs),
+            &val.1,
+            self.num_limbs,
+        );
     }
 
     fn add(&self, a: Self::Elem, b: Self::Elem) -> Self::Elem {
@@ -131,8 +135,8 @@ pub unsafe extern "C" fn rvr_ext_fp2_setup(
     rs2_ptr: u64,
     num_limbs: u32,
 ) {
-    let total_limbs = num_limbs * 2;
-    let num_words = total_limbs / WORD_SIZE as u32;
+    let total_limbs = num_limbs.checked_mul(2).expect("Fp2 limb count overflow");
+    let num_words = limb_bytes_to_words(total_limbs);
     debug_assert!(num_words >= 1);
 
     let mut input_words = vec![0u64; num_words as usize];

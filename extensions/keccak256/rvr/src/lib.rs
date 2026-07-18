@@ -34,7 +34,7 @@ impl ExtInstr for KeccakfInstr {
         let perm = air_index_to_c(self.perm_chip_idx);
         let op = format!("{op}u");
         let perm = format!("{perm}u");
-        ctx.extern_call("rvr_ext_keccakf", &["state", &buf, &op, &perm]);
+        ctx.emit_call("rvr_ext_keccakf", &["state", &buf, &op, &perm]);
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -67,7 +67,7 @@ impl ExtInstr for XorinInstr {
         let len = ctx.read_reg(self.len_reg);
         let chip = air_index_to_c(self.chip_idx);
         let chip = format!("{chip}u");
-        ctx.extern_call("rvr_ext_xorin", &["state", &buf_ptr, &input, &len, &chip]);
+        ctx.emit_call("rvr_ext_xorin", &["state", &buf_ptr, &input, &len, &chip]);
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {

@@ -11,14 +11,12 @@ void register_openvm_io_ctx(void* ctx) { g_io_ctx = ctx; }
 
 void* openvm_get_io_ctx(void) { return g_io_ctx; }
 
-static thread_local void (*g_hint_stream_set_fn)(void* ctx,
-                                                 const uint8_t* data,
-                                                 uint32_t len);
+static thread_local HintStreamSetFn g_hint_stream_set_fn;
 
-void register_hint_stream_set_fn(void (*fn)(void*, const uint8_t*, uint32_t)) {
+void register_hint_stream_set_fn(HintStreamSetFn fn) {
   g_hint_stream_set_fn = fn;
 }
 
-void ext_hint_stream_set(const uint8_t* data, uint32_t len) {
+void ext_hint_stream_set(const uint8_t* data, uint64_t len) {
   g_hint_stream_set_fn(g_io_ctx, data, len);
 }
