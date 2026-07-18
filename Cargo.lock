@@ -7380,6 +7380,7 @@ version = "2.0.0"
 dependencies = [
  "openvm-instructions",
  "openvm-keccak256-transpiler",
+ "p3-keccak-air",
  "rvr-openvm-build",
  "rvr-openvm-ir",
  "rvr-openvm-lift",
@@ -7437,6 +7438,7 @@ name = "rvr-openvm-ext-sha2"
 version = "2.0.0"
 dependencies = [
  "openvm-instructions",
+ "openvm-sha2-air",
  "openvm-sha2-transpiler",
  "rvr-openvm-build",
  "rvr-openvm-ir",

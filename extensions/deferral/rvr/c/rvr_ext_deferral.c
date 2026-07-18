@@ -35,8 +35,7 @@ void register_deferral_callbacks(const DeferralHostCallbacks* cb) {
 
 /* Deferral CALL: read input_commit, look up output_key, write it. */
 void rvr_ext_deferral_call(RvState* restrict state, uint64_t output_ptr,
-                           uint64_t input_ptr, uint32_t def_idx,
-                           uint32_t poseidon2_chip_idx) {
+                           uint64_t input_ptr, uint32_t def_idx) {
   /* Read input_commit (COMMIT_WORDS words) from guest memory. */
   uint64_t commit_words[COMMIT_WORDS];
   rd_mem_u64_range_traced(state, input_ptr, commit_words, COMMIT_WORDS);
@@ -66,15 +65,11 @@ void rvr_ext_deferral_call(RvState* restrict state, uint64_t output_ptr,
                              AS_DEFERRAL);
   trace_mem_access_u64_range(state, output_acc_ptr, DIGEST_MEMORY_OPS,
                              AS_DEFERRAL);
-
-  trace_chip(state, poseidon2_chip_idx, 2);
 }
 
 /* Deferral OUTPUT: read output_key, look up raw output, write it. */
-void rvr_ext_deferral_output(RvState* restrict state, uint64_t output_ptr,
-                             uint64_t input_ptr, uint32_t def_idx,
-                             uint32_t output_chip_idx,
-                             uint32_t poseidon2_chip_idx) {
+uint32_t rvr_ext_deferral_output(RvState* restrict state, uint64_t output_ptr,
+                                 uint64_t input_ptr, uint32_t def_idx) {
   /* Read output_key (OUTPUT_KEY_WORDS words) from guest memory. */
   uint64_t key_words[OUTPUT_KEY_WORDS];
   rd_mem_u64_range_traced(state, input_ptr, key_words, OUTPUT_KEY_WORDS);
@@ -108,8 +103,5 @@ void rvr_ext_deferral_output(RvState* restrict state, uint64_t output_ptr,
   free(output_raw);
 
   uint32_t num_rows = num_data_rows + 1;
-  if (num_rows > 1) {
-    trace_chip(state, output_chip_idx, num_rows - 1);
-  }
-  trace_chip(state, poseidon2_chip_idx, num_rows);
+  return num_rows;
 }

@@ -7,18 +7,19 @@
 
 use openvm_instructions::LocalOpcode;
 use openvm_keccak256_transpiler::{KeccakfOpcode, XorinOpcode};
-use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
+use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, FixedTraceRows, Instr, InstrAt, LiftedInstr, Reg};
 use rvr_openvm_lift::{
-    air_index_to_c, decode_reg, opcode_air_idx, AirIndex, ExtensionError, RvrExtension,
+    decode_reg, fixed_trace_rows_for_chip, opcode_air_idx, AirIndex, ExtensionError, RvrExtension,
     RvrExtensionCtx, RvrInstruction,
 };
+
+const KECCAK_NUM_ROUNDS: u32 = p3_keccak_air::NUM_ROUNDS as u32;
+const _: () = assert!(KECCAK_NUM_ROUNDS as usize == p3_keccak_air::NUM_ROUNDS);
 
 /// keccak-f\[1600\]: read 200 bytes via `buffer_ptr_reg`, permute in place.
 #[derive(Debug, Clone)]
 pub struct KeccakfInstr {
     pub buffer_ptr_reg: Reg,
-    /// KeccakfOp chip (1 row per instruction).
-    pub op_chip_idx: Option<AirIndex>,
     /// KeccakfPerm chip (24 rows per instruction).
     pub perm_chip_idx: Option<AirIndex>,
 }
@@ -30,11 +31,11 @@ impl ExtInstr for KeccakfInstr {
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         let buf = ctx.read_reg(self.buffer_ptr_reg);
-        let op = air_index_to_c(self.op_chip_idx);
-        let perm = air_index_to_c(self.perm_chip_idx);
-        let op = format!("{op}u");
-        let perm = format!("{perm}u");
-        ctx.emit_call("rvr_ext_keccakf", &["state", &buf, &op, &perm]);
+        ctx.emit_call("rvr_ext_keccakf", &["state", &buf]);
+    }
+
+    fn fixed_trace_rows(&self) -> Vec<FixedTraceRows> {
+        fixed_trace_rows_for_chip(self.perm_chip_idx, KECCAK_NUM_ROUNDS)
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -52,8 +53,6 @@ pub struct XorinInstr {
     pub buffer_ptr_reg: Reg,
     pub input_ptr_reg: Reg,
     pub len_reg: Reg,
-    /// Xorin chip (1 row per instruction).
-    pub chip_idx: Option<AirIndex>,
 }
 
 impl ExtInstr for XorinInstr {
@@ -65,9 +64,7 @@ impl ExtInstr for XorinInstr {
         let buf_ptr = ctx.read_reg(self.buffer_ptr_reg);
         let input = ctx.read_reg(self.input_ptr_reg);
         let len = ctx.read_reg(self.len_reg);
-        let chip = air_index_to_c(self.chip_idx);
-        let chip = format!("{chip}u");
-        ctx.emit_call("rvr_ext_xorin", &["state", &buf_ptr, &input, &len, &chip]);
+        ctx.emit_call("rvr_ext_xorin", &["state", &buf_ptr, &input, &len]);
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -81,22 +78,18 @@ impl ExtInstr for XorinInstr {
 
 /// Keccak-256 extension. Register with the `ExtensionRegistry`.
 pub struct KeccakExtension {
-    xorin_chip_idx: Option<AirIndex>,
-    keccakf_op_chip_idx: Option<AirIndex>,
     keccakf_perm_chip_idx: Option<AirIndex>,
 }
 
 impl KeccakExtension {
     pub fn new(ctx: Option<&RvrExtensionCtx>) -> Result<Self, ExtensionError> {
-        let xorin_chip_idx = opcode_air_idx(ctx, XorinOpcode::XORIN)?;
+        let _ = opcode_air_idx(ctx, XorinOpcode::XORIN)?;
         let keccakf_op_chip_idx = opcode_air_idx(ctx, KeccakfOpcode::KECCAKF)?;
         // KeccakfPerm is registered adjacent to KeccakfOp and assigned the next
         // AIR index (keccakf_op_chip_idx + 1) due to reverse registration order.
         let keccakf_perm_chip_idx = keccakf_op_chip_idx.map(AirIndex::next);
 
         Ok(Self {
-            xorin_chip_idx,
-            keccakf_op_chip_idx,
             keccakf_perm_chip_idx,
         })
     }
@@ -112,7 +105,6 @@ impl RvrExtension for KeccakExtension {
                 pc,
                 instr: Instr::Ext(Box::new(KeccakfInstr {
                     buffer_ptr_reg,
-                    op_chip_idx: self.keccakf_op_chip_idx,
                     perm_chip_idx: self.keccakf_perm_chip_idx,
                 })),
                 source_loc: None,
@@ -129,7 +121,6 @@ impl RvrExtension for KeccakExtension {
                     buffer_ptr_reg,
                     input_ptr_reg,
                     len_reg,
-                    chip_idx: self.xorin_chip_idx,
                 })),
                 source_loc: None,
             }));

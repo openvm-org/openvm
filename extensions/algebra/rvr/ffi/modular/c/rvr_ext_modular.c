@@ -25,8 +25,9 @@ static constexpr uint32_t SECP256K1_ELEM_WORDS =
 
 /* ── k256 field (mod p) helpers ──────────────────────────────────────── */
 
-static inline void bytes_reverse_32(uint8_t out[SECP256K1_ELEM_BYTES],
-                                    const uint8_t in[SECP256K1_ELEM_BYTES]) {
+static inline void bytes_reverse_32(
+    uint8_t out[static const SECP256K1_ELEM_BYTES],
+    const uint8_t in[static const SECP256K1_ELEM_BYTES]) {
   _Static_assert(SECP256K1_ELEM_BYTES == 4 * sizeof(uint64_t), "");
   uint64_t words[4];
   memcpy(words, in, sizeof(words));

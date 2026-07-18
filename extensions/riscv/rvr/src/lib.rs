@@ -70,10 +70,8 @@ impl ExtInstr for HintBufferInstr {
         // Block-entry already credits a static +1; emit the runtime
         // `(n - 1)` correction only when there is more than one row.
         let chip_idx = air_index_to_c(self.chip_idx);
-        ctx.write_line(&format!("if ({n} > 1) {{"));
         // The guard above proves this correction is at most 1022.
-        ctx.trace_chip(chip_idx, &format!("(uint32_t)({n} - 1ull)"));
-        ctx.write_line("}");
+        ctx.trace_chip_if_nonzero(chip_idx, &format!("(uint32_t)({n} - 1ull)"));
         ctx.trace_mem_access_u64_range(&ptr, &n, RV64_MEMORY_AS);
         let n = format!("(uint16_t)({n})");
         ctx.emit_checked_call_without_page_flush("openvm_hint_buffer", &[&ptr, &n]);
@@ -579,8 +577,23 @@ mod tests {
             tmp
         }
 
+        fn emit_call_with_trace_result(
+            &mut self,
+            ret_ty: &str,
+            name: &str,
+            args: &[&str],
+        ) -> Option<String> {
+            Some(self.emit_call_expr(ret_ty, name, args))
+        }
+
         fn trace_chip(&mut self, chip_idx: u32, count_expr: &str) {
             self.write_line(&format!("trace_chip(state, {chip_idx}u, {count_expr});"));
+        }
+
+        fn trace_chip_if_nonzero(&mut self, chip_idx: u32, count_expr: &str) {
+            self.write_line(&format!("if (({count_expr}) != 0u) {{"));
+            self.trace_chip(chip_idx, count_expr);
+            self.write_line("}");
         }
 
         fn trace_mem_access(&mut self, addr: &str, addr_space: u32) {
