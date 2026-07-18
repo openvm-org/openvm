@@ -1433,6 +1433,9 @@ __global__ void g2_emit_parallel(
                                  ? G2_EVENT_WRITE_SET
                                  : (emitted.kind == 0 ? G2_EVENT_READ_EXPECT
                                                       : G2_EVENT_READ_ANY);
+            // Opaque output rows have their own dense cursor. Predecessor
+            // patches index the global residual chronology, which may already
+            // contain crossing or HintStore events.
             g2_emit_timeline(
                 timeline,
                 timeline_capacity,
@@ -1442,7 +1445,7 @@ __global__ void g2_emit_parallel(
                 uint64_t(emitted.address) & ~uint64_t(7),
                 emitted.value,
                 G2_NO_RECORD,
-                uint32_t(opaque_cursor + event),
+                uint32_t(residual_cursor + event),
                 action,
                 emitted.width,
                 uint8_t(emitted.address & 7u),
