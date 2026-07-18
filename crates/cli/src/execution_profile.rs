@@ -149,6 +149,10 @@ fn build_firefox_profile(
     profile.set_thread_name(thread, "RV64 guest execution");
     profile.add_initial_selected_thread(thread);
 
+    // ITIMER_PROF advances only while the process is consuming CPU. The raw
+    // stack format does not carry clocks, so model every interval after the
+    // first as CPU time. This keeps Firefox's activity graph consistent with
+    // the synthetic sample timestamps instead of reporting zero CPU usage.
     let interval_ms = 1_000.0 / f64::from(sample_hz);
     for (sample_index, stack) in samples.iter().enumerate() {
         let frames = stack
@@ -177,10 +181,19 @@ fn build_firefox_profile(
             thread,
             Timestamp::from_millis_since_reference(sample_index as f64 * interval_ms),
             stack,
-            CpuDelta::ZERO,
+            if sample_index == 0 {
+                CpuDelta::ZERO
+            } else {
+                CpuDelta::from_millis(interval_ms)
+            },
             1,
         );
     }
+    let end = Timestamp::from_millis_since_reference(
+        samples.len().saturating_sub(1) as f64 * interval_ms,
+    );
+    profile.set_process_end_time(process, end);
+    profile.set_thread_end_time(thread, end);
     Ok(profile)
 }
 
@@ -205,6 +218,10 @@ fn upload_profile(compressed_profile: &[u8]) -> Result<String> {
 fn upload_profile_blocking(compressed_profile: &[u8]) -> Result<String> {
     let upload_url = std::env::var("FIREFOX_PROFILER_API_URL")
         .unwrap_or_else(|_| DEFAULT_UPLOAD_URL.to_string());
+    upload_profile_blocking_to(&upload_url, compressed_profile)
+}
+
+fn upload_profile_blocking_to(upload_url: &str, compressed_profile: &[u8]) -> Result<String> {
     let client = Client::builder()
         .timeout(Duration::from_secs(60))
         .build()
@@ -219,7 +236,7 @@ fn upload_profile_blocking(compressed_profile: &[u8]) -> Result<String> {
     .enumerate()
     {
         let result = client
-            .post(&upload_url)
+            .post(upload_url)
             .header(ACCEPT, FIREFOX_ACCEPT)
             .body(compressed_profile.to_vec())
             .send()
@@ -247,10 +264,11 @@ fn upload_profile_blocking(compressed_profile: &[u8]) -> Result<String> {
 }
 
 fn public_url_from_response(response: &str) -> Result<String> {
-    let payload = response
-        .split('.')
-        .nth(1)
-        .ok_or_else(|| eyre!("unexpected Firefox Profiler response"))?;
+    let parts = response.split('.').collect::<Vec<_>>();
+    if parts.len() != 3 {
+        bail!("unexpected Firefox Profiler response");
+    }
+    let payload = parts[1];
     let decoded = URL_SAFE_NO_PAD
         .decode(payload)
         .context("invalid Firefox Profiler response payload")?;
@@ -259,13 +277,25 @@ fn public_url_from_response(response: &str) -> Result<String> {
     let token = decoded
         .get("profileToken")
         .and_then(Value::as_str)
+        .filter(|token| !token.is_empty())
         .ok_or_else(|| eyre!("Firefox Profiler response did not contain profileToken"))?;
     Ok(format!("https://profiler.firefox.com/public/{token}"))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::{
+        fs,
+        io::{Read, Write},
+        net::TcpListener,
+        thread,
+    };
+
+    use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
+
+    use super::{
+        parse_raw_samples, public_url_from_response, upload_profile_blocking_to, FIREFOX_ACCEPT,
+    };
 
     #[test]
     fn parses_ordered_raw_stacks() {
@@ -286,5 +316,85 @@ mod tests {
             public_url_from_response(&response).unwrap(),
             "https://profiler.firefox.com/public/test-token"
         );
+    }
+
+    #[test]
+    fn rejects_malformed_upload_responses() {
+        assert!(public_url_from_response("not-a-jwt").is_err());
+        assert!(public_url_from_response("header.payload.signature.extra").is_err());
+
+        let payload = URL_SAFE_NO_PAD.encode(r#"{"profileToken":""}"#);
+        let response = format!("header.{payload}.signature");
+        assert!(public_url_from_response(&response).is_err());
+    }
+
+    #[test]
+    fn posts_the_compressed_profile_using_the_firefox_protocol() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let upload_url = format!("http://{}/compressed-store", listener.local_addr().unwrap());
+        let compressed_profile = b"\x1f\x8bopenvm-profile";
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = Vec::new();
+            let mut buffer = [0; 1024];
+            let (header_end, content_length) = loop {
+                let count = stream.read(&mut buffer).unwrap();
+                assert_ne!(count, 0, "request ended before its headers");
+                request.extend_from_slice(&buffer[..count]);
+                let Some(header_end) = request.windows(4).position(|bytes| bytes == b"\r\n\r\n")
+                else {
+                    continue;
+                };
+                let headers = String::from_utf8_lossy(&request[..header_end]);
+                let content_length = headers
+                    .lines()
+                    .find_map(|line| {
+                        line.split_once(':').and_then(|(name, value)| {
+                            if name.eq_ignore_ascii_case("content-length") {
+                                Some(value.trim().parse::<usize>().unwrap())
+                            } else {
+                                None
+                            }
+                        })
+                    })
+                    .expect("content-length header");
+                break (header_end + 4, content_length);
+            };
+            while request.len() < header_end + content_length {
+                let count = stream.read(&mut buffer).unwrap();
+                assert_ne!(count, 0, "request ended before its body");
+                request.extend_from_slice(&buffer[..count]);
+            }
+
+            let payload = URL_SAFE_NO_PAD.encode(r#"{"profileToken":"protocol-test"}"#);
+            let jwt = format!("header.{payload}.signature");
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{jwt}",
+                jwt.len()
+            )
+            .unwrap();
+            request
+        });
+
+        let public_url = upload_profile_blocking_to(&upload_url, compressed_profile).unwrap();
+        assert_eq!(
+            public_url,
+            "https://profiler.firefox.com/public/protocol-test"
+        );
+
+        let request = server.join().unwrap();
+        let header_end = request
+            .windows(4)
+            .position(|bytes| bytes == b"\r\n\r\n")
+            .unwrap();
+        let headers = String::from_utf8_lossy(&request[..header_end]);
+        assert!(headers.starts_with("POST /compressed-store HTTP/1.1\r\n"));
+        assert!(headers.lines().any(|line| {
+            line.split_once(':').is_some_and(|(name, value)| {
+                name.eq_ignore_ascii_case("accept") && value.trim() == FIREFOX_ACCEPT
+            })
+        }));
+        assert_eq!(&request[header_end + 4..], compressed_profile);
     }
 }
