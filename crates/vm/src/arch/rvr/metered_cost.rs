@@ -30,19 +30,10 @@ pub struct RvrMeteredCostInstance<'a> {
 ///
 /// Layout must exactly match the generated C `MeteredCostState` struct.
 #[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 pub struct MeteredCostState {
     pub instret: u64,
     pub cost: u64,
-}
-
-impl Default for MeteredCostState {
-    fn default() -> Self {
-        Self {
-            instret: 0,
-            cost: 0,
-        }
-    }
 }
 
 impl RvrMeteredCostInstance<'_> {

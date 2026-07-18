@@ -1046,10 +1046,14 @@ impl CProject {
             }
             RvrExecutionKind::MeteredCost => {
                 let widths = self.chip_widths.as_ref().unwrap();
-                let total: u64 = chip_counts
-                    .iter()
-                    .map(|(&chip, &count)| widths[chip as usize] * count as u64)
-                    .sum();
+                let total = chip_counts.iter().fold(0u64, |total, (&chip, &count)| {
+                    let contribution = widths[chip as usize]
+                        .checked_mul(u64::from(count))
+                        .expect("per-block metered cost contribution overflow");
+                    total
+                        .checked_add(contribution)
+                        .expect("per-block metered cost total overflow")
+                });
                 if total > 0 {
                     writeln!(out, "        state->mode_state.cost += {total}ull;").unwrap();
                 }

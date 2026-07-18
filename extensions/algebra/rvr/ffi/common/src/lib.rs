@@ -5,7 +5,7 @@ use std::ffi::c_void;
 use halo2curves_axiom::ff::{Field, PrimeField};
 use num_bigint::{BigInt, BigUint};
 use num_integer::Integer;
-use openvm_platform::{WORD_SIZE, WORD_SIZE_U32};
+use openvm_platform::WORD_SIZE;
 use rvr_openvm_ext_ffi_common::{rd_mem_words_traced, wr_mem_words_traced};
 
 /// Size of a 256-bit field element in bytes.
@@ -141,11 +141,11 @@ pub unsafe fn write_field_256<F: PrimeField<Repr = [u8; 32]>>(
 #[inline]
 pub fn limb_bytes_to_words(num_limbs: u32) -> u32 {
     assert_eq!(
-        num_limbs % WORD_SIZE_U32,
+        num_limbs % WORD_SIZE as u32,
         0,
         "limb byte count must be a multiple of WORD_SIZE"
     );
-    num_limbs / WORD_SIZE_U32
+    num_limbs / WORD_SIZE as u32
 }
 
 /// Read a `num_limbs`-byte little-endian BigUint from guest memory (traced).

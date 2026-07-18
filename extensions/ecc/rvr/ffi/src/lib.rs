@@ -11,7 +11,7 @@ use num_bigint::BigUint;
 use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
 use openvm_ecc_circuit::{ec_add_ne_expr, ec_double_ne_expr};
 use openvm_mod_circuit_builder::{run_field_expression_precomputed, ExprBuilderConfig};
-use openvm_platform::{WORD_SIZE, WORD_SIZE_U32};
+use openvm_platform::WORD_SIZE;
 use rvr_openvm_ext_algebra_ffi_common::{
     read_field_256, write_field_256, BLS12_381_ELEM_BYTES, FIELD_256_BYTES,
 };
@@ -103,7 +103,7 @@ unsafe fn ec_double_256<F: halo2curves_axiom::ff::PrimeField<Repr = [u8; FIELD_2
 const P256_A_ABS: u64 = 3;
 
 unsafe fn trace_read_bytes(state: *mut c_void, ptr: u64, len: u32) -> Vec<u8> {
-    debug_assert_eq!(len % WORD_SIZE_U32, 0);
+    debug_assert_eq!(len % WORD_SIZE as u32, 0);
     let num_words = (len as usize) / WORD_SIZE;
     let mut words = vec![0u64; num_words];
     rd_mem_words_traced(state, ptr, &mut words);

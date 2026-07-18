@@ -14,7 +14,7 @@ use openvm_pairing_guest::{
     halo2curves_shims::{bls12_381::Bls12_381, bn254::Bn254},
     pairing::{FinalExp, MultiMillerLoop},
 };
-use openvm_platform::{WORD_SIZE, WORD_SIZE_U32};
+use openvm_platform::WORD_SIZE;
 use rvr_openvm_ext_algebra_ffi_common::{BLS12_381_ELEM_BYTES, FIELD_256_BYTES};
 use rvr_openvm_ext_ffi_common::{
     ext_hint_stream_set, rd_mem_u64_range_wrapper, rd_mem_u64_wrapper,
@@ -31,7 +31,7 @@ const G1_AFFINE_COORDS: u64 = 2;
 /// G2 affine point: two Fp2 coordinates, each containing two Fp elements.
 const G2_AFFINE_COORDS: u64 = 4;
 /// Offset of `len` in a guest slice header `(data_ptr, len)`.
-const SLICE_LEN_OFFSET: u64 = WORD_SIZE_U32 as u64;
+const SLICE_LEN_OFFSET: u64 = WORD_SIZE as u64;
 
 unsafe fn set_hint_stream(bytes: &[u8]) {
     let len = u64::try_from(bytes.len()).unwrap();
