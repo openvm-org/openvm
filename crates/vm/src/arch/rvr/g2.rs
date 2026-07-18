@@ -133,8 +133,9 @@ impl RvrG2CapacitiesV1 {
     /// so their capacities must come from the same segment shape rather than
     /// a componentwise maximum assembled from different segments. Residual
     /// chronology is tighter still: a standard instruction contributes at
-    /// most two crossing-memory events, while HintStore and opaque extensions
-    /// retain their floor-defined per-row fail-closed bounds.
+    /// most two crossing-memory events, a narrow public-values store can add
+    /// one more event, and HintStore and opaque extensions retain their
+    /// floor-defined per-row fail-closed bounds.
     pub(crate) fn for_metered_segment(
         g2: &RvrG2MetaV1,
         trace_heights: &[u32],
@@ -167,8 +168,16 @@ impl RvrG2CapacitiesV1 {
         }
 
         let hintstore_rows = capacities.kinds[30] as usize;
+        // DeltaAirKind::{StoreByte, StoreHalfword, StoreWord}. StoreDoubleword
+        // uses the ordinary two-event public-values path.
+        const NARROW_STORE_KINDS: [usize; 3] = [23, 24, 25];
+        let narrow_reveal_rows = NARROW_STORE_KINDS.iter().try_fold(0usize, |sum, &kind| {
+            sum.checked_add(capacities.kinds[kind] as usize)
+                .ok_or_else(|| g2_error("G2 narrow-store row count overflow"))
+        })?;
         let mut residual_capacity = program_capacity
             .checked_mul(2)
+            .and_then(|capacity| capacity.checked_add(narrow_reveal_rows))
             .and_then(|capacity| capacity.checked_add(hintstore_rows.checked_mul(3)?))
             .and_then(|capacity| capacity.checked_add(64))
             .ok_or_else(|| g2_error("G2 residual capacity overflow"))?;
@@ -2283,6 +2292,20 @@ mod tests {
         let capacities = RvrG2CapacitiesV1::for_metered_segment(&meta, &[0, 0, 128], 100).unwrap();
         assert_eq!(capacities.opaque_events, 116);
         assert_eq!(capacities.residual, 2 * 116 + 64 + 32 * 128);
+    }
+
+    #[test]
+    fn metered_capacity_covers_narrow_reveals_beyond_slack() {
+        let meta = test_meta(vec![RvrG2AirBindingV1 {
+            kind: 23,
+            air_idx: 1,
+        }]);
+        let capacities = RvrG2CapacitiesV1::for_metered_segment(&meta, &[0, 128], 128).unwrap();
+
+        // 128 possible narrow reveals exceed the old 96-event run/slack
+        // allowance. Each may consume a third residual event.
+        assert_eq!(capacities.residual, 2 * 144 + 128 + 64);
+        assert!(capacities.residual >= 3 * 128);
     }
 
     #[test]
