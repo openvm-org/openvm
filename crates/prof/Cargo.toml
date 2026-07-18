@@ -17,3 +17,22 @@ eyre.workspace = true
 itertools = { workspace = true, features = ["use_std"] }
 num-format = "0.4"
 memmap2 = "0.9"
+openvm-circuit = { workspace = true, optional = true }
+base64 = { version = "0.22", optional = true }
+flate2 = { version = "1", optional = true }
+fxprof-processed-profile = { version = "0.8", optional = true }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"], optional = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[features]
+default = []
+firefox = [
+    "dep:base64",
+    "dep:flate2",
+    "dep:fxprof-processed-profile",
+    "dep:openvm-circuit",
+    "dep:reqwest",
+    "openvm-circuit/rvr",
+]

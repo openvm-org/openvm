@@ -1,7 +1,7 @@
 //! Signal-sampled guest call-stack profiling for the RVR backend.
 //!
 //! Set `OPENVM_RVR_GUEST_CALL_PROFILE` to a folded-stack output path to enable
-//! profiling for pure RVR execution. The optional
+//! profiling for RVR execution. The optional
 //! `OPENVM_RVR_GUEST_CALL_PROFILE_HZ` variable controls the sampling rate and
 //! defaults to 1 kHz. `OPENVM_RVR_GUEST_CALL_PROFILE_FORMAT=raw` preserves
 //! sample order for conversion to another profile format.
@@ -152,7 +152,9 @@ pub(super) struct GuestProfiler {
 }
 
 impl GuestProfiler {
-    pub(super) fn start_from_env(state: &RvState) -> Result<Option<Self>, String> {
+    pub(super) fn start_from_env<ModeState>(
+        state: &RvState<ModeState>,
+    ) -> Result<Option<Self>, String> {
         let Some(output) = std::env::var_os("OPENVM_RVR_GUEST_CALL_PROFILE") else {
             return Ok(None);
         };
@@ -191,7 +193,9 @@ impl GuestProfiler {
 
         let mut buffer = vec![StackSample::default(); DEFAULT_BUFFER_CAPACITY];
         let mut ctx = Box::new(SignalContext {
-            state_ptr: std::ptr::from_ref(state),
+            // `RvState` is `repr(C)` and all mode-specific state follows the
+            // register, PC, and memory prefix sampled by the signal handler.
+            state_ptr: std::ptr::from_ref(state).cast::<RvState>(),
             memory_base: state.memory.cast_const(),
             memory_size: openvm_platform::memory::MEM_SIZE,
             samples: buffer.as_mut_ptr(),

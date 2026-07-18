@@ -250,11 +250,6 @@ impl RunCmd {
     pub fn run(&self) -> Result<()> {
         let profile_enabled =
             self.run_args.execution_profile.is_some() || self.run_args.rate.is_some();
-        if profile_enabled && !matches!(self.run_args.mode, ExecutionMode::Pure) {
-            return Err(eyre!(
-                "--execution-profile is only supported with --mode pure"
-            ));
-        }
         if profile_enabled && self.run_args.exe.is_some() {
             return Err(eyre!(
                 "--execution-profile requires building the guest so frame pointers and debug info can be enabled; --exe is not supported"
@@ -365,25 +360,57 @@ impl RunCmd {
                 let guest_elf_path = guest_elf_path
                     .as_deref()
                     .ok_or_else(|| eyre!("guest ELF path is unavailable"))?;
-                let raw_profile = tempfile::NamedTempFile::new()
-                    .map_err(|error| eyre!("failed to create temporary profile: {error}"))?;
                 let sample_hz = self.run_args.rate.unwrap_or(DEFAULT_EXECUTION_PROFILE_HZ);
-                let guard = crate::execution_profile::GuestProfileGuard::start(
-                    raw_profile.path(),
-                    sample_hz,
-                );
-                let output = sdk.compile_and_execute(exe, inputs)?;
-                drop(guard);
-                eprintln!("[openvm] Execution output: {output:?}");
-                let url = crate::execution_profile::create_upload_and_optionally_save(
-                    raw_profile.path(),
-                    guest_elf_path,
-                    sample_hz,
-                    self.run_args
-                        .execution_profile
-                        .as_ref()
-                        .and_then(Option::as_deref),
-                )?;
+                let profile = match self.run_args.mode {
+                    ExecutionMode::Pure => {
+                        let (output, profile) = openvm_sdk::execution_profile::profile_execution(
+                            guest_elf_path,
+                            sample_hz,
+                            || sdk.compile_and_execute(exe, inputs),
+                        )?;
+                        eprintln!("[openvm] Execution output: {output:?}");
+                        profile
+                    }
+                    ExecutionMode::Meter => {
+                        let ((output, (cost, instret)), profile) =
+                            openvm_sdk::execution_profile::profile_execution(
+                                guest_elf_path,
+                                sample_hz,
+                                || sdk.compile_and_execute_metered_cost(exe, inputs),
+                            )?;
+                        eprintln!("[openvm] Execution output: {output:?}");
+                        eprintln!("[openvm] Number of instructions executed: {instret}");
+                        eprintln!("[openvm] Total cost: {cost}");
+                        profile
+                    }
+                    ExecutionMode::Segment => {
+                        let ((output, segments), profile) =
+                            openvm_sdk::execution_profile::profile_execution(
+                                guest_elf_path,
+                                sample_hz,
+                                || sdk.compile_and_execute_metered(exe, inputs),
+                            )?;
+                        let total_instructions: u64 =
+                            segments.iter().map(|segment| segment.num_insns).sum();
+                        eprintln!("[openvm] Execution output: {output:?}");
+                        eprintln!("[openvm] Number of instructions executed: {total_instructions}");
+                        eprintln!("[openvm] Total segments: {}", segments.len());
+                        profile
+                    }
+                };
+                if let Some(output_path) = self
+                    .run_args
+                    .execution_profile
+                    .as_ref()
+                    .and_then(Option::as_deref)
+                {
+                    profile.save(output_path)?;
+                    eprintln!(
+                        "[openvm] Saved execution profile to {}",
+                        output_path.display()
+                    );
+                }
+                let url = profile.upload()?;
                 println!("{url}");
                 return Ok(());
             }

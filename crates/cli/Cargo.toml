@@ -48,8 +48,6 @@ indicatif = "0.17"
 flate2 = "1"
 tar = "0.4"
 tempfile.workspace = true
-base64 = { version = "0.22", optional = true }
-fxprof-processed-profile = { version = "0.8", optional = true }
 
 [features]
 default = ["parallel", "jemalloc", "evm-verify", "metrics"]
@@ -60,8 +58,6 @@ tco = ["openvm-sdk/tco"]
 rvr = [
     "openvm-sdk/rvr",
     "openvm-circuit/rvr",
-    "dep:base64",
-    "dep:fxprof-processed-profile",
 ]
 unprotected = ["openvm-sdk/unprotected"]
 # for guest profiling:
