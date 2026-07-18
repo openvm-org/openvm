@@ -25,6 +25,7 @@
 //! in its queue) before touching buffer contents.
 
 use std::{
+    cell::Cell,
     collections::{BTreeMap, HashSet},
     ffi::c_void,
     sync::{
@@ -189,6 +190,32 @@ pub(crate) fn register_region(ptr: *mut u8, len: usize) -> bool {
     register_region_inner(ptr, len)
 }
 
+/// Register an allocation that will subsequently be owned by this pool. Unlike
+/// [`register_region`], this records the base pointer so the cleaner reuses the registration and
+/// [`clear`] can unregister it exactly once.
+#[cfg(feature = "rvr")]
+pub(crate) fn register_pool_region(buffer: &mut [u8]) -> bool {
+    if buffer.is_empty() {
+        return true;
+    }
+    let _lifecycle = lock_unpoisoned(&LIFECYCLE_GATE);
+    if SHUTTING_DOWN.load(Ordering::Acquire) {
+        return false;
+    }
+    let ptr = buffer.as_mut_ptr();
+    if registered().lock().unwrap().contains(&(ptr as usize)) {
+        return true;
+    }
+    if !register_region_inner(ptr, buffer.len()) {
+        stats()
+            .registration_failures
+            .fetch_add(1, Ordering::Relaxed);
+        return false;
+    }
+    registered().lock().unwrap().insert(ptr as usize);
+    true
+}
+
 fn register_region_inner(ptr: *mut u8, len: usize) -> bool {
     // SAFETY: [ptr, ptr+len) is a live allocation owned by the caller.
     let rc = unsafe { cudaHostRegister(ptr as *mut c_void, len, 0) };
@@ -245,10 +272,34 @@ static CLEANER_WORK_GATE: Mutex<()> = Mutex::new(());
 static CLEANER_INIT: Mutex<()> = Mutex::new(());
 static CLEANER: OnceLock<&'static CleanerRuntime> = OnceLock::new();
 
+thread_local! {
+    /// Startup pool priming runs on the proving thread before any asynchronous H2D can reference
+    /// a newly allocated arena. Register fresh misses immediately in that narrow scope so the
+    /// first real segment receives pinned buffers instead of racing the background cleaner.
+    static EAGER_REGISTRATION: Cell<bool> = const { Cell::new(false) };
+}
+
 fn lock_unpoisoned<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+/// Run a startup allocation pass with fresh pool misses registered synchronously. The scope is
+/// thread-local: ordinary segment execution retains the non-blocking pageable-miss fallback.
+#[cfg(feature = "rvr")]
+pub(crate) fn with_eager_registration<T>(f: impl FnOnce() -> T) -> T {
+    struct Reset(bool);
+
+    impl Drop for Reset {
+        fn drop(&mut self) {
+            EAGER_REGISTRATION.with(|enabled| enabled.set(self.0));
+        }
+    }
+
+    let previous = EAGER_REGISTRATION.with(|enabled| enabled.replace(true));
+    let _reset = Reset(previous);
+    f()
 }
 
 #[cfg(feature = "rvr")]
@@ -310,37 +361,41 @@ fn process_returned_batch(batch: Vec<ReturnedBuffer>, batch_idx: usize) {
     let mut zero_time_us = 0u64;
     for returned in batch {
         let (mut buffer, dirty_len) = returned.release();
-        stats().pending.fetch_sub(1, Ordering::Relaxed);
         stats().returns_synchronized.fetch_add(1, Ordering::Relaxed);
-        if buffer.is_empty() || !buffer.len().is_power_of_two() {
-            continue; // synchronized but not pool-shaped
-        }
-        let ptr = buffer.as_mut_ptr();
-        let is_new = !registered().lock().unwrap().contains(&(ptr as usize));
-        if is_new {
-            if !register_region_inner(ptr, buffer.len()) {
-                // Out of pinnable memory: drop the buffer, never pool it.
-                stats()
-                    .registration_failures
-                    .fetch_add(1, Ordering::Relaxed);
-                continue;
+        (|| {
+            if buffer.is_empty() || !buffer.len().is_power_of_two() {
+                return; // synchronized but not pool-shaped
             }
-            registered().lock().unwrap().insert(ptr as usize);
-        }
-        // Restore the fresh-arena invariant (all zero). Bytes past the dirty
-        // prefix were never written or were cleared on an earlier cycle.
-        let dirty_len = dirty_len.min(buffer.len());
-        let zero_started = std::time::Instant::now();
-        buffer[..dirty_len].fill(0);
-        zero_time_us += zero_started.elapsed().as_micros() as u64;
-        zeroed_bytes += dirty_len as u64;
-        pool()
-            .lock()
-            .unwrap()
-            .entry(buffer.len())
-            .or_default()
-            .push(buffer);
-        stats().returns_pooled.fetch_add(1, Ordering::Relaxed);
+            let ptr = buffer.as_mut_ptr();
+            let is_new = !registered().lock().unwrap().contains(&(ptr as usize));
+            if is_new {
+                if !register_region_inner(ptr, buffer.len()) {
+                    // Out of pinnable memory: drop the buffer, never pool it.
+                    stats()
+                        .registration_failures
+                        .fetch_add(1, Ordering::Relaxed);
+                    return;
+                }
+                registered().lock().unwrap().insert(ptr as usize);
+            }
+            // Restore the fresh-arena invariant (all zero). Bytes past the dirty
+            // prefix were never written or were cleared on an earlier cycle.
+            let dirty_len = dirty_len.min(buffer.len());
+            let zero_started = std::time::Instant::now();
+            buffer[..dirty_len].fill(0);
+            zero_time_us += zero_started.elapsed().as_micros() as u64;
+            zeroed_bytes += dirty_len as u64;
+            pool()
+                .lock()
+                .unwrap()
+                .entry(buffer.len())
+                .or_default()
+                .push(buffer);
+            stats().returns_pooled.fetch_add(1, Ordering::Relaxed);
+        })();
+        // Publish completion only after a reusable buffer has reached the ready map (or after a
+        // failed/non-pool-shaped return has been disposed of). Startup drain relies on this order.
+        stats().pending.fetch_sub(1, Ordering::Release);
     }
     stats()
         .zeroed_bytes
@@ -451,7 +506,25 @@ pub(crate) fn take_with_prefault_status(min_size: usize) -> (Vec<u8>, bool) {
     // Pool miss: pageable memory, zeroed lazily by the kernel, exactly as
     // without the pool. The buffer becomes pinned when first given back.
     stats().misses.fetch_add(1, Ordering::Relaxed);
-    (vec![0u8; size], true)
+    let mut buffer = vec![0u8; size];
+    let eager = EAGER_REGISTRATION.with(Cell::get);
+    let registered_eagerly = eager && {
+        let ptr = buffer.as_mut_ptr();
+        if register_region_inner(ptr, buffer.len()) {
+            registered().lock().unwrap().insert(ptr as usize);
+            true
+        } else {
+            stats()
+                .registration_failures
+                .fetch_add(1, Ordering::Relaxed);
+            false
+        }
+    };
+    if registered_eagerly {
+        (buffer, false)
+    } else {
+        (buffer, true)
+    }
 }
 
 pub(crate) fn take(min_size: usize) -> Vec<u8> {
@@ -548,6 +621,21 @@ pub(crate) fn give_back(buffer: Vec<u8>, dirty_len: usize) {
             drop(error);
         }
     }
+}
+
+/// Wait until every buffer returned before this call has completed CUDA synchronization, zeroing,
+/// and insertion into the ready map. Used only by startup pool priming after it has dropped all
+/// temporary arenas; ordinary proving never waits for the cleaner.
+#[cfg(feature = "rvr")]
+pub(crate) fn drain_returns(timeout: std::time::Duration) -> bool {
+    let deadline = std::time::Instant::now() + timeout;
+    while stats().pending.load(Ordering::Acquire) != 0 {
+        if std::time::Instant::now() >= deadline {
+            return false;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(1));
+    }
+    true
 }
 
 /// Unregisters and frees all pooled buffers (test hygiene; optional).

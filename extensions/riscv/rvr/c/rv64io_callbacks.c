@@ -128,6 +128,9 @@ bool openvm_hint_storew(void* state, uint64_t dest_addr, uint32_t from_pc,
         rv_state->tracer, &record->mem_ptr_aux_record.prev_timestamp,
         mem_ptr_prev_timestamp);
   }
+  if (event_replay) {
+    preflight_g2_emit_hint_word_count(rv_state->tracer, 1u);
+  }
   rvr_hintstore_trace_word(rv_state, dest_addr, prev_data, word, vars);
 #else
   trace_wr_mem_u64((RvState*)state, dest_addr, word);
@@ -191,6 +194,9 @@ bool openvm_hint_buffer(void* state, uint64_t dest_addr, uint16_t num_words,
     preflight_store_prev_timestamp(
         rv_state->tracer, &record->num_words_read.prev_timestamp,
         num_words_prev_timestamp);
+  }
+  if (event_replay) {
+    preflight_g2_emit_hint_word_count(rv_state->tracer, num_words);
   }
 #endif
   for (uint32_t i = 0; i < num_words; i++) {

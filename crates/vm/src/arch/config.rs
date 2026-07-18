@@ -206,6 +206,13 @@ pub trait VmBuilder<E: StarkEngine>: Sized {
         Ok(())
     }
 
+    /// Profiling-only snapshot of the default CUDA async allocation pool:
+    /// reserved current/high, used current/high, and release threshold.
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    fn rvr_cuda_device_pool_stats(&self) -> Result<Option<[u64; 5]>, String> {
+        Ok(None)
+    }
+
     /// Build the registry used by rvr preflight routing and record assembly.
     ///
     /// A composed builder adds its inner config's registrations first, then

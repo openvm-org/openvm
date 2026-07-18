@@ -15,8 +15,9 @@ use rvr_openvm_ext_ffi_common::{
     g2_standard_producer_slot, G2_ENCODING_FIXED_LE, G2_ENCODING_OPAQUE_FINAL, G2_FLAGS_V1,
     G2_FLAG_COMMITTED, G2_GROUP_LOAD_STORE, G2_GROUP_RESIDUAL, G2_LANE_ADDI_V0,
     G2_LANE_DESC_V1_SIZE, G2_LANE_FLAG_ATOMIC_GROUP, G2_LANE_FLAG_OPAQUE_FINAL,
-    G2_LANE_FLAG_REQUIRED, G2_LANE_OPAQUE_EVENT_COUNT, G2_LANE_RESIDUAL_CTRL, G2_LANE_RESIDUAL_TAG,
-    G2_LANE_RESIDUAL_VALUE, G2_LANE_RUN_BLOCK_ID, G2_LOAD_STORE_KINDS, G2_PRODUCER_ADDI_SLOT,
+    G2_LANE_FLAG_REQUIRED, G2_LANE_HINT_WORD_COUNT, G2_LANE_OPAQUE_EVENT_COUNT,
+    G2_LANE_RESIDUAL_CTRL, G2_LANE_RESIDUAL_TAG, G2_LANE_RESIDUAL_VALUE, G2_LANE_RUN_BLOCK_ID,
+    G2_LOAD_STORE_KINDS, G2_PRODUCER_ADDI_SLOT, G2_PRODUCER_HINT_WORD_COUNT_SLOT,
     G2_PRODUCER_LANE_COUNT, G2_PRODUCER_OPAQUE_EVENT_COUNT_SLOT, G2_PRODUCER_RESIDUAL_CTRL_SLOT,
     G2_PRODUCER_RESIDUAL_TAG_SLOT, G2_PRODUCER_RESIDUAL_VALUE_SLOT, G2_PRODUCER_RUN_SLOT,
     G2_SEGMENT_HEADER_V1_SIZE, G2_SEGMENT_MAGIC_V1, G2_WIRE_ALIGNMENT, G2_WIRE_VERSION_V1,
@@ -2073,6 +2074,13 @@ fn producer_lane_specs() -> Vec<LaneSpec> {
             flags: atomic,
             group: G2_GROUP_RESIDUAL,
         },
+        LaneSpec {
+            slot: G2_PRODUCER_HINT_WORD_COUNT_SLOT,
+            kind: G2_LANE_HINT_WORD_COUNT,
+            width: 4,
+            flags: required,
+            group: 0,
+        },
     ];
     for kind in 0u8..30 {
         for value_lane in [false, true] {
@@ -2105,6 +2113,7 @@ fn lane_capacity(spec: LaneSpec, capacities: &RvrG2CapacitiesV1) -> u32 {
         | G2_PRODUCER_RESIDUAL_TAG_SLOT
         | G2_PRODUCER_RESIDUAL_VALUE_SLOT => capacities.residual,
         G2_PRODUCER_OPAQUE_EVENT_COUNT_SLOT => capacities.opaque_events,
+        G2_PRODUCER_HINT_WORD_COUNT_SLOT => capacities.kinds[30],
         _ => (0u8..30)
             .find(|&kind| {
                 [false, true].into_iter().any(|value_lane| {

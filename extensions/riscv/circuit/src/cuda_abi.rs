@@ -176,7 +176,12 @@ pub mod rvr_g2_cuda {
     };
 
     extern "C" {
-        fn _rvr_g2_device_pool_configure(begin: i32, reserve_bytes: usize, stats: *mut u64) -> i32;
+        fn _rvr_g2_device_pool_configure(
+            begin: i32,
+            reserve_bytes: usize,
+            profile_kernels: i32,
+            stats: *mut u64,
+        ) -> i32;
         fn _rvr_g2_device_pool_stats(stats: *mut u64) -> i32;
         fn _rvr_g2_predecode(
             d_wire: DeviceBufferView,
@@ -212,6 +217,7 @@ pub mod rvr_g2_cuda {
             d_opaque_prev_timestamps: *mut u32,
             d_opaque_prev_values: *mut u64,
             d_error: *mut u32,
+            profile_stats: *mut u64,
             stream: cudaStream_t,
         ) -> i32;
         fn _rvr_g2_tracegen(
@@ -258,6 +264,7 @@ pub mod rvr_g2_cuda {
         CudaError::from_result(_rvr_g2_device_pool_configure(
             i32::from(begin),
             reserve_bytes,
+            i32::from(std::env::var("OPENVM_RVR_G2_KERNEL_PROFILE").as_deref() == Ok("1")),
             stats.as_mut_ptr(),
         ))?;
         Ok(stats)
@@ -299,6 +306,7 @@ pub mod rvr_g2_cuda {
         d_opaque_prev_timestamps: &DeviceBuffer<u32>,
         d_opaque_prev_values: &DeviceBuffer<u64>,
         d_error: &DeviceBuffer<u32>,
+        profile_stats: Option<&mut [u64; 18]>,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_rvr_g2_predecode(
@@ -335,6 +343,7 @@ pub mod rvr_g2_cuda {
             d_opaque_prev_timestamps.as_mut_ptr(),
             d_opaque_prev_values.as_mut_ptr(),
             d_error.as_mut_ptr(),
+            profile_stats.map_or(std::ptr::null_mut(), |stats| stats.as_mut_ptr()),
             stream,
         ))
     }

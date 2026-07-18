@@ -32,10 +32,12 @@
 //! arena-native backings; `OPENVM_RVR_CUDA_ARENA_PREWARM_DEPTH=0` disables that reserve.
 //! G2 uses the same populated-reserve mechanism with an independently tunable
 //! `OPENVM_RVR_CUDA_G2_PREWARM_DEPTH` (default 3, covering the producer plus
-//! two in-flight consumers). The CUDA device-path pass uses
-//! `OPENVM_RVR_CUDA_DEVICE_PREWARM_DEPTH`, falling back to that G2 depth when
-//! unset; zero disables it and a positive value warms that many real prefix
-//! shapes (all standard trace kernels are also pre-launched directly). The
+//! two in-flight consumers). `OPENVM_RVR_CUDA_DEVICE_PREWARM_DEPTH` (default
+//! 3, with the legacy G2 variable as a fallback) runs preflight and trace
+//! generation for that many prefix shapes under synchronous host registration,
+//! then drains the returned allocations into the pinned pool. It does not run
+//! STARK proof. The bounded context/module/kernel preload remains on for G2 and can
+//! be disabled with `OPENVM_RVR_CUDA_MODULE_PREWARM=0`. The
 //! corresponding device async pool reserve defaults to three times the
 //! tightened maximum G2 backing and can be set directly with
 //! `OPENVM_RVR_CUDA_DEVICE_POOL_PREWARM_BYTES`.
@@ -853,6 +855,8 @@ impl RvrPreflightBufferPool {
             if needs_populate {
                 crate::arch::cuda::pinned::populate_write(&mut backing);
             }
+            let registered =
+                !needs_populate || crate::arch::cuda::pinned::register_pool_region(&mut backing);
             let prepared_key =
                 ArenaNativeBackingKey::new(key.air, key.stride_bytes, backing.len() - 32);
             self.lock()
@@ -861,7 +865,7 @@ impl RvrPreflightBufferPool {
                 .or_default()
                 .push(PreparedDenseBacking {
                     buffer: backing,
-                    registered: !needs_populate,
+                    registered,
                 });
         }
     }
