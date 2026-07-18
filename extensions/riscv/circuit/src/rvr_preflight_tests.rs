@@ -2378,6 +2378,50 @@ fn continuation_boundary_memory_exe() -> VmExe<F> {
     exe(&instructions)
 }
 
+#[cfg(feature = "cuda")]
+fn continuation_dirty_page_loop_exe() -> VmExe<F> {
+    const TOUCHED_BLOCKS: usize = 135;
+    const LOOP_ITERS: usize = 400;
+    let mut instructions = vec![addi(1, 0, 64), addi(2, 0, 0x5a)];
+    for block_idx in 0..TOUCHED_BLOCKS {
+        instructions.push(store(
+            Rv64LoadStoreOpcode::STORED,
+            2,
+            1,
+            block_idx * size_of::<u64>(),
+        ));
+    }
+
+    // Keep the static program small while forcing metering to suspend after the
+    // stores. The following segment must receive the device-dirtied pages before
+    // it replays the loads below.
+    instructions.extend([addi(4, 0, 1), addi(5, 0, 0), addi(6, 0, LOOP_ITERS)]);
+    let loop_start = instructions.len();
+    instructions.push(alu_r(BaseAluOpcode::ADD, 7, 4, 5));
+    instructions.push(addi(5, 5, 1));
+    let branch_slot = instructions.len();
+    let offset = -(((branch_slot - loop_start) * 4) as isize);
+    instructions.push(Instruction::from_isize(
+        BranchLessThanOpcode::BLTU.global_opcode(),
+        reg(5) as isize,
+        reg(6) as isize,
+        offset,
+        1,
+        1,
+    ));
+
+    for block_idx in 0..TOUCHED_BLOCKS {
+        instructions.push(load(
+            Rv64LoadStoreOpcode::LOADD,
+            3,
+            1,
+            block_idx * size_of::<u64>(),
+        ));
+    }
+    instructions.push(terminate());
+    exe(&instructions)
+}
+
 fn block_boundary_branch_exe() -> VmExe<F> {
     exe(&[beq(0, 0, 8), addi(9, 0, 99), addi(1, 0, 7), terminate()])
 }
@@ -4321,7 +4365,7 @@ fn rvr_gpu_g2_continuation_dirty_pages_prove_and_verify() {
     let mut config = Rv64ImConfig::default();
     config.rv64i.system.segmentation_max_memory = 1;
     let segments = prove_gpu_rvr_preflight_and_verify_with_streams(
-        continuation_boundary_memory_exe(),
+        continuation_dirty_page_loop_exe(),
         config,
         Streams::default(),
     );
