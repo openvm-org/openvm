@@ -1146,6 +1146,7 @@ __device__ bool g2_emit_standard_direct(
     uint64_t expected_block,
     uint8_t expected_mode,
     bool crossing,
+    uint32_t crossing_residual_start,
     uint64_t crossing_value0,
     uint64_t crossing_value1,
     RvrOperandEntry const &entry,
@@ -1261,14 +1262,15 @@ __device__ bool g2_emit_standard_direct(
                         timeline, timeline_capacity, initial_timestamp,
                         record.from_timestamp + 1, address_space,
                         uint64_t(effective) & ~uint64_t(7), block0, instruction,
-                        G2_NO_RECORD, G2_EVENT_READ_EXPECT, 8, 0, EXPECT_NONE, error
+                        crossing_residual_start, G2_EVENT_READ_EXPECT, 8, 0,
+                        EXPECT_NONE, error
                     );
                     g2_emit_timeline(
                         timeline, timeline_capacity, initial_timestamp,
                         record.from_timestamp + 2, address_space,
                         (uint64_t(effective) & ~uint64_t(7)) + 8, block1,
-                        instruction, G2_NO_RECORD, G2_EVENT_READ_EXPECT, 8, 0,
-                        EXPECT_NONE, error
+                        instruction, crossing_residual_start + 1u,
+                        G2_EVENT_READ_EXPECT, 8, 0, EXPECT_NONE, error
                     );
                 } else {
                     memory_event(record.from_timestamp + 1, expected_block,
@@ -1293,15 +1295,15 @@ __device__ bool g2_emit_standard_direct(
                         timeline, timeline_capacity, initial_timestamp,
                         record.from_timestamp + 2, address_space,
                         uint64_t(effective) & ~uint64_t(7), crossing_value0,
-                        instruction, G2_NO_RECORD, G2_EVENT_WRITE_SET_EXPECT, 8, 0,
-                        EXPECT_BEFORE_STORE, error
+                        instruction, crossing_residual_start,
+                        G2_EVENT_WRITE_SET_EXPECT, 8, 0, EXPECT_BEFORE_STORE, error
                     );
                     g2_emit_timeline(
                         timeline, timeline_capacity, initial_timestamp,
                         record.from_timestamp + 3, address_space,
                         (uint64_t(effective) & ~uint64_t(7)) + 8,
-                        crossing_value1, instruction, G2_NO_RECORD, G2_EVENT_WRITE_SET,
-                        8, 0, EXPECT_NONE, error
+                        crossing_value1, instruction, crossing_residual_start + 1u,
+                        G2_EVENT_WRITE_SET, 8, 0, EXPECT_NONE, error
                     );
                 } else {
                     memory_event(record.from_timestamp + 2, expected_block,
@@ -1661,6 +1663,7 @@ __global__ void g2_emit_parallel(
             expected_block,
             expected_mode,
             crossing,
+            uint32_t(residual_cursor),
             crossing_value0,
             crossing_value1,
             entry,
