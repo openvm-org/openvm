@@ -1654,11 +1654,15 @@ impl RvrGpuDecodeState {
             .header_acquire()
             .expect("G2 committed header before device decode")
             .residual_event_count as usize;
-        let d_opaque_residual = DeviceBuffer::<u8>::with_capacity_on(
-            residual_capacity
-                * std::mem::size_of::<openvm_circuit::arch::rvr::DeltaMemoryLogEntry>(),
-            device_ctx,
-        );
+        let d_opaque_residual = if residual_capacity == 0 {
+            DeviceBuffer::<u8>::new()
+        } else {
+            DeviceBuffer::<u8>::with_capacity_on(
+                residual_capacity
+                    * std::mem::size_of::<openvm_circuit::arch::rvr::DeltaMemoryLogEntry>(),
+                device_ctx,
+            )
+        };
         let d_opaque_residual_count = DeviceBuffer::<u32>::with_capacity_on(1, device_ctx);
         d_opaque_residual_count
             .fill_zero_on(device_ctx)
