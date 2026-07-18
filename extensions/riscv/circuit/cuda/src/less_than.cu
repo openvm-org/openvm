@@ -125,12 +125,16 @@ extern "C" int _rv64_less_than_tracegen_compact(
     uint32_t timestamp_max_bits,
     cudaStream_t stream
 ) {
+#ifdef OPENVM_RVR_CUDA_G2_ONLY
+    return int(cudaErrorNotSupported);
+#else
     assert(width == sizeof(LessThanCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height);
     rv64_less_than_tracegen_compact<<<grid, block, 0, stream>>>(
         d_trace, height, d_records, d_operand_table, pc_base, d_rc, rc_bins, timestamp_max_bits
     );
     return CHECK_KERNEL();
+#endif
 }
 
 DEFINE_RVR_G2_TRACEGEN_LAUNCHER(
