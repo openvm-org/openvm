@@ -109,6 +109,7 @@ impl SystemChipComplex<DenseRecordArena, GpuBackend> for SystemChipInventoryGPU 
             rvr_exec_frequencies_pool,
             touched_memory,
             touched_memory_on_device,
+            device_replay_oracle,
         } = system_records;
 
         let program_ctx = {
@@ -155,7 +156,7 @@ impl SystemChipComplex<DenseRecordArena, GpuBackend> for SystemChipInventoryGPU 
                     &self.memory_inventory.device_initial_memory(),
                 )
                 .expect("device touched-memory route has no bound segment");
-            if std::env::var("OPENVM_RVR_DEVICE_REPLAY_ORACLE").as_deref() == Ok("1") {
+            if device_replay_oracle {
                 let actual = device_touched
                     .records
                     .to_host_on(&self.memory_inventory.device_ctx)
