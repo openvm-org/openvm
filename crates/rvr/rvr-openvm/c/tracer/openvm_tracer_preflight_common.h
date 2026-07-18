@@ -97,7 +97,8 @@ static constexpr uint32_t G2_PRODUCER_RESIDUAL_TAG_SLOT = 2u;
 static constexpr uint32_t G2_PRODUCER_RESIDUAL_VALUE_SLOT = 3u;
 static constexpr uint32_t G2_PRODUCER_ADDI_SLOT = 4u;
 static constexpr uint32_t G2_PRODUCER_OPAQUE_EVENT_COUNT_SLOT = 58u;
-static constexpr uint32_t G2_PRODUCER_LANE_COUNT = 59u;
+static constexpr uint32_t G2_PRODUCER_HINT_WORD_COUNT_SLOT = 59u;
+static constexpr uint32_t G2_PRODUCER_LANE_COUNT = 60u;
 
 static constexpr uint32_t PREFLIGHT_PROGRAM_WRITE_COMPLETE = 1u;
 static constexpr uint32_t PREFLIGHT_PROGRAM_CROSSING_RESIDUAL = 2u;
@@ -796,6 +797,24 @@ preflight_g2_emit_opaque_event_count(Tracer* restrict t,
   G2ProducerLaneV1 const* restrict lane =
       &g2->lanes[G2_PRODUCER_OPAQUE_EVENT_COUNT_SLOT];
   ((uint32_t*)(g2->base + lane->offset))[index] = event_count;
+}
+
+static __attribute__((always_inline)) inline void
+preflight_g2_emit_hint_word_count(Tracer* restrict t, uint32_t num_words) {
+  G2ProducerV1* restrict g2 = t->g2;
+  if (g2 == NULL) return;
+  uint32_t index = preflight_g2_claim(
+      g2, G2_PRODUCER_HINT_WORD_COUNT_SLOT, sizeof(uint32_t));
+  if (unlikely(OPENVM_G2_CHECKS_ENABLED &&
+               (index == UINT32_MAX || num_words == 0u ||
+                num_words > 1023u))) {
+    if (num_words == 0u || num_words > 1023u)
+      g2->overflow = G2_REJECT_LANE_CAPACITY;
+    return;
+  }
+  G2ProducerLaneV1 const* restrict lane =
+      &g2->lanes[G2_PRODUCER_HINT_WORD_COUNT_SLOT];
+  ((uint32_t*)(g2->base + lane->offset))[index] = num_words;
 }
 
 static __attribute__((always_inline)) inline uint32_t

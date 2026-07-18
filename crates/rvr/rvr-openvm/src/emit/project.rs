@@ -752,6 +752,7 @@ impl CProject {
             (0x0081, 1, 3, 2, 1),
             (0x0082, 8, 3, 2, 1),
             (0x0083, 4, 3, 2, 1),
+            (0x0084, 4, 1, 0, 1),
         ]);
         for kind in 0u8..30 {
             for value_lane in [false, true] {
@@ -818,18 +819,18 @@ impl CProject {
                uint32_t emission_mode;\n\
                uint8_t air_kinds[31];\n\
                uint32_t air_indices[31];\n\
-               OpenVmRvrG2DsoLaneManifestV1 lanes[59];\n\
+               OpenVmRvrG2DsoLaneManifestV1 lanes[60];\n\
              }} OpenVmRvrG2DsoManifestV2;\n\n\
              _Static_assert(sizeof(OpenVmRvrG2DsoLaneManifestV1) == 16, \"G2 DSO lane manifest size drift\");\n\
-             _Static_assert(sizeof(OpenVmRvrG2DsoManifestV2) == 1300, \"G2 DSO manifest size drift\");\n\n\
+             _Static_assert(sizeof(OpenVmRvrG2DsoManifestV2) == 1316, \"G2 DSO manifest size drift\");\n\n\
              __attribute__((visibility(\"default\")))\n\
              const OpenVmRvrG2DsoManifestV2 openvm_rvr_g2_manifest_v2 = {{\n\
                .magic = {{'O','V','M','G','2','D','2','\\0'}},\n\
                .version = 2,\n\
-               .manifest_bytes = 1300,\n\
+               .manifest_bytes = 1316,\n\
                .header_size = 64,\n\
                .lane_desc_size = 32,\n\
-               .lane_count = 59,\n\
+               .lane_count = 60,\n\
                .wire_flags = 14,\n\
                .fingerprint = {{{fingerprint}}},\n\
                .producer_schema_fingerprint = {{{producer_schema_fingerprint}}},\n\

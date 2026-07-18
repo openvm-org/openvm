@@ -423,6 +423,7 @@ struct DeviceG2TraceKind {
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 struct DeviceG2TraceSegment {
+    segment_id: u32,
     wire: Arc<DeviceBuffer<u8>>,
     operand_table: Arc<DeviceBuffer<u8>>,
     prepared: Arc<DeviceBuffer<u8>>,
@@ -506,6 +507,7 @@ impl DeviceG2TraceInput {
     ) -> DeviceMatrix<F> {
         let trace_height = self.row_count().next_power_of_two();
         let trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
+        let trace_timer = CudaStageTimer::start(device_ctx);
         unsafe {
             crate::cuda_abi::rvr_g2_cuda::tracegen(
                 self.kind,
@@ -523,6 +525,13 @@ impl DeviceG2TraceInput {
                 device_ctx.stream.as_raw(),
             )
             .expect("CUDA G2 strict lane-to-trace launch");
+        }
+        if let Some(timer) = trace_timer {
+            timer.finish(
+                &format!("trace_kind_{:?}", self.kind),
+                self.segment.segment_id,
+                trace_height * trace_width * size_of::<F>(),
+            );
         }
         let oracle_expected = self.oracle_expected();
         if let Some(expected_records) = oracle_expected {
@@ -640,9 +649,9 @@ const _: () = {
     assert!(core::mem::offset_of!(DeltaAirOutputDesc, kind) == 20);
 };
 
-/// Initialize the primary context, preload the G2 decoder and every live G2
-/// trace kernel, and retain async-pool pages while real metered shapes are
-/// warmed. This is run on an owned worker concurrently with CPU metering.
+/// Initialize the primary context and preload the G2 decoder plus every live
+/// G2 trace kernel. This bounded task runs on an owned worker concurrently
+/// with CPU setup; exact-shape pinned-host pool priming is a separate step.
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 pub fn begin_g2_device_prewarm() -> Result<(), String> {
     let started = std::time::Instant::now();
@@ -678,9 +687,8 @@ pub fn g2_device_prewarm_task() -> Box<dyn FnOnce() -> Result<(), String> + Send
     })
 }
 
-/// Keep the pool's warmed real-shape reservation resident at synchronization
-/// points, rather than letting CUDA's default zero threshold discard it and
-/// reintroduce a first-growth spike in a later measured segment.
+/// Retain the real-shape device reservation after pinned-host pool priming (or
+/// populate it directly when host priming is disabled).
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 pub fn finish_g2_device_prewarm(reserve_bytes: usize) -> Result<(), String> {
     let stats =
@@ -699,6 +707,12 @@ pub fn finish_g2_device_prewarm(reserve_bytes: usize) -> Result<(), String> {
         stats[4],
     );
     Ok(())
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+pub fn g2_device_pool_stats() -> Result<[u64; 5], String> {
+    unsafe { crate::cuda_abi::rvr_g2_cuda::device_pool_stats() }
+        .map_err(|error| format!("CUDA G2 device-pool query failed: {error:?}"))
 }
 
 /// Shared producer/consumer state. The builder holds one `Arc` per VM and
@@ -1643,6 +1657,9 @@ impl RvrGpuDecodeState {
         let (d_table, pc_base) = self
             .device_operand_table(device_ctx)
             .expect("G2 segment without a bound operand table");
+        let profile_enabled = std::env::var("OPENVM_RVR_G2_GPU_PROFILE").as_deref() == Ok("1");
+        let pool_entry = profile_enabled
+            .then(|| unsafe { crate::cuda_abi::rvr_g2_cuda::device_pool_stats() }.unwrap());
         let h2d_timer = CudaStageTimer::start(device_ctx);
         let d_wire = Arc::new(DeviceBuffer::<u8>::with_capacity_on(
             host.segment.transfer_byte_len(),
@@ -1874,8 +1891,9 @@ impl RvrGpuDecodeState {
         ));
         let d_error = Arc::new(DeviceBuffer::<u32>::with_capacity_on(1, device_ctx));
         d_error.fill_zero_on(device_ctx).expect("G2 error clear");
-        let pool_before = (std::env::var("OPENVM_RVR_G2_GPU_PROFILE").as_deref() == Ok("1"))
+        let pool_before = profile_enabled
             .then(|| unsafe { crate::cuda_abi::rvr_g2_cuda::device_pool_stats() }.unwrap());
+        let mut profile_stats = [0u64; 18];
         let g2_predecode_timer = CudaStageTimer::start(device_ctx);
         unsafe {
             crate::cuda_abi::rvr_g2_cuda::predecode(
@@ -1907,6 +1925,7 @@ impl RvrGpuDecodeState {
                 &d_opaque_prev_timestamps,
                 &d_opaque_prev_values,
                 &d_error,
+                profile_enabled.then_some(&mut profile_stats),
                 device_ctx.stream.as_raw(),
             )
             .expect("CUDA G2 wire expansion launch");
@@ -1914,18 +1933,61 @@ impl RvrGpuDecodeState {
         if let Some(timer) = g2_predecode_timer {
             timer.finish("g2_predecode", segment_id, host.total_record_count);
         }
-        if let Some(before) = pool_before {
+        if let Some(entry) = pool_entry {
+            let before = pool_before.unwrap();
             let after = unsafe { crate::cuda_abi::rvr_g2_cuda::device_pool_stats() }.unwrap();
+            let predecessor_bytes = residual_capacity
+                .saturating_mul(std::mem::size_of::<
+                    openvm_circuit::arch::rvr::DeltaMemoryLogEntry,
+                >())
+                .saturating_add(residual_capacity.saturating_mul(12))
+                .saturating_add(
+                    touched_capacity
+                        .saturating_mul(DEVICE_TOUCHED_RECORD_WORDS)
+                        .saturating_mul(std::mem::size_of::<u32>()),
+                );
+            let timeline_bytes = timestamp_capacity
+                .saturating_mul(G2_TIMELINE_EVENT_SIZE)
+                .saturating_add(instruction_count.saturating_mul(G2_PREPARED_INSTRUCTION_SIZE))
+                .saturating_add(host.total_record_count.saturating_mul(size_of::<u32>()))
+                .saturating_add((instruction_count + 1).saturating_mul(size_of::<u32>()));
             eprintln!(
-                "OPENVM_RVR_G2_DEVICE_POOL segment={} reserved_before={} reserved_after={} reserved_high={} used_before={} used_after={} used_high={} release_threshold={}",
+                "OPENVM_RVR_G2_DEVICE_POOL segment={} wire_bytes={} predecessor_bytes={} timeline_bytes={} entry_reserved={} persistent_reserved={} final_reserved={} reserved_high={} entry_used={} persistent_used={} final_used={} used_high={} release_threshold={}",
                 segment_id,
+                host.segment.transfer_byte_len(),
+                predecessor_bytes,
+                timeline_bytes,
+                entry[0],
                 before[0],
                 after[0],
                 after[1],
+                entry[2],
                 before[2],
                 after[2],
                 after[3],
                 after[4],
+            );
+            eprintln!(
+                "OPENVM_RVR_G2_PREDECODE_PROFILE segment={} alloc_init_us={} validate_us={} run_expand_us={} classify_us={} hint_plan_us={} emit_validate_us={} register_replay_us={} memory_count_us={} memory_replay_us={} cleanup_us={} total_us={} memory_events={} timestamp_budget={} residual_events={} trace_records={} run_count={} instruction_count={} logical_wire_bytes={}",
+                segment_id,
+                profile_stats[0],
+                profile_stats[1],
+                profile_stats[2],
+                profile_stats[3],
+                profile_stats[4],
+                profile_stats[5],
+                profile_stats[6],
+                profile_stats[7],
+                profile_stats[8],
+                profile_stats[9],
+                profile_stats[10],
+                profile_stats[11],
+                profile_stats[12],
+                profile_stats[13],
+                profile_stats[14],
+                profile_stats[15],
+                profile_stats[16],
+                profile_stats[17],
             );
         }
         let error = d_error.to_host_on(device_ctx).expect("G2 error D2H")[0];
@@ -2060,6 +2122,7 @@ impl RvrGpuDecodeState {
         let operand_count = u32::try_from(d_table.len() / size_of::<DeviceOperandEntry>())
             .expect("G2 operand-table count exceeds u32");
         let g2_trace = Arc::new(DeviceG2TraceSegment {
+            segment_id,
             wire: Arc::clone(&d_wire),
             operand_table: d_table,
             prepared: d_prepared,

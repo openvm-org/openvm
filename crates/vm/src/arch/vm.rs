@@ -2231,10 +2231,10 @@ where
     {
         #[cfg(all(feature = "cuda", feature = "rvr"))]
         let cuda_module_prewarm = (!self.rvr_cuda_module_prewarmed
-            && rvr_cuda_device_prewarm_depth() != 0)
-            .then(|| self.vm.builder.rvr_cuda_device_prewarm_task())
-            .flatten()
-            .map(std::thread::spawn);
+            && rvr_cuda_g2_module_prewarm_enabled())
+        .then(|| self.vm.builder.rvr_cuda_device_prewarm_task())
+        .flatten()
+        .map(std::thread::spawn);
         if self.rvr_metered.is_none() {
             let metered = self.vm.metered_interpreter(&self.exe)?.into_owned();
             self.rvr_metered = Some(Box::new(metered));
@@ -2366,8 +2366,18 @@ fn rvr_cuda_device_prewarm_depth() -> usize {
         .or_else(|_| std::env::var("OPENVM_RVR_CUDA_G2_PREWARM_DEPTH"))
         .ok()
         .and_then(|value| value.parse::<usize>().ok())
+        // Prime the exact pinned-host and trace-generation shapes used by the first three
+        // segments. This is no longer a proof replay: it registers fresh arena allocations in the
+        // foreground, launches trace kernels, and drains buffers before real segment zero.
         .unwrap_or(3)
         .min(8)
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+fn rvr_cuda_g2_module_prewarm_enabled() -> bool {
+    let g2_route = std::env::var("OPENVM_RVR_GPU_RECORDS").map_or(true, |records| records == "g2");
+    g2_route
+        && std::env::var("OPENVM_RVR_CUDA_MODULE_PREWARM").map_or(true, |enabled| enabled != "0")
 }
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
@@ -2409,7 +2419,6 @@ where
             self.rvr_cuda_pool_reserve_bytes = device_pool_reserve_bytes;
             return Ok(());
         }
-        let trace_only = std::env::var("OPENVM_STARK_DEBUG_TRACE_ONLY").as_deref() == Ok("1");
         let selected_set = selected
             .iter()
             .copied()
@@ -2429,34 +2438,51 @@ where
                 .rvr_preflight
                 .as_ref()
                 .expect("RVR preflight executor must be warmed before CUDA device warmup");
-            if let CachedRvrPreflight::Rvr(rvr) = rvr_preflight {
-                rvr.prepare_wire_backings(&segment.trace_heights);
-            }
+            let execute = || {
+                if let CachedRvrPreflight::Rvr(rvr) = rvr_preflight {
+                    rvr.prepare_wire_backings(&segment.trace_heights);
+                }
+                self.vm.execute_rvr_preflight_for_proving(
+                    rvr_preflight,
+                    &mut self.interpreter,
+                    &self.exe,
+                    from_state,
+                    Some(segment.num_insns),
+                    &segment.trace_heights,
+                )
+            };
             let PreflightExecutionOutput {
                 system_records,
                 record_arenas,
                 to_state,
-            } = self.vm.execute_rvr_preflight_for_proving(
-                rvr_preflight,
-                &mut self.interpreter,
-                &self.exe,
-                from_state,
-                Some(segment.num_insns),
-                &segment.trace_heights,
-            )?;
+            } = if warm_this_segment {
+                crate::arch::cuda::pinned::with_eager_registration(execute)?
+            } else {
+                execute()?
+            };
             state = Some(to_state);
             if warm_this_segment {
+                // Run trace generation, but deliberately stop before STARK proving. This launches
+                // the non-G2 system/extension trace kernels and materializes their exact device
+                // buffer shapes; the direct G2 kernel preloader alone cannot cover those paths.
                 let ctx = self
                     .vm
                     .generate_proving_ctx(system_records, record_arenas)?;
-                if !trace_only {
-                    drop(self.vm.engine.prove(self.vm.pk(), ctx).unwrap());
-                }
                 openvm_cuda_common::stream::device_synchronize().map_err(|error| {
                     ExecutionError::RvrExecution(format!(
-                        "CUDA device prewarm synchronization failed: {error:?}"
+                        "CUDA trace prewarm synchronization failed: {error:?}"
                     ))
                 })?;
+                drop(ctx);
+                if !crate::arch::cuda::pinned::drain_returns(std::time::Duration::from_secs(30)) {
+                    return Err(ExecutionError::RvrExecution(
+                        "CUDA pinned-host prewarm timed out draining returned arenas".to_string(),
+                    )
+                    .into());
+                }
+            } else {
+                drop(system_records);
+                drop(record_arenas);
             }
             if seg_idx == last_selected {
                 break;
@@ -2471,10 +2497,10 @@ where
         self.rvr_cuda_paths_prewarmed = true;
         self.rvr_cuda_pool_reserve_bytes = device_pool_reserve_bytes;
         eprintln!(
-            "OPENVM_RVR_CUDA_DEVICE_PREWARM phase=paths elapsed_ms={} selected={:?} proof_warm={}",
+            "OPENVM_RVR_CUDA_DEVICE_PREWARM phase=paths elapsed_ms={} selected={:?} \
+             pinned_host_pool_warm=1 trace_warm=1 proof_warm=0",
             started.elapsed().as_millis(),
             selected,
-            u8::from(!trace_only),
         );
         Ok(())
     }
@@ -2573,13 +2599,10 @@ where
                 if g2_airs.is_empty() {
                     Vec::new()
                 } else {
-                    // The direct module preloader covers every standard
-                    // per-kind trace kernel, while real prefix segments cover
-                    // the decoder, trace assembly, and proving-buffer shapes
-                    // that otherwise appear as the early cold tail. Keep the
-                    // configured depth literal: a single representative proof
-                    // does not populate every proving-side shape even when the
-                    // async allocator has already reserved its maximum pages.
+                    // The direct module preloader covers the G2 per-kind kernels. Prefix trace
+                    // passes cover the decoder, the remaining VM trace kernels, and synchronously
+                    // pinned arena shapes; retain the configured depth because later early
+                    // segments can introduce a larger size class.
                     let selected =
                         (0..segments.len().min(device_prewarm_depth)).collect::<Vec<_>>();
                     let mut uncovered = g2_airs
@@ -2615,7 +2638,18 @@ where
                 &selected,
                 device_pool_reserve_bytes,
             )?;
-        } else if device_prewarm_depth != 0 {
+        } else if !self.rvr_cuda_paths_prewarmed {
+            // Populate the async device pool without replaying workload segments when no pinned
+            // host-pool prefix was requested.
+            let device_pool_reserve_bytes =
+                rvr_cuda_device_pool_prewarm_bytes(max_g2_capacity_bytes);
+            self.prewarm_cuda_device_paths(
+                input.clone(),
+                &segments,
+                &[],
+                device_pool_reserve_bytes,
+            )?;
+        } else {
             let device_pool_reserve_bytes =
                 rvr_cuda_device_pool_prewarm_bytes(max_g2_capacity_bytes);
             if device_pool_reserve_bytes > self.rvr_cuda_pool_reserve_bytes {
@@ -2645,6 +2679,10 @@ where
             let from_state = Option::take(&mut state).unwrap();
             #[cfg(feature = "cuda")]
             let gpu_e2e_profile = std::env::var("OPENVM_GPU_E2E_PROFILE").as_deref() == Ok("1");
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
+            let device_pool_entry = gpu_e2e_profile
+                .then(|| vm.builder.rvr_cuda_device_pool_stats().unwrap())
+                .flatten();
             #[cfg(feature = "cuda")]
             if gpu_e2e_profile {
                 openvm_cuda_common::stream::device_synchronize().unwrap();
@@ -2663,6 +2701,10 @@ where
             drop(init_memory_span);
             #[cfg(feature = "cuda")]
             let init_memory_h2d_build_elapsed = init_h2d_started.elapsed();
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
+            let device_pool_after_init = gpu_e2e_profile
+                .then(|| vm.builder.rvr_cuda_device_pool_stats().unwrap())
+                .flatten();
             #[cfg(feature = "rvr")]
             let rvr_preflight = self
                 .rvr_preflight
@@ -2704,6 +2746,10 @@ where
             #[cfg(any(feature = "stark-debug", feature = "cuda"))]
             let preflight_elapsed = preflight_started.elapsed();
             #[cfg(all(feature = "cuda", feature = "rvr"))]
+            let device_pool_after_preflight = gpu_e2e_profile
+                .then(|| vm.builder.rvr_cuda_device_pool_stats().unwrap())
+                .flatten();
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
             if let Some(before) = arena_pool_before {
                 crate::arch::cuda::pinned::emit_segment_stats(seg_idx, before);
             }
@@ -2737,6 +2783,10 @@ where
             }
             #[cfg(any(feature = "stark-debug", feature = "cuda"))]
             let tracegen_elapsed = tracegen_started.elapsed();
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
+            let device_pool_after_tracegen = gpu_e2e_profile
+                .then(|| vm.builder.rvr_cuda_device_pool_stats().unwrap())
+                .flatten();
             modify_ctx(seg_idx, &mut ctx);
             #[cfg(feature = "stark-debug")]
             if std::env::var("OPENVM_STARK_DEBUG_TRACE_ONLY").as_deref() == Ok("1") {
@@ -2766,6 +2816,45 @@ where
             #[cfg(feature = "cuda")]
             if gpu_e2e_profile {
                 openvm_cuda_common::stream::device_synchronize().unwrap();
+                let prove_elapsed = prove_started.elapsed();
+                #[cfg(feature = "rvr")]
+                if let (
+                    Some(entry),
+                    Some(after_init),
+                    Some(after_preflight),
+                    Some(after_tracegen),
+                ) = (
+                    device_pool_entry,
+                    device_pool_after_init,
+                    device_pool_after_preflight,
+                    device_pool_after_tracegen,
+                ) {
+                    let after_prove = vm
+                        .builder
+                        .rvr_cuda_device_pool_stats()
+                        .unwrap()
+                        .expect("CUDA builder omitted device-pool profiling stats");
+                    eprintln!(
+                        "OPENVM_GPU_E2E_DEVICE_POOL seg={seg_idx} \
+                         entry_reserved={} init_reserved={} preflight_reserved={} \
+                         tracegen_reserved={} prove_reserved={} reserved_high={} \
+                         entry_used={} init_used={} preflight_used={} tracegen_used={} \
+                         prove_used={} used_high={} release_threshold={}",
+                        entry[0],
+                        after_init[0],
+                        after_preflight[0],
+                        after_tracegen[0],
+                        after_prove[0],
+                        after_prove[1],
+                        entry[2],
+                        after_init[2],
+                        after_preflight[2],
+                        after_tracegen[2],
+                        after_prove[2],
+                        after_prove[3],
+                        after_prove[4],
+                    );
+                }
                 eprintln!(
                     "OPENVM_GPU_E2E_SEGMENT_TIMING seg={seg_idx} insns={num_insns} \
                      init_memory_h2d_build_us={} preflight_us={} \
@@ -2773,7 +2862,7 @@ where
                     init_memory_h2d_build_elapsed.as_micros(),
                     preflight_elapsed.as_micros(),
                     tracegen_elapsed.as_micros(),
-                    prove_started.elapsed().as_micros()
+                    prove_elapsed.as_micros()
                 );
             }
             proofs.push(proof);

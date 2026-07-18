@@ -193,6 +193,28 @@ preflight_g2_emit_opaque_event_count(Tracer* restrict t,
   ((uint32_t*)(g2->base + lane->offset))[index] = event_count;
 }
 
+static __attribute__((always_inline)) inline void
+preflight_g2_emit_hint_word_count(Tracer* restrict t, uint32_t num_words) {
+  G2ProducerV1* restrict g2 = t->g2;
+  if (g2 == NULL) return;
+  if (unlikely(g2->base == NULL || g2->lanes == NULL ||
+               g2->lane_count != G2_PRODUCER_LANE_COUNT ||
+               num_words == 0u || num_words > 1023u)) {
+    g2->overflow = G2_REJECT_LANE_CAPACITY;
+    return;
+  }
+  G2ProducerLaneV1* restrict lane =
+      &g2->lanes[G2_PRODUCER_HINT_WORD_COUNT_SLOT];
+  uint32_t index = lane->len++;
+  uint64_t end = lane->offset + (uint64_t)(index + 1u) * sizeof(uint32_t);
+  if (unlikely(index >= lane->cap || end < lane->offset ||
+               end > g2->capacity)) {
+    g2->overflow = G2_REJECT_LANE_CAPACITY;
+    return;
+  }
+  ((uint32_t*)(g2->base + lane->offset))[index] = num_words;
+}
+
 /* Custom VecHeap emitters run after their traced accesses, so compact residual
  * entries no longer contain the predecessor fields they need. Capture only
  * that instruction's events in bounded scratch. */

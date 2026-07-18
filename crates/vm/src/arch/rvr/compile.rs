@@ -228,13 +228,19 @@ impl RvrCompiled {
             arity: 0,
             reserved: [0; 3],
         });
-        for (kind, width) in [(0x0080, 8), (0x0081, 1), (0x0082, 8), (0x0083, 4)] {
+        for (kind, width, flags, group_id) in [
+            (0x0080, 8, 3, 2),
+            (0x0081, 1, 3, 2),
+            (0x0082, 8, 3, 2),
+            (0x0083, 4, 3, 2),
+            (0x0084, 4, 1, 0),
+        ] {
             expected_lanes.push(OpenVmRvrG2DsoLaneManifestV1 {
                 kind,
                 elem_width: width,
                 encoding: 0,
-                flags: 3,
-                group_id: 2,
+                flags,
+                group_id,
                 arity: 1,
                 reserved: [0; 3],
             });
@@ -427,7 +433,7 @@ struct OpenVmRvrG2DsoLaneManifestV1 {
 
 const _: () = {
     assert!(std::mem::size_of::<OpenVmRvrG2DsoLaneManifestV1>() == 16);
-    assert!(std::mem::size_of::<OpenVmRvrG2DsoManifestV2>() == 1300);
+    assert!(std::mem::size_of::<OpenVmRvrG2DsoManifestV2>() == 1316);
 };
 
 /// Error during compilation.
@@ -1468,11 +1474,11 @@ fn g2_producer_schema_fingerprint(
     emission_mode: G2EmissionMode,
 ) -> [u8; 32] {
     let mut producer_schema = Sha256::new();
-    producer_schema.update(b"openvm-rvr-g2-block-span-producer-v3\0");
+    producer_schema.update(b"openvm-rvr-g2-block-span-producer-v4\0");
     producer_schema.update(wire_fingerprint);
     producer_schema.update([emission_mode as u8]);
     producer_schema.update(
-        b"producer-lane-24;checked-expected-cursors;production-device-replay-cursors;static-run-standard-spans;single-exit-commit;floor-static-timestamp;no-hot-chip-counters;grouped-custom-residual;",
+        b"producer-lane-24;checked-expected-cursors;production-device-replay-cursors;static-run-standard-spans;single-exit-commit;floor-static-timestamp;no-hot-chip-counters;grouped-custom-residual;hint-word-counts;branch-free-production-scratch;",
     );
     producer_schema.finalize().into()
 }
@@ -2309,6 +2315,13 @@ fn compile_impl<F: PrimeField32>(
             execution_kind = ?opts.execution_kind,
             "rvr native artifact input cache miss; regenerating project for validation"
         );
+        if std::env::var("OPENVM_RVR_CACHE_PROFILE").as_deref() == Ok("1") {
+            eprintln!(
+                "OPENVM_RVR_CACHE_MISS mode={:?} input_key={}",
+                opts.execution_kind,
+                cache.input_key.as_deref().unwrap_or("disabled"),
+            );
+        }
     }
 
     // CFG construction scans the complete initial memory image for indirect
