@@ -42,7 +42,8 @@ use tracing::{info_span, instrument};
 #[cfg(feature = "rvr")]
 use super::rvr::{
     bridge::map_rvr_compile_error, build_pc_to_chip, compile, compile_metered,
-    compile_metered_cost, compile_metered_segment_boundary, compile_with_instret_tracking,
+    compile_metered_cost, compile_metered_cost_profiled, compile_metered_profiled,
+    compile_metered_segment_boundary, compile_profiled, compile_with_instret_tracking,
     load_compiled_from_path, ChipMapping, GuestDebugMap, RvrExecutionKind, RvrInitialImage,
     RvrMeteredCostInstance, RvrMeteredInstance, RvrMeteredSegmentInstance, RvrPureInstance,
     RvrPureWithInstretTrackingInstance,
@@ -283,6 +284,27 @@ where
         ))
     }
 
+    /// Compile a pure RVR instance with the native DWARF needed to resolve
+    /// interrupted host PCs in an execution profile.
+    pub fn rvr_profiled_instance(
+        &self,
+        exe: &VmExe<F>,
+        guest_debug_map: Option<&GuestDebugMap>,
+    ) -> Result<RvrPureInstance<'_>, StaticProgramError> {
+        #[cfg(feature = "metrics")]
+        let _compilation_span =
+            tracing::info_span!("compile_pure", backend = "rvr", profiled = true).entered();
+        let extensions = self.build_rvr_extensions(None);
+        let compiled = compile_profiled(exe, extensions.lifters(), guest_debug_map)
+            .map_err(map_rvr_compile_error)?;
+        Ok(RvrPureInstance::new(
+            self.inventory.config(),
+            RvrInitialImage::from(exe),
+            compiled,
+            extensions.into_runtime_hooks(),
+        ))
+    }
+
     /// Compile a pure RVR instance with instret tracking and block-boundary suspension.
     pub fn rvr_instret_tracking_instance(
         &self,
@@ -443,6 +465,32 @@ where
         ))
     }
 
+    /// Compile a metered RVR instance with native profiling information.
+    pub fn metered_profiled_rvr_instance(
+        &self,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+        guest_debug_map: Option<&GuestDebugMap>,
+    ) -> Result<RvrMeteredInstance<'_>, StaticProgramError> {
+        #[cfg(feature = "metrics")]
+        let _compilation_span =
+            tracing::info_span!("compile_metered", backend = "rvr", profiled = true).entered();
+        let extensions = self.build_rvr_extensions(Some(executor_idx_to_air_idx));
+        let chips = ChipMapping {
+            pc_to_chip: build_pc_to_chip(exe, &self.inventory, executor_idx_to_air_idx)
+                .map_err(map_rvr_compile_error)?,
+            chip_widths: None,
+        };
+        let compiled = compile_metered_profiled(exe, extensions.lifters(), &chips, guest_debug_map)
+            .map_err(map_rvr_compile_error)?;
+        Ok(RvrMeteredInstance::new(
+            self.inventory.config(),
+            RvrInitialImage::from(exe),
+            extensions.into_runtime_hooks(),
+            compiled,
+        ))
+    }
+
     pub fn metered_segment_rvr_instance(
         &self,
         exe: &VmExe<F>,
@@ -585,6 +633,36 @@ where
             initial_image: RvrInitialImage::from(exe),
             runtime_hooks,
             compiled,
+        })
+    }
+
+    /// Compile a metered-cost RVR instance with native profiling information.
+    pub fn metered_cost_profiled_rvr_instance(
+        &self,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+        widths: &[usize],
+        guest_debug_map: Option<&GuestDebugMap>,
+    ) -> Result<RvrMeteredCostInstance<'_>, StaticProgramError> {
+        #[cfg(feature = "metrics")]
+        let _compilation_span =
+            tracing::info_span!("compile_metered_cost", backend = "rvr", profiled = true).entered();
+        let extensions = self.build_rvr_extensions(Some(executor_idx_to_air_idx));
+        let widths: Vec<u64> = widths.iter().map(|&width| width as u64).collect();
+        let chips = ChipMapping {
+            pc_to_chip: build_pc_to_chip(exe, &self.inventory, executor_idx_to_air_idx)
+                .map_err(map_rvr_compile_error)?,
+            chip_widths: Some(widths.clone()),
+        };
+        let compiled =
+            compile_metered_cost_profiled(exe, extensions.lifters(), &chips, guest_debug_map)
+                .map_err(map_rvr_compile_error)?;
+        Ok(RvrMeteredCostInstance {
+            system_config: self.inventory.config(),
+            initial_image: RvrInitialImage::from(exe),
+            runtime_hooks: extensions.into_runtime_hooks(),
+            compiled,
+            widths,
         })
     }
 }

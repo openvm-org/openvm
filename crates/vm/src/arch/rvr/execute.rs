@@ -206,6 +206,7 @@ fn run_and_finalize<ModeState>(
 /// is finished even when execution fails, but the execution error remains
 /// primary.
 fn run_profiled<ModeState, T>(
+    compiled: &RvrCompiled,
     state: &mut RvState<ModeState>,
     profile: Option<&GuestProfileConfig>,
     execute: impl FnOnce(&mut RvState<ModeState>) -> Result<T, ExecuteError>,
@@ -224,7 +225,7 @@ fn run_profiled<ModeState, T>(
     let execution_result = execute(state);
     #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
     let profile_result = profiler
-        .map(GuestProfiler::finish)
+        .map(|profiler| profiler.finish(compiled))
         .transpose()
         .map_err(ExecuteError::GuestProfile);
 
@@ -253,7 +254,7 @@ pub(super) fn execute_pure(
     let initial_regs = read_rv64_registers(vm_state);
     let mut state: PureRvState = init_rvr_state(vm_state, pc);
     state.regs = initial_regs;
-    run_profiled(&mut state, profile, |state| {
+    run_profiled(compiled, &mut state, profile, |state| {
         run_and_finalize(compiled, runtime_hooks, vm_state, state, false)
             .inspect_err(|error| tracing::warn!(%error, "rvr pure execution failed"))
     })?;
@@ -337,7 +338,7 @@ pub(super) fn execute_metered_cost(
     let mut state: MeteredCostRvState = init_rvr_state(vm_state, pc);
     state.regs = initial_regs;
 
-    run_profiled(&mut state, profile, |state| {
+    run_profiled(compiled, &mut state, profile, |state| {
         run_and_finalize(compiled, runtime_hooks, vm_state, state, false)
             .inspect_err(|error| tracing::warn!(%error, "rvr metered-cost execution failed"))
     })?;
@@ -372,7 +373,7 @@ fn execute_metered_profiled(
     profile: Option<&GuestProfileConfig>,
 ) -> Result<RvrMeteredExecutionOutcome, ExecuteError> {
     let mut state = prepare_metered_state(vm_state, &mut seg_state)?;
-    run_profiled(&mut state, profile, |state| {
+    run_profiled(compiled, &mut state, profile, |state| {
         run_metered_state(compiled, runtime_hooks, vm_state, state, seg_state, false)
     })
 }

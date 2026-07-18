@@ -354,6 +354,27 @@ pub fn compile<F: PrimeField32>(
     )
 }
 
+/// Compile an unlimited pure artifact with native DWARF and frame pointers for
+/// interrupted-host-PC execution profiling.
+pub fn compile_profiled<F: PrimeField32>(
+    exe: &VmExe<F>,
+    extensions: &ExtensionRegistry,
+    guest_debug_map: Option<&GuestDebugMap>,
+) -> Result<RvrCompiled, CompileError> {
+    compile_impl(
+        exe,
+        &CompileOptions {
+            base_name: None,
+            execution_kind: RvrExecutionKind::Pure,
+            extensions,
+            chips: None,
+            guest_debug_map,
+            native_debug_info: true,
+            keep_artifacts: false,
+        },
+    )
+}
+
 /// Compile a VmExe for pure execution with instret tracking and block-boundary suspension.
 pub fn compile_with_instret_tracking<F: PrimeField32>(
     exe: &VmExe<F>,
@@ -390,6 +411,28 @@ pub fn compile_metered<F: PrimeField32>(
             chips: Some(chips),
             guest_debug_map,
             native_debug_info: cfg!(feature = "profiling"),
+            keep_artifacts: false,
+        },
+    )
+}
+
+/// Compile a metered artifact with native debug information for execution
+/// profiling.
+pub fn compile_metered_profiled<F: PrimeField32>(
+    exe: &VmExe<F>,
+    extensions: &ExtensionRegistry,
+    chips: &ChipMapping,
+    guest_debug_map: Option<&GuestDebugMap>,
+) -> Result<RvrCompiled, CompileError> {
+    compile_impl(
+        exe,
+        &CompileOptions {
+            base_name: None,
+            execution_kind: RvrExecutionKind::Metered,
+            extensions,
+            chips: Some(chips),
+            guest_debug_map,
+            native_debug_info: true,
             keep_artifacts: false,
         },
     )
@@ -432,6 +475,28 @@ pub fn compile_metered_cost<F: PrimeField32>(
             chips: Some(chips),
             guest_debug_map,
             native_debug_info: cfg!(feature = "profiling"),
+            keep_artifacts: false,
+        },
+    )
+}
+
+/// Compile a metered-cost artifact with native debug information for execution
+/// profiling.
+pub fn compile_metered_cost_profiled<F: PrimeField32>(
+    exe: &VmExe<F>,
+    extensions: &ExtensionRegistry,
+    chips: &ChipMapping,
+    guest_debug_map: Option<&GuestDebugMap>,
+) -> Result<RvrCompiled, CompileError> {
+    compile_impl(
+        exe,
+        &CompileOptions {
+            base_name: None,
+            execution_kind: RvrExecutionKind::MeteredCost,
+            extensions,
+            chips: Some(chips),
+            guest_debug_map,
+            native_debug_info: true,
             keep_artifacts: false,
         },
     )

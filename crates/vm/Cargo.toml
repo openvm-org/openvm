@@ -37,6 +37,7 @@ derive_more = { workspace = true, features = ["from"] }
 backtrace.workspace = true
 rand.workspace = true
 serde.workspace = true
+serde_json = { workspace = true, optional = true }
 serde-big-array.workspace = true
 metrics = { workspace = true, optional = true }
 thiserror.workspace = true
@@ -100,6 +101,7 @@ rvr = [
     "dep:libloading",
     "dep:tempfile",
     "dep:nix",
+    "dep:serde_json",
     "openvm-circuit-derive/rvr",
 ]
 # Disable bounds checking in memory operations for performance

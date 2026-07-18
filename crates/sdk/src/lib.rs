@@ -504,8 +504,30 @@ where
         inputs: StdIn,
         profile: &GuestProfileConfig,
     ) -> Result<Vec<u8>, SdkError> {
-        let compiled = self.compile(app_exe)?;
+        let compiled = self.compile_profiled(app_exe)?;
         self.execute_profiled(&compiled, inputs, profile)
+    }
+
+    /// Compile a pure RVR artifact with native debug information for exact
+    /// interrupted-host-PC execution profiling.
+    #[cfg(feature = "rvr")]
+    #[tracing::instrument(name = "sdk.compile_profiled", level = "info", skip_all)]
+    pub fn compile_profiled(
+        &self,
+        app_exe: impl Into<ExecutableInput>,
+    ) -> Result<CompiledExePure<'_>, SdkError> {
+        let input = self.compile_input(app_exe)?;
+        let exe = self.convert_to_exe(input.executable)?;
+        let guest_debug_map = input
+            .elf_path
+            .as_deref()
+            .map(|elf_path| self.guest_debug_map(elf_path, &exe))
+            .transpose()?;
+        self.executor
+            .rvr_profiled_instance(&exe, guest_debug_map.as_ref())
+            .map(CompiledExePure::new)
+            .map_err(VirtualMachineError::from)
+            .map_err(SdkError::from)
     }
 
     /// Compile `app_exe` for pure execution.
@@ -648,8 +670,38 @@ where
         inputs: StdIn,
         profile: &GuestProfileConfig,
     ) -> Result<(Vec<u8>, Vec<Segment>), SdkError> {
-        let compiled = self.compile_metered(app_exe)?;
+        let compiled = self.compile_metered_profiled(app_exe)?;
         self.execute_metered_profiled(&compiled, inputs, profile)
+    }
+
+    /// Compile a metered RVR artifact with native debug information for exact
+    /// execution profiling.
+    #[cfg(feature = "rvr")]
+    #[tracing::instrument(name = "sdk.compile_metered_profiled", level = "info", skip_all)]
+    pub fn compile_metered_profiled(
+        &self,
+        app_exe: impl Into<ExecutableInput>,
+    ) -> Result<CompiledExeMetered<'_>, SdkError> {
+        let input = self.compile_input(app_exe)?;
+        let app_prover = self.app_prover(input.executable)?;
+        let vm = app_prover.vm();
+        let exe = app_prover.exe();
+        let ctx = vm.build_metered_ctx(&exe);
+        let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
+        let guest_debug_map = input
+            .elf_path
+            .as_deref()
+            .map(|elf_path| self.guest_debug_map(elf_path, &exe))
+            .transpose()?;
+        let instance = self
+            .executor
+            .metered_profiled_rvr_instance(&exe, &executor_idx_to_air_idx, guest_debug_map.as_ref())
+            .map_err(VirtualMachineError::from)?;
+        Ok(CompiledExeMetered {
+            instance,
+            ctx,
+            executor_idx_to_air_idx,
+        })
     }
 
     /// Compile `app_exe` for metered execution. The returned [`CompiledExeMetered`] bundles
@@ -781,8 +833,39 @@ where
         inputs: StdIn,
         profile: &GuestProfileConfig,
     ) -> Result<(Vec<u8>, (u64, u64)), SdkError> {
-        let compiled = self.compile_metered_cost(app_exe)?;
+        let compiled = self.compile_metered_cost_profiled(app_exe)?;
         self.execute_metered_cost_profiled(&compiled, inputs, profile)
+    }
+
+    /// Compile a metered-cost RVR artifact with native debug information for
+    /// exact execution profiling.
+    #[cfg(feature = "rvr")]
+    #[tracing::instrument(name = "sdk.compile_metered_cost_profiled", level = "info", skip_all)]
+    pub fn compile_metered_cost_profiled(
+        &self,
+        app_exe: impl Into<ExecutableInput>,
+    ) -> Result<CompiledExeMeteredCost<'_>, SdkError> {
+        let input = self.compile_input(app_exe)?;
+        let app_prover = self.app_prover(input.executable)?;
+        let vm = app_prover.vm();
+        let exe = app_prover.exe();
+        let ctx = vm.build_metered_cost_ctx();
+        let executor_idx_to_air_idx = vm.executor_idx_to_air_idx();
+        let guest_debug_map = input
+            .elf_path
+            .as_deref()
+            .map(|elf_path| self.guest_debug_map(elf_path, &exe))
+            .transpose()?;
+        let instance = self
+            .executor
+            .metered_cost_profiled_rvr_instance(
+                &exe,
+                &executor_idx_to_air_idx,
+                &ctx.widths,
+                guest_debug_map.as_ref(),
+            )
+            .map_err(VirtualMachineError::from)?;
+        Ok(CompiledExeMeteredCost { instance, ctx })
     }
 
     /// Compile `app_exe` for metered-cost execution. See [`Self::compile_metered`].
