@@ -15,7 +15,7 @@ use std::{
 };
 
 use openvm_instructions::program::{DEFAULT_PC_STEP, MAX_ALLOWED_PC};
-use openvm_platform::memory::TEXT_START;
+use openvm_platform::memory::{MEM_SIZE, TEXT_START};
 use rvr_state::RvState;
 
 use super::{
@@ -406,7 +406,7 @@ impl GuestProfiler {
             // register, PC, and memory prefix sampled by the signal handler.
             state_ptr: std::ptr::from_ref(state).cast::<RvState>(),
             memory_base: state.memory.cast_const(),
-            memory_size: openvm_platform::memory::MEM_SIZE,
+            memory_size: MEM_SIZE,
             samples: buffer.as_mut_ptr().cast::<StackSample>(),
             capacity: buffer.len(),
             delivered_samples: AtomicUsize::new(0),

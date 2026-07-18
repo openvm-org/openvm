@@ -4,6 +4,8 @@ use std::path::PathBuf;
 
 use clap::{Parser, ValueEnum};
 use eyre::{eyre, Result};
+#[cfg(feature = "rvr")]
+use openvm_build::get_dir_with_profile;
 use openvm_circuit::arch::instructions::exe::VmExe;
 #[cfg(feature = "rvr")]
 use openvm_execution_profile::FirefoxProfiler;
@@ -311,12 +313,8 @@ impl RunCmd {
                     .file_name()
                     .ok_or_else(|| eyre!("invalid guest target name"))?;
                 guest_elf_path = Some(
-                    openvm_build::get_dir_with_profile(
-                        target_dir,
-                        &self.cargo_args.profile,
-                        is_example,
-                    )
-                    .join(file_name),
+                    get_dir_with_profile(target_dir, &self.cargo_args.profile, is_example)
+                        .join(file_name),
                 );
             }
             output_dir.join(target_name.with_extension(VMEXE_EXT))

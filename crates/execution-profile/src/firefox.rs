@@ -2,6 +2,7 @@ use std::{
     collections::HashMap,
     fs,
     path::{Component, Path, PathBuf},
+    thread::{self, Builder},
     time::{Duration, SystemTime},
 };
 
@@ -906,7 +907,7 @@ fn compress_profile(profile: &Profile) -> Result<Vec<u8>> {
 
 fn upload_profile(compressed_profile: &[u8]) -> Result<String> {
     let compressed_profile = compressed_profile.to_vec();
-    std::thread::Builder::new()
+    Builder::new()
         .name("firefox-profile-upload".to_string())
         .spawn(move || upload_profile_blocking(&compressed_profile))
         .context("failed to start Firefox Profiler upload thread")?
@@ -949,7 +950,7 @@ fn upload_profile_blocking_to(upload_url: &str, compressed_profile: &[u8]) -> Re
                         attempt + 1,
                         backoff.as_secs()
                     );
-                    std::thread::sleep(backoff);
+                    thread::sleep(backoff);
                 }
             }
         }
@@ -982,9 +983,10 @@ fn public_url_from_response(response: &str) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use std::{
-        fs,
+        env, fs,
         io::{Read, Write},
         net::TcpListener,
+        path::PathBuf,
         thread,
     };
 
@@ -993,7 +995,8 @@ mod tests {
     use super::{
         build_firefox_profile, build_id_debug_path, debug_id_from_build_id,
         is_guest_execution_symbol, observed_interval_ns, parse_raw_profile,
-        public_url_from_response, sanitize_source_path, upload_profile_blocking_to, FIREFOX_ACCEPT,
+        public_url_from_response, sanitize_source_path, upload_profile_blocking_to,
+        RawGuestProfile, FIREFOX_ACCEPT,
     };
 
     #[test]
@@ -1038,7 +1041,7 @@ mod tests {
 
     #[test]
     fn interval_comes_from_observed_capture_duration() {
-        let raw = openvm_circuit::arch::rvr::RawGuestProfile {
+        let raw = RawGuestProfile {
             version: 3,
             requested_sample_hz: 10_000,
             owner_tid: 1,
@@ -1060,8 +1063,8 @@ mod tests {
 
     #[test]
     fn firefox_metadata_uses_capture_clock_and_hides_binary_path() {
-        let executable = std::env::current_exe().unwrap();
-        let raw: openvm_circuit::arch::rvr::RawGuestProfile = serde_json::from_str(
+        let executable = env::current_exe().unwrap();
+        let raw: RawGuestProfile = serde_json::from_str(
             r#"{
                 "version":3,
                 "requested_sample_hz":10000,
@@ -1096,8 +1099,8 @@ mod tests {
 
     #[test]
     fn zero_return_pc_is_treated_as_a_stack_terminator() {
-        let executable = std::env::current_exe().unwrap();
-        let raw: openvm_circuit::arch::rvr::RawGuestProfile = serde_json::from_str(
+        let executable = env::current_exe().unwrap();
+        let raw: RawGuestProfile = serde_json::from_str(
             r#"{
                 "version":3,
                 "requested_sample_hz":1000,
@@ -1193,7 +1196,7 @@ mod tests {
     fn build_id_maps_to_the_standard_debug_file_path() {
         assert_eq!(
             build_id_debug_path(&[0x8e, 0x9f, 0xd8, 0x27]).unwrap(),
-            std::path::PathBuf::from("/usr/lib/debug/.build-id/8e/9fd827.debug")
+            PathBuf::from("/usr/lib/debug/.build-id/8e/9fd827.debug")
         );
         assert_eq!(build_id_debug_path(&[]), None);
     }

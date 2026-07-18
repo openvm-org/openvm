@@ -131,6 +131,7 @@ impl GuestProfileConfig {
         self.format
     }
 
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
     pub(crate) fn native_artifact_output(&self) -> Option<&Path> {
         self.native_artifact_output.as_deref()
     }
@@ -146,6 +147,7 @@ impl GuestProfileConfig {
         Ok(self)
     }
 
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
     pub(crate) fn max_samples(&self) -> usize {
         self.max_samples
     }
