@@ -266,7 +266,7 @@ fn execute_invalid_hint_buffer(num_words: u64, provide_one_word: bool) {
         tester
             .streams_mut()
             .hint_stream
-            .extend([0; RV64_REGISTER_NUM_LIMBS]);
+            .set_hint_from_iter([0; RV64_REGISTER_NUM_LIMBS]);
     }
 
     tester.execute(
