@@ -19,5 +19,6 @@ fxprof-processed-profile = { git = "https://github.com/mstange/samply.git", rev 
 openvm-circuit = { workspace = true, features = ["rvr"] }
 object = "0.36"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
+samply-debugid = { git = "https://github.com/mstange/samply.git", rev = "c11e5a4cfc010095e7688f3e798b720ef8a9d657" }
 serde_json.workspace = true
 tempfile.workspace = true

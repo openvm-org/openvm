@@ -705,7 +705,11 @@ impl<'a> EmitContext<'a> {
             let pc = self
                 .current_pc
                 .expect("external call emitted before instruction PC was recorded");
-            self.write_line(&format!("state->pc = 0x{pc:08x}ull;"));
+            // The asynchronous sampler is invisible to the optimizer. A
+            // volatile store keeps the callsite observable under -O3/LTO.
+            self.write_line(&format!(
+                "*(volatile uint64_t*)&state->pc = 0x{pc:08x}ull;"
+            ));
         }
     }
 
@@ -1383,5 +1387,29 @@ mod tests {
             .contains("trace_sp_memory_access_span(&trace_memory, sp - 0x00000008u, 8u);"));
         assert!(!ctx.buf().contains("trace_memory_access_leaf(&trace_memory"));
         assert!(!ctx.buf().contains("trace_memory_access_span(&trace_memory"));
+    }
+
+    #[test]
+    fn profiled_external_call_emits_volatile_guest_pc_before_call() {
+        let mut ctx = EmitContext::new(
+            HashSet::new(),
+            EmitMode::Direct,
+            BlockAbi::Plain,
+            None,
+            None,
+            true,
+        );
+        ctx.trace_pc(0x20_1234);
+        ctx.emit_call_without_page_flush("host_callback", &["value"]);
+
+        let pc_store = ctx
+            .buf()
+            .find("*(volatile uint64_t*)&state->pc = 0x00201234ull;")
+            .expect("volatile profile callsite store");
+        let callback = ctx
+            .buf()
+            .find("host_callback(value);")
+            .expect("host callback");
+        assert!(pc_store < callback);
     }
 }
