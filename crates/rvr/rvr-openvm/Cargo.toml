@@ -19,3 +19,6 @@ thiserror.workspace = true
 
 [features]
 unprotected = []
+
+[dev-dependencies]
+tempfile.workspace = true

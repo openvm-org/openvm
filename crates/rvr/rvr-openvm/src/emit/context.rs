@@ -713,44 +713,32 @@ mod tests {
             .contains("trace_memory_access_span(&trace_memory, addr, 8u);"));
     }
 
-    #[test]
-    fn profiled_external_call_records_guest_pc_before_call() {
+    fn external_call_output(profile_execution: bool) -> String {
         let mut ctx = EmitContext::new(
             HashSet::new(),
             EmitMode::Direct,
             BlockAbi::Plain,
             None,
             None,
-            true,
+            profile_execution,
         );
         ctx.trace_pc(0x20_1234);
         ctx.extern_call_without_page_flush("host_callback", &["value"]);
-
-        let pc_snapshot = ctx
-            .buf()
-            .find("rv_profile_guest_pc(state, 0x00201234ull);")
-            .expect("profile callsite snapshot");
-        let callback = ctx
-            .buf()
-            .find("host_callback(value);")
-            .expect("host callback");
-        assert!(pc_snapshot < callback);
+        ctx.take_buf()
     }
 
     #[test]
-    fn unprofiled_external_call_emits_no_profile_snapshot() {
-        let mut ctx = EmitContext::new(
-            HashSet::new(),
-            EmitMode::Direct,
-            BlockAbi::Plain,
-            None,
-            None,
-            false,
-        );
-        ctx.trace_pc(0x20_1234);
-        ctx.extern_call_without_page_flush("host_callback", &["value"]);
+    fn profiling_changes_external_call_only_by_an_ordered_snapshot() {
+        let unprofiled = external_call_output(false);
+        let profiled = external_call_output(true);
 
-        assert!(ctx.buf().contains("host_callback(value);"));
-        assert!(!ctx.buf().contains("rv_profile_guest_pc"));
+        assert_eq!(unprofiled, "        host_callback(value);\n");
+        assert_eq!(
+            profiled,
+            concat!(
+                "        rv_profile_guest_pc(state, 0x00201234ull);\n",
+                "        host_callback(value);\n",
+            )
+        );
     }
 }

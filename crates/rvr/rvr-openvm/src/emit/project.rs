@@ -1364,9 +1364,10 @@ fn block_accesses_memory(block: &Block) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashSet, path::Path};
+    use std::{collections::HashSet, fs, path::Path};
 
     use rvr_openvm_ir::{Block, CfgEffect, ExtEmitCtx, ExtInstr, InstrAt, Terminator};
+    use tempfile::tempdir;
 
     use super::{CProject, RvrExecutionKind};
 
@@ -1494,26 +1495,58 @@ mod tests {
         assert_eq!(error.to_string(), "chip index 1 is outside AIR count 1");
     }
 
-    #[test]
-    fn profile_guest_pc_helper_is_absent_without_profiling() {
-        let project = CProject::new(Path::new("unused"), "test", RvrExecutionKind::Pure);
-        let mut header = String::new();
-
-        project.emit_profile_guest_pc_helper(&mut header);
-
-        assert!(header.is_empty());
+    fn generated_header(profile_execution: bool) -> String {
+        let dir = tempdir().unwrap();
+        let mut project = CProject::new(dir.path(), "test", RvrExecutionKind::Pure);
+        project.profile_execution = profile_execution;
+        project.write_header(&[], &[]).unwrap();
+        fs::read_to_string(dir.path().join("test.h")).unwrap()
     }
 
     #[test]
-    fn profile_guest_pc_helper_uses_volatile_store_when_enabled() {
-        let mut project = CProject::new(Path::new("unused"), "test", RvrExecutionKind::Pure);
-        project.profile_execution = true;
-        let mut header = String::new();
+    fn profiling_changes_generated_header_only_by_snapshot_helper() {
+        let unprofiled = generated_header(false);
+        let profiled = generated_header(true);
+        let expected_helper = r#"static __attribute__((always_inline)) inline void rv_profile_guest_pc(RvState* state, uint64_t pc) {
+    // The profiling signal handler observes this field asynchronously, outside the
+    // generated C's visible call graph. Use a volatile access so the callsite
+    // snapshot remains a compiler-visible side effect sequenced before the host call.
+    *(volatile uint64_t*)&state->pc = pc;
+}
 
-        project.emit_profile_guest_pc_helper(&mut header);
+"#;
 
-        assert!(header.contains("inline void rv_profile_guest_pc"));
-        assert!(header.contains("*(volatile uint64_t*)&state->pc = pc;"));
+        let without_helper = profiled.replacen(expected_helper, "", 1);
+        assert_ne!(without_helper, profiled, "profile helper was not emitted");
+        assert_eq!(without_helper, unprofiled);
+    }
+
+    fn metered_checkpoint_output(profile_execution: bool) -> String {
+        let mut project = CProject::new(Path::new("unused"), "test", RvrExecutionKind::Metered);
+        project.profile_execution = profile_execution;
+        let mut checkpoint = String::new();
+        project.emit_block_checkpoint_function(&mut checkpoint, &single_instruction_block());
+        checkpoint
+    }
+
+    #[test]
+    fn profiling_changes_metered_checkpoint_only_by_an_ordered_snapshot() {
+        let unprofiled = metered_checkpoint_output(false);
+        let profiled = metered_checkpoint_output(true);
+        let snapshot = "    rv_profile_guest_pc(state, 0x00000100ull);\n";
+
+        let without_snapshot = profiled.replacen(snapshot, "", 1);
+        assert_ne!(
+            without_snapshot, profiled,
+            "checkpoint snapshot was not emitted"
+        );
+        assert_eq!(without_snapshot, unprofiled);
+
+        let snapshot_index = profiled.find(snapshot).unwrap();
+        let checkpoint_index = profiled
+            .find("metered_checkpoint(state, check_counter)")
+            .unwrap();
+        assert!(snapshot_index < checkpoint_index);
     }
 
     #[test]
