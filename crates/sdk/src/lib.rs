@@ -768,13 +768,12 @@ where
             .executor
             .load_metered_instance(lib_path, &exe, &metadata.executor_idx_to_air_idx)
             .map_err(VirtualMachineError::from)?;
-        if let Some(expected) = metadata.profile_compatible {
-            if instance.is_profile_compatible() != expected {
-                return Err(SdkError::Other(eyre::eyre!(
-                    "metered artifact profile compatibility mismatch: metadata says {expected}, shared library says {}",
-                    instance.is_profile_compatible()
-                )));
-            }
+        let expected = metadata.profile_compatible;
+        if instance.is_profile_compatible() != expected {
+            return Err(SdkError::Other(eyre::eyre!(
+                "metered artifact profile compatibility mismatch: metadata says {expected}, shared library says {}",
+                instance.is_profile_compatible()
+            )));
         }
         Ok(CompiledExeMetered {
             instance,

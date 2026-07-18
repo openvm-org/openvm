@@ -187,9 +187,7 @@ pub struct MeteredArtifactMetadata {
     pub metered_ctx_config: MeteredCtxConfig,
     pub segmentation_config: SegmentationConfig,
     pub executor_idx_to_air_idx: Vec<usize>,
-    /// `None` only for artifacts saved before profile compatibility was recorded.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub profile_compatible: Option<bool>,
+    pub profile_compatible: bool,
 }
 
 #[cfg(feature = "rvr")]
@@ -219,7 +217,7 @@ impl CompiledExeMetered<'_> {
             metered_ctx_config: self.ctx.config.clone(),
             segmentation_config: self.ctx.segmentation_ctx.config().clone(),
             executor_idx_to_air_idx: self.executor_idx_to_air_idx.clone(),
-            profile_compatible: Some(self.is_profile_compatible()),
+            profile_compatible: self.is_profile_compatible(),
         };
         let metadata_path = metered_artifact_metadata_path(&lib_path);
         let data = serde_json::to_vec_pretty(&metadata)?;

@@ -583,9 +583,23 @@ fn test_sdk_compiled_metered_save_load_roundtrip() -> Result<()> {
         Some("libopenvm-metered")
     );
     let mut metadata = crate::compiled::load_metered_artifact_metadata(&lib_path)?;
-    assert_eq!(metadata.profile_compatible, Some(false));
-    metadata.profile_compatible = Some(true);
+    assert!(!metadata.profile_compatible);
     let metadata_path = crate::compiled::metered_artifact_metadata_path(&lib_path);
+
+    let mut metadata_without_compatibility = serde_json::to_value(&metadata)?;
+    metadata_without_compatibility
+        .as_object_mut()
+        .unwrap()
+        .remove("profile_compatible");
+    std::fs::write(
+        &metadata_path,
+        serde_json::to_vec_pretty(&metadata_without_compatibility)?,
+    )?;
+    let missing_compatibility = crate::compiled::load_metered_artifact_metadata(&lib_path)
+        .expect_err("metadata without profile_compatible must be rejected");
+    assert!(format!("{missing_compatibility:?}").contains("missing field `profile_compatible`"));
+
+    metadata.profile_compatible = true;
     std::fs::write(&metadata_path, serde_json::to_vec_pretty(&metadata)?)?;
     drop(compiled_a);
 
@@ -596,7 +610,7 @@ fn test_sdk_compiled_metered_save_load_roundtrip() -> Result<()> {
     assert!(profile_mismatch
         .to_string()
         .contains("artifact profile compatibility mismatch"));
-    metadata.profile_compatible = Some(false);
+    metadata.profile_compatible = false;
     std::fs::write(&metadata_path, serde_json::to_vec_pretty(&metadata)?)?;
 
     let mismatch = sdk.load_compiled(&lib_path, exe.clone());
