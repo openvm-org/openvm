@@ -8,9 +8,9 @@ use std::ffi::c_void;
 
 use halo2curves_axiom::ff::Field;
 use num_bigint::BigUint;
-use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
-use openvm_ecc_circuit::{ec_add_ne_expr, ec_double_ne_expr};
-use openvm_mod_circuit_builder::{run_field_expression_precomputed, ExprBuilderConfig};
+use openvm_circuit_primitives::U16_BITS;
+use openvm_ecc_circuit::{ec_add_ne_builder, ec_double_ne_builder};
+use openvm_mod_circuit_builder::{run_expr_builder_precomputed, ExprBuilderConfig};
 use openvm_platform::WORD_SIZE;
 use rvr_openvm_ext_algebra_ffi_common::{
     read_field_256, write_field_256, BLS12_381_ELEM_BYTES, FIELD_256_BYTES,
@@ -131,25 +131,14 @@ fn ecc_setup_expr(point_bytes: u32, setup_bytes: &[u8], is_double: bool) -> Vec<
         num_limbs: coord_bytes,
         limb_bits: 8,
     };
-    let expr = if is_double {
+    let builder = if is_double {
         let a_biguint = BigUint::from_bytes_le(&setup_bytes[coord_bytes..point_bytes as usize]);
-        ec_double_ne_expr(
-            config,
-            // TODO: use a real range bus here, or remove the requirement entirely;
-            // OpenVM currently uses the same dummy bus.
-            VariableRangeCheckerBus::new(u16::MAX, 16),
-            a_biguint,
-        )
+        ec_double_ne_builder(config, U16_BITS, a_biguint)
     } else {
-        ec_add_ne_expr(
-            config,
-            // TODO: use a real range bus here, or remove the requirement entirely;
-            // OpenVM currently uses the same dummy bus.
-            VariableRangeCheckerBus::new(u16::MAX, 16),
-        )
+        ec_add_ne_builder(config, U16_BITS)
     };
-    let flag_idx = expr.num_flags();
-    let writes = run_field_expression_precomputed::<true>(&expr, flag_idx, setup_bytes);
+    let flag_idx = builder.num_flags;
+    let writes = run_expr_builder_precomputed::<true>(&builder, flag_idx, setup_bytes);
     writes.into()
 }
 

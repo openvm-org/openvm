@@ -24,7 +24,7 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
-use crate::builder::{FieldExpr, FieldExprCols};
+use crate::builder::{ExprBuilder, FieldExpr, FieldExprCols};
 
 #[derive(Clone)]
 pub struct FieldExpressionCoreAir {
@@ -547,46 +547,66 @@ fn run_field_expression(
     (writes, inputs, flags)
 }
 
-#[inline(always)]
-pub fn run_field_expression_precomputed<const NEEDS_SETUP: bool>(
-    expr: &FieldExpr,
+fn decode_precomputed_inputs<const NEEDS_SETUP: bool>(
+    builder: &ExprBuilder,
     flag_idx: usize,
     data: &[u8],
-) -> DynArray<u8> {
-    let field_element_limbs = expr.canonical_num_limbs();
-    assert_eq!(data.len(), expr.num_inputs() * field_element_limbs);
+) -> (Vec<BigUint>, Vec<bool>) {
+    let field_element_limbs = builder.num_limbs;
+    assert_eq!(data.len(), builder.num_input * field_element_limbs);
 
-    let mut inputs = Vec::with_capacity(expr.num_inputs());
-    for i in 0..expr.num_inputs() {
-        let start = i * expr.canonical_num_limbs();
-        let end = start + expr.canonical_num_limbs();
+    let mut inputs = Vec::with_capacity(builder.num_input);
+    for i in 0..builder.num_input {
+        let start = i * field_element_limbs;
+        let end = start + field_element_limbs;
         let limb_slice = &data[start..end];
         let input = BigUint::from_bytes_le(limb_slice);
         inputs.push(input);
     }
 
     let flags = if NEEDS_SETUP {
-        let mut flags = vec![false; expr.num_flags()];
-        if flag_idx < expr.num_flags() {
+        let mut flags = vec![false; builder.num_flags];
+        if flag_idx < builder.num_flags {
             flags[flag_idx] = true;
         }
         flags
     } else {
         vec![]
     };
+    (inputs, flags)
+}
 
-    let vars = expr.execute(&inputs, &flags);
-    assert_eq!(vars.len(), expr.num_vars());
-
-    // Write outputs directly to a pre-allocated buffer to avoid intermediate Vecs
-    let num_outputs = expr.output_indices().len();
-    let total_output_bytes = num_outputs * field_element_limbs;
+fn encode_precomputed_outputs(builder: &ExprBuilder, vars: &[BigUint]) -> DynArray<u8> {
+    assert_eq!(vars.len(), builder.num_variables);
+    let total_output_bytes = builder.output_indices.len() * builder.num_limbs;
     let mut write_buffer = vec![0u8; total_output_bytes];
-    for (i, &var_idx) in expr.output_indices().iter().enumerate() {
-        let start = i * field_element_limbs;
+    for (i, &var_idx) in builder.output_indices.iter().enumerate() {
+        let start = i * builder.num_limbs;
         let bytes = vars[var_idx].to_bytes_le();
-        let copy_len = bytes.len().min(field_element_limbs);
+        let copy_len = bytes.len().min(builder.num_limbs);
         write_buffer[start..start + copy_len].copy_from_slice(&bytes[..copy_len]);
     }
     write_buffer.into()
+}
+
+#[inline(always)]
+pub fn run_expr_builder_precomputed<const NEEDS_SETUP: bool>(
+    builder: &ExprBuilder,
+    flag_idx: usize,
+    data: &[u8],
+) -> DynArray<u8> {
+    let (inputs, flags) = decode_precomputed_inputs::<NEEDS_SETUP>(builder, flag_idx, data);
+    let vars = builder.execute(&inputs, &flags);
+    encode_precomputed_outputs(builder, &vars)
+}
+
+#[inline(always)]
+pub fn run_field_expression_precomputed<const NEEDS_SETUP: bool>(
+    expr: &FieldExpr,
+    flag_idx: usize,
+    data: &[u8],
+) -> DynArray<u8> {
+    let (inputs, flags) = decode_precomputed_inputs::<NEEDS_SETUP>(&expr.builder, flag_idx, data);
+    let vars = expr.execute(&inputs, &flags);
+    encode_precomputed_outputs(&expr.builder, &vars)
 }

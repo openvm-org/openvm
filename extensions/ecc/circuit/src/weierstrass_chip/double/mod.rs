@@ -29,13 +29,13 @@ use super::{
 
 mod execution;
 
-pub fn ec_double_ne_expr(
-    config: ExprBuilderConfig, // The coordinate field.
-    range_bus: VariableRangeCheckerBus,
-    a_biguint: BigUint,
-) -> FieldExpr {
+fn build_ec_double_ne_expr(
+    config: ExprBuilderConfig,
+    range_max_bits: usize,
+    a_biguint: &BigUint,
+) -> ExprBuilder {
     config.check_valid();
-    let builder = ExprBuilder::new(config, range_bus.range_max_bits);
+    let builder = ExprBuilder::new(config, range_max_bits);
     let builder = Rc::new(RefCell::new(builder));
 
     let mut x1 = ExprBuilder::new_input(builder.clone());
@@ -55,8 +55,31 @@ pub fn ec_double_ne_expr(
     let mut y3 = lambda * (x1 - x3.clone()) - y1;
     y3.save_output();
 
-    let builder = (*builder).borrow().clone();
-    FieldExpr::new_with_setup_values(builder, range_bus, true, vec![a_biguint])
+    let builder = builder.borrow().clone();
+    builder
+}
+
+pub fn ec_double_ne_expr(
+    config: ExprBuilderConfig,
+    range_bus: VariableRangeCheckerBus,
+    a_biguint: BigUint,
+) -> FieldExpr {
+    FieldExpr::new_with_setup_values(
+        build_ec_double_ne_expr(config, range_bus.range_max_bits, &a_biguint),
+        range_bus,
+        true,
+        vec![a_biguint],
+    )
+}
+
+pub fn ec_double_ne_builder(
+    config: ExprBuilderConfig,
+    range_max_bits: usize,
+    a_biguint: BigUint,
+) -> ExprBuilder {
+    let mut builder = build_ec_double_ne_expr(config, range_max_bits, &a_biguint);
+    builder.finalize(true);
+    builder
 }
 
 /// `BLOCKS` is the number of memory blocks needed to represent one input or output point.
@@ -103,12 +126,10 @@ fn gen_base_expr(
     a_biguint: BigUint,
 ) -> (FieldExpr, Vec<usize>) {
     let expr = ec_double_ne_expr(config, range_checker_bus, a_biguint);
-
     let local_opcode_idx = vec![
         Rv64WeierstrassOpcode::EC_DOUBLE as usize,
         Rv64WeierstrassOpcode::SETUP_EC_DOUBLE as usize,
     ];
-
     (expr, local_opcode_idx)
 }
 

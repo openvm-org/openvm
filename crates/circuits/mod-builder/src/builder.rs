@@ -181,6 +181,16 @@ impl ExprBuilder {
         self.needs_setup
     }
 
+    pub fn execute(&self, inputs: &[BigUint], flags: &[bool]) -> Vec<BigUint> {
+        assert!(self.is_finalized());
+        let mut vars = vec![BigUint::zero(); self.num_variables];
+        for i in 0..self.constraints.len() {
+            let value = self.computes[i].compute(inputs, &vars, flags, &self.prime);
+            vars[i] = value;
+        }
+        vars
+    }
+
     // Below functions are used when adding variables and constraints manually, need to be careful.
     // Number of variables, constraints and computes should be consistent,
     // so there should be same number of calls to the new_var, add_constraint and add_compute.
@@ -587,8 +597,6 @@ impl FieldExpr {
     }
 
     pub fn execute(&self, inputs: &[BigUint], flags: &[bool]) -> Vec<BigUint> {
-        assert!(self.builder.is_finalized());
-
         #[cfg(debug_assertions)]
         {
             let is_setup = self.builder.needs_setup() && flags.iter().all(|&x| !x);
@@ -601,13 +609,7 @@ impl FieldExpr {
                 }
             }
         }
-
-        let mut vars = vec![BigUint::zero(); self.num_variables];
-        for i in 0..self.constraints.len() {
-            let r = self.computes[i].compute(inputs, &vars, flags, &self.prime);
-            vars[i] = r; // r is already owned, no clone needed
-        }
-        vars
+        self.builder.execute(inputs, flags)
     }
 
     pub fn execute_with_output(&self, inputs: &[BigUint], flags: &[bool]) -> Vec<BigUint> {
