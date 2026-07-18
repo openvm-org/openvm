@@ -13,7 +13,7 @@ struct RvState;
 extern __attribute__((preserve_most)) void rvr_ext_keccakf(
     RvState* state, uint64_t buffer_ptr);
 
-extern __attribute__((preserve_most)) void rvr_ext_xorin(RvState* state,
+extern __attribute__((preserve_most)) bool rvr_ext_xorin(RvState* state,
                                                          uint64_t buffer_ptr,
                                                          uint64_t input_ptr,
                                                          uint64_t len);

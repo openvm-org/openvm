@@ -22,15 +22,17 @@ __attribute__((preserve_most)) void rvr_ext_keccakf(RvState* restrict state,
   wr_mem_u64_range_traced(state, buffer_ptr, st, KECCAK_WIDTH_WORDS);
 }
 
-__attribute__((preserve_most)) void rvr_ext_xorin(RvState* restrict state,
+__attribute__((preserve_most)) bool rvr_ext_xorin(RvState* restrict state,
                                                   uint64_t buffer_ptr,
                                                   uint64_t input_ptr,
                                                   uint64_t len) {
-  assume(len <= KECCAK_RATE_BYTES);
+  if (unlikely(len > KECCAK_RATE_BYTES)) {
+    return false;
+  }
   /* The bound limits this to 17; uint32_t matches the traced range-helper ABI. */
   uint32_t num_words = (uint32_t)((len + WORD_SIZE - 1) / WORD_SIZE);
   if (unlikely(num_words == 0)) {
-    return;
+    return true;
   }
 
   uint64_t buffer[KECCAK_WIDTH_WORDS];
@@ -48,4 +50,5 @@ __attribute__((preserve_most)) void rvr_ext_xorin(RvState* restrict state,
   }
 #pragma clang diagnostic pop
   wr_mem_u64_range_traced(state, buffer_ptr, buffer, num_words);
+  return true;
 }

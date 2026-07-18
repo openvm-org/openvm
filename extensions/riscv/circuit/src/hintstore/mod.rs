@@ -72,7 +72,7 @@ fn validate_hint_buffer_num_words(pc: u32, num_words: u64) -> Result<u16, Execut
             ExecutionError::HintBufferTooLarge {
                 pc,
                 num_words,
-                max_hint_buffer_words: MAX_HINT_BUFFER_DWORDS as u32,
+                max_hint_buffer_words: MAX_HINT_BUFFER_DWORDS as u64,
             }
         });
     }

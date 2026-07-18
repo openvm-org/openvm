@@ -64,7 +64,7 @@ impl ExtInstr for XorinInstr {
         let buf_ptr = ctx.read_reg(self.buffer_ptr_reg);
         let input = ctx.read_reg(self.input_ptr_reg);
         let len = ctx.read_reg(self.len_reg);
-        ctx.emit_call("rvr_ext_xorin", &["state", &buf_ptr, &input, &len]);
+        ctx.emit_checked_call("rvr_ext_xorin", &["state", &buf_ptr, &input, &len]);
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {

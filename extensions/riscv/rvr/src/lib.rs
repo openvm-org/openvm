@@ -36,8 +36,8 @@ impl ExtInstr for HintStoreWInstr {
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         let ptr = ctx.read_reg(self.ptr_reg);
-        ctx.trace_mem_access(&ptr, RV64_MEMORY_AS);
         ctx.emit_checked_call_without_page_flush("openvm_hint_storew", &[&ptr]);
+        ctx.trace_mem_access(&ptr, RV64_MEMORY_AS);
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -67,14 +67,14 @@ impl ExtInstr for HintBufferInstr {
         ));
         ctx.emit_trap();
         ctx.write_line("}");
+        let callback_count = format!("(uint16_t)({n})");
+        ctx.emit_checked_call_without_page_flush("openvm_hint_buffer", &[&ptr, &callback_count]);
         // Block-entry already credits a static +1; emit the runtime
         // `(n - 1)` correction only when there is more than one row.
         let chip_idx = air_index_to_c(self.chip_idx);
         // The guard above proves this correction is at most 1022.
         ctx.trace_chip_if_nonzero(chip_idx, &format!("(uint32_t)({n} - 1ull)"));
         ctx.trace_mem_access_u64_range(&ptr, &n, RV64_MEMORY_AS);
-        let n = format!("(uint16_t)({n})");
-        ctx.emit_checked_call_without_page_flush("openvm_hint_buffer", &[&ptr, &n]);
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -111,9 +111,9 @@ impl ExtInstr for RevealInstr {
             std::cmp::Ordering::Equal => ptr,
             std::cmp::Ordering::Greater => format!("({ptr} + 0x{:08x}ull)", self.offset),
         };
-        ctx.trace_mem_access(&addr, PUBLIC_VALUES_AS);
         let width = format!("{}u", self.width.bytes());
         ctx.emit_checked_call_without_page_flush("openvm_reveal", &[&src, &addr, &width]);
+        ctx.trace_mem_access(&addr, PUBLIC_VALUES_AS);
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -426,6 +426,9 @@ pub extern "C" fn host_print_str(ctx: *mut c_void, ptr: u64, len: u64) -> bool {
         }
         let slice =
             unsafe { std::slice::from_raw_parts(io.memory_ptr.add(range.start), range.len()) };
+        if std::str::from_utf8(slice).is_err() {
+            return false;
+        }
         let _ = std::io::stdout().write_all(slice);
         let _ = std::io::stdout().flush();
     }
@@ -464,7 +467,7 @@ fn hint_random_byte_len(num_words: u64) -> Result<usize, &'static str> {
 pub extern "C" fn host_hint_storew(ctx: *mut c_void, dest_addr: u64) -> bool {
     let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_>) };
     if io.hint_stream.remaining() < RV64_REGISTER_NUM_LIMBS || io.memory_ptr.is_null() {
-        return true;
+        return false;
     }
     let Some(range) = checked_mem_bounds_range(dest_addr, RV64_REGISTER_BYTES) else {
         return false;
@@ -483,7 +486,7 @@ pub extern "C" fn host_hint_buffer(ctx: *mut c_void, dest_addr: u64, num_words: 
     let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_>) };
     let nbytes = num_words * RV64_REGISTER_NUM_LIMBS;
     if io.hint_stream.remaining() < nbytes || io.memory_ptr.is_null() {
-        return true;
+        return false;
     }
     let Some(range) = checked_mem_bounds_range(dest_addr, num_bytes) else {
         return false;
@@ -642,7 +645,7 @@ mod tests {
         let mut ctx = TestEmitCtx::default();
         instr.emit_c(&mut ctx);
         assert_eq!(
-            ctx.lines[1],
+            ctx.lines[0],
             format!("if (unlikely(!openvm_reveal(r1, r2, {width}u))) {{")
         );
     }
@@ -698,11 +701,11 @@ mod tests {
 
         assert_eq!(
             ctx.lines[0],
-            format!("trace_mem_access(state, (r10 + 0x0000000cull), {PUBLIC_VALUES_AS}u);")
+            "if (unlikely(!openvm_reveal(r5, (r10 + 0x0000000cull), 4u))) {"
         );
         assert_eq!(
-            ctx.lines[1],
-            "if (unlikely(!openvm_reveal(r5, (r10 + 0x0000000cull), 4u))) {"
+            ctx.lines[3],
+            format!("trace_mem_access(state, (r10 + 0x0000000cull), {PUBLIC_VALUES_AS}u);")
         );
     }
 
@@ -832,6 +835,63 @@ mod tests {
         assert_eq!(&memory[17..], &[0; 7]);
         assert_eq!(io.hint_stream.remaining(), 0);
         assert!(io.input_stream.is_empty());
+    }
+
+    #[test]
+    fn host_hint_writes_reject_short_stream_without_mutation() {
+        let mut input_stream = VecDeque::new();
+        let mut hint_stream = HintStream::default();
+        hint_stream.set_hint(vec![1, 2, 3, 4, 5, 6, 7]);
+        let mut rng = StdRng::seed_from_u64(0);
+        let mut memory = vec![0xa5; 16];
+        let original_memory = memory.clone();
+        let mut public_values = Vec::new();
+        let mut deferrals = Vec::new();
+        let mut io = OpenVmIoState {
+            input_stream: &mut input_stream,
+            hint_stream: &mut hint_stream,
+            rng: &mut rng,
+            memory_ptr: memory.as_mut_ptr(),
+            public_values: &mut public_values,
+            deferral_memory: std::ptr::null_mut(),
+            deferral_memory_len_bytes: 0,
+            deferrals: &mut deferrals,
+        };
+        let ctx = &mut io as *mut OpenVmIoState<'_> as *mut c_void;
+
+        assert!(!host_hint_storew(ctx, 0));
+        assert!(!host_hint_buffer(ctx, 0, 1));
+        assert_eq!(io.hint_stream.remaining(), 7);
+        let mut hint = [0; 7];
+        io.hint_stream.copy_to_slice(&mut hint);
+        assert_eq!(hint, [1, 2, 3, 4, 5, 6, 7]);
+        assert_eq!(memory, original_memory);
+    }
+
+    #[test]
+    fn host_print_str_rejects_invalid_utf8() {
+        let mut input_stream = VecDeque::new();
+        let mut hint_stream = HintStream::default();
+        let mut rng = StdRng::seed_from_u64(0);
+        let mut memory = vec![0xff];
+        let mut public_values = Vec::new();
+        let mut deferrals = Vec::new();
+        let mut io = OpenVmIoState {
+            input_stream: &mut input_stream,
+            hint_stream: &mut hint_stream,
+            rng: &mut rng,
+            memory_ptr: memory.as_mut_ptr(),
+            public_values: &mut public_values,
+            deferral_memory: std::ptr::null_mut(),
+            deferral_memory_len_bytes: 0,
+            deferrals: &mut deferrals,
+        };
+
+        assert!(!host_print_str(
+            &mut io as *mut OpenVmIoState<'_> as *mut c_void,
+            0,
+            1,
+        ));
     }
 
     #[test_case(u64::from(u32::MAX) + 1; "nonzero_upper_bits")]

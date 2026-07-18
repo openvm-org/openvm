@@ -75,7 +75,9 @@ uint32_t rvr_ext_deferral_output(RvState* restrict state, uint64_t output_ptr,
   rd_mem_u64_range_traced(state, input_ptr, key_words, OUTPUT_KEY_WORDS);
 
   /* output_len is the u64 LE stored right after the commit. */
-  uint64_t output_len = key_words[COMMIT_WORDS];
+  /* The output AIR encodes the length in its low four bytes. Ignore the
+   * unconstrained upper bytes exactly as the reference executor does. */
+  uint32_t output_len = (uint32_t)key_words[COMMIT_WORDS];
 
   /* Look up the raw output into a heap buffer sized to output_len. The
    * output_commit is the leading DEFERRAL_COMMIT_NUM_BYTES of output_key. */
@@ -87,7 +89,7 @@ uint32_t rvr_ext_deferral_output(RvState* restrict state, uint64_t output_ptr,
 
   /* Write raw output to guest memory in DEFERRAL_DIGEST_SIZE-byte rows. Each
    * row is an independent batched write (the trace API is per-row). */
-  uint32_t num_data_rows = (uint32_t)(output_len / DEFERRAL_DIGEST_SIZE);
+  uint32_t num_data_rows = output_len / DEFERRAL_DIGEST_SIZE;
   uint64_t row_words[DIGEST_MEMORY_OPS];
   for (uint64_t row_idx = 0; row_idx < num_data_rows; row_idx++) {
     uint64_t row_byte_base = row_idx * DEFERRAL_DIGEST_SIZE;

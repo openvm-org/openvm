@@ -62,6 +62,14 @@ pub trait ExtEmitCtx {
         args: &[&str],
     ) -> Option<String>;
 
+    /// Emit a stateful call returning `bool` and trap when it reports failure.
+    fn emit_checked_call(&mut self, name: &str, args: &[&str]) {
+        let result = self.emit_call_expr("bool", name, args);
+        self.write_line(&format!("if (unlikely(!{result})) {{"));
+        self.emit_trap();
+        self.write_line("}");
+    }
+
     /// Emit a no-flush call returning `bool` and trap when it reports failure.
     fn emit_checked_call_without_page_flush(&mut self, name: &str, args: &[&str]) {
         self.write_line(&format!("if (unlikely(!{name}({}))) {{", args.join(", ")));
