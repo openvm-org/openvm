@@ -444,7 +444,10 @@ mod tests {
 
     #[test]
     fn rate_requires_execution_profile() {
-        let error = RunCmd::try_parse_from(["execute", "--rate", "2000"]).unwrap_err();
+        let error = match RunCmd::try_parse_from(["execute", "--rate", "2000"]) {
+            Ok(_) => panic!("--rate should require --execution-profile"),
+            Err(error) => error,
+        };
         assert_eq!(
             error.kind(),
             clap::error::ErrorKind::MissingRequiredArgument
