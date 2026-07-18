@@ -415,14 +415,29 @@ fn emit_folded_stacks(samples: &[StackSample]) -> String {
 }
 
 fn emit_raw_profile(samples: &[StackSample], native_base: u64) -> Result<String, String> {
+    emit_raw_profile_with_module_lookup(samples, native_base, native_library_base_for_address)
+}
+
+fn emit_raw_profile_with_module_lookup(
+    samples: &[StackSample],
+    native_base: u64,
+    module_base_for_address: impl Fn(u64) -> Option<u64>,
+) -> Result<String, String> {
     let samples = samples
         .iter()
         .map(|sample| {
+            let host_pc = (sample.host_rip != 0)
+                .then_some(sample.host_rip)
+                .filter(|&rip| module_base_for_address(rip) == Some(native_base))
+                .and_then(|rip| rip.checked_sub(native_base));
             // Exclude state.pc when a current native IP was captured: state.pc
             // is only updated at selected RVR control-flow boundaries and is
             // not the interrupted instruction. The remaining entries are
-            // frame-pointer-derived caller return addresses.
-            let first_guest_pc = usize::from(sample.host_rip != 0);
+            // frame-pointer-derived caller return addresses. A signal may land
+            // in host-linked extension code outside the generated library; in
+            // that case retain state.pc as the best guest call-site context
+            // instead of mis-normalizing an unrelated host address.
+            let first_guest_pc = usize::from(host_pc.is_some());
             let guest_pcs = sample.pcs[first_guest_pc..usize::from(sample.depth)]
                 .iter()
                 .rev()
@@ -431,7 +446,7 @@ fn emit_raw_profile(samples: &[StackSample], native_base: u64) -> Result<String,
             RawGuestProfileSample {
                 wall_time_ns: sample.wall_time_ns,
                 cpu_time_ns: sample.cpu_time_ns,
-                host_pc: sample.host_rip.checked_sub(native_base),
+                host_pc,
                 guest_pcs,
             }
         })
@@ -441,6 +456,17 @@ fn emit_raw_profile(samples: &[StackSample], native_base: u64) -> Result<String,
         samples,
     })
     .map_err(|error| format!("failed to serialize raw guest profile: {error}"))
+}
+
+fn native_library_base_for_address(address: u64) -> Option<u64> {
+    let mut info: libc::Dl_info = unsafe { std::mem::zeroed() };
+    // SAFETY: dladdr only inspects the supplied address and writes `info`.
+    if unsafe { libc::dladdr(address as usize as *const libc::c_void, &mut info) } == 0
+        || info.dli_fbase.is_null()
+    {
+        return None;
+    }
+    Some(info.dli_fbase as usize as u64)
 }
 
 #[cfg(test)]
@@ -570,8 +596,13 @@ mod tests {
         second.pcs[..2].copy_from_slice(&[0x400, 0x500]);
         second.depth = 2;
 
-        let raw: RawGuestProfile =
-            serde_json::from_str(&emit_raw_profile(&[first, second], 0x10_0000).unwrap()).unwrap();
+        let raw: RawGuestProfile = serde_json::from_str(
+            &emit_raw_profile_with_module_lookup(&[first, second], 0x10_0000, |address| {
+                (address == 0x10_1234).then_some(0x10_0000)
+            })
+            .unwrap(),
+        )
+        .unwrap();
         assert_eq!(raw.version, RAW_GUEST_PROFILE_VERSION);
         assert_eq!(raw.samples.len(), 2);
         assert_eq!(raw.samples[0].host_pc, Some(0x1234));
@@ -580,5 +611,24 @@ mod tests {
         assert_eq!(raw.samples[0].cpu_time_ns, 15_000);
         assert_eq!(raw.samples[1].host_pc, None);
         assert_eq!(raw.samples[1].guest_pcs, vec![0x500, 0x400]);
+    }
+
+    #[test]
+    fn retains_guest_call_site_when_signal_lands_outside_native_artifact() {
+        let mut sample = StackSample {
+            host_rip: 0x20_1234,
+            ..Default::default()
+        };
+        sample.pcs[..3].copy_from_slice(&[0x100, 0x200, 0x300]);
+        sample.depth = 3;
+
+        let raw: RawGuestProfile = serde_json::from_str(
+            &emit_raw_profile_with_module_lookup(&[sample], 0x10_0000, |_| Some(0x20_0000))
+                .unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(raw.samples[0].host_pc, None);
+        assert_eq!(raw.samples[0].guest_pcs, vec![0x300, 0x200, 0x100]);
     }
 }
