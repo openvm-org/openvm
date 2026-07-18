@@ -48,6 +48,8 @@ indicatif = "0.17"
 flate2 = "1"
 tar = "0.4"
 tempfile.workspace = true
+base64 = "0.22"
+fxprof-processed-profile = "0.8"
 
 [features]
 default = ["parallel", "jemalloc", "evm-verify", "metrics"]
@@ -55,7 +57,7 @@ evm-prove = ["openvm-sdk/evm-prove"]
 evm-verify = ["evm-prove", "openvm-sdk/evm-verify"]
 metrics = ["openvm-sdk/metrics"]
 tco = ["openvm-sdk/tco"]
-rvr = ["openvm-sdk/rvr"]
+rvr = ["openvm-sdk/rvr", "openvm-circuit/rvr"]
 unprotected = ["openvm-sdk/unprotected"]
 # for guest profiling:
 perf-metrics = ["openvm-sdk/perf-metrics", "metrics"]

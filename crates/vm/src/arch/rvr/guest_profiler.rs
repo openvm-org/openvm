@@ -3,7 +3,8 @@
 //! Set `OPENVM_RVR_GUEST_CALL_PROFILE` to a folded-stack output path to enable
 //! profiling for pure RVR execution. The optional
 //! `OPENVM_RVR_GUEST_CALL_PROFILE_HZ` variable controls the sampling rate and
-//! defaults to 1 kHz.
+//! defaults to 1 kHz. `OPENVM_RVR_GUEST_CALL_PROFILE_FORMAT=raw` preserves
+//! sample order for conversion to another profile format.
 
 use std::{
     collections::HashMap,
@@ -17,6 +18,12 @@ const MAX_STACK_DEPTH: usize = 128;
 const DEFAULT_BUFFER_CAPACITY: usize = 1 << 18;
 const DEFAULT_SAMPLE_HZ: u32 = 1_000;
 const GUEST_FP_REG: usize = 8;
+
+#[derive(Clone, Copy)]
+enum OutputFormat {
+    Folded,
+    Raw,
+}
 
 #[derive(Clone, Copy)]
 #[repr(C)]
@@ -136,6 +143,7 @@ extern "C" fn sigprof_handler(_signal: libc::c_int) {
 
 pub(super) struct GuestProfiler {
     output: PathBuf,
+    output_format: OutputFormat,
     buffer: Vec<StackSample>,
     ctx: Box<SignalContext>,
     old_action: libc::sigaction,
@@ -162,6 +170,21 @@ impl GuestProfiler {
                 "OPENVM_RVR_GUEST_CALL_PROFILE_HZ must be in 1..=1000000, got {sample_hz}"
             ));
         }
+        let output_format = match std::env::var("OPENVM_RVR_GUEST_CALL_PROFILE_FORMAT") {
+            Ok(value) if value == "folded" => OutputFormat::Folded,
+            Ok(value) if value == "raw" => OutputFormat::Raw,
+            Ok(value) => {
+                return Err(format!(
+                    "OPENVM_RVR_GUEST_CALL_PROFILE_FORMAT must be `folded` or `raw`, got {value:?}"
+                ));
+            }
+            Err(std::env::VarError::NotPresent) => OutputFormat::Folded,
+            Err(error) => {
+                return Err(format!(
+                    "invalid OPENVM_RVR_GUEST_CALL_PROFILE_FORMAT: {error}"
+                ));
+            }
+        };
         if state.memory.is_null() {
             return Err("cannot profile RVR execution with null guest memory".to_string());
         }
@@ -233,6 +256,7 @@ impl GuestProfiler {
 
         Ok(Some(Self {
             output: output.into(),
+            output_format,
             buffer,
             ctx,
             old_action,
@@ -244,8 +268,11 @@ impl GuestProfiler {
     pub(super) fn finish(mut self) -> Result<(), String> {
         self.stop_sampling();
         let samples = self.samples();
-        let folded = emit_folded_stacks(&samples);
-        std::fs::write(&self.output, folded).map_err(|error| {
+        let output = match self.output_format {
+            OutputFormat::Folded => emit_folded_stacks(&samples),
+            OutputFormat::Raw => emit_raw_stacks(&samples),
+        };
+        std::fs::write(&self.output, output).map_err(|error| {
             format!(
                 "failed to write guest profile {}: {error}",
                 self.output.display()
@@ -343,6 +370,25 @@ fn emit_folded_stacks(samples: &[StackSample]) -> String {
     output
 }
 
+fn emit_raw_stacks(samples: &[StackSample]) -> String {
+    let mut output = String::new();
+    for sample in samples {
+        use std::fmt::Write;
+        for (idx, pc) in sample.pcs[..usize::from(sample.depth)]
+            .iter()
+            .rev()
+            .enumerate()
+        {
+            if idx != 0 {
+                output.push(';');
+            }
+            let _ = write!(output, "{pc:#018x}");
+        }
+        output.push('\n');
+    }
+    output
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -413,6 +459,21 @@ mod tests {
         assert_eq!(
             folded,
             "0x0000000000000300;0x0000000000000200;0x0000000000000100 2\n"
+        );
+    }
+
+    #[test]
+    fn emits_raw_stacks_in_sample_order() {
+        let mut first = StackSample::default();
+        first.pcs[..3].copy_from_slice(&[0x100, 0x200, 0x300]);
+        first.depth = 3;
+        let mut second = StackSample::default();
+        second.pcs[..2].copy_from_slice(&[0x400, 0x500]);
+        second.depth = 2;
+        assert_eq!(
+            emit_raw_stacks(&[first, second]),
+            "0x0000000000000300;0x0000000000000200;0x0000000000000100\n\
+             0x0000000000000500;0x0000000000000400\n"
         );
     }
 }

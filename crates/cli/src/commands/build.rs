@@ -52,6 +52,14 @@ pub struct BuildArgs {
 
     #[clap(flatten)]
     pub openvm_config: OpenVmConfigArgs,
+
+    /// Additional rustc flags used by callers such as execution profiling.
+    #[arg(skip)]
+    pub rustc_flags: Vec<String>,
+
+    /// Suppress OpenVM's build status messages on stdout.
+    #[arg(skip)]
+    pub quiet_status: bool,
 }
 
 #[derive(Clone, Parser)]
@@ -246,7 +254,9 @@ impl Default for BuildCargoArgs {
 // Returns either a) the default transpilation output directory or b) the ELF output
 // directory if no_transpile is set to true.
 pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<PathBuf> {
-    println!("[openvm] Building the package...");
+    if !build_args.quiet_status {
+        println!("[openvm] Building the package...");
+    }
 
     // Find manifest_path, manifest_dir, and target_dir
     let (manifest_path, manifest_dir) =
@@ -254,10 +264,16 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Path
     let target_dir = get_target_dir(&cargo_args.manifest.target_dir, &manifest_path);
 
     // Set guest options using build arguments; use found manifest directory for consistency
+    let rustc_flags = var("RUSTFLAGS")
+        .unwrap_or_default()
+        .split_whitespace()
+        .map(ToOwned::to_owned)
+        .chain(build_args.rustc_flags.iter().cloned())
+        .collect::<Vec<_>>();
     let mut guest_options = GuestOptions::default()
         .with_features(cargo_args.features.clone())
         .with_profile(cargo_args.profile.clone())
-        .with_rustc_flags(var("RUSTFLAGS").unwrap_or_default().split_whitespace());
+        .with_rustc_flags(rustc_flags);
 
     guest_options.target_dir = Some(target_dir.clone());
     guest_options
@@ -331,12 +347,14 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Path
             return Err(eyre::eyre!("Failed to build guest: code = {code}"));
         }
     };
-    println!("[openvm] Successfully built the packages");
+    if !build_args.quiet_status {
+        println!("[openvm] Successfully built the packages");
+    }
 
     // If transpilation is skipped, return the raw target directory
     if build_args.no_transpile {
         if build_args.openvm_config.output_dir.is_some() {
-            println!("[openvm] WARNING: Output directory set but transpilation skipped");
+            eprintln!("[openvm] WARNING: Output directory set but transpilation skipped");
         }
         return Ok(elf_target_dir);
     }
@@ -392,7 +410,9 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Path
     // Transpile, storing in ${openvm_dir}/${profile} by default
     let target_output_dir = get_target_output_dir(&target_dir, &cargo_args.profile);
 
-    println!("[openvm] Transpiling the package...");
+    if !build_args.quiet_status {
+        println!("[openvm] Transpiling the package...");
+    }
     for (elf_path, target) in izip!(&elf_paths, &elf_targets) {
         let transpiler = app_config.app_vm_config.transpiler();
         let data = read(elf_path)
@@ -429,9 +449,11 @@ pub fn build(build_args: &BuildArgs, cargo_args: &BuildCargoArgs) -> Result<Path
     } else {
         &target_output_dir
     };
-    println!(
-        "[openvm] Successfully transpiled to {}",
-        final_output_dir.display()
-    );
+    if !build_args.quiet_status {
+        println!(
+            "[openvm] Successfully transpiled to {}",
+            final_output_dir.display()
+        );
+    }
     Ok(final_output_dir.clone())
 }
