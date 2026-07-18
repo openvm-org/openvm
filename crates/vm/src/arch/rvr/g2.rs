@@ -126,6 +126,68 @@ pub struct RvrG2CapacitiesV1 {
     pub kinds: [u32; 31],
 }
 
+impl RvrG2CapacitiesV1 {
+    /// Build the fail-closed producer capacities for one real metered segment.
+    ///
+    /// Standard producer lanes are mutually exclusive instruction families,
+    /// so their capacities must come from the same segment shape rather than
+    /// a componentwise maximum assembled from different segments. Residual
+    /// chronology is tighter still: a standard instruction contributes at
+    /// most two crossing-memory events, while HintStore and opaque extensions
+    /// retain their floor-defined per-row fail-closed bounds.
+    pub(crate) fn for_metered_segment(
+        g2: &RvrG2MetaV1,
+        trace_heights: &[u32],
+        num_insns: u64,
+    ) -> Result<Self, ExecutionError> {
+        let program_capacity = usize::try_from(num_insns)
+            .map_err(|_| g2_error("G2 instruction count exceeds usize"))?
+            .checked_add(16)
+            .ok_or_else(|| g2_error("G2 run capacity overflow"))?
+            .max(64);
+        let run =
+            u32::try_from(program_capacity).map_err(|_| g2_error("G2 run capacity exceeds u32"))?;
+
+        let mut capacities = Self {
+            run,
+            residual: 0,
+            opaque_events: if g2.opaque_bindings.is_empty() {
+                0
+            } else {
+                run
+            },
+            ..Default::default()
+        };
+        for binding in g2.air_bindings.iter() {
+            capacities.kinds[binding.kind as usize] =
+                trace_heights
+                    .get(binding.air_idx)
+                    .copied()
+                    .ok_or_else(|| g2_error("G2 AIR binding exceeds metered trace heights"))?;
+        }
+
+        let hintstore_rows = capacities.kinds[30] as usize;
+        let mut residual_capacity = program_capacity
+            .checked_mul(2)
+            .and_then(|capacity| capacity.checked_add(hintstore_rows.checked_mul(3)?))
+            .and_then(|capacity| capacity.checked_add(64))
+            .ok_or_else(|| g2_error("G2 residual capacity overflow"))?;
+        for binding in g2.opaque_bindings.iter() {
+            let height = trace_heights
+                .get(binding.air_idx)
+                .copied()
+                .ok_or_else(|| g2_error("G2 opaque AIR exceeds metered trace heights"))?;
+            residual_capacity = (height as usize)
+                .checked_mul(binding.max_residual_events_per_record as usize)
+                .and_then(|capacity| residual_capacity.checked_add(capacity))
+                .ok_or_else(|| g2_error("G2 opaque residual capacity overflow"))?;
+        }
+        capacities.residual = u32::try_from(residual_capacity)
+            .map_err(|_| g2_error("G2 residual capacity exceeds u32"))?;
+        Ok(capacities)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RvrG2AddIReferenceV1 {
     /// Established 44-byte `RvrAlu3Compact` consumer records.
@@ -1931,6 +1993,16 @@ impl RvrG2PreparedV1 {
             committed_lanes,
         };
         segment.validate(&fingerprint)?;
+        if std::env::var("OPENVM_RVR_G2_GPU_PROFILE").as_deref() == Ok("1") {
+            eprintln!(
+                "OPENVM_RVR_G2_CAPACITY segment={} reserved_bytes={} committed_bytes={} transfer_bytes={} residual_events={}",
+                segment_id,
+                self.byte_capacity,
+                segment.byte_len(),
+                segment.transfer_byte_len(),
+                residual_count,
+            );
+        }
         Ok(segment)
     }
 }
@@ -2136,9 +2208,82 @@ fn g2_error(message: impl Into<String>) -> ExecutionError {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use rvr_openvm_ext_ffi_common::G2_PRODUCER_ADDI_SLOT;
 
     use super::*;
+
+    fn test_meta(bindings: Vec<RvrG2AirBindingV1>) -> RvrG2MetaV1 {
+        RvrG2MetaV1 {
+            fingerprint: [0; 32],
+            producer_schema_fingerprint: [0; 32],
+            emission_mode: 0,
+            program_fingerprint: [0; 32],
+            block_fingerprint: [0; 32],
+            air_manifest_fingerprint: [0; 32],
+            blocks: Arc::new(Vec::new()),
+            air_bindings: Arc::new(bindings),
+            opaque_bindings: Arc::new(Vec::new()),
+        }
+    }
+
+    #[test]
+    fn metered_capacity_uses_one_real_joint_shape() {
+        let meta = test_meta(vec![
+            RvrG2AirBindingV1 {
+                kind: 0,
+                air_idx: 1,
+            },
+            RvrG2AirBindingV1 {
+                kind: 29,
+                air_idx: 2,
+            },
+            RvrG2AirBindingV1 {
+                kind: 30,
+                air_idx: 3,
+            },
+        ]);
+        let first =
+            RvrG2CapacitiesV1::for_metered_segment(&meta, &[0, 1_000, 0, 0], 1_000).unwrap();
+        let second =
+            RvrG2CapacitiesV1::for_metered_segment(&meta, &[0, 0, 1_000, 64], 1_000).unwrap();
+        assert_eq!(first.residual, 2 * 1_016 + 64);
+        assert_eq!(second.residual, 2 * 1_016 + 64 + 3 * 64);
+
+        let mut impossible = first.clone();
+        impossible.kinds[29] = second.kinds[29];
+        impossible.kinds[30] = second.kinds[30];
+        let joint_max = RvrG2PreparedV1::capacity_bytes(&first)
+            .unwrap()
+            .max(RvrG2PreparedV1::capacity_bytes(&second).unwrap());
+        assert!(RvrG2PreparedV1::capacity_bytes(&impossible).unwrap() > joint_max);
+    }
+
+    #[test]
+    fn metered_capacity_keeps_opaque_residual_bound_fail_closed() {
+        let mut meta = test_meta(Vec::new());
+        meta.opaque_bindings = Arc::new(vec![RvrG2OpaqueBindingV1 {
+            air_idx: 2,
+            max_residual_events_per_record: 32,
+            geometry: super::super::ArenaNativeGeometry {
+                adapter_size: 16,
+                adapter_align: 8,
+                core_size: 0,
+                core_align: 1,
+                core_off_matrix: 0,
+                layout: super::super::ArenaNativeLayout::Custom {
+                    residual_memory_chronology: true,
+                    layout_id: "openvm.rvr.test-capacity-opaque.v1",
+                },
+            },
+            air_identity_digest: [0; 32],
+            layout_digest: [0; 32],
+        }]);
+        let capacities = RvrG2CapacitiesV1::for_metered_segment(&meta, &[0, 0, 128], 100).unwrap();
+        assert_eq!(capacities.opaque_events, 116);
+        assert_eq!(capacities.residual, 2 * 116 + 64 + 32 * 128);
+    }
 
     #[test]
     fn metered_standard_cursor_mismatch_is_rejected_at_publish() {

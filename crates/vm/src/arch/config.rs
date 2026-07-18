@@ -189,6 +189,23 @@ pub trait VmBuilder<E: StarkEngine>: Sized {
         crate::arch::rvr::RvrPreflightEngine::Interpreter
     }
 
+    /// CUDA/G2: create an owned module/context prewarm task. GPU builders
+    /// override this so it can run concurrently with CPU metering without
+    /// borrowing the builder across threads.
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    fn rvr_cuda_device_prewarm_task(
+        &self,
+    ) -> Option<Box<dyn FnOnce() -> Result<(), String> + Send + 'static>> {
+        None
+    }
+
+    /// CUDA/G2: seal the default async allocation pool at the size reached by
+    /// the real-shape warm pass and report its resulting counters.
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    fn finish_rvr_cuda_device_prewarm(&self, _reserve_bytes: usize) -> Result<(), String> {
+        Ok(())
+    }
+
     /// Build the registry used by rvr preflight routing and record assembly.
     ///
     /// A composed builder adds its inner config's registrations first, then

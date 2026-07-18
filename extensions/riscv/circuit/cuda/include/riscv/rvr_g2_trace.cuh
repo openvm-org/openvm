@@ -664,6 +664,24 @@ template <> struct G2TraceView<Rv64StoreRecord> {
         uint32_t timestamp_max_bits,                                                      \
         cudaStream_t stream
 
+#ifdef OPENVM_RVR_CUDA_G2_ONLY
+#define OPENVM_RVR_G2_REFERENCE(...) return int(cudaErrorNotSupported);
+#else
+#define OPENVM_RVR_G2_REFERENCE(...) __VA_ARGS__
+#endif
+
+#define OPENVM_RVR_G2_PRELOAD_LOCALS()                                                   \
+    [[maybe_unused]] riscv::G2TraceSource source{};                                      \
+    [[maybe_unused]] riscv::RvrOperandEntry const *operand_table = nullptr;              \
+    [[maybe_unused]] uint32_t pc_base = 0;                                               \
+    [[maybe_unused]] size_t pointer_max_bits = 0;                                        \
+    [[maybe_unused]] uint32_t *range_checker = nullptr;                                  \
+    [[maybe_unused]] uint32_t range_checker_num_bins = 0;                                \
+    [[maybe_unused]] uint32_t *bitwise_lookup = nullptr;                                 \
+    [[maybe_unused]] uint32_t *range_tuple_checker = nullptr;                            \
+    [[maybe_unused]] uint2 range_tuple_checker_sizes{};                                  \
+    [[maybe_unused]] uint32_t timestamp_max_bits = 0
+
 #define DEFINE_RVR_G2_TRACEGEN_LAUNCHER(                                                  \
     name, cols, kernel, record, threads, ...                                              \
 )                                                                                        \
@@ -675,13 +693,27 @@ template <> struct G2TraceView<Rv64StoreRecord> {
         );                                                                                \
         return CHECK_KERNEL();                                                            \
     }                                                                                     \
+    extern "C" int name##_preload(Fp *trace, cudaStream_t stream) {                    \
+        OPENVM_RVR_G2_PRELOAD_LOCALS();                                                  \
+        cudaFuncAttributes attributes{};                                                  \
+        cudaError_t status = cudaFuncGetAttributes(                                      \
+            &attributes, kernel<riscv::G2TraceView<record>>                              \
+        );                                                                               \
+        if (status != cudaSuccess) return int(status);                                   \
+        kernel<<<1, 1, 0, stream>>>(                                                     \
+            trace, 0, riscv::G2TraceView<record>{source, operand_table}, __VA_ARGS__     \
+        );                                                                               \
+        return CHECK_KERNEL();                                                           \
+    }                                                                                     \
     extern "C" int name##_reference(RVR_G2_REFERENCE_PARAMETERS) {                       \
+        OPENVM_RVR_G2_REFERENCE(                                                          \
         assert(width == sizeof(cols<uint8_t>));                                           \
         auto [grid, block] = kernel_launch_params(height, threads);                       \
         kernel<<<grid, block, 0, stream>>>(                                               \
             trace, height, records.as_typed<record>(), __VA_ARGS__                        \
         );                                                                                \
         return CHECK_KERNEL();                                                            \
+        )                                                                                 \
     }
 
 #define DEFINE_RVR_G2_TRACEGEN_LAUNCHER_WITH_WIDTH(                                       \
@@ -696,13 +728,28 @@ template <> struct G2TraceView<Rv64StoreRecord> {
         );                                                                                \
         return CHECK_KERNEL();                                                            \
     }                                                                                     \
+    extern "C" int name##_preload(Fp *trace, cudaStream_t stream) {                    \
+        OPENVM_RVR_G2_PRELOAD_LOCALS();                                                  \
+        cudaFuncAttributes attributes{};                                                  \
+        cudaError_t status = cudaFuncGetAttributes(                                      \
+            &attributes, kernel<riscv::G2TraceView<record>>                              \
+        );                                                                               \
+        if (status != cudaSuccess) return int(status);                                   \
+        kernel<<<1, 1, 0, stream>>>(                                                     \
+            trace, 0, sizeof(cols<uint8_t>),                                             \
+            riscv::G2TraceView<record>{source, operand_table}, __VA_ARGS__               \
+        );                                                                               \
+        return CHECK_KERNEL();                                                           \
+    }                                                                                     \
     extern "C" int name##_reference(RVR_G2_REFERENCE_PARAMETERS) {                       \
+        OPENVM_RVR_G2_REFERENCE(                                                          \
         assert(width == sizeof(cols<uint8_t>));                                           \
         auto [grid, block] = kernel_launch_params(height, threads);                       \
         kernel<<<grid, block, 0, stream>>>(                                               \
             trace, height, width, records.as_typed<record>(), __VA_ARGS__                 \
         );                                                                                \
         return CHECK_KERNEL();                                                            \
+        )                                                                                 \
     }
 
 extern "C" int _add_sub_tracegen_g2(RVR_G2_TRACEGEN_PARAMETERS);
@@ -736,6 +783,41 @@ extern "C" int _rv64_store_halfword_tracegen_g2(RVR_G2_TRACEGEN_PARAMETERS);
 extern "C" int _rv64_store_word_tracegen_g2(RVR_G2_TRACEGEN_PARAMETERS);
 extern "C" int _rv64_store_doubleword_tracegen_g2(RVR_G2_TRACEGEN_PARAMETERS);
 extern "C" int _hintstore_tracegen_g2(RVR_G2_TRACEGEN_PARAMETERS);
+
+#define DECLARE_RVR_G2_PRELOAD(name)                                                      \
+    extern "C" int name##_preload(Fp *trace, cudaStream_t stream);
+DECLARE_RVR_G2_PRELOAD(_add_sub_tracegen_g2)
+DECLARE_RVR_G2_PRELOAD(_rv64_add_sub_w_tracegen_g2)
+DECLARE_RVR_G2_PRELOAD(_addi_tracegen_g2_common)
+DECLARE_RVR_G2_PRELOAD(_auipc_tracegen_g2)
+DECLARE_RVR_G2_PRELOAD(_beq_tracegen_g2)
+DECLARE_RVR_G2_PRELOAD(_bitwise_logic_tracegen_g2)
+DECLARE_RVR_G2_PRELOAD(_blt_tracegen_g2)
+DECLARE_RVR_G2_PRELOAD(_rv64_div_rem_tracegen_g2)
+DECLARE_RVR_G2_PRELOAD(_rv64_div_rem_w_tracegen_g2)
+DECLARE_RVR_G2_PRELOAD(_jal_lui_tracegen_g2)
+DECLARE_RVR_G2_PRELOAD(_jalr_tracegen_g2)
+DECLARE_RVR_G2_PRELOAD(_rv64_less_than_tracegen_g2)
+DECLARE_RVR_G2_PRELOAD(_rv64_load_byte_tracegen_g2)
+DECLARE_RVR_G2_PRELOAD(_rv64_load_halfword_tracegen_g2)
+DECLARE_RVR_G2_PRELOAD(_rv64_load_word_tracegen_g2)
+DECLARE_RVR_G2_PRELOAD(_rv64_load_doubleword_tracegen_g2)
+DECLARE_RVR_G2_PRELOAD(_rv64_load_sign_extend_byte_tracegen_g2)
+DECLARE_RVR_G2_PRELOAD(_rv64_load_sign_extend_halfword_tracegen_g2)
+DECLARE_RVR_G2_PRELOAD(_rv64_load_sign_extend_word_tracegen_g2)
+DECLARE_RVR_G2_PRELOAD(_mul_tracegen_g2)
+DECLARE_RVR_G2_PRELOAD(_mulh_tracegen_g2)
+DECLARE_RVR_G2_PRELOAD(_rv64_mul_w_tracegen_g2)
+DECLARE_RVR_G2_PRELOAD(_rv64_shift_logical_tracegen_g2)
+DECLARE_RVR_G2_PRELOAD(_rv64_shift_right_arithmetic_tracegen_g2)
+DECLARE_RVR_G2_PRELOAD(_rv64_shift_w_logical_tracegen_g2)
+DECLARE_RVR_G2_PRELOAD(_rv64_shift_w_right_arithmetic_tracegen_g2)
+DECLARE_RVR_G2_PRELOAD(_rv64_store_byte_tracegen_g2)
+DECLARE_RVR_G2_PRELOAD(_rv64_store_halfword_tracegen_g2)
+DECLARE_RVR_G2_PRELOAD(_rv64_store_word_tracegen_g2)
+DECLARE_RVR_G2_PRELOAD(_rv64_store_doubleword_tracegen_g2)
+DECLARE_RVR_G2_PRELOAD(_hintstore_tracegen_g2)
+#undef DECLARE_RVR_G2_PRELOAD
 
 extern "C" int _add_sub_tracegen_g2_reference(RVR_G2_REFERENCE_PARAMETERS);
 extern "C" int _rv64_add_sub_w_tracegen_g2_reference(RVR_G2_REFERENCE_PARAMETERS);

@@ -11,6 +11,7 @@
 #include <cub/device/device_scan.cuh>
 #include <cub/device/device_select.cuh>
 #include <cuda_runtime.h>
+#include <chrono>
 #include <cstdio>
 #include <stdint.h>
 
@@ -2950,6 +2951,138 @@ extern "C" int _rvr_g2_tracegen_reference(
     default: return int(cudaErrorInvalidValue);
     }
 #undef G2_REFERENCE_DISPATCH
+}
+
+extern "C" int _rvr_g2_device_pool_configure(
+    int begin, size_t reserve_bytes, uint64_t *stats
+) {
+    if (stats == nullptr) return int(cudaErrorInvalidValue);
+    auto started = std::chrono::steady_clock::now();
+    cudaError_t status = cudaFree(nullptr);
+    if (status != cudaSuccess) return int(status);
+    auto context_ready = std::chrono::steady_clock::now();
+    if (begin) {
+        cudaFuncAttributes attributes{};
+        status = cudaFuncGetAttributes(&attributes, g2_run_lengths);
+        if (status != cudaSuccess) return int(status);
+        Fp *preload_trace = nullptr;
+        status = cudaMallocAsync(&preload_trace, sizeof(Fp), nullptr);
+        if (status != cudaSuccess) return int(status);
+        int (*trace_preloads[])(Fp *, cudaStream_t) = {
+            _add_sub_tracegen_g2_preload,
+            _rv64_add_sub_w_tracegen_g2_preload,
+            _addi_tracegen_g2_common_preload,
+            _auipc_tracegen_g2_preload,
+            _beq_tracegen_g2_preload,
+            _bitwise_logic_tracegen_g2_preload,
+            _blt_tracegen_g2_preload,
+            _rv64_div_rem_tracegen_g2_preload,
+            _rv64_div_rem_w_tracegen_g2_preload,
+            _jal_lui_tracegen_g2_preload,
+            _jalr_tracegen_g2_preload,
+            _rv64_less_than_tracegen_g2_preload,
+            _rv64_load_byte_tracegen_g2_preload,
+            _rv64_load_halfword_tracegen_g2_preload,
+            _rv64_load_word_tracegen_g2_preload,
+            _rv64_load_doubleword_tracegen_g2_preload,
+            _rv64_load_sign_extend_byte_tracegen_g2_preload,
+            _rv64_load_sign_extend_halfword_tracegen_g2_preload,
+            _rv64_load_sign_extend_word_tracegen_g2_preload,
+            _mul_tracegen_g2_preload,
+            _mulh_tracegen_g2_preload,
+            _rv64_mul_w_tracegen_g2_preload,
+            _rv64_shift_logical_tracegen_g2_preload,
+            _rv64_shift_right_arithmetic_tracegen_g2_preload,
+            _rv64_shift_w_logical_tracegen_g2_preload,
+            _rv64_shift_w_right_arithmetic_tracegen_g2_preload,
+            _rv64_store_byte_tracegen_g2_preload,
+            _rv64_store_halfword_tracegen_g2_preload,
+            _rv64_store_word_tracegen_g2_preload,
+            _rv64_store_doubleword_tracegen_g2_preload,
+            _hintstore_tracegen_g2_preload,
+        };
+        for (auto preload : trace_preloads) {
+            status = cudaError_t(preload(preload_trace, nullptr));
+            if (status != cudaSuccess) return int(status);
+        }
+        status = cudaStreamSynchronize(nullptr);
+        if (status != cudaSuccess) return int(status);
+        status = cudaFreeAsync(preload_trace, nullptr);
+        if (status != cudaSuccess) return int(status);
+        status = cudaStreamSynchronize(nullptr);
+        if (status != cudaSuccess) return int(status);
+    }
+    auto module_ready = std::chrono::steady_clock::now();
+    int device = 0;
+    status = cudaGetDevice(&device);
+    if (status != cudaSuccess) return int(status);
+    cudaMemPool_t pool = nullptr;
+    status = cudaDeviceGetDefaultMemPool(&pool, device);
+    if (status != cudaSuccess) return int(status);
+    if (!begin && reserve_bytes != 0) {
+        void *reservation = nullptr;
+        status = cudaMallocAsync(&reservation, reserve_bytes, nullptr);
+        if (status != cudaSuccess) return int(status);
+        status = cudaFreeAsync(reservation, nullptr);
+        if (status != cudaSuccess) return int(status);
+        status = cudaStreamSynchronize(nullptr);
+        if (status != cudaSuccess) return int(status);
+    }
+    uint64_t release_threshold = UINT64_MAX;
+    if (!begin) {
+        status = cudaMemPoolGetAttribute(
+            pool, cudaMemPoolAttrReservedMemCurrent, &release_threshold
+        );
+        if (status != cudaSuccess) return int(status);
+    }
+    status = cudaMemPoolSetAttribute(
+        pool, cudaMemPoolAttrReleaseThreshold, &release_threshold
+    );
+    if (status != cudaSuccess) return int(status);
+    cudaMemPoolAttr attributes_to_read[] = {
+        cudaMemPoolAttrReservedMemCurrent,
+        cudaMemPoolAttrReservedMemHigh,
+        cudaMemPoolAttrUsedMemCurrent,
+        cudaMemPoolAttrUsedMemHigh,
+        cudaMemPoolAttrReleaseThreshold,
+    };
+    for (size_t i = 0; i < sizeof(attributes_to_read) / sizeof(attributes_to_read[0]); ++i) {
+        status = cudaMemPoolGetAttribute(pool, attributes_to_read[i], &stats[i]);
+        if (status != cudaSuccess) return int(status);
+    }
+    auto configured = std::chrono::steady_clock::now();
+    stats[5] = std::chrono::duration_cast<std::chrono::microseconds>(
+        context_ready - started
+    ).count();
+    stats[6] = std::chrono::duration_cast<std::chrono::microseconds>(
+        module_ready - context_ready
+    ).count();
+    stats[7] = std::chrono::duration_cast<std::chrono::microseconds>(
+        configured - module_ready
+    ).count();
+    return int(cudaSuccess);
+}
+
+extern "C" int _rvr_g2_device_pool_stats(uint64_t *stats) {
+    if (stats == nullptr) return int(cudaErrorInvalidValue);
+    int device = 0;
+    cudaError_t status = cudaGetDevice(&device);
+    if (status != cudaSuccess) return int(status);
+    cudaMemPool_t pool = nullptr;
+    status = cudaDeviceGetDefaultMemPool(&pool, device);
+    if (status != cudaSuccess) return int(status);
+    cudaMemPoolAttr attributes_to_read[] = {
+        cudaMemPoolAttrReservedMemCurrent,
+        cudaMemPoolAttrReservedMemHigh,
+        cudaMemPoolAttrUsedMemCurrent,
+        cudaMemPoolAttrUsedMemHigh,
+        cudaMemPoolAttrReleaseThreshold,
+    };
+    for (size_t i = 0; i < sizeof(attributes_to_read) / sizeof(attributes_to_read[0]); ++i) {
+        status = cudaMemPoolGetAttribute(pool, attributes_to_read[i], &stats[i]);
+        if (status != cudaSuccess) return int(status);
+    }
+    return int(cudaSuccess);
 }
 
 extern "C" int _rvr_g2_predecode(

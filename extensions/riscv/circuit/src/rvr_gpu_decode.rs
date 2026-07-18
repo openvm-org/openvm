@@ -640,6 +640,67 @@ const _: () = {
     assert!(core::mem::offset_of!(DeltaAirOutputDesc, kind) == 20);
 };
 
+/// Initialize the primary context, preload the G2 decoder and every live G2
+/// trace kernel, and retain async-pool pages while real metered shapes are
+/// warmed. This is run on an owned worker concurrently with CPU metering.
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+pub fn begin_g2_device_prewarm() -> Result<(), String> {
+    let started = std::time::Instant::now();
+    let stats = unsafe { crate::cuda_abi::rvr_g2_cuda::configure_device_pool(true, 0) }
+        .map_err(|error| format!("CUDA G2 prewarm initialization failed: {error:?}"))?;
+    eprintln!(
+        "OPENVM_RVR_CUDA_DEVICE_PREWARM phase=begin trace_kernels=31 elapsed_ms={} context_us={} module_launch_us={} pool_us={} reserved_current={} reserved_high={} used_current={} used_high={} release_threshold={}",
+        started.elapsed().as_millis(),
+        stats[5],
+        stats[6],
+        stats[7],
+        stats[0],
+        stats[1],
+        stats[2],
+        stats[3],
+        stats[4],
+    );
+    Ok(())
+}
+
+/// Capture the caller's current CUDA device before the task moves to its
+/// worker. CUDA device selection is thread-local, so a fresh worker would
+/// otherwise silently warm device zero in a multi-GPU process.
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+pub fn g2_device_prewarm_task() -> Box<dyn FnOnce() -> Result<(), String> + Send + 'static> {
+    let device = openvm_cuda_common::common::get_device()
+        .map_err(|error| format!("CUDA G2 prewarm device query failed: {error:?}"));
+    Box::new(move || {
+        let device = device?;
+        openvm_cuda_common::common::set_device_by_id(device)
+            .map_err(|error| format!("CUDA G2 prewarm device selection failed: {error:?}"))?;
+        begin_g2_device_prewarm()
+    })
+}
+
+/// Keep the pool's warmed real-shape reservation resident at synchronization
+/// points, rather than letting CUDA's default zero threshold discard it and
+/// reintroduce a first-growth spike in a later measured segment.
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+pub fn finish_g2_device_prewarm(reserve_bytes: usize) -> Result<(), String> {
+    let stats =
+        unsafe { crate::cuda_abi::rvr_g2_cuda::configure_device_pool(false, reserve_bytes) }
+            .map_err(|error| format!("CUDA G2 prewarm pool finalization failed: {error:?}"))?;
+    eprintln!(
+        "OPENVM_RVR_CUDA_DEVICE_PREWARM phase=finish requested_reserve={} context_us={} module_launch_us={} pool_us={} reserved_current={} reserved_high={} used_current={} used_high={} release_threshold={}",
+        reserve_bytes,
+        stats[5],
+        stats[6],
+        stats[7],
+        stats[0],
+        stats[1],
+        stats[2],
+        stats[3],
+        stats[4],
+    );
+    Ok(())
+}
+
 /// Shared producer/consumer state. The builder holds one `Arc` per VM and
 /// clones it into every migrated GPU chip at construction.
 #[derive(Default)]
@@ -1813,6 +1874,8 @@ impl RvrGpuDecodeState {
         ));
         let d_error = Arc::new(DeviceBuffer::<u32>::with_capacity_on(1, device_ctx));
         d_error.fill_zero_on(device_ctx).expect("G2 error clear");
+        let pool_before = (std::env::var("OPENVM_RVR_G2_GPU_PROFILE").as_deref() == Ok("1"))
+            .then(|| unsafe { crate::cuda_abi::rvr_g2_cuda::device_pool_stats() }.unwrap());
         let g2_predecode_timer = CudaStageTimer::start(device_ctx);
         unsafe {
             crate::cuda_abi::rvr_g2_cuda::predecode(
@@ -1850,6 +1913,20 @@ impl RvrGpuDecodeState {
         }
         if let Some(timer) = g2_predecode_timer {
             timer.finish("g2_predecode", segment_id, host.total_record_count);
+        }
+        if let Some(before) = pool_before {
+            let after = unsafe { crate::cuda_abi::rvr_g2_cuda::device_pool_stats() }.unwrap();
+            eprintln!(
+                "OPENVM_RVR_G2_DEVICE_POOL segment={} reserved_before={} reserved_after={} reserved_high={} used_before={} used_after={} used_high={} release_threshold={}",
+                segment_id,
+                before[0],
+                after[0],
+                after[1],
+                before[2],
+                after[2],
+                after[3],
+                after[4],
+            );
         }
         let error = d_error.to_host_on(device_ctx).expect("G2 error D2H")[0];
         assert_eq!(error, 0, "CUDA G2 wire validation error {error}");
