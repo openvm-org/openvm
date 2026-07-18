@@ -44,7 +44,8 @@ pub struct RawGuestProfileSample {
     pub cpu_time_ns: u64,
     /// Exact native leaf captured from the signal ucontext.
     pub native_leaf: Option<RawNativeFrame>,
-    /// Exact guest instruction stored immediately before entering host code.
+    /// Guest PC snapshot. It is exact at profiled host-call boundaries; the
+    /// converter discards it when the native leaf is generated guest code.
     pub guest_callsite_pc: Option<u64>,
     /// Guest caller return addresses in root-to-leaf order.
     pub guest_return_pcs: Vec<u64>,

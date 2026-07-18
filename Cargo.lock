@@ -5011,6 +5011,7 @@ dependencies = [
  "object",
  "openvm-circuit",
  "reqwest",
+ "samply-debugid",
  "serde_json",
  "tempfile",
 ]
@@ -7561,6 +7562,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502"
 dependencies = [
  "winapi-util",
+]
+
+[[package]]
+name = "samply-debugid"
+version = "0.1.0"
+source = "git+https://github.com/mstange/samply.git?rev=c11e5a4cfc010095e7688f3e798b720ef8a9d657#c11e5a4cfc010095e7688f3e798b720ef8a9d657"
+dependencies = [
+ "debugid",
+ "uuid",
 ]
 
 [[package]]

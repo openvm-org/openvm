@@ -721,9 +721,6 @@ fn emit_raw_profile(
             let resolved_module = (sample.host_rip != 0)
                 .then(|| native_module_for_address(sample.host_rip))
                 .flatten();
-            let is_generated = resolved_module
-                .as_ref()
-                .is_some_and(|module| module.base == generated_module.base);
             let native_leaf = (sample.host_rip != 0).then(|| {
                 if let Some(module) = resolved_module {
                     let key = (module.base, module.path.clone());
@@ -747,8 +744,12 @@ fn emit_raw_profile(
                     }
                 }
             });
+            // Exact at profiled host-call boundaries, otherwise potentially
+            // stale. The converter uses the resolved native symbol/range to
+            // include this only for host-helper leaves, including helpers
+            // linked into the generated shared object.
             let guest_callsite_pc =
-                (!is_generated && sample.depth != 0).then_some(u64::from(sample.pcs[0]));
+                (native_leaf.is_some() && sample.depth != 0).then_some(u64::from(sample.pcs[0]));
             let guest_return_pcs = sample.pcs[1..usize::from(sample.depth)]
                 .iter()
                 .rev()
