@@ -20,6 +20,7 @@ fn default_build_test_args(example: &str) -> BuildArgs {
             ),
             ..Default::default()
         },
+        ..Default::default()
     }
 }
 
