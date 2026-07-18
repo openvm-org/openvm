@@ -420,26 +420,26 @@ impl RunCmd {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use clap::{error::ErrorKind, CommandFactory, Parser};
+
+    use super::RunCmd;
 
     #[test]
-    fn execution_profile_accepts_an_optional_output() {
-        let without_output = RunCmd::try_parse_from(["execute", "--execution-profile"]).unwrap();
-        assert_eq!(without_output.run_args.execution_profile, Some(None));
-        assert_eq!(without_output.run_args.rate, None);
+    fn execution_profile_help_has_only_the_compact_interface() {
+        let help = RunCmd::command().render_long_help().to_string();
+        let profiling_help = help
+            .split_once("Execution Profiling:")
+            .expect("execution profiling help section")
+            .1
+            .split_once("Package Selection:")
+            .expect("package selection follows execution profiling")
+            .0;
 
-        let with_output = RunCmd::try_parse_from([
-            "execute",
-            "--execution-profile=profiling.json.gz",
-            "--rate",
-            "2000",
-        ])
-        .unwrap();
-        assert_eq!(
-            with_output.run_args.execution_profile,
-            Some(Some(PathBuf::from("profiling.json.gz")))
-        );
-        assert_eq!(with_output.run_args.rate, Some(2000));
+        assert!(profiling_help.contains("--execution-profile[=<PATH>]"));
+        assert!(profiling_help.contains("-r, --rate <HZ>"));
+        assert!(!help.contains("--profile-execution"));
+        assert!(!help.contains("--profile-output"));
+        assert!(!help.contains("--profile-hz"));
     }
 
     #[test]
@@ -448,9 +448,7 @@ mod tests {
             Ok(_) => panic!("--rate should require --execution-profile"),
             Err(error) => error,
         };
-        assert_eq!(
-            error.kind(),
-            clap::error::ErrorKind::MissingRequiredArgument
-        );
+        assert_eq!(error.kind(), ErrorKind::MissingRequiredArgument);
+        assert!(error.to_string().contains("--execution-profile"));
     }
 }
