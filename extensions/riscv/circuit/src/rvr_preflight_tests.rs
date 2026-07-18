@@ -2190,6 +2190,18 @@ fn rvr_gpu_two_block_delta_residual_proves_and_verifies() {
     assert_eq!(segments, 1);
 }
 
+#[cfg(feature = "cuda")]
+#[test]
+fn rvr_gpu_two_block_g2_crossings_prove_and_verify() {
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "g2");
+    let segments = prove_gpu_rvr_preflight_and_verify_with_streams(
+        two_block_main_memory_exe(),
+        Rv64ImConfig::default(),
+        Streams::default(),
+    );
+    assert_eq!(segments, 1);
+}
+
 #[test]
 fn rvr_gpu_operand_table_rebinds_same_shape_different_exe() {
     let (vm, _) = VirtualMachine::new_with_keygen(
@@ -4295,6 +4307,20 @@ fn rvr_gpu_log_native_continuation_boundary_memory_matches_cpu() {
         &trace_heights,
         None,
     );
+}
+
+#[cfg(feature = "cuda")]
+#[test]
+fn rvr_gpu_g2_continuation_dirty_pages_prove_and_verify() {
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "g2");
+    let mut config = Rv64ImConfig::default();
+    config.rv64i.system.segmentation_max_memory = 1;
+    let segments = prove_gpu_rvr_preflight_and_verify_with_streams(
+        continuation_boundary_memory_exe(),
+        config,
+        Streams::default(),
+    );
+    assert!(segments > 1, "dirty-page fixture must cross a continuation");
 }
 
 #[cfg(feature = "cuda")]
