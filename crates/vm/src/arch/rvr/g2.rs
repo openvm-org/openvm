@@ -2241,6 +2241,7 @@ mod tests {
             block_fingerprint: [0; 32],
             air_manifest_fingerprint: [0; 32],
             blocks: Arc::new(Vec::new()),
+            block_host_counts: Arc::new(Vec::new()),
             air_bindings: Arc::new(bindings),
             opaque_bindings: Arc::new(Vec::new()),
         }
@@ -2292,6 +2293,7 @@ mod tests {
                 core_off_matrix: 0,
                 layout: super::super::ArenaNativeLayout::Custom {
                     residual_memory_chronology: true,
+                    max_residual_events_per_record: 32,
                     layout_id: "openvm.rvr.test-capacity-opaque.v1",
                 },
             },
@@ -2386,10 +2388,16 @@ mod tests {
                 .write(3);
         }
         prepared.lanes[G2_PRODUCER_ADDI_SLOT].len = 2;
+        prepared.lanes[G2_PRODUCER_ADDI_SLOT].expected_len = 2;
         prepared.lanes[G2_PRODUCER_RUN_SLOT].len = 1;
+        prepared.lanes[G2_PRODUCER_RUN_SLOT].expected_len = 1;
         prepared.producer.instruction_count = 2;
+        let mut expected_kind_counts = [0u32; 31];
+        expected_kind_counts[29] = 2;
         let fingerprint = [0x5a; 32];
-        let segment = prepared.finalize(9, 2, None, fingerprint, &[]).unwrap();
+        let segment = prepared
+            .finalize(9, 2, Some(&expected_kind_counts), fingerprint, &[])
+            .unwrap();
         let descs = segment.validate(&fingerprint).unwrap();
         assert_eq!(segment.header_acquire().unwrap().segment_id, 9);
         assert_eq!(
@@ -2497,16 +2505,25 @@ mod tests {
         capacities.kinds[29] = 1_000;
         let mut prepared = RvrG2PreparedV1::new(&capacities).unwrap();
         prepared.lanes[G2_PRODUCER_RUN_SLOT].len = 1;
+        prepared.lanes[G2_PRODUCER_RUN_SLOT].expected_len = 1;
         prepared.lanes[G2_PRODUCER_RESIDUAL_CTRL_SLOT].len = 3;
         prepared.lanes[G2_PRODUCER_RESIDUAL_TAG_SLOT].len = 3;
         prepared.lanes[G2_PRODUCER_RESIDUAL_VALUE_SLOT].len = 3;
         prepared.lanes[G2_PRODUCER_ADDI_SLOT].len = 2;
+        prepared.lanes[G2_PRODUCER_ADDI_SLOT].expected_len = 2;
         let store_slot = g2_load_store_producer_slot(26, false).unwrap();
         prepared.lanes[store_slot].len = 1;
+        prepared.lanes[store_slot].expected_len = 1;
         prepared.lanes[store_slot + 1].len = 1;
+        prepared.lanes[store_slot + 1].expected_len = 1;
         prepared.producer.instruction_count = 4;
+        let mut expected_kind_counts = [0u32; 31];
+        expected_kind_counts[26] = 1;
+        expected_kind_counts[29] = 2;
         let fingerprint = [4; 32];
-        let segment = prepared.finalize(0, 4, None, fingerprint, &[]).unwrap();
+        let segment = prepared
+            .finalize(0, 4, Some(&expected_kind_counts), fingerprint, &[])
+            .unwrap();
         let descs = segment.validate(&fingerprint).unwrap();
 
         let mut expected_len = align_up(
