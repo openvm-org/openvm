@@ -786,9 +786,10 @@ impl CProject {
                     if load_store { 3 } else { 1 },
                     if load_store { 1 } else { 0 },
                     match kind {
-                        13 | 29 => 1,
-                        1..=7 => u8::MAX,
-                        _ => 2,
+                        0..=7 | 15..=19 | 29 => 1,
+                        8 | 9 | 20..=28 => 2,
+                        10..=14 => 0,
+                        _ => u8::MAX,
                     },
                 ));
             }
@@ -833,18 +834,18 @@ impl CProject {
                uint32_t emission_mode;\n\
                uint8_t air_kinds[31];\n\
                uint32_t air_indices[31];\n\
-               OpenVmRvrG2DsoLaneManifestV1 lanes[60];\n\
+               OpenVmRvrG2DsoLaneManifestV1 lanes[42];\n\
              }} OpenVmRvrG2DsoManifestV2;\n\n\
              _Static_assert(sizeof(OpenVmRvrG2DsoLaneManifestV1) == 16, \"G2 DSO lane manifest size drift\");\n\
-             _Static_assert(sizeof(OpenVmRvrG2DsoManifestV2) == 1316, \"G2 DSO manifest size drift\");\n\n\
+             _Static_assert(sizeof(OpenVmRvrG2DsoManifestV2) == 1028, \"G2 DSO manifest size drift\");\n\n\
              __attribute__((visibility(\"default\")))\n\
              const OpenVmRvrG2DsoManifestV2 openvm_rvr_g2_manifest_v2 = {{\n\
                .magic = {{'O','V','M','G','2','D','2','\\0'}},\n\
                .version = 2,\n\
-               .manifest_bytes = 1316,\n\
+               .manifest_bytes = 1028,\n\
                .header_size = 64,\n\
                .lane_desc_size = 32,\n\
-               .lane_count = 60,\n\
+               .lane_count = 42,\n\
                .wire_flags = 14,\n\
                .fingerprint = {{{fingerprint}}},\n\
                .producer_schema_fingerprint = {{{producer_schema_fingerprint}}},\n\

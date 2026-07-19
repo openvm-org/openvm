@@ -433,7 +433,7 @@ struct OpenVmRvrG2DsoLaneManifestV1 {
 
 const _: () = {
     assert!(std::mem::size_of::<OpenVmRvrG2DsoLaneManifestV1>() == 16);
-    assert!(std::mem::size_of::<OpenVmRvrG2DsoManifestV2>() == 1316);
+    assert!(std::mem::size_of::<OpenVmRvrG2DsoManifestV2>() == 1028);
 };
 
 /// Error during compilation.
@@ -1288,7 +1288,10 @@ fn build_g2_meta_v1<F: PrimeField32>(
                     "G2 block instruction exceeds the operand table",
                 ))?;
             match kind_by_air[entry.air_idx as usize] {
+                10 => host_counts.kind10 += 1,
+                11 => host_counts.kind11 += 1,
                 12 => host_counts.kind12 += 1,
+                13 => host_counts.kind13 += 1,
                 14 => host_counts.kind14 += 1,
                 30 => host_counts.kind30 += 1,
                 _ => {}
@@ -1402,7 +1405,7 @@ fn build_g2_meta_v1<F: PrimeField32>(
     let air_manifest_fingerprint = g2_air_manifest_fingerprint(&air_manifest, &opaque_bindings)?;
 
     let mut fingerprint = Sha256::new();
-    fingerprint.update(b"openvm-rvr-g2-private-wire-v3-two-block\0");
+    fingerprint.update(b"openvm-rvr-g2-private-wire-v4-current-replay\0");
     fingerprint.update(1u16.to_le_bytes());
     fingerprint.update(b"header:magic8,version2,header_bytes2,lane_count2,flags2,segment_id4,instruction_count4,run_count4,residual_count4,fingerprint32;");
     fingerprint.update(
@@ -1474,7 +1477,7 @@ fn g2_producer_schema_fingerprint(
     emission_mode: G2EmissionMode,
 ) -> [u8; 32] {
     let mut producer_schema = Sha256::new();
-    producer_schema.update(b"openvm-rvr-g2-block-span-producer-v4\0");
+    producer_schema.update(b"openvm-rvr-g2-block-span-producer-v4-current-replay\0");
     producer_schema.update(wire_fingerprint);
     producer_schema.update([emission_mode as u8]);
     producer_schema.update(
@@ -1485,10 +1488,9 @@ fn g2_producer_schema_fingerprint(
 
 fn g2_kind_arity(kind: u8) -> u8 {
     match kind {
-        12 | 14 => 0,
-        13 | 29 => 1,
-        1..=7 => u8::MAX,
-        0..=28 => 2,
+        0..=7 | 15..=19 | 29 => 1,
+        8 | 9 | 20..=28 => 2,
+        10..=14 => 0,
         _ => u8::MAX,
     }
 }
@@ -2472,11 +2474,9 @@ fn compile_impl<F: PrimeField32>(
                                 (binding.air_idx == entry.air_idx as usize).then_some(binding.kind)
                             });
                             match kind {
-                                Some(12 | 14) | None => 0,
-                                Some(13 | 29) => 1,
-                                Some(1..=7) if entry.flags & 1 != 0 => 1,
-                                Some(0..=28) => 2,
-                                Some(_) => 0,
+                                Some(0..=7 | 15..=19 | 29) => 1,
+                                Some(8 | 9 | 20..=28) => 2,
+                                Some(_) | None => 0,
                             }
                         })
                         .collect();

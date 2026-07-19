@@ -260,21 +260,20 @@ static __device__ __forceinline__ bool g2_trace_alu3(
 
     uint64_t b = 0, c = 0;
     if (entry.access_pattern == 8) {
-        if (source.kind != 29 ||
-            !g2_trace_lane_value(source, false, row.prepared.v0_index, b) ||
-            !g2_trace_event(source, row, 1, write))
+        if (source.kind != 29 || !g2_trace_event(source, row, 1, write))
             return false;
+        b = first.value;
         c = uint64_t(int64_t(int32_t(entry.c << 20) >> 20));
     } else if (entry.access_pattern == 0 || entry.access_pattern == 1) {
-        if (!g2_trace_lane_value(source, false, row.prepared.v0_index, b) ||
-            !g2_trace_event(source, row, 2, write))
+        if (!g2_trace_event(source, row, 2, write))
             return false;
+        b = first.value;
         if (entry.flags & RVR_OPERAND_FLAG_RS2_IMM) {
             c = g2_trace_standard_immediate(entry);
         } else {
-            if (!g2_trace_lane_value(source, true, row.prepared.v1_index, c) ||
-                !g2_trace_event(source, row, 1, second))
+            if (!g2_trace_event(source, row, 1, second))
                 return false;
+            c = second.value;
             record.reads_prev_timestamp[1] = second.previous_timestamp;
         }
     } else if (entry.access_pattern == 2 || entry.access_pattern == 3) {
@@ -312,12 +311,12 @@ static __device__ __forceinline__ bool g2_trace_branch2(
     G2TimelineEvent first, second;
     uint64_t b, c;
     if (!g2_trace_row(source, operand_table, row_index, row) || row.entry.access_pattern != 4 ||
-        !g2_trace_lane_value(source, false, row.prepared.v0_index, b) ||
-        !g2_trace_lane_value(source, true, row.prepared.v1_index, c) ||
         !g2_trace_event(source, row, 0, first) || !g2_trace_event(source, row, 1, second)) {
         g2_trace_fail(source, 99);
         return false;
     }
+    b = first.value;
+    c = second.value;
     record = {};
     record.from_pc = row.from_pc;
     record.from_timestamp = row.from_timestamp;
@@ -362,11 +361,11 @@ static __device__ __forceinline__ bool g2_trace_rw1(
     G2TimelineEvent read;
     uint64_t b;
     if (!g2_trace_row(source, operand_table, row_index, row) || row.entry.access_pattern != 7 ||
-        !g2_trace_lane_value(source, false, row.prepared.v0_index, b) ||
         !g2_trace_event(source, row, 0, read)) {
         g2_trace_fail(source, 101);
         return false;
     }
+    b = read.value;
     record = {};
     record.from_pc = row.from_pc;
     record.from_timestamp = row.from_timestamp;

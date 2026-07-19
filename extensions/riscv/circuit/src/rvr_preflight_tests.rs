@@ -1865,11 +1865,11 @@ fn rvr_preflight_g2_phase2b_full_standard_matrix_is_byte_equal() {
                 .iter()
                 .find(|desc| desc.kind == 0x0101 + 2 * u16::from(kind))
                 .map_or(0, |desc| desc.count as usize),
-            register,
-            "kind {kind} V1 register-only count"
+            0,
+            "kind {kind} current-source V1 lane must be replayed on device"
         );
     }
-    for kind in [12u8, 14] {
+    for kind in 10u8..=14 {
         assert!(descs
             .iter()
             .all(|desc| desc.kind != 0x0100 + 2 * u16::from(kind)
