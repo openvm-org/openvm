@@ -45,6 +45,8 @@ impl<T> Drop for PendingReturn<T> {
 /// unless a consumer-specific synchronization step proves them idle.
 pub(crate) enum PendingReturnMessage<T> {
     Return(PendingReturn<T>),
+    /// Acknowledge after every return queued ahead of this message has been consumed.
+    Barrier(mpsc::Sender<()>),
     Shutdown,
 }
 
@@ -64,13 +66,22 @@ pub(crate) fn run_pending_return_worker<T>(
     loop {
         let first = match receiver.recv() {
             Ok(PendingReturnMessage::Return(first)) => first,
+            Ok(PendingReturnMessage::Barrier(acknowledge)) => {
+                let _ = acknowledge.send(());
+                continue;
+            }
             Ok(PendingReturnMessage::Shutdown) | Err(_) => return,
         };
         let mut batch = vec![first];
+        let mut acknowledge = None;
         let mut terminate = false;
         while batch.len() < batch_limit {
             match receiver.recv_timeout(idle_window) {
                 Ok(PendingReturnMessage::Return(next)) => batch.push(next),
+                Ok(PendingReturnMessage::Barrier(sender)) => {
+                    acknowledge = Some(sender);
+                    break;
+                }
                 Ok(PendingReturnMessage::Shutdown) => {
                     terminate = true;
                     break;
@@ -93,6 +104,9 @@ pub(crate) fn run_pending_return_worker<T>(
             return;
         }
         consume(batch, batch_idx);
+        if let Some(acknowledge) = acknowledge {
+            let _ = acknowledge.send(());
+        }
         batch_idx += 1;
     }
 }
@@ -179,6 +193,61 @@ mod tests {
 
         drop(PendingReturn::new(DropCounter).release());
         assert_eq!(DROPS.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn barrier_waits_for_prior_returns_but_not_later_returns() {
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let (acknowledge, acknowledged) = std::sync::mpsc::channel();
+        let (later_started, observe_later_started) = std::sync::mpsc::channel();
+        let (release_later, wait_for_release) = std::sync::mpsc::channel();
+        let shutdown = AtomicBool::new(false);
+        let work_gate = Mutex::new(());
+        let processed = AtomicUsize::new(0);
+
+        std::thread::scope(|scope| {
+            let worker_shutdown = &shutdown;
+            let worker_gate = &work_gate;
+            let worker_processed = &processed;
+            let worker = scope.spawn(move || {
+                run_pending_return_worker(
+                    receiver,
+                    worker_shutdown,
+                    worker_gate,
+                    Duration::from_millis(1),
+                    64,
+                    |batch, _| {
+                        for returned in batch {
+                            let value = returned.release();
+                            worker_processed.fetch_add(1, Ordering::SeqCst);
+                            if value == 2 {
+                                later_started.send(()).unwrap();
+                                wait_for_release.recv().unwrap();
+                            }
+                        }
+                    },
+                );
+            });
+
+            sender
+                .send(PendingReturnMessage::Return(PendingReturn::new(1)))
+                .unwrap();
+            sender
+                .send(PendingReturnMessage::Barrier(acknowledge))
+                .unwrap();
+            sender
+                .send(PendingReturnMessage::Return(PendingReturn::new(2)))
+                .unwrap();
+
+            acknowledged.recv_timeout(Duration::from_secs(1)).unwrap();
+            assert!(processed.load(Ordering::SeqCst) >= 1);
+            observe_later_started
+                .recv_timeout(Duration::from_secs(1))
+                .unwrap();
+            release_later.send(()).unwrap();
+            sender.send(PendingReturnMessage::Shutdown).unwrap();
+            worker.join().unwrap();
+        });
     }
 
     struct ReserveOwner {
