@@ -623,19 +623,30 @@ pub(crate) fn give_back(buffer: Vec<u8>, dirty_len: usize) {
     }
 }
 
-/// Wait until every buffer returned before this call has completed CUDA synchronization, zeroing,
-/// and insertion into the ready map. Used only by startup pool priming after it has dropped all
-/// temporary arenas; ordinary proving never waits for the cleaner.
+/// Wait until every buffer queued ahead of this call's cleaner barrier has completed CUDA
+/// synchronization, zeroing, and insertion into the ready map. Returns queued by concurrent
+/// proving after the barrier do not extend the wait. Used only by startup pool priming after it has
+/// dropped all temporary arenas; ordinary proving never waits for the cleaner.
 #[cfg(feature = "rvr")]
 pub(crate) fn drain_returns(timeout: std::time::Duration) -> bool {
-    let deadline = std::time::Instant::now() + timeout;
-    while stats().pending.load(Ordering::Acquire) != 0 {
-        if std::time::Instant::now() >= deadline {
+    let (acknowledge, acknowledged) = mpsc::channel();
+    {
+        let _lifecycle = lock_unpoisoned(&LIFECYCLE_GATE);
+        if SHUTTING_DOWN.load(Ordering::Acquire) {
             return false;
         }
-        std::thread::sleep(std::time::Duration::from_millis(1));
+        let Some(cleaner) = CLEANER.get().copied() else {
+            return stats().pending.load(Ordering::Acquire) == 0;
+        };
+        let sender = lock_unpoisoned(&cleaner.sender);
+        let Some(sender) = sender.as_ref() else {
+            return false;
+        };
+        if sender.send(CleanerMessage::Barrier(acknowledge)).is_err() {
+            return false;
+        }
     }
-    true
+    acknowledged.recv_timeout(timeout).is_ok()
 }
 
 /// Unregisters and frees all pooled buffers (test hygiene; optional).
