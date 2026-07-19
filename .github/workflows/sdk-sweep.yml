@@ -129,11 +129,13 @@ jobs:
         if: ${{ inputs.sweep_mode == 'sweep_evm' }}
         run: (hash svm 2>/dev/null || cargo install --locked --version 0.2.23 svm-rs) && svm install 0.8.19 && solc --version
 
-      - name: Install architecture specific tools
+      - name: Install OpenVM Rust source component
         if: ${{ inputs.sweep_mode == 'sweep_evm' }}
-        run: |
-          source ci/scripts/utils.sh
-          install_s5cmd
+        run: bash ci/scripts/install-openvm-rust-src.sh
+
+      - name: Install s5cmd
+        if: ${{ inputs.sweep_mode == 'sweep_evm' }}
+        run: bash ci/scripts/install-s5cmd.sh
 
       - name: Setup halo2
         if: ${{ inputs.sweep_mode == 'sweep_evm' }}

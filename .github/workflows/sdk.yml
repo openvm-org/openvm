@@ -80,10 +80,11 @@ jobs:
         with:
           version: v1.5.0
 
-      - name: Install architecture specific tools
-        run: |
-          source ci/scripts/utils.sh
-          install_s5cmd
+      - name: Install OpenVM Rust source component
+        run: bash ci/scripts/install-openvm-rust-src.sh
+
+      - name: Install s5cmd
+        run: bash ci/scripts/install-s5cmd.sh
 
       - name: Setup halo2
         working-directory: crates/sdk

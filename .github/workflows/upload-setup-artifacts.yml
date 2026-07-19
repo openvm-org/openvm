@@ -67,9 +67,7 @@ jobs:
           cargo openvm setup --evm
 
       - name: Install s5cmd
-        run: |
-          source ci/scripts/utils.sh
-          install_s5cmd
+        run: bash ci/scripts/install-s5cmd.sh
 
       - name: Sync ~/.openvm with S3 bucket in tagged dir
         run: s5cmd sync ~/.openvm/ s3://${S3_BUCKET%/}/${{ env.version }}/

@@ -45,10 +45,8 @@ env:
   CURRENT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
   REPO: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
   CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+  S3_ENABLED: ${{ vars.OPENVM_S3_DATA_BUCKET != '' }}
   S3_METRICS_PATH: s3://${{ vars.OPENVM_S3_DATA_BUCKET }}/benchmark/github/metrics
-  S3_MD_PATH: s3://${{ vars.OPENVM_S3_DATA_BUCKET }}/benchmark/github/results
-  S3_PUBLIC_PATH_BASE: s3://${{ vars.OPENVM_S3_DATA_BUCKET }}/benchmark/github
-  S3_PUBLIC_URL_BASE: https://${{ vars.OPENVM_S3_DATA_BUCKET }}.s3.${{ vars.OPENVM_S3_REGION }}.amazonaws.com/benchmark/github
   FEATURE_FLAGS: ""
 
 permissions:
@@ -138,27 +136,6 @@ jobs:
       - uses: runs-on/action@v2
         with:
           sccache: s3
-      ##########################################################################
-      # Install S3 if necessary                                                #
-      ##########################################################################
-      - name: Install architecture specific tools
-        run: |
-          S5CMD_BIN="s5cmd_2.2.2_linux_amd64.deb"
-          echo "Checking s5cmd"
-          if type s5cmd &>/dev/null; then
-              echo "s5cmd was installed."
-          else
-              TMP_DIR=/tmp/s5cmd
-              rm -rf $TMP_DIR
-              mkdir $TMP_DIR
-              echo "s5cmd was not installed. Installing.."
-              wget "https://github.com/peak/s5cmd/releases/download/v2.2.2/${S5CMD_BIN}" -P $TMP_DIR
-              sudo dpkg -i "${TMP_DIR}/${S5CMD_BIN}"
-          fi
-
-      ##########################################################################
-      # Download individual result .md files from S3 and combine them          #
-      ##########################################################################
       - name: Load SSH key
         uses: webfactory/ssh-agent@v0.9.0
         with:
@@ -168,6 +145,24 @@ jobs:
         with:
           ref: ${{ env.CURRENT_SHA }}
           repository: ${{ env.REPO }}
+
+      - name: Install s5cmd
+        if: ${{ env.S3_ENABLED == 'true' }}
+        run: bash ci/scripts/install-s5cmd.sh
+
+      - name: Download current benchmark metrics
+        uses: actions/download-artifact@v4
+        with:
+          pattern: benchmark-metrics-*
+          path: .bench_metrics/current
+          merge-multiple: true
+
+      - name: Download current benchmark flamegraphs
+        if: ${{ github.event.inputs.flamegraphs == 'true' }}
+        uses: actions/download-artifact@v4
+        with:
+          pattern: benchmark-flamegraphs-*
+          path: .bench_metrics/flamegraphs
       - uses: dtolnay/rust-toolchain@stable
       - name: Configure sccache
         run: |
@@ -206,21 +201,16 @@ jobs:
           BENCHMARK_RESULTS_PATH="benchmarks"
           echo "BENCHMARK_RESULTS_PATH=${BENCHMARK_RESULTS_PATH}" >> $GITHUB_ENV
 
-      - name: Install inferno-flamegraph
-        if: github.event.inputs.flamegraphs
-        run: cargo install inferno
-
-      - name: Download all metric json files from S3
+      - name: Render current benchmark artifacts
         run: |
-          matrix=$(echo '${{ needs.create-matrix.outputs.matrix }}')
-          names=$(echo $matrix | jq -r '.[] | "\(.id)"')
-          names_list=$(echo -n "$names" | paste -sd "," -)
+          matrix='${{ needs.create-matrix.outputs.matrix }}'
+          names_list=$(jq -r 'map(.id) | join(",")' <<< "$matrix")
 
-          json_files=$(echo $matrix | jq -r '
+          json_files=$(jq -r '
             .[] |
-            "\(.id)-${{ env.CURRENT_SHA }}.json"')
+            ".bench_metrics/current/\(.id).json"' <<< "$matrix")
           json_file_list=$(echo -n "$json_files" | paste -sd "," -)
-          echo $json_file_list
+          echo "$json_file_list"
 
           # For PRs, get the latest commit from the target branch
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
@@ -235,22 +225,27 @@ jobs:
             REF_HASH="main"
           fi
 
-          prev_json_files=$(echo $matrix | jq -r --arg target "$REF_HASH" '
+          mkdir -p .bench_metrics/baselines
+          prev_json_files=$(jq -r --arg target "$REF_HASH" '
             .[] |
-            "\($target)-\(.id).json"')
+            ".bench_metrics/baselines/\($target)-\(.id).json"' <<< "$matrix")
           prev_json_file_list=$(echo -n "$prev_json_files" | paste -sd "," -)
-          echo $prev_json_file_list
+          echo "$prev_json_file_list"
 
-          (echo "$json_files"; echo "$prev_json_files") | while read json_file; do
-            if [ -z "$json_file" ]; then
-              continue
-            fi
-            echo "Downloading metrics for benchmark: $json_file"
-            if ! s5cmd cp "${{ env.S3_METRICS_PATH }}/${json_file}" "${json_file}"; then
-              echo "Warning: Failed to download ${json_file}, skipping..."
-              continue
-            fi
-          done
+          if [[ "${S3_ENABLED}" == "true" ]]; then
+            while IFS= read -r json_file; do
+              if [[ -z "$json_file" ]]; then
+                continue
+              fi
+              s3_name=$(basename "$json_file")
+              echo "Downloading historical baseline: $s3_name"
+              if ! s5cmd cp "${{ env.S3_METRICS_PATH }}/${s3_name}" "${json_file}"; then
+                echo "Warning: Failed to download ${s3_name}, skipping..."
+              fi
+            done <<< "$prev_json_files"
+          else
+            echo "S3 is not configured; rendering without historical baselines."
+          fi
 
           openvm-prof --json-paths "${json_file_list}" \
             --prev-json-paths "${prev_json_file_list}" \
@@ -259,33 +254,56 @@ jobs:
             --benchmark-results-link "https://github.com/${{ github.repository }}/blob/benchmark-results/${BENCHMARK_RESULTS_PATH}" \
             --summary-md-path summary.md
 
-          COMMIT_URL=https://github.com/${{ github.repository }}/commit/${CURRENT_SHA}
-          BENCHMARK_WORKFLOW_URL=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          TMP_DIR=/tmp/benchmark-results/${{ env.CURRENT_SHA }}
-          echo "TMP_DIR=${TMP_DIR}" >> $GITHUB_ENV
-          mkdir -p ${TMP_DIR}
+          COMMIT_URL="https://github.com/${{ github.repository }}/commit/${CURRENT_SHA}"
+          BENCHMARK_WORKFLOW_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          TMP_DIR="${RUNNER_TEMP}/benchmark-results/${CURRENT_SHA}"
+          echo "TMP_DIR=${TMP_DIR}" >> "$GITHUB_ENV"
+          mkdir -p "$TMP_DIR"
 
-          # add metadata to markdown files
-          source ci/scripts/utils.sh
-          # Parse matrix data into associative arrays
           while IFS= read -r metric_path; do
-            FLAMEGRAPHS=${{ github.event.inputs.flamegraphs || 'false' }}
-            # Convert .json to .md
+            benchmark_id=$(basename "${metric_path%.json}")
+            inputs=$(jq -cer --arg id "$benchmark_id" \
+              'first(.[] | select(.id == $id)) // error("missing benchmark metadata for " + $id)' \
+              <<< "$matrix")
+            instance_type=$(jq -r '.instance_type' <<< "$inputs")
+            memory_allocator=$(jq -r '.memory_allocator' <<< "$inputs")
             md_path="${metric_path%.json}.md"
             detailed_md_path="${md_path%.md}.detailed.md"
-            
-            echo -e "\n<details>\n<summary>Detailed Metrics</summary>\n" >> $md_path
-            cat $detailed_md_path >> $md_path
-            echo -e "</details>\n\n" >> $md_path
 
-            add_metadata_and_flamegraphs \
-              $metric_path \
-              $md_path \
-              $matrix \
-              $COMMIT_URL \
-              $BENCHMARK_WORKFLOW_URL
+            {
+              printf '\n<details>\n<summary>Detailed Metrics</summary>\n\n'
+              cat "$detailed_md_path"
+              printf '</details>\n\n'
+            } >> "$md_path"
 
-            cp "$md_path" "${TMP_DIR}/"
+            metadata_args=(
+              --markdown "$md_path"
+              --instance-type "$instance_type"
+              --memory-allocator "$memory_allocator"
+              --commit-url "$COMMIT_URL"
+              --workflow-url "$BENCHMARK_WORKFLOW_URL"
+            )
+            flamegraph_dir=".bench_metrics/flamegraphs/benchmark-flamegraphs-${benchmark_id}"
+            if [[ -d "$flamegraph_dir" ]]; then
+              shopt -s nullglob
+              flamegraphs=("$flamegraph_dir"/*.svg)
+              shopt -u nullglob
+              if ((${#flamegraphs[@]})); then
+                metadata_args+=(
+                  --flamegraph-dir "$flamegraph_dir"
+                  --flamegraph-link-prefix "flamegraphs/${benchmark_id}"
+                )
+                mkdir -p "${TMP_DIR}/flamegraphs/${benchmark_id}"
+                cp "${flamegraphs[@]}" "${TMP_DIR}/flamegraphs/${benchmark_id}/"
+              fi
+            fi
+            bash ci/scripts/append-benchmark-metadata.sh "${metadata_args[@]}"
+
+            cp "$md_path" "$detailed_md_path" "$TMP_DIR/"
+            memory_svg_path="${md_path%.md}.memory.svg"
+            if [[ -f "$memory_svg_path" ]]; then
+              cp "$memory_svg_path" "$TMP_DIR/"
+            fi
           done <<< "$json_files"
 
           echo "" >> summary.md
@@ -293,7 +311,7 @@ jobs:
           echo "" >> summary.md
           echo "[Benchmark Workflow]($BENCHMARK_WORKFLOW_URL)" >> summary.md
 
-          cp summary.md ${TMP_DIR}/
+          cp summary.md "$TMP_DIR/"
 
       ##########################################################################
       # Update benchmark-results branch with summary                           #
@@ -310,9 +328,9 @@ jobs:
       - name: Update github pages with new bench results
         if: (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false) || (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch') || inputs.is_merge_queue == true
         run: |
-          mkdir -p ${BENCHMARK_RESULTS_PATH}
-          cp ${TMP_DIR}/*.md ${BENCHMARK_RESULTS_PATH}/
-          git add ${BENCHMARK_RESULTS_PATH}
+          mkdir -p "${BENCHMARK_RESULTS_PATH}"
+          cp -R "${TMP_DIR}/." "${BENCHMARK_RESULTS_PATH}/"
+          git add "${BENCHMARK_RESULTS_PATH}"
           # Update index.md for both push to main and merge_queue events
           if [[ "${{ github.event_name }}" == "push" ]] || [[ "${{ inputs.is_merge_queue }}" == "true" ]]; then
             cp ${TMP_DIR}/summary.md index.md

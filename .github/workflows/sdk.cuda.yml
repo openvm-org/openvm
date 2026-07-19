@@ -50,10 +50,11 @@ jobs:
         run: bash ./scripts/gpu_driver_setup.sh
       - uses: ./.github/actions/rust-cache-cuda
       - uses: taiki-e/install-action@nextest
-      - name: Install architecture specific tools
-        run: |
-          source ci/scripts/utils.sh
-          install_s5cmd
+      - name: Install OpenVM Rust source component
+        run: bash ci/scripts/install-openvm-rust-src.sh
+
+      - name: Install s5cmd
+        run: bash ci/scripts/install-s5cmd.sh
 
       - name: Install solc
         # The SDK EVM/Halo2 verification tests shell out to solc when generating verifiers.

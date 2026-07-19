@@ -62,9 +62,7 @@ jobs:
 
       - name: Install s5cmd
         if: github.event_name != 'pull_request'
-        run: |
-          source ci/scripts/utils.sh
-          install_s5cmd
+        run: bash ci/scripts/install-s5cmd.sh
 
       - name: Sync static S3 bucket
         working-directory: target/doc

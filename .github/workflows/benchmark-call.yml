@@ -75,6 +75,7 @@ on:
         default: false
 
 env:
+  S3_ENABLED: ${{ vars.OPENVM_S3_DATA_BUCKET != '' }}
   S3_METRICS_PATH: s3://${{ vars.OPENVM_S3_DATA_BUCKET }}/benchmark/github/metrics
   S3_PUBLIC_PATH_BASE: s3://${{ vars.OPENVM_S3_DATA_BUCKET }}/benchmark/github
   FEATURE_FLAGS: "metrics,parallel,tco"
@@ -120,10 +121,12 @@ jobs:
         with:
           cache-on-failure: true
 
-      - name: Install architecture specific tools
-        run: |
-          source ci/scripts/utils.sh
-          install_s5cmd
+      - name: Install OpenVM Rust source component
+        run: bash ci/scripts/install-openvm-rust-src.sh
+
+      - name: Install s5cmd
+        if: ${{ env.S3_ENABLED == 'true' || inputs.e2e_bench == true || github.event.inputs.e2e_bench == 'true' }}
+        run: bash ci/scripts/install-s5cmd.sh
 
       - name: Display workflow inputs
         run: echo "${{ toJSON(inputs) }}"
@@ -172,7 +175,7 @@ jobs:
       - name: Set working directory
         id: set-working-dir
         run: |
-          WORKING_DIR=$(jq -r --arg id "${{ inputs.benchmark_id }}" '
+          WORKING_DIR=$(jq -r --arg id "${{ inputs.benchmark_id || inputs.benchmark_name || github.event.inputs.benchmark_name }}" '
             .benchmarks[] |
             select(.id == $id) |
             .working_directory
@@ -207,10 +210,22 @@ jobs:
           export RUST_BACKTRACE=1
           python3 ${{ steps.set-working-dir.outputs.relative_path }}/ci/scripts/bench.py $BIN_NAME $INPUT_ARGS
 
+      - name: Upload current benchmark metrics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-metrics-${{ inputs.benchmark_id || inputs.benchmark_name || github.event.inputs.benchmark_name }}
+          path: .bench_metrics/${{ env.METRIC_NAME }}.*
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 3
+
       ##########################################################################
       # Store metric json file to S3                                           #
       ##########################################################################
-      - name: Upload metric json and compute diff with previous to generate markdown
+      - name: Publish immutable metric JSON to S3
+        if: ${{ env.S3_ENABLED == 'true' }}
+        continue-on-error: true
         run: |
           current_sha=$(git rev-parse HEAD)
           echo "Current SHA: $current_sha"
@@ -234,15 +249,30 @@ jobs:
               echo "No guest symbols found, generating flamegraphs without symbols"
               python3 ci/scripts/metric_unify/flamegraph.py $METRIC_PATH
             fi
-            s5cmd cp '.bench_metrics/flamegraphs/*.svg' "${{ env.S3_PUBLIC_PATH_BASE }}/flamegraphs/${current_sha}/"
             echo "UPLOAD_FLAMEGRAPHS=1" >> $GITHUB_ENV
           fi
+
+      - name: Upload current flamegraphs
+        if: ${{ contains(env.FEATURE_FLAGS, 'perf-metrics') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-flamegraphs-${{ inputs.benchmark_id || inputs.benchmark_name || github.event.inputs.benchmark_name }}
+          path: .bench_metrics/flamegraphs/*.svg
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 3
+
+      - name: Publish flamegraphs to S3
+        if: ${{ contains(env.FEATURE_FLAGS, 'perf-metrics') && env.S3_ENABLED == 'true' }}
+        continue-on-error: true
+        run: s5cmd cp '.bench_metrics/flamegraphs/*.svg' "${{ env.S3_PUBLIC_PATH_BASE }}/flamegraphs/${current_sha}/"
 
       ##########################################################################
       # Update s3 for latest branch metrics upon a push event                  #
       ##########################################################################
       - name: Update latest branch result in s3
-        if: github.event_name == 'push' || inputs.is_merge_queue == true
+        if: ${{ env.S3_ENABLED == 'true' && (github.event_name == 'push' || inputs.is_merge_queue == true) }}
+        continue-on-error: true
         run: |
           # Treat merge_queue events as main branch for ref-hash purposes
           if [[ "${{ inputs.is_merge_queue }}" == "true" ]]; then
