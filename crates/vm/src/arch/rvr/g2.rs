@@ -918,13 +918,20 @@ pub fn decode_reference_v1(
                 let crossing = u32::from(width) + (effective & 7) > 8;
                 let memory_key0 = (address_space, effective & !7);
                 let memory_key1 = (address_space, (effective & !7) + 8);
-                let current0 = blocks.get(&memory_key0).copied().unwrap_or(0);
-                if current0 != block0 {
-                    return Err(g2_error(format!(
-                        "kind {kind} aligned block mismatch at slot {slot}"
-                    )));
+                if let Some(&current0) = blocks.get(&memory_key0) {
+                    if current0 != block0 {
+                        return Err(g2_error(format!(
+                            "kind {kind} aligned block mismatch at slot {slot}"
+                        )));
+                    }
+                } else {
+                    // Production G2 leaves touched-memory discovery to the
+                    // device, so the host oracle does not necessarily receive
+                    // the segment's initial memory image. The first load/store
+                    // lane for a block is its authoritative current-value
+                    // seed; later accesses must still agree with replay.
+                    blocks.insert(memory_key0, block0);
                 }
-                blocks.entry(memory_key0).or_insert(block0);
 
                 let register0_prev = touch(&mut timestamps, (1, entry.b), timestamp);
                 let mut memory1_prev = u32::MAX;
