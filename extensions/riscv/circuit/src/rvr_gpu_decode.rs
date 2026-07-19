@@ -768,7 +768,7 @@ impl RvrGpuDecodeState {
                 {
                     let lazy =
                         build_operand_table(exe, Arc::clone(compiled_identity), pc_to_air_idx);
-                    assert_host_tables_equal(&precomputed, &lazy);
+                    assert_host_tables_match_supported_entries(&precomputed, &lazy);
                 }
                 precomputed
             } else {
@@ -2946,10 +2946,87 @@ fn host_table_from_precomputed(
 }
 
 #[cfg(all(feature = "rvr", debug_assertions))]
-fn assert_host_tables_equal(precomputed: &HostOperandTable, lazy: &HostOperandTable) {
+fn assert_host_tables_match_supported_entries(
+    precomputed: &HostOperandTable,
+    lazy: &HostOperandTable,
+) {
     assert_eq!(precomputed.pc_base, lazy.pc_base);
-    assert_eq!(precomputed.entries, lazy.entries);
-    assert_eq!(precomputed.kind_to_air, lazy.kind_to_air);
+    assert_eq!(precomputed.entries.len(), lazy.entries.len());
+    for (slot, (precomputed_entry, lazy_entry)) in precomputed
+        .entries
+        .iter()
+        .zip(lazy.entries.iter())
+        .enumerate()
+    {
+        if lazy_entry.air_idx == u8::MAX && lazy_entry.access_pattern == u8::MAX {
+            assert_eq!(
+                precomputed_entry.filtered_index, lazy_entry.filtered_index,
+                "precomputed opaque entry changed filtered slot {slot}"
+            );
+            if precomputed_entry == lazy_entry {
+                continue;
+            }
+            if precomputed
+                .compiled_identity
+                .get(slot)
+                .copied()
+                .unwrap_or(false)
+            {
+                assert_ne!(
+                    precomputed_entry.air_idx,
+                    u8::MAX,
+                    "precomputed G2 custom slot {slot} has no AIR"
+                );
+                assert!(
+                    matches!(
+                        precomputed_entry.access_pattern,
+                        pattern
+                            if pattern == DeviceDeltaAccessPattern::HintStore as u8
+                                || pattern == DeviceDeltaAccessPattern::OpaqueFinal as u8
+                                || pattern
+                                    == DeviceDeltaAccessPattern::OpaqueTimestamp as u8
+                    ),
+                    "precomputed G2 custom slot {slot} has invalid access pattern {}",
+                    precomputed_entry.access_pattern
+                );
+            } else {
+                assert_eq!(
+                    precomputed_entry, lazy_entry,
+                    "precomputed operand entry changed unsupported slot {slot}"
+                );
+            }
+        } else {
+            assert_eq!(
+                precomputed_entry, lazy_entry,
+                "precomputed operand entry changed supported slot {slot}"
+            );
+        }
+    }
+    for (&kind, &air) in &lazy.kind_to_air {
+        assert_eq!(
+            precomputed.kind_to_air.get(&kind),
+            Some(&air),
+            "precomputed operand table changed {kind:?} AIR binding"
+        );
+    }
+    for (&kind, &air) in &precomputed.kind_to_air {
+        if let Some(lazy_air) = lazy.kind_to_air.get(&kind) {
+            assert_eq!(air, *lazy_air, "precomputed {kind:?} AIR binding changed");
+        } else {
+            assert_eq!(
+                kind,
+                DeltaAirKind::HintStore,
+                "precomputed operand table added unsupported {kind:?} AIR binding"
+            );
+            assert!(
+                precomputed.entries.iter().any(|entry| {
+                    entry.air_idx as usize == air
+                        && entry.access_pattern == DeviceDeltaAccessPattern::HintStore as u8
+                }),
+                "precomputed HintStore AIR binding has no matching operand entry"
+            );
+        }
+    }
 }
 
 #[cfg(feature = "rvr")]
