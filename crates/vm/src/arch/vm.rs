@@ -2468,6 +2468,16 @@ where
                 let ctx = self
                     .vm
                     .generate_proving_ctx(system_records, record_arenas)?;
+                // Trace warmup exercises the same device-owned predecessor/touched-memory path
+                // as a real continuation. Consume its dirty-page result before binding the next
+                // warm segment; reset_state below restores the production initial state after the
+                // selected prefix has finished.
+                self.vm.merge_device_continuation_dirty_pages(
+                    &mut state
+                        .as_mut()
+                        .expect("CUDA trace prewarm produced no continuation state")
+                        .memory,
+                );
                 openvm_cuda_common::stream::device_synchronize().map_err(|error| {
                     ExecutionError::RvrExecution(format!(
                         "CUDA trace prewarm synchronization failed: {error:?}"
