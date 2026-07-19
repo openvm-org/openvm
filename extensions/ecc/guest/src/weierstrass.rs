@@ -65,6 +65,18 @@ pub trait WeierstrassPoint: Clone + Sized {
     /// been called already.
     fn double_impl<const CHECK_SETUP: bool>(&self) -> Self;
 
+    /// In-place complete projective addition: `self = self + p2`. Convenience wrapper over
+    /// [`add_impl`](Self::add_impl).
+    fn add_assign_impl<const CHECK_SETUP: bool>(&mut self, p2: &Self) {
+        *self = self.add_impl::<CHECK_SETUP>(p2);
+    }
+
+    /// In-place complete projective doubling: `self = 2 * self`. Convenience wrapper over
+    /// [`double_impl`](Self::double_impl).
+    fn double_assign_impl<const CHECK_SETUP: bool>(&mut self) {
+        *self = self.double_impl::<CHECK_SETUP>();
+    }
+
     /// Normalize to affine coordinates: (X/Z, Y/Z, 1). Returns identity for z=0.
     fn normalize(&self) -> Self;
 
