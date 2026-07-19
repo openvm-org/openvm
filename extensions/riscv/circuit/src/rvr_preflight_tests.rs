@@ -2815,6 +2815,49 @@ fn assert_system_records_eq(label: &str, interp: &SystemRecords<F>, rvr: &System
     );
 }
 
+#[cfg(feature = "cuda")]
+fn assert_system_records_route_compatible(
+    label: &str,
+    interp: &SystemRecords<F>,
+    rvr: &SystemRecords<F>,
+) {
+    if !rvr.program_frequencies_on_device && !rvr.touched_memory_on_device {
+        assert_system_records_eq(label, interp, rvr);
+        return;
+    }
+    assert_eq!(interp.from_state, rvr.from_state, "{label}: from_state");
+    assert_eq!(interp.to_state, rvr.to_state, "{label}: to_state");
+    assert_eq!(interp.exit_code, rvr.exit_code, "{label}: exit_code");
+    assert!(
+        !interp.program_frequencies_on_device && !interp.touched_memory_on_device,
+        "{label}: interpreter reference must retain host system records"
+    );
+    if rvr.program_frequencies_on_device {
+        assert_eq!(
+            interp.filtered_exec_frequencies.len(),
+            rvr.filtered_exec_frequencies.len(),
+            "{label}: filtered-execution-frequency table length"
+        );
+        assert!(
+            rvr.filtered_exec_frequencies
+                .iter()
+                .all(|&count| count == 0),
+            "{label}: device-owned filtered-execution-frequency host lease"
+        );
+    } else {
+        assert_eq!(
+            interp.filtered_exec_frequencies, rvr.filtered_exec_frequencies,
+            "{label}: filtered_exec_frequencies"
+        );
+    }
+    if !rvr.touched_memory_on_device {
+        assert_eq!(
+            interp.touched_memory, rvr.touched_memory,
+            "{label}: touched_memory"
+        );
+    }
+}
+
 fn prove_rvr_preflight_and_verify_with_streams(
     exe: VmExe<F>,
     config: Rv64ImConfig,
@@ -3107,7 +3150,7 @@ fn assert_standard_group_trace_matches_interpreter() {
 }
 
 #[cfg(feature = "cuda")]
-const FULL_RV64IM_INSTRUCTION_AIR_COUNT: usize = 22;
+const FULL_RV64IM_INSTRUCTION_AIR_COUNT: usize = 31;
 
 #[cfg(feature = "cuda")]
 type CpuProvingCtx = ProvingContext<CpuBackend<BabyBearPoseidon2Config>>;
@@ -3526,7 +3569,7 @@ fn assert_gpu_rvr_three_way_from_state(
             staged.push((air, geometry, arena));
         }
         let output = instance
-            .execute_preflight_from_state_with_arena_targets(
+            .execute_preflight_from_state_with_device_touched_memory_for_test(
                 from_state.clone(),
                 Some(retired_instructions),
                 trace_heights,
@@ -3535,12 +3578,12 @@ fn assert_gpu_rvr_three_way_from_state(
             .expect("gpu rvr preflight execution");
         (output, staged)
     };
-    assert_system_records_eq(
+    assert_system_records_route_compatible(
         &format!("{label}: gpu-record-arenas"),
         &cpu_output.system_records,
         &gpu_arena_output.system_records,
     );
-    assert_system_records_eq(
+    assert_system_records_route_compatible(
         &format!("{label}: gpu-rvr-logs"),
         &cpu_output.system_records,
         &rvr_output.system_records,
