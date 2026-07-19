@@ -2351,10 +2351,22 @@ fn restore_g2_production_counts(
                 ExecutionError::RvrExecution("G2 production instruction count overflow".to_string())
             })?;
         let block = meta.block_host_counts[block_index];
+        host_counts.kind10 = host_counts
+            .kind10
+            .checked_add(block.kind10)
+            .ok_or_else(|| ExecutionError::RvrExecution("G2 kind 10 count overflow".to_string()))?;
+        host_counts.kind11 = host_counts
+            .kind11
+            .checked_add(block.kind11)
+            .ok_or_else(|| ExecutionError::RvrExecution("G2 kind 11 count overflow".to_string()))?;
         host_counts.kind12 = host_counts
             .kind12
             .checked_add(block.kind12)
             .ok_or_else(|| ExecutionError::RvrExecution("G2 kind 12 count overflow".to_string()))?;
+        host_counts.kind13 = host_counts
+            .kind13
+            .checked_add(block.kind13)
+            .ok_or_else(|| ExecutionError::RvrExecution("G2 kind 13 count overflow".to_string()))?;
         host_counts.kind14 = host_counts
             .kind14
             .checked_add(block.kind14)
@@ -2365,7 +2377,10 @@ fn restore_g2_production_counts(
             .ok_or_else(|| ExecutionError::RvrExecution("G2 kind 30 count overflow".to_string()))?;
     }
     for (kind, count) in [
+        (10, host_counts.kind10),
+        (11, host_counts.kind11),
         (12, host_counts.kind12),
+        (13, host_counts.kind13),
         (14, host_counts.kind14),
         (30, host_counts.kind30),
     ] {

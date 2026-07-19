@@ -47,12 +47,15 @@ pub struct RvrG2BlockEntryV1 {
 
 const _: () = assert!(size_of::<RvrG2BlockEntryV1>() == 8);
 
-/// Host-only counts for standard kinds without a current-value lane. These
+/// Host-only counts for standard kinds without a replay-seed lane. These
 /// are summed once per entered run after native execution; they never expand
 /// the generated block or the device block-table ABI.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct RvrG2BlockHostCountsV1 {
+    pub kind10: u32,
+    pub kind11: u32,
     pub kind12: u32,
+    pub kind13: u32,
     pub kind14: u32,
     pub kind30: u32,
 }
@@ -499,11 +502,13 @@ pub fn decode_addi_reference_v1(
             let payload = addi_lane.get(payload_at..payload_at + 8).ok_or_else(|| {
                 g2_error("expanded program chronology over-consumed the AddI lane")
             })?;
-            let rs1_value = u64::from_le_bytes(payload.try_into().expect("eight-byte AddI lane"));
-            if rs1_value != registers[rs1] {
+            let result_seed = u64::from_le_bytes(payload.try_into().expect("eight-byte AddI lane"));
+            let rs1_value = registers[rs1];
+            let immediate = sign_extend_12(entry.c);
+            let result = rs1_value.wrapping_add(immediate);
+            if result_seed != result {
                 return Err(g2_error(format!(
-                    "AddI payload mismatch at slot {slot}: lane={rs1_value:#x}, replay={:#x}",
-                    registers[rs1]
+                    "AddI result-seed mismatch at slot {slot}: lane={result_seed:#x}, replay={result:#x}",
                 )));
             }
             let from_timestamp = timestamp;
@@ -518,8 +523,6 @@ pub fn decode_addi_reference_v1(
             timestamp = timestamp
                 .checked_add(1)
                 .ok_or_else(|| g2_error("timestamp overflow"))?;
-            let immediate = sign_extend_12(entry.c);
-            let result = rs1_value.wrapping_add(immediate);
             if rd != 0 {
                 registers[rd] = result;
             }
@@ -753,10 +756,13 @@ pub fn decode_reference_v1(
                     .ok_or_else(|| g2_error("missing AddI lane"))?;
                 let rs1 = register_index(entry.b)?;
                 let rd = register_index(entry.a)?;
-                let value = lane_u64(lane, kind_v0_cursors[kind as usize], "AddI")?;
+                let result_seed = lane_u64(lane, kind_v0_cursors[kind as usize], "AddI")?;
                 kind_v0_cursors[kind as usize] += 1;
-                if value != registers[rs1] {
-                    return Err(g2_error(format!("AddI value mismatch at slot {slot}")));
+                let value = registers[rs1];
+                let immediate = sign_extend_12(entry.c);
+                let result = value.wrapping_add(immediate);
+                if result_seed != result {
+                    return Err(g2_error(format!("AddI result mismatch at slot {slot}")));
                 }
                 let read_prev = touch(&mut timestamps, (1, entry.b), timestamp);
                 timestamp = timestamp
@@ -767,9 +773,8 @@ pub fn decode_reference_v1(
                 timestamp = timestamp
                     .checked_add(1)
                     .ok_or_else(|| g2_error("timestamp overflow"))?;
-                let immediate = sign_extend_12(entry.c);
                 if rd != 0 {
-                    registers[rd] = value.wrapping_add(immediate);
+                    registers[rd] = result;
                     blocks.insert((1, entry.a), registers[rd]);
                 }
                 append_u32(&mut record, read_prev);
@@ -781,27 +786,21 @@ pub fn decode_reference_v1(
             } else if matches!(kind, 0..=7 | 15..=19) && matches!(entry.access_pattern, 0 | 1) {
                 let rs1 = register_index(entry.b)?;
                 let rd = register_index(entry.a)?;
-                let v0_lane = segment
+                let result_lane = segment
                     .lane(&descs, g2_lane_v0(kind))
-                    .ok_or_else(|| g2_error(format!("kind {kind} missing V0 lane")))?;
-                let v0 = lane_u64(v0_lane, kind_v0_cursors[kind as usize], "standard V0")?;
+                    .ok_or_else(|| g2_error(format!("kind {kind} missing result lane")))?;
+                let result_seed = lane_u64(
+                    result_lane,
+                    kind_v0_cursors[kind as usize],
+                    "standard result",
+                )?;
                 kind_v0_cursors[kind as usize] += 1;
-                if v0 != registers[rs1] {
-                    return Err(g2_error(format!("kind {kind} V0 mismatch at slot {slot}")));
-                }
+                let v0 = registers[rs1];
                 let (v1, rs2_ptr) = if entry.flags & 1 != 0 {
                     (standard_immediate(entry), None)
                 } else {
                     let rs2 = register_index(entry.c)?;
-                    let v1_lane = segment
-                        .lane(&descs, g2_lane_v1(kind))
-                        .ok_or_else(|| g2_error(format!("kind {kind} missing V1 lane")))?;
-                    let v1 = lane_u64(v1_lane, kind_v1_cursors[kind as usize], "standard V1")?;
-                    kind_v1_cursors[kind as usize] += 1;
-                    if v1 != registers[rs2] {
-                        return Err(g2_error(format!("kind {kind} V1 mismatch at slot {slot}")));
-                    }
-                    (v1, Some(entry.c))
+                    (registers[rs2], Some(entry.c))
                 };
                 let read0_prev = touch(&mut timestamps, (1, entry.b), timestamp);
                 let read1_prev = rs2_ptr
@@ -810,6 +809,11 @@ pub fn decode_reference_v1(
                 let write_prev = touch(&mut timestamps, (1, entry.a), timestamp + 2);
                 let write_prev_value = registers[rd];
                 let result = standard_result(kind, entry.local_opcode, v0, v1)?;
+                if result_seed != result {
+                    return Err(g2_error(format!(
+                        "kind {kind} result-seed mismatch at slot {slot}"
+                    )));
+                }
                 if rd != 0 {
                     registers[rd] = result;
                     blocks.insert((1, entry.a), result);
@@ -826,21 +830,8 @@ pub fn decode_reference_v1(
             } else if matches!(kind, 10 | 11) && entry.access_pattern == 4 {
                 let rs1 = register_index(entry.a)?;
                 let rs2 = register_index(entry.b)?;
-                let v0_lane = segment
-                    .lane(&descs, g2_lane_v0(kind))
-                    .ok_or_else(|| g2_error(format!("branch kind {kind} missing V0 lane")))?;
-                let v1_lane = segment
-                    .lane(&descs, g2_lane_v1(kind))
-                    .ok_or_else(|| g2_error(format!("branch kind {kind} missing V1 lane")))?;
-                let v0 = lane_u64(v0_lane, kind_v0_cursors[kind as usize], "branch V0")?;
-                let v1 = lane_u64(v1_lane, kind_v1_cursors[kind as usize], "branch V1")?;
-                kind_v0_cursors[kind as usize] += 1;
-                kind_v1_cursors[kind as usize] += 1;
-                if v0 != registers[rs1] || v1 != registers[rs2] {
-                    return Err(g2_error(format!(
-                        "branch kind {kind} value mismatch at slot {slot}"
-                    )));
-                }
+                let v0 = registers[rs1];
+                let v1 = registers[rs2];
                 let read0_prev = touch(&mut timestamps, (1, entry.a), timestamp);
                 let read1_prev = touch(&mut timestamps, (1, entry.b), timestamp + 1);
                 timestamp = timestamp
@@ -872,14 +863,8 @@ pub fn decode_reference_v1(
                 append_u64(&mut record, write_prev_value);
             } else if kind == 13 && entry.access_pattern == 7 {
                 let rs1 = register_index(entry.b)?;
-                let v0_lane = segment
-                    .lane(&descs, g2_lane_v0(kind))
-                    .ok_or_else(|| g2_error("Jalr missing V0 lane"))?;
-                let pointer = lane_u32(v0_lane, kind_v0_cursors[kind as usize], "Jalr pointer")?;
-                kind_v0_cursors[kind as usize] += 1;
-                if u64::from(pointer) != registers[rs1] {
-                    return Err(g2_error(format!("Jalr pointer mismatch at slot {slot}")));
-                }
+                let pointer = u32::try_from(registers[rs1])
+                    .map_err(|_| g2_error(format!("Jalr pointer exceeds u32 at slot {slot}")))?;
                 let read_prev = touch(&mut timestamps, (1, entry.b), timestamp);
                 let write_enabled = entry.flags & (1 << 2) != 0;
                 let (write_prev, write_prev_value) = if write_enabled {
@@ -1796,7 +1781,9 @@ impl RvrG2PreparedV1 {
         // run/lane exhaustion to the fail-hard device replay.
         if checked_emission {
             for (slot, lane) in self.lanes.iter().enumerate() {
-                if slot == G2_PRODUCER_RUN_SLOT || (G2_PRODUCER_ADDI_SLOT..=57).contains(&slot) {
+                if slot == G2_PRODUCER_RUN_SLOT
+                    || (G2_PRODUCER_ADDI_SLOT..G2_PRODUCER_OPAQUE_EVENT_COUNT_SLOT).contains(&slot)
+                {
                     if lane.len != lane.expected_len {
                         return Err(g2_error(format!(
                             "static lane cursor differs from entered block spans: slot {slot}, actual {}, expected {}",
@@ -1821,9 +1808,9 @@ impl RvrG2PreparedV1 {
         }
 
         // Cross-check the independently accumulated static spans against the
-        // metered per-AIR totals. Kinds 1..=7 share one AIR between immediate
-        // and register forms, so V1 is necessarily bounded by that total;
-        // exactness for those lanes is supplied by `expected_len` above.
+        // metered per-AIR totals. Each surviving standard lane has exactly one
+        // result seed per instruction; current register values are replayed on
+        // the device.
         if let Some(expected_kind_counts) = expected_kind_counts {
             for kind in 0u8..30 {
                 for value_lane in [false, true] {
@@ -1832,12 +1819,7 @@ impl RvrG2PreparedV1 {
                     };
                     let expected = expected_kind_counts[kind as usize];
                     let actual = self.lanes[slot].len;
-                    let valid = if value_lane && (1..=7).contains(&kind) {
-                        actual <= expected
-                    } else {
-                        actual == expected
-                    };
-                    if !valid {
+                    if actual != expected {
                         return Err(g2_error(format!(
                             "standard lane cursor differs from metered count: kind {kind}, lane {value_lane}, actual {actual}, expected {expected}"
                         )));

@@ -642,8 +642,9 @@ impl<'a> EmitContext<'a> {
             let slot =
                 rvr_openvm_ext_ffi_common::g2_standard_producer_slot(self.current_g2_kind, false)
                     .expect("G2 two-value kind must have a first producer lane");
-            self.g2_store_u64(slot, &v1);
-            self.g2_store_u64(slot + 1, &v2);
+            // Device register replay recovers both current source values from
+            // the read events. Only the write result seeds the chunk scan.
+            self.g2_store_u64(slot, &res);
             if self.g2_checked {
                 self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs1});"));
                 self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs2});"));
@@ -1008,7 +1009,7 @@ impl<'a> EmitContext<'a> {
             self.write_line(&format!(
                 "uint64_t {result} = {v1} + 0x{imm_value:016x}ull;"
             ));
-            self.g2_store_u64(rvr_openvm_ext_ffi_common::G2_PRODUCER_ADDI_SLOT, &v1);
+            self.g2_store_u64(rvr_openvm_ext_ffi_common::G2_PRODUCER_ADDI_SLOT, &result);
             if self.g2_checked {
                 self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs1});"));
                 self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rd});"));
@@ -1153,7 +1154,7 @@ impl<'a> EmitContext<'a> {
             let slot =
                 rvr_openvm_ext_ffi_common::g2_standard_producer_slot(self.current_g2_kind, false)
                     .expect("G2 one-value kind must have a producer lane");
-            self.g2_store_u64(slot, &v1);
+            self.g2_store_u64(slot, &res);
             if self.g2_checked {
                 self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs1});"));
                 self.write_line("trace_timestamp(state);");
@@ -1397,11 +1398,6 @@ impl<'a> EmitContext<'a> {
             debug_assert!(matches!(self.current_g2_kind, 10 | 11));
             let v1 = self.g2_read_reg(rs1);
             let v2 = self.g2_read_reg(rs2);
-            let slot =
-                rvr_openvm_ext_ffi_common::g2_standard_producer_slot(self.current_g2_kind, false)
-                    .expect("G2 branch kind must have a first producer lane");
-            self.g2_store_u64(slot, &v1);
-            self.g2_store_u64(slot + 1, &v2);
             if self.g2_checked {
                 self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs1});"));
                 self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs2});"));
@@ -1496,9 +1492,6 @@ impl<'a> EmitContext<'a> {
                     "if (unlikely({v1} > UINT32_MAX)) rvr_g2->overflow = G2_REJECT_NARROW_VALUE;"
                 ));
             }
-            let slot = rvr_openvm_ext_ffi_common::g2_standard_producer_slot(13, false)
-                .expect("G2 jalr kind must have a producer lane");
-            self.g2_store_u32(slot, &v1);
             if self.g2_checked {
                 self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs1});"));
                 if let Some(rd) = link_rd.filter(|&rd| rd != 0) {

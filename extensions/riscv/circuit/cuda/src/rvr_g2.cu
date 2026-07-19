@@ -229,12 +229,10 @@ __device__ __forceinline__ void lane_consumption(
     v0 = false;
     v1 = false;
     if (kind <= 7 || (kind >= 15 && kind <= 19)) {
+        // The sole lane is the register-write result seed. Register replay
+        // reconstructs the current source values at both read events.
         v0 = true;
-        v1 = (entry.flags & RVR_OPERAND_FLAG_RS2_IMM) == 0;
-    } else if (kind == 10 || kind == 11) {
-        v0 = true;
-        v1 = true;
-    } else if (kind == 13 || kind == 29) {
+    } else if (kind == 29) {
         v0 = true;
     } else if (load_store_kind(kind)) {
         v0 = true;
@@ -242,16 +240,12 @@ __device__ __forceinline__ void lane_consumption(
     }
 }
 
-__device__ __forceinline__ bool zero_arity_kind(uint32_t kind) {
-    return kind == 12 || kind == 14;
-}
-
 __device__ __forceinline__ bool standard_v0_kind(uint32_t kind) {
-    return kind < 30 && !zero_arity_kind(kind);
+    return kind <= 9 || (kind >= 15 && kind <= 29);
 }
 
 __device__ __forceinline__ bool standard_v1_kind(uint32_t kind) {
-    return standard_v0_kind(kind) && kind != 13 && kind != 29;
+    return load_store_kind(kind);
 }
 
 __device__ __forceinline__ uint16_t lane_v0(uint32_t kind) {
@@ -290,7 +284,7 @@ __device__ bool lane_spec(
         bool is_v0 = kind == lane_v0(delta_kind) && standard_v0_kind(delta_kind);
         bool is_v1 = kind == lane_v1(delta_kind) && standard_v1_kind(delta_kind);
         if (is_v0 || is_v1) {
-            width = is_v0 && (load_store_kind(delta_kind) || delta_kind == 13) ? 4 : 8;
+            width = is_v0 && load_store_kind(delta_kind) ? 4 : 8;
             bool atomic = load_store_kind(delta_kind);
             flags = atomic ? G2_REQUIRED_ATOMIC : G2_REQUIRED;
             group = atomic ? G2_LOAD_STORE_GROUP : 0;
@@ -1170,27 +1164,21 @@ __device__ bool g2_emit_standard_direct(
     };
 
     if (entry.access_pattern == G2_ADDI_PATTERN) {
-        reg_event(record.from_timestamp, entry.b, record.v1, G2_EVENT_READ_EXPECT);
-        reg_event(record.from_timestamp + 1, entry.a, record.v1 + record.v2,
-                  G2_EVENT_WRITE_SET);
+        reg_event(record.from_timestamp, entry.b, 0, G2_EVENT_READ_PATCH);
+        reg_event(record.from_timestamp + 1, entry.a, record.v1, G2_EVENT_WRITE_SET);
         return true;
     }
     if (entry.access_pattern == 0 || entry.access_pattern == 1) {
-        reg_event(record.from_timestamp, entry.b, record.v1, G2_EVENT_READ_EXPECT);
+        reg_event(record.from_timestamp, entry.b, 0, G2_EVENT_READ_PATCH);
         if ((entry.flags & RVR_OPERAND_FLAG_RS2_IMM) == 0) {
-            reg_event(record.from_timestamp + 1, entry.c, record.v2, G2_EVENT_READ_EXPECT);
+            reg_event(record.from_timestamp + 1, entry.c, 0, G2_EVENT_READ_PATCH);
         }
-        uint64_t result;
-        if (!standard_post_write(kind, entry, record.v1, record.v2, result)) {
-            fail_parallel(error, 64);
-            return false;
-        }
-        reg_event(record.from_timestamp + 2, entry.a, result, G2_EVENT_WRITE_SET);
+        reg_event(record.from_timestamp + 2, entry.a, record.v1, G2_EVENT_WRITE_SET);
         return true;
     }
     if (entry.access_pattern == 4) {
-        reg_event(record.from_timestamp, entry.a, record.v1, G2_EVENT_READ_EXPECT);
-        reg_event(record.from_timestamp + 1, entry.b, record.v2, G2_EVENT_READ_EXPECT);
+        reg_event(record.from_timestamp, entry.a, 0, G2_EVENT_READ_PATCH);
+        reg_event(record.from_timestamp + 1, entry.b, 0, G2_EVENT_READ_PATCH);
         return true;
     }
     if (entry.access_pattern == 5 || entry.access_pattern == 6) {
@@ -1206,7 +1194,7 @@ __device__ bool g2_emit_standard_direct(
         return true;
     }
     if (entry.access_pattern == 7) {
-        reg_event(record.from_timestamp, entry.b, record.v1, G2_EVENT_READ_EXPECT);
+        reg_event(record.from_timestamp, entry.b, 0, G2_EVENT_READ_PATCH);
         if (entry.flags & RVR_OPERAND_FLAG_WRITE_ENABLED) {
             reg_event(record.from_timestamp + 1, entry.a, uint64_t(record.from_pc + 4u),
                       G2_EVENT_WRITE_SET);
@@ -1565,21 +1553,17 @@ __global__ void g2_emit_parallel(
     uint64_t crossing_value0 = 0;
     uint64_t crossing_value1 = 0;
     if (kind == 29 && entry.access_pattern == G2_ADDI_PATTERN) {
+        // The lane is the write result; replay supplies the current rs1 value.
         record.v1 = lane_v0_value;
         record.v2 = uint64_t(int64_t(int32_t(entry.c << 20) >> 20));
     } else if ((kind <= 7 || (kind >= 15 && kind <= 19)) &&
                (entry.access_pattern == 0 || entry.access_pattern == 1)) {
+        // The lane is the write result; replay supplies both current sources.
         record.v1 = lane_v0_value;
-        record.v2 = (entry.flags & RVR_OPERAND_FLAG_RS2_IMM)
-                        ? standard_immediate(entry)
-                        : lane_v1_value;
     } else if ((kind == 10 || kind == 11) && entry.access_pattern == 4) {
-        record.v1 = lane_v0_value;
-        record.v2 = lane_v1_value;
     } else if ((kind == 12 || kind == 14) &&
                (entry.access_pattern == 5 || entry.access_pattern == 6)) {
     } else if (kind == 13 && entry.access_pattern == 7) {
-        record.v1 = lane_v0_value;
     } else if (load_store_kind(kind) &&
                (entry.access_pattern == G2_LOAD_PATTERN ||
                 entry.access_pattern == G2_STORE_PATTERN)) {
@@ -2302,7 +2286,7 @@ __global__ void g2_predecode(
         }
     }
     if (header.version != 1 || header.lane_count == 0 ||
-        header.lane_count > 60 + expected_opaque_count ||
+        header.lane_count > 42 + expected_opaque_count ||
         header.header_bytes != 64 + 32 * header.lane_count ||
         header.header_bytes > wire_storage_bytes || header.flags != G2_FLAGS_COMMITTED_V1) {
         fail(error, 3);
@@ -2621,13 +2605,13 @@ __global__ void g2_predecode(
                     return;
                 }
                 uint32_t rd = entry.a / 8, rs1 = entry.b / 8;
-                record.v1 = prepared_v0;
-                if (record.v1 != registers[rs1]) {
+                record.v1 = registers[rs1];
+                record.v2 = uint64_t(int64_t(int32_t(entry.c << 20) >> 20));
+                if (prepared_v0 != record.v1 + record.v2) {
                     fail(error, 15);
                     return;
                 }
-                record.v2 = uint64_t(int64_t(int32_t(entry.c << 20) >> 20));
-                if (rd != 0) registers[rd] = record.v1 + record.v2;
+                if (rd != 0) registers[rd] = prepared_v0;
                 timestamp += 2;
             } else if ((kind <= 7 || (kind >= 15 && kind <= 19)) &&
                        (entry.access_pattern == 0 || entry.access_pattern == 1)) {
@@ -2637,11 +2621,7 @@ __global__ void g2_predecode(
                     return;
                 }
                 uint32_t rd = entry.a / 8, rs1 = entry.b / 8;
-                record.v1 = prepared_v0;
-                if (record.v1 != registers[rs1]) {
-                    fail(error, 29);
-                    return;
-                }
+                record.v1 = registers[rs1];
                 if (entry.flags & RVR_OPERAND_FLAG_RS2_IMM) {
                     record.v2 = standard_immediate(entry);
                 } else {
@@ -2649,15 +2629,15 @@ __global__ void g2_predecode(
                         fail(error, 30);
                         return;
                     }
-                    record.v2 = prepared_v1;
-                    if (record.v2 != registers[entry.c / 8]) {
-                        fail(error, 31);
-                        return;
-                    }
+                    record.v2 = registers[entry.c / 8];
                 }
                 uint64_t result;
                 if (!standard_post_write(kind, entry, record.v1, record.v2, result)) {
                     fail(error, 32);
+                    return;
+                }
+                if (prepared_v0 != result) {
+                    fail(error, 29);
                     return;
                 }
                 if (rd != 0) registers[rd] = result;
@@ -2668,12 +2648,8 @@ __global__ void g2_predecode(
                     fail(error, 33);
                     return;
                 }
-                record.v1 = prepared_v0;
-                record.v2 = prepared_v1;
-                if (record.v1 != registers[entry.a / 8] || record.v2 != registers[entry.b / 8]) {
-                    fail(error, 34);
-                    return;
-                }
+                record.v1 = registers[entry.a / 8];
+                record.v2 = registers[entry.b / 8];
                 timestamp += 2;
             } else if ((kind == 12 || kind == 14) &&
                        (entry.access_pattern == 5 || entry.access_pattern == 6)) {
@@ -2702,11 +2678,7 @@ __global__ void g2_predecode(
                     fail(error, 37);
                     return;
                 }
-                record.v1 = prepared_v0;
-                if (record.v1 != registers[entry.b / 8]) {
-                    fail(error, 38);
-                    return;
-                }
+                record.v1 = registers[entry.b / 8];
                 if (entry.flags & RVR_OPERAND_FLAG_WRITE_ENABLED) {
                     uint32_t rd = entry.a / 8;
                     if (rd != 0) registers[rd] = uint64_t(record.from_pc + 4u);
