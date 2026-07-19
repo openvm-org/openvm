@@ -80,9 +80,6 @@ pub trait WeierstrassPoint: Clone + Sized {
     /// Normalize to affine coordinates: (X/Z, Y/Z, 1). Returns identity for z=0.
     fn normalize(&self) -> Self;
 
-    /// Check if this point is the identity (z == 0).
-    fn is_identity(&self) -> bool;
-
     /// Constructs a point on the curve, including the identity point.
     ///
     /// # Safety
@@ -303,6 +300,11 @@ macro_rules! impl_sw_proj {
                 Self { x, y, z }
             }
 
+            /// Returns true if this is the identity point (z == 0).
+            fn is_identity_impl<const CHECK_SETUP: bool>(&self) -> bool {
+                self.z == <$field>::ZERO
+            }
+
             /// Complete projective addition for a=0 curves.
             /// Algorithm 7 from ePrint 2015/1060.
             #[inline(always)]
@@ -455,9 +457,6 @@ macro_rules! impl_sw_proj {
                 }
             }
 
-            fn is_identity(&self) -> bool {
-                self.z == <$field>::ZERO
-            }
         }
 
         impl core::ops::Neg for $struct_name {
@@ -504,7 +503,7 @@ macro_rules! impl_sw_group_ops {
 
             #[inline(always)]
             fn is_identity(&self) -> bool {
-                <Self as WeierstrassPoint>::is_identity(self)
+                self.is_identity_impl::<true>()
             }
         }
 

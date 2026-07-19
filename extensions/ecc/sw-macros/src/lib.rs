@@ -377,9 +377,6 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                     }
                 }
 
-                fn is_identity(&self) -> bool {
-                    self.is_identity_impl::<true>()
-                }
             }
 
             impl core::ops::Neg for #struct_name {
