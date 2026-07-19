@@ -88,8 +88,8 @@ where
         builder.assert_bool(is_valid.clone());
         builder.assert_bool(cols.imm_sign);
 
-        // Adding 0xf8 forces c_low[1] into the 3-bit range while the lookup also range-checks
-        // c_low[0].
+        // c_low[1] + 0xf8 is a byte iff c_low[1] fits in 3 bits. c_low[0] is
+        // range-checked directly.
         self.bus
             .send_range(cols.c_low[0], cols.c_low[1] + AB::Expr::from_u32(0xf8))
             .eval(builder, is_valid.clone());

@@ -27,7 +27,6 @@ template <typename T, size_t NUM_LIMBS, size_t LIMB_BITS> struct LessThanImmCore
     T opcode_sltu_flag;
 
     T b_msb_f;
-    T c_msb_f;
 
     T diff_marker[NUM_LIMBS];
     T diff_val;
@@ -100,7 +99,6 @@ template <size_t NUM_LIMBS, size_t LIMB_BITS> struct LessThanImmCore {
         COL_WRITE_VALUE(row, Cols, imm_sign, record.imm_sign);
         COL_WRITE_VALUE(row, Cols, cmp_result, cmp_result);
         COL_WRITE_VALUE(row, Cols, b_msb_f, b_msb_f);
-        COL_WRITE_VALUE(row, Cols, c_msb_f, c_msb_f);
         COL_WRITE_VALUE(row, Cols, diff_val, diff_val);
         COL_WRITE_VALUE(row, Cols, opcode_slt_flag, is_slt);
         COL_WRITE_VALUE(row, Cols, opcode_sltu_flag, !is_slt);
