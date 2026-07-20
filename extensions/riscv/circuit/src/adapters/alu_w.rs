@@ -62,7 +62,7 @@ pub struct Rv64BaseAluWAdapterCols<T> {
     pub writes_aux: MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>,
 }
 
-/// Same instruction format as `Rv64BaseAluAdapterAir`, but only exposes the low 32-bit limbs
+/// Exposes only the low 32-bit limbs of both source operands.
 /// (`RV64_WORD_NUM_LIMBS`) for reads and writes. Full-width RV64 writes are rebuilt in-adapter by
 /// sign-extending the low-word result.
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]

@@ -1,8 +1,8 @@
 use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper};
 
 use super::adapters::{
-    Rv64BaseAluAdapterAir, Rv64BaseAluAdapterExecutor, Rv64BaseAluAdapterFiller, RV64_BYTE_BITS,
-    RV64_REGISTER_NUM_LIMBS,
+    Rv64BaseAluRegAdapterAir, Rv64BaseAluRegAdapterExecutor, Rv64BaseAluRegAdapterFiller,
+    RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS,
 };
 
 mod core;
@@ -18,19 +18,12 @@ pub use cuda::*;
 mod tests;
 
 pub type Rv64BitwiseLogicAir = VmAirWrapper<
-    Rv64BaseAluAdapterAir,
+    Rv64BaseAluRegAdapterAir,
     BitwiseLogicCoreAir<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>,
 >;
-pub type Rv64BitwiseLogicExecutor = BitwiseLogicExecutor<
-    Rv64BaseAluAdapterExecutor<RV64_BYTE_BITS>,
-    RV64_REGISTER_NUM_LIMBS,
-    RV64_BYTE_BITS,
->;
+pub type Rv64BitwiseLogicExecutor =
+    BitwiseLogicExecutor<Rv64BaseAluRegAdapterExecutor, RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>;
 pub type Rv64BitwiseLogicChip<F> = VmChipWrapper<
     F,
-    BitwiseLogicFiller<
-        Rv64BaseAluAdapterFiller<RV64_BYTE_BITS>,
-        RV64_REGISTER_NUM_LIMBS,
-        RV64_BYTE_BITS,
-    >,
+    BitwiseLogicFiller<Rv64BaseAluRegAdapterFiller, RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>,
 >;

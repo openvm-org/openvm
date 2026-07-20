@@ -26,16 +26,13 @@ pub struct ShiftLogicalCoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usiz
     pub c: [T; NUM_LIMBS],
 
     pub opcode_sll_flag: T,
-    pub opcode_srl_flag: T,
 
     // bit_multiplier = 2^bit_shift (scaled by the active opcode flag, 0 otherwise)
     pub bit_multiplier_left: T,
-    pub bit_multiplier_right: T,
     // carry_multiplier = 2^(LIMB_BITS - bit_shift) (scaled by the active opcode flag).
     // Used to position the part of each limb that crosses the limb boundary without forming a
     // product that exceeds 2^LIMB_BITS (which would alias the field modulus for u16 limbs).
     pub carry_multiplier_left: T,
-    pub carry_multiplier_right: T,
 
     // Boolean columns that are 1 exactly at the index of the bit/limb shift amount
     pub bit_shift_marker: [T; LIMB_BITS],
@@ -92,51 +89,45 @@ where
         _from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
         let cols: &ShiftLogicalCoreCols<_, NUM_LIMBS, LIMB_BITS> = local_core.borrow();
-        let flags = [cols.opcode_sll_flag, cols.opcode_srl_flag];
-
-        let is_valid = flags.iter().fold(AB::Expr::ZERO, |acc, &flag| {
-            builder.assert_bool(flag);
-            acc + flag.into()
-        });
-        builder.assert_bool(is_valid.clone());
+        builder.assert_bool(cols.opcode_sll_flag);
+        let opcode_sll_flag: AB::Expr = cols.opcode_sll_flag.into();
 
         let a = &cols.a;
         let b = &cols.b;
         let c = &cols.c;
 
-        // Constrain that bit_shift and the (bit/carry) multipliers are correct. Because the sum of
-        // all bit_shift_marker[i] is constrained to be 1, bit_shift is guaranteed to be in range.
+        // Constrain that bit_shift and the bit/carry multipliers are correct. The marker sum is 1
+        // on valid rows and 0 on padding rows.
         let mut bit_marker_sum = AB::Expr::ZERO;
         let mut bit_shift = AB::Expr::ZERO;
+        let mut bit_multiplier = AB::Expr::ZERO;
+        let mut carry_multiplier = AB::Expr::ZERO;
 
         for i in 0..LIMB_BITS {
             builder.assert_bool(cols.bit_shift_marker[i]);
-            bit_marker_sum += cols.bit_shift_marker[i].into();
-            bit_shift += AB::Expr::from_usize(i) * cols.bit_shift_marker[i];
-
-            let mut when_bit_shift = builder.when(cols.bit_shift_marker[i]);
-            when_bit_shift.assert_eq(
-                cols.bit_multiplier_left,
-                AB::Expr::from_usize(1 << i) * cols.opcode_sll_flag,
-            );
-            when_bit_shift.assert_eq(
-                cols.bit_multiplier_right,
-                AB::Expr::from_usize(1 << i) * cols.opcode_srl_flag,
-            );
-            when_bit_shift.assert_eq(
-                cols.carry_multiplier_left,
-                AB::Expr::from_usize(1 << (LIMB_BITS - i)) * cols.opcode_sll_flag,
-            );
-            when_bit_shift.assert_eq(
-                cols.carry_multiplier_right,
-                AB::Expr::from_usize(1 << (LIMB_BITS - i)) * cols.opcode_srl_flag,
-            );
+            let marker: AB::Expr = cols.bit_shift_marker[i].into();
+            bit_marker_sum += marker.clone();
+            bit_shift += AB::Expr::from_usize(i) * marker.clone();
+            bit_multiplier += AB::Expr::from_usize(1 << i) * marker.clone();
+            carry_multiplier += AB::Expr::from_usize(1 << (LIMB_BITS - i)) * marker;
         }
-        builder.when(is_valid.clone()).assert_one(bit_marker_sum);
+        builder.assert_bool(bit_marker_sum.clone());
+        let is_valid = bit_marker_sum;
+        // A valid row is SLL iff `opcode_sll_flag` is set; otherwise it is SRL. Booleanity of the
+        // derived SRL flag forces the SLL flag to be zero on padding rows.
+        let opcode_srl_flag = is_valid.clone() - opcode_sll_flag.clone();
+        builder.assert_bool(opcode_srl_flag.clone());
+        builder.assert_eq(
+            cols.bit_multiplier_left,
+            bit_multiplier.clone() * opcode_sll_flag.clone(),
+        );
+        builder.assert_eq(
+            cols.carry_multiplier_left,
+            carry_multiplier.clone() * opcode_sll_flag.clone(),
+        );
 
-        // Decompose each b[k] into carry/aux parts. Multiplying the active opcode flag into the LHS
-        // makes each constraint vacuous (0 = 0) for the inactive opcode, since `bit_multiplier_*`
-        // and `carry_multiplier_*` are already zero there.
+        // Decompose each b[k] into carry/aux parts. Multiplying the active opcode flag into each
+        // constraint makes it vacuous for the inactive opcode.
         for (k, &b_limb) in b.iter().enumerate() {
             // SLL: b[k] = aux[k] + carry[k] * 2^(LIMB_BITS - bit_shift)
             builder.assert_eq(
@@ -146,9 +137,9 @@ where
             );
             // SRL: b[k] = carry[k] + aux[k] * 2^bit_shift
             builder.assert_eq(
-                b_limb * cols.opcode_srl_flag,
-                cols.bit_shift_carry[k] * cols.opcode_srl_flag
-                    + cols.bit_shift_aux[k] * cols.bit_multiplier_right,
+                b_limb * opcode_srl_flag.clone(),
+                cols.bit_shift_carry[k] * opcode_srl_flag.clone()
+                    + cols.bit_shift_aux[k] * (bit_multiplier.clone() - cols.bit_multiplier_left),
             );
         }
 
@@ -182,21 +173,22 @@ where
 
                 // SRL: a[j] = aux[j+i] + carry[j+i+1] * 2^(LIMB_BITS - bit_shift)
                 if j + i > NUM_LIMBS - 1 {
-                    when_limb_shift.assert_zero(a_limb * cols.opcode_srl_flag);
+                    when_limb_shift.assert_zero(a_limb * opcode_srl_flag.clone());
                 } else {
                     let carry_in = if j + i == NUM_LIMBS - 1 {
                         AB::Expr::ZERO
                     } else {
-                        cols.bit_shift_carry[j + i + 1].into() * cols.carry_multiplier_right
+                        cols.bit_shift_carry[j + i + 1].into()
+                            * (carry_multiplier.clone() - cols.carry_multiplier_left)
                     };
                     when_limb_shift.assert_eq(
-                        a_limb * cols.opcode_srl_flag,
-                        cols.bit_shift_aux[j + i] * cols.opcode_srl_flag + carry_in,
+                        a_limb * opcode_srl_flag.clone(),
+                        cols.bit_shift_aux[j + i] * opcode_srl_flag.clone() + carry_in,
                     );
                 }
             }
         }
-        builder.when(is_valid.clone()).assert_one(limb_marker_sum);
+        builder.assert_eq(limb_marker_sum, is_valid.clone());
 
         // Check that bit_shift and limb_shift are correct.
         let num_bits = AB::F::from_usize(NUM_LIMBS * LIMB_BITS);
@@ -224,12 +216,12 @@ where
         let expected_opcode = VmCoreAir::<AB, I>::expr_to_global_expr(
             self,
             [
-                (cols.opcode_sll_flag, ShiftOpcode::SLL),
-                (cols.opcode_srl_flag, ShiftOpcode::SRL),
+                (opcode_sll_flag, ShiftOpcode::SLL),
+                (opcode_srl_flag, ShiftOpcode::SRL),
             ]
             .iter()
             .fold(AB::Expr::ZERO, |acc, (flag, opcode)| {
-                acc + (*flag).into() * AB::Expr::from_u8(*opcode as u8)
+                acc + flag.clone() * AB::Expr::from_u8(*opcode as u8)
             }),
         );
 
@@ -268,7 +260,6 @@ pub struct ShiftLogicalExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: usiz
 pub struct ShiftLogicalFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
-    pub offset: usize,
 }
 
 impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> PreflightExecutor<F, RA>
@@ -385,12 +376,9 @@ where
         let core_row: &mut ShiftLogicalCoreCols<F, NUM_LIMBS, LIMB_BITS> = core_row.borrow_mut();
         let bit_mult = F::from_u32(1 << bit_shift);
         let carry_mult = F::from_u32(1 << aux_bits);
-        core_row.carry_multiplier_right = if is_sll { F::ZERO } else { carry_mult };
         core_row.carry_multiplier_left = if is_sll { carry_mult } else { F::ZERO };
-        core_row.bit_multiplier_right = if is_sll { F::ZERO } else { bit_mult };
         core_row.bit_multiplier_left = if is_sll { bit_mult } else { F::ZERO };
 
-        core_row.opcode_srl_flag = F::from_bool(opcode == ShiftOpcode::SRL);
         core_row.opcode_sll_flag = F::from_bool(is_sll);
 
         core_row.bit_shift_aux = bit_shift_aux;

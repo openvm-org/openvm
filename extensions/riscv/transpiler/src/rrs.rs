@@ -12,10 +12,10 @@ use openvm_transpiler::util::{
 };
 
 use crate::{
-    BaseAluImmOpcode, BaseAluOpcode, BaseAluWOpcode, BranchEqualOpcode, BranchLessThanOpcode,
-    DivRemOpcode, DivRemWOpcode, LessThanOpcode, MulHOpcode, MulOpcode, MulWOpcode,
-    Rv64AuipcOpcode, Rv64JalLuiOpcode, Rv64JalrOpcode, Rv64LoadStoreOpcode, ShiftOpcode,
-    ShiftWOpcode,
+    BaseAluImmOpcode, BaseAluOpcode, BaseAluWOpcode, BitwiseImmOpcode, BranchEqualOpcode,
+    BranchLessThanOpcode, DivRemOpcode, DivRemWOpcode, LessThanImmOpcode, LessThanOpcode,
+    MulHOpcode, MulOpcode, MulWOpcode, Rv64AuipcOpcode, Rv64JalLuiOpcode, Rv64JalrOpcode,
+    Rv64LoadStoreOpcode, ShiftImmOpcode, ShiftOpcode, ShiftWOpcode,
 };
 
 /// A transpiler that converts the 32-bit encoded instructions into instructions.
@@ -56,7 +56,7 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     }
 
     fn process_xori(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        from_i_type(BaseAluOpcode::XOR.global_opcode().as_usize(), &dec_insn)
+        from_i_type(BitwiseImmOpcode::XORI.global_opcode().as_usize(), &dec_insn)
     }
 
     fn process_or(&mut self, dec_insn: RType) -> Self::InstructionResult {
@@ -69,7 +69,7 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     }
 
     fn process_ori(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        from_i_type(BaseAluOpcode::OR.global_opcode().as_usize(), &dec_insn)
+        from_i_type(BitwiseImmOpcode::ORI.global_opcode().as_usize(), &dec_insn)
     }
 
     fn process_and(&mut self, dec_insn: RType) -> Self::InstructionResult {
@@ -82,7 +82,7 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     }
 
     fn process_andi(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        from_i_type(BaseAluOpcode::AND.global_opcode().as_usize(), &dec_insn)
+        from_i_type(BitwiseImmOpcode::ANDI.global_opcode().as_usize(), &dec_insn)
     }
 
     fn process_sll(&mut self, dec_insn: RType) -> Self::InstructionResult {
@@ -95,7 +95,7 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     }
 
     fn process_slli(&mut self, dec_insn: ITypeShamt) -> Self::InstructionResult {
-        from_i_type_shamt(ShiftOpcode::SLL.global_opcode().as_usize(), &dec_insn)
+        from_i_type_shamt(ShiftImmOpcode::SLLI.global_opcode().as_usize(), &dec_insn)
     }
 
     fn process_srl(&mut self, dec_insn: RType) -> Self::InstructionResult {
@@ -108,7 +108,7 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     }
 
     fn process_srli(&mut self, dec_insn: ITypeShamt) -> Self::InstructionResult {
-        from_i_type_shamt(ShiftOpcode::SRL.global_opcode().as_usize(), &dec_insn)
+        from_i_type_shamt(ShiftImmOpcode::SRLI.global_opcode().as_usize(), &dec_insn)
     }
 
     fn process_sra(&mut self, dec_insn: RType) -> Self::InstructionResult {
@@ -121,7 +121,7 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     }
 
     fn process_srai(&mut self, dec_insn: ITypeShamt) -> Self::InstructionResult {
-        from_i_type_shamt(ShiftOpcode::SRA.global_opcode().as_usize(), &dec_insn)
+        from_i_type_shamt(ShiftImmOpcode::SRAI.global_opcode().as_usize(), &dec_insn)
     }
 
     fn process_slt(&mut self, dec_insn: RType) -> Self::InstructionResult {
@@ -134,7 +134,10 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     }
 
     fn process_slti(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        from_i_type(LessThanOpcode::SLT.global_opcode().as_usize(), &dec_insn)
+        from_i_type(
+            LessThanImmOpcode::SLTI.global_opcode().as_usize(),
+            &dec_insn,
+        )
     }
 
     fn process_sltu(&mut self, dec_insn: RType) -> Self::InstructionResult {
@@ -147,7 +150,10 @@ impl<F: PrimeField32> InstructionProcessor for InstructionTranspiler<F> {
     }
 
     fn process_sltui(&mut self, dec_insn: IType) -> Self::InstructionResult {
-        from_i_type(LessThanOpcode::SLTU.global_opcode().as_usize(), &dec_insn)
+        from_i_type(
+            LessThanImmOpcode::SLTIU.global_opcode().as_usize(),
+            &dec_insn,
+        )
     }
 
     fn process_lb(&mut self, dec_insn: IType) -> Self::InstructionResult {

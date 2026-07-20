@@ -11,7 +11,7 @@ use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
-    adapters::{Rv64BaseAluU16AdapterCols, Rv64BaseAluU16AdapterRecord, U16_BITS},
+    adapters::{Rv64BaseAluRegU16AdapterCols, Rv64BaseAluRegU16AdapterRecord, U16_BITS},
     cuda_abi::shift_logical_cuda::tracegen as rv64_shift_logical_tracegen,
     ShiftLogicalCoreCols, ShiftLogicalCoreRecord,
 };
@@ -25,7 +25,7 @@ pub struct Rv64ShiftLogicalChipGpu {
 impl Chip<DenseRecordArena, GpuBackend> for Rv64ShiftLogicalChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         const RECORD_SIZE: usize = size_of::<(
-            Rv64BaseAluU16AdapterRecord,
+            Rv64BaseAluRegU16AdapterRecord,
             ShiftLogicalCoreRecord<BLOCK_FE_WIDTH, U16_BITS>,
         )>();
         let records = arena.allocated();
@@ -34,7 +34,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64ShiftLogicalChipGpu {
         }
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
-        let trace_width = Rv64BaseAluU16AdapterCols::<F>::width()
+        let trace_width = Rv64BaseAluRegU16AdapterCols::<F>::width()
             + ShiftLogicalCoreCols::<F, BLOCK_FE_WIDTH, U16_BITS>::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;

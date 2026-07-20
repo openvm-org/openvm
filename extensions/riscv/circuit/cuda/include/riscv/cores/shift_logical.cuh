@@ -26,12 +26,9 @@ template <typename T, size_t NUM_LIMBS, size_t LIMB_BITS> struct ShiftLogicalCor
     T c[NUM_LIMBS];
 
     T opcode_sll_flag;
-    T opcode_srl_flag;
 
     T bit_multiplier_left;
-    T bit_multiplier_right;
     T carry_multiplier_left;
-    T carry_multiplier_right;
 
     T bit_shift_marker[LIMB_BITS];
     T limb_shift_marker[NUM_LIMBS];
@@ -162,13 +159,10 @@ template <size_t NUM_LIMBS, size_t LIMB_BITS> struct ShiftLogicalCore {
 
         uint32_t bit_mult = 1u << bit_shift;
         uint32_t carry_mult = 1u << aux_bits;
-        COL_WRITE_VALUE(row, Cols, carry_multiplier_right, is_sll ? 0u : carry_mult);
         COL_WRITE_VALUE(row, Cols, carry_multiplier_left, is_sll ? carry_mult : 0u);
-        COL_WRITE_VALUE(row, Cols, bit_multiplier_right, is_sll ? 0u : bit_mult);
         COL_WRITE_VALUE(row, Cols, bit_multiplier_left, is_sll ? bit_mult : 0u);
 
         COL_WRITE_VALUE(row, Cols, opcode_sll_flag, is_sll ? 1u : 0u);
-        COL_WRITE_VALUE(row, Cols, opcode_srl_flag, is_sll ? 0u : 1u);
 
         COL_WRITE_ARRAY(row, Cols, b, record.b);
         COL_WRITE_ARRAY(row, Cols, c, record.c);
