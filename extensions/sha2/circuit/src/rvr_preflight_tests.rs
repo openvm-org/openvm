@@ -362,9 +362,16 @@ fn assert_segment_trace_matches_interpreter(
     let mut interpreter = interp_vm
         .preflight_interpreter(exe)
         .expect("interpreter preflight");
-    let interp_output = interp_vm
-        .execute_preflight(&mut interpreter, interp_state, num_insns, trace_heights)
-        .expect("interpreter execution");
+    let interp_output = match num_insns {
+        Some(num_insns) => interp_vm.execute_preflight_for(
+            &mut interpreter,
+            interp_state,
+            num_insns,
+            trace_heights,
+        ),
+        None => interp_vm.execute_preflight(&mut interpreter, interp_state, trace_heights),
+    }
+    .expect("interpreter execution");
 
     let (mut rvr_vm, _) =
         VirtualMachine::new_with_keygen(test_cpu_engine(), Sha2Rv64CpuBuilder, config.clone())
@@ -782,12 +789,12 @@ fn rvr_sha256_pure_and_metered_match_interpreter() {
     let pure_rvr = vm
         .interpreter(&exe)
         .expect("pure rvr instance")
-        .execute(Streams::default(), None)
+        .execute(Streams::default())
         .expect("pure execution");
     let pure_interpreter = vm
         .naive_interpreter(&exe)
         .expect("pure interpreter")
-        .execute(Streams::default(), None)
+        .execute(Streams::default())
         .expect("pure interpreter execution");
     assert_vm_states_equivalent(&pure_rvr, &pure_interpreter);
     assert_final_digest("pure", &pure_rvr, &expected);
