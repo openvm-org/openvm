@@ -94,10 +94,14 @@ impl FieldExprChipGpu {
         let width = self.adapter_width + self.core_width;
 
         let device_ctx = &self.range_checker.device_ctx;
+        #[cfg(feature = "rvr")]
         let h2d_timer = g2_segment_id.and_then(|_| {
             openvm_circuit::arch::rvr::gpu_profile::CudaStageTimer::start(device_ctx)
         });
+        #[cfg(not(feature = "rvr"))]
+        let _ = g2_segment_id;
         let d_records = records.to_device_on(device_ctx).unwrap();
+        #[cfg(feature = "rvr")]
         if let (Some(timer), Some(segment_id)) = (h2d_timer, g2_segment_id) {
             timer.finish("opaque_h2d", segment_id, records.len());
         }

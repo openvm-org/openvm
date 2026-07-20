@@ -60,6 +60,7 @@ tco = ["openvm-riscv-circuit/tco"]
 rvr = [
     "dep:rvr-openvm-lift",
     "dep:rvr-openvm-ext-algebra",
+    "openvm-mod-circuit-builder/rvr",
     "openvm-riscv-circuit/rvr",
 ]
 cuda = [

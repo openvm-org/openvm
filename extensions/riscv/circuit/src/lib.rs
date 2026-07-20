@@ -79,7 +79,9 @@ pub mod log_native;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
-        use openvm_circuit::arch::{Arena, DenseRecordArena};
+        #[cfg(feature = "rvr")]
+        use openvm_circuit::arch::Arena;
+        use openvm_circuit::arch::DenseRecordArena;
         use openvm_circuit::system::cuda::{extensions::SystemGpuBuilder, SystemChipInventoryGPU};
         use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend};
         use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;

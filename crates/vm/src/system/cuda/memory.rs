@@ -17,11 +17,12 @@ use openvm_cuda_common::{
     stream::GpuDeviceCtx,
 };
 use openvm_instructions::VM_DIGEST_WIDTH;
+#[cfg(feature = "parallel")]
+use openvm_stark_backend::p3_maybe_rayon::prelude::IndexedParallelIterator;
 use openvm_stark_backend::{
     p3_field::PrimeCharacteristicRing,
     p3_maybe_rayon::prelude::{
-        IndexedParallelIterator, IntoParallelIterator, ParallelIterator, ParallelSlice,
-        ParallelSliceMut,
+        IntoParallelIterator, ParallelIterator, ParallelSlice, ParallelSliceMut,
     },
     prover::AirProvingContext,
 };

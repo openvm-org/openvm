@@ -47,6 +47,7 @@ cuda = [
     "openvm-circuit/cuda",
 ]
 parallel = ["openvm-stark-backend/parallel", "openvm-circuit/parallel"]
+rvr = ["openvm-circuit/rvr"]
 test-utils = [
     "dep:halo2curves-axiom",
     "dep:openvm-pairing-guest",

@@ -46,6 +46,7 @@ impl<T> Drop for PendingReturn<T> {
 pub(crate) enum PendingReturnMessage<T> {
     Return(PendingReturn<T>),
     /// Acknowledge after every return queued ahead of this message has been consumed.
+    #[cfg(any(feature = "rvr", test))]
     Barrier(mpsc::Sender<()>),
     Shutdown,
 }
@@ -66,6 +67,7 @@ pub(crate) fn run_pending_return_worker<T>(
     loop {
         let first = match receiver.recv() {
             Ok(PendingReturnMessage::Return(first)) => first,
+            #[cfg(any(feature = "rvr", test))]
             Ok(PendingReturnMessage::Barrier(acknowledge)) => {
                 let _ = acknowledge.send(());
                 continue;
@@ -73,11 +75,13 @@ pub(crate) fn run_pending_return_worker<T>(
             Ok(PendingReturnMessage::Shutdown) | Err(_) => return,
         };
         let mut batch = vec![first];
+        #[cfg(any(feature = "rvr", test))]
         let mut acknowledge = None;
         let mut terminate = false;
         while batch.len() < batch_limit {
             match receiver.recv_timeout(idle_window) {
                 Ok(PendingReturnMessage::Return(next)) => batch.push(next),
+                #[cfg(any(feature = "rvr", test))]
                 Ok(PendingReturnMessage::Barrier(sender)) => {
                     acknowledge = Some(sender);
                     break;
@@ -104,6 +108,7 @@ pub(crate) fn run_pending_return_worker<T>(
             return;
         }
         consume(batch, batch_idx);
+        #[cfg(any(feature = "rvr", test))]
         if let Some(acknowledge) = acknowledge {
             let _ = acknowledge.send(());
         }

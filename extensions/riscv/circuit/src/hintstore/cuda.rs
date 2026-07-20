@@ -13,8 +13,10 @@ use openvm_cuda_common::{
 };
 use openvm_stark_backend::prover::AirProvingContext;
 
+#[cfg(feature = "rvr")]
+use crate::cuda_abi::hintstore_cuda::tracegen_replay;
 use crate::{
-    cuda_abi::hintstore_cuda::{decode_offsets, tracegen, tracegen_replay},
+    cuda_abi::hintstore_cuda::{decode_offsets, tracegen},
     Rv64HintStoreCols, Rv64HintStoreLayout, Rv64HintStoreRecordMut,
 };
 
