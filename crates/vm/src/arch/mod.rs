@@ -9,6 +9,7 @@ pub(crate) mod execution_metrics;
 /// Execution context types for different execution modes.
 pub mod execution_mode;
 mod extensions;
+mod hint_stream;
 /// Traits and wrappers to facilitate VM chip integration
 mod integration_api;
 /// [RecordArena] trait definitions and implementations. Currently there are two concrete
@@ -34,6 +35,7 @@ pub use config::*;
 pub use execution::*;
 pub use execution_mode::{ExecutionCtxTrait, MeteredExecutionCtxTrait};
 pub use extensions::*;
+pub use hint_stream::HintStream;
 pub use integration_api::*;
 pub use interpreter::InterpretedInstance;
 pub use openvm_circuit_derive::create_handler;

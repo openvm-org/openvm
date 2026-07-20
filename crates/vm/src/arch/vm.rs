@@ -53,6 +53,7 @@ use super::{
         SegmentationLimits,
     },
     hasher::poseidon2::vm_poseidon2_hasher,
+    hint_stream::HintStream,
     interpreter::InterpretedInstance,
     interpreter_preflight::PreflightInterpretedInstance,
     AirInventoryError, ChipInventoryError, ExecutionError, ExecutionState, Executor,
@@ -116,7 +117,7 @@ pub enum GenerationError {
 #[derive(Clone, Default)]
 pub struct Streams {
     pub input_stream: VecDeque<Vec<u8>>,
-    pub hint_stream: VecDeque<u8>,
+    pub hint_stream: HintStream,
     /// Cached deferred operation inputs and outputs. Each idx corresponds to a
     /// unique function that is constrained outside the VM in its own deferral circuit.
     pub deferrals: Vec<DeferralState>,
@@ -126,7 +127,7 @@ impl Streams {
     pub fn new(input_stream: impl Into<VecDeque<Vec<u8>>>) -> Self {
         Self {
             input_stream: input_stream.into(),
-            hint_stream: VecDeque::default(),
+            hint_stream: HintStream::default(),
             deferrals: Vec::default(),
         }
     }
