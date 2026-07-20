@@ -19,7 +19,7 @@ use openvm_stark_backend::{
 };
 use tracing::instrument;
 
-use super::{merkle::SerialReceiver, online::INITIAL_TIMESTAMP};
+use super::merkle::SerialReceiver;
 use crate::{
     arch::{hasher::Hasher, ADDR_SPACE_OFFSET, BLOCK_FE_WIDTH},
     primitives::Chip,
@@ -62,9 +62,8 @@ pub struct PersistentBoundaryCols<T, const DIGEST_WIDTH: usize> {
 ///   `-is_dirty`.
 /// - compression bus: `(initial_values, 0, initial_hash)` with multiplicity `is_valid`;
 ///   `(final_values, 0, final_hash)` with multiplicity `is_dirty`.
-/// - memory bus: opens the block at timestamp 0 with
-///   `initial_values` (multiplicity `is_valid`) and closes it at `final_timestamps` with
-///   `final_values` (multiplicity `-is_valid`).
+/// - memory bus: opens the block at timestamp 0 with `initial_values` (multiplicity `is_valid`) and
+///   closes it at `final_timestamps` with `final_values` (multiplicity `-is_valid`).
 #[derive(Clone, Debug, ColumnsAir)]
 #[columns_via(PersistentBoundaryCols<u8, DIGEST_WIDTH>)]
 pub struct PersistentBoundaryAir<const DIGEST_WIDTH: usize> {
@@ -158,7 +157,8 @@ impl<const DIGEST_WIDTH: usize, AB: InteractionBuilder> Air<AB>
             self.memory_bus
                 .send(
                     MemoryAddress::new(local.address_space, ptr.clone()),
-                    local.initial_values[block_idx * BLOCK_FE_WIDTH..(block_idx + 1) * BLOCK_FE_WIDTH]
+                    local.initial_values
+                        [block_idx * BLOCK_FE_WIDTH..(block_idx + 1) * BLOCK_FE_WIDTH]
                         .to_vec(),
                     AB::Expr::ZERO,
                 )
@@ -167,7 +167,8 @@ impl<const DIGEST_WIDTH: usize, AB: InteractionBuilder> Air<AB>
             self.memory_bus
                 .send(
                     MemoryAddress::new(local.address_space, ptr),
-                    local.final_values[block_idx * BLOCK_FE_WIDTH..(block_idx + 1) * BLOCK_FE_WIDTH]
+                    local.final_values
+                        [block_idx * BLOCK_FE_WIDTH..(block_idx + 1) * BLOCK_FE_WIDTH]
                         .to_vec(),
                     local.final_timestamps[block_idx],
                 )
@@ -311,7 +312,7 @@ where
                 .expect("Cannot generate trace before finalization");
             let width = PersistentBoundaryCols::<Val<SC>, DIGEST_WIDTH>::width();
             // Boundary AIR should always present in order to fix the AIR ID of merkle AIR.
-            let mut height = (2 * touched_labels.len()).next_power_of_two();
+            let mut height = touched_labels.len().next_power_of_two();
             if let Some(mut oh) = self.overridden_height {
                 oh = oh.next_power_of_two();
                 assert!(
@@ -322,26 +323,20 @@ where
             }
             let mut rows = Val::<SC>::zero_vec(height * width);
 
-            rows.par_chunks_mut(2 * width)
+            rows.par_chunks_mut(width)
                 .zip(touched_labels.par_iter())
                 .for_each(|(row, touched_label)| {
-                    let (initial_row, final_row) = row.split_at_mut(width);
-                    *initial_row.borrow_mut() = PersistentBoundaryCols {
-                        expand_direction: Val::<SC>::ONE,
+                    *row.borrow_mut() = PersistentBoundaryCols {
+                        is_valid: Val::<SC>::ONE,
+                        // TODO: set is_dirty only when it is actually dirty
+                        is_dirty: Val::<SC>::ONE,
                         address_space: Val::<SC>::from_u32(touched_label.address_space),
                         leaf_label: Val::<SC>::from_u32(touched_label.label),
-                        values: touched_label.init_values,
-                        hash: touched_label.init_hash,
-                        timestamps: [Val::<SC>::from_u32(INITIAL_TIMESTAMP); BLOCKS_PER_LEAF],
-                    };
-
-                    *final_row.borrow_mut() = PersistentBoundaryCols {
-                        expand_direction: Val::<SC>::NEG_ONE,
-                        address_space: Val::<SC>::from_u32(touched_label.address_space),
-                        leaf_label: Val::<SC>::from_u32(touched_label.label),
-                        values: touched_label.final_values,
-                        hash: touched_label.final_hash,
-                        timestamps: touched_label.final_timestamps.map(Val::<SC>::from_u32),
+                        initial_values: touched_label.init_values,
+                        final_values: touched_label.final_values,
+                        initial_hash: touched_label.init_hash,
+                        final_hash: touched_label.final_hash,
+                        final_timestamps: touched_label.final_timestamps.map(Val::<SC>::from_u32),
                     };
                 });
             RowMajorMatrix::new(rows, width)

@@ -363,7 +363,7 @@ impl MemoryCtx {
             + initial_default_poseidon_rows;
         // SAFETY: BOUNDARY_AIR_ID, MERKLE_AIR_ID, and poseidon2_idx are all within bounds
         unsafe {
-            *trace_heights.get_unchecked_mut(BOUNDARY_AIR_ID) += leaves * 2;
+            *trace_heights.get_unchecked_mut(BOUNDARY_AIR_ID) += leaves;
             *trace_heights.get_unchecked_mut(poseidon2_idx) += poseidon2_rows;
             // Merkle AIR: 2 rows per internal node (init + final tree)
             *trace_heights.get_unchecked_mut(MERKLE_AIR_ID) += merkle_nodes * 2;
@@ -489,7 +489,7 @@ mod tests {
         ctx.apply_height_updates(&mut trace_heights);
 
         let poseidon2_idx = trace_heights.len() - 2;
-        assert_eq!(trace_heights[BOUNDARY_AIR_ID], 4);
+        assert_eq!(trace_heights[BOUNDARY_AIR_ID], 2);
         assert_eq!(trace_heights[MERKLE_AIR_ID], 2 * height);
         assert_eq!(trace_heights[poseidon2_idx], 2 * height + 3);
     }
@@ -513,7 +513,7 @@ mod tests {
         ctx.update_boundary_merkle_heights(RV64_MEMORY_AS, next_page_ptr, 1);
         ctx.apply_height_updates(&mut trace_heights);
 
-        assert_eq!(trace_heights[BOUNDARY_AIR_ID] - boundary_before, 2);
+        assert_eq!(trace_heights[BOUNDARY_AIR_ID] - boundary_before, 1);
         assert_eq!(
             trace_heights[MERKLE_AIR_ID] - merkle_before,
             2 * PAGE_MASK_LEAF_BITS_U32
