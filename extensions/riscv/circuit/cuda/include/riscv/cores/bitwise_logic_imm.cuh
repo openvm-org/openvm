@@ -45,16 +45,15 @@ template <size_t NUM_LIMBS, size_t LIMB_BITS> struct BitwiseLogicImmCore {
             c[i] = sign_byte;
         }
 
-        // BitwiseImmOpcode mirrors the XOR/OR/AND slots of BaseAluOpcode (XORI=2, ORI=3, ANDI=4).
         uint8_t a[NUM_LIMBS];
         switch (record.local_opcode) {
-        case 2:
+        case 1:
             run_xor<NUM_LIMBS>(record.b, c, a);
             break;
-        case 3:
+        case 2:
             run_or<NUM_LIMBS>(record.b, c, a);
             break;
-        case 4:
+        case 3:
             run_and<NUM_LIMBS>(record.b, c, a);
             break;
         default:
@@ -71,9 +70,9 @@ template <size_t NUM_LIMBS, size_t LIMB_BITS> struct BitwiseLogicImmCore {
             bitwise_lookup.add_xor(record.b[i], c[i]);
         }
 
-        COL_WRITE_VALUE(row, Cols, opcode_and_flag, record.local_opcode == 4);
-        COL_WRITE_VALUE(row, Cols, opcode_or_flag, record.local_opcode == 3);
-        COL_WRITE_VALUE(row, Cols, opcode_xor_flag, record.local_opcode == 2);
+        COL_WRITE_VALUE(row, Cols, opcode_and_flag, record.local_opcode == 3);
+        COL_WRITE_VALUE(row, Cols, opcode_or_flag, record.local_opcode == 2);
+        COL_WRITE_VALUE(row, Cols, opcode_xor_flag, record.local_opcode == 1);
         COL_WRITE_VALUE(row, Cols, imm_sign, record.imm_sign);
         COL_WRITE_ARRAY(row, Cols, c_low, record.c_low);
         COL_WRITE_ARRAY(row, Cols, b, record.b);

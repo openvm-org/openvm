@@ -14,7 +14,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
-use openvm_riscv_transpiler::{BaseAluOpcode, BitwiseImmOpcode};
+use openvm_riscv_transpiler::{BaseAluImmOpcode, BaseAluOpcode};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::BaseAir,
@@ -116,9 +116,9 @@ where
 
         let expected_opcode = VmCoreAir::<AB, I>::expr_to_global_expr(
             self,
-            cols.opcode_xor_flag * AB::Expr::from_u8(BitwiseImmOpcode::XORI as u8)
-                + cols.opcode_or_flag * AB::Expr::from_u8(BitwiseImmOpcode::ORI as u8)
-                + cols.opcode_and_flag * AB::Expr::from_u8(BitwiseImmOpcode::ANDI as u8),
+            cols.opcode_xor_flag * AB::Expr::from_u8(BaseAluImmOpcode::XORI as u8)
+                + cols.opcode_or_flag * AB::Expr::from_u8(BaseAluImmOpcode::ORI as u8)
+                + cols.opcode_and_flag * AB::Expr::from_u8(BaseAluImmOpcode::ANDI as u8),
         );
 
         // Canonical 24-bit sign extension of the signed 12-bit immediate.
@@ -185,7 +185,7 @@ where
     >,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {
-        format!("{:?}", BitwiseImmOpcode::from_usize(opcode - self.offset))
+        format!("{:?}", BaseAluImmOpcode::from_usize(opcode - self.offset))
     }
 
     fn execute(
@@ -195,7 +195,7 @@ where
     ) -> Result<(), ExecutionError> {
         let Instruction { opcode, c, .. } = instruction;
 
-        let local_opcode = BitwiseImmOpcode::from_usize(opcode.local_opcode_idx(self.offset));
+        let local_opcode = BaseAluImmOpcode::from_usize(opcode.local_opcode_idx(self.offset));
 
         let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
         A::start(*state.pc, state.memory, &mut adapter_record);
@@ -212,9 +212,8 @@ where
         core_record.imm_sign = (c_bytes[2] != 0) as u8;
         core_record.local_opcode = local_opcode as u8;
 
-        // BitwiseImmOpcode mirrors the XOR/OR/AND slots of BaseAluOpcode.
-        let reg_opcode = BaseAluOpcode::from_usize(local_opcode as usize);
-        let rd = run_bitwise_logic::<NUM_LIMBS, LIMB_BITS>(reg_opcode, &core_record.b, &c_bytes);
+        let rd =
+            run_bitwise_logic_imm::<NUM_LIMBS, LIMB_BITS>(local_opcode, &core_record.b, &c_bytes);
 
         self.adapter
             .write(state.memory, instruction, [rd].into(), &mut adapter_record);
@@ -250,8 +249,8 @@ where
             _ => sign_byte,
         });
 
-        let reg_opcode = BaseAluOpcode::from_usize(local_opcode as usize);
-        let a = run_bitwise_logic::<NUM_LIMBS, LIMB_BITS>(reg_opcode, &b, &c);
+        let opcode = BaseAluImmOpcode::from_usize(local_opcode as usize);
+        let a = run_bitwise_logic_imm::<NUM_LIMBS, LIMB_BITS>(opcode, &b, &c);
 
         self.bitwise_lookup_chip
             .request_range(c_low[0] as u32, (c_low[1] + 0xf8) as u32);
@@ -260,12 +259,27 @@ where
                 .request_xor(b_val as u32, c_val as u32);
         }
 
-        core_row.opcode_and_flag = F::from_bool(local_opcode == BitwiseImmOpcode::ANDI as u8);
-        core_row.opcode_or_flag = F::from_bool(local_opcode == BitwiseImmOpcode::ORI as u8);
-        core_row.opcode_xor_flag = F::from_bool(local_opcode == BitwiseImmOpcode::XORI as u8);
+        core_row.opcode_and_flag = F::from_bool(local_opcode == BaseAluImmOpcode::ANDI as u8);
+        core_row.opcode_or_flag = F::from_bool(local_opcode == BaseAluImmOpcode::ORI as u8);
+        core_row.opcode_xor_flag = F::from_bool(local_opcode == BaseAluImmOpcode::XORI as u8);
         core_row.imm_sign = F::from_u8(imm_sign);
         core_row.c_low = c_low.map(F::from_u8);
         core_row.b = b.map(F::from_u8);
         core_row.a = a.map(F::from_u8);
     }
+}
+
+#[inline(always)]
+fn run_bitwise_logic_imm<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+    opcode: BaseAluImmOpcode,
+    x: &[u8; NUM_LIMBS],
+    y: &[u8; NUM_LIMBS],
+) -> [u8; NUM_LIMBS] {
+    let opcode = match opcode {
+        BaseAluImmOpcode::XORI => BaseAluOpcode::XOR,
+        BaseAluImmOpcode::ORI => BaseAluOpcode::OR,
+        BaseAluImmOpcode::ANDI => BaseAluOpcode::AND,
+        BaseAluImmOpcode::ADDI => unreachable!("bitwise core received ADDI"),
+    };
+    run_bitwise_logic::<NUM_LIMBS, LIMB_BITS>(opcode, x, y)
 }

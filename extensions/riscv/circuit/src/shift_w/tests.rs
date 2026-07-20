@@ -25,7 +25,7 @@ use test_case::test_case;
 #[cfg(feature = "cuda")]
 use {
     crate::{
-        adapters::Rv64BaseAluWU16AdapterRecord, Rv64ShiftWLogicalChipGpu,
+        adapters::Rv64BaseAluWRegU16AdapterRecord, Rv64ShiftWLogicalChipGpu,
         Rv64ShiftWRightArithmeticChipGpu, ShiftLogicalCoreRecord, ShiftRightArithmeticCoreRecord,
     },
     openvm_circuit::arch::{
@@ -44,13 +44,13 @@ use super::{
 };
 use crate::{
     adapters::{
-        Rv64BaseAluWU16AdapterAir, Rv64BaseAluWU16AdapterCols, Rv64BaseAluWU16AdapterExecutor,
-        Rv64BaseAluWU16AdapterFiller, RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
-        RV64_WORD_U16_LIMBS, U16_BITS,
+        Rv64BaseAluWRegU16AdapterAir, Rv64BaseAluWRegU16AdapterCols,
+        Rv64BaseAluWRegU16AdapterExecutor, Rv64BaseAluWRegU16AdapterFiller, RV64_BYTE_BITS,
+        RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS, RV64_WORD_U16_LIMBS, U16_BITS,
     },
     shift_logical::ShiftLogicalCoreCols,
     shift_right_arithmetic::ShiftRightArithmeticCoreCols,
-    test_utils::{generate_rv64_is_type_immediate, rv64_rand_write_register_or_imm},
+    test_utils::rv64_rand_write_register_or_imm,
 };
 
 type F = BabyBear;
@@ -106,14 +106,20 @@ fn create_logical_harness_fields(
     Rv64ShiftWLogicalChip<F>,
 ) {
     let air = Rv64ShiftWLogicalAir::new(
-        Rv64BaseAluWU16AdapterAir::new(execution_bridge, memory_bridge, range_checker_chip.bus()),
+        Rv64BaseAluWRegU16AdapterAir::new(
+            execution_bridge,
+            memory_bridge,
+            range_checker_chip.bus(),
+        ),
         ShiftWLogicalCoreAir::new(range_checker_chip.bus(), ShiftWOpcode::CLASS_OFFSET),
     );
-    let executor =
-        Rv64ShiftWLogicalExecutor::new(Rv64BaseAluWU16AdapterExecutor, ShiftWOpcode::CLASS_OFFSET);
+    let executor = Rv64ShiftWLogicalExecutor::new(
+        Rv64BaseAluWRegU16AdapterExecutor,
+        ShiftWOpcode::CLASS_OFFSET,
+    );
     let chip = Rv64ShiftWLogicalChip::<F>::new(
         ShiftWLogicalFiller::new(
-            Rv64BaseAluWU16AdapterFiller::new(range_checker_chip.clone()),
+            Rv64BaseAluWRegU16AdapterFiller::new(range_checker_chip.clone()),
             range_checker_chip,
         ),
         memory_helper,
@@ -132,16 +138,20 @@ fn create_right_arithmetic_harness_fields(
     Rv64ShiftWRightArithmeticChip<F>,
 ) {
     let air = Rv64ShiftWRightArithmeticAir::new(
-        Rv64BaseAluWU16AdapterAir::new(execution_bridge, memory_bridge, range_checker_chip.bus()),
+        Rv64BaseAluWRegU16AdapterAir::new(
+            execution_bridge,
+            memory_bridge,
+            range_checker_chip.bus(),
+        ),
         ShiftWRightArithmeticCoreAir::new(range_checker_chip.bus(), ShiftWOpcode::CLASS_OFFSET),
     );
     let executor = Rv64ShiftWRightArithmeticExecutor::new(
-        Rv64BaseAluWU16AdapterExecutor::new(),
+        Rv64BaseAluWRegU16AdapterExecutor::new(),
         ShiftWOpcode::CLASS_OFFSET,
     );
     let chip = Rv64ShiftWRightArithmeticChip::<F>::new(
         ShiftWRightArithmeticFiller::new(
-            Rv64BaseAluWU16AdapterFiller::new(range_checker_chip.clone()),
+            Rv64BaseAluWRegU16AdapterFiller::new(range_checker_chip.clone()),
             range_checker_chip,
         ),
         memory_helper,
@@ -177,31 +187,12 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     rng: &mut StdRng,
     opcode: ShiftWOpcode,
     b: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
-    is_imm: Option<bool>,
     c: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
 ) -> [u8; RV64_REGISTER_NUM_LIMBS] {
     let b = b.unwrap_or(array::from_fn(|_| rng.random_range(0..=u8::MAX)));
-    let (c_imm, c) = if is_imm.unwrap_or(rng.random_bool(0.5)) {
-        let (imm, c) = if let Some(c) = c {
-            ((u64::from_le_bytes(c) & 0xFFFFFF) as usize, c)
-        } else {
-            generate_rv64_is_type_immediate(rng)
-        };
-        (Some(imm), c)
-    } else {
-        (
-            None,
-            c.unwrap_or(array::from_fn(|_| rng.random_range(0..=u8::MAX))),
-        )
-    };
-    let (instruction, rd) = rv64_rand_write_register_or_imm(
-        tester,
-        b,
-        c,
-        c_imm,
-        opcode.global_opcode().as_usize(),
-        rng,
-    );
+    let c = c.unwrap_or(array::from_fn(|_| rng.random_range(0..=u8::MAX)));
+    let (instruction, rd) =
+        rv64_rand_write_register_or_imm(tester, b, c, None, opcode.global_opcode().as_usize(), rng);
     tester.execute(executor, arena, &instruction);
 
     let b_word: [u8; RV64_WORD_NUM_LIMBS] = b[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
@@ -231,16 +222,7 @@ fn execute_boundary_shifts<RA: Arena, E: PreflightExecutor<F, RA>>(
         for shift in REGISTER_SHIFT_AMOUNTS {
             let mut c = [0u8; RV64_REGISTER_NUM_LIMBS];
             c[0] = shift;
-            set_and_execute(
-                tester,
-                executor,
-                arena,
-                rng,
-                opcode,
-                Some(b),
-                Some(false),
-                Some(c),
-            );
+            set_and_execute(tester, executor, arena, rng, opcode, Some(b), Some(c));
         }
     }
 }
@@ -267,7 +249,6 @@ fn run_rv64w_shift_rand_test(opcode: ShiftWOpcode, num_ops: usize) {
                 opcode,
                 None,
                 None,
-                None,
             );
         }
         execute_boundary_shifts(
@@ -288,7 +269,6 @@ fn run_rv64w_shift_rand_test(opcode: ShiftWOpcode, num_ops: usize) {
                 &mut harness.arena,
                 &mut rng,
                 opcode,
-                None,
                 None,
                 None,
             );
@@ -346,7 +326,6 @@ fn run_negative_shift_logical_test(
         &mut rng,
         opcode,
         Some(b),
-        Some(false),
         Some(c),
     );
 
@@ -354,7 +333,7 @@ fn run_negative_shift_logical_test(
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut values = trace.row_slice(0).unwrap().to_vec();
         let (adapter_row, core_row) = values.split_at_mut(adapter_width);
-        let adapter_cols: &mut Rv64BaseAluWU16AdapterCols<F> = adapter_row.borrow_mut();
+        let adapter_cols: &mut Rv64BaseAluWRegU16AdapterCols<F> = adapter_row.borrow_mut();
         let cols: &mut ShiftWLogicalCoreCols<F> = core_row.borrow_mut();
 
         if let Some(a) = prank_vals.a {
@@ -512,7 +491,6 @@ fn run_negative_shift_right_arithmetic_test(
         &mut rng,
         opcode,
         Some(b),
-        Some(false),
         Some(c),
     );
 
@@ -520,7 +498,7 @@ fn run_negative_shift_right_arithmetic_test(
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut values = trace.row_slice(0).unwrap().to_vec();
         let (adapter_row, core_row) = values.split_at_mut(adapter_width);
-        let adapter_cols: &mut Rv64BaseAluWU16AdapterCols<F> = adapter_row.borrow_mut();
+        let adapter_cols: &mut Rv64BaseAluWRegU16AdapterCols<F> = adapter_row.borrow_mut();
         let cols: &mut ShiftWRightArithmeticCoreCols<F> = core_row.borrow_mut();
 
         if let Some(a) = prank_vals.a {
@@ -848,7 +826,6 @@ fn test_cuda_rand_shift_w_tracegen(opcode: ShiftWOpcode, num_ops: usize) {
                 opcode,
                 None,
                 None,
-                None,
             );
         }
 
@@ -861,7 +838,7 @@ fn test_cuda_rand_shift_w_tracegen(opcode: ShiftWOpcode, num_ops: usize) {
         );
 
         type Record<'a> = (
-            &'a mut Rv64BaseAluWU16AdapterRecord,
+            &'a mut Rv64BaseAluWRegU16AdapterRecord,
             &'a mut ShiftRightArithmeticCoreRecord<RV64_WORD_U16_LIMBS, U16_BITS>,
         );
         harness
@@ -869,7 +846,7 @@ fn test_cuda_rand_shift_w_tracegen(opcode: ShiftWOpcode, num_ops: usize) {
             .get_record_seeker::<Record, _>()
             .transfer_to_matrix_arena(
                 &mut harness.matrix_arena,
-                EmptyAdapterCoreLayout::<F, Rv64BaseAluWU16AdapterExecutor>::new(),
+                EmptyAdapterCoreLayout::<F, Rv64BaseAluWRegU16AdapterExecutor>::new(),
             );
 
         tester
@@ -890,7 +867,6 @@ fn test_cuda_rand_shift_w_tracegen(opcode: ShiftWOpcode, num_ops: usize) {
                 opcode,
                 None,
                 None,
-                None,
             );
         }
 
@@ -903,7 +879,7 @@ fn test_cuda_rand_shift_w_tracegen(opcode: ShiftWOpcode, num_ops: usize) {
         );
 
         type Record<'a> = (
-            &'a mut Rv64BaseAluWU16AdapterRecord,
+            &'a mut Rv64BaseAluWRegU16AdapterRecord,
             &'a mut ShiftLogicalCoreRecord<RV64_WORD_U16_LIMBS, U16_BITS>,
         );
         harness
@@ -911,7 +887,7 @@ fn test_cuda_rand_shift_w_tracegen(opcode: ShiftWOpcode, num_ops: usize) {
             .get_record_seeker::<Record, _>()
             .transfer_to_matrix_arena(
                 &mut harness.matrix_arena,
-                EmptyAdapterCoreLayout::<F, Rv64BaseAluWU16AdapterExecutor>::new(),
+                EmptyAdapterCoreLayout::<F, Rv64BaseAluWRegU16AdapterExecutor>::new(),
             );
 
         tester

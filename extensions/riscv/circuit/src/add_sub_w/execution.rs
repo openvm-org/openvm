@@ -8,65 +8,49 @@ use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_IMM_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS},
+    riscv::{RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::BaseAluWOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::AddSubWExecutor;
-use crate::adapters::imm_to_rv64_u64;
 
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
 pub(super) struct AddSubWPreCompute {
-    c: u64,
     a: u8,
     b: u8,
+    c: u8,
 }
 
 impl<A> AddSubWExecutor<A> {
-    /// Return `is_imm`, true if `e` is RV64_IMM_AS.
     #[inline(always)]
     pub(super) fn pre_compute_impl<F: PrimeField32>(
         &self,
         pc: u32,
         inst: &Instruction<F>,
         data: &mut AddSubWPreCompute,
-    ) -> Result<bool, StaticProgramError> {
+    ) -> Result<(), StaticProgramError> {
         let Instruction { a, b, c, d, e, .. } = inst;
-        let e_u32 = e.as_canonical_u32();
-        if (d.as_canonical_u32() != RV64_REGISTER_AS)
-            || !(e_u32 == RV64_IMM_AS || e_u32 == RV64_REGISTER_AS)
-        {
+        if d.as_canonical_u32() != RV64_REGISTER_AS || e.as_canonical_u32() != RV64_REGISTER_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
-        let is_imm = e_u32 == RV64_IMM_AS;
-        let c_u32 = c.as_canonical_u32();
         *data = AddSubWPreCompute {
-            c: if is_imm {
-                imm_to_rv64_u64(c_u32)
-            } else {
-                c_u32 as u64
-            },
             a: a.as_canonical_u32() as u8,
             b: b.as_canonical_u32() as u8,
+            c: c.as_canonical_u32() as u8,
         };
-        Ok(is_imm)
+        Ok(())
     }
 }
 
 macro_rules! dispatch {
-    ($execute_impl:ident, $is_imm:ident, $opcode:expr, $offset:expr) => {
+    ($execute_impl:ident, $opcode:expr, $offset:expr) => {
         Ok(
-            match (
-                $is_imm,
-                BaseAluWOpcode::from_usize($opcode.local_opcode_idx($offset)),
-            ) {
-                (true, BaseAluWOpcode::ADDW) => $execute_impl::<_, true, AddwOp>,
-                (false, BaseAluWOpcode::ADDW) => $execute_impl::<_, false, AddwOp>,
-                (true, BaseAluWOpcode::SUBW) => $execute_impl::<_, true, SubwOp>,
-                (false, BaseAluWOpcode::SUBW) => $execute_impl::<_, false, SubwOp>,
+            match BaseAluWOpcode::from_usize($opcode.local_opcode_idx($offset)) {
+                BaseAluWOpcode::ADDW => $execute_impl::<_, AddwOp>,
+                BaseAluWOpcode::SUBW => $execute_impl::<_, SubwOp>,
             },
         )
     };
@@ -92,9 +76,9 @@ where
         Ctx: ExecutionCtxTrait,
     {
         let data: &mut AddSubWPreCompute = data.borrow_mut();
-        let is_imm = self.pre_compute_impl(pc, inst, data)?;
+        self.pre_compute_impl(pc, inst, data)?;
 
-        dispatch!(execute_e1_handler, is_imm, inst.opcode, self.offset)
+        dispatch!(execute_e1_handler, inst.opcode, self.offset)
     }
 
     #[cfg(feature = "tco")]
@@ -108,9 +92,9 @@ where
         Ctx: ExecutionCtxTrait,
     {
         let data: &mut AddSubWPreCompute = data.borrow_mut();
-        let is_imm = self.pre_compute_impl(pc, inst, data)?;
+        self.pre_compute_impl(pc, inst, data)?;
 
-        dispatch!(execute_e1_handler, is_imm, inst.opcode, self.offset)
+        dispatch!(execute_e1_handler, inst.opcode, self.offset)
     }
 }
 
@@ -136,9 +120,9 @@ where
     {
         let data: &mut E2PreCompute<AddSubWPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
-        let is_imm = self.pre_compute_impl(pc, inst, &mut data.data)?;
+        self.pre_compute_impl(pc, inst, &mut data.data)?;
 
-        dispatch!(execute_e2_handler, is_imm, inst.opcode, self.offset)
+        dispatch!(execute_e2_handler, inst.opcode, self.offset)
     }
 
     #[cfg(feature = "tco")]
@@ -154,26 +138,21 @@ where
     {
         let data: &mut E2PreCompute<AddSubWPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
-        let is_imm = self.pre_compute_impl(pc, inst, &mut data.data)?;
+        self.pre_compute_impl(pc, inst, &mut data.data)?;
 
-        dispatch!(execute_e2_handler, is_imm, inst.opcode, self.offset)
+        dispatch!(execute_e2_handler, inst.opcode, self.offset)
     }
 }
 
 #[inline(always)]
-unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_IMM: bool, OP: AluWOp>(
+unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: AluWOp>(
     pre_compute: &AddSubWPreCompute,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let rs1 =
         exec_state.vm_read_bytes::<RV64_WORD_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.b as u32);
-    let rs2: [u8; RV64_WORD_NUM_LIMBS] = if IS_IMM {
-        pre_compute.c.to_le_bytes()[..RV64_WORD_NUM_LIMBS]
-            .try_into()
-            .unwrap()
-    } else {
-        exec_state.vm_read_bytes::<RV64_WORD_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.c as u32)
-    };
+    let rs2 =
+        exec_state.vm_read_bytes::<RV64_WORD_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.c as u32);
 
     let rs1_low = u32::from_le_bytes(rs1);
     let rs2_low = u32::from_le_bytes(rs2);
@@ -191,18 +170,18 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_IMM: bool, OP: AluWO
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, const IS_IMM: bool, OP: AluWOp>(
+unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, OP: AluWOp>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pre_compute: &AddSubWPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<AddSubWPreCompute>()).borrow();
-    execute_e12_impl::<CTX, IS_IMM, OP>(pre_compute, exec_state);
+    execute_e12_impl::<CTX, OP>(pre_compute, exec_state);
 }
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, const IS_IMM: bool, OP: AluWOp>(
+unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, OP: AluWOp>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
@@ -212,7 +191,7 @@ unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, const IS_IMM: bool, OP:
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<CTX, IS_IMM, OP>(&pre_compute.data, exec_state);
+    execute_e12_impl::<CTX, OP>(&pre_compute.data, exec_state);
 }
 
 trait AluWOp {

@@ -48,7 +48,7 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> AddIExecutor<A, NUM_LIMB
     }
 }
 
-impl<F, A> InterpreterExecutor<F> for AddIExecutor<A, { BLOCK_FE_WIDTH }, U16_BITS>
+impl<F, A, const NUM_LIMBS: usize> InterpreterExecutor<F> for AddIExecutor<A, NUM_LIMBS, U16_BITS>
 where
     F: PrimeField32,
 {
@@ -69,7 +69,7 @@ where
     {
         let data: &mut AddIPreCompute = data.borrow_mut();
         self.pre_compute_impl(pc, inst, data)?;
-        Ok(execute_e1_handler::<Ctx>)
+        Ok(execute_e1_handler::<Ctx, NUM_LIMBS>)
     }
 
     #[cfg(feature = "tco")]
@@ -84,11 +84,12 @@ where
     {
         let data: &mut AddIPreCompute = data.borrow_mut();
         self.pre_compute_impl(pc, inst, data)?;
-        Ok(execute_e1_handler::<Ctx>)
+        Ok(execute_e1_handler::<Ctx, NUM_LIMBS>)
     }
 }
 
-impl<F, A> InterpreterMeteredExecutor<F> for AddIExecutor<A, { BLOCK_FE_WIDTH }, U16_BITS>
+impl<F, A, const NUM_LIMBS: usize> InterpreterMeteredExecutor<F>
+    for AddIExecutor<A, NUM_LIMBS, U16_BITS>
 where
     F: PrimeField32,
 {
@@ -111,7 +112,7 @@ where
         let data: &mut E2PreCompute<AddIPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         self.pre_compute_impl(pc, inst, &mut data.data)?;
-        Ok(execute_e2_handler::<Ctx>)
+        Ok(execute_e2_handler::<Ctx, NUM_LIMBS>)
     }
 
     #[cfg(feature = "tco")]
@@ -128,12 +129,12 @@ where
         let data: &mut E2PreCompute<AddIPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         self.pre_compute_impl(pc, inst, &mut data.data)?;
-        Ok(execute_e2_handler::<Ctx>)
+        Ok(execute_e2_handler::<Ctx, NUM_LIMBS>)
     }
 }
 
 #[inline(always)]
-unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait>(
+unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const NUM_LIMBS: usize>(
     pre_compute: &AddIPreCompute,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
@@ -141,7 +142,11 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait>(
         exec_state
             .vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.rs1_ptr as u32),
     );
-    let rd = rs1.wrapping_add(pre_compute.imm);
+    let rd = if NUM_LIMBS * U16_BITS == 32 {
+        (rs1 as u32).wrapping_add(pre_compute.imm as u32) as i32 as i64 as u64
+    } else {
+        rs1.wrapping_add(pre_compute.imm)
+    };
     exec_state.vm_write_bytes::<RV64_REGISTER_NUM_LIMBS>(
         RV64_REGISTER_AS,
         pre_compute.rd_ptr as u32,
@@ -153,18 +158,18 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait>(
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait>(
+unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, const NUM_LIMBS: usize>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pre_compute: &AddIPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<AddIPreCompute>()).borrow();
-    execute_e12_impl::<CTX>(pre_compute, exec_state);
+    execute_e12_impl::<CTX, NUM_LIMBS>(pre_compute, exec_state);
 }
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait>(
+unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, const NUM_LIMBS: usize>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
@@ -173,7 +178,7 @@ unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait>(
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<CTX>(&pre_compute.data, exec_state);
+    execute_e12_impl::<CTX, NUM_LIMBS>(&pre_compute.data, exec_state);
 }
 
 #[cfg(test)]

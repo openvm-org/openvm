@@ -19,44 +19,35 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::{
-    utils::not,
     var_range::{SharedVariableRangeCheckerChip, VariableRangeCheckerBus},
     AlignedBytesBorrow, ColumnsAir, StructReflection, StructReflectionHelper,
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{
-    instruction::Instruction,
-    program::DEFAULT_PC_STEP,
-    riscv::{RV64_IMM_AS, RV64_REGISTER_AS},
+    instruction::Instruction, program::DEFAULT_PC_STEP, riscv::RV64_REGISTER_AS,
 };
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
-    p3_air::{AirBuilder, BaseAir},
+    p3_air::BaseAir,
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
 };
 
 use super::{
-    byte_ptr_to_u16_ptr, byte_ptr_to_u16_ptr_value, concat_rv64_u16_block, imm_to_rv64_u64,
-    tracing_read_u16, tracing_write_u16, RV64_WORD_U16_LIMBS, U16_BITS,
+    byte_ptr_to_u16_ptr, byte_ptr_to_u16_ptr_value, concat_rv64_u16_block, tracing_read_u16,
+    tracing_write_u16, RV64_WORD_U16_LIMBS, U16_BITS,
 };
 
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection)]
-pub struct Rv64BaseAluWU16AdapterCols<T> {
+pub struct Rv64BaseAluWRegU16AdapterCols<T> {
     pub from_state: ExecutionState<T>,
     pub rd_ptr: T,
     pub rs1_ptr: T,
     /// Upper 32 bits of the rs1 register read, as two u16 cells.
     pub rs1_high: [T; RV64_WORD_U16_LIMBS],
-    /// Pointer if rs2 was a read, immediate value otherwise.
-    pub rs2: T,
-    /// 1 if rs2 was a read, 0 if an immediate.
-    pub rs2_as: T,
-    /// Upper 32 bits of the rs2 register read, as two u16 cells (unused when rs2 is immediate).
+    pub rs2_ptr: T,
+    /// Upper 32 bits of the rs2 register read, as two u16 cells.
     pub rs2_high: [T; RV64_WORD_U16_LIMBS],
-    /// Sign bit of `rs2` when it is an immediate: 0 if positive, 1 if negative. Unused (= 0)
-    /// when `rs2_as == RV64_REGISTER_AS`.
-    pub rs2_imm_sign: T,
     /// Sign bit of the low-word core result (bit 15 of the high result limb), used to build the
     /// full-width sign-extended write.
     pub result_sign: T,
@@ -64,25 +55,22 @@ pub struct Rv64BaseAluWU16AdapterCols<T> {
     pub writes_aux: MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>,
 }
 
-/// u16-celled counterpart to [`super::Rv64BaseAluWAdapterAir`]. Exposes only the low 32-bit word
-/// (`RV64_WORD_U16_LIMBS` u16 limbs) to the core; full-width RV64 writes are rebuilt in-adapter by
-/// sign-extending the low-word result, and the result sign bit is extracted with the variable
-/// range checker instead of the bitwise lookup.
+/// Exposes the low 32-bit words of two register operands to the core and sign-extends the result.
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]
-#[columns_via(Rv64BaseAluWU16AdapterCols<u8>)]
-pub struct Rv64BaseAluWU16AdapterAir {
+#[columns_via(Rv64BaseAluWRegU16AdapterCols<u8>)]
+pub struct Rv64BaseAluWRegU16AdapterAir {
     pub(super) execution_bridge: ExecutionBridge,
     pub(super) memory_bridge: MemoryBridge,
     pub range_bus: VariableRangeCheckerBus,
 }
 
-impl<F: Field> BaseAir<F> for Rv64BaseAluWU16AdapterAir {
+impl<F: Field> BaseAir<F> for Rv64BaseAluWRegU16AdapterAir {
     fn width(&self) -> usize {
-        Rv64BaseAluWU16AdapterCols::<F>::width()
+        Rv64BaseAluWRegU16AdapterCols::<F>::width()
     }
 }
 
-impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluWU16AdapterAir {
+impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluWRegU16AdapterAir {
     type Interface = BasicAdapterInterface<
         AB::Expr,
         MinimalInstruction<AB::Expr>,
@@ -98,37 +86,13 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluWU16AdapterAir {
         local: &[AB::Var],
         ctx: AdapterAirContext<AB::Expr, Self::Interface>,
     ) {
-        let local: &Rv64BaseAluWU16AdapterCols<_> = local.borrow();
+        let local: &Rv64BaseAluWRegU16AdapterCols<_> = local.borrow();
         let timestamp = local.from_state.timestamp;
         let mut timestamp_delta: usize = 0;
         let mut timestamp_pp = || {
             timestamp_delta += 1;
             timestamp + AB::F::from_usize(timestamp_delta - 1)
         };
-
-        // If rs2 is an immediate value, constrain that the low-word limbs are the sign-extended
-        // immediate:
-        // 1. rs2_limbs[0] is the low u16 cell.
-        // 2. rs2_limbs[1] is the sign-extension cell (0x0000 / 0xFFFF).
-        // 3. The 24-bit signed encoding reconstructs to local.rs2.
-        let rs2_limbs = ctx.reads[1].clone();
-        let rs2_sign_u16 = local.rs2_imm_sign * AB::Expr::from_u32(u16::MAX as u32);
-        let rs2_low_u16 = rs2_limbs[0].clone();
-        let rs2_high_u16 = rs2_limbs[1].clone();
-
-        builder.assert_bool(local.rs2_as);
-        builder.assert_bool(local.rs2_imm_sign);
-
-        let mut rs2_imm_when = builder.when(not(local.rs2_as));
-        rs2_imm_when.assert_eq(
-            local.rs2,
-            rs2_low_u16.clone() + local.rs2_imm_sign * AB::Expr::from_u32(0xff_0000),
-        );
-        rs2_imm_when.assert_eq(rs2_high_u16, rs2_sign_u16);
-        // Range check the low u16 immediate limb.
-        self.range_bus
-            .range_check(rs2_low_u16, U16_BITS)
-            .eval(builder, ctx.instruction.is_valid.clone() - local.rs2_as);
 
         // Rebuild the full 64-bit register read from the low-word core limbs and the stashed
         // upper limbs, then send it on the memory bus.
@@ -146,20 +110,19 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluWU16AdapterAir {
             )
             .eval(builder, ctx.instruction.is_valid.clone());
 
-        // This constraint ensures that the following memory read only occurs when `is_valid == 1`.
-        builder
-            .when(local.rs2_as)
-            .assert_one(ctx.instruction.is_valid.clone());
         let rs2_data: [AB::Expr; BLOCK_FE_WIDTH] =
             concat_rv64_u16_block(&ctx.reads[1], &local.rs2_high);
         self.memory_bridge
             .read(
-                MemoryAddress::new(local.rs2_as, byte_ptr_to_u16_ptr::<AB>(local.rs2)),
+                MemoryAddress::new(
+                    AB::F::from_u32(RV64_REGISTER_AS),
+                    byte_ptr_to_u16_ptr::<AB>(local.rs2_ptr),
+                ),
                 rs2_data,
                 timestamp_pp(),
                 &local.reads_aux[1],
             )
-            .eval(builder, local.rs2_as);
+            .eval(builder, ctx.instruction.is_valid.clone());
 
         // Sign-extend the 32-bit result to 64 bits. Decomposing the top result limb as
         // `low15 + result_sign * 2^15`, with a 15-bit range check on `low15`, both proves that
@@ -193,9 +156,9 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluWU16AdapterAir {
                 [
                     local.rd_ptr.into(),
                     local.rs1_ptr.into(),
-                    local.rs2.into(),
+                    local.rs2_ptr.into(),
                     AB::Expr::from_u32(RV64_REGISTER_AS),
-                    local.rs2_as.into(),
+                    AB::Expr::from_u32(RV64_REGISTER_AS),
                 ],
                 local.from_state,
                 AB::F::from_usize(timestamp_delta),
@@ -205,50 +168,44 @@ impl<AB: InteractionBuilder> VmAdapterAir<AB> for Rv64BaseAluWU16AdapterAir {
     }
 
     fn get_from_pc(&self, local: &[AB::Var]) -> AB::Var {
-        let cols: &Rv64BaseAluWU16AdapterCols<_> = local.borrow();
+        let cols: &Rv64BaseAluWRegU16AdapterCols<_> = local.borrow();
         cols.from_state.pc
     }
 }
 
 #[derive(Clone, derive_new::new)]
-pub struct Rv64BaseAluWU16AdapterExecutor;
+pub struct Rv64BaseAluWRegU16AdapterExecutor;
 
 #[derive(derive_new::new)]
-pub struct Rv64BaseAluWU16AdapterFiller {
+pub struct Rv64BaseAluWRegU16AdapterFiller {
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
 #[repr(C)]
 #[derive(AlignedBytesBorrow, Debug)]
-pub struct Rv64BaseAluWU16AdapterRecord {
+pub struct Rv64BaseAluWRegU16AdapterRecord {
     pub from_pc: u32,
     pub from_timestamp: u32,
     pub rd_ptr: u32,
     pub rs1_ptr: u32,
     pub rs1_high: [u16; RV64_WORD_U16_LIMBS],
-    /// Pointer if rs2 was a read, immediate value otherwise.
-    pub rs2: u32,
-    /// 1 if rs2 was a read, 0 if an immediate.
-    pub rs2_as: u8,
-    /// Sign bit of the immediate; unused when `rs2_as == RV64_REGISTER_AS`.
-    pub rs2_imm_sign: bool,
+    pub rs2_ptr: u32,
     pub rs2_high: [u16; RV64_WORD_U16_LIMBS],
     /// Most significant low-word limb of the result, used to recover the sign bit and its 15-bit
     /// range-check witness.
     pub result_high: u16,
-    pub result_sign: u8,
     pub reads_aux: [MemoryReadAuxRecord; 2],
     pub writes_aux: MemoryWriteU16AuxRecord<BLOCK_FE_WIDTH>,
 }
 
-impl<F: PrimeField32> AdapterTraceExecutor<F> for Rv64BaseAluWU16AdapterExecutor {
-    const WIDTH: usize = size_of::<Rv64BaseAluWU16AdapterCols<u8>>();
+impl<F: PrimeField32> AdapterTraceExecutor<F> for Rv64BaseAluWRegU16AdapterExecutor {
+    const WIDTH: usize = size_of::<Rv64BaseAluWRegU16AdapterCols<u8>>();
     type ReadData = [[u16; RV64_WORD_U16_LIMBS]; 2];
     type WriteData = [[u16; RV64_WORD_U16_LIMBS]; 1];
-    type RecordMut<'a> = &'a mut Rv64BaseAluWU16AdapterRecord;
+    type RecordMut<'a> = &'a mut Rv64BaseAluWRegU16AdapterRecord;
 
     #[inline(always)]
-    fn start(pc: u32, memory: &TracingMemory, record: &mut &mut Rv64BaseAluWU16AdapterRecord) {
+    fn start(pc: u32, memory: &TracingMemory, record: &mut &mut Rv64BaseAluWRegU16AdapterRecord) {
         record.from_pc = pc;
         record.from_timestamp = memory.timestamp;
     }
@@ -258,14 +215,12 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for Rv64BaseAluWU16AdapterExecutor
         &self,
         memory: &mut TracingMemory,
         instruction: &Instruction<F>,
-        record: &mut &mut Rv64BaseAluWU16AdapterRecord,
+        record: &mut &mut Rv64BaseAluWRegU16AdapterRecord,
     ) -> Self::ReadData {
         let &Instruction { b, c, d, e, .. } = instruction;
 
         debug_assert_eq!(d.as_canonical_u32(), RV64_REGISTER_AS);
-        debug_assert!(
-            e.as_canonical_u32() == RV64_REGISTER_AS || e.as_canonical_u32() == RV64_IMM_AS
-        );
+        debug_assert_eq!(e.as_canonical_u32(), RV64_REGISTER_AS);
 
         record.rs1_ptr = b.as_canonical_u32();
         let rs1_full = tracing_read_u16::<BLOCK_FE_WIDTH>(
@@ -277,30 +232,15 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for Rv64BaseAluWU16AdapterExecutor
         record.rs1_high = array::from_fn(|i| rs1_full[RV64_WORD_U16_LIMBS + i]);
         let rs1 = array::from_fn(|i| rs1_full[i]);
 
-        let rs2 = if e.as_canonical_u32() == RV64_REGISTER_AS {
-            record.rs2_as = RV64_REGISTER_AS as u8;
-            record.rs2_imm_sign = false;
-            record.rs2 = c.as_canonical_u32();
-
-            let rs2_full = tracing_read_u16::<BLOCK_FE_WIDTH>(
-                memory,
-                RV64_REGISTER_AS,
-                byte_ptr_to_u16_ptr_value(record.rs2),
-                &mut record.reads_aux[1].prev_timestamp,
-            );
-            record.rs2_high = array::from_fn(|i| rs2_full[RV64_WORD_U16_LIMBS + i]);
-            array::from_fn(|i| rs2_full[i])
-        } else {
-            record.rs2_as = RV64_IMM_AS as u8;
-            let imm = c.as_canonical_u32();
-            record.rs2 = imm;
-            let imm64 = imm_to_rv64_u64(imm);
-            let sign_u16 = (imm64 >> U16_BITS) as u16;
-            record.rs2_imm_sign = sign_u16 != 0;
-            record.rs2_high = [sign_u16; RV64_WORD_U16_LIMBS];
-            memory.increment_timestamp();
-            array::from_fn(|i| (imm64 >> (U16_BITS * i)) as u16)
-        };
+        record.rs2_ptr = c.as_canonical_u32();
+        let rs2_full = tracing_read_u16::<BLOCK_FE_WIDTH>(
+            memory,
+            RV64_REGISTER_AS,
+            byte_ptr_to_u16_ptr_value(record.rs2_ptr),
+            &mut record.reads_aux[1].prev_timestamp,
+        );
+        record.rs2_high = array::from_fn(|i| rs2_full[RV64_WORD_U16_LIMBS + i]);
+        let rs2 = array::from_fn(|i| rs2_full[i]);
 
         [rs1, rs2]
     }
@@ -311,7 +251,7 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for Rv64BaseAluWU16AdapterExecutor
         memory: &mut TracingMemory,
         instruction: &Instruction<F>,
         data: Self::WriteData,
-        record: &mut &mut Rv64BaseAluWU16AdapterRecord,
+        record: &mut &mut Rv64BaseAluWRegU16AdapterRecord,
     ) {
         let &Instruction { a, d, .. } = instruction;
 
@@ -320,8 +260,8 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for Rv64BaseAluWU16AdapterExecutor
         record.rd_ptr = a.as_canonical_u32();
         let write_low = data[0];
         record.result_high = write_low[RV64_WORD_U16_LIMBS - 1];
-        record.result_sign = (record.result_high >> (U16_BITS - 1)) as u8;
-        let sign_extend_limb = if record.result_sign != 0 { u16::MAX } else { 0 };
+        let result_sign = record.result_high >> (U16_BITS - 1);
+        let sign_extend_limb = if result_sign != 0 { u16::MAX } else { 0 };
         let write_data: [u16; BLOCK_FE_WIDTH] = array::from_fn(|i| {
             if i < RV64_WORD_U16_LIMBS {
                 write_low[i]
@@ -340,14 +280,14 @@ impl<F: PrimeField32> AdapterTraceExecutor<F> for Rv64BaseAluWU16AdapterExecutor
     }
 }
 
-impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64BaseAluWU16AdapterFiller {
-    const WIDTH: usize = size_of::<Rv64BaseAluWU16AdapterCols<u8>>();
+impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64BaseAluWRegU16AdapterFiller {
+    const WIDTH: usize = size_of::<Rv64BaseAluWRegU16AdapterCols<u8>>();
 
     fn fill_trace_row(&self, mem_helper: &MemoryAuxColsFactory<F>, mut adapter_row: &mut [F]) {
         // SAFETY:
         // - caller ensures `adapter_row` contains a valid record representation
-        // - get_record_from_slice correctly interprets the bytes as Rv64BaseAluWU16AdapterRecord
-        let record: &Rv64BaseAluWU16AdapterRecord =
+        // - get_record_from_slice correctly interprets the bytes as Rv64BaseAluWRegU16AdapterRecord
+        let record: &Rv64BaseAluWRegU16AdapterRecord =
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
 
         // Copy every field out of the overlaid record before reinterpreting the row as columns;
@@ -357,12 +297,10 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64BaseAluWU16AdapterFiller {
         let rd_ptr = record.rd_ptr;
         let rs1_ptr = record.rs1_ptr;
         let rs1_high = record.rs1_high;
-        let rs2 = record.rs2;
-        let rs2_as = record.rs2_as;
-        let rs2_imm_sign = record.rs2_imm_sign;
+        let rs2_ptr = record.rs2_ptr;
         let rs2_high = record.rs2_high;
         let result_high = record.result_high;
-        let result_sign = record.result_sign;
+        let result_sign = result_high >> (U16_BITS - 1);
         let reads_aux_prev_ts = [
             record.reads_aux[0].prev_timestamp,
             record.reads_aux[1].prev_timestamp,
@@ -370,12 +308,8 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64BaseAluWU16AdapterFiller {
         let writes_aux_prev_ts = record.writes_aux.prev_timestamp;
         let writes_aux_prev_data = record.writes_aux.prev_data;
 
-        let adapter_row: &mut Rv64BaseAluWU16AdapterCols<F> = adapter_row.borrow_mut();
+        let adapter_row: &mut Rv64BaseAluWRegU16AdapterCols<F> = adapter_row.borrow_mut();
 
-        if rs2_as as u32 == RV64_IMM_AS {
-            let imm_low_u16 = rs2 & (u16::MAX as u32);
-            self.range_checker_chip.add_count(imm_low_u16, U16_BITS);
-        }
         // 15-bit range-check witness for the result sign decomposition.
         let result_low15 = (result_high & ((1 << (U16_BITS - 1)) - 1)) as u32;
         self.range_checker_chip
@@ -390,15 +324,11 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64BaseAluWU16AdapterFiller {
             adapter_row.writes_aux.as_mut(),
         );
 
-        if rs2_as as u32 == RV64_IMM_AS {
-            mem_helper.fill_zero(adapter_row.reads_aux[1].as_mut());
-        } else {
-            mem_helper.fill(
-                reads_aux_prev_ts[1],
-                from_timestamp + 1,
-                adapter_row.reads_aux[1].as_mut(),
-            );
-        }
+        mem_helper.fill(
+            reads_aux_prev_ts[1],
+            from_timestamp + 1,
+            adapter_row.reads_aux[1].as_mut(),
+        );
 
         mem_helper.fill(
             reads_aux_prev_ts[0],
@@ -406,11 +336,9 @@ impl<F: PrimeField32> AdapterTraceFiller<F> for Rv64BaseAluWU16AdapterFiller {
             adapter_row.reads_aux[0].as_mut(),
         );
 
-        adapter_row.result_sign = F::from_u8(result_sign);
+        adapter_row.result_sign = F::from_u16(result_sign);
         adapter_row.rs2_high = rs2_high.map(F::from_u16);
-        adapter_row.rs2_imm_sign = F::from_bool(rs2_imm_sign);
-        adapter_row.rs2_as = F::from_u8(rs2_as);
-        adapter_row.rs2 = F::from_u32(rs2);
+        adapter_row.rs2_ptr = F::from_u32(rs2_ptr);
         adapter_row.rs1_high = rs1_high.map(F::from_u16);
         adapter_row.rs1_ptr = F::from_u32(rs1_ptr);
         adapter_row.rd_ptr = F::from_u32(rd_ptr);

@@ -2,7 +2,8 @@ use openvm_circuit::arch::{VmAirWrapper, VmChipWrapper, BLOCK_FE_WIDTH};
 
 use crate::adapters::{
     Rv64BaseAluImmU16AdapterAir, Rv64BaseAluImmU16AdapterExecutor, Rv64BaseAluImmU16AdapterFiller,
-    U16_BITS,
+    Rv64BaseAluWImmU16AdapterAir, Rv64BaseAluWImmU16AdapterExecutor,
+    Rv64BaseAluWImmU16AdapterFiller, RV64_WORD_U16_LIMBS, U16_BITS,
 };
 
 mod core;
@@ -26,4 +27,15 @@ pub type Rv64ShiftLogicalImmExecutor =
 pub type Rv64ShiftLogicalImmChip<F> = VmChipWrapper<
     F,
     ShiftLogicalImmFiller<Rv64BaseAluImmU16AdapterFiller, BLOCK_FE_WIDTH, U16_BITS>,
+>;
+
+pub type Rv64ShiftWLogicalImmAir = VmAirWrapper<
+    Rv64BaseAluWImmU16AdapterAir,
+    ShiftLogicalImmCoreAir<RV64_WORD_U16_LIMBS, U16_BITS>,
+>;
+pub type Rv64ShiftWLogicalImmExecutor =
+    ShiftLogicalImmExecutor<Rv64BaseAluWImmU16AdapterExecutor, RV64_WORD_U16_LIMBS, U16_BITS>;
+pub type Rv64ShiftWLogicalImmChip<F> = VmChipWrapper<
+    F,
+    ShiftLogicalImmFiller<Rv64BaseAluWImmU16AdapterFiller, RV64_WORD_U16_LIMBS, U16_BITS>,
 >;

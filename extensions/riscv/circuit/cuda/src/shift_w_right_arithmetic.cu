@@ -3,8 +3,7 @@
 #include "primitives/constants.h"
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
-#include "riscv/adapters/alu_w.cuh"
-#include "riscv/adapters/alu_w_u16.cuh"
+#include "riscv/adapters/alu_w_reg_u16.cuh"
 #include "riscv/cores/shift_right_arithmetic.cuh"
 #include "system/memory/params.cuh"
 
@@ -20,12 +19,12 @@ using Rv64ShiftWRightArithmeticCoreCols =
     ShiftRightArithmeticCoreCols<T, RV64_WORD_U16_LIMBS, U16_BITS>;
 
 template <typename T> struct ShiftWRightArithmeticCols {
-    Rv64BaseAluWU16AdapterCols<T> adapter;
+    Rv64BaseAluWRegU16AdapterCols<T> adapter;
     Rv64ShiftWRightArithmeticCoreCols<T> core;
 };
 
 struct ShiftWRightArithmeticRecord {
-    Rv64BaseAluWU16AdapterRecord adapter;
+    Rv64BaseAluWRegU16AdapterRecord adapter;
     Rv64ShiftWRightArithmeticCoreRecord core;
 };
 
@@ -41,8 +40,9 @@ __global__ void rv64_shift_w_right_arithmetic_tracegen(
     RowSlice row(trace + idx, height);
     if (idx < records.len()) {
         auto const &rec = records[idx];
-        auto adapter =
-            Rv64BaseAluWU16Adapter(VariableRangeChecker(range_ptr, range_bins), timestamp_max_bits);
+        auto adapter = Rv64BaseAluWRegU16Adapter(
+            VariableRangeChecker(range_ptr, range_bins), timestamp_max_bits
+        );
         adapter.fill_trace_row(row, rec.adapter);
         auto core = Rv64ShiftWRightArithmeticCore(VariableRangeChecker(range_ptr, range_bins));
         core.fill_trace_row(row.slice_from(COL_INDEX(ShiftWRightArithmeticCols, core)), rec.core);
@@ -65,12 +65,7 @@ extern "C" int _rv64_shift_w_right_arithmetic_tracegen(
     auto [grid, block] = kernel_launch_params(height, 512);
 
     rv64_shift_w_right_arithmetic_tracegen<<<grid, block, 0, stream>>>(
-        d_trace,
-        height,
-        d_records,
-        d_range_checker,
-        range_checker_num_bins,
-        timestamp_max_bits
+        d_trace, height, d_records, d_range_checker, range_checker_num_bins, timestamp_max_bits
     );
     return CHECK_KERNEL();
 }

@@ -14,7 +14,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
-use openvm_riscv_transpiler::{LessThanImmOpcode, LessThanOpcode};
+use openvm_riscv_transpiler::LessThanImmOpcode;
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
@@ -352,9 +352,3 @@ where
         core_row.b = b.map(F::from_u16);
     }
 }
-
-// Keep the opcode mapping in sync with LessThanOpcode used by `run_less_than`.
-const _: () = assert!(
-    LessThanImmOpcode::SLTI as usize == LessThanOpcode::SLT as usize
-        && LessThanImmOpcode::SLTIU as usize == LessThanOpcode::SLTU as usize
-);

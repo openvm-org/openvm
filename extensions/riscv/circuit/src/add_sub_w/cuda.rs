@@ -9,7 +9,8 @@ use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
     adapters::{
-        Rv64BaseAluWU16AdapterCols, Rv64BaseAluWU16AdapterRecord, RV64_WORD_U16_LIMBS, U16_BITS,
+        Rv64BaseAluWRegU16AdapterCols, Rv64BaseAluWRegU16AdapterRecord, RV64_WORD_U16_LIMBS,
+        U16_BITS,
     },
     cuda_abi::add_sub_w_cuda::tracegen,
     AddSubCoreCols, AddSubCoreRecord,
@@ -24,7 +25,7 @@ pub struct Rv64AddSubWChipGpu {
 impl Chip<DenseRecordArena, GpuBackend> for Rv64AddSubWChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         const RECORD_SIZE: usize = size_of::<(
-            Rv64BaseAluWU16AdapterRecord,
+            Rv64BaseAluWRegU16AdapterRecord,
             AddSubCoreRecord<RV64_WORD_U16_LIMBS>,
         )>();
         let records = arena.allocated();
@@ -34,7 +35,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64AddSubWChipGpu {
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
         let trace_width = AddSubCoreCols::<F, RV64_WORD_U16_LIMBS, U16_BITS>::width()
-            + Rv64BaseAluWU16AdapterCols::<F>::width();
+            + Rv64BaseAluWRegU16AdapterCols::<F>::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
 

@@ -11,7 +11,7 @@ use openvm_instructions::{
     riscv::{RV64_IMM_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
-use openvm_riscv_transpiler::BitwiseImmOpcode;
+use openvm_riscv_transpiler::BaseAluImmOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::core::BitwiseLogicImmExecutor;
@@ -34,7 +34,7 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
         pc: u32,
         inst: &Instruction<F>,
         data: &mut BitwiseLogicImmPreCompute,
-    ) -> Result<BitwiseImmOpcode, StaticProgramError> {
+    ) -> Result<BaseAluImmOpcode, StaticProgramError> {
         let Instruction {
             opcode,
             a,
@@ -56,7 +56,7 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
             rd_ptr: a.as_canonical_u32() as u8,
             rs1_ptr: b.as_canonical_u32() as u8,
         };
-        Ok(BitwiseImmOpcode::from_usize(
+        Ok(BaseAluImmOpcode::from_usize(
             opcode.local_opcode_idx(self.offset),
         ))
     }
@@ -85,9 +85,10 @@ where
         let data: &mut BitwiseLogicImmPreCompute = data.borrow_mut();
         let opcode = self.pre_compute_impl(pc, inst, data)?;
         Ok(match opcode {
-            BitwiseImmOpcode::XORI => execute_e1_handler::<Ctx, XorOp>,
-            BitwiseImmOpcode::ORI => execute_e1_handler::<Ctx, OrOp>,
-            BitwiseImmOpcode::ANDI => execute_e1_handler::<Ctx, AndOp>,
+            BaseAluImmOpcode::XORI => execute_e1_handler::<Ctx, XorOp>,
+            BaseAluImmOpcode::ORI => execute_e1_handler::<Ctx, OrOp>,
+            BaseAluImmOpcode::ANDI => execute_e1_handler::<Ctx, AndOp>,
+            BaseAluImmOpcode::ADDI => unreachable!(),
         })
     }
 
@@ -104,9 +105,10 @@ where
         let data: &mut BitwiseLogicImmPreCompute = data.borrow_mut();
         let opcode = self.pre_compute_impl(pc, inst, data)?;
         Ok(match opcode {
-            BitwiseImmOpcode::XORI => execute_e1_handler::<Ctx, XorOp>,
-            BitwiseImmOpcode::ORI => execute_e1_handler::<Ctx, OrOp>,
-            BitwiseImmOpcode::ANDI => execute_e1_handler::<Ctx, AndOp>,
+            BaseAluImmOpcode::XORI => execute_e1_handler::<Ctx, XorOp>,
+            BaseAluImmOpcode::ORI => execute_e1_handler::<Ctx, OrOp>,
+            BaseAluImmOpcode::ANDI => execute_e1_handler::<Ctx, AndOp>,
+            BaseAluImmOpcode::ADDI => unreachable!(),
         })
     }
 }
@@ -136,9 +138,10 @@ where
         data.chip_idx = chip_idx as u32;
         let opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
         Ok(match opcode {
-            BitwiseImmOpcode::XORI => execute_e2_handler::<Ctx, XorOp>,
-            BitwiseImmOpcode::ORI => execute_e2_handler::<Ctx, OrOp>,
-            BitwiseImmOpcode::ANDI => execute_e2_handler::<Ctx, AndOp>,
+            BaseAluImmOpcode::XORI => execute_e2_handler::<Ctx, XorOp>,
+            BaseAluImmOpcode::ORI => execute_e2_handler::<Ctx, OrOp>,
+            BaseAluImmOpcode::ANDI => execute_e2_handler::<Ctx, AndOp>,
+            BaseAluImmOpcode::ADDI => unreachable!(),
         })
     }
 
@@ -157,9 +160,10 @@ where
         data.chip_idx = chip_idx as u32;
         let opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
         Ok(match opcode {
-            BitwiseImmOpcode::XORI => execute_e2_handler::<Ctx, XorOp>,
-            BitwiseImmOpcode::ORI => execute_e2_handler::<Ctx, OrOp>,
-            BitwiseImmOpcode::ANDI => execute_e2_handler::<Ctx, AndOp>,
+            BaseAluImmOpcode::XORI => execute_e2_handler::<Ctx, XorOp>,
+            BaseAluImmOpcode::ORI => execute_e2_handler::<Ctx, OrOp>,
+            BaseAluImmOpcode::ANDI => execute_e2_handler::<Ctx, AndOp>,
+            BaseAluImmOpcode::ADDI => unreachable!(),
         })
     }
 }
