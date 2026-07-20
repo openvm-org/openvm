@@ -26,7 +26,7 @@ struct Rv64AddIWRecord {
 static_assert(sizeof(Rv64AddIWRecord) == 48);
 static_assert(offsetof(Rv64AddIWRecord, core) == 40);
 
-__global__ void addiw_tracegen(
+__global__ void addi_w_tracegen(
     Fp *trace,
     size_t height,
     size_t width,
@@ -50,7 +50,7 @@ __global__ void addiw_tracegen(
     }
 }
 
-extern "C" int _addiw_tracegen(
+extern "C" int _addi_w_tracegen(
     Fp *__restrict__ trace,
     size_t height,
     size_t width,
@@ -62,7 +62,7 @@ extern "C" int _addiw_tracegen(
 ) {
     assert(width == sizeof(Rv64AddIWCols<uint8_t>));
     auto [grid, block] = kernel_launch_params(height, 512);
-    addiw_tracegen<<<grid, block, 0, stream>>>(
+    addi_w_tracegen<<<grid, block, 0, stream>>>(
         trace, height, width, records, range_ptr, range_bins, timestamp_max_bits
     );
     return CHECK_KERNEL();

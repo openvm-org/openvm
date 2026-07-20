@@ -17,7 +17,7 @@ use crate::{
         Rv64BaseAluWImmU16AdapterCols, Rv64BaseAluWImmU16AdapterRecord, RV64_WORD_U16_LIMBS,
         U16_BITS,
     },
-    cuda_abi::{addi_cuda, addiw_cuda},
+    cuda_abi::{addi_cuda, addi_w_cuda},
 };
 
 const _: () = assert!(
@@ -96,7 +96,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64AddIWChipGpu {
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
 
         unsafe {
-            addiw_cuda::tracegen(
+            addi_w_cuda::tracegen(
                 d_trace.buffer(),
                 trace_height,
                 &d_records,

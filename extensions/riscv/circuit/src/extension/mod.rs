@@ -243,12 +243,15 @@ impl VmExecutionExtension for Rv64I {
             [ShiftWOpcode::SRAW].map(|x| x.global_opcode()),
         )?;
 
-        let addiw = Rv64AddIWExecutor::new(
+        let addi_w = Rv64AddIWExecutor::new(
             Rv64BaseAluWImmU16AdapterExecutor,
             BaseAluWImmOpcode::CLASS_OFFSET,
             BaseAluWImmOpcode::ADDIW as usize,
         );
-        inventory.add_executor(addiw, [BaseAluWImmOpcode::ADDIW].map(|x| x.global_opcode()))?;
+        inventory.add_executor(
+            addi_w,
+            [BaseAluWImmOpcode::ADDIW].map(|x| x.global_opcode()),
+        )?;
 
         let shift_w_logical_imm = Rv64ShiftWLogicalImmExecutor::new(
             Rv64BaseAluWImmU16AdapterExecutor,
@@ -533,7 +536,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
         );
         inventory.add_air(shift_w_right_arithmetic);
 
-        let addiw = Rv64AddIWAir::new(
+        let addi_w = Rv64AddIWAir::new(
             Rv64BaseAluWImmU16AdapterAir::new(exec_bridge, memory_bridge, range_checker),
             AddICoreAir::new(
                 range_checker,
@@ -541,7 +544,7 @@ impl<SC: StarkProtocolConfig> VmCircuitExtension<SC> for Rv64I {
                 BaseAluWImmOpcode::ADDIW as usize,
             ),
         );
-        inventory.add_air(addiw);
+        inventory.add_air(addi_w);
 
         let shift_w_logical_imm = Rv64ShiftWLogicalImmAir::new(
             Rv64BaseAluWImmU16AdapterAir::new(exec_bridge, memory_bridge, range_checker),
@@ -862,14 +865,14 @@ where
         inventory.add_executor_chip(shift_w_right_arithmetic);
 
         inventory.next_air::<Rv64AddIWAir>()?;
-        let addiw = Rv64AddIWChip::new(
+        let addi_w = Rv64AddIWChip::new(
             AddIFiller::new(
                 Rv64BaseAluWImmU16AdapterFiller::new(range_checker.clone()),
                 range_checker.clone(),
             ),
             mem_helper.clone(),
         );
-        inventory.add_executor_chip(addiw);
+        inventory.add_executor_chip(addi_w);
 
         inventory.next_air::<Rv64ShiftWLogicalImmAir>()?;
         let shift_w_logical_imm = Rv64ShiftWLogicalImmChip::new(

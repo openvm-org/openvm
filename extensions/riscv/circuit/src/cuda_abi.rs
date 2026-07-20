@@ -897,10 +897,10 @@ pub mod addi_cuda {
     }
 }
 
-pub mod addiw_cuda {
+pub mod addi_w_cuda {
     use super::*;
     extern "C" {
-        fn _addiw_tracegen(
+        fn _addi_w_tracegen(
             d_trace: *mut F,
             height: usize,
             width: usize,
@@ -920,7 +920,7 @@ pub mod addiw_cuda {
         timestamp_max_bits: u32,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
-        CudaError::from_result(_addiw_tracegen(
+        CudaError::from_result(_addi_w_tracegen(
             d_trace.as_mut_ptr(),
             height,
             d_trace.len() / height,

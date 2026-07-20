@@ -92,8 +92,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
         inventory.add_executor_chip(shift_w_right_arithmetic);
 
         inventory.next_air::<Rv64AddIWAir>()?;
-        let addiw = Rv64AddIWChipGpu::new(range_checker.clone(), timestamp_max_bits);
-        inventory.add_executor_chip(addiw);
+        let addi_w = Rv64AddIWChipGpu::new(range_checker.clone(), timestamp_max_bits);
+        inventory.add_executor_chip(addi_w);
 
         inventory.next_air::<Rv64ShiftWLogicalImmAir>()?;
         let shift_w_logical_imm =
