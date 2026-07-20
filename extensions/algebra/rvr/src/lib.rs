@@ -2,9 +2,8 @@
 //!
 //! Provides IR nodes for modular arithmetic (ADD, SUB, MUL, DIV, IS_EQ, SETUP),
 //! Fp2 (complex extension field) operations, and phantom instructions
-//! (HintNonQr, HintSqrt). Lifting/codegen splits across [`ModularRvrExtension`]
-//! (modular + phantoms; ships the lift-time C and libsecp256k1 inputs for
-//! k256) and [`Fp2RvrExtension`] (fp2 ops only; Rust-only).
+//! (HintNonQr, HintSqrt). [`ModularRvrExtension`] also supplies the native C
+//! libraries used by known modular, Fp2, and elliptic-curve operations.
 
 mod common;
 mod fp2;

@@ -11,5 +11,5 @@ repository.workspace = true
 crate-type = ["staticlib"]
 
 [build-dependencies]
-cc = "1"
+cc.workspace = true
 rvr-openvm-build.workspace = true

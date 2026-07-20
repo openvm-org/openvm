@@ -12,11 +12,8 @@ use rvr_openvm_ext_ffi_common::{rd_mem_words_traced, wr_mem_words_traced};
 pub const FIELD_256_BYTES: usize = 32;
 /// Number of 8-byte words in a 256-bit field element.
 pub const FIELD_256_WORDS: usize = FIELD_256_BYTES / WORD_SIZE;
-
-/// Size of a BLS12-381 Fq element in bytes.
+/// Size of a BLS12-381 base field element in bytes.
 pub const BLS12_381_ELEM_BYTES: usize = 48;
-/// Number of 8-byte words in a BLS12-381 Fq element.
-pub const BLS12_381_ELEM_WORDS: usize = BLS12_381_ELEM_BYTES / WORD_SIZE;
 
 // ── FieldArith trait ─────────────────────────────────────────────────────────
 
@@ -90,7 +87,7 @@ impl<T: KnownFieldArith> FieldArith for T {
     }
 }
 
-// ── 256-bit / 384-bit field I/O ─────────────────────────────────────────────
+// ── 256-bit field I/O ───────────────────────────────────────────────────────
 
 /// Read a 256-bit field element from guest memory (traced).
 ///
@@ -128,47 +125,6 @@ pub unsafe fn write_field_256<F: PrimeField<Repr = [u8; 32]>>(
 ) {
     let bytes = val.to_repr();
     let mut words = [0u64; FIELD_256_WORDS];
-    for (i, w) in words.iter_mut().enumerate() {
-        *w = u64::from_le_bytes(
-            bytes[i * WORD_SIZE..(i + 1) * WORD_SIZE]
-                .try_into()
-                .unwrap(),
-        );
-    }
-    wr_mem_words_traced(state, ptr, &words);
-}
-
-/// Read a BLS12-381 Fq element (48 bytes) from guest memory (traced).
-///
-/// # Safety
-/// `state` must be a valid pointer to the C `RvState` struct.
-#[inline(always)]
-pub unsafe fn read_bls12_381_fq(state: *mut c_void, ptr: u64) -> blstrs::Fp {
-    let mut words = [0u64; BLS12_381_ELEM_WORDS];
-    rd_mem_words_traced(state, ptr, &mut words);
-    let mut bytes = [0u8; BLS12_381_ELEM_BYTES];
-    for (i, &w) in words.iter().enumerate() {
-        bytes[i * WORD_SIZE..(i + 1) * WORD_SIZE].copy_from_slice(&w.to_le_bytes());
-    }
-    blstrs::Fp::from_bytes_le(&bytes).unwrap_or_else(|| {
-        let modulus = BigUint::from_bytes_le(&blstrs::Fp::char());
-        let value = BigUint::from_bytes_le(&bytes);
-        let reduced = value % modulus;
-        let le = reduced.to_bytes_le();
-        let mut reduced_bytes = [0u8; BLS12_381_ELEM_BYTES];
-        reduced_bytes[..le.len()].copy_from_slice(&le);
-        blstrs::Fp::from_bytes_le(&reduced_bytes).unwrap()
-    })
-}
-
-/// Write a BLS12-381 Fq element (48 bytes) to guest memory (traced).
-///
-/// # Safety
-/// `state` must be a valid pointer to the C `RvState` struct.
-#[inline(always)]
-pub unsafe fn write_bls12_381_fq(state: *mut c_void, ptr: u64, val: &blstrs::Fp) {
-    let bytes = val.to_bytes_le();
-    let mut words = [0u64; BLS12_381_ELEM_WORDS];
     for (i, w) in words.iter_mut().enumerate() {
         *w = u64::from_le_bytes(
             bytes[i * WORD_SIZE..(i + 1) * WORD_SIZE]

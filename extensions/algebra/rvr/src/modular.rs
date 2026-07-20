@@ -164,10 +164,7 @@ impl ExtInstr for HintSqrtInstr {
 
 // ── Modular extension ────────────────────────────────────────────────────────
 
-/// Modular arithmetic + phantom hints. Owns the modular Rust FFI staticlib
-/// (built at repo build time) and registers `rvr_ext_modular.c` plus its
-/// libsecp256k1 inputs for lift-time compilation. Independent of
-/// [`crate::Fp2RvrExtension`].
+/// Modular arithmetic and phantom hints.
 pub struct ModularRvrExtension {
     moduli: Vec<ModulusInfo>,
 }
@@ -202,17 +199,29 @@ impl RvrExtension for ModularRvrExtension {
     }
 
     fn c_sources(&self) -> Vec<(&'static str, &'static str)> {
-        vec![(
-            "rvr_ext_modular.c",
-            include_str!("../ffi/modular/c/rvr_ext_modular.c"),
-        )]
+        vec![
+            (
+                "rvr_ext_modular.c",
+                include_str!("../ffi/modular/c/rvr_ext_modular.c"),
+            ),
+            (
+                "rvr_ext_bls12_381.c",
+                include_str!("../ffi/modular/c/rvr_ext_bls12_381.c"),
+            ),
+        ]
     }
 
     fn staticlib_files(&self) -> Vec<(&'static str, &'static [u8])> {
-        vec![(
-            "librvr_openvm_ext_algebra_modular_ffi.a",
-            include_bytes!(env!("RVR_ALGEBRA_MODULAR_FFI_STATICLIB")),
-        )]
+        vec![
+            (
+                "librvr_openvm_ext_algebra_modular_ffi.a",
+                include_bytes!(env!("RVR_ALGEBRA_MODULAR_FFI_STATICLIB")),
+            ),
+            (
+                "libblst.a",
+                include_bytes!(env!("RVR_ALGEBRA_BLST_STATICLIB")),
+            ),
+        ]
     }
 
     fn extra_c_sources(&self) -> Vec<(&'static str, &'static str)> {
@@ -229,7 +238,18 @@ impl RvrExtension for ModularRvrExtension {
     }
 
     fn extra_c_include_files(&self) -> Vec<(&'static str, &'static str)> {
-        SECP256K1_C_FILES.to_vec()
+        let mut files = SECP256K1_C_FILES.to_vec();
+        files.extend([
+            (
+                "blst.h",
+                include_str!("../ffi/modular/blst/bindings/blst.h"),
+            ),
+            (
+                "blst_aux.h",
+                include_str!("../ffi/modular/blst/bindings/blst_aux.h"),
+            ),
+        ]);
+        files
     }
 
     fn extra_cflags(&self) -> Vec<String> {
