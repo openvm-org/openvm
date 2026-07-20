@@ -12,3 +12,7 @@
 	path = extensions/keccak256/rvr/ffi/openssl
 	url = https://github.com/openssl/openssl.git
 	shallow = true
+[submodule "extensions/algebra/rvr/ffi/modular/blst"]
+	path = extensions/algebra/rvr/ffi/modular/blst
+	url = https://github.com/supranational/blst.git
+	shallow = true

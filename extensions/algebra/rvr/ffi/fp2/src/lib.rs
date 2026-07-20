@@ -1,6 +1,6 @@
-//! Fp2 (complex extension field) arithmetic FFI. Per-curve specializations
-//! dispatch to native `halo2curves_axiom::bn256::Fq2` / `blstrs::Fp2`;
-//! unknown moduli fall back to a BigUint-pair path.
+//! Rust FFI for BN254 and generic Fp2 arithmetic.
+//!
+//! BN254 uses `halo2curves_axiom`; other moduli use `BigUint`.
 //!
 //! Shared helpers (I/O, `FieldArith`, `exec_op`) live in
 //! `rvr-openvm-ext-algebra-ffi-common`.
@@ -11,13 +11,12 @@ use num_bigint::BigUint;
 use openvm_instructions::riscv::RV64_MEMORY_AS;
 use openvm_platform::WORD_SIZE;
 use rvr_openvm_ext_algebra_ffi_common::{
-    known_field_op_fn, mod_inverse, read_bigint, read_bls12_381_fq, read_field_256, write_bigint,
-    write_bls12_381_fq, write_field_256, FieldArith, KnownFieldArith,
+    known_field_op_fn, mod_inverse, read_bigint, read_field_256, write_bigint, write_field_256,
+    FieldArith, KnownFieldArith,
 };
 use rvr_openvm_ext_ffi_common::{rd_mem_words_traced, trace_mem_access_range, wr_mem_words_traced};
 
 const FIELD_256_BYTES: u64 = rvr_openvm_ext_algebra_ffi_common::FIELD_256_BYTES as u64;
-const BLS12_381_ELEM_BYTES: u64 = rvr_openvm_ext_algebra_ffi_common::BLS12_381_ELEM_BYTES as u64;
 
 // ── Field structs ───────────────────────────────────────────────────────────
 
@@ -45,24 +44,6 @@ impl KnownFieldArith for KnownComplexField<halo2curves_axiom::bn256::Fq2> {
     unsafe fn write_elem(&self, state: *mut c_void, ptr: u64, val: &Self::Elem) {
         write_field_256::<halo2curves_axiom::bn256::Fq>(state, ptr, &val.c0);
         write_field_256::<halo2curves_axiom::bn256::Fq>(state, ptr + FIELD_256_BYTES, &val.c1);
-    }
-}
-
-impl KnownFieldArith for KnownComplexField<blstrs::Fp2> {
-    type Elem = blstrs::Fp2;
-
-    #[inline(always)]
-    unsafe fn read_elem(&self, state: *mut c_void, ptr: u64) -> Self::Elem {
-        blstrs::Fp2::new(
-            read_bls12_381_fq(state, ptr),
-            read_bls12_381_fq(state, ptr + BLS12_381_ELEM_BYTES),
-        )
-    }
-
-    #[inline(always)]
-    unsafe fn write_elem(&self, state: *mut c_void, ptr: u64, val: &Self::Elem) {
-        write_bls12_381_fq(state, ptr, &val.c0());
-        write_bls12_381_fq(state, ptr + BLS12_381_ELEM_BYTES, &val.c1());
     }
 }
 
@@ -130,7 +111,6 @@ macro_rules! define_fp2_ffi {
 }
 
 define_fp2_ffi!(halo2curves_axiom::bn256::Fq2, bn254);
-define_fp2_ffi!(blstrs::Fp2, bls12_381);
 
 // ── Generic FFI (fallback for unknown moduli) ────────────────────────────────
 

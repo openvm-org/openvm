@@ -4403,6 +4403,7 @@ dependencies = [
  "openvm-circuit",
  "openvm-ecc-circuit",
  "openvm-instructions",
+ "openvm-pairing-guest",
  "openvm-riscv-transpiler",
  "openvm-stark-sdk",
  "openvm-toolchain-tests",
@@ -7260,6 +7261,7 @@ version = "2.0.0"
 name = "rvr-openvm-ext-algebra"
 version = "2.0.0"
 dependencies = [
+ "cc",
  "num-bigint 0.4.6",
  "openvm-algebra-transpiler",
  "openvm-algebra-utils",
@@ -7275,7 +7277,6 @@ dependencies = [
 name = "rvr-openvm-ext-algebra-ffi-common"
 version = "2.0.0"
 dependencies = [
- "blstrs",
  "halo2curves-axiom 0.7.3",
  "num-bigint 0.4.6",
  "num-integer",
@@ -7287,7 +7288,6 @@ dependencies = [
 name = "rvr-openvm-ext-algebra-fp2-ffi"
 version = "2.0.0"
 dependencies = [
- "blstrs",
  "halo2curves-axiom 0.7.3",
  "num-bigint 0.4.6",
  "openvm-instructions",
@@ -7301,7 +7301,6 @@ dependencies = [
 name = "rvr-openvm-ext-algebra-modular-ffi"
 version = "2.0.0"
 dependencies = [
- "blstrs",
  "halo2curves-axiom 0.7.3",
  "num-bigint 0.4.6",
  "num-traits",
@@ -7362,7 +7361,6 @@ dependencies = [
 name = "rvr-openvm-ext-ecc-ffi"
 version = "2.0.0"
 dependencies = [
- "blstrs",
  "halo2curves-axiom 0.7.3",
  "num-bigint 0.4.6",
  "openvm-circuit-primitives",

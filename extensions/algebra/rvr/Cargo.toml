@@ -20,4 +20,5 @@ rand.workspace = true
 strum.workspace = true
 
 [build-dependencies]
+cc.workspace = true
 rvr-openvm-build.workspace = true
