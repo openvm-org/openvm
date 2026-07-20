@@ -505,20 +505,6 @@ impl CProject {
         self.function_signature("__attribute__((preserve_none, cold)) void", "rv_trap", true)
     }
 
-    fn emit_trap_declaration(&self, out: &mut String) {
-        let trap_signature = self.trap_signature();
-        writeln!(
-            out,
-            "// Used when a computed jump or dispatch slot does not point to a real block."
-        )
-        .unwrap();
-        writeln!(
-            out,
-            "// It takes the same arguments as a block so those register values can still be saved."
-        )
-        .unwrap();
-        writeln!(out, "{trap_signature};").unwrap();
-    }
     /// C argument list extracting hot regs from state:
     /// "state, state->regs[1], state->regs[2]".
     fn fn_args_from_state(&self) -> String {
@@ -838,6 +824,7 @@ impl CProject {
              }} OpenVmRvrG2DsoManifestV2;\n\n\
              _Static_assert(sizeof(OpenVmRvrG2DsoLaneManifestV1) == 16, \"G2 DSO lane manifest size drift\");\n\
              _Static_assert(sizeof(OpenVmRvrG2DsoManifestV2) == 1028, \"G2 DSO manifest size drift\");\n\n\
+             extern const OpenVmRvrG2DsoManifestV2 openvm_rvr_g2_manifest_v2;\n\
              __attribute__((visibility(\"default\")))\n\
              const OpenVmRvrG2DsoManifestV2 openvm_rvr_g2_manifest_v2 = {{\n\
                .magic = {{'O','V','M','G','2','D','2','\\0'}},\n\
@@ -1339,9 +1326,14 @@ preflight_g2_claim(G2ProducerV1* restrict g2, uint32_t slot,
                 };
                 ctx.set_current_instr(chip_idx, instr_at.pc, self.g2_kind_for_pc(instr_at.pc));
             }
+            let exec_idx = if mode == EmitMode::ValueTrace {
+                self.exec_idx_for_pc(instr_at.pc)
+            } else {
+                u32::MAX
+            };
             ctx.trace_pc(
                 instr_at.pc,
-                self.exec_idx_for_pc(instr_at.pc),
+                exec_idx,
                 inline_records && self.pc_emits_inline_record(instr_at.pc),
                 self.native_detail_family(instr_at.pc),
             );
@@ -1375,9 +1367,14 @@ preflight_g2_claim(G2ProducerV1* restrict g2, uint32_t slot,
                     self.g2_kind_for_pc(block.terminator_pc),
                 );
             }
+            let exec_idx = if mode == EmitMode::ValueTrace {
+                self.exec_idx_for_pc(block.terminator_pc)
+            } else {
+                u32::MAX
+            };
             ctx.trace_pc(
                 block.terminator_pc,
-                self.exec_idx_for_pc(block.terminator_pc),
+                exec_idx,
                 inline_records && self.pc_emits_inline_record(block.terminator_pc),
                 self.native_detail_family(block.terminator_pc),
             );

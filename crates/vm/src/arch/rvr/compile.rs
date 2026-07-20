@@ -3084,8 +3084,8 @@ fn generated_project_input_cache_key<F: PrimeField32>(
     update_named_text_assets(&mut hasher, b"sources", opts.extensions.c_sources());
     update_named_text_assets(
         &mut hasher,
-        b"extra-sources",
-        opts.extensions.extra_c_sources(),
+        b"vendored-sources",
+        opts.extensions.vendored_c_sources(),
     );
     update_named_text_assets(
         &mut hasher,

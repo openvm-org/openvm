@@ -14,7 +14,9 @@ SANITIZERS ?= -fsanitize=undefined,bounds -fsanitize-trap=all
 WARNINGS += -Wno-c++-compat -Wno-c++98-compat \
 	-Wno-pre-c11-compat -Wno-pre-c23-compat -Wno-pre-c2y-compat \
 	-Wno-declaration-after-statement \
-	-Wno-gcc-install-dir-libstdcxx
+	-Wno-gcc-install-dir-libstdcxx \
+	-Wno-pedantic -Wno-unused-parameter -Wno-padded \
+	-Wno-cast-align -Wno-unsafe-buffer-usage
 
 # Do not apply OpenVM warning flags to third-party C. Compiler errors still
 # fail the build.
@@ -22,7 +24,8 @@ VENDOR_WARNINGS = -Wno-everything
 # The core runtime uses raw buffers with explicit bounds checks. Clang raises
 # this warning when raw pointers could be replaced with checked containers, so
 # it is not useful for these low-level files.
-CORE_WARNINGS = -Wno-unsafe-buffer-usage
+CORE_WARNINGS = -Wno-unsafe-buffer-usage -Wno-unused-variable \
+	-Wno-unused-but-set-variable
 CFLAGS = -std=c2y $(OPT) $(DEBUG) $(WARNINGS) -fPIC -march=native -falign-functions=32
 CFLAGS += $(SANITIZERS)
 LTO ?=

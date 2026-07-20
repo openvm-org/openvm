@@ -6,17 +6,13 @@ use std::{
 };
 
 use openvm_circuit_primitives::utils::next_power_of_two_or_zero;
-/// Pinned host-memory pool backing [DenseRecordArena] buffers under CUDA; see
-/// that module for the design and the async-copy lifetime hazard it handles.
-#[cfg(feature = "cuda")]
-use openvm_cuda_common::pinned;
 use openvm_stark_backend::{
     p3_field::{Field, PrimeField32},
     p3_matrix::dense::RowMajorMatrix,
 };
 
-/// Pinned host-memory pool backing [DenseRecordArena] buffers under CUDA; see
-/// that module for the design and the async-copy lifetime hazard it handles.
+/// RVR-aware pinned host-memory pool backing [DenseRecordArena] buffers under
+/// CUDA; see that module for the async-copy lifetime handling.
 #[cfg(feature = "cuda")]
 use super::cuda::pinned;
 

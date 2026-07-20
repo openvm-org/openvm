@@ -89,7 +89,7 @@ __global__ void rv64_add_sub_w_tracegen_compact(
         uint32_t const result_word =
             entry.local_opcode == 0 ? rec.b[0] + rec.c[0] : rec.b[0] - rec.c[0];
         Rv64AddSubWRecord full;
-        full.adapter = rvr_decode_alu3_alu_w_u16(rec, entry, result_word);
+        full.adapter = rvr_decode_alu3_alu_w_reg_u16(rec, entry, result_word);
 #pragma unroll
         for (size_t i = 0; i < RV64_WORD_U16_LIMBS; i++) {
             full.core.b[i] = rvr_u16_limb(rec.b, i);
@@ -97,7 +97,7 @@ __global__ void rv64_add_sub_w_tracegen_compact(
         }
         full.core.local_opcode = entry.local_opcode;
 
-        Rv64BaseAluWU16Adapter adapter(
+        Rv64BaseAluWRegU16Adapter adapter(
             VariableRangeChecker(d_range_checker_ptr, range_checker_num_bins), timestamp_max_bits
         );
         adapter.fill_trace_row(row, full.adapter);

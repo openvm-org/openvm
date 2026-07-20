@@ -761,6 +761,7 @@ where
         &self,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
+        num_airs: usize,
         guest_debug_map: Option<&GuestDebugMap>,
         assembler_admitter: &dyn LogNativeOpcodeAdmitter<F>,
         gpu_records_default: Option<&str>,
@@ -781,6 +782,7 @@ where
                 let _compilation_span =
                     tracing::info_span!("compile_preflight", backend = "rvr").entered();
                 let chips = ChipMapping {
+                    num_airs,
                     pc_to_chip: build_pc_to_chip(exe, &self.inventory, executor_idx_to_air_idx)
                         .map_err(map_rvr_compile_error)?,
                     chip_widths: None,
@@ -1322,6 +1324,7 @@ where
         self.executor().preflight_routed_instance(
             exe,
             &executor_idx_to_air_idx,
+            self.num_airs(),
             None,
             &assembler_registry,
             gpu_records_default,

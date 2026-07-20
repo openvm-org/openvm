@@ -104,9 +104,8 @@ __global__ void bitwise_logic_tracegen_compact(
         }
         full.core.local_opcode = entry.local_opcode;
 
-        Rv64BaseAluAdapter adapter(
+        Rv64BaseAluRegAdapter adapter(
             VariableRangeChecker(d_range_checker_ptr, range_checker_bins),
-            BitwiseOperationLookup(d_bitwise_lookup_ptr),
             timestamp_max_bits
         );
         adapter.fill_trace_row(row, full.adapter);

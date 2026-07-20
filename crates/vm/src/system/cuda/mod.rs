@@ -163,12 +163,12 @@ impl SystemChipComplex<DenseRecordArena, GpuBackend> for SystemChipInventoryGPU 
                     .expect("device touched-memory oracle D2H");
                 let mut expected =
                     Vec::with_capacity(touched_memory.len() * DEVICE_TOUCHED_RECORD_WORDS);
-                for &((address_space, ptr), timestamped) in &touched_memory {
-                    expected.push(address_space);
-                    expected.push(ptr);
-                    expected.push(timestamped.timestamp);
+                for touched in &touched_memory {
+                    expected.push(touched.address_space);
+                    expected.push(touched.ptr);
+                    expected.push(touched.timestamp);
                     expected.extend(
-                        timestamped
+                        touched
                             .values
                             .map(|value| unsafe { std::mem::transmute::<F, u32>(value) }),
                     );

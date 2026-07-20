@@ -91,7 +91,7 @@ __global__ void rv64_shift_w_right_arithmetic_tracegen_compact(
         uint32_t const result_word =
             (uint32_t)((int32_t)rec.b[0] >> (rec.c[0] & 31u));
         ShiftWRightArithmeticRecord full;
-        full.adapter = rvr_decode_alu3_alu_w_u16(rec, entry, result_word);
+        full.adapter = rvr_decode_alu3_alu_w_reg_u16(rec, entry, result_word);
 #pragma unroll
         for (size_t i = 0; i < RV64_WORD_U16_LIMBS; i++) {
             full.core.b[i] = rvr_u16_limb(rec.b, i);
@@ -99,7 +99,9 @@ __global__ void rv64_shift_w_right_arithmetic_tracegen_compact(
         }
 
         auto adapter =
-            Rv64BaseAluWU16Adapter(VariableRangeChecker(range_ptr, range_bins), timestamp_max_bits);
+            Rv64BaseAluWRegU16Adapter(
+                VariableRangeChecker(range_ptr, range_bins), timestamp_max_bits
+            );
         adapter.fill_trace_row(row, full.adapter);
         auto core = Rv64ShiftWRightArithmeticCore(VariableRangeChecker(range_ptr, range_bins));
         core.fill_trace_row(row.slice_from(COL_INDEX(ShiftWRightArithmeticCols, core)), full.core);

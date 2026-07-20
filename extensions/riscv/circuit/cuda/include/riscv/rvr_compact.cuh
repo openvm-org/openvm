@@ -1,13 +1,12 @@
 #pragma once
 
-#include "riscv/adapters/alu_u16.cuh"
 #include "riscv/adapters/alu_imm_u16.cuh"
 #include "riscv/adapters/alu_reg_u16.cuh"
-#include "riscv/adapters/alu_w_u16.cuh"
+#include "riscv/adapters/alu_w_reg_u16.cuh"
 #include "riscv/adapters/branch.cuh"
 #include "riscv/adapters/jalr.cuh"
 #include "riscv/adapters/rdwrite.cuh"
-#include "riscv/adapters/alu.cuh"
+#include "riscv/adapters/alu_reg.cuh"
 #include "riscv/adapters/load.cuh"
 #include "riscv/adapters/store.cuh"
 #include "riscv/adapters/mul.cuh"
@@ -62,30 +61,6 @@ __device__ __forceinline__ uint16_t rvr_u16_limb(uint32_t const (&words)[2], siz
     return (uint16_t)(words[i / 2] >> ((i % 2) * 16));
 }
 
-// Decode one alu3 wire record + operand-table entry into the full BaseAluU16
-// adapter record — the device mirror of the host's
-// fill_base_alu_u16_from_compact over derive_base_alu_u16_operands.
-__device__ __forceinline__ Rv64BaseAluU16AdapterRecord
-rvr_decode_alu3_alu_u16(RvrAlu3Compact const &rec, RvrOperandEntry const &entry) {
-    Rv64BaseAluU16AdapterRecord out;
-    out.from_pc = rec.from_pc;
-    out.from_timestamp = rec.from_timestamp;
-    out.rd_ptr = entry.a;
-    out.rs1_ptr = entry.b;
-    out.rs2 = entry.c;
-    // rs2_as: 1 = register read, 0 = immediate (RV64_REGISTER_AS / RV64_IMM_AS).
-    out.rs2_as = (entry.flags & RVR_OPERAND_FLAG_RS2_IMM) ? 0 : 1;
-    out.rs2_imm_sign = (entry.flags & RVR_OPERAND_FLAG_RS2_IMM_SIGN) ? 1 : 0;
-    out.reads_aux[0].prev_timestamp = rec.reads_prev_timestamp[0];
-    out.reads_aux[1].prev_timestamp = rec.reads_prev_timestamp[1];
-    out.writes_aux.prev_timestamp = rec.write_prev_timestamp;
-#pragma unroll
-    for (size_t i = 0; i < BLOCK_FE_WIDTH; i++) {
-        out.writes_aux.prev_data[i] = rvr_u16_limb(rec.write_prev_data, i);
-    }
-    return out;
-}
-
 // Register-only AddSub adapter mirror.
 __device__ __forceinline__ Rv64BaseAluRegU16AdapterRecord
 rvr_decode_alu3_alu_reg_u16(RvrAlu3Compact const &rec, RvrOperandEntry const &entry) {
@@ -123,25 +98,22 @@ rvr_decode_alu3_alu_imm_u16(RvrAlu3Compact const &rec, RvrOperandEntry const &en
     return out;
 }
 
-// Device mirror of fill_base_alu_w_u16_from_compact. The caller computes the
+// Device mirror of the register-only W adapter. The caller computes the
 // instruction-family-specific low-word result.
-__device__ __forceinline__ Rv64BaseAluWU16AdapterRecord rvr_decode_alu3_alu_w_u16(
+__device__ __forceinline__ Rv64BaseAluWRegU16AdapterRecord rvr_decode_alu3_alu_w_reg_u16(
     RvrAlu3Compact const &rec, RvrOperandEntry const &entry, uint32_t result_word
 ) {
-    Rv64BaseAluWU16AdapterRecord out;
+    Rv64BaseAluWRegU16AdapterRecord out;
     out.from_pc = rec.from_pc;
     out.from_timestamp = rec.from_timestamp;
     out.rd_ptr = entry.a;
     out.rs1_ptr = entry.b;
     out.rs1_high[0] = rvr_u16_limb(rec.b, 2);
     out.rs1_high[1] = rvr_u16_limb(rec.b, 3);
-    out.rs2 = entry.c;
-    out.rs2_as = (entry.flags & RVR_OPERAND_FLAG_RS2_IMM) ? 0 : 1;
-    out.rs2_imm_sign = (entry.flags & RVR_OPERAND_FLAG_RS2_IMM_SIGN) ? 1 : 0;
+    out.rs2_ptr = entry.c;
     out.rs2_high[0] = rvr_u16_limb(rec.c, 2);
     out.rs2_high[1] = rvr_u16_limb(rec.c, 3);
     out.result_high = (uint16_t)(result_word >> 16);
-    out.result_sign = (uint8_t)(result_word >> 31);
     out.reads_aux[0].prev_timestamp = rec.reads_prev_timestamp[0];
     out.reads_aux[1].prev_timestamp = rec.reads_prev_timestamp[1];
     out.writes_aux.prev_timestamp = rec.write_prev_timestamp;
@@ -362,18 +334,15 @@ __device__ __forceinline__ Rv64MultWAdapterRecord rvr_decode_alu3_mult_w(
     return out;
 }
 
-// Device mirror of the bitwise byte-adapter fill in assemble_bitwise_inline:
-// rs2_as = 1 (register) or 0 (immediate); rs2 = entry.c either way; no
-// imm-sign field on this adapter.
-__device__ __forceinline__ Rv64BaseAluAdapterRecord
+// Device mirror of the register-only bitwise byte adapter.
+__device__ __forceinline__ Rv64BaseAluRegAdapterRecord
 rvr_decode_alu3_bytes(RvrAlu3Compact const &rec, RvrOperandEntry const &entry) {
-    Rv64BaseAluAdapterRecord out;
+    Rv64BaseAluRegAdapterRecord out;
     out.from_pc = rec.from_pc;
     out.from_timestamp = rec.from_timestamp;
     out.rd_ptr = entry.a;
     out.rs1_ptr = entry.b;
-    out.rs2 = entry.c;
-    out.rs2_as = (entry.flags & RVR_OPERAND_FLAG_RS2_IMM) ? 0 : 1;
+    out.rs2_ptr = entry.c;
     out.reads_aux[0].prev_timestamp = rec.reads_prev_timestamp[0];
     out.reads_aux[1].prev_timestamp = rec.reads_prev_timestamp[1];
     out.writes_aux.prev_timestamp = rec.write_prev_timestamp;
