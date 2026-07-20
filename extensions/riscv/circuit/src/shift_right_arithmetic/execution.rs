@@ -8,18 +8,17 @@ use openvm_circuit_primitives_derive::AlignedBytesBorrow;
 use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
-    riscv::{RV64_IMM_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    riscv::{RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::ShiftOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::ShiftRightArithmeticExecutor;
-use crate::adapters::imm_to_rv64_u64;
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
 struct ShiftRightArithmeticPreCompute {
-    c: u64,
+    rs2_ptr: u8,
     a: u8,
     b: u8,
 }
@@ -31,7 +30,7 @@ impl<A, const LIMB_BITS: usize> ShiftRightArithmeticExecutor<A, { BLOCK_FE_WIDTH
         pc: u32,
         inst: &Instruction<F>,
         data: &mut ShiftRightArithmeticPreCompute,
-    ) -> Result<bool, StaticProgramError> {
+    ) -> Result<(), StaticProgramError> {
         let Instruction {
             opcode, a, b, c, e, ..
         } = inst;
@@ -39,34 +38,22 @@ impl<A, const LIMB_BITS: usize> ShiftRightArithmeticExecutor<A, { BLOCK_FE_WIDTH
         if shift_opcode != ShiftOpcode::SRA {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
-        let e_u32 = e.as_canonical_u32();
-        if inst.d.as_canonical_u32() != RV64_REGISTER_AS
-            || !(e_u32 == RV64_IMM_AS || e_u32 == RV64_REGISTER_AS)
+        if inst.d.as_canonical_u32() != RV64_REGISTER_AS || e.as_canonical_u32() != RV64_REGISTER_AS
         {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
-        let is_imm = e_u32 == RV64_IMM_AS;
-        let c_u32 = c.as_canonical_u32();
         *data = ShiftRightArithmeticPreCompute {
-            c: if is_imm {
-                imm_to_rv64_u64(c_u32)
-            } else {
-                c_u32 as u64
-            },
+            rs2_ptr: c.as_canonical_u32() as u8,
             a: a.as_canonical_u32() as u8,
             b: b.as_canonical_u32() as u8,
         };
-        // `d` is always expected to be RV64_REGISTER_AS.
-        Ok(is_imm)
+        Ok(())
     }
 }
 
 macro_rules! dispatch {
-    ($execute_impl:ident, $is_imm:ident) => {
-        match $is_imm {
-            true => Ok($execute_impl::<_, true>),
-            false => Ok($execute_impl::<_, false>),
-        }
+    ($execute_impl:ident) => {
+        Ok($execute_impl::<_>)
     };
 }
 
@@ -87,9 +74,8 @@ where
         data: &mut [u8],
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError> {
         let data: &mut ShiftRightArithmeticPreCompute = data.borrow_mut();
-        let is_imm = self.pre_compute_impl(pc, inst, data)?;
-        // `d` is always expected to be RV64_REGISTER_AS.
-        dispatch!(execute_e1_handler, is_imm)
+        self.pre_compute_impl(pc, inst, data)?;
+        dispatch!(execute_e1_handler)
     }
 
     #[cfg(feature = "tco")]
@@ -103,9 +89,8 @@ where
         Ctx: ExecutionCtxTrait,
     {
         let data: &mut ShiftRightArithmeticPreCompute = data.borrow_mut();
-        let is_imm = self.pre_compute_impl(pc, inst, data)?;
-        // `d` is always expected to be RV64_REGISTER_AS.
-        dispatch!(execute_e1_handler, is_imm)
+        self.pre_compute_impl(pc, inst, data)?;
+        dispatch!(execute_e1_handler)
     }
 }
 
@@ -128,9 +113,8 @@ where
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError> {
         let data: &mut E2PreCompute<ShiftRightArithmeticPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
-        let is_imm = self.pre_compute_impl(pc, inst, &mut data.data)?;
-        // `d` is always expected to be RV64_REGISTER_AS.
-        dispatch!(execute_e2_handler, is_imm)
+        self.pre_compute_impl(pc, inst, &mut data.data)?;
+        dispatch!(execute_e2_handler)
     }
 
     #[cfg(feature = "tco")]
@@ -143,24 +127,20 @@ where
     ) -> Result<Handler<Ctx>, StaticProgramError> {
         let data: &mut E2PreCompute<ShiftRightArithmeticPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
-        let is_imm = self.pre_compute_impl(pc, inst, &mut data.data)?;
-        // `d` is always expected to be RV64_REGISTER_AS.
-        dispatch!(execute_e2_handler, is_imm)
+        self.pre_compute_impl(pc, inst, &mut data.data)?;
+        dispatch!(execute_e2_handler)
     }
 }
 
 #[inline(always)]
-unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_IMM: bool>(
+unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait>(
     pre_compute: &ShiftRightArithmeticPreCompute,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let rs1 =
         exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.b as u32);
-    let rs2 = if IS_IMM {
-        pre_compute.c.to_le_bytes()
-    } else {
-        exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.c as u32)
-    };
+    let rs2 = exec_state
+        .vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.rs2_ptr as u32);
     let rs1 = i64::from_le_bytes(rs1);
     let rs2 = u64::from_le_bytes(rs2);
 
@@ -176,19 +156,19 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_IMM: bool>(
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, const IS_IMM: bool>(
+unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pre_compute: &ShiftRightArithmeticPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<ShiftRightArithmeticPreCompute>())
             .borrow();
-    execute_e12_impl::<CTX, IS_IMM>(pre_compute, exec_state);
+    execute_e12_impl::<CTX>(pre_compute, exec_state);
 }
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, const IS_IMM: bool>(
+unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
@@ -200,5 +180,5 @@ unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, const IS_IMM: bool>(
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<CTX, IS_IMM>(&pre_compute.data, exec_state);
+    execute_e12_impl::<CTX>(&pre_compute.data, exec_state);
 }

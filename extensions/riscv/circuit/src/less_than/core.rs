@@ -180,7 +180,6 @@ pub struct LessThanExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 pub struct LessThanFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
-    pub offset: usize,
 }
 
 impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> PreflightExecutor<F, RA>
@@ -330,7 +329,7 @@ where
 
 // Returns (cmp_result, diff_idx, x_sign, y_sign)
 #[inline(always)]
-pub(super) fn run_less_than<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
+pub(crate) fn run_less_than<const NUM_LIMBS: usize, const LIMB_BITS: usize>(
     is_slt: bool,
     x: &[u16; NUM_LIMBS],
     y: &[u16; NUM_LIMBS],

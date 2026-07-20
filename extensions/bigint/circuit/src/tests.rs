@@ -151,7 +151,6 @@ fn create_bitwise_logic_harness_fields(
         BitwiseLogicFiller::new(
             Rv64VecHeapAdapterFiller::new(address_bits, range_checker_chip),
             bitwise_chip,
-            Rv64BaseAlu256Opcode::CLASS_OFFSET,
         ),
         memory_helper,
     );
@@ -190,7 +189,6 @@ fn create_lt_harness_fields(
         LessThanFiller::new(
             Rv64VecHeapU16AdapterFiller::new(address_bits, range_checker_chip.clone()),
             range_checker_chip,
-            Rv64LessThan256Opcode::CLASS_OFFSET,
         ),
         memory_helper,
     );
@@ -267,7 +265,6 @@ fn create_shift_logical_harness_fields(
         ShiftLogicalFiller::new(
             Rv64VecHeapU16AdapterFiller::new(address_bits, range_checker_chip.clone()),
             range_checker_chip,
-            Rv64Shift256Opcode::CLASS_OFFSET,
         ),
         memory_helper,
     );
@@ -305,7 +302,6 @@ fn create_shift_right_arithmetic_harness_fields(
         ShiftRightArithmeticFiller::new(
             Rv64VecHeapU16AdapterFiller::new(address_bits, range_checker_chip.clone()),
             range_checker_chip,
-            Rv64Shift256Opcode::CLASS_OFFSET,
         ),
         memory_helper,
     );

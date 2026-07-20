@@ -25,7 +25,7 @@ use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 #[cfg(feature = "cuda")]
 use {
-    crate::{adapters::Rv64BaseAluU16AdapterRecord, LessThanCoreRecord, Rv64LessThanChipGpu},
+    crate::{adapters::Rv64BaseAluRegU16AdapterRecord, LessThanCoreRecord, Rv64LessThanChipGpu},
     openvm_circuit::arch::{
         testing::{GpuChipTestBuilder, GpuTestChipHarness},
         EmptyAdapterCoreLayout,
@@ -37,13 +37,13 @@ use {openvm_circuit_primitives::var_range::VariableRangeCheckerChip, std::sync::
 use super::{core::run_less_than, LessThanCoreAir, Rv64LessThanChip};
 use crate::{
     adapters::{
-        rv64_bytes_to_u16_block, Rv64BaseAluU16AdapterAir, Rv64BaseAluU16AdapterExecutor,
-        Rv64BaseAluU16AdapterFiller, RV64_PTR_U16_LIMBS, RV64_REGISTER_NUM_LIMBS, U16_BITS,
+        rv64_bytes_to_u16_block, Rv64BaseAluRegU16AdapterAir, Rv64BaseAluRegU16AdapterExecutor,
+        Rv64BaseAluRegU16AdapterFiller, RV64_REGISTER_NUM_LIMBS, U16_BITS,
     },
     less_than::LessThanCoreCols,
     test_utils::{
-        generate_rv64_is_type_immediate, rv64_marker_bytes_to_u16_marker,
-        rv64_msb_byte_prank_to_u16_limb, rv64_rand_write_register_or_imm,
+        rv64_marker_bytes_to_u16_marker, rv64_msb_byte_prank_to_u16_limb,
+        rv64_rand_write_register_or_imm,
     },
     LessThanFiller, Rv64LessThanAir, Rv64LessThanExecutor,
 };
@@ -59,17 +59,15 @@ fn create_harness_fields(
     memory_helper: SharedMemoryHelper<F>,
 ) -> (Rv64LessThanAir, Rv64LessThanExecutor, Rv64LessThanChip<F>) {
     let air = Rv64LessThanAir::new(
-        Rv64BaseAluU16AdapterAir::new(execution_bridge, memory_bridge, range_checker_chip.bus()),
+        Rv64BaseAluRegU16AdapterAir::new(execution_bridge, memory_bridge),
         LessThanCoreAir::new(range_checker_chip.bus(), LessThanOpcode::CLASS_OFFSET),
     );
-    let executor =
-        Rv64LessThanExecutor::new(Rv64BaseAluU16AdapterExecutor, LessThanOpcode::CLASS_OFFSET);
+    let executor = Rv64LessThanExecutor::new(
+        Rv64BaseAluRegU16AdapterExecutor,
+        LessThanOpcode::CLASS_OFFSET,
+    );
     let chip = Rv64LessThanChip::<F>::new(
-        LessThanFiller::new(
-            Rv64BaseAluU16AdapterFiller::new(range_checker_chip.clone()),
-            range_checker_chip,
-            LessThanOpcode::CLASS_OFFSET,
-        ),
+        LessThanFiller::new(Rv64BaseAluRegU16AdapterFiller::new(), range_checker_chip),
         memory_helper,
     );
     (air, executor, chip)
@@ -94,32 +92,13 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     rng: &mut StdRng,
     opcode: LessThanOpcode,
     b: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
-    is_imm: Option<bool>,
     c: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
 ) {
     let b = b.unwrap_or(array::from_fn(|_| rng.random_range(0..=u8::MAX)));
-    let (c_imm, c) = if is_imm.unwrap_or(rng.random_bool(0.5)) {
-        let (imm, c) = if let Some(c) = c {
-            ((u64::from_le_bytes(c) & 0xFFFFFF) as usize, c)
-        } else {
-            generate_rv64_is_type_immediate(rng)
-        };
-        (Some(imm), c)
-    } else {
-        (
-            None,
-            c.unwrap_or(array::from_fn(|_| rng.random_range(0..=u8::MAX))),
-        )
-    };
+    let c = c.unwrap_or(array::from_fn(|_| rng.random_range(0..=u8::MAX)));
 
-    let (instruction, rd) = rv64_rand_write_register_or_imm(
-        tester,
-        b,
-        c,
-        c_imm,
-        opcode.global_opcode().as_usize(),
-        rng,
-    );
+    let (instruction, rd) =
+        rv64_rand_write_register_or_imm(tester, b, c, None, opcode.global_opcode().as_usize(), rng);
     tester.execute(executor, arena, &instruction);
 
     let b_u16 = rv64_bytes_to_u16_block(b);
@@ -153,7 +132,6 @@ fn run_rv64_lt_rand_test(opcode: LessThanOpcode, num_ops: usize) {
             opcode,
             None,
             None,
-            None,
         );
     }
 
@@ -166,19 +144,6 @@ fn run_rv64_lt_rand_test(opcode: LessThanOpcode, num_ops: usize) {
         &mut rng,
         opcode,
         Some(b),
-        Some(false),
-        Some(b),
-    );
-
-    let b = [36, 0, 0, 0, 0, 0, 0, 0];
-    set_and_execute(
-        &mut tester,
-        &mut harness.executor,
-        &mut harness.arena,
-        &mut rng,
-        opcode,
-        Some(b),
-        Some(true),
         Some(b),
     );
 
@@ -221,7 +186,6 @@ fn run_negative_less_than_test(
         &mut rng,
         opcode,
         Some(b),
-        Some(false),
         Some(c),
     );
 
@@ -452,48 +416,6 @@ fn rv64_sltu_wrong_c_msb_sign_negative_test() {
     run_negative_less_than_test(SLTU, b, c, false, prank_vals, true);
 }
 
-#[test]
-fn rv64_lt_adapter_imm_sign_extension_negative_test() {
-    // Prank the first sign-extension cell while keeping the core comparison
-    // constraints consistent.
-    let mut rng = create_seeded_rng();
-    let mut tester: VmChipTestBuilder<BabyBear> = VmChipTestBuilder::default();
-    let mut harness = create_test_chip(&tester);
-
-    set_and_execute(
-        &mut tester,
-        &mut harness.executor,
-        &mut harness.arena,
-        &mut rng,
-        SLTU,
-        Some([10, 0, 0, 0, 1, 0, 0, 0]),
-        Some(true),
-        Some([5, 0, 0, 0, 0, 0, 0, 0]),
-    );
-
-    let adapter_width = BaseAir::<F>::width(&harness.air.adapter);
-    let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
-        let mut values = trace.row_slice(0).unwrap().to_vec();
-        let cols: &mut LessThanCoreCols<F, BLOCK_FE_WIDTH, U16_BITS> =
-            values.split_at_mut(adapter_width).1.borrow_mut();
-        cols.c[RV64_PTR_U16_LIMBS] = F::ONE;
-        cols.diff_marker = [F::ZERO; BLOCK_FE_WIDTH];
-        cols.diff_marker[0] = F::ONE;
-        // diff = (c[0] - b[0]) * (2*cmp_result - 1) = (5 - 10) * (-1) = 5
-        cols.diff_val = F::from_u32(5);
-        *trace = RowMajorMatrix::new(values, trace.width());
-    };
-
-    disable_debug_builder();
-    let tester = tester
-        .build()
-        .load_and_prank_trace(harness, modify_trace)
-        .finalize();
-    tester
-        .simple_test()
-        .expect_err("Expected verification to fail, but it passed");
-}
-
 ///////////////////////////////////////////////////////////////////////////////////////
 /// SANITY TESTS
 ///
@@ -595,12 +517,11 @@ fn test_cuda_rand_less_than_tracegen(opcode: LessThanOpcode, num_ops: usize) {
             opcode,
             None,
             None,
-            None,
         );
     }
 
     type Record<'a> = (
-        &'a mut Rv64BaseAluU16AdapterRecord,
+        &'a mut Rv64BaseAluRegU16AdapterRecord,
         &'a mut LessThanCoreRecord<BLOCK_FE_WIDTH, U16_BITS>,
     );
     harness
@@ -608,7 +529,7 @@ fn test_cuda_rand_less_than_tracegen(opcode: LessThanOpcode, num_ops: usize) {
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64BaseAluU16AdapterExecutor>::new(),
+            EmptyAdapterCoreLayout::<F, Rv64BaseAluRegU16AdapterExecutor>::new(),
         );
 
     tester

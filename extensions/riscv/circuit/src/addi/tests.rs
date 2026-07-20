@@ -80,7 +80,6 @@ fn create_harness(tester: &VmChipTestBuilder<F>) -> Harness {
     Harness::with_capacity(executor, air, chip, MAX_INS_CAPACITY)
 }
 
-// ADDI is always immediate — no opcode or is_imm parameter needed.
 fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     tester: &mut impl TestBuilder<F>,
     executor: &mut E,
