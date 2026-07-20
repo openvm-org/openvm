@@ -559,7 +559,7 @@ pub(crate) mod phantom {
                         .take(num_limbs),
                 )
                 .collect();
-            streams.hint_stream = hint_bytes;
+            streams.hint_stream.set_hint(hint_bytes);
             Ok(())
         }
     }
@@ -623,7 +623,7 @@ pub(crate) mod phantom {
                 .chain(repeat(0u8))
                 .take(num_limbs)
                 .collect();
-            streams.hint_stream = hint_bytes;
+            streams.hint_stream.set_hint(hint_bytes);
             Ok(())
         }
     }
