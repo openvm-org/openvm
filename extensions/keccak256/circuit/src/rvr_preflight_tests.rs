@@ -183,13 +183,15 @@ fn keccak_hintstore_interleaved_exe() -> VmExe<F> {
 
 fn hintstore_streams() -> Streams {
     let mut streams = Streams::default();
+    let mut hint = Vec::with_capacity(3 * std::mem::size_of::<u64>());
     for word in [
         0x0102_0304_0506_0708u64,
         0x1112_1314_1516_1718,
         0x2122_2324_2526_2728,
     ] {
-        streams.hint_stream.extend(word.to_le_bytes());
+        hint.extend(word.to_le_bytes());
     }
+    streams.hint_stream.set_hint(hint);
     streams
 }
 

@@ -141,7 +141,7 @@ struct Serializer<'a> {
 
 impl<'a> Serializer<'a> {
     fn mont(&self, x: &BigUint) -> Vec<u32> {
-        biguint_to_u32s(&((x * &self.r) % &self.expr.prime), self.k)
+        biguint_to_u32s(&((x * &self.r) % self.expr.program().prime()), self.k)
     }
 
     fn push_mont_payload(&mut self, x: &BigUint) -> u32 {
@@ -153,9 +153,10 @@ impl<'a> Serializer<'a> {
 
     fn imm_to_field(&self, s: isize) -> BigUint {
         if s >= 0 {
-            BigUint::from(s as u64) % &self.expr.prime
+            BigUint::from(s as u64) % self.expr.program().prime()
         } else {
-            &self.expr.prime - BigUint::from(s.unsigned_abs() as u64) % &self.expr.prime
+            self.expr.program().prime()
+                - BigUint::from(s.unsigned_abs() as u64) % self.expr.program().prime()
         }
     }
 
@@ -170,9 +171,9 @@ impl<'a> Serializer<'a> {
             // Input and Var slots are preassigned: inputs at [0, num_input) (loaded once
             // at tape start), vars at [num_input, num_input + num_vars).
             SymbolicExpr::Input(i) => *i as u32,
-            SymbolicExpr::Var(i) => (self.expr.builder.num_input + i) as u32,
+            SymbolicExpr::Var(i) => (self.expr.program().builder().num_input + i) as u32,
             SymbolicExpr::Const(i, _, _) => {
-                let val = self.expr.builder.constants[*i].0.clone();
+                let val = self.expr.program().builder().constants[*i].0.clone();
                 let payload = self.push_mont_payload(&val);
                 let dst = alloc(self);
                 self.value_ops.push(ValueOp {
@@ -242,7 +243,7 @@ impl<'a> Serializer<'a> {
 
     /// Emit limb ops computing `node`; returns (scratch_off, len).
     fn emit_limb(&mut self, node: &SymbolicExpr) -> (u32, u32) {
-        let num_limbs = self.expr.builder.num_limbs;
+        let num_limbs = self.expr.program().builder().num_limbs;
         let alloc = |s: &mut Self, len: u32| {
             let off = s.scratch_top;
             s.scratch_top += len;
@@ -272,7 +273,7 @@ impl<'a> Serializer<'a> {
                 (off, num_limbs as u32)
             }
             SymbolicExpr::Const(i, _, nl) => {
-                let limbs = &self.expr.builder.constants[*i].1;
+                let limbs = &self.expr.program().builder().constants[*i].1;
                 assert_eq!(limbs.len(), *nl);
                 let payload = self.const_limbs_payload.len() as u32;
                 self.const_limbs_payload
@@ -372,8 +373,8 @@ pub fn serialize_field_expr(
     opcode_flag_idx: Vec<usize>,
     width: usize,
 ) -> DeviceFieldExprProgram {
-    assert!(expr.builder.is_finalized());
-    let b = &expr.builder;
+    let b = expr.program().builder();
+    assert!(b.is_finalized());
     let k = (b.num_limbs * b.limb_bits).div_ceil(32);
     let r = (BigUint::one() << (32 * k)) % &b.prime;
 
@@ -1049,13 +1050,13 @@ mod device_program_tests {
         let ref_checker = Arc::new(VariableRangeCheckerChip::new(range_checker.bus()));
 
         let nl = expr.canonical_num_limbs();
-        let prime = expr.builder.prime.clone();
+        let prime = expr.program().builder().prime.clone();
         let mut state = 0xdeadbeef12345678u64;
         for rep in 0..n_random_repeats {
             for (row_i, (opcode, explicit)) in rows.iter().enumerate() {
                 let inputs: Vec<BigUint> = match explicit {
                     Some(v) => v.clone(),
-                    None => (0..expr.builder.num_input)
+                    None => (0..expr.program().builder().num_input)
                         .map(|_| {
                             let bytes: Vec<u8> = (0..nl).map(|_| lcg(&mut state)).collect();
                             BigUint::from_bytes_le(&bytes) % &prime
@@ -1068,7 +1069,7 @@ mod device_program_tests {
                     .collect();
 
                 // Flags exactly as FieldExpressionFiller derives them.
-                let mut flags = vec![false; expr.builder.num_flags];
+                let mut flags = vec![false; expr.program().builder().num_flags];
                 if expr.needs_setup() {
                     if let Some(pos) = local_opcode_idx.iter().position(|&x| x == *opcode) {
                         if pos < opcode_flag_idx.len() {
@@ -1245,8 +1246,8 @@ mod device_program_dump {
         let blob = prog.to_blob();
 
         let nl = expr.canonical_num_limbs();
-        let prime = expr.builder.prime.clone();
-        let rec_stride = 1 + expr.builder.num_input * nl;
+        let prime = expr.program().builder().prime.clone();
+        let rec_stride = 1 + expr.program().builder().num_input * nl;
         let range_checker = std::sync::Arc::new(VariableRangeCheckerChip::new(expr.range_bus));
 
         let mut state = 0x0123456789abcdefu64;
@@ -1254,7 +1255,7 @@ mod device_program_dump {
         let mut expected = Vec::with_capacity(rows * width);
         for r in 0..rows {
             let opcode = opcodes[r % opcodes.len()];
-            let inputs: Vec<BigUint> = (0..expr.builder.num_input)
+            let inputs: Vec<BigUint> = (0..expr.program().builder().num_input)
                 .map(|_| {
                     let bytes: Vec<u8> = (0..nl).map(|_| lcg(&mut state)).collect();
                     BigUint::from_bytes_le(&bytes) % &prime
@@ -1264,7 +1265,7 @@ mod device_program_dump {
             for x in &inputs {
                 records.extend(biguint_to_limbs_vec(x, nl));
             }
-            let mut flags = vec![false; expr.builder.num_flags];
+            let mut flags = vec![false; expr.program().builder().num_flags];
             if expr.needs_setup() {
                 if let Some(pos) = local_opcode_idx.iter().position(|&x| x == opcode) {
                     if pos < opcode_flag_idx.len() {

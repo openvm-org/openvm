@@ -18,10 +18,7 @@ use openvm_stark_backend::p3_field::Field;
 use super::preflight::{MemoryLogEntry, TouchedBlock};
 use crate::{
     arch::{AddressSpaceHostLayout, BLOCK_FE_WIDTH},
-    system::{
-        memory::{online::GuestMemory, TimestampedValues},
-        TouchedMemory,
-    },
+    system::{memory::online::GuestMemory, TouchedBlock as SystemTouchedBlock, TouchedMemory},
 };
 
 /// Traced blocks are `WORD_BYTES` bytes; the C shadow indexes by
@@ -176,7 +173,7 @@ pub(crate) fn build_preflight_replay_with_scratch<F: Field>(
     };
     let touched_collect_finished = std::time::Instant::now();
     if !ordered_touched {
-        touched_memory.sort_unstable_by_key(|(addr, _)| *addr);
+        touched_memory.sort_unstable_by_key(|block| (block.address_space, block.ptr));
     }
     let touched_sort_finished = std::time::Instant::now();
 
@@ -290,7 +287,7 @@ fn touched_memory_entry<F: Field>(
     shadows: &PreflightShadowsView,
     addr_space: u32,
     aligned_byte_addr: usize,
-) -> ((u32, u32), TimestampedValues<F, BLOCK_FE_WIDTH>) {
+) -> SystemTouchedBlock<F> {
     let config = &memory.memory.config[addr_space as usize];
     let cell_size = config.layout.size();
     let block_bytes = BLOCK_FE_WIDTH * cell_size;
@@ -307,10 +304,12 @@ fn touched_memory_entry<F: Field>(
             .get_u8_slice(addr_space, aligned_byte_addr, block_bytes)
     };
     let values = block_bytes_to_fields(memory, addr_space, bytes);
-    (
-        (addr_space, block_ptr),
-        TimestampedValues { timestamp, values },
-    )
+    SystemTouchedBlock {
+        address_space: addr_space,
+        ptr: block_ptr,
+        timestamp,
+        values,
+    }
 }
 
 fn block_bytes_to_fields<F: Field>(

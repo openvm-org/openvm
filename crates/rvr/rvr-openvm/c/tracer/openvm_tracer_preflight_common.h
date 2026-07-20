@@ -526,7 +526,7 @@ static __attribute__((always_inline)) inline uint64_t preflight_block_addr(
 
 static __attribute__((always_inline)) inline uint64_t preflight_read_mem_block(
     RvState* restrict state, uint64_t addr) {
-  return rd_mem_u64(state->memory, preflight_block_addr(addr));
+  return read_mem_u64(state->memory, preflight_block_addr(addr));
 }
 
 static __attribute__((always_inline)) inline uint64_t preflight_read_pv_block(
@@ -1313,8 +1313,6 @@ static __attribute__((always_inline)) inline uint32_t preflight_append_memory(
   if (kind == PREFLIGHT_MEMORY_KIND_WRITE && addr_space == AS_MEMORY) {
     preflight_mark_dirty_memory_page(t, address);
   }
-  bool g2_custom_capture =
-      t->g2 != NULL && t->custom_memory_scratch_len != UINT32_MAX;
   uint32_t event_index = preflight_append_memory_record(
       t, kind, addr_space, address, width, value, prev_value, timestamp,
       prev_timestamp, compact_residual);
@@ -1323,7 +1321,9 @@ static __attribute__((always_inline)) inline uint32_t preflight_append_memory(
              ? (PREFLIGHT_DEVICE_AUX_TOKEN | event_index)
              : prev_timestamp;
 #else
-  return preflight_device_aux(t) && !g2_custom_capture
+  return preflight_device_aux(t) &&
+                 !(t->g2 != NULL &&
+                   t->custom_memory_scratch_len != UINT32_MAX)
              ? (PREFLIGHT_DEVICE_AUX_TOKEN | event_index)
              : prev_timestamp;
 #endif
@@ -1466,7 +1466,7 @@ static __attribute__((always_inline)) inline uint32_t trace_mem_store_touch(
   if (prev_timestamp == 0u) {
     detail_started = preflight_detail_phase_begin(
         t, PREFLIGHT_DETAIL_PHASE_FIRST_TOUCH, sizeof(TouchedBlock));
-    initial_value = rd_mem_u64(state->memory, block_addr);
+    initial_value = read_mem_u64(state->memory, block_addr);
   }
   uint64_t aux_started = preflight_detail_phase_begin(
       t, PREFLIGHT_DETAIL_PHASE_AUX_CAPTURE, 0u);
@@ -2179,7 +2179,7 @@ static __attribute__((always_inline)) inline void trace_wr_as(
           ? preflight_read_pv_block(state->tracer, block_addr)
           : 0u;
   uint64_t block =
-      preflight_patch_mem_block(prev_block, addr, width, new_val);
+      preflight_patch_mem_block(prev_block, addr, (uint8_t)width, new_val);
   preflight_append_memory(state->tracer, PREFLIGHT_MEMORY_KIND_WRITE,
                           (uint8_t)addr_space, block_addr, WORD_SIZE, block,
                           prev_block);

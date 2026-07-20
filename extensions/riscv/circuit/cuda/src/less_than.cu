@@ -95,14 +95,14 @@ __global__ void rv64_less_than_tracegen_compact(
         RvrOperandEntry const entry = rvr_operand_entry(operand_table, pc_base, rec.from_pc);
 
         LessThanRecord full;
-        full.adapter = rvr_decode_alu3_alu_u16(rec, entry);
+        full.adapter = rvr_decode_alu3_alu_reg_u16(rec, entry);
 #pragma unroll
         for (size_t i = 0; i < BLOCK_FE_WIDTH; i++) {
             full.core.b[i] = rvr_u16_limb(rec.b, i);
             full.core.c[i] = rvr_u16_limb(rec.c, i);
         }
         full.core.local_opcode = entry.local_opcode;
-        auto adapter = Rv64BaseAluU16Adapter(
+        auto adapter = Rv64BaseAluRegU16Adapter(
             VariableRangeChecker(range_checker_ptr, range_checker_num_bins), timestamp_max_bits
         );
         adapter.fill_trace_row(row, full.adapter);

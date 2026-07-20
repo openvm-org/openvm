@@ -601,15 +601,38 @@ impl<'a> EmitContext<'a> {
     /// Preflight has no hot registers, so no ABI-name fast path is needed.
     fn reg_read_capture(&mut self, idx: u8) -> (String, String) {
         debug_assert!(self.hot_regs.is_empty());
-        let pts = self.next_var();
+        let capture_timestamp =
+            !self.delta_records || self.arena_native_airs.contains_key(&self.current_chip_idx);
+        let pts = capture_timestamp.then(|| self.next_var());
         if idx == 0 {
-            self.write_line(&format!("uint32_t {pts} = trace_reg_touch(state, 0);"));
-            ("0".to_string(), pts)
+            if let Some(pts) = pts.as_deref() {
+                self.write_line(&format!("uint32_t {pts} = trace_reg_touch(state, 0);"));
+            } else {
+                self.write_line("(void)trace_reg_touch(state, 0);");
+            }
+            ("0".to_string(), pts.unwrap_or_else(|| "0u".to_string()))
         } else {
             let val = self.next_var();
             self.write_line(&format!("uint64_t {val} = reg_read(state, {idx});"));
-            self.write_line(&format!("uint32_t {pts} = trace_reg_touch(state, {idx});"));
-            (val, pts)
+            if let Some(pts) = pts.as_deref() {
+                self.write_line(&format!("uint32_t {pts} = trace_reg_touch(state, {idx});"));
+            } else {
+                self.write_line(&format!("(void)trace_reg_touch(state, {idx});"));
+            }
+            (val, pts.unwrap_or_else(|| "0u".to_string()))
+        }
+    }
+
+    fn reg_touch_capture(&mut self, idx: u8) -> String {
+        if self.delta_records && !self.arena_native_airs.contains_key(&self.current_chip_idx) {
+            self.write_line(&format!("(void)trace_reg_touch(state, {idx});"));
+            "0u".to_string()
+        } else {
+            let prev_timestamp = self.next_var();
+            self.write_line(&format!(
+                "uint32_t {prev_timestamp} = trace_reg_touch(state, {idx});"
+            ));
+            prev_timestamp
         }
     }
 
@@ -672,8 +695,7 @@ impl<'a> EmitContext<'a> {
             self.write_line(&format!("uint64_t {rdprev} = state->regs[{rd}];"));
             rdprev
         });
-        let pw = self.next_var();
-        self.write_line(&format!("uint32_t {pw} = trace_reg_touch(state, {rd});"));
+        let pw = self.reg_touch_capture(rd);
         self.write_line(&format!("reg_write(state, {rd}, {res});"));
         if let Some(baked) = arena {
             let geom = self.arena_native_airs[&chip];
@@ -957,19 +979,19 @@ impl<'a> EmitContext<'a> {
         }
         if let Some(w) = off.w {
             self.write_line(&format!(
-                "*(uint16_t*)({rec} + {}) = (uint16_t)({v1} >> 32);",
+                "*(uint16_t*)({rec} + {}) = (uint16_t)((uint64_t)({v1}) >> 32);",
                 w.rs1_high
             ));
             self.write_line(&format!(
-                "*(uint16_t*)({rec} + {}) = (uint16_t)({v1} >> 48);",
+                "*(uint16_t*)({rec} + {}) = (uint16_t)((uint64_t)({v1}) >> 48);",
                 w.rs1_high + size_of::<u16>()
             ));
             self.write_line(&format!(
-                "*(uint16_t*)({rec} + {}) = (uint16_t)({v2} >> 32);",
+                "*(uint16_t*)({rec} + {}) = (uint16_t)((uint64_t)({v2}) >> 32);",
                 w.rs2_high
             ));
             self.write_line(&format!(
-                "*(uint16_t*)({rec} + {}) = (uint16_t)({v2} >> 48);",
+                "*(uint16_t*)({rec} + {}) = (uint16_t)((uint64_t)({v2}) >> 48);",
                 w.rs2_high + size_of::<u16>()
             ));
             let msl_store = match w.result_word_msl_bytes {
@@ -981,10 +1003,12 @@ impl<'a> EmitContext<'a> {
                 "*({msl_store}*)({rec} + {}) = ({msl_store})({res} >> {});",
                 w.result_word_msl, w.result_word_msl_shift
             ));
-            self.write_line(&format!(
-                "*(uint8_t*)({rec} + {}) = (uint8_t)(((uint32_t){res}) >> 31);",
-                w.result_sign
-            ));
+            if w.result_sign != usize::MAX {
+                self.write_line(&format!(
+                    "*(uint8_t*)({rec} + {}) = (uint8_t)(((uint32_t){res}) >> 31);",
+                    w.result_sign
+                ));
+            }
         }
         self.indent -= 1;
         self.write_line("}");
@@ -1036,8 +1060,7 @@ impl<'a> EmitContext<'a> {
             self.write_line(&format!("uint64_t {rdprev} = state->regs[{rd}];"));
             rdprev
         });
-        let pw = self.next_var();
-        self.write_line(&format!("uint32_t {pw} = trace_reg_touch(state, {rd});"));
+        let pw = self.reg_touch_capture(rd);
         self.write_line(&format!("reg_write(state, {rd}, {res});"));
         if let Some(baked) = arena {
             self.emit_arena_addi_stores(
@@ -1185,8 +1208,7 @@ impl<'a> EmitContext<'a> {
             self.write_line(&format!("uint64_t {rdprev} = state->regs[{rd}];"));
             rdprev
         });
-        let pw = self.next_var();
-        self.write_line(&format!("uint32_t {pw} = trace_reg_touch(state, {rd});"));
+        let pw = self.reg_touch_capture(rd);
         self.write_line(&format!("reg_write(state, {rd}, {res});"));
         if let Some(baked) = arena {
             let geom = self.arena_native_airs[&chip];
@@ -1271,8 +1293,7 @@ impl<'a> EmitContext<'a> {
                     self.write_line(&format!("uint64_t {rdprev} = state->regs[{rd}];"));
                     rdprev
                 });
-                let pw = self.next_var();
-                self.write_line(&format!("uint32_t {pw} = trace_reg_touch(state, {rd});"));
+                let pw = self.reg_touch_capture(rd);
                 self.write_line(&format!("reg_write(state, {rd}, {tmp});"));
                 if let Some(baked) = arena {
                     self.emit_arena_wr1_stores(
@@ -1527,8 +1548,7 @@ impl<'a> EmitContext<'a> {
                     self.write_line(&format!("uint64_t {rdprev} = state->regs[{rd}];"));
                     rdprev
                 });
-                let pw = self.next_var();
-                self.write_line(&format!("uint32_t {pw} = trace_reg_touch(state, {rd});"));
+                let pw = self.reg_touch_capture(rd);
                 self.write_line(&format!("reg_write(state, {rd}, {tmp});"));
                 if let Some(baked) = arena {
                     self.emit_arena_rw1_stores(
@@ -1661,6 +1681,7 @@ impl<'a> EmitContext<'a> {
         rs1: u8,
         offset: i16,
     ) {
+        self.uses_raw_memory = true;
         if self.g2_records {
             debug_assert!(!self.delta_records);
             let kind = match (signed, width) {
@@ -1684,7 +1705,7 @@ impl<'a> EmitContext<'a> {
             let block_addr = self.materialize_u64(&format!("preflight_block_addr({addr})"));
             let block = self.next_var();
             self.write_line(&format!(
-                "uint64_t {block} = rd_mem_u64(memory, {block_addr});"
+                "uint64_t {block} = read_mem_u64(memory, {block_addr});"
             ));
             let slot = rvr_openvm_ext_ffi_common::g2_standard_producer_slot(kind, false)
                 .expect("G2 load kind must have producer lanes");
@@ -1766,7 +1787,12 @@ impl<'a> EmitContext<'a> {
                         floor_block1.as_deref().unwrap_or("0u")
                     ));
                 }
-                self.write_line(&format!("reg_write(state, {rd}, {value});"));
+                let reg_value = if signed {
+                    format!("(uint64_t)(int64_t){value}")
+                } else {
+                    value
+                };
+                self.write_line(&format!("reg_write(state, {rd}, {reg_value});"));
             }
             if self.g2_checked {
                 self.indent -= 1;
@@ -1783,7 +1809,7 @@ impl<'a> EmitContext<'a> {
         let blockaddr = self.materialize_u64(&format!("preflight_block_addr({addr})"));
         let block = self.next_var();
         self.write_line(&format!(
-            "uint64_t {block} = rd_mem_u64(memory, {blockaddr});"
+            "uint64_t {block} = read_mem_u64(memory, {blockaddr});"
         ));
         let p2 = self.next_var();
         let mut crossing_flag = None;
@@ -1882,9 +1908,13 @@ impl<'a> EmitContext<'a> {
                 self.write_line(&format!("uint64_t {rdprev} = state->regs[{rd}];"));
                 rdprev
             });
-            let pw = self.next_var();
-            self.write_line(&format!("uint32_t {pw} = trace_reg_touch(state, {rd});"));
-            self.write_line(&format!("reg_write(state, {rd}, {val});"));
+            let pw = self.reg_touch_capture(rd);
+            let reg_value = if signed {
+                format!("(uint64_t)(int64_t){val}")
+            } else {
+                val.clone()
+            };
+            self.write_line(&format!("reg_write(state, {rd}, {reg_value});"));
             if let Some(geom) = arena_geom {
                 let baked = ls_baked((rd as u32) * 8);
                 self.emit_arena_loadstore_stores(
@@ -1925,6 +1955,7 @@ impl<'a> EmitContext<'a> {
     /// record's c value is the full rs2 value and prev is the block's value
     /// before the store (read here, before the raw write).
     pub(crate) fn emit_store_inline(&mut self, width: u8, rs1: u8, rs2: u8, offset: i16) {
+        self.uses_raw_memory = true;
         if self.g2_records {
             debug_assert!(!self.delta_records);
             let kind = match width {
@@ -1946,7 +1977,7 @@ impl<'a> EmitContext<'a> {
             let block_addr = self.materialize_u64(&format!("preflight_block_addr({addr})"));
             let block = self.next_var();
             self.write_line(&format!(
-                "uint64_t {block} = rd_mem_u64(memory, {block_addr});"
+                "uint64_t {block} = read_mem_u64(memory, {block_addr});"
             ));
             let slot = rvr_openvm_ext_ffi_common::g2_standard_producer_slot(kind, false)
                 .expect("G2 store kind must have producer lanes");
@@ -2024,7 +2055,7 @@ impl<'a> EmitContext<'a> {
                 self.write_line(&format!("uint64_t {prev} = 0u;"));
             } else {
                 self.write_line(&format!(
-                    "uint64_t {prev} = rd_mem_u64(memory, {blockaddr});"
+                    "uint64_t {prev} = read_mem_u64(memory, {blockaddr});"
                 ));
             }
             prev

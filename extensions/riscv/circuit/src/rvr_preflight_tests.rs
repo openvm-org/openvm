@@ -37,10 +37,11 @@ use openvm_instructions::{
     LocalOpcode, SysPhantom, SystemOpcode, DEFERRAL_AS, PUBLIC_VALUES_AS,
 };
 use openvm_riscv_transpiler::{
-    BaseAluImmOpcode, BaseAluOpcode, BaseAluWOpcode, BranchEqualOpcode, BranchLessThanOpcode,
-    DivRemOpcode, DivRemWOpcode, LessThanOpcode, MulHOpcode, MulOpcode, MulWOpcode,
-    Rv64AuipcOpcode, Rv64HintStoreOpcode, Rv64JalLuiOpcode, Rv64JalrOpcode, Rv64LoadStoreOpcode,
-    Rv64Phantom, ShiftOpcode, ShiftWOpcode,
+    BaseAluImmOpcode, BaseAluOpcode, BaseAluWImmOpcode, BaseAluWOpcode, BranchEqualOpcode,
+    BranchLessThanOpcode, DivRemOpcode, DivRemWOpcode, LessThanImmOpcode, LessThanOpcode,
+    MulHOpcode, MulOpcode, MulWOpcode, Rv64AuipcOpcode, Rv64HintStoreOpcode, Rv64JalLuiOpcode,
+    Rv64JalrOpcode, Rv64LoadStoreOpcode, Rv64Phantom, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode,
+    ShiftWOpcode,
 };
 use openvm_stark_backend::p3_field::{PrimeCharacteristicRing, PrimeField32};
 #[cfg(feature = "cuda")]
@@ -76,7 +77,7 @@ fn alu_r(opcode: BaseAluOpcode, rd: usize, rs1: usize, rs2: usize) -> Instructio
     Instruction::from_usize(opcode.global_opcode(), [reg(rd), reg(rs1), reg(rs2), 1, 1])
 }
 
-fn alu_imm(opcode: BaseAluOpcode, rd: usize, rs1: usize, imm: usize) -> Instruction<F> {
+fn alu_imm(opcode: BaseAluImmOpcode, rd: usize, rs1: usize, imm: usize) -> Instruction<F> {
     Instruction::from_usize(opcode.global_opcode(), [reg(rd), reg(rs1), imm, 1, 0])
 }
 
@@ -91,7 +92,7 @@ fn less_than(opcode: LessThanOpcode, rd: usize, rs1: usize, rs2: usize) -> Instr
     Instruction::from_usize(opcode.global_opcode(), [reg(rd), reg(rs1), reg(rs2), 1, 1])
 }
 
-fn less_than_imm(opcode: LessThanOpcode, rd: usize, rs1: usize, imm: usize) -> Instruction<F> {
+fn less_than_imm(opcode: LessThanImmOpcode, rd: usize, rs1: usize, imm: usize) -> Instruction<F> {
     Instruction::from_usize(opcode.global_opcode(), [reg(rd), reg(rs1), imm, 1, 0])
 }
 
@@ -99,11 +100,11 @@ fn alu_w(opcode: BaseAluWOpcode, rd: usize, rs1: usize, rs2: usize) -> Instructi
     Instruction::from_usize(opcode.global_opcode(), [reg(rd), reg(rs1), reg(rs2), 1, 1])
 }
 
-fn alu_w_imm(opcode: BaseAluWOpcode, rd: usize, rs1: usize, imm: usize) -> Instruction<F> {
+fn alu_w_imm(opcode: BaseAluWImmOpcode, rd: usize, rs1: usize, imm: usize) -> Instruction<F> {
     Instruction::from_usize(opcode.global_opcode(), [reg(rd), reg(rs1), imm, 1, 0])
 }
 
-fn shift(opcode: ShiftOpcode, rd: usize, rs1: usize, shamt: usize) -> Instruction<F> {
+fn shift(opcode: ShiftImmOpcode, rd: usize, rs1: usize, shamt: usize) -> Instruction<F> {
     Instruction::from_usize(opcode.global_opcode(), [reg(rd), reg(rs1), shamt, 1, 0])
 }
 
@@ -111,7 +112,7 @@ fn shift_reg(opcode: ShiftOpcode, rd: usize, rs1: usize, rs2: usize) -> Instruct
     Instruction::from_usize(opcode.global_opcode(), [reg(rd), reg(rs1), reg(rs2), 1, 1])
 }
 
-fn shift_w(opcode: ShiftWOpcode, rd: usize, rs1: usize, shamt: usize) -> Instruction<F> {
+fn shift_w(opcode: ShiftWImmOpcode, rd: usize, rs1: usize, shamt: usize) -> Instruction<F> {
     Instruction::from_usize(opcode.global_opcode(), [reg(rd), reg(rs1), shamt, 1, 0])
 }
 
@@ -354,9 +355,9 @@ fn inline_addsub_differential_exe() -> VmExe<F> {
         alu_r(BaseAluOpcode::XOR, 18, 1, 2),
         alu_r(BaseAluOpcode::OR, 19, 1, 2),
         alu_r(BaseAluOpcode::AND, 20, 1, 2),
-        shift(ShiftOpcode::SLL, 21, 1, 3), // shamt-immediate form
-        shift(ShiftOpcode::SRL, 22, 1, 1),
-        shift(ShiftOpcode::SRA, 23, 5, 2), // arithmetic core, negative-ish value
+        shift(ShiftImmOpcode::SLLI, 21, 1, 3), // shamt-immediate form
+        shift(ShiftImmOpcode::SRLI, 22, 1, 1),
+        shift(ShiftImmOpcode::SRAI, 23, 5, 2), // arithmetic core, negative-ish value
         alu_r(BaseAluOpcode::ADD, 24, 21, 22), // consumes shift results
         // Family 3: branches (branch2), JAL/LUI (wr1, incl. the suppressed
         // x0 link write), AUIPC (wr1), JALR (rw1). Forward targets only; the
@@ -2434,15 +2435,15 @@ fn push_standard_group_ops(instructions: &mut Vec<Instruction<F>>) {
         alu_r(BaseAluOpcode::AND, 7, 1, 2),
         less_than(LessThanOpcode::SLT, 8, 2, 1),
         less_than(LessThanOpcode::SLTU, 9, 2, 1),
-        shift(ShiftOpcode::SLL, 12, 1, 2),
-        shift(ShiftOpcode::SRL, 13, 12, 2),
-        shift(ShiftOpcode::SRA, 14, 12, 2),
+        shift(ShiftImmOpcode::SLLI, 12, 1, 2),
+        shift(ShiftImmOpcode::SRLI, 13, 12, 2),
+        shift(ShiftImmOpcode::SRAI, 14, 12, 2),
         alu_w(BaseAluWOpcode::ADDW, 15, 1, 2),
         alu_w(BaseAluWOpcode::SUBW, 16, 1, 2),
-        alu_w_imm(BaseAluWOpcode::ADDW, 15, 1, 0xff_fffb),
-        shift_w(ShiftWOpcode::SLLW, 17, 1, 2),
-        shift_w(ShiftWOpcode::SRLW, 18, 17, 2),
-        shift_w(ShiftWOpcode::SRAW, 19, 17, 2),
+        alu_w_imm(BaseAluWImmOpcode::ADDIW, 15, 1, 0xff_fffb),
+        shift_w(ShiftWImmOpcode::SLLIW, 17, 1, 2),
+        shift_w(ShiftWImmOpcode::SRLIW, 18, 17, 2),
+        shift_w(ShiftWImmOpcode::SRAIW, 19, 17, 2),
         shift_w_reg(ShiftWOpcode::SLLW, 17, 1, 2),
         shift_w_reg(ShiftWOpcode::SRLW, 18, 17, 2),
         shift_w_reg(ShiftWOpcode::SRAW, 19, 17, 2),
@@ -2488,8 +2489,8 @@ fn push_standard_group_ops(instructions: &mut Vec<Instruction<F>>) {
         branch_lt(BranchLessThanOpcode::BLTU, 1, 29, 4),
         mulh(MulHOpcode::MULH, 30, 29, 2),
         mulh(MulHOpcode::MULHSU, 31, 29, 2),
-        shift(ShiftOpcode::SRA, 30, 29, 3),
-        shift_w(ShiftWOpcode::SRAW, 31, 29, 3),
+        shift(ShiftImmOpcode::SRAI, 30, 29, 3),
+        shift_w(ShiftWImmOpcode::SRAIW, 31, 29, 3),
     ]);
 }
 
@@ -2556,12 +2557,12 @@ fn push_hard_chip_ops(instructions: &mut Vec<Instruction<F>>) {
         divrem_w(DivRemWOpcode::DIVW, 26, 10, 0),
         divrem_w(DivRemWOpcode::REMW, 27, 10, 0),
         addi(28, 0, 1),
-        shift(ShiftOpcode::SLL, 28, 28, 63),
-        shift(ShiftOpcode::SRA, 29, 28, 63),
+        shift(ShiftImmOpcode::SLLI, 28, 28, 63),
+        shift(ShiftImmOpcode::SRAI, 29, 28, 63),
         divrem(DivRemOpcode::DIV, 30, 28, 29),
         divrem(DivRemOpcode::REM, 31, 28, 29),
         addi(30, 0, 1),
-        shift(ShiftOpcode::SLL, 30, 30, 31),
+        shift(ShiftImmOpcode::SLLI, 30, 30, 31),
         divrem_w(DivRemWOpcode::DIVW, 31, 30, 29),
         divrem_w(DivRemWOpcode::REMW, 26, 30, 29),
         // LOADB sign edge: a stored byte with the MSB set must sign-extend.
@@ -2603,12 +2604,14 @@ fn hard_chip_with_add_tail_exe(add_tail_count: usize) -> VmExe<F> {
 
 fn hard_chip_streams(repeats: usize) -> Streams {
     let mut streams = Streams::default();
+    let mut hint = Vec::with_capacity(repeats * 3 * std::mem::size_of::<u64>());
     for repeat in 0..repeats {
         for word in 0..3u64 {
             let value = 0x0102_0304_0506_0708u64 + (repeat as u64) * 0x100 + word;
-            streams.hint_stream.extend(value.to_le_bytes());
+            hint.extend(value.to_le_bytes());
         }
     }
+    streams.hint_stream.set_hint(hint);
     streams
 }
 
@@ -2625,14 +2628,16 @@ fn hintstore_direct_exe() -> VmExe<F> {
 
 fn hintstore_direct_streams() -> Streams {
     let mut streams = Streams::default();
+    let mut hint = Vec::with_capacity(4 * std::mem::size_of::<u64>());
     for word in [
         0x0102_0304_0506_0708u64,
         0x1112_1314_1516_1718,
         0x2122_2324_2526_2728,
         0x3132_3334_3536_3738,
     ] {
-        streams.hint_stream.extend(word.to_le_bytes());
+        hint.extend(word.to_le_bytes());
     }
+    streams.hint_stream.set_hint(hint);
     streams
 }
 
@@ -2664,8 +2669,8 @@ fn g2_full_standard_matrix_exe() -> VmExe<F> {
     let mut instructions = vec![addi(1, 0, 9), addi(2, 0, 5)];
     push_standard_group_ops(&mut instructions);
     instructions.extend([
-        alu_imm(BaseAluOpcode::XOR, 3, 1, 0xff_fffb),
-        less_than_imm(LessThanOpcode::SLT, 4, 1, 0xff_fffb),
+        alu_imm(BaseAluImmOpcode::XORI, 3, 1, 0xff_fffb),
+        less_than_imm(LessThanImmOpcode::SLTI, 4, 1, 0xff_fffb),
         shift_reg(ShiftOpcode::SLL, 5, 1, 2),
         shift_reg(ShiftOpcode::SRL, 6, 1, 2),
         shift_reg(ShiftOpcode::SRA, 7, 1, 2),
@@ -3901,11 +3906,11 @@ fn assert_read_dominant_memory_aux(output: &RvrPreflightOutput<F>, exe: &VmExe<F
         .system_records
         .touched_memory
         .iter()
-        .find(|(addr, _)| *addr == block_addr)
+        .find(|block| (block.address_space, block.ptr) == block_addr)
         .expect("block must be touched");
     let read2_ts = program_ts_at_pc(output, read2_pc, 0);
     assert_eq!(
-        touched.1.timestamp,
+        touched.timestamp,
         read2_ts + 1,
         "touched_memory timestamp must be the trailing read's memory tick"
     );
@@ -3916,7 +3921,7 @@ fn assert_read_dominant_memory_aux(output: &RvrPreflightOutput<F>, exe: &VmExe<F
         F::from_u32(0),
     ];
     assert_eq!(
-        touched.1.values, expected_values,
+        touched.values, expected_values,
         "touched_memory value must remain the last write"
     );
 }
@@ -4621,7 +4626,7 @@ fn checkpoint_loop_exe(iters_base: usize, iters_shift: usize, body_adds: usize) 
         addi(1, 0, 1),
         addi(2, 0, 0),
         addi(3, 0, iters_base),
-        shift(ShiftOpcode::SLL, 3, 3, iters_shift),
+        shift(ShiftImmOpcode::SLLI, 3, 3, iters_shift),
     ];
     let loop_start = ins.len(); // slot index of the first body instruction
     for k in 0..body_adds {
