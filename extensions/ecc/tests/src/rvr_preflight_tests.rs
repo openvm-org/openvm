@@ -235,14 +235,20 @@ fn assert_rvr_differential(
         for (segment_idx, (num_insns, trace_heights)) in segments.into_iter().enumerate() {
             let segment_label = format!("{label}_segment_{segment_idx}");
             let from_state = state.clone();
-            let interp_output = interp_vm
-                .execute_preflight(
+            let interp_output = match num_insns {
+                Some(num_insns) => interp_vm.execute_preflight_for(
                     &mut interpreter,
                     from_state.clone(),
                     num_insns,
                     &trace_heights,
-                )
-                .expect("interpreter execution");
+                ),
+                None => interp_vm.execute_preflight(
+                    &mut interpreter,
+                    from_state.clone(),
+                    &trace_heights,
+                ),
+            }
+            .expect("interpreter execution");
             let capacities = trace_heights
                 .iter()
                 .zip(&widths)

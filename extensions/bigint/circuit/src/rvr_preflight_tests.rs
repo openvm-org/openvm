@@ -225,12 +225,7 @@ fn assert_single_segment_trace_matches_interpreter(exe: VmExe<F>) {
         .preflight_interpreter(&exe)
         .expect("interpreter preflight");
     let interpreter_output = interpreter_vm
-        .execute_preflight(
-            &mut interpreter,
-            interpreter_initial_state,
-            None,
-            &trace_heights,
-        )
+        .execute_preflight(&mut interpreter, interpreter_initial_state, &trace_heights)
         .expect("interpreter execution");
 
     let (mut rvr_vm, _) =
@@ -342,10 +337,10 @@ fn assert_two_segment_system_records_match_interpreter(exe: VmExe<F>) {
         .expect("interpreter preflight");
     let initial_state = vm.create_initial_state(&exe, Streams::default());
     let interpreter_first = vm
-        .execute_preflight(
+        .execute_preflight_for(
             &mut interpreter,
             initial_state.clone(),
-            Some(FIRST_SEGMENT_INSNS),
+            FIRST_SEGMENT_INSNS,
             &trace_heights,
         )
         .expect("first interpreter segment");
@@ -366,12 +361,7 @@ fn assert_two_segment_system_records_match_interpreter(exe: VmExe<F>) {
     );
 
     let interpreter_second = vm
-        .execute_preflight(
-            &mut interpreter,
-            interpreter_first.to_state,
-            None,
-            &trace_heights,
-        )
+        .execute_preflight(&mut interpreter, interpreter_first.to_state, &trace_heights)
         .expect("second interpreter segment");
     let rvr_second = instance
         .execute_preflight_from_state(rvr_first.to_state, None)
