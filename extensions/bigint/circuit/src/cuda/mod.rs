@@ -7,6 +7,9 @@ use openvm_circuit_primitives::{
     range_tuple::RangeTupleCheckerChipGPU, var_range::VariableRangeCheckerChipGPU, Chip,
 };
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
+#[cfg(not(feature = "rvr"))]
+use openvm_cuda_common::copy::MemCopyH2D;
+use openvm_cuda_common::{d_buffer::DeviceBuffer, stream::GpuDeviceCtx};
 use openvm_riscv_adapters::{
     Rv64VecHeapAdapterCols, Rv64VecHeapAdapterRecord, Rv64VecHeapBranchU16AdapterCols,
     Rv64VecHeapBranchU16AdapterRecord, Rv64VecHeapU16AdapterCols, Rv64VecHeapU16AdapterRecord,
@@ -24,6 +27,22 @@ use openvm_stark_backend::prover::AirProvingContext;
 mod cuda_abi;
 
 use crate::{INT256_NUM_MEMORY_BLOCKS, INT256_NUM_U16_LIMBS, INT256_NUM_U8_LIMBS, NUM_READS};
+
+fn opaque_h2d<T>(
+    records: &[T],
+    segment_id: Option<u32>,
+    device_ctx: &GpuDeviceCtx,
+) -> DeviceBuffer<T> {
+    #[cfg(feature = "rvr")]
+    {
+        openvm_circuit::arch::rvr::gpu_profile::opaque_h2d(records, segment_id, device_ctx)
+    }
+    #[cfg(not(feature = "rvr"))]
+    {
+        let _ = segment_id;
+        records.to_device_on(device_ctx).unwrap()
+    }
+}
 
 //////////////////////////////////////////////////////////////////////////////////////
 /// AddSub (u16 limbs, range checker)
@@ -59,8 +78,7 @@ impl Chip<DenseRecordArena, GpuBackend> for AddSub256ChipGpu {
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
 
-        let d_records =
-            openvm_circuit::arch::rvr::gpu_profile::opaque_h2d(records, g2_segment_id, device_ctx);
+        let d_records = opaque_h2d(records, g2_segment_id, device_ctx);
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
 
         unsafe {
@@ -116,8 +134,7 @@ impl Chip<DenseRecordArena, GpuBackend> for BitwiseLogic256ChipGpu {
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
 
-        let d_records =
-            openvm_circuit::arch::rvr::gpu_profile::opaque_h2d(records, g2_segment_id, device_ctx);
+        let d_records = opaque_h2d(records, g2_segment_id, device_ctx);
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
 
         unsafe {
@@ -168,8 +185,7 @@ impl Chip<DenseRecordArena, GpuBackend> for BranchEqual256ChipGpu {
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
 
-        let d_records =
-            openvm_circuit::arch::rvr::gpu_profile::opaque_h2d(records, g2_segment_id, device_ctx);
+        let d_records = opaque_h2d(records, g2_segment_id, device_ctx);
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
 
         unsafe {
@@ -226,8 +242,7 @@ impl Chip<DenseRecordArena, GpuBackend> for LessThan256ChipGpu {
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
 
-        let d_records =
-            openvm_circuit::arch::rvr::gpu_profile::opaque_h2d(records, g2_segment_id, device_ctx);
+        let d_records = opaque_h2d(records, g2_segment_id, device_ctx);
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
 
         unsafe {
@@ -277,8 +292,7 @@ impl Chip<DenseRecordArena, GpuBackend> for BranchLessThan256ChipGpu {
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
 
-        let d_records =
-            openvm_circuit::arch::rvr::gpu_profile::opaque_h2d(records, g2_segment_id, device_ctx);
+        let d_records = opaque_h2d(records, g2_segment_id, device_ctx);
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
 
         unsafe {
@@ -343,8 +357,7 @@ impl Chip<DenseRecordArena, GpuBackend> for ShiftLogical256ChipGpu {
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
 
-        let d_records =
-            openvm_circuit::arch::rvr::gpu_profile::opaque_h2d(records, g2_segment_id, device_ctx);
+        let d_records = opaque_h2d(records, g2_segment_id, device_ctx);
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
 
         unsafe {
@@ -388,8 +401,7 @@ impl Chip<DenseRecordArena, GpuBackend> for ShiftRightArithmetic256ChipGpu {
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
 
-        let d_records =
-            openvm_circuit::arch::rvr::gpu_profile::opaque_h2d(records, g2_segment_id, device_ctx);
+        let d_records = opaque_h2d(records, g2_segment_id, device_ctx);
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
 
         unsafe {
@@ -447,8 +459,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Multiplication256ChipGpu {
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
 
-        let d_records =
-            openvm_circuit::arch::rvr::gpu_profile::opaque_h2d(records, g2_segment_id, device_ctx);
+        let d_records = opaque_h2d(records, g2_segment_id, device_ctx);
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
 
         let sizes = self.range_tuple_checker.sizes;

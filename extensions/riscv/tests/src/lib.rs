@@ -617,7 +617,7 @@ mod tests {
                 .with_extension(Rv64IoTranspilerExtension)
                 .with_extension(Rv64MTranspilerExtension),
         )?;
-        air_test_with_min_segments(Rv64ImBuilder, config, exe, vec![], min_segments);
+        air_test_with_min_segments(Rv64ImBuilder::new(), config, exe, vec![], min_segments);
         Ok(())
     }
 

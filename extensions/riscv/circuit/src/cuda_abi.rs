@@ -583,6 +583,7 @@ pub mod hintstore_cuda {
         ))
     }
 
+    #[cfg(feature = "rvr")]
     #[allow(clippy::too_many_arguments)]
     pub unsafe fn tracegen_replay(
         d_trace: &DeviceBuffer<F>,
