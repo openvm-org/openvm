@@ -180,14 +180,15 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_HINT_STORED: bool>(
         });
     }
 
-    if exec_state.streams.hint_stream.len() < RV64_REGISTER_NUM_LIMBS * num_words as usize {
+    let num_bytes = RV64_REGISTER_NUM_LIMBS * num_words as usize;
+    if exec_state.streams.hint_stream.remaining() < num_bytes {
         let err = ExecutionError::HintOutOfBounds { pc };
         return Err(err);
     }
 
     for word_index in 0..num_words {
-        let data: [u8; RV64_REGISTER_NUM_LIMBS] =
-            std::array::from_fn(|_| exec_state.streams.hint_stream.pop_front().unwrap());
+        let mut data = [0; RV64_REGISTER_NUM_LIMBS];
+        exec_state.streams.hint_stream.copy_to_slice(&mut data);
         exec_state.vm_write_bytes(
             RV64_MEMORY_AS,
             mem_ptr + (RV64_REGISTER_NUM_LIMBS as u32 * word_index),

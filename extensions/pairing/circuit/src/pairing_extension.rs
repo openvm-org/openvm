@@ -118,12 +118,10 @@ where
 }
 
 pub(crate) mod phantom {
-    use std::collections::VecDeque;
-
     use eyre::bail;
     use halo2curves_axiom::ff;
     use openvm_circuit::{
-        arch::{PhantomSubExecutor, Streams},
+        arch::{HintStream, PhantomSubExecutor, Streams},
         system::memory::online::GuestMemory,
     };
     use openvm_ecc_guest::{algebra::field::FieldExtension, AffinePoint};
@@ -162,7 +160,7 @@ pub(crate) mod phantom {
 
     fn hint_pairing(
         memory: &GuestMemory,
-        hint_stream: &mut VecDeque<u8>,
+        hint_stream: &mut HintStream,
         rs1: u32,
         rs2: u32,
         c_upper: u16,
@@ -216,13 +214,13 @@ pub(crate) mod phantom {
 
                 let f: Fq12 = Bn254::multi_miller_loop(&p, &q);
                 let (c, u) = Bn254::final_exp_hint(&f);
-                hint_stream.clear();
-                hint_stream.extend(
+                hint_stream.set_hint(
                     c.to_coeffs()
                         .into_iter()
                         .chain(u.to_coeffs())
                         .flat_map(|fp2| fp2.to_coeffs())
-                        .flat_map(|fp| fp.to_bytes()),
+                        .flat_map(|fp| fp.to_bytes())
+                        .collect(),
                 );
             }
             Some(PairingCurve::Bls12_381) => {
@@ -257,13 +255,13 @@ pub(crate) mod phantom {
 
                 let f: Fq12 = Bls12_381::multi_miller_loop(&p, &q);
                 let (c, u) = Bls12_381::final_exp_hint(&f);
-                hint_stream.clear();
-                hint_stream.extend(
+                hint_stream.set_hint(
                     c.to_coeffs()
                         .into_iter()
                         .chain(u.to_coeffs())
                         .flat_map(|fp2| fp2.to_coeffs())
-                        .flat_map(|fp| fp.to_bytes()),
+                        .flat_map(|fp| fp.to_bytes())
+                        .collect(),
                 );
             }
             _ => {

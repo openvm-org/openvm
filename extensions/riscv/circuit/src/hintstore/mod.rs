@@ -473,7 +473,8 @@ where
             );
         };
 
-        if state.streams.hint_stream.len() < RV64_REGISTER_NUM_LIMBS * num_words as usize {
+        let num_bytes = RV64_REGISTER_NUM_LIMBS * num_words as usize;
+        if state.streams.hint_stream.remaining() < num_bytes {
             return Err(ExecutionError::HintOutOfBounds { pc: *state.pc });
         }
 
@@ -483,8 +484,8 @@ where
                 state.memory.increment_timestamp();
             }
 
-            let data: [u8; RV64_REGISTER_NUM_LIMBS] =
-                std::array::from_fn(|_| state.streams.hint_stream.pop_front().unwrap());
+            let mut data = [0; RV64_REGISTER_NUM_LIMBS];
+            state.streams.hint_stream.copy_to_slice(&mut data);
 
             record.var[idx].data = data;
 
