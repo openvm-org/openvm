@@ -65,14 +65,13 @@ pub trait WeierstrassPoint: Clone + Sized {
     /// been called already.
     fn double_impl<const CHECK_SETUP: bool>(&self) -> Self;
 
-    /// In-place complete projective addition: `self = self + p2`. Convenience wrapper over
-    /// [`add_impl`](Self::add_impl).
+    /// In-place complete projective addition: `self = self + p2`.
     fn add_assign_impl<const CHECK_SETUP: bool>(&mut self, p2: &Self) {
         *self = self.add_impl::<CHECK_SETUP>(p2);
     }
 
-    /// In-place complete projective doubling: `self = 2 * self`. Convenience wrapper over
-    /// [`double_impl`](Self::double_impl).
+    /// In-place complete projective doubling: `self = 2 * self`. Override for a true in-place
+    /// write; see [`add_assign_impl`](Self::add_assign_impl).
     fn double_assign_impl<const CHECK_SETUP: bool>(&mut self) {
         *self = self.double_impl::<CHECK_SETUP>();
     }
@@ -248,15 +247,13 @@ where
 
             if outer != 0 {
                 for _ in 0..self.window_bits {
-                    // setup has been called above
-                    res = res.double_impl::<false>();
+                    res.double_assign_impl::<false>();
                 }
             }
             for (base_idx, scalar) in scalars.iter().enumerate() {
                 let scalar = (scalar.as_le_bytes()[limb_idx] >> bit_idx) & mask;
                 let summand = self.get_multiple(base_idx, scalar as usize);
-                // setup has been called above
-                res = res.add_impl::<false>(summand);
+                res.add_assign_impl::<false>(summand);
             }
         }
         res
@@ -498,7 +495,7 @@ macro_rules! impl_sw_group_ops {
 
             #[inline(always)]
             fn double_assign(&mut self) {
-                *self = self.double_impl::<true>();
+                self.double_assign_impl::<true>();
             }
 
             #[inline(always)]
@@ -537,14 +534,14 @@ macro_rules! impl_sw_group_ops {
         impl core::ops::AddAssign<&$struct_name> for $struct_name {
             #[inline(always)]
             fn add_assign(&mut self, p2: &$struct_name) {
-                *self = self.add_impl::<true>(p2);
+                self.add_assign_impl::<true>(p2);
             }
         }
 
         impl core::ops::AddAssign for $struct_name {
             #[inline(always)]
             fn add_assign(&mut self, rhs: Self) {
-                *self = self.add_impl::<true>(&rhs);
+                self.add_assign_impl::<true>(&rhs);
             }
         }
 
@@ -578,14 +575,14 @@ macro_rules! impl_sw_group_ops {
         impl core::ops::SubAssign<&$struct_name> for $struct_name {
             #[inline(always)]
             fn sub_assign(&mut self, p2: &$struct_name) {
-                *self = self.add_impl::<true>(&core::ops::Neg::neg(p2));
+                self.add_assign_impl::<true>(&core::ops::Neg::neg(p2));
             }
         }
 
         impl core::ops::SubAssign for $struct_name {
             #[inline(always)]
             fn sub_assign(&mut self, rhs: Self) {
-                *self = self.add_impl::<true>(&core::ops::Neg::neg(rhs));
+                self.add_assign_impl::<true>(&core::ops::Neg::neg(rhs));
             }
         }
     };

@@ -366,6 +366,48 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                     Self::double_proj::<CHECK_SETUP>(self)
                 }
 
+                #[inline]
+                fn add_assign_impl<const CHECK_SETUP: bool>(&mut self, p2: &Self) {
+                    #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
+                    {
+                        *self = Self::add_proj::<CHECK_SETUP>(self, p2);
+                    }
+                    #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
+                    {
+                        if CHECK_SETUP {
+                            Self::set_up_once();
+                        }
+                        unsafe {
+                            #sw_add_proj_extern_func(
+                                self as *mut #struct_name as usize,
+                                self as *const #struct_name as usize,
+                                p2 as *const #struct_name as usize,
+                            );
+                        }
+                    }
+                }
+
+                // True in-place double: intrinsic writes directly back into `self`.
+                #[inline]
+                fn double_assign_impl<const CHECK_SETUP: bool>(&mut self) {
+                    #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
+                    {
+                        *self = Self::double_proj::<CHECK_SETUP>(self);
+                    }
+                    #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
+                    {
+                        if CHECK_SETUP {
+                            Self::set_up_once();
+                        }
+                        unsafe {
+                            #sw_double_proj_extern_func(
+                                self as *mut #struct_name as usize,
+                                self as *const #struct_name as usize,
+                            );
+                        }
+                    }
+                }
+
                 fn normalize(&self) -> Self {
                     use openvm_algebra_guest::DivUnsafe;
                     if self.is_identity_impl::<true>() {
