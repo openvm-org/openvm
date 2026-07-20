@@ -12,7 +12,7 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
     SharedBitwiseOperationLookupChip,
 };
 use openvm_instructions::{riscv::RV64_REGISTER_NUM_LIMBS, LocalOpcode};
-use openvm_riscv_transpiler::BitwiseImmOpcode;
+use openvm_riscv_transpiler::BaseAluImmOpcode;
 use openvm_stark_backend::{
     p3_air::BaseAir,
     p3_field::PrimeCharacteristicRing,
@@ -64,11 +64,11 @@ fn create_harness_fields(
 ) {
     let air = Rv64BitwiseLogicImmAir::new(
         Rv64BaseAluImmAdapterAir::new(execution_bridge, memory_bridge),
-        BitwiseLogicImmCoreAir::new(bitwise_chip.bus(), BitwiseImmOpcode::CLASS_OFFSET),
+        BitwiseLogicImmCoreAir::new(bitwise_chip.bus(), BaseAluImmOpcode::CLASS_OFFSET),
     );
     let executor = Rv64BitwiseLogicImmExecutor::new(
         Rv64BaseAluImmAdapterExecutor::new(),
-        BitwiseImmOpcode::CLASS_OFFSET,
+        BaseAluImmOpcode::CLASS_OFFSET,
     );
     let chip = Rv64BitwiseLogicImmChip::new(
         BitwiseLogicImmFiller::new(Rv64BaseAluImmAdapterFiller::new(), bitwise_chip),
@@ -106,12 +106,13 @@ fn encode_i12(imm: i16) -> usize {
     (imm as i32 as u32 & 0x00ff_ffff) as usize
 }
 
-fn expected(opcode: BitwiseImmOpcode, source: u64, imm: i16) -> u64 {
+fn expected(opcode: BaseAluImmOpcode, source: u64, imm: i16) -> u64 {
     let imm = imm as i64 as u64;
     match opcode {
-        BitwiseImmOpcode::XORI => source ^ imm,
-        BitwiseImmOpcode::ORI => source | imm,
-        BitwiseImmOpcode::ANDI => source & imm,
+        BaseAluImmOpcode::XORI => source ^ imm,
+        BaseAluImmOpcode::ORI => source | imm,
+        BaseAluImmOpcode::ANDI => source & imm,
+        BaseAluImmOpcode::ADDI => unreachable!(),
     }
 }
 
@@ -122,9 +123,9 @@ fn rv64_bitwise_immediate_boundaries() {
     let (mut harness, bitwise) = create_harness(&tester);
 
     for opcode in [
-        BitwiseImmOpcode::XORI,
-        BitwiseImmOpcode::ORI,
-        BitwiseImmOpcode::ANDI,
+        BaseAluImmOpcode::XORI,
+        BaseAluImmOpcode::ORI,
+        BaseAluImmOpcode::ANDI,
     ] {
         for source in [0, 0x0123_4567_89ab_cdef, u64::MAX] {
             for imm in [-2048, -1, 0, 2047] {
@@ -164,7 +165,7 @@ fn rv64_bitwise_immediate_binding_negative() {
         0x0123_4567_89ab_cdefu64.to_le_bytes(),
         [0; RV64_REGISTER_NUM_LIMBS],
         Some(encode_i12(-1)),
-        BitwiseImmOpcode::XORI.global_opcode().as_usize(),
+        BaseAluImmOpcode::XORI.global_opcode().as_usize(),
         &mut rng,
     );
     tester.execute(&mut harness.executor, &mut harness.arena, &instruction);
@@ -223,9 +224,9 @@ fn test_cuda_bitwise_immediate_boundaries_tracegen() {
     let mut harness = create_cuda_harness(&tester);
 
     for opcode in [
-        BitwiseImmOpcode::XORI,
-        BitwiseImmOpcode::ORI,
-        BitwiseImmOpcode::ANDI,
+        BaseAluImmOpcode::XORI,
+        BaseAluImmOpcode::ORI,
+        BaseAluImmOpcode::ANDI,
     ] {
         for imm in [-2048, -1, 0, 2047] {
             let (instruction, _) = rv64_rand_write_register_or_imm(

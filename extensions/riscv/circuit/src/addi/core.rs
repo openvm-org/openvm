@@ -13,7 +13,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
-use openvm_riscv_transpiler::BaseAluImmOpcode;
+use openvm_riscv_transpiler::{BaseAluImmOpcode, BaseAluWImmOpcode};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
@@ -21,7 +21,7 @@ use openvm_stark_backend::{
     BaseAirWithPublicValues,
 };
 
-use crate::adapters::U16_BITS;
+use crate::adapters::{is_canonical_i12, U16_BITS};
 
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection, Debug)]
@@ -40,26 +40,38 @@ pub struct AddICoreCols<T, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 
 #[derive(Copy, Clone, Debug, derive_new::new, ColumnsAir)]
 #[columns_via(AddICoreCols<u8, NUM_LIMBS, LIMB_BITS>)]
-pub struct AddICoreAir<const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct AddICoreAir<
+    const NUM_LIMBS: usize,
+    const LIMB_BITS: usize,
+    const RANGE_CHECK_TOP_LIMB: bool,
+> {
     pub range_bus: VariableRangeCheckerBus,
     pub offset: usize,
     pub local_opcode: usize,
 }
 
-impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAir<F>
-    for AddICoreAir<NUM_LIMBS, LIMB_BITS>
+impl<
+        F: Field,
+        const NUM_LIMBS: usize,
+        const LIMB_BITS: usize,
+        const RANGE_CHECK_TOP_LIMB: bool,
+    > BaseAir<F> for AddICoreAir<NUM_LIMBS, LIMB_BITS, RANGE_CHECK_TOP_LIMB>
 {
     fn width(&self) -> usize {
         AddICoreCols::<F, NUM_LIMBS, LIMB_BITS>::width()
     }
 }
-impl<F: Field, const NUM_LIMBS: usize, const LIMB_BITS: usize> BaseAirWithPublicValues<F>
-    for AddICoreAir<NUM_LIMBS, LIMB_BITS>
+impl<
+        F: Field,
+        const NUM_LIMBS: usize,
+        const LIMB_BITS: usize,
+        const RANGE_CHECK_TOP_LIMB: bool,
+    > BaseAirWithPublicValues<F> for AddICoreAir<NUM_LIMBS, LIMB_BITS, RANGE_CHECK_TOP_LIMB>
 {
 }
 
-impl<AB, I, const NUM_LIMBS: usize, const LIMB_BITS: usize> VmCoreAir<AB, I>
-    for AddICoreAir<NUM_LIMBS, LIMB_BITS>
+impl<AB, I, const NUM_LIMBS: usize, const LIMB_BITS: usize, const RANGE_CHECK_TOP_LIMB: bool>
+    VmCoreAir<AB, I> for AddICoreAir<NUM_LIMBS, LIMB_BITS, RANGE_CHECK_TOP_LIMB>
 where
     AB: InteractionBuilder,
     I: VmAdapterInterface<AB::Expr>,
@@ -103,7 +115,8 @@ where
             builder.when(cols.is_valid).assert_bool(carry[i].clone());
         }
 
-        for &rd_limb in cols.rd.iter() {
+        let range_limb_count = NUM_LIMBS - usize::from(!RANGE_CHECK_TOP_LIMB);
+        for &rd_limb in &cols.rd[..range_limb_count] {
             self.range_bus
                 .range_check(rd_limb, LIMB_BITS)
                 .eval(builder, cols.is_valid.into());
@@ -149,7 +162,12 @@ pub struct AddIExecutor<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
 }
 
 #[derive(derive_new::new)]
-pub struct AddIFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
+pub struct AddIFiller<
+    A,
+    const NUM_LIMBS: usize,
+    const LIMB_BITS: usize,
+    const RANGE_CHECK_TOP_LIMB: bool,
+> {
     adapter: A,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
@@ -171,7 +189,11 @@ where
     >,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {
-        format!("{:?}", BaseAluImmOpcode::from_usize(opcode - self.offset))
+        if NUM_LIMBS * LIMB_BITS == 32 {
+            format!("{:?}", BaseAluWImmOpcode::from_usize(opcode - self.offset))
+        } else {
+            format!("{:?}", BaseAluImmOpcode::from_usize(opcode - self.offset))
+        }
     }
 
     fn execute(
@@ -183,6 +205,8 @@ where
             instruction.opcode.local_opcode_idx(self.offset),
             self.local_opcode
         );
+        let c_u32 = instruction.c.as_canonical_u32();
+        debug_assert!(is_canonical_i12(c_u32));
 
         let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
 
@@ -193,7 +217,6 @@ where
             .read(state.memory, instruction, &mut adapter_record)
             .into();
 
-        let c_u32 = instruction.c.as_canonical_u32();
         core_record.imm_low11 = (c_u32 & 0x7FF) as u16;
         core_record.imm_sign = ((c_u32 >> 11) & 1) as u16;
 
@@ -212,8 +235,8 @@ where
     }
 }
 
-impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize> TraceFiller<F>
-    for AddIFiller<A, NUM_LIMBS, LIMB_BITS>
+impl<F, A, const NUM_LIMBS: usize, const LIMB_BITS: usize, const RANGE_CHECK_TOP_LIMB: bool>
+    TraceFiller<F> for AddIFiller<A, NUM_LIMBS, LIMB_BITS, RANGE_CHECK_TOP_LIMB>
 where
     F: PrimeField32,
     A: 'static + AdapterTraceFiller<F>,
@@ -234,7 +257,8 @@ where
             .add_count(record.imm_low11 as u32, 11);
         core_row.rs1 = record.rs1.map(F::from_u16);
         core_row.rd = rd.map(F::from_u16);
-        for &rd_val in &rd {
+        let range_limb_count = NUM_LIMBS - usize::from(!RANGE_CHECK_TOP_LIMB);
+        for &rd_val in &rd[..range_limb_count] {
             self.range_checker_chip.add_count(rd_val as u32, LIMB_BITS);
         }
     }
