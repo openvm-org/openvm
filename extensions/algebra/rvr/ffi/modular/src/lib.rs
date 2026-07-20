@@ -1,14 +1,10 @@
-//! Modular arithmetic FFI: 256-bit / 384-bit prime fields + the algebra
-//! sqrt phantom hint. Per-curve specializations dispatch to native
-//! `halo2curves_axiom` / `blstrs` arithmetic; unknown moduli fall back to a
-//! BigUint-based path.
+//! Rust FFI for P-256, BN254, generic modular arithmetic, setup, and
+//! square-root hints.
 //!
-//! This crate also bundles libsecp256k1 (with ECC) — see `c/rvr_ext_modular.c`
-//! and `build.rs`.
+//! P-256 and BN254 use `halo2curves_axiom`; other moduli use `BigUint`.
 //!
-//! Shared helpers (I/O, `FieldArith`, `exec_op`, the BLS12-381 newtype) live in
-//! `rvr-openvm-ext-algebra-ffi-common` so the fp2 staticlib can reuse them
-//! without re-defining strong globals.
+//! Shared I/O and arithmetic helpers live in
+//! `rvr-openvm-ext-algebra-ffi-common`.
 
 use std::{ffi::c_void, marker::PhantomData};
 
@@ -18,8 +14,8 @@ use num_traits::One;
 use openvm_instructions::riscv::RV64_MEMORY_AS;
 use openvm_platform::WORD_SIZE;
 use rvr_openvm_ext_algebra_ffi_common::{
-    known_field_op_fn, mod_inverse, read_bigint, read_bls12_381_fq, read_field_256, write_bigint,
-    write_bls12_381_fq, write_field_256, FieldArith, KnownFieldArith,
+    known_field_op_fn, mod_inverse, read_bigint, read_field_256, write_bigint, write_field_256,
+    FieldArith, KnownFieldArith,
 };
 use rvr_openvm_ext_ffi_common::{
     ext_hint_stream_set, rd_mem_u64_range_wrapper, rd_mem_words_traced, trace_mem_access_range,
@@ -29,16 +25,6 @@ use rvr_openvm_ext_ffi_common::{
 // ── Field structs ────────────────────────────────────────────────────────────
 
 pub struct KnownPrimeField<F>(pub PhantomData<F>);
-
-/// Newtype tag for BLS12-381 Fq used by `KnownPrimeField<Bls12381Fq>`.
-/// `blstrs::Fp` uses a different `ff` crate version than halo2curves_axiom, so
-/// it does not impl `halo2curves_axiom::ff::PrimeField`, but the compiler can't
-/// prove that — a concrete impl on `KnownPrimeField<blstrs::Fp>` would conflict
-/// with the generic blanket impl below. The newtype must live in this crate
-/// (not the shared `…-ffi-common`) so coherence allows the blanket + concrete
-/// impl pair: with `Bls12381Fq` local, the compiler knows no upstream
-/// `PrimeField<Repr=[u8;32]>` impl can ever appear for it.
-pub struct Bls12381Fq;
 
 struct UnknownPrimeField {
     modulus: BigUint,
@@ -56,20 +42,6 @@ impl<F: PrimeField<Repr = [u8; 32]>> KnownFieldArith for KnownPrimeField<F> {
     #[inline(always)]
     unsafe fn write_elem(&self, state: *mut c_void, ptr: u64, val: &Self::Elem) {
         write_field_256(state, ptr, val)
-    }
-}
-
-// ── KnownPrimeField impl (BLS12-381 Fq, 48 bytes) ──────────────────────────
-
-impl KnownFieldArith for KnownPrimeField<Bls12381Fq> {
-    type Elem = blstrs::Fp;
-    #[inline(always)]
-    unsafe fn read_elem(&self, state: *mut c_void, ptr: u64) -> Self::Elem {
-        read_bls12_381_fq(state, ptr)
-    }
-    #[inline(always)]
-    unsafe fn write_elem(&self, state: *mut c_void, ptr: u64, val: &Self::Elem) {
-        write_bls12_381_fq(state, ptr, val)
     }
 }
 
@@ -142,14 +114,10 @@ macro_rules! define_mod_ffi {
 
 // ── Specialized per-curve FFI instantiations ─────────────────────────────────
 
-// k256_coord and k256_scalar are provided by the C wrapper (see c/rvr_ext_modular.c)
-// using libsecp256k1; no Rust entry points generated for them.
 define_mod_ffi!(halo2curves_axiom::secp256r1::Fp, p256_coord);
 define_mod_ffi!(halo2curves_axiom::secp256r1::Fq, p256_scalar);
 define_mod_ffi!(halo2curves_axiom::bn256::Fq, bn254_fq);
 define_mod_ffi!(halo2curves_axiom::bn256::Fr, bn254_fr);
-define_mod_ffi!(Bls12381Fq, bls12_381_fq);
-define_mod_ffi!(halo2curves_axiom::bls12_381::Fr, bls12_381_fr);
 
 // ── Generic FFI (fallback for unknown moduli) ────────────────────────────────
 

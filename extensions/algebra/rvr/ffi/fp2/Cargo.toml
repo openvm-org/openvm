@@ -16,7 +16,6 @@ openvm-platform.workspace = true
 rvr-openvm-ext-algebra-ffi-common.workspace = true
 rvr-openvm-ext-ffi-common.workspace = true
 
-blstrs = { workspace = true, features = ["__private_bench"] }
 halo2curves-axiom.workspace = true
 num-bigint.workspace = true
 paste = "1"

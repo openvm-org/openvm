@@ -1,8 +1,8 @@
-//! FFI functions for the ECC extension (Weierstrass EC point operations).
+//! Rust FFI for P-256 and BN254 point operations and setup operations for all
+//! supported curves.
 //!
-//! Uses native halo2curves / blstrs field arithmetic for the 4 known curves,
-//! reusing the `FieldArith` trait and `KnownPrimeField` types from the algebra
-//! FFI crate.
+//! Point operations use `halo2curves_axiom`. Setup operations evaluate
+//! OpenVM's precomputed field expressions.
 
 use std::ffi::c_void;
 
@@ -13,16 +13,12 @@ use openvm_ecc_circuit::{ec_add_ne_expr, ec_double_ne_expr};
 use openvm_mod_circuit_builder::{run_field_expression_precomputed, ExprBuilderConfig};
 use openvm_platform::WORD_SIZE;
 use rvr_openvm_ext_algebra_ffi_common::{
-    read_bls12_381_fq, read_field_256, write_bls12_381_fq, write_field_256, BLS12_381_ELEM_BYTES,
-    FIELD_256_BYTES,
+    read_field_256, write_field_256, BLS12_381_ELEM_BYTES, FIELD_256_BYTES,
 };
 use rvr_openvm_ext_ffi_common::{rd_mem_words_traced, wr_mem_words_traced};
 
 /// BN254 base field element size in bytes, as `u64` for address arithmetic.
 const BN254_FQ_BYTES: u64 = FIELD_256_BYTES as u64;
-/// BLS12-381 base field element size in bytes, as `u64` for address arithmetic.
-const BLS12_381_FQ_BYTES: u64 = BLS12_381_ELEM_BYTES as u64;
-
 /// Affine point: two field coordinates (x, y).
 const AFFINE_COORDS: u32 = 2;
 /// Size of a 256-bit affine point in bytes.
@@ -100,27 +96,6 @@ unsafe fn ec_double_256<F: halo2curves_axiom::ff::PrimeField<Repr = [u8; FIELD_2
     let (x3, y3) = ec_double_impl(x1, y1, a);
     write_field_256(state, rd_ptr, &x3);
     write_field_256(state, rd_ptr + BN254_FQ_BYTES, &y3);
-}
-
-// ── BLS12-381 helpers ─────────────────────────────────────────────────────────
-
-unsafe fn ec_add_ne_bls12_381(state: *mut c_void, rd_ptr: u64, rs1_ptr: u64, rs2_ptr: u64) {
-    let x1 = read_bls12_381_fq(state, rs1_ptr);
-    let y1 = read_bls12_381_fq(state, rs1_ptr + BLS12_381_FQ_BYTES);
-    let x2 = read_bls12_381_fq(state, rs2_ptr);
-    let y2 = read_bls12_381_fq(state, rs2_ptr + BLS12_381_FQ_BYTES);
-    let (x3, y3) = ec_add_ne_impl(x1, y1, x2, y2);
-    write_bls12_381_fq(state, rd_ptr, &x3);
-    write_bls12_381_fq(state, rd_ptr + BLS12_381_FQ_BYTES, &y3);
-}
-
-unsafe fn ec_double_bls12_381(state: *mut c_void, rd_ptr: u64, rs1_ptr: u64) {
-    let x1 = read_bls12_381_fq(state, rs1_ptr);
-    let y1 = read_bls12_381_fq(state, rs1_ptr + BLS12_381_FQ_BYTES);
-    // BLS12-381 has a = 0
-    let (x3, y3) = ec_double_impl(x1, y1, blstrs::Fp::ZERO);
-    write_bls12_381_fq(state, rd_ptr, &x3);
-    write_bls12_381_fq(state, rd_ptr + BLS12_381_FQ_BYTES, &y3);
 }
 
 // ── Curve constants ──────────────────────────────────────────────────────────
@@ -281,8 +256,6 @@ macro_rules! ecc_double_setup_entry {
     };
 }
 
-// k256 add_ne and double are provided by rvr_ext_k256.c so these Rust
-// entry points are intentionally not generated here.
 ecc_add_ne_setup_entry!(rvr_ext_setup_ec_add_ne_k256, POINT_256_BYTES);
 ecc_double_setup_entry!(rvr_ext_setup_ec_double_k256, POINT_256_BYTES);
 
@@ -304,35 +277,5 @@ ecc_double_entry!(
 );
 ecc_double_setup_entry!(rvr_ext_setup_ec_double_bn254, POINT_256_BYTES);
 
-/// # Safety
-///
-/// `state` must point to a valid native tracer state for this execution.
-/// Pointer parameters must point to valid 48-byte BLS12-381 affine point
-/// coordinates.
-#[no_mangle]
-pub unsafe extern "C" fn rvr_ext_ec_add_ne_bls12_381(
-    state: *mut c_void,
-    rd_ptr: u64,
-    rs1_ptr: u64,
-    rs2_ptr: u64,
-) {
-    ec_add_ne_bls12_381(state, rd_ptr, rs1_ptr, rs2_ptr);
-}
-
 ecc_add_ne_setup_entry!(rvr_ext_setup_ec_add_ne_bls12_381, POINT_BLS12_381_BYTES);
-
-/// # Safety
-///
-/// `state` must point to a valid native tracer state for this execution.
-/// Pointer parameters must point to valid 48-byte BLS12-381 affine point
-/// coordinates.
-#[no_mangle]
-pub unsafe extern "C" fn rvr_ext_ec_double_bls12_381(
-    state: *mut c_void,
-    rd_ptr: u64,
-    rs1_ptr: u64,
-) {
-    ec_double_bls12_381(state, rd_ptr, rs1_ptr);
-}
-
 ecc_double_setup_entry!(rvr_ext_setup_ec_double_bls12_381, POINT_BLS12_381_BYTES);

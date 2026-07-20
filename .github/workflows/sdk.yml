@@ -56,6 +56,7 @@ jobs:
         run: |
           git submodule update --init --depth 1 extensions/keccak256/rvr/ffi/openssl
           git submodule update --init --depth 1 extensions/algebra/rvr/ffi/modular/secp256k1
+          git submodule update --init --depth 1 extensions/algebra/rvr/ffi/modular/blst
       - uses: dtolnay/rust-toolchain@stable
       - uses: ./.github/actions/sccache
       - uses: Swatinem/rust-cache@v2
