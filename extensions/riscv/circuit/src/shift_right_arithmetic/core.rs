@@ -25,15 +25,6 @@ pub struct ShiftRightArithmeticCoreCols<T, const NUM_LIMBS: usize, const LIMB_BI
     pub b: [T; NUM_LIMBS],
     pub c: [T; NUM_LIMBS],
 
-    pub is_valid: T,
-
-    // bit_multiplier = 2^bit_shift
-    pub bit_multiplier: T,
-    // carry_multiplier = 2^(LIMB_BITS - bit_shift). Used to position the bits that cross the limb
-    // boundary without forming a product that exceeds 2^LIMB_BITS (which would alias the field
-    // modulus for u16 limbs).
-    pub carry_multiplier: T,
-
     // Sign of b for SRA
     pub b_sign: T,
 
@@ -92,40 +83,31 @@ where
         _from_pc: AB::Var,
     ) -> AdapterAirContext<AB::Expr, I> {
         let cols: &ShiftRightArithmeticCoreCols<_, NUM_LIMBS, LIMB_BITS> = local_core.borrow();
-        builder.assert_bool(cols.is_valid);
-        let is_valid: AB::Expr = cols.is_valid.into();
-
         let a = &cols.a;
         let b = &cols.b;
         let c = &cols.c;
 
-        // Constrain that bit_shift and the (bit/carry) multipliers are correct. Because the sum of
-        // all bit_shift_marker[i] is constrained to be 1, bit_shift is guaranteed to be in range.
         let mut bit_marker_sum = AB::Expr::ZERO;
         let mut bit_shift = AB::Expr::ZERO;
+        let mut bit_multiplier = AB::Expr::ZERO;
+        let mut carry_multiplier = AB::Expr::ZERO;
 
         for i in 0..LIMB_BITS {
             builder.assert_bool(cols.bit_shift_marker[i]);
-            bit_marker_sum += cols.bit_shift_marker[i].into();
-            bit_shift += AB::Expr::from_usize(i) * cols.bit_shift_marker[i];
-
-            let mut when_bit_shift = builder.when(cols.bit_shift_marker[i]);
-            when_bit_shift.assert_eq(
-                cols.bit_multiplier,
-                AB::Expr::from_usize(1 << i) * is_valid.clone(),
-            );
-            when_bit_shift.assert_eq(
-                cols.carry_multiplier,
-                AB::Expr::from_usize(1 << (LIMB_BITS - i)) * is_valid.clone(),
-            );
+            let marker: AB::Expr = cols.bit_shift_marker[i].into();
+            bit_marker_sum += marker.clone();
+            bit_shift += AB::Expr::from_usize(i) * marker.clone();
+            bit_multiplier += AB::Expr::from_usize(1 << i) * marker.clone();
+            carry_multiplier += AB::Expr::from_usize(1 << (LIMB_BITS - i)) * marker;
         }
-        builder.assert_eq(bit_marker_sum, is_valid.clone());
+        builder.assert_bool(bit_marker_sum.clone());
+        let is_valid = bit_marker_sum;
 
         // Decompose each b[k] into carry/aux parts: b[k] = carry[k] + aux[k] * 2^bit_shift.
         for (k, &b_limb) in b.iter().enumerate() {
             builder.assert_eq(
                 b_limb,
-                cols.bit_shift_carry[k] + cols.bit_shift_aux[k] * cols.bit_multiplier,
+                cols.bit_shift_carry[k] + cols.bit_shift_aux[k] * bit_multiplier.clone(),
             );
         }
 
@@ -141,7 +123,6 @@ where
 
             let mut when_limb_shift = builder.when(cols.limb_shift_marker[i]);
 
-            let carry_multiplier: AB::Expr = cols.carry_multiplier.into();
             for (j, &a_limb) in a.iter().enumerate() {
                 // a[j] = aux[j+i] + carry_in * 2^(LIMB_BITS - bit_shift)
                 if j + i > NUM_LIMBS - 1 {
@@ -241,7 +222,6 @@ pub struct ShiftRightArithmeticExecutor<A, const NUM_LIMBS: usize, const LIMB_BI
 pub struct ShiftRightArithmeticFiller<A, const NUM_LIMBS: usize, const LIMB_BITS: usize> {
     adapter: A,
     pub range_checker_chip: SharedVariableRangeCheckerChip,
-    pub offset: usize,
 }
 
 impl<F, A, RA, const NUM_LIMBS: usize, const LIMB_BITS: usize> PreflightExecutor<F, RA>
@@ -358,9 +338,6 @@ where
 
         let core_row: &mut ShiftRightArithmeticCoreCols<F, NUM_LIMBS, LIMB_BITS> =
             core_row.borrow_mut();
-        core_row.is_valid = F::ONE;
-        core_row.bit_multiplier = F::from_u32(1 << bit_shift);
-        core_row.carry_multiplier = F::from_u32(1 << aux_bits);
         core_row.b_sign = F::from_u16(b_sign);
         core_row.bit_shift_marker = bit_shift_marker;
         core_row.limb_shift_marker = limb_shift_marker;

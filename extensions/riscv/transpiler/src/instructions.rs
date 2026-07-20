@@ -375,6 +375,83 @@ pub enum BaseAluImmOpcode {
     ADDI,
 }
 
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    EnumCount,
+    EnumIter,
+    FromRepr,
+    LocalOpcode,
+    Serialize,
+    Deserialize,
+)]
+#[opcode_offset = 0x291]
+#[repr(usize)]
+pub enum ShiftImmOpcode {
+    SLLI,
+    SRLI,
+    SRAI,
+}
+
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    EnumCount,
+    EnumIter,
+    FromRepr,
+    LocalOpcode,
+    Serialize,
+    Deserialize,
+)]
+#[opcode_offset = 0x294]
+#[repr(usize)]
+pub enum LessThanImmOpcode {
+    SLTI,
+    SLTIU,
+}
+
+/// Immediate variants of the bitwise base ALU opcodes.
+///
+/// Local indices mirror [`BaseAluOpcode`]; slots 0 and 1 are unused.
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    EnumCount,
+    EnumIter,
+    FromRepr,
+    LocalOpcode,
+    Serialize,
+    Deserialize,
+)]
+#[opcode_offset = 0x296]
+#[repr(usize)]
+pub enum BitwiseImmOpcode {
+    XORI = 2,
+    ORI = 3,
+    ANDI = 4,
+}
+
+const _: () = {
+    assert!(BitwiseImmOpcode::XORI as usize == BaseAluOpcode::XOR as usize);
+    assert!(BitwiseImmOpcode::ORI as usize == BaseAluOpcode::OR as usize);
+    assert!(BitwiseImmOpcode::ANDI as usize == BaseAluOpcode::AND as usize);
+};
+
 // =================================================================================================
 // Phantom opcodes
 // =================================================================================================
