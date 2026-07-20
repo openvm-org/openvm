@@ -9,7 +9,6 @@ use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV64_IMM_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
-    LocalOpcode,
 };
 use openvm_riscv_transpiler::ShiftImmOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -33,7 +32,7 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
         pc: u32,
         inst: &Instruction<F>,
         data: &mut ShiftLogicalImmPreCompute,
-    ) -> Result<ShiftImmOpcode, StaticProgramError> {
+    ) -> Result<bool, StaticProgramError> {
         let Instruction {
             opcode,
             a,
@@ -50,14 +49,18 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
         {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
+        let local_opcode = opcode.local_opcode_idx(self.offset);
+        if local_opcode != ShiftImmOpcode::SLLI as usize
+            && local_opcode != ShiftImmOpcode::SRLI as usize
+        {
+            return Err(StaticProgramError::InvalidInstruction(pc));
+        }
         *data = ShiftLogicalImmPreCompute {
             shamt: c as u8,
             rd_ptr: a.as_canonical_u32() as u8,
             rs1_ptr: b.as_canonical_u32() as u8,
         };
-        Ok(ShiftImmOpcode::from_usize(
-            opcode.local_opcode_idx(self.offset),
-        ))
+        Ok(local_opcode == ShiftImmOpcode::SLLI as usize)
     }
 }
 
@@ -82,11 +85,10 @@ where
         Ctx: ExecutionCtxTrait,
     {
         let data: &mut ShiftLogicalImmPreCompute = data.borrow_mut();
-        let opcode = self.pre_compute_impl(pc, inst, data)?;
-        Ok(match opcode {
-            ShiftImmOpcode::SLLI => execute_e1_handler::<Ctx, SllOp>,
-            ShiftImmOpcode::SRLI => execute_e1_handler::<Ctx, SrlOp>,
-            ShiftImmOpcode::SRAI => unreachable!(),
+        let is_sll = self.pre_compute_impl(pc, inst, data)?;
+        Ok(match is_sll {
+            true => execute_e1_handler::<Ctx, NUM_LIMBS, LIMB_BITS, SllOp>,
+            false => execute_e1_handler::<Ctx, NUM_LIMBS, LIMB_BITS, SrlOp>,
         })
     }
 
@@ -101,11 +103,10 @@ where
         Ctx: ExecutionCtxTrait,
     {
         let data: &mut ShiftLogicalImmPreCompute = data.borrow_mut();
-        let opcode = self.pre_compute_impl(pc, inst, data)?;
-        Ok(match opcode {
-            ShiftImmOpcode::SLLI => execute_e1_handler::<Ctx, SllOp>,
-            ShiftImmOpcode::SRLI => execute_e1_handler::<Ctx, SrlOp>,
-            ShiftImmOpcode::SRAI => unreachable!(),
+        let is_sll = self.pre_compute_impl(pc, inst, data)?;
+        Ok(match is_sll {
+            true => execute_e1_handler::<Ctx, NUM_LIMBS, LIMB_BITS, SllOp>,
+            false => execute_e1_handler::<Ctx, NUM_LIMBS, LIMB_BITS, SrlOp>,
         })
     }
 }
@@ -133,11 +134,10 @@ where
     {
         let data: &mut E2PreCompute<ShiftLogicalImmPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
-        let opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
-        Ok(match opcode {
-            ShiftImmOpcode::SLLI => execute_e2_handler::<Ctx, SllOp>,
-            ShiftImmOpcode::SRLI => execute_e2_handler::<Ctx, SrlOp>,
-            ShiftImmOpcode::SRAI => unreachable!(),
+        let is_sll = self.pre_compute_impl(pc, inst, &mut data.data)?;
+        Ok(match is_sll {
+            true => execute_e2_handler::<Ctx, NUM_LIMBS, LIMB_BITS, SllOp>,
+            false => execute_e2_handler::<Ctx, NUM_LIMBS, LIMB_BITS, SrlOp>,
         })
     }
 
@@ -154,24 +154,33 @@ where
     {
         let data: &mut E2PreCompute<ShiftLogicalImmPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
-        let opcode = self.pre_compute_impl(pc, inst, &mut data.data)?;
-        Ok(match opcode {
-            ShiftImmOpcode::SLLI => execute_e2_handler::<Ctx, SllOp>,
-            ShiftImmOpcode::SRLI => execute_e2_handler::<Ctx, SrlOp>,
-            ShiftImmOpcode::SRAI => unreachable!(),
+        let is_sll = self.pre_compute_impl(pc, inst, &mut data.data)?;
+        Ok(match is_sll {
+            true => execute_e2_handler::<Ctx, NUM_LIMBS, LIMB_BITS, SllOp>,
+            false => execute_e2_handler::<Ctx, NUM_LIMBS, LIMB_BITS, SrlOp>,
         })
     }
 }
 
 #[inline(always)]
-unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: ImmOp>(
+unsafe fn execute_e12_impl<
+    CTX: ExecutionCtxTrait,
+    const NUM_LIMBS: usize,
+    const LIMB_BITS: usize,
+    OP: ImmOp,
+>(
     pre_compute: &ShiftLogicalImmPreCompute,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let rs1 = exec_state
         .vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.rs1_ptr as u32);
     let rs1 = u64::from_le_bytes(rs1);
-    let rd = <OP as ImmOp>::compute(rs1, pre_compute.shamt as u64);
+    let shamt = pre_compute.shamt as u64;
+    let rd = if NUM_LIMBS * LIMB_BITS == 32 {
+        <OP as ImmOp>::compute(rs1 as u32 as u64, shamt) as u32 as i32 as i64 as u64
+    } else {
+        <OP as ImmOp>::compute(rs1, shamt)
+    };
     exec_state.vm_write_bytes::<RV64_REGISTER_NUM_LIMBS>(
         RV64_REGISTER_AS,
         pre_compute.rd_ptr as u32,
@@ -183,18 +192,28 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, OP: ImmOp>(
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, OP: ImmOp>(
+unsafe fn execute_e1_impl<
+    CTX: ExecutionCtxTrait,
+    const NUM_LIMBS: usize,
+    const LIMB_BITS: usize,
+    OP: ImmOp,
+>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
     let pre_compute: &ShiftLogicalImmPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<ShiftLogicalImmPreCompute>()).borrow();
-    execute_e12_impl::<CTX, OP>(pre_compute, exec_state);
+    execute_e12_impl::<CTX, NUM_LIMBS, LIMB_BITS, OP>(pre_compute, exec_state);
 }
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, OP: ImmOp>(
+unsafe fn execute_e2_impl<
+    CTX: MeteredExecutionCtxTrait,
+    const NUM_LIMBS: usize,
+    const LIMB_BITS: usize,
+    OP: ImmOp,
+>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) {
@@ -206,7 +225,7 @@ unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, OP: ImmOp>(
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<CTX, OP>(&pre_compute.data, exec_state);
+    execute_e12_impl::<CTX, NUM_LIMBS, LIMB_BITS, OP>(&pre_compute.data, exec_state);
 }
 
 trait ImmOp {

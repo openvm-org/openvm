@@ -11,7 +11,7 @@ using namespace riscv;
 
 // Concrete type aliases for RV64
 using Rv64AddICoreRecord = AddICoreRecord<BLOCK_FE_WIDTH>;
-using Rv64AddICore = AddICore<BLOCK_FE_WIDTH, U16_BITS>;
+using Rv64AddICore = AddICore<BLOCK_FE_WIDTH, U16_BITS, true>;
 template <typename T> using Rv64AddICoreCols = AddICoreCols<T, BLOCK_FE_WIDTH>;
 
 template <typename T> struct Rv64AddICols {

@@ -10,7 +10,7 @@ use openvm_circuit_primitives::{
 };
 use openvm_circuit_primitives_derive::AlignedBorrow;
 use openvm_instructions::{instruction::Instruction, program::DEFAULT_PC_STEP, LocalOpcode};
-use openvm_riscv_transpiler::{ShiftImmOpcode, ShiftOpcode};
+use openvm_riscv_transpiler::{ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
@@ -190,12 +190,12 @@ where
         let expected_opcode = VmCoreAir::<AB, I>::expr_to_global_expr(
             self,
             [
-                (opcode_sll_flag, ShiftImmOpcode::SLLI),
-                (opcode_srl_flag, ShiftImmOpcode::SRLI),
+                (opcode_sll_flag, ShiftImmOpcode::SLLI as usize),
+                (opcode_srl_flag, ShiftImmOpcode::SRLI as usize),
             ]
             .iter()
             .fold(AB::Expr::ZERO, |acc, (flag, opcode)| {
-                acc + flag.clone() * AB::Expr::from_u8(*opcode as u8)
+                acc + flag.clone() * AB::Expr::from_usize(*opcode)
             }),
         );
 
@@ -257,7 +257,11 @@ where
     >,
 {
     fn get_opcode_name(&self, opcode: usize) -> String {
-        format!("{:?}", ShiftImmOpcode::from_usize(opcode - self.offset))
+        if NUM_LIMBS * LIMB_BITS == 32 {
+            format!("{:?}", ShiftWImmOpcode::from_usize(opcode - self.offset))
+        } else {
+            format!("{:?}", ShiftImmOpcode::from_usize(opcode - self.offset))
+        }
     }
 
     fn execute(
@@ -267,8 +271,13 @@ where
     ) -> Result<(), ExecutionError> {
         let Instruction { opcode, c, .. } = instruction;
 
-        let local_opcode = ShiftImmOpcode::from_usize(opcode.local_opcode_idx(self.offset));
-        debug_assert_ne!(local_opcode, ShiftImmOpcode::SRAI);
+        let local_opcode = opcode.local_opcode_idx(self.offset);
+        debug_assert!(
+            local_opcode == ShiftImmOpcode::SLLI as usize
+                || local_opcode == ShiftImmOpcode::SRLI as usize
+        );
+        let shamt = c.as_canonical_u32();
+        debug_assert!(shamt < (NUM_LIMBS * LIMB_BITS) as u32);
 
         let (mut adapter_record, core_record) = state.ctx.alloc(EmptyAdapterCoreLayout::new());
 
@@ -279,12 +288,10 @@ where
             .read(state.memory, instruction, &mut adapter_record)
             .into();
 
-        let shamt = c.as_canonical_u32();
-        debug_assert!(shamt < (NUM_LIMBS * LIMB_BITS) as u32);
         core_record.shamt = shamt as u8;
         core_record.local_opcode = local_opcode as u8;
 
-        let reg_opcode = if local_opcode == ShiftImmOpcode::SLLI {
+        let reg_opcode = if local_opcode == ShiftImmOpcode::SLLI as usize {
             ShiftOpcode::SLL
         } else {
             ShiftOpcode::SRL

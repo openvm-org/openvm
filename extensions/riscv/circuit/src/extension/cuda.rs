@@ -11,8 +11,8 @@ use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engi
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 
 use crate::{
-    Rv64AddIAir, Rv64AddIChipGpu, Rv64AddSubAir, Rv64AddSubChipGpu, Rv64AddSubWAir,
-    Rv64AddSubWChipGpu, Rv64AuipcAir, Rv64AuipcChipGpu, Rv64BitwiseLogicAir,
+    Rv64AddIAir, Rv64AddIChipGpu, Rv64AddIWAir, Rv64AddIWChipGpu, Rv64AddSubAir, Rv64AddSubChipGpu,
+    Rv64AddSubWAir, Rv64AddSubWChipGpu, Rv64AuipcAir, Rv64AuipcChipGpu, Rv64BitwiseLogicAir,
     Rv64BitwiseLogicChipGpu, Rv64BitwiseLogicImmAir, Rv64BitwiseLogicImmChipGpu,
     Rv64BranchEqualAir, Rv64BranchEqualChipGpu, Rv64BranchLessThanAir, Rv64BranchLessThanChipGpu,
     Rv64DivRemAir, Rv64DivRemChipGpu, Rv64DivRemWAir, Rv64DivRemWChipGpu, Rv64HintStoreAir,
@@ -27,8 +27,10 @@ use crate::{
     Rv64ShiftLogicalChipGpu, Rv64ShiftLogicalImmAir, Rv64ShiftLogicalImmChipGpu,
     Rv64ShiftRightArithmeticAir, Rv64ShiftRightArithmeticChipGpu, Rv64ShiftRightArithmeticImmAir,
     Rv64ShiftRightArithmeticImmChipGpu, Rv64ShiftWLogicalAir, Rv64ShiftWLogicalChipGpu,
-    Rv64ShiftWRightArithmeticAir, Rv64ShiftWRightArithmeticChipGpu, Rv64StoreByteAir,
-    Rv64StoreByteChipGpu, Rv64StoreDoublewordAir, Rv64StoreDoublewordChipGpu, Rv64StoreHalfwordAir,
+    Rv64ShiftWLogicalImmAir, Rv64ShiftWLogicalImmChipGpu, Rv64ShiftWRightArithmeticAir,
+    Rv64ShiftWRightArithmeticChipGpu, Rv64ShiftWRightArithmeticImmAir,
+    Rv64ShiftWRightArithmeticImmChipGpu, Rv64StoreByteAir, Rv64StoreByteChipGpu,
+    Rv64StoreDoublewordAir, Rv64StoreDoublewordChipGpu, Rv64StoreHalfwordAir,
     Rv64StoreHalfwordChipGpu, Rv64StoreWordAir, Rv64StoreWordChipGpu,
 };
 
@@ -88,6 +90,20 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
         let shift_w_right_arithmetic =
             Rv64ShiftWRightArithmeticChipGpu::new(range_checker.clone(), timestamp_max_bits);
         inventory.add_executor_chip(shift_w_right_arithmetic);
+
+        inventory.next_air::<Rv64AddIWAir>()?;
+        let addi_w = Rv64AddIWChipGpu::new(range_checker.clone(), timestamp_max_bits);
+        inventory.add_executor_chip(addi_w);
+
+        inventory.next_air::<Rv64ShiftWLogicalImmAir>()?;
+        let shift_w_logical_imm =
+            Rv64ShiftWLogicalImmChipGpu::new(range_checker.clone(), timestamp_max_bits);
+        inventory.add_executor_chip(shift_w_logical_imm);
+
+        inventory.next_air::<Rv64ShiftWRightArithmeticImmAir>()?;
+        let shift_w_right_arithmetic_imm =
+            Rv64ShiftWRightArithmeticImmChipGpu::new(range_checker.clone(), timestamp_max_bits);
+        inventory.add_executor_chip(shift_w_right_arithmetic_imm);
 
         inventory.next_air::<Rv64LoadSignExtendByteAir>()?;
         let load_sign_extend_byte = Rv64LoadSignExtendByteChipGpu::new(

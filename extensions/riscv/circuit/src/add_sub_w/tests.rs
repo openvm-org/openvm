@@ -24,7 +24,7 @@ use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
 #[cfg(feature = "cuda")]
 use {
-    crate::{adapters::Rv64BaseAluWU16AdapterRecord, AddSubCoreRecord, Rv64AddSubWChipGpu},
+    crate::{adapters::Rv64BaseAluWRegU16AdapterRecord, AddSubCoreRecord, Rv64AddSubWChipGpu},
     openvm_circuit::arch::{
         testing::{GpuChipTestBuilder, GpuTestChipHarness},
         EmptyAdapterCoreLayout,
@@ -36,12 +36,12 @@ use {
 use super::{AddSubWCoreAir, AddSubWFiller, Rv64AddSubWChip, Rv64AddSubWExecutor};
 use crate::{
     adapters::{
-        Rv64BaseAluWU16AdapterAir, Rv64BaseAluWU16AdapterCols, Rv64BaseAluWU16AdapterExecutor,
-        Rv64BaseAluWU16AdapterFiller, RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS,
-        RV64_WORD_U16_LIMBS, U16_BITS,
+        Rv64BaseAluWRegU16AdapterAir, Rv64BaseAluWRegU16AdapterCols,
+        Rv64BaseAluWRegU16AdapterExecutor, Rv64BaseAluWRegU16AdapterFiller,
+        RV64_REGISTER_NUM_LIMBS, RV64_WORD_NUM_LIMBS, RV64_WORD_U16_LIMBS, U16_BITS,
     },
     add_sub::AddSubCoreCols,
-    test_utils::{generate_rv64_is_type_immediate, rv64_rand_write_register_or_imm},
+    test_utils::rv64_rand_write_register_or_imm,
     Rv64AddSubWAir,
 };
 
@@ -72,14 +72,20 @@ fn create_harness_fields(
     memory_helper: SharedMemoryHelper<F>,
 ) -> (Rv64AddSubWAir, Rv64AddSubWExecutor, Rv64AddSubWChip<F>) {
     let air = Rv64AddSubWAir::new(
-        Rv64BaseAluWU16AdapterAir::new(execution_bridge, memory_bridge, range_checker_chip.bus()),
+        Rv64BaseAluWRegU16AdapterAir::new(
+            execution_bridge,
+            memory_bridge,
+            range_checker_chip.bus(),
+        ),
         AddSubWCoreAir::new(range_checker_chip.bus(), BaseAluWOpcode::CLASS_OFFSET),
     );
-    let executor =
-        Rv64AddSubWExecutor::new(Rv64BaseAluWU16AdapterExecutor, BaseAluWOpcode::CLASS_OFFSET);
+    let executor = Rv64AddSubWExecutor::new(
+        Rv64BaseAluWRegU16AdapterExecutor,
+        BaseAluWOpcode::CLASS_OFFSET,
+    );
     let chip = Rv64AddSubWChip::new(
         AddSubWFiller::new(
-            Rv64BaseAluWU16AdapterFiller::new(range_checker_chip.clone()),
+            Rv64BaseAluWRegU16AdapterFiller::new(range_checker_chip.clone()),
             range_checker_chip,
         ),
         memory_helper,
@@ -106,32 +112,13 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     rng: &mut StdRng,
     opcode: BaseAluWOpcode,
     b: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
-    is_imm: Option<bool>,
     c: Option<[u8; RV64_REGISTER_NUM_LIMBS]>,
 ) -> [u8; RV64_REGISTER_NUM_LIMBS] {
     let b = b.unwrap_or(array::from_fn(|_| rng.random_range(0..=u8::MAX)));
-    let (c_imm, c) = if is_imm.unwrap_or(rng.random_bool(0.5)) {
-        let (imm, c) = if let Some(c) = c {
-            ((u64::from_le_bytes(c) & 0xFFFFFF) as usize, c)
-        } else {
-            generate_rv64_is_type_immediate(rng)
-        };
-        (Some(imm), c)
-    } else {
-        (
-            None,
-            c.unwrap_or(array::from_fn(|_| rng.random_range(0..=u8::MAX))),
-        )
-    };
+    let c = c.unwrap_or(array::from_fn(|_| rng.random_range(0..=u8::MAX)));
 
-    let (instruction, rd) = rv64_rand_write_register_or_imm(
-        tester,
-        b,
-        c,
-        c_imm,
-        opcode.global_opcode().as_usize(),
-        rng,
-    );
+    let (instruction, rd) =
+        rv64_rand_write_register_or_imm(tester, b, c, None, opcode.global_opcode().as_usize(), rng);
     tester.execute(executor, arena, &instruction);
 
     let b_word: [u8; RV64_WORD_NUM_LIMBS] = b[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
@@ -176,7 +163,6 @@ fn rand_rv64_add_sub_w_test(opcode: BaseAluWOpcode, num_ops: usize) {
             opcode,
             None,
             None,
-            None,
         );
     }
 
@@ -201,7 +187,6 @@ fn run_negative_alu_w_test(
     prank_c: Option<[u32; RV64_WORD_U16_LIMBS]>,
     prank_opcode_flags: Option<[bool; 2]>,
     prank_result_sign: Option<u32>,
-    is_imm: Option<bool>,
     _interaction_error: bool,
 ) {
     let mut rng = create_seeded_rng();
@@ -215,7 +200,6 @@ fn run_negative_alu_w_test(
         &mut rng,
         opcode,
         Some(b),
-        is_imm,
         Some(c),
     );
 
@@ -223,7 +207,7 @@ fn run_negative_alu_w_test(
     let modify_trace = |trace: &mut DenseMatrix<BabyBear>| {
         let mut values = trace.row_slice(0).unwrap().to_vec();
         let (adapter_row, core_row) = values.split_at_mut(adapter_width);
-        let adapter_cols: &mut Rv64BaseAluWU16AdapterCols<F> = adapter_row.borrow_mut();
+        let adapter_cols: &mut Rv64BaseAluWRegU16AdapterCols<F> = adapter_row.borrow_mut();
         let cols: &mut AddSubWCoreCols<F> = core_row.borrow_mut();
         cols.a = prank_a.map(F::from_u32);
         if let Some(prank_b) = prank_b {
@@ -264,7 +248,6 @@ fn rv64_alu_addw_wrong_negative_test() {
         None,
         None,
         None,
-        None,
         false,
     );
 }
@@ -283,7 +266,6 @@ fn rv64_alu_addw_out_of_range_negative_test() {
         None,
         None,
         None,
-        None,
         true,
     );
 }
@@ -296,7 +278,6 @@ fn rv64_alu_subw_wrong_negative_test() {
         [65535, 0],
         [1, 0, 0, 0, 0, 0, 0, 0],
         [2, 0, 0, 0, 0, 0, 0, 0],
-        None,
         None,
         None,
         None,
@@ -318,26 +299,7 @@ fn rv64_alu_subw_out_of_range_negative_test() {
         None,
         None,
         None,
-        None,
         true,
-    );
-}
-
-#[test]
-fn rv64_aluw_adapter_unconstrained_imm_limb_test() {
-    // Prank the immediate sign limb c[1] = 1 while the imm sign cell stays 0; the adapter must
-    // reject the mismatch. a[1] is pranked to 1 to keep the ADD core constraint satisfied.
-    run_negative_alu_w_test(
-        ADDW,
-        [5, 1],
-        [0, 0, 0, 0, 0, 0, 0, 0],
-        [5, 0, 0, 0, 0, 0, 0, 0],
-        None,
-        Some([5, 1]),
-        None,
-        None,
-        Some(true),
-        false,
     );
 }
 
@@ -353,7 +315,6 @@ fn rv64_aluw_adapter_unconstrained_rs2_read_test() {
         None,
         Some([false, false]),
         None,
-        Some(false),
         false,
     );
 }
@@ -371,7 +332,6 @@ fn rv64_aluw_wrong_upper_sign_extension_negative_test() {
         None,
         None,
         Some(1),
-        Some(false),
         true,
     );
 }
@@ -389,7 +349,6 @@ fn rv64_aluw_wrong_upper_sign_extension_negative_to_zero_test() {
         None,
         None,
         Some(0),
-        Some(false),
         true,
     );
 }
@@ -417,7 +376,6 @@ fn run_addw_noncanonical_upper_bytes_sanity_test() {
         &mut rng,
         ADDW,
         Some(rs1),
-        Some(false),
         Some(rs2),
     );
     assert_eq!(result, expected);
@@ -443,7 +401,6 @@ fn run_subw_noncanonical_upper_bytes_sanity_test() {
         &mut rng,
         SUBW,
         Some(rs1),
-        Some(false),
         Some(rs2),
     );
     assert_eq!(result, expected);
@@ -501,12 +458,11 @@ fn test_cuda_rand_add_sub_w_tracegen(opcode: BaseAluWOpcode, num_ops: usize) {
             opcode,
             None,
             None,
-            None,
         );
     }
 
     type Record<'a> = (
-        &'a mut Rv64BaseAluWU16AdapterRecord,
+        &'a mut Rv64BaseAluWRegU16AdapterRecord,
         &'a mut AddSubCoreRecord<RV64_WORD_U16_LIMBS>,
     );
 
@@ -515,7 +471,7 @@ fn test_cuda_rand_add_sub_w_tracegen(opcode: BaseAluWOpcode, num_ops: usize) {
         .get_record_seeker::<Record, _>()
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
-            EmptyAdapterCoreLayout::<F, Rv64BaseAluWU16AdapterExecutor>::new(),
+            EmptyAdapterCoreLayout::<F, Rv64BaseAluWRegU16AdapterExecutor>::new(),
         );
 
     tester

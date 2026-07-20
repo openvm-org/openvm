@@ -9,7 +9,8 @@ use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
     adapters::{
-        Rv64BaseAluWU16AdapterCols, Rv64BaseAluWU16AdapterRecord, RV64_WORD_U16_LIMBS, U16_BITS,
+        Rv64BaseAluWRegU16AdapterCols, Rv64BaseAluWRegU16AdapterRecord, RV64_WORD_U16_LIMBS,
+        U16_BITS,
     },
     cuda_abi::shift_w_cuda::{
         tracegen_logical as rv64_shift_w_logical_tracegen,
@@ -34,7 +35,7 @@ pub struct Rv64ShiftWRightArithmeticChipGpu {
 impl Chip<DenseRecordArena, GpuBackend> for Rv64ShiftWLogicalChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         const RECORD_SIZE: usize = size_of::<(
-            Rv64BaseAluWU16AdapterRecord,
+            Rv64BaseAluWRegU16AdapterRecord,
             ShiftLogicalCoreRecord<RV64_WORD_U16_LIMBS, U16_BITS>,
         )>();
         let records = arena.allocated();
@@ -43,7 +44,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64ShiftWLogicalChipGpu {
         }
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
-        let trace_width = Rv64BaseAluWU16AdapterCols::<F>::width()
+        let trace_width = Rv64BaseAluWRegU16AdapterCols::<F>::width()
             + ShiftLogicalCoreCols::<F, RV64_WORD_U16_LIMBS, U16_BITS>::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
@@ -69,7 +70,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64ShiftWLogicalChipGpu {
 impl Chip<DenseRecordArena, GpuBackend> for Rv64ShiftWRightArithmeticChipGpu {
     fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         const RECORD_SIZE: usize = size_of::<(
-            Rv64BaseAluWU16AdapterRecord,
+            Rv64BaseAluWRegU16AdapterRecord,
             ShiftRightArithmeticCoreRecord<RV64_WORD_U16_LIMBS, U16_BITS>,
         )>();
         let records = arena.allocated();
@@ -78,7 +79,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64ShiftWRightArithmeticChipGpu {
         }
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
 
-        let trace_width = Rv64BaseAluWU16AdapterCols::<F>::width()
+        let trace_width = Rv64BaseAluWRegU16AdapterCols::<F>::width()
             + ShiftRightArithmeticCoreCols::<F, RV64_WORD_U16_LIMBS, U16_BITS>::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;

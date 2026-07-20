@@ -13,10 +13,10 @@ use openvm_instructions::{
     LocalOpcode, SysPhantom, SystemOpcode, PUBLIC_VALUES_AS,
 };
 use openvm_riscv_transpiler::{
-    BaseAluImmOpcode, BaseAluOpcode, BaseAluWOpcode, BitwiseImmOpcode, BranchEqualOpcode,
+    BaseAluImmOpcode, BaseAluOpcode, BaseAluWImmOpcode, BaseAluWOpcode, BranchEqualOpcode,
     BranchLessThanOpcode, DivRemOpcode, DivRemWOpcode, LessThanImmOpcode, LessThanOpcode,
     MulHOpcode, MulOpcode, MulWOpcode, Rv64AuipcOpcode, Rv64JalLuiOpcode, Rv64JalrOpcode,
-    Rv64LoadStoreOpcode, ShiftImmOpcode, ShiftOpcode, ShiftWOpcode,
+    Rv64LoadStoreOpcode, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode, ShiftWOpcode,
 };
 use rvr_openvm_ir::{
     AluOp, BranchCond, Instr, InstrAt, LiftedInstr, MemWidth, MulDivOp, Terminator,
@@ -60,10 +60,6 @@ pub fn lift_instruction(
         return None;
     }
 
-    // Decode the e field to determine R-type vs I-type
-    let e = insn.e;
-
-    // BaseAlu: ADD=0x200, SUB=0x201, XOR=0x202, OR=0x203, AND=0x204, ADDW=0x270, SUBW=0x271
     if opcode == BaseAluOpcode::ADD.global_opcode_usize() {
         return lift_alu_reg(insn, pc, AluOp::Add);
     }
@@ -81,23 +77,26 @@ pub fn lift_instruction(
         return lift_alu_reg(insn, pc, AluOp::And);
     }
     if opcode == BaseAluWOpcode::ADDW.global_opcode_usize() {
-        return Some(lift_alu_w(insn, pc, e, AluOp::Add));
+        return lift_alu_w_reg(insn, pc, AluOp::Add);
     }
     if opcode == BaseAluWOpcode::SUBW.global_opcode_usize() {
-        return Some(lift_alu_w(insn, pc, e, AluOp::Sub));
+        return lift_alu_w_reg(insn, pc, AluOp::Sub);
+    }
+    if opcode == BaseAluWImmOpcode::ADDIW.global_opcode_usize() {
+        return lift_alu_w_imm(insn, pc, AluOp::Add);
     }
 
     if opcode == BaseAluImmOpcode::ADDI.global_opcode_usize() {
         return lift_alu_imm(insn, pc, AluOp::Add);
     }
 
-    if opcode == BitwiseImmOpcode::XORI.global_opcode_usize() {
+    if opcode == BaseAluImmOpcode::XORI.global_opcode_usize() {
         return lift_alu_imm(insn, pc, AluOp::Xor);
     }
-    if opcode == BitwiseImmOpcode::ORI.global_opcode_usize() {
+    if opcode == BaseAluImmOpcode::ORI.global_opcode_usize() {
         return lift_alu_imm(insn, pc, AluOp::Or);
     }
-    if opcode == BitwiseImmOpcode::ANDI.global_opcode_usize() {
+    if opcode == BaseAluImmOpcode::ANDI.global_opcode_usize() {
         return lift_alu_imm(insn, pc, AluOp::And);
     }
 
@@ -118,7 +117,6 @@ pub fn lift_instruction(
         return lift_shift_imm(insn, pc, AluOp::Sra);
     }
 
-    // Shift: SLL=0x205, SRL=0x206, SRA=0x207, SLLW=0x275, SRLW=0x276, SRAW=0x277
     if opcode == ShiftOpcode::SLL.global_opcode_usize() {
         return lift_alu_reg(insn, pc, AluOp::Sll);
     }
@@ -129,16 +127,24 @@ pub fn lift_instruction(
         return lift_alu_reg(insn, pc, AluOp::Sra);
     }
     if opcode == ShiftWOpcode::SLLW.global_opcode_usize() {
-        return Some(lift_shift_w(insn, pc, e, AluOp::Sll));
+        return lift_alu_w_reg(insn, pc, AluOp::Sll);
     }
     if opcode == ShiftWOpcode::SRLW.global_opcode_usize() {
-        return Some(lift_shift_w(insn, pc, e, AluOp::Srl));
+        return lift_alu_w_reg(insn, pc, AluOp::Srl);
     }
     if opcode == ShiftWOpcode::SRAW.global_opcode_usize() {
-        return Some(lift_shift_w(insn, pc, e, AluOp::Sra));
+        return lift_alu_w_reg(insn, pc, AluOp::Sra);
+    }
+    if opcode == ShiftWImmOpcode::SLLIW.global_opcode_usize() {
+        return lift_shift_w_imm(insn, pc, AluOp::Sll);
+    }
+    if opcode == ShiftWImmOpcode::SRLIW.global_opcode_usize() {
+        return lift_shift_w_imm(insn, pc, AluOp::Srl);
+    }
+    if opcode == ShiftWImmOpcode::SRAIW.global_opcode_usize() {
+        return lift_shift_w_imm(insn, pc, AluOp::Sra);
     }
 
-    // LessThan: SLT=0x208, SLTU=0x209
     if opcode == LessThanOpcode::SLT.global_opcode_usize() {
         return lift_alu_reg(insn, pc, AluOp::Slt);
     }
@@ -536,47 +542,68 @@ fn lift_auipc(insn: &RvrInstruction, pc: u64) -> LiftedInstr {
     body(pc, Instr::Auipc { rd, value })
 }
 
-/// Lift W-suffix ALU instruction (R-type when e!=0, I-type when e==0).
+/// Lift a register-register W-suffix ALU instruction.
 /// Result is the low 32 bits of the operation, sign-extended to 64 bits.
-fn lift_alu_w(insn: &RvrInstruction, pc: u64, e: u32, op: AluOp) -> LiftedInstr {
+fn lift_alu_w_reg(insn: &RvrInstruction, pc: u64, op: AluOp) -> Option<LiftedInstr> {
+    if insn.d != RV64_REGISTER_AS || insn.e != RV64_REGISTER_AS {
+        return None;
+    }
+
     let rd = decode_reg(insn.a);
     let rs1 = decode_reg(insn.b);
-
-    if e != 0 {
-        let rs2 = decode_reg(insn.c);
-        if rd == 0 {
-            return body(pc, Instr::Nop);
-        }
-        body(pc, Instr::AluWReg { op, rd, rs1, rs2 })
-    } else {
-        let raw_imm = insn.c & U24_MASK;
-        let imm = sign_extend_12(raw_imm);
-        if rd == 0 {
-            return body(pc, Instr::Nop);
-        }
-        body(pc, Instr::AluWImm { op, rd, rs1, imm })
+    let rs2 = decode_reg(insn.c);
+    if rd == 0 {
+        return Some(body(pc, Instr::Nop));
     }
+    Some(body(pc, Instr::AluWReg { op, rd, rs1, rs2 }))
 }
 
-/// Lift W-suffix shift instruction (R-type when e!=0, I-type shamt when e==0).
-/// Shamt is 5-bit (W shifts operate on 32-bit values regardless of register width).
-fn lift_shift_w(insn: &RvrInstruction, pc: u64, e: u32, op: AluOp) -> LiftedInstr {
+/// Lift an immediate W-suffix ALU instruction.
+fn lift_alu_w_imm(insn: &RvrInstruction, pc: u64, op: AluOp) -> Option<LiftedInstr> {
+    if insn.d != RV64_REGISTER_AS || insn.e != RV64_IMM_AS {
+        return None;
+    }
+
+    let raw_imm = insn.c;
+    let imm = sign_extend_12(raw_imm);
+    if raw_imm != (imm as u32 & U24_MASK) {
+        return None;
+    }
+
     let rd = decode_reg(insn.a);
     let rs1 = decode_reg(insn.b);
-
-    if e != 0 {
-        let rs2 = decode_reg(insn.c);
-        if rd == 0 {
-            return body(pc, Instr::Nop);
-        }
-        body(pc, Instr::AluWReg { op, rd, rs1, rs2 })
-    } else {
-        let shamt = (insn.c & 0x1f) as u8;
-        if rd == 0 {
-            return body(pc, Instr::Nop);
-        }
-        body(pc, Instr::ShiftWImm { op, rd, rs1, shamt })
+    if rd == 0 {
+        return Some(body(pc, Instr::Nop));
     }
+    Some(body(pc, Instr::AluWImm { op, rd, rs1, imm }))
+}
+
+/// Lift an immediate W-suffix shift instruction.
+/// Shamt is 5-bit (W shifts operate on 32-bit values regardless of register width).
+fn lift_shift_w_imm(insn: &RvrInstruction, pc: u64, op: AluOp) -> Option<LiftedInstr> {
+    if insn.d != RV64_REGISTER_AS || insn.e != RV64_IMM_AS {
+        return None;
+    }
+
+    let shamt = insn.c;
+    if shamt >= 32 {
+        return None;
+    }
+
+    let rd = decode_reg(insn.a);
+    let rs1 = decode_reg(insn.b);
+    if rd == 0 {
+        return Some(body(pc, Instr::Nop));
+    }
+    Some(body(
+        pc,
+        Instr::ShiftWImm {
+            op,
+            rd,
+            rs1,
+            shamt: shamt as u8,
+        },
+    ))
 }
 
 /// Lift W-suffix MUL/DIV/REM R-type instruction.
@@ -616,12 +643,12 @@ mod tests {
         LocalOpcode, VmOpcode, DEFERRAL_AS, PUBLIC_VALUES_AS,
     };
     use openvm_riscv_transpiler::{
-        BaseAluImmOpcode, BaseAluOpcode, BitwiseImmOpcode, BranchEqualOpcode, LessThanImmOpcode,
-        LessThanOpcode, Rv64AuipcOpcode, Rv64JalLuiOpcode,
+        BaseAluImmOpcode, BaseAluOpcode, BaseAluWImmOpcode, BaseAluWOpcode, BranchEqualOpcode,
+        LessThanImmOpcode, LessThanOpcode, Rv64AuipcOpcode, Rv64JalLuiOpcode,
         Rv64LoadStoreOpcode::{
             LOADB, LOADBU, LOADD, LOADH, LOADHU, LOADW, LOADWU, STOREB, STORED, STOREH, STOREW,
         },
-        ShiftImmOpcode, ShiftOpcode,
+        ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode, ShiftWOpcode,
     };
     use p3_baby_bear::BabyBear;
 
@@ -729,9 +756,9 @@ mod tests {
     fn immediate_alu_families_require_canonical_i12_encoding() {
         let extensions = ExtensionRegistry::new();
         let opcodes = [
-            (BitwiseImmOpcode::XORI.global_opcode(), AluOp::Xor),
-            (BitwiseImmOpcode::ORI.global_opcode(), AluOp::Or),
-            (BitwiseImmOpcode::ANDI.global_opcode(), AluOp::And),
+            (BaseAluImmOpcode::XORI.global_opcode(), AluOp::Xor),
+            (BaseAluImmOpcode::ORI.global_opcode(), AluOp::Or),
+            (BaseAluImmOpcode::ANDI.global_opcode(), AluOp::And),
             (LessThanImmOpcode::SLTI.global_opcode(), AluOp::Slt),
             (LessThanImmOpcode::SLTIU.global_opcode(), AluOp::Sltu),
         ];
@@ -793,6 +820,134 @@ mod tests {
                 alu_instruction(opcode, 0, RV64_IMM_AS, RV64_IMM_AS),
                 alu_instruction(opcode, 0, RV64_REGISTER_AS, RV64_REGISTER_AS),
                 alu_instruction(opcode, 64, RV64_REGISTER_AS, RV64_IMM_AS),
+            ] {
+                assert!(lift_babybear(&instruction, 0x100, &extensions).is_none());
+            }
+        }
+    }
+
+    #[test]
+    fn word_alu_opcodes_separate_register_and_immediate_forms() {
+        let extensions = ExtensionRegistry::new();
+
+        for (opcode, expected_op) in [
+            (BaseAluWOpcode::ADDW.global_opcode(), AluOp::Add),
+            (BaseAluWOpcode::SUBW.global_opcode(), AluOp::Sub),
+        ] {
+            let register = alu_instruction(
+                opcode,
+                3 * RV64_REGISTER_NUM_LIMBS,
+                RV64_REGISTER_AS,
+                RV64_REGISTER_AS,
+            );
+            match lift_babybear(&register, 0x100, &extensions) {
+                Some(LiftedInstr::Body(InstrAt {
+                    instr: Instr::AluWReg { op, rd, rs1, rs2 },
+                    ..
+                })) => assert_eq!((op, rd, rs1, rs2), (expected_op, 1, 2, 3)),
+                other => panic!("unexpected lift: {other:?}"),
+            }
+
+            let immediate = alu_instruction(opcode, 0, RV64_REGISTER_AS, RV64_IMM_AS);
+            assert!(lift_babybear(&immediate, 0x100, &extensions).is_none());
+        }
+
+        for (c, expected_imm) in [(0, 0), (0x7ff, 0x7ff), (0xff_f800, -0x800), (0xff_ffff, -1)] {
+            let instruction = alu_instruction(
+                BaseAluWImmOpcode::ADDIW.global_opcode(),
+                c,
+                RV64_REGISTER_AS,
+                RV64_IMM_AS,
+            );
+            match lift_babybear(&instruction, 0x100, &extensions) {
+                Some(LiftedInstr::Body(InstrAt {
+                    instr: Instr::AluWImm { op, rd, rs1, imm },
+                    ..
+                })) => assert_eq!((op, rd, rs1, imm), (AluOp::Add, 1, 2, expected_imm)),
+                other => panic!("unexpected lift: {other:?}"),
+            }
+        }
+
+        for instruction in [
+            alu_instruction(
+                BaseAluWImmOpcode::ADDIW.global_opcode(),
+                0,
+                RV64_IMM_AS,
+                RV64_IMM_AS,
+            ),
+            alu_instruction(
+                BaseAluWImmOpcode::ADDIW.global_opcode(),
+                0,
+                RV64_REGISTER_AS,
+                RV64_REGISTER_AS,
+            ),
+            alu_instruction(
+                BaseAluWImmOpcode::ADDIW.global_opcode(),
+                0xffff,
+                RV64_REGISTER_AS,
+                RV64_IMM_AS,
+            ),
+        ] {
+            assert!(lift_babybear(&instruction, 0x100, &extensions).is_none());
+        }
+    }
+
+    #[test]
+    fn word_shift_opcodes_separate_register_and_immediate_forms() {
+        let extensions = ExtensionRegistry::new();
+
+        for (opcode, expected_op) in [
+            (ShiftWOpcode::SLLW.global_opcode(), AluOp::Sll),
+            (ShiftWOpcode::SRLW.global_opcode(), AluOp::Srl),
+            (ShiftWOpcode::SRAW.global_opcode(), AluOp::Sra),
+        ] {
+            let register = alu_instruction(
+                opcode,
+                3 * RV64_REGISTER_NUM_LIMBS,
+                RV64_REGISTER_AS,
+                RV64_REGISTER_AS,
+            );
+            match lift_babybear(&register, 0x100, &extensions) {
+                Some(LiftedInstr::Body(InstrAt {
+                    instr: Instr::AluWReg { op, rd, rs1, rs2 },
+                    ..
+                })) => assert_eq!((op, rd, rs1, rs2), (expected_op, 1, 2, 3)),
+                other => panic!("unexpected lift: {other:?}"),
+            }
+
+            let immediate = alu_instruction(opcode, 0, RV64_REGISTER_AS, RV64_IMM_AS);
+            assert!(lift_babybear(&immediate, 0x100, &extensions).is_none());
+        }
+
+        for (opcode, expected_op) in [
+            (ShiftWImmOpcode::SLLIW.global_opcode(), AluOp::Sll),
+            (ShiftWImmOpcode::SRLIW.global_opcode(), AluOp::Srl),
+            (ShiftWImmOpcode::SRAIW.global_opcode(), AluOp::Sra),
+        ] {
+            for shamt in [0, 31] {
+                let instruction = alu_instruction(opcode, shamt, RV64_REGISTER_AS, RV64_IMM_AS);
+                match lift_babybear(&instruction, 0x100, &extensions) {
+                    Some(LiftedInstr::Body(InstrAt {
+                        instr:
+                            Instr::ShiftWImm {
+                                op,
+                                rd,
+                                rs1,
+                                shamt: lifted_shamt,
+                            },
+                        ..
+                    })) => assert_eq!(
+                        (op, rd, rs1, lifted_shamt),
+                        (expected_op, 1, 2, shamt as u8)
+                    ),
+                    other => panic!("unexpected lift: {other:?}"),
+                }
+            }
+
+            for instruction in [
+                alu_instruction(opcode, 0, RV64_IMM_AS, RV64_IMM_AS),
+                alu_instruction(opcode, 0, RV64_REGISTER_AS, RV64_REGISTER_AS),
+                alu_instruction(opcode, 32, RV64_REGISTER_AS, RV64_IMM_AS),
             ] {
                 assert!(lift_babybear(&instruction, 0x100, &extensions).is_none());
             }

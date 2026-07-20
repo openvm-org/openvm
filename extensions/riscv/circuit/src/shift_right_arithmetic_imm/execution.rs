@@ -9,7 +9,6 @@ use openvm_instructions::{
     instruction::Instruction,
     program::DEFAULT_PC_STEP,
     riscv::{RV64_IMM_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
-    LocalOpcode,
 };
 use openvm_riscv_transpiler::ShiftImmOpcode;
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -44,7 +43,7 @@ impl<A, const NUM_LIMBS: usize, const LIMB_BITS: usize>
             ..
         } = inst;
         let shamt = c.as_canonical_u32();
-        if ShiftImmOpcode::from_usize(opcode.local_opcode_idx(self.offset)) != ShiftImmOpcode::SRAI
+        if opcode.local_opcode_idx(self.offset) != ShiftImmOpcode::SRAI as usize
             || d.as_canonical_u32() != RV64_REGISTER_AS
             || e.as_canonical_u32() != RV64_IMM_AS
             || shamt >= (NUM_LIMBS * LIMB_BITS) as u32
@@ -78,7 +77,7 @@ where
     ) -> Result<ExecuteFunc<Ctx>, StaticProgramError> {
         let data: &mut ShiftRightArithmeticImmPreCompute = data.borrow_mut();
         self.pre_compute_impl(pc, inst, data)?;
-        Ok(execute_e1_handler::<Ctx>)
+        Ok(execute_e1_handler::<Ctx, NUM_LIMBS, LIMB_BITS>)
     }
 
     #[cfg(feature = "tco")]
@@ -90,7 +89,7 @@ where
     ) -> Result<Handler<Ctx>, StaticProgramError> {
         let data: &mut ShiftRightArithmeticImmPreCompute = data.borrow_mut();
         self.pre_compute_impl(pc, inst, data)?;
-        Ok(execute_e1_handler::<Ctx>)
+        Ok(execute_e1_handler::<Ctx, NUM_LIMBS, LIMB_BITS>)
     }
 }
 
@@ -114,7 +113,7 @@ where
         let data: &mut E2PreCompute<ShiftRightArithmeticImmPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         self.pre_compute_impl(pc, inst, &mut data.data)?;
-        Ok(execute_e2_handler::<Ctx>)
+        Ok(execute_e2_handler::<Ctx, NUM_LIMBS, LIMB_BITS>)
     }
 
     #[cfg(feature = "tco")]
@@ -128,18 +127,27 @@ where
         let data: &mut E2PreCompute<ShiftRightArithmeticImmPreCompute> = data.borrow_mut();
         data.chip_idx = chip_idx as u32;
         self.pre_compute_impl(pc, inst, &mut data.data)?;
-        Ok(execute_e2_handler::<Ctx>)
+        Ok(execute_e2_handler::<Ctx, NUM_LIMBS, LIMB_BITS>)
     }
 }
 
 #[inline(always)]
-unsafe fn execute_e12_impl<Ctx: ExecutionCtxTrait>(
+unsafe fn execute_e12_impl<
+    Ctx: ExecutionCtxTrait,
+    const NUM_LIMBS: usize,
+    const LIMB_BITS: usize,
+>(
     pre_compute: &ShiftRightArithmeticImmPreCompute,
     exec_state: &mut VmExecState<GuestMemory, Ctx>,
 ) {
     let rs1 = exec_state
         .vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.rs1_ptr as u32);
-    let rd = (i64::from_le_bytes(rs1) >> pre_compute.shamt).to_le_bytes();
+    let rd = if NUM_LIMBS * LIMB_BITS == 32 {
+        ((u32::from_le_bytes(rs1[..4].try_into().unwrap()) as i32) >> pre_compute.shamt) as i64
+    } else {
+        i64::from_le_bytes(rs1) >> pre_compute.shamt
+    }
+    .to_le_bytes();
     exec_state.vm_write_bytes(RV64_REGISTER_AS, pre_compute.rd_ptr as u32, &rd);
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
@@ -147,19 +155,27 @@ unsafe fn execute_e12_impl<Ctx: ExecutionCtxTrait>(
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<Ctx: ExecutionCtxTrait>(
+unsafe fn execute_e1_impl<
+    Ctx: ExecutionCtxTrait,
+    const NUM_LIMBS: usize,
+    const LIMB_BITS: usize,
+>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, Ctx>,
 ) {
     let pre_compute: &ShiftRightArithmeticImmPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<ShiftRightArithmeticImmPreCompute>())
             .borrow();
-    execute_e12_impl(pre_compute, exec_state);
+    execute_e12_impl::<Ctx, NUM_LIMBS, LIMB_BITS>(pre_compute, exec_state);
 }
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e2_impl<Ctx: MeteredExecutionCtxTrait>(
+unsafe fn execute_e2_impl<
+    Ctx: MeteredExecutionCtxTrait,
+    const NUM_LIMBS: usize,
+    const LIMB_BITS: usize,
+>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, Ctx>,
 ) {
@@ -171,5 +187,5 @@ unsafe fn execute_e2_impl<Ctx: MeteredExecutionCtxTrait>(
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl(&pre_compute.data, exec_state);
+    execute_e12_impl::<Ctx, NUM_LIMBS, LIMB_BITS>(&pre_compute.data, exec_state);
 }

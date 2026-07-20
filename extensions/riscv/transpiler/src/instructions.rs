@@ -310,6 +310,27 @@ pub enum BaseAluWOpcode {
     Serialize,
     Deserialize,
 )]
+#[opcode_offset = 0x288]
+#[repr(usize)]
+pub enum BaseAluWImmOpcode {
+    ADDIW,
+}
+
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    EnumCount,
+    EnumIter,
+    FromRepr,
+    LocalOpcode,
+    Serialize,
+    Deserialize,
+)]
 #[opcode_offset = 0x275]
 #[repr(usize)]
 #[allow(non_camel_case_types)]
@@ -317,6 +338,29 @@ pub enum ShiftWOpcode {
     SLLW,
     SRLW,
     SRAW,
+}
+
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    EnumCount,
+    EnumIter,
+    FromRepr,
+    LocalOpcode,
+    Serialize,
+    Deserialize,
+)]
+#[opcode_offset = 0x289]
+#[repr(usize)]
+pub enum ShiftWImmOpcode {
+    SLLIW,
+    SRLIW,
+    SRAIW,
 }
 
 #[derive(
@@ -373,6 +417,9 @@ pub enum DivRemWOpcode {
 #[repr(usize)]
 pub enum BaseAluImmOpcode {
     ADDI,
+    XORI,
+    ORI,
+    ANDI,
 }
 
 #[derive(
@@ -390,7 +437,7 @@ pub enum BaseAluImmOpcode {
     Serialize,
     Deserialize,
 )]
-#[opcode_offset = 0x291]
+#[opcode_offset = 0x294]
 #[repr(usize)]
 pub enum ShiftImmOpcode {
     SLLI,
@@ -413,44 +460,12 @@ pub enum ShiftImmOpcode {
     Serialize,
     Deserialize,
 )]
-#[opcode_offset = 0x294]
+#[opcode_offset = 0x297]
 #[repr(usize)]
 pub enum LessThanImmOpcode {
     SLTI,
     SLTIU,
 }
-
-/// Immediate variants of the bitwise base ALU opcodes.
-///
-/// Local indices mirror [`BaseAluOpcode`]; slots 0 and 1 are unused.
-#[derive(
-    Copy,
-    Clone,
-    Debug,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    EnumCount,
-    EnumIter,
-    FromRepr,
-    LocalOpcode,
-    Serialize,
-    Deserialize,
-)]
-#[opcode_offset = 0x296]
-#[repr(usize)]
-pub enum BitwiseImmOpcode {
-    XORI = 2,
-    ORI = 3,
-    ANDI = 4,
-}
-
-const _: () = {
-    assert!(BitwiseImmOpcode::XORI as usize == BaseAluOpcode::XOR as usize);
-    assert!(BitwiseImmOpcode::ORI as usize == BaseAluOpcode::OR as usize);
-    assert!(BitwiseImmOpcode::ANDI as usize == BaseAluOpcode::AND as usize);
-};
 
 // =================================================================================================
 // Phantom opcodes
