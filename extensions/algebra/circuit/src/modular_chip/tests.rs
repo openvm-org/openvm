@@ -76,7 +76,7 @@ mod addsub_tests {
         );
         let executor = get_modular_addsub_executor(
             config.clone(),
-            tester.range_checker().bus(),
+            tester.range_checker().bus().range_max_bits,
             tester.address_bits(),
             offset,
         );
@@ -117,8 +117,12 @@ mod addsub_tests {
             tester.address_bits(),
             offset,
         );
-        let executor =
-            get_modular_addsub_executor(config.clone(), range_bus, tester.address_bits(), offset);
+        let executor = get_modular_addsub_executor(
+            config.clone(),
+            range_bus.range_max_bits,
+            tester.address_bits(),
+            offset,
+        );
 
         let cpu_chip = get_modular_addsub_chip(
             config.clone(),
@@ -396,7 +400,7 @@ mod muldiv_tests {
 
         let executor = get_modular_muldiv_executor(
             config.clone(),
-            tester.range_checker().bus(),
+            tester.range_checker().bus().range_max_bits,
             tester.address_bits(),
             offset,
         );
@@ -438,8 +442,12 @@ mod muldiv_tests {
             tester.address_bits(),
             offset,
         );
-        let executor =
-            get_modular_muldiv_executor(config.clone(), range_bus, tester.address_bits(), offset);
+        let executor = get_modular_muldiv_executor(
+            config.clone(),
+            range_bus.range_max_bits,
+            tester.address_bits(),
+            offset,
+        );
 
         let cpu_chip = get_modular_muldiv_chip(
             config.clone(),

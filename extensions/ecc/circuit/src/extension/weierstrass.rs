@@ -12,11 +12,11 @@ use openvm_circuit::{
     system::{memory::SharedMemoryHelper, SystemPort},
 };
 use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor};
-use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
 use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_ecc_transpiler::Rv64WeierstrassOpcode;
 use openvm_instructions::{LocalOpcode, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
+use openvm_riscv_circuit::adapters::U16_BITS;
 use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, StarkProtocolConfig, Val};
 #[cfg(feature = "rvr")]
 use rvr_openvm_ext_ecc::EccExtension;
@@ -115,8 +115,6 @@ impl VmExecutionExtension for WeierstrassExtension {
         inventory: &mut ExecutorInventoryBuilder<WeierstrassExtensionExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
         let byte_ptr_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
-        // TODO: somehow get the range checker bus from `ExecutorInventory`
-        let dummy_range_checker_bus = VariableRangeCheckerBus::new(u16::MAX, 16);
         for (i, curve) in self.supported_curves.iter().enumerate() {
             let start_offset =
                 Rv64WeierstrassOpcode::CLASS_OFFSET + i * Rv64WeierstrassOpcode::COUNT;
@@ -130,7 +128,7 @@ impl VmExecutionExtension for WeierstrassExtension {
                 };
                 let addne = get_ec_addne_executor(
                     config.clone(),
-                    dummy_range_checker_bus,
+                    U16_BITS,
                     byte_ptr_max_bits,
                     start_offset,
                 );
@@ -144,7 +142,7 @@ impl VmExecutionExtension for WeierstrassExtension {
 
                 let double = get_ec_double_executor(
                     config,
-                    dummy_range_checker_bus,
+                    U16_BITS,
                     byte_ptr_max_bits,
                     start_offset,
                     curve.a.clone(),
@@ -164,7 +162,7 @@ impl VmExecutionExtension for WeierstrassExtension {
                 };
                 let addne = get_ec_addne_executor(
                     config.clone(),
-                    dummy_range_checker_bus,
+                    U16_BITS,
                     byte_ptr_max_bits,
                     start_offset,
                 );
@@ -178,7 +176,7 @@ impl VmExecutionExtension for WeierstrassExtension {
 
                 let double = get_ec_double_executor(
                     config,
-                    dummy_range_checker_bus,
+                    U16_BITS,
                     byte_ptr_max_bits,
                     start_offset,
                     curve.a.clone(),

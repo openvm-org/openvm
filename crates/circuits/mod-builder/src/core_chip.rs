@@ -22,9 +22,22 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeCharacteristicRing, PrimeField32},
     BaseAirWithPublicValues,
 };
-use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
-use crate::builder::{FieldExpr, FieldExprCols};
+use crate::builder::{ExprBuilder, FieldExpr, FieldExprCols, FieldExpressionProgram};
+
+fn normalize_opcode_flags(
+    needs_setup: bool,
+    local_opcode_idx: &[usize],
+    opcode_flag_idx: Vec<usize>,
+) -> Vec<usize> {
+    let opcode_flag_idx = if opcode_flag_idx.is_empty() && needs_setup {
+        vec![0]
+    } else {
+        opcode_flag_idx
+    };
+    assert_eq!(opcode_flag_idx.len(), local_opcode_idx.len() - 1);
+    opcode_flag_idx
+}
 
 #[derive(Clone)]
 pub struct FieldExpressionCoreAir {
@@ -61,14 +74,11 @@ impl FieldExpressionCoreAir {
         local_opcode_idx: Vec<usize>,
         opcode_flag_idx: Vec<usize>,
     ) -> Self {
-        let opcode_flag_idx = if opcode_flag_idx.is_empty() && expr.needs_setup() {
-            // single op chip that needs setup, so there is only one default flag, must be 0.
-            vec![0]
-        } else {
-            // multi ops chip or no-setup chip, use as is.
-            opcode_flag_idx
-        };
-        assert_eq!(opcode_flag_idx.len(), local_opcode_idx.len() - 1);
+        let opcode_flag_idx = normalize_opcode_flags(
+            expr.program().needs_setup(),
+            &local_opcode_idx,
+            opcode_flag_idx,
+        );
         Self {
             expr,
             offset,
@@ -78,19 +88,19 @@ impl FieldExpressionCoreAir {
     }
 
     pub fn num_inputs(&self) -> usize {
-        self.expr.builder.num_input
+        self.expr.program().num_inputs()
     }
 
     pub fn num_vars(&self) -> usize {
-        self.expr.builder.num_variables
+        self.expr.program().num_vars()
     }
 
     pub fn num_flags(&self) -> usize {
-        self.expr.builder.num_flags
+        self.expr.program().num_flags()
     }
 
     pub fn output_indices(&self) -> &[usize] {
-        &self.expr.builder.output_indices
+        self.expr.program().output_indices()
     }
 }
 
@@ -279,7 +289,7 @@ impl<'a> FieldExpressionCoreRecordMut<'a> {
 #[derive(Clone)]
 pub struct FieldExpressionExecutor<A> {
     adapter: A,
-    pub expr: FieldExpr,
+    program: FieldExpressionProgram,
     pub offset: usize,
     pub local_opcode_idx: Vec<usize>,
     pub opcode_flag_idx: Vec<usize>,
@@ -290,27 +300,21 @@ impl<A> FieldExpressionExecutor<A> {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         adapter: A,
-        expr: FieldExpr,
+        program: FieldExpressionProgram,
         offset: usize,
         local_opcode_idx: Vec<usize>,
         opcode_flag_idx: Vec<usize>,
         name: &str,
     ) -> Self {
-        let opcode_flag_idx = if opcode_flag_idx.is_empty() && expr.needs_setup() {
-            // single op chip that needs setup, so there is only one default flag, must be 0.
-            vec![0]
-        } else {
-            // multi ops chip or no-setup chip, use as is.
-            opcode_flag_idx
-        };
-        assert_eq!(opcode_flag_idx.len(), local_opcode_idx.len() - 1);
+        let opcode_flag_idx =
+            normalize_opcode_flags(program.needs_setup(), &local_opcode_idx, opcode_flag_idx);
         tracing::debug!(
             "FieldExpressionCoreExecutor: opcode={name}, main_width={}",
-            BaseAir::<BabyBear>::width(&expr)
+            program.width()
         );
         Self {
             adapter,
-            expr,
+            program,
             offset,
             local_opcode_idx,
             opcode_flag_idx,
@@ -321,7 +325,7 @@ impl<A> FieldExpressionExecutor<A> {
     pub fn get_record_layout<F>(&self) -> FieldExpressionRecordLayout<F, A> {
         FieldExpressionRecordLayout {
             metadata: FieldExpressionMetadata::new(
-                self.expr.builder.num_input * self.expr.canonical_num_limbs(),
+                self.program.num_inputs() * self.program.canonical_num_limbs(),
             ),
         }
     }
@@ -330,6 +334,10 @@ impl<A> FieldExpressionExecutor<A> {
     #[inline]
     pub fn adapter(&self) -> &A {
         &self.adapter
+    }
+
+    pub fn program(&self) -> &FieldExpressionProgram {
+        &self.program
     }
 }
 
@@ -352,14 +360,11 @@ impl<A> FieldExpressionFiller<A> {
         range_checker: SharedVariableRangeCheckerChip,
         should_finalize: bool,
     ) -> Self {
-        let opcode_flag_idx = if opcode_flag_idx.is_empty() && expr.needs_setup() {
-            // single op chip that needs setup, so there is only one default flag, must be 0.
-            vec![0]
-        } else {
-            // multi ops chip or no-setup chip, use as is.
-            opcode_flag_idx
-        };
-        assert_eq!(opcode_flag_idx.len(), local_opcode_idx.len() - 1);
+        let opcode_flag_idx = normalize_opcode_flags(
+            expr.program().needs_setup(),
+            &local_opcode_idx,
+            opcode_flag_idx,
+        );
         Self {
             adapter,
             expr,
@@ -370,17 +375,17 @@ impl<A> FieldExpressionFiller<A> {
         }
     }
     pub fn num_inputs(&self) -> usize {
-        self.expr.builder.num_input
+        self.expr.program().num_inputs()
     }
 
     pub fn num_flags(&self) -> usize {
-        self.expr.builder.num_flags
+        self.expr.program().num_flags()
     }
 
     pub fn get_record_layout<F>(&self) -> FieldExpressionRecordLayout<F, A> {
         FieldExpressionRecordLayout {
             metadata: FieldExpressionMetadata::new(
-                self.num_inputs() * self.expr.canonical_num_limbs(),
+                self.num_inputs() * self.expr.program().canonical_num_limbs(),
             ),
         }
     }
@@ -417,7 +422,7 @@ where
         );
 
         let (writes, _, _) = run_field_expression(
-            &self.expr,
+            &self.program,
             &self.local_opcode_idx,
             &self.opcode_flag_idx,
             core_record.input_limbs,
@@ -461,7 +466,7 @@ where
             unsafe { get_record_from_slice(&mut core_row, self.get_record_layout::<F>()) };
 
         let (_, inputs, flags) = run_field_expression(
-            &self.expr,
+            self.expr.program(),
             &self.local_opcode_idx,
             &self.opcode_flag_idx,
             record.input_limbs,
@@ -491,17 +496,17 @@ where
 }
 
 fn run_field_expression(
-    expr: &FieldExpr,
+    program: &FieldExpressionProgram,
     local_opcode_flags: &[usize],
     opcode_flag_idx: &[usize],
     data: &[u8],
     local_opcode_idx: usize,
 ) -> (DynArray<u8>, Vec<BigUint>, Vec<bool>) {
-    let field_element_limbs = expr.canonical_num_limbs();
-    assert_eq!(data.len(), expr.builder.num_input * field_element_limbs);
+    let field_element_limbs = program.canonical_num_limbs();
+    assert_eq!(data.len(), program.num_inputs() * field_element_limbs);
 
-    let mut inputs = Vec::with_capacity(expr.builder.num_input);
-    for i in 0..expr.builder.num_input {
+    let mut inputs = Vec::with_capacity(program.num_inputs());
+    for i in 0..program.num_inputs() {
         let start = i * field_element_limbs;
         let end = start + field_element_limbs;
         let limb_slice = &data[start..end];
@@ -510,8 +515,8 @@ fn run_field_expression(
     }
 
     let mut flags = vec![];
-    if expr.needs_setup() {
-        flags = vec![false; expr.builder.num_flags];
+    if program.needs_setup() {
+        flags = vec![false; program.num_flags()];
 
         // Find which opcode this is in our local_opcode_idx list
         if let Some(opcode_position) = local_opcode_flags
@@ -528,14 +533,14 @@ fn run_field_expression(
         }
     }
 
-    let vars = expr.execute(&inputs, &flags);
-    assert_eq!(vars.len(), expr.builder.num_variables);
+    let vars = program.execute(&inputs, &flags);
+    assert_eq!(vars.len(), program.num_vars());
 
     // Write outputs directly to a pre-allocated buffer to avoid intermediate Vecs
-    let num_outputs = expr.builder.output_indices.len();
+    let num_outputs = program.output_indices().len();
     let total_output_bytes = num_outputs * field_element_limbs;
     let mut write_buffer = vec![0u8; total_output_bytes];
-    for (i, &var_idx) in expr.builder.output_indices.iter().enumerate() {
+    for (i, &var_idx) in program.output_indices().iter().enumerate() {
         let start = i * field_element_limbs;
         let bytes = vars[var_idx].to_bytes_le();
         let copy_len = bytes.len().min(field_element_limbs);
@@ -547,46 +552,57 @@ fn run_field_expression(
     (writes, inputs, flags)
 }
 
-#[inline(always)]
-pub fn run_field_expression_precomputed<const NEEDS_SETUP: bool>(
-    expr: &FieldExpr,
+fn decode_precomputed_inputs<const NEEDS_SETUP: bool>(
+    program: &FieldExpressionProgram,
     flag_idx: usize,
     data: &[u8],
-) -> DynArray<u8> {
-    let field_element_limbs = expr.canonical_num_limbs();
-    assert_eq!(data.len(), expr.num_inputs() * field_element_limbs);
+) -> (Vec<BigUint>, Vec<bool>) {
+    debug_assert_eq!(NEEDS_SETUP, program.needs_setup());
+    let builder = program.builder();
+    let field_element_limbs = builder.num_limbs;
+    assert_eq!(data.len(), builder.num_input * field_element_limbs);
 
-    let mut inputs = Vec::with_capacity(expr.num_inputs());
-    for i in 0..expr.num_inputs() {
-        let start = i * expr.canonical_num_limbs();
-        let end = start + expr.canonical_num_limbs();
+    let mut inputs = Vec::with_capacity(builder.num_input);
+    for i in 0..builder.num_input {
+        let start = i * field_element_limbs;
+        let end = start + field_element_limbs;
         let limb_slice = &data[start..end];
         let input = BigUint::from_bytes_le(limb_slice);
         inputs.push(input);
     }
 
     let flags = if NEEDS_SETUP {
-        let mut flags = vec![false; expr.num_flags()];
-        if flag_idx < expr.num_flags() {
+        let mut flags = vec![false; builder.num_flags];
+        if flag_idx < builder.num_flags {
             flags[flag_idx] = true;
         }
         flags
     } else {
         vec![]
     };
+    (inputs, flags)
+}
 
-    let vars = expr.execute(&inputs, &flags);
-    assert_eq!(vars.len(), expr.num_vars());
-
-    // Write outputs directly to a pre-allocated buffer to avoid intermediate Vecs
-    let num_outputs = expr.output_indices().len();
-    let total_output_bytes = num_outputs * field_element_limbs;
+fn encode_precomputed_outputs(builder: &ExprBuilder, vars: &[BigUint]) -> DynArray<u8> {
+    assert_eq!(vars.len(), builder.num_variables);
+    let total_output_bytes = builder.output_indices.len() * builder.num_limbs;
     let mut write_buffer = vec![0u8; total_output_bytes];
-    for (i, &var_idx) in expr.output_indices().iter().enumerate() {
-        let start = i * field_element_limbs;
+    for (i, &var_idx) in builder.output_indices.iter().enumerate() {
+        let start = i * builder.num_limbs;
         let bytes = vars[var_idx].to_bytes_le();
-        let copy_len = bytes.len().min(field_element_limbs);
+        let copy_len = bytes.len().min(builder.num_limbs);
         write_buffer[start..start + copy_len].copy_from_slice(&bytes[..copy_len]);
     }
     write_buffer.into()
+}
+
+#[inline(always)]
+pub fn run_field_expression_precomputed<const NEEDS_SETUP: bool>(
+    program: &FieldExpressionProgram,
+    flag_idx: usize,
+    data: &[u8],
+) -> DynArray<u8> {
+    let (inputs, flags) = decode_precomputed_inputs::<NEEDS_SETUP>(program, flag_idx, data);
+    let vars = program.execute(&inputs, &flags);
+    encode_precomputed_outputs(program.builder(), &vars)
 }
