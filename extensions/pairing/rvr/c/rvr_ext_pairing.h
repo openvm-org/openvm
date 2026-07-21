@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-struct RvState;
+typedef struct RvState RvState;
 
 /* HintFinalExp phantom: computes pairing final exponentiation hint and
  * sets the hint stream (implemented in Rust). */

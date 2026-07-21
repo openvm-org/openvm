@@ -56,11 +56,11 @@ pub enum ExecutionError {
     HintOutOfBounds { pc: u32 },
     #[error("at pc {pc}, hint buffer num_words is zero")]
     HintBufferZeroWords { pc: u32 },
-    #[error("at pc {pc}, hint buffer num_words {num_words} exceeds MAX_HINT_BUFFER_WORDS {max_hint_buffer_words}")]
+    #[error("at pc {pc}, hint buffer num_words {num_words} exceeds MAX_HINT_BUFFER_DWORDS {max_hint_buffer_words}")]
     HintBufferTooLarge {
         pc: u32,
         num_words: u64,
-        max_hint_buffer_words: u32,
+        max_hint_buffer_words: u64,
     },
     #[error("at pc {pc}, tried to publish into index {public_value_index} when num_public_values = {num_public_values}")]
     PublicValueIndexOutOfBounds {

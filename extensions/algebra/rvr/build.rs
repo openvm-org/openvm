@@ -47,6 +47,8 @@ fn main() {
     println!("cargo:rerun-if-changed=ffi/modular/src/lib.rs");
     println!("cargo:rerun-if-changed=ffi/fp2/Cargo.toml");
     println!("cargo:rerun-if-changed=ffi/fp2/src/lib.rs");
+    println!("cargo:rerun-if-changed=../../../crates/rvr/rvr-openvm-ffi-common/Cargo.toml");
+    println!("cargo:rerun-if-changed=../../../crates/rvr/rvr-openvm-ffi-common/src");
 }
 
 fn build_blst_staticlib(manifest_dir: &Path, out_dir: &Path) -> PathBuf {

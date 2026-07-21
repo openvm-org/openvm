@@ -5,8 +5,8 @@ use std::ffi::c_void;
 use halo2curves_axiom::ff::{Field, PrimeField};
 use num_bigint::{BigInt, BigUint};
 use num_integer::Integer;
-use openvm_platform::{WORD_SIZE, WORD_SIZE_U32};
-use rvr_openvm_ext_ffi_common::{rd_mem_words_traced, wr_mem_words_traced};
+use openvm_platform::WORD_SIZE;
+use rvr_openvm_ext_ffi_common::{read_mem_words, write_mem_words};
 
 /// Size of a 256-bit field element in bytes.
 pub const FIELD_256_BYTES: usize = 32;
@@ -89,14 +89,14 @@ impl<T: KnownFieldArith> FieldArith for T {
 
 // ── 256-bit field I/O ───────────────────────────────────────────────────────
 
-/// Read a 256-bit field element from guest memory (traced).
+/// Read a 256-bit field element through the VM memory interface.
 ///
 /// # Safety
 /// `state` must be a valid pointer to the C `RvState` struct.
 #[inline(always)]
 pub unsafe fn read_field_256<F: PrimeField<Repr = [u8; 32]>>(state: *mut c_void, ptr: u64) -> F {
     let mut words = [0u64; FIELD_256_WORDS];
-    rd_mem_words_traced(state, ptr, &mut words);
+    read_mem_words(state, ptr, &mut words);
     let mut bytes = [0u8; FIELD_256_BYTES];
     for (i, &w) in words.iter().enumerate() {
         bytes[i * WORD_SIZE..(i + 1) * WORD_SIZE].copy_from_slice(&w.to_le_bytes());
@@ -113,7 +113,7 @@ pub unsafe fn read_field_256<F: PrimeField<Repr = [u8; 32]>>(state: *mut c_void,
     })
 }
 
-/// Write a 256-bit field element to guest memory (traced).
+/// Write a 256-bit field element through the VM memory interface.
 ///
 /// # Safety
 /// `state` must be a valid pointer to the C `RvState` struct.
@@ -132,23 +132,23 @@ pub unsafe fn write_field_256<F: PrimeField<Repr = [u8; 32]>>(
                 .unwrap(),
         );
     }
-    wr_mem_words_traced(state, ptr, &words);
+    write_mem_words(state, ptr, &words);
 }
 
 // ── BigUint helpers (for unknown-modulus fallbacks) ──────────────────────────
 
-/// Convert a byte-sized limb count into RV64 words.
+/// Convert a limb count in bytes to RV64 words.
 #[inline]
 pub fn limb_bytes_to_words(num_limbs: u32) -> u32 {
     assert_eq!(
-        num_limbs % WORD_SIZE_U32,
+        num_limbs % WORD_SIZE as u32,
         0,
         "limb byte count must be a multiple of WORD_SIZE"
     );
-    num_limbs / WORD_SIZE_U32
+    num_limbs / WORD_SIZE as u32
 }
 
-/// Read a `num_limbs`-byte little-endian BigUint from guest memory (traced).
+/// Read a `num_limbs`-byte little-endian BigUint through the VM memory interface.
 ///
 /// # Safety
 /// `state` must be a valid `RvState` pointer; `num_limbs` must be a multiple
@@ -157,7 +157,7 @@ pub fn limb_bytes_to_words(num_limbs: u32) -> u32 {
 pub unsafe fn read_bigint(state: *mut c_void, ptr: u64, num_limbs: u32) -> BigUint {
     let num_words = limb_bytes_to_words(num_limbs) as usize;
     let mut words = vec![0u64; num_words];
-    rd_mem_words_traced(state, ptr, &mut words);
+    read_mem_words(state, ptr, &mut words);
     let mut bytes = vec![0u8; num_limbs as usize];
     for (i, &w) in words.iter().enumerate() {
         bytes[i * WORD_SIZE..(i + 1) * WORD_SIZE].copy_from_slice(&w.to_le_bytes());
@@ -165,7 +165,7 @@ pub unsafe fn read_bigint(state: *mut c_void, ptr: u64, num_limbs: u32) -> BigUi
     BigUint::from_bytes_le(&bytes)
 }
 
-/// Write a BigUint to guest memory (traced), zero-padded to `num_limbs` bytes.
+/// Write a zero-padded BigUint through the VM memory interface.
 ///
 /// # Safety
 /// `state` must be a valid `RvState` pointer; `num_limbs` must be a multiple
@@ -183,7 +183,7 @@ pub unsafe fn write_bigint(state: *mut c_void, ptr: u64, value: &BigUint, num_li
                 .unwrap(),
         );
     }
-    wr_mem_words_traced(state, ptr, &words);
+    write_mem_words(state, ptr, &words);
 }
 
 /// Modular inverse of `a` modulo `p` via extended GCD. Caller must ensure

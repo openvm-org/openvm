@@ -86,8 +86,46 @@ pub(crate) type ModArithInstr = FieldArithInstr<ModArithKind>;
 /// IR node for modular IS_EQ.
 pub(crate) type ModIsEqInstr = FieldIsEqInstr<ModArithKind>;
 
-/// IR node for modular SETUP (SETUP_ADDSUB, SETUP_MULDIV, SETUP_ISEQ).
+/// IR node for modular SETUP (SETUP_ADDSUB and SETUP_MULDIV).
 pub(crate) type ModSetupInstr = FieldSetupInstr<ModArithKind>;
+
+#[derive(Debug, Clone)]
+struct ModSetupIsEqInstr {
+    rd_reg: Reg,
+    rs1_reg: Reg,
+    rs2_reg: Reg,
+    num_limbs: u32,
+    modulus: Vec<u8>,
+}
+
+impl ExtInstr for ModSetupIsEqInstr {
+    fn opname(&self) -> &str {
+        "mod_setup_iseq"
+    }
+
+    fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
+        let rs1 = ctx.read_reg(self.rs1_reg);
+        let rs2 = ctx.read_reg(self.rs2_reg);
+        let mod_literal = format_c_byte_array(&self.modulus);
+        let num_limbs = format!("{}u", self.num_limbs);
+        ctx.write_line("{");
+        ctx.write_line(&format!("static constexpr uint8_t mod_[] = {mod_literal};"));
+        let result = ctx.emit_call_expr(
+            "uint8_t",
+            "rvr_ext_mod_setup_iseq",
+            &["state", &rs1, &rs2, &num_limbs, "mod_"],
+        );
+        ctx.write_line(&format!("if (unlikely({result} > 1u)) {{"));
+        ctx.emit_trap();
+        ctx.write_line("}");
+        ctx.write_reg(self.rd_reg, &result);
+        ctx.write_line("}");
+    }
+
+    fn clone_box(&self) -> Box<dyn ExtInstr> {
+        Box::new(self.clone())
+    }
+}
 
 // ── Phantom instructions (HintNonQr, HintSqrt) ──────────────────────────────
 
@@ -139,7 +177,7 @@ impl ExtInstr for HintSqrtInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rs1 = ctx.read_reg(self.rs1_reg);
+        let rs1 = ctx.peek_reg(self.rs1_reg);
         let mod_literal = format_c_byte_array(&self.modulus);
         let nqr_literal = format_c_byte_array(&self.non_qr_bytes);
         ctx.write_line("{");
@@ -228,6 +266,10 @@ impl RvrExtension for ModularRvrExtension {
                 include_bytes!(env!("RVR_ALGEBRA_BLST_STATICLIB")),
             ),
         ]
+    }
+
+    fn uses_memory_wrappers(&self) -> bool {
+        true
     }
 
     fn vendored_c_sources(&self) -> Vec<(&'static str, &'static str)> {
@@ -322,9 +364,15 @@ impl ModularRvrExtension {
                     info.modulus_bytes.clone(),
                 )))
             }
-            x if x == Rv64ModularArithmeticOpcode::SETUP_ADDSUB as usize => Instr::Ext(Box::new(
-                ModSetupInstr::new(rd_reg, rs1_reg, rs2_reg, info.num_limbs),
-            )),
+            x if x == Rv64ModularArithmeticOpcode::SETUP_ADDSUB as usize => {
+                Instr::Ext(Box::new(ModSetupInstr::new(
+                    rd_reg,
+                    rs1_reg,
+                    rs2_reg,
+                    info.num_limbs,
+                    info.modulus_bytes.clone(),
+                )))
+            }
             x if x == Rv64ModularArithmeticOpcode::MUL as usize => {
                 Instr::Ext(Box::new(ModArithInstr::new(
                     ModOp::Mul,
@@ -345,9 +393,15 @@ impl ModularRvrExtension {
                     info.modulus_bytes.clone(),
                 )))
             }
-            x if x == Rv64ModularArithmeticOpcode::SETUP_MULDIV as usize => Instr::Ext(Box::new(
-                ModSetupInstr::new(rd_reg, rs1_reg, rs2_reg, info.num_limbs),
-            )),
+            x if x == Rv64ModularArithmeticOpcode::SETUP_MULDIV as usize => {
+                Instr::Ext(Box::new(ModSetupInstr::new(
+                    rd_reg,
+                    rs1_reg,
+                    rs2_reg,
+                    info.num_limbs,
+                    info.modulus_bytes.clone(),
+                )))
+            }
             x if x == Rv64ModularArithmeticOpcode::IS_EQ as usize => {
                 Instr::Ext(Box::new(ModIsEqInstr::new(
                     rd_reg,
@@ -357,9 +411,15 @@ impl ModularRvrExtension {
                     info.modulus_bytes.clone(),
                 )))
             }
-            x if x == Rv64ModularArithmeticOpcode::SETUP_ISEQ as usize => Instr::Ext(Box::new(
-                ModSetupInstr::new(rd_reg, rs1_reg, rs2_reg, info.num_limbs),
-            )),
+            x if x == Rv64ModularArithmeticOpcode::SETUP_ISEQ as usize => {
+                Instr::Ext(Box::new(ModSetupIsEqInstr {
+                    rd_reg,
+                    rs1_reg,
+                    rs2_reg,
+                    num_limbs: info.num_limbs,
+                    modulus: info.modulus_bytes.clone(),
+                }))
+            }
             _ => return None,
         };
 

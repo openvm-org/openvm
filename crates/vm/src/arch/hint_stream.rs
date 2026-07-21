@@ -58,8 +58,9 @@ impl HintStream {
         len: usize,
         bytes: impl IntoIterator<Item = u8>,
     ) -> Result<(), TryReserveError> {
+        let additional = len.saturating_sub(self.bytes.len());
+        self.bytes.try_reserve(additional)?;
         self.clear();
-        self.bytes.try_reserve(len)?;
         self.bytes.extend(bytes);
         Ok(())
     }

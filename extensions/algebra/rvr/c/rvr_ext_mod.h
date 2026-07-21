@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-struct RvState;
+typedef struct RvState RvState;
 
 /* Direct C functions use preserve_most so generated block functions keep live
  * values in registers across calls. Rust functions use the standard C ABI. */
@@ -21,13 +21,15 @@ extern void rvr_ext_mod_mul(RvState* state, uint64_t rd_ptr, uint64_t rs1_ptr, u
 extern void rvr_ext_mod_div(RvState* state, uint64_t rd_ptr, uint64_t rs1_ptr, uint64_t rs2_ptr,
                             uint32_t num_limbs, const uint8_t* modulus);
 
-/* Modular IS_EQ extension FFI entry point (implemented in Rust). */
+/* Modular IS_EQ function implemented in Rust. */
 extern bool rvr_ext_mod_iseq(RvState* state, uint64_t rs1_ptr, uint64_t rs2_ptr,
                              uint32_t num_limbs, const uint8_t* modulus);
 
 /* Modular SETUP extension FFI entry point (implemented in Rust). */
-extern void rvr_ext_mod_setup(RvState* state, uint64_t rd_ptr, uint64_t rs1_ptr, uint64_t rs2_ptr,
-                              uint32_t num_limbs);
+extern bool rvr_ext_mod_setup(RvState* state, uint64_t rd_ptr, uint64_t rs1_ptr, uint64_t rs2_ptr,
+                              uint32_t num_limbs, const uint8_t* modulus);
+extern uint8_t rvr_ext_mod_setup_iseq(RvState* state, uint64_t rs1_ptr, uint64_t rs2_ptr,
+                                      uint32_t num_limbs, const uint8_t* modulus);
 
 /* HintSqrt phantom: computes sqrt hint and sets hint stream (implemented in
  * Rust). */

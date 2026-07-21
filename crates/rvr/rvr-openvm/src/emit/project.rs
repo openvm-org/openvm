@@ -12,7 +12,7 @@ use rvr_openvm_lift::{ExtensionRegistry, TraceChipIndex};
 
 use super::{
     codegen::{emit_terminator, InstrCodegen, TermCtx},
-    context::{BlockAbi, EmitContext, EmitMode},
+    context::{validate_chip_index, BlockAbi, EmitContext, EmitMode, InvalidChipIndex},
 };
 use crate::constants::constants_header;
 
@@ -107,7 +107,6 @@ impl RvrExecutionKind {
                 writeln!(out, "typedef struct MeteredCostState {{").unwrap();
                 writeln!(out, "  uint64_t instret;").unwrap();
                 writeln!(out, "  uint64_t cost;").unwrap();
-                writeln!(out, "  const uint64_t* chip_widths;").unwrap();
                 writeln!(out, "}} MeteredCostState;").unwrap();
             }
             Self::Metered | Self::MeteredSegment => {
@@ -189,7 +188,7 @@ pub struct CProject {
     pub blocks_per_partition: usize,
     /// Enable thin LTO for the generated C code.
     pub enable_lto: bool,
-    /// Per-PC chip index for hardcoded trace_chip calls.
+    /// Main chip index for each PC, used to count rows once per block.
     /// Index i = chip for PC = pc_base + i*4.
     /// `None` in pure mode (no chip metadata requested); must be set in metered modes.
     pub pc_to_chip: Option<Vec<TraceChipIndex>>,
@@ -197,7 +196,7 @@ pub struct CProject {
     pub pc_base: u64,
     /// Per-AIR widths for MeteredCost precomputation. Indexed by chip index.
     pub chip_widths: Option<Vec<u64>>,
-    /// Number of AIRs in metered artifacts. Emitted into the generated C ABI.
+    /// Number of AIRs written into a metered artifact's C ABI.
     pub num_airs: Option<u32>,
     /// Compile with native debug info (`-g -fno-omit-frame-pointer`).
     pub native_debug_info: bool,
@@ -326,15 +325,15 @@ impl CProject {
     }
 
     /// C function parameter list entries.
-    fn param_list_items(&self, include_names: bool) -> Vec<String> {
+    fn param_list_items(&self, include_names: bool, unused_trace_heights: bool) -> Vec<String> {
         let mut params = vec![if include_names {
-            "RvState* restrict state [[maybe_unused]]".to_string()
+            "RvState* restrict state".to_string()
         } else {
             "RvState* restrict".to_string()
         }];
         for &(_, name) in &self.sorted_hot_regs() {
             params.push(if include_names {
-                format!("uint64_t {name} [[maybe_unused]]")
+                format!("uint64_t {name}")
             } else {
                 "uint64_t".to_string()
             });
@@ -342,18 +341,23 @@ impl CProject {
         match self.block_abi() {
             BlockAbi::Plain => {}
             BlockAbi::InstretCountdown => params.push(if include_names {
-                "uint64_t instret_remaining [[maybe_unused]]".to_string()
+                "uint64_t instret_remaining".to_string()
             } else {
                 "uint64_t".to_string()
             }),
             BlockAbi::Metered => {
                 params.push(if include_names {
-                    "uint32_t check_counter [[maybe_unused]]".to_string()
+                    "uint32_t check_counter".to_string()
                 } else {
                     "uint32_t".to_string()
                 });
                 params.push(if include_names {
-                    "TraceHeights* restrict trace_heights [[maybe_unused]]".to_string()
+                    let attribute = if unused_trace_heights {
+                        " [[maybe_unused]]"
+                    } else {
+                        ""
+                    };
+                    format!("TraceHeights* restrict trace_heights{attribute}")
                 } else {
                     "TraceHeights* restrict".to_string()
                 });
@@ -362,8 +366,8 @@ impl CProject {
         params
     }
 
-    fn block_signature(&self, prefix: &str, name: &str) -> String {
-        let params = self.param_list_items(true);
+    fn function_signature(&self, prefix: &str, name: &str, unused_trace_heights: bool) -> String {
+        let params = self.param_list_items(true, unused_trace_heights);
         let mut out = format!("{prefix} {name}(\n");
         for (idx, param) in params.iter().enumerate() {
             let suffix = if idx + 1 == params.len() { "" } else { "," };
@@ -373,8 +377,12 @@ impl CProject {
         out
     }
 
+    fn block_signature(&self, prefix: &str, name: &str) -> String {
+        self.function_signature(prefix, name, false)
+    }
+
     fn trap_signature(&self) -> String {
-        self.block_signature("__attribute__((preserve_none, cold)) void", "rv_trap")
+        self.function_signature("__attribute__((preserve_none, cold)) void", "rv_trap", true)
     }
 
     fn emit_trap_declaration(&self, out: &mut String) {
@@ -411,7 +419,7 @@ impl CProject {
 
     /// C typedef parameter types: "RvState*, uint32_t, uint32_t".
     fn typedef_params(&self) -> String {
-        self.param_list_items(false).join(", ")
+        self.param_list_items(false, false).join(", ")
     }
 
     /// Call to save hot registers back to state before returning.
@@ -454,9 +462,8 @@ impl CProject {
             RvrExecutionKind::Metered | RvrExecutionKind::MeteredSegment => EmitMode::Metered {
                 trace_memory_pages: block_accesses_memory(block),
             },
-            RvrExecutionKind::Pure
-            | RvrExecutionKind::PureWithInstretTracking
-            | RvrExecutionKind::MeteredCost => EmitMode::Direct,
+            RvrExecutionKind::MeteredCost => EmitMode::MeteredCost,
+            RvrExecutionKind::Pure | RvrExecutionKind::PureWithInstretTracking => EmitMode::Direct,
         }
     }
 
@@ -599,9 +606,6 @@ impl CProject {
             self.execution_kind.trace_header_filename()
         )
         .unwrap();
-        if self.execution_kind.metered_block_header_content().is_some() {
-            writeln!(openvm_h, "#include \"openvm_block.h\"").unwrap();
-        }
         writeln!(openvm_h, "#include \"openvm_io.h\"").unwrap();
         fs::write(self.output_dir.join("openvm.h"), openvm_h)?;
 
@@ -617,8 +621,7 @@ impl CProject {
         self.write_embedded_files(extensions.vendored_c_sources(), &mut created_dirs)?;
         self.write_embedded_files(extensions.extra_c_include_files(), &mut created_dirs)?;
 
-        // Write wrapper functions if any extensions are registered
-        if !extensions.is_empty() {
+        if extensions.uses_memory_wrappers() {
             self.write_ext_wrappers()?;
         }
 
@@ -664,9 +667,6 @@ impl CProject {
 
         // Mode-specific tracing helpers include openvm_state.h internally.
         writeln!(h, "#include \"{trace_header}\"").unwrap();
-        if self.execution_kind.metered_block_header_content().is_some() {
-            writeln!(h, "#include \"openvm_block.h\"").unwrap();
-        }
         writeln!(h).unwrap();
 
         // Block function type and dispatch table (for JumpDyn tail calls).
@@ -684,7 +684,12 @@ impl CProject {
             );
             writeln!(h, "{signature};").unwrap();
         }
-        writeln!(h, "extern BlockFn dispatch_table[RV_DISPATCH_TABLE_SIZE];").unwrap();
+        // Keep this table private to the library so the linker can address it directly.
+        writeln!(
+            h,
+            "extern __attribute__((visibility(\"hidden\"))) BlockFn const dispatch_table[RV_DISPATCH_TABLE_SIZE];"
+        )
+        .unwrap();
         writeln!(h).unwrap();
 
         // Block function declarations.
@@ -743,11 +748,15 @@ impl CProject {
             let first_pc = partition[0].start_pc;
             let mut src = String::with_capacity(64 * 1024);
             writeln!(src, "#include \"{name}.h\"").unwrap();
+            if self.execution_kind.metered_block_header_content().is_some() {
+                writeln!(src, "#include \"openvm_block.h\"").unwrap();
+            }
             writeln!(src).unwrap();
 
             for block in partition {
                 self.emit_block_checkpoint_function(&mut src, block);
-                self.emit_block_function(&mut src, block, &valid_blocks);
+                self.emit_block_function(&mut src, block, &valid_blocks)
+                    .map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))?;
             }
 
             let path = self.output_dir.join(format!("{name}_0x{first_pc:08x}.c"));
@@ -757,7 +766,12 @@ impl CProject {
         Ok(())
     }
 
-    fn emit_block_function(&self, out: &mut String, block: &Block, valid_blocks: &HashSet<u64>) {
+    fn emit_block_function(
+        &self,
+        out: &mut String,
+        block: &Block,
+        valid_blocks: &HashSet<u64>,
+    ) -> Result<(), InvalidChipIndex> {
         let pc = block.start_pc;
         let end_pc = self.block_end_pc(block);
         let insn_count = block.insn_count();
@@ -770,7 +784,17 @@ impl CProject {
         )
         .unwrap();
         // Body instructions (each in its own scope to avoid variable collisions).
-        let mut ctx = EmitContext::new(self.hot_regs.clone(), mode, self.block_abi());
+        let chip_widths = match mode {
+            EmitMode::MeteredCost => self.chip_widths.as_deref(),
+            _ => None,
+        };
+        let mut ctx = EmitContext::new(
+            self.hot_regs.clone(),
+            mode,
+            self.block_abi(),
+            chip_widths,
+            self.num_airs,
+        );
         let mut body = String::new();
 
         if matches!(
@@ -787,7 +811,7 @@ impl CProject {
         }
 
         self.emit_block_boundary(&mut body, block);
-        self.emit_per_block_chip_updates(&mut body, block);
+        self.emit_per_block_chip_updates(&mut body, block)?;
 
         for instr_at in &block.instructions {
             self.emit_source_annotation(
@@ -817,6 +841,10 @@ impl CProject {
         let tc = TermCtx { valid_blocks };
         emit_terminator(&mut ctx, &block.terminator, block.terminator_pc, &tc);
         Self::emit_context_scope(&mut body, &mut ctx);
+
+        if let Some(error) = ctx.invalid_chip_index() {
+            return Err(error);
+        }
 
         let self_tail_call = format!("return block_0x{pc:08x}(");
         let has_direct_self_tail_call = body.contains(&self_tail_call);
@@ -848,6 +876,7 @@ impl CProject {
             writeln!(out, "#pragma clang diagnostic pop").unwrap();
         }
         writeln!(out).unwrap();
+        Ok(())
     }
 
     fn emit_block_checkpoint_function(&self, out: &mut String, block: &Block) {
@@ -987,27 +1016,57 @@ impl CProject {
     ///   - MeteredCost: `state->mode_state.cost += <constant>;` where the constant is
     ///     `sum(width[chip]
     ///     * count)` precomputed at emit time from `self.chip_widths`.
-    fn emit_per_block_chip_updates(&self, out: &mut String, block: &Block) {
+    fn emit_per_block_chip_updates(
+        &self,
+        out: &mut String,
+        block: &Block,
+    ) -> Result<(), InvalidChipIndex> {
         if matches!(
             self.execution_kind,
             RvrExecutionKind::Pure | RvrExecutionKind::PureWithInstretTracking
         ) {
-            return;
+            return Ok(());
         }
 
+        let num_airs = self
+            .num_airs
+            .expect("metered code generation requires the AIR count");
         let mut chip_counts: BTreeMap<u32, u32> = BTreeMap::new();
-        let mut increment_chip_count = |pc: u64| match self.chip_idx_for_pc(pc) {
-            TraceChipIndex::Chip(chip) => *chip_counts.entry(chip.as_u32()).or_insert(0) += 1,
-            TraceChipIndex::NoChip => {}
+        let add_rows = |chip_counts: &mut BTreeMap<u32, u32>, chip_idx, count| {
+            validate_chip_index(chip_idx, num_airs)?;
+            let current = chip_counts.entry(chip_idx).or_default();
+            *current = current
+                .checked_add(count)
+                .expect("per-block trace-height increment overflow");
+            Ok::<(), InvalidChipIndex>(())
+        };
+        let add_base_row = |chip_counts: &mut BTreeMap<u32, u32>, pc: u64| {
+            if let TraceChipIndex::Chip(chip) = self.chip_idx_for_pc(pc) {
+                add_rows(chip_counts, chip.as_u32(), 1)?;
+            }
+            Ok::<(), InvalidChipIndex>(())
+        };
+        let add_extension_rows = |chip_counts: &mut BTreeMap<u32, u32>,
+                                  extension: &dyn ExtInstr| {
+            for rows in extension.fixed_trace_rows() {
+                add_rows(chip_counts, rows.chip_idx, rows.count)?;
+            }
+            Ok::<(), InvalidChipIndex>(())
         };
         for instr_at in &block.instructions {
-            increment_chip_count(instr_at.pc);
+            add_base_row(&mut chip_counts, instr_at.pc)?;
+            if let Instr::Ext(extension) = &instr_at.instr {
+                add_extension_rows(&mut chip_counts, extension.as_ref())?;
+            }
         }
         if !matches!(block.terminator, Terminator::FallThrough) {
-            increment_chip_count(block.terminator_pc);
+            add_base_row(&mut chip_counts, block.terminator_pc)?;
+            if let Terminator::Extension(extension) = &block.terminator {
+                add_extension_rows(&mut chip_counts, extension.as_ref())?;
+            }
         }
         if chip_counts.is_empty() {
-            return;
+            return Ok(());
         }
 
         writeln!(out, "    {{").unwrap();
@@ -1020,16 +1079,21 @@ impl CProject {
             }
             RvrExecutionKind::MeteredCost => {
                 let widths = self.chip_widths.as_ref().unwrap();
-                let total: u64 = chip_counts
-                    .iter()
-                    .map(|(&chip, &count)| widths[chip as usize] * count as u64)
-                    .sum();
+                let total = chip_counts.iter().fold(0u64, |total, (&chip, &count)| {
+                    let contribution = widths[chip as usize]
+                        .checked_mul(u64::from(count))
+                        .expect("per-block metered cost contribution overflow");
+                    total
+                        .checked_add(contribution)
+                        .expect("per-block metered cost total overflow")
+                });
                 if total > 0 {
-                    writeln!(out, "        state->mode_state.cost += {total}u;").unwrap();
+                    writeln!(out, "        state->mode_state.cost += {total}ull;").unwrap();
                 }
             }
         }
         writeln!(out, "    }}").unwrap();
+        Ok(())
     }
 
     /// Emit PC/opname comment and `#line` directive for source attribution.
@@ -1116,7 +1180,11 @@ impl CProject {
         let block_starts: std::collections::HashMap<u64, u64> =
             blocks.iter().map(|b| (b.start_pc, b.start_pc)).collect();
 
-        writeln!(src, "BlockFn dispatch_table[RV_DISPATCH_TABLE_SIZE] = {{").unwrap();
+        writeln!(
+            src,
+            "BlockFn const dispatch_table[RV_DISPATCH_TABLE_SIZE] = {{"
+        )
+        .unwrap();
         for i in 0..table_size {
             let pc = text_start + (i as u64) * 4;
             if block_starts.contains_key(&pc) {
@@ -1136,6 +1204,27 @@ impl CProject {
             writeln!(src, "__attribute__((visibility(\"default\"), used))").unwrap();
             writeln!(src, "uint32_t rv_num_airs(void) {{").unwrap();
             writeln!(src, "    return RV_NUM_AIRS;").unwrap();
+            writeln!(src, "}}").unwrap();
+            writeln!(src).unwrap();
+        }
+        if self.execution_kind == RvrExecutionKind::MeteredCost {
+            let widths = self
+                .chip_widths
+                .as_ref()
+                .expect("metered-cost artifact requires chip widths");
+            writeln!(
+                src,
+                "static constexpr uint64_t RV_CHIP_WIDTHS[RV_NUM_AIRS] = {{"
+            )
+            .unwrap();
+            for width in widths {
+                writeln!(src, "    {width}ull,").unwrap();
+            }
+            writeln!(src, "}};").unwrap();
+            writeln!(src, "const uint64_t* rv_chip_widths(void);").unwrap();
+            writeln!(src, "__attribute__((visibility(\"default\"), used))").unwrap();
+            writeln!(src, "const uint64_t* rv_chip_widths(void) {{").unwrap();
+            writeln!(src, "    return RV_CHIP_WIDTHS;").unwrap();
             writeln!(src, "}}").unwrap();
             writeln!(src).unwrap();
         }
@@ -1203,11 +1292,8 @@ impl CProject {
             args.push(format!("VENDOR_SRCS={}", vendor_sources.join(" ")));
         }
         if !ext_staticlibs.is_empty() {
-            // `make` receives `VAR=value` assignments as single argv entries,
-            // but `$(EXT_LIBS)` and `$(EXT_CFLAGS)` are later expanded by
-            // splitting on spaces. Static library paths, `-I...` paths, and
-            // copied source filenames in `$(EXT_SRCS)` and `$(VENDOR_SRCS)`
-            // therefore must not contain spaces.
+            // Make expands these space-separated paths, so extension filenames
+            // cannot contain spaces.
             let libs: Vec<String> = ext_staticlibs
                 .iter()
                 .map(|p| p.display().to_string())
@@ -1248,7 +1334,7 @@ fn block_accesses_memory(block: &Block) -> bool {
 mod tests {
     use std::{collections::HashSet, path::Path};
 
-    use rvr_openvm_ir::{Block, Terminator};
+    use rvr_openvm_ir::{Block, ExtEmitCtx, ExtInstr, Instr, InstrAt, Terminator};
 
     use super::{CProject, RvrExecutionKind};
 
@@ -1260,6 +1346,19 @@ mod tests {
             terminator: Terminator::Exit { code: 0 },
             terminator_pc: 0x100,
             terminator_source_loc: None,
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    struct InvalidTraceChipInstr;
+
+    impl ExtInstr for InvalidTraceChipInstr {
+        fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
+            ctx.trace_chip(1, "1u");
+        }
+
+        fn clone_box(&self) -> Box<dyn ExtInstr> {
+            Box::new(self.clone())
         }
     }
 
@@ -1325,6 +1424,35 @@ mod tests {
     }
 
     #[test]
+    fn metered_codegen_rejects_extension_chip_outside_air_count() {
+        let mut project = CProject::new(Path::new("unused"), "test", RvrExecutionKind::Metered);
+        project.pc_base = 0x100;
+        project.num_airs = Some(1);
+        project.pc_to_chip = Some(vec![
+            rvr_openvm_lift::TraceChipIndex::NoChip,
+            rvr_openvm_lift::TraceChipIndex::NoChip,
+        ]);
+        let block = Block {
+            start_pc: 0x100,
+            end_pc: 0x108,
+            instructions: vec![InstrAt {
+                pc: 0x100,
+                instr: Instr::Ext(Box::new(InvalidTraceChipInstr)),
+                source_loc: None,
+            }],
+            terminator: Terminator::Exit { code: 0 },
+            terminator_pc: 0x104,
+            terminator_source_loc: None,
+        };
+
+        let error = project
+            .emit_block_function(&mut String::new(), &block, &HashSet::new())
+            .unwrap_err();
+
+        assert_eq!(error.to_string(), "chip index 1 is outside AIR count 1");
+    }
+
+    #[test]
     fn metered_cost_counts_without_suspension_layer() {
         let project = CProject::new(Path::new("unused"), "test", RvrExecutionKind::MeteredCost);
         let mut boundary = String::new();
@@ -1335,7 +1463,7 @@ mod tests {
     }
 
     #[test]
-    fn execution_kinds_have_distinct_markers_and_suffixes() {
+    fn execution_kinds_have_distinct_suffixes_and_round_trip_markers() {
         let kinds = [
             RvrExecutionKind::Pure,
             RvrExecutionKind::PureWithInstretTracking,
@@ -1343,10 +1471,8 @@ mod tests {
             RvrExecutionKind::Metered,
             RvrExecutionKind::MeteredSegment,
         ];
-        let mut markers = HashSet::new();
         let mut suffixes = HashSet::new();
         for kind in kinds {
-            assert!(markers.insert(kind as u32));
             assert!(suffixes.insert(kind.artifact_suffix()));
             assert_eq!(RvrExecutionKind::try_from(kind as u32), Ok(kind));
         }

@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-struct RvState;
+typedef struct RvState RvState;
 
 /* Direct C functions use preserve_most so generated block functions keep live
  * values in registers across calls. Rust functions use the standard C ABI. */
@@ -22,8 +22,8 @@ extern void rvr_ext_fp2_div(RvState* state, uint64_t rd_ptr, uint64_t rs1_ptr, u
                             uint32_t num_limbs, const uint8_t* modulus);
 
 /* Fp2 SETUP extension FFI entry point (implemented in Rust). */
-extern void rvr_ext_fp2_setup(RvState* state, uint64_t rd_ptr, uint64_t rs1_ptr, uint64_t rs2_ptr,
-                              uint32_t num_limbs);
+extern bool rvr_ext_fp2_setup(RvState* state, uint64_t rd_ptr, uint64_t rs1_ptr, uint64_t rs2_ptr,
+                              uint32_t num_limbs, const uint8_t* modulus);
 
 /* ── Specialized per-curve fp2 FFI ─────────────────────────────────────── */
 

@@ -288,16 +288,13 @@ pub(super) fn execute_metered_cost(
     compiled: &RvrCompiled,
     runtime_hooks: &[Box<dyn RvrRuntimeExtension>],
     vm_state: &mut VmState<GuestMemory>,
-    widths: &[u64],
 ) -> Result<RvrMeteredCostResult, ExecuteError> {
     require_execution_kind(compiled, "MeteredCost", &[RvrExecutionKind::MeteredCost])?;
-    require_num_airs(compiled, widths.len(), "chip-width table")?;
     let pc = vm_state.pc();
     let initial_regs = read_rv64_registers(vm_state);
 
     let mut state: MeteredCostRvState = init_rvr_state(vm_state, pc);
     state.regs = initial_regs;
-    state.mode_state.chip_widths = widths.as_ptr();
 
     run_and_finalize(compiled, runtime_hooks, vm_state, &mut state, false)
         .inspect_err(|error| tracing::warn!(%error, "rvr metered-cost execution failed"))?;

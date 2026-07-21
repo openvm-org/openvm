@@ -94,6 +94,10 @@ impl RvrExtension for Fp2RvrExtension {
             include_bytes!(env!("RVR_ALGEBRA_FP2_FFI_STATICLIB")),
         )]
     }
+
+    fn uses_memory_wrappers(&self) -> bool {
+        true
+    }
 }
 
 impl Fp2RvrExtension {
@@ -117,48 +121,55 @@ impl Fp2RvrExtension {
         let rs1_reg = decode_reg(insn.b);
         let rs2_reg = decode_reg(insn.c);
 
-        let instr: Instr =
-            match local {
-                x if x == Fp2Opcode::ADD as usize => Instr::Ext(Box::new(Fp2ArithInstr::new(
-                    ModOp::Add,
-                    rd_reg,
-                    rs1_reg,
-                    rs2_reg,
-                    info.num_limbs,
-                    info.modulus_bytes.clone(),
-                ))),
-                x if x == Fp2Opcode::SUB as usize => Instr::Ext(Box::new(Fp2ArithInstr::new(
-                    ModOp::Sub,
-                    rd_reg,
-                    rs1_reg,
-                    rs2_reg,
-                    info.num_limbs,
-                    info.modulus_bytes.clone(),
-                ))),
-                x if x == Fp2Opcode::SETUP_ADDSUB as usize => Instr::Ext(Box::new(
-                    Fp2SetupInstr::new(rd_reg, rs1_reg, rs2_reg, info.num_limbs),
-                )),
-                x if x == Fp2Opcode::MUL as usize => Instr::Ext(Box::new(Fp2ArithInstr::new(
-                    ModOp::Mul,
-                    rd_reg,
-                    rs1_reg,
-                    rs2_reg,
-                    info.num_limbs,
-                    info.modulus_bytes.clone(),
-                ))),
-                x if x == Fp2Opcode::DIV as usize => Instr::Ext(Box::new(Fp2ArithInstr::new(
-                    ModOp::Div,
-                    rd_reg,
-                    rs1_reg,
-                    rs2_reg,
-                    info.num_limbs,
-                    info.modulus_bytes.clone(),
-                ))),
-                x if x == Fp2Opcode::SETUP_MULDIV as usize => Instr::Ext(Box::new(
-                    Fp2SetupInstr::new(rd_reg, rs1_reg, rs2_reg, info.num_limbs),
-                )),
-                _ => return None,
-            };
+        let instr: Instr = match local {
+            x if x == Fp2Opcode::ADD as usize => Instr::Ext(Box::new(Fp2ArithInstr::new(
+                ModOp::Add,
+                rd_reg,
+                rs1_reg,
+                rs2_reg,
+                info.num_limbs,
+                info.modulus_bytes.clone(),
+            ))),
+            x if x == Fp2Opcode::SUB as usize => Instr::Ext(Box::new(Fp2ArithInstr::new(
+                ModOp::Sub,
+                rd_reg,
+                rs1_reg,
+                rs2_reg,
+                info.num_limbs,
+                info.modulus_bytes.clone(),
+            ))),
+            x if x == Fp2Opcode::SETUP_ADDSUB as usize => Instr::Ext(Box::new(Fp2SetupInstr::new(
+                rd_reg,
+                rs1_reg,
+                rs2_reg,
+                info.num_limbs,
+                info.modulus_bytes.clone(),
+            ))),
+            x if x == Fp2Opcode::MUL as usize => Instr::Ext(Box::new(Fp2ArithInstr::new(
+                ModOp::Mul,
+                rd_reg,
+                rs1_reg,
+                rs2_reg,
+                info.num_limbs,
+                info.modulus_bytes.clone(),
+            ))),
+            x if x == Fp2Opcode::DIV as usize => Instr::Ext(Box::new(Fp2ArithInstr::new(
+                ModOp::Div,
+                rd_reg,
+                rs1_reg,
+                rs2_reg,
+                info.num_limbs,
+                info.modulus_bytes.clone(),
+            ))),
+            x if x == Fp2Opcode::SETUP_MULDIV as usize => Instr::Ext(Box::new(Fp2SetupInstr::new(
+                rd_reg,
+                rs1_reg,
+                rs2_reg,
+                info.num_limbs,
+                info.modulus_bytes.clone(),
+            ))),
+            _ => return None,
+        };
 
         Some(LiftedInstr::Body(InstrAt {
             pc,
