@@ -147,8 +147,21 @@ pub fn build_rust_staticlib(
     lib_name: &str,
     crate_name: &str,
 ) -> PathBuf {
+    build_rust_staticlib_with_features(manifest_path, target_dir, lib_name, crate_name, &[])
+}
+
+/// Build a Rust staticlib crate with the requested Cargo features in a private
+/// target directory and return the expected archive path.
+pub fn build_rust_staticlib_with_features(
+    manifest_path: &Path,
+    target_dir: &Path,
+    lib_name: &str,
+    crate_name: &str,
+    features: &[&str],
+) -> PathBuf {
     let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
-    let output = Command::new(&cargo)
+    let mut command = Command::new(&cargo);
+    command
         .args([
             "build",
             "--release",
@@ -158,7 +171,11 @@ pub fn build_rust_staticlib(
         ])
         .arg(manifest_path)
         .arg("--target-dir")
-        .arg(target_dir)
+        .arg(target_dir);
+    if !features.is_empty() {
+        command.args(["--features", &features.join(",")]);
+    }
+    let output = command
         .output()
         .unwrap_or_else(|e| panic!("failed to spawn cargo for {crate_name}: {e}"));
 
