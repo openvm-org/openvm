@@ -1502,6 +1502,7 @@ impl CProject {
             writeln!(src, "}}").unwrap();
             writeln!(src).unwrap();
         }
+        writeln!(src, "uint32_t rv_profile_compatible(void);").unwrap();
         writeln!(src, "__attribute__((visibility(\"default\"), used))").unwrap();
         writeln!(src, "uint32_t rv_profile_compatible(void) {{").unwrap();
         writeln!(src, "  return {}u;", u32::from(self.profile_execution)).unwrap();

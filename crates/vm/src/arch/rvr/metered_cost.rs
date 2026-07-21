@@ -92,12 +92,7 @@ impl RvrMeteredCostInstance<'_> {
         let metrics = ExecutionMetricTimer::start(ExecutionMetric::MeteredCost);
         let result = tracing::info_span!("execute_metered_cost")
             .in_scope(|| {
-                execute_metered_cost(
-                    &self.compiled,
-                    &self.runtime_hooks,
-                    &mut vm_state,
-                    profile,
-                )
+                execute_metered_cost(&self.compiled, &self.runtime_hooks, &mut vm_state, profile)
             })
             .map_err(map_rvr_execute_error)?;
         #[cfg(feature = "metrics")]

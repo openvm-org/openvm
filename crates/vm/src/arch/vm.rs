@@ -851,7 +851,7 @@ where
             num_airs: widths.len(),
             pc_to_chip: build_pc_to_chip(exe, &self.inventory, executor_idx_to_air_idx)
                 .map_err(map_rvr_compile_error)?,
-            chip_widths: Some(widths.clone()),
+            chip_widths: Some(widths),
         };
         let compiled =
             compile_metered_cost_profiled(exe, extensions.lifters(), &chips, guest_debug_map)
@@ -861,7 +861,6 @@ where
             initial_image: RvrInitialImage::from(exe),
             runtime_hooks: extensions.into_runtime_hooks(),
             compiled,
-            widths,
         })
     }
 }
