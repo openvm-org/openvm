@@ -11,7 +11,7 @@ use tracing::instrument;
 
 use crate::{
     arch::{AddressSpaceHostConfig, AddressSpaceHostLayout, MemoryConfig, BLOCK_FE_WIDTH},
-    system::{memory::TimestampedValues, TouchedMemory},
+    system::{TouchedBlock, TouchedMemory},
 };
 
 mod basic;
@@ -314,11 +314,11 @@ impl<M: LinearMemory> AddressMap<M> {
     /// `touched` is the [`TouchedMemory`] produced by `TracingMemory::finalize`; its `ptr` is in
     /// AS-native cells and each block spans `BLOCK_FE_WIDTH` cells.
     pub fn extend_touched_pages_from_touched<F>(&mut self, touched: &TouchedMemory<F>) {
-        for &((addr_space, ptr), _) in touched.iter() {
-            let cell_size = self.config[addr_space as usize].layout.size();
-            let start = ptr as usize * cell_size;
+        for block in touched.iter() {
+            let cell_size = self.config[block.address_space as usize].layout.size();
+            let start = block.ptr as usize * cell_size;
             let len = BLOCK_FE_WIDTH * cell_size;
-            self.touched_pages[addr_space as usize].mark_byte_range(start, len);
+            self.touched_pages[block.address_space as usize].mark_byte_range(start, len);
         }
     }
 }
@@ -751,7 +751,12 @@ impl TracingMemory {
                             cell_size,
                         ))
                 });
-                ((addr_space, ptr), TimestampedValues { timestamp, values })
+                TouchedBlock {
+                    address_space: addr_space,
+                    ptr,
+                    timestamp,
+                    values,
+                }
             })
             .collect()
     }

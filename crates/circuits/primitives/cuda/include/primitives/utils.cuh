@@ -2,8 +2,10 @@
 
 #include "primitives/constants.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <cuda_runtime.h>
+#include <utility>
 
 // Kernel to fill size-n buffer with a certain value
 template <typename T> __global__ void fill_buffer(T *buffer, T value, uint32_t n) {
@@ -66,6 +68,20 @@ template <typename T> __device__ __host__ __forceinline__ T d_div_ceil(T a, T b)
 
 template <typename T> __device__ __host__ __forceinline__ T next_multiple_of(T a, T b) {
     return d_div_ceil(a, b) * b;
+}
+
+// Launch params for grid-stride kernels: `threads_per_block`-wide blocks with
+// the grid capped at `max_blocks`, so oversize inputs iterate in the kernel's
+// stride loop instead of growing the grid with the input. `count` must be
+// nonzero. Unlike `kernel_launch_params` (launcher.cuh), which launches one
+// thread per element with an unbounded grid.
+inline std::pair<dim3, dim3> grid_stride_launch_params(
+    size_t count,
+    size_t threads_per_block,
+    size_t max_blocks
+) {
+    size_t blocks = std::min(d_div_ceil(count, threads_per_block), max_blocks);
+    return std::make_pair(dim3(blocks, 1, 1), dim3(threads_per_block, 1, 1));
 }
 
 // UB-free 64-bit rotate left. (-(n)) & 63 equals (64 - n) % 64, so when

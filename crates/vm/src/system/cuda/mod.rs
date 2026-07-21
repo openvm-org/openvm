@@ -87,11 +87,17 @@ impl SystemChipComplex<DenseRecordArena, GpuBackend> for SystemChipInventoryGPU 
             touched_memory,
         } = system_records;
 
-        let program_ctx = self.program.generate_proving_ctx(filtered_exec_frequencies);
+        let program_ctx = {
+            let _span = tracing::info_span!("program_trace_gen").entered();
+            self.program.generate_proving_ctx(filtered_exec_frequencies)
+        };
 
         self.connector.cpu_chip.begin(from_state);
         self.connector.cpu_chip.end(to_state, exit_code);
-        let connector_ctx = self.connector.generate_proving_ctx(());
+        let connector_ctx = {
+            let _span = tracing::info_span!("connector_trace_gen").entered();
+            self.connector.generate_proving_ctx(())
+        };
 
         let memory_ctxs = self.memory_inventory.generate_proving_ctxs(touched_memory);
 

@@ -242,6 +242,32 @@ pub mod inventory {
         ))
     }
 
+    extern "C" {
+        fn _inventory_to_merkle_records(
+            d_out_records: *const u32,
+            num_records: usize,
+            d_merkle_records: *mut u32,
+            stream: cudaStream_t,
+        ) -> i32;
+    }
+
+    /// Converts merged inventory records (boundary layout) into Merkle
+    /// touched-block records on device. `d_merkle_records` must hold exactly
+    /// `num_records * MERKLE_TOUCHED_BLOCK_WIDTH` words.
+    pub unsafe fn to_merkle_records(
+        d_out_records: &DeviceBuffer<u32>,
+        num_records: usize,
+        d_merkle_records: &DeviceBuffer<u32>,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_inventory_to_merkle_records(
+            d_out_records.as_ptr(),
+            num_records,
+            d_merkle_records.as_mut_ptr(),
+            stream,
+        ))
+    }
+
     pub unsafe fn merge_records_get_temp_bytes(
         d_flags: &DeviceBuffer<u32>,
         in_num_records: usize,
@@ -259,6 +285,34 @@ pub mod inventory {
 
 pub mod program {
     use super::*;
+
+    extern "C" {
+        fn _program_fill_frequencies(
+            d_freqs: *const u32,
+            filtered_len: usize,
+            d_out: *mut F,
+            height: usize,
+            stream: cudaStream_t,
+        ) -> i32;
+    }
+
+    /// Converts raw u32 execution frequencies to field elements on device,
+    /// zero-filling `[filtered_len, height)`.
+    pub unsafe fn fill_frequencies(
+        d_freqs: &DeviceBuffer<u32>,
+        filtered_len: usize,
+        d_out: &DeviceBuffer<F>,
+        height: usize,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_program_fill_frequencies(
+            d_freqs.as_ptr(),
+            filtered_len,
+            d_out.as_mut_ptr(),
+            height,
+            stream,
+        ))
+    }
 
     extern "C" {
         fn _program_cached_tracegen(
