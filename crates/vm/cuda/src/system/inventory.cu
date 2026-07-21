@@ -217,3 +217,46 @@ extern "C" int _inventory_merge_records_get_temp_bytes(
     *h_temp_bytes_out = temp_bytes;
     return CHECK_KERNEL();
 }
+
+/// Width in u32 words of one Merkle touched-block record:
+/// (address_space, ptr, timestamp, values[DIGEST_WIDTH]).
+/// Must match MERKLE_TOUCHED_BLOCK_WIDTH on the Rust side.
+inline constexpr uint32_t MERKLE_REC_WIDTH = 3 + DIGEST_WIDTH;
+
+/// Converts merged inventory records (boundary layout) into Merkle
+/// touched-block records: drops the second timestamp, taking the max.
+/// Values stay Montgomery-encoded in both layouts.
+__global__ void inventory_to_merkle_records_kernel(
+    uint32_t const *out_records,
+    size_t num_records,
+    uint32_t *merkle_records
+) {
+    size_t stride = gridDim.x * (size_t)blockDim.x;
+    for (size_t i = blockIdx.x * (size_t)blockDim.x + threadIdx.x; i < num_records;
+         i += stride) {
+        OutRec const &r = ((OutRec const *)out_records)[i];
+        uint32_t *dst = merkle_records + i * MERKLE_REC_WIDTH;
+        dst[0] = r.address_space;
+        dst[1] = r.ptr;
+        dst[2] = max(r.timestamps[0], r.timestamps[1]);
+#pragma unroll
+        for (int j = 0; j < DIGEST_WIDTH; ++j) {
+            dst[3 + j] = r.values[j];
+        }
+    }
+}
+
+extern "C" int _inventory_to_merkle_records(
+    const uint32_t *d_out_records,
+    size_t num_records,
+    uint32_t *d_merkle_records,
+    cudaStream_t stream
+) {
+    if (num_records == 0) {
+        return 0;
+    }
+    auto [grid, block] = grid_stride_launch_params(num_records, 256, 1024);
+    inventory_to_merkle_records_kernel<<<grid, block, 0, stream>>>(
+        d_out_records, num_records, d_merkle_records);
+    return CHECK_KERNEL();
+}
