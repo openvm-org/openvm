@@ -4,7 +4,7 @@ use openvm_circuit::{
     arch::{AddressSpaceHostLayout, MemoryConfig, ADDR_SPACE_OFFSET, BLOCK_FE_WIDTH},
     system::{
         memory::{persistent::BLOCKS_PER_LEAF, AddressMap},
-        TouchedMemory,
+        TouchedBlock, TouchedMemory,
     },
 };
 use openvm_circuit_primitives::Chip;
@@ -13,10 +13,21 @@ use openvm_cuda_common::{
     copy::{cuda_memcpy_on, MemCopyD2H, MemCopyH2D},
     d_buffer::DeviceBuffer,
     memory_manager::MemTracker,
+    pinned,
     stream::GpuDeviceCtx,
 };
 use openvm_instructions::VM_DIGEST_WIDTH;
-use openvm_stark_backend::{p3_field::PrimeCharacteristicRing, prover::AirProvingContext};
+use openvm_stark_backend::{
+    p3_field::PrimeCharacteristicRing,
+    p3_maybe_rayon::prelude::{
+        IndexedParallelIterator, IntoParallelIterator, ParallelIterator, ParallelSlice,
+        ParallelSliceMut,
+    },
+    prover::AirProvingContext,
+};
+
+/// Chunk size for the parallel pack into the upload staging buffer.
+const UPLOAD_PACK_CHUNK: usize = 8 << 20;
 use tracing::instrument;
 
 use super::{
@@ -34,6 +45,13 @@ const _: () = assert!(
     "CUDA memory inventory only supports (BLOCK_FE_WIDTH, VM_DIGEST_WIDTH) == (4, 8)"
 );
 
+// `TouchedBlock<F>` must be exactly the 7-word `InRec` layout in `inventory.cu`
+// so the merge path can upload the vector's bytes without repacking.
+const _: () = assert!(
+    std::mem::size_of::<TouchedBlock<F>>() == (3 + BLOCK_FE_WIDTH) * std::mem::size_of::<u32>(),
+    "TouchedBlock<F> must match the 7-u32-word InRec layout in inventory.cu"
+);
+
 pub struct MemoryInventoryGPU {
     pub device_ctx: GpuDeviceCtx,
     pub boundary: BoundaryChipGPU,
@@ -41,8 +59,52 @@ pub struct MemoryInventoryGPU {
     pub hasher_chip: Arc<Poseidon2PeripheryChipGPU>,
     pub initial_memory: Vec<Arc<DeviceBuffer<u8>>>,
     pub merkle_records: Option<DeviceBuffer<u32>>,
+    upload_staging: PinnedStaging,
     #[cfg(feature = "metrics")]
     pub(super) unpadded_merkle_height: usize,
+}
+
+/// Page-locked host staging for the per-segment memory-image upload.
+///
+/// Copies from pageable memory run at staging-pipeline speed and only return
+/// once the source is consumed; copies from registered memory take the DMA
+/// fast path (~2x) and return immediately. Registering the guest memory
+/// itself would tie a registration to an allocation this module does not own
+/// (freed-while-registered is undefined), so the image is packed into this
+/// owned, once-registered buffer instead: the pack memcpy is parallel and
+/// fully consumes the guest memory before returning, so preflight may mutate
+/// it right away, while the DMA reads the staging asynchronously.
+#[derive(Default)]
+struct PinnedStaging {
+    buf: Vec<u8>,
+    registered: bool,
+}
+
+impl PinnedStaging {
+    /// Returns a staging slice of exactly `len` bytes, growing and
+    /// re-registering the underlying buffer if needed.
+    fn ensure(&mut self, len: usize) -> &mut [u8] {
+        if self.buf.len() < len {
+            if self.registered {
+                pinned::unregister_region(self.buf.as_mut_ptr());
+                self.registered = false;
+            }
+            self.buf = vec![0u8; len];
+            self.registered = pinned::register_region(self.buf.as_mut_ptr(), len);
+            if !self.registered {
+                tracing::debug!("memory-image staging stays pageable ({len} bytes)");
+            }
+        }
+        &mut self.buf[..len]
+    }
+}
+
+impl Drop for PinnedStaging {
+    fn drop(&mut self) {
+        if self.registered {
+            pinned::unregister_region(self.buf.as_mut_ptr());
+        }
+    }
 }
 
 #[repr(C)]
@@ -81,6 +143,7 @@ impl MemoryInventoryGPU {
             hasher_chip,
             initial_memory: Vec::new(),
             merkle_records: None,
+            upload_staging: PinnedStaging::default(),
             #[cfg(feature = "metrics")]
             unpadded_merkle_height: 0,
         }
@@ -89,16 +152,26 @@ impl MemoryInventoryGPU {
     #[instrument(name = "set_initial_memory", skip_all)]
     pub fn set_initial_memory(&mut self, initial_memory: &AddressMap) {
         let mem = MemTracker::start("set initial memory");
-        for (addr_sp, raw_mem) in initial_memory
+        // Only transfer pages that may contain non-zero data; the rest are zero-filled
+        // on-device. The merkle kernel reads the full address-space region, so the device
+        // buffer is full-size and the skipped pages must read as zero.
+        let per_as: Vec<_> = initial_memory
             .get_memory()
             .iter()
-            .map(|mem| mem.as_slice())
             .enumerate()
-        {
-            // Only transfer pages that may contain non-zero data; the rest are zero-filled
-            // on-device. The merkle kernel reads the full address-space region, so the device
-            // buffer is full-size and the skipped pages must read as zero.
-            let runs = initial_memory.touched_pages[addr_sp].touched_byte_ranges(raw_mem.len());
+            .map(|(addr_sp, mem)| {
+                let raw = mem.as_slice();
+                let runs = initial_memory.touched_pages[addr_sp].touched_byte_ranges(raw.len());
+                (raw, runs)
+            })
+            .collect();
+        let total: usize = per_as
+            .iter()
+            .flat_map(|(_, runs)| runs.iter().map(|(s, e)| e - s))
+            .sum();
+        let staging = self.upload_staging.ensure(total);
+        let mut offset = 0usize;
+        for (addr_sp, (raw_mem, runs)) in per_as.into_iter().enumerate() {
             tracing::debug!(
                 "Setting initial memory for address space {}: {} bytes, {} touched run(s)",
                 addr_sp,
@@ -109,17 +182,20 @@ impl MemoryInventoryGPU {
                 DeviceBuffer::new()
             } else {
                 let buf = DeviceBuffer::<u8>::with_capacity_on(raw_mem.len(), &self.device_ctx);
-                // Device-bandwidth memset (cheap) so all un-copied pages read as zero.
                 buf.fill_zero_on(&self.device_ctx)
                     .expect("failed to zero device memory");
                 for (start, end) in runs {
-                    // SAFETY: `touched_byte_ranges` clamps ranges to `raw_mem.len()`, and `buf` has
-                    // the same length, so both the host slice and the device
-                    // offset stay in bounds.
+                    let dst = &mut staging[offset..offset + (end - start)];
+                    offset += end - start;
+                    dst.par_chunks_mut(UPLOAD_PACK_CHUNK)
+                        .zip(raw_mem[start..end].par_chunks(UPLOAD_PACK_CHUNK))
+                        .for_each(|(d, s)| d.copy_from_slice(s));
+                    // SAFETY: runs are clamped to raw_mem.len() and buf has the same
+                    // length; dst is exactly end-start bytes of the staging.
                     unsafe {
                         cuda_memcpy_on::<false, true>(
                             buf.as_mut_ptr().add(start) as *mut std::ffi::c_void,
-                            raw_mem[start..end].as_ptr() as *const std::ffi::c_void,
+                            dst.as_ptr() as *const std::ffi::c_void,
                             end - start,
                             &self.device_ctx,
                         )
@@ -147,7 +223,7 @@ impl MemoryInventoryGPU {
     ) -> Vec<AirProvingContext<GpuBackend>> {
         let mem = MemTracker::start("generate mem proving ctxs");
         let partition = touched_memory;
-        let boundary_records = if partition.is_empty() {
+        let unpadded_merkle_height = if partition.is_empty() {
             let leftmost_values = 'left: {
                 let mut res = [F::ZERO; VM_DIGEST_WIDTH];
                 if self.initial_memory[ADDR_SPACE_OFFSET as usize].is_empty() {
@@ -189,28 +265,42 @@ impl MemoryInventoryGPU {
             };
             self.merkle_records = Some(merkle_words.to_device_on(&self.device_ctx).unwrap());
 
+            let unpadded_merkle_height = self
+                .merkle_tree
+                .calculate_unpadded_height(&partition, |b| (b.address_space, b.ptr));
+            #[cfg(feature = "metrics")]
+            {
+                self.unpadded_merkle_height = unpadded_merkle_height;
+            }
             self.boundary
                 .finalize_records::<VM_DIGEST_WIDTH>(Vec::new());
-            0
+            self.prepare_poseidon2_records(0, unpadded_merkle_height);
+            unpadded_merkle_height
         } else {
-            // `inventory.cu` merges 4-cell block records into 8-cell leaf records.
-            let in_records: Vec<MemoryInventoryRecord<BLOCK_FE_WIDTH, 1>> = partition
-                .iter()
-                .map(|&((addr_space, ptr), ts_values)| MemoryInventoryRecord {
-                    address_space: addr_space,
-                    ptr,
-                    timestamps: [ts_values.timestamp],
-                    values: ts_values.values.map(Self::field_to_raw_u32),
-                })
-                .collect();
-            let in_num_records = in_records.len();
+            let _span = tracing::info_span!("mem_merge_records").entered();
+            let in_num_records = partition.len();
+            let in_bytes = in_num_records * std::mem::size_of::<TouchedBlock<F>>();
+            let mut h_in = pinned::take(in_bytes + 4);
+            let align_offset = h_in.as_ptr().align_offset(std::mem::size_of::<u32>());
+            let dirty_len = align_offset + in_bytes;
+            let src: &[u8] =
+                unsafe { std::slice::from_raw_parts(partition.as_ptr() as *const u8, in_bytes) };
+            let dst = &mut h_in[align_offset..align_offset + in_bytes];
+            dst.par_chunks_mut(UPLOAD_PACK_CHUNK)
+                .zip(src.par_chunks(UPLOAD_PACK_CHUNK))
+                .for_each(|(d, s)| d.copy_from_slice(s));
+            // SAFETY: 4-aligned by `align_offset`, within the buffer.
+            let in_words: &[u32] = unsafe {
+                std::slice::from_raw_parts(
+                    h_in.as_ptr().add(align_offset) as *const u32,
+                    in_bytes / std::mem::size_of::<u32>(),
+                )
+            };
             let out_words = in_num_records
                 * (std::mem::size_of::<MemoryInventoryRecord<VM_DIGEST_WIDTH, BLOCKS_PER_LEAF>>()
                     / std::mem::size_of::<u32>());
-            let d_in_records = in_records
-                .to_device_on(&self.device_ctx)
-                .unwrap()
-                .as_buffer::<u32>();
+            let d_in_records = in_words.to_device_on(&self.device_ctx).unwrap();
+            pinned::give_back(h_in, dirty_len);
             let d_tmp_records = DeviceBuffer::<u32>::with_capacity_on(out_words, &self.device_ctx);
             let d_out_records = DeviceBuffer::<u32>::with_capacity_on(out_words, &self.device_ctx);
             let d_out_num_records = DeviceBuffer::<usize>::with_capacity_on(1, &self.device_ctx);
@@ -254,68 +344,91 @@ impl MemoryInventoryGPU {
                 .expect("merge_records failed");
             }
 
+            // The merged record count is a pure function of input adjacency
+            // (the device merge flags a record iff its (address_space,
+            // ptr / VM_DIGEST_WIDTH) differs from its predecessor's, and the
+            // partition is sorted), so it can be computed here and the
+            // mid-merge D2H sync dropped entirely.
+            let out_num_records = 1
+                + (1..in_num_records)
+                    .into_par_iter()
+                    .filter(|&i| {
+                        let (a, b) = (&partition[i], &partition[i - 1]);
+                        (a.address_space, a.ptr / VM_DIGEST_WIDTH as u32)
+                            != (b.address_space, b.ptr / VM_DIGEST_WIDTH as u32)
+                    })
+                    .count();
+
+            // Host work overlapping the merge kernels: neither the unpadded
+            // height scan nor the Poseidon2 records buffer depends on the
+            // merge kernels.
+            let unpadded_merkle_height = self
+                .merkle_tree
+                .calculate_unpadded_height(&partition, |b| (b.address_space, b.ptr));
+            #[cfg(feature = "metrics")]
+            {
+                self.unpadded_merkle_height = unpadded_merkle_height;
+            }
+            {
+                let _span = tracing::info_span!("poseidon2_prepare").entered();
+                self.prepare_poseidon2_records(out_num_records, unpadded_merkle_height);
+            }
+
+            // Cross-check the host-computed count against the device merge in
+            // debug builds (a mismatch would corrupt the boundary trace).
+            #[cfg(debug_assertions)]
+            {
+                let device_count = d_out_num_records.to_host_on(&self.device_ctx).unwrap()[0];
+                assert_eq!(device_count, out_num_records, "merged-count mismatch");
+            }
+
             // Send records to boundary chip
-            let out_num_records = d_out_num_records.to_host_on(&self.device_ctx).unwrap()[0];
             self.boundary
                 .finalize_records_device::<VM_DIGEST_WIDTH>(d_out_records, out_num_records);
 
-            // Send records to memory merkle tree
-            let out_records = self
-                .boundary
-                .records()
-                .to_host_on(&self.device_ctx)
-                .unwrap();
-            let record_words = 2 + BLOCKS_PER_LEAF + VM_DIGEST_WIDTH;
-            let mut merkle_records = Vec::with_capacity(out_num_records);
-            for i in 0..out_num_records {
-                let base = i * record_words;
-                let mut values = [0u32; VM_DIGEST_WIDTH];
-                values.copy_from_slice(
-                    &out_records
-                        [base + 2 + BLOCKS_PER_LEAF..base + 2 + BLOCKS_PER_LEAF + VM_DIGEST_WIDTH],
-                );
-                let timestamp = *out_records[base + 2..base + 2 + BLOCKS_PER_LEAF]
-                    .iter()
-                    .max()
-                    .unwrap();
-                let record = MemoryMerkleRecord {
-                    address_space: out_records[base],
-                    ptr: out_records[base + 1],
-                    timestamp,
-                    values,
-                };
-                merkle_records.push(record);
-            }
-            let merkle_words: &[u32] = unsafe {
-                std::slice::from_raw_parts(
-                    merkle_records.as_ptr() as *const u32,
-                    merkle_records.len() * MERKLE_TOUCHED_BLOCK_WIDTH,
+            // Send records to memory merkle tree: convert boundary-layout
+            // records to Merkle touched-block records on device (the merged
+            // records already live there; a host round-trip would serialize
+            // on the stream and rebuild the buffer one record at a time).
+            let d_merkle_records = DeviceBuffer::<u32>::with_capacity_on(
+                out_num_records * MERKLE_TOUCHED_BLOCK_WIDTH,
+                &self.device_ctx,
+            );
+            unsafe {
+                inventory::to_merkle_records(
+                    self.boundary.records(),
+                    out_num_records,
+                    &d_merkle_records,
+                    self.device_ctx.stream.as_raw(),
                 )
-            };
-            self.merkle_records = Some(merkle_words.to_device_on(&self.device_ctx).unwrap());
-            out_num_records
+                .expect("inventory_to_merkle_records failed");
+            }
+            self.merkle_records = Some(d_merkle_records);
+            unpadded_merkle_height
         };
 
-        let unpadded_merkle_height = self.merkle_tree.calculate_unpadded_height(&partition);
-        #[cfg(feature = "metrics")]
-        {
-            self.unpadded_merkle_height = unpadded_merkle_height;
-        }
-
-        self.prepare_poseidon2_records(boundary_records, unpadded_merkle_height);
         mem.tracing_info("merkle update");
-        self.merkle_tree.finalize();
-        let merkle_proof_ctx = self.merkle_tree.update_with_touched_blocks(
-            unpadded_merkle_height,
-            self.merkle_records
-                .as_ref()
-                .expect("missing merkle records"),
-            partition.is_empty(),
-        );
+        let merkle_proof_ctx = {
+            let _span = tracing::info_span!("merkle_update").entered();
+            self.merkle_tree.finalize();
+            self.merkle_tree.update_with_touched_blocks(
+                unpadded_merkle_height,
+                self.merkle_records
+                    .as_ref()
+                    .expect("missing merkle records"),
+                partition.is_empty(),
+            )
+        };
         mem.tracing_info("boundary tracegen");
-        let ret = vec![self.boundary.generate_proving_ctx(()), merkle_proof_ctx];
+        let ret = {
+            let _span = tracing::info_span!("boundary_trace_gen").entered();
+            vec![self.boundary.generate_proving_ctx(()), merkle_proof_ctx]
+        };
         mem.tracing_info("dropping merkle tree");
-        self.merkle_tree.drop_subtrees();
+        {
+            let _span = tracing::info_span!("merkle_drop").entered();
+            self.merkle_tree.drop_subtrees();
+        }
         self.initial_memory = Vec::new();
         mem.emit_metrics();
         ret
@@ -350,9 +463,10 @@ mod tests {
                 merkle::MerkleTree,
                 offline_checker::pack_u8_block_value,
                 online::{GuestMemory, PAGE_SIZE},
-                ptr_bits_from_address_height, AddressMap, TimestampedValues,
+                ptr_bits_from_address_height, AddressMap,
             },
             poseidon2::Poseidon2PeripheryChip,
+            TouchedBlock,
         },
     };
     use openvm_cuda_backend::prelude::F;
@@ -476,20 +590,18 @@ mod tests {
         let expected_root = cpu_merkle_root(&final_memory.memory, &mem_config);
 
         let touched_memory = vec![
-            (
-                (RV64_MEMORY_AS, 0),
-                TimestampedValues {
-                    timestamp: 1,
-                    values: pack_u8_block_value(&touched_bytes.map(F::from_u8)),
-                },
-            ),
-            (
-                (RV64_MEMORY_AS, BLOCK_FE_WIDTH as u32),
-                TimestampedValues {
-                    timestamp: 3,
-                    values: pack_u8_block_value(&touched_bytes_late.map(F::from_u8)),
-                },
-            ),
+            TouchedBlock {
+                address_space: RV64_MEMORY_AS,
+                ptr: 0,
+                timestamp: 1,
+                values: pack_u8_block_value(&touched_bytes.map(F::from_u8)),
+            },
+            TouchedBlock {
+                address_space: RV64_MEMORY_AS,
+                ptr: BLOCK_FE_WIDTH as u32,
+                timestamp: 3,
+                values: pack_u8_block_value(&touched_bytes_late.map(F::from_u8)),
+            },
         ];
         let ctxs = run_inventory(&mem_config, &memory.memory, touched_memory);
         let boundary_ctx = ctxs.first().expect("missing boundary ctx");
