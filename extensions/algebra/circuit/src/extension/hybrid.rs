@@ -50,7 +50,7 @@ pub struct HybridModularChip<F, const BLOCKS: usize> {
 impl<const BLOCKS: usize> Chip<DenseRecordArena, GpuBackend> for HybridModularChip<F, BLOCKS> {
     fn generate_proving_ctx(&self, mut arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         let total_input_limbs =
-            self.cpu.inner.num_inputs() * self.cpu.inner.expr.canonical_num_limbs();
+            self.cpu.inner.num_inputs() * self.cpu.inner.expr.program().canonical_num_limbs();
         let layout = AdapterCoreLayout::with_metadata(FieldExpressionMetadata::<
             F,
             Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS>,
@@ -260,7 +260,7 @@ pub struct HybridFp2Chip<F, const BLOCKS: usize> {
 impl<const BLOCKS: usize> Chip<DenseRecordArena, GpuBackend> for HybridFp2Chip<F, BLOCKS> {
     fn generate_proving_ctx(&self, mut arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
         let total_input_limbs =
-            self.cpu.inner.num_inputs() * self.cpu.inner.expr.canonical_num_limbs();
+            self.cpu.inner.num_inputs() * self.cpu.inner.expr.program().canonical_num_limbs();
         let layout = AdapterCoreLayout::with_metadata(FieldExpressionMetadata::<
             F,
             Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS>,

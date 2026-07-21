@@ -12,7 +12,7 @@ use openvm_instructions::{
     program::DEFAULT_PC_STEP,
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
 };
-use openvm_mod_circuit_builder::{run_field_expression_precomputed, FieldExpr};
+use openvm_mod_circuit_builder::{run_field_expression_precomputed, FieldExpressionProgram};
 use openvm_platform::memory::MEM_SIZE;
 use openvm_riscv_circuit::adapters::rv64_bytes_to_u32;
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -70,7 +70,7 @@ macro_rules! generate_fp2_dispatch {
 macro_rules! dispatch {
     ($execute_impl:ident,$execute_generic_impl:ident,$execute_setup_impl:ident,$pre_compute:ident,$op:ident) => {
         if let Some(op) = $op {
-            let modulus = &$pre_compute.expr.prime;
+            let modulus = $pre_compute.program.prime();
             if IS_FP2 {
                 if let Some(field_type) = get_fp2_field_type(modulus) {
                     generate_fp2_dispatch!(
@@ -145,7 +145,7 @@ macro_rules! dispatch {
 #[derive(AlignedBytesBorrow, Clone)]
 #[repr(C)]
 struct FieldExpressionPreCompute<'a> {
-    expr: &'a FieldExpr,
+    program: &'a FieldExpressionProgram,
     rs_addrs: [u8; 2],
     a: u8,
     flag_idx: u8,
@@ -179,8 +179,8 @@ impl<'a, const BLOCKS: usize, const IS_FP2: bool> FieldExprVecHeapExecutor<BLOCK
 
         let local_opcode = opcode.local_opcode_idx(self.inner.offset);
 
-        let needs_setup = self.inner.expr.needs_setup();
-        let mut flag_idx = self.inner.expr.num_flags() as u8;
+        let needs_setup = self.inner.program().needs_setup();
+        let mut flag_idx = self.inner.program().num_flags() as u8;
         if needs_setup {
             if let Some(opcode_position) = self
                 .inner
@@ -198,7 +198,7 @@ impl<'a, const BLOCKS: usize, const IS_FP2: bool> FieldExprVecHeapExecutor<BLOCK
         *data = FieldExpressionPreCompute {
             a: a as u8,
             rs_addrs,
-            expr: &self.inner.expr,
+            program: self.inner.program(),
             flag_idx,
         };
 
@@ -416,7 +416,7 @@ unsafe fn execute_e12_generic_impl<CTX: ExecutionCtxTrait, const BLOCKS: usize>(
     let read_data_dyn: DynArray<u8> = read_data.into();
 
     let writes = run_field_expression_precomputed::<true>(
-        pre_compute.expr,
+        pre_compute.program,
         pre_compute.flag_idx as usize,
         &read_data_dyn.0,
     );
@@ -466,7 +466,7 @@ unsafe fn execute_e12_setup_impl<
         BigUint::from_bytes_le(read_data[0].as_flattened())
     };
 
-    if input_prime != pre_compute.expr.prime {
+    if &input_prime != pre_compute.program.prime() {
         let err = ExecutionError::Fail {
             pc,
             msg: "ModularSetup: mismatched prime",
@@ -477,7 +477,7 @@ unsafe fn execute_e12_setup_impl<
     let read_data_dyn: DynArray<u8> = read_data.into();
 
     let writes = run_field_expression_precomputed::<true>(
-        pre_compute.expr,
+        pre_compute.program,
         pre_compute.flag_idx as usize,
         &read_data_dyn.0,
     );

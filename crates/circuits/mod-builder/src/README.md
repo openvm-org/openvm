@@ -85,7 +85,8 @@ The `ExprBuilder` struct stores the constraints and computes associated to a sin
 Every `FieldVariable` stores a shared reference to an `ExprBuilder` and it mutates the builder as needed.
 
 When we are done building the circuit, the `ExprBuilder` has all the data necessary to build the circuit.
-We can pass the `ExprBuilder` into the `FieldExpr` constructor to build an AIR.
+We first finalize it as a `FieldExpressionProgram`, which can be executed without AIR metadata.
+Passing that program and a range bus to `FieldExpr::new` builds the AIR.
 
 ## The Select operation
 
@@ -97,8 +98,8 @@ Select is implemented as $s x + (1 - s) y$.
 
 Some chips have a setup instruction that verifies the modulus, along with any other relevant constants.
 Mod Builder supports chips with setup instructions.
-- If you call `FieldExpr::new` with `needs_setup = true` then the chip will have a setup instruction that verifies the modulus.
-- If you call `FieldExpr::new_with_setup_values` with `needs_setup = true` and pass in a `Vec` of setup values, then the chip will have a setup instruction that verifies the modulus as well as the values of the constants provided in the constructor as setup values.
+- If you call `FieldExpressionProgram::new` with `needs_setup = true`, the program has a setup instruction that verifies the modulus.
+- If you call `FieldExpressionProgram::new_with_setup_values` with `needs_setup = true` and pass in a `Vec` of setup values, the setup instruction also verifies those values.
 
 ## Notes on flags and setup
 
@@ -169,11 +170,11 @@ See the [examples section](#examples) for code examples to follow along with.
    Usually you don't need to do this because variables are auto-saved when there is a possibility of overflow (i.e. when the carry for any of the limbs overflows).
    But it gives greater control over how the expression is broken down into constraints, if that's needed.
 
-7. Finally, pull out a copy of the builder as follows: `let builder = builder.borrow().clone()`, and pass it into the appropriate `FieldExpr` constructor:
-    - If your chip has no setup instruction, use `FieldExpr::new(builder, range_bus, false)`.
-    - If your chip has a setup instruction that only checks if the modulus is correct, use `FieldExpr::new(builder, range_bus, true)`.
-    - If your chip has a setup instruction that checks the correctness of more than just the modulus, use `FieldExpr::new_with_setup_values(builder, range_bus, true, setup_values)` where `setup_values` is a `Vec<BigUint>` of values to be used in setup.
-     The setup row should be filled with the modulus followed by the values in `setup_values`.
+7. Finally, pull out a copy of the builder as follows: `let builder = builder.borrow().clone()`, finalize it as a `FieldExpressionProgram`, and pass the program to `FieldExpr::new(program, range_bus)`:
+    - If your chip has no setup instruction, use `FieldExpressionProgram::new(builder, false)`.
+    - If your chip has a setup instruction that only checks the modulus, use `FieldExpressionProgram::new(builder, true)`.
+    - If your chip has a setup instruction that checks additional constants, use `FieldExpressionProgram::new_with_setup_values(builder, true, setup_values)` where `setup_values` is a `Vec<BigUint>`.
+      The setup row should contain the modulus followed by the values in `setup_values`.
 
 ### Examples
 

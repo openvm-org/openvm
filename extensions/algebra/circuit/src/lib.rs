@@ -61,9 +61,9 @@ impl<const BLOCKS: usize, const IS_FP2: bool> FieldExprVecHeapExecutor<BLOCKS, I
         inner: FieldExpressionExecutor<Rv64VecHeapAdapterExecutor<2, BLOCKS, BLOCKS>>,
     ) -> Self {
         let cached_field_type = if IS_FP2 {
-            get_fp2_field_type(&inner.expr.prime)
+            get_fp2_field_type(inner.program().prime())
         } else {
-            get_field_type(&inner.expr.prime)
+            get_field_type(inner.program().prime())
         };
         Self {
             inner,

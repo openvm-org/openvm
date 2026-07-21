@@ -103,18 +103,18 @@ fn is_setup_opcode(local_opcode: usize) -> bool {
 /// Slow-path fallback for EC operations (used for SETUP opcodes and unknown field types).
 #[inline]
 fn compute_ec_slow<const BLOCKS: usize>(
-    expr: &openvm_mod_circuit_builder::FieldExpr,
+    program: &openvm_mod_circuit_builder::FieldExpressionProgram,
     local_opcode: usize,
     read_bytes: &[u8],
 ) -> [[u8; MEMORY_BLOCK_BYTES]; BLOCKS] {
     let flag_idx = if is_setup_opcode(local_opcode) {
         // SETUP operations: pass num_flags so no flag is set
-        expr.num_flags()
+        program.num_flags()
     } else {
         // Single operation chip, flag_idx = 0
         0
     };
-    run_field_expression_precomputed::<true>(expr, flag_idx, read_bytes).into()
+    run_field_expression_precomputed::<true>(program, flag_idx, read_bytes).into()
 }
 
 // Implementation for EcAddNeExecutor
@@ -160,7 +160,7 @@ where
             compute_ec_add_ne_fast::<BLOCKS>(self.cached_field_type, read_data).unwrap_or_else(
                 || {
                     compute_ec_slow::<BLOCKS>(
-                        &self.inner.expr,
+                        self.inner.program(),
                         local_opcode,
                         read_data.as_flattened().as_flattened(),
                     )
@@ -168,7 +168,7 @@ where
             )
         } else {
             compute_ec_slow::<BLOCKS>(
-                &self.inner.expr,
+                self.inner.program(),
                 local_opcode,
                 read_data.as_flattened().as_flattened(),
             )
@@ -230,14 +230,14 @@ where
             compute_ec_double_fast::<BLOCKS>(self.cached_curve_type, read_data).unwrap_or_else(
                 || {
                     compute_ec_slow::<BLOCKS>(
-                        &self.inner.expr,
+                        self.inner.program(),
                         local_opcode,
                         read_data.as_flattened(),
                     )
                 },
             )
         } else {
-            compute_ec_slow::<BLOCKS>(&self.inner.expr, local_opcode, read_data.as_flattened())
+            compute_ec_slow::<BLOCKS>(self.inner.program(), local_opcode, read_data.as_flattened())
         };
 
         self.inner
