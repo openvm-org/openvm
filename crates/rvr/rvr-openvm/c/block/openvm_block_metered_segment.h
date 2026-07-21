@@ -12,8 +12,8 @@ typedef struct MeteredSegmentCheckpointResult {
   uint8_t suspend_signal;
 } MeteredSegmentCheckpointResult;
 
-static __attribute__((preserve_most, cold,
-                      noinline)) MeteredSegmentCheckpointResult
+[[maybe_unused]] static __attribute__((preserve_most, cold,
+                                       noinline)) MeteredSegmentCheckpointResult
 metered_segment_checkpoint(RvState* restrict state, uint32_t check_counter) {
   MeteringState* metering = &state->mode_state;
   metering->check_counter = check_counter;

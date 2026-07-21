@@ -1,6 +1,6 @@
 //! OpenVM IO runtime: ctx (`OpenVmIoState`) borrowed from `VmState`.
 
-use std::{collections::VecDeque, ffi::c_void};
+use std::{collections::VecDeque, ffi::c_void, ops::Range};
 
 #[cfg(not(feature = "unprotected"))]
 use openvm_platform::memory::MEM_SIZE;
@@ -23,34 +23,32 @@ pub struct OpenVmIoState<'a> {
     pub deferrals: &'a mut Vec<DeferralState>,
 }
 
-/// Verify that `[start, start + num_bytes)` fits within AS_MEMORY
-/// (`MEM_SIZE` bytes). Panics with a "Memory access out of bounds"
-/// message on overflow; panicking across `extern "C"` aborts the process,
-/// matching the C-side `abort_oob` termination used by `rd_mem_*`/`wr_mem_*`.
-/// Compiles to a no-op under the `unprotected` feature.
+/// Convert an RV64 memory range to host indices if it fits within AS_MEMORY
+/// (`MEM_SIZE` bytes).
 #[cfg(not(feature = "unprotected"))]
-pub fn check_mem_bounds_range(start: u64, num_bytes: usize) {
-    let start = start as usize;
-    if start > MEM_SIZE || num_bytes > MEM_SIZE - start {
-        panic!(
-            "Memory access out of bounds: start={start} size={num_bytes} memory_size={MEM_SIZE}"
-        );
-    }
+#[inline(always)]
+pub fn checked_mem_bounds_range(start: u64, num_bytes: u64) -> Option<Range<usize>> {
+    let end = start.checked_add(num_bytes)?;
+    (end <= MEM_SIZE as u64).then_some(start as usize..end as usize)
 }
 
 #[cfg(feature = "unprotected")]
 #[inline(always)]
-pub fn check_mem_bounds_range(_start: u64, _num_bytes: usize) {}
+pub fn checked_mem_bounds_range(start: u64, num_bytes: u64) -> Option<Range<usize>> {
+    let start = start as usize;
+    Some(start..start.wrapping_add(num_bytes as usize))
+}
 
 /// Replace the hint stream contents. Called via `ext_hint_stream_set` from extension FFI.
 ///
 /// # Safety
 ///
 /// `ctx` must be a valid `OpenVmIoState` pointer. `data` must point to `len` bytes (or be null).
-pub unsafe extern "C" fn host_hint_stream_set(ctx: *mut c_void, data: *const u8, len: u32) {
+pub unsafe extern "C" fn host_hint_stream_set(ctx: *mut c_void, data: *const u8, len: u64) {
     let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_>) };
     if len > 0 && !data.is_null() {
-        let slice = unsafe { std::slice::from_raw_parts(data, len as usize) };
+        let len = usize::try_from(len).expect("hint stream length must fit in usize");
+        let slice = unsafe { std::slice::from_raw_parts(data, len) };
         io.hint_stream.set_hint_from_slice(slice);
     } else {
         io.hint_stream.clear();

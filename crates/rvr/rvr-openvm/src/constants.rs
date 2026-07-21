@@ -40,12 +40,17 @@ pub const DEFERRAL_PAGE_BUF_CAP: usize = 1 << 16;
 
 /// Generate the `openvm_constants.h` content with compile-time constants
 /// for the C tracing headers.
-pub fn constants_header(text_start: u64, text_end: u64, dispatch_table_size: usize) -> String {
+pub fn constants_header(
+    text_start: u64,
+    text_end: u64,
+    dispatch_table_size: usize,
+    num_airs: Option<u32>,
+) -> String {
     let memory_mask = MEM_SIZE as u64 - 1;
     let byte_space_ptrs_per_leaf_bits = BYTE_SPACE_PTRS_PER_LEAF.ilog2();
     let deferral_ptrs_per_leaf_bits = DEFERRAL_PTRS_PER_LEAF.ilog2();
 
-    format!(
+    let mut header = format!(
         "\
 #pragma once
 #include <stdint.h>
@@ -69,5 +74,11 @@ static constexpr uint32_t TRACER_DEFERRAL_PAGE_BUF_CAP = {DEFERRAL_PAGE_BUF_CAP}
 static constexpr uint32_t TRACER_SEGMENT_CHECK_INSNS = {SEGMENT_CHECK_INSNS};
 static constexpr uint32_t TRACER_MAX_MEM_PAGES_PER_INSN = {MAX_MEM_PAGES_PER_INSN};
 "
-    )
+    );
+    if let Some(num_airs) = num_airs {
+        header.push_str(&format!(
+            "static constexpr uint32_t RV_NUM_AIRS = {num_airs}u;\n"
+        ));
+    }
+    header
 }

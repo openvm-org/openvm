@@ -1412,15 +1412,16 @@ where
 mod phantom {
     use std::{iter::repeat_with, sync::Once};
 
-    use eyre::bail;
+    use eyre::{bail, eyre, WrapErr};
     use openvm_circuit::{
         arch::{PhantomSubExecutor, Streams},
         system::memory::online::GuestMemory,
     };
-    use openvm_instructions::PhantomDiscriminant;
+    use openvm_instructions::{riscv::RV64_MEMORY_AS, PhantomDiscriminant};
+    use openvm_platform::memory::MEM_SIZE;
     use rand::{rngs::StdRng, Rng};
 
-    use crate::adapters::{memory_read, read_rv64_register_as_u32, RV64_REGISTER_NUM_LIMBS};
+    use crate::adapters::{read_rv64_register, RV64_REGISTER_NUM_LIMBS};
 
     const HINT_DWORD_BYTES: usize = RV64_REGISTER_NUM_LIMBS;
 
@@ -1466,10 +1467,21 @@ mod phantom {
                 eprintln!("WARNING: Using fixed-seed RNG for deterministic randomness. Consider security implications for your use case.");
             });
 
-            let byte_len = read_rv64_register_as_u32(memory, a) as usize * HINT_DWORD_BYTES;
+            let num_words: u64 = read_rv64_register(memory, a);
+            let num_bytes: u64 = num_words
+                .checked_mul(HINT_DWORD_BYTES as u64)
+                .ok_or_else(|| eyre!("HINT_RANDOM byte count overflow"))?;
+            if num_bytes > MEM_SIZE as u64 {
+                bail!("HINT_RANDOM byte count {num_bytes} exceeds resource limit {MEM_SIZE}");
+            }
+            let num_bytes = num_bytes as usize;
             streams
                 .hint_stream
-                .set_hint_from_iter(repeat_with(|| rng.random::<u8>()).take(byte_len));
+                .try_set_hint_from_iter(
+                    num_bytes,
+                    repeat_with(|| rng.random::<u8>()).take(num_bytes),
+                )
+                .wrap_err("failed to reserve HINT_RANDOM stream")?;
             Ok(())
         }
     }
@@ -1485,14 +1497,106 @@ mod phantom {
             b: u32,
             _: u16,
         ) -> eyre::Result<()> {
-            let rd = read_rv64_register_as_u32(memory, a);
-            let rs1 = read_rv64_register_as_u32(memory, b);
-            let bytes = (0..rs1)
-                .map(|i| memory_read::<1>(memory, 2, rd + i)[0])
-                .collect::<Vec<u8>>();
-            let peeked_str = String::from_utf8(bytes)?;
+            let ptr = read_rv64_register(memory, a);
+            let len = read_rv64_register(memory, b);
+            let bytes = memory
+                .checked_u8_slice(RV64_MEMORY_AS, ptr, len)
+                .map_err(|error| eyre!("PRINT_STR {error}"))?;
+            let peeked_str = std::str::from_utf8(bytes)?;
             print!("{peeked_str}");
             Ok(())
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use openvm_circuit::{
+            arch::{MemoryConfig, Streams},
+            system::memory::online::{AddressMap, GuestMemory},
+        };
+        use openvm_instructions::riscv::{
+            RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS,
+        };
+        use rand::{rngs::StdRng, SeedableRng};
+
+        use super::*;
+        use crate::adapters::memory_write;
+
+        const OPERAND_A_REG: u32 = RV64_REGISTER_NUM_LIMBS as u32;
+        const OPERAND_B_REG: u32 = 2 * RV64_REGISTER_NUM_LIMBS as u32;
+
+        fn memory_with_operands(first: u64, second: u64) -> GuestMemory {
+            let mut config = MemoryConfig::default();
+            config.addr_spaces[RV64_MEMORY_AS as usize].num_cells = 512;
+            let mut memory = GuestMemory::new(AddressMap::from_mem_config(&config));
+            memory_write(
+                &mut memory,
+                RV64_REGISTER_AS,
+                OPERAND_A_REG,
+                first.to_le_bytes(),
+            );
+            memory_write(
+                &mut memory,
+                RV64_REGISTER_AS,
+                OPERAND_B_REG,
+                second.to_le_bytes(),
+            );
+            memory
+        }
+
+        fn phantom_error(executor: &dyn PhantomSubExecutor, memory: &GuestMemory) -> String {
+            let mut streams = Streams::default();
+            let mut rng = StdRng::seed_from_u64(0);
+            executor
+                .phantom_execute(
+                    memory,
+                    &mut streams,
+                    &mut rng,
+                    PhantomDiscriminant(0),
+                    OPERAND_A_REG,
+                    OPERAND_B_REG,
+                    0,
+                )
+                .unwrap_err()
+                .to_string()
+        }
+
+        #[test]
+        fn print_str_checks_full_rv64_length_against_guest_memory() {
+            let memory = memory_with_operands(0x400, 1u64 << 32);
+            let message = phantom_error(&Rv64PrintStrSubEx, &memory);
+
+            assert!(
+                message.contains("PRINT_STR memory range out of bounds"),
+                "unexpected error: {message}"
+            );
+        }
+
+        #[test]
+        fn print_str_rejects_full_rv64_range_overflow() {
+            let memory = memory_with_operands(u64::MAX, 1);
+            let message = phantom_error(&Rv64PrintStrSubEx, &memory);
+
+            assert_eq!(message, "PRINT_STR range overflow");
+        }
+
+        #[test]
+        fn hint_random_applies_resource_limit_after_full_rv64_multiplication() {
+            let memory = memory_with_operands(u64::from(u32::MAX) + 1, 0);
+            let message = phantom_error(&Rv64HintRandomSubEx, &memory);
+
+            assert!(
+                message.contains("exceeds resource limit"),
+                "unexpected error: {message}"
+            );
+        }
+
+        #[test]
+        fn hint_random_rejects_full_rv64_byte_count_overflow() {
+            let memory = memory_with_operands(u64::MAX, 0);
+            let message = phantom_error(&Rv64HintRandomSubEx, &memory);
+
+            assert_eq!(message, "HINT_RANDOM byte count overflow");
         }
     }
 }

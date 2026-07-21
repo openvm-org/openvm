@@ -27,15 +27,6 @@ static constexpr uint32_t OUTPUT_KEY_WORDS =
     DEFERRAL_OUTPUT_KEY_BYTES / WORD_SIZE;
 static constexpr uint32_t DIGEST_MEMORY_OPS = DEFERRAL_DIGEST_SIZE / WORD_SIZE;
 
-typedef struct {
-  void* ctx;
-  void (*call_lookup)(void* d_ctx, void* io_ctx, uint32_t def_idx,
-                      const uint8_t* input_commit, uint8_t* output_key_out);
-  void (*output_lookup)(void* d_ctx, void* io_ctx, uint32_t def_idx,
-                        const uint8_t* output_commit, uint8_t* output_raw_out,
-                        uint32_t expected_len);
-} DeferralHostCallbacks;
-
 static thread_local DeferralHostCallbacks g_deferral;
 
 void register_deferral_callbacks(const DeferralHostCallbacks* cb) {
@@ -105,7 +96,12 @@ void rvr_ext_deferral_output(RvState* restrict state, uint64_t output_ptr,
   uint64_t row_words[DIGEST_MEMORY_OPS];
   for (uint64_t row_idx = 0; row_idx < num_data_rows; row_idx++) {
     uint64_t row_byte_base = row_idx * DEFERRAL_DIGEST_SIZE;
+    /* output_raw has output_len bytes and row_idx is bounded by
+     * output_len / DEFERRAL_DIGEST_SIZE. */
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunsafe-buffer-usage"
     memcpy(row_words, output_raw + row_byte_base, DEFERRAL_DIGEST_SIZE);
+#pragma clang diagnostic pop
     wr_mem_u64_range_traced(state, output_ptr + row_byte_base, row_words,
                             DIGEST_MEMORY_OPS);
   }

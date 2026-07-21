@@ -4,11 +4,11 @@
 #include <assert.h>
 
 static __attribute__((always_inline)) inline int likely(int x) {
-  return __builtin_expect(!!(x), 1);
+  return __builtin_expect(!!(x), 1) != 0;
 }
 
 static __attribute__((always_inline)) inline int unlikely(int x) {
-  return __builtin_expect(!!(x), 0);
+  return __builtin_expect(!!(x), 0) != 0;
 }
 
 static __attribute__((always_inline)) inline void assume(int x) {

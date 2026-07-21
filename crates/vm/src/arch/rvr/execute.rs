@@ -29,7 +29,7 @@ use crate::{arch::VmState, system::memory::online::GuestMemory};
 
 type RegisterIoCtxFn = unsafe extern "C" fn(*mut c_void);
 type RegisterHintStreamSetFn =
-    unsafe extern "C" fn(unsafe extern "C" fn(*mut c_void, *const u8, u32));
+    unsafe extern "C" fn(unsafe extern "C" fn(*mut c_void, *const u8, u64));
 type ExecuteFn = unsafe extern "C" fn(*mut c_void);
 
 /// Error during execution.
@@ -81,6 +81,25 @@ fn require_execution_kind(
         Ok(())
     } else {
         Err(ExecuteError::ExecutionKindMismatch { expected, found })
+    }
+}
+
+fn require_num_airs(
+    compiled: &RvrCompiled,
+    actual: usize,
+    actual_name: &str,
+) -> Result<(), ExecuteError> {
+    let expected = compiled.num_airs().ok_or_else(|| {
+        ExecuteError::InvalidMeteredContext(
+            "compiled metered artifact does not declare its AIR count".to_string(),
+        )
+    })?;
+    if actual == expected as usize {
+        Ok(())
+    } else {
+        Err(ExecuteError::InvalidMeteredContext(format!(
+            "{actual_name} has {actual} entries, but the compiled artifact expects {expected} AIRs"
+        )))
     }
 }
 
@@ -272,6 +291,7 @@ pub(super) fn execute_metered_cost(
     widths: &[u64],
 ) -> Result<RvrMeteredCostResult, ExecuteError> {
     require_execution_kind(compiled, "MeteredCost", &[RvrExecutionKind::MeteredCost])?;
+    require_num_airs(compiled, widths.len(), "chip-width table")?;
     let pc = vm_state.pc();
     let initial_regs = read_rv64_registers(vm_state);
 
@@ -329,6 +349,11 @@ fn execute_metered_impl(
         !allow_suspended || seg_state.suspend_on_segment(),
         "segment-boundary rvr execution requires MeteredCtx::suspend_on_segment"
     );
+    require_num_airs(
+        compiled,
+        seg_state.ctx.trace_heights.len(),
+        "trace-height storage",
+    )?;
 
     let pc = vm_state.pc();
     let initial_regs = read_rv64_registers(vm_state);

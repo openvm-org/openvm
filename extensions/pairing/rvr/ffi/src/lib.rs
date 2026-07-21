@@ -14,7 +14,7 @@ use openvm_pairing_guest::{
     halo2curves_shims::{bls12_381::Bls12_381, bn254::Bn254},
     pairing::{FinalExp, MultiMillerLoop},
 };
-use openvm_platform::WORD_SIZE;
+use openvm_platform::{WORD_SIZE, WORD_SIZE_U32};
 use rvr_openvm_ext_algebra_ffi_common::{BLS12_381_ELEM_BYTES, FIELD_256_BYTES};
 use rvr_openvm_ext_ffi_common::{
     ext_hint_stream_set, rd_mem_u64_range_wrapper, rd_mem_u64_wrapper,
@@ -22,17 +22,19 @@ use rvr_openvm_ext_ffi_common::{
 
 /// BN254 base field element size in bytes.
 const BN254_FQ_BYTES: u64 = FIELD_256_BYTES as u64;
+const BN254_FQ_BYTES_USIZE: usize = FIELD_256_BYTES;
 /// BLS12-381 base field element size in bytes.
 const BLS12_381_FQ_BYTES: u64 = BLS12_381_ELEM_BYTES as u64;
+const BLS12_381_FQ_BYTES_USIZE: usize = BLS12_381_ELEM_BYTES;
 /// G1 affine point: two field coordinates (x, y).
 const G1_AFFINE_COORDS: u64 = 2;
 /// G2 affine point: two Fp2 coordinates, each containing two Fp elements.
 const G2_AFFINE_COORDS: u64 = 4;
 /// Offset of `len` in a guest slice header `(data_ptr, len)`.
-const SLICE_LEN_OFFSET: u64 = WORD_SIZE as u64;
+const SLICE_LEN_OFFSET: u64 = WORD_SIZE_U32 as u64;
 
 unsafe fn set_hint_stream(bytes: &[u8]) {
-    let len: u32 = bytes.len().try_into().unwrap();
+    let len = u64::try_from(bytes.len()).unwrap();
     ext_hint_stream_set(bytes.as_ptr(), len);
 }
 
@@ -52,7 +54,12 @@ unsafe fn read_bytes<const N: usize>(state: *mut c_void, ptr: u64) -> [u8; N] {
     }
     let num_words = N / WORD_SIZE;
     let mut words = vec![0u64; num_words];
-    rd_mem_u64_range_wrapper(state, ptr, words.as_mut_ptr(), num_words as u32);
+    rd_mem_u64_range_wrapper(
+        state,
+        ptr,
+        words.as_mut_ptr(),
+        u32::try_from(num_words).unwrap(),
+    );
     let mut bytes = [0u8; N];
     for (i, &w) in words.iter().enumerate() {
         bytes[i * WORD_SIZE..(i + 1) * WORD_SIZE].copy_from_slice(&w.to_le_bytes());
@@ -62,13 +69,13 @@ unsafe fn read_bytes<const N: usize>(state: *mut c_void, ptr: u64) -> [u8; N] {
 
 /// Read an Fq element from guest memory for BN254.
 unsafe fn read_bn254_fq(state: *mut c_void, ptr: u64) -> Option<bn256::Fq> {
-    let bytes = read_bytes::<{ BN254_FQ_BYTES as usize }>(state, ptr);
+    let bytes = read_bytes::<BN254_FQ_BYTES_USIZE>(state, ptr);
     Option::from(bn256::Fq::from_repr(bytes))
 }
 
 /// Read an Fq element from guest memory for BLS12-381.
 unsafe fn read_bls12_381_fq(state: *mut c_void, ptr: u64) -> Option<bls12_381::Fq> {
-    let bytes = read_bytes::<{ BLS12_381_FQ_BYTES as usize }>(state, ptr);
+    let bytes = read_bytes::<BLS12_381_FQ_BYTES_USIZE>(state, ptr);
     Option::from(bls12_381::Fq::from_repr(bytes.into()))
 }
 

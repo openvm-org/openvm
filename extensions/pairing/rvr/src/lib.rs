@@ -54,7 +54,7 @@ impl ExtInstr for HintFinalExpInstr {
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         let rs1 = ctx.read_reg(self.rs1_reg);
         let rs2 = ctx.read_reg(self.rs2_reg);
-        ctx.extern_call(self.curve.ffi_symbol(), &["state", &rs1, &rs2]);
+        ctx.emit_call(self.curve.ffi_symbol(), &["state", &rs1, &rs2]);
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {

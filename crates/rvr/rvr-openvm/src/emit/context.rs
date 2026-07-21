@@ -76,6 +76,7 @@ pub struct EmitContext {
     indent: usize,
     /// Counter for unique variable names.
     var_counter: u32,
+    uses_raw_memory: bool,
     mode: EmitMode,
     block_abi: BlockAbi,
 }
@@ -87,6 +88,7 @@ impl EmitContext {
             hot_regs,
             indent: 2,
             var_counter: 0,
+            uses_raw_memory: false,
             mode,
             block_abi,
         }
@@ -114,6 +116,10 @@ impl EmitContext {
         std::mem::take(&mut self.buf)
     }
 
+    pub(crate) fn uses_raw_memory(&self) -> bool {
+        self.uses_raw_memory
+    }
+
     pub fn buf(&self) -> &str {
         &self.buf
     }
@@ -129,6 +135,13 @@ impl EmitContext {
         }
         self.buf.push_str(s);
         self.buf.push('\n');
+    }
+
+    /// Flush block-local metering state and tail-call the shared RVR trap.
+    pub fn emit_trap(&mut self) {
+        self.flush_page_locals();
+        let args = self.tail_call_args();
+        self.write_line(&format!("[[clang::musttail]] return rv_trap({args});"));
     }
 
     /// Public ABI name accessor for use by project.rs.
@@ -177,7 +190,7 @@ impl EmitContext {
     /// Read a register with tracing. Returns a C expression for the value.
     pub fn read_reg(&mut self, idx: u8) -> String {
         if idx == 0 {
-            return "0".to_string();
+            return "0ull".to_string();
         }
         if self.hot_regs.contains(&idx) {
             let name = Self::abi_name(idx);
@@ -194,7 +207,7 @@ impl EmitContext {
     /// Read a register WITHOUT tracing (for phantom instructions).
     pub fn read_reg_raw(&mut self, idx: u8) -> String {
         if idx == 0 {
-            return "0".to_string();
+            return "0ull".to_string();
         }
         if self.hot_regs.contains(&idx) {
             Self::abi_name(idx).to_string()
@@ -215,7 +228,7 @@ impl EmitContext {
             return;
         }
         let tmp = self.next_var();
-        self.write_line(&format!("uint64_t {tmp} = {val};"));
+        self.write_line(&format!("uint64_t {tmp} = (uint64_t)({val});"));
         self.write_line(&format!("trace_reg_write(state, {idx}, {tmp});"));
         if self.hot_regs.contains(&idx) {
             let name = Self::abi_name(idx);
@@ -286,6 +299,9 @@ impl EmitContext {
         let value_traced = self.mode.traces_memory_values();
         let (data_func, var_ty) = Self::read_mem_helper(width, signed, value_traced);
         let data_arg = if value_traced { "state" } else { "memory" };
+        if !value_traced {
+            self.uses_raw_memory = true;
+        }
 
         self.write_line(&format!(
             "{var_ty} {var} = {data_func}({data_arg}, {addr});"
@@ -308,6 +324,9 @@ impl EmitContext {
         let value_traced = self.mode.traces_memory_values();
         let (wr_func, cast_ty) = Self::write_mem_helper(width, value_traced);
         let data_arg = if value_traced { "state" } else { "memory" };
+        if !value_traced {
+            self.uses_raw_memory = true;
+        }
 
         if self.mode.traces_memory_pages() {
             self.emit_inline_page_record(&addr, width);
@@ -346,19 +365,19 @@ impl EmitContext {
         self.write_line(&format!("trace_pc(state, 0x{pc:08x}ull);"));
     }
 
-    pub fn extern_call(&mut self, name: &str, args: &[&str]) {
+    pub fn emit_call(&mut self, name: &str, args: &[&str]) {
         self.flush_page_locals();
         let args_str = args.join(", ");
         self.write_line(&format!("{name}({args_str});"));
         self.reload_page_locals();
     }
 
-    pub fn extern_call_without_page_flush(&mut self, name: &str, args: &[&str]) {
+    pub fn emit_call_without_page_flush(&mut self, name: &str, args: &[&str]) {
         let args_str = args.join(", ");
         self.write_line(&format!("{name}({args_str});"));
     }
 
-    pub fn extern_call_expr(&mut self, ret_ty: &str, name: &str, args: &[&str]) -> String {
+    pub fn emit_call_expr(&mut self, ret_ty: &str, name: &str, args: &[&str]) -> String {
         self.flush_page_locals();
         let tmp = self.next_var();
         let args_str = args.join(", ");
@@ -372,7 +391,7 @@ impl EmitContext {
             return;
         }
         if self.mode.has_metered_abi() {
-            self.write_line(&format!("trace_heights[{chip_idx}] += {count_expr};"));
+            self.write_line(&format!("(*trace_heights)[{chip_idx}] += {count_expr};"));
         } else {
             self.write_line(&format!("trace_chip(state, {chip_idx}u, {count_expr});"));
         }
@@ -477,6 +496,10 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext {
         EmitContext::write_line(self, s)
     }
 
+    fn emit_trap(&mut self) {
+        EmitContext::emit_trap(self)
+    }
+
     fn read_mem(&mut self, base: &str, offset: i16, width: u8, signed: bool) -> String {
         EmitContext::read_mem(self, base, offset, width, signed)
     }
@@ -485,16 +508,16 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext {
         EmitContext::write_mem(self, base, offset, val, width);
     }
 
-    fn extern_call(&mut self, name: &str, args: &[&str]) {
-        EmitContext::extern_call(self, name, args);
+    fn emit_call(&mut self, name: &str, args: &[&str]) {
+        EmitContext::emit_call(self, name, args);
     }
 
-    fn extern_call_without_page_flush(&mut self, name: &str, args: &[&str]) {
-        EmitContext::extern_call_without_page_flush(self, name, args);
+    fn emit_call_without_page_flush(&mut self, name: &str, args: &[&str]) {
+        EmitContext::emit_call_without_page_flush(self, name, args);
     }
 
-    fn extern_call_expr(&mut self, ret_ty: &str, name: &str, args: &[&str]) -> String {
-        EmitContext::extern_call_expr(self, ret_ty, name, args)
+    fn emit_call_expr(&mut self, ret_ty: &str, name: &str, args: &[&str]) -> String {
+        EmitContext::emit_call_expr(self, ret_ty, name, args)
     }
 
     fn trace_chip(&mut self, chip_idx: u32, count_expr: &str) {

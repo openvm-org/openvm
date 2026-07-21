@@ -128,7 +128,7 @@ impl<K: SetupKind> ExtInstr for FieldSetupInstr<K> {
         let rs2 = ctx.read_reg(self.rs2_reg);
         let num_limbs = format!("{}u", self.num_limbs);
         let name = format!("rvr_ext_{}_setup", K::c_prefix());
-        ctx.extern_call(&name, &["state", &rd, &rs1, &rs2, &num_limbs]);
+        ctx.emit_call(&name, &["state", &rd, &rs1, &rs2, &num_limbs]);
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -152,7 +152,7 @@ impl<K: IsEqKind> ExtInstr for FieldIsEqInstr<K> {
         let known_suffix = detect_known_field(&self.modulus).and_then(K::known_suffix);
         if let Some(suffix) = known_suffix {
             let name = format!("rvr_ext_{prefix}_iseq_{suffix}");
-            let val = ctx.extern_call_expr("uint32_t", &name, &["state", &rs1, &rs2]);
+            let val = ctx.emit_call_expr("bool", &name, &["state", &rs1, &rs2]);
             ctx.write_reg(self.rd_reg, &val);
         } else {
             let mod_literal = format_c_byte_array(&self.modulus);
@@ -160,11 +160,7 @@ impl<K: IsEqKind> ExtInstr for FieldIsEqInstr<K> {
             ctx.write_line(&format!("static constexpr uint8_t mod_[] = {mod_literal};"));
             let name = format!("rvr_ext_{prefix}_iseq");
             let num_limbs = format!("{}u", self.num_limbs);
-            let val = ctx.extern_call_expr(
-                "uint32_t",
-                &name,
-                &["state", &rs1, &rs2, &num_limbs, "mod_"],
-            );
+            let val = ctx.emit_call_expr("bool", &name, &["state", &rs1, &rs2, &num_limbs, "mod_"]);
             ctx.write_reg(self.rd_reg, &val);
             ctx.write_line("}");
         }
@@ -193,14 +189,14 @@ impl<K: ArithKind> ExtInstr for FieldArithInstr<K> {
         let known_suffix = detect_known_field(&self.modulus).and_then(K::known_suffix);
         if let Some(suffix) = known_suffix {
             let name = format!("rvr_ext_{prefix}_{op_name}_{suffix}");
-            ctx.extern_call(&name, &["state", &rd, &rs1, &rs2]);
+            ctx.emit_call(&name, &["state", &rd, &rs1, &rs2]);
         } else {
             let mod_literal = format_c_byte_array(&self.modulus);
             ctx.write_line("{");
             ctx.write_line(&format!("static constexpr uint8_t mod_[] = {mod_literal};"));
             let name = format!("rvr_ext_{prefix}_{op_name}");
             let num_limbs = format!("{}u", self.num_limbs);
-            ctx.extern_call(&name, &["state", &rd, &rs1, &rs2, &num_limbs, "mod_"]);
+            ctx.emit_call(&name, &["state", &rd, &rs1, &rs2, &num_limbs, "mod_"]);
             ctx.write_line("}");
         }
     }

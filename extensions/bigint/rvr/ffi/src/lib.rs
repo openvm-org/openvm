@@ -327,16 +327,16 @@ int256_alu_fn!(rvr_ext_int256_slt, u256_slt);
 int256_alu_fn!(rvr_ext_int256_sltu, u256_sltu);
 int256_alu_fn!(rvr_ext_int256_mul, u256_mul);
 
-/// Defines an `extern "C"` branch predicate. Returns 1 if the branch is taken.
+/// Defines an `extern "C"` branch predicate.
 macro_rules! int256_branch_fn {
     ($name:ident, $cond:expr) => {
         /// # Safety
         /// `state` must be a valid pointer to the C `RvState` struct.
         #[no_mangle]
-        pub unsafe extern "C" fn $name(state: *mut c_void, rs1_ptr: u64, rs2_ptr: u64) -> u32 {
+        pub unsafe extern "C" fn $name(state: *mut c_void, rs1_ptr: u64, rs2_ptr: u64) -> bool {
             let rs1 = read_int256(state, rs1_ptr);
             let rs2 = read_int256(state, rs2_ptr);
-            ($cond(&rs1, &rs2)) as u32
+            $cond(&rs1, &rs2)
         }
     };
 }
