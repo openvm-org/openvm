@@ -75,14 +75,15 @@ impl ConditionallySelectable for P256Point {
 
 impl ConstantTimeEq for P256Point {
     fn ct_eq(&self, other: &P256Point) -> Choice {
+        let self_is_identity = elliptic_curve::Group::is_identity(self);
+        let other_is_identity = elliptic_curve::Group::is_identity(other);
         // Projective equivalence: (X1*Z2 == X2*Z1) && (Y1*Z2 == Y2*Z1)
-        // Note: this also treats non-canonical encodings of the identity/infinity point
-        // (z = 0 with arbitrary x, y) as equal.
         let x1z2 = <Self as WeierstrassPoint>::x(self) * other.z();
         let x2z1 = <Self as WeierstrassPoint>::x(other) * self.z();
         let y1z2 = self.y() * other.z();
         let y2z1 = other.y() * self.z();
-        x1z2.ct_eq(&x2z1) & y1z2.ct_eq(&y2z1)
+        (self_is_identity & other_is_identity)
+            | (!self_is_identity & !other_is_identity & x1z2.ct_eq(&x2z1) & y1z2.ct_eq(&y2z1))
     }
 }
 
@@ -163,7 +164,7 @@ impl elliptic_curve::Group for P256Point {
     }
 
     fn double(&self) -> Self {
-        self + self
+        <Self as openvm_ecc_guest::Group>::double(self)
     }
 }
 

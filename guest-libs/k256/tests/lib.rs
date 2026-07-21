@@ -270,10 +270,92 @@ mod guest_tests {
 }
 
 mod host_tests {
+    use elliptic_curve::subtle::ConstantTimeEq;
     use hex_literal::hex;
-    use k256::{Scalar as Secp256k1Scalar, Secp256k1Coord, Secp256k1Point};
+    use k256::{Scalar as Secp256k1Scalar, Secp256k1, Secp256k1Coord, Secp256k1Point};
     use openvm_algebra_guest::IntMod;
-    use openvm_ecc_guest::{msm, weierstrass::WeierstrassPoint, Group};
+    use openvm_ecc_guest::{
+        msm,
+        weierstrass::{CachedMulTable, IntrinsicCurve, WeierstrassPoint},
+        CyclicGroup, Group,
+    };
+
+    #[test]
+    fn test_projective_coordinate_contracts() {
+        let generator = Secp256k1Point::GENERATOR;
+        let expected = generator.into_affine_coords().unwrap();
+        assert_eq!(expected.0, generator.x().clone());
+        assert_eq!(expected.1, generator.y().clone());
+
+        let scale = Secp256k1Coord::from_u32(7);
+        let scaled = unsafe {
+            Secp256k1Point::from_xyz_unchecked(
+                generator.x() * &scale,
+                generator.y() * &scale,
+                generator.z() * &scale,
+            )
+        };
+        assert_eq!(scaled.into_affine_coords(), Some(expected));
+        assert!(<Secp256k1Point as WeierstrassPoint>::IDENTITY
+            .into_affine_coords()
+            .is_none());
+
+        let malformed_identity = unsafe {
+            Secp256k1Point::from_xyz_unchecked(
+                Secp256k1Coord::ZERO,
+                Secp256k1Coord::ZERO,
+                Secp256k1Coord::ZERO,
+            )
+        };
+        assert_ne!(malformed_identity, generator);
+        assert!(!bool::from(malformed_identity.ct_eq(&generator)));
+
+        let encoded = serde_json::to_vec(&malformed_identity).unwrap();
+        let decoded: Secp256k1Point = serde_json::from_slice(&encoded).unwrap();
+        assert!(Group::is_identity(&decoded));
+        assert_ne!(decoded, generator);
+    }
+
+    #[test]
+    fn test_cached_mul_table_matches_msm() {
+        let bases = [Secp256k1Point::GENERATOR];
+        let table = CachedMulTable::<Secp256k1>::new_with_prime_order(&bases, 4);
+        for scalar in [0, 1, 2, 3, 7, 15, 16, 255] {
+            let scalar = Secp256k1Scalar::from_u32(scalar);
+            assert_eq!(table.windowed_mul(&[scalar]), msm(&[scalar], &bases));
+        }
+    }
+
+    #[test]
+    fn test_fixed_generator_lincomb_matches_msm() {
+        let point = Secp256k1Point::GENERATOR.double();
+        for (generator_scalar, point_scalar) in [(0, 0), (1, 1), (7, 15), (255, 65_537)] {
+            let generator_scalar = Secp256k1Scalar::from_u32(generator_scalar);
+            let point_scalar = Secp256k1Scalar::from_u32(point_scalar);
+            assert_eq!(
+                <Secp256k1 as IntrinsicCurve>::lincomb_generator(
+                    &generator_scalar,
+                    &point_scalar,
+                    &point,
+                ),
+                msm(
+                    &[generator_scalar, point_scalar],
+                    &[Secp256k1Point::GENERATOR, point]
+                )
+            );
+            assert_eq!(
+                <Secp256k1 as IntrinsicCurve>::lincomb_neg_generator(
+                    &generator_scalar,
+                    &point_scalar,
+                    &point,
+                ),
+                msm(
+                    &[generator_scalar, point_scalar],
+                    &[Secp256k1Point::NEG_GENERATOR, point]
+                )
+            );
+        }
+    }
 
     #[test]
     fn test_host_secp256k1() {

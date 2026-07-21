@@ -88,7 +88,7 @@ where
 
             fn add(self, mut other: EcPoint) -> EcPoint {
                 match self {
-                    Bucket::None => other.clone(),
+                    Bucket::None => other,
                     Bucket::Affine(a) => {
                         other += a;
                         other
@@ -116,7 +116,7 @@ where
         let mut running_sum = EcPoint::IDENTITY;
         for exp in buckets.into_iter().rev() {
             running_sum = exp.add(running_sum);
-            acc = acc.add(&running_sum);
+            acc.add_assign(&running_sum);
         }
     }
     acc
