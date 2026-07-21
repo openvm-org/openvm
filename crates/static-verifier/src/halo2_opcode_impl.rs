@@ -13,10 +13,7 @@
 //! over the tape's cell type; ops that may reduce take [`BbWire`]s (value + bit
 //! bound) and pure gate ops take plain `Fr` values.
 
-use std::{
-    cmp::Ordering,
-    collections::{HashMap, HashSet},
-};
+use std::{cmp::Ordering, collections::HashMap};
 
 use halo2_base::{
     halo2_proofs::{
@@ -634,9 +631,8 @@ pub(crate) struct CalculateOffsetsTape {
 }
 
 impl CalculateOffsetsTape {
-    pub(crate) fn new(lookup_bits: usize, warm: &HashSet<Fr>) -> Self {
+    pub(crate) fn new<'a>(lookup_bits: usize, warm: impl Iterator<Item = &'a Fr>) -> Self {
         let const_cache = warm
-            .iter()
             .map(|&value| {
                 (
                     value,
@@ -1122,12 +1118,12 @@ pub(crate) struct OpcodeMeta {
 /// by earlier nodes). The tape shape depends only on the operand bit bounds,
 /// constant argument values, `lookup_bits`, and the warm set — never on runtime
 /// cell values.
-pub(crate) fn derive_opcode_metadata(
+pub(crate) fn derive_opcode_metadata<'a>(
     opcode: &Halo2Opcode,
     args: &[Fr],
     bits: &[u16],
     lookup_bits: usize,
-    warm: &HashSet<Fr>,
+    warm: impl Iterator<Item = &'a Fr>,
 ) -> OpcodeMeta {
     let mut tape = CalculateOffsetsTape::new(lookup_bits, warm);
     run_op(&mut tape, opcode, args, bits);
@@ -1158,7 +1154,7 @@ pub(crate) fn interpret_op(
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use std::{collections::HashSet, sync::Arc};
 
     use halo2_base::{
         gates::{
@@ -1240,7 +1236,7 @@ mod tests {
             .collect();
         let real_range: Vec<Fr> = lookup_tape(&range)[range_start..].to_vec();
 
-        let mut tape = CalculateOffsetsTape::new(lookup_bits, &warm);
+        let mut tape = CalculateOffsetsTape::new(lookup_bits, warm.iter());
         run_op(&mut tape, &opcode, args, bits);
         assert_eq!(tape.advice, real_ctx, "{name}: context tape");
         assert_eq!(tape.lookups, real_range, "{name}: range tape");
@@ -1268,7 +1264,7 @@ mod tests {
             }
         }
 
-        let meta = derive_opcode_metadata(&opcode, args, bits, lookup_bits, &warm);
+        let meta = derive_opcode_metadata(&opcode, args, bits, lookup_bits, warm.iter());
         assert_eq!(meta.ctx_len, real_ctx.len(), "{name}: meta ctx_len");
         assert_eq!(
             meta.lookups_len,
