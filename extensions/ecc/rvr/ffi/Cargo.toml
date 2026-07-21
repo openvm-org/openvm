@@ -20,4 +20,6 @@ openvm-ecc-circuit.workspace = true
 openvm-mod-circuit-builder.workspace = true
 
 halo2curves-axiom.workspace = true
+
+[dev-dependencies]
 num-bigint.workspace = true
