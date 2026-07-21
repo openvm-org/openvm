@@ -147,6 +147,8 @@ impl Instr for Rv64IInstr {
                 let value = ctx.read_mem(&base, *offset, width.bytes(), *signed);
                 if let Some(rd) = rd {
                     ctx.write_slot(*rd, &value);
+                } else {
+                    ctx.write_line(&format!("(void){value};"));
                 }
             }
             Self::Store {
