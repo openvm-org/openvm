@@ -32,6 +32,7 @@ use crate::{
                 MemoryMerkleChip, MemoryMerkleCols, MerkleTree,
             },
             online::{GuestMemory, LinearMemory},
+            persistent::DirtyLeaves,
             ptr_bits_from_address_height, AddressMap, MemoryImage,
         },
         poseidon2::Poseidon2PeripheryChip,
@@ -88,13 +89,30 @@ fn test(
                 ((address_space, label * (VM_DIGEST_WIDTH as u32)), values)
             })
             .collect();
-    let final_partition = final_partition
+    let final_partition: BTreeMap<_, _> = final_partition
         .into_iter()
         .filter(|((address_space, pointer), _)| {
             touched_labels.contains(&(*address_space, pointer / VM_DIGEST_WIDTH as u32))
         })
         .collect();
-    chip.finalize(initial_memory, &final_partition, &hash_test_chip);
+    // Mirror the boundary chip's dirtiness definition: a touched leaf is dirty iff its
+    // final values differ from its initial values.
+    let dirty_leaves: DirtyLeaves = final_partition
+        .iter()
+        .filter(|((address_space, pointer), values)| {
+            let init_values: [F; VM_DIGEST_WIDTH] = array::from_fn(|i| unsafe {
+                initial_memory.get_f::<F>(*address_space, *pointer + i as u32)
+            });
+            init_values != **values
+        })
+        .map(|(&key, _)| key)
+        .collect();
+    chip.finalize(
+        initial_memory,
+        &final_partition,
+        &dirty_leaves,
+        &hash_test_chip,
+    );
 
     assert_eq!(
         chip.final_state.as_ref().unwrap().final_root,
@@ -147,17 +165,20 @@ fn test(
             address_label,
             initial_values,
         );
-        let final_values = *final_partition
-            .get(&(address_space, address_label * (VM_DIGEST_WIDTH as u32)))
-            .unwrap();
-        interaction(
-            PermutationInteractionType::Send,
-            true,
-            0,
-            as_label,
-            address_label,
-            final_values,
-        );
+        let leaf_ptr = address_label * (VM_DIGEST_WIDTH as u32);
+        let final_values = *final_partition.get(&(address_space, leaf_ptr)).unwrap();
+        // Like the real boundary chip, the dummy references a leaf's final state only
+        // when the leaf is dirty (the final-claim multiplicity is `is_dirty`).
+        if dirty_leaves.contains(&(address_space, leaf_ptr)) {
+            interaction(
+                PermutationInteractionType::Send,
+                true,
+                0,
+                as_label,
+                address_label,
+                final_values,
+            );
+        }
     }
 
     while !(dummy_interaction_trace_rows.len() / (dummy_interaction_air.field_width() + 1))
@@ -315,7 +336,12 @@ fn expand_test_no_accesses() {
         COMPRESSION_BUS,
     );
 
-    chip.finalize(&memory, &BTreeMap::new(), &hash_test_chip);
+    chip.finalize(
+        &memory,
+        &BTreeMap::new(),
+        &DirtyLeaves::default(),
+        &hash_test_chip,
+    );
     let trace = chip.generate_proving_ctx();
     test_cpu_engine()
         .run_test(
@@ -360,7 +386,12 @@ fn expand_test_negative() {
         COMPRESSION_BUS,
     );
 
-    chip.finalize(&memory, &BTreeMap::new(), &hash_test_chip);
+    chip.finalize(
+        &memory,
+        &BTreeMap::new(),
+        &DirtyLeaves::default(),
+        &hash_test_chip,
+    );
     let mut chip_ctx = chip.generate_proving_ctx();
     {
         for row in chip_ctx.common_main.rows_mut() {
@@ -1018,7 +1049,14 @@ fn expand_test_label_rebinding_attack() {
 
     let merkle_bus = PermutationCheckBus::new(MEMORY_MERKLE_BUS);
     let mut chip = MemoryMerkleChip::<VM_DIGEST_WIDTH, _>::new(md, merkle_bus, COMPRESSION_BUS);
-    chip.finalize(&memory.memory, &final_partition_for_chip, &hash_test_chip);
+    // The touched leaf's final values equal its initial ones (the write happened before
+    // the initial snapshot), so no leaf is dirty.
+    chip.finalize(
+        &memory.memory,
+        &final_partition_for_chip,
+        &DirtyLeaves::default(),
+        &hash_test_chip,
+    );
     let mut chip_ctx = chip.generate_proving_ctx();
 
     {
@@ -1097,14 +1135,8 @@ fn expand_test_label_rebinding_attack() {
             address_label,
             values,
         );
-        interaction(
-            PermutationInteractionType::Send,
-            true,
-            0,
-            as_label,
-            address_label,
-            values,
-        );
+        // No final-state claim: the leaf is touched but clean, and a real boundary row
+        // would have `is_dirty = 0`.
     }
 
     while !(dummy_interaction_trace_rows.len() / (dummy_interaction_air.field_width() + 1))

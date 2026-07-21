@@ -17,6 +17,7 @@ use openvm_stark_backend::{
     prover::AirProvingContext,
     BaseAirWithPublicValues, PartitionedBaseAir, StarkProtocolConfig, Val,
 };
+use rustc_hash::FxHashSet;
 use tracing::instrument;
 
 use super::merkle::SerialReceiver;
@@ -193,7 +194,17 @@ pub struct FinalTouchedLabel<F, const DIGEST_WIDTH: usize> {
     final_hash: [F; DIGEST_WIDTH],
     /// Per-block timestamps. Each BLOCK_FE_WIDTH block has its own timestamp.
     final_timestamps: [u32; BLOCKS_PER_LEAF],
+    /// Whether the leaf's final values differ from its initial values. Dirtiness gates
+    /// all of the row's final-state interactions: a clean leaf's final hash equals its
+    /// initial one and is never recorded with the hasher.
+    is_dirty: bool,
 }
+
+/// Pointers `(address_space, leaf_ptr)` of the touched leaves whose values changed,
+/// keyed like `Equipartition<_, DIGEST_WIDTH>` so entries match the merkle chip's
+/// `final_memory` keys. Computed by [`PersistentBoundaryChip::finalize`] and consumed by
+/// the merkle chip, which emits final-direction rows only along dirty paths.
+pub type DirtyLeaves = FxHashSet<(u32, u32)>;
 
 type BlockInfo<F> = (usize, u32, [F; BLOCK_FE_WIDTH]); // (block_idx, timestamp, values)
 type EnrichedEntry<F> = ((u32, u32), BlockInfo<F>); // ((addr_space, leaf_label), block_info)
@@ -249,13 +260,17 @@ impl<const DIGEST_WIDTH: usize, F: PrimeField32> PersistentBoundaryChip<F, DIGES
     /// Finalize the boundary chip with touched memory grouped by Merkle leaf.
     ///
     /// Untouched blocks within a touched leaf get values from initial_memory and timestamp 0.
+    ///
+    /// Returns the [`DirtyLeaves`] this chip committed to, so the merkle chip consumes
+    /// the exact same bits instead of re-deriving dirtiness.
     #[instrument(name = "boundary_finalize", level = "debug", skip_all)]
     pub(crate) fn finalize<H>(
         &mut self,
         initial_memory: &MemoryImage,
         final_memory_by_leaf: &LeafGroupedTouchedMemory<F>,
         hasher: &H,
-    ) where
+    ) -> DirtyLeaves
+    where
         H: Hasher<DIGEST_WIDTH, F> + Sync + for<'a> SerialReceiver<&'a [F]>,
     {
         let final_touched_labels: Vec<_> = final_memory_by_leaf
@@ -277,8 +292,16 @@ impl<const DIGEST_WIDTH: usize, F: PrimeField32> PersistentBoundaryChip<F, DIGES
                     }
                 }
 
+                // Value inequality is the single definition of dirtiness (equal values
+                // give equal hashes); a clean leaf's final hash equals the initial one,
+                // so the second hash is skipped entirely.
+                let is_dirty = final_values != init_values;
                 let initial_hash = hasher.hash(&init_values);
-                let final_hash = hasher.hash(&final_values);
+                let final_hash = if is_dirty {
+                    hasher.hash(&final_values)
+                } else {
+                    initial_hash
+                };
                 FinalTouchedLabel {
                     address_space: *addr_space,
                     label: *leaf_label,
@@ -287,14 +310,25 @@ impl<const DIGEST_WIDTH: usize, F: PrimeField32> PersistentBoundaryChip<F, DIGES
                     init_hash: initial_hash,
                     final_hash,
                     final_timestamps: timestamps,
+                    is_dirty,
                 }
             })
             .collect();
         for l in &final_touched_labels {
             hasher.receive(&l.init_values);
-            hasher.receive(&l.final_values);
+            // A clean leaf's final compression has multiplicity `is_dirty = 0` on the
+            // compression bus, so it must not be recorded with the hasher chip.
+            if l.is_dirty {
+                hasher.receive(&l.final_values);
+            }
         }
+        let dirty_leaves = final_touched_labels
+            .iter()
+            .filter(|l| l.is_dirty)
+            .map(|l| (l.address_space, l.label * DIGEST_WIDTH as u32))
+            .collect();
         self.touched_labels = Some(final_touched_labels);
+        dirty_leaves
     }
 }
 
@@ -328,8 +362,7 @@ where
                 .for_each(|(row, touched_label)| {
                     *row.borrow_mut() = PersistentBoundaryCols {
                         is_valid: Val::<SC>::ONE,
-                        // TODO: set is_dirty only when it is actually dirty
-                        is_dirty: Val::<SC>::ONE,
+                        is_dirty: Val::<SC>::from_bool(touched_label.is_dirty),
                         address_space: Val::<SC>::from_u32(touched_label.address_space),
                         leaf_label: Val::<SC>::from_u32(touched_label.label),
                         initial_values: touched_label.init_values,
