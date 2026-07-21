@@ -2,10 +2,10 @@
 git-fetch-with-cli = true
 
 # Uncomment this block when testing OpenVM against a patched stark-backend branch.
-[patch."https://github.com/openvm-org/stark-backend.git"]
-openvm-stark-backend = { git = "ssh://git@github.com/openvm-org/stark-backend.git", rev = "8f23bfc4b209869aab8cd57ac0100f3bd0277c6b" }
-openvm-stark-sdk = { git = "ssh://git@github.com/openvm-org/stark-backend.git", rev = "8f23bfc4b209869aab8cd57ac0100f3bd0277c6b" }
-openvm-cpu-backend = { git = "ssh://git@github.com/openvm-org/stark-backend.git", rev = "8f23bfc4b209869aab8cd57ac0100f3bd0277c6b" }
-openvm-cuda-backend = { git = "ssh://git@github.com/openvm-org/stark-backend.git", rev = "8f23bfc4b209869aab8cd57ac0100f3bd0277c6b" }
-openvm-cuda-builder = { git = "ssh://git@github.com/openvm-org/stark-backend.git", rev = "8f23bfc4b209869aab8cd57ac0100f3bd0277c6b" }
-openvm-cuda-common = { git = "ssh://git@github.com/openvm-org/stark-backend.git", rev = "8f23bfc4b209869aab8cd57ac0100f3bd0277c6b" }
+# [patch."https://github.com/openvm-org/stark-backend.git"]
+# openvm-stark-backend = { git = "ssh://git@github.com/openvm-org/stark-backend.git", branch = "main" }
+# openvm-stark-sdk = { git = "ssh://git@github.com/openvm-org/stark-backend.git", branch = "main" }
+# openvm-cpu-backend = { git = "ssh://git@github.com/openvm-org/stark-backend.git", branch = "main" }
+# openvm-cuda-backend = { git = "ssh://git@github.com/openvm-org/stark-backend.git", branch = "main" }
+# openvm-cuda-builder = { git = "ssh://git@github.com/openvm-org/stark-backend.git", branch = "main" }
+# openvm-cuda-common = { git = "ssh://git@github.com/openvm-org/stark-backend.git", branch = "main" }

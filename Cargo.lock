@@ -2906,7 +2906,7 @@ dependencies = [
 [[package]]
 name = "halo2-axiom-gpu"
 version = "1.0.0"
-source = "git+https://github.com/axiom-crypto/halo2-gpu.git?branch=develop-v2.1.0#ef0dca275895ee786a5ea5bbe03cdf72ffb68061"
+source = "git+https://github.com/axiom-crypto/halo2-gpu.git?branch=develop-v2.1.0#85ad4c2a623ae520fc1454fcb5adf15ec1bb4410"
 dependencies = [
  "ahash",
  "anyhow",
