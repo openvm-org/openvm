@@ -483,7 +483,7 @@ mod tests {
                 panic!("expected bigint branch terminator");
             };
             assert_eq!(
-                terminator.successors(pc + DEFAULT_PC_STEP as u64),
+                terminator.successors(pc, pc + DEFAULT_PC_STEP as u64),
                 [pc - 12, pc + 4]
             );
         }
