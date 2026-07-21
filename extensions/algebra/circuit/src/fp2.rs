@@ -182,7 +182,9 @@ mod tests {
     use halo2curves_axiom::bn256::Fq2;
     use num_bigint::BigUint;
     use openvm_circuit_primitives::TraceSubRowGenerator;
-    use openvm_mod_circuit_builder::{test_utils::*, FieldExpr, FieldExprCols};
+    use openvm_mod_circuit_builder::{
+        test_utils::*, FieldExpr, FieldExprCols, FieldExpressionProgram,
+    };
     use openvm_pairing_guest::bn254::BN254_MODULUS;
     use openvm_stark_backend::{
         any_air_arc_vec, p3_air::BaseAir, p3_field::PrimeCharacteristicRing,
@@ -217,7 +219,8 @@ mod tests {
         }
 
         let builder = builder.borrow().clone();
-        let air = FieldExpr::new(builder, range_checker.bus(), false);
+        let program = FieldExpressionProgram::new(builder, false);
+        let air = FieldExpr::new(program, range_checker.bus());
         let width = BaseAir::<BabyBear>::width(&air);
 
         let x_fp2 = bn254_fq2_random(1);
@@ -282,7 +285,8 @@ mod tests {
         // no need to save as div auto save.
 
         let builder = builder.borrow().clone();
-        let air = FieldExpr::new(builder, range_checker.bus(), false);
+        let program = FieldExpressionProgram::new(builder, false);
+        let air = FieldExpr::new(program, range_checker.bus());
         let width = BaseAir::<BabyBear>::width(&air);
 
         let x_fp2 = bn254_fq2_random(5);

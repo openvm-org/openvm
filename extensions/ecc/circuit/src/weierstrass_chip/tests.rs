@@ -119,7 +119,7 @@ mod ec_addne_tests {
         );
         let executor = get_ec_addne_executor::<BLOCKS>(
             config.clone(),
-            tester.range_checker().bus(),
+            tester.range_checker().bus().range_max_bits,
             tester.address_bits(),
             offset,
         );
@@ -161,8 +161,12 @@ mod ec_addne_tests {
             tester.address_bits(),
             offset,
         );
-        let executor =
-            get_ec_addne_executor(config.clone(), range_bus, tester.address_bits(), offset);
+        let executor = get_ec_addne_executor(
+            config.clone(),
+            range_bus.range_max_bits,
+            tester.address_bits(),
+            offset,
+        );
 
         let cpu_chip = get_ec_addne_chip(
             config.clone(),
@@ -479,15 +483,17 @@ mod ec_addne_tests {
 
         let executor = get_ec_addne_executor::<{ ECC_BLOCKS_32 }>(
             config,
-            tester.range_checker().bus(),
+            tester.range_checker().bus().range_max_bits,
             tester.address_bits(),
             Rv64WeierstrassOpcode::CLASS_OFFSET,
         );
 
         let (p1_x, p1_y) = SampleEcPoints[0].clone();
         let (p2_x, p2_y) = SampleEcPoints[1].clone();
-        assert_eq!(executor.expr.builder.num_variables, 3); // lambda, x3, y3
-        let r = executor.expr.execute(&[p1_x, p1_y, p2_x, p2_y], &[true]);
+        assert_eq!(executor.program().num_vars(), 3); // lambda, x3, y3
+        let r = executor
+            .program()
+            .execute(&[p1_x, p1_y, p2_x, p2_y], &[true]);
 
         assert_eq!(r.len(), 3); // lambda, x3, y3
         assert_eq!(r[1], SampleEcPoints[2].0);
@@ -495,8 +501,10 @@ mod ec_addne_tests {
 
         let (p1_x, p1_y) = SampleEcPoints[2].clone();
         let (p2_x, p2_y) = SampleEcPoints[3].clone();
-        assert_eq!(executor.expr.builder.num_variables, 3); // lambda, x3, y3
-        let r = executor.expr.execute(&[p1_x, p1_y, p2_x, p2_y], &[true]);
+        assert_eq!(executor.program().num_vars(), 3); // lambda, x3, y3
+        let r = executor
+            .program()
+            .execute(&[p1_x, p1_y, p2_x, p2_y], &[true]);
 
         assert_eq!(r.len(), 3); // lambda, x3, y3
         assert_eq!(r[1], SampleEcPoints[4].0);
@@ -532,7 +540,7 @@ mod ec_double_tests {
         );
         let executor = get_ec_double_executor(
             config.clone(),
-            tester.range_checker().bus(),
+            tester.range_checker().bus().range_max_bits,
             tester.address_bits(),
             offset,
             a_biguint.clone(),
@@ -579,7 +587,7 @@ mod ec_double_tests {
         );
         let executor = get_ec_double_executor(
             config.clone(),
-            range_bus,
+            range_bus.range_max_bits,
             tester.address_bits(),
             offset,
             a_biguint.clone(),
@@ -970,7 +978,7 @@ mod ec_double_tests {
 
         let executor = get_ec_double_executor::<{ ECC_BLOCKS_32 }>(
             config,
-            tester.range_checker().bus(),
+            tester.range_checker().bus().range_max_bits,
             tester.address_bits(),
             Rv64WeierstrassOpcode::CLASS_OFFSET,
             BigUint::zero(),
@@ -978,9 +986,9 @@ mod ec_double_tests {
 
         let (p1_x, p1_y) = SampleEcPoints[1].clone();
 
-        assert_eq!(executor.expr.builder.num_variables, 3); // lambda, x3, y3
+        assert_eq!(executor.program().num_vars(), 3); // lambda, x3, y3
 
-        let r = executor.expr.execute(&[p1_x, p1_y], &[true]);
+        let r = executor.program().execute(&[p1_x, p1_y], &[true]);
         assert_eq!(r.len(), 3); // lambda, x3, y3
         assert_eq!(r[1], SampleEcPoints[3].0);
         assert_eq!(r[2], SampleEcPoints[3].1);
@@ -1002,7 +1010,7 @@ mod ec_double_tests {
 
         let executor = get_ec_double_executor::<{ ECC_BLOCKS_32 }>(
             config.clone(),
-            tester.range_checker().bus(),
+            tester.range_checker().bus().range_max_bits,
             tester.address_bits(),
             Rv64WeierstrassOpcode::CLASS_OFFSET,
             a.clone(),
@@ -1020,9 +1028,9 @@ mod ec_double_tests {
         )
         .unwrap();
 
-        assert_eq!(executor.expr.builder.num_variables, 3); // lambda, x3, y3
+        assert_eq!(executor.program().num_vars(), 3); // lambda, x3, y3
 
-        let r = executor.expr.execute(&[p1_x, p1_y], &[true]);
+        let r = executor.program().execute(&[p1_x, p1_y], &[true]);
         assert_eq!(r.len(), 3); // lambda, x3, y3
         let expected_double_x = BigUint::from_str_radix(
             "7CF27B188D034F7E8A52380304B51AC3C08969E277F21B35A60B48FC47669978",

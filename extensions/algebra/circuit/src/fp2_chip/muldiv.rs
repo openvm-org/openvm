@@ -10,7 +10,7 @@ use openvm_circuit_primitives::var_range::{
 };
 use openvm_mod_circuit_builder::{
     ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreAir, FieldExpressionExecutor,
-    FieldExpressionFiller, SymbolicExpr,
+    FieldExpressionFiller, FieldExpressionProgram, SymbolicExpr,
 };
 use openvm_riscv_adapters::{
     Rv64VecHeapAdapterAir, Rv64VecHeapAdapterExecutor, Rv64VecHeapAdapterFiller,
@@ -23,8 +23,16 @@ pub fn fp2_muldiv_expr(
     config: ExprBuilderConfig,
     range_bus: VariableRangeCheckerBus,
 ) -> (FieldExpr, usize, usize) {
+    let (program, is_mul_flag, is_div_flag) = fp2_muldiv_program(config, range_bus.range_max_bits);
+    (FieldExpr::new(program, range_bus), is_mul_flag, is_div_flag)
+}
+
+fn fp2_muldiv_program(
+    config: ExprBuilderConfig,
+    range_max_bits: usize,
+) -> (FieldExpressionProgram, usize, usize) {
     config.check_valid();
-    let builder = ExprBuilder::new(config, range_bus.range_max_bits);
+    let builder = ExprBuilder::new(config, range_max_bits);
     let builder = Rc::new(RefCell::new(builder));
 
     let x = Fp2::new(builder.clone());
@@ -79,7 +87,7 @@ pub fn fp2_muldiv_expr(
 
     let builder = builder.borrow().clone();
     (
-        FieldExpr::new(builder, range_bus, true),
+        FieldExpressionProgram::new(builder, true),
         is_mul_flag,
         is_div_flag,
     )
@@ -88,11 +96,11 @@ pub fn fp2_muldiv_expr(
 // Input: Fp2 * 2
 // Output: Fp2
 
-fn gen_base_expr(
+fn gen_base_program(
     config: ExprBuilderConfig,
-    range_checker_bus: VariableRangeCheckerBus,
-) -> (FieldExpr, Vec<usize>, Vec<usize>) {
-    let (expr, is_mul_flag, is_div_flag) = fp2_muldiv_expr(config, range_checker_bus);
+    range_max_bits: usize,
+) -> (FieldExpressionProgram, Vec<usize>, Vec<usize>) {
+    let (program, is_mul_flag, is_div_flag) = fp2_muldiv_program(config, range_max_bits);
 
     let local_opcode_idx = vec![
         Fp2Opcode::MUL as usize,
@@ -101,7 +109,7 @@ fn gen_base_expr(
     ];
     let opcode_flag_idx = vec![is_mul_flag, is_div_flag];
 
-    (expr, local_opcode_idx, opcode_flag_idx)
+    (program, local_opcode_idx, opcode_flag_idx)
 }
 
 pub fn get_fp2_muldiv_air<const BLOCKS: usize>(
@@ -112,7 +120,9 @@ pub fn get_fp2_muldiv_air<const BLOCKS: usize>(
     pointer_max_bits: usize,
     offset: usize,
 ) -> Fp2Air<BLOCKS> {
-    let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker_bus);
+    let (program, local_opcode_idx, opcode_flag_idx) =
+        gen_base_program(config, range_checker_bus.range_max_bits);
+    let expr = FieldExpr::new(program, range_checker_bus);
     Fp2Air::new(
         Rv64VecHeapAdapterAir::new(exec_bridge, mem_bridge, range_checker_bus, pointer_max_bits),
         FieldExpressionCoreAir::new(expr, offset, local_opcode_idx, opcode_flag_idx),
@@ -121,15 +131,15 @@ pub fn get_fp2_muldiv_air<const BLOCKS: usize>(
 
 pub fn get_fp2_muldiv_executor<const BLOCKS: usize>(
     config: ExprBuilderConfig,
-    range_checker_bus: VariableRangeCheckerBus,
+    range_max_bits: usize,
     pointer_max_bits: usize,
     offset: usize,
 ) -> Fp2Executor<BLOCKS> {
-    let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker_bus);
+    let (program, local_opcode_idx, opcode_flag_idx) = gen_base_program(config, range_max_bits);
 
     FieldExprVecHeapExecutor::new(FieldExpressionExecutor::new(
         Rv64VecHeapAdapterExecutor::new(pointer_max_bits),
-        expr,
+        program,
         offset,
         local_opcode_idx,
         opcode_flag_idx,
@@ -143,7 +153,10 @@ pub fn get_fp2_muldiv_chip<F, const BLOCKS: usize>(
     range_checker: SharedVariableRangeCheckerChip,
     pointer_max_bits: usize,
 ) -> Fp2Chip<F, BLOCKS> {
-    let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker.bus());
+    let range_bus = range_checker.bus();
+    let (program, local_opcode_idx, opcode_flag_idx) =
+        gen_base_program(config, range_bus.range_max_bits);
+    let expr = FieldExpr::new(program, range_bus);
     Fp2Chip::new(
         FieldExpressionFiller::new(
             Rv64VecHeapAdapterFiller::new(pointer_max_bits, range_checker.clone()),

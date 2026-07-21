@@ -10,7 +10,7 @@ use openvm_circuit_primitives::var_range::{
 };
 use openvm_mod_circuit_builder::{
     ExprBuilder, ExprBuilderConfig, FieldExpr, FieldExpressionCoreAir, FieldExpressionExecutor,
-    FieldExpressionFiller, FieldVariable, SymbolicExpr,
+    FieldExpressionFiller, FieldExpressionProgram, FieldVariable, SymbolicExpr,
 };
 use openvm_riscv_adapters::{
     Rv64VecHeapAdapterAir, Rv64VecHeapAdapterExecutor, Rv64VecHeapAdapterFiller,
@@ -23,8 +23,16 @@ pub fn muldiv_expr(
     config: ExprBuilderConfig,
     range_bus: VariableRangeCheckerBus,
 ) -> (FieldExpr, usize, usize) {
+    let (program, is_mul_flag, is_div_flag) = muldiv_program(config, range_bus.range_max_bits);
+    (FieldExpr::new(program, range_bus), is_mul_flag, is_div_flag)
+}
+
+fn muldiv_program(
+    config: ExprBuilderConfig,
+    range_max_bits: usize,
+) -> (FieldExpressionProgram, usize, usize) {
     config.check_valid();
-    let builder = ExprBuilder::new(config, range_bus.range_max_bits);
+    let builder = ExprBuilder::new(config, range_max_bits);
     let builder = Rc::new(RefCell::new(builder));
     let x = ExprBuilder::new_input(builder.clone());
     let y = ExprBuilder::new_input(builder.clone());
@@ -56,17 +64,17 @@ pub fn muldiv_expr(
     let builder = (*builder).borrow().clone();
 
     (
-        FieldExpr::new(builder, range_bus, true),
+        FieldExpressionProgram::new(builder, true),
         is_mul_flag,
         is_div_flag,
     )
 }
 
-fn gen_base_expr(
+fn gen_base_program(
     config: ExprBuilderConfig,
-    range_checker_bus: VariableRangeCheckerBus,
-) -> (FieldExpr, Vec<usize>, Vec<usize>) {
-    let (expr, is_mul_flag, is_div_flag) = muldiv_expr(config, range_checker_bus);
+    range_max_bits: usize,
+) -> (FieldExpressionProgram, Vec<usize>, Vec<usize>) {
+    let (program, is_mul_flag, is_div_flag) = muldiv_program(config, range_max_bits);
 
     let local_opcode_idx = vec![
         Rv64ModularArithmeticOpcode::MUL as usize,
@@ -75,7 +83,7 @@ fn gen_base_expr(
     ];
     let opcode_flag_idx = vec![is_mul_flag, is_div_flag];
 
-    (expr, local_opcode_idx, opcode_flag_idx)
+    (program, local_opcode_idx, opcode_flag_idx)
 }
 
 pub fn get_modular_muldiv_air<const BLOCKS: usize>(
@@ -86,7 +94,9 @@ pub fn get_modular_muldiv_air<const BLOCKS: usize>(
     pointer_max_bits: usize,
     offset: usize,
 ) -> ModularAir<BLOCKS> {
-    let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker_bus);
+    let (program, local_opcode_idx, opcode_flag_idx) =
+        gen_base_program(config, range_checker_bus.range_max_bits);
+    let expr = FieldExpr::new(program, range_checker_bus);
     ModularAir::new(
         Rv64VecHeapAdapterAir::new(exec_bridge, mem_bridge, range_checker_bus, pointer_max_bits),
         FieldExpressionCoreAir::new(expr, offset, local_opcode_idx, opcode_flag_idx),
@@ -95,15 +105,15 @@ pub fn get_modular_muldiv_air<const BLOCKS: usize>(
 
 pub fn get_modular_muldiv_executor<const BLOCKS: usize>(
     config: ExprBuilderConfig,
-    range_checker_bus: VariableRangeCheckerBus,
+    range_max_bits: usize,
     pointer_max_bits: usize,
     offset: usize,
 ) -> ModularExecutor<BLOCKS> {
-    let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker_bus);
+    let (program, local_opcode_idx, opcode_flag_idx) = gen_base_program(config, range_max_bits);
 
     FieldExprVecHeapExecutor::new(FieldExpressionExecutor::new(
         Rv64VecHeapAdapterExecutor::new(pointer_max_bits),
-        expr,
+        program,
         offset,
         local_opcode_idx,
         opcode_flag_idx,
@@ -117,7 +127,10 @@ pub fn get_modular_muldiv_chip<F, const BLOCKS: usize>(
     range_checker: SharedVariableRangeCheckerChip,
     pointer_max_bits: usize,
 ) -> ModularChip<F, BLOCKS> {
-    let (expr, local_opcode_idx, opcode_flag_idx) = gen_base_expr(config, range_checker.bus());
+    let range_bus = range_checker.bus();
+    let (program, local_opcode_idx, opcode_flag_idx) =
+        gen_base_program(config, range_bus.range_max_bits);
+    let expr = FieldExpr::new(program, range_bus);
     ModularChip::new(
         FieldExpressionFiller::new(
             Rv64VecHeapAdapterFiller::new(pointer_max_bits, range_checker.clone()),

@@ -9,10 +9,10 @@ use openvm_circuit::{
     system::{memory::SharedMemoryHelper, SystemPort},
 };
 use openvm_circuit_derive::{AnyEnum, Executor, MeteredExecutor, PreflightExecutor};
-use openvm_circuit_primitives::var_range::VariableRangeCheckerBus;
 use openvm_cpu_backend::{CpuBackend, CpuDevice};
 use openvm_instructions::{LocalOpcode, VmOpcode};
 use openvm_mod_circuit_builder::ExprBuilderConfig;
+use openvm_riscv_circuit::adapters::U16_BITS;
 use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, StarkProtocolConfig, Val};
 #[cfg(feature = "rvr")]
 use rvr_openvm_ext_algebra::Fp2RvrExtension;
@@ -97,8 +97,6 @@ impl VmExecutionExtension for Fp2Extension {
         inventory: &mut ExecutorInventoryBuilder<Fp2ExtensionExecutor>,
     ) -> Result<(), ExecutorInventoryError> {
         let byte_ptr_max_bits = to_byte_ptr_bits(inventory.pointer_max_bits());
-        // TODO: somehow get the range checker bus from `ExecutorInventory`
-        let dummy_range_checker_bus = VariableRangeCheckerBus::new(u16::MAX, 16);
         for (i, (_, modulus)) in self.supported_moduli.iter().enumerate() {
             // determine the number of bytes needed to represent a prime field element
             let bytes = modulus.bits().div_ceil(8) as usize;
@@ -112,7 +110,7 @@ impl VmExecutionExtension for Fp2Extension {
                 };
                 let addsub = get_fp2_addsub_executor(
                     config.clone(),
-                    dummy_range_checker_bus,
+                    U16_BITS,
                     byte_ptr_max_bits,
                     start_offset,
                 );
@@ -123,12 +121,8 @@ impl VmExecutionExtension for Fp2Extension {
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
 
-                let muldiv = get_fp2_muldiv_executor(
-                    config,
-                    dummy_range_checker_bus,
-                    byte_ptr_max_bits,
-                    start_offset,
-                );
+                let muldiv =
+                    get_fp2_muldiv_executor(config, U16_BITS, byte_ptr_max_bits, start_offset);
 
                 inventory.add_executor(
                     Fp2ExtensionExecutor::Fp2MulDivRv64_32(muldiv),
@@ -143,7 +137,7 @@ impl VmExecutionExtension for Fp2Extension {
                 };
                 let addsub = get_fp2_addsub_executor(
                     config.clone(),
-                    dummy_range_checker_bus,
+                    U16_BITS,
                     byte_ptr_max_bits,
                     start_offset,
                 );
@@ -154,12 +148,8 @@ impl VmExecutionExtension for Fp2Extension {
                         .map(|x| VmOpcode::from_usize(x + start_offset)),
                 )?;
 
-                let muldiv = get_fp2_muldiv_executor(
-                    config,
-                    dummy_range_checker_bus,
-                    byte_ptr_max_bits,
-                    start_offset,
-                );
+                let muldiv =
+                    get_fp2_muldiv_executor(config, U16_BITS, byte_ptr_max_bits, start_offset);
 
                 inventory.add_executor(
                     Fp2ExtensionExecutor::Fp2MulDivRv64_48(muldiv),

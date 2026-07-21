@@ -232,10 +232,10 @@ where
                             None
                         }
                     })
-                    .unwrap_or_else(|| self.inner.expr.num_flags());
+                    .unwrap_or_else(|| self.inner.program().num_flags());
 
                 run_field_expression_precomputed::<true>(
-                    &self.inner.expr,
+                    self.inner.program(),
                     flag_idx,
                     read_data.as_flattened().as_flattened(),
                 )

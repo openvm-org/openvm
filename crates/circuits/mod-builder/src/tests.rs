@@ -10,21 +10,35 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{config::baby_bear_poseidon2::*, p3_baby_bear::BabyBear};
 
 use crate::{
-    test_utils::*, utils::biguint_to_limbs_vec, ExprBuilder, FieldExpr, FieldExprCols,
-    FieldExpressionCoreRecordMut, FieldVariable, SymbolicExpr,
+    test_utils::*, utils::biguint_to_limbs_vec, ExprBuilder, ExprBuilderConfig, FieldExpr,
+    FieldExprCols, FieldExpressionCoreRecordMut, FieldExpressionProgram, FieldVariable,
+    SymbolicExpr,
 };
 
 const LIMB_BITS: usize = 8;
 use std::sync::Arc;
 
-use openvm_circuit_primitives::var_range::VariableRangeCheckerChip;
+use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
+
+#[test]
+#[should_panic(expected = "expression and range bus must use the same range capacity")]
+fn field_expr_rejects_mismatched_range_capacity() {
+    let config = ExprBuilderConfig {
+        modulus: secp256k1_coord_prime(),
+        num_limbs: 32,
+        limb_bits: 8,
+    };
+    let program = FieldExpressionProgram::new(ExprBuilder::new(config, 16), false);
+    FieldExpr::new(program, VariableRangeCheckerBus::new(0, 15));
+}
 
 fn create_field_expr_with_setup(
     builder: ExprBuilder,
 ) -> (FieldExpr, Arc<VariableRangeCheckerChip>, usize) {
     let prime = secp256k1_coord_prime();
     let (range_checker, _) = setup(&prime);
-    let expr = FieldExpr::new(builder, range_checker.bus(), false);
+    let program = FieldExpressionProgram::new(builder, false);
+    let expr = FieldExpr::new(program, range_checker.bus());
     let width = BaseAir::<BabyBear>::width(&expr);
     (expr, range_checker, width)
 }
@@ -34,7 +48,8 @@ fn create_field_expr_with_flags_setup(
 ) -> (FieldExpr, Arc<VariableRangeCheckerChip>, usize) {
     let prime = secp256k1_coord_prime();
     let (range_checker, _) = setup(&prime);
-    let expr = FieldExpr::new(builder, range_checker.bus(), true);
+    let program = FieldExpressionProgram::new(builder, true);
+    let expr = FieldExpr::new(program, range_checker.bus());
     let width = BaseAir::<BabyBear>::width(&expr);
     (expr, range_checker, width)
 }
@@ -62,17 +77,17 @@ fn generate_recorded_trace(
     let mut record = FieldExpressionCoreRecordMut::new_from_execution_data(
         &mut buffer,
         inputs,
-        expr.canonical_num_limbs(),
+        expr.program().canonical_num_limbs(),
     );
     let data: Vec<u8> = inputs
         .iter()
-        .flat_map(|x| biguint_to_limbs_vec(x, expr.canonical_num_limbs()))
+        .flat_map(|x| biguint_to_limbs_vec(x, expr.program().canonical_num_limbs()))
         .collect();
     record.fill_from_execution_data(0, &data);
 
     let reconstructed_inputs: Vec<BigUint> = record
         .input_limbs
-        .chunks(expr.canonical_num_limbs())
+        .chunks(expr.program().canonical_num_limbs())
         .map(BigUint::from_bytes_le)
         .collect();
 
@@ -435,11 +450,11 @@ fn test_recorded_execution_records() {
     let mut record = FieldExpressionCoreRecordMut::new_from_execution_data(
         &mut buffer,
         &inputs,
-        expr.canonical_num_limbs(),
+        expr.program().canonical_num_limbs(),
     );
     let data: Vec<u8> = inputs
         .iter()
-        .flat_map(|x| biguint_to_limbs_vec(x, expr.canonical_num_limbs()))
+        .flat_map(|x| biguint_to_limbs_vec(x, expr.program().canonical_num_limbs()))
         .collect();
     record.fill_from_execution_data(0, &data);
     assert_eq!(*record.opcode, 0);
@@ -447,7 +462,7 @@ fn test_recorded_execution_records() {
     // Verify input reconstruction preserves data
     let reconstructed_inputs: Vec<BigUint> = record
         .input_limbs
-        .chunks(expr.canonical_num_limbs())
+        .chunks(expr.program().canonical_num_limbs())
         .map(BigUint::from_bytes_le)
         .collect();
     assert_eq!(reconstructed_inputs.len(), inputs.len());
@@ -521,11 +536,11 @@ fn test_record_arena_allocation_patterns() {
     let mut record = FieldExpressionCoreRecordMut::new_from_execution_data(
         &mut buffer,
         &inputs,
-        expr.canonical_num_limbs(),
+        expr.program().canonical_num_limbs(),
     );
     let data: Vec<u8> = inputs
         .iter()
-        .flat_map(|x| biguint_to_limbs_vec(x, expr.canonical_num_limbs()))
+        .flat_map(|x| biguint_to_limbs_vec(x, expr.program().canonical_num_limbs()))
         .collect();
     record.fill_from_execution_data(0, &data);
     assert_eq!(*record.opcode, 0);
@@ -540,7 +555,7 @@ fn test_record_arena_allocation_patterns() {
     // Test input reconstruction
     let reconstructed_inputs: Vec<BigUint> = record
         .input_limbs
-        .chunks(expr.canonical_num_limbs())
+        .chunks(expr.program().canonical_num_limbs())
         .map(BigUint::from_bytes_le)
         .collect();
     assert_eq!(reconstructed_inputs.len(), inputs.len());
@@ -569,27 +584,27 @@ fn test_tracestep_tracefiller_roundtrip() {
         generate_random_biguint(&prime),
     ];
 
-    let vars_direct = expr.execute(&inputs, &[]);
+    let vars_direct = expr.program().execute(&inputs, &[]);
 
     // Test record creation and reconstruction roundtrip
     let mut buffer = vec![0u8; 1024];
     let mut record = FieldExpressionCoreRecordMut::new_from_execution_data(
         &mut buffer,
         &inputs,
-        expr.canonical_num_limbs(),
+        expr.program().canonical_num_limbs(),
     );
     let data: Vec<u8> = inputs
         .iter()
-        .flat_map(|x| biguint_to_limbs_vec(x, expr.canonical_num_limbs()))
+        .flat_map(|x| biguint_to_limbs_vec(x, expr.program().canonical_num_limbs()))
         .collect();
     record.fill_from_execution_data(0, &data);
 
     let reconstructed_inputs: Vec<BigUint> = record
         .input_limbs
-        .chunks(expr.canonical_num_limbs())
+        .chunks(expr.program().canonical_num_limbs())
         .map(BigUint::from_bytes_le)
         .collect();
-    let vars_reconstructed = expr.execute(&reconstructed_inputs, &[]);
+    let vars_reconstructed = expr.program().execute(&reconstructed_inputs, &[]);
 
     // All intermediate variables must be preserved
     assert_eq!(vars_direct.len(), vars_reconstructed.len());
