@@ -31,7 +31,7 @@ pub struct RvrCompiled {
     artifact_dir: Option<ArtifactDir>,
     /// Generated state, tracing, and block ABI family baked into this artifact.
     execution_kind: RvrExecutionKind,
-    /// Number of AIRs baked into metered artifacts.
+    /// Number of AIRs stored in a metered artifact.
     num_airs: Option<u32>,
 }
 
@@ -69,6 +69,57 @@ impl RvrCompiled {
             "RVR execution kind mismatch: expected one of {expected:?}, found {:?}",
             self.execution_kind
         )))
+    }
+
+    /// Check that a metered-cost artifact contains the expected chip widths.
+    pub(crate) fn require_chip_widths(&self, expected: &[usize]) -> Result<(), CompileError> {
+        self.require_execution_kind(&[RvrExecutionKind::MeteredCost])?;
+        let num_airs = self.num_airs.ok_or_else(|| {
+            CompileError::LibLoad(
+                "compiled metered-cost artifact does not declare its AIR count".to_string(),
+            )
+        })? as usize;
+        if expected.len() != num_airs {
+            return Err(CompileError::LibLoad(format!(
+                "chip-width table has {} entries, but the compiled artifact expects {num_airs}",
+                expected.len()
+            )));
+        }
+
+        type ChipWidthsFn = unsafe extern "C" fn() -> *const u64;
+        let chip_widths_fn: ChipWidthsFn = unsafe {
+            *self
+                .lib
+                .get::<ChipWidthsFn>(b"rv_chip_widths")
+                .map_err(|error| {
+                    CompileError::LibLoad(format!(
+                        "missing metered-cost rv_chip_widths marker: {error}"
+                    ))
+                })?
+        };
+        // SAFETY: the loaded symbol has the declared zero-argument C ABI.
+        let actual_ptr = unsafe { chip_widths_fn() };
+        if actual_ptr.is_null() {
+            return Err(CompileError::LibLoad(
+                "rv_chip_widths marker returned null".to_string(),
+            ));
+        }
+        // SAFETY: the symbol points to `RV_NUM_AIRS` elements, and that count
+        // was checked against `expected` above.
+        let actual = unsafe { std::slice::from_raw_parts(actual_ptr, num_airs) };
+        for (chip_idx, (&actual, &expected)) in actual.iter().zip(expected).enumerate() {
+            let expected = u64::try_from(expected).map_err(|_| {
+                CompileError::LibLoad(format!(
+                    "chip width at AIR {chip_idx} exceeds the artifact u64 domain"
+                ))
+            })?;
+            if actual != expected {
+                return Err(CompileError::LibLoad(format!(
+                    "chip width mismatch at AIR {chip_idx}: artifact has {actual}, current VM has {expected}"
+                )));
+            }
+        }
+        Ok(())
     }
 
     /// Path to the directory holding generated C sources and build artifacts,
@@ -197,6 +248,14 @@ pub enum CompileError {
     AirIndexOutOfBounds { pc: u32, air_idx: usize },
     #[error("AIR count {num_airs} exceeds the generated C u32 domain")]
     AirCountOutOfBounds { num_airs: usize },
+    #[error("chip mapping has {actual} entries, but the program has {expected} instruction slots")]
+    ChipMappingLengthMismatch { expected: usize, actual: usize },
+    #[error("chip index {chip_idx} at pc {pc:#x} is outside the {num_airs} AIRs")]
+    ChipIndexOutOfBounds {
+        pc: u32,
+        chip_idx: u32,
+        num_airs: u32,
+    },
     #[error("invalid compile options: {0}")]
     InvalidOptions(&'static str),
 }
@@ -208,11 +267,19 @@ pub struct ChipMapping {
     pub num_airs: usize,
     /// Per-PC chip index. Index i = chip for PC = pc_base + i*4.
     pub pc_to_chip: Vec<TraceChipIndex>,
-    /// Per-AIR widths (MeteredCost mode only). When present, the emitter
-    /// precomputes `sum(width[chip] * count)` per block so the generated C
-    /// increments `cost` by a single constant instead of loading from the
-    /// `chip_widths` array at runtime.
+    /// Width of each AIR in metered-cost mode. The generator writes each width
+    /// into its cost update and stores the list in the artifact for validation
+    /// when it is loaded. Execution does not look up widths at runtime.
     pub chip_widths: Option<Vec<u64>>,
+}
+
+fn pc_for_instruction_index(pc_base: u32, instruction_index: usize) -> Result<u32, CompileError> {
+    let instruction_index_u32 = u32::try_from(instruction_index)
+        .map_err(|_| CompileError::ProgramCounterOutOfBounds { instruction_index })?;
+    instruction_index_u32
+        .checked_mul(DEFAULT_PC_STEP)
+        .and_then(|offset| pc_base.checked_add(offset))
+        .ok_or(CompileError::ProgramCounterOutOfBounds { instruction_index })
 }
 
 pub fn build_pc_to_chip<F, E>(
@@ -226,16 +293,7 @@ pub fn build_pc_to_chip<F, E>(
         .iter()
         .enumerate()
         .map(|(i, slot)| {
-            let instruction_index =
-                u32::try_from(i).map_err(|_| CompileError::ProgramCounterOutOfBounds {
-                    instruction_index: i,
-                })?;
-            let pc = instruction_index
-                .checked_mul(DEFAULT_PC_STEP)
-                .and_then(|offset| exe.program.pc_base.checked_add(offset))
-                .ok_or(CompileError::ProgramCounterOutOfBounds {
-                    instruction_index: i,
-                })?;
+            let pc = pc_for_instruction_index(exe.program.pc_base, i)?;
             let Some((inst, _)) = slot else {
                 return Ok(TraceChipIndex::NoChip);
             };
@@ -486,18 +544,63 @@ fn compile_impl<F: PrimeField32>(
             let chips = opts.chips.ok_or(CompileError::InvalidOptions(
                 "metered rvr compile requires ChipMapping",
             ))?;
-            project.num_airs = Some(u32::try_from(chips.num_airs).map_err(|_| {
-                CompileError::AirCountOutOfBounds {
+            let num_airs =
+                u32::try_from(chips.num_airs).map_err(|_| CompileError::AirCountOutOfBounds {
                     num_airs: chips.num_airs,
-                }
-            })?);
-            if project.num_airs == Some(0) {
+                })?;
+            if num_airs == 0 {
                 return Err(CompileError::InvalidOptions(
                     "metered rvr compile requires at least one AIR",
                 ));
             }
+            project.num_airs = Some(num_airs);
+            let expected_slots = exe.program.instructions_and_debug_infos.len();
+            if chips.pc_to_chip.len() != expected_slots {
+                return Err(CompileError::ChipMappingLengthMismatch {
+                    expected: expected_slots,
+                    actual: chips.pc_to_chip.len(),
+                });
+            }
+            for (slot, chip) in chips.pc_to_chip.iter().copied().enumerate() {
+                let TraceChipIndex::Chip(chip) = chip else {
+                    continue;
+                };
+                if chip.as_u32() >= num_airs {
+                    return Err(CompileError::ChipIndexOutOfBounds {
+                        pc: pc_for_instruction_index(exe.program.pc_base, slot)?,
+                        chip_idx: chip.as_u32(),
+                        num_airs,
+                    });
+                }
+            }
             project.pc_to_chip = Some(chips.pc_to_chip.clone());
             project.chip_widths = chips.chip_widths.clone();
+            match opts.execution_kind {
+                RvrExecutionKind::MeteredCost => {
+                    let widths =
+                        project
+                            .chip_widths
+                            .as_ref()
+                            .ok_or(CompileError::InvalidOptions(
+                                "metered-cost rvr compile requires chip widths",
+                            ))?;
+                    if widths.len() != chips.num_airs {
+                        return Err(CompileError::InvalidOptions(
+                            "metered-cost chip widths must match the AIR count",
+                        ));
+                    }
+                }
+                RvrExecutionKind::Metered | RvrExecutionKind::MeteredSegment => {
+                    if project.chip_widths.is_some() {
+                        return Err(CompileError::InvalidOptions(
+                            "per-chip metered rvr compile does not use chip widths",
+                        ));
+                    }
+                }
+                RvrExecutionKind::Pure | RvrExecutionKind::PureWithInstretTracking => {
+                    unreachable!()
+                }
+            }
         }
     }
 

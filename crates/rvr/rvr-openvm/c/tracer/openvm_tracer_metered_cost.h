@@ -1,94 +1,39 @@
-/* OpenVM metered-cost tracing helpers.
- *
- * Accumulates scalar trace cell cost matching OpenVM's MeteredCostCtx.
- * Instruction retirement is counted directly at generated block boundaries.
- *
- * All functions are static inline for zero-overhead inlining.
- */
+/* OpenVM metered-cost execution helpers. */
 
 #ifndef OPENVM_TRACER_METERED_COST_H
 #define OPENVM_TRACER_METERED_COST_H
 
-#include <stdint.h>
-
 #include "openvm_state.h"
 
-/* ── Trace-only register access (no-ops in metered cost mode) ────── */
-
-static __attribute__((always_inline)) inline void trace_reg_read(
-    RvState* restrict state [[maybe_unused]], uint8_t idx [[maybe_unused]],
-    uint64_t val [[maybe_unused]]) {}
-static __attribute__((always_inline)) inline void trace_reg_write(
-    RvState* restrict state [[maybe_unused]], uint8_t idx [[maybe_unused]],
-    uint64_t new_val [[maybe_unused]]) {}
-
-/* ── Trace-only memory reads (no-ops in metered cost mode) ───────── */
-
-static __attribute__((always_inline)) inline void trace_rd_mem_u8(
-    RvState* restrict state [[maybe_unused]], uint64_t addr [[maybe_unused]],
-    uint8_t val [[maybe_unused]]) {}
-static __attribute__((always_inline)) inline void trace_rd_mem_i8(
-    RvState* restrict state [[maybe_unused]], uint64_t addr [[maybe_unused]],
-    int8_t val [[maybe_unused]]) {}
-static __attribute__((always_inline)) inline void trace_rd_mem_u16(
-    RvState* restrict state [[maybe_unused]], uint64_t addr [[maybe_unused]],
-    uint16_t val [[maybe_unused]]) {}
-static __attribute__((always_inline)) inline void trace_rd_mem_i16(
-    RvState* restrict state [[maybe_unused]], uint64_t addr [[maybe_unused]],
-    int16_t val [[maybe_unused]]) {}
-static __attribute__((always_inline)) inline void trace_rd_mem_u32(
-    RvState* restrict state [[maybe_unused]], uint64_t addr [[maybe_unused]],
-    uint32_t val [[maybe_unused]]) {}
-static __attribute__((always_inline)) inline void trace_rd_mem_i32(
-    RvState* restrict state [[maybe_unused]], uint64_t addr [[maybe_unused]],
-    int32_t val [[maybe_unused]]) {}
-static __attribute__((always_inline)) inline void trace_rd_mem_u64(
-    RvState* restrict state [[maybe_unused]], uint64_t addr [[maybe_unused]],
-    uint64_t val [[maybe_unused]]) {}
-
-/* ── Trace-only memory writes (no-ops in metered cost mode) ──────── */
-
-static __attribute__((always_inline)) inline void trace_wr_mem_u8(
-    RvState* restrict state [[maybe_unused]], uint64_t addr [[maybe_unused]],
-    uint8_t new_val [[maybe_unused]]) {}
-static __attribute__((always_inline)) inline void trace_wr_mem_u16(
-    RvState* restrict state [[maybe_unused]], uint64_t addr [[maybe_unused]],
-    uint16_t new_val [[maybe_unused]]) {}
-static __attribute__((always_inline)) inline void trace_wr_mem_u32(
-    RvState* restrict state [[maybe_unused]], uint64_t addr [[maybe_unused]],
-    uint32_t new_val [[maybe_unused]]) {}
-static __attribute__((always_inline)) inline void trace_wr_mem_u64(
-    RvState* restrict state [[maybe_unused]], uint64_t addr [[maybe_unused]],
-    uint64_t new_val [[maybe_unused]]) {}
-
-/* ── Trace-only word-range memory access (no-ops in metered cost mode) */
-
-static __attribute__((always_inline)) inline void trace_rd_mem_u64_range(
-    RvState* restrict state [[maybe_unused]], uint64_t base_addr [[maybe_unused]],
-    const uint64_t* vals [[maybe_unused]], uint32_t num_words [[maybe_unused]]) {}
-static __attribute__((always_inline)) inline void trace_wr_mem_u64_range(
-    RvState* restrict state [[maybe_unused]], uint64_t base_addr [[maybe_unused]],
-    const uint64_t* vals [[maybe_unused]], uint32_t num_words [[maybe_unused]]) {}
-
-/* ── Trace-only operations ────────────────────────────────────────── */
-
-static __attribute__((always_inline)) inline void trace_mem_access(
-    RvState* restrict state [[maybe_unused]], uint64_t addr [[maybe_unused]],
-    uint32_t addr_space [[maybe_unused]]) {}
-
-static __attribute__((always_inline)) inline void trace_mem_access_u64_range(
-    RvState* restrict state [[maybe_unused]], uint64_t base_addr [[maybe_unused]],
-    uint64_t num_dwords [[maybe_unused]], uint32_t addr_space [[maybe_unused]]) {}
-
-static __attribute__((always_inline)) inline void trace_pc(
-    RvState* restrict state [[maybe_unused]], uint64_t pc [[maybe_unused]]) {}
-
-/* chip_idx is assigned from the bounded executor-to-AIR mapping. */
-#pragma clang unsafe_buffer_usage begin
-static __attribute__((always_inline)) inline void trace_chip(
-    RvState* restrict state, uint32_t chip_idx, uint32_t count) {
-  state->mode_state.cost += state->mode_state.chip_widths[chip_idx] * (uint64_t)count;
+/* Memory page accounting does not contribute to scalar metered cost. */
+static __attribute__((always_inline)) inline void read_mem_u64_range(
+    RvState* restrict state, uint64_t base_addr, uint64_t* restrict out,
+    uint32_t num_words) {
+  read_mem_u64_range_raw(state, base_addr, out, num_words);
 }
-#pragma clang unsafe_buffer_usage end
+
+static __attribute__((always_inline)) inline void write_mem_u64_range(
+    RvState* restrict state, uint64_t base_addr, const uint64_t* restrict vals,
+    uint32_t num_words) {
+  write_mem_u64_range_raw(state, base_addr, vals, num_words);
+}
+
+/* Peeking at a value does not contribute to scalar metered cost. */
+static __attribute__((always_inline)) inline uint64_t peek_mem_u64(
+    RvState* restrict state, uint64_t addr) {
+  return read_mem_u64(state->memory, addr);
+}
+
+static __attribute__((always_inline)) inline void peek_mem_u64_range(
+    RvState* restrict state, uint64_t base_addr, uint64_t* restrict out,
+    uint32_t num_words) {
+  read_mem_u64_range_raw(state, base_addr, out, num_words);
+}
+
+/* Page locations do not affect scalar metered cost. */
+static __attribute__((always_inline)) inline void trace_page_access_u64_range(
+    RvState* restrict state [[maybe_unused]],
+    uint64_t base_addr [[maybe_unused]], uint64_t num_dwords [[maybe_unused]],
+    uint32_t addr_space [[maybe_unused]]) {}
 
 #endif /* OPENVM_TRACER_METERED_COST_H */

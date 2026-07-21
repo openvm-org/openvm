@@ -709,8 +709,8 @@ fn worklist(
     let mut unresolved_dynamic_jumps: HashSet<u64> = HashSet::new();
     let mut resolved_jumps: HashMap<u64, HashSet<u64>> = HashMap::new();
 
-    // Internal targets receive state from their real predecessors. An unknown seed would discard
-    // constants used to resolve dynamic jumps.
+    // Do not seed internal targets with unknown register values. Their actual
+    // predecessors may provide constants needed to resolve dynamic jumps.
     for addr in function_entries {
         if in_work.insert(*addr) {
             states.insert(*addr, RegisterState::new());

@@ -8,12 +8,13 @@
 use std::{ffi::c_void, marker::PhantomData};
 
 use num_bigint::BigUint;
-use openvm_instructions::riscv::RV64_MEMORY_AS;
 use rvr_openvm_ext_algebra_ffi_common::{
     known_field_op_fn, limb_bytes_to_words, mod_inverse, read_bigint, read_field_256, write_bigint,
     write_field_256, FieldArith, KnownFieldArith,
 };
-use rvr_openvm_ext_ffi_common::{rd_mem_words_traced, trace_mem_access_range, wr_mem_words_traced};
+use rvr_openvm_ext_ffi_common::{
+    read_mem_words, u64s_as_bytes, u64s_as_bytes_mut, write_mem_words,
+};
 
 const FIELD_256_BYTES: u64 = rvr_openvm_ext_algebra_ffi_common::FIELD_256_BYTES as u64;
 
@@ -126,7 +127,8 @@ unknown_field_op_fn!(rvr_ext_fp2_mul, UnknownComplexField, mul);
 unknown_field_op_fn!(rvr_ext_fp2_div, UnknownComplexField, div);
 
 /// # Safety
-/// `state` must be a valid `RvState` pointer.
+/// `state` must be a valid `RvState` pointer. `modulus_ptr` must point to
+/// `num_limbs` bytes.
 #[no_mangle]
 pub unsafe extern "C" fn rvr_ext_fp2_setup(
     state: *mut c_void,
@@ -134,14 +136,25 @@ pub unsafe extern "C" fn rvr_ext_fp2_setup(
     rs1_ptr: u64,
     rs2_ptr: u64,
     num_limbs: u32,
-) {
+    modulus_ptr: *const u8,
+) -> bool {
     let total_limbs = num_limbs.checked_mul(2).expect("Fp2 limb count overflow");
     let num_words = limb_bytes_to_words(total_limbs);
     debug_assert!(num_words >= 1);
 
-    let mut input_words = vec![0u64; num_words as usize];
-    rd_mem_words_traced(state, rs1_ptr, &mut input_words);
-    trace_mem_access_range(state, rs2_ptr, num_words, RV64_MEMORY_AS);
+    let mut words = vec![0u64; num_words as usize];
+    read_mem_words(state, rs1_ptr, &mut words);
+    let num_limbs = num_limbs as usize;
+    let modulus_bytes = std::slice::from_raw_parts(modulus_ptr, num_limbs);
+    let input_bytes = u64s_as_bytes(&words);
+    let modulus_matches = &input_bytes[..num_limbs] == modulus_bytes;
+    let second_input = BigUint::from_bytes_le(&input_bytes[num_limbs..2 * num_limbs]);
+
+    // SETUP reads both inputs before it validates the configured modulus.
+    read_mem_words(state, rs2_ptr, &mut words);
+    if !modulus_matches {
+        return false;
+    }
 
     // Setup validates that the guest-provided base-field modulus and setup
     // inputs match the constants configured into this chip.
@@ -149,6 +162,11 @@ pub unsafe extern "C" fn rvr_ext_fp2_setup(
     // In mod-builder, `Input(0)` means the first input slot. For setup, that
     // slot is the modulus p read from rs1. VM evaluates inputs modulo p,
     // so each setup coordinate writes p % p = 0.
-    let output_words = vec![0u64; num_words as usize];
-    wr_mem_words_traced(state, rd_ptr, &output_words);
+    let modulus = BigUint::from_bytes_le(modulus_bytes);
+    let second_output = (second_input % modulus).to_bytes_le();
+    let mut output_words = vec![0u64; num_words as usize];
+    let output_bytes = u64s_as_bytes_mut(&mut output_words);
+    output_bytes[num_limbs..num_limbs + second_output.len()].copy_from_slice(&second_output);
+    write_mem_words(state, rd_ptr, &output_words);
+    true
 }

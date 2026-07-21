@@ -1,12 +1,30 @@
 use std::{collections::HashSet, fmt::Write};
 
 use openvm_instructions::riscv::RV64_MEMORY_AS;
+use rvr_openvm_ir::MemWidth;
 
 use super::codegen::hex_u32;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
+#[error("chip index {chip_idx} is outside AIR count {num_airs}")]
+pub(crate) struct InvalidChipIndex {
+    pub chip_idx: u32,
+    pub num_airs: u32,
+}
+
+pub(crate) fn validate_chip_index(chip_idx: u32, num_airs: u32) -> Result<(), InvalidChipIndex> {
+    if chip_idx < num_airs {
+        Ok(())
+    } else {
+        Err(InvalidChipIndex { chip_idx, num_airs })
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(crate) enum EmitMode {
-    /// Memory accesses go through `*_traced` helpers so tracing sees values.
+    /// Emit ordered register, PC, and memory-value hooks.
+    ///
+    /// Page hooks are separate because they record only addresses for metering.
     #[allow(dead_code)]
     ValueTrace,
     /// Memory accesses use direct helpers and do not emit memory trace events.
@@ -14,6 +32,8 @@ pub(crate) enum EmitMode {
     Direct,
     /// Metered block ABI. Blocks with memory ops record AS_MEMORY pages locally.
     Metered { trace_memory_pages: bool },
+    /// Metered-cost execution with chip widths written into generated C.
+    MeteredCost,
 }
 
 /// Extra values carried between generated blocks through the `preserve_none`
@@ -40,11 +60,7 @@ impl BlockAbi {
 }
 
 impl EmitMode {
-    fn has_metered_abi(self) -> bool {
-        matches!(self, Self::Metered { .. })
-    }
-
-    fn traces_memory_values(self) -> bool {
+    fn traces_values(self) -> bool {
         matches!(self, Self::ValueTrace)
     }
 
@@ -68,8 +84,14 @@ impl EmitMode {
     }
 }
 
+#[derive(Clone, Copy)]
+enum RegisterReadKind {
+    MemoryAccess,
+    Peek,
+}
+
 /// Code generation context. Holds a mutable buffer and tracks hot registers.
-pub struct EmitContext {
+pub struct EmitContext<'a> {
     buf: String,
     hot_regs: HashSet<u8>,
     /// Base indentation level (in 4-space units) for emitted lines.
@@ -79,10 +101,20 @@ pub struct EmitContext {
     uses_raw_memory: bool,
     mode: EmitMode,
     block_abi: BlockAbi,
+    chip_widths: Option<&'a [u64]>,
+    num_airs: Option<u32>,
+    invalid_chip_index: Option<InvalidChipIndex>,
 }
 
-impl EmitContext {
-    pub(crate) fn new(hot_regs: HashSet<u8>, mode: EmitMode, block_abi: BlockAbi) -> Self {
+impl<'a> EmitContext<'a> {
+    pub(crate) fn new(
+        hot_regs: HashSet<u8>,
+        mode: EmitMode,
+        block_abi: BlockAbi,
+        chip_widths: Option<&'a [u64]>,
+        num_airs: Option<u32>,
+    ) -> Self {
+        debug_assert_eq!(matches!(mode, EmitMode::MeteredCost), chip_widths.is_some());
         Self {
             buf: String::with_capacity(1024),
             hot_regs,
@@ -91,6 +123,9 @@ impl EmitContext {
             uses_raw_memory: false,
             mode,
             block_abi,
+            chip_widths,
+            num_airs,
+            invalid_chip_index: None,
         }
     }
 
@@ -137,7 +172,7 @@ impl EmitContext {
         self.buf.push('\n');
     }
 
-    /// Flush block-local metering state and tail-call the shared RVR trap.
+    /// Save local metering state and tail-call the shared RVR trap.
     pub fn emit_trap(&mut self) {
         self.flush_page_locals();
         let args = self.tail_call_args();
@@ -187,59 +222,66 @@ impl EmitContext {
         }
     }
 
-    /// Read a register with tracing. Returns a C expression for the value.
-    pub fn read_reg(&mut self, idx: u8) -> String {
+    pub(crate) fn traces_values(&self) -> bool {
+        self.mode.traces_values()
+    }
+
+    fn read_reg_impl(&mut self, idx: u8, kind: RegisterReadKind) -> String {
         if idx == 0 {
             return "0ull".to_string();
         }
-        if self.hot_regs.contains(&idx) {
+
+        let value = if self.hot_regs.contains(&idx) {
             let name = Self::abi_name(idx);
-            self.write_line(&format!("trace_reg_read(state, {idx}, {name});"));
             name.to_string()
         } else {
             let var = self.next_var();
             self.write_line(&format!("uint64_t {var} = reg_read(state, {idx});"));
-            self.write_line(&format!("trace_reg_read(state, {idx}, {var});"));
             var
+        };
+
+        if self.mode.traces_values() {
+            let trace_fn = match kind {
+                RegisterReadKind::MemoryAccess => "trace_reg_read",
+                RegisterReadKind::Peek => "trace_reg_peek",
+            };
+            self.write_line(&format!("{trace_fn}(state, {idx}, {value});"));
         }
+
+        value
     }
 
-    /// Read a register WITHOUT tracing (for phantom instructions).
-    pub fn read_reg_raw(&mut self, idx: u8) -> String {
-        if idx == 0 {
-            return "0ull".to_string();
-        }
-        if self.hot_regs.contains(&idx) {
-            Self::abi_name(idx).to_string()
-        } else {
-            format!("state->regs[{idx}]")
-        }
+    /// Read an AIR-visible register value.
+    pub fn read_reg(&mut self, idx: u8) -> String {
+        self.read_reg_impl(idx, RegisterReadKind::MemoryAccess)
     }
 
-    /// Write a register with tracing. Trace before write so the helper can read
-    /// the old value from state if needed.
-    ///
-    /// `val` is materialized into a temporary first so it is evaluated exactly
-    /// once even when interpolated into both the trace and the data write
-    /// statements. This matters when `val` is an opaque function call (e.g.
-    /// an `rvr_ext_*` extension entry point) that the C compiler cannot CSE.
+    /// Get a register value without creating a VM memory access.
+    pub fn peek_reg(&mut self, idx: u8) -> String {
+        self.read_reg_impl(idx, RegisterReadKind::Peek)
+    }
+
+    /// Write a register with tracing when value tracing is enabled.
     pub fn write_reg(&mut self, idx: u8, val: &str) {
         if idx == 0 {
             return;
         }
-        let tmp = self.next_var();
-        self.write_line(&format!("uint64_t {tmp} = (uint64_t)({val});"));
-        self.write_line(&format!("trace_reg_write(state, {idx}, {tmp});"));
-        if self.hot_regs.contains(&idx) {
-            let name = Self::abi_name(idx);
-            self.write_line(&format!("{name} = {tmp};"));
-        } else {
-            self.write_line(&format!("reg_write(state, {idx}, {tmp});"));
+        if self.mode.traces_values() {
+            let tmp = self.next_var();
+            self.write_line(&format!("uint64_t {tmp} = (uint64_t)({val});"));
+            self.write_line(&format!("trace_reg_write(state, {idx}, {tmp});"));
+            if self.hot_regs.contains(&idx) {
+                let name = Self::abi_name(idx);
+                self.write_line(&format!("{name} = {tmp};"));
+            } else {
+                self.write_line(&format!("reg_write(state, {idx}, {tmp});"));
+            }
+            return;
         }
+        self.write_reg_direct(idx, &format!("(uint64_t)({val})"));
     }
 
-    /// Write a register WITHOUT tracing (for phantom instructions).
-    pub fn write_reg_raw(&mut self, idx: u8, val: &str) {
+    fn write_reg_direct(&mut self, idx: u8, val: &str) {
         if idx == 0 {
             return;
         }
@@ -261,31 +303,27 @@ impl EmitContext {
         }
     }
 
-    fn read_mem_helper(width: u8, signed: bool, traced: bool) -> (&'static str, &'static str) {
-        let (raw_func, traced_func, var_ty) = match (width, signed) {
-            (1, false) => ("rd_mem_u8", "rd_mem_u8_traced", "uint32_t"),
-            (1, true) => ("rd_mem_i8", "rd_mem_i8_traced", "int32_t"),
-            (2, false) => ("rd_mem_u16", "rd_mem_u16_traced", "uint32_t"),
-            (2, true) => ("rd_mem_i16", "rd_mem_i16_traced", "int32_t"),
-            (4, false) => ("rd_mem_u32", "rd_mem_u32_traced", "uint32_t"),
-            (4, true) => ("rd_mem_i32", "rd_mem_i32_traced", "int32_t"),
-            (8, _) => ("rd_mem_u64", "rd_mem_u64_traced", "uint64_t"),
+    fn read_mem_helper(width: u8, signed: bool) -> (&'static str, &'static str, &'static str) {
+        match (width, signed) {
+            (1, false) => ("read_mem_u8", "trace_read_mem_u8", "uint32_t"),
+            (1, true) => ("read_mem_i8", "trace_read_mem_i8", "int32_t"),
+            (2, false) => ("read_mem_u16", "trace_read_mem_u16", "uint32_t"),
+            (2, true) => ("read_mem_i16", "trace_read_mem_i16", "int32_t"),
+            (4, false) => ("read_mem_u32", "trace_read_mem_u32", "uint32_t"),
+            (4, true) => ("read_mem_i32", "trace_read_mem_i32", "int32_t"),
+            (8, _) => ("read_mem_u64", "trace_read_mem_u64", "uint64_t"),
             _ => unreachable!("invalid memory width {width}"),
-        };
-        let func = if traced { traced_func } else { raw_func };
-        (func, var_ty)
+        }
     }
 
-    fn write_mem_helper(width: u8, traced: bool) -> (&'static str, &'static str) {
-        let (raw_func, traced_func, cast_ty) = match width {
-            1 => ("wr_mem_u8", "wr_mem_u8_traced", "uint8_t"),
-            2 => ("wr_mem_u16", "wr_mem_u16_traced", "uint16_t"),
-            4 => ("wr_mem_u32", "wr_mem_u32_traced", "uint32_t"),
-            8 => ("wr_mem_u64", "wr_mem_u64_traced", "uint64_t"),
+    fn write_mem_helper(width: u8) -> (&'static str, &'static str, &'static str) {
+        match width {
+            1 => ("write_mem_u8", "trace_write_mem_u8", "uint8_t"),
+            2 => ("write_mem_u16", "trace_write_mem_u16", "uint16_t"),
+            4 => ("write_mem_u32", "trace_write_mem_u32", "uint32_t"),
+            8 => ("write_mem_u64", "trace_write_mem_u64", "uint64_t"),
             _ => unreachable!("invalid memory width {width}"),
-        };
-        let func = if traced { traced_func } else { raw_func };
-        (func, cast_ty)
+        }
     }
 
     /// Read guest memory. Metered hot blocks record the memory page separately.
@@ -296,16 +334,13 @@ impl EmitContext {
         );
         let addr = Self::addr_expr(base, offset);
         let var = self.next_var();
-        let value_traced = self.mode.traces_memory_values();
-        let (data_func, var_ty) = Self::read_mem_helper(width, signed, value_traced);
-        let data_arg = if value_traced { "state" } else { "memory" };
-        if !value_traced {
-            self.uses_raw_memory = true;
-        }
+        let (read_func, trace_func, var_ty) = Self::read_mem_helper(width, signed);
+        self.uses_raw_memory = true;
 
-        self.write_line(&format!(
-            "{var_ty} {var} = {data_func}({data_arg}, {addr});"
-        ));
+        self.write_line(&format!("{var_ty} {var} = {read_func}(memory, {addr});"));
+        if self.mode.traces_values() {
+            self.write_line(&format!("{trace_func}(state, {addr}, {var});"));
+        }
         if self.mode.traces_memory_pages() {
             self.emit_inline_page_record(&addr, width);
         }
@@ -321,19 +356,22 @@ impl EmitContext {
             "metered memory write emitted without page tracking"
         );
         let addr = Self::addr_expr(base, offset);
-        let value_traced = self.mode.traces_memory_values();
-        let (wr_func, cast_ty) = Self::write_mem_helper(width, value_traced);
-        let data_arg = if value_traced { "state" } else { "memory" };
-        if !value_traced {
-            self.uses_raw_memory = true;
-        }
+        let (write_func, trace_func, cast_ty) = Self::write_mem_helper(width);
+        self.uses_raw_memory = true;
 
         if self.mode.traces_memory_pages() {
             self.emit_inline_page_record(&addr, width);
         }
-        self.write_line(&format!(
-            "{wr_func}({data_arg}, {addr}, ({cast_ty})({val}));"
-        ));
+        if self.mode.traces_values() {
+            let value = self.next_var();
+            self.write_line(&format!("{cast_ty} {value} = ({cast_ty})({val});"));
+            self.write_line(&format!("{trace_func}(state, {addr}, {value});"));
+            self.write_line(&format!("{write_func}(memory, {addr}, {value});"));
+        } else {
+            self.write_line(&format!(
+                "{write_func}(memory, {addr}, ({cast_ty})({val}));"
+            ));
+        }
     }
 
     fn emit_inline_page_record(&mut self, addr: &str, width: u8) {
@@ -358,11 +396,11 @@ impl EmitContext {
         }
     }
 
-    /// Emit a trace_pc call. Per-instruction chip accounting is rolled into
-    /// the per-block chip update emitted at block entry by
-    /// `CProject::emit_block_function`, not here.
+    /// Emit a PC read when value tracing is enabled.
     pub fn trace_pc(&mut self, pc: u64) {
-        self.write_line(&format!("trace_pc(state, 0x{pc:08x}ull);"));
+        if self.mode.traces_values() {
+            self.write_line(&format!("trace_pc(state, 0x{pc:08x}ull);"));
+        }
     }
 
     pub fn emit_call(&mut self, name: &str, args: &[&str]) {
@@ -386,40 +424,107 @@ impl EmitContext {
         tmp
     }
 
+    pub fn emit_call_with_trace_result(
+        &mut self,
+        ret_ty: &str,
+        name: &str,
+        args: &[&str],
+    ) -> Option<String> {
+        if matches!(self.mode, EmitMode::ValueTrace | EmitMode::Direct) {
+            self.emit_call(name, args);
+            None
+        } else {
+            Some(self.emit_call_expr(ret_ty, name, args))
+        }
+    }
+
     pub fn trace_chip(&mut self, chip_idx: u32, count_expr: &str) {
         if chip_idx == u32::MAX {
             return;
         }
-        if self.mode.has_metered_abi() {
-            self.write_line(&format!("(*trace_heights)[{chip_idx}] += {count_expr};"));
-        } else {
-            self.write_line(&format!("trace_chip(state, {chip_idx}u, {count_expr});"));
+        if !matches!(self.mode, EmitMode::ValueTrace | EmitMode::Direct) {
+            let num_airs = self
+                .num_airs
+                .expect("metered code generation requires the AIR count");
+            if let Err(error) = validate_chip_index(chip_idx, num_airs) {
+                self.invalid_chip_index.get_or_insert(error);
+                return;
+            }
+        }
+        match self.mode {
+            EmitMode::ValueTrace | EmitMode::Direct => {}
+            EmitMode::Metered { .. } => {
+                self.write_line(&format!("(*trace_heights)[{chip_idx}] += {count_expr};"));
+            }
+            EmitMode::MeteredCost => {
+                let width = self
+                    .chip_widths
+                    .unwrap()
+                    .get(chip_idx as usize)
+                    .copied()
+                    .expect("extension chip index exceeds chip-width table");
+                if width != 0 {
+                    self.write_line(&format!(
+                        "state->mode_state.cost += {width}ull * (uint64_t)({count_expr});"
+                    ));
+                }
+            }
         }
     }
 
-    pub fn trace_mem_access(&mut self, addr: &str, addr_space: u32) {
+    pub(crate) fn invalid_chip_index(&self) -> Option<InvalidChipIndex> {
+        self.invalid_chip_index
+    }
+
+    pub fn trace_chip_if_nonzero(&mut self, chip_idx: u32, count_expr: &str) {
+        if chip_idx == u32::MAX || matches!(self.mode, EmitMode::ValueTrace | EmitMode::Direct) {
+            return;
+        }
+        self.write_line(&format!("if (({count_expr}) != 0u) {{"));
+        self.trace_chip(chip_idx, count_expr);
+        self.write_line("}");
+    }
+
+    pub fn trace_page_access(&mut self, addr: &str, width: MemWidth, addr_space: u32) {
+        assert!(
+            !self.mode.traces_values(),
+            "page-only access is invalid when values are being traced"
+        );
+        if !matches!(self.mode, EmitMode::Metered { .. }) {
+            return;
+        }
         let touches_memory = addr_space == RV64_MEMORY_AS;
         if touches_memory {
             self.flush_page_locals();
         }
-        self.write_line(&format!("trace_mem_access(state, {addr}, {addr_space}u);"));
+        let size = width.bytes();
+        self.write_line(&format!(
+            "trace_page_access(state, {addr}, {size}u, {addr_space}u);"
+        ));
         if touches_memory {
             self.reload_page_locals();
         }
     }
 
-    pub fn trace_mem_access_u64_range(
+    pub fn trace_page_access_u64_range(
         &mut self,
         base_addr: &str,
         num_dwords: &str,
         addr_space: u32,
     ) {
+        assert!(
+            !self.mode.traces_values(),
+            "page-only access is invalid when values are being traced"
+        );
+        if !matches!(self.mode, EmitMode::Metered { .. }) {
+            return;
+        }
         let touches_memory = addr_space == RV64_MEMORY_AS;
         if touches_memory {
             self.flush_page_locals();
         }
         self.write_line(&format!(
-            "trace_mem_access_u64_range(state, {base_addr}, {num_dwords}, {addr_space}u);"
+            "trace_page_access_u64_range(state, {base_addr}, {num_dwords}, {addr_space}u);"
         ));
         if touches_memory {
             self.reload_page_locals();
@@ -475,21 +580,17 @@ impl EmitContext {
     }
 }
 
-impl rvr_openvm_ir::ExtEmitCtx for EmitContext {
+impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
     fn read_reg(&mut self, idx: u8) -> String {
         EmitContext::read_reg(self, idx)
     }
 
-    fn read_reg_raw(&mut self, idx: u8) -> String {
-        EmitContext::read_reg_raw(self, idx)
+    fn peek_reg(&mut self, idx: u8) -> String {
+        EmitContext::peek_reg(self, idx)
     }
 
     fn write_reg(&mut self, idx: u8, val: &str) {
         EmitContext::write_reg(self, idx, val)
-    }
-
-    fn write_reg_raw(&mut self, idx: u8, val: &str) {
-        EmitContext::write_reg_raw(self, idx, val)
     }
 
     fn write_line(&mut self, s: &str) {
@@ -520,16 +621,29 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext {
         EmitContext::emit_call_expr(self, ret_ty, name, args)
     }
 
+    fn emit_call_with_trace_result(
+        &mut self,
+        ret_ty: &str,
+        name: &str,
+        args: &[&str],
+    ) -> Option<String> {
+        EmitContext::emit_call_with_trace_result(self, ret_ty, name, args)
+    }
+
     fn trace_chip(&mut self, chip_idx: u32, count_expr: &str) {
         EmitContext::trace_chip(self, chip_idx, count_expr);
     }
 
-    fn trace_mem_access(&mut self, addr: &str, addr_space: u32) {
-        EmitContext::trace_mem_access(self, addr, addr_space);
+    fn trace_chip_if_nonzero(&mut self, chip_idx: u32, count_expr: &str) {
+        EmitContext::trace_chip_if_nonzero(self, chip_idx, count_expr);
     }
 
-    fn trace_mem_access_u64_range(&mut self, base_addr: &str, num_dwords: &str, addr_space: u32) {
-        EmitContext::trace_mem_access_u64_range(self, base_addr, num_dwords, addr_space);
+    fn trace_page_access(&mut self, addr: &str, width: MemWidth, addr_space: u32) {
+        EmitContext::trace_page_access(self, addr, width, addr_space);
+    }
+
+    fn trace_page_access_u64_range(&mut self, base_addr: &str, num_dwords: &str, addr_space: u32) {
+        EmitContext::trace_page_access_u64_range(self, base_addr, num_dwords, addr_space);
     }
 }
 
@@ -539,13 +653,15 @@ mod tests {
 
     use super::{BlockAbi, EmitContext, EmitMode};
 
-    fn metered_memory_ctx() -> EmitContext {
+    fn metered_memory_ctx() -> EmitContext<'static> {
         EmitContext::new(
             HashSet::new(),
             EmitMode::Metered {
                 trace_memory_pages: true,
             },
             BlockAbi::Metered,
+            None,
+            Some(1),
         )
     }
 

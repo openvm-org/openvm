@@ -13,6 +13,7 @@ rvr-openvm-lift.workspace = true
 
 openvm-instructions.workspace = true
 openvm-keccak256-transpiler.workspace = true
+p3-keccak-air.workspace = true
 
 [build-dependencies]
 rvr-openvm-build.workspace = true

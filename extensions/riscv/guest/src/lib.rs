@@ -31,7 +31,7 @@ pub const CSRRW_FUNCT3: u8 = 0b001;
 // For the constraints, they are configured for a range of MAX_HINT_BUFFER_DWORDS_BITS between
 // [8,16)
 pub const MAX_HINT_BUFFER_DWORDS_BITS: usize = 10;
-// RVR narrows a validated HINT_BUFFER count to `u16` at its host callback ABI.
+// RVR checks the HINT_BUFFER count before passing it to the host as `u16`.
 const _: () = assert!(MAX_HINT_BUFFER_DWORDS_BITS <= u16::BITS as usize);
 /// Maximum number of dwords that can be read in a single HINT_BUFFER instruction.
 /// AIR constraint requires rem_dwords < 2^MAX_HINT_BUFFER_DWORDS_BITS, so max is one less

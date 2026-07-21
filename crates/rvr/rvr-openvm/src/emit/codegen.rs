@@ -9,7 +9,7 @@ use super::context::EmitContext;
 /// Trait for instructions that can emit their own C code.
 pub trait InstrCodegen {
     /// Emit the C body for this instruction into the buffer.
-    /// `ctx` provides traced helpers for register/memory access.
+    /// `ctx` handles register and memory access for the current execution mode.
     fn emit_c(&self, ctx: &mut EmitContext);
 }
 
@@ -169,6 +169,10 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
             target,
         } => {
             if let Some(taken) = constant_branch_result(*cond, *rs1, *rs2) {
+                if ctx.traces_values() {
+                    ctx.read_reg(*rs1);
+                    ctx.read_reg(*rs2);
+                }
                 let destination = if taken { *target } else { next_pc };
                 emit_tail_call(ctx, destination, &args, tc.valid_blocks);
                 return;
@@ -211,7 +215,7 @@ fn static_tail_call(target: u64, args: &str, valid_blocks: &HashSet<u64>) -> Str
     if valid_blocks.contains(&target) {
         format!("[[clang::musttail]] return block_0x{target:08x}({args});")
     } else {
-        format!("[[clang::musttail]] return rv_trap({args});")
+        format!("state->pc = 0x{target:016x}ull; [[clang::musttail]] return rv_trap({args});")
     }
 }
 

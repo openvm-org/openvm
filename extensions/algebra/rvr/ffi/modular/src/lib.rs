@@ -11,15 +11,13 @@ use std::{ffi::c_void, marker::PhantomData};
 use halo2curves_axiom::ff::PrimeField;
 use num_bigint::BigUint;
 use num_traits::One;
-use openvm_instructions::riscv::RV64_MEMORY_AS;
 use openvm_platform::WORD_SIZE;
 use rvr_openvm_ext_algebra_ffi_common::{
     known_field_op_fn, limb_bytes_to_words, mod_inverse, read_bigint, read_field_256, write_bigint,
     write_field_256, FieldArith, KnownFieldArith,
 };
 use rvr_openvm_ext_ffi_common::{
-    ext_hint_stream_set, rd_mem_u64_range_wrapper, rd_mem_words_traced, trace_mem_access_range,
-    wr_mem_words_traced,
+    ext_hint_stream_set, peek_mem_words, read_mem_words, u64s_as_bytes, write_mem_words,
 };
 
 // ── Field structs ────────────────────────────────────────────────────────────
@@ -141,7 +139,8 @@ pub unsafe extern "C" fn rvr_ext_mod_iseq(
 }
 
 /// # Safety
-/// `state` must be a valid `RvState` pointer.
+/// `state` must be a valid `RvState` pointer. `modulus_ptr` must point to
+/// `num_limbs` bytes.
 #[no_mangle]
 pub unsafe extern "C" fn rvr_ext_mod_setup(
     state: *mut c_void,
@@ -149,13 +148,23 @@ pub unsafe extern "C" fn rvr_ext_mod_setup(
     rs1_ptr: u64,
     rs2_ptr: u64,
     num_limbs: u32,
-) {
+    modulus_ptr: *const u8,
+) -> bool {
     let num_words = limb_bytes_to_words(num_limbs);
     debug_assert!(num_words >= 1);
 
-    let mut input_words = vec![0u64; num_words as usize];
-    rd_mem_words_traced(state, rs1_ptr, &mut input_words);
-    trace_mem_access_range(state, rs2_ptr, num_words, RV64_MEMORY_AS);
+    let mut words = vec![0u64; num_words as usize];
+    read_mem_words(state, rs1_ptr, &mut words);
+    let num_limbs = num_limbs as usize;
+    let modulus = std::slice::from_raw_parts(modulus_ptr, num_limbs);
+    let modulus_matches = &u64s_as_bytes(&words)[..num_limbs] == modulus;
+
+    // SETUP reads both inputs even though only the configured modulus affects
+    // the result.
+    read_mem_words(state, rs2_ptr, &mut words);
+    if !modulus_matches {
+        return false;
+    }
 
     // Setup validates that the guest-provided modulus and setup inputs match
     // the constants configured into this chip.
@@ -164,7 +173,39 @@ pub unsafe extern "C" fn rvr_ext_mod_setup(
     // slot is the modulus p read from rs1. VM evaluates inputs modulo p,
     // so the setup output is p % p = 0.
     let output_words = vec![0u64; num_words as usize];
-    wr_mem_words_traced(state, rd_ptr, &output_words);
+    write_mem_words(state, rd_ptr, &output_words);
+    true
+}
+
+/// # Safety
+/// `state` must be a valid `RvState` pointer. `modulus_ptr` must point to
+/// `num_limbs` bytes.
+#[no_mangle]
+pub unsafe extern "C" fn rvr_ext_mod_setup_iseq(
+    state: *mut c_void,
+    rs1_ptr: u64,
+    rs2_ptr: u64,
+    num_limbs: u32,
+    modulus_ptr: *const u8,
+) -> u8 {
+    const INVALID_MODULUS: u8 = 2;
+
+    let num_words = limb_bytes_to_words(num_limbs);
+    debug_assert!(num_words >= 1);
+    let num_limbs = num_limbs as usize;
+    let modulus = std::slice::from_raw_parts(modulus_ptr, num_limbs);
+
+    let mut rs1_words = vec![0u64; num_words as usize];
+    read_mem_words(state, rs1_ptr, &mut rs1_words);
+    let modulus_matches = &u64s_as_bytes(&rs1_words)[..num_limbs] == modulus;
+
+    let mut rs2_words = vec![0u64; num_words as usize];
+    read_mem_words(state, rs2_ptr, &mut rs2_words);
+    if !modulus_matches {
+        return INVALID_MODULUS;
+    }
+
+    u8::from(u64s_as_bytes(&rs1_words)[..num_limbs] == u64s_as_bytes(&rs2_words)[..num_limbs])
 }
 
 // ── Phantom: HintSqrt ────────────────────────────────────────────────────────
@@ -234,8 +275,7 @@ pub unsafe extern "C" fn rvr_ext_algebra_hint_sqrt(
 
     let num_words = limb_bytes_to_words(num_limbs);
     let mut words = vec![0u64; num_words as usize];
-    rd_mem_u64_range_wrapper(state, rs1_ptr, words.as_mut_ptr(), num_words);
-    // Note: no trace here — this is a phantom (hint) instruction, reads are not traced
+    peek_mem_words(state, rs1_ptr, &mut words);
     let mut x_bytes = vec![0u8; num_limbs_usize];
     for (i, &w) in words.iter().enumerate() {
         x_bytes[i * WORD_SIZE..(i + 1) * WORD_SIZE].copy_from_slice(&w.to_le_bytes());

@@ -8,25 +8,24 @@
 #include <string.h>
 
 #include "openvm.h"
+#include "rvr_ext_mod.h"
 
 #if !defined(__BYTE_ORDER__) || __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
 #error "k256 guest limb codecs require a little-endian host"
 #endif
 
-// TODO(follow-up): add some kind of checker during build time to ensure that
-//    RVR_WORD_SIZE and OpenVM WORD_SIZE don't differ from each other
-static constexpr uint32_t RVR_WORD_SIZE = 8;
 static constexpr uint32_t SECP256K1_ELEM_BYTES = 32;
 static constexpr uint32_t SECP256K1_ELEM_WORDS =
-    SECP256K1_ELEM_BYTES / RVR_WORD_SIZE;
+    SECP256K1_ELEM_BYTES / WORD_SIZE;
 
 /* ── libsecp256k1 amalgamation (ECC modules always enabled) ──────────── */
 #include "secp256k1.c"
 
 /* ── k256 field (mod p) helpers ──────────────────────────────────────── */
 
-static inline void bytes_reverse_32(uint8_t out[SECP256K1_ELEM_BYTES],
-                                    const uint8_t in[SECP256K1_ELEM_BYTES]) {
+static inline void bytes_reverse_32(
+    uint8_t out[static const SECP256K1_ELEM_BYTES],
+    const uint8_t in[static const SECP256K1_ELEM_BYTES]) {
   _Static_assert(SECP256K1_ELEM_BYTES == 4 * sizeof(uint64_t), "");
   uint64_t words[4];
   memcpy(words, in, sizeof(words));
@@ -41,7 +40,7 @@ static inline void bytes_reverse_32(uint8_t out[SECP256K1_ELEM_BYTES],
 
 static inline secp256k1_fe fe_read(RvState* state, uint64_t ptr) {
   uint64_t words[SECP256K1_ELEM_WORDS];
-  rd_mem_u64_range_traced(state, ptr, words, SECP256K1_ELEM_WORDS);
+  read_mem_u64_range(state, ptr, words, SECP256K1_ELEM_WORDS);
   uint8_t le[SECP256K1_ELEM_BYTES];
   memcpy(le, words, SECP256K1_ELEM_BYTES);
   uint8_t be[SECP256K1_ELEM_BYTES];
@@ -62,7 +61,7 @@ static inline void fe_write(RvState* state, uint64_t ptr,
   bytes_reverse_32(le, be);
   uint64_t words[SECP256K1_ELEM_WORDS];
   memcpy(words, le, SECP256K1_ELEM_BYTES);
-  wr_mem_u64_range_traced(state, ptr, words, SECP256K1_ELEM_WORDS);
+  write_mem_u64_range(state, ptr, words, SECP256K1_ELEM_WORDS);
 }
 
 static inline secp256k1_fe fe_add(secp256k1_fe a, const secp256k1_fe* b) {
@@ -104,7 +103,7 @@ static inline int fe_is_zero(const secp256k1_fe* a) {
 
 static inline secp256k1_scalar scalar_read(RvState* state, uint64_t ptr) {
   uint64_t words[SECP256K1_ELEM_WORDS];
-  rd_mem_u64_range_traced(state, ptr, words, SECP256K1_ELEM_WORDS);
+  read_mem_u64_range(state, ptr, words, SECP256K1_ELEM_WORDS);
   uint8_t le[SECP256K1_ELEM_BYTES];
   memcpy(le, words, SECP256K1_ELEM_BYTES);
   uint8_t be[SECP256K1_ELEM_BYTES];
@@ -122,7 +121,7 @@ static inline void scalar_write(RvState* state, uint64_t ptr,
   bytes_reverse_32(le, be);
   uint64_t words[SECP256K1_ELEM_WORDS];
   memcpy(words, le, SECP256K1_ELEM_BYTES);
-  wr_mem_u64_range_traced(state, ptr, words, SECP256K1_ELEM_WORDS);
+  write_mem_u64_range(state, ptr, words, SECP256K1_ELEM_WORDS);
 }
 
 /* ── Modular arithmetic: secp256k1 coordinate field (mod p) ──────────── */
@@ -221,10 +220,13 @@ __attribute__((preserve_most)) bool rvr_ext_mod_iseq_k256_scalar(
 /* ── EC ops: secp256k1 (always present in modular, regardless of whether
  * the ECC extension is configured at lift time) ──────────────────────── */
 
-__attribute__((preserve_most)) void rvr_ext_ec_add_ne_k256(
-    RvState* state, uint64_t rd_ptr, uint64_t rs1_ptr, uint64_t rs2_ptr);
-__attribute__((preserve_most)) void rvr_ext_ec_double_k256(
-    RvState* state, uint64_t rd_ptr, uint64_t rs1_ptr);
+__attribute__((preserve_most)) void rvr_ext_ec_add_ne_k256(RvState* state,
+                                                           uint64_t rd_ptr,
+                                                           uint64_t rs1_ptr,
+                                                           uint64_t rs2_ptr);
+__attribute__((preserve_most)) void rvr_ext_ec_double_k256(RvState* state,
+                                                           uint64_t rd_ptr,
+                                                           uint64_t rs1_ptr);
 
 __attribute__((preserve_most)) void rvr_ext_ec_add_ne_k256(RvState* state,
                                                            uint64_t rd_ptr,

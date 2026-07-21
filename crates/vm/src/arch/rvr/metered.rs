@@ -75,7 +75,7 @@ pub struct MeteringState {
     pub check_counter: u32,
     /// Dedup cache for AS_MEMORY pages. `u32::MAX` = none. Reset on flush.
     pub last_mem_page: u32,
-    /// Fills the otherwise implicit tail padding required by the struct's pointer alignment.
+    /// Explicit tail padding that keeps the Rust and C layouts the same.
     pub padding: u32,
 }
 

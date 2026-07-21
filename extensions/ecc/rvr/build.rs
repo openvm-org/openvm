@@ -27,4 +27,6 @@ fn main() {
     );
     println!("cargo:rerun-if-changed=ffi/Cargo.toml");
     println!("cargo:rerun-if-changed=ffi/src");
+    println!("cargo:rerun-if-changed=../../../crates/rvr/rvr-openvm-ffi-common/Cargo.toml");
+    println!("cargo:rerun-if-changed=../../../crates/rvr/rvr-openvm-ffi-common/src");
 }

@@ -436,7 +436,7 @@ impl GuestMemory {
         self.memory.get_u8_slice(addr_space, byte_ptr as usize, len)
     }
 
-    /// Reads a raw byte range addressed by full RV64 register values.
+    /// Read a byte range addressed by full RV64 register values.
     pub fn checked_u8_slice(
         &self,
         addr_space: u32,

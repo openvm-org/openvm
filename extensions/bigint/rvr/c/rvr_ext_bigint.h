@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-struct RvState;
+typedef struct RvState RvState;
 
 /* 256-bit ALU operations (implemented in Rust). One specialized FFI entry
  * point per opcode so the C compiler does not see a runtime `op` switch. */
