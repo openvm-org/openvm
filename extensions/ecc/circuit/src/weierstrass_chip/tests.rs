@@ -556,9 +556,9 @@ mod ec_add_tests {
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////
-    /// SANITY TESTS
-    ///
-    /// Ensure that execute functions produce the correct results.
+    // SANITY TESTS
+    //
+    // Ensure that execute functions produce the correct results.
     ///////////////////////////////////////////////////////////////////////////////////////
 
     /// Helper to convert projective (X, Y, Z) to affine (x, y) via x = X/Z, y = Y/Z.
@@ -1149,9 +1149,9 @@ mod ec_double_tests {
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////
-    /// SANITY TESTS
-    ///
-    /// Ensure that execute functions produce the correct results.
+    // SANITY TESTS
+    //
+    // Ensure that execute functions produce the correct results.
     ///////////////////////////////////////////////////////////////////////////////////////
 
     /// Helper to convert projective (X, Y, Z) to affine (x, y) via x = X/Z, y = Y/Z.
