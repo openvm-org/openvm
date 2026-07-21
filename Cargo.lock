@@ -7373,7 +7373,6 @@ version = "2.1.0"
 dependencies = [
  "halo2curves-axiom",
  "num-bigint 0.4.6",
- "openvm-instructions",
  "paste",
  "rvr-openvm-ext-algebra-ffi-common",
  "rvr-openvm-ext-ffi-common",
@@ -7386,7 +7385,6 @@ dependencies = [
  "halo2curves-axiom",
  "num-bigint 0.4.6",
  "num-traits",
- "openvm-instructions",
  "openvm-platform",
  "paste",
  "rvr-openvm-ext-algebra-ffi-common",
@@ -7456,6 +7454,9 @@ dependencies = [
 [[package]]
 name = "rvr-openvm-ext-ffi-common"
 version = "2.1.0"
+dependencies = [
+ "openvm-platform",
+]
 
 [[package]]
 name = "rvr-openvm-ext-keccak"
@@ -7463,6 +7464,7 @@ version = "2.1.0"
 dependencies = [
  "openvm-instructions",
  "openvm-keccak256-transpiler",
+ "p3-keccak-air",
  "rvr-openvm-build",
  "rvr-openvm-ir",
  "rvr-openvm-lift",
@@ -7520,6 +7522,7 @@ name = "rvr-openvm-ext-sha2"
 version = "2.1.0"
 dependencies = [
  "openvm-instructions",
+ "openvm-sha2-air",
  "openvm-sha2-transpiler",
  "rvr-openvm-build",
  "rvr-openvm-ir",

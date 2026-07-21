@@ -15,10 +15,10 @@ use openvm_circuit::arch::{
 use openvm_deferral_transpiler::DeferralOpcode;
 use openvm_instructions::{LocalOpcode, VM_DIGEST_WIDTH};
 use openvm_stark_backend::p3_field::PrimeField32;
-use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
+use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, FixedTraceRows, Instr, InstrAt, LiftedInstr, Reg};
 use rvr_openvm_lift::{
-    air_index_to_c, decode_reg, opcode_air_idx, AirIndex, ExtensionError, RvrExtension,
-    RvrExtensionCtx, RvrInstruction, RvrRuntimeExtension,
+    air_index_to_c, decode_reg, fixed_trace_rows_for_chip, opcode_air_idx, AirIndex,
+    ExtensionError, RvrExtension, RvrExtensionCtx, RvrInstruction, RvrRuntimeExtension,
 };
 
 /// Size in bytes of a serialized deferral commitment.
@@ -75,13 +75,12 @@ impl ExtInstr for DeferralCallInstr {
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         let rd = ctx.read_reg(self.rd_reg);
         let rs = ctx.read_reg(self.rs_reg);
-        let poseidon2 = air_index_to_c(self.poseidon2_chip_idx);
         let def_idx = format!("{}u", self.def_idx);
-        let poseidon2 = format!("{poseidon2}u");
-        ctx.emit_call(
-            "rvr_ext_deferral_call",
-            &["state", &rd, &rs, &def_idx, &poseidon2],
-        );
+        ctx.emit_call("rvr_ext_deferral_call", &["state", &rd, &rs, &def_idx]);
+    }
+
+    fn fixed_trace_rows(&self) -> Vec<FixedTraceRows> {
+        fixed_trace_rows_for_chip(self.poseidon2_chip_idx, 2)
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -114,12 +113,15 @@ impl ExtInstr for DeferralOutputInstr {
         let output = air_index_to_c(self.output_chip_idx);
         let poseidon2 = air_index_to_c(self.poseidon2_chip_idx);
         let def_idx = format!("{}u", self.def_idx);
-        let output = format!("{output}u");
-        let poseidon2 = format!("{poseidon2}u");
-        ctx.emit_call(
+        let num_rows = ctx.emit_call_with_trace_result(
+            "uint32_t",
             "rvr_ext_deferral_output",
-            &["state", &rd, &rs, &def_idx, &output, &poseidon2],
+            &["state", &rd, &rs, &def_idx],
         );
+        if let Some(num_rows) = num_rows {
+            ctx.trace_chip_if_nonzero(output, &format!("{num_rows} - 1u"));
+            ctx.trace_chip(poseidon2, &num_rows);
+        }
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {

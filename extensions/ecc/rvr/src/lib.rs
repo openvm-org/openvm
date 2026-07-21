@@ -227,4 +227,8 @@ impl RvrExtension for EccExtension {
             include_bytes!(env!("RVR_ECC_FFI_STATICLIB")),
         )]
     }
+
+    fn uses_memory_wrappers(&self) -> bool {
+        true
+    }
 }

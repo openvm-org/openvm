@@ -92,7 +92,7 @@ impl<K: IsEqKind> FieldIsEqInstr<K> {
     }
 }
 
-/// Generic IR node for field setup (SETUP_ADDSUB, SETUP_MULDIV, SETUP_ISEQ).
+/// Generic IR node for field setup (SETUP_ADDSUB and SETUP_MULDIV).
 /// The C function name is derived from `K::c_prefix()` as `rvr_ext_{prefix}_setup`.
 /// Use the type aliases [`crate::ModSetupInstr`] / [`crate::Fp2SetupInstr`]
 /// rather than naming this type directly.
@@ -103,16 +103,18 @@ pub(crate) struct FieldSetupInstr<K: SetupKind> {
     pub rs1_reg: Reg,
     pub rs2_reg: Reg,
     pub num_limbs: u32,
+    pub modulus: Vec<u8>,
 }
 
 impl<K: SetupKind> FieldSetupInstr<K> {
-    pub fn new(rd_reg: Reg, rs1_reg: Reg, rs2_reg: Reg, num_limbs: u32) -> Self {
+    pub fn new(rd_reg: Reg, rs1_reg: Reg, rs2_reg: Reg, num_limbs: u32, modulus: Vec<u8>) -> Self {
         Self {
             _kind: PhantomData,
             rd_reg,
             rs1_reg,
             rs2_reg,
             num_limbs,
+            modulus,
         }
     }
 }
@@ -127,8 +129,12 @@ impl<K: SetupKind> ExtInstr for FieldSetupInstr<K> {
         let rs1 = ctx.read_reg(self.rs1_reg);
         let rs2 = ctx.read_reg(self.rs2_reg);
         let num_limbs = format!("{}u", self.num_limbs);
+        let mod_literal = format_c_byte_array(&self.modulus);
         let name = format!("rvr_ext_{}_setup", K::c_prefix());
-        ctx.emit_call(&name, &["state", &rd, &rs1, &rs2, &num_limbs]);
+        ctx.write_line("{");
+        ctx.write_line(&format!("static constexpr uint8_t mod_[] = {mod_literal};"));
+        ctx.emit_checked_call(&name, &["state", &rd, &rs1, &rs2, &num_limbs, "mod_"]);
+        ctx.write_line("}");
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {

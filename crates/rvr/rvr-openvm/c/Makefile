@@ -9,13 +9,12 @@ WARNINGS += -Wno-c++-compat -Wno-c++98-compat \
 	-Wno-pre-c11-compat -Wno-pre-c23-compat -Wno-pre-c2y-compat \
 	-Wno-declaration-after-statement
 
-# Vendored translation units are outside OpenVM's warning policy. Compiler
-# errors remain fatal, but diagnostics from third-party C are suppressed.
+# Do not apply OpenVM warning flags to third-party C. Compiler errors still
+# fail the build.
 VENDOR_WARNINGS = -Wno-everything
-# The core runtime implements VM memory using raw buffers behind explicit
-# bounds and invariant contracts. Clang's diagnostic is a migration heuristic
-# for moving raw pointers to checked container APIs, which is not applicable
-# to these low-level translation units.
+# The core runtime uses raw buffers with explicit bounds checks. Clang raises
+# this warning when raw pointers could be replaced with checked containers, so
+# it is not useful for these low-level files.
 CORE_WARNINGS = -Wno-unsafe-buffer-usage
 CFLAGS = -std=c2y $(OPT) $(DEBUG) $(WARNINGS) -fPIC -march=native -falign-functions=32
 LTO ?=
@@ -24,8 +23,8 @@ LDFLAGS ?=
 LDFLAGS += -fuse-ld=$(LINKER)
 LDLIBS ?=
 
-# On ELF platforms, force eager symbol binding to prevent the PLT lazy
-# resolver from clobbering preserve_none argument registers (r11 on x86_64).
+# On ELF platforms, bind symbols when the library loads. Lazy PLT binding can
+# overwrite `preserve_none` argument registers such as r11 on x86_64.
 HOST_OS ?= $(shell uname -s)
 ifeq ($(HOST_OS),Linux)
 LDFLAGS += -Wl,-z,now

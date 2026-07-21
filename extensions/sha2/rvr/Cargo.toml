@@ -12,6 +12,7 @@ rvr-openvm-ir.workspace = true
 rvr-openvm-lift.workspace = true
 
 openvm-instructions.workspace = true
+openvm-sha2-air.workspace = true
 openvm-sha2-transpiler.workspace = true
 
 [build-dependencies]

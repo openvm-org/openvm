@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-struct RvState;
+typedef struct RvState RvState;
 
 /* Direct C functions use preserve_most so generated block functions keep live
  * values in registers across calls. Rust functions use the standard C ABI. */

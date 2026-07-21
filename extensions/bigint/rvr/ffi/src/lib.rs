@@ -8,7 +8,7 @@
 use std::ffi::c_void;
 
 use openvm_platform::WORD_SIZE;
-use rvr_openvm_ext_ffi_common::{rd_mem_words_traced, wr_mem_words_traced};
+use rvr_openvm_ext_ffi_common::{read_mem_words, write_mem_words};
 
 /// Number of bytes in a 256-bit integer.
 const INT256_BYTES: usize = 32;
@@ -44,7 +44,7 @@ const SIGN_BIT_MASK: u8 = 1 << SIGN_BIT_SHIFT;
 #[inline]
 unsafe fn read_int256(state: *mut c_void, ptr: u64) -> [u8; INT256_BYTES] {
     let mut words = [0u64; INT256_WORDS];
-    rd_mem_words_traced(state, ptr, &mut words);
+    read_mem_words(state, ptr, &mut words);
     let mut bytes = [0u8; INT256_BYTES];
     for (i, w) in words.iter().enumerate() {
         bytes[i * WORD_SIZE..(i + 1) * WORD_SIZE].copy_from_slice(&w.to_le_bytes());
@@ -63,7 +63,7 @@ unsafe fn write_int256(state: *mut c_void, ptr: u64, bytes: &[u8; INT256_BYTES])
                 .unwrap(),
         );
     }
-    wr_mem_words_traced(state, ptr, &words);
+    write_mem_words(state, ptr, &words);
 }
 
 // ── Byte-level helpers ──────────────────────────────────────────────────────
@@ -327,7 +327,7 @@ int256_alu_fn!(rvr_ext_int256_slt, u256_slt);
 int256_alu_fn!(rvr_ext_int256_sltu, u256_sltu);
 int256_alu_fn!(rvr_ext_int256_mul, u256_mul);
 
-/// Defines an `extern "C"` branch predicate.
+/// Define an `extern "C"` branch predicate.
 macro_rules! int256_branch_fn {
     ($name:ident, $cond:expr) => {
         /// # Safety

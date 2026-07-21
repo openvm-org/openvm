@@ -52,8 +52,8 @@ impl ExtInstr for HintFinalExpInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rs1 = ctx.read_reg(self.rs1_reg);
-        let rs2 = ctx.read_reg(self.rs2_reg);
+        let rs1 = ctx.peek_reg(self.rs1_reg);
+        let rs2 = ctx.peek_reg(self.rs2_reg);
         ctx.emit_call(self.curve.ffi_symbol(), &["state", &rs1, &rs2]);
     }
 
@@ -123,5 +123,9 @@ impl RvrExtension for PairingExtension {
             "librvr_openvm_ext_pairing_ffi.a",
             include_bytes!(env!("RVR_PAIRING_FFI_STATICLIB")),
         )]
+    }
+
+    fn uses_memory_wrappers(&self) -> bool {
+        true
     }
 }

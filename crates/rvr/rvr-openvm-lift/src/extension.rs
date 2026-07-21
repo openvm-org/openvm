@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use openvm_instructions::{LocalOpcode, VmOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
-use rvr_openvm_ir::LiftedInstr;
+use rvr_openvm_ir::{FixedTraceRows, LiftedInstr};
 
 use crate::RvrInstruction;
 
@@ -48,6 +48,18 @@ pub enum TraceChipIndex {
 #[inline]
 pub fn air_index_to_c(idx: Option<AirIndex>) -> u32 {
     idx.map_or(u32::MAX, AirIndex::as_u32)
+}
+
+/// Return extra fixed rows when this extension has an AIR index.
+#[inline]
+pub fn fixed_trace_rows_for_chip(idx: Option<AirIndex>, count: u32) -> Vec<FixedTraceRows> {
+    idx.map(|idx| {
+        vec![FixedTraceRows {
+            chip_idx: idx.as_u32(),
+            count,
+        }]
+    })
+    .unwrap_or_default()
 }
 
 /// Data needed by extension crates to resolve opcode/chip metadata when
@@ -149,11 +161,16 @@ pub trait RvrExtension: Send + Sync {
         Vec::new()
     }
 
-    /// Vendored C source files compiled as separate translation units.
+    /// Whether this extension's static library calls the shared memory wrappers.
+    fn uses_memory_wrappers(&self) -> bool {
+        false
+    }
+
+    /// Third-party C source files compiled separately.
     ///
-    /// These are built without OpenVM's warning policy. Headers or C files
-    /// included by an OpenVM-owned translation unit should instead be supplied
-    /// through [`Self::extra_c_include_files`] and an `-isystem` include path.
+    /// OpenVM warning flags do not apply to these files. If OpenVM-owned C
+    /// includes a third-party file, provide it through
+    /// [`Self::extra_c_include_files`] and use an `-isystem` include path.
     fn vendored_c_sources(&self) -> Vec<(&'static str, &'static str)> {
         vec![]
     }
@@ -165,9 +182,8 @@ pub trait RvrExtension: Send + Sync {
         vec![]
     }
 
-    /// Additional CFLAGS for compiling owned and vendored extension C sources
-    /// (e.g., `-I` paths for submodule headers). Passed to the Makefile as
-    /// EXT_CFLAGS.
+    /// Extra compiler flags for extension C, such as include paths for
+    /// submodule headers. The Makefile receives them as `EXT_CFLAGS`.
     fn extra_cflags(&self) -> Vec<String> {
         vec![]
     }
@@ -253,7 +269,12 @@ impl ExtensionRegistry {
             .collect()
     }
 
-    /// Collect vendored C source files from all extensions.
+    /// Whether any registered extension needs the shared memory wrappers.
+    pub fn uses_memory_wrappers(&self) -> bool {
+        self.extensions.iter().any(|ext| ext.uses_memory_wrappers())
+    }
+
+    /// Collect third-party C source files from all extensions.
     pub fn vendored_c_sources(&self) -> Vec<(&'static str, &'static str)> {
         self.extensions
             .iter()
@@ -275,11 +296,6 @@ impl ExtensionRegistry {
             .iter()
             .flat_map(|ext| ext.extra_cflags())
             .collect()
-    }
-
-    /// Whether any extensions are registered.
-    pub fn is_empty(&self) -> bool {
-        self.extensions.is_empty()
     }
 }
 

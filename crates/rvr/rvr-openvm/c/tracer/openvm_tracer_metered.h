@@ -12,8 +12,8 @@
 
 #include "openvm_state.h"
 
-/* Page buffers are fixed-capacity arrays whose lengths are maintained and
- * checked by the metering state; Clang's C heuristic cannot model that. */
+/* The metering state checks the lengths of these fixed-capacity page buffers,
+ * but Clang cannot prove those bounds. */
 #pragma clang unsafe_buffer_usage begin
 
 static constexpr uint32_t NO_LAST_PAGE = UINT32_MAX;
@@ -22,17 +22,18 @@ static constexpr uint32_t TRACER_BYTES_PER_LEAF =
 static constexpr uint32_t TRACER_LEAF_BYTE_OFFSET_MASK =
     TRACER_BYTES_PER_LEAF - 1u;
 
-static constexpr uint32_t MAX_PV_PAGES_PER_INSN = 1;
 static_assert(
     TRACER_MEM_PAGE_BUF_CAP >=
         TRACER_SEGMENT_CHECK_INSNS * TRACER_MAX_MEM_PAGES_PER_INSN,
     "MEM_PAGE_BUF_CAP too small for worst-case pages per flush interval");
 static_assert(
     TRACER_PV_PAGE_BUF_CAP >=
-        TRACER_SEGMENT_CHECK_INSNS * MAX_PV_PAGES_PER_INSN,
+        TRACER_SEGMENT_CHECK_INSNS * TRACER_MAX_PV_PAGES_PER_INSN,
     "PV_PAGE_BUF_CAP too small for worst-case pages per flush interval");
-/* No static assert for DEFERRAL — justifying the capacity is a TODO
- * (see DEFERRAL_PAGE_BUF_CAP in metered.rs). */
+static_assert(
+    TRACER_DEFERRAL_PAGE_BUF_CAP >=
+        TRACER_SEGMENT_CHECK_INSNS * TRACER_MAX_DEFERRAL_PAGES_PER_INSN,
+    "DEFERRAL_PAGE_BUF_CAP too small for worst-case pages per flush interval");
 
 typedef struct PageTouch {
   /* Page table index plus a 64-bit leaf mask for that page. */
@@ -53,15 +54,15 @@ typedef struct TraceMemory {
 
 /* ── Page tracking ─────────────────────────────────────────────────── */
 
-/* Valid configured VM pointers fit in uint32_t. XLEN-wide operands must be
- * bounds-checked before reaching these narrowing helpers. */
+/* Valid VM pointers fit in uint32_t. Check full RV64 operands before calling
+ * these helpers. */
 static __attribute__((always_inline)) inline uint32_t byte_addr_to_local_leaf(
     uint64_t ptr) {
   return (uint32_t)(ptr >> TRACER_BYTE_SPACE_PTRS_PER_LEAF_BITS);
 }
 
-static __attribute__((always_inline)) inline uint32_t deferral_addr_to_local_leaf(
-    uint64_t ptr) {
+static __attribute__((always_inline)) inline uint32_t
+deferral_addr_to_local_leaf(uint64_t ptr) {
   return (uint32_t)(ptr >> TRACER_DEFERRAL_PTRS_PER_LEAF_BITS);
 }
 
@@ -73,8 +74,7 @@ static __attribute__((always_inline)) inline uint32_t addr_to_local_leaf(
   return deferral_addr_to_local_leaf(ptr);
 }
 
-static __attribute__((always_inline)) inline uint64_t leaf_mask(
-    uint32_t leaf) {
+static __attribute__((always_inline)) inline uint64_t leaf_mask(uint32_t leaf) {
   return 1ull << (leaf & ((1u << TRACER_PAGE_BITS) - 1u));
 }
 
@@ -82,8 +82,7 @@ static __attribute__((always_inline)) inline uint64_t leaf_mask_range(
     uint32_t first_leaf, uint32_t last_leaf) {
   /* Convert an inclusive leaf range within one page into an occupancy mask. */
   assume(first_leaf <= last_leaf);
-  assume((first_leaf >> TRACER_PAGE_BITS) ==
-         (last_leaf >> TRACER_PAGE_BITS));
+  assume((first_leaf >> TRACER_PAGE_BITS) == (last_leaf >> TRACER_PAGE_BITS));
   uint32_t start = first_leaf & ((1u << TRACER_PAGE_BITS) - 1u);
   uint32_t end = last_leaf & ((1u << TRACER_PAGE_BITS) - 1u);
   return (UINT64_MAX << start) &
@@ -108,7 +107,8 @@ static __attribute__((always_inline)) inline void append_page_touch_range(
   for (uint32_t page = first_page; page <= last_page; page++) {
     uint32_t page_first_leaf = page << TRACER_PAGE_BITS;
     uint32_t page_last_leaf = page_first_leaf + (1u << TRACER_PAGE_BITS) - 1u;
-    uint32_t start = first_leaf > page_first_leaf ? first_leaf : page_first_leaf;
+    uint32_t start =
+        first_leaf > page_first_leaf ? first_leaf : page_first_leaf;
     uint32_t end = last_leaf < page_last_leaf ? last_leaf : page_last_leaf;
     append_page_touch(buf, len, page, leaf_mask_range(start, end));
   }
@@ -118,7 +118,8 @@ static __attribute__((always_inline)) inline void append_page_touch_range(
 static __attribute__((always_inline)) inline void record_mem_page(
     MeteringState* metering, uint32_t page, uint64_t leaf_mask) {
   if (likely(page == metering->last_mem_page)) {
-    metering->mem_page_buf[metering->mem_page_buf_len - 1u].leaf_mask |= leaf_mask;
+    metering->mem_page_buf[metering->mem_page_buf_len - 1u].leaf_mask |=
+        leaf_mask;
     return;
   }
   metering->last_mem_page = page;
@@ -132,9 +133,10 @@ static __attribute__((always_inline)) inline void record_mem_page_range(
   uint32_t last_page = last_leaf >> TRACER_PAGE_BITS;
   if (likely(first_page == metering->last_mem_page)) {
     metering->mem_page_buf[metering->mem_page_buf_len - 1u].leaf_mask |=
-        leaf_mask_range(first_leaf, first_page == last_page
-                                        ? last_leaf
-                                        : ((first_page + 1u) << TRACER_PAGE_BITS) - 1u);
+        leaf_mask_range(first_leaf,
+                        first_page == last_page
+                            ? last_leaf
+                            : ((first_page + 1u) << TRACER_PAGE_BITS) - 1u);
     if (first_page == last_page) {
       return;
     }
@@ -144,9 +146,11 @@ static __attribute__((always_inline)) inline void record_mem_page_range(
   for (uint32_t page = first_page; page <= last_page; page++) {
     uint32_t page_first_leaf = page << TRACER_PAGE_BITS;
     uint32_t page_last_leaf = page_first_leaf + (1u << TRACER_PAGE_BITS) - 1u;
-    uint32_t start = first_leaf > page_first_leaf ? first_leaf : page_first_leaf;
+    uint32_t start =
+        first_leaf > page_first_leaf ? first_leaf : page_first_leaf;
     uint32_t end = last_leaf < page_last_leaf ? last_leaf : page_last_leaf;
-    append_page_touch(metering->mem_page_buf, &len, page, leaf_mask_range(start, end));
+    append_page_touch(metering->mem_page_buf, &len, page,
+                      leaf_mask_range(start, end));
   }
   metering->mem_page_buf_len = len;
   metering->last_mem_page = last_page;
@@ -155,7 +159,8 @@ static __attribute__((always_inline)) inline void record_mem_page_range(
 /* No bounds check — see PV_PAGE_BUF_CAP in metered.rs. */
 static __attribute__((always_inline)) inline void record_pv_page(
     MeteringState* metering, uint32_t page, uint64_t leaf_mask) {
-  append_page_touch(metering->pv_page_buf, &metering->pv_page_buf_len, page, leaf_mask);
+  append_page_touch(metering->pv_page_buf, &metering->pv_page_buf_len, page,
+                    leaf_mask);
 }
 
 static __attribute__((always_inline)) inline void record_pv_page_range(
@@ -168,13 +173,15 @@ static __attribute__((always_inline)) inline void record_pv_page_range(
 /* No bounds check — see DEFERRAL_PAGE_BUF_CAP in metered.rs. */
 static __attribute__((always_inline)) inline void record_deferral_page(
     MeteringState* metering, uint32_t page, uint64_t leaf_mask) {
-  append_page_touch(metering->deferral_page_buf, &metering->deferral_page_buf_len, page, leaf_mask);
+  append_page_touch(metering->deferral_page_buf,
+                    &metering->deferral_page_buf_len, page, leaf_mask);
 }
 
 static __attribute__((always_inline)) inline void record_deferral_page_range(
     MeteringState* metering, uint32_t first_leaf, uint32_t last_leaf) {
   uint32_t len = metering->deferral_page_buf_len;
-  append_page_touch_range(metering->deferral_page_buf, &len, first_leaf, last_leaf);
+  append_page_touch_range(metering->deferral_page_buf, &len, first_leaf,
+                          last_leaf);
   metering->deferral_page_buf_len = len;
 }
 
@@ -188,19 +195,22 @@ static __attribute__((always_inline)) inline void record_page(
   uint32_t last_page = last_leaf >> TRACER_PAGE_BITS;
   if (likely(addr_space == AS_MEMORY)) {
     if (likely(first_page == last_page)) {
-      record_mem_page(metering, first_page, leaf_mask_range(first_leaf, last_leaf));
+      record_mem_page(metering, first_page,
+                      leaf_mask_range(first_leaf, last_leaf));
     } else {
       record_mem_page_range(metering, first_leaf, last_leaf);
     }
   } else if (addr_space == AS_PUBLIC_VALUES) {
     if (first_page == last_page) {
-      record_pv_page(metering, first_page, leaf_mask_range(first_leaf, last_leaf));
+      record_pv_page(metering, first_page,
+                     leaf_mask_range(first_leaf, last_leaf));
     } else {
       record_pv_page_range(metering, first_leaf, last_leaf);
     }
   } else {
     if (first_page == last_page) {
-      record_deferral_page(metering, first_page, leaf_mask_range(first_leaf, last_leaf));
+      record_deferral_page(metering, first_page,
+                           leaf_mask_range(first_leaf, last_leaf));
     } else {
       record_deferral_page_range(metering, first_leaf, last_leaf);
     }
@@ -210,7 +220,8 @@ static __attribute__((always_inline)) inline void record_page(
 /* Record leaves touched by [first_addr, last_addr]. Duplicates are fine —
  * Rust-side checkpoint processing deduplicates by page mask. */
 static __attribute__((always_inline)) inline void record_page_range(
-    MeteringState* metering, uint32_t addr_space, uint64_t first_addr, uint64_t last_addr) {
+    MeteringState* metering, uint32_t addr_space, uint64_t first_addr,
+    uint64_t last_addr) {
   uint32_t first_leaf = addr_to_local_leaf(addr_space, first_addr);
   uint32_t last_leaf = addr_to_local_leaf(addr_space, last_addr);
   if (likely(addr_space == AS_MEMORY)) {
@@ -244,7 +255,7 @@ static __attribute__((always_inline)) inline void trace_memory_drain(
     return;
   }
   append_page_touch(memory->mem_page_buf, &memory->mem_page_buf_len,
-                     memory->last_mem_page, memory->last_mem_leaf_mask);
+                    memory->last_mem_page, memory->last_mem_leaf_mask);
   memory->last_mem_page = NO_LAST_PAGE;
   memory->last_mem_leaf_mask = 0;
 }
@@ -315,104 +326,51 @@ static __attribute__((always_inline)) inline void trace_memory_access_span(
   }
 }
 
-/* ── Trace-only register access (no-ops in metered mode) ─────────── */
+/* Extension range access includes page accounting in metered mode. */
 
-static __attribute__((always_inline)) inline void trace_reg_read(
-    RvState* restrict state [[maybe_unused]], uint8_t idx [[maybe_unused]],
-    uint64_t val [[maybe_unused]]) {}
-static __attribute__((always_inline)) inline void trace_reg_write(
-    RvState* restrict state [[maybe_unused]], uint8_t idx [[maybe_unused]],
-    uint64_t new_val [[maybe_unused]]) {}
-
-/* ── Trace-only memory reads (record page in metered mode) ───────── */
-
-static __attribute__((always_inline)) inline void trace_rd_mem_u8(
-    RvState* restrict state, uint64_t addr, uint8_t val [[maybe_unused]]) {
-  record_page(&state->mode_state, AS_MEMORY, addr, sizeof(uint8_t));
-}
-
-static __attribute__((always_inline)) inline void trace_rd_mem_i8(
-    RvState* restrict state, uint64_t addr, int8_t val [[maybe_unused]]) {
-  record_page(&state->mode_state, AS_MEMORY, addr, sizeof(int8_t));
-}
-
-static __attribute__((always_inline)) inline void trace_rd_mem_u16(
-    RvState* restrict state, uint64_t addr, uint16_t val [[maybe_unused]]) {
-  record_page(&state->mode_state, AS_MEMORY, addr, sizeof(uint16_t));
-}
-
-static __attribute__((always_inline)) inline void trace_rd_mem_i16(
-    RvState* restrict state, uint64_t addr, int16_t val [[maybe_unused]]) {
-  record_page(&state->mode_state, AS_MEMORY, addr, sizeof(int16_t));
-}
-
-static __attribute__((always_inline)) inline void trace_rd_mem_u32(
-    RvState* restrict state, uint64_t addr, uint32_t val [[maybe_unused]]) {
-  record_page(&state->mode_state, AS_MEMORY, addr, sizeof(uint32_t));
-}
-
-static __attribute__((always_inline)) inline void trace_rd_mem_i32(
-    RvState* restrict state, uint64_t addr, int32_t val [[maybe_unused]]) {
-  record_page(&state->mode_state, AS_MEMORY, addr, sizeof(int32_t));
-}
-
-static __attribute__((always_inline)) inline void trace_rd_mem_u64(
-    RvState* restrict state, uint64_t addr, uint64_t val [[maybe_unused]]) {
-  record_page(&state->mode_state, AS_MEMORY, addr, sizeof(uint64_t));
-}
-
-/* ── Trace-only memory writes (record page in metered mode) ──────── */
-
-static __attribute__((always_inline)) inline void trace_wr_mem_u8(
-    RvState* restrict state, uint64_t addr, uint8_t new_val [[maybe_unused]]) {
-  record_page(&state->mode_state, AS_MEMORY, addr, sizeof(uint8_t));
-}
-
-static __attribute__((always_inline)) inline void trace_wr_mem_u16(
-    RvState* restrict state, uint64_t addr, uint16_t new_val [[maybe_unused]]) {
-  record_page(&state->mode_state, AS_MEMORY, addr, sizeof(uint16_t));
-}
-
-static __attribute__((always_inline)) inline void trace_wr_mem_u32(
-    RvState* restrict state, uint64_t addr, uint32_t new_val [[maybe_unused]]) {
-  record_page(&state->mode_state, AS_MEMORY, addr, sizeof(uint32_t));
-}
-
-static __attribute__((always_inline)) inline void trace_wr_mem_u64(
-    RvState* restrict state, uint64_t addr, uint64_t new_val [[maybe_unused]]) {
-  record_page(&state->mode_state, AS_MEMORY, addr, sizeof(uint64_t));
-}
-
-/* ── Trace-only word-range memory access ──────────────────────────── */
-
-/* Precondition for all *_range trace functions: num_words >= 1.
+/* Precondition for all range functions: num_words >= 1.
  * Callers are responsible for guarding empty ranges (e.g. xorin with len=0)
  * so we can skip the branch on the hot path. */
 
-static __attribute__((always_inline)) inline void trace_rd_mem_u64_range(
-    RvState* restrict state, uint64_t base_addr,
-    const uint64_t* vals [[maybe_unused]], uint32_t num_words) {
+static __attribute__((always_inline)) inline void read_mem_u64_range(
+    RvState* restrict state, uint64_t base_addr, uint64_t* restrict out,
+    uint32_t num_words) {
+  read_mem_u64_range_raw(state, base_addr, out, num_words);
   assume(num_words > 0);
   uint64_t last_addr = base_addr + num_words * sizeof(uint64_t) - 1u;
   record_page_range(&state->mode_state, AS_MEMORY, base_addr, last_addr);
 }
 
-static __attribute__((always_inline)) inline void trace_wr_mem_u64_range(
-    RvState* restrict state, uint64_t base_addr,
-    const uint64_t* vals [[maybe_unused]], uint32_t num_words) {
+static __attribute__((always_inline)) inline void write_mem_u64_range(
+    RvState* restrict state, uint64_t base_addr, const uint64_t* restrict vals,
+    uint32_t num_words) {
   assume(num_words > 0);
   uint64_t last_addr = base_addr + num_words * sizeof(uint64_t) - 1u;
   record_page_range(&state->mode_state, AS_MEMORY, base_addr, last_addr);
+  write_mem_u64_range_raw(state, base_addr, vals, num_words);
 }
 
-/* ── Trace-only operations ────────────────────────────────────────── */
-
-static __attribute__((always_inline)) inline void trace_mem_access(
-    RvState* restrict state, uint64_t addr, uint32_t addr_space) {
-  record_page(&state->mode_state, addr_space, addr, WORD_SIZE);
+/* Peeking at a value does not create a VM memory access. */
+static __attribute__((always_inline)) inline uint64_t peek_mem_u64(
+    RvState* restrict state, uint64_t addr) {
+  return read_mem_u64(state->memory, addr);
 }
 
-static __attribute__((always_inline)) inline void trace_mem_access_u64_range(
+static __attribute__((always_inline)) inline void peek_mem_u64_range(
+    RvState* restrict state, uint64_t base_addr, uint64_t* restrict out,
+    uint32_t num_words) {
+  read_mem_u64_range_raw(state, base_addr, out, num_words);
+}
+
+/* ── Page accounting ──────────────────────────────────────────────── */
+
+static __attribute__((always_inline)) inline void trace_page_access(
+    RvState* restrict state, uint64_t addr, uint32_t size,
+    uint32_t addr_space) {
+  record_page(&state->mode_state, addr_space, addr, size);
+}
+
+static __attribute__((always_inline)) inline void trace_page_access_u64_range(
     RvState* restrict state, uint64_t base_addr, uint64_t num_dwords,
     uint32_t addr_space) {
   assume(num_dwords > 0);
@@ -420,13 +378,6 @@ static __attribute__((always_inline)) inline void trace_mem_access_u64_range(
   record_page_range(&state->mode_state, addr_space, base_addr, last_addr);
 }
 
-static __attribute__((always_inline)) inline void trace_pc(
-    RvState* restrict state [[maybe_unused]], uint64_t pc [[maybe_unused]]) {}
-
-static __attribute__((always_inline)) inline void trace_chip(
-    RvState* restrict state, uint32_t chip_idx, uint32_t count) {
-  (*state->mode_state.trace_heights)[chip_idx] += count;
-}
 #pragma clang unsafe_buffer_usage end
 
 #endif /* OPENVM_TRACER_METERED_H */
