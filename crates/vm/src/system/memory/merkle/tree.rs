@@ -197,6 +197,10 @@ impl<F: PrimeField32, const DIGEST_WIDTH: usize> MerkleTree<F, DIGEST_WIDTH> {
                                         right_child_hash: *old_right,
                                         left_direction_different: F::ZERO,
                                         right_direction_different: F::ZERO,
+                                        left_extra_ref: F::ZERO,
+                                        right_extra_ref: F::ZERO,
+                                        left_absent_ref: F::ZERO,
+                                        right_absent_ref: F::ZERO,
                                     },
                                     MemoryMerkleCols {
                                         expand_direction: F::NEG_ONE,
@@ -211,6 +215,10 @@ impl<F: PrimeField32, const DIGEST_WIDTH: usize> MerkleTree<F, DIGEST_WIDTH> {
                                         right_child_hash: *right,
                                         left_direction_different: F::from_bool(!changed_left),
                                         right_direction_different: F::from_bool(!changed_right),
+                                        left_extra_ref: F::ZERO,
+                                        right_extra_ref: F::ZERO,
+                                        left_absent_ref: F::ZERO,
+                                        right_absent_ref: F::ZERO,
                                     },
                                 ],
                             )

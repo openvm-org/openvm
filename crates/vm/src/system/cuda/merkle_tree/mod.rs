@@ -429,8 +429,20 @@ impl MemoryMerkleTree {
             if empty_touched_blocks {
                 // The trace is small then
                 let mut output_vec = output.buffer().to_host_on(&self.device_ctx).unwrap();
-                output_vec[unpadded_height - 1 + (width - 2) * padded_height] = F::ONE; // left_direction_different
-                output_vec[unpadded_height - 1 + (width - 1) * padded_height] = F::ONE; // right_direction_different
+                // TODO: update later
+                // Column indices within the column-major trace, derived from the column
+                // struct so they survive layout changes.
+                let col = |byte_offset: usize| byte_offset / std::mem::size_of::<F>();
+                let left_dd_col = col(std::mem::offset_of!(
+                    MemoryMerkleCols<F, VM_DIGEST_WIDTH>,
+                    left_direction_different
+                ));
+                let right_dd_col = col(std::mem::offset_of!(
+                    MemoryMerkleCols<F, VM_DIGEST_WIDTH>,
+                    right_direction_different
+                ));
+                output_vec[unpadded_height - 1 + left_dd_col * padded_height] = F::ONE;
+                output_vec[unpadded_height - 1 + right_dd_col * padded_height] = F::ONE;
                 DeviceMatrix::new(
                     Arc::new(output_vec.to_device_on(&self.device_ctx).unwrap()),
                     padded_height,

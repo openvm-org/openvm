@@ -195,6 +195,13 @@ template <typename T> struct MerkleCols {
     T right_child_hash[CELLS_OUT];
     T left_direction_different;
     T right_direction_different;
+    // Reference-count adjustments for initial-row child interactions; always 0 while
+    // tracegen emits full (initial, final) pairs. The trace buffer is pre-zeroed, so
+    // these columns are never written by the kernels.
+    T left_extra_ref;
+    T right_extra_ref;
+    T left_absent_ref;
+    T right_absent_ref;
 };
 
 struct LabeledDigest {

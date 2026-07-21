@@ -27,6 +27,21 @@ pub struct MemoryMerkleCols<T, const DIGEST_WIDTH: usize> {
     // when `expand_direction` != -1, must be 0
     pub left_direction_different: T,
     pub right_direction_different: T,
+
+    // Reference-count adjustments for the child interactions of *initial* rows
+    // (`expand_direction` = 1); all four must be 0 when `expand_direction` != 1.
+    //
+    // `*_extra_ref` = 1 means this row's final counterpart dd-borrows the child's initial
+    // hash, so this row consumes the child's initial claim twice (multiplicity -2).
+    // `*_absent_ref` = 1 means the child is untouched and this node has no final row to
+    // prop the reference, so this row consumes nothing (multiplicity 0).
+    //
+    // NOTE: until real dirtiness is enabled in tracegen, all four are always 0 and the
+    // child multiplicities reduce to the previous `-expand_direction`.
+    pub left_extra_ref: T,
+    pub right_extra_ref: T,
+    pub left_absent_ref: T,
+    pub right_absent_ref: T,
 }
 
 #[derive(Debug, Clone, Copy, AlignedBorrow, StructReflection)]
