@@ -1,4 +1,5 @@
 use alloc::vec::Vec;
+use core::convert::Infallible;
 
 use halo2curves_axiom::{
     bn256::{Fq, Fq12, Fq2},
@@ -78,76 +79,96 @@ impl FinalExp for Bn254 {
     // returns c (residueWitness) and u (cubicNonResiduePower)
     // The Gnark implementation is based on https://eprint.iacr.org/2024/640.pdf
     fn final_exp_hint(f: &Self::Fp12) -> (Self::Fp12, Self::Fp12) {
-        // Residue witness
-        let mut c;
-        // Cubic nonresidue power
-        let u;
-
-        let unity_root_27 = *UNITY_ROOT_27;
-        debug_assert_eq!(unity_root_27.pow([27]), Fq12::one());
-
-        if f.exp_naf(true, &EXP1_NAF) == Fq12::ONE {
-            c = *f;
-            u = Fq12::ONE;
-        } else {
-            let f_mul_unity_root_27 = f * unity_root_27;
-            if f_mul_unity_root_27.exp_naf(true, &EXP1_NAF) == Fq12::ONE {
-                c = f_mul_unity_root_27;
-                u = unity_root_27;
-            } else {
-                c = f_mul_unity_root_27 * unity_root_27;
-                u = unity_root_27.square();
-            }
+        match try_final_exp_hint_with_pow(f, |base, digits| {
+            Ok::<_, Infallible>(base.exp_naf(true, digits))
+        }) {
+            Ok(hint) => hint,
+            Err(error) => match error {},
         }
-
-        // 1. Compute r-th root and exponentiate to rInv where
-        //   rInv = 1/r mod (p^12-1)/r
-        c = c.exp_naf(true, &R_INV_NAF);
-
-        // 2. Compute m-th root where
-        //   m = (6x + 2 + q^3 - q^2 +q)/3r
-        // Exponentiate to mInv where
-        //   mInv = 1/m mod p^12-1
-        c = c.exp_naf(true, &M_INV_NAF);
-
-        // 3. Compute cube root
-        // since gcd(3, (p^12-1)/r) != 1, we use a modified Tonelli-Shanks algorithm
-        // see Alg.4 of https://eprint.iacr.org/2024/640.pdf
-        // Typo in the paper: p^k-1 = 3^n * s instead of p-1 = 3^r * s
-        // where k=12 and n=3 here and exp2 = (s+1)/3
-        let mut x = c.exp_naf(true, &EXP2_NAF);
-
-        // 3^t is ord(x^3 / residueWitness)
-        let c_inv = c.invert().unwrap();
-        let mut x3 = x.square() * x * c_inv;
-        let mut t = 0;
-        let mut tmp = x3.square();
-
-        // Modified Tonelli-Shanks algorithm for computing the cube root
-        fn tonelli_shanks_loop(x3: &mut Fq12, tmp: &mut Fq12, t: &mut i32) {
-            while *x3 != Fq12::ONE {
-                *tmp = (*x3).square();
-                *x3 *= *tmp;
-                *t += 1;
-            }
-        }
-
-        tonelli_shanks_loop(&mut x3, &mut tmp, &mut t);
-
-        let unity_root_27_exp2 = *UNITY_ROOT_27_EXP2;
-        while t != 0 {
-            tmp = unity_root_27_exp2;
-            x *= tmp;
-
-            x3 = x.square() * x * c_inv;
-            t = 0;
-            tonelli_shanks_loop(&mut x3, &mut tmp, &mut t);
-        }
-
-        debug_assert_eq!(c, x * x * x);
-        // x is the cube root of the residue witness c
-        c = x;
-
-        (c, u)
     }
+}
+
+/// Runs the BN254 final-exponentiation hint with a supplied Fp12 exponentiation
+/// implementation.
+#[doc(hidden)]
+pub fn try_final_exp_hint_with_pow<E>(
+    f: &Fq12,
+    mut pow: impl FnMut(&Fq12, &[i8]) -> Result<Fq12, E>,
+) -> Result<(Fq12, Fq12), E> {
+    // Residue witness
+    let mut c;
+    // Cubic nonresidue power
+    let u;
+
+    let unity_root_27 = *UNITY_ROOT_27;
+    debug_assert_eq!(unity_root_27.pow([27]), Fq12::one());
+
+    if pow(f, &EXP1_NAF)? == Fq12::ONE {
+        c = *f;
+        u = Fq12::ONE;
+    } else {
+        let f_mul_unity_root_27 = f * unity_root_27;
+        if pow(&f_mul_unity_root_27, &EXP1_NAF)? == Fq12::ONE {
+            c = f_mul_unity_root_27;
+            u = unity_root_27;
+        } else {
+            c = f_mul_unity_root_27 * unity_root_27;
+            u = unity_root_27.square();
+        }
+    }
+
+    // 1. Compute r-th root and exponentiate to rInv where
+    //   rInv = 1/r mod (p^12-1)/r
+    c = pow(&c, &R_INV_NAF)?;
+
+    // 2. Compute m-th root where
+    //   m = (6x + 2 + q^3 - q^2 +q)/3r
+    // Exponentiate to mInv where
+    //   mInv = 1/m mod p^12-1
+    c = pow(&c, &M_INV_NAF)?;
+
+    // 3. Compute cube root
+    // since gcd(3, (p^12-1)/r) != 1, we use a modified Tonelli-Shanks algorithm
+    // see Alg.4 of https://eprint.iacr.org/2024/640.pdf
+    // Typo in the paper: p^k-1 = 3^n * s instead of p-1 = 3^r * s
+    // where k=12 and n=3 here and exp2 = (s+1)/3
+    let mut x = pow(&c, &EXP2_NAF)?;
+
+    // 3^t is ord(x^3 / residueWitness)
+    let c_inv = c.invert().unwrap();
+    let mut x3 = x.square() * x * c_inv;
+    let mut t = 0;
+    let mut tmp = x3.square();
+
+    // Modified Tonelli-Shanks algorithm for computing the cube root
+    fn tonelli_shanks_loop(x3: &mut Fq12, tmp: &mut Fq12, t: &mut i32) {
+        while *x3 != Fq12::ONE {
+            *tmp = (*x3).square();
+            *x3 *= *tmp;
+            *t += 1;
+        }
+    }
+
+    tonelli_shanks_loop(&mut x3, &mut tmp, &mut t);
+
+    let unity_root_27_exp2 = *UNITY_ROOT_27_EXP2;
+    while t != 0 {
+        tmp = unity_root_27_exp2;
+        x *= tmp;
+
+        x3 = x.square() * x * c_inv;
+        t = 0;
+        tonelli_shanks_loop(&mut x3, &mut tmp, &mut t);
+    }
+
+    debug_assert_eq!(c, x * x * x);
+    // x is the cube root of the residue witness c
+    c = x;
+
+    Ok((c, u))
+}
+
+#[doc(hidden)]
+pub fn final_exp_hint_naf_exponents() -> [&'static [i8]; 4] {
+    [&EXP1_NAF, &R_INV_NAF, &M_INV_NAF, &EXP2_NAF]
 }

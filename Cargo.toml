@@ -257,6 +257,7 @@ snark-verifier-sdk = { version = "0.2.6", git = "https://github.com/axiom-crypto
 ] }
 halo2-base = { version = "0.5.4", git = "https://github.com/axiom-crypto/halo2-lib.git", branch = "develop-v2.1.0", default-features = false }
 halo2curves-axiom = { version = "0.7.3", git = "https://github.com/axiom-crypto/halo2curves.git", tag = "v0.7.3" }
+mcl_rust = { git = "https://github.com/shuklaayush/mcl-rust.git", rev = "503a45f3b39e81238873f089b675de09c0d4cf03" }
 struct-reflection = "0.1.0"
 
 cargo_metadata = "0.18"

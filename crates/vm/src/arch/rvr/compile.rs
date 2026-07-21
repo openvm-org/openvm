@@ -651,6 +651,7 @@ fn compile_impl<F: PrimeField32>(
         .map(|(filename, _)| filename.to_string())
         .collect();
     let ext_cflags = opts.extensions.extra_cflags();
+    let native_link_args = opts.extensions.native_link_args();
 
     compile_generated_project(
         output_dir,
@@ -659,6 +660,7 @@ fn compile_impl<F: PrimeField32>(
             &ext_sources,
             &vendor_sources,
             &ext_cflags,
+            &native_link_args,
         ),
         &toolchain,
     )?;

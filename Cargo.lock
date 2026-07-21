@@ -3819,6 +3819,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "link-cplusplus"
+version = "1.0.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f78c730aaa7d0b9336a299029ea49f9ee53b0ed06e9202e8cb7db9bae7b8c82"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "linked_list_allocator"
 version = "0.10.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3920,6 +3929,16 @@ checksum = "8ea1f30cedd69f0a2954655f7188c6a834246d2bcf1e315e2ac40c4b24dc9519"
 dependencies = [
  "cfg-if 1.0.1",
  "rayon",
+]
+
+[[package]]
+name = "mcl_rust"
+version = "1.1.0"
+source = "git+https://github.com/shuklaayush/mcl-rust.git?rev=503a45f3b39e81238873f089b675de09c0d4cf03#503a45f3b39e81238873f089b675de09c0d4cf03"
+dependencies = [
+ "cmake",
+ "getrandom 0.2.16",
+ "link-cplusplus",
 ]
 
 [[package]]
@@ -7411,9 +7430,11 @@ name = "rvr-openvm-ext-pairing-ffi"
 version = "2.0.0"
 dependencies = [
  "halo2curves-axiom 0.7.3",
+ "mcl_rust",
  "openvm-ecc-guest",
  "openvm-pairing-guest",
  "openvm-platform",
+ "rand 0.8.5",
  "rvr-openvm-ext-algebra-ffi-common",
  "rvr-openvm-ext-ffi-common",
 ]
