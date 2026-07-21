@@ -176,7 +176,8 @@ impl<F: VmField> MemoryController<F> {
 
         let hasher = self.hasher_chip.as_ref().unwrap();
         let final_memory_by_leaf = group_touched_memory_by_leaf(&final_memory);
-        boundary_chip.finalize(initial_memory, &final_memory_by_leaf, hasher.as_ref());
+        let dirty_leaves =
+            boundary_chip.finalize(initial_memory, &final_memory_by_leaf, hasher.as_ref());
 
         // Regroup BLOCK_FE_WIDTH-cell blocks into VM_DIGEST_WIDTH-cell leaves for merkle_chip.
         // The equipartition key is (addr_space, ptr).
@@ -195,7 +196,12 @@ impl<F: VmField> MemoryController<F> {
                 ((*addr_space, ptr), values)
             })
             .collect();
-        merkle_chip.finalize(initial_memory, &final_memory_values, hasher.as_ref());
+        merkle_chip.finalize(
+            initial_memory,
+            &final_memory_values,
+            &dirty_leaves,
+            hasher.as_ref(),
+        );
 
         vec![
             boundary_chip.generate_proving_ctx(()),

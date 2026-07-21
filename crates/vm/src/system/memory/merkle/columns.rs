@@ -35,9 +35,6 @@ pub struct MemoryMerkleCols<T, const DIGEST_WIDTH: usize> {
     // hash, so this row consumes the child's initial claim twice (multiplicity -2).
     // `*_absent_ref` = 1 means the child is untouched and this node has no final row to
     // prop the reference, so this row consumes nothing (multiplicity 0).
-    //
-    // NOTE: until real dirtiness is enabled in tracegen, all four are always 0 and the
-    // child multiplicities reduce to the previous `-expand_direction`.
     pub left_extra_ref: T,
     pub right_extra_ref: T,
     pub left_absent_ref: T,

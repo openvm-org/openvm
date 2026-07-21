@@ -506,6 +506,7 @@ mod tests {
             memory::{
                 merkle::{MemoryMerkleChip, MerkleTree},
                 online::{GuestMemory, LinearMemory},
+                persistent::DirtyLeaves,
                 AddressMap, TimestampedValues,
             },
             poseidon2::Poseidon2PeripheryChip,
@@ -703,6 +704,21 @@ mod tests {
             .map(|_| std::array::from_fn(|_| F::from_u32(rng.random_range(0..F::ORDER_U32))))
             .collect::<Vec<[F; VM_DIGEST_WIDTH]>>();
         assert!(!touched_ptrs.is_empty());
+        // Mirror the boundary chip's dirtiness definition: a touched leaf is dirty iff
+        // its final values differ from its initial values.
+        let dirty_leaves: DirtyLeaves = touched_ptrs
+            .iter()
+            .zip(new_data.iter())
+            .filter(|(&(address_space, ptr), values)| {
+                let init_values: [F; VM_DIGEST_WIDTH] = std::array::from_fn(|i| unsafe {
+                    initial_memory
+                        .memory
+                        .get_f::<F>(address_space, ptr + i as u32)
+                });
+                init_values != **values
+            })
+            .map(|(&key, _)| key)
+            .collect();
         cpu_merkle_tree.finalize(
             &cpu_hasher_chip,
             &(touched_ptrs
@@ -710,6 +726,7 @@ mod tests {
                 .copied()
                 .zip(new_data.iter().copied())
                 .collect()),
+            &dirty_leaves,
             &mem_config.memory_dimensions(),
         );
         let touched_blocks = touched_ptrs
@@ -883,7 +900,26 @@ mod tests {
             .copied()
             .zip(new_data.iter().copied())
             .collect();
-        cpu_merkle_chip.finalize(&initial_memory.memory, &final_partition, &cpu_hasher_chip);
+        // Mirror the boundary chip's dirtiness definition: a touched leaf is dirty iff
+        // its final values differ from its initial values.
+        let dirty_leaves: DirtyLeaves = final_partition
+            .iter()
+            .filter(|((address_space, ptr), values)| {
+                let init_values: [F; VM_DIGEST_WIDTH] = std::array::from_fn(|i| unsafe {
+                    initial_memory
+                        .memory
+                        .get_f::<F>(*address_space, *ptr + i as u32)
+                });
+                init_values != **values
+            })
+            .map(|(&key, _)| key)
+            .collect();
+        cpu_merkle_chip.finalize(
+            &initial_memory.memory,
+            &final_partition,
+            &dirty_leaves,
+            &cpu_hasher_chip,
+        );
         let cpu_ctx = cpu_merkle_chip.generate_proving_ctx::<SC>();
 
         // Run the GPU update and capture the resulting trace.

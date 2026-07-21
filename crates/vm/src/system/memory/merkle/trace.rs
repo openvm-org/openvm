@@ -12,6 +12,7 @@ use crate::{
     system::{
         memory::{
             merkle::{tree::MerkleTree, FinalState, MemoryMerkleChip, MemoryMerkleCols},
+            persistent::DirtyLeaves,
             Equipartition, MemoryImage,
         },
         poseidon2::{
@@ -21,17 +22,22 @@ use crate::{
 };
 
 impl<const DIGEST_WIDTH: usize, F: PrimeField32> MemoryMerkleChip<DIGEST_WIDTH, F> {
+    /// `dirty_leaves` must be exactly the set the boundary chip committed to (returned by
+    /// its `finalize`): the two chips' merkle-bus interactions balance only if they agree
+    /// on which leaves are dirty.
     #[instrument(name = "merkle_finalize", level = "debug", skip_all)]
     pub(crate) fn finalize(
         &mut self,
         initial_memory: &MemoryImage,
         final_memory: &Equipartition<F, DIGEST_WIDTH>,
+        dirty_leaves: &DirtyLeaves,
         hasher: &impl HasherChip<DIGEST_WIDTH, F>,
     ) {
         assert!(self.final_state.is_none(), "Merkle chip already finalized");
         let memory_dimensions = &self.air.memory_dimensions;
         let mut tree = MerkleTree::from_memory(initial_memory, memory_dimensions, hasher);
-        self.final_state = Some(tree.finalize(hasher, final_memory, memory_dimensions));
+        self.final_state =
+            Some(tree.finalize(hasher, final_memory, dirty_leaves, memory_dimensions));
         self.top_tree = tree.top_tree(memory_dimensions.addr_space_height);
     }
 }
