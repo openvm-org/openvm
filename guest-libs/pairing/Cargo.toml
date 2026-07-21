@@ -58,7 +58,12 @@ rand08 = { package = "rand", version = "0.8.5", features = ["std_rng"] }
 
 [features]
 default = []
-halo2curves = ["bls12_381", "bn254", "dep:halo2curves-axiom"]
+halo2curves = [
+    "bls12_381",
+    "bn254",
+    "dep:halo2curves-axiom",
+    "openvm-pairing-guest/halo2curves",
+]
 # features to enable specific curves in guest programs
 # only enable for the curves you use as it affects the init! macro
 bn254 = ["openvm-pairing-guest/bn254"]
