@@ -1,6 +1,5 @@
 use bytesize::ByteSize;
-#[cfg(feature = "metrics")]
-use openvm_stark_backend::memory_metering::INTERACTION_MEMORY_OVERHEAD;
+use itertools::izip;
 use openvm_stark_backend::memory_metering::{ProvingMemoryConfig, ProvingMemoryCounts};
 use serde::{Deserialize, Serialize};
 
@@ -30,6 +29,7 @@ struct SegmentationParams {
     widths: Vec<usize>,
     interactions: Vec<usize>,
     need_rot: Vec<bool>,
+    constraint_eval_buffers: Vec<usize>,
     max_trace_height: u32,
     max_memory: usize,
     max_interactions: u32,
@@ -43,12 +43,14 @@ impl SegmentationParams {
         widths: Vec<usize>,
         interactions: Vec<usize>,
         need_rot: Vec<bool>,
+        constraint_eval_buffers: Vec<usize>,
         limits: SegmentationLimits,
         memory_config: ProvingMemoryConfig,
     ) -> Self {
         assert_eq!(air_names.len(), widths.len());
         assert_eq!(air_names.len(), interactions.len());
         assert_eq!(air_names.len(), need_rot.len());
+        assert_eq!(air_names.len(), constraint_eval_buffers.len());
         assert!(
             limits.max_trace_height_bits < u32::BITS as u8,
             "max_trace_height_bits must be less than {}",
@@ -68,6 +70,7 @@ impl SegmentationParams {
             widths,
             interactions,
             need_rot,
+            constraint_eval_buffers,
             max_trace_height,
             max_memory: limits.max_memory,
             max_interactions: limits.max_interactions,
@@ -128,6 +131,10 @@ struct MeteredCounts {
     interaction_cells_unpadded: usize,
     /// Metered row-interaction slots from padding rows.
     interaction_cells_padding: usize,
+    /// Constraint eval buffer size without padding.
+    constraint_eval_buffers_unpadded: usize,
+    /// Constraint eval buffer size from padding.
+    constraint_eval_buffers_padding: usize,
 }
 
 struct MeteredMemoryBreakdown {
@@ -143,6 +150,7 @@ impl SegmentationCtx {
         widths: Vec<usize>,
         interactions: Vec<usize>,
         need_rot: Vec<bool>,
+        constraint_eval_buffers: Vec<usize>,
         limits: SegmentationLimits,
         memory_config: ProvingMemoryConfig,
     ) -> Self {
@@ -152,6 +160,7 @@ impl SegmentationCtx {
             widths,
             interactions,
             need_rot,
+            constraint_eval_buffers,
             limits,
             memory_config,
         );
@@ -203,17 +212,19 @@ impl SegmentationCtx {
         main_cnt_with_rot: usize,
         main_cnt_no_rot: usize,
         interaction_cells: usize,
+        constraint_eval_cells: usize,
     ) -> (
-        usize, /* memory */
+        usize, /* total */
         usize, /* main */
-        usize, /* interaction */
+        usize, /* secondary */
     ) {
         let estimate = self.params.memory_config.estimate(ProvingMemoryCounts::new(
             main_cnt_with_rot,
             main_cnt_no_rot,
             interaction_cells,
+            constraint_eval_cells,
         ));
-        (estimate.total, estimate.main, estimate.interaction)
+        (estimate.total, estimate.main, estimate.secondary_peak)
     }
 
     /// Sum padded main trace cells and interaction cells across all chips, splitting main
@@ -223,14 +234,19 @@ impl SegmentationCtx {
         debug_assert_eq!(trace_heights.len(), self.params.widths.len());
         debug_assert_eq!(trace_heights.len(), self.params.interactions.len());
         debug_assert_eq!(trace_heights.len(), self.params.need_rot.len());
+        debug_assert_eq!(
+            trace_heights.len(),
+            self.params.constraint_eval_buffers.len()
+        );
 
         let mut counts = MeteredCounts::default();
-        for (((&height, &width), &interactions), &need_rot) in trace_heights
-            .iter()
-            .zip(self.params.widths.iter())
-            .zip(self.params.interactions.iter())
-            .zip(self.params.need_rot.iter())
-        {
+        for (&height, &width, &interactions, &need_rot, &constraint_eval_buffer) in izip!(
+            trace_heights,
+            &self.params.widths,
+            &self.params.interactions,
+            &self.params.need_rot,
+            &self.params.constraint_eval_buffers
+        ) {
             let padded_height = next_power_of_two_or_zero(height as usize);
             let unpadded_height = height as usize;
             let padding_height = padded_height - unpadded_height;
@@ -247,6 +263,8 @@ impl SegmentationCtx {
             }
             counts.interaction_cells_unpadded += unpadded_height * interactions;
             counts.interaction_cells_padding += padding_height * interactions;
+            counts.constraint_eval_buffers_unpadded += unpadded_height * constraint_eval_buffer;
+            counts.constraint_eval_buffers_padding += padding_height * constraint_eval_buffer;
         }
         counts
     }
@@ -254,20 +272,26 @@ impl SegmentationCtx {
     /// Sum padded main trace cells and interaction cells across all chips, splitting main
     /// cells by per-AIR `need_rot`.
     #[inline(always)]
-    fn calculate_cell_counts(&self, trace_heights: &[u32]) -> (usize, usize, usize) {
+    fn calculate_cell_counts(&self, trace_heights: &[u32]) -> (usize, usize, usize, usize) {
         debug_assert_eq!(trace_heights.len(), self.params.widths.len());
         debug_assert_eq!(trace_heights.len(), self.params.interactions.len());
         debug_assert_eq!(trace_heights.len(), self.params.need_rot.len());
+        debug_assert_eq!(
+            trace_heights.len(),
+            self.params.constraint_eval_buffers.len()
+        );
 
         let mut main_cnt_with_rot = 0;
         let mut main_cnt_no_rot = 0;
         let mut interaction_cells = 0;
-        for (((&height, &width), &interactions), &need_rot) in trace_heights
-            .iter()
-            .zip(self.params.widths.iter())
-            .zip(self.params.interactions.iter())
-            .zip(self.params.need_rot.iter())
-        {
+        let mut constraint_eval_cells = 0;
+        for (&height, &width, &interactions, &need_rot, &constraint_eval_buffer) in izip!(
+            trace_heights,
+            &self.params.widths,
+            &self.params.interactions,
+            &self.params.need_rot,
+            &self.params.constraint_eval_buffers
+        ) {
             let padded_height = next_power_of_two_or_zero(height as usize);
             let main_cells = padded_height * width;
             if need_rot {
@@ -276,8 +300,14 @@ impl SegmentationCtx {
                 main_cnt_no_rot += main_cells;
             }
             interaction_cells += padded_height * interactions;
+            constraint_eval_cells += padded_height * constraint_eval_buffer;
         }
-        (main_cnt_with_rot, main_cnt_no_rot, interaction_cells)
+        (
+            main_cnt_with_rot,
+            main_cnt_no_rot,
+            interaction_cells,
+            constraint_eval_cells,
+        )
     }
 
     /// Calculate total memory in bytes based on trace heights and widths.
@@ -286,13 +316,18 @@ impl SegmentationCtx {
         &self,
         trace_heights: &[u32],
     ) -> (
-        usize, /* memory */
+        usize, /* total */
         usize, /* main */
-        usize, /* interaction */
+        usize, /* secondary */
     ) {
-        let (main_cnt_with_rot, main_cnt_no_rot, interaction_cells) =
+        let (main_cnt_with_rot, main_cnt_no_rot, interaction_cells, constraint_eval_cells) =
             self.calculate_cell_counts(trace_heights);
-        self.counts_to_memory(main_cnt_with_rot, main_cnt_no_rot, interaction_cells)
+        self.counts_to_memory(
+            main_cnt_with_rot,
+            main_cnt_no_rot,
+            interaction_cells,
+            constraint_eval_cells,
+        )
     }
 
     #[inline(always)]
@@ -301,11 +336,13 @@ impl SegmentationCtx {
             counts.main_unpadded_with_rot,
             counts.main_unpadded_no_rot,
             counts.interaction_cells_unpadded,
+            counts.constraint_eval_buffers_unpadded,
         ));
         let total = self.params.memory_config.estimate(ProvingMemoryCounts::new(
             counts.main_unpadded_with_rot + counts.main_padding_with_rot,
             counts.main_unpadded_no_rot + counts.main_padding_no_rot,
             counts.interaction_cells_unpadded + counts.interaction_cells_padding,
+            counts.constraint_eval_buffers_unpadded + counts.constraint_eval_buffers_padding,
         ));
 
         MeteredMemoryBreakdown {
@@ -366,15 +403,22 @@ impl SegmentationCtx {
         let mut main_cnt_with_rot = 0usize;
         let mut main_cnt_no_rot = 0usize;
         let mut interaction_cells = 0usize;
-        for (i, ((((padded_height, width), interactions), is_constant), &need_rot)) in trace_heights
+        let mut constraint_eval_cells = 0usize;
+        let padded_heights = trace_heights
             .iter()
-            .map(|&height| next_power_of_two_or_zero(height as usize) as u32)
-            .zip(self.params.widths.iter())
-            .zip(self.params.interactions.iter())
-            .zip(is_trace_height_constant.iter())
-            .zip(self.params.need_rot.iter())
-            .enumerate()
+            .map(|&height| next_power_of_two_or_zero(height as usize) as u32);
+        for (i, row) in izip!(
+            padded_heights,
+            &self.params.widths,
+            &self.params.interactions,
+            is_trace_height_constant,
+            &self.params.need_rot,
+            &self.params.constraint_eval_buffers
+        )
+        .enumerate()
         {
+            let (padded_height, &width, &interactions, &is_constant, &need_rot, &constraint_eval) =
+                row;
             // Only segment if the height is not constant and exceeds the maximum height after
             // padding
             if !is_constant && padded_height > self.params.max_trace_height {
@@ -399,10 +443,15 @@ impl SegmentationCtx {
                 main_cnt_no_rot += main_cells;
             }
             interaction_cells += padded_height as usize * interactions;
+            constraint_eval_cells += padded_height as usize * constraint_eval;
         }
 
-        let (total_memory, main_memory, interaction_memory) =
-            self.counts_to_memory(main_cnt_with_rot, main_cnt_no_rot, interaction_cells);
+        let (total_memory, main_memory, interaction_memory) = self.counts_to_memory(
+            main_cnt_with_rot,
+            main_cnt_no_rot,
+            interaction_cells,
+            constraint_eval_cells,
+        );
         if total_memory > self.params.max_memory {
             tracing::info!(
                 "overshoot: instret {:10} | total memory ({:5}) > max ({:5}) | main ({:5}) | interaction ({:5})",
@@ -639,26 +688,42 @@ impl SegmentationCtx {
         let counts = self.calculate_count_breakdown(trace_heights);
         let memory = self.calculate_memory_breakdown(&counts);
         let padding = memory.total - memory.unpadded;
+        let estimate = self.params.memory_config.estimate(ProvingMemoryCounts::new(
+            counts.main_unpadded_with_rot + counts.main_padding_with_rot,
+            counts.main_unpadded_no_rot + counts.main_padding_no_rot,
+            counts.interaction_cells_unpadded + counts.interaction_cells_padding,
+            counts.constraint_eval_buffers_unpadded + counts.constraint_eval_buffers_padding,
+        ));
         let labels = [("segment", segment.to_string())];
         metrics::counter!("metered_memory_bytes", &labels).absolute(memory.total as u64);
         metrics::counter!("metered_memory_unpadded_bytes", &labels)
             .absolute(memory.unpadded as u64);
         metrics::counter!("metered_memory_padding_bytes", &labels).absolute(padding as u64);
-        metrics::counter!("metered_interaction_memory_overhead_bytes", &labels)
-            .absolute(INTERACTION_MEMORY_OVERHEAD as u64);
+        metrics::counter!("metered_stacked_matrix_memory_bytes", &labels)
+            .absolute(estimate.stacked_matrix as u64);
+        metrics::counter!("metered_rs_code_matrix_memory_bytes", &labels)
+            .absolute(estimate.rs_code_matrix as u64);
+        metrics::counter!("metered_batch_constraint_memory_bytes", &labels)
+            .absolute(estimate.batch_constraint as u64);
+        metrics::counter!("metered_gkr_memory_bytes", &labels).absolute(estimate.gkr as u64);
+        metrics::counter!("metered_whir_memory_bytes", &labels).absolute(estimate.whir as u64);
+        metrics::counter!("metered_secondary_peak_memory_bytes", &labels)
+            .absolute(estimate.secondary_peak as u64);
     }
 
     fn emit_metered_air_metrics(&self, segment: &str, trace_heights: &[u32]) {
         let memory_config = self.params.memory_config;
 
-        for (air_id, ((((&height, &width), &interactions), &need_rot), air_name)) in trace_heights
-            .iter()
-            .zip(self.params.widths.iter())
-            .zip(self.params.interactions.iter())
-            .zip(self.params.need_rot.iter())
-            .zip(self.params.air_names.iter())
-            .enumerate()
+        for (air_id, row) in izip!(
+            trace_heights,
+            &self.params.widths,
+            &self.params.interactions,
+            &self.params.constraint_eval_buffers,
+            &self.params.air_names
+        )
+        .enumerate()
         {
+            let (&height, &width, &interactions, &constraint_eval_buffer, air_name) = row;
             let padded_height = next_power_of_two_or_zero(height as usize);
             let unpadded_height = height as usize;
             let padding_height = padded_height - unpadded_height;
@@ -675,15 +740,9 @@ impl SegmentationCtx {
             // One interaction cell is one metered row-interaction slot.
             let interaction_cells_unpadded = unpadded_height * interactions;
             let interaction_cells_padding = padding_height * interactions;
-            let main_secondary_unpadded =
-                memory_config.main_secondary_memory_bytes_for_rot(unpadded_cells, need_rot);
-            let main_secondary = memory_config
-                .main_secondary_memory_bytes_for_rot(unpadded_cells + padding_cells, need_rot);
-            let interaction_unpadded =
-                memory_config.interaction_memory_bytes_without_overhead(interaction_cells_unpadded);
-            let interaction_total = memory_config.interaction_memory_bytes_without_overhead(
-                interaction_cells_unpadded + interaction_cells_padding,
-            );
+            // One constraint eval cell is one zerocheck round0 intermediate slot.
+            let constraint_eval_cells_unpadded = unpadded_height * constraint_eval_buffer;
+            let constraint_eval_cells_padding = padding_height * constraint_eval_buffer;
 
             metrics::counter!("metered_rows_unpadded", &labels).absolute(height as u64);
             metrics::counter!("metered_rows_padding", &labels).absolute(padding_height as u64);
@@ -694,18 +753,14 @@ impl SegmentationCtx {
                 .absolute(interaction_cells_unpadded as u64);
             metrics::counter!("metered_interaction_cells_padding", &labels)
                 .absolute(interaction_cells_padding as u64);
+            metrics::counter!("metered_constraint_eval_cells_unpadded", &labels)
+                .absolute(constraint_eval_cells_unpadded as u64);
+            metrics::counter!("metered_constraint_eval_cells_padding", &labels)
+                .absolute(constraint_eval_cells_padding as u64);
             metrics::counter!("metered_main_memory_unpadded_bytes", &labels)
                 .absolute(memory_config.main_memory_bytes(unpadded_cells) as u64);
             metrics::counter!("metered_main_memory_padding_bytes", &labels)
                 .absolute(memory_config.main_memory_bytes(padding_cells) as u64);
-            metrics::counter!("metered_main_secondary_memory_unpadded_bytes", &labels)
-                .absolute(main_secondary_unpadded as u64);
-            metrics::counter!("metered_main_secondary_memory_padding_bytes", &labels)
-                .absolute((main_secondary - main_secondary_unpadded) as u64);
-            metrics::counter!("metered_interaction_memory_unpadded_bytes", &labels)
-                .absolute(interaction_unpadded as u64);
-            metrics::counter!("metered_interaction_memory_padding_bytes", &labels)
-                .absolute((interaction_total - interaction_unpadded) as u64);
         }
     }
 }
