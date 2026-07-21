@@ -510,6 +510,10 @@ fn build_below_leaf_swap_subtree(
                 direction,
                 right_has_path && child_depth < BELOW_LEAF_PATH_LEN,
             ),
+            left_extra_ref: BabyBear::ZERO,
+            right_extra_ref: BabyBear::ZERO,
+            left_absent_ref: BabyBear::ZERO,
+            right_absent_ref: BabyBear::ZERO,
         });
 
         parent_hash
@@ -632,6 +636,10 @@ fn build_counterexample_canonical_rows(
                 right_child_hash: right_initial_hash,
                 left_direction_different: BabyBear::ZERO,
                 right_direction_different: BabyBear::ZERO,
+                left_extra_ref: BabyBear::ZERO,
+                right_extra_ref: BabyBear::ZERO,
+                left_absent_ref: BabyBear::ZERO,
+                right_absent_ref: BabyBear::ZERO,
             });
             rows_by_height[height].push(MemoryMerkleCols {
                 expand_direction: BabyBear::NEG_ONE,
@@ -646,6 +654,10 @@ fn build_counterexample_canonical_rows(
                 right_child_hash: right_final_hash,
                 left_direction_different: BabyBear::from_bool(!left_changed),
                 right_direction_different: BabyBear::from_bool(!right_changed),
+                left_extra_ref: BabyBear::ZERO,
+                right_extra_ref: BabyBear::ZERO,
+                left_absent_ref: BabyBear::ZERO,
+                right_absent_ref: BabyBear::ZERO,
             });
 
             next.insert(parent_prefix, (initial_hash, final_hash));
@@ -693,6 +705,10 @@ fn build_hidden_leaf_expansion_row(
             right_child_hash: unchanged_sibling_hash,
             left_direction_different: final_direction_different(direction, true),
             right_direction_different: final_direction_different(direction, false),
+            left_extra_ref: BabyBear::ZERO,
+            right_extra_ref: BabyBear::ZERO,
+            left_absent_ref: BabyBear::ZERO,
+            right_absent_ref: BabyBear::ZERO,
         },
     )
 }
@@ -822,6 +838,10 @@ fn build_below_leaf_swap_fraud_merkle(
             right_child_hash: [BabyBear::ZERO; VM_DIGEST_WIDTH],
             left_direction_different: BabyBear::ZERO,
             right_direction_different: BabyBear::ZERO,
+            left_extra_ref: BabyBear::ZERO,
+            right_extra_ref: BabyBear::ZERO,
+            left_absent_ref: BabyBear::ZERO,
+            right_absent_ref: BabyBear::ZERO,
         });
     }
 

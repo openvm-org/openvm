@@ -62,6 +62,21 @@ impl<const DIGEST_WIDTH: usize, AB: InteractionBuilder + AirBuilderWithPublicVal
             .when_ne(local.expand_direction, AB::F::NEG_ONE)
             .assert_zero(local.right_direction_different);
 
+        // The reference-count flags adjust how many copies of a child's initial claim an
+        // initial row consumes (see the child interactions in `eval_interactions`). They
+        // are meaningful only on initial rows: if `expand_direction` != 1, all must be 0.
+        for flag in [
+            local.left_extra_ref,
+            local.right_extra_ref,
+            local.left_absent_ref,
+            local.right_absent_ref,
+        ] {
+            builder.assert_bool(flag);
+            builder
+                .when_ne(local.expand_direction, AB::F::ONE)
+                .assert_zero(flag);
+        }
+
         // rows should be sorted in descending order
         // independently by `parent_height`, `height_section`, `is_root`
         builder
@@ -164,6 +179,10 @@ impl<const DIGEST_WIDTH: usize> MemoryMerkleAir<DIGEST_WIDTH> {
             (AB::Expr::ONE - local.is_root) * local.expand_direction,
         );
 
+        // Child-reference multiplicity: `-expand_direction`, adjusted on initial rows by
+        // the reference-count flags (constrained zero on non-initial rows):
+        //   -1 * (1 - absent + extra) ∈ {0, -1, -2} on initial rows (how many copies of
+        //   the child's initial claim this row consumes), +1 on final rows (send).
         self.merkle_bus.interact(
             builder,
             [
@@ -174,7 +193,8 @@ impl<const DIGEST_WIDTH: usize> MemoryMerkleAir<DIGEST_WIDTH> {
             ]
             .into_iter()
             .chain(local.left_child_hash.into_iter().map(Into::into)),
-            -local.expand_direction.into(),
+            (AB::Expr::ZERO - local.expand_direction)
+                * (AB::Expr::ONE - local.left_absent_ref + local.left_extra_ref),
         );
 
         self.merkle_bus.interact(
@@ -189,7 +209,8 @@ impl<const DIGEST_WIDTH: usize> MemoryMerkleAir<DIGEST_WIDTH> {
             ]
             .into_iter()
             .chain(local.right_child_hash.into_iter().map(Into::into)),
-            -local.expand_direction.into(),
+            (AB::Expr::ZERO - local.expand_direction)
+                * (AB::Expr::ONE - local.right_absent_ref + local.right_extra_ref),
         );
 
         let compress_fields = iter::empty()
