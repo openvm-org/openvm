@@ -560,6 +560,18 @@ fn simple_eval_jumpdyn(regs: &[Option<u64>; NUM_REGS], rs1: u8, imm: i32) -> Opt
 
 // ── Phase 1: collect_potential_targets ─────────────────────────────────────
 
+fn extend_existing_pcs(
+    pcs: &mut impl Extend<u64>,
+    pc_to_idx: &HashMap<u64, usize>,
+    candidates: impl IntoIterator<Item = u64>,
+) {
+    pcs.extend(
+        candidates
+            .into_iter()
+            .filter(|pc| pc_to_idx.contains_key(pc)),
+    );
+}
+
 fn collect_potential_targets(
     instructions: &[LiftedInstr],
     pc_to_idx: &HashMap<u64, usize>,
@@ -587,11 +599,14 @@ fn collect_potential_targets(
             LiftedInstr::Term { terminator, .. } => match terminator {
                 Terminator::FallThrough => {}
                 Terminator::Jump { target, .. } => {
-                    if is_call(li) {
-                        function_entries.insert(*target);
-                        return_sites.insert(pc + INSTR_SIZE as u64);
-                    } else {
-                        internal_targets.insert(*target);
+                    if pc_to_idx.contains_key(target) {
+                        if is_call(li) {
+                            function_entries.insert(*target);
+                            let return_pc = pc + INSTR_SIZE as u64;
+                            extend_existing_pcs(&mut return_sites, pc_to_idx, [return_pc]);
+                        } else {
+                            internal_targets.insert(*target);
+                        }
                     }
                     regs = [None; NUM_REGS];
                     regs[0] = Some(0);
@@ -603,14 +618,15 @@ fn collect_potential_targets(
                         }
                     }
                     if is_call(li) {
-                        return_sites.insert(pc + INSTR_SIZE as u64);
+                        let return_pc = pc + INSTR_SIZE as u64;
+                        extend_existing_pcs(&mut return_sites, pc_to_idx, [return_pc]);
                     }
                     regs = [None; NUM_REGS];
                     regs[0] = Some(0);
                 }
                 Terminator::Branch { target, .. } => {
-                    internal_targets.insert(*target);
-                    internal_targets.insert(pc + INSTR_SIZE as u64);
+                    let fallthrough = pc + INSTR_SIZE as u64;
+                    extend_existing_pcs(&mut internal_targets, pc_to_idx, [*target, fallthrough]);
                     regs = [None; NUM_REGS];
                     regs[0] = Some(0);
                 }
@@ -619,9 +635,11 @@ fn collect_potential_targets(
                     regs[0] = Some(0);
                 }
                 Terminator::Extension(ext) => {
-                    for target in ext.successors(pc + INSTR_SIZE as u64) {
-                        internal_targets.insert(target);
-                    }
+                    extend_existing_pcs(
+                        &mut internal_targets,
+                        pc_to_idx,
+                        ext.successors(pc + INSTR_SIZE as u64),
+                    );
                     regs = [None; NUM_REGS];
                     regs[0] = Some(0);
                 }
@@ -634,7 +652,10 @@ fn collect_potential_targets(
 
 // ── Phase 2: build_call_return_map ────────────────────────────────────────
 
-fn build_call_return_map(instructions: &[LiftedInstr]) -> HashMap<u64, HashSet<u64>> {
+fn build_call_return_map(
+    instructions: &[LiftedInstr],
+    pc_to_idx: &HashMap<u64, usize>,
+) -> HashMap<u64, HashSet<u64>> {
     let mut map: HashMap<u64, HashSet<u64>> = HashMap::new();
 
     for li in instructions {
@@ -649,7 +670,9 @@ fn build_call_return_map(instructions: &[LiftedInstr]) -> HashMap<u64, HashSet<u
         } = li
         {
             let return_site = pc + INSTR_SIZE as u64;
-            map.entry(*target).or_default().insert(return_site);
+            if pc_to_idx.contains_key(target) && pc_to_idx.contains_key(&return_site) {
+                map.entry(*target).or_default().insert(return_site);
+            }
         }
     }
 
@@ -677,7 +700,7 @@ fn worklist(
     ctx: &WorklistContext<'_>,
     function_entries: &BTreeSet<u64>,
     internal_targets: &BTreeSet<u64>,
-) -> Result<WorklistResult, CfgError> {
+) -> WorklistResult {
     let estimated_size = function_entries.len() + internal_targets.len();
     let mut states: HashMap<u64, RegisterState> = HashMap::with_capacity(estimated_size);
     let mut work: Vec<u64> = Vec::with_capacity(estimated_size);
@@ -686,7 +709,9 @@ fn worklist(
     let mut unresolved_dynamic_jumps: HashSet<u64> = HashSet::new();
     let mut resolved_jumps: HashMap<u64, HashSet<u64>> = HashMap::new();
 
-    for addr in function_entries.iter().chain(internal_targets.iter()) {
+    // Internal targets receive state from their real predecessors. An unknown seed would discard
+    // constants used to resolve dynamic jumps.
+    for addr in function_entries {
         if in_work.insert(*addr) {
             states.insert(*addr, RegisterState::new());
             work.push(*addr);
@@ -724,7 +749,7 @@ fn worklist(
             ctx,
             &mut unresolved_dynamic_jumps,
             &mut resolved_jumps,
-        )?;
+        );
 
         let state_out = transfer(li, state);
 
@@ -744,62 +769,10 @@ fn worklist(
         successors.entry(pc).or_default().extend(succs);
     }
 
-    Ok(WorklistResult {
+    WorklistResult {
         successors,
         resolved_jumps,
-    })
-}
-
-fn validate_static_target(
-    pc_to_idx: &HashMap<u64, usize>,
-    pc: u64,
-    target: u64,
-) -> Result<(), CfgError> {
-    if !is_pc_in_bounds(target) {
-        return Err(CfgError::PcOutOfBounds { pc, target });
     }
-    if !pc_to_idx.contains_key(&target) {
-        return Err(CfgError::PcNotInProgram { pc, target });
-    }
-    Ok(())
-}
-
-fn validate_static_control_targets(
-    instructions: &[LiftedInstr],
-    pc_to_idx: &HashMap<u64, usize>,
-) -> Result<(), CfgError> {
-    // TODO: Make this looser if RVR should support programs with unused invalid jump
-    // targets, e.g. a branch to a missing instruction that is never taken at runtime.
-    // Generated C must safely trap if such a jump is ever taken.
-    for li in instructions {
-        let pc = li.pc();
-        let fallthrough = pc + INSTR_SIZE as u64;
-        match li {
-            LiftedInstr::Body(_) => {
-                validate_static_target(pc_to_idx, pc, fallthrough)?;
-            }
-            LiftedInstr::Term { terminator, .. } => match terminator {
-                Terminator::FallThrough => {
-                    validate_static_target(pc_to_idx, pc, fallthrough)?;
-                }
-                Terminator::Jump { target, .. } => {
-                    validate_static_target(pc_to_idx, pc, *target)?;
-                }
-                Terminator::JumpDyn { .. } => {}
-                Terminator::Branch { target, .. } => {
-                    validate_static_target(pc_to_idx, pc, *target)?;
-                    validate_static_target(pc_to_idx, pc, fallthrough)?;
-                }
-                Terminator::Exit { .. } | Terminator::Trap { .. } => {}
-                Terminator::Extension(ext) => {
-                    for target in ext.successors(fallthrough) {
-                        validate_static_target(pc_to_idx, pc, target)?;
-                    }
-                }
-            },
-        }
-    }
-    Ok(())
 }
 
 // ── Phase 4: transfer ─────────────────────────────────────────────────────
@@ -946,7 +919,7 @@ fn get_successors(
     ctx: &WorklistContext<'_>,
     unresolved_dynamic_jumps: &mut HashSet<u64>,
     resolved_jumps: &mut HashMap<u64, HashSet<u64>>,
-) -> Result<HashSet<u64>, CfgError> {
+) -> HashSet<u64> {
     let mut result = HashSet::new();
     let pc = li.pc();
     let is_call_instr = is_call(li);
@@ -954,17 +927,22 @@ fn get_successors(
     match li {
         LiftedInstr::Body(_) => {
             // Body instructions fall through.
-            result.insert(pc + INSTR_SIZE as u64);
+            let fallthrough = pc + INSTR_SIZE as u64;
+            extend_existing_pcs(&mut result, ctx.pc_to_idx, [fallthrough]);
         }
         LiftedInstr::Term { terminator, .. } => {
             match terminator {
                 Terminator::FallThrough => {
-                    result.insert(pc + INSTR_SIZE as u64);
+                    let fallthrough = pc + INSTR_SIZE as u64;
+                    extend_existing_pcs(&mut result, ctx.pc_to_idx, [fallthrough]);
                 }
                 Terminator::Jump { target, .. } => {
-                    result.insert(*target);
-                    if is_call_instr {
-                        result.insert(pc + INSTR_SIZE as u64);
+                    if ctx.pc_to_idx.contains_key(target) {
+                        result.insert(*target);
+                        let return_pc = pc + INSTR_SIZE as u64;
+                        if is_call_instr {
+                            extend_existing_pcs(&mut result, ctx.pc_to_idx, [return_pc]);
+                        }
                     }
                 }
                 Terminator::JumpDyn { rs1, imm, .. } => {
@@ -974,9 +952,6 @@ fn get_successors(
                     if addr_val.is_constant() && !addr_val.values.is_empty() {
                         let mut targets: Vec<u64> = Vec::new();
                         for &t in &addr_val.values {
-                            if !is_pc_in_bounds(t) {
-                                return Err(CfgError::PcOutOfBounds { pc, target: t });
-                            }
                             if ctx.pc_to_idx.contains_key(&t) {
                                 targets.push(t);
                             }
@@ -1011,20 +986,22 @@ fn get_successors(
                     }
                 }
                 Terminator::Branch { target, .. } => {
-                    result.insert(pc + INSTR_SIZE as u64);
-                    result.insert(*target);
+                    let fallthrough = pc + INSTR_SIZE as u64;
+                    extend_existing_pcs(&mut result, ctx.pc_to_idx, [fallthrough, *target]);
                 }
                 Terminator::Exit { .. } | Terminator::Trap { .. } => {}
                 Terminator::Extension(ext) => {
-                    for target in ext.successors(pc + INSTR_SIZE as u64) {
-                        result.insert(target);
-                    }
+                    extend_existing_pcs(
+                        &mut result,
+                        ctx.pc_to_idx,
+                        ext.successors(pc + INSTR_SIZE as u64),
+                    );
                 }
             }
         }
     }
 
-    Ok(result)
+    result
 }
 
 /// Compute a single JumpDyn target: `(base + imm) & !1`, returning `None` if
@@ -1228,8 +1205,6 @@ pub fn build_blocks(
         .map(|(i, li)| (li.pc(), i))
         .collect();
 
-    validate_static_control_targets(instructions, &pc_to_idx)?;
-
     // Phase 1: Discover potential targets.
     let (function_entries, mut internal_targets, return_sites) =
         collect_potential_targets(instructions, &pc_to_idx);
@@ -1242,7 +1217,7 @@ pub fn build_blocks(
     }
 
     // Phase 2: Build call-return map.
-    let call_return_map = build_call_return_map(instructions);
+    let call_return_map = build_call_return_map(instructions, &pc_to_idx);
 
     // Sorted function entries for binary_search_le.
     let sorted_function_entries: Vec<u64> = function_entries.iter().copied().collect();
@@ -1272,7 +1247,7 @@ pub fn build_blocks(
     let WorklistResult {
         successors,
         resolved_jumps,
-    } = worklist(&ctx, &function_entries, &internal_targets)?;
+    } = worklist(&ctx, &function_entries, &internal_targets);
 
     // Phase 7: Compute leaders.
     let leaders = compute_leaders(
@@ -1396,7 +1371,6 @@ fn build_block_list(
 
 #[cfg(test)]
 mod tests {
-    use openvm_instructions::program::MAX_ALLOWED_PC;
     use rvr_openvm_ir::BranchCond;
 
     use super::*;
@@ -1409,60 +1383,31 @@ mod tests {
         }
     }
 
-    #[test]
-    fn build_blocks_rejects_static_jump_to_missing_pc() {
-        let err = build_blocks(
-            &[
-                term(
-                    0,
-                    Terminator::Jump {
-                        link_rd: None,
-                        target: 8,
-                    },
-                ),
-                term(4, Terminator::Exit { code: 0 }),
-            ],
-            &[],
-        )
-        .unwrap_err();
+    fn body(pc: u64, instr: Instr) -> LiftedInstr {
+        LiftedInstr::Body(InstrAt {
+            pc,
+            instr,
+            source_loc: None,
+        })
+    }
 
-        assert!(matches!(err, CfgError::PcNotInProgram { pc: 0, target: 8 }));
+    fn block_at(blocks: &[Block], start_pc: u64) -> &Block {
+        blocks
+            .iter()
+            .find(|block| block.start_pc == start_pc)
+            .unwrap_or_else(|| panic!("no block starts at {start_pc:#x}"))
     }
 
     #[test]
-    fn build_blocks_rejects_static_jump_out_of_bounds() {
-        let target = u64::from(MAX_ALLOWED_PC) + 1;
-        let err = build_blocks(
-            &[
-                term(
-                    0,
-                    Terminator::Jump {
-                        link_rd: None,
-                        target,
-                    },
-                ),
-                term(4, Terminator::Exit { code: 0 }),
-            ],
-            &[],
-        )
-        .unwrap_err();
-
-        assert!(matches!(
-            err,
-            CfgError::PcOutOfBounds { pc: 0, target: t } if t == target
-        ));
-    }
-
-    #[test]
-    fn build_blocks_rejects_static_branch_to_missing_pc() {
-        let err = build_blocks(
+    fn invalid_branch_target_preserves_valid_fallthrough() {
+        let blocks = build_blocks(
             &[
                 term(
                     0,
                     Terminator::Branch {
                         cond: BranchCond::Eq,
-                        rs1: 0,
-                        rs2: 0,
+                        rs1: 1,
+                        rs2: 2,
                         target: 8,
                     },
                 ),
@@ -1470,8 +1415,72 @@ mod tests {
             ],
             &[],
         )
-        .unwrap_err();
+        .expect("invalid branch edge should be handled at runtime");
 
-        assert!(matches!(err, CfgError::PcNotInProgram { pc: 0, target: 8 }));
+        assert!(matches!(
+            block_at(&blocks, 0).terminator,
+            Terminator::Branch { target: 8, .. }
+        ));
+        assert!(matches!(
+            block_at(&blocks, 4).terminator,
+            Terminator::Exit { code: 0 }
+        ));
+    }
+
+    #[test]
+    fn trailing_body_is_preserved_before_invalid_fallthrough() {
+        let blocks = build_blocks(
+            &[body(
+                0,
+                Instr::AluImm {
+                    op: AluOp::Add,
+                    rd: 5,
+                    rs1: 0,
+                    imm: 1,
+                },
+            )],
+            &[],
+        )
+        .expect("invalid fallthrough should be handled at runtime");
+
+        let block = block_at(&blocks, 0);
+        assert_eq!(block.instructions.len(), 1);
+        assert!(matches!(block.terminator, Terminator::FallThrough));
+    }
+
+    #[test]
+    fn internal_target_keeps_predecessor_state_for_jump_resolution() {
+        let blocks = build_blocks(
+            &[
+                body(
+                    0,
+                    Instr::AluImm {
+                        op: AluOp::Add,
+                        rd: 5,
+                        rs1: 0,
+                        imm: 16,
+                    },
+                ),
+                term(
+                    4,
+                    Terminator::JumpDyn {
+                        link_rd: None,
+                        rs1: 5,
+                        imm: 0,
+                        resolved: Vec::new(),
+                    },
+                ),
+                body(8, Instr::Nop),
+                body(12, Instr::Nop),
+                term(16, Terminator::Exit { code: 0 }),
+            ],
+            &[4],
+        )
+        .expect("cfg build");
+
+        assert!(matches!(
+            &block_at(&blocks, 4).terminator,
+            Terminator::JumpDyn { resolved, .. } if resolved == &[16]
+        ));
     }
 }

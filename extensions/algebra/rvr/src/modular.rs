@@ -111,7 +111,7 @@ impl ExtInstr for HintNonQrInstr {
         ctx.write_line("{");
         ctx.write_line(&format!("static constexpr uint8_t nqr[] = {literal};"));
         let len = format!("{}u", self.non_qr_bytes.len());
-        ctx.extern_call("ext_hint_stream_set", &["nqr", &len]);
+        ctx.emit_call_without_page_flush("ext_hint_stream_set", &["nqr", &len]);
         ctx.write_line("}");
     }
 
@@ -146,7 +146,7 @@ impl ExtInstr for HintSqrtInstr {
         ctx.write_line(&format!("static constexpr uint8_t mod_[] = {mod_literal};"));
         ctx.write_line(&format!("static constexpr uint8_t nqr[] = {nqr_literal};"));
         let num_limbs = format!("{}u", self.num_limbs);
-        ctx.extern_call(
+        ctx.emit_call(
             "rvr_ext_algebra_hint_sqrt",
             &["state", &rs1, &num_limbs, "mod_", "nqr"],
         );
@@ -195,7 +195,13 @@ impl RvrExtension for ModularRvrExtension {
     }
 
     fn c_headers(&self) -> Vec<(&'static str, &'static str)> {
-        vec![("rvr_ext_mod.h", include_str!("../c/rvr_ext_mod.h"))]
+        vec![
+            (
+                "rvr_ext_bls12_381.h",
+                include_str!("../c/rvr_ext_bls12_381.h"),
+            ),
+            ("rvr_ext_mod.h", include_str!("../c/rvr_ext_mod.h")),
+        ]
     }
 
     fn c_sources(&self) -> Vec<(&'static str, &'static str)> {
@@ -224,7 +230,7 @@ impl RvrExtension for ModularRvrExtension {
         ]
     }
 
-    fn extra_c_sources(&self) -> Vec<(&'static str, &'static str)> {
+    fn vendored_c_sources(&self) -> Vec<(&'static str, &'static str)> {
         vec![
             (
                 "precomputed_ecmult.c",
@@ -241,11 +247,11 @@ impl RvrExtension for ModularRvrExtension {
         let mut files = SECP256K1_C_FILES.to_vec();
         files.extend([
             (
-                "blst.h",
+                "blst/blst.h",
                 include_str!("../ffi/modular/blst/bindings/blst.h"),
             ),
             (
-                "blst_aux.h",
+                "blst/blst_aux.h",
                 include_str!("../ffi/modular/blst/bindings/blst_aux.h"),
             ),
         ]);
@@ -254,17 +260,17 @@ impl RvrExtension for ModularRvrExtension {
 
     fn extra_cflags(&self) -> Vec<String> {
         vec![
-            "-Isecp256k1/src".to_string(),
-            "-Isecp256k1".to_string(),
+            "-isystem".to_string(),
+            "secp256k1/src".to_string(),
+            "-isystem".to_string(),
+            "secp256k1".to_string(),
+            "-isystem".to_string(),
+            "blst".to_string(),
             // ENABLE_MODULE_RECOVERY keeps the ECC modules compiled in so the
             // k256 EC ops in rvr_ext_modular.c can call into libsecp256k1.
             // (-DSECP256K1_BUILD is not set here — secp256k1.c defines it
             // internally.)
             "-DENABLE_MODULE_RECOVERY".to_string(),
-            "-Wno-unused-function".to_string(),
-            "-Wno-unused-parameter".to_string(),
-            "-Wno-unused-variable".to_string(),
-            "-Wno-strict-prototypes".to_string(),
         ]
     }
 }

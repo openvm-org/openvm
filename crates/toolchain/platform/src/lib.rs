@@ -20,7 +20,13 @@ pub mod rust_rt;
 
 /// Size of a zkVM machine word in bytes.
 /// 8 bytes (i.e. 64 bits) as the zkVM is an implementation of the rv64im ISA.
-pub const WORD_SIZE: usize = core::mem::size_of::<u64>();
+pub const WORD_SIZE_U32: u32 = u64::BITS / 8;
+/// `usize` form for array lengths and indexing.
+pub const WORD_SIZE: usize = WORD_SIZE_U32 as usize;
+
+// OpenVM targets support at least 32-bit pointers, so VM indices and counts
+// represented as u32 can be converted to usize without truncation.
+const _: () = assert!(usize::BITS >= u32::BITS);
 
 /// Standard IO file descriptors for use with sys_read and sys_write.
 pub mod fileno {

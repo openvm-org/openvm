@@ -5,7 +5,7 @@ use std::ffi::c_void;
 use halo2curves_axiom::ff::{Field, PrimeField};
 use num_bigint::{BigInt, BigUint};
 use num_integer::Integer;
-use openvm_platform::WORD_SIZE;
+use openvm_platform::{WORD_SIZE, WORD_SIZE_U32};
 use rvr_openvm_ext_ffi_common::{rd_mem_words_traced, wr_mem_words_traced};
 
 /// Size of a 256-bit field element in bytes.
@@ -137,6 +137,17 @@ pub unsafe fn write_field_256<F: PrimeField<Repr = [u8; 32]>>(
 
 // ── BigUint helpers (for unknown-modulus fallbacks) ──────────────────────────
 
+/// Convert a byte-sized limb count into RV64 words.
+#[inline]
+pub fn limb_bytes_to_words(num_limbs: u32) -> u32 {
+    assert_eq!(
+        num_limbs % WORD_SIZE_U32,
+        0,
+        "limb byte count must be a multiple of WORD_SIZE"
+    );
+    num_limbs / WORD_SIZE_U32
+}
+
 /// Read a `num_limbs`-byte little-endian BigUint from guest memory (traced).
 ///
 /// # Safety
@@ -144,7 +155,7 @@ pub unsafe fn write_field_256<F: PrimeField<Repr = [u8; 32]>>(
 /// of `WORD_SIZE`.
 #[inline]
 pub unsafe fn read_bigint(state: *mut c_void, ptr: u64, num_limbs: u32) -> BigUint {
-    let num_words = (num_limbs / WORD_SIZE as u32) as usize;
+    let num_words = limb_bytes_to_words(num_limbs) as usize;
     let mut words = vec![0u64; num_words];
     rd_mem_words_traced(state, ptr, &mut words);
     let mut bytes = vec![0u8; num_limbs as usize];
@@ -161,7 +172,7 @@ pub unsafe fn read_bigint(state: *mut c_void, ptr: u64, num_limbs: u32) -> BigUi
 /// of `WORD_SIZE` and large enough to hold `value`.
 #[inline]
 pub unsafe fn write_bigint(state: *mut c_void, ptr: u64, value: &BigUint, num_limbs: u32) {
-    let num_words = (num_limbs / WORD_SIZE as u32) as usize;
+    let num_words = limb_bytes_to_words(num_limbs) as usize;
     let mut bytes = value.to_bytes_le();
     bytes.resize(num_limbs as usize, 0);
     let mut words = vec![0u64; num_words];
@@ -236,7 +247,7 @@ macro_rules! unknown_field_op_fn {
         ) {
             let modulus = ::num_bigint::BigUint::from_bytes_le(::std::slice::from_raw_parts(
                 modulus_ptr,
-                num_limbs as usize,
+                num_limbs as ::std::primitive::usize,
             ));
             let f = $field_ty { modulus, num_limbs };
             $crate::exec_op(&f, state, rd_ptr, rs1_ptr, rs2_ptr, |f, a, b| {

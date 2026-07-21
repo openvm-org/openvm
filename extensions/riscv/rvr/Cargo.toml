@@ -13,6 +13,7 @@ rvr-openvm-lift = { workspace = true, optional = true }
 
 openvm-circuit = { workspace = true, optional = true }
 openvm-instructions = { workspace = true, optional = true }
+openvm-platform = { workspace = true, optional = true }
 openvm-riscv-transpiler = { workspace = true, optional = true }
 
 libloading = { workspace = true, optional = true }
@@ -20,6 +21,7 @@ rand = { workspace = true, optional = true }
 
 [dev-dependencies]
 p3-baby-bear.workspace = true
+test-case.workspace = true
 
 [features]
 default = []
@@ -28,6 +30,7 @@ rvr = [
     "dep:rvr-openvm-lift",
     "openvm-circuit/rvr",
     "dep:openvm-instructions",
+    "dep:openvm-platform",
     "dep:openvm-riscv-transpiler",
     "dep:libloading",
     "dep:rand",

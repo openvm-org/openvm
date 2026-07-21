@@ -1,7 +1,8 @@
 /* RVR wrappers for BLS12-381 Fp, Fr, Fp2, and affine G1 arithmetic using blst. */
 
 #include "openvm.h"
-#include "blst.h"
+#include "rvr_ext_bls12_381.h"
+#include <blst.h>
 #include <string.h>
 
 #if !defined(__BYTE_ORDER__) || __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__

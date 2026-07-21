@@ -31,6 +31,8 @@ pub struct RvrCompiled {
     artifact_dir: Option<ArtifactDir>,
     /// Generated state, tracing, and block ABI family baked into this artifact.
     execution_kind: RvrExecutionKind,
+    /// Number of AIRs baked into metered artifacts.
+    num_airs: Option<u32>,
 }
 
 enum ArtifactDir {
@@ -50,6 +52,10 @@ impl ArtifactDir {
 impl RvrCompiled {
     pub(crate) const fn execution_kind(&self) -> RvrExecutionKind {
         self.execution_kind
+    }
+
+    pub(crate) const fn num_airs(&self) -> Option<u32> {
+        self.num_airs
     }
 
     pub(crate) fn require_execution_kind(
@@ -183,6 +189,14 @@ pub enum CompileError {
     LibLoad(String),
     #[error("unknown opcode {opcode:?} at pc {pc:#x}")]
     UnknownOpcode { pc: u32, opcode: VmOpcode },
+    #[error("program counter for instruction index {instruction_index} exceeds the u32 PC domain")]
+    ProgramCounterOutOfBounds { instruction_index: usize },
+    #[error("executor index {executor_idx} at pc {pc:#x} has no AIR mapping")]
+    ExecutorIndexOutOfBounds { pc: u32, executor_idx: u32 },
+    #[error("AIR index {air_idx} at pc {pc:#x} exceeds the u32 chip-index domain")]
+    AirIndexOutOfBounds { pc: u32, air_idx: usize },
+    #[error("AIR count {num_airs} exceeds the generated C u32 domain")]
+    AirCountOutOfBounds { num_airs: usize },
     #[error("invalid compile options: {0}")]
     InvalidOptions(&'static str),
 }
@@ -190,6 +204,8 @@ pub enum CompileError {
 /// Chip mapping information for hardcoding chip indices into generated code.
 #[derive(Clone)]
 pub struct ChipMapping {
+    /// Total number of AIRs in the VM verifying key.
+    pub num_airs: usize,
     /// Per-PC chip index. Index i = chip for PC = pc_base + i*4.
     pub pc_to_chip: Vec<TraceChipIndex>,
     /// Per-AIR widths (MeteredCost mode only). When present, the emitter
@@ -210,6 +226,16 @@ pub fn build_pc_to_chip<F, E>(
         .iter()
         .enumerate()
         .map(|(i, slot)| {
+            let instruction_index =
+                u32::try_from(i).map_err(|_| CompileError::ProgramCounterOutOfBounds {
+                    instruction_index: i,
+                })?;
+            let pc = instruction_index
+                .checked_mul(DEFAULT_PC_STEP)
+                .and_then(|offset| exe.program.pc_base.checked_add(offset))
+                .ok_or(CompileError::ProgramCounterOutOfBounds {
+                    instruction_index: i,
+                })?;
             let Some((inst, _)) = slot else {
                 return Ok(TraceChipIndex::NoChip);
             };
@@ -217,15 +243,16 @@ pub fn build_pc_to_chip<F, E>(
             if opcode == terminate_opcode {
                 return Ok(TraceChipIndex::NoChip);
             }
-            let &executor_idx = inventory.instruction_lookup.get(&opcode).ok_or_else(|| {
-                CompileError::UnknownOpcode {
-                    pc: exe.program.pc_base + (i as u32) * DEFAULT_PC_STEP,
-                    opcode,
-                }
-            })?;
-            Ok(TraceChipIndex::Chip(AirIndex::new(
-                executor_idx_to_air_idx[executor_idx as usize] as u32,
-            )))
+            let &executor_idx = inventory
+                .instruction_lookup
+                .get(&opcode)
+                .ok_or(CompileError::UnknownOpcode { pc, opcode })?;
+            let &air_idx = executor_idx_to_air_idx
+                .get(executor_idx as usize)
+                .ok_or(CompileError::ExecutorIndexOutOfBounds { pc, executor_idx })?;
+            let air_idx = u32::try_from(air_idx)
+                .map_err(|_| CompileError::AirIndexOutOfBounds { pc, air_idx })?;
+            Ok(TraceChipIndex::Chip(AirIndex::new(air_idx)))
         })
         .collect()
 }
@@ -372,11 +399,13 @@ pub fn load_compiled_from_path(lib_path: &Path) -> Result<RvrCompiled, CompileEr
             .map_err(|e| CompileError::LibLoad(format!("{}: {}", lib_path.display(), e)))?
     };
     let execution_kind = load_execution_kind(&lib)?;
+    let num_airs = load_num_airs(&lib, execution_kind)?;
     Ok(RvrCompiled {
         lib,
         lib_path: lib_path.to_path_buf(),
         artifact_dir: None,
         execution_kind,
+        num_airs,
     })
 }
 
@@ -391,6 +420,32 @@ fn load_execution_kind(lib: &libloading::Library) -> Result<RvrExecutionKind, Co
     let marker = unsafe { execution_kind_fn() };
     RvrExecutionKind::try_from(marker)
         .map_err(|_| CompileError::LibLoad(format!("unknown rv_execution_kind marker {marker}")))
+}
+
+fn load_num_airs(
+    lib: &libloading::Library,
+    execution_kind: RvrExecutionKind,
+) -> Result<Option<u32>, CompileError> {
+    if matches!(
+        execution_kind,
+        RvrExecutionKind::Pure | RvrExecutionKind::PureWithInstretTracking
+    ) {
+        return Ok(None);
+    }
+
+    type NumAirsFn = unsafe extern "C" fn() -> u32;
+    let num_airs_fn: NumAirsFn = unsafe {
+        *lib.get::<NumAirsFn>(b"rv_num_airs").map_err(|error| {
+            CompileError::LibLoad(format!("missing rv_num_airs marker: {error}"))
+        })?
+    };
+    let num_airs = unsafe { num_airs_fn() };
+    if num_airs == 0 {
+        return Err(CompileError::LibLoad(
+            "rv_num_airs marker must be nonzero".to_string(),
+        ));
+    }
+    Ok(Some(num_airs))
 }
 
 fn compile_impl<F: PrimeField32>(
@@ -431,6 +486,16 @@ fn compile_impl<F: PrimeField32>(
             let chips = opts.chips.ok_or(CompileError::InvalidOptions(
                 "metered rvr compile requires ChipMapping",
             ))?;
+            project.num_airs = Some(u32::try_from(chips.num_airs).map_err(|_| {
+                CompileError::AirCountOutOfBounds {
+                    num_airs: chips.num_airs,
+                }
+            })?);
+            if project.num_airs == Some(0) {
+                return Err(CompileError::InvalidOptions(
+                    "metered rvr compile requires at least one AIR",
+                ));
+            }
             project.pc_to_chip = Some(chips.pc_to_chip.clone());
             project.chip_widths = chips.chip_widths.clone();
         }
@@ -464,18 +529,23 @@ fn compile_impl<F: PrimeField32>(
         .c_sources()
         .into_iter()
         .map(|(filename, _)| filename.to_string())
-        .chain(
-            opts.extensions
-                .extra_c_sources()
-                .into_iter()
-                .map(|(filename, _)| filename.to_string()),
-        )
+        .collect();
+    let vendor_sources: Vec<String> = opts
+        .extensions
+        .vendored_c_sources()
+        .into_iter()
+        .map(|(filename, _)| filename.to_string())
         .collect();
     let ext_cflags = opts.extensions.extra_cflags();
 
     compile_generated_project(
         output_dir,
-        &project.make_args_with_extensions(&ext_staticlibs, &ext_sources, &ext_cflags),
+        &project.make_args_with_extensions(
+            &ext_staticlibs,
+            &ext_sources,
+            &vendor_sources,
+            &ext_cflags,
+        ),
         &toolchain,
     )?;
 
@@ -491,7 +561,7 @@ fn compile_impl<F: PrimeField32>(
             opts.execution_kind
         )));
     }
-
+    let num_airs = load_num_airs(&lib, execution_kind)?;
     let artifact_dir = if opts.keep_artifacts {
         let path = temp_dir.keep();
         tracing::info!(
@@ -508,6 +578,7 @@ fn compile_impl<F: PrimeField32>(
         lib_path,
         artifact_dir: Some(artifact_dir),
         execution_kind,
+        num_airs,
     })
 }
 

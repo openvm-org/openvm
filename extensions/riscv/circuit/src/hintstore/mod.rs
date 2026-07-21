@@ -39,8 +39,8 @@ use openvm_stark_backend::{
 
 use crate::adapters::{
     byte_ptr_to_u16_ptr, expand_to_rv64_block, ptr_bound_from_high_u16_expr, ptr_bound_from_ptr,
-    ptr_to_field_u16_limbs, read_rv64_register_as_u32, tracing_read, tracing_read_reg_ptr,
-    tracing_write, u16_limbs_to_ptr, RV64_PTR_BITS, RV64_PTR_U16_LIMBS, U16_BITS,
+    ptr_to_field_u16_limbs, read_rv64_register, tracing_read, tracing_read_reg_ptr, tracing_write,
+    u16_limbs_to_ptr, RV64_PTR_BITS, RV64_PTR_U16_LIMBS, U16_BITS,
 };
 
 mod execution;
@@ -62,6 +62,22 @@ const _: () = assert!(
 );
 // Scale factor for rem_words range checks.
 const REM_WORDS_SHIFT: usize = U16_BITS - MAX_HINT_BUFFER_DWORDS_BITS;
+
+#[inline]
+fn validate_hint_buffer_num_words(pc: u32, num_words: u64) -> Result<u16, ExecutionError> {
+    if num_words.wrapping_sub(1) >= MAX_HINT_BUFFER_DWORDS as u64 {
+        return Err(if num_words == 0 {
+            ExecutionError::HintBufferZeroWords { pc }
+        } else {
+            ExecutionError::HintBufferTooLarge {
+                pc,
+                num_words,
+                max_hint_buffer_words: MAX_HINT_BUFFER_DWORDS as u32,
+            }
+        });
+    }
+    Ok(num_words as u16)
+}
 
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection, Debug)]
@@ -427,19 +443,11 @@ where
 
         // We do untraced read of `num_words` in order to allocate the record first
         let num_words = if local_opcode == HINT_STORED {
-            1
+            1u64
         } else {
-            read_rv64_register_as_u32(state.memory.data(), a)
+            read_rv64_register(state.memory.data(), a)
         };
-
-        // Bounds check: num_words must not exceed MAX_HINT_BUFFER_DWORDS
-        if num_words > MAX_HINT_BUFFER_DWORDS as u32 {
-            return Err(ExecutionError::HintBufferTooLarge {
-                pc: *state.pc,
-                num_words,
-                max_hint_buffer_words: MAX_HINT_BUFFER_DWORDS as u32,
-            });
-        }
+        let num_words = u32::from(validate_hint_buffer_num_words(*state.pc, num_words)?);
 
         let record = state.ctx.alloc(MultiRowLayout::new(Rv64HintStoreMetadata {
             num_words: num_words as usize,
@@ -456,7 +464,6 @@ where
             self.pointer_max_bits,
         );
 
-        debug_assert_ne!(num_words, 0);
         debug_assert!(num_words <= (1 << self.pointer_max_bits));
 
         record.inner.num_words = num_words;

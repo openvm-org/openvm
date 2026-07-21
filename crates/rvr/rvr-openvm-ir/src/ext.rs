@@ -20,22 +20,31 @@ pub trait ExtEmitCtx {
     /// Append a line of C code (indented).
     fn write_line(&mut self, s: &str);
 
+    /// End the current block through the RVR trap path while preserving
+    /// execution-mode state.
+    fn emit_trap(&mut self);
+
     /// Read guest memory and return a C expression for the loaded value.
     fn read_mem(&mut self, base: &str, offset: i16, width: u8, signed: bool) -> String;
 
     /// Write guest memory.
     fn write_mem(&mut self, base: &str, offset: i16, val: &str, width: u8);
 
-    /// Emit an opaque C call that may update state observed by the tracer.
-    fn extern_call(&mut self, name: &str, args: &[&str]);
+    /// Emit an opaque C call, flushing page-local metering state around it.
+    fn emit_call(&mut self, name: &str, args: &[&str]);
 
-    /// Emit a C call that does not require flushing local page trace state.
-    fn extern_call_without_page_flush(&mut self, name: &str, args: &[&str]) {
-        self.extern_call(name, args);
+    /// Emit a C call that cannot access RVR state and needs no page-local flush.
+    fn emit_call_without_page_flush(&mut self, name: &str, args: &[&str]);
+
+    /// Emit an opaque C call that returns a value, flushing page-local metering state around it.
+    fn emit_call_expr(&mut self, ret_ty: &str, name: &str, args: &[&str]) -> String;
+
+    /// Emit a no-flush call returning `bool` and trap when it reports failure.
+    fn emit_checked_call_without_page_flush(&mut self, name: &str, args: &[&str]) {
+        self.write_line(&format!("if (unlikely(!{name}({}))) {{", args.join(", ")));
+        self.emit_trap();
+        self.write_line("}");
     }
-
-    /// Emit an opaque C call that returns a value.
-    fn extern_call_expr(&mut self, ret_ty: &str, name: &str, args: &[&str]) -> String;
 
     /// Emit a chip-height update.
     fn trace_chip(&mut self, chip_idx: u32, count_expr: &str);

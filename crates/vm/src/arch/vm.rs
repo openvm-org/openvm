@@ -410,20 +410,23 @@ where
         &self,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
+        num_airs: usize,
     ) -> Result<RvrMeteredInstance<'_>, StaticProgramError> {
-        self.metered_rvr_instance(exe, executor_idx_to_air_idx, None)
+        self.metered_rvr_instance(exe, executor_idx_to_air_idx, num_airs, None)
     }
 
     pub fn metered_rvr_instance(
         &self,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
+        num_airs: usize,
         guest_debug_map: Option<&GuestDebugMap>,
     ) -> Result<RvrMeteredInstance<'_>, StaticProgramError> {
         #[cfg(feature = "metrics")]
         let _compilation_span = tracing::info_span!("compile_metered", backend = "rvr").entered();
         let extensions = self.build_rvr_extensions(Some(executor_idx_to_air_idx));
         let chips = ChipMapping {
+            num_airs,
             pc_to_chip: build_pc_to_chip(exe, &self.inventory, executor_idx_to_air_idx)
                 .map_err(map_rvr_compile_error)?,
             chip_widths: None,
@@ -444,6 +447,7 @@ where
         &self,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
+        num_airs: usize,
         guest_debug_map: Option<&GuestDebugMap>,
     ) -> Result<RvrMeteredSegmentInstance<'_>, StaticProgramError> {
         #[cfg(feature = "metrics")]
@@ -451,6 +455,7 @@ where
             tracing::info_span!("compile_metered_segment", backend = "rvr").entered();
         let extensions = self.build_rvr_extensions(Some(executor_idx_to_air_idx));
         let chips = ChipMapping {
+            num_airs,
             pc_to_chip: build_pc_to_chip(exe, &self.inventory, executor_idx_to_air_idx)
                 .map_err(map_rvr_compile_error)?,
             chip_widths: None,
@@ -568,6 +573,7 @@ where
         let extensions = self.build_rvr_extensions(Some(executor_idx_to_air_idx));
         let widths: Vec<u64> = widths.iter().map(|&w| w as u64).collect();
         let chips = ChipMapping {
+            num_airs: widths.len(),
             pc_to_chip: build_pc_to_chip(exe, &self.inventory, executor_idx_to_air_idx)
                 .map_err(map_rvr_compile_error)?,
             chip_widths: Some(widths.clone()),
@@ -784,7 +790,7 @@ where
     {
         let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
         self.executor()
-            .metered_instance(exe, &executor_idx_to_air_idx)
+            .metered_instance(exe, &executor_idx_to_air_idx, self.num_airs())
     }
 
     #[cfg(feature = "rvr")]
@@ -798,7 +804,7 @@ where
     {
         let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
         self.executor()
-            .metered_rvr_instance(exe, &executor_idx_to_air_idx, None)
+            .metered_rvr_instance(exe, &executor_idx_to_air_idx, self.num_airs(), None)
     }
 
     #[cfg(feature = "rvr")]
@@ -811,8 +817,12 @@ where
         <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
     {
         let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
-        self.executor()
-            .metered_segment_rvr_instance(exe, &executor_idx_to_air_idx, None)
+        self.executor().metered_segment_rvr_instance(
+            exe,
+            &executor_idx_to_air_idx,
+            self.num_airs(),
+            None,
+        )
     }
 
     #[cfg(feature = "rvr")]

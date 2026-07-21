@@ -20,12 +20,12 @@ extern void rvr_ext_int256_sltu(RvState* state, uint64_t rd_ptr, uint64_t rs1_pt
                                 uint64_t rs2_ptr);
 extern void rvr_ext_int256_mul(RvState* state, uint64_t rd_ptr, uint64_t rs1_ptr, uint64_t rs2_ptr);
 
-/* 256-bit branch predicates. Each returns 1 if the branch should be taken. */
-extern uint32_t rvr_ext_int256_beq(RvState* state, uint64_t rs1_ptr, uint64_t rs2_ptr);
-extern uint32_t rvr_ext_int256_bne(RvState* state, uint64_t rs1_ptr, uint64_t rs2_ptr);
-extern uint32_t rvr_ext_int256_blt(RvState* state, uint64_t rs1_ptr, uint64_t rs2_ptr);
-extern uint32_t rvr_ext_int256_bltu(RvState* state, uint64_t rs1_ptr, uint64_t rs2_ptr);
-extern uint32_t rvr_ext_int256_bge(RvState* state, uint64_t rs1_ptr, uint64_t rs2_ptr);
-extern uint32_t rvr_ext_int256_bgeu(RvState* state, uint64_t rs1_ptr, uint64_t rs2_ptr);
+/* 256-bit branch predicates. */
+extern bool rvr_ext_int256_beq(RvState* state, uint64_t rs1_ptr, uint64_t rs2_ptr);
+extern bool rvr_ext_int256_bne(RvState* state, uint64_t rs1_ptr, uint64_t rs2_ptr);
+extern bool rvr_ext_int256_blt(RvState* state, uint64_t rs1_ptr, uint64_t rs2_ptr);
+extern bool rvr_ext_int256_bltu(RvState* state, uint64_t rs1_ptr, uint64_t rs2_ptr);
+extern bool rvr_ext_int256_bge(RvState* state, uint64_t rs1_ptr, uint64_t rs2_ptr);
+extern bool rvr_ext_int256_bgeu(RvState* state, uint64_t rs1_ptr, uint64_t rs2_ptr);
 
 #endif /* RVR_EXT_BIGINT_H */

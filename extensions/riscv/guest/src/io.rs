@@ -91,7 +91,9 @@ pub fn hint_input() {
     );
 }
 
-/// Reset the hint stream with `len` random `u64`s
+/// Reset the hint stream with `len` random `u64`s.
+///
+/// `len` is passed as a full RV64 register value.
 #[inline(always)]
 pub fn hint_random(len: usize) {
     openvm_custom_insn::custom_insn_i!(
@@ -123,6 +125,7 @@ pub fn print_str_from_bytes(str_as_bytes: &[u8]) {
     raw_print_str_from_bytes(str_as_bytes.as_ptr(), str_as_bytes.len());
 }
 
+/// Both operands are passed as full RV64 register values.
 #[inline(always)]
 pub fn raw_print_str_from_bytes(msg_ptr: *const u8, len: usize) {
     openvm_custom_insn::custom_insn_i!(

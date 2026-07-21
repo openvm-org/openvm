@@ -76,7 +76,7 @@ impl ExtInstr for EcAddNeInstr {
         let setup_prefix = if self.is_setup { "setup_" } else { "" };
         let suffix = self.curve.c_suffix();
         let name = format!("rvr_ext_{setup_prefix}ec_add_ne_{suffix}");
-        ctx.extern_call(&name, &["state", &rd, &rs1, &rs2]);
+        ctx.emit_call(&name, &["state", &rd, &rs1, &rs2]);
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -108,7 +108,7 @@ impl ExtInstr for EcDoubleInstr {
         let setup_prefix = if self.is_setup { "setup_" } else { "" };
         let suffix = self.curve.c_suffix();
         let name = format!("rvr_ext_{setup_prefix}ec_double_{suffix}");
-        ctx.extern_call(&name, &["state", &rd, &rs1]);
+        ctx.emit_call(&name, &["state", &rd, &rs1]);
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {

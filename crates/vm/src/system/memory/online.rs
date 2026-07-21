@@ -6,6 +6,7 @@ use openvm_stark_backend::{
     p3_field::{Field, PrimeField32},
     p3_maybe_rayon::prelude::*,
 };
+use thiserror::Error;
 use tracing::instrument;
 
 use crate::{
@@ -331,6 +332,20 @@ pub struct GuestMemory {
     pub memory: AddressMap,
 }
 
+#[derive(Debug, Error, PartialEq, Eq)]
+pub enum GuestMemoryAccessError {
+    #[error("address space {addr_space} is not configured")]
+    InvalidAddressSpace { addr_space: u32 },
+    #[error("range overflow")]
+    RangeOverflow,
+    #[error("memory range out of bounds: start={start} size={len} memory_size={memory_size}")]
+    RangeOutOfBounds {
+        start: u64,
+        len: u64,
+        memory_size: usize,
+    },
+}
+
 impl GuestMemory {
     pub fn new(addr: AddressMap) -> Self {
         Self { memory: addr }
@@ -419,6 +434,32 @@ impl GuestMemory {
     #[inline(always)]
     pub unsafe fn get_u8_slice(&self, addr_space: u32, byte_ptr: u32, len: usize) -> &[u8] {
         self.memory.get_u8_slice(addr_space, byte_ptr as usize, len)
+    }
+
+    /// Reads a raw byte range addressed by full RV64 register values.
+    pub fn checked_u8_slice(
+        &self,
+        addr_space: u32,
+        byte_ptr: u64,
+        len: u64,
+    ) -> Result<&[u8], GuestMemoryAccessError> {
+        let end = byte_ptr
+            .checked_add(len)
+            .ok_or(GuestMemoryAccessError::RangeOverflow)?;
+        let memory = self
+            .memory
+            .get_memory()
+            .get(addr_space as usize)
+            .ok_or(GuestMemoryAccessError::InvalidAddressSpace { addr_space })?;
+        let memory_size = memory.size();
+        if end > memory_size as u64 {
+            return Err(GuestMemoryAccessError::RangeOutOfBounds {
+                start: byte_ptr,
+                len,
+                memory_size,
+            });
+        }
+        Ok(&memory.as_slice()[byte_ptr as usize..end as usize])
     }
 
     #[inline(always)]

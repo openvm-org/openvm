@@ -14,8 +14,8 @@ use num_traits::One;
 use openvm_instructions::riscv::RV64_MEMORY_AS;
 use openvm_platform::WORD_SIZE;
 use rvr_openvm_ext_algebra_ffi_common::{
-    known_field_op_fn, mod_inverse, read_bigint, read_field_256, write_bigint, write_field_256,
-    FieldArith, KnownFieldArith,
+    known_field_op_fn, limb_bytes_to_words, mod_inverse, read_bigint, read_field_256, write_bigint,
+    write_field_256, FieldArith, KnownFieldArith,
 };
 use rvr_openvm_ext_ffi_common::{
     ext_hint_stream_set, rd_mem_u64_range_wrapper, rd_mem_words_traced, trace_mem_access_range,
@@ -83,14 +83,10 @@ impl FieldArith for UnknownPrimeField {
 // ── Instruction execution helpers ────────────────────────────────────────────
 
 #[inline(always)]
-unsafe fn exec_iseq<F: FieldArith>(f: &F, state: *mut c_void, rs1_ptr: u64, rs2_ptr: u64) -> u32 {
+unsafe fn exec_iseq<F: FieldArith>(f: &F, state: *mut c_void, rs1_ptr: u64, rs2_ptr: u64) -> bool {
     let a = f.read_elem(state, rs1_ptr);
     let b = f.read_elem(state, rs2_ptr);
-    if f.is_eq(&a, &b) {
-        1
-    } else {
-        0
-    }
+    f.is_eq(&a, &b)
 }
 
 // ── FFI generation macros ────────────────────────────────────────────────────
@@ -107,7 +103,7 @@ macro_rules! define_mod_ffi {
             #[no_mangle]
             pub unsafe extern "C" fn [<rvr_ext_mod_iseq_ $suffix>](
                 state: *mut c_void, rs1: u64, rs2: u64,
-            ) -> u32 { exec_iseq(&KnownPrimeField::<$field>(PhantomData), state, rs1, rs2) }
+            ) -> bool { exec_iseq(&KnownPrimeField::<$field>(PhantomData), state, rs1, rs2) }
         }
     };
 }
@@ -137,9 +133,9 @@ pub unsafe extern "C" fn rvr_ext_mod_iseq(
     rs2_ptr: u64,
     num_limbs: u32,
     modulus_ptr: *const u8,
-) -> u32 {
-    let modulus =
-        BigUint::from_bytes_le(std::slice::from_raw_parts(modulus_ptr, num_limbs as usize));
+) -> bool {
+    let num_limbs_usize = num_limbs as usize;
+    let modulus = BigUint::from_bytes_le(std::slice::from_raw_parts(modulus_ptr, num_limbs_usize));
     let f = UnknownPrimeField { modulus, num_limbs };
     exec_iseq(&f, state, rs1_ptr, rs2_ptr)
 }
@@ -154,7 +150,7 @@ pub unsafe extern "C" fn rvr_ext_mod_setup(
     rs2_ptr: u64,
     num_limbs: u32,
 ) {
-    let num_words = num_limbs / WORD_SIZE as u32;
+    let num_words = limb_bytes_to_words(num_limbs);
     debug_assert!(num_words >= 1);
 
     let mut input_words = vec![0u64; num_words as usize];
@@ -232,15 +228,15 @@ pub unsafe extern "C" fn rvr_ext_algebra_hint_sqrt(
     modulus_ptr: *const u8,
     non_qr_ptr: *const u8,
 ) {
-    let modulus =
-        BigUint::from_bytes_le(std::slice::from_raw_parts(modulus_ptr, num_limbs as usize));
-    let non_qr = BigUint::from_bytes_le(std::slice::from_raw_parts(non_qr_ptr, num_limbs as usize));
+    let num_limbs_usize = num_limbs as usize;
+    let modulus = BigUint::from_bytes_le(std::slice::from_raw_parts(modulus_ptr, num_limbs_usize));
+    let non_qr = BigUint::from_bytes_le(std::slice::from_raw_parts(non_qr_ptr, num_limbs_usize));
 
-    let num_words = (num_limbs / WORD_SIZE as u32) as usize;
-    let mut words = vec![0u64; num_words];
-    rd_mem_u64_range_wrapper(state, rs1_ptr, words.as_mut_ptr(), num_words as u32);
+    let num_words = limb_bytes_to_words(num_limbs);
+    let mut words = vec![0u64; num_words as usize];
+    rd_mem_u64_range_wrapper(state, rs1_ptr, words.as_mut_ptr(), num_words);
     // Note: no trace here — this is a phantom (hint) instruction, reads are not traced
-    let mut x_bytes = vec![0u8; num_limbs as usize];
+    let mut x_bytes = vec![0u8; num_limbs_usize];
     for (i, &w) in words.iter().enumerate() {
         x_bytes[i * WORD_SIZE..(i + 1) * WORD_SIZE].copy_from_slice(&w.to_le_bytes());
     }
@@ -255,10 +251,10 @@ pub unsafe extern "C" fn rvr_ext_algebra_hint_sqrt(
         }
     };
 
-    let mut hint = vec![0u8; WORD_SIZE + num_limbs as usize];
+    let mut hint = vec![0u8; WORD_SIZE + num_limbs_usize];
     hint[0] = if success { 1 } else { 0 };
     let sqrt_bytes = sqrt.to_bytes_le();
     hint[WORD_SIZE..WORD_SIZE + sqrt_bytes.len()].copy_from_slice(&sqrt_bytes);
 
-    ext_hint_stream_set(hint.as_ptr(), hint.len() as u32);
+    ext_hint_stream_set(hint.as_ptr(), u64::try_from(hint.len()).unwrap());
 }
