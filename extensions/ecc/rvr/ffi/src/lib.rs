@@ -4,13 +4,14 @@
 //! Point operations use `halo2curves_axiom`. Setup operations evaluate
 //! OpenVM's precomputed field expressions.
 
-use std::ffi::c_void;
+use std::{ffi::c_void, iter, sync::LazyLock};
 
 use halo2curves_axiom::ff::Field;
-use num_bigint::BigUint;
 use openvm_circuit_primitives::U16_BITS;
-use openvm_ecc_circuit::{ec_add_ne_program, ec_double_ne_program};
-use openvm_mod_circuit_builder::{run_field_expression_precomputed, ExprBuilderConfig};
+use openvm_ecc_circuit::{ec_add_ne_program, ec_double_ne_program, CurveType};
+use openvm_mod_circuit_builder::{
+    run_field_expression_precomputed, ExprBuilderConfig, FieldExpressionProgram,
+};
 use openvm_platform::WORD_SIZE;
 use rvr_openvm_ext_algebra_ffi_common::{
     read_field_256, write_field_256, BLS12_381_ELEM_BYTES, FIELD_256_BYTES,
@@ -123,23 +124,56 @@ unsafe fn trace_write_bytes(state: *mut c_void, ptr: u64, bytes: &[u8]) {
     write_mem_words(state, ptr, &words);
 }
 
-fn ecc_setup_expr(point_bytes: u32, setup_bytes: &[u8], is_double: bool) -> Vec<u8> {
-    let coord_bytes = (point_bytes / 2) as usize;
-    let modulus = BigUint::from_bytes_le(&setup_bytes[..coord_bytes]);
-    let config = ExprBuilderConfig {
-        modulus,
-        num_limbs: coord_bytes,
+fn field_config(curve: CurveType, num_limbs: usize) -> ExprBuilderConfig {
+    ExprBuilderConfig {
+        modulus: curve.coordinate_modulus().clone(),
+        num_limbs,
         limb_bits: 8,
-    };
-    let program = if is_double {
-        let a_biguint = BigUint::from_bytes_le(&setup_bytes[coord_bytes..point_bytes as usize]);
-        ec_double_ne_program(config, U16_BITS, a_biguint)
-    } else {
-        ec_add_ne_program(config, U16_BITS)
-    };
-    let flag_idx = program.num_flags();
-    let writes = run_field_expression_precomputed::<true>(&program, flag_idx, setup_bytes);
-    writes.into()
+    }
+}
+
+fn ec_add_ne_setup_program(curve: CurveType, coord_bytes: usize) -> FieldExpressionProgram {
+    ec_add_ne_program(field_config(curve, coord_bytes), U16_BITS)
+}
+
+fn ec_double_setup_program(curve: CurveType, coord_bytes: usize) -> FieldExpressionProgram {
+    ec_double_ne_program(
+        field_config(curve, coord_bytes),
+        U16_BITS,
+        curve.a_coefficient().clone(),
+    )
+}
+
+fn setup_values_match(
+    program: &FieldExpressionProgram,
+    coord_bytes: usize,
+    setup_bytes: &[u8],
+) -> bool {
+    let expected = iter::once(program.prime()).chain(program.setup_values());
+    expected.enumerate().all(|(i, expected)| {
+        let start = i * coord_bytes;
+        let Some(bytes) = setup_bytes.get(start..start + coord_bytes) else {
+            return false;
+        };
+        let expected = expected.to_bytes_le();
+        bytes
+            .get(..expected.len())
+            .is_some_and(|value| value == expected.as_slice())
+            && bytes[expected.len()..].iter().all(|&byte| byte == 0)
+    })
+}
+
+fn ecc_setup_expr(
+    program: &FieldExpressionProgram,
+    point_bytes: u32,
+    setup_bytes: &[u8],
+) -> Option<Vec<u8>> {
+    let coord_bytes = (point_bytes / 2) as usize;
+    setup_values_match(program, coord_bytes, setup_bytes).then(|| {
+        let flag_idx = program.num_flags();
+        let writes = run_field_expression_precomputed::<true>(program, flag_idx, setup_bytes);
+        writes.into()
+    })
 }
 
 unsafe fn ec_add_ne_setup(
@@ -148,17 +182,30 @@ unsafe fn ec_add_ne_setup(
     rs1_ptr: u64,
     rs2_ptr: u64,
     point_bytes: u32,
-) {
+    program: &FieldExpressionProgram,
+) -> bool {
     let mut setup_bytes = trace_read_bytes(state, rs1_ptr, point_bytes);
     setup_bytes.extend_from_slice(&trace_read_bytes(state, rs2_ptr, point_bytes));
-    let output = ecc_setup_expr(point_bytes, &setup_bytes, false);
+    let Some(output) = ecc_setup_expr(program, point_bytes, &setup_bytes) else {
+        return false;
+    };
     trace_write_bytes(state, rd_ptr, &output);
+    true
 }
 
-unsafe fn ec_double_setup(state: *mut c_void, rd_ptr: u64, rs1_ptr: u64, point_bytes: u32) {
+unsafe fn ec_double_setup(
+    state: *mut c_void,
+    rd_ptr: u64,
+    rs1_ptr: u64,
+    point_bytes: u32,
+    program: &FieldExpressionProgram,
+) -> bool {
     let setup_bytes = trace_read_bytes(state, rs1_ptr, point_bytes);
-    let output = ecc_setup_expr(point_bytes, &setup_bytes, true);
+    let Some(output) = ecc_setup_expr(program, point_bytes, &setup_bytes) else {
+        return false;
+    };
     trace_write_bytes(state, rd_ptr, &output);
+    true
 }
 
 unsafe fn ec_add_ne_256_entry<
@@ -215,7 +262,7 @@ macro_rules! ecc_double_entry {
 }
 
 macro_rules! ecc_add_ne_setup_entry {
-    ($name:ident, $point_bytes:expr) => {
+    ($name:ident, $point_bytes:expr, $curve:expr) => {
         /// # Safety
         ///
         /// `state` must point to a valid native tracer state for this execution.
@@ -226,45 +273,155 @@ macro_rules! ecc_add_ne_setup_entry {
             rd_ptr: u64,
             rs1_ptr: u64,
             rs2_ptr: u64,
-        ) {
-            ec_add_ne_setup(state, rd_ptr, rs1_ptr, rs2_ptr, $point_bytes);
+        ) -> bool {
+            static PROGRAM: LazyLock<FieldExpressionProgram> =
+                LazyLock::new(|| ec_add_ne_setup_program($curve, ($point_bytes / 2) as usize));
+            ec_add_ne_setup(state, rd_ptr, rs1_ptr, rs2_ptr, $point_bytes, &PROGRAM)
         }
     };
 }
 
 macro_rules! ecc_double_setup_entry {
-    ($name:ident, $point_bytes:expr) => {
+    ($name:ident, $point_bytes:expr, $curve:expr) => {
         /// # Safety
         ///
         /// `state` must point to a valid native tracer state for this execution.
         /// Pointer parameters must point to valid affine point coordinates.
         #[no_mangle]
-        pub unsafe extern "C" fn $name(state: *mut c_void, rd_ptr: u64, rs1_ptr: u64) {
-            ec_double_setup(state, rd_ptr, rs1_ptr, $point_bytes);
+        pub unsafe extern "C" fn $name(state: *mut c_void, rd_ptr: u64, rs1_ptr: u64) -> bool {
+            static PROGRAM: LazyLock<FieldExpressionProgram> =
+                LazyLock::new(|| ec_double_setup_program($curve, ($point_bytes / 2) as usize));
+            ec_double_setup(state, rd_ptr, rs1_ptr, $point_bytes, &PROGRAM)
         }
     };
 }
 
-ecc_add_ne_setup_entry!(rvr_ext_setup_ec_add_ne_k256, POINT_256_BYTES);
-ecc_double_setup_entry!(rvr_ext_setup_ec_double_k256, POINT_256_BYTES);
+ecc_add_ne_setup_entry!(
+    rvr_ext_setup_ec_add_ne_k256,
+    POINT_256_BYTES,
+    CurveType::K256
+);
+ecc_double_setup_entry!(
+    rvr_ext_setup_ec_double_k256,
+    POINT_256_BYTES,
+    CurveType::K256
+);
 
 ecc_add_ne_entry!(rvr_ext_ec_add_ne_p256, halo2curves_axiom::secp256r1::Fp);
-ecc_add_ne_setup_entry!(rvr_ext_setup_ec_add_ne_p256, POINT_256_BYTES);
+ecc_add_ne_setup_entry!(
+    rvr_ext_setup_ec_add_ne_p256,
+    POINT_256_BYTES,
+    CurveType::P256
+);
 ecc_double_entry!(
     rvr_ext_ec_double_p256,
     halo2curves_axiom::secp256r1::Fp,
     -halo2curves_axiom::secp256r1::Fp::from(P256_A_ABS)
 );
-ecc_double_setup_entry!(rvr_ext_setup_ec_double_p256, POINT_256_BYTES);
+ecc_double_setup_entry!(
+    rvr_ext_setup_ec_double_p256,
+    POINT_256_BYTES,
+    CurveType::P256
+);
 
 ecc_add_ne_entry!(rvr_ext_ec_add_ne_bn254, halo2curves_axiom::bn256::Fq);
-ecc_add_ne_setup_entry!(rvr_ext_setup_ec_add_ne_bn254, POINT_256_BYTES);
+ecc_add_ne_setup_entry!(
+    rvr_ext_setup_ec_add_ne_bn254,
+    POINT_256_BYTES,
+    CurveType::BN254
+);
 ecc_double_entry!(
     rvr_ext_ec_double_bn254,
     halo2curves_axiom::bn256::Fq,
     halo2curves_axiom::bn256::Fq::ZERO
 );
-ecc_double_setup_entry!(rvr_ext_setup_ec_double_bn254, POINT_256_BYTES);
+ecc_double_setup_entry!(
+    rvr_ext_setup_ec_double_bn254,
+    POINT_256_BYTES,
+    CurveType::BN254
+);
 
-ecc_add_ne_setup_entry!(rvr_ext_setup_ec_add_ne_bls12_381, POINT_BLS12_381_BYTES);
-ecc_double_setup_entry!(rvr_ext_setup_ec_double_bls12_381, POINT_BLS12_381_BYTES);
+ecc_add_ne_setup_entry!(
+    rvr_ext_setup_ec_add_ne_bls12_381,
+    POINT_BLS12_381_BYTES,
+    CurveType::BLS12_381
+);
+
+ecc_double_setup_entry!(
+    rvr_ext_setup_ec_double_bls12_381,
+    POINT_BLS12_381_BYTES,
+    CurveType::BLS12_381
+);
+
+#[cfg(test)]
+mod tests {
+    use num_bigint::BigUint;
+
+    use super::*;
+
+    fn parse_hex(value: &str) -> BigUint {
+        BigUint::parse_bytes(value.as_bytes(), 16).unwrap()
+    }
+
+    fn write_le(value: &BigUint, out: &mut [u8]) {
+        let bytes = value.to_bytes_le();
+        out[..bytes.len()].copy_from_slice(&bytes);
+    }
+
+    #[test]
+    fn setup_programs_validate_each_curve() {
+        let cases = [
+            (
+                CurveType::K256,
+                POINT_256_BYTES,
+                "fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f",
+                "0",
+            ),
+            (
+                CurveType::P256,
+                POINT_256_BYTES,
+                "ffffffff00000001000000000000000000000000ffffffffffffffffffffffff",
+                "ffffffff00000001000000000000000000000000fffffffffffffffffffffffc",
+            ),
+            (
+                CurveType::BN254,
+                POINT_256_BYTES,
+                "30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47",
+                "0",
+            ),
+            (
+                CurveType::BLS12_381,
+                POINT_BLS12_381_BYTES,
+                "1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab",
+                "0",
+            ),
+        ];
+
+        for (curve, point_bytes, modulus, a) in cases {
+            let coord_bytes = point_bytes as usize / 2;
+            let modulus = parse_hex(modulus);
+            let a = parse_hex(a);
+
+            let add_program = ec_add_ne_setup_program(curve, coord_bytes);
+            assert_eq!(add_program.prime(), &modulus);
+            let mut add_setup = vec![0u8; 2 * point_bytes as usize];
+            write_le(&modulus, &mut add_setup[..coord_bytes]);
+            write_le(&a, &mut add_setup[coord_bytes..2 * coord_bytes]);
+            add_setup[2 * coord_bytes] = 1;
+            add_setup[3 * coord_bytes] = 1;
+            assert!(ecc_setup_expr(&add_program, point_bytes, &add_setup).is_some());
+            add_setup[0] ^= 1;
+            assert!(ecc_setup_expr(&add_program, point_bytes, &add_setup).is_none());
+
+            let double_program = ec_double_setup_program(curve, coord_bytes);
+            assert_eq!(double_program.prime(), &modulus);
+            assert_eq!(double_program.setup_values(), std::slice::from_ref(&a));
+            let mut double_setup = vec![0u8; point_bytes as usize];
+            write_le(&modulus, &mut double_setup[..coord_bytes]);
+            write_le(&a, &mut double_setup[coord_bytes..]);
+            assert!(ecc_setup_expr(&double_program, point_bytes, &double_setup).is_some());
+            double_setup[coord_bytes] ^= 1;
+            assert!(ecc_setup_expr(&double_program, point_bytes, &double_setup).is_none());
+        }
+    }
+}

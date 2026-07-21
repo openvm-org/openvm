@@ -4,6 +4,8 @@ mod double;
 mod preflight;
 
 pub use add_ne::*;
+#[cfg(feature = "rvr")]
+pub(crate) use curves::get_curve_type;
 pub use curves::CurveType;
 pub use double::*;
 
