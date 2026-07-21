@@ -9,7 +9,7 @@
 //!   extensions.
 
 use openvm_instructions::{
-    riscv::{RV64_IMM_AS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+    riscv::{RV64_IMM_AS, RV64_MEMORY_AS, RV64_REGISTER_AS},
     LocalOpcode, SysPhantom, SystemOpcode, PUBLIC_VALUES_AS,
 };
 use openvm_riscv_transpiler::{
@@ -23,7 +23,7 @@ use rvr_openvm_ir::{
 };
 
 use crate::{
-    helpers::{decode_imm_cg, sext32},
+    helpers::{decode_imm_cg, decode_reg, sext32},
     ExtensionRegistry, RvrInstruction,
 };
 
@@ -290,11 +290,6 @@ pub fn lift_instruction(
 }
 
 // ============= Helpers =============
-
-/// Decode register index from OpenVM operand (divided by RV64_REGISTER_NUM_LIMBS).
-pub fn decode_reg(value: u32) -> u8 {
-    (value / RV64_REGISTER_NUM_LIMBS as u32) as u8
-}
 
 /// Sign-extend a 12-bit immediate stored in the low 24 bits.
 fn sign_extend_12(val: u32) -> i32 {

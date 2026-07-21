@@ -57,6 +57,11 @@ mod tests {
 
     #[cfg(feature = "rvr")]
     fn execute_rvr_example(program_name: &str) {
+        execute_rvr_example_with_input(program_name, vec![]);
+    }
+
+    #[cfg(feature = "rvr")]
+    fn execute_rvr_example_with_input(program_name: &str, input: Vec<Vec<u8>>) {
         let config = test_rv64im_config();
         let elf =
             build_example_program_at_path(get_programs_dir!(), program_name, &config).unwrap();
@@ -70,13 +75,57 @@ mod tests {
         .unwrap();
         let executor = VmExecutor::new(config).unwrap();
         let instance = executor.instance(&exe).unwrap();
-        instance.execute(vec![]).unwrap();
+        instance.execute(input).unwrap();
+    }
+
+    #[test_case("fibonacci"; "fibonacci")]
+    #[test_case("rvr_x0_shifts"; "x0_shifts")]
+    #[test_case("rvr_embedded_text_data"; "embedded_text_data")]
+    #[test_case("rvr_invalid_branch_fallthrough"; "invalid_branch_fallthrough")]
+    #[cfg(feature = "rvr")]
+    fn test_rvr_example_executes(program_name: &str) {
+        execute_rvr_example(program_name);
+    }
+
+    #[test_case("rvr_invalid_branch_taken"; "invalid_branch_taken")]
+    #[test_case("out_of_bound_reveal"; "out_of_bound_reveal")]
+    #[cfg(feature = "rvr")]
+    fn test_rvr_example_traps(program_name: &str) {
+        assert_rvr_example_traps(program_name);
     }
 
     #[test]
     #[cfg(feature = "rvr")]
-    fn test_rvr_fibonacci() {
-        execute_rvr_example("fibonacci");
+    fn test_rvr_reveal_negative_offset() -> Result<()> {
+        let mut config = test_rv64im_config();
+        config.rv64i.system = config.rv64i.system.with_public_values_bytes(32);
+        let elf = build_example_program_at_path(
+            get_programs_dir!(),
+            "rvr_reveal_negative_offset",
+            &config,
+        )?;
+        let exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension),
+        )?;
+        let executor = VmExecutor::new(config)?;
+        let state = executor.instance(&exe)?.execute(vec![])?;
+        let public_values = extract_public_values(32, &state.memory.memory);
+
+        assert_eq!(
+            u64::from_le_bytes(public_values[..8].try_into().unwrap()),
+            0x1122_3344_5566_7788
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(feature = "rvr")]
+    fn test_rvr_hint_io() {
+        execute_rvr_example_with_input("hint", vec![vec![0, 1, 2, 3]]);
     }
 
     #[test]
@@ -138,6 +187,35 @@ mod tests {
         // Success path for these tests: relay the child failure text so the
         // caller's `#[should_panic(expected = ...)]` can match it.
         panic!("{}", String::from_utf8_lossy(&output.stderr));
+    }
+
+    #[cfg(feature = "rvr")]
+    fn assert_rvr_example_traps(program_name: &str) {
+        assert_rvr_example_with_config_traps(program_name, test_rv64im_config());
+    }
+
+    #[cfg(feature = "rvr")]
+    fn assert_rvr_example_with_config_traps(program_name: &str, config: Rv64ImConfig) {
+        let elf =
+            build_example_program_at_path(get_programs_dir!(), program_name, &config).unwrap();
+        let exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension),
+        )
+        .unwrap();
+        let executor = VmExecutor::new(config).unwrap();
+        let result = executor.instance(&exe).unwrap().execute(vec![]);
+
+        match result {
+            Err(ExecutionError::RvrExecution(message)) => {
+                assert_eq!(message, "execution returned error code: 3");
+            }
+            Err(error) => panic!("expected an RVR execution error, got {error}"),
+            Ok(_) => panic!("expected RVR execution to fail"),
+        }
     }
 
     #[test_case("fibonacci", 1)]
@@ -381,30 +459,11 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "reveal out of bounds")]
     #[cfg(all(feature = "rvr", not(feature = "unprotected")))]
     fn test_reveal_beyond_num_public_values_errors() {
-        if env::var(RVR_OOB_CHILD_ENV).is_ok() {
-            let mut config = test_rv64im_config();
-            config.rv64i.system = config.rv64i.system.with_public_values_bytes(32);
-            let elf =
-                build_example_program_at_path(get_programs_dir!(), "reveal", &config).unwrap();
-            let exe = VmExe::from_elf(
-                elf,
-                Transpiler::<F>::default()
-                    .with_extension(Rv64ITranspilerExtension)
-                    .with_extension(Rv64MTranspilerExtension)
-                    .with_extension(Rv64IoTranspilerExtension),
-            )
-            .unwrap();
-
-            let executor = VmExecutor::new(config).unwrap();
-            let instance = executor.instance(&exe).unwrap();
-            instance.execute(vec![]).unwrap();
-            return; // unreachable: abort fired
-        }
-
-        assert_child_aborts("tests::test_reveal_beyond_num_public_values_errors");
+        let mut config = test_rv64im_config();
+        config.rv64i.system = config.rv64i.system.with_public_values_bytes(32);
+        assert_rvr_example_with_config_traps("reveal", config);
     }
 
     #[test]
@@ -585,36 +644,12 @@ mod tests {
         assert_child_aborts("tests::test_out_of_bound_mem_access");
     }
 
-    #[test]
-    #[should_panic(expected = "reveal out of bounds")]
+    #[test_case("rvr_hint_buffer_zero"; "zero")]
+    #[test_case("rvr_hint_buffer_oversized"; "oversized")]
+    #[test_case("out_of_bound_print_str"; "print_str_out_of_bounds")]
     #[cfg(all(feature = "rvr", not(feature = "unprotected")))]
-    fn test_out_of_bound_reveal() {
-        // Child mode: triggers the existing host_reveal public-values bounds assert.
-        if env::var(RVR_OOB_CHILD_ENV).is_ok() {
-            execute_rvr_example("out_of_bound_reveal");
-            return; // unreachable: abort fired
-        }
-
-        // Parent mode: spawn ourselves as the child and forward its stderr
-        // as our own panic. `#[should_panic(expected = ...)]` matches iff
-        // the child's host_reveal assert actually fired.
-        assert_child_aborts("tests::test_out_of_bound_reveal");
-    }
-
-    #[test]
-    #[should_panic(expected = "Memory access out of bounds")]
-    #[cfg(all(feature = "rvr", not(feature = "unprotected")))]
-    fn test_out_of_bound_print_str() {
-        // Child mode: triggers the Rust-side bounds check in host_print_str.
-        if env::var(RVR_OOB_CHILD_ENV).is_ok() {
-            execute_rvr_example("out_of_bound_print_str");
-            return; // unreachable: abort fired
-        }
-
-        // Parent mode: spawn ourselves as the child and forward its stderr
-        // as our own panic. `#[should_panic(expected = ...)]` matches iff
-        // the child's host_print_str bounds check actually fired.
-        assert_child_aborts("tests::test_out_of_bound_print_str");
+    fn test_rvr_protected_execution_traps(program_name: &str) {
+        assert_rvr_example_traps(program_name);
     }
 
     #[test_case("getrandom", vec!["getrandom", "getrandom-unsupported"])]

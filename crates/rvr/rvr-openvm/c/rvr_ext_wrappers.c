@@ -12,6 +12,7 @@
  */
 
 #include "openvm.h"
+#include "rvr_ext_wrappers.h"
 
 /* ── Memory access (single word) ───────────────────────────────────── */
 

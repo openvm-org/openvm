@@ -21,10 +21,9 @@ extern void rvr_ext_mod_mul(RvState* state, uint64_t rd_ptr, uint64_t rs1_ptr, u
 extern void rvr_ext_mod_div(RvState* state, uint64_t rd_ptr, uint64_t rs1_ptr, uint64_t rs2_ptr,
                             uint32_t num_limbs, const uint8_t* modulus);
 
-/* Modular IS_EQ extension FFI entry point (implemented in Rust).
- * Returns 1 if equal, 0 otherwise. */
-extern uint32_t rvr_ext_mod_iseq(RvState* state, uint64_t rs1_ptr, uint64_t rs2_ptr,
-                                 uint32_t num_limbs, const uint8_t* modulus);
+/* Modular IS_EQ extension FFI entry point (implemented in Rust). */
+extern bool rvr_ext_mod_iseq(RvState* state, uint64_t rs1_ptr, uint64_t rs2_ptr,
+                             uint32_t num_limbs, const uint8_t* modulus);
 
 /* Modular SETUP extension FFI entry point (implemented in Rust). */
 extern void rvr_ext_mod_setup(RvState* state, uint64_t rd_ptr, uint64_t rs1_ptr, uint64_t rs2_ptr,
@@ -50,9 +49,9 @@ extern __attribute__((preserve_most)) void rvr_ext_mod_mul_k256_coord(RvState*, 
 extern __attribute__((preserve_most)) void rvr_ext_mod_div_k256_coord(RvState*, uint64_t rd_ptr,
                                                                       uint64_t rs1_ptr,
                                                                       uint64_t rs2_ptr);
-extern __attribute__((preserve_most)) uint32_t rvr_ext_mod_iseq_k256_coord(RvState*,
-                                                                           uint64_t rs1_ptr,
-                                                                           uint64_t rs2_ptr);
+extern __attribute__((preserve_most)) bool rvr_ext_mod_iseq_k256_coord(RvState*,
+                                                                       uint64_t rs1_ptr,
+                                                                       uint64_t rs2_ptr);
 
 extern __attribute__((preserve_most)) void rvr_ext_mod_add_k256_scalar(RvState*, uint64_t rd_ptr,
                                                                        uint64_t rs1_ptr,
@@ -66,9 +65,9 @@ extern __attribute__((preserve_most)) void rvr_ext_mod_mul_k256_scalar(RvState*,
 extern __attribute__((preserve_most)) void rvr_ext_mod_div_k256_scalar(RvState*, uint64_t rd_ptr,
                                                                        uint64_t rs1_ptr,
                                                                        uint64_t rs2_ptr);
-extern __attribute__((preserve_most)) uint32_t rvr_ext_mod_iseq_k256_scalar(RvState*,
-                                                                            uint64_t rs1_ptr,
-                                                                            uint64_t rs2_ptr);
+extern __attribute__((preserve_most)) bool rvr_ext_mod_iseq_k256_scalar(RvState*,
+                                                                        uint64_t rs1_ptr,
+                                                                        uint64_t rs2_ptr);
 
 /* P-256 and BN254 use Rust functions with the standard C ABI. */
 extern void rvr_ext_mod_add_p256_coord(RvState*, uint64_t rd_ptr, uint64_t rs1_ptr,
@@ -79,7 +78,7 @@ extern void rvr_ext_mod_mul_p256_coord(RvState*, uint64_t rd_ptr, uint64_t rs1_p
                                        uint64_t rs2_ptr);
 extern void rvr_ext_mod_div_p256_coord(RvState*, uint64_t rd_ptr, uint64_t rs1_ptr,
                                        uint64_t rs2_ptr);
-extern uint32_t rvr_ext_mod_iseq_p256_coord(RvState*, uint64_t rs1_ptr, uint64_t rs2_ptr);
+extern bool rvr_ext_mod_iseq_p256_coord(RvState*, uint64_t rs1_ptr, uint64_t rs2_ptr);
 
 extern void rvr_ext_mod_add_p256_scalar(RvState*, uint64_t rd_ptr, uint64_t rs1_ptr,
                                         uint64_t rs2_ptr);
@@ -89,40 +88,18 @@ extern void rvr_ext_mod_mul_p256_scalar(RvState*, uint64_t rd_ptr, uint64_t rs1_
                                         uint64_t rs2_ptr);
 extern void rvr_ext_mod_div_p256_scalar(RvState*, uint64_t rd_ptr, uint64_t rs1_ptr,
                                         uint64_t rs2_ptr);
-extern uint32_t rvr_ext_mod_iseq_p256_scalar(RvState*, uint64_t rs1_ptr, uint64_t rs2_ptr);
+extern bool rvr_ext_mod_iseq_p256_scalar(RvState*, uint64_t rs1_ptr, uint64_t rs2_ptr);
 
 extern void rvr_ext_mod_add_bn254_fq(RvState*, uint64_t rd_ptr, uint64_t rs1_ptr, uint64_t rs2_ptr);
 extern void rvr_ext_mod_sub_bn254_fq(RvState*, uint64_t rd_ptr, uint64_t rs1_ptr, uint64_t rs2_ptr);
 extern void rvr_ext_mod_mul_bn254_fq(RvState*, uint64_t rd_ptr, uint64_t rs1_ptr, uint64_t rs2_ptr);
 extern void rvr_ext_mod_div_bn254_fq(RvState*, uint64_t rd_ptr, uint64_t rs1_ptr, uint64_t rs2_ptr);
-extern uint32_t rvr_ext_mod_iseq_bn254_fq(RvState*, uint64_t rs1_ptr, uint64_t rs2_ptr);
+extern bool rvr_ext_mod_iseq_bn254_fq(RvState*, uint64_t rs1_ptr, uint64_t rs2_ptr);
 
 extern void rvr_ext_mod_add_bn254_fr(RvState*, uint64_t rd_ptr, uint64_t rs1_ptr, uint64_t rs2_ptr);
 extern void rvr_ext_mod_sub_bn254_fr(RvState*, uint64_t rd_ptr, uint64_t rs1_ptr, uint64_t rs2_ptr);
 extern void rvr_ext_mod_mul_bn254_fr(RvState*, uint64_t rd_ptr, uint64_t rs1_ptr, uint64_t rs2_ptr);
 extern void rvr_ext_mod_div_bn254_fr(RvState*, uint64_t rd_ptr, uint64_t rs1_ptr, uint64_t rs2_ptr);
-extern uint32_t rvr_ext_mod_iseq_bn254_fr(RvState*, uint64_t rs1_ptr, uint64_t rs2_ptr);
-
-extern __attribute__((preserve_most)) void rvr_ext_mod_add_bls12_381_fq(
-    RvState*, uint64_t rd_ptr, uint64_t rs1_ptr, uint64_t rs2_ptr);
-extern __attribute__((preserve_most)) void rvr_ext_mod_sub_bls12_381_fq(
-    RvState*, uint64_t rd_ptr, uint64_t rs1_ptr, uint64_t rs2_ptr);
-extern __attribute__((preserve_most)) void rvr_ext_mod_mul_bls12_381_fq(
-    RvState*, uint64_t rd_ptr, uint64_t rs1_ptr, uint64_t rs2_ptr);
-extern __attribute__((preserve_most)) void rvr_ext_mod_div_bls12_381_fq(
-    RvState*, uint64_t rd_ptr, uint64_t rs1_ptr, uint64_t rs2_ptr);
-extern __attribute__((preserve_most)) uint32_t rvr_ext_mod_iseq_bls12_381_fq(
-    RvState*, uint64_t rs1_ptr, uint64_t rs2_ptr);
-
-extern __attribute__((preserve_most)) void rvr_ext_mod_add_bls12_381_fr(
-    RvState*, uint64_t rd_ptr, uint64_t rs1_ptr, uint64_t rs2_ptr);
-extern __attribute__((preserve_most)) void rvr_ext_mod_sub_bls12_381_fr(
-    RvState*, uint64_t rd_ptr, uint64_t rs1_ptr, uint64_t rs2_ptr);
-extern __attribute__((preserve_most)) void rvr_ext_mod_mul_bls12_381_fr(
-    RvState*, uint64_t rd_ptr, uint64_t rs1_ptr, uint64_t rs2_ptr);
-extern __attribute__((preserve_most)) void rvr_ext_mod_div_bls12_381_fr(
-    RvState*, uint64_t rd_ptr, uint64_t rs1_ptr, uint64_t rs2_ptr);
-extern __attribute__((preserve_most)) uint32_t rvr_ext_mod_iseq_bls12_381_fr(
-    RvState*, uint64_t rs1_ptr, uint64_t rs2_ptr);
+extern bool rvr_ext_mod_iseq_bn254_fr(RvState*, uint64_t rs1_ptr, uint64_t rs2_ptr);
 
 #endif /* RVR_EXT_MOD_H */

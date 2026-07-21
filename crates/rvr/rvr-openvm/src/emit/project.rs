@@ -111,10 +111,11 @@ impl RvrExecutionKind {
                 writeln!(out, "}} MeteredCostState;").unwrap();
             }
             Self::Metered | Self::MeteredSegment => {
+                writeln!(out, "typedef uint32_t TraceHeights[RV_NUM_AIRS];").unwrap();
                 writeln!(out, "struct PageTouch;").unwrap();
                 writeln!(out, "struct SegmentationState;").unwrap();
                 writeln!(out, "typedef struct MeteringState {{").unwrap();
-                writeln!(out, "  uint32_t* trace_heights;").unwrap();
+                writeln!(out, "  TraceHeights* trace_heights;").unwrap();
                 writeln!(out, "  struct PageTouch* mem_page_buf;").unwrap();
                 writeln!(out, "  struct PageTouch* pv_page_buf;").unwrap();
                 writeln!(out, "  struct PageTouch* deferral_page_buf;").unwrap();
@@ -125,6 +126,12 @@ impl RvrExecutionKind {
                 writeln!(out, "  uint32_t deferral_page_buf_len;").unwrap();
                 writeln!(out, "  uint32_t check_counter;").unwrap();
                 writeln!(out, "  uint32_t last_mem_page;").unwrap();
+                writeln!(
+                    out,
+                    "  /* Explicit tail padding required by pointer alignment. */"
+                )
+                .unwrap();
+                writeln!(out, "  uint32_t padding;").unwrap();
                 writeln!(out, "}} MeteringState;").unwrap();
             }
         }
@@ -134,6 +141,8 @@ impl RvrExecutionKind {
         writeln!(out, "  uint64_t pc;").unwrap();
         writeln!(out, "  uint8_t status;").unwrap();
         writeln!(out, "  uint8_t exit_code;").unwrap();
+        writeln!(out, "  /* Keep the following pointer naturally aligned. */").unwrap();
+        writeln!(out, "  uint8_t padding[6];").unwrap();
         writeln!(out, "  uint8_t* memory;").unwrap();
         match self {
             Self::Pure => {}
@@ -154,6 +163,7 @@ impl RvrExecutionKind {
     }
 
     fn write_execution_kind_marker(self, out: &mut String) {
+        writeln!(out, "uint32_t rv_execution_kind(void);").unwrap();
         writeln!(out, "__attribute__((visibility(\"default\"), used))").unwrap();
         writeln!(out, "uint32_t rv_execution_kind(void) {{").unwrap();
         writeln!(out, "  return {}u;", self as u32).unwrap();
@@ -187,6 +197,8 @@ pub struct CProject {
     pub pc_base: u64,
     /// Per-AIR widths for MeteredCost precomputation. Indexed by chip index.
     pub chip_widths: Option<Vec<u64>>,
+    /// Number of AIRs in metered artifacts. Emitted into the generated C ABI.
+    pub num_airs: Option<u32>,
     /// Compile with native debug info (`-g -fno-omit-frame-pointer`).
     pub native_debug_info: bool,
 }
@@ -207,6 +219,7 @@ impl CProject {
             pc_to_chip: None,
             pc_base: 0,
             chip_widths: None,
+            num_airs: None,
             native_debug_info: false,
         }
     }
@@ -315,13 +328,13 @@ impl CProject {
     /// C function parameter list entries.
     fn param_list_items(&self, include_names: bool) -> Vec<String> {
         let mut params = vec![if include_names {
-            "RvState* restrict state".to_string()
+            "RvState* restrict state [[maybe_unused]]".to_string()
         } else {
             "RvState* restrict".to_string()
         }];
         for &(_, name) in &self.sorted_hot_regs() {
             params.push(if include_names {
-                format!("uint64_t {name}")
+                format!("uint64_t {name} [[maybe_unused]]")
             } else {
                 "uint64_t".to_string()
             });
@@ -329,20 +342,20 @@ impl CProject {
         match self.block_abi() {
             BlockAbi::Plain => {}
             BlockAbi::InstretCountdown => params.push(if include_names {
-                "uint64_t instret_remaining".to_string()
+                "uint64_t instret_remaining [[maybe_unused]]".to_string()
             } else {
                 "uint64_t".to_string()
             }),
             BlockAbi::Metered => {
                 params.push(if include_names {
-                    "uint32_t check_counter".to_string()
+                    "uint32_t check_counter [[maybe_unused]]".to_string()
                 } else {
                     "uint32_t".to_string()
                 });
                 params.push(if include_names {
-                    "uint32_t* trace_heights".to_string()
+                    "TraceHeights* restrict trace_heights [[maybe_unused]]".to_string()
                 } else {
-                    "uint32_t*".to_string()
+                    "TraceHeights* restrict".to_string()
                 });
             }
         }
@@ -481,6 +494,16 @@ impl CProject {
         text_start: u64,
         extensions: &ExtensionRegistry,
     ) -> io::Result<()> {
+        if !matches!(
+            self.execution_kind,
+            RvrExecutionKind::Pure | RvrExecutionKind::PureWithInstretTracking
+        ) && self.num_airs.is_none()
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "metered RVR code generation requires the AIR count",
+            ));
+        }
         self.validate_block_abi()?;
         let text_end = Self::dispatch_max_pc(blocks, entry_point, text_start);
         let table_size = Self::dispatch_table_size(text_start, text_end);
@@ -504,7 +527,7 @@ impl CProject {
         text_end: u64,
         dispatch_table_size: usize,
     ) -> io::Result<()> {
-        let h = constants_header(text_start, text_end, dispatch_table_size);
+        let h = constants_header(text_start, text_end, dispatch_table_size, self.num_airs);
         let path = self.output_dir.join("openvm_constants.h");
         fs::write(&path, h)
     }
@@ -591,7 +614,7 @@ impl CProject {
         let mut created_dirs = HashSet::new();
         self.write_embedded_files(extensions.c_headers(), &mut created_dirs)?;
         self.write_embedded_files(extensions.c_sources(), &mut created_dirs)?;
-        self.write_embedded_files(extensions.extra_c_sources(), &mut created_dirs)?;
+        self.write_embedded_files(extensions.vendored_c_sources(), &mut created_dirs)?;
         self.write_embedded_files(extensions.extra_c_include_files(), &mut created_dirs)?;
 
         // Write wrapper functions if any extensions are registered
@@ -621,6 +644,10 @@ impl CProject {
     }
 
     fn write_ext_wrappers(&self) -> io::Result<()> {
+        fs::write(
+            self.output_dir.join("rvr_ext_wrappers.h"),
+            include_str!("../../c/rvr_ext_wrappers.h"),
+        )?;
         fs::write(
             self.output_dir.join("rvr_ext_wrappers.c"),
             include_str!("../../c/rvr_ext_wrappers.c"),
@@ -742,16 +769,9 @@ impl CProject {
             end_pc.saturating_sub(1)
         )
         .unwrap();
-        let signature = self.block_signature(
-            "__attribute__((preserve_none)) void",
-            &format!("block_0x{pc:08x}"),
-        );
-        writeln!(out, "{signature} {{").unwrap();
-
         // Body instructions (each in its own scope to avoid variable collisions).
         let mut ctx = EmitContext::new(self.hot_regs.clone(), mode, self.block_abi());
-
-        writeln!(out, "    uint8_t* memory = state->memory;").unwrap();
+        let mut body = String::new();
 
         if matches!(
             mode,
@@ -760,34 +780,34 @@ impl CProject {
             }
         ) {
             writeln!(
-                out,
+                body,
                 "    TraceMemory trace_memory = trace_memory_setup(&state->mode_state);"
             )
             .unwrap();
         }
 
-        self.emit_block_boundary(out, block);
-        self.emit_per_block_chip_updates(out, block);
+        self.emit_block_boundary(&mut body, block);
+        self.emit_per_block_chip_updates(&mut body, block);
 
         for instr_at in &block.instructions {
             self.emit_source_annotation(
-                out,
+                &mut body,
                 instr_at.pc,
                 instr_at.instr.opname(),
                 instr_at.source_loc.as_ref(),
             );
             ctx.trace_pc(instr_at.pc);
             instr_at.instr.emit_c(&mut ctx);
-            Self::emit_context_scope(out, &mut ctx);
-            out.push('\n');
+            Self::emit_context_scope(&mut body, &mut ctx);
+            body.push('\n');
         }
 
         ctx.flush_page_locals();
-        Self::emit_context_scope(out, &mut ctx);
+        Self::emit_context_scope(&mut body, &mut ctx);
 
         if !matches!(block.terminator, Terminator::FallThrough) {
             self.emit_source_annotation(
-                out,
+                &mut body,
                 block.terminator_pc,
                 block.terminator.opname(),
                 block.terminator_source_loc.as_ref(),
@@ -796,9 +816,37 @@ impl CProject {
         }
         let tc = TermCtx { valid_blocks };
         emit_terminator(&mut ctx, &block.terminator, block.terminator_pc, &tc);
-        Self::emit_context_scope(out, &mut ctx);
+        Self::emit_context_scope(&mut body, &mut ctx);
+
+        let self_tail_call = format!("return block_0x{pc:08x}(");
+        let has_direct_self_tail_call = body.contains(&self_tail_call);
+        if has_direct_self_tail_call {
+            writeln!(
+                out,
+                "// This guest back-edge is an intentional musttail self-call."
+            )
+            .unwrap();
+            writeln!(out, "#pragma clang diagnostic push").unwrap();
+            writeln!(
+                out,
+                "#pragma clang diagnostic ignored \"-Winfinite-recursion\""
+            )
+            .unwrap();
+        }
+        let signature = self.block_signature(
+            "__attribute__((preserve_none)) void",
+            &format!("block_0x{pc:08x}"),
+        );
+        writeln!(out, "{signature} {{").unwrap();
+        if ctx.uses_raw_memory() {
+            writeln!(out, "    uint8_t* memory = state->memory;").unwrap();
+        }
+        out.push_str(&body);
 
         writeln!(out, "}}").unwrap();
+        if has_direct_self_tail_call {
+            writeln!(out, "#pragma clang diagnostic pop").unwrap();
+        }
         writeln!(out).unwrap();
     }
 
@@ -967,7 +1015,7 @@ impl CProject {
             RvrExecutionKind::Pure | RvrExecutionKind::PureWithInstretTracking => unreachable!(),
             RvrExecutionKind::Metered | RvrExecutionKind::MeteredSegment => {
                 for (chip, count) in &chip_counts {
-                    writeln!(out, "        trace_heights[{chip}] += {count}u;").unwrap();
+                    writeln!(out, "        (*trace_heights)[{chip}] += {count}u;").unwrap();
                 }
             }
             RvrExecutionKind::MeteredCost => {
@@ -1083,6 +1131,14 @@ impl CProject {
         // Let loaders reject an artifact generated for a different execution kind.
         self.execution_kind.write_execution_kind_marker(&mut src);
         writeln!(src).unwrap();
+        if self.num_airs.is_some() {
+            writeln!(src, "uint32_t rv_num_airs(void);").unwrap();
+            writeln!(src, "__attribute__((visibility(\"default\"), used))").unwrap();
+            writeln!(src, "uint32_t rv_num_airs(void) {{").unwrap();
+            writeln!(src, "    return RV_NUM_AIRS;").unwrap();
+            writeln!(src, "}}").unwrap();
+            writeln!(src).unwrap();
+        }
 
         // Execution entry point — single entry call; tail calls chain blocks.
         writeln!(
@@ -1136,18 +1192,22 @@ impl CProject {
         &self,
         ext_staticlibs: &[PathBuf],
         ext_sources: &[String],
+        vendor_sources: &[String],
         ext_cflags: &[String],
     ) -> Vec<String> {
         let mut args = self.make_args();
         if !ext_sources.is_empty() {
             args.push(format!("EXT_SRCS={}", ext_sources.join(" ")));
         }
+        if !vendor_sources.is_empty() {
+            args.push(format!("VENDOR_SRCS={}", vendor_sources.join(" ")));
+        }
         if !ext_staticlibs.is_empty() {
             // `make` receives `VAR=value` assignments as single argv entries,
             // but `$(EXT_LIBS)` and `$(EXT_CFLAGS)` are later expanded by
             // splitting on spaces. Static library paths, `-I...` paths, and
-            // copied extra-source filenames in `$(EXT_SRCS)` therefore must
-            // not contain spaces.
+            // copied source filenames in `$(EXT_SRCS)` and `$(VENDOR_SRCS)`
+            // therefore must not contain spaces.
             let libs: Vec<String> = ext_staticlibs
                 .iter()
                 .map(|p| p.display().to_string())

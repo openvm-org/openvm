@@ -1,10 +1,18 @@
-use openvm_instructions::{program::MAX_ALLOWED_PC, riscv::RV64_REGISTER_NUM_LIMBS};
+use openvm_instructions::{program::MAX_ALLOWED_PC, riscv::RV64_REGISTER_BYTES};
 
 use crate::RvrInstruction;
 
 /// Decode register index from an OpenVM operand.
 pub fn decode_reg(value: u32) -> u8 {
-    (value / RV64_REGISTER_NUM_LIMBS as u32) as u8
+    let value = u64::from(value);
+    assert_eq!(
+        value % RV64_REGISTER_BYTES,
+        0,
+        "register operand must be register-aligned"
+    );
+    let index = value / RV64_REGISTER_BYTES;
+    assert!(index < 32, "register operand must name x0..x31");
+    u8::try_from(index).unwrap()
 }
 
 /// Decode the immediate from the (c, g) field pair used by JALR, LOAD, STORE,

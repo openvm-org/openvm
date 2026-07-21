@@ -1,3 +1,5 @@
+use std::collections::TryReserveError;
+
 use openvm_platform::WORD_SIZE;
 
 /// The byte stream read by guest hint-store instructions.
@@ -47,6 +49,19 @@ impl HintStream {
     pub fn set_hint_from_iter(&mut self, bytes: impl IntoIterator<Item = u8>) {
         self.clear();
         self.bytes.extend(bytes);
+    }
+
+    /// Replaces the hint after reserving enough space for all of its bytes.
+    #[inline]
+    pub fn try_set_hint_from_iter(
+        &mut self,
+        len: usize,
+        bytes: impl IntoIterator<Item = u8>,
+    ) -> Result<(), TryReserveError> {
+        self.clear();
+        self.bytes.try_reserve(len)?;
+        self.bytes.extend(bytes);
+        Ok(())
     }
 
     /// Removes all bytes and resets the stream.

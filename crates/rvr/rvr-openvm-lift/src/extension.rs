@@ -96,7 +96,11 @@ pub fn opcode_air_idx(
             executor_idx,
         },
     )?;
-    Ok(Some(AirIndex::new(*raw as u32)))
+    let air_idx = u32::try_from(*raw).map_err(|_| ExtensionError::AirIndexOutOfBounds {
+        opcode,
+        air_idx: *raw,
+    })?;
+    Ok(Some(AirIndex::new(air_idx)))
 }
 
 /// Errors raised when resolving extension metadata from a `RvrExtensionCtx`.
@@ -112,6 +116,8 @@ pub enum ExtensionError {
         opcode: VmOpcode,
         executor_idx: usize,
     },
+    #[error("AIR index {air_idx} for opcode {opcode:?} does not fit in u32")]
+    AirIndexOutOfBounds { opcode: VmOpcode, air_idx: usize },
     #[error("failed to register host callbacks: {0}")]
     HostCallbackRegistration(String),
 }
@@ -143,9 +149,12 @@ pub trait RvrExtension: Send + Sync {
         Vec::new()
     }
 
-    /// Additional embedded C source files to compile alongside the generated
-    /// code (e.g., precomputed tables).
-    fn extra_c_sources(&self) -> Vec<(&'static str, &'static str)> {
+    /// Vendored C source files compiled as separate translation units.
+    ///
+    /// These are built without OpenVM's warning policy. Headers or C files
+    /// included by an OpenVM-owned translation unit should instead be supplied
+    /// through [`Self::extra_c_include_files`] and an `-isystem` include path.
+    fn vendored_c_sources(&self) -> Vec<(&'static str, &'static str)> {
         vec![]
     }
 
@@ -156,8 +165,9 @@ pub trait RvrExtension: Send + Sync {
         vec![]
     }
 
-    /// Additional CFLAGS for compiling extension C sources (e.g., `-I`
-    /// paths for submodule headers). Passed to the Makefile as EXT_CFLAGS.
+    /// Additional CFLAGS for compiling owned and vendored extension C sources
+    /// (e.g., `-I` paths for submodule headers). Passed to the Makefile as
+    /// EXT_CFLAGS.
     fn extra_cflags(&self) -> Vec<String> {
         vec![]
     }
@@ -243,11 +253,11 @@ impl ExtensionRegistry {
             .collect()
     }
 
-    /// Collect extra embedded C source files from all extensions.
-    pub fn extra_c_sources(&self) -> Vec<(&'static str, &'static str)> {
+    /// Collect vendored C source files from all extensions.
+    pub fn vendored_c_sources(&self) -> Vec<(&'static str, &'static str)> {
         self.extensions
             .iter()
-            .flat_map(|ext| ext.extra_c_sources())
+            .flat_map(|ext| ext.vendored_c_sources())
             .collect()
     }
 

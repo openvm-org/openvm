@@ -161,11 +161,11 @@ __attribute__((preserve_most)) void rvr_ext_mod_div_k256_coord(
   fe_write(state, rd_ptr, &r);
 }
 
-__attribute__((preserve_most)) uint32_t rvr_ext_mod_iseq_k256_coord(
+__attribute__((preserve_most)) bool rvr_ext_mod_iseq_k256_coord(
     RvState* state, uint64_t rs1_ptr, uint64_t rs2_ptr) {
   secp256k1_fe a = fe_read(state, rs1_ptr);
   secp256k1_fe b = fe_read(state, rs2_ptr);
-  return secp256k1_fe_equal(&a, &b) ? 1u : 0u;
+  return secp256k1_fe_equal(&a, &b) != 0;
 }
 
 /* ── Modular arithmetic: secp256k1 scalar field (mod n) ──────────────── */
@@ -211,15 +211,20 @@ __attribute__((preserve_most)) void rvr_ext_mod_div_k256_scalar(
   scalar_write(state, rd_ptr, &r);
 }
 
-__attribute__((preserve_most)) uint32_t rvr_ext_mod_iseq_k256_scalar(
+__attribute__((preserve_most)) bool rvr_ext_mod_iseq_k256_scalar(
     RvState* state, uint64_t rs1_ptr, uint64_t rs2_ptr) {
   secp256k1_scalar a = scalar_read(state, rs1_ptr);
   secp256k1_scalar b = scalar_read(state, rs2_ptr);
-  return secp256k1_scalar_eq(&a, &b) ? 1u : 0u;
+  return secp256k1_scalar_eq(&a, &b) != 0;
 }
 
 /* ── EC ops: secp256k1 (always present in modular, regardless of whether
  * the ECC extension is configured at lift time) ──────────────────────── */
+
+__attribute__((preserve_most)) void rvr_ext_ec_add_ne_k256(
+    RvState* state, uint64_t rd_ptr, uint64_t rs1_ptr, uint64_t rs2_ptr);
+__attribute__((preserve_most)) void rvr_ext_ec_double_k256(
+    RvState* state, uint64_t rd_ptr, uint64_t rs1_ptr);
 
 __attribute__((preserve_most)) void rvr_ext_ec_add_ne_k256(RvState* state,
                                                            uint64_t rd_ptr,
