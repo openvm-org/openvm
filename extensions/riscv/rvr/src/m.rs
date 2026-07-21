@@ -1,4 +1,7 @@
-use openvm_instructions::{riscv::RV64_REGISTER_AS, LocalOpcode};
+use openvm_instructions::{
+    riscv::{RV64_IMM_AS, RV64_REGISTER_AS},
+    LocalOpcode,
+};
 use openvm_riscv_transpiler::{DivRemOpcode, DivRemWOpcode, MulHOpcode, MulOpcode, MulWOpcode};
 use rvr_openvm_ir::{InstrAt, LiftedInstr};
 use rvr_openvm_lift::{RvrExtension, RvrInstruction};
@@ -88,7 +91,7 @@ impl RvrExtension for Rv64MExtension {
         let (_, op, word) = operations
             .into_iter()
             .find(|(candidate, _, _)| *candidate == opcode)?;
-        if insn.d != RV64_REGISTER_AS || insn.e != RV64_REGISTER_AS {
+        if insn.d != RV64_REGISTER_AS || insn.e != RV64_IMM_AS {
             return None;
         }
 
@@ -118,11 +121,7 @@ impl RvrExtension for Rv64MExtension {
 
 #[cfg(test)]
 mod tests {
-    use openvm_instructions::{
-        instruction::Instruction,
-        riscv::{RV64_IMM_AS, RV64_REGISTER_NUM_LIMBS},
-        VmOpcode,
-    };
+    use openvm_instructions::{instruction::Instruction, riscv::RV64_REGISTER_NUM_LIMBS, VmOpcode};
     use p3_baby_bear::BabyBear;
     use rvr_openvm_ir::{InstrAt, LiftedInstr};
 
@@ -161,7 +160,7 @@ mod tests {
             (DivRemWOpcode::REMW.global_opcode(), "remw"),
             (DivRemWOpcode::REMUW.global_opcode(), "remuw"),
         ] {
-            let insn = instruction(opcode, RV64_REGISTER_AS, RV64_REGISTER_AS);
+            let insn = instruction(opcode, RV64_REGISTER_AS, RV64_IMM_AS);
             let LiftedInstr::Body(InstrAt { instr, .. }) =
                 extension.try_lift(&insn, 0x100).unwrap()
             else {
@@ -169,7 +168,7 @@ mod tests {
             };
             assert_eq!(instr.opname(), name);
 
-            let wrong_source = instruction(opcode, RV64_REGISTER_AS, RV64_IMM_AS);
+            let wrong_source = instruction(opcode, RV64_REGISTER_AS, RV64_REGISTER_AS);
             assert!(extension.try_lift(&wrong_source, 0x100).is_none());
         }
     }
@@ -183,7 +182,7 @@ mod tests {
                 2 * RV64_REGISTER_NUM_LIMBS,
                 3 * RV64_REGISTER_NUM_LIMBS,
                 RV64_REGISTER_AS as usize,
-                RV64_REGISTER_AS as usize,
+                RV64_IMM_AS as usize,
                 1,
                 0,
             ],
