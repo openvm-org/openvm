@@ -4,6 +4,8 @@ mod line;
 mod miller_loop;
 
 pub use curve::*;
+#[doc(hidden)]
+pub use final_exp::{final_exp_hint_naf_exponents, try_final_exp_hint_with_pow, UNITY_ROOT_27};
 pub use line::*;
 
 #[cfg(test)]

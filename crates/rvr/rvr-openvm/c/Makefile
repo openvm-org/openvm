@@ -34,6 +34,7 @@ endif
 
 LIB ?= libout.so
 EXT_LIBS ?=
+EXT_LDLIBS ?=
 EXT_SRCS ?=
 EXT_OBJS = $(EXT_SRCS:.c=.o)
 VENDOR_SRCS ?=
@@ -50,7 +51,7 @@ $(VENDOR_OBJS): CFLAGS += $(EXT_CFLAGS) $(VENDOR_WARNINGS)
 shared: $(LIB)
 
 $(LIB): $(ALL_OBJS)
-	$(CC) -shared $(CFLAGS) $(LDFLAGS) -o $@ $^ $(EXT_LIBS) $(LDLIBS)
+	$(CC) -shared $(CFLAGS) $(LDFLAGS) -o $@ $^ $(EXT_LIBS) $(EXT_LDLIBS) $(LDLIBS)
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c -o $@ $<

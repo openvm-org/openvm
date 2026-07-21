@@ -203,6 +203,11 @@ pub trait RvrExtension: Send + Sync {
         Vec::new()
     }
 
+    /// Native linker arguments that must follow this extension's static libraries.
+    fn native_link_args(&self) -> Vec<&'static str> {
+        Vec::new()
+    }
+
     /// Whether this extension's static library calls the shared memory wrappers.
     fn uses_memory_wrappers(&self) -> bool {
         false
@@ -346,6 +351,14 @@ impl ExtensionRegistry {
         self.extensions
             .iter()
             .flat_map(|ext| ext.extension.staticlib_files())
+            .collect()
+    }
+
+    /// Collect native linker arguments that must follow the extension static libraries.
+    pub fn native_link_args(&self) -> Vec<&'static str> {
+        self.extensions
+            .iter()
+            .flat_map(|ext| ext.extension.native_link_args())
             .collect()
     }
 
