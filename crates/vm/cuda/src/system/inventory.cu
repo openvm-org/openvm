@@ -255,10 +255,8 @@ extern "C" int _inventory_to_merkle_records(
     if (num_records == 0) {
         return 0;
     }
-    const int threads = 256;
-    const size_t want = (num_records + threads - 1) / threads;
-    const int blocks = (int)(want < 1024 ? want : 1024);
-    inventory_to_merkle_records_kernel<<<blocks, threads, 0, stream>>>(
+    auto [grid, block] = grid_stride_launch_params(num_records, 256, 1024);
+    inventory_to_merkle_records_kernel<<<grid, block, 0, stream>>>(
         d_out_records, num_records, d_merkle_records);
     return CHECK_KERNEL();
 }

@@ -2,7 +2,7 @@ use std::{mem::size_of, sync::Arc};
 
 use openvm_circuit::{primitives::Chip, system::program::ProgramExecutionCols};
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend, GpuDevice};
-use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, stream::GpuDeviceCtx};
+use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer, pinned, stream::GpuDeviceCtx};
 use openvm_instructions::{program::Program, LocalOpcode, SystemOpcode};
 use openvm_stark_backend::prover::{
     AirProvingContext, CommittedTraceData, MatrixDimensions, TraceCommitter,
@@ -109,7 +109,7 @@ impl Chip<Vec<u32>, GpuBackend> for ProgramChipGPU {
         // Upload the raw u32 frequencies through a pooled pinned buffer and
         // convert to field elements on device (also zero-filling the tail).
         let bytes = filtered_len * std::mem::size_of::<u32>();
-        let mut h_freqs = openvm_cuda_common::pinned::take(bytes + std::mem::size_of::<u32>());
+        let mut h_freqs = pinned::take(bytes + std::mem::size_of::<u32>());
         let off = h_freqs.as_ptr().align_offset(std::mem::size_of::<u32>());
         // SAFETY: the ranges are in-bounds, disjoint allocations, and the
         // destination is 4-aligned by `off`.
@@ -124,7 +124,7 @@ impl Chip<Vec<u32>, GpuBackend> for ProgramChipGPU {
         let d_freqs = words
             .to_device_on(&self.device_ctx)
             .expect("failed to copy exec frequencies to device");
-        openvm_cuda_common::pinned::give_back(h_freqs, off + bytes);
+        pinned::give_back(h_freqs, off + bytes);
         unsafe {
             crate::cuda_abi::program::fill_frequencies(
                 &d_freqs,

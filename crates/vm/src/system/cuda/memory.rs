@@ -13,6 +13,7 @@ use openvm_cuda_common::{
     copy::{cuda_memcpy_on, MemCopyD2H, MemCopyH2D},
     d_buffer::DeviceBuffer,
     memory_manager::MemTracker,
+    pinned,
     stream::GpuDeviceCtx,
 };
 use openvm_instructions::VM_DIGEST_WIDTH;
@@ -42,6 +43,13 @@ use crate::{cuda_abi::inventory, system::memory::online::LinearMemory};
 const _: () = assert!(
     BLOCK_FE_WIDTH == 4 && VM_DIGEST_WIDTH == 8,
     "CUDA memory inventory only supports (BLOCK_FE_WIDTH, VM_DIGEST_WIDTH) == (4, 8)"
+);
+
+// `TouchedBlock<F>` must be exactly the 7-word `InRec` layout in `inventory.cu`
+// so the merge path can upload the vector's bytes without repacking.
+const _: () = assert!(
+    std::mem::size_of::<TouchedBlock<F>>() == (3 + BLOCK_FE_WIDTH) * std::mem::size_of::<u32>(),
+    "TouchedBlock<F> must match the 7-u32-word InRec layout in inventory.cu"
 );
 
 pub struct MemoryInventoryGPU {
@@ -78,12 +86,11 @@ impl PinnedStaging {
     fn ensure(&mut self, len: usize) -> &mut [u8] {
         if self.buf.len() < len {
             if self.registered {
-                openvm_cuda_common::pinned::unregister_region(self.buf.as_mut_ptr());
+                pinned::unregister_region(self.buf.as_mut_ptr());
                 self.registered = false;
             }
             self.buf = vec![0u8; len];
-            self.registered =
-                openvm_cuda_common::pinned::register_region(self.buf.as_mut_ptr(), len);
+            self.registered = pinned::register_region(self.buf.as_mut_ptr(), len);
             if !self.registered {
                 tracing::debug!("memory-image staging stays pageable ({len} bytes)");
             }
@@ -95,7 +102,7 @@ impl PinnedStaging {
 impl Drop for PinnedStaging {
     fn drop(&mut self) {
         if self.registered {
-            openvm_cuda_common::pinned::unregister_region(self.buf.as_mut_ptr());
+            pinned::unregister_region(self.buf.as_mut_ptr());
         }
     }
 }
@@ -271,10 +278,9 @@ impl MemoryInventoryGPU {
             unpadded_merkle_height
         } else {
             let _span = tracing::info_span!("mem_merge_records").entered();
-            const _: () = assert!(std::mem::size_of::<TouchedBlock<F>>() == 28);
             let in_num_records = partition.len();
             let in_bytes = in_num_records * std::mem::size_of::<TouchedBlock<F>>();
-            let mut h_in = openvm_cuda_common::pinned::take(in_bytes + 4);
+            let mut h_in = pinned::take(in_bytes + 4);
             let align_offset = h_in.as_ptr().align_offset(std::mem::size_of::<u32>());
             let dirty_len = align_offset + in_bytes;
             let src: &[u8] =
@@ -294,7 +300,7 @@ impl MemoryInventoryGPU {
                 * (std::mem::size_of::<MemoryInventoryRecord<VM_DIGEST_WIDTH, BLOCKS_PER_LEAF>>()
                     / std::mem::size_of::<u32>());
             let d_in_records = in_words.to_device_on(&self.device_ctx).unwrap();
-            openvm_cuda_common::pinned::give_back(h_in, dirty_len);
+            pinned::give_back(h_in, dirty_len);
             let d_tmp_records = DeviceBuffer::<u32>::with_capacity_on(out_words, &self.device_ctx);
             let d_out_records = DeviceBuffer::<u32>::with_capacity_on(out_words, &self.device_ctx);
             let d_out_num_records = DeviceBuffer::<usize>::with_capacity_on(1, &self.device_ctx);

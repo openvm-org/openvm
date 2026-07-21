@@ -2,6 +2,7 @@
 #include "primitives/buffer_view.cuh"
 #include "primitives/constants.h"
 #include "primitives/trace_access.h"
+#include "primitives/utils.cuh"
 #include "system/program.cuh"
 
 static constexpr uint32_t EXIT_CODE_FAIL = 1;
@@ -81,9 +82,7 @@ extern "C" int _program_fill_frequencies(
     if (height == 0) {
         return 0;
     }
-    const int threads = 256;
-    const size_t want = (height + threads - 1) / threads;
-    const int blocks = (int)(want < 2048 ? want : 2048);
-    program_fill_frequencies<<<blocks, threads, 0, stream>>>(d_freqs, filtered_len, d_out, height);
+    auto [grid, block] = grid_stride_launch_params(height, 256, 2048);
+    program_fill_frequencies<<<grid, block, 0, stream>>>(d_freqs, filtered_len, d_out, height);
     return CHECK_KERNEL();
 }
