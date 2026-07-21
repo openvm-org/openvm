@@ -286,8 +286,14 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
 
             impl core::cmp::PartialEq for #struct_name {
                 fn eq(&self, other: &Self) -> bool {
-                    (&self.x * &other.z) == (&other.x * &self.z)
-                        && (&self.y * &other.z) == (&other.y * &self.z)
+                    let self_is_identity = self.is_identity_impl::<true>();
+                    let other_is_identity = other.is_identity_impl::<true>();
+                    if self_is_identity || other_is_identity {
+                        self_is_identity && other_is_identity
+                    } else {
+                        (&self.x * &other.z) == (&other.x * &self.z)
+                            && (&self.y * &other.z) == (&other.y * &self.z)
+                    }
                 }
             }
 
@@ -349,6 +355,21 @@ pub fn sw_declare(input: TokenStream) -> TokenStream {
                 #[inline(always)]
                 fn into_coords(self) -> (Self::Coordinate, Self::Coordinate, Self::Coordinate) {
                     (self.x, self.y, self.z)
+                }
+
+                #[inline(always)]
+                fn into_affine_coords(self) -> Option<(Self::Coordinate, Self::Coordinate)> {
+                    use openvm_algebra_guest::{DivUnsafe, IntMod};
+                    if self.z == <#intmod_type as IntMod>::ZERO {
+                        None
+                    } else if self.z == <#intmod_type as IntMod>::ONE {
+                        Some((self.x, self.y))
+                    } else {
+                        Some((
+                            (&self.x).div_unsafe(&self.z),
+                            (&self.y).div_unsafe(&self.z),
+                        ))
+                    }
                 }
 
                 #[inline(always)]

@@ -22,6 +22,8 @@ extern crate self as openvm_ecc;
 #[cfg(feature = "halo2curves")]
 pub use halo2curves_axiom as halo2curves;
 pub use openvm_algebra_guest as algebra;
+use openvm_algebra_guest::Field;
+use openvm_ecc_guest::{weierstrass::WeierstrassPoint, AffinePoint};
 
 /// Implementation of this library's traits on halo2curves types.
 /// Used for testing and also VM runtime execution.
@@ -41,3 +43,15 @@ pub mod bls12_381;
 /// Types for BN254 curve with intrinsic functions.
 #[cfg(feature = "bn254")]
 pub mod bn254;
+
+/// Converts a projective Weierstrass point to the affine representation used by pairing code.
+/// The projective identity is mapped to the pairing infinity encoding `(0, 0)`.
+pub fn projective_to_affine<P>(point: P) -> AffinePoint<P::Coordinate>
+where
+    P: WeierstrassPoint,
+{
+    match point.into_affine_coords() {
+        Some((x, y)) => AffinePoint::new(x, y),
+        None => AffinePoint::new(P::Coordinate::ZERO, P::Coordinate::ZERO),
+    }
+}
