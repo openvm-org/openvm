@@ -147,7 +147,7 @@ jobs:
               echo "::group::Running guest tests for $extension"
               guest_feature_args=()
               if [[ "$extension" == "pairing" ]]; then
-                guest_feature_args=(--features=bn254,bls12_381,halo2curves)
+                guest_feature_args=(--features=bn254,bls12_381,halo2curves,blst)
               fi
               pushd "extensions/$extension/guest"
               cargo nextest run --cargo-profile=fast "${guest_feature_args[@]}" --no-tests=pass

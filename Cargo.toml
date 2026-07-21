@@ -328,6 +328,7 @@ num-traits = { version = "0.2.19", default-features = false }
 ff = { version = "0.13.1", default-features = false }
 sha2 = { version = "0.10", default-features = false }
 blstrs = { version = "0.7.1", default-features = true }
+blst = { version = "0.3.15" }
 
 [workspace.metadata.cargo-shear]
 ignored = [

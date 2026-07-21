@@ -1,13 +1,17 @@
-use alloc::vec::Vec;
+use alloc::{vec, vec::Vec};
 
-use halo2curves_axiom::bls12_381::{Fq, Fq2, Fr, G1Affine, G2Affine};
+use halo2curves_axiom::{
+    bls12_381::{Fq, Fq12, Fq2, Fr, G1Affine, G2Affine},
+    ff::Field,
+};
 use itertools::izip;
 use num_bigint::BigUint;
 use num_traits::Num;
 use openvm_ecc_guest::{algebra::ExpBytes, AffinePoint};
+use rand08::{rngs::StdRng, SeedableRng};
 
 use crate::{
-    halo2curves_shims::bls12_381::{Bls12_381, SEED_NEG},
+    halo2curves_shims::bls12_381::{final_exp::final_exp_hint_basic, Bls12_381, SEED_NEG},
     pairing::{FinalExp, MultiMillerLoop},
 };
 
@@ -27,6 +31,20 @@ fn test_bls12_381_final_exp_hint() {
     let c_qt = c.exp_bytes(true, &q.to_bytes_be()) * c.exp_bytes(true, &SEED_NEG.to_bytes_be());
 
     assert_eq!(f * s, c_qt);
+}
+
+#[cfg(feature = "blst")]
+#[test]
+fn test_blst_final_exp_hint_matches_basic() {
+    let mut inputs = vec![Fq12::ZERO, Fq12::ONE];
+    let mut rng = StdRng::seed_from_u64(0x41b5_1238);
+    inputs.extend((0..4).map(|_| Fq12::random(&mut rng)));
+
+    for f in inputs {
+        let expected = final_exp_hint_basic(&f);
+        let actual = Bls12_381::final_exp_hint(&f);
+        assert_eq!(actual, expected);
+    }
 }
 
 #[test]
