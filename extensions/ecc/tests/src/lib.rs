@@ -9,6 +9,8 @@ mod tests {
     use hex_literal::hex;
     use num_bigint::BigUint;
     use openvm_algebra_transpiler::ModularTranspilerExtension;
+    #[cfg(feature = "rvr")]
+    use openvm_circuit::arch::{ExecutionError, VmExecutor};
     use openvm_circuit::{
         arch::instructions::exe::VmExe,
         utils::{air_test, air_test_with_min_segments, test_system_config},
@@ -255,5 +257,39 @@ mod tests {
         let config =
             test_rv64weierstrass_config(vec![SECP256K1_CONFIG.clone(), P256_CONFIG.clone()]);
         air_test(Rv64WeierstrassBuilder, config, openvm_exe);
+    }
+
+    #[test]
+    #[cfg(feature = "rvr")]
+    fn test_rvr_invalid_setup() {
+        let config =
+            test_rv64weierstrass_config(vec![SECP256K1_CONFIG.clone(), P256_CONFIG.clone()]);
+        let elf = build_example_program_at_path_with_features(
+            get_programs_dir!(),
+            "invalid_setup",
+            ["k256", "p256"],
+            &NoInitFile,
+        )
+        .unwrap();
+        let openvm_exe = VmExe::from_elf(
+            elf,
+            Transpiler::<F>::default()
+                .with_extension(Rv64ITranspilerExtension)
+                .with_extension(Rv64MTranspilerExtension)
+                .with_extension(Rv64IoTranspilerExtension)
+                .with_extension(EccTranspilerExtension)
+                .with_extension(ModularTranspilerExtension),
+        )
+        .unwrap();
+        let executor = VmExecutor::new(config).unwrap();
+        let result = executor.instance(&openvm_exe).unwrap().execute(vec![]);
+
+        match result {
+            Err(ExecutionError::RvrExecution(message)) => {
+                assert_eq!(message, "execution returned error code: 3");
+            }
+            Err(error) => panic!("expected an RVR execution error, got {error}"),
+            Ok(_) => panic!("expected RVR execution to fail"),
+        }
     }
 }

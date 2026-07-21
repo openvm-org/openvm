@@ -30,28 +30,49 @@ static BN254_COORD_MODULUS: Lazy<BigUint> =
     Lazy::new(get_modulus_as_bigint::<halo2curves_axiom::bn256::Fq>);
 static BLS12_381_COORD_MODULUS: Lazy<BigUint> =
     Lazy::new(get_modulus_as_bigint::<halo2curves_axiom::bls12_381::Fq>);
+static ZERO_A_COEFF: Lazy<BigUint> = Lazy::new(|| BigUint::ZERO);
 static P256_A_COEFF: Lazy<BigUint> = Lazy::new(|| {
     BigUint::from_bytes_le(&(-halo2curves_axiom::secp256r1::Fp::from(P256_NEG_A)).to_bytes())
 });
 
-pub(super) fn get_curve_type(modulus: &BigUint, a_coeff: &BigUint) -> Option<CurveType> {
-    if modulus == &*K256_COORD_MODULUS && a_coeff == &BigUint::ZERO {
-        return Some(CurveType::K256);
+impl CurveType {
+    pub fn coordinate_modulus(self) -> &'static BigUint {
+        match self {
+            Self::K256 => &K256_COORD_MODULUS,
+            Self::P256 => &P256_COORD_MODULUS,
+            Self::BN254 => &BN254_COORD_MODULUS,
+            Self::BLS12_381 => &BLS12_381_COORD_MODULUS,
+        }
     }
 
-    if modulus == &*P256_COORD_MODULUS && a_coeff == &*P256_A_COEFF {
-        return Some(CurveType::P256);
+    pub fn a_coefficient(self) -> &'static BigUint {
+        match self {
+            Self::P256 => &P256_A_COEFF,
+            Self::K256 | Self::BN254 | Self::BLS12_381 => &ZERO_A_COEFF,
+        }
     }
 
-    if modulus == &*BN254_COORD_MODULUS && a_coeff == &BigUint::ZERO {
-        return Some(CurveType::BN254);
+    #[cfg(feature = "rvr")]
+    pub(crate) fn from_struct_name(struct_name: &str) -> Option<Self> {
+        match struct_name {
+            "Secp256k1Point" => Some(Self::K256),
+            "P256Point" => Some(Self::P256),
+            "Bn254G1Affine" => Some(Self::BN254),
+            "Bls12_381G1Affine" => Some(Self::BLS12_381),
+            _ => None,
+        }
     }
+}
 
-    if modulus == &*BLS12_381_COORD_MODULUS && a_coeff == &BigUint::ZERO {
-        return Some(CurveType::BLS12_381);
-    }
-
-    None
+pub(crate) fn get_curve_type(modulus: &BigUint, a_coeff: &BigUint) -> Option<CurveType> {
+    [
+        CurveType::K256,
+        CurveType::P256,
+        CurveType::BN254,
+        CurveType::BLS12_381,
+    ]
+    .into_iter()
+    .find(|curve| modulus == curve.coordinate_modulus() && a_coeff == curve.a_coefficient())
 }
 
 #[inline(always)]

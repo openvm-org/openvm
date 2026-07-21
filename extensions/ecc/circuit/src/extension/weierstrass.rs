@@ -26,6 +26,8 @@ use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use strum::EnumCount;
 
+#[cfg(feature = "rvr")]
+use crate::{get_curve_type, CurveType};
 use crate::{
     get_ec_addne_air, get_ec_addne_chip, get_ec_addne_executor, get_ec_double_air,
     get_ec_double_chip, get_ec_double_executor, EcAddNeExecutor, EcDoubleExecutor, EccCpuProverExt,
@@ -88,6 +90,16 @@ impl WeierstrassExtension {
 #[cfg(feature = "rvr")]
 impl<F: PrimeField32> VmRvrExtension<F> for WeierstrassExtension {
     fn extend_rvr(&self, extensions: &mut RvrExtensions, _ctx: Option<&RvrExtensionCtx>) {
+        for curve in &self.supported_curves {
+            if let Some(expected) = CurveType::from_struct_name(&curve.struct_name) {
+                assert_eq!(
+                    get_curve_type(&curve.modulus, &curve.a),
+                    Some(expected),
+                    "RVR curve parameters do not match {}",
+                    curve.struct_name
+                );
+            }
+        }
         let struct_names = self
             .supported_curves
             .iter()
