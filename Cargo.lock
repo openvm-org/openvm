@@ -2906,7 +2906,7 @@ dependencies = [
 [[package]]
 name = "halo2-axiom-gpu"
 version = "1.0.0"
-source = "git+https://github.com/axiom-crypto/halo2-gpu.git?tag=v1.0.0#97ef2d02aa3348fc04b520c3c2562a9c13b57126"
+source = "git+https://github.com/axiom-crypto/halo2-gpu.git?branch=develop-v2.1.0#ef0dca275895ee786a5ea5bbe03cdf72ffb68061"
 dependencies = [
  "ahash",
  "anyhow",
@@ -2946,7 +2946,7 @@ dependencies = [
 [[package]]
 name = "halo2-base"
 version = "0.5.4"
-source = "git+https://github.com/axiom-crypto/halo2-lib.git?tag=v0.5.4#a69fdee77f41bdd48ad658b69673dea5a0815db4"
+source = "git+https://github.com/axiom-crypto/halo2-lib.git?branch=develop-v2.1.0#d59f41ac884d18a985025090a227fa6733398ae8"
 dependencies = [
  "getset",
  "halo2-axiom",
@@ -2967,7 +2967,7 @@ dependencies = [
 [[package]]
 name = "halo2-ecc"
 version = "0.5.4"
-source = "git+https://github.com/axiom-crypto/halo2-lib.git?tag=v0.5.4#a69fdee77f41bdd48ad658b69673dea5a0815db4"
+source = "git+https://github.com/axiom-crypto/halo2-lib.git?branch=develop-v2.1.0#d59f41ac884d18a985025090a227fa6733398ae8"
 dependencies = [
  "halo2-base",
  "itertools 0.11.0",
@@ -4653,7 +4653,7 @@ dependencies = [
 [[package]]
 name = "openvm-codec-derive"
 version = "2.0.0"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v2.0.0#16d60de724c21dcadfde7d8315a1db507e5832d7"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2.1.0#8f23bfc4b209869aab8cd57ac0100f3bd0277c6b"
 dependencies = [
  "proc-macro-crate 1.3.1",
  "proc-macro2",
@@ -4701,7 +4701,7 @@ dependencies = [
 [[package]]
 name = "openvm-cpu-backend"
 version = "2.0.0"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v2.0.0#16d60de724c21dcadfde7d8315a1db507e5832d7"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2.1.0#8f23bfc4b209869aab8cd57ac0100f3bd0277c6b"
 dependencies = [
  "cfg-if 1.0.1",
  "derive-new 0.7.0",
@@ -4726,7 +4726,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-backend"
 version = "2.0.0"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v2.0.0#16d60de724c21dcadfde7d8315a1db507e5832d7"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2.1.0#8f23bfc4b209869aab8cd57ac0100f3bd0277c6b"
 dependencies = [
  "derive-new 0.7.0",
  "getset",
@@ -4753,7 +4753,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-builder"
 version = "2.0.0"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v2.0.0#16d60de724c21dcadfde7d8315a1db507e5832d7"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2.1.0#8f23bfc4b209869aab8cd57ac0100f3bd0277c6b"
 dependencies = [
  "cc",
  "glob",
@@ -4762,7 +4762,7 @@ dependencies = [
 [[package]]
 name = "openvm-cuda-common"
 version = "2.0.0"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v2.0.0#16d60de724c21dcadfde7d8315a1db507e5832d7"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2.1.0#8f23bfc4b209869aab8cd57ac0100f3bd0277c6b"
 dependencies = [
  "bytesize",
  "ctor",
@@ -5559,7 +5559,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-backend"
 version = "2.0.0"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v2.0.0#16d60de724c21dcadfde7d8315a1db507e5832d7"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2.1.0#8f23bfc4b209869aab8cd57ac0100f3bd0277c6b"
 dependencies = [
  "cfg-if 1.0.1",
  "derivative",
@@ -5594,7 +5594,7 @@ dependencies = [
 [[package]]
 name = "openvm-stark-sdk"
 version = "2.0.0"
-source = "git+https://github.com/openvm-org/stark-backend.git?tag=v2.0.0#16d60de724c21dcadfde7d8315a1db507e5832d7"
+source = "git+https://github.com/openvm-org/stark-backend.git?branch=develop-v2.1.0#8f23bfc4b209869aab8cd57ac0100f3bd0277c6b"
 dependencies = [
  "dashmap",
  "derive-new 0.7.0",
@@ -7877,7 +7877,7 @@ checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
 [[package]]
 name = "snark-verifier"
 version = "0.2.6"
-source = "git+https://github.com/axiom-crypto/snark-verifier.git?tag=v0.2.6#364e82654c746b063aff528d8cb660890908278a"
+source = "git+https://github.com/axiom-crypto/snark-verifier.git?branch=develop-v2.1.0#369f98ff87dbdde689ec576aa9c5fd2609599481"
 dependencies = [
  "halo2-base",
  "halo2-ecc",
@@ -7898,7 +7898,7 @@ dependencies = [
 [[package]]
 name = "snark-verifier-sdk"
 version = "0.2.6"
-source = "git+https://github.com/axiom-crypto/snark-verifier.git?tag=v0.2.6#364e82654c746b063aff528d8cb660890908278a"
+source = "git+https://github.com/axiom-crypto/snark-verifier.git?branch=develop-v2.1.0#369f98ff87dbdde689ec576aa9c5fd2609599481"
 dependencies = [
  "bincode",
  "ethereum-types",
