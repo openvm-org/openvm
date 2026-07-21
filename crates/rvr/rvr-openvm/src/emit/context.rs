@@ -723,7 +723,7 @@ mod tests {
             profile_execution,
         );
         ctx.trace_pc(0x20_1234);
-        ctx.extern_call_without_page_flush("host_callback", &["value"]);
+        ctx.emit_call_without_page_flush("host_callback", &["value"]);
         ctx.take_buf()
     }
 

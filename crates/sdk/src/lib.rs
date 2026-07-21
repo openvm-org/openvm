@@ -695,7 +695,12 @@ where
             .transpose()?;
         let instance = self
             .executor
-            .metered_profiled_rvr_instance(&exe, &executor_idx_to_air_idx, guest_debug_map.as_ref())
+            .metered_profiled_rvr_instance(
+                &exe,
+                &executor_idx_to_air_idx,
+                ctx.trace_heights.len(),
+                guest_debug_map.as_ref(),
+            )
             .map_err(VirtualMachineError::from)?;
         Ok(CompiledExeMetered {
             instance,

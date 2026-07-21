@@ -470,6 +470,7 @@ where
         &self,
         exe: &VmExe<F>,
         executor_idx_to_air_idx: &[usize],
+        num_airs: usize,
         guest_debug_map: Option<&GuestDebugMap>,
     ) -> Result<RvrMeteredInstance<'_>, StaticProgramError> {
         #[cfg(feature = "metrics")]
@@ -477,6 +478,7 @@ where
             tracing::info_span!("compile_metered", backend = "rvr", profiled = true).entered();
         let extensions = self.build_rvr_extensions(Some(executor_idx_to_air_idx));
         let chips = ChipMapping {
+            num_airs,
             pc_to_chip: build_pc_to_chip(exe, &self.inventory, executor_idx_to_air_idx)
                 .map_err(map_rvr_compile_error)?,
             chip_widths: None,
@@ -650,9 +652,10 @@ where
         let extensions = self.build_rvr_extensions(Some(executor_idx_to_air_idx));
         let widths: Vec<u64> = widths.iter().map(|&width| width as u64).collect();
         let chips = ChipMapping {
+            num_airs: widths.len(),
             pc_to_chip: build_pc_to_chip(exe, &self.inventory, executor_idx_to_air_idx)
                 .map_err(map_rvr_compile_error)?,
-            chip_widths: Some(widths.clone()),
+            chip_widths: Some(widths),
         };
         let compiled =
             compile_metered_cost_profiled(exe, extensions.lifters(), &chips, guest_debug_map)
@@ -662,7 +665,6 @@ where
             initial_image: RvrInitialImage::from(exe),
             runtime_hooks: extensions.into_runtime_hooks(),
             compiled,
-            widths,
         })
     }
 }
