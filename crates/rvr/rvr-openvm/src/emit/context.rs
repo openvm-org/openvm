@@ -1,7 +1,6 @@
 use std::{collections::HashSet, fmt::Write};
 
-use openvm_instructions::riscv::RV64_MEMORY_AS;
-use rvr_openvm_ir::MemWidth;
+use rvr_openvm_ir::{MemWidth, PageAddressSpace, ValueSlot};
 
 use super::codegen::hex_u32;
 
@@ -220,10 +219,6 @@ impl<'a> EmitContext<'a> {
             31 => "t6",
             _ => unreachable!(),
         }
-    }
-
-    pub(crate) fn traces_values(&self) -> bool {
-        self.mode.traces_values()
     }
 
     fn read_reg_impl(&mut self, idx: u8, kind: RegisterReadKind) -> String {
@@ -485,7 +480,7 @@ impl<'a> EmitContext<'a> {
         self.write_line("}");
     }
 
-    pub fn trace_page_access(&mut self, addr: &str, width: MemWidth, addr_space: u32) {
+    pub fn trace_page_access(&mut self, addr: &str, width: MemWidth, addr_space: PageAddressSpace) {
         assert!(
             !self.mode.traces_values(),
             "page-only access is invalid when values are being traced"
@@ -493,13 +488,14 @@ impl<'a> EmitContext<'a> {
         if !matches!(self.mode, EmitMode::Metered { .. }) {
             return;
         }
-        let touches_memory = addr_space == RV64_MEMORY_AS;
+        let touches_memory = addr_space.is_main_memory();
         if touches_memory {
             self.flush_page_locals();
         }
         let size = width.bytes();
         self.write_line(&format!(
-            "trace_page_access(state, {addr}, {size}u, {addr_space}u);"
+            "trace_page_access(state, {addr}, {size}u, {}u);",
+            addr_space.id()
         ));
         if touches_memory {
             self.reload_page_locals();
@@ -510,7 +506,7 @@ impl<'a> EmitContext<'a> {
         &mut self,
         base_addr: &str,
         num_dwords: &str,
-        addr_space: u32,
+        addr_space: PageAddressSpace,
     ) {
         assert!(
             !self.mode.traces_values(),
@@ -519,12 +515,13 @@ impl<'a> EmitContext<'a> {
         if !matches!(self.mode, EmitMode::Metered { .. }) {
             return;
         }
-        let touches_memory = addr_space == RV64_MEMORY_AS;
+        let touches_memory = addr_space.is_main_memory();
         if touches_memory {
             self.flush_page_locals();
         }
         self.write_line(&format!(
-            "trace_page_access_u64_range(state, {base_addr}, {num_dwords}, {addr_space}u);"
+            "trace_page_access_u64_range(state, {base_addr}, {num_dwords}, {}u);",
+            addr_space.id()
         ));
         if touches_memory {
             self.reload_page_locals();
@@ -581,16 +578,16 @@ impl<'a> EmitContext<'a> {
 }
 
 impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
-    fn read_reg(&mut self, idx: u8) -> String {
-        EmitContext::read_reg(self, idx)
+    fn read_slot(&mut self, slot: ValueSlot) -> String {
+        EmitContext::read_reg(self, rv64_slot_index(slot))
     }
 
-    fn peek_reg(&mut self, idx: u8) -> String {
-        EmitContext::peek_reg(self, idx)
+    fn peek_slot(&mut self, slot: ValueSlot) -> String {
+        EmitContext::peek_reg(self, rv64_slot_index(slot))
     }
 
-    fn write_reg(&mut self, idx: u8, val: &str) {
-        EmitContext::write_reg(self, idx, val)
+    fn write_slot(&mut self, slot: ValueSlot, val: &str) {
+        EmitContext::write_reg(self, rv64_slot_index(slot), val)
     }
 
     fn write_line(&mut self, s: &str) {
@@ -638,13 +635,24 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
         EmitContext::trace_chip_if_nonzero(self, chip_idx, count_expr);
     }
 
-    fn trace_page_access(&mut self, addr: &str, width: MemWidth, addr_space: u32) {
+    fn trace_page_access(&mut self, addr: &str, width: MemWidth, addr_space: PageAddressSpace) {
         EmitContext::trace_page_access(self, addr, width, addr_space);
     }
 
-    fn trace_page_access_u64_range(&mut self, base_addr: &str, num_dwords: &str, addr_space: u32) {
+    fn trace_page_access_u64_range(
+        &mut self,
+        base_addr: &str,
+        num_dwords: &str,
+        addr_space: PageAddressSpace,
+    ) {
         EmitContext::trace_page_access_u64_range(self, base_addr, num_dwords, addr_space);
     }
+}
+
+fn rv64_slot_index(slot: ValueSlot) -> u8 {
+    let index = u8::try_from(slot.index()).expect("RV64 value slot index must fit in u8");
+    assert!(index < 32, "RV64 value slot index must name x0..x31");
+    index
 }
 
 #[cfg(test)]

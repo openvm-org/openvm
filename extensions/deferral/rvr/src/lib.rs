@@ -13,13 +13,22 @@ use openvm_circuit::arch::{
     rvr::io::OpenVmIoState,
 };
 use openvm_deferral_transpiler::DeferralOpcode;
-use openvm_instructions::{LocalOpcode, VM_DIGEST_WIDTH};
+use openvm_instructions::{
+    riscv::{RV64_NUM_REGISTERS, RV64_REGISTER_BYTES},
+    LocalOpcode, VM_DIGEST_WIDTH,
+};
 use openvm_stark_backend::p3_field::PrimeField32;
-use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, FixedTraceRows, Instr, InstrAt, LiftedInstr, Reg};
+use rvr_openvm_ir::{
+    CfgEffect, ExtEmitCtx, ExtInstr, FixedTraceRows, InstrAt, LiftedInstr, ValueSlot,
+};
 use rvr_openvm_lift::{
-    air_index_to_c, decode_reg, fixed_trace_rows_for_chip, opcode_air_idx, AirIndex,
+    air_index_to_c, decode_value_slot, fixed_trace_rows_for_chip, opcode_air_idx, AirIndex,
     ExtensionError, RvrExtension, RvrExtensionCtx, RvrInstruction, RvrRuntimeExtension,
 };
+
+fn decode_reg(value: u32) -> ValueSlot {
+    decode_value_slot(value, RV64_REGISTER_BYTES as u32, RV64_NUM_REGISTERS as u32)
+}
 
 /// Size in bytes of a serialized deferral commitment.
 pub const DEFERRAL_COMMIT_NUM_BYTES: usize = VM_DIGEST_WIDTH * core::mem::size_of::<u32>();
@@ -61,8 +70,8 @@ impl DeferralCtx {
 /// IR node for a deferral CALL instruction.
 #[derive(Debug, Clone)]
 pub struct DeferralCallInstr {
-    pub rd_reg: Reg,
-    pub rs_reg: Reg,
+    pub rd_reg: ValueSlot,
+    pub rs_reg: ValueSlot,
     pub def_idx: u32,
     pub poseidon2_chip_idx: Option<AirIndex>,
 }
@@ -73,8 +82,8 @@ impl ExtInstr for DeferralCallInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rd = ctx.read_reg(self.rd_reg);
-        let rs = ctx.read_reg(self.rs_reg);
+        let rd = ctx.read_slot(self.rd_reg);
+        let rs = ctx.read_slot(self.rs_reg);
         let def_idx = format!("{}u", self.def_idx);
         ctx.emit_call("rvr_ext_deferral_call", &["state", &rd, &rs, &def_idx]);
     }
@@ -87,16 +96,16 @@ impl ExtInstr for DeferralCallInstr {
         Box::new(self.clone())
     }
 
-    fn is_block_end(&self) -> bool {
-        false
+    fn cfg_effect(&self) -> CfgEffect {
+        CfgEffect::None
     }
 }
 
 /// IR node for a deferral OUTPUT instruction.
 #[derive(Debug, Clone)]
 pub struct DeferralOutputInstr {
-    pub rd_reg: Reg,
-    pub rs_reg: Reg,
+    pub rd_reg: ValueSlot,
+    pub rs_reg: ValueSlot,
     pub def_idx: u32,
     pub output_chip_idx: Option<AirIndex>,
     pub poseidon2_chip_idx: Option<AirIndex>,
@@ -108,8 +117,8 @@ impl ExtInstr for DeferralOutputInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rd = ctx.read_reg(self.rd_reg);
-        let rs = ctx.read_reg(self.rs_reg);
+        let rd = ctx.read_slot(self.rd_reg);
+        let rs = ctx.read_slot(self.rs_reg);
         let output = air_index_to_c(self.output_chip_idx);
         let poseidon2 = air_index_to_c(self.poseidon2_chip_idx);
         let def_idx = format!("{}u", self.def_idx);
@@ -128,8 +137,8 @@ impl ExtInstr for DeferralOutputInstr {
         Box::new(self.clone())
     }
 
-    fn is_block_end(&self) -> bool {
-        false
+    fn cfg_effect(&self) -> CfgEffect {
+        CfgEffect::None
     }
 }
 
@@ -166,12 +175,12 @@ impl RvrExtension for DeferralRvrExtension {
             let def_idx = insn.c;
             return Some(LiftedInstr::Body(InstrAt {
                 pc,
-                instr: Instr::Ext(Box::new(DeferralCallInstr {
+                instr: Box::new(DeferralCallInstr {
                     rd_reg,
                     rs_reg,
                     def_idx,
                     poseidon2_chip_idx: self.poseidon2_chip_idx,
-                })),
+                }),
                 source_loc: None,
             }));
         }
@@ -182,13 +191,13 @@ impl RvrExtension for DeferralRvrExtension {
             let def_idx = insn.c;
             return Some(LiftedInstr::Body(InstrAt {
                 pc,
-                instr: Instr::Ext(Box::new(DeferralOutputInstr {
+                instr: Box::new(DeferralOutputInstr {
                     rd_reg,
                     rs_reg,
                     def_idx,
                     output_chip_idx: self.output_chip_idx,
                     poseidon2_chip_idx: self.poseidon2_chip_idx,
-                })),
+                }),
                 source_loc: None,
             }));
         }

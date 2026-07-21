@@ -515,7 +515,12 @@ impl CProject {
         let text_end = Self::dispatch_max_pc(blocks, entry_point, text_start);
         let table_size = Self::dispatch_table_size(text_start, text_end);
 
-        self.write_constants(text_start, text_end, table_size)?;
+        self.write_constants(
+            text_start,
+            text_end,
+            table_size,
+            extensions.max_main_memory_pages_per_instruction(),
+        )?;
         self.write_support_files()?;
         self.write_extension_files(extensions)?;
         let ext_headers = extensions.c_headers();
@@ -533,8 +538,15 @@ impl CProject {
         text_start: u64,
         text_end: u64,
         dispatch_table_size: usize,
+        max_mem_pages_per_insn: usize,
     ) -> io::Result<()> {
-        let h = constants_header(text_start, text_end, dispatch_table_size, self.num_airs);
+        let h = constants_header(
+            text_start,
+            text_end,
+            dispatch_table_size,
+            self.num_airs,
+            max_mem_pages_per_insn,
+        );
         let path = self.output_dir.join("openvm_constants.h");
         fs::write(&path, h)
     }
@@ -566,10 +578,6 @@ impl CProject {
         if let Some(content) = self.execution_kind.metered_block_header_content() {
             fs::write(self.output_dir.join("openvm_block.h"), content)?;
         }
-
-        // RISC-V M-extension helpers.
-        let muldiv_path = self.output_dir.join("rv_muldiv.h");
-        fs::write(&muldiv_path, include_str!("../../c/rv_muldiv.h"))?;
 
         // Memory-bounds checks are header-selected so hot helpers can inline.
         let bounds_h_path = self.output_dir.join("openvm_check_mem_bounds.h");
@@ -714,8 +722,7 @@ impl CProject {
         writeln!(h, "}}").unwrap();
         writeln!(h).unwrap();
 
-        // M-extension and IO headers.
-        writeln!(h, "#include \"rv_muldiv.h\"").unwrap();
+        // Runtime and extension headers.
         writeln!(h, "#include \"openvm_io.h\"").unwrap();
         for &(filename, _) in ext_headers {
             writeln!(h, "#include \"{filename}\"").unwrap();
@@ -1055,13 +1062,11 @@ impl CProject {
         };
         for instr_at in &block.instructions {
             add_base_row(&mut chip_counts, instr_at.pc)?;
-            if let Instr::Ext(extension) = &instr_at.instr {
-                add_extension_rows(&mut chip_counts, extension.as_ref())?;
-            }
+            add_extension_rows(&mut chip_counts, instr_at.instr.as_ref())?;
         }
         if !matches!(block.terminator, Terminator::FallThrough) {
             add_base_row(&mut chip_counts, block.terminator_pc)?;
-            if let Terminator::Extension(extension) = &block.terminator {
+            if let Terminator::Instr(extension) = &block.terminator {
                 add_extension_rows(&mut chip_counts, extension.as_ref())?;
             }
         }
@@ -1307,17 +1312,13 @@ impl CProject {
     }
 }
 
-fn instr_accesses_memory(instr: &Instr) -> bool {
-    match instr {
-        Instr::Load { .. } | Instr::Store { .. } => true,
-        Instr::Ext(ext) => ext.accesses_memory(),
-        _ => false,
-    }
+fn instr_accesses_memory(instr: &dyn Instr) -> bool {
+    instr.accesses_memory()
 }
 
 fn terminator_accesses_memory(terminator: &Terminator) -> bool {
     match terminator {
-        Terminator::Extension(ext) => ext.accesses_memory(),
+        Terminator::Instr(instr) => instr.accesses_memory(),
         _ => false,
     }
 }
@@ -1326,7 +1327,7 @@ fn block_accesses_memory(block: &Block) -> bool {
     block
         .instructions
         .iter()
-        .any(|instr_at| instr_accesses_memory(&instr_at.instr))
+        .any(|instr_at| instr_accesses_memory(instr_at.instr.as_ref()))
         || terminator_accesses_memory(&block.terminator)
 }
 
@@ -1334,7 +1335,7 @@ fn block_accesses_memory(block: &Block) -> bool {
 mod tests {
     use std::{collections::HashSet, path::Path};
 
-    use rvr_openvm_ir::{Block, ExtEmitCtx, ExtInstr, Instr, InstrAt, Terminator};
+    use rvr_openvm_ir::{Block, CfgEffect, ExtEmitCtx, ExtInstr, InstrAt, Terminator};
 
     use super::{CProject, RvrExecutionKind};
 
@@ -1355,6 +1356,10 @@ mod tests {
     impl ExtInstr for InvalidTraceChipInstr {
         fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
             ctx.trace_chip(1, "1u");
+        }
+
+        fn cfg_effect(&self) -> CfgEffect {
+            CfgEffect::None
         }
 
         fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -1437,7 +1442,7 @@ mod tests {
             end_pc: 0x108,
             instructions: vec![InstrAt {
                 pc: 0x100,
-                instr: Instr::Ext(Box::new(InvalidTraceChipInstr)),
+                instr: Box::new(InvalidTraceChipInstr),
                 source_loc: None,
             }],
             terminator: Terminator::Exit { code: 0 },

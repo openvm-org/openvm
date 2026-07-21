@@ -1,7 +1,7 @@
 //! rvr-openvm-lift: Convert OpenVM VmExe to rvr-openvm-ir types.
 //!
 //! This crate provides the bridge between OpenVM's instruction format
-//! and the rvr-openvm-ir intermediate representation for RISC-V instructions.
+//! and the target-neutral rvr-openvm-ir intermediate representation.
 //!
 //! The `opcode` module lifts individual OpenVM instructions to `LiftedInstr`,
 //! which is either a body `Instr` or a `Terminator` (control flow).
@@ -12,19 +12,15 @@
 pub mod cfg;
 pub mod convert;
 pub mod extension;
-pub mod helpers;
 pub mod instruction;
 pub mod opcode;
 
 pub use cfg::{build_blocks, CfgError};
-pub use convert::{
-    convert_vmexe_to_ir, convert_vmexe_to_ir_with_debug, scan_init_memory_for_code_pointers,
-    ConvertError,
-};
+pub use convert::{convert_vmexe_to_ir, convert_vmexe_to_ir_with_debug, ConvertError};
 pub use extension::{
-    air_index_to_c, fixed_trace_rows_for_chip, opcode_air_idx, AirIndex, ExtensionError,
-    ExtensionRegistry, RvrExtension, RvrExtensionCtx, RvrExtensions, RvrRuntimeExtension,
-    TraceChipIndex, VmRvrExtension,
+    air_index_to_c, decode_value_slot, fixed_trace_rows_for_chip, opcode_air_idx, AirIndex,
+    ExtensionError, ExtensionRegistry, RvrExtension, RvrExtensionCtx, RvrExtensions,
+    RvrRuntimeExtension, TraceChipIndex, VmRvrExtension,
 };
-pub use helpers::{decode_imm_cg, decode_reg};
 pub use instruction::RvrInstruction;
+pub use opcode::NopInstr;

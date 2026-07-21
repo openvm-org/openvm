@@ -34,7 +34,7 @@ use openvm_stark_backend::p3_field::PrimeField32;
 use openvm_stark_backend::{StarkEngine, StarkProtocolConfig, Val};
 #[cfg(feature = "rvr")]
 use rvr_openvm_ext_riscv::{
-    Rv64IExtension, Rv64IRuntimeHooks, Rv64IoExtension, Rv64IoRuntimeHooks,
+    Rv64IExtension, Rv64IRuntimeHooks, Rv64IoExtension, Rv64IoRuntimeHooks, Rv64MExtension,
 };
 #[cfg(feature = "rvr")]
 use rvr_openvm_lift::{RvrExtensionCtx, RvrExtensions, VmRvrExtension};
@@ -109,7 +109,11 @@ impl<F: PrimeField32> VmRvrExtension<F> for Rv64Io {
 }
 
 #[cfg(feature = "rvr")]
-impl<F: PrimeField32> VmRvrExtension<F> for Rv64M {}
+impl<F: PrimeField32> VmRvrExtension<F> for Rv64M {
+    fn extend_rvr(&self, extensions: &mut RvrExtensions, _ctx: Option<&RvrExtensionCtx>) {
+        extensions.register_lifter(Rv64MExtension::new());
+    }
+}
 
 // ============ Executor and Periphery Enums for Extension ============
 

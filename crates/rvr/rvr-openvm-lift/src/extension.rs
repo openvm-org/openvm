@@ -1,10 +1,13 @@
 //! Extension registry for plugging in new opcode families.
 
-use std::collections::HashMap;
+use std::{
+    any::type_name,
+    collections::{HashMap, HashSet},
+};
 
-use openvm_instructions::{LocalOpcode, VmOpcode};
+use openvm_instructions::{exe::SparseMemoryImage, LocalOpcode, VmOpcode};
 use openvm_stark_backend::p3_field::PrimeField32;
-use rvr_openvm_ir::{FixedTraceRows, LiftedInstr};
+use rvr_openvm_ir::{FixedTraceRows, LiftedInstr, ValueSlot};
 
 use crate::RvrInstruction;
 
@@ -60,6 +63,15 @@ pub fn fixed_trace_rows_for_chip(idx: Option<AirIndex>, count: u32) -> Vec<Fixed
         }]
     })
     .unwrap_or_default()
+}
+
+/// Decodes an aligned OpenVM operand into an opaque value slot.
+pub fn decode_value_slot(value: u32, stride: u32, slot_count: u32) -> ValueSlot {
+    assert!(stride != 0, "value-slot stride must be nonzero");
+    assert_eq!(value % stride, 0, "value-slot operand must be slot-aligned");
+    let index = value / stride;
+    assert!(index < slot_count, "value-slot operand is out of bounds");
+    ValueSlot::new(index)
 }
 
 /// Data needed by extension crates to resolve opcode/chip metadata when
@@ -132,6 +144,15 @@ pub enum ExtensionError {
     AirIndexOutOfBounds { opcode: VmOpcode, air_idx: usize },
     #[error("failed to register host callbacks: {0}")]
     HostCallbackRegistration(String),
+    #[error(
+        "opcode {opcode:?} at pc {pc:#x} was claimed by both {first_extension} and {second_extension}"
+    )]
+    DuplicateOpcodeClaim {
+        opcode: VmOpcode,
+        pc: u64,
+        first_extension: &'static str,
+        second_extension: &'static str,
+    },
 }
 
 /// Trait for an rvr-openvm extension. Each extension handles a range of opcodes
@@ -164,6 +185,21 @@ pub trait RvrExtension: Send + Sync {
     /// Whether this extension's static library calls the shared memory wrappers.
     fn uses_memory_wrappers(&self) -> bool {
         false
+    }
+
+    /// Maximum number of main-memory pages one instruction can add to the
+    /// metering buffer.
+    fn max_main_memory_pages_per_instruction(&self) -> usize {
+        0
+    }
+
+    /// Returns instruction targets encoded in target-specific initialized data.
+    fn extra_cfg_targets(
+        &self,
+        _init_memory: &SparseMemoryImage,
+        _valid_pcs: &HashSet<u64>,
+    ) -> Vec<u64> {
+        Vec::new()
     }
 
     /// Third-party C source files compiled separately.
@@ -223,7 +259,12 @@ impl<F: PrimeField32, EXT: VmRvrExtension<F>> VmRvrExtension<F> for Option<EXT> 
 /// Registry of extensions, consulted during lifting and project generation.
 #[derive(Default)]
 pub struct ExtensionRegistry {
-    extensions: Vec<Box<dyn RvrExtension>>,
+    extensions: Vec<RegisteredExtension>,
+}
+
+struct RegisteredExtension {
+    name: &'static str,
+    extension: Box<dyn RvrExtension>,
 }
 
 impl ExtensionRegistry {
@@ -233,23 +274,43 @@ impl ExtensionRegistry {
     }
 
     /// Register an extension.
-    pub fn register(&mut self, ext: impl RvrExtension + 'static) {
-        self.extensions.push(Box::new(ext));
+    pub fn register<E: RvrExtension + 'static>(&mut self, ext: E) {
+        self.extensions.push(RegisteredExtension {
+            name: type_name::<E>(),
+            extension: Box::new(ext),
+        });
     }
 
     /// Try to lift an instruction through all registered extensions.
-    /// Returns the first successful lift, or `None`.
-    pub fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
-        self.extensions
-            .iter()
-            .find_map(|ext| ext.try_lift(insn, pc))
+    /// Returns an error if multiple extensions claim the same instruction.
+    pub fn try_lift(
+        &self,
+        insn: &RvrInstruction,
+        pc: u64,
+    ) -> Result<Option<LiftedInstr>, ExtensionError> {
+        let mut lifted: Option<(&'static str, LiftedInstr)> = None;
+        for registered in &self.extensions {
+            let Some(candidate) = registered.extension.try_lift(insn, pc) else {
+                continue;
+            };
+            if let Some((first_extension, _)) = &lifted {
+                return Err(ExtensionError::DuplicateOpcodeClaim {
+                    opcode: insn.opcode,
+                    pc,
+                    first_extension,
+                    second_extension: registered.name,
+                });
+            }
+            lifted = Some((registered.name, candidate));
+        }
+        Ok(lifted.map(|(_, instruction)| instruction))
     }
 
     /// Collect all C headers from all registered extensions.
     pub fn c_headers(&self) -> Vec<(&'static str, &'static str)> {
         self.extensions
             .iter()
-            .flat_map(|ext| ext.c_headers())
+            .flat_map(|ext| ext.extension.c_headers())
             .collect()
     }
 
@@ -257,7 +318,7 @@ impl ExtensionRegistry {
     pub fn c_sources(&self) -> Vec<(&'static str, &'static str)> {
         self.extensions
             .iter()
-            .flat_map(|ext| ext.c_sources())
+            .flat_map(|ext| ext.extension.c_sources())
             .collect()
     }
 
@@ -265,20 +326,47 @@ impl ExtensionRegistry {
     pub fn staticlib_files(&self) -> Vec<(&'static str, &'static [u8])> {
         self.extensions
             .iter()
-            .flat_map(|ext| ext.staticlib_files())
+            .flat_map(|ext| ext.extension.staticlib_files())
             .collect()
     }
 
     /// Whether any registered extension needs the shared memory wrappers.
     pub fn uses_memory_wrappers(&self) -> bool {
-        self.extensions.iter().any(|ext| ext.uses_memory_wrappers())
+        self.extensions
+            .iter()
+            .any(|ext| ext.extension.uses_memory_wrappers())
+    }
+
+    /// Maximum per-instruction main-memory page contribution across extensions.
+    pub fn max_main_memory_pages_per_instruction(&self) -> usize {
+        self.extensions
+            .iter()
+            .map(|ext| ext.extension.max_main_memory_pages_per_instruction())
+            .max()
+            .unwrap_or(0)
+    }
+
+    /// Collect target-specific CFG roots from initialized memory.
+    pub fn extra_cfg_targets(
+        &self,
+        init_memory: &SparseMemoryImage,
+        valid_pcs: &HashSet<u64>,
+    ) -> Vec<u64> {
+        let mut targets = self
+            .extensions
+            .iter()
+            .flat_map(|ext| ext.extension.extra_cfg_targets(init_memory, valid_pcs))
+            .collect::<Vec<_>>();
+        targets.sort_unstable();
+        targets.dedup();
+        targets
     }
 
     /// Collect third-party C source files from all extensions.
     pub fn vendored_c_sources(&self) -> Vec<(&'static str, &'static str)> {
         self.extensions
             .iter()
-            .flat_map(|ext| ext.vendored_c_sources())
+            .flat_map(|ext| ext.extension.vendored_c_sources())
             .collect()
     }
 
@@ -286,7 +374,7 @@ impl ExtensionRegistry {
     pub fn extra_c_include_files(&self) -> Vec<(&'static str, &'static str)> {
         self.extensions
             .iter()
-            .flat_map(|ext| ext.extra_c_include_files())
+            .flat_map(|ext| ext.extension.extra_c_include_files())
             .collect()
     }
 
@@ -294,7 +382,7 @@ impl ExtensionRegistry {
     pub fn extra_cflags(&self) -> Vec<String> {
         self.extensions
             .iter()
-            .flat_map(|ext| ext.extra_cflags())
+            .flat_map(|ext| ext.extension.extra_cflags())
             .collect()
     }
 }
@@ -325,5 +413,44 @@ impl RvrExtensions {
 
     pub fn into_runtime_hooks(self) -> Vec<Box<dyn RvrRuntimeExtension>> {
         self.runtime_hooks
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use openvm_instructions::VmOpcode;
+    use rvr_openvm_ir::{InstrAt, LiftedInstr};
+
+    use super::*;
+    use crate::NopInstr;
+
+    struct ClaimingExtension;
+
+    impl RvrExtension for ClaimingExtension {
+        fn try_lift(&self, _insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
+            Some(LiftedInstr::Body(InstrAt {
+                pc,
+                instr: Box::new(NopInstr),
+                source_loc: None,
+            }))
+        }
+
+        fn c_headers(&self) -> Vec<(&'static str, &'static str)> {
+            Vec::new()
+        }
+    }
+
+    #[test]
+    fn duplicate_opcode_claims_are_rejected() {
+        let mut registry = ExtensionRegistry::new();
+        registry.register(ClaimingExtension);
+        registry.register(ClaimingExtension);
+        let instruction =
+            RvrInstruction::from_canonical(VmOpcode::from_usize(123), [0; 7], 2_013_265_921);
+
+        assert!(matches!(
+            registry.try_lift(&instruction, 0x100),
+            Err(ExtensionError::DuplicateOpcodeClaim { .. })
+        ));
     }
 }

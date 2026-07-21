@@ -6,22 +6,9 @@ use openvm_instructions::{
     DEFERRAL_AS, PUBLIC_VALUES_AS, VM_DIGEST_WIDTH,
 };
 use openvm_platform::{memory::MEM_SIZE, WORD_SIZE};
-use openvm_riscv_guest::MAX_HINT_BUFFER_DWORDS;
 
 const BYTE_SPACE_PTRS_PER_LEAF: usize = core::mem::size_of::<u16>() * VM_DIGEST_WIDTH;
 const DEFERRAL_PTRS_PER_LEAF: usize = VM_DIGEST_WIDTH;
-
-/// Worst-case AS_MEMORY pages a single instruction can touch.
-///
-/// Bound is set by `HINT_BUFFER`, which writes up to
-/// `MAX_HINT_BUFFER_DWORDS * WORD_SIZE` contiguous bytes. One AS_MEMORY page
-/// covers `BYTE_SPACE_PTRS_PER_LEAF * 2^PAGE_MASK_LEAF_BITS` bytes. The `+1`
-/// covers worst-case misalignment of the range across page boundaries.
-pub const MAX_MEM_PAGES_PER_INSN: usize = {
-    let page_bytes = BYTE_SPACE_PTRS_PER_LEAF * (1 << PAGE_MASK_LEAF_BITS);
-    let max_bytes = MAX_HINT_BUFFER_DWORDS * WORD_SIZE;
-    max_bytes.div_ceil(page_bytes) + 1
-};
 
 /// Maximum AS_MEMORY page buffer entries per segment check interval.
 ///
@@ -48,6 +35,7 @@ pub fn constants_header(
     text_end: u64,
     dispatch_table_size: usize,
     num_airs: Option<u32>,
+    max_mem_pages_per_insn: usize,
 ) -> String {
     let memory_mask = MEM_SIZE as u64 - 1;
     let byte_space_ptrs_per_leaf_bits = BYTE_SPACE_PTRS_PER_LEAF.ilog2();
@@ -76,7 +64,7 @@ static constexpr uint32_t TRACER_MEM_PAGE_BUF_CAP = {MEM_PAGE_BUF_CAP};
 static constexpr uint32_t TRACER_PV_PAGE_BUF_CAP = {PV_PAGE_BUF_CAP};
 static constexpr uint32_t TRACER_DEFERRAL_PAGE_BUF_CAP = {DEFERRAL_PAGE_BUF_CAP};
 static constexpr uint32_t TRACER_SEGMENT_CHECK_INSNS = {SEGMENT_CHECK_INSNS};
-static constexpr uint32_t TRACER_MAX_MEM_PAGES_PER_INSN = {MAX_MEM_PAGES_PER_INSN};
+static constexpr uint32_t TRACER_MAX_MEM_PAGES_PER_INSN = {max_mem_pages_per_insn};
 static constexpr uint32_t TRACER_MAX_PV_PAGES_PER_INSN = {MAX_PV_PAGES_PER_INSN};
 static constexpr uint32_t TRACER_MAX_DEFERRAL_PAGES_PER_INSN = {MAX_DEFERRAL_PAGES_PER_INSN};
 "

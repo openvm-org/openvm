@@ -7246,7 +7246,6 @@ version = "2.0.0"
 dependencies = [
  "openvm-instructions",
  "openvm-platform",
- "openvm-riscv-guest",
  "rvr-openvm-build",
  "rvr-openvm-ir",
  "rvr-openvm-lift",
@@ -7469,7 +7468,6 @@ version = "2.0.0"
 dependencies = [
  "libloading",
  "openvm-instructions",
- "openvm-riscv-transpiler",
  "openvm-stark-backend",
  "p3-baby-bear",
  "rvr-openvm-ir",

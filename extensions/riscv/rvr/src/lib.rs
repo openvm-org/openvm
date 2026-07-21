@@ -1,32 +1,44 @@
-//! rvr lifter for the RISC-V I/O sub-extension: HINT_STORED, HINT_BUFFER,
-//! and stores to public values, including REVEAL.
-//!
-//! TODO: check if other RISC-V instructions/opcodes can be separated into
-//! extensions.
+//! RVR lifting, code generation, and runtime hooks for RV64 extensions.
 #![cfg(feature = "rvr")]
 
-use std::{ffi::c_void, io::Write, iter::repeat_with};
+mod i;
+mod instruction;
+mod m;
 
+use std::{
+    collections::{BTreeMap, HashSet},
+    ffi::c_void,
+    io::Write,
+    iter::repeat_with,
+};
+
+pub use m::Rv64MExtension;
 use openvm_circuit::arch::rvr::io::{checked_mem_bounds_range, OpenVmIoState};
 use openvm_instructions::{
+    exe::SparseMemoryImage,
+    metering::PAGE_MASK_LEAF_BITS,
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_BYTES, RV64_REGISTER_NUM_LIMBS},
-    LocalOpcode, SystemOpcode, PUBLIC_VALUES_AS,
+    LocalOpcode, SystemOpcode, PUBLIC_VALUES_AS, VM_DIGEST_WIDTH,
 };
-use openvm_platform::memory::MEM_SIZE;
+use openvm_platform::{memory::MEM_SIZE, WORD_SIZE};
 use openvm_riscv_transpiler::{
     Rv64HintStoreOpcode, Rv64LoadStoreOpcode, Rv64Phantom, MAX_HINT_BUFFER_DWORDS,
 };
 use rand::Rng;
-use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, MemWidth, Reg};
-use rvr_openvm_lift::{
-    air_index_to_c, decode_imm_cg, decode_reg, opcode_air_idx, AirIndex, ExtensionError,
-    RvrExtension, RvrExtensionCtx, RvrInstruction, RvrRuntimeExtension,
+use rvr_openvm_ir::{
+    CfgEffect, ExtEmitCtx, ExtInstr, InstrAt, LiftedInstr, MemWidth, PageAddressSpace, ValueSlot,
 };
+use rvr_openvm_lift::{
+    air_index_to_c, opcode_air_idx, AirIndex, ExtensionError, RvrExtension, RvrExtensionCtx,
+    RvrInstruction, RvrRuntimeExtension,
+};
+
+use crate::i::{decode_imm_cg, decode_reg};
 
 /// HINT_STORED: pop one register word (8 bytes) from the hint stream into `mem[reg[ptr_reg]]`.
 #[derive(Debug, Clone)]
 pub struct HintStoreWInstr {
-    pub ptr_reg: Reg,
+    pub ptr_reg: ValueSlot,
 }
 
 impl ExtInstr for HintStoreWInstr {
@@ -35,9 +47,17 @@ impl ExtInstr for HintStoreWInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let ptr = ctx.read_reg(self.ptr_reg);
+        let ptr = ctx.read_slot(self.ptr_reg);
         ctx.emit_checked_call_without_page_flush("openvm_hint_storew", &[&ptr]);
-        ctx.trace_page_access(&ptr, MemWidth::Double, RV64_MEMORY_AS);
+        ctx.trace_page_access(
+            &ptr,
+            MemWidth::Double,
+            PageAddressSpace::MainMemory(RV64_MEMORY_AS),
+        );
+    }
+
+    fn cfg_effect(&self) -> CfgEffect {
+        CfgEffect::None
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -49,8 +69,8 @@ impl ExtInstr for HintStoreWInstr {
 /// write them sequentially starting at `mem[reg[ptr_reg]]`.
 #[derive(Debug, Clone)]
 pub struct HintBufferInstr {
-    pub ptr_reg: Reg,
-    pub num_words_reg: Reg,
+    pub ptr_reg: ValueSlot,
+    pub num_words_reg: ValueSlot,
     pub chip_idx: Option<AirIndex>,
 }
 
@@ -60,8 +80,8 @@ impl ExtInstr for HintBufferInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let ptr = ctx.read_reg(self.ptr_reg);
-        let n = ctx.read_reg(self.num_words_reg);
+        let ptr = ctx.read_slot(self.ptr_reg);
+        let n = ctx.read_slot(self.num_words_reg);
         ctx.write_line(&format!(
             "if (unlikely(({n} - 1ull) >= {MAX_HINT_BUFFER_DWORDS}ull)) {{"
         ));
@@ -74,7 +94,11 @@ impl ExtInstr for HintBufferInstr {
         let chip_idx = air_index_to_c(self.chip_idx);
         // After the check above, n - 1 is at most 1022.
         ctx.trace_chip_if_nonzero(chip_idx, &format!("(uint32_t)({n} - 1ull)"));
-        ctx.trace_page_access_u64_range(&ptr, &n, RV64_MEMORY_AS);
+        ctx.trace_page_access_u64_range(&ptr, &n, PageAddressSpace::MainMemory(RV64_MEMORY_AS));
+    }
+
+    fn cfg_effect(&self) -> CfgEffect {
+        CfgEffect::None
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -86,8 +110,8 @@ impl ExtInstr for HintBufferInstr {
 /// This is also used for REVEAL.
 #[derive(Debug, Clone)]
 pub struct RevealInstr {
-    pub src_reg: Reg,
-    pub ptr_reg: Reg,
+    pub src_reg: ValueSlot,
+    pub ptr_reg: ValueSlot,
     pub offset: i32,
     pub width: MemWidth,
 }
@@ -102,8 +126,8 @@ impl ExtInstr for RevealInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let src = ctx.read_reg(self.src_reg);
-        let ptr = ctx.read_reg(self.ptr_reg);
+        let src = ctx.read_slot(self.src_reg);
+        let ptr = ctx.read_slot(self.ptr_reg);
         let addr = match self.offset.cmp(&0) {
             std::cmp::Ordering::Less => {
                 format!("({ptr} - 0x{:08x}ull)", self.offset.unsigned_abs())
@@ -113,7 +137,11 @@ impl ExtInstr for RevealInstr {
         };
         let width = format!("{}u", self.width.bytes());
         ctx.emit_checked_call_without_page_flush("openvm_reveal", &[&src, &addr, &width]);
-        ctx.trace_page_access(&addr, self.width, PUBLIC_VALUES_AS);
+        ctx.trace_page_access(&addr, self.width, PageAddressSpace::Other(PUBLIC_VALUES_AS));
+    }
+
+    fn cfg_effect(&self) -> CfgEffect {
+        CfgEffect::None
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -134,6 +162,10 @@ impl ExtInstr for HintInputInstr {
         ctx.emit_call_without_page_flush("openvm_hint_input", &[]);
     }
 
+    fn cfg_effect(&self) -> CfgEffect {
+        CfgEffect::None
+    }
+
     fn clone_box(&self) -> Box<dyn ExtInstr> {
         Box::new(self.clone())
     }
@@ -142,8 +174,8 @@ impl ExtInstr for HintInputInstr {
 /// PRINT_STR phantom: print a UTF-8 string from guest memory to host stdout.
 #[derive(Debug, Clone)]
 pub struct PrintStrInstr {
-    pub ptr_reg: Reg,
-    pub len_reg: Reg,
+    pub ptr_reg: ValueSlot,
+    pub len_reg: ValueSlot,
 }
 
 impl ExtInstr for PrintStrInstr {
@@ -152,9 +184,13 @@ impl ExtInstr for PrintStrInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let ptr = ctx.peek_reg(self.ptr_reg);
-        let len = ctx.peek_reg(self.len_reg);
+        let ptr = ctx.peek_slot(self.ptr_reg);
+        let len = ctx.peek_slot(self.len_reg);
         ctx.emit_checked_call_without_page_flush("openvm_print_str", &[&ptr, &len]);
+    }
+
+    fn cfg_effect(&self) -> CfgEffect {
+        CfgEffect::None
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -166,7 +202,7 @@ impl ExtInstr for PrintStrInstr {
 /// random bytes drawn from the host's persistent RNG.
 #[derive(Debug, Clone)]
 pub struct HintRandomInstr {
-    pub num_words_reg: Reg,
+    pub num_words_reg: ValueSlot,
 }
 
 impl ExtInstr for HintRandomInstr {
@@ -175,8 +211,12 @@ impl ExtInstr for HintRandomInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let n = ctx.peek_reg(self.num_words_reg);
+        let n = ctx.peek_slot(self.num_words_reg);
         ctx.emit_checked_call_without_page_flush("openvm_hint_random", &[&n]);
+    }
+
+    fn cfg_effect(&self) -> CfgEffect {
+        CfgEffect::None
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -207,7 +247,7 @@ impl RvrExtension for Rv64IoExtension {
             let ptr_reg = decode_reg(insn.b);
             return Some(LiftedInstr::Body(InstrAt {
                 pc,
-                instr: Instr::Ext(Box::new(HintStoreWInstr { ptr_reg })),
+                instr: Box::new(HintStoreWInstr { ptr_reg }),
                 source_loc: None,
             }));
         }
@@ -217,11 +257,11 @@ impl RvrExtension for Rv64IoExtension {
             let ptr_reg = decode_reg(insn.b);
             return Some(LiftedInstr::Body(InstrAt {
                 pc,
-                instr: Instr::Ext(Box::new(HintBufferInstr {
+                instr: Box::new(HintBufferInstr {
                     ptr_reg,
                     num_words_reg,
                     chip_idx: self.hint_store_chip_idx,
-                })),
+                }),
                 source_loc: None,
             }));
         }
@@ -232,12 +272,12 @@ impl RvrExtension for Rv64IoExtension {
             let offset = decode_imm_cg(insn);
             return Some(LiftedInstr::Body(InstrAt {
                 pc,
-                instr: Instr::Ext(Box::new(RevealInstr {
+                instr: Box::new(RevealInstr {
                     src_reg,
                     ptr_reg,
                     offset: offset as i32,
                     width,
-                })),
+                }),
                 source_loc: None,
             }));
         }
@@ -257,6 +297,12 @@ impl RvrExtension for Rv64IoExtension {
             "rv64io_callbacks.c",
             include_str!("../c/rv64io_callbacks.c"),
         )]
+    }
+
+    fn max_main_memory_pages_per_instruction(&self) -> usize {
+        let page_bytes = core::mem::size_of::<u16>() * VM_DIGEST_WIDTH * (1 << PAGE_MASK_LEAF_BITS);
+        let max_bytes = MAX_HINT_BUFFER_DWORDS * WORD_SIZE;
+        max_bytes.div_ceil(page_bytes) + 1
     }
 }
 
@@ -323,26 +369,27 @@ impl Default for Rv64IExtension {
 
 impl RvrExtension for Rv64IExtension {
     fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
-        if insn.opcode.as_usize() != SystemOpcode::PHANTOM.global_opcode_usize() {
-            return None;
+        if insn.opcode.as_usize() == SystemOpcode::PHANTOM.global_opcode_usize() {
+            let discriminant = (insn.c & 0xffff) as u16;
+            if let Some(phantom) = Rv64Phantom::from_repr(discriminant) {
+                let instr: Box<dyn ExtInstr> = match phantom {
+                    Rv64Phantom::HintInput => Box::new(HintInputInstr),
+                    Rv64Phantom::PrintStr => Box::new(PrintStrInstr {
+                        ptr_reg: decode_reg(insn.a),
+                        len_reg: decode_reg(insn.b),
+                    }),
+                    Rv64Phantom::HintRandom => Box::new(HintRandomInstr {
+                        num_words_reg: decode_reg(insn.a),
+                    }),
+                };
+                return Some(LiftedInstr::Body(InstrAt {
+                    pc,
+                    instr,
+                    source_loc: None,
+                }));
+            }
         }
-        let discriminant = (insn.c & 0xffff) as u16;
-        let phantom = Rv64Phantom::from_repr(discriminant)?;
-        let instr: Box<dyn ExtInstr> = match phantom {
-            Rv64Phantom::HintInput => Box::new(HintInputInstr),
-            Rv64Phantom::PrintStr => Box::new(PrintStrInstr {
-                ptr_reg: decode_reg(insn.a),
-                len_reg: decode_reg(insn.b),
-            }),
-            Rv64Phantom::HintRandom => Box::new(HintRandomInstr {
-                num_words_reg: decode_reg(insn.a),
-            }),
-        };
-        Some(LiftedInstr::Body(InstrAt {
-            pc,
-            instr: Instr::Ext(instr),
-            source_loc: None,
-        }))
+        i::try_lift(insn, pc)
     }
 
     fn c_headers(&self) -> Vec<(&'static str, &'static str)> {
@@ -357,6 +404,38 @@ impl RvrExtension for Rv64IExtension {
             "rv64i_phantom_callbacks.c",
             include_str!("../c/rv64i_phantom_callbacks.c"),
         )]
+    }
+
+    fn extra_cfg_targets(
+        &self,
+        init_memory: &SparseMemoryImage,
+        valid_pcs: &HashSet<u64>,
+    ) -> Vec<u64> {
+        let bytes = init_memory
+            .iter()
+            .filter_map(|(&(address_space, address), &byte)| {
+                (address_space == RV64_MEMORY_AS).then_some((address, byte))
+            })
+            .collect::<BTreeMap<_, _>>();
+        bytes
+            .keys()
+            .copied()
+            .filter(|address| address % 4 == 0)
+            .filter_map(|address| {
+                let address1 = address.checked_add(1)?;
+                let address2 = address.checked_add(2)?;
+                let address3 = address.checked_add(3)?;
+                let value = u32::from_le_bytes([
+                    *bytes.get(&address)?,
+                    *bytes.get(&address1)?,
+                    *bytes.get(&address2)?,
+                    *bytes.get(&address3)?,
+                ]);
+                valid_pcs
+                    .contains(&u64::from(value))
+                    .then_some(u64::from(value))
+            })
+            .collect()
     }
 }
 
@@ -534,15 +613,15 @@ mod tests {
     }
 
     impl ExtEmitCtx for TestEmitCtx {
-        fn read_reg(&mut self, idx: u8) -> String {
-            format!("r{idx}")
+        fn read_slot(&mut self, slot: ValueSlot) -> String {
+            format!("r{}", slot.index())
         }
 
-        fn peek_reg(&mut self, idx: u8) -> String {
-            format!("r{idx}")
+        fn peek_slot(&mut self, slot: ValueSlot) -> String {
+            format!("r{}", slot.index())
         }
 
-        fn write_reg(&mut self, _idx: u8, _val: &str) {}
+        fn write_slot(&mut self, _slot: ValueSlot, _val: &str) {}
 
         fn write_line(&mut self, s: &str) {
             self.lines.push(s.to_string());
@@ -597,10 +676,11 @@ mod tests {
             self.write_line("}");
         }
 
-        fn trace_page_access(&mut self, addr: &str, width: MemWidth, addr_space: u32) {
+        fn trace_page_access(&mut self, addr: &str, width: MemWidth, addr_space: PageAddressSpace) {
             let size = width.bytes();
             self.write_line(&format!(
-                "trace_page_access(state, {addr}, {size}u, {addr_space}u);"
+                "trace_page_access(state, {addr}, {size}u, {}u);",
+                addr_space.id()
             ));
         }
 
@@ -608,10 +688,11 @@ mod tests {
             &mut self,
             base_addr: &str,
             num_dwords: &str,
-            addr_space: u32,
+            addr_space: PageAddressSpace,
         ) {
             self.write_line(&format!(
-                "trace_page_access_u64_range(state, {base_addr}, {num_dwords}, {addr_space}u);"
+                "trace_page_access_u64_range(state, {base_addr}, {num_dwords}, {}u);",
+                addr_space.id()
             ));
         }
     }
@@ -635,11 +716,7 @@ mod tests {
             ],
         ));
         let lifted = ext.try_lift(&inst, 0x100).unwrap();
-        let LiftedInstr::Body(InstrAt {
-            instr: Instr::Ext(instr),
-            ..
-        }) = lifted
-        else {
+        let LiftedInstr::Body(InstrAt { instr, .. }) = lifted else {
             panic!("expected public-values store extension instruction");
         };
 
@@ -693,8 +770,8 @@ mod tests {
     fn reveal_accounts_for_the_offset_public_values_page() {
         let mut ctx = TestEmitCtx::default();
         RevealInstr {
-            src_reg: 5,
-            ptr_reg: 10,
+            src_reg: ValueSlot::new(5),
+            ptr_reg: ValueSlot::new(10),
             offset: 12,
             width: MemWidth::Word,
         }
@@ -899,7 +976,8 @@ mod tests {
     #[test_case(u64::MAX; "byte_count_overflow")]
     fn host_hint_random_rejects_invalid_full_rv64_count(num_words: u64) {
         let mut input_stream = VecDeque::new();
-        let mut hint_stream = VecDeque::from([0xa5]);
+        let mut hint_stream = HintStream::default();
+        hint_stream.set_hint(vec![0xa5]);
         let mut rng = StdRng::seed_from_u64(0);
         let mut memory = Vec::new();
         let mut public_values = Vec::new();
@@ -919,6 +997,9 @@ mod tests {
             &mut io as *mut OpenVmIoState<'_> as *mut c_void,
             num_words,
         ));
-        assert_eq!(io.hint_stream.iter().copied().collect::<Vec<_>>(), [0xa5]);
+        assert_eq!(io.hint_stream.remaining(), 1);
+        let mut hint = [0; 1];
+        io.hint_stream.copy_to_slice(&mut hint);
+        assert_eq!(hint, [0xa5]);
     }
 }

@@ -623,9 +623,6 @@ mod tests {
 
     #[test]
     #[should_panic]
-    // RVR skips this test since it is not a trusted program: it compiles to native code without
-    // OpenVM's runtime memory bounds checks, so an out-of-bounds load doesn't surface as a Rust
-    // panic.
     #[cfg(not(feature = "rvr"))]
     fn test_load_x0() {
         let config = test_rv64im_config();
@@ -641,6 +638,18 @@ mod tests {
         let executor = VmExecutor::new(config).unwrap();
         let instance = executor.instance(&exe).unwrap();
         instance.execute(vec![]).unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "Memory access out of bounds")]
+    #[cfg(all(feature = "rvr", not(feature = "unprotected")))]
+    fn test_rvr_load_x0_traps() {
+        if env::var(RVR_OOB_CHILD_ENV).is_ok() {
+            execute_rvr_example("load_x0");
+            return;
+        }
+
+        assert_child_aborts("tests::test_rvr_load_x0_traps");
     }
 
     #[test]

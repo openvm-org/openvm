@@ -1,13 +1,9 @@
-#ifndef RV_MULDIV_H
-#define RV_MULDIV_H
+#ifndef OPENVM_RVR_RV64M_H
+#define OPENVM_RVR_RV64M_H
 
 #include <stdint.h>
 
 #include "openvm_state.h"
-
-/* RISC-V M-extension helpers with spec-compliant division semantics.
-   Division by zero returns all-ones (unsigned) or the dividend (remainder).
-   Signed overflow (INT64_MIN / -1) returns INT64_MIN (div) or 0 (rem). */
 
 static __attribute__((always_inline)) inline uint64_t rv_div(int64_t a,
                                                              int64_t b) {
@@ -47,8 +43,6 @@ static __attribute__((always_inline)) inline uint64_t rv_remu(uint64_t a,
   return a % b;
 }
 
-/* ── MULH helpers: upper 64 bits of 64×64 multiply ─────────────────────── */
-
 static __attribute__((always_inline)) inline uint64_t rv_mulh(int64_t a,
                                                               int64_t b) {
   return (uint64_t)(((__int128)a * b) >> 64);
@@ -63,8 +57,6 @@ static __attribute__((always_inline)) inline uint64_t rv_mulhsu(int64_t a,
                                                                 uint64_t b) {
   return (uint64_t)(((__int128)a * (__int128)b) >> 64);
 }
-
-/* ── W-suffix helpers (rv64): operate on low 32 bits, sign-extend to 64 ── */
 
 static __attribute__((always_inline)) inline uint64_t rv_divw(int32_t a,
                                                               int32_t b) {
@@ -104,4 +96,4 @@ static __attribute__((always_inline)) inline uint64_t rv_remuw(uint32_t a,
   return (uint64_t)(int64_t)(int32_t)(a % b);
 }
 
-#endif /* RV_MULDIV_H */
+#endif

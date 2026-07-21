@@ -6,13 +6,13 @@ use openvm_algebra_transpiler::{ModularPhantom, Rv64ModularArithmeticOpcode};
 use openvm_algebra_utils::{find_non_qr, NQR_RNG_SEED};
 use openvm_instructions::{LocalOpcode, SystemOpcode};
 use rand::{rngs::StdRng, SeedableRng};
-use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
-use rvr_openvm_lift::{helpers::decode_reg, RvrExtension, RvrInstruction};
+use rvr_openvm_ir::{CfgEffect, ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, ValueSlot};
+use rvr_openvm_lift::{RvrExtension, RvrInstruction};
 use strum::EnumCount;
 
 use crate::{
-    format_c_byte_array, pad_modulus, ArithKind, FieldArithInstr, FieldIsEqInstr, FieldKind,
-    FieldSetupInstr, IsEqKind, KnownField, ModOp, SetupKind,
+    decode_reg, format_c_byte_array, pad_modulus, ArithKind, FieldArithInstr, FieldIsEqInstr,
+    FieldKind, FieldSetupInstr, IsEqKind, KnownField, ModOp, SetupKind,
 };
 
 include!(concat!(env!("OUT_DIR"), "/secp256k1_files.rs"));
@@ -91,9 +91,9 @@ pub(crate) type ModSetupInstr = FieldSetupInstr<ModArithKind>;
 
 #[derive(Debug, Clone)]
 struct ModSetupIsEqInstr {
-    rd_reg: Reg,
-    rs1_reg: Reg,
-    rs2_reg: Reg,
+    rd_reg: ValueSlot,
+    rs1_reg: ValueSlot,
+    rs2_reg: ValueSlot,
     num_limbs: u32,
     modulus: Vec<u8>,
 }
@@ -104,8 +104,8 @@ impl ExtInstr for ModSetupIsEqInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rs1 = ctx.read_reg(self.rs1_reg);
-        let rs2 = ctx.read_reg(self.rs2_reg);
+        let rs1 = ctx.read_slot(self.rs1_reg);
+        let rs2 = ctx.read_slot(self.rs2_reg);
         let mod_literal = format_c_byte_array(&self.modulus);
         let num_limbs = format!("{}u", self.num_limbs);
         ctx.write_line("{");
@@ -118,12 +118,16 @@ impl ExtInstr for ModSetupIsEqInstr {
         ctx.write_line(&format!("if (unlikely({result} > 1u)) {{"));
         ctx.emit_trap();
         ctx.write_line("}");
-        ctx.write_reg(self.rd_reg, &result);
+        ctx.write_slot(self.rd_reg, &result);
         ctx.write_line("}");
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
         Box::new(self.clone())
+    }
+
+    fn cfg_effect(&self) -> CfgEffect {
+        CfgEffect::WriteUnknown { dst: self.rd_reg }
     }
 }
 
@@ -157,15 +161,15 @@ impl ExtInstr for HintNonQrInstr {
         Box::new(self.clone())
     }
 
-    fn is_block_end(&self) -> bool {
-        false
+    fn cfg_effect(&self) -> CfgEffect {
+        CfgEffect::None
     }
 }
 
 /// IR node for HintSqrt phantom instruction.
 #[derive(Debug, Clone)]
 pub struct HintSqrtInstr {
-    pub rs1_reg: Reg,
+    pub rs1_reg: ValueSlot,
     pub num_limbs: u32,
     pub modulus: Vec<u8>,
     pub non_qr_bytes: Vec<u8>,
@@ -177,7 +181,7 @@ impl ExtInstr for HintSqrtInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rs1 = ctx.peek_reg(self.rs1_reg);
+        let rs1 = ctx.peek_slot(self.rs1_reg);
         let mod_literal = format_c_byte_array(&self.modulus);
         let nqr_literal = format_c_byte_array(&self.non_qr_bytes);
         ctx.write_line("{");
@@ -195,8 +199,8 @@ impl ExtInstr for HintSqrtInstr {
         Box::new(self.clone())
     }
 
-    fn is_block_end(&self) -> bool {
-        false
+    fn cfg_effect(&self) -> CfgEffect {
+        CfgEffect::None
     }
 }
 
@@ -343,82 +347,72 @@ impl ModularRvrExtension {
         let rs1_reg = decode_reg(insn.b);
         let rs2_reg = decode_reg(insn.c);
 
-        let instr: Instr = match local {
-            x if x == Rv64ModularArithmeticOpcode::ADD as usize => {
-                Instr::Ext(Box::new(ModArithInstr::new(
-                    ModOp::Add,
-                    rd_reg,
-                    rs1_reg,
-                    rs2_reg,
-                    info.num_limbs,
-                    info.modulus_bytes.clone(),
-                )))
-            }
-            x if x == Rv64ModularArithmeticOpcode::SUB as usize => {
-                Instr::Ext(Box::new(ModArithInstr::new(
-                    ModOp::Sub,
-                    rd_reg,
-                    rs1_reg,
-                    rs2_reg,
-                    info.num_limbs,
-                    info.modulus_bytes.clone(),
-                )))
-            }
+        let instr: Box<dyn Instr> = match local {
+            x if x == Rv64ModularArithmeticOpcode::ADD as usize => Box::new(ModArithInstr::new(
+                ModOp::Add,
+                rd_reg,
+                rs1_reg,
+                rs2_reg,
+                info.num_limbs,
+                info.modulus_bytes.clone(),
+            )),
+            x if x == Rv64ModularArithmeticOpcode::SUB as usize => Box::new(ModArithInstr::new(
+                ModOp::Sub,
+                rd_reg,
+                rs1_reg,
+                rs2_reg,
+                info.num_limbs,
+                info.modulus_bytes.clone(),
+            )),
             x if x == Rv64ModularArithmeticOpcode::SETUP_ADDSUB as usize => {
-                Instr::Ext(Box::new(ModSetupInstr::new(
+                Box::new(ModSetupInstr::new(
                     rd_reg,
                     rs1_reg,
                     rs2_reg,
                     info.num_limbs,
                     info.modulus_bytes.clone(),
-                )))
+                ))
             }
-            x if x == Rv64ModularArithmeticOpcode::MUL as usize => {
-                Instr::Ext(Box::new(ModArithInstr::new(
-                    ModOp::Mul,
-                    rd_reg,
-                    rs1_reg,
-                    rs2_reg,
-                    info.num_limbs,
-                    info.modulus_bytes.clone(),
-                )))
-            }
-            x if x == Rv64ModularArithmeticOpcode::DIV as usize => {
-                Instr::Ext(Box::new(ModArithInstr::new(
-                    ModOp::Div,
-                    rd_reg,
-                    rs1_reg,
-                    rs2_reg,
-                    info.num_limbs,
-                    info.modulus_bytes.clone(),
-                )))
-            }
+            x if x == Rv64ModularArithmeticOpcode::MUL as usize => Box::new(ModArithInstr::new(
+                ModOp::Mul,
+                rd_reg,
+                rs1_reg,
+                rs2_reg,
+                info.num_limbs,
+                info.modulus_bytes.clone(),
+            )),
+            x if x == Rv64ModularArithmeticOpcode::DIV as usize => Box::new(ModArithInstr::new(
+                ModOp::Div,
+                rd_reg,
+                rs1_reg,
+                rs2_reg,
+                info.num_limbs,
+                info.modulus_bytes.clone(),
+            )),
             x if x == Rv64ModularArithmeticOpcode::SETUP_MULDIV as usize => {
-                Instr::Ext(Box::new(ModSetupInstr::new(
+                Box::new(ModSetupInstr::new(
                     rd_reg,
                     rs1_reg,
                     rs2_reg,
                     info.num_limbs,
                     info.modulus_bytes.clone(),
-                )))
+                ))
             }
-            x if x == Rv64ModularArithmeticOpcode::IS_EQ as usize => {
-                Instr::Ext(Box::new(ModIsEqInstr::new(
-                    rd_reg,
-                    rs1_reg,
-                    rs2_reg,
-                    info.num_limbs,
-                    info.modulus_bytes.clone(),
-                )))
-            }
+            x if x == Rv64ModularArithmeticOpcode::IS_EQ as usize => Box::new(ModIsEqInstr::new(
+                rd_reg,
+                rs1_reg,
+                rs2_reg,
+                info.num_limbs,
+                info.modulus_bytes.clone(),
+            )),
             x if x == Rv64ModularArithmeticOpcode::SETUP_ISEQ as usize => {
-                Instr::Ext(Box::new(ModSetupIsEqInstr {
+                Box::new(ModSetupIsEqInstr {
                     rd_reg,
                     rs1_reg,
                     rs2_reg,
                     num_limbs: info.num_limbs,
                     modulus: info.modulus_bytes.clone(),
-                }))
+                })
             }
             _ => return None,
         };
@@ -440,9 +434,9 @@ impl ModularRvrExtension {
                 let info = self.moduli.get(mod_idx)?;
                 Some(LiftedInstr::Body(InstrAt {
                     pc,
-                    instr: Instr::Ext(Box::new(HintNonQrInstr {
+                    instr: Box::new(HintNonQrInstr {
                         non_qr_bytes: info.non_qr_bytes.clone(),
-                    })),
+                    }),
                     source_loc: None,
                 }))
             }
@@ -451,12 +445,12 @@ impl ModularRvrExtension {
                 let rs1_reg = decode_reg(insn.a);
                 Some(LiftedInstr::Body(InstrAt {
                     pc,
-                    instr: Instr::Ext(Box::new(HintSqrtInstr {
+                    instr: Box::new(HintSqrtInstr {
                         rs1_reg,
                         num_limbs: info.num_limbs,
                         modulus: info.modulus_bytes.clone(),
                         non_qr_bytes: info.non_qr_bytes.clone(),
-                    })),
+                    }),
                     source_loc: None,
                 }))
             }

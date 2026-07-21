@@ -13,8 +13,7 @@ use openvm_instructions::{
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm::{CProject, RvrExecutionKind};
 use rvr_openvm_lift::{
-    build_blocks, convert_vmexe_to_ir_with_debug, scan_init_memory_for_code_pointers, AirIndex,
-    ExtensionRegistry, TraceChipIndex,
+    build_blocks, convert_vmexe_to_ir_with_debug, AirIndex, ExtensionRegistry, TraceChipIndex,
 };
 
 use super::debug::GuestDebugMap;
@@ -520,7 +519,9 @@ fn compile_impl<F: PrimeField32>(
     })?;
 
     let valid_pcs: std::collections::HashSet<u64> = ir.iter().map(|li| li.pc()).collect();
-    let extra_targets = scan_init_memory_for_code_pointers(&exe.init_memory, &valid_pcs);
+    let extra_targets = opts
+        .extensions
+        .extra_cfg_targets(&exe.init_memory, &valid_pcs);
     let blocks = build_blocks(&ir, &extra_targets)?;
 
     let temp_root = std::env::temp_dir();
