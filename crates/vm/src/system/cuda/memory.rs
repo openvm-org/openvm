@@ -340,17 +340,16 @@ impl MemoryInventoryGPU {
 
             // The merged record count is a pure function of input adjacency
             // (the device merge flags a record iff its (address_space,
-            // ptr / OUT_BLOCK) differs from its predecessor's, and the
+            // ptr / VM_DIGEST_WIDTH) differs from its predecessor's, and the
             // partition is sorted), so it can be computed here and the
             // mid-merge D2H sync dropped entirely.
-            const OUT_BLOCK_CELLS: u32 = 8;
             let out_num_records = 1
                 + (1..in_num_records)
                     .into_par_iter()
                     .filter(|&i| {
                         let (a, b) = (&partition[i], &partition[i - 1]);
-                        (a.address_space, a.ptr / OUT_BLOCK_CELLS)
-                            != (b.address_space, b.ptr / OUT_BLOCK_CELLS)
+                        (a.address_space, a.ptr / VM_DIGEST_WIDTH as u32)
+                            != (b.address_space, b.ptr / VM_DIGEST_WIDTH as u32)
                     })
                     .count();
 
