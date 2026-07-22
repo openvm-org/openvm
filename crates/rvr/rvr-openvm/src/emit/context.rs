@@ -1,7 +1,7 @@
 use std::{collections::HashSet, fmt::Write};
 
-use openvm_instructions::riscv::RV64_NUM_REGISTERS;
 use rvr_openvm_ir::{MemWidth, PageAddressSpace, Variable};
+use rvr_state::NUM_REGS;
 
 use super::codegen::hex_u32;
 
@@ -587,15 +587,15 @@ impl<'a> EmitContext<'a> {
 
 impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
     fn read_var(&mut self, var: Variable) -> String {
-        EmitContext::read_reg(self, rv64_reg_index(var))
+        EmitContext::read_reg(self, reg_index(var))
     }
 
     fn peek_var(&mut self, var: Variable) -> String {
-        EmitContext::peek_reg(self, rv64_reg_index(var))
+        EmitContext::peek_reg(self, reg_index(var))
     }
 
     fn write_var(&mut self, var: Variable, val: &str) {
-        EmitContext::write_reg(self, rv64_reg_index(var), val)
+        EmitContext::write_reg(self, reg_index(var), val)
     }
 
     fn write_line(&mut self, s: &str) {
@@ -657,11 +657,11 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
     }
 }
 
-fn rv64_reg_index(var: Variable) -> u8 {
-    let index = u8::try_from(var.index()).expect("RV64 variable index must fit in u8");
+fn reg_index(var: Variable) -> u8 {
+    let index = u8::try_from(var.index()).expect("variable index must fit in u8");
     assert!(
-        usize::from(index) < RV64_NUM_REGISTERS,
-        "RV64 variable index must name an integer register"
+        usize::from(index) < NUM_REGS,
+        "variable index must name a state register"
     );
     index
 }

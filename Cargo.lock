@@ -7249,6 +7249,7 @@ dependencies = [
  "rvr-openvm-build",
  "rvr-openvm-ir",
  "rvr-openvm-lift",
+ "rvr-state",
  "thiserror 1.0.69",
 ]
 

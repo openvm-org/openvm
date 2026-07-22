@@ -1,5 +1,7 @@
 //! Native RVR backend for OpenVM.
 //!
+//! The current implementation supports RV64 artifacts.
+//!
 //! # Runtime Requirements
 //!
 //! RVR emits generated C and builds a native dynamic library before execution.
