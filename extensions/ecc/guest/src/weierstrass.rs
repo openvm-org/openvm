@@ -473,6 +473,34 @@ macro_rules! impl_sw_proj {
                 self.clone().neg()
             }
         }
+
+        impl From<$struct_name> for $crate::AffinePoint<$field> {
+            /// Converts a projective point to affine coordinates `(X/Z, Y/Z)`.
+            /// The identity maps to the affine point-at-infinity sentinel `(0, 0)`.
+            fn from(value: $struct_name) -> Self {
+                if value.z == <$field>::ZERO {
+                    $crate::AffinePoint::new(<$field>::ZERO, <$field>::ZERO)
+                } else {
+                    let affine = value.normalize();
+                    $crate::AffinePoint::new(affine.x, affine.y)
+                }
+            }
+        }
+
+        impl From<$crate::AffinePoint<$field>> for $struct_name {
+            /// Converts affine coordinates `(x, y)` to the projective point `(x, y, 1)`.
+            /// The affine point-at-infinity sentinel `(0, 0)` maps to the identity.
+            fn from(value: $crate::AffinePoint<$field>) -> Self {
+                if value.is_infinity() {
+                    <$struct_name as WeierstrassPoint>::IDENTITY
+                } else {
+                    // SAFETY: not the identity sentinel; `(x, y, 1)` is a valid representation.
+                    unsafe {
+                        <$struct_name as WeierstrassPoint>::from_xy_unchecked(value.x, value.y)
+                    }
+                }
+            }
+        }
     };
 }
 
