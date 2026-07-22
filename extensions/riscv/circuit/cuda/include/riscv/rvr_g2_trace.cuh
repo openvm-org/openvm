@@ -260,10 +260,14 @@ static __device__ __forceinline__ bool g2_trace_alu3(
 
     uint64_t b = 0, c = 0;
     if (entry.access_pattern == 8) {
-        if (source.kind != 29 || !g2_trace_event(source, row, 1, write))
+        if (!((source.kind == 29 || (source.kind >= 31 && source.kind <= 37))) ||
+            !g2_trace_event(source, row, 1, write))
             return false;
         b = first.value;
-        c = uint64_t(int64_t(int32_t(entry.c << 20) >> 20));
+        c = (source.kind == 29 || source.kind == 31 || source.kind == 32 ||
+             source.kind == 35)
+                ? uint64_t(int64_t(int32_t(entry.c << 20) >> 20))
+                : uint64_t(entry.c);
     } else if (entry.access_pattern == 0 || entry.access_pattern == 1) {
         if (!g2_trace_event(source, row, 2, write))
             return false;
@@ -782,6 +786,13 @@ extern "C" int _rv64_store_halfword_tracegen_g2(RVR_G2_TRACEGEN_PARAMETERS);
 extern "C" int _rv64_store_word_tracegen_g2(RVR_G2_TRACEGEN_PARAMETERS);
 extern "C" int _rv64_store_doubleword_tracegen_g2(RVR_G2_TRACEGEN_PARAMETERS);
 extern "C" int _hintstore_tracegen_g2(RVR_G2_TRACEGEN_PARAMETERS);
+extern "C" int _bitwise_logic_imm_tracegen_g2(RVR_G2_TRACEGEN_PARAMETERS);
+extern "C" int _less_than_imm_tracegen_g2(RVR_G2_TRACEGEN_PARAMETERS);
+extern "C" int _shift_logical_imm_tracegen_g2(RVR_G2_TRACEGEN_PARAMETERS);
+extern "C" int _shift_right_arithmetic_imm_tracegen_g2(RVR_G2_TRACEGEN_PARAMETERS);
+extern "C" int _addi_w_tracegen_g2(RVR_G2_TRACEGEN_PARAMETERS);
+extern "C" int _shift_w_logical_imm_tracegen_g2(RVR_G2_TRACEGEN_PARAMETERS);
+extern "C" int _shift_w_right_arithmetic_imm_tracegen_g2(RVR_G2_TRACEGEN_PARAMETERS);
 
 #define DECLARE_RVR_G2_PRELOAD(name)                                                      \
     extern "C" int name##_preload(Fp *trace, cudaStream_t stream);
@@ -816,6 +827,13 @@ DECLARE_RVR_G2_PRELOAD(_rv64_store_halfword_tracegen_g2)
 DECLARE_RVR_G2_PRELOAD(_rv64_store_word_tracegen_g2)
 DECLARE_RVR_G2_PRELOAD(_rv64_store_doubleword_tracegen_g2)
 DECLARE_RVR_G2_PRELOAD(_hintstore_tracegen_g2)
+DECLARE_RVR_G2_PRELOAD(_bitwise_logic_imm_tracegen_g2)
+DECLARE_RVR_G2_PRELOAD(_less_than_imm_tracegen_g2)
+DECLARE_RVR_G2_PRELOAD(_shift_logical_imm_tracegen_g2)
+DECLARE_RVR_G2_PRELOAD(_shift_right_arithmetic_imm_tracegen_g2)
+DECLARE_RVR_G2_PRELOAD(_addi_w_tracegen_g2)
+DECLARE_RVR_G2_PRELOAD(_shift_w_logical_imm_tracegen_g2)
+DECLARE_RVR_G2_PRELOAD(_shift_w_right_arithmetic_imm_tracegen_g2)
 #undef DECLARE_RVR_G2_PRELOAD
 
 extern "C" int _add_sub_tracegen_g2_reference(RVR_G2_REFERENCE_PARAMETERS);
@@ -859,3 +877,12 @@ extern "C" int _rv64_store_halfword_tracegen_g2_reference(RVR_G2_REFERENCE_PARAM
 extern "C" int _rv64_store_word_tracegen_g2_reference(RVR_G2_REFERENCE_PARAMETERS);
 extern "C" int _rv64_store_doubleword_tracegen_g2_reference(RVR_G2_REFERENCE_PARAMETERS);
 extern "C" int _hintstore_tracegen_g2_reference(RVR_G2_REFERENCE_PARAMETERS);
+extern "C" int _bitwise_logic_imm_tracegen_g2_reference(RVR_G2_REFERENCE_PARAMETERS);
+extern "C" int _less_than_imm_tracegen_g2_reference(RVR_G2_REFERENCE_PARAMETERS);
+extern "C" int _shift_logical_imm_tracegen_g2_reference(RVR_G2_REFERENCE_PARAMETERS);
+extern "C" int _shift_right_arithmetic_imm_tracegen_g2_reference(RVR_G2_REFERENCE_PARAMETERS);
+extern "C" int _addi_w_tracegen_g2_reference(RVR_G2_REFERENCE_PARAMETERS);
+extern "C" int _shift_w_logical_imm_tracegen_g2_reference(RVR_G2_REFERENCE_PARAMETERS);
+extern "C" int _shift_w_right_arithmetic_imm_tracegen_g2_reference(
+    RVR_G2_REFERENCE_PARAMETERS
+);

@@ -40,11 +40,12 @@ pub use g2::{
 pub use initial_image::RvrInitialImage;
 pub use log_native::{
     generate_record_arenas_from_logs, generate_record_arenas_from_logs_with_compact,
-    AddIArenaFieldOffsets, Alu3ArenaFieldOffsets, Alu3WArenaFieldOffsets, ArenaNativeGeometry,
-    ArenaNativeLayout, Branch2ArenaFieldOffsets, DeltaAccessPattern, LoadStoreArenaFieldOffsets,
-    LogNativeAccessView, LogNativeAssembler, LogNativeAssemblerRegistry, LogNativeInlineAssembler,
-    LogNativeOpcodeAdmitter, RvrDeltaDecodeEntry, RvrDeltaDecodeInfo, Rw1ArenaFieldOffsets,
-    VmRvrLogNativeExtension, Wr1ArenaFieldOffsets,
+    AddIArenaFieldOffsets, Alu3ArenaFieldOffsets, Alu3WArenaFieldOffsets, AluImmArenaFieldOffsets,
+    ArenaNativeGeometry, ArenaNativeLayout, Branch2ArenaFieldOffsets, DeltaAccessPattern,
+    LoadStoreArenaFieldOffsets, LogNativeAccessView, LogNativeAssembler,
+    LogNativeAssemblerRegistry, LogNativeInlineAssembler, LogNativeOpcodeAdmitter,
+    RvrDeltaDecodeEntry, RvrDeltaDecodeInfo, Rw1ArenaFieldOffsets, VmRvrLogNativeExtension,
+    Wr1ArenaFieldOffsets,
 };
 pub use metered::{RvrMeteredExecutionOutcome, RvrMeteredInstance, RvrMeteredSegmentInstance};
 pub use metered_cost::{MeteredCostState, RvrMeteredCostInstance};
@@ -77,5 +78,6 @@ pub use rvr_openvm::{
     default_compiler as default_native_compiler, default_compiler_command, default_dwarfdump_cmd,
     default_linker, runtime_toolchain, RuntimeToolchain, RuntimeToolchainError, RvrExecutionKind,
 };
+pub use rvr_openvm_ext_ffi_common::G2_DECODER_KIND_COUNT;
 
 pub use crate::arch::execution_mode::metered::segment_ctx::SegmentationLimits;

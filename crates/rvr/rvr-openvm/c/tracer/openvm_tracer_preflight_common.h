@@ -96,9 +96,9 @@ static constexpr uint32_t G2_PRODUCER_RESIDUAL_CTRL_SLOT = 1u;
 static constexpr uint32_t G2_PRODUCER_RESIDUAL_TAG_SLOT = 2u;
 static constexpr uint32_t G2_PRODUCER_RESIDUAL_VALUE_SLOT = 3u;
 static constexpr uint32_t G2_PRODUCER_ADDI_SLOT = 4u;
-static constexpr uint32_t G2_PRODUCER_OPAQUE_EVENT_COUNT_SLOT = 40u;
-static constexpr uint32_t G2_PRODUCER_HINT_WORD_COUNT_SLOT = 41u;
-static constexpr uint32_t G2_PRODUCER_LANE_COUNT = 42u;
+static constexpr uint32_t G2_PRODUCER_OPAQUE_EVENT_COUNT_SLOT = 47u;
+static constexpr uint32_t G2_PRODUCER_HINT_WORD_COUNT_SLOT = 48u;
+static constexpr uint32_t G2_PRODUCER_LANE_COUNT = 49u;
 
 static constexpr uint32_t PREFLIGHT_PROGRAM_WRITE_COMPLETE = 1u;
 static constexpr uint32_t PREFLIGHT_PROGRAM_CROSSING_RESIDUAL = 2u;

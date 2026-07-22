@@ -8,7 +8,7 @@
 #include "openvm.h"
 #include "openvm_io.h"
 
-static constexpr uint32_t RVR_HINT_MAX_BUFFER_DWORDS = 1023u;
+[[maybe_unused]] static constexpr uint32_t RVR_HINT_MAX_BUFFER_DWORDS = 1023u;
 
 #ifdef OPENVM_TRACER_PREFLIGHT_H
 typedef struct {

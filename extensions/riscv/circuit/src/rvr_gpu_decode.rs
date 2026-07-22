@@ -47,10 +47,10 @@ use openvm_instructions::{
 };
 #[cfg(feature = "rvr")]
 use openvm_riscv_transpiler::{
-    BaseAluImmOpcode, BaseAluOpcode, BaseAluWOpcode, BranchEqualOpcode, BranchLessThanOpcode,
-    DivRemOpcode, DivRemWOpcode, LessThanOpcode, MulHOpcode, MulOpcode, MulWOpcode,
-    Rv64AuipcOpcode, Rv64JalLuiOpcode, Rv64JalrOpcode, Rv64LoadStoreOpcode, ShiftOpcode,
-    ShiftWOpcode,
+    BaseAluImmOpcode, BaseAluOpcode, BaseAluWImmOpcode, BaseAluWOpcode, BranchEqualOpcode,
+    BranchLessThanOpcode, DivRemOpcode, DivRemWOpcode, LessThanImmOpcode, LessThanOpcode,
+    MulHOpcode, MulOpcode, MulWOpcode, Rv64AuipcOpcode, Rv64JalLuiOpcode, Rv64JalrOpcode,
+    Rv64LoadStoreOpcode, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode, ShiftWOpcode,
 };
 #[cfg(feature = "rvr")]
 use openvm_stark_backend::p3_field::PrimeField32;
@@ -166,10 +166,17 @@ pub enum DeltaAirKind {
     /// Private G2 HintStore event replay; there is deliberately no payload
     /// lane for this kind.
     HintStore = 30,
+    BitwiseImm = 31,
+    LessThanImm = 32,
+    ShiftLogicalImm = 33,
+    ShiftRightArithmeticImm = 34,
+    AddIW = 35,
+    ShiftWLogicalImm = 36,
+    ShiftWRightArithmeticImm = 37,
 }
 
 impl DeltaAirKind {
-    pub const COUNT: usize = 31;
+    pub const COUNT: usize = openvm_circuit::arch::rvr::G2_DECODER_KIND_COUNT;
 
     fn from_repr(value: u8) -> Option<Self> {
         Some(match value {
@@ -204,6 +211,13 @@ impl DeltaAirKind {
             28 => Self::LoadSignExtendWord,
             29 => Self::AddI,
             30 => Self::HintStore,
+            31 => Self::BitwiseImm,
+            32 => Self::LessThanImm,
+            33 => Self::ShiftLogicalImm,
+            34 => Self::ShiftRightArithmeticImm,
+            35 => Self::AddIW,
+            36 => Self::ShiftWLogicalImm,
+            37 => Self::ShiftWRightArithmeticImm,
             _ => return None,
         })
     }
@@ -658,7 +672,7 @@ pub fn begin_g2_device_prewarm() -> Result<(), String> {
     let stats = unsafe { crate::cuda_abi::rvr_g2_cuda::configure_device_pool(true, 0) }
         .map_err(|error| format!("CUDA G2 prewarm initialization failed: {error:?}"))?;
     eprintln!(
-        "OPENVM_RVR_CUDA_DEVICE_PREWARM phase=begin trace_kernels=31 elapsed_ms={} context_us={} module_launch_us={} pool_us={} reserved_current={} reserved_high={} used_current={} used_high={} release_threshold={}",
+        "OPENVM_RVR_CUDA_DEVICE_PREWARM phase=begin trace_kernels=38 elapsed_ms={} context_us={} module_launch_us={} pool_us={} reserved_current={} reserved_high={} used_current={} used_high={} release_threshold={}",
         started.elapsed().as_millis(),
         stats[5],
         stats[6],
@@ -2304,6 +2318,67 @@ fn gpu_decode_entry<F: PrimeField32>(
         ));
     }
 
+    let split_imm = if matches!(
+        opcode,
+        value if value == BaseAluImmOpcode::XORI.global_opcode_usize()
+            || value == BaseAluImmOpcode::ORI.global_opcode_usize()
+            || value == BaseAluImmOpcode::ANDI.global_opcode_usize()
+    ) {
+        Some((
+            DeltaAirKind::BitwiseImm,
+            (opcode - BaseAluImmOpcode::CLASS_OFFSET) as u8,
+        ))
+    } else if opcode == LessThanImmOpcode::SLTI.global_opcode_usize()
+        || opcode == LessThanImmOpcode::SLTIU.global_opcode_usize()
+    {
+        Some((
+            DeltaAirKind::LessThanImm,
+            (opcode - LessThanImmOpcode::CLASS_OFFSET) as u8,
+        ))
+    } else if opcode == ShiftImmOpcode::SLLI.global_opcode_usize()
+        || opcode == ShiftImmOpcode::SRLI.global_opcode_usize()
+    {
+        Some((
+            DeltaAirKind::ShiftLogicalImm,
+            (opcode - ShiftImmOpcode::CLASS_OFFSET) as u8,
+        ))
+    } else if opcode == ShiftImmOpcode::SRAI.global_opcode_usize() {
+        Some((DeltaAirKind::ShiftRightArithmeticImm, 0))
+    } else if opcode == BaseAluWImmOpcode::ADDIW.global_opcode_usize() {
+        Some((DeltaAirKind::AddIW, 0))
+    } else if opcode == ShiftWImmOpcode::SLLIW.global_opcode_usize()
+        || opcode == ShiftWImmOpcode::SRLIW.global_opcode_usize()
+    {
+        Some((
+            DeltaAirKind::ShiftWLogicalImm,
+            (opcode - ShiftWImmOpcode::CLASS_OFFSET) as u8,
+        ))
+    } else if opcode == ShiftWImmOpcode::SRAIW.global_opcode_usize() {
+        Some((DeltaAirKind::ShiftWRightArithmeticImm, 0))
+    } else {
+        None
+    };
+    if let Some((kind, local_opcode)) = split_imm {
+        let operands = derive_addi_operands(instruction);
+        let mut flags = OPERAND_FLAG_RS2_IMM;
+        if ((operands.immediate >> 11) & 1) != 0 {
+            flags |= OPERAND_FLAG_RS2_IMM_SIGN;
+        }
+        return Some((
+            DeviceOperandEntry {
+                a: operands.rd_ptr,
+                b: operands.rs1_ptr,
+                c: operands.immediate,
+                flags,
+                local_opcode,
+                air_idx: u8::MAX,
+                access_pattern: DeviceDeltaAccessPattern::AddI as u8,
+                filtered_index: u32::MAX,
+            },
+            kind,
+        ));
+    }
+
     // alu3 over the BaseAluU16 adapter: AddSub, LessThan, ShiftLogical, SRA.
     let alu_u16_local = if opcode == BaseAluOpcode::ADD.global_opcode_usize()
         || opcode == BaseAluOpcode::SUB.global_opcode_usize()
@@ -2792,6 +2867,52 @@ pub(crate) fn delta_post_write_value<F: PrimeField32>(
                 return None;
             }
             v1.wrapping_add(v2)
+        }
+        DeltaAirKind::BitwiseImm => match entry.local_opcode {
+            value if value == BaseAluImmOpcode::XORI as u8 => v1 ^ v2,
+            value if value == BaseAluImmOpcode::ORI as u8 => v1 | v2,
+            value if value == BaseAluImmOpcode::ANDI as u8 => v1 & v2,
+            _ => return None,
+        },
+        DeltaAirKind::LessThanImm => match entry.local_opcode {
+            value if value == LessThanImmOpcode::SLTI as u8 => u64::from((v1 as i64) < (v2 as i64)),
+            value if value == LessThanImmOpcode::SLTIU as u8 => u64::from(v1 < v2),
+            _ => return None,
+        },
+        DeltaAirKind::ShiftLogicalImm => match entry.local_opcode {
+            value if value == ShiftImmOpcode::SLLI as u8 => v1.wrapping_shl((v2 & 63) as u32),
+            value if value == ShiftImmOpcode::SRLI as u8 => v1.wrapping_shr((v2 & 63) as u32),
+            _ => return None,
+        },
+        DeltaAirKind::ShiftRightArithmeticImm => {
+            if entry.local_opcode != 0 {
+                return None;
+            }
+            ((v1 as i64) >> (v2 & 63)) as u64
+        }
+        DeltaAirKind::AddIW => {
+            if entry.local_opcode != 0 {
+                return None;
+            }
+            sign_extend_word((v1 as u32).wrapping_add(v2 as u32))
+        }
+        DeltaAirKind::ShiftWLogicalImm => {
+            let result = match entry.local_opcode {
+                value if value == ShiftWImmOpcode::SLLIW as u8 => {
+                    (v1 as u32).wrapping_shl((v2 & 31) as u32)
+                }
+                value if value == ShiftWImmOpcode::SRLIW as u8 => {
+                    (v1 as u32).wrapping_shr((v2 & 31) as u32)
+                }
+                _ => return None,
+            };
+            sign_extend_word(result)
+        }
+        DeltaAirKind::ShiftWRightArithmeticImm => {
+            if entry.local_opcode != 0 {
+                return None;
+            }
+            sign_extend_word(((v1 as u32 as i32) >> (v2 & 31)) as u32)
         }
         DeltaAirKind::AddSub => match entry.local_opcode {
             0 => v1.wrapping_add(v2),

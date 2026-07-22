@@ -1809,6 +1809,43 @@ pub mod addi_w_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
+        fn _addi_w_tracegen_compact(
+            d_trace: *mut F,
+            height: usize,
+            width: usize,
+            d_records: DeviceBufferView,
+            d_operand_table: *const u8,
+            pc_base: u32,
+            d_range_checker: *mut u32,
+            range_checker_num_bins: u32,
+            timestamp_max_bits: u32,
+            stream: cudaStream_t,
+        ) -> i32;
+    }
+
+    #[cfg(feature = "rvr")]
+    pub unsafe fn tracegen_compact(
+        d_trace: &DeviceBuffer<F>,
+        height: usize,
+        d_records: &DeviceBuffer<u8>,
+        d_operand_table: &DeviceBuffer<u8>,
+        pc_base: u32,
+        d_range_checker: &DeviceBuffer<F>,
+        timestamp_max_bits: u32,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_addi_w_tracegen_compact(
+            d_trace.as_mut_ptr(),
+            height,
+            d_trace.len() / height,
+            d_records.view(),
+            d_operand_table.as_ptr(),
+            pc_base,
+            d_range_checker.as_mut_ptr() as *mut u32,
+            d_range_checker.len() as u32,
+            timestamp_max_bits,
+            stream,
+        ))
     }
 
     pub unsafe fn tracegen(
@@ -2671,6 +2708,43 @@ pub mod shift_logical_imm_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
+        fn _shift_logical_imm_tracegen_compact(
+            d_trace: *mut F,
+            height: usize,
+            width: usize,
+            d_records: DeviceBufferView,
+            d_operand_table: *const u8,
+            pc_base: u32,
+            d_range_checker: *mut u32,
+            range_checker_num_bins: u32,
+            timestamp_max_bits: u32,
+            stream: cudaStream_t,
+        ) -> i32;
+    }
+
+    #[cfg(feature = "rvr")]
+    pub unsafe fn tracegen_compact(
+        d_trace: &DeviceBuffer<F>,
+        height: usize,
+        d_records: &DeviceBuffer<u8>,
+        d_operand_table: &DeviceBuffer<u8>,
+        pc_base: u32,
+        d_range_checker: &DeviceBuffer<F>,
+        timestamp_max_bits: u32,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_shift_logical_imm_tracegen_compact(
+            d_trace.as_mut_ptr(),
+            height,
+            d_trace.len() / height,
+            d_records.view(),
+            d_operand_table.as_ptr(),
+            pc_base,
+            d_range_checker.as_mut_ptr() as *mut u32,
+            d_range_checker.len() as u32,
+            timestamp_max_bits,
+            stream,
+        ))
     }
 
     pub unsafe fn tracegen(
@@ -2707,6 +2781,43 @@ pub mod shift_w_logical_imm_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
+        fn _shift_w_logical_imm_tracegen_compact(
+            d_trace: *mut F,
+            height: usize,
+            width: usize,
+            d_records: DeviceBufferView,
+            d_operand_table: *const u8,
+            pc_base: u32,
+            d_range_checker: *mut u32,
+            range_checker_num_bins: u32,
+            timestamp_max_bits: u32,
+            stream: cudaStream_t,
+        ) -> i32;
+    }
+
+    #[cfg(feature = "rvr")]
+    pub unsafe fn tracegen_compact(
+        d_trace: &DeviceBuffer<F>,
+        height: usize,
+        d_records: &DeviceBuffer<u8>,
+        d_operand_table: &DeviceBuffer<u8>,
+        pc_base: u32,
+        d_range_checker: &DeviceBuffer<F>,
+        timestamp_max_bits: u32,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_shift_w_logical_imm_tracegen_compact(
+            d_trace.as_mut_ptr(),
+            height,
+            d_trace.len() / height,
+            d_records.view(),
+            d_operand_table.as_ptr(),
+            pc_base,
+            d_range_checker.as_mut_ptr() as *mut u32,
+            d_range_checker.len() as u32,
+            timestamp_max_bits,
+            stream,
+        ))
     }
 
     pub unsafe fn tracegen(
@@ -2743,6 +2854,43 @@ pub mod shift_right_arithmetic_imm_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
+        fn _shift_right_arithmetic_imm_tracegen_compact(
+            d_trace: *mut F,
+            height: usize,
+            width: usize,
+            d_records: DeviceBufferView,
+            d_operand_table: *const u8,
+            pc_base: u32,
+            d_range_checker: *mut u32,
+            range_checker_num_bins: u32,
+            timestamp_max_bits: u32,
+            stream: cudaStream_t,
+        ) -> i32;
+    }
+
+    #[cfg(feature = "rvr")]
+    pub unsafe fn tracegen_compact(
+        d_trace: &DeviceBuffer<F>,
+        height: usize,
+        d_records: &DeviceBuffer<u8>,
+        d_operand_table: &DeviceBuffer<u8>,
+        pc_base: u32,
+        d_range_checker: &DeviceBuffer<F>,
+        timestamp_max_bits: u32,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_shift_right_arithmetic_imm_tracegen_compact(
+            d_trace.as_mut_ptr(),
+            height,
+            d_trace.len() / height,
+            d_records.view(),
+            d_operand_table.as_ptr(),
+            pc_base,
+            d_range_checker.as_mut_ptr() as *mut u32,
+            d_range_checker.len() as u32,
+            timestamp_max_bits,
+            stream,
+        ))
     }
 
     pub unsafe fn tracegen(
@@ -2779,6 +2927,43 @@ pub mod shift_w_right_arithmetic_imm_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
+        fn _shift_w_right_arithmetic_imm_tracegen_compact(
+            d_trace: *mut F,
+            height: usize,
+            width: usize,
+            d_records: DeviceBufferView,
+            d_operand_table: *const u8,
+            pc_base: u32,
+            d_range_checker: *mut u32,
+            range_checker_num_bins: u32,
+            timestamp_max_bits: u32,
+            stream: cudaStream_t,
+        ) -> i32;
+    }
+
+    #[cfg(feature = "rvr")]
+    pub unsafe fn tracegen_compact(
+        d_trace: &DeviceBuffer<F>,
+        height: usize,
+        d_records: &DeviceBuffer<u8>,
+        d_operand_table: &DeviceBuffer<u8>,
+        pc_base: u32,
+        d_range_checker: &DeviceBuffer<F>,
+        timestamp_max_bits: u32,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_shift_w_right_arithmetic_imm_tracegen_compact(
+            d_trace.as_mut_ptr(),
+            height,
+            d_trace.len() / height,
+            d_records.view(),
+            d_operand_table.as_ptr(),
+            pc_base,
+            d_range_checker.as_mut_ptr() as *mut u32,
+            d_range_checker.len() as u32,
+            timestamp_max_bits,
+            stream,
+        ))
     }
 
     pub unsafe fn tracegen(
@@ -2815,6 +3000,43 @@ pub mod less_than_imm_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
+        fn _less_than_imm_tracegen_compact(
+            d_trace: *mut F,
+            height: usize,
+            width: usize,
+            d_records: DeviceBufferView,
+            d_operand_table: *const u8,
+            pc_base: u32,
+            d_range_checker: *mut u32,
+            range_checker_num_bins: u32,
+            timestamp_max_bits: u32,
+            stream: cudaStream_t,
+        ) -> i32;
+    }
+
+    #[cfg(feature = "rvr")]
+    pub unsafe fn tracegen_compact(
+        d_trace: &DeviceBuffer<F>,
+        height: usize,
+        d_records: &DeviceBuffer<u8>,
+        d_operand_table: &DeviceBuffer<u8>,
+        pc_base: u32,
+        d_range_checker: &DeviceBuffer<F>,
+        timestamp_max_bits: u32,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_less_than_imm_tracegen_compact(
+            d_trace.as_mut_ptr(),
+            height,
+            d_trace.len() / height,
+            d_records.view(),
+            d_operand_table.as_ptr(),
+            pc_base,
+            d_range_checker.as_mut_ptr() as *mut u32,
+            d_range_checker.len() as u32,
+            timestamp_max_bits,
+            stream,
+        ))
     }
 
     pub unsafe fn tracegen(
@@ -2852,6 +3074,46 @@ pub mod bitwise_logic_imm_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
+        fn _bitwise_logic_imm_tracegen_compact(
+            d_trace: *mut F,
+            height: usize,
+            width: usize,
+            d_records: DeviceBufferView,
+            d_operand_table: *const u8,
+            pc_base: u32,
+            d_range_checker: *mut u32,
+            range_checker_bins: usize,
+            d_bitwise_lookup: *mut u32,
+            timestamp_max_bits: u32,
+            stream: cudaStream_t,
+        ) -> i32;
+    }
+
+    #[cfg(feature = "rvr")]
+    pub unsafe fn tracegen_compact(
+        d_trace: &DeviceBuffer<F>,
+        height: usize,
+        d_records: &DeviceBuffer<u8>,
+        d_operand_table: &DeviceBuffer<u8>,
+        pc_base: u32,
+        d_range_checker: &DeviceBuffer<F>,
+        d_bitwise_lookup: &DeviceBuffer<F>,
+        timestamp_max_bits: u32,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_bitwise_logic_imm_tracegen_compact(
+            d_trace.as_mut_ptr(),
+            height,
+            d_trace.len() / height,
+            d_records.view(),
+            d_operand_table.as_ptr(),
+            pc_base,
+            d_range_checker.as_mut_ptr() as *mut u32,
+            d_range_checker.len(),
+            d_bitwise_lookup.as_mut_ptr() as *mut u32,
+            timestamp_max_bits,
+            stream,
+        ))
     }
 
     pub unsafe fn tracegen(

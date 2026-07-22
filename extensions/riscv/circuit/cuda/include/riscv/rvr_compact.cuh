@@ -1,6 +1,8 @@
 #pragma once
 
 #include "riscv/adapters/alu_imm_u16.cuh"
+#include "riscv/adapters/alu_imm.cuh"
+#include "riscv/adapters/alu_w_imm_u16.cuh"
 #include "riscv/adapters/alu_reg_u16.cuh"
 #include "riscv/adapters/alu_w_reg_u16.cuh"
 #include "riscv/adapters/branch.cuh"
@@ -89,6 +91,43 @@ rvr_decode_alu3_alu_imm_u16(RvrAlu3Compact const &rec, RvrOperandEntry const &en
     out.from_timestamp = rec.from_timestamp;
     out.rd_ptr = entry.a;
     out.rs1_ptr = entry.b;
+    out.reads_aux.prev_timestamp = rec.reads_prev_timestamp[0];
+    out.writes_aux.prev_timestamp = rec.write_prev_timestamp;
+#pragma unroll
+    for (size_t i = 0; i < BLOCK_FE_WIDTH; i++) {
+        out.writes_aux.prev_data[i] = rvr_u16_limb(rec.write_prev_data, i);
+    }
+    return out;
+}
+
+__device__ __forceinline__ Rv64BaseAluImmAdapterRecord
+rvr_decode_alu3_alu_imm_bytes(RvrAlu3Compact const &rec, RvrOperandEntry const &entry) {
+    Rv64BaseAluImmAdapterRecord out;
+    out.from_pc = rec.from_pc;
+    out.from_timestamp = rec.from_timestamp;
+    out.rd_ptr = entry.a;
+    out.rs1_ptr = entry.b;
+    out.reads_aux.prev_timestamp = rec.reads_prev_timestamp[0];
+    out.writes_aux.prev_timestamp = rec.write_prev_timestamp;
+#pragma unroll
+    for (size_t i = 0; i < RV64_REGISTER_NUM_LIMBS; i++) {
+        out.writes_aux.prev_data[i] =
+            uint8_t(rec.write_prev_data[i / 4] >> ((i % 4) * 8));
+    }
+    return out;
+}
+
+__device__ __forceinline__ Rv64BaseAluWImmU16AdapterRecord rvr_decode_alu3_alu_w_imm_u16(
+    RvrAlu3Compact const &rec, RvrOperandEntry const &entry, uint32_t result_word
+) {
+    Rv64BaseAluWImmU16AdapterRecord out;
+    out.from_pc = rec.from_pc;
+    out.from_timestamp = rec.from_timestamp;
+    out.rd_ptr = entry.a;
+    out.rs1_ptr = entry.b;
+    out.rs1_high[0] = rvr_u16_limb(rec.b, 2);
+    out.rs1_high[1] = rvr_u16_limb(rec.b, 3);
+    out.result_high = uint16_t(result_word >> 16);
     out.reads_aux.prev_timestamp = rec.reads_prev_timestamp[0];
     out.writes_aux.prev_timestamp = rec.write_prev_timestamp;
 #pragma unroll

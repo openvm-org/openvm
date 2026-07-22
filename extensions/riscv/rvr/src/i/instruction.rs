@@ -171,18 +171,7 @@ impl ExtInstr for Rv64IInstr {
 
     fn inline_record_shape(&self) -> Option<InlineRecordShape> {
         match self {
-            Self::Alu {
-                op: AluOp::Add,
-                word: false,
-                immediate: true,
-                ..
-            }
-            | Self::Alu {
-                immediate: false, ..
-            } => Some(InlineRecordShape::Alu3),
-            Self::Alu {
-                immediate: true, ..
-            } => None,
+            Self::Alu { .. } => Some(InlineRecordShape::Alu3),
             Self::Load { .. } | Self::Store { .. } => Some(InlineRecordShape::Alu3),
             Self::Const { .. } | Self::Jump { .. } => Some(InlineRecordShape::Wr1),
             Self::Branch { .. } => Some(InlineRecordShape::Branch2),

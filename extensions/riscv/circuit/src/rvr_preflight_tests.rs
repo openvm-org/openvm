@@ -518,6 +518,17 @@ fn run_inline_addsub_differential_arm(
     Vec<openvm_circuit::arch::DenseRecordArena>,
     Vec<Option<usize>>,
 ) {
+    run_inline_addsub_differential_arm_with_streams(exe, Streams::default())
+}
+
+fn run_inline_addsub_differential_arm_with_streams(
+    exe: &VmExe<F>,
+    streams: Streams,
+) -> (
+    RvrPreflightOutput<F>,
+    Vec<openvm_circuit::arch::DenseRecordArena>,
+    Vec<Option<usize>>,
+) {
     use openvm_circuit::arch::DenseRecordArena;
 
     // This harness drives the COMPACT wire + host assembler without arena
@@ -546,7 +557,7 @@ fn run_inline_addsub_differential_arm(
             panic!("program must route to RVR preflight");
         };
         instance
-            .execute_preflight(Streams::default(), None)
+            .execute_preflight(streams, None)
             .expect("rvr preflight execution")
     };
     let arenas = crate::log_native::generate_rv64im_record_arenas_from_logs::<F, DenseRecordArena>(
@@ -738,10 +749,12 @@ fn rvr_preflight_delta_full_rv64im_matrix_is_byte_equal_to_compact() {
     let exe = full_rv64im_matrix_exe();
 
     std::env::set_var("OPENVM_RVR_GPU_RECORDS", "compact");
-    let (compact_output, compact_arenas, _) = run_inline_addsub_differential_arm(&exe);
+    let (compact_output, compact_arenas, _) =
+        run_inline_addsub_differential_arm_with_streams(&exe, hard_chip_streams(1));
 
     std::env::set_var("OPENVM_RVR_GPU_RECORDS", "delta");
-    let (delta_output, delta_arenas, _) = run_inline_addsub_differential_arm(&exe);
+    let (delta_output, delta_arenas, _) =
+        run_inline_addsub_differential_arm_with_streams(&exe, hard_chip_streams(1));
     let delta_stream = delta_output
         .delta_records
         .as_ref()
@@ -1816,7 +1829,7 @@ fn rvr_preflight_g2_phase2b_full_standard_matrix_is_byte_equal() {
             .iter()
             .map(|binding| binding.kind)
             .collect::<Vec<_>>(),
-        (0u8..30).collect::<Vec<_>>(),
+        (0u8..30).chain(31u8..38).collect::<Vec<_>>(),
         "Phase-2b matrix must bind every standard decoder kind"
     );
     let mut initial_blocks = BTreeMap::new();
@@ -1849,10 +1862,11 @@ fn rvr_preflight_g2_phase2b_full_standard_matrix_is_byte_equal() {
                 register += usize::from(entry.flags & 1 == 0);
             }
         }
-        assert!(
-            total > register && register > 0,
-            "kind {kind} must cover both arities"
+        assert_eq!(
+            total, register,
+            "kind {kind} is register-only after the AIR split"
         );
+        assert!(register > 0, "kind {kind} must be represented");
         assert_eq!(
             descs
                 .iter()
@@ -1869,6 +1883,33 @@ fn rvr_preflight_g2_phase2b_full_standard_matrix_is_byte_equal() {
             0,
             "kind {kind} current-source V1 lane must be replayed on device"
         );
+    }
+    for kind in 31u8..=37 {
+        let binding = meta
+            .air_bindings
+            .iter()
+            .find(|binding| binding.kind == kind)
+            .expect("split-immediate kind binding");
+        let total = reference
+            .expanded_program_slots
+            .iter()
+            .filter(|&&slot| {
+                let entry = decode.entries[slot as usize];
+                entry.air_idx as usize == binding.air_idx && entry.flags & 1 != 0
+            })
+            .count();
+        assert!(total > 0, "split-immediate kind {kind} must be represented");
+        assert_eq!(
+            descs
+                .iter()
+                .find(|desc| desc.kind == 0x0100 + 2 * u16::from(kind))
+                .map_or(0, |desc| desc.count as usize),
+            total,
+            "split-immediate kind {kind} result lane count"
+        );
+        assert!(descs
+            .iter()
+            .all(|desc| desc.kind != 0x0101 + 2 * u16::from(kind)));
     }
     for kind in 10u8..=14 {
         assert!(descs

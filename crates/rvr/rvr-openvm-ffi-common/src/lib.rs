@@ -178,7 +178,13 @@ pub const G2_GROUP_RESIDUAL: u32 = 2;
 pub const G2_LOAD_STORE_KINDS: [u8; 11] = [8, 9, 20, 21, 22, 23, 24, 25, 26, 27, 28];
 /// Fixed Phase-2b slot allocation. Stage 4 retains one slot per ALU kind as a
 /// device-replay result seed; branch and Jalr current values have no host lane.
-pub const G2_PHASE2B_RESULT_KINDS: [u8; 13] = [0, 1, 2, 3, 4, 5, 6, 7, 15, 16, 17, 18, 19];
+/// Number of private standard decoder kinds. Kind 30 remains reserved for the
+/// variable-row HintStore decoder; split-immediate AIRs occupy 31 through 37.
+pub const G2_DECODER_KIND_COUNT: usize = 38;
+pub const G2_HINT_STORE_KIND: u8 = 30;
+pub const G2_PHASE2B_RESULT_KINDS: [u8; 20] = [
+    0, 1, 2, 3, 4, 5, 6, 7, 15, 16, 17, 18, 19, 31, 32, 33, 34, 35, 36, 37,
+];
 pub const G2_ZERO_ARITY_KINDS: [u8; 2] = [12, 14];
 pub const G2_PRODUCER_RUN_SLOT: usize = 0;
 pub const G2_PRODUCER_RESIDUAL_CTRL_SLOT: usize = 1;
@@ -201,6 +207,10 @@ pub const fn g2_lane_v0(kind: u8) -> u16 {
 
 pub const fn g2_lane_v1(kind: u8) -> u16 {
     g2_lane_v0(kind) + 1
+}
+
+pub const fn g2_standard_decoder_kind(kind: u8) -> bool {
+    (kind as usize) < G2_DECODER_KIND_COUNT && kind != G2_HINT_STORE_KIND
 }
 
 pub const fn g2_load_store_producer_slot(kind: u8, value_lane: bool) -> Option<usize> {
