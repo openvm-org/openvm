@@ -47,6 +47,7 @@ impl ExtInstr for HintStoreWInstr {
                 &ptr,
                 MemWidth::Double,
                 PageAddressSpace::MainMemory(RV64_MEMORY_AS),
+                true,
             );
             return;
         }
@@ -128,7 +129,12 @@ impl ExtInstr for HintBufferInstr {
                 &[&ptr, &callback_count],
             );
             ctx.append_replay_memory_u64_range(&ptr, &callback_count);
-            ctx.trace_page_access_u64_range(&ptr, &n, PageAddressSpace::MainMemory(RV64_MEMORY_AS));
+            ctx.trace_page_access_u64_range(
+                &ptr,
+                &n,
+                PageAddressSpace::MainMemory(RV64_MEMORY_AS),
+                true,
+            );
         }
         // Block entry credits one row; runtime metering adds the remaining
         // `(n - 1)` rows.
@@ -192,7 +198,12 @@ impl ExtInstr for RevealInstr {
         // callback after materializing the crossing-access plan.
         ctx.reserve_preflight_timestamp_slots(slots);
         ctx.emit_checked_call("openvm_reveal", &["state", &src, &ptr, &addr, &width]);
-        ctx.trace_page_access(&addr, self.width, PageAddressSpace::Other(PUBLIC_VALUES_AS));
+        ctx.trace_page_access(
+            &addr,
+            self.width,
+            PageAddressSpace::Other(PUBLIC_VALUES_AS),
+            true,
+        );
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -629,11 +640,17 @@ mod tests {
             self.write_line("}");
         }
 
-        fn trace_page_access(&mut self, addr: &str, width: MemWidth, addr_space: PageAddressSpace) {
+        fn trace_page_access(
+            &mut self,
+            addr: &str,
+            width: MemWidth,
+            addr_space: PageAddressSpace,
+            is_write: bool,
+        ) {
             let size = width.bytes();
             self.write_line(&format!(
-                "trace_page_access(state, {addr}, {size}u, {}u);",
-                addr_space.id()
+                "trace_page_access(state, {addr}, {size}u, {}u, {is_write});",
+                addr_space.id(),
             ));
         }
 
@@ -642,10 +659,11 @@ mod tests {
             base_addr: &str,
             num_dwords: &str,
             addr_space: PageAddressSpace,
+            is_write: bool,
         ) {
             self.write_line(&format!(
-                "trace_page_access_u64_range(state, {base_addr}, {num_dwords}, {}u);",
-                addr_space.id()
+                "trace_page_access_u64_range(state, {base_addr}, {num_dwords}, {}u, {is_write});",
+                addr_space.id(),
             ));
         }
     }
@@ -746,7 +764,9 @@ mod tests {
         assert_eq!(ctx.lines[2], "if (unlikely(!tmp1)) {");
         assert_eq!(
             ctx.lines[5],
-            format!("trace_page_access(state, (r10 + 0x0000000cull), 4u, {PUBLIC_VALUES_AS}u);")
+            format!(
+                "trace_page_access(state, (r10 + 0x0000000cull), 4u, {PUBLIC_VALUES_AS}u, true);"
+            )
         );
     }
 

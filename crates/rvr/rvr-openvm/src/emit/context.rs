@@ -426,7 +426,7 @@ impl<'a> EmitContext<'a> {
         self.write_line(&format!("{var_ty} {var} = {read_func}(memory, {addr});"));
         self.count_fixed_timestamp_slots(if width == 1 { 1 } else { 2 });
         if self.mode.traces_memory_pages() {
-            self.emit_inline_page_record(&addr, width, sp_relative);
+            self.emit_inline_page_record(&addr, width, sp_relative, false);
         }
         var
     }
@@ -453,7 +453,7 @@ impl<'a> EmitContext<'a> {
 
         self.emit_memory_bounds_trap(&addr, width);
         if self.mode.traces_memory_pages() {
-            self.emit_inline_page_record(&addr, width, sp_relative);
+            self.emit_inline_page_record(&addr, width, sp_relative, true);
         }
         self.count_fixed_timestamp_slots(if width == 1 { 1 } else { 2 });
         self.write_line(&format!(
@@ -484,7 +484,7 @@ impl<'a> EmitContext<'a> {
 
         self.emit_memory_bounds_trap(addr, MEMORY_BLOCK_BYTES as u8);
         if self.mode.traces_memory_pages() {
-            self.emit_inline_page_record(addr, MEMORY_BLOCK_BYTES as u8, false);
+            self.emit_inline_page_record(addr, MEMORY_BLOCK_BYTES as u8, false, true);
         }
         self.count_fixed_timestamp_slots(1);
         self.write_line(&format!(
@@ -640,17 +640,25 @@ impl<'a> EmitContext<'a> {
         self.write_line("}");
     }
 
-    fn emit_inline_page_record(&mut self, addr: &str, width: u8, sp_relative: bool) {
+    fn emit_inline_page_record(
+        &mut self,
+        addr: &str,
+        width: u8,
+        sp_relative: bool,
+        is_write: bool,
+    ) {
         let prefix = if sp_relative {
             "trace_sp_memory"
         } else {
             "trace_memory"
         };
         if width == 1 {
-            self.write_line(&format!("{prefix}_access_leaf(&trace_memory, {addr});"));
+            self.write_line(&format!(
+                "{prefix}_access_leaf(&trace_memory, {addr}, {is_write});"
+            ));
         } else {
             self.write_line(&format!(
-                "{prefix}_access_span(&trace_memory, {addr}, {width}u);"
+                "{prefix}_access_span(&trace_memory, {addr}, {width}u, {is_write});"
             ));
         }
     }
@@ -771,7 +779,13 @@ impl<'a> EmitContext<'a> {
         self.write_line("}");
     }
 
-    pub fn trace_page_access(&mut self, addr: &str, width: MemWidth, addr_space: PageAddressSpace) {
+    pub fn trace_page_access(
+        &mut self,
+        addr: &str,
+        width: MemWidth,
+        addr_space: PageAddressSpace,
+        is_write: bool,
+    ) {
         if !matches!(self.mode, EmitMode::Metered { .. }) {
             return;
         }
@@ -781,8 +795,8 @@ impl<'a> EmitContext<'a> {
         }
         let size = width.bytes();
         self.write_line(&format!(
-            "trace_page_access(state, {addr}, {size}u, {}u);",
-            addr_space.id()
+            "trace_page_access(state, {addr}, {size}u, {}u, {is_write});",
+            addr_space.id(),
         ));
         if touches_memory {
             self.reload_page_locals();
@@ -794,6 +808,7 @@ impl<'a> EmitContext<'a> {
         base_addr: &str,
         num_dwords: &str,
         addr_space: PageAddressSpace,
+        is_write: bool,
     ) {
         if !matches!(self.mode, EmitMode::Metered { .. }) {
             return;
@@ -803,8 +818,8 @@ impl<'a> EmitContext<'a> {
             self.flush_page_locals();
         }
         self.write_line(&format!(
-            "trace_page_access_u64_range(state, {base_addr}, {num_dwords}, {}u);",
-            addr_space.id()
+            "trace_page_access_u64_range(state, {base_addr}, {num_dwords}, {}u, {is_write});",
+            addr_space.id(),
         ));
         if touches_memory {
             self.reload_page_locals();
@@ -969,8 +984,14 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
         EmitContext::trace_chip_if_nonzero(self, chip_idx, count_expr);
     }
 
-    fn trace_page_access(&mut self, addr: &str, width: MemWidth, addr_space: PageAddressSpace) {
-        EmitContext::trace_page_access(self, addr, width, addr_space);
+    fn trace_page_access(
+        &mut self,
+        addr: &str,
+        width: MemWidth,
+        addr_space: PageAddressSpace,
+        is_write: bool,
+    ) {
+        EmitContext::trace_page_access(self, addr, width, addr_space, is_write);
     }
 
     fn trace_page_access_u64_range(
@@ -978,8 +999,9 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
         base_addr: &str,
         num_dwords: &str,
         addr_space: PageAddressSpace,
+        is_write: bool,
     ) {
-        EmitContext::trace_page_access_u64_range(self, base_addr, num_dwords, addr_space);
+        EmitContext::trace_page_access_u64_range(self, base_addr, num_dwords, addr_space, is_write);
     }
 }
 
@@ -1306,7 +1328,7 @@ mod tests {
 
         assert_eq!(
             ctx.buf()
-                .matches("trace_memory_access_span(&trace_memory, addr, 8u);")
+                .matches("trace_memory_access_span(&trace_memory, addr, 8u, true);")
                 .count(),
             1
         );
@@ -1333,7 +1355,7 @@ mod tests {
 
         assert!(ctx
             .buf()
-            .contains("trace_memory_access_span(&trace_memory, addr, 8u);"));
+            .contains("trace_memory_access_span(&trace_memory, addr, 8u, false);"));
     }
 
     #[test]
@@ -1344,10 +1366,10 @@ mod tests {
 
         assert!(ctx
             .buf()
-            .contains("trace_sp_memory_access_leaf(&trace_memory, sp + 0x00000004u);"));
+            .contains("trace_sp_memory_access_leaf(&trace_memory, sp + 0x00000004u, false);"));
         assert!(ctx
             .buf()
-            .contains("trace_sp_memory_access_span(&trace_memory, sp - 0x00000008u, 8u);"));
+            .contains("trace_sp_memory_access_span(&trace_memory, sp - 0x00000008u, 8u, true);"));
         assert!(!ctx.buf().contains("trace_memory_access_leaf(&trace_memory"));
         assert!(!ctx.buf().contains("trace_memory_access_span(&trace_memory"));
     }

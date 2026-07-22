@@ -640,16 +640,19 @@ mod tests {
             page_id: 7,
             _padding: 0,
             leaf_mask: 1,
+            dirty_mask: 1,
         };
         with_interval_buffer.pv_page_buf[0] = PageTouch {
             page_id: 3,
             _padding: 0,
             leaf_mask: 1,
+            dirty_mask: 1,
         };
         with_interval_buffer.deferral_page_buf[0] = PageTouch {
             page_id: 2,
             _padding: 0,
             leaf_mask: 1,
+            dirty_mask: 1,
         };
         with_interval_buffer.initialize_segment_memory(1, 1, 1);
 
@@ -678,6 +681,7 @@ mod tests {
             page_id: 0,
             _padding: 0,
             leaf_mask: 1,
+            dirty_mask: 1,
         };
         assert!(!seg_state.on_periodic_check(1, 0, 0, 0, 0));
 
@@ -687,6 +691,7 @@ mod tests {
             page_id: 1,
             _padding: 0,
             leaf_mask: 1,
+            dirty_mask: 1,
         };
         assert!(!seg_state.on_periodic_check(1, 0, 0, 0, 0));
 
@@ -703,6 +708,7 @@ mod tests {
             page_id: 0,
             _padding: 0,
             leaf_mask: 0b11,
+            dirty_mask: 0b11,
         };
         buffered.on_termination(1, 0, 0, 0, 0);
 
@@ -710,7 +716,7 @@ mod tests {
         explicit
             .ctx
             .memory_ctx
-            .update_boundary_merkle_heights(RV64_MEMORY_AS, 0, 17);
+            .update_boundary_merkle_heights(RV64_MEMORY_AS, 0, 17, true);
         explicit
             .ctx
             .memory_ctx
@@ -739,6 +745,7 @@ mod tests {
             page_id: 7,
             _padding: 0,
             leaf_mask: 1,
+            dirty_mask: 1,
         };
         let initial_heights = drained.ctx.trace_heights.clone();
         let initial_instret = drained.ctx.segmentation_ctx.instret;
@@ -771,6 +778,7 @@ mod tests {
             page_id: 7,
             _padding: 0,
             leaf_mask: 1,
+            dirty_mask: 1,
         };
         metering.mem_page_buf_len = 1;
         metering.last_mem_page = 7;
@@ -782,6 +790,7 @@ mod tests {
             page_id: 7,
             _padding: 0,
             leaf_mask: 1,
+            dirty_mask: 1,
         };
         once.on_termination(1, 0, 0, 0, 0);
 
@@ -794,6 +803,7 @@ mod tests {
             page_id: 7,
             _padding: 0,
             leaf_mask: 1,
+            dirty_mask: 1,
         };
 
         let mut drained = make_segmentation_state();

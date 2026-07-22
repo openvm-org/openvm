@@ -255,7 +255,8 @@ unsafe fn read_canonical_field_block<F: PrimeField32>(
 
 impl ExecutionCtxTrait for PreflightCtx {
     #[inline(always)]
-    fn on_memory_operation(&mut self, _address_space: u32, _ptr: u32, _size: u32) {}
+    fn on_memory_operation(&mut self, _address_space: u32, _ptr: u32, _size: u32, _is_write: bool) {
+    }
 
     #[inline(always)]
     fn on_memory_read(
