@@ -1,4 +1,4 @@
-//! RV64I instruction nodes and generated-C semantics.
+//! RV64I instruction nodes and C code generation.
 
 use rvr_openvm_ir::{
     CfgBranchCond, CfgEffect, CfgIntWidth, CfgJumpKind, CfgOp, CfgOperand, CfgResultWidth, CfgTerm,
@@ -7,6 +7,7 @@ use rvr_openvm_ir::{
 
 use crate::instruction::{hex_u64, reg_operand, Reg, RA, ZERO};
 
+/// RV64I arithmetic or logical operation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum AluOp {
     Add,
@@ -72,8 +73,10 @@ impl AluOp {
     }
 }
 
+/// RV64I instruction represented as extension-owned IR.
 #[derive(Debug, Clone)]
 pub(crate) enum Rv64IInstr {
+    /// Register-register or register-immediate arithmetic.
     Alu {
         op: AluOp,
         word: bool,
@@ -82,6 +85,7 @@ pub(crate) enum Rv64IInstr {
         lhs: Reg,
         rhs: CfgOperand,
     },
+    /// Load from main memory.
     Load {
         width: MemWidth,
         signed: bool,
@@ -89,27 +93,29 @@ pub(crate) enum Rv64IInstr {
         base: Reg,
         offset: i16,
     },
+    /// Store to main memory.
     Store {
         width: MemWidth,
         base: Reg,
         src: Reg,
         offset: i16,
     },
+    /// Write a precomputed LUI or AUIPC result.
     Const {
         name: &'static str,
         rd: Reg,
         value: u64,
     },
+    /// Conditional branch.
     Branch {
         cond: CfgBranchCond,
         lhs: Reg,
         rhs: Reg,
         target: u64,
     },
-    Jump {
-        link_dst: Option<Reg>,
-        target: u64,
-    },
+    /// Jump to a statically known target.
+    Jump { link_dst: Option<Reg>, target: u64 },
+    /// Jump to a CFG-resolved register-relative target.
     JumpIndirect {
         link_dst: Option<Reg>,
         base: Reg,
@@ -119,55 +125,6 @@ pub(crate) enum Rv64IInstr {
 }
 
 impl ExtInstr for Rv64IInstr {
-    fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        match self {
-            Self::Branch { .. } | Self::Jump { .. } | Self::JumpIndirect { .. } => {}
-            Self::Alu {
-                op,
-                word,
-                rd,
-                lhs,
-                rhs,
-                ..
-            } => {
-                let lhs_value = ctx.read_slot(*lhs);
-                let rhs_value = operand_c(ctx, *rhs);
-                let value = (!*word)
-                    .then(|| constant_alu_result(*op, *lhs, *rhs))
-                    .flatten()
-                    .map(hex_u64)
-                    .unwrap_or_else(|| alu_expr(*op, *word, &lhs_value, &rhs_value));
-                ctx.write_slot(*rd, &value);
-            }
-            Self::Load {
-                width,
-                signed,
-                rd,
-                base,
-                offset,
-            } => {
-                let base = ctx.read_slot(*base);
-                let value = ctx.read_mem(&base, *offset, width.bytes(), *signed);
-                if let Some(rd) = rd {
-                    ctx.write_slot(*rd, &value);
-                } else {
-                    ctx.write_line(&format!("(void){value};"));
-                }
-            }
-            Self::Store {
-                width,
-                base,
-                src,
-                offset,
-            } => {
-                let base = ctx.read_slot(*base);
-                let value = ctx.read_slot(*src);
-                ctx.write_mem(&base, *offset, &value, width.bytes());
-            }
-            Self::Const { rd, value, .. } => ctx.write_slot(*rd, &hex_u64(*value)),
-        }
-    }
-
     fn opname(&self) -> &str {
         match self {
             Self::Alu {
@@ -209,6 +166,63 @@ impl ExtInstr for Rv64IInstr {
             } => "jalr",
             Self::JumpIndirect { link_dst: None, .. } => "jr",
         }
+    }
+
+    fn accesses_memory(&self) -> bool {
+        matches!(self, Self::Load { .. } | Self::Store { .. })
+    }
+
+    fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
+        match self {
+            Self::Branch { .. } | Self::Jump { .. } | Self::JumpIndirect { .. } => {}
+            Self::Alu {
+                op,
+                word,
+                rd,
+                lhs,
+                rhs,
+                ..
+            } => {
+                let lhs_value = ctx.read_var(*lhs);
+                let rhs_value = operand_c(ctx, *rhs);
+                let value = (!*word)
+                    .then(|| constant_alu_result(*op, *lhs, *rhs))
+                    .flatten()
+                    .map(hex_u64)
+                    .unwrap_or_else(|| alu_expr(*op, *word, &lhs_value, &rhs_value));
+                ctx.write_var(*rd, &value);
+            }
+            Self::Load {
+                width,
+                signed,
+                rd,
+                base,
+                offset,
+            } => {
+                let base = ctx.read_var(*base);
+                let value = ctx.read_mem(&base, *offset, width.bytes(), *signed);
+                if let Some(rd) = rd {
+                    ctx.write_var(*rd, &value);
+                } else {
+                    ctx.write_line(&format!("(void){value};"));
+                }
+            }
+            Self::Store {
+                width,
+                base,
+                src,
+                offset,
+            } => {
+                let base = ctx.read_var(*base);
+                let value = ctx.read_var(*src);
+                ctx.write_mem(&base, *offset, &value, width.bytes());
+            }
+            Self::Const { rd, value, .. } => ctx.write_var(*rd, &hex_u64(*value)),
+        }
+    }
+
+    fn clone_box(&self) -> Box<dyn ExtInstr> {
+        Box::new(self.clone())
     }
 
     fn cfg_effect(&self) -> CfgEffect {
@@ -291,14 +305,6 @@ impl ExtInstr for Rv64IInstr {
         }
     }
 
-    fn accesses_memory(&self) -> bool {
-        matches!(self, Self::Load { .. } | Self::Store { .. })
-    }
-
-    fn clone_box(&self) -> Box<dyn ExtInstr> {
-        Box::new(self.clone())
-    }
-
     fn with_resolved_jumps(&self, resolved: Vec<u64>) -> Box<dyn ExtInstr> {
         match self {
             Self::JumpIndirect {
@@ -319,7 +325,7 @@ impl ExtInstr for Rv64IInstr {
 
 fn operand_c(ctx: &mut dyn ExtEmitCtx, operand: CfgOperand) -> String {
     match operand {
-        CfgOperand::Slot(reg) => ctx.read_slot(reg),
+        CfgOperand::Var(reg) => ctx.read_var(reg),
         CfgOperand::Const(value) => hex_u64(value),
     }
 }
@@ -355,7 +361,7 @@ fn alu_expr(op: AluOp, word: bool, lhs: &str, rhs: &str) -> String {
 
 fn constant_alu_result(op: AluOp, lhs: Reg, rhs: CfgOperand) -> Option<u64> {
     match (op, rhs) {
-        (AluOp::Slt | AluOp::Sltu, CfgOperand::Slot(rhs)) if lhs == rhs => Some(0),
+        (AluOp::Slt | AluOp::Sltu, CfgOperand::Var(rhs)) if lhs == rhs => Some(0),
         (AluOp::Sltu, CfgOperand::Const(0)) => Some(0),
         (AluOp::Slt, CfgOperand::Const(rhs)) if lhs == ZERO => Some(u64::from(0 < rhs as i64)),
         (AluOp::Sltu, CfgOperand::Const(rhs)) if lhs == ZERO => Some(u64::from(rhs != 0)),

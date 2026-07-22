@@ -1,4 +1,4 @@
-//! RV64I instruction lifting, CFG metadata, and generated-C semantics.
+//! RV64I instruction lifting, CFG metadata, and C code generation.
 
 mod instruction;
 

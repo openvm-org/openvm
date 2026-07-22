@@ -16,11 +16,11 @@ pub use fp2::Fp2RvrExtension;
 pub use modular::{HintNonQrInstr, HintSqrtInstr, ModularRvrExtension};
 use num_bigint::BigUint;
 use openvm_instructions::riscv::{RV64_NUM_REGISTERS, RV64_REGISTER_BYTES};
-use rvr_openvm_ir::ValueSlot;
-use rvr_openvm_lift::decode_value_slot;
+use rvr_openvm_ir::Variable;
+use rvr_openvm_lift::decode_variable;
 
-fn decode_reg(value: u32) -> ValueSlot {
-    decode_value_slot(value, RV64_REGISTER_BYTES as u32, RV64_NUM_REGISTERS as u32)
+fn decode_reg(value: u32) -> Variable {
+    decode_variable(value, RV64_REGISTER_BYTES as u32, RV64_NUM_REGISTERS as u32)
 }
 
 /// Zero-pad `modulus` to the canonical limb boundary (32 or 48 bytes).

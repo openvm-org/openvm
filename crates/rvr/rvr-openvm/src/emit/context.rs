@@ -1,6 +1,6 @@
 use std::{collections::HashSet, fmt::Write};
 
-use rvr_openvm_ir::{MemWidth, PageAddressSpace, ValueSlot};
+use rvr_openvm_ir::{MemWidth, PageAddressSpace, Variable};
 
 use super::codegen::hex_u32;
 
@@ -578,16 +578,16 @@ impl<'a> EmitContext<'a> {
 }
 
 impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
-    fn read_slot(&mut self, slot: ValueSlot) -> String {
-        EmitContext::read_reg(self, rv64_slot_index(slot))
+    fn read_var(&mut self, var: Variable) -> String {
+        EmitContext::read_reg(self, rv64_reg_index(var))
     }
 
-    fn peek_slot(&mut self, slot: ValueSlot) -> String {
-        EmitContext::peek_reg(self, rv64_slot_index(slot))
+    fn peek_var(&mut self, var: Variable) -> String {
+        EmitContext::peek_reg(self, rv64_reg_index(var))
     }
 
-    fn write_slot(&mut self, slot: ValueSlot, val: &str) {
-        EmitContext::write_reg(self, rv64_slot_index(slot), val)
+    fn write_var(&mut self, var: Variable, val: &str) {
+        EmitContext::write_reg(self, rv64_reg_index(var), val)
     }
 
     fn write_line(&mut self, s: &str) {
@@ -649,9 +649,9 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
     }
 }
 
-fn rv64_slot_index(slot: ValueSlot) -> u8 {
-    let index = u8::try_from(slot.index()).expect("RV64 value slot index must fit in u8");
-    assert!(index < 32, "RV64 value slot index must name x0..x31");
+fn rv64_reg_index(var: Variable) -> u8 {
+    let index = u8::try_from(var.index()).expect("RV64 variable index must fit in u8");
+    assert!(index < 32, "RV64 variable index must name x0..x31");
     index
 }
 

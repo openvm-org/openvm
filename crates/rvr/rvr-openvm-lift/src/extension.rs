@@ -9,7 +9,7 @@ use openvm_instructions::{
     exe::SparseMemoryImage, metering::PAGE_MASK_LEAF_BITS, LocalOpcode, VmOpcode, VM_DIGEST_WIDTH,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
-use rvr_openvm_ir::{FixedTraceRows, LiftedInstr, ValueSlot};
+use rvr_openvm_ir::{FixedTraceRows, LiftedInstr, Variable};
 
 use crate::RvrInstruction;
 
@@ -78,13 +78,13 @@ pub fn fixed_trace_rows_for_chip(idx: Option<AirIndex>, count: u32) -> Vec<Fixed
     .unwrap_or_default()
 }
 
-/// Decodes an aligned OpenVM operand into an opaque value slot.
-pub fn decode_value_slot(value: u32, stride: u32, slot_count: u32) -> ValueSlot {
-    assert!(stride != 0, "value-slot stride must be nonzero");
-    assert_eq!(value % stride, 0, "value-slot operand must be slot-aligned");
+/// Decodes an aligned OpenVM operand into a target-defined variable.
+pub fn decode_variable(value: u32, stride: u32, variable_count: u32) -> Variable {
+    assert!(stride != 0, "variable stride must be nonzero");
+    assert_eq!(value % stride, 0, "variable operand must be aligned");
     let index = value / stride;
-    assert!(index < slot_count, "value-slot operand is out of bounds");
-    ValueSlot::new(index)
+    assert!(index < variable_count, "variable operand is out of bounds");
+    Variable::new(index)
 }
 
 /// Data needed by extension crates to resolve opcode/chip metadata when

@@ -1,4 +1,4 @@
-//! RV64IO instruction lifting and host callbacks.
+//! RV64 IO instruction lifting and host callbacks.
 
 use std::ffi::c_void;
 
@@ -35,7 +35,7 @@ impl ExtInstr for HintStoreWInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let ptr = ctx.read_slot(self.ptr_reg);
+        let ptr = ctx.read_var(self.ptr_reg);
         ctx.emit_checked_call_without_page_flush("openvm_hint_storew", &[&ptr]);
         ctx.trace_page_access(
             &ptr,
@@ -44,12 +44,12 @@ impl ExtInstr for HintStoreWInstr {
         );
     }
 
-    fn cfg_effect(&self) -> CfgEffect {
-        CfgEffect::None
-    }
-
     fn clone_box(&self) -> Box<dyn ExtInstr> {
         Box::new(self.clone())
+    }
+
+    fn cfg_effect(&self) -> CfgEffect {
+        CfgEffect::None
     }
 }
 
@@ -68,8 +68,8 @@ impl ExtInstr for HintBufferInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let ptr = ctx.read_slot(self.ptr_reg);
-        let n = ctx.read_slot(self.num_words_reg);
+        let ptr = ctx.read_var(self.ptr_reg);
+        let n = ctx.read_var(self.num_words_reg);
         ctx.write_line(&format!(
             "if (unlikely(({n} - 1ull) >= {MAX_HINT_BUFFER_DWORDS}ull)) {{"
         ));
@@ -85,12 +85,12 @@ impl ExtInstr for HintBufferInstr {
         ctx.trace_page_access_u64_range(&ptr, &n, PageAddressSpace::MainMemory(RV64_MEMORY_AS));
     }
 
-    fn cfg_effect(&self) -> CfgEffect {
-        CfgEffect::None
-    }
-
     fn clone_box(&self) -> Box<dyn ExtInstr> {
         Box::new(self.clone())
+    }
+
+    fn cfg_effect(&self) -> CfgEffect {
+        CfgEffect::None
     }
 }
 
@@ -114,8 +114,8 @@ impl ExtInstr for RevealInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let src = ctx.read_slot(self.src_reg);
-        let ptr = ctx.read_slot(self.ptr_reg);
+        let src = ctx.read_var(self.src_reg);
+        let ptr = ctx.read_var(self.ptr_reg);
         let addr = match self.offset.cmp(&0) {
             std::cmp::Ordering::Less => {
                 format!("({ptr} - 0x{:08x}ull)", self.offset.unsigned_abs())
@@ -128,16 +128,16 @@ impl ExtInstr for RevealInstr {
         ctx.trace_page_access(&addr, self.width, PageAddressSpace::Other(PUBLIC_VALUES_AS));
     }
 
-    fn cfg_effect(&self) -> CfgEffect {
-        CfgEffect::None
-    }
-
     fn clone_box(&self) -> Box<dyn ExtInstr> {
         Box::new(self.clone())
     }
+
+    fn cfg_effect(&self) -> CfgEffect {
+        CfgEffect::None
+    }
 }
 
-/// RVR extension for RV64IO hint-store instructions and stores to public
+/// RVR extension for RV64 IO hint-store instructions and stores to public
 /// values, including REVEAL.
 pub struct Rv64IoExtension {
     hint_store_chip_idx: Option<AirIndex>,
@@ -345,15 +345,15 @@ mod tests {
     }
 
     impl ExtEmitCtx for TestEmitCtx {
-        fn read_slot(&mut self, slot: Reg) -> String {
-            format!("r{}", slot.index())
+        fn read_var(&mut self, var: Reg) -> String {
+            format!("r{}", var.index())
         }
 
-        fn peek_slot(&mut self, slot: Reg) -> String {
-            format!("r{}", slot.index())
+        fn peek_var(&mut self, var: Reg) -> String {
+            format!("r{}", var.index())
         }
 
-        fn write_slot(&mut self, _slot: Reg, _val: &str) {}
+        fn write_var(&mut self, _var: Reg, _val: &str) {}
 
         fn write_line(&mut self, s: &str) {
             self.lines.push(s.to_string());

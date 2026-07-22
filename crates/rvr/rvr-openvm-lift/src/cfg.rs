@@ -1,8 +1,7 @@
-//! CFG analysis for the new rvr-openvm-ir types.
+//! CFG analysis for RVR IR.
 //!
-//! Multi-value register tracking, worklist fixpoint propagation,
-//! call/return analysis, and Duff's device scanning -- all operating
-//! on `LiftedInstr` / `Block` from `rvr_openvm_ir`.
+//! Multi-value variable tracking, worklist fixpoint propagation, call/return
+//! analysis, and Duff's device scanning operate on `LiftedInstr` and `Block`.
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 
@@ -12,7 +11,7 @@ use openvm_instructions::{
 };
 use rvr_openvm_ir::{
     Block, CfgEffect, CfgJumpKind, CfgOp, CfgOperand, CfgResultWidth, CfgTerm, InstrAt,
-    LiftedInstr, Terminator, ValueSlot,
+    LiftedInstr, Terminator, Variable,
 };
 
 const MAX_VALUES: usize = 16;
@@ -30,7 +29,7 @@ pub enum CfgError {
     PcNotInProgram { pc: u64, target: u64 },
 }
 
-// ── RegisterValue ──────────────────────────────────────────────────────────
+// ── TrackedValue ──────────────────────────────────────────────────────────
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ValueKind {
@@ -39,12 +38,12 @@ enum ValueKind {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct RegisterValue {
+struct TrackedValue {
     kind: ValueKind,
     values: Vec<u64>,
 }
 
-impl RegisterValue {
+impl TrackedValue {
     const fn unknown() -> Self {
         Self {
             kind: ValueKind::Unknown,
@@ -134,44 +133,44 @@ impl RegisterValue {
     }
 }
 
-// ── RegisterState ──────────────────────────────────────────────────────────
+// ── VariableState ──────────────────────────────────────────────────────────
 
 #[derive(Clone, Debug)]
-struct RegisterState {
-    values: HashMap<ValueSlot, RegisterValue>,
+struct VariableState {
+    values: HashMap<Variable, TrackedValue>,
 }
 
-impl RegisterState {
+impl VariableState {
     fn new() -> Self {
         Self {
             values: HashMap::new(),
         }
     }
 
-    fn get(&self, slot: ValueSlot) -> RegisterValue {
+    fn get(&self, var: Variable) -> TrackedValue {
         self.values
-            .get(&slot)
+            .get(&var)
             .cloned()
-            .unwrap_or_else(RegisterValue::unknown)
+            .unwrap_or_else(TrackedValue::unknown)
     }
 
-    fn operand(&self, operand: CfgOperand) -> RegisterValue {
+    fn operand(&self, operand: CfgOperand) -> TrackedValue {
         match operand {
-            CfgOperand::Slot(slot) => self.get(slot),
-            CfgOperand::Const(value) => RegisterValue::constant(value),
+            CfgOperand::Var(var) => self.get(var),
+            CfgOperand::Const(value) => TrackedValue::constant(value),
         }
     }
 
-    fn set(&mut self, slot: ValueSlot, value: RegisterValue) {
+    fn set(&mut self, var: Variable, value: TrackedValue) {
         if value.is_constant() {
-            self.values.insert(slot, value);
+            self.values.insert(var, value);
         } else {
-            self.values.remove(&slot);
+            self.values.remove(&var);
         }
     }
 
-    fn set_unknown(&mut self, slot: ValueSlot) {
-        self.values.remove(&slot);
+    fn set_unknown(&mut self, var: Variable) {
+        self.values.remove(&var);
     }
 
     fn clear(&mut self) {
@@ -180,12 +179,12 @@ impl RegisterState {
 
     fn merge(&mut self, other: &Self) -> bool {
         let mut changed = false;
-        let slots: Vec<_> = self.values.keys().copied().collect();
-        for slot in slots {
-            let current = self.get(slot);
-            let merged = current.merge(&other.get(slot));
+        let vars: Vec<_> = self.values.keys().copied().collect();
+        for var in vars {
+            let current = self.get(var);
+            let merged = current.merge(&other.get(var));
             if merged != current {
-                self.set(slot, merged);
+                self.set(var, merged);
                 changed = true;
             }
         }
@@ -305,19 +304,19 @@ fn compute_op(op: CfgOp, result: CfgResultWidth, left: u64, right: u64) -> u64 {
     }
 }
 
-/// Compute the cross-product of two multi-value register values under a binary op.
+/// Compute the cross-product of two tracked multi-value operands under a binary operation.
 fn eval_op_multi(
     op: CfgOp,
     result_width: CfgResultWidth,
-    lhs: &RegisterValue,
-    rhs: &RegisterValue,
-) -> RegisterValue {
+    lhs: &TrackedValue,
+    rhs: &TrackedValue,
+) -> TrackedValue {
     if !lhs.is_constant() || !rhs.is_constant() || lhs.values.is_empty() || rhs.values.is_empty() {
-        return RegisterValue::unknown();
+        return TrackedValue::unknown();
     }
 
     let mut result =
-        RegisterValue::constant(compute_op(op, result_width, lhs.values[0], rhs.values[0]));
+        TrackedValue::constant(compute_op(op, result_width, lhs.values[0], rhs.values[0]));
     'outer: for left in &lhs.values {
         for right in &rhs.values {
             if *left == lhs.values[0] && *right == rhs.values[0] {
@@ -334,6 +333,7 @@ fn eval_op_multi(
 
 // ── IR classification ─────────────────────────────────────────────────────
 
+/// A call is a static or indirect jump whose CFG role is `Call`.
 fn is_call(li: &LiftedInstr) -> bool {
     matches!(
         cfg_term_of(li),
@@ -349,6 +349,7 @@ fn is_call(li: &LiftedInstr) -> bool {
     )
 }
 
+/// A return is an indirect jump whose CFG role is `Return`.
 fn is_return(li: &LiftedInstr) -> bool {
     matches!(
         cfg_term_of(li),
@@ -359,6 +360,7 @@ fn is_return(li: &LiftedInstr) -> bool {
     )
 }
 
+/// An indirect jump has a computed target and is neither a call nor a return.
 fn is_indirect_jump(li: &LiftedInstr) -> bool {
     matches!(
         cfg_term_of(li),
@@ -384,16 +386,16 @@ fn cfg_term_of(li: &LiftedInstr) -> Option<CfgTerm> {
     }
 }
 
-// ── Simple register tracking (phase 1, single-value) ──────────────────────
+// ── Simple variable tracking (phase 1, single-value) ──────────────────────
 
-fn single_value(state: &RegisterState, operand: CfgOperand) -> Option<u64> {
+fn single_value(state: &VariableState, operand: CfgOperand) -> Option<u64> {
     let value = state.operand(operand);
     (value.values.len() == 1).then(|| value.values[0])
 }
 
 /// Evaluate one known indirect target as `(base + offset) & target_mask`.
 fn simple_eval_indirect(
-    state: &RegisterState,
+    state: &VariableState,
     base: CfgOperand,
     offset: i32,
     target_mask: u64,
@@ -427,7 +429,7 @@ fn collect_potential_targets(
         function_entries.insert(first.pc());
     }
 
-    let mut state = RegisterState::new();
+    let mut state = VariableState::new();
 
     for li in instructions {
         let pc = li.pc();
@@ -540,18 +542,18 @@ fn worklist(
     internal_targets: &BTreeSet<u64>,
 ) -> WorklistResult {
     let estimated_size = function_entries.len() + internal_targets.len();
-    let mut states: HashMap<u64, RegisterState> = HashMap::with_capacity(estimated_size);
+    let mut states: HashMap<u64, VariableState> = HashMap::with_capacity(estimated_size);
     let mut work: Vec<u64> = Vec::with_capacity(estimated_size);
     let mut in_work: HashSet<u64> = HashSet::with_capacity(estimated_size);
     let mut successors: HashMap<u64, HashSet<u64>> = HashMap::with_capacity(estimated_size);
     let mut unresolved_dynamic_jumps: HashSet<u64> = HashSet::new();
     let mut resolved_jumps: HashMap<u64, HashSet<u64>> = HashMap::new();
 
-    // Do not seed internal targets with unknown register values. Their actual
+    // Do not seed internal targets with unknown variable values. Their actual
     // predecessors may provide constants needed to resolve dynamic jumps.
     for addr in function_entries {
         if in_work.insert(*addr) {
-            states.insert(*addr, RegisterState::new());
+            states.insert(*addr, VariableState::new());
             work.push(*addr);
         }
     }
@@ -615,8 +617,8 @@ fn worklist(
 
 // ── Phase 4: transfer ─────────────────────────────────────────────────────
 
-/// Process one LiftedInstr, updating the register state for the output edge.
-fn transfer(li: &LiftedInstr, mut state: RegisterState) -> RegisterState {
+/// Process one LiftedInstr, updating the variable state for the output edge.
+fn transfer(li: &LiftedInstr, mut state: VariableState) -> VariableState {
     match li {
         LiftedInstr::Body(InstrAt { instr, .. }) => {
             transfer_effect(instr.cfg_effect(), &mut state);
@@ -634,7 +636,7 @@ fn transfer(li: &LiftedInstr, mut state: RegisterState) -> RegisterState {
                 | CfgTerm::JumpIndirect {
                     link_dst: Some(dst),
                     ..
-                } => state.set(dst, RegisterValue::constant(fall_pc)),
+                } => state.set(dst, TrackedValue::constant(fall_pc)),
                 _ => {}
             }
         }
@@ -642,12 +644,12 @@ fn transfer(li: &LiftedInstr, mut state: RegisterState) -> RegisterState {
     state
 }
 
-fn transfer_effect(effect: CfgEffect, state: &mut RegisterState) {
+fn transfer_effect(effect: CfgEffect, state: &mut VariableState) {
     match effect {
         CfgEffect::None => {}
         CfgEffect::WriteUnknown { dst } => state.set_unknown(dst),
         CfgEffect::WriteConst { dst, value } => {
-            state.set(dst, RegisterValue::constant(value));
+            state.set(dst, TrackedValue::constant(value));
         }
         CfgEffect::WriteOp {
             dst,
@@ -668,7 +670,7 @@ fn transfer_effect(effect: CfgEffect, state: &mut RegisterState) {
 
 fn get_successors(
     li: &LiftedInstr,
-    state: &RegisterState,
+    state: &VariableState,
     ctx: &WorklistContext<'_>,
     unresolved_dynamic_jumps: &mut HashSet<u64>,
     resolved_jumps: &mut HashMap<u64, HashSet<u64>>,
@@ -765,30 +767,30 @@ fn eval_indirect_target(base: u64, offset: i32, target_mask: u64) -> Option<u64>
 
 /// Evaluate an indirect target for every currently known value of the base operand.
 fn eval_indirect_multi(
-    state: &RegisterState,
+    state: &VariableState,
     base: CfgOperand,
     offset: i32,
     target_mask: u64,
-) -> RegisterValue {
+) -> TrackedValue {
     let base = state.operand(base);
     if !base.is_constant() || base.values.is_empty() {
-        return RegisterValue::unknown();
+        return TrackedValue::unknown();
     }
 
     let first = match eval_indirect_target(base.values[0], offset, target_mask) {
         Some(t) => t,
-        None => return RegisterValue::unknown(),
+        None => return TrackedValue::unknown(),
     };
-    let mut result = RegisterValue::constant(first);
+    let mut result = TrackedValue::constant(first);
     for &v in base.values.iter().skip(1) {
         match eval_indirect_target(v, offset, target_mask) {
             Some(t) => {
                 result.add_value(t);
                 if !result.is_constant() {
-                    return RegisterValue::unknown();
+                    return TrackedValue::unknown();
                 }
             }
-            None => return RegisterValue::unknown(),
+            None => return TrackedValue::unknown(),
         }
     }
     result
@@ -1201,8 +1203,8 @@ mod tests {
             .unwrap_or_else(|| panic!("no block starts at {start_pc:#x}"))
     }
 
-    const fn slot(index: u32) -> ValueSlot {
-        ValueSlot::new(index)
+    const fn var(index: u32) -> Variable {
+        Variable::new(index)
     }
 
     #[test]
@@ -1214,8 +1216,8 @@ mod tests {
                     CfgTerm::Branch {
                         cond: CfgBranchCond::Eq,
                         width: CfgIntWidth::U64,
-                        lhs: slot(1),
-                        rhs: slot(2),
+                        lhs: var(1),
+                        rhs: var(2),
                         target: 8,
                         known: None,
                     },
@@ -1243,7 +1245,7 @@ mod tests {
                 0,
                 TestInstr {
                     effect: CfgEffect::WriteConst {
-                        dst: slot(5),
+                        dst: var(5),
                         value: 1,
                     },
                     term: None,
@@ -1266,7 +1268,7 @@ mod tests {
                     0,
                     TestInstr {
                         effect: CfgEffect::WriteConst {
-                            dst: slot(5),
+                            dst: var(5),
                             value: 16,
                         },
                         term: None,
@@ -1277,7 +1279,7 @@ mod tests {
                     CfgTerm::JumpIndirect {
                         kind: CfgJumpKind::Jump,
                         link_dst: None,
-                        base_value: CfgOperand::Slot(slot(5)),
+                        base_value: CfgOperand::Var(var(5)),
                         offset: 0,
                         target_mask: !1,
                         resolved: Vec::new(),
@@ -1317,7 +1319,7 @@ mod tests {
                     0,
                     TestInstr {
                         effect: CfgEffect::WriteConst {
-                            dst: slot(5),
+                            dst: var(5),
                             value: 16,
                         },
                         term: None,
@@ -1335,7 +1337,7 @@ mod tests {
                     CfgTerm::JumpIndirect {
                         kind: CfgJumpKind::Jump,
                         link_dst: None,
-                        base_value: CfgOperand::Slot(slot(5)),
+                        base_value: CfgOperand::Var(var(5)),
                         offset: 0,
                         target_mask: !1,
                         resolved: Vec::new(),
@@ -1362,7 +1364,7 @@ mod tests {
                     0,
                     TestInstr {
                         effect: CfgEffect::WriteConst {
-                            dst: slot(5),
+                            dst: var(5),
                             value: 16,
                         },
                         term: None,
@@ -1370,7 +1372,7 @@ mod tests {
                 ),
                 instruction_term_with_effect(
                     4,
-                    CfgEffect::WriteUnknown { dst: slot(5) },
+                    CfgEffect::WriteUnknown { dst: var(5) },
                     CfgTerm::Opaque {
                         successors: vec![8],
                     },
@@ -1380,7 +1382,7 @@ mod tests {
                     CfgTerm::JumpIndirect {
                         kind: CfgJumpKind::Jump,
                         link_dst: None,
-                        base_value: CfgOperand::Slot(slot(5)),
+                        base_value: CfgOperand::Var(var(5)),
                         offset: 0,
                         target_mask: !1,
                         resolved: Vec::new(),

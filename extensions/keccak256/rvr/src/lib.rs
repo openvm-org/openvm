@@ -11,15 +11,15 @@ use openvm_instructions::{
 };
 use openvm_keccak256_transpiler::{KeccakfOpcode, XorinOpcode};
 use rvr_openvm_ir::{
-    CfgEffect, ExtEmitCtx, ExtInstr, FixedTraceRows, InstrAt, LiftedInstr, ValueSlot,
+    CfgEffect, ExtEmitCtx, ExtInstr, FixedTraceRows, InstrAt, LiftedInstr, Variable,
 };
 use rvr_openvm_lift::{
-    decode_value_slot, fixed_trace_rows_for_chip, max_main_memory_pages_for_contiguous_range,
+    decode_variable, fixed_trace_rows_for_chip, max_main_memory_pages_for_contiguous_range,
     opcode_air_idx, AirIndex, ExtensionError, RvrExtension, RvrExtensionCtx, RvrInstruction,
 };
 
-fn decode_reg(value: u32) -> ValueSlot {
-    decode_value_slot(value, RV64_REGISTER_BYTES as u32, RV64_NUM_REGISTERS as u32)
+fn decode_reg(value: u32) -> Variable {
+    decode_variable(value, RV64_REGISTER_BYTES as u32, RV64_NUM_REGISTERS as u32)
 }
 
 const KECCAK_NUM_ROUNDS: u32 = p3_keccak_air::NUM_ROUNDS as u32;
@@ -31,7 +31,7 @@ const KECCAK_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize =
 /// keccak-f\[1600\]: read 200 bytes via `buffer_ptr_reg`, permute in place.
 #[derive(Debug, Clone)]
 pub struct KeccakfInstr {
-    pub buffer_ptr_reg: ValueSlot,
+    pub buffer_ptr_reg: Variable,
     /// KeccakfPerm chip (24 rows per instruction).
     pub perm_chip_idx: Option<AirIndex>,
 }
@@ -42,7 +42,7 @@ impl ExtInstr for KeccakfInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let buf = ctx.read_slot(self.buffer_ptr_reg);
+        let buf = ctx.read_var(self.buffer_ptr_reg);
         ctx.emit_call("rvr_ext_keccakf", &["state", &buf]);
     }
 
@@ -62,9 +62,9 @@ impl ExtInstr for KeccakfInstr {
 /// XORIN: XOR `len_reg` bytes from `input_ptr_reg` into `buffer_ptr_reg` in place.
 #[derive(Debug, Clone)]
 pub struct XorinInstr {
-    pub buffer_ptr_reg: ValueSlot,
-    pub input_ptr_reg: ValueSlot,
-    pub len_reg: ValueSlot,
+    pub buffer_ptr_reg: Variable,
+    pub input_ptr_reg: Variable,
+    pub len_reg: Variable,
 }
 
 impl ExtInstr for XorinInstr {
@@ -73,9 +73,9 @@ impl ExtInstr for XorinInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let buf_ptr = ctx.read_slot(self.buffer_ptr_reg);
-        let input = ctx.read_slot(self.input_ptr_reg);
-        let len = ctx.read_slot(self.len_reg);
+        let buf_ptr = ctx.read_var(self.buffer_ptr_reg);
+        let input = ctx.read_var(self.input_ptr_reg);
+        let len = ctx.read_var(self.len_reg);
         ctx.emit_checked_call("rvr_ext_xorin", &["state", &buf_ptr, &input, &len]);
     }
 

@@ -1,7 +1,7 @@
 //! RV64 extensions for rvr-openvm.
 //!
-//! Provides opcode lifters, generated-C support, and runtime hooks for RV64I,
-//! RV64M, RV64IO, and RV64-specific phantom instructions.
+//! Provides opcode lifters, C code generation, and runtime hooks for RV64I,
+//! RV64M, RV64 IO, and RV64-specific phantom instructions.
 #![cfg(feature = "rvr")]
 
 mod i;

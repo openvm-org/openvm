@@ -1,9 +1,10 @@
-//! RV64M instruction nodes and generated-C semantics.
+//! RV64M instruction nodes and C code generation.
 
 use rvr_openvm_ir::{CfgEffect, CfgOp, CfgResultWidth, ExtEmitCtx, ExtInstr};
 
 use crate::instruction::{reg_operand, Reg};
 
+/// RV64M multiplication or division operation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum MulDivOp {
     Mul,
@@ -50,6 +51,7 @@ impl MulDivOp {
     }
 }
 
+/// RV64M instruction represented as extension-owned IR.
 #[derive(Debug, Clone)]
 pub(crate) struct Rv64MInstr {
     pub op: MulDivOp,
@@ -60,14 +62,22 @@ pub(crate) struct Rv64MInstr {
 }
 
 impl ExtInstr for Rv64MInstr {
-    fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let lhs = ctx.read_slot(self.lhs);
-        let rhs = ctx.read_slot(self.rhs);
-        ctx.write_slot(self.rd, &muldiv_expr(self.op, self.word, &lhs, &rhs));
-    }
-
     fn opname(&self) -> &str {
         self.op.name(self.word)
+    }
+
+    fn accesses_memory(&self) -> bool {
+        false
+    }
+
+    fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
+        let lhs = ctx.read_var(self.lhs);
+        let rhs = ctx.read_var(self.rhs);
+        ctx.write_var(self.rd, &muldiv_expr(self.op, self.word, &lhs, &rhs));
+    }
+
+    fn clone_box(&self) -> Box<dyn ExtInstr> {
+        Box::new(self.clone())
     }
 
     fn cfg_effect(&self) -> CfgEffect {
@@ -82,14 +92,6 @@ impl ExtInstr for Rv64MInstr {
                 CfgResultWidth::U64
             },
         }
-    }
-
-    fn accesses_memory(&self) -> bool {
-        false
-    }
-
-    fn clone_box(&self) -> Box<dyn ExtInstr> {
-        Box::new(self.clone())
     }
 }
 

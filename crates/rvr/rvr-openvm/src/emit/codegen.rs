@@ -1,5 +1,4 @@
 //! C code generation for IR instructions and terminators.
-
 use std::collections::HashSet;
 
 use openvm_instructions::program::DEFAULT_PC_STEP;
@@ -12,7 +11,7 @@ use super::context::EmitContext;
 /// Trait for instructions that can emit their own C code.
 pub trait InstrCodegen {
     /// Emit the C body for this instruction into the buffer.
-    /// `ctx` handles value-slot and memory access for the current execution mode.
+    /// `ctx` handles variable and memory access for the current execution mode.
     fn emit_c(&self, ctx: &mut EmitContext);
 }
 
@@ -48,7 +47,7 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
             link_dst, target, ..
         } => {
             if let Some(dst) = link_dst {
-                ctx.write_slot(dst, &hex_u64(next_pc));
+                ctx.write_var(dst, &hex_u64(next_pc));
             }
             emit_tail_call(ctx, target, &args, tc.valid_blocks);
         }
@@ -60,11 +59,11 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
             ..
         } => {
             let base_value = match base_value {
-                CfgOperand::Slot(base) => {
-                    let value = ctx.read_slot(base);
+                CfgOperand::Var(base) => {
+                    let value = ctx.read_var(base);
                     if link_dst.is_some_and(|dst| dst == base) {
                         // Save base to a temporary when the link destination is the
-                        // same slot, so the link write cannot clobber the jump target.
+                        // same variable, so the link write cannot clobber the jump target.
                         ctx.materialize_u64(&value)
                     } else {
                         value
@@ -73,7 +72,7 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
                 CfgOperand::Const(value) => hex_u64(value),
             };
             if let Some(dst) = link_dst {
-                ctx.write_slot(dst, &hex_u64(next_pc));
+                ctx.write_var(dst, &hex_u64(next_pc));
             }
             let target = indirect_target_expr(ctx, &base_value, offset, target_mask);
             ctx.write_line(&format!(
@@ -94,8 +93,8 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
             target,
             known,
         } => {
-            let lhs = ctx.read_slot(lhs);
-            let rhs = ctx.read_slot(rhs);
+            let lhs = ctx.read_var(lhs);
+            let rhs = ctx.read_var(rhs);
             if let Some(taken) = known {
                 emit_tail_call(
                     ctx,

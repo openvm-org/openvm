@@ -8,11 +8,11 @@ use openvm_instructions::{
     LocalOpcode, SystemOpcode,
 };
 use openvm_pairing_transpiler::PairingPhantom;
-use rvr_openvm_ir::{CfgEffect, ExtEmitCtx, ExtInstr, InstrAt, LiftedInstr, ValueSlot};
-use rvr_openvm_lift::{decode_value_slot, RvrExtension, RvrInstruction};
+use rvr_openvm_ir::{CfgEffect, ExtEmitCtx, ExtInstr, InstrAt, LiftedInstr, Variable};
+use rvr_openvm_lift::{decode_variable, RvrExtension, RvrInstruction};
 
-fn decode_reg(value: u32) -> ValueSlot {
-    decode_value_slot(value, RV64_REGISTER_BYTES as u32, RV64_NUM_REGISTERS as u32)
+fn decode_reg(value: u32) -> Variable {
+    decode_variable(value, RV64_REGISTER_BYTES as u32, RV64_NUM_REGISTERS as u32)
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -46,9 +46,9 @@ impl KnownPairingCurve {
 #[derive(Debug, Clone)]
 pub struct HintFinalExpInstr {
     /// Register holding pointer to P slice header (data_ptr, len).
-    pub rs1_reg: ValueSlot,
+    pub rs1_reg: Variable,
     /// Register holding pointer to Q slice header (data_ptr, len).
-    pub rs2_reg: ValueSlot,
+    pub rs2_reg: Variable,
     /// Pairing curve, resolved at lift time.
     curve: KnownPairingCurve,
 }
@@ -59,8 +59,8 @@ impl ExtInstr for HintFinalExpInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rs1 = ctx.peek_slot(self.rs1_reg);
-        let rs2 = ctx.peek_slot(self.rs2_reg);
+        let rs1 = ctx.peek_var(self.rs1_reg);
+        let rs2 = ctx.peek_var(self.rs2_reg);
         ctx.emit_call(self.curve.ffi_symbol(), &["state", &rs1, &rs2]);
     }
 

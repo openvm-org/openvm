@@ -10,10 +10,10 @@ use openvm_instructions::{
 use openvm_sha2_air::{Sha256Config, Sha2BlockHasherSubairConfig, Sha512Config};
 use openvm_sha2_transpiler::Rv64Sha2Opcode;
 use rvr_openvm_ir::{
-    CfgEffect, ExtEmitCtx, ExtInstr, FixedTraceRows, InstrAt, LiftedInstr, ValueSlot,
+    CfgEffect, ExtEmitCtx, ExtInstr, FixedTraceRows, InstrAt, LiftedInstr, Variable,
 };
 use rvr_openvm_lift::{
-    decode_value_slot, fixed_trace_rows_for_chip, max_main_memory_pages_for_contiguous_range,
+    decode_variable, fixed_trace_rows_for_chip, max_main_memory_pages_for_contiguous_range,
     opcode_air_idx, AirIndex, ExtensionError, RvrExtension, RvrExtensionCtx, RvrInstruction,
 };
 
@@ -21,8 +21,8 @@ use rvr_openvm_lift::{
 const SHA2_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize =
     3 * max_main_memory_pages_for_contiguous_range(128);
 
-fn decode_reg(value: u32) -> ValueSlot {
-    decode_value_slot(value, RV64_REGISTER_BYTES as u32, RV64_NUM_REGISTERS as u32)
+fn decode_reg(value: u32) -> Variable {
+    decode_variable(value, RV64_REGISTER_BYTES as u32, RV64_NUM_REGISTERS as u32)
 }
 
 const fn rows_to_u32(rows: usize) -> u32 {
@@ -43,11 +43,11 @@ const SHA512_ROWS_PER_BLOCK: u32 =
 #[derive(Debug, Clone)]
 pub struct Sha256Instr {
     /// Register index holding destination pointer (where new state is written).
-    pub dst_ptr_reg: ValueSlot,
+    pub dst_ptr_reg: Variable,
     /// Register index holding state pointer (previous hash state).
-    pub state_ptr_reg: ValueSlot,
+    pub state_ptr_reg: Variable,
     /// Register index holding input pointer (message block).
-    pub input_ptr_reg: ValueSlot,
+    pub input_ptr_reg: Variable,
     /// AIR index of the SHA-256 block hasher chip (ROWS_PER_BLOCK rows per instruction).
     pub block_hasher_chip_idx: Option<AirIndex>,
 }
@@ -58,9 +58,9 @@ impl ExtInstr for Sha256Instr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let dst = ctx.read_slot(self.dst_ptr_reg);
-        let st = ctx.read_slot(self.state_ptr_reg);
-        let inp = ctx.read_slot(self.input_ptr_reg);
+        let dst = ctx.read_var(self.dst_ptr_reg);
+        let st = ctx.read_var(self.state_ptr_reg);
+        let inp = ctx.read_var(self.input_ptr_reg);
         ctx.emit_call("rvr_ext_sha256", &["state", &dst, &st, &inp]);
     }
 
@@ -84,11 +84,11 @@ impl ExtInstr for Sha256Instr {
 #[derive(Debug, Clone)]
 pub struct Sha512Instr {
     /// Register index holding destination pointer (where new state is written).
-    pub dst_ptr_reg: ValueSlot,
+    pub dst_ptr_reg: Variable,
     /// Register index holding state pointer (previous hash state).
-    pub state_ptr_reg: ValueSlot,
+    pub state_ptr_reg: Variable,
     /// Register index holding input pointer (message block).
-    pub input_ptr_reg: ValueSlot,
+    pub input_ptr_reg: Variable,
     /// AIR index of the SHA-512 block hasher chip (ROWS_PER_BLOCK rows per instruction).
     pub block_hasher_chip_idx: Option<AirIndex>,
 }
@@ -99,9 +99,9 @@ impl ExtInstr for Sha512Instr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let dst = ctx.read_slot(self.dst_ptr_reg);
-        let st = ctx.read_slot(self.state_ptr_reg);
-        let inp = ctx.read_slot(self.input_ptr_reg);
+        let dst = ctx.read_var(self.dst_ptr_reg);
+        let st = ctx.read_var(self.state_ptr_reg);
+        let inp = ctx.read_var(self.input_ptr_reg);
         ctx.emit_call("rvr_ext_sha512", &["state", &dst, &st, &inp]);
     }
 

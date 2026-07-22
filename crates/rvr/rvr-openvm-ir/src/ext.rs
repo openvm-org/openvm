@@ -1,4 +1,4 @@
-use crate::{MemWidth, ValueSlot};
+use crate::{MemWidth, Variable};
 
 /// Extra trace rows added by one extension instruction.
 ///
@@ -38,32 +38,45 @@ impl PageAddressSpace {
 
 /// Trait abstracting the code-generation context for extension instructions.
 ///
-/// Extensions use this context to access opaque value slots and emit C. The
-/// emission mode decides whether accesses are traced.
+/// Extensions use this context to access target-defined variables and emit C.
+/// The emission mode decides whether accesses are traced. Variable access stays
+/// in generated C so FFI calls only carry resolved values and memory.
 pub trait ExtEmitCtx {
-    /// Read a value slot as an AIR-visible memory access.
-    fn read_slot(&mut self, slot: ValueSlot) -> String;
-    /// Get a slot value without creating an AIR memory access.
+    /// Read a variable as an AIR-visible memory access.
+    fn read_var(&mut self, var: Variable) -> String;
+
+    /// Get a variable's value without creating an AIR memory access.
+    ///
     /// Value tracing records the value without advancing the memory timestamp.
-    fn peek_slot(&mut self, slot: ValueSlot) -> String;
-    /// Write a value slot, tracing it when required by the emission mode.
-    fn write_slot(&mut self, slot: ValueSlot, val: &str);
-    /// Append a line of C code.
+    fn peek_var(&mut self, var: Variable) -> String;
+
+    /// Write a variable, tracing it when required by the emission mode.
+    fn write_var(&mut self, var: Variable, val: &str);
+
+    /// Append a line of C code (indented).
     fn write_line(&mut self, s: &str);
+
     /// Save execution-mode state and end the block through the shared RVR trap.
     fn emit_trap(&mut self);
+
     /// Read guest memory and return a C expression for the loaded value.
     fn read_mem(&mut self, base: &str, offset: i16, width: u8, signed: bool) -> String;
+
     /// Write guest memory.
     fn write_mem(&mut self, base: &str, offset: i16, val: &str, width: u8);
+
     /// Flush local page state, emit a C call, then reload the page state.
     fn emit_call(&mut self, name: &str, args: &[&str]);
+
     /// Emit a C call that cannot access RVR state, without flushing page state.
     fn emit_call_without_page_flush(&mut self, name: &str, args: &[&str]);
+
     /// Flush local page state, emit a C call that returns a value, then reload
     /// the page state.
     fn emit_call_expr(&mut self, ret_ty: &str, name: &str, args: &[&str]) -> String;
+
     /// Emit a call and save its result only when chip tracing needs it.
+    ///
     /// Pure execution emits the call as a statement and returns `None`.
     fn emit_call_with_trace_result(
         &mut self,
@@ -89,12 +102,17 @@ pub trait ExtEmitCtx {
 
     /// Emit a chip-height update.
     fn trace_chip(&mut self, chip_idx: u32, count_expr: &str);
+
     /// Emit a chip-height update only when `count_expr` is nonzero.
     fn trace_chip_if_nonzero(&mut self, chip_idx: u32, count_expr: &str);
+
     /// Record the pages containing one fixed-width access for metering.
+    ///
     /// This records the address, not the accessed value.
     fn trace_page_access(&mut self, addr: &str, width: MemWidth, addr_space: PageAddressSpace);
+
     /// Record pages touched by a dword range for metering (one dword is 8 bytes).
+    ///
     /// This records the address range, not the accessed values.
     fn trace_page_access_u64_range(
         &mut self,

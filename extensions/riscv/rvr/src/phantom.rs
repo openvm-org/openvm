@@ -17,20 +17,20 @@ use crate::instruction::{decode_reg, Reg};
 pub(crate) struct HintInputInstr;
 
 impl ExtInstr for HintInputInstr {
-    fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        ctx.emit_call_without_page_flush("openvm_hint_input", &[]);
-    }
-
     fn opname(&self) -> &str {
         "hint_input"
     }
 
-    fn cfg_effect(&self) -> CfgEffect {
-        CfgEffect::None
+    fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
+        ctx.emit_call_without_page_flush("openvm_hint_input", &[]);
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
         Box::new(*self)
+    }
+
+    fn cfg_effect(&self) -> CfgEffect {
+        CfgEffect::None
     }
 }
 
@@ -42,47 +42,48 @@ pub(crate) struct PrintStrInstr {
 }
 
 impl ExtInstr for PrintStrInstr {
-    fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let ptr = ctx.peek_slot(self.ptr_reg);
-        let len = ctx.peek_slot(self.len_reg);
-        ctx.emit_checked_call_without_page_flush("openvm_print_str", &[&ptr, &len]);
-    }
-
     fn opname(&self) -> &str {
         "print_str"
     }
 
-    fn cfg_effect(&self) -> CfgEffect {
-        CfgEffect::None
+    fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
+        let ptr = ctx.peek_var(self.ptr_reg);
+        let len = ctx.peek_var(self.len_reg);
+        ctx.emit_checked_call_without_page_flush("openvm_print_str", &[&ptr, &len]);
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
         Box::new(self.clone())
     }
+
+    fn cfg_effect(&self) -> CfgEffect {
+        CfgEffect::None
+    }
 }
 
-/// HINT_RANDOM: fill the hint stream with `num_words_reg * 8` random bytes.
+/// HINT_RANDOM: fill the hint stream with `num_words_reg * 8` random bytes
+/// drawn from the host's persistent RNG.
 #[derive(Debug, Clone)]
 pub(crate) struct HintRandomInstr {
     pub(crate) num_words_reg: Reg,
 }
 
 impl ExtInstr for HintRandomInstr {
-    fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let num_words = ctx.peek_slot(self.num_words_reg);
-        ctx.emit_checked_call_without_page_flush("openvm_hint_random", &[&num_words]);
-    }
-
     fn opname(&self) -> &str {
         "hint_random"
     }
 
-    fn cfg_effect(&self) -> CfgEffect {
-        CfgEffect::None
+    fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
+        let num_words = ctx.peek_var(self.num_words_reg);
+        ctx.emit_checked_call_without_page_flush("openvm_hint_random", &[&num_words]);
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
         Box::new(self.clone())
+    }
+
+    fn cfg_effect(&self) -> CfgEffect {
+        CfgEffect::None
     }
 }
 

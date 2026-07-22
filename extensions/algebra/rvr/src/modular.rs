@@ -6,7 +6,7 @@ use openvm_algebra_transpiler::{ModularPhantom, Rv64ModularArithmeticOpcode};
 use openvm_algebra_utils::{find_non_qr, NQR_RNG_SEED};
 use openvm_instructions::{LocalOpcode, SystemOpcode};
 use rand::{rngs::StdRng, SeedableRng};
-use rvr_openvm_ir::{CfgEffect, ExtEmitCtx, ExtInstr, InstrAt, LiftedInstr, ValueSlot};
+use rvr_openvm_ir::{CfgEffect, ExtEmitCtx, ExtInstr, InstrAt, LiftedInstr, Variable};
 use rvr_openvm_lift::{max_main_memory_pages_for_contiguous_range, RvrExtension, RvrInstruction};
 use strum::EnumCount;
 
@@ -95,9 +95,9 @@ pub(crate) type ModSetupInstr = FieldSetupInstr<ModArithKind>;
 
 #[derive(Debug, Clone)]
 struct ModSetupIsEqInstr {
-    rd_reg: ValueSlot,
-    rs1_reg: ValueSlot,
-    rs2_reg: ValueSlot,
+    rd_reg: Variable,
+    rs1_reg: Variable,
+    rs2_reg: Variable,
     num_limbs: u32,
     modulus: Vec<u8>,
 }
@@ -108,8 +108,8 @@ impl ExtInstr for ModSetupIsEqInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rs1 = ctx.read_slot(self.rs1_reg);
-        let rs2 = ctx.read_slot(self.rs2_reg);
+        let rs1 = ctx.read_var(self.rs1_reg);
+        let rs2 = ctx.read_var(self.rs2_reg);
         let mod_literal = format_c_byte_array(&self.modulus);
         let num_limbs = format!("{}u", self.num_limbs);
         ctx.write_line("{");
@@ -122,7 +122,7 @@ impl ExtInstr for ModSetupIsEqInstr {
         ctx.write_line(&format!("if (unlikely({result} > 1u)) {{"));
         ctx.emit_trap();
         ctx.write_line("}");
-        ctx.write_slot(self.rd_reg, &result);
+        ctx.write_var(self.rd_reg, &result);
         ctx.write_line("}");
     }
 
@@ -173,7 +173,7 @@ impl ExtInstr for HintNonQrInstr {
 /// IR node for HintSqrt phantom instruction.
 #[derive(Debug, Clone)]
 pub struct HintSqrtInstr {
-    pub rs1_reg: ValueSlot,
+    pub rs1_reg: Variable,
     pub num_limbs: u32,
     pub modulus: Vec<u8>,
     pub non_qr_bytes: Vec<u8>,
@@ -185,7 +185,7 @@ impl ExtInstr for HintSqrtInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rs1 = ctx.peek_slot(self.rs1_reg);
+        let rs1 = ctx.peek_var(self.rs1_reg);
         let mod_literal = format_c_byte_array(&self.modulus);
         let nqr_literal = format_c_byte_array(&self.non_qr_bytes);
         ctx.write_line("{");

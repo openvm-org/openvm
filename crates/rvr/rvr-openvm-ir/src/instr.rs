@@ -2,9 +2,9 @@ use crate::{ExtEmitCtx, FixedTraceRows};
 
 /// Opaque target-defined mutable state location used by CFG analysis and code generation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct ValueSlot(u32);
+pub struct Variable(u32);
 
-impl ValueSlot {
+impl Variable {
     pub const fn new(index: u32) -> Self {
         Self(index)
     }
@@ -37,8 +37,8 @@ impl MemWidth {
 /// Operand used by target-neutral CFG evaluation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CfgOperand {
-    /// Value read from an opaque target-defined slot.
-    Slot(ValueSlot),
+    /// Value read from a target-defined variable.
+    Var(Variable),
     /// Immediate constant.
     Const(u64),
 }
@@ -86,19 +86,19 @@ pub enum CfgIntWidth {
     U64,
 }
 
-/// Data-flow effect of one instruction on tracked value slots.
+/// Data-flow effect of one instruction on tracked variables.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CfgEffect {
     None,
     WriteUnknown {
-        dst: ValueSlot,
+        dst: Variable,
     },
     WriteConst {
-        dst: ValueSlot,
+        dst: Variable,
         value: u64,
     },
     WriteOp {
-        dst: ValueSlot,
+        dst: Variable,
         op: CfgOp,
         lhs: CfgOperand,
         rhs: CfgOperand,
@@ -135,13 +135,13 @@ pub enum CfgTerm {
     /// Jump to a statically known target.
     Jump {
         kind: CfgJumpKind,
-        link_dst: Option<ValueSlot>,
+        link_dst: Option<Variable>,
         target: u64,
     },
     /// Jump to a target computed from an operand and signed offset.
     JumpIndirect {
         kind: CfgJumpKind,
-        link_dst: Option<ValueSlot>,
+        link_dst: Option<Variable>,
         base_value: CfgOperand,
         offset: i32,
         target_mask: u64,
@@ -151,8 +151,8 @@ pub enum CfgTerm {
     Branch {
         cond: CfgBranchCond,
         width: CfgIntWidth,
-        lhs: ValueSlot,
-        rhs: ValueSlot,
+        lhs: Variable,
+        rhs: Variable,
         target: u64,
         known: Option<bool>,
     },
@@ -167,6 +167,10 @@ pub enum CfgTerm {
 /// Trait for self-contained instruction nodes owned by RVR extensions.
 pub trait ExtInstr: std::fmt::Debug + Send + Sync {
     /// Emit C code for this instruction through the mode-aware context.
+    ///
+    /// Use `ctx.read_var()` / `ctx.write_var()` for variable access (tracing is
+    /// handled in the generated C code) and `ctx.write_line()` to emit raw C
+    /// lines.
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx);
 
     /// Emit C code for an instruction-owned terminator.
@@ -178,13 +182,15 @@ pub trait ExtInstr: std::fmt::Debug + Send + Sync {
     }
 
     /// Short operation name used in generated C comments.
+    ///
+    /// The default is `"ext"`.
     fn opname(&self) -> &str {
         "ext"
     }
 
     /// Data-flow behavior used by CFG analysis.
     ///
-    /// Implementations must choose an explicit effect so value-slot writes cannot
+    /// Implementations must choose an explicit effect so variable writes cannot
     /// accidentally preserve stale control-flow constants.
     fn cfg_effect(&self) -> CfgEffect;
 
@@ -202,6 +208,9 @@ pub trait ExtInstr: std::fmt::Debug + Send + Sync {
     }
 
     /// Extra chip rows whose count is known when the artifact is generated.
+    ///
+    /// The generator adds them to the block's metering update, so the extension
+    /// does not record them at runtime.
     fn fixed_trace_rows(&self) -> Vec<FixedTraceRows> {
         Vec::new()
     }

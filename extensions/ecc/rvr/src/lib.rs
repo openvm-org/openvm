@@ -12,9 +12,9 @@ use openvm_instructions::{
     riscv::{RV64_NUM_REGISTERS, RV64_REGISTER_BYTES},
     LocalOpcode,
 };
-use rvr_openvm_ir::{CfgEffect, ExtEmitCtx, ExtInstr, InstrAt, LiftedInstr, ValueSlot};
+use rvr_openvm_ir::{CfgEffect, ExtEmitCtx, ExtInstr, InstrAt, LiftedInstr, Variable};
 use rvr_openvm_lift::{
-    decode_value_slot, max_main_memory_pages_for_contiguous_range, RvrExtension, RvrInstruction,
+    decode_variable, max_main_memory_pages_for_contiguous_range, RvrExtension, RvrInstruction,
 };
 use strum::EnumCount;
 
@@ -22,8 +22,8 @@ use strum::EnumCount;
 const ECC_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize =
     3 * max_main_memory_pages_for_contiguous_range(96);
 
-fn decode_reg(value: u32) -> ValueSlot {
-    decode_value_slot(value, RV64_REGISTER_BYTES as u32, RV64_NUM_REGISTERS as u32)
+fn decode_reg(value: u32) -> Variable {
+    decode_variable(value, RV64_REGISTER_BYTES as u32, RV64_NUM_REGISTERS as u32)
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -70,9 +70,9 @@ impl KnownCurve {
 /// IR node for EC point addition (non-equal x-coordinates).
 #[derive(Debug, Clone)]
 pub struct EcAddNeInstr {
-    pub rd_reg: ValueSlot,
-    pub rs1_reg: ValueSlot,
-    pub rs2_reg: ValueSlot,
+    pub rd_reg: Variable,
+    pub rs1_reg: Variable,
+    pub rs2_reg: Variable,
     curve: KnownCurve,
     pub is_setup: bool,
 }
@@ -83,9 +83,9 @@ impl ExtInstr for EcAddNeInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rd = ctx.read_slot(self.rd_reg);
-        let rs1 = ctx.read_slot(self.rs1_reg);
-        let rs2 = ctx.read_slot(self.rs2_reg);
+        let rd = ctx.read_var(self.rd_reg);
+        let rs1 = ctx.read_var(self.rs1_reg);
+        let rs2 = ctx.read_var(self.rs2_reg);
         let setup_prefix = if self.is_setup { "setup_" } else { "" };
         let suffix = self.curve.c_suffix();
         let name = format!("rvr_ext_{setup_prefix}ec_add_ne_{suffix}");
@@ -108,8 +108,8 @@ impl ExtInstr for EcAddNeInstr {
 /// IR node for EC point doubling.
 #[derive(Debug, Clone)]
 pub struct EcDoubleInstr {
-    pub rd_reg: ValueSlot,
-    pub rs1_reg: ValueSlot,
+    pub rd_reg: Variable,
+    pub rs1_reg: Variable,
     curve: KnownCurve,
     pub is_setup: bool,
 }
@@ -120,8 +120,8 @@ impl ExtInstr for EcDoubleInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rd = ctx.read_slot(self.rd_reg);
-        let rs1 = ctx.read_slot(self.rs1_reg);
+        let rd = ctx.read_var(self.rd_reg);
+        let rs1 = ctx.read_var(self.rs1_reg);
         let setup_prefix = if self.is_setup { "setup_" } else { "" };
         let suffix = self.curve.c_suffix();
         let name = format!("rvr_ext_{setup_prefix}ec_double_{suffix}");

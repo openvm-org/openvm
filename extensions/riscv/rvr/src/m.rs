@@ -1,4 +1,4 @@
-//! RV64M instruction lifting and generated-C support.
+//! RV64M instruction lifting and C code generation.
 
 mod instruction;
 
@@ -10,12 +10,10 @@ use openvm_riscv_transpiler::{DivRemOpcode, DivRemWOpcode, MulHOpcode, MulOpcode
 use rvr_openvm_ir::{ExtInstr, InstrAt, LiftedInstr};
 use rvr_openvm_lift::{RvrExtension, RvrInstruction};
 
-use crate::{
-    instruction::{decode_reg, NopInstr, ZERO},
-    m::instruction::{MulDivOp, Rv64MInstr},
-};
+use self::instruction::{MulDivOp, Rv64MInstr};
+use crate::instruction::{decode_reg, NopInstr, ZERO};
 
-/// RVR lifter for RV64M instructions.
+/// RVR extension for RV64M instructions.
 pub struct Rv64MExtension;
 
 impl Rv64MExtension {

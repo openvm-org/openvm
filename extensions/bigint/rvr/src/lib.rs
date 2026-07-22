@@ -17,10 +17,10 @@ use openvm_riscv_transpiler::{
     BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, LessThanOpcode, MulOpcode, ShiftOpcode,
 };
 use rvr_openvm_ir::{
-    CfgEffect, CfgTerm, ExtEmitCtx, ExtInstr, InstrAt, LiftedInstr, Terminator, ValueSlot,
+    CfgEffect, CfgTerm, ExtEmitCtx, ExtInstr, InstrAt, LiftedInstr, Terminator, Variable,
 };
 use rvr_openvm_lift::{
-    decode_value_slot, max_main_memory_pages_for_contiguous_range, opcode_air_idx, AirIndex,
+    decode_variable, max_main_memory_pages_for_contiguous_range, opcode_air_idx, AirIndex,
     ExtensionError, RvrExtension, RvrExtensionCtx, RvrInstruction,
 };
 use strum::EnumCount;
@@ -29,8 +29,8 @@ use strum::EnumCount;
 const INT256_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize =
     3 * max_main_memory_pages_for_contiguous_range(32);
 
-fn decode_reg(value: u32) -> ValueSlot {
-    decode_value_slot(value, RV64_REGISTER_BYTES as u32, RV64_NUM_REGISTERS as u32)
+fn decode_reg(value: u32) -> Variable {
+    decode_variable(value, RV64_REGISTER_BYTES as u32, RV64_NUM_REGISTERS as u32)
 }
 
 // ── ALU / branch opcode enums ───────────────────────────────────────────────
@@ -100,11 +100,11 @@ impl Int256BranchLtOp {
 #[derive(Debug, Clone)]
 pub struct Int256AluInstr {
     /// Register index holding pointer to destination (rd).
-    pub rd_reg: ValueSlot,
+    pub rd_reg: Variable,
     /// Register index holding pointer to first operand (rs1).
-    pub rs1_reg: ValueSlot,
+    pub rs1_reg: Variable,
     /// Register index holding pointer to second operand (rs2).
-    pub rs2_reg: ValueSlot,
+    pub rs2_reg: Variable,
     /// The ALU operation to perform (selects the FFI function at codegen time).
     pub op: Int256AluOp,
     /// AIR index associated with this instruction.
@@ -117,9 +117,9 @@ impl ExtInstr for Int256AluInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rd = ctx.read_slot(self.rd_reg);
-        let rs1 = ctx.read_slot(self.rs1_reg);
-        let rs2 = ctx.read_slot(self.rs2_reg);
+        let rd = ctx.read_var(self.rd_reg);
+        let rs1 = ctx.read_var(self.rs1_reg);
+        let rs2 = ctx.read_var(self.rs2_reg);
         ctx.emit_call(self.op.ffi_name(), &["state", &rd, &rs1, &rs2]);
     }
 
@@ -136,9 +136,9 @@ impl ExtInstr for Int256AluInstr {
 #[derive(Debug, Clone)]
 pub struct Int256BranchEqInstr {
     /// Register index holding pointer to first operand.
-    pub rs1_reg: ValueSlot,
+    pub rs1_reg: Variable,
     /// Register index holding pointer to second operand.
-    pub rs2_reg: ValueSlot,
+    pub rs2_reg: Variable,
     /// PC to jump to if condition is true.
     pub target_pc: u64,
     /// PC to fall through to if condition is false.
@@ -159,8 +159,8 @@ impl ExtInstr for Int256BranchEqInstr {
     }
 
     fn emit_c_term(&self, ctx: &mut dyn ExtEmitCtx, branch_to: &dyn Fn(u64) -> String) {
-        let rs1 = ctx.read_slot(self.rs1_reg);
-        let rs2 = ctx.read_slot(self.rs2_reg);
+        let rs1 = ctx.read_var(self.rs1_reg);
+        let rs2 = ctx.read_var(self.rs2_reg);
         let fn_name = if self.is_ne {
             "rvr_ext_int256_bne"
         } else {
@@ -193,9 +193,9 @@ impl ExtInstr for Int256BranchEqInstr {
 #[derive(Debug, Clone)]
 pub struct Int256BranchLtInstr {
     /// Register index holding pointer to first operand.
-    pub rs1_reg: ValueSlot,
+    pub rs1_reg: Variable,
     /// Register index holding pointer to second operand.
-    pub rs2_reg: ValueSlot,
+    pub rs2_reg: Variable,
     /// PC to jump to if condition is true.
     pub target_pc: u64,
     /// PC to fall through to if condition is false.
@@ -216,8 +216,8 @@ impl ExtInstr for Int256BranchLtInstr {
     }
 
     fn emit_c_term(&self, ctx: &mut dyn ExtEmitCtx, branch_to: &dyn Fn(u64) -> String) {
-        let rs1 = ctx.read_slot(self.rs1_reg);
-        let rs2 = ctx.read_slot(self.rs2_reg);
+        let rs1 = ctx.read_var(self.rs1_reg);
+        let rs2 = ctx.read_var(self.rs2_reg);
         let cond = ctx.emit_call_expr("bool", self.op.ffi_name(), &["state", &rs1, &rs2]);
         ctx.write_line(&format!("if ({cond}) {{"));
         ctx.write_line(&format!("  {}", branch_to(self.target_pc)));
