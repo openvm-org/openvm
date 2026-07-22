@@ -7,7 +7,7 @@ use crate::{ExtensionError, ExtensionRegistry, RvrInstruction};
 
 /// Lift one OpenVM instruction.
 ///
-/// System instructions are handled here. All target instructions are offered
+/// System instructions are handled here. All remaining instructions are offered
 /// to the registered extensions, and duplicate claims return an error.
 pub fn lift_instruction(
     insn: &RvrInstruction,

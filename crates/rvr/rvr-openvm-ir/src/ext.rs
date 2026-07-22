@@ -19,7 +19,7 @@ pub struct FixedTraceRows {
 /// flushed before the call and reloaded afterward.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PageAddressSpace {
-    /// The target's main guest-memory address space.
+    /// The main guest-memory address space.
     MainMemory(u32),
     /// Any other address space identified by its numeric ID.
     Other(u32),
@@ -39,9 +39,9 @@ impl PageAddressSpace {
 
 /// Trait abstracting the code-generation context for extension instructions.
 ///
-/// Extensions use this context to read and write target-defined variables while
-/// emitting C. The current mode controls tracing. Generated C resolves variable
-/// accesses before passing their values to extension functions.
+/// Extensions use this context to read and write variables while emitting C.
+/// The current mode controls tracing. Generated C resolves variable accesses
+/// before passing their values to extension functions.
 pub trait ExtEmitCtx {
     /// Read a variable as an AIR-visible memory access.
     fn read_var(&mut self, var: Variable) -> String;

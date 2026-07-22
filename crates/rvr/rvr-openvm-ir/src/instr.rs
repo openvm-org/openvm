@@ -1,6 +1,9 @@
 use crate::{ExtEmitCtx, FixedTraceRows};
 
-/// A target-defined variable used by CFG analysis and C code generation.
+/// Identifier for a VM state variable used by CFG analysis and C code generation.
+///
+/// Identifiers use the same `u32` representation as lifted instruction operands.
+/// The instruction set defines the width of the stored values.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Variable(u32);
 
@@ -34,10 +37,10 @@ impl MemWidth {
     }
 }
 
-/// Operand used by target-neutral CFG evaluation.
+/// Operand used by CFG analysis and code generation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CfgOperand {
-    /// Value read from a target-defined variable.
+    /// Value read from a variable.
     Var(Variable),
     /// Immediate constant.
     Const(u64),
@@ -108,7 +111,7 @@ pub enum CfgEffect {
     ClobberAll,
 }
 
-/// Target-neutral conditional branch predicate.
+/// Conditional branch predicate used by CFG analysis and code generation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CfgBranchCond {
     Eq,
@@ -127,7 +130,7 @@ pub enum CfgJumpKind {
     Return,
 }
 
-/// Target-neutral control-flow behavior used by CFG analysis and code generation.
+/// Control-flow behavior used by CFG analysis and code generation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CfgTerm {
     /// Continue at the next instruction.
@@ -199,7 +202,7 @@ pub trait ExtInstr: std::fmt::Debug + Send + Sync {
         None
     }
 
-    /// Whether this instruction may access the target's main guest memory.
+    /// Whether this instruction may access main guest memory.
     ///
     /// Code generation uses this to decide whether a metered block needs main
     /// memory page tracking. The conservative default is `true`.

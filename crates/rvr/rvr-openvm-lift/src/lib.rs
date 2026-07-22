@@ -1,7 +1,7 @@
 //! rvr-openvm-lift: Convert OpenVM VmExe to rvr-openvm-ir types.
 //!
 //! This crate provides the bridge between OpenVM's instruction format
-//! and the target-neutral rvr-openvm-ir intermediate representation.
+//! and the shared rvr-openvm-ir intermediate representation.
 //!
 //! The `opcode` module lifts individual OpenVM instructions to `LiftedInstr`,
 //! which is either a body `ExtInstr` or a `Terminator` (control flow).

@@ -42,7 +42,7 @@ pub enum Terminator {
 }
 
 impl Terminator {
-    /// Returns the target-neutral control-flow behavior of this terminator.
+    /// Returns the control-flow behavior of this terminator.
     pub fn cfg_term(&self, pc: u64, fall_pc: u64) -> CfgTerm {
         match self {
             Self::FallThrough => CfgTerm::FallThrough,

@@ -78,7 +78,8 @@ pub fn fixed_trace_rows_for_chip(idx: Option<AirIndex>, count: u32) -> Vec<Fixed
     .unwrap_or_default()
 }
 
-/// Decodes an aligned OpenVM operand into a target-defined variable.
+/// Decodes a stride-scaled `u32` operand as a variable identifier and checks
+/// the caller-provided bound.
 pub fn decode_variable(value: u32, stride: u32, variable_count: u32) -> Variable {
     assert!(stride != 0, "variable stride must be nonzero");
     assert_eq!(value % stride, 0, "variable operand must be aligned");
@@ -204,7 +205,7 @@ pub trait RvrExtension: Send + Sync {
     /// between page-buffer drains. Extensions with zero such entries return zero.
     fn max_main_memory_pages_per_instruction(&self) -> usize;
 
-    /// Returns target-specific indirect-jump candidates found in initialized data.
+    /// Returns indirect-jump candidates found by this extension in initialized data.
     fn extra_cfg_targets(
         &self,
         _init_memory: &SparseMemoryImage,
@@ -357,7 +358,7 @@ impl ExtensionRegistry {
             .unwrap_or(0)
     }
 
-    /// Collect target-specific indirect-jump candidates from initialized memory.
+    /// Collect indirect-jump candidates from initialized memory.
     pub fn extra_cfg_targets(
         &self,
         init_memory: &SparseMemoryImage,
