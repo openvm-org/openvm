@@ -20,8 +20,9 @@ use super::{
     io::{host_hint_stream_set, OpenVmIoState},
     metered::{metered_periodic_check, RvrMeteredExecutionOutcome, SegmentationState},
     metered_cost::RvrMeteredCostResult,
+    preflight::{PreflightBuffers, RvrPreflightLimits, RvrPreflightTranscript},
     state::{
-        init_rvr_state, MeteredCostRvState, MeteredRvState, PureRvState,
+        init_rvr_state, MeteredCostRvState, MeteredRvState, PreflightRvState, PureRvState,
         PureWithInstretTrackingRvState,
     },
 };
@@ -45,6 +46,8 @@ pub enum ExecuteError {
     ExtensionRegistration(#[from] ExtensionError),
     #[error("invalid metered context: {0}")]
     InvalidMeteredContext(String),
+    #[error("invalid preflight context: {0}")]
+    InvalidPreflightContext(String),
     #[error("RVR execution kind mismatch: expected {expected}, found {found:?}")]
     ExecutionKindMismatch {
         expected: &'static str,
@@ -218,6 +221,38 @@ pub(super) fn execute_pure(
     run_and_finalize(compiled, runtime_hooks, vm_state, &mut state, false)
         .inspect_err(|error| tracing::warn!(%error, "rvr pure execution failed"))?;
     Ok(())
+}
+
+/// Execute an append-only preflight artifact until termination.
+pub(super) fn execute_preflight(
+    compiled: &RvrCompiled,
+    runtime_hooks: &[Box<dyn RvrRuntimeExtension>],
+    vm_state: &mut VmState<GuestMemory>,
+    limits: RvrPreflightLimits,
+) -> Result<RvrPreflightTranscript, ExecuteError> {
+    require_execution_kind(compiled, "Preflight", &[RvrExecutionKind::Preflight])?;
+    let pc = vm_state.pc();
+    let mut buffers =
+        PreflightBuffers::new(limits).map_err(ExecuteError::InvalidPreflightContext)?;
+    let mut state: PreflightRvState = init_rvr_state(vm_state, pc);
+    state.regs = read_rv64_registers(vm_state);
+    state.mode_state = buffers.ffi_state();
+
+    let execution = run_and_finalize(compiled, runtime_hooks, vm_state, &mut state, false);
+    if state.mode_state.error != 0 {
+        return Err(ExecuteError::InvalidPreflightContext(format!(
+            "generated preflight logger failed with code {}",
+            state.mode_state.error
+        )));
+    }
+    execution.inspect_err(|error| tracing::warn!(%error, "rvr preflight execution failed"))?;
+    let final_pc = u32::try_from(state.pc).map_err(|_| {
+        ExecuteError::InvalidPreflightContext("final PC does not fit in u32".to_string())
+    })?;
+    // SAFETY: the raw state was created from `buffers` immediately above and
+    // neither vector can reallocate during generated execution.
+    unsafe { buffers.finish(&state.mode_state, final_pc) }
+        .map_err(ExecuteError::InvalidPreflightContext)
 }
 
 /// Execute an instret-tracking pure artifact until termination.

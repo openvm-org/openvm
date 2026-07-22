@@ -84,12 +84,14 @@ pub(crate) enum Rv64IInstr {
         rd: Reg,
         lhs: Reg,
         rhs: CfgOperand,
+        /// Original register operand before CFG constant folding.
+        rhs_reg: Option<Reg>,
     },
     /// Load from main memory.
     Load {
         width: MemWidth,
         signed: bool,
-        rd: Option<Reg>,
+        rd: Reg,
         base: Reg,
         offset: i16,
     },
@@ -180,10 +182,13 @@ impl ExtInstr for Rv64IInstr {
                 rd,
                 lhs,
                 rhs,
+                rhs_reg,
                 ..
             } => {
                 let lhs_value = ctx.read_var(*lhs);
-                let rhs_value = operand_c(ctx, *rhs);
+                let rhs_value = rhs_reg
+                    .map(|reg| ctx.read_var(reg))
+                    .unwrap_or_else(|| operand_c(ctx, *rhs));
                 let value = (!*word)
                     .then(|| constant_alu_result(*op, *lhs, *rhs))
                     .flatten()
@@ -200,11 +205,14 @@ impl ExtInstr for Rv64IInstr {
             } => {
                 let base = ctx.read_var(*base);
                 let value = ctx.read_mem(&base, *offset, width.bytes(), *signed);
-                if let Some(rd) = rd {
-                    ctx.write_var(*rd, &value);
-                } else {
+                if *rd == ZERO {
+                    // Pure execution still has to perform the potentially
+                    // trapping load, but has no register write that would use
+                    // the temporary. Preflight's write_var call below reserves
+                    // the disabled destination slot.
                     ctx.write_line(&format!("(void){value};"));
                 }
+                ctx.write_var(*rd, &value);
             }
             Self::Store {
                 width,
@@ -224,12 +232,17 @@ impl ExtInstr for Rv64IInstr {
         Box::new(self.clone())
     }
 
+    fn supports_preflight(&self) -> bool {
+        true
+    }
+
     fn cfg_effect(&self) -> CfgEffect {
         match self {
             Self::Store { .. }
             | Self::Branch { .. }
             | Self::Jump { .. }
             | Self::JumpIndirect { .. } => CfgEffect::None,
+            Self::Alu { rd, .. } | Self::Const { rd, .. } if *rd == ZERO => CfgEffect::None,
             Self::Alu {
                 op,
                 word,
@@ -248,8 +261,8 @@ impl ExtInstr for Rv64IInstr {
                     CfgResultWidth::U64
                 },
             },
-            Self::Load { rd: Some(rd), .. } => CfgEffect::WriteUnknown { dst: *rd },
-            Self::Load { rd: None, .. } => CfgEffect::None,
+            Self::Load { rd, .. } if *rd != ZERO => CfgEffect::WriteUnknown { dst: *rd },
+            Self::Load { .. } => CfgEffect::None,
             Self::Const { rd, value, .. } => CfgEffect::WriteConst {
                 dst: *rd,
                 value: *value,
@@ -279,6 +292,7 @@ impl ExtInstr for Rv64IInstr {
                     CfgJumpKind::Jump
                 },
                 link_dst: *link_dst,
+                link_write: true,
                 target: *target,
             }),
             Self::JumpIndirect {
@@ -294,7 +308,15 @@ impl ExtInstr for Rv64IInstr {
                     CfgJumpKind::Jump
                 },
                 link_dst: *link_dst,
-                base_value: reg_operand(*base),
+                link_write: true,
+                base_value: if *base == ZERO {
+                    CfgOperand::ReadConst {
+                        source: *base,
+                        value: 0,
+                    }
+                } else {
+                    CfgOperand::Var(*base)
+                },
                 offset: *offset,
                 target_mask: !1,
             }),
@@ -307,6 +329,10 @@ fn operand_c(ctx: &mut dyn ExtEmitCtx, operand: CfgOperand) -> String {
     match operand {
         CfgOperand::Var(reg) => ctx.read_var(reg),
         CfgOperand::Const(value) => hex_u64(value),
+        CfgOperand::ReadConst { source, value } => {
+            ctx.read_var(source);
+            hex_u64(value)
+        }
     }
 }
 

@@ -7,7 +7,7 @@ WARNINGS = -Weverything -Werror
 # The generated sources target C2y, not C++ or older C language revisions.
 WARNINGS += -Wno-c++-compat -Wno-c++98-compat \
 	-Wno-pre-c11-compat -Wno-pre-c23-compat -Wno-pre-c2y-compat \
-	-Wno-declaration-after-statement
+	-Wno-declaration-after-statement -Wno-gcc-install-dir-libstdcxx
 
 # Do not apply OpenVM warning flags to third-party C. Compiler errors still
 # fail the build.

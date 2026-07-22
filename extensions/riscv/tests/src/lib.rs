@@ -3,11 +3,11 @@ mod tests {
     #[cfg(all(feature = "rvr", not(feature = "unprotected")))]
     use std::{env, process::Command};
     #[cfg(feature = "rvr")]
-    use std::{sync::Barrier, thread};
+    use std::{sync::Barrier, thread, time::Instant};
 
     use eyre::Result;
     #[cfg(feature = "rvr")]
-    use openvm_circuit::arch::ExecutionOutcome;
+    use openvm_circuit::arch::{ExecutionOutcome, PreflightExecutionOutput, VirtualMachine};
     use openvm_circuit::{
         arch::{hasher::poseidon2::vm_poseidon2_hasher, ExecutionError, VmExecutor},
         system::memory::{
@@ -17,20 +17,25 @@ mod tests {
             },
             online::LinearMemory,
         },
-        utils::{air_test, air_test_with_min_segments, test_system_config},
+        utils::{air_test, air_test_with_min_segments, test_cpu_engine, test_system_config},
     };
     use openvm_instructions::{
-        exe::VmExe, instruction::Instruction, riscv::RV64_REGISTER_NUM_LIMBS, LocalOpcode,
-        SystemOpcode,
+        exe::VmExe,
+        instruction::Instruction,
+        program::Program,
+        riscv::{RV64_IMM_AS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+        LocalOpcode, SystemOpcode,
     };
     use openvm_riscv_circuit::{Rv64IBuilder, Rv64IConfig, Rv64ImBuilder, Rv64ImConfig};
     use openvm_riscv_guest::MAX_HINT_BUFFER_DWORDS;
     use openvm_riscv_transpiler::{
-        DivRemOpcode, MulHOpcode, MulOpcode, Rv64ITranspilerExtension, Rv64IoTranspilerExtension,
+        BaseAluImmOpcode, BaseAluOpcode, BranchEqualOpcode, DivRemOpcode, MulHOpcode, MulOpcode,
+        Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64JalrOpcode, Rv64LoadStoreOpcode,
         Rv64MTranspilerExtension,
     };
     use openvm_stark_sdk::{
-        openvm_stark_backend::p3_field::PrimeCharacteristicRing, p3_baby_bear::BabyBear,
+        openvm_stark_backend::p3_field::{PrimeCharacteristicRing, PrimeField32},
+        p3_baby_bear::BabyBear,
     };
     use openvm_toolchain_tests::{
         build_example_program_at_path, build_example_program_at_path_with_features,
@@ -85,6 +90,443 @@ mod tests {
     #[cfg(feature = "rvr")]
     fn test_rvr_example_executes(program_name: &str) {
         execute_rvr_example(program_name);
+    }
+
+    #[test]
+    #[cfg(feature = "rvr")]
+    fn test_rvr_preflight_logs_register_schedule() -> Result<()> {
+        let instructions = [
+            Instruction::<F>::from_usize(
+                BaseAluImmOpcode::ADDI.global_opcode(),
+                [
+                    RV64_REGISTER_NUM_LIMBS,
+                    0,
+                    5,
+                    RV64_REGISTER_AS as usize,
+                    RV64_IMM_AS as usize,
+                    1,
+                    0,
+                ],
+            ),
+            Instruction::<F>::from_usize(
+                BaseAluOpcode::ADD.global_opcode(),
+                [
+                    3 * RV64_REGISTER_NUM_LIMBS,
+                    3 * RV64_REGISTER_NUM_LIMBS,
+                    0,
+                    RV64_REGISTER_AS as usize,
+                    RV64_REGISTER_AS as usize,
+                    1,
+                    0,
+                ],
+            ),
+            Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+        ];
+        let exe = VmExe::from(Program::from_instructions(&instructions));
+        let executor = VmExecutor::new(test_rv64im_config())?;
+        let instance = executor.rvr_preflight_instance(&exe, None)?;
+        let execution = instance.execute(
+            Vec::<Vec<u8>>::new(),
+            openvm_circuit::arch::rvr::RvrPreflightLimits::new(3, 5),
+        )?;
+
+        let program = &execution.transcript.program_log;
+        assert_eq!(
+            program
+                .iter()
+                .map(|event| (event.pc, event.timestamp))
+                .collect::<Vec<_>>(),
+            vec![(0, 1), (4, 3), (8, 6), (8, 6)]
+        );
+
+        let memory = &execution.transcript.memory_log;
+        assert_eq!(memory.len(), 5);
+        assert_eq!(
+            memory
+                .iter()
+                .map(|event| event.timestamp)
+                .collect::<Vec<_>>(),
+            vec![1, 2, 3, 4, 5]
+        );
+        assert_eq!(memory[0].pointer, 0);
+        assert_eq!(memory[1].pointer, 4);
+        assert_eq!(memory[1].value, [5, 0, 0, 0]);
+        assert_eq!(memory[2].pointer, 12);
+        assert_eq!(memory[3].pointer, 0);
+        assert_eq!(memory[4].pointer, 12);
+
+        // x1's first event is a write. x3 is read before it is written, so
+        // cold candidate filtering must not emit an initial-write entry for it.
+        assert_eq!(execution.transcript.initial_write_log.len(), 1);
+        assert_eq!(execution.transcript.initial_write_log[0].pointer, 4);
+        assert_eq!(
+            execution.transcript.initial_write_log[0].initial_value,
+            [0; 4]
+        );
+
+        let capacity_error = match instance.execute(
+            Vec::<Vec<u8>>::new(),
+            openvm_circuit::arch::rvr::RvrPreflightLimits::new(0, 0),
+        ) {
+            Ok(_) => panic!("zero-capacity execution unexpectedly succeeded"),
+            Err(error) => error,
+        };
+        assert!(capacity_error.to_string().contains("code 1"));
+
+        let allocation_error = match instance.execute(
+            Vec::<Vec<u8>>::new(),
+            openvm_circuit::arch::rvr::RvrPreflightLimits::new(0, usize::MAX),
+        ) {
+            Ok(_) => panic!("impossible capacity unexpectedly succeeded"),
+            Err(error) => error,
+        };
+        assert!(allocation_error
+            .to_string()
+            .contains("failed to reserve preflight memory log"));
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(feature = "rvr")]
+    fn test_rvr_preflight_rejects_unsupported_phantom() -> Result<()> {
+        let instructions = [
+            Instruction::<F>::from_isize(SystemOpcode::PHANTOM.global_opcode(), 0, 0, 0, 0, 0),
+            Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+        ];
+        let exe = VmExe::from(Program::from_instructions(&instructions));
+        let executor = VmExecutor::new(test_rv64im_config())?;
+        let error = match executor.rvr_preflight_instance(&exe, None) {
+            Ok(_) => panic!("unsupported phantom unexpectedly compiled for preflight"),
+            Err(error) => error,
+        };
+        assert!(error.to_string().contains("does not support RVR preflight"));
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(feature = "rvr")]
+    fn test_rvr_x0_schedule_does_not_change_jalr_cfg() -> Result<()> {
+        let instructions = [
+            Instruction::<F>::from_usize(
+                BaseAluImmOpcode::ADDI.global_opcode(),
+                [
+                    0,
+                    0,
+                    8,
+                    RV64_REGISTER_AS as usize,
+                    RV64_IMM_AS as usize,
+                    0,
+                    0,
+                ],
+            ),
+            Instruction::<F>::from_usize(
+                Rv64JalrOpcode::JALR.global_opcode(),
+                [
+                    0,
+                    0,
+                    12,
+                    RV64_REGISTER_AS as usize,
+                    RV64_IMM_AS as usize,
+                    0,
+                    0,
+                ],
+            ),
+            Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 1, 0, 0),
+            Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+        ];
+        let exe = VmExe::from(Program::from_instructions(&instructions));
+        let executor = VmExecutor::new(test_rv64im_config())?;
+
+        let pure = executor.instance(&exe)?.execute(Vec::<Vec<u8>>::new())?;
+        assert_eq!(pure.pc(), 12);
+
+        let preflight = executor.rvr_preflight_instance(&exe, None)?.execute(
+            Vec::<Vec<u8>>::new(),
+            openvm_circuit::arch::rvr::RvrPreflightLimits::new(3, 2),
+        )?;
+        assert_eq!(preflight.state.pc(), 12);
+        assert_eq!(
+            preflight
+                .transcript
+                .program_log
+                .iter()
+                .map(|event| (event.pc, event.timestamp))
+                .collect::<Vec<_>>(),
+            vec![(0, 1), (4, 3), (12, 5), (12, 5)]
+        );
+        assert_eq!(
+            preflight
+                .transcript
+                .memory_log
+                .iter()
+                .map(|event| (event.timestamp, event.pointer, event.value))
+                .collect::<Vec<_>>(),
+            vec![(1, 0, [0; 4]), (3, 0, [0; 4])]
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "manual executor benchmark; builds native artifacts"]
+    #[cfg(all(feature = "rvr", not(feature = "cuda")))]
+    fn benchmark_rvr_preflight_against_interpreter() -> Result<()> {
+        const REPETITIONS: usize = 7;
+
+        let config = test_rv64im_config();
+        let reg = |index: usize| index * RV64_REGISTER_NUM_LIMBS;
+        let addi = |rd: usize, rs1: usize, immediate: isize| {
+            Instruction::<F>::from_isize(
+                BaseAluImmOpcode::ADDI.global_opcode(),
+                reg(rd) as isize,
+                reg(rs1) as isize,
+                immediate,
+                RV64_REGISTER_AS as isize,
+                RV64_IMM_AS as isize,
+            )
+        };
+        let instructions = [
+            addi(1, 0, 0),
+            addi(2, 0, 1000),
+            addi(1, 1, 1),
+            Instruction::<F>::from_isize(
+                BranchEqualOpcode::BNE.global_opcode(),
+                reg(1) as isize,
+                reg(2) as isize,
+                -4,
+                RV64_REGISTER_AS as isize,
+                RV64_REGISTER_AS as isize,
+            ),
+            Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+        ];
+        let exe = VmExe::from(Program::from_instructions(&instructions));
+        let (vm, _) = VirtualMachine::new_with_keygen(
+            test_cpu_engine(),
+            openvm_riscv_circuit::Rv64ImCpuBuilder,
+            config,
+        )?;
+
+        let metered_ctx = vm.build_metered_ctx(&exe);
+        let (segments, _) = vm
+            .metered_instance(&exe)?
+            .execute_metered(Vec::<Vec<u8>>::new(), metered_ctx)?;
+        assert_eq!(segments.len(), 1, "benchmark input must fit one segment");
+        let segment = &segments[0];
+        let max_instructions = usize::try_from(segment.num_insns)?;
+        let max_memory_events = max_instructions
+            .checked_mul(4)
+            .ok_or_else(|| eyre::eyre!("benchmark memory-event capacity overflow"))?;
+
+        let rvr = vm.executor().rvr_preflight_instance(&exe, None)?;
+        let mut interpreter = vm.preflight_interpreter(&exe)?;
+        let limits =
+            openvm_circuit::arch::rvr::RvrPreflightLimits::new(max_instructions, max_memory_events);
+        let mut interpreter_times = Vec::with_capacity(REPETITIONS);
+        let mut rvr_times = Vec::with_capacity(REPETITIONS);
+        let mut transcript_bytes = 0usize;
+
+        for _ in 0..REPETITIONS {
+            let interpreter_state = vm.create_initial_state(&exe, Vec::<Vec<u8>>::new());
+            let started = Instant::now();
+            let PreflightExecutionOutput {
+                system_records,
+                to_state,
+                ..
+            } = vm.execute_preflight_for(
+                &mut interpreter,
+                interpreter_state,
+                segment.num_insns,
+                &segment.trace_heights,
+            )?;
+            interpreter_times.push(started.elapsed());
+
+            let rvr_state = rvr.create_initial_vm_state(Vec::<Vec<u8>>::new());
+            let started = Instant::now();
+            let execution = rvr.execute_from_state(rvr_state, limits)?;
+            rvr_times.push(started.elapsed());
+
+            assert_eq!(execution.state.pc(), to_state.pc());
+            assert_eq!(
+                execution.transcript.program_log.last().unwrap().timestamp,
+                system_records.to_state.timestamp
+            );
+            let mut frequencies = vec![0u32; instructions.len()];
+            for event in execution.transcript.program_log.iter().rev().skip(1) {
+                frequencies[event.pc as usize / 4] += 1;
+            }
+            assert_eq!(frequencies, system_records.filtered_exec_frequencies);
+            assert!(execution
+                .transcript
+                .memory_log
+                .windows(2)
+                .all(|events| events[0].timestamp < events[1].timestamp));
+            for touched in &system_records.touched_memory {
+                let values: [u16; 4] = unsafe {
+                    execution
+                        .state
+                        .memory
+                        .read(touched.address_space, touched.ptr)
+                };
+                assert_eq!(
+                    values.map(u32::from),
+                    touched.values.map(|value| value.as_canonical_u32()),
+                    "final touched block differs at AS={} ptr={}",
+                    touched.address_space,
+                    touched.ptr
+                );
+                let last_event = execution
+                    .transcript
+                    .memory_log
+                    .iter()
+                    .rev()
+                    .find(|event| {
+                        event.address_space_and_kind & !(1 << 31) == touched.address_space
+                            && event.pointer == touched.ptr
+                    })
+                    .expect("interpreter-touched block is absent from RVR memory log");
+                assert_eq!(last_event.timestamp, touched.timestamp);
+                assert_eq!(
+                    last_event.value,
+                    touched.values.map(|value| value.as_canonical_u32())
+                );
+            }
+
+            transcript_bytes = std::mem::size_of_val(execution.transcript.program_log.as_slice())
+                + std::mem::size_of_val(execution.transcript.memory_log.as_slice())
+                + std::mem::size_of_val(execution.transcript.initial_write_log.as_slice());
+        }
+
+        interpreter_times.sort_unstable();
+        rvr_times.sort_unstable();
+        let interpreter_median = interpreter_times[REPETITIONS / 2];
+        let rvr_median = rvr_times[REPETITIONS / 2];
+        println!(
+            "RVR_PREFLIGHT_BENCH guest_insns={} repetitions={} interpreter_median_us={} rvr_median_us={} speedup={:.3} transcript_bytes={} bytes_per_insn={:.3}",
+            segment.num_insns,
+            REPETITIONS,
+            interpreter_median.as_micros(),
+            rvr_median.as_micros(),
+            interpreter_median.as_secs_f64() / rvr_median.as_secs_f64(),
+            transcript_bytes,
+            transcript_bytes as f64 / segment.num_insns as f64,
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(feature = "rvr")]
+    fn test_rvr_preflight_logs_memory_schedule() -> Result<()> {
+        let reg = |index: usize| index * RV64_REGISTER_NUM_LIMBS;
+        let reg_pointer = |index: u32| index * 4;
+        let addi = |rd: usize, immediate: usize| {
+            Instruction::<F>::from_usize(
+                BaseAluImmOpcode::ADDI.global_opcode(),
+                [
+                    reg(rd),
+                    0,
+                    immediate,
+                    RV64_REGISTER_AS as usize,
+                    RV64_IMM_AS as usize,
+                    1,
+                    0,
+                ],
+            )
+        };
+        let memory = |opcode: Rv64LoadStoreOpcode, a: usize, base: usize| {
+            Instruction::<F>::from_usize(
+                opcode.global_opcode(),
+                [
+                    reg(a),
+                    reg(base),
+                    0,
+                    RV64_REGISTER_AS as usize,
+                    RV64_MEMORY_AS as usize,
+                    1,
+                    0,
+                ],
+            )
+        };
+        let instructions = [
+            addi(1, 1),
+            addi(2, 0x123),
+            memory(Rv64LoadStoreOpcode::STOREW, 2, 1),
+            memory(Rv64LoadStoreOpcode::LOADW, 3, 1),
+            addi(1, 6),
+            memory(Rv64LoadStoreOpcode::STOREW, 2, 1),
+            memory(Rv64LoadStoreOpcode::LOADW, 0, 1),
+            Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+        ];
+        let exe = VmExe::from(Program::from_instructions(&instructions));
+        let executor = VmExecutor::new(test_rv64im_config())?;
+        let execution = executor.rvr_preflight_instance(&exe, None)?.execute(
+            Vec::<Vec<u8>>::new(),
+            openvm_circuit::arch::rvr::RvrPreflightLimits::new(8, 19),
+        )?;
+
+        assert_eq!(
+            execution
+                .transcript
+                .program_log
+                .iter()
+                .map(|event| (event.pc, event.timestamp))
+                .collect::<Vec<_>>(),
+            vec![
+                (0, 1),
+                (4, 3),
+                (8, 5),
+                (12, 9),
+                (16, 13),
+                (20, 15),
+                (24, 19),
+                (28, 23),
+                (28, 23),
+            ]
+        );
+
+        let memory = &execution.transcript.memory_log;
+        assert_eq!(memory.len(), 19);
+        assert_eq!(
+            memory
+                .iter()
+                .map(|event| event.timestamp)
+                .collect::<Vec<_>>(),
+            vec![1, 2, 3, 4, 5, 6, 7, 9, 10, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]
+        );
+
+        const WRITE_BIT: u32 = 1 << 31;
+        let writes = memory
+            .iter()
+            .filter(|event| event.address_space_and_kind & WRITE_BIT != 0)
+            .map(|event| (event.timestamp, event.pointer, event.value))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            writes,
+            vec![
+                (2, reg_pointer(1), [1, 0, 0, 0]),
+                (4, reg_pointer(2), [0x123, 0, 0, 0]),
+                (7, 0, [0x2300, 1, 0, 0]),
+                (12, reg_pointer(3), [0x123, 0, 0, 0]),
+                (14, reg_pointer(1), [6, 0, 0, 0]),
+                (17, 0, [0x2300, 1, 0, 0x123]),
+                (18, 4, [0, 0, 0, 0]),
+            ]
+        );
+
+        assert_eq!(
+            execution
+                .transcript
+                .initial_write_log
+                .iter()
+                .map(|event| (event.address_space, event.pointer, event.initial_value))
+                .collect::<Vec<_>>(),
+            vec![
+                (RV64_REGISTER_AS, reg_pointer(1), [0; 4]),
+                (RV64_REGISTER_AS, reg_pointer(2), [0; 4]),
+                (RV64_MEMORY_AS, 0, [0; 4]),
+                (RV64_REGISTER_AS, reg_pointer(3), [0; 4]),
+                (RV64_MEMORY_AS, 4, [0; 4]),
+            ]
+        );
+        Ok(())
     }
 
     #[test_case("rvr_invalid_branch_taken"; "invalid_branch_taken")]

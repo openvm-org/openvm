@@ -1,7 +1,7 @@
 //! Shared RV64 instruction decoding and IR helpers.
 
 use openvm_instructions::riscv::{RV64_NUM_REGISTERS, RV64_REGISTER_BYTES};
-use rvr_openvm_ir::{CfgEffect, CfgOperand, ExtEmitCtx, ExtInstr, Variable};
+use rvr_openvm_ir::{CfgOperand, Variable};
 use rvr_openvm_lift::{decode_variable, RvrInstruction};
 
 /// The IR representation of an RV64 integer register.
@@ -35,28 +35,4 @@ pub(crate) const fn reg_operand(reg: Reg) -> CfgOperand {
 
 pub(crate) fn hex_u64(value: u64) -> String {
     format!("0x{value:016x}ull")
-}
-
-/// Instruction node used when a side-effect-free operation writes to `x0`.
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct NopInstr;
-
-impl ExtInstr for NopInstr {
-    fn opname(&self) -> &str {
-        "nop"
-    }
-
-    fn accesses_memory(&self) -> bool {
-        false
-    }
-
-    fn emit_c(&self, _ctx: &mut dyn ExtEmitCtx) {}
-
-    fn clone_box(&self) -> Box<dyn ExtInstr> {
-        Box::new(*self)
-    }
-
-    fn cfg_effect(&self) -> CfgEffect {
-        CfgEffect::None
-    }
 }

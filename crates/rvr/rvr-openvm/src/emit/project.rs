@@ -29,6 +29,7 @@ pub enum RvrExecutionKind {
     MeteredCost = 2,
     Metered = 3,
     MeteredSegment = 4,
+    Preflight = 5,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -45,6 +46,7 @@ impl TryFrom<u32> for RvrExecutionKind {
             2 => Ok(Self::MeteredCost),
             3 => Ok(Self::Metered),
             4 => Ok(Self::MeteredSegment),
+            5 => Ok(Self::Preflight),
             value => Err(InvalidRvrExecutionKind(value)),
         }
     }
@@ -58,6 +60,7 @@ impl RvrExecutionKind {
             Self::MeteredCost => "metered-cost",
             Self::Metered => "metered",
             Self::MeteredSegment => "metered-segment",
+            Self::Preflight => "preflight",
         }
     }
 
@@ -66,6 +69,7 @@ impl RvrExecutionKind {
             Self::Pure | Self::PureWithInstretTracking => "openvm_tracer_pure.h",
             Self::MeteredCost => "openvm_tracer_metered_cost.h",
             Self::Metered | Self::MeteredSegment => "openvm_tracer_metered.h",
+            Self::Preflight => "openvm_tracer_preflight.h",
         }
     }
 
@@ -78,6 +82,7 @@ impl RvrExecutionKind {
             Self::Metered | Self::MeteredSegment => {
                 include_str!("../../c/tracer/openvm_tracer_metered.h")
             }
+            Self::Preflight => include_str!("../../c/tracer/openvm_tracer_preflight.h"),
         }
     }
 
@@ -87,7 +92,9 @@ impl RvrExecutionKind {
             Self::MeteredSegment => {
                 Some(include_str!("../../c/block/openvm_block_metered_segment.h"))
             }
-            Self::Pure | Self::PureWithInstretTracking | Self::MeteredCost => None,
+            Self::Pure | Self::PureWithInstretTracking | Self::MeteredCost | Self::Preflight => {
+                None
+            }
         }
     }
 
@@ -98,6 +105,44 @@ impl RvrExecutionKind {
         writeln!(out).unwrap();
         match self {
             Self::Pure => {}
+            Self::Preflight => {
+                writeln!(out, "typedef struct PreflightProgramEvent {{").unwrap();
+                writeln!(out, "  uint32_t pc;").unwrap();
+                writeln!(out, "  uint32_t timestamp;").unwrap();
+                writeln!(out, "}} PreflightProgramEvent;").unwrap();
+                writeln!(out, "typedef struct PreflightMemoryEvent {{").unwrap();
+                writeln!(out, "  uint32_t timestamp;").unwrap();
+                writeln!(out, "  uint32_t address_space_and_kind;").unwrap();
+                writeln!(out, "  uint32_t pointer;").unwrap();
+                writeln!(out, "  uint32_t value[4];").unwrap();
+                writeln!(out, "}} PreflightMemoryEvent;").unwrap();
+                writeln!(out, "typedef struct PreflightInitialWrite {{").unwrap();
+                writeln!(out, "  uint32_t address_space;").unwrap();
+                writeln!(out, "  uint32_t pointer;").unwrap();
+                writeln!(out, "  uint32_t initial_value[4];").unwrap();
+                writeln!(out, "}} PreflightInitialWrite;").unwrap();
+                writeln!(out, "typedef struct PreflightState {{").unwrap();
+                writeln!(out, "  PreflightProgramEvent* program_log;").unwrap();
+                writeln!(out, "  PreflightMemoryEvent* memory_log;").unwrap();
+                writeln!(out, "  PreflightInitialWrite* initial_write_log;").unwrap();
+                writeln!(out, "  uint64_t program_log_len;").unwrap();
+                writeln!(out, "  uint64_t program_log_cap;").unwrap();
+                writeln!(out, "  uint64_t memory_log_len;").unwrap();
+                writeln!(out, "  uint64_t memory_log_cap;").unwrap();
+                writeln!(out, "  uint64_t initial_write_log_len;").unwrap();
+                writeln!(out, "  uint64_t initial_write_log_cap;").unwrap();
+                writeln!(out, "  uint32_t timestamp;").unwrap();
+                writeln!(out, "  uint32_t error;").unwrap();
+                writeln!(out, "}} PreflightState;").unwrap();
+                writeln!(out, "static_assert(sizeof(PreflightState) == 80);").unwrap();
+                writeln!(out, "static_assert(alignof(PreflightState) == 8);").unwrap();
+                writeln!(
+                    out,
+                    "static_assert(offsetof(PreflightState, timestamp) == 72);"
+                )
+                .unwrap();
+                writeln!(out, "static_assert(offsetof(PreflightState, error) == 76);").unwrap();
+            }
             Self::PureWithInstretTracking => {
                 writeln!(out, "typedef struct InstretTrackingState {{").unwrap();
                 writeln!(out, "  uint64_t retired;").unwrap();
@@ -147,6 +192,9 @@ impl RvrExecutionKind {
         writeln!(out, "  uint8_t* memory;").unwrap();
         match self {
             Self::Pure => {}
+            Self::Preflight => {
+                writeln!(out, "  PreflightState mode_state;").unwrap();
+            }
             Self::PureWithInstretTracking => {
                 writeln!(out, "  InstretTrackingState mode_state;").unwrap();
             }
@@ -173,7 +221,7 @@ impl RvrExecutionKind {
 
     const fn block_abi(self) -> BlockAbi {
         match self {
-            Self::Pure | Self::MeteredCost => BlockAbi::Plain,
+            Self::Pure | Self::MeteredCost | Self::Preflight => BlockAbi::Plain,
             Self::PureWithInstretTracking => BlockAbi::InstretCountdown,
             Self::Metered | Self::MeteredSegment => BlockAbi::Metered,
         }
@@ -466,6 +514,7 @@ impl CProject {
             },
             RvrExecutionKind::MeteredCost => EmitMode::MeteredCost,
             RvrExecutionKind::Pure | RvrExecutionKind::PureWithInstretTracking => EmitMode::Direct,
+            RvrExecutionKind::Preflight => EmitMode::ValueTrace,
         }
     }
 
@@ -505,13 +554,49 @@ impl CProject {
     ) -> io::Result<()> {
         if !matches!(
             self.execution_kind,
-            RvrExecutionKind::Pure | RvrExecutionKind::PureWithInstretTracking
+            RvrExecutionKind::Pure
+                | RvrExecutionKind::PureWithInstretTracking
+                | RvrExecutionKind::Preflight
         ) && self.num_airs.is_none()
         {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "metered RVR code generation requires the AIR count",
             ));
+        }
+        if self.execution_kind == RvrExecutionKind::Preflight {
+            if extensions.uses_memory_wrappers() {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "RVR preflight does not yet support extension memory wrappers",
+                ));
+            }
+            for block in blocks {
+                for instruction in &block.instructions {
+                    if !instruction.instr.supports_preflight() {
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            format!(
+                                "instruction {} at {:#x} does not support RVR preflight",
+                                instruction.instr.opname(),
+                                instruction.pc
+                            ),
+                        ));
+                    }
+                }
+                if let Terminator::Instruction { node, .. } = &block.terminator {
+                    if !node.supports_preflight() {
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidInput,
+                            format!(
+                                "instruction {} at {:#x} does not support RVR preflight",
+                                node.opname(),
+                                block.terminator_pc
+                            ),
+                        ));
+                    }
+                }
+            }
         }
         self.validate_block_abi()?;
         let text_end = Self::dispatch_max_pc(blocks, entry_point, text_start);
@@ -892,7 +977,9 @@ impl CProject {
         match self.execution_kind {
             RvrExecutionKind::PureWithInstretTracking => return,
             RvrExecutionKind::Metered | RvrExecutionKind::MeteredSegment => {}
-            RvrExecutionKind::Pure | RvrExecutionKind::MeteredCost => return,
+            RvrExecutionKind::Pure
+            | RvrExecutionKind::MeteredCost
+            | RvrExecutionKind::Preflight => return,
         }
 
         let pc = block.start_pc;
@@ -965,7 +1052,7 @@ impl CProject {
         let insn_count = block.insn_count();
 
         match self.execution_kind {
-            RvrExecutionKind::Pure => {}
+            RvrExecutionKind::Pure | RvrExecutionKind::Preflight => {}
             RvrExecutionKind::PureWithInstretTracking => {
                 let args = self.fn_args_from_params();
                 writeln!(
@@ -1032,7 +1119,9 @@ impl CProject {
     ) -> Result<(), InvalidChipIndex> {
         if matches!(
             self.execution_kind,
-            RvrExecutionKind::Pure | RvrExecutionKind::PureWithInstretTracking
+            RvrExecutionKind::Pure
+                | RvrExecutionKind::PureWithInstretTracking
+                | RvrExecutionKind::Preflight
         ) {
             return Ok(());
         }
@@ -1077,7 +1166,9 @@ impl CProject {
 
         writeln!(out, "    {{").unwrap();
         match self.execution_kind {
-            RvrExecutionKind::Pure | RvrExecutionKind::PureWithInstretTracking => unreachable!(),
+            RvrExecutionKind::Pure
+            | RvrExecutionKind::PureWithInstretTracking
+            | RvrExecutionKind::Preflight => unreachable!(),
             RvrExecutionKind::Metered | RvrExecutionKind::MeteredSegment => {
                 for (chip, count) in &chip_counts {
                     writeln!(out, "        (*trace_heights)[{chip}] += {count}u;").unwrap();
@@ -1390,6 +1481,27 @@ mod tests {
     }
 
     #[test]
+    fn preflight_preserves_plain_block_abi_and_hot_registers() {
+        let pure = CProject::new(Path::new("unused"), "test", RvrExecutionKind::Pure);
+        let preflight = CProject::new(Path::new("unused"), "test", RvrExecutionKind::Preflight);
+        let mut boundary = String::new();
+        preflight.emit_block_boundary(&mut boundary, &single_instruction_block());
+
+        assert!(boundary.is_empty());
+        assert_eq!(preflight.block_abi(), super::BlockAbi::Plain);
+        assert_eq!(preflight.hot_regs, pure.hot_regs);
+        assert_eq!(
+            preflight.emit_mode_for_block(&single_instruction_block()),
+            super::EmitMode::ValueTrace
+        );
+
+        let header = RvrExecutionKind::Preflight.state_layout_header();
+        assert!(header.contains("PreflightState mode_state;"));
+        assert!(header.contains("PreflightMemoryEvent* memory_log;"));
+        assert!(!header.contains("trace_heights"));
+    }
+
+    #[test]
     fn tracked_pure_carries_countdown_and_uses_shared_suspend_path() {
         let project = CProject::new(
             Path::new("unused"),
@@ -1482,6 +1594,7 @@ mod tests {
             RvrExecutionKind::MeteredCost,
             RvrExecutionKind::Metered,
             RvrExecutionKind::MeteredSegment,
+            RvrExecutionKind::Preflight,
         ];
         let mut suffixes = HashSet::new();
         for kind in kinds {

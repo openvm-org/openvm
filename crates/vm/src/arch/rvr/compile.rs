@@ -374,6 +374,26 @@ pub fn compile_with_instret_tracking<F: PrimeField32>(
     )
 }
 
+/// Compile a VmExe for append-only RVR preflight execution.
+pub fn compile_preflight<F: PrimeField32>(
+    exe: &VmExe<F>,
+    extensions: &ExtensionRegistry,
+    guest_debug_map: Option<&GuestDebugMap>,
+) -> Result<RvrCompiled, CompileError> {
+    compile_impl(
+        exe,
+        &CompileOptions {
+            base_name: None,
+            execution_kind: RvrExecutionKind::Preflight,
+            extensions,
+            chips: None,
+            guest_debug_map,
+            native_debug_info: cfg!(feature = "profiling"),
+            keep_artifacts: false,
+        },
+    )
+}
+
 /// Compile a VmExe with per-chip metered execution.
 pub fn compile_metered<F: PrimeField32>(
     exe: &VmExe<F>,
@@ -483,7 +503,9 @@ fn load_num_airs(
 ) -> Result<Option<u32>, CompileError> {
     if matches!(
         execution_kind,
-        RvrExecutionKind::Pure | RvrExecutionKind::PureWithInstretTracking
+        RvrExecutionKind::Pure
+            | RvrExecutionKind::PureWithInstretTracking
+            | RvrExecutionKind::Preflight
     ) {
         return Ok(None);
     }
@@ -536,7 +558,9 @@ fn compile_impl<F: PrimeField32>(
     project.pc_base = u64::from(exe.program.pc_base);
 
     match opts.execution_kind {
-        RvrExecutionKind::Pure | RvrExecutionKind::PureWithInstretTracking => {}
+        RvrExecutionKind::Pure
+        | RvrExecutionKind::PureWithInstretTracking
+        | RvrExecutionKind::Preflight => {}
         RvrExecutionKind::Metered
         | RvrExecutionKind::MeteredSegment
         | RvrExecutionKind::MeteredCost => {
@@ -596,7 +620,9 @@ fn compile_impl<F: PrimeField32>(
                         ));
                     }
                 }
-                RvrExecutionKind::Pure | RvrExecutionKind::PureWithInstretTracking => {
+                RvrExecutionKind::Pure
+                | RvrExecutionKind::PureWithInstretTracking
+                | RvrExecutionKind::Preflight => {
                     unreachable!()
                 }
             }

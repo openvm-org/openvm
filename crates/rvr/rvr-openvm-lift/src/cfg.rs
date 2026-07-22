@@ -147,7 +147,9 @@ impl VariableState {
     fn operand(&self, operand: CfgOperand) -> TrackedValue {
         match operand {
             CfgOperand::Var(var) => self.get(var),
-            CfgOperand::Const(value) => TrackedValue::constant(value),
+            CfgOperand::Const(value) | CfgOperand::ReadConst { value, .. } => {
+                TrackedValue::constant(value)
+            }
         }
     }
 
@@ -1280,6 +1282,7 @@ mod tests {
                     CfgTerm::JumpIndirect {
                         kind: CfgJumpKind::Jump,
                         link_dst: None,
+                        link_write: false,
                         base_value: CfgOperand::Var(var(5)),
                         offset: 0,
                         target_mask: !1,
@@ -1333,6 +1336,7 @@ mod tests {
                     CfgTerm::JumpIndirect {
                         kind: CfgJumpKind::Jump,
                         link_dst: None,
+                        link_write: false,
                         base_value: CfgOperand::Var(var(5)),
                         offset: 0,
                         target_mask: !1,
@@ -1373,6 +1377,7 @@ mod tests {
                     CfgTerm::JumpIndirect {
                         kind: CfgJumpKind::Jump,
                         link_dst: None,
+                        link_write: false,
                         base_value: CfgOperand::Var(var(5)),
                         offset: 0,
                         target_mask: !1,

@@ -2,7 +2,7 @@
 
 use rvr_openvm_ir::{CfgEffect, CfgOp, CfgResultWidth, ExtEmitCtx, ExtInstr};
 
-use crate::instruction::{reg_operand, Reg};
+use crate::instruction::{reg_operand, Reg, ZERO};
 
 /// RV64M multiplication or division operation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -80,7 +80,14 @@ impl ExtInstr for Rv64MInstr {
         Box::new(self.clone())
     }
 
+    fn supports_preflight(&self) -> bool {
+        true
+    }
+
     fn cfg_effect(&self) -> CfgEffect {
+        if self.rd == ZERO {
+            return CfgEffect::None;
+        }
         CfgEffect::WriteOp {
             dst: self.rd,
             op: self.op.cfg_op(),
