@@ -282,24 +282,20 @@ impl SegmentationState {
             .memory_ctx
             .apply_height_updates(&mut self.ctx.trace_heights);
 
-        let did_segment = self.ctx.segmentation_ctx.check_and_segment(
-            instret,
-            &mut self.ctx.trace_heights,
-            &self.ctx.config.is_trace_height_constant,
-        );
+        let did_segment = self
+            .ctx
+            .segmentation_ctx
+            .check_and_segment(instret, &mut self.ctx.trace_heights);
 
         if did_segment {
-            self.ctx.segmentation_ctx.initialize_segment(
-                &mut self.ctx.trace_heights,
-                &self.ctx.config.is_trace_height_constant,
-            );
+            self.ctx
+                .segmentation_ctx
+                .initialize_segment(&mut self.ctx.trace_heights);
             self.initialize_segment_memory(mem_len, pv_len, deferral_len);
 
-            self.ctx.segmentation_ctx.warn_if_exceeds_limits(
-                instret,
-                &self.ctx.trace_heights,
-                &self.ctx.config.is_trace_height_constant,
-            );
+            self.ctx
+                .segmentation_ctx
+                .warn_if_exceeds_limits(instret, &self.ctx.trace_heights);
         }
 
         self.ctx

@@ -48,7 +48,7 @@ pub struct SegmentationConfig {
 }
 
 impl SegmentationConfig {
-    fn new(
+    pub(crate) fn new(
         air_names: Vec<String>,
         widths: Vec<usize>,
         interactions: Vec<usize>,
@@ -114,6 +114,15 @@ impl SegmentationConfig {
     }
 }
 
+/// AIR metadata read during each segmentation check.
+#[derive(Clone, Debug)]
+struct VariableAir {
+    air_id: usize,
+    width: usize,
+    interactions: usize,
+    need_rot: bool,
+}
+
 #[derive(Clone, Debug)]
 pub struct SegmentationCtx {
     pub segments: Vec<Segment>,
@@ -124,9 +133,15 @@ pub struct SegmentationCtx {
     pub(crate) checkpoint_trace_heights: Vec<u32>,
     /// Instruction count at the checkpoint
     checkpoint_instret: u64,
+    /// AIRs whose heights can change between segments.
+    variable_airs: Vec<VariableAir>,
+    /// Proving-memory contribution from AIRs whose heights are fixed.
+    constant_counts: ProvingMemoryCounts,
+    /// Interaction contribution from AIRs whose heights are fixed.
+    constant_total_interactions: u64,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum SegmentationTrigger {
     Height {
         #[cfg(feature = "metrics")]
@@ -175,23 +190,53 @@ struct MeteredMemoryBreakdown {
 }
 
 impl SegmentationCtx {
-    pub fn new(
-        air_names: Vec<String>,
-        widths: Vec<usize>,
-        interactions: Vec<usize>,
-        need_rot: Vec<bool>,
-        limits: SegmentationLimits,
-        memory_config: ProvingMemoryConfig,
+    pub(crate) fn new(
+        config: SegmentationConfig,
+        trace_heights: &[u32],
+        is_trace_height_constant: &[bool],
     ) -> Self {
-        let num_airs = air_names.len();
-        let config = SegmentationConfig::new(
-            air_names,
-            widths,
-            interactions,
-            need_rot,
-            limits,
-            memory_config,
-        );
+        assert_eq!(trace_heights.len(), is_trace_height_constant.len());
+        assert_eq!(trace_heights.len(), config.air_names.len());
+        assert_eq!(trace_heights.len(), config.widths.len());
+        assert_eq!(trace_heights.len(), config.interactions.len());
+        assert_eq!(trace_heights.len(), config.need_rot.len());
+
+        let mut variable_airs = Vec::with_capacity(trace_heights.len());
+        let mut constant_main_with_rot = 0;
+        let mut constant_main_without_rot = 0;
+        let mut constant_interaction_cells = 0;
+        let mut constant_total_interactions = 0;
+
+        for (air_idx, ((((&height, &width), &interactions), &is_constant), &need_rot)) in
+            trace_heights
+                .iter()
+                .zip(config.widths.iter())
+                .zip(config.interactions.iter())
+                .zip(is_trace_height_constant.iter())
+                .zip(config.need_rot.iter())
+                .enumerate()
+        {
+            if is_constant {
+                let padded_height = next_power_of_two_or_zero(height as usize);
+                let main_cells = padded_height * width;
+                if need_rot {
+                    constant_main_with_rot += main_cells;
+                } else {
+                    constant_main_without_rot += main_cells;
+                }
+                constant_interaction_cells += padded_height * interactions;
+                constant_total_interactions += add_one_or_zero(height) as u64 * interactions as u64;
+            } else {
+                variable_airs.push(VariableAir {
+                    air_id: air_idx,
+                    width,
+                    interactions,
+                    need_rot,
+                });
+            }
+        }
+
+        let num_airs = config.air_names.len();
         Self {
             segments: Vec::new(),
             instrets_until_check: u64::from(SEGMENT_CHECK_INSNS),
@@ -199,6 +244,13 @@ impl SegmentationCtx {
             instret: 0,
             checkpoint_trace_heights: vec![0; num_airs],
             checkpoint_instret: 0,
+            variable_airs,
+            constant_counts: ProvingMemoryCounts::new(
+                constant_main_with_rot,
+                constant_main_without_rot,
+                constant_interaction_cells,
+            ),
+            constant_total_interactions,
         }
     }
 
@@ -227,18 +279,6 @@ impl SegmentationCtx {
 
     pub fn config(&self) -> &SegmentationConfig {
         &self.config
-    }
-
-    pub fn from_config(config: SegmentationConfig) -> Self {
-        let num_airs = config.air_names.len();
-        Self {
-            segments: Vec::new(),
-            instrets_until_check: u64::from(SEGMENT_CHECK_INSNS),
-            config,
-            instret: 0,
-            checkpoint_trace_heights: vec![0; num_airs],
-            checkpoint_instret: 0,
-        }
     }
 
     /// Calculate the maximum trace height and corresponding air name
@@ -386,14 +426,8 @@ impl SegmentationCtx {
     }
 
     #[inline(always)]
-    pub(crate) fn should_segment(
-        &self,
-        instret: u64,
-        trace_heights: &[u32],
-        is_trace_height_constant: &[bool],
-    ) -> bool {
-        self.segmentation_trigger(instret, trace_heights, is_trace_height_constant)
-            .is_some()
+    pub(crate) fn should_segment(&self, instret: u64, trace_heights: &[u32]) -> bool {
+        self.segmentation_trigger(instret, trace_heights).is_some()
     }
 
     #[inline(always)]
@@ -401,13 +435,8 @@ impl SegmentationCtx {
         &self,
         instret: u64,
         trace_heights: &[u32],
-        is_trace_height_constant: &[bool],
     ) -> Option<SegmentationTrigger> {
-        debug_assert_eq!(trace_heights.len(), is_trace_height_constant.len());
         debug_assert_eq!(trace_heights.len(), self.config.air_names.len());
-        debug_assert_eq!(trace_heights.len(), self.config.widths.len());
-        debug_assert_eq!(trace_heights.len(), self.config.interactions.len());
-        debug_assert_eq!(trace_heights.len(), self.config.need_rot.len());
 
         let instret_start = self
             .segments
@@ -420,48 +449,44 @@ impl SegmentationCtx {
             return None;
         }
 
-        let mut main_cnt_with_rot = 0usize;
-        let mut main_cnt_no_rot = 0usize;
-        let mut interaction_cells = 0usize;
-        let mut total_interactions = 0u64;
-        for (i, ((((&height, &width), &interactions), is_constant), &need_rot)) in trace_heights
-            .iter()
-            .zip(self.config.widths.iter())
-            .zip(self.config.interactions.iter())
-            .zip(is_trace_height_constant.iter())
-            .zip(self.config.need_rot.iter())
-            .enumerate()
-        {
-            let padded_height = next_power_of_two_or_zero(height as usize) as u32;
-            // Only segment if the height is not constant and exceeds the maximum height after
-            // padding
-            if !is_constant && padded_height > self.config.max_trace_height {
-                let air_name = unsafe { self.config.air_names.get_unchecked(i) };
+        let mut counts = self.constant_counts;
+        let mut total_interactions = self.constant_total_interactions;
+        for air in &self.variable_airs {
+            // SAFETY: `new` validates the AIR layout and creates every `air_id` from it.
+            let height = unsafe { *trace_heights.get_unchecked(air.air_id) };
+            let padded_height = next_power_of_two_or_zero(height as usize);
+            if padded_height > self.config.max_trace_height as usize {
+                // SAFETY: `new` validates that `air_names` has the same AIR layout.
+                let air_name = unsafe { self.config.air_names.get_unchecked(air.air_id) };
                 tracing::info!(
                     "overshoot: instret {:10} | height ({:8}) > max ({:8}) | chip {:3} ({}) ",
                     instret,
                     padded_height,
                     self.config.max_trace_height,
-                    i,
+                    air.air_id,
                     air_name,
                 );
                 return Some(SegmentationTrigger::Height {
                     #[cfg(feature = "metrics")]
-                    air_id: i,
+                    air_id: air.air_id,
                 });
             }
-            let main_cells = padded_height as usize * width;
-            if need_rot {
-                main_cnt_with_rot += main_cells;
+
+            let main_cells = padded_height * air.width;
+            if air.need_rot {
+                counts.main_cells_with_rot += main_cells;
             } else {
-                main_cnt_no_rot += main_cells;
+                counts.main_cells_without_rot += main_cells;
             }
-            interaction_cells += padded_height as usize * interactions;
-            total_interactions += add_one_or_zero(height) as u64 * interactions as u64;
+            counts.interaction_cells += padded_height * air.interactions;
+            total_interactions += add_one_or_zero(height) as u64 * air.interactions as u64;
         }
 
-        let (total_memory, main_memory, interaction_memory) =
-            self.counts_to_memory(main_cnt_with_rot, main_cnt_no_rot, interaction_cells);
+        let (total_memory, main_memory, interaction_memory) = self.counts_to_memory(
+            counts.main_cells_with_rot,
+            counts.main_cells_without_rot,
+            counts.interaction_cells,
+        );
         if total_memory > self.config.max_memory {
             tracing::info!(
                 "overshoot: instret {:10} | total memory ({:5}) > max ({:5}) | main ({:5}) | interaction ({:5})",
@@ -499,13 +524,8 @@ impl SegmentationCtx {
     }
 
     #[inline(always)]
-    pub(crate) fn warn_if_exceeds_limits(
-        &self,
-        instret: u64,
-        trace_heights: &[u32],
-        is_trace_height_constant: &[bool],
-    ) {
-        if self.should_segment(instret, trace_heights, is_trace_height_constant) {
+    pub(crate) fn warn_if_exceeds_limits(&self, instret: u64, trace_heights: &[u32]) {
+        if self.should_segment(instret, trace_heights) {
             let trace_heights_str = self.format_nonzero_trace_heights(trace_heights);
             tracing::warn!(
                 "Segment initialized with heights that exceed limits\n\
@@ -516,13 +536,8 @@ impl SegmentationCtx {
     }
 
     #[inline(always)]
-    pub fn check_and_segment(
-        &mut self,
-        instret: u64,
-        trace_heights: &mut [u32],
-        is_trace_height_constant: &[bool],
-    ) -> bool {
-        let trigger = self.segmentation_trigger(instret, trace_heights, is_trace_height_constant);
+    pub fn check_and_segment(&mut self, instret: u64, trace_heights: &mut [u32]) -> bool {
+        let trigger = self.segmentation_trigger(instret, trace_heights);
         let should_segment = trigger.is_some();
 
         #[cfg(feature = "metrics")]
@@ -565,36 +580,13 @@ impl SegmentationCtx {
 
     /// Initialize state for a new segment
     #[inline(always)]
-    pub(crate) fn initialize_segment(
-        &mut self,
-        trace_heights: &mut [u32],
-        is_trace_height_constant: &[bool],
-    ) {
-        // Reset trace heights by subtracting the last segment's heights
+    pub(crate) fn initialize_segment(&mut self, trace_heights: &mut [u32]) {
         let last_segment = self.segments.last().unwrap();
-        self.reset_trace_heights(
-            trace_heights,
-            &last_segment.trace_heights,
-            is_trace_height_constant,
-        );
-    }
-
-    /// Resets trace heights by subtracting segment heights
-    #[inline(always)]
-    fn reset_trace_heights(
-        &self,
-        trace_heights: &mut [u32],
-        segment_heights: &[u32],
-        is_trace_height_constant: &[bool],
-    ) {
-        for ((trace_height, &segment_height), &is_trace_height_constant) in trace_heights
-            .iter_mut()
-            .zip(segment_heights.iter())
-            .zip(is_trace_height_constant.iter())
-        {
-            if !is_trace_height_constant {
-                *trace_height = trace_height.checked_sub(segment_height).unwrap();
-            }
+        for air in &self.variable_airs {
+            let trace_height = &mut trace_heights[air.air_id];
+            *trace_height = trace_height
+                .checked_sub(last_segment.trace_heights[air.air_id])
+                .unwrap();
         }
     }
 
@@ -808,14 +800,15 @@ mod tests {
             max_constraint_degree: 4,
             cache_rs_code_matrix: false,
         };
-        SegmentationCtx::new(
+        let config = SegmentationConfig::new(
             vec!["air".to_string()],
             vec![1],
             vec![0],
             vec![false],
             limits,
             memory_config,
-        )
+        );
+        SegmentationCtx::new(config, &[0], &[false])
     }
 
     #[test]
@@ -824,11 +817,92 @@ mod tests {
         ctx.update_checkpoint(10, &[2]);
 
         let mut trace_heights = vec![8];
-        assert!(ctx.check_and_segment(15, &mut trace_heights, &[false]));
+        assert!(ctx.check_and_segment(15, &mut trace_heights));
 
         assert_eq!(ctx.segments.len(), 1);
         assert_eq!(ctx.segments[0].instret_start, 0);
         assert_eq!(ctx.segments[0].num_insns, 10);
         assert_eq!(ctx.segments[0].trace_heights, vec![2]);
+    }
+
+    fn scan_test_ctx(initial_heights: &[u32], is_constant: &[bool]) -> SegmentationCtx {
+        let config = SegmentationConfig::new(
+            (0..4).map(|i| format!("air{i}")).collect(),
+            vec![2, 3, 5, 7],
+            vec![1, 2, 3, 4],
+            vec![false, true, false, true],
+            SegmentationLimits {
+                max_trace_height_bits: 11,
+                max_memory: usize::MAX,
+                max_interactions: u32::MAX,
+            },
+            ProvingMemoryConfig {
+                base_field_size: 4,
+                extension_degree: 4,
+                log_blowup: 1,
+                l_skip: 4,
+                max_constraint_degree: 4,
+                cache_rs_code_matrix: false,
+            },
+        );
+        SegmentationCtx::new(config, initial_heights, is_constant)
+    }
+
+    #[test]
+    fn segmentation_trigger_uses_preaggregated_counts() {
+        let mut ctx = scan_test_ctx(&[5, 8, 0, 0], &[true, true, false, false]);
+
+        assert_eq!(ctx.segmentation_trigger(50, &[5, 8, 2048, 0]), None);
+        let height_trigger = ctx.segmentation_trigger(50, &[5, 8, 2049, 0]);
+        #[cfg(feature = "metrics")]
+        assert_eq!(
+            height_trigger,
+            Some(SegmentationTrigger::Height { air_id: 2 })
+        );
+        #[cfg(not(feature = "metrics"))]
+        assert_eq!(height_trigger, Some(SegmentationTrigger::Height {}));
+
+        assert_eq!(
+            ctx.segmentation_trigger(50, &[5, 8, u32::MAX, 0]),
+            height_trigger
+        );
+
+        let heights = [5, 8, 9, 4];
+        let total_memory = ctx.calculate_total_memory(&heights).0;
+        ctx.set_max_memory(total_memory);
+        assert_eq!(ctx.segmentation_trigger(50, &heights), None);
+        ctx.set_max_memory(total_memory - 1);
+        assert_eq!(
+            ctx.segmentation_trigger(50, &heights),
+            Some(SegmentationTrigger::Memory)
+        );
+
+        ctx.set_max_memory(usize::MAX);
+        let total_interactions = ctx.calculate_total_interactions(&heights) as u32;
+        ctx.config.max_interactions = total_interactions;
+        assert_eq!(ctx.segmentation_trigger(50, &heights), None);
+        ctx.config.max_interactions = total_interactions - 1;
+        assert_eq!(
+            ctx.segmentation_trigger(50, &heights),
+            Some(SegmentationTrigger::Interactions)
+        );
+
+        let ctx = scan_test_ctx(&[2049, 8, 0, 0], &[true, true, false, false]);
+        assert_eq!(ctx.segmentation_trigger(50, &[2049, 8, 0, 0]), None);
+    }
+
+    #[test]
+    fn initialize_segment_preserves_constant_heights() {
+        let mut ctx = scan_test_ctx(&[5, 8, 0, 0], &[true, true, false, false]);
+        ctx.segments.push(Segment {
+            instret_start: 0,
+            num_insns: 50,
+            trace_heights: vec![5, 8, 9, 4],
+        });
+        let mut trace_heights = vec![5, 8, 12, 10];
+
+        ctx.initialize_segment(&mut trace_heights);
+
+        assert_eq!(trace_heights, vec![5, 8, 3, 6]);
     }
 }
