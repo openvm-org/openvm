@@ -19,9 +19,6 @@ use crate::{
     system::memory::online::GuestMemory,
 };
 
-const WRITE_BIT: u32 = 1 << 31;
-const ADDRESS_SPACE_MASK: u32 = !WRITE_BIT;
-
 const _: () = assert!(BLOCK_FE_WIDTH == 4);
 
 /// Hard capacities for one preflight execution call.
@@ -51,10 +48,22 @@ pub struct RvrPreflightTranscript {
     pub initial_write_log: Vec<PreflightInitialWrite>,
 }
 
+/// Why a complete preflight transcript stopped. This stays beside the
+/// transcript rather than adding another hot-path log field.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RvrPreflightEndpoint {
+    Terminated,
+    Suspended {
+        resume_pc: u32,
+        final_timestamp: u32,
+    },
+}
+
 /// State and transcript returned only after successful termination.
 pub struct RvrPreflightExecution {
     pub state: VmState<GuestMemory>,
     pub transcript: RvrPreflightTranscript,
+    pub endpoint: RvrPreflightEndpoint,
 }
 
 pub(crate) struct PreflightBuffers {
@@ -160,8 +169,8 @@ impl PreflightBuffers {
         let mut candidate_index = 0usize;
         let mut initial_write_log = Vec::new();
         for event in &self.memory_log {
-            let address_space = event.address_space_and_kind & ADDRESS_SPACE_MASK;
-            let is_write = event.address_space_and_kind & WRITE_BIT != 0;
+            let address_space = event.address_space();
+            let is_write = event.is_write();
             let first_event = seen.insert((address_space, event.pointer));
             if is_write {
                 let candidate = *self
@@ -194,10 +203,10 @@ pub(crate) fn extend_touched_pages(
     transcript: &RvrPreflightTranscript,
 ) -> Result<(), String> {
     for event in &transcript.memory_log {
-        if event.address_space_and_kind & WRITE_BIT == 0 {
+        if !event.is_write() {
             continue;
         }
-        let address_space = event.address_space_and_kind & ADDRESS_SPACE_MASK;
+        let address_space = event.address_space();
         if address_space != RV64_REGISTER_AS && address_space != RV64_MEMORY_AS {
             return Err(format!(
                 "unsupported preflight address space {address_space} in first executor milestone"
@@ -274,7 +283,11 @@ impl<'a> RvrPreflightInstance<'a> {
         )
         .map_err(map_rvr_execute_error)?;
         extend_touched_pages(&mut state, &transcript).map_err(ExecutionError::RvrExecution)?;
-        Ok(RvrPreflightExecution { state, transcript })
+        Ok(RvrPreflightExecution {
+            state,
+            transcript,
+            endpoint: RvrPreflightEndpoint::Terminated,
+        })
     }
 
     pub fn save(&self, dir: &Path) -> Result<std::path::PathBuf, CompileError> {
