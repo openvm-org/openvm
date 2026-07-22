@@ -107,8 +107,6 @@ impl RvrExtension for PairingExtension {
 
         let rs1_reg = decode_reg(insn.a);
         let rs2_reg = decode_reg(insn.b);
-        // Leave unconfigured curves unclaimed so conversion reports a clean
-        // unrecognized-instruction error instead of panicking.
         let curve = KnownPairingCurve::from_idx(curve_idx)?;
 
         Some(LiftedInstr::Body(InstrAt {

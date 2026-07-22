@@ -426,8 +426,6 @@ fn collect_potential_targets(
             }
             LiftedInstr::Term { terminator, .. } => {
                 match terminator.cfg_term(pc, pc + INSTR_SIZE as u64) {
-                    // Not real control flow: keep constant state, matching the
-                    // phase-3 transfer function.
                     CfgTerm::FallThrough => continue,
                     CfgTerm::Jump { kind, target, .. } => {
                         if pc_to_idx.contains_key(&target) {
