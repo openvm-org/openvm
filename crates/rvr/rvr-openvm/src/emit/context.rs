@@ -167,6 +167,13 @@ impl<'a> EmitContext<'a> {
         self.mode.traces_values()
     }
 
+    /// Reserve logical memory slots that have no enabled memory event.
+    pub(crate) fn advance_timestamp(&mut self, slots: u32) {
+        if self.mode.traces_values() && slots != 0 {
+            self.write_line(&format!("trace_advance_timestamp(state, {slots}u);"));
+        }
+    }
+
     /// Append a line of C code (indented).
     pub fn write_line(&mut self, s: &str) {
         for _ in 0..self.indent {
@@ -228,6 +235,9 @@ impl<'a> EmitContext<'a> {
 
     fn read_reg_impl(&mut self, idx: u8, kind: RegisterReadKind) -> String {
         if idx == 0 {
+            if self.mode.traces_values() && matches!(kind, RegisterReadKind::MemoryAccess) {
+                self.write_line("trace_reg_read(state, 0, 0ull);");
+            }
             return "0ull".to_string();
         }
 
@@ -267,12 +277,22 @@ impl<'a> EmitContext<'a> {
     /// value-tracing mode.
     pub fn write_reg(&mut self, idx: u8, val: &str) {
         if idx == 0 {
+            if self.mode.traces_values() {
+                self.write_line("trace_timestamp(state);");
+            }
             return;
         }
         if self.mode.traces_values() {
             let tmp = self.next_var();
             self.write_line(&format!("uint64_t {tmp} = (uint64_t)({val});"));
-            self.write_line(&format!("trace_reg_write(state, {idx}, {tmp});"));
+            let previous = if self.hot_regs.contains(&idx) {
+                Self::abi_name(idx).to_string()
+            } else {
+                format!("state->regs[{idx}]")
+            };
+            self.write_line(&format!(
+                "trace_reg_write(state, {idx}, {tmp}, {previous});"
+            ));
             if self.hot_regs.contains(&idx) {
                 let name = Self::abi_name(idx);
                 self.write_line(&format!("{name} = {tmp};"));
@@ -402,7 +422,12 @@ impl<'a> EmitContext<'a> {
     /// Emit a PC read when value tracing is enabled.
     pub fn trace_pc(&mut self, pc: u64) {
         if self.mode.traces_values() {
-            self.write_line(&format!("trace_pc(state, 0x{pc:08x}ull);"));
+            let args = self.tail_call_args();
+            self.write_line(&format!(
+                "if (unlikely(!trace_pc(state, 0x{pc:08x}ull))) {{"
+            ));
+            self.write_line(&format!("  [[clang::musttail]] return rv_trap({args});"));
+            self.write_line("}");
         }
     }
 
@@ -671,6 +696,39 @@ mod tests {
     use std::collections::HashSet;
 
     use super::{BlockAbi, EmitContext, EmitMode};
+
+    fn value_trace_ctx() -> EmitContext<'static> {
+        EmitContext::new(
+            HashSet::new(),
+            EmitMode::ValueTrace,
+            BlockAbi::Plain,
+            None,
+            None,
+        )
+    }
+
+    #[test]
+    fn value_trace_keeps_x0_read_and_disabled_write_slots() {
+        let mut ctx = value_trace_ctx();
+        assert_eq!(ctx.read_reg(0), "0ull");
+        ctx.write_reg(0, "123ull");
+
+        assert_eq!(
+            ctx.buf().matches("trace_reg_read(state, 0, 0ull);").count(),
+            1
+        );
+        assert_eq!(ctx.buf().matches("trace_timestamp(state);").count(), 1);
+    }
+
+    #[test]
+    fn value_trace_register_write_captures_previous_value() {
+        let mut ctx = value_trace_ctx();
+        ctx.write_reg(3, "123ull");
+
+        assert!(ctx
+            .buf()
+            .contains("trace_reg_write(state, 3, _v0, state->regs[3]);"));
+    }
 
     fn metered_memory_ctx() -> EmitContext<'static> {
         EmitContext::new(
