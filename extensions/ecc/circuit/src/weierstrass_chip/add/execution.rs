@@ -170,9 +170,7 @@ impl<F: PrimeField32, const BLOCKS: usize> InterpreterExecutor<F> for EcAddExecu
     }
 }
 
-impl<F: PrimeField32, const BLOCKS: usize> InterpreterMeteredExecutor<F>
-    for EcAddExecutor<BLOCKS>
-{
+impl<F: PrimeField32, const BLOCKS: usize> InterpreterMeteredExecutor<F> for EcAddExecutor<BLOCKS> {
     #[inline(always)]
     fn metered_pre_compute_size(&self) -> usize {
         std::mem::size_of::<E2PreCompute<EcAddPreCompute>>()

@@ -166,15 +166,13 @@ where
 
         // Try fast path for non-SETUP operations with known field types
         let output: [[u8; MEMORY_BLOCK_BYTES]; BLOCKS] = if !is_setup_opcode(local_opcode) {
-            compute_ec_add_fast::<BLOCKS>(self.cached_field_type, read_data).unwrap_or_else(
-                || {
-                    compute_ec_slow::<BLOCKS>(
-                        self.inner.program(),
-                        local_opcode,
-                        read_data.as_flattened().as_flattened(),
-                    )
-                },
-            )
+            compute_ec_add_fast::<BLOCKS>(self.cached_field_type, read_data).unwrap_or_else(|| {
+                compute_ec_slow::<BLOCKS>(
+                    self.inner.program(),
+                    local_opcode,
+                    read_data.as_flattened().as_flattened(),
+                )
+            })
         } else {
             compute_ec_slow::<BLOCKS>(
                 self.inner.program(),

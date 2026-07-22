@@ -95,7 +95,9 @@ pub fn ec_add_proj<const FIELD_TYPE: u8, const BLOCKS: usize>(
         x if x == FieldType::BN254Coordinate as u8 => {
             ec_add_proj_256bit_a0::<halo2curves_axiom::bn256::Fq, BN254_B3, BLOCKS>(input_data)
         }
-        x if x == FieldType::BLS12_381Coordinate as u8 => ec_add_proj_bls12_381::<BLOCKS>(input_data),
+        x if x == FieldType::BLS12_381Coordinate as u8 => {
+            ec_add_proj_bls12_381::<BLOCKS>(input_data)
+        }
         _ => panic!("Unsupported field type: {FIELD_TYPE}"),
     }
 }
@@ -106,7 +108,9 @@ pub fn ec_double_proj<const FIELD_TYPE: u8, const BLOCKS: usize>(
     input_data: [[u8; MEMORY_BLOCK_BYTES]; BLOCKS],
 ) -> [[u8; MEMORY_BLOCK_BYTES]; BLOCKS] {
     match FIELD_TYPE {
-        x if x == FieldType::K256Coordinate as u8 => ec_double_proj_k256_bytes::<BLOCKS>(input_data),
+        x if x == FieldType::K256Coordinate as u8 => {
+            ec_double_proj_k256_bytes::<BLOCKS>(input_data)
+        }
         x if x == FieldType::P256Coordinate as u8 => {
             ec_double_proj_256bit_general::<halo2curves_axiom::secp256r1::Fp, P256_NEG_A, BLOCKS>(
                 input_data,

@@ -453,7 +453,6 @@ macro_rules! impl_sw_proj {
                     }
                 }
             }
-
         }
 
         impl core::ops::Neg for $struct_name {
