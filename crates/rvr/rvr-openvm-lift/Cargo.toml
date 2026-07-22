@@ -12,6 +12,7 @@ rvr-openvm-ir.workspace = true
 openvm-instructions.workspace = true
 openvm-stark-backend.workspace = true
 libloading.workspace = true
+rustc-hash.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]

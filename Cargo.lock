@@ -7470,6 +7470,7 @@ dependencies = [
  "openvm-instructions",
  "openvm-stark-backend",
  "p3-baby-bear",
+ "rustc-hash 2.1.1",
  "rvr-openvm-ir",
  "thiserror 1.0.69",
 ]

@@ -3,12 +3,13 @@
 //! Multi-value variable tracking, worklist fixpoint propagation, call/return
 //! analysis, and Duff's device scanning operate on `LiftedInstr` and `Block`.
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashSet};
 
 use openvm_instructions::{
     metering::MAX_METERED_BLOCK_INSNS,
     program::{DEFAULT_PC_STEP as INSTR_SIZE, MAX_ALLOWED_PC},
 };
+use rustc_hash::FxHashMap;
 use rvr_openvm_ir::{
     Block, CfgEffect, CfgJumpKind, CfgOp, CfgOperand, CfgResultWidth, CfgTerm, InstrAt,
     LiftedInstr, Terminator, Variable,
@@ -137,13 +138,13 @@ impl TrackedValue {
 
 #[derive(Clone, Debug)]
 struct VariableState {
-    values: HashMap<Variable, TrackedValue>,
+    values: FxHashMap<Variable, TrackedValue>,
 }
 
 impl VariableState {
     fn new() -> Self {
         Self {
-            values: HashMap::new(),
+            values: FxHashMap::default(),
         }
     }
 
@@ -403,7 +404,7 @@ fn simple_eval_indirect(
 
 fn extend_existing_pcs(
     pcs: &mut impl Extend<u64>,
-    pc_to_idx: &HashMap<u64, usize>,
+    pc_to_idx: &FxHashMap<u64, usize>,
     candidates: impl IntoIterator<Item = u64>,
 ) {
     pcs.extend(
@@ -415,7 +416,7 @@ fn extend_existing_pcs(
 
 fn collect_potential_targets(
     instructions: &[LiftedInstr],
-    pc_to_idx: &HashMap<u64, usize>,
+    pc_to_idx: &FxHashMap<u64, usize>,
 ) -> (BTreeSet<u64>, BTreeSet<u64>, BTreeSet<u64>) {
     let mut function_entries = BTreeSet::new();
     let mut internal_targets = BTreeSet::new();
@@ -492,9 +493,9 @@ fn collect_potential_targets(
 
 fn build_call_return_map(
     instructions: &[LiftedInstr],
-    pc_to_idx: &HashMap<u64, usize>,
-) -> HashMap<u64, HashSet<u64>> {
-    let mut map: HashMap<u64, HashSet<u64>> = HashMap::new();
+    pc_to_idx: &FxHashMap<u64, usize>,
+) -> FxHashMap<u64, HashSet<u64>> {
+    let mut map: FxHashMap<u64, HashSet<u64>> = FxHashMap::default();
 
     for li in instructions {
         if let LiftedInstr::Term { pc, terminator, .. } = li {
@@ -519,17 +520,17 @@ fn build_call_return_map(
 
 struct WorklistContext<'a> {
     instructions: &'a [LiftedInstr],
-    pc_to_idx: &'a HashMap<u64, usize>,
+    pc_to_idx: &'a FxHashMap<u64, usize>,
     function_entries: &'a BTreeSet<u64>,
     return_sites: &'a BTreeSet<u64>,
     sorted_function_entries: &'a [u64],
-    func_internal_targets: &'a HashMap<u64, HashSet<u64>>,
-    call_return_map: &'a HashMap<u64, HashSet<u64>>,
+    func_internal_targets: &'a FxHashMap<u64, HashSet<u64>>,
+    call_return_map: &'a FxHashMap<u64, HashSet<u64>>,
 }
 
 struct WorklistResult {
-    successors: HashMap<u64, HashSet<u64>>,
-    resolved_jumps: HashMap<u64, HashSet<u64>>,
+    successors: FxHashMap<u64, HashSet<u64>>,
+    resolved_jumps: FxHashMap<u64, HashSet<u64>>,
 }
 
 fn worklist(
@@ -538,12 +539,14 @@ fn worklist(
     internal_targets: &BTreeSet<u64>,
 ) -> WorklistResult {
     let estimated_size = function_entries.len() + internal_targets.len();
-    let mut states: HashMap<u64, VariableState> = HashMap::with_capacity(estimated_size);
+    let mut states: FxHashMap<u64, VariableState> =
+        FxHashMap::with_capacity_and_hasher(estimated_size, Default::default());
     let mut work: Vec<u64> = Vec::with_capacity(estimated_size);
     let mut in_work: HashSet<u64> = HashSet::with_capacity(estimated_size);
-    let mut successors: HashMap<u64, HashSet<u64>> = HashMap::with_capacity(estimated_size);
+    let mut successors: FxHashMap<u64, HashSet<u64>> =
+        FxHashMap::with_capacity_and_hasher(estimated_size, Default::default());
     let mut unresolved_dynamic_jumps: HashSet<u64> = HashSet::new();
-    let mut resolved_jumps: HashMap<u64, HashSet<u64>> = HashMap::new();
+    let mut resolved_jumps: FxHashMap<u64, HashSet<u64>> = FxHashMap::default();
 
     // Seed function entries with empty variable state. Internal targets receive
     // predecessor state, including constants used to resolve dynamic jumps.
@@ -669,7 +672,7 @@ fn get_successors(
     state: &VariableState,
     ctx: &WorklistContext<'_>,
     unresolved_dynamic_jumps: &mut HashSet<u64>,
-    resolved_jumps: &mut HashMap<u64, HashSet<u64>>,
+    resolved_jumps: &mut FxHashMap<u64, HashSet<u64>>,
 ) -> HashSet<u64> {
     let mut result = HashSet::new();
     let pc = li.pc();
@@ -837,7 +840,7 @@ fn handle_unresolved_jump(
 
 fn scan_jump_table_targets(
     instructions: &[LiftedInstr],
-    pc_to_idx: &HashMap<u64, usize>,
+    pc_to_idx: &FxHashMap<u64, usize>,
     start_pc: u64,
 ) -> HashSet<u64> {
     let mut targets = HashSet::new();
@@ -878,8 +881,8 @@ fn scan_jump_table_targets(
 
 fn compute_leaders(
     instructions: &[LiftedInstr],
-    pc_to_idx: &HashMap<u64, usize>,
-    successors: &HashMap<u64, HashSet<u64>>,
+    pc_to_idx: &FxHashMap<u64, usize>,
+    successors: &FxHashMap<u64, HashSet<u64>>,
     function_entries: &BTreeSet<u64>,
     internal_targets: &BTreeSet<u64>,
     return_sites: &BTreeSet<u64>,
@@ -949,7 +952,7 @@ pub fn build_blocks(
     }
 
     // Build PC -> instruction index lookup.
-    let pc_to_idx: HashMap<u64, usize> = instructions
+    let pc_to_idx: FxHashMap<u64, usize> = instructions
         .iter()
         .enumerate()
         .map(|(i, li)| (li.pc(), i))
@@ -973,7 +976,7 @@ pub fn build_blocks(
     let sorted_function_entries: Vec<u64> = function_entries.iter().copied().collect();
 
     // Group internal targets by enclosing function.
-    let mut func_internal_targets: HashMap<u64, HashSet<u64>> = HashMap::new();
+    let mut func_internal_targets: FxHashMap<u64, HashSet<u64>> = FxHashMap::default();
     for target in &internal_targets {
         if let Some(func_start) = binary_search_le(&sorted_function_entries, *target) {
             func_internal_targets
@@ -1018,7 +1021,7 @@ pub fn build_blocks(
 fn build_block_list(
     instructions: &[LiftedInstr],
     leaders: &BTreeSet<u64>,
-    resolved_jumps: &HashMap<u64, HashSet<u64>>,
+    resolved_jumps: &FxHashMap<u64, HashSet<u64>>,
 ) -> Vec<Block> {
     // Max block size; used to flush periodically so the segmentation check in
     // metered mode (which fires at block boundaries) stays granular enough.
