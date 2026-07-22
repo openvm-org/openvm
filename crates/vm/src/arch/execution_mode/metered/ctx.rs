@@ -53,7 +53,7 @@ impl MeteredCtx {
         config: &SystemConfig,
         memory_config: ProvingMemoryConfig,
     ) -> Self {
-        let (trace_heights, is_trace_height_constant): (Vec<u32>, Vec<bool>) = inputs
+        let (mut trace_heights, is_trace_height_constant): (Vec<u32>, Vec<bool>) = inputs
             .constant_trace_heights
             .iter()
             .map(|&constant_height| {
@@ -65,7 +65,7 @@ impl MeteredCtx {
             })
             .unzip();
 
-        let segmentation_ctx = SegmentationCtx::new(
+        let segmentation_config = SegmentationConfig::new(
             inputs.air_names.to_vec(),
             inputs.widths.to_vec(),
             inputs.interactions.to_vec(),
@@ -74,7 +74,16 @@ impl MeteredCtx {
             inputs.segmentation_limits,
             memory_config,
         );
-        let memory_ctx = MemoryCtx::new(config);
+        let initial_trace_heights = trace_heights.clone();
+        let mut memory_ctx = MemoryCtx::new(config);
+        memory_ctx.add_register_merkle_heights();
+        memory_ctx.apply_height_updates(&mut trace_heights);
+        memory_ctx.update_checkpoint();
+        let segmentation_ctx = SegmentationCtx::new(
+            segmentation_config,
+            &trace_heights,
+            &is_trace_height_constant,
+        );
 
         // Assert that the indices are correct
         let air_names = segmentation_ctx.air_names();
@@ -95,23 +104,16 @@ impl MeteredCtx {
             "air_name={}",
             air_names[poseidon2_idx]
         );
-        let mut ctx = Self {
+        Self {
             config: MeteredCtxConfig {
-                initial_trace_heights: trace_heights.clone(),
+                initial_trace_heights,
                 is_trace_height_constant,
                 suspend_on_segment: false,
             },
             trace_heights,
             memory_ctx,
             segmentation_ctx,
-        };
-
-        // Add merkle height contributions for all registers
-        ctx.memory_ctx.add_register_merkle_heights();
-        ctx.memory_ctx.apply_height_updates(&mut ctx.trace_heights);
-        ctx.memory_ctx.update_checkpoint();
-
-        ctx
+        }
     }
 
     pub fn with_max_memory(mut self, max_memory: usize) -> Self {
@@ -143,12 +145,16 @@ impl MeteredCtx {
         segmentation_config: SegmentationConfig,
         system_config: &SystemConfig,
     ) -> Self {
-        let segmentation_ctx = SegmentationCtx::from_config(segmentation_config);
         let mut memory_ctx = MemoryCtx::new(system_config);
         let mut trace_heights = config.initial_trace_heights.clone();
         memory_ctx.add_register_merkle_heights();
         memory_ctx.apply_height_updates(&mut trace_heights);
         memory_ctx.update_checkpoint();
+        let segmentation_ctx = SegmentationCtx::new(
+            segmentation_config,
+            &trace_heights,
+            &config.is_trace_height_constant,
+        );
         Self {
             trace_heights,
             config,
@@ -190,26 +196,19 @@ impl MeteredCtx {
 
         self.memory_ctx
             .apply_height_updates(&mut self.trace_heights);
-        let did_segment = self.segmentation_ctx.check_and_segment(
-            self.segmentation_ctx.instret,
-            &mut self.trace_heights,
-            &self.config.is_trace_height_constant,
-        );
+        let did_segment = self
+            .segmentation_ctx
+            .check_and_segment(self.segmentation_ctx.instret, &mut self.trace_heights);
 
         if did_segment {
             // Initialize contexts for new segment
-            self.segmentation_ctx.initialize_segment(
-                &mut self.trace_heights,
-                &self.config.is_trace_height_constant,
-            );
+            self.segmentation_ctx
+                .initialize_segment(&mut self.trace_heights);
             self.memory_ctx.initialize_segment(&mut self.trace_heights);
 
             // Check if the new segment is within limits
-            self.segmentation_ctx.warn_if_exceeds_limits(
-                self.segmentation_ctx.instret,
-                &self.trace_heights,
-                &self.config.is_trace_height_constant,
-            );
+            self.segmentation_ctx
+                .warn_if_exceeds_limits(self.segmentation_ctx.instret, &self.trace_heights);
         }
 
         // Update checkpoints
