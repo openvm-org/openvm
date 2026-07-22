@@ -21,17 +21,49 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use {
+    crate::Rv64IConfig,
+    openvm_circuit::{
+        arch::{
+            rvr::{
+                cuda::{GpuRvrInputError, GpuRvrProgram},
+                RvrPreflightEndpoint, RvrPreflightLimits, RvrPreflightTranscript,
+            },
+            VmExecutor,
+        },
+        utils::test_system_config,
+    },
+    openvm_instructions::{
+        exe::VmExe,
+        instruction::Instruction,
+        program::{Program, DEFAULT_PC_STEP},
+        riscv::{RV64_IMM_AS, RV64_REGISTER_AS},
+        SystemOpcode,
+    },
+    openvm_riscv_transpiler::BranchEqualOpcode,
+};
 #[cfg(feature = "cuda")]
 use {
     crate::{
-        adapters::{Rv64BaseAluWImmU16AdapterRecord, RV64_WORD_U16_LIMBS},
-        AddICoreRecord, Rv64AddIWChipGpu,
+        adapters::{
+            Rv64BaseAluImmU16AdapterRecord, Rv64BaseAluWImmU16AdapterRecord, Rv64BranchAdapterAir,
+            Rv64BranchAdapterExecutor, Rv64BranchAdapterFiller, RV64_WORD_U16_LIMBS,
+        },
+        AddICoreRecord, BranchEqualCoreAir, BranchEqualFiller, Rv64AddIChipGpu, Rv64AddIWChipGpu,
+        Rv64BranchEqualAir, Rv64BranchEqualChip, Rv64BranchEqualChipGpu, Rv64BranchEqualExecutor,
     },
     openvm_circuit::arch::{
         testing::{default_var_range_checker_bus, GpuChipTestBuilder, GpuTestChipHarness},
-        EmptyAdapterCoreLayout,
+        EmptyAdapterCoreLayout, MatrixRecordArena,
     },
-    openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
+    openvm_circuit_primitives::{var_range::VariableRangeCheckerChip, Chip},
+    openvm_cpu_backend::CpuBackend,
+    openvm_cuda_backend::{
+        data_transporter::assert_eq_host_and_device_matrix_col_maj, prelude::SC,
+    },
+    openvm_cuda_common::{copy::MemCopyD2H, stream::device_synchronize},
+    openvm_stark_backend::prover::ColMajorMatrix,
     std::sync::Arc,
 };
 
@@ -61,6 +93,17 @@ type WHarness = TestChipHarness<F, Rv64AddIWExecutor, Rv64AddIWAir, Rv64AddIWChi
 #[cfg(feature = "cuda")]
 type GpuWHarness =
     GpuTestChipHarness<F, Rv64AddIWExecutor, Rv64AddIWAir, Rv64AddIWChipGpu, Rv64AddIWChip<F>>;
+#[cfg(feature = "cuda")]
+type GpuHarness =
+    GpuTestChipHarness<F, Rv64AddIExecutor, Rv64AddIAir, Rv64AddIChipGpu, Rv64AddIChip<F>>;
+#[cfg(feature = "cuda")]
+type GpuBranchHarness = GpuTestChipHarness<
+    F,
+    Rv64BranchEqualExecutor,
+    Rv64BranchEqualAir,
+    Rv64BranchEqualChipGpu,
+    Rv64BranchEqualChip<F>,
+>;
 
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
@@ -151,6 +194,44 @@ fn create_cuda_w_harness(tester: &GpuChipTestBuilder) -> GpuWHarness {
     );
     let gpu_chip = Rv64AddIWChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, 8)
+}
+
+#[cfg(feature = "cuda")]
+fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
+    let dummy_range_checker = Arc::new(VariableRangeCheckerChip::new(
+        default_var_range_checker_bus(),
+    ));
+    let (air, executor, cpu_chip) = create_harness_fields(
+        tester.memory_bridge(),
+        tester.execution_bridge(),
+        dummy_range_checker,
+        tester.dummy_memory_helper(),
+    );
+    let gpu_chip = Rv64AddIChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
+    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, 64)
+}
+
+#[cfg(feature = "cuda")]
+fn create_cuda_branch_harness(tester: &GpuChipTestBuilder) -> GpuBranchHarness {
+    let air = Rv64BranchEqualAir::new(
+        Rv64BranchAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
+        BranchEqualCoreAir::new(BranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
+    );
+    let executor = Rv64BranchEqualExecutor::new(
+        Rv64BranchAdapterExecutor,
+        BranchEqualOpcode::CLASS_OFFSET,
+        DEFAULT_PC_STEP,
+    );
+    let cpu_chip = Rv64BranchEqualChip::new(
+        BranchEqualFiller::new(
+            Rv64BranchAdapterFiller,
+            BranchEqualOpcode::CLASS_OFFSET,
+            DEFAULT_PC_STEP,
+        ),
+        tester.dummy_memory_helper(),
+    );
+    let gpu_chip = Rv64BranchEqualChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
+    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, 32)
 }
 
 fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
@@ -311,6 +392,201 @@ fn test_cuda_addiw_tracegen() {
         .finalize()
         .simple_test()
         .expect("verification failed");
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+#[test]
+fn test_cuda_addi_tracegen_from_rvr_transcript() {
+    const ITERATIONS: usize = 32;
+    let reg = |index: usize| index * RV64_REGISTER_NUM_LIMBS;
+    let addi = |rd: usize, rs1: usize, immediate: usize| {
+        Instruction::<F>::from_usize(
+            BaseAluImmOpcode::ADDI.global_opcode(),
+            [
+                reg(rd),
+                reg(rs1),
+                immediate,
+                RV64_REGISTER_AS as usize,
+                RV64_IMM_AS as usize,
+            ],
+        )
+    };
+    let instructions = vec![
+        addi(1, 0, 0),
+        addi(2, 0, ITERATIONS),
+        addi(1, 1, 1),
+        Instruction::from_isize(
+            BranchEqualOpcode::BNE.global_opcode(),
+            reg(1) as isize,
+            reg(2) as isize,
+            -4,
+            RV64_REGISTER_AS as isize,
+            RV64_REGISTER_AS as isize,
+        ),
+        addi(3, 1, 0xff_ffff),
+        Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+    ];
+    let program = Program::from_instructions(&instructions);
+    let exe = VmExe::from(program.clone());
+    let config = Rv64IConfig {
+        system: test_system_config(),
+        ..Default::default()
+    };
+    let executor = VmExecutor::new(config).unwrap();
+    let execution = executor
+        .rvr_preflight_instance(&exe, None)
+        .unwrap()
+        .execute(
+            Vec::<Vec<u8>>::new(),
+            RvrPreflightLimits::new(2 * ITERATIONS + 4, 4 * ITERATIONS + 6),
+        )
+        .unwrap();
+    let mut tester = GpuChipTestBuilder::default();
+    let mut harness = create_cuda_harness(&tester);
+    let mut branch_harness = create_cuda_branch_harness(&tester);
+    for (pc, instruction) in instructions[..2].iter().enumerate() {
+        tester.execute_with_pc(
+            &mut harness.executor,
+            &mut harness.dense_arena,
+            instruction,
+            (pc as u32) * 4,
+        );
+    }
+    for _ in 0..ITERATIONS {
+        tester.execute_with_pc(
+            &mut harness.executor,
+            &mut harness.dense_arena,
+            &instructions[2],
+            8,
+        );
+        tester.execute_with_pc(
+            &mut branch_harness.executor,
+            &mut branch_harness.dense_arena,
+            &instructions[3],
+            12,
+        );
+    }
+    tester.execute_with_pc(
+        &mut harness.executor,
+        &mut harness.dense_arena,
+        &instructions[4],
+        16,
+    );
+
+    type Record<'a> = (
+        &'a mut Rv64BaseAluImmU16AdapterRecord,
+        &'a mut AddICoreRecord<BLOCK_FE_WIDTH>,
+    );
+    harness
+        .dense_arena
+        .get_record_seeker::<Record, _>()
+        .transfer_to_matrix_arena(
+            &mut harness.matrix_arena,
+            EmptyAdapterCoreLayout::<F, Rv64BaseAluImmU16AdapterExecutor>::new(),
+        );
+
+    let range_checker = tester.range_checker();
+    let device_ctx = &range_checker.device_ctx;
+    let d_program = GpuRvrProgram::upload(&program, device_ctx).unwrap();
+    let (d_transcript, d_replay_plan) = d_program
+        .upload_transcript(&execution.transcript, execution.endpoint)
+        .unwrap();
+    assert_eq!(
+        d_replay_plan
+            .opcode_range(BaseAluImmOpcode::ADDI.global_opcode())
+            .len(),
+        ITERATIONS + 3
+    );
+    let mismatched_program = GpuRvrProgram::upload(&program, device_ctx).unwrap();
+    assert!(matches!(
+        harness.gpu_chip.generate_proving_ctx_from_rvr(
+            &mismatched_program,
+            &d_transcript,
+            &d_replay_plan,
+        ),
+        Err(GpuRvrInputError::ProgramMismatch)
+    ));
+    let (_other_transcript, other_plan) = d_program
+        .upload_transcript(&execution.transcript, execution.endpoint)
+        .unwrap();
+    assert!(matches!(
+        harness
+            .gpu_chip
+            .generate_proving_ctx_from_rvr(&d_program, &d_transcript, &other_plan,),
+        Err(GpuRvrInputError::SegmentMismatch)
+    ));
+    let replay_ctx = harness
+        .gpu_chip
+        .generate_proving_ctx_from_rvr(&d_program, &d_transcript, &d_replay_plan)
+        .unwrap();
+    assert_eq!(d_transcript.error_code().unwrap(), 0);
+    let replay_counts = range_checker.count.to_host_on(device_ctx).unwrap();
+
+    let mut corrupt_transcript = RvrPreflightTranscript {
+        program_log: execution.transcript.program_log.clone(),
+        memory_log: execution.transcript.memory_log.clone(),
+        initial_write_log: execution.transcript.initial_write_log.clone(),
+    };
+    corrupt_transcript.memory_log[1].value[0] ^= 1;
+    let (d_corrupt, d_corrupt_plan) = d_program
+        .upload_transcript(&corrupt_transcript, RvrPreflightEndpoint::Terminated)
+        .unwrap();
+    let corrupt_range_checker = Arc::new(
+        openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU::new(
+            default_var_range_checker_bus(),
+            device_ctx.clone(),
+        ),
+    );
+    let corrupt_chip = Rv64AddIChipGpu::new(corrupt_range_checker, tester.timestamp_max_bits());
+    corrupt_chip
+        .generate_proving_ctx_from_rvr(&d_program, &d_corrupt, &d_corrupt_plan)
+        .unwrap();
+    assert_eq!(d_corrupt.error_code().unwrap(), 9);
+
+    let legacy_range_checker = Arc::new(
+        openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU::new(
+            default_var_range_checker_bus(),
+            device_ctx.clone(),
+        ),
+    );
+    let legacy_chip =
+        Rv64AddIChipGpu::new(legacy_range_checker.clone(), tester.timestamp_max_bits());
+    let legacy_ctx = legacy_chip.generate_proving_ctx(harness.dense_arena);
+    let legacy_counts = legacy_range_checker.count.to_host_on(device_ctx).unwrap();
+    assert_eq!(replay_counts, legacy_counts);
+    let raw_count = |count: &F| {
+        const { assert!(std::mem::size_of::<F>() == std::mem::size_of::<u32>()) };
+        // The CUDA range-check buffer is typed as `F` for shared ownership but
+        // kernels update it as an atomic `u32` histogram.
+        unsafe { *(std::ptr::from_ref(count).cast::<u32>()) }
+    };
+    assert_eq!(
+        replay_counts.iter().map(raw_count).sum::<u32>(),
+        (ITERATIONS as u32 + 3) * 9
+    );
+
+    let expected_trace =
+        <Rv64AddIChip<F> as Chip<MatrixRecordArena<F>, CpuBackend<SC>>>::generate_proving_ctx(
+            &harness.cpu_chip,
+            harness.matrix_arena,
+        )
+        .common_main;
+    let expected_trace = ColMajorMatrix::from_row_major(&expected_trace);
+    device_synchronize().unwrap();
+    assert_eq_host_and_device_matrix_col_maj(&expected_trace, &legacy_ctx.common_main, device_ctx);
+    assert_eq_host_and_device_matrix_col_maj(&expected_trace, &replay_ctx.common_main, device_ctx);
+
+    tester
+        .build()
+        .load_air_proving_ctx(Arc::new(harness.air), replay_ctx)
+        .load(
+            branch_harness.air,
+            branch_harness.gpu_chip,
+            branch_harness.dense_arena,
+        )
+        .finalize()
+        .simple_test()
+        .expect("RVR transcript replay proof failed");
 }
 
 //////////////////////////////////////////////////////////////////////////////////////

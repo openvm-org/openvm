@@ -3,12 +3,16 @@
 mod abi_consts;
 pub mod bridge;
 pub mod compile;
+#[cfg(feature = "cuda")]
+pub mod cuda;
 pub mod debug;
 mod execute;
 mod initial_image;
 pub mod io;
 pub mod metered;
 pub mod metered_cost;
+#[cfg(feature = "cuda")]
+mod postflight;
 pub mod preflight;
 pub mod pure;
 pub mod state;
@@ -25,7 +29,8 @@ pub use initial_image::RvrInitialImage;
 pub use metered::{RvrMeteredExecutionOutcome, RvrMeteredInstance, RvrMeteredSegmentInstance};
 pub use metered_cost::{MeteredCostState, RvrMeteredCostInstance};
 pub use preflight::{
-    RvrPreflightExecution, RvrPreflightInstance, RvrPreflightLimits, RvrPreflightTranscript,
+    RvrPreflightEndpoint, RvrPreflightExecution, RvrPreflightInstance, RvrPreflightLimits,
+    RvrPreflightTranscript,
 };
 pub use pure::{
     RvrPureInstance, RvrPureWithInstretTrackingInstance, RvrTrackedExecution,
