@@ -44,6 +44,11 @@ pub enum CfgOperand {
     Var(Variable),
     /// Immediate constant.
     Const(u64),
+    /// A statically known value whose source read remains execution-visible.
+    ///
+    /// This is used for architectural constant registers such as RISC-V x0:
+    /// CFG analysis sees the constant while preflight still emits the read.
+    ReadConst { source: Variable, value: u64 },
 }
 
 /// Integer operation understood by CFG constant propagation.
@@ -139,12 +144,18 @@ pub enum CfgTerm {
     Jump {
         kind: CfgJumpKind,
         link_dst: Option<Variable>,
+        /// Whether execution reserves a destination-write slot even when
+        /// `link_dst` is disabled.
+        link_write: bool,
         target: u64,
     },
     /// Jump to a target computed from an operand and signed offset.
     JumpIndirect {
         kind: CfgJumpKind,
         link_dst: Option<Variable>,
+        /// Whether execution reserves a destination-write slot even when
+        /// `link_dst` is disabled.
+        link_write: bool,
         base_value: CfgOperand,
         offset: i32,
         target_mask: u64,
@@ -215,6 +226,15 @@ pub trait ExtInstr: std::fmt::Debug + Send + Sync {
     /// generation time.
     fn fixed_trace_rows(&self) -> Vec<FixedTraceRows> {
         Vec::new()
+    }
+
+    /// Whether this node emits a complete logical schedule in preflight mode.
+    ///
+    /// The default is fail-closed because semantic execution alone is not
+    /// sufficient: preflight must also preserve disabled clock slots and every
+    /// proof-visible memory access.
+    fn supports_preflight(&self) -> bool {
+        false
     }
 
     /// Clone into a boxed trait object.

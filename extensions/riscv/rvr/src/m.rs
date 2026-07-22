@@ -11,7 +11,7 @@ use rvr_openvm_ir::{ExtInstr, InstrAt, LiftedInstr};
 use rvr_openvm_lift::{RvrExtension, RvrInstruction};
 
 use self::instruction::{MulDivOp, Rv64MInstr};
-use crate::instruction::{decode_reg, NopInstr, ZERO};
+use crate::instruction::decode_reg;
 
 /// RVR extension for RV64M instructions.
 pub struct Rv64MExtension;
@@ -97,18 +97,13 @@ impl RvrExtension for Rv64MExtension {
             return None;
         }
 
-        let rd = decode_reg(insn.a);
-        let instruction: Box<dyn ExtInstr> = if rd == ZERO {
-            Box::new(NopInstr)
-        } else {
-            Box::new(Rv64MInstr {
-                op,
-                word,
-                rd,
-                lhs: decode_reg(insn.b),
-                rhs: decode_reg(insn.c),
-            })
-        };
+        let instruction: Box<dyn ExtInstr> = Box::new(Rv64MInstr {
+            op,
+            word,
+            rd: decode_reg(insn.a),
+            lhs: decode_reg(insn.b),
+            rhs: decode_reg(insn.c),
+        });
         Some(LiftedInstr::Body(InstrAt {
             pc,
             instr: instruction,
@@ -180,7 +175,7 @@ mod tests {
     }
 
     #[test]
-    fn writes_to_x0_remain_nops() {
+    fn writes_to_x0_keep_the_preflight_schedule() {
         let insn = RvrInstruction::from_field(&Instruction::<BabyBear>::from_usize(
             MulOpcode::MUL.global_opcode(),
             [
@@ -198,6 +193,7 @@ mod tests {
         else {
             panic!("expected body instruction");
         };
-        assert_eq!(instr.opname(), "nop");
+        assert_eq!(instr.opname(), "mul");
+        assert!(instr.supports_preflight());
     }
 }

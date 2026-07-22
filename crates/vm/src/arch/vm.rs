@@ -42,9 +42,10 @@ use tracing::{info_span, instrument};
 #[cfg(feature = "rvr")]
 use super::rvr::{
     bridge::map_rvr_compile_error, build_pc_to_chip, compile, compile_metered,
-    compile_metered_cost, compile_metered_segment_boundary, compile_with_instret_tracking,
-    load_compiled_from_path, ChipMapping, GuestDebugMap, RvrExecutionKind, RvrInitialImage,
-    RvrMeteredCostInstance, RvrMeteredInstance, RvrMeteredSegmentInstance, RvrPureInstance,
+    compile_metered_cost, compile_metered_segment_boundary, compile_preflight,
+    compile_with_instret_tracking, load_compiled_from_path, ChipMapping, GuestDebugMap,
+    RvrExecutionKind, RvrInitialImage, RvrMeteredCostInstance, RvrMeteredInstance,
+    RvrMeteredSegmentInstance, RvrPreflightInstance, RvrPureInstance,
     RvrPureWithInstretTrackingInstance,
 };
 use super::{
@@ -295,6 +296,25 @@ where
         let compiled = compile_with_instret_tracking(exe, extensions.lifters(), guest_debug_map)
             .map_err(map_rvr_compile_error)?;
         Ok(RvrPureWithInstretTrackingInstance::new(
+            self.inventory.config(),
+            RvrInitialImage::from(exe),
+            compiled,
+            extensions.into_runtime_hooks(),
+        ))
+    }
+
+    /// Compile an append-only RVR preflight instance.
+    pub fn rvr_preflight_instance(
+        &self,
+        exe: &VmExe<F>,
+        guest_debug_map: Option<&GuestDebugMap>,
+    ) -> Result<RvrPreflightInstance<'_>, StaticProgramError> {
+        #[cfg(feature = "metrics")]
+        let _compilation_span = tracing::info_span!("compile_preflight", backend = "rvr").entered();
+        let extensions = self.build_rvr_extensions(None);
+        let compiled = compile_preflight(exe, extensions.lifters(), guest_debug_map)
+            .map_err(map_rvr_compile_error)?;
+        Ok(RvrPreflightInstance::new(
             self.inventory.config(),
             RvrInitialImage::from(exe),
             compiled,

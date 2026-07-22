@@ -22,7 +22,7 @@ use rvr_openvm_ir::{
 use rvr_openvm_lift::{max_main_memory_pages_for_contiguous_range, RvrExtension, RvrInstruction};
 
 use self::instruction::{AluOp, Rv64IInstr};
-use crate::instruction::{decode_imm_cg, decode_reg, reg_operand, NopInstr, ZERO};
+use crate::instruction::{decode_imm_cg, decode_reg, reg_operand};
 
 const U24_MASK: u32 = (1 << 24) - 1;
 const RV64I_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize =
@@ -349,11 +349,9 @@ fn lift_alu(
     }
 
     let rd = decode_reg(insn.a);
-    if rd == ZERO {
-        return Some(body(pc, NopInstr));
-    }
     let lhs = decode_reg(insn.b);
-    let rhs = immediate.unwrap_or_else(|| reg_operand(decode_reg(insn.c)));
+    let rhs_reg = immediate.is_none().then(|| decode_reg(insn.c));
+    let rhs = immediate.unwrap_or_else(|| reg_operand(rhs_reg.unwrap()));
     Some(body(
         pc,
         Rv64IInstr::Alu {
@@ -363,6 +361,7 @@ fn lift_alu(
             rd,
             lhs,
             rhs,
+            rhs_reg,
         },
     ))
 }
@@ -379,7 +378,7 @@ fn lift_load(insn: &RvrInstruction, pc: u64, width: MemWidth, signed: bool) -> O
         Rv64IInstr::Load {
             width,
             signed,
-            rd: (rd != ZERO).then_some(rd),
+            rd,
             base: decode_reg(insn.b),
             offset: decode_imm_cg(insn) as i16,
         },
@@ -424,7 +423,7 @@ fn lift_jal(insn: &RvrInstruction, pc: u64) -> LiftedInstr {
     term(
         pc,
         Rv64IInstr::Jump {
-            link_dst: (rd != ZERO).then_some(rd),
+            link_dst: (rd != crate::instruction::ZERO).then_some(rd),
             target: pc.wrapping_add_signed(i64::from(insn.signed_c())),
         },
     )
@@ -437,7 +436,7 @@ fn lift_jalr(insn: &RvrInstruction, pc: u64) -> LiftedInstr {
     term(
         pc,
         Rv64IInstr::JumpIndirect {
-            link_dst: (rd != ZERO).then_some(rd),
+            link_dst: (rd != crate::instruction::ZERO).then_some(rd),
             base: decode_reg(insn.b),
             offset: decode_imm_cg(insn) as i32,
         },
@@ -446,15 +445,11 @@ fn lift_jalr(insn: &RvrInstruction, pc: u64) -> LiftedInstr {
 
 /// Lift LUI encoded as `rd=a/8` and the upper immediate in `c << 12`.
 fn lift_lui(insn: &RvrInstruction, pc: u64) -> LiftedInstr {
-    let rd = decode_reg(insn.a);
-    if rd == ZERO {
-        return body(pc, NopInstr);
-    }
     body(
         pc,
         Rv64IInstr::Const {
             name: "lui",
-            rd,
+            rd: decode_reg(insn.a),
             value: sign_extend_32(insn.c << 12),
         },
     )
@@ -465,16 +460,12 @@ fn lift_lui(insn: &RvrInstruction, pc: u64) -> LiftedInstr {
 /// The transpiler stores `(imm & 0xfffff000) >> 8` in `c`, so shifting by
 /// eight reconstructs the upper 20 bits with twelve low zero bits.
 fn lift_auipc(insn: &RvrInstruction, pc: u64) -> LiftedInstr {
-    let rd = decode_reg(insn.a);
-    if rd == ZERO {
-        return body(pc, NopInstr);
-    }
     let upper = insn.c << 8;
     body(
         pc,
         Rv64IInstr::Const {
             name: "auipc",
-            rd,
+            rd: decode_reg(insn.a),
             value: pc.wrapping_add(sign_extend_32(upper)),
         },
     )

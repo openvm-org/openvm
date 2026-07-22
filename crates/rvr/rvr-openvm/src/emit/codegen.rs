@@ -24,15 +24,21 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
     match term.cfg_term(pc, next_pc) {
         CfgTerm::FallThrough => emit_tail_call(ctx, next_pc, &args, tc.valid_blocks),
         CfgTerm::Jump {
-            link_dst, target, ..
+            link_dst,
+            link_write,
+            target,
+            ..
         } => {
             if let Some(dst) = link_dst {
                 ctx.write_var(dst, &hex_u64(next_pc));
+            } else if link_write {
+                ctx.advance_timestamp(1);
             }
             emit_tail_call(ctx, target, &args, tc.valid_blocks);
         }
         CfgTerm::JumpIndirect {
             link_dst,
+            link_write,
             base_value,
             offset,
             target_mask,
@@ -50,9 +56,17 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
                     }
                 }
                 CfgOperand::Const(value) => hex_u64(value),
+                CfgOperand::ReadConst { source, value } => {
+                    if ctx.traces_values() {
+                        ctx.read_var(source);
+                    }
+                    hex_u64(value)
+                }
             };
             if let Some(dst) = link_dst {
                 ctx.write_var(dst, &hex_u64(next_pc));
+            } else if link_write {
+                ctx.advance_timestamp(1);
             }
             let target = indirect_target_expr(ctx, &base_value, offset, target_mask);
             ctx.write_line(&format!(
