@@ -18,14 +18,14 @@ use openvm_riscv_transpiler::{
 use rvr_openvm_ir::{
     CfgBranchCond, CfgOperand, ExtInstr, InstrAt, LiftedInstr, MemWidth, Terminator,
 };
-use rvr_openvm_lift::{max_pages_for_contiguous_range, RvrExtension, RvrInstruction};
+use rvr_openvm_lift::{max_main_memory_pages_for_contiguous_range, RvrExtension, RvrInstruction};
 
 use self::instruction::{AluOp, Rv64IInstr};
 use crate::instruction::{decode_imm_cg, decode_reg, reg_operand, NopInstr, ZERO};
 
 const U24_MASK: u32 = (1 << 24) - 1;
 const RV64I_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize =
-    max_pages_for_contiguous_range(RV64_REGISTER_BYTES as usize);
+    max_main_memory_pages_for_contiguous_range(RV64_REGISTER_BYTES as usize);
 
 /// RVR extension for RV64I base integer instructions.
 pub struct Rv64IExtension;

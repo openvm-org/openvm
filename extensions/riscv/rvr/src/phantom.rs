@@ -14,7 +14,7 @@ use crate::instruction::{decode_reg, Reg};
 
 /// HINT_INPUT: make the next input record available through the hint stream.
 #[derive(Debug, Clone, Copy)]
-pub struct HintInputInstr;
+pub(crate) struct HintInputInstr;
 
 impl ExtInstr for HintInputInstr {
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
@@ -36,9 +36,9 @@ impl ExtInstr for HintInputInstr {
 
 /// PRINT_STR: print a UTF-8 string from guest memory to host stdout.
 #[derive(Debug, Clone)]
-pub struct PrintStrInstr {
-    pub ptr_reg: Reg,
-    pub len_reg: Reg,
+pub(crate) struct PrintStrInstr {
+    pub(crate) ptr_reg: Reg,
+    pub(crate) len_reg: Reg,
 }
 
 impl ExtInstr for PrintStrInstr {
@@ -63,8 +63,8 @@ impl ExtInstr for PrintStrInstr {
 
 /// HINT_RANDOM: fill the hint stream with `num_words_reg * 8` random bytes.
 #[derive(Debug, Clone)]
-pub struct HintRandomInstr {
-    pub num_words_reg: Reg,
+pub(crate) struct HintRandomInstr {
+    pub(crate) num_words_reg: Reg,
 }
 
 impl ExtInstr for HintRandomInstr {
@@ -137,6 +137,10 @@ impl RvrExtension for Rv64PhantomExtension {
             include_str!("../c/rv64_phantom_callbacks.c"),
         )]
     }
+
+    fn max_main_memory_pages_per_instruction(&self) -> usize {
+        0
+    }
 }
 
 /// Runtime hooks for RV64-specific phantom instructions.
@@ -167,14 +171,14 @@ type RegisterRv64PhantomHostCallbacksFn = unsafe extern "C" fn(*const Rv64Phanto
 
 /// Host callback table shared with `rv64_phantom_callbacks.c`.
 #[repr(C)]
-pub struct Rv64PhantomHostCallbacks {
-    pub hint_input: extern "C" fn(*mut c_void),
-    pub print_str: extern "C" fn(*mut c_void, u64, u64) -> bool,
-    pub hint_random: extern "C" fn(*mut c_void, u64) -> bool,
+struct Rv64PhantomHostCallbacks {
+    hint_input: extern "C" fn(*mut c_void),
+    print_str: extern "C" fn(*mut c_void, u64, u64) -> bool,
+    hint_random: extern "C" fn(*mut c_void, u64) -> bool,
 }
 
 /// Host callback for HINT_INPUT. Makes the next input record available without copying it.
-pub extern "C" fn host_hint_input(ctx: *mut c_void) {
+pub(crate) extern "C" fn host_hint_input(ctx: *mut c_void) {
     let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_>) };
     if let Some(bytes) = io.input_stream.pop_front() {
         io.hint_stream.set_input(bytes);
@@ -184,7 +188,7 @@ pub extern "C" fn host_hint_input(ctx: *mut c_void) {
 }
 
 /// Host callback for PRINT_STR. Writes a guest-memory UTF-8 string to stdout.
-pub extern "C" fn host_print_str(ctx: *mut c_void, ptr: u64, len: u64) -> bool {
+extern "C" fn host_print_str(ctx: *mut c_void, ptr: u64, len: u64) -> bool {
     let io = unsafe { &*(ctx as *const OpenVmIoState<'_>) };
     let Some(range) = checked_mem_bounds_range(ptr, len) else {
         return false;
@@ -205,7 +209,7 @@ pub extern "C" fn host_print_str(ctx: *mut c_void, ptr: u64, len: u64) -> bool {
 }
 
 /// Host callback for HINT_RANDOM. Refills the hint stream with random RV64 words.
-pub extern "C" fn host_hint_random(ctx: *mut c_void, num_words: u64) -> bool {
+extern "C" fn host_hint_random(ctx: *mut c_void, num_words: u64) -> bool {
     let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_>) };
     let Ok(num_bytes) = hint_random_byte_len(num_words) else {
         return false;

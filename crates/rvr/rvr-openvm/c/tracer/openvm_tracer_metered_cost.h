@@ -36,4 +36,7 @@ static __attribute__((always_inline)) inline void trace_page_access_u64_range(
     uint64_t base_addr [[maybe_unused]], uint64_t num_dwords [[maybe_unused]],
     uint32_t addr_space [[maybe_unused]]) {}
 
+static __attribute__((always_inline)) inline void
+flush_main_memory_page_buffer(RvState* restrict state [[maybe_unused]]) {}
+
 #endif /* OPENVM_TRACER_METERED_COST_H */

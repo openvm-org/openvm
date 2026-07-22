@@ -17,8 +17,9 @@ use crate::RvrInstruction;
 pub const MAIN_MEMORY_PAGE_BYTES: usize =
     core::mem::size_of::<u16>() * VM_DIGEST_WIDTH * (1 << PAGE_MASK_LEAF_BITS);
 
-/// Maximum pages touched by a nonempty contiguous byte range at arbitrary alignment.
-pub const fn max_pages_for_contiguous_range(bytes: usize) -> usize {
+/// Maximum main-memory metering pages touched by a nonempty contiguous byte
+/// range at arbitrary alignment.
+pub const fn max_main_memory_pages_for_contiguous_range(bytes: usize) -> usize {
     assert!(bytes > 0);
     1 + (bytes - 1).div_ceil(MAIN_MEMORY_PAGE_BYTES)
 }
@@ -199,11 +200,10 @@ pub trait RvrExtension: Send + Sync {
         false
     }
 
-    /// Maximum number of main-memory pages one instruction can add to the
-    /// metering buffer.
-    fn max_main_memory_pages_per_instruction(&self) -> usize {
-        0
-    }
+    /// Maximum number of main-memory page entries one instruction can append
+    /// without draining the buffer itself. Extensions must return zero
+    /// explicitly when they never record main-memory pages.
+    fn max_main_memory_pages_per_instruction(&self) -> usize;
 
     /// Returns instruction targets encoded in target-specific initialized data.
     fn extra_cfg_targets(
@@ -451,6 +451,10 @@ mod tests {
         fn c_headers(&self) -> Vec<(&'static str, &'static str)> {
             Vec::new()
         }
+
+        fn max_main_memory_pages_per_instruction(&self) -> usize {
+            0
+        }
     }
 
     impl RvrExtension for BoundedExtension {
@@ -469,14 +473,17 @@ mod tests {
 
     #[test]
     fn contiguous_range_page_bound_includes_arbitrary_alignment() {
-        assert_eq!(max_pages_for_contiguous_range(1), 1);
-        assert_eq!(max_pages_for_contiguous_range(MAIN_MEMORY_PAGE_BYTES), 2);
+        assert_eq!(max_main_memory_pages_for_contiguous_range(1), 1);
         assert_eq!(
-            max_pages_for_contiguous_range(MAIN_MEMORY_PAGE_BYTES + 1),
+            max_main_memory_pages_for_contiguous_range(MAIN_MEMORY_PAGE_BYTES),
             2
         );
         assert_eq!(
-            max_pages_for_contiguous_range(2 * MAIN_MEMORY_PAGE_BYTES),
+            max_main_memory_pages_for_contiguous_range(MAIN_MEMORY_PAGE_BYTES + 1),
+            2
+        );
+        assert_eq!(
+            max_main_memory_pages_for_contiguous_range(2 * MAIN_MEMORY_PAGE_BYTES),
             3
         );
     }

@@ -378,6 +378,13 @@ static __attribute__((always_inline)) inline void trace_page_access_u64_range(
   record_page_range(&state->mode_state, addr_space, base_addr, last_addr);
 }
 
+/* Drain AS_MEMORY page touches without advancing the instruction counter or
+ * creating a segmentation checkpoint. */
+static __attribute__((always_inline)) inline void
+flush_main_memory_page_buffer(RvState* restrict state) {
+  state->mode_state.on_memory_flush(&state->mode_state);
+}
+
 #pragma clang unsafe_buffer_usage end
 
 #endif /* OPENVM_TRACER_METERED_H */

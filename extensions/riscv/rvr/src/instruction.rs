@@ -15,7 +15,11 @@ pub(crate) fn decode_reg(value: u32) -> Reg {
     decode_value_slot(value, RV64_REGISTER_BYTES as u32, RV64_NUM_REGISTERS as u32)
 }
 
-/// Decode a sign-extended immediate from the register-width limb encoding.
+/// Decode the immediate from the `(c, g)` field pair used by JALR, loads, and stores.
+///
+/// OpenVM stores the lower 16 bits of the sign-extended immediate in `c` and
+/// the sign marker in `g`. A negative value is reconstructed by adding
+/// `0xffff0000` to `(c & 0xffff)`.
 pub(crate) fn decode_imm_cg(insn: &RvrInstruction) -> u32 {
     let low16 = insn.c & 0xffff;
     low16.wrapping_add(if insn.g != 0 { 0xffff_0000 } else { 0 })

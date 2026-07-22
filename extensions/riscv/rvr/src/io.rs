@@ -13,20 +13,20 @@ use rvr_openvm_ir::{
     CfgEffect, ExtEmitCtx, ExtInstr, InstrAt, LiftedInstr, MemWidth, PageAddressSpace,
 };
 use rvr_openvm_lift::{
-    air_index_to_c, max_pages_for_contiguous_range, opcode_air_idx, AirIndex, ExtensionError,
-    RvrExtension, RvrExtensionCtx, RvrInstruction, RvrRuntimeExtension,
+    air_index_to_c, max_main_memory_pages_for_contiguous_range, opcode_air_idx, AirIndex,
+    ExtensionError, RvrExtension, RvrExtensionCtx, RvrInstruction, RvrRuntimeExtension,
 };
 
 use crate::instruction::{decode_imm_cg, decode_reg, Reg};
 
 // HINT_BUFFER writes the maximum hint payload as one arbitrarily aligned range.
 const RV64_IO_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize =
-    max_pages_for_contiguous_range(MAX_HINT_BUFFER_DWORDS * WORD_SIZE);
+    max_main_memory_pages_for_contiguous_range(MAX_HINT_BUFFER_DWORDS * WORD_SIZE);
 
 /// HINT_STORED: pop one register word (8 bytes) from the hint stream into `mem[reg[ptr_reg]]`.
 #[derive(Debug, Clone)]
-pub struct HintStoreWInstr {
-    pub ptr_reg: Reg,
+pub(crate) struct HintStoreWInstr {
+    pub(crate) ptr_reg: Reg,
 }
 
 impl ExtInstr for HintStoreWInstr {
@@ -56,10 +56,10 @@ impl ExtInstr for HintStoreWInstr {
 /// HINT_BUFFER: pop `8 * reg[num_words_reg]` bytes from the hint stream and
 /// write them sequentially starting at `mem[reg[ptr_reg]]`.
 #[derive(Debug, Clone)]
-pub struct HintBufferInstr {
-    pub ptr_reg: Reg,
-    pub num_words_reg: Reg,
-    pub chip_idx: Option<AirIndex>,
+pub(crate) struct HintBufferInstr {
+    pub(crate) ptr_reg: Reg,
+    pub(crate) num_words_reg: Reg,
+    pub(crate) chip_idx: Option<AirIndex>,
 }
 
 impl ExtInstr for HintBufferInstr {
@@ -97,11 +97,11 @@ impl ExtInstr for HintBufferInstr {
 /// Store the low `width` bytes of `src_reg` at `ptr_reg + offset` in the
 /// public-values address space. This node also implements REVEAL.
 #[derive(Debug, Clone)]
-pub struct RevealInstr {
-    pub src_reg: Reg,
-    pub ptr_reg: Reg,
-    pub offset: i32,
-    pub width: MemWidth,
+pub(crate) struct RevealInstr {
+    pub(crate) src_reg: Reg,
+    pub(crate) ptr_reg: Reg,
+    pub(crate) offset: i32,
+    pub(crate) width: MemWidth,
 }
 
 impl ExtInstr for RevealInstr {
@@ -266,15 +266,15 @@ type RegisterRv64IoHostCallbacksFn = unsafe extern "C" fn(*const Rv64IoHostCallb
 
 /// Host callback table shared with `rv64io_callbacks.c`.
 #[repr(C)]
-pub struct Rv64IoHostCallbacks {
-    pub hint_storew: extern "C" fn(*mut c_void, u64) -> bool,
-    pub hint_buffer: extern "C" fn(*mut c_void, u64, u16) -> bool,
-    pub reveal: extern "C" fn(*mut c_void, u64, u64, u8) -> bool,
+struct Rv64IoHostCallbacks {
+    hint_storew: extern "C" fn(*mut c_void, u64) -> bool,
+    hint_buffer: extern "C" fn(*mut c_void, u64, u16) -> bool,
+    reveal: extern "C" fn(*mut c_void, u64, u64, u8) -> bool,
 }
 
 /// Host callback for HINT_STORED. Pops one RV64 register-width word from the
 /// hint stream and writes it to guest memory at `dest_addr`.
-pub extern "C" fn host_hint_storew(ctx: *mut c_void, dest_addr: u64) -> bool {
+extern "C" fn host_hint_storew(ctx: *mut c_void, dest_addr: u64) -> bool {
     let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_>) };
     if io.hint_stream.remaining() < RV64_REGISTER_NUM_LIMBS || io.memory_ptr.is_null() {
         return false;
@@ -290,7 +290,7 @@ pub extern "C" fn host_hint_storew(ctx: *mut c_void, dest_addr: u64) -> bool {
 
 /// Host callback for HINT_BUFFER. Copies `num_words * RV64_REGISTER_BYTES`
 /// bytes from the hint stream to guest memory.
-pub extern "C" fn host_hint_buffer(ctx: *mut c_void, dest_addr: u64, num_words: u16) -> bool {
+extern "C" fn host_hint_buffer(ctx: *mut c_void, dest_addr: u64, num_words: u16) -> bool {
     let num_bytes = u64::from(num_words) * RV64_REGISTER_BYTES;
     let num_words = usize::from(num_words);
     let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_>) };
@@ -309,7 +309,7 @@ pub extern "C" fn host_hint_buffer(ctx: *mut c_void, dest_addr: u64, num_words: 
 
 /// Host callback for stores to `PUBLIC_VALUES_AS`.
 /// Generated C adds the trace-row cost.
-pub extern "C" fn host_reveal(ctx: *mut c_void, src_val: u64, addr: u64, width: u8) -> bool {
+extern "C" fn host_reveal(ctx: *mut c_void, src_val: u64, addr: u64, width: u8) -> bool {
     let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_>) };
     let width = match width {
         1 | 2 | 4 | 8 => usize::from(width),

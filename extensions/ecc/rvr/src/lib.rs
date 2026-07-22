@@ -14,12 +14,13 @@ use openvm_instructions::{
 };
 use rvr_openvm_ir::{CfgEffect, ExtEmitCtx, ExtInstr, InstrAt, LiftedInstr, ValueSlot};
 use rvr_openvm_lift::{
-    decode_value_slot, max_pages_for_contiguous_range, RvrExtension, RvrInstruction,
+    decode_value_slot, max_main_memory_pages_for_contiguous_range, RvrExtension, RvrInstruction,
 };
 use strum::EnumCount;
 
 // An ECC addition can read two independent 96-byte points and write one.
-const ECC_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize = 3 * max_pages_for_contiguous_range(96);
+const ECC_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize =
+    3 * max_main_memory_pages_for_contiguous_range(96);
 
 fn decode_reg(value: u32) -> ValueSlot {
     decode_value_slot(value, RV64_REGISTER_BYTES as u32, RV64_NUM_REGISTERS as u32)

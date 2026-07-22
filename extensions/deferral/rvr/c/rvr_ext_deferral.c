@@ -27,6 +27,14 @@ static constexpr uint32_t COMMIT_WORDS = DEFERRAL_COMMIT_NUM_BYTES / WORD_SIZE;
 static constexpr uint32_t OUTPUT_KEY_WORDS =
     DEFERRAL_OUTPUT_KEY_BYTES / WORD_SIZE;
 static constexpr uint32_t DIGEST_MEMORY_OPS = DEFERRAL_DIGEST_SIZE / WORD_SIZE;
+static constexpr uint64_t MAIN_MEMORY_PAGE_BYTES =
+    1ull << (TRACER_BYTE_SPACE_PTRS_PER_LEAF_BITS + TRACER_PAGE_BITS);
+/* Reserve one page for arbitrary alignment at either end of a chunk. */
+static constexpr uint64_t OUTPUT_ROWS_PER_PAGE_BUFFER =
+    ((uint64_t)TRACER_MEM_PAGE_BUF_CAP - 1ull) * MAIN_MEMORY_PAGE_BYTES /
+    DEFERRAL_DIGEST_SIZE;
+static_assert(OUTPUT_ROWS_PER_PAGE_BUFFER > 0u,
+              "main-memory page buffer must hold one deferral output row");
 
 static thread_local DeferralHostCallbacks g_deferral;
 
@@ -89,20 +97,33 @@ uint32_t rvr_ext_deferral_output(RvState* restrict state, uint64_t output_ptr,
                            (const uint8_t*)key_words, output_raw,
                            (uint32_t)output_len);
 
+  /* The key read above is covered by the extension's fixed page bound. Drain
+   * it before the variable-size output so each output chunk starts empty. */
+  flush_main_memory_page_buffer(state);
+
   /* Write raw output to guest memory in DEFERRAL_DIGEST_SIZE-byte rows. Each
-   * row is an independent batched write (the trace API is per-row). */
+   * chunk spans at most TRACER_MEM_PAGE_BUF_CAP pages at arbitrary alignment,
+   * then drains without creating an instruction or segment checkpoint. */
   uint32_t num_data_rows = output_len / DEFERRAL_DIGEST_SIZE;
   uint64_t row_words[DIGEST_MEMORY_OPS];
-  for (uint64_t row_idx = 0; row_idx < num_data_rows; row_idx++) {
-    uint64_t row_byte_base = row_idx * DEFERRAL_DIGEST_SIZE;
-    /* row_idx is less than output_len / DEFERRAL_DIGEST_SIZE, so this slice
-     * stays within output_raw. */
+  for (uint64_t chunk_start = 0; chunk_start < num_data_rows;
+       chunk_start += OUTPUT_ROWS_PER_PAGE_BUFFER) {
+    uint64_t chunk_end = chunk_start + OUTPUT_ROWS_PER_PAGE_BUFFER;
+    if (chunk_end > num_data_rows) {
+      chunk_end = num_data_rows;
+    }
+    for (uint64_t row_idx = chunk_start; row_idx < chunk_end; row_idx++) {
+      uint64_t row_byte_base = row_idx * DEFERRAL_DIGEST_SIZE;
+      /* row_idx is less than output_len / DEFERRAL_DIGEST_SIZE, so this slice
+       * stays within output_raw. */
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunsafe-buffer-usage"
-    memcpy(row_words, output_raw + row_byte_base, DEFERRAL_DIGEST_SIZE);
+      memcpy(row_words, output_raw + row_byte_base, DEFERRAL_DIGEST_SIZE);
 #pragma clang diagnostic pop
-    write_mem_u64_range(state, output_ptr + row_byte_base, row_words,
-                        DIGEST_MEMORY_OPS);
+      write_mem_u64_range(state, output_ptr + row_byte_base, row_words,
+                          DIGEST_MEMORY_OPS);
+    }
+    flush_main_memory_page_buffer(state);
   }
   if (output_len > 0) free(output_raw);
 

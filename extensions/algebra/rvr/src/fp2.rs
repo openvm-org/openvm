@@ -4,7 +4,7 @@ use num_bigint::BigUint;
 use openvm_algebra_transpiler::Fp2Opcode;
 use openvm_instructions::LocalOpcode;
 use rvr_openvm_ir::{ExtInstr, InstrAt, LiftedInstr};
-use rvr_openvm_lift::{max_pages_for_contiguous_range, RvrExtension, RvrInstruction};
+use rvr_openvm_lift::{max_main_memory_pages_for_contiguous_range, RvrExtension, RvrInstruction};
 use strum::EnumCount;
 
 use crate::{
@@ -13,7 +13,8 @@ use crate::{
 };
 
 // An Fp2 operation can read two independent 96-byte values and write one.
-const FP2_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize = 3 * max_pages_for_contiguous_range(96);
+const FP2_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize =
+    3 * max_main_memory_pages_for_contiguous_range(96);
 
 /// Per-modulus info for the Fp2 extension. Fp2 lifting never consults a
 /// non-QR, so we only carry the padded modulus and limb count.

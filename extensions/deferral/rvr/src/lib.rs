@@ -22,8 +22,9 @@ use rvr_openvm_ir::{
     CfgEffect, ExtEmitCtx, ExtInstr, FixedTraceRows, InstrAt, LiftedInstr, ValueSlot,
 };
 use rvr_openvm_lift::{
-    air_index_to_c, decode_value_slot, fixed_trace_rows_for_chip, opcode_air_idx, AirIndex,
-    ExtensionError, RvrExtension, RvrExtensionCtx, RvrInstruction, RvrRuntimeExtension,
+    air_index_to_c, decode_value_slot, fixed_trace_rows_for_chip,
+    max_main_memory_pages_for_contiguous_range, opcode_air_idx, AirIndex, ExtensionError,
+    RvrExtension, RvrExtensionCtx, RvrInstruction, RvrRuntimeExtension,
 };
 
 fn decode_reg(value: u32) -> ValueSlot {
@@ -35,6 +36,9 @@ pub const DEFERRAL_COMMIT_NUM_BYTES: usize = VM_DIGEST_WIDTH * core::mem::size_o
 /// Size in bytes of a deferral output key: commitment followed by output length.
 pub const DEFERRAL_OUTPUT_KEY_BYTES: usize =
     DEFERRAL_COMMIT_NUM_BYTES + core::mem::size_of::<u64>();
+const DEFERRAL_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize =
+    max_main_memory_pages_for_contiguous_range(DEFERRAL_COMMIT_NUM_BYTES)
+        + max_main_memory_pages_for_contiguous_range(DEFERRAL_OUTPUT_KEY_BYTES);
 
 /// `(def_idx, output_raw) → output_commit` hasher registered by the host.
 pub type DeferralHashFn = Box<dyn Fn(u32, &[u8]) -> [u8; DEFERRAL_COMMIT_NUM_BYTES] + Send + Sync>;
@@ -217,6 +221,10 @@ impl RvrExtension for DeferralRvrExtension {
             "rvr_ext_deferral.c",
             include_str!("../c/rvr_ext_deferral.c"),
         )]
+    }
+
+    fn max_main_memory_pages_per_instruction(&self) -> usize {
+        DEFERRAL_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION
     }
 }
 
@@ -468,4 +476,26 @@ pub unsafe extern "C" fn host_deferral_output_lookup(
     // TODO: change these panics to something better to handle across the FFI boundary.
     assert_eq!(raw.len(), expected_len as usize);
     unsafe { std::ptr::copy_nonoverlapping(raw.as_ptr(), output_raw_out, raw.len()) };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fixed_page_bound_covers_call_memory_ranges() {
+        assert_eq!(DEFERRAL_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION, 4);
+    }
+
+    #[test]
+    fn output_source_drains_before_and_after_variable_writes() {
+        let source = include_str!("../c/rvr_ext_deferral.c");
+        assert_eq!(
+            source
+                .matches("flush_main_memory_page_buffer(state);")
+                .count(),
+            2
+        );
+        assert!(source.contains("chunk_start += OUTPUT_ROWS_PER_PAGE_BUFFER"));
+    }
 }

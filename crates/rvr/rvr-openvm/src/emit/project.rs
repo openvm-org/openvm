@@ -119,6 +119,7 @@ impl RvrExecutionKind {
                 writeln!(out, "  struct PageTouch* pv_page_buf;").unwrap();
                 writeln!(out, "  struct PageTouch* deferral_page_buf;").unwrap();
                 writeln!(out, "  uint8_t (*on_check)(struct MeteringState*);").unwrap();
+                writeln!(out, "  void (*on_memory_flush)(struct MeteringState*);").unwrap();
                 writeln!(out, "  struct SegmentationState* seg_state;").unwrap();
                 writeln!(out, "  uint32_t mem_page_buf_len;").unwrap();
                 writeln!(out, "  uint32_t pv_page_buf_len;").unwrap();
@@ -1338,6 +1339,12 @@ mod tests {
     use rvr_openvm_ir::{Block, CfgEffect, ExtEmitCtx, ExtInstr, InstrAt, Terminator};
 
     use super::{CProject, RvrExecutionKind};
+
+    #[test]
+    fn metered_state_layout_includes_memory_flush_callback() {
+        let header = RvrExecutionKind::Metered.state_layout_header();
+        assert!(header.contains("void (*on_memory_flush)(struct MeteringState*);"));
+    }
 
     fn single_instruction_block() -> Block {
         Block {

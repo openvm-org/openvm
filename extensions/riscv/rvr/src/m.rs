@@ -121,6 +121,10 @@ impl RvrExtension for Rv64MExtension {
     fn c_headers(&self) -> Vec<(&'static str, &'static str)> {
         vec![("rv64m.h", include_str!("../c/rv64m.h"))]
     }
+
+    fn max_main_memory_pages_per_instruction(&self) -> usize {
+        0
+    }
 }
 
 #[cfg(test)]

@@ -68,6 +68,9 @@ pub struct MeteringState {
     /// Periodic-check callback. Always initialized; generated C calls it
     /// unconditionally to keep the hot metered path branch-free.
     pub on_check: unsafe extern "C" fn(*mut MeteringState) -> u8,
+    /// Drains only the main-memory page buffer for instructions whose output
+    /// can exceed its fixed capacity.
+    pub on_memory_flush: unsafe extern "C" fn(*mut MeteringState),
     pub seg_state: *mut SegmentationState,
     pub mem_page_buf_len: u32,
     pub pv_page_buf_len: u32,
@@ -90,6 +93,7 @@ impl Default for MeteringState {
             pv_page_buf: std::ptr::null_mut(),
             deferral_page_buf: std::ptr::null_mut(),
             on_check: metered_periodic_check,
+            on_memory_flush: metered_memory_buffer_flush,
             seg_state: std::ptr::null_mut(),
             mem_page_buf_len: 0,
             pv_page_buf_len: 0,
@@ -114,6 +118,7 @@ pub struct SegmentationState {
     mem_page_buf: Vec<PageTouch>,
     pv_page_buf: Vec<PageTouch>,
     deferral_page_buf: Vec<PageTouch>,
+    drained_mem_page_touches: Vec<PageTouch>,
     address_height: usize,
 }
 
@@ -125,6 +130,7 @@ impl SegmentationState {
             mem_page_buf: vec![PageTouch::default(); MEM_PAGE_BUF_CAP],
             pv_page_buf: vec![PageTouch::default(); PV_PAGE_BUF_CAP],
             deferral_page_buf: vec![PageTouch::default(); DEFERRAL_PAGE_BUF_CAP],
+            drained_mem_page_touches: Vec::new(),
             address_height: memory_dimensions.address_height,
         }
     }
@@ -213,6 +219,32 @@ impl SegmentationState {
         );
     }
 
+    fn drain_main_memory_buffer(&mut self, mem_len: u32) {
+        let len = mem_len as usize;
+        for &touch in &self.mem_page_buf[..len] {
+            let merged = if let Some(previous) = self.drained_mem_page_touches.last_mut() {
+                if previous.page_id == touch.page_id {
+                    previous.leaf_mask |= touch.leaf_mask;
+                    true
+                } else {
+                    false
+                }
+            } else {
+                false
+            };
+            if !merged {
+                self.drained_mem_page_touches.push(touch);
+            }
+        }
+        Self::apply_addr_space_buffer(
+            &mut self.ctx.memory_ctx,
+            self.address_height,
+            RV64_MEMORY_AS,
+            &self.mem_page_buf,
+            mem_len,
+        );
+    }
+
     fn initialize_segment_memory(&mut self, mem_len: u32, pv_len: u32, deferral_len: u32) {
         // RVR can only suspend at block boundaries, so segmentation uses the
         // last safe checkpoint. The pages accumulated since that checkpoint
@@ -221,6 +253,13 @@ impl SegmentationState {
         self.ctx
             .memory_ctx
             .reset_segment_without_replay(&mut self.ctx.trace_heights);
+        Self::apply_addr_space_buffer(
+            &mut self.ctx.memory_ctx,
+            self.address_height,
+            RV64_MEMORY_AS,
+            &self.drained_mem_page_touches,
+            self.drained_mem_page_touches.len() as u32,
+        );
         self.apply_page_buffers(mem_len, pv_len, deferral_len);
         self.ctx
             .memory_ctx
@@ -275,6 +314,7 @@ impl SegmentationState {
             .segmentation_ctx
             .update_checkpoint(instret, &self.ctx.trace_heights);
         self.ctx.memory_ctx.update_checkpoint();
+        self.drained_mem_page_touches.clear();
 
         did_segment
     }
@@ -331,6 +371,22 @@ pub unsafe extern "C" fn metered_periodic_check(state: *mut MeteringState) -> u8
     // boundary, so the next interval starts here with a full countdown.
     metering.check_counter = SEGMENT_CHECK_INSNS;
     did_segment as u8
+}
+
+/// Drains main-memory page touches without advancing instruction accounting or
+/// creating a segmentation checkpoint.
+///
+/// # Safety
+/// `state` must satisfy the same lifetime and buffer requirements as
+/// [`metered_periodic_check`].
+pub unsafe extern "C" fn metered_memory_buffer_flush(state: *mut MeteringState) {
+    let metering = &mut *state;
+    let mem_len = metering.mem_page_buf_len;
+    metering.mem_page_buf_len = 0;
+    metering.last_mem_page = NO_LAST_PAGE;
+
+    let seg_state = &mut *metering.seg_state;
+    seg_state.drain_main_memory_buffer(mem_len);
 }
 
 impl RvrMeteredInstanceInner<'_> {
@@ -656,6 +712,84 @@ mod tests {
     }
 
     #[test]
+    fn test_memory_buffer_flush_preserves_accounting_and_deduplicates() {
+        let mut drained = make_segmentation_state();
+        drained.mem_page_buf[0] = PageTouch {
+            page_id: 7,
+            _padding: 0,
+            leaf_mask: 1,
+        };
+        let initial_heights = drained.ctx.trace_heights.clone();
+        let initial_instret = drained.ctx.segmentation_ctx.instret;
+        let mut metering = MeteringState {
+            trace_heights: drained.trace_heights_ptr(),
+            mem_page_buf: drained.mem_page_buf_ptr(),
+            pv_page_buf: drained.pv_page_buf_ptr(),
+            deferral_page_buf: drained.deferral_page_buf_ptr(),
+            on_check: metered_periodic_check,
+            on_memory_flush: metered_memory_buffer_flush,
+            seg_state: &mut drained,
+            mem_page_buf_len: 1,
+            pv_page_buf_len: 3,
+            deferral_page_buf_len: 4,
+            check_counter: 17,
+            last_mem_page: 7,
+            padding: 0,
+        };
+
+        unsafe { metered_memory_buffer_flush(&mut metering) };
+        assert_eq!(metering.mem_page_buf_len, 0);
+        assert_eq!(metering.last_mem_page, NO_LAST_PAGE);
+        assert_eq!(metering.pv_page_buf_len, 3);
+        assert_eq!(metering.deferral_page_buf_len, 4);
+        assert_eq!(metering.check_counter, 17);
+        assert_eq!(drained.ctx.trace_heights, initial_heights);
+        assert_eq!(drained.ctx.segmentation_ctx.instret, initial_instret);
+
+        drained.mem_page_buf[0] = PageTouch {
+            page_id: 7,
+            _padding: 0,
+            leaf_mask: 1,
+        };
+        metering.mem_page_buf_len = 1;
+        metering.last_mem_page = 7;
+        unsafe { metered_memory_buffer_flush(&mut metering) };
+        drained.on_termination(0, 0, 0, 0);
+
+        let mut once = make_segmentation_state();
+        once.mem_page_buf[0] = PageTouch {
+            page_id: 7,
+            _padding: 0,
+            leaf_mask: 1,
+        };
+        once.on_termination(1, 0, 0, 0);
+
+        assert_eq!(drained.ctx.trace_heights, once.ctx.trace_heights);
+    }
+
+    #[test]
+    fn test_memory_buffer_flush_replays_after_segmentation() {
+        let touch = PageTouch {
+            page_id: 7,
+            _padding: 0,
+            leaf_mask: 1,
+        };
+
+        let mut drained = make_segmentation_state();
+        drained.mem_page_buf[0] = touch;
+        drained.drain_main_memory_buffer(1);
+        *drained.ctx.trace_heights.last_mut().unwrap() = 4096;
+        assert!(drained.on_periodic_check(0, 0, 0, 0));
+
+        let mut buffered = make_segmentation_state();
+        buffered.mem_page_buf[0] = touch;
+        *buffered.ctx.trace_heights.last_mut().unwrap() = 4096;
+        assert!(buffered.on_periodic_check(1, 0, 0, 0));
+
+        assert_eq!(drained.ctx.trace_heights, buffered.ctx.trace_heights);
+    }
+
+    #[test]
     fn test_periodic_check_records_block_boundary_instret() {
         let remaining = SEGMENT_CHECK_INSNS / 4;
         let mut seg_state = make_segmentation_state();
@@ -684,6 +818,7 @@ mod tests {
             pv_page_buf: seg_state.pv_page_buf_ptr(),
             deferral_page_buf: seg_state.deferral_page_buf_ptr(),
             on_check: metered_periodic_check,
+            on_memory_flush: metered_memory_buffer_flush,
             seg_state: &mut seg_state,
             mem_page_buf_len: 0,
             pv_page_buf_len: 0,
@@ -715,6 +850,7 @@ mod tests {
             pv_page_buf: seg_state.pv_page_buf_ptr(),
             deferral_page_buf: seg_state.deferral_page_buf_ptr(),
             on_check: metered_periodic_check,
+            on_memory_flush: metered_memory_buffer_flush,
             seg_state: &mut seg_state,
             mem_page_buf_len: 0,
             pv_page_buf_len: 0,

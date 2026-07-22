@@ -20,13 +20,14 @@ use rvr_openvm_ir::{
     CfgEffect, CfgTerm, ExtEmitCtx, ExtInstr, InstrAt, LiftedInstr, Terminator, ValueSlot,
 };
 use rvr_openvm_lift::{
-    decode_value_slot, max_pages_for_contiguous_range, opcode_air_idx, AirIndex, ExtensionError,
-    RvrExtension, RvrExtensionCtx, RvrInstruction,
+    decode_value_slot, max_main_memory_pages_for_contiguous_range, opcode_air_idx, AirIndex,
+    ExtensionError, RvrExtension, RvrExtensionCtx, RvrInstruction,
 };
 use strum::EnumCount;
 
 // An Int256 operation can read two independent 32-byte values and write one.
-const INT256_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize = 3 * max_pages_for_contiguous_range(32);
+const INT256_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize =
+    3 * max_main_memory_pages_for_contiguous_range(32);
 
 fn decode_reg(value: u32) -> ValueSlot {
     decode_value_slot(value, RV64_REGISTER_BYTES as u32, RV64_NUM_REGISTERS as u32)
