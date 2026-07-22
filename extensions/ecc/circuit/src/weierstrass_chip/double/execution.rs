@@ -253,8 +253,9 @@ unsafe fn execute_e12_impl<
         }
 
         // Validate Y coordinate = a coefficient
-        let input_a =
-            BigUint::from_bytes_le(read_data[blocks_per_coord..2 * blocks_per_coord].as_flattened());
+        let input_a = BigUint::from_bytes_le(
+            read_data[blocks_per_coord..2 * blocks_per_coord].as_flattened(),
+        );
         let coeff_a = &pre_compute.program.setup_values()[0];
         if input_a != *coeff_a {
             let err = ExecutionError::Fail {
