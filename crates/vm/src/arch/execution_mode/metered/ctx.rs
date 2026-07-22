@@ -239,7 +239,7 @@ impl MeteredCtx {
 
 impl ExecutionCtxTrait for MeteredCtx {
     #[inline(always)]
-    fn on_memory_operation(&mut self, address_space: u32, ptr: u32, size: u32) {
+    fn on_memory_operation(&mut self, address_space: u32, ptr: u32, size: u32, _is_write: bool) {
         debug_assert!(
             address_space != RV64_IMM_AS,
             "address space must not be immediate"

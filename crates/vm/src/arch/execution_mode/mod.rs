@@ -14,7 +14,7 @@ pub use preflight::PreflightCtx;
 pub use pure::ExecutionCtx;
 
 pub trait ExecutionCtxTrait: Sized {
-    fn on_memory_operation(&mut self, address_space: u32, ptr: u32, size: u32);
+    fn on_memory_operation(&mut self, address_space: u32, ptr: u32, size: u32, is_write: bool);
 
     fn should_suspend(exec_state: &mut VmExecState<GuestMemory, Self>) -> bool;
 
