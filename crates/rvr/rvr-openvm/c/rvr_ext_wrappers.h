@@ -1,6 +1,7 @@
 #ifndef RVR_EXT_WRAPPERS_H
 #define RVR_EXT_WRAPPERS_H
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #include "openvm_state.h"
@@ -14,5 +15,5 @@ void write_mem_u64_range_wrapper(RvState* state, uint64_t base_addr,
                                  const uint64_t* vals, uint32_t num_words);
 void record_page_access_u64_range_wrapper(RvState* state, uint64_t base_addr,
                                           uint32_t num_words,
-                                          uint32_t addr_space);
+                                          uint32_t addr_space, bool is_write);
 #endif /* RVR_EXT_WRAPPERS_H */

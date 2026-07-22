@@ -38,6 +38,7 @@ extern "C" {
         base_addr: u64,
         num_words: u32,
         addr_space: u32,
+        is_write: bool,
     );
 
     // ── Hint stream (for extension phantom instructions) ──────────────
@@ -148,6 +149,8 @@ pub unsafe fn peek_mem_words(state: *mut c_void, base_addr: u64, out: &mut [u64]
 
 /// Record the pages touched by `num_words` consecutive words in `addr_space`.
 /// This is metering data only; it does not record the accessed values.
+/// `is_write` marks the touched leaves as written (dirty), which costs
+/// final-direction Merkle rows and Poseidon2 compressions.
 ///
 /// `num_words` must be `>= 1`; see [`read_mem_words`] for rationale.
 ///
@@ -158,10 +161,11 @@ pub unsafe fn record_page_access_range(
     base_addr: u64,
     num_words: u32,
     addr_space: u32,
+    is_write: bool,
 ) {
     debug_assert!(
         num_words >= 1,
         "record_page_access_range requires num_words >= 1"
     );
-    record_page_access_u64_range_wrapper(state, base_addr, num_words, addr_space);
+    record_page_access_u64_range_wrapper(state, base_addr, num_words, addr_space, is_write);
 }

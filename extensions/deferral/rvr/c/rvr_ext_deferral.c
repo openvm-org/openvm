@@ -46,9 +46,9 @@ void rvr_ext_deferral_call(RvState* restrict state, uint64_t output_ptr,
   uint64_t input_acc_ptr = 2u * def_idx * DEFERRAL_DIGEST_SIZE;
   uint64_t output_acc_ptr = input_acc_ptr + DEFERRAL_DIGEST_SIZE;
   trace_page_access_u64_range(state, input_acc_ptr, DIGEST_MEMORY_OPS,
-                              AS_DEFERRAL);
+                              AS_DEFERRAL, /*is_write=*/false);
   trace_page_access_u64_range(state, output_acc_ptr, DIGEST_MEMORY_OPS,
-                              AS_DEFERRAL);
+                              AS_DEFERRAL, /*is_write=*/false);
 
   /* Look up output_key + update accumulators (Rust side, on byte buffers). */
   uint64_t key_words[OUTPUT_KEY_WORDS];
@@ -60,9 +60,9 @@ void rvr_ext_deferral_call(RvState* restrict state, uint64_t output_ptr,
 
   /* Trace DEFERRAL_AS writes (new input_acc + new output_acc). */
   trace_page_access_u64_range(state, input_acc_ptr, DIGEST_MEMORY_OPS,
-                              AS_DEFERRAL);
+                              AS_DEFERRAL, /*is_write=*/true);
   trace_page_access_u64_range(state, output_acc_ptr, DIGEST_MEMORY_OPS,
-                              AS_DEFERRAL);
+                              AS_DEFERRAL, /*is_write=*/true);
 }
 
 /* Deferral OUTPUT: read output_key, look up raw output, write it. */

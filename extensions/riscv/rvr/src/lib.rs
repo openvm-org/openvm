@@ -37,7 +37,7 @@ impl ExtInstr for HintStoreWInstr {
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         let ptr = ctx.read_reg(self.ptr_reg);
         ctx.emit_checked_call_without_page_flush("openvm_hint_storew", &[&ptr]);
-        ctx.trace_page_access(&ptr, MemWidth::Double, RV64_MEMORY_AS);
+        ctx.trace_page_access(&ptr, MemWidth::Double, RV64_MEMORY_AS, true);
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -74,7 +74,7 @@ impl ExtInstr for HintBufferInstr {
         let chip_idx = air_index_to_c(self.chip_idx);
         // After the check above, n - 1 is at most 1022.
         ctx.trace_chip_if_nonzero(chip_idx, &format!("(uint32_t)({n} - 1ull)"));
-        ctx.trace_page_access_u64_range(&ptr, &n, RV64_MEMORY_AS);
+        ctx.trace_page_access_u64_range(&ptr, &n, RV64_MEMORY_AS, true);
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -113,7 +113,7 @@ impl ExtInstr for RevealInstr {
         };
         let width = format!("{}u", self.width.bytes());
         ctx.emit_checked_call_without_page_flush("openvm_reveal", &[&src, &addr, &width]);
-        ctx.trace_page_access(&addr, self.width, PUBLIC_VALUES_AS);
+        ctx.trace_page_access(&addr, self.width, PUBLIC_VALUES_AS, true);
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -597,10 +597,16 @@ mod tests {
             self.write_line("}");
         }
 
-        fn trace_page_access(&mut self, addr: &str, width: MemWidth, addr_space: u32) {
+        fn trace_page_access(
+            &mut self,
+            addr: &str,
+            width: MemWidth,
+            addr_space: u32,
+            is_write: bool,
+        ) {
             let size = width.bytes();
             self.write_line(&format!(
-                "trace_page_access(state, {addr}, {size}u, {addr_space}u);"
+                "trace_page_access(state, {addr}, {size}u, {addr_space}u, {is_write});"
             ));
         }
 
@@ -609,9 +615,11 @@ mod tests {
             base_addr: &str,
             num_dwords: &str,
             addr_space: u32,
+            is_write: bool,
         ) {
             self.write_line(&format!(
-                "trace_page_access_u64_range(state, {base_addr}, {num_dwords}, {addr_space}u);"
+                "trace_page_access_u64_range(state, {base_addr}, {num_dwords}, {addr_space}u, \
+                 {is_write});"
             ));
         }
     }

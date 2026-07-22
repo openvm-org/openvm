@@ -37,6 +37,7 @@ void write_mem_u64_range_wrapper(RvState* state, uint64_t base_addr,
 
 void record_page_access_u64_range_wrapper(RvState* state, uint64_t base_addr,
                                           uint32_t num_words,
-                                          uint32_t addr_space) {
-  trace_page_access_u64_range(state, base_addr, num_words, addr_space);
+                                          uint32_t addr_space, bool is_write) {
+  trace_page_access_u64_range(state, base_addr, num_words, addr_space,
+                              is_write);
 }

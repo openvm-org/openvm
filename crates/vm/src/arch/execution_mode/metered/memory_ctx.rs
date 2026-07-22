@@ -41,6 +41,10 @@ pub struct MemoryCtx {
     memory_dimensions: MemoryDimensions,
     /// Memory leaves and nodes already counted in the current segment.
     segment_memory: SegmentMemoryTracker,
+    /// Written (dirty) leaves and nodes already counted in the current segment. Dirty
+    /// entities cost final-direction Merkle rows and Poseidon2 compressions; read-only
+    /// ones do not. Dirtiness is per write, matching tracegen's definition exactly.
+    segment_dirty: SegmentMemoryTracker,
     /// Memory leaves and nodes present in the baseline at the last checkpoint.
     baseline_memory: BaselineMemoryTracker,
     /// Touches since the last safe checkpoint, kept so they can be replayed into a new segment.
@@ -55,6 +59,11 @@ pub struct MemoryCtx {
     pending_segment_leaves: u32,
     /// Newly needed tree nodes waiting to be added to the Merkle row estimate.
     pending_segment_merkle_nodes: u32,
+    /// Newly written leaves waiting to be added to the final-direction estimates.
+    pending_dirty_leaves: u32,
+    /// Newly needed dirty-tree nodes waiting to be added to the final-direction
+    /// estimates.
+    pending_dirty_merkle_nodes: u32,
     /// Pending leaves and nodes that were absent at the last checkpoint.
     pending_first_touches: FirstTouchCounts,
     /// Reusable default-hash rows already charged in the current segment.
@@ -72,6 +81,7 @@ impl MemoryCtx {
         Self {
             memory_dimensions,
             segment_memory: SegmentMemoryTracker::new(upper_height),
+            segment_dirty: SegmentMemoryTracker::new(upper_height),
             baseline_memory: BaselineMemoryTracker::new(upper_height),
             page_indices_since_checkpoint: Vec::with_capacity(checkpoint_capacity),
             page_indices_since_checkpoint_len: 0,
@@ -79,6 +89,8 @@ impl MemoryCtx {
             pending_baseline_updates: Vec::with_capacity(checkpoint_capacity),
             pending_segment_leaves: 0,
             pending_segment_merkle_nodes: 0,
+            pending_dirty_leaves: 0,
+            pending_dirty_merkle_nodes: 0,
             pending_first_touches: FirstTouchCounts::default(),
             default_poseidon_rows: DefaultPoseidonRowTracker::default(),
         }
@@ -91,10 +103,14 @@ impl MemoryCtx {
 
     #[inline(always)]
     pub(crate) fn add_register_merkle_heights(&mut self) {
+        // Registers are counted as written: they are rewritten in practice in every
+        // segment, and this also guarantees the dirty tree is never empty, covering the
+        // Merkle root's final row pair, which exists even in a write-free segment.
         self.update_boundary_merkle_heights(
             RV64_REGISTER_AS,
             0,
             (RV64_NUM_REGISTERS * RV64_REGISTER_NUM_LIMBS) as u32,
+            true,
         );
     }
 
@@ -157,22 +173,26 @@ impl MemoryCtx {
     /// Records the memory-tree pages touched by `[ptr, ptr + size)`.
     /// For metered callbacks, DEFERRAL_AS ranges are AS-native F-cell ranges and
     /// u16-celled address space ranges are byte ranges.
+    /// Writes additionally mark the leaves as dirty.
     #[inline(always)]
     pub(crate) fn update_boundary_merkle_heights(
         &mut self,
         address_space: u32,
         ptr: u32,
         size: u32,
+        is_write: bool,
     ) {
         let (start_leaf_id, end_leaf_id) = self.leaf_id_range(address_space, ptr, size);
         let num_leaves = end_leaf_id - start_leaf_id;
         let start_page_id = start_leaf_id >> PAGE_MASK_LEAF_BITS;
 
         if num_leaves == 1 {
+            let leaf_mask = 1u64 << (start_leaf_id & ((1 << PAGE_MASK_LEAF_BITS) - 1));
             push_page_touch(
                 &mut self.page_indices_since_checkpoint,
                 start_page_id,
-                1u64 << (start_leaf_id & ((1 << PAGE_MASK_LEAF_BITS) - 1)),
+                leaf_mask,
+                if is_write { leaf_mask } else { 0 },
             );
             self.page_indices_since_checkpoint_len = self.page_indices_since_checkpoint.len();
             return;
@@ -194,7 +214,12 @@ impl MemoryCtx {
             let start = start_leaf_id.max(page_start) - page_start;
             let end = end_leaf_id.min(page_end) - page_start;
             let leaf_mask = leaf_mask_range(start, end);
-            push_page_touch(&mut self.page_indices_since_checkpoint, page_id, leaf_mask);
+            push_page_touch(
+                &mut self.page_indices_since_checkpoint,
+                page_id,
+                leaf_mask,
+                if is_write { leaf_mask } else { 0 },
+            );
         }
         self.page_indices_since_checkpoint_len = self.page_indices_since_checkpoint.len();
     }
@@ -225,8 +250,16 @@ impl MemoryCtx {
                     &mut self.pending_baseline_updates,
                     page_id,
                     delta.new_segment_leaf_mask,
+                    0,
                 );
                 self.pending_first_touches.add(delta.first_touches);
+            }
+            if touch.dirty_mask != 0 {
+                let (dirty_leaves, dirty_nodes) = self
+                    .segment_dirty
+                    .insert_counting(page_id as usize, touch.dirty_mask);
+                self.pending_dirty_leaves += dirty_leaves;
+                self.pending_dirty_merkle_nodes += dirty_nodes;
             }
         }
     }
@@ -235,12 +268,15 @@ impl MemoryCtx {
     #[inline(always)]
     pub(crate) fn reset_segment_without_replay(&mut self, trace_heights: &mut [u32]) {
         self.segment_memory.clear();
+        self.segment_dirty.clear();
         self.page_indices_since_checkpoint.clear();
         self.page_indices_since_checkpoint_len = 0;
         self.page_indices_applied_len = 0;
         self.pending_baseline_updates.clear();
         self.pending_segment_leaves = 0;
         self.pending_segment_merkle_nodes = 0;
+        self.pending_dirty_leaves = 0;
+        self.pending_dirty_merkle_nodes = 0;
         self.pending_first_touches = FirstTouchCounts::default();
         self.default_poseidon_rows = DefaultPoseidonRowTracker::default();
 
@@ -261,10 +297,13 @@ impl MemoryCtx {
     #[inline(always)]
     pub(crate) fn initialize_segment(&mut self, trace_heights: &mut [u32]) {
         self.segment_memory.clear();
+        self.segment_dirty.clear();
         self.page_indices_applied_len = 0;
         self.pending_baseline_updates.clear();
         self.pending_segment_leaves = 0;
         self.pending_segment_merkle_nodes = 0;
+        self.pending_dirty_leaves = 0;
+        self.pending_dirty_merkle_nodes = 0;
         self.pending_first_touches = FirstTouchCounts::default();
         self.default_poseidon_rows = DefaultPoseidonRowTracker::default();
 
@@ -298,31 +337,42 @@ impl MemoryCtx {
         self.pending_baseline_updates.clear();
         self.pending_segment_leaves = 0;
         self.pending_segment_merkle_nodes = 0;
+        self.pending_dirty_leaves = 0;
+        self.pending_dirty_merkle_nodes = 0;
         self.pending_first_touches = FirstTouchCounts::default();
     }
 
     /// Applies memory height deltas recorded since the last checkpoint.
     ///
-    /// - BOUNDARY_AIR: `2 * segment_leaves` rows
-    /// - MERKLE_AIR:   `2 * segment_merkle_nodes` rows
-    /// - Poseidon2:    hashes at the end of the segment plus hashes at its start
+    /// - BOUNDARY_AIR: `segment_leaves` rows (one per touched leaf)
+    /// - MERKLE_AIR:   `segment_merkle_nodes + dirty_merkle_nodes` rows (an initial row per touched
+    ///   node, a final row per written-below node)
+    /// - Poseidon2:    hashes at the end of the segment (dirty entities only) plus hashes at its
+    ///   start (all touched entities)
     ///
     /// A leaf or node absent at the checkpoint starts from the hash of zero-filled memory. Equal
     /// starting hashes share a row: one for all zero leaves and one for each internal-node height.
     /// Therefore:
     ///
     /// ```text
-    /// Poseidon2 rows = end-of-segment hashes
+    /// Poseidon2 rows = end-of-segment hashes (dirty leaves + dirty nodes)
     ///                + nonzero checkpoint hashes
     ///                + shared zero-filled hashes
     /// ```
+    ///
+    /// "Written" is exactly tracegen's definition of dirty (per write, independent of the
+    /// written content), so the dirty terms match the realized trace heights.
     #[inline(always)]
     pub(crate) fn apply_height_updates(&mut self, trace_heights: &mut [u32]) {
         let mut leaves = self.pending_segment_leaves;
         let mut merkle_nodes = self.pending_segment_merkle_nodes;
+        let mut dirty_leaves = self.pending_dirty_leaves;
+        let mut dirty_merkle_nodes = self.pending_dirty_merkle_nodes;
         let mut first_touches = self.pending_first_touches;
         self.pending_segment_leaves = 0;
         self.pending_segment_merkle_nodes = 0;
+        self.pending_dirty_leaves = 0;
+        self.pending_dirty_merkle_nodes = 0;
         self.pending_first_touches = FirstTouchCounts::default();
 
         let len = self.page_indices_since_checkpoint.len();
@@ -342,13 +392,23 @@ impl MemoryCtx {
                     &mut self.pending_baseline_updates,
                     touch.page_id,
                     delta.new_segment_leaf_mask,
+                    0,
                 );
                 first_touches.add(delta.first_touches);
+            }
+            // A write to an already-touched leaf adds no touched delta but can still be
+            // newly dirty, so this is not gated on the touched delta above.
+            if touch.dirty_mask != 0 {
+                let (new_dirty_leaves, new_dirty_nodes) = self
+                    .segment_dirty
+                    .insert_counting(touch.page_id as usize, touch.dirty_mask);
+                dirty_leaves += new_dirty_leaves;
+                dirty_merkle_nodes += new_dirty_nodes;
             }
         }
         self.page_indices_applied_len = len;
 
-        if leaves == 0 && merkle_nodes == 0 {
+        if leaves == 0 && merkle_nodes == 0 && dirty_leaves == 0 && dirty_merkle_nodes == 0 {
             return;
         }
 
@@ -357,29 +417,31 @@ impl MemoryCtx {
         let initial_default_poseidon_rows = self.default_poseidon_rows.count_new(first_touches);
         let initial_nondefault_poseidon_rows = (leaves + merkle_nodes)
             .saturating_sub(first_touches.leaves + first_touches.merkle_nodes);
-        let poseidon2_rows = leaves
-            + merkle_nodes
+        let poseidon2_rows = dirty_leaves
+            + dirty_merkle_nodes
             + initial_nondefault_poseidon_rows
             + initial_default_poseidon_rows;
         // SAFETY: BOUNDARY_AIR_ID, MERKLE_AIR_ID, and poseidon2_idx are all within bounds
         unsafe {
             *trace_heights.get_unchecked_mut(BOUNDARY_AIR_ID) += leaves;
             *trace_heights.get_unchecked_mut(poseidon2_idx) += poseidon2_rows;
-            // Merkle AIR: 2 rows per internal node (init + final tree)
-            *trace_heights.get_unchecked_mut(MERKLE_AIR_ID) += merkle_nodes * 2;
+            // Merkle AIR: an initial row per touched node plus a final row per dirty node
+            *trace_heights.get_unchecked_mut(MERKLE_AIR_ID) += merkle_nodes + dirty_merkle_nodes;
         }
     }
 }
 
 #[inline(always)]
-fn push_page_touch(touches: &mut Vec<PageTouch>, page_id: u32, leaf_mask: u64) {
+fn push_page_touch(touches: &mut Vec<PageTouch>, page_id: u32, leaf_mask: u64, dirty_mask: u64) {
     debug_assert!(leaf_mask != 0);
+    debug_assert!(dirty_mask & !leaf_mask == 0);
     let len = touches.len();
     if len != 0 {
         // SAFETY: len is non-zero, so len - 1 is in bounds.
         let prev = unsafe { touches.get_unchecked_mut(len - 1) };
         if prev.page_id == page_id {
             prev.leaf_mask |= leaf_mask;
+            prev.dirty_mask |= dirty_mask;
             return;
         }
     }
@@ -394,6 +456,7 @@ fn push_page_touch(touches: &mut Vec<PageTouch>, page_id: u32, leaf_mask: u64) {
             page_id,
             _padding: 0,
             leaf_mask,
+            dirty_mask,
         });
         touches.set_len(len + 1);
     }
@@ -412,9 +475,9 @@ mod tests {
         let mut range_ctx = MemoryCtx::new(&system_config);
         let mut explicit_ctx = MemoryCtx::new(&system_config);
 
-        range_ctx.update_boundary_merkle_heights(2, 0, 17);
+        range_ctx.update_boundary_merkle_heights(2, 0, 17, true);
         for ptr in [0, 16] {
-            explicit_ctx.update_boundary_merkle_heights(2, ptr, 1);
+            explicit_ctx.update_boundary_merkle_heights(2, ptr, 1, true);
         }
 
         let mut range_heights = vec![0; 6];
@@ -448,13 +511,55 @@ mod tests {
         }
     }
 
+    /// Reads pay only initial-direction rows; writes add one final-direction Merkle row
+    /// per spanning node and one Poseidon2 compression per dirty leaf/node. A later
+    /// write to an already-read leaf upgrades it to exactly the written cost.
+    #[test]
+    fn test_read_only_touches_cost_no_final_direction_rows() {
+        let system_config = test_system_config();
+        let mut read_ctx = MemoryCtx::new(&system_config);
+        let mut write_ctx = MemoryCtx::new(&system_config);
+        let mut read_heights = vec![0; 6];
+        let mut write_heights = vec![0; 6];
+
+        read_ctx.update_boundary_merkle_heights(2, 0, 1, false);
+        write_ctx.update_boundary_merkle_heights(2, 0, 1, true);
+        read_ctx.apply_height_updates(&mut read_heights);
+        write_ctx.apply_height_updates(&mut write_heights);
+
+        // Boundary: one row per touched leaf, written or not.
+        assert_eq!(
+            read_heights[BOUNDARY_AIR_ID],
+            write_heights[BOUNDARY_AIR_ID]
+        );
+        // Merkle: the write pays a final row per node on top of the shared initial rows.
+        let read_merkle = read_heights[MERKLE_AIR_ID];
+        assert!(read_merkle > 0);
+        assert_eq!(write_heights[MERKLE_AIR_ID], 2 * read_merkle);
+        // Poseidon2: the write additionally hashes the dirty leaf and each dirty node.
+        let poseidon2_idx = read_heights.len() - 2;
+        assert_eq!(
+            write_heights[poseidon2_idx],
+            read_heights[poseidon2_idx] + 1 + read_merkle
+        );
+
+        // Reading and then writing the same leaf costs exactly what writing it costs:
+        // the write upgrades the touched leaf to dirty.
+        let mut upgrade_ctx = MemoryCtx::new(&system_config);
+        let mut upgrade_heights = vec![0; 6];
+        upgrade_ctx.update_boundary_merkle_heights(2, 0, 1, false);
+        upgrade_ctx.update_boundary_merkle_heights(2, 0, 1, true);
+        upgrade_ctx.apply_height_updates(&mut upgrade_heights);
+        assert_eq!(upgrade_heights, write_heights);
+    }
+
     #[test]
     fn test_tentative_apply_does_not_commit_occupancy() {
         let system_config = test_system_config();
         let mut ctx = MemoryCtx::new(&system_config);
         let mut trace_heights = vec![0; 6];
 
-        ctx.update_boundary_merkle_heights(2, 0, 1);
+        ctx.update_boundary_merkle_heights(2, 0, 1, true);
         ctx.apply_height_updates(&mut trace_heights);
 
         let page_id = ((2 - ADDR_SPACE_OFFSET) << ctx.memory_dimensions.address_height) as usize
@@ -482,8 +587,8 @@ mod tests {
         let height = ctx.memory_dimensions.overall_height() as u32;
         let second_leaf_ptr = (U16_CELL_SIZE * VM_DIGEST_WIDTH) as u32;
 
-        ctx.update_boundary_merkle_heights(2, 0, 1);
-        ctx.update_boundary_merkle_heights(2, second_leaf_ptr, 1);
+        ctx.update_boundary_merkle_heights(2, 0, 1, true);
+        ctx.update_boundary_merkle_heights(2, second_leaf_ptr, 1, true);
 
         let mut trace_heights = vec![0; 6];
         ctx.apply_height_updates(&mut trace_heights);
@@ -500,7 +605,7 @@ mod tests {
         let mut ctx = MemoryCtx::new(&system_config);
         let mut trace_heights = vec![0; 6];
 
-        ctx.update_boundary_merkle_heights(RV64_MEMORY_AS, 0, 1);
+        ctx.update_boundary_merkle_heights(RV64_MEMORY_AS, 0, 1, true);
         ctx.apply_height_updates(&mut trace_heights);
         ctx.update_checkpoint();
 
@@ -510,7 +615,7 @@ mod tests {
         let poseidon_before = trace_heights[poseidon2_idx];
         let next_page_ptr = ((1 << PAGE_MASK_LEAF_BITS) * U16_CELL_SIZE * VM_DIGEST_WIDTH) as u32;
 
-        ctx.update_boundary_merkle_heights(RV64_MEMORY_AS, next_page_ptr, 1);
+        ctx.update_boundary_merkle_heights(RV64_MEMORY_AS, next_page_ptr, 1, true);
         ctx.apply_height_updates(&mut trace_heights);
 
         assert_eq!(trace_heights[BOUNDARY_AIR_ID] - boundary_before, 1);
@@ -532,8 +637,8 @@ mod tests {
         ctx.seed_initial_memory(&SparseMemoryImage::from([((2, 0), 0)]));
         let second_leaf_ptr = (U16_CELL_SIZE * VM_DIGEST_WIDTH) as u32;
 
-        ctx.update_boundary_merkle_heights(2, 0, 1);
-        ctx.update_boundary_merkle_heights(2, second_leaf_ptr, 1);
+        ctx.update_boundary_merkle_heights(2, 0, 1, true);
+        ctx.update_boundary_merkle_heights(2, second_leaf_ptr, 1, true);
 
         let mut trace_heights = vec![0; 6];
         ctx.apply_height_updates(&mut trace_heights);
@@ -553,8 +658,8 @@ mod tests {
             ((2, second_leaf_ptr), 1),
         ]));
 
-        ctx.update_boundary_merkle_heights(2, 0, 1);
-        ctx.update_boundary_merkle_heights(2, second_leaf_ptr, 1);
+        ctx.update_boundary_merkle_heights(2, 0, 1, true);
+        ctx.update_boundary_merkle_heights(2, second_leaf_ptr, 1, true);
 
         let mut trace_heights = vec![0; 6];
         ctx.apply_height_updates(&mut trace_heights);
@@ -575,8 +680,8 @@ mod tests {
             ((DEFERRAL_AS, second_leaf_byte_ptr), 1),
         ]));
 
-        ctx.update_boundary_merkle_heights(DEFERRAL_AS, 0, 1);
-        ctx.update_boundary_merkle_heights(DEFERRAL_AS, second_leaf_ptr, 1);
+        ctx.update_boundary_merkle_heights(DEFERRAL_AS, 0, 1, true);
+        ctx.update_boundary_merkle_heights(DEFERRAL_AS, second_leaf_ptr, 1, true);
 
         let mut trace_heights = vec![0; 6];
         ctx.apply_height_updates(&mut trace_heights);

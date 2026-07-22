@@ -85,12 +85,18 @@ pub trait ExtEmitCtx {
     /// Record the pages containing one fixed-width access for metering.
     ///
     /// This records the address, not the accessed value.
-    fn trace_page_access(&mut self, addr: &str, width: MemWidth, addr_space: u32);
+    fn trace_page_access(&mut self, addr: &str, width: MemWidth, addr_space: u32, is_write: bool);
 
     /// Record pages touched by a dword range for metering (one dword is 8 bytes).
     ///
     /// This records the address range, not the accessed values.
-    fn trace_page_access_u64_range(&mut self, base_addr: &str, num_dwords: &str, addr_space: u32);
+    fn trace_page_access_u64_range(
+        &mut self,
+        base_addr: &str,
+        num_dwords: &str,
+        addr_space: u32,
+        is_write: bool,
+    );
 }
 
 /// Trait for extension IR nodes. Implemented by each extension's instruction types.
