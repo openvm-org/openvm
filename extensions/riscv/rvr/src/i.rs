@@ -24,6 +24,7 @@ use self::instruction::{AluOp, Rv64IInstr};
 use crate::instruction::{decode_imm_cg, decode_reg, reg_operand, NopInstr, ZERO};
 
 const U24_MASK: u32 = (1 << 24) - 1;
+const STORED_PC_BYTES: u32 = core::mem::size_of::<u32>() as u32;
 const RV64I_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize =
     max_main_memory_pages_for_contiguous_range(RV64_REGISTER_BYTES as usize);
 
@@ -75,7 +76,7 @@ impl RvrExtension for Rv64IExtension {
         bytes
             .keys()
             .copied()
-            .filter(|address| address % 4 == 0)
+            .filter(|address| address % STORED_PC_BYTES == 0)
             .filter_map(|address| {
                 let address1 = address.checked_add(1)?;
                 let address2 = address.checked_add(2)?;
@@ -546,6 +547,23 @@ mod tests {
             LiftedInstr::Body(InstrAt { instr, .. }) => instr.opname().to_string(),
             LiftedInstr::Term { terminator, .. } => terminator.opname().to_string(),
         })
+    }
+
+    #[test]
+    fn initialized_u32_code_pointer_at_four_byte_alignment_is_a_cfg_target() {
+        let target = 0x100u32;
+        let init_memory = SparseMemoryImage::from_iter(
+            target
+                .to_le_bytes()
+                .into_iter()
+                .enumerate()
+                .map(|(offset, byte)| ((RV64_MEMORY_AS, 4 + offset as u32), byte)),
+        );
+
+        assert_eq!(
+            Rv64IExtension.extra_cfg_targets(&init_memory, &HashSet::from([u64::from(target)])),
+            vec![u64::from(target)]
+        );
     }
 
     #[test]

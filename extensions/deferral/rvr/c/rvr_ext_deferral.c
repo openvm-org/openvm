@@ -15,9 +15,8 @@
 #include "openvm.h"
 #include "rvr_ext_deferral.h"
 
-/* Byte-layout constants derived from the generated digest and word sizes. */
-// TODO(rvr): update to better formula/solution instead of defining field element size here
-static constexpr uint32_t F_NUM_BYTES = 4;
+/* PrimeField32 values use four-byte canonical encodings. */
+static constexpr uint32_t F_NUM_BYTES = sizeof(uint32_t);
 static constexpr uint32_t DEFERRAL_COMMIT_NUM_BYTES =
     DEFERRAL_DIGEST_SIZE * F_NUM_BYTES;
 /* output_key layout: commit ++ u64 output length. */
@@ -27,9 +26,10 @@ static constexpr uint32_t COMMIT_WORDS = DEFERRAL_COMMIT_NUM_BYTES / WORD_SIZE;
 static constexpr uint32_t OUTPUT_KEY_WORDS =
     DEFERRAL_OUTPUT_KEY_BYTES / WORD_SIZE;
 static constexpr uint32_t DIGEST_MEMORY_OPS = DEFERRAL_DIGEST_SIZE / WORD_SIZE;
+/* Page size from the configured leaves per page and byte addresses per leaf. */
 static constexpr uint64_t MAIN_MEMORY_PAGE_BYTES =
     1ull << (TRACER_BYTE_SPACE_PTRS_PER_LEAF_BITS + TRACER_PAGE_BITS);
-/* Leave room for an unaligned chunk to touch one extra page. */
+/* Reserve one page for the extra page touched by an unaligned chunk. */
 static constexpr uint64_t OUTPUT_ROWS_PER_PAGE_BUFFER =
     ((uint64_t)TRACER_MEM_PAGE_BUF_CAP - 1ull) * MAIN_MEMORY_PAGE_BYTES /
     DEFERRAL_DIGEST_SIZE;

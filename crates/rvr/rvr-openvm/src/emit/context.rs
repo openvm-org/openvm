@@ -1,5 +1,6 @@
 use std::{collections::HashSet, fmt::Write};
 
+use openvm_instructions::riscv::RV64_NUM_REGISTERS;
 use rvr_openvm_ir::{MemWidth, PageAddressSpace, Variable};
 
 use super::codegen::hex_u32;
@@ -160,6 +161,10 @@ impl<'a> EmitContext<'a> {
 
     pub fn buf_mut(&mut self) -> &mut String {
         &mut self.buf
+    }
+
+    pub(crate) fn traces_values(&self) -> bool {
+        self.mode.traces_values()
     }
 
     /// Append a line of C code (indented).
@@ -654,7 +659,10 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
 
 fn rv64_reg_index(var: Variable) -> u8 {
     let index = u8::try_from(var.index()).expect("RV64 variable index must fit in u8");
-    assert!(index < 32, "RV64 variable index must name x0..x31");
+    assert!(
+        usize::from(index) < RV64_NUM_REGISTERS,
+        "RV64 variable index must name an integer register"
+    );
     index
 }
 

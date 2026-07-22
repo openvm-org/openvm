@@ -38,7 +38,7 @@ pub struct TermCtx<'a> {
 /// Dynamic targets use the dispatch table. Exit and trap write cached registers
 /// back to `RvState` before returning from the generated block.
 pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &TermCtx) {
-    let next_pc = pc.wrapping_add(u64::from(DEFAULT_PC_STEP));
+    let next_pc = pc + u64::from(DEFAULT_PC_STEP);
     let args = ctx.tail_call_args();
 
     match term.cfg_term(pc, next_pc) {
@@ -93,9 +93,11 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
             target,
             known,
         } => {
-            let lhs = ctx.read_var(lhs);
-            let rhs = ctx.read_var(rhs);
             if let Some(taken) = known {
+                if ctx.traces_values() {
+                    ctx.read_var(lhs);
+                    ctx.read_var(rhs);
+                }
                 emit_tail_call(
                     ctx,
                     if taken { target } else { next_pc },
@@ -104,6 +106,8 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
                 );
                 return;
             }
+            let lhs = ctx.read_var(lhs);
+            let rhs = ctx.read_var(rhs);
             let cmp = branch_cond_expr(cond, width, &lhs, &rhs);
             ctx.write_line(&format!("if ({cmp}) {{"));
             ctx.write_line(&format!(
@@ -211,7 +215,65 @@ pub(super) fn hex_u32(value: u32) -> String {
 
 #[cfg(test)]
 mod tests {
+    use rvr_openvm_ir::{CfgEffect, Variable};
+
     use super::*;
+    use crate::emit::context::{BlockAbi, EmitMode};
+
+    #[derive(Clone, Debug)]
+    struct KnownBranch;
+
+    impl ExtInstr for KnownBranch {
+        fn emit_c(&self, _ctx: &mut dyn ExtEmitCtx) {}
+
+        fn cfg_effect(&self) -> CfgEffect {
+            CfgEffect::None
+        }
+
+        fn cfg_term(&self, _pc: u64, _fall_pc: u64) -> Option<CfgTerm> {
+            Some(CfgTerm::Branch {
+                cond: CfgBranchCond::Eq,
+                width: CfgIntWidth::U64,
+                lhs: Variable::new(1),
+                rhs: Variable::new(2),
+                target: 8,
+                known: Some(true),
+            })
+        }
+
+        fn clone_box(&self) -> Box<dyn ExtInstr> {
+            Box::new(self.clone())
+        }
+    }
+
+    #[test]
+    fn known_branch_reads_operands_only_for_value_tracing() {
+        let term = Terminator::Instruction(Box::new(KnownBranch));
+        let valid_blocks = HashSet::from([8]);
+        let tc = TermCtx {
+            valid_blocks: &valid_blocks,
+        };
+
+        let mut direct = EmitContext::new(
+            HashSet::new(),
+            EmitMode::Direct,
+            BlockAbi::Plain,
+            None,
+            None,
+        );
+        emit_terminator(&mut direct, &term, 0, &tc);
+        assert!(!direct.buf().contains("reg_read"));
+
+        let mut tracing = EmitContext::new(
+            HashSet::new(),
+            EmitMode::ValueTrace,
+            BlockAbi::Plain,
+            None,
+            None,
+        );
+        emit_terminator(&mut tracing, &term, 0, &tc);
+        assert_eq!(tracing.buf().matches("trace_reg_read").count(), 2);
+    }
 
     #[test]
     fn branch_width_controls_operand_truncation() {
@@ -222,6 +284,24 @@ mod tests {
         assert_eq!(
             branch_cond_expr(CfgBranchCond::Eq, CfgIntWidth::U32, "left", "right"),
             "(uint32_t)left == (uint32_t)right"
+        );
+        assert_eq!(
+            branch_cond_expr(
+                CfgBranchCond::LessThanSigned,
+                CfgIntWidth::U32,
+                "left",
+                "right",
+            ),
+            "(int32_t)(uint32_t)left < (int32_t)(uint32_t)right"
+        );
+        assert_eq!(
+            branch_cond_expr(
+                CfgBranchCond::GreaterEqualUnsigned,
+                CfgIntWidth::U32,
+                "left",
+                "right",
+            ),
+            "(uint32_t)left >= (uint32_t)right"
         );
     }
 }

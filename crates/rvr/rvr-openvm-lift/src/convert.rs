@@ -4,7 +4,9 @@ use openvm_instructions::exe::VmExe;
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ir::{LiftedInstr, SourceLoc};
 
-use crate::{extension::ExtensionRegistry, opcode::lift_instruction, RvrInstruction};
+use crate::{
+    extension::ExtensionRegistry, opcode::lift_instruction, ExtensionError, RvrInstruction,
+};
 
 /// Error during VmExe to IR conversion.
 #[derive(Debug, thiserror::Error)]
@@ -12,13 +14,13 @@ pub enum ConvertError {
     #[error("unrecognized opcode {opcode} at pc {pc:#x}")]
     UnrecognizedOpcode { opcode: usize, pc: u64 },
     #[error(transparent)]
-    Extension(#[from] crate::ExtensionError),
+    Extension(#[from] ExtensionError),
 }
 
 /// Convert a VmExe to a vector of lifted IR instructions.
 pub fn convert_vmexe_to_ir<F: PrimeField32>(
     exe: &VmExe<F>,
-    extensions: &crate::extension::ExtensionRegistry,
+    extensions: &ExtensionRegistry,
 ) -> Result<Vec<LiftedInstr>, ConvertError> {
     convert_vmexe_to_ir_with_debug(exe, extensions, |_| None)
 }

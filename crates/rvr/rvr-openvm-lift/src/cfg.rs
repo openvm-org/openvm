@@ -194,70 +194,7 @@ impl VariableState {
 
 // ── Abstract integer evaluation ───────────────────────────────────────────
 
-fn compute_op(op: CfgOp, result: CfgResultWidth, left: u64, right: u64) -> u64 {
-    if result != CfgResultWidth::U64 {
-        let left = left as u32;
-        let right = right as u32;
-        let value = match op {
-            CfgOp::Add => left.wrapping_add(right),
-            CfgOp::Sub => left.wrapping_sub(right),
-            CfgOp::And => left & right,
-            CfgOp::Or => left | right,
-            CfgOp::Xor => left ^ right,
-            CfgOp::ShiftLeft => left.wrapping_shl(right & 0x1f),
-            CfgOp::ShiftRightLogical => left.wrapping_shr(right & 0x1f),
-            CfgOp::ShiftRightArithmetic => ((left as i32) >> (right & 0x1f)) as u32,
-            CfgOp::LessThanSigned => u32::from((left as i32) < (right as i32)),
-            CfgOp::LessThanUnsigned => u32::from(left < right),
-            CfgOp::Mul => left.wrapping_mul(right),
-            CfgOp::DivSigned => {
-                if right == 0 {
-                    u32::MAX
-                } else {
-                    (left as i32).wrapping_div(right as i32) as u32
-                }
-            }
-            CfgOp::DivUnsigned => {
-                if right == 0 {
-                    u32::MAX
-                } else {
-                    left / right
-                }
-            }
-            CfgOp::RemSigned => {
-                if right == 0 {
-                    left
-                } else {
-                    (left as i32).wrapping_rem(right as i32) as u32
-                }
-            }
-            CfgOp::RemUnsigned => {
-                if right == 0 {
-                    left
-                } else {
-                    left % right
-                }
-            }
-            CfgOp::MulHighSigned if result == CfgResultWidth::U32 => {
-                (((left as i32 as i64) * (right as i32 as i64)) >> 32) as u32
-            }
-            CfgOp::MulHighSignedUnsigned if result == CfgResultWidth::U32 => {
-                (((left as i32 as i64) * (right as u64 as i64)) >> 32) as u32
-            }
-            CfgOp::MulHighUnsigned if result == CfgResultWidth::U32 => {
-                (((left as u64) * (right as u64)) >> 32) as u32
-            }
-            CfgOp::MulHighSigned | CfgOp::MulHighSignedUnsigned | CfgOp::MulHighUnsigned => {
-                unreachable!("sign-extending word instructions do not have high multiply")
-            }
-        };
-        return match result {
-            CfgResultWidth::U32 => u64::from(value),
-            CfgResultWidth::SignExtend32 => value as i32 as i64 as u64,
-            CfgResultWidth::U64 => unreachable!(),
-        };
-    }
-
+fn compute_op_u64(op: CfgOp, left: u64, right: u64) -> u64 {
     match op {
         CfgOp::Add => left.wrapping_add(right),
         CfgOp::Sub => left.wrapping_sub(right),
@@ -304,6 +241,65 @@ fn compute_op(op: CfgOp, result: CfgResultWidth, left: u64, right: u64) -> u64 {
     }
 }
 
+fn compute_op_u32(op: CfgOp, left: u32, right: u32) -> u32 {
+    match op {
+        CfgOp::Add => left.wrapping_add(right),
+        CfgOp::Sub => left.wrapping_sub(right),
+        CfgOp::And => left & right,
+        CfgOp::Or => left | right,
+        CfgOp::Xor => left ^ right,
+        CfgOp::ShiftLeft => left.wrapping_shl(right & 0x1f),
+        CfgOp::ShiftRightLogical => left.wrapping_shr(right & 0x1f),
+        CfgOp::ShiftRightArithmetic => ((left as i32) >> (right & 0x1f)) as u32,
+        CfgOp::LessThanSigned => u32::from((left as i32) < (right as i32)),
+        CfgOp::LessThanUnsigned => u32::from(left < right),
+        CfgOp::Mul => left.wrapping_mul(right),
+        CfgOp::MulHighSigned => (((left as i32 as i64) * (right as i32 as i64)) >> 32) as u32,
+        CfgOp::MulHighSignedUnsigned => {
+            (((left as i32 as i64) * (right as u64 as i64)) >> 32) as u32
+        }
+        CfgOp::MulHighUnsigned => (((left as u64) * (right as u64)) >> 32) as u32,
+        CfgOp::DivSigned => {
+            if right == 0 {
+                u32::MAX
+            } else {
+                (left as i32).wrapping_div(right as i32) as u32
+            }
+        }
+        CfgOp::DivUnsigned => {
+            if right == 0 {
+                u32::MAX
+            } else {
+                left / right
+            }
+        }
+        CfgOp::RemSigned => {
+            if right == 0 {
+                left
+            } else {
+                (left as i32).wrapping_rem(right as i32) as u32
+            }
+        }
+        CfgOp::RemUnsigned => {
+            if right == 0 {
+                left
+            } else {
+                left % right
+            }
+        }
+    }
+}
+
+fn compute_op(op: CfgOp, result: CfgResultWidth, left: u64, right: u64) -> u64 {
+    match result {
+        CfgResultWidth::U32 => u64::from(compute_op_u32(op, left as u32, right as u32)),
+        CfgResultWidth::U64 => compute_op_u64(op, left, right),
+        CfgResultWidth::SignExtend32 => {
+            compute_op_u32(op, left as u32, right as u32) as i32 as i64 as u64
+        }
+    }
+}
+
 /// Compute the cross-product of two tracked multi-value operands under a binary operation.
 fn eval_op_multi(
     op: CfgOp,
@@ -317,14 +313,14 @@ fn eval_op_multi(
 
     let mut result =
         TrackedValue::constant(compute_op(op, result_width, lhs.values[0], rhs.values[0]));
-    'outer: for left in &lhs.values {
-        for right in &rhs.values {
-            if *left == lhs.values[0] && *right == rhs.values[0] {
+    for (left_idx, left) in lhs.values.iter().enumerate() {
+        for (right_idx, right) in rhs.values.iter().enumerate() {
+            if left_idx == 0 && right_idx == 0 {
                 continue;
             }
             result.add_value(compute_op(op, result_width, *left, *right));
             if !result.is_constant() {
-                break 'outer;
+                return result;
             }
         }
     }
@@ -371,16 +367,16 @@ fn is_indirect_jump(li: &LiftedInstr) -> bool {
     )
 }
 
-/// Returns true if this LiftedInstr is a control-flow terminator (not a body instruction
-/// and not a FallThrough).
+/// Whether this instruction ends its block with explicit control flow.
 fn is_control_flow(li: &LiftedInstr) -> bool {
     cfg_term_of(li).is_some_and(|term| !matches!(term, CfgTerm::FallThrough))
 }
 
+/// Return a terminator's control-flow description.
 fn cfg_term_of(li: &LiftedInstr) -> Option<CfgTerm> {
     match li {
         LiftedInstr::Term { pc, terminator, .. } => {
-            Some(terminator.cfg_term(*pc, pc.wrapping_add(INSTR_SIZE as u64)))
+            Some(terminator.cfg_term(*pc, pc + INSTR_SIZE as u64))
         }
         LiftedInstr::Body(_) => None,
     }
@@ -1208,6 +1204,30 @@ mod tests {
     }
 
     #[test]
+    fn variable_state_merge_tracks_only_values_known_on_every_path() {
+        let variable = var(1);
+        let mut state = VariableState::new();
+        state.set(variable, TrackedValue::constant(7));
+
+        let mut same = VariableState::new();
+        same.set(variable, TrackedValue::constant(7));
+        assert!(!state.merge(&same));
+        assert_eq!(state.get(variable), TrackedValue::constant(7));
+
+        let mut different = VariableState::new();
+        different.set(variable, TrackedValue::constant(9));
+        assert!(state.merge(&different));
+        assert_eq!(state.get(variable).values, vec![7, 9]);
+
+        assert!(state.merge(&VariableState::new()));
+        assert_eq!(state.get(variable), TrackedValue::unknown());
+
+        let mut unknown = VariableState::new();
+        assert!(!unknown.merge(&same));
+        assert_eq!(unknown.get(variable), TrackedValue::unknown());
+    }
+
+    #[test]
     fn invalid_branch_target_preserves_valid_fallthrough() {
         let blocks = build_blocks(
             &[
@@ -1412,6 +1432,15 @@ mod tests {
                 2,
             ),
             1
+        );
+        assert_eq!(
+            compute_op(
+                CfgOp::MulHighUnsigned,
+                CfgResultWidth::SignExtend32,
+                u64::from(u32::MAX),
+                u64::from(u32::MAX),
+            ),
+            u64::MAX - 1
         );
     }
 }

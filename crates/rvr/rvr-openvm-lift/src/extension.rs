@@ -78,8 +78,10 @@ pub fn fixed_trace_rows_for_chip(idx: Option<AirIndex>, count: u32) -> Vec<Fixed
     .unwrap_or_default()
 }
 
-/// Decodes a stride-scaled `u32` operand as a variable identifier and checks
-/// the caller-provided bound.
+/// Decode a variable operand encoded as `index * stride`.
+///
+/// Panics for a zero stride, a value that is not aligned to the stride, or a
+/// decoded index outside `0..variable_count`.
 pub fn decode_variable(value: u32, stride: u32, variable_count: u32) -> Variable {
     assert!(stride != 0, "variable stride must be nonzero");
     assert_eq!(value % stride, 0, "variable operand must be aligned");

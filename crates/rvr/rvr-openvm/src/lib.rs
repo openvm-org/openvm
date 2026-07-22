@@ -1,4 +1,4 @@
-//! rvr-openvm backend pieces shared by OpenVM integration.
+//! Native RVR backend for OpenVM's RV64 machine state.
 //!
 //! # Runtime Requirements
 //!
