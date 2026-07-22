@@ -6,9 +6,14 @@ use openvm_instructions::{
     DEFERRAL_AS, PUBLIC_VALUES_AS, VM_DIGEST_WIDTH,
 };
 use openvm_platform::{memory::MEM_SIZE, WORD_SIZE};
+use rvr_openvm_lift::MAIN_MEMORY_PAGE_BYTES;
 
 const BYTE_SPACE_PTRS_PER_LEAF: usize = core::mem::size_of::<u16>() * VM_DIGEST_WIDTH;
 const DEFERRAL_PTRS_PER_LEAF: usize = VM_DIGEST_WIDTH;
+
+// Extension page bounds are declared against this page size and feed the
+// unchecked main-memory page buffer.
+const _: () = assert!(BYTE_SPACE_PTRS_PER_LEAF << PAGE_MASK_LEAF_BITS == MAIN_MEMORY_PAGE_BYTES);
 
 /// Maximum AS_MEMORY page buffer entries per segment check interval.
 ///

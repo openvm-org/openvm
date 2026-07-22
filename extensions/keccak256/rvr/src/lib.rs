@@ -24,9 +24,16 @@ fn decode_reg(value: u32) -> Variable {
 
 const KECCAK_NUM_ROUNDS: u32 = p3_keccak_air::NUM_ROUNDS as u32;
 const _: () = assert!(KECCAK_NUM_ROUNDS as usize == p3_keccak_air::NUM_ROUNDS);
-// XORIN reads one 136-byte buffer, writes it back, and separately reads its input.
-const KECCAK_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize =
-    3 * max_main_memory_pages_for_contiguous_range(136);
+// XORIN reads one 136-byte rate buffer, writes it back, and separately reads
+// its input: three ranges of at most 136 bytes.
+const XORIN_MAX_PAGES: usize = 3 * max_main_memory_pages_for_contiguous_range(136);
+// KECCAKF reads and writes the full 200-byte state: two 200-byte ranges.
+const KECCAKF_MAX_PAGES: usize = 2 * max_main_memory_pages_for_contiguous_range(200);
+const KECCAK_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize = if XORIN_MAX_PAGES > KECCAKF_MAX_PAGES {
+    XORIN_MAX_PAGES
+} else {
+    KECCAKF_MAX_PAGES
+};
 
 /// keccak-f\[1600\]: read 200 bytes via `buffer_ptr_reg`, permute in place.
 #[derive(Debug, Clone)]
