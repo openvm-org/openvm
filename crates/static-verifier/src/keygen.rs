@@ -14,6 +14,10 @@ use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "halo2-gpu")]
 use crate::graph_executor::GraphProver;
+
+#[cfg(feature = "halo2-gpu")]
+use openvm_cuda_common::d_buffer::DeviceBuffer;
+
 use crate::{
     circuit::StaticVerifierCircuit,
     config::StaticVerifierShape,
@@ -226,10 +230,7 @@ impl StaticVerifierProvingKey {
         proof: &Proof<RootConfig>,
         num_threads: usize,
         diagnostic_params: Option<&Halo2Params>,
-    ) -> (
-        Vec<halo2_base::halo2_proofs::cuda::DeviceBuffer<Fr>>,
-        Vec<Vec<Fr>>,
-    ) {
+    ) -> (Vec<DeviceBuffer<Fr>>, Vec<Vec<Fr>>) {
         use halo2_base::{
             gates::circuit::MaybeRangeConfig,
             halo2_proofs::{halo2curves::bn256::G1Affine, plonk::create_constraint_system},

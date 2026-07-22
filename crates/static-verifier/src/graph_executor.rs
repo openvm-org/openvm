@@ -30,6 +30,10 @@ use openvm_stark_sdk::{
     },
     p3_baby_bear::BabyBear,
 };
+#[cfg(feature = "halo2-gpu")]
+use halo2_base::halo2_proofs::cuda::utils::HALO2_GPU_CTX;
+#[cfg(feature = "halo2-gpu")]
+use openvm_cuda_common::d_buffer::DeviceBuffer;
 
 use crate::{
     chip_traits::{ChipBase, PopulateInputs},
@@ -741,6 +745,7 @@ impl GraphProver {
 /// Columns are zero-filled `DeviceBuffer`s allocated on the first [`Self::append`];
 /// each contiguous delta segment is copied H2D directly into its row range, so no
 /// host-side column buffer is ever materialized.
+#[cfg(feature = "halo2-gpu")]
 pub struct FusedColumnBuilder {
     // ---- Config (immutable after `new`) ------------------------------------
     n: usize,
@@ -756,9 +761,10 @@ pub struct FusedColumnBuilder {
     lookup_col_indices: Vec<usize>,
 
     // ---- Device columns (lazily allocated on first `append`) ---------------
-    device_columns: Vec<halo2_base::halo2_proofs::cuda::DeviceBuffer<Fr>>,
+    device_columns: Vec<DeviceBuffer<Fr>>,
 }
 
+#[cfg(feature = "halo2-gpu")]
 impl FusedColumnBuilder {
     pub fn new(
         n: usize,
@@ -782,7 +788,6 @@ impl FusedColumnBuilder {
     }
 
     fn ensure_allocated(&mut self) {
-        use halo2_base::halo2_proofs::cuda::{utils::HALO2_GPU_CTX, DeviceBuffer};
         if !self.device_columns.is_empty() {
             return;
         }
@@ -807,8 +812,6 @@ impl FusedColumnBuilder {
         lookup_offset: usize,
         lookup_delta: &[Fr],
     ) {
-        use halo2_base::halo2_proofs::cuda::{utils::HALO2_GPU_CTX, DeviceBufferExt as _};
-
         self.ensure_allocated();
 
         // --- Gate stream: contiguous H2D per (column, row-range) segment ----
@@ -882,7 +885,7 @@ impl FusedColumnBuilder {
     }
 
     /// Consumes the device columns, leaving the builder empty.
-    pub fn take_device_columns(&mut self) -> Vec<halo2_base::halo2_proofs::cuda::DeviceBuffer<Fr>> {
+    pub fn take_device_columns(&mut self) -> Vec<DeviceBuffer<Fr>> {
         assert!(
             !self.device_columns.is_empty(),
             "take_device_columns: no data was ever appended",
@@ -894,7 +897,7 @@ impl FusedColumnBuilder {
     /// caller can byte-compare against the legacy `BaseCircuitBuilder` +
     /// `synthesize_witness_shplonk` path. Not used on the hot prove path.
     pub fn snapshot_columns_to_host(&self) -> Vec<Vec<Fr>> {
-        use halo2_base::halo2_proofs::cuda::{utils::HALO2_GPU_CTX, MemCopyD2H as _};
+        use openvm_cuda_common::copy::MemCopyD2H;
         self.device_columns
             .iter()
             .map(|d| d.to_host_on(&HALO2_GPU_CTX).expect("D2H advice column"))
