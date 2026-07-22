@@ -3,7 +3,7 @@
 use num_bigint::BigUint;
 use openvm_algebra_transpiler::Fp2Opcode;
 use openvm_instructions::LocalOpcode;
-use rvr_openvm_ir::{Instr, InstrAt, LiftedInstr};
+use rvr_openvm_ir::{ExtInstr, InstrAt, LiftedInstr};
 use rvr_openvm_lift::{RvrExtension, RvrInstruction};
 use strum::EnumCount;
 
@@ -121,7 +121,7 @@ impl Fp2RvrExtension {
         let rs1_reg = decode_reg(insn.b);
         let rs2_reg = decode_reg(insn.c);
 
-        let instr: Box<dyn Instr> = match local {
+        let instr: Box<dyn ExtInstr> = match local {
             x if x == Fp2Opcode::ADD as usize => Box::new(Fp2ArithInstr::new(
                 ModOp::Add,
                 rd_reg,

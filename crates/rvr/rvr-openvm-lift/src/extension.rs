@@ -422,7 +422,7 @@ mod tests {
     use rvr_openvm_ir::{InstrAt, LiftedInstr};
 
     use super::*;
-    use crate::NopInstr;
+    use crate::opcode::NopInstr;
 
     struct ClaimingExtension;
 

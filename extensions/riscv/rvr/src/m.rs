@@ -96,7 +96,7 @@ impl RvrExtension for Rv64MExtension {
         }
 
         let rd = decode_reg(insn.a);
-        let instruction: Box<dyn rvr_openvm_ir::Instr> = if rd == crate::instruction::ZERO {
+        let instruction: Box<dyn rvr_openvm_ir::ExtInstr> = if rd == crate::instruction::ZERO {
             Box::new(crate::instruction::Rv64IInstr::Nop)
         } else {
             Box::new(Rv64MInstr {

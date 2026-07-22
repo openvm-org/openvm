@@ -1066,7 +1066,7 @@ impl CProject {
         }
         if !matches!(block.terminator, Terminator::FallThrough) {
             add_base_row(&mut chip_counts, block.terminator_pc)?;
-            if let Terminator::Instr(extension) = &block.terminator {
+            if let Terminator::Extension(extension) = &block.terminator {
                 add_extension_rows(&mut chip_counts, extension.as_ref())?;
             }
         }
@@ -1312,13 +1312,13 @@ impl CProject {
     }
 }
 
-fn instr_accesses_memory(instr: &dyn Instr) -> bool {
+fn instr_accesses_memory(instr: &dyn ExtInstr) -> bool {
     instr.accesses_memory()
 }
 
 fn terminator_accesses_memory(terminator: &Terminator) -> bool {
     match terminator {
-        Terminator::Instr(instr) => instr.accesses_memory(),
+        Terminator::Extension(instr) => instr.accesses_memory(),
         _ => false,
     }
 }

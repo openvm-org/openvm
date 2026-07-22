@@ -300,6 +300,9 @@ impl RvrExtension for Rv64IoExtension {
     }
 
     fn max_main_memory_pages_per_instruction(&self) -> usize {
+        // HINT_BUFFER writes up to MAX_HINT_BUFFER_DWORDS * WORD_SIZE contiguous
+        // bytes. One main-memory page covers `page_bytes`; the extra page covers
+        // worst-case misalignment of the range across page boundaries.
         let page_bytes = core::mem::size_of::<u16>() * VM_DIGEST_WIDTH * (1 << PAGE_MASK_LEAF_BITS);
         let max_bytes = MAX_HINT_BUFFER_DWORDS * WORD_SIZE;
         max_bytes.div_ceil(page_bytes) + 1
@@ -351,8 +354,8 @@ fn public_values_store_width(insn: &RvrInstruction) -> Option<MemWidth> {
     }
 }
 
-/// rvr extension for the RISC-V base IO phantoms HINT_INPUT, PRINT_STR,
-/// HINT_RANDOM, and the extension hint-stream setter.
+/// RVR extension for RV64I instructions and the HINT_INPUT, PRINT_STR, and
+/// HINT_RANDOM phantoms.
 pub struct Rv64IExtension;
 
 impl Rv64IExtension {
@@ -411,6 +414,9 @@ impl RvrExtension for Rv64IExtension {
         init_memory: &SparseMemoryImage,
         valid_pcs: &HashSet<u64>,
     ) -> Vec<u64> {
+        // Scan four-byte-aligned main-memory addresses rather than u64 word
+        // boundaries. Little-endian RV64 instruction PCs in switch tables,
+        // function-pointer arrays, and other initialized data become CFG roots.
         let bytes = init_memory
             .iter()
             .filter_map(|(&(address_space, address), &byte)| {

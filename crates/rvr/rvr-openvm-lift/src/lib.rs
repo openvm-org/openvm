@@ -4,7 +4,7 @@
 //! and the target-neutral rvr-openvm-ir intermediate representation.
 //!
 //! The `opcode` module lifts individual OpenVM instructions to `LiftedInstr`,
-//! which is either a body `Instr` or a `Terminator` (control flow).
+//! which is either a body `ExtInstr` or a `Terminator` (control flow).
 //! The `convert` module provides the top-level `convert_vmexe_to_ir` function.
 //! The `cfg` module builds basic blocks from flat IR using rvr-openvm-ir types.
 //! The `extension` module provides the `RvrExtension` trait and `ExtensionRegistry`.
@@ -23,4 +23,3 @@ pub use extension::{
     RvrRuntimeExtension, TraceChipIndex, VmRvrExtension,
 };
 pub use instruction::RvrInstruction;
-pub use opcode::NopInstr;

@@ -13,7 +13,8 @@ const DEFERRAL_PTRS_PER_LEAF: usize = VM_DIGEST_WIDTH;
 /// Maximum AS_MEMORY page buffer entries per segment check interval.
 ///
 /// The C tracer flushes before crossing `SEGMENT_CHECK_INSNS` and statically
-/// verifies this capacity against `MAX_MEM_PAGES_PER_INSN`.
+/// verifies this capacity against the extension-contributed
+/// `TRACER_MAX_MEM_PAGES_PER_INSN` bound.
 pub const MEM_PAGE_BUF_CAP: usize = 1 << 16;
 
 /// Worst-case AS_PUBLIC_VALUES pages a fixed-width reveal can touch.

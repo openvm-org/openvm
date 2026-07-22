@@ -1,6 +1,6 @@
 use rvr_openvm_ir::{
     CfgBranchCond, CfgEffect, CfgIntWidth, CfgJumpKind, CfgOp, CfgOperand, CfgResultWidth, CfgTerm,
-    EmitCtx, Instr, MemWidth, ValueSlot,
+    ExtEmitCtx, ExtInstr, MemWidth, ValueSlot,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -115,8 +115,8 @@ pub(crate) enum Rv64IInstr {
     },
 }
 
-impl Instr for Rv64IInstr {
-    fn emit_c(&self, ctx: &mut dyn EmitCtx) {
+impl ExtInstr for Rv64IInstr {
+    fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         match self {
             Self::Nop | Self::Branch { .. } | Self::Jump { .. } | Self::JumpIndirect { .. } => {}
             Self::Alu {
@@ -281,7 +281,6 @@ impl Instr for Rv64IInstr {
                     CfgJumpKind::Jump
                 },
                 link_dst: *link_dst,
-                base: *base,
                 base_value: reg_operand(*base),
                 offset: *offset,
                 target_mask: !1,
@@ -295,11 +294,11 @@ impl Instr for Rv64IInstr {
         matches!(self, Self::Load { .. } | Self::Store { .. })
     }
 
-    fn clone_box(&self) -> Box<dyn Instr> {
+    fn clone_box(&self) -> Box<dyn ExtInstr> {
         Box::new(self.clone())
     }
 
-    fn with_resolved_jumps(&self, resolved: Vec<u64>) -> Box<dyn Instr> {
+    fn with_resolved_jumps(&self, resolved: Vec<u64>) -> Box<dyn ExtInstr> {
         match self {
             Self::JumpIndirect {
                 link_dst,
@@ -372,8 +371,8 @@ pub(crate) struct Rv64MInstr {
     pub rhs: ValueSlot,
 }
 
-impl Instr for Rv64MInstr {
-    fn emit_c(&self, ctx: &mut dyn EmitCtx) {
+impl ExtInstr for Rv64MInstr {
+    fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         let lhs = ctx.read_slot(self.lhs);
         let rhs = ctx.read_slot(self.rhs);
         ctx.write_slot(self.rd, &muldiv_expr(self.op, self.word, &lhs, &rhs));
@@ -401,7 +400,7 @@ impl Instr for Rv64MInstr {
         false
     }
 
-    fn clone_box(&self) -> Box<dyn Instr> {
+    fn clone_box(&self) -> Box<dyn ExtInstr> {
         Box::new(self.clone())
     }
 }
@@ -414,7 +413,7 @@ pub(crate) const fn reg_operand(reg: ValueSlot) -> CfgOperand {
     }
 }
 
-fn operand_c(ctx: &mut dyn EmitCtx, operand: CfgOperand) -> String {
+fn operand_c(ctx: &mut dyn ExtEmitCtx, operand: CfgOperand) -> String {
     match operand {
         CfgOperand::Slot(reg) => ctx.read_slot(reg),
         CfgOperand::Const(value) => hex_u64(value),

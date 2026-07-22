@@ -1,10 +1,14 @@
 //! OpenVM system instruction lifting and RVR extension dispatch.
 
 use openvm_instructions::{LocalOpcode, SysPhantom, SystemOpcode};
-use rvr_openvm_ir::{CfgEffect, EmitCtx, Instr, InstrAt, LiftedInstr, Terminator};
+use rvr_openvm_ir::{CfgEffect, ExtEmitCtx, ExtInstr, InstrAt, LiftedInstr, Terminator};
 
 use crate::{ExtensionError, ExtensionRegistry, RvrInstruction};
 
+/// Lift one OpenVM instruction.
+///
+/// System instructions are handled here. All target instructions are offered
+/// to the registered extensions, and duplicate claims return an error.
 pub fn lift_instruction(
     insn: &RvrInstruction,
     pc: u64,
@@ -48,10 +52,10 @@ fn lift_system_phantom(pc: u64, phantom: SysPhantom) -> LiftedInstr {
 }
 
 #[derive(Debug, Clone)]
-pub struct NopInstr;
+pub(crate) struct NopInstr;
 
-impl Instr for NopInstr {
-    fn emit_c(&self, _ctx: &mut dyn EmitCtx) {}
+impl ExtInstr for NopInstr {
+    fn emit_c(&self, _ctx: &mut dyn ExtEmitCtx) {}
 
     fn opname(&self) -> &str {
         "nop"
@@ -65,7 +69,7 @@ impl Instr for NopInstr {
         false
     }
 
-    fn clone_box(&self) -> Box<dyn Instr> {
+    fn clone_box(&self) -> Box<dyn ExtInstr> {
         Box::new(self.clone())
     }
 }

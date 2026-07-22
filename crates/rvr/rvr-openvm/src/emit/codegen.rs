@@ -1,31 +1,43 @@
-//! C code generation for extension-owned IR instructions and terminators.
+//! C code generation for IR instructions and terminators.
 
 use std::collections::HashSet;
 
 use openvm_instructions::program::DEFAULT_PC_STEP;
-use rvr_openvm_ir::{CfgBranchCond, CfgIntWidth, CfgTerm, EmitCtx, Instr, Terminator};
+use rvr_openvm_ir::{
+    CfgBranchCond, CfgIntWidth, CfgOperand, CfgTerm, ExtEmitCtx, ExtInstr, Terminator,
+};
 
 use super::context::EmitContext;
 
-/// Emits C for an instruction using an OpenVM execution context.
+/// Trait for instructions that can emit their own C code.
 pub trait InstrCodegen {
+    /// Emit the C body for this instruction into the buffer.
+    /// `ctx` handles value-slot and memory access for the current execution mode.
     fn emit_c(&self, ctx: &mut EmitContext);
 }
 
-impl InstrCodegen for Box<dyn Instr> {
+impl InstrCodegen for Box<dyn ExtInstr> {
     fn emit_c(&self, ctx: &mut EmitContext) {
-        Instr::emit_c(self.as_ref(), ctx);
+        ExtInstr::emit_c(self.as_ref(), ctx);
     }
 }
 
-pub fn emit_instr(ctx: &mut EmitContext, instr: &dyn Instr) {
+/// Emit C code for a body instruction.
+pub fn emit_instr(ctx: &mut EmitContext, instr: &dyn ExtInstr) {
     instr.emit_c(ctx);
 }
 
+/// Context for terminator code generation and tail-call dispatch.
 pub struct TermCtx<'a> {
+    /// Set of valid block start PCs for direct tail calls.
     pub valid_blocks: &'a HashSet<u64>,
 }
 
+/// Emit C code for a terminator using tail calls between blocks.
+///
+/// Static targets use direct tail calls or trap when no block exists. Dynamic
+/// targets go through the dispatch table. Exit and trap synchronize hot state
+/// before returning from the generated block.
 pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &TermCtx) {
     let next_pc = pc.wrapping_add(u64::from(DEFAULT_PC_STEP));
     let args = ctx.tail_call_args();
@@ -42,16 +54,23 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
         }
         CfgTerm::JumpIndirect {
             link_dst,
-            base,
+            base_value,
             offset,
             target_mask,
             ..
         } => {
-            let base_value = ctx.read_slot(base);
-            let base_value = if link_dst.is_some_and(|dst| dst == base) {
-                ctx.materialize_u64(&base_value)
-            } else {
-                base_value
+            let base_value = match base_value {
+                CfgOperand::Slot(base) => {
+                    let value = ctx.read_slot(base);
+                    if link_dst.is_some_and(|dst| dst == base) {
+                        // Save base to a temporary when the link destination is the
+                        // same slot, so the link write cannot clobber the jump target.
+                        ctx.materialize_u64(&value)
+                    } else {
+                        value
+                    }
+                }
+                CfgOperand::Const(value) => hex_u64(value),
             };
             if let Some(dst) = link_dst {
                 ctx.write_slot(dst, &hex_u64(next_pc));
@@ -98,7 +117,7 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
         CfgTerm::Exit { code } => emit_exit(ctx, pc, code),
         CfgTerm::Trap { message } => emit_trap(ctx, pc, &message),
         CfgTerm::Opaque { .. } => {
-            let Terminator::Instr(instr) = term else {
+            let Terminator::Extension(instr) = term else {
                 unreachable!("opaque control flow requires an instruction-owned terminator")
             };
             let branch_to = |target| static_tail_call(target, &args, tc.valid_blocks);
@@ -143,6 +162,7 @@ fn emit_trap(ctx: &mut EmitContext, pc: u64, message: &str) {
     ctx.write_line("return;");
 }
 
+/// Emit a tail call to a statically known PC, trapping if it is not a block start.
 fn static_tail_call(target: u64, args: &str, valid_blocks: &HashSet<u64>) -> String {
     if valid_blocks.contains(&target) {
         format!("[[clang::musttail]] return block_0x{target:08x}({args});")

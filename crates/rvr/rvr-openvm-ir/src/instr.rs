@@ -1,4 +1,4 @@
-use crate::{EmitCtx, FixedTraceRows};
+use crate::{ExtEmitCtx, FixedTraceRows};
 
 /// Opaque value location used by CFG analysis and generated-code access.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -34,12 +34,16 @@ impl MemWidth {
     }
 }
 
+/// Operand used by target-neutral CFG evaluation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CfgOperand {
+    /// Value read from an opaque target-defined slot.
     Slot(ValueSlot),
+    /// Immediate constant.
     Const(u64),
 }
 
+/// Integer operation understood by CFG constant propagation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CfgOp {
     Add,
@@ -62,6 +66,7 @@ pub enum CfgOp {
     RemUnsigned,
 }
 
+/// Width and extension behavior of a CFG operation result.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CfgResultWidth {
     U32,
@@ -69,12 +74,14 @@ pub enum CfgResultWidth {
     SignExtend32,
 }
 
+/// Integer width used to compare branch operands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CfgIntWidth {
     U32,
     U64,
 }
 
+/// Data-flow effect of one instruction on tracked value slots.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CfgEffect {
     None,
@@ -96,6 +103,7 @@ pub enum CfgEffect {
     ClobberAll,
 }
 
+/// Target-neutral conditional branch predicate.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CfgBranchCond {
     Eq,
@@ -106,6 +114,7 @@ pub enum CfgBranchCond {
     GreaterEqualUnsigned,
 }
 
+/// Control-flow role of a jump.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CfgJumpKind {
     Jump,
@@ -113,23 +122,27 @@ pub enum CfgJumpKind {
     Return,
 }
 
+/// Target-neutral control-flow behavior used by CFG analysis and code generation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CfgTerm {
+    /// Continue at the next instruction.
     FallThrough,
+    /// Jump to a statically known target.
     Jump {
         kind: CfgJumpKind,
         link_dst: Option<ValueSlot>,
         target: u64,
     },
+    /// Jump to a target computed from an operand and signed offset.
     JumpIndirect {
         kind: CfgJumpKind,
         link_dst: Option<ValueSlot>,
-        base: ValueSlot,
         base_value: CfgOperand,
         offset: i32,
         target_mask: u64,
         resolved: Vec<u64>,
     },
+    /// Conditionally jump to `target`, otherwise fall through.
     Branch {
         cond: CfgBranchCond,
         width: CfgIntWidth,
@@ -138,27 +151,30 @@ pub enum CfgTerm {
         target: u64,
         known: Option<bool>,
     },
-    Exit {
-        code: u32,
-    },
-    Trap {
-        message: String,
-    },
-    Opaque {
-        successors: Vec<u64>,
-    },
+    /// Terminate execution with an exit code.
+    Exit { code: u32 },
+    /// Trap execution with a diagnostic message.
+    Trap { message: String },
+    /// Instruction-defined control flow with an explicit successor set.
+    Opaque { successors: Vec<u64> },
 }
 
-/// A self-contained instruction node owned by an RVR extension.
-pub trait Instr: std::fmt::Debug + Send + Sync {
-    fn emit_c(&self, ctx: &mut dyn EmitCtx);
+/// Trait for self-contained instruction nodes owned by RVR extensions.
+pub trait ExtInstr: std::fmt::Debug + Send + Sync {
+    /// Emit C code for this instruction through the mode-aware context.
+    fn emit_c(&self, ctx: &mut dyn ExtEmitCtx);
 
-    fn emit_c_term(&self, ctx: &mut dyn EmitCtx, _branch_to: &dyn Fn(u64) -> String) {
+    /// Emit C code for an instruction-owned terminator.
+    ///
+    /// `branch_to(target_pc)` returns the C tail-call statement for a static
+    /// successor. The default delegates to `emit_c`.
+    fn emit_c_term(&self, ctx: &mut dyn ExtEmitCtx, _branch_to: &dyn Fn(u64) -> String) {
         self.emit_c(ctx);
     }
 
+    /// Short operation name used in generated C comments.
     fn opname(&self) -> &str {
-        "instr"
+        "ext"
     }
 
     /// Data-flow behavior used by CFG analysis.
@@ -167,21 +183,32 @@ pub trait Instr: std::fmt::Debug + Send + Sync {
     /// accidentally preserve stale control-flow constants.
     fn cfg_effect(&self) -> CfgEffect;
 
+    /// Control-flow behavior, if this instruction ends a basic block.
     fn cfg_term(&self, _pc: u64, _fall_pc: u64) -> Option<CfgTerm> {
         None
     }
 
+    /// Whether this instruction may access the target's main guest memory.
+    ///
+    /// Code generation uses this to decide whether a metered block needs main
+    /// memory page tracking. The conservative default is `true`.
     fn accesses_memory(&self) -> bool {
         true
     }
 
+    /// Extra chip rows whose count is known when the artifact is generated.
     fn fixed_trace_rows(&self) -> Vec<FixedTraceRows> {
         Vec::new()
     }
 
-    fn clone_box(&self) -> Box<dyn Instr>;
+    /// Clone into a boxed trait object.
+    fn clone_box(&self) -> Box<dyn ExtInstr>;
 
-    fn with_resolved_jumps(&self, resolved: Vec<u64>) -> Box<dyn Instr> {
+    /// Return a copy with CFG-resolved indirect-jump targets.
+    ///
+    /// Instructions without indirect control flow reject nonempty targets so
+    /// resolved successors cannot be silently discarded.
+    fn with_resolved_jumps(&self, resolved: Vec<u64>) -> Box<dyn ExtInstr> {
         assert!(
             resolved.is_empty(),
             "instruction {} does not accept resolved jump targets",
@@ -191,7 +218,7 @@ pub trait Instr: std::fmt::Debug + Send + Sync {
     }
 }
 
-impl Clone for Box<dyn Instr> {
+impl Clone for Box<dyn ExtInstr> {
     fn clone(&self) -> Self {
         self.clone_box()
     }

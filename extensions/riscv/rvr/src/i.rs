@@ -1,3 +1,8 @@
+//! RV64I lifting for integer arithmetic, branches, jumps, and memory access.
+//!
+//! Operand validation follows the OpenVM RV64 register, immediate, and main
+//! memory address-space domains before constructing extension-owned IR nodes.
+
 use openvm_instructions::{
     riscv::{
         RV64_IMM_AS, RV64_MEMORY_AS, RV64_NUM_REGISTERS, RV64_REGISTER_AS, RV64_REGISTER_BYTES,
@@ -291,6 +296,8 @@ fn lift_alu(
     ))
 }
 
+/// Lift a load encoded as `rd=a/8`, `rs1=b/8`, immediate low bits in `c`,
+/// and the immediate sign marker in `g`.
 fn lift_load(insn: &RvrInstruction, pc: u64, width: MemWidth, signed: bool) -> Option<LiftedInstr> {
     if insn.d != RV64_REGISTER_AS || insn.e != RV64_MEMORY_AS {
         return None;
@@ -308,6 +315,8 @@ fn lift_load(insn: &RvrInstruction, pc: u64, width: MemWidth, signed: bool) -> O
     ))
 }
 
+/// Lift a store encoded as `rs2=a/8`, `rs1=b/8`, immediate low bits in `c`,
+/// and the immediate sign marker in `g`.
 fn lift_store(insn: &RvrInstruction, pc: u64, width: MemWidth) -> Option<LiftedInstr> {
     if insn.d != RV64_REGISTER_AS || insn.e != RV64_MEMORY_AS {
         return None;
@@ -323,6 +332,7 @@ fn lift_store(insn: &RvrInstruction, pc: u64, width: MemWidth) -> Option<LiftedI
     ))
 }
 
+/// Lift a branch encoded as `rs1=a/8`, `rs2=b/8`, and a field-signed offset in `c`.
 fn lift_branch(insn: &RvrInstruction, pc: u64, cond: CfgBranchCond) -> LiftedInstr {
     term(
         pc,
@@ -335,6 +345,7 @@ fn lift_branch(insn: &RvrInstruction, pc: u64, cond: CfgBranchCond) -> LiftedIns
     )
 }
 
+/// Lift JAL encoded as `rd=a/8` and a field-signed offset in `c`.
 fn lift_jal(insn: &RvrInstruction, pc: u64) -> LiftedInstr {
     let rd = decode_reg(insn.a);
     term(
@@ -346,6 +357,8 @@ fn lift_jal(insn: &RvrInstruction, pc: u64) -> LiftedInstr {
     )
 }
 
+/// Lift JALR encoded as `rd=a/8`, `rs1=b/8`, immediate low bits in `c`,
+/// and the immediate sign marker in `g`.
 fn lift_jalr(insn: &RvrInstruction, pc: u64) -> LiftedInstr {
     let rd = decode_reg(insn.a);
     term(
@@ -359,6 +372,7 @@ fn lift_jalr(insn: &RvrInstruction, pc: u64) -> LiftedInstr {
     )
 }
 
+/// Lift LUI encoded as `rd=a/8` and the upper immediate in `c << 12`.
 fn lift_lui(insn: &RvrInstruction, pc: u64) -> LiftedInstr {
     let rd = decode_reg(insn.a);
     if rd == ZERO {
@@ -374,6 +388,10 @@ fn lift_lui(insn: &RvrInstruction, pc: u64) -> LiftedInstr {
     )
 }
 
+/// Lift AUIPC encoded as `rd=a/8` and `c << 8`.
+///
+/// The transpiler stores `(imm & 0xfffff000) >> 8` in `c`, so shifting by
+/// eight reconstructs the upper 20 bits with twelve low zero bits.
 fn lift_auipc(insn: &RvrInstruction, pc: u64) -> LiftedInstr {
     let rd = decode_reg(insn.a);
     if rd == ZERO {
@@ -401,7 +419,7 @@ fn body(pc: u64, instr: Rv64IInstr) -> LiftedInstr {
 fn term(pc: u64, instr: Rv64IInstr) -> LiftedInstr {
     LiftedInstr::Term {
         pc,
-        terminator: Terminator::Instr(Box::new(instr)),
+        terminator: Terminator::Extension(Box::new(instr)),
         source_loc: None,
     }
 }
@@ -410,11 +428,17 @@ pub(crate) fn decode_reg(value: u32) -> ValueSlot {
     decode_value_slot(value, RV64_REGISTER_BYTES as u32, RV64_NUM_REGISTERS as u32)
 }
 
+/// Decode the immediate from the `(c, g)` field pair used by JALR, loads, and stores.
+///
+/// OpenVM stores the lower 16 bits of the sign-extended immediate in `c` and
+/// the sign marker in `g`. A negative value is reconstructed by adding
+/// `0xffff0000` to `(c & 0xffff)`.
 pub(crate) fn decode_imm_cg(insn: &RvrInstruction) -> u32 {
     let low16 = insn.c & 0xffff;
     low16.wrapping_add(if insn.g != 0 { 0xffff_0000 } else { 0 })
 }
 
+/// Sign-extend a 12-bit immediate stored in the low 24 bits.
 fn sign_extend_12(value: u32) -> i32 {
     let value = value & 0xfff;
     if value & 0x800 != 0 {
@@ -424,6 +448,7 @@ fn sign_extend_12(value: u32) -> i32 {
     }
 }
 
+/// Sign-extend a 32-bit value into an RV64 register value.
 fn sign_extend_32(value: u32) -> u64 {
     value as i32 as i64 as u64
 }

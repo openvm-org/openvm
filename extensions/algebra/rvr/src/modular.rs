@@ -6,7 +6,7 @@ use openvm_algebra_transpiler::{ModularPhantom, Rv64ModularArithmeticOpcode};
 use openvm_algebra_utils::{find_non_qr, NQR_RNG_SEED};
 use openvm_instructions::{LocalOpcode, SystemOpcode};
 use rand::{rngs::StdRng, SeedableRng};
-use rvr_openvm_ir::{CfgEffect, ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, ValueSlot};
+use rvr_openvm_ir::{CfgEffect, ExtEmitCtx, ExtInstr, InstrAt, LiftedInstr, ValueSlot};
 use rvr_openvm_lift::{RvrExtension, RvrInstruction};
 use strum::EnumCount;
 
@@ -347,7 +347,7 @@ impl ModularRvrExtension {
         let rs1_reg = decode_reg(insn.b);
         let rs2_reg = decode_reg(insn.c);
 
-        let instr: Box<dyn Instr> = match local {
+        let instr: Box<dyn ExtInstr> = match local {
             x if x == Rv64ModularArithmeticOpcode::ADD as usize => Box::new(ModArithInstr::new(
                 ModOp::Add,
                 rd_reg,

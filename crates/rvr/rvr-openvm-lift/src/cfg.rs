@@ -378,7 +378,7 @@ fn is_control_flow(li: &LiftedInstr) -> bool {
 fn cfg_term_of(li: &LiftedInstr) -> Option<CfgTerm> {
     match li {
         LiftedInstr::Term { pc, terminator, .. } => {
-            Some(terminator.cfg_term(*pc, pc.wrapping_add(u64::from(INSTR_SIZE))))
+            Some(terminator.cfg_term(*pc, pc.wrapping_add(INSTR_SIZE as u64)))
         }
         LiftedInstr::Body(_) => None,
     }
@@ -391,6 +391,7 @@ fn single_value(state: &RegisterState, operand: CfgOperand) -> Option<u64> {
     (value.values.len() == 1).then(|| value.values[0])
 }
 
+/// Evaluate one known indirect target as `(base + offset) & target_mask`.
 fn simple_eval_indirect(
     state: &RegisterState,
     base: CfgOperand,
@@ -436,13 +437,13 @@ fn collect_potential_targets(
                 transfer_effect(instr.cfg_effect(), &mut state);
             }
             LiftedInstr::Term { terminator, .. } => {
-                match terminator.cfg_term(pc, pc + u64::from(INSTR_SIZE)) {
+                match terminator.cfg_term(pc, pc + INSTR_SIZE as u64) {
                     CfgTerm::FallThrough => {}
                     CfgTerm::Jump { kind, target, .. } => {
                         if pc_to_idx.contains_key(&target) {
                             if kind == CfgJumpKind::Call {
                                 function_entries.insert(target);
-                                let return_pc = pc + u64::from(INSTR_SIZE);
+                                let return_pc = pc + INSTR_SIZE as u64;
                                 extend_existing_pcs(&mut return_sites, pc_to_idx, [return_pc]);
                             } else {
                                 internal_targets.insert(target);
@@ -464,12 +465,12 @@ fn collect_potential_targets(
                             }
                         }
                         if kind == CfgJumpKind::Call {
-                            let return_pc = pc + u64::from(INSTR_SIZE);
+                            let return_pc = pc + INSTR_SIZE as u64;
                             extend_existing_pcs(&mut return_sites, pc_to_idx, [return_pc]);
                         }
                     }
                     CfgTerm::Branch { target, .. } => {
-                        let fallthrough = pc + u64::from(INSTR_SIZE);
+                        let fallthrough = pc + INSTR_SIZE as u64;
                         extend_existing_pcs(
                             &mut internal_targets,
                             pc_to_idx,
@@ -503,9 +504,9 @@ fn build_call_return_map(
                 kind: CfgJumpKind::Call,
                 target,
                 ..
-            } = terminator.cfg_term(*pc, pc + u64::from(INSTR_SIZE))
+            } = terminator.cfg_term(*pc, pc + INSTR_SIZE as u64)
             {
-                let return_site = pc + u64::from(INSTR_SIZE);
+                let return_site = pc + INSTR_SIZE as u64;
                 if pc_to_idx.contains_key(&target) && pc_to_idx.contains_key(&return_site) {
                     map.entry(target).or_default().insert(return_site);
                 }
@@ -621,10 +622,10 @@ fn transfer(li: &LiftedInstr, mut state: RegisterState) -> RegisterState {
             transfer_effect(instr.cfg_effect(), &mut state);
         }
         LiftedInstr::Term { pc, terminator, .. } => {
-            if let Terminator::Instr(instr) = terminator {
+            if let Terminator::Extension(instr) = terminator {
                 transfer_effect(instr.cfg_effect(), &mut state);
             }
-            let fall_pc = pc + u64::from(INSTR_SIZE);
+            let fall_pc = pc + INSTR_SIZE as u64;
             match terminator.cfg_term(*pc, fall_pc) {
                 CfgTerm::Jump {
                     link_dst: Some(dst),
@@ -679,19 +680,19 @@ fn get_successors(
     match li {
         LiftedInstr::Body(_) => {
             // Body instructions fall through.
-            let fallthrough = pc + u64::from(INSTR_SIZE);
+            let fallthrough = pc + INSTR_SIZE as u64;
             extend_existing_pcs(&mut result, ctx.pc_to_idx, [fallthrough]);
         }
         LiftedInstr::Term { terminator, .. } => {
-            match terminator.cfg_term(pc, pc + u64::from(INSTR_SIZE)) {
+            match terminator.cfg_term(pc, pc + INSTR_SIZE as u64) {
                 CfgTerm::FallThrough => {
-                    let fallthrough = pc + u64::from(INSTR_SIZE);
+                    let fallthrough = pc + INSTR_SIZE as u64;
                     extend_existing_pcs(&mut result, ctx.pc_to_idx, [fallthrough]);
                 }
                 CfgTerm::Jump { target, .. } => {
                     if ctx.pc_to_idx.contains_key(&target) {
                         result.insert(target);
-                        let return_pc = pc + u64::from(INSTR_SIZE);
+                        let return_pc = pc + INSTR_SIZE as u64;
                         if is_call_instr {
                             extend_existing_pcs(&mut result, ctx.pc_to_idx, [return_pc]);
                         }
@@ -718,7 +719,7 @@ fn get_successors(
                             let entry = resolved_jumps.entry(pc).or_default();
                             entry.extend(targets.iter().copied());
                             if is_call_instr {
-                                result.insert(pc + u64::from(INSTR_SIZE));
+                                result.insert(pc + INSTR_SIZE as u64);
                             }
                         } else {
                             handle_unresolved_jump(
@@ -742,7 +743,7 @@ fn get_successors(
                     }
                 }
                 CfgTerm::Branch { target, .. } => {
-                    let fallthrough = pc + u64::from(INSTR_SIZE);
+                    let fallthrough = pc + INSTR_SIZE as u64;
                     extend_existing_pcs(&mut result, ctx.pc_to_idx, [fallthrough, target]);
                 }
                 CfgTerm::Opaque { successors } => {
@@ -756,11 +757,13 @@ fn get_successors(
     result
 }
 
+/// Evaluate `(base + offset) & target_mask`, rejecting targets outside the PC domain.
 fn eval_indirect_target(base: u64, offset: i32, target_mask: u64) -> Option<u64> {
     let target = base.wrapping_add_signed(i64::from(offset)) & target_mask;
     (target <= u64::from(MAX_ALLOWED_PC)).then_some(target)
 }
 
+/// Evaluate an indirect target for every currently known value of the base operand.
 fn eval_indirect_multi(
     state: &RegisterState,
     base: CfgOperand,
@@ -811,10 +814,10 @@ fn handle_unresolved_jump(
         }
     } else if is_call_instr {
         result.extend(ctx.function_entries.iter().copied());
-        result.insert(pc + u64::from(INSTR_SIZE));
+        result.insert(pc + INSTR_SIZE as u64);
     } else if is_indirect_jump(li) {
         let duff_targets =
-            scan_jump_table_targets(ctx.instructions, ctx.pc_to_idx, pc + u64::from(INSTR_SIZE));
+            scan_jump_table_targets(ctx.instructions, ctx.pc_to_idx, pc + INSTR_SIZE as u64);
         if !duff_targets.is_empty() {
             result.extend(duff_targets);
         }
@@ -866,7 +869,7 @@ fn scan_jump_table_targets(
             break;
         }
 
-        pc = li.pc() + u64::from(INSTR_SIZE);
+        pc = li.pc() + INSTR_SIZE as u64;
         count += 1;
     }
 
@@ -896,7 +899,7 @@ fn compute_leaders(
         let li = &instructions[idx];
         if is_control_flow(li) {
             leaders.extend(succs.iter().copied());
-            let next_pc = li.pc() + u64::from(INSTR_SIZE);
+            let next_pc = li.pc() + INSTR_SIZE as u64;
             if pc_to_idx.contains_key(&next_pc) {
                 leaders.insert(next_pc);
             }
@@ -1039,7 +1042,7 @@ fn build_block_list(
                 let last_body_pc = body.last().unwrap().pc;
                 blocks.push(Block {
                     start_pc: start,
-                    end_pc: last_body_pc + u64::from(INSTR_SIZE),
+                    end_pc: last_body_pc + INSTR_SIZE as u64,
                     instructions: std::mem::take(&mut body),
                     terminator: Terminator::FallThrough,
                     terminator_pc: last_body_pc,
@@ -1061,7 +1064,7 @@ fn build_block_list(
                     let last_body_pc = body.last().unwrap().pc;
                     blocks.push(Block {
                         start_pc: start,
-                        end_pc: last_body_pc + u64::from(INSTR_SIZE),
+                        end_pc: last_body_pc + INSTR_SIZE as u64,
                         instructions: std::mem::take(&mut body),
                         terminator: Terminator::FallThrough,
                         terminator_pc: last_body_pc,
@@ -1079,7 +1082,7 @@ fn build_block_list(
 
                 // Patch resolved targets into the instruction-owned terminator.
                 if let Some(targets) = resolved_jumps.get(&pc) {
-                    if let Terminator::Instr(instr) = &mut term {
+                    if let Terminator::Extension(instr) = &mut term {
                         let mut sorted_targets: Vec<u64> = targets.iter().copied().collect();
                         sorted_targets.sort_unstable();
                         *instr = instr.with_resolved_jumps(sorted_targets);
@@ -1089,7 +1092,7 @@ fn build_block_list(
                 let start = block_start_pc.unwrap();
                 blocks.push(Block {
                     start_pc: start,
-                    end_pc: pc + u64::from(INSTR_SIZE),
+                    end_pc: pc + INSTR_SIZE as u64,
                     instructions: std::mem::take(&mut body),
                     terminator: term,
                     terminator_pc: pc,
@@ -1106,7 +1109,7 @@ fn build_block_list(
             let last_body_pc = body.last().unwrap().pc;
             blocks.push(Block {
                 start_pc: start,
-                end_pc: last_body_pc + u64::from(INSTR_SIZE),
+                end_pc: last_body_pc + INSTR_SIZE as u64,
                 instructions: std::mem::take(&mut body),
                 terminator: Terminator::FallThrough,
                 terminator_pc: last_body_pc,
@@ -1120,7 +1123,7 @@ fn build_block_list(
 
 #[cfg(test)]
 mod tests {
-    use rvr_openvm_ir::{CfgBranchCond, CfgIntWidth, EmitCtx, Instr};
+    use rvr_openvm_ir::{CfgBranchCond, CfgIntWidth, ExtEmitCtx, ExtInstr};
 
     use super::*;
 
@@ -1132,7 +1135,7 @@ mod tests {
         }
     }
 
-    fn body(pc: u64, instr: impl Instr + 'static) -> LiftedInstr {
+    fn body(pc: u64, instr: impl ExtInstr + 'static) -> LiftedInstr {
         LiftedInstr::Body(InstrAt {
             pc,
             instr: Box::new(instr),
@@ -1146,8 +1149,8 @@ mod tests {
         term: Option<CfgTerm>,
     }
 
-    impl Instr for TestInstr {
-        fn emit_c(&self, _ctx: &mut dyn EmitCtx) {}
+    impl ExtInstr for TestInstr {
+        fn emit_c(&self, _ctx: &mut dyn ExtEmitCtx) {}
 
         fn cfg_effect(&self) -> CfgEffect {
             self.effect.clone()
@@ -1161,11 +1164,11 @@ mod tests {
             false
         }
 
-        fn clone_box(&self) -> Box<dyn Instr> {
+        fn clone_box(&self) -> Box<dyn ExtInstr> {
             Box::new(self.clone())
         }
 
-        fn with_resolved_jumps(&self, resolved: Vec<u64>) -> Box<dyn Instr> {
+        fn with_resolved_jumps(&self, resolved: Vec<u64>) -> Box<dyn ExtInstr> {
             let mut cloned = self.clone();
             if let Some(CfgTerm::JumpIndirect {
                 resolved: targets, ..
@@ -1184,7 +1187,7 @@ mod tests {
     fn instruction_term_with_effect(pc: u64, effect: CfgEffect, cfg_term: CfgTerm) -> LiftedInstr {
         term(
             pc,
-            Terminator::Instr(Box::new(TestInstr {
+            Terminator::Extension(Box::new(TestInstr {
                 effect,
                 term: Some(cfg_term),
             })),
@@ -1274,7 +1277,6 @@ mod tests {
                     CfgTerm::JumpIndirect {
                         kind: CfgJumpKind::Jump,
                         link_dst: None,
-                        base: slot(5),
                         base_value: CfgOperand::Slot(slot(5)),
                         offset: 0,
                         target_mask: !1,
@@ -1333,7 +1335,6 @@ mod tests {
                     CfgTerm::JumpIndirect {
                         kind: CfgJumpKind::Jump,
                         link_dst: None,
-                        base: slot(5),
                         base_value: CfgOperand::Slot(slot(5)),
                         offset: 0,
                         target_mask: !1,
@@ -1379,7 +1380,6 @@ mod tests {
                     CfgTerm::JumpIndirect {
                         kind: CfgJumpKind::Jump,
                         link_dst: None,
-                        base: slot(5),
                         base_value: CfgOperand::Slot(slot(5)),
                         offset: 0,
                         target_mask: !1,
