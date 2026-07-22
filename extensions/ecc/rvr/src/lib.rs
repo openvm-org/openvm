@@ -198,13 +198,7 @@ impl RvrExtension for EccExtension {
         let curve_idx = offset / ecc_count;
         let local_op = offset % ecc_count;
 
-        assert!(
-            curve_idx < self.curves.len(),
-            "ECC opcode references unregistered curve_idx {curve_idx} (only {} curves registered)",
-            self.curves.len(),
-        );
-        // Skip lifting opcodes for curves not in the rvr-known set.
-        let curve = self.curves[curve_idx].curve?;
+        let curve = self.curves.get(curve_idx)?.curve?;
 
         let rd_reg = decode_reg(insn.a);
         let rs1_reg = decode_reg(insn.b);
@@ -255,5 +249,23 @@ impl RvrExtension for EccExtension {
 
     fn max_main_memory_pages_per_instruction(&self) -> usize {
         ECC_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use openvm_instructions::VmOpcode;
+
+    use super::*;
+
+    #[test]
+    fn ignores_opcodes_outside_configured_curves() {
+        let extension = EccExtension::new(vec![0]);
+        let opcode = VmOpcode::from_usize(
+            Rv64WeierstrassOpcode::CLASS_OFFSET + Rv64WeierstrassOpcode::COUNT,
+        );
+        let insn = RvrInstruction::from_canonical(opcode, [0; 7], u32::MAX);
+
+        assert!(extension.try_lift(&insn, 0x100).is_none());
     }
 }
