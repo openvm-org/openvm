@@ -35,7 +35,7 @@ use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 #[cfg(feature = "cuda")]
 use {
-    crate::extension::{HybridModularChip, HybridModularIsEqualChip},
+    crate::{cuda::ModularIsEqualChipGpu, extension::HybridModularChip},
     openvm_circuit::arch::testing::{
         default_bitwise_lookup_bus, default_var_range_checker_bus, GpuChipTestBuilder,
         GpuTestChipHarness,
@@ -166,7 +166,10 @@ mod addsub_tests {
                 tester.cpu_bitwise_op_lookup(),
                 tester.address_bits(),
             ),
-            tester.range_checker().device_ctx.clone(),
+            tester.address_bits(),
+            tester.timestamp_max_bits(),
+            tester.range_checker(),
+            tester.bitwise_op_lookup(),
         );
 
         GpuHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
@@ -541,7 +544,10 @@ mod muldiv_tests {
                 tester.cpu_bitwise_op_lookup(),
                 tester.address_bits(),
             ),
-            tester.range_checker().device_ctx.clone(),
+            tester.address_bits(),
+            tester.timestamp_max_bits(),
+            tester.range_checker(),
+            tester.bitwise_op_lookup(),
         );
 
         GpuHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
@@ -1009,7 +1015,7 @@ mod is_equal_tests {
             F,
             VmModularIsEqualExecutor<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
             ModularIsEqualAir<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
-            HybridModularIsEqualChip<F, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
+            ModularIsEqualChipGpu<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
             ModularIsEqualChip<F, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
         >;
 
@@ -1056,21 +1062,12 @@ mod is_equal_tests {
             tester.dummy_memory_helper(),
         );
 
-        // Use hybrid chip wrapping the CPU chip
-        let hybrid_chip = HybridModularIsEqualChip::new(
-            ModularIsEqualChip::<F, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>::new(
-                ModularIsEqualFiller::new(
-                    Rv32IsEqualModAdapterFiller::new(
-                        tester.address_bits(),
-                        tester.cpu_bitwise_op_lookup(),
-                    ),
-                    offset,
-                    modulus_limbs,
-                    tester.cpu_bitwise_op_lookup(),
-                ),
-                tester.cpu_memory_helper(),
-            ),
-            tester.range_checker().device_ctx.clone(),
+        let hybrid_chip = ModularIsEqualChipGpu::<NUM_LANES, LANE_SIZE, TOTAL_LIMBS>::new(
+            modulus_limbs,
+            tester.address_bits(),
+            tester.timestamp_max_bits(),
+            tester.range_checker(),
+            tester.bitwise_op_lookup(),
         );
 
         GpuHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)

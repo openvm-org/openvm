@@ -1,6 +1,7 @@
 //! Prover extension for the GPU backend which still does trace generation on CPU.
 
-use openvm_algebra_transpiler::Rv32ModularArithmeticOpcode;
+use std::sync::Arc;
+
 use openvm_circuit::{
     arch::{DEFAULT_BLOCK_SIZE, *},
     system::{
@@ -14,124 +15,77 @@ use openvm_circuit::{
     },
 };
 use openvm_circuit_primitives::{
-    bigint::utils::big_uint_to_limbs, hybrid_chip::cpu_proving_ctx_to_gpu, Chip,
+    bigint::utils::big_uint_to_limbs, bitwise_op_lookup::BitwiseOperationLookupChipGPU,
+    var_range::VariableRangeCheckerChipGPU, Chip,
 };
-use openvm_cpu_backend::CpuBackend;
 use openvm_cuda_backend::{
-    base::DeviceMatrix,
     prelude::{F, SC},
     BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend,
 };
-use openvm_cuda_common::stream::GpuDeviceCtx;
-use openvm_instructions::LocalOpcode;
-use openvm_mod_circuit_builder::{ExprBuilderConfig, FieldExpressionMetadata};
-use openvm_rv32_adapters::{
-    Rv32IsEqualModAdapterCols, Rv32IsEqualModAdapterExecutor, Rv32IsEqualModAdapterFiller,
-    Rv32IsEqualModAdapterRecord, Rv32VecHeapAdapterCols, Rv32VecHeapAdapterExecutor,
+use openvm_mod_circuit_builder::{
+    cuda::FieldExprChipGpu, ExprBuilderConfig, FieldExpressionMetadata,
 };
+use openvm_rv32_adapters::{Rv32VecHeapAdapterCols, Rv32VecHeapAdapterExecutor};
 use openvm_rv32im_circuit::Rv32ImGpuProverExt;
-use openvm_stark_backend::{p3_air::BaseAir, prover::AirProvingContext};
-use strum::EnumCount;
+use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::{
+    cuda::ModularIsEqualChipGpu,
     fp2_chip::{get_fp2_addsub_chip, get_fp2_muldiv_chip, Fp2Air, Fp2Chip},
     modular_chip::*,
     AlgebraRecord, Fp2Extension, ModularExtension, Rv32ModularConfig, Rv32ModularWithFp2Config,
     FP2_BLOCKS_32, FP2_BLOCKS_48, MODULAR_BLOCKS_32, MODULAR_BLOCKS_48, NUM_LIMBS_32, NUM_LIMBS_48,
 };
 
-#[derive(derive_new::new)]
 pub struct HybridModularChip<F, const BLOCKS: usize, const BLOCK_SIZE: usize> {
-    cpu: ModularChip<F, BLOCKS, BLOCK_SIZE>,
-    device_ctx: GpuDeviceCtx,
+    gpu: FieldExprChipGpu,
+    _phantom: std::marker::PhantomData<ModularChip<F, BLOCKS, BLOCK_SIZE>>,
 }
 
-// Auto-implementation of Chip for GpuBackend for a Cpu Chip by doing conversion
-// of Dense->Matrix Record Arena, cpu tracegen, and then H2D transfer of the trace matrix.
-impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Chip<DenseRecordArena, GpuBackend>
-    for HybridModularChip<F, BLOCKS, BLOCK_SIZE>
-{
-    fn generate_proving_ctx(&self, mut arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-        let total_input_limbs =
-            self.cpu.inner.num_inputs() * self.cpu.inner.expr.canonical_num_limbs();
+impl<const BLOCKS: usize, const BLOCK_SIZE: usize> HybridModularChip<F, BLOCKS, BLOCK_SIZE> {
+    pub fn new(
+        cpu: ModularChip<F, BLOCKS, BLOCK_SIZE>,
+        byte_ptr_max_bits: usize,
+        timestamp_max_bits: usize,
+        range_checker_gpu: Arc<VariableRangeCheckerChipGPU>,
+        bitwise_lookup_gpu: Arc<BitwiseOperationLookupChipGPU<8>>,
+    ) -> Self {
+        let total_input_limbs = cpu.inner.num_inputs() * cpu.inner.expr.canonical_num_limbs();
         let layout = AdapterCoreLayout::with_metadata(FieldExpressionMetadata::<
             F,
             Rv32VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
         >::new(total_input_limbs));
-
-        let record_size = RecordSeeker::<
+        let (adapter_size, core_size) = RecordSeeker::<
             DenseRecordArena,
             AlgebraRecord<2, BLOCKS, BLOCK_SIZE>,
             _,
-        >::get_aligned_record_size(&layout);
-
-        let records = arena.allocated();
-        if records.is_empty() {
-            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
+        >::get_aligned_sizes(&layout);
+        let gpu = FieldExprChipGpu::new(
+            &cpu.inner,
+            2,
+            BLOCKS,
+            Rv32VecHeapAdapterCols::<F, 2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>::width(),
+            adapter_size + core_size,
+            adapter_size,
+            byte_ptr_max_bits as u32,
+            timestamp_max_bits as u32,
+            range_checker_gpu,
+            bitwise_lookup_gpu,
+        );
+        Self {
+            gpu,
+            _phantom: std::marker::PhantomData,
         }
-        debug_assert_eq!(records.len() % record_size, 0);
-
-        let num_records = records.len() / record_size;
-
-        let height = num_records.next_power_of_two();
-        let mut seeker = arena
-            .get_record_seeker::<AlgebraRecord<2, BLOCKS, BLOCK_SIZE>, AdapterCoreLayout<
-                FieldExpressionMetadata<
-                    F,
-                    Rv32VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
-                >,
-            >>();
-        let adapter_width =
-            Rv32VecHeapAdapterCols::<F, 2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>::width();
-        let width = adapter_width + BaseAir::<F>::width(&self.cpu.inner.expr);
-        let mut matrix_arena = MatrixRecordArena::<F>::with_capacity(height, width);
-        seeker.transfer_to_matrix_arena(&mut matrix_arena, layout);
-        let cpu_ctx = Chip::<_, CpuBackend<SC>>::generate_proving_ctx(&self.cpu, matrix_arena);
-        cpu_proving_ctx_to_gpu(cpu_ctx, &self.device_ctx)
     }
 }
 
-#[derive(derive_new::new)]
-pub struct HybridModularIsEqualChip<
-    F,
-    const NUM_LANES: usize,
-    const LANE_SIZE: usize,
-    const TOTAL_LIMBS: usize,
-> {
-    cpu: ModularIsEqualChip<F, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
-    device_ctx: GpuDeviceCtx,
-}
-
-impl<const NUM_LANES: usize, const LANE_SIZE: usize, const TOTAL_LIMBS: usize>
-    Chip<DenseRecordArena, GpuBackend>
-    for HybridModularIsEqualChip<F, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>
+// GPU tracegen: the field_expr kernel fills adapter + core columns directly from
+// the dense records (see openvm_mod_circuit_builder::cuda).
+impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Chip<DenseRecordArena, GpuBackend>
+    for HybridModularChip<F, BLOCKS, BLOCK_SIZE>
 {
-    fn generate_proving_ctx(&self, mut arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-        let record_size = size_of::<(
-            Rv32IsEqualModAdapterRecord<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
-            ModularIsEqualRecord<TOTAL_LIMBS>,
-        )>();
-        let trace_width = Rv32IsEqualModAdapterCols::<F, 2, NUM_LANES, LANE_SIZE>::width()
-            + ModularIsEqualCoreCols::<F, TOTAL_LIMBS>::width();
-        let records = arena.allocated();
-        if records.is_empty() {
-            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
-        }
-        debug_assert_eq!(records.len() % record_size, 0);
-
-        let num_records = records.len() / record_size;
-        let height = num_records.next_power_of_two();
-        let mut seeker = arena.get_record_seeker::<(
-            &mut Rv32IsEqualModAdapterRecord<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
-            &mut ModularIsEqualRecord<TOTAL_LIMBS>,
-        ), EmptyAdapterCoreLayout<
-            F,
-            Rv32IsEqualModAdapterExecutor<2, NUM_LANES, LANE_SIZE, TOTAL_LIMBS>,
-        >>();
-        let mut matrix_arena = MatrixRecordArena::<F>::with_capacity(height, trace_width);
-        seeker.transfer_to_matrix_arena(&mut matrix_arena, EmptyAdapterCoreLayout::new());
-        let cpu_ctx = Chip::<_, CpuBackend<SC>>::generate_proving_ctx(&self.cpu, matrix_arena);
-        cpu_proving_ctx_to_gpu(cpu_ctx, &self.device_ctx)
+    fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
+        self.gpu.generate_proving_ctx(arena.allocated())
     }
 }
 
@@ -153,13 +107,10 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
         let bitwise_lu_gpu = get_or_create_bitwise_op_lookup(inventory)?;
         let bitwise_lu = bitwise_lu_gpu.cpu_chip.clone().unwrap();
-        let device_ctx = range_checker_gpu.device_ctx.clone();
 
-        for (i, modulus) in extension.supported_moduli.iter().enumerate() {
+        for modulus in extension.supported_moduli.iter() {
             // determine the number of bytes needed to represent a prime field element
             let bytes = modulus.bits().div_ceil(8) as usize;
-            let start_offset =
-                Rv32ModularArithmeticOpcode::CLASS_OFFSET + i * Rv32ModularArithmeticOpcode::COUNT;
 
             let modulus_limbs = big_uint_to_limbs(modulus, 8);
 
@@ -178,7 +129,13 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                     bitwise_lu.clone(),
                     pointer_max_bits,
                 );
-                inventory.add_executor_chip(HybridModularChip::new(addsub, device_ctx.clone()));
+                inventory.add_executor_chip(HybridModularChip::new(
+                    addsub,
+                    pointer_max_bits,
+                    timestamp_max_bits,
+                    range_checker_gpu.clone(),
+                    bitwise_lu_gpu.clone(),
+                ));
 
                 inventory.next_air::<ModularAir<MODULAR_BLOCKS_32, DEFAULT_BLOCK_SIZE>>()?;
                 let muldiv = get_modular_muldiv_chip::<F, MODULAR_BLOCKS_32, DEFAULT_BLOCK_SIZE>(
@@ -188,7 +145,13 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                     bitwise_lu.clone(),
                     pointer_max_bits,
                 );
-                inventory.add_executor_chip(HybridModularChip::new(muldiv, device_ctx.clone()));
+                inventory.add_executor_chip(HybridModularChip::new(
+                    muldiv,
+                    pointer_max_bits,
+                    timestamp_max_bits,
+                    range_checker_gpu.clone(),
+                    bitwise_lu_gpu.clone(),
+                ));
 
                 let modulus_limbs = std::array::from_fn(|i| {
                     if i < modulus_limbs.len() {
@@ -198,22 +161,18 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                     }
                 });
                 inventory.next_air::<ModularIsEqualAir<MODULAR_BLOCKS_32, DEFAULT_BLOCK_SIZE, NUM_LIMBS_32>>()?;
-                let is_eq = ModularIsEqualChip::<
-                    F,
+                let is_eq = ModularIsEqualChipGpu::<
                     MODULAR_BLOCKS_32,
                     DEFAULT_BLOCK_SIZE,
                     NUM_LIMBS_32,
                 >::new(
-                    ModularIsEqualFiller::new(
-                        Rv32IsEqualModAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
-                        start_offset,
-                        modulus_limbs,
-                        bitwise_lu.clone(),
-                    ),
-                    mem_helper.clone(),
+                    modulus_limbs,
+                    pointer_max_bits,
+                    timestamp_max_bits,
+                    range_checker_gpu.clone(),
+                    bitwise_lu_gpu.clone(),
                 );
-                inventory
-                    .add_executor_chip(HybridModularIsEqualChip::new(is_eq, device_ctx.clone()));
+                inventory.add_executor_chip(is_eq);
             } else if bytes <= NUM_LIMBS_48 {
                 let config = ExprBuilderConfig {
                     modulus: modulus.clone(),
@@ -229,7 +188,13 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                     bitwise_lu.clone(),
                     pointer_max_bits,
                 );
-                inventory.add_executor_chip(HybridModularChip::new(addsub, device_ctx.clone()));
+                inventory.add_executor_chip(HybridModularChip::new(
+                    addsub,
+                    pointer_max_bits,
+                    timestamp_max_bits,
+                    range_checker_gpu.clone(),
+                    bitwise_lu_gpu.clone(),
+                ));
 
                 inventory.next_air::<ModularAir<MODULAR_BLOCKS_48, DEFAULT_BLOCK_SIZE>>()?;
                 let muldiv = get_modular_muldiv_chip::<F, MODULAR_BLOCKS_48, DEFAULT_BLOCK_SIZE>(
@@ -239,7 +204,13 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                     bitwise_lu.clone(),
                     pointer_max_bits,
                 );
-                inventory.add_executor_chip(HybridModularChip::new(muldiv, device_ctx.clone()));
+                inventory.add_executor_chip(HybridModularChip::new(
+                    muldiv,
+                    pointer_max_bits,
+                    timestamp_max_bits,
+                    range_checker_gpu.clone(),
+                    bitwise_lu_gpu.clone(),
+                ));
 
                 let modulus_limbs = std::array::from_fn(|i| {
                     if i < modulus_limbs.len() {
@@ -249,22 +220,18 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                     }
                 });
                 inventory.next_air::<ModularIsEqualAir<MODULAR_BLOCKS_48, DEFAULT_BLOCK_SIZE, NUM_LIMBS_48>>()?;
-                let is_eq = ModularIsEqualChip::<
-                    F,
+                let is_eq = ModularIsEqualChipGpu::<
                     MODULAR_BLOCKS_48,
                     DEFAULT_BLOCK_SIZE,
                     NUM_LIMBS_48,
                 >::new(
-                    ModularIsEqualFiller::new(
-                        Rv32IsEqualModAdapterFiller::new(pointer_max_bits, bitwise_lu.clone()),
-                        start_offset,
-                        modulus_limbs,
-                        bitwise_lu.clone(),
-                    ),
-                    mem_helper.clone(),
+                    modulus_limbs,
+                    pointer_max_bits,
+                    timestamp_max_bits,
+                    range_checker_gpu.clone(),
+                    bitwise_lu_gpu.clone(),
                 );
-                inventory
-                    .add_executor_chip(HybridModularIsEqualChip::new(is_eq, device_ctx.clone()));
+                inventory.add_executor_chip(is_eq);
             } else {
                 panic!("Modulus too large");
             }
@@ -274,51 +241,55 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
     }
 }
 
-#[derive(derive_new::new)]
 pub struct HybridFp2Chip<F, const BLOCKS: usize, const BLOCK_SIZE: usize> {
-    cpu: Fp2Chip<F, BLOCKS, BLOCK_SIZE>,
-    device_ctx: GpuDeviceCtx,
+    gpu: FieldExprChipGpu,
+    _phantom: std::marker::PhantomData<Fp2Chip<F, BLOCKS, BLOCK_SIZE>>,
 }
 
-impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Chip<DenseRecordArena, GpuBackend>
-    for HybridFp2Chip<F, BLOCKS, BLOCK_SIZE>
-{
-    fn generate_proving_ctx(&self, mut arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
-        let total_input_limbs =
-            self.cpu.inner.num_inputs() * self.cpu.inner.expr.canonical_num_limbs();
+impl<const BLOCKS: usize, const BLOCK_SIZE: usize> HybridFp2Chip<F, BLOCKS, BLOCK_SIZE> {
+    pub fn new(
+        cpu: Fp2Chip<F, BLOCKS, BLOCK_SIZE>,
+        byte_ptr_max_bits: usize,
+        timestamp_max_bits: usize,
+        range_checker_gpu: Arc<VariableRangeCheckerChipGPU>,
+        bitwise_lookup_gpu: Arc<BitwiseOperationLookupChipGPU<8>>,
+    ) -> Self {
+        let total_input_limbs = cpu.inner.num_inputs() * cpu.inner.expr.canonical_num_limbs();
         let layout = AdapterCoreLayout::with_metadata(FieldExpressionMetadata::<
             F,
             Rv32VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
         >::new(total_input_limbs));
-
-        let record_size = RecordSeeker::<
+        let (adapter_size, core_size) = RecordSeeker::<
             DenseRecordArena,
             AlgebraRecord<2, BLOCKS, BLOCK_SIZE>,
             _,
-        >::get_aligned_record_size(&layout);
-
-        let records = arena.allocated();
-        if records.is_empty() {
-            return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
+        >::get_aligned_sizes(&layout);
+        let gpu = FieldExprChipGpu::new(
+            &cpu.inner,
+            2,
+            BLOCKS,
+            Rv32VecHeapAdapterCols::<F, 2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>::width(),
+            adapter_size + core_size,
+            adapter_size,
+            byte_ptr_max_bits as u32,
+            timestamp_max_bits as u32,
+            range_checker_gpu,
+            bitwise_lookup_gpu,
+        );
+        Self {
+            gpu,
+            _phantom: std::marker::PhantomData,
         }
-        debug_assert_eq!(records.len() % record_size, 0);
+    }
+}
 
-        let num_records = records.len() / record_size;
-        let height = num_records.next_power_of_two();
-        let mut seeker = arena
-            .get_record_seeker::<AlgebraRecord<2, BLOCKS, BLOCK_SIZE>, AdapterCoreLayout<
-                FieldExpressionMetadata<
-                    F,
-                    Rv32VecHeapAdapterExecutor<2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>,
-                >,
-            >>();
-        let adapter_width =
-            Rv32VecHeapAdapterCols::<F, 2, BLOCKS, BLOCKS, BLOCK_SIZE, BLOCK_SIZE>::width();
-        let width = adapter_width + BaseAir::<F>::width(&self.cpu.inner.expr);
-        let mut matrix_arena = MatrixRecordArena::<F>::with_capacity(height, width);
-        seeker.transfer_to_matrix_arena(&mut matrix_arena, layout);
-        let cpu_ctx = Chip::<_, CpuBackend<SC>>::generate_proving_ctx(&self.cpu, matrix_arena);
-        cpu_proving_ctx_to_gpu(cpu_ctx, &self.device_ctx)
+// GPU tracegen: the field_expr kernel fills adapter + core columns directly from
+// the dense records (see openvm_mod_circuit_builder::cuda).
+impl<const BLOCKS: usize, const BLOCK_SIZE: usize> Chip<DenseRecordArena, GpuBackend>
+    for HybridFp2Chip<F, BLOCKS, BLOCK_SIZE>
+{
+    fn generate_proving_ctx(&self, arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
+        self.gpu.generate_proving_ctx(arena.allocated())
     }
 }
 
@@ -337,7 +308,6 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
         let bitwise_lu_gpu = get_or_create_bitwise_op_lookup(inventory)?;
         let bitwise_lu = bitwise_lu_gpu.cpu_chip.clone().unwrap();
-        let device_ctx = range_checker_gpu.device_ctx.clone();
 
         for (_, modulus) in extension.supported_moduli.iter() {
             // determine the number of bytes needed to represent a prime field element
@@ -358,7 +328,13 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
                     bitwise_lu.clone(),
                     pointer_max_bits,
                 );
-                inventory.add_executor_chip(HybridFp2Chip::new(addsub, device_ctx.clone()));
+                inventory.add_executor_chip(HybridFp2Chip::new(
+                    addsub,
+                    pointer_max_bits,
+                    timestamp_max_bits,
+                    range_checker_gpu.clone(),
+                    bitwise_lu_gpu.clone(),
+                ));
 
                 inventory.next_air::<Fp2Air<FP2_BLOCKS_32, DEFAULT_BLOCK_SIZE>>()?;
                 let muldiv = get_fp2_muldiv_chip::<F, FP2_BLOCKS_32, DEFAULT_BLOCK_SIZE>(
@@ -368,7 +344,13 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
                     bitwise_lu.clone(),
                     pointer_max_bits,
                 );
-                inventory.add_executor_chip(HybridFp2Chip::new(muldiv, device_ctx.clone()));
+                inventory.add_executor_chip(HybridFp2Chip::new(
+                    muldiv,
+                    pointer_max_bits,
+                    timestamp_max_bits,
+                    range_checker_gpu.clone(),
+                    bitwise_lu_gpu.clone(),
+                ));
             } else if bytes <= NUM_LIMBS_48 {
                 let config = ExprBuilderConfig {
                     modulus: modulus.clone(),
@@ -384,7 +366,13 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
                     bitwise_lu.clone(),
                     pointer_max_bits,
                 );
-                inventory.add_executor_chip(HybridFp2Chip::new(addsub, device_ctx.clone()));
+                inventory.add_executor_chip(HybridFp2Chip::new(
+                    addsub,
+                    pointer_max_bits,
+                    timestamp_max_bits,
+                    range_checker_gpu.clone(),
+                    bitwise_lu_gpu.clone(),
+                ));
 
                 inventory.next_air::<Fp2Air<FP2_BLOCKS_48, DEFAULT_BLOCK_SIZE>>()?;
                 let muldiv = get_fp2_muldiv_chip::<F, FP2_BLOCKS_48, DEFAULT_BLOCK_SIZE>(
@@ -394,7 +382,13 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
                     bitwise_lu.clone(),
                     pointer_max_bits,
                 );
-                inventory.add_executor_chip(HybridFp2Chip::new(muldiv, device_ctx.clone()));
+                inventory.add_executor_chip(HybridFp2Chip::new(
+                    muldiv,
+                    pointer_max_bits,
+                    timestamp_max_bits,
+                    range_checker_gpu.clone(),
+                    bitwise_lu_gpu.clone(),
+                ));
             } else {
                 panic!("Modulus too large");
             }

@@ -211,7 +211,10 @@ mod ec_addne_tests {
                 tester.cpu_bitwise_op_lookup(),
                 tester.address_bits(),
             ),
-            tester.range_checker().device_ctx.clone(),
+            tester.address_bits(),
+            tester.timestamp_max_bits(),
+            tester.range_checker(),
+            tester.bitwise_op_lookup(),
         );
 
         GpuTestChipHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
@@ -664,7 +667,10 @@ mod ec_double_tests {
                 tester.address_bits(),
                 a_biguint,
             ),
-            tester.range_checker().device_ctx.clone(),
+            tester.address_bits(),
+            tester.timestamp_max_bits(),
+            tester.range_checker(),
+            tester.bitwise_op_lookup(),
         );
 
         GpuTestChipHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)

@@ -38,6 +38,8 @@ pub mod modular_chip;
 mod execution;
 mod fp2;
 pub use fp2::*;
+#[cfg(feature = "cuda")]
+pub mod cuda;
 mod extension;
 pub use extension::*;
 pub mod fields;
