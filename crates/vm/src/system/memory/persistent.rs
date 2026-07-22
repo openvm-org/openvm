@@ -205,9 +205,7 @@ pub struct FinalTouchedLabel<F, const DIGEST_WIDTH: usize> {
 /// *written* during execution (per-write dirtiness, tracked by `TracingMemory`:
 /// writing values equal to the existing ones still marks a leaf dirty), keyed like
 /// `Equipartition<_, DIGEST_WIDTH>` so entries match the merkle chip's `final_memory`
-/// keys. Computed by [`PersistentBoundaryChip::finalize`] from the touched blocks' bits
-/// and consumed by the merkle chip, which emits final-direction rows only along dirty
-/// paths.
+/// keys.
 pub type DirtyLeaves = FxHashSet<(u32, u32)>;
 
 // (block_idx, timestamp, is_dirty, values)
