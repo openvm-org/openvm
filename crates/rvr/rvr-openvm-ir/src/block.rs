@@ -55,6 +55,14 @@ impl Terminator {
     }
 
     /// Returns the control-flow behavior of this terminator.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an instruction node in terminator position does not describe
+    /// real control flow. Codegen only emits an instruction terminator's
+    /// control-flow effect, so a plain instruction here would be silently
+    /// dropped from the artifact; lifters must emit such instructions as
+    /// [`LiftedInstr::Body`] instead.
     pub fn cfg_term(&self, pc: u64, fall_pc: u64) -> CfgTerm {
         match self {
             Self::FallThrough => CfgTerm::FallThrough,
@@ -63,7 +71,20 @@ impl Terminator {
                 message: message.clone(),
             },
             Self::Instruction { node, .. } => {
-                node.cfg_term(pc, fall_pc).unwrap_or(CfgTerm::FallThrough)
+                let term = node.cfg_term(pc, fall_pc).unwrap_or_else(|| {
+                    panic!(
+                        "instruction `{}` in terminator position at pc {pc:#x} \
+                         does not define cfg_term",
+                        node.opname()
+                    )
+                });
+                assert!(
+                    !matches!(term, CfgTerm::FallThrough),
+                    "instruction `{}` in terminator position at pc {pc:#x} \
+                     declares fall-through control flow; lift it as a body instruction",
+                    node.opname()
+                );
+                term
             }
         }
     }
