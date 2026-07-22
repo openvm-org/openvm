@@ -277,11 +277,7 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
                     is_jal: 1,
                     core_from_pc: 0,
                 };
-                ctx.emit_wr1_inline(
-                    link_dst.map(variable_index),
-                    &hex_u64(next_pc),
-                    Some(baked),
-                );
+                ctx.emit_wr1_inline(link_dst.map(variable_index), &hex_u64(next_pc), Some(baked));
             } else if let Some(dst) = link_dst {
                 ctx.write_var(dst, &hex_u64(next_pc));
             } else {
@@ -296,14 +292,18 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
             target_mask,
             ..
         } => {
+            let base_var = match term {
+                Terminator::Instruction { node, .. } => node.indirect_base_var(),
+                _ => None,
+            };
             let base_value = if inline_shape == Some(InlineRecordShape::Rw1) {
-                let base = match base_value {
-                    CfgOperand::Var(base) => variable_index(base),
-                    CfgOperand::Const(0) => 0,
-                    CfgOperand::Const(_) => {
-                        unreachable!("RV64 JALR compact base must be a register or zero")
-                    }
-                };
+                let base = base_var
+                    .or(match base_value {
+                        CfgOperand::Var(base) => Some(base),
+                        CfgOperand::Const(_) => None,
+                    })
+                    .map(variable_index)
+                    .expect("compact indirect-jump record requires a variable base");
                 let baked = ArenaRw1Baked {
                     rs1_ptr: u32::from(base) * 8,
                     rd_ptr: link_dst.map_or(u32::MAX, |rd| rd.index() * 8),
@@ -316,17 +316,26 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
                     &hex_u64(next_pc),
                     Some(baked),
                 )
+            } else if let Some(base) = base_var {
+                let value = ctx.read_var(base);
+                if link_dst == Some(base) {
+                    // Save the base before writing the same variable as the link
+                    // destination, preserving the jump target across the write.
+                    ctx.materialize_u64(&value)
+                } else {
+                    value
+                }
             } else {
                 match base_value {
                     CfgOperand::Var(base) => {
-                    let value = ctx.read_var(base);
-                    if link_dst.is_some_and(|dst| dst == base) {
-                        // Save the base before writing the same variable as the link
-                        // destination, preserving the jump target across the write.
-                        ctx.materialize_u64(&value)
-                    } else {
-                        value
-                    }
+                        let value = ctx.read_var(base);
+                        if link_dst.is_some_and(|dst| dst == base) {
+                            // Save the base before writing the same variable as the link
+                            // destination, preserving the jump target across the write.
+                            ctx.materialize_u64(&value)
+                        } else {
+                            value
+                        }
                     }
                     CfgOperand::Const(value) => hex_u64(value),
                 }

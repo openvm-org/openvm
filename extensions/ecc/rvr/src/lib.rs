@@ -9,9 +9,7 @@ use openvm_ecc_transpiler::Rv64WeierstrassOpcode::{
     self, EC_ADD_NE, EC_DOUBLE, SETUP_EC_ADD_NE, SETUP_EC_DOUBLE,
 };
 use openvm_instructions::{
-    riscv::{
-        RV64_MEMORY_AS, RV64_NUM_REGISTERS, RV64_REGISTER_AS, RV64_REGISTER_BYTES,
-    },
+    riscv::{RV64_MEMORY_AS, RV64_NUM_REGISTERS, RV64_REGISTER_AS, RV64_REGISTER_BYTES},
     LocalOpcode, VmOpcode,
 };
 use rvr_openvm_ext_algebra::{VecHeapRecordDescriptor, VEC_HEAP_RECORD_C_HEADER};

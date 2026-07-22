@@ -9,9 +9,10 @@ use openvm_instructions::{
 };
 use openvm_platform::WORD_SIZE;
 use openvm_riscv_transpiler::{Rv64HintStoreOpcode, Rv64LoadStoreOpcode, MAX_HINT_BUFFER_DWORDS};
+#[cfg(test)]
+use rvr_openvm_ir::PageAddressSpace;
 use rvr_openvm_ir::{
     CfgEffect, ExtEmitCtx, ExtInstr, InlineRecordShape, InstrAt, LiftedInstr, MemWidth,
-    PageAddressSpace,
 };
 use rvr_openvm_lift::{
     air_index_codegen_fingerprint, air_index_to_c, max_main_memory_pages_for_contiguous_range,
@@ -71,8 +72,7 @@ impl ExtInstr for HintStoreWInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let (ptr, from_timestamp, ptr_prev_timestamp) =
-            ctx.read_var_with_trace(self.ptr_reg);
+        let (ptr, from_timestamp, ptr_prev_timestamp) = ctx.read_var_with_trace(self.ptr_reg);
         // HINT_STORED has the same three-tick shape as HINT_BUFFER: pointer
         // read, row-count placeholder, and memory write.
         ctx.trace_timestamp();
@@ -88,10 +88,7 @@ impl ExtInstr for HintStoreWInstr {
                 &ptr,
                 &format!("{}u", self.from_pc),
                 &from_timestamp,
-                &format!(
-                    "{}u",
-                    self.ptr_reg.index() * RV64_REGISTER_NUM_LIMBS as u32
-                ),
+                &format!("{}u", self.ptr_reg.index() * RV64_REGISTER_NUM_LIMBS as u32),
                 &ptr_prev_timestamp,
                 &format!("{chip_idx}u"),
             ],
@@ -129,8 +126,7 @@ impl ExtInstr for HintBufferInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let (ptr, from_timestamp, ptr_prev_timestamp) =
-            ctx.read_var_with_trace(self.ptr_reg);
+        let (ptr, from_timestamp, ptr_prev_timestamp) = ctx.read_var_with_trace(self.ptr_reg);
         let (n, _, count_prev_timestamp) = ctx.read_var_with_trace(self.num_words_reg);
         ctx.write_line(&format!(
             "if (unlikely(({n} - 1ull) >= {MAX_HINT_BUFFER_DWORDS}ull)) {{"
@@ -157,10 +153,7 @@ impl ExtInstr for HintBufferInstr {
                 &callback_count,
                 &format!("{}u", self.from_pc),
                 &from_timestamp,
-                &format!(
-                    "{}u",
-                    self.ptr_reg.index() * RV64_REGISTER_NUM_LIMBS as u32
-                ),
+                &format!("{}u", self.ptr_reg.index() * RV64_REGISTER_NUM_LIMBS as u32),
                 &ptr_prev_timestamp,
                 &format!(
                     "{}u",

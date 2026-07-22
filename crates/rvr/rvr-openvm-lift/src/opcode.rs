@@ -85,9 +85,11 @@ impl ExtInstr for SystemPhantomInstr {
     }
 }
 
+#[cfg(test)]
 #[derive(Debug, Clone)]
 pub(crate) struct NopInstr;
 
+#[cfg(test)]
 impl ExtInstr for NopInstr {
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         ctx.trace_timestamp();

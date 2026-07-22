@@ -740,6 +740,36 @@ fn rvr_preflight_inline_addsub_records_match_assembler() {
     }
 }
 
+#[test]
+fn rvr_preflight_jalr_x0_base_records_match_assembler() {
+    let exe = exe(&[jalr(1, 0, 4), terminate()]);
+
+    std::env::set_var("OPENVM_RVR_INLINE_RECORDS", "0");
+    let (off_output, off_arenas, _) = run_inline_addsub_differential_arm(&exe);
+    assert!(off_output.inline_records.is_empty());
+
+    std::env::set_var("OPENVM_RVR_INLINE_RECORDS", "1");
+    let (on_output, on_arenas, _) = run_inline_addsub_differential_arm(&exe);
+
+    assert_eq!(
+        off_output.raw_logs.program_log,
+        on_output.raw_logs.program_log
+    );
+    assert_system_records_eq(
+        "jalr_x0_base_differential",
+        &off_output.system_records,
+        &on_output.system_records,
+    );
+    assert_eq!(off_arenas.len(), on_arenas.len());
+    for (air_idx, (off_arena, on_arena)) in off_arenas.iter().zip(on_arenas.iter()).enumerate() {
+        assert_eq!(
+            off_arena.allocated(),
+            on_arena.allocated(),
+            "JALR x0 record bytes differ for air_idx {air_idx}"
+        );
+    }
+}
+
 /// Stage-2 byte oracle over every migrated RV64IM wire family. The delta arm
 /// reconstructs its omitted previous timestamps and partitions the global
 /// stream; the resulting Dense arenas must match the established compact arm

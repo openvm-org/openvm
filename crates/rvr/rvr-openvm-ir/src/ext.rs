@@ -21,12 +21,16 @@ pub enum InlineRecordShape {
     Wr1,
     Rw1,
     /// Extension-owned record bytes with an extension-defined consumer.
-    Custom { record_size: usize },
+    Custom {
+        record_size: usize,
+    },
     /// Extension-owned packed records with a runtime row count. These records
     /// are valid only with a matching arena-native target: `capacity_per_row`
     /// sizes the backing from the metered AIR height, while the extension
     /// advances the target byte cursor by each record's actual packed size.
-    CustomVariableRows { capacity_per_row: usize },
+    CustomVariableRows {
+        capacity_per_row: usize,
+    },
 }
 
 /// Program-redundant fields required when an ALU compact record is emitted

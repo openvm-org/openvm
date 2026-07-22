@@ -18,6 +18,13 @@ WARNINGS += -Wno-c++-compat -Wno-c++98-compat \
 	-Wno-pedantic -Wno-unused-parameter -Wno-padded \
 	-Wno-cast-align -Wno-unsafe-buffer-usage
 
+# Clang 22 diagnoses hosts with multiple GCC installations while selecting its
+# C++ include path, even though the generated runtime is C. Probe before adding
+# the suppression so older supported Clang releases do not reject the flag.
+WARNINGS += $(shell $(CC) -Werror -Wno-gcc-install-dir-libstdcxx \
+	-x c -fsyntax-only /dev/null >/dev/null 2>&1 && \
+	printf '%s' -Wno-gcc-install-dir-libstdcxx)
+
 # Do not apply OpenVM warning flags to third-party C. Compiler errors still
 # fail the build.
 VENDOR_WARNINGS = -Wno-everything

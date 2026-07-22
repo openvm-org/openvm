@@ -77,12 +77,7 @@ impl ExtInstr for Rv64MInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let result_template = muldiv_expr(
-            self.op,
-            self.word,
-            "__RVR_LHS__",
-            "__RVR_RHS__",
-        );
+        let result_template = muldiv_expr(self.op, self.word, "__RVR_LHS__", "__RVR_RHS__");
         let local_opcode = match self.op {
             MulDivOp::Mul | MulDivOp::MulHighSigned | MulDivOp::DivSigned => 0,
             MulDivOp::MulHighSignedUnsigned | MulDivOp::DivUnsigned => 1,

@@ -237,18 +237,16 @@ impl Fp2RvrExtension {
                 )
                 .with_inline_record(from_pc, local_opcode, chip_idx, emit_inline),
             ),
-            x if x == Fp2Opcode::SETUP_ADDSUB as usize => {
-                Box::new(
-                    Fp2SetupInstr::new(
-                        rd_reg,
-                        rs1_reg,
-                        rs2_reg,
-                        info.num_limbs,
-                        info.modulus_bytes.clone(),
-                    )
-                    .with_inline_record(from_pc, local_opcode, chip_idx, emit_inline),
+            x if x == Fp2Opcode::SETUP_ADDSUB as usize => Box::new(
+                Fp2SetupInstr::new(
+                    rd_reg,
+                    rs1_reg,
+                    rs2_reg,
+                    info.num_limbs,
+                    info.modulus_bytes.clone(),
                 )
-            }
+                .with_inline_record(from_pc, local_opcode, chip_idx, emit_inline),
+            ),
             x if x == Fp2Opcode::MUL as usize => Box::new(
                 Fp2ArithInstr::new(
                     ModOp::Mul,
@@ -271,18 +269,16 @@ impl Fp2RvrExtension {
                 )
                 .with_inline_record(from_pc, local_opcode, chip_idx, emit_inline),
             ),
-            x if x == Fp2Opcode::SETUP_MULDIV as usize => {
-                Box::new(
-                    Fp2SetupInstr::new(
-                        rd_reg,
-                        rs1_reg,
-                        rs2_reg,
-                        info.num_limbs,
-                        info.modulus_bytes.clone(),
-                    )
-                    .with_inline_record(from_pc, local_opcode, chip_idx, emit_inline),
+            x if x == Fp2Opcode::SETUP_MULDIV as usize => Box::new(
+                Fp2SetupInstr::new(
+                    rd_reg,
+                    rs1_reg,
+                    rs2_reg,
+                    info.num_limbs,
+                    info.modulus_bytes.clone(),
                 )
-            }
+                .with_inline_record(from_pc, local_opcode, chip_idx, emit_inline),
+            ),
             _ => return None,
         };
 

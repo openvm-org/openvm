@@ -350,7 +350,7 @@ impl ExtensionRegistry {
     pub fn codegen_fingerprints(&self) -> Option<Vec<Vec<u8>>> {
         self.extensions
             .iter()
-            .map(|ext| ext.codegen_fingerprint())
+            .map(|ext| ext.extension.codegen_fingerprint())
             .collect()
     }
 
