@@ -126,11 +126,6 @@ pub struct SystemRecords<F> {
 pub struct TouchedBlock<F> {
     pub address_space: u32,
     pub ptr: u32,
-    /// Whether the block was *written* during the segment (0/1), as tracked by
-    /// `TracingMemory`. Dirtiness is per write access, independent of the written
-    /// content: writing values equal to the existing ones still marks the block dirty.
-    /// Not consumed yet: a follow-up switches the boundary and merkle chips to commit
-    /// final state only for leaves containing a dirty block.
     pub is_dirty: u32,
     pub timestamp: u32,
     pub values: [F; BLOCK_FE_WIDTH],

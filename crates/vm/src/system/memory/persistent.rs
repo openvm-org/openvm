@@ -194,19 +194,24 @@ pub struct FinalTouchedLabel<F, const DIGEST_WIDTH: usize> {
     final_hash: [F; DIGEST_WIDTH],
     /// Per-block timestamps. Each BLOCK_FE_WIDTH block has its own timestamp.
     final_timestamps: [u32; BLOCKS_PER_LEAF],
-    /// Whether the leaf's final values differ from its initial values. Dirtiness gates
-    /// all of the row's final-state interactions: a clean leaf's final hash equals its
-    /// initial one and is never recorded with the hasher.
+    /// Whether some block of the leaf was *written* during execution (independent of
+    /// the written content). Dirtiness gates all of the row's final-state interactions:
+    /// a clean leaf's final hash equals its initial one and is never recorded with the
+    /// hasher.
     is_dirty: bool,
 }
 
-/// Pointers `(address_space, leaf_ptr)` of the touched leaves whose values changed,
-/// keyed like `Equipartition<_, DIGEST_WIDTH>` so entries match the merkle chip's
-/// `final_memory` keys. Computed by [`PersistentBoundaryChip::finalize`] and consumed by
-/// the merkle chip, which emits final-direction rows only along dirty paths.
+/// Pointers `(address_space, leaf_ptr)` of the leaves containing at least one block
+/// *written* during execution (per-write dirtiness, tracked by `TracingMemory`:
+/// writing values equal to the existing ones still marks a leaf dirty), keyed like
+/// `Equipartition<_, DIGEST_WIDTH>` so entries match the merkle chip's `final_memory`
+/// keys. Computed by [`PersistentBoundaryChip::finalize`] from the touched blocks' bits
+/// and consumed by the merkle chip, which emits final-direction rows only along dirty
+/// paths.
 pub type DirtyLeaves = FxHashSet<(u32, u32)>;
 
-type BlockInfo<F> = (usize, u32, [F; BLOCK_FE_WIDTH]); // (block_idx, timestamp, values)
+// (block_idx, timestamp, is_dirty, values)
+type BlockInfo<F> = (usize, u32, bool, [F; BLOCK_FE_WIDTH]);
 type EnrichedEntry<F> = ((u32, u32), BlockInfo<F>); // ((addr_space, leaf_label), block_info)
 /// Touched memory grouped into merkle leaves: `(addr_space, leaf_label) -> blocks`.
 pub(crate) type LeafGroupedTouchedMemory<F> = Vec<((u32, u32), Vec<BlockInfo<F>>)>;
@@ -220,7 +225,12 @@ pub(crate) fn group_touched_memory_by_leaf<F: Copy + Send + Sync>(
             let leaf_label = block.ptr / VM_DIGEST_WIDTH as u32;
             let block_idx = ((block.ptr % VM_DIGEST_WIDTH as u32) / BLOCK_FE_WIDTH as u32) as usize;
             let key = (block.address_space, leaf_label);
-            let block_info = (block_idx, block.timestamp, block.values);
+            let block_info = (
+                block_idx,
+                block.timestamp,
+                block.is_dirty != 0,
+                block.values,
+            );
             (key, block_info)
         })
         .collect();
@@ -285,17 +295,22 @@ impl<const DIGEST_WIDTH: usize, F: PrimeField32> PersistentBoundaryChip<F, DIGES
                 let mut final_values = init_values;
                 let mut timestamps = [0u32; BLOCKS_PER_LEAF];
 
-                for &(block_idx, ts, values) in blocks {
+                for &(block_idx, ts, _, values) in blocks {
                     timestamps[block_idx] = ts;
                     for (i, &val) in values.iter().enumerate() {
                         final_values[block_idx * BLOCK_FE_WIDTH + i] = val;
                     }
                 }
 
-                // Value inequality is the single definition of dirtiness (equal values
-                // give equal hashes); a clean leaf's final hash equals the initial one,
-                // so the second hash is skipped entirely.
-                let is_dirty = final_values != init_values;
+                // Dirtiness is per *write*, tracked during execution: a leaf is dirty
+                // iff some block of it was written, even if the written values equal
+                // the initial ones. A clean (unwritten) leaf cannot have changed, so
+                // its final hash is the initial one.
+                let is_dirty = blocks.iter().any(|&(_, _, dirty, _)| dirty);
+                debug_assert!(
+                    is_dirty || final_values == init_values,
+                    "unwritten leaf ({addr_space}, {leaf_label}) changed values"
+                );
                 let initial_hash = hasher.hash(&init_values);
                 let final_hash = if is_dirty {
                     hasher.hash(&final_values)
