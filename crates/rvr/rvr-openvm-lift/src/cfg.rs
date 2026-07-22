@@ -376,7 +376,7 @@ fn is_control_flow(li: &LiftedInstr) -> bool {
 fn cfg_term_of(li: &LiftedInstr) -> Option<CfgTerm> {
     match li {
         LiftedInstr::Term { pc, terminator, .. } => {
-            Some(terminator.cfg_term(*pc, pc + INSTR_SIZE as u64))
+            Some(terminator.cfg_term(*pc, pc.wrapping_add(INSTR_SIZE as u64)))
         }
         LiftedInstr::Body(_) => None,
     }

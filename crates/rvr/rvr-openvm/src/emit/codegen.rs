@@ -18,7 +18,7 @@ pub struct TermCtx<'a> {
 /// Dynamic targets use the dispatch table. Exit and trap write cached registers
 /// back to `RvState` before returning from the generated block.
 pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &TermCtx) {
-    let next_pc = pc + u64::from(DEFAULT_PC_STEP);
+    let next_pc = pc.wrapping_add(u64::from(DEFAULT_PC_STEP));
     let args = ctx.tail_call_args();
 
     match term.cfg_term(pc, next_pc) {
