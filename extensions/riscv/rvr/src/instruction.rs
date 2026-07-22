@@ -37,7 +37,7 @@ pub(crate) fn hex_u64(value: u64) -> String {
     format!("0x{value:016x}ull")
 }
 
-/// Architectural no-op used when an instruction writes to `x0`.
+/// Instruction node used when a side-effect-free operation writes to `x0`.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct NopInstr;
 

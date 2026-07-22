@@ -75,7 +75,7 @@ impl Terminator {
         }
     }
 
-    /// Returns true if this is a block-ending terminator rather than fall-through.
+    /// Returns whether this terminator ends the block.
     pub fn is_block_end(&self, pc: u64, fall_pc: u64) -> bool {
         !matches!(self.cfg_term(pc, fall_pc), CfgTerm::FallThrough)
     }

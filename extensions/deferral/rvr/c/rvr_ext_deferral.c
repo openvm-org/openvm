@@ -103,7 +103,8 @@ uint32_t rvr_ext_deferral_output(RvState* restrict state, uint64_t output_ptr,
 
   /* Write raw output to guest memory in DEFERRAL_DIGEST_SIZE-byte rows. Each
    * chunk spans at most TRACER_MEM_PAGE_BUF_CAP pages at arbitrary alignment,
-   * then drains without creating an instruction or segment checkpoint. */
+   * then drains while preserving the instruction counter and current
+   * segmentation checkpoint. */
   uint32_t num_data_rows = output_len / DEFERRAL_DIGEST_SIZE;
   uint64_t row_words[DIGEST_MEMORY_OPS];
   for (uint64_t chunk_start = 0; chunk_start < num_data_rows;

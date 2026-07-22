@@ -34,9 +34,9 @@ pub struct TermCtx<'a> {
 
 /// Emit C code for a terminator using tail calls between blocks.
 ///
-/// Static targets use direct tail calls or trap when no block exists. Dynamic
-/// targets use the dispatch table. Exit and trap write cached registers back to
-/// `RvState` before returning from the generated block.
+/// Static block-start targets use direct tail calls; other static targets trap.
+/// Dynamic targets use the dispatch table. Exit and trap write cached registers
+/// back to `RvState` before returning from the generated block.
 pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &TermCtx) {
     let next_pc = pc.wrapping_add(u64::from(DEFAULT_PC_STEP));
     let args = ctx.tail_call_args();
@@ -62,8 +62,8 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
                 CfgOperand::Var(base) => {
                     let value = ctx.read_var(base);
                     if link_dst.is_some_and(|dst| dst == base) {
-                        // Save base to a temporary when the link destination is the
-                        // same variable, so the link write cannot clobber the jump target.
+                        // Save the base before writing the same variable as the link
+                        // destination, preserving the jump target across the write.
                         ctx.materialize_u64(&value)
                     } else {
                         value
@@ -161,7 +161,7 @@ fn emit_trap(ctx: &mut EmitContext, pc: u64, message: &str) {
     ctx.write_line("return;");
 }
 
-/// Emit a tail call to a statically known PC, trapping if it is not a block start.
+/// Emit a direct tail call for a block-start PC or a trap for any other PC.
 fn static_tail_call(target: u64, args: &str, valid_blocks: &HashSet<u64>) -> String {
     if valid_blocks.contains(&target) {
         format!("[[clang::musttail]] return block_0x{target:08x}({args});")

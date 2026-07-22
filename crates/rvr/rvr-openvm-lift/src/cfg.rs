@@ -360,7 +360,7 @@ fn is_return(li: &LiftedInstr) -> bool {
     )
 }
 
-/// An indirect jump has a computed target and is neither a call nor a return.
+/// An indirect jump has a computed target with CFG role `Jump`.
 fn is_indirect_jump(li: &LiftedInstr) -> bool {
     matches!(
         cfg_term_of(li),
@@ -549,8 +549,8 @@ fn worklist(
     let mut unresolved_dynamic_jumps: HashSet<u64> = HashSet::new();
     let mut resolved_jumps: HashMap<u64, HashSet<u64>> = HashMap::new();
 
-    // Do not seed internal targets with unknown variable values. Their actual
-    // predecessors may provide constants needed to resolve dynamic jumps.
+    // Seed function entries with empty variable state. Internal targets receive
+    // predecessor state, including constants used to resolve dynamic jumps.
     for addr in function_entries {
         if in_work.insert(*addr) {
             states.insert(*addr, VariableState::new());
@@ -759,7 +759,7 @@ fn get_successors(
     result
 }
 
-/// Evaluate `(base + offset) & target_mask`, rejecting targets outside the PC domain.
+/// Evaluate `(base + offset) & target_mask` and return a target inside the PC domain.
 fn eval_indirect_target(base: u64, offset: i32, target_mask: u64) -> Option<u64> {
     let target = base.wrapping_add_signed(i64::from(offset)) & target_mask;
     (target <= u64::from(MAX_ALLOWED_PC)).then_some(target)

@@ -68,8 +68,7 @@ pub struct MeteringState {
     /// Periodic-check callback. Always initialized; generated C calls it
     /// unconditionally to keep the hot metered path branch-free.
     pub on_check: unsafe extern "C" fn(*mut MeteringState) -> u8,
-    /// Drains only the main-memory page buffer for instructions whose output
-    /// can exceed its fixed capacity.
+    /// Drains the main-memory page buffer during variable-size memory access.
     pub on_memory_flush: unsafe extern "C" fn(*mut MeteringState),
     pub seg_state: *mut SegmentationState,
     pub mem_page_buf_len: u32,
@@ -373,8 +372,8 @@ pub unsafe extern "C" fn metered_periodic_check(state: *mut MeteringState) -> u8
     did_segment as u8
 }
 
-/// Drains main-memory page touches without advancing instruction accounting or
-/// creating a segmentation checkpoint.
+/// Drains main-memory page touches while preserving instruction accounting and
+/// the current segmentation checkpoint.
 ///
 /// # Safety
 /// `state` must satisfy the same lifetime and buffer requirements as

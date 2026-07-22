@@ -104,7 +104,7 @@ pub enum CfgEffect {
         rhs: CfgOperand,
         result: CfgResultWidth,
     },
-    /// Forget every tracked value when an instruction does not describe its effects.
+    /// Clear all tracked values for an instruction with opaque variable effects.
     ClobberAll,
 }
 
@@ -188,10 +188,10 @@ pub trait ExtInstr: std::fmt::Debug + Send + Sync {
         "ext"
     }
 
-    /// Report this instruction's variable writes for CFG analysis.
+    /// Report this instruction's additional variable writes.
     ///
-    /// Writes represented by `cfg_term()` need not be repeated here. Other
-    /// writes must be reported so the analysis does not reuse an outdated constant.
+    /// CFG analysis combines these writes with link writes from `cfg_term()` to
+    /// keep propagated constants current.
     fn cfg_effect(&self) -> CfgEffect;
 
     /// Control-flow behavior, if this instruction ends a basic block.
@@ -209,8 +209,8 @@ pub trait ExtInstr: std::fmt::Debug + Send + Sync {
 
     /// Extra chip rows whose count is known when the artifact is generated.
     ///
-    /// The generator adds them to the block's metering update, so the extension
-    /// does not record them at runtime.
+    /// The generator adds these rows to the block's metering update at artifact
+    /// generation time.
     fn fixed_trace_rows(&self) -> Vec<FixedTraceRows> {
         Vec::new()
     }
@@ -220,7 +220,7 @@ pub trait ExtInstr: std::fmt::Debug + Send + Sync {
 
     /// Return a copy with the indirect-jump targets found by CFG analysis.
     ///
-    /// The default rejects nonempty target lists instead of ignoring them.
+    /// The default accepts an empty target list and panics for any target.
     fn with_resolved_jumps(&self, resolved: Vec<u64>) -> Box<dyn ExtInstr> {
         assert!(
             resolved.is_empty(),

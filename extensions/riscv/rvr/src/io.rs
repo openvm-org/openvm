@@ -77,8 +77,8 @@ impl ExtInstr for HintBufferInstr {
         ctx.write_line("}");
         let callback_count = format!("(uint16_t)({n})");
         ctx.emit_checked_call_without_page_flush("openvm_hint_buffer", &[&ptr, &callback_count]);
-        // Block-entry already credits a static +1; emit the runtime
-        // `(n - 1)` correction only when there is more than one row.
+        // Block entry credits one row; runtime metering adds the remaining
+        // `(n - 1)` rows.
         let chip_idx = air_index_to_c(self.chip_idx);
         // After the check above, n - 1 is at most 1022.
         ctx.trace_chip_if_nonzero(chip_idx, &format!("(uint32_t)({n} - 1ull)"));

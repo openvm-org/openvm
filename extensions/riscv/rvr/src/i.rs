@@ -55,13 +55,17 @@ impl RvrExtension for Rv64IExtension {
         RV64I_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION
     }
 
+    /// Find initialized values that match valid RV64 instruction PCs.
+    ///
+    /// Scans four-byte-aligned initialized main-memory locations as little-endian
+    /// `u32`s. Matching values become additional indirect-jump target candidates.
+    /// This covers absolute code pointers in switch tables, function-pointer
+    /// arrays, and other initialized data, including read-only tables.
     fn extra_cfg_targets(
         &self,
         init_memory: &SparseMemoryImage,
         valid_pcs: &HashSet<u64>,
     ) -> Vec<u64> {
-        // RV64 instruction addresses are four-byte aligned. Decode little-endian
-        // code pointers from initialized main memory and add valid PCs as CFG roots.
         let bytes = init_memory
             .iter()
             .filter_map(|(&(address_space, address), &byte)| {

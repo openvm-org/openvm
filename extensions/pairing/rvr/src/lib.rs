@@ -137,7 +137,7 @@ impl RvrExtension for PairingExtension {
     }
 
     fn max_main_memory_pages_per_instruction(&self) -> usize {
-        // Pairing only peeks at guest memory; peeks do not create VM accesses.
+        // Pairing's guest-memory reads record zero main-memory page entries.
         0
     }
 }

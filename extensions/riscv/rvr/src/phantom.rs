@@ -178,7 +178,7 @@ struct Rv64PhantomHostCallbacks {
     hint_random: extern "C" fn(*mut c_void, u64) -> bool,
 }
 
-/// Host callback for HINT_INPUT. Makes the next input record available without copying it.
+/// Host callback for HINT_INPUT. Moves the next input record into the hint stream.
 pub(crate) extern "C" fn host_hint_input(ctx: *mut c_void) {
     let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_>) };
     if let Some(bytes) = io.input_stream.pop_front() {

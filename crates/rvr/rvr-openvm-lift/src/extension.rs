@@ -201,11 +201,10 @@ pub trait RvrExtension: Send + Sync {
     }
 
     /// Maximum number of main-memory page entries one instruction can append
-    /// without draining the buffer itself. Extensions must return zero
-    /// explicitly when they never record main-memory pages.
+    /// between page-buffer drains. Extensions with zero such entries return zero.
     fn max_main_memory_pages_per_instruction(&self) -> usize;
 
-    /// Returns instruction targets encoded in target-specific initialized data.
+    /// Returns target-specific indirect-jump candidates found in initialized data.
     fn extra_cfg_targets(
         &self,
         _init_memory: &SparseMemoryImage,
@@ -358,7 +357,7 @@ impl ExtensionRegistry {
             .unwrap_or(0)
     }
 
-    /// Collect target-specific CFG roots from initialized memory.
+    /// Collect target-specific indirect-jump candidates from initialized memory.
     pub fn extra_cfg_targets(
         &self,
         init_memory: &SparseMemoryImage,

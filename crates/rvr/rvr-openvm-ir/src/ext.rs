@@ -46,9 +46,9 @@ pub trait ExtEmitCtx {
     /// Read a variable as an AIR-visible memory access.
     fn read_var(&mut self, var: Variable) -> String;
 
-    /// Get a variable's value without creating an AIR memory access.
+    /// Get a variable's current value.
     ///
-    /// Value tracing records the value without advancing the memory timestamp.
+    /// Value-tracing modes record the value at the current memory timestamp.
     fn peek_var(&mut self, var: Variable) -> String;
 
     /// Write a variable, tracing it when required by the emission mode.
