@@ -65,7 +65,9 @@ impl BuildCtx {
 
     fn cc(&self) -> cc::Build {
         let mut b = cc::Build::new();
-        b.compiler(&self.compiler).flag("-fintegrated-as");
+        b.compiler(&self.compiler)
+            .flag("-fintegrated-as")
+            .flag_if_supported("-Wno-gcc-install-dir-libstdcxx");
         if self.is_macos {
             // GNU `ar`'s slash-member format is rejected by the macOS linker.
             b.archiver("/usr/bin/ar");
