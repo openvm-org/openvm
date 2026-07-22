@@ -2,6 +2,9 @@
 
 use core::mem::offset_of;
 
+pub const PREFLIGHT_WRITE_BIT: u32 = 1 << 31;
+pub const PREFLIGHT_ADDRESS_SPACE_MASK: u32 = !PREFLIGHT_WRITE_BIT;
+
 /// One fetched instruction, or the final execution sentinel.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -18,6 +21,18 @@ pub struct PreflightMemoryEvent {
     pub address_space_and_kind: u32,
     pub pointer: u32,
     pub value: [u32; 4],
+}
+
+impl PreflightMemoryEvent {
+    #[inline]
+    pub const fn address_space(&self) -> u32 {
+        self.address_space_and_kind & PREFLIGHT_ADDRESS_SPACE_MASK
+    }
+
+    #[inline]
+    pub const fn is_write(&self) -> bool {
+        self.address_space_and_kind & PREFLIGHT_WRITE_BIT != 0
+    }
 }
 
 /// Previous value captured before a write.

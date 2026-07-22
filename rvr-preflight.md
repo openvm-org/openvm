@@ -561,6 +561,28 @@ sizes, GPU and host model, compiler flags and versions, warmup count, repetition
 count, and reported statistic. The 10% per-workload threshold is evaluated with a
 documented noise interval rather than a single run.
 
+#### Initial GPU correctness checkpoint (2026-07-23)
+
+The first direct replay kernel covers ADDI without constructing a compatibility
+record. The three logs and static program are uploaded once. Cold postflight
+builds one packed predecessor reference per memory event and one stable,
+opcode-partitioned step buffer shared by every kernel. Replay validation uses a
+single device error word that is checked once after the kernel batch, rather than
+synchronizing after every AIR.
+
+The CUDA differential test executes a real RVR loop with a repeated ADDI PC and
+interleaved BNE memory events. The replay ADDI matrix matches both the legacy GPU
+kernel and CPU filler exactly, its raw range-check histogram matches legacy
+exactly, and the resulting AIR proof passes. Corrupting a logged ADDI result is
+rejected by device validation. ADDI with `rd = x0` is deliberately rejected:
+the current immediate-ALU AIR always emits a destination write and must gain the
+same conditional-write shape as load/JALR before that schedule can be replayed.
+
+This establishes correctness and log sufficiency for one fixed-row RISC-V AIR;
+it does not pass the M2 performance gate. The fixed benchmark manifest and
+executor + indexing + upload + kernel measurements are the next checkpoint
+before widening to the other RISC-V adapters.
+
 ### M3: complete the GPU proving path
 
 Once RISC-V replay is viable:
