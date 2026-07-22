@@ -9,6 +9,7 @@ use openvm_stark_backend::{
 use thiserror::Error;
 use tracing::instrument;
 
+use super::has_nonzero_byte;
 use crate::{
     arch::{AddressSpaceHostConfig, AddressSpaceHostLayout, MemoryConfig, BLOCK_FE_WIDTH},
     system::{TouchedBlock, TouchedMemory},
@@ -331,18 +332,13 @@ impl<M: LinearMemory> AddressMap<M> {
     /// It scans all configured memory, so callers should use the incremental marking methods when
     /// they already have reliable write information.
     pub fn recompute_touched_pages(&mut self) {
-        const ZERO_CHUNK: [u8; 32] = [0; 32];
-
         self.touched_pages = self
             .mem
             .iter()
             .map(|mem| {
                 let mut rebuilt = TouchedPages::new(mem.size());
                 for (page_idx, page) in mem.as_slice().chunks(PAGE_SIZE).enumerate() {
-                    let mut chunks = page.chunks_exact(ZERO_CHUNK.len());
-                    let contains_nonzero = chunks.any(|chunk| chunk != ZERO_CHUNK)
-                        || chunks.remainder().iter().any(|&byte| byte != 0);
-                    if contains_nonzero {
+                    if has_nonzero_byte(page) {
                         rebuilt.mark_byte_range(page_idx * PAGE_SIZE, page.len());
                     }
                 }
