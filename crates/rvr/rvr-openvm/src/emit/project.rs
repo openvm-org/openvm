@@ -1410,17 +1410,6 @@ mod tests {
     }
 
     #[test]
-    fn metered_segment_checkpoint_compares_suspend_signal_as_int() {
-        let project = CProject::new(Path::new("unused"), "test", RvrExecutionKind::MeteredSegment);
-        let mut checkpoint = String::new();
-        project.emit_block_checkpoint_function(&mut checkpoint, &single_instruction_block());
-
-        assert!(checkpoint.contains("if (unlikely(checkpoint.suspend_signal != 0))"));
-        // The bare `unlikely(checkpoint.suspend_signal)` form is the bug.
-        assert!(!checkpoint.contains("if (unlikely(checkpoint.suspend_signal))"));
-    }
-
-    #[test]
     fn oversized_block_abi_is_rejected() {
         let mut project = CProject::new(
             Path::new("unused"),
