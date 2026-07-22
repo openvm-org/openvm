@@ -677,7 +677,7 @@ impl CProject {
         writeln!(h, "#include \"{trace_header}\"").unwrap();
         writeln!(h).unwrap();
 
-        // Block function type and dispatch table (for JumpDyn tail calls).
+        // Block function type and dispatch table for indirect-jump tail calls.
         let typedef_params = self.typedef_params();
         writeln!(
             h,

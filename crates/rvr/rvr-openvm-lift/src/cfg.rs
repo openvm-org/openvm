@@ -941,7 +941,7 @@ fn binary_search_le(sorted: &[u64], target: u64) -> Option<u64> {
 /// e.g. by scanning read-only data segments for code pointers (switch tables,
 /// function pointer arrays).
 ///
-/// Returns `Vec<Block>` with resolved `JumpDyn` targets filled in.
+/// Returns `Vec<Block>` with resolved indirect-jump targets filled in.
 pub fn build_blocks(
     instructions: &[LiftedInstr],
     extra_targets: &[u64],
@@ -1011,12 +1011,12 @@ pub fn build_blocks(
         &return_sites,
     );
 
-    // Build blocks by splitting at leaders and patching resolved JumpDyn targets.
+    // Build blocks by splitting at leaders and patching resolved indirect-jump targets.
     Ok(build_block_list(instructions, &leaders, &resolved_jumps))
 }
 
 /// Split the flat instruction list into `Block`s at leader boundaries,
-/// filling in resolved JumpDyn targets.
+/// filling in resolved indirect-jump targets.
 fn build_block_list(
     instructions: &[LiftedInstr],
     leaders: &BTreeSet<u64>,
