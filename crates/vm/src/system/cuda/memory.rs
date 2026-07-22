@@ -45,11 +45,11 @@ const _: () = assert!(
     "CUDA memory inventory only supports (BLOCK_FE_WIDTH, VM_DIGEST_WIDTH) == (4, 8)"
 );
 
-// `TouchedBlock<F>` must be exactly the 7-word `InRec` layout in `inventory.cu`
+// `TouchedBlock<F>` must be exactly the 8-word `InRec` layout in `inventory.cu`
 // so the merge path can upload the vector's bytes without repacking.
 const _: () = assert!(
-    std::mem::size_of::<TouchedBlock<F>>() == (3 + BLOCK_FE_WIDTH) * std::mem::size_of::<u32>(),
-    "TouchedBlock<F> must match the 7-u32-word InRec layout in inventory.cu"
+    std::mem::size_of::<TouchedBlock<F>>() == (4 + BLOCK_FE_WIDTH) * std::mem::size_of::<u32>(),
+    "TouchedBlock<F> must match the 8-u32-word InRec layout in inventory.cu"
 );
 
 pub struct MemoryInventoryGPU {
@@ -112,6 +112,9 @@ impl Drop for PinnedStaging {
 struct MemoryInventoryRecord<const CHUNK: usize, const BLOCKS: usize> {
     address_space: u32,
     ptr: u32,
+    /// Whether some covered block was *written* during execution (0/1); see
+    /// [`TouchedBlock`]. The merge kernel ORs the input blocks' bits. Not consumed yet.
+    is_dirty: u32,
     timestamps: [u32; BLOCKS],
     values: [u32; CHUNK],
 }
@@ -593,12 +596,14 @@ mod tests {
             TouchedBlock {
                 address_space: RV64_MEMORY_AS,
                 ptr: 0,
+                is_dirty: 1,
                 timestamp: 1,
                 values: pack_u8_block_value(&touched_bytes.map(F::from_u8)),
             },
             TouchedBlock {
                 address_space: RV64_MEMORY_AS,
                 ptr: BLOCK_FE_WIDTH as u32,
+                is_dirty: 1,
                 timestamp: 3,
                 values: pack_u8_block_value(&touched_bytes_late.map(F::from_u8)),
             },
