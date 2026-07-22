@@ -594,17 +594,6 @@ pub fn tracing_read_reg_ptr(
     val
 }
 
-#[inline(always)]
-pub fn tracing_read_imm(
-    memory: &mut TracingMemory,
-    imm: u32,
-    imm_mut: &mut u32,
-) -> [u8; RV64_REGISTER_NUM_LIMBS] {
-    *imm_mut = imm;
-    memory.increment_timestamp();
-    imm_to_rv64_bytes(imm)
-}
-
 /// Writes `reg_ptr, reg_val` into memory and records the memory access in mutable buffer.
 /// Trace generation relevant to this memory access can be done fully from the recorded buffer.
 #[inline(always)]
