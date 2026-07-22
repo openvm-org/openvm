@@ -78,14 +78,19 @@ pub fn fixed_trace_rows_for_chip(idx: Option<AirIndex>, count: u32) -> Vec<Fixed
     .unwrap_or_default()
 }
 
-/// Decode a variable operand encoded as `index * stride`.
+/// Decode a variable operand whose value is `index * index_scale`.
 ///
-/// Panics for a zero stride, a value that is not aligned to the stride, or a
-/// decoded index outside `0..variable_count`.
-pub fn decode_variable(value: u32, stride: u32, variable_count: u32) -> Variable {
-    assert!(stride != 0, "variable stride must be nonzero");
-    assert_eq!(value % stride, 0, "variable operand must be aligned");
-    let index = value / stride;
+/// `index_scale` is the distance between consecutive encoded variable indices.
+/// Panics if it is zero, `value` is not an exact multiple of it, or the decoded
+/// index is outside `0..variable_count`.
+pub fn decode_variable(value: u32, index_scale: u32, variable_count: u32) -> Variable {
+    assert!(index_scale != 0, "variable index scale must be nonzero");
+    assert_eq!(
+        value % index_scale,
+        0,
+        "variable operand must be a multiple of its index scale"
+    );
+    let index = value / index_scale;
     assert!(index < variable_count, "variable operand is out of bounds");
     Variable::new(index)
 }
