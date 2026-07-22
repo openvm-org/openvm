@@ -330,7 +330,14 @@ impl<'a> EmitContext<'a> {
     }
 
     /// Read guest memory. Metered hot blocks record the memory page separately.
-    pub fn read_mem(&mut self, base: &str, offset: i16, width: u8, signed: bool) -> String {
+    pub fn read_mem(
+        &mut self,
+        base: &str,
+        offset: i16,
+        width: u8,
+        signed: bool,
+        sp_relative: bool,
+    ) -> String {
         assert!(
             !self.mode.is_metered_without_memory_pages(),
             "metered memory read emitted without page tracking"
@@ -345,7 +352,7 @@ impl<'a> EmitContext<'a> {
             self.write_line(&format!("{trace_func}(state, {addr}, {var});"));
         }
         if self.mode.traces_memory_pages() {
-            self.emit_inline_page_record(&addr, width);
+            self.emit_inline_page_record(&addr, width, sp_relative);
         }
         var
     }
@@ -353,7 +360,7 @@ impl<'a> EmitContext<'a> {
     /// Emit a guest memory write. Metered hot blocks record the memory page
     /// through the block-local `TraceMemory` context, then use the raw memory
     /// helper so the common path avoids tracing calls.
-    pub fn write_mem(&mut self, base: &str, offset: i16, val: &str, width: u8) {
+    pub fn write_mem(&mut self, base: &str, offset: i16, val: &str, width: u8, sp_relative: bool) {
         assert!(
             !self.mode.is_metered_without_memory_pages(),
             "metered memory write emitted without page tracking"
@@ -363,7 +370,7 @@ impl<'a> EmitContext<'a> {
         self.uses_raw_memory = true;
 
         if self.mode.traces_memory_pages() {
-            self.emit_inline_page_record(&addr, width);
+            self.emit_inline_page_record(&addr, width, sp_relative);
         }
         if self.mode.traces_values() {
             let value = self.next_var();
@@ -377,12 +384,17 @@ impl<'a> EmitContext<'a> {
         }
     }
 
-    fn emit_inline_page_record(&mut self, addr: &str, width: u8) {
+    fn emit_inline_page_record(&mut self, addr: &str, width: u8, sp_relative: bool) {
+        let prefix = if sp_relative {
+            "trace_sp_memory"
+        } else {
+            "trace_memory"
+        };
         if width == 1 {
-            self.write_line(&format!("trace_memory_access_leaf(&trace_memory, {addr});"));
+            self.write_line(&format!("{prefix}_access_leaf(&trace_memory, {addr});"));
         } else {
             self.write_line(&format!(
-                "trace_memory_access_span(&trace_memory, {addr}, {width}u);"
+                "{prefix}_access_span(&trace_memory, {addr}, {width}u);"
             ));
         }
     }
@@ -606,12 +618,19 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
         EmitContext::emit_trap(self)
     }
 
-    fn read_mem(&mut self, base: &str, offset: i16, width: u8, signed: bool) -> String {
-        EmitContext::read_mem(self, base, offset, width, signed)
+    fn read_mem(
+        &mut self,
+        base: &str,
+        offset: i16,
+        width: u8,
+        signed: bool,
+        sp_relative: bool,
+    ) -> String {
+        EmitContext::read_mem(self, base, offset, width, signed, sp_relative)
     }
 
-    fn write_mem(&mut self, base: &str, offset: i16, val: &str, width: u8) {
-        EmitContext::write_mem(self, base, offset, val, width);
+    fn write_mem(&mut self, base: &str, offset: i16, val: &str, width: u8, sp_relative: bool) {
+        EmitContext::write_mem(self, base, offset, val, width, sp_relative);
     }
 
     fn emit_call(&mut self, name: &str, args: &[&str]) {
@@ -687,7 +706,7 @@ mod tests {
     #[test]
     fn metered_memory_access_records_full_span() {
         let mut ctx = metered_memory_ctx();
-        ctx.read_mem("addr", 0, 8, false);
+        ctx.read_mem("addr", 0, 8, false, false);
 
         assert!(ctx
             .buf()

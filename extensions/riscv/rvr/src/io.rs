@@ -363,7 +363,14 @@ mod tests {
             self.write_line("trap;");
         }
 
-        fn read_mem(&mut self, base: &str, offset: i16, width: u8, signed: bool) -> String {
+        fn read_mem(
+            &mut self,
+            base: &str,
+            offset: i16,
+            width: u8,
+            signed: bool,
+            _sp_relative: bool,
+        ) -> String {
             let tmp = format!("tmp{}", self.lines.len());
             self.write_line(&format!(
                 "uint32_t {tmp} = read_mem({base}, {offset}, {width}, {signed});"
@@ -371,7 +378,7 @@ mod tests {
             tmp
         }
 
-        fn write_mem(&mut self, base: &str, offset: i16, val: &str, width: u8) {
+        fn write_mem(&mut self, base: &str, offset: i16, val: &str, width: u8, _sp_relative: bool) {
             self.write_line(&format!("write_mem({base}, {offset}, {val}, {width});"));
         }
 

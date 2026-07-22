@@ -28,7 +28,7 @@ static constexpr uint32_t OUTPUT_KEY_WORDS =
 static constexpr uint32_t DIGEST_MEMORY_OPS = DEFERRAL_DIGEST_SIZE / WORD_SIZE;
 /* Page size from the configured leaves per page and byte addresses per leaf. */
 static constexpr uint64_t MAIN_MEMORY_PAGE_BYTES =
-    1ull << (TRACER_BYTE_SPACE_PTRS_PER_LEAF_BITS + TRACER_PAGE_BITS);
+    1ull << (TRACER_BYTE_SPACE_PTRS_PER_LEAF_BITS + PAGE_MASK_LEAF_BITS);
 /* Reserve one page for the extra page touched by an unaligned chunk. */
 static constexpr uint64_t OUTPUT_ROWS_PER_PAGE_BUFFER =
     ((uint64_t)TRACER_MEM_PAGE_BUF_CAP - 1ull) * MAIN_MEMORY_PAGE_BYTES /
