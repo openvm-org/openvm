@@ -114,11 +114,6 @@ impl Terminator {
             Self::Instruction { node, .. } => node.opname(),
         }
     }
-
-    /// Returns whether this terminator ends the block.
-    pub fn is_block_end(&self, pc: u64, fall_pc: u64) -> bool {
-        !matches!(self.cfg_term(pc, fall_pc), CfgTerm::FallThrough)
-    }
 }
 
 /// An instruction at a specific PC.

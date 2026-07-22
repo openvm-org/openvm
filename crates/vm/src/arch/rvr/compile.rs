@@ -217,8 +217,6 @@ impl RvrCompiled {
 pub enum CompileError {
     #[error("IR conversion failed: {0}")]
     Convert(#[from] rvr_openvm_lift::ConvertError),
-    #[error("CFG construction failed: {0}")]
-    Cfg(#[from] rvr_openvm_lift::CfgError),
     #[error("C project write failed under {}: {source}", path.display())]
     CProject {
         path: PathBuf,
@@ -522,7 +520,7 @@ fn compile_impl<F: PrimeField32>(
     let extra_targets = opts
         .extensions
         .extra_cfg_targets(&exe.init_memory, &valid_pcs);
-    let blocks = build_blocks(&ir, &extra_targets)?;
+    let blocks = build_blocks(&ir, &extra_targets);
 
     let temp_root = std::env::temp_dir();
     let temp_dir = tempfile::Builder::new()

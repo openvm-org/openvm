@@ -15,7 +15,7 @@ pub mod extension;
 pub mod instruction;
 pub mod opcode;
 
-pub use cfg::{build_blocks, CfgError};
+pub use cfg::build_blocks;
 pub use convert::{convert_vmexe_to_ir, convert_vmexe_to_ir_with_debug, ConvertError};
 pub use extension::{
     air_index_to_c, decode_variable, fixed_trace_rows_for_chip,

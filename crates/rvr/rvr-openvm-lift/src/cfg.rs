@@ -19,17 +19,6 @@ const MAX_VALUES: usize = 16;
 const MAX_ITERATIONS_MULTIPLIER: usize = 20;
 const MAX_JUMP_TABLE_SCAN: usize = 256;
 
-/// Error during basic-block (CFG) construction.
-#[derive(Debug, thiserror::Error)]
-pub enum CfgError {
-    /// A statically computable control-flow target exceeds the PC address space.
-    #[error("control-flow target {target:#x} from PC {pc:#x} exceeds PC address space")]
-    PcOutOfBounds { pc: u64, target: u64 },
-    /// A statically computable control-flow target does not name a lifted instruction.
-    #[error("control-flow target {target:#x} from PC {pc:#x} does not point to an instruction")]
-    PcNotInProgram { pc: u64, target: u64 },
-}
-
 // ── TrackedValue ──────────────────────────────────────────────────────────
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -945,12 +934,11 @@ fn binary_search_le(sorted: &[u64], target: u64) -> Option<u64> {
 /// function pointer arrays).
 ///
 /// Returns `Vec<Block>` with resolved indirect-jump targets filled in.
-pub fn build_blocks(
-    instructions: &[LiftedInstr],
-    extra_targets: &[u64],
-) -> Result<Vec<Block>, CfgError> {
+/// Invalid control-flow edges are kept and handled at runtime (they dispatch
+/// to `rv_trap`), so block construction itself cannot fail.
+pub fn build_blocks(instructions: &[LiftedInstr], extra_targets: &[u64]) -> Vec<Block> {
     if instructions.is_empty() {
-        return Ok(Vec::new());
+        return Vec::new();
     }
 
     // Build PC -> instruction index lookup.
@@ -1015,7 +1003,7 @@ pub fn build_blocks(
     );
 
     // Build blocks by splitting at leaders and patching resolved indirect-jump targets.
-    Ok(build_block_list(instructions, &leaders, &resolved_jumps))
+    build_block_list(instructions, &leaders, &resolved_jumps)
 }
 
 /// Split the flat instruction list into `Block`s at leader boundaries,
@@ -1242,8 +1230,7 @@ mod tests {
                 term(4, Terminator::Exit { code: 0 }),
             ],
             &[],
-        )
-        .expect("invalid branch edge should be handled at runtime");
+        );
 
         assert!(matches!(
             block_at(&blocks, 0).terminator.cfg_term(0, 4),
@@ -1269,8 +1256,7 @@ mod tests {
                 },
             )],
             &[],
-        )
-        .expect("invalid fallthrough should be handled at runtime");
+        );
 
         let block = block_at(&blocks, 0);
         assert_eq!(block.instructions.len(), 1);
@@ -1318,8 +1304,7 @@ mod tests {
                 term(16, Terminator::Exit { code: 0 }),
             ],
             &[4],
-        )
-        .expect("cfg build");
+        );
 
         assert_eq!(block_at(&blocks, 4).terminator.successors(4, 8), vec![16]);
     }
@@ -1359,8 +1344,7 @@ mod tests {
                 term(16, Terminator::Exit { code: 0 }),
             ],
             &[],
-        )
-        .expect("cfg build");
+        );
 
         assert!(block_at(&blocks, 0).terminator.successors(8, 12).is_empty());
     }
@@ -1400,8 +1384,7 @@ mod tests {
                 term(16, Terminator::Exit { code: 0 }),
             ],
             &[],
-        )
-        .expect("cfg build");
+        );
 
         assert!(block_at(&blocks, 8).terminator.successors(8, 12).is_empty());
     }
