@@ -1,9 +1,9 @@
 use crate::{ExtEmitCtx, FixedTraceRows};
 
-/// Identifier for a VM state variable used by CFG analysis and C code generation.
+/// Opaque machine-state variable identifier.
 ///
-/// Identifiers use the same `u32` representation as lifted instruction operands.
-/// The instruction set defines the width of the stored values.
+/// The concrete [`ExtEmitCtx`] defines how each identifier is stored and the
+/// width of its value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Variable(u32);
 

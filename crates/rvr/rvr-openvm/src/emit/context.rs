@@ -90,7 +90,10 @@ enum RegisterReadKind {
     Peek,
 }
 
-/// Code generation context. Holds a mutable buffer and tracks hot registers.
+/// RV64 C code generation context.
+///
+/// Its [`rvr_openvm_ir::ExtEmitCtx`] implementation maps [`Variable`] indices
+/// to RV64 integer registers.
 pub struct EmitContext<'a> {
     buf: String,
     hot_regs: HashSet<u8>,

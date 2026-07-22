@@ -53,7 +53,7 @@ static constexpr uint32_t AS_MEMORY = {RV64_MEMORY_AS};
 static constexpr uint32_t AS_PUBLIC_VALUES = {PUBLIC_VALUES_AS};
 static constexpr uint32_t AS_DEFERRAL = {DEFERRAL_AS};
 static constexpr uint32_t WORD_SIZE = {WORD_SIZE};
-static_assert(WORD_SIZE == sizeof(uint64_t), \"OpenVM word size must match uint64_t\");
+static_assert(WORD_SIZE == sizeof(uint64_t), \"RV64 backend requires 64-bit OpenVM words\");
 static constexpr uint32_t DEFERRAL_DIGEST_SIZE = {VM_DIGEST_WIDTH};
 static constexpr uint64_t RV_TEXT_START = 0x{text_start:08x}ull;
 static constexpr uint64_t RV_TEXT_END = 0x{text_end:08x}ull;

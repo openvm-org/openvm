@@ -7,6 +7,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use openvm_instructions::riscv::RV64_NUM_REGISTERS;
 use rvr_openvm_ir::*;
 use rvr_openvm_lift::{ExtensionRegistry, TraceChipIndex};
 
@@ -137,7 +138,7 @@ impl RvrExecutionKind {
         }
         writeln!(out).unwrap();
         writeln!(out, "typedef struct RvState {{").unwrap();
-        writeln!(out, "  uint64_t regs[32];").unwrap();
+        writeln!(out, "  uint64_t regs[{RV64_NUM_REGISTERS}];").unwrap();
         writeln!(out, "  uint64_t pc;").unwrap();
         writeln!(out, "  uint8_t status;").unwrap();
         writeln!(out, "  uint8_t exit_code;").unwrap();
@@ -226,7 +227,7 @@ impl CProject {
 
     /// Register priority order.
     /// x0 (zero) is excluded since it's always 0.
-    const REG_PRIORITY: [u8; 31] = [
+    const REG_PRIORITY: [u8; RV64_NUM_REGISTERS - 1] = [
         1, 2, // ra, sp
         10, 11, 12, 13, 14, 15, 16, 17, // a0-a7
         5, 6, 7, // t0-t2
