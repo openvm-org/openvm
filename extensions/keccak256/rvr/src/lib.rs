@@ -14,8 +14,8 @@ use rvr_openvm_ir::{
     CfgEffect, ExtEmitCtx, ExtInstr, FixedTraceRows, InstrAt, LiftedInstr, ValueSlot,
 };
 use rvr_openvm_lift::{
-    decode_value_slot, fixed_trace_rows_for_chip, opcode_air_idx, AirIndex, ExtensionError,
-    RvrExtension, RvrExtensionCtx, RvrInstruction,
+    decode_value_slot, fixed_trace_rows_for_chip, max_pages_for_contiguous_range, opcode_air_idx,
+    AirIndex, ExtensionError, RvrExtension, RvrExtensionCtx, RvrInstruction,
 };
 
 fn decode_reg(value: u32) -> ValueSlot {
@@ -24,6 +24,8 @@ fn decode_reg(value: u32) -> ValueSlot {
 
 const KECCAK_NUM_ROUNDS: u32 = p3_keccak_air::NUM_ROUNDS as u32;
 const _: () = assert!(KECCAK_NUM_ROUNDS as usize == p3_keccak_air::NUM_ROUNDS);
+// XORIN reads and rewrites a 136-byte buffer around an independent input read.
+const KECCAK_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize = 3 * max_pages_for_contiguous_range(136);
 
 /// keccak-f\[1600\]: read 200 bytes via `buffer_ptr_reg`, permute in place.
 #[derive(Debug, Clone)]
@@ -151,5 +153,9 @@ impl RvrExtension for KeccakExtension {
             "librvr_openvm_ext_keccak_ffi.a",
             include_bytes!(env!("RVR_KECCAK_FFI_STATICLIB")),
         )]
+    }
+
+    fn max_main_memory_pages_per_instruction(&self) -> usize {
+        KECCAK_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION
     }
 }

@@ -5,11 +5,23 @@ use std::{
     collections::{HashMap, HashSet},
 };
 
-use openvm_instructions::{exe::SparseMemoryImage, LocalOpcode, VmOpcode};
+use openvm_instructions::{
+    exe::SparseMemoryImage, metering::PAGE_MASK_LEAF_BITS, LocalOpcode, VmOpcode, VM_DIGEST_WIDTH,
+};
 use openvm_stark_backend::p3_field::PrimeField32;
 use rvr_openvm_ir::{FixedTraceRows, LiftedInstr, ValueSlot};
 
 use crate::RvrInstruction;
+
+/// Number of byte-addressed memory bytes represented by one metering page.
+pub const MAIN_MEMORY_PAGE_BYTES: usize =
+    core::mem::size_of::<u16>() * VM_DIGEST_WIDTH * (1 << PAGE_MASK_LEAF_BITS);
+
+/// Maximum pages touched by a nonempty contiguous byte range at arbitrary alignment.
+pub const fn max_pages_for_contiguous_range(bytes: usize) -> usize {
+    assert!(bytes > 0);
+    1 + (bytes - 1).div_ceil(MAIN_MEMORY_PAGE_BYTES)
+}
 
 /// Real AIR index in the trace.
 ///
@@ -425,6 +437,7 @@ mod tests {
     use crate::opcode::NopInstr;
 
     struct ClaimingExtension;
+    struct BoundedExtension(usize);
 
     impl RvrExtension for ClaimingExtension {
         fn try_lift(&self, _insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
@@ -438,6 +451,44 @@ mod tests {
         fn c_headers(&self) -> Vec<(&'static str, &'static str)> {
             Vec::new()
         }
+    }
+
+    impl RvrExtension for BoundedExtension {
+        fn try_lift(&self, _insn: &RvrInstruction, _pc: u64) -> Option<LiftedInstr> {
+            None
+        }
+
+        fn c_headers(&self) -> Vec<(&'static str, &'static str)> {
+            Vec::new()
+        }
+
+        fn max_main_memory_pages_per_instruction(&self) -> usize {
+            self.0
+        }
+    }
+
+    #[test]
+    fn contiguous_range_page_bound_includes_arbitrary_alignment() {
+        assert_eq!(max_pages_for_contiguous_range(1), 1);
+        assert_eq!(max_pages_for_contiguous_range(MAIN_MEMORY_PAGE_BYTES), 2);
+        assert_eq!(
+            max_pages_for_contiguous_range(MAIN_MEMORY_PAGE_BYTES + 1),
+            2
+        );
+        assert_eq!(
+            max_pages_for_contiguous_range(2 * MAIN_MEMORY_PAGE_BYTES),
+            3
+        );
+    }
+
+    #[test]
+    fn registry_uses_largest_extension_page_bound() {
+        let mut registry = ExtensionRegistry::new();
+        registry.register(BoundedExtension(2));
+        registry.register(BoundedExtension(9));
+        registry.register(BoundedExtension(6));
+
+        assert_eq!(registry.max_main_memory_pages_per_instruction(), 9);
     }
 
     #[test]

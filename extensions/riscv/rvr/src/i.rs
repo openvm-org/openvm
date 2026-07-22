@@ -1,12 +1,12 @@
-//! RV64I lifting for integer arithmetic, branches, jumps, and memory access.
-//!
-//! Operand validation follows the OpenVM RV64 register, immediate, and main
-//! memory address-space domains before constructing extension-owned IR nodes.
+//! RV64I instruction lifting, CFG metadata, and generated-C semantics.
+
+mod instruction;
+
+use std::collections::{BTreeMap, HashSet};
 
 use openvm_instructions::{
-    riscv::{
-        RV64_IMM_AS, RV64_MEMORY_AS, RV64_NUM_REGISTERS, RV64_REGISTER_AS, RV64_REGISTER_BYTES,
-    },
+    exe::SparseMemoryImage,
+    riscv::{RV64_IMM_AS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_BYTES},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::{
@@ -16,13 +16,79 @@ use openvm_riscv_transpiler::{
     ShiftWOpcode,
 };
 use rvr_openvm_ir::{
-    CfgBranchCond, CfgOperand, InstrAt, LiftedInstr, MemWidth, Terminator, ValueSlot,
+    CfgBranchCond, CfgOperand, ExtInstr, InstrAt, LiftedInstr, MemWidth, Terminator,
 };
-use rvr_openvm_lift::{decode_value_slot, RvrInstruction};
+use rvr_openvm_lift::{max_pages_for_contiguous_range, RvrExtension, RvrInstruction};
 
-use crate::instruction::{reg_operand, AluOp, Rv64IInstr, ZERO};
+use self::instruction::{AluOp, Rv64IInstr};
+use crate::instruction::{decode_imm_cg, decode_reg, reg_operand, NopInstr, ZERO};
 
 const U24_MASK: u32 = (1 << 24) - 1;
+const RV64I_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize =
+    max_pages_for_contiguous_range(RV64_REGISTER_BYTES as usize);
+
+/// RVR extension for RV64I base integer instructions.
+pub struct Rv64IExtension;
+
+impl Rv64IExtension {
+    pub const fn new() -> Self {
+        Self
+    }
+}
+
+impl Default for Rv64IExtension {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl RvrExtension for Rv64IExtension {
+    fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
+        try_lift(insn, pc)
+    }
+
+    fn c_headers(&self) -> Vec<(&'static str, &'static str)> {
+        Vec::new()
+    }
+
+    fn max_main_memory_pages_per_instruction(&self) -> usize {
+        RV64I_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION
+    }
+
+    fn extra_cfg_targets(
+        &self,
+        init_memory: &SparseMemoryImage,
+        valid_pcs: &HashSet<u64>,
+    ) -> Vec<u64> {
+        // RV64 instruction addresses are four-byte aligned. Decode little-endian
+        // code pointers from initialized main memory and add valid PCs as CFG roots.
+        let bytes = init_memory
+            .iter()
+            .filter_map(|(&(address_space, address), &byte)| {
+                (address_space == RV64_MEMORY_AS).then_some((address, byte))
+            })
+            .collect::<BTreeMap<_, _>>();
+        bytes
+            .keys()
+            .copied()
+            .filter(|address| address % 4 == 0)
+            .filter_map(|address| {
+                let address1 = address.checked_add(1)?;
+                let address2 = address.checked_add(2)?;
+                let address3 = address.checked_add(3)?;
+                let value = u32::from_le_bytes([
+                    *bytes.get(&address)?,
+                    *bytes.get(&address1)?,
+                    *bytes.get(&address2)?,
+                    *bytes.get(&address3)?,
+                ]);
+                valid_pcs
+                    .contains(&u64::from(value))
+                    .then_some(u64::from(value))
+            })
+            .collect()
+    }
+}
 
 pub(crate) fn try_lift(insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
     let opcode = insn.opcode.as_usize();
@@ -279,7 +345,7 @@ fn lift_alu(
 
     let rd = decode_reg(insn.a);
     if rd == ZERO {
-        return Some(body(pc, Rv64IInstr::Nop));
+        return Some(body(pc, NopInstr));
     }
     let lhs = decode_reg(insn.b);
     let rhs = immediate.unwrap_or_else(|| reg_operand(decode_reg(insn.c)));
@@ -376,7 +442,7 @@ fn lift_jalr(insn: &RvrInstruction, pc: u64) -> LiftedInstr {
 fn lift_lui(insn: &RvrInstruction, pc: u64) -> LiftedInstr {
     let rd = decode_reg(insn.a);
     if rd == ZERO {
-        return body(pc, Rv64IInstr::Nop);
+        return body(pc, NopInstr);
     }
     body(
         pc,
@@ -395,7 +461,7 @@ fn lift_lui(insn: &RvrInstruction, pc: u64) -> LiftedInstr {
 fn lift_auipc(insn: &RvrInstruction, pc: u64) -> LiftedInstr {
     let rd = decode_reg(insn.a);
     if rd == ZERO {
-        return body(pc, Rv64IInstr::Nop);
+        return body(pc, NopInstr);
     }
     let upper = insn.c << 8;
     body(
@@ -408,7 +474,7 @@ fn lift_auipc(insn: &RvrInstruction, pc: u64) -> LiftedInstr {
     )
 }
 
-fn body(pc: u64, instr: Rv64IInstr) -> LiftedInstr {
+fn body(pc: u64, instr: impl ExtInstr + 'static) -> LiftedInstr {
     LiftedInstr::Body(InstrAt {
         pc,
         instr: Box::new(instr),
@@ -422,20 +488,6 @@ fn term(pc: u64, instr: Rv64IInstr) -> LiftedInstr {
         terminator: Terminator::Extension(Box::new(instr)),
         source_loc: None,
     }
-}
-
-pub(crate) fn decode_reg(value: u32) -> ValueSlot {
-    decode_value_slot(value, RV64_REGISTER_BYTES as u32, RV64_NUM_REGISTERS as u32)
-}
-
-/// Decode the immediate from the `(c, g)` field pair used by JALR, loads, and stores.
-///
-/// OpenVM stores the lower 16 bits of the sign-extended immediate in `c` and
-/// the sign marker in `g`. A negative value is reconstructed by adding
-/// `0xffff0000` to `(c & 0xffff)`.
-pub(crate) fn decode_imm_cg(insn: &RvrInstruction) -> u32 {
-    let low16 = insn.c & 0xffff;
-    low16.wrapping_add(if insn.g != 0 { 0xffff_0000 } else { 0 })
 }
 
 /// Sign-extend a 12-bit immediate stored in the low 24 bits.
@@ -461,6 +513,7 @@ mod tests {
     use p3_baby_bear::BabyBear;
 
     use super::*;
+    use crate::instruction::Reg;
 
     fn instruction(opcode: impl LocalOpcode, operands: [usize; 7]) -> RvrInstruction {
         instruction_for_opcode(opcode.global_opcode(), operands)
@@ -687,7 +740,7 @@ mod tests {
         assert_eq!(
             instr.cfg_effect(),
             rvr_openvm_ir::CfgEffect::WriteConst {
-                dst: ValueSlot::new(1),
+                dst: Reg::new(1),
                 value: pc + 0x100,
             }
         );

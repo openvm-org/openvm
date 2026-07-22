@@ -7,7 +7,7 @@ use openvm_algebra_utils::{find_non_qr, NQR_RNG_SEED};
 use openvm_instructions::{LocalOpcode, SystemOpcode};
 use rand::{rngs::StdRng, SeedableRng};
 use rvr_openvm_ir::{CfgEffect, ExtEmitCtx, ExtInstr, InstrAt, LiftedInstr, ValueSlot};
-use rvr_openvm_lift::{RvrExtension, RvrInstruction};
+use rvr_openvm_lift::{max_pages_for_contiguous_range, RvrExtension, RvrInstruction};
 use strum::EnumCount;
 
 use crate::{
@@ -16,6 +16,9 @@ use crate::{
 };
 
 include!(concat!(env!("OUT_DIR"), "/secp256k1_files.rs"));
+
+// A modular operation can read two independent 48-byte values and write one.
+const MODULAR_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize = 3 * max_pages_for_contiguous_range(48);
 
 /// Per-modulus info for the modular extension. Includes a precomputed non-QR
 /// for the `HintNonQr` / `HintSqrt` phantoms.
@@ -274,6 +277,10 @@ impl RvrExtension for ModularRvrExtension {
 
     fn uses_memory_wrappers(&self) -> bool {
         true
+    }
+
+    fn max_main_memory_pages_per_instruction(&self) -> usize {
+        MODULAR_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION
     }
 
     fn vendored_c_sources(&self) -> Vec<(&'static str, &'static str)> {

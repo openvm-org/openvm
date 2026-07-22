@@ -4,13 +4,16 @@ use num_bigint::BigUint;
 use openvm_algebra_transpiler::Fp2Opcode;
 use openvm_instructions::LocalOpcode;
 use rvr_openvm_ir::{ExtInstr, InstrAt, LiftedInstr};
-use rvr_openvm_lift::{RvrExtension, RvrInstruction};
+use rvr_openvm_lift::{max_pages_for_contiguous_range, RvrExtension, RvrInstruction};
 use strum::EnumCount;
 
 use crate::{
     decode_reg, pad_modulus, ArithKind, FieldArithInstr, FieldKind, FieldSetupInstr, KnownField,
     ModOp, SetupKind,
 };
+
+// An Fp2 operation can read two independent 96-byte values and write one.
+const FP2_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize = 3 * max_pages_for_contiguous_range(96);
 
 /// Per-modulus info for the Fp2 extension. Fp2 lifting never consults a
 /// non-QR, so we only carry the padded modulus and limb count.
@@ -97,6 +100,10 @@ impl RvrExtension for Fp2RvrExtension {
 
     fn uses_memory_wrappers(&self) -> bool {
         true
+    }
+
+    fn max_main_memory_pages_per_instruction(&self) -> usize {
+        FP2_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION
     }
 }
 

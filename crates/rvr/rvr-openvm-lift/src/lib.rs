@@ -6,7 +6,7 @@
 //! The `opcode` module lifts individual OpenVM instructions to `LiftedInstr`,
 //! which is either a body `ExtInstr` or a `Terminator` (control flow).
 //! The `convert` module provides the top-level `convert_vmexe_to_ir` function.
-//! The `cfg` module builds basic blocks from flat IR using rvr-openvm-ir types.
+//! The `cfg` module constructs control-flow graphs and propagates constants.
 //! The `extension` module provides the `RvrExtension` trait and `ExtensionRegistry`.
 
 pub mod cfg;
@@ -18,8 +18,8 @@ pub mod opcode;
 pub use cfg::{build_blocks, CfgError};
 pub use convert::{convert_vmexe_to_ir, convert_vmexe_to_ir_with_debug, ConvertError};
 pub use extension::{
-    air_index_to_c, decode_value_slot, fixed_trace_rows_for_chip, opcode_air_idx, AirIndex,
-    ExtensionError, ExtensionRegistry, RvrExtension, RvrExtensionCtx, RvrExtensions,
-    RvrRuntimeExtension, TraceChipIndex, VmRvrExtension,
+    air_index_to_c, decode_value_slot, fixed_trace_rows_for_chip, max_pages_for_contiguous_range,
+    opcode_air_idx, AirIndex, ExtensionError, ExtensionRegistry, RvrExtension, RvrExtensionCtx,
+    RvrExtensions, RvrRuntimeExtension, TraceChipIndex, VmRvrExtension, MAIN_MEMORY_PAGE_BYTES,
 };
 pub use instruction::RvrInstruction;

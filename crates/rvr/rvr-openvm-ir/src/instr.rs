@@ -1,6 +1,6 @@
 use crate::{ExtEmitCtx, FixedTraceRows};
 
-/// Opaque value location used by CFG analysis and generated-code access.
+/// Opaque target-defined mutable state location used by CFG analysis and code generation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ValueSlot(u32);
 
@@ -69,15 +69,20 @@ pub enum CfgOp {
 /// Width and extension behavior of a CFG operation result.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CfgResultWidth {
+    /// Keep the low 32 bits and zero-extend them.
     U32,
+    /// Keep all 64 bits.
     U64,
+    /// Keep the low 32 bits and sign-extend them to 64 bits.
     SignExtend32,
 }
 
 /// Integer width used to compare branch operands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CfgIntWidth {
+    /// Compare the low 32 bits.
     U32,
+    /// Compare all 64 bits.
     U64,
 }
 

@@ -13,9 +13,12 @@ use rvr_openvm_ir::{
     CfgEffect, ExtEmitCtx, ExtInstr, FixedTraceRows, InstrAt, LiftedInstr, ValueSlot,
 };
 use rvr_openvm_lift::{
-    decode_value_slot, fixed_trace_rows_for_chip, opcode_air_idx, AirIndex, ExtensionError,
-    RvrExtension, RvrExtensionCtx, RvrInstruction,
+    decode_value_slot, fixed_trace_rows_for_chip, max_pages_for_contiguous_range, opcode_air_idx,
+    AirIndex, ExtensionError, RvrExtension, RvrExtensionCtx, RvrInstruction,
 };
+
+// SHA-512 has three independent ranges; its largest range is the 128-byte block.
+const SHA2_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize = 3 * max_pages_for_contiguous_range(128);
 
 fn decode_reg(value: u32) -> ValueSlot {
     decode_value_slot(value, RV64_REGISTER_BYTES as u32, RV64_NUM_REGISTERS as u32)
@@ -190,5 +193,9 @@ impl RvrExtension for Sha2Extension {
 
     fn uses_memory_wrappers(&self) -> bool {
         true
+    }
+
+    fn max_main_memory_pages_per_instruction(&self) -> usize {
+        SHA2_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION
     }
 }

@@ -1,14 +1,18 @@
+//! RV64M instruction lifting and generated-C support.
+
+mod instruction;
+
 use openvm_instructions::{
     riscv::{RV64_IMM_AS, RV64_REGISTER_AS},
     LocalOpcode,
 };
 use openvm_riscv_transpiler::{DivRemOpcode, DivRemWOpcode, MulHOpcode, MulOpcode, MulWOpcode};
-use rvr_openvm_ir::{InstrAt, LiftedInstr};
+use rvr_openvm_ir::{ExtInstr, InstrAt, LiftedInstr};
 use rvr_openvm_lift::{RvrExtension, RvrInstruction};
 
 use crate::{
-    i::decode_reg,
-    instruction::{MulDivOp, Rv64MInstr},
+    instruction::{decode_reg, NopInstr, ZERO},
+    m::instruction::{MulDivOp, Rv64MInstr},
 };
 
 /// RVR lifter for RV64M instructions.
@@ -96,8 +100,8 @@ impl RvrExtension for Rv64MExtension {
         }
 
         let rd = decode_reg(insn.a);
-        let instruction: Box<dyn rvr_openvm_ir::ExtInstr> = if rd == crate::instruction::ZERO {
-            Box::new(crate::instruction::Rv64IInstr::Nop)
+        let instruction: Box<dyn ExtInstr> = if rd == ZERO {
+            Box::new(NopInstr)
         } else {
             Box::new(Rv64MInstr {
                 op,
