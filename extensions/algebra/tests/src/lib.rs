@@ -44,7 +44,7 @@ mod tests {
             verify_segments, ContinuationVmProver, DenseRecordArena, MatrixRecordArena, Streams,
             VirtualMachine, VmInstance,
         },
-        system::{memory::TimestampedValues, SystemRecords},
+        system::{SystemRecords, TouchedBlock},
         utils::test_cpu_engine,
     };
     #[cfg(feature = "rvr")]
@@ -603,18 +603,17 @@ mod tests {
                 if let Some(&expected) = reference.final_blocks.get(&(address_space, address)) {
                     assert_eq!(block, expected, "G2 opaque modular final block value");
                 }
-                touched_memory.push((
-                    (u32::from(address_space), address / 2),
-                    TimestampedValues {
-                        timestamp,
-                        values: [0, 2, 4, 6].map(|offset| {
-                            F::from_u32(u32::from(u16::from_le_bytes([
-                                bytes[offset],
-                                bytes[offset + 1],
-                            ])))
-                        }),
-                    },
-                ));
+                touched_memory.push(TouchedBlock {
+                    address_space: u32::from(address_space),
+                    ptr: address / 2,
+                    timestamp,
+                    values: [0, 2, 4, 6].map(|offset| {
+                        F::from_u32(u32::from(u16::from_le_bytes([
+                            bytes[offset],
+                            bytes[offset + 1],
+                        ])))
+                    }),
+                });
             }
             output.system_records.touched_memory = touched_memory;
         }

@@ -413,24 +413,6 @@ impl RvrExtension for EccExtension {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use openvm_instructions::VmOpcode;
-
-    use super::*;
-
-    #[test]
-    fn ignores_opcodes_outside_configured_curves() {
-        let extension = EccExtension::new(vec![0]);
-        let opcode = VmOpcode::from_usize(
-            Rv64WeierstrassOpcode::CLASS_OFFSET + Rv64WeierstrassOpcode::COUNT,
-        );
-        let insn = RvrInstruction::from_canonical(opcode, [0; 7], u32::MAX);
-
-        assert!(extension.try_lift(&insn, 0x100).is_none());
-    }
-}
-
 fn emit_vec_heap_record(
     ctx: &mut dyn ExtEmitCtx,
     from_pc: u32,
@@ -450,4 +432,22 @@ fn emit_vec_heap_record(
             &format!("{}u", air_index_to_c(chip_idx)),
         ],
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use openvm_instructions::VmOpcode;
+
+    use super::*;
+
+    #[test]
+    fn ignores_opcodes_outside_configured_curves() {
+        let extension = EccExtension::new(vec![0]);
+        let opcode = VmOpcode::from_usize(
+            Rv64WeierstrassOpcode::CLASS_OFFSET + Rv64WeierstrassOpcode::COUNT,
+        );
+        let insn = RvrInstruction::from_canonical(opcode, [0; 7], u32::MAX);
+
+        assert!(extension.try_lift(&insn, 0x100).is_none());
+    }
 }
