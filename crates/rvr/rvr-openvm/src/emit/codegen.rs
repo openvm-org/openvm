@@ -2,29 +2,9 @@
 use std::collections::HashSet;
 
 use openvm_instructions::program::DEFAULT_PC_STEP;
-use rvr_openvm_ir::{
-    CfgBranchCond, CfgIntWidth, CfgOperand, CfgTerm, ExtEmitCtx, ExtInstr, Terminator,
-};
+use rvr_openvm_ir::{CfgBranchCond, CfgIntWidth, CfgOperand, CfgTerm, ExtEmitCtx, Terminator};
 
 use super::context::EmitContext;
-
-/// Trait for instructions that can emit their own C code.
-pub trait InstrCodegen {
-    /// Emit the C body for this instruction into the buffer.
-    /// `ctx` handles variable and memory access for the current execution mode.
-    fn emit_c(&self, ctx: &mut EmitContext);
-}
-
-impl InstrCodegen for Box<dyn ExtInstr> {
-    fn emit_c(&self, ctx: &mut EmitContext) {
-        ExtInstr::emit_c(self.as_ref(), ctx);
-    }
-}
-
-/// Emit C code for a body instruction.
-pub fn emit_instr(ctx: &mut EmitContext, instr: &dyn ExtInstr) {
-    instr.emit_c(ctx);
-}
 
 /// Context for terminator code generation and tail-call dispatch.
 pub struct TermCtx<'a> {
@@ -120,11 +100,11 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
         CfgTerm::Exit { code } => emit_exit(ctx, pc, code),
         CfgTerm::Trap { message } => emit_trap(ctx, pc, &message),
         CfgTerm::Opaque { .. } => {
-            let Terminator::Instruction(instr) = term else {
+            let Terminator::Instruction { node, .. } = term else {
                 unreachable!("opaque control flow requires an instruction-owned terminator")
             };
             let branch_to = |target| static_tail_call(target, &args, tc.valid_blocks);
-            instr.emit_c_term(ctx, &branch_to);
+            node.emit_c_term(ctx, &branch_to);
         }
     }
 }
@@ -215,7 +195,7 @@ pub(super) fn hex_u32(value: u32) -> String {
 
 #[cfg(test)]
 mod tests {
-    use rvr_openvm_ir::{CfgEffect, Variable};
+    use rvr_openvm_ir::{CfgEffect, ExtInstr, Variable};
 
     use super::*;
     use crate::emit::context::{BlockAbi, EmitMode};
@@ -248,7 +228,7 @@ mod tests {
 
     #[test]
     fn known_branch_reads_operands_only_for_value_tracing() {
-        let term = Terminator::Instruction(Box::new(KnownBranch));
+        let term = Terminator::instruction(KnownBranch);
         let valid_blocks = HashSet::from([8]);
         let tc = TermCtx {
             valid_blocks: &valid_blocks,

@@ -440,7 +440,6 @@ fn lift_jalr(insn: &RvrInstruction, pc: u64) -> LiftedInstr {
             link_dst: (rd != ZERO).then_some(rd),
             base: decode_reg(insn.b),
             offset: decode_imm_cg(insn) as i32,
-            resolved: Vec::new(),
         },
     )
 }
@@ -492,7 +491,7 @@ fn body(pc: u64, instr: impl ExtInstr + 'static) -> LiftedInstr {
 fn term(pc: u64, instr: Rv64IInstr) -> LiftedInstr {
     LiftedInstr::Term {
         pc,
-        terminator: Terminator::Instruction(Box::new(instr)),
+        terminator: Terminator::instruction(instr),
         source_loc: None,
     }
 }

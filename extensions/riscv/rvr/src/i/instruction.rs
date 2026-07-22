@@ -120,7 +120,6 @@ pub(crate) enum Rv64IInstr {
         link_dst: Option<Reg>,
         base: Reg,
         offset: i32,
-        resolved: Vec<u64>,
     },
 }
 
@@ -286,7 +285,6 @@ impl ExtInstr for Rv64IInstr {
                 link_dst,
                 base,
                 offset,
-                resolved,
             } => Some(CfgTerm::JumpIndirect {
                 kind: if link_dst.is_some() {
                     CfgJumpKind::Call
@@ -299,26 +297,8 @@ impl ExtInstr for Rv64IInstr {
                 base_value: reg_operand(*base),
                 offset: *offset,
                 target_mask: !1,
-                resolved: resolved.clone(),
             }),
             _ => None,
-        }
-    }
-
-    fn with_resolved_jumps(&self, resolved: Vec<u64>) -> Box<dyn ExtInstr> {
-        match self {
-            Self::JumpIndirect {
-                link_dst,
-                base,
-                offset,
-                ..
-            } => Box::new(Self::JumpIndirect {
-                link_dst: *link_dst,
-                base: *base,
-                offset: *offset,
-                resolved,
-            }),
-            _ => self.clone_box(),
         }
     }
 }

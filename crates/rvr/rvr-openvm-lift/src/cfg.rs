@@ -620,8 +620,8 @@ fn transfer(li: &LiftedInstr, mut state: VariableState) -> VariableState {
             transfer_effect(instr.cfg_effect(), &mut state);
         }
         LiftedInstr::Term { pc, terminator, .. } => {
-            if let Terminator::Instruction(instr) = terminator {
-                transfer_effect(instr.cfg_effect(), &mut state);
+            if let Terminator::Instruction { node, .. } = terminator {
+                transfer_effect(node.cfg_effect(), &mut state);
             }
             let fall_pc = pc + INSTR_SIZE as u64;
             match terminator.cfg_term(*pc, fall_pc) {
@@ -1078,12 +1078,15 @@ fn build_block_list(
             } => {
                 let mut term = terminator.clone();
 
-                // Patch resolved targets into the instruction-owned terminator.
+                // Store the indirect-jump targets found by CFG analysis.
                 if let Some(targets) = resolved_jumps.get(&pc) {
-                    if let Terminator::Instruction(instr) = &mut term {
+                    if let Terminator::Instruction {
+                        resolved_targets, ..
+                    } = &mut term
+                    {
                         let mut sorted_targets: Vec<u64> = targets.iter().copied().collect();
                         sorted_targets.sort_unstable();
-                        *instr = instr.with_resolved_jumps(sorted_targets);
+                        *resolved_targets = sorted_targets;
                     }
                 }
 
@@ -1165,17 +1168,6 @@ mod tests {
         fn clone_box(&self) -> Box<dyn ExtInstr> {
             Box::new(self.clone())
         }
-
-        fn with_resolved_jumps(&self, resolved: Vec<u64>) -> Box<dyn ExtInstr> {
-            let mut cloned = self.clone();
-            if let Some(CfgTerm::JumpIndirect {
-                resolved: targets, ..
-            }) = &mut cloned.term
-            {
-                *targets = resolved;
-            }
-            Box::new(cloned)
-        }
     }
 
     fn instruction_term(pc: u64, cfg_term: CfgTerm) -> LiftedInstr {
@@ -1185,10 +1177,10 @@ mod tests {
     fn instruction_term_with_effect(pc: u64, effect: CfgEffect, cfg_term: CfgTerm) -> LiftedInstr {
         term(
             pc,
-            Terminator::Instruction(Box::new(TestInstr {
+            Terminator::instruction(TestInstr {
                 effect,
                 term: Some(cfg_term),
-            })),
+            }),
         )
     }
 
@@ -1302,7 +1294,6 @@ mod tests {
                         base_value: CfgOperand::Var(var(5)),
                         offset: 0,
                         target_mask: !1,
-                        resolved: Vec::new(),
                     },
                 ),
                 body(
@@ -1325,10 +1316,7 @@ mod tests {
         )
         .expect("cfg build");
 
-        assert!(matches!(
-            block_at(&blocks, 4).terminator.cfg_term(4, 8),
-            CfgTerm::JumpIndirect { resolved, .. } if resolved == vec![16]
-        ));
+        assert_eq!(block_at(&blocks, 4).terminator.successors(4, 8), vec![16]);
     }
 
     #[test]
@@ -1360,7 +1348,6 @@ mod tests {
                         base_value: CfgOperand::Var(var(5)),
                         offset: 0,
                         target_mask: !1,
-                        resolved: Vec::new(),
                     },
                 ),
                 term(12, Terminator::Exit { code: 0 }),
@@ -1370,10 +1357,7 @@ mod tests {
         )
         .expect("cfg build");
 
-        assert!(matches!(
-            block_at(&blocks, 0).terminator.cfg_term(8, 12),
-            CfgTerm::JumpIndirect { resolved, .. } if resolved.is_empty()
-        ));
+        assert!(block_at(&blocks, 0).terminator.successors(8, 12).is_empty());
     }
 
     #[test]
@@ -1405,7 +1389,6 @@ mod tests {
                         base_value: CfgOperand::Var(var(5)),
                         offset: 0,
                         target_mask: !1,
-                        resolved: Vec::new(),
                     },
                 ),
                 term(12, Terminator::Exit { code: 0 }),
@@ -1415,10 +1398,7 @@ mod tests {
         )
         .expect("cfg build");
 
-        assert!(matches!(
-            block_at(&blocks, 8).terminator.cfg_term(8, 12),
-            CfgTerm::JumpIndirect { resolved, .. } if resolved.is_empty()
-        ));
+        assert!(block_at(&blocks, 8).terminator.successors(8, 12).is_empty());
     }
 
     #[test]

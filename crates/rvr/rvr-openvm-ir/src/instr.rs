@@ -148,7 +148,6 @@ pub enum CfgTerm {
         base_value: CfgOperand,
         offset: i32,
         target_mask: u64,
-        resolved: Vec<u64>,
     },
     /// Conditionally jump to `target`, otherwise fall through.
     Branch {
@@ -220,18 +219,6 @@ pub trait ExtInstr: std::fmt::Debug + Send + Sync {
 
     /// Clone into a boxed trait object.
     fn clone_box(&self) -> Box<dyn ExtInstr>;
-
-    /// Return a copy with the indirect-jump targets found by CFG analysis.
-    ///
-    /// The default accepts an empty target list and panics for any target.
-    fn with_resolved_jumps(&self, resolved: Vec<u64>) -> Box<dyn ExtInstr> {
-        assert!(
-            resolved.is_empty(),
-            "instruction {} does not accept resolved jump targets",
-            self.opname()
-        );
-        self.clone_box()
-    }
 }
 
 impl Clone for Box<dyn ExtInstr> {

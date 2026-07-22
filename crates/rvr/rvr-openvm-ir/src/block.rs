@@ -31,17 +31,29 @@ impl SourceLoc {
 /// Block terminator — control flow at the end of a basic block.
 #[derive(Debug, Clone)]
 pub enum Terminator {
-    /// Fall through to pc + 4 (implicit next block).
+    /// Fall through to the next lifted instruction.
     FallThrough,
     /// Program exit.
     Exit { code: u32 },
     /// Illegal instruction / debug panic.
     Trap { message: String },
     /// Instruction node stored in terminator position.
-    Instruction(Box<dyn ExtInstr>),
+    Instruction {
+        node: Box<dyn ExtInstr>,
+        /// Indirect-jump targets found by CFG analysis.
+        resolved_targets: Vec<u64>,
+    },
 }
 
 impl Terminator {
+    /// Create a terminator for an instruction node.
+    pub fn instruction(node: impl ExtInstr + 'static) -> Self {
+        Self::Instruction {
+            node: Box::new(node),
+            resolved_targets: Vec::new(),
+        }
+    }
+
     /// Returns the control-flow behavior of this terminator.
     pub fn cfg_term(&self, pc: u64, fall_pc: u64) -> CfgTerm {
         match self {
@@ -50,7 +62,9 @@ impl Terminator {
             Self::Trap { message } => CfgTerm::Trap {
                 message: message.clone(),
             },
-            Self::Instruction(instr) => instr.cfg_term(pc, fall_pc).unwrap_or(CfgTerm::FallThrough),
+            Self::Instruction { node, .. } => {
+                node.cfg_term(pc, fall_pc).unwrap_or(CfgTerm::FallThrough)
+            }
         }
     }
 
@@ -59,7 +73,12 @@ impl Terminator {
         match self.cfg_term(pc, fall_pc) {
             CfgTerm::FallThrough => vec![fall_pc],
             CfgTerm::Jump { target, .. } => vec![target],
-            CfgTerm::JumpIndirect { resolved, .. } => resolved,
+            CfgTerm::JumpIndirect { .. } => match self {
+                Self::Instruction {
+                    resolved_targets, ..
+                } => resolved_targets.clone(),
+                _ => Vec::new(),
+            },
             CfgTerm::Branch { target, .. } => vec![target, fall_pc],
             CfgTerm::Exit { .. } | CfgTerm::Trap { .. } => Vec::new(),
             CfgTerm::Opaque { successors } => successors,
@@ -71,7 +90,7 @@ impl Terminator {
             Self::FallThrough => "fallthrough",
             Self::Exit { .. } => "exit",
             Self::Trap { .. } => "trap",
-            Self::Instruction(instr) => instr.opname(),
+            Self::Instruction { node, .. } => node.opname(),
         }
     }
 

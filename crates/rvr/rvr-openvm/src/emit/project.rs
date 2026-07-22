@@ -11,7 +11,7 @@ use rvr_openvm_ir::*;
 use rvr_openvm_lift::{ExtensionRegistry, TraceChipIndex};
 
 use super::{
-    codegen::{emit_terminator, InstrCodegen, TermCtx},
+    codegen::{emit_terminator, TermCtx},
     context::{validate_chip_index, BlockAbi, EmitContext, EmitMode, InvalidChipIndex},
 };
 use crate::constants::constants_header;
@@ -1066,8 +1066,8 @@ impl CProject {
         }
         if !matches!(block.terminator, Terminator::FallThrough) {
             add_base_row(&mut chip_counts, block.terminator_pc)?;
-            if let Terminator::Instruction(instr) = &block.terminator {
-                add_instruction_rows(&mut chip_counts, instr.as_ref())?;
+            if let Terminator::Instruction { node, .. } = &block.terminator {
+                add_instruction_rows(&mut chip_counts, node.as_ref())?;
             }
         }
         if chip_counts.is_empty() {
@@ -1318,7 +1318,7 @@ fn instr_accesses_memory(instr: &dyn ExtInstr) -> bool {
 
 fn terminator_accesses_memory(terminator: &Terminator) -> bool {
     match terminator {
-        Terminator::Instruction(instr) => instr.accesses_memory(),
+        Terminator::Instruction { node, .. } => node.accesses_memory(),
         _ => false,
     }
 }
