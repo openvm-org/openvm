@@ -119,13 +119,19 @@ pub struct SystemRecords<F> {
 ///
 /// `repr(C)` with 4-byte fields: for a 4-byte field type its bytes are plain
 /// data and the struct is exactly the GPU memory-inventory input-record
-/// layout (7 u32 words), so the device path uploads the vector's bytes
+/// layout (8 u32 words), so the device path uploads the vector's bytes
 /// without repacking. Keep in sync with `InRec` in `inventory.cu`.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TouchedBlock<F> {
     pub address_space: u32,
     pub ptr: u32,
+    /// Whether the block was *written* during the segment (0/1), as tracked by
+    /// `TracingMemory`. Dirtiness is per write access, independent of the written
+    /// content: writing values equal to the existing ones still marks the block dirty.
+    /// Not consumed yet: a follow-up switches the boundary and merkle chips to commit
+    /// final state only for leaves containing a dirty block.
+    pub is_dirty: u32,
     pub timestamp: u32,
     pub values: [F; BLOCK_FE_WIDTH],
 }

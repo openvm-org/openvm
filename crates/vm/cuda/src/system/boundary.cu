@@ -9,6 +9,9 @@ template <size_t CHUNK, size_t BLOCKS> struct BoundaryRecord {
     uint32_t address_space;
     // AS-native pointer to the first cell of this Merkle leaf.
     uint32_t ptr;
+    // Whether some block of the leaf was *written* during execution (0/1), tracked by
+    // preflight and merged by inventory.cu. Not consumed yet.
+    uint32_t is_dirty;
     uint32_t timestamps[BLOCKS];
     uint32_t values[CHUNK]; // Montgomery-encoded Fp values stored as raw u32
 };
