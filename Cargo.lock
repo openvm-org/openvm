@@ -7359,7 +7359,9 @@ dependencies = [
 name = "rvr-openvm-ext-ecc-ffi"
 version = "2.0.0"
 dependencies = [
+ "blstrs",
  "halo2curves-axiom 0.7.3",
+ "hex-literal",
  "num-bigint 0.4.6",
  "openvm-circuit-primitives",
  "openvm-ecc-circuit",
