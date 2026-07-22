@@ -171,9 +171,9 @@ pub enum CfgTerm {
 pub trait ExtInstr: std::fmt::Debug + Send + Sync {
     /// Emit C code for this instruction through the mode-aware context.
     ///
-    /// Use `ctx.read_var()` / `ctx.write_var()` for variable access (tracing is
-    /// handled in the generated C code) and `ctx.write_line()` to emit raw C
-    /// lines.
+    /// Use `ctx.read_var()` and `ctx.write_var()` for VM memory accesses,
+    /// `ctx.peek_var()` for reads that preserve the logical memory timestamp, and
+    /// `ctx.write_line()` to emit raw C lines.
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx);
 
     /// Emit C code for an instruction-owned terminator.

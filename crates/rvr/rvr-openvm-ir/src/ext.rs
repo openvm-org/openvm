@@ -37,21 +37,20 @@ impl PageAddressSpace {
     }
 }
 
-/// Trait abstracting the code-generation context for extension instructions.
+/// Code-generation context used by instruction nodes.
 ///
-/// Extensions use this context to read and write variables while emitting C.
-/// The current mode controls tracing. Generated C resolves variable accesses
-/// before passing their values to extension functions.
+/// Value tracing emits ordered hooks used to build execution records. The
+/// logical memory timestamp represents the order of VM memory accesses. Each
+/// recorded read or write advances it. A peek reads the current value and
+/// preserves the current timestamp.
 pub trait ExtEmitCtx {
-    /// Read a variable as an AIR-visible memory access.
+    /// Read a variable through a VM memory access.
     fn read_var(&mut self, var: Variable) -> String;
 
-    /// Get a variable's current value.
-    ///
-    /// Value-tracing modes record the value at the current memory timestamp.
+    /// Read a variable at the current logical memory timestamp.
     fn peek_var(&mut self, var: Variable) -> String;
 
-    /// Write a variable, tracing it when required by the emission mode.
+    /// Write a variable through a VM memory access.
     fn write_var(&mut self, var: Variable, val: &str);
 
     /// Append a line of C code (indented).

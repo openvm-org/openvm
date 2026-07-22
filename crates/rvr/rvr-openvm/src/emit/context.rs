@@ -21,7 +21,7 @@ pub(crate) fn validate_chip_index(chip_idx: u32, num_airs: u32) -> Result<(), In
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(crate) enum EmitMode {
-    /// Emit ordered register, PC, and memory-value hooks.
+    /// Emit ordered PC, register, and memory hooks used to build execution records.
     ///
     /// Page hooks are separate because they record only addresses for metering.
     #[allow(dead_code)]
@@ -246,17 +246,20 @@ impl<'a> EmitContext<'a> {
         value
     }
 
-    /// Read an AIR-visible register value.
+    /// Read a register as a VM memory access, emitting `trace_reg_read` in
+    /// value-tracing mode.
     pub fn read_reg(&mut self, idx: u8) -> String {
         self.read_reg_impl(idx, RegisterReadKind::MemoryAccess)
     }
 
-    /// Get a register value without creating a VM memory access.
+    /// Read a register at the current logical memory timestamp, emitting
+    /// `trace_reg_peek` in value-tracing mode.
     pub fn peek_reg(&mut self, idx: u8) -> String {
         self.read_reg_impl(idx, RegisterReadKind::Peek)
     }
 
-    /// Write a register with tracing when value tracing is enabled.
+    /// Write a register as a VM memory access, emitting `trace_reg_write` in
+    /// value-tracing mode.
     pub fn write_reg(&mut self, idx: u8, val: &str) {
         if idx == 0 {
             return;
