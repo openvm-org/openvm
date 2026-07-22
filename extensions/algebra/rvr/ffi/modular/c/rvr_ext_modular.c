@@ -220,68 +220,100 @@ __attribute__((preserve_most)) bool rvr_ext_mod_iseq_k256_scalar(
 /* ── EC ops: secp256k1 (always present in modular, regardless of whether
  * the ECC extension is configured at lift time) ──────────────────────── */
 
-__attribute__((preserve_most)) void rvr_ext_ec_add_ne_k256(RvState* state,
-                                                           uint64_t rd_ptr,
-                                                           uint64_t rs1_ptr,
-                                                           uint64_t rs2_ptr);
-__attribute__((preserve_most)) void rvr_ext_ec_double_k256(RvState* state,
-                                                           uint64_t rd_ptr,
-                                                           uint64_t rs1_ptr);
+__attribute__((preserve_most)) void rvr_ext_ec_add_proj_k256(RvState* state,
+                                                             uint64_t rd_ptr,
+                                                             uint64_t rs1_ptr,
+                                                             uint64_t rs2_ptr);
+__attribute__((preserve_most)) void rvr_ext_ec_double_proj_k256(RvState* state,
+                                                                uint64_t rd_ptr,
+                                                                uint64_t rs1_ptr);
 
-__attribute__((preserve_most)) void rvr_ext_ec_add_ne_k256(RvState* state,
-                                                           uint64_t rd_ptr,
-                                                           uint64_t rs1_ptr,
-                                                           uint64_t rs2_ptr) {
+/* Complete projective point addition (a = 0), ePrint 2015/1060 Algorithm 7.
+ * Mirrors the circuit's `ec_add_proj_impl_a0`; `3b = 21` for secp256k1 (b = 7). */
+__attribute__((preserve_most)) void rvr_ext_ec_add_proj_k256(RvState* state,
+                                                             uint64_t rd_ptr,
+                                                             uint64_t rs1_ptr,
+                                                             uint64_t rs2_ptr) {
   secp256k1_fe x1 = fe_read(state, rs1_ptr);
   secp256k1_fe y1 = fe_read(state, rs1_ptr + SECP256K1_ELEM_BYTES);
+  secp256k1_fe z1 = fe_read(state, rs1_ptr + 2 * SECP256K1_ELEM_BYTES);
   secp256k1_fe x2 = fe_read(state, rs2_ptr);
   secp256k1_fe y2 = fe_read(state, rs2_ptr + SECP256K1_ELEM_BYTES);
+  secp256k1_fe z2 = fe_read(state, rs2_ptr + 2 * SECP256K1_ELEM_BYTES);
 
-  /* lambda = (y2 - y1) / (x2 - x1) */
-  secp256k1_fe dy = fe_sub(&y2, &y1);
-  secp256k1_fe dx = fe_sub(&x2, &x1);
-  debug_assume(!fe_is_zero(&dx));
-  secp256k1_fe dx_inv = fe_inv(&dx);
-  secp256k1_fe lambda = fe_mul(&dy, &dx_inv);
+  secp256k1_fe b3;
+  secp256k1_fe_set_int(&b3, 21);
 
-  /* x3 = lambda^2 - x1 - x2 */
-  secp256k1_fe lsq = fe_mul(&lambda, &lambda);
-  secp256k1_fe x3 = fe_sub(&lsq, &x1);
-  x3 = fe_sub(&x3, &x2);
+  secp256k1_fe t0 = fe_mul(&x1, &x2);
+  secp256k1_fe t1 = fe_mul(&y1, &y2);
+  secp256k1_fe t2 = fe_mul(&z1, &z2);
+  secp256k1_fe t3 = fe_add(x1, &y1);
+  secp256k1_fe t4 = fe_add(x2, &y2);
+  t3 = fe_mul(&t3, &t4);
+  t4 = fe_add(t0, &t1);
+  t3 = fe_sub(&t3, &t4);
+  t4 = fe_add(y1, &z1);
+  secp256k1_fe x3 = fe_add(y2, &z2);
+  t4 = fe_mul(&t4, &x3);
+  x3 = fe_add(t1, &t2);
+  t4 = fe_sub(&t4, &x3);
+  x3 = fe_add(x1, &z1);
+  secp256k1_fe y3 = fe_add(x2, &z2);
+  x3 = fe_mul(&x3, &y3);
+  y3 = fe_add(t0, &t2);
+  y3 = fe_sub(&x3, &y3);
+  x3 = fe_add(fe_add(t0, &t0), &t0);
+  t2 = fe_mul(&b3, &t2);
+  secp256k1_fe z3 = fe_add(t1, &t2);
+  t1 = fe_sub(&t1, &t2);
+  y3 = fe_mul(&b3, &y3);
+  secp256k1_fe x3_out = fe_mul(&t4, &y3);
+  t2 = fe_mul(&t3, &t1);
+  x3_out = fe_sub(&t2, &x3_out);
+  y3 = fe_mul(&y3, &x3);
+  t1 = fe_mul(&t1, &z3);
+  secp256k1_fe y3_out = fe_add(t1, &y3);
+  x3 = fe_mul(&x3, &t3);
+  z3 = fe_mul(&z3, &t4);
+  secp256k1_fe z3_out = fe_add(z3, &x3);
 
-  /* y3 = lambda * (x1 - x3) - y1 */
-  secp256k1_fe dx13 = fe_sub(&x1, &x3);
-  secp256k1_fe y3 = fe_mul(&lambda, &dx13);
-  y3 = fe_sub(&y3, &y1);
-
-  fe_write(state, rd_ptr, &x3);
-  fe_write(state, rd_ptr + SECP256K1_ELEM_BYTES, &y3);
+  fe_write(state, rd_ptr, &x3_out);
+  fe_write(state, rd_ptr + SECP256K1_ELEM_BYTES, &y3_out);
+  fe_write(state, rd_ptr + 2 * SECP256K1_ELEM_BYTES, &z3_out);
 }
 
-__attribute__((preserve_most)) void rvr_ext_ec_double_k256(RvState* state,
-                                                           uint64_t rd_ptr,
-                                                           uint64_t rs1_ptr) {
+/* Complete projective point doubling (a = 0), ePrint 2015/1060 Algorithm 9.
+ * Mirrors the circuit's `ec_double_proj_impl_a0`; `3b = 21` for secp256k1. */
+__attribute__((preserve_most)) void rvr_ext_ec_double_proj_k256(RvState* state,
+                                                                uint64_t rd_ptr,
+                                                                uint64_t rs1_ptr) {
   secp256k1_fe x1 = fe_read(state, rs1_ptr);
   secp256k1_fe y1 = fe_read(state, rs1_ptr + SECP256K1_ELEM_BYTES);
+  secp256k1_fe z1 = fe_read(state, rs1_ptr + 2 * SECP256K1_ELEM_BYTES);
 
-  /* lambda = 3*x1^2 / (2*y1)  (a = 0 for secp256k1) */
-  secp256k1_fe x1sq = fe_mul(&x1, &x1);
-  secp256k1_fe three_x1sq = fe_add(fe_add(x1sq, &x1sq), &x1sq);
-  secp256k1_fe two_y1 = fe_add(y1, &y1);
-  debug_assume(!fe_is_zero(&two_y1));
-  secp256k1_fe two_y1_inv = fe_inv(&two_y1);
-  secp256k1_fe lambda = fe_mul(&three_x1sq, &two_y1_inv);
+  secp256k1_fe b3;
+  secp256k1_fe_set_int(&b3, 21);
 
-  /* x3 = lambda^2 - 2*x1 */
-  secp256k1_fe lsq = fe_mul(&lambda, &lambda);
-  secp256k1_fe two_x1 = fe_add(x1, &x1);
-  secp256k1_fe x3 = fe_sub(&lsq, &two_x1);
-
-  /* y3 = lambda * (x1 - x3) - y1 */
-  secp256k1_fe dx = fe_sub(&x1, &x3);
-  secp256k1_fe y3 = fe_mul(&lambda, &dx);
-  y3 = fe_sub(&y3, &y1);
+  secp256k1_fe t0 = fe_mul(&y1, &y1);
+  secp256k1_fe z3 = fe_add(t0, &t0);
+  z3 = fe_add(z3, &z3);
+  z3 = fe_add(z3, &z3);
+  secp256k1_fe t1 = fe_mul(&y1, &z1);
+  secp256k1_fe t2 = fe_mul(&z1, &z1);
+  t2 = fe_mul(&b3, &t2);
+  secp256k1_fe x3 = fe_mul(&t2, &z3);
+  secp256k1_fe y3 = fe_add(t0, &t2);
+  z3 = fe_mul(&t1, &z3);
+  t1 = fe_add(t2, &t2);
+  t2 = fe_add(t1, &t2);
+  t0 = fe_sub(&t0, &t2);
+  y3 = fe_mul(&t0, &y3);
+  y3 = fe_add(x3, &y3);
+  t1 = fe_mul(&x1, &y1);
+  x3 = fe_mul(&t0, &t1);
+  x3 = fe_add(x3, &x3);
 
   fe_write(state, rd_ptr, &x3);
   fe_write(state, rd_ptr + SECP256K1_ELEM_BYTES, &y3);
+  fe_write(state, rd_ptr + 2 * SECP256K1_ELEM_BYTES, &z3);
 }
