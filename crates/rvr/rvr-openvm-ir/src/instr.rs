@@ -1,6 +1,6 @@
 use crate::{ExtEmitCtx, FixedTraceRows};
 
-/// Opaque target-defined mutable state location used by CFG analysis and code generation.
+/// A target-defined variable used by CFG analysis and C code generation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Variable(u32);
 
@@ -86,7 +86,7 @@ pub enum CfgIntWidth {
     U64,
 }
 
-/// Data-flow effect of one instruction on tracked variables.
+/// Variable writes tracked by CFG analysis.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CfgEffect {
     None,
@@ -188,10 +188,10 @@ pub trait ExtInstr: std::fmt::Debug + Send + Sync {
         "ext"
     }
 
-    /// Data-flow behavior used by CFG analysis.
+    /// Report this instruction's variable writes for CFG analysis.
     ///
-    /// Implementations must choose an explicit effect so variable writes cannot
-    /// accidentally preserve stale control-flow constants.
+    /// Writes represented by `cfg_term()` need not be repeated here. Other
+    /// writes must be reported so the analysis does not reuse an outdated constant.
     fn cfg_effect(&self) -> CfgEffect;
 
     /// Control-flow behavior, if this instruction ends a basic block.
@@ -218,10 +218,9 @@ pub trait ExtInstr: std::fmt::Debug + Send + Sync {
     /// Clone into a boxed trait object.
     fn clone_box(&self) -> Box<dyn ExtInstr>;
 
-    /// Return a copy with CFG-resolved indirect-jump targets.
+    /// Return a copy with the indirect-jump targets found by CFG analysis.
     ///
-    /// Instructions without indirect control flow reject nonempty targets so
-    /// resolved successors cannot be silently discarded.
+    /// The default rejects nonempty target lists instead of ignoring them.
     fn with_resolved_jumps(&self, resolved: Vec<u64>) -> Box<dyn ExtInstr> {
         assert!(
             resolved.is_empty(),

@@ -24,7 +24,7 @@ fn decode_reg(value: u32) -> Variable {
 
 const KECCAK_NUM_ROUNDS: u32 = p3_keccak_air::NUM_ROUNDS as u32;
 const _: () = assert!(KECCAK_NUM_ROUNDS as usize == p3_keccak_air::NUM_ROUNDS);
-// XORIN reads and rewrites a 136-byte buffer around an independent input read.
+// XORIN reads one 136-byte buffer, writes it back, and separately reads its input.
 const KECCAK_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize =
     3 * max_main_memory_pages_for_contiguous_range(136);
 

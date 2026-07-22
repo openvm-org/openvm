@@ -14,8 +14,9 @@ pub struct FixedTraceRows {
 
 /// Address space classification used by page-access metering.
 ///
-/// Main memory is distinguished because generated code keeps its current page
-/// in local state and must flush that state around calls that can change it.
+/// Main memory is distinct because generated metered code caches its current
+/// page locally. Calls that may access main memory require this cache to be
+/// flushed before the call and reloaded afterward.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PageAddressSpace {
     /// The target's main guest-memory address space.
@@ -38,9 +39,9 @@ impl PageAddressSpace {
 
 /// Trait abstracting the code-generation context for extension instructions.
 ///
-/// Extensions use this context to access target-defined variables and emit C.
-/// The emission mode decides whether accesses are traced. Variable access stays
-/// in generated C so FFI calls only carry resolved values and memory.
+/// Extensions use this context to read and write target-defined variables while
+/// emitting C. The current mode controls tracing. Generated C resolves variable
+/// accesses before passing their values to extension functions.
 pub trait ExtEmitCtx {
     /// Read a variable as an AIR-visible memory access.
     fn read_var(&mut self, var: Variable) -> String;

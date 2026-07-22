@@ -73,7 +73,7 @@ impl AluOp {
     }
 }
 
-/// RV64I instruction represented as extension-owned IR.
+/// An RV64I instruction implemented by this extension.
 #[derive(Debug, Clone)]
 pub(crate) enum Rv64IInstr {
     /// Register-register or register-immediate arithmetic.
@@ -115,7 +115,7 @@ pub(crate) enum Rv64IInstr {
     },
     /// Jump to a statically known target.
     Jump { link_dst: Option<Reg>, target: u64 },
-    /// Jump to a CFG-resolved register-relative target.
+    /// Jump through a register to one of the targets found by CFG analysis.
     JumpIndirect {
         link_dst: Option<Reg>,
         base: Reg,

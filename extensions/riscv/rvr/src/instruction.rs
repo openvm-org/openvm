@@ -4,7 +4,7 @@ use openvm_instructions::riscv::{RV64_NUM_REGISTERS, RV64_REGISTER_BYTES};
 use rvr_openvm_ir::{CfgEffect, CfgOperand, ExtEmitCtx, ExtInstr, Variable};
 use rvr_openvm_lift::{decode_variable, RvrInstruction};
 
-/// An RV64 integer register represented by a target-neutral IR variable.
+/// The IR representation of an RV64 integer register.
 pub(crate) type Reg = Variable;
 
 pub(crate) const ZERO: Reg = Reg::new(0);

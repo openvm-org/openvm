@@ -398,7 +398,8 @@ fn lift_store(insn: &RvrInstruction, pc: u64, width: MemWidth) -> Option<LiftedI
     ))
 }
 
-/// Lift a branch encoded as `rs1=a/8`, `rs2=b/8`, and a field-signed offset in `c`.
+/// Lift a branch encoded as `rs1=a/8`, `rs2=b/8`, and an offset in `c`
+/// interpreted as a signed source-field value.
 fn lift_branch(insn: &RvrInstruction, pc: u64, cond: CfgBranchCond) -> LiftedInstr {
     term(
         pc,
@@ -411,7 +412,8 @@ fn lift_branch(insn: &RvrInstruction, pc: u64, cond: CfgBranchCond) -> LiftedIns
     )
 }
 
-/// Lift JAL encoded as `rd=a/8` and a field-signed offset in `c`.
+/// Lift JAL encoded as `rd=a/8` and an offset in `c` interpreted as a signed
+/// source-field value.
 fn lift_jal(insn: &RvrInstruction, pc: u64) -> LiftedInstr {
     let rd = decode_reg(insn.a);
     term(

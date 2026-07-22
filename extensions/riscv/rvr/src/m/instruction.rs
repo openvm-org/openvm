@@ -51,7 +51,7 @@ impl MulDivOp {
     }
 }
 
-/// RV64M instruction represented as extension-owned IR.
+/// An RV64M instruction implemented by this extension.
 #[derive(Debug, Clone)]
 pub(crate) struct Rv64MInstr {
     pub op: MulDivOp,
