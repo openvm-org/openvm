@@ -1,17 +1,21 @@
-use alloc::{vec, vec::Vec};
+use alloc::vec::Vec;
 
-use halo2curves_axiom::{
-    bls12_381::{Fq, Fq12, Fq2, Fr, G1Affine, G2Affine},
-    ff::Field,
-};
+use halo2curves_axiom::bls12_381::{Fq, Fq2, Fr, G1Affine, G2Affine};
 use itertools::izip;
 use num_bigint::BigUint;
 use num_traits::Num;
 use openvm_ecc_guest::{algebra::ExpBytes, AffinePoint};
-use rand08::{rngs::StdRng, SeedableRng};
+#[cfg(feature = "blst")]
+use {
+    alloc::vec,
+    halo2curves_axiom::{bls12_381::Fq12, ff::Field},
+    rand08::{rngs::StdRng, SeedableRng},
+};
 
+#[cfg(feature = "blst")]
+use crate::halo2curves_shims::bls12_381::final_exp::final_exp_hint_basic;
 use crate::{
-    halo2curves_shims::bls12_381::{final_exp::final_exp_hint_basic, Bls12_381, SEED_NEG},
+    halo2curves_shims::bls12_381::{Bls12_381, SEED_NEG},
     pairing::{FinalExp, MultiMillerLoop},
 };
 
