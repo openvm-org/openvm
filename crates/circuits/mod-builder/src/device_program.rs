@@ -17,7 +17,7 @@
 use num_bigint::{BigInt, BigUint, Sign};
 use num_traits::{One, Zero};
 
-use crate::{FieldExpr, SymbolicExpr};
+use crate::{ExprBuilder, FieldExpr, SymbolicExpr};
 
 /// Value-phase opcodes (field arithmetic over slots of K u32 limbs, Montgomery form).
 pub const VOP_LOAD_INPUT: u32 = 0; // dst <- mont(input[a])
@@ -128,7 +128,7 @@ fn biguint_to_u32s(x: &BigUint, k: usize) -> Vec<u32> {
 }
 
 struct Serializer<'a> {
-    expr: &'a FieldExpr,
+    builder: &'a ExprBuilder,
     k: usize,
     value_ops: Vec<ValueOp>,
     next_slot: usize,
@@ -141,7 +141,7 @@ struct Serializer<'a> {
 
 impl<'a> Serializer<'a> {
     fn mont(&self, x: &BigUint) -> Vec<u32> {
-        biguint_to_u32s(&((x * &self.r) % &self.expr.prime), self.k)
+        biguint_to_u32s(&((x * &self.r) % &self.builder.prime), self.k)
     }
 
     fn push_mont_payload(&mut self, x: &BigUint) -> u32 {
@@ -153,9 +153,9 @@ impl<'a> Serializer<'a> {
 
     fn imm_to_field(&self, s: isize) -> BigUint {
         if s >= 0 {
-            BigUint::from(s as u64) % &self.expr.prime
+            BigUint::from(s as u64) % &self.builder.prime
         } else {
-            &self.expr.prime - BigUint::from(s.unsigned_abs() as u64) % &self.expr.prime
+            &self.builder.prime - BigUint::from(s.unsigned_abs() as u64) % &self.builder.prime
         }
     }
 
@@ -170,9 +170,9 @@ impl<'a> Serializer<'a> {
             // Input and Var slots are preassigned: inputs at [0, num_input) (loaded once
             // at tape start), vars at [num_input, num_input + num_vars).
             SymbolicExpr::Input(i) => *i as u32,
-            SymbolicExpr::Var(i) => (self.expr.builder.num_input + i) as u32,
+            SymbolicExpr::Var(i) => (self.builder.num_input + i) as u32,
             SymbolicExpr::Const(i, _, _) => {
-                let val = self.expr.builder.constants[*i].0.clone();
+                let val = self.builder.constants[*i].0.clone();
                 let payload = self.push_mont_payload(&val);
                 let dst = alloc(self);
                 self.value_ops.push(ValueOp {
@@ -242,7 +242,7 @@ impl<'a> Serializer<'a> {
 
     /// Emit limb ops computing `node`; returns (scratch_off, len).
     fn emit_limb(&mut self, node: &SymbolicExpr) -> (u32, u32) {
-        let num_limbs = self.expr.builder.num_limbs;
+        let num_limbs = self.builder.num_limbs;
         let alloc = |s: &mut Self, len: u32| {
             let off = s.scratch_top;
             s.scratch_top += len;
@@ -272,7 +272,7 @@ impl<'a> Serializer<'a> {
                 (off, num_limbs as u32)
             }
             SymbolicExpr::Const(i, _, nl) => {
-                let limbs = &self.expr.builder.constants[*i].1;
+                let limbs = &self.builder.constants[*i].1;
                 assert_eq!(limbs.len(), *nl);
                 let payload = self.const_limbs_payload.len() as u32;
                 self.const_limbs_payload
@@ -372,13 +372,13 @@ pub fn serialize_field_expr(
     opcode_flag_idx: Vec<usize>,
     width: usize,
 ) -> DeviceFieldExprProgram {
-    assert!(expr.builder.is_finalized());
-    let b = &expr.builder;
+    let b = expr.program().builder();
+    assert!(b.is_finalized());
     let k = (b.num_limbs * b.limb_bits).div_ceil(32);
     let r = (BigUint::one() << (32 * k)) % &b.prime;
 
     let mut ser = Serializer {
-        expr,
+        builder: b,
         k,
         value_ops: vec![],
         next_slot: b.num_input + b.num_variables,
@@ -1048,14 +1048,14 @@ mod device_program_tests {
         let interp = ReferenceInterpreter { prog: &prog };
         let ref_checker = Arc::new(VariableRangeCheckerChip::new(range_checker.bus()));
 
-        let nl = expr.canonical_num_limbs();
-        let prime = expr.builder.prime.clone();
+        let nl = expr.program().canonical_num_limbs();
+        let prime = expr.program().prime().clone();
         let mut state = 0xdeadbeef12345678u64;
         for rep in 0..n_random_repeats {
             for (row_i, (opcode, explicit)) in rows.iter().enumerate() {
                 let inputs: Vec<BigUint> = match explicit {
                     Some(v) => v.clone(),
-                    None => (0..expr.builder.num_input)
+                    None => (0..expr.program().num_inputs())
                         .map(|_| {
                             let bytes: Vec<u8> = (0..nl).map(|_| lcg(&mut state)).collect();
                             BigUint::from_bytes_le(&bytes) % &prime
@@ -1068,8 +1068,8 @@ mod device_program_tests {
                     .collect();
 
                 // Flags exactly as FieldExpressionFiller derives them.
-                let mut flags = vec![false; expr.builder.num_flags];
-                if expr.needs_setup() {
+                let mut flags = vec![false; expr.program().num_flags()];
+                if expr.program().needs_setup() {
                     if let Some(pos) = local_opcode_idx.iter().position(|&x| x == *opcode) {
                         if pos < opcode_flag_idx.len() {
                             flags[opcode_flag_idx[pos]] = true;
@@ -1119,7 +1119,8 @@ mod device_program_tests {
         let mut y3 = lambda * (x1 - x3.clone()) - y1;
         y3.save_output();
         let builder = (*builder).borrow().clone();
-        let expr = crate::FieldExpr::new(builder, range_checker.bus(), true);
+        let program = crate::FieldExpressionProgram::new(builder, true);
+        let expr = crate::FieldExpr::new(program, range_checker.bus());
 
         // 1-op chip that needs setup: local ops [0, 2], default flag 0 for op 0.
         check_equivalence(expr, range_checker, vec![0, 2], vec![0], &[(0, None)], 25);
@@ -1155,7 +1156,8 @@ mod device_program_tests {
         (*builder).borrow_mut().set_compute(z_idx, compute);
         z.save_output();
         let builder = (*builder).borrow().clone();
-        let expr = crate::FieldExpr::new(builder, range_checker.bus(), true);
+        let program = crate::FieldExpressionProgram::new(builder, true);
+        let expr = crate::FieldExpr::new(program, range_checker.bus());
 
         // Ops: mul (local 2, flag 0), div (local 3, flag 1), setup (local 4).
         let setup_inputs = vec![prime.clone(), BigUint::from(0u32)];
@@ -1186,7 +1188,8 @@ mod device_program_tests {
         let mut w = x1.int_add(-7) + y1.int_add(11);
         w.save_output();
         let builder = (*builder).borrow().clone();
-        let expr = crate::FieldExpr::new(builder, range_checker.bus(), true);
+        let program = crate::FieldExpressionProgram::new(builder, true);
+        let expr = crate::FieldExpr::new(program, range_checker.bus());
 
         check_equivalence(expr, range_checker, vec![0, 2], vec![0], &[(0, None)], 25);
     }
@@ -1200,7 +1203,8 @@ mod device_program_dump {
 
     use num_bigint::BigUint;
     use openvm_circuit_primitives::{
-        bigint::utils::secp256k1_coord_prime, var_range::VariableRangeCheckerChip,
+        bigint::utils::secp256k1_coord_prime,
+        var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip},
         TraceSubRowGenerator,
     };
     use openvm_stark_backend::{
@@ -1226,10 +1230,12 @@ mod device_program_dump {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn dump_case(
         dir: &str,
         name: &str,
         expr: crate::FieldExpr,
+        range_bus: VariableRangeCheckerBus,
         local_opcode_idx: Vec<usize>,
         opcode_flag_idx: Vec<usize>,
         opcodes: &[usize],
@@ -1244,17 +1250,17 @@ mod device_program_dump {
         );
         let blob = prog.to_blob();
 
-        let nl = expr.canonical_num_limbs();
-        let prime = expr.builder.prime.clone();
-        let rec_stride = 1 + expr.builder.num_input * nl;
-        let range_checker = std::sync::Arc::new(VariableRangeCheckerChip::new(expr.range_bus));
+        let nl = expr.program().canonical_num_limbs();
+        let prime = expr.program().prime().clone();
+        let rec_stride = 1 + expr.program().num_inputs() * nl;
+        let range_checker = std::sync::Arc::new(VariableRangeCheckerChip::new(range_bus));
 
         let mut state = 0x0123456789abcdefu64;
         let mut records = Vec::with_capacity(rows * rec_stride);
         let mut expected = Vec::with_capacity(rows * width);
         for r in 0..rows {
             let opcode = opcodes[r % opcodes.len()];
-            let inputs: Vec<BigUint> = (0..expr.builder.num_input)
+            let inputs: Vec<BigUint> = (0..expr.program().num_inputs())
                 .map(|_| {
                     let bytes: Vec<u8> = (0..nl).map(|_| lcg(&mut state)).collect();
                     BigUint::from_bytes_le(&bytes) % &prime
@@ -1264,8 +1270,8 @@ mod device_program_dump {
             for x in &inputs {
                 records.extend(biguint_to_limbs_vec(x, nl));
             }
-            let mut flags = vec![false; expr.builder.num_flags];
-            if expr.needs_setup() {
+            let mut flags = vec![false; expr.program().num_flags()];
+            if expr.program().needs_setup() {
                 if let Some(pos) = local_opcode_idx.iter().position(|&x| x == opcode) {
                     if pos < opcode_flag_idx.len() {
                         flags[opcode_flag_idx[pos]] = true;
@@ -1316,8 +1322,18 @@ mod device_program_dump {
             let mut y3 = lambda * (x1 - x3.clone()) - y1;
             y3.save_output();
             let b = (*builder).borrow().clone();
-            let expr = crate::FieldExpr::new(b, range_checker.bus(), true);
-            dump_case(&dir, "ecaddne", expr, vec![0, 2], vec![0], &[0], 32768);
+            let program = crate::FieldExpressionProgram::new(b, true);
+            let expr = crate::FieldExpr::new(program, range_checker.bus());
+            dump_case(
+                &dir,
+                "ecaddne",
+                expr,
+                range_checker.bus(),
+                vec![0, 2],
+                vec![0],
+                &[0],
+                32768,
+            );
         }
         // MulDiv with flags
         {
@@ -1347,11 +1363,13 @@ mod device_program_dump {
             (*builder).borrow_mut().set_compute(z_idx, compute);
             z.save_output();
             let b = (*builder).borrow().clone();
-            let expr = crate::FieldExpr::new(b, range_checker.bus(), true);
+            let program = crate::FieldExpressionProgram::new(b, true);
+            let expr = crate::FieldExpr::new(program, range_checker.bus());
             dump_case(
                 &dir,
                 "muldiv",
                 expr,
+                range_checker.bus(),
                 vec![2, 3, 4],
                 vec![0, 1],
                 &[2, 3],
@@ -1374,8 +1392,18 @@ mod device_program_dump {
             let mut w = x1.int_add(-7) + y1.int_add(11);
             w.save_output();
             let b = (*builder).borrow().clone();
-            let expr = crate::FieldExpr::new(b, range_checker.bus(), true);
-            dump_case(&dir, "intops", expr, vec![0, 2], vec![0], &[0], 16384);
+            let program = crate::FieldExpressionProgram::new(b, true);
+            let expr = crate::FieldExpr::new(program, range_checker.bus());
+            dump_case(
+                &dir,
+                "intops",
+                expr,
+                range_checker.bus(),
+                vec![0, 2],
+                vec![0],
+                &[0],
+                16384,
+            );
         }
     }
 }

@@ -744,8 +744,8 @@ fn bench_tracegen_ec_add_ne_shape() {
     let (expr, range_checker, width) = create_field_expr_with_flags_setup(builder);
     println!(
         "width = {width}, num_vars = {}, num_limbs = {}",
-        expr.builder.num_variables,
-        expr.canonical_num_limbs()
+        expr.program().num_vars(),
+        expr.program().canonical_num_limbs()
     );
 
     const N: usize = 4096;
@@ -768,7 +768,7 @@ fn bench_tracegen_ec_add_ne_shape() {
 
     let t0 = Instant::now();
     for inp in &rows_inputs {
-        std::hint::black_box(expr.execute(inp, &flags));
+        std::hint::black_box(expr.program().execute(inp, &flags));
     }
     let exec_time = t0.elapsed();
 
