@@ -472,7 +472,8 @@ impl<'a> EmitContext<'a> {
 
     fn read_reg_impl(&mut self, idx: u8, kind: RegisterReadKind) -> String {
         if idx == 0 {
-            if self.mode.traces_register_values() {
+            if self.mode.traces_register_values() && matches!(kind, RegisterReadKind::MemoryAccess)
+            {
                 self.write_line("trace_reg_read(state, 0, 0);");
             }
             return "0ull".to_string();
@@ -487,12 +488,8 @@ impl<'a> EmitContext<'a> {
             var
         };
 
-        if self.mode.traces_values() {
-            let trace_fn = match kind {
-                RegisterReadKind::MemoryAccess => "trace_reg_read",
-                RegisterReadKind::Peek => "trace_reg_peek",
-            };
-            self.write_line(&format!("{trace_fn}(state, {idx}, {value});"));
+        if self.mode.traces_values() && matches!(kind, RegisterReadKind::MemoryAccess) {
+            self.write_line(&format!("trace_reg_read(state, {idx}, {value});"));
         }
 
         value
@@ -1150,11 +1147,12 @@ impl<'a> EmitContext<'a> {
         self.end_arena_detail(&detail_started);
     }
 
-    /// R3: emit a register-immediate 2-read-1-write instruction with an
+    /// R3: emit a register-immediate one-read-one-write instruction with an
     /// inline compact alu3 record (touch-only accesses; see
-    /// [`Self::emit_reg3_inline`]). The immediate occupies a timestamp slot
-    /// without a memory touch (matching `trace_immediate`), so
-    /// `reads_aux[1].prev_timestamp` is 0. `imm_value` is the value recorded
+    /// [`Self::emit_reg3_inline`]). Develop's split-immediate adapters carry
+    /// the immediate as program metadata, so it consumes no timestamp;
+    /// `reads_aux[1].prev_timestamp` remains 0 only as compact-wire padding.
+    /// `imm_value` is the value recorded
     /// as the c operand (sign-extended immediate, or the raw shift amount);
     /// `result` renders the C expression computing rd from the read value and
     /// the materialized immediate variable.
@@ -1168,7 +1166,7 @@ impl<'a> EmitContext<'a> {
     ) {
         if self.g2_records {
             debug_assert!(!self.delta_records);
-            debug_assert!(matches!(self.current_g2_kind, 1..=7));
+            debug_assert!(matches!(self.current_g2_kind, 31..=37));
             let v1 = self.g2_read_reg(rs1);
             let vimm = format!("0x{imm_value:016x}ull");
             let res = self.next_var();
@@ -1180,10 +1178,9 @@ impl<'a> EmitContext<'a> {
             self.g2_store_u64(slot, &res);
             if self.g2_checked {
                 self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs1});"));
-                self.write_line("trace_timestamp(state);");
                 self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rd});"));
             } else {
-                self.g2_floor_timestamp(3);
+                self.g2_floor_timestamp(2);
             }
             if rd != 0 {
                 self.write_line(&format!("reg_write(state, {rd}, {res});"));
@@ -1195,8 +1192,6 @@ impl<'a> EmitContext<'a> {
         let fromts = self.next_var();
         self.write_line(&format!("uint32_t {fromts} = state->tracer->timestamp;"));
         let (v1, p1) = self.reg_read_capture(rs1);
-        // Immediate consumes a timestamp slot but touches no block.
-        self.write_line("trace_timestamp(state);");
         let vimm = self.next_var();
         self.write_line(&format!("uint64_t {vimm} = 0x{imm_value:016x}ull;"));
         let res = self.next_var();
@@ -1768,7 +1763,7 @@ impl<'a> EmitContext<'a> {
             }
             if rd != 0 {
                 let value = self.next_var();
-                let (read_func, _, var_ty) = Self::read_mem_helper(width, signed);
+                let (read_func, _, var_ty, _) = Self::read_mem_helper(width, signed);
                 if self.g2_checked {
                     self.write_line(&format!("{var_ty} {value} = {read_func}(memory, {addr});"));
                 } else {
@@ -1901,7 +1896,7 @@ impl<'a> EmitContext<'a> {
             }
         } else {
             let val = self.next_var();
-            let (read_func, _, var_ty) = Self::read_mem_helper(width, signed);
+            let (read_func, _, var_ty, _) = Self::read_mem_helper(width, signed);
             self.write_line(&format!("{var_ty} {val} = {read_func}(memory, {addr});"));
             let rdprev = (!self.delta_records || arena_geom.is_some()).then(|| {
                 let rdprev = self.next_var();
@@ -2484,25 +2479,28 @@ impl<'a> EmitContext<'a> {
         }
     }
 
-    fn read_mem_helper(width: u8, signed: bool) -> (&'static str, &'static str, &'static str) {
+    fn read_mem_helper(
+        width: u8,
+        signed: bool,
+    ) -> (&'static str, &'static str, &'static str, &'static str) {
         match (width, signed) {
-            (1, false) => ("read_mem_u8", "trace_read_mem_u8", "uint32_t"),
-            (1, true) => ("read_mem_i8", "trace_read_mem_i8", "int32_t"),
-            (2, false) => ("read_mem_u16", "trace_read_mem_u16", "uint32_t"),
-            (2, true) => ("read_mem_i16", "trace_read_mem_i16", "int32_t"),
-            (4, false) => ("read_mem_u32", "trace_read_mem_u32", "uint32_t"),
-            (4, true) => ("read_mem_i32", "trace_read_mem_i32", "int32_t"),
-            (8, _) => ("read_mem_u64", "trace_read_mem_u64", "uint64_t"),
+            (1, false) => ("read_mem_u8", "trace_rd_mem_u8", "uint32_t", "uint8_t"),
+            (1, true) => ("read_mem_i8", "trace_rd_mem_i8", "int32_t", "int8_t"),
+            (2, false) => ("read_mem_u16", "trace_rd_mem_u16", "uint32_t", "uint16_t"),
+            (2, true) => ("read_mem_i16", "trace_rd_mem_i16", "int32_t", "int16_t"),
+            (4, false) => ("read_mem_u32", "trace_rd_mem_u32", "uint32_t", "uint32_t"),
+            (4, true) => ("read_mem_i32", "trace_rd_mem_i32", "int32_t", "int32_t"),
+            (8, _) => ("read_mem_u64", "trace_rd_mem_u64", "uint64_t", "uint64_t"),
             _ => unreachable!("invalid memory width {width}"),
         }
     }
 
     fn write_mem_helper(width: u8) -> (&'static str, &'static str, &'static str) {
         match width {
-            1 => ("write_mem_u8", "trace_write_mem_u8", "uint8_t"),
-            2 => ("write_mem_u16", "trace_write_mem_u16", "uint16_t"),
-            4 => ("write_mem_u32", "trace_write_mem_u32", "uint32_t"),
-            8 => ("write_mem_u64", "trace_write_mem_u64", "uint64_t"),
+            1 => ("write_mem_u8", "trace_wr_mem_u8", "uint8_t"),
+            2 => ("write_mem_u16", "trace_wr_mem_u16", "uint16_t"),
+            4 => ("write_mem_u32", "trace_wr_mem_u32", "uint32_t"),
+            8 => ("write_mem_u64", "trace_wr_mem_u64", "uint64_t"),
             _ => unreachable!("invalid memory width {width}"),
         }
     }
@@ -2515,12 +2513,14 @@ impl<'a> EmitContext<'a> {
         );
         let addr = Self::addr_expr(base, offset);
         let var = self.next_var();
-        let (read_func, trace_func, var_ty) = Self::read_mem_helper(width, signed);
+        let (read_func, trace_func, var_ty, trace_ty) = Self::read_mem_helper(width, signed);
         self.uses_raw_memory = true;
 
         self.write_line(&format!("{var_ty} {var} = {read_func}(memory, {addr});"));
         if self.mode.traces_values() {
-            self.write_line(&format!("{trace_func}(state, {addr}, {var});"));
+            self.write_line(&format!(
+                "{trace_func}(state, {addr}, ({trace_ty})({var}));"
+            ));
         }
         if self.mode.traces_memory_pages() {
             self.emit_inline_page_record(&addr, width);
@@ -2647,7 +2647,7 @@ impl<'a> EmitContext<'a> {
         if chip_idx == u32::MAX {
             return;
         }
-        if !matches!(self.mode, EmitMode::ValueTrace | EmitMode::Direct) {
+        if !matches!(self.mode, EmitMode::Direct) {
             let num_airs = self
                 .num_airs
                 .expect("metered code generation requires the AIR count");
@@ -2657,7 +2657,10 @@ impl<'a> EmitContext<'a> {
             }
         }
         match self.mode {
-            EmitMode::ValueTrace | EmitMode::Direct => {}
+            EmitMode::ValueTrace => {
+                self.write_line(&format!("trace_chip(state, {chip_idx}u, {count_expr});"));
+            }
+            EmitMode::Direct => {}
             EmitMode::Metered { .. } => {
                 self.write_line(&format!("(*trace_heights)[{chip_idx}] += {count_expr};"));
             }
@@ -2682,7 +2685,7 @@ impl<'a> EmitContext<'a> {
     }
 
     pub fn trace_chip_if_nonzero(&mut self, chip_idx: u32, count_expr: &str) {
-        if chip_idx == u32::MAX || matches!(self.mode, EmitMode::ValueTrace | EmitMode::Direct) {
+        if chip_idx == u32::MAX || matches!(self.mode, EmitMode::Direct) {
             return;
         }
         self.write_line(&format!("if (({count_expr}) != 0u) {{"));

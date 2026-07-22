@@ -36,6 +36,8 @@ static constexpr uint8_t G2_STORE_PATTERN = 3u;
 static constexpr uint8_t G2_HINT_PATTERN = 9u;
 static constexpr uint8_t G2_OPAQUE_PATTERN = 10u;
 static constexpr uint8_t G2_OPAQUE_TIMESTAMP_PATTERN = 11u;
+static constexpr uint32_t G2_KIND_COUNT = 38u;
+static constexpr uint32_t G2_HINT_KIND = 30u;
 static constexpr uint8_t INVALID_AIR = UINT8_MAX;
 static constexpr uint8_t EXPECT_NONE = 0u;
 static constexpr uint8_t EXPECT_BEFORE_LOAD = 1u;
@@ -223,12 +225,16 @@ __device__ __forceinline__ bool load_store_kind(uint32_t kind) {
     return kind == 8 || kind == 9 || (kind >= 20 && kind <= 28);
 }
 
+__device__ __forceinline__ bool standard_row_kind(uint32_t kind) {
+    return kind < G2_KIND_COUNT && kind != G2_HINT_KIND;
+}
+
 __device__ __forceinline__ void lane_consumption(
     uint32_t kind, RvrOperandEntry const &entry, bool &v0, bool &v1
 ) {
     v0 = false;
     v1 = false;
-    if (kind <= 7 || (kind >= 15 && kind <= 19)) {
+    if (kind <= 7 || (kind >= 15 && kind <= 19) || (kind >= 31 && kind <= 37)) {
         // The sole lane is the register-write result seed. Register replay
         // reconstructs the current source values at both read events.
         v0 = true;
@@ -241,7 +247,7 @@ __device__ __forceinline__ void lane_consumption(
 }
 
 __device__ __forceinline__ bool standard_v0_kind(uint32_t kind) {
-    return kind <= 9 || (kind >= 15 && kind <= 29);
+    return kind <= 9 || (kind >= 15 && kind <= 29) || (kind >= 31 && kind <= 37);
 }
 
 __device__ __forceinline__ bool standard_v1_kind(uint32_t kind) {
@@ -280,7 +286,8 @@ __device__ bool lane_spec(
         group = G2_RESIDUAL_GROUP;
         return true;
     }
-    for (uint32_t delta_kind = 0; delta_kind < 30; ++delta_kind) {
+    for (uint32_t delta_kind = 0; delta_kind < G2_KIND_COUNT; ++delta_kind) {
+        if (!standard_row_kind(delta_kind)) continue;
         bool is_v0 = kind == lane_v0(delta_kind) && standard_v0_kind(delta_kind);
         bool is_v1 = kind == lane_v1(delta_kind) && standard_v1_kind(delta_kind);
         if (is_v0 || is_v1) {
@@ -448,6 +455,14 @@ __device__ __forceinline__ uint64_t standard_immediate(RvrOperandEntry const &en
                : uint64_t(entry.c);
 }
 
+__device__ __forceinline__ uint64_t split_immediate(
+    uint32_t kind, RvrOperandEntry const &entry
+) {
+    return (kind == 29 || kind == 31 || kind == 32 || kind == 35)
+               ? uint64_t(int64_t(int32_t(entry.c << 20) >> 20))
+               : uint64_t(entry.c);
+}
+
 __device__ __forceinline__ uint64_t sign_extend_word(uint32_t value) {
     return uint64_t(int64_t(int32_t(value)));
 }
@@ -595,6 +610,52 @@ __device__ bool standard_post_write(
     case 17: result = sign_extend_word(uint32_t(v0) * uint32_t(v1)); return true;
     case 18: return divrem_result(entry.local_opcode, v0, v1, result);
     case 19: return divrem_w_result(entry.local_opcode, v0, v1, result);
+    case 31:
+        if (entry.local_opcode == 1)
+            result = v0 ^ v1;
+        else if (entry.local_opcode == 2)
+            result = v0 | v1;
+        else if (entry.local_opcode == 3)
+            result = v0 & v1;
+        else
+            return false;
+        return true;
+    case 32:
+        if (entry.local_opcode == 0)
+            result = int64_t(v0) < int64_t(v1);
+        else if (entry.local_opcode == 1)
+            result = v0 < v1;
+        else
+            return false;
+        return true;
+    case 33:
+        if (entry.local_opcode == 0)
+            result = v0 << uint32_t(v1 & 63u);
+        else if (entry.local_opcode == 1)
+            result = v0 >> uint32_t(v1 & 63u);
+        else
+            return false;
+        return true;
+    case 34:
+        if (entry.local_opcode != 0) return false;
+        result = uint64_t(int64_t(v0) >> uint32_t(v1 & 63u));
+        return true;
+    case 35:
+        if (entry.local_opcode != 0) return false;
+        result = sign_extend_word(uint32_t(v0) + uint32_t(v1));
+        return true;
+    case 36:
+        if (entry.local_opcode == 0)
+            result = sign_extend_word(uint32_t(v0) << uint32_t(v1 & 31u));
+        else if (entry.local_opcode == 1)
+            result = sign_extend_word(uint32_t(v0) >> uint32_t(v1 & 31u));
+        else
+            return false;
+        return true;
+    case 37:
+        if (entry.local_opcode != 0) return false;
+        result = sign_extend_word(uint32_t(int32_t(uint32_t(v0)) >> uint32_t(v1 & 31u)));
+        return true;
     default: return false;
     }
 }
@@ -761,7 +822,8 @@ __global__ void g2_build_kind_map(
     for (size_t i = 0; i < 256; ++i) kind_by_air[i] = -1;
     for (size_t i = 0; i < expected_count; ++i) {
         G2ExpectedKindV1 entry = expected[i];
-        if (entry.air_idx >= 256 || entry.kind >= 31 || kind_by_air[entry.air_idx] != -1) {
+        if (entry.air_idx >= 256 || entry.kind >= G2_KIND_COUNT ||
+            kind_by_air[entry.air_idx] != -1) {
             fail_parallel(error, 48);
             return;
         }
@@ -782,8 +844,8 @@ __global__ void g2_count_lane_blocks(
     uint32_t *error
 ) {
     if (*error != 0) return;
-    __shared__ uint32_t counts[93];
-    for (uint32_t i = threadIdx.x; i < 93; i += blockDim.x) counts[i] = 0;
+    __shared__ uint32_t counts[3 * G2_KIND_COUNT];
+    for (uint32_t i = threadIdx.x; i < 3 * G2_KIND_COUNT; i += blockDim.x) counts[i] = 0;
     __syncthreads();
 
     size_t instruction = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
@@ -800,18 +862,20 @@ __global__ void g2_count_lane_blocks(
                 if (kind >= 0) {
                     bool v0, v1;
                     lane_consumption(uint32_t(kind), entry, v0, v1);
-                    if (kind < 30) atomicAdd(&counts[kind], 1u);
-                    if (v0) atomicAdd(&counts[31 + kind], 1u);
-                    if (v1) atomicAdd(&counts[62 + kind], 1u);
+                    if (standard_row_kind(kind)) atomicAdd(&counts[kind], 1u);
+                    if (v0) atomicAdd(&counts[G2_KIND_COUNT + kind], 1u);
+                    if (v1) atomicAdd(&counts[2 * G2_KIND_COUNT + kind], 1u);
                 }
             }
         }
     }
     __syncthreads();
-    for (uint32_t kind = threadIdx.x; kind < 31; kind += blockDim.x) {
+    for (uint32_t kind = threadIdx.x; kind < G2_KIND_COUNT; kind += blockDim.x) {
         row_counts[size_t(kind) * count_stride + blockIdx.x] = counts[kind];
-        v0_counts[size_t(kind) * count_stride + blockIdx.x] = counts[31 + kind];
-        v1_counts[size_t(kind) * count_stride + blockIdx.x] = counts[62 + kind];
+        v0_counts[size_t(kind) * count_stride + blockIdx.x] =
+            counts[G2_KIND_COUNT + kind];
+        v1_counts[size_t(kind) * count_stride + blockIdx.x] =
+            counts[2 * G2_KIND_COUNT + kind];
     }
 }
 
@@ -859,7 +923,7 @@ __global__ void g2_prepare_instructions(
     uint32_t local_row = 0, local_v0 = 0, local_v1 = 0;
     for (uint32_t local = 0; local < threadIdx.x; ++local) {
         if (kinds[local] != kind) continue;
-        local_row += kind >= 0 && kind < 30;
+        local_row += kind >= 0 && standard_row_kind(uint32_t(kind));
         local_v0 += consumption[local] & 1u;
         local_v1 += consumption[local] >> 1;
     }
@@ -870,7 +934,7 @@ __global__ void g2_prepare_instructions(
     output.v0_index = UINT32_MAX;
     output.v1_index = UINT32_MAX;
     if (kind >= 0) {
-        if (kind < 30) {
+        if (standard_row_kind(uint32_t(kind))) {
             output.row_index =
                 row_offsets[size_t(kind) * count_stride + blockIdx.x] + local_row;
         }
@@ -950,7 +1014,7 @@ __global__ void g2_classify_instructions(
         return;
     }
     uint32_t kind = uint32_t(kind_code);
-    if (kind == 30 && entry.access_pattern == G2_HINT_PATTERN) {
+    if (kind == G2_HINT_KIND && entry.access_pattern == G2_HINT_PATTERN) {
         if (entry.local_opcode > 1) {
             fail_parallel(error, 42);
             return;
@@ -959,7 +1023,8 @@ __global__ void g2_classify_instructions(
         return;
     }
     output_counts[instruction] = 1;
-    if (kind == 29 && entry.access_pattern == G2_ADDI_PATTERN) {
+    if ((kind == 29 || (kind >= 31 && kind <= 37)) &&
+        entry.access_pattern == G2_ADDI_PATTERN) {
         timestamp_counts[instruction] = 2;
     } else if ((kind <= 7 || (kind >= 15 && kind <= 19)) &&
                (entry.access_pattern == 0 || entry.access_pattern == 1)) {
@@ -1413,14 +1478,14 @@ __global__ void g2_emit_parallel(
     uint32_t kind = uint32_t(decoded.kind);
     bool consumes_v0, consumes_v1;
     lane_consumption(kind, entry, consumes_v0, consumes_v1);
-    if (kind != 30 && ((consumes_v0 && decoded.v0_index == UINT32_MAX) ||
+    if (kind != G2_HINT_KIND && ((consumes_v0 && decoded.v0_index == UINT32_MAX) ||
                        (!consumes_v0 && decoded.v0_index != UINT32_MAX) ||
                        (consumes_v1 && decoded.v1_index == UINT32_MAX) ||
                        (!consumes_v1 && decoded.v1_index != UINT32_MAX))) {
         fail_parallel(error, 54);
         return;
     }
-    if (kind == 30 && entry.access_pattern == G2_HINT_PATTERN) {
+    if (kind == G2_HINT_KIND && entry.access_pattern == G2_HINT_PATTERN) {
         G2LaneDescV1 const *ctrl = find_lane(descs, header.lane_count, G2_RESIDUAL_CTRL);
         G2LaneDescV1 const *tag = find_lane(descs, header.lane_count, G2_RESIDUAL_TAG);
         G2LaneDescV1 const *value = find_lane(descs, header.lane_count, G2_RESIDUAL_VALUE);
@@ -1552,10 +1617,11 @@ __global__ void g2_emit_parallel(
     bool crossing = false;
     uint64_t crossing_value0 = 0;
     uint64_t crossing_value1 = 0;
-    if (kind == 29 && entry.access_pattern == G2_ADDI_PATTERN) {
+    if ((kind == 29 || (kind >= 31 && kind <= 37)) &&
+        entry.access_pattern == G2_ADDI_PATTERN) {
         // The lane is the write result; replay supplies the current rs1 value.
         record.v1 = lane_v0_value;
-        record.v2 = uint64_t(int64_t(int32_t(entry.c << 20) >> 20));
+        record.v2 = split_immediate(kind, entry);
     } else if ((kind <= 7 || (kind >= 15 && kind <= 19)) &&
                (entry.access_pattern == 0 || entry.access_pattern == 1)) {
         // The lane is the write result; replay supplies both current sources.
@@ -1681,14 +1747,14 @@ __global__ void g2_validate_parallel_output(
     }
     for (size_t i = 0; i < expected_kind_count; ++i) {
         G2ExpectedKindV1 expected = expected_kinds[i];
-        if (expected.kind >= 31 || kind_counts[expected.kind] != expected.count) {
+        if (expected.kind >= G2_KIND_COUNT || kind_counts[expected.kind] != expected.count) {
             fail(error, 24);
             return;
         }
         G2LaneDescV1 const *v0 = find_lane(descs, header.lane_count, lane_v0(expected.kind));
         G2LaneDescV1 const *v1 = find_lane(descs, header.lane_count, lane_v1(expected.kind));
         size_t offset = size_t(expected.kind) * count_stride + count_stride - 1;
-        if ((expected.kind < 30 && expected.count != row_offsets[offset]) ||
+        if ((standard_row_kind(expected.kind) && expected.count != row_offsets[offset]) ||
             (v0 == nullptr ? 0 : v0->count) != v0_offsets[offset] ||
             (v1 == nullptr ? 0 : v1->count) != v1_offsets[offset]) {
             fail(error, 26);
@@ -1717,7 +1783,8 @@ __global__ void g2_validate_trace_rows(
         return;
     }
     G2PreparedInstruction decoded = prepared[instruction];
-    if (decoded.kind < 0 || decoded.kind >= 31 || decoded.slot >= operand_count) {
+    if (decoded.kind < 0 || decoded.kind >= int32_t(G2_KIND_COUNT) ||
+        decoded.slot >= operand_count) {
         fail_parallel(error, 81);
         return;
     }
@@ -2286,7 +2353,7 @@ __global__ void g2_predecode(
         }
     }
     if (header.version != 1 || header.lane_count == 0 ||
-        header.lane_count > 42 + expected_opaque_count ||
+        header.lane_count > 49 + expected_opaque_count ||
         header.header_bytes != 64 + 32 * header.lane_count ||
         header.header_bytes > wire_storage_bytes || header.flags != G2_FLAGS_COMMITTED_V1) {
         fail(error, 3);
@@ -2357,9 +2424,10 @@ __global__ void g2_predecode(
         fail(error, 7);
         return;
     }
-    G2LaneDescV1 const *v0_lanes[31]{};
-    G2LaneDescV1 const *v1_lanes[31]{};
-    for (uint32_t kind = 0; kind < 30; ++kind) {
+    G2LaneDescV1 const *v0_lanes[G2_KIND_COUNT]{};
+    G2LaneDescV1 const *v1_lanes[G2_KIND_COUNT]{};
+    for (uint32_t kind = 0; kind < G2_KIND_COUNT; ++kind) {
+        if (!standard_row_kind(kind)) continue;
         v0_lanes[kind] = find_lane(descs, header.lane_count, lane_v0(kind));
         v1_lanes[kind] = find_lane(descs, header.lane_count, lane_v1(kind));
         if (!load_store_kind(kind)) continue;
@@ -2375,7 +2443,7 @@ __global__ void g2_predecode(
     for (size_t i = 0; i < 256; ++i) kind_by_air[i] = -1;
     for (size_t i = 0; i < expected_kind_count; ++i) {
         G2ExpectedKindV1 const &expected = expected_kinds[i];
-        if (expected.air_idx >= 256 || expected.kind >= 31 ||
+        if (expected.air_idx >= 256 || expected.kind >= G2_KIND_COUNT ||
             kind_by_air[expected.air_idx] != -1) {
             fail(error, 48);
             return;
@@ -2398,9 +2466,9 @@ __global__ void g2_predecode(
     for (size_t i = 0; i < 32; ++i)
         registers[i] = *reinterpret_cast<uint64_t const *>(registers_image.base + i * 8);
     registers[0] = 0;
-    size_t kind_v0_cursors[31]{};
-    size_t kind_v1_cursors[31]{};
-    size_t kind_counts[31]{};
+    size_t kind_v0_cursors[G2_KIND_COUNT]{};
+    size_t kind_v1_cursors[G2_KIND_COUNT]{};
+    size_t kind_counts[G2_KIND_COUNT]{};
     size_t residual_cursor = 0;
     size_t opaque_residual_cursor = 0;
     size_t opaque_event_cursor = 0;
@@ -2598,7 +2666,8 @@ __global__ void g2_predecode(
                 }
                 timestamp += 3u * num_words;
                 continue;
-            } else if (kind == 29 && entry.access_pattern == G2_ADDI_PATTERN) {
+            } else if ((kind == 29 || (kind >= 31 && kind <= 37)) &&
+                       entry.access_pattern == G2_ADDI_PATTERN) {
                 if ((entry.a & 7u) != 0 || (entry.b & 7u) != 0 ||
                     entry.a >= 32 * 8 || entry.b >= 32 * 8) {
                     fail(error, 14);
@@ -2606,12 +2675,17 @@ __global__ void g2_predecode(
                 }
                 uint32_t rd = entry.a / 8, rs1 = entry.b / 8;
                 record.v1 = registers[rs1];
-                record.v2 = uint64_t(int64_t(int32_t(entry.c << 20) >> 20));
-                if (prepared_v0 != record.v1 + record.v2) {
+                record.v2 = split_immediate(kind, entry);
+                uint64_t result = record.v1 + record.v2;
+                if (kind != 29 && !standard_post_write(kind, entry, record.v1, record.v2, result)) {
+                    fail(error, 32);
+                    return;
+                }
+                if (prepared_v0 != result) {
                     fail(error, 15);
                     return;
                 }
-                if (rd != 0) registers[rd] = prepared_v0;
+                if (rd != 0) registers[rd] = result;
                 timestamp += 2;
             } else if ((kind <= 7 || (kind >= 15 && kind <= 19)) &&
                        (entry.access_pattern == 0 || entry.access_pattern == 1)) {
@@ -2777,17 +2851,13 @@ __global__ void g2_predecode(
     *opaque_residual_count = uint32_t(opaque_residual_cursor);
     for (size_t i = 0; i < expected_kind_count; ++i) {
         G2ExpectedKindV1 const &expected = expected_kinds[i];
-        if (expected.kind >= 31 || kind_counts[expected.kind] != expected.count) {
+        if (expected.kind >= G2_KIND_COUNT || kind_counts[expected.kind] != expected.count) {
             fail(error, 24);
             return;
         }
     }
-    G2LaneDescV1 const *addi = v0_lanes[29];
-    if ((addi == nullptr ? 0 : addi->count) != kind_v0_cursors[29]) {
-        fail(error, 25);
-        return;
-    }
-    for (uint32_t kind = 0; kind < 30; ++kind) {
+    for (uint32_t kind = 0; kind < G2_KIND_COUNT; ++kind) {
+        if (!standard_row_kind(kind)) continue;
         G2LaneDescV1 const *v0 = v0_lanes[kind];
         G2LaneDescV1 const *v1 = v1_lanes[kind];
         if ((v0 == nullptr ? 0 : v0->count) != kind_v0_cursors[kind] ||
@@ -2839,6 +2909,13 @@ extern "C" int _rvr_g2_tracegen(uint32_t kind, RVR_G2_TRACEGEN_PARAMETERS) {
     case 28: G2_DISPATCH(_rv64_load_sign_extend_word_tracegen_g2);
     case 29: G2_DISPATCH(_addi_tracegen_g2_common);
     case 30: G2_DISPATCH(_hintstore_tracegen_g2);
+    case 31: G2_DISPATCH(_bitwise_logic_imm_tracegen_g2);
+    case 32: G2_DISPATCH(_less_than_imm_tracegen_g2);
+    case 33: G2_DISPATCH(_shift_logical_imm_tracegen_g2);
+    case 34: G2_DISPATCH(_shift_right_arithmetic_imm_tracegen_g2);
+    case 35: G2_DISPATCH(_addi_w_tracegen_g2);
+    case 36: G2_DISPATCH(_shift_w_logical_imm_tracegen_g2);
+    case 37: G2_DISPATCH(_shift_w_right_arithmetic_imm_tracegen_g2);
     default: return int(cudaErrorInvalidValue);
     }
 #undef G2_DISPATCH
@@ -2885,6 +2962,13 @@ extern "C" int _rvr_g2_tracegen_reference(
     case 28: G2_REFERENCE_DISPATCH(_rv64_load_sign_extend_word_tracegen_g2_reference);
     case 29: G2_REFERENCE_DISPATCH(_addi_tracegen_g2_common_reference);
     case 30: G2_REFERENCE_DISPATCH(_hintstore_tracegen_g2_reference);
+    case 31: G2_REFERENCE_DISPATCH(_bitwise_logic_imm_tracegen_g2_reference);
+    case 32: G2_REFERENCE_DISPATCH(_less_than_imm_tracegen_g2_reference);
+    case 33: G2_REFERENCE_DISPATCH(_shift_logical_imm_tracegen_g2_reference);
+    case 34: G2_REFERENCE_DISPATCH(_shift_right_arithmetic_imm_tracegen_g2_reference);
+    case 35: G2_REFERENCE_DISPATCH(_addi_w_tracegen_g2_reference);
+    case 36: G2_REFERENCE_DISPATCH(_shift_w_logical_imm_tracegen_g2_reference);
+    case 37: G2_REFERENCE_DISPATCH(_shift_w_right_arithmetic_imm_tracegen_g2_reference);
     default: return int(cudaErrorInvalidValue);
     }
 #undef G2_REFERENCE_DISPATCH
@@ -2937,6 +3021,13 @@ extern "C" int _rvr_g2_device_pool_configure(
             _rv64_store_word_tracegen_g2_preload,
             _rv64_store_doubleword_tracegen_g2_preload,
             _hintstore_tracegen_g2_preload,
+            _bitwise_logic_imm_tracegen_g2_preload,
+            _less_than_imm_tracegen_g2_preload,
+            _shift_logical_imm_tracegen_g2_preload,
+            _shift_right_arithmetic_imm_tracegen_g2_preload,
+            _addi_w_tracegen_g2_preload,
+            _shift_w_logical_imm_tracegen_g2_preload,
+            _shift_w_right_arithmetic_imm_tracegen_g2_preload,
         };
         char const *trace_names[] = {
             "add_sub",
@@ -2970,6 +3061,13 @@ extern "C" int _rvr_g2_device_pool_configure(
             "rv64_store_word",
             "rv64_store_doubleword",
             "hintstore",
+            "bitwise_logic_imm",
+            "less_than_imm",
+            "shift_logical_imm",
+            "shift_right_arithmetic_imm",
+            "addi_w",
+            "shift_w_logical_imm",
+            "shift_w_right_arithmetic_imm",
         };
         static constexpr size_t trace_preload_count =
             sizeof(trace_preloads) / sizeof(trace_preloads[0]);
@@ -3167,7 +3265,7 @@ extern "C" int _rvr_g2_predecode(
     size_t chunk_capacity =
         (timestamp_budget + G2_REGISTER_REPLAY_CHUNK - 1) / G2_REGISTER_REPLAY_CHUNK;
     if (instruction_blocks > CUDA_GRID_X_MAX || instruction_blocks == SIZE_MAX ||
-        count_stride > SIZE_MAX / 31 ||
+        count_stride > SIZE_MAX / G2_KIND_COUNT ||
         instruction_count > SIZE_MAX / sizeof(G2PreparedInstruction) ||
         timestamp_budget > SIZE_MAX / sizeof(G2TimelineEvent) ||
         chunk_capacity > SIZE_MAX / G2_REGISTER_COUNT ||
@@ -3175,7 +3273,7 @@ extern "C" int _rvr_g2_predecode(
         std::fprintf(stderr, "OPENVM_RVR_G2_CUDA_ERROR call=launch_dimensions code=%d\n", int(cudaErrorInvalidValue));
         return int(cudaErrorInvalidValue);
     }
-    size_t lane_count_entries = 31 * count_stride;
+    size_t lane_count_entries = G2_KIND_COUNT * count_stride;
     size_t instruction_scan_entries = instruction_count + 1;
     uint32_t *d_run_lengths = nullptr, *d_run_offsets = nullptr, *d_program_slots = nullptr;
     uint32_t *d_row_counts = nullptr, *d_row_offsets = nullptr;
@@ -3316,7 +3414,7 @@ extern "C" int _rvr_g2_predecode(
     G2_ALLOC_U32(d_instruction_indices, instruction_scan_entries);
     G2_ALLOC_U32(d_hint_indices, instruction_count);
     G2_ALLOC_U32(d_hint_count, 1);
-    G2_ALLOC_U32(d_kind_counts, 31);
+    G2_ALLOC_U32(d_kind_counts, G2_KIND_COUNT);
     G2_ALLOC_U32(d_hint_row_offsets, instruction_scan_entries);
     G2_ALLOC_U32(d_register_touched_count, 1);
     G2_ALLOC_U32(d_memory_event_count, 1);
@@ -3352,7 +3450,7 @@ extern "C" int _rvr_g2_predecode(
     ));
     G2_TRY(cudaMemsetAsync(d_hint_flags, 0, instruction_count, stream));
     G2_TRY(cudaMemsetAsync(d_hint_count, 0, sizeof(uint32_t), stream));
-    G2_TRY(cudaMemsetAsync(d_kind_counts, 0, 31 * sizeof(uint32_t), stream));
+    G2_TRY(cudaMemsetAsync(d_kind_counts, 0, G2_KIND_COUNT * sizeof(uint32_t), stream));
     G2_TRY(cudaMemsetAsync(
         d_hint_row_offsets, 0xff, instruction_scan_entries * sizeof(uint32_t), stream
     ));
@@ -3518,7 +3616,7 @@ extern "C" int _rvr_g2_predecode(
         );
         G2_TRY(cudaGetLastError());
     }
-    for (uint32_t kind = 0; kind < 31; ++kind) {
+    for (uint32_t kind = 0; kind < G2_KIND_COUNT; ++kind) {
         size_t offset = size_t(kind) * count_stride;
         G2_TRY(cub::DeviceScan::ExclusiveSum(
             d_scan_temp,

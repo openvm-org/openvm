@@ -210,8 +210,8 @@ pub struct G2DsoManifestConfigV2 {
     pub pc_base: u32,
     pub block_count: u32,
     pub air_count: u32,
-    pub air_kinds: [u8; 31],
-    pub air_indices: [u32; 31],
+    pub air_kinds: [u8; rvr_openvm_ext_ffi_common::G2_DECODER_KIND_COUNT],
+    pub air_indices: [u32; rvr_openvm_ext_ffi_common::G2_DECODER_KIND_COUNT],
 }
 
 /// Capacity-check policy baked into a generated G2 preflight DSO.
@@ -754,7 +754,10 @@ impl CProject {
             (0x0083, 4, 3, 2, 1),
             (0x0084, 4, 1, 0, 1),
         ]);
-        for kind in 0u8..30 {
+        for kind in 0u8..rvr_openvm_ext_ffi_common::G2_DECODER_KIND_COUNT as u8 {
+            if !rvr_openvm_ext_ffi_common::g2_standard_decoder_kind(kind) {
+                continue;
+            }
             for value_lane in [false, true] {
                 let Some(width) =
                     rvr_openvm_ext_ffi_common::g2_standard_lane_width(kind, value_lane)
@@ -772,7 +775,7 @@ impl CProject {
                     if load_store { 3 } else { 1 },
                     if load_store { 1 } else { 0 },
                     match kind {
-                        0..=7 | 15..=19 | 29 => 1,
+                        0..=7 | 15..=19 | 29 | 31..=37 => 1,
                         8 | 9 | 20..=28 => 2,
                         10..=14 => 0,
                         _ => u8::MAX,
@@ -818,21 +821,21 @@ impl CProject {
                uint32_t block_count;\n\
                uint32_t air_count;\n\
                uint32_t emission_mode;\n\
-               uint8_t air_kinds[31];\n\
-               uint32_t air_indices[31];\n\
-               OpenVmRvrG2DsoLaneManifestV1 lanes[42];\n\
+               uint8_t air_kinds[38];\n\
+               uint32_t air_indices[38];\n\
+               OpenVmRvrG2DsoLaneManifestV1 lanes[49];\n\
              }} OpenVmRvrG2DsoManifestV2;\n\n\
              _Static_assert(sizeof(OpenVmRvrG2DsoLaneManifestV1) == 16, \"G2 DSO lane manifest size drift\");\n\
-             _Static_assert(sizeof(OpenVmRvrG2DsoManifestV2) == 1028, \"G2 DSO manifest size drift\");\n\n\
+             _Static_assert(sizeof(OpenVmRvrG2DsoManifestV2) == 1176, \"G2 DSO manifest size drift\");\n\n\
              extern const OpenVmRvrG2DsoManifestV2 openvm_rvr_g2_manifest_v2;\n\
              __attribute__((visibility(\"default\")))\n\
              const OpenVmRvrG2DsoManifestV2 openvm_rvr_g2_manifest_v2 = {{\n\
                .magic = {{'O','V','M','G','2','D','2','\\0'}},\n\
                .version = 2,\n\
-               .manifest_bytes = 1028,\n\
+               .manifest_bytes = 1176,\n\
                .header_size = 64,\n\
                .lane_desc_size = 32,\n\
-               .lane_count = 42,\n\
+               .lane_count = 49,\n\
                .wire_flags = 14,\n\
                .fingerprint = {{{fingerprint}}},\n\
                .producer_schema_fingerprint = {{{producer_schema_fingerprint}}},\n\
@@ -1453,7 +1456,10 @@ preflight_g2_claim(G2ProducerV1* restrict g2, uint32_t slot,
         if slot == rvr_openvm_ext_ffi_common::G2_PRODUCER_RUN_SLOT {
             return 4;
         }
-        for kind in 0u8..30 {
+        for kind in 0u8..rvr_openvm_ext_ffi_common::G2_DECODER_KIND_COUNT as u8 {
+            if !rvr_openvm_ext_ffi_common::g2_standard_decoder_kind(kind) {
+                continue;
+            }
             for value_lane in [false, true] {
                 if rvr_openvm_ext_ffi_common::g2_standard_producer_slot(kind, value_lane)
                     == Some(slot)

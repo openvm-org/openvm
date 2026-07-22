@@ -1714,7 +1714,7 @@ where
                 run_result.state.mode_state.instret = u64::from(derived_instruction_count);
             }
             let expected_kind_counts = g2.checked_emission().then(|| {
-                let mut counts = [0u32; 31];
+                let mut counts = [0u32; rvr_openvm_ext_ffi_common::G2_DECODER_KIND_COUNT];
                 for binding in g2.air_bindings.iter() {
                     counts[binding.kind as usize] = chip_counts[binding.air_idx];
                 }
@@ -2311,7 +2311,11 @@ fn restore_g2_production_counts(
         chip_counts[air_idx] = 0;
     }
 
-    for binding in meta.air_bindings.iter().filter(|binding| binding.kind < 30) {
+    for binding in meta
+        .air_bindings
+        .iter()
+        .filter(|binding| rvr_openvm_ext_ffi_common::g2_standard_decoder_kind(binding.kind))
+    {
         if let Some(slot) =
             rvr_openvm_ext_ffi_common::g2_standard_producer_slot(binding.kind, false)
         {

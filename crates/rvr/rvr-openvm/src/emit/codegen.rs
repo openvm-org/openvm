@@ -44,6 +44,9 @@ impl ArenaNativeGeometry {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ArenaNativeLayout {
     AddI(AddIArenaFieldOffsets),
+    /// G2-only geometry for develop's split two-access immediate AIRs. These
+    /// families use the alu3 compact wire but are not arena-native emitters.
+    AluImm(AluImmArenaFieldOffsets),
     Alu3(Alu3ArenaFieldOffsets),
     Branch2(Branch2ArenaFieldOffsets),
     LoadStore(LoadStoreArenaFieldOffsets),
@@ -83,6 +86,29 @@ pub struct AddIArenaFieldOffsets {
     pub core_rs1: usize,
     pub core_imm_low11: usize,
     pub core_imm_sign: usize,
+}
+
+/// Layout identity for a split-immediate adapter/core record. Optional core
+/// and RV64-W fields use `usize::MAX`; the limb geometry distinguishes byte,
+/// full-u16, and word-u16 witnesses.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AluImmArenaFieldOffsets {
+    pub from_pc: usize,
+    pub from_timestamp: usize,
+    pub rd_ptr: usize,
+    pub rs1_ptr: usize,
+    pub read_prev_ts: usize,
+    pub write_prev_ts: usize,
+    pub write_prev_data: usize,
+    pub rs1_high: usize,
+    pub result_high: usize,
+    pub core_b: usize,
+    pub core_imm_low11: usize,
+    pub core_imm_sign: usize,
+    pub core_shamt: usize,
+    pub core_local_opcode: usize,
+    pub core_b_limb_bytes: u8,
+    pub core_b_limb_count: u8,
 }
 
 /// Field offsets for a conditional one-write JAL/LUI/AUIPC record.

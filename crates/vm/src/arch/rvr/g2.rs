@@ -121,13 +121,24 @@ impl RvrG2OpaqueBindingV1 {
     }
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct RvrG2CapacitiesV1 {
     pub run: u32,
     pub residual: u32,
     pub opaque_events: u32,
     /// Per `DeltaAirKind`; unsupported entries must remain zero.
-    pub kinds: [u32; 31],
+    pub kinds: [u32; rvr_openvm_ext_ffi_common::G2_DECODER_KIND_COUNT],
+}
+
+impl Default for RvrG2CapacitiesV1 {
+    fn default() -> Self {
+        Self {
+            run: 0,
+            residual: 0,
+            opaque_events: 0,
+            kinds: [0; rvr_openvm_ext_ffi_common::G2_DECODER_KIND_COUNT],
+        }
+    }
 }
 
 impl RvrG2CapacitiesV1 {
@@ -581,8 +592,8 @@ pub fn decode_reference_v1(
     for (reg, &value) in registers.iter().enumerate() {
         blocks.insert((1, reg as u32 * 8), value);
     }
-    let mut kind_v0_cursors = [0usize; 31];
-    let mut kind_v1_cursors = [0usize; 31];
+    let mut kind_v0_cursors = [0usize; rvr_openvm_ext_ffi_common::G2_DECODER_KIND_COUNT];
+    let mut kind_v1_cursors = [0usize; rvr_openvm_ext_ffi_common::G2_DECODER_KIND_COUNT];
     let mut residual_cursor = 0usize;
     let mut opaque_event_cursor = 0usize;
     let mut timestamp = initial_timestamp;
@@ -750,19 +761,26 @@ pub fn decode_reference_v1(
             append_u32(&mut record, decode.pc_base + slot * 4);
             append_u32(&mut record, from_timestamp);
 
-            if kind == 29 && entry.access_pattern == 8 {
+            if matches!(kind, 29 | 31..=37) && entry.access_pattern == 8 {
                 let lane = segment
-                    .lane(&descs, G2_LANE_ADDI_V0)
-                    .ok_or_else(|| g2_error("missing AddI lane"))?;
+                    .lane(&descs, g2_lane_v0(kind))
+                    .ok_or_else(|| g2_error(format!("missing immediate kind {kind} lane")))?;
                 let rs1 = register_index(entry.b)?;
                 let rd = register_index(entry.a)?;
-                let result_seed = lane_u64(lane, kind_v0_cursors[kind as usize], "AddI")?;
+                let result_seed =
+                    lane_u64(lane, kind_v0_cursors[kind as usize], "immediate result")?;
                 kind_v0_cursors[kind as usize] += 1;
                 let value = registers[rs1];
-                let immediate = sign_extend_12(entry.c);
-                let result = value.wrapping_add(immediate);
+                let immediate = split_immediate(kind, entry);
+                let result = if kind == 29 {
+                    value.wrapping_add(immediate)
+                } else {
+                    standard_result(kind, entry.local_opcode, value, immediate)?
+                };
                 if result_seed != result {
-                    return Err(g2_error(format!("AddI result mismatch at slot {slot}")));
+                    return Err(g2_error(format!(
+                        "immediate kind {kind} result mismatch at slot {slot}"
+                    )));
                 }
                 let read_prev = touch(&mut timestamps, (1, entry.b), timestamp);
                 timestamp = timestamp
@@ -1107,7 +1125,10 @@ pub fn decode_reference_v1(
             "program or residual cursor did not finish exactly",
         ));
     }
-    for kind in 0u8..30 {
+    for kind in 0u8..rvr_openvm_ext_ffi_common::G2_DECODER_KIND_COUNT as u8 {
+        if !rvr_openvm_ext_ffi_common::g2_standard_decoder_kind(kind) {
+            continue;
+        }
         let v0_count = descs
             .iter()
             .find(|desc| desc.kind == g2_lane_v0(kind))
@@ -1448,6 +1469,14 @@ fn standard_immediate(entry: &RvrDeltaDecodeEntry) -> u64 {
     }
 }
 
+fn split_immediate(kind: u8, entry: &RvrDeltaDecodeEntry) -> u64 {
+    if matches!(kind, 29 | 31 | 32 | 35) {
+        sign_extend_12(entry.c)
+    } else {
+        u64::from(entry.c)
+    }
+}
+
 fn sign_extend_word(value: u32) -> u64 {
     value as i32 as i64 as u64
 }
@@ -1502,6 +1531,30 @@ fn standard_result(kind: u8, local_opcode: u8, v0: u64, v1: u64) -> Result<u64, 
         17 => sign_extend_word((v0 as u32).wrapping_mul(v1 as u32)),
         18 => divrem_result(local_opcode, v0, v1).ok_or_else(invalid)?,
         19 => divrem_w_result(local_opcode, v0, v1).ok_or_else(invalid)?,
+        31 => match local_opcode {
+            1 => v0 ^ v1,
+            2 => v0 | v1,
+            3 => v0 & v1,
+            _ => return Err(invalid()),
+        },
+        32 => match local_opcode {
+            0 => u64::from((v0 as i64) < (v1 as i64)),
+            1 => u64::from(v0 < v1),
+            _ => return Err(invalid()),
+        },
+        33 => match local_opcode {
+            0 => v0.wrapping_shl((v1 & 63) as u32),
+            1 => v0.wrapping_shr((v1 & 63) as u32),
+            _ => return Err(invalid()),
+        },
+        34 if local_opcode == 0 => ((v0 as i64) >> (v1 & 63)) as u64,
+        35 if local_opcode == 0 => sign_extend_word((v0 as u32).wrapping_add(v1 as u32)),
+        36 => sign_extend_word(match local_opcode {
+            0 => (v0 as u32).wrapping_shl((v1 & 31) as u32),
+            1 => (v0 as u32).wrapping_shr((v1 & 31) as u32),
+            _ => return Err(invalid()),
+        }),
+        37 if local_opcode == 0 => sign_extend_word(((v0 as u32 as i32) >> (v1 & 31)) as u32),
         _ => return Err(invalid()),
     })
 }
@@ -1756,7 +1809,7 @@ impl RvrG2PreparedV1 {
         mut self,
         segment_id: u32,
         expected_instruction_count: u32,
-        expected_kind_counts: Option<&[u32; 31]>,
+        expected_kind_counts: Option<&[u32; rvr_openvm_ext_ffi_common::G2_DECODER_KIND_COUNT]>,
         fingerprint: [u8; 32],
         opaque_written: &[(RvrG2OpaqueBindingV1, u32, u32)],
     ) -> Result<RvrG2SegmentV1, ExecutionError> {
@@ -1819,7 +1872,10 @@ impl RvrG2PreparedV1 {
         // result seed per instruction; current register values are replayed on
         // the device.
         if let Some(expected_kind_counts) = expected_kind_counts {
-            for kind in 0u8..30 {
+            for kind in 0u8..rvr_openvm_ext_ffi_common::G2_DECODER_KIND_COUNT as u8 {
+                if !rvr_openvm_ext_ffi_common::g2_standard_decoder_kind(kind) {
+                    continue;
+                }
                 for value_lane in [false, true] {
                     let Some(slot) = g2_standard_producer_slot(kind, value_lane) else {
                         continue;
@@ -2071,7 +2127,10 @@ fn producer_lane_specs() -> Vec<LaneSpec> {
             group: 0,
         },
     ];
-    for kind in 0u8..30 {
+    for kind in 0u8..rvr_openvm_ext_ffi_common::G2_DECODER_KIND_COUNT as u8 {
+        if !rvr_openvm_ext_ffi_common::g2_standard_decoder_kind(kind) {
+            continue;
+        }
         for value_lane in [false, true] {
             let Some(width) = g2_standard_lane_width(kind, value_lane) else {
                 continue;
@@ -2103,7 +2162,8 @@ fn lane_capacity(spec: LaneSpec, capacities: &RvrG2CapacitiesV1) -> u32 {
         | G2_PRODUCER_RESIDUAL_VALUE_SLOT => capacities.residual,
         G2_PRODUCER_OPAQUE_EVENT_COUNT_SLOT => capacities.opaque_events,
         G2_PRODUCER_HINT_WORD_COUNT_SLOT => capacities.kinds[30],
-        _ => (0u8..30)
+        _ => (0u8..rvr_openvm_ext_ffi_common::G2_DECODER_KIND_COUNT as u8)
+            .filter(|&kind| rvr_openvm_ext_ffi_common::g2_standard_decoder_kind(kind))
             .find(|&kind| {
                 [false, true].into_iter().any(|value_lane| {
                     g2_standard_producer_slot(kind, value_lane) == Some(spec.slot)
@@ -2316,7 +2376,7 @@ mod tests {
         let mut prepared = RvrG2PreparedV1::new_pooled(&capacities, &pool).unwrap();
         prepared.lanes[G2_PRODUCER_ADDI_SLOT].len = 1;
         prepared.lanes[G2_PRODUCER_ADDI_SLOT].expected_len = 1;
-        let mut expected = [0u32; 31];
+        let mut expected = [0u32; rvr_openvm_ext_ffi_common::G2_DECODER_KIND_COUNT];
         expected[29] = 2;
 
         let error = prepared
@@ -2335,7 +2395,7 @@ mod tests {
         let mut prepared = RvrG2PreparedV1::new_pooled(&capacities, &pool).unwrap();
         prepared.lanes[G2_PRODUCER_ADDI_SLOT].len = 1;
         prepared.lanes[G2_PRODUCER_ADDI_SLOT].expected_len = 2;
-        let mut expected = [0u32; 31];
+        let mut expected = [0u32; rvr_openvm_ext_ffi_common::G2_DECODER_KIND_COUNT];
         expected[29] = 1;
 
         let error = prepared
@@ -2381,7 +2441,7 @@ mod tests {
         prepared.lanes[G2_PRODUCER_RUN_SLOT].len = 1;
         prepared.lanes[G2_PRODUCER_RUN_SLOT].expected_len = 1;
         prepared.producer.instruction_count = 2;
-        let mut expected_kind_counts = [0u32; 31];
+        let mut expected_kind_counts = [0u32; rvr_openvm_ext_ffi_common::G2_DECODER_KIND_COUNT];
         expected_kind_counts[29] = 2;
         let fingerprint = [0x5a; 32];
         let segment = prepared
@@ -2506,7 +2566,7 @@ mod tests {
         prepared.lanes[store_slot + 1].len = 1;
         prepared.lanes[store_slot + 1].expected_len = 1;
         prepared.producer.instruction_count = 4;
-        let mut expected_kind_counts = [0u32; 31];
+        let mut expected_kind_counts = [0u32; rvr_openvm_ext_ffi_common::G2_DECODER_KIND_COUNT];
         expected_kind_counts[26] = 1;
         expected_kind_counts[29] = 2;
         let fingerprint = [4; 32];

@@ -144,9 +144,9 @@ pub type LogNativeCrossingAssembler<F, RA> = for<'a> fn(
 /// the real record types at registration. Re-exported here so extension
 /// crates keep a single import path.
 pub use rvr_openvm::{
-    AddIArenaFieldOffsets, Alu3ArenaFieldOffsets, Alu3WArenaFieldOffsets, ArenaNativeGeometry,
-    ArenaNativeLayout, Branch2ArenaFieldOffsets, LoadStoreArenaFieldOffsets, Rw1ArenaFieldOffsets,
-    Wr1ArenaFieldOffsets,
+    AddIArenaFieldOffsets, Alu3ArenaFieldOffsets, Alu3WArenaFieldOffsets, AluImmArenaFieldOffsets,
+    ArenaNativeGeometry, ArenaNativeLayout, Branch2ArenaFieldOffsets, LoadStoreArenaFieldOffsets,
+    Rw1ArenaFieldOffsets, Wr1ArenaFieldOffsets,
 };
 
 struct RegisteredInlineAssembler<F, RA> {
@@ -159,6 +159,10 @@ struct RegisteredInlineAssembler<F, RA> {
     /// skips `assemble` for it entirely. Families without geometry keep the
     /// R3 compact wire + host expansion, so R4 rolls out shape by shape.
     arena_native: Option<ArenaNativeGeometry>,
+    /// Geometry used only to bind/fingerprint a G2 compact decoder. This is
+    /// separate because split-immediate AIRs are compact in G2 but are not
+    /// full-record arena-native emitters.
+    g2_geometry: Option<ArenaNativeGeometry>,
     delta_pattern: Option<DeltaAccessPattern>,
     /// Width used to reconstruct Load/Store timestamp geometry and writes.
     delta_memory_width: Option<u8>,
@@ -266,7 +270,7 @@ impl<F, RA> LogNativeAssemblerRegistry<F, RA> {
         record_size: usize,
         assembler: LogNativeInlineAssembler<F, RA>,
     ) {
-        self.register_inline_impl(opcodes, record_size, assembler, None)
+        self.register_inline_impl(opcodes, record_size, assembler, None, None)
     }
 
     /// Like [`Self::register_inline`], additionally declaring the family's
@@ -280,7 +284,25 @@ impl<F, RA> LogNativeAssemblerRegistry<F, RA> {
         assembler: LogNativeInlineAssembler<F, RA>,
         geometry: ArenaNativeGeometry,
     ) {
-        self.register_inline_impl(opcodes, record_size, assembler, Some(geometry))
+        self.register_inline_impl(
+            opcodes,
+            record_size,
+            assembler,
+            Some(geometry),
+            Some(geometry),
+        )
+    }
+
+    /// Register a compact decoder whose full-record geometry is consumed by
+    /// G2 binding/fingerprinting only.
+    pub fn register_inline_g2(
+        &mut self,
+        opcodes: impl IntoIterator<Item = VmOpcode>,
+        record_size: usize,
+        assembler: LogNativeInlineAssembler<F, RA>,
+        geometry: ArenaNativeGeometry,
+    ) {
+        self.register_inline_impl(opcodes, record_size, assembler, None, Some(geometry))
     }
 
     fn register_inline_impl(
@@ -289,6 +311,7 @@ impl<F, RA> LogNativeAssemblerRegistry<F, RA> {
         record_size: usize,
         assembler: LogNativeInlineAssembler<F, RA>,
         arena_native: Option<ArenaNativeGeometry>,
+        g2_geometry: Option<ArenaNativeGeometry>,
     ) {
         for opcode in opcodes {
             assert!(
@@ -300,6 +323,7 @@ impl<F, RA> LogNativeAssemblerRegistry<F, RA> {
                             assemble: assembler,
                             crossing_assemble: None,
                             arena_native,
+                            g2_geometry,
                             delta_pattern: None,
                             delta_memory_width: None,
                         }
@@ -380,6 +404,12 @@ impl<F, RA> LogNativeAssemblerRegistry<F, RA> {
         self.inline_assemblers
             .get(opcode)
             .and_then(|reg| reg.arena_native)
+    }
+
+    pub fn inline_g2_geometry(&self, opcode: &VmOpcode) -> Option<ArenaNativeGeometry> {
+        self.inline_assemblers
+            .get(opcode)
+            .and_then(|reg| reg.g2_geometry)
     }
 
     /// Register `assembler` for every opcode in `opcodes`.
@@ -496,6 +526,12 @@ pub trait LogNativeOpcodeAdmitter<F> {
         None
     }
 
+    /// Geometry used by the private G2 compact decoder. Defaults to the
+    /// arena-native geometry for existing fused families.
+    fn inline_g2_geometry_for(&self, instruction: &Instruction<F>) -> Option<ArenaNativeGeometry> {
+        self.inline_arena_geometry_for(instruction)
+    }
+
     /// AOT-only operand/classification derivation for the CUDA delta decoder.
     fn delta_decode_for(&self, _instruction: &Instruction<F>) -> Option<RvrDeltaDecodeInfo> {
         None
@@ -518,6 +554,10 @@ impl<F, RA> LogNativeOpcodeAdmitter<F> for LogNativeAssemblerRegistry<F, RA> {
         instruction: &Instruction<F>,
     ) -> Option<ArenaNativeGeometry> {
         self.inline_arena_geometry(&instruction.opcode)
+    }
+
+    fn inline_g2_geometry_for(&self, instruction: &Instruction<F>) -> Option<ArenaNativeGeometry> {
+        self.inline_g2_geometry(&instruction.opcode)
     }
 
     fn delta_decode_for(&self, instruction: &Instruction<F>) -> Option<RvrDeltaDecodeInfo> {

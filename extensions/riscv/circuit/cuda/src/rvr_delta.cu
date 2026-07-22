@@ -187,7 +187,14 @@ enum DeltaAirKind : uint32_t {
     DELTA_KIND_LOAD_SIGN_EXTEND_WORD = 28,
     DELTA_KIND_ADDI = 29,
     DELTA_KIND_HINT_STORE = 30,
-    DELTA_KIND_COUNT = 31,
+    DELTA_KIND_BITWISE_IMM = 31,
+    DELTA_KIND_LESS_THAN_IMM = 32,
+    DELTA_KIND_SHIFT_LOGICAL_IMM = 33,
+    DELTA_KIND_SHIFT_RIGHT_ARITHMETIC_IMM = 34,
+    DELTA_KIND_ADDI_W = 35,
+    DELTA_KIND_SHIFT_W_LOGICAL_IMM = 36,
+    DELTA_KIND_SHIFT_W_RIGHT_ARITHMETIC_IMM = 37,
+    DELTA_KIND_COUNT = 38,
 };
 
 __device__ __forceinline__ void fail(uint32_t *error, uint32_t code) {
@@ -536,6 +543,59 @@ __device__ __forceinline__ bool delta_post_write_value(
     case DELTA_KIND_ADDI:
         if (entry.local_opcode != 0) return false;
         result = record.v1 + record.v2;
+        return true;
+    case DELTA_KIND_BITWISE_IMM:
+        if (entry.local_opcode == 1)
+            result = record.v1 ^ record.v2;
+        else if (entry.local_opcode == 2)
+            result = record.v1 | record.v2;
+        else if (entry.local_opcode == 3)
+            result = record.v1 & record.v2;
+        else
+            return false;
+        return true;
+    case DELTA_KIND_LESS_THAN_IMM:
+        if (entry.local_opcode == 0)
+            result = int64_t(record.v1) < int64_t(record.v2);
+        else if (entry.local_opcode == 1)
+            result = record.v1 < record.v2;
+        else
+            return false;
+        return true;
+    case DELTA_KIND_SHIFT_LOGICAL_IMM: {
+        uint32_t shamt = uint32_t(record.v2 & 63u);
+        if (entry.local_opcode == 0)
+            result = record.v1 << shamt;
+        else if (entry.local_opcode == 1)
+            result = record.v1 >> shamt;
+        else
+            return false;
+        return true;
+    }
+    case DELTA_KIND_SHIFT_RIGHT_ARITHMETIC_IMM:
+        if (entry.local_opcode != 0) return false;
+        result = uint64_t(int64_t(record.v1) >> uint32_t(record.v2 & 63u));
+        return true;
+    case DELTA_KIND_ADDI_W:
+        if (entry.local_opcode != 0) return false;
+        result = sign_extend_word(uint32_t(record.v1) + uint32_t(record.v2));
+        return true;
+    case DELTA_KIND_SHIFT_W_LOGICAL_IMM: {
+        uint32_t shamt = uint32_t(record.v2 & 31u), word;
+        if (entry.local_opcode == 0)
+            word = uint32_t(record.v1) << shamt;
+        else if (entry.local_opcode == 1)
+            word = uint32_t(record.v1) >> shamt;
+        else
+            return false;
+        result = sign_extend_word(word);
+        return true;
+    }
+    case DELTA_KIND_SHIFT_W_RIGHT_ARITHMETIC_IMM:
+        if (entry.local_opcode != 0) return false;
+        result = sign_extend_word(
+            uint32_t(int32_t(uint32_t(record.v1)) >> uint32_t(record.v2 & 31u))
+        );
         return true;
     case DELTA_KIND_ADD_SUB:
         if (entry.local_opcode == 0)

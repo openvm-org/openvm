@@ -136,17 +136,30 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
         inventory.add_executor_chip(shift_w_right_arithmetic);
 
         inventory.next_air::<Rv64AddIWAir>()?;
-        let addi_w = Rv64AddIWChipGpu::new(range_checker.clone(), timestamp_max_bits);
+        let addi_w = Rv64AddIWChipGpu::new(
+            range_checker.clone(),
+            timestamp_max_bits,
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
+            self.rvr_decode.clone(),
+        );
         inventory.add_executor_chip(addi_w);
 
         inventory.next_air::<Rv64ShiftWLogicalImmAir>()?;
-        let shift_w_logical_imm =
-            Rv64ShiftWLogicalImmChipGpu::new(range_checker.clone(), timestamp_max_bits);
+        let shift_w_logical_imm = Rv64ShiftWLogicalImmChipGpu::new(
+            range_checker.clone(),
+            timestamp_max_bits,
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
+            self.rvr_decode.clone(),
+        );
         inventory.add_executor_chip(shift_w_logical_imm);
 
         inventory.next_air::<Rv64ShiftWRightArithmeticImmAir>()?;
-        let shift_w_right_arithmetic_imm =
-            Rv64ShiftWRightArithmeticImmChipGpu::new(range_checker.clone(), timestamp_max_bits);
+        let shift_w_right_arithmetic_imm = Rv64ShiftWRightArithmeticImmChipGpu::new(
+            range_checker.clone(),
+            timestamp_max_bits,
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
+            self.rvr_decode.clone(),
+        );
         inventory.add_executor_chip(shift_w_right_arithmetic_imm);
 
         inventory.next_air::<Rv64LoadSignExtendByteAir>()?;
@@ -325,17 +338,30 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
         inventory.add_executor_chip(addi);
 
         inventory.next_air::<Rv64ShiftLogicalImmAir>()?;
-        let shift_logical_imm =
-            Rv64ShiftLogicalImmChipGpu::new(range_checker.clone(), timestamp_max_bits);
+        let shift_logical_imm = Rv64ShiftLogicalImmChipGpu::new(
+            range_checker.clone(),
+            timestamp_max_bits,
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
+            self.rvr_decode.clone(),
+        );
         inventory.add_executor_chip(shift_logical_imm);
 
         inventory.next_air::<Rv64ShiftRightArithmeticImmAir>()?;
-        let shift_right_arithmetic_imm =
-            Rv64ShiftRightArithmeticImmChipGpu::new(range_checker.clone(), timestamp_max_bits);
+        let shift_right_arithmetic_imm = Rv64ShiftRightArithmeticImmChipGpu::new(
+            range_checker.clone(),
+            timestamp_max_bits,
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
+            self.rvr_decode.clone(),
+        );
         inventory.add_executor_chip(shift_right_arithmetic_imm);
 
         inventory.next_air::<Rv64LessThanImmAir>()?;
-        let lt_imm = Rv64LessThanImmChipGpu::new(range_checker.clone(), timestamp_max_bits);
+        let lt_imm = Rv64LessThanImmChipGpu::new(
+            range_checker.clone(),
+            timestamp_max_bits,
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
+            self.rvr_decode.clone(),
+        );
         inventory.add_executor_chip(lt_imm);
 
         inventory.next_air::<Rv64BitwiseLogicImmAir>()?;
@@ -343,6 +369,8 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Rv64I> for 
             range_checker.clone(),
             bitwise_lu.clone(),
             timestamp_max_bits,
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
+            self.rvr_decode.clone(),
         );
         inventory.add_executor_chip(bitwise_logic_imm);
 
