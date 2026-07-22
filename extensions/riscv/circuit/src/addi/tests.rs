@@ -149,7 +149,12 @@ fn create_cuda_w_harness(tester: &GpuChipTestBuilder) -> GpuWHarness {
         dummy_range_checker,
         tester.dummy_memory_helper(),
     );
-    let gpu_chip = Rv64AddIWChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
+    let gpu_chip = Rv64AddIWChipGpu::new(
+        tester.range_checker(),
+        tester.timestamp_max_bits(),
+        #[cfg(feature = "rvr")]
+        Default::default(),
+    );
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, 8)
 }
 

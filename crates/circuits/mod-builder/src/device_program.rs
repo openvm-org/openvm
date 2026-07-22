@@ -1049,7 +1049,7 @@ mod device_program_tests {
         let interp = ReferenceInterpreter { prog: &prog };
         let ref_checker = Arc::new(VariableRangeCheckerChip::new(range_checker.bus()));
 
-        let nl = expr.canonical_num_limbs();
+        let nl = expr.program().canonical_num_limbs();
         let prime = expr.program().builder().prime.clone();
         let mut state = 0xdeadbeef12345678u64;
         for rep in 0..n_random_repeats {
@@ -1070,7 +1070,7 @@ mod device_program_tests {
 
                 // Flags exactly as FieldExpressionFiller derives them.
                 let mut flags = vec![false; expr.program().builder().num_flags];
-                if expr.needs_setup() {
+                if expr.program().needs_setup() {
                     if let Some(pos) = local_opcode_idx.iter().position(|&x| x == *opcode) {
                         if pos < opcode_flag_idx.len() {
                             flags[opcode_flag_idx[pos]] = true;
@@ -1120,7 +1120,8 @@ mod device_program_tests {
         let mut y3 = lambda * (x1 - x3.clone()) - y1;
         y3.save_output();
         let builder = (*builder).borrow().clone();
-        let expr = crate::FieldExpr::new(builder, range_checker.bus(), true);
+        let program = crate::FieldExpressionProgram::new(builder, true);
+        let expr = crate::FieldExpr::new(program, range_checker.bus());
 
         // 1-op chip that needs setup: local ops [0, 2], default flag 0 for op 0.
         check_equivalence(expr, range_checker, vec![0, 2], vec![0], &[(0, None)], 25);
@@ -1156,7 +1157,8 @@ mod device_program_tests {
         (*builder).borrow_mut().set_compute(z_idx, compute);
         z.save_output();
         let builder = (*builder).borrow().clone();
-        let expr = crate::FieldExpr::new(builder, range_checker.bus(), true);
+        let program = crate::FieldExpressionProgram::new(builder, true);
+        let expr = crate::FieldExpr::new(program, range_checker.bus());
 
         // Ops: mul (local 2, flag 0), div (local 3, flag 1), setup (local 4).
         let setup_inputs = vec![prime.clone(), BigUint::from(0u32)];
@@ -1187,7 +1189,8 @@ mod device_program_tests {
         let mut w = x1.int_add(-7) + y1.int_add(11);
         w.save_output();
         let builder = (*builder).borrow().clone();
-        let expr = crate::FieldExpr::new(builder, range_checker.bus(), true);
+        let program = crate::FieldExpressionProgram::new(builder, true);
+        let expr = crate::FieldExpr::new(program, range_checker.bus());
 
         check_equivalence(expr, range_checker, vec![0, 2], vec![0], &[(0, None)], 25);
     }
@@ -1230,12 +1233,13 @@ mod device_program_dump {
     fn dump_case(
         dir: &str,
         name: &str,
-        expr: crate::FieldExpr,
+        case: (crate::FieldExpr, std::sync::Arc<VariableRangeCheckerChip>),
         local_opcode_idx: Vec<usize>,
         opcode_flag_idx: Vec<usize>,
         opcodes: &[usize],
         rows: usize,
     ) {
+        let (expr, range_checker) = case;
         let width = BaseAir::<BabyBear>::width(&expr);
         let prog = serialize_field_expr(
             &expr,
@@ -1245,10 +1249,9 @@ mod device_program_dump {
         );
         let blob = prog.to_blob();
 
-        let nl = expr.canonical_num_limbs();
+        let nl = expr.program().canonical_num_limbs();
         let prime = expr.program().builder().prime.clone();
         let rec_stride = 1 + expr.program().builder().num_input * nl;
-        let range_checker = std::sync::Arc::new(VariableRangeCheckerChip::new(expr.range_bus));
 
         let mut state = 0x0123456789abcdefu64;
         let mut records = Vec::with_capacity(rows * rec_stride);
@@ -1266,7 +1269,7 @@ mod device_program_dump {
                 records.extend(biguint_to_limbs_vec(x, nl));
             }
             let mut flags = vec![false; expr.program().builder().num_flags];
-            if expr.needs_setup() {
+            if expr.program().needs_setup() {
                 if let Some(pos) = local_opcode_idx.iter().position(|&x| x == opcode) {
                     if pos < opcode_flag_idx.len() {
                         flags[opcode_flag_idx[pos]] = true;
@@ -1317,8 +1320,17 @@ mod device_program_dump {
             let mut y3 = lambda * (x1 - x3.clone()) - y1;
             y3.save_output();
             let b = (*builder).borrow().clone();
-            let expr = crate::FieldExpr::new(b, range_checker.bus(), true);
-            dump_case(&dir, "ecaddne", expr, vec![0, 2], vec![0], &[0], 32768);
+            let program = crate::FieldExpressionProgram::new(b, true);
+            let expr = crate::FieldExpr::new(program, range_checker.bus());
+            dump_case(
+                &dir,
+                "ecaddne",
+                (expr, range_checker),
+                vec![0, 2],
+                vec![0],
+                &[0],
+                32768,
+            );
         }
         // MulDiv with flags
         {
@@ -1348,11 +1360,12 @@ mod device_program_dump {
             (*builder).borrow_mut().set_compute(z_idx, compute);
             z.save_output();
             let b = (*builder).borrow().clone();
-            let expr = crate::FieldExpr::new(b, range_checker.bus(), true);
+            let program = crate::FieldExpressionProgram::new(b, true);
+            let expr = crate::FieldExpr::new(program, range_checker.bus());
             dump_case(
                 &dir,
                 "muldiv",
-                expr,
+                (expr, range_checker),
                 vec![2, 3, 4],
                 vec![0, 1],
                 &[2, 3],
@@ -1375,8 +1388,17 @@ mod device_program_dump {
             let mut w = x1.int_add(-7) + y1.int_add(11);
             w.save_output();
             let b = (*builder).borrow().clone();
-            let expr = crate::FieldExpr::new(b, range_checker.bus(), true);
-            dump_case(&dir, "intops", expr, vec![0, 2], vec![0], &[0], 16384);
+            let program = crate::FieldExpressionProgram::new(b, true);
+            let expr = crate::FieldExpr::new(program, range_checker.bus());
+            dump_case(
+                &dir,
+                "intops",
+                (expr, range_checker),
+                vec![0, 2],
+                vec![0],
+                &[0],
+                16384,
+            );
         }
     }
 }

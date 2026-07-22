@@ -211,6 +211,8 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
         tester.range_checker(),
         tester.bitwise_op_lookup(),
         tester.timestamp_max_bits(),
+        #[cfg(feature = "rvr")]
+        Default::default(),
     );
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, 64)
 }
