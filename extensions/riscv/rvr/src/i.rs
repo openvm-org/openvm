@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, HashSet};
 
 use openvm_instructions::{
     exe::SparseMemoryImage,
+    program::DEFAULT_PC_STEP,
     riscv::{RV64_IMM_AS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_BYTES},
     LocalOpcode,
 };
@@ -24,7 +25,6 @@ use self::instruction::{AluOp, Rv64IInstr};
 use crate::instruction::{decode_imm_cg, decode_reg, reg_operand, NopInstr, ZERO};
 
 const U24_MASK: u32 = (1 << 24) - 1;
-const STORED_PC_BYTES: u32 = core::mem::size_of::<u32>() as u32;
 const RV64I_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize =
     max_main_memory_pages_for_contiguous_range(RV64_REGISTER_BYTES as usize);
 
@@ -76,7 +76,7 @@ impl RvrExtension for Rv64IExtension {
         bytes
             .keys()
             .copied()
-            .filter(|address| address % STORED_PC_BYTES == 0)
+            .filter(|address| address.is_multiple_of(DEFAULT_PC_STEP))
             .filter_map(|address| {
                 let address1 = address.checked_add(1)?;
                 let address2 = address.checked_add(2)?;
