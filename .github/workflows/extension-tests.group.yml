@@ -131,6 +131,18 @@ jobs:
             popd
             echo "::endgroup::"
 
+            if [[ "${{ inputs.mode }}" == "rvr" && -f "extensions/$extension/rvr/Cargo.toml" ]]; then
+              echo "::group::Running rvr crate tests for $extension"
+              pushd "extensions/$extension/rvr"
+              rvr_feature_args=()
+              if grep -q '^rvr = \[' Cargo.toml; then
+                rvr_feature_args=(--features=rvr)
+              fi
+              cargo nextest run --cargo-profile=fast "${rvr_feature_args[@]}" --no-tests=pass --success-output=immediate
+              popd
+              echo "::endgroup::"
+            fi
+
             if [[ "${{ inputs.mode }}" == "default" && -f "extensions/$extension/guest/Cargo.toml" ]]; then
               echo "::group::Running guest tests for $extension"
               guest_feature_args=()

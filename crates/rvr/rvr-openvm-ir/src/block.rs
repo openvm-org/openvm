@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::instr::{Instr, Reg};
+use crate::{CfgTerm, ExtInstr};
 
 /// Source location for debug info (`#line` directives).
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -28,91 +28,90 @@ impl SourceLoc {
     }
 }
 
-/// Branch condition (used in Terminator::Branch).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BranchCond {
-    Eq,
-    Ne,
-    Lt,
-    Ge,
-    Ltu,
-    Geu,
-}
-
 /// Block terminator — control flow at the end of a basic block.
 #[derive(Debug, Clone)]
 pub enum Terminator {
-    /// Fall through to pc + 4 (implicit next block).
+    /// Fall through to the next lifted instruction.
     FallThrough,
-    /// Static jump (JAL). `link_rd` writes pc+4 to rd before jumping.
-    Jump { link_rd: Option<Reg>, target: u64 },
-    /// Dynamic jump (JALR). `resolved` filled in by CFG analysis.
-    JumpDyn {
-        link_rd: Option<Reg>,
-        rs1: Reg,
-        imm: i32,
-        resolved: Vec<u64>,
-    },
-    /// Conditional branch. Falls through if false.
-    Branch {
-        cond: BranchCond,
-        rs1: Reg,
-        rs2: Reg,
-        target: u64,
-    },
     /// Program exit.
     Exit { code: u32 },
     /// Illegal instruction / debug panic.
     Trap { message: String },
-    /// Extension terminator (from a registered extension crate).
-    /// Carries its own codegen via `ExtInstr::emit_c`.
-    Extension(Box<dyn crate::ExtInstr>),
+    /// Instruction node stored in terminator position.
+    Instruction {
+        node: Box<dyn ExtInstr>,
+        /// Indirect-jump targets found by CFG analysis.
+        resolved_targets: Vec<u64>,
+    },
 }
 
 impl Terminator {
-    /// Returns the set of possible successor PCs (for CFG building).
-    pub fn successors(&self, fall_pc: u64) -> Vec<u64> {
+    /// Create a terminator for an instruction node.
+    pub fn instruction(node: impl ExtInstr + 'static) -> Self {
+        Self::Instruction {
+            node: Box::new(node),
+            resolved_targets: Vec::new(),
+        }
+    }
+
+    /// Returns the control-flow behavior of this terminator.
+    ///
+    /// # Panics
+    ///
+    /// Panics if an instruction node in terminator position does not describe
+    /// real control flow. Codegen only emits an instruction terminator's
+    /// control-flow effect, so a plain instruction here would be silently
+    /// dropped from the artifact; lifters must emit such instructions as
+    /// [`LiftedInstr::Body`] instead.
+    pub fn cfg_term(&self, pc: u64, fall_pc: u64) -> CfgTerm {
         match self {
-            Terminator::FallThrough => vec![fall_pc],
-            Terminator::Jump { target, .. } => vec![*target],
-            Terminator::JumpDyn { resolved, .. } => resolved.clone(),
-            Terminator::Branch { target, .. } => vec![*target, fall_pc],
-            Terminator::Exit { .. } | Terminator::Trap { .. } => vec![],
-            Terminator::Extension(ext) => ext.successors(fall_pc),
+            Self::FallThrough => CfgTerm::FallThrough,
+            Self::Exit { code } => CfgTerm::Exit { code: *code },
+            Self::Trap { message } => CfgTerm::Trap {
+                message: message.clone(),
+            },
+            Self::Instruction { node, .. } => {
+                let term = node.cfg_term(pc, fall_pc).unwrap_or_else(|| {
+                    panic!(
+                        "instruction `{}` in terminator position at pc {pc:#x} \
+                         does not define cfg_term",
+                        node.opname()
+                    )
+                });
+                assert!(
+                    !matches!(term, CfgTerm::FallThrough),
+                    "instruction `{}` in terminator position at pc {pc:#x} \
+                     declares fall-through control flow; lift it as a body instruction",
+                    node.opname()
+                );
+                term
+            }
+        }
+    }
+
+    /// Returns the set of possible successor PCs for CFG construction.
+    pub fn successors(&self, pc: u64, fall_pc: u64) -> Vec<u64> {
+        match self.cfg_term(pc, fall_pc) {
+            CfgTerm::FallThrough => vec![fall_pc],
+            CfgTerm::Jump { target, .. } => vec![target],
+            CfgTerm::JumpIndirect { .. } => match self {
+                Self::Instruction {
+                    resolved_targets, ..
+                } => resolved_targets.clone(),
+                _ => Vec::new(),
+            },
+            CfgTerm::Branch { target, .. } => vec![target, fall_pc],
+            CfgTerm::Exit { .. } | CfgTerm::Trap { .. } => Vec::new(),
+            CfgTerm::Opaque { successors } => successors,
         }
     }
 
     pub fn opname(&self) -> &str {
         match self {
-            Terminator::FallThrough => "fallthrough",
-            Terminator::Jump {
-                link_rd: Some(_), ..
-            } => "jal",
-            Terminator::Jump { link_rd: None, .. } => "j",
-            Terminator::JumpDyn {
-                link_rd: Some(_), ..
-            } => "jalr",
-            Terminator::JumpDyn { link_rd: None, .. } => "jr",
-            Terminator::Branch { cond, .. } => match cond {
-                BranchCond::Eq => "beq",
-                BranchCond::Ne => "bne",
-                BranchCond::Lt => "blt",
-                BranchCond::Ge => "bge",
-                BranchCond::Ltu => "bltu",
-                BranchCond::Geu => "bgeu",
-            },
-            Terminator::Exit { .. } => "exit",
-            Terminator::Trap { .. } => "trap",
-            Terminator::Extension(ext) => ext.opname(),
-        }
-    }
-
-    /// Returns true if this is a block-ending terminator (not fall-through).
-    pub fn is_block_end(&self) -> bool {
-        match self {
-            Terminator::FallThrough => false,
-            Terminator::Extension(ext) => ext.is_block_end(),
-            _ => true,
+            Self::FallThrough => "fallthrough",
+            Self::Exit { .. } => "exit",
+            Self::Trap { .. } => "trap",
+            Self::Instruction { node, .. } => node.opname(),
         }
     }
 }
@@ -121,7 +120,7 @@ impl Terminator {
 #[derive(Debug, Clone)]
 pub struct InstrAt {
     pub pc: u64,
-    pub instr: Instr,
+    pub instr: Box<dyn ExtInstr>,
     /// Source location from guest ELF debug info.
     pub source_loc: Option<SourceLoc>,
 }
@@ -141,8 +140,8 @@ pub enum LiftedInstr {
 impl LiftedInstr {
     pub fn pc(&self) -> u64 {
         match self {
-            LiftedInstr::Body(i) => i.pc,
-            LiftedInstr::Term { pc, .. } => *pc,
+            Self::Body(i) => i.pc,
+            Self::Term { pc, .. } => *pc,
         }
     }
 }

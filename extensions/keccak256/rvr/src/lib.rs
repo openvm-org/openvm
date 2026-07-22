@@ -5,21 +5,39 @@
 //! `.c` shim is emitted alongside generated code so clang can inline the
 //! tracer helpers across the call boundary.
 
-use openvm_instructions::LocalOpcode;
-use openvm_keccak256_transpiler::{KeccakfOpcode, XorinOpcode};
-use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, FixedTraceRows, Instr, InstrAt, LiftedInstr, Reg};
-use rvr_openvm_lift::{
-    decode_reg, fixed_trace_rows_for_chip, opcode_air_idx, AirIndex, ExtensionError, RvrExtension,
-    RvrExtensionCtx, RvrInstruction,
+use openvm_instructions::{
+    riscv::{RV64_NUM_REGISTERS, RV64_REGISTER_BYTES},
+    LocalOpcode,
 };
+use openvm_keccak256_transpiler::{KeccakfOpcode, XorinOpcode};
+use rvr_openvm_ir::{
+    CfgEffect, ExtEmitCtx, ExtInstr, FixedTraceRows, InstrAt, LiftedInstr, Variable,
+};
+use rvr_openvm_lift::{
+    decode_variable, fixed_trace_rows_for_chip, max_main_memory_pages_for_contiguous_range,
+    opcode_air_idx, AirIndex, ExtensionError, RvrExtension, RvrExtensionCtx, RvrInstruction,
+};
+
+fn decode_reg(value: u32) -> Variable {
+    decode_variable(value, RV64_REGISTER_BYTES as u32, RV64_NUM_REGISTERS as u32)
+}
 
 const KECCAK_NUM_ROUNDS: u32 = p3_keccak_air::NUM_ROUNDS as u32;
 const _: () = assert!(KECCAK_NUM_ROUNDS as usize == p3_keccak_air::NUM_ROUNDS);
+// XORIN reads one 136-byte rate buffer, writes it back, and separately reads its input.
+const XORIN_MAX_PAGES: usize = 3 * max_main_memory_pages_for_contiguous_range(136);
+// KECCAKF reads and writes the 200-byte state in place.
+const KECCAKF_MAX_PAGES: usize = 2 * max_main_memory_pages_for_contiguous_range(200);
+const KECCAK_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize = if XORIN_MAX_PAGES > KECCAKF_MAX_PAGES {
+    XORIN_MAX_PAGES
+} else {
+    KECCAKF_MAX_PAGES
+};
 
 /// keccak-f\[1600\]: read 200 bytes via `buffer_ptr_reg`, permute in place.
 #[derive(Debug, Clone)]
 pub struct KeccakfInstr {
-    pub buffer_ptr_reg: Reg,
+    pub buffer_ptr_reg: Variable,
     /// KeccakfPerm chip (24 rows per instruction).
     pub perm_chip_idx: Option<AirIndex>,
 }
@@ -30,7 +48,7 @@ impl ExtInstr for KeccakfInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let buf = ctx.read_reg(self.buffer_ptr_reg);
+        let buf = ctx.read_var(self.buffer_ptr_reg);
         ctx.emit_call("rvr_ext_keccakf", &["state", &buf]);
     }
 
@@ -42,17 +60,17 @@ impl ExtInstr for KeccakfInstr {
         Box::new(self.clone())
     }
 
-    fn is_block_end(&self) -> bool {
-        false
+    fn cfg_effect(&self) -> CfgEffect {
+        CfgEffect::None
     }
 }
 
 /// XORIN: XOR `len_reg` bytes from `input_ptr_reg` into `buffer_ptr_reg` in place.
 #[derive(Debug, Clone)]
 pub struct XorinInstr {
-    pub buffer_ptr_reg: Reg,
-    pub input_ptr_reg: Reg,
-    pub len_reg: Reg,
+    pub buffer_ptr_reg: Variable,
+    pub input_ptr_reg: Variable,
+    pub len_reg: Variable,
 }
 
 impl ExtInstr for XorinInstr {
@@ -61,9 +79,9 @@ impl ExtInstr for XorinInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let buf_ptr = ctx.read_reg(self.buffer_ptr_reg);
-        let input = ctx.read_reg(self.input_ptr_reg);
-        let len = ctx.read_reg(self.len_reg);
+        let buf_ptr = ctx.read_var(self.buffer_ptr_reg);
+        let input = ctx.read_var(self.input_ptr_reg);
+        let len = ctx.read_var(self.len_reg);
         ctx.emit_checked_call("rvr_ext_xorin", &["state", &buf_ptr, &input, &len]);
     }
 
@@ -71,8 +89,8 @@ impl ExtInstr for XorinInstr {
         Box::new(self.clone())
     }
 
-    fn is_block_end(&self) -> bool {
-        false
+    fn cfg_effect(&self) -> CfgEffect {
+        CfgEffect::None
     }
 }
 
@@ -103,10 +121,10 @@ impl RvrExtension for KeccakExtension {
             let buffer_ptr_reg = decode_reg(insn.a);
             return Some(LiftedInstr::Body(InstrAt {
                 pc,
-                instr: Instr::Ext(Box::new(KeccakfInstr {
+                instr: Box::new(KeccakfInstr {
                     buffer_ptr_reg,
                     perm_chip_idx: self.keccakf_perm_chip_idx,
-                })),
+                }),
                 source_loc: None,
             }));
         }
@@ -117,11 +135,11 @@ impl RvrExtension for KeccakExtension {
             let len_reg = decode_reg(insn.c);
             return Some(LiftedInstr::Body(InstrAt {
                 pc,
-                instr: Instr::Ext(Box::new(XorinInstr {
+                instr: Box::new(XorinInstr {
                     buffer_ptr_reg,
                     input_ptr_reg,
                     len_reg,
-                })),
+                }),
                 source_loc: None,
             }));
         }
@@ -142,5 +160,9 @@ impl RvrExtension for KeccakExtension {
             "librvr_openvm_ext_keccak_ffi.a",
             include_bytes!(env!("RVR_KECCAK_FFI_STATICLIB")),
         )]
+    }
+
+    fn max_main_memory_pages_per_instruction(&self) -> usize {
+        KECCAK_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION
     }
 }

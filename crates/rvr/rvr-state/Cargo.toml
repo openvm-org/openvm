@@ -1,6 +1,6 @@
 [package]
 name = "rvr-state"
-description = "RV64 state shared with the generated RVR runtime"
+description = "Machine state shared with the generated RVR runtime"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

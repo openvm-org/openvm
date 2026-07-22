@@ -10,9 +10,9 @@ repository.workspace = true
 [dependencies]
 rvr-openvm-ir.workspace = true
 openvm-instructions.workspace = true
-openvm-riscv-transpiler.workspace = true
 openvm-stark-backend.workspace = true
 libloading.workspace = true
+rustc-hash.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]

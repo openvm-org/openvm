@@ -6,27 +6,20 @@ use openvm_instructions::{
     DEFERRAL_AS, PUBLIC_VALUES_AS, VM_DIGEST_WIDTH,
 };
 use openvm_platform::{memory::MEM_SIZE, WORD_SIZE};
-use openvm_riscv_guest::MAX_HINT_BUFFER_DWORDS;
+use rvr_openvm_lift::MAIN_MEMORY_PAGE_BYTES;
 
 const BYTE_SPACE_PTRS_PER_LEAF: usize = core::mem::size_of::<u16>() * VM_DIGEST_WIDTH;
 const DEFERRAL_PTRS_PER_LEAF: usize = VM_DIGEST_WIDTH;
 
-/// Worst-case AS_MEMORY pages a single instruction can touch.
-///
-/// Bound is set by `HINT_BUFFER`, which writes up to
-/// `MAX_HINT_BUFFER_DWORDS * WORD_SIZE` contiguous bytes. One AS_MEMORY page
-/// covers `BYTE_SPACE_PTRS_PER_LEAF * 2^PAGE_MASK_LEAF_BITS` bytes. The `+1`
-/// covers worst-case misalignment of the range across page boundaries.
-pub const MAX_MEM_PAGES_PER_INSN: usize = {
-    let page_bytes = BYTE_SPACE_PTRS_PER_LEAF * (1 << PAGE_MASK_LEAF_BITS);
-    let max_bytes = MAX_HINT_BUFFER_DWORDS * WORD_SIZE;
-    max_bytes.div_ceil(page_bytes) + 1
-};
+// Extension page bounds are declared against this page size and feed the
+// unchecked main-memory page buffer.
+const _: () = assert!(BYTE_SPACE_PTRS_PER_LEAF << PAGE_MASK_LEAF_BITS == MAIN_MEMORY_PAGE_BYTES);
 
 /// Maximum AS_MEMORY page buffer entries per segment check interval.
 ///
 /// The C tracer flushes before crossing `SEGMENT_CHECK_INSNS` and statically
-/// verifies this capacity against `MAX_MEM_PAGES_PER_INSN`.
+/// verifies this capacity against the extension-contributed
+/// `TRACER_MAX_MEM_PAGES_PER_INSN` bound.
 pub const MEM_PAGE_BUF_CAP: usize = 1 << 16;
 
 /// Worst-case AS_PUBLIC_VALUES pages a fixed-width reveal can touch.
@@ -48,6 +41,7 @@ pub fn constants_header(
     text_end: u64,
     dispatch_table_size: usize,
     num_airs: Option<u32>,
+    max_mem_pages_per_insn: usize,
 ) -> String {
     let memory_mask = MEM_SIZE as u64 - 1;
     let byte_space_ptrs_per_leaf_bits = BYTE_SPACE_PTRS_PER_LEAF.ilog2();
@@ -64,7 +58,7 @@ static constexpr uint32_t AS_MEMORY = {RV64_MEMORY_AS};
 static constexpr uint32_t AS_PUBLIC_VALUES = {PUBLIC_VALUES_AS};
 static constexpr uint32_t AS_DEFERRAL = {DEFERRAL_AS};
 static constexpr uint32_t WORD_SIZE = {WORD_SIZE};
-static_assert(WORD_SIZE == sizeof(uint64_t), \"OpenVM word size must match uint64_t\");
+static_assert(WORD_SIZE == sizeof(uint64_t), \"RV64 backend requires 64-bit OpenVM words\");
 static constexpr uint32_t DEFERRAL_DIGEST_SIZE = {VM_DIGEST_WIDTH};
 static constexpr uint64_t RV_TEXT_START = 0x{text_start:08x}ull;
 static constexpr uint64_t RV_TEXT_END = 0x{text_end:08x}ull;
@@ -76,7 +70,7 @@ static constexpr uint32_t TRACER_MEM_PAGE_BUF_CAP = {MEM_PAGE_BUF_CAP};
 static constexpr uint32_t TRACER_PV_PAGE_BUF_CAP = {PV_PAGE_BUF_CAP};
 static constexpr uint32_t TRACER_DEFERRAL_PAGE_BUF_CAP = {DEFERRAL_PAGE_BUF_CAP};
 static constexpr uint32_t TRACER_SEGMENT_CHECK_INSNS = {SEGMENT_CHECK_INSNS};
-static constexpr uint32_t TRACER_MAX_MEM_PAGES_PER_INSN = {MAX_MEM_PAGES_PER_INSN};
+static constexpr uint32_t TRACER_MAX_MEM_PAGES_PER_INSN = {max_mem_pages_per_insn};
 static constexpr uint32_t TRACER_MAX_PV_PAGES_PER_INSN = {MAX_PV_PAGES_PER_INSN};
 static constexpr uint32_t TRACER_MAX_DEFERRAL_PAGES_PER_INSN = {MAX_DEFERRAL_PAGES_PER_INSN};
 "

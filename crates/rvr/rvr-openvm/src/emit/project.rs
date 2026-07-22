@@ -9,9 +9,10 @@ use std::{
 
 use rvr_openvm_ir::*;
 use rvr_openvm_lift::{ExtensionRegistry, TraceChipIndex};
+use rvr_state::NUM_REGS;
 
 use super::{
-    codegen::{emit_terminator, InstrCodegen, TermCtx},
+    codegen::{emit_terminator, TermCtx},
     context::{validate_chip_index, BlockAbi, EmitContext, EmitMode, InvalidChipIndex},
 };
 use crate::constants::constants_header;
@@ -119,6 +120,7 @@ impl RvrExecutionKind {
                 writeln!(out, "  struct PageTouch* pv_page_buf;").unwrap();
                 writeln!(out, "  struct PageTouch* deferral_page_buf;").unwrap();
                 writeln!(out, "  uint8_t (*on_check)(struct MeteringState*);").unwrap();
+                writeln!(out, "  void (*on_memory_flush)(struct MeteringState*);").unwrap();
                 writeln!(out, "  struct SegmentationState* seg_state;").unwrap();
                 writeln!(out, "  uint32_t mem_page_buf_len;").unwrap();
                 writeln!(out, "  uint32_t pv_page_buf_len;").unwrap();
@@ -136,7 +138,7 @@ impl RvrExecutionKind {
         }
         writeln!(out).unwrap();
         writeln!(out, "typedef struct RvState {{").unwrap();
-        writeln!(out, "  uint64_t regs[32];").unwrap();
+        writeln!(out, "  uint64_t regs[{NUM_REGS}];").unwrap();
         writeln!(out, "  uint64_t pc;").unwrap();
         writeln!(out, "  uint8_t status;").unwrap();
         writeln!(out, "  uint8_t exit_code;").unwrap();
@@ -225,7 +227,7 @@ impl CProject {
 
     /// Register priority order.
     /// x0 (zero) is excluded since it's always 0.
-    const REG_PRIORITY: [u8; 31] = [
+    const REG_PRIORITY: [u8; NUM_REGS - 1] = [
         1, 2, // ra, sp
         10, 11, 12, 13, 14, 15, 16, 17, // a0-a7
         5, 6, 7, // t0-t2
@@ -515,7 +517,12 @@ impl CProject {
         let text_end = Self::dispatch_max_pc(blocks, entry_point, text_start);
         let table_size = Self::dispatch_table_size(text_start, text_end);
 
-        self.write_constants(text_start, text_end, table_size)?;
+        self.write_constants(
+            text_start,
+            text_end,
+            table_size,
+            extensions.max_main_memory_pages_per_instruction(),
+        )?;
         self.write_support_files()?;
         self.write_extension_files(extensions)?;
         let ext_headers = extensions.c_headers();
@@ -533,8 +540,15 @@ impl CProject {
         text_start: u64,
         text_end: u64,
         dispatch_table_size: usize,
+        max_mem_pages_per_insn: usize,
     ) -> io::Result<()> {
-        let h = constants_header(text_start, text_end, dispatch_table_size, self.num_airs);
+        let h = constants_header(
+            text_start,
+            text_end,
+            dispatch_table_size,
+            self.num_airs,
+            max_mem_pages_per_insn,
+        );
         let path = self.output_dir.join("openvm_constants.h");
         fs::write(&path, h)
     }
@@ -566,10 +580,6 @@ impl CProject {
         if let Some(content) = self.execution_kind.metered_block_header_content() {
             fs::write(self.output_dir.join("openvm_block.h"), content)?;
         }
-
-        // RISC-V M-extension helpers.
-        let muldiv_path = self.output_dir.join("rv_muldiv.h");
-        fs::write(&muldiv_path, include_str!("../../c/rv_muldiv.h"))?;
 
         // Memory-bounds checks are header-selected so hot helpers can inline.
         let bounds_h_path = self.output_dir.join("openvm_check_mem_bounds.h");
@@ -669,7 +679,7 @@ impl CProject {
         writeln!(h, "#include \"{trace_header}\"").unwrap();
         writeln!(h).unwrap();
 
-        // Block function type and dispatch table (for JumpDyn tail calls).
+        // Block function type and dispatch table for indirect-jump tail calls.
         let typedef_params = self.typedef_params();
         writeln!(
             h,
@@ -714,8 +724,7 @@ impl CProject {
         writeln!(h, "}}").unwrap();
         writeln!(h).unwrap();
 
-        // M-extension and IO headers.
-        writeln!(h, "#include \"rv_muldiv.h\"").unwrap();
+        // Runtime and extension headers.
         writeln!(h, "#include \"openvm_io.h\"").unwrap();
         for &(filename, _) in ext_headers {
             writeln!(h, "#include \"{filename}\"").unwrap();
@@ -1046,23 +1055,20 @@ impl CProject {
             }
             Ok::<(), InvalidChipIndex>(())
         };
-        let add_extension_rows = |chip_counts: &mut BTreeMap<u32, u32>,
-                                  extension: &dyn ExtInstr| {
-            for rows in extension.fixed_trace_rows() {
+        let add_instruction_rows = |chip_counts: &mut BTreeMap<u32, u32>, instr: &dyn ExtInstr| {
+            for rows in instr.fixed_trace_rows() {
                 add_rows(chip_counts, rows.chip_idx, rows.count)?;
             }
             Ok::<(), InvalidChipIndex>(())
         };
         for instr_at in &block.instructions {
             add_base_row(&mut chip_counts, instr_at.pc)?;
-            if let Instr::Ext(extension) = &instr_at.instr {
-                add_extension_rows(&mut chip_counts, extension.as_ref())?;
-            }
+            add_instruction_rows(&mut chip_counts, instr_at.instr.as_ref())?;
         }
         if !matches!(block.terminator, Terminator::FallThrough) {
             add_base_row(&mut chip_counts, block.terminator_pc)?;
-            if let Terminator::Extension(extension) = &block.terminator {
-                add_extension_rows(&mut chip_counts, extension.as_ref())?;
+            if let Terminator::Instruction { node, .. } = &block.terminator {
+                add_instruction_rows(&mut chip_counts, node.as_ref())?;
             }
         }
         if chip_counts.is_empty() {
@@ -1307,17 +1313,13 @@ impl CProject {
     }
 }
 
-fn instr_accesses_memory(instr: &Instr) -> bool {
-    match instr {
-        Instr::Load { .. } | Instr::Store { .. } => true,
-        Instr::Ext(ext) => ext.accesses_memory(),
-        _ => false,
-    }
+fn instr_accesses_memory(instr: &dyn ExtInstr) -> bool {
+    instr.accesses_memory()
 }
 
 fn terminator_accesses_memory(terminator: &Terminator) -> bool {
     match terminator {
-        Terminator::Extension(ext) => ext.accesses_memory(),
+        Terminator::Instruction { node, .. } => node.accesses_memory(),
         _ => false,
     }
 }
@@ -1326,7 +1328,7 @@ fn block_accesses_memory(block: &Block) -> bool {
     block
         .instructions
         .iter()
-        .any(|instr_at| instr_accesses_memory(&instr_at.instr))
+        .any(|instr_at| instr_accesses_memory(instr_at.instr.as_ref()))
         || terminator_accesses_memory(&block.terminator)
 }
 
@@ -1334,9 +1336,15 @@ fn block_accesses_memory(block: &Block) -> bool {
 mod tests {
     use std::{collections::HashSet, path::Path};
 
-    use rvr_openvm_ir::{Block, ExtEmitCtx, ExtInstr, Instr, InstrAt, Terminator};
+    use rvr_openvm_ir::{Block, CfgEffect, ExtEmitCtx, ExtInstr, InstrAt, Terminator};
 
     use super::{CProject, RvrExecutionKind};
+
+    #[test]
+    fn metered_state_layout_includes_memory_flush_callback() {
+        let header = RvrExecutionKind::Metered.state_layout_header();
+        assert!(header.contains("void (*on_memory_flush)(struct MeteringState*);"));
+    }
 
     fn single_instruction_block() -> Block {
         Block {
@@ -1355,6 +1363,10 @@ mod tests {
     impl ExtInstr for InvalidTraceChipInstr {
         fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
             ctx.trace_chip(1, "1u");
+        }
+
+        fn cfg_effect(&self) -> CfgEffect {
+            CfgEffect::None
         }
 
         fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -1437,7 +1449,7 @@ mod tests {
             end_pc: 0x108,
             instructions: vec![InstrAt {
                 pc: 0x100,
-                instr: Instr::Ext(Box::new(InvalidTraceChipInstr)),
+                instr: Box::new(InvalidTraceChipInstr),
                 source_loc: None,
             }],
             terminator: Terminator::Exit { code: 0 },

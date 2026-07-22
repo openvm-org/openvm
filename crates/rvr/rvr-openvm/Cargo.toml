@@ -11,10 +11,10 @@ repository.workspace = true
 rvr-openvm-build.workspace = true
 rvr-openvm-ir.workspace = true
 rvr-openvm-lift.workspace = true
+rvr-state.workspace = true
 
 openvm-instructions.workspace = true
 openvm-platform.workspace = true
-openvm-riscv-guest = { workspace = true, default-features = false }
 thiserror.workspace = true
 
 [features]

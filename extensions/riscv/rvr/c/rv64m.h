@@ -1,5 +1,5 @@
-#ifndef RV_MULDIV_H
-#define RV_MULDIV_H
+#ifndef OPENVM_RVR_RV64M_H
+#define OPENVM_RVR_RV64M_H
 
 #include <stdint.h>
 
@@ -64,7 +64,7 @@ static __attribute__((always_inline)) inline uint64_t rv_mulhsu(int64_t a,
   return (uint64_t)(((__int128)a * (__int128)b) >> 64);
 }
 
-/* ── W-suffix helpers (rv64): operate on low 32 bits, sign-extend to 64 ── */
+/* ── W-suffix helpers (RV64): operate on low 32 bits, sign-extend to 64 ── */
 
 static __attribute__((always_inline)) inline uint64_t rv_divw(int32_t a,
                                                               int32_t b) {
@@ -104,4 +104,4 @@ static __attribute__((always_inline)) inline uint64_t rv_remuw(uint32_t a,
   return (uint64_t)(int64_t)(int32_t)(a % b);
 }
 
-#endif /* RV_MULDIV_H */
+#endif /* OPENVM_RVR_RV64M_H */

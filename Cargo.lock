@@ -7246,10 +7246,10 @@ version = "2.0.0"
 dependencies = [
  "openvm-instructions",
  "openvm-platform",
- "openvm-riscv-guest",
  "rvr-openvm-build",
  "rvr-openvm-ir",
  "rvr-openvm-lift",
+ "rvr-state",
  "thiserror 1.0.69",
 ]
 
@@ -7469,9 +7469,9 @@ version = "2.0.0"
 dependencies = [
  "libloading",
  "openvm-instructions",
- "openvm-riscv-transpiler",
  "openvm-stark-backend",
  "p3-baby-bear",
+ "rustc-hash 2.1.1",
  "rvr-openvm-ir",
  "thiserror 1.0.69",
 ]

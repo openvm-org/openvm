@@ -13,19 +13,32 @@ use openvm_circuit::arch::{
     rvr::io::OpenVmIoState,
 };
 use openvm_deferral_transpiler::DeferralOpcode;
-use openvm_instructions::{LocalOpcode, VM_DIGEST_WIDTH};
-use openvm_stark_backend::p3_field::PrimeField32;
-use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, FixedTraceRows, Instr, InstrAt, LiftedInstr, Reg};
-use rvr_openvm_lift::{
-    air_index_to_c, decode_reg, fixed_trace_rows_for_chip, opcode_air_idx, AirIndex,
-    ExtensionError, RvrExtension, RvrExtensionCtx, RvrInstruction, RvrRuntimeExtension,
+use openvm_instructions::{
+    riscv::{RV64_NUM_REGISTERS, RV64_REGISTER_BYTES},
+    LocalOpcode, VM_DIGEST_WIDTH,
 };
+use openvm_stark_backend::p3_field::PrimeField32;
+use rvr_openvm_ir::{
+    CfgEffect, ExtEmitCtx, ExtInstr, FixedTraceRows, InstrAt, LiftedInstr, Variable,
+};
+use rvr_openvm_lift::{
+    air_index_to_c, decode_variable, fixed_trace_rows_for_chip,
+    max_main_memory_pages_for_contiguous_range, opcode_air_idx, AirIndex, ExtensionError,
+    RvrExtension, RvrExtensionCtx, RvrInstruction, RvrRuntimeExtension,
+};
+
+fn decode_reg(value: u32) -> Variable {
+    decode_variable(value, RV64_REGISTER_BYTES as u32, RV64_NUM_REGISTERS as u32)
+}
 
 /// Size in bytes of a serialized deferral commitment.
 pub const DEFERRAL_COMMIT_NUM_BYTES: usize = VM_DIGEST_WIDTH * core::mem::size_of::<u32>();
 /// Size in bytes of a deferral output key: commitment followed by output length.
 pub const DEFERRAL_OUTPUT_KEY_BYTES: usize =
     DEFERRAL_COMMIT_NUM_BYTES + core::mem::size_of::<u64>();
+const DEFERRAL_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize =
+    max_main_memory_pages_for_contiguous_range(DEFERRAL_COMMIT_NUM_BYTES)
+        + max_main_memory_pages_for_contiguous_range(DEFERRAL_OUTPUT_KEY_BYTES);
 
 /// `(def_idx, output_raw) → output_commit` hasher registered by the host.
 pub type DeferralHashFn = Box<dyn Fn(u32, &[u8]) -> [u8; DEFERRAL_COMMIT_NUM_BYTES] + Send + Sync>;
@@ -61,8 +74,8 @@ impl DeferralCtx {
 /// IR node for a deferral CALL instruction.
 #[derive(Debug, Clone)]
 pub struct DeferralCallInstr {
-    pub rd_reg: Reg,
-    pub rs_reg: Reg,
+    pub rd_reg: Variable,
+    pub rs_reg: Variable,
     pub def_idx: u32,
     pub poseidon2_chip_idx: Option<AirIndex>,
 }
@@ -73,8 +86,8 @@ impl ExtInstr for DeferralCallInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rd = ctx.read_reg(self.rd_reg);
-        let rs = ctx.read_reg(self.rs_reg);
+        let rd = ctx.read_var(self.rd_reg);
+        let rs = ctx.read_var(self.rs_reg);
         let def_idx = format!("{}u", self.def_idx);
         ctx.emit_call("rvr_ext_deferral_call", &["state", &rd, &rs, &def_idx]);
     }
@@ -87,16 +100,16 @@ impl ExtInstr for DeferralCallInstr {
         Box::new(self.clone())
     }
 
-    fn is_block_end(&self) -> bool {
-        false
+    fn cfg_effect(&self) -> CfgEffect {
+        CfgEffect::None
     }
 }
 
 /// IR node for a deferral OUTPUT instruction.
 #[derive(Debug, Clone)]
 pub struct DeferralOutputInstr {
-    pub rd_reg: Reg,
-    pub rs_reg: Reg,
+    pub rd_reg: Variable,
+    pub rs_reg: Variable,
     pub def_idx: u32,
     pub output_chip_idx: Option<AirIndex>,
     pub poseidon2_chip_idx: Option<AirIndex>,
@@ -108,8 +121,8 @@ impl ExtInstr for DeferralOutputInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rd = ctx.read_reg(self.rd_reg);
-        let rs = ctx.read_reg(self.rs_reg);
+        let rd = ctx.read_var(self.rd_reg);
+        let rs = ctx.read_var(self.rs_reg);
         let output = air_index_to_c(self.output_chip_idx);
         let poseidon2 = air_index_to_c(self.poseidon2_chip_idx);
         let def_idx = format!("{}u", self.def_idx);
@@ -128,8 +141,8 @@ impl ExtInstr for DeferralOutputInstr {
         Box::new(self.clone())
     }
 
-    fn is_block_end(&self) -> bool {
-        false
+    fn cfg_effect(&self) -> CfgEffect {
+        CfgEffect::None
     }
 }
 
@@ -166,12 +179,12 @@ impl RvrExtension for DeferralRvrExtension {
             let def_idx = insn.c;
             return Some(LiftedInstr::Body(InstrAt {
                 pc,
-                instr: Instr::Ext(Box::new(DeferralCallInstr {
+                instr: Box::new(DeferralCallInstr {
                     rd_reg,
                     rs_reg,
                     def_idx,
                     poseidon2_chip_idx: self.poseidon2_chip_idx,
-                })),
+                }),
                 source_loc: None,
             }));
         }
@@ -182,13 +195,13 @@ impl RvrExtension for DeferralRvrExtension {
             let def_idx = insn.c;
             return Some(LiftedInstr::Body(InstrAt {
                 pc,
-                instr: Instr::Ext(Box::new(DeferralOutputInstr {
+                instr: Box::new(DeferralOutputInstr {
                     rd_reg,
                     rs_reg,
                     def_idx,
                     output_chip_idx: self.output_chip_idx,
                     poseidon2_chip_idx: self.poseidon2_chip_idx,
-                })),
+                }),
                 source_loc: None,
             }));
         }
@@ -208,6 +221,10 @@ impl RvrExtension for DeferralRvrExtension {
             "rvr_ext_deferral.c",
             include_str!("../c/rvr_ext_deferral.c"),
         )]
+    }
+
+    fn max_main_memory_pages_per_instruction(&self) -> usize {
+        DEFERRAL_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION
     }
 }
 
@@ -459,4 +476,26 @@ pub unsafe extern "C" fn host_deferral_output_lookup(
     // TODO: change these panics to something better to handle across the FFI boundary.
     assert_eq!(raw.len(), expected_len as usize);
     unsafe { std::ptr::copy_nonoverlapping(raw.as_ptr(), output_raw_out, raw.len()) };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fixed_page_bound_covers_call_memory_ranges() {
+        assert_eq!(DEFERRAL_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION, 4);
+    }
+
+    #[test]
+    fn output_source_drains_before_and_after_variable_writes() {
+        let source = include_str!("../c/rvr_ext_deferral.c");
+        assert_eq!(
+            source
+                .matches("flush_main_memory_page_buffer(state);")
+                .count(),
+            2
+        );
+        assert!(source.contains("chunk_start += OUTPUT_ROWS_PER_PAGE_BUFFER"));
+    }
 }

@@ -1,4 +1,4 @@
-use crate::MemWidth;
+use crate::{MemWidth, Variable};
 
 /// Extra trace rows added by one extension instruction.
 ///
@@ -12,22 +12,46 @@ pub struct FixedTraceRows {
     pub count: u32,
 }
 
-/// Trait abstracting the code-generation context for extension instructions.
+/// Address space classification used by page-access metering.
 ///
-/// Extensions use this context to read or write registers and emit C. The
-/// emission mode decides whether register accesses are traced.
-/// Register access stays on the C side so the FFI boundary only carries
-/// resolved values and memory.
+/// Main memory is distinct because generated metered code caches its current
+/// page locally. Calls that may access main memory require this cache to be
+/// flushed before the call and reloaded afterward.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PageAddressSpace {
+    /// The main guest-memory address space.
+    MainMemory(u32),
+    /// Any other address space identified by its numeric ID.
+    Other(u32),
+}
+
+impl PageAddressSpace {
+    pub const fn id(self) -> u32 {
+        match self {
+            Self::MainMemory(id) | Self::Other(id) => id,
+        }
+    }
+
+    pub const fn is_main_memory(self) -> bool {
+        matches!(self, Self::MainMemory(_))
+    }
+}
+
+/// Code-generation context used by instruction nodes.
+///
+/// Value tracing emits ordered hooks used to build execution records. The
+/// logical memory timestamp represents the order of VM memory accesses. Each
+/// recorded read or write advances it. A peek reads the current value and
+/// preserves the current timestamp.
 pub trait ExtEmitCtx {
-    /// Read a register as an AIR-visible memory access.
-    fn read_reg(&mut self, idx: u8) -> String;
+    /// Read a variable through a VM memory access.
+    fn read_var(&mut self, var: Variable) -> String;
 
-    /// Get a register value without creating an AIR memory access. Value
-    /// tracing records the value without advancing the memory timestamp.
-    fn peek_reg(&mut self, idx: u8) -> String;
+    /// Read a variable at the current logical memory timestamp.
+    fn peek_var(&mut self, var: Variable) -> String;
 
-    /// Write a register, tracing it when required by the emission mode.
-    fn write_reg(&mut self, idx: u8, val: &str);
+    /// Write a variable through a VM memory access.
+    fn write_var(&mut self, var: Variable, val: &str);
 
     /// Append a line of C code (indented).
     fn write_line(&mut self, s: &str);
@@ -85,76 +109,15 @@ pub trait ExtEmitCtx {
     /// Record the pages containing one fixed-width access for metering.
     ///
     /// This records the address, not the accessed value.
-    fn trace_page_access(&mut self, addr: &str, width: MemWidth, addr_space: u32);
+    fn trace_page_access(&mut self, addr: &str, width: MemWidth, addr_space: PageAddressSpace);
 
     /// Record pages touched by a dword range for metering (one dword is 8 bytes).
     ///
     /// This records the address range, not the accessed values.
-    fn trace_page_access_u64_range(&mut self, base_addr: &str, num_dwords: &str, addr_space: u32);
-}
-
-/// Trait for extension IR nodes. Implemented by each extension's instruction types.
-pub trait ExtInstr: std::fmt::Debug + Send + Sync {
-    /// Emit C code for this instruction via the emit context.
-    ///
-    /// Use `ctx.read_reg()` / `ctx.write_reg()` for register access (tracing
-    /// is handled in the generated C code) and `ctx.write_line()` to emit raw
-    /// C lines.
-    fn emit_c(&self, ctx: &mut dyn ExtEmitCtx);
-
-    /// Emit C code for a terminator extension instruction.
-    ///
-    /// `branch_to(target_pc)` returns a C tail-call statement (e.g.,
-    /// `[[clang::musttail]] return block_0x...(state, ra, sp);`).
-    /// Extensions that serve as block terminators (branches) should override this
-    /// to emit comparison logic and use `branch_to` for control flow.
-    ///
-    /// Default: delegates to `emit_c`.
-    fn emit_c_term(&self, ctx: &mut dyn ExtEmitCtx, _branch_to: &dyn Fn(u64) -> String) {
-        self.emit_c(ctx);
-    }
-
-    /// Short op name for use in generated C comments (e.g. "keccakf").
-    /// Default: returns `"ext"`.
-    fn opname(&self) -> &str {
-        "ext"
-    }
-
-    /// Whether this instruction may access main guest memory (`AS_MEMORY`).
-    ///
-    /// Codegen uses this to decide whether a metered block needs AS_MEMORY page
-    /// tracking. The conservative default is `true` because most opaque
-    /// extension FFIs read or write main memory through `state`.
-    fn accesses_memory(&self) -> bool {
-        true
-    }
-
-    /// Extra chip rows whose count is known when the artifact is generated.
-    ///
-    /// The generator adds them to the block's metering update, so the extension
-    /// does not record them at runtime.
-    fn fixed_trace_rows(&self) -> Vec<FixedTraceRows> {
-        Vec::new()
-    }
-
-    /// Clone into a new boxed trait object.
-    fn clone_box(&self) -> Box<dyn ExtInstr>;
-
-    /// For terminator extensions: return successor PCs for CFG construction.
-    /// Default returns `[fall_pc]` (fall-through behavior).
-    fn successors(&self, fall_pc: u64) -> Vec<u64> {
-        vec![fall_pc]
-    }
-
-    /// Whether this ends a basic block.
-    /// Default is `false` (body instruction).
-    fn is_block_end(&self) -> bool {
-        false
-    }
-}
-
-impl Clone for Box<dyn ExtInstr> {
-    fn clone(&self) -> Self {
-        self.clone_box()
-    }
+    fn trace_page_access_u64_range(
+        &mut self,
+        base_addr: &str,
+        num_dwords: &str,
+        addr_space: PageAddressSpace,
+    );
 }
