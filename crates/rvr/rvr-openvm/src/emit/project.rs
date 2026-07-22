@@ -946,7 +946,7 @@ impl CProject {
         )
         .unwrap();
         writeln!(out, "    check_counter = checkpoint.check_counter;").unwrap();
-        writeln!(out, "    if (unlikely(checkpoint.suspend_signal)) {{").unwrap();
+        writeln!(out, "    if (unlikely(checkpoint.suspend_signal != 0)) {{").unwrap();
         self.emit_suspend_return(out, pc);
         writeln!(out, "    }}").unwrap();
     }
@@ -1407,6 +1407,17 @@ mod tests {
         assert_eq!(project.hot_regs.len(), 22);
         #[cfg(not(target_arch = "aarch64"))]
         assert_eq!(project.hot_regs.len(), 9);
+    }
+
+    #[test]
+    fn metered_segment_checkpoint_compares_suspend_signal_as_int() {
+        let project = CProject::new(Path::new("unused"), "test", RvrExecutionKind::MeteredSegment);
+        let mut checkpoint = String::new();
+        project.emit_block_checkpoint_function(&mut checkpoint, &single_instruction_block());
+
+        assert!(checkpoint.contains("if (unlikely(checkpoint.suspend_signal != 0))"));
+        // The bare `unlikely(checkpoint.suspend_signal)` form is the bug.
+        assert!(!checkpoint.contains("if (unlikely(checkpoint.suspend_signal))"));
     }
 
     #[test]
