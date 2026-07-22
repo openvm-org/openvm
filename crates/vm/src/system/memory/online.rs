@@ -337,10 +337,15 @@ impl<M: LinearMemory> AddressMap<M> {
             .iter()
             .map(|mem| {
                 let mut rebuilt = TouchedPages::new(mem.size());
-                for (page_idx, page) in mem.as_slice().chunks(PAGE_SIZE).enumerate() {
-                    if has_nonzero_byte(page) {
-                        rebuilt.mark_byte_range(page_idx * PAGE_SIZE, page.len());
-                    }
+                // Scan pages in parallel, then update the compact non-atomic bitset serially.
+                let nonzero_pages = mem
+                    .as_slice()
+                    .par_chunks(PAGE_SIZE)
+                    .enumerate()
+                    .filter_map(|(page_idx, page)| has_nonzero_byte(page).then_some(page_idx))
+                    .collect::<Vec<_>>();
+                for page_idx in nonzero_pages {
+                    rebuilt.mark_byte_range(page_idx * PAGE_SIZE, 1);
                 }
                 rebuilt
             })
