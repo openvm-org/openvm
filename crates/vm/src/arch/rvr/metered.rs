@@ -167,10 +167,9 @@ impl SegmentationState {
         memory_ctx: &mut MemoryCtx,
         address_height: usize,
         addr_space: u32,
-        buffer: &[PageTouch],
-        len: u32,
+        touches: &[PageTouch],
     ) {
-        if len == 0 {
+        if touches.is_empty() {
             return;
         }
         // C buffers use page ids local to one address space. `MemoryCtx`
@@ -187,8 +186,7 @@ impl SegmentationState {
             .checked_shl(page_shift as u32)
             .and_then(|offset| u32::try_from(offset).ok())
             .expect("global metering page offset must fit in u32");
-        let len = len as usize;
-        memory_ctx.apply_page_touches_with_offset(page_offset, &buffer[..len]);
+        memory_ctx.apply_page_touches_with_offset(page_offset, touches);
     }
 
     /// Apply all page buffers: convert local pages to global ids and update
@@ -199,22 +197,19 @@ impl SegmentationState {
             &mut self.ctx.memory_ctx,
             self.address_height,
             RV64_MEMORY_AS,
-            &self.mem_page_buf,
-            mem_len,
+            &self.mem_page_buf[..mem_len as usize],
         );
         Self::apply_addr_space_buffer(
             &mut self.ctx.memory_ctx,
             self.address_height,
             PUBLIC_VALUES_AS,
-            &self.pv_page_buf,
-            pv_len,
+            &self.pv_page_buf[..pv_len as usize],
         );
         Self::apply_addr_space_buffer(
             &mut self.ctx.memory_ctx,
             self.address_height,
             DEFERRAL_AS,
-            &self.deferral_page_buf,
-            deferral_len,
+            &self.deferral_page_buf[..deferral_len as usize],
         );
     }
 
@@ -239,8 +234,7 @@ impl SegmentationState {
             &mut self.ctx.memory_ctx,
             self.address_height,
             RV64_MEMORY_AS,
-            &self.mem_page_buf,
-            mem_len,
+            &self.mem_page_buf[..len],
         );
     }
 
@@ -257,7 +251,6 @@ impl SegmentationState {
             self.address_height,
             RV64_MEMORY_AS,
             &self.drained_mem_page_touches,
-            self.drained_mem_page_touches.len() as u32,
         );
         self.apply_page_buffers(mem_len, pv_len, deferral_len);
         self.ctx
