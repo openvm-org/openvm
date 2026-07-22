@@ -3,6 +3,7 @@ use std::sync::Arc;
 use halo2_base::{
     gates::circuit::{builder::BaseCircuitBuilder, CircuitBuilderStage},
     halo2_proofs::dev::MockProver,
+    Context,
 };
 use itertools::Itertools;
 use openvm_stark_sdk::{
@@ -24,9 +25,10 @@ use crate::{
     circuit::build_stacked_layouts_for_static_vk,
     config::{STATIC_VERIFIER_LOOKUP_ADVICE_COLS, STATIC_VERIFIER_NUM_ADVICE_COLS},
     field::baby_bear::{
-        clear_recorded_ext_base_consts, take_recorded_ext_base_consts, BabyBearChip,
-        RecordedExtBaseConst, BABY_BEAR_MODULUS_U64,
+        clear_recorded_ext_base_consts, take_recorded_ext_base_consts, RecordedExtBaseConst,
+        BABY_BEAR_MODULUS_U64,
     },
+    halo2_backend::Halo2Backend,
     stages::proof_shape::{log_heights_per_air_from_proof, trace_id_order_from_static_heights},
     RootF, StaticVerifierCircuit,
 };
@@ -38,7 +40,7 @@ const END_TO_END_MIN_ROWS: usize = 32768;
 fn run_mock(
     instance_columns: usize,
     expect_satisfied: bool,
-    build: impl FnOnce(&mut Context<Fr>, BabyBearExtChip),
+    build: impl FnOnce(&mut Halo2Backend),
 ) {
     let mut builder = BaseCircuitBuilder::from_stage(CircuitBuilderStage::Mock)
         .use_k(END_TO_END_K as usize)
@@ -46,16 +48,16 @@ fn run_mock(
         .use_instance_columns(instance_columns);
 
     let range = builder.range_chip();
-    let ext_chip = BabyBearExtChip::new(BabyBearChip::new(Arc::new(range)));
     let ctx = builder.main(0);
+    let mut backend = Halo2Backend::new(Arc::new(range), ctx);
     if expect_satisfied {
-        build(ctx, ext_chip);
+        build(&mut backend);
     } else {
         // Disable guarded debug assertions in BabyBearChip, and catch host-side
         // panics (e.g. deterministic metadata shape checks) that fire before the
         // MockProver can verify constraints.
         let build_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            crate::utils::with_debug_asserts_disabled(|| build(ctx, ext_chip));
+            crate::utils::with_debug_asserts_disabled(|| build(&mut backend));
         }));
         if build_result.is_err() {
             return;
@@ -115,8 +117,8 @@ where
     let circuit = StaticVerifierCircuit::try_new(vk, dummy_onion_commit, &log_heights_per_air)
         .expect("static circuit params");
 
-    run_mock(0, true, |ctx, ext_chip| {
-        circuit.populate_verify_stark_constraints(ctx, &ext_chip, &proof);
+    run_mock(0, true, |backend| {
+        circuit.populate_verify_stark_constraints(backend, &proof);
     });
 }
 
@@ -167,12 +169,11 @@ fn pipeline_constraints_fail_when_ext_constant_families_are_pranked() {
     let log_heights_per_air = log_heights_per_air_from_proof(&proof);
     let trace_id_to_air_id = trace_id_order_from_static_heights(&vk.inner, &log_heights_per_air);
     let stacked_layouts = build_stacked_layouts_for_static_vk(&vk.inner, &log_heights_per_air);
-    run_mock(1, false, move |ctx, ext_chip| {
-        let proof_wire = load_proof_wire(ctx, &ext_chip, &proof, &log_heights_per_air);
+    run_mock(1, false, move |backend| {
+        let proof_wire = load_proof_wire(backend, &proof, &log_heights_per_air);
         clear_recorded_ext_base_consts();
         constrained_verify(
-            ctx,
-            &ext_chip,
+            backend,
             &vk,
             &proof_wire,
             &trace_id_to_air_id,
@@ -181,14 +182,19 @@ fn pipeline_constraints_fail_when_ext_constant_families_are_pranked() {
         );
         let records = take_recorded_ext_base_consts();
         for (family, constant) in base_families {
-            prank_recorded_ext_constant(ctx, &records, family, constant);
+            prank_recorded_ext_constant(backend.ctx_mut(), &records, family, constant);
         }
         let normalization_constant = records
             .iter()
             .find(|record| normalization_family_constants.contains(&record.constant))
             .map(|record| record.constant)
             .unwrap_or(1);
-        prank_recorded_ext_constant(ctx, &records, "normalization", normalization_constant);
+        prank_recorded_ext_constant(
+            backend.ctx_mut(),
+            &records,
+            "normalization",
+            normalization_constant,
+        );
     });
 }
 
@@ -225,6 +231,8 @@ fn pipeline_cell_count_profiling() {
         openvm_stark_backend::test_utils::MixtureFixture,
     };
 
+    use crate::chip_traits::GateInst;
+
     let system_params = root_params_with_100_bits_security();
     let (vk, proof) = {
         #[cfg(feature = "cuda")]
@@ -254,12 +262,12 @@ fn pipeline_cell_count_profiling() {
         .use_lookup_bits(END_TO_END_LOOKUP_BITS)
         .use_instance_columns(0);
     let range = builder.range_chip();
-    let ext_chip = BabyBearExtChip::new(BabyBearChip::new(Arc::new(range)));
     let ctx = builder.main(0);
+    let mut backend = Halo2Backend::new(Arc::new(range), ctx);
 
-    let initial_cells = ctx.advice.len();
-    circuit.populate_verify_stark_constraints(ctx, &ext_chip, &proof);
-    let final_cells = ctx.advice.len();
+    let initial_cells = backend.cell_count();
+    circuit.populate_verify_stark_constraints(&mut backend, &proof);
+    let final_cells = backend.cell_count();
     assert!(
         final_cells > initial_cells,
         "expected advice cells to increase during populate_verify_stark_constraints"

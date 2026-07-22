@@ -33,9 +33,9 @@ use openvm_stark_sdk::{
     utils::setup_tracing,
 };
 use openvm_static_verifier::{
-    field::baby_bear::{BabyBearChip, BabyBearExtChip},
-    log_heights_per_air_from_proof, Fr, Halo2Params, Halo2ProvingMetadata, Halo2ProvingPinning,
-    StaticVerifierCircuit, StaticVerifierProof, StaticVerifierShape,
+    halo2_backend::Halo2Backend, log_heights_per_air_from_proof, Fr, Halo2Params,
+    Halo2ProvingMetadata, Halo2ProvingPinning, StaticVerifierCircuit, StaticVerifierProof,
+    StaticVerifierShape,
 };
 use rand_chacha::{rand_core::SeedableRng, ChaCha20Rng};
 
@@ -53,9 +53,9 @@ fn select_k_verify_stark(circuit: &StaticVerifierCircuit, proof: &Proof<RootConf
         };
         let mut builder = StaticVerifierCircuit::builder(CircuitBuilderStage::Keygen, &shape);
         let range = builder.range_chip();
-        let ext_chip = BabyBearExtChip::new(BabyBearChip::new(Arc::new(range)));
         let ctx = builder.main(0);
-        let _ = circuit.populate_verify_stark_constraints(ctx, &ext_chip, proof);
+        let mut backend = Halo2Backend::new(Arc::new(range), ctx);
+        let _ = circuit.populate_verify_stark_constraints(&mut backend, proof);
         let params = builder.calculate_params(Some(MIN_ROWS));
         if params.num_advice_per_phase[0] == 1 {
             builder.clear();
@@ -86,9 +86,9 @@ fn prove_verify_stark_constraints_only(
     builder = builder.use_instance_columns(0);
 
     let range = builder.range_chip();
-    let ext_chip = BabyBearExtChip::new(BabyBearChip::new(Arc::new(range)));
     let ctx = builder.main(0);
-    let _ = circuit.populate_verify_stark_constraints(ctx, &ext_chip, proof);
+    let mut backend = Halo2Backend::new(Arc::new(range), ctx);
+    let _ = circuit.populate_verify_stark_constraints(&mut backend, proof);
 
     let rng = ChaCha20Rng::from_seed(Default::default());
     let instances: &[&[Fr]] = &[];
@@ -146,9 +146,9 @@ fn real_prover_keygen_prove_verify_roundtrip() {
     let pinning = {
         let mut builder = StaticVerifierCircuit::builder(CircuitBuilderStage::Keygen, &shape);
         let range = builder.range_chip();
-        let ext_chip = BabyBearExtChip::new(BabyBearChip::new(Arc::new(range)));
         let ctx = builder.main(0);
-        let _proof_wire = circuit.populate_verify_stark_constraints(ctx, &ext_chip, &proof_keygen);
+        let mut backend = Halo2Backend::new(Arc::new(range), ctx);
+        let _proof_wire = circuit.populate_verify_stark_constraints(&mut backend, &proof_keygen);
 
         let config_params = builder.calculate_params(Some(shape.minimum_rows));
 

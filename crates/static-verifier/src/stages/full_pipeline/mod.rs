@@ -1,4 +1,4 @@
-use halo2_base::{utils::biguint_to_fe, AssignedValue, Context};
+use halo2_base::{utils::biguint_to_fe, AssignedValue};
 use openvm_stark_sdk::{
     config::baby_bear_bn254_poseidon2::{BabyBearBn254Poseidon2Config as RootConfig, Bn254Scalar},
     openvm_stark_backend::{
@@ -11,7 +11,8 @@ use openvm_stark_sdk::{
 };
 
 use crate::{
-    field::baby_bear::{BabyBearExtChip, ReducedBabyBearWire},
+    chip_traits::{DigestHashInst, PopulateInputs, TranscriptInst},
+    field::baby_bear::ReducedBabyBearWire,
     stages::{
         batch_constraints::{
             constrain_batch_constraints_verification, load_batch_constraint_proof_wire,
@@ -23,7 +24,7 @@ use crate::{
         },
         whir::{constrain_whir_verification, load_whir_proof_wire, WhirProofWire},
     },
-    transcript::{digest_wire_from_root, DigestWire, TranscriptChip},
+    transcript::{digest_wire_from_root, DigestWire},
     Fr,
 };
 
@@ -34,28 +35,28 @@ mod tests;
 pub use public_values::*;
 
 #[derive(Clone, Debug)]
-pub struct ProofWire {
-    pub common_main_commit_root: AssignedValue<Fr>,
-    pub public_values: Vec<Vec<ReducedBabyBearWire>>,
-    pub cached_commitment_roots: Vec<Vec<AssignedValue<Fr>>>,
-    pub gkr: GkrProofWire,
-    pub batch: BatchConstraintProofWire,
-    pub stacking: StackingProofWire,
-    pub whir: WhirProofWire,
+pub struct ProofWire<F = AssignedValue<Fr>> {
+    pub common_main_commit_root: F,
+    pub public_values: Vec<Vec<ReducedBabyBearWire<F>>>,
+    pub cached_commitment_roots: Vec<Vec<F>>,
+    pub gkr: GkrProofWire<F>,
+    pub batch: BatchConstraintProofWire<F>,
+    pub stacking: StackingProofWire<F>,
+    pub whir: WhirProofWire<F>,
 }
 
 pub(crate) fn digest_scalar_to_fr(value: Bn254Scalar) -> Fr {
     biguint_to_fe(&value.as_canonical_biguint())
 }
 
-/// Load proof data into Halo2 cells. `log_heights_per_air` must match this circuit's fixed heights;
-/// host-side asserts that per-AIR log heights extracted from the proof match `log_heights_per_air`.
-pub fn load_proof_wire(
-    ctx: &mut Context<Fr>,
-    ext_chip: &BabyBearExtChip,
+/// Load proof data into circuit cells. `log_heights_per_air` must match this circuit's fixed
+/// heights; host-side asserts that per-AIR log heights extracted from the proof match
+/// `log_heights_per_air`.
+pub fn load_proof_wire<B: PopulateInputs>(
+    b: &mut B,
     proof: &Proof<RootConfig>,
     log_heights_per_air: &[usize],
-) -> ProofWire {
+) -> ProofWire<B::F> {
     let from_proof = log_heights_per_air_from_proof(proof);
     assert_eq!(
         from_proof.as_slice(),
@@ -63,10 +64,7 @@ pub fn load_proof_wire(
         "per-AIR log heights from proof must match this circuit's fixed log_heights_per_air"
     );
 
-    let base_chip = ext_chip.base();
-
-    let common_main_commit_root =
-        ctx.load_witness(digest_scalar_to_fr(proof.common_main_commit[0]));
+    let common_main_commit_root = b.load_witness(digest_scalar_to_fr(proof.common_main_commit[0]));
 
     let public_values = proof
         .public_values
@@ -74,7 +72,7 @@ pub fn load_proof_wire(
         .map(|values| {
             values
                 .iter()
-                .map(|&value| base_chip.load_reduced_witness(ctx, value))
+                .map(|&value| b.bb_load_reduced_witness(value))
                 .collect()
         })
         .collect();
@@ -87,7 +85,7 @@ pub fn load_proof_wire(
                 vdata
                     .cached_commitments
                     .iter()
-                    .map(|commit| ctx.load_witness(digest_scalar_to_fr(commit[0])))
+                    .map(|commit| b.load_witness(digest_scalar_to_fr(commit[0])))
                     .collect()
             } else {
                 Vec::new()
@@ -95,10 +93,10 @@ pub fn load_proof_wire(
         })
         .collect();
 
-    let gkr = load_gkr_proof_wire(ctx, base_chip, ext_chip, &proof.gkr_proof);
-    let batch = load_batch_constraint_proof_wire(ctx, ext_chip, &proof.batch_constraint_proof);
-    let stacking = load_stacking_proof_wire(ctx, ext_chip, &proof.stacking_proof);
-    let whir = load_whir_proof_wire(ctx, base_chip, ext_chip, &proof.whir_proof);
+    let gkr = load_gkr_proof_wire(b, &proof.gkr_proof);
+    let batch = load_batch_constraint_proof_wire(b, &proof.batch_constraint_proof);
+    let stacking = load_stacking_proof_wire(b, &proof.stacking_proof);
+    let whir = load_whir_proof_wire(b, &proof.whir_proof);
 
     ProofWire {
         common_main_commit_root,
@@ -112,47 +110,46 @@ pub fn load_proof_wire(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn observe_preamble(
-    ctx: &mut Context<Fr>,
-    transcript: &mut TranscriptChip,
+fn observe_preamble<B: TranscriptInst>(
+    b: &mut B,
     mvk: &MultiStarkVerifyingKey<RootConfig>,
     log_heights_per_air: &[usize],
-    public_values: &[Vec<ReducedBabyBearWire>],
-    cached_commitment_roots: &[Vec<AssignedValue<Fr>>],
-    vk_pre_hash: DigestWire,
-    common_main_commit: DigestWire,
+    public_values: &[Vec<ReducedBabyBearWire<B::F>>],
+    cached_commitment_roots: &[Vec<B::F>],
+    vk_pre_hash: DigestWire<B::F>,
+    common_main_commit: DigestWire<B::F>,
 ) {
-    transcript.observe_commit(ctx, &vk_pre_hash);
-    transcript.observe_commit(ctx, &common_main_commit);
+    b.observe_commit(&vk_pre_hash);
+    b.observe_commit(&common_main_commit);
 
     for air_idx in 0..mvk.inner.per_air.len() {
         if !mvk.inner.per_air[air_idx].is_required {
             // Static verifier: every AIR in the child VK has a trace (see crate `lib.rs`).
-            let presence_flag = transcript
-                .baby_bear()
-                .load_reduced_constant(ctx, BabyBear::ONE);
-            transcript.observe(ctx, &presence_flag);
+            // unfortunately transcript has it's own cloned BabyBear chip that has a separate
+            // constant cache compared to the BabyBear chip. To make vk the same as on main we need
+            // this.
+            // TODO: if vk ever can change then remove this
+            let presence_flag = b.transcript_load_reduced_constant(BabyBear::ONE);
+            b.observe(&presence_flag);
         }
 
         if let Some(preprocessed) = mvk.inner.per_air[air_idx].preprocessed_data.as_ref() {
-            let preprocessed_root = ctx.load_constant(digest_scalar_to_fr(preprocessed.commit[0]));
-            transcript.observe_commit(ctx, &digest_wire_from_root(preprocessed_root));
+            let preprocessed_root = b.load_constant(digest_scalar_to_fr(preprocessed.commit[0]));
+            b.observe_commit(&digest_wire_from_root(preprocessed_root));
         } else {
             // Fixed circuit parameter (not loaded from the proof witness).
             let lh = u32::try_from(log_heights_per_air[air_idx])
                 .expect("log_height must fit in u32 for BabyBear constant");
-            let log_height = transcript
-                .baby_bear()
-                .load_reduced_constant(ctx, BabyBear::from_u32(lh));
-            transcript.observe(ctx, &log_height);
+            let log_height = b.transcript_load_reduced_constant(BabyBear::from_u32(lh));
+            b.observe(&log_height);
         }
 
         for root in &cached_commitment_roots[air_idx] {
-            transcript.observe_commit(ctx, &digest_wire_from_root(*root));
+            b.observe_commit(&digest_wire_from_root(*root));
         }
 
         for value in &public_values[air_idx] {
-            transcript.observe(ctx, value);
+            b.observe(value);
         }
     }
 }
@@ -166,14 +163,10 @@ fn observe_preamble(
 ///
 /// `stacked_layouts` must be the layout vector fixed for this circuit (same as stored on
 /// [`crate::StaticVerifierCircuit`]).
-///
-/// Returns the two statement public inputs as assigned cells:
-/// `[mvk_pre_hash_root, common_main_commit_root]`.
-pub fn constrained_verify(
-    ctx: &mut Context<Fr>,
-    ext_chip: &BabyBearExtChip,
+pub fn constrained_verify<B: TranscriptInst + DigestHashInst>(
+    b: &mut B,
     root_vk: &MultiStarkVerifyingKey<RootConfig>,
-    proof_wire: &ProofWire, /* Root proof */
+    proof_wire: &ProofWire<B::F>, /* Root proof */
     trace_id_to_air_id: &[usize],
     log_heights_per_air: &[usize],
     stacked_layouts: &[StackedLayout],
@@ -189,15 +182,14 @@ pub fn constrained_verify(
         .map(|&air_id| log_heights_per_air[air_id] as isize - l_skip as isize)
         .collect();
 
-    let mut profiler = crate::profiling::CellProfiler::new("constrained_verify", ctx.advice.len());
+    let mut profiler = crate::profiling::CellProfiler::new("constrained_verify", b.cell_count());
 
-    let mvk_pre_hash_root = ctx.load_constant(digest_scalar_to_fr(root_vk.pre_hash[0]));
-    let mut transcript = TranscriptChip::new(ctx, ext_chip.base().clone());
+    let mvk_pre_hash_root = b.load_constant(digest_scalar_to_fr(root_vk.pre_hash[0]));
+    b.init_transcript();
 
-    profiler.push("observe_preamble", ctx.advice.len());
+    profiler.push("observe_preamble", b.cell_count());
     observe_preamble(
-        ctx,
-        &mut transcript,
+        b,
         root_vk,
         log_heights_per_air,
         &proof_wire.public_values,
@@ -205,13 +197,11 @@ pub fn constrained_verify(
         digest_wire_from_root(mvk_pre_hash_root),
         digest_wire_from_root(proof_wire.common_main_commit_root),
     );
-    profiler.pop(ctx.advice.len());
+    profiler.pop(b.cell_count());
 
-    profiler.push("batch_constraints", ctx.advice.len());
+    profiler.push("batch_constraints", b.cell_count());
     let batch = constrain_batch_constraints_verification(
-        ctx,
-        ext_chip,
-        &mut transcript,
+        b,
         &root_vk.inner,
         &proof_wire.gkr,
         &proof_wire.batch,
@@ -220,15 +210,13 @@ pub fn constrained_verify(
         proof_wire.public_values.clone(),
         &mut profiler,
     );
-    profiler.pop(ctx.advice.len());
+    profiler.pop(b.cell_count());
 
     let need_rot_per_commit = get_need_rot_per_commit(&root_vk.inner, trace_id_to_air_id);
 
-    profiler.push("stacked_reduction", ctx.advice.len());
+    profiler.push("stacked_reduction", b.cell_count());
     let stacked_reduction = constrain_stacked_reduction(
-        ctx,
-        ext_chip,
-        &mut transcript,
+        b,
         &proof_wire.stacking,
         stacked_layouts,
         &need_rot_per_commit,
@@ -238,7 +226,7 @@ pub fn constrained_verify(
         &batch.r,
         &mut profiler,
     );
-    profiler.pop(ctx.advice.len());
+    profiler.pop(b.cell_count());
 
     let u_cube = {
         let u = &stacked_reduction.u;
@@ -247,8 +235,8 @@ pub fn constrained_verify(
         let mut power = *u.first().unwrap();
         for _ in 0..l_skip {
             u_cube.push(power);
-            power = ext_chip.square(ctx, power);
-            power = ext_chip.reduce_max_bits(ctx, power);
+            power = b.ext_square(power);
+            power = b.ext_reduce_max_bits(power);
         }
         u_cube.extend(u.iter().skip(1).copied());
         u_cube
@@ -259,18 +247,16 @@ pub fn constrained_verify(
         let mut commits = vec![common_main_root];
         for &air_id in trace_id_to_air_id {
             if let Some(preprocessed) = &root_vk.inner.per_air[air_id].preprocessed_data {
-                commits.push(ctx.load_constant(digest_scalar_to_fr(preprocessed.commit[0])));
+                commits.push(b.load_constant(digest_scalar_to_fr(preprocessed.commit[0])));
             }
             commits.extend(proof_wire.cached_commitment_roots[air_id].iter().copied());
         }
         commits
     };
 
-    profiler.push("whir_verification", ctx.advice.len());
+    profiler.push("whir_verification", b.cell_count());
     constrain_whir_verification(
-        ctx,
-        ext_chip,
-        &mut transcript,
+        b,
         &root_vk.inner,
         &proof_wire.whir,
         &stacked_reduction.stacking_openings,
@@ -278,9 +264,9 @@ pub fn constrained_verify(
         &u_cube,
         &mut profiler,
     );
-    profiler.pop(ctx.advice.len());
+    profiler.pop(b.cell_count());
 
-    profiler.print(ctx.advice.len());
+    profiler.print(b.cell_count());
 
     #[cfg(feature = "cell-profiling")]
     if let Ok(dir) = std::env::var("OPENVM_PROFILE_DIR") {
@@ -288,12 +274,12 @@ pub fn constrained_verify(
         profiler.write_flamegraph(
             &format!("{dir}/constrained_verify.svg"),
             "Constrained Verify Sub-stages",
-            ctx.advice.len(),
+            b.cell_count(),
         );
         profiler.write_flamegraph_reversed(
             &format!("{dir}/constrained_verify_rev.svg"),
             "Constrained Verify Sub-stages (reversed)",
-            ctx.advice.len(),
+            b.cell_count(),
         );
     }
 }

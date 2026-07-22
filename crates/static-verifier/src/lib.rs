@@ -14,21 +14,31 @@
 //! values + symbolic DAG cached-commit pin) belong in `openvm-sdk` integration tests; this crate
 //! keeps a lighter FibFixture + KZG roundtrip via
 //! [`StaticVerifierCircuit::populate_verify_stark_constraints`].
-#![forbid(unsafe_code)]
+#![deny(unsafe_code)]
 
 #[cfg(feature = "cell-profiling")]
 mod context_tree;
 pub mod profiling;
 
+pub mod chip_traits;
 mod circuit;
 #[cfg(feature = "evm-prove")]
 pub mod codec;
 pub mod config;
 pub mod field;
+#[cfg(feature = "halo2-gpu")]
+pub mod graph_executor;
+pub mod halo2_backend;
+#[cfg(feature = "halo2-gpu")]
+pub mod halo2_ir_builder;
+#[cfg(feature = "halo2-gpu")]
+pub mod halo2_opcode_impl;
 pub mod hash;
 pub mod keygen;
 pub mod prover;
 pub mod stages;
+#[cfg(all(test, feature = "halo2-gpu"))]
+mod test_fixtures;
 pub mod transcript;
 mod utils;
 #[cfg(feature = "evm-prove")]
