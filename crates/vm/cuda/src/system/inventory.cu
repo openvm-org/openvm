@@ -11,10 +11,14 @@
 ///
 /// Note on uint32_t encoding: only `values` stores Montgomery-encoded BabyBear
 /// field elements (Fp::asRaw()). All other fields (`address_space`,
-/// `ptr`, `timestamps`) are plain integers.
+/// `ptr`, `is_dirty`, `timestamps`) are plain integers.
 template <size_t CHUNK, size_t BLOCKS> struct MemoryInventoryRecord {
-    uint32_t address_space;      // plain integer
-    uint32_t ptr;                // plain integer (address-space pointer)
+    uint32_t address_space; // plain integer
+    uint32_t ptr;           // plain integer (address-space pointer)
+    /// Whether some covered block was *written* during execution (0/1), tracked by
+    /// preflight and carried in the input records; the merge kernel ORs the merged
+    /// blocks' bits. Not consumed on device yet.
+    uint32_t is_dirty;
     uint32_t timestamps[BLOCKS]; // plain integers
     uint32_t values[CHUNK];      // Montgomery-encoded Fp values (Fp::asRaw())
 };
@@ -99,6 +103,7 @@ __global__ void cukernel_build_candidates(
     OutRec rec{};
     rec.address_space = in[row_idx].address_space;
     rec.ptr = (in[row_idx].ptr / DIGEST_WIDTH) * DIGEST_WIDTH;
+    rec.is_dirty = in[row_idx].is_dirty;
     #pragma unroll
     for (size_t i = 0; i < BLOCKS_PER_LEAF; ++i) {
         rec.timestamps[i] = 0;
@@ -123,6 +128,7 @@ __global__ void cukernel_build_candidates(
             rec.values[block_idx2 * BLOCK_FE_WIDTH + i] = in[row_idx + 1].values[i];
         }
         rec.timestamps[block_idx2] = in[row_idx + 1].timestamps[0];
+        rec.is_dirty |= in[row_idx + 1].is_dirty;
     }
 
     tmp_out[row_idx] = rec;
