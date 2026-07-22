@@ -624,7 +624,7 @@ fn transfer(li: &LiftedInstr, mut state: VariableState) -> VariableState {
             transfer_effect(instr.cfg_effect(), &mut state);
         }
         LiftedInstr::Term { pc, terminator, .. } => {
-            if let Terminator::Extension(instr) = terminator {
+            if let Terminator::Instruction(instr) = terminator {
                 transfer_effect(instr.cfg_effect(), &mut state);
             }
             let fall_pc = pc + INSTR_SIZE as u64;
@@ -1084,7 +1084,7 @@ fn build_block_list(
 
                 // Patch resolved targets into the instruction-owned terminator.
                 if let Some(targets) = resolved_jumps.get(&pc) {
-                    if let Terminator::Extension(instr) = &mut term {
+                    if let Terminator::Instruction(instr) = &mut term {
                         let mut sorted_targets: Vec<u64> = targets.iter().copied().collect();
                         sorted_targets.sort_unstable();
                         *instr = instr.with_resolved_jumps(sorted_targets);
@@ -1189,7 +1189,7 @@ mod tests {
     fn instruction_term_with_effect(pc: u64, effect: CfgEffect, cfg_term: CfgTerm) -> LiftedInstr {
         term(
             pc,
-            Terminator::Extension(Box::new(TestInstr {
+            Terminator::Instruction(Box::new(TestInstr {
                 effect,
                 term: Some(cfg_term),
             })),

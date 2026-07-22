@@ -491,7 +491,7 @@ fn body(pc: u64, instr: impl ExtInstr + 'static) -> LiftedInstr {
 fn term(pc: u64, instr: Rv64IInstr) -> LiftedInstr {
     LiftedInstr::Term {
         pc,
-        terminator: Terminator::Extension(Box::new(instr)),
+        terminator: Terminator::Instruction(Box::new(instr)),
         source_loc: None,
     }
 }

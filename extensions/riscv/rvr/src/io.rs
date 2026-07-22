@@ -449,7 +449,7 @@ mod tests {
         ));
         let lifted = ext.try_lift(&inst, 0x100).unwrap();
         let LiftedInstr::Body(InstrAt { instr, .. }) = lifted else {
-            panic!("expected public-values store extension instruction");
+            panic!("expected public-values store body instruction");
         };
 
         let mut ctx = TestEmitCtx::default();

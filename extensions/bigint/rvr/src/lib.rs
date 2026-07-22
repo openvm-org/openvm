@@ -378,7 +378,7 @@ impl RvrExtension for Int256Extension {
 
             return Some(LiftedInstr::Term {
                 pc,
-                terminator: Terminator::Extension(Box::new(Int256BranchEqInstr {
+                terminator: Terminator::Instruction(Box::new(Int256BranchEqInstr {
                     rs1_reg,
                     rs2_reg,
                     target_pc,
@@ -409,7 +409,7 @@ impl RvrExtension for Int256Extension {
 
             return Some(LiftedInstr::Term {
                 pc,
-                terminator: Terminator::Extension(Box::new(Int256BranchLtInstr {
+                terminator: Terminator::Instruction(Box::new(Int256BranchLtInstr {
                     rs1_reg,
                     rs2_reg,
                     target_pc,

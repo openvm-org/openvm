@@ -37,8 +37,8 @@ pub enum Terminator {
     Exit { code: u32 },
     /// Illegal instruction / debug panic.
     Trap { message: String },
-    /// Control-flow instruction owned by a registered extension.
-    Extension(Box<dyn ExtInstr>),
+    /// Instruction node stored in terminator position.
+    Instruction(Box<dyn ExtInstr>),
 }
 
 impl Terminator {
@@ -50,7 +50,7 @@ impl Terminator {
             Self::Trap { message } => CfgTerm::Trap {
                 message: message.clone(),
             },
-            Self::Extension(instr) => instr.cfg_term(pc, fall_pc).unwrap_or(CfgTerm::FallThrough),
+            Self::Instruction(instr) => instr.cfg_term(pc, fall_pc).unwrap_or(CfgTerm::FallThrough),
         }
     }
 
@@ -71,7 +71,7 @@ impl Terminator {
             Self::FallThrough => "fallthrough",
             Self::Exit { .. } => "exit",
             Self::Trap { .. } => "trap",
-            Self::Extension(instr) => instr.opname(),
+            Self::Instruction(instr) => instr.opname(),
         }
     }
 

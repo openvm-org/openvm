@@ -1054,21 +1054,20 @@ impl CProject {
             }
             Ok::<(), InvalidChipIndex>(())
         };
-        let add_extension_rows = |chip_counts: &mut BTreeMap<u32, u32>,
-                                  extension: &dyn ExtInstr| {
-            for rows in extension.fixed_trace_rows() {
+        let add_instruction_rows = |chip_counts: &mut BTreeMap<u32, u32>, instr: &dyn ExtInstr| {
+            for rows in instr.fixed_trace_rows() {
                 add_rows(chip_counts, rows.chip_idx, rows.count)?;
             }
             Ok::<(), InvalidChipIndex>(())
         };
         for instr_at in &block.instructions {
             add_base_row(&mut chip_counts, instr_at.pc)?;
-            add_extension_rows(&mut chip_counts, instr_at.instr.as_ref())?;
+            add_instruction_rows(&mut chip_counts, instr_at.instr.as_ref())?;
         }
         if !matches!(block.terminator, Terminator::FallThrough) {
             add_base_row(&mut chip_counts, block.terminator_pc)?;
-            if let Terminator::Extension(extension) = &block.terminator {
-                add_extension_rows(&mut chip_counts, extension.as_ref())?;
+            if let Terminator::Instruction(instr) = &block.terminator {
+                add_instruction_rows(&mut chip_counts, instr.as_ref())?;
             }
         }
         if chip_counts.is_empty() {
@@ -1319,7 +1318,7 @@ fn instr_accesses_memory(instr: &dyn ExtInstr) -> bool {
 
 fn terminator_accesses_memory(terminator: &Terminator) -> bool {
     match terminator {
-        Terminator::Extension(instr) => instr.accesses_memory(),
+        Terminator::Instruction(instr) => instr.accesses_memory(),
         _ => false,
     }
 }

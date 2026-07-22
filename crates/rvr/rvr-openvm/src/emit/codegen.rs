@@ -116,7 +116,7 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
         CfgTerm::Exit { code } => emit_exit(ctx, pc, code),
         CfgTerm::Trap { message } => emit_trap(ctx, pc, &message),
         CfgTerm::Opaque { .. } => {
-            let Terminator::Extension(instr) = term else {
+            let Terminator::Instruction(instr) = term else {
                 unreachable!("opaque control flow requires an instruction-owned terminator")
             };
             let branch_to = |target| static_tail_call(target, &args, tc.valid_blocks);
