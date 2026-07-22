@@ -1,35 +1,25 @@
-//! CFG analysis for the new rvr-openvm-ir types.
+//! CFG analysis for RVR IR.
 //!
-//! Multi-value register tracking, worklist fixpoint propagation,
-//! call/return analysis, and Duff's device scanning -- all operating
-//! on `LiftedInstr` / `Block` from `rvr_openvm_ir`.
+//! Multi-value variable tracking, worklist fixpoint propagation, call/return
+//! analysis, and Duff's device scanning operate on `LiftedInstr` and `Block`.
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashSet};
 
 use openvm_instructions::{
-    metering::MAX_METERED_BLOCK_INSNS, program::DEFAULT_PC_STEP as INSTR_SIZE,
-    riscv::RV64_NUM_REGISTERS as NUM_REGS,
+    metering::MAX_METERED_BLOCK_INSNS,
+    program::{DEFAULT_PC_STEP as INSTR_SIZE, MAX_ALLOWED_PC},
 };
-use rvr_openvm_ir::{AluOp, Block, Instr, InstrAt, LiftedInstr, MulDivOp, Terminator};
-
-use crate::helpers::{is_pc_in_bounds, sext32};
+use rustc_hash::FxHashMap;
+use rvr_openvm_ir::{
+    Block, CfgEffect, CfgJumpKind, CfgOp, CfgOperand, CfgResultWidth, CfgTerm, InstrAt,
+    LiftedInstr, Terminator, Variable,
+};
 
 const MAX_VALUES: usize = 16;
 const MAX_ITERATIONS_MULTIPLIER: usize = 20;
 const MAX_JUMP_TABLE_SCAN: usize = 256;
 
-/// Error during basic-block (CFG) construction.
-#[derive(Debug, thiserror::Error)]
-pub enum CfgError {
-    /// A statically computable control-flow target exceeds the PC address space.
-    #[error("control-flow target {target:#x} from PC {pc:#x} exceeds PC address space")]
-    PcOutOfBounds { pc: u64, target: u64 },
-    /// A statically computable control-flow target does not name a lifted instruction.
-    #[error("control-flow target {target:#x} from PC {pc:#x} does not point to an instruction")]
-    PcNotInProgram { pc: u64, target: u64 },
-}
-
-// ── RegisterValue ──────────────────────────────────────────────────────────
+// ── TrackedValue ──────────────────────────────────────────────────────────
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ValueKind {
@@ -38,12 +28,12 @@ enum ValueKind {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct RegisterValue {
+struct TrackedValue {
     kind: ValueKind,
     values: Vec<u64>,
 }
 
-impl RegisterValue {
+impl TrackedValue {
     const fn unknown() -> Self {
         Self {
             kind: ValueKind::Unknown,
@@ -133,49 +123,58 @@ impl RegisterValue {
     }
 }
 
-// ── RegisterState ──────────────────────────────────────────────────────────
+// ── VariableState ──────────────────────────────────────────────────────────
 
 #[derive(Clone, Debug)]
-struct RegisterState {
-    regs: [RegisterValue; NUM_REGS],
+struct VariableState {
+    values: FxHashMap<Variable, TrackedValue>,
 }
 
-impl RegisterState {
+impl VariableState {
     fn new() -> Self {
-        let mut regs = std::array::from_fn(|_| RegisterValue::unknown());
-        regs[0] = RegisterValue::constant(0);
-        Self { regs }
+        Self {
+            values: FxHashMap::default(),
+        }
     }
 
-    fn get(&self, reg: u8) -> RegisterValue {
-        let idx = reg as usize;
-        if idx >= NUM_REGS {
-            return RegisterValue::unknown();
-        }
-        if idx == 0 {
-            return RegisterValue::constant(0);
-        }
-        self.regs[idx].clone()
+    fn get(&self, var: Variable) -> TrackedValue {
+        self.values
+            .get(&var)
+            .cloned()
+            .unwrap_or_else(TrackedValue::unknown)
     }
 
-    fn set(&mut self, reg: u8, value: RegisterValue) {
-        let idx = reg as usize;
-        if idx == 0 || idx >= NUM_REGS {
-            return;
+    fn operand(&self, operand: CfgOperand) -> TrackedValue {
+        match operand {
+            CfgOperand::Var(var) => self.get(var),
+            CfgOperand::Const(value) => TrackedValue::constant(value),
         }
-        self.regs[idx] = value;
     }
 
-    fn set_unknown(&mut self, reg: u8) {
-        self.set(reg, RegisterValue::unknown());
+    fn set(&mut self, var: Variable, value: TrackedValue) {
+        if value.is_constant() {
+            self.values.insert(var, value);
+        } else {
+            self.values.remove(&var);
+        }
+    }
+
+    fn set_unknown(&mut self, var: Variable) {
+        self.values.remove(&var);
+    }
+
+    fn clear(&mut self) {
+        self.values.clear();
     }
 
     fn merge(&mut self, other: &Self) -> bool {
         let mut changed = false;
-        for idx in 1..NUM_REGS {
-            let merged = self.regs[idx].merge(&other.regs[idx]);
-            if merged != self.regs[idx] {
-                self.regs[idx] = merged;
+        let vars: Vec<_> = self.values.keys().copied().collect();
+        for var in vars {
+            let current = self.get(var);
+            let merged = current.merge(&other.get(var));
+            if merged != current {
+                self.set(var, merged);
                 changed = true;
             }
         }
@@ -183,386 +182,218 @@ impl RegisterState {
     }
 }
 
-// ── Binary operation evaluation (u64) ─────────────────────────────────────
+// ── Abstract integer evaluation ───────────────────────────────────────────
 
-fn compute_binary_op(op: AluOp, left: u64, right: u64) -> u64 {
+fn compute_op_u64(op: CfgOp, left: u64, right: u64) -> u64 {
     match op {
-        AluOp::Add => left.wrapping_add(right),
-        AluOp::Sub => left.wrapping_sub(right),
-        AluOp::And => left & right,
-        AluOp::Or => left | right,
-        AluOp::Xor => left ^ right,
-        AluOp::Sll => left.wrapping_shl((right & 0x3f) as u32),
-        AluOp::Srl => left.wrapping_shr((right & 0x3f) as u32),
-        AluOp::Sra => ((left as i64).wrapping_shr((right & 0x3f) as u32)) as u64,
-        AluOp::Slt => {
-            if (left as i64) < (right as i64) {
-                1
-            } else {
-                0
-            }
-        }
-        AluOp::Sltu => {
-            if left < right {
-                1
-            } else {
-                0
-            }
-        }
-    }
-}
-
-fn is_address_relevant_op(op: AluOp) -> bool {
-    matches!(
-        op,
-        AluOp::Add
-            | AluOp::Sub
-            | AluOp::And
-            | AluOp::Or
-            | AluOp::Xor
-            | AluOp::Sll
-            | AluOp::Srl
-            | AluOp::Sra
-    )
-}
-
-/// Compute the cross-product of two multi-value register values under a binary op.
-fn eval_binary_multi(op: AluOp, lv: &RegisterValue, rv: &RegisterValue) -> RegisterValue {
-    if !lv.is_constant() || !rv.is_constant() || lv.values.is_empty() || rv.values.is_empty() {
-        return RegisterValue::unknown();
-    }
-
-    if !is_address_relevant_op(op) {
-        return RegisterValue::unknown();
-    }
-
-    let mut result = RegisterValue::constant(compute_binary_op(op, lv.values[0], rv.values[0]));
-    'outer: for l in &lv.values {
-        for r in &rv.values {
-            if *l == lv.values[0] && *r == rv.values[0] {
-                continue;
-            }
-            result.add_value(compute_binary_op(op, *l, *r));
-            if !result.is_constant() {
-                break 'outer;
-            }
-        }
-    }
-    result
-}
-
-/// Same as `eval_binary_multi` but using W-suffix semantics (32-bit arithmetic, sign-extended).
-fn eval_binary_multi_w(op: AluOp, lv: &RegisterValue, rv: &RegisterValue) -> RegisterValue {
-    if !lv.is_constant() || !rv.is_constant() || lv.values.is_empty() || rv.values.is_empty() {
-        return RegisterValue::unknown();
-    }
-
-    let mut result = RegisterValue::constant(compute_binary_op_w(op, lv.values[0], rv.values[0]));
-    'outer: for l in &lv.values {
-        for r in &rv.values {
-            if *l == lv.values[0] && *r == rv.values[0] {
-                continue;
-            }
-            result.add_value(compute_binary_op_w(op, *l, *r));
-            if !result.is_constant() {
-                break 'outer;
-            }
-        }
-    }
-    result
-}
-
-fn compute_binary_op_w(op: AluOp, left: u64, right: u64) -> u64 {
-    let rs1 = left as u32;
-    let rs2 = right as u32;
-    let result: u32 = match op {
-        AluOp::Add => rs1.wrapping_add(rs2),
-        AluOp::Sub => rs1.wrapping_sub(rs2),
-        AluOp::Sll => rs1 << (rs2 & 0x1f),
-        AluOp::Srl => rs1 >> (rs2 & 0x1f),
-        AluOp::Sra => ((rs1 as i32) >> (rs2 & 0x1f)) as u32,
-        _ => unreachable!(),
-    };
-    sext32(result)
-}
-
-fn compute_muldiv_op_w(op: MulDivOp, left: u64, right: u64) -> u64 {
-    let rs1 = left as u32;
-    let rs2 = right as u32;
-    let result: u32 = match op {
-        MulDivOp::Mul => rs1.wrapping_mul(rs2),
-        MulDivOp::Div => {
-            let rs1_i32 = rs1 as i32;
-            let rs2_i32 = rs2 as i32;
-            match (rs1_i32, rs2_i32) {
-                (_, 0) => u32::MAX,
-                (i32::MIN, -1) => rs1,
-                _ => (rs1_i32 / rs2_i32) as u32,
-            }
-        }
-        MulDivOp::Divu => {
-            if rs2 == 0 {
-                u32::MAX
-            } else {
-                rs1 / rs2
-            }
-        }
-        MulDivOp::Rem => {
-            let rs1_i32 = rs1 as i32;
-            let rs2_i32 = rs2 as i32;
-            match (rs1_i32, rs2_i32) {
-                (_, 0) => rs1,
-                (i32::MIN, -1) => 0,
-                _ => (rs1_i32 % rs2_i32) as u32,
-            }
-        }
-        MulDivOp::Remu => {
-            if rs2 == 0 {
-                rs1
-            } else {
-                rs1 % rs2
-            }
-        }
-        _ => unreachable!(),
-    };
-    sext32(result)
-}
-
-/// Compute a mul/div op if both operands are known (single-value only for simplicity).
-fn compute_muldiv_op(op: MulDivOp, left: u64, right: u64) -> u64 {
-    match op {
-        MulDivOp::Mul => left.wrapping_mul(right),
-        MulDivOp::Mulh => {
-            let a = left as i64 as i128;
-            let b = right as i64 as i128;
-            ((a.wrapping_mul(b)) >> 64) as u64
-        }
-        MulDivOp::Mulhsu => {
-            let a = left as i64 as i128;
-            let b = right as i128;
-            ((a.wrapping_mul(b)) >> 64) as u64
-        }
-        MulDivOp::Mulhu => {
-            let a = left as u128;
-            let b = right as u128;
-            ((a.wrapping_mul(b)) >> 64) as u64
-        }
-        MulDivOp::Div => {
+        CfgOp::Add => left.wrapping_add(right),
+        CfgOp::Sub => left.wrapping_sub(right),
+        CfgOp::And => left & right,
+        CfgOp::Or => left | right,
+        CfgOp::Xor => left ^ right,
+        CfgOp::ShiftLeft => left.wrapping_shl((right & 0x3f) as u32),
+        CfgOp::ShiftRightLogical => left.wrapping_shr((right & 0x3f) as u32),
+        CfgOp::ShiftRightArithmetic => ((left as i64) >> (right & 0x3f)) as u64,
+        CfgOp::LessThanSigned => u64::from((left as i64) < (right as i64)),
+        CfgOp::LessThanUnsigned => u64::from(left < right),
+        CfgOp::Mul => left.wrapping_mul(right),
+        CfgOp::MulHighSigned => (((left as i64 as i128) * (right as i64 as i128)) >> 64) as u64,
+        CfgOp::MulHighSignedUnsigned => (((left as i64 as i128) * (right as i128)) >> 64) as u64,
+        CfgOp::MulHighUnsigned => (((left as u128) * (right as u128)) >> 64) as u64,
+        CfgOp::DivSigned => {
             if right == 0 {
                 u64::MAX
             } else {
                 (left as i64).wrapping_div(right as i64) as u64
             }
         }
-        MulDivOp::Divu => {
+        CfgOp::DivUnsigned => {
             if right == 0 {
                 u64::MAX
             } else {
-                left.wrapping_div(right)
+                left / right
             }
         }
-        MulDivOp::Rem => {
+        CfgOp::RemSigned => {
             if right == 0 {
                 left
             } else {
                 (left as i64).wrapping_rem(right as i64) as u64
             }
         }
-        MulDivOp::Remu => {
+        CfgOp::RemUnsigned => {
             if right == 0 {
                 left
             } else {
-                left.wrapping_rem(right)
+                left % right
             }
         }
     }
+}
+
+fn compute_op_u32(op: CfgOp, left: u32, right: u32) -> u32 {
+    match op {
+        CfgOp::Add => left.wrapping_add(right),
+        CfgOp::Sub => left.wrapping_sub(right),
+        CfgOp::And => left & right,
+        CfgOp::Or => left | right,
+        CfgOp::Xor => left ^ right,
+        CfgOp::ShiftLeft => left.wrapping_shl(right & 0x1f),
+        CfgOp::ShiftRightLogical => left.wrapping_shr(right & 0x1f),
+        CfgOp::ShiftRightArithmetic => ((left as i32) >> (right & 0x1f)) as u32,
+        CfgOp::LessThanSigned => u32::from((left as i32) < (right as i32)),
+        CfgOp::LessThanUnsigned => u32::from(left < right),
+        CfgOp::Mul => left.wrapping_mul(right),
+        CfgOp::MulHighSigned => (((left as i32 as i64) * (right as i32 as i64)) >> 32) as u32,
+        CfgOp::MulHighSignedUnsigned => {
+            (((left as i32 as i64) * (right as u64 as i64)) >> 32) as u32
+        }
+        CfgOp::MulHighUnsigned => (((left as u64) * (right as u64)) >> 32) as u32,
+        CfgOp::DivSigned => {
+            if right == 0 {
+                u32::MAX
+            } else {
+                (left as i32).wrapping_div(right as i32) as u32
+            }
+        }
+        CfgOp::DivUnsigned => {
+            if right == 0 {
+                u32::MAX
+            } else {
+                left / right
+            }
+        }
+        CfgOp::RemSigned => {
+            if right == 0 {
+                left
+            } else {
+                (left as i32).wrapping_rem(right as i32) as u32
+            }
+        }
+        CfgOp::RemUnsigned => {
+            if right == 0 {
+                left
+            } else {
+                left % right
+            }
+        }
+    }
+}
+
+fn compute_op(op: CfgOp, result: CfgResultWidth, left: u64, right: u64) -> u64 {
+    match result {
+        CfgResultWidth::U32 => u64::from(compute_op_u32(op, left as u32, right as u32)),
+        CfgResultWidth::U64 => compute_op_u64(op, left, right),
+        CfgResultWidth::SignExtend32 => {
+            compute_op_u32(op, left as u32, right as u32) as i32 as i64 as u64
+        }
+    }
+}
+
+/// Compute the cross-product of two tracked multi-value operands under a binary operation.
+fn eval_op_multi(
+    op: CfgOp,
+    result_width: CfgResultWidth,
+    lhs: &TrackedValue,
+    rhs: &TrackedValue,
+) -> TrackedValue {
+    if !lhs.is_constant() || !rhs.is_constant() || lhs.values.is_empty() || rhs.values.is_empty() {
+        return TrackedValue::unknown();
+    }
+
+    let mut result =
+        TrackedValue::constant(compute_op(op, result_width, lhs.values[0], rhs.values[0]));
+    for (left_idx, left) in lhs.values.iter().enumerate() {
+        for (right_idx, right) in rhs.values.iter().enumerate() {
+            if left_idx == 0 && right_idx == 0 {
+                continue;
+            }
+            result.add_value(compute_op(op, result_width, *left, *right));
+            if !result.is_constant() {
+                return result;
+            }
+        }
+    }
+    result
 }
 
 // ── IR classification ─────────────────────────────────────────────────────
 
-/// A LiftedInstr is a call if it's a Term with Jump { link_rd: Some(_), .. }
-/// or JumpDyn { link_rd: Some(_), .. }.
+/// A call is a static or indirect jump whose CFG role is `Call`.
 fn is_call(li: &LiftedInstr) -> bool {
-    match li {
-        LiftedInstr::Term {
-            terminator: Terminator::Jump { link_rd, .. } | Terminator::JumpDyn { link_rd, .. },
-            ..
-        } => link_rd.is_some(),
-        _ => false,
-    }
+    matches!(
+        cfg_term_of(li),
+        Some(
+            CfgTerm::Jump {
+                kind: CfgJumpKind::Call,
+                ..
+            } | CfgTerm::JumpIndirect {
+                kind: CfgJumpKind::Call,
+                ..
+            }
+        )
+    )
 }
 
-/// A LiftedInstr is a return if it's a Term with JumpDyn { link_rd: None, rs1: 1, .. }.
+/// A return is an indirect jump whose CFG role is `Return`.
 fn is_return(li: &LiftedInstr) -> bool {
-    match li {
-        LiftedInstr::Term {
-            terminator: Terminator::JumpDyn { link_rd, rs1, .. },
+    matches!(
+        cfg_term_of(li),
+        Some(CfgTerm::JumpIndirect {
+            kind: CfgJumpKind::Return,
             ..
-        } => link_rd.is_none() && *rs1 == 1,
-        _ => false,
-    }
+        })
+    )
 }
 
-/// A LiftedInstr is an indirect jump if it's a JumpDyn that is not a call and not a return.
+/// An indirect jump has a computed target with CFG role `Jump`.
 fn is_indirect_jump(li: &LiftedInstr) -> bool {
     matches!(
-        li,
-        LiftedInstr::Term {
-            terminator: Terminator::JumpDyn { .. },
+        cfg_term_of(li),
+        Some(CfgTerm::JumpIndirect {
+            kind: CfgJumpKind::Jump,
             ..
-        }
-    ) && !is_call(li)
-        && !is_return(li)
+        })
+    )
 }
 
-/// Returns true if this LiftedInstr is a control-flow terminator (not a body instruction
-/// and not a FallThrough).
+/// Whether this instruction ends its block with explicit control flow.
 fn is_control_flow(li: &LiftedInstr) -> bool {
+    cfg_term_of(li).is_some_and(|term| !matches!(term, CfgTerm::FallThrough))
+}
+
+/// Return a terminator's control-flow description.
+fn cfg_term_of(li: &LiftedInstr) -> Option<CfgTerm> {
     match li {
-        LiftedInstr::Term { terminator, .. } => terminator.is_block_end(),
-        _ => false,
+        LiftedInstr::Term { pc, terminator, .. } => {
+            Some(terminator.cfg_term(*pc, pc.wrapping_add(INSTR_SIZE as u64)))
+        }
+        LiftedInstr::Body(_) => None,
     }
 }
 
-// ── Simple register tracking (phase 1, single-value) ──────────────────────
+// ── Simple variable tracking (phase 1, single-value) ──────────────────────
 
-/// Process a single instruction for simple single-value register tracking.
-fn simple_process(li: &LiftedInstr, regs: &mut [Option<u64>; NUM_REGS]) {
-    match li {
-        LiftedInstr::Body(InstrAt { instr, .. }) => {
-            simple_process_instr(instr, regs);
-        }
-        LiftedInstr::Term { terminator, .. } => {
-            // Jump/JumpDyn may write link register
-            match terminator {
-                Terminator::Jump {
-                    link_rd: Some(rd), ..
-                }
-                | Terminator::JumpDyn {
-                    link_rd: Some(rd), ..
-                } => {
-                    // link register gets pc+4, which we don't track in simple mode
-                    regs[*rd as usize] = None;
-                }
-                _ => {}
-            }
-        }
-    }
+fn single_value(state: &VariableState, operand: CfgOperand) -> Option<u64> {
+    let value = state.operand(operand);
+    (value.values.len() == 1).then(|| value.values[0])
 }
 
-fn simple_process_instr(instr: &Instr, regs: &mut [Option<u64>; NUM_REGS]) {
-    match instr {
-        Instr::AluReg { op, rd, rs1, rs2 } => {
-            let rd = *rd;
-            if rd == 0 {
-                return;
-            }
-            let val = match (regs[*rs1 as usize], regs[*rs2 as usize]) {
-                (Some(a), Some(b)) => Some(compute_binary_op(*op, a, b)),
-                _ => None,
-            };
-            regs[rd as usize] = val;
-        }
-        Instr::AluWReg { op, rd, rs1, rs2 } => {
-            let rd = *rd;
-            if rd == 0 {
-                return;
-            }
-            let val = match (regs[*rs1 as usize], regs[*rs2 as usize]) {
-                (Some(a), Some(b)) => Some(compute_binary_op_w(*op, a, b)),
-                _ => None,
-            };
-            regs[rd as usize] = val;
-        }
-        Instr::AluImm { op, rd, rs1, imm } => {
-            let rd = *rd;
-            if rd == 0 {
-                return;
-            }
-            let val = regs[*rs1 as usize].map(|a| compute_binary_op(*op, a, *imm as i64 as u64));
-            regs[rd as usize] = val;
-        }
-        Instr::AluWImm { op, rd, rs1, imm } => {
-            let rd = *rd;
-            if rd == 0 {
-                return;
-            }
-            let val = regs[*rs1 as usize].map(|a| compute_binary_op_w(*op, a, *imm as i64 as u64));
-            regs[rd as usize] = val;
-        }
-        Instr::ShiftImm { op, rd, rs1, shamt } => {
-            let rd = *rd;
-            if rd == 0 {
-                return;
-            }
-            let val = regs[*rs1 as usize].map(|a| compute_binary_op(*op, a, u64::from(*shamt)));
-            regs[rd as usize] = val;
-        }
-        Instr::ShiftWImm { op, rd, rs1, shamt } => {
-            let rd = *rd;
-            if rd == 0 {
-                return;
-            }
-            let val = regs[*rs1 as usize].map(|a| compute_binary_op_w(*op, a, u64::from(*shamt)));
-            regs[rd as usize] = val;
-        }
-        Instr::Lui { rd, value } => {
-            let rd = *rd;
-            if rd == 0 {
-                return;
-            }
-            regs[rd as usize] = Some(sext32(*value));
-        }
-        Instr::Auipc { rd, value } => {
-            let rd = *rd;
-            if rd == 0 {
-                return;
-            }
-            regs[rd as usize] = Some(*value);
-        }
-        Instr::Load { rd, .. } => {
-            let rd = *rd;
-            if rd != 0 {
-                regs[rd as usize] = None;
-            }
-        }
-        Instr::MulDiv { op, rd, rs1, rs2 } => {
-            let rd = *rd;
-            if rd == 0 {
-                return;
-            }
-            let val = match (regs[*rs1 as usize], regs[*rs2 as usize]) {
-                (Some(a), Some(b)) => Some(compute_muldiv_op(*op, a, b)),
-                _ => None,
-            };
-            regs[rd as usize] = val;
-        }
-        Instr::MulDivW { op, rd, rs1, rs2 } => {
-            let rd = *rd;
-            if rd == 0 {
-                return;
-            }
-            let val = match (regs[*rs1 as usize], regs[*rs2 as usize]) {
-                (Some(a), Some(b)) => Some(compute_muldiv_op_w(*op, a, b)),
-                _ => None,
-            };
-            regs[rd as usize] = val;
-        }
-        // IO / system instructions: most don't write general registers
-        Instr::Store { .. } | Instr::Nop | Instr::Ext(_) => {}
-    }
-}
-
-/// Evaluate the JumpDyn target address: (state[rs1] + imm) & !1.
-fn simple_eval_jumpdyn(regs: &[Option<u64>; NUM_REGS], rs1: u8, imm: i32) -> Option<u64> {
-    regs[rs1 as usize].and_then(|base| eval_jumpdyn_target(base, imm))
+/// Evaluate one known indirect target as `(base + offset) & target_mask`.
+fn simple_eval_indirect(
+    state: &VariableState,
+    base: CfgOperand,
+    offset: i32,
+    target_mask: u64,
+) -> Option<u64> {
+    single_value(state, base).and_then(|base| eval_indirect_target(base, offset, target_mask))
 }
 
 // ── Phase 1: collect_potential_targets ─────────────────────────────────────
 
 fn extend_existing_pcs(
     pcs: &mut impl Extend<u64>,
-    pc_to_idx: &HashMap<u64, usize>,
+    pc_to_idx: &FxHashMap<u64, usize>,
     candidates: impl IntoIterator<Item = u64>,
 ) {
     pcs.extend(
@@ -574,7 +405,7 @@ fn extend_existing_pcs(
 
 fn collect_potential_targets(
     instructions: &[LiftedInstr],
-    pc_to_idx: &HashMap<u64, usize>,
+    pc_to_idx: &FxHashMap<u64, usize>,
 ) -> (BTreeSet<u64>, BTreeSet<u64>, BTreeSet<u64>) {
     let mut function_entries = BTreeSet::new();
     let mut internal_targets = BTreeSet::new();
@@ -584,66 +415,63 @@ fn collect_potential_targets(
         function_entries.insert(first.pc());
     }
 
-    let mut regs: [Option<u64>; NUM_REGS] = [None; NUM_REGS];
-    regs[0] = Some(0);
+    let mut state = VariableState::new();
 
     for li in instructions {
         let pc = li.pc();
 
-        simple_process(li, &mut regs);
-
         match li {
-            LiftedInstr::Body(_) => {
-                // Body instructions don't end blocks.
+            LiftedInstr::Body(InstrAt { instr, .. }) => {
+                transfer_effect(instr.cfg_effect(), &mut state);
             }
-            LiftedInstr::Term { terminator, .. } => match terminator {
-                Terminator::FallThrough => {}
-                Terminator::Jump { target, .. } => {
-                    if pc_to_idx.contains_key(target) {
-                        if is_call(li) {
-                            function_entries.insert(*target);
+            LiftedInstr::Term { terminator, .. } => {
+                match terminator.cfg_term(pc, pc + INSTR_SIZE as u64) {
+                    CfgTerm::FallThrough => continue,
+                    CfgTerm::Jump { kind, target, .. } => {
+                        if pc_to_idx.contains_key(&target) {
+                            if kind == CfgJumpKind::Call {
+                                function_entries.insert(target);
+                                let return_pc = pc + INSTR_SIZE as u64;
+                                extend_existing_pcs(&mut return_sites, pc_to_idx, [return_pc]);
+                            } else {
+                                internal_targets.insert(target);
+                            }
+                        }
+                    }
+                    CfgTerm::JumpIndirect {
+                        kind,
+                        base_value,
+                        offset,
+                        target_mask,
+                        ..
+                    } => {
+                        if let Some(target_pc) =
+                            simple_eval_indirect(&state, base_value, offset, target_mask)
+                        {
+                            if pc_to_idx.contains_key(&target_pc) {
+                                function_entries.insert(target_pc);
+                            }
+                        }
+                        if kind == CfgJumpKind::Call {
                             let return_pc = pc + INSTR_SIZE as u64;
                             extend_existing_pcs(&mut return_sites, pc_to_idx, [return_pc]);
-                        } else {
-                            internal_targets.insert(*target);
                         }
                     }
-                    regs = [None; NUM_REGS];
-                    regs[0] = Some(0);
-                }
-                Terminator::JumpDyn { rs1, imm, .. } => {
-                    if let Some(target_pc) = simple_eval_jumpdyn(&regs, *rs1, *imm) {
-                        if pc_to_idx.contains_key(&target_pc) {
-                            function_entries.insert(target_pc);
-                        }
+                    CfgTerm::Branch { target, .. } => {
+                        let fallthrough = pc + INSTR_SIZE as u64;
+                        extend_existing_pcs(
+                            &mut internal_targets,
+                            pc_to_idx,
+                            [target, fallthrough],
+                        );
                     }
-                    if is_call(li) {
-                        let return_pc = pc + INSTR_SIZE as u64;
-                        extend_existing_pcs(&mut return_sites, pc_to_idx, [return_pc]);
+                    CfgTerm::Opaque { successors } => {
+                        extend_existing_pcs(&mut internal_targets, pc_to_idx, successors);
                     }
-                    regs = [None; NUM_REGS];
-                    regs[0] = Some(0);
+                    CfgTerm::Exit { .. } | CfgTerm::Trap { .. } => {}
                 }
-                Terminator::Branch { target, .. } => {
-                    let fallthrough = pc + INSTR_SIZE as u64;
-                    extend_existing_pcs(&mut internal_targets, pc_to_idx, [*target, fallthrough]);
-                    regs = [None; NUM_REGS];
-                    regs[0] = Some(0);
-                }
-                Terminator::Exit { .. } | Terminator::Trap { .. } => {
-                    regs = [None; NUM_REGS];
-                    regs[0] = Some(0);
-                }
-                Terminator::Extension(ext) => {
-                    extend_existing_pcs(
-                        &mut internal_targets,
-                        pc_to_idx,
-                        ext.successors(pc + INSTR_SIZE as u64),
-                    );
-                    regs = [None; NUM_REGS];
-                    regs[0] = Some(0);
-                }
-            },
+                state.clear();
+            }
         }
     }
 
@@ -654,24 +482,22 @@ fn collect_potential_targets(
 
 fn build_call_return_map(
     instructions: &[LiftedInstr],
-    pc_to_idx: &HashMap<u64, usize>,
-) -> HashMap<u64, HashSet<u64>> {
-    let mut map: HashMap<u64, HashSet<u64>> = HashMap::new();
+    pc_to_idx: &FxHashMap<u64, usize>,
+) -> FxHashMap<u64, HashSet<u64>> {
+    let mut map: FxHashMap<u64, HashSet<u64>> = FxHashMap::default();
 
     for li in instructions {
-        if let LiftedInstr::Term {
-            pc,
-            terminator:
-                Terminator::Jump {
-                    link_rd: Some(_),
-                    target,
-                },
-            ..
-        } = li
-        {
-            let return_site = pc + INSTR_SIZE as u64;
-            if pc_to_idx.contains_key(target) && pc_to_idx.contains_key(&return_site) {
-                map.entry(*target).or_default().insert(return_site);
+        if let LiftedInstr::Term { pc, terminator, .. } = li {
+            if let CfgTerm::Jump {
+                kind: CfgJumpKind::Call,
+                target,
+                ..
+            } = terminator.cfg_term(*pc, pc + INSTR_SIZE as u64)
+            {
+                let return_site = pc + INSTR_SIZE as u64;
+                if pc_to_idx.contains_key(&target) && pc_to_idx.contains_key(&return_site) {
+                    map.entry(target).or_default().insert(return_site);
+                }
             }
         }
     }
@@ -683,17 +509,17 @@ fn build_call_return_map(
 
 struct WorklistContext<'a> {
     instructions: &'a [LiftedInstr],
-    pc_to_idx: &'a HashMap<u64, usize>,
+    pc_to_idx: &'a FxHashMap<u64, usize>,
     function_entries: &'a BTreeSet<u64>,
     return_sites: &'a BTreeSet<u64>,
     sorted_function_entries: &'a [u64],
-    func_internal_targets: &'a HashMap<u64, HashSet<u64>>,
-    call_return_map: &'a HashMap<u64, HashSet<u64>>,
+    func_internal_targets: &'a FxHashMap<u64, HashSet<u64>>,
+    call_return_map: &'a FxHashMap<u64, HashSet<u64>>,
 }
 
 struct WorklistResult {
-    successors: HashMap<u64, HashSet<u64>>,
-    resolved_jumps: HashMap<u64, HashSet<u64>>,
+    successors: FxHashMap<u64, HashSet<u64>>,
+    resolved_jumps: FxHashMap<u64, HashSet<u64>>,
 }
 
 fn worklist(
@@ -702,18 +528,20 @@ fn worklist(
     internal_targets: &BTreeSet<u64>,
 ) -> WorklistResult {
     let estimated_size = function_entries.len() + internal_targets.len();
-    let mut states: HashMap<u64, RegisterState> = HashMap::with_capacity(estimated_size);
+    let mut states: FxHashMap<u64, VariableState> =
+        FxHashMap::with_capacity_and_hasher(estimated_size, Default::default());
     let mut work: Vec<u64> = Vec::with_capacity(estimated_size);
     let mut in_work: HashSet<u64> = HashSet::with_capacity(estimated_size);
-    let mut successors: HashMap<u64, HashSet<u64>> = HashMap::with_capacity(estimated_size);
+    let mut successors: FxHashMap<u64, HashSet<u64>> =
+        FxHashMap::with_capacity_and_hasher(estimated_size, Default::default());
     let mut unresolved_dynamic_jumps: HashSet<u64> = HashSet::new();
-    let mut resolved_jumps: HashMap<u64, HashSet<u64>> = HashMap::new();
+    let mut resolved_jumps: FxHashMap<u64, HashSet<u64>> = FxHashMap::default();
 
-    // Do not seed internal targets with unknown register values. Their actual
-    // predecessors may provide constants needed to resolve dynamic jumps.
+    // Seed function entries with empty variable state. Internal targets receive
+    // predecessor state, including constants used to resolve dynamic jumps.
     for addr in function_entries {
         if in_work.insert(*addr) {
-            states.insert(*addr, RegisterState::new());
+            states.insert(*addr, VariableState::new());
             work.push(*addr);
         }
     }
@@ -777,26 +605,26 @@ fn worklist(
 
 // ── Phase 4: transfer ─────────────────────────────────────────────────────
 
-/// Process one LiftedInstr, updating the register state for the output edge.
-fn transfer(li: &LiftedInstr, mut state: RegisterState) -> RegisterState {
+/// Process one LiftedInstr, updating the variable state for the output edge.
+fn transfer(li: &LiftedInstr, mut state: VariableState) -> VariableState {
     match li {
         LiftedInstr::Body(InstrAt { instr, .. }) => {
-            transfer_instr(instr, &mut state);
+            transfer_effect(instr.cfg_effect(), &mut state);
         }
-        LiftedInstr::Term { terminator, .. } => {
-            // Jump / JumpDyn may write link register (rd = pc+4).
-            // The value of pc+4 is known but we don't need to track it for
-            // address resolution purposes -- link registers are typically
-            // not used to compute jump targets. Set to unknown to be safe.
-            match terminator {
-                Terminator::Jump {
-                    link_rd: Some(rd), ..
+        LiftedInstr::Term { pc, terminator, .. } => {
+            if let Terminator::Instruction { node, .. } = terminator {
+                transfer_effect(node.cfg_effect(), &mut state);
+            }
+            let fall_pc = pc + INSTR_SIZE as u64;
+            match terminator.cfg_term(*pc, fall_pc) {
+                CfgTerm::Jump {
+                    link_dst: Some(dst),
+                    ..
                 }
-                | Terminator::JumpDyn {
-                    link_rd: Some(rd), ..
-                } => {
-                    state.set_unknown(*rd);
-                }
+                | CfgTerm::JumpIndirect {
+                    link_dst: Some(dst),
+                    ..
+                } => state.set(dst, TrackedValue::constant(fall_pc)),
                 _ => {}
             }
         }
@@ -804,110 +632,25 @@ fn transfer(li: &LiftedInstr, mut state: RegisterState) -> RegisterState {
     state
 }
 
-/// Update register state for a body instruction.
-fn transfer_instr(instr: &Instr, state: &mut RegisterState) {
-    match instr {
-        Instr::AluReg { op, rd, rs1, rs2 } => {
-            if *rd == 0 {
-                return;
-            }
-            let lv = state.get(*rs1);
-            let rv = state.get(*rs2);
-            let result = eval_binary_multi(*op, &lv, &rv);
-            state.set(*rd, result);
+fn transfer_effect(effect: CfgEffect, state: &mut VariableState) {
+    match effect {
+        CfgEffect::None => {}
+        CfgEffect::WriteUnknown { dst } => state.set_unknown(dst),
+        CfgEffect::WriteConst { dst, value } => {
+            state.set(dst, TrackedValue::constant(value));
         }
-        Instr::AluWReg { op, rd, rs1, rs2 } => {
-            if *rd == 0 {
-                return;
-            }
-            let lv = state.get(*rs1);
-            let rv = state.get(*rs2);
-            let result = eval_binary_multi_w(*op, &lv, &rv);
-            state.set(*rd, result);
+        CfgEffect::WriteOp {
+            dst,
+            op,
+            lhs,
+            rhs,
+            result,
+        } => {
+            let lhs = state.operand(lhs);
+            let rhs = state.operand(rhs);
+            state.set(dst, eval_op_multi(op, result, &lhs, &rhs));
         }
-        Instr::AluImm { op, rd, rs1, imm } => {
-            if *rd == 0 {
-                return;
-            }
-            let lv = state.get(*rs1);
-            let rv = RegisterValue::constant(*imm as u64);
-            let result = eval_binary_multi(*op, &lv, &rv);
-            state.set(*rd, result);
-        }
-        Instr::AluWImm { op, rd, rs1, imm } => {
-            if *rd == 0 {
-                return;
-            }
-            let lv = state.get(*rs1);
-            let rv = RegisterValue::constant(*imm as u64);
-            let result = eval_binary_multi_w(*op, &lv, &rv);
-            state.set(*rd, result);
-        }
-        Instr::ShiftImm { op, rd, rs1, shamt } => {
-            if *rd == 0 {
-                return;
-            }
-            let lv = state.get(*rs1);
-            let rv = RegisterValue::constant(u64::from(*shamt));
-            let result = eval_binary_multi(*op, &lv, &rv);
-            state.set(*rd, result);
-        }
-        Instr::ShiftWImm { op, rd, rs1, shamt } => {
-            if *rd == 0 {
-                return;
-            }
-            let lv = state.get(*rs1);
-            let rv = RegisterValue::constant(u64::from(*shamt));
-            let result = eval_binary_multi_w(*op, &lv, &rv);
-            state.set(*rd, result);
-        }
-        Instr::Lui { rd, value } => {
-            if *rd == 0 {
-                return;
-            }
-            state.set(*rd, RegisterValue::constant(sext32(*value)));
-        }
-        Instr::Auipc { rd, value } => {
-            if *rd == 0 {
-                return;
-            }
-            state.set(*rd, RegisterValue::constant(*value));
-        }
-        Instr::Load { rd, .. } => {
-            if *rd != 0 {
-                state.set_unknown(*rd);
-            }
-        }
-        Instr::MulDiv { op, rd, rs1, rs2 } => {
-            if *rd == 0 {
-                return;
-            }
-            let lv = state.get(*rs1);
-            let rv = state.get(*rs2);
-            if lv.is_constant() && rv.is_constant() && lv.values.len() == 1 && rv.values.len() == 1
-            {
-                let result = compute_muldiv_op(*op, lv.values[0], rv.values[0]);
-                state.set(*rd, RegisterValue::constant(result));
-            } else {
-                state.set_unknown(*rd);
-            }
-        }
-        Instr::MulDivW { op, rd, rs1, rs2 } => {
-            if *rd == 0 {
-                return;
-            }
-            let lv = state.get(*rs1);
-            let rv = state.get(*rs2);
-            if lv.is_constant() && rv.is_constant() && lv.values.len() == 1 && rv.values.len() == 1
-            {
-                let result = compute_muldiv_op_w(*op, lv.values[0], rv.values[0]);
-                state.set(*rd, RegisterValue::constant(result));
-            } else {
-                state.set_unknown(*rd);
-            }
-        }
-        // IO / system instructions: most don't write general registers
-        Instr::Store { .. } | Instr::Nop | Instr::Ext(_) => {}
+        CfgEffect::ClobberAll => state.clear(),
     }
 }
 
@@ -915,10 +658,10 @@ fn transfer_instr(instr: &Instr, state: &mut RegisterState) {
 
 fn get_successors(
     li: &LiftedInstr,
-    state: &RegisterState,
+    state: &VariableState,
     ctx: &WorklistContext<'_>,
     unresolved_dynamic_jumps: &mut HashSet<u64>,
-    resolved_jumps: &mut HashMap<u64, HashSet<u64>>,
+    resolved_jumps: &mut FxHashMap<u64, HashSet<u64>>,
 ) -> HashSet<u64> {
     let mut result = HashSet::new();
     let pc = li.pc();
@@ -931,23 +674,27 @@ fn get_successors(
             extend_existing_pcs(&mut result, ctx.pc_to_idx, [fallthrough]);
         }
         LiftedInstr::Term { terminator, .. } => {
-            match terminator {
-                Terminator::FallThrough => {
+            match terminator.cfg_term(pc, pc + INSTR_SIZE as u64) {
+                CfgTerm::FallThrough => {
                     let fallthrough = pc + INSTR_SIZE as u64;
                     extend_existing_pcs(&mut result, ctx.pc_to_idx, [fallthrough]);
                 }
-                Terminator::Jump { target, .. } => {
-                    if ctx.pc_to_idx.contains_key(target) {
-                        result.insert(*target);
+                CfgTerm::Jump { target, .. } => {
+                    if ctx.pc_to_idx.contains_key(&target) {
+                        result.insert(target);
                         let return_pc = pc + INSTR_SIZE as u64;
                         if is_call_instr {
                             extend_existing_pcs(&mut result, ctx.pc_to_idx, [return_pc]);
                         }
                     }
                 }
-                Terminator::JumpDyn { rs1, imm, .. } => {
-                    // Evaluate address: (state[rs1] + imm) & !1
-                    let addr_val = eval_jumpdyn_multi(state, *rs1, *imm);
+                CfgTerm::JumpIndirect {
+                    base_value,
+                    offset,
+                    target_mask,
+                    ..
+                } => {
+                    let addr_val = eval_indirect_multi(state, base_value, offset, target_mask);
 
                     if addr_val.is_constant() && !addr_val.values.is_empty() {
                         let mut targets: Vec<u64> = Vec::new();
@@ -985,18 +732,14 @@ fn get_successors(
                         );
                     }
                 }
-                Terminator::Branch { target, .. } => {
+                CfgTerm::Branch { target, .. } => {
                     let fallthrough = pc + INSTR_SIZE as u64;
-                    extend_existing_pcs(&mut result, ctx.pc_to_idx, [fallthrough, *target]);
+                    extend_existing_pcs(&mut result, ctx.pc_to_idx, [fallthrough, target]);
                 }
-                Terminator::Exit { .. } | Terminator::Trap { .. } => {}
-                Terminator::Extension(ext) => {
-                    extend_existing_pcs(
-                        &mut result,
-                        ctx.pc_to_idx,
-                        ext.successors(pc + INSTR_SIZE as u64),
-                    );
+                CfgTerm::Opaque { successors } => {
+                    extend_existing_pcs(&mut result, ctx.pc_to_idx, successors);
                 }
+                CfgTerm::Exit { .. } | CfgTerm::Trap { .. } => {}
             }
         }
     }
@@ -1004,35 +747,38 @@ fn get_successors(
     result
 }
 
-/// Compute a single JumpDyn target: `(base + imm) & !1`, returning `None` if
-/// the result exceeds the valid PC address space.
-fn eval_jumpdyn_target(base: u64, imm: i32) -> Option<u64> {
-    let target = base.wrapping_add(imm as i64 as u64) & !1u64;
-    is_pc_in_bounds(target).then_some(target)
+/// Evaluate `(base + offset) & target_mask` and return a target inside the PC domain.
+fn eval_indirect_target(base: u64, offset: i32, target_mask: u64) -> Option<u64> {
+    let target = base.wrapping_add_signed(i64::from(offset)) & target_mask;
+    (target <= u64::from(MAX_ALLOWED_PC)).then_some(target)
 }
 
-/// Evaluate the JumpDyn target as a multi-value register value:
-/// for each possible value of rs1, compute (val + imm) & !1.
-fn eval_jumpdyn_multi(state: &RegisterState, rs1: u8, imm: i32) -> RegisterValue {
-    let base = state.get(rs1);
+/// Evaluate an indirect target for every currently known value of the base operand.
+fn eval_indirect_multi(
+    state: &VariableState,
+    base: CfgOperand,
+    offset: i32,
+    target_mask: u64,
+) -> TrackedValue {
+    let base = state.operand(base);
     if !base.is_constant() || base.values.is_empty() {
-        return RegisterValue::unknown();
+        return TrackedValue::unknown();
     }
 
-    let first = match eval_jumpdyn_target(base.values[0], imm) {
+    let first = match eval_indirect_target(base.values[0], offset, target_mask) {
         Some(t) => t,
-        None => return RegisterValue::unknown(),
+        None => return TrackedValue::unknown(),
     };
-    let mut result = RegisterValue::constant(first);
+    let mut result = TrackedValue::constant(first);
     for &v in base.values.iter().skip(1) {
-        match eval_jumpdyn_target(v, imm) {
+        match eval_indirect_target(v, offset, target_mask) {
             Some(t) => {
                 result.add_value(t);
                 if !result.is_constant() {
-                    return RegisterValue::unknown();
+                    return TrackedValue::unknown();
                 }
             }
-            None => return RegisterValue::unknown(),
+            None => return TrackedValue::unknown(),
         }
     }
     result
@@ -1083,7 +829,7 @@ fn handle_unresolved_jump(
 
 fn scan_jump_table_targets(
     instructions: &[LiftedInstr],
-    pc_to_idx: &HashMap<u64, usize>,
+    pc_to_idx: &FxHashMap<u64, usize>,
     start_pc: u64,
 ) -> HashSet<u64> {
     let mut targets = HashSet::new();
@@ -1102,13 +848,9 @@ fn scan_jump_table_targets(
             break;
         }
 
-        if let LiftedInstr::Term {
-            terminator: Terminator::Jump { target, .. },
-            ..
-        } = li
-        {
+        if let Some(CfgTerm::Jump { target, .. }) = cfg_term_of(li) {
             if !is_call(li) {
-                targets.insert(*target);
+                targets.insert(target);
                 break;
             }
         }
@@ -1128,8 +870,8 @@ fn scan_jump_table_targets(
 
 fn compute_leaders(
     instructions: &[LiftedInstr],
-    pc_to_idx: &HashMap<u64, usize>,
-    successors: &HashMap<u64, HashSet<u64>>,
+    pc_to_idx: &FxHashMap<u64, usize>,
+    successors: &FxHashMap<u64, HashSet<u64>>,
     function_entries: &BTreeSet<u64>,
     internal_targets: &BTreeSet<u64>,
     return_sites: &BTreeSet<u64>,
@@ -1189,17 +931,16 @@ fn binary_search_le(sorted: &[u64], target: u64) -> Option<u64> {
 /// e.g. by scanning read-only data segments for code pointers (switch tables,
 /// function pointer arrays).
 ///
-/// Returns `Vec<Block>` with resolved `JumpDyn` targets filled in.
-pub fn build_blocks(
-    instructions: &[LiftedInstr],
-    extra_targets: &[u64],
-) -> Result<Vec<Block>, CfgError> {
+/// Returns `Vec<Block>` with resolved indirect-jump targets filled in.
+/// Invalid control-flow edges are kept and handled at runtime (they dispatch
+/// to `rv_trap`), so block construction itself cannot fail.
+pub fn build_blocks(instructions: &[LiftedInstr], extra_targets: &[u64]) -> Vec<Block> {
     if instructions.is_empty() {
-        return Ok(Vec::new());
+        return Vec::new();
     }
 
     // Build PC -> instruction index lookup.
-    let pc_to_idx: HashMap<u64, usize> = instructions
+    let pc_to_idx: FxHashMap<u64, usize> = instructions
         .iter()
         .enumerate()
         .map(|(i, li)| (li.pc(), i))
@@ -1223,7 +964,7 @@ pub fn build_blocks(
     let sorted_function_entries: Vec<u64> = function_entries.iter().copied().collect();
 
     // Group internal targets by enclosing function.
-    let mut func_internal_targets: HashMap<u64, HashSet<u64>> = HashMap::new();
+    let mut func_internal_targets: FxHashMap<u64, HashSet<u64>> = FxHashMap::default();
     for target in &internal_targets {
         if let Some(func_start) = binary_search_le(&sorted_function_entries, *target) {
             func_internal_targets
@@ -1259,16 +1000,16 @@ pub fn build_blocks(
         &return_sites,
     );
 
-    // Build blocks by splitting at leaders and patching resolved JumpDyn targets.
-    Ok(build_block_list(instructions, &leaders, &resolved_jumps))
+    // Build blocks by splitting at leaders and patching resolved indirect-jump targets.
+    build_block_list(instructions, &leaders, &resolved_jumps)
 }
 
 /// Split the flat instruction list into `Block`s at leader boundaries,
-/// filling in resolved JumpDyn targets.
+/// filling in resolved indirect-jump targets.
 fn build_block_list(
     instructions: &[LiftedInstr],
     leaders: &BTreeSet<u64>,
-    resolved_jumps: &HashMap<u64, HashSet<u64>>,
+    resolved_jumps: &FxHashMap<u64, HashSet<u64>>,
 ) -> Vec<Block> {
     // Max block size; used to flush periodically so the segmentation check in
     // metered mode (which fires at block boundaries) stays granular enough.
@@ -1328,12 +1069,15 @@ fn build_block_list(
             } => {
                 let mut term = terminator.clone();
 
-                // Patch resolved targets into JumpDyn.
+                // Store the indirect-jump targets found by CFG analysis.
                 if let Some(targets) = resolved_jumps.get(&pc) {
-                    if let Terminator::JumpDyn { resolved, .. } = &mut term {
+                    if let Terminator::Instruction {
+                        resolved_targets, ..
+                    } = &mut term
+                    {
                         let mut sorted_targets: Vec<u64> = targets.iter().copied().collect();
                         sorted_targets.sort_unstable();
-                        *resolved = sorted_targets;
+                        *resolved_targets = sorted_targets;
                     }
                 }
 
@@ -1371,7 +1115,7 @@ fn build_block_list(
 
 #[cfg(test)]
 mod tests {
-    use rvr_openvm_ir::BranchCond;
+    use rvr_openvm_ir::{CfgBranchCond, CfgIntWidth, ExtEmitCtx, ExtInstr};
 
     use super::*;
 
@@ -1383,12 +1127,52 @@ mod tests {
         }
     }
 
-    fn body(pc: u64, instr: Instr) -> LiftedInstr {
+    fn body(pc: u64, instr: impl ExtInstr + 'static) -> LiftedInstr {
         LiftedInstr::Body(InstrAt {
             pc,
-            instr,
+            instr: Box::new(instr),
             source_loc: None,
         })
+    }
+
+    #[derive(Debug, Clone)]
+    struct TestInstr {
+        effect: CfgEffect,
+        term: Option<CfgTerm>,
+    }
+
+    impl ExtInstr for TestInstr {
+        fn emit_c(&self, _ctx: &mut dyn ExtEmitCtx) {}
+
+        fn cfg_effect(&self) -> CfgEffect {
+            self.effect.clone()
+        }
+
+        fn cfg_term(&self, _pc: u64, _fall_pc: u64) -> Option<CfgTerm> {
+            self.term.clone()
+        }
+
+        fn accesses_memory(&self) -> bool {
+            false
+        }
+
+        fn clone_box(&self) -> Box<dyn ExtInstr> {
+            Box::new(self.clone())
+        }
+    }
+
+    fn instruction_term(pc: u64, cfg_term: CfgTerm) -> LiftedInstr {
+        instruction_term_with_effect(pc, CfgEffect::None, cfg_term)
+    }
+
+    fn instruction_term_with_effect(pc: u64, effect: CfgEffect, cfg_term: CfgTerm) -> LiftedInstr {
+        term(
+            pc,
+            Terminator::instruction(TestInstr {
+                effect,
+                term: Some(cfg_term),
+            }),
+        )
     }
 
     fn block_at(blocks: &[Block], start_pc: u64) -> &Block {
@@ -1398,28 +1182,57 @@ mod tests {
             .unwrap_or_else(|| panic!("no block starts at {start_pc:#x}"))
     }
 
+    const fn var(index: u32) -> Variable {
+        Variable::new(index)
+    }
+
+    #[test]
+    fn variable_state_merge_tracks_only_values_known_on_every_path() {
+        let variable = var(1);
+        let mut state = VariableState::new();
+        state.set(variable, TrackedValue::constant(7));
+
+        let mut same = VariableState::new();
+        same.set(variable, TrackedValue::constant(7));
+        assert!(!state.merge(&same));
+        assert_eq!(state.get(variable), TrackedValue::constant(7));
+
+        let mut different = VariableState::new();
+        different.set(variable, TrackedValue::constant(9));
+        assert!(state.merge(&different));
+        assert_eq!(state.get(variable).values, vec![7, 9]);
+
+        assert!(state.merge(&VariableState::new()));
+        assert_eq!(state.get(variable), TrackedValue::unknown());
+
+        let mut unknown = VariableState::new();
+        assert!(!unknown.merge(&same));
+        assert_eq!(unknown.get(variable), TrackedValue::unknown());
+    }
+
     #[test]
     fn invalid_branch_target_preserves_valid_fallthrough() {
         let blocks = build_blocks(
             &[
-                term(
+                instruction_term(
                     0,
-                    Terminator::Branch {
-                        cond: BranchCond::Eq,
-                        rs1: 1,
-                        rs2: 2,
+                    CfgTerm::Branch {
+                        cond: CfgBranchCond::Eq,
+                        width: CfgIntWidth::U64,
+                        lhs: var(1),
+                        rhs: var(2),
                         target: 8,
+                        known: None,
                     },
                 ),
                 term(4, Terminator::Exit { code: 0 }),
             ],
             &[],
-        )
-        .expect("invalid branch edge should be handled at runtime");
+        );
 
         assert!(matches!(
-            block_at(&blocks, 0).terminator,
-            Terminator::Branch { target: 8, .. }
+            block_at(&blocks, 0).terminator.cfg_term(0, 4),
+            CfgTerm::Branch { target: 8, .. }
         ));
         assert!(matches!(
             block_at(&blocks, 4).terminator,
@@ -1432,16 +1245,16 @@ mod tests {
         let blocks = build_blocks(
             &[body(
                 0,
-                Instr::AluImm {
-                    op: AluOp::Add,
-                    rd: 5,
-                    rs1: 0,
-                    imm: 1,
+                TestInstr {
+                    effect: CfgEffect::WriteConst {
+                        dst: var(5),
+                        value: 1,
+                    },
+                    term: None,
                 },
             )],
             &[],
-        )
-        .expect("invalid fallthrough should be handled at runtime");
+        );
 
         let block = block_at(&blocks, 0);
         assert_eq!(block.instructions.len(), 1);
@@ -1454,33 +1267,146 @@ mod tests {
             &[
                 body(
                     0,
-                    Instr::AluImm {
-                        op: AluOp::Add,
-                        rd: 5,
-                        rs1: 0,
-                        imm: 16,
+                    TestInstr {
+                        effect: CfgEffect::WriteConst {
+                            dst: var(5),
+                            value: 16,
+                        },
+                        term: None,
                     },
                 ),
-                term(
+                instruction_term(
                     4,
-                    Terminator::JumpDyn {
-                        link_rd: None,
-                        rs1: 5,
-                        imm: 0,
-                        resolved: Vec::new(),
+                    CfgTerm::JumpIndirect {
+                        kind: CfgJumpKind::Jump,
+                        link_dst: None,
+                        base_value: CfgOperand::Var(var(5)),
+                        offset: 0,
+                        target_mask: !1,
                     },
                 ),
-                body(8, Instr::Nop),
-                body(12, Instr::Nop),
+                body(
+                    8,
+                    TestInstr {
+                        effect: CfgEffect::None,
+                        term: None,
+                    },
+                ),
+                body(
+                    12,
+                    TestInstr {
+                        effect: CfgEffect::None,
+                        term: None,
+                    },
+                ),
                 term(16, Terminator::Exit { code: 0 }),
             ],
             &[4],
-        )
-        .expect("cfg build");
+        );
 
-        assert!(matches!(
-            &block_at(&blocks, 4).terminator,
-            Terminator::JumpDyn { resolved, .. } if resolved == &[16]
-        ));
+        assert_eq!(block_at(&blocks, 4).terminator.successors(4, 8), vec![16]);
+    }
+
+    #[test]
+    fn clobber_all_invalidates_a_stale_indirect_target() {
+        let blocks = build_blocks(
+            &[
+                body(
+                    0,
+                    TestInstr {
+                        effect: CfgEffect::WriteConst {
+                            dst: var(5),
+                            value: 16,
+                        },
+                        term: None,
+                    },
+                ),
+                body(
+                    4,
+                    TestInstr {
+                        effect: CfgEffect::ClobberAll,
+                        term: None,
+                    },
+                ),
+                instruction_term(
+                    8,
+                    CfgTerm::JumpIndirect {
+                        kind: CfgJumpKind::Jump,
+                        link_dst: None,
+                        base_value: CfgOperand::Var(var(5)),
+                        offset: 0,
+                        target_mask: !1,
+                    },
+                ),
+                term(12, Terminator::Exit { code: 0 }),
+                term(16, Terminator::Exit { code: 0 }),
+            ],
+            &[],
+        );
+
+        assert!(block_at(&blocks, 0).terminator.successors(8, 12).is_empty());
+    }
+
+    #[test]
+    fn terminator_effect_invalidates_a_stale_indirect_target() {
+        let blocks = build_blocks(
+            &[
+                body(
+                    0,
+                    TestInstr {
+                        effect: CfgEffect::WriteConst {
+                            dst: var(5),
+                            value: 16,
+                        },
+                        term: None,
+                    },
+                ),
+                instruction_term_with_effect(
+                    4,
+                    CfgEffect::WriteUnknown { dst: var(5) },
+                    CfgTerm::Opaque {
+                        successors: vec![8],
+                    },
+                ),
+                instruction_term(
+                    8,
+                    CfgTerm::JumpIndirect {
+                        kind: CfgJumpKind::Jump,
+                        link_dst: None,
+                        base_value: CfgOperand::Var(var(5)),
+                        offset: 0,
+                        target_mask: !1,
+                    },
+                ),
+                term(12, Terminator::Exit { code: 0 }),
+                term(16, Terminator::Exit { code: 0 }),
+            ],
+            &[],
+        );
+
+        assert!(block_at(&blocks, 8).terminator.successors(8, 12).is_empty());
+    }
+
+    #[test]
+    fn u32_cfg_arithmetic_wraps_and_computes_high_multiply() {
+        assert_eq!(compute_op(CfgOp::Add, CfgResultWidth::U32, u64::MAX, 1), 0);
+        assert_eq!(
+            compute_op(
+                CfgOp::MulHighUnsigned,
+                CfgResultWidth::U32,
+                u64::from(u32::MAX),
+                2,
+            ),
+            1
+        );
+        assert_eq!(
+            compute_op(
+                CfgOp::MulHighUnsigned,
+                CfgResultWidth::SignExtend32,
+                u64::from(u32::MAX),
+                u64::from(u32::MAX),
+            ),
+            u64::MAX - 1
+        );
     }
 }

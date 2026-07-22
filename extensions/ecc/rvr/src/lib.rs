@@ -8,10 +8,23 @@
 use openvm_ecc_transpiler::Rv64WeierstrassOpcode::{
     self, EC_ADD_NE, EC_DOUBLE, SETUP_EC_ADD_NE, SETUP_EC_DOUBLE,
 };
-use openvm_instructions::LocalOpcode;
-use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
-use rvr_openvm_lift::{helpers::decode_reg, RvrExtension, RvrInstruction};
+use openvm_instructions::{
+    riscv::{RV64_NUM_REGISTERS, RV64_REGISTER_BYTES},
+    LocalOpcode,
+};
+use rvr_openvm_ir::{CfgEffect, ExtEmitCtx, ExtInstr, InstrAt, LiftedInstr, Variable};
+use rvr_openvm_lift::{
+    decode_variable, max_main_memory_pages_for_contiguous_range, RvrExtension, RvrInstruction,
+};
 use strum::EnumCount;
+
+// An ECC addition can read two independent 96-byte points and write one.
+const ECC_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize =
+    3 * max_main_memory_pages_for_contiguous_range(96);
+
+fn decode_reg(value: u32) -> Variable {
+    decode_variable(value, RV64_REGISTER_BYTES as u32, RV64_NUM_REGISTERS as u32)
+}
 
 #[derive(Debug, Clone, Copy)]
 enum KnownCurve {
@@ -57,9 +70,9 @@ impl KnownCurve {
 /// IR node for EC point addition (non-equal x-coordinates).
 #[derive(Debug, Clone)]
 pub struct EcAddNeInstr {
-    pub rd_reg: Reg,
-    pub rs1_reg: Reg,
-    pub rs2_reg: Reg,
+    pub rd_reg: Variable,
+    pub rs1_reg: Variable,
+    pub rs2_reg: Variable,
     curve: KnownCurve,
     pub is_setup: bool,
 }
@@ -70,9 +83,9 @@ impl ExtInstr for EcAddNeInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rd = ctx.read_reg(self.rd_reg);
-        let rs1 = ctx.read_reg(self.rs1_reg);
-        let rs2 = ctx.read_reg(self.rs2_reg);
+        let rd = ctx.read_var(self.rd_reg);
+        let rs1 = ctx.read_var(self.rs1_reg);
+        let rs2 = ctx.read_var(self.rs2_reg);
         let setup_prefix = if self.is_setup { "setup_" } else { "" };
         let suffix = self.curve.c_suffix();
         let name = format!("rvr_ext_{setup_prefix}ec_add_ne_{suffix}");
@@ -87,16 +100,16 @@ impl ExtInstr for EcAddNeInstr {
         Box::new(self.clone())
     }
 
-    fn is_block_end(&self) -> bool {
-        false
+    fn cfg_effect(&self) -> CfgEffect {
+        CfgEffect::None
     }
 }
 
 /// IR node for EC point doubling.
 #[derive(Debug, Clone)]
 pub struct EcDoubleInstr {
-    pub rd_reg: Reg,
-    pub rs1_reg: Reg,
+    pub rd_reg: Variable,
+    pub rs1_reg: Variable,
     curve: KnownCurve,
     pub is_setup: bool,
 }
@@ -107,8 +120,8 @@ impl ExtInstr for EcDoubleInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rd = ctx.read_reg(self.rd_reg);
-        let rs1 = ctx.read_reg(self.rs1_reg);
+        let rd = ctx.read_var(self.rd_reg);
+        let rs1 = ctx.read_var(self.rs1_reg);
         let setup_prefix = if self.is_setup { "setup_" } else { "" };
         let suffix = self.curve.c_suffix();
         let name = format!("rvr_ext_{setup_prefix}ec_double_{suffix}");
@@ -123,8 +136,8 @@ impl ExtInstr for EcDoubleInstr {
         Box::new(self.clone())
     }
 
-    fn is_block_end(&self) -> bool {
-        false
+    fn cfg_effect(&self) -> CfgEffect {
+        CfgEffect::None
     }
 }
 
@@ -185,13 +198,7 @@ impl RvrExtension for EccExtension {
         let curve_idx = offset / ecc_count;
         let local_op = offset % ecc_count;
 
-        assert!(
-            curve_idx < self.curves.len(),
-            "ECC opcode references unregistered curve_idx {curve_idx} (only {} curves registered)",
-            self.curves.len(),
-        );
-        // Skip lifting opcodes for curves not in the rvr-known set.
-        let curve = self.curves[curve_idx].curve?;
+        let curve = self.curves.get(curve_idx)?.curve?;
 
         let rd_reg = decode_reg(insn.a);
         let rs1_reg = decode_reg(insn.b);
@@ -218,7 +225,7 @@ impl RvrExtension for EccExtension {
 
         Some(LiftedInstr::Body(InstrAt {
             pc,
-            instr: Instr::Ext(instr),
+            instr,
             source_loc: None,
         }))
     }
@@ -238,5 +245,27 @@ impl RvrExtension for EccExtension {
 
     fn uses_memory_wrappers(&self) -> bool {
         true
+    }
+
+    fn max_main_memory_pages_per_instruction(&self) -> usize {
+        ECC_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use openvm_instructions::VmOpcode;
+
+    use super::*;
+
+    #[test]
+    fn ignores_opcodes_outside_configured_curves() {
+        let extension = EccExtension::new(vec![0]);
+        let opcode = VmOpcode::from_usize(
+            Rv64WeierstrassOpcode::CLASS_OFFSET + Rv64WeierstrassOpcode::COUNT,
+        );
+        let insn = RvrInstruction::from_canonical(opcode, [0; 7], u32::MAX);
+
+        assert!(extension.try_lift(&insn, 0x100).is_none());
     }
 }

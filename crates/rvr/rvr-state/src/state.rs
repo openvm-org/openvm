@@ -1,6 +1,6 @@
-//! RV64 machine state shared with generated C.
+//! Machine state shared with generated C.
 
-/// Number of RV64 general-purpose registers.
+/// Number of general-purpose state registers.
 pub const NUM_REGS: usize = 32;
 
 #[repr(u8)]
@@ -12,7 +12,7 @@ pub enum ExecutionStatus {
     Trapped = 3,
 }
 
-/// RV64 machine state passed to a generated artifact.
+/// Machine state passed to a generated artifact.
 ///
 /// `ModeState` is the single payload selected by the artifact's execution
 /// kind: `()` for pure execution, [`crate::InstretTrackingState`] for tracked pure

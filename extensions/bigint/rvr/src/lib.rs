@@ -8,16 +8,30 @@ use openvm_bigint_transpiler::{
     Rv64BaseAlu256Opcode, Rv64BranchEqual256Opcode, Rv64BranchLessThan256Opcode,
     Rv64LessThan256Opcode, Rv64Mul256Opcode, Rv64Shift256Opcode,
 };
-use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode};
+use openvm_instructions::{
+    program::DEFAULT_PC_STEP,
+    riscv::{RV64_NUM_REGISTERS, RV64_REGISTER_BYTES},
+    LocalOpcode,
+};
 use openvm_riscv_transpiler::{
     BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, LessThanOpcode, MulOpcode, ShiftOpcode,
 };
-use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg, Terminator};
+use rvr_openvm_ir::{
+    CfgEffect, CfgTerm, ExtEmitCtx, ExtInstr, InstrAt, LiftedInstr, Terminator, Variable,
+};
 use rvr_openvm_lift::{
-    decode_reg, opcode_air_idx, AirIndex, ExtensionError, RvrExtension, RvrExtensionCtx,
-    RvrInstruction,
+    decode_variable, max_main_memory_pages_for_contiguous_range, opcode_air_idx, AirIndex,
+    ExtensionError, RvrExtension, RvrExtensionCtx, RvrInstruction,
 };
 use strum::EnumCount;
+
+// An Int256 operation can read two independent 32-byte values and write one.
+const INT256_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize =
+    3 * max_main_memory_pages_for_contiguous_range(32);
+
+fn decode_reg(value: u32) -> Variable {
+    decode_variable(value, RV64_REGISTER_BYTES as u32, RV64_NUM_REGISTERS as u32)
+}
 
 // ── ALU / branch opcode enums ───────────────────────────────────────────────
 //
@@ -86,11 +100,11 @@ impl Int256BranchLtOp {
 #[derive(Debug, Clone)]
 pub struct Int256AluInstr {
     /// Register index holding pointer to destination (rd).
-    pub rd_reg: Reg,
+    pub rd_reg: Variable,
     /// Register index holding pointer to first operand (rs1).
-    pub rs1_reg: Reg,
+    pub rs1_reg: Variable,
     /// Register index holding pointer to second operand (rs2).
-    pub rs2_reg: Reg,
+    pub rs2_reg: Variable,
     /// The ALU operation to perform (selects the FFI function at codegen time).
     pub op: Int256AluOp,
     /// AIR index associated with this instruction.
@@ -103,9 +117,9 @@ impl ExtInstr for Int256AluInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rd = ctx.read_reg(self.rd_reg);
-        let rs1 = ctx.read_reg(self.rs1_reg);
-        let rs2 = ctx.read_reg(self.rs2_reg);
+        let rd = ctx.read_var(self.rd_reg);
+        let rs1 = ctx.read_var(self.rs1_reg);
+        let rs2 = ctx.read_var(self.rs2_reg);
         ctx.emit_call(self.op.ffi_name(), &["state", &rd, &rs1, &rs2]);
     }
 
@@ -113,8 +127,8 @@ impl ExtInstr for Int256AluInstr {
         Box::new(self.clone())
     }
 
-    fn is_block_end(&self) -> bool {
-        false
+    fn cfg_effect(&self) -> CfgEffect {
+        CfgEffect::None
     }
 }
 
@@ -122,9 +136,9 @@ impl ExtInstr for Int256AluInstr {
 #[derive(Debug, Clone)]
 pub struct Int256BranchEqInstr {
     /// Register index holding pointer to first operand.
-    pub rs1_reg: Reg,
+    pub rs1_reg: Variable,
     /// Register index holding pointer to second operand.
-    pub rs2_reg: Reg,
+    pub rs2_reg: Variable,
     /// PC to jump to if condition is true.
     pub target_pc: u64,
     /// PC to fall through to if condition is false.
@@ -145,8 +159,8 @@ impl ExtInstr for Int256BranchEqInstr {
     }
 
     fn emit_c_term(&self, ctx: &mut dyn ExtEmitCtx, branch_to: &dyn Fn(u64) -> String) {
-        let rs1 = ctx.read_reg(self.rs1_reg);
-        let rs2 = ctx.read_reg(self.rs2_reg);
+        let rs1 = ctx.read_var(self.rs1_reg);
+        let rs2 = ctx.read_var(self.rs2_reg);
         let fn_name = if self.is_ne {
             "rvr_ext_int256_bne"
         } else {
@@ -164,12 +178,14 @@ impl ExtInstr for Int256BranchEqInstr {
         Box::new(self.clone())
     }
 
-    fn successors(&self, _fall_pc: u64) -> Vec<u64> {
-        vec![self.target_pc, self.fall_pc]
+    fn cfg_effect(&self) -> CfgEffect {
+        CfgEffect::None
     }
 
-    fn is_block_end(&self) -> bool {
-        true
+    fn cfg_term(&self, _pc: u64, _fall_pc: u64) -> Option<CfgTerm> {
+        Some(CfgTerm::Opaque {
+            successors: vec![self.target_pc, self.fall_pc],
+        })
     }
 }
 
@@ -177,9 +193,9 @@ impl ExtInstr for Int256BranchEqInstr {
 #[derive(Debug, Clone)]
 pub struct Int256BranchLtInstr {
     /// Register index holding pointer to first operand.
-    pub rs1_reg: Reg,
+    pub rs1_reg: Variable,
     /// Register index holding pointer to second operand.
-    pub rs2_reg: Reg,
+    pub rs2_reg: Variable,
     /// PC to jump to if condition is true.
     pub target_pc: u64,
     /// PC to fall through to if condition is false.
@@ -200,8 +216,8 @@ impl ExtInstr for Int256BranchLtInstr {
     }
 
     fn emit_c_term(&self, ctx: &mut dyn ExtEmitCtx, branch_to: &dyn Fn(u64) -> String) {
-        let rs1 = ctx.read_reg(self.rs1_reg);
-        let rs2 = ctx.read_reg(self.rs2_reg);
+        let rs1 = ctx.read_var(self.rs1_reg);
+        let rs2 = ctx.read_var(self.rs2_reg);
         let cond = ctx.emit_call_expr("bool", self.op.ffi_name(), &["state", &rs1, &rs2]);
         ctx.write_line(&format!("if ({cond}) {{"));
         ctx.write_line(&format!("  {}", branch_to(self.target_pc)));
@@ -214,12 +230,14 @@ impl ExtInstr for Int256BranchLtInstr {
         Box::new(self.clone())
     }
 
-    fn successors(&self, _fall_pc: u64) -> Vec<u64> {
-        vec![self.target_pc, self.fall_pc]
+    fn cfg_effect(&self) -> CfgEffect {
+        CfgEffect::None
     }
 
-    fn is_block_end(&self) -> bool {
-        true
+    fn cfg_term(&self, _pc: u64, _fall_pc: u64) -> Option<CfgTerm> {
+        Some(CfgTerm::Opaque {
+            successors: vec![self.target_pc, self.fall_pc],
+        })
     }
 }
 
@@ -360,14 +378,14 @@ impl RvrExtension for Int256Extension {
 
             return Some(LiftedInstr::Term {
                 pc,
-                terminator: Terminator::Extension(Box::new(Int256BranchEqInstr {
+                terminator: Terminator::instruction(Int256BranchEqInstr {
                     rs1_reg,
                     rs2_reg,
                     target_pc,
                     fall_pc,
                     is_ne,
                     chip_idx,
-                })),
+                }),
                 source_loc: None,
             });
         }
@@ -391,14 +409,14 @@ impl RvrExtension for Int256Extension {
 
             return Some(LiftedInstr::Term {
                 pc,
-                terminator: Terminator::Extension(Box::new(Int256BranchLtInstr {
+                terminator: Terminator::instruction(Int256BranchLtInstr {
                     rs1_reg,
                     rs2_reg,
                     target_pc,
                     fall_pc,
                     op,
                     chip_idx,
-                })),
+                }),
                 source_loc: None,
             });
         }
@@ -420,6 +438,10 @@ impl RvrExtension for Int256Extension {
     fn uses_memory_wrappers(&self) -> bool {
         true
     }
+
+    fn max_main_memory_pages_per_instruction(&self) -> usize {
+        INT256_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION
+    }
 }
 
 impl Int256Extension {
@@ -432,13 +454,13 @@ impl Int256Extension {
 
         LiftedInstr::Body(InstrAt {
             pc,
-            instr: Instr::Ext(Box::new(Int256AluInstr {
+            instr: Box::new(Int256AluInstr {
                 rd_reg,
                 rs1_reg,
                 rs2_reg,
                 op,
                 chip_idx,
-            })),
+            }),
             source_loc: None,
         })
     }
@@ -469,7 +491,7 @@ mod tests {
                 panic!("expected bigint branch terminator");
             };
             assert_eq!(
-                terminator.successors(pc + DEFAULT_PC_STEP as u64),
+                terminator.successors(pc, pc + DEFAULT_PC_STEP as u64),
                 [pc - 12, pc + 4]
             );
         }

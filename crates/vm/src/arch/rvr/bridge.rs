@@ -6,7 +6,7 @@
 //! and never converted upfront.
 
 use openvm_instructions::{
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    riscv::{RV64_MEMORY_AS, RV64_NUM_REGISTERS, RV64_REGISTER_AS, RV64_REGISTER_BYTES},
     DEFERRAL_AS, PUBLIC_VALUES_AS,
 };
 use rvr_state::NUM_REGS;
@@ -18,6 +18,11 @@ use crate::{
         online::{GuestMemory, LinearMemory},
         AddressMap,
     },
+};
+
+const _: () = {
+    assert!(NUM_REGS == RV64_NUM_REGISTERS);
+    assert!(core::mem::size_of::<u64>() == RV64_REGISTER_BYTES as usize);
 };
 
 /// Mut pointer to the RV64 main memory address space inside `vm_state`.
@@ -40,7 +45,10 @@ pub fn deferral_memory_ptr(memory: &mut AddressMap) -> (*mut u8, usize) {
 pub fn read_rv64_registers(vm_state: &VmState<GuestMemory>) -> [u64; NUM_REGS] {
     let bytes = vm_state.memory.memory.mem[RV64_REGISTER_AS as usize].as_slice();
     let mut regs = [0u64; NUM_REGS];
-    for (reg, chunk) in regs.iter_mut().zip(bytes.chunks_exact(8)) {
+    for (reg, chunk) in regs
+        .iter_mut()
+        .zip(bytes.chunks_exact(RV64_REGISTER_BYTES as usize))
+    {
         *reg = u64::from_le_bytes(chunk.try_into().unwrap());
     }
     regs
@@ -48,7 +56,10 @@ pub fn read_rv64_registers(vm_state: &VmState<GuestMemory>) -> [u64; NUM_REGS] {
 
 pub fn write_rv64_registers(vm_state: &mut VmState<GuestMemory>, regs: &[u64; NUM_REGS]) {
     let bytes = vm_state.memory.memory.mem[RV64_REGISTER_AS as usize].as_mut_slice();
-    for (reg, dst) in regs.iter().zip(bytes.chunks_exact_mut(8)) {
+    for (reg, dst) in regs
+        .iter()
+        .zip(bytes.chunks_exact_mut(RV64_REGISTER_BYTES as usize))
+    {
         dst.copy_from_slice(&reg.to_le_bytes());
     }
 }
