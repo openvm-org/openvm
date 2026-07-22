@@ -35,6 +35,17 @@ pub const POINTER_MAX_BITS: usize = MEM_BITS - size_of::<u16>().ilog2() as usize
 // `u64` until a runtime bounds check proves that they are valid pointers.
 const _: () = assert!(MEM_BITS <= u32::BITS as usize);
 
+/// Returns whether `bytes` contains any non-zero byte.
+///
+/// Fixed-size comparisons allow the compiler to vectorize scans of mostly-zero memory pages.
+#[inline]
+pub(crate) fn has_nonzero_byte(bytes: &[u8]) -> bool {
+    const ZERO_CHUNK: [u8; 32] = [0; 32];
+
+    let mut chunks = bytes.chunks_exact(ZERO_CHUNK.len());
+    chunks.any(|chunk| chunk != ZERO_CHUNK) || chunks.remainder().iter().any(|&byte| byte != 0)
+}
+
 #[derive(PartialEq, Copy, Clone, Debug, Eq)]
 pub enum OpType {
     Read = 0,

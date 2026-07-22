@@ -4,7 +4,7 @@ use openvm_stark_backend::{
     interaction::PermutationCheckBus, p3_field::PrimeField32, p3_maybe_rayon::prelude::*,
 };
 
-use super::{controller::dimensions::MemoryDimensions, online::LinearMemory};
+use super::{controller::dimensions::MemoryDimensions, has_nonzero_byte, online::LinearMemory};
 use crate::{
     arch::AddressSpaceHostLayout,
     system::memory::{online::PAGE_SIZE, AddressMap},
@@ -84,13 +84,7 @@ fn memory_to_vec_partition<F: PrimeField32, const N: usize>(
             let num_nonzero_pages = space_mem
                 .par_chunks(PAGE_SIZE)
                 .enumerate()
-                .flat_map(|(idx, page)| {
-                    if page.iter().any(|x| *x != 0) {
-                        Some(idx + 1)
-                    } else {
-                        None
-                    }
-                })
+                .filter_map(|(idx, page)| has_nonzero_byte(page).then_some(idx + 1))
                 .max()
                 .unwrap_or(0);
 

@@ -9,6 +9,7 @@ use openvm_stark_backend::{
 use thiserror::Error;
 use tracing::instrument;
 
+use super::has_nonzero_byte;
 use crate::{
     arch::{AddressSpaceHostConfig, AddressSpaceHostLayout, MemoryConfig, BLOCK_FE_WIDTH},
     system::{TouchedBlock, TouchedMemory},
@@ -152,9 +153,11 @@ pub struct AddressMap<M: LinearMemory = MemoryBackend> {
     ///
     /// Invariant: any path that writes non-zero data into memory that may later be transferred via
     /// `set_initial_memory` must mark the written pages (`set_from_sparse`,
-    /// `extend_touched_pages_from_touched`). Unmarked pages are transferred as zero. The untracked
-    /// write paths (`get_memory_mut`, `GuestMemory::write`/`write_bytes`) do not mark and must not
-    /// be the source of transferred initial memory.
+    /// `extend_touched_pages_from_touched`) or rebuild the metadata with
+    /// [`AddressMap::recompute_touched_pages`]. Unmarked pages are transferred as zero. The
+    /// untracked write paths (`get_memory_mut`, `GuestMemory::write`/`write_bytes`) do not mark,
+    /// so callers must recompute before transferring a memory image produced through those
+    /// paths.
     pub touched_pages: Vec<TouchedPages>,
 }
 
@@ -320,6 +323,33 @@ impl<M: LinearMemory> AddressMap<M> {
             let len = BLOCK_FE_WIDTH * cell_size;
             self.touched_pages[block.address_space as usize].mark_byte_range(start, len);
         }
+    }
+
+    /// Rebuilds the sparse host-to-device transfer metadata from the current memory image.
+    ///
+    /// This replaces all existing marks and is intended for snapshots produced through untracked
+    /// execution paths. Call it after the final untracked write and before transferring the image.
+    /// It scans all configured memory, so callers should use the incremental marking methods when
+    /// they already have reliable write information.
+    pub fn recompute_touched_pages(&mut self) {
+        self.touched_pages = self
+            .mem
+            .iter()
+            .map(|mem| {
+                let mut rebuilt = TouchedPages::new(mem.size());
+                // Scan pages in parallel, then update the compact non-atomic bitset serially.
+                let nonzero_pages = mem
+                    .as_slice()
+                    .par_chunks(PAGE_SIZE)
+                    .enumerate()
+                    .filter_map(|(page_idx, page)| has_nonzero_byte(page).then_some(page_idx))
+                    .collect::<Vec<_>>();
+                for page_idx in nonzero_pages {
+                    rebuilt.mark_byte_range(page_idx * PAGE_SIZE, 1);
+                }
+                rebuilt
+            })
+            .collect();
     }
 }
 
@@ -759,5 +789,69 @@ impl TracingMemory {
                 }
             })
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::arch::MemoryCellType;
+
+    #[test]
+    fn recompute_touched_pages_reflects_current_memory() {
+        let config = vec![
+            AddressSpaceHostConfig::new(0, MemoryCellType::Null),
+            AddressSpaceHostConfig::new(2 * PAGE_SIZE + 17, MemoryCellType::U8),
+            AddressSpaceHostConfig::new(PAGE_SIZE + 1, MemoryCellType::U8),
+            AddressSpaceHostConfig::new(PAGE_SIZE + 1, MemoryCellType::U8),
+        ];
+        let mut memory: AddressMap = AddressMap::new(config);
+
+        memory.mem[1].as_mut_slice()[0] = 1;
+        memory.mem[1].as_mut_slice()[2 * PAGE_SIZE + 16] = 2;
+        memory.mem[2].as_mut_slice()[PAGE_SIZE] = 3;
+        // Recomputing replaces stale metadata, including pages that are still all zero.
+        memory.touched_pages[1].mark_byte_range(PAGE_SIZE, 1);
+        memory.touched_pages[3].mark_byte_range(PAGE_SIZE, 1);
+
+        memory.recompute_touched_pages();
+
+        assert_eq!(
+            memory.touched_pages[1].touched_byte_ranges(memory.mem[1].size()),
+            vec![(0, PAGE_SIZE), (2 * PAGE_SIZE, 2 * PAGE_SIZE + 17)]
+        );
+        assert_eq!(
+            memory.touched_pages[2].touched_byte_ranges(memory.mem[2].size()),
+            vec![(PAGE_SIZE, PAGE_SIZE + 1)]
+        );
+        assert!(memory.touched_pages[3]
+            .touched_byte_ranges(memory.mem[3].size())
+            .is_empty());
+
+        memory.mem[1].as_mut_slice()[0] = 0;
+        memory.recompute_touched_pages();
+        assert_eq!(
+            memory.touched_pages[1].touched_byte_ranges(memory.mem[1].size()),
+            vec![(2 * PAGE_SIZE, 2 * PAGE_SIZE + 17)]
+        );
+    }
+
+    #[test]
+    fn recompute_touched_pages_detects_chunk_boundaries() {
+        let config = vec![
+            AddressSpaceHostConfig::new(0, MemoryCellType::Null),
+            AddressSpaceHostConfig::new(3 * PAGE_SIZE, MemoryCellType::U8),
+        ];
+        let mut memory: AddressMap = AddressMap::new(config);
+        for offset in [31, PAGE_SIZE + 32, 3 * PAGE_SIZE - 1] {
+            memory.mem[1].as_mut_slice()[offset] = 1;
+        }
+
+        memory.recompute_touched_pages();
+
+        assert_eq!(
+            memory.touched_pages[1].touched_byte_ranges(memory.mem[1].size()),
+            vec![(0, 3 * PAGE_SIZE)]
+        );
     }
 }
