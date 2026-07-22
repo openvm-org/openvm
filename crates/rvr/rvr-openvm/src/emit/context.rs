@@ -1,7 +1,7 @@
 use std::{collections::HashSet, fmt::Write};
 
-use openvm_instructions::riscv::RV64_MEMORY_AS;
-use rvr_openvm_ir::MemWidth;
+use rvr_openvm_ir::{MemWidth, PageAddressSpace, Variable};
+use rvr_state::NUM_REGS;
 
 use super::codegen::hex_u32;
 
@@ -22,7 +22,7 @@ pub(crate) fn validate_chip_index(chip_idx: u32, num_airs: u32) -> Result<(), In
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(crate) enum EmitMode {
-    /// Emit ordered register, PC, and memory-value hooks.
+    /// Emit ordered PC, register, and memory hooks used to build execution records.
     ///
     /// Page hooks are separate because they record only addresses for metering.
     #[allow(dead_code)]
@@ -163,6 +163,10 @@ impl<'a> EmitContext<'a> {
         &mut self.buf
     }
 
+    pub(crate) fn traces_values(&self) -> bool {
+        self.mode.traces_values()
+    }
+
     /// Append a line of C code (indented).
     pub fn write_line(&mut self, s: &str) {
         for _ in 0..self.indent {
@@ -222,10 +226,6 @@ impl<'a> EmitContext<'a> {
         }
     }
 
-    pub(crate) fn traces_values(&self) -> bool {
-        self.mode.traces_values()
-    }
-
     fn read_reg_impl(&mut self, idx: u8, kind: RegisterReadKind) -> String {
         if idx == 0 {
             return "0ull".to_string();
@@ -251,17 +251,20 @@ impl<'a> EmitContext<'a> {
         value
     }
 
-    /// Read an AIR-visible register value.
+    /// Read a register as a VM memory access, emitting `trace_reg_read` in
+    /// value-tracing mode.
     pub fn read_reg(&mut self, idx: u8) -> String {
         self.read_reg_impl(idx, RegisterReadKind::MemoryAccess)
     }
 
-    /// Get a register value without creating a VM memory access.
+    /// Read a register at the current logical memory timestamp, emitting
+    /// `trace_reg_peek` in value-tracing mode.
     pub fn peek_reg(&mut self, idx: u8) -> String {
         self.read_reg_impl(idx, RegisterReadKind::Peek)
     }
 
-    /// Write a register with tracing when value tracing is enabled.
+    /// Write a register as a VM memory access, emitting `trace_reg_write` in
+    /// value-tracing mode.
     pub fn write_reg(&mut self, idx: u8, val: &str) {
         if idx == 0 {
             return;
@@ -485,7 +488,7 @@ impl<'a> EmitContext<'a> {
         self.write_line("}");
     }
 
-    pub fn trace_page_access(&mut self, addr: &str, width: MemWidth, addr_space: u32) {
+    pub fn trace_page_access(&mut self, addr: &str, width: MemWidth, addr_space: PageAddressSpace) {
         assert!(
             !self.mode.traces_values(),
             "page-only access is invalid when values are being traced"
@@ -493,13 +496,14 @@ impl<'a> EmitContext<'a> {
         if !matches!(self.mode, EmitMode::Metered { .. }) {
             return;
         }
-        let touches_memory = addr_space == RV64_MEMORY_AS;
+        let touches_memory = addr_space.is_main_memory();
         if touches_memory {
             self.flush_page_locals();
         }
         let size = width.bytes();
         self.write_line(&format!(
-            "trace_page_access(state, {addr}, {size}u, {addr_space}u);"
+            "trace_page_access(state, {addr}, {size}u, {}u);",
+            addr_space.id()
         ));
         if touches_memory {
             self.reload_page_locals();
@@ -510,7 +514,7 @@ impl<'a> EmitContext<'a> {
         &mut self,
         base_addr: &str,
         num_dwords: &str,
-        addr_space: u32,
+        addr_space: PageAddressSpace,
     ) {
         assert!(
             !self.mode.traces_values(),
@@ -519,12 +523,13 @@ impl<'a> EmitContext<'a> {
         if !matches!(self.mode, EmitMode::Metered { .. }) {
             return;
         }
-        let touches_memory = addr_space == RV64_MEMORY_AS;
+        let touches_memory = addr_space.is_main_memory();
         if touches_memory {
             self.flush_page_locals();
         }
         self.write_line(&format!(
-            "trace_page_access_u64_range(state, {base_addr}, {num_dwords}, {addr_space}u);"
+            "trace_page_access_u64_range(state, {base_addr}, {num_dwords}, {}u);",
+            addr_space.id()
         ));
         if touches_memory {
             self.reload_page_locals();
@@ -581,16 +586,16 @@ impl<'a> EmitContext<'a> {
 }
 
 impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
-    fn read_reg(&mut self, idx: u8) -> String {
-        EmitContext::read_reg(self, idx)
+    fn read_var(&mut self, var: Variable) -> String {
+        EmitContext::read_reg(self, reg_index(var))
     }
 
-    fn peek_reg(&mut self, idx: u8) -> String {
-        EmitContext::peek_reg(self, idx)
+    fn peek_var(&mut self, var: Variable) -> String {
+        EmitContext::peek_reg(self, reg_index(var))
     }
 
-    fn write_reg(&mut self, idx: u8, val: &str) {
-        EmitContext::write_reg(self, idx, val)
+    fn write_var(&mut self, var: Variable, val: &str) {
+        EmitContext::write_reg(self, reg_index(var), val)
     }
 
     fn write_line(&mut self, s: &str) {
@@ -638,13 +643,27 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
         EmitContext::trace_chip_if_nonzero(self, chip_idx, count_expr);
     }
 
-    fn trace_page_access(&mut self, addr: &str, width: MemWidth, addr_space: u32) {
+    fn trace_page_access(&mut self, addr: &str, width: MemWidth, addr_space: PageAddressSpace) {
         EmitContext::trace_page_access(self, addr, width, addr_space);
     }
 
-    fn trace_page_access_u64_range(&mut self, base_addr: &str, num_dwords: &str, addr_space: u32) {
+    fn trace_page_access_u64_range(
+        &mut self,
+        base_addr: &str,
+        num_dwords: &str,
+        addr_space: PageAddressSpace,
+    ) {
         EmitContext::trace_page_access_u64_range(self, base_addr, num_dwords, addr_space);
     }
+}
+
+fn reg_index(var: Variable) -> u8 {
+    let index = u8::try_from(var.index()).expect("variable index must fit in u8");
+    assert!(
+        usize::from(index) < NUM_REGS,
+        "variable index must name a state register"
+    );
+    index
 }
 
 #[cfg(test)]

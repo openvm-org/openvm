@@ -3,10 +3,17 @@
 //! Provides an IR node for the `HintFinalExp` phantom instruction and the
 //! `PairingExtension` for lifting and executing it via FFI.
 
-use openvm_instructions::{LocalOpcode, SystemOpcode};
+use openvm_instructions::{
+    riscv::{RV64_NUM_REGISTERS, RV64_REGISTER_BYTES},
+    LocalOpcode, SystemOpcode,
+};
 use openvm_pairing_transpiler::PairingPhantom;
-use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, Instr, InstrAt, LiftedInstr, Reg};
-use rvr_openvm_lift::{helpers::decode_reg, RvrExtension, RvrInstruction};
+use rvr_openvm_ir::{CfgEffect, ExtEmitCtx, ExtInstr, InstrAt, LiftedInstr, Variable};
+use rvr_openvm_lift::{decode_variable, RvrExtension, RvrInstruction};
+
+fn decode_reg(value: u32) -> Variable {
+    decode_variable(value, RV64_REGISTER_BYTES as u32, RV64_NUM_REGISTERS as u32)
+}
 
 #[derive(Debug, Clone, Copy)]
 enum KnownPairingCurve {
@@ -39,9 +46,9 @@ impl KnownPairingCurve {
 #[derive(Debug, Clone)]
 pub struct HintFinalExpInstr {
     /// Register holding pointer to P slice header (data_ptr, len).
-    pub rs1_reg: Reg,
+    pub rs1_reg: Variable,
     /// Register holding pointer to Q slice header (data_ptr, len).
-    pub rs2_reg: Reg,
+    pub rs2_reg: Variable,
     /// Pairing curve, resolved at lift time.
     curve: KnownPairingCurve,
 }
@@ -52,8 +59,8 @@ impl ExtInstr for HintFinalExpInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rs1 = ctx.peek_reg(self.rs1_reg);
-        let rs2 = ctx.peek_reg(self.rs2_reg);
+        let rs1 = ctx.peek_var(self.rs1_reg);
+        let rs2 = ctx.peek_var(self.rs2_reg);
         ctx.emit_call(self.curve.ffi_symbol(), &["state", &rs1, &rs2]);
     }
 
@@ -61,8 +68,8 @@ impl ExtInstr for HintFinalExpInstr {
         Box::new(self.clone())
     }
 
-    fn is_block_end(&self) -> bool {
-        false
+    fn cfg_effect(&self) -> CfgEffect {
+        CfgEffect::None
     }
 }
 
@@ -100,16 +107,15 @@ impl RvrExtension for PairingExtension {
 
         let rs1_reg = decode_reg(insn.a);
         let rs2_reg = decode_reg(insn.b);
-        let curve = KnownPairingCurve::from_idx(curve_idx)
-            .unwrap_or_else(|| panic!("unsupported pairing curve idx: {curve_idx}"));
+        let curve = KnownPairingCurve::from_idx(curve_idx)?;
 
         Some(LiftedInstr::Body(InstrAt {
             pc,
-            instr: Instr::Ext(Box::new(HintFinalExpInstr {
+            instr: Box::new(HintFinalExpInstr {
                 rs1_reg,
                 rs2_reg,
                 curve,
-            })),
+            }),
             source_loc: None,
         }))
     }
@@ -127,5 +133,10 @@ impl RvrExtension for PairingExtension {
 
     fn uses_memory_wrappers(&self) -> bool {
         true
+    }
+
+    fn max_main_memory_pages_per_instruction(&self) -> usize {
+        // Pairing's guest-memory reads record zero main-memory page entries.
+        0
     }
 }

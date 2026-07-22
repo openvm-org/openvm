@@ -3,14 +3,27 @@
 //! Provides IR nodes for the SHA-256 and SHA-512 opcodes and the
 //! `Sha2Extension` for lifting and executing them via double FFI.
 
-use openvm_instructions::LocalOpcode;
+use openvm_instructions::{
+    riscv::{RV64_NUM_REGISTERS, RV64_REGISTER_BYTES},
+    LocalOpcode,
+};
 use openvm_sha2_air::{Sha256Config, Sha2BlockHasherSubairConfig, Sha512Config};
 use openvm_sha2_transpiler::Rv64Sha2Opcode;
-use rvr_openvm_ir::{ExtEmitCtx, ExtInstr, FixedTraceRows, Instr, InstrAt, LiftedInstr, Reg};
-use rvr_openvm_lift::{
-    decode_reg, fixed_trace_rows_for_chip, opcode_air_idx, AirIndex, ExtensionError, RvrExtension,
-    RvrExtensionCtx, RvrInstruction,
+use rvr_openvm_ir::{
+    CfgEffect, ExtEmitCtx, ExtInstr, FixedTraceRows, InstrAt, LiftedInstr, Variable,
 };
+use rvr_openvm_lift::{
+    decode_variable, fixed_trace_rows_for_chip, max_main_memory_pages_for_contiguous_range,
+    opcode_air_idx, AirIndex, ExtensionError, RvrExtension, RvrExtensionCtx, RvrInstruction,
+};
+
+// SHA-512 has three independent ranges; its largest range is the 128-byte block.
+const SHA2_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize =
+    3 * max_main_memory_pages_for_contiguous_range(128);
+
+fn decode_reg(value: u32) -> Variable {
+    decode_variable(value, RV64_REGISTER_BYTES as u32, RV64_NUM_REGISTERS as u32)
+}
 
 const fn rows_to_u32(rows: usize) -> u32 {
     let rows_u32 = rows as u32;
@@ -30,11 +43,11 @@ const SHA512_ROWS_PER_BLOCK: u32 =
 #[derive(Debug, Clone)]
 pub struct Sha256Instr {
     /// Register index holding destination pointer (where new state is written).
-    pub dst_ptr_reg: Reg,
+    pub dst_ptr_reg: Variable,
     /// Register index holding state pointer (previous hash state).
-    pub state_ptr_reg: Reg,
+    pub state_ptr_reg: Variable,
     /// Register index holding input pointer (message block).
-    pub input_ptr_reg: Reg,
+    pub input_ptr_reg: Variable,
     /// AIR index of the SHA-256 block hasher chip (ROWS_PER_BLOCK rows per instruction).
     pub block_hasher_chip_idx: Option<AirIndex>,
 }
@@ -45,9 +58,9 @@ impl ExtInstr for Sha256Instr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let dst = ctx.read_reg(self.dst_ptr_reg);
-        let st = ctx.read_reg(self.state_ptr_reg);
-        let inp = ctx.read_reg(self.input_ptr_reg);
+        let dst = ctx.read_var(self.dst_ptr_reg);
+        let st = ctx.read_var(self.state_ptr_reg);
+        let inp = ctx.read_var(self.input_ptr_reg);
         ctx.emit_call("rvr_ext_sha256", &["state", &dst, &st, &inp]);
     }
 
@@ -59,8 +72,8 @@ impl ExtInstr for Sha256Instr {
         Box::new(self.clone())
     }
 
-    fn is_block_end(&self) -> bool {
-        false
+    fn cfg_effect(&self) -> CfgEffect {
+        CfgEffect::None
     }
 }
 
@@ -71,11 +84,11 @@ impl ExtInstr for Sha256Instr {
 #[derive(Debug, Clone)]
 pub struct Sha512Instr {
     /// Register index holding destination pointer (where new state is written).
-    pub dst_ptr_reg: Reg,
+    pub dst_ptr_reg: Variable,
     /// Register index holding state pointer (previous hash state).
-    pub state_ptr_reg: Reg,
+    pub state_ptr_reg: Variable,
     /// Register index holding input pointer (message block).
-    pub input_ptr_reg: Reg,
+    pub input_ptr_reg: Variable,
     /// AIR index of the SHA-512 block hasher chip (ROWS_PER_BLOCK rows per instruction).
     pub block_hasher_chip_idx: Option<AirIndex>,
 }
@@ -86,9 +99,9 @@ impl ExtInstr for Sha512Instr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let dst = ctx.read_reg(self.dst_ptr_reg);
-        let st = ctx.read_reg(self.state_ptr_reg);
-        let inp = ctx.read_reg(self.input_ptr_reg);
+        let dst = ctx.read_var(self.dst_ptr_reg);
+        let st = ctx.read_var(self.state_ptr_reg);
+        let inp = ctx.read_var(self.input_ptr_reg);
         ctx.emit_call("rvr_ext_sha512", &["state", &dst, &st, &inp]);
     }
 
@@ -100,8 +113,8 @@ impl ExtInstr for Sha512Instr {
         Box::new(self.clone())
     }
 
-    fn is_block_end(&self) -> bool {
-        false
+    fn cfg_effect(&self) -> CfgEffect {
+        CfgEffect::None
     }
 }
 
@@ -139,12 +152,12 @@ impl RvrExtension for Sha2Extension {
             let input_ptr_reg = decode_reg(insn.c);
             return Some(LiftedInstr::Body(InstrAt {
                 pc,
-                instr: Instr::Ext(Box::new(Sha256Instr {
+                instr: Box::new(Sha256Instr {
                     dst_ptr_reg,
                     state_ptr_reg,
                     input_ptr_reg,
                     block_hasher_chip_idx: self.sha256_block_hasher_chip_idx,
-                })),
+                }),
                 source_loc: None,
             }));
         }
@@ -155,12 +168,12 @@ impl RvrExtension for Sha2Extension {
             let input_ptr_reg = decode_reg(insn.c);
             return Some(LiftedInstr::Body(InstrAt {
                 pc,
-                instr: Instr::Ext(Box::new(Sha512Instr {
+                instr: Box::new(Sha512Instr {
                     dst_ptr_reg,
                     state_ptr_reg,
                     input_ptr_reg,
                     block_hasher_chip_idx: self.sha512_block_hasher_chip_idx,
-                })),
+                }),
                 source_loc: None,
             }));
         }
@@ -181,5 +194,9 @@ impl RvrExtension for Sha2Extension {
 
     fn uses_memory_wrappers(&self) -> bool {
         true
+    }
+
+    fn max_main_memory_pages_per_instruction(&self) -> usize {
+        SHA2_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION
     }
 }

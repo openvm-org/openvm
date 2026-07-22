@@ -1,4 +1,4 @@
-//! RV64 machine state shared with the generated rvr-openvm runtime.
+//! Machine state shared with the generated rvr-openvm runtime.
 
 mod instret;
 mod state;

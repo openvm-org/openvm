@@ -1,21 +1,20 @@
-use crate::ext::ExtInstr;
+use crate::{ExtEmitCtx, FixedTraceRows};
 
-/// Register index alias.
-pub type Reg = u8;
+/// Opaque machine-state variable identifier.
+///
+/// The concrete [`ExtEmitCtx`] defines how each identifier is stored and the
+/// width of its value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct Variable(u32);
 
-/// ALU operations shared by R-type and I-type instructions.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AluOp {
-    Add,
-    Sub,
-    Sll,
-    Slt,
-    Sltu,
-    Xor,
-    Srl,
-    Sra,
-    Or,
-    And,
+impl Variable {
+    pub const fn new(index: u32) -> Self {
+        Self(index)
+    }
+
+    pub const fn index(self) -> u32 {
+        self.0
+    }
 }
 
 /// Memory access width.
@@ -28,206 +27,202 @@ pub enum MemWidth {
 }
 
 impl MemWidth {
-    pub fn bytes(self) -> u8 {
+    pub const fn bytes(self) -> u8 {
         match self {
-            MemWidth::Byte => 1,
-            MemWidth::Half => 2,
-            MemWidth::Word => 4,
-            MemWidth::Double => 8,
+            Self::Byte => 1,
+            Self::Half => 2,
+            Self::Word => 4,
+            Self::Double => 8,
         }
     }
 }
 
-/// Multiply/divide operations.
+/// Operand used by CFG analysis and code generation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MulDivOp {
-    Mul,
-    Mulh,
-    Mulhsu,
-    Mulhu,
-    Div,
-    Divu,
-    Rem,
-    Remu,
+pub enum CfgOperand {
+    /// Value read from a variable.
+    Var(Variable),
+    /// Immediate constant.
+    Const(u64),
 }
 
-/// Body instruction (no control flow). Control flow lives in `Terminator`.
-#[derive(Debug, Clone)]
-pub enum Instr {
-    /// Register-register ALU.
-    AluReg {
-        op: AluOp,
-        rd: Reg,
-        rs1: Reg,
-        rs2: Reg,
+/// Integer operation understood by CFG constant propagation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CfgOp {
+    Add,
+    Sub,
+    And,
+    Or,
+    Xor,
+    ShiftLeft,
+    ShiftRightLogical,
+    ShiftRightArithmetic,
+    LessThanSigned,
+    LessThanUnsigned,
+    Mul,
+    MulHighSigned,
+    MulHighSignedUnsigned,
+    MulHighUnsigned,
+    DivSigned,
+    DivUnsigned,
+    RemSigned,
+    RemUnsigned,
+}
+
+/// Width and extension behavior of a CFG operation result.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CfgResultWidth {
+    /// Keep the low 32 bits and zero-extend them.
+    U32,
+    /// Keep all 64 bits.
+    U64,
+    /// Keep the low 32 bits and sign-extend them to 64 bits.
+    SignExtend32,
+}
+
+/// Integer width used to compare branch operands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CfgIntWidth {
+    /// Compare the low 32 bits.
+    U32,
+    /// Compare all 64 bits.
+    U64,
+}
+
+/// Variable writes tracked by CFG analysis.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CfgEffect {
+    None,
+    WriteUnknown {
+        dst: Variable,
     },
-    /// W-suffix register-register ALU (low 32 bits, result sign-extended to 64).
-    AluWReg {
-        op: AluOp,
-        rd: Reg,
-        rs1: Reg,
-        rs2: Reg,
-    },
-    /// Register-immediate ALU.
-    AluImm {
-        op: AluOp,
-        rd: Reg,
-        rs1: Reg,
-        imm: i32,
-    },
-    /// W-suffix register-immediate ALU (low 32 bits, result sign-extended to 64).
-    AluWImm {
-        op: AluOp,
-        rd: Reg,
-        rs1: Reg,
-        imm: i32,
-    },
-    /// Shift by immediate shamt (6-bit for rv64).
-    ShiftImm {
-        op: AluOp,
-        rd: Reg,
-        rs1: Reg,
-        shamt: u8,
-    },
-    /// W-suffix shift by immediate shamt (5-bit, result sign-extended to 64).
-    ShiftWImm {
-        op: AluOp,
-        rd: Reg,
-        rs1: Reg,
-        shamt: u8,
-    },
-    /// Load upper immediate (rd = imm << 12).
-    Lui {
-        rd: Reg,
-        value: u32,
-    },
-    /// Add upper immediate to PC (rd = pc + sign_extend(imm << 12), pre-computed).
-    Auipc {
-        rd: Reg,
+    WriteConst {
+        dst: Variable,
         value: u64,
     },
-    /// Load from memory.
-    Load {
-        width: MemWidth,
-        signed: bool,
-        rd: Reg,
-        rs1: Reg,
-        offset: i16,
+    WriteOp {
+        dst: Variable,
+        op: CfgOp,
+        lhs: CfgOperand,
+        rhs: CfgOperand,
+        result: CfgResultWidth,
     },
-    /// Store to memory.
-    Store {
-        width: MemWidth,
-        rs1: Reg,
-        rs2: Reg,
-        offset: i16,
-    },
-    /// Multiply/divide.
-    MulDiv {
-        op: MulDivOp,
-        rd: Reg,
-        rs1: Reg,
-        rs2: Reg,
-    },
-    /// W-suffix multiply/divide (low 32 bits, result sign-extended to 64).
-    MulDivW {
-        op: MulDivOp,
-        rd: Reg,
-        rs1: Reg,
-        rs2: Reg,
-    },
-
-    // OpenVM system/IO instructions.
-    Nop,
-    /// Extension instruction (dispatched via trait object).
-    Ext(Box<dyn ExtInstr>),
+    /// Clear all tracked values for an instruction with opaque variable effects.
+    ClobberAll,
 }
 
-impl Instr {
-    pub fn opname(&self) -> &str {
-        match self {
-            Instr::AluReg { op, .. } => match op {
-                AluOp::Add => "add",
-                AluOp::Sub => "sub",
-                AluOp::Sll => "sll",
-                AluOp::Slt => "slt",
-                AluOp::Sltu => "sltu",
-                AluOp::Xor => "xor",
-                AluOp::Srl => "srl",
-                AluOp::Sra => "sra",
-                AluOp::Or => "or",
-                AluOp::And => "and",
-            },
-            Instr::AluWReg { op, .. } => match op {
-                AluOp::Add => "addw",
-                AluOp::Sub => "subw",
-                AluOp::Sll => "sllw",
-                AluOp::Srl => "srlw",
-                AluOp::Sra => "sraw",
-                _ => unreachable!("no W variant for this alu op"),
-            },
-            Instr::AluImm { op, .. } => match op {
-                AluOp::Add => "addi",
-                AluOp::Sub => "subi",
-                AluOp::Slt => "slti",
-                AluOp::Sltu => "sltiu",
-                AluOp::Xor => "xori",
-                AluOp::Or => "ori",
-                AluOp::And => "andi",
-                _ => unreachable!("shift ops use ShiftImm, not AluImm"),
-            },
-            Instr::AluWImm { op, .. } => match op {
-                AluOp::Add => "addiw",
-                _ => unreachable!("no W immediate variant for this op"),
-            },
-            Instr::ShiftImm { op, .. } => match op {
-                AluOp::Sll => "slli",
-                AluOp::Srl => "srli",
-                AluOp::Sra => "srai",
-                _ => unreachable!("non-shift ops use AluImm, not ShiftImm"),
-            },
-            Instr::ShiftWImm { op, .. } => match op {
-                AluOp::Sll => "slliw",
-                AluOp::Srl => "srliw",
-                AluOp::Sra => "sraiw",
-                _ => unreachable!("non-shift ops use AluWImm, not ShiftWImm"),
-            },
-            Instr::Lui { .. } => "lui",
-            Instr::Auipc { .. } => "auipc",
-            Instr::Load { width, signed, .. } => match (width, signed) {
-                (MemWidth::Double, _) => "ld",
-                (MemWidth::Word, true) => "lw",
-                (MemWidth::Word, false) => "lwu",
-                (MemWidth::Half, true) => "lh",
-                (MemWidth::Half, false) => "lhu",
-                (MemWidth::Byte, true) => "lb",
-                (MemWidth::Byte, false) => "lbu",
-            },
-            Instr::Store { width, .. } => match width {
-                MemWidth::Double => "sd",
-                MemWidth::Word => "sw",
-                MemWidth::Half => "sh",
-                MemWidth::Byte => "sb",
-            },
-            Instr::MulDiv { op, .. } => match op {
-                MulDivOp::Mul => "mul",
-                MulDivOp::Mulh => "mulh",
-                MulDivOp::Mulhsu => "mulhsu",
-                MulDivOp::Mulhu => "mulhu",
-                MulDivOp::Div => "div",
-                MulDivOp::Divu => "divu",
-                MulDivOp::Rem => "rem",
-                MulDivOp::Remu => "remu",
-            },
-            Instr::MulDivW { op, .. } => match op {
-                MulDivOp::Mul => "mulw",
-                MulDivOp::Div => "divw",
-                MulDivOp::Divu => "divuw",
-                MulDivOp::Rem => "remw",
-                MulDivOp::Remu => "remuw",
-                _ => unreachable!("no W variant for mul/div ops"),
-            },
-            Instr::Nop => "nop",
-            Instr::Ext(e) => e.opname(),
-        }
+/// Conditional branch predicate used by CFG analysis and code generation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CfgBranchCond {
+    Eq,
+    Ne,
+    LessThanSigned,
+    GreaterEqualSigned,
+    LessThanUnsigned,
+    GreaterEqualUnsigned,
+}
+
+/// Control-flow role of a jump.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CfgJumpKind {
+    Jump,
+    Call,
+    Return,
+}
+
+/// Control-flow behavior used by CFG analysis and code generation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CfgTerm {
+    /// Continue at the next instruction.
+    FallThrough,
+    /// Jump to a statically known target.
+    Jump {
+        kind: CfgJumpKind,
+        link_dst: Option<Variable>,
+        target: u64,
+    },
+    /// Jump to a target computed from an operand and signed offset.
+    JumpIndirect {
+        kind: CfgJumpKind,
+        link_dst: Option<Variable>,
+        base_value: CfgOperand,
+        offset: i32,
+        target_mask: u64,
+    },
+    /// Conditionally jump to `target`, otherwise fall through.
+    Branch {
+        cond: CfgBranchCond,
+        width: CfgIntWidth,
+        lhs: Variable,
+        rhs: Variable,
+        target: u64,
+        known: Option<bool>,
+    },
+    /// Terminate execution with an exit code.
+    Exit { code: u32 },
+    /// Trap execution with a diagnostic message.
+    Trap { message: String },
+    /// Instruction-defined control flow with an explicit successor set.
+    Opaque { successors: Vec<u64> },
+}
+
+/// Trait for self-contained instruction nodes owned by RVR extensions.
+pub trait ExtInstr: std::fmt::Debug + Send + Sync {
+    /// Emit C code for this instruction through the mode-aware context.
+    ///
+    /// Use `ctx.read_var()` and `ctx.write_var()` for VM memory accesses,
+    /// `ctx.peek_var()` for reads that preserve the logical memory timestamp, and
+    /// `ctx.write_line()` to emit raw C lines.
+    fn emit_c(&self, ctx: &mut dyn ExtEmitCtx);
+
+    /// Emit C code for an instruction-owned terminator.
+    ///
+    /// `branch_to(target_pc)` returns the C tail-call statement for a static
+    /// successor. The default delegates to `emit_c`.
+    fn emit_c_term(&self, ctx: &mut dyn ExtEmitCtx, _branch_to: &dyn Fn(u64) -> String) {
+        self.emit_c(ctx);
+    }
+
+    /// Short operation name used in generated C comments.
+    ///
+    /// The default is `"ext"`.
+    fn opname(&self) -> &str {
+        "ext"
+    }
+
+    /// Report this instruction's additional variable writes.
+    ///
+    /// CFG analysis combines these writes with link writes from `cfg_term()` to
+    /// keep propagated constants current.
+    fn cfg_effect(&self) -> CfgEffect;
+
+    /// Control-flow behavior, if this instruction ends a basic block.
+    fn cfg_term(&self, _pc: u64, _fall_pc: u64) -> Option<CfgTerm> {
+        None
+    }
+
+    /// Whether this instruction may access main guest memory.
+    ///
+    /// Code generation uses this to decide whether a metered block needs main
+    /// memory page tracking. The conservative default is `true`.
+    fn accesses_memory(&self) -> bool {
+        true
+    }
+
+    /// Extra chip rows whose count is known when the artifact is generated.
+    ///
+    /// The generator adds these rows to the block's metering update at artifact
+    /// generation time.
+    fn fixed_trace_rows(&self) -> Vec<FixedTraceRows> {
+        Vec::new()
+    }
+
+    /// Clone into a boxed trait object.
+    fn clone_box(&self) -> Box<dyn ExtInstr>;
+}
+
+impl Clone for Box<dyn ExtInstr> {
+    fn clone(&self) -> Self {
+        self.clone_box()
     }
 }

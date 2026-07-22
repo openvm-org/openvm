@@ -3,14 +3,18 @@
 use num_bigint::BigUint;
 use openvm_algebra_transpiler::Fp2Opcode;
 use openvm_instructions::LocalOpcode;
-use rvr_openvm_ir::{Instr, InstrAt, LiftedInstr};
-use rvr_openvm_lift::{helpers::decode_reg, RvrExtension, RvrInstruction};
+use rvr_openvm_ir::{ExtInstr, InstrAt, LiftedInstr};
+use rvr_openvm_lift::{max_main_memory_pages_for_contiguous_range, RvrExtension, RvrInstruction};
 use strum::EnumCount;
 
 use crate::{
-    pad_modulus, ArithKind, FieldArithInstr, FieldKind, FieldSetupInstr, KnownField, ModOp,
-    SetupKind,
+    decode_reg, pad_modulus, ArithKind, FieldArithInstr, FieldKind, FieldSetupInstr, KnownField,
+    ModOp, SetupKind,
 };
+
+// An Fp2 operation can read two independent 96-byte values and write one.
+const FP2_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize =
+    3 * max_main_memory_pages_for_contiguous_range(96);
 
 /// Per-modulus info for the Fp2 extension. Fp2 lifting never consults a
 /// non-QR, so we only carry the padded modulus and limb count.
@@ -98,6 +102,10 @@ impl RvrExtension for Fp2RvrExtension {
     fn uses_memory_wrappers(&self) -> bool {
         true
     }
+
+    fn max_main_memory_pages_per_instruction(&self) -> usize {
+        FP2_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION
+    }
 }
 
 impl Fp2RvrExtension {
@@ -121,53 +129,53 @@ impl Fp2RvrExtension {
         let rs1_reg = decode_reg(insn.b);
         let rs2_reg = decode_reg(insn.c);
 
-        let instr: Instr = match local {
-            x if x == Fp2Opcode::ADD as usize => Instr::Ext(Box::new(Fp2ArithInstr::new(
+        let instr: Box<dyn ExtInstr> = match local {
+            x if x == Fp2Opcode::ADD as usize => Box::new(Fp2ArithInstr::new(
                 ModOp::Add,
                 rd_reg,
                 rs1_reg,
                 rs2_reg,
                 info.num_limbs,
                 info.modulus_bytes.clone(),
-            ))),
-            x if x == Fp2Opcode::SUB as usize => Instr::Ext(Box::new(Fp2ArithInstr::new(
+            )),
+            x if x == Fp2Opcode::SUB as usize => Box::new(Fp2ArithInstr::new(
                 ModOp::Sub,
                 rd_reg,
                 rs1_reg,
                 rs2_reg,
                 info.num_limbs,
                 info.modulus_bytes.clone(),
-            ))),
-            x if x == Fp2Opcode::SETUP_ADDSUB as usize => Instr::Ext(Box::new(Fp2SetupInstr::new(
+            )),
+            x if x == Fp2Opcode::SETUP_ADDSUB as usize => Box::new(Fp2SetupInstr::new(
                 rd_reg,
                 rs1_reg,
                 rs2_reg,
                 info.num_limbs,
                 info.modulus_bytes.clone(),
-            ))),
-            x if x == Fp2Opcode::MUL as usize => Instr::Ext(Box::new(Fp2ArithInstr::new(
+            )),
+            x if x == Fp2Opcode::MUL as usize => Box::new(Fp2ArithInstr::new(
                 ModOp::Mul,
                 rd_reg,
                 rs1_reg,
                 rs2_reg,
                 info.num_limbs,
                 info.modulus_bytes.clone(),
-            ))),
-            x if x == Fp2Opcode::DIV as usize => Instr::Ext(Box::new(Fp2ArithInstr::new(
+            )),
+            x if x == Fp2Opcode::DIV as usize => Box::new(Fp2ArithInstr::new(
                 ModOp::Div,
                 rd_reg,
                 rs1_reg,
                 rs2_reg,
                 info.num_limbs,
                 info.modulus_bytes.clone(),
-            ))),
-            x if x == Fp2Opcode::SETUP_MULDIV as usize => Instr::Ext(Box::new(Fp2SetupInstr::new(
+            )),
+            x if x == Fp2Opcode::SETUP_MULDIV as usize => Box::new(Fp2SetupInstr::new(
                 rd_reg,
                 rs1_reg,
                 rs2_reg,
                 info.num_limbs,
                 info.modulus_bytes.clone(),
-            ))),
+            )),
             _ => return None,
         };
 

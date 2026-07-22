@@ -1,6 +1,6 @@
 [package]
 name = "rvr-openvm-ext-riscv"
-description = "rvr lifter for the OpenVM RISC-V I/O extension"
+description = "rvr lifters and runtime hooks for OpenVM RV64 extensions"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
