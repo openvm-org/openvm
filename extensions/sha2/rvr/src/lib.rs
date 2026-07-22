@@ -67,8 +67,7 @@ impl ExtInstr for Sha256Instr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let (dst, from_timestamp, dst_prev_timestamp) =
-            ctx.read_var_with_trace(self.dst_ptr_reg);
+        let (dst, from_timestamp, dst_prev_timestamp) = ctx.read_var_with_trace(self.dst_ptr_reg);
         let (st, _, state_prev_timestamp) = ctx.read_var_with_trace(self.state_ptr_reg);
         let (inp, _, input_prev_timestamp) = ctx.read_var_with_trace(self.input_ptr_reg);
         let main = if ctx.inline_record_enabled() {

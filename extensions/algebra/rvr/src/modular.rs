@@ -651,7 +651,12 @@ impl ModularRvrExtension {
                     info.num_limbs,
                     info.modulus_bytes.clone(),
                 )
-                .with_inline_record(from_pc, local_opcode, chip_idx, vec_heap_inline),
+                .with_inline_record(
+                    from_pc,
+                    local_opcode,
+                    chip_idx,
+                    vec_heap_inline,
+                ),
             ),
             x if x == Rv64ModularArithmeticOpcode::SUB as usize => Box::new(
                 ModArithInstr::new(
@@ -662,7 +667,12 @@ impl ModularRvrExtension {
                     info.num_limbs,
                     info.modulus_bytes.clone(),
                 )
-                .with_inline_record(from_pc, local_opcode, chip_idx, vec_heap_inline),
+                .with_inline_record(
+                    from_pc,
+                    local_opcode,
+                    chip_idx,
+                    vec_heap_inline,
+                ),
             ),
             x if x == Rv64ModularArithmeticOpcode::SETUP_ADDSUB as usize => Box::new(
                 ModSetupInstr::new(
@@ -672,7 +682,12 @@ impl ModularRvrExtension {
                     info.num_limbs,
                     info.modulus_bytes.clone(),
                 )
-                .with_inline_record(from_pc, local_opcode, chip_idx, vec_heap_inline),
+                .with_inline_record(
+                    from_pc,
+                    local_opcode,
+                    chip_idx,
+                    vec_heap_inline,
+                ),
             ),
             x if x == Rv64ModularArithmeticOpcode::MUL as usize => Box::new(
                 ModArithInstr::new(
@@ -683,7 +698,12 @@ impl ModularRvrExtension {
                     info.num_limbs,
                     info.modulus_bytes.clone(),
                 )
-                .with_inline_record(from_pc, local_opcode, chip_idx, vec_heap_inline),
+                .with_inline_record(
+                    from_pc,
+                    local_opcode,
+                    chip_idx,
+                    vec_heap_inline,
+                ),
             ),
             x if x == Rv64ModularArithmeticOpcode::DIV as usize => Box::new(
                 ModArithInstr::new(
@@ -694,7 +714,12 @@ impl ModularRvrExtension {
                     info.num_limbs,
                     info.modulus_bytes.clone(),
                 )
-                .with_inline_record(from_pc, local_opcode, chip_idx, vec_heap_inline),
+                .with_inline_record(
+                    from_pc,
+                    local_opcode,
+                    chip_idx,
+                    vec_heap_inline,
+                ),
             ),
             x if x == Rv64ModularArithmeticOpcode::SETUP_MULDIV as usize => Box::new(
                 ModSetupInstr::new(
@@ -704,7 +729,12 @@ impl ModularRvrExtension {
                     info.num_limbs,
                     info.modulus_bytes.clone(),
                 )
-                .with_inline_record(from_pc, local_opcode, chip_idx, vec_heap_inline),
+                .with_inline_record(
+                    from_pc,
+                    local_opcode,
+                    chip_idx,
+                    vec_heap_inline,
+                ),
             ),
             x if x == Rv64ModularArithmeticOpcode::IS_EQ as usize => Box::new(
                 ModIsEqInstr::new(
@@ -859,12 +889,7 @@ mod tests {
             self.trace_chip(chip_idx, count_expr);
         }
 
-        fn trace_page_access(
-            &mut self,
-            addr: &str,
-            width: MemWidth,
-            addr_space: PageAddressSpace,
-        ) {
+        fn trace_page_access(&mut self, addr: &str, width: MemWidth, addr_space: PageAddressSpace) {
             self.write_line(&format!(
                 "trace_page_access(state, {addr}, {}u, {}u);",
                 width.bytes(),

@@ -585,9 +585,9 @@ pub fn classify_preflight_opcodes_with_extensions<F: PrimeField32>(
             continue;
         }
         return RvrPreflightOpcodeClass::Unsupported {
-                pc,
-                opcode: rvr_insn.opcode,
-            };
+            pc,
+            opcode: rvr_insn.opcode,
+        };
     }
     RvrPreflightOpcodeClass::Supported
 }
@@ -767,7 +767,7 @@ fn collect_inline_records_meta_for_mode<F: PrimeField32>(
         for lifted in ir {
             match lifted {
                 LiftedInstr::Body(instr_at) => {
-                    if let Some(shape) = inline_record_shape_for_instr(&instr_at.instr) {
+                    if let Some(shape) = inline_record_shape_for_instr(instr_at.instr.as_ref()) {
                         record(instr_at.pc, shape);
                     }
                 }

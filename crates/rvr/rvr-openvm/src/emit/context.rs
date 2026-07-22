@@ -334,11 +334,6 @@ impl<'a> EmitContext<'a> {
         self.current_g2_kind = g2_kind;
     }
 
-    /// PC of the instruction currently being emitted, as u32.
-    pub(crate) fn current_pc_u32(&self) -> u32 {
-        self.current_pc as u32
-    }
-
     /// Whether the current instruction should emit an inline compact record
     /// (R3 enabled and the instruction maps to a chip).
     pub(crate) fn inline_records_enabled(&self) -> bool {
@@ -2908,13 +2903,7 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
         if !self.inline_records_enabled() {
             return false;
         }
-        EmitContext::emit_addi_inline(
-            self,
-            reg_index(rd),
-            reg_index(rs1),
-            imm_value,
-            arena,
-        );
+        EmitContext::emit_addi_inline(self, reg_index(rd), reg_index(rs1), imm_value, arena);
         true
     }
 
@@ -2953,23 +2942,11 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
         true
     }
 
-    fn emit_store_inline(
-        &mut self,
-        width: u8,
-        base: Variable,
-        src: Variable,
-        offset: i16,
-    ) -> bool {
+    fn emit_store_inline(&mut self, width: u8, base: Variable, src: Variable, offset: i16) -> bool {
         if !self.inline_records_enabled() {
             return false;
         }
-        EmitContext::emit_store_inline(
-            self,
-            width,
-            reg_index(base),
-            reg_index(src),
-            offset,
-        );
+        EmitContext::emit_store_inline(self, width, reg_index(base), reg_index(src), offset);
         true
     }
 

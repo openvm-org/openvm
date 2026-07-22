@@ -206,6 +206,16 @@ pub trait ExtInstr: std::fmt::Debug + Send + Sync {
         None
     }
 
+    /// Underlying variable read by an indirect-jump terminator.
+    ///
+    /// CFG analysis may represent a variable with a known value as a constant
+    /// in [`CfgTerm::JumpIndirect`]. Code generation still needs the original
+    /// variable to preserve its architectural read event. Return it here when
+    /// this instruction owns such an operand.
+    fn indirect_base_var(&self) -> Option<Variable> {
+        None
+    }
+
     /// Whether this instruction may access main guest memory.
     ///
     /// Code generation uses this to decide whether a metered block needs main

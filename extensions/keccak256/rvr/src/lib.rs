@@ -58,8 +58,7 @@ impl ExtInstr for KeccakfInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let (buf, from_timestamp, rd_prev_timestamp) =
-            ctx.read_var_with_trace(self.buffer_ptr_reg);
+        let (buf, from_timestamp, rd_prev_timestamp) = ctx.read_var_with_trace(self.buffer_ptr_reg);
         let from_pc = format!("{}u", self.from_pc);
         let rd_ptr = format!("{}u", self.buffer_ptr_reg.index() * 8);
         let op = if ctx.inline_record_enabled() {

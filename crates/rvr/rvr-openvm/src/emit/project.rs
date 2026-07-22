@@ -12,10 +12,7 @@ use rvr_openvm_lift::{ExtensionRegistry, TraceChipIndex};
 use rvr_state::NUM_REGS;
 
 use super::{
-    codegen::{
-        emit_terminator, inline_record_shape_for_terminator, instr_emits_inline_record,
-        TermCtx,
-    },
+    codegen::{emit_terminator, TermCtx},
     context::{validate_chip_index, BlockAbi, EmitContext, EmitMode, InvalidChipIndex},
 };
 use crate::constants::constants_header;
