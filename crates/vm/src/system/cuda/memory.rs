@@ -32,7 +32,7 @@ use tracing::instrument;
 
 use super::{
     boundary::BoundaryChipGPU,
-    merkle_tree::{MemoryMerkleTree, MERKLE_TOUCHED_BLOCK_WIDTH},
+    merkle_tree::{MemoryMerkleTree, SpanningNodeCounter, MERKLE_TOUCHED_BLOCK_WIDTH},
     Poseidon2PeripheryChipGPU,
 };
 use crate::{cuda_abi::inventory, system::memory::online::LinearMemory};
@@ -112,8 +112,6 @@ impl Drop for PinnedStaging {
 struct MemoryInventoryRecord<const CHUNK: usize, const BLOCKS: usize> {
     address_space: u32,
     ptr: u32,
-    /// Whether some covered block was *written* during execution (0/1); see
-    /// [`TouchedBlock`]. The merge kernel ORs the input blocks' bits. Not consumed yet.
     is_dirty: u32,
     timestamps: [u32; BLOCKS],
     values: [u32; CHUNK],
@@ -124,7 +122,7 @@ struct MemoryInventoryRecord<const CHUNK: usize, const BLOCKS: usize> {
 struct MemoryMerkleRecord {
     address_space: u32,
     ptr: u32,
-    timestamp: u32,
+    is_dirty: u32,
     values: [u32; VM_DIGEST_WIDTH],
 }
 
@@ -226,7 +224,10 @@ impl MemoryInventoryGPU {
     ) -> Vec<AirProvingContext<GpuBackend>> {
         let mem = MemTracker::start("generate mem proving ctxs");
         let partition = touched_memory;
-        let unpadded_merkle_height = if partition.is_empty() {
+        // Exact merkle trace rows: one initial row per touched-spanning node, one final
+        // row per dirty-spanning node (or just the forced root final row when nothing
+        // is dirty).
+        let merkle_rows = if partition.is_empty() {
             let leftmost_values = 'left: {
                 let mut res = [F::ZERO; VM_DIGEST_WIDTH];
                 if self.initial_memory[ADDR_SPACE_OFFSET as usize].is_empty() {
@@ -256,7 +257,7 @@ impl MemoryInventoryGPU {
             let merkle_record = MemoryMerkleRecord {
                 address_space: ADDR_SPACE_OFFSET,
                 ptr: 0,
-                timestamp: 0,
+                is_dirty: 0,
                 values: values_u32,
             };
             let merkle_records = [merkle_record];
@@ -268,17 +269,22 @@ impl MemoryInventoryGPU {
             };
             self.merkle_records = Some(merkle_words.to_device_on(&self.device_ctx).unwrap());
 
-            let unpadded_merkle_height = self
+            // The artificial clean touch spans one root-to-leaf path of initial rows,
+            // plus the always-present final root row.
+            let merkle_rows = self
                 .merkle_tree
-                .calculate_unpadded_height(&partition, |b| (b.address_space, b.ptr));
+                .mem_config()
+                .memory_dimensions()
+                .overall_height()
+                + 1;
             #[cfg(feature = "metrics")]
             {
-                self.unpadded_merkle_height = unpadded_merkle_height;
+                self.unpadded_merkle_height = merkle_rows;
             }
             self.boundary
                 .finalize_records::<VM_DIGEST_WIDTH>(Vec::new());
-            self.prepare_poseidon2_records(0, unpadded_merkle_height);
-            unpadded_merkle_height
+            self.prepare_poseidon2_records(0, 0, merkle_rows);
+            merkle_rows
         } else {
             let _span = tracing::info_span!("mem_merge_records").entered();
             let in_num_records = partition.len();
@@ -362,19 +368,47 @@ impl MemoryInventoryGPU {
                     })
                     .count();
 
-            // Host work overlapping the merge kernels: neither the unpadded
-            // height scan nor the Poseidon2 records buffer depends on the
-            // merge kernels.
-            let unpadded_merkle_height = self
-                .merkle_tree
-                .calculate_unpadded_height(&partition, |b| (b.address_space, b.ptr));
+            // Host work overlapping the merge kernels: the compacted leaf keys and
+            // their dirty bits are pure functions of the sorted partition (the same
+            // dedup rule the device merge uses; a leaf is dirty iff some of its blocks
+            // was written), so the exact merkle trace shape and Poseidon2 record count
+            // are computed here with no device synchronization.
+            let memory_dimensions = self.merkle_tree.mem_config().memory_dimensions();
+            let tree_height = memory_dimensions.overall_height();
+            let mut touched_nodes = SpanningNodeCounter::default();
+            let mut dirty_nodes = SpanningNodeCounter::default();
+            let mut num_touched_leaves = 0usize;
+            let mut num_dirty_leaves = 0usize;
+            for leaf_blocks in partition.chunk_by(|a, b| {
+                (a.address_space, a.ptr / VM_DIGEST_WIDTH as u32)
+                    == (b.address_space, b.ptr / VM_DIGEST_WIDTH as u32)
+            }) {
+                let block = &leaf_blocks[0];
+                let key = (block.address_space, block.ptr / VM_DIGEST_WIDTH as u32);
+                let leaf_index = memory_dimensions.label_to_index(key);
+                touched_nodes.push(leaf_index, tree_height);
+                num_touched_leaves += 1;
+                if leaf_blocks.iter().any(|b| b.is_dirty != 0) {
+                    dirty_nodes.push(leaf_index, tree_height);
+                    num_dirty_leaves += 1;
+                }
+            }
+            debug_assert_eq!(num_touched_leaves, out_num_records);
+            // One initial row per touched node, one final row per dirty node; the
+            // final root row exists even when nothing is dirty.
+            let merkle_rows = touched_nodes.nodes
+                + if num_dirty_leaves == 0 {
+                    1
+                } else {
+                    dirty_nodes.nodes
+                };
             #[cfg(feature = "metrics")]
             {
-                self.unpadded_merkle_height = unpadded_merkle_height;
+                self.unpadded_merkle_height = merkle_rows;
             }
             {
                 let _span = tracing::info_span!("poseidon2_prepare").entered();
-                self.prepare_poseidon2_records(out_num_records, unpadded_merkle_height);
+                self.prepare_poseidon2_records(out_num_records, num_dirty_leaves, merkle_rows);
             }
 
             // Cross-check the host-computed count against the device merge in
@@ -407,7 +441,7 @@ impl MemoryInventoryGPU {
                 .expect("inventory_to_merkle_records failed");
             }
             self.merkle_records = Some(d_merkle_records);
-            unpadded_merkle_height
+            merkle_rows
         };
 
         mem.tracing_info("merkle update");
@@ -415,7 +449,7 @@ impl MemoryInventoryGPU {
             let _span = tracing::info_span!("merkle_update").entered();
             self.merkle_tree.finalize();
             self.merkle_tree.update_with_touched_blocks(
-                unpadded_merkle_height,
+                merkle_rows,
                 self.merkle_records
                     .as_ref()
                     .expect("missing merkle records"),
@@ -437,10 +471,19 @@ impl MemoryInventoryGPU {
         ret
     }
 
-    fn prepare_poseidon2_records(&self, boundary_records: usize, merkle_height: usize) {
+    /// Sizes the shared Poseidon2 record buffer to the exact push count: the boundary
+    /// kernel records one initial hash per touched leaf plus one final hash per dirty
+    /// leaf, and every merkle trace row records exactly one compression. These counts
+    /// must stay in lockstep with `boundary.cu` / `merkle_tree.cu`.
+    fn prepare_poseidon2_records(
+        &self,
+        boundary_records: usize,
+        dirty_leaves: usize,
+        merkle_rows: usize,
+    ) {
         let num_records = boundary_records
-            .checked_mul(2)
-            .and_then(|n| n.checked_add(merkle_height))
+            .checked_add(dirty_leaves)
+            .and_then(|n| n.checked_add(merkle_rows))
             .expect("Poseidon2 records count overflow");
         self.hasher_chip.prepare_records(num_records);
     }

@@ -78,11 +78,11 @@ impl<F: PrimeField32, const DIGEST_WIDTH: usize> MerkleTree<F, DIGEST_WIDTH> {
     #[allow(clippy::type_complexity)]
     /// Applies leaf updates upward to the root.
     ///
-    /// Each layer entry carries an `is_dirty` bit: for leaves it originates at the
-    /// boundary chip (value inequality), and for inner nodes it is the OR of the
-    /// children's bits. A node emits a final-direction row (and records a final
-    /// compression) only if it is dirty — or if it is the root, whose final row is
-    /// pinned to the public values.
+    /// Each layer entry carries an `is_dirty` bit: for leaves it says the leaf was
+    /// *written* during execution (tracked by `TracingMemory`, independent of the
+    /// written content), and for inner nodes it is the OR of the children's bits. A node emits a
+    /// final-direction row (and records a final compression) only if it is dirty — or if it is
+    /// the root, whose final row is pinned to the public values.
     fn process_layers<CompressFn>(
         &mut self,
         layer: Vec<(u64, [F; DIGEST_WIDTH], bool)>,

@@ -95,8 +95,9 @@ fn test(
             touched_labels.contains(&(*address_space, pointer / VM_DIGEST_WIDTH as u32))
         })
         .collect();
-    // Mirror the boundary chip's dirtiness definition: a touched leaf is dirty iff its
-    // final values differ from its initial values.
+    // Dirtiness is per *write* and the test scenario defines its write pattern here:
+    // exactly the touched leaves whose values changed are treated as written (the
+    // minimal valid dirty set; any superset would also be sound).
     let dirty_leaves: DirtyLeaves = final_partition
         .iter()
         .filter(|((address_space, pointer), values)| {

@@ -60,10 +60,11 @@ pub mod merkle_tree {
             subtree_height: usize,
             child_buf: *mut u32,
             tmp_buf: *mut u32,
+            dirty_buf: *mut u32,
             tmp_storage: *mut u8,
             need_tmp_storage_bytes: usize,
             merkle_trace: *mut u32,
-            trace_height: usize,
+            unpadded_trace_height: usize,
             num_subtrees: usize,
             subtrees: *mut usize,        // is actually H**
             top_roots: *mut u32,         // are actually `H`s
@@ -177,6 +178,9 @@ pub mod merkle_tree {
         let num_leaves = touched_blocks.len() / MERKLE_TOUCHED_BLOCK_WIDTH;
         let num_subtrees = subtree_ptrs.len();
         let tmp_buffer = DeviceBuffer::<u32>::with_capacity_on(5 * num_leaves, device_ctx);
+        // Per-layer dirty flags / their inclusive prefix sum (layers only shrink, so
+        // `num_leaves` entries suffice).
+        let dirty_buffer = DeviceBuffer::<u32>::with_capacity_on(num_leaves, device_ctx);
         let mut need_tmp_storage_bytes = 0;
         get_prefix_scan_temp_bytes(
             &tmp_buffer,
@@ -195,6 +199,7 @@ pub mod merkle_tree {
             subtree_height,
             tmp_buffer.as_mut_ptr(),
             tmp_buffer.as_mut_ptr().add(2 * num_leaves),
+            dirty_buffer.as_mut_ptr(),
             tmp_storage.as_mut_ptr(),
             need_tmp_storage_bytes,
             trace.buffer().as_ptr() as *mut u32,

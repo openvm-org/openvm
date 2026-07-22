@@ -10,7 +10,8 @@ template <size_t CHUNK, size_t BLOCKS> struct BoundaryRecord {
     // AS-native pointer to the first cell of this Merkle leaf.
     uint32_t ptr;
     // Whether some block of the leaf was *written* during execution (0/1), tracked by
-    // preflight and merged by inventory.cu. Not consumed yet.
+    // preflight and merged by inventory.cu. Gates the row's final-state interactions
+    // and the final compression.
     uint32_t is_dirty;
     uint32_t timestamps[BLOCKS];
     uint32_t values[CHUNK]; // Montgomery-encoded Fp values stored as raw u32
@@ -46,10 +47,9 @@ __global__ void cukernel_persistent_boundary_tracegen(
         BoundaryRecord<DIGEST_WIDTH, BLOCKS_PER_LEAF> record = records[row_idx];
         Poseidon2Buffer poseidon2(poseidon2_buffer, poseidon2_buffer_idx, poseidon2_capacity);
         COL_WRITE_VALUE(row, PersistentBoundaryCols, is_valid, Fp::one());
-        // TODO(follow-up): set real dirtiness (`final_values != init_values`) once
-        // MemoryMerkleAir supports skipping clean leaves in the final expansion. Until
-        // then every touched leaf is treated as dirty, matching the CPU tracegen.
-        COL_WRITE_VALUE(row, PersistentBoundaryCols, is_dirty, Fp::one());
+        // Dirtiness is per *write*, tracked during execution and carried in the record.
+        bool is_dirty = record.is_dirty != 0;
+        COL_WRITE_VALUE(row, PersistentBoundaryCols, is_dirty, is_dirty);
         COL_WRITE_VALUE(row, PersistentBoundaryCols, address_space, record.address_space);
         COL_WRITE_VALUE(
             row,
@@ -96,7 +96,10 @@ __global__ void cukernel_persistent_boundary_tracegen(
 
         // record.values are already Montgomery-encoded (see read_initial_chunk in inventory.cu)
         FpArray<DIGEST_WIDTH> final_values = FpArray<DIGEST_WIDTH>::from_raw_array(record.values);
-        FpArray<DIGEST_WIDTH> final_hash = poseidon2.hash_and_record(final_values);
+        // A clean leaf's final compression has multiplicity `is_dirty = 0`, so it must
+        // not be recorded with the hasher; its final hash equals the initial one.
+        FpArray<DIGEST_WIDTH> final_hash =
+            is_dirty ? poseidon2.hash_and_record(final_values) : init_hash;
         COL_WRITE_ARRAY(
             row, PersistentBoundaryCols, final_values, reinterpret_cast<Fp const *>(final_values.v)
         );

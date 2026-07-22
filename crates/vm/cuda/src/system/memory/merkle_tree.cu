@@ -195,9 +195,8 @@ template <typename T> struct MerkleCols {
     T right_child_hash[CELLS_OUT];
     T left_direction_different;
     T right_direction_different;
-    // Reference-count adjustments for initial-row child interactions; always 0 while
-    // tracegen emits full (initial, final) pairs. The trace buffer is pre-zeroed, so
-    // these columns are never written by the kernels.
+    // Reference-count adjustments for initial-row child interactions; see
+    // `MemoryMerkleCols` (columns.rs) and `fill_merkle_trace_row`.
     T left_extra_ref;
     T right_extra_ref;
     T left_absent_ref;
@@ -207,7 +206,12 @@ template <typename T> struct MerkleCols {
 struct LabeledDigest {
     uint32_t address_space_idx;
     uint32_t label;
-    uint32_t timestamp; // unused
+    /// "This node's value changed": arrives precomputed for leaves in the record's third
+    /// word (the inventory record-conversion kernel compares final against initial
+    /// values; see `MemoryMerkleRecord`) and is OR-propagated upward by
+    /// `update_merkle_layer`. Dirtiness decides whether a node emits a final-direction
+    /// trace row.
+    uint32_t is_dirty;
     uint32_t digest_raw[CELLS_OUT];
 };
 
@@ -279,6 +283,15 @@ __global__ void group_by_parent(
     }
 }
 
+/// Fills one merkle trace row and records its compression (leaving the parent digest in
+/// `digests[0..CELLS_OUT]`).
+///
+/// For final rows (`new_values`), `direction_different` marks children *not expanded
+/// finally* (untouched or touched-but-clean), whose hashes are borrowed from the initial
+/// tree. For initial rows, the reference-count flags adjust how many copies of a child's
+/// initial claim this node consumes: an extra one when this node's final row dd-borrows a
+/// touched-clean child, none when the child is untouched and this node has no final row
+/// to prop the reference (see `MemoryMerkleCols`).
 __device__ void fill_merkle_trace_row(
     RowSlice row,
     bool new_values,
@@ -286,8 +299,11 @@ __device__ void fill_merkle_trace_row(
     uint32_t parent_label,
     uint32_t parent_height,
     Fp *digests,
-    bool left_new,
-    bool right_new,
+    bool left_present,
+    bool right_present,
+    bool left_dirty,
+    bool right_dirty,
+    bool emits_final,
     Poseidon2Buffer &poseidon2
 ) {
     COL_WRITE_VALUE(row, MerkleCols, expand_direction, new_values ? Fp::neg_one() : Fp::one());
@@ -301,8 +317,32 @@ __device__ void fill_merkle_trace_row(
     COL_WRITE_ARRAY(row, MerkleCols, right_child_hash, digests + CELLS_OUT);
     poseidon2.compress_and_record_inplace(digests);
     COL_WRITE_ARRAY(row, MerkleCols, parent_hash, digests);
-    COL_WRITE_VALUE(row, MerkleCols, left_direction_different, left_new != new_values);
-    COL_WRITE_VALUE(row, MerkleCols, right_direction_different, right_new != new_values);
+    COL_WRITE_VALUE(row, MerkleCols, left_direction_different, new_values && !left_dirty);
+    COL_WRITE_VALUE(row, MerkleCols, right_direction_different, new_values && !right_dirty);
+    COL_WRITE_VALUE(
+        row,
+        MerkleCols,
+        left_extra_ref,
+        !new_values && emits_final && left_present && !left_dirty
+    );
+    COL_WRITE_VALUE(
+        row,
+        MerkleCols,
+        right_extra_ref,
+        !new_values && emits_final && right_present && !right_dirty
+    );
+    COL_WRITE_VALUE(
+        row,
+        MerkleCols,
+        left_absent_ref,
+        !new_values && !emits_final && !left_present
+    );
+    COL_WRITE_VALUE(
+        row,
+        MerkleCols,
+        right_absent_ref,
+        !new_values && !emits_final && !right_present
+    );
 }
 
 // A "virtual node" is a node of the conceptual full subtree, addressed by
@@ -387,6 +427,36 @@ __device__ void store_virtual_node(
     COPY_DIGEST(&subtree[idx], value);
 }
 
+/// For each parent group of the current layer, computes whether the parent is dirty
+/// (some present child is dirty; leaf dirtiness arrives precomputed in the records).
+/// Launched over `num_children` threads so the count can stay on device: entries beyond
+/// the parent count (read from the tail of the inclusive scan) are zeroed, letting the
+/// subsequent prefix sum run over the host-known `num_children` length. The prefix
+/// places each dirty parent's final row and its total gives the layer's final-row count.
+__global__ void mark_parent_dirty(
+    uint32_t const *child_ptrs,
+    LabeledDigest const *layer,
+    uint32_t *parent_dirty,
+    size_t const num_children,
+    uint32_t const *num_parents_minus_one
+) {
+    auto gid = blockDim.x * blockIdx.x + threadIdx.x;
+    if (gid >= num_children) {
+        return;
+    }
+    uint32_t dirty = 0;
+    if (gid <= *num_parents_minus_one) {
+        #pragma unroll
+        for (int i = 0; i < 2; ++i) {
+            uint32_t const child_ptr = child_ptrs[2 * gid + i];
+            if (child_ptr != MISSING_CHILD) {
+                dirty |= layer[child_ptr].is_dirty;
+            }
+        }
+    }
+    parent_dirty[gid] = dirty;
+}
+
 __global__ void update_merkle_layer(
     uint32_t layer_height,
     digest_t const *zero_hash,
@@ -401,6 +471,13 @@ __global__ void update_merkle_layer(
     uintptr_t *d_subtrees,
     Fp *const merkle_trace,
     size_t const trace_height,
+    // Inclusive prefix sum of per-parent dirtiness for this layer; a dirty parent's
+    // final row goes at `num_parents + prefix[idx] - 1` within the layer's region.
+    uint32_t const *parent_dirty_prefix,
+    // Set only for the topmost layer when it holds the true root (single-subtree
+    // configs): the root's final row must exist even if it is clean, since the AIR pins
+    // the first two rows to the root public values.
+    bool const force_final,
     Fp *poseidon2_buffer,
     uint32_t *poseidon2_buffer_idx,
     size_t poseidon2_capacity
@@ -449,10 +526,19 @@ __global__ void update_merkle_layer(
         2 * parent_label + 1,
         &old_right_digest
     );
-    { // old values trace row
+    // TODO: If we update MerkleMemoryAir, then we need to modify this part
+    bool const left_present = child_ptrs[2 * idx] != MISSING_CHILD;
+    bool const right_present = child_ptrs[2 * idx + 1] != MISSING_CHILD;
+    bool const left_dirty = left_present && layer[child_ptrs[2 * idx]].is_dirty;
+    bool const right_dirty = right_present && layer[child_ptrs[2 * idx + 1]].is_dirty;
+    bool const node_dirty = left_dirty || right_dirty;
+    bool const emits_final = node_dirty || force_final;
+
+    digest_t old_parent;
+    { // initial (old values) trace row -- one per touched node
         COPY_DIGEST(cells, &old_left_digest);
         COPY_DIGEST(cells + CELLS_OUT, &old_right_digest);
-        RowSlice row(merkle_trace + 2 * idx, trace_height);
+        RowSlice row(merkle_trace + idx, trace_height);
         fill_merkle_trace_row(
             row,
             false,
@@ -460,16 +546,20 @@ __global__ void update_merkle_layer(
             parent_label,
             layer_height,
             cells,
-            false,
-            false,
+            left_present,
+            right_present,
+            left_dirty,
+            right_dirty,
+            emits_final,
             poseidon2
         );
+        // fill_merkle_trace_row leaves the compressed parent digest in `cells`.
+        COPY_DIGEST(&old_parent, cells);
     }
 
-    { // new values trace row + actual update
-        bool left_new = false;
-        if (auto const child_ptr = child_ptrs[2 * idx]; child_ptr != MISSING_CHILD) {
-            COPY_DIGEST(cells, layer[child_ptr].digest_raw);
+    { // subtree update + optional final (new values) trace row
+        if (left_present) {
+            COPY_DIGEST(cells, layer[child_ptrs[2 * idx]].digest_raw);
             store_virtual_node(
                 subtree,
                 layout,
@@ -477,15 +567,13 @@ __global__ void update_merkle_layer(
                 actual_height,
                 layer_height - 1,
                 2 * parent_label,
-                reinterpret_cast<digest_t const *>(layer[child_ptr].digest_raw)
+                reinterpret_cast<digest_t const *>(layer[child_ptrs[2 * idx]].digest_raw)
             );
-            left_new = true;
         } else {
             COPY_DIGEST(cells, &old_left_digest);
         }
-        bool right_new = false;
-        if (auto const child_ptr = child_ptrs[2 * idx + 1]; child_ptr != MISSING_CHILD) {
-            COPY_DIGEST(cells + CELLS_OUT, layer[child_ptr].digest_raw);
+        if (right_present) {
+            COPY_DIGEST(cells + CELLS_OUT, layer[child_ptrs[2 * idx + 1]].digest_raw);
             store_virtual_node(
                 subtree,
                 layout,
@@ -493,25 +581,37 @@ __global__ void update_merkle_layer(
                 actual_height,
                 layer_height - 1,
                 2 * parent_label + 1,
-                reinterpret_cast<digest_t const *>(layer[child_ptr].digest_raw)
+                reinterpret_cast<digest_t const *>(layer[child_ptrs[2 * idx + 1]].digest_raw)
             );
-            right_new = true;
         } else {
             COPY_DIGEST(cells + CELLS_OUT, &old_right_digest);
         }
-        RowSlice row(merkle_trace + 2 * idx + 1, trace_height);
-        fill_merkle_trace_row(
-            row,
-            true,
-            address_space_idx,
-            parent_label,
-            layer_height,
-            cells,
-            left_new,
-            right_new,
-            poseidon2
-        );
-        COPY_DIGEST(layer[parent_ptr].digest_raw, cells);
+        if (emits_final) {
+            // Dirty finals are packed after the layer's initial rows in prefix order; a
+            // clean forced root (rank 0 in a single-node layer) lands there trivially.
+            uint32_t const rank = parent_dirty_prefix[idx] - (node_dirty ? 1 : 0);
+            RowSlice row(merkle_trace + num_parents + rank, trace_height);
+            fill_merkle_trace_row(
+                row,
+                true,
+                address_space_idx,
+                parent_label,
+                layer_height,
+                cells,
+                left_present,
+                right_present,
+                left_dirty,
+                right_dirty,
+                true,
+                poseidon2
+            );
+            COPY_DIGEST(layer[parent_ptr].digest_raw, cells);
+        } else {
+            // Clean node: the new digest equals the stored one; no final row, no final
+            // compression.
+            COPY_DIGEST(layer[parent_ptr].digest_raw, &old_parent);
+        }
+        layer[parent_ptr].is_dirty = node_dirty;
     }
 }
 
@@ -562,15 +662,39 @@ __global__ void update_to_root(
         if (children_ids[0] == MISSING_CHILD && children_ids[1] == MISSING_CHILD) {
             continue;
         }
-        merkle_trace_offset -= 2;
+        bool const left_present = children_ids[0] != MISSING_CHILD;
+        bool const right_present = children_ids[1] != MISSING_CHILD;
+        bool const left_dirty =
+            left_present && layer[layer_ids[children_ids[0]]].is_dirty;
+        bool const right_dirty =
+            right_present && layer[layer_ids[children_ids[1]]].is_dirty;
+        bool const node_dirty = left_dirty || right_dirty;
+        // The true root's final row always exists: the AIR pins the first two rows to
+        // the initial/final root public values.
+        bool const emits_final = node_dirty || out_idx == 0;
+
+        merkle_trace_offset -= emits_final ? 2 : 1;
+        digest_t old_parent;
         {
             RowSlice row(merkle_trace + merkle_trace_offset, trace_height);
             COPY_DIGEST(cells, &out[2 * out_idx + 1]);
             COPY_DIGEST(cells + CELLS_OUT, &out[2 * out_idx + 2]);
             fill_merkle_trace_row(
-                row, false, drop_highest_bit(out_idx + 1), 0, h, cells, false, false, poseidon2
+                row,
+                false,
+                drop_highest_bit(out_idx + 1),
+                0,
+                h,
+                cells,
+                left_present,
+                right_present,
+                left_dirty,
+                right_dirty,
+                emits_final,
+                poseidon2
             );
             COL_WRITE_VALUE(row, MerkleCols, height_section, true);
+            COPY_DIGEST(&old_parent, cells);
         }
         for (auto i : {0, 1}) {
             if (children_ids[i] != MISSING_CHILD) {
@@ -587,7 +711,7 @@ __global__ void update_to_root(
             layer_ids[max_idx] = layer_ids[--layer_size];
         }
         layer[layer_ids[surely_surviving_child]].label = out_idx;
-        {
+        if (emits_final) {
             RowSlice row(merkle_trace + merkle_trace_offset + 1, trace_height);
             fill_merkle_trace_row(
                 row,
@@ -596,15 +720,25 @@ __global__ void update_to_root(
                 0,
                 h,
                 cells,
-                children_ids[0] != MISSING_CHILD,
-                children_ids[1] != MISSING_CHILD,
+                left_present,
+                right_present,
+                left_dirty,
+                right_dirty,
+                true,
                 poseidon2
             );
             COPY_DIGEST(layer[layer_ids[surely_surviving_child]].digest_raw, cells);
             COL_WRITE_VALUE(row, MerkleCols, height_section, true);
+        } else {
+            // Clean node: new digest equals the stored one; no final row or compression.
+            COPY_DIGEST(layer[layer_ids[surely_surviving_child]].digest_raw, &old_parent);
         }
+        layer[layer_ids[surely_surviving_child]].is_dirty = node_dirty;
     }
     COPY_DIGEST(out, layer[layer_ids[0]].digest_raw);
+    // The host computed the trace height exactly, so the downward walk must land the
+    // root pair precisely at rows 0..1.
+    assert(merkle_trace_offset == 0);
     for (auto i : {0, 1}) {
         RowSlice row(merkle_trace + i, trace_height);
         COL_WRITE_VALUE(row, MerkleCols, is_root, true);
@@ -723,6 +857,7 @@ extern "C" int _update_merkle_tree(
     size_t subtree_height,
     uint32_t *child_buf,
     uint32_t *tmp_buf,
+    uint32_t *dirty_buf,
     uint8_t *d_temp_storage,
     size_t need_tmp_storage_bytes,
     Fp *const merkle_trace,
@@ -751,6 +886,9 @@ extern "C" int _update_merkle_tree(
     {
         auto [grid, block] = kernel_launch_params(num_leaves, 256);
         prepare_for_updating<<<grid, block, 0, stream>>>(child_buf, layer, num_children);
+        if (int err = CHECK_KERNEL(); err) {
+            return err;
+        }
     }
 
     uint32_t merkle_trace_offset = unpadded_trace_height;
@@ -791,10 +929,38 @@ extern "C" int _update_merkle_tree(
                 return err;
             }
         }
-        uint32_t num_parents;
+        bool const force_final = (num_subtrees == 1) && (h == subtree_height);
+        // TODO: might need to think of better layout, or maybe different way of storing
+        // Count this layer's dirty parents (each contributes a final row) and prefix-sum
+        // so every dirty parent knows its final-row slot. Launched over `num_children`
+        // with the parent count read on device, so a single sync fetches both counts.
+        {
+            auto [grid, block] = kernel_launch_params(num_children);
+            mark_parent_dirty<<<grid, block, 0, stream>>>(
+                tmp_buf, layer, dirty_buf, num_children, parent_ids + (num_children - 1)
+            );
+            if (int err = CHECK_KERNEL(); err) {
+                return err;
+            }
+        }
+        cub::DeviceScan::InclusiveSum(
+            d_temp_storage, need_tmp_storage_bytes, dirty_buf, dirty_buf, num_children, stream
+        );
+        if (int err = CHECK_KERNEL(); err) {
+            return err;
+        }
+        uint32_t num_parents = 0;
+        uint32_t num_dirty = 0;
         cudaMemcpyAsync(
             &num_parents,
             parent_ids + (num_children - 1),
+            sizeof(uint32_t),
+            cudaMemcpyDeviceToHost,
+            stream
+        );
+        cudaMemcpyAsync(
+            &num_dirty,
+            dirty_buf + (num_children - 1),
             sizeof(uint32_t),
             cudaMemcpyDeviceToHost,
             stream
@@ -804,7 +970,15 @@ extern "C" int _update_merkle_tree(
         }
         cudaStreamSynchronize(stream);
         ++num_parents;
-        merkle_trace_offset -= 2 * num_parents;
+        // A forced-final layer holds the single true root, which emits a final row even
+        // when clean.
+        uint32_t const layer_rows = num_parents + (force_final ? 1 : num_dirty);
+        // The trace height is computed exactly on the host from the leaf records; a
+        // mismatch here means that invariant broke, and writing would corrupt memory.
+        if (layer_rows > merkle_trace_offset) {
+            return -1;
+        }
+        merkle_trace_offset -= layer_rows;
         auto [grid, block] = kernel_launch_params(num_parents, 256);
         update_merkle_layer<<<grid, block, 0, stream>>>(
             h,
@@ -820,6 +994,8 @@ extern "C" int _update_merkle_tree(
             subtrees,
             merkle_trace + merkle_trace_offset,
             trace_height,
+            dirty_buf,
+            force_final,
             d_poseidon2_raw_buffer,
             d_poseidon2_buffer_idx,
             poseidon2_record_capacity

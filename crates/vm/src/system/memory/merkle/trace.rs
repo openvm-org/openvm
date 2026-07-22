@@ -22,9 +22,9 @@ use crate::{
 };
 
 impl<const DIGEST_WIDTH: usize, F: PrimeField32> MemoryMerkleChip<DIGEST_WIDTH, F> {
-    /// `dirty_leaves` must be exactly the set the boundary chip committed to (returned by
-    /// its `finalize`): the two chips' merkle-bus interactions balance only if they agree
-    /// on which leaves are dirty.
+    /// `dirty_leaves` must be exactly the set the boundary chip committed to (the
+    /// written leaves tracked by `TracingMemory`): the two chips' merkle-bus
+    /// interactions balance only if they agree on which leaves are dirty.
     #[instrument(name = "merkle_finalize", level = "debug", skip_all)]
     pub(crate) fn finalize(
         &mut self,

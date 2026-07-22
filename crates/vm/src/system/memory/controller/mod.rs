@@ -188,7 +188,7 @@ impl<F: VmField> MemoryController<F> {
                 let mut values = std::array::from_fn(|i| unsafe {
                     initial_memory.get_f::<F>(*addr_space, ptr + i as u32)
                 });
-                for &(block_idx, _, block_values) in blocks {
+                for &(block_idx, _, _, block_values) in blocks {
                     for (i, val) in block_values.iter().enumerate() {
                         values[block_idx * BLOCK_FE_WIDTH + i] = *val;
                     }
