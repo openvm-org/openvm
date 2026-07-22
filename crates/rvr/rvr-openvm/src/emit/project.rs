@@ -955,7 +955,7 @@ impl CProject {
         )
         .unwrap();
         writeln!(out, "    check_counter = checkpoint.check_counter;").unwrap();
-        writeln!(out, "    if (unlikely(checkpoint.suspend_signal)) {{").unwrap();
+        writeln!(out, "    if (unlikely(checkpoint.suspend_signal != 0)) {{").unwrap();
         self.emit_suspend_return(out, pc);
         writeln!(out, "    }}").unwrap();
     }
