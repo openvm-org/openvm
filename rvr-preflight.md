@@ -814,6 +814,42 @@ shape, and non-power-of-two padding. CPU, legacy CUDA, and replay rows and range
 histograms match; the replay trace proves and rejects a corrupted upper
 sign-extension limb.
 
+SLT and SLTU add the comparison core to the same two-read/one-write register
+schedule. Replay authenticates both full-width operands, recomputes the signed
+or unsigned comparison, requires the logged destination to be the canonical
+boolean register value, and fills the existing adapter and less-than core
+directly. The grouped test covers signed and unsigned boundaries, x0 sources,
+equal operands, source/destination aliases, and padding. CPU, legacy CUDA, and
+replay rows and range histograms match; the replay trace proves and rejects a
+corrupted result.
+
+#### First multi-AIR GPU proving checkpoint (2026-07-23)
+
+`Rv64IRvrGpuTracegen` now drives the VM inventory's ordinary reverse tracegen
+order from one uploaded RVR transcript. Before launching any opcode kernel, it
+compares the segment's actually executed opcode partition with the concrete set
+of replay ports. `TERMINATE` is explicitly system-owned; any other unported
+executed opcode fails before tracegen. Supported opcodes remain pending until
+the inventory walk reaches their concrete chip, so a missing or mismatched chip
+also fails closed.
+
+Replay producers run before the shared byte-bitwise and variable-range
+peripheries. Those peripheries, plus Poseidon2, consume their accumulated device
+counts through their normal tracegen using `()` rather than even an empty
+`RecordArena`. Unexecuted, unported executor chips produce dummy traces. After
+all extension contexts have been generated, the coordinator reads the shared
+sticky replay error once, immediately before proving.
+
+The first integration test executes all 21 currently ported opcodes across the
+12 replay chips, followed by `TERMINATE`. It uses interpreter preflight only for
+current system records, discards every interpreter-produced extension arena,
+generates all extension traces from the RVR transcript, passes the resulting
+context through the VM's existing trace-height validation, and completes a real
+GPU prove-and-verify. A negative test confirms that an executed, not-yet-ported
+register XOR is rejected by the pre-kernel coverage check. This establishes the
+multi-AIR RISC-V integration seam without generalizing `Chip`; system tracegen
+still uses legacy records and remains the next cutover.
+
 ### M3: complete the GPU proving path
 
 Once RISC-V replay is viable:

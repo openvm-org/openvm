@@ -11,7 +11,6 @@
 //! get around Rust orphan rules.
 use std::{
     any::{type_name, Any},
-    iter::zip,
     sync::Arc,
 };
 
@@ -695,15 +694,7 @@ where
         &mut self,
         system_records: SystemRecords<PB::Val>,
         record_arenas: Vec<RA>,
-        // trace_height_constraints: &[LinearConstraint],
     ) -> Result<ProvingContext<PB>, GenerationError> {
-        // ATTENTION: The order of AIR proving context generation MUST be consistent with
-        // `AirInventory::into_airs`.
-
-        // Execution has finished at this point.
-        // ASSUMPTION WHICH MUST HOLD: non-system chips do not have a dependency on the system chips
-        // during trace generation. Given this assumption, we can generate trace on the system chips
-        // first.
         let num_sys_airs = self.system_config().num_airs();
         let num_airs = num_sys_airs + self.inventory.chips.len();
         if num_airs != record_arenas.len() {
@@ -715,43 +706,65 @@ where
         let mut _record_arenas = record_arenas;
         let record_arenas = _record_arenas.split_off(num_sys_airs);
         let sys_record_arenas = _record_arenas;
+        let air_names = self
+            .inventory
+            .airs
+            .ext_airs
+            .iter()
+            .map(|air| air.name().to_string())
+            .collect::<Vec<_>>();
+        let mut record_arenas = record_arenas.into_iter();
+        self.generate_proving_ctx_with_extension_tracegen(
+            system_records,
+            sys_record_arenas,
+            |insertion_idx, chip| {
+                let records = record_arenas.next().unwrap();
+                // Span only for non-empty arenas: span + metric emission costs
+                // tens of microseconds each and most chips in a segment are
+                // empty. Chips doing real work from an empty arena (periphery
+                // hashers, lookup tables) are covered in aggregate by the
+                // executor_trace_gen span.
+                let _span = (!records.is_empty()).then(|| {
+                    info_span!("single_trace_gen", air = air_names[insertion_idx]).entered()
+                });
+                #[cfg(feature = "metrics")]
+                if let Some(allocated_bytes) = (!records.is_empty())
+                    .then(|| records.allocated_bytes())
+                    .flatten()
+                {
+                    let labels = [
+                        ("air_name", air_names[insertion_idx].clone()),
+                        ("air_id", (num_sys_airs + insertion_idx).to_string()),
+                    ];
+                    metrics::counter!("trace_gen.record_arena_bytes", &labels)
+                        .absolute(allocated_bytes as u64);
+                }
+                Ok(chip.generate_proving_ctx(records))
+            },
+        )
+    }
 
-        // First go through all system chips
-        // Then go through all other chips in inventory in **reverse** order they were added (to
-        // resolve dependencies)
-        //
-        // Perf[jpw]: currently we call tracegen on each chip **serially** (although tracegen per
-        // chip is parallelized). We could introduce more parallelism, while potentially increasing
-        // the peak memory usage, by keeping a dependency tree and generating traces at the same
-        // layer of the tree in parallel.
-        let chip_ctx = |insertion_idx: usize,
-                        chip: &dyn AnyChip<RA, PB>,
-                        records: RA|
-         -> AirProvingContext<PB> {
-            // Span only for non-empty arenas: span + metric emission costs
-            // tens of microseconds each and most chips in a segment are
-            // empty. Chips doing real work from an empty arena (periphery
-            // hashers, lookup tables) are covered in aggregate by the
-            // executor_trace_gen span.
-            let _span = (!records.is_empty()).then(|| {
-                let air_name = self.inventory.airs.ext_airs[insertion_idx].name();
-                info_span!("single_trace_gen", air = air_name).entered()
+    /// Generates system traces from their existing records while allowing one segment-wide source
+    /// to generate extension traces directly. The callback is invoked in reverse chip insertion
+    /// order, which is both verifying-key order and dependency order.
+    pub(crate) fn generate_proving_ctx_with_extension_tracegen(
+        &mut self,
+        system_records: SystemRecords<PB::Val>,
+        system_record_arenas: Vec<RA>,
+        mut generate_extension: impl FnMut(
+            usize,
+            &dyn AnyChip<RA, PB>,
+        ) -> Result<AirProvingContext<PB>, GenerationError>,
+    ) -> Result<ProvingContext<PB>, GenerationError> {
+        // ATTENTION: The order of AIR proving context generation MUST be consistent with
+        // `AirInventory::into_airs`.
+        let num_sys_airs = self.system_config().num_airs();
+        if system_record_arenas.len() != num_sys_airs {
+            return Err(GenerationError::UnexpectedNumArenas {
+                actual: system_record_arenas.len(),
+                expected: num_sys_airs,
             });
-            #[cfg(feature = "metrics")]
-            if let Some(allocated_bytes) = (!records.is_empty())
-                .then(|| records.allocated_bytes())
-                .flatten()
-            {
-                let air_name = self.inventory.airs.ext_airs[insertion_idx].name();
-                let labels = [
-                    ("air_name", air_name.to_string()),
-                    ("air_id", (num_sys_airs + insertion_idx).to_string()),
-                ];
-                metrics::counter!("trace_gen.record_arena_bytes", &labels)
-                    .absolute(allocated_bytes as u64);
-            }
-            chip.generate_proving_ctx(records)
-        };
+        }
 
         let num_ext_airs = self.inventory.chips.len();
         let mut exec_ctxs: Vec<Option<AirProvingContext<PB>>> = Vec::new();
@@ -762,14 +775,14 @@ where
         let sys_ctxs = {
             let _span = info_span!("system_trace_gen").entered();
             self.system
-                .generate_proving_ctx(system_records, sys_record_arenas)
+                .generate_proving_ctx(system_records, system_record_arenas)
         };
         {
             let _span = info_span!("executor_trace_gen").entered();
-            for (chain_pos, ((insertion_idx, chip), records)) in
-                zip(self.inventory.chips.iter().enumerate().rev(), record_arenas).enumerate()
+            for (chain_pos, (insertion_idx, chip)) in
+                self.inventory.chips.iter().enumerate().rev().enumerate()
             {
-                exec_ctxs[chain_pos] = Some(chip_ctx(insertion_idx, chip.as_ref(), records));
+                exec_ctxs[chain_pos] = Some(generate_extension(insertion_idx, chip.as_ref())?);
             }
         }
         let ctx_without_empties: Vec<(usize, AirProvingContext<_>)> = sys_ctxs
