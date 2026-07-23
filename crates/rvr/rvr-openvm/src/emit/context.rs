@@ -397,6 +397,43 @@ impl<'a> EmitContext<'a> {
         }
     }
 
+    /// Emit one aligned eight-byte main-memory block write.
+    pub fn write_aligned_mem_block(&mut self, addr: &str, val: &str) {
+        assert!(
+            !self.mode.is_metered_without_memory_pages(),
+            "metered memory block write emitted without page tracking"
+        );
+        self.uses_raw_memory = true;
+
+        if self.mode.traces_memory_pages() {
+            self.emit_inline_page_record(addr, 8);
+        }
+        if self.mode.traces_values() {
+            let value = self.next_var();
+            self.write_line(&format!("uint64_t {value} = (uint64_t)({val});"));
+            self.write_line(&format!(
+                "trace_write_mem_block_u64(state, {addr}, {value});"
+            ));
+            self.write_line(&format!("write_mem_u64(memory, {addr}, {value});"));
+        } else {
+            self.write_line(&format!(
+                "write_mem_u64(memory, {addr}, (uint64_t)({val}));"
+            ));
+        }
+    }
+
+    /// Emit a fail-before-mutation capacity and timestamp-headroom check.
+    pub fn reserve_preflight_writes(&mut self, writes: &str, slots: &str) {
+        if self.mode.traces_values() {
+            let args = self.tail_call_args();
+            self.write_line(&format!(
+                "if (unlikely(!trace_reserve_memory_writes(state, {writes}, {slots}))) {{"
+            ));
+            self.write_line(&format!("  [[clang::musttail]] return rv_trap({args});"));
+            self.write_line("}");
+        }
+    }
+
     fn emit_inline_page_record(&mut self, addr: &str, width: u8) {
         if width == 1 {
             self.write_line(&format!("trace_memory_access_leaf(&trace_memory, {addr});"));
@@ -643,6 +680,14 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
         EmitContext::write_mem(self, base, offset, val, width);
     }
 
+    fn write_aligned_mem_block(&mut self, addr: &str, val: &str) {
+        EmitContext::write_aligned_mem_block(self, addr, val);
+    }
+
+    fn reserve_preflight_writes(&mut self, writes: &str, slots: &str) {
+        EmitContext::reserve_preflight_writes(self, writes, slots);
+    }
+
     fn emit_call(&mut self, name: &str, args: &[&str]) {
         EmitContext::emit_call(self, name, args);
     }
@@ -760,6 +805,62 @@ mod tests {
             ctx.advance_timestamp(3);
             assert!(ctx.buf().is_empty());
         }
+    }
+
+    #[test]
+    fn aligned_block_write_is_one_value_trace_event() {
+        let mut ctx = value_trace_ctx();
+        ctx.write_aligned_mem_block("addr", "value");
+
+        assert!(ctx
+            .buf()
+            .contains("trace_write_mem_block_u64(state, addr, _v0);"));
+        assert!(ctx.buf().contains("write_mem_u64(memory, addr, _v0);"));
+        assert!(!ctx.buf().contains("trace_write_mem_u64("));
+    }
+
+    #[test]
+    fn aligned_block_write_is_an_ordinary_raw_write_outside_preflight() {
+        let mut ctx = EmitContext::new(
+            HashSet::new(),
+            EmitMode::Direct,
+            BlockAbi::Plain,
+            None,
+            Some(0),
+        );
+        ctx.write_aligned_mem_block("addr", "value");
+        ctx.reserve_preflight_writes("5u", "13u");
+
+        assert_eq!(
+            ctx.buf(),
+            "        write_mem_u64(memory, addr, (uint64_t)(value));\n"
+        );
+    }
+
+    #[test]
+    fn metered_aligned_block_write_records_pages_once() {
+        let mut ctx = metered_memory_ctx();
+        ctx.write_aligned_mem_block("addr", "value");
+
+        assert_eq!(
+            ctx.buf()
+                .matches("trace_memory_access_span(&trace_memory, addr, 8u);")
+                .count(),
+            1
+        );
+        assert_eq!(ctx.buf().matches("write_mem_u64(").count(), 1);
+        assert!(!ctx.buf().contains("trace_page_access("));
+    }
+
+    #[test]
+    fn value_trace_reserves_whole_instruction_before_mutation() {
+        let mut ctx = value_trace_ctx();
+        ctx.reserve_preflight_writes("5u", "13u");
+
+        assert!(ctx
+            .buf()
+            .contains("!trace_reserve_memory_writes(state, 5u, 13u)"));
+        assert!(ctx.buf().contains("return rv_trap("));
     }
 
     fn metered_memory_ctx() -> EmitContext<'static> {
