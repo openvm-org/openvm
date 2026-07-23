@@ -398,8 +398,8 @@ fn expand_test_negative() {
         for row in chip_ctx.common_main.rows_mut() {
             let row: &mut MemoryMerkleCols<_, VM_DIGEST_WIDTH> = row.borrow_mut();
             if row.expand_direction == BabyBear::NEG_ONE {
-                row.left_direction_different = BabyBear::ZERO;
-                row.right_direction_different = BabyBear::ZERO;
+                row.left_child_mode = BabyBear::ZERO;
+                row.right_child_mode = BabyBear::ZERO;
             }
         }
     }
@@ -432,6 +432,17 @@ fn final_direction_different(direction: BabyBear, child_has_expansion: bool) -> 
         BabyBear::ONE
     } else {
         BabyBear::ZERO
+    }
+}
+
+/// The merged `*_child_mode` value for these hand-built fixtures. They reference each
+/// touched child exactly once, so an initial row's mode is always 1; a final row's mode
+/// is the dd bit (1 iff the child is borrowed from the initial tree); padding is 0.
+fn child_mode(direction: BabyBear, child_has_expansion: bool) -> BabyBear {
+    if direction == BabyBear::ONE {
+        BabyBear::ONE
+    } else {
+        final_direction_different(direction, child_has_expansion)
     }
 }
 
@@ -534,16 +545,14 @@ fn build_below_leaf_swap_subtree(
             parent_hash,
             left_child_hash,
             right_child_hash,
-            left_direction_different: final_direction_different(
+            left_child_mode: child_mode(
                 direction,
                 left_has_path && child_depth < BELOW_LEAF_PATH_LEN,
             ),
-            right_direction_different: final_direction_different(
+            right_child_mode: child_mode(
                 direction,
                 right_has_path && child_depth < BELOW_LEAF_PATH_LEN,
             ),
-            left_adj_ref: BabyBear::ZERO,
-            right_adj_ref: BabyBear::ZERO,
         });
 
         parent_hash
@@ -664,10 +673,8 @@ fn build_counterexample_canonical_rows(
                 parent_hash: initial_hash,
                 left_child_hash: left_initial_hash,
                 right_child_hash: right_initial_hash,
-                left_direction_different: BabyBear::ZERO,
-                right_direction_different: BabyBear::ZERO,
-                left_adj_ref: BabyBear::ZERO,
-                right_adj_ref: BabyBear::ZERO,
+                left_child_mode: BabyBear::ONE,
+                right_child_mode: BabyBear::ONE,
             });
             rows_by_height[height].push(MemoryMerkleCols {
                 expand_direction: BabyBear::NEG_ONE,
@@ -680,10 +687,8 @@ fn build_counterexample_canonical_rows(
                 parent_hash: final_hash,
                 left_child_hash: left_final_hash,
                 right_child_hash: right_final_hash,
-                left_direction_different: BabyBear::from_bool(!left_changed),
-                right_direction_different: BabyBear::from_bool(!right_changed),
-                left_adj_ref: BabyBear::ZERO,
-                right_adj_ref: BabyBear::ZERO,
+                left_child_mode: BabyBear::from_bool(!left_changed),
+                right_child_mode: BabyBear::from_bool(!right_changed),
             });
 
             next.insert(parent_prefix, (initial_hash, final_hash));
@@ -729,10 +734,8 @@ fn build_hidden_leaf_expansion_row(
             parent_hash,
             left_child_hash: below_leaf_root,
             right_child_hash: unchanged_sibling_hash,
-            left_direction_different: final_direction_different(direction, true),
-            right_direction_different: final_direction_different(direction, false),
-            left_adj_ref: BabyBear::ZERO,
-            right_adj_ref: BabyBear::ZERO,
+            left_child_mode: child_mode(direction, true),
+            right_child_mode: child_mode(direction, false),
         },
     )
 }
@@ -860,10 +863,8 @@ fn build_below_leaf_swap_fraud_merkle(
             parent_hash: [BabyBear::ZERO; VM_DIGEST_WIDTH],
             left_child_hash: [BabyBear::ZERO; VM_DIGEST_WIDTH],
             right_child_hash: [BabyBear::ZERO; VM_DIGEST_WIDTH],
-            left_direction_different: BabyBear::ZERO,
-            right_direction_different: BabyBear::ZERO,
-            left_adj_ref: BabyBear::ZERO,
-            right_adj_ref: BabyBear::ZERO,
+            left_child_mode: BabyBear::ZERO,
+            right_child_mode: BabyBear::ZERO,
         });
     }
 

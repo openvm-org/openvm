@@ -31,16 +31,12 @@ fn parent_label_parts(
     (parent_as_label, parent_address_label)
 }
 
-/// Reference-count adjustment for a child of an initial row: the child's initial claim
-/// is consumed `1 + adj` times (see `MemoryMerkleCols::left_adj_ref`).
-fn child_adj_ref<F: PrimeField32>(emits_final: bool, changed: bool, dirty: bool) -> F {
-    if emits_final && changed && !dirty {
-        F::ONE
-    } else if !emits_final && !changed {
-        F::NEG_ONE
-    } else {
-        F::ZERO
-    }
+/// The `*_child_mode` value for an *initial* row (see `MemoryMerkleCols`): how many
+/// times the row references the child's initial claim, in {0, 1, 2}. One reference if
+/// the child is on the touched path, plus one if this node's final row dd-borrows it
+/// (touched-clean or untouched child of a node that emits a final row).
+fn initial_child_mode<F: PrimeField32>(emits_final: bool, changed: bool, dirty: bool) -> F {
+    F::from_bool(changed) + F::from_bool(emits_final && !dirty)
 }
 
 #[derive(Debug)]
@@ -235,19 +231,14 @@ impl<F: PrimeField32, const DIGEST_WIDTH: usize> MerkleTree<F, DIGEST_WIDTH> {
                                 parent_hash: par_old_values,
                                 left_child_hash: *old_left,
                                 right_child_hash: *old_right,
-                                left_direction_different: F::ZERO,
-                                right_direction_different: F::ZERO,
-                                // Reference-count adjustments (see MemoryMerkleCols
-                                // docs): +1 when our final row dd-borrows a
-                                // touched-clean child (consumed twice), -1 when the
-                                // child is untouched and no final row props it
-                                // (consumed zero times).
-                                left_adj_ref: child_adj_ref::<F>(
+                                // Initial-row child mode: reference count in {0, 1, 2}
+                                // (see MemoryMerkleCols).
+                                left_child_mode: initial_child_mode::<F>(
                                     emits_final,
                                     changed_left,
                                     left_dirty,
                                 ),
-                                right_adj_ref: child_adj_ref::<F>(
+                                right_child_mode: initial_child_mode::<F>(
                                     emits_final,
                                     changed_right,
                                     right_dirty,
@@ -264,13 +255,11 @@ impl<F: PrimeField32, const DIGEST_WIDTH: usize> MerkleTree<F, DIGEST_WIDTH> {
                                 parent_hash: combined,
                                 left_child_hash: *left,
                                 right_child_hash: *right,
-                                // dd = "not expanded finally": untouched *or*
-                                // touched-clean children are borrowed from the initial
-                                // tree.
-                                left_direction_different: F::from_bool(!left_dirty),
-                                right_direction_different: F::from_bool(!right_dirty),
-                                left_adj_ref: F::ZERO,
-                                right_adj_ref: F::ZERO,
+                                // Final-row child mode = dd bit: 1 when the child is
+                                // "not expanded finally" (untouched *or* touched-clean,
+                                // borrowed from the initial tree), 0 when it is dirty.
+                                left_child_mode: F::from_bool(!left_dirty),
+                                right_child_mode: F::from_bool(!right_dirty),
                             });
                             (
                                 (par_index, combined, par_old_values, node_dirty),
@@ -360,12 +349,9 @@ impl<F: PrimeField32, const DIGEST_WIDTH: usize> MerkleTree<F, DIGEST_WIDTH> {
             // The artificial touch seeds the walk so the root pair exists, but there is
             // no boundary row supplying the leaf's claim, so the height-1 initial row
             // (rows[0]) must treat the leaf as *untouched*: one dd-borrowed reference if
-            // the row's final counterpart exists (root case), none otherwise.
-            rows[0].left_adj_ref = if rows[0].is_root == F::ZERO {
-                F::NEG_ONE
-            } else {
-                F::ZERO
-            };
+            // the row's final counterpart exists (root case, mode 1), none otherwise
+            // (mode 0).
+            rows[0].left_child_mode = F::from_bool(rows[0].is_root == F::ONE);
         }
         let final_root = self.get_node(1);
         FinalState {

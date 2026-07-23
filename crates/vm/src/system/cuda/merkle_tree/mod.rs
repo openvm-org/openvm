@@ -456,13 +456,14 @@ impl MemoryMerkleTree {
                 // The artificial touch (see the caller) seeds the walk so the root pair
                 // exists, but no boundary row supplies the leaf's claim, so the height-1
                 // initial row (the last row) must treat the leaf as *untouched*: consume
-                // nothing.
+                // nothing, i.e. `left_child_mode = 0` (the kernel wrote 1 for the seeded
+                // leaf).
                 let mut output_vec = output.buffer().to_host_on(&self.device_ctx).unwrap();
-                let left_adj_ref_col = std::mem::offset_of!(
+                let left_child_mode_col = std::mem::offset_of!(
                     MemoryMerkleCols<F, VM_DIGEST_WIDTH>,
-                    left_adj_ref
+                    left_child_mode
                 ) / std::mem::size_of::<F>();
-                output_vec[unpadded_height - 1 + left_adj_ref_col * padded_height] = F::NEG_ONE;
+                output_vec[unpadded_height - 1 + left_child_mode_col * padded_height] = F::ZERO;
                 DeviceMatrix::new(
                     Arc::new(output_vec.to_device_on(&self.device_ctx).unwrap()),
                     padded_height,
