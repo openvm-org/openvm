@@ -2694,6 +2694,17 @@ mod tests {
 
     #[test]
     fn base_preflight_compiles_and_logs_system_phantoms() {
+        // This test invokes the real rvr AOT toolchain (clang). Some CI jobs that run
+        // `openvm-circuit` tests (e.g. the basic-memory backend job) do not install the
+        // toolchain; skip cleanly there. The compile path is covered by the
+        // `rvr_preflight_tests` suite in `openvm-riscv-circuit`, which runs in
+        // toolchain-equipped jobs.
+        if crate::arch::rvr::compile::ensure_toolchain_available().is_err() {
+            eprintln!(
+                "skipping base_preflight_compiles_and_logs_system_phantoms: rvr toolchain (clang) unavailable"
+            );
+            return;
+        }
         let exe = system_phantom_exe();
         let chips = phantom_chip_mapping(&exe);
         let compiled = compile_preflight(&exe, &chips, None).expect("compile preflight");
