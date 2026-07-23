@@ -24,14 +24,14 @@ mod tests {
         instruction::Instruction,
         program::Program,
         riscv::{RV64_IMM_AS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
-        LocalOpcode, SystemOpcode,
+        LocalOpcode, SysPhantom, SystemOpcode,
     };
     use openvm_riscv_circuit::{Rv64IBuilder, Rv64IConfig, Rv64ImBuilder, Rv64ImConfig};
     use openvm_riscv_guest::MAX_HINT_BUFFER_DWORDS;
     use openvm_riscv_transpiler::{
         BaseAluImmOpcode, BaseAluOpcode, BranchEqualOpcode, DivRemOpcode, MulHOpcode, MulOpcode,
         Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64JalrOpcode, Rv64LoadStoreOpcode,
-        Rv64MTranspilerExtension,
+        Rv64MTranspilerExtension, Rv64Phantom,
     };
     use openvm_stark_sdk::{
         openvm_stark_backend::p3_field::{PrimeCharacteristicRing, PrimeField32},
@@ -338,15 +338,106 @@ mod tests {
 
     #[test]
     #[cfg(feature = "rvr")]
-    fn test_rvr_preflight_rejects_unsupported_phantom() -> Result<()> {
+    fn test_rvr_builtin_phantoms_have_one_slot_and_no_memory_events() -> Result<()> {
         let instructions = [
-            Instruction::<F>::from_isize(SystemOpcode::PHANTOM.global_opcode(), 0, 0, 0, 0, 0),
+            Instruction::<F>::from_isize(
+                SystemOpcode::PHANTOM.global_opcode(),
+                0,
+                0,
+                SysPhantom::Nop as isize,
+                0,
+                0,
+            ),
+            Instruction::<F>::from_isize(
+                SystemOpcode::PHANTOM.global_opcode(),
+                0,
+                0,
+                SysPhantom::CtStart as isize,
+                0,
+                0,
+            ),
+            Instruction::<F>::from_isize(
+                SystemOpcode::PHANTOM.global_opcode(),
+                0,
+                0,
+                SysPhantom::CtEnd as isize,
+                0,
+                0,
+            ),
+            Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+        ];
+        let exe = VmExe::from(Program::from_instructions(&instructions));
+        let executor = VmExecutor::new(test_rv64im_config())?;
+        let preflight = executor.rvr_preflight_instance(&exe, None)?;
+
+        let suspended = preflight.execute_for(
+            Vec::<Vec<u8>>::new(),
+            openvm_circuit::arch::rvr::RvrPreflightLimits::new(3, 0),
+        )?;
+        assert_eq!(
+            suspended.endpoint,
+            openvm_circuit::arch::rvr::RvrPreflightEndpoint::Suspended {
+                resume_pc: 0,
+                final_timestamp: 1,
+            }
+        );
+        assert_eq!(
+            suspended
+                .transcript
+                .program_log
+                .iter()
+                .map(|event| (event.pc, event.timestamp))
+                .collect::<Vec<_>>(),
+            vec![(0, 1)]
+        );
+        assert!(suspended.transcript.memory_log.is_empty());
+        assert!(suspended.transcript.initial_write_log.is_empty());
+
+        let execution = preflight.execute(
+            Vec::<Vec<u8>>::new(),
+            openvm_circuit::arch::rvr::RvrPreflightLimits::new(4, 0),
+        )?;
+        assert_eq!(
+            execution.endpoint,
+            openvm_circuit::arch::rvr::RvrPreflightEndpoint::Terminated
+        );
+        assert_eq!(
+            execution
+                .transcript
+                .program_log
+                .iter()
+                .map(|event| (event.pc, event.timestamp))
+                .collect::<Vec<_>>(),
+            vec![(0, 1), (4, 2), (8, 3), (12, 4), (12, 4)]
+        );
+        assert!(execution.transcript.memory_log.is_empty());
+        assert!(execution.transcript.initial_write_log.is_empty());
+        assert_eq!(execution.state.pc(), 12);
+
+        let pure = executor.rvr_instance(&exe, None)?;
+        let pure_state = pure.execute(Vec::<Vec<u8>>::new())?;
+        assert_eq!(pure_state.pc(), 12);
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(feature = "rvr")]
+    fn test_rvr_preflight_still_rejects_callback_phantoms() -> Result<()> {
+        let instructions = [
+            Instruction::<F>::from_isize(
+                SystemOpcode::PHANTOM.global_opcode(),
+                0,
+                0,
+                Rv64Phantom::HintInput as isize,
+                0,
+                0,
+            ),
             Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
         let executor = VmExecutor::new(test_rv64im_config())?;
         let error = match executor.rvr_preflight_instance(&exe, None) {
-            Ok(_) => panic!("unsupported phantom unexpectedly compiled for preflight"),
+            Ok(_) => panic!("callback phantom unexpectedly compiled for preflight"),
             Err(error) => error,
         };
         assert!(error.to_string().contains("does not support RVR preflight"));

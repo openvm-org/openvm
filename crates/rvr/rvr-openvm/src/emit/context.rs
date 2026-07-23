@@ -619,6 +619,10 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
         EmitContext::peek_reg(self, reg_index(var))
     }
 
+    fn advance_timestamp(&mut self, slots: u32) {
+        EmitContext::advance_timestamp(self, slots)
+    }
+
     fn write_var(&mut self, var: Variable, val: &str) {
         EmitContext::write_reg(self, reg_index(var), val)
     }
@@ -728,6 +732,34 @@ mod tests {
         assert!(ctx
             .buf()
             .contains("trace_reg_write(state, 3, _v0, state->regs[3]);"));
+    }
+
+    #[test]
+    fn advance_timestamp_is_value_trace_only() {
+        let mut tracing = value_trace_ctx();
+        tracing.advance_timestamp(3);
+        assert_eq!(
+            tracing.buf(),
+            "        trace_advance_timestamp(state, 3u);\n"
+        );
+
+        for mode in [
+            EmitMode::Direct,
+            EmitMode::Metered {
+                trace_memory_pages: false,
+            },
+            EmitMode::MeteredCost,
+        ] {
+            let chip_widths = matches!(mode, EmitMode::MeteredCost).then_some(&[][..]);
+            let block_abi = if matches!(mode, EmitMode::Metered { .. }) {
+                BlockAbi::Metered
+            } else {
+                BlockAbi::Plain
+            };
+            let mut ctx = EmitContext::new(HashSet::new(), mode, block_abi, chip_widths, Some(0));
+            ctx.advance_timestamp(3);
+            assert!(ctx.buf().is_empty());
+        }
     }
 
     fn metered_memory_ctx() -> EmitContext<'static> {

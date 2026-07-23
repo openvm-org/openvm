@@ -55,7 +55,9 @@ fn lift_system_phantom(pc: u64, phantom: SysPhantom) -> LiftedInstr {
 pub(crate) struct NopInstr;
 
 impl ExtInstr for NopInstr {
-    fn emit_c(&self, _ctx: &mut dyn ExtEmitCtx) {}
+    fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
+        ctx.advance_timestamp(1);
+    }
 
     fn opname(&self) -> &str {
         "nop"
@@ -67,6 +69,10 @@ impl ExtInstr for NopInstr {
 
     fn accesses_memory(&self) -> bool {
         false
+    }
+
+    fn supports_preflight(&self) -> bool {
+        true
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
