@@ -757,6 +757,16 @@ canonicalization, matches the complete range histogram including the
 equal-operands/no-difference path, rejects a corrupted result, and proves the
 AIR. No comparison record is constructed by production replay.
 
+SLLI and SRLI follow the same direct shape. Replay decodes the logged source,
+re-executes the shift on the GPU, checks the logged destination, resolves both
+memory predecessors, and fills the existing immediate adapter and shift core
+without a compatibility record. The differential proof test starts from a
+nonzero register in the untimed initial memory image and covers shifts 0, 1, 15,
+16, 31, 32, and 63 across interleaved opcode groups. CPU, legacy CUDA, and replay
+rows and range histograms match, while corrupting a nonzero cross-limb result is
+rejected. This also exercises first-touch reads from initial memory without
+adding a setup instruction or timed observation to the transcript.
+
 ### M3: complete the GPU proving path
 
 Once RISC-V replay is viable:

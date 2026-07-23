@@ -39,21 +39,25 @@ template <size_t NUM_LIMBS, size_t LIMB_BITS> struct ShiftLogicalImmCore {
 
     __device__ ShiftLogicalImmCore(VariableRangeChecker rc) : range_checker(rc) {}
 
-    __device__ void
-    fill_trace_row(RowSlice row, ShiftLogicalImmCoreRecord<NUM_LIMBS, LIMB_BITS> record) {
+    __device__ void fill_trace_row(
+        RowSlice row,
+        uint16_t const (&b)[NUM_LIMBS],
+        uint8_t shamt,
+        uint8_t local_opcode
+    ) {
         // ShiftImmOpcode: SLLI = 0, SRLI = 1 (SRAI never reaches this chip).
-        bool is_sll = record.local_opcode == 0;
+        bool is_sll = local_opcode == 0;
 
         uint16_t shamt_limbs[NUM_LIMBS] = {0};
-        shamt_limbs[0] = record.shamt;
+        shamt_limbs[0] = shamt;
 
         uint16_t a[NUM_LIMBS];
         size_t limb_shift = 0, bit_shift = 0;
         if (is_sll) {
-            run_shift_left<NUM_LIMBS, LIMB_BITS>(record.b, shamt_limbs, a, limb_shift, bit_shift);
+            run_shift_left<NUM_LIMBS, LIMB_BITS>(b, shamt_limbs, a, limb_shift, bit_shift);
         } else {
             run_shift_right_logical<NUM_LIMBS, LIMB_BITS>(
-                record.b, shamt_limbs, a, limb_shift, bit_shift
+                b, shamt_limbs, a, limb_shift, bit_shift
             );
         }
 
@@ -63,7 +67,7 @@ template <size_t NUM_LIMBS, size_t LIMB_BITS> struct ShiftLogicalImmCore {
         uint16_t carry_arr[NUM_LIMBS];
         uint16_t aux_arr[NUM_LIMBS];
         for (size_t k = 0; k < NUM_LIMBS; k++) {
-            uint32_t limb = record.b[k];
+            uint32_t limb = b[k];
             uint32_t carry, aux;
             if (is_sll) {
                 carry = limb >> aux_bits;
@@ -94,7 +98,12 @@ template <size_t NUM_LIMBS, size_t LIMB_BITS> struct ShiftLogicalImmCore {
 
         COL_WRITE_VALUE(row, Cols, opcode_sll_flag, is_sll ? 1u : 0u);
 
-        COL_WRITE_ARRAY(row, Cols, b, record.b);
+        COL_WRITE_ARRAY(row, Cols, b, b);
         COL_WRITE_ARRAY(row, Cols, a, a);
+    }
+
+    __device__ void
+    fill_trace_row(RowSlice row, ShiftLogicalImmCoreRecord<NUM_LIMBS, LIMB_BITS> record) {
+        fill_trace_row(row, record.b, record.shamt, record.local_opcode);
     }
 };
