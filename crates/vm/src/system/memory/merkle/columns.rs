@@ -23,21 +23,21 @@ pub struct MemoryMerkleCols<T, const DIGEST_WIDTH: usize> {
     pub left_child_hash: [T; DIGEST_WIDTH],
     pub right_child_hash: [T; DIGEST_WIDTH],
 
-    // indicate whether `expand_direction` is different from origin
-    // when `expand_direction` != -1, must be 0
-    pub left_direction_different: T,
-    pub right_direction_different: T,
-
-    // Reference-count adjustments for the child interactions of *initial* rows
-    // (`expand_direction` = 1): the child's initial claim is consumed `1 + adj` times.
+    // One child-reference descriptor per side, in {0, 1, 2}. Its meaning depends on
+    // `expand_direction`
     //
-    // In {-1, 0, 1}; both must be 0 when `expand_direction` != 1.
-    //  `+1` = this row's final counterpart dd-borrows the child's initial hash, so this
-    //         row consumes the child's initial claim twice (multiplicity -2).
-    //  `-1` = the child is untouched and this node has no final row to prop the
-    //         reference, so this row consumes nothing (multiplicity 0).
-    pub left_adj_ref: T,
-    pub right_adj_ref: T,
+    // Initial row (`expand_direction` = 1): number of times this row consumes the child's
+    // *initial* claim (count `-mode`) — one copy for a touched child, plus one more when
+    // this node's final row dd-borrows the child's initial hash. An untouched child of a
+    // node that emits no final row consumes nothing (`mode` = 0).
+    //
+    // Final row (`expand_direction` = -1): the "direction different" bit in {0, 1} —
+    // 1 iff the child is borrowed from the initial tree (untouched or touched-clean)
+    // rather than expanded as the final child. The count is `+1` regardless.
+    //
+    // Padding row (`expand_direction` = 0): must be 0.
+    pub left_child_mode: T,
+    pub right_child_mode: T,
 }
 
 #[derive(Debug, Clone, Copy, AlignedBorrow, StructReflection)]

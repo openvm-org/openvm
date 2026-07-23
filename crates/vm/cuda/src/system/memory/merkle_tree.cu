@@ -193,10 +193,8 @@ template <typename T> struct MerkleCols {
     T parent_hash[CELLS_OUT];
     T left_child_hash[CELLS_OUT];
     T right_child_hash[CELLS_OUT];
-    T left_direction_different;
-    T right_direction_different;
-    T left_adj_ref;
-    T right_adj_ref;
+    T left_child_mode;
+    T right_child_mode;
 };
 
 struct LabeledDigest {
@@ -279,23 +277,21 @@ __global__ void group_by_parent(
     }
 }
 
-/// Reference-count adjustment for a child of an initial row
-__device__ inline Fp child_adj_ref(bool emits_final, bool present, bool dirty) {
-    if (emits_final && present && !dirty) {
-        return Fp::one();
+/// The `*_child_mode` value for a merkle row (see `MemoryMerkleCols` in columns.rs).
+/// Initial rows (`!new_values`) carry the reference count in {0, 1, 2}: one if the child
+/// is on the touched path, plus one if this node's final row dd-borrows it. Final rows
+/// carry the dd bit: 1 iff the child is borrowed from the initial tree (not dirty).
+__device__ inline Fp child_mode(bool new_values, bool present, bool dirty, bool emits_final) {
+    if (new_values) {
+        return Fp((uint32_t)(!dirty));
     }
-    if (!emits_final && !present) {
-        return Fp::neg_one();
-    }
-    return Fp::zero();
+    return Fp((uint32_t)present + (uint32_t)(emits_final && !dirty));
 }
 
 /// Fills one merkle trace row and records its compression (leaving the parent digest in
 /// `digests[0..CELLS_OUT]`).
 ///
-/// For final rows (`new_values`), `direction_different` marks children *not expanded
-/// finally* (untouched or touched-but-clean), whose hashes are borrowed from the initial
-/// tree.
+/// The `*_child_mode` columns are derived from the node state via `child_mode`.
 __device__ void fill_merkle_trace_row(
     RowSlice row,
     bool new_values,
@@ -321,19 +317,17 @@ __device__ void fill_merkle_trace_row(
     COL_WRITE_ARRAY(row, MerkleCols, right_child_hash, digests + CELLS_OUT);
     poseidon2.compress_and_record_inplace(digests);
     COL_WRITE_ARRAY(row, MerkleCols, parent_hash, digests);
-    COL_WRITE_VALUE(row, MerkleCols, left_direction_different, new_values && !left_dirty);
-    COL_WRITE_VALUE(row, MerkleCols, right_direction_different, new_values && !right_dirty);
     COL_WRITE_VALUE(
         row,
         MerkleCols,
-        left_adj_ref,
-        new_values ? Fp::zero() : child_adj_ref(emits_final, left_present, left_dirty)
+        left_child_mode,
+        child_mode(new_values, left_present, left_dirty, emits_final)
     );
     COL_WRITE_VALUE(
         row,
         MerkleCols,
-        right_adj_ref,
-        new_values ? Fp::zero() : child_adj_ref(emits_final, right_present, right_dirty)
+        right_child_mode,
+        child_mode(new_values, right_present, right_dirty, emits_final)
     );
 }
 
