@@ -775,6 +775,13 @@ and shifts 0, 1, 15, 16, 31, 32, 47, 48, and 63. Direct replay and legacy CUDA
 match the CPU matrix and complete range histogram exactly, the replay trace
 proves, and a corrupted sign-filled cross-limb result is rejected.
 
+SLLIW and SRLIW extend replay to the word adapter. The kernel authenticates all
+64 source bits, executes the shift over the low 32 bits, and requires both upper
+destination limbs to equal the low-word result's sign extension. An interleaved
+boundary test covers shifts 0, 1, 15, 16, and 31 and both positive and negative
+word results. Replay and legacy CUDA match the CPU rows and range histogram, the
+replay trace proves, and corrupting an upper sign-extension limb is rejected.
+
 ### M3: complete the GPU proving path
 
 Once RISC-V replay is viable:
