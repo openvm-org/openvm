@@ -623,10 +623,36 @@ repository's deterministic `FxHashMap`, updating each predecessor entry with a
 single lookup, and fusing timestamp validation into the step scan reduced the
 cold index median from 53.5 ms to 24.0 ms. A measured attempt to replace the
 small opcode `BTreeMap`s with hash maps regressed it to 35.0 ms and was
-discarded. Even the improved CPU path is not the intended production result:
-GPU postflight should derive predecessor and opcode indexes after the raw logs
-are uploaded, retain the block-sorted event order for system-memory tracegen,
-and avoid uploading the 8.4 MiB derived index.
+discarded.
+
+The next checkpoint moved both indexes to the GPU. Memory indexing packs a
+32-bit block label and a 32-bit source ordinal into one unique `u64` radix-sort
+key. First-write seeds occupy the ordinal prefix and therefore sort before
+chronological memory events for the same block without relying on sort
+stability. A second, stable radix sort derives replay steps partitioned by
+opcode; only the small per-opcode range table returns to the host. The static
+GPU artifact binds the program and `MemoryConfig`, rejects a block-label domain
+wider than 32 bits, and the kernels reject out-of-range or unaligned addresses.
+The production GPU path no longer calls the CPU replay-index builder or uploads
+its 8.4 MiB output. That builder remains only as a differential-test oracle.
+
+On the same fixed workload, two compact-key runs measured 1,623.2 and 1,752.4 us
+median for raw-transcript H2D plus GPU memory indexing, 134.3 and 136.5 us for
+GPU program indexing plus range-table D2H, and 56.7 and 56.8 us for the replay
+ADDI kernel. Their conservative isolated totals are 1,814.3 and 1,945.7 us,
+down from 25,857.3 us after the CPU-oracle optimization and 55.7 ms at the
+initial checkpoint. They are 3.41x and 3.64x the corresponding isolated legacy
+ADDI record-upload-plus-kernel slices, with the same deliberate asymmetry:
+replay is charged for the complete ADDI+BNE transcript while legacy includes
+only ADDI records. The retained GPU-derived state is 8,388,616 bytes. Replacing separate
+64-bit block keys and 32-bit ordinal values with the unique packed key reduced
+peak indexing allocation from 42,240,511 to 29,657,599 additional bytes above
+the raw transcript and static program. CUB's
+double-buffer overload had previously produced the same queried workspace and
+latency as ordinary pair sorting and was discarded. The compact-key result is a
+material improvement but still fails the isolated slice's peak-memory target;
+the complete executor plus all-RISC-V comparison is required before applying
+the formal M2 gate, and the peak must fall further before widening AIR coverage.
 
 #### Initial GPU correctness checkpoint (2026-07-23)
 
@@ -646,10 +672,10 @@ the current immediate-ALU AIR always emits a destination write and must gain the
 same conditional-write shape as load/JALR before that schedule can be replayed.
 
 This establishes correctness and log sufficiency for one fixed-row RISC-V AIR,
-but does not yet exercise the complete M2 performance gate. The measurements
-above make the next checkpoint concrete: move indexing to the GPU and improve
-the replay layout, then repeat this benchmark before widening to the other
-RISC-V adapters.
+and removes CPU postflight from the production GPU path, but does not yet
+exercise the complete M2 performance gate. The next checkpoint is another
+measured reduction in index peak memory, followed by a full-path executor plus
+RISC-V comparison before widening to the other RISC-V adapters.
 
 ### M3: complete the GPU proving path
 
