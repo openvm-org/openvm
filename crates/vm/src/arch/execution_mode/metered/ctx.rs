@@ -239,7 +239,7 @@ impl MeteredCtx {
 
 impl ExecutionCtxTrait for MeteredCtx {
     #[inline(always)]
-    fn on_memory_operation(&mut self, address_space: u32, ptr: u32, size: u32) {
+    fn on_memory_operation(&mut self, address_space: u32, ptr: u32, size: u32, is_write: bool) {
         debug_assert!(
             address_space != RV64_IMM_AS,
             "address space must not be immediate"
@@ -253,7 +253,7 @@ impl ExecutionCtxTrait for MeteredCtx {
         // Handle merkle tree updates
         if address_space != RV64_REGISTER_AS {
             self.memory_ctx
-                .update_boundary_merkle_heights(address_space, ptr, size);
+                .update_boundary_merkle_heights(address_space, ptr, size, is_write);
         }
     }
 

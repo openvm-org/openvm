@@ -342,7 +342,7 @@ impl<'a> EmitContext<'a> {
             self.write_line(&format!("{trace_func}(state, {addr}, {var});"));
         }
         if self.mode.traces_memory_pages() {
-            self.emit_inline_page_record(&addr, width);
+            self.emit_inline_page_record(&addr, width, false);
         }
         var
     }
@@ -360,7 +360,7 @@ impl<'a> EmitContext<'a> {
         self.uses_raw_memory = true;
 
         if self.mode.traces_memory_pages() {
-            self.emit_inline_page_record(&addr, width);
+            self.emit_inline_page_record(&addr, width, true);
         }
         if self.mode.traces_values() {
             let value = self.next_var();
@@ -374,12 +374,14 @@ impl<'a> EmitContext<'a> {
         }
     }
 
-    fn emit_inline_page_record(&mut self, addr: &str, width: u8) {
+    fn emit_inline_page_record(&mut self, addr: &str, width: u8, is_write: bool) {
         if width == 1 {
-            self.write_line(&format!("trace_memory_access_leaf(&trace_memory, {addr});"));
+            self.write_line(&format!(
+                "trace_memory_access_leaf(&trace_memory, {addr}, {is_write});"
+            ));
         } else {
             self.write_line(&format!(
-                "trace_memory_access_span(&trace_memory, {addr}, {width}u);"
+                "trace_memory_access_span(&trace_memory, {addr}, {width}u, {is_write});"
             ));
         }
     }
@@ -485,7 +487,13 @@ impl<'a> EmitContext<'a> {
         self.write_line("}");
     }
 
-    pub fn trace_page_access(&mut self, addr: &str, width: MemWidth, addr_space: u32) {
+    pub fn trace_page_access(
+        &mut self,
+        addr: &str,
+        width: MemWidth,
+        addr_space: u32,
+        is_write: bool,
+    ) {
         assert!(
             !self.mode.traces_values(),
             "page-only access is invalid when values are being traced"
@@ -499,7 +507,7 @@ impl<'a> EmitContext<'a> {
         }
         let size = width.bytes();
         self.write_line(&format!(
-            "trace_page_access(state, {addr}, {size}u, {addr_space}u);"
+            "trace_page_access(state, {addr}, {size}u, {addr_space}u, {is_write});"
         ));
         if touches_memory {
             self.reload_page_locals();
@@ -511,6 +519,7 @@ impl<'a> EmitContext<'a> {
         base_addr: &str,
         num_dwords: &str,
         addr_space: u32,
+        is_write: bool,
     ) {
         assert!(
             !self.mode.traces_values(),
@@ -524,7 +533,8 @@ impl<'a> EmitContext<'a> {
             self.flush_page_locals();
         }
         self.write_line(&format!(
-            "trace_page_access_u64_range(state, {base_addr}, {num_dwords}, {addr_space}u);"
+            "trace_page_access_u64_range(state, {base_addr}, {num_dwords}, {addr_space}u, \
+             {is_write});"
         ));
         if touches_memory {
             self.reload_page_locals();
@@ -638,12 +648,18 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
         EmitContext::trace_chip_if_nonzero(self, chip_idx, count_expr);
     }
 
-    fn trace_page_access(&mut self, addr: &str, width: MemWidth, addr_space: u32) {
-        EmitContext::trace_page_access(self, addr, width, addr_space);
+    fn trace_page_access(&mut self, addr: &str, width: MemWidth, addr_space: u32, is_write: bool) {
+        EmitContext::trace_page_access(self, addr, width, addr_space, is_write);
     }
 
-    fn trace_page_access_u64_range(&mut self, base_addr: &str, num_dwords: &str, addr_space: u32) {
-        EmitContext::trace_page_access_u64_range(self, base_addr, num_dwords, addr_space);
+    fn trace_page_access_u64_range(
+        &mut self,
+        base_addr: &str,
+        num_dwords: &str,
+        addr_space: u32,
+        is_write: bool,
+    ) {
+        EmitContext::trace_page_access_u64_range(self, base_addr, num_dwords, addr_space, is_write);
     }
 }
 
@@ -672,6 +688,6 @@ mod tests {
 
         assert!(ctx
             .buf()
-            .contains("trace_memory_access_span(&trace_memory, addr, 8u);"));
+            .contains("trace_memory_access_span(&trace_memory, addr, 8u, false);"));
     }
 }

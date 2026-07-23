@@ -22,10 +22,15 @@ const FIRST_LEAF_PER_64_LEAVES: u64 = 0x0000_0000_0000_0001;
 pub struct PageTouch {
     /// Index of the 64-leaf page in the memory tree.
     pub page_id: u32,
-    /// Aligns `leaf_mask` and makes the shared 16-byte Rust/C layout explicit.
+    /// Aligns `leaf_mask` and makes the shared 24-byte Rust/C layout explicit.
     pub _padding: u32,
     /// Leaves touched in this page, with one bit per leaf.
     pub leaf_mask: u64,
+    /// Leaves *written* in this page (`dirty_mask & !leaf_mask == 0`). Written leaves
+    /// are exactly the leaves tracegen commits final state for (dirtiness is per write,
+    /// independent of the written content), costing final-direction Merkle rows and
+    /// Poseidon2 compressions; read-only leaves do not.
+    pub dirty_mask: u64,
 }
 
 /// Leaves and tree nodes that must be created because they were absent at the last checkpoint.
@@ -421,6 +426,47 @@ impl SegmentMemoryTracker {
             }
         }
         count
+    }
+
+    /// Leaf/node counting without baseline bookkeeping. Used for the dirty
+    /// (written-leaf) mirror: dirtiness has no first-touch/default-hash concept (those
+    /// are initial-side notions), only the size of the spanning tree matters.
+    #[inline(always)]
+    pub(super) fn insert_counting(&mut self, page_id: usize, leaf_mask: u64) -> (u32, u32) {
+        debug_assert!(page_id < self.segment_leaf_masks.len());
+        debug_assert!(leaf_mask != 0);
+
+        let segment_leaf_mask = unsafe { self.segment_leaf_masks.get_unchecked_mut(page_id) };
+        let segment_leaf_mask_before = *segment_leaf_mask;
+        let segment_leaf_mask_after = segment_leaf_mask_before | leaf_mask;
+        if segment_leaf_mask_after == segment_leaf_mask_before {
+            return (0, 0);
+        }
+
+        *segment_leaf_mask = segment_leaf_mask_after;
+        if segment_leaf_mask_before == 0 {
+            self.dirty_page_ids.push(page_id);
+        }
+
+        let new_segment_leaf_mask = leaf_mask & !segment_leaf_mask_before;
+        let (leaves, mut merkle_nodes) = if new_segment_leaf_mask.is_power_of_two() {
+            (
+                1,
+                local_merkle_nodes_added_leaf(
+                    segment_leaf_mask_before,
+                    new_segment_leaf_mask.trailing_zeros(),
+                ),
+            )
+        } else {
+            (
+                new_segment_leaf_mask.count_ones(),
+                local_merkle_nodes_delta(segment_leaf_mask_before, new_segment_leaf_mask),
+            )
+        };
+        if segment_leaf_mask_before == 0 {
+            merkle_nodes += self.insert_upper_path(page_id);
+        }
+        (leaves, merkle_nodes)
     }
 }
 
@@ -876,6 +922,7 @@ mod tests {
             page_id: 0,
             _padding: 0,
             leaf_mask: 1,
+            dirty_mask: 0,
         }]);
         tracker.clear();
         let second = tracker.insert(0, 1, &baseline_memory).first_touches;
