@@ -805,6 +805,15 @@ borrow, both x0 source positions, every source/destination alias ordering, and
 padding. CPU, legacy CUDA, and replay rows and range histograms match; the replay
 trace proves and rejects a corrupted result.
 
+ADDW and SUBW reuse that three-event schedule while authenticating all 64 bits
+of both source reads. Replay computes the low 32-bit sum or difference, requires
+the logged 64-bit destination to be its exact sign extension, and supplies the
+source high limbs to the existing word adapter. A seven-row grouped test covers
+carry, borrow, positive and negative results, x0 sources, every read/write alias
+shape, and non-power-of-two padding. CPU, legacy CUDA, and replay rows and range
+histograms match; the replay trace proves and rejects a corrupted upper
+sign-extension limb.
+
 ### M3: complete the GPU proving path
 
 Once RISC-V replay is viable:

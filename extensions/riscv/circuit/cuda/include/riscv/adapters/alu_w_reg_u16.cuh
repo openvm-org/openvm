@@ -43,50 +43,82 @@ struct Rv64BaseAluWRegU16Adapter {
     __device__ Rv64BaseAluWRegU16Adapter(VariableRangeChecker rc, uint32_t timestamp_max_bits)
         : mem_helper(rc, timestamp_max_bits), range_checker(rc) {}
 
-    __device__ void fill_trace_row(RowSlice row, Rv64BaseAluWRegU16AdapterRecord record) {
+    __device__ void fill_trace_row(
+        RowSlice row,
+        uint32_t from_pc,
+        uint32_t from_timestamp,
+        uint32_t rd_ptr,
+        uint32_t rs1_ptr,
+        uint16_t const (&rs1_high_value)[RV64_WORD_U16_LIMBS],
+        uint32_t rs2_ptr,
+        uint16_t const (&rs2_high_value)[RV64_WORD_U16_LIMBS],
+        uint16_t result_high,
+        uint32_t rs1_prev_timestamp,
+        uint32_t rs2_prev_timestamp,
+        uint32_t write_prev_timestamp,
+        uint16_t const (&write_prev_data)[BLOCK_FE_WIDTH]
+    ) {
         Fp prev[BLOCK_FE_WIDTH];
-        copy_u16_cells(prev, record.writes_aux.prev_data);
+        copy_u16_cells(prev, write_prev_data);
         COL_WRITE_ARRAY(row, Rv64BaseAluWRegU16AdapterCols, writes_aux.prev_data, prev);
         mem_helper.fill(
             row.slice_from(COL_INDEX(Rv64BaseAluWRegU16AdapterCols, writes_aux)),
-            record.writes_aux.prev_timestamp,
-            record.from_timestamp + 2
+            write_prev_timestamp,
+            from_timestamp + 2
         );
 
         mem_helper.fill(
             row.slice_from(COL_INDEX(Rv64BaseAluWRegU16AdapterCols, reads_aux[1])),
-            record.reads_aux[1].prev_timestamp,
-            record.from_timestamp + 1
+            rs2_prev_timestamp,
+            from_timestamp + 1
         );
         mem_helper.fill(
             row.slice_from(COL_INDEX(Rv64BaseAluWRegU16AdapterCols, reads_aux[0])),
-            record.reads_aux[0].prev_timestamp,
-            record.from_timestamp
+            rs1_prev_timestamp,
+            from_timestamp
         );
 
         range_checker.add_count(
-            static_cast<uint32_t>(record.result_high) & ((1u << (U16_BITS - 1)) - 1u), U16_BITS - 1
+            static_cast<uint32_t>(result_high) & ((1u << (U16_BITS - 1)) - 1u), U16_BITS - 1
         );
 
         Fp rs1_high[RV64_WORD_U16_LIMBS];
         Fp rs2_high[RV64_WORD_U16_LIMBS];
-        copy_u16_cells(rs1_high, record.rs1_high);
-        copy_u16_cells(rs2_high, record.rs2_high);
+        copy_u16_cells(rs1_high, rs1_high_value);
+        copy_u16_cells(rs2_high, rs2_high_value);
 
         COL_WRITE_VALUE(
             row,
             Rv64BaseAluWRegU16AdapterCols,
             result_sign,
-            record.result_high >> (U16_BITS - 1)
+            result_high >> (U16_BITS - 1)
         );
         COL_WRITE_ARRAY(row, Rv64BaseAluWRegU16AdapterCols, rs2_high, rs2_high);
-        COL_WRITE_VALUE(row, Rv64BaseAluWRegU16AdapterCols, rs2_ptr, record.rs2_ptr);
+        COL_WRITE_VALUE(row, Rv64BaseAluWRegU16AdapterCols, rs2_ptr, rs2_ptr);
         COL_WRITE_ARRAY(row, Rv64BaseAluWRegU16AdapterCols, rs1_high, rs1_high);
-        COL_WRITE_VALUE(row, Rv64BaseAluWRegU16AdapterCols, rs1_ptr, record.rs1_ptr);
-        COL_WRITE_VALUE(row, Rv64BaseAluWRegU16AdapterCols, rd_ptr, record.rd_ptr);
+        COL_WRITE_VALUE(row, Rv64BaseAluWRegU16AdapterCols, rs1_ptr, rs1_ptr);
+        COL_WRITE_VALUE(row, Rv64BaseAluWRegU16AdapterCols, rd_ptr, rd_ptr);
         COL_WRITE_VALUE(
-            row, Rv64BaseAluWRegU16AdapterCols, from_state.timestamp, record.from_timestamp
+            row, Rv64BaseAluWRegU16AdapterCols, from_state.timestamp, from_timestamp
         );
-        COL_WRITE_VALUE(row, Rv64BaseAluWRegU16AdapterCols, from_state.pc, record.from_pc);
+        COL_WRITE_VALUE(row, Rv64BaseAluWRegU16AdapterCols, from_state.pc, from_pc);
+    }
+
+    __device__ void fill_trace_row(RowSlice row, Rv64BaseAluWRegU16AdapterRecord record) {
+        fill_trace_row(
+            row,
+            record.from_pc,
+            record.from_timestamp,
+            record.rd_ptr,
+            record.rs1_ptr,
+            record.rs1_high,
+            record.rs2_ptr,
+            record.rs2_high,
+            record.result_high,
+            record.reads_aux[0].prev_timestamp,
+            record.reads_aux[1].prev_timestamp,
+            record.writes_aux.prev_timestamp,
+            record.writes_aux.prev_data
+        );
     }
 };
