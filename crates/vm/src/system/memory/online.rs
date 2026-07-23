@@ -512,6 +512,10 @@ pub struct TracingMemory {
     /// Maps `(addr_space, ptr / BLOCK_FE_WIDTH)` to the latest access timestamp.
     /// A value of 0 means the touched-memory slot has never been accessed.
     pub(super) meta: Vec<PagedVec<u32, PAGE_SIZE>>,
+    /// Maps `(addr_space, ptr / BLOCK_FE_WIDTH)` to whether the block was ever written
+    /// during this segment. Dirtiness is per write access, independent of the written
+    /// content; stamped into each [`TouchedBlock`] by [`Self::finalize`].
+    pub(super) is_dirty: Vec<PagedVec<bool, PAGE_SIZE>>,
 }
 
 impl TracingMemory {
@@ -528,9 +532,16 @@ impl TracingMemory {
             .iter()
             .map(|config| PagedVec::new(config.num_cells.div_ceil(BLOCK_FE_WIDTH)))
             .collect();
+        let is_dirty = image
+            .memory
+            .config
+            .iter()
+            .map(|config| PagedVec::new(config.num_cells.div_ceil(BLOCK_FE_WIDTH)))
+            .collect();
         Self {
             data: image,
             meta,
+            is_dirty,
             timestamp: INITIAL_TIMESTAMP + 1,
         }
     }
@@ -594,6 +605,13 @@ impl TracingMemory {
                 .size()
     }
 
+    #[inline(always)]
+    fn mark_dirty(&mut self, address_space: usize, block_idx: usize) {
+        // SAFETY: address_space is validated during instruction decoding
+        let dirty_page = unsafe { self.is_dirty.get_unchecked_mut(address_space) };
+        dirty_page.set(block_idx, true);
+    }
+
     /// Atomic cell read operation which increments the timestamp by 1.
     /// Returns `(t_prev, values)`.
     ///
@@ -638,6 +656,7 @@ impl TracingMemory {
     {
         self.assert_valid_access::<BLOCK_SIZE>(address_space, ptr);
         let t_prev = self.prev_access_time(address_space as usize, ptr as usize);
+        self.mark_dirty(address_space as usize, ptr as usize / BLOCK_FE_WIDTH);
         let values_prev = self.data.read(address_space, ptr);
         self.data.write(address_space, ptr, values);
         self.timestamp += 1;
@@ -679,6 +698,10 @@ impl TracingMemory {
     ) -> (u32, [u8; N]) {
         self.assert_valid_byte_access::<N>(address_space, byte_ptr);
         let t_prev = self.byte_prev_access_time(address_space as usize, byte_ptr as usize);
+        self.mark_dirty(
+            address_space as usize,
+            byte_ptr as usize / self.memory_block_bytes(address_space),
+        );
         let values_prev = self.data.read_bytes::<N>(address_space, byte_ptr);
         self.data.write_bytes::<N>(address_space, byte_ptr, values);
         self.timestamp += 1;
@@ -731,7 +754,8 @@ impl TracingMemory {
         touched_blocks
     }
 
-    /// Returns touched memory in `BLOCK_FE_WIDTH`-cell blocks.
+    /// Returns touched memory in `BLOCK_FE_WIDTH`-cell blocks, each stamped with its
+    /// per-write dirty bit.
     fn touched_blocks_to_equipartition<F: Field>(
         &self,
         touched_blocks: Vec<((u32, u32), u32)>,
@@ -751,13 +775,84 @@ impl TracingMemory {
                             cell_size,
                         ))
                 });
+                let is_dirty =
+                    self.is_dirty[addr_space as usize].get(ptr as usize / BLOCK_FE_WIDTH);
                 TouchedBlock {
                     address_space: addr_space,
                     ptr,
+                    is_dirty: is_dirty as u32,
                     timestamp,
                     values,
                 }
             })
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use openvm_instructions::VM_DIGEST_WIDTH;
+    use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
+    use openvm_stark_sdk::p3_baby_bear::BabyBear;
+
+    use super::*;
+    use crate::{
+        arch::{AddressSpaceHostConfig, MemoryCellType},
+        system::memory::ptr_bits_from_address_height,
+    };
+
+    type F = BabyBear;
+
+    /// Dirtiness is per *write*: a write marks its leaf dirty regardless of the written
+    /// content (writing the values a leaf already holds keeps it dirty), and reads never
+    /// mark anything.
+    #[test]
+    fn write_tracking_marks_dirty_leaves() {
+        let height = 2; // 4 leaves of VM_DIGEST_WIDTH cells per address space
+        let mem_config = MemoryConfig::new(
+            1,
+            vec![
+                AddressSpaceHostConfig {
+                    num_cells: 0,
+                    layout: MemoryCellType::Null,
+                },
+                AddressSpaceHostConfig {
+                    num_cells: VM_DIGEST_WIDTH << height,
+                    layout: MemoryCellType::F { size: 4 },
+                },
+                AddressSpaceHostConfig {
+                    num_cells: VM_DIGEST_WIDTH << height,
+                    layout: MemoryCellType::F { size: 4 },
+                },
+            ],
+            ptr_bits_from_address_height(height),
+            20,
+            17,
+        );
+        let mut memory = TracingMemory::new(&mem_config);
+
+        let leaf = VM_DIGEST_WIDTH as u32;
+        // SAFETY: `F` matches the configured cell type and all pointers are
+        // block-aligned and in bounds.
+        unsafe {
+            // Leaf (1, 0): written with fresh values -> dirty.
+            let _ = memory.write::<F, BLOCK_FE_WIDTH>(1, 0, [F::ONE; BLOCK_FE_WIDTH]);
+            // Leaf (1, 8): only read -> touched but clean.
+            let _ = memory.read::<F, BLOCK_FE_WIDTH>(1, leaf);
+            // Leaf (1, 16): written with the values it already holds (zeros) -> dirty.
+            let _ = memory.write::<F, BLOCK_FE_WIDTH>(1, 2 * leaf, [F::ZERO; BLOCK_FE_WIDTH]);
+            // Leaf (2, 0): only read, in another address space -> touched but clean.
+            let _ = memory.read::<F, BLOCK_FE_WIDTH>(2, 0);
+        }
+
+        let touched_memory = memory.finalize::<F>();
+        let touched: Vec<(u32, u32, u32)> = touched_memory
+            .iter()
+            .map(|block| (block.address_space, block.ptr, block.is_dirty))
+            .collect();
+        assert_eq!(
+            touched,
+            vec![(1, 0, 1), (1, leaf, 0), (1, 2 * leaf, 1), (2, 0, 0)]
+        );
     }
 }

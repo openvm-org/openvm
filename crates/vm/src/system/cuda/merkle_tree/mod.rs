@@ -12,11 +12,7 @@ use openvm_cuda_common::{
     stream::{CudaEvent, GpuDeviceCtx},
 };
 use openvm_instructions::VM_DIGEST_WIDTH;
-use openvm_stark_backend::{
-    p3_maybe_rayon::prelude::{IntoParallelIterator, ParallelIterator},
-    p3_util::log2_ceil_usize,
-    prover::AirProvingContext,
-};
+use openvm_stark_backend::{p3_util::log2_ceil_usize, prover::AirProvingContext};
 use p3_field::PrimeCharacteristicRing;
 
 use super::{poseidon2::SharedBuffer, Poseidon2PeripheryChipGPU};
@@ -28,10 +24,40 @@ type H = [F; VM_DIGEST_WIDTH];
 /// Width of `((u32, u32), TimestampedValues<F, BLOCK_FE_WIDTH>)` in u32 units.
 /// = 2 (key) + 1 (timestamp) + BLOCK_FE_WIDTH (values)
 pub const TIMESTAMPED_BLOCK_WIDTH: usize = 3 + BLOCK_FE_WIDTH;
-/// Width of `((u32, u32), TimestampedValues<F, VM_DIGEST_WIDTH>)` in u32 units.
-/// = 2 (key) + 1 (timestamp) + VM_DIGEST_WIDTH (values)
+/// Width of one merkle touched-block record in u32 units.
+/// = 2 (key) + 1 (is_dirty) + VM_DIGEST_WIDTH (values); see `MemoryMerkleRecord`.
 pub const MERKLE_TOUCHED_BLOCK_WIDTH: usize = 3 + VM_DIGEST_WIDTH;
 pub(crate) const OMITTED_BOTTOM_LEVELS: usize = 3;
+
+/// Exact number of distinct internal merkle nodes (heights `1..=tree_height`) on the
+/// paths from a sorted stream of global leaf indices to the root: the first leaf's path
+/// has `tree_height` nodes, and each subsequent leaf adds nodes only below the height at
+/// which its path merges with the previous one (`log2` of the index xor). Exact, not an
+/// upper bound.
+#[derive(Default)]
+pub(crate) struct SpanningNodeCounter {
+    prev_leaf_index: Option<u64>,
+    pub(crate) nodes: usize,
+}
+
+impl SpanningNodeCounter {
+    #[inline]
+    pub(crate) fn push(&mut self, leaf_index: u64, tree_height: usize) {
+        self.nodes += match self.prev_leaf_index {
+            None => tree_height,
+            Some(prev) => {
+                debug_assert!(prev <= leaf_index);
+                let xor = prev ^ leaf_index;
+                if xor == 0 {
+                    0
+                } else {
+                    xor.ilog2() as usize
+                }
+            }
+        };
+        self.prev_leaf_index = Some(leaf_index);
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u8)]
@@ -370,7 +396,7 @@ impl MemoryMerkleTree {
 
     /// Updates the tree and returns the merkle trace.
     ///
-    /// `d_touched_blocks` consists of `(as, ptr, ts, [F; VM_DIGEST_WIDTH])`.
+    /// `d_touched_blocks` consists of `(as, ptr, is_dirty, [F; VM_DIGEST_WIDTH])`.
     pub fn update_with_touched_blocks(
         &mut self,
         unpadded_height: usize,
@@ -427,10 +453,17 @@ impl MemoryMerkleTree {
             }
 
             if empty_touched_blocks {
-                // The trace is small then
+                // The artificial touch (see the caller) seeds the walk so the root pair
+                // exists, but no boundary row supplies the leaf's claim, so the height-1
+                // initial row (the last row) must treat the leaf as *untouched*: consume
+                // nothing, i.e. `left_child_mode = 0` (the kernel wrote 1 for the seeded
+                // leaf).
                 let mut output_vec = output.buffer().to_host_on(&self.device_ctx).unwrap();
-                output_vec[unpadded_height - 1 + (width - 2) * padded_height] = F::ONE; // left_direction_different
-                output_vec[unpadded_height - 1 + (width - 1) * padded_height] = F::ONE; // right_direction_different
+                let left_child_mode_col = std::mem::offset_of!(
+                    MemoryMerkleCols<F, VM_DIGEST_WIDTH>,
+                    left_child_mode
+                ) / std::mem::size_of::<F>();
+                output_vec[unpadded_height - 1 + left_child_mode_col * padded_height] = F::ZERO;
                 DeviceMatrix::new(
                     Arc::new(output_vec.to_device_on(&self.device_ctx).unwrap()),
                     padded_height,
@@ -444,36 +477,6 @@ impl MemoryMerkleTree {
         public_values.extend(self.top_roots_host[0]);
 
         AirProvingContext::new(Vec::new(), merkle_trace, public_values)
-    }
-
-    /// An auxiliary function to calculate the required number of rows for the merkle trace.
-    /// Generic over BLOCK_SIZE since only addresses are used, not values.
-    pub fn calculate_unpadded_height<A: Sync>(
-        &self,
-        touched_memory: &[A],
-        address: impl Fn(&A) -> (u32, u32) + Sync,
-    ) -> usize {
-        let md = self.mem_config.memory_dimensions();
-        let tree_height = md.overall_height();
-        let shift_address = |(sp, ptr): (u32, u32)| (sp, ptr / VM_DIGEST_WIDTH as u32);
-        2 * if touched_memory.is_empty() {
-            tree_height
-        } else {
-            tree_height
-                + (0..(touched_memory.len() - 1))
-                    .into_par_iter()
-                    .map(|i| {
-                        let x = md.label_to_index(shift_address(address(&touched_memory[i])));
-                        let y = md.label_to_index(shift_address(address(&touched_memory[i + 1])));
-                        let xor = x ^ y;
-                        if xor == 0 {
-                            0
-                        } else {
-                            xor.ilog2() as usize
-                        }
-                    })
-                    .sum::<usize>()
-        }
     }
 }
 
@@ -494,6 +497,7 @@ mod tests {
             memory::{
                 merkle::{MemoryMerkleChip, MerkleTree},
                 online::{GuestMemory, LinearMemory},
+                persistent::DirtyLeaves,
                 AddressMap, TimestampedValues,
             },
             poseidon2::Poseidon2PeripheryChip,
@@ -516,12 +520,57 @@ mod tests {
     use rand::Rng;
 
     use super::{
-        MemoryMerkleSubTree, MemoryMerkleSubTreeLayout, MemoryMerkleTree, OMITTED_BOTTOM_LEVELS,
+        MemoryMerkleSubTree, MemoryMerkleSubTreeLayout, MemoryMerkleTree, SpanningNodeCounter,
+        OMITTED_BOTTOM_LEVELS,
     };
     use crate::{
         arch::testing::{MEMORY_MERKLE_BUS, POSEIDON2_DIRECT_BUS},
         system::cuda::Poseidon2PeripheryChipGPU,
     };
+
+    /// Builds the device merkle-record words and the exact unpadded merkle trace height
+    /// they imply. Dirtiness is per *write*; the tests treat exactly the leaves whose
+    /// values changed as written (the minimal valid dirty set). `touched_blocks` must be
+    /// sorted by (address space, pointer).
+    fn build_records_and_height(
+        initial_memory: &GuestMemory,
+        touched_blocks: &[((u32, u32), TimestampedValues<F, VM_DIGEST_WIDTH>)],
+        mem_config: &MemoryConfig,
+    ) -> (Vec<u32>, usize) {
+        let md = mem_config.memory_dimensions();
+        let tree_height = md.overall_height();
+        let mut words = Vec::with_capacity(touched_blocks.len() * MERKLE_TOUCHED_BLOCK_WIDTH);
+        let mut touched_nodes = SpanningNodeCounter::default();
+        let mut dirty_nodes = SpanningNodeCounter::default();
+        let mut dirty_leaves = 0usize;
+        for ((address_space, ptr), ts_values) in touched_blocks {
+            let init_values: [F; VM_DIGEST_WIDTH] = std::array::from_fn(|i| unsafe {
+                initial_memory
+                    .memory
+                    .get_f::<F>(*address_space, *ptr + i as u32)
+            });
+            let is_dirty = u32::from(init_values != ts_values.values);
+            let leaf_index = md.label_to_index((*address_space, *ptr / VM_DIGEST_WIDTH as u32));
+            touched_nodes.push(leaf_index, tree_height);
+            if is_dirty != 0 {
+                dirty_nodes.push(leaf_index, tree_height);
+                dirty_leaves += 1;
+            }
+            words.push(*address_space);
+            words.push(*ptr);
+            words.push(is_dirty);
+            for &v in &ts_values.values {
+                words.push(unsafe { std::mem::transmute::<F, u32>(v) });
+            }
+        }
+        let rows = touched_nodes.nodes
+            + if dirty_leaves == 0 {
+                1
+            } else {
+                dirty_nodes.nodes
+            };
+        (words, rows)
+    }
 
     #[test]
     fn test_cuda_merkle_subtree_layout_and_buffer_sizes() {
@@ -691,6 +740,21 @@ mod tests {
             .map(|_| std::array::from_fn(|_| F::from_u32(rng.random_range(0..F::ORDER_U32))))
             .collect::<Vec<[F; VM_DIGEST_WIDTH]>>();
         assert!(!touched_ptrs.is_empty());
+        // Dirtiness is per *write*; the test scenario treats exactly the leaves whose
+        // values changed as written (the minimal valid dirty set).
+        let dirty_leaves: DirtyLeaves = touched_ptrs
+            .iter()
+            .zip(new_data.iter())
+            .filter(|(&(address_space, ptr), values)| {
+                let init_values: [F; VM_DIGEST_WIDTH] = std::array::from_fn(|i| unsafe {
+                    initial_memory
+                        .memory
+                        .get_f::<F>(address_space, ptr + i as u32)
+                });
+                init_values != **values
+            })
+            .map(|(&key, _)| key)
+            .collect();
         cpu_merkle_tree.finalize(
             &cpu_hasher_chip,
             &(touched_ptrs
@@ -698,6 +762,7 @@ mod tests {
                 .copied()
                 .zip(new_data.iter().copied())
                 .collect()),
+            &dirty_leaves,
             &mem_config.memory_dimensions(),
         );
         let touched_blocks = touched_ptrs
@@ -713,23 +778,11 @@ mod tests {
                 )
             })
             .collect::<Vec<_>>();
-        let mut merkle_records =
-            Vec::<u32>::with_capacity(touched_blocks.len() * MERKLE_TOUCHED_BLOCK_WIDTH);
-        for (address, ts_values) in &touched_blocks {
-            let (address_space, ptr) = *address;
-            merkle_records.push(address_space);
-            merkle_records.push(ptr);
-            merkle_records.push(ts_values.timestamp);
-            for &v in &ts_values.values {
-                merkle_records.push(unsafe { std::mem::transmute::<F, u32>(v) });
-            }
-        }
+        let (merkle_records, unpadded_height) =
+            build_records_and_height(&initial_memory, &touched_blocks, &mem_config);
         let d_touched_blocks = merkle_records
             .to_device_on(&gpu_merkle_tree.device_ctx)
             .unwrap();
-
-        let unpadded_height =
-            gpu_merkle_tree.calculate_unpadded_height(&touched_blocks, |(addr, _)| *addr);
         gpu_hasher_chip.prepare_records(unpadded_height);
         gpu_merkle_tree.update_with_touched_blocks(unpadded_height, &d_touched_blocks, false);
 
@@ -852,10 +905,25 @@ mod tests {
                 ptrs
             })
             .collect::<Vec<_>>();
-        let new_data = touched_ptrs
+        let mut new_data = touched_ptrs
             .iter()
             .map(|_| std::array::from_fn(|_| F::from_u32(rng.random_range(0..F::ORDER_U32))))
             .collect::<Vec<[F; VM_DIGEST_WIDTH]>>();
+        // Make every third touched leaf *clean* (final values equal to initial ones):
+        // random values are almost surely dirty, and the mixed case is what exercises
+        // skipped final rows, dd-borrows of clean leaves, and the reference-count flags.
+        for (i, (&(address_space, ptr), values)) in
+            touched_ptrs.iter().zip(new_data.iter_mut()).enumerate()
+        {
+            if i % 3 == 0 {
+                *values = std::array::from_fn(|j| unsafe {
+                    initial_memory
+                        .memory
+                        .get_f::<F>(address_space, ptr + j as u32)
+                });
+            }
+        }
+        let new_data = new_data;
         assert!(!touched_ptrs.is_empty());
 
         // Build the canonical CPU trace from the same initial memory and touched blocks, using a
@@ -871,7 +939,26 @@ mod tests {
             .copied()
             .zip(new_data.iter().copied())
             .collect();
-        cpu_merkle_chip.finalize(&initial_memory.memory, &final_partition, &cpu_hasher_chip);
+        // Dirtiness is per *write*; the test scenario treats exactly the leaves whose
+        // values changed as written (the minimal valid dirty set).
+        let dirty_leaves: DirtyLeaves = final_partition
+            .iter()
+            .filter(|((address_space, ptr), values)| {
+                let init_values: [F; VM_DIGEST_WIDTH] = std::array::from_fn(|i| unsafe {
+                    initial_memory
+                        .memory
+                        .get_f::<F>(*address_space, *ptr + i as u32)
+                });
+                init_values != **values
+            })
+            .map(|(&key, _)| key)
+            .collect();
+        cpu_merkle_chip.finalize(
+            &initial_memory.memory,
+            &final_partition,
+            &dirty_leaves,
+            &cpu_hasher_chip,
+        );
         let cpu_ctx = cpu_merkle_chip.generate_proving_ctx::<SC>();
 
         // Run the GPU update and capture the resulting trace.
@@ -888,23 +975,11 @@ mod tests {
                 )
             })
             .collect::<Vec<_>>();
-        let mut merkle_records =
-            Vec::<u32>::with_capacity(touched_blocks.len() * MERKLE_TOUCHED_BLOCK_WIDTH);
-        for (address, ts_values) in &touched_blocks {
-            let (address_space, ptr) = *address;
-            merkle_records.push(address_space);
-            merkle_records.push(ptr);
-            merkle_records.push(ts_values.timestamp);
-            for &v in &ts_values.values {
-                merkle_records.push(unsafe { std::mem::transmute::<F, u32>(v) });
-            }
-        }
+        let (merkle_records, unpadded_height) =
+            build_records_and_height(&initial_memory, &touched_blocks, &mem_config);
         let d_touched_blocks = merkle_records
             .to_device_on(&gpu_merkle_tree.device_ctx)
             .unwrap();
-
-        let unpadded_height =
-            gpu_merkle_tree.calculate_unpadded_height(&touched_blocks, |(addr, _)| *addr);
         gpu_hasher_chip.prepare_records(unpadded_height);
         let merkle_ctx =
             gpu_merkle_tree.update_with_touched_blocks(unpadded_height, &d_touched_blocks, false);
