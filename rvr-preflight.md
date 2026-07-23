@@ -646,13 +646,24 @@ ADDI record-upload-plus-kernel slices, with the same deliberate asymmetry:
 replay is charged for the complete ADDI+BNE transcript while legacy includes
 only ADDI records. The retained GPU-derived state is 8,388,616 bytes. Replacing separate
 64-bit block keys and 32-bit ordinal values with the unique packed key reduced
-peak indexing allocation from 42,240,511 to 29,657,599 additional bytes above
+peak requested live-buffer payload from 42,240,511 to 29,657,599 bytes above
 the raw transcript and static program. CUB's
 double-buffer overload had previously produced the same queried workspace and
 latency as ordinary pair sorting and was discarded. The compact-key result is a
-material improvement but still fails the isolated slice's peak-memory target;
-the complete executor plus all-RISC-V comparison is required before applying
-the formal M2 gate, and the peak must fall further before widening AIR coverage.
+material improvement. Staging predecessor allocation after the radix sort then
+reduced that requested payload again to 25,463,295 bytes: the input keys and CUB
+workspace are freed on the same stream before the 4,194,304-byte predecessor
+buffer is allocated. This is a live requested-byte calculation, not a physical
+device-memory measurement: allocator page rounding, the four-byte shared error
+word, and the raw-log/static-program baseline are excluded. The formal M2 gate
+must additionally measure the allocator high-water delta over an identical
+phase. Two runs measured 1,781.2 and 1,610.5 us for transcript H2D plus
+memory indexing and conservative totals of 1,975.2 and 1,799.4 us, so the split
+adds no measured latency regression. The result still fails the isolated
+slice's peak-memory target. Porting BEQ/BNE next is necessary to remove the
+remaining legacy RISC-V records from this exact workload and make the complete
+RISC-V phase comparison symmetric before deciding whether the index must change
+again.
 
 #### Initial GPU correctness checkpoint (2026-07-23)
 
@@ -673,9 +684,9 @@ same conditional-write shape as load/JALR before that schedule can be replayed.
 
 This establishes correctness and log sufficiency for one fixed-row RISC-V AIR,
 and removes CPU postflight from the production GPU path, but does not yet
-exercise the complete M2 performance gate. The next checkpoint is another
-measured reduction in index peak memory, followed by a full-path executor plus
-RISC-V comparison before widening to the other RISC-V adapters.
+exercise the complete M2 performance gate. The next checkpoint is direct
+BEQ/BNE replay, followed by a full-path executor plus RISC-V comparison before
+widening to the other RISC-V adapters.
 
 ### M3: complete the GPU proving path
 
