@@ -2164,6 +2164,8 @@ where
     rvr_cuda_paths_prewarmed: bool,
     #[cfg(all(feature = "cuda", feature = "rvr"))]
     rvr_cuda_pool_reserve_bytes: usize,
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    rvr_cuda_pool_trim_enabled: Option<bool>,
     #[getset(get = "pub")]
     program_commitment: <E::PB as ProverBackend>::Commitment,
     #[getset(get = "pub")]
@@ -2201,6 +2203,8 @@ where
             rvr_cuda_paths_prewarmed: false,
             #[cfg(all(feature = "cuda", feature = "rvr"))]
             rvr_cuda_pool_reserve_bytes: 0,
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
+            rvr_cuda_pool_trim_enabled: None,
             program_commitment,
             exe,
             state: Some(state),
@@ -2384,15 +2388,30 @@ fn rvr_cuda_g2_module_prewarm_enabled() -> bool {
 }
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
-fn rvr_cuda_device_pool_prewarm_bytes(max_g2_capacity_bytes: usize) -> usize {
+fn rvr_cuda_device_pool_prewarm_bytes(max_g2_capacity_bytes: usize, trim_enabled: bool) -> usize {
+    const DEFAULT_WARM_FLOOR_BYTES: usize = 256 * 1024 * 1024;
+
     std::env::var("OPENVM_RVR_CUDA_DEVICE_POOL_PREWARM_BYTES")
         .ok()
         .and_then(|value| value.parse::<usize>().ok())
-        // The decoder concurrently owns its compact inputs, chronology, and
-        // radix-sort workspace. Keep the default shape-scaled while leaving a
-        // direct override for deployments whose G2 mix needs a different
-        // retention target.
-        .unwrap_or_else(|| max_g2_capacity_bytes.saturating_mul(3))
+        .unwrap_or_else(|| {
+            let legacy_reserve = max_g2_capacity_bytes.saturating_mul(3);
+            if trim_enabled {
+                // Retain small/frequent allocations, but let each sequential
+                // segment regrow the large chronology and radix-sort workspace
+                // on demand. Cap the floor at the old shape-scaled reserve so
+                // small or non-G2 workloads never pre-reserve more memory.
+                DEFAULT_WARM_FLOOR_BYTES.min(legacy_reserve)
+            } else {
+                // Preserve the pre-Fix-B reserve for one-knob A/B runs.
+                legacy_reserve
+            }
+        })
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+fn rvr_cuda_device_pool_trim_enabled() -> bool {
+    std::env::var("OPENVM_RVR_CUDA_POOL_TRIM").map_or(true, |enabled| enabled != "0")
 }
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
@@ -2606,6 +2625,11 @@ where
             );
         }
         #[cfg(all(feature = "cuda", feature = "rvr"))]
+        let device_pool_trim_enabled = rvr_cuda_device_pool_trim_enabled();
+        #[cfg(all(feature = "cuda", feature = "rvr"))]
+        let device_pool_reserve_bytes =
+            rvr_cuda_device_pool_prewarm_bytes(max_g2_capacity_bytes, device_pool_trim_enabled);
+        #[cfg(all(feature = "cuda", feature = "rvr"))]
         if device_prewarm_depth != 0 && !self.rvr_cuda_paths_prewarmed {
             let selected = if let Some(CachedRvrPreflight::Rvr(rvr)) = self.rvr_preflight.as_ref() {
                 let g2_airs = rvr.g2_air_indices();
@@ -2643,8 +2667,6 @@ where
                 Vec::new()
             };
             let _ = vm;
-            let device_pool_reserve_bytes =
-                rvr_cuda_device_pool_prewarm_bytes(max_g2_capacity_bytes);
             self.prewarm_cuda_device_paths(
                 input.clone(),
                 &segments,
@@ -2654,8 +2676,6 @@ where
         } else if !self.rvr_cuda_paths_prewarmed {
             // Populate the async device pool without replaying workload segments when no pinned
             // host-pool prefix was requested.
-            let device_pool_reserve_bytes =
-                rvr_cuda_device_pool_prewarm_bytes(max_g2_capacity_bytes);
             self.prewarm_cuda_device_paths(
                 input.clone(),
                 &segments,
@@ -2663,15 +2683,30 @@ where
                 device_pool_reserve_bytes,
             )?;
         } else {
-            let device_pool_reserve_bytes =
-                rvr_cuda_device_pool_prewarm_bytes(max_g2_capacity_bytes);
-            if device_pool_reserve_bytes > self.rvr_cuda_pool_reserve_bytes {
+            let restore_untrimmed_threshold =
+                self.rvr_cuda_pool_trim_enabled == Some(true) && !device_pool_trim_enabled;
+            if device_pool_reserve_bytes > self.rvr_cuda_pool_reserve_bytes
+                || restore_untrimmed_threshold
+            {
                 self.vm
                     .builder
                     .finish_rvr_cuda_device_prewarm(device_pool_reserve_bytes)
                     .map_err(ExecutionError::RvrExecution)?;
-                self.rvr_cuda_pool_reserve_bytes = device_pool_reserve_bytes;
             }
+            self.rvr_cuda_pool_reserve_bytes = device_pool_reserve_bytes;
+        }
+        #[cfg(all(feature = "cuda", feature = "rvr"))]
+        {
+            self.rvr_cuda_pool_trim_enabled = Some(device_pool_trim_enabled);
+        }
+        #[cfg(all(feature = "cuda", feature = "rvr"))]
+        let device_pool_trim_active = device_pool_trim_enabled && max_g2_capacity_bytes != 0;
+        #[cfg(all(feature = "cuda", feature = "rvr"))]
+        if !device_pool_trim_enabled && max_g2_capacity_bytes != 0 {
+            eprintln!(
+                "OPENVM_RVR_CUDA_DEVICE_POOL_TRIM enabled=0 \
+                 requested_retain={device_pool_reserve_bytes}"
+            );
         }
         let vm = &mut self.vm;
         #[cfg(feature = "stark-debug")]
@@ -2784,6 +2819,12 @@ where
             );
             #[cfg(all(feature = "cuda", feature = "rvr"))]
             vm.builder.release_rvr_cuda_device_trace_sources();
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
+            if device_pool_trim_active {
+                vm.builder
+                    .trim_rvr_cuda_device_pool(device_pool_reserve_bytes, seg_idx)
+                    .map_err(ExecutionError::RvrExecution)?;
+            }
             #[cfg(all(feature = "cuda", feature = "rvr"))]
             if let Some(timer) = tracegen_gpu_timer {
                 timer.finish(

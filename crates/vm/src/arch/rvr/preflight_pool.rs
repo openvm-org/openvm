@@ -38,9 +38,10 @@
 //! then drains the returned allocations into the pinned pool. It does not run
 //! STARK proof. The bounded context/module/kernel preload remains on for G2 and can
 //! be disabled with `OPENVM_RVR_CUDA_MODULE_PREWARM=0`. The
-//! corresponding device async pool reserve defaults to three times the
-//! tightened maximum G2 backing and can be set directly with
-//! `OPENVM_RVR_CUDA_DEVICE_POOL_PREWARM_BYTES`.
+//! corresponding device async pool keeps up to a 256 MiB warm floor by default and
+//! can be set directly with `OPENVM_RVR_CUDA_DEVICE_POOL_PREWARM_BYTES`.
+//! Unused pages above that floor are returned before each sequential STARK
+//! proof; `OPENVM_RVR_CUDA_POOL_TRIM=0` disables this trim for A/B runs.
 //! `OPENVM_RVR_CUDA_ARENA_POPULATE_MISS=0` restores lazy pages on a reserve/pool
 //! miss. All other switches default on.
 

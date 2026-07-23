@@ -670,6 +670,15 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SdkVmGpuBuilder {
     }
 
     #[cfg(feature = "rvr")]
+    fn trim_rvr_cuda_device_pool(
+        &self,
+        retain_bytes: usize,
+        segment_idx: usize,
+    ) -> Result<(), String> {
+        openvm_riscv_circuit::rvr_gpu_decode::trim_g2_device_pool(retain_bytes, segment_idx)
+    }
+
+    #[cfg(feature = "rvr")]
     fn release_rvr_cuda_device_trace_sources(&self) {
         self.rvr_decode.release_consumed_g2_device_trace_sources();
     }

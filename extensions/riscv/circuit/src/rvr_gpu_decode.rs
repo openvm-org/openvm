@@ -729,6 +729,32 @@ pub fn g2_device_pool_stats() -> Result<[u64; 5], String> {
         .map_err(|error| format!("CUDA G2 device-pool query failed: {error:?}"))
 }
 
+/// Synchronize the completed decode/trace work, then return unused async-pool
+/// pages before the sequential STARK proof while retaining the warm floor.
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+pub fn trim_g2_device_pool(retain_bytes: usize, segment_idx: usize) -> Result<(), String> {
+    let stats = unsafe { crate::cuda_abi::rvr_g2_cuda::trim_device_pool(retain_bytes) }
+        .map_err(|error| format!("CUDA G2 device-pool trim failed: {error:?}"))?;
+    eprintln!(
+        "OPENVM_RVR_CUDA_DEVICE_POOL_TRIM enabled=1 segment={} requested_retain={} released={} \
+         before_reserved={} after_reserved={} reserved_high={} before_used={} after_used={} \
+         used_high={} release_threshold={} synchronize_us={} trim_us={}",
+        segment_idx,
+        retain_bytes,
+        stats[0].saturating_sub(stats[5]),
+        stats[0],
+        stats[5],
+        stats[6],
+        stats[2],
+        stats[7],
+        stats[8],
+        stats[9],
+        stats[10],
+        stats[11],
+    );
+    Ok(())
+}
+
 /// Shared producer/consumer state. The builder holds one `Arc` per VM and
 /// clones it into every migrated GPU chip at construction.
 #[derive(Default)]

@@ -182,6 +182,7 @@ pub mod rvr_g2_cuda {
             profile_kernels: i32,
             stats: *mut u64,
         ) -> i32;
+        fn _rvr_g2_device_pool_trim(retain_bytes: usize, stats: *mut u64) -> i32;
         fn _rvr_g2_device_pool_stats(stats: *mut u64) -> i32;
         fn _rvr_g2_predecode(
             d_wire: DeviceBufferView,
@@ -267,6 +268,12 @@ pub mod rvr_g2_cuda {
             i32::from(std::env::var("OPENVM_RVR_G2_KERNEL_PROFILE").as_deref() == Ok("1")),
             stats.as_mut_ptr(),
         ))?;
+        Ok(stats)
+    }
+
+    pub unsafe fn trim_device_pool(retain_bytes: usize) -> Result<[u64; 12], CudaError> {
+        let mut stats = [0u64; 12];
+        CudaError::from_result(_rvr_g2_device_pool_trim(retain_bytes, stats.as_mut_ptr()))?;
         Ok(stats)
     }
 
