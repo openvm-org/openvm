@@ -102,6 +102,9 @@ impl<'a> Rv64IRvrGpuTracegen<'a> {
         [
             BaseAluOpcode::ADD.global_opcode(),
             BaseAluOpcode::SUB.global_opcode(),
+            BaseAluOpcode::XOR.global_opcode(),
+            BaseAluOpcode::OR.global_opcode(),
+            BaseAluOpcode::AND.global_opcode(),
             BaseAluWOpcode::ADDW.global_opcode(),
             BaseAluWOpcode::SUBW.global_opcode(),
             LessThanOpcode::SLT.global_opcode(),
@@ -164,6 +167,10 @@ impl<'a> Rv64IRvrGpuTracegen<'a> {
         }
 
         replay_chip!(Rv64AddSubChipGpu, [BaseAluOpcode::ADD, BaseAluOpcode::SUB]);
+        replay_chip!(
+            Rv64BitwiseLogicChipGpu,
+            [BaseAluOpcode::XOR, BaseAluOpcode::OR, BaseAluOpcode::AND,]
+        );
         replay_chip!(
             Rv64AddSubWChipGpu,
             [BaseAluWOpcode::ADDW, BaseAluWOpcode::SUBW]
