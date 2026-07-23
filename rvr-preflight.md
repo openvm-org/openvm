@@ -571,15 +571,14 @@ with 3 warmups and 11 measured samples. Each CUDA sample contains 10 launches;
 legacy and replay order alternates between samples. Results report median,
 p10, and p90.
 
-Cold host postflight indexing, synchronized segment H2D, and legacy-record H2D
-are timed separately. Direct legacy and replay kernels reuse pre-uploaded inputs
-and preallocated equal-sized output matrices, and use CUDA events on the same
-stream. Static-program upload, RVR artifact compilation, serial execution, and
-trace allocation are reported or excluded explicitly rather than hidden in a
-kernel comparison. The conservative pipeline totals charge the entire shared
-transcript/index upload to ADDI; a full multi-AIR pipeline will amortize that
-cost. The run records CPU, GPU, driver, rustc, and nvcc versions and checks that
-no competing GPU process is active.
+Serial RVR and interpreter preflight, synchronized segment H2D/indexing, and
+legacy-record H2D are timed separately. Initial-state construction, VM keygen,
+metering, RVR artifact compilation, and trace allocation are setup costs and are
+excluded from both timed paths. Direct legacy and replay kernels reuse
+pre-uploaded inputs and preallocated equal-sized output matrices, and use CUDA
+events on the same stream. Static-program upload is reported separately because
+it is reusable across segments. The run records CPU, GPU, driver, rustc, and nvcc
+versions and checks that no competing GPU process is active.
 
 The first two runs on 2026-07-23 used an AMD EPYC Milan host (16 physical
 cores), NVIDIA L40S (46,068 MiB), driver 610.43.02, rustc 1.93.0 with LLVM
@@ -687,6 +686,59 @@ and removes CPU postflight from the production GPU path, but does not yet
 exercise the complete M2 performance gate. The next checkpoint is direct
 BEQ/BNE replay, followed by a full-path executor plus RISC-V comparison before
 widening to the other RISC-V adapters.
+
+#### Branch replay and full-slice checkpoint (2026-07-23)
+
+The second direct replay kernel covers BEQ and BNE. It reconstructs both timed
+register reads through the shared predecessor index, validates the exact clock
+schedule and branch target, and writes the adapter and core columns directly.
+The production path does not construct an `Rv64BranchAdapterRecord` or use a
+`RecordArena`. A shared CUDA helper now implements only the mechanical operation
+of resolving a four-cell predecessor value; instruction-specific schedules stay
+in their concrete kernels.
+
+The differential test includes a taken BEQ and an interleaved BEQ/BNE loop.
+ADDI matrices match both legacy GPU and CPU fillers exactly. Branch matrices
+match after canonicalizing their row order by timestamp because replay groups
+opcodes while legacy records preserve execution order. Their combined
+range-check histogram matches legacy, and a proof containing both AIRs passes.
+Separate corruptions of ADDI, branch outcome, and predecessor consistency fail
+device validation.
+This test also fixed an important replay rule: when a block's first timed access
+is a read, the event's logged value is the segment's initial touched value. It is
+not required to be zero. A first-write predecessor instead comes from the sparse
+initial-write log.
+
+The same fixed workload was then measured symmetrically: both ADDI and BNE record
+upload/kernels are charged to legacy, both replay kernels are charged to the new
+path, and both serial preflight executors are included. The median result was:
+
+| Stage | Replay | Legacy |
+| --- | ---: | ---: |
+| Serial preflight | 28,095.7 us | 52,792.0 us |
+| Program GPU index | 133.9 us | N/A |
+| Transcript H2D + memory GPU index | 1,634.8 us | N/A |
+| Record H2D | N/A | 1,006.6 us |
+| ADDI + BNE kernels | 125.1 us | 61.7 us |
+| GPU phase total | 1,893.8 us | 1,068.3 us |
+| Summed slice total | 29,989.5 us | 53,860.4 us |
+
+RVR preflight is 1.88x faster than interpreter preflight on this workload. The
+read-only replay GPU phase is 1.77x slower and its two kernels are 2.03x slower,
+but the sum of the independently measured stage medians is 1.80x faster. The
+transcript is 33,554,448 bytes, the steady derived index is 8,388,616 bytes, and
+the two legacy record arrays total 24,117,248 bytes. This is a modeled RISC-V
+slice total, not an observed contiguous pipeline sample: timed executor outputs
+are discarded, and the GPU stages use equivalent inputs prepared outside those
+samples. It also excludes system AIRs, continuation/Merkle work, proof
+generation, and reusable static-program upload. The result passes the time
+criterion for this one fixed feasibility slice without hiding the GPU cost.
+
+They do not complete the formal M2 gate. The suite still lacks the other RISC-V
+access shapes, and the 25,463,295-byte index figure is requested live-buffer
+payload rather than an allocator high-water measurement over an identical phase.
+The next checkpoint is therefore the remaining fixed-row RV64I arithmetic and
+register adapters, followed by loads/stores and the actual memory-peak comparison.
 
 ### M3: complete the GPU proving path
 
