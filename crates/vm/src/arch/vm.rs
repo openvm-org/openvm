@@ -12,6 +12,8 @@ use std::{any::TypeId, borrow::Borrow, collections::VecDeque, sync::Arc};
 use getset::{Getters, MutGetters, Setters, WithSetters};
 use itertools::{zip_eq, Itertools};
 use openvm_circuit::system::program::trace::compute_exe_commit;
+#[cfg(feature = "rvr")]
+use openvm_circuit_primitives::AnyChip;
 use openvm_instructions::{
     exe::{SparseMemoryImage, VmExe},
     program::Program,
@@ -95,6 +97,8 @@ impl<T> VmField for T where T: PrimeField32 + InjectiveMonomial<BABYBEAR_S_BOX_D
 pub enum GenerationError {
     #[error("unexpected number of arenas: {actual} (expected num_airs={expected})")]
     UnexpectedNumArenas { actual: usize, expected: usize },
+    #[error("extension trace generation failed: {0}")]
+    ExtensionTracegen(String),
     #[error("trace height for air_idx={air_idx} must be fixed to {expected}, actual={actual}")]
     ForceTraceHeightIncorrect {
         air_idx: usize,
@@ -1144,6 +1148,41 @@ where
             .chip_complex
             .generate_proving_ctx(system_records, record_arenas)?;
 
+        self.validate_proving_ctx(ctx)
+    }
+
+    /// Generates extension traces from a segment-wide source while retaining the normal system
+    /// trace generation, AIR ordering, and trace-height validation. This is the narrow integration
+    /// point used while RVR replay replaces extension record arenas.
+    #[cfg(feature = "rvr")]
+    #[instrument(name = "trace_gen", skip_all)]
+    pub fn generate_proving_ctx_with_extension_tracegen(
+        &mut self,
+        system_records: SystemRecords<Val<E::SC>>,
+        system_record_arenas: Vec<VB::RecordArena>,
+        generate_extension: impl FnMut(
+            usize,
+            &dyn AnyChip<VB::RecordArena, E::PB>,
+        ) -> Result<
+            openvm_stark_backend::prover::AirProvingContext<E::PB>,
+            GenerationError,
+        >,
+    ) -> Result<ProvingContext<E::PB>, GenerationError> {
+        let ctx = self
+            .chip_complex
+            .generate_proving_ctx_with_extension_tracegen(
+                system_records,
+                system_record_arenas,
+                generate_extension,
+            )?;
+
+        self.validate_proving_ctx(ctx)
+    }
+
+    fn validate_proving_ctx(
+        &self,
+        ctx: ProvingContext<E::PB>,
+    ) -> Result<ProvingContext<E::PB>, GenerationError> {
         // ==== Defensive checks that the trace heights satisfy the linear constraints: ====
         let idx_trace_heights = ctx
             .per_trace

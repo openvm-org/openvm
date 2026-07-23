@@ -644,6 +644,15 @@ impl GpuRvrReplayPlan {
             .unwrap_or(0..0)
     }
 
+    /// Global opcodes that were actually executed in this segment.
+    ///
+    /// The iterator is sorted and contains no duplicates because it follows
+    /// the replay plan's opcode partition. Tracegen coordinators use this
+    /// before launching any opcode kernel to reject unported instructions.
+    pub fn executed_opcodes(&self) -> impl Iterator<Item = u32> + '_ {
+        self.opcode_ranges.keys().copied()
+    }
+
     #[cfg(feature = "test-utils")]
     #[doc(hidden)]
     pub fn steps_host(&self) -> Result<Vec<[u32; 2]>, MemCopyError> {
