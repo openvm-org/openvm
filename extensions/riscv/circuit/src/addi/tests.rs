@@ -785,7 +785,7 @@ fn benchmark_cuda_addi_replay_vs_legacy() {
     let d_program = GpuRvrProgram::upload(&program, &memory_config, device_ctx).unwrap();
     device_ctx.stream.synchronize().unwrap();
     let static_program_upload = started.elapsed();
-    let (gpu_index_peak_extra_bytes, gpu_index_steady_bytes) = d_program
+    let (gpu_index_requested_peak_live_bytes, gpu_index_requested_steady_live_bytes) = d_program
         .gpu_index_memory_bytes(&execution.transcript)
         .unwrap();
 
@@ -913,7 +913,7 @@ fn benchmark_cuda_addi_replay_vs_legacy() {
         + (execution.transcript.program_log.len() - 1) * 2 * size_of::<u32>();
     let trace_bytes = ADDI_ROWS * trace_width * size_of::<F>();
     println!(
-        "RVR_ADDI_GPU_BENCH addi_rows={ADDI_ROWS} guest_insns={} warmups={WARMUPS} repetitions={REPETITIONS} launches_per_sample={LAUNCHES_PER_SAMPLE} static_program_upload_us={:.3} program_index_p10_us={:.3} program_index_median_us={:.3} program_index_p90_us={:.3} transcript_memory_index_p10_us={:.3} transcript_memory_index_median_us={:.3} transcript_memory_index_p90_us={:.3} legacy_record_h2d_p10_us={:.3} legacy_record_h2d_median_us={:.3} legacy_record_h2d_p90_us={:.3} replay_kernel_p10_us={:.3} replay_kernel_median_us={:.3} replay_kernel_p90_us={:.3} legacy_kernel_p10_us={:.3} legacy_kernel_median_us={:.3} legacy_kernel_p90_us={:.3} replay_over_legacy_kernel={:.3} new_total_us={new_total_us:.3} legacy_total_us={legacy_total_us:.3} transcript_bytes={transcript_bytes} derived_bytes={derived_bytes} gpu_index_peak_extra_bytes={gpu_index_peak_extra_bytes} gpu_index_steady_bytes={gpu_index_steady_bytes} legacy_record_bytes={} trace_bytes={trace_bytes}",
+        "RVR_ADDI_GPU_BENCH addi_rows={ADDI_ROWS} guest_insns={} warmups={WARMUPS} repetitions={REPETITIONS} launches_per_sample={LAUNCHES_PER_SAMPLE} static_program_upload_us={:.3} program_index_p10_us={:.3} program_index_median_us={:.3} program_index_p90_us={:.3} transcript_memory_index_p10_us={:.3} transcript_memory_index_median_us={:.3} transcript_memory_index_p90_us={:.3} legacy_record_h2d_p10_us={:.3} legacy_record_h2d_median_us={:.3} legacy_record_h2d_p90_us={:.3} replay_kernel_p10_us={:.3} replay_kernel_median_us={:.3} replay_kernel_p90_us={:.3} legacy_kernel_p10_us={:.3} legacy_kernel_median_us={:.3} legacy_kernel_p90_us={:.3} replay_over_legacy_kernel={:.3} new_total_us={new_total_us:.3} legacy_total_us={legacy_total_us:.3} transcript_bytes={transcript_bytes} derived_bytes={derived_bytes} gpu_index_requested_peak_live_bytes={gpu_index_requested_peak_live_bytes} gpu_index_requested_steady_live_bytes={gpu_index_requested_steady_live_bytes} legacy_record_bytes={} trace_bytes={trace_bytes}",
         2 * ADDI_ROWS + 1,
         micros(static_program_upload),
         micros(program_index_p10),

@@ -294,6 +294,8 @@ impl GpuRvrProgram {
 
     #[cfg(feature = "test-utils")]
     #[doc(hidden)]
+    /// Requested live-buffer payload, excluding allocator page rounding, the
+    /// shared error word, raw logs, and the static program.
     pub fn gpu_index_memory_bytes(
         &self,
         transcript: &RvrPreflightTranscript,
@@ -320,11 +322,17 @@ impl GpuRvrProgram {
         // sorts an 8-byte step value beside each 32-bit opcode key.
         // They run sequentially, so peak incremental allocation is the larger
         // stage rather than their sum.
-        let memory_stage = 16 * num_entries + 4 * num_memory + memory_temp;
+        let memory_sort_stage = 16 * num_entries + memory_temp;
+        let memory_scatter_stage = 8 * num_entries + 4 * num_memory;
         let program_stage =
             4 * num_memory + 24 * num_steps + 8 * self.active_opcodes.len() + program_temp;
         let steady = 4 * num_memory + 8 * num_steps;
-        Ok((memory_stage.max(program_stage), steady))
+        Ok((
+            memory_sort_stage
+                .max(memory_scatter_stage)
+                .max(program_stage),
+            steady,
+        ))
     }
 }
 
@@ -380,7 +388,6 @@ fn build_gpu_memory_index(
         .expect("memory index entry count overflow");
     let keys_in = gpu_buffer::<u64>(num_entries, device_ctx);
     let keys_out = gpu_buffer::<u64>(num_entries, device_ctx);
-    let memory_predecessors = gpu_buffer::<u32>(memory.len(), device_ctx);
 
     let mut temp_bytes = 0usize;
     unsafe {
@@ -392,7 +399,7 @@ fn build_gpu_memory_index(
     }
     let temp_storage = gpu_buffer::<u8>(temp_bytes, device_ctx);
     unsafe {
-        rvr_postflight::memory_index(
+        rvr_postflight::memory_index_sort(
             memory.view(),
             seeds.view(),
             ADDR_SPACE_OFFSET,
@@ -400,9 +407,25 @@ fn build_gpu_memory_index(
             pointer_max_bits,
             &keys_in,
             &keys_out,
-            &memory_predecessors,
             &temp_storage,
             temp_bytes,
+            error,
+            device_ctx.stream.as_raw(),
+        )?;
+    }
+    // Both frees are enqueued on this stream after the sort. Allocating the
+    // output only afterwards keeps sort scratch and retained predecessors out
+    // of the same peak without introducing a host synchronization.
+    drop(keys_in);
+    drop(temp_storage);
+    let memory_predecessors = gpu_buffer::<u32>(memory.len(), device_ctx);
+    unsafe {
+        rvr_postflight::memory_index_scatter(
+            memory.view(),
+            seeds.len(),
+            &keys_out,
+            num_entries,
+            &memory_predecessors,
             error,
             device_ctx.stream.as_raw(),
         )?;

@@ -175,7 +175,7 @@ extern "C" int _rvr_memory_index_get_temp_bytes(
     return CHECK_KERNEL();
 }
 
-extern "C" int _rvr_memory_index(
+extern "C" int _rvr_memory_index_sort(
     DeviceBufferConstView<PreflightMemoryEvent> memory,
     DeviceBufferConstView<PreflightInitialWrite> seeds,
     uint32_t address_space_offset,
@@ -183,7 +183,6 @@ extern "C" int _rvr_memory_index(
     uint32_t pointer_max_bits,
     uint64_t *keys_in,
     uint64_t *keys_out,
-    uint32_t *predecessors,
     void *temp_storage,
     size_t temp_storage_bytes,
     uint32_t *error,
@@ -216,13 +215,22 @@ extern "C" int _rvr_memory_index(
         err != cudaSuccess) {
         return err;
     }
+    return CHECK_KERNEL();
+}
+
+extern "C" int _rvr_memory_index_scatter(
+    DeviceBufferConstView<PreflightMemoryEvent> memory,
+    size_t num_seeds,
+    uint64_t const *sorted_keys,
+    size_t num_entries,
+    uint32_t *predecessors,
+    uint32_t *error,
+    cudaStream_t stream
+) {
+    if (num_entries == 0) return 0;
+    auto [grid, block] = kernel_launch_params(num_entries);
     scatter_predecessors<<<grid, block, 0, stream>>>(
-        memory,
-        seeds.len(),
-        keys_out,
-        num_entries,
-        predecessors,
-        error
+        memory, num_seeds, sorted_keys, num_entries, predecessors, error
     );
     return CHECK_KERNEL();
 }
