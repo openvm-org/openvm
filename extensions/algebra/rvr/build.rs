@@ -74,6 +74,7 @@ fn build_blst_staticlib(manifest_dir: &Path, out_dir: &Path) -> PathBuf {
         .pic(true)
         .flag("-fno-builtin")
         .flag("-fintegrated-as")
+        .flag_if_supported("-Wno-gcc-install-dir-libstdcxx")
         .flag_if_supported("-Wno-unused-command-line-argument")
         .out_dir(out_dir)
         .file(&server);
