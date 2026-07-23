@@ -229,6 +229,7 @@ pub(super) fn execute_preflight(
     runtime_hooks: &[Box<dyn RvrRuntimeExtension>],
     vm_state: &mut VmState<GuestMemory>,
     limits: RvrPreflightLimits,
+    timestamp_max_bits: usize,
 ) -> Result<RvrPreflightTranscript, ExecuteError> {
     require_execution_kind(compiled, "Preflight", &[RvrExecutionKind::Preflight])?;
     let pc = vm_state.pc();
@@ -251,7 +252,7 @@ pub(super) fn execute_preflight(
     })?;
     // SAFETY: the raw state was created from `buffers` immediately above and
     // neither vector can reallocate during generated execution.
-    unsafe { buffers.finish(&state.mode_state, final_pc) }
+    unsafe { buffers.finish(&state.mode_state, final_pc, timestamp_max_bits) }
         .map_err(ExecuteError::InvalidPreflightContext)
 }
 

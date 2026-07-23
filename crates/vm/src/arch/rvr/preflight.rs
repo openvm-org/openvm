@@ -128,11 +128,24 @@ impl PreflightBuffers {
         mut self,
         ffi: &PreflightState,
         final_pc: u32,
+        timestamp_max_bits: usize,
     ) -> Result<RvrPreflightTranscript, String> {
         if ffi.error != 0 {
             return Err(format!(
                 "generated preflight logger failed with code {}",
                 ffi.error
+            ));
+        }
+        let timestamp_limit = 1u32
+            .checked_shl(
+                u32::try_from(timestamp_max_bits)
+                    .map_err(|_| "preflight timestamp width does not fit u32".to_string())?,
+            )
+            .ok_or_else(|| "preflight timestamp width must be less than 32".to_string())?;
+        if ffi.timestamp >= timestamp_limit {
+            return Err(format!(
+                "preflight final timestamp {} is outside the configured {timestamp_max_bits}-bit domain",
+                ffi.timestamp
             ));
         }
         let program_len = usize::try_from(ffi.program_log_len)
@@ -272,6 +285,9 @@ impl<'a> RvrPreflightInstance<'a> {
         self.execute_from_state(self.create_initial_vm_state(inputs), limits)
     }
 
+    /// Consumes `state` as the transaction boundary. On any execution or
+    /// finalization error, the mutated working state is discarded and neither
+    /// state nor transcript is returned.
     pub fn execute_from_state(
         &self,
         mut state: VmState<GuestMemory>,
@@ -282,6 +298,7 @@ impl<'a> RvrPreflightInstance<'a> {
             &self.inner.runtime_hooks,
             &mut state,
             limits,
+            self.inner.system_config.memory_config.timestamp_max_bits,
         )
         .map_err(map_rvr_execute_error)?;
         extend_touched_pages(&mut state, &transcript).map_err(ExecutionError::RvrExecution)?;
@@ -300,5 +317,28 @@ impl<'a> RvrPreflightInstance<'a> {
 
     pub fn save_generated_sources(&self, dir: &Path) -> Result<(), CompileError> {
         self.inner.compiled.save_generated_sources(dir)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn finalization_enforces_the_exact_timestamp_domain_boundary() {
+        let mut accepted = PreflightBuffers::new(RvrPreflightLimits::new(0, 0)).unwrap();
+        let mut accepted_ffi = accepted.ffi_state();
+        accepted_ffi.timestamp = 3;
+        // SAFETY: `accepted_ffi` was created by `accepted`, and no pointers or
+        // capacities were changed.
+        unsafe { accepted.finish(&accepted_ffi, 0, 2) }.unwrap();
+
+        let mut rejected = PreflightBuffers::new(RvrPreflightLimits::new(0, 0)).unwrap();
+        let mut rejected_ffi = rejected.ffi_state();
+        rejected_ffi.timestamp = 4;
+        // SAFETY: `rejected_ffi` was created by `rejected`, and no pointers or
+        // capacities were changed.
+        let error = unsafe { rejected.finish(&rejected_ffi, 0, 2) }.unwrap_err();
+        assert!(error.contains("outside the configured 2-bit domain"));
     }
 }
