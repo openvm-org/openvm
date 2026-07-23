@@ -869,6 +869,19 @@ variable-range requests. The replay trace proves and rejects a corrupt upper
 sign-extension limb, an inconsistent aliased source predecessor, and a
 destination x0.
 
+SRAW completes the register word-shift family with the same two-read/one-write
+schedule. Replay authenticates all four u16 limbs of both operands while using
+only the signed low word of the first source and the low five shift bits of the
+second. It checks both low result limbs and both upper sign-extension limbs
+before resolving all three predecessors and emitting lookup requests. A 15-row
+test covers positive and negative inputs, raw shifts 0, 1, 15, 16, 31, 32, 33,
+63, 64, and 65, nonzero ignored upper source limbs, both x0 source positions,
+every source/destination alias shape, and padding. CPU, legacy CUDA, and replay
+traces and complete range histograms match; each valid row emits exactly 13
+variable-range requests. The replay trace proves and rejects a corrupt upper
+sign-extension limb, an inconsistent all-alias source predecessor, and a
+destination x0.
+
 #### First multi-AIR GPU proving checkpoint (2026-07-23)
 
 `Rv64IRvrGpuTracegen` now drives the VM inventory's ordinary reverse tracegen
@@ -886,15 +899,15 @@ counts through their normal tracegen using `()` rather than even an empty
 all extension contexts have been generated, the coordinator reads the shared
 sticky replay error once, immediately before proving.
 
-The first integration test executes all 29 currently ported opcodes across the
-16 replay chips, followed by `TERMINATE`. It uses interpreter preflight only for
+The first integration test executes all 30 currently ported opcodes across the
+17 replay chips, followed by `TERMINATE`. It uses interpreter preflight only for
 current system records, discards every interpreter-produced extension arena,
 generates all extension traces from the RVR transcript, passes the resulting
 context through the VM's existing trace-height validation, and completes a real
 GPU prove-and-verify. A negative test confirms that an executed, not-yet-ported
-register SRAW is rejected by the pre-kernel coverage check. This establishes the
-multi-AIR RISC-V integration seam without generalizing `Chip`; system tracegen
-still uses legacy records and remains the next cutover.
+BLT is rejected by the pre-kernel coverage check. This establishes the multi-AIR
+RISC-V integration seam without generalizing `Chip`; system tracegen still uses
+legacy records and remains the next cutover.
 
 ### M3: complete the GPU proving path
 
