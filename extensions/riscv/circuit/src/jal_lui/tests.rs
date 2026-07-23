@@ -30,6 +30,41 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use {
+    crate::Rv64IConfig,
+    openvm_circuit::{
+        arch::{
+            rvr::{
+                cuda::GpuRvrProgram, RvrPreflightEndpoint, RvrPreflightLimits,
+                RvrPreflightTranscript,
+            },
+            MatrixRecordArena, VmExecutor,
+        },
+        system::{
+            cuda::memory::MemoryInventoryGPU,
+            memory::online::{AddressMap, GuestMemory, TracingMemory},
+        },
+        utils::test_system_config,
+    },
+    openvm_circuit_primitives::Chip,
+    openvm_cpu_backend::CpuBackend,
+    openvm_cuda_backend::{
+        data_transporter::{
+            assert_eq_host_and_device_matrix_col_maj, transport_matrix_d2h_row_major,
+        },
+        prelude::SC,
+    },
+    openvm_cuda_common::{copy::MemCopyD2H, stream::device_synchronize},
+    openvm_instructions::{
+        exe::VmExe,
+        program::Program,
+        riscv::{RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+        SystemOpcode,
+    },
+    openvm_riscv_transpiler::BaseAluImmOpcode,
+    openvm_stark_backend::prover::ColMajorMatrix,
+};
 #[cfg(feature = "cuda")]
 use {
     crate::{adapters::Rv64RdWriteAdapterRecord, Rv64JalLuiChipGpu, Rv64JalLuiCoreRecord},
@@ -677,4 +712,343 @@ fn test_cuda_rand_jal_lui_tracegen(opcode: Rv64JalLuiOpcode, num_ops: usize) {
         .finalize()
         .simple_test()
         .unwrap();
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+#[test]
+fn test_cuda_jal_lui_tracegen_from_rvr_transcript() {
+    let reg = |index: usize| index * RV64_REGISTER_NUM_LIMBS;
+    let jal_lui = |opcode: Rv64JalLuiOpcode, rd: usize, immediate: usize, needs_write: usize| {
+        Instruction::<F>::from_usize(
+            opcode.global_opcode(),
+            [
+                reg(rd),
+                0,
+                immediate,
+                RV64_REGISTER_AS as usize,
+                0,
+                needs_write,
+            ],
+        )
+    };
+    let instructions = [
+        jal_lui(LUI, 1, 1, 1),
+        jal_lui(JAL, 2, 4, 1),
+        jal_lui(LUI, 3, 0x80000, 1),
+        jal_lui(JAL, 0, 4, 0),
+        jal_lui(LUI, 1, 0xfffff, 1),
+        jal_lui(JAL, 1, 4, 1),
+        jal_lui(LUI, 4, 0x12345, 1),
+        Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
+    ];
+    let program = Program::from_instructions(&instructions);
+    let exe = VmExe::new(program.clone());
+    let config = Rv64IConfig {
+        system: test_system_config(),
+        ..Default::default()
+    };
+    let memory_config = config.system.memory_config.clone();
+    let execution = VmExecutor::new(config.clone())
+        .unwrap()
+        .rvr_preflight_instance(&exe, None)
+        .unwrap()
+        .execute(Vec::<Vec<u8>>::new(), RvrPreflightLimits::new(16, 16))
+        .unwrap();
+
+    let mut tester = GpuChipTestBuilder::default();
+    let initial_image = GuestMemory::new(AddressMap::from_mem_config(&tester.memory.config));
+    tester.memory.memory = TracingMemory::from_image(initial_image);
+    let device_ctx = tester.range_checker().device_ctx.clone();
+    let hasher_chip = tester.memory.hasher_chip.clone().unwrap();
+    tester.memory.inventory = MemoryInventoryGPU::new(
+        tester.memory.config.clone(),
+        hasher_chip,
+        device_ctx.clone(),
+    );
+    tester
+        .memory
+        .inventory
+        .set_initial_memory(&tester.memory.memory.data().memory);
+    let mut harness = create_cuda_harness(&tester);
+    for (instruction_index, instruction) in instructions[..7].iter().enumerate() {
+        tester.execute_with_pc(
+            &mut harness.executor,
+            &mut harness.dense_arena,
+            instruction,
+            instruction_index as u32 * 4,
+        );
+    }
+    type Record<'a> = (
+        &'a mut Rv64RdWriteAdapterRecord,
+        &'a mut Rv64JalLuiCoreRecord,
+    );
+    harness
+        .dense_arena
+        .get_record_seeker::<Record, _>()
+        .transfer_to_matrix_arena(
+            &mut harness.matrix_arena,
+            EmptyAdapterCoreLayout::<F, Rv64CondRdWriteAdapterExecutor>::new(),
+        );
+
+    let range_checker = tester.range_checker();
+    let device_ctx = &range_checker.device_ctx;
+    let d_program = GpuRvrProgram::upload(&program, &memory_config, device_ctx).unwrap();
+    let (d_transcript, d_replay_plan) = d_program
+        .upload_transcript(&execution.transcript, execution.endpoint)
+        .unwrap();
+    assert_eq!(d_replay_plan.opcode_range(JAL.global_opcode()).len(), 3);
+    assert_eq!(d_replay_plan.opcode_range(LUI.global_opcode()).len(), 4);
+    let replay_ctx = harness
+        .gpu_chip
+        .generate_proving_ctx_from_rvr(&d_program, &d_transcript, &d_replay_plan)
+        .unwrap();
+    assert_eq!(d_transcript.error_code().unwrap(), 0);
+    let replay_counts = range_checker.count.to_host_on(device_ctx).unwrap();
+    let raw_count = |count: &F| {
+        const { assert!(std::mem::size_of::<F>() == std::mem::size_of::<u32>()) };
+        // CUDA kernels atomically update this shared field-typed buffer as raw u32 counters.
+        unsafe { *(std::ptr::from_ref(count).cast::<u32>()) }
+    };
+    // Six enabled writes contribute six lookups each. The x0 JAL advances the clock without a
+    // memory event and contributes only the four core lookups.
+    assert_eq!(replay_counts.iter().map(raw_count).sum::<u32>(), 6 * 6 + 4);
+
+    let negative_program = Program::from_instructions(&[
+        Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
+        Instruction::<F>::large_from_isize(
+            JAL.global_opcode(),
+            0,
+            0,
+            -4,
+            RV64_REGISTER_AS as isize,
+            0,
+            0,
+            0,
+        ),
+    ]);
+    let mut negative_from = execution.transcript.program_log[0];
+    negative_from.pc = 4;
+    negative_from.timestamp = 1;
+    let mut negative_terminate = execution.transcript.program_log[0];
+    negative_terminate.pc = 0;
+    negative_terminate.timestamp = 2;
+    let negative_transcript = RvrPreflightTranscript {
+        program_log: vec![negative_from, negative_terminate, negative_terminate],
+        memory_log: Vec::new(),
+        initial_write_log: Vec::new(),
+    };
+    let d_negative_program =
+        GpuRvrProgram::upload(&negative_program, &memory_config, device_ctx).unwrap();
+    let (d_negative, d_negative_plan) = d_negative_program
+        .upload_transcript(&negative_transcript, RvrPreflightEndpoint::Terminated)
+        .unwrap();
+    let negative_range_checker = Arc::new(
+        openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU::new(
+            openvm_circuit::arch::testing::default_var_range_checker_bus(),
+            device_ctx.clone(),
+        ),
+    );
+    Rv64JalLuiChipGpu::new(negative_range_checker.clone(), tester.timestamp_max_bits())
+        .generate_proving_ctx_from_rvr(&d_negative_program, &d_negative, &d_negative_plan)
+        .unwrap();
+    assert_eq!(d_negative.error_code().unwrap(), 0);
+    assert_eq!(
+        negative_range_checker
+            .count
+            .to_host_on(device_ctx)
+            .unwrap()
+            .iter()
+            .map(raw_count)
+            .sum::<u32>(),
+        4
+    );
+
+    let run_corrupt = |corrupt_program: &Program<F>,
+                       transcript: RvrPreflightTranscript,
+                       expected_error: u32,
+                       expected_lookup_count: u32| {
+        let corrupt_range_checker = Arc::new(
+            openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU::new(
+                openvm_circuit::arch::testing::default_var_range_checker_bus(),
+                device_ctx.clone(),
+            ),
+        );
+        let d_corrupt_program =
+            GpuRvrProgram::upload(corrupt_program, &memory_config, device_ctx).unwrap();
+        let (d_corrupt, d_corrupt_plan) = d_corrupt_program
+            .upload_transcript(&transcript, RvrPreflightEndpoint::Terminated)
+            .unwrap();
+        Rv64JalLuiChipGpu::new(corrupt_range_checker.clone(), tester.timestamp_max_bits())
+            .generate_proving_ctx_from_rvr(&d_corrupt_program, &d_corrupt, &d_corrupt_plan)
+            .unwrap();
+        assert_eq!(d_corrupt.error_code().unwrap(), expected_error);
+        assert_eq!(
+            corrupt_range_checker
+                .count
+                .to_host_on(device_ctx)
+                .unwrap()
+                .iter()
+                .map(raw_count)
+                .sum::<u32>(),
+            expected_lookup_count,
+            "a rejected row must not update the shared lookup histogram"
+        );
+    };
+    let transcript = || RvrPreflightTranscript {
+        program_log: execution.transcript.program_log.clone(),
+        memory_log: execution.transcript.memory_log.clone(),
+        initial_write_log: execution.transcript.initial_write_log.clone(),
+    };
+
+    let negative_lui_timestamp = execution
+        .transcript
+        .program_log
+        .iter()
+        .find(|event| event.pc == 8)
+        .unwrap()
+        .timestamp;
+    let negative_lui_write = execution
+        .transcript
+        .memory_log
+        .iter()
+        .position(|event| event.timestamp == negative_lui_timestamp)
+        .unwrap();
+    let mut result_corrupt = transcript();
+    result_corrupt.memory_log[negative_lui_write].value[2] = 0;
+    run_corrupt(&program, result_corrupt, 186, 34);
+
+    let mut target_instructions = instructions.clone();
+    target_instructions[1] = jal_lui(JAL, 2, 8, 1);
+    run_corrupt(
+        &Program::from_instructions(&target_instructions),
+        transcript(),
+        187,
+        34,
+    );
+
+    let mut flag_instructions = instructions.clone();
+    flag_instructions[3] = jal_lui(JAL, 0, 4, 1);
+    run_corrupt(
+        &Program::from_instructions(&flag_instructions),
+        transcript(),
+        184,
+        36,
+    );
+
+    let mut bound_instructions = instructions.clone();
+    bound_instructions[6] = jal_lui(LUI, 4, 1 << 20, 1);
+    run_corrupt(
+        &Program::from_instructions(&bound_instructions),
+        transcript(),
+        189,
+        34,
+    );
+
+    let x0_timestamp = execution
+        .transcript
+        .program_log
+        .iter()
+        .find(|event| event.pc == 12)
+        .unwrap()
+        .timestamp;
+    let mut gap_corrupt = transcript();
+    let mut displaced_final_write = gap_corrupt.memory_log.pop().unwrap();
+    displaced_final_write.timestamp = x0_timestamp;
+    let insertion_index = gap_corrupt
+        .memory_log
+        .partition_point(|event| event.timestamp < x0_timestamp);
+    gap_corrupt
+        .memory_log
+        .insert(insertion_index, displaced_final_write);
+    run_corrupt(&program, gap_corrupt, 185, 30);
+
+    // A preceding ADDI is outside this AIR, but its logged write is the exact predecessor of the
+    // JAL write. Corrupting only that predecessor's value reaches error 188 without making another
+    // JAL/LUI row fail first.
+    let predecessor_instructions = [
+        Instruction::<F>::from_usize(
+            BaseAluImmOpcode::ADDI.global_opcode(),
+            [
+                reg(1),
+                0,
+                7,
+                RV64_REGISTER_AS as usize,
+                openvm_instructions::riscv::RV64_IMM_AS as usize,
+            ],
+        ),
+        jal_lui(JAL, 1, 4, 1),
+        Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
+    ];
+    let predecessor_program = Program::from_instructions(&predecessor_instructions);
+    let predecessor_execution = VmExecutor::new(config)
+        .unwrap()
+        .rvr_preflight_instance(&VmExe::new(predecessor_program.clone()), None)
+        .unwrap()
+        .execute(Vec::<Vec<u8>>::new(), RvrPreflightLimits::new(8, 8))
+        .unwrap();
+    let mut predecessor_corrupt = RvrPreflightTranscript {
+        program_log: predecessor_execution.transcript.program_log,
+        memory_log: predecessor_execution.transcript.memory_log,
+        initial_write_log: predecessor_execution.transcript.initial_write_log,
+    };
+    let addi_timestamp = predecessor_corrupt.program_log[0].timestamp;
+    let predecessor_write = predecessor_corrupt
+        .memory_log
+        .iter()
+        .position(|event| {
+            event.timestamp == addi_timestamp + 1 && event.pointer == (reg(1) / 2) as u32
+        })
+        .unwrap();
+    predecessor_corrupt.memory_log[predecessor_write].value[0] = 1 << 16;
+    run_corrupt(&predecessor_program, predecessor_corrupt, 188, 0);
+
+    let legacy_range_checker = Arc::new(
+        openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU::new(
+            openvm_circuit::arch::testing::default_var_range_checker_bus(),
+            device_ctx.clone(),
+        ),
+    );
+    let legacy_ctx =
+        Rv64JalLuiChipGpu::new(legacy_range_checker.clone(), tester.timestamp_max_bits())
+            .generate_proving_ctx(harness.dense_arena);
+    assert_eq!(
+        replay_counts,
+        legacy_range_checker.count.to_host_on(device_ctx).unwrap()
+    );
+
+    let expected_trace =
+        <Rv64JalLuiChip<F> as Chip<MatrixRecordArena<F>, CpuBackend<SC>>>::generate_proving_ctx(
+            &harness.cpu_chip,
+            harness.matrix_arena,
+        )
+        .common_main;
+    let replay_trace = transport_matrix_d2h_row_major(&replay_ctx.common_main, device_ctx).unwrap();
+    let canonical_rows = |matrix: &RowMajorMatrix<F>| {
+        let mut rows = (0..matrix.height())
+            .map(|row| {
+                matrix
+                    .row_slice(row)
+                    .unwrap()
+                    .iter()
+                    .map(|value| value.as_canonical_u32())
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        rows.sort_unstable();
+        rows
+    };
+    assert_eq!(
+        canonical_rows(&expected_trace),
+        canonical_rows(&replay_trace)
+    );
+    let expected_trace = ColMajorMatrix::from_row_major(&expected_trace);
+    device_synchronize().unwrap();
+    assert_eq_host_and_device_matrix_col_maj(&expected_trace, &legacy_ctx.common_main, device_ctx);
+
+    tester
+        .build()
+        .load_air_proving_ctx(Arc::new(harness.air), replay_ctx)
+        .finalize()
+        .simple_test()
+        .expect("RVR JAL/LUI transcript replay proof failed");
 }
