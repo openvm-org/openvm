@@ -80,7 +80,7 @@ impl ExtInstr for HintStoreWInstr {
         } else {
             u32::MAX
         };
-        ctx.emit_checked_call_without_page_flush(
+        ctx.emit_checked_call(
             "openvm_hint_storew",
             &[
                 "state",
@@ -144,7 +144,7 @@ impl ExtInstr for HintBufferInstr {
             u32::MAX
         };
         let callback_count = format!("(uint16_t)({n})");
-        ctx.emit_checked_call_without_page_flush(
+        ctx.emit_checked_call(
             "openvm_hint_buffer",
             &[
                 "state",
@@ -688,6 +688,40 @@ mod tests {
         assert_eq!(
             ctx.lines[3],
             format!("trace_page_access(state, (r10 + 0x0000000cull), 4u, {PUBLIC_VALUES_AS}u);")
+        );
+    }
+
+    #[test]
+    fn hint_store_callbacks_use_page_synchronized_calls() {
+        let mut storew_ctx = TestEmitCtx::default();
+        HintStoreWInstr {
+            from_pc: 0x100,
+            ptr_reg: Reg::new(1),
+            chip_idx: None,
+        }
+        .emit_c(&mut storew_ctx);
+        assert!(
+            storew_ctx
+                .lines
+                .iter()
+                .any(|line| line.contains(" = openvm_hint_storew(")),
+            "HINT_STOREW must use emit_checked_call so metered page locals are synchronized"
+        );
+
+        let mut buffer_ctx = TestEmitCtx::default();
+        HintBufferInstr {
+            from_pc: 0x104,
+            ptr_reg: Reg::new(1),
+            num_words_reg: Reg::new(2),
+            chip_idx: None,
+        }
+        .emit_c(&mut buffer_ctx);
+        assert!(
+            buffer_ctx
+                .lines
+                .iter()
+                .any(|line| line.contains(" = openvm_hint_buffer(")),
+            "HINT_BUFFER must use emit_checked_call so metered page locals are synchronized"
         );
     }
 
