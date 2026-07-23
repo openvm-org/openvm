@@ -14,7 +14,7 @@ use openvm_instructions::{
 };
 use openvm_riscv_transpiler::{
     BaseAluImmOpcode, BaseAluOpcode, BaseAluWImmOpcode, BaseAluWOpcode, BranchEqualOpcode,
-    LessThanImmOpcode, LessThanOpcode, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode,
+    LessThanImmOpcode, LessThanOpcode, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode, ShiftWOpcode,
 };
 use openvm_stark_backend::StarkEngine;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
@@ -72,6 +72,7 @@ fn rvr_gpu_tracegen_proves_multiple_rv64i_airs_without_extension_arenas() {
         instruction(LessThanOpcode::SLT, register_operands(13, 1, 2)),
         instruction(ShiftOpcode::SLL, register_operands(25, 1, 2)),
         instruction(ShiftOpcode::SRL, register_operands(26, 1, 2)),
+        instruction(ShiftOpcode::SRA, register_operands(27, 1, 2)),
         instruction(ShiftWImmOpcode::SLLIW, immediate_operands(17, 8, 1)),
         instruction(ShiftWImmOpcode::SRLIW, immediate_operands(18, 17, 1)),
         instruction(ShiftWImmOpcode::SRAIW, immediate_operands(19, 17, 1)),
@@ -169,7 +170,7 @@ fn rvr_gpu_tracegen_proves_multiple_rv64i_airs_without_extension_arenas() {
 fn rvr_gpu_tracegen_rejects_an_executed_unported_opcode_before_tracegen() {
     let instructions = [
         instruction(
-            ShiftOpcode::SRA,
+            ShiftWOpcode::SRAW,
             [
                 reg(3),
                 reg(1),
@@ -215,7 +216,7 @@ fn rvr_gpu_tracegen_rejects_an_executed_unported_opcode_before_tracegen() {
         .unwrap();
 
     let error = match Rv64IRvrGpuTracegen::new(&gpu_program, &gpu_transcript, &replay_plan) {
-        Ok(_) => panic!("executed register SRA must not reach tracegen before its replay port"),
+        Ok(_) => panic!("executed register SRAW must not reach tracegen before its replay port"),
         Err(error) => error,
     };
     assert!(

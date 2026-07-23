@@ -845,6 +845,17 @@ proves and rejects corrupt output and predecessor-consistency logs. A
 destination x0 remains fail-closed because this AIR always emits a destination
 write.
 
+SRA completes the full-width register-shift family on the same three-event
+schedule. Replay authenticates all four u16 limbs of both operands, masks the
+shift operand to its low six bits, recomputes the signed 64-bit result including
+the high sign fill, and checks all four logged destination limbs before emitting
+any lookup requests. A 15-row test covers positive and negative inputs, shifts
+0, 1, 15, 16, 31, 32, 63, 64, and 65 with nonzero high shift-operand limbs,
+both x0 source positions, every source/destination alias shape, and padding. CPU,
+legacy CUDA, and replay traces and complete range histograms match; each valid
+row emits exactly 16 variable-range requests. The replay trace proves and rejects
+corrupt output, inconsistent alias predecessors, and a destination x0.
+
 #### First multi-AIR GPU proving checkpoint (2026-07-23)
 
 `Rv64IRvrGpuTracegen` now drives the VM inventory's ordinary reverse tracegen
@@ -862,13 +873,13 @@ counts through their normal tracegen using `()` rather than even an empty
 all extension contexts have been generated, the coordinator reads the shared
 sticky replay error once, immediately before proving.
 
-The first integration test executes all 26 currently ported opcodes across the
-14 replay chips, followed by `TERMINATE`. It uses interpreter preflight only for
+The first integration test executes all 27 currently ported opcodes across the
+15 replay chips, followed by `TERMINATE`. It uses interpreter preflight only for
 current system records, discards every interpreter-produced extension arena,
 generates all extension traces from the RVR transcript, passes the resulting
 context through the VM's existing trace-height validation, and completes a real
 GPU prove-and-verify. A negative test confirms that an executed, not-yet-ported
-register SRA is rejected by the pre-kernel coverage check. This establishes the
+register SRAW is rejected by the pre-kernel coverage check. This establishes the
 multi-AIR RISC-V integration seam without generalizing `Chip`; system tracegen
 still uses legacy records and remains the next cutover.
 

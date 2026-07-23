@@ -22,6 +22,38 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use {
+    crate::Rv64IConfig,
+    openvm_circuit::{
+        arch::{
+            rvr::{
+                cuda::GpuRvrProgram, RvrPreflightEndpoint, RvrPreflightLimits,
+                RvrPreflightTranscript,
+            },
+            MatrixRecordArena, VmExecutor,
+        },
+        system::{
+            cuda::memory::MemoryInventoryGPU,
+            memory::online::{AddressMap, GuestMemory, TracingMemory},
+        },
+        utils::test_system_config,
+    },
+    openvm_circuit_primitives::{var_range::VariableRangeCheckerChipGPU, Chip},
+    openvm_cpu_backend::CpuBackend,
+    openvm_cuda_backend::{
+        data_transporter::assert_eq_host_and_device_matrix_col_maj, prelude::SC,
+    },
+    openvm_cuda_common::{copy::MemCopyD2H, stream::device_synchronize},
+    openvm_instructions::{
+        exe::{SparseMemoryImage, VmExe},
+        instruction::Instruction,
+        program::Program,
+        riscv::RV64_REGISTER_AS,
+        SystemOpcode,
+    },
+    openvm_stark_backend::prover::ColMajorMatrix,
+};
 #[cfg(feature = "cuda")]
 use {
     crate::{
@@ -431,4 +463,249 @@ fn test_cuda_rand_shift_right_arithmetic_tracegen(opcode: ShiftOpcode, num_ops: 
         .finalize()
         .simple_test()
         .unwrap();
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+#[test]
+fn test_cuda_shift_right_arithmetic_tracegen_from_rvr_transcript() {
+    let reg = |index: usize| index * RV64_REGISTER_NUM_LIMBS;
+    let instruction = |rd: usize, rs1: usize, rs2: usize| {
+        Instruction::<F>::from_usize(
+            SRA.global_opcode(),
+            [
+                reg(rd),
+                reg(rs1),
+                reg(rs2),
+                RV64_REGISTER_AS as usize,
+                RV64_REGISTER_AS as usize,
+            ],
+        )
+    };
+    let instructions = [
+        // The upper rs2 limbs are nonzero and its low limb is 65, so only the low six bits apply.
+        instruction(23, 1, 2),
+        instruction(24, 3, 4),
+        instruction(25, 1, 5),
+        instruction(26, 1, 6),
+        instruction(27, 1, 7),
+        instruction(28, 1, 8),
+        instruction(29, 1, 9),
+        instruction(30, 1, 10),
+        instruction(31, 3, 11),
+        instruction(12, 0, 2),
+        instruction(13, 1, 0),
+        instruction(14, 14, 5),
+        instruction(15, 1, 15),
+        instruction(17, 18, 18),
+        instruction(19, 19, 19),
+        Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+    ];
+    let program = Program::from_instructions(&instructions);
+    let init_registers = [
+        (1usize, 0x8123_4567_89ab_cdefu64),
+        (2, 0xfeed_face_cafe_0041),
+        (3, 0x7123_4567_89ab_cdef),
+        (4, 0),
+        (5, 15),
+        (6, 16),
+        (7, 31),
+        (8, 32),
+        (9, 63),
+        (10, 64),
+        (11, 1),
+        (14, 0x9123_4567_89ab_cdef),
+        (15, 48),
+        (18, 0x7123_4567_89ab_cdef),
+        (19, 0x8123_4567_89ab_cdef),
+    ];
+    let init_memory: SparseMemoryImage = init_registers
+        .into_iter()
+        .flat_map(|(register, value)| {
+            value
+                .to_le_bytes()
+                .into_iter()
+                .enumerate()
+                .map(move |(offset, byte)| {
+                    ((RV64_REGISTER_AS, (reg(register) + offset) as u32), byte)
+                })
+        })
+        .collect();
+    let exe = VmExe::new(program.clone()).with_init_memory(init_memory.clone());
+    let config = Rv64IConfig {
+        system: test_system_config(),
+        ..Default::default()
+    };
+    let memory_config = config.system.memory_config.clone();
+    let execution = VmExecutor::new(config)
+        .unwrap()
+        .rvr_preflight_instance(&exe, None)
+        .unwrap()
+        .execute(Vec::<Vec<u8>>::new(), RvrPreflightLimits::new(20, 45))
+        .unwrap();
+
+    let mut tester = GpuChipTestBuilder::default();
+    let mut initial_image = GuestMemory::new(AddressMap::from_mem_config(&tester.memory.config));
+    initial_image.memory.set_from_sparse(&init_memory);
+    tester.memory.memory = TracingMemory::from_image(initial_image);
+    let device_ctx = tester.range_checker().device_ctx.clone();
+    let hasher_chip = tester.memory.hasher_chip.clone().unwrap();
+    tester.memory.inventory = MemoryInventoryGPU::new(
+        tester.memory.config.clone(),
+        hasher_chip,
+        device_ctx.clone(),
+    );
+    tester
+        .memory
+        .inventory
+        .set_initial_memory(&tester.memory.memory.data().memory);
+    let mut harness = create_cuda_harness(&tester);
+    for (pc, instruction) in instructions[..15].iter().enumerate() {
+        tester.execute_with_pc(
+            &mut harness.executor,
+            &mut harness.dense_arena,
+            instruction,
+            pc as u32 * 4,
+        );
+    }
+    type Record<'a> = (
+        &'a mut Rv64BaseAluRegU16AdapterRecord,
+        &'a mut ShiftRightArithmeticCoreRecord<BLOCK_FE_WIDTH, U16_BITS>,
+    );
+    harness
+        .dense_arena
+        .get_record_seeker::<Record, _>()
+        .transfer_to_matrix_arena(
+            &mut harness.matrix_arena,
+            EmptyAdapterCoreLayout::<F, Rv64BaseAluRegU16AdapterExecutor>::new(),
+        );
+
+    let range_checker = tester.range_checker();
+    let device_ctx = &range_checker.device_ctx;
+    let d_program = GpuRvrProgram::upload(&program, &memory_config, device_ctx).unwrap();
+    let (d_transcript, d_replay_plan) = d_program
+        .upload_transcript(&execution.transcript, execution.endpoint)
+        .unwrap();
+    assert_eq!(d_replay_plan.opcode_range(SRA.global_opcode()).len(), 15);
+    let replay_ctx = harness
+        .gpu_chip
+        .generate_proving_ctx_from_rvr(&d_program, &d_transcript, &d_replay_plan)
+        .unwrap();
+    assert_eq!(d_transcript.error_code().unwrap(), 0);
+    let replay_counts = range_checker.count.to_host_on(device_ctx).unwrap();
+
+    let mut corrupt_transcript = RvrPreflightTranscript {
+        program_log: execution.transcript.program_log.clone(),
+        memory_log: execution.transcript.memory_log.clone(),
+        initial_write_log: execution.transcript.initial_write_log.clone(),
+    };
+    let first_write_timestamp = corrupt_transcript.program_log[0].timestamp + 2;
+    corrupt_transcript
+        .memory_log
+        .iter_mut()
+        .find(|event| event.timestamp == first_write_timestamp)
+        .unwrap()
+        .value[3] ^= 1;
+    let (d_corrupt, d_corrupt_plan) = d_program
+        .upload_transcript(&corrupt_transcript, RvrPreflightEndpoint::Terminated)
+        .unwrap();
+    let corrupt_chip = Rv64ShiftRightArithmeticChipGpu::new(
+        Arc::new(VariableRangeCheckerChipGPU::new(
+            openvm_circuit::arch::testing::default_var_range_checker_bus(),
+            device_ctx.clone(),
+        )),
+        tester.timestamp_max_bits(),
+    );
+    corrupt_chip
+        .generate_proving_ctx_from_rvr(&d_program, &d_corrupt, &d_corrupt_plan)
+        .unwrap();
+    assert_eq!(d_corrupt.error_code().unwrap(), 158);
+
+    // On the rd == rs1 == rs2 row, alter only an upper limb of the second read. That limb is
+    // ignored by shift arithmetic, so output validation passes, but predecessor resolution must
+    // reject it because the first read is its immediate predecessor.
+    let mut predecessor_corrupt_transcript = RvrPreflightTranscript {
+        program_log: execution.transcript.program_log.clone(),
+        memory_log: execution.transcript.memory_log.clone(),
+        initial_write_log: execution.transcript.initial_write_log.clone(),
+    };
+    let alias_timestamp = predecessor_corrupt_transcript.program_log[14].timestamp;
+    let rs1_index = predecessor_corrupt_transcript
+        .memory_log
+        .iter()
+        .position(|event| event.timestamp == alias_timestamp)
+        .unwrap();
+    predecessor_corrupt_transcript.memory_log[rs1_index + 1].value[3] ^= 1;
+    let (d_predecessor_corrupt, d_predecessor_corrupt_plan) = d_program
+        .upload_transcript(
+            &predecessor_corrupt_transcript,
+            RvrPreflightEndpoint::Terminated,
+        )
+        .unwrap();
+    let predecessor_corrupt_chip = Rv64ShiftRightArithmeticChipGpu::new(
+        Arc::new(VariableRangeCheckerChipGPU::new(
+            openvm_circuit::arch::testing::default_var_range_checker_bus(),
+            device_ctx.clone(),
+        )),
+        tester.timestamp_max_bits(),
+    );
+    predecessor_corrupt_chip
+        .generate_proving_ctx_from_rvr(
+            &d_program,
+            &d_predecessor_corrupt,
+            &d_predecessor_corrupt_plan,
+        )
+        .unwrap();
+    assert_eq!(d_predecessor_corrupt.error_code().unwrap(), 159);
+
+    // This AIR always emits a destination write, so replay must reject x0 rather than synthesize
+    // a disabled write row.
+    let mut x0_instructions = instructions;
+    x0_instructions[0] = instruction(0, 1, 2);
+    let x0_program = Program::from_instructions(&x0_instructions);
+    let d_x0_program = GpuRvrProgram::upload(&x0_program, &memory_config, device_ctx).unwrap();
+    let (d_x0, d_x0_plan) = d_x0_program
+        .upload_transcript(&execution.transcript, execution.endpoint)
+        .unwrap();
+    let x0_chip = Rv64ShiftRightArithmeticChipGpu::new(
+        Arc::new(VariableRangeCheckerChipGPU::new(
+            openvm_circuit::arch::testing::default_var_range_checker_bus(),
+            device_ctx.clone(),
+        )),
+        tester.timestamp_max_bits(),
+    );
+    x0_chip
+        .generate_proving_ctx_from_rvr(&d_x0_program, &d_x0, &d_x0_plan)
+        .unwrap();
+    assert_eq!(d_x0.error_code().unwrap(), 154);
+
+    let legacy_range_checker = Arc::new(VariableRangeCheckerChipGPU::new(
+        openvm_circuit::arch::testing::default_var_range_checker_bus(),
+        device_ctx.clone(),
+    ));
+    let legacy_chip = Rv64ShiftRightArithmeticChipGpu::new(
+        legacy_range_checker.clone(),
+        tester.timestamp_max_bits(),
+    );
+    let legacy_ctx = legacy_chip.generate_proving_ctx(harness.dense_arena);
+    assert_eq!(
+        replay_counts,
+        legacy_range_checker.count.to_host_on(device_ctx).unwrap()
+    );
+
+    let expected_trace = <Rv64ShiftRightArithmeticChip<F> as Chip<
+        MatrixRecordArena<F>,
+        CpuBackend<SC>,
+    >>::generate_proving_ctx(&harness.cpu_chip, harness.matrix_arena)
+    .common_main;
+    let expected_trace = ColMajorMatrix::from_row_major(&expected_trace);
+    device_synchronize().unwrap();
+    assert_eq_host_and_device_matrix_col_maj(&expected_trace, &replay_ctx.common_main, device_ctx);
+    assert_eq_host_and_device_matrix_col_maj(&expected_trace, &legacy_ctx.common_main, device_ctx);
+
+    tester
+        .build()
+        .load_air_proving_ctx(Arc::new(harness.air), replay_ctx)
+        .finalize()
+        .simple_test()
+        .expect("RVR SRA transcript replay proof failed");
 }
