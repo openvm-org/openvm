@@ -782,6 +782,13 @@ boundary test covers shifts 0, 1, 15, 16, and 31 and both positive and negative
 word results. Replay and legacy CUDA match the CPU rows and range histogram, the
 replay trace proves, and corrupting an upper sign-extension limb is rejected.
 
+SRAIW completes the immediate word-shift family. It authenticates the full
+source register, arithmetic-shifts its low signed word, and verifies the full
+sign-extended 64-bit write. The replay test covers both sign boundaries, x0,
+an in-place destination, shifts 0, 1, 15, 16, and 31, and non-power-of-two row
+padding. CPU, legacy CUDA, and replay traces and range histograms match; the
+replay trace proves and rejects a corrupted upper sign-extension limb.
+
 ### M3: complete the GPU proving path
 
 Once RISC-V replay is viable:
