@@ -29,16 +29,15 @@ pub struct MemoryMerkleCols<T, const DIGEST_WIDTH: usize> {
     pub right_direction_different: T,
 
     // Reference-count adjustments for the child interactions of *initial* rows
-    // (`expand_direction` = 1); all four must be 0 when `expand_direction` != 1.
+    // (`expand_direction` = 1): the child's initial claim is consumed `1 + adj` times.
     //
-    // `*_extra_ref` = 1 means this row's final counterpart dd-borrows the child's initial
-    // hash, so this row consumes the child's initial claim twice (multiplicity -2).
-    // `*_absent_ref` = 1 means the child is untouched and this node has no final row to
-    // prop the reference, so this row consumes nothing (multiplicity 0).
-    pub left_extra_ref: T,
-    pub right_extra_ref: T,
-    pub left_absent_ref: T,
-    pub right_absent_ref: T,
+    // In {-1, 0, 1}; both must be 0 when `expand_direction` != 1.
+    //  `+1` = this row's final counterpart dd-borrows the child's initial hash, so this
+    //         row consumes the child's initial claim twice (multiplicity -2).
+    //  `-1` = the child is untouched and this node has no final row to prop the
+    //         reference, so this row consumes nothing (multiplicity 0).
+    pub left_adj_ref: T,
+    pub right_adj_ref: T,
 }
 
 #[derive(Debug, Clone, Copy, AlignedBorrow, StructReflection)]
