@@ -150,10 +150,7 @@ impl ExtInstr for RevealInstr {
             std::cmp::Ordering::Greater => format!("({ptr} + 0x{:08x}ull)", self.offset),
         };
         let width = format!("{}u", self.width.bytes());
-        ctx.emit_checked_call_without_page_flush(
-            "openvm_reveal",
-            &["state", &src, &ptr, &addr, &width],
-        );
+        ctx.emit_checked_call("openvm_reveal", &["state", &src, &ptr, &addr, &width]);
         ctx.trace_page_access(&addr, self.width, PageAddressSpace::Other(PUBLIC_VALUES_AS));
     }
 
@@ -585,8 +582,9 @@ mod tests {
         instr.emit_c(&mut ctx);
         assert_eq!(
             ctx.lines[0],
-            format!("if (unlikely(!openvm_reveal(state, r1, r2, r2, {width}u))) {{")
+            format!("bool tmp0 = openvm_reveal(state, r1, r2, r2, {width}u);")
         );
+        assert_eq!(ctx.lines[1], "if (unlikely(!tmp0)) {");
     }
 
     #[test]
@@ -641,10 +639,11 @@ mod tests {
 
         assert_eq!(
             ctx.lines[0],
-            "if (unlikely(!openvm_reveal(state, r5, r10, (r10 + 0x0000000cull), 4u))) {"
+            "bool tmp0 = openvm_reveal(state, r5, r10, (r10 + 0x0000000cull), 4u);"
         );
+        assert_eq!(ctx.lines[1], "if (unlikely(!tmp0)) {");
         assert_eq!(
-            ctx.lines[3],
+            ctx.lines[4],
             format!("trace_page_access(state, (r10 + 0x0000000cull), 4u, {PUBLIC_VALUES_AS}u);")
         );
     }

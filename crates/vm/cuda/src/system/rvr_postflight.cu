@@ -14,7 +14,6 @@ static constexpr uint32_t ERROR_MISSING_FIRST_WRITE_SEED = 104;
 static constexpr uint32_t ERROR_DUPLICATE_SEED = 105;
 static constexpr uint32_t ERROR_UNUSED_SEED = 106;
 static constexpr uint32_t ERROR_MEMORY_ADDRESS = 107;
-static constexpr uint32_t ERROR_MEMORY_VALUE = 108;
 
 struct RvrMemoryAddressSpace {
     uint64_t num_cells;
@@ -87,12 +86,6 @@ __global__ void prepare_entries(
             preflight_set_error(error, ERROR_MEMORY_ADDRESS);
             compact_key = 0;
         }
-        #pragma unroll
-        for (size_t i = 0; i < 4; ++i) {
-            if (seed.initial_value[i] > UINT16_MAX) {
-                preflight_set_error(error, ERROR_MEMORY_VALUE);
-            }
-        }
         keys[ordinal] = (static_cast<uint64_t>(compact_key) << 32) | ordinal;
         return;
     }
@@ -111,12 +104,6 @@ __global__ void prepare_entries(
         )) {
         preflight_set_error(error, ERROR_MEMORY_ADDRESS);
         compact_key = 0;
-    }
-    #pragma unroll
-    for (size_t i = 0; i < 4; ++i) {
-        if (event.value[i] > UINT16_MAX) {
-            preflight_set_error(error, ERROR_MEMORY_VALUE);
-        }
     }
     keys[ordinal] = (static_cast<uint64_t>(compact_key) << 32) | ordinal;
     if (event_index != 0 && memory[event_index - 1].timestamp >= event.timestamp) {

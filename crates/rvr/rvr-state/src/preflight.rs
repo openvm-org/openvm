@@ -20,7 +20,7 @@ pub struct PreflightMemoryEvent {
     pub timestamp: u32,
     pub address_space_and_kind: u32,
     pub pointer: u32,
-    pub value: [u32; 4],
+    pub value: [u16; 4],
 }
 
 impl PreflightMemoryEvent {
@@ -37,14 +37,14 @@ impl PreflightMemoryEvent {
 
 /// Previous value captured before a write.
 ///
-/// The generated executor may append one candidate per write. Rust finalization
-/// retains it only when that write is the block's first timed event.
+/// Register candidates are emitted only for a first-event write. Other address
+/// spaces may append one candidate per write for cold finalization to compact.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct PreflightInitialWrite {
     pub address_space: u32,
     pub pointer: u32,
-    pub initial_value: [u32; 4],
+    pub initial_value: [u16; 4],
 }
 
 /// Raw buffer descriptors shared with generated C.
@@ -65,6 +65,12 @@ pub struct PreflightState {
     pub initial_write_log_cap: u64,
     pub timestamp: u32,
     pub error: u32,
+    /// Segment-local scratch used to avoid emitting redundant register seeds.
+    pub seen_register_blocks: u32,
+    pub wrote_register: u32,
+    /// Lets finalization skip its memory-log scan when execution touched only registers.
+    pub has_non_register_events: u32,
+    pub padding: u32,
 }
 
 impl Default for PreflightState {
@@ -81,6 +87,10 @@ impl Default for PreflightState {
             initial_write_log_cap: 0,
             timestamp: 1,
             error: 0,
+            seen_register_blocks: 0,
+            wrote_register: 0,
+            has_non_register_events: 0,
+            padding: 0,
         }
     }
 }
@@ -88,11 +98,11 @@ impl Default for PreflightState {
 const _: () = {
     assert!(size_of::<PreflightProgramEvent>() == 8);
     assert!(align_of::<PreflightProgramEvent>() == 4);
-    assert!(size_of::<PreflightMemoryEvent>() == 28);
+    assert!(size_of::<PreflightMemoryEvent>() == 20);
     assert!(align_of::<PreflightMemoryEvent>() == 4);
-    assert!(size_of::<PreflightInitialWrite>() == 24);
+    assert!(size_of::<PreflightInitialWrite>() == 16);
     assert!(align_of::<PreflightInitialWrite>() == 4);
-    assert!(size_of::<PreflightState>() == 80);
+    assert!(size_of::<PreflightState>() == 96);
     assert!(align_of::<PreflightState>() == 8);
     assert!(offset_of!(PreflightState, program_log) == 0);
     assert!(offset_of!(PreflightState, memory_log) == 8);
@@ -100,4 +110,6 @@ const _: () = {
     assert!(offset_of!(PreflightState, program_log_len) == 24);
     assert!(offset_of!(PreflightState, timestamp) == 72);
     assert!(offset_of!(PreflightState, error) == 76);
+    assert!(offset_of!(PreflightState, seen_register_blocks) == 80);
+    assert!(offset_of!(PreflightState, has_non_register_events) == 88);
 };

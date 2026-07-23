@@ -853,7 +853,7 @@ mod tests {
             timestamp,
             address_space_and_kind: address_space | if is_write { PREFLIGHT_WRITE_BIT } else { 0 },
             pointer,
-            value: [timestamp; 4],
+            value: [timestamp as u16; 4],
         }
     }
 
@@ -862,7 +862,7 @@ mod tests {
         address_space: u32,
         pointer: u32,
         is_write: bool,
-        value: [u32; 4],
+        value: [u16; 4],
     ) -> PreflightMemoryEvent {
         PreflightMemoryEvent {
             timestamp,
@@ -1129,7 +1129,7 @@ mod tests {
         let config = MemoryConfig::default();
         let memory = vec![
             event_value(1, RV64_MEMORY_AS, 4, false, [0; 4]),
-            event_value(2, RV64_REGISTER_AS, 4, true, [1, u16::MAX as u32, 0, 3]),
+            event_value(2, RV64_REGISTER_AS, 4, true, [1, u16::MAX, 0, 3]),
             event_value(3, RV64_MEMORY_AS, 0, true, [10, 11, 12, 13]),
             event_value(4, RV64_MEMORY_AS, 4, false, [0; 4]),
             event_value(5, RV64_MEMORY_AS, 4, true, [20, 21, 22, 23]),
@@ -1193,7 +1193,7 @@ mod tests {
                 RV64_REGISTER_AS,
                 pointer,
                 false,
-                [u16::MAX as u32; 4],
+                [u16::MAX; 4],
             )],
             &[],
             &config,
@@ -1208,7 +1208,7 @@ mod tests {
     }
 
     #[test]
-    fn gpu_memory_metadata_fails_closed_for_bad_layout_bounds_and_values() {
+    fn gpu_memory_metadata_fails_closed_for_bad_layout_and_bounds() {
         use openvm_instructions::{riscv::RV64_REGISTER_AS, DEFERRAL_AS};
 
         let config = MemoryConfig::default();
@@ -1221,26 +1221,6 @@ mod tests {
         assert_rejected(
             &[event_value(1, DEFERRAL_AS, 0, false, [0; 4])],
             &[],
-            &config,
-        );
-        assert_rejected(
-            &[event_value(
-                1,
-                RV64_REGISTER_AS,
-                0,
-                false,
-                [0, 0, 0, u16::MAX as u32 + 1],
-            )],
-            &[],
-            &config,
-        );
-        assert_rejected(
-            &[event_value(1, RV64_REGISTER_AS, 0, true, [0; 4])],
-            &[PreflightInitialWrite {
-                address_space: RV64_REGISTER_AS,
-                pointer: 0,
-                initial_value: [0, 0, 0, u16::MAX as u32 + 1],
-            }],
             &config,
         );
         let end = config.addr_spaces[RV64_REGISTER_AS as usize].num_cells as u32;
@@ -1256,57 +1236,6 @@ mod tests {
             &[],
             &crossing,
         );
-
-        let device_ctx = GpuDeviceCtx::for_current_device().unwrap();
-        let program = gpu_program(&[100], &device_ctx);
-        let malformed = RvrPreflightTranscript {
-            program_log: vec![
-                PreflightProgramEvent {
-                    pc: 0,
-                    timestamp: 1,
-                },
-                PreflightProgramEvent {
-                    pc: 0,
-                    timestamp: 2,
-                },
-            ],
-            memory_log: vec![event_value(
-                1,
-                RV64_REGISTER_AS,
-                0,
-                false,
-                [0, 0, 0, u16::MAX as u32 + 1],
-            )],
-            initial_write_log: vec![],
-        };
-        assert!(program
-            .upload_transcript(
-                &malformed,
-                RvrPreflightEndpoint::Suspended {
-                    resume_pc: 0,
-                    final_timestamp: 2,
-                },
-            )
-            .is_err());
-
-        let malformed_seed = RvrPreflightTranscript {
-            program_log: malformed.program_log.clone(),
-            memory_log: vec![event_value(1, RV64_REGISTER_AS, 0, true, [0; 4])],
-            initial_write_log: vec![PreflightInitialWrite {
-                address_space: RV64_REGISTER_AS,
-                pointer: 0,
-                initial_value: [0, 0, 0, u16::MAX as u32 + 1],
-            }],
-        };
-        assert!(program
-            .upload_transcript(
-                &malformed_seed,
-                RvrPreflightEndpoint::Suspended {
-                    resume_pc: 0,
-                    final_timestamp: 2,
-                },
-            )
-            .is_err());
     }
 
     #[test]

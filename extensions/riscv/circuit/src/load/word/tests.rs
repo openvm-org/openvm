@@ -663,12 +663,20 @@ fn test_cuda_loadwu_tracegen_from_rvr_transcript() {
     let wide_byte_ptr_bits =
         openvm_circuit::arch::to_byte_ptr_bits(wide_memory_config.pointer_max_bits);
     let mut max_crossing = crossing_transcript();
-    max_crossing.memory_log[0].value =
-        [(u32::MAX - 5) & u16::MAX as u32, (u32::MAX - 5) >> 16, 0, 0];
+    max_crossing.memory_log[0].value = [
+        ((u32::MAX - 5) & u16::MAX as u32) as u16,
+        ((u32::MAX - 5) >> 16) as u16,
+        0,
+        0,
+    ];
     max_crossing.memory_log[1].pointer = (u32::MAX & !7) / 2;
     let mut effective_overflow = crossing_transcript();
-    effective_overflow.memory_log[0].value =
-        [(u32::MAX - 4) & u16::MAX as u32, (u32::MAX - 4) >> 16, 0, 0];
+    effective_overflow.memory_log[0].value = [
+        ((u32::MAX - 4) & u16::MAX as u32) as u16,
+        ((u32::MAX - 4) >> 16) as u16,
+        0,
+        0,
+    ];
 
     let mut narrow_memory_config = memory_config.clone();
     narrow_memory_config.pointer_max_bits = 19;
@@ -678,8 +686,8 @@ fn test_cuda_loadwu_tracegen_from_rvr_transcript() {
     let narrow_limit = 1u32 << narrow_byte_ptr_bits;
     let mut configured_crossing_overflow = crossing_transcript();
     configured_crossing_overflow.memory_log[0].value = [
-        (narrow_limit - 8) & u16::MAX as u32,
-        (narrow_limit - 8) >> 16,
+        ((narrow_limit - 8) & u16::MAX as u32) as u16,
+        ((narrow_limit - 8) >> 16) as u16,
         0,
         0,
     ];

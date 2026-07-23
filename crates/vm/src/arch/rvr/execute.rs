@@ -233,11 +233,15 @@ pub(super) fn execute_preflight(
     limits: RvrPreflightLimits,
     timestamp_max_bits: usize,
     allow_suspended: bool,
+    reuse: Option<RvrPreflightTranscript>,
 ) -> Result<(RvrPreflightTranscript, RvrPreflightEndpoint), ExecuteError> {
     require_execution_kind(compiled, "Preflight", &[RvrExecutionKind::Preflight])?;
     let pc = vm_state.pc();
-    let mut buffers =
-        PreflightBuffers::new(limits).map_err(ExecuteError::InvalidPreflightContext)?;
+    let mut buffers = match reuse {
+        Some(transcript) => PreflightBuffers::reuse(limits, transcript),
+        None => PreflightBuffers::new(limits),
+    }
+    .map_err(ExecuteError::InvalidPreflightContext)?;
     let mut state: PreflightRvState = init_rvr_state(vm_state, pc);
     state.regs = read_rv64_registers(vm_state);
     state.mode_state = buffers.ffi_state();
@@ -270,8 +274,9 @@ pub(super) fn execute_preflight(
     };
     // SAFETY: the raw state was created from `buffers` immediately above and
     // neither vector can reallocate during generated execution.
-    let transcript = unsafe { buffers.finish(&state.mode_state, final_pc, timestamp_max_bits) }
-        .map_err(ExecuteError::InvalidPreflightContext)?;
+    let transcript =
+        unsafe { buffers.finish(&state.mode_state, final_pc, timestamp_max_bits, vm_state) }
+            .map_err(ExecuteError::InvalidPreflightContext)?;
     Ok((transcript, endpoint))
 }
 

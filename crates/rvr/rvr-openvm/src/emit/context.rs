@@ -104,6 +104,10 @@ pub struct EmitContext<'a> {
     chip_widths: Option<&'a [u64]>,
     num_airs: Option<u32>,
     invalid_chip_index: Option<InvalidChipIndex>,
+    preflight_local_events: u32,
+    preflight_local_writes: u32,
+    preflight_local_slots: u32,
+    preflight_dynamic_reserve: bool,
 }
 
 impl<'a> EmitContext<'a> {
@@ -126,7 +130,38 @@ impl<'a> EmitContext<'a> {
             chip_widths,
             num_airs,
             invalid_chip_index: None,
+            preflight_local_events: 0,
+            preflight_local_writes: 0,
+            preflight_local_slots: 0,
+            preflight_dynamic_reserve: false,
         }
+    }
+
+    fn count_preflight_local(&mut self, events: u32, writes: u32, slots: u32) {
+        if !self.mode.traces_values() {
+            return;
+        }
+        self.preflight_local_events = self
+            .preflight_local_events
+            .checked_add(events)
+            .expect("preflight block memory-event count overflow");
+        self.preflight_local_writes = self
+            .preflight_local_writes
+            .checked_add(writes)
+            .expect("preflight block write count overflow");
+        self.preflight_local_slots = self
+            .preflight_local_slots
+            .checked_add(slots)
+            .expect("preflight block timestamp-slot count overflow");
+    }
+
+    pub(crate) fn preflight_local_budget(&self) -> (u32, u32, u32, bool) {
+        (
+            self.preflight_local_events,
+            self.preflight_local_writes,
+            self.preflight_local_slots,
+            self.preflight_dynamic_reserve,
+        )
     }
 
     fn next_var(&mut self) -> String {
@@ -170,7 +205,10 @@ impl<'a> EmitContext<'a> {
     /// Reserve logical memory slots that have no enabled memory event.
     pub(crate) fn advance_timestamp(&mut self, slots: u32) {
         if self.mode.traces_values() && slots != 0 {
-            self.write_line(&format!("trace_advance_timestamp(state, {slots}u);"));
+            self.count_preflight_local(0, 0, slots);
+            self.write_line(&format!(
+                "preflight_local_advance_timestamp_unchecked(&preflight, {slots}u);"
+            ));
         }
     }
 
@@ -186,6 +224,7 @@ impl<'a> EmitContext<'a> {
     /// Save local metering state and tail-call the shared RVR trap.
     pub fn emit_trap(&mut self) {
         self.flush_page_locals();
+        self.flush_preflight_local();
         let args = self.tail_call_args();
         self.write_line(&format!("[[clang::musttail]] return rv_trap({args});"));
     }
@@ -236,7 +275,8 @@ impl<'a> EmitContext<'a> {
     fn read_reg_impl(&mut self, idx: u8, kind: RegisterReadKind) -> String {
         if idx == 0 {
             if self.mode.traces_values() && matches!(kind, RegisterReadKind::MemoryAccess) {
-                self.write_line("trace_reg_read(state, 0, 0ull);");
+                self.count_preflight_local(1, 0, 1);
+                self.write_line("preflight_local_reg_read_unchecked(&preflight, 0, 0ull);");
             }
             return "0ull".to_string();
         }
@@ -252,10 +292,18 @@ impl<'a> EmitContext<'a> {
 
         if self.mode.traces_values() {
             let trace_fn = match kind {
-                RegisterReadKind::MemoryAccess => "trace_reg_read",
+                RegisterReadKind::MemoryAccess => "preflight_local_reg_read_unchecked",
                 RegisterReadKind::Peek => "trace_reg_peek",
             };
-            self.write_line(&format!("{trace_fn}(state, {idx}, {value});"));
+            if matches!(kind, RegisterReadKind::MemoryAccess) {
+                self.count_preflight_local(1, 0, 1);
+            }
+            let trace_state = if matches!(kind, RegisterReadKind::MemoryAccess) {
+                "&preflight"
+            } else {
+                "state"
+            };
+            self.write_line(&format!("{trace_fn}({trace_state}, {idx}, {value});"));
         }
 
         value
@@ -278,11 +326,13 @@ impl<'a> EmitContext<'a> {
     pub fn write_reg(&mut self, idx: u8, val: &str) {
         if idx == 0 {
             if self.mode.traces_values() {
-                self.write_line("trace_timestamp(state);");
+                self.count_preflight_local(0, 0, 1);
+                self.write_line("preflight_local_timestamp_unchecked(&preflight);");
             }
             return;
         }
         if self.mode.traces_values() {
+            self.count_preflight_local(1, 1, 1);
             let tmp = self.next_var();
             self.write_line(&format!("uint64_t {tmp} = (uint64_t)({val});"));
             let previous = if self.hot_regs.contains(&idx) {
@@ -291,7 +341,7 @@ impl<'a> EmitContext<'a> {
                 format!("state->regs[{idx}]")
             };
             self.write_line(&format!(
-                "trace_reg_write(state, {idx}, {tmp}, {previous});"
+                "preflight_local_reg_write_unchecked(&preflight, {idx}, {tmp}, {previous});"
             ));
             if self.hot_regs.contains(&idx) {
                 let name = Self::abi_name(idx);
@@ -362,7 +412,9 @@ impl<'a> EmitContext<'a> {
 
         self.write_line(&format!("{var_ty} {var} = {read_func}(memory, {addr});"));
         if self.mode.traces_values() {
+            self.flush_preflight_local();
             self.write_line(&format!("{trace_func}(state, {addr}, {var});"));
+            self.reload_preflight_local();
         }
         if self.mode.traces_memory_pages() {
             self.emit_inline_page_record(&addr, width);
@@ -388,7 +440,9 @@ impl<'a> EmitContext<'a> {
         if self.mode.traces_values() {
             let value = self.next_var();
             self.write_line(&format!("{cast_ty} {value} = ({cast_ty})({val});"));
+            self.flush_preflight_local();
             self.write_line(&format!("{trace_func}(state, {addr}, {value});"));
+            self.reload_preflight_local();
             self.write_line(&format!("{write_func}(memory, {addr}, {value});"));
         } else {
             self.write_line(&format!(
@@ -411,9 +465,11 @@ impl<'a> EmitContext<'a> {
         if self.mode.traces_values() {
             let value = self.next_var();
             self.write_line(&format!("uint64_t {value} = (uint64_t)({val});"));
+            self.flush_preflight_local();
             self.write_line(&format!(
                 "trace_write_mem_block_u64(state, {addr}, {value});"
             ));
+            self.reload_preflight_local();
             self.write_line(&format!("write_mem_u64(memory, {addr}, {value});"));
         } else {
             self.write_line(&format!(
@@ -425,12 +481,15 @@ impl<'a> EmitContext<'a> {
     /// Emit a fail-before-mutation capacity and timestamp-headroom check.
     pub fn reserve_preflight_writes(&mut self, writes: &str, slots: &str) {
         if self.mode.traces_values() {
+            self.preflight_dynamic_reserve = true;
             let args = self.tail_call_args();
+            self.flush_preflight_local();
             self.write_line(&format!(
                 "if (unlikely(!trace_reserve_memory_writes(state, {writes}, {slots}))) {{"
             ));
             self.write_line(&format!("  [[clang::musttail]] return rv_trap({args});"));
             self.write_line("}");
+            self.reload_preflight_local();
         }
     }
 
@@ -459,19 +518,30 @@ impl<'a> EmitContext<'a> {
     /// Emit a PC read when value tracing is enabled.
     pub fn trace_pc(&mut self, pc: u64) {
         if self.mode.traces_values() {
-            let args = self.tail_call_args();
             self.write_line(&format!(
-                "if (unlikely(!trace_pc(state, 0x{pc:08x}ull))) {{"
+                "preflight_local_trace_pc(&preflight, 0x{pc:08x}ull);"
             ));
-            self.write_line(&format!("  [[clang::musttail]] return rv_trap({args});"));
-            self.write_line("}");
+        }
+    }
+
+    pub(crate) fn flush_preflight_local(&mut self) {
+        if self.mode.traces_values() {
+            self.write_line("preflight_local_flush(state, &preflight);");
+        }
+    }
+
+    pub(crate) fn reload_preflight_local(&mut self) {
+        if self.mode.traces_values() {
+            self.write_line("preflight_local_reload(&preflight, state);");
         }
     }
 
     pub fn emit_call(&mut self, name: &str, args: &[&str]) {
         self.flush_page_locals();
+        self.flush_preflight_local();
         let args_str = args.join(", ");
         self.write_line(&format!("{name}({args_str});"));
+        self.reload_preflight_local();
         self.reload_page_locals();
     }
 
@@ -482,9 +552,11 @@ impl<'a> EmitContext<'a> {
 
     pub fn emit_call_expr(&mut self, ret_ty: &str, name: &str, args: &[&str]) -> String {
         self.flush_page_locals();
+        self.flush_preflight_local();
         let tmp = self.next_var();
         let args_str = args.join(", ");
         self.write_line(&format!("{ret_ty} {tmp} = {name}({args_str});"));
+        self.reload_preflight_local();
         self.reload_page_locals();
         tmp
     }
@@ -616,6 +688,7 @@ impl<'a> EmitContext<'a> {
 
     pub fn sync_regs_to_state(&mut self) {
         self.flush_page_locals();
+        self.flush_preflight_local();
         let mut args = "state".to_string();
         for &idx in &self.sorted_hot_regs() {
             let name = Self::abi_name(idx);
@@ -759,10 +832,18 @@ mod tests {
         ctx.write_reg(0, "123ull");
 
         assert_eq!(
-            ctx.buf().matches("trace_reg_read(state, 0, 0ull);").count(),
+            ctx.buf()
+                .matches("preflight_local_reg_read_unchecked(&preflight, 0, 0ull);")
+                .count(),
             1
         );
-        assert_eq!(ctx.buf().matches("trace_timestamp(state);").count(), 1);
+        assert_eq!(
+            ctx.buf()
+                .matches("preflight_local_timestamp_unchecked(&preflight);")
+                .count(),
+            1
+        );
+        assert_eq!(ctx.preflight_local_budget(), (1, 0, 2, false));
     }
 
     #[test]
@@ -772,7 +853,8 @@ mod tests {
 
         assert!(ctx
             .buf()
-            .contains("trace_reg_write(state, 3, _v0, state->regs[3]);"));
+            .contains("preflight_local_reg_write_unchecked(&preflight, 3, _v0, state->regs[3]);"));
+        assert_eq!(ctx.preflight_local_budget(), (1, 1, 1, false));
     }
 
     #[test]
@@ -781,8 +863,9 @@ mod tests {
         tracing.advance_timestamp(3);
         assert_eq!(
             tracing.buf(),
-            "        trace_advance_timestamp(state, 3u);\n"
+            "        preflight_local_advance_timestamp_unchecked(&preflight, 3u);\n"
         );
+        assert_eq!(tracing.preflight_local_budget(), (0, 0, 3, false));
 
         for mode in [
             EmitMode::Direct,
@@ -857,6 +940,7 @@ mod tests {
             .buf()
             .contains("!trace_reserve_memory_writes(state, 5u, 13u)"));
         assert!(ctx.buf().contains("return rv_trap("));
+        assert_eq!(ctx.preflight_local_budget(), (0, 0, 0, true));
     }
 
     fn metered_memory_ctx() -> EmitContext<'static> {

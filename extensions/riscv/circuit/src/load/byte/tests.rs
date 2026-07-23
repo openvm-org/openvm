@@ -541,17 +541,6 @@ fn test_cuda_loadbu_tracegen_from_rvr_transcript() {
         .iter()
         .all(|&count| count == F::ZERO));
 
-    // Non-u16 cells are rejected by shared transcript upload before a kernel can launch.
-    let mut corrupt_u16 = RvrPreflightTranscript {
-        program_log: single_execution.transcript.program_log.clone(),
-        memory_log: single_execution.transcript.memory_log.clone(),
-        initial_write_log: single_execution.transcript.initial_write_log.clone(),
-    };
-    corrupt_u16.memory_log[0].value[0] = u16::MAX as u32 + 1;
-    assert!(d_single_program
-        .upload_transcript(&corrupt_u16, RvrPreflightEndpoint::Terminated)
-        .is_err());
-
     // The executor accepts the largest u32 byte address even when the configured byte-pointer
     // width is 33. Replay must preserve that boundary without truncating larger effective values.
     let mut max_address_transcript = RvrPreflightTranscript {
@@ -559,7 +548,7 @@ fn test_cuda_loadbu_tracegen_from_rvr_transcript() {
         memory_log: single_execution.transcript.memory_log.clone(),
         initial_write_log: single_execution.transcript.initial_write_log.clone(),
     };
-    max_address_transcript.memory_log[0].value = [u16::MAX as u32, u16::MAX as u32, 0, 0];
+    max_address_transcript.memory_log[0].value = [u16::MAX, u16::MAX, 0, 0];
     max_address_transcript.memory_log[1].pointer = (u32::MAX & !7) / 2;
     max_address_transcript.memory_log[2].value = [0x55, 0, 0, 0];
     let mut wide_memory_config = memory_config.clone();

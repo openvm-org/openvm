@@ -1088,10 +1088,10 @@ mod tests {
         );
         let u64_cells = |value: u64| {
             [
-                value as u16 as u32,
-                (value >> 16) as u16 as u32,
-                (value >> 32) as u16 as u32,
-                (value >> 48) as u16 as u32,
+                value as u16,
+                (value >> 16) as u16,
+                (value >> 32) as u16,
+                (value >> 48) as u16,
             ]
         };
         assert_eq!(
@@ -1155,10 +1155,10 @@ mod tests {
         {
             let byte_start = seed.pointer as usize * 2;
             let expected = std::array::from_fn(|index| {
-                u32::from(u16::from_le_bytes([
+                u16::from_le_bytes([
                     initial_public_values[byte_start + 2 * index],
                     initial_public_values[byte_start + 2 * index + 1],
-                ]))
+                ])
             });
             assert_eq!(seed.initial_value, expected);
         }
@@ -1195,7 +1195,7 @@ mod tests {
                     block.ptr,
                     (
                         block.timestamp,
-                        block.values.map(|value| value.as_canonical_u32()),
+                        block.values.map(|value| value.as_canonical_u32() as u16),
                     ),
                 )
             })
@@ -1520,6 +1520,7 @@ mod tests {
     #[cfg(all(feature = "rvr", not(feature = "cuda")))]
     fn benchmark_rvr_preflight_against_interpreter() -> Result<()> {
         const REPETITIONS: usize = 7;
+        const LOOP_COUNT: u64 = 1 << 18;
 
         let config = test_rv64im_config();
         let reg = |index: usize| index * RV64_REGISTER_NUM_LIMBS;
@@ -1535,7 +1536,6 @@ mod tests {
         };
         let instructions = [
             addi(1, 0, 0),
-            addi(2, 0, 1000),
             addi(1, 1, 1),
             Instruction::<F>::from_isize(
                 BranchEqualOpcode::BNE.global_opcode(),
@@ -1547,17 +1547,23 @@ mod tests {
             ),
             Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ];
-        let exe = VmExe::from(Program::from_instructions(&instructions));
+        let init_memory = LOOP_COUNT
+            .to_le_bytes()
+            .into_iter()
+            .enumerate()
+            .map(|(offset, byte)| ((RV64_REGISTER_AS, (reg(2) + offset) as u32), byte))
+            .collect();
+        let exe =
+            VmExe::new(Program::from_instructions(&instructions)).with_init_memory(init_memory);
         let (vm, _) = VirtualMachine::new_with_keygen(
             test_cpu_engine(),
             openvm_riscv_circuit::Rv64ImCpuBuilder,
             config,
         )?;
 
-        let metered_ctx = vm.build_metered_ctx(&exe);
-        let (segments, _) = vm
-            .metered_instance(&exe)?
-            .execute_metered(Vec::<Vec<u8>>::new(), metered_ctx)?;
+        let metered = vm.metered_instance(&exe)?;
+        let (segments, _) =
+            metered.execute_metered(Vec::<Vec<u8>>::new(), vm.build_metered_ctx(&exe))?;
         assert_eq!(segments.len(), 1, "benchmark input must fit one segment");
         let segment = &segments[0];
         let max_instructions = usize::try_from(segment.num_insns)?;
@@ -1565,15 +1571,35 @@ mod tests {
             .checked_mul(4)
             .ok_or_else(|| eyre::eyre!("benchmark memory-event capacity overflow"))?;
 
+        let pure = vm.get_rvr_instance(&exe)?;
         let rvr = vm.executor().rvr_preflight_instance(&exe, None)?;
+        if let Some(path) = std::env::var_os("RVR_PREFLIGHT_BENCH_SOURCES") {
+            rvr.save_generated_sources(std::path::Path::new(&path))?;
+        }
         let mut interpreter = vm.preflight_interpreter(&exe)?;
         let limits =
             openvm_circuit::arch::rvr::RvrPreflightLimits::new(max_instructions, max_memory_events);
         let mut interpreter_times = Vec::with_capacity(REPETITIONS);
+        let mut pure_times = Vec::with_capacity(REPETITIONS);
+        let mut metered_times = Vec::with_capacity(REPETITIONS);
         let mut rvr_times = Vec::with_capacity(REPETITIONS);
         let mut transcript_bytes = 0usize;
+        let mut reusable_transcript = None;
 
         for _ in 0..REPETITIONS {
+            let pure_state = pure.create_initial_vm_state(Vec::<Vec<u8>>::new());
+            let started = Instant::now();
+            let pure_state = pure.execute_from_state(pure_state)?;
+            pure_times.push(started.elapsed());
+
+            let metered_state = metered.create_initial_vm_state(Vec::<Vec<u8>>::new());
+            let metered_ctx = vm.build_metered_ctx(&exe);
+            let started = Instant::now();
+            let (metered_segments, metered_state) =
+                metered.execute_metered_from_state(metered_state, metered_ctx)?;
+            metered_times.push(started.elapsed());
+            assert_eq!(metered_segments.len(), 1);
+
             let interpreter_state = vm.create_initial_state(&exe, Vec::<Vec<u8>>::new());
             let started = Instant::now();
             let PreflightExecutionOutput {
@@ -1590,9 +1616,16 @@ mod tests {
 
             let rvr_state = rvr.create_initial_vm_state(Vec::<Vec<u8>>::new());
             let started = Instant::now();
-            let execution = rvr.execute_from_state(rvr_state, limits)?;
+            let execution = match reusable_transcript.take() {
+                Some(transcript) => {
+                    rvr.execute_from_state_reusing(rvr_state, limits, transcript)?
+                }
+                None => rvr.execute_from_state(rvr_state, limits)?,
+            };
             rvr_times.push(started.elapsed());
 
+            assert_eq!(pure_state.pc(), to_state.pc());
+            assert_eq!(metered_state.pc(), to_state.pc());
             assert_eq!(execution.state.pc(), to_state.pc());
             assert_eq!(
                 execution.transcript.program_log.last().unwrap().timestamp,
@@ -1635,26 +1668,35 @@ mod tests {
                 assert_eq!(last_event.timestamp, touched.timestamp);
                 assert_eq!(
                     last_event.value,
-                    touched.values.map(|value| value.as_canonical_u32())
+                    touched.values.map(|value| value.as_canonical_u32() as u16)
                 );
             }
 
             transcript_bytes = std::mem::size_of_val(execution.transcript.program_log.as_slice())
                 + std::mem::size_of_val(execution.transcript.memory_log.as_slice())
                 + std::mem::size_of_val(execution.transcript.initial_write_log.as_slice());
+            reusable_transcript = Some(execution.transcript);
         }
 
         interpreter_times.sort_unstable();
+        pure_times.sort_unstable();
+        metered_times.sort_unstable();
         rvr_times.sort_unstable();
         let interpreter_median = interpreter_times[REPETITIONS / 2];
+        let pure_median = pure_times[REPETITIONS / 2];
+        let metered_median = metered_times[REPETITIONS / 2];
         let rvr_median = rvr_times[REPETITIONS / 2];
         println!(
-            "RVR_PREFLIGHT_BENCH guest_insns={} repetitions={} interpreter_median_us={} rvr_median_us={} speedup={:.3} transcript_bytes={} bytes_per_insn={:.3}",
+            "RVR_PREFLIGHT_BENCH guest_insns={} repetitions={} pure_median_us={} metered_median_us={} interpreter_median_us={} rvr_median_us={} interpreter_speedup={:.3} preflight_over_pure={:.3} preflight_over_metered={:.3} transcript_bytes={} bytes_per_insn={:.3}",
             segment.num_insns,
             REPETITIONS,
+            pure_median.as_micros(),
+            metered_median.as_micros(),
             interpreter_median.as_micros(),
             rvr_median.as_micros(),
             interpreter_median.as_secs_f64() / rvr_median.as_secs_f64(),
+            rvr_median.as_secs_f64() / pure_median.as_secs_f64(),
+            rvr_median.as_secs_f64() / metered_median.as_secs_f64(),
             transcript_bytes,
             transcript_bytes as f64 / segment.num_insns as f64,
         );

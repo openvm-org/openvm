@@ -546,8 +546,7 @@ fn test_cuda_loadhu_tracegen_from_rvr_transcript() {
         memory_log: single_execution.transcript.memory_log.clone(),
         initial_write_log: single_execution.transcript.initial_write_log.clone(),
     };
-    max_address_transcript.memory_log[0].value =
-        [(u32::MAX - 1) & u16::MAX as u32, u16::MAX as u32, 0, 0];
+    max_address_transcript.memory_log[0].value = [u16::MAX - 1, u16::MAX, 0, 0];
     max_address_transcript.memory_log[1].pointer = (u32::MAX & !7) / 2;
     max_address_transcript.memory_log[1].value = [0, 0, 0, 0x8000];
     max_address_transcript.memory_log[2].value = [0x8000, 0, 0, 0];
@@ -589,8 +588,8 @@ fn test_cuda_loadhu_tracegen_from_rvr_transcript() {
         initial_write_log: single_execution.transcript.initial_write_log.clone(),
     };
     narrow_boundary_transcript.memory_log[0].value = [
-        (narrow_limit - 2) & u16::MAX as u32,
-        (narrow_limit - 2) >> 16,
+        ((narrow_limit - 2) & u16::MAX as u32) as u16,
+        ((narrow_limit - 2) >> 16) as u16,
         0,
         0,
     ];

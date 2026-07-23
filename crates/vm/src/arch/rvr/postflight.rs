@@ -336,7 +336,7 @@ mod tests {
 
     use super::*;
 
-    fn read(timestamp: u32, pointer: u32, value: [u32; 4]) -> PreflightMemoryEvent {
+    fn read(timestamp: u32, pointer: u32, value: [u16; 4]) -> PreflightMemoryEvent {
         PreflightMemoryEvent {
             timestamp,
             address_space_and_kind: 1,
@@ -345,7 +345,7 @@ mod tests {
         }
     }
 
-    fn write(timestamp: u32, pointer: u32, value: [u32; 4]) -> PreflightMemoryEvent {
+    fn write(timestamp: u32, pointer: u32, value: [u16; 4]) -> PreflightMemoryEvent {
         PreflightMemoryEvent {
             timestamp,
             address_space_and_kind: PREFLIGHT_WRITE_BIT | 1,
