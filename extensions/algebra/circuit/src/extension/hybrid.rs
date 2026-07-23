@@ -22,9 +22,7 @@ use openvm_cuda_backend::{
 use openvm_mod_circuit_builder::{
     cuda::FieldExprChipGpu, ExprBuilderConfig, FieldExpressionMetadata,
 };
-use openvm_riscv_adapters::{
-    Rv64IsEqualModU16AdapterRecord, Rv64VecHeapAdapterCols, Rv64VecHeapAdapterExecutor,
-};
+use openvm_riscv_adapters::{Rv64VecHeapAdapterCols, Rv64VecHeapAdapterExecutor};
 use openvm_riscv_circuit::{adapters::U16_BITS, Rv64ImGpuProverExt};
 use openvm_stark_backend::prover::AirProvingContext;
 
