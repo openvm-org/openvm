@@ -666,7 +666,8 @@ fn test_cuda_storeb_tracegen_from_rvr_transcript() {
             memory_log: single_execution.transcript.memory_log.clone(),
             initial_write_log: single_execution.transcript.initial_write_log.clone(),
         };
-        boundary_transcript.memory_log[0].value = [base & u16::MAX as u32, base >> 16, 0, 0];
+        boundary_transcript.memory_log[0].value =
+            [(base & u16::MAX as u32) as u16, (base >> 16) as u16, 0, 0];
         let (d_boundary, d_boundary_plan) = d_boundary_program
             .upload_transcript(&boundary_transcript, RvrPreflightEndpoint::Terminated)
             .unwrap();
@@ -705,13 +706,13 @@ fn test_cuda_storeb_tracegen_from_rvr_transcript() {
         memory_log: single_execution.transcript.memory_log.clone(),
         initial_write_log: single_execution.transcript.initial_write_log.clone(),
     };
-    max_address.memory_log[0].value = [u16::MAX as u32, u16::MAX as u32, 0, 0];
+    max_address.memory_log[0].value = [u16::MAX, u16::MAX, 0, 0];
     let max_block_pointer = (u32::MAX & !7) / 2;
     max_address.memory_log[2].pointer = max_block_pointer;
     max_address.initial_write_log[0].pointer = max_block_pointer;
     let mut expected_post = max_address.initial_write_log[0].initial_value;
     expected_post[3] =
-        (expected_post[3] & u8::MAX as u32) | ((max_address.memory_log[1].value[0] & 0xff) << 8);
+        (expected_post[3] & u8::MAX as u16) | ((max_address.memory_log[1].value[0] & 0xff) << 8);
     max_address.memory_log[2].value = expected_post;
     let mut wide_memory_config = memory_config.clone();
     wide_memory_config.pointer_max_bits = 32;

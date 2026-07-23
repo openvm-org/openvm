@@ -9,7 +9,7 @@ use openvm_instructions::{
 use rustc_hash::FxHashSet;
 use rvr_openvm_lift::RvrRuntimeExtension;
 use rvr_state::{
-    PreflightInitialWrite, PreflightMemoryEvent, PreflightProgramEvent, PreflightState,
+    PreflightInitialWrite, PreflightMemoryEvent, PreflightProgramEvent, PreflightState, NUM_REGS,
 };
 
 use super::{
@@ -104,8 +104,50 @@ impl PreflightBuffers {
             program_limit: limits.max_instructions,
             memory_log,
             memory_limit: limits.max_memory_events,
-            // The generated hot path appends one candidate per write. Cold
-            // finalization retains only first-event writes.
+            // Registers emit only first-event writes. Other address spaces
+            // append one candidate per write for cold finalization to compact.
+            initial_write_candidates,
+        })
+    }
+
+    pub(crate) fn reuse(
+        limits: RvrPreflightLimits,
+        transcript: RvrPreflightTranscript,
+    ) -> Result<Self, String> {
+        let program_capacity = limits
+            .max_instructions
+            .checked_add(1)
+            .ok_or_else(|| "preflight program capacity overflow".to_string())?;
+        let RvrPreflightTranscript {
+            mut program_log,
+            mut memory_log,
+            initial_write_log: mut initial_write_candidates,
+        } = transcript;
+        program_log.clear();
+        memory_log.clear();
+        initial_write_candidates.clear();
+        if program_log.capacity() < program_capacity {
+            program_log
+                .try_reserve_exact(program_capacity - program_log.capacity())
+                .map_err(|error| format!("failed to reserve preflight program log: {error}"))?;
+        }
+        if memory_log.capacity() < limits.max_memory_events {
+            memory_log
+                .try_reserve_exact(limits.max_memory_events - memory_log.capacity())
+                .map_err(|error| format!("failed to reserve preflight memory log: {error}"))?;
+        }
+        if initial_write_candidates.capacity() < limits.max_memory_events {
+            initial_write_candidates
+                .try_reserve_exact(limits.max_memory_events - initial_write_candidates.capacity())
+                .map_err(|error| {
+                    format!("failed to reserve preflight initial-write log: {error}")
+                })?;
+        }
+        Ok(Self {
+            program_log,
+            program_limit: limits.max_instructions,
+            memory_log,
+            memory_limit: limits.max_memory_events,
             initial_write_candidates,
         })
     }
@@ -123,6 +165,10 @@ impl PreflightBuffers {
             initial_write_log_cap: self.memory_limit as u64,
             timestamp: 1,
             error: 0,
+            seen_register_blocks: 0,
+            wrote_register: 0,
+            has_non_register_events: 0,
+            padding: 0,
         }
     }
 
@@ -135,6 +181,7 @@ impl PreflightBuffers {
         ffi: &PreflightState,
         final_pc: u32,
         timestamp_max_bits: usize,
+        state: &mut VmState<GuestMemory>,
     ) -> Result<RvrPreflightTranscript, String> {
         if ffi.error != 0 {
             return Err(format!(
@@ -185,90 +232,169 @@ impl PreflightBuffers {
             timestamp: ffi.timestamp,
         });
 
-        let mut seen = FxHashSet::default();
+        if ffi.has_non_register_events == 0 {
+            let mut seeded_register_blocks = 0u32;
+            for seed in &self.initial_write_candidates {
+                if seed.address_space != RV64_REGISTER_AS
+                    || seed.pointer % BLOCK_FE_WIDTH as u32 != 0
+                {
+                    return Err("invalid register-only initial-write seed".to_string());
+                }
+                let block = seed.pointer as usize / BLOCK_FE_WIDTH;
+                if block >= NUM_REGS {
+                    return Err("preflight register seed is out of bounds".to_string());
+                }
+                let bit = 1u32 << block;
+                if seeded_register_blocks & bit != 0 {
+                    return Err("duplicate preflight register seed".to_string());
+                }
+                seeded_register_blocks |= bit;
+            }
+            if ffi.wrote_register != 0 {
+                mark_touched_block(state, RV64_REGISTER_AS, 0)?;
+            }
+            return Ok(RvrPreflightTranscript {
+                program_log: self.program_log,
+                memory_log: self.memory_log,
+                initial_write_log: self.initial_write_candidates,
+            });
+        }
+
+        let mut seen_non_register_blocks = FxHashSet::default();
+        let mut seen_register_blocks = 0u32;
+        let mut written_non_register_pages = FxHashSet::default();
+        let mut wrote_register_page = false;
         let mut candidate_index = 0usize;
-        let mut initial_write_log = Vec::new();
+        let mut retained_initial_writes = 0usize;
         for event in &self.memory_log {
             let address_space = event.address_space();
             let is_write = event.is_write();
             let key = ((address_space as u64) << 32) | event.pointer as u64;
-            let first_event = seen.insert(key);
-            if is_write {
-                let candidate = *self
-                    .initial_write_candidates
-                    .get(candidate_index)
-                    .ok_or_else(|| "missing initial-write candidate".to_string())?;
-                candidate_index += 1;
-                if candidate.address_space != address_space || candidate.pointer != event.pointer {
-                    return Err("initial-write candidate is out of order".to_string());
+            let first_event = if address_space == RV64_REGISTER_AS {
+                if event.pointer % BLOCK_FE_WIDTH as u32 != 0 {
+                    return Err("unaligned preflight register block".to_string());
                 }
-                if first_event {
-                    initial_write_log.push(candidate);
+                let block = event.pointer as usize / BLOCK_FE_WIDTH;
+                if block >= NUM_REGS {
+                    return Err("preflight register block is out of bounds".to_string());
+                }
+                let bit = 1u32 << block;
+                let first = seen_register_blocks & bit == 0;
+                seen_register_blocks |= bit;
+                first
+            } else {
+                seen_non_register_blocks.insert(key)
+            };
+            if is_write {
+                // Register candidates are emitted only for a first-event
+                // write. Non-register writes stay branch-free in generated C
+                // and append one candidate each for cold compaction here.
+                if address_space != RV64_REGISTER_AS || first_event {
+                    let candidate = *self
+                        .initial_write_candidates
+                        .get(candidate_index)
+                        .ok_or_else(|| "missing initial-write candidate".to_string())?;
+                    candidate_index += 1;
+                    if candidate.address_space != address_space
+                        || candidate.pointer != event.pointer
+                    {
+                        return Err("initial-write candidate is out of order".to_string());
+                    }
+                    if first_event {
+                        self.initial_write_candidates[retained_initial_writes] = candidate;
+                        retained_initial_writes += 1;
+                    }
+                }
+                if address_space == RV64_REGISTER_AS {
+                    if !wrote_register_page {
+                        mark_touched_block(state, address_space, event.pointer)?;
+                        wrote_register_page = true;
+                    }
+                } else {
+                    let page_key = touched_page_key(state, address_space, event.pointer)?;
+                    if written_non_register_pages.insert(page_key) {
+                        mark_touched_block(state, address_space, event.pointer)?;
+                    }
                 }
             }
         }
         if candidate_index != self.initial_write_candidates.len() {
             return Err("unused initial-write candidates remain".to_string());
         }
+        self.initial_write_candidates
+            .truncate(retained_initial_writes);
 
         Ok(RvrPreflightTranscript {
             program_log: self.program_log,
             memory_log: self.memory_log,
-            initial_write_log,
+            initial_write_log: self.initial_write_candidates,
         })
     }
 }
 
-pub(crate) fn extend_touched_pages(
+fn touched_page_key(
+    state: &VmState<GuestMemory>,
+    address_space: u32,
+    pointer: u32,
+) -> Result<u64, String> {
+    let config = state
+        .memory
+        .memory
+        .config
+        .get(address_space as usize)
+        .ok_or_else(|| format!("preflight address space {address_space} is not configured"))?;
+    let byte_start = (pointer as usize)
+        .checked_mul(config.layout.size())
+        .ok_or_else(|| "preflight touched-page pointer overflow".to_string())?;
+    let page = byte_start / crate::system::memory::online::PAGE_SIZE;
+    Ok((u64::from(address_space) << 32) | page as u64)
+}
+
+fn mark_touched_block(
     state: &mut VmState<GuestMemory>,
-    transcript: &RvrPreflightTranscript,
+    address_space: u32,
+    pointer: u32,
 ) -> Result<(), String> {
-    for event in &transcript.memory_log {
-        if !event.is_write() {
-            continue;
-        }
-        let address_space = event.address_space();
-        if address_space != RV64_REGISTER_AS
-            && address_space != RV64_MEMORY_AS
-            && address_space != PUBLIC_VALUES_AS
-        {
-            return Err(format!(
-                "unsupported preflight address space {address_space}"
-            ));
-        }
-        let address_space_index = address_space as usize;
-        let config = state
-            .memory
-            .memory
-            .config
-            .get(address_space_index)
-            .ok_or_else(|| format!("preflight address space {address_space} is not configured"))?;
-        let block_end = (event.pointer as usize)
-            .checked_add(BLOCK_FE_WIDTH)
-            .ok_or_else(|| "preflight touched-page block overflow".to_string())?;
-        if block_end > config.num_cells {
-            return Err(format!(
-                "preflight touched-page block {address_space}:{}..{block_end} exceeds {} configured cells",
-                event.pointer, config.num_cells
-            ));
-        }
-        let cell_bytes = config.layout.size();
-        let byte_start = (event.pointer as usize)
-            .checked_mul(cell_bytes)
-            .ok_or_else(|| "preflight touched-page pointer overflow".to_string())?;
-        let byte_len = BLOCK_FE_WIDTH
-            .checked_mul(cell_bytes)
-            .ok_or_else(|| "preflight touched-page byte length overflow".to_string())?;
-        state
-            .memory
-            .memory
-            .touched_pages
-            .get_mut(address_space_index)
-            .ok_or_else(|| {
-                format!("preflight address space {address_space} has no touched-page tracker")
-            })?
-            .mark_byte_range(byte_start, byte_len);
+    if address_space != RV64_REGISTER_AS
+        && address_space != RV64_MEMORY_AS
+        && address_space != PUBLIC_VALUES_AS
+    {
+        return Err(format!(
+            "unsupported preflight address space {address_space}"
+        ));
     }
+    let address_space_index = address_space as usize;
+    let config = state
+        .memory
+        .memory
+        .config
+        .get(address_space_index)
+        .ok_or_else(|| format!("preflight address space {address_space} is not configured"))?;
+    let block_end = (pointer as usize)
+        .checked_add(BLOCK_FE_WIDTH)
+        .ok_or_else(|| "preflight touched-page block overflow".to_string())?;
+    if block_end > config.num_cells {
+        return Err(format!(
+            "preflight touched-page block {address_space}:{pointer}..{block_end} exceeds {} configured cells",
+            config.num_cells
+        ));
+    }
+    let cell_bytes = config.layout.size();
+    let byte_start = (pointer as usize)
+        .checked_mul(cell_bytes)
+        .ok_or_else(|| "preflight touched-page pointer overflow".to_string())?;
+    let byte_len = BLOCK_FE_WIDTH
+        .checked_mul(cell_bytes)
+        .ok_or_else(|| "preflight touched-page byte length overflow".to_string())?;
+    state
+        .memory
+        .memory
+        .touched_pages
+        .get_mut(address_space_index)
+        .ok_or_else(|| {
+            format!("preflight address space {address_space} has no touched-page tracker")
+        })?
+        .mark_byte_range(byte_start, byte_len);
     Ok(())
 }
 
@@ -328,7 +454,20 @@ impl<'a> RvrPreflightInstance<'a> {
         state: VmState<GuestMemory>,
         limits: RvrPreflightLimits,
     ) -> Result<RvrPreflightExecution, ExecutionError> {
-        self.execute_from_state_inner(state, limits, false)
+        self.execute_from_state_inner(state, limits, false, None)
+    }
+
+    /// Executes with the allocation owned by a prior transcript. The three
+    /// vectors are cleared without shrinking and become the new transcript.
+    /// Callers must wait for any asynchronous consumer of `reuse` before
+    /// passing it back here.
+    pub fn execute_from_state_reusing(
+        &self,
+        state: VmState<GuestMemory>,
+        limits: RvrPreflightLimits,
+        reuse: RvrPreflightTranscript,
+    ) -> Result<RvrPreflightExecution, ExecutionError> {
+        self.execute_from_state_inner(state, limits, false, Some(reuse))
     }
 
     /// Executes until either successful termination or the next whole basic
@@ -350,7 +489,17 @@ impl<'a> RvrPreflightInstance<'a> {
         state: VmState<GuestMemory>,
         limits: RvrPreflightLimits,
     ) -> Result<RvrPreflightExecution, ExecutionError> {
-        self.execute_from_state_inner(state, limits, true)
+        self.execute_from_state_inner(state, limits, true, None)
+    }
+
+    /// Bounded execution that recycles the allocation owned by `reuse`.
+    pub fn execute_from_state_for_reusing(
+        &self,
+        state: VmState<GuestMemory>,
+        limits: RvrPreflightLimits,
+        reuse: RvrPreflightTranscript,
+    ) -> Result<RvrPreflightExecution, ExecutionError> {
+        self.execute_from_state_inner(state, limits, true, Some(reuse))
     }
 
     fn execute_from_state_inner(
@@ -358,6 +507,7 @@ impl<'a> RvrPreflightInstance<'a> {
         mut state: VmState<GuestMemory>,
         limits: RvrPreflightLimits,
         allow_suspended: bool,
+        reuse: Option<RvrPreflightTranscript>,
     ) -> Result<RvrPreflightExecution, ExecutionError> {
         let (transcript, endpoint) = execute_preflight(
             &self.inner.compiled,
@@ -366,9 +516,9 @@ impl<'a> RvrPreflightInstance<'a> {
             limits,
             self.inner.system_config.memory_config.timestamp_max_bits,
             allow_suspended,
+            reuse,
         )
         .map_err(map_rvr_execute_error)?;
-        extend_touched_pages(&mut state, &transcript).map_err(ExecutionError::RvrExecution)?;
         Ok(RvrPreflightExecution {
             state,
             transcript,
@@ -393,19 +543,21 @@ mod tests {
 
     #[test]
     fn finalization_enforces_the_exact_timestamp_domain_boundary() {
+        let config = SystemConfig::default();
+        let mut state = VmState::initial(&config, &Default::default(), 0, Vec::<Vec<u8>>::new());
         let mut accepted = PreflightBuffers::new(RvrPreflightLimits::new(0, 0)).unwrap();
         let mut accepted_ffi = accepted.ffi_state();
         accepted_ffi.timestamp = 3;
         // SAFETY: `accepted_ffi` was created by `accepted`, and no pointers or
         // capacities were changed.
-        unsafe { accepted.finish(&accepted_ffi, 0, 2) }.unwrap();
+        unsafe { accepted.finish(&accepted_ffi, 0, 2, &mut state) }.unwrap();
 
         let mut rejected = PreflightBuffers::new(RvrPreflightLimits::new(0, 0)).unwrap();
         let mut rejected_ffi = rejected.ffi_state();
         rejected_ffi.timestamp = 4;
         // SAFETY: `rejected_ffi` was created by `rejected`, and no pointers or
         // capacities were changed.
-        let error = unsafe { rejected.finish(&rejected_ffi, 0, 2) }.unwrap_err();
+        let error = unsafe { rejected.finish(&rejected_ffi, 0, 2, &mut state) }.unwrap_err();
         assert!(error.contains("outside the configured 2-bit domain"));
     }
 }

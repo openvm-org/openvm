@@ -474,8 +474,8 @@ macro_rules! store_replay_test {
             };
             let overflowing_ptr = u32::MAX - $width as u32 + 2;
             overflow.memory_log[0].value = [
-                overflowing_ptr & u16::MAX as u32,
-                overflowing_ptr >> 16,
+                (overflowing_ptr & u16::MAX as u32) as u16,
+                (overflowing_ptr >> 16) as u16,
                 0,
                 0,
             ];

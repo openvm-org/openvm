@@ -993,14 +993,6 @@ fn test_cuda_branch_lt_tracegen_from_rvr_transcript() {
     target_corrupt.memory_log[final_unique_read].value = [2, 0, 0, 0];
     run_corrupt(target_corrupt, 18, 54);
 
-    let mut u16_corrupt = RvrPreflightTranscript {
-        program_log: execution.transcript.program_log.clone(),
-        memory_log: execution.transcript.memory_log.clone(),
-        initial_write_log: execution.transcript.initial_write_log.clone(),
-    };
-    u16_corrupt.memory_log[final_unique_read].value[0] = 1 << 16;
-    run_corrupt(u16_corrupt, 17, 54);
-
     let mut schedule_corrupt = RvrPreflightTranscript {
         program_log: execution.transcript.program_log.clone(),
         memory_log: execution.transcript.memory_log.clone(),

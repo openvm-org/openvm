@@ -16,13 +16,13 @@ struct PreflightMemoryEvent {
     uint32_t timestamp;
     uint32_t address_space_and_kind;
     uint32_t pointer;
-    uint32_t value[4];
+    uint16_t value[4];
 };
 
 struct PreflightInitialWrite {
     uint32_t address_space;
     uint32_t pointer;
-    uint32_t initial_value[4];
+    uint16_t initial_value[4];
 };
 
 struct RvrReplayInstruction {
@@ -35,8 +35,8 @@ struct RvrReplayStep {
 };
 
 static_assert(sizeof(PreflightProgramEvent) == 8);
-static_assert(sizeof(PreflightMemoryEvent) == 28);
-static_assert(sizeof(PreflightInitialWrite) == 24);
+static_assert(sizeof(PreflightMemoryEvent) == 20);
+static_assert(sizeof(PreflightInitialWrite) == 16);
 static_assert(sizeof(RvrReplayInstruction) == 32);
 static_assert(sizeof(RvrReplayStep) == 8);
 

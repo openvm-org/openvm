@@ -114,12 +114,12 @@ impl RvrExecutionKind {
                 writeln!(out, "  uint32_t timestamp;").unwrap();
                 writeln!(out, "  uint32_t address_space_and_kind;").unwrap();
                 writeln!(out, "  uint32_t pointer;").unwrap();
-                writeln!(out, "  uint32_t value[4];").unwrap();
+                writeln!(out, "  uint16_t value[4];").unwrap();
                 writeln!(out, "}} PreflightMemoryEvent;").unwrap();
                 writeln!(out, "typedef struct PreflightInitialWrite {{").unwrap();
                 writeln!(out, "  uint32_t address_space;").unwrap();
                 writeln!(out, "  uint32_t pointer;").unwrap();
-                writeln!(out, "  uint32_t initial_value[4];").unwrap();
+                writeln!(out, "  uint16_t initial_value[4];").unwrap();
                 writeln!(out, "}} PreflightInitialWrite;").unwrap();
                 writeln!(out, "typedef struct PreflightState {{").unwrap();
                 writeln!(out, "  PreflightProgramEvent* program_log;").unwrap();
@@ -133,8 +133,12 @@ impl RvrExecutionKind {
                 writeln!(out, "  uint64_t initial_write_log_cap;").unwrap();
                 writeln!(out, "  uint32_t timestamp;").unwrap();
                 writeln!(out, "  uint32_t error;").unwrap();
+                writeln!(out, "  uint32_t seen_register_blocks;").unwrap();
+                writeln!(out, "  uint32_t wrote_register;").unwrap();
+                writeln!(out, "  uint32_t has_non_register_events;").unwrap();
+                writeln!(out, "  uint32_t padding;").unwrap();
                 writeln!(out, "}} PreflightState;").unwrap();
-                writeln!(out, "static_assert(sizeof(PreflightState) == 80);").unwrap();
+                writeln!(out, "static_assert(sizeof(PreflightState) == 96);").unwrap();
                 writeln!(out, "static_assert(alignof(PreflightState) == 8);").unwrap();
                 writeln!(
                     out,
@@ -142,6 +146,16 @@ impl RvrExecutionKind {
                 )
                 .unwrap();
                 writeln!(out, "static_assert(offsetof(PreflightState, error) == 76);").unwrap();
+                writeln!(
+                    out,
+                    "static_assert(offsetof(PreflightState, seen_register_blocks) == 80);"
+                )
+                .unwrap();
+                writeln!(
+                    out,
+                    "static_assert(offsetof(PreflightState, has_non_register_events) == 88);"
+                )
+                .unwrap();
             }
             Self::PureWithInstretTracking => {
                 writeln!(out, "typedef struct InstretTrackingState {{").unwrap();
@@ -908,6 +922,23 @@ impl CProject {
         }
 
         self.emit_block_boundary(&mut body, block);
+        if matches!(self.execution_kind, RvrExecutionKind::Preflight) {
+            writeln!(
+                body,
+                "    PreflightLocal preflight = preflight_local_load(state);\n\
+                 preflight_block_loop:\n\
+                     if (unlikely(preflight.program_log_len > preflight.program_log_cap || (uint64_t){insn_count}u > preflight.program_log_cap - preflight.program_log_len)) {{\n\
+                         preflight_local_flush(state, &preflight);"
+            )
+            .unwrap();
+            self.emit_suspend_return(&mut body, block.start_pc);
+            writeln!(
+                body,
+                "    }}\n\
+                 /* PREFLIGHT_LOCAL_RESERVE */"
+            )
+            .unwrap();
+        }
         self.emit_per_block_chip_updates(&mut body, block)?;
 
         for instr_at in &block.instructions {
@@ -935,9 +966,56 @@ impl CProject {
             );
             ctx.trace_pc(block.terminator_pc);
         }
-        let tc = TermCtx { valid_blocks };
+        let tc = TermCtx {
+            valid_blocks,
+            current_block: block.start_pc,
+        };
         emit_terminator(&mut ctx, &block.terminator, block.terminator_pc, &tc);
         Self::emit_context_scope(&mut body, &mut ctx);
+
+        if matches!(self.execution_kind, RvrExecutionKind::Preflight) {
+            let (events, writes, slots, dynamic_reserve) = ctx.preflight_local_budget();
+            if dynamic_reserve {
+                body = body.replace("/* PREFLIGHT_LOCAL_RESERVE */\n", "");
+                body = body
+                    .replace(
+                        "preflight_local_reg_read_unchecked",
+                        "preflight_local_reg_read",
+                    )
+                    .replace(
+                        "preflight_local_reg_write_unchecked",
+                        "preflight_local_reg_write",
+                    )
+                    .replace(
+                        "preflight_local_timestamp_unchecked",
+                        "preflight_local_timestamp",
+                    )
+                    .replace(
+                        "preflight_local_advance_timestamp_unchecked",
+                        "preflight_local_advance_timestamp",
+                    );
+            } else {
+                let reserve = format!(
+                    "    if (unlikely(!preflight_local_reserve(&preflight, {events}u, {writes}u, {slots}u))) {{\n\
+                         preflight_local_flush(state, &preflight);\n"
+                );
+                let mut reserve_with_trap = reserve;
+                let args = self.fn_args_from_params();
+                writeln!(
+                    reserve_with_trap,
+                    "        [[clang::musttail]] return rv_trap({args});"
+                )
+                .unwrap();
+                reserve_with_trap.push_str("    }\n");
+                body = body.replace("/* PREFLIGHT_LOCAL_RESERVE */\n", &reserve_with_trap);
+            }
+        }
+
+        if matches!(self.execution_kind, RvrExecutionKind::Preflight)
+            && !body.contains("goto preflight_block_loop;")
+        {
+            body = body.replacen("preflight_block_loop:\n", "", 1);
+        }
 
         if let Some(error) = ctx.invalid_chip_index() {
             return Err(error);
@@ -1446,9 +1524,9 @@ fn block_accesses_memory(block: &Block) -> bool {
 mod tests {
     use std::{collections::HashSet, path::Path};
 
-    use rvr_openvm_ir::{Block, CfgEffect, ExtEmitCtx, ExtInstr, InstrAt, Terminator};
+    use rvr_openvm_ir::{Block, CfgEffect, ExtEmitCtx, ExtInstr, InstrAt, Terminator, Variable};
 
-    use super::{CProject, RvrExecutionKind};
+    use super::{CProject, EmitContext, EmitMode, RvrExecutionKind};
 
     #[test]
     fn metered_state_layout_includes_memory_flush_callback() {
@@ -1481,6 +1559,57 @@ mod tests {
 
         fn clone_box(&self) -> Box<dyn ExtInstr> {
             Box::new(self.clone())
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    struct StaticPreflightInstr;
+
+    impl ExtInstr for StaticPreflightInstr {
+        fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
+            let value = ctx.read_var(Variable::new(1));
+            ctx.write_var(Variable::new(2), &value);
+        }
+
+        fn cfg_effect(&self) -> CfgEffect {
+            CfgEffect::None
+        }
+
+        fn clone_box(&self) -> Box<dyn ExtInstr> {
+            Box::new(self.clone())
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    struct DynamicPreflightInstr;
+
+    impl ExtInstr for DynamicPreflightInstr {
+        fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
+            ctx.reserve_preflight_writes("count", "slots");
+            let _ = ctx.read_var(Variable::new(1));
+        }
+
+        fn cfg_effect(&self) -> CfgEffect {
+            CfgEffect::None
+        }
+
+        fn clone_box(&self) -> Box<dyn ExtInstr> {
+            Box::new(self.clone())
+        }
+    }
+
+    fn block_with_instruction(instruction: Box<dyn ExtInstr>) -> Block {
+        Block {
+            start_pc: 0x100,
+            end_pc: 0x108,
+            instructions: vec![InstrAt {
+                pc: 0x100,
+                instr: instruction,
+                source_loc: None,
+            }],
+            terminator: Terminator::Exit { code: 0 },
+            terminator_pc: 0x104,
+            terminator_source_loc: None,
         }
     }
 
@@ -1525,10 +1654,55 @@ mod tests {
             super::EmitMode::ValueTrace
         );
 
+        let mut ctx = EmitContext::new(
+            preflight.hot_regs.clone(),
+            EmitMode::ValueTrace,
+            preflight.block_abi(),
+            None,
+            None,
+        );
+        ctx.trace_pc(0x100);
+        assert_eq!(
+            ctx.buf(),
+            "        preflight_local_trace_pc(&preflight, 0x00000100ull);\n"
+        );
+
         let header = RvrExecutionKind::Preflight.state_layout_header();
         assert!(header.contains("PreflightState mode_state;"));
         assert!(header.contains("PreflightMemoryEvent* memory_log;"));
         assert!(!header.contains("trace_heights"));
+    }
+
+    #[test]
+    fn fixed_preflight_block_reserves_once_and_appends_unchecked() {
+        let project = CProject::new(Path::new("unused"), "test", RvrExecutionKind::Preflight);
+        let block = block_with_instruction(Box::new(StaticPreflightInstr));
+        let mut output = String::new();
+
+        project
+            .emit_block_function(&mut output, &block, &HashSet::new())
+            .unwrap();
+
+        assert!(output.contains("preflight_local_reserve(&preflight, 2u, 1u, 2u)"));
+        assert_eq!(output.matches("preflight_local_reserve(").count(), 1);
+        assert!(output.contains("preflight_local_reg_read_unchecked("));
+        assert!(output.contains("preflight_local_reg_write_unchecked("));
+    }
+
+    #[test]
+    fn dynamic_preflight_block_keeps_checked_event_hooks() {
+        let project = CProject::new(Path::new("unused"), "test", RvrExecutionKind::Preflight);
+        let block = block_with_instruction(Box::new(DynamicPreflightInstr));
+        let mut output = String::new();
+
+        project
+            .emit_block_function(&mut output, &block, &HashSet::new())
+            .unwrap();
+
+        assert!(!output.contains("preflight_local_reserve(&preflight"));
+        assert!(output.contains("preflight_local_reg_read(&preflight"));
+        assert!(!output.contains("preflight_local_reg_read_unchecked"));
+        assert!(output.contains("trace_reserve_memory_writes(state, count, slots)"));
     }
 
     #[test]

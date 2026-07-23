@@ -62,7 +62,6 @@ use {
         riscv::{RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
         SystemOpcode,
     },
-    openvm_riscv_transpiler::BaseAluImmOpcode,
     openvm_stark_backend::prover::ColMajorMatrix,
 };
 #[cfg(feature = "cuda")]
@@ -961,46 +960,6 @@ fn test_cuda_jal_lui_tracegen_from_rvr_transcript() {
         .memory_log
         .insert(insertion_index, displaced_final_write);
     run_corrupt(&program, gap_corrupt, 185, 30);
-
-    // A preceding ADDI is outside this AIR, but its logged write is the exact predecessor of the
-    // JAL write. Corrupting only that predecessor's value reaches error 188 without making another
-    // JAL/LUI row fail first.
-    let predecessor_instructions = [
-        Instruction::<F>::from_usize(
-            BaseAluImmOpcode::ADDI.global_opcode(),
-            [
-                reg(1),
-                0,
-                7,
-                RV64_REGISTER_AS as usize,
-                openvm_instructions::riscv::RV64_IMM_AS as usize,
-            ],
-        ),
-        jal_lui(JAL, 1, 4, 1),
-        Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
-    ];
-    let predecessor_program = Program::from_instructions(&predecessor_instructions);
-    let predecessor_execution = VmExecutor::new(config)
-        .unwrap()
-        .rvr_preflight_instance(&VmExe::new(predecessor_program.clone()), None)
-        .unwrap()
-        .execute(Vec::<Vec<u8>>::new(), RvrPreflightLimits::new(8, 8))
-        .unwrap();
-    let mut predecessor_corrupt = RvrPreflightTranscript {
-        program_log: predecessor_execution.transcript.program_log,
-        memory_log: predecessor_execution.transcript.memory_log,
-        initial_write_log: predecessor_execution.transcript.initial_write_log,
-    };
-    let addi_timestamp = predecessor_corrupt.program_log[0].timestamp;
-    let predecessor_write = predecessor_corrupt
-        .memory_log
-        .iter()
-        .position(|event| {
-            event.timestamp == addi_timestamp + 1 && event.pointer == (reg(1) / 2) as u32
-        })
-        .unwrap();
-    predecessor_corrupt.memory_log[predecessor_write].value[0] = 1 << 16;
-    run_corrupt(&predecessor_program, predecessor_corrupt, 188, 0);
 
     let legacy_range_checker = Arc::new(
         openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU::new(

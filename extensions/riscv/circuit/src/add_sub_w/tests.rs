@@ -701,19 +701,15 @@ fn test_cuda_add_sub_w_tracegen_from_rvr_transcript() {
     let rs2_index = rs1_index + 1;
     let write_index = rs1_index + 2;
     alias_corrupt_transcript.memory_log[rs2_index].value[0] ^= 1;
-    let rs1_word = alias_corrupt_transcript.memory_log[rs1_index].value[0]
-        | (alias_corrupt_transcript.memory_log[rs1_index].value[1] << U16_BITS);
-    let rs2_word = alias_corrupt_transcript.memory_log[rs2_index].value[0]
-        | (alias_corrupt_transcript.memory_log[rs2_index].value[1] << U16_BITS);
+    let rs1_word = u32::from(alias_corrupt_transcript.memory_log[rs1_index].value[0])
+        | (u32::from(alias_corrupt_transcript.memory_log[rs1_index].value[1]) << U16_BITS);
+    let rs2_word = u32::from(alias_corrupt_transcript.memory_log[rs2_index].value[0])
+        | (u32::from(alias_corrupt_transcript.memory_log[rs2_index].value[1]) << U16_BITS);
     let result_word = rs1_word.wrapping_add(rs2_word);
-    let sign_extension = if result_word >> 31 == 0 {
-        0
-    } else {
-        u16::MAX as u32
-    };
+    let sign_extension = if result_word >> 31 == 0 { 0 } else { u16::MAX };
     alias_corrupt_transcript.memory_log[write_index].value = [
-        result_word & u16::MAX as u32,
-        result_word >> U16_BITS,
+        (result_word & u16::MAX as u32) as u16,
+        (result_word >> U16_BITS) as u16,
         sign_extension,
         sign_extension,
     ];

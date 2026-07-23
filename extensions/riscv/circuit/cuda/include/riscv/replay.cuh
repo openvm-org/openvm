@@ -10,15 +10,12 @@ struct ReplayPreviousValue {
 };
 
 static __device__ bool replay_u16_block(
-    uint32_t const (&source)[BLOCK_FE_WIDTH],
+    uint16_t const (&source)[BLOCK_FE_WIDTH],
     uint16_t (&out)[BLOCK_FE_WIDTH]
 ) {
 #pragma unroll
     for (size_t i = 0; i < BLOCK_FE_WIDTH; i++) {
-        if (source[i] > 0xffffu) {
-            return false;
-        }
-        out[i] = static_cast<uint16_t>(source[i]);
+        out[i] = source[i];
     }
     return true;
 }

@@ -882,7 +882,12 @@ fn test_cuda_jalr_tracegen_from_rvr_transcript() {
     boundary_read.timestamp = boundary_from.timestamp;
     boundary_read.address_space_and_kind = RV64_REGISTER_AS;
     boundary_read.pointer = (reg(1) / 2) as u32;
-    boundary_read.value = [boundary_pc & u16::MAX as u32, boundary_pc >> 16, 0, 0];
+    boundary_read.value = [
+        (boundary_pc & u16::MAX as u32) as u16,
+        (boundary_pc >> 16) as u16,
+        0,
+        0,
+    ];
     let boundary_transcript = RvrPreflightTranscript {
         program_log: vec![boundary_from, boundary_to],
         memory_log: vec![boundary_read],
