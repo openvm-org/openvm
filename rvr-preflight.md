@@ -789,6 +789,14 @@ an in-place destination, shifts 0, 1, 15, 16, and 31, and non-power-of-two row
 padding. CPU, legacy CUDA, and replay traces and range histograms match; the
 replay trace proves and rejects a corrupted upper sign-extension limb.
 
+XORI, ORI, and ANDI add the byte-limb and bitwise-lookup path. Replay validates
+the canonical signed 12-bit immediate encoding, converts the four logged u16
+cells to eight little-endian bytes, checks the computed full-register result,
+and emits both timestamp range and bitwise lookup requests directly. A grouped
+test covers all three opcodes with immediates -2048, -1, 0, and 2047, plus x0,
+an in-place destination, and padding. CPU, legacy CUDA, and replay rows and both
+lookup histograms match; the replay trace proves and rejects a corrupt result.
+
 ### M3: complete the GPU proving path
 
 Once RISC-V replay is viable:
