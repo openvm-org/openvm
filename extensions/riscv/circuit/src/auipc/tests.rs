@@ -29,6 +29,45 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use {
+    crate::Rv64IConfig,
+    openvm_circuit::{
+        arch::{
+            rvr::{
+                cuda::GpuRvrProgram, RvrPreflightEndpoint, RvrPreflightLimits,
+                RvrPreflightTranscript,
+            },
+            testing::default_var_range_checker_bus,
+            MatrixRecordArena, VmExecutor,
+        },
+        system::{
+            cuda::memory::MemoryInventoryGPU,
+            memory::online::{AddressMap, GuestMemory, TracingMemory},
+        },
+        utils::test_system_config,
+    },
+    openvm_circuit_primitives::Chip,
+    openvm_cpu_backend::CpuBackend,
+    openvm_cuda_backend::{
+        base::DeviceMatrix,
+        data_transporter::{
+            assert_eq_host_and_device_matrix_col_maj, transport_matrix_d2h_row_major,
+        },
+        prelude::SC,
+    },
+    openvm_cuda_common::{
+        copy::{MemCopyD2H, MemCopyH2D},
+        stream::device_synchronize,
+    },
+    openvm_instructions::{
+        exe::VmExe,
+        program::Program,
+        riscv::{RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+        SystemOpcode,
+    },
+    openvm_stark_backend::prover::ColMajorMatrix,
+};
 #[cfg(feature = "cuda")]
 use {
     crate::{adapters::Rv64RdWriteAdapterRecord, Rv64AuipcChipGpu, Rv64AuipcCoreRecord},
@@ -536,4 +575,279 @@ fn test_cuda_rand_auipc_tracegen() {
         .finalize()
         .simple_test()
         .unwrap();
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+#[test]
+fn test_cuda_auipc_tracegen_from_rvr_transcript() {
+    let reg = |index: usize| index * RV64_REGISTER_NUM_LIMBS;
+    let auipc = |rd: usize, immediate: usize| {
+        Instruction::<F>::from_usize(
+            AUIPC.global_opcode(),
+            [reg(rd), 0, immediate, RV64_REGISTER_AS as usize, 0],
+        )
+    };
+    let pc_base = 0x1000;
+    let instructions = [
+        auipc(1, 0x7f_fff0),
+        auipc(2, 0x80_0000),
+        auipc(3, 0),
+        auipc(1, 1),
+        auipc(4, 0xff_fff0),
+        auipc(5, 0x12_3456),
+        auipc(6, 0x80_0001),
+        Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
+    ];
+    let program = Program::new_without_debug_infos(&instructions, pc_base);
+    let exe = VmExe::new(program.clone()).with_pc_start(pc_base);
+    let config = Rv64IConfig {
+        system: test_system_config(),
+        ..Default::default()
+    };
+    let memory_config = config.system.memory_config.clone();
+    let execution = VmExecutor::new(config.clone())
+        .unwrap()
+        .rvr_preflight_instance(&exe, None)
+        .unwrap()
+        .execute(Vec::<Vec<u8>>::new(), RvrPreflightLimits::new(16, 16))
+        .unwrap();
+
+    // The first result is 0x8000_0000 with zero upper limbs. It must not be
+    // sign-extended from the low word's sign bit.
+    assert_eq!(execution.transcript.memory_log[0].value, [0, 0x8000, 0, 0]);
+    // The second result is negative in the full u64 AUIPC semantics.
+    assert_eq!(
+        execution.transcript.memory_log[1].value,
+        [0x1004, 0x8000, 0xffff, 0xffff]
+    );
+
+    let mut tester = GpuChipTestBuilder::default();
+    let initial_image = GuestMemory::new(AddressMap::from_mem_config(&tester.memory.config));
+    tester.memory.memory = TracingMemory::from_image(initial_image);
+    let device_ctx = tester.range_checker().device_ctx.clone();
+    let hasher_chip = tester.memory.hasher_chip.clone().unwrap();
+    tester.memory.inventory = MemoryInventoryGPU::new(
+        tester.memory.config.clone(),
+        hasher_chip,
+        device_ctx.clone(),
+    );
+    tester
+        .memory
+        .inventory
+        .set_initial_memory(&tester.memory.memory.data().memory);
+    let mut harness = create_cuda_harness(&tester);
+    for (instruction_index, instruction) in instructions[..7].iter().enumerate() {
+        tester.execute_with_pc(
+            &mut harness.executor,
+            &mut harness.dense_arena,
+            instruction,
+            pc_base + instruction_index as u32 * 4,
+        );
+    }
+    type Record<'a> = (
+        &'a mut Rv64RdWriteAdapterRecord,
+        &'a mut Rv64AuipcCoreRecord,
+    );
+    harness
+        .dense_arena
+        .get_record_seeker::<Record, _>()
+        .transfer_to_matrix_arena(
+            &mut harness.matrix_arena,
+            EmptyAdapterCoreLayout::<F, Rv64RdWriteAdapterExecutor>::new(),
+        );
+
+    let range_checker = tester.range_checker();
+    let device_ctx = &range_checker.device_ctx;
+    let d_program = GpuRvrProgram::upload(&program, &memory_config, device_ctx).unwrap();
+    let (d_transcript, d_replay_plan) = d_program
+        .upload_transcript(&execution.transcript, execution.endpoint)
+        .unwrap();
+    assert_eq!(d_replay_plan.opcode_range(AUIPC.global_opcode()).len(), 7);
+    let replay_ctx = harness
+        .gpu_chip
+        .generate_proving_ctx_from_rvr(&d_program, &d_transcript, &d_replay_plan)
+        .unwrap();
+    assert_eq!(d_transcript.error_code().unwrap(), 0);
+    let replay_counts = range_checker.count.to_host_on(device_ctx).unwrap();
+    let raw_count = |count: &F| {
+        const { assert!(std::mem::size_of::<F>() == std::mem::size_of::<u32>()) };
+        // CUDA kernels atomically update this shared field-typed buffer as raw u32 counters.
+        unsafe { *(std::ptr::from_ref(count).cast::<u32>()) }
+    };
+    assert_eq!(replay_counts.iter().map(raw_count).sum::<u32>(), 7 * 9);
+
+    let run_corrupt = |corrupt_program: &Program<F>,
+                       transcript: RvrPreflightTranscript,
+                       endpoint: RvrPreflightEndpoint,
+                       expected_error: u32,
+                       expected_lookup_count: u32| {
+        let corrupt_range_checker = Arc::new(
+            openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU::new(
+                default_var_range_checker_bus(),
+                device_ctx.clone(),
+            ),
+        );
+        let d_corrupt_program =
+            GpuRvrProgram::upload(corrupt_program, &memory_config, device_ctx).unwrap();
+        let (d_corrupt, d_corrupt_plan) = d_corrupt_program
+            .upload_transcript(&transcript, endpoint)
+            .unwrap();
+        Rv64AuipcChipGpu::new(corrupt_range_checker.clone(), tester.timestamp_max_bits())
+            .generate_proving_ctx_from_rvr(&d_corrupt_program, &d_corrupt, &d_corrupt_plan)
+            .unwrap();
+        assert_eq!(d_corrupt.error_code().unwrap(), expected_error);
+        assert_eq!(
+            corrupt_range_checker
+                .count
+                .to_host_on(device_ctx)
+                .unwrap()
+                .iter()
+                .map(raw_count)
+                .sum::<u32>(),
+            expected_lookup_count,
+            "a rejected row must not update the shared lookup histogram"
+        );
+    };
+    let transcript = || RvrPreflightTranscript {
+        program_log: execution.transcript.program_log.clone(),
+        memory_log: execution.transcript.memory_log.clone(),
+        initial_write_log: execution.transcript.initial_write_log.clone(),
+    };
+
+    let mut result_corrupt = transcript();
+    result_corrupt.memory_log.last_mut().unwrap().value[3] = 0;
+    run_corrupt(
+        &program,
+        result_corrupt,
+        RvrPreflightEndpoint::Terminated,
+        197,
+        6 * 9,
+    );
+
+    let mut bound_instructions = instructions.clone();
+    bound_instructions[6] = auipc(6, 1 << 24);
+    run_corrupt(
+        &Program::new_without_debug_infos(&bound_instructions, pc_base),
+        transcript(),
+        RvrPreflightEndpoint::Terminated,
+        194,
+        6 * 9,
+    );
+
+    let mut x0_instructions = instructions.clone();
+    x0_instructions[6] = auipc(0, 0x80_0001);
+    run_corrupt(
+        &Program::new_without_debug_infos(&x0_instructions, pc_base),
+        transcript(),
+        RvrPreflightEndpoint::Terminated,
+        194,
+        6 * 9,
+    );
+
+    let boundary_pc = (1u32 << PC_BITS) - 4;
+    let boundary_program = Program::new_without_debug_infos(&[auipc(1, 0)], boundary_pc);
+    let mut boundary_from = execution.transcript.program_log[0];
+    boundary_from.pc = boundary_pc;
+    let mut boundary_to = boundary_from;
+    boundary_to.timestamp += 1;
+    let mut boundary_write = execution.transcript.memory_log[0];
+    boundary_write.timestamp = boundary_from.timestamp;
+    boundary_write.value = [0, 0, 0, 0];
+    let boundary_transcript = RvrPreflightTranscript {
+        program_log: vec![boundary_from, boundary_to],
+        memory_log: vec![boundary_write],
+        initial_write_log: execution.transcript.initial_write_log[..1].to_vec(),
+    };
+    run_corrupt(
+        &boundary_program,
+        boundary_transcript,
+        RvrPreflightEndpoint::Suspended {
+            resume_pc: boundary_pc,
+            final_timestamp: boundary_to.timestamp,
+        },
+        192,
+        0,
+    );
+
+    // The shared postflight derives predecessor indexes, so corrupt that
+    // derived input directly to exercise the AUIPC kernel's fail-closed check.
+    let mut corrupt_predecessors = d_transcript.memory_predecessors_host().unwrap();
+    *corrupt_predecessors.last_mut().unwrap() = u32::MAX;
+    let d_corrupt_predecessors = corrupt_predecessors.to_device_on(device_ctx).unwrap();
+    let predecessor_range_checker = Arc::new(
+        openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU::new(
+            default_var_range_checker_bus(),
+            device_ctx.clone(),
+        ),
+    );
+    let trace_width = Rv64AuipcCoreCols::<F>::width() + Rv64RdWriteAdapterCols::<F>::width();
+    let d_predecessor_trace = DeviceMatrix::<F>::with_capacity_on(8, trace_width, device_ctx);
+    let step_range = d_replay_plan.opcode_range(AUIPC.global_opcode());
+    unsafe {
+        crate::cuda_abi::auipc_cuda::replay_tracegen(
+            d_predecessor_trace.buffer(),
+            8,
+            d_program.instructions(),
+            d_program.pc_base(),
+            d_transcript.program_log(),
+            d_transcript.memory_log(),
+            d_transcript.initial_write_log(),
+            d_corrupt_predecessors.view(),
+            d_replay_plan.steps(),
+            step_range.start,
+            step_range.len(),
+            d_transcript.error_ptr(),
+            AUIPC.global_opcode().as_usize() as u32,
+            RV64_REGISTER_AS,
+            &predecessor_range_checker.count,
+            tester.timestamp_max_bits() as u32,
+            device_ctx.stream.as_raw(),
+        )
+        .unwrap();
+    }
+    assert_eq!(d_transcript.error_code().unwrap(), 198);
+    assert_eq!(
+        predecessor_range_checker
+            .count
+            .to_host_on(device_ctx)
+            .unwrap()
+            .iter()
+            .map(raw_count)
+            .sum::<u32>(),
+        6 * 9,
+        "the row with an invalid predecessor must not update the histogram"
+    );
+
+    let legacy_range_checker = Arc::new(
+        openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU::new(
+            default_var_range_checker_bus(),
+            device_ctx.clone(),
+        ),
+    );
+    let legacy_ctx =
+        Rv64AuipcChipGpu::new(legacy_range_checker.clone(), tester.timestamp_max_bits())
+            .generate_proving_ctx(harness.dense_arena);
+    assert_eq!(
+        replay_counts,
+        legacy_range_checker.count.to_host_on(device_ctx).unwrap()
+    );
+
+    let expected_trace =
+        <Rv64AuipcChip<F> as Chip<MatrixRecordArena<F>, CpuBackend<SC>>>::generate_proving_ctx(
+            &harness.cpu_chip,
+            harness.matrix_arena,
+        )
+        .common_main;
+    let replay_trace = transport_matrix_d2h_row_major(&replay_ctx.common_main, device_ctx).unwrap();
+    assert_eq!(expected_trace, replay_trace);
+    let expected_trace = ColMajorMatrix::from_row_major(&expected_trace);
+    device_synchronize().unwrap();
+    assert_eq_host_and_device_matrix_col_maj(&expected_trace, &legacy_ctx.common_main, device_ctx);
+
+    tester
+        .build()
+        .load_air_proving_ctx(Arc::new(harness.air), replay_ctx)
+        .finalize()
+        .simple_test()
+        .expect("RVR AUIPC transcript replay proof failed");
 }
