@@ -50,6 +50,8 @@ cfg_if::cfg_if! {
         pub use cuda::{
             Rv64ImGpuProverExt as Rv64ImGpuProverExt,
         };
+        #[cfg(feature = "rvr")]
+        pub use cuda::Rv64IRvrGpuTracegen;
     } else {
         pub use self::{
             Rv64ImCpuProverExt as Rv64ImProverExt,
