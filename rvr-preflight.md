@@ -767,6 +767,14 @@ rows and range histograms match, while corrupting a nonzero cross-limb result is
 rejected. This also exercises first-touch reads from initial memory without
 adding a setup instruction or timed observation to the transcript.
 
+SRAI then validates the sign-sensitive variant independently. Its direct kernel
+preserves the core's sign decomposition and extra range request while checking
+the logged destination against a GPU arithmetic shift before emitting any
+lookup counts. The test covers both signs, x0 reads, an in-place destination,
+and shifts 0, 1, 15, 16, 31, 32, 47, 48, and 63. Direct replay and legacy CUDA
+match the CPU matrix and complete range histogram exactly, the replay trace
+proves, and a corrupted sign-filled cross-limb result is rejected.
+
 ### M3: complete the GPU proving path
 
 Once RISC-V replay is viable:
