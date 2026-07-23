@@ -8,7 +8,10 @@ use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_stark_backend::prover::AirProvingContext;
 #[cfg(feature = "rvr")]
 use {
-    crate::cuda_abi::shift_w_cuda::replay_tracegen_logical as rv64_shift_w_logical_replay_tracegen,
+    crate::cuda_abi::shift_w_cuda::{
+        replay_tracegen_logical as rv64_shift_w_logical_replay_tracegen,
+        replay_tracegen_right_arithmetic as rv64_shift_w_right_arithmetic_replay_tracegen,
+    },
     openvm_circuit::arch::rvr::cuda::{
         GpuRvrInputError, GpuRvrProgram, GpuRvrReplayPlan, GpuRvrTranscript,
     },
@@ -87,6 +90,50 @@ impl Rv64ShiftWLogicalChipGpu {
                 transcript.error_ptr(),
                 ShiftWOpcode::SLLW.global_opcode().as_usize() as u32,
                 ShiftWOpcode::SRLW.global_opcode().as_usize() as u32,
+                RV64_REGISTER_AS,
+                &self.range_checker.count,
+                self.timestamp_max_bits as u32,
+                device_ctx.stream.as_raw(),
+            )?;
+        }
+        Ok(AirProvingContext::simple_no_pis(d_trace))
+    }
+}
+
+#[cfg(feature = "rvr")]
+impl Rv64ShiftWRightArithmeticChipGpu {
+    pub fn generate_proving_ctx_from_rvr(
+        &self,
+        program: &GpuRvrProgram,
+        transcript: &GpuRvrTranscript,
+        replay_plan: &GpuRvrReplayPlan,
+    ) -> Result<AirProvingContext<GpuBackend>, GpuRvrInputError> {
+        let device_ctx = &self.range_checker.device_ctx;
+        program.ensure_replay_inputs(transcript, replay_plan, device_ctx)?;
+        let range = replay_plan.opcode_range(ShiftWOpcode::SRAW.global_opcode());
+        if range.is_empty() {
+            return Ok(AirProvingContext::simple_no_pis(DeviceMatrix::dummy()));
+        }
+
+        let trace_width = Rv64BaseAluWRegU16AdapterCols::<F>::width()
+            + ShiftRightArithmeticCoreCols::<F, RV64_WORD_U16_LIMBS, U16_BITS>::width();
+        let trace_height = next_power_of_two_or_zero(range.len());
+        let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
+        unsafe {
+            rv64_shift_w_right_arithmetic_replay_tracegen(
+                d_trace.buffer(),
+                trace_height,
+                program.instructions(),
+                program.pc_base(),
+                transcript.program_log(),
+                transcript.memory_log(),
+                transcript.initial_write_log(),
+                transcript.memory_predecessors(),
+                replay_plan.steps(),
+                range.start,
+                range.len(),
+                transcript.error_ptr(),
+                ShiftWOpcode::SRAW.global_opcode().as_usize() as u32,
                 RV64_REGISTER_AS,
                 &self.range_checker.count,
                 self.timestamp_max_bits as u32,

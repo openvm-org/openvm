@@ -14,7 +14,8 @@ use openvm_instructions::{
 };
 use openvm_riscv_transpiler::{
     BaseAluImmOpcode, BaseAluOpcode, BaseAluWImmOpcode, BaseAluWOpcode, BranchEqualOpcode,
-    LessThanImmOpcode, LessThanOpcode, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode, ShiftWOpcode,
+    BranchLessThanOpcode, LessThanImmOpcode, LessThanOpcode, ShiftImmOpcode, ShiftOpcode,
+    ShiftWImmOpcode, ShiftWOpcode,
 };
 use openvm_stark_backend::StarkEngine;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
@@ -75,12 +76,13 @@ fn rvr_gpu_tracegen_proves_multiple_rv64i_airs_without_extension_arenas() {
         instruction(ShiftOpcode::SRA, register_operands(27, 1, 2)),
         instruction(ShiftWOpcode::SLLW, register_operands(28, 1, 2)),
         instruction(ShiftWOpcode::SRLW, register_operands(29, 1, 2)),
+        instruction(ShiftWOpcode::SRAW, register_operands(30, 1, 2)),
         instruction(ShiftWImmOpcode::SLLIW, immediate_operands(17, 8, 1)),
         instruction(ShiftWImmOpcode::SRLIW, immediate_operands(18, 17, 1)),
         instruction(ShiftWImmOpcode::SRAIW, immediate_operands(19, 17, 1)),
         instruction(BaseAluImmOpcode::ORI, immediate_operands(20, 4, 2)),
         instruction(BaseAluImmOpcode::ANDI, immediate_operands(21, 20, 7)),
-        Instruction::from_isize(
+        Instruction::<F>::from_isize(
             BranchEqualOpcode::BEQ.global_opcode(),
             reg(1) as isize,
             reg(2) as isize,
@@ -171,15 +173,13 @@ fn rvr_gpu_tracegen_proves_multiple_rv64i_airs_without_extension_arenas() {
 #[test]
 fn rvr_gpu_tracegen_rejects_an_executed_unported_opcode_before_tracegen() {
     let instructions = [
-        instruction(
-            ShiftWOpcode::SRAW,
-            [
-                reg(3),
-                reg(1),
-                reg(2),
-                RV64_REGISTER_AS as usize,
-                RV64_REGISTER_AS as usize,
-            ],
+        Instruction::<F>::from_isize(
+            BranchLessThanOpcode::BLT.global_opcode(),
+            reg(1) as isize,
+            reg(2) as isize,
+            4,
+            RV64_REGISTER_AS as isize,
+            RV64_REGISTER_AS as isize,
         ),
         Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
     ];
@@ -218,7 +218,7 @@ fn rvr_gpu_tracegen_rejects_an_executed_unported_opcode_before_tracegen() {
         .unwrap();
 
     let error = match Rv64IRvrGpuTracegen::new(&gpu_program, &gpu_transcript, &replay_plan) {
-        Ok(_) => panic!("executed register SRAW must not reach tracegen before its replay port"),
+        Ok(_) => panic!("executed BLT must not reach tracegen before its replay port"),
         Err(error) => error,
     };
     assert!(
