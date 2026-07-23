@@ -9,7 +9,7 @@ use openvm_instructions::{
     exe::VmExe,
     instruction::Instruction,
     program::Program,
-    riscv::{RV64_IMM_AS, RV64_REGISTER_AS},
+    riscv::{RV64_IMM_AS, RV64_MEMORY_AS, RV64_REGISTER_AS},
     LocalOpcode, SystemOpcode,
 };
 use openvm_riscv_transpiler::{
@@ -148,13 +148,37 @@ fn rvr_gpu_tracegen_proves_system_and_rv64i_airs_without_record_arenas() {
             [reg(29), 0, 1, RV64_REGISTER_AS as usize, 0],
         ),
         Instruction::from_usize(
+            Rv64LoadStoreOpcode::LOADB.global_opcode(),
+            [
+                reg(28),
+                reg(1),
+                0,
+                RV64_REGISTER_AS as usize,
+                RV64_MEMORY_AS as usize,
+                1,
+                0,
+            ],
+        ),
+        Instruction::from_usize(
+            Rv64LoadStoreOpcode::LOADBU.global_opcode(),
+            [
+                reg(29),
+                reg(1),
+                1,
+                RV64_REGISTER_AS as usize,
+                RV64_MEMORY_AS as usize,
+                1,
+                0,
+            ],
+        ),
+        Instruction::from_usize(
             Rv64JalrOpcode::JALR.global_opcode(),
-            [reg(30), 0, 156, RV64_REGISTER_AS as usize, 0, 1, 0],
+            [reg(30), 0, 164, RV64_REGISTER_AS as usize, 0, 1, 0],
         ),
         Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
     ];
     let program = Program::from_instructions(&instructions);
-    let init_memory = [(1usize, 3u64), (2, 4u64)]
+    let mut init_memory = [(1usize, 3u64), (2, 4u64)]
         .into_iter()
         .flat_map(|(register, value)| {
             value
@@ -165,7 +189,9 @@ fn rvr_gpu_tracegen_proves_system_and_rv64i_airs_without_record_arenas() {
                     ((RV64_REGISTER_AS, (reg(register) + offset) as u32), byte)
                 })
         })
-        .collect();
+        .collect::<openvm_instructions::exe::SparseMemoryImage>();
+    init_memory.insert((RV64_MEMORY_AS, 3), 0x80);
+    init_memory.insert((RV64_MEMORY_AS, 4), 0xfe);
     let exe = VmExe::new(program.clone()).with_init_memory(init_memory);
     let config = Rv64IConfig {
         system: test_system_config(),
@@ -218,7 +244,7 @@ fn rvr_gpu_tracegen_proves_system_and_rv64i_airs_without_record_arenas() {
 fn rvr_gpu_tracegen_rejects_an_executed_unported_opcode_before_tracegen() {
     let instructions = [
         Instruction::<F>::from_usize(
-            Rv64LoadStoreOpcode::LOADB.global_opcode(),
+            Rv64LoadStoreOpcode::LOADH.global_opcode(),
             [
                 reg(1),
                 0,
@@ -266,7 +292,7 @@ fn rvr_gpu_tracegen_rejects_an_executed_unported_opcode_before_tracegen() {
         .unwrap();
 
     let error = match Rv64IRvrGpuTracegen::new(&gpu_program, &gpu_transcript, &replay_plan) {
-        Ok(_) => panic!("executed LOADB must not reach tracegen before its replay port"),
+        Ok(_) => panic!("executed LOADH must not reach tracegen before its replay port"),
         Err(error) => error,
     };
     assert!(

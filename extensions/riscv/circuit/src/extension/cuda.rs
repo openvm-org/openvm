@@ -25,7 +25,8 @@ use {
     openvm_riscv_transpiler::{
         BaseAluImmOpcode, BaseAluOpcode, BaseAluWImmOpcode, BaseAluWOpcode, BranchEqualOpcode,
         BranchLessThanOpcode, LessThanImmOpcode, LessThanOpcode, Rv64AuipcOpcode, Rv64JalLuiOpcode,
-        Rv64JalrOpcode, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode, ShiftWOpcode,
+        Rv64JalrOpcode, Rv64LoadStoreOpcode, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode,
+        ShiftWOpcode,
     },
     openvm_stark_backend::prover::AirProvingContext,
 };
@@ -139,6 +140,8 @@ impl<'a> Rv64IRvrGpuTracegen<'a> {
             BaseAluImmOpcode::XORI.global_opcode(),
             BaseAluImmOpcode::ORI.global_opcode(),
             BaseAluImmOpcode::ANDI.global_opcode(),
+            Rv64LoadStoreOpcode::LOADB.global_opcode(),
+            Rv64LoadStoreOpcode::LOADBU.global_opcode(),
         ]
         .into_iter()
         .any(|candidate| candidate.as_usize() as u32 == opcode)
@@ -232,6 +235,8 @@ impl<'a> Rv64IRvrGpuTracegen<'a> {
         );
         replay_chip!(Rv64JalrChipGpu, [Rv64JalrOpcode::JALR]);
         replay_chip!(Rv64AuipcChipGpu, [Rv64AuipcOpcode::AUIPC]);
+        replay_chip!(Rv64LoadSignExtendByteChipGpu, [Rv64LoadStoreOpcode::LOADB]);
+        replay_chip!(Rv64LoadByteChipGpu, [Rv64LoadStoreOpcode::LOADBU]);
         replay_chip!(Rv64AddIChipGpu, [BaseAluImmOpcode::ADDI]);
         replay_chip!(
             Rv64ShiftLogicalImmChipGpu,
