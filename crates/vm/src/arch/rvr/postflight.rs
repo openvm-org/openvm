@@ -1,11 +1,12 @@
 //! Small derived indexes for replaying an RVR preflight transcript.
 
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{hash_map::Entry, BTreeMap},
     ops::Range,
 };
 
 use openvm_instructions::{program::DEFAULT_PC_STEP, LocalOpcode, SystemOpcode};
+use rustc_hash::FxHashMap;
 use rvr_state::{PreflightInitialWrite, PreflightMemoryEvent, PreflightProgramEvent};
 use thiserror::Error;
 
@@ -17,6 +18,11 @@ pub(crate) const MEMORY_PREDECESSOR_BASELINE: u32 = 0;
 /// The high bit distinguishes an initial-write seed index from an event index.
 pub(crate) const MEMORY_PREDECESSOR_SEED_BIT: u32 = 1 << 31;
 const MEMORY_PREDECESSOR_INDEX_MASK: u32 = !MEMORY_PREDECESSOR_SEED_BIT;
+
+#[inline]
+const fn memory_key(address_space: u32, pointer: u32) -> u64 {
+    ((address_space as u64) << 32) | pointer as u64
+}
 
 #[derive(Debug, Error)]
 #[error("invalid RVR preflight transcript: {0}")]
@@ -51,16 +57,8 @@ fn build_step_memory_starts(
             "segment transcript must start at timestamp 1",
         ));
     }
-    if memory
-        .windows(2)
-        .any(|events| events[0].timestamp >= events[1].timestamp)
-    {
-        return Err(RvrPreflightIndexError::new(
-            "memory timestamps are not strictly increasing",
-        ));
-    }
-
     let mut memory_cursor = 0usize;
+    let mut previous_memory_timestamp = None;
     let mut step_memory_starts = Vec::with_capacity(program.len() - 1);
     for (program_index, boundary) in program.windows(2).enumerate() {
         let [from, to] = boundary else { unreachable!() };
@@ -85,6 +83,13 @@ fn build_step_memory_starts(
             .get(memory_cursor)
             .is_some_and(|event| event.timestamp < to.timestamp)
         {
+            let timestamp = memory[memory_cursor].timestamp;
+            if previous_memory_timestamp.is_some_and(|previous| previous >= timestamp) {
+                return Err(RvrPreflightIndexError::new(
+                    "memory timestamps are not strictly increasing",
+                ));
+            }
+            previous_memory_timestamp = Some(timestamp);
             memory_cursor += 1;
         }
     }
@@ -275,10 +280,13 @@ fn build_memory_predecessors(
         ));
     }
 
-    let mut seed_by_block = HashMap::with_capacity(seeds.len());
+    let mut seed_by_block = FxHashMap::with_capacity_and_hasher(seeds.len(), Default::default());
     for (index, seed) in seeds.iter().enumerate() {
         if seed_by_block
-            .insert((seed.address_space, seed.pointer), index)
+            .insert(
+                memory_key(seed.address_space, seed.pointer),
+                u32::try_from(index).expect("seed count was bounded above"),
+            )
             .is_some()
         {
             return Err(RvrPreflightIndexError::new(format!(
@@ -288,30 +296,35 @@ fn build_memory_predecessors(
         }
     }
 
-    let mut last_event = HashMap::new();
+    let mut last_event = FxHashMap::<u64, u32>::default();
     let mut predecessors = Vec::with_capacity(memory.len());
     for (event_index, event) in memory.iter().enumerate() {
-        let key = (event.address_space(), event.pointer);
-        let predecessor = if let Some(&previous_index) = last_event.get(&key) {
-            u32::try_from(previous_index + 1).map_err(|_| {
-                RvrPreflightIndexError::new("memory predecessor index does not fit u32")
-            })?
-        } else if event.is_write() {
-            let seed_index = seed_by_block.remove(&key).ok_or_else(|| {
-                RvrPreflightIndexError::new(format!(
-                    "first event is a write without a seed for AS={} pointer={}",
-                    key.0, key.1
-                ))
-            })?;
-            MEMORY_PREDECESSOR_SEED_BIT
-                | u32::try_from(seed_index).map_err(|_| {
-                    RvrPreflightIndexError::new("initial-write seed index does not fit u32")
-                })?
-        } else {
-            MEMORY_PREDECESSOR_BASELINE
+        let address_space = event.address_space();
+        let key = memory_key(address_space, event.pointer);
+        let event_index = u32::try_from(event_index).expect("memory event count was bounded above");
+        let predecessor = match last_event.entry(key) {
+            Entry::Occupied(mut previous) => {
+                let predecessor = *previous.get() + 1;
+                previous.insert(event_index);
+                predecessor
+            }
+            Entry::Vacant(vacant) => {
+                let predecessor = if event.is_write() {
+                    let seed_index = seed_by_block.remove(&key).ok_or_else(|| {
+                        RvrPreflightIndexError::new(format!(
+                            "first event is a write without a seed for AS={} pointer={}",
+                            address_space, event.pointer
+                        ))
+                    })?;
+                    MEMORY_PREDECESSOR_SEED_BIT | seed_index
+                } else {
+                    MEMORY_PREDECESSOR_BASELINE
+                };
+                vacant.insert(event_index);
+                predecessor
+            }
         };
         predecessors.push(predecessor);
-        last_event.insert(key, event_index);
     }
 
     if !seed_by_block.is_empty() {
@@ -425,6 +438,67 @@ mod tests {
                 .to_string()
                 .contains("without a seed")
         );
+    }
+
+    #[test]
+    fn tracks_interleaved_block_predecessors() {
+        let memory = vec![
+            read(1, 0, [1; 4]),
+            read(2, 4, [2; 4]),
+            read(3, 0, [1; 4]),
+            write(4, 4, [3; 4]),
+        ];
+        assert_eq!(
+            build_memory_predecessors(&memory, &[]).unwrap(),
+            vec![
+                MEMORY_PREDECESSOR_BASELINE,
+                MEMORY_PREDECESSOR_BASELINE,
+                1,
+                2,
+            ]
+        );
+    }
+
+    #[test]
+    fn rejects_duplicate_and_unused_initial_write_seeds() {
+        let seed = PreflightInitialWrite {
+            address_space: 1,
+            pointer: 4,
+            initial_value: [0; 4],
+        };
+        assert!(
+            build_memory_predecessors(&[write(1, 4, [1; 4])], &[seed, seed])
+                .unwrap_err()
+                .to_string()
+                .contains("duplicate")
+        );
+        assert!(build_memory_predecessors(&[read(1, 4, [1; 4])], &[seed])
+            .unwrap_err()
+            .to_string()
+            .contains("were not used"));
+    }
+
+    #[test]
+    fn rejects_non_increasing_memory_timestamps_across_steps() {
+        let program = vec![
+            PreflightProgramEvent {
+                pc: 0,
+                timestamp: 1,
+            },
+            PreflightProgramEvent {
+                pc: 4,
+                timestamp: 3,
+            },
+            PreflightProgramEvent {
+                pc: 8,
+                timestamp: 5,
+            },
+        ];
+        let memory = vec![read(1, 0, [0; 4]), read(3, 4, [0; 4]), read(3, 8, [0; 4])];
+        assert!(build_step_memory_starts(&program, &memory)
+            .unwrap_err()
+            .to_string()
+            .contains("not strictly increasing"));
     }
 
     #[test]
