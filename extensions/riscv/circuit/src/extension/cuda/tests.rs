@@ -15,7 +15,8 @@ use openvm_instructions::{
 use openvm_riscv_transpiler::{
     BaseAluImmOpcode, BaseAluOpcode, BaseAluWImmOpcode, BaseAluWOpcode, BranchEqualOpcode,
     BranchLessThanOpcode, LessThanImmOpcode, LessThanOpcode, Rv64AuipcOpcode, Rv64JalLuiOpcode,
-    Rv64JalrOpcode, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode, ShiftWOpcode,
+    Rv64JalrOpcode, Rv64LoadStoreOpcode, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode,
+    ShiftWOpcode,
 };
 use openvm_stark_backend::StarkEngine;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
@@ -143,8 +144,12 @@ fn rvr_gpu_tracegen_proves_multiple_rv64i_airs_without_extension_arenas() {
             [0, 0, 4, RV64_REGISTER_AS as usize, 0, 0],
         ),
         Instruction::from_usize(
+            Rv64AuipcOpcode::AUIPC.global_opcode(),
+            [reg(29), 0, 1, RV64_REGISTER_AS as usize, 0],
+        ),
+        Instruction::from_usize(
             Rv64JalrOpcode::JALR.global_opcode(),
-            [reg(30), 0, 152, RV64_REGISTER_AS as usize, 0, 1, 0],
+            [reg(30), 0, 156, RV64_REGISTER_AS as usize, 0, 1, 0],
         ),
         Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
     ];
@@ -222,8 +227,16 @@ fn rvr_gpu_tracegen_proves_multiple_rv64i_airs_without_extension_arenas() {
 fn rvr_gpu_tracegen_rejects_an_executed_unported_opcode_before_tracegen() {
     let instructions = [
         Instruction::<F>::from_usize(
-            Rv64AuipcOpcode::AUIPC.global_opcode(),
-            [reg(1), 0, 1, RV64_REGISTER_AS as usize, 0, 1],
+            Rv64LoadStoreOpcode::LOADB.global_opcode(),
+            [
+                reg(1),
+                0,
+                0,
+                RV64_REGISTER_AS as usize,
+                openvm_instructions::riscv::RV64_MEMORY_AS as usize,
+                1,
+                0,
+            ],
         ),
         Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
     ];
@@ -262,7 +275,7 @@ fn rvr_gpu_tracegen_rejects_an_executed_unported_opcode_before_tracegen() {
         .unwrap();
 
     let error = match Rv64IRvrGpuTracegen::new(&gpu_program, &gpu_transcript, &replay_plan) {
-        Ok(_) => panic!("executed AUIPC must not reach tracegen before its replay port"),
+        Ok(_) => panic!("executed LOADB must not reach tracegen before its replay port"),
         Err(error) => error,
     };
     assert!(
