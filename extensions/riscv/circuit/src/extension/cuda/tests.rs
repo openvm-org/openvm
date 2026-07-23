@@ -15,7 +15,7 @@ use openvm_instructions::{
 use openvm_riscv_transpiler::{
     BaseAluImmOpcode, BaseAluOpcode, BaseAluWImmOpcode, BaseAluWOpcode, BranchEqualOpcode,
     BranchLessThanOpcode, LessThanImmOpcode, LessThanOpcode, Rv64AuipcOpcode, Rv64JalLuiOpcode,
-    ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode, ShiftWOpcode,
+    Rv64JalrOpcode, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode, ShiftWOpcode,
 };
 use openvm_stark_backend::StarkEngine;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
@@ -142,6 +142,10 @@ fn rvr_gpu_tracegen_proves_multiple_rv64i_airs_without_extension_arenas() {
             Rv64JalLuiOpcode::JAL.global_opcode(),
             [0, 0, 4, RV64_REGISTER_AS as usize, 0, 0],
         ),
+        Instruction::from_usize(
+            Rv64JalrOpcode::JALR.global_opcode(),
+            [reg(30), 0, 152, RV64_REGISTER_AS as usize, 0, 1, 0],
+        ),
         Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
     ];
     let program = Program::from_instructions(&instructions);
@@ -166,7 +170,7 @@ fn rvr_gpu_tracegen_proves_multiple_rv64i_airs_without_extension_arenas() {
     let executor = VmExecutor::new(config.clone()).unwrap();
     let rvr = executor.rvr_preflight_instance(&exe, None).unwrap();
     let rvr_execution = rvr
-        .execute(Vec::<Vec<u8>>::new(), RvrPreflightLimits::new(64, 128))
+        .execute(Vec::<Vec<u8>>::new(), RvrPreflightLimits::new(64, 192))
         .unwrap();
 
     let (mut vm, pk) =
