@@ -68,13 +68,14 @@ template <size_t NUM_LIMBS, size_t LIMB_BITS> struct ShiftRightArithmeticCore {
 
     __device__ ShiftRightArithmeticCore(VariableRangeChecker range) : range_checker(range) {}
 
-    __device__ void
-    fill_trace_row(RowSlice row, ShiftRightArithmeticCoreRecord<NUM_LIMBS, LIMB_BITS> record) {
+    __device__ void fill_trace_row(
+        RowSlice row,
+        uint16_t const (&b)[NUM_LIMBS],
+        uint16_t const (&c)[NUM_LIMBS]
+    ) {
         uint16_t a[NUM_LIMBS];
         size_t limb_shift = 0, bit_shift = 0;
-        run_shift_right_arithmetic<NUM_LIMBS, LIMB_BITS>(
-            record.b, record.c, a, limb_shift, bit_shift
-        );
+        run_shift_right_arithmetic<NUM_LIMBS, LIMB_BITS>(b, c, a, limb_shift, bit_shift);
 
         size_t combined_bits = NUM_LIMBS * LIMB_BITS;
         size_t num_bits_log = 0;
@@ -82,8 +83,7 @@ template <size_t NUM_LIMBS, size_t LIMB_BITS> struct ShiftRightArithmeticCore {
             ++num_bits_log;
         }
         range_checker.add_count(
-            ((uint32_t)record.c[0] - (uint32_t)bit_shift -
-             (uint32_t)(limb_shift * LIMB_BITS)) >>
+            ((uint32_t)c[0] - (uint32_t)bit_shift - (uint32_t)(limb_shift * LIMB_BITS)) >>
                 num_bits_log,
             LIMB_BITS - num_bits_log
         );
@@ -93,7 +93,7 @@ template <size_t NUM_LIMBS, size_t LIMB_BITS> struct ShiftRightArithmeticCore {
         uint16_t carry_arr[NUM_LIMBS];
         uint16_t aux_arr[NUM_LIMBS];
         for (size_t k = 0; k < NUM_LIMBS; k++) {
-            uint32_t limb = record.b[k];
+            uint32_t limb = b[k];
             uint32_t carry = limb & ((1u << bit_shift) - 1u);
             uint32_t aux = limb >> bit_shift;
             range_checker.add_count(carry, bit_shift);
@@ -111,16 +111,21 @@ template <size_t NUM_LIMBS, size_t LIMB_BITS> struct ShiftRightArithmeticCore {
         bit_marker[bit_shift] = 1u;
         COL_WRITE_ARRAY(row, Cols, bit_shift_marker, bit_marker);
 
-        uint16_t b_sign_val = record.b[NUM_LIMBS - 1] >> (LIMB_BITS - 1);
+        uint16_t b_sign_val = b[NUM_LIMBS - 1] >> (LIMB_BITS - 1);
         COL_WRITE_VALUE(row, Cols, b_sign, b_sign_val);
         // b_sign correctness: range check the low LIMB_BITS-1 bits of b[NUM_LIMBS - 1].
         range_checker.add_count(
-            (uint32_t)record.b[NUM_LIMBS - 1] - ((uint32_t)b_sign_val << (LIMB_BITS - 1)),
+            (uint32_t)b[NUM_LIMBS - 1] - ((uint32_t)b_sign_val << (LIMB_BITS - 1)),
             LIMB_BITS - 1
         );
 
-        COL_WRITE_ARRAY(row, Cols, b, record.b);
-        COL_WRITE_ARRAY(row, Cols, c, record.c);
+        COL_WRITE_ARRAY(row, Cols, b, b);
+        COL_WRITE_ARRAY(row, Cols, c, c);
         COL_WRITE_ARRAY(row, Cols, a, a);
+    }
+
+    __device__ void
+    fill_trace_row(RowSlice row, ShiftRightArithmeticCoreRecord<NUM_LIMBS, LIMB_BITS> record) {
+        fill_trace_row(row, record.b, record.c);
     }
 };
