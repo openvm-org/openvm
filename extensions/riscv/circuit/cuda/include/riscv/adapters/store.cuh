@@ -173,45 +173,76 @@ struct Rv64StoreByteAdapter {
         : pointer_max_bits(pointer_max_bits), range_checker(range_checker),
           mem_helper(range_checker, timestamp_max_bits) {}
 
-    __device__ void fill_trace_row(RowSlice row, Rv64StoreByteAdapterRecord record) {
-        COL_WRITE_VALUE(row, Rv64StoreByteAdapterCols, from_state.pc, record.from_pc);
+    __device__ void fill_trace_row(
+        RowSlice row,
+        uint32_t from_pc,
+        uint32_t from_timestamp,
+        uint32_t rs1_ptr,
+        uint32_t rs2_ptr,
+        uint32_t rs1_val,
+        uint32_t rs1_prev_timestamp,
+        uint32_t rs2_prev_timestamp,
+        uint32_t write_prev_timestamp,
+        uint16_t imm,
+        uint8_t imm_sign,
+        uint32_t mem_as
+    ) {
+        COL_WRITE_VALUE(row, Rv64StoreByteAdapterCols, from_state.pc, from_pc);
         COL_WRITE_VALUE(
-            row, Rv64StoreByteAdapterCols, from_state.timestamp, record.from_timestamp
+            row, Rv64StoreByteAdapterCols, from_state.timestamp, from_timestamp
         );
-        COL_WRITE_VALUE(row, Rv64StoreByteAdapterCols, rs1_ptr, record.rs1_ptr);
+        COL_WRITE_VALUE(row, Rv64StoreByteAdapterCols, rs1_ptr, rs1_ptr);
 
         Fp rs1_data[RV64_PTR_U16_LIMBS];
-        ptr_to_u16_limbs(rs1_data, record.rs1_val);
+        ptr_to_u16_limbs(rs1_data, rs1_val);
         COL_WRITE_ARRAY(row, Rv64StoreByteAdapterCols, rs1_data, rs1_data);
 
         mem_helper.fill(
             row.slice_from(COL_INDEX(Rv64StoreByteAdapterCols, rs1_aux_cols)),
-            record.rs1_aux_record.prev_timestamp,
-            record.from_timestamp
+            rs1_prev_timestamp,
+            from_timestamp
         );
         mem_helper.fill(
             row.slice_from(COL_INDEX(Rv64StoreByteAdapterCols, read_data_aux)),
-            record.read_data_aux.prev_timestamp,
-            record.from_timestamp + 1
+            rs2_prev_timestamp,
+            from_timestamp + 1
         );
         mem_helper.fill(
             row.slice_from(COL_INDEX(Rv64StoreByteAdapterCols, write_base_aux)),
-            record.write_prev_timestamp,
-            record.from_timestamp + 2
+            write_prev_timestamp,
+            from_timestamp + 2
         );
 
-        COL_WRITE_VALUE(row, Rv64StoreByteAdapterCols, rs2_ptr, record.rs2_ptr);
-        COL_WRITE_VALUE(row, Rv64StoreByteAdapterCols, imm, record.imm);
-        COL_WRITE_VALUE(row, Rv64StoreByteAdapterCols, imm_sign, record.imm_sign);
-        COL_WRITE_VALUE(row, Rv64StoreByteAdapterCols, mem_as, record.mem_as);
+        COL_WRITE_VALUE(row, Rv64StoreByteAdapterCols, rs2_ptr, rs2_ptr);
+        COL_WRITE_VALUE(row, Rv64StoreByteAdapterCols, imm, imm);
+        COL_WRITE_VALUE(row, Rv64StoreByteAdapterCols, imm_sign, imm_sign);
+        COL_WRITE_VALUE(row, Rv64StoreByteAdapterCols, mem_as, mem_as);
 
-        uint32_t ptr = rv64_store_effective_ptr(record);
+        uint32_t ptr = rs1_val + uint32_t(imm) +
+                       uint32_t(imm_sign) * (uint32_t(UINT16_MAX) << U16_BITS);
         uint32_t ptr_limbs[RV64_PTR_U16_LIMBS];
         ptr_to_u16_limbs(ptr_limbs, ptr);
         COL_WRITE_VALUE(row, Rv64StoreByteAdapterCols, mem_ptr_low_limb, ptr_limbs[0]);
 
-        uint32_t shift_amount = rv64_store_shift_amount(record);
+        uint32_t shift_amount = ptr & (MEMORY_BLOCK_BYTES - 1);
         range_checker.add_count((ptr_limbs[0] - shift_amount) >> 3, U16_BITS - 3);
         range_checker.add_count(ptr_limbs[1], pointer_max_bits - U16_BITS);
+    }
+
+    __device__ void fill_trace_row(RowSlice row, Rv64StoreByteAdapterRecord record) {
+        fill_trace_row(
+            row,
+            record.from_pc,
+            record.from_timestamp,
+            record.rs1_ptr,
+            record.rs2_ptr,
+            record.rs1_val,
+            record.rs1_aux_record.prev_timestamp,
+            record.read_data_aux.prev_timestamp,
+            record.write_prev_timestamp,
+            record.imm,
+            record.imm_sign,
+            record.mem_as
+        );
     }
 };

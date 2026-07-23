@@ -232,8 +232,20 @@ fn rvr_gpu_tracegen_proves_system_and_rv64i_airs_without_record_arenas() {
             ],
         ),
         Instruction::from_usize(
+            Rv64LoadStoreOpcode::STOREB.global_opcode(),
+            [
+                reg(2),
+                reg(1),
+                5,
+                RV64_REGISTER_AS as usize,
+                RV64_MEMORY_AS as usize,
+                1,
+                0,
+            ],
+        ),
+        Instruction::from_usize(
             Rv64JalrOpcode::JALR.global_opcode(),
-            [reg(30), 0, 184, RV64_REGISTER_AS as usize, 0, 1, 0],
+            [reg(30), 0, 188, RV64_REGISTER_AS as usize, 0, 1, 0],
         ),
         Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
     ];
@@ -306,7 +318,7 @@ fn rvr_gpu_tracegen_proves_system_and_rv64i_airs_without_record_arenas() {
 fn rvr_gpu_tracegen_rejects_an_executed_unported_opcode_before_tracegen() {
     let instructions = [
         Instruction::<F>::from_usize(
-            Rv64LoadStoreOpcode::STOREB.global_opcode(),
+            Rv64LoadStoreOpcode::STOREH.global_opcode(),
             [
                 reg(1),
                 0,
@@ -354,7 +366,7 @@ fn rvr_gpu_tracegen_rejects_an_executed_unported_opcode_before_tracegen() {
         .unwrap();
 
     let error = match Rv64IRvrGpuTracegen::new(&gpu_program, &gpu_transcript, &replay_plan) {
-        Ok(_) => panic!("executed STOREB must not reach tracegen before its replay port"),
+        Ok(_) => panic!("executed STOREH must not reach tracegen before its replay port"),
         Err(error) => error,
     };
     assert!(
