@@ -418,6 +418,15 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64IGpuBuilder {
     }
 
     #[cfg(feature = "rvr")]
+    fn trim_rvr_cuda_device_pool(
+        &self,
+        retain_bytes: usize,
+        segment_idx: usize,
+    ) -> Result<(), String> {
+        rvr_gpu_decode::trim_g2_device_pool(retain_bytes, segment_idx)
+    }
+
+    #[cfg(feature = "rvr")]
     fn release_rvr_cuda_device_trace_sources(&self) {
         self.rvr_decode.release_consumed_g2_device_trace_sources();
     }
@@ -963,6 +972,15 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64ImGpuBuilder {
     #[cfg(feature = "rvr")]
     fn rvr_cuda_device_pool_stats(&self) -> Result<Option<[u64; 5]>, String> {
         rvr_gpu_decode::g2_device_pool_stats().map(Some)
+    }
+
+    #[cfg(feature = "rvr")]
+    fn trim_rvr_cuda_device_pool(
+        &self,
+        retain_bytes: usize,
+        segment_idx: usize,
+    ) -> Result<(), String> {
+        rvr_gpu_decode::trim_g2_device_pool(retain_bytes, segment_idx)
     }
 
     #[cfg(feature = "rvr")]

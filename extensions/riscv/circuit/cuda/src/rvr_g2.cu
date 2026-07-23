@@ -3175,6 +3175,50 @@ extern "C" int _rvr_g2_device_pool_stats(uint64_t *stats) {
     return int(cudaSuccess);
 }
 
+extern "C" int _rvr_g2_device_pool_trim(size_t retain_bytes, uint64_t *stats) {
+    if (stats == nullptr) return int(cudaErrorInvalidValue);
+    int device = 0;
+    cudaError_t status = cudaGetDevice(&device);
+    if (status != cudaSuccess) return int(status);
+    cudaMemPool_t pool = nullptr;
+    status = cudaDeviceGetDefaultMemPool(&pool, device);
+    if (status != cudaSuccess) return int(status);
+    cudaMemPoolAttr attributes_to_read[] = {
+        cudaMemPoolAttrReservedMemCurrent,
+        cudaMemPoolAttrReservedMemHigh,
+        cudaMemPoolAttrUsedMemCurrent,
+        cudaMemPoolAttrUsedMemHigh,
+        cudaMemPoolAttrReleaseThreshold,
+    };
+    for (size_t i = 0; i < sizeof(attributes_to_read) / sizeof(attributes_to_read[0]); ++i) {
+        status = cudaMemPoolGetAttribute(pool, attributes_to_read[i], &stats[i]);
+        if (status != cudaSuccess) return int(status);
+    }
+    uint64_t release_threshold = retain_bytes;
+    status = cudaMemPoolSetAttribute(
+        pool, cudaMemPoolAttrReleaseThreshold, &release_threshold
+    );
+    if (status != cudaSuccess) return int(status);
+    auto started = std::chrono::steady_clock::now();
+    status = cudaDeviceSynchronize();
+    if (status != cudaSuccess) return int(status);
+    auto synchronized = std::chrono::steady_clock::now();
+    status = cudaMemPoolTrimTo(pool, retain_bytes);
+    if (status != cudaSuccess) return int(status);
+    auto trimmed = std::chrono::steady_clock::now();
+    for (size_t i = 0; i < sizeof(attributes_to_read) / sizeof(attributes_to_read[0]); ++i) {
+        status = cudaMemPoolGetAttribute(pool, attributes_to_read[i], &stats[5 + i]);
+        if (status != cudaSuccess) return int(status);
+    }
+    stats[10] = std::chrono::duration_cast<std::chrono::microseconds>(
+        synchronized - started
+    ).count();
+    stats[11] = std::chrono::duration_cast<std::chrono::microseconds>(
+        trimmed - synchronized
+    ).count();
+    return int(cudaSuccess);
+}
+
 extern "C" int _rvr_g2_predecode(
     DeviceBufferConstView<uint8_t> d_wire,
     size_t logical_wire_bytes,

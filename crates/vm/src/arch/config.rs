@@ -213,6 +213,17 @@ pub trait VmBuilder<E: StarkEngine>: Sized {
         Ok(None)
     }
 
+    /// CUDA/G2: return unused pages from the default async allocation pool at
+    /// the decode-to-prove boundary while retaining a small warm floor.
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    fn trim_rvr_cuda_device_pool(
+        &self,
+        _retain_bytes: usize,
+        _segment_idx: usize,
+    ) -> Result<(), String> {
+        Ok(())
+    }
+
     /// CUDA/G2: release the current segment's device trace-source bundle once
     /// trace generation and device continuation-state merging are complete.
     ///
