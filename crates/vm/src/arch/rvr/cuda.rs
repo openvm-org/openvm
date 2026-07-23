@@ -1,6 +1,8 @@
 //! GPU-owned copies of the immutable program and append-only preflight logs.
 
 use std::sync::Arc;
+#[cfg(feature = "test-utils")]
+use std::time::{Duration, Instant};
 
 use openvm_cuda_common::{
     copy::{MemCopyD2H, MemCopyH2D},
@@ -106,23 +108,60 @@ impl GpuRvrProgram {
         transcript: &RvrPreflightTranscript,
         endpoint: RvrPreflightEndpoint,
     ) -> Result<(GpuRvrTranscript, GpuRvrReplayPlan), GpuRvrInputError> {
+        let replay = self.build_replay(transcript, endpoint)?;
+        self.upload_replay(transcript, &replay)
+    }
+
+    fn build_replay(
+        &self,
+        transcript: &RvrPreflightTranscript,
+        endpoint: RvrPreflightEndpoint,
+    ) -> Result<RvrReplayData, GpuRvrInputError> {
         let replay = RvrReplayData::build(self.pc_base, &self.opcodes, transcript, endpoint)
             .map_err(|error| GpuRvrInputError::InvalidTranscript(error.to_string()))?;
+        Ok(replay)
+    }
+
+    fn upload_replay(
+        &self,
+        transcript: &RvrPreflightTranscript,
+        replay: &RvrReplayData,
+    ) -> Result<(GpuRvrTranscript, GpuRvrReplayPlan), GpuRvrInputError> {
         let segment_identity = Arc::new(());
         let gpu = GpuRvrTranscript::upload(
             transcript,
-            &replay,
+            replay,
             &self.device_ctx,
             self.identity.clone(),
             segment_identity.clone(),
         )?;
         let plan = GpuRvrReplayPlan::upload(
-            &replay,
+            replay,
             &self.device_ctx,
             self.identity.clone(),
             segment_identity,
         )?;
         Ok((gpu, plan))
+    }
+
+    /// Benchmark-only split of cold host indexing and synchronized segment H2D.
+    #[cfg(feature = "test-utils")]
+    #[doc(hidden)]
+    pub fn upload_transcript_profiled(
+        &self,
+        transcript: &RvrPreflightTranscript,
+        endpoint: RvrPreflightEndpoint,
+    ) -> Result<(GpuRvrTranscript, GpuRvrReplayPlan, Duration, Duration), GpuRvrInputError> {
+        self.device_ctx.stream.synchronize()?;
+        let started = Instant::now();
+        let replay = self.build_replay(transcript, endpoint)?;
+        let index_time = started.elapsed();
+
+        let started = Instant::now();
+        let (transcript, plan) = self.upload_replay(transcript, &replay)?;
+        self.device_ctx.stream.synchronize()?;
+        let upload_time = started.elapsed();
+        Ok((transcript, plan, index_time, upload_time))
     }
 
     pub fn ensure_replay_inputs(
