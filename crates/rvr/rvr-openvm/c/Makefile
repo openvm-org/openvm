@@ -3,11 +3,18 @@ LINKER ?= lld
 OPT ?= -O3
 DEBUG ?=
 WARNINGS = -Weverything -Werror
+# `bounds` adds local array checks that are not part of the `undefined` group.
+# Trap mode keeps the generated shared library self-contained. Override with
+# `make SANITIZERS=` only for performance-sensitive runs.
+SANITIZERS ?= -fsanitize=undefined,bounds -fsanitize-trap=all
 
 # The generated sources target C2y, not C++ or older C language revisions.
+# This C-only project also does not use the libstdc++ installation selected by
+# Clang's driver.
 WARNINGS += -Wno-c++-compat -Wno-c++98-compat \
 	-Wno-pre-c11-compat -Wno-pre-c23-compat -Wno-pre-c2y-compat \
-	-Wno-declaration-after-statement
+	-Wno-declaration-after-statement \
+	-Wno-gcc-install-dir-libstdcxx
 
 # Do not apply OpenVM warning flags to third-party C. Compiler errors still
 # fail the build.
@@ -17,6 +24,7 @@ VENDOR_WARNINGS = -Wno-everything
 # it is not useful for these low-level files.
 CORE_WARNINGS = -Wno-unsafe-buffer-usage
 CFLAGS = -std=c2y $(OPT) $(DEBUG) $(WARNINGS) -fPIC -march=native -falign-functions=32
+CFLAGS += $(SANITIZERS)
 LTO ?=
 CFLAGS += $(LTO)
 LDFLAGS ?=
@@ -27,7 +35,9 @@ LDLIBS ?=
 # overwrite `preserve_none` argument registers such as r11 on x86_64.
 HOST_OS ?= $(shell uname -s)
 ifeq ($(HOST_OS),Linux)
-LDFLAGS += -Wl,-z,now
+# Reject unresolved symbols and linker warnings while the generated artifact is
+# still being built instead of deferring failures until dlopen.
+LDFLAGS += -Wl,-z,now -Wl,-z,defs -Wl,--fatal-warnings
 CFLAGS += -fno-plt -fno-semantic-interposition
 LDLIBS += -lm
 endif
