@@ -5361,6 +5361,7 @@ dependencies = [
  "openvm-stark-sdk",
  "openvm-toolchain-tests",
  "openvm-transpiler",
+ "rand 0.9.2",
  "serde",
  "strum",
  "tempfile",
