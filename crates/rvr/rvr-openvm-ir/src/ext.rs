@@ -72,6 +72,18 @@ pub trait ExtEmitCtx {
     /// Write guest memory.
     fn write_mem(&mut self, base: &str, offset: i16, val: &str, width: u8);
 
+    /// Write one aligned eight-byte main-memory block.
+    ///
+    /// Unlike a scalar doubleword store, this is one enabled memory event and
+    /// does not reserve a second block-access slot.
+    fn write_aligned_mem_block(&mut self, addr: &str, val: &str);
+
+    /// Ensure value tracing can append `writes` memory writes and advance
+    /// `slots` logical clock slots before an instruction starts mutating state.
+    ///
+    /// Pure and metered emitters preserve their existing execution behavior.
+    fn reserve_preflight_writes(&mut self, writes: &str, slots: &str);
+
     /// Flush local page state, emit a C call, then reload the page state.
     fn emit_call(&mut self, name: &str, args: &[&str]);
 

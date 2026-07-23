@@ -32,8 +32,8 @@ mod tests {
     use openvm_riscv_guest::MAX_HINT_BUFFER_DWORDS;
     use openvm_riscv_transpiler::{
         BaseAluImmOpcode, BaseAluOpcode, BranchEqualOpcode, DivRemOpcode, MulHOpcode, MulOpcode,
-        Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64JalLuiOpcode, Rv64JalrOpcode,
-        Rv64LoadStoreOpcode, Rv64MTranspilerExtension, Rv64Phantom,
+        Rv64HintStoreOpcode, Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64JalLuiOpcode,
+        Rv64JalrOpcode, Rv64LoadStoreOpcode, Rv64MTranspilerExtension, Rv64Phantom,
     };
     use openvm_stark_sdk::{
         openvm_stark_backend::p3_field::{PrimeCharacteristicRing, PrimeField32},
@@ -125,6 +125,59 @@ mod tests {
         let mut hint = vec![0; state.streams.hint_stream.remaining()];
         state.streams.hint_stream.copy_to_slice(&mut hint);
         hint
+    }
+
+    #[cfg(feature = "rvr")]
+    fn configure_hint_state(
+        mut state: VmState<GuestMemory>,
+        registers: &[(usize, u64)],
+        hint_words: &[u64],
+    ) -> VmState<GuestMemory> {
+        for &(index, value) in registers {
+            unsafe {
+                state.memory.write_bytes(
+                    RV64_REGISTER_AS,
+                    (index * RV64_REGISTER_NUM_LIMBS) as u32,
+                    value.to_le_bytes(),
+                );
+            }
+        }
+        state.streams.hint_stream.set_hint(
+            hint_words
+                .iter()
+                .flat_map(|word| word.to_le_bytes())
+                .collect(),
+        );
+        state
+    }
+
+    #[cfg(feature = "rvr")]
+    fn read_main_word(state: &VmState<GuestMemory>, byte_addr: u32) -> u64 {
+        let limbs: [u16; 4] = unsafe { state.memory.read(RV64_MEMORY_AS, byte_addr / 2) };
+        u64::from(limbs[0])
+            | (u64::from(limbs[1]) << 16)
+            | (u64::from(limbs[2]) << 32)
+            | (u64::from(limbs[3]) << 48)
+    }
+
+    #[cfg(feature = "rvr")]
+    fn hint_store_instruction(
+        opcode: Rv64HintStoreOpcode,
+        ptr_reg: usize,
+        count_reg: usize,
+    ) -> Instruction<F> {
+        Instruction::from_usize(
+            opcode.global_opcode(),
+            [
+                count_reg * RV64_REGISTER_NUM_LIMBS,
+                ptr_reg * RV64_REGISTER_NUM_LIMBS,
+                0,
+                RV64_REGISTER_AS as usize,
+                RV64_MEMORY_AS as usize,
+                1,
+                0,
+            ],
+        )
     }
 
     #[cfg(feature = "rvr")]
@@ -593,6 +646,294 @@ mod tests {
         );
         assert_eq!(take_hint(&mut pure_state), expected_hint);
         assert_eq!(pure_state.rng.random::<u64>(), expected_next_random);
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(feature = "rvr")]
+    fn test_rvr_hint_store_preflight_logs_all_word_counts_and_matches_pure() -> Result<()> {
+        let instructions = [
+            hint_store_instruction(Rv64HintStoreOpcode::HINT_BUFFER, 1, 2),
+            hint_store_instruction(Rv64HintStoreOpcode::HINT_BUFFER, 3, 4),
+            hint_store_instruction(Rv64HintStoreOpcode::HINT_BUFFER, 5, 6),
+            Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+        ];
+        let exe = VmExe::from(Program::from_instructions(&instructions));
+        let executor = VmExecutor::new(test_rv64im_config())?;
+        let instance = executor.rvr_preflight_instance(&exe, None)?;
+        let word_counts = [1usize, 3, MAX_HINT_BUFFER_DWORDS];
+        let destinations = [0u64, 16, 64];
+        let registers = [
+            (1, destinations[0]),
+            (2, word_counts[0] as u64),
+            (3, destinations[1]),
+            (4, word_counts[1] as u64),
+            (5, destinations[2]),
+            (6, word_counts[2] as u64),
+        ];
+        let hint_words = (0..word_counts.iter().sum())
+            .map(|index| 0x1000_0000_0000_0000u64 + index as u64)
+            .collect::<Vec<_>>();
+        let initial = configure_hint_state(
+            instance.create_initial_vm_state(Vec::<Vec<u8>>::new()),
+            &registers,
+            &hint_words,
+        );
+        let total_memory_events = 2 * word_counts.len() + hint_words.len();
+        let execution = instance.execute_from_state(
+            initial,
+            openvm_circuit::arch::rvr::RvrPreflightLimits::new(
+                instructions.len(),
+                total_memory_events,
+            ),
+        )?;
+
+        assert_eq!(
+            execution
+                .transcript
+                .program_log
+                .iter()
+                .map(|event| (event.pc, event.timestamp))
+                .collect::<Vec<_>>(),
+            vec![(0, 1), (4, 4), (8, 13), (12, 3082), (12, 3082)]
+        );
+        assert_eq!(execution.transcript.memory_log.len(), total_memory_events);
+        assert_eq!(
+            execution
+                .transcript
+                .memory_log
+                .iter()
+                .map(|event| event.timestamp)
+                .collect::<Vec<_>>(),
+            [1, 2, 3, 4, 5]
+                .into_iter()
+                .chain([6, 9, 12])
+                .chain([13, 14])
+                .chain((0..MAX_HINT_BUFFER_DWORDS).map(|index| 15 + 3 * index as u32))
+                .collect::<Vec<_>>()
+        );
+
+        const WRITE_BIT: u32 = 1 << 31;
+        let writes = execution
+            .transcript
+            .memory_log
+            .iter()
+            .filter(|event| event.address_space_and_kind & WRITE_BIT != 0)
+            .collect::<Vec<_>>();
+        assert_eq!(writes.len(), hint_words.len());
+        assert_eq!(
+            writes
+                .iter()
+                .map(|event| event.timestamp)
+                .take(4)
+                .collect::<Vec<_>>(),
+            vec![3, 6, 9, 12]
+        );
+        assert_eq!(writes[4].timestamp, 15);
+        assert_eq!(writes.last().unwrap().timestamp, 3081);
+        assert_eq!(
+            writes.iter().map(|event| event.pointer).collect::<Vec<_>>(),
+            destinations
+                .into_iter()
+                .zip(word_counts)
+                .flat_map(|(dest, count)| {
+                    (0..count).map(move |index| (dest as u32 / 2) + 4 * index as u32)
+                })
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            execution.transcript.initial_write_log.len(),
+            hint_words.len()
+        );
+        assert!(execution
+            .transcript
+            .initial_write_log
+            .iter()
+            .all(|event| event.address_space == RV64_MEMORY_AS && event.initial_value == [0; 4]));
+        assert_eq!(execution.state.streams.hint_stream.remaining(), 0);
+
+        let pure = executor.rvr_instance(&exe, None)?;
+        let pure_initial = configure_hint_state(
+            pure.create_initial_vm_state(Vec::<Vec<u8>>::new()),
+            &registers,
+            &hint_words,
+        );
+        let pure_state = pure.execute_from_state(pure_initial)?;
+        assert_eq!(pure_state.streams.hint_stream.remaining(), 0);
+
+        let mut hint_index = 0;
+        for (&dest, &count) in destinations.iter().zip(&word_counts) {
+            for word_index in 0..count {
+                let addr = dest as u32 + (word_index * 8) as u32;
+                assert_eq!(
+                    read_main_word(&execution.state, addr),
+                    hint_words[hint_index]
+                );
+                assert_eq!(read_main_word(&pure_state, addr), hint_words[hint_index]);
+                hint_index += 1;
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(feature = "rvr")]
+    fn test_rvr_hint_store_repeated_write_has_one_initial_seed() -> Result<()> {
+        let instructions = [
+            hint_store_instruction(Rv64HintStoreOpcode::HINT_STORED, 1, 0),
+            hint_store_instruction(Rv64HintStoreOpcode::HINT_STORED, 1, 0),
+            Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+        ];
+        let exe = VmExe::from(Program::from_instructions(&instructions));
+        let executor = VmExecutor::new(test_rv64im_config())?;
+        let instance = executor.rvr_preflight_instance(&exe, None)?;
+        let hint_words = [0x0123_4567_89ab_cdef, 0xfedc_ba98_7654_3210];
+        let initial = configure_hint_state(
+            instance.create_initial_vm_state(Vec::<Vec<u8>>::new()),
+            &[(1, 32)],
+            &hint_words,
+        );
+        let execution = instance.execute_from_state(
+            initial,
+            openvm_circuit::arch::rvr::RvrPreflightLimits::new(3, 4),
+        )?;
+
+        assert_eq!(
+            execution
+                .transcript
+                .program_log
+                .iter()
+                .map(|event| (event.pc, event.timestamp))
+                .collect::<Vec<_>>(),
+            vec![(0, 1), (4, 4), (8, 7), (8, 7)]
+        );
+        assert_eq!(
+            execution
+                .transcript
+                .memory_log
+                .iter()
+                .map(|event| (event.timestamp, event.pointer, event.value))
+                .collect::<Vec<_>>(),
+            vec![
+                (1, 4, [32, 0, 0, 0]),
+                (3, 16, [0xcdef, 0x89ab, 0x4567, 0x0123]),
+                (4, 4, [32, 0, 0, 0]),
+                (6, 16, [0x3210, 0x7654, 0xba98, 0xfedc]),
+            ]
+        );
+        assert_eq!(execution.transcript.initial_write_log.len(), 1);
+        assert_eq!(execution.transcript.initial_write_log[0].pointer, 16);
+        assert_eq!(
+            execution.transcript.initial_write_log[0].initial_value,
+            [0; 4]
+        );
+        assert_eq!(read_main_word(&execution.state, 32), hint_words[1]);
+        assert_eq!(execution.state.streams.hint_stream.remaining(), 0);
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(feature = "rvr")]
+    fn test_rvr_hint_store_suspends_only_after_consuming_the_whole_instruction() -> Result<()> {
+        let instructions = [
+            hint_store_instruction(Rv64HintStoreOpcode::HINT_STORED, 1, 0),
+            Instruction::<F>::from_usize(
+                Rv64JalLuiOpcode::JAL.global_opcode(),
+                [0, 0, 4, RV64_REGISTER_AS as usize, 0, 0],
+            ),
+            hint_store_instruction(Rv64HintStoreOpcode::HINT_STORED, 1, 0),
+            Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+        ];
+        let exe = VmExe::from(Program::from_instructions(&instructions));
+        let executor = VmExecutor::new(test_rv64im_config())?;
+        let instance = executor.rvr_preflight_instance(&exe, None)?;
+        let hint_words = [0x0123_4567_89ab_cdef, 0xfedc_ba98_7654_3210];
+        let initial = configure_hint_state(
+            instance.create_initial_vm_state(Vec::<Vec<u8>>::new()),
+            &[(1, 32)],
+            &hint_words,
+        );
+
+        let first = instance.execute_from_state_for(
+            initial,
+            openvm_circuit::arch::rvr::RvrPreflightLimits::new(2, 2),
+        )?;
+        assert_eq!(
+            first.endpoint,
+            openvm_circuit::arch::rvr::RvrPreflightEndpoint::Suspended {
+                resume_pc: 8,
+                final_timestamp: 5,
+            }
+        );
+        assert_eq!(
+            first
+                .transcript
+                .program_log
+                .iter()
+                .map(|event| (event.pc, event.timestamp))
+                .collect::<Vec<_>>(),
+            vec![(0, 1), (4, 4), (8, 5)]
+        );
+        assert_eq!(read_main_word(&first.state, 32), hint_words[0]);
+        assert_eq!(first.state.streams.hint_stream.remaining(), 8);
+
+        let second = instance.execute_from_state(
+            first.state,
+            openvm_circuit::arch::rvr::RvrPreflightLimits::new(2, 2),
+        )?;
+        assert_eq!(
+            second.endpoint,
+            openvm_circuit::arch::rvr::RvrPreflightEndpoint::Terminated
+        );
+        assert_eq!(
+            second
+                .transcript
+                .program_log
+                .iter()
+                .map(|event| (event.pc, event.timestamp))
+                .collect::<Vec<_>>(),
+            vec![(8, 1), (12, 4), (12, 4)]
+        );
+        assert_eq!(read_main_word(&second.state, 32), hint_words[1]);
+        assert_eq!(second.state.streams.hint_stream.remaining(), 0);
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(feature = "rvr")]
+    fn test_rvr_hint_store_rejects_before_consuming_or_writing() -> Result<()> {
+        let instructions = [
+            hint_store_instruction(Rv64HintStoreOpcode::HINT_BUFFER, 1, 2),
+            Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+        ];
+        let exe = VmExe::from(Program::from_instructions(&instructions));
+        let executor = VmExecutor::new(test_rv64im_config())?;
+        let instance = executor.rvr_preflight_instance(&exe, None)?;
+        let initial = configure_hint_state(
+            instance.create_initial_vm_state(Vec::<Vec<u8>>::new()),
+            &[(1, 0), (2, 3)],
+            &[1, 2, 3],
+        );
+        let error = match instance.execute_from_state(
+            initial,
+            openvm_circuit::arch::rvr::RvrPreflightLimits::new(2, 4),
+        ) {
+            Ok(_) => panic!("undersized whole-operation reservation unexpectedly succeeded"),
+            Err(error) => error,
+        };
+        assert!(error.to_string().contains("code 2"), "{error}");
+
+        let pure = executor.rvr_instance(&exe, None)?;
+        let unaligned = configure_hint_state(
+            pure.create_initial_vm_state(Vec::<Vec<u8>>::new()),
+            &[(1, 1), (2, 1)],
+            &[0xdead_beef],
+        );
+        let error = match pure.execute_from_state(unaligned) {
+            Ok(_) => panic!("unaligned hint destination unexpectedly succeeded"),
+            Err(error) => error,
+        };
+        assert!(error.to_string().contains("error code: 3"));
         Ok(())
     }
 

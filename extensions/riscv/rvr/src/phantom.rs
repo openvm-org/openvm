@@ -309,6 +309,14 @@ mod tests {
             unreachable!()
         }
 
+        fn write_aligned_mem_block(&mut self, _addr: &str, _val: &str) {
+            unreachable!()
+        }
+
+        fn reserve_preflight_writes(&mut self, _writes: &str, _slots: &str) {
+            unreachable!()
+        }
+
         fn emit_call(&mut self, _name: &str, _args: &[&str]) {
             unreachable!()
         }

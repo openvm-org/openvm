@@ -126,6 +126,31 @@ static __attribute__((always_inline)) inline void preflight_append_write_u64(
   p->initial_write_log_len = initial_index + 1u;
 }
 
+static __attribute__((always_inline)) inline bool
+trace_reserve_memory_writes(RvState* restrict state, uint32_t writes,
+                            uint32_t slots) {
+  PreflightState* restrict p = &state->mode_state;
+  if (unlikely(p->error != PREFLIGHT_ERROR_NONE)) return false;
+  if (unlikely(p->memory_log_len > p->memory_log_cap ||
+               writes > p->memory_log_cap - p->memory_log_len ||
+               (writes != 0u && p->memory_log == NULL))) {
+    preflight_set_error(p, PREFLIGHT_ERROR_MEMORY_CAPACITY);
+    return false;
+  }
+  if (unlikely(p->initial_write_log_len > p->initial_write_log_cap ||
+               writes >
+                   p->initial_write_log_cap - p->initial_write_log_len ||
+               (writes != 0u && p->initial_write_log == NULL))) {
+    preflight_set_error(p, PREFLIGHT_ERROR_INITIAL_WRITE_CAPACITY);
+    return false;
+  }
+  if (unlikely(slots > UINT32_MAX - p->timestamp)) {
+    preflight_set_error(p, PREFLIGHT_ERROR_TIMESTAMP_OVERFLOW);
+    return false;
+  }
+  return true;
+}
+
 static __attribute__((always_inline)) inline void trace_reg_read(
     RvState* restrict state, uint8_t index, uint64_t value) {
   preflight_append_read_u64(state, AS_REGISTER,
@@ -266,6 +291,13 @@ static __attribute__((always_inline)) inline void trace_write_mem_u32(
 static __attribute__((always_inline)) inline void trace_write_mem_u64(
     RvState* restrict state, uint64_t address, uint64_t value) {
   preflight_trace_store(state, address, value, 8u);
+}
+
+static __attribute__((always_inline)) inline void trace_write_mem_block_u64(
+    RvState* restrict state, uint64_t address, uint64_t value) {
+  uint64_t previous_value = preflight_read_block(state, address);
+  preflight_append_write_u64(state, AS_MEMORY, (uint32_t)(address >> 1),
+                             value, previous_value);
 }
 
 /* Extension range access is not preflight-safe yet. Artifact construction
