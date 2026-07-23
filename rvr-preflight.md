@@ -749,6 +749,14 @@ sign-extension limb is rejected. Writes to x0 remain fail-closed because the
 transpiler canonicalizes those instructions to NOP and the AIR has no disabled
 write row.
 
+SLTI and SLTIU are the next fixed-row slice. Their shared replay kernel consumes
+two explicit opcode ranges, validates the comparison result against the logged
+write, and fills the existing immediate adapter and comparison core directly.
+An interleaved-opcode test matches CPU and legacy CUDA rows after timestamp
+canonicalization, matches the complete range histogram including the
+equal-operands/no-difference path, rejects a corrupted result, and proves the
+AIR. No comparison record is constructed by production replay.
+
 ### M3: complete the GPU proving path
 
 Once RISC-V replay is viable:
