@@ -1094,6 +1094,31 @@ pub mod beq_cuda {
             timestamp_max_bits: u32,
             stream: cudaStream_t,
         ) -> i32;
+
+        fn _beq_replay_tracegen(
+            d_trace: *mut F,
+            height: usize,
+            width: usize,
+            d_instructions: DeviceBufferView,
+            pc_base: u32,
+            d_program_log: DeviceBufferView,
+            d_memory_log: DeviceBufferView,
+            d_initial_write_log: DeviceBufferView,
+            d_memory_predecessors: DeviceBufferView,
+            d_steps: DeviceBufferView,
+            beq_step_start: usize,
+            num_beq_steps: usize,
+            bne_step_start: usize,
+            num_bne_steps: usize,
+            d_error: *mut u32,
+            beq_opcode: u32,
+            bne_opcode: u32,
+            register_address_space: u32,
+            d_range_checker: *mut u32,
+            range_checker_num_bins: u32,
+            timestamp_max_bits: u32,
+            stream: cudaStream_t,
+        ) -> i32;
     }
 
     pub unsafe fn tracegen(
@@ -1110,6 +1135,56 @@ pub mod beq_cuda {
             height,
             d_trace.len() / height,
             d_records.view(),
+            d_range_checker.as_mut_ptr() as *mut u32,
+            d_range_checker.len() as u32,
+            timestamp_max_bits,
+            stream,
+        ))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn replay_tracegen(
+        d_trace: &DeviceBuffer<F>,
+        height: usize,
+        d_instructions: DeviceBufferView,
+        pc_base: u32,
+        d_program_log: DeviceBufferView,
+        d_memory_log: DeviceBufferView,
+        d_initial_write_log: DeviceBufferView,
+        d_memory_predecessors: DeviceBufferView,
+        d_steps: DeviceBufferView,
+        beq_step_start: usize,
+        num_beq_steps: usize,
+        bne_step_start: usize,
+        num_bne_steps: usize,
+        d_error: *mut u32,
+        beq_opcode: u32,
+        bne_opcode: u32,
+        register_address_space: u32,
+        d_range_checker: &DeviceBuffer<F>,
+        timestamp_max_bits: u32,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        assert!(height.is_power_of_two());
+        CudaError::from_result(_beq_replay_tracegen(
+            d_trace.as_mut_ptr(),
+            height,
+            d_trace.len() / height,
+            d_instructions,
+            pc_base,
+            d_program_log,
+            d_memory_log,
+            d_initial_write_log,
+            d_memory_predecessors,
+            d_steps,
+            beq_step_start,
+            num_beq_steps,
+            bne_step_start,
+            num_bne_steps,
+            d_error,
+            beq_opcode,
+            bne_opcode,
+            register_address_space,
             d_range_checker.as_mut_ptr() as *mut u32,
             d_range_checker.len() as u32,
             timestamp_max_bits,
