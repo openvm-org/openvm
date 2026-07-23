@@ -969,6 +969,25 @@ and lookup-histogram equality with legacy tracegen, replay proofs, malformed
 u16 cells, corrupt logged results, the `u32::MAX` effective-address boundary,
 overflow and underflow rejection, and a malformed `rd = x0` gap.
 
+#### Halfword-load GPU replay checkpoint (2026-07-23)
+
+`LOADH` and `LOADHU` use the same direct replay shape without adding a producer
+abstraction. Replay validates the register read at `T`, first block read at
+`T + 1`, a second block read at `T + 2` only when byte shift seven crosses the
+eight-byte block boundary, and the destination write or x0 gap at `T + 3`.
+It reconstructs the effective address with the signed immediate, rejects both
+low-word overflow and configured address-space overflow, and requires a
+crossing access's entire second block to remain in the configured domain. Both
+block-read predecessors and the enabled destination-write predecessor are
+validated before the row's nonzero trace fill or lookup-histogram updates.
+
+Focused signed and unsigned differential tests cover every non-crossing shift,
+crossing first and repeated reads, negative immediates, low-limb address carry,
+`rd = x0`, `rd = rs1`, signed extension of `0x8000`, full trace and lookup
+histogram equality with legacy tracegen, and replay proofs. Corrupt results,
+malformed x0 schedules, the `u32` boundary, and configured-width overflow are
+rejected before the affected row contributes lookup counts.
+
 #### First multi-AIR GPU proving checkpoint (2026-07-23)
 
 `Rv64IRvrGpuTracegen` now drives the VM inventory's ordinary reverse tracegen
@@ -986,15 +1005,15 @@ counts through their normal tracegen using `()` rather than even an empty
 all extension contexts have been generated, the coordinator reads the shared
 sticky replay error once, immediately before proving.
 
-The first integration test executes all 40 currently ported opcodes across the
-23 replay chips, followed by `TERMINATE`. One RVR preflight run supplies both
+The integration test executes all 42 currently ported opcodes across the 25
+replay chips, followed by `TERMINATE`. One RVR preflight run supplies both
 system and RISC-V tracegen. Program reads the device PC histogram, Connector uses
 the segment endpoints, and PersistentBoundary and MemoryMerkle consume the sorted
 device touched-block prefix while the coordinator retains the pre-segment Merkle
 state. No interpreter or production `RecordArena` is constructed or passed. The
 combined context goes through the VM's existing trace-height validation and
 completes a real GPU prove-and-verify. A negative test confirms that an executed,
-not-yet-ported LOADH is rejected by the pre-kernel coverage check. This establishes
+not-yet-ported LOADW is rejected by the pre-kernel coverage check. This establishes
 the arena-free system plus multi-AIR RISC-V integration seam without generalizing
 `Chip`.
 

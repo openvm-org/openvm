@@ -172,8 +172,32 @@ fn rvr_gpu_tracegen_proves_system_and_rv64i_airs_without_record_arenas() {
             ],
         ),
         Instruction::from_usize(
+            Rv64LoadStoreOpcode::LOADH.global_opcode(),
+            [
+                reg(20),
+                reg(1),
+                4,
+                RV64_REGISTER_AS as usize,
+                RV64_MEMORY_AS as usize,
+                1,
+                0,
+            ],
+        ),
+        Instruction::from_usize(
+            Rv64LoadStoreOpcode::LOADHU.global_opcode(),
+            [
+                reg(21),
+                reg(1),
+                3,
+                RV64_REGISTER_AS as usize,
+                RV64_MEMORY_AS as usize,
+                1,
+                0,
+            ],
+        ),
+        Instruction::from_usize(
             Rv64JalrOpcode::JALR.global_opcode(),
-            [reg(30), 0, 164, RV64_REGISTER_AS as usize, 0, 1, 0],
+            [reg(30), 0, 172, RV64_REGISTER_AS as usize, 0, 1, 0],
         ),
         Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
     ];
@@ -192,6 +216,8 @@ fn rvr_gpu_tracegen_proves_system_and_rv64i_airs_without_record_arenas() {
         .collect::<openvm_instructions::exe::SparseMemoryImage>();
     init_memory.insert((RV64_MEMORY_AS, 3), 0x80);
     init_memory.insert((RV64_MEMORY_AS, 4), 0xfe);
+    init_memory.insert((RV64_MEMORY_AS, 7), 0x7f);
+    init_memory.insert((RV64_MEMORY_AS, 8), 0x80);
     let exe = VmExe::new(program.clone()).with_init_memory(init_memory);
     let config = Rv64IConfig {
         system: test_system_config(),
@@ -244,7 +270,7 @@ fn rvr_gpu_tracegen_proves_system_and_rv64i_airs_without_record_arenas() {
 fn rvr_gpu_tracegen_rejects_an_executed_unported_opcode_before_tracegen() {
     let instructions = [
         Instruction::<F>::from_usize(
-            Rv64LoadStoreOpcode::LOADH.global_opcode(),
+            Rv64LoadStoreOpcode::LOADW.global_opcode(),
             [
                 reg(1),
                 0,
@@ -292,7 +318,7 @@ fn rvr_gpu_tracegen_rejects_an_executed_unported_opcode_before_tracegen() {
         .unwrap();
 
     let error = match Rv64IRvrGpuTracegen::new(&gpu_program, &gpu_transcript, &replay_plan) {
-        Ok(_) => panic!("executed LOADH must not reach tracegen before its replay port"),
+        Ok(_) => panic!("executed LOADW must not reach tracegen before its replay port"),
         Err(error) => error,
     };
     assert!(
