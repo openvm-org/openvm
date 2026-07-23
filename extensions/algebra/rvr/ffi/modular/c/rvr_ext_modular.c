@@ -34,7 +34,7 @@ typedef struct RvrModIsEqRecordDescriptor {
 
 static inline RvrModIsEqRecordDescriptor rvr_mod_iseq_descriptor(
     uint32_t num_limbs) {
-  uint32_t blocks = num_limbs / RVR_WORD_SIZE;
+  uint32_t blocks = num_limbs / WORD_SIZE;
   uint32_t u16_limbs = num_limbs / 2u;
   uint32_t heap_read_aux = 32u;
   uint32_t rd_ptr = heap_read_aux + 8u * blocks;
@@ -51,11 +51,6 @@ static inline RvrModIsEqRecordDescriptor rvr_mod_iseq_descriptor(
       .rd_ptr = rd_ptr,
       .writes_aux = writes_aux,
   };
-}
-
-static inline void rvr_mod_iseq_store_u64_unaligned_le(uint8_t* dst,
-                                                       uint64_t value) {
-  memcpy(dst, &value, sizeof(value));
 }
 
 static inline uint8_t* rvr_claim_mod_iseq_record(RvState* state,

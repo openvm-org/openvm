@@ -2086,6 +2086,42 @@ static __attribute__((always_inline)) inline void trace_wr_mem_u64_range(
   }
 }
 
+/* Extension FFI uses one memory-range interface in every execution mode.
+ * Preflight reads before recording their values and records writes before
+ * mutating memory so the previous block remains available to the tracer. */
+static __attribute__((always_inline)) inline void read_mem_u64_range(
+    RvState* restrict state, uint64_t base_addr, uint64_t* restrict out,
+    uint32_t num_words) {
+  read_mem_u64_range_raw(state, base_addr, out, num_words);
+  trace_rd_mem_u64_range(state, base_addr, out, num_words);
+}
+
+static __attribute__((always_inline)) inline void write_mem_u64_range(
+    RvState* restrict state, uint64_t base_addr, const uint64_t* restrict vals,
+    uint32_t num_words) {
+  trace_wr_mem_u64_range(state, base_addr, vals, num_words);
+  write_mem_u64_range_raw(state, base_addr, vals, num_words);
+}
+
+/* Peeks affect extension execution but are not VM memory accesses. */
+static __attribute__((always_inline)) inline uint64_t peek_mem_u64(
+    RvState* restrict state, uint64_t addr) {
+  return read_mem_u64(state->memory, addr);
+}
+
+static __attribute__((always_inline)) inline void peek_mem_u64_range(
+    RvState* restrict state, uint64_t base_addr, uint64_t* restrict out,
+    uint32_t num_words) {
+  read_mem_u64_range_raw(state, base_addr, out, num_words);
+}
+
+/* Page-only accounting belongs to metered execution. */
+static __attribute__((always_inline)) inline void
+trace_page_access_u64_range(RvState* restrict state [[maybe_unused]],
+                            uint64_t base_addr [[maybe_unused]],
+                            uint64_t num_dwords [[maybe_unused]],
+                            uint32_t addr_space [[maybe_unused]]) {}
+
 /* ── Trace-only operations ───────────────────────────────────────── */
 
 static __attribute__((always_inline)) inline void trace_mem_access(

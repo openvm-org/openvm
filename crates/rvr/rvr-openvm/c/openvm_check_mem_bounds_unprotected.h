@@ -3,6 +3,12 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "openvm_constants.h"
+
+/* Extension callbacks still need the configured memory extent for validating
+ * host-written ranges even when instruction memory accesses are unchecked. */
+static constexpr size_t OPENVM_MEM_SIZE = (size_t)MEMORY_MASK + 1u;
+
 /* Unprotected builds keep the checked-mode interface but skip bounds checks. */
 static __attribute__((always_inline)) inline void check_mem_bounds_u8(
     uint64_t start [[maybe_unused]]) {}

@@ -3067,6 +3067,81 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
         )
     }
 
+    fn emit_reveal(
+        &mut self,
+        src: Variable,
+        ptr: Variable,
+        offset: i32,
+        width: MemWidth,
+        addr_space: PageAddressSpace,
+        full_word_local_opcode: u8,
+    ) {
+        if self.trace_reveal_compact_inline(
+            src,
+            ptr,
+            offset,
+            width.bytes(),
+            addr_space.id(),
+            full_word_local_opcode,
+        ) {
+            return;
+        }
+
+        let addr_from_ptr = |ptr: &str| match offset.cmp(&0) {
+            std::cmp::Ordering::Less => {
+                format!("({ptr} - 0x{:08x}ull)", offset.unsigned_abs())
+            }
+            std::cmp::Ordering::Equal => ptr.to_string(),
+            std::cmp::Ordering::Greater => format!("({ptr} + 0x{offset:08x}ull)"),
+        };
+        let width_arg = format!("{}u", width.bytes());
+
+        if !self.mode.traces_values() {
+            let src = EmitContext::read_reg(self, reg_index(src));
+            let ptr = EmitContext::read_reg(self, reg_index(ptr));
+            let addr = addr_from_ptr(&ptr);
+            self.write_line(&format!(
+                "if (unlikely(!openvm_reveal({src}, {addr}, {width_arg}))) {{"
+            ));
+            self.emit_trap();
+            self.write_line("}");
+            self.trace_page_access(&addr, width, addr_space);
+            return;
+        }
+
+        let (src, addr) = if width == MemWidth::Double {
+            let (src, ptr) = self.trace_store_u64_as_inline(
+                src,
+                ptr,
+                offset,
+                addr_space.id(),
+                full_word_local_opcode,
+            );
+            (src, addr_from_ptr(&ptr))
+        } else {
+            let ptr = EmitContext::read_reg(self, reg_index(ptr));
+            let src = EmitContext::read_reg(self, reg_index(src));
+            let addr = addr_from_ptr(&ptr);
+            let width = width.bytes().to_string();
+            self.emit_call_without_page_flush(
+                "trace_wr_as",
+                &[
+                    "state",
+                    &addr,
+                    &src,
+                    &width,
+                    &format!("{}u", addr_space.id()),
+                ],
+            );
+            (src, addr)
+        };
+        self.write_line(&format!(
+            "if (unlikely(!openvm_reveal({src}, {addr}, {width_arg}))) {{"
+        ));
+        self.emit_trap();
+        self.write_line("}");
+    }
+
     fn trace_timestamp(&mut self) {
         EmitContext::trace_timestamp(self);
     }

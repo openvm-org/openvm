@@ -407,6 +407,14 @@ static __attribute__((always_inline)) inline void trace_wr_mem_u64(
  * Callers are responsible for guarding empty ranges (e.g. xorin with len=0)
  * so we can skip the branch on the hot path. */
 
+static __attribute__((always_inline)) inline void trace_rd_mem_u64_range(
+    RvState* restrict state, uint64_t base_addr, const uint64_t* vals,
+    uint32_t num_words) {}
+
+static __attribute__((always_inline)) inline void trace_wr_mem_u64_range(
+    RvState* restrict state, uint64_t base_addr, const uint64_t* vals,
+    uint32_t num_words) {}
+
 static __attribute__((always_inline)) inline void read_mem_u64_range(
     RvState* restrict state, uint64_t base_addr, uint64_t* restrict out,
     uint32_t num_words) {
@@ -451,6 +459,12 @@ static __attribute__((always_inline)) inline void trace_page_access_u64_range(
   assume(num_dwords > 0);
   uint64_t last_addr = base_addr + num_dwords * WORD_SIZE - 1u;
   record_page_range(&state->mode_state, addr_space, base_addr, last_addr);
+}
+
+static __attribute__((always_inline)) inline void trace_mem_access_u64_range(
+    RvState* restrict state, uint64_t base_addr, uint32_t num_dwords,
+    uint32_t addr_space) {
+  trace_page_access_u64_range(state, base_addr, num_dwords, addr_space);
 }
 
 /* Drain AS_MEMORY page touches while preserving the instruction counter and

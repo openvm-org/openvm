@@ -339,6 +339,44 @@ pub trait ExtEmitCtx {
         false
     }
 
+    /// Emit a public-values store (REVEAL) with mode-correct trace ordering.
+    ///
+    /// Pure and metered execution perform the host write first and then account
+    /// for the touched page. Value-tracing implementations override this so
+    /// they can capture the previous public-values block before the host write.
+    fn emit_reveal(
+        &mut self,
+        src: Variable,
+        ptr: Variable,
+        offset: i32,
+        width: MemWidth,
+        addr_space: PageAddressSpace,
+        full_word_local_opcode: u8,
+    ) {
+        if self.trace_reveal_compact(
+            src,
+            ptr,
+            offset,
+            width.bytes(),
+            addr_space.id(),
+            full_word_local_opcode,
+        ) {
+            return;
+        }
+        let src = self.read_var(src);
+        let ptr = self.read_var(ptr);
+        let addr = match offset.cmp(&0) {
+            std::cmp::Ordering::Less => {
+                format!("({ptr} - 0x{:08x}ull)", offset.unsigned_abs())
+            }
+            std::cmp::Ordering::Equal => ptr,
+            std::cmp::Ordering::Greater => format!("({ptr} + 0x{offset:08x}ull)"),
+        };
+        let width_arg = format!("{}u", width.bytes());
+        self.emit_checked_call_without_page_flush("openvm_reveal", &[&src, &addr, &width_arg]);
+        self.trace_page_access(&addr, width, addr_space);
+    }
+
     /// Emit a timestamp-only trace tick.
     fn trace_timestamp(&mut self);
 
