@@ -400,6 +400,15 @@ pub mod poseidon2 {
 pub mod inventory {
     use super::*;
 
+    #[repr(C)]
+    #[derive(Clone, Copy, Debug, Default)]
+    pub struct MergeMetadata {
+        pub out_num_records: usize,
+        pub merkle_path_sum: u64,
+    }
+
+    const _: () = assert!(std::mem::size_of::<MergeMetadata>() == 2 * std::mem::size_of::<u64>());
+
     extern "C" {
         fn _inventory_merge_records_get_temp_bytes(
             d_flags: *mut u32,
@@ -411,6 +420,7 @@ pub mod inventory {
         fn _inventory_merge_records(
             d_in_records: *const u32,
             in_num_records: usize,
+            address_height: usize,
             d_initial_mem: *const *const std::ffi::c_void,
             d_tmp_records: *mut u32,
             d_out_records: *mut u32,
@@ -418,15 +428,17 @@ pub mod inventory {
             d_positions: *mut u32,
             d_temp_storage: *mut std::ffi::c_void,
             temp_storage_bytes: usize,
-            out_num_records: *mut usize,
+            metadata: *mut MergeMetadata,
+            collect_merkle_path_sum: u32,
             stream: cudaStream_t,
         ) -> i32;
     }
 
     #[allow(clippy::too_many_arguments)]
     pub unsafe fn merge_records(
-        d_in_records: &DeviceBuffer<u32>,
+        d_in_records: DeviceBufferView,
         in_num_records: usize,
+        address_height: usize,
         d_initial_mem: &DeviceBuffer<*const std::ffi::c_void>,
         d_tmp_records: &DeviceBuffer<u32>,
         d_out_records: &DeviceBuffer<u32>,
@@ -434,12 +446,14 @@ pub mod inventory {
         d_positions: &DeviceBuffer<u32>,
         d_temp_storage: &DeviceBuffer<u8>,
         temp_storage_bytes: usize,
-        d_out_num_records: &DeviceBuffer<usize>,
+        d_metadata: &DeviceBuffer<MergeMetadata>,
+        collect_merkle_path_sum: bool,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_inventory_merge_records(
-            d_in_records.as_ptr(),
+            d_in_records.ptr.cast(),
             in_num_records,
+            address_height,
             d_initial_mem.as_ptr(),
             d_tmp_records.as_mut_ptr(),
             d_out_records.as_mut_ptr(),
@@ -447,7 +461,8 @@ pub mod inventory {
             d_positions.as_mut_ptr(),
             d_temp_storage.as_mut_raw_ptr(),
             temp_storage_bytes,
-            d_out_num_records.as_mut_ptr(),
+            d_metadata.as_mut_ptr(),
+            collect_merkle_path_sum as u32,
             stream,
         ))
     }
@@ -517,6 +532,24 @@ pub mod program {
     ) -> Result<(), CudaError> {
         CudaError::from_result(_program_fill_frequencies(
             d_freqs.as_ptr(),
+            filtered_len,
+            d_out.as_mut_ptr(),
+            height,
+            stream,
+        ))
+    }
+
+    /// Same conversion as [`fill_frequencies`], borrowing an initialized
+    /// device prefix owned by another segment object.
+    pub unsafe fn fill_frequencies_from_view(
+        d_freqs: DeviceBufferView,
+        filtered_len: usize,
+        d_out: &DeviceBuffer<F>,
+        height: usize,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_program_fill_frequencies(
+            d_freqs.ptr.cast(),
             filtered_len,
             d_out.as_mut_ptr(),
             height,

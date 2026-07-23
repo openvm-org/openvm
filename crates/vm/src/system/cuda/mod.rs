@@ -63,6 +63,51 @@ impl SystemChipInventoryGPU {
             memory_inventory,
         }
     }
+
+    /// Generates every system AIR directly from one validated RVR segment.
+    ///
+    /// The initial memory image must already have been transported before RVR
+    /// consumes and mutates the host state.
+    #[cfg(feature = "rvr")]
+    pub fn generate_proving_ctx_from_rvr(
+        &mut self,
+        program: &crate::arch::rvr::cuda::GpuRvrProgram,
+        transcript: &crate::arch::rvr::cuda::GpuRvrTranscript,
+        replay_plan: &crate::arch::rvr::cuda::GpuRvrReplayPlan,
+    ) -> Result<Vec<AirProvingContext<GpuBackend>>, crate::arch::rvr::cuda::GpuRvrInputError> {
+        program.ensure_replay_inputs(transcript, replay_plan, &self.program.device_ctx)?;
+        let program_ctx = {
+            let _span = tracing::info_span!("program_trace_gen").entered();
+            // SAFETY: replay_plan owns this same-context buffer through the
+            // entire system tracegen call. Memory tracegen below synchronizes
+            // the same stream before returning.
+            unsafe {
+                self.program
+                    .generate_proving_ctx_from_device(replay_plan.program_frequencies())
+            }
+        };
+
+        let (from_state, to_state, exit_code) = replay_plan.connector_boundary();
+        self.connector.cpu_chip.begin(from_state);
+        self.connector.cpu_chip.end(to_state, exit_code);
+        let connector_ctx = {
+            let _span = tracing::info_span!("connector_trace_gen").entered();
+            self.connector.generate_proving_ctx(())
+        };
+
+        // SAFETY: transcript owns the validated initialized prefix and remains
+        // borrowed until this synchronous memory-inventory call returns.
+        let memory_ctxs = unsafe {
+            self.memory_inventory.generate_proving_ctxs_from_device(
+                transcript.touched_blocks(),
+                transcript.num_touched_blocks(),
+            )
+        };
+        Ok([program_ctx, connector_ctx]
+            .into_iter()
+            .chain(memory_ctxs)
+            .collect())
+    }
 }
 
 impl SystemChipComplex<DenseRecordArena, GpuBackend> for SystemChipInventoryGPU {

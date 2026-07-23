@@ -796,6 +796,64 @@ where
     }
 }
 
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+impl<SC>
+    VmChipComplex<
+        SC,
+        crate::arch::DenseRecordArena,
+        openvm_cuda_backend::GpuBackend,
+        crate::system::cuda::SystemChipInventoryGPU,
+    >
+where
+    SC: StarkProtocolConfig,
+{
+    /// Generates a complete GPU proving context from one RVR segment without
+    /// constructing any system or extension record arenas.
+    pub(crate) fn generate_proving_ctx_from_rvr(
+        &mut self,
+        program: &crate::arch::rvr::cuda::GpuRvrProgram,
+        transcript: &crate::arch::rvr::cuda::GpuRvrTranscript,
+        replay_plan: &crate::arch::rvr::cuda::GpuRvrReplayPlan,
+        mut generate_extension: impl FnMut(
+            usize,
+            &dyn AnyChip<crate::arch::DenseRecordArena, openvm_cuda_backend::GpuBackend>,
+        ) -> Result<
+            AirProvingContext<openvm_cuda_backend::GpuBackend>,
+            GenerationError,
+        >,
+    ) -> Result<ProvingContext<openvm_cuda_backend::GpuBackend>, GenerationError> {
+        let num_ext_airs = self.inventory.chips.len();
+        let mut exec_ctxs = Vec::new();
+        exec_ctxs.resize_with(num_ext_airs, || None);
+
+        // This is the same load-bearing order as the legacy path: system
+        // connector/Merkle requests first, then extension chips in reverse
+        // insertion order so shared periphery chips are generated last.
+        let sys_ctxs = {
+            let _span = info_span!("system_trace_gen").entered();
+            self.system
+                .generate_proving_ctx_from_rvr(program, transcript, replay_plan)
+                .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?
+        };
+        debug_assert_eq!(sys_ctxs.len(), self.system_config().num_airs());
+        {
+            let _span = info_span!("executor_trace_gen").entered();
+            for (chain_pos, (insertion_idx, chip)) in
+                self.inventory.chips.iter().enumerate().rev().enumerate()
+            {
+                exec_ctxs[chain_pos] = Some(generate_extension(insertion_idx, chip.as_ref())?);
+            }
+        }
+        let ctx_without_empties = sys_ctxs
+            .into_iter()
+            .chain(exec_ctxs.into_iter().map(|ctx| ctx.unwrap()))
+            .enumerate()
+            .filter(|(_air_id, ctx)| ctx.common_main.height() > 0)
+            .collect();
+        Ok(ProvingContext::new(ctx_without_empties))
+    }
+}
+
 // ============ Blanket implementation of VM extension traits for Option<E> ===========
 
 impl<EXT: VmExecutionExtension> VmExecutionExtension for Option<EXT> {
