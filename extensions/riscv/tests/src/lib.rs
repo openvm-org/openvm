@@ -7,7 +7,9 @@ mod tests {
 
     use eyre::Result;
     #[cfg(feature = "rvr")]
-    use openvm_circuit::arch::{ExecutionOutcome, PreflightExecutionOutput, VirtualMachine};
+    use openvm_circuit::arch::{
+        ExecutionOutcome, PreflightExecutionOutput, VirtualMachine, VmState,
+    };
     use openvm_circuit::{
         arch::{hasher::poseidon2::vm_poseidon2_hasher, ExecutionError, VmExecutor},
         system::memory::{
@@ -15,7 +17,7 @@ mod tests {
                 public_values::{extract_public_values, UserPublicValuesProof},
                 MerkleTree,
             },
-            online::LinearMemory,
+            online::{GuestMemory, LinearMemory},
         },
         utils::{air_test, air_test_with_min_segments, test_cpu_engine, test_system_config},
     };
@@ -30,8 +32,8 @@ mod tests {
     use openvm_riscv_guest::MAX_HINT_BUFFER_DWORDS;
     use openvm_riscv_transpiler::{
         BaseAluImmOpcode, BaseAluOpcode, BranchEqualOpcode, DivRemOpcode, MulHOpcode, MulOpcode,
-        Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64JalrOpcode, Rv64LoadStoreOpcode,
-        Rv64MTranspilerExtension, Rv64Phantom,
+        Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64JalLuiOpcode, Rv64JalrOpcode,
+        Rv64LoadStoreOpcode, Rv64MTranspilerExtension, Rv64Phantom,
     };
     use openvm_stark_sdk::{
         openvm_stark_backend::p3_field::{PrimeCharacteristicRing, PrimeField32},
@@ -42,6 +44,8 @@ mod tests {
         get_programs_dir,
     };
     use openvm_transpiler::{transpiler::Transpiler, FromElf};
+    #[cfg(feature = "rvr")]
+    use rand::{rngs::StdRng, Rng, SeedableRng};
     use strum::IntoEnumIterator;
     use test_case::test_case;
 
@@ -58,6 +62,69 @@ mod tests {
             },
             ..Default::default()
         }
+    }
+
+    #[cfg(feature = "rvr")]
+    fn callback_phantom_exe() -> VmExe<F> {
+        let reg = |index: usize| index * RV64_REGISTER_NUM_LIMBS;
+        let instructions = [
+            Instruction::<F>::from_isize(
+                SystemOpcode::PHANTOM.global_opcode(),
+                0,
+                0,
+                Rv64Phantom::HintInput as isize,
+                0,
+                0,
+            ),
+            Instruction::<F>::from_usize(
+                Rv64JalLuiOpcode::JAL.global_opcode(),
+                [0, 0, 4, RV64_REGISTER_AS as usize, 0, 0],
+            ),
+            Instruction::<F>::from_isize(
+                SystemOpcode::PHANTOM.global_opcode(),
+                reg(1) as isize,
+                0,
+                Rv64Phantom::HintRandom as isize,
+                0,
+                0,
+            ),
+            Instruction::<F>::from_isize(
+                SystemOpcode::PHANTOM.global_opcode(),
+                reg(2) as isize,
+                reg(3) as isize,
+                Rv64Phantom::PrintStr as isize,
+                0,
+                0,
+            ),
+            Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+        ];
+        VmExe::from(Program::from_instructions(&instructions))
+    }
+
+    #[cfg(feature = "rvr")]
+    fn configure_callback_state(mut state: VmState<GuestMemory>) -> VmState<GuestMemory> {
+        let reg = |index: usize| index * RV64_REGISTER_NUM_LIMBS;
+        state.streams.hint_stream.set_hint(vec![0xa5]);
+        unsafe {
+            state
+                .memory
+                .write_bytes(RV64_REGISTER_AS, reg(1) as u32, 1u64.to_le_bytes());
+            state
+                .memory
+                .write_bytes(RV64_REGISTER_AS, reg(2) as u32, 0u64.to_le_bytes());
+            state
+                .memory
+                .write_bytes(RV64_REGISTER_AS, reg(3) as u32, 3u64.to_le_bytes());
+            state.memory.write_bytes(RV64_MEMORY_AS, 0, *b"ok\n");
+        }
+        state
+    }
+
+    #[cfg(feature = "rvr")]
+    fn take_hint(state: &mut VmState<GuestMemory>) -> Vec<u8> {
+        let mut hint = vec![0; state.streams.hint_stream.remaining()];
+        state.streams.hint_stream.copy_to_slice(&mut hint);
+        hint
     }
 
     #[cfg(feature = "rvr")]
@@ -422,7 +489,116 @@ mod tests {
 
     #[test]
     #[cfg(feature = "rvr")]
-    fn test_rvr_preflight_still_rejects_callback_phantoms() -> Result<()> {
+    fn test_rvr_callback_phantoms_are_serial_without_memory_events() -> Result<()> {
+        let exe = callback_phantom_exe();
+        let executor = VmExecutor::new(test_rv64im_config())?;
+        let preflight = executor.rvr_preflight_instance(&exe, None)?;
+        let inputs = vec![b"first".to_vec(), b"second".to_vec()];
+        let initial_state =
+            configure_callback_state(preflight.create_initial_vm_state(inputs.clone()));
+
+        let suspended = preflight.execute_from_state_for(
+            initial_state,
+            openvm_circuit::arch::rvr::RvrPreflightLimits::new(2, 0),
+        )?;
+        assert_eq!(
+            suspended.endpoint,
+            openvm_circuit::arch::rvr::RvrPreflightEndpoint::Suspended {
+                resume_pc: 8,
+                final_timestamp: 3,
+            }
+        );
+        assert_eq!(
+            suspended
+                .transcript
+                .program_log
+                .iter()
+                .map(|event| (event.pc, event.timestamp))
+                .collect::<Vec<_>>(),
+            vec![(0, 1), (4, 2), (8, 3)]
+        );
+        assert!(suspended.transcript.memory_log.is_empty());
+        assert!(suspended.transcript.initial_write_log.is_empty());
+        assert_eq!(
+            suspended
+                .state
+                .streams
+                .input_stream
+                .iter()
+                .cloned()
+                .collect::<Vec<_>>(),
+            vec![b"second".to_vec()]
+        );
+        let mut suspended_hint = suspended.state.streams.hint_stream.clone();
+        let mut input_hint = vec![0; suspended_hint.remaining()];
+        suspended_hint.copy_to_slice(&mut input_hint);
+        let mut expected_input_hint = (b"first".len() as u64).to_le_bytes().to_vec();
+        expected_input_hint.extend_from_slice(b"first");
+        expected_input_hint.resize(16, 0);
+        assert_eq!(input_hint, expected_input_hint);
+        let mut suspended_rng = suspended.state.rng.clone();
+        let mut initial_rng = StdRng::seed_from_u64(0);
+        assert_eq!(suspended_rng.random::<u64>(), initial_rng.random::<u64>());
+
+        let mut execution = preflight.execute_from_state_for(
+            suspended.state,
+            openvm_circuit::arch::rvr::RvrPreflightLimits::new(3, 0),
+        )?;
+        assert_eq!(
+            execution.endpoint,
+            openvm_circuit::arch::rvr::RvrPreflightEndpoint::Terminated
+        );
+        assert_eq!(
+            execution
+                .transcript
+                .program_log
+                .iter()
+                .map(|event| (event.pc, event.timestamp))
+                .collect::<Vec<_>>(),
+            vec![(8, 1), (12, 2), (16, 3), (16, 3)]
+        );
+        assert!(execution.transcript.memory_log.is_empty());
+        assert!(execution.transcript.initial_write_log.is_empty());
+        assert_eq!(
+            execution
+                .state
+                .streams
+                .input_stream
+                .iter()
+                .cloned()
+                .collect::<Vec<_>>(),
+            vec![b"second".to_vec()]
+        );
+
+        let mut expected_rng = StdRng::seed_from_u64(0);
+        let expected_hint = (0..8)
+            .map(|_| expected_rng.random::<u8>())
+            .collect::<Vec<_>>();
+        let expected_next_random = expected_rng.random::<u64>();
+        assert_eq!(take_hint(&mut execution.state), expected_hint);
+        assert_eq!(execution.state.rng.random::<u64>(), expected_next_random);
+
+        let pure = executor.rvr_instance(&exe, None)?;
+        let pure_initial = configure_callback_state(pure.create_initial_vm_state(inputs));
+        let mut pure_state = pure.execute_from_state(pure_initial)?;
+        assert_eq!(pure_state.pc(), 16);
+        assert_eq!(
+            pure_state
+                .streams
+                .input_stream
+                .iter()
+                .cloned()
+                .collect::<Vec<_>>(),
+            vec![b"second".to_vec()]
+        );
+        assert_eq!(take_hint(&mut pure_state), expected_hint);
+        assert_eq!(pure_state.rng.random::<u64>(), expected_next_random);
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(feature = "rvr")]
+    fn test_rvr_hint_input_exhaustion_traps() -> Result<()> {
         let instructions = [
             Instruction::<F>::from_isize(
                 SystemOpcode::PHANTOM.global_opcode(),
@@ -436,11 +612,26 @@ mod tests {
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
         let executor = VmExecutor::new(test_rv64im_config())?;
-        let error = match executor.rvr_preflight_instance(&exe, None) {
-            Ok(_) => panic!("callback phantom unexpectedly compiled for preflight"),
+        let preflight = executor.rvr_preflight_instance(&exe, None)?;
+        let preflight_error = match preflight.execute(
+            Vec::<Vec<u8>>::new(),
+            openvm_circuit::arch::rvr::RvrPreflightLimits::new(2, 0),
+        ) {
+            Ok(_) => panic!("empty HINT_INPUT unexpectedly succeeded in preflight"),
             Err(error) => error,
         };
-        assert!(error.to_string().contains("does not support RVR preflight"));
+        assert!(preflight_error
+            .to_string()
+            .contains("execution returned error code: 3"));
+
+        let pure = executor.rvr_instance(&exe, None)?;
+        let pure_error = match pure.execute(Vec::<Vec<u8>>::new()) {
+            Ok(_) => panic!("empty HINT_INPUT unexpectedly succeeded in pure execution"),
+            Err(error) => error,
+        };
+        assert!(pure_error
+            .to_string()
+            .contains("execution returned error code: 3"));
         Ok(())
     }
 

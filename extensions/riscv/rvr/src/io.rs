@@ -640,7 +640,7 @@ mod tests {
         };
         let ctx = &mut io as *mut OpenVmIoState<'_> as *mut c_void;
 
-        host_hint_input(ctx);
+        assert!(host_hint_input(ctx));
         host_hint_storew(ctx, 0);
         host_hint_buffer(ctx, 8, 2);
 
