@@ -261,6 +261,10 @@ pub trait ExtEmitCtx {
     }
 
     /// Emit a call without flushing page state and trap if it returns `false`.
+    ///
+    /// The callee must not append main-memory page touches through `RvState`.
+    /// Use [`Self::emit_checked_call`] for callbacks that trace main memory so
+    /// metered block-local page cursors are synchronized around the call.
     fn emit_checked_call_without_page_flush(&mut self, name: &str, args: &[&str]) {
         self.write_line(&format!("if (unlikely(!{name}({}))) {{", args.join(", ")));
         self.emit_trap();

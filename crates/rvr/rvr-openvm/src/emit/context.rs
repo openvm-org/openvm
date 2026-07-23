@@ -3197,4 +3197,22 @@ mod tests {
             .buf()
             .contains("trace_memory_access_span(&trace_memory, addr, 8u);"));
     }
+
+    #[test]
+    fn metered_stateful_call_synchronizes_page_cursors() {
+        let mut ctx = metered_memory_ctx();
+        ctx.emit_call_expr("bool", "callback", &["state"]);
+
+        let source = ctx.buf();
+        let flush = source
+            .find("trace_memory_flush(&state->mode_state, &trace_memory);")
+            .expect("stateful calls must flush block-local page touches");
+        let call = source
+            .find("bool _v0 = callback(state);")
+            .expect("callback must be emitted");
+        let reload = source
+            .find("trace_memory_reload(&state->mode_state, &trace_memory);")
+            .expect("stateful calls must reload the global page cursor");
+        assert!(flush < call && call < reload);
+    }
 }
