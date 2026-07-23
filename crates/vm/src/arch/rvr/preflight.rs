@@ -2,7 +2,10 @@
 
 use std::path::Path;
 
-use openvm_instructions::riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS};
+use openvm_instructions::{
+    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+    PUBLIC_VALUES_AS,
+};
 use rustc_hash::FxHashSet;
 use rvr_openvm_lift::RvrRuntimeExtension;
 use rvr_state::{
@@ -225,20 +228,46 @@ pub(crate) fn extend_touched_pages(
             continue;
         }
         let address_space = event.address_space();
-        if address_space != RV64_REGISTER_AS && address_space != RV64_MEMORY_AS {
+        if address_space != RV64_REGISTER_AS
+            && address_space != RV64_MEMORY_AS
+            && address_space != PUBLIC_VALUES_AS
+        {
             return Err(format!(
-                "unsupported preflight address space {address_space} in first executor milestone"
+                "unsupported preflight address space {address_space}"
             ));
         }
         let address_space_index = address_space as usize;
-        let cell_bytes = state.memory.memory.config[address_space_index]
-            .layout
-            .size();
+        let config = state
+            .memory
+            .memory
+            .config
+            .get(address_space_index)
+            .ok_or_else(|| format!("preflight address space {address_space} is not configured"))?;
+        let block_end = (event.pointer as usize)
+            .checked_add(BLOCK_FE_WIDTH)
+            .ok_or_else(|| "preflight touched-page block overflow".to_string())?;
+        if block_end > config.num_cells {
+            return Err(format!(
+                "preflight touched-page block {address_space}:{}..{block_end} exceeds {} configured cells",
+                event.pointer, config.num_cells
+            ));
+        }
+        let cell_bytes = config.layout.size();
         let byte_start = (event.pointer as usize)
             .checked_mul(cell_bytes)
             .ok_or_else(|| "preflight touched-page pointer overflow".to_string())?;
-        state.memory.memory.touched_pages[address_space_index]
-            .mark_byte_range(byte_start, BLOCK_FE_WIDTH * cell_bytes);
+        let byte_len = BLOCK_FE_WIDTH
+            .checked_mul(cell_bytes)
+            .ok_or_else(|| "preflight touched-page byte length overflow".to_string())?;
+        state
+            .memory
+            .memory
+            .touched_pages
+            .get_mut(address_space_index)
+            .ok_or_else(|| {
+                format!("preflight address space {address_space} has no touched-page tracker")
+            })?
+            .mark_byte_range(byte_start, byte_len);
     }
     Ok(())
 }
