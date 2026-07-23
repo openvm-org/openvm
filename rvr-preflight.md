@@ -1083,7 +1083,7 @@ counts through their normal tracegen using `()` rather than even an empty
 all extension contexts have been generated, the coordinator reads the shared
 sticky replay error once, immediately before proving.
 
-The integration test executes all 49 currently ported opcodes across the 31
+The integration tests execute all 62 currently ported opcodes across the 37
 replay chips, followed by `TERMINATE`. One RVR preflight run supplies both
 system and RISC-V tracegen. Program reads the device PC histogram, Connector uses
 the segment endpoints, and PersistentBoundary and MemoryMerkle consume the sorted
@@ -1094,6 +1094,25 @@ completes a real GPU prove-and-verify. The deliberately unsupported sentinel is
 now `HINT_BUFFER`: a negative test confirms that it is rejected by the
 pre-kernel coverage check before tracegen. This establishes the arena-free
 system plus multi-AIR RISC-V integration seam without generalizing `Chip`.
+
+RV64M is the first complete extension beyond RV64I on this path. Its five GPU
+replay producers cover all 13 `MUL`, `MULW`, high-multiply, `DIV`/`REM`, and
+word `DIV`/`REM` opcodes. They consume the same fixed three-event schedule:
+register reads at `T` and `T + 1`, followed by the destination write at `T +
+2`. A concrete shared validator checks the canonical instruction shape, the
+non-wrapping `T + 3` endpoint, all three events and predecessors, and the full
+result before that row updates any lookup histogram. Division handles zero divisors
+and signed minimum divided by minus one before native division. Word results
+are checked after full 64-bit sign extension.
+
+The replay kernels retain the existing core fillers, so their byte-bitwise and
+range-tuple requests are identical to legacy CUDA tracegen without transporting
+records. The RV64IM coordinator now generates the range-tuple periphery from its
+device histogram alongside the existing range-check and bitwise peripheries.
+Focused tests cover source `x0`, source/destination aliases, high-multiply sign
+variants, zero divisors, signed overflow, corrupt results and predecessor links,
+and the fail-closed raw `rd = x0` shape. The combined system-plus-RV64IM context
+completes a GPU prove-and-verify without a production `RecordArena`.
 
 ### M3: complete the GPU proving path
 
@@ -1110,6 +1129,41 @@ With the system and initial RISC-V replay seam established:
 - validate continuation boundaries, final public-value extraction, and Merkle
   proofs;
 - run full proof equivalence against the legacy path.
+
+#### Production continuation cutover
+
+The first production entry point is CUDA-and-RVR-specific. It does not replace
+the generic prover until every configured extension has a concrete replay
+producer. For one program it:
+
+1. runs RVR metering once to obtain block-aligned segment boundaries;
+2. clones the executor and compiles one RVR preflight instance, avoiding an
+   immutable borrow of the mutable proving VM;
+3. uploads one immutable `GpuRvrProgram` and reuses it for every segment;
+4. uploads each segment's initial memory before RVR mutates the carried host
+   state;
+5. executes preflight to the metered instruction boundary, requires the exact
+   retired-step count and expected suspended-or-terminated endpoint, uploads the
+   three logs, generates the system and extension contexts, checks the single
+   sticky replay error, and proves; and
+6. carries only the returned final `VmState` to the next segment. Final public
+   values use the final segment's completed memory top tree.
+
+For fixed-width RV64I/M/IO instructions, four memory events per instruction is
+a safe capacity bound. HintStore is the only current variable-length schedule.
+If `N` is the segment instruction count and `H` is the unpadded HintStore row
+count from metering, the existing metadata gives the checked bound
+`4 * N + H`: every non-HintStore instruction emits at most four events, while a
+HintStore instruction emits at most two register reads plus one event per row.
+This avoids adding another hot metering counter. Capacity arithmetic and the GPU
+packed-index limit fail before allocation.
+
+The RVR path has no `PreflightExecutor` bound and never constructs an
+interpreter or record arena. Initially expose it separately and prove a real
+multi-segment `Rv64IConfig` execution, including `verify_segments`, endpoint
+continuity, Merkle-root chaining, and final public-value extraction. Route the
+default SDK prover only after RV64M, Phantom, HintStore, public-values stores,
+and every configured non-RISC-V extension are covered.
 
 ### M4: other GPU extensions
 

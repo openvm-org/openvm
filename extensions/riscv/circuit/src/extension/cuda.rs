@@ -24,9 +24,9 @@ use {
     openvm_instructions::{LocalOpcode, SystemOpcode},
     openvm_riscv_transpiler::{
         BaseAluImmOpcode, BaseAluOpcode, BaseAluWImmOpcode, BaseAluWOpcode, BranchEqualOpcode,
-        BranchLessThanOpcode, LessThanImmOpcode, LessThanOpcode, Rv64AuipcOpcode, Rv64JalLuiOpcode,
-        Rv64JalrOpcode, Rv64LoadStoreOpcode, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode,
-        ShiftWOpcode,
+        BranchLessThanOpcode, DivRemOpcode, DivRemWOpcode, LessThanImmOpcode, LessThanOpcode,
+        MulHOpcode, MulOpcode, MulWOpcode, Rv64AuipcOpcode, Rv64JalLuiOpcode, Rv64JalrOpcode,
+        Rv64LoadStoreOpcode, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode, ShiftWOpcode,
     },
     openvm_stark_backend::prover::AirProvingContext,
 };
@@ -65,7 +65,7 @@ pub struct Rv64ImGpuProverExt;
 /// This makes a missing/mismatched chip fail closed instead of silently
 /// producing a dummy trace.
 #[cfg(feature = "rvr")]
-pub struct Rv64IRvrGpuTracegen<'a> {
+pub struct Rv64ImRvrGpuTracegen<'a> {
     program: &'a GpuRvrProgram,
     transcript: &'a GpuRvrTranscript,
     replay_plan: &'a GpuRvrReplayPlan,
@@ -73,7 +73,7 @@ pub struct Rv64IRvrGpuTracegen<'a> {
 }
 
 #[cfg(feature = "rvr")]
-impl<'a> Rv64IRvrGpuTracegen<'a> {
+impl<'a> Rv64ImRvrGpuTracegen<'a> {
     pub fn new(
         program: &'a GpuRvrProgram,
         transcript: &'a GpuRvrTranscript,
@@ -89,7 +89,7 @@ impl<'a> Rv64IRvrGpuTracegen<'a> {
             .find(|&&opcode| !Self::supports_opcode(opcode))
         {
             return Err(GpuRvrInputError::InvalidTranscript(format!(
-                "RV64I RVR GPU tracegen does not support executed opcode {opcode:#x}"
+                "RV64IM RVR GPU tracegen does not support executed opcode {opcode:#x}"
             )));
         }
         Ok(Self {
@@ -153,6 +153,19 @@ impl<'a> Rv64IRvrGpuTracegen<'a> {
             Rv64LoadStoreOpcode::STOREH.global_opcode(),
             Rv64LoadStoreOpcode::STOREW.global_opcode(),
             Rv64LoadStoreOpcode::STORED.global_opcode(),
+            MulOpcode::MUL.global_opcode(),
+            MulWOpcode::MULW.global_opcode(),
+            MulHOpcode::MULH.global_opcode(),
+            MulHOpcode::MULHSU.global_opcode(),
+            MulHOpcode::MULHU.global_opcode(),
+            DivRemOpcode::DIV.global_opcode(),
+            DivRemOpcode::DIVU.global_opcode(),
+            DivRemOpcode::REM.global_opcode(),
+            DivRemOpcode::REMU.global_opcode(),
+            DivRemWOpcode::DIVW.global_opcode(),
+            DivRemWOpcode::DIVUW.global_opcode(),
+            DivRemWOpcode::REMW.global_opcode(),
+            DivRemWOpcode::REMUW.global_opcode(),
         ]
         .into_iter()
         .any(|candidate| candidate.as_usize() as u32 == opcode)
@@ -260,6 +273,30 @@ impl<'a> Rv64IRvrGpuTracegen<'a> {
         replay_chip!(Rv64StoreHalfwordChipGpu, [Rv64LoadStoreOpcode::STOREH]);
         replay_chip!(Rv64StoreWordChipGpu, [Rv64LoadStoreOpcode::STOREW]);
         replay_chip!(Rv64StoreDoublewordChipGpu, [Rv64LoadStoreOpcode::STORED]);
+        replay_chip!(Rv64MultiplicationChipGpu, [MulOpcode::MUL]);
+        replay_chip!(Rv64MulWChipGpu, [MulWOpcode::MULW]);
+        replay_chip!(
+            Rv64MulHChipGpu,
+            [MulHOpcode::MULH, MulHOpcode::MULHSU, MulHOpcode::MULHU]
+        );
+        replay_chip!(
+            Rv64DivRemChipGpu,
+            [
+                DivRemOpcode::DIV,
+                DivRemOpcode::DIVU,
+                DivRemOpcode::REM,
+                DivRemOpcode::REMU,
+            ]
+        );
+        replay_chip!(
+            Rv64DivRemWChipGpu,
+            [
+                DivRemWOpcode::DIVW,
+                DivRemWOpcode::DIVUW,
+                DivRemWOpcode::REMW,
+                DivRemWOpcode::REMUW,
+            ]
+        );
         replay_chip!(Rv64AddIChipGpu, [BaseAluImmOpcode::ADDI]);
         replay_chip!(
             Rv64ShiftLogicalImmChipGpu,
@@ -301,6 +338,17 @@ impl<'a> Rv64IRvrGpuTracegen<'a> {
         }
         if let Some(chip) = chip
             .as_any()
+            .downcast_ref::<Arc<RangeTupleCheckerChipGPU<2>>>()
+        {
+            return Ok(
+                <Arc<RangeTupleCheckerChipGPU<2>> as Chip<(), GpuBackend>>::generate_proving_ctx(
+                    chip,
+                    (),
+                ),
+            );
+        }
+        if let Some(chip) = chip
+            .as_any()
             .downcast_ref::<Arc<Poseidon2PeripheryChipGPU>>()
         {
             return Ok(
@@ -322,14 +370,14 @@ impl<'a> Rv64IRvrGpuTracegen<'a> {
     pub fn finish(self) -> Result<(), GpuRvrInputError> {
         if !self.pending_opcodes.is_empty() {
             return Err(GpuRvrInputError::InvalidTranscript(format!(
-                "RV64I RVR GPU tracegen did not visit chips for executed opcodes {:?}",
+                "RV64IM RVR GPU tracegen did not visit chips for executed opcodes {:?}",
                 self.pending_opcodes
             )));
         }
         let error = self.transcript.error_code()?;
         if error != 0 {
             return Err(GpuRvrInputError::InvalidTranscript(format!(
-                "RV64I RVR GPU tracegen rejected transcript with code {error}"
+                "RV64IM RVR GPU tracegen rejected transcript with code {error}"
             )));
         }
         Ok(())

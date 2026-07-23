@@ -1,10 +1,19 @@
+use std::sync::Arc;
+
 use openvm_circuit::{
     arch::{
-        rvr::{cuda::GpuRvrProgram, RvrPreflightLimits},
+        rvr::{
+            cuda::GpuRvrProgram, RvrPreflightEndpoint, RvrPreflightLimits, RvrPreflightTranscript,
+        },
         GenerationError, VirtualMachine, VmExecutor,
     },
     utils::{test_gpu_engine, test_system_config},
 };
+use openvm_circuit_primitives::{
+    bitwise_op_lookup::BitwiseOperationLookupChipGPU, range_tuple::RangeTupleCheckerChipGPU,
+    var_range::VariableRangeCheckerChipGPU,
+};
+use openvm_cuda_common::copy::MemCopyD2H;
 use openvm_instructions::{
     exe::VmExe,
     instruction::Instruction,
@@ -14,15 +23,19 @@ use openvm_instructions::{
 };
 use openvm_riscv_transpiler::{
     BaseAluImmOpcode, BaseAluOpcode, BaseAluWImmOpcode, BaseAluWOpcode, BranchEqualOpcode,
-    BranchLessThanOpcode, LessThanImmOpcode, LessThanOpcode, Rv64AuipcOpcode, Rv64HintStoreOpcode,
-    Rv64JalLuiOpcode, Rv64JalrOpcode, Rv64LoadStoreOpcode, ShiftImmOpcode, ShiftOpcode,
-    ShiftWImmOpcode, ShiftWOpcode,
+    BranchLessThanOpcode, DivRemOpcode, DivRemWOpcode, LessThanImmOpcode, LessThanOpcode,
+    MulHOpcode, MulOpcode, MulWOpcode, Rv64AuipcOpcode, Rv64HintStoreOpcode, Rv64JalLuiOpcode,
+    Rv64JalrOpcode, Rv64LoadStoreOpcode, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode,
+    ShiftWOpcode,
 };
-use openvm_stark_backend::StarkEngine;
+use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine};
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
-use super::Rv64IRvrGpuTracegen;
-use crate::{adapters::RV64_REGISTER_NUM_LIMBS, Rv64IConfig, Rv64IGpuBuilder};
+use super::Rv64ImRvrGpuTracegen;
+use crate::{
+    adapters::RV64_REGISTER_NUM_LIMBS, Rv64IConfig, Rv64IGpuBuilder, Rv64ImConfig,
+    Rv64ImGpuBuilder, Rv64MultiplicationChipGpu,
+};
 
 type F = BabyBear;
 
@@ -331,7 +344,7 @@ fn rvr_gpu_tracegen_proves_system_and_rv64i_airs_without_record_arenas() {
         .upload_transcript(&rvr_execution.transcript, rvr_execution.endpoint)
         .unwrap();
     let mut tracegen =
-        Rv64IRvrGpuTracegen::new(&gpu_program, &gpu_transcript, &replay_plan).unwrap();
+        Rv64ImRvrGpuTracegen::new(&gpu_program, &gpu_transcript, &replay_plan).unwrap();
     let proving_ctx = vm
         .generate_proving_ctx_from_rvr(
             &gpu_program,
@@ -348,6 +361,275 @@ fn rvr_gpu_tracegen_proves_system_and_rv64i_airs_without_record_arenas() {
 
     let proof = vm.engine.prove(vm.pk(), proving_ctx).unwrap();
     vm.engine.verify(&pk.get_vk(), &proof).unwrap();
+}
+
+#[test]
+fn rvr_gpu_tracegen_proves_rv64m_airs_without_record_arenas() {
+    let m_operands = |rd, rs1, rs2| {
+        [
+            reg(rd),
+            reg(rs1),
+            reg(rs2),
+            RV64_REGISTER_AS as usize,
+            RV64_IMM_AS as usize,
+        ]
+    };
+    let instructions = [
+        instruction(MulOpcode::MUL, m_operands(3, 1, 2)),
+        instruction(MulWOpcode::MULW, m_operands(4, 1, 2)),
+        instruction(MulHOpcode::MULH, m_operands(5, 1, 2)),
+        instruction(MulHOpcode::MULHSU, m_operands(6, 1, 2)),
+        instruction(MulHOpcode::MULHU, m_operands(7, 1, 2)),
+        instruction(DivRemOpcode::DIV, m_operands(8, 1, 2)),
+        instruction(DivRemOpcode::DIVU, m_operands(9, 1, 2)),
+        instruction(DivRemOpcode::REM, m_operands(10, 1, 2)),
+        instruction(DivRemOpcode::REMU, m_operands(11, 1, 2)),
+        instruction(DivRemWOpcode::DIVW, m_operands(12, 1, 2)),
+        instruction(DivRemWOpcode::DIVUW, m_operands(13, 1, 2)),
+        instruction(DivRemWOpcode::REMW, m_operands(14, 1, 2)),
+        instruction(DivRemWOpcode::REMUW, m_operands(15, 1, 2)),
+        // Source x0 reads, destination aliases, divide by zero, and signed
+        // overflow all use the same fixed read/read/write replay schedule.
+        instruction(MulOpcode::MUL, m_operands(1, 1, 0)),
+        instruction(MulWOpcode::MULW, m_operands(2, 0, 2)),
+        instruction(DivRemOpcode::DIV, m_operands(18, 16, 17)),
+        instruction(DivRemOpcode::REM, m_operands(19, 16, 17)),
+        instruction(DivRemOpcode::DIVU, m_operands(20, 1, 0)),
+        instruction(DivRemOpcode::REMU, m_operands(21, 1, 0)),
+        instruction(DivRemWOpcode::DIVW, m_operands(22, 16, 17)),
+        instruction(DivRemWOpcode::REMW, m_operands(23, 16, 17)),
+        Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
+    ];
+    let program = Program::from_instructions(&instructions);
+    let init_memory = [
+        (1usize, (-5i64) as u64),
+        (2, 3u64),
+        (16, i64::MIN as u64),
+        (17, u64::MAX),
+    ]
+    .into_iter()
+    .flat_map(|(register, value)| {
+        value
+            .to_le_bytes()
+            .into_iter()
+            .enumerate()
+            .map(move |(offset, byte)| ((RV64_REGISTER_AS, (reg(register) + offset) as u32), byte))
+    })
+    .collect();
+    let exe = VmExe::new(program.clone()).with_init_memory(init_memory);
+    let config = Rv64ImConfig {
+        rv64i: Rv64IConfig {
+            system: test_system_config(),
+            ..Default::default()
+        },
+        mul: Default::default(),
+    };
+    let executor = VmExecutor::new(config.clone()).unwrap();
+    let rvr = executor.rvr_preflight_instance(&exe, None).unwrap();
+    let state = rvr.create_initial_vm_state(Vec::<Vec<u8>>::new());
+    let (mut vm, pk) =
+        VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64ImGpuBuilder, config.clone())
+            .unwrap();
+    let cached_program = vm.commit_program_on_device(&program);
+    vm.load_program(cached_program);
+    vm.transport_init_memory_to_device(&state.memory);
+    let execution = rvr
+        .execute_from_state(state, RvrPreflightLimits::new(32, 96))
+        .unwrap();
+    assert_eq!(execution.transcript.memory_log.len(), 21 * 3);
+
+    let device_ctx = &vm.engine.device().device_ctx;
+    let gpu_program =
+        GpuRvrProgram::upload(&program, &config.rv64i.system.memory_config, device_ctx).unwrap();
+    let (gpu_transcript, replay_plan) = gpu_program
+        .upload_transcript(&execution.transcript, execution.endpoint)
+        .unwrap();
+    let mut tracegen =
+        Rv64ImRvrGpuTracegen::new(&gpu_program, &gpu_transcript, &replay_plan).unwrap();
+    let proving_ctx = vm
+        .generate_proving_ctx_from_rvr(
+            &gpu_program,
+            &gpu_transcript,
+            &replay_plan,
+            |insertion_idx, chip| {
+                tracegen
+                    .generate_for_chip(insertion_idx, chip)
+                    .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))
+            },
+        )
+        .unwrap();
+    tracegen.finish().unwrap();
+    let proof = vm.engine.prove(vm.pk(), proving_ctx).unwrap();
+    vm.engine.verify(&pk.get_vk(), &proof).unwrap();
+}
+
+#[test]
+fn rvr_mul_replay_rejects_corrupt_results_and_predecessors_before_lookups() {
+    let instructions = [
+        instruction(
+            MulOpcode::MUL,
+            [
+                reg(3),
+                reg(1),
+                reg(1),
+                RV64_REGISTER_AS as usize,
+                RV64_IMM_AS as usize,
+            ],
+        ),
+        Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
+    ];
+    let program = Program::from_instructions(&instructions);
+    let init_memory = 2u64
+        .to_le_bytes()
+        .into_iter()
+        .enumerate()
+        .map(|(offset, byte)| ((RV64_REGISTER_AS, (reg(1) + offset) as u32), byte))
+        .collect();
+    let exe = VmExe::new(program.clone()).with_init_memory(init_memory);
+    let config = Rv64ImConfig {
+        rv64i: Rv64IConfig {
+            system: test_system_config(),
+            ..Default::default()
+        },
+        mul: Default::default(),
+    };
+    let execution = VmExecutor::new(config.clone())
+        .unwrap()
+        .rvr_preflight_instance(&exe, None)
+        .unwrap()
+        .execute(Vec::<Vec<u8>>::new(), RvrPreflightLimits::new(4, 4))
+        .unwrap();
+    assert_eq!(execution.transcript.memory_log.len(), 3);
+    let engine = test_gpu_engine();
+    let device_ctx = &engine.device().device_ctx;
+    let gpu_program =
+        GpuRvrProgram::upload(&program, &config.rv64i.system.memory_config, device_ctx).unwrap();
+
+    let reject = |transcript: &RvrPreflightTranscript, expected_code| {
+        let (gpu_transcript, replay_plan) = gpu_program
+            .upload_transcript(transcript, RvrPreflightEndpoint::Terminated)
+            .unwrap();
+        let range_checker = Arc::new(VariableRangeCheckerChipGPU::new(
+            openvm_circuit::arch::testing::default_var_range_checker_bus(),
+            device_ctx.clone(),
+        ));
+        let bitwise_lookup = Arc::new(BitwiseOperationLookupChipGPU::new(device_ctx.clone()));
+        let range_tuple = Arc::new(RangeTupleCheckerChipGPU::new(
+            config.mul.range_tuple_checker_sizes,
+            device_ctx.clone(),
+        ));
+        let chip = Rv64MultiplicationChipGpu::new(
+            range_checker.clone(),
+            bitwise_lookup.clone(),
+            range_tuple.clone(),
+            config.rv64i.system.memory_config.timestamp_max_bits,
+        );
+        chip.generate_proving_ctx_from_rvr(&gpu_program, &gpu_transcript, &replay_plan)
+            .unwrap();
+        assert_eq!(gpu_transcript.error_code().unwrap(), expected_code);
+        for count in [
+            range_checker.count.to_host_on(device_ctx).unwrap(),
+            bitwise_lookup.count.to_host_on(device_ctx).unwrap(),
+            range_tuple.count.to_host_on(device_ctx).unwrap(),
+        ] {
+            assert!(count.iter().all(|value| value.as_canonical_u32() == 0));
+        }
+    };
+
+    let mut corrupt_result = RvrPreflightTranscript {
+        program_log: execution.transcript.program_log.clone(),
+        memory_log: execution.transcript.memory_log.clone(),
+        initial_write_log: execution.transcript.initial_write_log.clone(),
+    };
+    corrupt_result.memory_log[2].value[0] = 5;
+    reject(&corrupt_result, 609);
+
+    let mut corrupt_predecessor = RvrPreflightTranscript {
+        program_log: execution.transcript.program_log.clone(),
+        memory_log: execution.transcript.memory_log.clone(),
+        initial_write_log: execution.transcript.initial_write_log.clone(),
+    };
+    corrupt_predecessor.memory_log[1].value[0] = 3;
+    corrupt_predecessor.memory_log[2].value[0] = 6;
+    reject(&corrupt_predecessor, 608);
+}
+
+#[test]
+fn rvr_mul_replay_rejects_raw_x0_destination_without_lookups() {
+    let instructions = [
+        instruction(
+            MulOpcode::MUL,
+            [
+                0,
+                reg(1),
+                reg(2),
+                RV64_REGISTER_AS as usize,
+                RV64_IMM_AS as usize,
+            ],
+        ),
+        Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
+    ];
+    let program = Program::from_instructions(&instructions);
+    let init_memory = [(1usize, 2u64), (2, 3u64)]
+        .into_iter()
+        .flat_map(|(register, value)| {
+            value
+                .to_le_bytes()
+                .into_iter()
+                .enumerate()
+                .map(move |(offset, byte)| {
+                    ((RV64_REGISTER_AS, (reg(register) + offset) as u32), byte)
+                })
+        })
+        .collect();
+    let exe = VmExe::new(program.clone()).with_init_memory(init_memory);
+    let config = Rv64ImConfig {
+        rv64i: Rv64IConfig {
+            system: test_system_config(),
+            ..Default::default()
+        },
+        mul: Default::default(),
+    };
+    let execution = VmExecutor::new(config.clone())
+        .unwrap()
+        .rvr_preflight_instance(&exe, None)
+        .unwrap()
+        .execute(Vec::<Vec<u8>>::new(), RvrPreflightLimits::new(4, 3))
+        .unwrap();
+    assert_eq!(execution.transcript.memory_log.len(), 2);
+
+    let engine = test_gpu_engine();
+    let device_ctx = &engine.device().device_ctx;
+    let gpu_program =
+        GpuRvrProgram::upload(&program, &config.rv64i.system.memory_config, device_ctx).unwrap();
+    let (gpu_transcript, replay_plan) = gpu_program
+        .upload_transcript(&execution.transcript, execution.endpoint)
+        .unwrap();
+    let range_checker = Arc::new(VariableRangeCheckerChipGPU::new(
+        openvm_circuit::arch::testing::default_var_range_checker_bus(),
+        device_ctx.clone(),
+    ));
+    let bitwise_lookup = Arc::new(BitwiseOperationLookupChipGPU::new(device_ctx.clone()));
+    let range_tuple = Arc::new(RangeTupleCheckerChipGPU::new(
+        config.mul.range_tuple_checker_sizes,
+        device_ctx.clone(),
+    ));
+    let chip = Rv64MultiplicationChipGpu::new(
+        range_checker.clone(),
+        bitwise_lookup.clone(),
+        range_tuple.clone(),
+        config.rv64i.system.memory_config.timestamp_max_bits,
+    );
+    chip.generate_proving_ctx_from_rvr(&gpu_program, &gpu_transcript, &replay_plan)
+        .unwrap();
+    assert_eq!(gpu_transcript.error_code().unwrap(), 604);
+    for count in [
+        range_checker.count.to_host_on(device_ctx).unwrap(),
+        bitwise_lookup.count.to_host_on(device_ctx).unwrap(),
+        range_tuple.count.to_host_on(device_ctx).unwrap(),
+    ] {
+        assert!(count.iter().all(|value| value.as_canonical_u32() == 0));
+    }
 }
 
 #[test]
@@ -401,7 +683,7 @@ fn rvr_gpu_tracegen_rejects_an_executed_unported_opcode_before_tracegen() {
         .upload_transcript(&execution.transcript, execution.endpoint)
         .unwrap();
 
-    let error = match Rv64IRvrGpuTracegen::new(&gpu_program, &gpu_transcript, &replay_plan) {
+    let error = match Rv64ImRvrGpuTracegen::new(&gpu_program, &gpu_transcript, &replay_plan) {
         Ok(_) => panic!("executed HINT_BUFFER must not reach tracegen before its replay port"),
         Err(error) => error,
     };
