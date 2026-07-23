@@ -205,6 +205,54 @@ mod tests {
 
     #[test]
     #[cfg(feature = "rvr")]
+    fn test_rvr_preflight_rejects_timestamp_outside_proof_domain() -> Result<()> {
+        let instructions = [
+            Instruction::<F>::from_usize(
+                BaseAluImmOpcode::ADDI.global_opcode(),
+                [
+                    RV64_REGISTER_NUM_LIMBS,
+                    0,
+                    1,
+                    RV64_REGISTER_AS as usize,
+                    RV64_IMM_AS as usize,
+                    1,
+                    0,
+                ],
+            ),
+            Instruction::<F>::from_usize(
+                BaseAluImmOpcode::ADDI.global_opcode(),
+                [
+                    2 * RV64_REGISTER_NUM_LIMBS,
+                    0,
+                    2,
+                    RV64_REGISTER_AS as usize,
+                    RV64_IMM_AS as usize,
+                    1,
+                    0,
+                ],
+            ),
+            Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+        ];
+        let exe = VmExe::from(Program::from_instructions(&instructions));
+        let mut config = test_rv64im_config();
+        config.rv64i.system.memory_config.timestamp_max_bits = 2;
+        let executor = VmExecutor::new(config)?;
+        let instance = executor.rvr_preflight_instance(&exe, None)?;
+        let error = match instance.execute(
+            Vec::<Vec<u8>>::new(),
+            openvm_circuit::arch::rvr::RvrPreflightLimits::new(3, 4),
+        ) {
+            Ok(_) => panic!("out-of-domain preflight unexpectedly succeeded"),
+            Err(error) => error,
+        };
+        assert!(error
+            .to_string()
+            .contains("outside the configured 2-bit domain"));
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(feature = "rvr")]
     fn test_rvr_x0_schedule_does_not_change_jalr_cfg() -> Result<()> {
         let instructions = [
             Instruction::<F>::from_usize(
