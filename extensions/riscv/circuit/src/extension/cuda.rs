@@ -142,6 +142,8 @@ impl<'a> Rv64IRvrGpuTracegen<'a> {
             BaseAluImmOpcode::ANDI.global_opcode(),
             Rv64LoadStoreOpcode::LOADB.global_opcode(),
             Rv64LoadStoreOpcode::LOADBU.global_opcode(),
+            Rv64LoadStoreOpcode::LOADH.global_opcode(),
+            Rv64LoadStoreOpcode::LOADHU.global_opcode(),
         ]
         .into_iter()
         .any(|candidate| candidate.as_usize() as u32 == opcode)
@@ -237,6 +239,11 @@ impl<'a> Rv64IRvrGpuTracegen<'a> {
         replay_chip!(Rv64AuipcChipGpu, [Rv64AuipcOpcode::AUIPC]);
         replay_chip!(Rv64LoadSignExtendByteChipGpu, [Rv64LoadStoreOpcode::LOADB]);
         replay_chip!(Rv64LoadByteChipGpu, [Rv64LoadStoreOpcode::LOADBU]);
+        replay_chip!(
+            Rv64LoadSignExtendHalfwordChipGpu,
+            [Rv64LoadStoreOpcode::LOADH]
+        );
+        replay_chip!(Rv64LoadHalfwordChipGpu, [Rv64LoadStoreOpcode::LOADHU]);
         replay_chip!(Rv64AddIChipGpu, [BaseAluImmOpcode::ADDI]);
         replay_chip!(
             Rv64ShiftLogicalImmChipGpu,

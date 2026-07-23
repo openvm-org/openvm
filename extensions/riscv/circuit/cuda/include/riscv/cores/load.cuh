@@ -46,9 +46,16 @@ static __device__ __forceinline__ uint16_t load_byte_from_cell(uint16_t cell, ui
     return (cell >> (RV64_BYTE_BITS * byte_idx)) & RV64_BYTE_MASK;
 }
 
+static __device__ __forceinline__ uint16_t load_read_full_cell(
+    uint16_t const (&read_data)[2][BLOCK_FE_WIDTH],
+    uint32_t cell
+) {
+    return read_data[cell / BLOCK_FE_WIDTH][cell % BLOCK_FE_WIDTH];
+}
+
 static __device__ __forceinline__ uint16_t
 load_read_full_cell(LoadRecord const &record, uint32_t cell) {
-    return record.read_data[cell / BLOCK_FE_WIDTH][cell % BLOCK_FE_WIDTH];
+    return load_read_full_cell(record.read_data, cell);
 }
 
 template <typename T, size_t WIDTH_BYTES> struct LoadWidthCoreCols {
@@ -73,10 +80,14 @@ template <size_t WIDTH_BYTES> struct LoadWidthCore {
     __device__ LoadWidthCore(BitwiseOperationLookup bitwise_lookup)
         : bitwise_lookup(bitwise_lookup) {}
 
-    __device__ void fill_trace_row(RowSlice row, LoadRecord record, uint8_t shift) {
+    __device__ void fill_trace_row(
+        RowSlice row,
+        uint16_t const (&read_data)[2][BLOCK_FE_WIDTH],
+        uint8_t shift
+    ) {
         Encoder encoder = shift_encoder();
         encoder.write_flag_pt(row.slice_from(offsetof(Cols, selector)), shift);
-        row.write_array(offsetof(Cols, read_data), 2 * BLOCK_FE_WIDTH, &record.read_data[0][0]);
+        row.write_array(offsetof(Cols, read_data), 2 * BLOCK_FE_WIDTH, &read_data[0][0]);
 
         // On odd shifts, slot `j` holds the low byte of overlapped cell `j`. The high bytes are
         // derived in the AIR and only range checked here.
@@ -84,7 +95,7 @@ template <size_t WIDTH_BYTES> struct LoadWidthCore {
         uint16_t overlap_hi_bytes[NUM_OVERLAP_CELLS] = {};
         if (shift & 1) {
             for (size_t j = 0; j < NUM_OVERLAP_CELLS; j++) {
-                uint16_t cell = load_read_full_cell(record, (shift >> 1) + j);
+                uint16_t cell = load_read_full_cell(read_data, (shift >> 1) + j);
                 overlap_lo_bytes[j] = load_byte_from_cell(cell, 0);
                 overlap_hi_bytes[j] = load_byte_from_cell(cell, 1);
             }
@@ -93,5 +104,9 @@ template <size_t WIDTH_BYTES> struct LoadWidthCore {
             bitwise_lookup.add_range(overlap_lo_bytes[j], overlap_hi_bytes[j]);
         }
         row.write_array(offsetof(Cols, overlap_lo_bytes), NUM_OVERLAP_CELLS, overlap_lo_bytes);
+    }
+
+    __device__ void fill_trace_row(RowSlice row, LoadRecord record, uint8_t shift) {
+        fill_trace_row(row, record.read_data, shift);
     }
 };
