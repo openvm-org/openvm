@@ -22,7 +22,7 @@ use thiserror::Error;
 use super::postflight::RvrReplayData;
 use super::{postflight::RvrReplayStep, RvrPreflightEndpoint, RvrPreflightTranscript};
 use crate::{
-    arch::{MemoryCellType, MemoryConfig, ADDR_SPACE_OFFSET, BLOCK_FE_WIDTH},
+    arch::{ExecutionState, MemoryCellType, MemoryConfig, ADDR_SPACE_OFFSET, BLOCK_FE_WIDTH},
     cuda_abi::rvr_postflight,
     system::TouchedBlock,
 };
@@ -73,6 +73,25 @@ fn upload<T>(values: &[T], device_ctx: &GpuDeviceCtx) -> Result<DeviceBuffer<T>,
     } else {
         values.to_device_on(device_ctx)
     }
+}
+
+pub(crate) type ConnectorBoundary = (ExecutionState<u32>, ExecutionState<u32>, Option<u32>);
+
+fn replay_boundary(
+    transcript: &RvrPreflightTranscript,
+    endpoint: RvrPreflightEndpoint,
+) -> Result<ConnectorBoundary, GpuRvrInputError> {
+    let first = transcript.program_log.first().ok_or_else(|| {
+        GpuRvrInputError::InvalidTranscript(
+            "transcript must contain an initial event and final sentinel".to_string(),
+        )
+    })?;
+    let last = transcript.program_log.last().unwrap();
+    Ok((
+        ExecutionState::new(first.pc, first.timestamp),
+        ExecutionState::new(last.pc, last.timestamp),
+        matches!(endpoint, RvrPreflightEndpoint::Terminated).then_some(0),
+    ))
 }
 
 /// Static program data uploaded once and shared by every replayed segment.
@@ -226,6 +245,7 @@ impl GpuRvrProgram {
         transcript: &RvrPreflightTranscript,
         endpoint: RvrPreflightEndpoint,
     ) -> Result<(GpuRvrTranscript, GpuRvrReplayPlan), GpuRvrInputError> {
+        let boundary = replay_boundary(transcript, endpoint)?;
         let segment_identity = Arc::new(());
         let gpu = GpuRvrTranscript::upload(
             transcript,
@@ -240,6 +260,7 @@ impl GpuRvrProgram {
             self,
             &gpu,
             endpoint,
+            boundary,
             self.identity.clone(),
             segment_identity,
         )?;
@@ -255,6 +276,7 @@ impl GpuRvrProgram {
         transcript: &RvrPreflightTranscript,
         endpoint: RvrPreflightEndpoint,
     ) -> Result<(GpuRvrTranscript, GpuRvrReplayPlan, Duration, Duration), GpuRvrInputError> {
+        let boundary = replay_boundary(transcript, endpoint)?;
         self.device_ctx.stream.synchronize()?;
         let started = Instant::now();
         let segment_identity = Arc::new(());
@@ -275,6 +297,7 @@ impl GpuRvrProgram {
             self,
             &transcript,
             endpoint,
+            boundary,
             self.identity.clone(),
             segment_identity,
         )?;
@@ -634,6 +657,9 @@ pub struct GpuRvrReplayPlan {
     steps: DeviceBuffer<RvrReplayStep>,
     program_frequencies: DeviceBuffer<u32>,
     opcode_ranges: std::collections::BTreeMap<u32, std::ops::Range<usize>>,
+    from_state: ExecutionState<u32>,
+    to_state: ExecutionState<u32>,
+    exit_code: Option<u32>,
     device_ctx: GpuDeviceCtx,
     program_identity: Arc<()>,
     segment_identity: Arc<()>,
@@ -644,6 +670,7 @@ impl GpuRvrReplayPlan {
         program: &GpuRvrProgram,
         transcript: &GpuRvrTranscript,
         endpoint: RvrPreflightEndpoint,
+        boundary: ConnectorBoundary,
         program_identity: Arc<()>,
         segment_identity: Arc<()>,
     ) -> Result<Self, GpuRvrInputError> {
@@ -738,6 +765,9 @@ impl GpuRvrReplayPlan {
             steps: steps_out,
             program_frequencies,
             opcode_ranges,
+            from_state: boundary.0,
+            to_state: boundary.1,
+            exit_code: boundary.2,
             device_ctx: program.device_ctx.clone(),
             program_identity,
             segment_identity,
@@ -752,6 +782,13 @@ impl GpuRvrReplayPlan {
     /// gaps are omitted and unexecuted defined instructions remain zero.
     pub fn program_frequencies(&self) -> DeviceBufferView {
         self.program_frequencies.view()
+    }
+
+    /// Connector inputs derived from the same host events uploaded into this
+    /// validated replay plan. This metadata is cold and adds nothing to the
+    /// preflight hot-path logs.
+    pub(crate) const fn connector_boundary(&self) -> ConnectorBoundary {
+        (self.from_state, self.to_state, self.exit_code)
     }
 
     pub fn opcode_range(&self, opcode: VmOpcode) -> std::ops::Range<usize> {
@@ -989,6 +1026,7 @@ mod tests {
         transcript: &RvrPreflightTranscript,
         endpoint: RvrPreflightEndpoint,
     ) -> Result<GpuRvrReplayPlan, GpuRvrInputError> {
+        let boundary = replay_boundary(transcript, endpoint)?;
         let segment_identity = Arc::new(());
         let gpu_transcript = GpuRvrTranscript::upload(
             transcript,
@@ -1003,6 +1041,7 @@ mod tests {
             program,
             &gpu_transcript,
             endpoint,
+            boundary,
             program.identity.clone(),
             segment_identity,
         )
@@ -1415,6 +1454,14 @@ mod tests {
             plan.program_frequencies.to_host_on(&device_ctx).unwrap(),
             vec![2, 1, 0, 1]
         );
+        assert_eq!(
+            plan.connector_boundary(),
+            (
+                ExecutionState::new(0x100u32, 1u32),
+                ExecutionState::new(0x110u32, 4u32),
+                Some(0)
+            )
+        );
 
         let suspended = RvrPreflightTranscript {
             program_log: vec![
@@ -1442,6 +1489,14 @@ mod tests {
         assert_eq!(
             plan.program_frequencies.to_host_on(&device_ctx).unwrap(),
             vec![1, 0, 0, 0]
+        );
+        assert_eq!(
+            plan.connector_boundary(),
+            (
+                ExecutionState::new(0x100u32, 1u32),
+                ExecutionState::new(0x108u32, 2u32),
+                None
+            )
         );
 
         let empty = RvrPreflightTranscript {
