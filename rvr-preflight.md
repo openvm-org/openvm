@@ -915,6 +915,26 @@ upper result limbs, field-correct target mismatches, noncanonical write flags,
 events inside an x0 clock-only gap, and invalid predecessor values without
 lookup contributions from the rejected row.
 
+JALR adds the first indirect control-flow replay shape. It authenticates the
+low-32-bit register source at `t`, requires its upper two u16 cells to be zero,
+computes the unaligned signed-immediate target, checks that target against the
+implemented PC range before clearing bit zero, and matches the logged transition
+at `t + 2`. A nonzero destination writes the four-byte link with zero upper
+cells at `t + 1`; the link is independently checked against the implemented PC
+range even for x0, which reserves that timestamp without a memory event. The write
+predecessor is resolved after the read, so `rd = rs1` naturally uses the read
+event as its predecessor. Instruction validation also requires canonical
+register-file pointers, exact address spaces, boolean sign/write flags, and a
+write flag equal to `rd != x0`.
+
+The seven-row differential test covers enabled and disabled writes, both source
+and destination x0, `rd = rs1`, a negative immediate, odd-target bit clearing,
+repeated register predecessor chains, and padding. CPU, legacy CUDA, and replay
+matrices and complete range histograms match. Enabled rows emit eight
+variable-range requests and x0 rows emit six. The replay trace proves and
+rejects result, target, flag, PC-bound, and predecessor corruptions before a
+rejected row updates the shared histogram.
+
 #### First multi-AIR GPU proving checkpoint (2026-07-23)
 
 `Rv64IRvrGpuTracegen` now drives the VM inventory's ordinary reverse tracegen
@@ -932,8 +952,8 @@ counts through their normal tracegen using `()` rather than even an empty
 all extension contexts have been generated, the coordinator reads the shared
 sticky replay error once, immediately before proving.
 
-The first integration test executes all 36 currently ported opcodes across the
-19 replay chips, followed by `TERMINATE`. It uses interpreter preflight only for
+The first integration test executes all 37 currently ported opcodes across the
+20 replay chips, followed by `TERMINATE`. It uses interpreter preflight only for
 current system records, discards every interpreter-produced extension arena,
 generates all extension traces from the RVR transcript, passes the resulting
 context through the VM's existing trace-height validation, and completes a real
