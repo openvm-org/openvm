@@ -3898,6 +3898,10 @@ mod tests {
         fn c_headers(&self) -> Vec<(&'static str, &'static str)> {
             Vec::new()
         }
+
+        fn max_main_memory_pages_per_instruction(&self) -> usize {
+            0
+        }
     }
 
     #[test]
