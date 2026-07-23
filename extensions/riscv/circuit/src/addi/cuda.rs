@@ -18,7 +18,7 @@ use {
         riscv::{RV64_IMM_AS, RV64_REGISTER_AS},
         LocalOpcode,
     },
-    openvm_riscv_transpiler::BaseAluImmOpcode,
+    openvm_riscv_transpiler::{BaseAluImmOpcode, BaseAluWImmOpcode},
 };
 
 use super::{AddICoreCols, AddICoreRecord};
@@ -85,6 +85,52 @@ impl Rv64AddIChipGpu {
                 step_range.len(),
                 transcript.error_ptr(),
                 BaseAluImmOpcode::ADDI.global_opcode().as_usize() as u32,
+                RV64_REGISTER_AS,
+                RV64_IMM_AS,
+                &self.range_checker.count,
+                self.timestamp_max_bits as u32,
+                device_ctx.stream.as_raw(),
+            )?;
+        }
+        Ok(AirProvingContext::simple_no_pis(d_trace))
+    }
+}
+
+#[cfg(feature = "rvr")]
+impl Rv64AddIWChipGpu {
+    pub fn generate_proving_ctx_from_rvr(
+        &self,
+        program: &GpuRvrProgram,
+        transcript: &GpuRvrTranscript,
+        replay_plan: &GpuRvrReplayPlan,
+    ) -> Result<AirProvingContext<GpuBackend>, GpuRvrInputError> {
+        let device_ctx = &self.range_checker.device_ctx;
+        program.ensure_replay_inputs(transcript, replay_plan, device_ctx)?;
+        let step_range = replay_plan.opcode_range(BaseAluWImmOpcode::ADDIW.global_opcode());
+        if step_range.is_empty() {
+            return Ok(AirProvingContext::simple_no_pis(DeviceMatrix::dummy()));
+        }
+
+        let trace_width = Rv64BaseAluWImmU16AdapterCols::<F>::width()
+            + AddICoreCols::<F, RV64_WORD_U16_LIMBS, U16_BITS>::width();
+        let trace_height = next_power_of_two_or_zero(step_range.len());
+        let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
+
+        unsafe {
+            addi_w_cuda::replay_tracegen(
+                d_trace.buffer(),
+                trace_height,
+                program.instructions(),
+                program.pc_base(),
+                transcript.program_log(),
+                transcript.memory_log(),
+                transcript.initial_write_log(),
+                transcript.memory_predecessors(),
+                replay_plan.steps(),
+                step_range.start,
+                step_range.len(),
+                transcript.error_ptr(),
+                BaseAluWImmOpcode::ADDIW.global_opcode().as_usize() as u32,
                 RV64_REGISTER_AS,
                 RV64_IMM_AS,
                 &self.range_checker.count,
