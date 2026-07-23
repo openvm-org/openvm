@@ -25,6 +25,7 @@ use {
     openvm_riscv_transpiler::{
         BaseAluImmOpcode, BaseAluOpcode, BaseAluWImmOpcode, BaseAluWOpcode, BranchEqualOpcode,
         LessThanImmOpcode, LessThanOpcode, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode,
+        ShiftWOpcode,
     },
     openvm_stark_backend::prover::AirProvingContext,
 };
@@ -112,6 +113,8 @@ impl<'a> Rv64IRvrGpuTracegen<'a> {
             ShiftOpcode::SLL.global_opcode(),
             ShiftOpcode::SRL.global_opcode(),
             ShiftOpcode::SRA.global_opcode(),
+            ShiftWOpcode::SLLW.global_opcode(),
+            ShiftWOpcode::SRLW.global_opcode(),
             BaseAluWImmOpcode::ADDIW.global_opcode(),
             ShiftWImmOpcode::SLLIW.global_opcode(),
             ShiftWImmOpcode::SRLIW.global_opcode(),
@@ -187,6 +190,10 @@ impl<'a> Rv64IRvrGpuTracegen<'a> {
             [ShiftOpcode::SLL, ShiftOpcode::SRL]
         );
         replay_chip!(Rv64ShiftRightArithmeticChipGpu, [ShiftOpcode::SRA]);
+        replay_chip!(
+            Rv64ShiftWLogicalChipGpu,
+            [ShiftWOpcode::SLLW, ShiftWOpcode::SRLW]
+        );
         replay_chip!(Rv64AddIWChipGpu, [BaseAluWImmOpcode::ADDIW]);
         replay_chip!(
             Rv64ShiftWLogicalImmChipGpu,
