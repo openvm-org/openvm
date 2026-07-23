@@ -196,8 +196,44 @@ fn rvr_gpu_tracegen_proves_system_and_rv64i_airs_without_record_arenas() {
             ],
         ),
         Instruction::from_usize(
+            Rv64LoadStoreOpcode::LOADW.global_opcode(),
+            [
+                reg(22),
+                reg(1),
+                0,
+                RV64_REGISTER_AS as usize,
+                RV64_MEMORY_AS as usize,
+                1,
+                0,
+            ],
+        ),
+        Instruction::from_usize(
+            Rv64LoadStoreOpcode::LOADWU.global_opcode(),
+            [
+                reg(23),
+                reg(1),
+                1,
+                RV64_REGISTER_AS as usize,
+                RV64_MEMORY_AS as usize,
+                1,
+                0,
+            ],
+        ),
+        Instruction::from_usize(
+            Rv64LoadStoreOpcode::LOADD.global_opcode(),
+            [
+                reg(24),
+                reg(1),
+                2,
+                RV64_REGISTER_AS as usize,
+                RV64_MEMORY_AS as usize,
+                1,
+                0,
+            ],
+        ),
+        Instruction::from_usize(
             Rv64JalrOpcode::JALR.global_opcode(),
-            [reg(30), 0, 172, RV64_REGISTER_AS as usize, 0, 1, 0],
+            [reg(30), 0, 184, RV64_REGISTER_AS as usize, 0, 1, 0],
         ),
         Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
     ];
@@ -270,7 +306,7 @@ fn rvr_gpu_tracegen_proves_system_and_rv64i_airs_without_record_arenas() {
 fn rvr_gpu_tracegen_rejects_an_executed_unported_opcode_before_tracegen() {
     let instructions = [
         Instruction::<F>::from_usize(
-            Rv64LoadStoreOpcode::LOADW.global_opcode(),
+            Rv64LoadStoreOpcode::STOREB.global_opcode(),
             [
                 reg(1),
                 0,
@@ -318,7 +354,7 @@ fn rvr_gpu_tracegen_rejects_an_executed_unported_opcode_before_tracegen() {
         .unwrap();
 
     let error = match Rv64IRvrGpuTracegen::new(&gpu_program, &gpu_transcript, &replay_plan) {
-        Ok(_) => panic!("executed LOADW must not reach tracegen before its replay port"),
+        Ok(_) => panic!("executed STOREB must not reach tracegen before its replay port"),
         Err(error) => error,
     };
     assert!(

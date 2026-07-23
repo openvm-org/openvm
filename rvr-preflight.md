@@ -988,6 +988,24 @@ histogram equality with legacy tracegen, and replay proofs. Corrupt results,
 malformed x0 schedules, the `u32` boundary, and configured-width overflow are
 rejected before the affected row contributes lookup counts.
 
+#### Word-load GPU replay checkpoint (2026-07-23)
+
+`LOADW`, `LOADWU`, and `LOADD` replay through one width-parameterized validator
+and three concrete AIR kernels. The validator preserves the fixed four-clock
+load schedule, checks width-specific crossing and the complete second memory
+block's address-domain bounds, reconstructs all four destination u16 cells, and
+validates every actual predecessor before trace fill. `LOADW` sign extends bit
+31, `LOADWU` clears the upper word, and `LOADD` preserves the full loaded value.
+No production record arena is used; the legacy record-input kernels remain
+available unchanged.
+
+Each focused test compares the CPU, legacy CUDA, and replay matrices plus the
+complete variable-range and bitwise histograms, then proves the replay trace.
+Together they cover non-crossing and crossing reads, negative immediates,
+low-limb address carry, `rd = x0`, and `rd = rs1`. Isolated corrupt-result,
+disabled-write-gap, and address-underflow transcripts fail before that row
+updates either lookup histogram.
+
 #### First multi-AIR GPU proving checkpoint (2026-07-23)
 
 `Rv64IRvrGpuTracegen` now drives the VM inventory's ordinary reverse tracegen
@@ -1005,7 +1023,7 @@ counts through their normal tracegen using `()` rather than even an empty
 all extension contexts have been generated, the coordinator reads the shared
 sticky replay error once, immediately before proving.
 
-The integration test executes all 42 currently ported opcodes across the 25
+The integration test executes all 45 currently ported opcodes across the 28
 replay chips, followed by `TERMINATE`. One RVR preflight run supplies both
 system and RISC-V tracegen. Program reads the device PC histogram, Connector uses
 the segment endpoints, and PersistentBoundary and MemoryMerkle consume the sorted
@@ -1013,7 +1031,7 @@ device touched-block prefix while the coordinator retains the pre-segment Merkle
 state. No interpreter or production `RecordArena` is constructed or passed. The
 combined context goes through the VM's existing trace-height validation and
 completes a real GPU prove-and-verify. A negative test confirms that an executed,
-not-yet-ported LOADW is rejected by the pre-kernel coverage check. This establishes
+not-yet-ported `STOREB` is rejected by the pre-kernel coverage check. This establishes
 the arena-free system plus multi-AIR RISC-V integration seam without generalizing
 `Chip`.
 
