@@ -2279,6 +2279,87 @@ fn rvr_gpu_two_block_g2_crossings_prove_and_verify() {
     assert_eq!(segments, 1);
 }
 
+#[cfg(feature = "cuda")]
+#[test]
+fn rvr_gpu_g2_release_before_prove_preserves_full_decoder_matrix() {
+    std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "1");
+    std::env::set_var("OPENVM_RVR_INLINE_RECORDS", "1");
+    std::env::set_var("OPENVM_RVR_GPU_RECORDS", "g2");
+
+    let exe = g2_full_decoder_matrix_exe();
+    let streams = hard_chip_streams(1);
+    let config = Rv64ImConfig::with_public_values_bytes(32);
+    let (vm, _) =
+        VirtualMachine::new_with_keygen(test_cpu_engine(), Rv64ImCpuBuilder, config.clone())
+            .expect("G2 release matrix VM init");
+    let trace_heights = vec![4096u32; vm.num_airs()];
+    let RvrPreflightRoute::Rvr(g2) = vm
+        .preflight_routed_instance(&exe)
+        .expect("G2 release matrix route")
+    else {
+        panic!("G2 release matrix must route to RVR");
+    };
+    let meta = g2
+        .compiled()
+        .inline_records()
+        .g2
+        .clone()
+        .expect("G2 release matrix negotiation");
+    let decode = g2
+        .compiled()
+        .inline_records()
+        .delta_decode
+        .clone()
+        .expect("G2 release matrix operand table");
+    let mut output = g2
+        .execute_preflight_from_state_with_device_touched_memory_for_test(
+            g2.create_initial_state(streams.clone()),
+            Some(exe.program.num_defined_instructions() as u64),
+            &trace_heights,
+            &BTreeMap::new(),
+        )
+        .expect("G2 release matrix preflight");
+    let segment = output
+        .g2_segment
+        .take()
+        .expect("G2 release matrix committed segment");
+    let mut initial_blocks = BTreeMap::new();
+    initial_blocks.insert((PUBLIC_VALUES_AS as u8, 0), 0);
+    let reference = openvm_circuit::arch::rvr::decode_reference_v1(
+        &segment,
+        &meta,
+        &decode,
+        [0; 32],
+        &initial_blocks,
+        openvm_circuit::arch::rvr::PREFLIGHT_INITIAL_TIMESTAMP,
+    )
+    .expect("G2 release matrix reference decode");
+    let active_kinds = reference
+        .compact_records
+        .iter()
+        .filter_map(|(&kind, records)| (!records.is_empty()).then_some(kind))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        active_kinds,
+        (0u8..crate::rvr_gpu_decode::DeltaAirKind::COUNT as u8).collect::<Vec<_>>(),
+        "release fixture must execute all 38 G2 decoder kinds"
+    );
+
+    assert_gpu_rvr_three_way_single_segment_with_config(
+        "g2_release_full_decoder_matrix",
+        exe.clone(),
+        streams.clone(),
+        Some(FULL_RV64IM_INSTRUCTION_AIR_COUNT),
+        config.clone(),
+    );
+    let segments = prove_gpu_rvr_preflight_and_verify_with_streams(exe, config, streams);
+    assert_eq!(segments, 1);
+
+    std::env::remove_var("OPENVM_RVR_GPU_RECORDS");
+    std::env::remove_var("OPENVM_RVR_ARENA_NATIVE");
+    std::env::remove_var("OPENVM_RVR_INLINE_RECORDS");
+}
+
 #[test]
 fn rvr_gpu_operand_table_rebinds_same_shape_different_exe() {
     let (vm, _) = VirtualMachine::new_with_keygen(
@@ -2753,6 +2834,23 @@ fn g2_full_standard_matrix_exe() -> VmExe<F> {
     // custom opaque/event-replay transport remains outside this oracle.
     debug_assert!(instructions.len() - standard_end >= 5);
     instructions.truncate(instructions.len() - 5);
+    instructions.push(extension_store(10, 0, 0));
+    instructions.push(terminate());
+    exe(&instructions)
+}
+
+#[cfg(feature = "cuda")]
+fn g2_full_decoder_matrix_exe() -> VmExe<F> {
+    let mut instructions = vec![addi(1, 0, 9), addi(2, 0, 5)];
+    push_standard_group_ops(&mut instructions);
+    instructions.extend([
+        alu_imm(BaseAluImmOpcode::XORI, 3, 1, 0xff_fffb),
+        less_than_imm(LessThanImmOpcode::SLTI, 4, 1, 0xff_fffb),
+        shift_reg(ShiftOpcode::SLL, 5, 1, 2),
+        shift_reg(ShiftOpcode::SRL, 6, 1, 2),
+        shift_reg(ShiftOpcode::SRA, 7, 1, 2),
+    ]);
+    push_hard_chip_ops(&mut instructions);
     instructions.push(extension_store(10, 0, 0));
     instructions.push(terminate());
     exe(&instructions)
@@ -3528,14 +3626,19 @@ fn prove_gpu_rvr_preflight_and_verify_with_streams(
     streams: Streams,
 ) -> usize {
     let engine = test_gpu_engine();
-    let (vm, pk) = VirtualMachine::new_with_keygen(engine, Rv64ImGpuBuilder::default(), config)
-        .expect("gpu vm init");
+    let builder = Rv64ImGpuBuilder::default();
+    let (vm, pk) =
+        VirtualMachine::new_with_keygen(engine, builder.clone(), config).expect("gpu vm init");
     let vk = pk.get_vk();
     let cached_program_trace = vm.commit_program_on_device(&exe.program);
     let mut instance =
         VmInstance::new(vm, Arc::new(exe), cached_program_trace).expect("gpu instance init");
     let proof = ContinuationVmProver::prove(&mut instance, streams).expect("gpu prove");
     verify_segments(&instance.vm.engine, &vk, &proof.per_segment).expect("gpu verify segments");
+    assert!(
+        !builder.rvr_decode.has_g2_device_trace_sources_for_test(),
+        "production proving retained the final segment's G2 device trace sources"
+    );
     proof.per_segment.len()
 }
 
@@ -3713,6 +3816,22 @@ fn assert_gpu_rvr_three_way_from_state(
         .generate_proving_ctx(rvr_output.system_records, gpu_log_record_arenas)
         .expect("gpu rvr-log trace generation");
     gpu_log_vm.merge_device_continuation_dirty_pages(&mut rvr_to_state.memory);
+    let had_g2_sources = gpu_log_builder
+        .rvr_decode
+        .has_g2_device_trace_sources_for_test();
+    if std::env::var("OPENVM_RVR_GPU_RECORDS").as_deref() == Ok("g2") {
+        assert!(
+            had_g2_sources,
+            "{label}: G2 trace generation must bind device trace sources"
+        );
+    }
+    gpu_log_builder.release_rvr_cuda_device_trace_sources();
+    assert!(
+        !gpu_log_builder
+            .rvr_decode
+            .has_g2_device_trace_sources_for_test(),
+        "{label}: release hook retained G2 device trace sources"
+    );
     let gpu_log_device_ctx = gpu_log_vm.engine.device().device_ctx.clone();
 
     let cpu_traces = collect_cpu_trace_map(cpu_ctx);

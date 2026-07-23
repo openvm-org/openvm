@@ -98,4 +98,5 @@ jemalloc = ["openvm-circuit/jemalloc"]
 ignored = ["openvm-cuda-backend", "derive_more"]
 
 [dev-dependencies]
+openvm-circuit = { workspace = true, features = ["test-utils"] }
 openvm-instructions.workspace = true

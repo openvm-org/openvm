@@ -668,6 +668,11 @@ impl VmBuilder<BabyBearPoseidon2GpuEngine> for SdkVmGpuBuilder {
     fn finish_rvr_cuda_device_prewarm(&self, reserve_bytes: usize) -> Result<(), String> {
         openvm_riscv_circuit::rvr_gpu_decode::finish_g2_device_prewarm(reserve_bytes)
     }
+
+    #[cfg(feature = "rvr")]
+    fn release_rvr_cuda_device_trace_sources(&self) {
+        self.rvr_decode.release_consumed_g2_device_trace_sources();
+    }
 }
 
 // ======================= Boilerplate ====================
@@ -922,5 +927,123 @@ mod rvr_registration_tests {
             !registry.contains_instruction(&wrong_address_spaces),
             "HARD-2 predicate must reject the same operands for routing and assembly"
         );
+    }
+}
+
+#[cfg(all(test, feature = "cuda", feature = "rvr"))]
+mod rvr_cuda_lifecycle_tests {
+    use std::sync::Arc;
+
+    use openvm_circuit::{
+        arch::{
+            rvr::RvrPreflightRoute, verify_segments, ContinuationVmProver, Streams, VirtualMachine,
+            VmInstance,
+        },
+        utils::test_gpu_engine,
+    };
+    use openvm_instructions::{
+        exe::VmExe,
+        instruction::Instruction,
+        program::Program,
+        riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+        LocalOpcode, SystemOpcode,
+    };
+    use openvm_keccak256_transpiler::{KeccakfOpcode, XorinOpcode};
+    use openvm_riscv_transpiler::BaseAluImmOpcode;
+
+    use super::*;
+
+    fn reg(index: usize) -> usize {
+        index * RV64_REGISTER_NUM_LIMBS
+    }
+
+    fn addi(rd: usize, rs1: usize, immediate: usize) -> Instruction<Val<SC>> {
+        Instruction::from_usize(
+            BaseAluImmOpcode::ADDI.global_opcode(),
+            [reg(rd), reg(rs1), immediate, 1, 0],
+        )
+    }
+
+    fn custom_g2_exe() -> VmExe<Val<SC>> {
+        let instructions = [
+            addi(1, 0, 64),
+            addi(2, 0, 512),
+            addi(3, 0, 16),
+            Instruction::from_usize(
+                XorinOpcode::XORIN.global_opcode(),
+                [
+                    reg(1),
+                    reg(2),
+                    reg(3),
+                    RV64_REGISTER_AS as usize,
+                    RV64_MEMORY_AS as usize,
+                ],
+            ),
+            Instruction::from_usize(
+                KeccakfOpcode::KECCAKF.global_opcode(),
+                [
+                    reg(1),
+                    0,
+                    0,
+                    RV64_REGISTER_AS as usize,
+                    RV64_MEMORY_AS as usize,
+                ],
+            ),
+            Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+        ];
+        VmExe::new(Program::from_instructions(&instructions))
+    }
+
+    #[test]
+    fn g2_custom_opaque_sources_are_released_before_proving() {
+        std::env::set_var("OPENVM_RVR_ARENA_NATIVE", "1");
+        std::env::set_var("OPENVM_RVR_INLINE_RECORDS", "1");
+        std::env::set_var("OPENVM_RVR_GPU_RECORDS", "g2");
+
+        let config = SdkVmConfig::builder()
+            .system(Default::default())
+            .rv64i(Default::default())
+            .rv64m(Default::default())
+            .io(Default::default())
+            .keccak(Default::default())
+            .build()
+            .optimize();
+        let exe = custom_g2_exe();
+        let builder = SdkVmGpuBuilder::default();
+        let (vm, pk) = VirtualMachine::new_with_keygen(test_gpu_engine(), builder.clone(), config)
+            .expect("G2 custom opaque GPU VM init");
+        let RvrPreflightRoute::Rvr(rvr) = vm
+            .preflight_routed_instance(&exe)
+            .expect("G2 custom opaque route")
+        else {
+            panic!("custom opaque fixture must route to RVR");
+        };
+        assert_eq!(
+            rvr.compiled()
+                .inline_records()
+                .g2
+                .as_ref()
+                .expect("G2 custom opaque negotiation")
+                .opaque_bindings
+                .len(),
+            2,
+            "fixture must cover both XORIN and KECCAKF opaque lanes"
+        );
+
+        let vk = pk.get_vk();
+        let cached_program_trace = vm.commit_program_on_device(&exe.program);
+        let mut instance =
+            VmInstance::new(vm, Arc::new(exe), cached_program_trace).expect("GPU instance init");
+        let proof =
+            ContinuationVmProver::prove(&mut instance, Streams::default()).expect("GPU prove");
+        verify_segments(&instance.vm.engine, &vk, &proof.per_segment).expect("GPU verify segments");
+        assert!(
+            !builder.rvr_decode.has_g2_device_trace_sources_for_test(),
+            "custom opaque proof retained G2 device trace sources"
+        );
+
+        std::env::remove_var("OPENVM_RVR_GPU_RECORDS");
+        std::env::remove_var("OPENVM_RVR_ARENA_NATIVE");
+        std::env::remove_var("OPENVM_RVR_INLINE_RECORDS");
     }
 }

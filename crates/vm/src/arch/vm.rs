@@ -2783,6 +2783,8 @@ where
                     .memory,
             );
             #[cfg(all(feature = "cuda", feature = "rvr"))]
+            vm.builder.release_rvr_cuda_device_trace_sources();
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
             if let Some(timer) = tracegen_gpu_timer {
                 timer.finish(
                     "tracegen",

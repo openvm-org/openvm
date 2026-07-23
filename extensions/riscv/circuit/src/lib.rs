@@ -416,6 +416,11 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64IGpuBuilder {
     fn rvr_cuda_device_pool_stats(&self) -> Result<Option<[u64; 5]>, String> {
         rvr_gpu_decode::g2_device_pool_stats().map(Some)
     }
+
+    #[cfg(feature = "rvr")]
+    fn release_rvr_cuda_device_trace_sources(&self) {
+        self.rvr_decode.release_consumed_g2_device_trace_sources();
+    }
 }
 
 /// G2: the airs whose inline records the proving path should stage as compact
@@ -958,5 +963,10 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64ImGpuBuilder {
     #[cfg(feature = "rvr")]
     fn rvr_cuda_device_pool_stats(&self) -> Result<Option<[u64; 5]>, String> {
         rvr_gpu_decode::g2_device_pool_stats().map(Some)
+    }
+
+    #[cfg(feature = "rvr")]
+    fn release_rvr_cuda_device_trace_sources(&self) {
+        self.rvr_decode.release_consumed_g2_device_trace_sources();
     }
 }

@@ -213,6 +213,14 @@ pub trait VmBuilder<E: StarkEngine>: Sized {
         Ok(None)
     }
 
+    /// CUDA/G2: release the current segment's device trace-source bundle once
+    /// trace generation and device continuation-state merging are complete.
+    ///
+    /// GPU builders with G2 state override this hook. Executable-wide device
+    /// caches and CUDA module state must remain bound for later segments.
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    fn release_rvr_cuda_device_trace_sources(&self) {}
+
     /// Build the registry used by rvr preflight routing and record assembly.
     ///
     /// A composed builder adds its inner config's registrations first, then
