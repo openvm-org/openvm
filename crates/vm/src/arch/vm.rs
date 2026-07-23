@@ -1432,6 +1432,43 @@ where
     }
 }
 
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+impl<VB> VirtualMachine<openvm_cuda_backend::BabyBearPoseidon2GpuEngine, VB>
+where
+    VB: VmBuilder<
+        openvm_cuda_backend::BabyBearPoseidon2GpuEngine,
+        RecordArena = crate::arch::DenseRecordArena,
+        SystemChipInventory = crate::system::cuda::SystemChipInventoryGPU,
+    >,
+{
+    /// Generates all system and extension traces from one RVR segment without
+    /// allocating record arenas. The segment's initial memory must be uploaded
+    /// before RVR consumes its host state; continuation coordinators must
+    /// repeat that upload for every segment.
+    #[instrument(name = "trace_gen", skip_all)]
+    pub fn generate_proving_ctx_from_rvr(
+        &mut self,
+        program: &crate::arch::rvr::cuda::GpuRvrProgram,
+        transcript: &crate::arch::rvr::cuda::GpuRvrTranscript,
+        replay_plan: &crate::arch::rvr::cuda::GpuRvrReplayPlan,
+        generate_extension: impl FnMut(
+            usize,
+            &dyn AnyChip<crate::arch::DenseRecordArena, openvm_cuda_backend::GpuBackend>,
+        ) -> Result<
+            openvm_stark_backend::prover::AirProvingContext<openvm_cuda_backend::GpuBackend>,
+            GenerationError,
+        >,
+    ) -> Result<ProvingContext<openvm_cuda_backend::GpuBackend>, GenerationError> {
+        let ctx = self.chip_complex.generate_proving_ctx_from_rvr(
+            program,
+            transcript,
+            replay_plan,
+            generate_extension,
+        )?;
+        self.validate_proving_ctx(ctx)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{SystemConfig, VirtualMachine, CONNECTOR_AIR_ID, PROGRAM_AIR_ID};
