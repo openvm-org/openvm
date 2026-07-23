@@ -523,6 +523,7 @@ fn test_cuda_addi_tracegen_from_rvr_transcript() {
         system: test_system_config(),
         ..Default::default()
     };
+    let memory_config = config.system.memory_config.clone();
     let executor = VmExecutor::new(config).unwrap();
     let execution = executor
         .rvr_preflight_instance(&exe, None)
@@ -578,17 +579,26 @@ fn test_cuda_addi_tracegen_from_rvr_transcript() {
 
     let range_checker = tester.range_checker();
     let device_ctx = &range_checker.device_ctx;
-    let d_program = GpuRvrProgram::upload(&program, device_ctx).unwrap();
+    let d_program = GpuRvrProgram::upload(&program, &memory_config, device_ctx).unwrap();
     let (d_transcript, d_replay_plan) = d_program
         .upload_transcript(&execution.transcript, execution.endpoint)
         .unwrap();
+    assert_eq!(
+        d_transcript.memory_predecessors_host().unwrap(),
+        GpuRvrProgram::cpu_memory_predecessors(&execution.transcript).unwrap()
+    );
+    let (cpu_steps, cpu_ranges) = d_program
+        .cpu_replay_plan(&execution.transcript, execution.endpoint)
+        .unwrap();
+    assert_eq!(d_replay_plan.steps_host().unwrap(), cpu_steps);
+    assert_eq!(d_replay_plan.opcode_ranges_host(), &cpu_ranges);
     assert_eq!(
         d_replay_plan
             .opcode_range(BaseAluImmOpcode::ADDI.global_opcode())
             .len(),
         ITERATIONS + 3
     );
-    let mismatched_program = GpuRvrProgram::upload(&program, device_ctx).unwrap();
+    let mismatched_program = GpuRvrProgram::upload(&program, &memory_config, device_ctx).unwrap();
     assert!(matches!(
         harness.gpu_chip.generate_proving_ctx_from_rvr(
             &mismatched_program,
@@ -722,6 +732,7 @@ fn benchmark_cuda_addi_replay_vs_legacy() {
         system: test_system_config(),
         ..Default::default()
     };
+    let memory_config = config.system.memory_config.clone();
     let executor = VmExecutor::new(config).unwrap();
     let execution = executor
         .rvr_preflight_instance(&exe, None)
@@ -771,19 +782,22 @@ fn benchmark_cuda_addi_replay_vs_legacy() {
     let device_ctx = &range_checker.device_ctx;
     device_ctx.stream.synchronize().unwrap();
     let started = std::time::Instant::now();
-    let d_program = GpuRvrProgram::upload(&program, device_ctx).unwrap();
+    let d_program = GpuRvrProgram::upload(&program, &memory_config, device_ctx).unwrap();
     device_ctx.stream.synchronize().unwrap();
     let static_program_upload = started.elapsed();
+    let (gpu_index_peak_extra_bytes, gpu_index_steady_bytes) = d_program
+        .gpu_index_memory_bytes(&execution.transcript)
+        .unwrap();
 
-    let mut index_times = Vec::with_capacity(REPETITIONS);
-    let mut replay_upload_times = Vec::with_capacity(REPETITIONS);
+    let mut program_index_times = Vec::with_capacity(REPETITIONS);
+    let mut transcript_memory_index_times = Vec::with_capacity(REPETITIONS);
     for sample in 0..WARMUPS + REPETITIONS {
         let (_, _, index_time, upload_time) = d_program
             .upload_transcript_profiled(&execution.transcript, execution.endpoint)
             .unwrap();
         if sample >= WARMUPS {
-            index_times.push(index_time);
-            replay_upload_times.push(upload_time);
+            program_index_times.push(index_time);
+            transcript_memory_index_times.push(upload_time);
         }
     }
     let (d_transcript, d_replay_plan) = d_program
@@ -877,9 +891,10 @@ fn benchmark_cuda_addi_replay_vs_legacy() {
     }
     assert_eq!(d_transcript.error_code().unwrap(), 0);
 
-    let (index_p10, index_median, index_p90) = duration_percentiles(index_times);
-    let (replay_upload_p10, replay_upload_median, replay_upload_p90) =
-        duration_percentiles(replay_upload_times);
+    let (program_index_p10, program_index_median, program_index_p90) =
+        duration_percentiles(program_index_times);
+    let (transcript_memory_index_p10, transcript_memory_index_median, transcript_memory_index_p90) =
+        duration_percentiles(transcript_memory_index_times);
     let (legacy_upload_p10, legacy_upload_median, legacy_upload_p90) =
         duration_percentiles(legacy_upload_times);
     let (legacy_kernel_p10, legacy_kernel_median, legacy_kernel_p90) =
@@ -887,8 +902,9 @@ fn benchmark_cuda_addi_replay_vs_legacy() {
     let (replay_kernel_p10, replay_kernel_median, replay_kernel_p90) =
         f64_percentiles(replay_kernel_ms);
     let micros = |duration: Duration| duration.as_secs_f64() * 1_000_000.0;
-    let new_total_us =
-        micros(index_median) + micros(replay_upload_median) + replay_kernel_median * 1000.0;
+    let new_total_us = micros(program_index_median)
+        + micros(transcript_memory_index_median)
+        + replay_kernel_median * 1000.0;
     let legacy_total_us = micros(legacy_upload_median) + legacy_kernel_median * 1000.0;
     let transcript_bytes = std::mem::size_of_val(execution.transcript.program_log.as_slice())
         + std::mem::size_of_val(execution.transcript.memory_log.as_slice())
@@ -897,15 +913,15 @@ fn benchmark_cuda_addi_replay_vs_legacy() {
         + (execution.transcript.program_log.len() - 1) * 2 * size_of::<u32>();
     let trace_bytes = ADDI_ROWS * trace_width * size_of::<F>();
     println!(
-        "RVR_ADDI_GPU_BENCH addi_rows={ADDI_ROWS} guest_insns={} warmups={WARMUPS} repetitions={REPETITIONS} launches_per_sample={LAUNCHES_PER_SAMPLE} static_program_upload_us={:.3} index_p10_us={:.3} index_median_us={:.3} index_p90_us={:.3} replay_h2d_p10_us={:.3} replay_h2d_median_us={:.3} replay_h2d_p90_us={:.3} legacy_record_h2d_p10_us={:.3} legacy_record_h2d_median_us={:.3} legacy_record_h2d_p90_us={:.3} replay_kernel_p10_us={:.3} replay_kernel_median_us={:.3} replay_kernel_p90_us={:.3} legacy_kernel_p10_us={:.3} legacy_kernel_median_us={:.3} legacy_kernel_p90_us={:.3} replay_over_legacy_kernel={:.3} new_total_us={new_total_us:.3} legacy_total_us={legacy_total_us:.3} transcript_bytes={transcript_bytes} derived_bytes={derived_bytes} legacy_record_bytes={} trace_bytes={trace_bytes}",
+        "RVR_ADDI_GPU_BENCH addi_rows={ADDI_ROWS} guest_insns={} warmups={WARMUPS} repetitions={REPETITIONS} launches_per_sample={LAUNCHES_PER_SAMPLE} static_program_upload_us={:.3} program_index_p10_us={:.3} program_index_median_us={:.3} program_index_p90_us={:.3} transcript_memory_index_p10_us={:.3} transcript_memory_index_median_us={:.3} transcript_memory_index_p90_us={:.3} legacy_record_h2d_p10_us={:.3} legacy_record_h2d_median_us={:.3} legacy_record_h2d_p90_us={:.3} replay_kernel_p10_us={:.3} replay_kernel_median_us={:.3} replay_kernel_p90_us={:.3} legacy_kernel_p10_us={:.3} legacy_kernel_median_us={:.3} legacy_kernel_p90_us={:.3} replay_over_legacy_kernel={:.3} new_total_us={new_total_us:.3} legacy_total_us={legacy_total_us:.3} transcript_bytes={transcript_bytes} derived_bytes={derived_bytes} gpu_index_peak_extra_bytes={gpu_index_peak_extra_bytes} gpu_index_steady_bytes={gpu_index_steady_bytes} legacy_record_bytes={} trace_bytes={trace_bytes}",
         2 * ADDI_ROWS + 1,
         micros(static_program_upload),
-        micros(index_p10),
-        micros(index_median),
-        micros(index_p90),
-        micros(replay_upload_p10),
-        micros(replay_upload_median),
-        micros(replay_upload_p90),
+        micros(program_index_p10),
+        micros(program_index_median),
+        micros(program_index_p90),
+        micros(transcript_memory_index_p10),
+        micros(transcript_memory_index_median),
+        micros(transcript_memory_index_p90),
         micros(legacy_upload_p10),
         micros(legacy_upload_median),
         micros(legacy_upload_p90),

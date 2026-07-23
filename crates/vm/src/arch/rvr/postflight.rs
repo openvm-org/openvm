@@ -107,7 +107,6 @@ fn build_step_memory_starts(
 pub(crate) struct RvrReplayData {
     steps: Vec<RvrReplayStep>,
     opcode_ranges: BTreeMap<u32, Range<usize>>,
-    memory_predecessors: Vec<u32>,
 }
 
 impl RvrReplayData {
@@ -119,8 +118,6 @@ impl RvrReplayData {
     ) -> Result<Self, RvrPreflightIndexError> {
         let step_memory_starts =
             build_step_memory_starts(&transcript.program_log, &transcript.memory_log)?;
-        let memory_predecessors =
-            build_memory_predecessors(&transcript.memory_log, &transcript.initial_write_log)?;
         let mut opcode_counts = BTreeMap::<u32, usize>::new();
         for program_index in 0..step_memory_starts.len() {
             let opcode = resolve_opcode(pc_base, opcodes, &transcript.program_log[program_index])?;
@@ -156,16 +153,11 @@ impl RvrReplayData {
         Ok(Self {
             steps,
             opcode_ranges,
-            memory_predecessors,
         })
     }
 
     pub(crate) fn steps(&self) -> &[RvrReplayStep] {
         &self.steps
-    }
-
-    pub(crate) fn memory_predecessors(&self) -> &[u32] {
-        &self.memory_predecessors
     }
 
     pub(crate) fn opcode_ranges(&self) -> &BTreeMap<u32, Range<usize>> {
@@ -268,7 +260,7 @@ fn validate_endpoint(
     Ok(())
 }
 
-fn build_memory_predecessors(
+pub(crate) fn build_memory_predecessors(
     memory: &[PreflightMemoryEvent],
     seeds: &[PreflightInitialWrite],
 ) -> Result<Vec<u32>, RvrPreflightIndexError> {
