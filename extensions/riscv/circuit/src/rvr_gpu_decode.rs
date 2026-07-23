@@ -1277,6 +1277,58 @@ impl RvrGpuDecodeState {
         *self.g2_device.lock().unwrap() = None;
     }
 
+    /// Release the consumed current-segment G2 device state after all trace
+    /// kernels have completed and continuation state has been merged.
+    ///
+    /// The executable-wide operand table in `device_table` and the CUDA
+    /// module/allocation-pool state are intentionally retained.
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    pub fn release_consumed_g2_device_trace_sources(&self) {
+        assert!(
+            self.continuation_dirty_pages.lock().unwrap().is_none(),
+            "G2 device sources released before continuation dirty pages were consumed"
+        );
+
+        let mut current = self.g2_device.lock().unwrap();
+        let Some(device) = current.as_ref() else {
+            return;
+        };
+        assert!(
+            device.touched_memory.is_none(),
+            "G2 device sources released before touched memory was consumed"
+        );
+        assert!(
+            device.program_frequencies.is_none(),
+            "G2 device sources released before program frequencies were consumed"
+        );
+        if let Some(trace) = device.g2_trace.as_ref() {
+            assert_eq!(
+                trace.pending_trace_kinds.load(Ordering::Acquire),
+                0,
+                "G2 device sources released before every trace kind completed"
+            );
+            assert_eq!(
+                Arc::strong_count(trace),
+                1,
+                "G2 device sources released while a trace consumer still retained them"
+            );
+        }
+        let device = current.take();
+        drop(current);
+        drop(device);
+    }
+
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    #[doc(hidden)]
+    pub fn has_g2_device_trace_sources_for_test(&self) -> bool {
+        self.g2_device
+            .lock()
+            .unwrap()
+            .as_ref()
+            .and_then(|device| device.g2_trace.as_ref())
+            .is_some()
+    }
+
     /// Perform the whole segment predecode exactly once. The system inventory
     /// calls this first for device-replayed touched memory; compact-record
     /// consumers then clone their already-populated per-AIR outputs.
