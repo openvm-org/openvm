@@ -41,14 +41,21 @@ impl PageAddressSpace {
 ///
 /// Value tracing emits ordered hooks used to build execution records. The
 /// logical memory timestamp represents the order of VM memory accesses. Each
-/// recorded read or write advances it. A peek reads the current value and
-/// preserves the current timestamp.
+/// recorded read or write advances it, and instructions may reserve disabled
+/// slots without a memory event. A peek reads the current value and preserves
+/// the current timestamp.
 pub trait ExtEmitCtx {
     /// Read a variable through a VM memory access.
     fn read_var(&mut self, var: Variable) -> String;
 
     /// Read a variable at the current logical memory timestamp.
     fn peek_var(&mut self, var: Variable) -> String;
+
+    /// Reserve logical clock slots that have no enabled memory event.
+    ///
+    /// This affects value-tracing execution only. Pure and metered emitters
+    /// preserve their existing execution behavior.
+    fn advance_timestamp(&mut self, slots: u32);
 
     /// Write a variable through a VM memory access.
     fn write_var(&mut self, var: Variable, val: &str);

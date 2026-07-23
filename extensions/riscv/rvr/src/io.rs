@@ -353,6 +353,10 @@ mod tests {
             format!("r{}", var.index())
         }
 
+        fn advance_timestamp(&mut self, slots: u32) {
+            self.write_line(&format!("advance_timestamp({slots});"));
+        }
+
         fn write_var(&mut self, _var: Reg, _val: &str) {}
 
         fn write_line(&mut self, s: &str) {
