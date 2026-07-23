@@ -62,20 +62,22 @@ impl<const DIGEST_WIDTH: usize, AB: InteractionBuilder + AirBuilderWithPublicVal
             .when_ne(local.expand_direction, AB::F::NEG_ONE)
             .assert_zero(local.right_direction_different);
 
-        // The reference-count flags adjust how many copies of a child's initial claim an
-        // initial row consumes (see the child interactions in `eval_interactions`). They
-        // are meaningful only on initial rows: if `expand_direction` != 1, all must be 0.
-        for flag in [
-            local.left_extra_ref,
-            local.right_extra_ref,
-            local.left_absent_ref,
-            local.right_absent_ref,
-        ] {
-            builder.assert_bool(flag);
-            builder
-                .when_ne(local.expand_direction, AB::F::ONE)
-                .assert_zero(flag);
-        }
+        // left/right reference adjustment must be -1, 0, 1
+        builder.assert_eq(
+            local.left_adj_ref,
+            local.left_adj_ref * local.left_adj_ref * local.left_adj_ref,
+        );
+        builder.assert_eq(
+            local.right_adj_ref,
+            local.right_adj_ref * local.right_adj_ref * local.right_adj_ref,
+        );
+        // left/right reference adjustment must be set to 0 when expand_direction is not 1
+        builder
+            .when_ne(local.expand_direction, AB::F::ONE)
+            .assert_zero(local.left_adj_ref);
+        builder
+            .when_ne(local.expand_direction, AB::F::ONE)
+            .assert_zero(local.right_adj_ref);
 
         // rows should be sorted in descending order
         // independently by `parent_height`, `height_section`, `is_root`
@@ -193,8 +195,7 @@ impl<const DIGEST_WIDTH: usize> MemoryMerkleAir<DIGEST_WIDTH> {
             ]
             .into_iter()
             .chain(local.left_child_hash.into_iter().map(Into::into)),
-            (AB::Expr::ZERO - local.expand_direction)
-                * (AB::Expr::ONE - local.left_absent_ref + local.left_extra_ref),
+            (AB::Expr::ZERO - local.expand_direction) * (AB::Expr::ONE + local.left_adj_ref),
         );
 
         self.merkle_bus.interact(
@@ -209,8 +210,7 @@ impl<const DIGEST_WIDTH: usize> MemoryMerkleAir<DIGEST_WIDTH> {
             ]
             .into_iter()
             .chain(local.right_child_hash.into_iter().map(Into::into)),
-            (AB::Expr::ZERO - local.expand_direction)
-                * (AB::Expr::ONE - local.right_absent_ref + local.right_extra_ref),
+            (AB::Expr::ZERO - local.expand_direction) * (AB::Expr::ONE + local.right_adj_ref),
         );
 
         let compress_fields = iter::empty()

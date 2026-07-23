@@ -195,12 +195,8 @@ template <typename T> struct MerkleCols {
     T right_child_hash[CELLS_OUT];
     T left_direction_different;
     T right_direction_different;
-    // Reference-count adjustments for initial-row child interactions; see
-    // `MemoryMerkleCols` (columns.rs) and `fill_merkle_trace_row`.
-    T left_extra_ref;
-    T right_extra_ref;
-    T left_absent_ref;
-    T right_absent_ref;
+    T left_adj_ref;
+    T right_adj_ref;
 };
 
 struct LabeledDigest {
@@ -283,15 +279,23 @@ __global__ void group_by_parent(
     }
 }
 
+/// Reference-count adjustment for a child of an initial row
+__device__ inline Fp child_adj_ref(bool emits_final, bool present, bool dirty) {
+    if (emits_final && present && !dirty) {
+        return Fp::one();
+    }
+    if (!emits_final && !present) {
+        return Fp::neg_one();
+    }
+    return Fp::zero();
+}
+
 /// Fills one merkle trace row and records its compression (leaving the parent digest in
 /// `digests[0..CELLS_OUT]`).
 ///
 /// For final rows (`new_values`), `direction_different` marks children *not expanded
 /// finally* (untouched or touched-but-clean), whose hashes are borrowed from the initial
-/// tree. For initial rows, the reference-count flags adjust how many copies of a child's
-/// initial claim this node consumes: an extra one when this node's final row dd-borrows a
-/// touched-clean child, none when the child is untouched and this node has no final row
-/// to prop the reference (see `MemoryMerkleCols`).
+/// tree.
 __device__ void fill_merkle_trace_row(
     RowSlice row,
     bool new_values,
@@ -322,26 +326,14 @@ __device__ void fill_merkle_trace_row(
     COL_WRITE_VALUE(
         row,
         MerkleCols,
-        left_extra_ref,
-        !new_values && emits_final && left_present && !left_dirty
+        left_adj_ref,
+        new_values ? Fp::zero() : child_adj_ref(emits_final, left_present, left_dirty)
     );
     COL_WRITE_VALUE(
         row,
         MerkleCols,
-        right_extra_ref,
-        !new_values && emits_final && right_present && !right_dirty
-    );
-    COL_WRITE_VALUE(
-        row,
-        MerkleCols,
-        left_absent_ref,
-        !new_values && !emits_final && !left_present
-    );
-    COL_WRITE_VALUE(
-        row,
-        MerkleCols,
-        right_absent_ref,
-        !new_values && !emits_final && !right_present
+        right_adj_ref,
+        new_values ? Fp::zero() : child_adj_ref(emits_final, right_present, right_dirty)
     );
 }
 
@@ -526,7 +518,6 @@ __global__ void update_merkle_layer(
         2 * parent_label + 1,
         &old_right_digest
     );
-    // TODO: If we update MerkleMemoryAir, then we need to modify this part
     bool const left_present = child_ptrs[2 * idx] != MISSING_CHILD;
     bool const right_present = child_ptrs[2 * idx + 1] != MISSING_CHILD;
     bool const left_dirty = left_present && layer[child_ptrs[2 * idx]].is_dirty;
@@ -602,7 +593,7 @@ __global__ void update_merkle_layer(
                 right_present,
                 left_dirty,
                 right_dirty,
-                true,
+                emits_final,
                 poseidon2
             );
             COPY_DIGEST(layer[parent_ptr].digest_raw, cells);
@@ -724,7 +715,7 @@ __global__ void update_to_root(
                 right_present,
                 left_dirty,
                 right_dirty,
-                true,
+                emits_final,
                 poseidon2
             );
             COPY_DIGEST(layer[layer_ids[surely_surviving_child]].digest_raw, cells);
