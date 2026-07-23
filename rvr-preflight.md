@@ -1006,6 +1006,35 @@ low-limb address carry, `rd = x0`, and `rd = rs1`. Isolated corrupt-result,
 disabled-write-gap, and address-underflow transcripts fail before that row
 updates either lookup histogram.
 
+#### Byte-store GPU replay checkpoint (2026-07-23)
+
+The ordinary RV64I main-memory `STOREB` shape replays directly from the same
+three append-only logs and derived predecessor index. It requires the
+base-register read at `T`, source-register read at `T + 1`, and one aligned
+full-block write at `T + 2`, then advances to `pc + 4` at `T + 3`. Replay
+derives the previous block from the initial-write seed for a first write or the
+preceding event for a repeated write, splices the source register's low byte at
+the effective byte offset, and checks the entire logged post-write block. Both
+register-read predecessors, the write predecessor, signed effective address,
+configured address domain, canonical register pointers, and instruction
+fields are validated before trace fill or lookup-histogram updates. The legacy
+record-input entry point remains available and produces identical output.
+
+This checkpoint does not claim `PUBLIC_VALUES_AS` stores. Those are owned by
+the RV64IO execution shape rather than the ordinary RISC-V lifter and remain
+fail-closed in replay until that path emits and consumes its proof-visible
+timed accesses.
+
+The focused differential test covers every byte offset, a negative immediate,
+the first-write seed, repeated writes to one block, and `rs1 = rs2`. CPU,
+legacy CUDA, and replay matrices plus complete variable-range and bitwise
+histograms match, and the replay trace proves. Corrupt post-write blocks,
+invalid execution flags, noncanonical register pointers, a fabricated
+public-values operand shape, wrong aligned blocks, repeated-read predecessor
+mismatches, address underflow, configured-domain overflow, and low-word
+overflow are rejected; the `u32::MAX` byte-address boundary is accepted for a
+32-bit domain. Isolated rejected rows contribute no lookup counts.
+
 #### First multi-AIR GPU proving checkpoint (2026-07-23)
 
 `Rv64IRvrGpuTracegen` now drives the VM inventory's ordinary reverse tracegen
