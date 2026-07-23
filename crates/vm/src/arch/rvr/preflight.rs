@@ -1,8 +1,9 @@
 //! Append-only RVR preflight execution.
 
-use std::{collections::HashSet, path::Path};
+use std::path::Path;
 
 use openvm_instructions::riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS};
+use rustc_hash::FxHashSet;
 use rvr_openvm_lift::RvrRuntimeExtension;
 use rvr_state::{
     PreflightInitialWrite, PreflightMemoryEvent, PreflightProgramEvent, PreflightState,
@@ -165,13 +166,14 @@ impl PreflightBuffers {
             timestamp: ffi.timestamp,
         });
 
-        let mut seen = HashSet::new();
+        let mut seen = FxHashSet::default();
         let mut candidate_index = 0usize;
         let mut initial_write_log = Vec::new();
         for event in &self.memory_log {
             let address_space = event.address_space();
             let is_write = event.is_write();
-            let first_event = seen.insert((address_space, event.pointer));
+            let key = ((address_space as u64) << 32) | event.pointer as u64;
+            let first_event = seen.insert(key);
             if is_write {
                 let candidate = *self
                     .initial_write_candidates

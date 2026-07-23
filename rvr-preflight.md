@@ -610,10 +610,23 @@ bytes, and the equivalent ADDI-only legacy records are 11,534,336 bytes. The
 comparison deliberately charges the replay path for the shared ADDI+BNE
 transcript and index while the legacy byte count contains only ADDI records.
 The conservative median total is therefore 55.7 ms for replay versus 0.54 ms
-for the isolated legacy ADDI path. This checkpoint fails the performance gate:
-the first required optimization is the postflight/index representation, and
-the replay kernel's extra validation and gather cost must also be reduced before
-porting more AIRs.
+for the isolated legacy ADDI path. This slice is far outside acceptable
+overhead: the first required optimization is the postflight/index
+representation, and the replay kernel's extra validation and gather cost must
+also be reduced before porting more AIRs. It does not by itself decide the
+formal end-to-end M2 gate because it excludes both serial execution paths and
+the legacy BNE record upload/kernel while charging the complete shared
+ADDI+BNE transcript and index to ADDI.
+
+As a CPU-oracle optimization, packing the block key into a `u64`, using the
+repository's deterministic `FxHashMap`, updating each predecessor entry with a
+single lookup, and fusing timestamp validation into the step scan reduced the
+cold index median from 53.5 ms to 24.0 ms. A measured attempt to replace the
+small opcode `BTreeMap`s with hash maps regressed it to 35.0 ms and was
+discarded. Even the improved CPU path is not the intended production result:
+GPU postflight should derive predecessor and opcode indexes after the raw logs
+are uploaded, retain the block-sorted event order for system-memory tracegen,
+and avoid uploading the 8.4 MiB derived index.
 
 #### Initial GPU correctness checkpoint (2026-07-23)
 
@@ -633,9 +646,10 @@ the current immediate-ALU AIR always emits a destination write and must gain the
 same conditional-write shape as load/JALR before that schedule can be replayed.
 
 This establishes correctness and log sufficiency for one fixed-row RISC-V AIR,
-but does not pass the M2 performance gate. The measurements above make the next
-checkpoint concrete: fix indexing and replay layout, then repeat this benchmark
-before widening to the other RISC-V adapters.
+but does not yet exercise the complete M2 performance gate. The measurements
+above make the next checkpoint concrete: move indexing to the GPU and improve
+the replay layout, then repeat this benchmark before widening to the other
+RISC-V adapters.
 
 ### M3: complete the GPU proving path
 
