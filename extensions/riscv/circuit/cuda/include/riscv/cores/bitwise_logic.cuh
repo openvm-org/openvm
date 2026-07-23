@@ -52,18 +52,23 @@ template <size_t NUM_LIMBS> struct BitwiseLogicCore {
 
     __device__ BitwiseLogicCore(BitwiseOperationLookup lookup) : bitwise_lookup(lookup) {}
 
-    __device__ void fill_trace_row(RowSlice row, BitwiseLogicCoreRecord<NUM_LIMBS> record) {
+    __device__ void fill_trace_row(
+        RowSlice row,
+        uint8_t const (&b)[NUM_LIMBS],
+        uint8_t const (&c)[NUM_LIMBS],
+        uint8_t local_opcode
+    ) {
         uint8_t a[NUM_LIMBS];
 
-        switch (record.local_opcode) {
+        switch (local_opcode) {
         case 2:
-            run_xor<NUM_LIMBS>(record.b, record.c, a);
+            run_xor<NUM_LIMBS>(b, c, a);
             break;
         case 3:
-            run_or<NUM_LIMBS>(record.b, record.c, a);
+            run_or<NUM_LIMBS>(b, c, a);
             break;
         case 4:
-            run_and<NUM_LIMBS>(record.b, record.c, a);
+            run_and<NUM_LIMBS>(b, c, a);
             break;
         default:
 #pragma unroll
@@ -73,16 +78,20 @@ template <size_t NUM_LIMBS> struct BitwiseLogicCore {
         }
 
         COL_WRITE_ARRAY(row, Cols, a, a);
-        COL_WRITE_ARRAY(row, Cols, b, record.b);
-        COL_WRITE_ARRAY(row, Cols, c, record.c);
+        COL_WRITE_ARRAY(row, Cols, b, b);
+        COL_WRITE_ARRAY(row, Cols, c, c);
 
-        COL_WRITE_VALUE(row, Cols, opcode_xor_flag, record.local_opcode == 2);
-        COL_WRITE_VALUE(row, Cols, opcode_or_flag, record.local_opcode == 3);
-        COL_WRITE_VALUE(row, Cols, opcode_and_flag, record.local_opcode == 4);
+        COL_WRITE_VALUE(row, Cols, opcode_xor_flag, local_opcode == 2);
+        COL_WRITE_VALUE(row, Cols, opcode_or_flag, local_opcode == 3);
+        COL_WRITE_VALUE(row, Cols, opcode_and_flag, local_opcode == 4);
 
 #pragma unroll
         for (size_t i = 0; i < NUM_LIMBS; i++) {
-            bitwise_lookup.add_xor(record.b[i], record.c[i]);
+            bitwise_lookup.add_xor(b[i], c[i]);
         }
+    }
+
+    __device__ void fill_trace_row(RowSlice row, BitwiseLogicCoreRecord<NUM_LIMBS> record) {
+        fill_trace_row(row, record.b, record.c, record.local_opcode);
     }
 };

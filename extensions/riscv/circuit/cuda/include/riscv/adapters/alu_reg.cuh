@@ -38,6 +38,43 @@ struct Rv64BaseAluRegAdapter {
     )
         : mem_helper(range_checker, timestamp_max_bits) {}
 
+    __device__ void fill_trace_row(
+        RowSlice row,
+        uint32_t from_pc,
+        uint32_t from_timestamp,
+        uint32_t rd_ptr,
+        uint32_t rs1_ptr,
+        uint32_t rs2_ptr,
+        uint32_t rs1_prev_timestamp,
+        uint32_t rs2_prev_timestamp,
+        uint32_t write_prev_timestamp,
+        uint16_t const (&write_prev_data)[BLOCK_FE_WIDTH]
+    ) {
+        COL_WRITE_VALUE(row, Rv64BaseAluRegAdapterCols, from_state.pc, from_pc);
+        COL_WRITE_VALUE(row, Rv64BaseAluRegAdapterCols, from_state.timestamp, from_timestamp);
+        COL_WRITE_VALUE(row, Rv64BaseAluRegAdapterCols, rd_ptr, rd_ptr);
+        COL_WRITE_VALUE(row, Rv64BaseAluRegAdapterCols, rs1_ptr, rs1_ptr);
+        COL_WRITE_VALUE(row, Rv64BaseAluRegAdapterCols, rs2_ptr, rs2_ptr);
+        mem_helper.fill(
+            row.slice_from(COL_INDEX(Rv64BaseAluRegAdapterCols, reads_aux[0])),
+            rs1_prev_timestamp,
+            from_timestamp
+        );
+        mem_helper.fill(
+            row.slice_from(COL_INDEX(Rv64BaseAluRegAdapterCols, reads_aux[1])),
+            rs2_prev_timestamp,
+            from_timestamp + 1
+        );
+        Fp packed_prev[BLOCK_FE_WIDTH];
+        copy_u16_cells(packed_prev, write_prev_data);
+        COL_WRITE_ARRAY(row, Rv64BaseAluRegAdapterCols, writes_aux.prev_data, packed_prev);
+        mem_helper.fill(
+            row.slice_from(COL_INDEX(Rv64BaseAluRegAdapterCols, writes_aux)),
+            write_prev_timestamp,
+            from_timestamp + 2
+        );
+    }
+
     __device__ void fill_trace_row(RowSlice row, Rv64BaseAluRegAdapterRecord record) {
         COL_WRITE_VALUE(row, Rv64BaseAluRegAdapterCols, from_state.pc, record.from_pc);
         COL_WRITE_VALUE(

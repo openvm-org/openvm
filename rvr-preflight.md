@@ -823,6 +823,17 @@ equal operands, source/destination aliases, and padding. CPU, legacy CUDA, and
 replay rows and range histograms match; the replay trace proves and rejects a
 corrupted result.
 
+XOR, OR, and AND complete the byte-limb register ALU path using the same
+two-read/one-write schedule. Replay authenticates both full-width operands,
+recomputes the complete 64-bit result, resolves every source/destination alias
+through the shared predecessor index, and emits the existing timestamp-range
+and byte-bitwise lookup requests directly. A seven-row grouped test covers all
+three opcodes, both x0 source positions, every source/destination alias shape,
+and non-power-of-two padding. CPU, legacy CUDA, and replay rows and both lookup
+histograms match; the replay trace proves and rejects corrupt output and
+predecessor-consistency logs. A destination x0 remains fail-closed because this
+AIR always emits a destination write.
+
 #### First multi-AIR GPU proving checkpoint (2026-07-23)
 
 `Rv64IRvrGpuTracegen` now drives the VM inventory's ordinary reverse tracegen
@@ -840,13 +851,13 @@ counts through their normal tracegen using `()` rather than even an empty
 all extension contexts have been generated, the coordinator reads the shared
 sticky replay error once, immediately before proving.
 
-The first integration test executes all 21 currently ported opcodes across the
-12 replay chips, followed by `TERMINATE`. It uses interpreter preflight only for
+The first integration test executes all 24 currently ported opcodes across the
+13 replay chips, followed by `TERMINATE`. It uses interpreter preflight only for
 current system records, discards every interpreter-produced extension arena,
 generates all extension traces from the RVR transcript, passes the resulting
 context through the VM's existing trace-height validation, and completes a real
 GPU prove-and-verify. A negative test confirms that an executed, not-yet-ported
-register XOR is rejected by the pre-kernel coverage check. This establishes the
+register SLL is rejected by the pre-kernel coverage check. This establishes the
 multi-AIR RISC-V integration seam without generalizing `Chip`; system tracegen
 still uses legacy records and remains the next cutover.
 

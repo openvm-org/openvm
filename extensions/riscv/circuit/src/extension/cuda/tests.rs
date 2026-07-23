@@ -14,7 +14,7 @@ use openvm_instructions::{
 };
 use openvm_riscv_transpiler::{
     BaseAluImmOpcode, BaseAluOpcode, BaseAluWImmOpcode, BaseAluWOpcode, BranchEqualOpcode,
-    LessThanImmOpcode, LessThanOpcode, ShiftImmOpcode, ShiftWImmOpcode,
+    LessThanImmOpcode, LessThanOpcode, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode,
 };
 use openvm_stark_backend::StarkEngine;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
@@ -57,6 +57,9 @@ fn rvr_gpu_tracegen_proves_multiple_rv64i_airs_without_extension_arenas() {
         instruction(BaseAluImmOpcode::XORI, immediate_operands(4, 3, 1)),
         instruction(BaseAluOpcode::ADD, register_operands(5, 3, 4)),
         instruction(BaseAluOpcode::SUB, register_operands(11, 5, 1)),
+        instruction(BaseAluOpcode::XOR, register_operands(22, 3, 4)),
+        instruction(BaseAluOpcode::OR, register_operands(23, 3, 4)),
+        instruction(BaseAluOpcode::AND, register_operands(24, 3, 4)),
         instruction(LessThanImmOpcode::SLTI, immediate_operands(6, 5, 100)),
         instruction(LessThanImmOpcode::SLTIU, immediate_operands(14, 1, 4)),
         instruction(ShiftImmOpcode::SLLI, immediate_operands(7, 6, 1)),
@@ -164,7 +167,7 @@ fn rvr_gpu_tracegen_proves_multiple_rv64i_airs_without_extension_arenas() {
 fn rvr_gpu_tracegen_rejects_an_executed_unported_opcode_before_tracegen() {
     let instructions = [
         instruction(
-            BaseAluOpcode::XOR,
+            ShiftOpcode::SLL,
             [
                 reg(3),
                 reg(1),
@@ -210,7 +213,7 @@ fn rvr_gpu_tracegen_rejects_an_executed_unported_opcode_before_tracegen() {
         .unwrap();
 
     let error = match Rv64IRvrGpuTracegen::new(&gpu_program, &gpu_transcript, &replay_plan) {
-        Ok(_) => panic!("executed register XOR must not reach tracegen before its replay port"),
+        Ok(_) => panic!("executed register SLL must not reach tracegen before its replay port"),
         Err(error) => error,
     };
     assert!(
