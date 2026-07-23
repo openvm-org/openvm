@@ -14,9 +14,9 @@ use openvm_instructions::{
 };
 use openvm_riscv_transpiler::{
     BaseAluImmOpcode, BaseAluOpcode, BaseAluWImmOpcode, BaseAluWOpcode, BranchEqualOpcode,
-    BranchLessThanOpcode, LessThanImmOpcode, LessThanOpcode, Rv64AuipcOpcode, Rv64JalLuiOpcode,
-    Rv64JalrOpcode, Rv64LoadStoreOpcode, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode,
-    ShiftWOpcode,
+    BranchLessThanOpcode, LessThanImmOpcode, LessThanOpcode, Rv64AuipcOpcode, Rv64HintStoreOpcode,
+    Rv64JalLuiOpcode, Rv64JalrOpcode, Rv64LoadStoreOpcode, ShiftImmOpcode, ShiftOpcode,
+    ShiftWImmOpcode, ShiftWOpcode,
 };
 use openvm_stark_backend::StarkEngine;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
@@ -244,8 +244,44 @@ fn rvr_gpu_tracegen_proves_system_and_rv64i_airs_without_record_arenas() {
             ],
         ),
         Instruction::from_usize(
+            Rv64LoadStoreOpcode::STOREH.global_opcode(),
+            [
+                reg(2),
+                reg(1),
+                4,
+                RV64_REGISTER_AS as usize,
+                RV64_MEMORY_AS as usize,
+                1,
+                0,
+            ],
+        ),
+        Instruction::from_usize(
+            Rv64LoadStoreOpcode::STOREW.global_opcode(),
+            [
+                reg(2),
+                reg(1),
+                5,
+                RV64_REGISTER_AS as usize,
+                RV64_MEMORY_AS as usize,
+                1,
+                0,
+            ],
+        ),
+        Instruction::from_usize(
+            Rv64LoadStoreOpcode::STORED.global_opcode(),
+            [
+                reg(2),
+                reg(1),
+                6,
+                RV64_REGISTER_AS as usize,
+                RV64_MEMORY_AS as usize,
+                1,
+                0,
+            ],
+        ),
+        Instruction::from_usize(
             Rv64JalrOpcode::JALR.global_opcode(),
-            [reg(30), 0, 188, RV64_REGISTER_AS as usize, 0, 1, 0],
+            [reg(30), 0, 200, RV64_REGISTER_AS as usize, 0, 1, 0],
         ),
         Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
     ];
@@ -318,21 +354,19 @@ fn rvr_gpu_tracegen_proves_system_and_rv64i_airs_without_record_arenas() {
 fn rvr_gpu_tracegen_rejects_an_executed_unported_opcode_before_tracegen() {
     let instructions = [
         Instruction::<F>::from_usize(
-            Rv64LoadStoreOpcode::STOREH.global_opcode(),
+            Rv64HintStoreOpcode::HINT_BUFFER.global_opcode(),
             [
                 reg(1),
-                0,
+                reg(2),
                 0,
                 RV64_REGISTER_AS as usize,
-                openvm_instructions::riscv::RV64_MEMORY_AS as usize,
-                1,
-                0,
+                RV64_MEMORY_AS as usize,
             ],
         ),
         Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
     ];
     let program = Program::from_instructions(&instructions);
-    let init_memory = [(1usize, 3u64), (2, 4u64)]
+    let init_memory = [(1usize, 1u64), (2, 16u64)]
         .into_iter()
         .flat_map(|(register, value)| {
             value
@@ -351,8 +385,10 @@ fn rvr_gpu_tracegen_rejects_an_executed_unported_opcode_before_tracegen() {
     };
     let executor = VmExecutor::new(config.clone()).unwrap();
     let rvr = executor.rvr_preflight_instance(&exe, None).unwrap();
+    let mut state = rvr.create_initial_vm_state(Vec::<Vec<u8>>::new());
+    state.streams.hint_stream.set_hint(vec![0x42; 8]);
     let execution = rvr
-        .execute(Vec::<Vec<u8>>::new(), RvrPreflightLimits::new(8, 16))
+        .execute_from_state(state, RvrPreflightLimits::new(8, 16))
         .unwrap();
     let engine = test_gpu_engine();
     let gpu_program = GpuRvrProgram::upload(
@@ -366,7 +402,7 @@ fn rvr_gpu_tracegen_rejects_an_executed_unported_opcode_before_tracegen() {
         .unwrap();
 
     let error = match Rv64IRvrGpuTracegen::new(&gpu_program, &gpu_transcript, &replay_plan) {
-        Ok(_) => panic!("executed STOREH must not reach tracegen before its replay port"),
+        Ok(_) => panic!("executed HINT_BUFFER must not reach tracegen before its replay port"),
         Err(error) => error,
     };
     assert!(

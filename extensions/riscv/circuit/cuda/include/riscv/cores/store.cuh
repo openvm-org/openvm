@@ -79,11 +79,16 @@ template <size_t WIDTH_BYTES> struct StoreWidthCore {
     __device__ StoreWidthCore(BitwiseOperationLookup bitwise_lookup)
         : bitwise_lookup(bitwise_lookup) {}
 
-    __device__ void fill_trace_row(RowSlice row, StoreRecord record, uint8_t shift) {
+    __device__ void fill_trace_row(
+        RowSlice row,
+        uint16_t const (&read_data)[BLOCK_FE_WIDTH],
+        uint16_t const (&prev_data)[2][BLOCK_FE_WIDTH],
+        uint8_t shift
+    ) {
         Encoder encoder = shift_encoder();
         encoder.write_flag_pt(row.slice_from(offsetof(Cols, selector)), shift);
-        row.write_array(offsetof(Cols, read_data), BLOCK_FE_WIDTH, record.read_data);
-        row.write_array(offsetof(Cols, prev_data), 2 * BLOCK_FE_WIDTH, &record.prev_data[0][0]);
+        row.write_array(offsetof(Cols, read_data), BLOCK_FE_WIDTH, read_data);
+        row.write_array(offsetof(Cols, prev_data), 2 * BLOCK_FE_WIDTH, &prev_data[0][0]);
 
         // Odd shifts materialize the value cells' low bytes and the two preserved boundary
         // bytes. The AIR derives each paired byte; even shifts leave these columns zero and emit
@@ -92,14 +97,15 @@ template <size_t WIDTH_BYTES> struct StoreWidthCore {
         uint16_t prev_bound_bytes[2] = {};
         if (shift & 1) {
             for (size_t i = 0; i < NUM_VALUE_CELLS; i++) {
-                value_lo_bytes[i] = store_byte_from_cell(record.read_data[i], 0);
+                value_lo_bytes[i] = store_byte_from_cell(read_data[i], 0);
                 bitwise_lookup.add_range(
-                    value_lo_bytes[i], store_byte_from_cell(record.read_data[i], 1)
+                    value_lo_bytes[i], store_byte_from_cell(read_data[i], 1)
                 );
             }
             for (size_t which = 0; which < 2; which++) {
                 uint16_t cell =
-                    store_prev_full_cell(record, (shift >> 1) + which * NUM_VALUE_CELLS);
+                    prev_data[((shift >> 1) + which * NUM_VALUE_CELLS) / BLOCK_FE_WIDTH]
+                             [((shift >> 1) + which * NUM_VALUE_CELLS) % BLOCK_FE_WIDTH];
                 bitwise_lookup.add_range(
                     store_byte_from_cell(cell, 0), store_byte_from_cell(cell, 1)
                 );
@@ -108,5 +114,9 @@ template <size_t WIDTH_BYTES> struct StoreWidthCore {
         }
         row.write_array(offsetof(Cols, value_lo_bytes), NUM_VALUE_CELLS, value_lo_bytes);
         row.write_array(offsetof(Cols, prev_bound_bytes), 2, prev_bound_bytes);
+    }
+
+    __device__ void fill_trace_row(RowSlice row, StoreRecord record, uint8_t shift) {
+        fill_trace_row(row, record.read_data, record.prev_data, shift);
     }
 };

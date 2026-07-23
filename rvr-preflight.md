@@ -1035,6 +1035,37 @@ mismatches, address underflow, configured-domain overflow, and low-word
 overflow are rejected; the `u32::MAX` byte-address boundary is accepted for a
 32-bit domain. Isolated rejected rows contribute no lookup counts.
 
+#### Multibyte-store GPU replay checkpoint (2026-07-23)
+
+`STOREH`, `STOREW`, and `STORED` now share one width-parameterized replay
+validator and retain three concrete AIR kernel and Rust entry points. Each row
+requires the base-register read at `T`, source-register read at `T + 1`, and
+first aligned full-block write at `T + 2`. A crossing store additionally
+requires the consecutive second-block write at `T + 3`; a non-crossing store
+requires that clock slot to contain no memory event. Both shapes end at
+`pc + 4, T + 4`.
+
+Replay derives each write's previous block from its segment-local predecessor,
+splices the low two, four, or eight source bytes into those blocks, and compares
+every cell of every logged post-write block. It validates both register
+predecessors, every actual write predecessor, canonical instruction fields,
+signed effective-address arithmetic, and `u64` access and full-block bounds
+before trace fill or either shared lookup histogram update. Non-crossing rows
+retain the AIR's zero second-block data and `u32::MAX` previous-timestamp
+sentinel. Direct replay remains main-memory (`RV64_MEMORY_AS`) only;
+public-values operand shapes fail closed while the legacy record path remains
+available.
+
+The focused STOREH/STOREW/STORED tests cover all eight shifts, every crossing
+shape, first and repeated writes, `rs1 = rs2`, a negative immediate, complete
+CPU/legacy/replay matrix and lookup-histogram equality, and replay proofs.
+Isolated corrupt second-block writes, non-crossing gap events, public-values
+operands, and `u32` end-wrap transcripts must fail before contributing lookup
+counts. The combined arena-free proving test also executes all three stores.
+CUDA execution of these new tests remains pending because both local CUDA
+availability and remote-host approval were unavailable at this checkpoint;
+the non-CUDA RVR build and exact-path formatting checks pass.
+
 #### First multi-AIR GPU proving checkpoint (2026-07-23)
 
 `Rv64IRvrGpuTracegen` now drives the VM inventory's ordinary reverse tracegen
@@ -1052,17 +1083,17 @@ counts through their normal tracegen using `()` rather than even an empty
 all extension contexts have been generated, the coordinator reads the shared
 sticky replay error once, immediately before proving.
 
-The integration test executes all 45 currently ported opcodes across the 28
+The integration test executes all 49 currently ported opcodes across the 31
 replay chips, followed by `TERMINATE`. One RVR preflight run supplies both
 system and RISC-V tracegen. Program reads the device PC histogram, Connector uses
 the segment endpoints, and PersistentBoundary and MemoryMerkle consume the sorted
 device touched-block prefix while the coordinator retains the pre-segment Merkle
 state. No interpreter or production `RecordArena` is constructed or passed. The
 combined context goes through the VM's existing trace-height validation and
-completes a real GPU prove-and-verify. A negative test confirms that an executed,
-not-yet-ported `STOREB` is rejected by the pre-kernel coverage check. This establishes
-the arena-free system plus multi-AIR RISC-V integration seam without generalizing
-`Chip`.
+completes a real GPU prove-and-verify. The deliberately unsupported sentinel is
+now `HINT_BUFFER`: a negative test confirms that it is rejected by the
+pre-kernel coverage check before tracegen. This establishes the arena-free
+system plus multi-AIR RISC-V integration seam without generalizing `Chip`.
 
 ### M3: complete the GPU proving path
 
