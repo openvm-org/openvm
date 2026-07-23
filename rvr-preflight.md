@@ -797,6 +797,14 @@ test covers all three opcodes with immediates -2048, -1, 0, and 2047, plus x0,
 an in-place destination, and padding. CPU, legacy CUDA, and replay rows and both
 lookup histograms match; the replay trace proves and rejects a corrupt result.
 
+ADD and SUB establish the two-source register adapter. Their kernel requires
+reads at T and T+1 followed by the destination write at T+2, resolves each
+predecessor separately, recomputes the wrapped 64-bit result, and fills the
+adapter and arithmetic core directly. The test covers cross-limb carry and
+borrow, both x0 source positions, every source/destination alias ordering, and
+padding. CPU, legacy CUDA, and replay rows and range histograms match; the replay
+trace proves and rejects a corrupted result.
+
 ### M3: complete the GPU proving path
 
 Once RISC-V replay is viable:
