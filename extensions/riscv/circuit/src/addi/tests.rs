@@ -534,6 +534,47 @@ fn test_cuda_addi_tracegen_from_rvr_transcript() {
             RV64_REGISTER_AS as isize,
         ),
         addi(3, 1, 0xff_ffff),
+        addi(11, 0, 0xff_ffff),
+        Instruction::from_usize(
+            BaseAluWImmOpcode::ADDIW.global_opcode(),
+            [
+                reg(5),
+                reg(1),
+                0xff_f800,
+                RV64_REGISTER_AS as usize,
+                RV64_IMM_AS as usize,
+            ],
+        ),
+        Instruction::from_usize(
+            BaseAluWImmOpcode::ADDIW.global_opcode(),
+            [
+                reg(1),
+                reg(1),
+                1,
+                RV64_REGISTER_AS as usize,
+                RV64_IMM_AS as usize,
+            ],
+        ),
+        Instruction::from_usize(
+            BaseAluWImmOpcode::ADDIW.global_opcode(),
+            [
+                reg(13),
+                reg(11),
+                1,
+                RV64_REGISTER_AS as usize,
+                RV64_IMM_AS as usize,
+            ],
+        ),
+        Instruction::from_usize(
+            BaseAluWImmOpcode::ADDIW.global_opcode(),
+            [
+                reg(14),
+                reg(1),
+                0x7ff,
+                RV64_REGISTER_AS as usize,
+                RV64_IMM_AS as usize,
+            ],
+        ),
         Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
     ];
     let program = Program::from_instructions(&instructions);
@@ -549,11 +590,12 @@ fn test_cuda_addi_tracegen_from_rvr_transcript() {
         .unwrap()
         .execute(
             Vec::<Vec<u8>>::new(),
-            RvrPreflightLimits::new(3 * ITERATIONS + 5, 6 * ITERATIONS + 8),
+            RvrPreflightLimits::new(3 * ITERATIONS + 10, 6 * ITERATIONS + 18),
         )
         .unwrap();
     let mut tester = GpuChipTestBuilder::default();
     let mut harness = create_cuda_harness(&tester);
+    let mut w_harness = create_cuda_w_harness(&tester);
     let mut branch_harness = create_cuda_branch_harness_with_capacity(&tester, 2 * ITERATIONS + 1);
     for (pc, instruction) in instructions[..2].iter().enumerate() {
         tester.execute_with_pc(
@@ -595,6 +637,20 @@ fn test_cuda_addi_tracegen_from_rvr_transcript() {
         &instructions[7],
         28,
     );
+    tester.execute_with_pc(
+        &mut harness.executor,
+        &mut harness.dense_arena,
+        &instructions[8],
+        32,
+    );
+    for (index, instruction) in instructions[9..13].iter().enumerate() {
+        tester.execute_with_pc(
+            &mut w_harness.executor,
+            &mut w_harness.dense_arena,
+            instruction,
+            36 + index as u32 * 4,
+        );
+    }
 
     type Record<'a> = (
         &'a mut Rv64BaseAluImmU16AdapterRecord,
@@ -606,6 +662,17 @@ fn test_cuda_addi_tracegen_from_rvr_transcript() {
         .transfer_to_matrix_arena(
             &mut harness.matrix_arena,
             EmptyAdapterCoreLayout::<F, Rv64BaseAluImmU16AdapterExecutor>::new(),
+        );
+    type WRecord<'a> = (
+        &'a mut Rv64BaseAluWImmU16AdapterRecord,
+        &'a mut AddICoreRecord<RV64_WORD_U16_LIMBS>,
+    );
+    w_harness
+        .dense_arena
+        .get_record_seeker::<WRecord, _>()
+        .transfer_to_matrix_arena(
+            &mut w_harness.matrix_arena,
+            EmptyAdapterCoreLayout::<F, Rv64BaseAluWImmU16AdapterExecutor>::new(),
         );
     type BranchRecord<'a> = (
         &'a mut Rv64BranchAdapterRecord,
@@ -638,7 +705,7 @@ fn test_cuda_addi_tracegen_from_rvr_transcript() {
         d_replay_plan
             .opcode_range(BaseAluImmOpcode::ADDI.global_opcode())
             .len(),
-        ITERATIONS + 3
+        ITERATIONS + 4
     );
     assert_eq!(
         d_replay_plan
@@ -651,6 +718,12 @@ fn test_cuda_addi_tracegen_from_rvr_transcript() {
             .opcode_range(BranchEqualOpcode::BNE.global_opcode())
             .len(),
         ITERATIONS
+    );
+    assert_eq!(
+        d_replay_plan
+            .opcode_range(BaseAluWImmOpcode::ADDIW.global_opcode())
+            .len(),
+        4
     );
     let mismatched_program = GpuRvrProgram::upload(&program, &memory_config, device_ctx).unwrap();
     assert!(matches!(
@@ -682,6 +755,12 @@ fn test_cuda_addi_tracegen_from_rvr_transcript() {
         .unwrap();
     assert_eq!(d_transcript.error_code().unwrap(), 0);
     let combined_replay_counts = range_checker.count.to_host_on(device_ctx).unwrap();
+    let addiw_replay_ctx = w_harness
+        .gpu_chip
+        .generate_proving_ctx_from_rvr(&d_program, &d_transcript, &d_replay_plan)
+        .unwrap();
+    assert_eq!(d_transcript.error_code().unwrap(), 0);
+    let all_replay_counts = range_checker.count.to_host_on(device_ctx).unwrap();
 
     let mut corrupt_transcript = RvrPreflightTranscript {
         program_log: execution.transcript.program_log.clone(),
@@ -775,6 +854,39 @@ fn test_cuda_addi_tracegen_from_rvr_transcript() {
         .unwrap();
     assert_eq!(d_corrupt_branch_predecessor.error_code().unwrap(), 29);
 
+    let mut corrupt_addiw_transcript = RvrPreflightTranscript {
+        program_log: execution.transcript.program_log.clone(),
+        memory_log: execution.transcript.memory_log.clone(),
+        initial_write_log: execution.transcript.initial_write_log.clone(),
+    };
+    let addiw_timestamp = corrupt_addiw_transcript
+        .program_log
+        .iter()
+        .find(|event| event.pc == 36)
+        .unwrap()
+        .timestamp;
+    let addiw_write_index = corrupt_addiw_transcript
+        .memory_log
+        .iter()
+        .position(|event| event.timestamp == addiw_timestamp + 1)
+        .unwrap();
+    corrupt_addiw_transcript.memory_log[addiw_write_index].value[2] ^= 1;
+    let (d_corrupt_addiw, d_corrupt_addiw_plan) = d_program
+        .upload_transcript(&corrupt_addiw_transcript, RvrPreflightEndpoint::Terminated)
+        .unwrap();
+    let corrupt_addiw_range_checker = Arc::new(
+        openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU::new(
+            default_var_range_checker_bus(),
+            device_ctx.clone(),
+        ),
+    );
+    let corrupt_addiw_chip =
+        Rv64AddIWChipGpu::new(corrupt_addiw_range_checker, tester.timestamp_max_bits());
+    corrupt_addiw_chip
+        .generate_proving_ctx_from_rvr(&d_program, &d_corrupt_addiw, &d_corrupt_addiw_plan)
+        .unwrap();
+    assert_eq!(d_corrupt_addiw.error_code().unwrap(), 39);
+
     let legacy_range_checker = Arc::new(
         openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU::new(
             default_var_range_checker_bus(),
@@ -794,7 +906,7 @@ fn test_cuda_addi_tracegen_from_rvr_transcript() {
     };
     assert_eq!(
         replay_counts.iter().map(raw_count).sum::<u32>(),
-        (ITERATIONS as u32 + 3) * 9
+        (ITERATIONS as u32 + 4) * 9
     );
 
     let legacy_branch_range_checker = Arc::new(
@@ -819,6 +931,27 @@ fn test_cuda_addi_tracegen_from_rvr_transcript() {
         .all(|((combined, addi), branch)| {
             raw_count(combined) - raw_count(addi) == raw_count(branch)
         }));
+
+    let legacy_addiw_range_checker = Arc::new(
+        openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU::new(
+            default_var_range_checker_bus(),
+            device_ctx.clone(),
+        ),
+    );
+    let legacy_addiw_chip = Rv64AddIWChipGpu::new(
+        legacy_addiw_range_checker.clone(),
+        tester.timestamp_max_bits(),
+    );
+    let legacy_addiw_ctx = legacy_addiw_chip.generate_proving_ctx(w_harness.dense_arena);
+    let legacy_addiw_counts = legacy_addiw_range_checker
+        .count
+        .to_host_on(device_ctx)
+        .unwrap();
+    assert!(all_replay_counts
+        .iter()
+        .zip(&combined_replay_counts)
+        .zip(&legacy_addiw_counts)
+        .all(|((all, prior), addiw)| raw_count(all) - raw_count(prior) == raw_count(addiw)));
 
     let expected_trace =
         <Rv64AddIChip<F> as Chip<MatrixRecordArena<F>, CpuBackend<SC>>>::generate_proving_ctx(
@@ -862,10 +995,29 @@ fn test_cuda_addi_tracegen_from_rvr_transcript() {
         device_ctx,
     );
 
+    let expected_addiw_trace =
+        <Rv64AddIWChip<F> as Chip<MatrixRecordArena<F>, CpuBackend<SC>>>::generate_proving_ctx(
+            &w_harness.cpu_chip,
+            w_harness.matrix_arena,
+        )
+        .common_main;
+    let expected_addiw_trace = ColMajorMatrix::from_row_major(&expected_addiw_trace);
+    assert_eq_host_and_device_matrix_col_maj(
+        &expected_addiw_trace,
+        &legacy_addiw_ctx.common_main,
+        device_ctx,
+    );
+    assert_eq_host_and_device_matrix_col_maj(
+        &expected_addiw_trace,
+        &addiw_replay_ctx.common_main,
+        device_ctx,
+    );
+
     tester
         .build()
         .load_air_proving_ctx(Arc::new(harness.air), replay_ctx)
         .load_air_proving_ctx(Arc::new(branch_harness.air), branch_replay_ctx)
+        .load_air_proving_ctx(Arc::new(w_harness.air), addiw_replay_ctx)
         .finalize()
         .simple_test()
         .expect("RVR transcript replay proof failed");

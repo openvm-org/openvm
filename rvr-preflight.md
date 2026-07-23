@@ -740,6 +740,15 @@ payload rather than an allocator high-water measurement over an identical phase.
 The next checkpoint is therefore the remaining fixed-row RV64I arithmetic and
 register adapters, followed by loads/stores and the actual memory-peak comparison.
 
+The first widening step adds direct ADDIW replay. It authenticates the full
+64-bit source and destination events while the core re-executes only the low
+32-bit addition, then requires the logged upper limbs to equal the result's sign
+extension. CPU, legacy CUDA, and replay matrices and range histograms match for
+negative, positive, low-limb-carry, and in-place-destination cases; a corrupted
+sign-extension limb is rejected. Writes to x0 remain fail-closed because the
+transpiler canonicalizes those instructions to NOP and the AIR has no disabled
+write row.
+
 ### M3: complete the GPU proving path
 
 Once RISC-V replay is viable:
