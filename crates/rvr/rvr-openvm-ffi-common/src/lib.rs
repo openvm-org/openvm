@@ -365,6 +365,12 @@ extern "C" {
         vals: *const u64,
         num_words: u32,
     );
+    fn touch_mem_u64_range_wrapper(
+        state: *mut c_void,
+        base_addr: u64,
+        out: *mut u64,
+        num_words: u32,
+    );
     fn record_page_access_u64_range_wrapper(
         state: *mut c_void,
         base_addr: u64,
@@ -473,6 +479,17 @@ pub unsafe fn read_mem_words(state: *mut c_void, base_addr: u64, out: &mut [u64]
 pub unsafe fn write_mem_words(state: *mut c_void, base_addr: u64, vals: &[u64]) {
     let num_words = memory_word_count(vals.len());
     write_mem_u64_range_wrapper(state, base_addr, vals.as_ptr(), num_words);
+}
+
+/// Read guest words for execution and record memory-touch events for their
+/// range without treating them as ordinary reads.
+///
+/// # Safety
+/// `state` must point to a valid `RvState`, and `out` must be non-empty and
+/// cover a valid main-memory range beginning at `base_addr`.
+pub unsafe fn touch_mem_words(state: *mut c_void, base_addr: u64, out: &mut [u64]) {
+    let num_words = memory_word_count(out.len());
+    touch_mem_u64_range_wrapper(state, base_addr, out.as_mut_ptr(), num_words);
 }
 
 /// Read one u64 whose value affects execution but is not a VM memory access.

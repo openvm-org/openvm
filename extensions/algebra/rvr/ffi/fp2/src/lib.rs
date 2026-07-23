@@ -13,7 +13,7 @@ use rvr_openvm_ext_algebra_ffi_common::{
     write_field_256, FieldArith, KnownFieldArith,
 };
 use rvr_openvm_ext_ffi_common::{
-    read_mem_words, u64s_as_bytes, u64s_as_bytes_mut, write_mem_words,
+    read_mem_words, touch_mem_words, u64s_as_bytes, u64s_as_bytes_mut, write_mem_words,
 };
 
 const FIELD_256_BYTES: u64 = rvr_openvm_ext_algebra_ffi_common::FIELD_256_BYTES as u64;
@@ -150,8 +150,9 @@ pub unsafe extern "C" fn rvr_ext_fp2_setup(
     let modulus_matches = &input_bytes[..num_limbs] == modulus_bytes;
     let second_input = BigUint::from_bytes_le(&input_bytes[num_limbs..2 * num_limbs]);
 
-    // SETUP reads both inputs before it validates the configured modulus.
-    read_mem_words(state, rs2_ptr, &mut words);
+    // The setup AIR treats its second heap operand as a touch: the value is
+    // available to execution, but the memory event has setup/touch semantics.
+    touch_mem_words(state, rs2_ptr, &mut words);
     if !modulus_matches {
         return false;
     }

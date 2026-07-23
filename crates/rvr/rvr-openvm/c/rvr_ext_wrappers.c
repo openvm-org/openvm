@@ -35,6 +35,12 @@ void write_mem_u64_range_wrapper(RvState* state, uint64_t base_addr,
   write_mem_u64_range(state, base_addr, vals, num_words);
 }
 
+void touch_mem_u64_range_wrapper(RvState* state, uint64_t base_addr,
+                                 uint64_t* out, uint32_t num_words) {
+  peek_mem_u64_range(state, base_addr, out, num_words);
+  trace_mem_access_u64_range(state, base_addr, num_words, AS_MEMORY);
+}
+
 void record_page_access_u64_range_wrapper(RvState* state, uint64_t base_addr,
                                           uint32_t num_words,
                                           uint32_t addr_space) {

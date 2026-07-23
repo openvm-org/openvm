@@ -17,7 +17,8 @@ use rvr_openvm_ext_algebra_ffi_common::{
     write_field_256, FieldArith, KnownFieldArith,
 };
 use rvr_openvm_ext_ffi_common::{
-    ext_hint_stream_set, peek_mem_words, read_mem_words, u64s_as_bytes, write_mem_words,
+    ext_hint_stream_set, peek_mem_words, read_mem_words, touch_mem_words, u64s_as_bytes,
+    write_mem_words,
 };
 
 // ── Field structs ────────────────────────────────────────────────────────────
@@ -159,9 +160,9 @@ pub unsafe extern "C" fn rvr_ext_mod_setup(
     let modulus = std::slice::from_raw_parts(modulus_ptr, num_limbs);
     let modulus_matches = &u64s_as_bytes(&words)[..num_limbs] == modulus;
 
-    // SETUP reads both inputs even though only the configured modulus affects
-    // the result.
-    read_mem_words(state, rs2_ptr, &mut words);
+    // The setup AIR treats its second heap operand as a touch: the value is
+    // available to execution, but the memory event has setup/touch semantics.
+    touch_mem_words(state, rs2_ptr, &mut words);
     if !modulus_matches {
         return false;
     }
@@ -200,7 +201,7 @@ pub unsafe extern "C" fn rvr_ext_mod_setup_iseq(
     let modulus_matches = &u64s_as_bytes(&rs1_words)[..num_limbs] == modulus;
 
     let mut rs2_words = vec![0u64; num_words as usize];
-    read_mem_words(state, rs2_ptr, &mut rs2_words);
+    touch_mem_words(state, rs2_ptr, &mut rs2_words);
     if !modulus_matches {
         return INVALID_MODULUS;
     }
