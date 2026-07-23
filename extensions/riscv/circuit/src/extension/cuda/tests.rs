@@ -1,7 +1,7 @@
 use openvm_circuit::{
     arch::{
         rvr::{cuda::GpuRvrProgram, RvrPreflightLimits},
-        Arena, GenerationError, VirtualMachine, VmExecutor,
+        GenerationError, VirtualMachine, VmExecutor,
     },
     utils::{test_gpu_engine, test_system_config},
 };
@@ -35,7 +35,7 @@ fn instruction(opcode: impl LocalOpcode, operands: [usize; 5]) -> Instruction<F>
 }
 
 #[test]
-fn rvr_gpu_tracegen_proves_multiple_rv64i_airs_without_extension_arenas() {
+fn rvr_gpu_tracegen_proves_system_and_rv64i_airs_without_record_arenas() {
     let register_operands = |rd, rs1, rs2| {
         [
             reg(rd),
@@ -174,29 +174,19 @@ fn rvr_gpu_tracegen_proves_multiple_rv64i_airs_without_extension_arenas() {
 
     let executor = VmExecutor::new(config.clone()).unwrap();
     let rvr = executor.rvr_preflight_instance(&exe, None).unwrap();
-    let rvr_execution = rvr
-        .execute(Vec::<Vec<u8>>::new(), RvrPreflightLimits::new(64, 192))
-        .unwrap();
+    let state = rvr.create_initial_vm_state(Vec::<Vec<u8>>::new());
 
     let (mut vm, pk) =
         VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64IGpuBuilder, config.clone())
             .unwrap();
     let cached_program = vm.commit_program_on_device(&program);
     vm.load_program(cached_program);
-    let mut interpreter = vm.preflight_interpreter(&exe).unwrap();
-    let state = vm.create_initial_state(&exe, Vec::<Vec<u8>>::new());
+    // The system memory trace starts from the segment's pre-mutation image.
+    // Upload it before RVR consumes the host state and produces the final image.
     vm.transport_init_memory_to_device(&state.memory);
-    let output = vm
-        .execute_preflight(&mut interpreter, state, &vec![64; vm.pk().per_air.len()])
+    let rvr_execution = rvr
+        .execute_from_state(state, RvrPreflightLimits::new(64, 192))
         .unwrap();
-    let num_system_airs = config.system.num_airs();
-    let mut record_arenas = output.record_arenas;
-    let extension_arenas = record_arenas.split_off(num_system_airs);
-    assert!(
-        extension_arenas.iter().any(|arena| !arena.is_empty()),
-        "the interpreter must have produced extension records that this path discards"
-    );
-    drop(extension_arenas);
 
     let device_ctx = &vm.engine.device().device_ctx;
     let gpu_program =
@@ -207,9 +197,10 @@ fn rvr_gpu_tracegen_proves_multiple_rv64i_airs_without_extension_arenas() {
     let mut tracegen =
         Rv64IRvrGpuTracegen::new(&gpu_program, &gpu_transcript, &replay_plan).unwrap();
     let proving_ctx = vm
-        .generate_proving_ctx_with_extension_tracegen(
-            output.system_records,
-            record_arenas,
+        .generate_proving_ctx_from_rvr(
+            &gpu_program,
+            &gpu_transcript,
+            &replay_plan,
             |insertion_idx, chip| {
                 tracegen
                     .generate_for_chip(insertion_idx, chip)
