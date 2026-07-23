@@ -970,21 +970,23 @@ all extension contexts have been generated, the coordinator reads the shared
 sticky replay error once, immediately before proving.
 
 The first integration test executes all 38 currently ported opcodes across the
-21 replay chips, followed by `TERMINATE`. It uses interpreter preflight only for
-current system records, discards every interpreter-produced extension arena,
-generates all extension traces from the RVR transcript, passes the resulting
-context through the VM's existing trace-height validation, and completes a real
-GPU prove-and-verify. A negative test confirms that an executed, not-yet-ported
-LOADB is rejected by the pre-kernel coverage check. This establishes the multi-AIR
-RISC-V integration seam without generalizing `Chip`; system tracegen still uses
-legacy records and remains the next cutover.
+21 replay chips, followed by `TERMINATE`. One RVR preflight run supplies both
+system and RISC-V tracegen. Program reads the device PC histogram, Connector uses
+the segment endpoints, and PersistentBoundary and MemoryMerkle consume the sorted
+device touched-block prefix while the coordinator retains the pre-segment Merkle
+state. No interpreter or production `RecordArena` is constructed or passed. The
+combined context goes through the VM's existing trace-height validation and
+completes a real GPU prove-and-verify. A negative test confirms that an executed,
+not-yet-ported LOADB is rejected by the pre-kernel coverage check. This establishes
+the arena-free system plus multi-AIR RISC-V integration seam without generalizing
+`Chip`.
 
 ### M3: complete the GPU proving path
 
-Once RISC-V replay is viable:
+With the system and initial RISC-V replay seam established:
 
-- generate Program, Connector, PersistentBoundary, MemoryMerkle, and system-origin
-  Poseidon requests from the same logs;
+- keep Program, Connector, PersistentBoundary, MemoryMerkle, and system-origin
+  Poseidon requests on the same-log path as more instructions are ported;
 - merge all RISC-V and system requests before generating the global range-check,
   bitwise, and other periphery traces;
 - reconstruct initial touched leaves from final memory plus the sparse
