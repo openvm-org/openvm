@@ -73,6 +73,8 @@ fn rvr_gpu_tracegen_proves_multiple_rv64i_airs_without_extension_arenas() {
         instruction(ShiftOpcode::SLL, register_operands(25, 1, 2)),
         instruction(ShiftOpcode::SRL, register_operands(26, 1, 2)),
         instruction(ShiftOpcode::SRA, register_operands(27, 1, 2)),
+        instruction(ShiftWOpcode::SLLW, register_operands(28, 1, 2)),
+        instruction(ShiftWOpcode::SRLW, register_operands(29, 1, 2)),
         instruction(ShiftWImmOpcode::SLLIW, immediate_operands(17, 8, 1)),
         instruction(ShiftWImmOpcode::SRLIW, immediate_operands(18, 17, 1)),
         instruction(ShiftWImmOpcode::SRAIW, immediate_operands(19, 17, 1)),
