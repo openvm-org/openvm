@@ -150,6 +150,9 @@ impl<'a> Rv64IRvrGpuTracegen<'a> {
             // The concrete replay kernel accepts the RV64I main-memory shape.
             // RV64IO public-values stores fail closed in instruction validation.
             Rv64LoadStoreOpcode::STOREB.global_opcode(),
+            Rv64LoadStoreOpcode::STOREH.global_opcode(),
+            Rv64LoadStoreOpcode::STOREW.global_opcode(),
+            Rv64LoadStoreOpcode::STORED.global_opcode(),
         ]
         .into_iter()
         .any(|candidate| candidate.as_usize() as u32 == opcode)
@@ -254,6 +257,9 @@ impl<'a> Rv64IRvrGpuTracegen<'a> {
         replay_chip!(Rv64LoadWordChipGpu, [Rv64LoadStoreOpcode::LOADWU]);
         replay_chip!(Rv64LoadDoublewordChipGpu, [Rv64LoadStoreOpcode::LOADD]);
         replay_chip!(Rv64StoreByteChipGpu, [Rv64LoadStoreOpcode::STOREB]);
+        replay_chip!(Rv64StoreHalfwordChipGpu, [Rv64LoadStoreOpcode::STOREH]);
+        replay_chip!(Rv64StoreWordChipGpu, [Rv64LoadStoreOpcode::STOREW]);
+        replay_chip!(Rv64StoreDoublewordChipGpu, [Rv64LoadStoreOpcode::STORED]);
         replay_chip!(Rv64AddIChipGpu, [BaseAluImmOpcode::ADDI]);
         replay_chip!(
             Rv64ShiftLogicalImmChipGpu,
