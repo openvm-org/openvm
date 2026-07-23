@@ -103,18 +103,20 @@ template <size_t NUM_LIMBS, size_t LIMB_BITS> struct ShiftLogicalCore {
 
     __device__ ShiftLogicalCore(VariableRangeChecker range) : range_checker(range) {}
 
-    __device__ void
-    fill_trace_row(RowSlice row, ShiftLogicalCoreRecord<NUM_LIMBS, LIMB_BITS> record) {
-        bool is_sll = record.local_opcode == 0;
+    __device__ void fill_trace_row(
+        RowSlice row,
+        uint16_t const (&b)[NUM_LIMBS],
+        uint16_t const (&c)[NUM_LIMBS],
+        uint8_t local_opcode
+    ) {
+        bool is_sll = local_opcode == 0;
 
         uint16_t a[NUM_LIMBS];
         size_t limb_shift = 0, bit_shift = 0;
         if (is_sll) {
-            run_shift_left<NUM_LIMBS, LIMB_BITS>(record.b, record.c, a, limb_shift, bit_shift);
+            run_shift_left<NUM_LIMBS, LIMB_BITS>(b, c, a, limb_shift, bit_shift);
         } else {
-            run_shift_right_logical<NUM_LIMBS, LIMB_BITS>(
-                record.b, record.c, a, limb_shift, bit_shift
-            );
+            run_shift_right_logical<NUM_LIMBS, LIMB_BITS>(b, c, a, limb_shift, bit_shift);
         }
 
         size_t combined_bits = NUM_LIMBS * LIMB_BITS;
@@ -123,8 +125,7 @@ template <size_t NUM_LIMBS, size_t LIMB_BITS> struct ShiftLogicalCore {
             ++num_bits_log;
         }
         range_checker.add_count(
-            ((uint32_t)record.c[0] - (uint32_t)bit_shift -
-             (uint32_t)(limb_shift * LIMB_BITS)) >>
+            ((uint32_t)c[0] - (uint32_t)bit_shift - (uint32_t)(limb_shift * LIMB_BITS)) >>
                 num_bits_log,
             LIMB_BITS - num_bits_log
         );
@@ -133,7 +134,7 @@ template <size_t NUM_LIMBS, size_t LIMB_BITS> struct ShiftLogicalCore {
         uint16_t carry_arr[NUM_LIMBS];
         uint16_t aux_arr[NUM_LIMBS];
         for (size_t k = 0; k < NUM_LIMBS; k++) {
-            uint32_t limb = record.b[k];
+            uint32_t limb = b[k];
             uint32_t carry, aux;
             if (is_sll) {
                 carry = limb >> aux_bits;
@@ -164,8 +165,13 @@ template <size_t NUM_LIMBS, size_t LIMB_BITS> struct ShiftLogicalCore {
 
         COL_WRITE_VALUE(row, Cols, opcode_sll_flag, is_sll ? 1u : 0u);
 
-        COL_WRITE_ARRAY(row, Cols, b, record.b);
-        COL_WRITE_ARRAY(row, Cols, c, record.c);
+        COL_WRITE_ARRAY(row, Cols, b, b);
+        COL_WRITE_ARRAY(row, Cols, c, c);
         COL_WRITE_ARRAY(row, Cols, a, a);
+    }
+
+    __device__ void
+    fill_trace_row(RowSlice row, ShiftLogicalCoreRecord<NUM_LIMBS, LIMB_BITS> record) {
+        fill_trace_row(row, record.b, record.c, record.local_opcode);
     }
 };
