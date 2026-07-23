@@ -551,10 +551,6 @@ impl<'a> EmitContext<'a> {
     }
 
     pub fn trace_page_access(&mut self, addr: &str, width: MemWidth, addr_space: PageAddressSpace) {
-        assert!(
-            !self.mode.traces_values(),
-            "page-only access is invalid when values are being traced"
-        );
         if !matches!(self.mode, EmitMode::Metered { .. }) {
             return;
         }

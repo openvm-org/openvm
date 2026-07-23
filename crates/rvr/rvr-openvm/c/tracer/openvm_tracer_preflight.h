@@ -151,6 +151,15 @@ trace_reserve_memory_writes(RvState* restrict state, uint32_t writes,
   return true;
 }
 
+static __attribute__((always_inline)) inline bool
+trace_write_other_block_u64(RvState* restrict state, uint32_t address_space,
+                            uint32_t pointer, uint64_t value,
+                            uint64_t previous_value) {
+  preflight_append_write_u64(state, address_space, pointer, value,
+                             previous_value);
+  return state->mode_state.error == PREFLIGHT_ERROR_NONE;
+}
+
 static __attribute__((always_inline)) inline void trace_reg_read(
     RvState* restrict state, uint8_t index, uint64_t value) {
   preflight_append_read_u64(state, AS_REGISTER,
