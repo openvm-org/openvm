@@ -935,6 +935,23 @@ variable-range requests and x0 rows emit six. The replay trace proves and
 rejects result, target, flag, PC-bound, and predecessor corruptions before a
 rejected row updates the shared histogram.
 
+AUIPC adds the unconditional destination-write adapter. Replay requires one
+register write at `t`, advances to `pc + 4` at `t + 1`, resolves the write's
+exact predecessor, and rejects raw `rd = x0` because canonical transpilation
+turns that case into a NOP while this AIR has no disabled-write row. The
+immediate must be the canonical 24-bit value used by the executor. The kernel
+computes the full 64-bit result as `pc + sign_extend32(imm << 8)` and checks all
+four logged u16 cells; in particular, it does not infer the upper word from the
+sign bit of the low result word. Every valid row emits nine variable-range
+requests.
+
+The differential test covers zero and signed offsets, the positive result
+`0x8000_0000` with zero upper cells, a negative full-width result, repeated
+destinations, and padding. CPU, legacy CUDA, and replay matrices and complete
+range histograms match, and the replay trace proves. Raw `rd = x0`,
+noncanonical immediates, corrupt results, invalid PC fallthrough, and malformed
+predecessors are rejected before the affected row updates the histogram.
+
 #### First multi-AIR GPU proving checkpoint (2026-07-23)
 
 `Rv64IRvrGpuTracegen` now drives the VM inventory's ordinary reverse tracegen
@@ -952,13 +969,13 @@ counts through their normal tracegen using `()` rather than even an empty
 all extension contexts have been generated, the coordinator reads the shared
 sticky replay error once, immediately before proving.
 
-The first integration test executes all 37 currently ported opcodes across the
-20 replay chips, followed by `TERMINATE`. It uses interpreter preflight only for
+The first integration test executes all 38 currently ported opcodes across the
+21 replay chips, followed by `TERMINATE`. It uses interpreter preflight only for
 current system records, discards every interpreter-produced extension arena,
 generates all extension traces from the RVR transcript, passes the resulting
 context through the VM's existing trace-height validation, and completes a real
 GPU prove-and-verify. A negative test confirms that an executed, not-yet-ported
-AUIPC is rejected by the pre-kernel coverage check. This establishes the multi-AIR
+LOADB is rejected by the pre-kernel coverage check. This establishes the multi-AIR
 RISC-V integration seam without generalizing `Chip`; system tracegen still uses
 legacy records and remains the next cutover.
 
