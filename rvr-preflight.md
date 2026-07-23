@@ -882,6 +882,19 @@ variable-range requests. The replay trace proves and rejects a corrupt upper
 sign-extension limb, an inconsistent all-alias source predecessor, and a
 destination x0.
 
+BLT, BLTU, BGE, and BGEU extend direct replay to the second branch AIR. The
+kernel authenticates the two register reads at timestamps `t` and `t + 1`,
+resolves both predecessor chains, reconstructs signed or unsigned comparison
+semantics, and requires the logged PC at `t + 2` to equal either the
+field-encoded branch target or the four-byte fallthrough. A nine-row grouped
+test covers all four opcodes, signed/unsigned disagreement, equality, both x0
+source positions, aliased non-x0 reads, a selected negative backward target, a
+negative immediate on fallthrough, and padding. CPU, legacy CUDA, and replay
+matrices and complete range histograms match; equal rows emit six variable-range
+requests and unequal rows emit seven. The replay trace proves and rejects
+corrupt target, schedule, non-u16 value, and predecessor-consistency logs before
+any rejected row can update the shared histogram.
+
 #### First multi-AIR GPU proving checkpoint (2026-07-23)
 
 `Rv64IRvrGpuTracegen` now drives the VM inventory's ordinary reverse tracegen
@@ -899,13 +912,13 @@ counts through their normal tracegen using `()` rather than even an empty
 all extension contexts have been generated, the coordinator reads the shared
 sticky replay error once, immediately before proving.
 
-The first integration test executes all 30 currently ported opcodes across the
-17 replay chips, followed by `TERMINATE`. It uses interpreter preflight only for
+The first integration test executes all 34 currently ported opcodes across the
+18 replay chips, followed by `TERMINATE`. It uses interpreter preflight only for
 current system records, discards every interpreter-produced extension arena,
 generates all extension traces from the RVR transcript, passes the resulting
 context through the VM's existing trace-height validation, and completes a real
 GPU prove-and-verify. A negative test confirms that an executed, not-yet-ported
-BLT is rejected by the pre-kernel coverage check. This establishes the multi-AIR
+LUI is rejected by the pre-kernel coverage check. This establishes the multi-AIR
 RISC-V integration seam without generalizing `Chip`; system tracegen still uses
 legacy records and remains the next cutover.
 

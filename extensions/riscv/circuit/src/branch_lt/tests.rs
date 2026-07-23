@@ -27,6 +27,40 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use {
+    crate::Rv64IConfig,
+    openvm_circuit::{
+        arch::{
+            rvr::{
+                cuda::GpuRvrProgram, RvrPreflightEndpoint, RvrPreflightLimits,
+                RvrPreflightTranscript,
+            },
+            MatrixRecordArena, VmExecutor,
+        },
+        system::{
+            cuda::memory::MemoryInventoryGPU,
+            memory::online::{AddressMap, GuestMemory, TracingMemory},
+        },
+        utils::test_system_config,
+    },
+    openvm_circuit_primitives::Chip,
+    openvm_cpu_backend::CpuBackend,
+    openvm_cuda_backend::{
+        data_transporter::{
+            assert_eq_host_and_device_matrix_col_maj, transport_matrix_d2h_row_major,
+        },
+        prelude::SC,
+    },
+    openvm_cuda_common::{copy::MemCopyD2H, stream::device_synchronize},
+    openvm_instructions::{
+        exe::{SparseMemoryImage, VmExe},
+        program::Program,
+        riscv::RV64_REGISTER_AS,
+        SystemOpcode,
+    },
+    openvm_stark_backend::prover::ColMajorMatrix,
+};
 #[cfg(feature = "cuda")]
 use {
     crate::{
@@ -702,4 +736,346 @@ fn test_cuda_rand_branch_lt_tracegen(opcode: BranchLessThanOpcode, num_ops: usiz
         .finalize()
         .simple_test()
         .unwrap();
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+#[test]
+fn test_cuda_branch_lt_tracegen_from_rvr_transcript() {
+    let reg = |index: usize| index * RV64_REGISTER_NUM_LIMBS;
+    let branch = |opcode: BranchLessThanOpcode, rs1: usize, rs2: usize, immediate: isize| {
+        Instruction::<F>::from_isize(
+            opcode.global_opcode(),
+            reg(rs1) as isize,
+            reg(rs2) as isize,
+            immediate,
+            RV64_REGISTER_AS as isize,
+            RV64_REGISTER_AS as isize,
+        )
+    };
+    let instructions = [
+        // Taken, and skips the unexecuted row at PC=4.
+        branch(BranchLessThanOpcode::BLT, 1, 2, 8),
+        branch(BranchLessThanOpcode::BLT, 0, 0, 4),
+        // Signed and unsigned interpretations of the same source words disagree.
+        branch(BranchLessThanOpcode::BLTU, 1, 2, 4),
+        branch(BranchLessThanOpcode::BGE, 1, 2, 4),
+        branch(BranchLessThanOpcode::BGEU, 1, 2, 4),
+        // Exercise x0 on either side and aliased reads, including a non-x0 predecessor chain.
+        branch(BranchLessThanOpcode::BLT, 0, 2, 4),
+        branch(BranchLessThanOpcode::BLTU, 2, 0, 4),
+        branch(BranchLessThanOpcode::BGE, 0, 0, 4),
+        branch(BranchLessThanOpcode::BGEU, 1, 1, 4),
+        // The negative field-encoded target is not selected, so this falls through.
+        branch(BranchLessThanOpcode::BGE, 3, 2, -4),
+        Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+    ];
+    let program = Program::from_instructions(&instructions);
+    let initial_registers = [(1usize, u64::MAX), (2, 1), (3, i64::MIN as u64)];
+    let init_memory: SparseMemoryImage = initial_registers
+        .into_iter()
+        .flat_map(|(register, value)| {
+            value
+                .to_le_bytes()
+                .into_iter()
+                .enumerate()
+                .map(move |(offset, byte)| {
+                    ((RV64_REGISTER_AS, (reg(register) + offset) as u32), byte)
+                })
+        })
+        .collect();
+    let exe = VmExe::new(program.clone()).with_init_memory(init_memory.clone());
+    let config = Rv64IConfig {
+        system: test_system_config(),
+        ..Default::default()
+    };
+    let memory_config = config.system.memory_config.clone();
+    let execution = VmExecutor::new(config)
+        .unwrap()
+        .rvr_preflight_instance(&exe, None)
+        .unwrap()
+        .execute(Vec::<Vec<u8>>::new(), RvrPreflightLimits::new(10, 18))
+        .unwrap();
+
+    let mut tester = GpuChipTestBuilder::default();
+    let mut initial_image = GuestMemory::new(AddressMap::from_mem_config(&tester.memory.config));
+    initial_image.memory.set_from_sparse(&init_memory);
+    tester.memory.memory = TracingMemory::from_image(initial_image);
+    let device_ctx = tester.range_checker().device_ctx.clone();
+    let hasher_chip = tester.memory.hasher_chip.clone().unwrap();
+    tester.memory.inventory = MemoryInventoryGPU::new(
+        tester.memory.config.clone(),
+        hasher_chip,
+        device_ctx.clone(),
+    );
+    tester
+        .memory
+        .inventory
+        .set_initial_memory(&tester.memory.memory.data().memory);
+    let mut harness = create_cuda_harness(&tester);
+    for &instruction_index in &[0usize, 2, 3, 4, 5, 6, 7, 8, 9] {
+        tester.execute_with_pc(
+            &mut harness.executor,
+            &mut harness.dense_arena,
+            &instructions[instruction_index],
+            instruction_index as u32 * 4,
+        );
+    }
+    type Record<'a> = (
+        &'a mut Rv64BranchAdapterRecord,
+        &'a mut BranchLessThanCoreRecord<BLOCK_FE_WIDTH, U16_BITS>,
+    );
+    harness
+        .dense_arena
+        .get_record_seeker::<Record, _>()
+        .transfer_to_matrix_arena(
+            &mut harness.matrix_arena,
+            EmptyAdapterCoreLayout::<F, Rv64BranchAdapterExecutor>::new(),
+        );
+
+    let range_checker = tester.range_checker();
+    let device_ctx = &range_checker.device_ctx;
+    let d_program = GpuRvrProgram::upload(&program, &memory_config, device_ctx).unwrap();
+    let (d_transcript, d_replay_plan) = d_program
+        .upload_transcript(&execution.transcript, execution.endpoint)
+        .unwrap();
+    assert_eq!(
+        d_replay_plan
+            .opcode_range(BranchLessThanOpcode::BLT.global_opcode())
+            .len(),
+        2
+    );
+    assert_eq!(
+        d_replay_plan
+            .opcode_range(BranchLessThanOpcode::BLTU.global_opcode())
+            .len(),
+        2
+    );
+    assert_eq!(
+        d_replay_plan
+            .opcode_range(BranchLessThanOpcode::BGE.global_opcode())
+            .len(),
+        3
+    );
+    assert_eq!(
+        d_replay_plan
+            .opcode_range(BranchLessThanOpcode::BGEU.global_opcode())
+            .len(),
+        2
+    );
+    let replay_ctx = harness
+        .gpu_chip
+        .generate_proving_ctx_from_rvr(&d_program, &d_transcript, &d_replay_plan)
+        .unwrap();
+    assert_eq!(d_transcript.error_code().unwrap(), 0);
+    let replay_counts = range_checker.count.to_host_on(device_ctx).unwrap();
+    let raw_count = |count: &F| {
+        const { assert!(std::mem::size_of::<F>() == std::mem::size_of::<u32>()) };
+        // The CUDA range-check buffer is typed as `F` for shared ownership but kernels update it as
+        // an atomic `u32` histogram.
+        unsafe { *(std::ptr::from_ref(count).cast::<u32>()) }
+    };
+
+    // A minimal terminated transcript starts at PC=4, takes a field-encoded -4 BGE target to the
+    // TERMINATE at PC=0, and uses two aliased x0 reads. This exercises the selected negative
+    // target, not only a negative immediate on a fallthrough row.
+    let negative_program = Program::from_instructions(&[
+        Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+        branch(BranchLessThanOpcode::BGE, 0, 0, -4),
+    ]);
+    let alias_timestamp = execution
+        .transcript
+        .program_log
+        .iter()
+        .find(|event| event.pc == 28)
+        .unwrap()
+        .timestamp;
+    let alias_read_index = execution
+        .transcript
+        .memory_log
+        .iter()
+        .position(|event| event.timestamp == alias_timestamp)
+        .unwrap();
+    let mut negative_from = execution.transcript.program_log[0];
+    negative_from.pc = 4;
+    negative_from.timestamp = 1;
+    let mut negative_terminate = execution.transcript.program_log[0];
+    negative_terminate.pc = 0;
+    negative_terminate.timestamp = 3;
+    let mut negative_first_read = execution.transcript.memory_log[alias_read_index];
+    negative_first_read.timestamp = 1;
+    let mut negative_second_read = execution.transcript.memory_log[alias_read_index + 1];
+    negative_second_read.timestamp = 2;
+    let negative_transcript = RvrPreflightTranscript {
+        program_log: vec![negative_from, negative_terminate, negative_terminate],
+        memory_log: vec![negative_first_read, negative_second_read],
+        initial_write_log: Vec::new(),
+    };
+    let d_negative_program =
+        GpuRvrProgram::upload(&negative_program, &memory_config, device_ctx).unwrap();
+    let (d_negative, d_negative_plan) = d_negative_program
+        .upload_transcript(&negative_transcript, RvrPreflightEndpoint::Terminated)
+        .unwrap();
+    let negative_range_checker = Arc::new(
+        openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU::new(
+            openvm_circuit::arch::testing::default_var_range_checker_bus(),
+            device_ctx.clone(),
+        ),
+    );
+    Rv64BranchLessThanChipGpu::new(negative_range_checker.clone(), tester.timestamp_max_bits())
+        .generate_proving_ctx_from_rvr(&d_negative_program, &d_negative, &d_negative_plan)
+        .unwrap();
+    assert_eq!(d_negative.error_code().unwrap(), 0);
+    assert_eq!(
+        negative_range_checker
+            .count
+            .to_host_on(device_ctx)
+            .unwrap()
+            .iter()
+            .map(raw_count)
+            .sum::<u32>(),
+        6
+    );
+
+    let run_corrupt =
+        |transcript: RvrPreflightTranscript, expected_error: u32, expected_lookup_count: u32| {
+            let corrupt_range_checker = Arc::new(
+                openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU::new(
+                    openvm_circuit::arch::testing::default_var_range_checker_bus(),
+                    device_ctx.clone(),
+                ),
+            );
+            let corrupt_chip = Rv64BranchLessThanChipGpu::new(
+                corrupt_range_checker.clone(),
+                tester.timestamp_max_bits(),
+            );
+            let (d_corrupt, d_corrupt_plan) = d_program
+                .upload_transcript(&transcript, RvrPreflightEndpoint::Terminated)
+                .unwrap();
+            corrupt_chip
+                .generate_proving_ctx_from_rvr(&d_program, &d_corrupt, &d_corrupt_plan)
+                .unwrap();
+            assert_eq!(d_corrupt.error_code().unwrap(), expected_error);
+            assert_eq!(
+                corrupt_range_checker
+                    .count
+                    .to_host_on(device_ctx)
+                    .unwrap()
+                    .iter()
+                    .map(raw_count)
+                    .sum::<u32>(),
+                expected_lookup_count,
+                "the rejected row must not update the shared lookup histogram"
+            );
+        };
+
+    let final_row_timestamp = execution
+        .transcript
+        .program_log
+        .iter()
+        .find(|event| event.pc == 36)
+        .unwrap()
+        .timestamp;
+    let final_unique_read = execution
+        .transcript
+        .memory_log
+        .iter()
+        .position(|event| event.timestamp == final_row_timestamp)
+        .unwrap();
+
+    // Change the final BGE's unique rs1 value from i64::MIN to two. The logged row falls through,
+    // but the corrupted comparison takes the field-encoded -4 target. Using the final unique read
+    // avoids also corrupting a later event's predecessor chain.
+    let mut target_corrupt = RvrPreflightTranscript {
+        program_log: execution.transcript.program_log.clone(),
+        memory_log: execution.transcript.memory_log.clone(),
+        initial_write_log: execution.transcript.initial_write_log.clone(),
+    };
+    target_corrupt.memory_log[final_unique_read].value = [2, 0, 0, 0];
+    run_corrupt(target_corrupt, 18, 54);
+
+    let mut u16_corrupt = RvrPreflightTranscript {
+        program_log: execution.transcript.program_log.clone(),
+        memory_log: execution.transcript.memory_log.clone(),
+        initial_write_log: execution.transcript.initial_write_log.clone(),
+    };
+    u16_corrupt.memory_log[final_unique_read].value[0] = 1 << 16;
+    run_corrupt(u16_corrupt, 17, 54);
+
+    let mut schedule_corrupt = RvrPreflightTranscript {
+        program_log: execution.transcript.program_log.clone(),
+        memory_log: execution.transcript.memory_log.clone(),
+        initial_write_log: execution.transcript.initial_write_log.clone(),
+    };
+    // Point the read at an otherwise-unused, canonically aligned register block. This reaches the
+    // branch kernel's exact schedule check instead of being rejected earlier by generic postflight
+    // address validation or perturbing another row's predecessor chain.
+    schedule_corrupt.memory_log[0].pointer = (reg(31) / 2) as u32;
+    run_corrupt(schedule_corrupt, 16, 54);
+
+    // On the non-x0 rs1 == rs2 row, change only the second read while preserving BGEU=true.
+    // Target validation therefore passes, but the second read no longer matches its immediate
+    // predecessor.
+    let mut predecessor_corrupt = RvrPreflightTranscript {
+        program_log: execution.transcript.program_log.clone(),
+        memory_log: execution.transcript.memory_log.clone(),
+        initial_write_log: execution.transcript.initial_write_log.clone(),
+    };
+    let alias_timestamp = predecessor_corrupt
+        .program_log
+        .iter()
+        .find(|event| event.pc == 32)
+        .unwrap()
+        .timestamp;
+    let second_alias_read = predecessor_corrupt
+        .memory_log
+        .iter()
+        .position(|event| event.timestamp == alias_timestamp + 1)
+        .unwrap();
+    predecessor_corrupt.memory_log[second_alias_read].value[0] ^= 1;
+    run_corrupt(predecessor_corrupt, 19, 55);
+
+    let legacy_range_checker = Arc::new(
+        openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU::new(
+            openvm_circuit::arch::testing::default_var_range_checker_bus(),
+            device_ctx.clone(),
+        ),
+    );
+    let legacy_chip =
+        Rv64BranchLessThanChipGpu::new(legacy_range_checker.clone(), tester.timestamp_max_bits());
+    let legacy_ctx = legacy_chip.generate_proving_ctx(harness.dense_arena);
+    assert_eq!(
+        replay_counts,
+        legacy_range_checker.count.to_host_on(device_ctx).unwrap()
+    );
+    // Four timestamp lookups and two MSB lookups per row, plus one non-zero-difference lookup for
+    // each of the seven unequal rows.
+    assert_eq!(replay_counts.iter().map(raw_count).sum::<u32>(), 9 * 6 + 7);
+
+    let expected_trace = <Rv64BranchLessThanChip<F> as Chip<
+        MatrixRecordArena<F>,
+        CpuBackend<SC>,
+    >>::generate_proving_ctx(&harness.cpu_chip, harness.matrix_arena)
+    .common_main;
+    let replay_trace = transport_matrix_d2h_row_major(&replay_ctx.common_main, device_ctx).unwrap();
+    let canonical_rows = |matrix: &RowMajorMatrix<F>| {
+        let mut rows = (0..matrix.height())
+            .map(|row| matrix.row_slice(row).unwrap().to_vec())
+            .collect::<Vec<_>>();
+        rows.sort_unstable_by_key(|row| row[1].as_canonical_u32());
+        rows
+    };
+    assert_eq!(
+        canonical_rows(&expected_trace),
+        canonical_rows(&replay_trace)
+    );
+    let expected_trace = ColMajorMatrix::from_row_major(&expected_trace);
+    device_synchronize().unwrap();
+    assert_eq_host_and_device_matrix_col_maj(&expected_trace, &legacy_ctx.common_main, device_ctx);
+
+    tester
+        .build()
+        .load_air_proving_ctx(Arc::new(harness.air), replay_ctx)
+        .finalize()
+        .simple_test()
+        .expect("RVR BLT/BLTU/BGE/BGEU transcript replay proof failed");
 }
