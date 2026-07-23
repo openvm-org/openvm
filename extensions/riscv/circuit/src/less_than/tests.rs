@@ -23,6 +23,41 @@ use openvm_stark_backend::{
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
 use test_case::test_case;
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use {
+    crate::Rv64IConfig,
+    openvm_circuit::{
+        arch::{
+            rvr::{
+                cuda::GpuRvrProgram, RvrPreflightEndpoint, RvrPreflightLimits,
+                RvrPreflightTranscript,
+            },
+            MatrixRecordArena, VmExecutor,
+        },
+        system::{
+            cuda::memory::MemoryInventoryGPU,
+            memory::online::{AddressMap, GuestMemory, TracingMemory},
+        },
+        utils::test_system_config,
+    },
+    openvm_circuit_primitives::Chip,
+    openvm_cpu_backend::CpuBackend,
+    openvm_cuda_backend::{
+        data_transporter::{
+            assert_eq_host_and_device_matrix_col_maj, transport_matrix_d2h_row_major,
+        },
+        prelude::SC,
+    },
+    openvm_cuda_common::{copy::MemCopyD2H, stream::device_synchronize},
+    openvm_instructions::{
+        exe::{SparseMemoryImage, VmExe},
+        instruction::Instruction,
+        program::Program,
+        riscv::RV64_REGISTER_AS,
+        SystemOpcode,
+    },
+    openvm_stark_backend::prover::ColMajorMatrix,
+};
 #[cfg(feature = "cuda")]
 use {
     crate::{adapters::Rv64BaseAluRegU16AdapterRecord, LessThanCoreRecord, Rv64LessThanChipGpu},
@@ -538,4 +573,185 @@ fn test_cuda_rand_less_than_tracegen(opcode: LessThanOpcode, num_ops: usize) {
         .finalize()
         .simple_test()
         .unwrap();
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+#[test]
+fn test_cuda_less_than_tracegen_from_rvr_transcript() {
+    let reg = |index: usize| index * RV64_REGISTER_NUM_LIMBS;
+    let instruction = |opcode: LessThanOpcode, rd: usize, rs1: usize, rs2: usize| {
+        Instruction::<F>::from_usize(
+            opcode.global_opcode(),
+            [
+                reg(rd),
+                reg(rs1),
+                reg(rs2),
+                RV64_REGISTER_AS as usize,
+                RV64_REGISTER_AS as usize,
+            ],
+        )
+    };
+    let instructions = [
+        instruction(SLT, 3, 1, 2),
+        instruction(SLTU, 4, 1, 2),
+        instruction(SLT, 1, 1, 2),
+        instruction(SLTU, 2, 1, 2),
+        instruction(SLT, 5, 0, 1),
+        instruction(SLTU, 6, 1, 0),
+        instruction(SLT, 7, 1, 1),
+        instruction(SLTU, 8, 8, 8),
+        instruction(SLT, 9, 9, 2),
+        Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+    ];
+    let program = Program::from_instructions(&instructions);
+    let initial_registers = [(1usize, u64::MAX), (2, 1), (9, i64::MIN as u64)];
+    let init_memory: SparseMemoryImage = initial_registers
+        .into_iter()
+        .flat_map(|(register, value)| {
+            value
+                .to_le_bytes()
+                .into_iter()
+                .enumerate()
+                .map(move |(offset, byte)| {
+                    ((RV64_REGISTER_AS, (reg(register) + offset) as u32), byte)
+                })
+        })
+        .collect();
+    let exe = VmExe::new(program.clone()).with_init_memory(init_memory.clone());
+    let config = Rv64IConfig {
+        system: test_system_config(),
+        ..Default::default()
+    };
+    let memory_config = config.system.memory_config.clone();
+    let execution = VmExecutor::new(config)
+        .unwrap()
+        .rvr_preflight_instance(&exe, None)
+        .unwrap()
+        .execute(Vec::<Vec<u8>>::new(), RvrPreflightLimits::new(10, 27))
+        .unwrap();
+
+    let mut tester = GpuChipTestBuilder::default();
+    let mut initial_image = GuestMemory::new(AddressMap::from_mem_config(&tester.memory.config));
+    initial_image.memory.set_from_sparse(&init_memory);
+    tester.memory.memory = TracingMemory::from_image(initial_image);
+    let device_ctx = tester.range_checker().device_ctx.clone();
+    let hasher_chip = tester.memory.hasher_chip.clone().unwrap();
+    tester.memory.inventory = MemoryInventoryGPU::new(
+        tester.memory.config.clone(),
+        hasher_chip,
+        device_ctx.clone(),
+    );
+    tester
+        .memory
+        .inventory
+        .set_initial_memory(&tester.memory.memory.data().memory);
+    let mut harness = create_cuda_harness(&tester);
+    for (pc, instruction) in instructions[..9].iter().enumerate() {
+        tester.execute_with_pc(
+            &mut harness.executor,
+            &mut harness.dense_arena,
+            instruction,
+            pc as u32 * 4,
+        );
+    }
+    type Record<'a> = (
+        &'a mut Rv64BaseAluRegU16AdapterRecord,
+        &'a mut LessThanCoreRecord<BLOCK_FE_WIDTH, U16_BITS>,
+    );
+    harness
+        .dense_arena
+        .get_record_seeker::<Record, _>()
+        .transfer_to_matrix_arena(
+            &mut harness.matrix_arena,
+            EmptyAdapterCoreLayout::<F, Rv64BaseAluRegU16AdapterExecutor>::new(),
+        );
+
+    let range_checker = tester.range_checker();
+    let device_ctx = &range_checker.device_ctx;
+    let d_program = GpuRvrProgram::upload(&program, &memory_config, device_ctx).unwrap();
+    let (d_transcript, d_replay_plan) = d_program
+        .upload_transcript(&execution.transcript, execution.endpoint)
+        .unwrap();
+    assert_eq!(
+        d_replay_plan
+            .opcode_range(LessThanOpcode::SLT.global_opcode())
+            .len(),
+        5
+    );
+    assert_eq!(
+        d_replay_plan
+            .opcode_range(LessThanOpcode::SLTU.global_opcode())
+            .len(),
+        4
+    );
+    let replay_ctx = harness
+        .gpu_chip
+        .generate_proving_ctx_from_rvr(&d_program, &d_transcript, &d_replay_plan)
+        .unwrap();
+    assert_eq!(d_transcript.error_code().unwrap(), 0);
+    let replay_counts = range_checker.count.to_host_on(device_ctx).unwrap();
+
+    let mut corrupt_transcript = RvrPreflightTranscript {
+        program_log: execution.transcript.program_log.clone(),
+        memory_log: execution.transcript.memory_log.clone(),
+        initial_write_log: execution.transcript.initial_write_log.clone(),
+    };
+    corrupt_transcript.memory_log[2].value[0] ^= 1;
+    let (d_corrupt, d_corrupt_plan) = d_program
+        .upload_transcript(&corrupt_transcript, RvrPreflightEndpoint::Terminated)
+        .unwrap();
+    let corrupt_range_checker = Arc::new(
+        openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU::new(
+            openvm_circuit::arch::testing::default_var_range_checker_bus(),
+            device_ctx.clone(),
+        ),
+    );
+    let corrupt_chip = Rv64LessThanChipGpu::new(corrupt_range_checker, tester.timestamp_max_bits());
+    corrupt_chip
+        .generate_proving_ctx_from_rvr(&d_program, &d_corrupt, &d_corrupt_plan)
+        .unwrap();
+    assert_eq!(d_corrupt.error_code().unwrap(), 128);
+
+    let legacy_range_checker = Arc::new(
+        openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU::new(
+            openvm_circuit::arch::testing::default_var_range_checker_bus(),
+            device_ctx.clone(),
+        ),
+    );
+    let legacy_chip =
+        Rv64LessThanChipGpu::new(legacy_range_checker.clone(), tester.timestamp_max_bits());
+    let legacy_ctx = legacy_chip.generate_proving_ctx(harness.dense_arena);
+    assert_eq!(
+        replay_counts,
+        legacy_range_checker.count.to_host_on(device_ctx).unwrap()
+    );
+
+    let expected_trace =
+        <Rv64LessThanChip<F> as Chip<MatrixRecordArena<F>, CpuBackend<SC>>>::generate_proving_ctx(
+            &harness.cpu_chip,
+            harness.matrix_arena,
+        )
+        .common_main;
+    let replay_trace = transport_matrix_d2h_row_major(&replay_ctx.common_main, device_ctx).unwrap();
+    let canonical_rows = |matrix: &RowMajorMatrix<F>| {
+        let mut rows = (0..matrix.height())
+            .map(|row| matrix.row_slice(row).unwrap().to_vec())
+            .collect::<Vec<_>>();
+        rows.sort_unstable_by_key(|row| row[1].as_canonical_u32());
+        rows
+    };
+    assert_eq!(
+        canonical_rows(&expected_trace),
+        canonical_rows(&replay_trace)
+    );
+    let expected_trace = ColMajorMatrix::from_row_major(&expected_trace);
+    device_synchronize().unwrap();
+    assert_eq_host_and_device_matrix_col_maj(&expected_trace, &legacy_ctx.common_main, device_ctx);
+
+    tester
+        .build()
+        .load_air_proving_ctx(Arc::new(harness.air), replay_ctx)
+        .finalize()
+        .simple_test()
+        .expect("RVR SLT/SLTU transcript replay proof failed");
 }

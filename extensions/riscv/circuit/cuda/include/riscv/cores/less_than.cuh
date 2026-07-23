@@ -56,19 +56,23 @@ template <size_t NUM_LIMBS, size_t LIMB_BITS> struct LessThanCore {
 
     template <typename T> using Cols = LessThanCoreCols<T, NUM_LIMBS, LIMB_BITS>;
 
-    __device__ void
-    fill_trace_row(RowSlice row, LessThanCoreRecord<NUM_LIMBS, LIMB_BITS> record) {
+    __device__ void fill_trace_row(
+        RowSlice row,
+        uint16_t const (&b)[NUM_LIMBS],
+        uint16_t const (&c)[NUM_LIMBS],
+        uint8_t local_opcode
+    ) {
         constexpr uint8_t SLT = 0;
 
-        bool is_slt = record.local_opcode == SLT;
-        LessThanResult result = run_less_than<NUM_LIMBS, LIMB_BITS>(is_slt, record.b, record.c);
+        bool is_slt = local_opcode == SLT;
+        LessThanResult result = run_less_than<NUM_LIMBS, LIMB_BITS>(is_slt, b, c);
         bool cmp_result = result.cmp_result;
         size_t diff_idx = result.diff_idx;
         bool b_sign = result.x_sign;
         bool c_sign = result.y_sign;
 
-        uint32_t b_raw_msb = record.b[NUM_LIMBS - 1];
-        uint32_t c_raw_msb = record.c[NUM_LIMBS - 1];
+        uint32_t b_raw_msb = b[NUM_LIMBS - 1];
+        uint32_t c_raw_msb = c[NUM_LIMBS - 1];
 
         uint32_t b_msb_f = b_sign ? (Fp::P - ((1u << LIMB_BITS) - b_raw_msb)) : b_raw_msb;
         uint32_t c_msb_f = c_sign ? (Fp::P - ((1u << LIMB_BITS) - c_raw_msb)) : c_raw_msb;
@@ -88,9 +92,9 @@ template <size_t NUM_LIMBS, size_t LIMB_BITS> struct LessThanCore {
             Fp fp_diff = cmp_result ? (Fp(c_msb_f) - Fp(b_msb_f)) : (Fp(b_msb_f) - Fp(c_msb_f));
             diff_val = fp_diff.asUInt32();
         } else if (cmp_result) {
-            diff_val = uint32_t(record.c[diff_idx] - record.b[diff_idx]);
+            diff_val = uint32_t(c[diff_idx] - b[diff_idx]);
         } else {
-            diff_val = uint32_t(record.b[diff_idx] - record.c[diff_idx]);
+            diff_val = uint32_t(b[diff_idx] - c[diff_idx]);
         }
 
         range_checker.add_count(b_msb_range, LIMB_BITS);
@@ -103,8 +107,8 @@ template <size_t NUM_LIMBS, size_t LIMB_BITS> struct LessThanCore {
             diff_marker[diff_idx] = 1;
         }
 
-        COL_WRITE_ARRAY(row, Cols, b, record.b);
-        COL_WRITE_ARRAY(row, Cols, c, record.c);
+        COL_WRITE_ARRAY(row, Cols, b, b);
+        COL_WRITE_ARRAY(row, Cols, c, c);
         COL_WRITE_ARRAY(row, Cols, diff_marker, diff_marker);
 
         COL_WRITE_VALUE(row, Cols, cmp_result, cmp_result);
@@ -113,5 +117,10 @@ template <size_t NUM_LIMBS, size_t LIMB_BITS> struct LessThanCore {
         COL_WRITE_VALUE(row, Cols, diff_val, diff_val);
         COL_WRITE_VALUE(row, Cols, opcode_slt_flag, is_slt);
         COL_WRITE_VALUE(row, Cols, opcode_sltu_flag, !is_slt);
+    }
+
+    __device__ void
+    fill_trace_row(RowSlice row, LessThanCoreRecord<NUM_LIMBS, LIMB_BITS> record) {
+        fill_trace_row(row, record.b, record.c, record.local_opcode);
     }
 };
