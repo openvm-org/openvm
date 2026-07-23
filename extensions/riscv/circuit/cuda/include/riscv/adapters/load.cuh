@@ -184,39 +184,52 @@ struct Rv64LoadByteAdapter {
         : pointer_max_bits(pointer_max_bits), range_checker(range_checker),
           mem_helper(range_checker, timestamp_max_bits) {}
 
-    __device__ void fill_trace_row(RowSlice row, Rv64LoadByteAdapterRecord record) {
-        COL_WRITE_VALUE(row, Rv64LoadByteAdapterCols, from_state.pc, record.from_pc);
+    __device__ void fill_trace_row(
+        RowSlice row,
+        uint32_t from_pc,
+        uint32_t from_timestamp,
+        uint32_t rs1_ptr,
+        uint32_t rd_ptr,
+        bool needs_write,
+        uint32_t rs1_val,
+        uint32_t rs1_prev_timestamp,
+        uint32_t read_prev_timestamp,
+        uint32_t write_prev_timestamp,
+        uint16_t const (&write_prev_data)[BLOCK_FE_WIDTH],
+        uint16_t imm,
+        bool imm_sign
+    ) {
+        COL_WRITE_VALUE(row, Rv64LoadByteAdapterCols, from_state.pc, from_pc);
         COL_WRITE_VALUE(
-            row, Rv64LoadByteAdapterCols, from_state.timestamp, record.from_timestamp
+            row, Rv64LoadByteAdapterCols, from_state.timestamp, from_timestamp
         );
-        COL_WRITE_VALUE(row, Rv64LoadByteAdapterCols, rs1_ptr, record.rs1_ptr);
+        COL_WRITE_VALUE(row, Rv64LoadByteAdapterCols, rs1_ptr, rs1_ptr);
 
         Fp rs1_data[RV64_PTR_U16_LIMBS];
-        ptr_to_u16_limbs(rs1_data, record.rs1_val);
+        ptr_to_u16_limbs(rs1_data, rs1_val);
         COL_WRITE_ARRAY(row, Rv64LoadByteAdapterCols, rs1_data, rs1_data);
 
         mem_helper.fill(
             row.slice_from(COL_INDEX(Rv64LoadByteAdapterCols, rs1_aux_cols)),
-            record.rs1_aux_record.prev_timestamp,
-            record.from_timestamp
+            rs1_prev_timestamp,
+            from_timestamp
         );
         mem_helper.fill(
             row.slice_from(COL_INDEX(Rv64LoadByteAdapterCols, read_data_aux)),
-            record.read_data_aux.prev_timestamp,
-            record.from_timestamp + 1
+            read_prev_timestamp,
+            from_timestamp + 1
         );
 
-        bool needs_write = record.rd_ptr != UINT8_MAX;
-        COL_WRITE_VALUE(row, Rv64LoadByteAdapterCols, rd_ptr, needs_write ? record.rd_ptr : 0);
+        COL_WRITE_VALUE(row, Rv64LoadByteAdapterCols, rd_ptr, needs_write ? rd_ptr : 0);
         COL_WRITE_VALUE(row, Rv64LoadByteAdapterCols, needs_write, needs_write);
         if (needs_write) {
             mem_helper.fill(
                 row.slice_from(COL_INDEX(Rv64LoadByteAdapterCols, write_aux.base)),
-                record.write_prev_timestamp,
-                record.from_timestamp + 2
+                write_prev_timestamp,
+                from_timestamp + 2
             );
             Fp prev_data[BLOCK_FE_WIDTH];
-            copy_u16_cells(prev_data, record.write_prev_data);
+            copy_u16_cells(prev_data, write_prev_data);
             COL_WRITE_ARRAY(row, Rv64LoadByteAdapterCols, write_aux.prev_data, prev_data);
         } else {
             mem_helper.fill_zero(
@@ -225,16 +238,36 @@ struct Rv64LoadByteAdapter {
             row.fill_zero(COL_INDEX(Rv64LoadByteAdapterCols, write_aux.prev_data), BLOCK_FE_WIDTH);
         }
 
-        COL_WRITE_VALUE(row, Rv64LoadByteAdapterCols, imm, record.imm);
-        COL_WRITE_VALUE(row, Rv64LoadByteAdapterCols, imm_sign, record.imm_sign);
+        COL_WRITE_VALUE(row, Rv64LoadByteAdapterCols, imm, imm);
+        COL_WRITE_VALUE(row, Rv64LoadByteAdapterCols, imm_sign, imm_sign);
 
-        uint32_t ptr = rv64_load_effective_ptr(record);
+        uint32_t ptr = rs1_val + uint32_t(imm) +
+                       uint32_t(imm_sign) * (uint32_t(UINT16_MAX) << U16_BITS);
         uint32_t ptr_limbs[RV64_PTR_U16_LIMBS];
         ptr_to_u16_limbs(ptr_limbs, ptr);
         COL_WRITE_VALUE(row, Rv64LoadByteAdapterCols, mem_ptr_low_limb, ptr_limbs[0]);
 
-        uint32_t shift_amount = rv64_load_shift_amount(record);
+        uint32_t shift_amount = ptr & (MEMORY_BLOCK_BYTES - 1);
         range_checker.add_count((ptr_limbs[0] - shift_amount) >> 3, U16_BITS - 3);
         range_checker.add_count(ptr_limbs[1], pointer_max_bits - U16_BITS);
+    }
+
+    __device__ void fill_trace_row(RowSlice row, Rv64LoadByteAdapterRecord record) {
+        bool needs_write = record.rd_ptr != UINT8_MAX;
+        fill_trace_row(
+            row,
+            record.from_pc,
+            record.from_timestamp,
+            record.rs1_ptr,
+            needs_write ? record.rd_ptr : 0,
+            needs_write,
+            record.rs1_val,
+            record.rs1_aux_record.prev_timestamp,
+            record.read_data_aux.prev_timestamp,
+            needs_write ? record.write_prev_timestamp : 0,
+            record.write_prev_data,
+            record.imm,
+            record.imm_sign
+        );
     }
 };

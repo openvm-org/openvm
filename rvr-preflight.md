@@ -952,6 +952,23 @@ range histograms match, and the replay trace proves. Raw `rd = x0`,
 noncanonical immediates, corrupt results, invalid PC fallthrough, and malformed
 predecessors are rejected before the affected row updates the histogram.
 
+#### Byte-load GPU replay checkpoint (2026-07-23)
+
+`LOADB` and `LOADBU` replay directly from the program log, memory log, initial
+write log, and derived predecessor index. The shared validator checks the
+instruction encoding, register and address spaces, canonical register pointers,
+the exact `T` register read / `T + 1` memory read / `T + 2` destination-write
+schedule, the disabled-write gap for `rd = x0`, effective-address bounds, logged
+result, and every predecessor before filling the row or updating a lookup
+histogram. The legacy record-input kernels remain unchanged for the existing
+proving path and differential tests.
+
+Focused tests cover all eight byte shifts, signed and unsigned extension,
+`rd = x0`, `rd = rs1`, first and repeated reads of one memory block, full trace
+and lookup-histogram equality with legacy tracegen, replay proofs, malformed
+u16 cells, corrupt logged results, the `u32::MAX` effective-address boundary,
+overflow and underflow rejection, and a malformed `rd = x0` gap.
+
 #### First multi-AIR GPU proving checkpoint (2026-07-23)
 
 `Rv64IRvrGpuTracegen` now drives the VM inventory's ordinary reverse tracegen
@@ -969,15 +986,15 @@ counts through their normal tracegen using `()` rather than even an empty
 all extension contexts have been generated, the coordinator reads the shared
 sticky replay error once, immediately before proving.
 
-The first integration test executes all 38 currently ported opcodes across the
-21 replay chips, followed by `TERMINATE`. One RVR preflight run supplies both
+The first integration test executes all 40 currently ported opcodes across the
+23 replay chips, followed by `TERMINATE`. One RVR preflight run supplies both
 system and RISC-V tracegen. Program reads the device PC histogram, Connector uses
 the segment endpoints, and PersistentBoundary and MemoryMerkle consume the sorted
 device touched-block prefix while the coordinator retains the pre-segment Merkle
 state. No interpreter or production `RecordArena` is constructed or passed. The
 combined context goes through the VM's existing trace-height validation and
 completes a real GPU prove-and-verify. A negative test confirms that an executed,
-not-yet-ported LOADB is rejected by the pre-kernel coverage check. This establishes
+not-yet-ported LOADH is rejected by the pre-kernel coverage check. This establishes
 the arena-free system plus multi-AIR RISC-V integration seam without generalizing
 `Chip`.
 
