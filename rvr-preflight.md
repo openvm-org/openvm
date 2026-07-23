@@ -856,6 +856,19 @@ legacy CUDA, and replay traces and complete range histograms match; each valid
 row emits exactly 16 variable-range requests. The replay trace proves and rejects
 corrupt output, inconsistent alias predecessors, and a destination x0.
 
+SLLW and SRLW reuse the two-u16 logical-shift core and word-register adapter on
+that same schedule. Replay authenticates every source limb, masks the register
+shift operand to its low five bits, recomputes the low 32-bit result, and
+requires the logged 64-bit destination to be its exact sign extension. A
+nine-row grouped test covers raw shift operands 0, 1, 15, 16, 31, 32, 63, and
+64 (including masked shifts 32 to 0, 63 to 31, and 64 to 0), with nonzero upper
+shift-operand limbs, both x0 source positions, every
+source/destination alias shape, and padding. CPU, legacy CUDA, and replay rows
+and complete range histograms match; each valid row emits exactly 12
+variable-range requests. The replay trace proves and rejects a corrupt upper
+sign-extension limb, an inconsistent aliased source predecessor, and a
+destination x0.
+
 #### First multi-AIR GPU proving checkpoint (2026-07-23)
 
 `Rv64IRvrGpuTracegen` now drives the VM inventory's ordinary reverse tracegen
@@ -873,8 +886,8 @@ counts through their normal tracegen using `()` rather than even an empty
 all extension contexts have been generated, the coordinator reads the shared
 sticky replay error once, immediately before proving.
 
-The first integration test executes all 27 currently ported opcodes across the
-15 replay chips, followed by `TERMINATE`. It uses interpreter preflight only for
+The first integration test executes all 29 currently ported opcodes across the
+16 replay chips, followed by `TERMINATE`. It uses interpreter preflight only for
 current system records, discards every interpreter-produced extension arena,
 generates all extension traces from the RVR transcript, passes the resulting
 context through the VM's existing trace-height validation, and completes a real
