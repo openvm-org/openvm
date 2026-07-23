@@ -42,13 +42,15 @@ use {
         SystemOpcode,
     },
     openvm_riscv_transpiler::BranchEqualOpcode,
+    std::{ffi::c_void, time::Duration},
 };
 #[cfg(feature = "cuda")]
 use {
     crate::{
         adapters::{
-            Rv64BaseAluImmU16AdapterRecord, Rv64BaseAluWImmU16AdapterRecord, Rv64BranchAdapterAir,
-            Rv64BranchAdapterExecutor, Rv64BranchAdapterFiller, RV64_WORD_U16_LIMBS,
+            Rv64BaseAluImmU16AdapterCols, Rv64BaseAluImmU16AdapterRecord,
+            Rv64BaseAluWImmU16AdapterRecord, Rv64BranchAdapterAir, Rv64BranchAdapterExecutor,
+            Rv64BranchAdapterFiller, RV64_WORD_U16_LIMBS,
         },
         AddICoreRecord, BranchEqualCoreAir, BranchEqualFiller, Rv64AddIChipGpu, Rv64AddIWChipGpu,
         Rv64BranchEqualAir, Rv64BranchEqualChip, Rv64BranchEqualChipGpu, Rv64BranchEqualExecutor,
@@ -60,9 +62,12 @@ use {
     openvm_circuit_primitives::{var_range::VariableRangeCheckerChip, Chip},
     openvm_cpu_backend::CpuBackend,
     openvm_cuda_backend::{
-        data_transporter::assert_eq_host_and_device_matrix_col_maj, prelude::SC,
+        base::DeviceMatrix, data_transporter::assert_eq_host_and_device_matrix_col_maj, prelude::SC,
     },
-    openvm_cuda_common::{copy::MemCopyD2H, stream::device_synchronize},
+    openvm_cuda_common::{
+        copy::{MemCopyD2H, MemCopyH2D},
+        stream::{cudaStream_t, device_synchronize},
+    },
     openvm_stark_backend::prover::ColMajorMatrix,
     std::sync::Arc,
 };
@@ -104,6 +109,79 @@ type GpuBranchHarness = GpuTestChipHarness<
     Rv64BranchEqualChipGpu,
     Rv64BranchEqualChip<F>,
 >;
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+#[link(name = "cudart")]
+unsafe extern "C" {
+    fn cudaEventCreate(event: *mut *mut c_void) -> i32;
+    fn cudaEventRecord(event: *mut c_void, stream: cudaStream_t) -> i32;
+    fn cudaEventSynchronize(event: *mut c_void) -> i32;
+    fn cudaEventElapsedTime(milliseconds: *mut f32, start: *mut c_void, end: *mut c_void) -> i32;
+    fn cudaEventDestroy(event: *mut c_void) -> i32;
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+struct BenchmarkCudaEvent(*mut c_void);
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+impl BenchmarkCudaEvent {
+    fn new() -> Self {
+        let mut event = std::ptr::null_mut();
+        assert_eq!(unsafe { cudaEventCreate(&mut event) }, 0);
+        Self(event)
+    }
+
+    fn record(&self, stream: cudaStream_t) {
+        assert_eq!(unsafe { cudaEventRecord(self.0, stream) }, 0);
+    }
+
+    fn synchronize(&self) {
+        assert_eq!(unsafe { cudaEventSynchronize(self.0) }, 0);
+    }
+
+    fn elapsed_ms(&self, end: &Self) -> f32 {
+        let mut milliseconds = 0.0;
+        assert_eq!(
+            unsafe { cudaEventElapsedTime(&mut milliseconds, self.0, end.0) },
+            0
+        );
+        milliseconds
+    }
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+impl Drop for BenchmarkCudaEvent {
+    fn drop(&mut self) {
+        assert_eq!(unsafe { cudaEventDestroy(self.0) }, 0);
+    }
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+fn benchmark_cuda_launches(stream: cudaStream_t, launches: usize, mut launch: impl FnMut()) -> f64 {
+    let start = BenchmarkCudaEvent::new();
+    let end = BenchmarkCudaEvent::new();
+    start.record(stream);
+    for _ in 0..launches {
+        launch();
+    }
+    end.record(stream);
+    end.synchronize();
+    f64::from(start.elapsed_ms(&end)) / launches as f64
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+fn duration_percentiles(mut values: Vec<Duration>) -> (Duration, Duration, Duration) {
+    values.sort_unstable();
+    let last = values.len() - 1;
+    (values[last / 10], values[last / 2], values[last * 9 / 10])
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+fn f64_percentiles(mut values: Vec<f64>) -> (f64, f64, f64) {
+    values.sort_by(f64::total_cmp);
+    let last = values.len() - 1;
+    (values[last / 10], values[last / 2], values[last * 9 / 10])
+}
 
 fn create_harness_fields(
     memory_bridge: MemoryBridge,
@@ -198,6 +276,11 @@ fn create_cuda_w_harness(tester: &GpuChipTestBuilder) -> GpuWHarness {
 
 #[cfg(feature = "cuda")]
 fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
+    create_cuda_harness_with_capacity(tester, 64)
+}
+
+#[cfg(feature = "cuda")]
+fn create_cuda_harness_with_capacity(tester: &GpuChipTestBuilder, capacity: usize) -> GpuHarness {
     let dummy_range_checker = Arc::new(VariableRangeCheckerChip::new(
         default_var_range_checker_bus(),
     ));
@@ -208,11 +291,19 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
         tester.dummy_memory_helper(),
     );
     let gpu_chip = Rv64AddIChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
-    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, 64)
+    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, capacity)
 }
 
 #[cfg(feature = "cuda")]
 fn create_cuda_branch_harness(tester: &GpuChipTestBuilder) -> GpuBranchHarness {
+    create_cuda_branch_harness_with_capacity(tester, 32)
+}
+
+#[cfg(feature = "cuda")]
+fn create_cuda_branch_harness_with_capacity(
+    tester: &GpuChipTestBuilder,
+    capacity: usize,
+) -> GpuBranchHarness {
     let air = Rv64BranchEqualAir::new(
         Rv64BranchAdapterAir::new(tester.execution_bridge(), tester.memory_bridge()),
         BranchEqualCoreAir::new(BranchEqualOpcode::CLASS_OFFSET, DEFAULT_PC_STEP),
@@ -231,7 +322,7 @@ fn create_cuda_branch_harness(tester: &GpuChipTestBuilder) -> GpuBranchHarness {
         tester.dummy_memory_helper(),
     );
     let gpu_chip = Rv64BranchEqualChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
-    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, 32)
+    GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, capacity)
 }
 
 fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
@@ -587,6 +678,246 @@ fn test_cuda_addi_tracegen_from_rvr_transcript() {
         .finalize()
         .simple_test()
         .expect("RVR transcript replay proof failed");
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+#[test]
+#[ignore = "manual release-mode CUDA benchmark"]
+fn benchmark_cuda_addi_replay_vs_legacy() {
+    const ADDI_ROWS: usize = 1 << 18;
+    const WARMUPS: usize = 3;
+    const REPETITIONS: usize = 11;
+    const LAUNCHES_PER_SAMPLE: usize = 10;
+
+    let reg = |index: usize| index * RV64_REGISTER_NUM_LIMBS;
+    let addi = Instruction::<F>::from_usize(
+        BaseAluImmOpcode::ADDI.global_opcode(),
+        [
+            reg(2),
+            reg(2),
+            0xff_ffff,
+            RV64_REGISTER_AS as usize,
+            RV64_IMM_AS as usize,
+        ],
+    );
+    let bne = Instruction::<F>::from_isize(
+        BranchEqualOpcode::BNE.global_opcode(),
+        reg(2) as isize,
+        reg(0) as isize,
+        -4,
+        RV64_REGISTER_AS as isize,
+        RV64_REGISTER_AS as isize,
+    );
+    let terminate =
+        Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0);
+    let program = Program::from_instructions(&[addi.clone(), bne.clone(), terminate]);
+    let initial_counter = (ADDI_ROWS as u64).to_le_bytes();
+    let init_memory = initial_counter
+        .into_iter()
+        .enumerate()
+        .map(|(offset, byte)| ((RV64_REGISTER_AS, (reg(2) + offset) as u32), byte))
+        .collect();
+    let exe = VmExe::new(program.clone()).with_init_memory(init_memory);
+    let config = Rv64IConfig {
+        system: test_system_config(),
+        ..Default::default()
+    };
+    let executor = VmExecutor::new(config).unwrap();
+    let execution = executor
+        .rvr_preflight_instance(&exe, None)
+        .unwrap()
+        .execute(
+            Vec::<Vec<u8>>::new(),
+            RvrPreflightLimits::new(2 * ADDI_ROWS + 1, 4 * ADDI_ROWS),
+        )
+        .unwrap();
+    assert_eq!(execution.transcript.program_log.len(), 2 * ADDI_ROWS + 2);
+    assert_eq!(execution.transcript.memory_log.len(), 4 * ADDI_ROWS);
+
+    let mut tester = GpuChipTestBuilder::default();
+    tester.write_bytes(
+        RV64_REGISTER_AS as usize,
+        reg(2),
+        initial_counter.map(F::from_u8),
+    );
+    let mut addi_harness = create_cuda_harness_with_capacity(&tester, ADDI_ROWS);
+    let mut branch_harness = create_cuda_branch_harness_with_capacity(&tester, ADDI_ROWS);
+    for _ in 0..ADDI_ROWS {
+        tester.execute_with_pc(
+            &mut addi_harness.executor,
+            &mut addi_harness.dense_arena,
+            &addi,
+            0,
+        );
+        tester.execute_with_pc(
+            &mut branch_harness.executor,
+            &mut branch_harness.dense_arena,
+            &bne,
+            4,
+        );
+    }
+    let legacy_record_bytes = addi_harness.dense_arena.allocated().to_vec();
+    assert_eq!(
+        legacy_record_bytes.len(),
+        ADDI_ROWS
+            * size_of::<(
+                Rv64BaseAluImmU16AdapterRecord,
+                AddICoreRecord<BLOCK_FE_WIDTH>,
+            )>()
+    );
+    drop(branch_harness);
+
+    let range_checker = tester.range_checker();
+    let device_ctx = &range_checker.device_ctx;
+    device_ctx.stream.synchronize().unwrap();
+    let started = std::time::Instant::now();
+    let d_program = GpuRvrProgram::upload(&program, device_ctx).unwrap();
+    device_ctx.stream.synchronize().unwrap();
+    let static_program_upload = started.elapsed();
+
+    let mut index_times = Vec::with_capacity(REPETITIONS);
+    let mut replay_upload_times = Vec::with_capacity(REPETITIONS);
+    for sample in 0..WARMUPS + REPETITIONS {
+        let (_, _, index_time, upload_time) = d_program
+            .upload_transcript_profiled(&execution.transcript, execution.endpoint)
+            .unwrap();
+        if sample >= WARMUPS {
+            index_times.push(index_time);
+            replay_upload_times.push(upload_time);
+        }
+    }
+    let (d_transcript, d_replay_plan) = d_program
+        .upload_transcript(&execution.transcript, execution.endpoint)
+        .unwrap();
+    assert_eq!(d_transcript.error_code().unwrap(), 0);
+    let replay_range = d_replay_plan.opcode_range(BaseAluImmOpcode::ADDI.global_opcode());
+    assert_eq!(replay_range.len(), ADDI_ROWS);
+
+    let mut legacy_upload_times = Vec::with_capacity(REPETITIONS);
+    for sample in 0..WARMUPS + REPETITIONS {
+        device_ctx.stream.synchronize().unwrap();
+        let started = std::time::Instant::now();
+        let d_records = legacy_record_bytes.to_device_on(device_ctx).unwrap();
+        device_ctx.stream.synchronize().unwrap();
+        if sample >= WARMUPS {
+            legacy_upload_times.push(started.elapsed());
+        }
+        drop(d_records);
+    }
+    let d_legacy_records = legacy_record_bytes.to_device_on(device_ctx).unwrap();
+
+    let trace_width = Rv64BaseAluImmU16AdapterCols::<F>::width()
+        + AddICoreCols::<F, BLOCK_FE_WIDTH, U16_BITS>::width();
+    let legacy_trace = DeviceMatrix::<F>::with_capacity_on(ADDI_ROWS, trace_width, device_ctx);
+    let replay_trace = DeviceMatrix::<F>::with_capacity_on(ADDI_ROWS, trace_width, device_ctx);
+    let legacy_range_checker =
+        openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU::new(
+            default_var_range_checker_bus(),
+            device_ctx.clone(),
+        );
+    let replay_range_checker =
+        openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU::new(
+            default_var_range_checker_bus(),
+            device_ctx.clone(),
+        );
+    device_ctx.stream.synchronize().unwrap();
+
+    let time_legacy = || {
+        benchmark_cuda_launches(device_ctx.stream.as_raw(), LAUNCHES_PER_SAMPLE, || unsafe {
+            crate::cuda_abi::addi_cuda::tracegen(
+                legacy_trace.buffer(),
+                ADDI_ROWS,
+                &d_legacy_records,
+                &legacy_range_checker.count,
+                tester.timestamp_max_bits() as u32,
+                device_ctx.stream.as_raw(),
+            )
+            .unwrap();
+        })
+    };
+    let time_replay = || {
+        benchmark_cuda_launches(device_ctx.stream.as_raw(), LAUNCHES_PER_SAMPLE, || unsafe {
+            crate::cuda_abi::addi_cuda::replay_tracegen(
+                replay_trace.buffer(),
+                ADDI_ROWS,
+                d_program.instructions(),
+                d_program.pc_base(),
+                d_transcript.program_log(),
+                d_transcript.memory_log(),
+                d_transcript.initial_write_log(),
+                d_transcript.memory_predecessors(),
+                d_replay_plan.steps(),
+                replay_range.start,
+                replay_range.len(),
+                d_transcript.error_ptr(),
+                BaseAluImmOpcode::ADDI.global_opcode().as_usize() as u32,
+                RV64_REGISTER_AS,
+                RV64_IMM_AS,
+                &replay_range_checker.count,
+                tester.timestamp_max_bits() as u32,
+                device_ctx.stream.as_raw(),
+            )
+            .unwrap();
+        })
+    };
+
+    let mut legacy_kernel_ms = Vec::with_capacity(REPETITIONS);
+    let mut replay_kernel_ms = Vec::with_capacity(REPETITIONS);
+    for sample in 0..WARMUPS + REPETITIONS {
+        let (legacy, replay) = if sample % 2 == 0 {
+            (time_legacy(), time_replay())
+        } else {
+            let replay = time_replay();
+            (time_legacy(), replay)
+        };
+        if sample >= WARMUPS {
+            legacy_kernel_ms.push(legacy);
+            replay_kernel_ms.push(replay);
+        }
+    }
+    assert_eq!(d_transcript.error_code().unwrap(), 0);
+
+    let (index_p10, index_median, index_p90) = duration_percentiles(index_times);
+    let (replay_upload_p10, replay_upload_median, replay_upload_p90) =
+        duration_percentiles(replay_upload_times);
+    let (legacy_upload_p10, legacy_upload_median, legacy_upload_p90) =
+        duration_percentiles(legacy_upload_times);
+    let (legacy_kernel_p10, legacy_kernel_median, legacy_kernel_p90) =
+        f64_percentiles(legacy_kernel_ms);
+    let (replay_kernel_p10, replay_kernel_median, replay_kernel_p90) =
+        f64_percentiles(replay_kernel_ms);
+    let micros = |duration: Duration| duration.as_secs_f64() * 1_000_000.0;
+    let new_total_us =
+        micros(index_median) + micros(replay_upload_median) + replay_kernel_median * 1000.0;
+    let legacy_total_us = micros(legacy_upload_median) + legacy_kernel_median * 1000.0;
+    let transcript_bytes = std::mem::size_of_val(execution.transcript.program_log.as_slice())
+        + std::mem::size_of_val(execution.transcript.memory_log.as_slice())
+        + std::mem::size_of_val(execution.transcript.initial_write_log.as_slice());
+    let derived_bytes = execution.transcript.memory_log.len() * size_of::<u32>()
+        + (execution.transcript.program_log.len() - 1) * 2 * size_of::<u32>();
+    let trace_bytes = ADDI_ROWS * trace_width * size_of::<F>();
+    println!(
+        "RVR_ADDI_GPU_BENCH addi_rows={ADDI_ROWS} guest_insns={} warmups={WARMUPS} repetitions={REPETITIONS} launches_per_sample={LAUNCHES_PER_SAMPLE} static_program_upload_us={:.3} index_p10_us={:.3} index_median_us={:.3} index_p90_us={:.3} replay_h2d_p10_us={:.3} replay_h2d_median_us={:.3} replay_h2d_p90_us={:.3} legacy_record_h2d_p10_us={:.3} legacy_record_h2d_median_us={:.3} legacy_record_h2d_p90_us={:.3} replay_kernel_p10_us={:.3} replay_kernel_median_us={:.3} replay_kernel_p90_us={:.3} legacy_kernel_p10_us={:.3} legacy_kernel_median_us={:.3} legacy_kernel_p90_us={:.3} replay_over_legacy_kernel={:.3} new_total_us={new_total_us:.3} legacy_total_us={legacy_total_us:.3} transcript_bytes={transcript_bytes} derived_bytes={derived_bytes} legacy_record_bytes={} trace_bytes={trace_bytes}",
+        2 * ADDI_ROWS + 1,
+        micros(static_program_upload),
+        micros(index_p10),
+        micros(index_median),
+        micros(index_p90),
+        micros(replay_upload_p10),
+        micros(replay_upload_median),
+        micros(replay_upload_p90),
+        micros(legacy_upload_p10),
+        micros(legacy_upload_median),
+        micros(legacy_upload_p90),
+        replay_kernel_p10 * 1000.0,
+        replay_kernel_median * 1000.0,
+        replay_kernel_p90 * 1000.0,
+        legacy_kernel_p10 * 1000.0,
+        legacy_kernel_median * 1000.0,
+        legacy_kernel_p90 * 1000.0,
+        replay_kernel_median / legacy_kernel_median,
+        legacy_record_bytes.len(),
+    );
 }
 
 //////////////////////////////////////////////////////////////////////////////////////

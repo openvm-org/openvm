@@ -561,6 +561,60 @@ sizes, GPU and host model, compiler flags and versions, warmup count, repetition
 count, and reported statistic. The 10% per-workload threshold is evaluated with a
 documented noise interval rather than a single run.
 
+#### M2 GPU benchmark manifest
+
+The first performance gate uses a fixed `ADDI x2, x2, -1; BNE x2, x0, -4`
+loop with `x2 = 2^18` in initial register memory, followed by TERMINATE. It
+therefore produces exactly `2^18` ADDI rows with interleaved branch accesses and
+no trace padding. The benchmark is a release build on the dedicated GPU host,
+with 3 warmups and 11 measured samples. Each CUDA sample contains 10 launches;
+legacy and replay order alternates between samples. Results report median,
+p10, and p90.
+
+Cold host postflight indexing, synchronized segment H2D, and legacy-record H2D
+are timed separately. Direct legacy and replay kernels reuse pre-uploaded inputs
+and preallocated equal-sized output matrices, and use CUDA events on the same
+stream. Static-program upload, RVR artifact compilation, serial execution, and
+trace allocation are reported or excluded explicitly rather than hidden in a
+kernel comparison. The conservative pipeline totals charge the entire shared
+transcript/index upload to ADDI; a full multi-AIR pipeline will amortize that
+cost. The run records CPU, GPU, driver, rustc, and nvcc versions and checks that
+no competing GPU process is active.
+
+The first two runs on 2026-07-23 used an AMD EPYC Milan host (16 physical
+cores), NVIDIA L40S (46,068 MiB), driver 610.43.02, rustc 1.93.0 with LLVM
+21.1.8, and CUDA 13.3 (`nvcc` 13.3.33). The exact command was:
+
+```text
+cargo test --release -p openvm-riscv-circuit --features cuda,rvr \
+  benchmark_cuda_addi_replay_vs_legacy -- \
+  --ignored --nocapture --test-threads=1
+```
+
+This uses the workspace release profile (`opt-level = 3`, thin LTO, 16
+codegen units, line-table debug information) and the repository's default CUDA
+build flags. No other GPU compute process was active. The two median results
+were stable:
+
+| Stage | Run 1 | Run 2 |
+| --- | ---: | ---: |
+| Cold host postflight index | 54,006.7 us | 53,549.4 us |
+| Replay transcript/index H2D | 2,046.5 us | 2,051.5 us |
+| Legacy ADDI-record H2D | 503.4 us | 507.8 us |
+| Replay ADDI kernel | 56.94 us | 57.14 us |
+| Legacy ADDI kernel | 29.39 us | 29.58 us |
+| Replay / legacy kernel | 1.938x | 1.931x |
+
+The transcript is 33,554,448 bytes, the derived replay index is 8,388,616
+bytes, and the equivalent ADDI-only legacy records are 11,534,336 bytes. The
+comparison deliberately charges the replay path for the shared ADDI+BNE
+transcript and index while the legacy byte count contains only ADDI records.
+The conservative median total is therefore 55.7 ms for replay versus 0.54 ms
+for the isolated legacy ADDI path. This checkpoint fails the performance gate:
+the first required optimization is the postflight/index representation, and
+the replay kernel's extra validation and gather cost must also be reduced before
+porting more AIRs.
+
 #### Initial GPU correctness checkpoint (2026-07-23)
 
 The first direct replay kernel covers ADDI without constructing a compatibility
@@ -578,9 +632,9 @@ rejected by device validation. ADDI with `rd = x0` is deliberately rejected:
 the current immediate-ALU AIR always emits a destination write and must gain the
 same conditional-write shape as load/JALR before that schedule can be replayed.
 
-This establishes correctness and log sufficiency for one fixed-row RISC-V AIR;
-it does not pass the M2 performance gate. The fixed benchmark manifest and
-executor + indexing + upload + kernel measurements are the next checkpoint
+This establishes correctness and log sufficiency for one fixed-row RISC-V AIR,
+but does not pass the M2 performance gate. The measurements above make the next
+checkpoint concrete: fix indexing and replay layout, then repeat this benchmark
 before widening to the other RISC-V adapters.
 
 ### M3: complete the GPU proving path
