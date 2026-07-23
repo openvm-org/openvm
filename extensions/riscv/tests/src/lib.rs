@@ -171,7 +171,9 @@ mod tests {
             Ok(_) => panic!("zero-capacity execution unexpectedly succeeded"),
             Err(error) => error,
         };
-        assert!(capacity_error.to_string().contains("code 1"));
+        assert!(capacity_error
+            .to_string()
+            .contains("execution returned error code: 2"));
 
         let allocation_error = match instance.execute(
             Vec::<Vec<u8>>::new(),
@@ -183,6 +185,154 @@ mod tests {
         assert!(allocation_error
             .to_string()
             .contains("failed to reserve preflight memory log"));
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(feature = "rvr")]
+    fn test_rvr_preflight_suspends_and_resumes_at_whole_blocks() -> Result<()> {
+        let reg = |index: usize| index * RV64_REGISTER_NUM_LIMBS;
+        let instructions = [
+            Instruction::<F>::from_isize(
+                BaseAluImmOpcode::ADDI.global_opcode(),
+                reg(1) as isize,
+                reg(0) as isize,
+                1,
+                RV64_REGISTER_AS as isize,
+                RV64_IMM_AS as isize,
+            ),
+            Instruction::<F>::from_isize(
+                BranchEqualOpcode::BNE.global_opcode(),
+                reg(1) as isize,
+                reg(0) as isize,
+                8,
+                RV64_REGISTER_AS as isize,
+                RV64_REGISTER_AS as isize,
+            ),
+            Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 1, 0, 0),
+            Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+        ];
+        let exe = VmExe::from(Program::from_instructions(&instructions));
+        let executor = VmExecutor::new(test_rv64im_config())?;
+        let instance = executor.rvr_preflight_instance(&exe, None)?;
+
+        let too_small = instance.execute_for(
+            Vec::<Vec<u8>>::new(),
+            openvm_circuit::arch::rvr::RvrPreflightLimits::new(1, 8),
+        )?;
+        assert_eq!(
+            too_small.endpoint,
+            openvm_circuit::arch::rvr::RvrPreflightEndpoint::Suspended {
+                resume_pc: 0,
+                final_timestamp: 1,
+            }
+        );
+        assert_eq!(
+            too_small
+                .transcript
+                .program_log
+                .iter()
+                .map(|event| (event.pc, event.timestamp))
+                .collect::<Vec<_>>(),
+            vec![(0, 1)]
+        );
+
+        let first = instance.execute_for(
+            Vec::<Vec<u8>>::new(),
+            openvm_circuit::arch::rvr::RvrPreflightLimits::new(2, 8),
+        )?;
+        assert_eq!(
+            first.endpoint,
+            openvm_circuit::arch::rvr::RvrPreflightEndpoint::Suspended {
+                resume_pc: 12,
+                final_timestamp: 5,
+            }
+        );
+        assert_eq!(
+            first
+                .transcript
+                .program_log
+                .iter()
+                .map(|event| (event.pc, event.timestamp))
+                .collect::<Vec<_>>(),
+            vec![(0, 1), (4, 3), (12, 5)]
+        );
+        assert_eq!(first.state.pc(), 12);
+
+        let second = instance.execute_from_state_for(
+            first.state,
+            openvm_circuit::arch::rvr::RvrPreflightLimits::new(1, 0),
+        )?;
+        assert_eq!(
+            second.endpoint,
+            openvm_circuit::arch::rvr::RvrPreflightEndpoint::Terminated
+        );
+        assert_eq!(
+            second
+                .transcript
+                .program_log
+                .iter()
+                .map(|event| (event.pc, event.timestamp))
+                .collect::<Vec<_>>(),
+            // The resumed call resets its timestamp to one. The second entry is
+            // the single final sentinel at the terminal PC.
+            vec![(12, 1), (12, 1)]
+        );
+
+        let unbounded = instance.execute(
+            Vec::<Vec<u8>>::new(),
+            openvm_circuit::arch::rvr::RvrPreflightLimits::new(3, 4),
+        )?;
+        let segmented_pcs = first
+            .transcript
+            .program_log
+            .iter()
+            .rev()
+            .skip(1)
+            .rev()
+            .chain(second.transcript.program_log.iter().rev().skip(1).rev())
+            .map(|event| event.pc)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            segmented_pcs,
+            unbounded
+                .transcript
+                .program_log
+                .iter()
+                .rev()
+                .skip(1)
+                .rev()
+                .map(|event| event.pc)
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(second.state.pc(), unbounded.state.pc());
+        let x1_ptr = (reg(1) / 2) as u32;
+        let segmented_x1: [u16; 4] = unsafe { second.state.memory.read(RV64_REGISTER_AS, x1_ptr) };
+        let unbounded_x1: [u16; 4] =
+            unsafe { unbounded.state.memory.read(RV64_REGISTER_AS, x1_ptr) };
+        assert_eq!(segmented_x1, [1, 0, 0, 0]);
+        assert_eq!(segmented_x1, unbounded_x1);
+
+        let termination_required = match instance.execute(
+            Vec::<Vec<u8>>::new(),
+            openvm_circuit::arch::rvr::RvrPreflightLimits::new(2, 8),
+        ) {
+            Ok(_) => panic!("termination-required preflight unexpectedly suspended successfully"),
+            Err(error) => error,
+        };
+        assert!(termination_required
+            .to_string()
+            .contains("execution returned error code: 2"));
+
+        let memory_error = match instance.execute_for(
+            Vec::<Vec<u8>>::new(),
+            openvm_circuit::arch::rvr::RvrPreflightLimits::new(2, 3),
+        ) {
+            Ok(_) => panic!("mid-block memory exhaustion unexpectedly suspended"),
+            Err(error) => error,
+        };
+        assert!(memory_error.to_string().contains("code 2"));
+
         Ok(())
     }
 

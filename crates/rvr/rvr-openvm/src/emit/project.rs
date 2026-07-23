@@ -1052,7 +1052,16 @@ impl CProject {
         let insn_count = block.insn_count();
 
         match self.execution_kind {
-            RvrExecutionKind::Pure | RvrExecutionKind::Preflight => {}
+            RvrExecutionKind::Pure => {}
+            RvrExecutionKind::Preflight => {
+                writeln!(
+                    out,
+                    "    if (unlikely(state->mode_state.program_log_len > state->mode_state.program_log_cap || (uint64_t){insn_count}u > state->mode_state.program_log_cap - state->mode_state.program_log_len)) {{"
+                )
+                .unwrap();
+                self.emit_suspend_return(out, pc);
+                writeln!(out, "    }}").unwrap();
+            }
             RvrExecutionKind::PureWithInstretTracking => {
                 let args = self.fn_args_from_params();
                 writeln!(
@@ -1481,13 +1490,24 @@ mod tests {
     }
 
     #[test]
-    fn preflight_preserves_plain_block_abi_and_hot_registers() {
+    fn preflight_block_guard_is_subtraction_safe_and_preserves_plain_abi() {
         let pure = CProject::new(Path::new("unused"), "test", RvrExecutionKind::Pure);
         let preflight = CProject::new(Path::new("unused"), "test", RvrExecutionKind::Preflight);
         let mut boundary = String::new();
         preflight.emit_block_boundary(&mut boundary, &single_instruction_block());
 
-        assert!(boundary.is_empty());
+        assert_eq!(boundary.matches("if (unlikely(").count(), 1);
+        assert!(boundary.contains(
+            "state->mode_state.program_log_len > state->mode_state.program_log_cap || \
+             (uint64_t)1u > state->mode_state.program_log_cap - \
+             state->mode_state.program_log_len"
+        ));
+        let save = boundary.find("rv_save_hot_regs(state").unwrap();
+        let suspend = boundary
+            .find("rv_set_status_at(state, 0x00000100ull, OPENVM_EXEC_SUSPENDED, 0);")
+            .unwrap();
+        let return_pos = boundary.find("return;").unwrap();
+        assert!(save < suspend && suspend < return_pos);
         assert_eq!(preflight.block_abi(), super::BlockAbi::Plain);
         assert_eq!(preflight.hot_regs, pure.hot_regs);
         assert_eq!(

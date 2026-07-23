@@ -22,10 +22,13 @@ use crate::{
 
 const _: () = assert!(BLOCK_FE_WIDTH == 4);
 
-/// Hard capacities for one preflight execution call.
+/// Limits for one preflight execution call.
 ///
 /// The final program sentinel needs one additional program-log slot, which is
-/// reserved by the executor automatically.
+/// reserved by the executor automatically. Bounded execution suspends before a
+/// whole basic block that would exceed `max_instructions`;
+/// `max_memory_events` remains a hard error boundary and never suspends midway
+/// through a block.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RvrPreflightLimits {
     pub max_instructions: usize,
@@ -60,7 +63,7 @@ pub enum RvrPreflightEndpoint {
     },
 }
 
-/// State and transcript returned only after successful termination.
+/// State and transcript returned after successful termination or bounded suspension.
 pub struct RvrPreflightExecution {
     pub state: VmState<GuestMemory>,
     pub transcript: RvrPreflightTranscript,
@@ -285,27 +288,62 @@ impl<'a> RvrPreflightInstance<'a> {
         self.execute_from_state(self.create_initial_vm_state(inputs), limits)
     }
 
+    /// Executes until successful termination. A generated suspension is treated
+    /// as an error.
+    ///
     /// Consumes `state` as the transaction boundary. On any execution or
     /// finalization error, the mutated working state is discarded and neither
     /// state nor transcript is returned.
     pub fn execute_from_state(
         &self,
-        mut state: VmState<GuestMemory>,
+        state: VmState<GuestMemory>,
         limits: RvrPreflightLimits,
     ) -> Result<RvrPreflightExecution, ExecutionError> {
-        let transcript = execute_preflight(
+        self.execute_from_state_inner(state, limits, false)
+    }
+
+    /// Executes until either successful termination or the next whole basic
+    /// block would exceed `limits.max_instructions`. Memory-log exhaustion
+    /// remains an error.
+    pub fn execute_for(
+        &self,
+        inputs: impl Into<Streams>,
+        limits: RvrPreflightLimits,
+    ) -> Result<RvrPreflightExecution, ExecutionError> {
+        self.execute_from_state_for(self.create_initial_vm_state(inputs), limits)
+    }
+
+    /// Resumes from `state` and returns it only after successful termination or
+    /// suspension at a whole-basic-block boundary. Any error discards the
+    /// consumed working state.
+    pub fn execute_from_state_for(
+        &self,
+        state: VmState<GuestMemory>,
+        limits: RvrPreflightLimits,
+    ) -> Result<RvrPreflightExecution, ExecutionError> {
+        self.execute_from_state_inner(state, limits, true)
+    }
+
+    fn execute_from_state_inner(
+        &self,
+        mut state: VmState<GuestMemory>,
+        limits: RvrPreflightLimits,
+        allow_suspended: bool,
+    ) -> Result<RvrPreflightExecution, ExecutionError> {
+        let (transcript, endpoint) = execute_preflight(
             &self.inner.compiled,
             &self.inner.runtime_hooks,
             &mut state,
             limits,
             self.inner.system_config.memory_config.timestamp_max_bits,
+            allow_suspended,
         )
         .map_err(map_rvr_execute_error)?;
         extend_touched_pages(&mut state, &transcript).map_err(ExecutionError::RvrExecution)?;
         Ok(RvrPreflightExecution {
             state,
             transcript,
-            endpoint: RvrPreflightEndpoint::Terminated,
+            endpoint,
         })
     }
 

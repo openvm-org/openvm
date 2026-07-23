@@ -20,7 +20,9 @@ use super::{
     io::{host_hint_stream_set, OpenVmIoState},
     metered::{metered_periodic_check, RvrMeteredExecutionOutcome, SegmentationState},
     metered_cost::RvrMeteredCostResult,
-    preflight::{PreflightBuffers, RvrPreflightLimits, RvrPreflightTranscript},
+    preflight::{
+        PreflightBuffers, RvrPreflightEndpoint, RvrPreflightLimits, RvrPreflightTranscript,
+    },
     state::{
         init_rvr_state, MeteredCostRvState, MeteredRvState, PreflightRvState, PureRvState,
         PureWithInstretTrackingRvState,
@@ -230,7 +232,8 @@ pub(super) fn execute_preflight(
     vm_state: &mut VmState<GuestMemory>,
     limits: RvrPreflightLimits,
     timestamp_max_bits: usize,
-) -> Result<RvrPreflightTranscript, ExecuteError> {
+    allow_suspended: bool,
+) -> Result<(RvrPreflightTranscript, RvrPreflightEndpoint), ExecuteError> {
     require_execution_kind(compiled, "Preflight", &[RvrExecutionKind::Preflight])?;
     let pc = vm_state.pc();
     let mut buffers =
@@ -239,21 +242,37 @@ pub(super) fn execute_preflight(
     state.regs = read_rv64_registers(vm_state);
     state.mode_state = buffers.ffi_state();
 
-    let execution = run_and_finalize(compiled, runtime_hooks, vm_state, &mut state, false);
+    let execution = run_and_finalize(
+        compiled,
+        runtime_hooks,
+        vm_state,
+        &mut state,
+        allow_suspended,
+    );
     if state.mode_state.error != 0 {
         return Err(ExecuteError::InvalidPreflightContext(format!(
             "generated preflight logger failed with code {}",
             state.mode_state.error
         )));
     }
-    execution.inspect_err(|error| tracing::warn!(%error, "rvr preflight execution failed"))?;
+    let status =
+        execution.inspect_err(|error| tracing::warn!(%error, "rvr preflight execution failed"))?;
     let final_pc = u32::try_from(state.pc).map_err(|_| {
         ExecuteError::InvalidPreflightContext("final PC does not fit in u32".to_string())
     })?;
+    let endpoint = match status {
+        ExecutionStatus::Terminated => RvrPreflightEndpoint::Terminated,
+        ExecutionStatus::Suspended => RvrPreflightEndpoint::Suspended {
+            resume_pc: final_pc,
+            final_timestamp: state.mode_state.timestamp,
+        },
+        _ => unreachable!("run_and_finalize accepted an invalid preflight status"),
+    };
     // SAFETY: the raw state was created from `buffers` immediately above and
     // neither vector can reallocate during generated execution.
-    unsafe { buffers.finish(&state.mode_state, final_pc, timestamp_max_bits) }
-        .map_err(ExecuteError::InvalidPreflightContext)
+    let transcript = unsafe { buffers.finish(&state.mode_state, final_pc, timestamp_max_bits) }
+        .map_err(ExecuteError::InvalidPreflightContext)?;
+    Ok((transcript, endpoint))
 }
 
 /// Execute an instret-tracking pure artifact until termination.
