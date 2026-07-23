@@ -2495,13 +2495,11 @@ unsafe fn assume_init_prefix<T>(mut buffer: Vec<MaybeUninit<T>>, len: usize) -> 
 #[cfg(test)]
 #[allow(clippy::items_after_test_module)]
 mod tests {
-    use std::collections::HashSet;
-
     use openvm_instructions::{
         exe::VmExe,
         instruction::Instruction,
         program::{Program, DEFAULT_PC_STEP},
-        riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+        riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
         LocalOpcode, SysPhantom, SystemOpcode, VmOpcode, DEFERRAL_AS,
         PUBLIC_VALUES_AS as AS_PUBLIC_VALUES,
     };
@@ -2517,7 +2515,7 @@ mod tests {
             },
             Streams, VmState,
         },
-        system::memory::{online::PAGE_SIZE, AddressMap, TimestampedValues},
+        system::memory::{online::PAGE_SIZE, AddressMap},
         utils::test_system_config,
     };
 
@@ -2547,14 +2545,11 @@ mod tests {
 
         let finalized = raw_touched
             .iter()
-            .map(|block| {
-                (
-                    (block.addr_space, block.block_addr / 2),
-                    TimestampedValues {
-                        timestamp: 1,
-                        values: [BabyBear::default(); BLOCK_FE_WIDTH],
-                    },
-                )
+            .map(|block| crate::system::TouchedBlock {
+                address_space: block.addr_space,
+                ptr: block.block_addr / 2,
+                timestamp: 1,
+                values: [BabyBear::default(); BLOCK_FE_WIDTH],
             })
             .collect::<Vec<_>>();
         finalized_memory
@@ -2611,72 +2606,8 @@ mod tests {
     }
 
     const OPCODE_ADDI: usize = 0x290;
-    const OPCODE_LOADD: usize = 0x210;
-    const OPCODE_LOADBU: usize = 0x211;
-    const OPCODE_LOADHU: usize = 0x212;
-    const OPCODE_LOADWU: usize = 0x213;
     const OPCODE_STORED: usize = 0x214;
-    const OPCODE_STOREW: usize = 0x215;
-    const OPCODE_STOREH: usize = 0x216;
-    const OPCODE_STOREB: usize = 0x217;
-    const OPCODE_LOADB: usize = 0x218;
-    const OPCODE_LOADH: usize = 0x219;
-    const OPCODE_LOADW: usize = 0x21a;
-    const TEST_CHIP: u32 = 0;
-    const PHANTOM_CHIP: u32 = 1;
-
-    fn reg(idx: usize) -> usize {
-        idx * RV64_REGISTER_NUM_LIMBS
-    }
-
-    fn addi(rd: usize, rs1: usize, imm: usize) -> Instruction<BabyBear> {
-        Instruction::from_usize(
-            VmOpcode::from_usize(OPCODE_ADDI),
-            [reg(rd), reg(rs1), imm, 1, 0],
-        )
-    }
-
-    fn load_d(rd: usize, rs1: usize, offset: usize) -> Instruction<BabyBear> {
-        Instruction::from_usize(
-            VmOpcode::from_usize(OPCODE_LOADD),
-            [reg(rd), reg(rs1), offset, 1, RV64_MEMORY_AS as usize, 1, 0],
-        )
-    }
-
-    fn load_width(opcode: usize, rd: usize, rs1: usize, offset: usize) -> Instruction<BabyBear> {
-        Instruction::from_usize(
-            VmOpcode::from_usize(opcode),
-            [reg(rd), reg(rs1), offset, 1, RV64_MEMORY_AS as usize, 1, 0],
-        )
-    }
-
-    fn store_d(rs2: usize, rs1: usize, offset: usize) -> Instruction<BabyBear> {
-        Instruction::from_usize(
-            VmOpcode::from_usize(OPCODE_STORED),
-            [reg(rs2), reg(rs1), offset, 1, RV64_MEMORY_AS as usize, 1, 0],
-        )
-    }
-
-    fn store_width(opcode: usize, rs2: usize, rs1: usize, offset: usize) -> Instruction<BabyBear> {
-        Instruction::from_usize(
-            VmOpcode::from_usize(opcode),
-            [reg(rs2), reg(rs1), offset, 1, RV64_MEMORY_AS as usize, 1, 0],
-        )
-    }
-
-    fn reveal_like_store() -> Instruction<BabyBear> {
-        Instruction::from_usize(
-            VmOpcode::from_usize(OPCODE_STORED),
-            [reg(1), reg(0), 0, 1, AS_PUBLIC_VALUES as usize, 1, 0],
-        )
-    }
-
-    fn deferral_like_store() -> Instruction<BabyBear> {
-        Instruction::from_usize(
-            VmOpcode::from_usize(OPCODE_STORED),
-            [reg(1), reg(0), 0, 1, DEFERRAL_AS as usize, 1, 0],
-        )
-    }
+    const PHANTOM_CHIP: u32 = 0;
 
     fn terminate() -> Instruction<BabyBear> {
         Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0)
@@ -2693,45 +2624,27 @@ mod tests {
         )
     }
 
-    fn rv64im_memory_exe() -> VmExe<BabyBear> {
+    fn system_phantom_exe() -> VmExe<BabyBear> {
         let instructions = [
-            addi(1, 0, 64),
-            addi(2, 0, 7),
-            store_d(2, 1, 0),
-            load_d(3, 1, 0),
-            addi(4, 0, 0x5a),
-            store_width(OPCODE_STOREB, 4, 1, 1),
-            load_width(OPCODE_LOADBU, 5, 1, 1),
-            store_width(OPCODE_STOREH, 4, 1, 2),
-            load_width(OPCODE_LOADHU, 6, 1, 2),
-            store_width(OPCODE_STOREW, 4, 1, 4),
-            load_width(OPCODE_LOADWU, 7, 1, 4),
-            load_width(OPCODE_LOADB, 8, 1, 1),
-            load_width(OPCODE_LOADH, 9, 1, 2),
-            load_width(OPCODE_LOADW, 10, 1, 4),
-            load_d(0, 1, 0),
-            terminate(),
-        ];
-        VmExe::new(Program::from_instructions(&instructions))
-    }
-
-    fn phantom_timestamp_exe() -> VmExe<BabyBear> {
-        let instructions = [
-            addi(1, 0, 64),
             phantom(SysPhantom::Nop),
-            addi(2, 0, 7),
             phantom(SysPhantom::CtStart),
-            store_d(2, 1, 0),
             phantom(SysPhantom::CtEnd),
-            load_d(3, 1, 0),
             terminate(),
         ];
         VmExe::new(Program::from_instructions(&instructions))
     }
 
-    fn chip_mapping(exe: &VmExe<BabyBear>) -> ChipMapping {
+    fn extension_owned_instruction(opcode: usize, address_space: usize) -> Instruction<BabyBear> {
+        Instruction::from_usize(
+            VmOpcode::from_usize(opcode),
+            [8, 0, 0, RV64_REGISTER_AS as usize, address_space, 1, 0],
+        )
+    }
+
+    fn phantom_chip_mapping(exe: &VmExe<BabyBear>) -> ChipMapping {
         let terminate_opcode = SystemOpcode::TERMINATE.global_opcode();
         ChipMapping {
+            num_airs: PHANTOM_CHIP as usize + 1,
             pc_to_chip: exe
                 .program
                 .instructions_and_debug_infos
@@ -2743,29 +2656,8 @@ mod tests {
                     {
                         TraceChipIndex::NoChip
                     } else {
-                        TraceChipIndex::Chip(AirIndex::new(TEST_CHIP))
-                    }
-                })
-                .collect(),
-            chip_widths: None,
-        }
-    }
-
-    fn phantom_chip_mapping(exe: &VmExe<BabyBear>) -> ChipMapping {
-        let terminate_opcode = SystemOpcode::TERMINATE.global_opcode();
-        let phantom_opcode = SystemOpcode::PHANTOM.global_opcode();
-        ChipMapping {
-            pc_to_chip: exe
-                .program
-                .instructions_and_debug_infos
-                .iter()
-                .map(|slot| match slot {
-                    Some((insn, _)) if insn.opcode == terminate_opcode => TraceChipIndex::NoChip,
-                    Some((insn, _)) if insn.opcode == phantom_opcode => {
                         TraceChipIndex::Chip(AirIndex::new(PHANTOM_CHIP))
                     }
-                    Some(_) => TraceChipIndex::Chip(AirIndex::new(TEST_CHIP)),
-                    None => TraceChipIndex::NoChip,
                 })
                 .collect(),
             chip_widths: None,
@@ -2773,42 +2665,37 @@ mod tests {
     }
 
     #[test]
-    fn classifier_flags_rv64im_only_vs_extension_using_exes() {
-        let base = rv64im_memory_exe();
+    fn base_classifier_accepts_system_and_rejects_extension_owned_opcodes() {
+        let system = system_phantom_exe();
         assert_eq!(
-            classify_preflight_opcodes(&base),
+            classify_preflight_opcodes(&system),
             RvrPreflightOpcodeClass::Supported
         );
-        assert!(classify_preflight_opcodes(&base).is_supported());
+        assert!(classify_preflight_opcodes(&system).is_supported());
 
-        let extension = VmExe::new(Program::from_instructions(&[reveal_like_store()]));
-        assert_eq!(
-            classify_preflight_opcodes(&extension),
-            RvrPreflightOpcodeClass::Unsupported {
-                pc: 0,
-                opcode: VmOpcode::from_usize(OPCODE_STORED),
-            }
-        );
-
-        let non_memory_store = VmExe::new(Program::from_instructions(&[deferral_like_store()]));
-        assert_eq!(
-            classify_preflight_opcodes(&non_memory_store),
-            RvrPreflightOpcodeClass::Unsupported {
-                pc: 0,
-                opcode: VmOpcode::from_usize(OPCODE_STORED),
-            }
-        );
+        for (opcode, address_space) in [
+            (OPCODE_ADDI, 0),
+            (OPCODE_STORED, AS_PUBLIC_VALUES as usize),
+            (OPCODE_STORED, DEFERRAL_AS as usize),
+        ] {
+            let extension = VmExe::new(Program::from_instructions(&[extension_owned_instruction(
+                opcode,
+                address_space,
+            )]));
+            assert_eq!(
+                classify_preflight_opcodes(&extension),
+                RvrPreflightOpcodeClass::Unsupported {
+                    pc: 0,
+                    opcode: VmOpcode::from_usize(opcode),
+                }
+            );
+        }
     }
 
     #[test]
-    fn preflight_compiles_and_logs_rv64im_program() {
-        // This test asserts the verbose-log tracer contract (the path
-        // non-migrated opcodes take), so opt out of R3 inline records — the
-        // default compile suppresses AddSub memory-log entries. Safe under
-        // nextest (one process per test).
-        std::env::set_var("OPENVM_RVR_INLINE_RECORDS", "0");
-        let exe = rv64im_memory_exe();
-        let chips = chip_mapping(&exe);
+    fn base_preflight_compiles_and_logs_system_phantoms() {
+        let exe = system_phantom_exe();
+        let chips = phantom_chip_mapping(&exe);
         let compiled = compile_preflight(&exe, &chips, None).expect("compile preflight");
         assert!(compiled.artifact_dir().is_some());
 
@@ -2818,180 +2705,22 @@ mod tests {
             exe.pc_start,
             Streams::default(),
         );
-        let mut program_log = vec![ProgramLogEntry::default(); 64];
-        let mut memory_log = vec![MemoryLogEntry::default(); 64];
-        let mut chip_counts = vec![0u32; 4];
+        let mut program_log = vec![ProgramLogEntry::default(); 8];
+        let mut memory_log = vec![MemoryLogEntry::default(); 1];
+        let mut chip_counts = vec![0u32; 1];
         let mut tracer =
             PreflightTracerData::new(&mut program_log, &mut memory_log, &mut chip_counts);
-        let mut shadows = TestShadows::new(&vm_state, 64);
+        let mut shadows = TestShadows::new(&vm_state, 8);
         shadows.attach(&mut vm_state, &mut tracer);
 
         let state = execute_preflight_for_test(&compiled, &mut vm_state, &mut tracer)
             .expect("execute preflight");
 
         let program_len = tracer.program_log_len as usize;
-        let memory_len = tracer.memory_log_len as usize;
         assert_eq!(program_len, state.mode_state.instret as usize);
-        assert!(program_len > 0);
-        assert!(memory_len > 0);
-        assert_eq!(chip_counts[TEST_CHIP as usize], 15);
-
-        let valid_pcs = exe
-            .program
-            .enumerate_by_pc()
-            .into_iter()
-            .map(|(pc, _, _)| pc)
-            .collect::<HashSet<_>>();
-        for entry in &program_log[..program_len] {
-            assert!(
-                valid_pcs.contains(&entry.pc()),
-                "invalid pc {:#x}",
-                entry.pc()
-            );
-        }
-        assert_eq!(
-            program_log[..program_len]
-                .iter()
-                .map(ProgramLogEntry::pc)
-                .collect::<Vec<_>>(),
-            (0..program_len as u32)
-                .map(|idx| idx * DEFAULT_PC_STEP)
-                .collect::<Vec<_>>()
-        );
-        assert_eq!(
-            program_log[..program_len]
-                .iter()
-                .map(|entry| entry.timestamp)
-                .collect::<Vec<_>>(),
-            vec![1, 3, 5, 9, 13, 15, 18, 21, 25, 29, 33, 37, 40, 44, 48, 52]
-        );
-        assert!(program_log[..program_len]
-            .windows(2)
-            .all(|pair| pair[0].timestamp <= pair[1].timestamp));
-        assert!(memory_log[..memory_len]
-            .windows(2)
-            .all(|pair| pair[0].timestamp < pair[1].timestamp));
-        assert_eq!(memory_len, 41);
-        assert_eq!(tracer.timestamp, 52);
-        assert!(memory_log[..memory_len]
-            .iter()
-            .filter(|entry| entry.addr_space == RV64_MEMORY_AS as u8)
-            .all(|entry| entry.address == 64 && entry.width == 8));
-
-        assert!(memory_log[..memory_len].iter().all(|entry| entry.width > 0
-            && matches!(
-                entry.kind,
-                PREFLIGHT_MEMORY_KIND_READ | PREFLIGHT_MEMORY_KIND_WRITE
-            )));
-        assert!(memory_log[..memory_len].iter().any(|entry| entry.addr_space
-            == RV64_MEMORY_AS as u8
-            && entry.kind == PREFLIGHT_MEMORY_KIND_WRITE
-            && entry.address == 64
-            && entry.value == 7));
-        assert!(memory_log[..memory_len].iter().any(|entry| entry.addr_space
-            == RV64_MEMORY_AS as u8
-            && entry.kind == PREFLIGHT_MEMORY_KIND_READ
-            && entry.address == 64
-            && entry.value == 7));
-        assert_eq!(
-            memory_log[..memory_len]
-                .iter()
-                .filter(|entry| entry.addr_space == RV64_MEMORY_AS as u8
-                    && entry.kind == PREFLIGHT_MEMORY_KIND_READ
-                    && entry.address == 64
-                    && entry.value == 7)
-                .count(),
-            1
-        );
-        assert!(memory_log[..memory_len]
-            .iter()
-            .any(|entry| entry.addr_space == RV64_MEMORY_AS as u8
-                && entry.kind == PREFLIGHT_MEMORY_KIND_WRITE
-                && entry.value == 0x5a07));
-        assert!(memory_log[..memory_len]
-            .iter()
-            .any(|entry| entry.addr_space == RV64_MEMORY_AS as u8
-                && entry.kind == PREFLIGHT_MEMORY_KIND_WRITE
-                && entry.value == 0x005a5a07));
-        assert!(memory_log[..memory_len]
-            .iter()
-            .any(|entry| entry.addr_space == RV64_MEMORY_AS as u8
-                && entry.kind == PREFLIGHT_MEMORY_KIND_WRITE
-                && entry.value == 0x0000005a005a5a07));
-        assert!(memory_log[..memory_len]
-            .iter()
-            .any(|entry| entry.addr_space == RV64_MEMORY_AS as u8
-                && entry.kind == PREFLIGHT_MEMORY_KIND_READ
-                && entry.value == 0x0000005a005a5a07));
-
-        let register_entries = memory_log[..memory_len]
-            .iter()
-            .filter(|entry| entry.addr_space == RV64_REGISTER_AS as u8)
-            .collect::<Vec<_>>();
-        assert!(
-            !register_entries.is_empty(),
-            "preflight must log AS_REGISTER accesses"
-        );
-        assert!(register_entries.iter().all(|entry| entry.width == 8));
-        assert!(register_entries
-            .iter()
-            .any(|entry| entry.kind == PREFLIGHT_MEMORY_KIND_WRITE
-                && entry.address == reg(1) as u64
-                && entry.value == 64));
-        assert!(register_entries
-            .iter()
-            .any(|entry| entry.kind == PREFLIGHT_MEMORY_KIND_WRITE
-                && entry.address == reg(2) as u64
-                && entry.value == 7));
-        assert!(register_entries
-            .iter()
-            .any(|entry| entry.kind == PREFLIGHT_MEMORY_KIND_READ
-                && entry.address == reg(2) as u64
-                && entry.value == 7));
-        assert!(register_entries
-            .iter()
-            .any(|entry| entry.kind == PREFLIGHT_MEMORY_KIND_WRITE
-                && entry.address == reg(3) as u64
-                && entry.value == 7));
-        assert!(!register_entries
-            .iter()
-            .any(|entry| entry.kind == PREFLIGHT_MEMORY_KIND_WRITE && entry.address == 0));
-    }
-
-    #[test]
-    fn preflight_phantoms_tick_shared_timestamp_and_chip_counts() {
-        // Verbose-log contract test; opt out of R3 inline records (see
-        // `preflight_compiles_and_logs_rv64im_program`).
-        std::env::set_var("OPENVM_RVR_INLINE_RECORDS", "0");
-        let exe = phantom_timestamp_exe();
-        let chips = phantom_chip_mapping(&exe);
-        let compiled = compile_preflight(&exe, &chips, None).expect("compile preflight");
-
-        let mut vm_state: VmState = VmState::initial(
-            &test_system_config(),
-            &exe.init_memory,
-            exe.pc_start,
-            Streams::default(),
-        );
-        let mut program_log = vec![ProgramLogEntry::default(); 32];
-        let mut memory_log = vec![MemoryLogEntry::default(); 32];
-        let mut chip_counts = vec![0u32; 4];
-        let mut tracer =
-            PreflightTracerData::new(&mut program_log, &mut memory_log, &mut chip_counts);
-        let mut shadows = TestShadows::new(&vm_state, 32);
-        shadows.attach(&mut vm_state, &mut tracer);
-
-        let state = execute_preflight_for_test(&compiled, &mut vm_state, &mut tracer)
-            .expect("execute preflight");
-
-        let program_len = tracer.program_log_len as usize;
-        let memory_len = tracer.memory_log_len as usize;
-        assert_eq!(program_len, state.mode_state.instret as usize);
-        assert_eq!(program_len, 8);
-        assert_eq!(memory_len, 10);
-        assert_eq!(chip_counts[TEST_CHIP as usize], 4);
+        assert_eq!(program_len, 4);
+        assert_eq!(tracer.memory_log_len, 0);
         assert_eq!(chip_counts[PHANTOM_CHIP as usize], 3);
-
         assert_eq!(
             program_log[..program_len]
                 .iter()
@@ -3006,30 +2735,9 @@ mod tests {
                 .iter()
                 .map(|entry| entry.timestamp)
                 .collect::<Vec<_>>(),
-            vec![1, 3, 4, 6, 7, 11, 12, 16]
+            vec![1, 2, 3, 4]
         );
-        assert_eq!(
-            memory_log[..memory_len]
-                .iter()
-                .map(|entry| entry.timestamp)
-                .collect::<Vec<_>>(),
-            vec![1, 2, 4, 5, 7, 8, 9, 12, 13, 15]
-        );
-        assert_eq!(tracer.timestamp, 16);
-
-        let data_memory_timestamps = memory_log[..memory_len]
-            .iter()
-            .filter(|entry| entry.addr_space == RV64_MEMORY_AS as u8)
-            .map(|entry| entry.timestamp)
-            .collect::<Vec<_>>();
-        assert_eq!(data_memory_timestamps, vec![9, 13]);
-
-        let phantom_timestamps = [3, 6, 11];
-        assert!(phantom_timestamps
-            .iter()
-            .all(|timestamp| !memory_log[..memory_len]
-                .iter()
-                .any(|entry| entry.timestamp == *timestamp)));
+        assert_eq!(tracer.timestamp, 4);
     }
 }
 
