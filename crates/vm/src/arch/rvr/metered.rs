@@ -666,7 +666,6 @@ mod tests {
             MEMORY_CONFIG,
         );
         let seg_state = SegmentationState::new(ctx, &system_config);
-        let constant = [false; NUM_AIRS];
 
         let memory_heights = |height| [0, 0, height, height, height, 0];
         let undercounted = memory_heights(1 << 19);
@@ -688,11 +687,8 @@ mod tests {
         assert!(!seg_state
             .ctx
             .segmentation_ctx
-            .should_segment(1, &undercounted, &constant));
-        assert!(seg_state
-            .ctx
-            .segmentation_ctx
-            .should_segment(1, &corrected, &constant));
+            .should_segment(1, &undercounted));
+        assert!(seg_state.ctx.segmentation_ctx.should_segment(1, &corrected));
     }
 
     #[test]
