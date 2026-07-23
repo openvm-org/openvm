@@ -895,6 +895,26 @@ requests and unequal rows emit seven. The replay trace proves and rejects
 corrupt target, schedule, non-u16 value, and predecessor-consistency logs before
 any rejected row can update the shared histogram.
 
+JAL and LUI extend direct replay to the conditional destination-write AIR. Both
+instructions advance the execution timestamp by one. For a nonzero destination,
+the transcript must contain exactly one register write at `t`; for x0 it must
+contain no memory event in `[t, t + 1)`. The kernel requires the instruction's
+write flag to be boolean and to equal `rd != x0`, validates all four logged
+result limbs, and resolves a predecessor only for an enabled write. JAL targets
+are recomputed with BabyBear field addition so field-encoded negative offsets
+retain their exact VM semantics; LUI immediates are required to be canonical
+20-bit values. Every transition, result, target, and predecessor check finishes
+before trace or lookup updates.
+
+A seven-row grouped test covers both opcodes, positive and sign-extending LUI
+values, repeated destinations, enabled writes, an x0 clock-only gap, a selected
+negative backward JAL target, and padding. CPU, legacy CUDA, and replay matrices
+and complete range histograms match. Enabled rows emit six variable-range
+requests, while x0 rows emit four. The replay trace proves and rejects corrupt
+upper result limbs, field-correct target mismatches, noncanonical write flags,
+events inside an x0 clock-only gap, and invalid predecessor values without
+lookup contributions from the rejected row.
+
 #### First multi-AIR GPU proving checkpoint (2026-07-23)
 
 `Rv64IRvrGpuTracegen` now drives the VM inventory's ordinary reverse tracegen
@@ -912,13 +932,13 @@ counts through their normal tracegen using `()` rather than even an empty
 all extension contexts have been generated, the coordinator reads the shared
 sticky replay error once, immediately before proving.
 
-The first integration test executes all 34 currently ported opcodes across the
-18 replay chips, followed by `TERMINATE`. It uses interpreter preflight only for
+The first integration test executes all 36 currently ported opcodes across the
+19 replay chips, followed by `TERMINATE`. It uses interpreter preflight only for
 current system records, discards every interpreter-produced extension arena,
 generates all extension traces from the RVR transcript, passes the resulting
 context through the VM's existing trace-height validation, and completes a real
 GPU prove-and-verify. A negative test confirms that an executed, not-yet-ported
-LUI is rejected by the pre-kernel coverage check. This establishes the multi-AIR
+AUIPC is rejected by the pre-kernel coverage check. This establishes the multi-AIR
 RISC-V integration seam without generalizing `Chip`; system tracegen still uses
 legacy records and remains the next cutover.
 
