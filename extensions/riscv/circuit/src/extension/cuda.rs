@@ -111,6 +111,7 @@ impl<'a> Rv64IRvrGpuTracegen<'a> {
             LessThanOpcode::SLTU.global_opcode(),
             ShiftOpcode::SLL.global_opcode(),
             ShiftOpcode::SRL.global_opcode(),
+            ShiftOpcode::SRA.global_opcode(),
             BaseAluWImmOpcode::ADDIW.global_opcode(),
             ShiftWImmOpcode::SLLIW.global_opcode(),
             ShiftWImmOpcode::SRLIW.global_opcode(),
@@ -185,6 +186,7 @@ impl<'a> Rv64IRvrGpuTracegen<'a> {
             Rv64ShiftLogicalChipGpu,
             [ShiftOpcode::SLL, ShiftOpcode::SRL]
         );
+        replay_chip!(Rv64ShiftRightArithmeticChipGpu, [ShiftOpcode::SRA]);
         replay_chip!(Rv64AddIWChipGpu, [BaseAluWImmOpcode::ADDIW]);
         replay_chip!(
             Rv64ShiftWLogicalImmChipGpu,

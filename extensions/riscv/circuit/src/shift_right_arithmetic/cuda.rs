@@ -9,10 +9,18 @@ use openvm_circuit_primitives::{var_range::VariableRangeCheckerChipGPU, Chip};
 use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::copy::MemCopyH2D;
 use openvm_stark_backend::prover::AirProvingContext;
+#[cfg(feature = "rvr")]
+use {
+    openvm_circuit::arch::rvr::cuda::{
+        GpuRvrInputError, GpuRvrProgram, GpuRvrReplayPlan, GpuRvrTranscript,
+    },
+    openvm_instructions::{riscv::RV64_REGISTER_AS, LocalOpcode},
+    openvm_riscv_transpiler::ShiftOpcode,
+};
 
 use crate::{
     adapters::{Rv64BaseAluRegU16AdapterCols, Rv64BaseAluRegU16AdapterRecord, U16_BITS},
-    cuda_abi::shift_right_arithmetic_cuda::tracegen as rv64_shift_right_arithmetic_tracegen,
+    cuda_abi::shift_right_arithmetic_cuda,
     ShiftRightArithmeticCoreCols, ShiftRightArithmeticCoreRecord,
 };
 
@@ -20,6 +28,50 @@ use crate::{
 pub struct Rv64ShiftRightArithmeticChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub timestamp_max_bits: usize,
+}
+
+#[cfg(feature = "rvr")]
+impl Rv64ShiftRightArithmeticChipGpu {
+    pub fn generate_proving_ctx_from_rvr(
+        &self,
+        program: &GpuRvrProgram,
+        transcript: &GpuRvrTranscript,
+        replay_plan: &GpuRvrReplayPlan,
+    ) -> Result<AirProvingContext<GpuBackend>, GpuRvrInputError> {
+        let device_ctx = &self.range_checker.device_ctx;
+        program.ensure_replay_inputs(transcript, replay_plan, device_ctx)?;
+        let range = replay_plan.opcode_range(ShiftOpcode::SRA.global_opcode());
+        if range.is_empty() {
+            return Ok(AirProvingContext::simple_no_pis(DeviceMatrix::dummy()));
+        }
+
+        let trace_width = Rv64BaseAluRegU16AdapterCols::<F>::width()
+            + ShiftRightArithmeticCoreCols::<F, BLOCK_FE_WIDTH, U16_BITS>::width();
+        let trace_height = next_power_of_two_or_zero(range.len());
+        let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
+        unsafe {
+            shift_right_arithmetic_cuda::replay_tracegen(
+                d_trace.buffer(),
+                trace_height,
+                program.instructions(),
+                program.pc_base(),
+                transcript.program_log(),
+                transcript.memory_log(),
+                transcript.initial_write_log(),
+                transcript.memory_predecessors(),
+                replay_plan.steps(),
+                range.start,
+                range.len(),
+                transcript.error_ptr(),
+                ShiftOpcode::SRA.global_opcode().as_usize() as u32,
+                RV64_REGISTER_AS,
+                &self.range_checker.count,
+                self.timestamp_max_bits as u32,
+                device_ctx.stream.as_raw(),
+            )?;
+        }
+        Ok(AirProvingContext::simple_no_pis(d_trace))
+    }
 }
 
 impl Chip<DenseRecordArena, GpuBackend> for Rv64ShiftRightArithmeticChipGpu {
@@ -42,7 +94,7 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64ShiftRightArithmeticChipGpu {
         let d_records = records.to_device_on(device_ctx).unwrap();
         let d_trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
         unsafe {
-            rv64_shift_right_arithmetic_tracegen(
+            shift_right_arithmetic_cuda::tracegen(
                 d_trace.buffer(),
                 trace_height,
                 &d_records,
