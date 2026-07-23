@@ -96,6 +96,7 @@ pub mod rvr_postflight {
         fn _rvr_memory_index_sort(
             memory: DeviceBufferView,
             seeds: DeviceBufferView,
+            address_spaces: DeviceBufferView,
             address_space_offset: u32,
             address_space_height: u32,
             pointer_max_bits: u32,
@@ -113,6 +114,12 @@ pub mod rvr_postflight {
             sorted_keys: *const u64,
             num_entries: usize,
             predecessors: *mut u32,
+            touched_flags: *mut u32,
+            touched_positions: *mut u32,
+            touched_blocks: *mut std::ffi::c_void,
+            num_touched_blocks: *mut u32,
+            temp_storage: *mut std::ffi::c_void,
+            temp_storage_bytes: usize,
             error: *mut u32,
             stream: cudaStream_t,
         ) -> i32;
@@ -125,6 +132,7 @@ pub mod rvr_postflight {
 
         fn _rvr_program_index(
             instructions: DeviceBufferView,
+            dense_program_rows: DeviceBufferView,
             pc_base: u32,
             program: DeviceBufferView,
             memory: DeviceBufferView,
@@ -139,6 +147,7 @@ pub mod rvr_postflight {
             steps_in: *mut std::ffi::c_void,
             steps_out: *mut std::ffi::c_void,
             ranges: *mut u32,
+            program_frequencies: *mut u32,
             temp_storage: *mut std::ffi::c_void,
             temp_storage_bytes: usize,
             error: *mut u32,
@@ -162,6 +171,7 @@ pub mod rvr_postflight {
     pub unsafe fn memory_index_sort(
         memory: DeviceBufferView,
         seeds: DeviceBufferView,
+        address_spaces: DeviceBufferView,
         address_space_offset: u32,
         address_space_height: u32,
         pointer_max_bits: u32,
@@ -175,6 +185,7 @@ pub mod rvr_postflight {
         CudaError::from_result(_rvr_memory_index_sort(
             memory,
             seeds,
+            address_spaces,
             address_space_offset,
             address_space_height,
             pointer_max_bits,
@@ -194,6 +205,12 @@ pub mod rvr_postflight {
         sorted_keys: &DeviceBuffer<u64>,
         num_entries: usize,
         predecessors: &DeviceBuffer<u32>,
+        touched_flags: &DeviceBuffer<u32>,
+        touched_positions: &DeviceBuffer<u32>,
+        touched_blocks: *mut std::ffi::c_void,
+        num_touched_blocks: &DeviceBuffer<u32>,
+        temp_storage: &DeviceBuffer<u8>,
+        temp_storage_bytes: usize,
         error: &DeviceBuffer<u32>,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
@@ -203,6 +220,12 @@ pub mod rvr_postflight {
             sorted_keys.as_ptr(),
             num_entries,
             predecessors.as_mut_ptr(),
+            touched_flags.as_mut_ptr(),
+            touched_positions.as_mut_ptr(),
+            touched_blocks,
+            num_touched_blocks.as_mut_ptr(),
+            temp_storage.as_mut_raw_ptr(),
+            temp_storage_bytes,
             error.as_mut_ptr(),
             stream,
         ))
@@ -223,6 +246,7 @@ pub mod rvr_postflight {
     #[allow(clippy::too_many_arguments)]
     pub unsafe fn program_index(
         instructions: DeviceBufferView,
+        dense_program_rows: DeviceBufferView,
         pc_base: u32,
         program: DeviceBufferView,
         memory: DeviceBufferView,
@@ -237,6 +261,7 @@ pub mod rvr_postflight {
         steps_in: *mut std::ffi::c_void,
         steps_out: *mut std::ffi::c_void,
         ranges: &DeviceBuffer<u32>,
+        program_frequencies: &DeviceBuffer<u32>,
         temp_storage: &DeviceBuffer<u8>,
         temp_storage_bytes: usize,
         error: &DeviceBuffer<u32>,
@@ -244,6 +269,7 @@ pub mod rvr_postflight {
     ) -> Result<(), CudaError> {
         CudaError::from_result(_rvr_program_index(
             instructions,
+            dense_program_rows,
             pc_base,
             program,
             memory,
@@ -258,6 +284,7 @@ pub mod rvr_postflight {
             steps_in,
             steps_out,
             ranges.as_mut_ptr(),
+            program_frequencies.as_mut_ptr(),
             temp_storage.as_mut_raw_ptr(),
             temp_storage_bytes,
             error.as_mut_ptr(),
