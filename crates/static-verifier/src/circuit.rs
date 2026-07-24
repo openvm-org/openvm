@@ -4,7 +4,7 @@ use core::cmp::Reverse;
 use std::{borrow::Borrow, fmt, sync::Arc};
 
 use halo2_base::{
-    gates::circuit::builder::BaseCircuitBuilder, halo2_proofs::halo2curves::bn256::Fr, Context,
+    gates::circuit::builder::BaseCircuitBuilder, halo2_proofs::halo2curves::bn256::Fr,
 };
 use itertools::Itertools;
 use openvm_cpu_backend::CpuBackend;
@@ -27,7 +27,8 @@ use openvm_verify_stark_host::pvs::CONSTRAINT_EVAL_AIR_ID;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    field::baby_bear::{BabyBearChip, BabyBearExtChip},
+    chip_traits::{BabyBearInst, DigestHashInst, GateInst, PopulateInputs, TranscriptInst},
+    halo2_backend::Halo2Backend,
     stages::{
         full_pipeline::{
             constrained_verify, extract_public_values, load_proof_wire, ProofWire,
@@ -164,31 +165,31 @@ impl StaticVerifierCircuit {
     ///
     /// This function should be used internally or for testing only.
     /// Production uses with the continuations framework **must** use [`Self::populate`] instead.
-    pub fn populate_verify_stark_constraints(
+    pub fn populate_verify_stark_constraints<
+        B: TranscriptInst + DigestHashInst + PopulateInputs,
+    >(
         &self,
-        ctx: &mut Context<Fr>,
-        ext_chip: &BabyBearExtChip,
+        b: &mut B,
         proof: &Proof<RootConfig>,
-    ) -> ProofWire {
-        let mut profiler = crate::profiling::CellProfiler::new("static_verifier", ctx.advice.len());
+    ) -> ProofWire<B::F> {
+        let mut profiler = crate::profiling::CellProfiler::new("static_verifier", b.cell_count());
 
-        profiler.push("load_proof_wire", ctx.advice.len());
-        let proof_wire = load_proof_wire(ctx, ext_chip, proof, &self.log_heights_per_air);
-        profiler.pop(ctx.advice.len());
+        profiler.push("load_proof_wire", b.cell_count());
+        let proof_wire = load_proof_wire(b, proof, &self.log_heights_per_air);
+        profiler.pop(b.cell_count());
 
-        profiler.push("constrained_verify", ctx.advice.len());
+        profiler.push("constrained_verify", b.cell_count());
         constrained_verify(
-            ctx,
-            ext_chip,
+            b,
             &self.root_vk,
             &proof_wire,
             &self.trace_id_to_air_id,
             &self.log_heights_per_air,
             &self.stacked_layouts,
         );
-        profiler.pop(ctx.advice.len());
+        profiler.pop(b.cell_count());
 
-        profiler.print(ctx.advice.len());
+        profiler.print(b.cell_count());
 
         #[cfg(feature = "cell-profiling")]
         if let Ok(dir) = std::env::var("OPENVM_PROFILE_DIR") {
@@ -196,12 +197,12 @@ impl StaticVerifierCircuit {
             profiler.write_flamegraph(
                 &format!("{dir}/static_verifier_constraints.svg"),
                 "Static Verifier Constraints",
-                ctx.advice.len(),
+                b.cell_count(),
             );
             profiler.write_flamegraph_reversed(
                 &format!("{dir}/static_verifier_constraints_rev.svg"),
                 "Static Verifier Constraints (reversed)",
-                ctx.advice.len(),
+                b.cell_count(),
             );
         }
 
@@ -215,14 +216,14 @@ impl StaticVerifierCircuit {
         proof: &Proof<RootConfig>,
     ) -> StaticVerifierPvs<Fr> {
         let range = builder.range_chip();
-        let ext_chip = BabyBearExtChip::new(BabyBearChip::new(Arc::new(range)));
         let ctx = builder.main(0);
+        let mut backend = Halo2Backend::new(Arc::new(range), ctx);
 
-        let mut profiler = crate::profiling::CellProfiler::new("populate", ctx.advice.len());
+        let mut profiler = crate::profiling::CellProfiler::new("populate", backend.cell_count());
 
-        profiler.push("verify_stark_constraints", ctx.advice.len());
-        let proof_wire = &self.populate_verify_stark_constraints(ctx, &ext_chip, proof);
-        profiler.pop(ctx.advice.len());
+        profiler.push("verify_stark_constraints", backend.cell_count());
+        let proof_wire = &self.populate_verify_stark_constraints(&mut backend, proof);
+        profiler.pop(backend.cell_count());
 
         debug_assert!(
             proof_wire
@@ -231,7 +232,7 @@ impl StaticVerifierCircuit {
                 .all(|commits| commits.is_empty()),
             "RootVerifierCircuit has no cached trace"
         );
-        profiler.push("pin_dag_onion_commit", ctx.advice.len());
+        profiler.push("pin_dag_onion_commit", backend.cell_count());
         let &DagCommitPvs::<_> {
             commit: onion_commit,
         } = proof_wire.public_values[CONSTRAINT_EVAL_AIR_ID]
@@ -241,16 +242,14 @@ impl StaticVerifierCircuit {
             .into_iter()
             .zip_eq(self.internal_recursive_dag_onion_commit)
         {
-            let loaded_const = ext_chip.base().load_constant(ctx, bb_const);
-            ext_chip
-                .base()
-                .assert_equal(ctx, bb_wire.into(), loaded_const);
+            let loaded_const = backend.bb_load_constant(bb_const);
+            backend.bb_assert_equal(bb_wire.into(), loaded_const);
         }
-        profiler.pop(ctx.advice.len());
+        profiler.pop(backend.cell_count());
 
-        profiler.push("extract_public_values", ctx.advice.len());
-        let pvs_wire = extract_public_values(ctx, ext_chip.base(), proof_wire);
-        profiler.pop(ctx.advice.len());
+        profiler.push("extract_public_values", backend.cell_count());
+        let pvs_wire = extract_public_values(&mut backend, proof_wire);
+        profiler.pop(backend.cell_count());
 
         #[cfg(feature = "cell-profiling")]
         if let Ok(dir) = std::env::var("OPENVM_PROFILE_DIR") {
@@ -258,12 +257,12 @@ impl StaticVerifierCircuit {
             profiler.write_flamegraph(
                 &format!("{dir}/populate.svg"),
                 "Static Verifier Populate",
-                ctx.advice.len(),
+                backend.cell_count(),
             );
             profiler.write_flamegraph_reversed(
                 &format!("{dir}/populate_rev.svg"),
                 "Static Verifier Populate (reversed)",
-                ctx.advice.len(),
+                backend.cell_count(),
             );
         }
 

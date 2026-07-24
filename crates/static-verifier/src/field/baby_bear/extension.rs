@@ -2,10 +2,9 @@ use core::array;
 #[cfg(test)]
 use std::{cell::RefCell, vec::Vec};
 
-#[cfg(test)]
-use halo2_base::AssignedValue;
 use halo2_base::{
-    gates::range::RangeChip, halo2_proofs::halo2curves::bn256::Fr, safe_types::SafeBool, Context,
+    gates::range::RangeChip, halo2_proofs::halo2curves::bn256::Fr, safe_types::SafeBool,
+    AssignedValue, Context,
 };
 use itertools::Itertools;
 #[cfg(test)]
@@ -50,8 +49,9 @@ pub struct BabyBearExt4Chip {
     pub base: BabyBearChip,
 }
 
+/// Generic over the cell representation `F`; see [`BabyBearWire`].
 #[derive(Copy, Clone, Debug)]
-pub struct BabyBearExt4Wire(pub [BabyBearWire; 4]);
+pub struct BabyBearExt4Wire<F = AssignedValue<Fr>>(pub [BabyBearWire<F>; 4]);
 
 /// An extension-field wire whose BabyBear basis coefficients are all reduced.
 ///
@@ -60,7 +60,7 @@ pub struct BabyBearExt4Wire(pub [BabyBearWire; 4]);
 /// `BabyBearExt4Wire::from` drops that evidence when the value is used by arithmetic
 /// helpers.
 #[derive(Copy, Clone, Debug)]
-pub struct ReducedBabyBearExt4Wire([ReducedBabyBearWire; 4]);
+pub struct ReducedBabyBearExt4Wire<F = AssignedValue<Fr>>([ReducedBabyBearWire<F>; 4]);
 pub type BabyBearExt4 = BinomialExtensionField<BabyBear, 4>;
 
 impl BabyBearExt4Wire {
@@ -69,21 +69,21 @@ impl BabyBearExt4Wire {
     }
 }
 
-impl ReducedBabyBearExt4Wire {
-    pub fn coeffs(&self) -> &[ReducedBabyBearWire; 4] {
+impl<F> ReducedBabyBearExt4Wire<F> {
+    pub fn coeffs(&self) -> &[ReducedBabyBearWire<F>; 4] {
         &self.0
     }
 }
 
-impl From<ReducedBabyBearExt4Wire> for BabyBearExt4Wire {
+impl<F> From<ReducedBabyBearExt4Wire<F>> for BabyBearExt4Wire<F> {
     /// Drops the canonicality evidence and returns the underlying arithmetic wire.
-    fn from(wire: ReducedBabyBearExt4Wire) -> Self {
+    fn from(wire: ReducedBabyBearExt4Wire<F>) -> Self {
         BabyBearExt4Wire(wire.0.map(BabyBearWire::from))
     }
 }
 
-impl From<&ReducedBabyBearExt4Wire> for BabyBearExt4Wire {
-    fn from(wire: &ReducedBabyBearExt4Wire) -> Self {
+impl<F: Copy> From<&ReducedBabyBearExt4Wire<F>> for BabyBearExt4Wire<F> {
+    fn from(wire: &ReducedBabyBearExt4Wire<F>) -> Self {
         (*wire).into()
     }
 }

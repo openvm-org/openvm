@@ -20,11 +20,13 @@
 mod context_tree;
 pub mod profiling;
 
+pub mod chip_traits;
 mod circuit;
 #[cfg(feature = "evm-prove")]
 pub mod codec;
 pub mod config;
 pub mod field;
+pub mod halo2_backend;
 pub mod hash;
 pub mod keygen;
 pub mod prover;
