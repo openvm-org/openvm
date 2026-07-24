@@ -600,12 +600,96 @@ slice needs staged register and main-memory chronology joins. The production
 schema changes only if the executor meets the real Reth gate and the GPU slice
 meets M2's time and memory gates.
 
+#### Selected executor experiment: block-boundary checkpoints plus residuals
+
+The exact Reth audit rejects the eight-byte-every-register-result candidate as
+unnecessary. The workload executed 456,833,245 enabled loads, all with a nonzero
+destination, and materialized 3,819,217 hint/advice words. The minimal semantic
+residual stream is therefore 460,652,462 `u64` values, or 3.685 GB total and
+1.208 bytes per guest instruction. The audit observed no `HINT_RANDOM`. It ran
+after the timed executor interval and checked each load/store/hint timestamp
+schedule against the full event transcript.
+
+The next executor writes only two arrays:
+
+```rust
+#[repr(C)]
+struct Checkpoint {
+    pc: u32,
+    timestamp: u32,
+    retired: u32,
+    residual_cursor: u32,
+    regs: [u64; 31],
+}
+
+struct PreflightTranscript {
+    checkpoints: Vec<Checkpoint>,
+    residuals: Vec<u64>,
+}
+```
+
+There is no transcript header, schema version, program digest, record arena,
+per-chip lane, PC stream, memory-event stream, or first-write seed stream. A
+checkpoint is exactly 264 bytes and its layout is asserted at the Rust/C ABI.
+The segment's existing `from_state`, final state, and endpoint are the logical
+first and final anchors and are not duplicated into the arrays.
+
+Checkpointing is block-aligned. After a block retires, the executor accumulates
+its instruction count; when the count has reached the target, the next executed
+block entry appends the current PC, clock, cumulative retired count, residual
+cursor, and x1-x31. This adds one predictable comparison per executed RVR block,
+not per instruction, and bounds a chunk by the target plus at most one RVR block.
+The first experiment uses a 512-instruction target. The exact dynamic checkpoint
+count is measured from this policy; `N / 512` is only a planning estimate.
+
+The residual stream is ordered by serial execution and contains exactly:
+
+- one sign- or zero-extended architectural `u64` result for each enabled RV64
+  load whose destination is not x0; and
+- one `u64` word for each `HINT_STORED` or `HINT_BUFFER` output written from host
+  advice.
+
+A load to x0 consumes no residual but still becomes a proof-visible timed read
+during replay. Stores, ALU results, branch decisions, public-value stores, and
+ordinary jumps are derived from registers. Phantoms execute their host side
+effects only during serial preflight; their AIR data is static, and their peeks
+remain untimed execution advice. Artifact construction fails closed for a future
+opcode or host callback whose execution-affecting nondeterminism is not covered
+by an explicit residual rule.
+
+At the measured Reth counts, estimated checkpoint-plus-residual bytes are
+6.83 GB for target 256, 5.26 GB for 512, and 4.47 GB for 1024. The 512 candidate
+is about 36x smaller than the rejected 189.536 GB transcript and leaves ample
+room inside the roughly 19.1 GB append allowance implied by the two-times-metered
+executor target. These estimates do not pass M1: the actual executor must still
+show the same 275 endpoints and output hash, near-pure compile size, and a warm
+runtime near or below twice metered.
+
+Seeds disappear only because GPU proving must retain an immutable segment-start
+memory image before serial preflight mutates host memory. CPU replay needs the
+same initial view. Without it, an overwritten first value is unrecoverable and a
+seed or undo log would be mandatory. The serial executor separately reuses RVR's
+cheap page-touch tracking for writes so continuation H2D remains sparse; dirty
+pages are execution-transfer metadata in `VmState`, not a third transcript log.
+
+GPU replay is deliberately staged. Parallel chunk workers re-execute control
+flow from each checkpoint, consume residuals, emit normalized transient memory
+access descriptors, and validate every next checkpoint plus the final execution
+state. A chronology join then resolves full four-cell blocks and predecessor
+timestamps from the immutable initial image, validates loaded scalars, forms
+partial-store post-values, and emits exact touched-block tails. Register
+predecessors use per-chunk first/last-access summaries and a chunk-order scan;
+they are not added to checkpoints. Derived descriptors are GPU scratch, not an
+authoritative log, and must be freed before system tracegen/proving according to
+the M2 memory gate.
+
 ### M2: RISC-V GPU feasibility slice
 
 Before designing the rest of tracegen, test the central bet on the most important
 backend: GPU tracegen for the existing RISC-V AIRs.
 
-- Upload the three compact logs and build only the indexes needed by RISC-V.
+- Upload the checkpoint and residual arrays and build only the transient indexes
+  needed by RISC-V replay.
 - Port RISC-V trace generation directly to read-only replay, starting with simple
   fixed-row arithmetic and then registers, branches, loads/stores, unaligned
   accesses, multiplication/division, and Phantom.
