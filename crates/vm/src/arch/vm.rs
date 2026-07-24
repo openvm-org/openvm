@@ -16,6 +16,8 @@ use openvm_circuit::system::program::trace::compute_exe_commit;
 use openvm_circuit_primitives::AnyChip;
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use openvm_cuda_common::memory_manager::MemTracker;
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use openvm_instructions::riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS};
 use openvm_instructions::{
     exe::{SparseMemoryImage, VmExe},
     program::Program,
@@ -1516,8 +1518,6 @@ where
     > {
         let memory = MemTracker::start_and_reset_peak("tracegen.rvr_checkpoint_expand");
         let result = (|| {
-            use openvm_instructions::riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS};
-
             let initial_memory = &self.chip_complex.system.memory_inventory.initial_memory;
             let initial_registers =
                 initial_memory

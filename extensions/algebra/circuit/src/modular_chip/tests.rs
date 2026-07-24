@@ -69,6 +69,18 @@ fn reset_gpu_initial_memory(tester: &mut GpuChipTestBuilder) {
 
 #[cfg(test)]
 mod addsub_tests {
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    use openvm_circuit::arch::{
+        rvr::{cuda::GpuRvrProgram, RvrPreflightEndpoint, RvrPreflightTranscript},
+        DenseRecordArena,
+    };
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    use openvm_instructions::{program::Program, SystemOpcode};
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    use rvr_state::{
+        PreflightInitialWrite, PreflightMemoryEvent, PreflightProgramEvent, PREFLIGHT_WRITE_BIT,
+    };
+
     use super::*;
 
     const ADD_LOCAL: usize = Rv64ModularArithmeticOpcode::ADD as usize;
@@ -409,16 +421,6 @@ mod addsub_tests {
         b: BigUint,
         c: BigUint,
     ) {
-        use openvm_circuit::arch::{
-            rvr::{cuda::GpuRvrProgram, RvrPreflightEndpoint, RvrPreflightTranscript},
-            DenseRecordArena,
-        };
-        use openvm_cuda_common::copy::MemCopyD2H;
-        use openvm_instructions::{program::Program, SystemOpcode};
-        use rvr_state::{
-            PreflightInitialWrite, PreflightMemoryEvent, PreflightProgramEvent, PREFLIGHT_WRITE_BIT,
-        };
-
         const BLOCKS: usize = MODULAR_BLOCKS_32;
         let opcode_base = Rv64ModularArithmeticOpcode::CLASS_OFFSET;
         let config = ExprBuilderConfig {

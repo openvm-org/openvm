@@ -1,5 +1,7 @@
 use num_bigint::BigUint;
 use openvm_algebra_transpiler::Rv64ModularArithmeticOpcode;
+#[cfg(feature = "cuda")]
+use openvm_circuit::utils::test_gpu_engine;
 use openvm_circuit::{
     arch::{rvr::RvrCheckpointPreflightLimits, VirtualMachine, VmExecutor},
     utils::{test_cpu_engine, test_system_config},
@@ -12,9 +14,13 @@ use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_BYTES},
     LocalOpcode, SystemOpcode,
 };
+#[cfg(feature = "cuda")]
+use openvm_stark_backend::StarkEngine;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 use super::{modular_is_eq_x0_destination, Rv64ModularConfig, Rv64ModularCpuBuilder};
+#[cfg(feature = "cuda")]
+use super::{AlgebraRvrGpuTracegen, Rv64ModularHybridBuilder};
 
 const SETUP_DST_PTR: u32 = 0x100;
 const SUM_PTR: u32 = 0x200;
@@ -226,11 +232,6 @@ fn modular_heap_pointers_follow_the_eight_byte_memory_equipartition() {
 #[cfg(feature = "cuda")]
 #[test]
 fn modular_checkpoint_expansion_proves_without_records() {
-    use openvm_circuit::{arch::VirtualMachine, utils::test_gpu_engine};
-    use openvm_stark_backend::StarkEngine;
-
-    use super::{AlgebraRvrGpuTracegen, Rv64ModularHybridBuilder};
-
     let (program, exe) = fixture();
     let config = config();
     let executor = VmExecutor::new(config.clone()).unwrap();
