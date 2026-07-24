@@ -58,6 +58,31 @@ use openvm_stark_backend::p3_field::PrimeField32;
 #[cfg(feature = "rvr")]
 use crate::log_native::{derive_addi_operands, derive_base_alu_u16_operands};
 
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+fn empty_device_buffer_for_zero_capacity<T>(capacity: usize) -> Option<DeviceBuffer<T>> {
+    (capacity == 0).then(DeviceBuffer::new)
+}
+
+#[cfg(all(test, feature = "cuda", feature = "rvr"))]
+mod zero_capacity_tests {
+    use super::*;
+
+    #[test]
+    fn zero_capacity_decode_inputs_use_null_device_buffers() {
+        let delta = empty_device_buffer_for_zero_capacity::<u8>(0)
+            .expect("empty delta stream must not allocate");
+        let row_instructions = empty_device_buffer_for_zero_capacity::<u32>(0)
+            .expect("empty G2 row map must not allocate");
+
+        assert!(delta.is_empty());
+        assert!(delta.as_ptr().is_null());
+        assert!(row_instructions.is_empty());
+        assert!(row_instructions.as_ptr().is_null());
+        assert!(empty_device_buffer_for_zero_capacity::<u8>(1).is_none());
+        assert!(empty_device_buffer_for_zero_capacity::<u32>(1).is_none());
+    }
+}
+
 /// One 20-byte operand-table entry per program slot, indexed by
 /// `(from_pc - pc_base) / DEFAULT_PC_STEP`. Field meanings are per wire
 /// format; for alu3 over the BaseAluU16 adapter: `a` = rd_ptr, `b` = rs1_ptr,
@@ -1509,11 +1534,13 @@ impl RvrGpuDecodeState {
             sorted_start += spec.count;
         }
 
-        let d_delta = host
-            .delta
-            .bytes()
-            .to_device_on(device_ctx)
-            .expect("delta H2D");
+        let d_delta = empty_device_buffer_for_zero_capacity(host.delta.bytes().len())
+            .unwrap_or_else(|| {
+                host.delta
+                    .bytes()
+                    .to_device_on(device_ctx)
+                    .expect("delta H2D")
+            });
         if !host.memory_log.is_empty() && !host.delta_memory_log.is_empty() {
             panic!("delta segment populated both full and compact residual-memory schemas");
         }
@@ -2074,10 +2101,11 @@ impl RvrGpuDecodeState {
             instruction_count * G2_PREPARED_INSTRUCTION_SIZE,
             device_ctx,
         ));
-        let d_row_instructions = Arc::new(DeviceBuffer::<u32>::with_capacity_on(
-            host.total_record_count,
-            device_ctx,
-        ));
+        let d_row_instructions = Arc::new(
+            empty_device_buffer_for_zero_capacity(host.total_record_count).unwrap_or_else(|| {
+                DeviceBuffer::<u32>::with_capacity_on(host.total_record_count, device_ctx)
+            }),
+        );
         let d_timestamp_offsets = Arc::new(DeviceBuffer::<u32>::with_capacity_on(
             instruction_count + 1,
             device_ctx,

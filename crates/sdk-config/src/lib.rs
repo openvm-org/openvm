@@ -974,10 +974,13 @@ mod rvr_cuda_lifecycle_tests {
     }
 
     fn custom_g2_exe() -> VmExe<Val<SC>> {
-        let instructions = [
+        let mut instructions = vec![
             addi(1, 0, 64),
             addi(2, 0, 512),
             addi(3, 0, 16),
+        ];
+        instructions.extend((3..1000).map(|_| addi(0, 0, 0)));
+        instructions.extend([
             Instruction::from_usize(
                 XorinOpcode::XORIN.global_opcode(),
                 [
@@ -999,7 +1002,7 @@ mod rvr_cuda_lifecycle_tests {
                 ],
             ),
             Instruction::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
-        ];
+        ]);
         VmExe::new(Program::from_instructions(&instructions))
     }
 
@@ -1009,7 +1012,7 @@ mod rvr_cuda_lifecycle_tests {
         std::env::set_var("OPENVM_RVR_INLINE_RECORDS", "1");
         std::env::set_var("OPENVM_RVR_GPU_RECORDS", "g2");
 
-        let config = SdkVmConfig::builder()
+        let mut config = SdkVmConfig::builder()
             .system(Default::default())
             .rv64i(Default::default())
             .rv64m(Default::default())
@@ -1017,6 +1020,7 @@ mod rvr_cuda_lifecycle_tests {
             .keccak(Default::default())
             .build()
             .optimize();
+        config.as_mut().segmentation_max_memory = 1;
         let exe = custom_g2_exe();
         let builder = SdkVmGpuBuilder::default();
         let (vm, pk) = VirtualMachine::new_with_keygen(test_gpu_engine(), builder.clone(), config)
@@ -1045,6 +1049,11 @@ mod rvr_cuda_lifecycle_tests {
             VmInstance::new(vm, Arc::new(exe), cached_program_trace).expect("GPU instance init");
         let proof =
             ContinuationVmProver::prove(&mut instance, Streams::default()).expect("GPU prove");
+        assert_eq!(
+            proof.per_segment.len(),
+            2,
+            "fixture must place the opaque-only tail in its own segment"
+        );
         verify_segments(&instance.vm.engine, &vk, &proof.per_segment).expect("GPU verify segments");
         assert!(
             !builder.rvr_decode.has_g2_device_trace_sources_for_test(),

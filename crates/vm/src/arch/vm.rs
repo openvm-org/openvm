@@ -2506,6 +2506,7 @@ where
                     ))
                 })?;
                 drop(ctx);
+                self.vm.builder.release_rvr_cuda_device_trace_sources();
                 if !crate::arch::cuda::pinned::drain_returns(std::time::Duration::from_secs(30)) {
                     return Err(ExecutionError::RvrExecution(
                         "CUDA pinned-host prewarm timed out draining returned arenas".to_string(),
