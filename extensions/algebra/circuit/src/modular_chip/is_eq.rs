@@ -28,7 +28,9 @@ use openvm_instructions::{
 };
 use openvm_platform::memory::MEM_SIZE;
 use openvm_riscv_adapters::Rv64IsEqualModU16AdapterExecutor;
-use openvm_riscv_circuit::adapters::{rv64_bytes_to_u16_block, rv64_bytes_to_u32};
+use openvm_riscv_circuit::adapters::{
+    rv64_bytes_to_u16_block, rv64_bytes_to_u32, validate_memory_block_byte_ptr,
+};
 use openvm_stark_backend::{
     interaction::InteractionBuilder,
     p3_air::{AirBuilder, BaseAir},
@@ -641,14 +643,14 @@ unsafe fn execute_e1_impl<
 >(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
-) {
+) -> Result<(), ExecutionError> {
     let pre_compute: &ModularIsEqualPreCompute<TOTAL_READ_SIZE> = std::slice::from_raw_parts(
         pre_compute,
         size_of::<ModularIsEqualPreCompute<TOTAL_READ_SIZE>>(),
     )
     .borrow();
 
-    execute_e12_impl::<_, NUM_LANES, TOTAL_READ_SIZE, IS_SETUP>(pre_compute, exec_state);
+    execute_e12_impl::<_, NUM_LANES, TOTAL_READ_SIZE, IS_SETUP>(pre_compute, exec_state)
 }
 
 #[create_handler]
@@ -661,7 +663,7 @@ unsafe fn execute_e2_impl<
 >(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
-) {
+) -> Result<(), ExecutionError> {
     let pre_compute: &E2PreCompute<ModularIsEqualPreCompute<TOTAL_READ_SIZE>> =
         std::slice::from_raw_parts(
             pre_compute,
@@ -671,7 +673,7 @@ unsafe fn execute_e2_impl<
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<_, NUM_LANES, TOTAL_READ_SIZE, IS_SETUP>(&pre_compute.data, exec_state);
+    execute_e12_impl::<_, NUM_LANES, TOTAL_READ_SIZE, IS_SETUP>(&pre_compute.data, exec_state)
 }
 
 #[inline(always)]
@@ -683,11 +685,15 @@ unsafe fn execute_e12_impl<
 >(
     pre_compute: &ModularIsEqualPreCompute<TOTAL_READ_SIZE>,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
-) {
+) -> Result<(), ExecutionError> {
+    let pc = exec_state.pc();
     // Read register values (RV64: read 8 bytes, assert upper 4 are zero, cast to u32)
     let rs_vals = pre_compute
         .rs_addrs
         .map(|addr| rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, addr as u32)));
+    for &address in &rs_vals {
+        validate_memory_block_byte_ptr(pc, address)?;
+    }
 
     // Read memory values
     let [b, c]: [[u16; TOTAL_READ_SIZE]; 2] = rs_vals.map(|address| {
@@ -719,8 +725,8 @@ unsafe fn execute_e12_impl<
     // Write result to register
     exec_state.vm_write_bytes(RV64_REGISTER_AS, pre_compute.a as u32, &write_data);
 
-    let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
+    Ok(())
 }
 
 // Returns (cmp_result, diff_idx). If the inputs are equal, diff_idx is NUM_LIMBS.

@@ -124,15 +124,15 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for Rv64LessThan256Executor 
 unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_U256: bool>(
     pre_compute: &LessThanPreCompute,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
-) {
+) -> Result<(), ExecutionError> {
     let rs1_ptr =
         exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.b as u32);
     let rs2_ptr =
         exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.c as u32);
     let rd_ptr =
         exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.a as u32);
-    let rs1 = read_int256(exec_state, RV64_MEMORY_AS, rv64_bytes_to_u32(rs1_ptr));
-    let rs2 = read_int256(exec_state, RV64_MEMORY_AS, rv64_bytes_to_u32(rs2_ptr));
+    let rs1 = read_int256(exec_state, RV64_MEMORY_AS, rv64_bytes_to_u32(rs1_ptr))?;
+    let rs2 = read_int256(exec_state, RV64_MEMORY_AS, rv64_bytes_to_u32(rs2_ptr))?;
     let cmp_result = if IS_U256 {
         common::u256_lt(rs1, rs2)
     } else {
@@ -140,10 +140,11 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_U256: bool>(
     };
     let mut rd = [0u8; INT256_NUM_U8_LIMBS];
     rd[0] = cmp_result as u8;
-    write_int256(exec_state, RV64_MEMORY_AS, rv64_bytes_to_u32(rd_ptr), &rd);
+    write_int256(exec_state, RV64_MEMORY_AS, rv64_bytes_to_u32(rd_ptr), &rd)?;
 
     let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
+    Ok(())
 }
 
 #[create_handler]
@@ -151,10 +152,10 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_U256: bool>(
 unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, const IS_U256: bool>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
-) {
+) -> Result<(), ExecutionError> {
     let pre_compute: &LessThanPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<LessThanPreCompute>()).borrow();
-    execute_e12_impl::<CTX, IS_U256>(pre_compute, exec_state);
+    execute_e12_impl::<CTX, IS_U256>(pre_compute, exec_state)
 }
 
 #[create_handler]
@@ -162,14 +163,14 @@ unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, const IS_U256: bool>(
 unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, const IS_U256: bool>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
-) {
+) -> Result<(), ExecutionError> {
     let pre_compute: &E2PreCompute<LessThanPreCompute> =
         std::slice::from_raw_parts(pre_compute, size_of::<E2PreCompute<LessThanPreCompute>>())
             .borrow();
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<CTX, IS_U256>(&pre_compute.data, exec_state);
+    execute_e12_impl::<CTX, IS_U256>(&pre_compute.data, exec_state)
 }
 
 impl Rv64LessThan256Executor {

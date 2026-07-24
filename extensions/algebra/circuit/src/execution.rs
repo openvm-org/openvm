@@ -14,7 +14,7 @@ use openvm_instructions::{
 };
 use openvm_mod_circuit_builder::{run_field_expression_precomputed, FieldExpressionProgram};
 use openvm_platform::memory::MEM_SIZE;
-use openvm_riscv_circuit::adapters::rv64_bytes_to_u32;
+use openvm_riscv_circuit::adapters::{rv64_bytes_to_u32, validate_memory_block_byte_ptr};
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::FieldExprVecHeapExecutor;
@@ -364,10 +364,18 @@ unsafe fn execute_e12_impl<
 >(
     pre_compute: &FieldExpressionPreCompute,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
-) {
+) -> Result<(), ExecutionError> {
+    let pc = exec_state.pc();
     let rs_vals = pre_compute
         .rs_addrs
         .map(|addr| rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, addr as u32)));
+    for &address in &rs_vals {
+        validate_memory_block_byte_ptr(pc, address)?;
+    }
+    let rd_val = validate_memory_block_byte_ptr(
+        pc,
+        rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.a as u32)),
+    )?;
 
     let read_data: [[[u8; MEMORY_BLOCK_BYTES]; BLOCKS]; 2] = rs_vals.map(|address| {
         debug_assert!(address as usize + MEMORY_BLOCK_BYTES * BLOCKS - 1 < MEM_SIZE);
@@ -382,8 +390,6 @@ unsafe fn execute_e12_impl<
         field_operation::<FIELD_TYPE, BLOCKS, OP>(read_data)
     };
 
-    let rd_val =
-        rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.a as u32));
     debug_assert!(rd_val as usize + MEMORY_BLOCK_BYTES * BLOCKS - 1 < MEM_SIZE);
 
     for (i, block) in output_data.into_iter().enumerate() {
@@ -394,18 +400,26 @@ unsafe fn execute_e12_impl<
         );
     }
 
-    let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
+    Ok(())
 }
 
 #[inline(always)]
 unsafe fn execute_e12_generic_impl<CTX: ExecutionCtxTrait, const BLOCKS: usize>(
     pre_compute: &FieldExpressionPreCompute,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
-) {
+) -> Result<(), ExecutionError> {
+    let pc = exec_state.pc();
     let rs_vals = pre_compute
         .rs_addrs
         .map(|addr| rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, addr as u32)));
+    for &address in &rs_vals {
+        validate_memory_block_byte_ptr(pc, address)?;
+    }
+    let rd_val = validate_memory_block_byte_ptr(
+        pc,
+        rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.a as u32)),
+    )?;
 
     let read_data: [[[u8; MEMORY_BLOCK_BYTES]; BLOCKS]; 2] = rs_vals.map(|address| {
         debug_assert!(address as usize + MEMORY_BLOCK_BYTES * BLOCKS - 1 < MEM_SIZE);
@@ -421,8 +435,6 @@ unsafe fn execute_e12_generic_impl<CTX: ExecutionCtxTrait, const BLOCKS: usize>(
         &read_data_dyn.0,
     );
 
-    let rd_val =
-        rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.a as u32));
     debug_assert!(rd_val as usize + MEMORY_BLOCK_BYTES * BLOCKS - 1 < MEM_SIZE);
 
     let data: [[u8; MEMORY_BLOCK_BYTES]; BLOCKS] = writes.into();
@@ -434,8 +446,8 @@ unsafe fn execute_e12_generic_impl<CTX: ExecutionCtxTrait, const BLOCKS: usize>(
         );
     }
 
-    let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
+    Ok(())
 }
 
 #[inline(always)]
@@ -452,6 +464,13 @@ unsafe fn execute_e12_setup_impl<
     let rs_vals = pre_compute
         .rs_addrs
         .map(|addr| rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, addr as u32)));
+    for &address in &rs_vals {
+        validate_memory_block_byte_ptr(pc, address)?;
+    }
+    let rd_val = validate_memory_block_byte_ptr(
+        pc,
+        rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.a as u32)),
+    )?;
     let read_data: [[[u8; MEMORY_BLOCK_BYTES]; BLOCKS]; 2] = rs_vals.map(|address| {
         debug_assert!(address as usize + MEMORY_BLOCK_BYTES * BLOCKS - 1 < MEM_SIZE);
         from_fn(|i| {
@@ -482,8 +501,6 @@ unsafe fn execute_e12_setup_impl<
         &read_data_dyn.0,
     );
 
-    let rd_val =
-        rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.a as u32));
     debug_assert!(rd_val as usize + MEMORY_BLOCK_BYTES * BLOCKS - 1 < MEM_SIZE);
 
     let data: [[u8; MEMORY_BLOCK_BYTES]; BLOCKS] = writes.into();
@@ -543,10 +560,10 @@ unsafe fn execute_e1_impl<
 >(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
-) {
+) -> Result<(), ExecutionError> {
     let pre_compute: &FieldExpressionPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<FieldExpressionPreCompute>()).borrow();
-    execute_e12_impl::<_, BLOCKS, IS_FP2, FIELD_TYPE, OP>(pre_compute, exec_state);
+    execute_e12_impl::<_, BLOCKS, IS_FP2, FIELD_TYPE, OP>(pre_compute, exec_state)
 }
 
 #[create_handler]
@@ -560,7 +577,7 @@ unsafe fn execute_e2_impl<
 >(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
-) {
+) -> Result<(), ExecutionError> {
     let pre_compute: &E2PreCompute<FieldExpressionPreCompute> = std::slice::from_raw_parts(
         pre_compute,
         size_of::<E2PreCompute<FieldExpressionPreCompute>>(),
@@ -569,7 +586,7 @@ unsafe fn execute_e2_impl<
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_impl::<_, BLOCKS, IS_FP2, FIELD_TYPE, OP>(&pre_compute.data, exec_state);
+    execute_e12_impl::<_, BLOCKS, IS_FP2, FIELD_TYPE, OP>(&pre_compute.data, exec_state)
 }
 
 #[create_handler]
@@ -581,10 +598,10 @@ unsafe fn execute_e1_generic_impl<
 >(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
-) {
+) -> Result<(), ExecutionError> {
     let pre_compute: &FieldExpressionPreCompute =
         std::slice::from_raw_parts(pre_compute, size_of::<FieldExpressionPreCompute>()).borrow();
-    execute_e12_generic_impl::<_, BLOCKS>(pre_compute, exec_state);
+    execute_e12_generic_impl::<_, BLOCKS>(pre_compute, exec_state)
 }
 
 #[create_handler]
@@ -596,7 +613,7 @@ unsafe fn execute_e2_generic_impl<
 >(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
-) {
+) -> Result<(), ExecutionError> {
     let pre_compute: &E2PreCompute<FieldExpressionPreCompute> = std::slice::from_raw_parts(
         pre_compute,
         size_of::<E2PreCompute<FieldExpressionPreCompute>>(),
@@ -605,5 +622,5 @@ unsafe fn execute_e2_generic_impl<
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, 1);
-    execute_e12_generic_impl::<_, BLOCKS>(&pre_compute.data, exec_state);
+    execute_e12_generic_impl::<_, BLOCKS>(&pre_compute.data, exec_state)
 }

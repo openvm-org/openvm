@@ -33,6 +33,16 @@ fn decode_reg(value: u32) -> Variable {
     decode_variable(value, RV64_REGISTER_BYTES as u32, RV64_NUM_REGISTERS as u32)
 }
 
+fn emit_pointer_alignment_guard(ctx: &mut dyn ExtEmitCtx, pointers: &[&str]) {
+    let pointers = pointers.join(" | ");
+    ctx.write_line(&format!(
+        "if (unlikely((({pointers}) & {}ull) != 0ull)) {{",
+        RV64_REGISTER_BYTES - 1
+    ));
+    ctx.emit_trap();
+    ctx.write_line("}");
+}
+
 // ── ALU / branch opcode enums ───────────────────────────────────────────────
 //
 // Used only at codegen time to select the specialized FFI function name. There
@@ -132,6 +142,7 @@ impl ExtInstr for Int256AluInstr {
             let rs2 = ctx.read_var(self.rs2_reg);
             (rd, rs1, rs2)
         };
+        emit_pointer_alignment_guard(ctx, &[&rd, &rs1, &rs2]);
         // The FFI performs eight aligned heap reads followed by four aligned
         // heap writes. Checkpoint replay reconstructs those events from the
         // postimage; pure and metered modes emit neither reservation nor peek.
@@ -188,6 +199,7 @@ impl ExtInstr for Int256BranchEqInstr {
         } else {
             "rvr_ext_int256_beq"
         };
+        emit_pointer_alignment_guard(ctx, &[&rs1, &rs2]);
         let cond = ctx.emit_call_expr("bool", fn_name, &["state", &rs1, &rs2]);
         // The predicate call performs eight aligned heap reads. Its one-bit
         // result is the minimum information needed by independent GPU chunks
@@ -250,6 +262,7 @@ impl ExtInstr for Int256BranchLtInstr {
     fn emit_c_term(&self, ctx: &mut dyn ExtEmitCtx, branch_to: &dyn Fn(u64) -> String) {
         let rs1 = ctx.read_var(self.rs1_reg);
         let rs2 = ctx.read_var(self.rs2_reg);
+        emit_pointer_alignment_guard(ctx, &[&rs1, &rs2]);
         let cond = ctx.emit_call_expr("bool", self.op.ffi_name(), &["state", &rs1, &rs2]);
         ctx.advance_checkpoint_timestamp(8);
         ctx.append_replay_value(&cond);
@@ -727,6 +740,9 @@ mod tests {
                 "read(r2)",
                 "read(r3)",
                 "read(r1)",
+                "if (unlikely(((r1 | r2 | r3) & 7ull) != 0ull)) {",
+                "trap",
+                "}",
                 "reserve(4u, 12u)",
                 "reserve_replay(4u)",
                 "rvr_ext_int256_add(state, r1, r2, r3)",
@@ -743,6 +759,9 @@ mod tests {
                     "read(r1)",
                     "read(r2)",
                     "read(r3)",
+                    "if (unlikely(((r1 | r2 | r3) & 7ull) != 0ull)) {",
+                    "trap",
+                    "}",
                     "rvr_ext_int256_add(state, r1, r2, r3)",
                 ]
             );
@@ -769,6 +788,9 @@ mod tests {
             [
                 "read(r2)",
                 "read(r3)",
+                "if (unlikely(((r2 | r3) & 7ull) != 0ull)) {",
+                "trap",
+                "}",
                 "bool tmp0 = rvr_ext_int256_beq(state, r2, r3)",
                 "advance_checkpoint(8)",
                 "append(tmp0)",
@@ -788,6 +810,9 @@ mod tests {
             [
                 "read(r2)",
                 "read(r3)",
+                "if (unlikely(((r2 | r3) & 7ull) != 0ull)) {",
+                "trap",
+                "}",
                 "bool tmp0 = rvr_ext_int256_beq(state, r2, r3)",
                 "if (tmp0) {",
                 "  goto_40",
@@ -807,10 +832,10 @@ mod tests {
         };
         let mut checkpoint = TestEmitCtx::default();
         instruction.emit_c_term(&mut checkpoint, &|pc| format!("goto_{pc}"));
-        assert_eq!(checkpoint.lines[3], "advance_checkpoint(8)");
-        assert_eq!(checkpoint.lines[5], "flush");
+        assert_eq!(checkpoint.lines[6], "advance_checkpoint(8)");
+        assert_eq!(checkpoint.lines[8], "flush");
         assert_eq!(
-            checkpoint.lines[2],
+            checkpoint.lines[5],
             "bool tmp0 = rvr_ext_int256_bltu(state, r2, r3)"
         );
     }

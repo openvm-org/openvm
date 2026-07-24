@@ -15,7 +15,7 @@ use openvm_instructions::{
 };
 use openvm_mod_circuit_builder::{run_field_expression_precomputed, FieldExpressionProgram};
 use openvm_platform::memory::MEM_SIZE;
-use openvm_riscv_circuit::adapters::rv64_bytes_to_u32;
+use openvm_riscv_circuit::adapters::{rv64_bytes_to_u32, validate_memory_block_byte_ptr};
 use openvm_stark_backend::p3_field::PrimeField32;
 
 use super::EcDoubleExecutor;
@@ -226,6 +226,13 @@ unsafe fn execute_e12_impl<
     let rs_vals = pre_compute
         .rs_addrs
         .map(|addr| rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, addr as u32)));
+    for &address in &rs_vals {
+        validate_memory_block_byte_ptr(pc, address)?;
+    }
+    let rd_val = validate_memory_block_byte_ptr(
+        pc,
+        rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.a as u32)),
+    )?;
 
     // Read memory values for the point
     let read_data: [[u8; MEMORY_BLOCK_BYTES]; BLOCKS] = {
@@ -271,8 +278,6 @@ unsafe fn execute_e12_impl<
         ec_double::<CURVE_TYPE, BLOCKS>(read_data)
     };
 
-    let rd_val =
-        rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.a as u32));
     debug_assert!(rd_val as usize + MEMORY_BLOCK_BYTES * BLOCKS - 1 < MEM_SIZE);
 
     // Write output data to memory

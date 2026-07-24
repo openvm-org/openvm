@@ -1,7 +1,10 @@
 use std::ops::Mul;
 
 use openvm_circuit::{
-    arch::{execution_mode::ExecutionCtxTrait, VmStateMut, BLOCK_FE_WIDTH},
+    arch::{
+        execution_mode::ExecutionCtxTrait, ExecutionError, VmStateMut, BLOCK_FE_WIDTH,
+        MEMORY_BLOCK_BYTES,
+    },
     system::memory::online::{GuestMemory, TracingMemory},
 };
 use openvm_circuit_primitives::encoder::Encoder;
@@ -53,6 +56,41 @@ pub const RV64_PTR_BITS: usize = U16_BITS * RV64_PTR_U16_LIMBS;
 /// Number of u16 limbs in a 32-bit RV64 word (e.g. an `ADDW`/`SUBW` operand, or one half of a
 /// register). Numerically equal to [`RV64_PTR_U16_LIMBS`], but named for arithmetic-word use.
 pub const RV64_WORD_U16_LIMBS: usize = RV64_WORD_NUM_LIMBS / 2;
+
+/// Validate a guest byte pointer used as the start of a memory-bus block.
+///
+/// OpenVM memory is an equipartition into [`BLOCK_FE_WIDTH`]-cell blocks. In
+/// the RV64 u16 address spaces that makes every proof-visible block start
+/// [`MEMORY_BLOCK_BYTES`]-byte aligned.
+#[inline(always)]
+pub fn validate_memory_block_byte_ptr(pc: u32, ptr: u32) -> Result<u32, ExecutionError> {
+    if !ptr.is_multiple_of(MEMORY_BLOCK_BYTES as u32) {
+        return Err(ExecutionError::Fail {
+            pc,
+            msg: "memory block pointer must be eight-byte aligned",
+        });
+    }
+    Ok(ptr)
+}
+
+#[cfg(test)]
+mod block_pointer_tests {
+    use super::validate_memory_block_byte_ptr;
+
+    #[test]
+    fn memory_block_pointer_uses_the_eight_byte_equipartition() {
+        for pointer in [0, 8] {
+            assert_eq!(
+                validate_memory_block_byte_ptr(12, pointer).unwrap(),
+                pointer
+            );
+        }
+        for pointer in [2, 4, 6] {
+            let error = validate_memory_block_byte_ptr(12, pointer).unwrap_err();
+            assert!(error.to_string().contains("eight-byte aligned"), "{error}");
+        }
+    }
+}
 
 /// Supported load/store access widths in bytes.
 pub(crate) const BYTE_ACCESS_WIDTH: usize = 1;
