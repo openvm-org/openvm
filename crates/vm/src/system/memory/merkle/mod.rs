@@ -69,7 +69,7 @@ impl<const DIGEST_WIDTH: usize, F: PrimeField32> MemoryMerkleChip<DIGEST_WIDTH, 
 }
 
 #[tracing::instrument(level = "info", skip_all)]
-fn memory_to_vec_partition<F: PrimeField32, const N: usize>(
+pub(crate) fn memory_to_vec_partition<F: PrimeField32, const N: usize>(
     memory: &AddressMap,
     md: &MemoryDimensions,
 ) -> Vec<(u64, [F; N])> {
