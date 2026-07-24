@@ -3,7 +3,7 @@
 //! Each trait mirrors one concrete chip used by the static verifier:
 //! [`GateInst`] ↔ `GateChip` (plus raw `Context` cell operations), [`BabyBearInst`] ↔
 //! `BabyBearChip`, [`BabyBearExt4Inst`] ↔ `BabyBearExt4Chip`, [`TranscriptInst`] ↔
-//! `TranscriptChip`, and [`DigestHashInst`] ↔ the Poseidon2 digest hashing helpers.
+//! `TranscriptChip`, and [`Poseidon2Inst`] ↔ the Poseidon2 digest hashing helpers.
 //! [`PopulateInputs`] is the exception: it groups the witness-loading methods used by
 //! `load_proof_wire` and inherits only from [`ChipBase`].
 //!
