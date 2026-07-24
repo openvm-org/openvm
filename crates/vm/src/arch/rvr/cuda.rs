@@ -2140,11 +2140,14 @@ mod tests {
         copy::{MemCopyD2H, MemCopyH2D},
         stream::GpuDeviceCtx,
     };
+    use openvm_instructions::riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS};
+    use p3_baby_bear::BabyBear;
     use rvr_state::{
         PreflightInitialWrite, PreflightMemoryEvent, PreflightProgramEvent, PREFLIGHT_WRITE_BIT,
     };
 
     use super::*;
+    use crate::system::memory::online::TracingMemory;
 
     fn event(
         timestamp: u32,
@@ -2518,10 +2521,6 @@ mod tests {
 
     #[test]
     fn gpu_touched_blocks_match_tracing_memory_finalize() {
-        use openvm_instructions::riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS};
-
-        use crate::system::memory::online::TracingMemory;
-
         let config = MemoryConfig::default();
         let memory = vec![
             event_value(1, RV64_MEMORY_AS, 4, false, [0; 4]),
@@ -2575,8 +2574,6 @@ mod tests {
 
     #[test]
     fn gpu_touched_blocks_accept_empty_and_last_aligned_u16_block() {
-        use openvm_instructions::riscv::RV64_REGISTER_AS;
-
         let config = MemoryConfig::default();
         let (_, touched, _, error) = gpu_memory_index_with_config(&[], &[], &config);
         assert_eq!(error, 0);
@@ -2605,8 +2602,6 @@ mod tests {
 
     #[test]
     fn gpu_touched_block_compaction_never_raises_the_scatter_peak() {
-        use openvm_instructions::riscv::RV64_MEMORY_AS;
-
         let config = MemoryConfig::default();
         let at_half = [
             event(1, RV64_MEMORY_AS, 0, false),
@@ -2636,8 +2631,6 @@ mod tests {
 
     #[test]
     fn gpu_memory_metadata_fails_closed_for_bad_layout_and_bounds() {
-        use openvm_instructions::{riscv::RV64_REGISTER_AS, DEFERRAL_AS};
-
         let config = MemoryConfig::default();
         let assert_rejected =
             |memory: &[PreflightMemoryEvent], seeds: &[PreflightInitialWrite], config| {
@@ -2666,8 +2659,6 @@ mod tests {
     }
 
     fn mixed_chronology_fixture() -> (MemoryConfig, Vec<Vec<u8>>) {
-        use openvm_instructions::riscv::RV64_MEMORY_AS;
-
         let mut config = MemoryConfig::default();
         for address_space in &mut config.addr_spaces {
             address_space.num_cells = 0;
@@ -2700,8 +2691,6 @@ mod tests {
 
     #[test]
     fn gpu_chronology_resolves_mixed_u16_and_field_blocks_with_one_predecessor_order() {
-        use openvm_instructions::riscv::RV64_MEMORY_AS;
-
         let (config, initial_memory) = mixed_chronology_fixture();
         let memory = [
             field_event(1, 0, false, 0),
@@ -2777,8 +2766,6 @@ mod tests {
 
     #[test]
     fn gpu_chronology_keeps_narrow_u16_only_path() {
-        use openvm_instructions::riscv::RV64_MEMORY_AS;
-
         let mut config = MemoryConfig::default();
         config.addr_space_height = 1;
         config.addr_spaces.truncate(3);
@@ -2898,8 +2885,6 @@ mod tests {
 
     #[test]
     fn gpu_program_rejects_memory_configs_outside_the_compact_key_abi() {
-        use p3_baby_bear::BabyBear;
-
         let device_ctx = GpuDeviceCtx::for_current_device().unwrap();
         let program = Program::<BabyBear>::from_instructions(&[]);
         let assert_invalid = |config: &MemoryConfig| {

@@ -22,6 +22,8 @@ mod tests {
     use openvm_deferral_circuit::{
         DeferralExtension, DeferralFn, Rv64DeferralBuilder, Rv64DeferralConfig,
     };
+    #[cfg(feature = "rvr")]
+    use openvm_deferral_transpiler::DeferralOpcode;
     use openvm_deferral_transpiler::DeferralTranspilerExtension;
     use openvm_instructions::{exe::VmExe, DEFERRAL_AS};
     #[cfg(feature = "rvr")]
@@ -32,6 +34,8 @@ mod tests {
         LocalOpcode, SystemOpcode,
     };
     use openvm_riscv_circuit::{Rv64I, Rv64Io, Rv64M};
+    #[cfg(feature = "rvr")]
+    use openvm_riscv_transpiler::Rv64JalLuiOpcode;
     use openvm_riscv_transpiler::{
         Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
     };
@@ -150,9 +154,6 @@ mod tests {
     #[test]
     #[cfg(feature = "rvr")]
     fn test_checkpoint_preflight_carries_deferral_state_across_segments() -> Result<()> {
-        use openvm_deferral_transpiler::DeferralOpcode;
-        use openvm_riscv_transpiler::Rv64JalLuiOpcode;
-
         let config = make_config(1);
         let instructions = [
             Instruction::<F>::from_usize(
@@ -254,8 +255,6 @@ mod tests {
     #[test]
     #[cfg(feature = "rvr")]
     fn deferral_output_oob_sizing_read_traps_in_every_rvr_mode() -> Result<()> {
-        use openvm_deferral_transpiler::DeferralOpcode;
-
         let config = make_config(1);
         let instructions = [
             Instruction::<F>::from_usize(

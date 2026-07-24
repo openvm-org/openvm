@@ -1,6 +1,14 @@
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use openvm_circuit_primitives::Chip;
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use openvm_cuda_common::stream::GpuDeviceCtx;
 use openvm_instructions::{instruction::Instruction, SystemOpcode, VmOpcode};
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use openvm_instructions::{program::Program, riscv::RV64_MEMORY_AS, PhantomDiscriminant};
 use openvm_stark_backend::p3_field::{PrimeCharacteristicRing, PrimeField32};
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use rvr_state::{PreflightMemoryEvent, PreflightProgramEvent};
 
 use super::PhantomExecutor;
 use crate::{
@@ -10,6 +18,17 @@ use crate::{
         Arena, ExecutionState, PreflightExecutor,
     },
     system::phantom::{PhantomAir, PhantomChip, PhantomFiller},
+};
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use crate::{
+    arch::{
+        rvr::{cuda::GpuRvrProgram, RvrPreflightEndpoint, RvrPreflightTranscript},
+        Arena, DenseRecordArena, EmptyMultiRowLayout, MemoryConfig, RecordArena,
+    },
+    system::{
+        cuda::phantom::PhantomChipGPU,
+        phantom::{PhantomCols, PhantomRecord},
+    },
 };
 
 type F = BabyBear;
@@ -110,22 +129,6 @@ fn test_cuda_phantom_tracegen() {
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
 fn test_cuda_phantom_rvr_replay() {
-    use openvm_circuit_primitives::Chip;
-    use openvm_cuda_common::stream::GpuDeviceCtx;
-    use openvm_instructions::{program::Program, riscv::RV64_MEMORY_AS, PhantomDiscriminant};
-    use rvr_state::{PreflightMemoryEvent, PreflightProgramEvent};
-
-    use crate::{
-        arch::{
-            rvr::{cuda::GpuRvrProgram, RvrPreflightEndpoint, RvrPreflightTranscript},
-            Arena, DenseRecordArena, EmptyMultiRowLayout, MemoryConfig, RecordArena,
-        },
-        system::{
-            cuda::phantom::PhantomChipGPU,
-            phantom::{PhantomCols, PhantomRecord},
-        },
-    };
-
     let device_ctx = GpuDeviceCtx::for_current_device().unwrap();
     // This discriminant is deliberately not registered with the RV64 executor.
     // GPU replay must treat it as an execution-bus operand and never invoke a callback.
