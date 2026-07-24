@@ -1375,7 +1375,7 @@ mod tests {
 
     #[test]
     #[cfg(feature = "rvr")]
-    fn test_hint_store_uses_the_air_u16_alignment_contract() -> Result<()> {
+    fn test_hint_store_uses_the_memory_block_alignment_contract() -> Result<()> {
         let instructions = [
             hint_store_instruction(Rv64HintStoreOpcode::HINT_BUFFER, 1, 2),
             Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
@@ -1422,28 +1422,30 @@ mod tests {
         assert!(error.to_string().contains("eight-byte aligned"), "{error}");
 
         // A proof-visible memory event is one fixed eight-byte block. Both
-        // executors reject a two-byte-aligned pointer that is not block-aligned.
+        // executors reject every two-byte-aligned pointer that is not block-aligned.
         let hint = 0x0123_4567_89ab_cdefu64;
-        let rvr_unaligned = configure_hint_state(
-            pure.create_initial_vm_state(Vec::<Vec<u8>>::new()),
-            &[(1, 2), (2, 1)],
-            &[hint],
-        );
-        let error = match pure.execute_from_state(rvr_unaligned) {
-            Ok(_) => panic!("two-byte-aligned hint destination unexpectedly succeeded"),
-            Err(error) => error,
-        };
-        assert!(error.to_string().contains("error code: 3"));
-        let interpreter_unaligned = configure_hint_state(
-            pure.create_initial_vm_state(Vec::<Vec<u8>>::new()),
-            &[(1, 2), (2, 1)],
-            &[hint],
-        );
-        let error = match interpreter.execute_from_state(interpreter_unaligned) {
-            Ok(_) => panic!("two-byte-aligned hint destination unexpectedly succeeded"),
-            Err(error) => error,
-        };
-        assert!(error.to_string().contains("eight-byte aligned"), "{error}");
+        for pointer in [2, 4, 6] {
+            let rvr_unaligned = configure_hint_state(
+                pure.create_initial_vm_state(Vec::<Vec<u8>>::new()),
+                &[(1, pointer), (2, 1)],
+                &[hint],
+            );
+            let error = match pure.execute_from_state(rvr_unaligned) {
+                Ok(_) => panic!("misaligned hint destination {pointer} unexpectedly succeeded"),
+                Err(error) => error,
+            };
+            assert!(error.to_string().contains("error code: 3"));
+            let interpreter_unaligned = configure_hint_state(
+                pure.create_initial_vm_state(Vec::<Vec<u8>>::new()),
+                &[(1, pointer), (2, 1)],
+                &[hint],
+            );
+            let error = match interpreter.execute_from_state(interpreter_unaligned) {
+                Ok(_) => panic!("misaligned hint destination {pointer} unexpectedly succeeded"),
+                Err(error) => error,
+            };
+            assert!(error.to_string().contains("eight-byte aligned"), "{error}");
+        }
 
         let rvr_initial = configure_hint_state(
             pure.create_initial_vm_state(Vec::<Vec<u8>>::new()),

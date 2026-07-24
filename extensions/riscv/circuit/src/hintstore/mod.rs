@@ -40,7 +40,7 @@ use openvm_stark_backend::{
 use crate::adapters::{
     byte_ptr_to_u16_ptr, expand_to_rv64_block, ptr_bound_from_high_u16_expr, ptr_bound_from_ptr,
     ptr_to_field_u16_limbs, read_rv64_register, tracing_read, tracing_read_reg_ptr, tracing_write,
-    u16_limbs_to_ptr, RV64_PTR_BITS, RV64_PTR_U16_LIMBS, U16_BITS,
+    u16_limbs_to_ptr, validate_memory_block_byte_ptr, RV64_PTR_BITS, RV64_PTR_U16_LIMBS, U16_BITS,
 };
 
 mod execution;
@@ -81,13 +81,7 @@ fn validate_hint_buffer_num_words(pc: u32, num_words: u64) -> Result<u16, Execut
 
 #[inline]
 fn validate_hint_store_mem_ptr(pc: u32, mem_ptr: u32) -> Result<u32, ExecutionError> {
-    if !mem_ptr.is_multiple_of(MEMORY_BLOCK_BYTES as u32) {
-        return Err(ExecutionError::Fail {
-            pc,
-            msg: "hint destination must be eight-byte aligned",
-        });
-    }
-    Ok(mem_ptr)
+    validate_memory_block_byte_ptr(pc, mem_ptr)
 }
 
 #[repr(C)]

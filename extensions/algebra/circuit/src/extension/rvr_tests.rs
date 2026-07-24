@@ -32,7 +32,7 @@ fn padded_bytes(value: &BigUint) -> [u8; 32] {
     std::array::from_fn(|index| bytes.get(index).copied().unwrap_or_default())
 }
 
-fn fixture() -> (Program<BabyBear>, VmExe<BabyBear>) {
+fn fixture_with_pointer_offset(pointer_offset: u32) -> (Program<BabyBear>, VmExe<BabyBear>) {
     let instructions = [
         Instruction::from_usize(
             Rv64ModularArithmeticOpcode::SETUP_ADDSUB.global_opcode(),
@@ -86,6 +86,7 @@ fn fixture() -> (Program<BabyBear>, VmExe<BabyBear>) {
         (4, LHS_PTR),
         (5, RHS_PTR),
     ] {
+        let pointer = pointer + pointer_offset;
         memory.extend(
             u64::from(pointer)
                 .to_le_bytes()
@@ -99,6 +100,7 @@ fn fixture() -> (Program<BabyBear>, VmExe<BabyBear>) {
         (LHS_PTR, padded_bytes(&BigUint::from(5u32))),
         (RHS_PTR, padded_bytes(&BigUint::from(7u32))),
     ] {
+        let pointer = pointer + pointer_offset;
         memory.extend(
             value
                 .into_iter()
@@ -111,6 +113,10 @@ fn fixture() -> (Program<BabyBear>, VmExe<BabyBear>) {
         program.clone(),
         VmExe::new(program).with_init_memory(memory),
     )
+}
+
+fn fixture() -> (Program<BabyBear>, VmExe<BabyBear>) {
+    fixture_with_pointer_offset(0)
 }
 
 fn config() -> Rv64ModularConfig {
@@ -164,6 +170,37 @@ fn modular_is_equal_rejects_x0_destination_before_execution() {
         assert!(executor
             .rvr_experimental_checkpoint_preflight_instance(&exe, None)
             .is_err());
+    }
+}
+
+#[test]
+fn modular_heap_pointers_follow_the_eight_byte_memory_equipartition() {
+    let executor = VmExecutor::new(config()).unwrap();
+
+    for pointer_offset in [0, 8] {
+        let (_, exe) = fixture_with_pointer_offset(pointer_offset);
+        let interpreter = executor.interpreter_instance(&exe).unwrap();
+        let state = interpreter.create_initial_vm_state(Vec::<Vec<u8>>::new());
+        interpreter.execute_from_state(state).unwrap();
+
+        let rvr = executor.rvr_instance(&exe, None).unwrap();
+        let state = rvr.create_initial_vm_state(Vec::<Vec<u8>>::new());
+        rvr.execute_from_state(state).unwrap();
+    }
+
+    for pointer_offset in [2, 4, 6] {
+        let (_, exe) = fixture_with_pointer_offset(pointer_offset);
+        let interpreter = executor.interpreter_instance(&exe).unwrap();
+        let state = interpreter.create_initial_vm_state(Vec::<Vec<u8>>::new());
+        let error = match interpreter.execute_from_state(state) {
+            Ok(_) => panic!("misaligned modular heap pointer unexpectedly succeeded"),
+            Err(error) => error,
+        };
+        assert!(error.to_string().contains("eight-byte aligned"), "{error}");
+
+        let rvr = executor.rvr_instance(&exe, None).unwrap();
+        let state = rvr.create_initial_vm_state(Vec::<Vec<u8>>::new());
+        assert!(rvr.execute_from_state(state).is_err());
     }
 }
 

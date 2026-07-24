@@ -49,7 +49,7 @@ fn add_residuals(equal: bool) -> [u64; 4] {
     })
 }
 
-fn fixture(equal: bool) -> VmExe<BabyBear> {
+fn fixture_with_pointer_offset(equal: bool, pointer_offset: u32) -> VmExe<BabyBear> {
     let program = Program::from_instructions(&[
         Instruction::from_usize(
             Rv64BaseAlu256Opcode(BaseAluOpcode::ADD).global_opcode(),
@@ -77,6 +77,7 @@ fn fixture(equal: bool) -> VmExe<BabyBear> {
     let (lhs, rhs) = operands(equal);
     let mut memory = SparseMemoryImage::default();
     for (register, pointer) in [(1, DST_PTR), (2, LHS_PTR), (3, RHS_PTR)] {
+        let pointer = pointer + pointer_offset;
         memory.extend(
             u64::from(pointer)
                 .to_le_bytes()
@@ -85,17 +86,23 @@ fn fixture(equal: bool) -> VmExe<BabyBear> {
                 .map(|(offset, byte)| ((RV64_REGISTER_AS, (reg(register) + offset) as u32), byte)),
         );
     }
-    memory.extend(
-        lhs.into_iter()
-            .enumerate()
-            .map(|(offset, byte)| ((RV64_MEMORY_AS, LHS_PTR + offset as u32), byte)),
-    );
-    memory.extend(
-        rhs.into_iter()
-            .enumerate()
-            .map(|(offset, byte)| ((RV64_MEMORY_AS, RHS_PTR + offset as u32), byte)),
-    );
+    memory.extend(lhs.into_iter().enumerate().map(|(offset, byte)| {
+        (
+            (RV64_MEMORY_AS, LHS_PTR + pointer_offset + offset as u32),
+            byte,
+        )
+    }));
+    memory.extend(rhs.into_iter().enumerate().map(|(offset, byte)| {
+        (
+            (RV64_MEMORY_AS, RHS_PTR + pointer_offset + offset as u32),
+            byte,
+        )
+    }));
     VmExe::new(program).with_init_memory(memory)
+}
+
+fn fixture(equal: bool) -> VmExe<BabyBear> {
+    fixture_with_pointer_offset(equal, 0)
 }
 
 #[test]
@@ -118,5 +125,40 @@ fn checkpoint_execution_preserves_int256_branch_outcomes() {
         let mut expected_residuals = add_residuals(equal).to_vec();
         expected_residuals.push(expected_branch_residual);
         assert_eq!(execution.transcript.residuals, expected_residuals);
+    }
+}
+
+#[test]
+fn int256_heap_pointers_follow_the_eight_byte_memory_equipartition() {
+    let config = Int256Rv64Config {
+        system: test_system_config(),
+        ..Default::default()
+    };
+    let executor = VmExecutor::new(config).unwrap();
+
+    for pointer_offset in [0, 8] {
+        let exe = fixture_with_pointer_offset(false, pointer_offset);
+        let interpreter = executor.interpreter_instance(&exe).unwrap();
+        let state = interpreter.create_initial_vm_state(Vec::<Vec<u8>>::new());
+        interpreter.execute_from_state(state).unwrap();
+
+        let rvr = executor.rvr_instance(&exe, None).unwrap();
+        let state = rvr.create_initial_vm_state(Vec::<Vec<u8>>::new());
+        rvr.execute_from_state(state).unwrap();
+    }
+
+    for pointer_offset in [2, 4, 6] {
+        let exe = fixture_with_pointer_offset(false, pointer_offset);
+        let interpreter = executor.interpreter_instance(&exe).unwrap();
+        let state = interpreter.create_initial_vm_state(Vec::<Vec<u8>>::new());
+        let error = match interpreter.execute_from_state(state) {
+            Ok(_) => panic!("misaligned Int256 heap pointer unexpectedly succeeded"),
+            Err(error) => error,
+        };
+        assert!(error.to_string().contains("eight-byte aligned"), "{error}");
+
+        let rvr = executor.rvr_instance(&exe, None).unwrap();
+        let state = rvr.create_initial_vm_state(Vec::<Vec<u8>>::new());
+        assert!(rvr.execute_from_state(state).is_err());
     }
 }
