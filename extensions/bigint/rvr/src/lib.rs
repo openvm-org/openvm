@@ -147,9 +147,16 @@ impl ExtInstr for Int256AluInstr {
         // heap writes. Checkpoint replay reconstructs those events from the
         // postimage; pure and metered modes emit neither reservation nor peek.
         ctx.reserve_preflight_writes("4u", "12u");
-        ctx.reserve_replay_values("4u");
+        let checkpoint = ctx.is_checkpoint_preflight();
+        if checkpoint {
+            ctx.reserve_replay_values("4u");
+        } else if ctx.counts_checkpoint_residuals() {
+            ctx.count_fixed_replay_values(4);
+        }
         ctx.emit_call(self.op.ffi_name(), &["state", &rd, &rs1, &rs2]);
-        ctx.append_replay_memory_u64_range(&rd, "4u");
+        if checkpoint {
+            ctx.append_replay_memory_u64_range(&rd, "4u");
+        }
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {

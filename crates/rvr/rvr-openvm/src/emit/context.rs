@@ -84,6 +84,10 @@ impl EmitMode {
         )
     }
 
+    fn tracks_metered_checkpoint_residuals(self) -> bool {
+        matches!(self, Self::Metered { .. })
+    }
+
     /// Whether this block records AS_MEMORY pages through local `TraceMemory`.
     fn traces_memory_pages(self) -> bool {
         matches!(
@@ -193,6 +197,18 @@ impl<'a> EmitContext<'a> {
             "unfinished checkpoint-preflight dynamic reservation"
         );
         (self.checkpoint_fixed_slots, self.checkpoint_fixed_residuals)
+    }
+
+    pub(crate) fn metered_checkpoint_residuals(&self) -> u32 {
+        if self.mode.tracks_metered_checkpoint_residuals() {
+            assert!(
+                !self.checkpoint_dynamic_residuals,
+                "unfinished metered dynamic residual reservation"
+            );
+            self.checkpoint_fixed_residuals
+        } else {
+            0
+        }
     }
 
     fn count_checkpoint_slots(&mut self, slots: u32) {
@@ -600,6 +616,15 @@ impl<'a> EmitContext<'a> {
     }
 
     pub fn reserve_replay_values(&mut self, count: &str) {
+        if self.mode.tracks_metered_checkpoint_residuals() {
+            assert!(
+                !self.checkpoint_dynamic_residuals,
+                "nested metered residual reservation"
+            );
+            self.checkpoint_dynamic_residuals = true;
+            self.emit_metered_residual_add(count);
+            return;
+        }
         if !self.mode.uses_checkpoint_local() {
             return;
         }
@@ -621,7 +646,53 @@ impl<'a> EmitContext<'a> {
         }
     }
 
+    pub fn count_fixed_replay_values(&mut self, count: u32) {
+        if !self.mode.tracks_metered_checkpoint_residuals() {
+            return;
+        }
+        assert!(
+            !self.checkpoint_dynamic_residuals,
+            "fixed residual count during a dynamic reservation"
+        );
+        self.checkpoint_fixed_residuals = self
+            .checkpoint_fixed_residuals
+            .checked_add(count)
+            .expect("metered block residual count overflow");
+    }
+
+    pub fn count_replay_values(&mut self, count: &str) {
+        if !self.mode.tracks_metered_checkpoint_residuals() {
+            return;
+        }
+        assert!(
+            !self.checkpoint_dynamic_residuals,
+            "dynamic residual count during a materialization reservation"
+        );
+        self.emit_metered_residual_add(count);
+    }
+
+    fn emit_metered_residual_add(&mut self, count: &str) {
+        let count_var = self.next_var();
+        self.write_line(&format!("uint64_t {count_var} = (uint64_t)({count});"));
+        self.write_line(&format!(
+            "if (unlikely({count_var} > (uint64_t)UINT32_MAX - state->mode_state.num_checkpoint_residuals)) {{"
+        ));
+        self.emit_trap();
+        self.write_line("}");
+        self.write_line(&format!(
+            "state->mode_state.num_checkpoint_residuals += (uint32_t){count_var};"
+        ));
+    }
+
     pub fn append_replay_value(&mut self, value: &str) {
+        if self.mode.tracks_metered_checkpoint_residuals() {
+            if self.checkpoint_dynamic_residuals {
+                self.checkpoint_dynamic_residuals = false;
+            } else {
+                self.count_fixed_replay_values(1);
+            }
+            return;
+        }
         if !self.mode.uses_checkpoint_local() {
             return;
         }
@@ -639,6 +710,14 @@ impl<'a> EmitContext<'a> {
     }
 
     pub fn append_replay_memory_u64_range(&mut self, base: &str, count: &str) {
+        if self.mode.tracks_metered_checkpoint_residuals() {
+            assert!(
+                self.checkpoint_dynamic_residuals,
+                "metered replay range requires a residual reservation"
+            );
+            self.checkpoint_dynamic_residuals = false;
+            return;
+        }
         if !self.mode.uses_checkpoint_local() {
             return;
         }
@@ -924,6 +1003,10 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
         self.mode.uses_checkpoint_local()
     }
 
+    fn counts_checkpoint_residuals(&self) -> bool {
+        self.mode.uses_checkpoint_local() || self.mode.tracks_metered_checkpoint_residuals()
+    }
+
     fn read_var(&mut self, var: Variable) -> String {
         EmitContext::read_reg(self, reg_index(var))
     }
@@ -970,6 +1053,14 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
 
     fn append_replay_value(&mut self, value: &str) {
         EmitContext::append_replay_value(self, value);
+    }
+
+    fn count_fixed_replay_values(&mut self, count: u32) {
+        EmitContext::count_fixed_replay_values(self, count);
+    }
+
+    fn count_replay_values(&mut self, count: &str) {
+        EmitContext::count_replay_values(self, count);
     }
 
     fn append_replay_memory_u64_range(&mut self, base: &str, count: &str) {
@@ -1247,6 +1338,27 @@ mod tests {
     }
 
     #[test]
+    fn metered_residuals_fold_fixed_counts_and_emit_dynamic_counts() {
+        let mut ctx = metered_memory_ctx();
+        ctx.count_fixed_replay_values(4);
+        ctx.append_replay_value("fixed");
+        ctx.reserve_replay_values("words");
+        ctx.append_replay_memory_u64_range("buffer", "words");
+        ctx.count_replay_values("late_words");
+
+        assert_eq!(ctx.metered_checkpoint_residuals(), 5);
+        assert!(ctx.buf().contains("uint64_t _v0 = (uint64_t)(words);"));
+        assert!(ctx
+            .buf()
+            .contains("_v0 > (uint64_t)UINT32_MAX - state->mode_state.num_checkpoint_residuals"));
+        assert!(ctx.buf().contains("uint64_t _v1 = (uint64_t)(late_words);"));
+        assert!(ctx
+            .buf()
+            .contains("_v1 > (uint64_t)UINT32_MAX - state->mode_state.num_checkpoint_residuals"));
+        assert_eq!(ctx.buf().matches("return rv_trap(").count(), 2);
+    }
+
+    #[test]
     fn checkpoint_dynamic_hint_schedule_and_residual_are_counted_once() {
         let mut ctx = checkpoint_ctx();
         ctx.append_replay_value("before");
@@ -1289,7 +1401,7 @@ mod tests {
     }
 
     #[test]
-    fn replay_memory_range_is_checkpoint_only_and_closes_dynamic_reservation() {
+    fn replay_memory_range_materializes_only_in_checkpoint_and_counts_in_metered() {
         let mut checkpoint = checkpoint_ctx();
         checkpoint.reserve_replay_values("words");
         checkpoint.append_replay_memory_u64_range("buffer", "words");
@@ -1302,13 +1414,23 @@ mod tests {
             .buf()
             .contains("peek_mem_u64(state, buffer + (uint64_t)replay_word * 8ull)"));
 
-        for mode in [
-            EmitMode::Direct,
+        let mut metered = EmitContext::new(
+            HashSet::new(),
             EmitMode::Metered {
                 trace_memory_pages: false,
             },
-            EmitMode::MeteredCost,
-        ] {
+            BlockAbi::Metered,
+            None,
+            Some(0),
+        );
+        metered.reserve_replay_values("words");
+        metered.append_replay_memory_u64_range("buffer", "words");
+        assert!(metered.buf().contains("uint64_t _v0 = (uint64_t)(words);"));
+        assert!(metered
+            .buf()
+            .contains("state->mode_state.num_checkpoint_residuals += (uint32_t)_v0;"));
+
+        for mode in [EmitMode::Direct, EmitMode::MeteredCost] {
             let chip_widths = matches!(mode, EmitMode::MeteredCost).then_some(&[][..]);
             let block_abi = if matches!(mode, EmitMode::Metered { .. }) {
                 BlockAbi::Metered

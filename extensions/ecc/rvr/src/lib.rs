@@ -101,6 +101,7 @@ impl ExtInstr for EcAddNeInstr {
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         let checkpoint = ctx.is_checkpoint_preflight();
+        let count_residuals = ctx.counts_checkpoint_residuals();
         let (rd, rs1, rs2) = if checkpoint {
             // Match the VecHeap adapter: source registers precede the destination register.
             let rs1 = ctx.read_var(self.rs1_reg);
@@ -128,7 +129,7 @@ impl ExtInstr for EcAddNeInstr {
         } else {
             ctx.emit_call(&name, &["state", &rd, &rs1, &rs2]);
         }
-        if checkpoint {
+        if count_residuals {
             // Add setup constrains only its modulus input; y1, x2, and y2 remain execution data.
             // Its postimage is therefore no less authoritative than a regular add postimage.
             for word in 0..point_dwords {
@@ -166,6 +167,7 @@ impl ExtInstr for EcDoubleInstr {
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         let checkpoint = ctx.is_checkpoint_preflight();
+        let count_residuals = ctx.counts_checkpoint_residuals();
         let (rd, rs1) = if checkpoint {
             // Match the VecHeap adapter: the source register precedes the destination register.
             let rs1 = ctx.read_var(self.rs1_reg);
@@ -191,7 +193,7 @@ impl ExtInstr for EcDoubleInstr {
         } else {
             ctx.emit_call(&name, &["state", &rd, &rs1]);
         }
-        if checkpoint && !self.is_setup {
+        if count_residuals && !self.is_setup {
             // Regular-operation outputs are the only residuals. Setup replay derives its writes
             // from the timed reads and the configured field-expression program rather than
             // extending the transcript with setup-only values.

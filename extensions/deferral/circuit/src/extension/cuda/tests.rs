@@ -2,13 +2,10 @@ use std::sync::Arc;
 
 use openvm_circuit::{
     arch::{
-        deferral::DeferralState,
-        rvr::{
-            cuda::GpuRvrProgram, RvrCheckpointPreflightLimits, RvrPreflightEndpoint,
-            RvrPreflightTranscript,
-        },
-        Streams, VirtualMachine, VmExecutor, VmState, BLOCK_FE_WIDTH, MEMORY_BLOCK_BYTES,
+        deferral::DeferralState, rvr::RvrCheckpointPreflightLimits, Streams, VirtualMachine,
+        VmExecutor, BLOCK_FE_WIDTH,
     },
+    system::memory::online::LinearMemory,
     utils::{test_gpu_engine, test_system_config},
 };
 use openvm_deferral_transpiler::DeferralOpcode;
@@ -22,9 +19,6 @@ use openvm_instructions::{
 use openvm_riscv_circuit::{Rv64I, Rv64Io, Rv64M};
 use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine};
 use openvm_stark_sdk::{config::baby_bear_poseidon2::DIGEST_SIZE, p3_baby_bear::BabyBear};
-use rvr_state::{
-    PreflightInitialWrite, PreflightMemoryEvent, PreflightProgramEvent, PREFLIGHT_WRITE_BIT,
-};
 
 use super::{DeferralRvrCoverage, DeferralRvrGpuTracegen, Rv64DeferralGpuBuilder};
 use crate::{
@@ -35,10 +29,6 @@ use crate::{
 };
 
 type F = BabyBear;
-
-fn block(bytes: &[u8]) -> [u16; BLOCK_FE_WIDTH] {
-    std::array::from_fn(|i| u16::from_le_bytes([bytes[2 * i], bytes[2 * i + 1]]))
-}
 
 fn insert_bytes(memory: &mut SparseMemoryImage, address_space: u32, pointer: u32, bytes: &[u8]) {
     memory.extend(
@@ -89,7 +79,7 @@ fn deferral_output_coordinator_proves_without_record_arenas() {
     )
     .pop()
     .unwrap();
-    let output_commit: [u8; COMMIT_NUM_BYTES] = result.output_commit.try_into().unwrap();
+    let output_commit: [u8; COMMIT_NUM_BYTES] = result.output_commit.clone().try_into().unwrap();
     let output_key = combine_output(output_commit, (output_raw.len() as u64).to_le_bytes());
     let output = Instruction::from_usize(
         DeferralOpcode::OUTPUT.global_opcode(),
@@ -131,75 +121,84 @@ fn deferral_output_coordinator_proves_without_record_arenas() {
             vec![[0; COMMIT_NUM_BYTES]],
         ),
     };
-    let initial_state = VmState::initial(&config.system, &init_memory, 0, Streams::default());
+    let exe = VmExe::new(program.clone()).with_init_memory(init_memory);
+    let executor = VmExecutor::new(config.clone()).unwrap();
+    let checkpoint = executor
+        .rvr_experimental_checkpoint_preflight_instance(&exe, None)
+        .unwrap();
+    let initial_state = checkpoint.create_initial_vm_state(Streams {
+        deferrals: vec![DeferralState::new(vec![result])],
+        ..Default::default()
+    });
     let (mut vm, pk) =
         VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64DeferralGpuBuilder, config.clone())
             .unwrap();
     let cached_program = vm.commit_program_on_device(&program);
     vm.load_program(cached_program);
     vm.transport_init_memory_to_device(&initial_state.memory);
-    let device_ctx = vm.engine.device().device_ctx.clone();
-    let gpu_program =
-        GpuRvrProgram::upload(&program, &config.system.memory_config, &device_ctx).unwrap();
-
-    let mut memory_log = vec![
-        PreflightMemoryEvent {
-            timestamp: 1,
-            address_space_and_kind: RV64_REGISTER_AS,
-            pointer: rd / 2,
-            value: block(&(output_ptr as u64).to_le_bytes()),
-        },
-        PreflightMemoryEvent {
-            timestamp: 2,
-            address_space_and_kind: RV64_REGISTER_AS,
-            pointer: rs / 2,
-            value: block(&(input_ptr as u64).to_le_bytes()),
-        },
-    ];
-    memory_log.extend(output_key.chunks_exact(MEMORY_BLOCK_BYTES).enumerate().map(
-        |(chunk_idx, chunk)| PreflightMemoryEvent {
-            timestamp: 3 + chunk_idx as u32,
-            address_space_and_kind: RV64_MEMORY_AS,
-            pointer: input_ptr / 2 + (chunk_idx * BLOCK_FE_WIDTH) as u32,
-            value: block(chunk),
-        },
-    ));
-    memory_log.extend(output_raw.chunks_exact(MEMORY_BLOCK_BYTES).enumerate().map(
-        |(chunk_idx, chunk)| PreflightMemoryEvent {
-            timestamp: 8 + chunk_idx as u32,
-            address_space_and_kind: RV64_MEMORY_AS | PREFLIGHT_WRITE_BIT,
-            pointer: output_ptr / 2 + (chunk_idx * BLOCK_FE_WIDTH) as u32,
-            value: block(chunk),
-        },
-    ));
-    let final_timestamp = 8 + (output_raw.len() / MEMORY_BLOCK_BYTES) as u32;
-    let transcript = RvrPreflightTranscript {
-        program_log: vec![
-            PreflightProgramEvent {
-                pc: 0,
-                timestamp: 1,
-            },
-            PreflightProgramEvent {
-                pc: 4,
-                timestamp: final_timestamp,
-            },
-            PreflightProgramEvent {
-                pc: 4,
-                timestamp: final_timestamp,
-            },
-        ],
-        memory_log,
-        initial_write_log: (0..output_raw.len() / MEMORY_BLOCK_BYTES)
-            .map(|chunk_idx| PreflightInitialWrite {
-                address_space: RV64_MEMORY_AS,
-                pointer: output_ptr / 2 + (chunk_idx * BLOCK_FE_WIDTH) as u32,
-                initial_value: [0; BLOCK_FE_WIDTH],
-            })
-            .collect(),
-    };
-    let (gpu_transcript, replay_plan) = gpu_program
-        .upload_transcript(&transcript, RvrPreflightEndpoint::Terminated)
+    let mut execution = checkpoint
+        .execute_from_state(initial_state, RvrCheckpointPreflightLimits::new(2, 3, 1))
         .unwrap();
+    assert_eq!(execution.retired, 2);
+    assert_eq!(execution.to_state.timestamp, 10);
+    assert_eq!(
+        execution.transcript.residuals,
+        vec![
+            2,
+            u64::from_le_bytes(output_raw[..DIGEST_SIZE].try_into().unwrap()),
+            u64::from_le_bytes(output_raw[DIGEST_SIZE..].try_into().unwrap()),
+        ]
+    );
+    assert_eq!(
+        &execution.state.memory.memory.mem[RV64_MEMORY_AS as usize].as_slice()
+            [output_ptr as usize..output_ptr as usize + output_raw.len()],
+        output_raw
+    );
+
+    let gpu_program = DeferralRvrGpuTracegen::upload_checkpoint_program(
+        &program,
+        &config.system.memory_config,
+        &vm.engine.device().device_ctx,
+    )
+    .unwrap();
+    let missing = execution.transcript.residuals.pop().unwrap();
+    let error = DeferralRvrGpuTracegen::expand_checkpoint_replay(&vm, &gpu_program, &execution, 2)
+        .err()
+        .expect("missing OUTPUT residual must be rejected");
+    assert!(error.to_string().contains("code 306"), "{error}");
+    execution.transcript.residuals.push(missing);
+
+    let (gpu_transcript, replay_plan) =
+        DeferralRvrGpuTracegen::expand_checkpoint_replay(&vm, &gpu_program, &execution, 2).unwrap();
+    assert_eq!(
+        gpu_transcript
+            .program_log_host()
+            .unwrap()
+            .iter()
+            .map(|event| (event.pc, event.timestamp))
+            .collect::<Vec<_>>(),
+        [(0, 1), (4, 10), (4, 10)]
+    );
+    let memory = gpu_transcript.memory_log_host().unwrap();
+    assert_eq!(memory.len(), 9);
+    let expected = [
+        (1, RV64_REGISTER_AS, rd / 2, false),
+        (2, RV64_REGISTER_AS, rs / 2, false),
+        (3, RV64_MEMORY_AS, input_ptr / 2, false),
+        (4, RV64_MEMORY_AS, input_ptr / 2 + 4, false),
+        (5, RV64_MEMORY_AS, input_ptr / 2 + 8, false),
+        (6, RV64_MEMORY_AS, input_ptr / 2 + 12, false),
+        (7, RV64_MEMORY_AS, input_ptr / 2 + 16, false),
+        (8, RV64_MEMORY_AS, output_ptr / 2, true),
+        (9, RV64_MEMORY_AS, output_ptr / 2 + 4, true),
+    ];
+    for (event, &(timestamp, address_space, pointer, is_write)) in memory.iter().zip(&expected) {
+        assert_eq!(event.timestamp, timestamp);
+        assert_eq!(event.address_space(), address_space);
+        assert_eq!(event.pointer, pointer);
+        assert_eq!(event.is_write(), is_write);
+    }
+
     let proving_ctx =
         DeferralRvrGpuTracegen::new(&gpu_program, &gpu_transcript, &replay_plan, 1 << 20)
             .unwrap()
@@ -268,8 +267,8 @@ fn deferral_call_checkpoint_expands_exact_as4_chronology_and_proves_without_reco
         deferrals: vec![deferral],
         ..Default::default()
     };
-    let checkpoint = VmExecutor::new(config.clone())
-        .unwrap()
+    let executor = VmExecutor::new(config.clone()).unwrap();
+    let checkpoint = executor
         .rvr_experimental_checkpoint_preflight_instance(&exe, None)
         .unwrap();
     let state = checkpoint.create_initial_vm_state(streams);
@@ -296,13 +295,15 @@ fn deferral_call_checkpoint_expands_exact_as4_chronology_and_proves_without_reco
     let original = execution.transcript.residuals[5];
     execution.transcript.residuals[5] = u64::from(F::ORDER_U32) << 32;
     let error = DeferralRvrGpuTracegen::expand_checkpoint_replay(&vm, &gpu_program, &execution, 2)
-        .unwrap_err();
+        .err()
+        .expect("non-canonical CALL residual must be rejected");
     assert!(error.to_string().contains("code 306"), "{error}");
     execution.transcript.residuals[5] = original;
 
     let missing = execution.transcript.residuals.pop().unwrap();
     let error = DeferralRvrGpuTracegen::expand_checkpoint_replay(&vm, &gpu_program, &execution, 2)
-        .unwrap_err();
+        .err()
+        .expect("missing CALL residual must be rejected");
     assert!(error.to_string().contains("code 306"), "{error}");
     execution.transcript.residuals.push(missing);
 

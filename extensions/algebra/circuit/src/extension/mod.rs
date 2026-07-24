@@ -15,6 +15,13 @@ use openvm_riscv_circuit::{
 };
 use openvm_stark_backend::{StarkEngine, StarkProtocolConfig, Val};
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "rvr")]
+use {
+    openvm_algebra_transpiler::Rv64ModularArithmeticOpcode,
+    openvm_instructions::{program::Program, LocalOpcode},
+    openvm_stark_backend::p3_field::PrimeField32,
+    strum::EnumCount,
+};
 
 mod modular;
 pub use modular::*;
@@ -41,6 +48,34 @@ cfg_if::cfg_if! {
 
 #[cfg(all(test, feature = "rvr"))]
 mod rvr_tests;
+
+/// Returns the first configured modular IS_EQ/SETUP_ISEQ program slot whose
+/// destination is x0.
+#[cfg(feature = "rvr")]
+#[doc(hidden)]
+pub fn modular_is_eq_x0_destination<F: PrimeField32>(
+    program: &Program<F>,
+    num_moduli: usize,
+) -> Option<usize> {
+    let opcode_base = Rv64ModularArithmeticOpcode::CLASS_OFFSET;
+    let opcode_count = Rv64ModularArithmeticOpcode::COUNT;
+    program
+        .instructions_and_debug_infos
+        .iter()
+        .enumerate()
+        .find_map(|(slot, entry)| {
+            let (instruction, _) = entry.as_ref()?;
+            let relative = instruction.opcode.as_usize().checked_sub(opcode_base)?;
+            let local = relative % opcode_count;
+            (relative / opcode_count < num_moduli
+                && matches!(
+                    Rv64ModularArithmeticOpcode::from_usize(local),
+                    Rv64ModularArithmeticOpcode::IS_EQ | Rv64ModularArithmeticOpcode::SETUP_ISEQ
+                )
+                && instruction.a.as_canonical_u32() == 0)
+                .then_some(slot)
+        })
+}
 
 pub struct AlgebraCpuProverExt;
 

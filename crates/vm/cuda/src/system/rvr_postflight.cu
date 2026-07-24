@@ -1,3 +1,4 @@
+#define CUB_WRAPPED_NAMESPACE openvm_rvr_postflight_cub
 #include "arch/rvr/preflight.cuh"
 #include "launcher.cuh"
 #include "primitives/trace_access.h"
@@ -5,6 +6,8 @@
 #include <cub/device/device_scan.cuh>
 #include <cstddef>
 #include <cstdint>
+
+namespace cub = openvm_rvr_postflight_cub::cub;
 
 template <typename T> struct MutableDeviceBufferView {
     T *ptr;

@@ -96,6 +96,7 @@ impl ExtInstr for DeferralCallInstr {
         let rs = ctx.read_var(self.rs_reg);
         let def_idx = format!("{}u", self.def_idx);
         let checkpoint = ctx.is_checkpoint_preflight();
+        let count_residuals = ctx.counts_checkpoint_residuals();
         if checkpoint {
             // The opaque call performs four input-key reads, five output-key
             // writes, and two reads plus two writes of two-block AS4 digests.
@@ -121,6 +122,12 @@ impl ExtInstr for DeferralCallInstr {
             ));
             ctx.append_replay_value("deferral_replay[deferral_replay_idx]");
             ctx.write_line("}");
+        } else if count_residuals {
+            ctx.count_fixed_replay_values(
+                DEFERRAL_CALL_REPLAY_WORDS
+                    .try_into()
+                    .expect("deferral replay word count fits in u32"),
+            );
         }
     }
 
@@ -160,6 +167,7 @@ impl ExtInstr for DeferralOutputInstr {
         let rd = ctx.read_var(self.rd_reg);
         let rs = ctx.read_var(self.rs_reg);
         let checkpoint = ctx.is_checkpoint_preflight();
+        let count_residuals = ctx.counts_checkpoint_residuals();
         let output_words = "deferral_output_words";
         if checkpoint {
             ctx.write_line(&format!(
@@ -207,6 +215,10 @@ impl ExtInstr for DeferralOutputInstr {
                 "deferral_replay_idx == 0u ? (uint64_t){output_words} : peek_mem_u64(state, {rd} + (uint64_t)(deferral_replay_idx - 1u) * 8ull)"
             ));
             ctx.write_line("}");
+        } else if count_residuals {
+            // Each non-header Deferral row contains four guest u64 words.
+            // Count only after the checked host call has succeeded.
+            ctx.count_replay_values("1ull + 4ull * ((uint64_t)deferral_num_rows - 1ull)");
         }
     }
 
@@ -724,6 +736,10 @@ mod tests {
             self.checkpoint
         }
 
+        fn counts_checkpoint_residuals(&self) -> bool {
+            self.checkpoint || self.trace_result
+        }
+
         fn read_var(&mut self, var: Variable) -> String {
             let value = format!("r{}", var.index());
             self.operations.push(format!("read({value})"));
@@ -768,6 +784,10 @@ mod tests {
 
         fn reserve_replay_values(&mut self, count: &str) {
             self.operations.push(format!("reserve_replay({count})"));
+        }
+
+        fn count_replay_values(&mut self, count: &str) {
+            self.operations.push(format!("count_replay({count})"));
         }
 
         fn append_replay_value(&mut self, value: &str) {
@@ -1250,7 +1270,19 @@ mod tests {
                 "}",
                 "trace_nonzero(4294967295, deferral_num_rows - 1u)",
                 "trace(4294967295, deferral_num_rows)",
+                "count_replay(1ull + 4ull * ((uint64_t)deferral_num_rows - 1ull))",
             ]
         );
+        let checked_call = metered
+            .operations
+            .iter()
+            .position(|operation| operation.contains("rvr_ext_deferral_output"))
+            .unwrap();
+        let residual_count = metered
+            .operations
+            .iter()
+            .position(|operation| operation.starts_with("count_replay"))
+            .unwrap();
+        assert!(checked_call < residual_count);
     }
 }

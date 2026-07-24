@@ -60,6 +60,14 @@ pub struct Keccak256RvrGpuTracegen<'a> {
 #[cfg(feature = "rvr")]
 impl<'a> Keccak256RvrGpuTracegen<'a> {
     #[doc(hidden)]
+    pub fn extension_opcodes() -> [u32; 2] {
+        [
+            XorinOpcode::XORIN.global_opcode().as_usize() as u32,
+            KeccakfOpcode::KECCAKF.global_opcode().as_usize() as u32,
+        ]
+    }
+
+    #[doc(hidden)]
     pub fn register_checkpoint_access_schedules(
         registry: &mut RvrCheckpointAccessRegistry,
     ) -> Result<(), GpuRvrInputError> {
@@ -228,10 +236,7 @@ impl<'a> Keccak256RvrGpuTracegen<'a> {
             SystemChipInventory = SystemChipInventoryGPU,
         >,
     {
-        let extension_opcodes = [
-            XorinOpcode::XORIN.global_opcode().as_usize() as u32,
-            KeccakfOpcode::KECCAKF.global_opcode().as_usize() as u32,
-        ];
+        let extension_opcodes = Self::extension_opcodes();
         let mut rv64 = Rv64ImRvrGpuTracegen::new_after_claiming_extension_opcodes(
             self.program,
             self.transcript,

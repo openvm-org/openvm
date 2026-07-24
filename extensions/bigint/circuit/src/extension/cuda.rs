@@ -65,7 +65,8 @@ impl<'a> Int256RvrGpuTracegen<'a> {
             .collect()
     }
 
-    fn extension_opcodes() -> Vec<u32> {
+    #[doc(hidden)]
+    pub fn extension_opcodes() -> Vec<u32> {
         Self::opcodes(Rv64BaseAlu256Opcode::iter())
             .into_iter()
             .chain(Self::opcodes(Rv64Shift256Opcode::iter()))

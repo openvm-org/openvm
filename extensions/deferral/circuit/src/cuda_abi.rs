@@ -454,7 +454,7 @@ pub mod output {
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
         CudaError::from_result(_deferral_output_replay_count_rows(
-            d_counts.as_mut_raw_ptr(),
+            d_counts.as_mut_ptr(),
             d_instructions,
             pc_base,
             d_program,

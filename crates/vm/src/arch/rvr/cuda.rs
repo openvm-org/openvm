@@ -135,6 +135,7 @@ const RVR_CHECKPOINT_SPAN_BASE_DEFERRAL_INPUT: u8 = 1;
 const RVR_CHECKPOINT_SPAN_BASE_DEFERRAL_OUTPUT: u8 = 2;
 const RVR_CHECKPOINT_SPAN_COUNT_FIXED: u8 = 0;
 const RVR_CHECKPOINT_SPAN_COUNT_REGISTER: u8 = 1;
+const RVR_CHECKPOINT_SPAN_COUNT_RESIDUAL: u8 = 2;
 const RVR_CHECKPOINT_SPAN_READ_U16: u8 = 0;
 const RVR_CHECKPOINT_SPAN_WRITE_U16_RESIDUAL: u8 = 1;
 const RVR_CHECKPOINT_SPAN_WRITE_U16_ZERO: u8 = 2;
@@ -243,6 +244,20 @@ impl RvrCheckpointAccessSpan {
                 count_shift,
                 max_count,
             )
+        }
+    }
+
+    /// A variable-size write whose next residual is the number of eight-byte
+    /// blocks and whose following residuals are the block postimages.
+    pub const fn write_count_from_residual_from_residuals(
+        address_space: u32,
+        base_register: u8,
+        max_count: u32,
+    ) -> Self {
+        Self {
+            count_source: RVR_CHECKPOINT_SPAN_COUNT_RESIDUAL,
+            value_source: RVR_CHECKPOINT_SPAN_WRITE_U16_RESIDUAL,
+            ..Self::read_fixed(address_space, base_register, max_count)
         }
     }
 
@@ -611,6 +626,9 @@ impl RvrCheckpointAccessRegistry {
                 RVR_CHECKPOINT_SPAN_COUNT_REGISTER => {
                     usize::from(span.count_register) < register_operands.len()
                         && span.count_shift < u64::BITS as u8
+                }
+                RVR_CHECKPOINT_SPAN_COUNT_RESIDUAL => {
+                    span.count != 0 && span.count_register == 0 && span.count_shift == 0
                 }
                 _ => false,
             };

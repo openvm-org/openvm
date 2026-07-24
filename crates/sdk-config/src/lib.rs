@@ -33,6 +33,9 @@ use serde::{Deserialize, Serialize};
 pub mod deferral;
 use deferral::DeferralConfig;
 
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+mod rvr_cuda;
+
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
         use openvm_algebra_circuit::AlgebraProverExt;

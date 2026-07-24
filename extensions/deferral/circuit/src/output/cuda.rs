@@ -51,7 +51,7 @@ pub struct DeferralOutputChipGpu {
 }
 
 #[cfg(feature = "rvr")]
-fn checked_replay_trace_shape(
+pub(crate) fn checked_replay_trace_shape(
     rows_used: u64,
     trace_width: usize,
     max_trace_height: usize,

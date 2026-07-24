@@ -785,6 +785,33 @@ mod tests {
             read_register(&checkpoint_execution.state, 3),
             read_register(&full_execution.state, 3)
         );
+
+        let (vm, _) = VirtualMachine::new_with_keygen(
+            test_cpu_engine(),
+            openvm_riscv_circuit::Rv64ImCpuBuilder,
+            test_rv64im_config(),
+        )?;
+        let mut metered_initial = vm.create_initial_state(&exe, Vec::<Vec<u8>>::new());
+        unsafe {
+            metered_initial
+                .memory
+                .write_bytes(RV64_MEMORY_AS, 0, loaded.to_le_bytes());
+            metered_initial
+                .memory
+                .write_bytes(RV64_MEMORY_AS, 8, x0_only.to_le_bytes());
+            metered_initial.memory.write_bytes(
+                RV64_MEMORY_AS,
+                16,
+                (sign_extended as u32).to_le_bytes(),
+            );
+        }
+        let metered_ctx = vm.build_metered_ctx(&exe);
+        let (segments, _) = vm
+            .metered_instance(&exe)?
+            .execute_metered_from_state(metered_initial, metered_ctx)?;
+        assert_eq!(segments.len(), 1);
+        assert_eq!(segments[0].num_insns, instructions.len() as u64);
+        assert_eq!(segments[0].num_checkpoint_residuals, 2);
         Ok(())
     }
 

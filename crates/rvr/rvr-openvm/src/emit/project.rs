@@ -319,13 +319,14 @@ impl RvrExecutionKind {
                 writeln!(out, "  uint32_t deferral_page_buf_len;").unwrap();
                 writeln!(out, "  uint32_t check_counter;").unwrap();
                 writeln!(out, "  uint32_t last_mem_page;").unwrap();
+                writeln!(out, "  uint32_t num_checkpoint_residuals;").unwrap();
+                writeln!(out, "}} MeteringState;").unwrap();
+                writeln!(out, "static_assert(sizeof(MeteringState) == 80);").unwrap();
                 writeln!(
                     out,
-                    "  /* Explicit tail padding required by pointer alignment. */"
+                    "static_assert(offsetof(MeteringState, num_checkpoint_residuals) == 76);"
                 )
                 .unwrap();
-                writeln!(out, "  uint32_t padding;").unwrap();
-                writeln!(out, "}} MeteringState;").unwrap();
             }
         }
         writeln!(out).unwrap();
@@ -1071,6 +1072,9 @@ impl CProject {
         }
 
         self.emit_block_boundary(&mut body, block);
+        if matches!(mode, EmitMode::Metered { .. }) {
+            writeln!(body, "    /* METERED_CHECKPOINT_RESIDUALS */").unwrap();
+        }
         if matches!(self.execution_kind, RvrExecutionKind::Preflight) {
             writeln!(
                 body,
@@ -1147,7 +1151,21 @@ impl CProject {
         emit_terminator(&mut ctx, &block.terminator, block.terminator_pc, &tc);
         Self::emit_context_scope(&mut body, &mut ctx);
 
-        if matches!(self.execution_kind, RvrExecutionKind::Preflight) {
+        if matches!(mode, EmitMode::Metered { .. }) {
+            let residuals = ctx.metered_checkpoint_residuals();
+            let update = if residuals == 0 {
+                String::new()
+            } else {
+                let args = self.fn_args_from_params();
+                format!(
+                    "if (unlikely({residuals}u > UINT32_MAX - state->mode_state.num_checkpoint_residuals)) {{\n\
+                         [[clang::musttail]] return rv_trap({args});\n\
+                     }}\n\
+                     state->mode_state.num_checkpoint_residuals += {residuals}u;"
+                )
+            };
+            body = body.replace("/* METERED_CHECKPOINT_RESIDUALS */", &update);
+        } else if matches!(self.execution_kind, RvrExecutionKind::Preflight) {
             let (events, writes, slots, dynamic_reserve) = ctx.preflight_local_budget();
             if dynamic_reserve {
                 body = body.replace("/* PREFLIGHT_LOCAL_RESERVE */\n", "");
@@ -1735,6 +1753,9 @@ mod tests {
     fn metered_state_layout_includes_memory_flush_callback() {
         let header = RvrExecutionKind::Metered.state_layout_header();
         assert!(header.contains("void (*on_memory_flush)(struct MeteringState*);"));
+        assert!(header.contains("static_assert(sizeof(MeteringState) == 80);"));
+        assert!(header
+            .contains("static_assert(offsetof(MeteringState, num_checkpoint_residuals) == 76);"));
     }
 
     fn single_instruction_block() -> Block {
@@ -1762,6 +1783,23 @@ mod tests {
 
         fn clone_box(&self) -> Box<dyn ExtInstr> {
             Box::new(self.clone())
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    struct FixedResidualInstr;
+
+    impl ExtInstr for FixedResidualInstr {
+        fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
+            ctx.count_fixed_replay_values(3);
+        }
+
+        fn clone_box(&self) -> Box<dyn ExtInstr> {
+            Box::new(self.clone())
+        }
+
+        fn cfg_effect(&self) -> CfgEffect {
+            CfgEffect::None
         }
     }
 
@@ -2099,6 +2137,42 @@ mod tests {
             .unwrap_err();
 
         assert_eq!(error.to_string(), "chip index 1 is outside AIR count 1");
+    }
+
+    #[test]
+    fn metered_codegen_adds_fixed_residuals_after_the_segment_check() {
+        let mut project = CProject::new(Path::new("unused"), "test", RvrExecutionKind::Metered);
+        project.pc_base = 0x100;
+        project.num_airs = Some(1);
+        project.pc_to_chip = Some(vec![
+            rvr_openvm_lift::TraceChipIndex::NoChip,
+            rvr_openvm_lift::TraceChipIndex::NoChip,
+        ]);
+        let block = block_with_instruction(Box::new(FixedResidualInstr));
+        let mut output = String::new();
+
+        project
+            .emit_block_function(&mut output, &block, &HashSet::new())
+            .unwrap();
+
+        let check = output.find("if (unlikely(check_counter < 2u))").unwrap();
+        let overflow = output
+            .find("if (unlikely(3u > UINT32_MAX - state->mode_state.num_checkpoint_residuals))")
+            .unwrap();
+        let trap = output[overflow..]
+            .find("[[clang::musttail]] return rv_trap(")
+            .map(|offset| overflow + offset)
+            .unwrap();
+        let residuals = output
+            .find("state->mode_state.num_checkpoint_residuals += 3u;")
+            .unwrap();
+        assert!(check < overflow && overflow < trap && trap < residuals);
+        assert_eq!(
+            output
+                .matches("state->mode_state.num_checkpoint_residuals += 3u;")
+                .count(),
+            1
+        );
     }
 
     #[test]
