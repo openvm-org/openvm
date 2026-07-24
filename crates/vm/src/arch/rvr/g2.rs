@@ -28,9 +28,17 @@ pub use rvr_openvm_ext_ffi_common::{
 
 use super::{RvrDeltaDecodeEntry, RvrDeltaDecodePrecompute, PREFLIGHT_ADDSUB_RECORD_SIZE};
 use crate::arch::ExecutionError;
+#[cfg(feature = "cuda")]
+use crate::system::cuda::memory::DEVICE_TOUCHED_RECORD_WORDS;
 
 static NEXT_G2_SEGMENT_ID: AtomicU32 = AtomicU32::new(0);
 const G2_MAX_OPAQUE_LANES: usize = 128;
+
+pub const G2_PREPARED_INSTRUCTION_SIZE: usize = 20;
+pub const G2_TIMELINE_EVENT_SIZE: usize = 32;
+const G2_DEVICE_TOUCHED_RECORD_WORDS: usize = 7;
+#[cfg(feature = "cuda")]
+const _: () = assert!(G2_DEVICE_TOUCHED_RECORD_WORDS == DEVICE_TOUCHED_RECORD_WORDS);
 
 pub(crate) fn next_segment_id() -> Result<u32, ExecutionError> {
     NEXT_G2_SEGMENT_ID
@@ -209,6 +217,160 @@ impl RvrG2CapacitiesV1 {
         capacities.residual = u32::try_from(residual_capacity)
             .map_err(|_| g2_error("G2 residual capacity exceeds u32"))?;
         Ok(capacities)
+    }
+}
+
+/// CUDA/G2 memory that is live in addition to the ordinary AIR proving-memory estimate.
+#[derive(Clone, Debug)]
+pub(crate) struct RvrSegmentMemoryModel {
+    g2: std::sync::Arc<RvrG2MetaV1>,
+    include_device: bool,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct RvrSegmentMemoryEstimate {
+    pub device_bytes: usize,
+    pub host_bytes: usize,
+}
+
+impl RvrSegmentMemoryEstimate {
+    pub fn total(self) -> usize {
+        self.device_bytes.saturating_add(self.host_bytes)
+    }
+}
+
+impl RvrSegmentMemoryModel {
+    #[cfg(any(feature = "cuda", test))]
+    pub fn new(g2: std::sync::Arc<RvrG2MetaV1>, include_device: bool) -> Self {
+        Self { g2, include_device }
+    }
+
+    /// Bound the per-segment CUDA G2 predecode buffers and the simultaneous host patch RSS.
+    ///
+    /// `T` is the sum of standard G2 AIR record counts, `R` is the producer's fail-closed
+    /// residual capacity, and `I` is the segment instruction count. The device expression mirrors
+    /// `ensure_device_g2_segment`; `wire_bytes` is a conservative capacity bound for the compact
+    /// device wire:
+    ///
+    /// `wire_bytes + 24R + 28(4T + R + 32) + 12R + 20I + 4T + 4(I + 1)
+    ///  + 32(4T + R + I)`.
+    ///
+    /// Preflight simultaneously owns a `2R` `DeviceAuxPatch` allocation. Only opaque records
+    /// produce patches on the G2 route, with at most two patches per opaque residual event, so the
+    /// transient validation-range vector is bounded by `2R_opaque` entries without charging normal
+    /// RV64 records for an unreachable range population.
+    pub fn estimate(
+        &self,
+        trace_heights: &[u32],
+        num_insns: u64,
+    ) -> Result<RvrSegmentMemoryEstimate, ExecutionError> {
+        let capacities =
+            RvrG2CapacitiesV1::for_metered_segment(&self.g2, trace_heights, num_insns)?;
+        let opaque_residual_capacity =
+            self.g2
+                .opaque_bindings
+                .iter()
+                .try_fold(0usize, |total, binding| {
+                    let count = trace_heights.get(binding.air_idx).copied().ok_or_else(|| {
+                        g2_error("G2 memory estimate opaque AIR exceeds trace heights")
+                    })?;
+                    (count as usize)
+                        .checked_mul(binding.max_residual_events_per_record as usize)
+                        .and_then(|count| total.checked_add(count))
+                        .ok_or_else(|| {
+                            g2_error("G2 memory estimate opaque residual capacity overflow")
+                        })
+                })?;
+        let residual_capacity = capacities.residual as usize;
+        let device_bytes = if self.include_device {
+            let instruction_count = usize::try_from(num_insns)
+                .map_err(|_| g2_error("G2 memory estimate instruction count exceeds usize"))?;
+            let trace_record_count =
+                self.g2
+                    .air_bindings
+                    .iter()
+                    .try_fold(0usize, |total, binding| {
+                        let count =
+                            trace_heights.get(binding.air_idx).copied().ok_or_else(|| {
+                                g2_error("G2 memory estimate AIR binding exceeds trace heights")
+                            })?;
+                        total
+                            .checked_add(count as usize)
+                            .ok_or_else(|| g2_error("G2 memory estimate trace count overflow"))
+                    })?;
+            let wire_bytes = RvrG2PreparedV1::capacity_bytes(&capacities)?;
+            let touched_capacity = trace_record_count
+                .checked_mul(4)
+                .and_then(|count| count.checked_add(residual_capacity))
+                .and_then(|count| count.checked_add(32))
+                .ok_or_else(|| g2_error("G2 memory estimate touched capacity overflow"))?;
+            let timeline_capacity = trace_record_count
+                .checked_mul(4)
+                .and_then(|count| count.checked_add(residual_capacity))
+                .and_then(|count| count.checked_add(instruction_count))
+                .ok_or_else(|| g2_error("G2 memory estimate timeline capacity overflow"))?;
+
+            wire_bytes
+                .checked_add(
+                    residual_capacity
+                        .checked_mul(size_of::<super::DeltaMemoryLogEntry>())
+                        .ok_or_else(|| g2_error("G2 opaque residual byte estimate overflow"))?,
+                )
+                .and_then(|bytes| {
+                    touched_capacity
+                        .checked_mul(G2_DEVICE_TOUCHED_RECORD_WORDS * size_of::<u32>())
+                        .and_then(|value| bytes.checked_add(value))
+                })
+                .and_then(|bytes| {
+                    residual_capacity
+                        .checked_mul(size_of::<u32>() + size_of::<u64>())
+                        .and_then(|value| bytes.checked_add(value))
+                })
+                .and_then(|bytes| {
+                    instruction_count
+                        .checked_mul(G2_PREPARED_INSTRUCTION_SIZE)
+                        .and_then(|value| bytes.checked_add(value))
+                })
+                .and_then(|bytes| {
+                    trace_record_count
+                        .checked_mul(size_of::<u32>())
+                        .and_then(|value| bytes.checked_add(value))
+                })
+                .and_then(|bytes| {
+                    instruction_count
+                        .checked_add(1)
+                        .and_then(|count| count.checked_mul(size_of::<u32>()))
+                        .and_then(|value| bytes.checked_add(value))
+                })
+                .and_then(|bytes| {
+                    timeline_capacity
+                        .checked_mul(G2_TIMELINE_EVENT_SIZE)
+                        .and_then(|value| bytes.checked_add(value))
+                })
+                .ok_or_else(|| g2_error("G2 device memory estimate overflow"))?
+        } else {
+            0
+        };
+
+        let patch_capacity = residual_capacity
+            .checked_mul(2)
+            .ok_or_else(|| g2_error("G2 patch capacity estimate overflow"))?;
+        let max_opaque_patch_count = opaque_residual_capacity
+            .checked_mul(2)
+            .ok_or_else(|| g2_error("G2 opaque patch count estimate overflow"))?;
+        let host_bytes = patch_capacity
+            .checked_mul(size_of::<super::DeviceAuxPatch>())
+            .and_then(|bytes| {
+                max_opaque_patch_count
+                    .checked_mul(size_of::<(usize, usize, usize, usize)>())
+                    .and_then(|value| bytes.checked_add(value))
+            })
+            .ok_or_else(|| g2_error("G2 host patch memory estimate overflow"))?;
+
+        Ok(RvrSegmentMemoryEstimate {
+            device_bytes,
+            host_bytes,
+        })
     }
 }
 
@@ -2366,6 +2528,34 @@ mod tests {
         // allowance. Each may consume a third residual event.
         assert_eq!(capacities.residual, 2 * 144 + 128 + 64);
         assert!(capacities.residual >= 3 * 128);
+    }
+
+    #[test]
+    fn segment_memory_model_keeps_standard_rv64_shape_bounded() {
+        const HEIGHT: u32 = 1 << 20;
+
+        let meta = test_meta(vec![RvrG2AirBindingV1 {
+            kind: 0,
+            air_idx: 1,
+        }]);
+        let model = RvrSegmentMemoryModel::new(Arc::new(meta.clone()), true);
+        let estimate = model.estimate(&[0, HEIGHT], u64::from(HEIGHT)).unwrap();
+        let capacities =
+            RvrG2CapacitiesV1::for_metered_segment(&meta, &[0, HEIGHT], u64::from(HEIGHT)).unwrap();
+
+        assert_eq!(
+            estimate.host_bytes,
+            capacities.residual as usize * 2 * size_of::<super::super::DeviceAuxPatch>()
+        );
+        assert!(estimate.device_bytes < 1 << 30);
+        assert!(estimate.host_bytes < 1 << 30);
+        assert!(estimate.total() < 1 << 30);
+
+        let host_only = RvrSegmentMemoryModel::new(Arc::new(meta), false)
+            .estimate(&[0, HEIGHT], u64::from(HEIGHT))
+            .unwrap();
+        assert_eq!(host_only.device_bytes, 0);
+        assert_eq!(host_only.host_bytes, estimate.host_bytes);
     }
 
     #[test]

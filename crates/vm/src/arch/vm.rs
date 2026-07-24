@@ -41,6 +41,8 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{info_span, instrument};
 
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use super::rvr::g2::RvrSegmentMemoryModel;
 #[cfg(feature = "rvr")]
 use super::rvr::{
     bridge::map_rvr_compile_error,
@@ -182,6 +184,9 @@ trait CachedRvrPreflightExecutor<F>: Send + Sync {
 
     #[cfg(feature = "cuda")]
     fn g2_air_indices(&self) -> Vec<usize>;
+
+    #[cfg(feature = "cuda")]
+    fn segment_memory_model(&self) -> Option<RvrSegmentMemoryModel>;
 }
 
 /// The program-dependent, owned pieces of an rvr preflight instance.
@@ -364,6 +369,15 @@ impl<F: PrimeField32> CachedRvrPreflightExecutor<F> for CachedRvrCompiledPreflig
                     .collect()
             })
             .unwrap_or_default()
+    }
+
+    #[cfg(feature = "cuda")]
+    fn segment_memory_model(&self) -> Option<RvrSegmentMemoryModel> {
+        self.compiled
+            .inline_records()
+            .g2
+            .clone()
+            .map(|g2| RvrSegmentMemoryModel::new(g2, self.device_touched_memory))
     }
 }
 
@@ -2586,6 +2600,21 @@ where
         let device_prewarm_depth = rvr_cuda_device_prewarm_depth();
         let vm = &mut self.vm;
         let metered_ctx = vm.build_metered_ctx(&self.exe);
+        #[cfg(all(feature = "cuda", feature = "rvr"))]
+        let metered_ctx = {
+            let mut metered_ctx = metered_ctx;
+            if let Some(model) = self
+                .rvr_preflight
+                .as_ref()
+                .and_then(|preflight| match preflight {
+                    CachedRvrPreflight::Rvr(rvr) => rvr.segment_memory_model(),
+                    CachedRvrPreflight::Interpreter => None,
+                })
+            {
+                metered_ctx.segmentation_ctx.set_rvr_memory_model(model);
+            }
+            metered_ctx
+        };
         #[cfg(feature = "rvr")]
         let metered_interpreter = self
             .rvr_metered

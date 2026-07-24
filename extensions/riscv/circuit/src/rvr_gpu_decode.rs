@@ -19,7 +19,10 @@ use std::{
 };
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
-use openvm_circuit::arch::rvr::gpu_profile::CudaStageTimer;
+use openvm_circuit::arch::rvr::{
+    g2::{G2_PREPARED_INSTRUCTION_SIZE, G2_TIMELINE_EVENT_SIZE},
+    gpu_profile::CudaStageTimer,
+};
 #[cfg(feature = "rvr")]
 use openvm_circuit::arch::rvr::{
     RvrDeltaDecodeEntry, RvrDeltaDecodeInfo, RvrDeltaDecodePrecompute,
@@ -405,12 +408,6 @@ struct DeviceDeltaSegment {
     program_frequencies: Option<DeviceProgramFrequencies>,
     g2_trace: Option<Arc<DeviceG2TraceSegment>>,
 }
-
-#[cfg(all(feature = "cuda", feature = "rvr"))]
-const G2_PREPARED_INSTRUCTION_SIZE: usize = 20;
-
-#[cfg(all(feature = "cuda", feature = "rvr"))]
-const G2_TIMELINE_EVENT_SIZE: usize = 32;
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 const G2_RESIDUAL_VALUE_LANE: u16 = 0x0082;

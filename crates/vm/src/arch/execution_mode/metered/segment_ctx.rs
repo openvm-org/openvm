@@ -5,6 +5,8 @@ use openvm_stark_backend::memory_metering::INTERACTION_MEMORY_OVERHEAD;
 use openvm_stark_backend::memory_metering::{ProvingMemoryConfig, ProvingMemoryCounts};
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "rvr")]
+use crate::arch::rvr::g2::RvrSegmentMemoryModel;
 use crate::utils::{add_one_or_zero, next_power_of_two_or_zero};
 
 pub const DEFAULT_MAX_MEMORY: usize = 15 << 30; // 15GiB
@@ -139,6 +141,9 @@ pub struct SegmentationCtx {
     constant_counts: ProvingMemoryCounts,
     /// Interaction contribution from AIRs whose heights are fixed.
     constant_total_interactions: u64,
+    /// CUDA/G2 allocations outside the ordinary AIR proving-memory model.
+    #[cfg(feature = "rvr")]
+    rvr_memory_model: Option<RvrSegmentMemoryModel>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -187,6 +192,11 @@ struct MeteredMemoryBreakdown {
     total: usize,
     /// Unpadded-row contribution to the selected memory estimate.
     unpadded: usize,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+struct SegmentMemoryOverhead {
+    total: usize,
 }
 
 impl SegmentationCtx {
@@ -251,6 +261,8 @@ impl SegmentationCtx {
                 constant_interaction_cells,
             ),
             constant_total_interactions,
+            #[cfg(feature = "rvr")]
+            rvr_memory_model: None,
         }
     }
 
@@ -279,6 +291,37 @@ impl SegmentationCtx {
 
     pub fn config(&self) -> &SegmentationConfig {
         &self.config
+    }
+
+    #[cfg(all(feature = "rvr", any(feature = "cuda", test)))]
+    pub(crate) fn set_rvr_memory_model(&mut self, model: RvrSegmentMemoryModel) {
+        self.rvr_memory_model = Some(model);
+    }
+
+    #[inline(always)]
+    fn calculate_memory_overhead(
+        &self,
+        num_insns: u64,
+        trace_heights: &[u32],
+    ) -> SegmentMemoryOverhead {
+        #[cfg(feature = "rvr")]
+        {
+            let total = self.rvr_memory_model.as_ref().map_or(0, |model| {
+                model.estimate(trace_heights, num_insns).map_or_else(
+                    |error| {
+                        tracing::warn!("RVR segment memory estimate failed closed: {error}");
+                        usize::MAX
+                    },
+                    |estimate| estimate.total(),
+                )
+            });
+            SegmentMemoryOverhead { total }
+        }
+        #[cfg(not(feature = "rvr"))]
+        {
+            let _ = (num_insns, trace_heights);
+            SegmentMemoryOverhead::default()
+        }
     }
 
     /// Calculate the maximum trace height and corresponding air name
@@ -381,19 +424,34 @@ impl SegmentationCtx {
     #[inline(always)]
     fn calculate_total_memory(
         &self,
+        num_insns: u64,
         trace_heights: &[u32],
     ) -> (
         usize, /* memory */
         usize, /* main */
         usize, /* interaction */
+        SegmentMemoryOverhead,
     ) {
         let (main_cnt_with_rot, main_cnt_no_rot, interaction_cells) =
             self.calculate_cell_counts(trace_heights);
-        self.counts_to_memory(main_cnt_with_rot, main_cnt_no_rot, interaction_cells)
+        let (memory, main, interaction) =
+            self.counts_to_memory(main_cnt_with_rot, main_cnt_no_rot, interaction_cells);
+        let overhead = self.calculate_memory_overhead(num_insns, trace_heights);
+        (
+            memory.saturating_add(overhead.total),
+            main,
+            interaction,
+            overhead,
+        )
     }
 
     #[inline(always)]
-    fn calculate_memory_breakdown(&self, counts: &MeteredCounts) -> MeteredMemoryBreakdown {
+    fn calculate_memory_breakdown(
+        &self,
+        num_insns: u64,
+        trace_heights: &[u32],
+        counts: &MeteredCounts,
+    ) -> MeteredMemoryBreakdown {
         let unpadded = self.config.memory_config.estimate(ProvingMemoryCounts::new(
             counts.main_unpadded_with_rot,
             counts.main_unpadded_no_rot,
@@ -404,10 +462,11 @@ impl SegmentationCtx {
             counts.main_unpadded_no_rot + counts.main_padding_no_rot,
             counts.interaction_cells_unpadded + counts.interaction_cells_padding,
         ));
+        let overhead = self.calculate_memory_overhead(num_insns, trace_heights);
 
         MeteredMemoryBreakdown {
-            total: total.total,
-            unpadded: unpadded.total,
+            total: total.total.saturating_add(overhead.total),
+            unpadded: unpadded.total.saturating_add(overhead.total),
         }
     }
 
@@ -482,19 +541,22 @@ impl SegmentationCtx {
             total_interactions += add_one_or_zero(height) as u64 * air.interactions as u64;
         }
 
-        let (total_memory, main_memory, interaction_memory) = self.counts_to_memory(
+        let (air_memory, main_memory, interaction_memory) = self.counts_to_memory(
             counts.main_cells_with_rot,
             counts.main_cells_without_rot,
             counts.interaction_cells,
         );
+        let overhead = self.calculate_memory_overhead(num_insns, trace_heights);
+        let total_memory = air_memory.saturating_add(overhead.total);
         if total_memory > self.config.max_memory {
             tracing::info!(
-                "overshoot: instret {:10} | total memory ({:5}) > max ({:5}) | main ({:5}) | interaction ({:5})",
+                "overshoot: instret {:10} | total memory ({:5}) > max ({:5}) | main ({:5}) | interaction ({:5}) | segment overhead ({:5})",
                 instret,
                 ByteSize::b(total_memory as u64),
                 ByteSize::b(self.config.max_memory as u64),
                 ByteSize::b(main_memory as u64),
                 ByteSize::b(interaction_memory as u64),
+                ByteSize::b(overhead.total as u64),
             );
             return Some(SegmentationTrigger::Memory);
         }
@@ -628,7 +690,7 @@ impl SegmentationCtx {
         #[cfg(feature = "metrics")]
         {
             let segment = self.segments.len().to_string();
-            self.emit_metered_segment_metrics(&segment, &trace_heights);
+            self.emit_metered_segment_metrics(&segment, num_insns, &trace_heights);
             self.emit_metered_air_metrics(&segment, &trace_heights);
         }
         self.segments.push(Segment {
@@ -642,9 +704,9 @@ impl SegmentationCtx {
     /// This measures how much of the selected proving memory estimate is useful work vs
     /// power-of-two trace padding. Note: this inherits memory-related trace-height overestimates.
     #[inline(always)]
-    fn calculate_memory_utilization(&self, trace_heights: &[u32]) -> f64 {
+    fn calculate_memory_utilization(&self, num_insns: u64, trace_heights: &[u32]) -> f64 {
         let counts = self.calculate_count_breakdown(trace_heights);
-        let memory = self.calculate_memory_breakdown(&counts);
+        let memory = self.calculate_memory_breakdown(num_insns, trace_heights, &counts);
         if memory.total == 0 {
             0.0
         } else {
@@ -661,21 +723,22 @@ impl SegmentationCtx {
         trace_heights: &[u32],
     ) {
         let (max_trace_height, air_name) = self.calculate_max_trace_height_with_name(trace_heights);
-        let (total_memory, main_memory, interaction_memory) =
-            self.calculate_total_memory(trace_heights);
+        let (total_memory, main_memory, interaction_memory, overhead) =
+            self.calculate_total_memory(num_insns, trace_heights);
         let total_interactions = self.calculate_total_interactions(trace_heights);
-        let utilization = self.calculate_memory_utilization(trace_heights);
+        let utilization = self.calculate_memory_utilization(num_insns, trace_heights);
 
         let final_marker = if IS_FINAL { " [TERMINATED]" } else { "" };
 
         tracing::info!(
-            "Segment {:3} | instret {:10} | {:8} instructions | {:5} memory ({:5}, {:5}) | {:10} interactions | {:8} max height ({}) | {:.2}% memory util{}",
+            "Segment {:3} | instret {:10} | {:8} instructions | {:5} memory ({:5}, {:5}, {:5} overhead) | {:10} interactions | {:8} max height ({}) | {:.2}% memory util{}",
             self.segments.len(),
             instret_start,
             num_insns,
             ByteSize::b(total_memory as u64),
             ByteSize::b(main_memory as u64),
             ByteSize::b(interaction_memory as u64),
+            ByteSize::b(overhead.total as u64),
             total_interactions,
             max_trace_height,
             air_name,
@@ -707,9 +770,9 @@ impl SegmentationCtx {
         }
     }
 
-    fn emit_metered_segment_metrics(&self, segment: &str, trace_heights: &[u32]) {
+    fn emit_metered_segment_metrics(&self, segment: &str, num_insns: u64, trace_heights: &[u32]) {
         let counts = self.calculate_count_breakdown(trace_heights);
-        let memory = self.calculate_memory_breakdown(&counts);
+        let memory = self.calculate_memory_breakdown(num_insns, trace_heights, &counts);
         let padding = memory.total - memory.unpadded;
         let labels = [("segment", segment.to_string())];
         metrics::counter!("metered_memory_bytes", &labels).absolute(memory.total as u64);
@@ -784,7 +847,14 @@ impl SegmentationCtx {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "rvr")]
+    use std::sync::Arc;
+
     use super::*;
+    #[cfg(feature = "rvr")]
+    use crate::arch::rvr::{
+        ArenaNativeGeometry, ArenaNativeLayout, RvrG2MetaV1, RvrG2OpaqueBindingV1,
+    };
 
     fn small_segmentation_ctx() -> SegmentationCtx {
         let limits = SegmentationLimits {
@@ -868,7 +938,7 @@ mod tests {
         );
 
         let heights = [5, 8, 9, 4];
-        let total_memory = ctx.calculate_total_memory(&heights).0;
+        let total_memory = ctx.calculate_total_memory(50, &heights).0;
         ctx.set_max_memory(total_memory);
         assert_eq!(ctx.segmentation_trigger(50, &heights), None);
         ctx.set_max_memory(total_memory - 1);
@@ -889,6 +959,84 @@ mod tests {
 
         let ctx = scan_test_ctx(&[2049, 8, 0, 0], &[true, true, false, false]);
         assert_eq!(ctx.segmentation_trigger(50, &[2049, 8, 0, 0]), None);
+    }
+
+    #[cfg(feature = "rvr")]
+    #[test]
+    fn rvr_opaque_buffers_trigger_memory_segmentation() {
+        const OPAQUE_AIR: usize = 1;
+        const HEIGHT: u32 = 1 << 20;
+        const MAX_RESIDUAL_EVENTS_PER_RECORD: u32 = 54;
+
+        let config = SegmentationConfig::new(
+            vec!["base".to_string(), "Xorin".to_string()],
+            vec![1, 1],
+            vec![0, 0],
+            vec![false, false],
+            SegmentationLimits {
+                max_trace_height_bits: 30,
+                max_memory: usize::MAX,
+                max_interactions: u32::MAX,
+            },
+            ProvingMemoryConfig {
+                base_field_size: 4,
+                extension_degree: 4,
+                log_blowup: 1,
+                l_skip: 4,
+                max_constraint_degree: 4,
+                cache_rs_code_matrix: false,
+            },
+        );
+        let mut ctx = SegmentationCtx::new(config, &[0, 0], &[false, false]);
+        let heights = [0, HEIGHT];
+        let num_insns = u64::from(HEIGHT);
+        let air_memory = ctx.calculate_total_memory(num_insns, &heights).0;
+        let mut meta = RvrG2MetaV1 {
+            fingerprint: [0; 32],
+            producer_schema_fingerprint: [0; 32],
+            emission_mode: 0,
+            program_fingerprint: [0; 32],
+            block_fingerprint: [0; 32],
+            air_manifest_fingerprint: [0; 32],
+            blocks: Arc::new(Vec::new()),
+            block_host_counts: Arc::new(Vec::new()),
+            air_bindings: Arc::new(Vec::new()),
+            opaque_bindings: Arc::new(Vec::new()),
+        };
+        meta.opaque_bindings = Arc::new(vec![RvrG2OpaqueBindingV1 {
+            air_idx: OPAQUE_AIR,
+            geometry: ArenaNativeGeometry {
+                adapter_size: 16,
+                adapter_align: 8,
+                core_size: 0,
+                core_align: 1,
+                core_off_matrix: 0,
+                layout: ArenaNativeLayout::Custom {
+                    residual_memory_chronology: true,
+                    max_residual_events_per_record: MAX_RESIDUAL_EVENTS_PER_RECORD,
+                    layout_id: "openvm.rvr.test-meter-xorin.v1",
+                },
+            },
+            max_residual_events_per_record: MAX_RESIDUAL_EVENTS_PER_RECORD,
+            air_identity_digest: [0; 32],
+            layout_digest: [0; 32],
+        }]);
+        let model = RvrSegmentMemoryModel::new(Arc::new(meta), true);
+        let overhead = model.estimate(&heights, num_insns).unwrap();
+        assert!(overhead.device_bytes > 5 << 30);
+        assert!(overhead.host_bytes > 5 << 30);
+
+        // The AIR-only estimate admits this shape at the midpoint budget.
+        let max_memory = air_memory + overhead.total() / 2;
+        ctx.set_max_memory(max_memory);
+        assert_eq!(ctx.segmentation_trigger(num_insns, &heights), None);
+
+        // The production CUDA/RVR model rejects the same shape before preflight can allocate it.
+        ctx.set_rvr_memory_model(model);
+        assert_eq!(
+            ctx.segmentation_trigger(num_insns, &heights),
+            Some(SegmentationTrigger::Memory)
+        );
     }
 
     #[test]
