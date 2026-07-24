@@ -1,7 +1,10 @@
 mod builder;
 mod core_chip;
+#[cfg(feature = "cuda")]
+pub mod cuda;
 mod field_variable;
 mod symbolic_expr;
+pub mod tracegen_ir;
 
 #[cfg(test)]
 mod tests;

@@ -721,3 +721,76 @@ fn test_concurrent_direct_recorded_simulation() {
     let same_inputs = vec![BigUint::from(123u32), BigUint::from(456u32)];
     test_trace_equivalence(&expr, &range_checker, same_inputs, vec![], width);
 }
+
+#[test]
+#[ignore]
+fn bench_tracegen_ec_add_ne_shape() {
+    use std::time::Instant;
+    let prime = secp256k1_coord_prime();
+    let (_, builder) = setup(&prime);
+
+    // Same expression as ec_add_ne_expr in extensions/ecc weierstrass chip
+    let x1 = ExprBuilder::new_input(builder.clone());
+    let y1 = ExprBuilder::new_input(builder.clone());
+    let x2 = ExprBuilder::new_input(builder.clone());
+    let y2 = ExprBuilder::new_input(builder.clone());
+    let mut lambda = (y2 - y1.clone()) / (x2.clone() - x1.clone());
+    let mut x3 = lambda.square() - x1.clone() - x2;
+    x3.save_output();
+    let mut y3 = lambda * (x1 - x3.clone()) - y1;
+    y3.save_output();
+    let builder = builder.borrow().clone();
+
+    let (expr, range_checker, width) = create_field_expr_with_flags_setup(builder);
+    println!(
+        "width = {width}, num_vars = {}, num_limbs = {}",
+        expr.program().num_vars(),
+        expr.program().canonical_num_limbs()
+    );
+
+    const N: usize = 4096;
+    let mut state = 0x12345678u64;
+    let mut next_biguint = |p: &BigUint| -> BigUint {
+        let bytes: Vec<u8> = (0..32)
+            .map(|_| {
+                state = state
+                    .wrapping_mul(6364136223846793005)
+                    .wrapping_add(1442695040888963407);
+                (state >> 33) as u8
+            })
+            .collect();
+        BigUint::from_bytes_le(&bytes) % p
+    };
+    let rows_inputs: Vec<Vec<BigUint>> = (0..N)
+        .map(|_| (0..4).map(|_| next_biguint(&prime)).collect())
+        .collect();
+    let flags = vec![true];
+
+    let t0 = Instant::now();
+    for inp in &rows_inputs {
+        std::hint::black_box(expr.program().execute(inp, &flags));
+    }
+    let exec_time = t0.elapsed();
+
+    let mut trace = BabyBear::zero_vec(width * N);
+    let t1 = Instant::now();
+    for (i, inp) in rows_inputs.iter().enumerate() {
+        expr.generate_subrow(
+            (&range_checker, inp.clone(), flags.clone()),
+            &mut trace[i * width..(i + 1) * width],
+        );
+    }
+    let subrow_time = t1.elapsed();
+    let per_row = (exec_time + subrow_time) / N as u32;
+    println!(
+        "execute (run_field_expression part): {:?}/row",
+        exec_time / N as u32
+    );
+    println!("generate_subrow: {:?}/row", subrow_time / N as u32);
+    println!(
+        "total fill: {:?}/row => {:.0} rows/s single-thread, {:.1} ms for 2^17 rows at 32 threads",
+        per_row,
+        1.0 / per_row.as_secs_f64(),
+        (1 << 17) as f64 * per_row.as_secs_f64() * 1000.0 / 32.0
+    );
+}
