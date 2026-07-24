@@ -142,12 +142,12 @@ lto = "thin"
 
 [workspace.dependencies]
 # Stark Backend
-openvm-stark-backend = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2.1.0", default-features = false }
-openvm-stark-sdk = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2.1.0", default-features = false }
-openvm-cpu-backend = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2.1.0", default-features = false }
-openvm-cuda-backend = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2.1.0", default-features = false }
-openvm-cuda-builder = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2.1.0", default-features = false }
-openvm-cuda-common = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2.1.0", default-features = false }
+openvm-stark-backend = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "experimental-v2.1.0", default-features = false }
+openvm-stark-sdk = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "experimental-v2.1.0", default-features = false }
+openvm-cpu-backend = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "experimental-v2.1.0", default-features = false }
+openvm-cuda-backend = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "experimental-v2.1.0", default-features = false }
+openvm-cuda-builder = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "experimental-v2.1.0", default-features = false }
+openvm-cuda-common = { version = "2.0.0", git = "https://github.com/openvm-org/stark-backend.git", branch = "experimental-v2.1.0", default-features = false }
 
 # OpenVM
 openvm-decoder = { version = "2.0.0", path = "crates/toolchain/decoder", default-features = false }
@@ -252,10 +252,10 @@ p3-poseidon2-air = { version = "=0.4.3", default-features = false }
 p3-symmetric = { version = "=0.4.3", default-features = false }
 
 zkhash = { package = "zkhash-axiom", version = "0.2.0" }
-snark-verifier-sdk = { version = "0.2.6", git = "https://github.com/axiom-crypto/snark-verifier.git", branch = "develop-v2.1.0", default-features = false, features = [
+snark-verifier-sdk = { version = "0.2.6", git = "https://github.com/axiom-crypto/snark-verifier.git", branch = "experimental-v2.1.0", default-features = false, features = [
   "loader_halo2",
 ] }
-halo2-base = { version = "0.5.4", git = "https://github.com/axiom-crypto/halo2-lib.git", branch = "develop-v2.1.0", default-features = false }
+halo2-base = { version = "0.5.4", git = "https://github.com/axiom-crypto/halo2-lib.git", branch = "experimental-v2.1.0", default-features = false }
 halo2curves-axiom = { version = "0.7.3", git = "https://github.com/axiom-crypto/halo2curves.git", tag = "v0.7.3" }
 struct-reflection = "0.1.0"
 
@@ -332,14 +332,14 @@ blst = { version = "0.3.15" }
 
 [workspace.metadata.cargo-shear]
 ignored = [
-    "cargo-openvm",
-    "rvr-openvm-ext-sha2-ffi",
-    "rvr-openvm-ext-ecc-ffi",
-    "rvr-openvm-ext-bigint-ffi",
-    "rvr-openvm-ext-algebra-modular-ffi",
-    "rvr-openvm-ext-algebra-fp2-ffi",
-    "rvr-openvm-ext-pairing-ffi",
-    "rvr-openvm-ext-keccak-ffi",
+  "cargo-openvm",
+  "rvr-openvm-ext-sha2-ffi",
+  "rvr-openvm-ext-ecc-ffi",
+  "rvr-openvm-ext-bigint-ffi",
+  "rvr-openvm-ext-algebra-modular-ffi",
+  "rvr-openvm-ext-algebra-fp2-ffi",
+  "rvr-openvm-ext-pairing-ffi",
+  "rvr-openvm-ext-keccak-ffi",
 ]
 
 # Declares the two custom cfgs the guest gating uses so host-side builds
@@ -349,4 +349,7 @@ ignored = [
 #     stable-rustc otherwise treats it as an unknown target_os value.
 # Crates opt in with `[lints] workspace = true`.
 [workspace.lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(openvm_intrinsics)', 'cfg(target_os, values("openvm"))'] }
+unexpected_cfgs = { level = "warn", check-cfg = [
+  'cfg(openvm_intrinsics)',
+  'cfg(target_os, values("openvm"))',
+] }
