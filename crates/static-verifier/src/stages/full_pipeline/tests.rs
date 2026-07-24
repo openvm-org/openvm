@@ -28,7 +28,7 @@ use crate::{
         clear_recorded_ext_base_consts, take_recorded_ext_base_consts, RecordedExtBaseConst,
         BABY_BEAR_MODULUS_U64,
     },
-    halo2_backend::Halo2Backend,
+    backend::Halo2Backend,
     stages::proof_shape::{log_heights_per_air_from_proof, trace_id_order_from_static_heights},
     RootF, StaticVerifierCircuit,
 };

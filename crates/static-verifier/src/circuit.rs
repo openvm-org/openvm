@@ -27,8 +27,8 @@ use openvm_verify_stark_host::pvs::CONSTRAINT_EVAL_AIR_ID;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    chip_traits::{BabyBearInst, DigestHashInst, GateInst, PopulateInputs, TranscriptInst},
-    halo2_backend::Halo2Backend,
+    chip_traits::{BabyBearInst, Poseidon2Inst, GateInst, PopulateInputs, TranscriptInst},
+    backend::Halo2Backend,
     stages::{
         full_pipeline::{
             constrained_verify, extract_public_values, load_proof_wire, ProofWire,
@@ -166,7 +166,7 @@ impl StaticVerifierCircuit {
     /// This function should be used internally or for testing only.
     /// Production uses with the continuations framework **must** use [`Self::populate`] instead.
     pub fn populate_verify_stark_constraints<
-        B: TranscriptInst + DigestHashInst + PopulateInputs,
+        B: TranscriptInst + Poseidon2Inst + PopulateInputs,
     >(
         &self,
         b: &mut B,

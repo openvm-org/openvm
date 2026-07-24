@@ -26,7 +26,7 @@ mod circuit;
 pub mod codec;
 pub mod config;
 pub mod field;
-pub mod halo2_backend;
+pub mod backend;
 pub mod hash;
 pub mod keygen;
 pub mod prover;

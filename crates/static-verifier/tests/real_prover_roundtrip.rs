@@ -33,7 +33,7 @@ use openvm_stark_sdk::{
     utils::setup_tracing,
 };
 use openvm_static_verifier::{
-    halo2_backend::Halo2Backend, log_heights_per_air_from_proof, Fr, Halo2Params,
+    backend::Halo2Backend, log_heights_per_air_from_proof, Fr, Halo2Params,
     Halo2ProvingMetadata, Halo2ProvingPinning, StaticVerifierCircuit, StaticVerifierProof,
     StaticVerifierShape,
 };

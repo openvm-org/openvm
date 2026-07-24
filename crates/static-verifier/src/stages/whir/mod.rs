@@ -15,7 +15,7 @@ use openvm_stark_sdk::{
 
 use crate::{
     chip_traits::{
-        BabyBearExt4Inst, BabyBearInst, DigestHashInst, GateInst, PopulateInputs, TranscriptInst,
+        BabyBearExt4Inst, BabyBearInst, Poseidon2Inst, GateInst, PopulateInputs, TranscriptInst,
     },
     field::baby_bear::{
         BabyBearExt4Wire, BabyBearExtWire, BabyBearWire, ReducedBabyBearExtWire,
@@ -313,7 +313,7 @@ fn binary_k_fold_assigned<B: BabyBearExt4Inst>(
     values[0]
 }
 
-fn tree_compress_assigned_digests<B: DigestHashInst>(b: &mut B, digests: Vec<B::F>) -> B::F {
+fn tree_compress_assigned_digests<B: Poseidon2Inst>(b: &mut B, digests: Vec<B::F>) -> B::F {
     assert!(
         digests.len().is_power_of_two(),
         "tree_compress inputs must be power-of-two length"
@@ -331,7 +331,7 @@ fn tree_compress_assigned_digests<B: DigestHashInst>(b: &mut B, digests: Vec<B::
         .expect("tree_compress must output one digest for non-empty inputs")
 }
 
-fn constrain_merkle_path<B: GateInst + DigestHashInst>(
+fn constrain_merkle_path<B: GateInst + Poseidon2Inst>(
     b: &mut B,
     query_bits: &[B::F],
     merkle_path: &MerklePathWire<B::F>,
@@ -369,7 +369,7 @@ fn constrain_merkle_path<B: GateInst + DigestHashInst>(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn constrain_whir_verification<B: TranscriptInst + DigestHashInst>(
+pub(crate) fn constrain_whir_verification<B: TranscriptInst + Poseidon2Inst>(
     b: &mut B,
     mvk0: &MultiStarkVerifyingKey0<RootConfig>,
     whir_wire: &WhirProofWire<B::F>,

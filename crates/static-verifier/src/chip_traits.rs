@@ -165,7 +165,7 @@ pub trait BabyBearExt4Inst: BabyBearInst {
 }
 
 /// Poseidon2 digest hashing/compression mirroring the helpers in `hash::poseidon2`.
-pub trait DigestHashInst: ChipBase {
+pub trait Poseidon2Inst: ChipBase {
     /// Hash a slice of reduced BabyBear wires into a single Bn254 digest cell.
     fn hash_babybear_slice_to_digest(&mut self, values: &[ReducedBabyBearWire<Self::F>])
         -> Self::F;

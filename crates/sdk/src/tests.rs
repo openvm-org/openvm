@@ -692,7 +692,7 @@ fn sdk_static_verifier_cell_profiling() -> Result<()> {
         proof::Proof,
     };
     use openvm_static_verifier::{
-        chip_traits::GateInst, compute_dag_onion_commit, halo2_backend::Halo2Backend,
+        chip_traits::GateInst, compute_dag_onion_commit, backend::Halo2Backend,
         log_heights_per_air_from_proof, StaticVerifierCircuit,
     };
 

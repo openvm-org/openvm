@@ -11,7 +11,7 @@ use openvm_stark_sdk::{
 };
 
 use crate::{
-    chip_traits::{DigestHashInst, PopulateInputs, TranscriptInst},
+    chip_traits::{Poseidon2Inst, PopulateInputs, TranscriptInst},
     field::baby_bear::ReducedBabyBearWire,
     stages::{
         batch_constraints::{
@@ -163,7 +163,7 @@ fn observe_preamble<B: TranscriptInst>(
 ///
 /// `stacked_layouts` must be the layout vector fixed for this circuit (same as stored on
 /// [`crate::StaticVerifierCircuit`]).
-pub fn constrained_verify<B: TranscriptInst + DigestHashInst>(
+pub fn constrained_verify<B: TranscriptInst + Poseidon2Inst>(
     b: &mut B,
     root_vk: &MultiStarkVerifyingKey<RootConfig>,
     proof_wire: &ProofWire<B::F>, /* Root proof */
