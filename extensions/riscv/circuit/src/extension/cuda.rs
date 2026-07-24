@@ -15,10 +15,13 @@ use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engi
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 #[cfg(feature = "rvr")]
 use {
-    openvm_circuit::arch::rvr::cuda::{
-        GpuRvrInputError, GpuRvrProgram, GpuRvrReplayPlan, GpuRvrTranscript,
+    openvm_circuit::arch::{
+        rvr::cuda::{GpuRvrInputError, GpuRvrProgram, GpuRvrReplayPlan, GpuRvrTranscript},
+        GenerationError, VirtualMachine, VmBuilder,
     },
-    openvm_circuit::system::cuda::poseidon2::Poseidon2PeripheryChipGPU,
+    openvm_circuit::system::cuda::{
+        phantom::PhantomChipGPU, poseidon2::Poseidon2PeripheryChipGPU, SystemChipInventoryGPU,
+    },
     openvm_circuit_primitives::{AnyChip, Chip},
     openvm_cuda_backend::base::DeviceMatrix,
     openvm_instructions::{LocalOpcode, SystemOpcode},
@@ -28,7 +31,7 @@ use {
         MulHOpcode, MulOpcode, MulWOpcode, Rv64AuipcOpcode, Rv64JalLuiOpcode, Rv64JalrOpcode,
         Rv64LoadStoreOpcode, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode, ShiftWOpcode,
     },
-    openvm_stark_backend::prover::AirProvingContext,
+    openvm_stark_backend::prover::{AirProvingContext, ProvingContext},
 };
 
 use crate::{
@@ -60,8 +63,8 @@ pub struct Rv64ImGpuProverExt;
 /// Segment-wide RV64I GPU trace generation from an immutable RVR transcript.
 ///
 /// Construction rejects an executed opcode unless its trace kernel is present
-/// below (or it is the system-owned `TERMINATE`). Each supported opcode remains
-/// pending until the VM's reverse inventory walk reaches its concrete chip.
+/// below (or it is the record-free system `TERMINATE`). Each supported opcode
+/// remains pending until the VM's reverse inventory walk reaches its concrete chip.
 /// This makes a missing/mismatched chip fail closed instead of silently
 /// producing a dummy trace.
 #[cfg(feature = "rvr")]
@@ -166,6 +169,7 @@ impl<'a> Rv64ImRvrGpuTracegen<'a> {
             DivRemWOpcode::DIVUW.global_opcode(),
             DivRemWOpcode::REMW.global_opcode(),
             DivRemWOpcode::REMUW.global_opcode(),
+            SystemOpcode::PHANTOM.global_opcode(),
         ]
         .into_iter()
         .any(|candidate| candidate.as_usize() as u32 == opcode)
@@ -181,6 +185,38 @@ impl<'a> Rv64ImRvrGpuTracegen<'a> {
         opcode.global_opcode().as_usize() as u32
     }
 
+    /// Generates one complete segment and verifies that every executed opcode
+    /// reached its concrete replay producer.
+    ///
+    /// Keep the coverage check inside this concrete coordinator: the VM owns
+    /// inventory order and lifetime fencing, while RV64IM owns its opcode-to-
+    /// producer mapping. This avoids a generic trace-generator framework and
+    /// makes skipping [`Self::finish`] impossible on the production entry path.
+    pub fn generate_proving_ctx<VB>(
+        mut self,
+        vm: &mut VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
+    ) -> Result<ProvingContext<GpuBackend>, GenerationError>
+    where
+        VB: VmBuilder<
+            GpuBabyBearPoseidon2Engine,
+            RecordArena = DenseRecordArena,
+            SystemChipInventory = SystemChipInventoryGPU,
+        >,
+    {
+        let ctx = vm.generate_proving_ctx_from_rvr_unchecked_coverage(
+            self.program,
+            self.transcript,
+            self.replay_plan,
+            |insertion_idx, chip| {
+                self.generate_for_chip(insertion_idx, chip)
+                    .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))
+            },
+        )?;
+        self.finish()
+            .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
+        Ok(ctx)
+    }
+
     /// Generates one extension AIR in the VM inventory's normal reverse order.
     ///
     /// Replay producers update their shared lookup histograms. Periphery chips
@@ -193,6 +229,15 @@ impl<'a> Rv64ImRvrGpuTracegen<'a> {
         _insertion_idx: usize,
         chip: &dyn AnyChip<DenseRecordArena, GpuBackend>,
     ) -> Result<AirProvingContext<GpuBackend>, GpuRvrInputError> {
+        if let Some(chip) = chip.as_any().downcast_ref::<PhantomChipGPU>() {
+            self.mark_generated([SystemOpcode::PHANTOM.global_opcode().as_usize() as u32]);
+            return chip.generate_proving_ctx_from_rvr(
+                self.program,
+                self.transcript,
+                self.replay_plan,
+            );
+        }
+
         macro_rules! replay_chip {
             ($chip_ty:ty, [$($opcode:expr),+ $(,)?]) => {
                 if let Some(chip) = chip.as_any().downcast_ref::<$chip_ty>() {
@@ -315,7 +360,6 @@ impl<'a> Rv64ImRvrGpuTracegen<'a> {
                 BaseAluImmOpcode::ANDI,
             ]
         );
-
         if let Some(chip) = chip
             .as_any()
             .downcast_ref::<Arc<VariableRangeCheckerChipGPU>>()
@@ -364,20 +408,15 @@ impl<'a> Rv64ImRvrGpuTracegen<'a> {
 
     /// Completes one segment after every extension AIR context has been made.
     ///
-    /// This performs the one post-replay synchronized read of the sticky GPU
-    /// error word. Call it immediately before handing the context to the proof
-    /// engine.
-    pub fn finish(self) -> Result<(), GpuRvrInputError> {
+    /// The safe VM trace-generation entry point performs the synchronized
+    /// sticky-error read after every kernel has been submitted. This final
+    /// check only proves that the reverse inventory walk visited a producer for
+    /// every executed opcode.
+    fn finish(self) -> Result<(), GpuRvrInputError> {
         if !self.pending_opcodes.is_empty() {
             return Err(GpuRvrInputError::InvalidTranscript(format!(
                 "RV64IM RVR GPU tracegen did not visit chips for executed opcodes {:?}",
                 self.pending_opcodes
-            )));
-        }
-        let error = self.transcript.error_code()?;
-        if error != 0 {
-            return Err(GpuRvrInputError::InvalidTranscript(format!(
-                "RV64IM RVR GPU tracegen rejected transcript with code {error}"
             )));
         }
         Ok(())

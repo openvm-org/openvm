@@ -64,6 +64,22 @@ pub mod phantom {
             d_records: DeviceBufferView,
             stream: cudaStream_t,
         ) -> i32;
+
+        fn _phantom_replay_tracegen(
+            d_trace: *mut F,
+            height: usize,
+            width: usize,
+            d_instructions: DeviceBufferView,
+            pc_base: u32,
+            d_program: DeviceBufferView,
+            d_memory: DeviceBufferView,
+            d_steps: DeviceBufferView,
+            step_start: usize,
+            num_steps: usize,
+            d_error: *mut u32,
+            phantom_opcode: u32,
+            stream: cudaStream_t,
+        ) -> i32;
     }
 
     pub unsafe fn tracegen(
@@ -78,6 +94,39 @@ pub mod phantom {
             height,
             width,
             d_records.view(),
+            stream,
+        ))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn replay_tracegen(
+        d_trace: &DeviceBuffer<F>,
+        height: usize,
+        width: usize,
+        d_instructions: DeviceBufferView,
+        pc_base: u32,
+        d_program: DeviceBufferView,
+        d_memory: DeviceBufferView,
+        d_steps: DeviceBufferView,
+        step_start: usize,
+        num_steps: usize,
+        d_error: *mut u32,
+        phantom_opcode: u32,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_phantom_replay_tracegen(
+            d_trace.as_mut_ptr(),
+            height,
+            width,
+            d_instructions,
+            pc_base,
+            d_program,
+            d_memory,
+            d_steps,
+            step_start,
+            num_steps,
+            d_error,
+            phantom_opcode,
             stream,
         ))
     }

@@ -520,6 +520,86 @@ The three logs occupied 128,192 bytes, or 64.0 bytes per guest instruction.
 This is an implementation checkpoint, not the M1 gate: the pinned suite must
 also cover memory-heavy programs and logger-aware host callbacks before M2.
 
+#### Optimized executor checkpoint (2026-07-23)
+
+The executor now reuses the three transcript allocations across segments, keeps
+append cursors block-local, reserves fixed-shape block spans once, turns direct
+self-backedges into internal loops, emits register seeds only for first timed
+events, and stores four proof cells as `u16`. No extra authoritative buffer was
+added. Logger-aware REVEAL flushes and reloads the block-local cursors around its
+stateful callback.
+
+On the dedicated x86-64 benchmark host, a warmed 524,290-instruction `ADDI/BNE`
+loop took 59.272 ms in interpreter preflight, 1.248 ms in RVR preflight, and
+0.617 ms in metered RVR: RVR preflight was 47.5x faster than the interpreter and
+2.02x metered. The transcript occupied 25,165,904 bytes, or 48.0 bytes per guest
+instruction. Repeated RVR samples vary enough that the segmented Reth benchmark,
+not this register-only loop, remains the M1 acceptance gate.
+
+For this small program, preflight generated source plus headers is 57,128 bytes
+versus 45,251 bytes for metered (+26.2%); the shared object is 13,320 bytes versus
+11,352 bytes (+17.3%), while `.text` is 4,216 bytes versus 1,784 bytes (+136.3%).
+The large relative `.text` increase is a code-density warning. Cold compile time,
+RSS, and the same artifact sizes must be measured on the real Reth executable;
+further per-block specialization is rejected if it recreates PR #3020's compile
+time blowup without a measured end-to-end execution win.
+
+#### Real Reth gate: current event transcript rejected (2026-07-24)
+
+The first authoritative segmented run used block 23,992,138 from the Reth
+benchmark: 3,050,677,224 guest instructions over 275 canonical metered
+segments. All modes reached the same endpoints and output hash. Median execution
+was 2.656 seconds for metered RVR, 46.854 seconds for reusable RVR preflight,
+and 515.490 seconds for interpreter preflight. RVR preflight is useful relative
+to the interpreter but is 17.6x metered, so it fails M1 and is not an acceptable
+executor design.
+
+The reason is physical rather than ambiguous: the returned transcript contained
+3,050,677,499 program events (24.405 GB), 8,250,512,871 memory events
+(165.010 GB), and 7,495,742 finalized seeds (0.120 GB), for 189.536 GB total or
+62.13 bytes per guest instruction. At the measured 4.045 GB/s effective append
+throughput, the current per-instruction PC stream alone exceeds the target budget.
+Peak returned transcript size for one segment was 893.8 MB. Generated-C compile
+time was 255.339 seconds versus 132.547 seconds for metered, and the generated
+project occupied 305 MiB of source plus 396 MiB of objects.
+
+Accordingly, no further hot-path tuning of the all-access schema may be called an
+M1 success. A disposable write-only/per-PC experiment then omitted every timed
+read while preserving its clock slot. It produced the same 275 endpoints and
+output hash, but median execution was still 28.915 seconds, or 11.0x metered.
+It appended 2,968,455,940 writes and retained 83.897 GB of authoritative output
+(27.50 bytes per guest instruction); raw seed candidates added another 6.185 GB
+on the hot path. Register writes were 2,581,871,213 events (86.98%), main-memory
+writes were 386,584,723, and public-value writes were four. Removing reads alone
+is therefore rejected as a production encoding.
+
+The next executor-only experiment must measure exact executed-basic-block and
+load-result counts, then test reductions that remove the two remaining dominant
+streams:
+
+1. append one `(block_start_pc, start_timestamp)` entry per executed basic block,
+   splitting variable-span operations such as `HINT_BUFFER` so static expansion
+   remains unambiguous; and
+2. replace 20-byte memory events with the narrowest program-ordered value stream
+   that makes register reconstruction parallel. The first candidate is one
+   eight-byte result per enabled register write; ordinary store values and
+   addresses are then derived from reconstructed source registers, while loads
+   and host advice retain only the residual values needed to break true memory or
+   nondeterministic dependencies.
+
+The 2.582-billion-result candidate is already about 20.655 GB before block entries
+or residuals, so it is not accepted by arithmetic alone. Measure block count,
+load count, actual append bandwidth, and generated code size first. If it cannot
+fit the roughly 5.3-second executor budget, use coarser checkpointing or a staged
+GPU reconstruction rather than adding another general-purpose log.
+
+These remain experimental until differential tests prove that GPU replay
+re-materializes every timed access and enforces a bijection with every residual
+value. Independent per-read binary searches are not acceptable; a viable GPU
+slice needs staged register and main-memory chronology joins. The production
+schema changes only if the executor meets the real Reth gate and the GPU slice
+meets M2's time and memory gates.
+
 ### M2: RISC-V GPU feasibility slice
 
 Before designing the rest of tracegen, test the central bet on the most important
@@ -550,6 +630,12 @@ suite chosen before tuning:
 - peak memory is no larger than the legacy path's peak over the same phase and
   inputs, with identical trace-output allocations either included on both sides or
   excluded from both;
+- phase-tagged device-memory measurements show that transcript, sort/index scratch,
+  replay indexes, and completed traces do not create a new tracegen peak. The
+  segment transcript and replay plan must be released after the synchronized replay
+  error check and before proving; only the immutable program remains resident. The
+  existing proving/GKR peak and deployment budget (currently about 15 GB) remain
+  authoritative for concurrent-proof packing;
 - executor + upload + indexing + RISC-V kernel time has no more than 10% regression
   on any representative workload and is no slower in geometric mean than legacy
   interpreter preflight + RISC-V GPU tracegen.
@@ -1080,8 +1166,16 @@ Replay producers run before the shared byte-bitwise and variable-range
 peripheries. Those peripheries, plus Poseidon2, consume their accumulated device
 counts through their normal tracegen using `()` rather than even an empty
 `RecordArena`. Unexecuted, unported executor chips produce dummy traces. After
-all extension contexts have been generated, the coordinator reads the shared
-sticky replay error once, immediately before proving.
+all extension contexts have been generated, the safe top-level VM entry point
+first synchronizes the shared stream, then reads the sticky replay error. The
+explicit stream fence still runs if trace generation failed, and a failed D2H
+enqueue cannot skip it. The concrete RV64IM entry point then verifies that the
+inventory walk visited every pending opcode before returning the context.
+
+`PHANTOM` is a base-VM AIR stored in the extension inventory. The active RV64IM
+coordinator keeps the opcode in its fail-closed pending set and generates its rows
+from the program log and fetched instruction when the reverse inventory walk
+reaches the concrete phantom chip. It needs no phantom-specific records.
 
 The integration tests execute all 62 currently ported opcodes across the 37
 replay chips, followed by `TERMINATE`. One RVR preflight run supplies both
@@ -1094,6 +1188,16 @@ completes a real GPU prove-and-verify. The deliberately unsupported sentinel is
 now `HINT_BUFFER`: a negative test confirms that it is rejected by the
 pre-kernel coverage check before tracegen. This establishes the arena-free
 system plus multi-AIR RISC-V integration seam without generalizing `Chip`.
+
+Memory indexing initially scatters final touched blocks into a `memory_log.len()`
+upper-bound buffer. After the synchronized unique-count read, it drops sort/scan
+scratch. If the initialized prefix is at most half the upper bound, it compacts to
+an exact-size buffer; the temporary old-plus-new allocation is then provably below
+the preceding scatter stage's minimum live bytes. At higher occupancy it retains
+the upper bound and exposes only the initialized prefix, avoiding a new tracegen
+peak merely to save a small tail. The transcript and replay plan are dropped after
+the sticky-error/lifetime fence and before proving, so only the immutable uploaded
+program survives into the prover's peak-memory phase.
 
 RV64M is the first complete extension beyond RV64I on this path. Its five GPU
 replay producers cover all 13 `MUL`, `MULW`, high-multiply, `DIV`/`REM`, and
@@ -1145,7 +1249,8 @@ producer. For one program it:
 5. executes preflight to the metered instruction boundary, requires the exact
    retired-step count and expected suspended-or-terminated endpoint, uploads the
    three logs, generates the system and extension contexts, checks the single
-   sticky replay error, and proves; and
+   sticky replay error, and then drops the per-segment GPU transcript and replay
+   plan before proving; and
 6. carries only the returned final `VmState` to the next segment. Final public
    values use the final segment's completed memory top tree.
 

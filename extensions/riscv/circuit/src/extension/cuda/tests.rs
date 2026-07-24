@@ -5,7 +5,7 @@ use openvm_circuit::{
         rvr::{
             cuda::GpuRvrProgram, RvrPreflightEndpoint, RvrPreflightLimits, RvrPreflightTranscript,
         },
-        GenerationError, VirtualMachine, VmExecutor,
+        VirtualMachine, VmExecutor,
     },
     utils::{test_gpu_engine, test_system_config},
 };
@@ -19,7 +19,7 @@ use openvm_instructions::{
     instruction::Instruction,
     program::Program,
     riscv::{RV64_IMM_AS, RV64_MEMORY_AS, RV64_REGISTER_AS},
-    LocalOpcode, SystemOpcode,
+    LocalOpcode, PhantomDiscriminant, SysPhantom, SystemOpcode,
 };
 use openvm_riscv_transpiler::{
     BaseAluImmOpcode, BaseAluOpcode, BaseAluWImmOpcode, BaseAluWOpcode, BranchEqualOpcode,
@@ -28,7 +28,10 @@ use openvm_riscv_transpiler::{
     Rv64JalrOpcode, Rv64LoadStoreOpcode, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode,
     ShiftWOpcode,
 };
-use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine};
+use openvm_stark_backend::{
+    p3_field::{PrimeCharacteristicRing, PrimeField32},
+    StarkEngine,
+};
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 use super::Rv64ImRvrGpuTracegen;
@@ -296,6 +299,12 @@ fn rvr_gpu_tracegen_proves_system_and_rv64i_airs_without_record_arenas() {
             Rv64JalrOpcode::JALR.global_opcode(),
             [reg(30), 0, 200, RV64_REGISTER_AS as usize, 0, 1, 0],
         ),
+        Instruction::phantom(
+            PhantomDiscriminant(SysPhantom::Nop as u16),
+            F::from_u32(0x1234),
+            F::from_u32(0x5678),
+            0x1234,
+        ),
         Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
     ];
     let program = Program::from_instructions(&instructions);
@@ -336,28 +345,20 @@ fn rvr_gpu_tracegen_proves_system_and_rv64i_airs_without_record_arenas() {
     let rvr_execution = rvr
         .execute_from_state(state, RvrPreflightLimits::new(64, 192))
         .unwrap();
-
     let device_ctx = &vm.engine.device().device_ctx;
     let gpu_program =
         GpuRvrProgram::upload(&program, &config.system.memory_config, device_ctx).unwrap();
     let (gpu_transcript, replay_plan) = gpu_program
         .upload_transcript(&rvr_execution.transcript, rvr_execution.endpoint)
         .unwrap();
-    let mut tracegen =
-        Rv64ImRvrGpuTracegen::new(&gpu_program, &gpu_transcript, &replay_plan).unwrap();
-    let proving_ctx = vm
-        .generate_proving_ctx_from_rvr(
-            &gpu_program,
-            &gpu_transcript,
-            &replay_plan,
-            |insertion_idx, chip| {
-                tracegen
-                    .generate_for_chip(insertion_idx, chip)
-                    .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))
-            },
-        )
-        .unwrap();
-    tracegen.finish().unwrap();
+    let tracegen = Rv64ImRvrGpuTracegen::new(&gpu_program, &gpu_transcript, &replay_plan).unwrap();
+    let proving_ctx = tracegen.generate_proving_ctx(&mut vm).unwrap();
+
+    // The synchronized replay error read above makes every trace independent
+    // of the segment inputs. Release them before the prover reaches its GPU
+    // memory peak; only the immutable program stays resident across segments.
+    drop(replay_plan);
+    drop(gpu_transcript);
 
     let proof = vm.engine.prove(vm.pk(), proving_ctx).unwrap();
     vm.engine.verify(&pk.get_vk(), &proof).unwrap();
@@ -444,21 +445,10 @@ fn rvr_gpu_tracegen_proves_rv64m_airs_without_record_arenas() {
     let (gpu_transcript, replay_plan) = gpu_program
         .upload_transcript(&execution.transcript, execution.endpoint)
         .unwrap();
-    let mut tracegen =
-        Rv64ImRvrGpuTracegen::new(&gpu_program, &gpu_transcript, &replay_plan).unwrap();
-    let proving_ctx = vm
-        .generate_proving_ctx_from_rvr(
-            &gpu_program,
-            &gpu_transcript,
-            &replay_plan,
-            |insertion_idx, chip| {
-                tracegen
-                    .generate_for_chip(insertion_idx, chip)
-                    .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))
-            },
-        )
-        .unwrap();
-    tracegen.finish().unwrap();
+    let tracegen = Rv64ImRvrGpuTracegen::new(&gpu_program, &gpu_transcript, &replay_plan).unwrap();
+    let proving_ctx = tracegen.generate_proving_ctx(&mut vm).unwrap();
+    drop(replay_plan);
+    drop(gpu_transcript);
     let proof = vm.engine.prove(vm.pk(), proving_ctx).unwrap();
     vm.engine.verify(&pk.get_vk(), &proof).unwrap();
 }
