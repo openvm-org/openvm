@@ -460,6 +460,22 @@ impl<'a> EmitContext<'a> {
         }
     }
 
+    /// Trap from the generated block before a protected scalar memory helper
+    /// can reach its process-aborting backstop. This is the same predicate as
+    /// the inlined helper check, so Clang folds the latter away; unprotected
+    /// artifacts emit no check.
+    #[cfg(not(feature = "unprotected"))]
+    fn emit_memory_bounds_trap(&mut self, addr: &str, width: u8) {
+        self.write_line(&format!(
+            "if (unlikely((uint64_t)({addr}) > OPENVM_MEM_SIZE - {width}u)) {{"
+        ));
+        self.emit_trap();
+        self.write_line("}");
+    }
+
+    #[cfg(feature = "unprotected")]
+    fn emit_memory_bounds_trap(&mut self, _addr: &str, _width: u8) {}
+
     /// Read guest memory. Metered hot blocks record the memory page separately.
     pub fn read_mem(&mut self, base: &str, offset: i16, width: u8, signed: bool) -> String {
         assert!(
@@ -471,6 +487,7 @@ impl<'a> EmitContext<'a> {
         let (read_func, trace_func, var_ty) = Self::read_mem_helper(width, signed);
         self.uses_raw_memory = true;
 
+        self.emit_memory_bounds_trap(&addr, width);
         self.write_line(&format!("{var_ty} {var} = {read_func}(memory, {addr});"));
         if self.mode.writes_full_events() {
             self.flush_value_trace_local();
@@ -497,6 +514,7 @@ impl<'a> EmitContext<'a> {
         let (write_func, trace_func, cast_ty) = Self::write_mem_helper(width);
         self.uses_raw_memory = true;
 
+        self.emit_memory_bounds_trap(&addr, width);
         if self.mode.traces_memory_pages() {
             self.emit_inline_page_record(&addr, width);
         }
@@ -528,6 +546,7 @@ impl<'a> EmitContext<'a> {
         );
         self.uses_raw_memory = true;
 
+        self.emit_memory_bounds_trap(addr, 8);
         if self.mode.traces_memory_pages() {
             self.emit_inline_page_record(addr, 8);
         }
@@ -1362,10 +1381,43 @@ mod tests {
         ctx.write_aligned_mem_block("addr", "value");
         ctx.reserve_preflight_writes("5u", "13u");
 
-        assert_eq!(
-            ctx.buf(),
-            "        write_mem_u64(memory, addr, (uint64_t)(value));\n"
+        #[cfg(not(feature = "unprotected"))]
+        {
+            assert!(ctx
+                .buf()
+                .contains("if (unlikely((uint64_t)(addr) > OPENVM_MEM_SIZE - 8u)) {"));
+            assert!(ctx.buf().contains("return rv_trap(state);"));
+        }
+        assert!(ctx
+            .buf()
+            .contains("write_mem_u64(memory, addr, (uint64_t)(value));"));
+    }
+
+    #[test]
+    #[cfg(not(feature = "unprotected"))]
+    fn protected_scalar_memory_traps_before_the_raw_access() {
+        let mut ctx = EmitContext::new(
+            HashSet::new(),
+            EmitMode::Direct,
+            BlockAbi::Plain,
+            None,
+            Some(0),
         );
+        ctx.read_mem("addr", 3, 4, false);
+
+        let bounds = ctx
+            .buf()
+            .find("if (unlikely((uint64_t)(addr + 0x00000003u) > OPENVM_MEM_SIZE - 4u)) {")
+            .expect("protected bounds guard");
+        let trap = ctx
+            .buf()
+            .find("return rv_trap(state);")
+            .expect("typed trap");
+        let read = ctx
+            .buf()
+            .find("read_mem_u32(memory, addr + 0x00000003u)")
+            .expect("raw read");
+        assert!(bounds < trap && trap < read);
     }
 
     #[test]

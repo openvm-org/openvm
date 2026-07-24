@@ -13,8 +13,11 @@ mod tests {
     };
     #[cfg(feature = "rvr")]
     use openvm_circuit::{
-        arch::{rvr::RvrCheckpointPreflightLimits, VmExecutor, VmState},
+        arch::{
+            rvr::RvrCheckpointPreflightLimits, ExecutionError, VirtualMachine, VmExecutor, VmState,
+        },
         system::memory::online::{GuestMemory, LinearMemory, TouchedPages, PAGE_SIZE},
+        utils::test_cpu_engine,
     };
     use openvm_deferral_circuit::{
         DeferralExtension, DeferralFn, Rv64DeferralBuilder, Rv64DeferralConfig,
@@ -246,6 +249,75 @@ mod tests {
         assert_eq!(split.state.pc(), unbounded.state.pc());
         assert_sparse_state_eq(&split.state, &unbounded.state);
         Ok(())
+    }
+
+    #[test]
+    #[cfg(feature = "rvr")]
+    fn deferral_output_oob_sizing_read_traps_in_every_rvr_mode() -> Result<()> {
+        use openvm_deferral_transpiler::DeferralOpcode;
+
+        let config = make_config(1);
+        let instructions = [
+            Instruction::<F>::from_usize(
+                DeferralOpcode::OUTPUT.global_opcode(),
+                [
+                    RV64_REGISTER_NUM_LIMBS,
+                    2 * RV64_REGISTER_NUM_LIMBS,
+                    0,
+                    RV64_REGISTER_AS as usize,
+                    RV64_MEMORY_AS as usize,
+                ],
+            ),
+            Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+        ];
+        let mut exe = VmExe::from(Program::from_instructions(&instructions));
+        for (offset, byte) in u64::MAX.to_le_bytes().into_iter().enumerate() {
+            exe.init_memory.insert(
+                (
+                    RV64_REGISTER_AS,
+                    (2 * RV64_REGISTER_NUM_LIMBS) as u32 + offset as u32,
+                ),
+                byte,
+            );
+        }
+
+        let executor = VmExecutor::new(config.clone())?;
+        let pure_error = executor
+            .rvr_instance(&exe, None)?
+            .execute(Streams::default())
+            .err()
+            .expect("pure RVR must trap an out-of-bounds OUTPUT key");
+        assert_rvr_trap(pure_error);
+
+        let checkpoint_error = executor
+            .rvr_experimental_checkpoint_preflight_instance(&exe, None)?
+            .execute(
+                Streams::default(),
+                RvrCheckpointPreflightLimits::new(instructions.len(), 0, 1),
+            )
+            .err()
+            .expect("checkpoint RVR must trap before its OUTPUT sizing peek");
+        assert_rvr_trap(checkpoint_error);
+
+        let (vm, _) =
+            VirtualMachine::new_with_keygen(test_cpu_engine(), Rv64DeferralBuilder, config)?;
+        let metered_error = vm
+            .metered_instance(&exe)?
+            .execute_metered(Streams::default(), vm.build_metered_ctx(&exe))
+            .err()
+            .expect("metered RVR must trap an out-of-bounds OUTPUT key");
+        assert_rvr_trap(metered_error);
+        Ok(())
+    }
+
+    #[cfg(feature = "rvr")]
+    fn assert_rvr_trap(error: ExecutionError) {
+        match error {
+            ExecutionError::RvrExecution(message) => {
+                assert_eq!(message, "execution returned error code: 3");
+            }
+            error => panic!("expected a typed RVR trap, got {error}"),
+        }
     }
 
     #[cfg(feature = "rvr")]

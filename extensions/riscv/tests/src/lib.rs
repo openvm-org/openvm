@@ -1,7 +1,5 @@
 #[cfg(test)]
 mod tests {
-    #[cfg(all(feature = "rvr", not(feature = "unprotected")))]
-    use std::{env, process::Command};
     #[cfg(feature = "rvr")]
     use std::{sync::Barrier, thread, time::Instant};
 
@@ -50,9 +48,6 @@ mod tests {
     use test_case::test_case;
 
     type F = BabyBear;
-    #[cfg(all(feature = "rvr", not(feature = "unprotected")))]
-    const RVR_OOB_CHILD_ENV: &str = "OPENVM_RVR_OOB_CHILD";
-
     #[cfg(test)]
     fn test_rv64im_config() -> Rv64ImConfig {
         Rv64ImConfig {
@@ -2402,22 +2397,6 @@ mod tests {
         Ok(())
     }
 
-    #[cfg(all(feature = "rvr", not(feature = "unprotected")))]
-    fn assert_child_aborts(test_name: &str) {
-        let output = Command::new(env::current_exe().unwrap())
-            .args(["--exact", test_name, "--nocapture"])
-            .env(RVR_OOB_CHILD_ENV, "1")
-            .output()
-            .expect("failed to spawn self");
-
-        if output.status.success() {
-            panic!("child process succeeded; OOB access was not caught");
-        }
-        // Success path for these tests: relay the child failure text so the
-        // caller's `#[should_panic(expected = ...)]` can match it.
-        panic!("{}", String::from_utf8_lossy(&output.stderr));
-    }
-
     #[cfg(feature = "rvr")]
     fn assert_rvr_example_traps(program_name: &str) {
         assert_rvr_example_with_config_and_input_traps(program_name, test_rv64im_config(), vec![]);
@@ -2870,31 +2849,15 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "Memory access out of bounds")]
     #[cfg(all(feature = "rvr", not(feature = "unprotected")))]
     fn test_rvr_load_x0_traps() {
-        if env::var(RVR_OOB_CHILD_ENV).is_ok() {
-            execute_rvr_example("load_x0");
-            return;
-        }
-
-        assert_child_aborts("tests::test_rvr_load_x0_traps");
+        assert_rvr_example_traps("load_x0");
     }
 
     #[test]
-    #[should_panic(expected = "Memory access out of bounds")]
     #[cfg(all(feature = "rvr", not(feature = "unprotected")))]
     fn test_out_of_bound_mem_access() {
-        // Child mode: triggers the OOB; abort_oob in C aborts the process.
-        if env::var(RVR_OOB_CHILD_ENV).is_ok() {
-            execute_rvr_example("out_of_bound_mem_access");
-            return; // unreachable: abort fired
-        }
-
-        // Parent mode: spawn ourselves as the child and forward its stderr
-        // as our own panic. `#[should_panic(expected = ...)]` matches iff
-        // the child's rvr bounds check actually fired.
-        assert_child_aborts("tests::test_out_of_bound_mem_access");
+        assert_rvr_example_traps("out_of_bound_mem_access");
     }
 
     #[test_case("out_of_bound_print_str"; "print_str_out_of_bounds")]
