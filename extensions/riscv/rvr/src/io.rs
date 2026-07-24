@@ -60,6 +60,10 @@ impl ExtInstr for HintStoreWInstr {
     fn supports_preflight(&self) -> bool {
         true
     }
+
+    fn supports_checkpoint_preflight(&self) -> bool {
+        true
+    }
 }
 
 /// HINT_BUFFER: pop `8 * reg[num_words_reg]` bytes from the hint stream and
@@ -123,6 +127,10 @@ impl ExtInstr for HintBufferInstr {
     fn supports_preflight(&self) -> bool {
         true
     }
+
+    fn supports_checkpoint_preflight(&self) -> bool {
+        true
+    }
 }
 
 /// Store the low `width` bytes of `src_reg` at `ptr_reg + offset` in the
@@ -179,6 +187,10 @@ impl ExtInstr for RevealInstr {
     }
 
     fn supports_preflight(&self) -> bool {
+        true
+    }
+
+    fn supports_checkpoint_preflight(&self) -> bool {
         true
     }
 }

@@ -238,6 +238,10 @@ impl ExtInstr for Rv64IInstr {
         true
     }
 
+    fn supports_checkpoint_preflight(&self) -> bool {
+        true
+    }
+
     fn cfg_effect(&self) -> CfgEffect {
         match self {
             Self::Store { .. }

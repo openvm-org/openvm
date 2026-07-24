@@ -240,12 +240,10 @@ pub trait ExtInstr: std::fmt::Debug + Send + Sync {
     /// Whether this node emits enough replay values and logical clock slots
     /// for compact checkpoint preflight.
     ///
-    /// Most instructions share one schedule across both preflight modes, so
-    /// the default follows [`Self::supports_preflight`]. Instructions whose
-    /// timed accesses are reconstructed later may opt into checkpoint replay
-    /// without making legacy value tracing silently incomplete.
+    /// The default is fail-closed because legacy value tracing and compact
+    /// checkpoint replay have different completeness requirements.
     fn supports_checkpoint_preflight(&self) -> bool {
-        self.supports_preflight()
+        false
     }
 
     /// Clone into a boxed trait object.
