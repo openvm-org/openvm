@@ -2870,6 +2870,49 @@ __global__ void g2_predecode(
 
 } // namespace
 
+using RvrG2ScratchAllocator = int (*)(
+    void *context, size_t size, size_t alignment, void **output
+);
+
+static cudaError_t rvr_g2_allocate_scratch(
+    RvrG2ScratchAllocator allocator,
+    void *context,
+    void **output,
+    size_t size,
+    size_t alignment,
+    cudaStream_t stream
+) {
+    if (output == nullptr || size == 0 || alignment == 0) return cudaErrorInvalidValue;
+    if (allocator == nullptr) return cudaMallocAsync(output, size, stream);
+    return static_cast<cudaError_t>(allocator(context, size, alignment, output));
+}
+
+template <typename T>
+static cudaError_t rvr_g2_allocate_scratch_array(
+    RvrG2ScratchAllocator allocator,
+    void *context,
+    T **output,
+    size_t count,
+    cudaStream_t stream
+) {
+    if (count > SIZE_MAX / sizeof(T)) return cudaErrorInvalidValue;
+    return rvr_g2_allocate_scratch(
+        allocator,
+        context,
+        reinterpret_cast<void **>(output),
+        count * sizeof(T),
+        alignof(T),
+        stream
+    );
+}
+
+static cudaError_t rvr_g2_release_scratch(
+    RvrG2ScratchAllocator allocator, void *ptr, cudaStream_t stream
+) {
+    if (allocator != nullptr || ptr == nullptr) return cudaSuccess;
+    return cudaFreeAsync(ptr, stream);
+}
+
 extern "C" int _rvr_g2_tracegen(uint32_t kind, RVR_G2_TRACEGEN_PARAMETERS) {
 #define G2_DISPATCH(name)                                                                \
     return name(                                                                         \
@@ -3253,6 +3296,8 @@ extern "C" int _rvr_g2_predecode(
     uint32_t *d_opaque_prev_timestamps,
     uint64_t *d_opaque_prev_values,
     uint32_t *d_error,
+    RvrG2ScratchAllocator scratch_allocator,
+    void *scratch_context,
     uint64_t *profile_stats,
     cudaStream_t stream
 ) {
@@ -3393,58 +3438,54 @@ extern "C" int _rvr_g2_predecode(
     }
     G2_PROFILE_CHECKPOINT(0);
 
-    G2_TRY(cudaMallocAsync(
-        reinterpret_cast<void **>(&d_run_lengths), (run_count + 1) * sizeof(uint32_t), stream
+    G2_TRY(rvr_g2_allocate_scratch_array(
+        scratch_allocator, scratch_context, &d_run_lengths, run_count + 1, stream
     ));
-    G2_TRY(cudaMallocAsync(
-        reinterpret_cast<void **>(&d_run_offsets), (run_count + 1) * sizeof(uint32_t), stream
+    G2_TRY(rvr_g2_allocate_scratch_array(
+        scratch_allocator, scratch_context, &d_run_offsets, run_count + 1, stream
     ));
-    G2_TRY(cudaMallocAsync(
-        reinterpret_cast<void **>(&d_program_slots), instruction_count * sizeof(uint32_t), stream
+    G2_TRY(rvr_g2_allocate_scratch_array(
+        scratch_allocator, scratch_context, &d_program_slots, instruction_count, stream
     ));
-    G2_TRY(cudaMallocAsync(
-        reinterpret_cast<void **>(&d_row_counts), lane_count_entries * sizeof(uint32_t), stream
+    G2_TRY(rvr_g2_allocate_scratch_array(
+        scratch_allocator, scratch_context, &d_row_counts, lane_count_entries, stream
     ));
-    G2_TRY(cudaMallocAsync(
-        reinterpret_cast<void **>(&d_row_offsets), lane_count_entries * sizeof(uint32_t), stream
+    G2_TRY(rvr_g2_allocate_scratch_array(
+        scratch_allocator, scratch_context, &d_row_offsets, lane_count_entries, stream
     ));
-    G2_TRY(cudaMallocAsync(
-        reinterpret_cast<void **>(&d_v0_counts), lane_count_entries * sizeof(uint32_t), stream
+    G2_TRY(rvr_g2_allocate_scratch_array(
+        scratch_allocator, scratch_context, &d_v0_counts, lane_count_entries, stream
     ));
-    G2_TRY(cudaMallocAsync(
-        reinterpret_cast<void **>(&d_v0_offsets), lane_count_entries * sizeof(uint32_t), stream
+    G2_TRY(rvr_g2_allocate_scratch_array(
+        scratch_allocator, scratch_context, &d_v0_offsets, lane_count_entries, stream
     ));
-    G2_TRY(cudaMallocAsync(
-        reinterpret_cast<void **>(&d_v1_counts), lane_count_entries * sizeof(uint32_t), stream
+    G2_TRY(rvr_g2_allocate_scratch_array(
+        scratch_allocator, scratch_context, &d_v1_counts, lane_count_entries, stream
     ));
-    G2_TRY(cudaMallocAsync(
-        reinterpret_cast<void **>(&d_v1_offsets), lane_count_entries * sizeof(uint32_t), stream
+    G2_TRY(rvr_g2_allocate_scratch_array(
+        scratch_allocator, scratch_context, &d_v1_offsets, lane_count_entries, stream
     ));
-    G2_TRY(cudaMallocAsync(reinterpret_cast<void **>(&d_kind_by_air), 256, stream));
-    G2_TRY(cudaMallocAsync(
-        reinterpret_cast<void **>(&d_register_summaries),
-        register_entries * sizeof(G2RegisterSummary),
-        stream
+    G2_TRY(rvr_g2_allocate_scratch_array(
+        scratch_allocator, scratch_context, &d_kind_by_air, size_t(256), stream
     ));
-    G2_TRY(cudaMallocAsync(
-        reinterpret_cast<void **>(&d_register_incoming),
-        register_entries * sizeof(G2RegisterState),
-        stream
+    G2_TRY(rvr_g2_allocate_scratch_array(
+        scratch_allocator, scratch_context, &d_register_summaries, register_entries, stream
     ));
-    G2_TRY(cudaMallocAsync(
-        reinterpret_cast<void **>(&d_register_final),
-        G2_REGISTER_COUNT * sizeof(G2RegisterState),
-        stream
+    G2_TRY(rvr_g2_allocate_scratch_array(
+        scratch_allocator, scratch_context, &d_register_incoming, register_entries, stream
     ));
-    G2_TRY(cudaMallocAsync(
-        reinterpret_cast<void **>(&d_memory_indices), timestamp_budget * sizeof(uint32_t), stream
+    G2_TRY(rvr_g2_allocate_scratch_array(
+        scratch_allocator, scratch_context, &d_register_final, size_t(G2_REGISTER_COUNT), stream
     ));
-    G2_TRY(cudaMallocAsync(
-        reinterpret_cast<void **>(&d_memory_flags), timestamp_budget, stream
+    G2_TRY(rvr_g2_allocate_scratch_array(
+        scratch_allocator, scratch_context, &d_memory_indices, timestamp_budget, stream
+    ));
+    G2_TRY(rvr_g2_allocate_scratch_array(
+        scratch_allocator, scratch_context, &d_memory_flags, timestamp_budget, stream
     ));
 #define G2_ALLOC_U32(ptr, count)                                                                  \
-    G2_TRY(cudaMallocAsync(                                                                       \
-        reinterpret_cast<void **>(&(ptr)), (count) * sizeof(uint32_t), stream                    \
+    G2_TRY(rvr_g2_allocate_scratch_array(                                                         \
+        scratch_allocator, scratch_context, &(ptr), size_t(count), stream                        \
     ))
     G2_ALLOC_U32(d_timestamp_counts, instruction_scan_entries);
     G2_ALLOC_U32(d_output_counts, instruction_scan_entries);
@@ -3463,8 +3504,8 @@ extern "C" int _rvr_g2_predecode(
     G2_ALLOC_U32(d_register_touched_count, 1);
     G2_ALLOC_U32(d_memory_event_count, 1);
     G2_ALLOC_U32(d_memory_group_count, 1);
-    G2_TRY(cudaMallocAsync(
-        reinterpret_cast<void **>(&d_hint_flags), instruction_count, stream
+    G2_TRY(rvr_g2_allocate_scratch_array(
+        scratch_allocator, scratch_context, &d_hint_flags, instruction_count, stream
     ));
 #undef G2_ALLOC_U32
     G2_TRY(cudaMemsetAsync(d_run_lengths, 0, (run_count + 1) * sizeof(uint32_t), stream));
@@ -3615,7 +3656,14 @@ extern "C" int _rvr_g2_predecode(
     if (instruction_scan_temp_bytes > scan_temp_bytes)
         scan_temp_bytes = instruction_scan_temp_bytes;
     if (select_temp_bytes > scan_temp_bytes) scan_temp_bytes = select_temp_bytes;
-    G2_TRY(cudaMallocAsync(&d_scan_temp, scan_temp_bytes, stream));
+    G2_TRY(rvr_g2_allocate_scratch(
+        scratch_allocator,
+        scratch_context,
+        &d_scan_temp,
+        scan_temp_bytes,
+        256,
+        stream
+    ));
     G2_TRY(cub::DeviceScan::ExclusiveSum(
         d_scan_temp,
         scan_temp_bytes,
@@ -3930,7 +3978,14 @@ extern "C" int _rvr_g2_predecode(
         timestamp_budget,
         stream
     ));
-    G2_TRY(cudaMallocAsync(&d_memory_temp, memory_count_temp_bytes, stream));
+    G2_TRY(rvr_g2_allocate_scratch(
+        scratch_allocator,
+        scratch_context,
+        &d_memory_temp,
+        memory_count_temp_bytes,
+        256,
+        stream
+    ));
     G2_TRY(cub::DeviceReduce::Sum(
         d_memory_temp,
         memory_count_temp_bytes,
@@ -3949,42 +4004,60 @@ extern "C" int _rvr_g2_predecode(
     G2_TRY(cudaStreamSynchronize(stream));
     G2_PROFILE_CHECKPOINT(8);
     if (memory_event_count != 0) {
-        G2_TRY(cudaMallocAsync(
-            reinterpret_cast<void **>(&d_memory_selected_a),
-            size_t(memory_event_count) * sizeof(uint32_t),
+        G2_TRY(rvr_g2_allocate_scratch_array(
+            scratch_allocator,
+            scratch_context,
+            &d_memory_selected_a,
+            size_t(memory_event_count),
             stream
         ));
-        G2_TRY(cudaMallocAsync(
-            reinterpret_cast<void **>(&d_memory_selected_b),
-            size_t(memory_event_count) * sizeof(uint32_t),
+        G2_TRY(rvr_g2_allocate_scratch_array(
+            scratch_allocator,
+            scratch_context,
+            &d_memory_selected_b,
+            size_t(memory_event_count),
             stream
         ));
-        G2_TRY(cudaMallocAsync(
-            reinterpret_cast<void **>(&d_memory_keys_a),
-            size_t(memory_event_count) * sizeof(uint64_t),
+        G2_TRY(rvr_g2_allocate_scratch_array(
+            scratch_allocator,
+            scratch_context,
+            &d_memory_keys_a,
+            size_t(memory_event_count),
             stream
         ));
-        G2_TRY(cudaMallocAsync(
-            reinterpret_cast<void **>(&d_memory_keys_b),
-            size_t(memory_event_count) * sizeof(uint64_t),
+        G2_TRY(rvr_g2_allocate_scratch_array(
+            scratch_allocator,
+            scratch_context,
+            &d_memory_keys_b,
+            size_t(memory_event_count),
             stream
         ));
-        G2_TRY(cudaMallocAsync(
-            reinterpret_cast<void **>(&d_memory_group_starts),
-            size_t(memory_event_count) * sizeof(uint32_t),
+        G2_TRY(rvr_g2_allocate_scratch_array(
+            scratch_allocator,
+            scratch_context,
+            &d_memory_group_starts,
+            size_t(memory_event_count),
             stream
         ));
-        G2_TRY(cudaMallocAsync(
-            reinterpret_cast<void **>(&d_memory_group_flags), memory_event_count, stream
-        ));
-        G2_TRY(cudaMallocAsync(
-            reinterpret_cast<void **>(&d_memory_transforms_a),
-            size_t(memory_event_count) * sizeof(G2MemoryTransform),
+        G2_TRY(rvr_g2_allocate_scratch_array(
+            scratch_allocator,
+            scratch_context,
+            &d_memory_group_flags,
+            size_t(memory_event_count),
             stream
         ));
-        G2_TRY(cudaMallocAsync(
-            reinterpret_cast<void **>(&d_memory_transforms_b),
-            size_t(memory_event_count) * sizeof(G2MemoryTransform),
+        G2_TRY(rvr_g2_allocate_scratch_array(
+            scratch_allocator,
+            scratch_context,
+            &d_memory_transforms_a,
+            size_t(memory_event_count),
+            stream
+        ));
+        G2_TRY(rvr_g2_allocate_scratch_array(
+            scratch_allocator,
+            scratch_context,
+            &d_memory_transforms_b,
+            size_t(memory_event_count),
             stream
         ));
         G2_TRY(cub::DeviceSelect::Flagged(
@@ -4037,9 +4110,16 @@ extern "C" int _rvr_g2_predecode(
             memory_temp_bytes = memory_group_select_temp_bytes;
         if (memory_scan_temp_bytes > memory_temp_bytes)
             memory_temp_bytes = memory_scan_temp_bytes;
-        G2_TRY(cudaFreeAsync(d_memory_temp, stream));
+        G2_TRY(rvr_g2_release_scratch(scratch_allocator, d_memory_temp, stream));
         d_memory_temp = nullptr;
-        G2_TRY(cudaMallocAsync(&d_memory_temp, memory_temp_bytes, stream));
+        G2_TRY(rvr_g2_allocate_scratch(
+            scratch_allocator,
+            scratch_context,
+            &d_memory_temp,
+            memory_temp_bytes,
+            256,
+            stream
+        ));
         G2_TRY(cub::DeviceSelect::Flagged(
             d_memory_temp,
             memory_select_temp_bytes,
@@ -4169,49 +4249,49 @@ extern "C" int _rvr_g2_predecode(
     G2_PROFILE_CHECKPOINT(9);
 
 cleanup:
-    if (d_memory_temp) cudaFreeAsync(d_memory_temp, stream);
-    if (d_memory_transforms_b) cudaFreeAsync(d_memory_transforms_b, stream);
-    if (d_memory_transforms_a) cudaFreeAsync(d_memory_transforms_a, stream);
-    if (d_memory_selected_b) cudaFreeAsync(d_memory_selected_b, stream);
-    if (d_memory_selected_a) cudaFreeAsync(d_memory_selected_a, stream);
-    if (d_memory_keys_b) cudaFreeAsync(d_memory_keys_b, stream);
-    if (d_memory_keys_a) cudaFreeAsync(d_memory_keys_a, stream);
-    if (d_memory_group_flags) cudaFreeAsync(d_memory_group_flags, stream);
-    if (d_memory_flags) cudaFreeAsync(d_memory_flags, stream);
-    if (d_memory_group_starts) cudaFreeAsync(d_memory_group_starts, stream);
-    if (d_memory_indices) cudaFreeAsync(d_memory_indices, stream);
-    if (d_memory_group_count) cudaFreeAsync(d_memory_group_count, stream);
-    if (d_memory_event_count) cudaFreeAsync(d_memory_event_count, stream);
-    if (d_register_touched_count) cudaFreeAsync(d_register_touched_count, stream);
-    if (d_register_final) cudaFreeAsync(d_register_final, stream);
-    if (d_register_incoming) cudaFreeAsync(d_register_incoming, stream);
-    if (d_register_summaries) cudaFreeAsync(d_register_summaries, stream);
-    if (d_scan_temp) cudaFreeAsync(d_scan_temp, stream);
-    if (d_hint_flags) cudaFreeAsync(d_hint_flags, stream);
-    if (d_kind_counts) cudaFreeAsync(d_kind_counts, stream);
-    if (d_hint_row_offsets) cudaFreeAsync(d_hint_row_offsets, stream);
-    if (d_hint_count) cudaFreeAsync(d_hint_count, stream);
-    if (d_hint_indices) cudaFreeAsync(d_hint_indices, stream);
-    if (d_instruction_indices) cudaFreeAsync(d_instruction_indices, stream);
-    if (d_opaque_occurrences) cudaFreeAsync(d_opaque_occurrences, stream);
-    if (d_opaque_markers) cudaFreeAsync(d_opaque_markers, stream);
-    if (d_opaque_offsets) cudaFreeAsync(d_opaque_offsets, stream);
-    if (d_opaque_counts) cudaFreeAsync(d_opaque_counts, stream);
-    if (d_residual_offsets) cudaFreeAsync(d_residual_offsets, stream);
-    if (d_residual_counts) cudaFreeAsync(d_residual_counts, stream);
-    if (d_output_offsets) cudaFreeAsync(d_output_offsets, stream);
-    if (d_output_counts) cudaFreeAsync(d_output_counts, stream);
-    if (d_timestamp_counts) cudaFreeAsync(d_timestamp_counts, stream);
-    if (d_kind_by_air) cudaFreeAsync(d_kind_by_air, stream);
-    if (d_v1_offsets) cudaFreeAsync(d_v1_offsets, stream);
-    if (d_v1_counts) cudaFreeAsync(d_v1_counts, stream);
-    if (d_v0_offsets) cudaFreeAsync(d_v0_offsets, stream);
-    if (d_v0_counts) cudaFreeAsync(d_v0_counts, stream);
-    if (d_row_offsets) cudaFreeAsync(d_row_offsets, stream);
-    if (d_row_counts) cudaFreeAsync(d_row_counts, stream);
-    if (d_program_slots) cudaFreeAsync(d_program_slots, stream);
-    if (d_run_offsets) cudaFreeAsync(d_run_offsets, stream);
-    if (d_run_lengths) cudaFreeAsync(d_run_lengths, stream);
+    rvr_g2_release_scratch(scratch_allocator, d_memory_temp, stream);
+    rvr_g2_release_scratch(scratch_allocator, d_memory_transforms_b, stream);
+    rvr_g2_release_scratch(scratch_allocator, d_memory_transforms_a, stream);
+    rvr_g2_release_scratch(scratch_allocator, d_memory_selected_b, stream);
+    rvr_g2_release_scratch(scratch_allocator, d_memory_selected_a, stream);
+    rvr_g2_release_scratch(scratch_allocator, d_memory_keys_b, stream);
+    rvr_g2_release_scratch(scratch_allocator, d_memory_keys_a, stream);
+    rvr_g2_release_scratch(scratch_allocator, d_memory_group_flags, stream);
+    rvr_g2_release_scratch(scratch_allocator, d_memory_flags, stream);
+    rvr_g2_release_scratch(scratch_allocator, d_memory_group_starts, stream);
+    rvr_g2_release_scratch(scratch_allocator, d_memory_indices, stream);
+    rvr_g2_release_scratch(scratch_allocator, d_memory_group_count, stream);
+    rvr_g2_release_scratch(scratch_allocator, d_memory_event_count, stream);
+    rvr_g2_release_scratch(scratch_allocator, d_register_touched_count, stream);
+    rvr_g2_release_scratch(scratch_allocator, d_register_final, stream);
+    rvr_g2_release_scratch(scratch_allocator, d_register_incoming, stream);
+    rvr_g2_release_scratch(scratch_allocator, d_register_summaries, stream);
+    rvr_g2_release_scratch(scratch_allocator, d_scan_temp, stream);
+    rvr_g2_release_scratch(scratch_allocator, d_hint_flags, stream);
+    rvr_g2_release_scratch(scratch_allocator, d_kind_counts, stream);
+    rvr_g2_release_scratch(scratch_allocator, d_hint_row_offsets, stream);
+    rvr_g2_release_scratch(scratch_allocator, d_hint_count, stream);
+    rvr_g2_release_scratch(scratch_allocator, d_hint_indices, stream);
+    rvr_g2_release_scratch(scratch_allocator, d_instruction_indices, stream);
+    rvr_g2_release_scratch(scratch_allocator, d_opaque_occurrences, stream);
+    rvr_g2_release_scratch(scratch_allocator, d_opaque_markers, stream);
+    rvr_g2_release_scratch(scratch_allocator, d_opaque_offsets, stream);
+    rvr_g2_release_scratch(scratch_allocator, d_opaque_counts, stream);
+    rvr_g2_release_scratch(scratch_allocator, d_residual_offsets, stream);
+    rvr_g2_release_scratch(scratch_allocator, d_residual_counts, stream);
+    rvr_g2_release_scratch(scratch_allocator, d_output_offsets, stream);
+    rvr_g2_release_scratch(scratch_allocator, d_output_counts, stream);
+    rvr_g2_release_scratch(scratch_allocator, d_timestamp_counts, stream);
+    rvr_g2_release_scratch(scratch_allocator, d_kind_by_air, stream);
+    rvr_g2_release_scratch(scratch_allocator, d_v1_offsets, stream);
+    rvr_g2_release_scratch(scratch_allocator, d_v1_counts, stream);
+    rvr_g2_release_scratch(scratch_allocator, d_v0_offsets, stream);
+    rvr_g2_release_scratch(scratch_allocator, d_v0_counts, stream);
+    rvr_g2_release_scratch(scratch_allocator, d_row_offsets, stream);
+    rvr_g2_release_scratch(scratch_allocator, d_row_counts, stream);
+    rvr_g2_release_scratch(scratch_allocator, d_program_slots, stream);
+    rvr_g2_release_scratch(scratch_allocator, d_run_offsets, stream);
+    rvr_g2_release_scratch(scratch_allocator, d_run_lengths, stream);
     if (result == 0 && profile_stats != nullptr) {
         cudaError_t profile_error = cudaEventRecord(profile_events[10], stream);
         if (profile_error == cudaSuccess)

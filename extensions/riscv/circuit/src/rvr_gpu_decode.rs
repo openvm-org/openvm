@@ -391,6 +391,111 @@ const G2_TIMELINE_EVENT_SIZE: usize = 32;
 const G2_RESIDUAL_VALUE_LANE: u16 = 0x0082;
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
+const G2_VPMM_SCRATCH_MIN_CHUNK_BYTES: usize = 64 << 20;
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+fn g2_vpmm_scratch_enabled() -> bool {
+    std::env::var("OPENVM_RVR_ZERO_VRAM_REGRESSION").map_or(true, |value| value != "0")
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+struct G2VpmmScratchChunk {
+    storage: DeviceBuffer<u8>,
+    used: usize,
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+struct G2VpmmScratchArena<'a> {
+    device_ctx: &'a GpuDeviceCtx,
+    chunks: Vec<G2VpmmScratchChunk>,
+    min_chunk_bytes: usize,
+    requested_bytes: usize,
+    backing_bytes: usize,
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+impl<'a> G2VpmmScratchArena<'a> {
+    fn new(device_ctx: &'a GpuDeviceCtx) -> Self {
+        // A DeviceBuffer at least as large as VPMM's configured page size is
+        // served by VPMM. The default CUDA allocation granularity is much
+        // smaller than this floor; honor an explicit larger override as well.
+        let configured_page_bytes = std::env::var("VPMM_PAGE_SIZE")
+            .ok()
+            .and_then(|value| value.parse::<usize>().ok())
+            .unwrap_or(0);
+        Self {
+            device_ctx,
+            chunks: Vec::new(),
+            min_chunk_bytes: G2_VPMM_SCRATCH_MIN_CHUNK_BYTES.max(configured_page_bytes),
+            requested_bytes: 0,
+            backing_bytes: 0,
+        }
+    }
+
+    fn allocate_from_chunk(
+        chunk: &mut G2VpmmScratchChunk,
+        size: usize,
+        alignment: usize,
+    ) -> Option<*mut std::ffi::c_void> {
+        let base = chunk.storage.as_mut_ptr() as usize;
+        let current = base.checked_add(chunk.used)?;
+        let aligned = current.checked_add(alignment - 1)? & !(alignment - 1);
+        let offset = aligned.checked_sub(base)?;
+        let end = offset.checked_add(size)?;
+        if end > chunk.storage.len() {
+            return None;
+        }
+        chunk.used = end;
+        Some(unsafe { chunk.storage.as_mut_ptr().add(offset).cast() })
+    }
+
+    fn allocate(&mut self, size: usize, alignment: usize) -> Option<*mut std::ffi::c_void> {
+        if size == 0 || !alignment.is_power_of_two() {
+            return None;
+        }
+        for chunk in &mut self.chunks {
+            if let Some(ptr) = Self::allocate_from_chunk(chunk, size, alignment) {
+                self.requested_bytes = self.requested_bytes.saturating_add(size);
+                return Some(ptr);
+            }
+        }
+
+        let capacity = self.min_chunk_bytes.max(size.checked_add(alignment - 1)?);
+        let storage = DeviceBuffer::<u8>::with_capacity_on(capacity, self.device_ctx);
+        let mut chunk = G2VpmmScratchChunk { storage, used: 0 };
+        let ptr = Self::allocate_from_chunk(&mut chunk, size, alignment)?;
+        self.requested_bytes = self.requested_bytes.saturating_add(size);
+        self.backing_bytes = self.backing_bytes.saturating_add(capacity);
+        self.chunks.push(chunk);
+        Some(ptr)
+    }
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+unsafe extern "C" fn allocate_g2_vpmm_scratch(
+    context: *mut std::ffi::c_void,
+    size: usize,
+    alignment: usize,
+    output: *mut *mut std::ffi::c_void,
+) -> i32 {
+    if context.is_null() || output.is_null() {
+        return 1; // cudaErrorInvalidValue
+    }
+    let allocation = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let arena = unsafe { &mut *context.cast::<G2VpmmScratchArena<'_>>() };
+        arena.allocate(size, alignment)
+    }));
+    match allocation {
+        Ok(Some(ptr)) => {
+            unsafe { *output = ptr };
+            0 // cudaSuccess
+        }
+        Ok(None) => 1, // cudaErrorInvalidValue
+        Err(_) => 2,   // cudaErrorMemoryAllocation
+    }
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct G2TraceSource {
@@ -1986,6 +2091,16 @@ impl RvrGpuDecodeState {
         let pool_before = profile_enabled
             .then(|| unsafe { crate::cuda_abi::rvr_g2_cuda::device_pool_stats() }.unwrap());
         let mut profile_stats = [0u64; 18];
+        let mut vpmm_scratch =
+            g2_vpmm_scratch_enabled().then(|| G2VpmmScratchArena::new(device_ctx));
+        let scratch_allocator = vpmm_scratch.as_mut().map(|arena| {
+            let allocator: crate::cuda_abi::rvr_g2_cuda::G2ScratchAllocator =
+                allocate_g2_vpmm_scratch;
+            (
+                allocator,
+                std::ptr::from_mut(arena).cast::<std::ffi::c_void>(),
+            )
+        });
         let g2_predecode_timer = CudaStageTimer::start(device_ctx);
         unsafe {
             crate::cuda_abi::rvr_g2_cuda::predecode(
@@ -2017,10 +2132,26 @@ impl RvrGpuDecodeState {
                 &d_opaque_prev_timestamps,
                 &d_opaque_prev_values,
                 &d_error,
+                scratch_allocator,
                 profile_enabled.then_some(&mut profile_stats),
                 device_ctx.stream.as_raw(),
             )
             .expect("CUDA G2 wire expansion launch");
+        }
+        if let Some(arena) = vpmm_scratch.as_ref() {
+            eprintln!(
+                "OPENVM_RVR_G2_VPMM_SCRATCH segment={} enabled=1 requested_bytes={} \
+                 backing_bytes={} chunks={}",
+                segment_id,
+                arena.requested_bytes,
+                arena.backing_bytes,
+                arena.chunks.len(),
+            );
+        } else {
+            eprintln!(
+                "OPENVM_RVR_G2_VPMM_SCRATCH segment={} enabled=0",
+                segment_id
+            );
         }
         if let Some(timer) = g2_predecode_timer {
             timer.finish("g2_predecode", segment_id, host.total_record_count);

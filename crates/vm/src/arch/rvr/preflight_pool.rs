@@ -42,6 +42,9 @@
 //! can be set directly with `OPENVM_RVR_CUDA_DEVICE_POOL_PREWARM_BYTES`.
 //! Unused pages above that floor are returned before each sequential STARK
 //! proof; `OPENVM_RVR_CUDA_POOL_TRIM=0` disables this trim for A/B runs.
+//! G2 decoder scratch uses VPMM-backed buffers by default so it can reuse the
+//! proving pool while proving is idle; `OPENVM_RVR_ZERO_VRAM_REGRESSION=0`
+//! restores the raw CUDA async-pool allocation path for A/B runs.
 //! `OPENVM_RVR_CUDA_ARENA_POPULATE_MISS=0` restores lazy pages on a reserve/pool
 //! miss. All other switches default on.
 

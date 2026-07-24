@@ -175,6 +175,13 @@ pub mod rvr_g2_cuda {
         G2TraceSource,
     };
 
+    pub type G2ScratchAllocator = unsafe extern "C" fn(
+        context: *mut std::ffi::c_void,
+        size: usize,
+        alignment: usize,
+        output: *mut *mut std::ffi::c_void,
+    ) -> i32;
+
     extern "C" {
         fn _rvr_g2_device_pool_configure(
             begin: i32,
@@ -218,6 +225,8 @@ pub mod rvr_g2_cuda {
             d_opaque_prev_timestamps: *mut u32,
             d_opaque_prev_values: *mut u64,
             d_error: *mut u32,
+            scratch_allocator: Option<G2ScratchAllocator>,
+            scratch_context: *mut std::ffi::c_void,
             profile_stats: *mut u64,
             stream: cudaStream_t,
         ) -> i32;
@@ -313,9 +322,14 @@ pub mod rvr_g2_cuda {
         d_opaque_prev_timestamps: &DeviceBuffer<u32>,
         d_opaque_prev_values: &DeviceBuffer<u64>,
         d_error: &DeviceBuffer<u32>,
+        scratch_allocator: Option<(G2ScratchAllocator, *mut std::ffi::c_void)>,
         profile_stats: Option<&mut [u64; 18]>,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
+        let (scratch_allocator, scratch_context) = scratch_allocator
+            .map_or((None, std::ptr::null_mut()), |(allocator, context)| {
+                (Some(allocator), context)
+            });
         CudaError::from_result(_rvr_g2_predecode(
             d_wire.view(),
             logical_wire_bytes,
@@ -350,6 +364,8 @@ pub mod rvr_g2_cuda {
             d_opaque_prev_timestamps.as_mut_ptr(),
             d_opaque_prev_values.as_mut_ptr(),
             d_error.as_mut_ptr(),
+            scratch_allocator,
+            scratch_context,
             profile_stats.map_or(std::ptr::null_mut(), |stats| stats.as_mut_ptr()),
             stream,
         ))
