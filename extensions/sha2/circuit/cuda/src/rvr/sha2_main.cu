@@ -188,7 +188,7 @@ __global__ void sha2_main_replay_tracegen(
         return;
     }
     Sha2ReplayInput input;
-    if (!replay_sha2_instruction(
+    if (!replay_sha2_instruction<V>(
             instructions,
             pc_base,
             program,
