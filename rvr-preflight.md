@@ -683,6 +683,40 @@ they are not added to checkpoints. Derived descriptors are GPU scratch, not an
 authoritative log, and must be freed before system tracegen/proving according to
 the M2 memory gate.
 
+#### Checkpoint executor result (2026-07-24)
+
+The checkpoint executor passes the real Reth M1 gate. On block 23,992,138 it
+executed 3,050,677,224 guest instructions over the same 275 canonical segments,
+reached the same segment endpoints, and produced the same output as metered
+execution. With a 512-instruction checkpoint target, one warmup followed by three
+measured runs took 1.324, 1.325, and 1.326 seconds; the median is 1.325 seconds,
+or 2.303 billion guest instructions per second. Metered execution of the same
+segments took 2.745 seconds, so checkpoint preflight is 2.07x faster than metered
+rather than merely staying within the two-times-metered budget.
+
+The exact output was 4,759,951 checkpoints and 460,652,462 residual `u64`s,
+totalling 4,941,846,760 bytes across all segments, or 1.620 bytes per guest
+instruction. Because the proving pipeline consumes and reuses the buffers one
+segment at a time, the largest live segment transcript was 33,467,208 bytes; the
+4.942 GB aggregate is not simultaneously resident memory. Median effective log
+throughput was 3.73 GB/s.
+
+The checkpoint artifact compiled in 110.369 seconds versus 131.091 seconds for
+the metered artifact on the same executable. This rejects the concern that the
+selected encoding bought runtime by reproducing the compile-time expansion of
+the all-event logger. Source, object, and compiler-RSS measurements remain part
+of the compile-size report, but compile wall time is already below the metered
+baseline.
+
+M1 establishes only executor viability. It does not establish GPU tracegen
+viability. M2 must measure logical live allocations from the CUDA memory manager
+and physical reserved memory separately: allocator pools can keep pages mapped
+after buffers are logically freed, so `nvidia-smi` alone cannot prove correct
+lifetimes. The hard gate is that the largest tracegen phase remains below both
+the legacy tracegen peak and the existing proving/GKR peak (operationally about
+15 GiB), and that the handoff to proving retains no checkpoint, residual,
+chronology, sort, or replay-index allocation.
+
 ### M2: RISC-V GPU feasibility slice
 
 Before designing the rest of tracegen, test the central bet on the most important
