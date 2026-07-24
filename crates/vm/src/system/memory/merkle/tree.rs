@@ -8,7 +8,8 @@ use super::{FinalState, MemoryMerkleCols};
 use crate::{
     arch::hasher::{Hasher, HasherChip},
     system::memory::{
-        dimensions::MemoryDimensions, merkle::memory_to_vec_partition, AddressMap, Equipartition,
+        dimensions::MemoryDimensions, merkle::memory_to_vec_partition, persistent::DirtyLeaves,
+        AddressMap, Equipartition,
     },
 };
 
@@ -28,6 +29,14 @@ fn parent_label_parts(
     let parent_as_label = (path >> address_bits_below) as u32;
 
     (parent_as_label, parent_address_label)
+}
+
+/// The `*_child_mode` value for an *initial* row (see `MemoryMerkleCols`): how many
+/// times the row references the child's initial claim, in {0, 1, 2}. One reference if
+/// the child is on the touched path, plus one if this node's final row dd-borrows it
+/// (touched-clean or untouched child of a node that emits a final row).
+fn initial_child_mode<F: PrimeField32>(emits_final: bool, changed: bool, dirty: bool) -> F {
+    F::from_bool(changed) + F::from_bool(emits_final && !dirty)
 }
 
 #[derive(Debug)]
@@ -76,9 +85,15 @@ impl<F: PrimeField32, const DIGEST_WIDTH: usize> MerkleTree<F, DIGEST_WIDTH> {
 
     #[allow(clippy::type_complexity)]
     /// Applies leaf updates upward to the root.
+    ///
+    /// Each layer entry carries an `is_dirty` bit: for leaves it says the leaf was
+    /// *written* during execution (tracked by `TracingMemory`, independent of the
+    /// written content), and for inner nodes it is the OR of the children's bits. A node emits a
+    /// final-direction row (and records a final compression) only if it is dirty — or if it is
+    /// the root, whose final row is pinned to the public values.
     fn process_layers<CompressFn>(
         &mut self,
-        layer: Vec<(u64, [F; DIGEST_WIDTH])>,
+        layer: Vec<(u64, [F; DIGEST_WIDTH], bool)>,
         md: &MemoryDimensions,
         mut rows: Option<&mut Vec<MemoryMerkleCols<F, DIGEST_WIDTH>>>,
         compress: CompressFn,
@@ -92,16 +107,16 @@ impl<F: PrimeField32, const DIGEST_WIDTH: usize> MerkleTree<F, DIGEST_WIDTH> {
         new_entries.reserve(initial_len.max(self.height));
         let mut layer = new_entries
             .par_iter()
-            .map(|(index, values)| {
+            .map(|(index, values, is_dirty)| {
                 let old_values = self.nodes.get(index).unwrap_or(&self.zero_nodes[0]);
-                (*index, *values, *old_values)
+                (*index, *values, *old_values, *is_dirty)
             })
             .collect::<Vec<_>>();
         for height in 1..=self.height {
             let new_layer = layer
                 .iter()
                 .enumerate()
-                .filter_map(|(i, (index, values, old_values))| {
+                .filter_map(|(i, (index, values, old_values, is_dirty))| {
                     if i > 0 && layer[i - 1].0 ^ 1 == *index {
                         return None;
                     }
@@ -109,16 +124,16 @@ impl<F: PrimeField32, const DIGEST_WIDTH: usize> MerkleTree<F, DIGEST_WIDTH> {
                     let par_index = index >> 1;
 
                     if i + 1 < layer.len() && layer[i + 1].0 == index ^ 1 {
-                        let (_, sibling_values, sibling_old_values) = &layer[i + 1];
+                        let (_, sibling_values, sibling_old_values, sibling_dirty) = &layer[i + 1];
                         Some((
                             par_index,
-                            Some((values, old_values)),
-                            Some((sibling_values, sibling_old_values)),
+                            Some((values, old_values, *is_dirty)),
+                            Some((sibling_values, sibling_old_values, *sibling_dirty)),
                         ))
                     } else if index & 1 == 0 {
-                        Some((par_index, Some((values, old_values)), None))
+                        Some((par_index, Some((values, old_values, *is_dirty)), None))
                     } else {
-                        Some((par_index, None, Some((values, old_values))))
+                        Some((par_index, None, Some((values, old_values, *is_dirty))))
                     }
                 })
                 .collect::<Vec<_>>();
@@ -129,102 +144,150 @@ impl<F: PrimeField32, const DIGEST_WIDTH: usize> MerkleTree<F, DIGEST_WIDTH> {
                         .into_par_iter()
                         .map(|(par_index, left, right)| {
                             let left_node;
-                            let left = if let Some(left) = left {
-                                left.0
+                            let (left, left_dirty) = if let Some((values, _, dirty)) = left {
+                                (values, dirty)
                             } else {
                                 left_node = self.get_node_at_height(2 * par_index, height - 1);
-                                &left_node
+                                (&left_node, false)
                             };
                             let right_node;
-                            let right = if let Some(right) = right {
-                                right.0
+                            let (right, right_dirty) = if let Some((values, _, dirty)) = right {
+                                (values, dirty)
                             } else {
                                 right_node = self.get_node_at_height(2 * par_index + 1, height - 1);
-                                &right_node
+                                (&right_node, false)
                             };
                             let combined = compress(left, right);
                             let par_old_values = self.get_node_at_height(par_index, height);
-                            (par_index, combined, par_old_values)
+                            (
+                                par_index,
+                                combined,
+                                par_old_values,
+                                left_dirty || right_dirty,
+                            )
                         })
                         .collect();
                 }
                 Some(ref mut rows) => {
                     let height_section = F::from_bool(height > md.address_height);
                     let parent_height = F::from_usize(height);
-                    let is_root = F::from_bool(height == md.overall_height());
+                    let is_root = height == md.overall_height();
                     let (tmp, new_rows): (
-                        Vec<(u64, [F; DIGEST_WIDTH], [F; DIGEST_WIDTH])>,
-                        Vec<[_; 2]>,
+                        Vec<(u64, [F; DIGEST_WIDTH], [F; DIGEST_WIDTH], bool)>,
+                        Vec<_>,
                     ) = new_layer
                         .into_par_iter()
                         .map(|(par_index, left, right)| {
                             let (parent_as_label, parent_address_label) =
                                 parent_label_parts(md, self.height, par_index, height);
+                            // `changed_*` says the child is on the touched path (its
+                            // layer entry exists); `*_dirty` says its value actually
+                            // changed. Untouched children carry `dirty = false`.
                             let left_node;
-                            let (left, old_left, changed_left) = match left {
-                                Some((left, old_left)) => (left, old_left, true),
+                            let (left, old_left, left_dirty, changed_left) = match left {
+                                Some((left, old_left, dirty)) => (left, old_left, dirty, true),
                                 None => {
                                     left_node = self.get_node_at_height(2 * par_index, height - 1);
-                                    (&left_node, &left_node, false)
+                                    (&left_node, &left_node, false, false)
                                 }
                             };
                             let right_node;
-                            let (right, old_right, changed_right) = match right {
-                                Some((right, old_right)) => (right, old_right, true),
+                            let (right, old_right, right_dirty, changed_right) = match right {
+                                Some((right, old_right, dirty)) => (right, old_right, dirty, true),
                                 None => {
                                     right_node =
                                         self.get_node_at_height(2 * par_index + 1, height - 1);
-                                    (&right_node, &right_node, false)
+                                    (&right_node, &right_node, false, false)
                                 }
                             };
-                            let combined = compress(left, right);
-                            // Record the old child pair on the compression bus.
-                            compress(old_left, old_right);
+                            let node_dirty = left_dirty || right_dirty;
+                            // Final rows are emitted only for dirty nodes, except the
+                            // root: the AIR pins the first two rows to the initial/final
+                            // root public values, so the root's final row always exists.
+                            // A forced root row does not redefine a clean root as dirty:
+                            // `node_dirty`, not `emits_final`, is what propagates upward.
+                            let emits_final = node_dirty || is_root;
+
                             let par_old_values = self.get_node_at_height(par_index, height);
+                            // Record the initial (old-children) compression for the
+                            // initial row.
+                            compress(old_left, old_right);
+                            // Only emitted final rows claim a final compression. A clean
+                            // node's new hash equals its stored one, so skip hashing.
+                            let combined = if emits_final {
+                                compress(left, right)
+                            } else {
+                                par_old_values
+                            };
+
+                            let initial_row = MemoryMerkleCols {
+                                expand_direction: F::ONE,
+                                height_section,
+                                parent_height,
+                                parent_height_inv: parent_height.inverse(),
+                                is_root: F::from_bool(is_root),
+                                parent_as_label: F::from_u32(parent_as_label),
+                                parent_address_label: F::from_u32(parent_address_label),
+                                parent_hash: par_old_values,
+                                left_child_hash: *old_left,
+                                right_child_hash: *old_right,
+                                // Initial-row child mode: reference count in {0, 1, 2}
+                                // (see MemoryMerkleCols).
+                                left_child_mode: initial_child_mode::<F>(
+                                    emits_final,
+                                    changed_left,
+                                    left_dirty,
+                                ),
+                                right_child_mode: initial_child_mode::<F>(
+                                    emits_final,
+                                    changed_right,
+                                    right_dirty,
+                                ),
+                            };
+                            let final_row = emits_final.then(|| MemoryMerkleCols {
+                                expand_direction: F::NEG_ONE,
+                                height_section,
+                                parent_height,
+                                parent_height_inv: parent_height.inverse(),
+                                is_root: F::from_bool(is_root),
+                                parent_as_label: F::from_u32(parent_as_label),
+                                parent_address_label: F::from_u32(parent_address_label),
+                                parent_hash: combined,
+                                left_child_hash: *left,
+                                right_child_hash: *right,
+                                // Final-row child mode = dd bit: 1 when the child is
+                                // "not expanded finally" (untouched *or* touched-clean,
+                                // borrowed from the initial tree), 0 when it is dirty.
+                                left_child_mode: F::from_bool(!left_dirty),
+                                right_child_mode: F::from_bool(!right_dirty),
+                            });
                             (
-                                (par_index, combined, par_old_values),
-                                [
-                                    MemoryMerkleCols {
-                                        expand_direction: F::ONE,
-                                        height_section,
-                                        parent_height,
-                                        parent_height_inv: parent_height.inverse(),
-                                        is_root,
-                                        parent_as_label: F::from_u32(parent_as_label),
-                                        parent_address_label: F::from_u32(parent_address_label),
-                                        parent_hash: par_old_values,
-                                        left_child_hash: *old_left,
-                                        right_child_hash: *old_right,
-                                        left_direction_different: F::ZERO,
-                                        right_direction_different: F::ZERO,
-                                    },
-                                    MemoryMerkleCols {
-                                        expand_direction: F::NEG_ONE,
-                                        height_section,
-                                        parent_height,
-                                        parent_height_inv: parent_height.inverse(),
-                                        is_root,
-                                        parent_as_label: F::from_u32(parent_as_label),
-                                        parent_address_label: F::from_u32(parent_address_label),
-                                        parent_hash: combined,
-                                        left_child_hash: *left,
-                                        right_child_hash: *right,
-                                        left_direction_different: F::from_bool(!changed_left),
-                                        right_direction_different: F::from_bool(!changed_right),
-                                    },
-                                ],
+                                (par_index, combined, par_old_values, node_dirty),
+                                (initial_row, final_row),
                             )
                         })
                         .unzip();
-                    rows.extend(new_rows.into_iter().flatten());
+                    rows.extend(
+                        new_rows
+                            .into_iter()
+                            .flat_map(|(initial, fin)| std::iter::once(initial).chain(fin)),
+                    );
                     layer = tmp;
                 }
             }
-            new_entries.extend(layer.iter().map(|(idx, values, _)| (*idx, *values)));
+            new_entries.extend(
+                layer
+                    .iter()
+                    .map(|(idx, values, _, is_dirty)| (*idx, *values, *is_dirty)),
+            );
         }
 
         self.nodes.reserve(new_entries.len());
-        self.nodes.extend(new_entries);
+        self.nodes.extend(
+            new_entries
+                .into_iter()
+                .map(|(idx, values, _)| (idx, values)),
+        );
     }
 
     pub fn from_memory(
@@ -235,16 +298,20 @@ impl<F: PrimeField32, const DIGEST_WIDTH: usize> MerkleTree<F, DIGEST_WIDTH> {
         let mut tree = Self::new(md.overall_height(), hasher);
         let layer: Vec<_> = memory_to_vec_partition(memory, md)
             .par_iter()
-            .map(|(idx, v)| ((1 << tree.height) + idx, hasher.hash(v)))
+            .map(|(idx, v)| ((1 << tree.height) + idx, hasher.hash(v), false))
             .collect();
         tree.process_layers(layer, md, None, |left, right| hasher.compress(left, right));
         tree
     }
 
+    /// `dirty_leaves` must be the set committed to by the boundary chip (keyed by
+    /// `(address_space, leaf_ptr)`, like `touched`): its rows only reference a leaf's
+    /// final state when that leaf is in the set.
     pub fn finalize(
         &mut self,
         hasher: &impl HasherChip<DIGEST_WIDTH, F>,
         touched: &Equipartition<F, DIGEST_WIDTH>,
+        dirty_leaves: &DirtyLeaves,
         md: &MemoryDimensions,
     ) -> FinalState<DIGEST_WIDTH, F> {
         let init_root = self.get_node(1);
@@ -256,31 +323,35 @@ impl<F: PrimeField32, const DIGEST_WIDTH: usize> MerkleTree<F, DIGEST_WIDTH> {
                         (1 << self.height)
                             + md.label_to_index((*addr_sp, *ptr / DIGEST_WIDTH as u32)),
                         hasher.hash(v),
+                        dirty_leaves.contains(&(*addr_sp, *ptr)),
                     )
                 })
                 .collect()
         } else {
+            // Artificial touch to seed the walk so the root row pair exists. It is not
+            // dirty, and no boundary row backs it (see the post-walk fix below).
             let index = 1 << self.height;
-            vec![(index, self.get_node(index))]
+            vec![(index, self.get_node(index), false)]
         };
-        let mut rows = Vec::with_capacity(if layer.is_empty() {
-            0
-        } else {
-            layer
-                .iter()
-                .zip(layer.iter().skip(1))
-                .fold(md.overall_height(), |acc, ((lhs, _), (rhs, _))| {
-                    acc + (lhs ^ rhs).ilog2() as usize
-                })
-        });
+        // Upper bound: one initial row per touched-spanning node plus at most one final
+        // row each.
+        let touched_spanning_nodes = layer
+            .iter()
+            .zip(layer.iter().skip(1))
+            .fold(md.overall_height(), |acc, ((lhs, _, _), (rhs, _, _))| {
+                acc + (lhs ^ rhs).ilog2() as usize
+            });
+        let mut rows = Vec::with_capacity(2 * touched_spanning_nodes);
         self.process_layers(layer, md, Some(&mut rows), |left, right| {
             hasher.compress_and_record(left, right)
         });
         if touched.is_empty() {
-            // If we made an artificial touch, we need to change the direction changes for the
-            // leaves
-            rows[1].left_direction_different = F::ONE;
-            rows[1].right_direction_different = F::ONE;
+            // The artificial touch seeds the walk so the root pair exists, but there is
+            // no boundary row supplying the leaf's claim, so the height-1 initial row
+            // (rows[0]) must treat the leaf as *untouched*: one dd-borrowed reference if
+            // the row's final counterpart exists (root case, mode 1), none otherwise
+            // (mode 0).
+            rows[0].left_child_mode = F::from_bool(rows[0].is_root == F::ONE);
         }
         let final_root = self.get_node(1);
         FinalState {

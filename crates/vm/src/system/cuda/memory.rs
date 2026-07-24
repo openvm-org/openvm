@@ -32,7 +32,7 @@ use tracing::instrument;
 
 use super::{
     boundary::BoundaryChipGPU,
-    merkle_tree::{MemoryMerkleTree, MERKLE_TOUCHED_BLOCK_WIDTH},
+    merkle_tree::{MemoryMerkleTree, SpanningNodeCounter, MERKLE_TOUCHED_BLOCK_WIDTH},
     Poseidon2PeripheryChipGPU,
 };
 use crate::{cuda_abi::inventory, system::memory::online::LinearMemory};
@@ -45,11 +45,11 @@ const _: () = assert!(
     "CUDA memory inventory only supports (BLOCK_FE_WIDTH, VM_DIGEST_WIDTH) == (4, 8)"
 );
 
-// `TouchedBlock<F>` must be exactly the 7-word `InRec` layout in `inventory.cu`
+// `TouchedBlock<F>` must be exactly the 8-word `InRec` layout in `inventory.cu`
 // so the merge path can upload the vector's bytes without repacking.
 const _: () = assert!(
-    std::mem::size_of::<TouchedBlock<F>>() == (3 + BLOCK_FE_WIDTH) * std::mem::size_of::<u32>(),
-    "TouchedBlock<F> must match the 7-u32-word InRec layout in inventory.cu"
+    std::mem::size_of::<TouchedBlock<F>>() == (4 + BLOCK_FE_WIDTH) * std::mem::size_of::<u32>(),
+    "TouchedBlock<F> must match the 8-u32-word InRec layout in inventory.cu"
 );
 
 pub struct MemoryInventoryGPU {
@@ -112,6 +112,7 @@ impl Drop for PinnedStaging {
 struct MemoryInventoryRecord<const CHUNK: usize, const BLOCKS: usize> {
     address_space: u32,
     ptr: u32,
+    is_dirty: u32,
     timestamps: [u32; BLOCKS],
     values: [u32; CHUNK],
 }
@@ -121,7 +122,7 @@ struct MemoryInventoryRecord<const CHUNK: usize, const BLOCKS: usize> {
 struct MemoryMerkleRecord {
     address_space: u32,
     ptr: u32,
-    timestamp: u32,
+    is_dirty: u32,
     values: [u32; VM_DIGEST_WIDTH],
 }
 
@@ -223,7 +224,10 @@ impl MemoryInventoryGPU {
     ) -> Vec<AirProvingContext<GpuBackend>> {
         let mem = MemTracker::start("generate mem proving ctxs");
         let partition = touched_memory;
-        let unpadded_merkle_height = if partition.is_empty() {
+        // Exact merkle trace rows: one initial row per touched-spanning node, one final
+        // row per dirty-spanning node (or just the forced root final row when nothing
+        // is dirty).
+        let merkle_rows = if partition.is_empty() {
             let leftmost_values = 'left: {
                 let mut res = [F::ZERO; VM_DIGEST_WIDTH];
                 if self.initial_memory[ADDR_SPACE_OFFSET as usize].is_empty() {
@@ -253,7 +257,7 @@ impl MemoryInventoryGPU {
             let merkle_record = MemoryMerkleRecord {
                 address_space: ADDR_SPACE_OFFSET,
                 ptr: 0,
-                timestamp: 0,
+                is_dirty: 0,
                 values: values_u32,
             };
             let merkle_records = [merkle_record];
@@ -265,17 +269,22 @@ impl MemoryInventoryGPU {
             };
             self.merkle_records = Some(merkle_words.to_device_on(&self.device_ctx).unwrap());
 
-            let unpadded_merkle_height = self
+            // The artificial clean touch spans one root-to-leaf path of initial rows,
+            // plus the always-present final root row.
+            let merkle_rows = self
                 .merkle_tree
-                .calculate_unpadded_height(&partition, |b| (b.address_space, b.ptr));
+                .mem_config()
+                .memory_dimensions()
+                .overall_height()
+                + 1;
             #[cfg(feature = "metrics")]
             {
-                self.unpadded_merkle_height = unpadded_merkle_height;
+                self.unpadded_merkle_height = merkle_rows;
             }
             self.boundary
                 .finalize_records::<VM_DIGEST_WIDTH>(Vec::new());
-            self.prepare_poseidon2_records(0, unpadded_merkle_height);
-            unpadded_merkle_height
+            self.prepare_poseidon2_records(0, 0, merkle_rows);
+            merkle_rows
         } else {
             let _span = tracing::info_span!("mem_merge_records").entered();
             let in_num_records = partition.len();
@@ -359,19 +368,47 @@ impl MemoryInventoryGPU {
                     })
                     .count();
 
-            // Host work overlapping the merge kernels: neither the unpadded
-            // height scan nor the Poseidon2 records buffer depends on the
-            // merge kernels.
-            let unpadded_merkle_height = self
-                .merkle_tree
-                .calculate_unpadded_height(&partition, |b| (b.address_space, b.ptr));
+            // Host work overlapping the merge kernels: the compacted leaf keys and
+            // their dirty bits are pure functions of the sorted partition (the same
+            // dedup rule the device merge uses; a leaf is dirty iff some of its blocks
+            // was written), so the exact merkle trace shape and Poseidon2 record count
+            // are computed here with no device synchronization.
+            let memory_dimensions = self.merkle_tree.mem_config().memory_dimensions();
+            let tree_height = memory_dimensions.overall_height();
+            let mut touched_nodes = SpanningNodeCounter::default();
+            let mut dirty_nodes = SpanningNodeCounter::default();
+            let mut num_touched_leaves = 0usize;
+            let mut num_dirty_leaves = 0usize;
+            for leaf_blocks in partition.chunk_by(|a, b| {
+                (a.address_space, a.ptr / VM_DIGEST_WIDTH as u32)
+                    == (b.address_space, b.ptr / VM_DIGEST_WIDTH as u32)
+            }) {
+                let block = &leaf_blocks[0];
+                let key = (block.address_space, block.ptr / VM_DIGEST_WIDTH as u32);
+                let leaf_index = memory_dimensions.label_to_index(key);
+                touched_nodes.push(leaf_index, tree_height);
+                num_touched_leaves += 1;
+                if leaf_blocks.iter().any(|b| b.is_dirty != 0) {
+                    dirty_nodes.push(leaf_index, tree_height);
+                    num_dirty_leaves += 1;
+                }
+            }
+            debug_assert_eq!(num_touched_leaves, out_num_records);
+            // One initial row per touched node, one final row per dirty node; the
+            // final root row exists even when nothing is dirty.
+            let merkle_rows = touched_nodes.nodes
+                + if num_dirty_leaves == 0 {
+                    1
+                } else {
+                    dirty_nodes.nodes
+                };
             #[cfg(feature = "metrics")]
             {
-                self.unpadded_merkle_height = unpadded_merkle_height;
+                self.unpadded_merkle_height = merkle_rows;
             }
             {
                 let _span = tracing::info_span!("poseidon2_prepare").entered();
-                self.prepare_poseidon2_records(out_num_records, unpadded_merkle_height);
+                self.prepare_poseidon2_records(out_num_records, num_dirty_leaves, merkle_rows);
             }
 
             // Cross-check the host-computed count against the device merge in
@@ -404,7 +441,7 @@ impl MemoryInventoryGPU {
                 .expect("inventory_to_merkle_records failed");
             }
             self.merkle_records = Some(d_merkle_records);
-            unpadded_merkle_height
+            merkle_rows
         };
 
         mem.tracing_info("merkle update");
@@ -412,7 +449,7 @@ impl MemoryInventoryGPU {
             let _span = tracing::info_span!("merkle_update").entered();
             self.merkle_tree.finalize();
             self.merkle_tree.update_with_touched_blocks(
-                unpadded_merkle_height,
+                merkle_rows,
                 self.merkle_records
                     .as_ref()
                     .expect("missing merkle records"),
@@ -434,10 +471,19 @@ impl MemoryInventoryGPU {
         ret
     }
 
-    fn prepare_poseidon2_records(&self, boundary_records: usize, merkle_height: usize) {
+    /// Sizes the shared Poseidon2 record buffer to the exact push count: the boundary
+    /// kernel records one initial hash per touched leaf plus one final hash per dirty
+    /// leaf, and every merkle trace row records exactly one compression. These counts
+    /// must stay in lockstep with `boundary.cu` / `merkle_tree.cu`.
+    fn prepare_poseidon2_records(
+        &self,
+        boundary_records: usize,
+        dirty_leaves: usize,
+        merkle_rows: usize,
+    ) {
         let num_records = boundary_records
-            .checked_mul(2)
-            .and_then(|n| n.checked_add(merkle_height))
+            .checked_add(dirty_leaves)
+            .and_then(|n| n.checked_add(merkle_rows))
             .expect("Poseidon2 records count overflow");
         self.hasher_chip.prepare_records(num_records);
     }
@@ -593,12 +639,14 @@ mod tests {
             TouchedBlock {
                 address_space: RV64_MEMORY_AS,
                 ptr: 0,
+                is_dirty: 1,
                 timestamp: 1,
                 values: pack_u8_block_value(&touched_bytes.map(F::from_u8)),
             },
             TouchedBlock {
                 address_space: RV64_MEMORY_AS,
                 ptr: BLOCK_FE_WIDTH as u32,
+                is_dirty: 1,
                 timestamp: 3,
                 values: pack_u8_block_value(&touched_bytes_late.map(F::from_u8)),
             },
@@ -675,5 +723,94 @@ mod tests {
         let ctxs = run_inventory(&mem_config, &memory.memory, Vec::new());
 
         assert_eq!(expected_root, gpu_merkle_root(&ctxs));
+    }
+
+    /// CPU and GPU must generate the *same* Merkle trace, row for row.
+    #[test]
+    fn test_merkle_trace_matches_between_cpu_and_gpu() {
+        use std::collections::{BTreeMap, BTreeSet};
+
+        use openvm_circuit::{
+            arch::ADDR_SPACE_OFFSET,
+            system::memory::{
+                merkle::{memory_to_vec_partition, MemoryMerkleChip},
+                persistent::DirtyLeaves,
+            },
+        };
+        use openvm_cuda_backend::data_transporter::assert_eq_host_and_device_matrix_col_maj;
+        use openvm_stark_backend::{interaction::PermutationCheckBus, prover::ColMajorMatrix};
+        use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
+
+        let (mem_config, memory) = single_block_setup();
+        let mut final_memory = memory.clone();
+        let touched_bytes = [101u8, 102, 103, 104, 105, 106, 107, 108];
+        let touched_bytes_late = [111u8, 112, 113, 114, 115, 116, 117, 118];
+        unsafe {
+            final_memory.write_bytes::<MEMORY_BLOCK_BYTES>(RV64_MEMORY_AS, 0, touched_bytes);
+            final_memory.write_bytes::<MEMORY_BLOCK_BYTES>(
+                RV64_MEMORY_AS,
+                MEMORY_BLOCK_BYTES as u32,
+                touched_bytes_late,
+            );
+        }
+
+        // GPU trace: both blocks written (is_dirty = 1), forming one dirty leaf.
+        let touched_memory = vec![
+            TouchedBlock {
+                address_space: RV64_MEMORY_AS,
+                ptr: 0,
+                is_dirty: 1,
+                timestamp: 1,
+                values: pack_u8_block_value(&touched_bytes.map(F::from_u8)),
+            },
+            TouchedBlock {
+                address_space: RV64_MEMORY_AS,
+                ptr: BLOCK_FE_WIDTH as u32,
+                is_dirty: 1,
+                timestamp: 3,
+                values: pack_u8_block_value(&touched_bytes_late.map(F::from_u8)),
+            },
+        ];
+        let ctxs = run_inventory(&mem_config, &memory.memory, touched_memory);
+        let gpu_merkle = ctxs
+            .iter()
+            .find(|ctx| ctx.public_values.len() >= 2 * VM_DIGEST_WIDTH)
+            .expect("missing merkle ctx");
+
+        // CPU reference trace via the merkle chip, which applies the reverse+swap that
+        // defines the committed row order.
+        let md = mem_config.memory_dimensions();
+        let hasher = Poseidon2PeripheryChip::new(vm_poseidon2_config(), 3);
+
+        // The two written blocks fall in one 8-cell leaf at (RV64_MEMORY_AS, label 0).
+        let touched_labels: BTreeSet<(u32, u32)> = BTreeSet::from([(RV64_MEMORY_AS, 0)]);
+        let final_partition: BTreeMap<(u32, u32), [F; VM_DIGEST_WIDTH]> =
+            memory_to_vec_partition::<F, VM_DIGEST_WIDTH>(&final_memory.memory, &md)
+                .into_iter()
+                .map(|(idx, values)| {
+                    let address_space = (idx >> md.address_height) as u32 + ADDR_SPACE_OFFSET;
+                    let label = (idx & ((1 << md.address_height) - 1)) as u32;
+                    ((address_space, label * VM_DIGEST_WIDTH as u32), values)
+                })
+                .filter(|((address_space, ptr), _)| {
+                    touched_labels.contains(&(*address_space, ptr / VM_DIGEST_WIDTH as u32))
+                })
+                .collect();
+        // Every touched block sets is_dirty = 1, so the leaf is dirty (matches the GPU input).
+        let dirty_leaves: DirtyLeaves = final_partition.keys().copied().collect();
+
+        let bus = PermutationCheckBus::new(0); // bus index does not affect the main trace
+        let mut cpu_chip = MemoryMerkleChip::<VM_DIGEST_WIDTH, F>::new(md, bus, bus);
+        cpu_chip.finalize(&memory.memory, &final_partition, &dirty_leaves, &hasher);
+        let cpu_trace = cpu_chip
+            .generate_proving_ctx::<BabyBearPoseidon2Config>()
+            .common_main;
+        let cpu_trace_cm = ColMajorMatrix::from_row_major(&cpu_trace);
+
+        let device_ctx = GpuDeviceCtx {
+            device_id: get_device().unwrap() as u32,
+            stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
+        };
+        assert_eq_host_and_device_matrix_col_maj(&cpu_trace_cm, &gpu_merkle.common_main, &device_ctx);
     }
 }

@@ -32,6 +32,7 @@ use crate::{
                 MemoryMerkleChip, MemoryMerkleCols, MerkleTree,
             },
             online::{GuestMemory, LinearMemory},
+            persistent::DirtyLeaves,
             ptr_bits_from_address_height, AddressMap, MemoryImage,
         },
         poseidon2::Poseidon2PeripheryChip,
@@ -88,13 +89,31 @@ fn test(
                 ((address_space, label * (VM_DIGEST_WIDTH as u32)), values)
             })
             .collect();
-    let final_partition = final_partition
+    let final_partition: BTreeMap<_, _> = final_partition
         .into_iter()
         .filter(|((address_space, pointer), _)| {
             touched_labels.contains(&(*address_space, pointer / VM_DIGEST_WIDTH as u32))
         })
         .collect();
-    chip.finalize(initial_memory, &final_partition, &hash_test_chip);
+    // Dirtiness is per *write* and the test scenario defines its write pattern here:
+    // exactly the touched leaves whose values changed are treated as written (the
+    // minimal valid dirty set; any superset would also be sound).
+    let dirty_leaves: DirtyLeaves = final_partition
+        .iter()
+        .filter(|((address_space, pointer), values)| {
+            let init_values: [F; VM_DIGEST_WIDTH] = array::from_fn(|i| unsafe {
+                initial_memory.get_f::<F>(*address_space, *pointer + i as u32)
+            });
+            init_values != **values
+        })
+        .map(|(&key, _)| key)
+        .collect();
+    chip.finalize(
+        initial_memory,
+        &final_partition,
+        &dirty_leaves,
+        &hash_test_chip,
+    );
 
     assert_eq!(
         chip.final_state.as_ref().unwrap().final_root,
@@ -147,17 +166,20 @@ fn test(
             address_label,
             initial_values,
         );
-        let final_values = *final_partition
-            .get(&(address_space, address_label * (VM_DIGEST_WIDTH as u32)))
-            .unwrap();
-        interaction(
-            PermutationInteractionType::Send,
-            true,
-            0,
-            as_label,
-            address_label,
-            final_values,
-        );
+        let leaf_ptr = address_label * (VM_DIGEST_WIDTH as u32);
+        let final_values = *final_partition.get(&(address_space, leaf_ptr)).unwrap();
+        // Like the real boundary chip, the dummy references a leaf's final state only
+        // when the leaf is dirty (the final-claim multiplicity is `is_dirty`).
+        if dirty_leaves.contains(&(address_space, leaf_ptr)) {
+            interaction(
+                PermutationInteractionType::Send,
+                true,
+                0,
+                as_label,
+                address_label,
+                final_values,
+            );
+        }
     }
 
     while !(dummy_interaction_trace_rows.len() / (dummy_interaction_air.field_width() + 1))
@@ -315,7 +337,12 @@ fn expand_test_no_accesses() {
         COMPRESSION_BUS,
     );
 
-    chip.finalize(&memory, &BTreeMap::new(), &hash_test_chip);
+    chip.finalize(
+        &memory,
+        &BTreeMap::new(),
+        &DirtyLeaves::default(),
+        &hash_test_chip,
+    );
     let trace = chip.generate_proving_ctx();
     test_cpu_engine()
         .run_test(
@@ -360,14 +387,19 @@ fn expand_test_negative() {
         COMPRESSION_BUS,
     );
 
-    chip.finalize(&memory, &BTreeMap::new(), &hash_test_chip);
+    chip.finalize(
+        &memory,
+        &BTreeMap::new(),
+        &DirtyLeaves::default(),
+        &hash_test_chip,
+    );
     let mut chip_ctx = chip.generate_proving_ctx();
     {
         for row in chip_ctx.common_main.rows_mut() {
             let row: &mut MemoryMerkleCols<_, VM_DIGEST_WIDTH> = row.borrow_mut();
             if row.expand_direction == BabyBear::NEG_ONE {
-                row.left_direction_different = BabyBear::ZERO;
-                row.right_direction_different = BabyBear::ZERO;
+                row.left_child_mode = BabyBear::ZERO;
+                row.right_child_mode = BabyBear::ZERO;
             }
         }
     }
@@ -400,6 +432,17 @@ fn final_direction_different(direction: BabyBear, child_has_expansion: bool) -> 
         BabyBear::ONE
     } else {
         BabyBear::ZERO
+    }
+}
+
+/// The merged `*_child_mode` value for these hand-built fixtures. They reference each
+/// touched child exactly once, so an initial row's mode is always 1; a final row's mode
+/// is the dd bit (1 iff the child is borrowed from the initial tree); padding is 0.
+fn child_mode(direction: BabyBear, child_has_expansion: bool) -> BabyBear {
+    if direction == BabyBear::ONE {
+        BabyBear::ONE
+    } else {
+        final_direction_different(direction, child_has_expansion)
     }
 }
 
@@ -502,11 +545,11 @@ fn build_below_leaf_swap_subtree(
             parent_hash,
             left_child_hash,
             right_child_hash,
-            left_direction_different: final_direction_different(
+            left_child_mode: child_mode(
                 direction,
                 left_has_path && child_depth < BELOW_LEAF_PATH_LEN,
             ),
-            right_direction_different: final_direction_different(
+            right_child_mode: child_mode(
                 direction,
                 right_has_path && child_depth < BELOW_LEAF_PATH_LEN,
             ),
@@ -630,8 +673,8 @@ fn build_counterexample_canonical_rows(
                 parent_hash: initial_hash,
                 left_child_hash: left_initial_hash,
                 right_child_hash: right_initial_hash,
-                left_direction_different: BabyBear::ZERO,
-                right_direction_different: BabyBear::ZERO,
+                left_child_mode: BabyBear::ONE,
+                right_child_mode: BabyBear::ONE,
             });
             rows_by_height[height].push(MemoryMerkleCols {
                 expand_direction: BabyBear::NEG_ONE,
@@ -644,8 +687,8 @@ fn build_counterexample_canonical_rows(
                 parent_hash: final_hash,
                 left_child_hash: left_final_hash,
                 right_child_hash: right_final_hash,
-                left_direction_different: BabyBear::from_bool(!left_changed),
-                right_direction_different: BabyBear::from_bool(!right_changed),
+                left_child_mode: BabyBear::from_bool(!left_changed),
+                right_child_mode: BabyBear::from_bool(!right_changed),
             });
 
             next.insert(parent_prefix, (initial_hash, final_hash));
@@ -691,8 +734,8 @@ fn build_hidden_leaf_expansion_row(
             parent_hash,
             left_child_hash: below_leaf_root,
             right_child_hash: unchanged_sibling_hash,
-            left_direction_different: final_direction_different(direction, true),
-            right_direction_different: final_direction_different(direction, false),
+            left_child_mode: child_mode(direction, true),
+            right_child_mode: child_mode(direction, false),
         },
     )
 }
@@ -820,8 +863,8 @@ fn build_below_leaf_swap_fraud_merkle(
             parent_hash: [BabyBear::ZERO; VM_DIGEST_WIDTH],
             left_child_hash: [BabyBear::ZERO; VM_DIGEST_WIDTH],
             right_child_hash: [BabyBear::ZERO; VM_DIGEST_WIDTH],
-            left_direction_different: BabyBear::ZERO,
-            right_direction_different: BabyBear::ZERO,
+            left_child_mode: BabyBear::ZERO,
+            right_child_mode: BabyBear::ZERO,
         });
     }
 
@@ -998,7 +1041,14 @@ fn expand_test_label_rebinding_attack() {
 
     let merkle_bus = PermutationCheckBus::new(MEMORY_MERKLE_BUS);
     let mut chip = MemoryMerkleChip::<VM_DIGEST_WIDTH, _>::new(md, merkle_bus, COMPRESSION_BUS);
-    chip.finalize(&memory.memory, &final_partition_for_chip, &hash_test_chip);
+    // The touched leaf's final values equal its initial ones (the write happened before
+    // the initial snapshot), so no leaf is dirty.
+    chip.finalize(
+        &memory.memory,
+        &final_partition_for_chip,
+        &DirtyLeaves::default(),
+        &hash_test_chip,
+    );
     let mut chip_ctx = chip.generate_proving_ctx();
 
     {
@@ -1077,14 +1127,8 @@ fn expand_test_label_rebinding_attack() {
             address_label,
             values,
         );
-        interaction(
-            PermutationInteractionType::Send,
-            true,
-            0,
-            as_label,
-            address_label,
-            values,
-        );
+        // No final-state claim: the leaf is touched but clean, and a real boundary row
+        // would have `is_dirty = 0`.
     }
 
     while !(dummy_interaction_trace_rows.len() / (dummy_interaction_air.field_width() + 1))
