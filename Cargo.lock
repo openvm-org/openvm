@@ -5262,7 +5262,7 @@ dependencies = [
 name = "openvm-pairing-guest"
 version = "2.1.0"
 dependencies = [
- "blstrs",
+ "blst",
  "halo2curves-axiom",
  "hex-literal",
  "itertools 0.14.0",
