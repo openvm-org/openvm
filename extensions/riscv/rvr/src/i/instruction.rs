@@ -1,8 +1,9 @@
 //! RV64I instruction nodes and C code generation.
 
 use rvr_openvm_ir::{
-    CfgBranchCond, CfgEffect, CfgIntWidth, CfgJumpKind, CfgOp, CfgOperand, CfgResultWidth, CfgTerm,
-    ExtEmitCtx, ExtInstr, MemWidth,
+    ArenaAddIBaked, ArenaAlu3Baked, ArenaWr1Baked, CfgBranchCond, CfgEffect, CfgIntWidth,
+    CfgJumpKind, CfgOp, CfgOperand, CfgResultWidth, CfgTerm, ExtEmitCtx, ExtInstr,
+    InlineRecordShape, MemWidth,
 };
 
 use crate::instruction::{hex_u64, reg_operand, Reg, RA, ZERO};
@@ -105,6 +106,7 @@ pub(crate) enum Rv64IInstr {
         name: &'static str,
         rd: Reg,
         value: u64,
+        arena: ArenaWr1Baked,
     },
     /// Conditional branch.
     Branch {
@@ -167,6 +169,16 @@ impl ExtInstr for Rv64IInstr {
         }
     }
 
+    fn inline_record_shape(&self) -> Option<InlineRecordShape> {
+        match self {
+            Self::Alu { .. } => Some(InlineRecordShape::Alu3),
+            Self::Load { .. } | Self::Store { .. } => Some(InlineRecordShape::Alu3),
+            Self::Const { .. } | Self::Jump { .. } => Some(InlineRecordShape::Wr1),
+            Self::Branch { .. } => Some(InlineRecordShape::Branch2),
+            Self::JumpIndirect { .. } => Some(InlineRecordShape::Rw1),
+        }
+    }
+
     fn accesses_memory(&self) -> bool {
         matches!(self, Self::Load { .. } | Self::Store { .. })
     }
@@ -177,13 +189,102 @@ impl ExtInstr for Rv64IInstr {
             Self::Alu {
                 op,
                 word,
+                immediate,
                 rd,
                 lhs,
                 rhs,
-                ..
             } => {
+                {
+                    let result_template = alu_expr(*op, *word, "__RVR_LHS__", "__RVR_RHS__");
+                    let emitted = match rhs {
+                        CfgOperand::Var(rhs) => {
+                            let arena = match op {
+                                AluOp::Add => Some(0),
+                                AluOp::Sub => Some(1),
+                                AluOp::Slt | AluOp::Sll | AluOp::Sra => Some(0),
+                                AluOp::Sltu | AluOp::Srl => Some(1),
+                                AluOp::Xor => Some(2),
+                                AluOp::Or => Some(3),
+                                AluOp::And => Some(4),
+                            }
+                            .map(|local_opcode| ArenaAlu3Baked {
+                                rs2_field: rhs.index() * 8,
+                                rs2_as: 1,
+                                rs2_imm_sign: 0,
+                                local_opcode,
+                            });
+                            ctx.emit_reg3_inline(*rd, *lhs, *rhs, arena, &result_template)
+                        }
+                        // CFG metadata represents the architectural x0 value as a
+                        // constant, but a register-form instruction must still
+                        // consume its rs2 memory timestamp and emit a three-access
+                        // record. Re-materialize x0 for execution/record emission;
+                        // immediate-form constants take the two-access path below.
+                        CfgOperand::Const(0) if !*immediate => {
+                            let local_opcode = match op {
+                                AluOp::Add | AluOp::Slt | AluOp::Sll | AluOp::Sra => 0,
+                                AluOp::Sub | AluOp::Sltu | AluOp::Srl => 1,
+                                AluOp::Xor => 2,
+                                AluOp::Or => 3,
+                                AluOp::And => 4,
+                            };
+                            ctx.emit_reg3_inline(
+                                *rd,
+                                *lhs,
+                                ZERO,
+                                Some(ArenaAlu3Baked {
+                                    rs2_field: 0,
+                                    rs2_as: 1,
+                                    rs2_imm_sign: 0,
+                                    local_opcode,
+                                }),
+                                &result_template,
+                            )
+                        }
+                        CfgOperand::Const(imm) if *immediate => {
+                            if *op == AluOp::Add && !*word {
+                                let encoded = (*imm as u32) & 0x00ff_ffff;
+                                if ctx.emit_addi_inline(
+                                    *rd,
+                                    *lhs,
+                                    *imm,
+                                    Some(ArenaAddIBaked {
+                                        imm_low11: (encoded & 0x7ff) as u16,
+                                        imm_sign: ((encoded >> 11) & 1) as u16,
+                                    }),
+                                ) {
+                                    return;
+                                }
+                            }
+                            let local_opcode = match op {
+                                AluOp::Add if *word => Some(0),
+                                AluOp::Add => None,
+                                AluOp::Slt | AluOp::Sll | AluOp::Sra => Some(0),
+                                AluOp::Sltu | AluOp::Srl => Some(1),
+                                AluOp::Xor => Some(2),
+                                AluOp::Or => Some(3),
+                                AluOp::And => Some(4),
+                                AluOp::Sub => None,
+                            };
+                            let arena = local_opcode.map(|local_opcode| ArenaAlu3Baked {
+                                rs2_field: (*imm as u32) & 0x00ff_ffff,
+                                rs2_as: 0,
+                                rs2_imm_sign: ((*imm as i64) < 0) as u8,
+                                local_opcode,
+                            });
+                            ctx.emit_reg2imm_inline(*rd, *lhs, *imm, arena, &result_template)
+                        }
+                        CfgOperand::Const(_) => false,
+                    };
+                    if emitted {
+                        return;
+                    }
+                }
                 let lhs_value = ctx.read_var(*lhs);
-                let rhs_value = operand_c(ctx, *rhs);
+                let rhs_value = match rhs {
+                    CfgOperand::Const(0) if !*immediate => ctx.read_var(ZERO),
+                    _ => operand_c(ctx, *rhs),
+                };
                 let value = (!*word)
                     .then(|| constant_alu_result(*op, *lhs, *rhs))
                     .flatten()
@@ -198,12 +299,19 @@ impl ExtInstr for Rv64IInstr {
                 base,
                 offset,
             } => {
+                if ctx.emit_load_inline(width.bytes(), *signed, *rd, *base, *offset) {
+                    return;
+                }
                 let base = ctx.read_var(*base);
                 let value = ctx.read_mem(&base, *offset, width.bytes(), *signed);
+                ctx.trace_absent_second_block(&base, *offset, width.bytes());
                 if let Some(rd) = rd {
                     ctx.write_var(*rd, &value);
                 } else {
                     ctx.write_line(&format!("(void){value};"));
+                    // The adapter suppresses x0 data writes but still consumes
+                    // the architectural write timestamp.
+                    ctx.trace_timestamp();
                 }
             }
             Self::Store {
@@ -212,11 +320,22 @@ impl ExtInstr for Rv64IInstr {
                 src,
                 offset,
             } => {
+                if ctx.emit_store_inline(width.bytes(), *base, *src, *offset) {
+                    return;
+                }
                 let base = ctx.read_var(*base);
                 let value = ctx.read_var(*src);
                 ctx.write_mem(&base, *offset, &value, width.bytes());
+                ctx.trace_absent_second_block(&base, *offset, width.bytes());
             }
-            Self::Const { rd, value, .. } => ctx.write_var(*rd, &hex_u64(*value)),
+            Self::Const {
+                rd, value, arena, ..
+            } => {
+                let value = hex_u64(*value);
+                if !ctx.emit_wr1_inline(Some(*rd), &value, Some(*arena)) {
+                    ctx.write_var(*rd, &value);
+                }
+            }
         }
     }
 
@@ -298,6 +417,13 @@ impl ExtInstr for Rv64IInstr {
                 offset: *offset,
                 target_mask: !1,
             }),
+            _ => None,
+        }
+    }
+
+    fn indirect_base_var(&self) -> Option<rvr_openvm_ir::Variable> {
+        match self {
+            Self::JumpIndirect { base, .. } => Some(*base),
             _ => None,
         }
     }

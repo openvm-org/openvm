@@ -8,7 +8,9 @@ use openvm_instructions::{
     LocalOpcode, SystemOpcode,
 };
 use openvm_pairing_transpiler::PairingPhantom;
-use rvr_openvm_ir::{CfgEffect, ExtEmitCtx, ExtInstr, InstrAt, LiftedInstr, Variable};
+use rvr_openvm_ir::{
+    CfgEffect, ExtEmitCtx, ExtInstr, InlineRecordShape, InstrAt, LiftedInstr, Variable,
+};
 use rvr_openvm_lift::{decode_variable, RvrExtension, RvrInstruction};
 
 fn decode_reg(value: u32) -> Variable {
@@ -51,6 +53,7 @@ pub struct HintFinalExpInstr {
     pub rs2_reg: Variable,
     /// Pairing curve, resolved at lift time.
     curve: KnownPairingCurve,
+    operands: [u32; 3],
 }
 
 impl ExtInstr for HintFinalExpInstr {
@@ -59,9 +62,16 @@ impl ExtInstr for HintFinalExpInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rs1 = ctx.peek_var(self.rs1_reg);
-        let rs2 = ctx.peek_var(self.rs2_reg);
-        ctx.emit_call(self.curve.ffi_symbol(), &["state", &rs1, &rs2]);
+        // Phantom subexecutors inspect memory without going through the VM memory bus.
+        // Keep the generated path equally untraced so PHANTOM still consumes one timestamp.
+        let rs1 = ctx.read_var_raw(self.rs1_reg);
+        let rs2 = ctx.read_var_raw(self.rs2_reg);
+        ctx.extern_call(self.curve.ffi_symbol(), &["state", &rs1, &rs2]);
+        ctx.trace_phantom_record(self.operands);
+    }
+
+    fn inline_record_shape(&self) -> Option<InlineRecordShape> {
+        Some(InlineRecordShape::Custom { record_size: 20 })
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -90,6 +100,10 @@ impl Default for PairingExtension {
 }
 
 impl RvrExtension for PairingExtension {
+    fn codegen_fingerprint(&self) -> Option<Vec<u8>> {
+        Some(b"openvm-pairing-rvr-v2".to_vec())
+    }
+
     fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
 
@@ -115,6 +129,7 @@ impl RvrExtension for PairingExtension {
                 rs1_reg,
                 rs2_reg,
                 curve,
+                operands: [insn.a, insn.b, insn.c],
             }),
             source_loc: None,
         }))

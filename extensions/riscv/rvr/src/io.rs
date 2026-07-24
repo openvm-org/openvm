@@ -4,20 +4,54 @@ use std::ffi::c_void;
 
 use openvm_circuit::arch::rvr::io::{checked_mem_bounds_range, OpenVmIoState};
 use openvm_instructions::{
-    riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_BYTES, RV64_REGISTER_NUM_LIMBS},
+    riscv::{RV64_REGISTER_AS, RV64_REGISTER_BYTES, RV64_REGISTER_NUM_LIMBS},
     LocalOpcode, PUBLIC_VALUES_AS,
 };
 use openvm_platform::WORD_SIZE;
 use openvm_riscv_transpiler::{Rv64HintStoreOpcode, Rv64LoadStoreOpcode, MAX_HINT_BUFFER_DWORDS};
 use rvr_openvm_ir::{
-    CfgEffect, ExtEmitCtx, ExtInstr, InstrAt, LiftedInstr, MemWidth, PageAddressSpace,
+    CfgEffect, ExtEmitCtx, ExtInstr, InlineRecordShape, InstrAt, LiftedInstr, MemWidth,
+    PageAddressSpace,
 };
 use rvr_openvm_lift::{
-    air_index_to_c, max_main_memory_pages_for_contiguous_range, opcode_air_idx, AirIndex,
-    ExtensionError, RvrExtension, RvrExtensionCtx, RvrInstruction, RvrRuntimeExtension,
+    air_index_codegen_fingerprint, air_index_to_c, max_main_memory_pages_for_contiguous_range,
+    opcode_air_idx, AirIndex, ExtensionError, RvrExtension, RvrExtensionCtx, RvrInstruction,
+    RvrRuntimeExtension,
 };
 
 use crate::instruction::{decode_imm_cg, decode_reg, Reg};
+
+/// Packed hint-store record geometry shared with the circuit consumer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HintStoreRecordDescriptor {
+    pub header_size: usize,
+    pub header_align: usize,
+    pub var_size: usize,
+    pub var_align: usize,
+    pub capacity_per_row: usize,
+}
+
+impl HintStoreRecordDescriptor {
+    pub const fn new() -> Self {
+        Self {
+            header_size: 32,
+            header_align: 4,
+            var_size: 20,
+            var_align: 4,
+            capacity_per_row: 52,
+        }
+    }
+
+    pub const fn record_size(self, rows: usize) -> usize {
+        self.header_size + self.var_size * rows
+    }
+}
+
+impl Default for HintStoreRecordDescriptor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 // HINT_BUFFER writes the maximum hint payload as one arbitrarily aligned range.
 const RV64_IO_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize =
@@ -26,7 +60,9 @@ const RV64_IO_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize =
 /// HINT_STORED: pop one register word (8 bytes) from the hint stream into `mem[reg[ptr_reg]]`.
 #[derive(Debug, Clone)]
 pub(crate) struct HintStoreWInstr {
+    pub(crate) from_pc: u32,
     pub(crate) ptr_reg: Reg,
+    pub(crate) chip_idx: Option<AirIndex>,
 }
 
 impl ExtInstr for HintStoreWInstr {
@@ -35,13 +71,33 @@ impl ExtInstr for HintStoreWInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let ptr = ctx.read_var(self.ptr_reg);
-        ctx.emit_checked_call_without_page_flush("openvm_hint_storew", &[&ptr]);
-        ctx.trace_page_access(
-            &ptr,
-            MemWidth::Double,
-            PageAddressSpace::MainMemory(RV64_MEMORY_AS),
+        let (ptr, from_timestamp, ptr_prev_timestamp) = ctx.read_var_with_trace(self.ptr_reg);
+        // HINT_STORED has the same three-tick shape as HINT_BUFFER: pointer
+        // read, row-count placeholder, and memory write.
+        ctx.trace_timestamp();
+        let chip_idx = if ctx.inline_record_enabled() {
+            air_index_to_c(self.chip_idx)
+        } else {
+            u32::MAX
+        };
+        ctx.emit_checked_call(
+            "openvm_hint_storew",
+            &[
+                "state",
+                &ptr,
+                &format!("{}u", self.from_pc),
+                &from_timestamp,
+                &format!("{}u", self.ptr_reg.index() * RV64_REGISTER_NUM_LIMBS as u32),
+                &ptr_prev_timestamp,
+                &format!("{chip_idx}u"),
+            ],
         );
+    }
+
+    fn inline_record_shape(&self) -> Option<InlineRecordShape> {
+        Some(InlineRecordShape::CustomVariableRows {
+            capacity_per_row: HintStoreRecordDescriptor::new().capacity_per_row,
+        })
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -57,6 +113,7 @@ impl ExtInstr for HintStoreWInstr {
 /// write them sequentially starting at `mem[reg[ptr_reg]]`.
 #[derive(Debug, Clone)]
 pub(crate) struct HintBufferInstr {
+    pub(crate) from_pc: u32,
     pub(crate) ptr_reg: Reg,
     pub(crate) num_words_reg: Reg,
     pub(crate) chip_idx: Option<AirIndex>,
@@ -68,21 +125,50 @@ impl ExtInstr for HintBufferInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let ptr = ctx.read_var(self.ptr_reg);
-        let n = ctx.read_var(self.num_words_reg);
+        let (ptr, from_timestamp, ptr_prev_timestamp) = ctx.read_var_with_trace(self.ptr_reg);
+        let (n, _, count_prev_timestamp) = ctx.read_var_with_trace(self.num_words_reg);
         ctx.write_line(&format!(
             "if (unlikely(({n} - 1ull) >= {MAX_HINT_BUFFER_DWORDS}ull)) {{"
         ));
         ctx.emit_trap();
         ctx.write_line("}");
-        let callback_count = format!("(uint16_t)({n})");
-        ctx.emit_checked_call_without_page_flush("openvm_hint_buffer", &[&ptr, &callback_count]);
         // Block entry credits one row; runtime metering adds the remaining
         // `(n - 1)` rows.
         let chip_idx = air_index_to_c(self.chip_idx);
         // After the check above, n - 1 is at most 1022.
         ctx.trace_chip_if_nonzero(chip_idx, &format!("(uint32_t)({n} - 1ull)"));
-        ctx.trace_page_access_u64_range(&ptr, &n, PageAddressSpace::MainMemory(RV64_MEMORY_AS));
+        ctx.write_line(&format!("if ({n} > 0) {{"));
+        let direct_chip_idx = if ctx.inline_record_enabled() {
+            chip_idx
+        } else {
+            u32::MAX
+        };
+        let callback_count = format!("(uint16_t)({n})");
+        ctx.emit_checked_call(
+            "openvm_hint_buffer",
+            &[
+                "state",
+                &ptr,
+                &callback_count,
+                &format!("{}u", self.from_pc),
+                &from_timestamp,
+                &format!("{}u", self.ptr_reg.index() * RV64_REGISTER_NUM_LIMBS as u32),
+                &ptr_prev_timestamp,
+                &format!(
+                    "{}u",
+                    self.num_words_reg.index() * RV64_REGISTER_NUM_LIMBS as u32
+                ),
+                &count_prev_timestamp,
+                &format!("{direct_chip_idx}u"),
+            ],
+        );
+        ctx.write_line("}");
+    }
+
+    fn inline_record_shape(&self) -> Option<InlineRecordShape> {
+        Some(InlineRecordShape::CustomVariableRows {
+            capacity_per_row: HintStoreRecordDescriptor::new().capacity_per_row,
+        })
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -114,18 +200,18 @@ impl ExtInstr for RevealInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let src = ctx.read_var(self.src_reg);
-        let ptr = ctx.read_var(self.ptr_reg);
-        let addr = match self.offset.cmp(&0) {
-            std::cmp::Ordering::Less => {
-                format!("({ptr} - 0x{:08x}ull)", self.offset.unsigned_abs())
-            }
-            std::cmp::Ordering::Equal => ptr,
-            std::cmp::Ordering::Greater => format!("({ptr} + 0x{:08x}ull)", self.offset),
-        };
-        let width = format!("{}u", self.width.bytes());
-        ctx.emit_checked_call_without_page_flush("openvm_reveal", &[&src, &addr, &width]);
-        ctx.trace_page_access(&addr, self.width, PageAddressSpace::Other(PUBLIC_VALUES_AS));
+        ctx.emit_reveal(
+            self.src_reg,
+            self.ptr_reg,
+            self.offset,
+            self.width,
+            PageAddressSpace::Other(PUBLIC_VALUES_AS),
+            4,
+        );
+    }
+
+    fn inline_record_shape(&self) -> Option<InlineRecordShape> {
+        (self.width == MemWidth::Double).then_some(InlineRecordShape::Alu3)
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -146,6 +232,15 @@ pub struct Rv64IoExtension {
 impl Rv64IoExtension {
     pub fn new(ctx: Option<&RvrExtensionCtx>) -> Result<Self, ExtensionError> {
         let hint_store_chip_idx = opcode_air_idx(ctx, Rv64HintStoreOpcode::HINT_STORED)?;
+        let hint_buffer_chip_idx = opcode_air_idx(ctx, Rv64HintStoreOpcode::HINT_BUFFER)?;
+        if hint_store_chip_idx != hint_buffer_chip_idx {
+            return Err(ExtensionError::SharedAirMismatch {
+                first_opcode: Rv64HintStoreOpcode::HINT_STORED.global_opcode(),
+                second_opcode: Rv64HintStoreOpcode::HINT_BUFFER.global_opcode(),
+                first_air: hint_store_chip_idx,
+                second_air: hint_buffer_chip_idx,
+            });
+        }
         Ok(Self {
             hint_store_chip_idx,
         })
@@ -153,6 +248,13 @@ impl Rv64IoExtension {
 }
 
 impl RvrExtension for Rv64IoExtension {
+    fn codegen_fingerprint(&self) -> Option<Vec<u8>> {
+        Some(air_index_codegen_fingerprint(
+            b"openvm-rv64io-rvr-v3-two-block",
+            &[self.hint_store_chip_idx],
+        ))
+    }
+
     fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
 
@@ -160,7 +262,11 @@ impl RvrExtension for Rv64IoExtension {
             let ptr_reg = decode_reg(insn.b);
             return Some(LiftedInstr::Body(InstrAt {
                 pc,
-                instr: Box::new(HintStoreWInstr { ptr_reg }),
+                instr: Box::new(HintStoreWInstr {
+                    from_pc: pc as u32,
+                    ptr_reg,
+                    chip_idx: self.hint_store_chip_idx,
+                }),
                 source_loc: None,
             }));
         }
@@ -171,6 +277,7 @@ impl RvrExtension for Rv64IoExtension {
             return Some(LiftedInstr::Body(InstrAt {
                 pc,
                 instr: Box::new(HintBufferInstr {
+                    from_pc: pc as u32,
                     ptr_reg,
                     num_words_reg,
                     chip_idx: self.hint_store_chip_idx,
@@ -182,7 +289,7 @@ impl RvrExtension for Rv64IoExtension {
         if let Some(width) = public_values_store_width(insn) {
             let src_reg = decode_reg(insn.a);
             let ptr_reg = decode_reg(insn.b);
-            let offset = decode_imm_cg(insn);
+            let offset = decode_imm_cg(insn) as i16;
             return Some(LiftedInstr::Body(InstrAt {
                 pc,
                 instr: Box::new(RevealInstr {
@@ -233,6 +340,7 @@ impl RvrRuntimeExtension for Rv64IoRuntimeHooks {
         let callbacks = Rv64IoHostCallbacks {
             hint_storew: host_hint_storew,
             hint_buffer: host_hint_buffer,
+            validate_reveal: host_validate_reveal,
             reveal: host_reveal,
         };
         unsafe { register_fn(&callbacks) };
@@ -269,6 +377,7 @@ type RegisterRv64IoHostCallbacksFn = unsafe extern "C" fn(*const Rv64IoHostCallb
 struct Rv64IoHostCallbacks {
     hint_storew: extern "C" fn(*mut c_void, u64) -> bool,
     hint_buffer: extern "C" fn(*mut c_void, u64, u16) -> bool,
+    validate_reveal: extern "C" fn(*mut c_void, u64, u8) -> bool,
     reveal: extern "C" fn(*mut c_void, u64, u64, u8) -> bool,
 }
 
@@ -309,21 +418,35 @@ extern "C" fn host_hint_buffer(ctx: *mut c_void, dest_addr: u64, num_words: u16)
 
 /// Host callback for stores to `PUBLIC_VALUES_AS`.
 /// Generated C adds the trace-row cost.
+extern "C" fn host_validate_reveal(ctx: *mut c_void, addr: u64, width: u8) -> bool {
+    let io = unsafe { &*(ctx as *const OpenVmIoState<'_>) };
+    checked_reveal_range(addr, width, io.public_values.len()).is_some()
+}
+
 extern "C" fn host_reveal(ctx: *mut c_void, src_val: u64, addr: u64, width: u8) -> bool {
     let io = unsafe { &mut *(ctx as *mut OpenVmIoState<'_>) };
-    let width = match width {
-        1 | 2 | 4 | 8 => usize::from(width),
-        _ => return false,
-    };
-    let Some(end) = addr.checked_add(width as u64) else {
+    let Some(range) = checked_reveal_range(addr, width, io.public_values.len()) else {
         return false;
     };
-    if end > io.public_values.len() as u64 {
-        return false;
-    }
-    let range = addr as usize..end as usize;
+    let width = range.len();
     io.public_values[range].copy_from_slice(&src_val.to_le_bytes()[..width]);
     true
+}
+
+fn checked_reveal_range(
+    addr: u64,
+    width: u8,
+    public_values_len: usize,
+) -> Option<std::ops::Range<usize>> {
+    let width = match width {
+        1 | 2 | 4 | 8 => usize::from(width),
+        _ => return None,
+    };
+    let end = addr.checked_add(width as u64)?;
+    if end > public_values_len as u64 {
+        return None;
+    }
+    Some(addr as usize..end as usize)
 }
 
 #[cfg(test)]
@@ -427,6 +550,28 @@ mod tests {
                 addr_space.id()
             ));
         }
+
+        fn trace_mem_access_u64_range(
+            &mut self,
+            base_addr: &str,
+            num_dwords: &str,
+            addr_space: PageAddressSpace,
+        ) {
+            self.write_line(&format!(
+                "trace_mem_access_u64_range(state, {base_addr}, {num_dwords}, {}u);",
+                addr_space.id()
+            ));
+        }
+
+        fn trace_timestamp(&mut self) {
+            self.write_line("trace_timestamp(state);");
+        }
+
+        fn trace_wr_as_u64(&mut self, addr: &str, val: &str, addr_space: u32) {
+            self.write_line(&format!(
+                "trace_wr_as_u64(state, {addr}, {val}, {addr_space}u);"
+            ));
+        }
     }
 
     #[test_case(Rv64LoadStoreOpcode::STORED, 8; "dword")]
@@ -480,6 +625,33 @@ mod tests {
     }
 
     #[test]
+    fn rv64io_sign_extends_negative_public_values_store_offset() {
+        let ext = Rv64IoExtension::new(None).unwrap();
+        let inst = RvrInstruction::from_field(&Instruction::<BabyBear>::from_usize(
+            Rv64LoadStoreOpcode::STOREW.global_opcode(),
+            [
+                8,
+                16,
+                0xfffc,
+                RV64_REGISTER_AS as usize,
+                PUBLIC_VALUES_AS as usize,
+                1,
+                1,
+            ],
+        ));
+        let LiftedInstr::Body(InstrAt { instr, .. }) = ext.try_lift(&inst, 0x100).unwrap() else {
+            panic!("expected public-values store body instruction");
+        };
+
+        let mut ctx = TestEmitCtx::default();
+        instr.emit_c(&mut ctx);
+        assert_eq!(
+            ctx.lines[0],
+            "if (unlikely(!openvm_reveal(r1, (r2 - 0x00000004ull), 4u))) {"
+        );
+    }
+
+    #[test]
     fn rv64io_ignores_non_store_public_values_shaped_instruction() {
         let ext = Rv64IoExtension::new(None).unwrap();
         let inst = RvrInstruction::from_field(&Instruction::<BabyBear>::from_usize(
@@ -516,6 +688,40 @@ mod tests {
         assert_eq!(
             ctx.lines[3],
             format!("trace_page_access(state, (r10 + 0x0000000cull), 4u, {PUBLIC_VALUES_AS}u);")
+        );
+    }
+
+    #[test]
+    fn hint_store_callbacks_use_page_synchronized_calls() {
+        let mut storew_ctx = TestEmitCtx::default();
+        HintStoreWInstr {
+            from_pc: 0x100,
+            ptr_reg: Reg::new(1),
+            chip_idx: None,
+        }
+        .emit_c(&mut storew_ctx);
+        assert!(
+            storew_ctx
+                .lines
+                .iter()
+                .any(|line| line.contains(" = openvm_hint_storew(")),
+            "HINT_STOREW must use emit_checked_call so metered page locals are synchronized"
+        );
+
+        let mut buffer_ctx = TestEmitCtx::default();
+        HintBufferInstr {
+            from_pc: 0x104,
+            ptr_reg: Reg::new(1),
+            num_words_reg: Reg::new(2),
+            chip_idx: None,
+        }
+        .emit_c(&mut buffer_ctx);
+        assert!(
+            buffer_ctx
+                .lines
+                .iter()
+                .any(|line| line.contains(" = openvm_hint_buffer(")),
+            "HINT_BUFFER must use emit_checked_call so metered page locals are synchronized"
         );
     }
 

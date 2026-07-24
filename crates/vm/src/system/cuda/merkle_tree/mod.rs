@@ -475,6 +475,34 @@ impl MemoryMerkleTree {
                     .sum::<usize>()
         }
     }
+
+    /// Device replay reaches the memory inventory as already-merged Merkle
+    /// leaf pointers. Computing the height from those pointers is equivalent to
+    /// the block-label form above: consecutive blocks in the same leaf add a
+    /// zero transition and therefore do not affect the sum.
+    pub fn calculate_unpadded_height_from_leaf_ptrs(&self, leaf_ptrs: &[(u32, u32)]) -> usize {
+        let md = self.mem_config.memory_dimensions();
+        let tree_height = md.overall_height();
+        let to_label = |(sp, ptr): (u32, u32)| (sp, ptr / VM_DIGEST_WIDTH as u32);
+        2 * if leaf_ptrs.is_empty() {
+            tree_height
+        } else {
+            tree_height
+                + (0..(leaf_ptrs.len() - 1))
+                    .into_par_iter()
+                    .map(|i| {
+                        let x = md.label_to_index(to_label(leaf_ptrs[i]));
+                        let y = md.label_to_index(to_label(leaf_ptrs[i + 1]));
+                        let xor = x ^ y;
+                        if xor == 0 {
+                            0
+                        } else {
+                            xor.ilog2() as usize
+                        }
+                    })
+                    .sum::<usize>()
+        }
+    }
 }
 
 impl Drop for MemoryMerkleTree {

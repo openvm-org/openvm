@@ -1,7 +1,10 @@
 //! Per-chip metered execution: page tracking and segmentation
 //! matching OpenVM's `MeteredCtx`.
 
-use std::path::{Path, PathBuf};
+use std::{
+    borrow::Cow,
+    path::{Path, PathBuf},
+};
 
 use openvm_instructions::{
     metering::{PAGE_MASK_LEAF_BITS, SEGMENT_CHECK_INSNS},
@@ -33,7 +36,7 @@ use crate::{
 };
 
 struct RvrMeteredInstanceInner<'a> {
-    system_config: &'a SystemConfig,
+    system_config: Cow<'a, SystemConfig>,
     initial_image: RvrInitialImage,
     runtime_hooks: Vec<Box<dyn RvrRuntimeExtension>>,
     compiled: RvrCompiled,
@@ -380,7 +383,7 @@ pub unsafe extern "C" fn metered_memory_buffer_flush(state: *mut MeteringState) 
 impl RvrMeteredInstanceInner<'_> {
     fn create_initial_vm_state(&self, inputs: impl Into<Streams>) -> VmState<GuestMemory> {
         self.initial_image
-            .create_vm_state(self.system_config, inputs)
+            .create_vm_state(&self.system_config, inputs)
     }
 
     /// Persist the compiled shared library into `dir`. Returns the path to
@@ -408,7 +411,7 @@ impl RvrMeteredInstance<'_> {
     ) -> RvrMeteredInstance<'_> {
         RvrMeteredInstance {
             inner: RvrMeteredInstanceInner {
-                system_config,
+                system_config: Cow::Borrowed(system_config),
                 initial_image,
                 runtime_hooks,
                 compiled,
@@ -431,6 +434,19 @@ impl RvrMeteredInstance<'_> {
     pub fn save_generated_sources(&self, dir: &Path) -> Result<(), super::CompileError> {
         self.inner.save_generated_sources(dir)
     }
+    /// Convert the instance into an owned form suitable for caching on a VM
+    /// prover instance. The compiled library and executable are already
+    /// owned; only the small system configuration needs to be cloned.
+    pub(crate) fn into_owned(self) -> RvrMeteredInstance<'static> {
+        RvrMeteredInstance {
+            inner: RvrMeteredInstanceInner {
+                system_config: Cow::Owned(self.inner.system_config.into_owned()),
+                initial_image: self.inner.initial_image,
+                runtime_hooks: self.inner.runtime_hooks,
+                compiled: self.inner.compiled,
+            },
+        }
+    }
 
     pub fn execute_metered(
         &self,
@@ -448,7 +464,7 @@ impl RvrMeteredInstance<'_> {
     ) -> Result<(Vec<Segment>, VmState<GuestMemory>), ExecutionError> {
         #[cfg(feature = "metrics")]
         let start_instret = ctx.segmentation_ctx.instret;
-        let seg_state = SegmentationState::new(ctx, self.inner.system_config);
+        let seg_state = SegmentationState::new(ctx, &self.inner.system_config);
 
         #[cfg(feature = "metrics")]
         let metrics = ExecutionMetricTimer::start(ExecutionMetric::Metered);
@@ -482,7 +498,7 @@ impl RvrMeteredSegmentInstance<'_> {
     ) -> RvrMeteredSegmentInstance<'_> {
         RvrMeteredSegmentInstance {
             inner: RvrMeteredInstanceInner {
-                system_config,
+                system_config: Cow::Borrowed(system_config),
                 initial_image,
                 runtime_hooks,
                 compiled,
@@ -525,7 +541,7 @@ impl RvrMeteredSegmentInstance<'_> {
         let metrics = ExecutionMetricTimer::start(ExecutionMetric::Metered);
         #[cfg(feature = "metrics")]
         let start_instret = ctx.segmentation_ctx.instret;
-        let seg_state = SegmentationState::new(ctx, self.inner.system_config);
+        let seg_state = SegmentationState::new(ctx, &self.inner.system_config);
 
         let result = tracing::info_span!("execute_metered").in_scope(|| {
             execute_metered_segment_boundary(
@@ -553,7 +569,10 @@ impl RvrMeteredSegmentInstance<'_> {
 #[cfg(all(test, feature = "rvr"))]
 mod tests {
     use openvm_instructions::metering::PAGE_MASK_LEAF_BITS_U32;
-    use openvm_stark_backend::StarkEngine;
+    use openvm_stark_backend::{
+        memory_metering::{ProvingMemoryConfig, ProvingMemoryCounts},
+        StarkEngine,
+    };
 
     use super::*;
     use crate::{
@@ -598,6 +617,78 @@ mod tests {
             test_cpu_engine().proving_memory_config(),
         );
         SegmentationState::new(ctx, &system_config)
+    }
+
+    #[test]
+    fn test_poseidon_heavy_memory_crosses_gpu_segmentation_budget() {
+        // Production memory-AIR geometry from the block-24001988 regression:
+        // PersistentBoundary (21 columns, 4 interactions), MemoryMerkle
+        // (33 columns, 4 interactions, rotations), and Poseidon2Periphery
+        // (300 columns, 1 interaction).
+        const MEMORY_CONFIG: ProvingMemoryConfig = ProvingMemoryConfig {
+            base_field_size: 4,
+            extension_degree: 4,
+            log_blowup: 1,
+            l_skip: 4,
+            max_constraint_degree: 3,
+            cache_rs_code_matrix: false,
+        };
+        const NUM_AIRS: usize = 6;
+
+        let system_config = test_system_config();
+        let air_names = [
+            "Program",
+            "Connector",
+            "PersistentBoundary",
+            "MemoryMerkle",
+            "Poseidon2Periphery",
+            "Inventory",
+        ]
+        .map(str::to_string);
+        let widths = [1, 1, 21, 33, 300, 1];
+        let interactions = [0, 0, 4, 4, 1, 0];
+        let need_rot = [false, false, false, true, false, false];
+        let constant_trace_heights = [None; NUM_AIRS];
+        let ctx = MeteredCtx::new(
+            MeteredCtxInputs {
+                constant_trace_heights: &constant_trace_heights,
+                air_names: &air_names,
+                widths: &widths,
+                interactions: &interactions,
+                need_rot: &need_rot,
+                segmentation_limits: SegmentationLimits {
+                    max_trace_height_bits: 30,
+                    max_memory: DEFAULT_MAX_MEMORY,
+                    max_interactions: u32::MAX,
+                },
+            },
+            &system_config,
+            MEMORY_CONFIG,
+        );
+        let seg_state = SegmentationState::new(ctx, &system_config);
+
+        let memory_heights = |height| [0, 0, height, height, height, 0];
+        let undercounted = memory_heights(1 << 19);
+        let corrected = memory_heights(1 << 22);
+        let estimate = |height: usize| {
+            MEMORY_CONFIG
+                .estimate(ProvingMemoryCounts::new(
+                    height * 33,
+                    height * (21 + 300),
+                    height * (4 + 4 + 1),
+                ))
+                .total
+        };
+
+        assert_eq!(estimate(1 << 19), 2_227_175_424);
+        assert_eq!(estimate(1 << 22), 17_817_403_392);
+        assert!(estimate(1 << 19) < DEFAULT_MAX_MEMORY);
+        assert!(estimate(1 << 22) > DEFAULT_MAX_MEMORY);
+        assert!(!seg_state
+            .ctx
+            .segmentation_ctx
+            .should_segment(1, &undercounted));
+        assert!(seg_state.ctx.segmentation_ctx.should_segment(1, &corrected));
     }
 
     #[test]

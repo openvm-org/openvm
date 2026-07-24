@@ -7,6 +7,8 @@
 #include "primitives/trace_access.h"
 #include "primitives/utils.cuh"
 #include "riscv/adapters/rdwrite.cuh"
+#include "riscv/rvr_compact.cuh"
+#include "riscv/rvr_g2_trace.cuh"
 
 using namespace riscv;
 using namespace program;
@@ -125,3 +127,69 @@ extern "C" int _auipc_tracegen(
     );
     return CHECK_KERNEL();
 }
+
+// M-GPUDEC (G2): tracegen from compact wire records + the per-exe operand
+// table; materializes the same record structs in registers and calls the SAME
+// fill methods as auipc_tracegen.
+template <typename RecordView>
+__global__ void auipc_tracegen_compact(
+    Fp *trace,
+    size_t height,
+    RecordView records,
+    RvrOperandEntry const *operand_table,
+    uint32_t pc_base,
+    uint32_t *range_checker_ptr,
+    uint32_t range_checker_num_bins,
+    uint32_t timestamp_max_bits
+) {
+    uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    RowSlice row(trace + idx, height);
+
+    if (idx < records.len()) {
+        RvrWr1Compact const rec = records[idx];
+        RvrOperandEntry const entry = rvr_operand_entry(operand_table, pc_base, rec.from_pc);
+
+        Rv64AuipcRecord full;
+        full.adapter = rvr_decode_wr1_adapter(rec, entry);
+        full.core.from_pc = rec.from_pc;
+        full.core.imm = entry.c;
+        auto adapter = Rv64RdWriteAdapter(
+            VariableRangeChecker(range_checker_ptr, range_checker_num_bins), timestamp_max_bits
+        );
+        adapter.fill_trace_row(row, full.adapter);
+        auto core =
+            Rv64AuipcCore(VariableRangeChecker(range_checker_ptr, range_checker_num_bins));
+        core.fill_trace_row(row.slice_from(COL_INDEX(Rv64AuipcCols, core)), full.core);
+    } else {
+        row.fill_zero(0, sizeof(Rv64AuipcCols<uint8_t>));
+    }
+}
+
+extern "C" int _auipc_tracegen_compact(
+    Fp *d_trace,
+    size_t height,
+    size_t width,
+    DeviceBufferConstView<RvrWr1Compact> d_records,
+    RvrOperandEntry const *d_operand_table,
+    uint32_t pc_base,
+    uint32_t *d_rc,
+    uint32_t rc_bins,
+    uint32_t timestamp_max_bits,
+    cudaStream_t stream
+) {
+#ifdef OPENVM_RVR_CUDA_G2_ONLY
+    return int(cudaErrorNotSupported);
+#else
+    assert(width == sizeof(Rv64AuipcCols<uint8_t>));
+    auto [grid, block] = kernel_launch_params(height);
+    auipc_tracegen_compact<<<grid, block, 0, stream>>>(
+        d_trace, height, d_records, d_operand_table, pc_base, d_rc, rc_bins, timestamp_max_bits
+    );
+    return CHECK_KERNEL();
+#endif
+}
+
+DEFINE_RVR_G2_TRACEGEN_LAUNCHER(
+    _auipc_tracegen_g2, Rv64AuipcCols, auipc_tracegen_compact, RvrWr1Compact, 256,
+    operand_table, pc_base, range_checker, range_checker_num_bins, timestamp_max_bits
+)

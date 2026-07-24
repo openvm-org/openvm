@@ -31,6 +31,52 @@ static __attribute__((always_inline)) inline void peek_mem_u64_range(
   read_mem_u64_range_raw(state, base_addr, out, num_words);
 }
 
+/* ── Trace-only memory writes (no-ops in pure mode) ──────────────── */
+
+static __attribute__((always_inline)) inline void trace_wr_mem_u8(
+    RvState* restrict state, uint64_t addr, uint8_t new_val) {}
+static __attribute__((always_inline)) inline void trace_wr_mem_u16(
+    RvState* restrict state, uint64_t addr, uint16_t new_val) {}
+static __attribute__((always_inline)) inline void trace_wr_mem_u32(
+    RvState* restrict state, uint64_t addr, uint32_t new_val) {}
+static __attribute__((always_inline)) inline void trace_wr_mem_u64(
+    RvState* restrict state, uint64_t addr, uint64_t new_val) {}
+
+/* ── Trace-only word-range memory access (no-ops in pure mode) ───── */
+
+static __attribute__((always_inline)) inline void trace_rd_mem_u64_range(
+    RvState* restrict state, uint64_t base_addr, const uint64_t* vals,
+    uint32_t num_words) {}
+static __attribute__((always_inline)) inline void trace_wr_mem_u64_range(
+    RvState* restrict state, uint64_t base_addr, const uint64_t* vals,
+    uint32_t num_words) {}
+
+/* ── Trace-only operations (no-ops in pure mode) ──────────────────── */
+
+static __attribute__((always_inline)) inline void trace_mem_access(
+    RvState* restrict state, uint64_t addr, uint32_t addr_space) {}
+
+static __attribute__((always_inline)) inline void trace_mem_access_u64_range(
+    RvState* restrict state, uint64_t base_addr, uint32_t num_dwords,
+    uint32_t addr_space) {}
+
+static __attribute__((always_inline)) inline void trace_wr_as_u64(
+    RvState* restrict state, uint64_t addr, uint64_t new_val,
+    uint32_t addr_space) {}
+
+static __attribute__((always_inline)) inline void trace_wr_as(
+    RvState* restrict state, uint64_t addr, uint64_t new_val, uint32_t width,
+    uint32_t addr_space) {}
+
+static __attribute__((always_inline)) inline void trace_timestamp(
+    RvState* restrict state) {}
+
+static __attribute__((always_inline)) inline void trace_pc(
+    RvState* restrict state, uint64_t pc) {}
+
+static __attribute__((always_inline)) inline void trace_chip(
+    RvState* restrict state, uint32_t chip_idx, uint32_t count) {}
+
 /* Some extension callbacks report page-only accesses through a shared ABI. */
 static __attribute__((always_inline)) inline void trace_page_access_u64_range(
     RvState* restrict state [[maybe_unused]],

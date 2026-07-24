@@ -22,7 +22,7 @@ use rvr_openvm_ir::{
     CfgEffect, ExtEmitCtx, ExtInstr, FixedTraceRows, InstrAt, LiftedInstr, Variable,
 };
 use rvr_openvm_lift::{
-    air_index_to_c, decode_variable, fixed_trace_rows_for_chip,
+    air_index_codegen_fingerprint, air_index_to_c, decode_variable, fixed_trace_rows_for_chip,
     max_main_memory_pages_for_contiguous_range, opcode_air_idx, AirIndex, ExtensionError,
     RvrExtension, RvrExtensionCtx, RvrInstruction, RvrRuntimeExtension,
 };
@@ -170,6 +170,13 @@ impl DeferralRvrExtension {
 }
 
 impl RvrExtension for DeferralRvrExtension {
+    fn codegen_fingerprint(&self) -> Option<Vec<u8>> {
+        Some(air_index_codegen_fingerprint(
+            b"openvm-deferral-rvr-v1",
+            &[self.output_chip_idx, self.poseidon2_chip_idx],
+        ))
+    }
+
     fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
 

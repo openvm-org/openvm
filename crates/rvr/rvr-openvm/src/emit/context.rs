@@ -1,6 +1,11 @@
-use std::{collections::HashSet, fmt::Write};
+use std::{collections::HashSet, fmt::Write, mem::size_of};
 
-use rvr_openvm_ir::{MemWidth, PageAddressSpace, Variable};
+use openvm_instructions::PUBLIC_VALUES_AS;
+use rvr_openvm_ext_ffi_common::G2_PRODUCER_LANE_COUNT;
+use rvr_openvm_ir::{
+    ArenaAddIBaked, ArenaAlu3Baked, ArenaRw1Baked, ArenaWr1Baked, MemWidth, PageAddressSpace,
+    Variable,
+};
 use rvr_state::NUM_REGS;
 
 use super::codegen::hex_u32;
@@ -45,6 +50,8 @@ pub(crate) enum BlockAbi {
     Plain,
     /// Pure execution with an instret countdown.
     InstretCountdown,
+    /// Production G2 preflight with a register-carried instret countdown.
+    PreflightInstretCountdown,
     /// Metered execution with its periodic-check counter and trace heights.
     Metered,
 }
@@ -53,7 +60,7 @@ impl BlockAbi {
     pub(crate) const fn extra_args(self) -> usize {
         match self {
             Self::Plain => 0,
-            Self::InstretCountdown => 1,
+            Self::InstretCountdown | Self::PreflightInstretCountdown => 1,
             Self::Metered => 2,
         }
     }
@@ -61,6 +68,10 @@ impl BlockAbi {
 
 impl EmitMode {
     fn traces_values(self) -> bool {
+        matches!(self, Self::ValueTrace)
+    }
+
+    fn traces_register_values(self) -> bool {
         matches!(self, Self::ValueTrace)
     }
 
@@ -104,6 +115,64 @@ pub struct EmitContext<'a> {
     chip_widths: Option<&'a [u64]>,
     num_airs: Option<u32>,
     invalid_chip_index: Option<InvalidChipIndex>,
+    /// R3: whether migrated opcodes (currently base-ALU ADD/SUB) emit compact
+    /// inline records into their chip's record buffer. Only meaningful in the
+    /// preflight (`ValueTrace`) mode.
+    inline_records: bool,
+    /// Stage-2 chronological delta mode. Every routed instruction writes one
+    /// 24-byte record into a block-reserved span instead of a per-AIR wire.
+    delta_records: bool,
+    delta_batch: Option<(String, u32)>,
+    /// G2 v1 compact lanes. This is mutually exclusive with delta/arena.
+    g2_records: bool,
+    /// Whether generated G2 value-shape checks remain in the hot loop.
+    g2_checked: bool,
+    /// Per-basic-block G2 run/standard lane spans. The generated function
+    /// reserves these once at entry, writes through typed local bases, and
+    /// publishes the cursors on every control-flow exit.
+    g2_block_spans: Option<[u32; G2_PRODUCER_LANE_COUNT]>,
+    /// Compile-time offsets within each reserved span. These never become
+    /// runtime cursor increments in generated C.
+    g2_block_next: [u32; G2_PRODUCER_LANE_COUNT],
+    /// Generated production blocks publish their common cursor endpoints once,
+    /// before control-flow arms diverge.
+    g2_block_committed: bool,
+    /// Chip (AIR) index of the instruction currently being emitted, or
+    /// `u32::MAX` if it maps to no chip. Set per instruction by the block emit
+    /// loop before `emit_c`.
+    current_chip_idx: u32,
+    /// Stable `DeltaAirKind` selected by the frozen operand table for the
+    /// current instruction, or `u8::MAX` when it has no G2 payload.
+    current_g2_kind: u8,
+    /// Program counter of the instruction currently being emitted.
+    current_pc: u64,
+    /// R4: airs emitting arena-native full records (baked-offset stores at
+    /// final arena positions) instead of the compact wire.
+    arena_native_airs: std::collections::BTreeMap<u32, crate::ArenaNativeGeometry>,
+}
+
+/// Program-redundant fields for an arena-native branch record.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ArenaBranch2Baked {
+    pub rs1_ptr: u32,
+    pub rs2_ptr: u32,
+    pub imm: u32,
+    pub local_opcode: u8,
+}
+
+/// R4: baked operands for an arena-native load/store record. `rd_rs2_ptr`
+/// is `u32::MAX` for a suppressed rd write (load to x0) — stored explicitly
+/// because the assembler writes the sentinel, not zero.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ArenaLoadStoreBaked {
+    pub rs1_ptr: u32,
+    pub rd_rs2_ptr: u32,
+    pub imm: u16,
+    pub imm_sign: u8,
+    pub mem_as: u8,
+    pub local_opcode: u8,
+    pub is_byte: u8,
+    pub is_word: u8,
 }
 
 impl<'a> EmitContext<'a> {
@@ -126,7 +195,177 @@ impl<'a> EmitContext<'a> {
             chip_widths,
             num_airs,
             invalid_chip_index: None,
+            inline_records: false,
+            delta_records: false,
+            delta_batch: None,
+            g2_records: false,
+            g2_checked: true,
+            g2_block_spans: None,
+            g2_block_next: [0; G2_PRODUCER_LANE_COUNT],
+            g2_block_committed: false,
+            current_chip_idx: u32::MAX,
+            current_g2_kind: u8::MAX,
+            current_pc: 0,
+            arena_native_airs: std::collections::BTreeMap::new(),
         }
+    }
+
+    /// R3: enable inline compact-record emission for migrated opcodes.
+    pub(crate) fn set_inline_records(&mut self, enabled: bool) {
+        self.inline_records = enabled;
+    }
+
+    pub(crate) fn set_delta_records(&mut self, enabled: bool, batch: Option<String>) {
+        self.delta_records = enabled;
+        self.delta_batch = batch.map(|base| (base, 0));
+    }
+
+    pub(crate) fn set_g2_records(&mut self, enabled: bool) {
+        self.g2_records = enabled;
+    }
+
+    pub(crate) fn set_g2_checked(&mut self, checked: bool) {
+        self.g2_checked = checked;
+    }
+
+    pub(crate) fn set_g2_block_spans(&mut self, spans: Option<[u32; G2_PRODUCER_LANE_COUNT]>) {
+        self.g2_block_spans = spans;
+        self.g2_block_next = [0; G2_PRODUCER_LANE_COUNT];
+        self.g2_block_committed = false;
+    }
+
+    fn g2_read_reg(&mut self, idx: u8) -> String {
+        if idx == 0 {
+            "0".to_string()
+        } else {
+            let value = self.next_var();
+            self.write_line(&format!("uint64_t {value} = reg_read(state, {idx});"));
+            value
+        }
+    }
+
+    fn g2_floor_timestamp(&mut self, static_count: u32) {
+        debug_assert!(self.g2_records && !self.g2_checked);
+        self.write_line(&format!("state->tracer->timestamp += {static_count}u;"));
+    }
+
+    fn g2_block_index(&mut self, slot: usize) -> u32 {
+        let spans = self
+            .g2_block_spans
+            .as_ref()
+            .expect("G2 emission requires block-reserved lane spans");
+        let index = self.g2_block_next[slot];
+        assert!(
+            index < spans[slot],
+            "G2 lane {slot} emitted more values than its static block span"
+        );
+        self.g2_block_next[slot] += 1;
+        index
+    }
+
+    fn g2_store_u32(&mut self, slot: usize, value: &str) {
+        let index = self.g2_block_index(slot);
+        self.write_line(&format!(
+            "rvr_g2_lane_{slot}[{index}u] = (uint32_t)({value});"
+        ));
+    }
+
+    fn g2_store_u64(&mut self, slot: usize, value: &str) {
+        let index = self.g2_block_index(slot);
+        self.write_line(&format!("rvr_g2_lane_{slot}[{index}u] = {value};"));
+    }
+
+    pub(crate) fn emit_g2_run(&mut self, program_slot: u32, instruction_count: u32) {
+        if !self.g2_records {
+            return;
+        }
+        self.g2_store_u32(
+            rvr_openvm_ext_ffi_common::G2_PRODUCER_RUN_SLOT,
+            &format!("{program_slot}u"),
+        );
+        if self.g2_checked {
+            self.write_line(&format!(
+                "rvr_g2->instruction_count += {instruction_count}u;"
+            ));
+        }
+    }
+
+    /// Publish the block-local lane cursors before a tail call, suspension,
+    /// trap, or normal exit. Emitting this more than once is harmless because
+    /// every control-flow path writes the same statically computed endpoints.
+    pub(crate) fn commit_g2_block(&mut self) {
+        if self.g2_block_committed {
+            return;
+        }
+        let Some(spans) = self.g2_block_spans else {
+            return;
+        };
+        for (slot, span) in spans.into_iter().enumerate() {
+            if span != 0 {
+                self.write_line(&format!(
+                    "rvr_g2_desc_{slot}->len = rvr_g2_base_{slot} + {span}u;"
+                ));
+            }
+        }
+        self.g2_block_committed = true;
+    }
+
+    pub(crate) fn assert_g2_block_complete(&self) {
+        if let Some(spans) = self.g2_block_spans {
+            assert_eq!(
+                self.g2_block_next, spans,
+                "generated G2 stores differ from the statically reserved block spans"
+            );
+        }
+    }
+
+    /// R4: set the airs whose records are emitted arena-native.
+    pub(crate) fn set_arena_native_airs(
+        &mut self,
+        airs: std::collections::BTreeMap<u32, crate::ArenaNativeGeometry>,
+    ) {
+        self.arena_native_airs = airs;
+    }
+
+    /// Set the chip index and pc of the instruction about to be emitted.
+    pub(crate) fn set_current_instr(&mut self, chip_idx: u32, pc: u64, g2_kind: u8) {
+        self.current_chip_idx = chip_idx;
+        self.current_pc = pc;
+        self.current_g2_kind = g2_kind;
+    }
+
+    /// Whether the current instruction should emit an inline compact record
+    /// (R3 enabled and the instruction maps to a chip).
+    pub(crate) fn inline_records_enabled(&self) -> bool {
+        self.inline_records && self.current_chip_idx != u32::MAX
+    }
+
+    fn emit_delta2(&mut self, pc: &str, fromts: &str, v1: &str, v2: &str) {
+        let (base, index) = self
+            .delta_batch
+            .as_ref()
+            .map(|(base, index)| (base.clone(), *index))
+            .expect("delta emission requires a block-reserved span");
+        self.write_line(&format!(
+            "preflight_write_delta2(state, {base} ? &{base}[{index}u] : NULL, {pc}, {fromts}, {v1}, {v2});"
+        ));
+        self.delta_batch.as_mut().unwrap().1 += 1;
+    }
+
+    fn begin_arena_detail(&mut self, chip: u32) -> String {
+        let started = self.next_var();
+        self.write_line(&format!(
+            "uint64_t {started} = preflight_detail_phase_begin(state->tracer, \
+             PREFLIGHT_DETAIL_PHASE_ARENA_EMIT, state->tracer->chip_records[{chip}].stride);"
+        ));
+        started
+    }
+
+    fn end_arena_detail(&mut self, started: &str) {
+        self.write_line(&format!(
+            "preflight_detail_phase_end(state->tracer, PREFLIGHT_DETAIL_PHASE_ARENA_EMIT, \
+             {started});"
+        ));
     }
 
     fn next_var(&mut self) -> String {
@@ -228,6 +467,10 @@ impl<'a> EmitContext<'a> {
 
     fn read_reg_impl(&mut self, idx: u8, kind: RegisterReadKind) -> String {
         if idx == 0 {
+            if self.mode.traces_register_values() && matches!(kind, RegisterReadKind::MemoryAccess)
+            {
+                self.write_line("trace_reg_read(state, 0, 0);");
+            }
             return "0ull".to_string();
         }
 
@@ -240,12 +483,8 @@ impl<'a> EmitContext<'a> {
             var
         };
 
-        if self.mode.traces_values() {
-            let trace_fn = match kind {
-                RegisterReadKind::MemoryAccess => "trace_reg_read",
-                RegisterReadKind::Peek => "trace_reg_peek",
-            };
-            self.write_line(&format!("{trace_fn}(state, {idx}, {value});"));
+        if self.mode.traces_values() && matches!(kind, RegisterReadKind::MemoryAccess) {
+            self.write_line(&format!("trace_reg_read(state, {idx}, {value});"));
         }
 
         value
@@ -263,25 +502,1949 @@ impl<'a> EmitContext<'a> {
         self.read_reg_impl(idx, RegisterReadKind::Peek)
     }
 
+    pub fn read_var_with_trace(&mut self, var: Variable) -> (String, String, String) {
+        let idx = reg_index(var);
+        if self.mode != EmitMode::ValueTrace || !self.inline_records_enabled() {
+            return (self.read_reg(idx), "0u".to_string(), "0u".to_string());
+        }
+        let from_timestamp = self.next_var();
+        self.write_line(&format!(
+            "uint32_t {from_timestamp} = state->tracer->timestamp;"
+        ));
+        let value = if idx == 0 {
+            "0".to_string()
+        } else if self.hot_regs.contains(&idx) {
+            Self::abi_name(idx).to_string()
+        } else {
+            let value = self.next_var();
+            self.write_line(&format!("uint64_t {value} = reg_read(state, {idx});"));
+            value
+        };
+        let previous_timestamp = self.next_var();
+        self.write_line(&format!(
+            "uint32_t {previous_timestamp} = trace_reg_read(state, {idx}, {value});"
+        ));
+        (value, from_timestamp, previous_timestamp)
+    }
+
+    /// Read a variable without emitting a trace event.
+    pub fn read_var_raw(&self, var: Variable) -> String {
+        let idx = reg_index(var);
+        if idx == 0 {
+            "0ull".to_string()
+        } else if self.hot_regs.contains(&idx) {
+            Self::abi_name(idx).to_string()
+        } else {
+            format!("state->regs[{idx}]")
+        }
+    }
+
     /// Write a register as a VM memory access, emitting `trace_reg_write` in
     /// value-tracing mode.
     pub fn write_reg(&mut self, idx: u8, val: &str) {
         if idx == 0 {
+            if self.mode.traces_register_values() {
+                self.write_line("trace_timestamp(state);");
+            }
             return;
         }
         if self.mode.traces_values() {
             let tmp = self.next_var();
             self.write_line(&format!("uint64_t {tmp} = (uint64_t)({val});"));
+            debug_assert!(self.hot_regs.is_empty());
+            // Trace before the store so the preflight tracer reads the previous
+            // register value (for `prev_value`) from `state->regs`; the new
+            // value is passed explicitly.
             self.write_line(&format!("trace_reg_write(state, {idx}, {tmp});"));
-            if self.hot_regs.contains(&idx) {
-                let name = Self::abi_name(idx);
-                self.write_line(&format!("{name} = {tmp};"));
-            } else {
-                self.write_line(&format!("reg_write(state, {idx}, {tmp});"));
-            }
+            self.write_line(&format!("reg_write(state, {idx}, {tmp});"));
             return;
         }
         self.write_reg_direct(idx, &format!("(uint64_t)({val})"));
+    }
+
+    pub fn trace_immediate(&mut self) {
+        self.trace_timestamp();
+    }
+
+    pub fn trace_timestamp(&mut self) {
+        if self.mode.traces_register_values() {
+            self.write_line("trace_timestamp(state);");
+        }
+    }
+
+    /// Multi-byte RV64 load/store adapters reserve a timestamp slot for the
+    /// optional second block. Generic traced memory helpers are also used by
+    /// custom instructions, so the RV64 instruction emitter owns the absent
+    /// non-crossing slot explicitly.
+    pub fn trace_absent_second_block(&mut self, base: &str, offset: i16, width: u8) {
+        if self.mode.traces_values() && width > 1 {
+            let addr = Self::addr_expr(base, offset);
+            self.write_line(&format!(
+                "if (!preflight_crosses_block({addr}, {width}u)) trace_timestamp(state);"
+            ));
+        }
+    }
+
+    /// R3 helper: emit a touch-only register read for a migrated opcode and
+    /// capture the block's `prev_timestamp`. Returns the C value expression and
+    /// the prev-timestamp variable name. `trace_reg_touch` consumes the exact
+    /// tick `trace_reg_read` would (same shadow/touched updates), but appends no
+    /// memory-log entry — the inline compact record carries the aux data.
+    /// Preflight has no hot registers, so no ABI-name fast path is needed.
+    fn reg_read_capture(&mut self, idx: u8) -> (String, String) {
+        debug_assert!(self.hot_regs.is_empty());
+        let capture_timestamp =
+            !self.delta_records || self.arena_native_airs.contains_key(&self.current_chip_idx);
+        let pts = capture_timestamp.then(|| self.next_var());
+        if idx == 0 {
+            if let Some(pts) = pts.as_deref() {
+                self.write_line(&format!("uint32_t {pts} = trace_reg_touch(state, 0);"));
+            } else {
+                self.write_line("(void)trace_reg_touch(state, 0);");
+            }
+            ("0".to_string(), pts.unwrap_or_else(|| "0u".to_string()))
+        } else {
+            let val = self.next_var();
+            self.write_line(&format!("uint64_t {val} = reg_read(state, {idx});"));
+            if let Some(pts) = pts.as_deref() {
+                self.write_line(&format!("uint32_t {pts} = trace_reg_touch(state, {idx});"));
+            } else {
+                self.write_line(&format!("(void)trace_reg_touch(state, {idx});"));
+            }
+            (val, pts.unwrap_or_else(|| "0u".to_string()))
+        }
+    }
+
+    fn reg_touch_capture(&mut self, idx: u8) -> String {
+        if self.delta_records && !self.arena_native_airs.contains_key(&self.current_chip_idx) {
+            self.write_line(&format!("(void)trace_reg_touch(state, {idx});"));
+            "0u".to_string()
+        } else {
+            let prev_timestamp = self.next_var();
+            self.write_line(&format!(
+                "uint32_t {prev_timestamp} = trace_reg_touch(state, {idx});"
+            ));
+            prev_timestamp
+        }
+    }
+
+    /// R3: emit a 2-read-1-write single-row instruction with an inline compact
+    /// alu3 record. All three register accesses are touch-only (timestamp,
+    /// shadow, and touched updates identical to the logging helpers; no
+    /// memory-log entries) — the 44-byte dynamic witness carries the aux data
+    /// and the host consumes it directly instead of running the log assembler.
+    /// `result` renders the C expression computing rd from the two read
+    /// values; per-op semantics (div-by-zero, overflow) live inside it.
+    pub(crate) fn emit_reg3_inline(
+        &mut self,
+        rd: u8,
+        rs1: u8,
+        rs2: u8,
+        arena: Option<ArenaAlu3Baked>,
+        result: impl FnOnce(&str, &str) -> String,
+    ) {
+        if self.g2_records {
+            debug_assert!(!self.delta_records);
+            debug_assert!(matches!(
+                self.current_g2_kind,
+                0..=7 | 15..=19
+            ));
+            let v1 = self.g2_read_reg(rs1);
+            let v2 = self.g2_read_reg(rs2);
+            let res = self.next_var();
+            let result_expr = result(&v1, &v2);
+            self.write_line(&format!("uint64_t {res} = {result_expr};"));
+            let slot =
+                rvr_openvm_ext_ffi_common::g2_standard_producer_slot(self.current_g2_kind, false)
+                    .expect("G2 two-value kind must have a first producer lane");
+            // Device register replay recovers both current source values from
+            // the read events. Only the write result seeds the chunk scan.
+            self.g2_store_u64(slot, &res);
+            if self.g2_checked {
+                self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs1});"));
+                self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs2});"));
+                self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rd});"));
+            } else {
+                self.g2_floor_timestamp(3);
+            }
+            if rd != 0 {
+                self.write_line(&format!("reg_write(state, {rd}, {res});"));
+            }
+            return;
+        }
+        let chip = self.current_chip_idx;
+        let pc = hex_u32(self.current_pc as u32);
+        let fromts = self.next_var();
+        self.write_line(&format!("uint32_t {fromts} = state->tracer->timestamp;"));
+        let (v1, p1) = self.reg_read_capture(rs1);
+        let (v2, p2) = self.reg_read_capture(rs2);
+        let res = self.next_var();
+        let result_expr = result(&v1, &v2);
+        self.write_line(&format!("uint64_t {res} = {result_expr};"));
+        let arena = arena.filter(|_| self.arena_native_airs.contains_key(&chip));
+        let rdprev = (!self.delta_records || arena.is_some()).then(|| {
+            let rdprev = self.next_var();
+            self.write_line(&format!("uint64_t {rdprev} = state->regs[{rd}];"));
+            rdprev
+        });
+        let pw = self.reg_touch_capture(rd);
+        self.write_line(&format!("reg_write(state, {rd}, {res});"));
+        if let Some(baked) = arena {
+            let geom = self.arena_native_airs[&chip];
+            self.emit_arena_alu3_stores(
+                geom,
+                baked,
+                rd,
+                rs1,
+                &pc,
+                &fromts,
+                &p1,
+                &p2,
+                &pw,
+                rdprev.as_deref().expect("arena record requires old rd"),
+                &v1,
+                &v2,
+                &res,
+            );
+            if self.delta_records {
+                self.write_line(&format!(
+                    "preflight_set_last_program_write_value(state->tracer, {res});"
+                ));
+            }
+        } else if self.delta_records {
+            self.emit_delta2(&pc, &fromts, &v1, &v2);
+        } else {
+            let rdprev = rdprev.as_deref().expect("compact record requires old rd");
+            self.write_line(&format!(
+                "preflight_emit_alu3(state, {chip}u, {pc}, {fromts}, {p1}, {p2}, {pw}, {rdprev}, \
+                 {v1}, {v2});"
+            ));
+        }
+    }
+
+    /// R4: emit the arena-native load/store full-record store sequence.
+    /// `write_prev_ts`/`prev_data` are `None` for the suppressed-write path
+    /// (the zero-filled arena already matches the assembler's untouched
+    /// fields); `rd_rs2_ptr` always stores (the sentinel is explicit).
+    #[allow(clippy::too_many_arguments)]
+    fn emit_arena_loadstore_stores(
+        &mut self,
+        geom: crate::ArenaNativeGeometry,
+        baked: ArenaLoadStoreBaked,
+        pc: &str,
+        fromts: &str,
+        v1: &str,
+        p1: &str,
+        p2: &str,
+        p2_second: Option<&str>,
+        addr: &str,
+        read_data: &str,
+        read_data_second: Option<&str>,
+        write_prev_ts: Option<&str>,
+        write_prev_ts_second: Option<&str>,
+        prev_data: Option<&str>,
+        prev_data_second: Option<&str>,
+    ) {
+        let chip = self.current_chip_idx;
+        let crate::ArenaNativeLayout::LoadStore(off) = geom.layout else {
+            panic!("load/store air {chip} registered a non-loadstore layout");
+        };
+        let detail_started = self.begin_arena_detail(chip);
+        let rec = self.next_var();
+        self.write_line(&format!(
+            "uint8_t* {rec} = (uint8_t*)preflight_claim_record(state, {chip}u);"
+        ));
+        self.write_line(&format!("if ({rec}) {{"));
+        self.indent += 1;
+        let core = self.next_var();
+        self.write_line(&format!(
+            "uint8_t* {core} = {rec} + state->tracer->chip_records[{chip}].core_off;"
+        ));
+        for (offset, value) in [
+            (off.from_pc, pc.to_string()),
+            (off.from_timestamp, fromts.to_string()),
+            (off.rs1_val, format!("(uint32_t){v1}")),
+            (off.rs1_aux_prev_ts, p1.to_string()),
+            (off.read_data_aux_prev_ts, p2.to_string()),
+        ] {
+            self.write_line(&format!("*(uint32_t*)({rec} + {offset}) = {value};"));
+        }
+        if off.read_data_aux_prev_ts2 != usize::MAX {
+            let p2_second = p2_second.expect("multi-block load requires second read timestamp");
+            self.write_line(&format!(
+                "*(uint32_t*)({rec} + {}) = {p2_second};",
+                off.read_data_aux_prev_ts2
+            ));
+        }
+        for (offset, value) in [
+            (off.rs1_ptr, baked.rs1_ptr),
+            (off.rd_rs2_ptr, baked.rd_rs2_ptr),
+        ] {
+            self.write_line(&format!("*(uint8_t*)({rec} + {offset}) = {value}u;"));
+        }
+        self.write_line(&format!(
+            "*(uint16_t*)({rec} + {}) = {}u;",
+            off.imm, baked.imm
+        ));
+        self.write_line(&format!(
+            "*(uint8_t*)({rec} + {}) = {}u;",
+            off.imm_sign, baked.imm_sign
+        ));
+        if off.mem_as != usize::MAX {
+            self.write_line(&format!(
+                "*(uint8_t*)({rec} + {}) = {}u;",
+                off.mem_as, baked.mem_as
+            ));
+        }
+        if let Some(pw) = write_prev_ts {
+            self.write_line(&format!(
+                "*(uint32_t*)({rec} + {}) = {pw};",
+                off.write_prev_ts
+            ));
+        }
+        if off.write_prev_ts2 != usize::MAX {
+            let pw_second =
+                write_prev_ts_second.expect("multi-block store requires second write timestamp");
+            self.write_line(&format!(
+                "*(uint32_t*)({rec} + {}) = {pw_second};",
+                off.write_prev_ts2
+            ));
+        }
+        if off.core_local_opcode != usize::MAX {
+            self.write_line(&format!(
+                "*(uint8_t*)({core} + {}) = {}u;",
+                off.core_local_opcode, baked.local_opcode
+            ));
+        }
+        if off.core_is_byte != usize::MAX {
+            self.write_line(&format!(
+                "*(uint8_t*)({core} + {}) = {}u;",
+                off.core_is_byte, baked.is_byte
+            ));
+        }
+        if off.core_is_word != usize::MAX {
+            self.write_line(&format!(
+                "*(uint8_t*)({core} + {}) = {}u;",
+                off.core_is_word, baked.is_word
+            ));
+        }
+        if off.core_shift_amount != usize::MAX {
+            self.write_line(&format!(
+                "*(uint8_t*)({core} + {}) = (uint8_t)({addr} & 7u);",
+                off.core_shift_amount
+            ));
+        }
+        self.write_line(&format!(
+            "arena_store_u64_le({core} + {}, {read_data});",
+            off.core_read_data
+        ));
+        if off.core_read_data2 != usize::MAX {
+            let read_data_second =
+                read_data_second.expect("multi-block load requires second read block");
+            self.write_line(&format!(
+                "arena_store_u64_le({core} + {}, {read_data_second});",
+                off.core_read_data2
+            ));
+        }
+        if let Some(prev) = prev_data {
+            if off.write_prev_data != usize::MAX {
+                self.write_line(&format!(
+                    "arena_store_u64_le({rec} + {}, {prev});",
+                    off.write_prev_data
+                ));
+            }
+            if off.core_prev_data != usize::MAX {
+                self.write_line(&format!(
+                    "arena_store_u64_le({core} + {}, {prev});",
+                    off.core_prev_data
+                ));
+            }
+        }
+        if off.core_prev_data2 != usize::MAX {
+            let prev = prev_data_second.expect("multi-block store requires second previous block");
+            self.write_line(&format!(
+                "arena_store_u64_le({core} + {}, {prev});",
+                off.core_prev_data2
+            ));
+        }
+        self.indent -= 1;
+        self.write_line("}");
+        self.end_arena_detail(&detail_started);
+    }
+
+    /// R4: emit the arena-native alu3 full-record store sequence — claim one
+    /// slot (stride/core_off come from the ChipRecordBuf at runtime), store
+    /// dynamic fields from locals and program-redundant fields as baked
+    /// literals, all at `offset_of!`-derived literal offsets. u64-valued
+    /// fields expand to u16 byte-limbs via `arena_store_u64_le`
+    /// (4-byte-aligned stores only: Matrix rows are not 8-aligned).
+    #[allow(clippy::too_many_arguments)]
+    fn emit_arena_alu3_stores(
+        &mut self,
+        geom: crate::ArenaNativeGeometry,
+        baked: ArenaAlu3Baked,
+        rd: u8,
+        rs1: u8,
+        pc: &str,
+        fromts: &str,
+        p1: &str,
+        p2: &str,
+        pw: &str,
+        rdprev: &str,
+        v1: &str,
+        v2: &str,
+        res: &str,
+    ) {
+        let chip = self.current_chip_idx;
+        let crate::ArenaNativeLayout::Alu3(off) = geom.layout else {
+            panic!("alu3 air {chip} registered a non-alu3 layout");
+        };
+        let detail_started = self.begin_arena_detail(chip);
+        let rec = self.next_var();
+        self.write_line(&format!(
+            "uint8_t* {rec} = (uint8_t*)preflight_claim_record(state, {chip}u);"
+        ));
+        self.write_line(&format!("if ({rec}) {{"));
+        self.indent += 1;
+        let core = self.next_var();
+        self.write_line(&format!(
+            "uint8_t* {core} = {rec} + state->tracer->chip_records[{chip}].core_off;"
+        ));
+        let rd_ptr = (rd as u32) * 8;
+        let rs1_ptr = (rs1 as u32) * 8;
+        let stores = [
+            (off.from_pc, pc.to_string()),
+            (off.from_timestamp, fromts.to_string()),
+            (off.rd_ptr, format!("{rd_ptr}u")),
+            (off.rs1_ptr, format!("{rs1_ptr}u")),
+            (off.rs2, format!("{}u", baked.rs2_field)),
+            (off.reads_aux0_prev_ts, p1.to_string()),
+            (off.reads_aux1_prev_ts, p2.to_string()),
+            (off.write_prev_ts, pw.to_string()),
+        ];
+        for (offset, value) in stores {
+            self.write_line(&format!("*(uint32_t*)({rec} + {offset}) = {value};"));
+        }
+        if off.rs2_as != usize::MAX {
+            self.write_line(&format!(
+                "*(uint8_t*)({rec} + {}) = {}u;",
+                off.rs2_as, baked.rs2_as
+            ));
+        }
+        if off.rs2_imm_sign != usize::MAX {
+            self.write_line(&format!(
+                "*(uint8_t*)({rec} + {}) = {}u;",
+                off.rs2_imm_sign, baked.rs2_imm_sign
+            ));
+        }
+        self.write_line(&format!(
+            "arena_store_u64_le({rec} + {}, {rdprev});",
+            off.write_prev_data
+        ));
+        if off.w.is_some() {
+            // Every RV64 W core consumes exactly the low 32-bit word (four
+            // byte cells or two u16 cells). An eight-byte store would run
+            // through the adjacent operand/local-opcode fields.
+            self.write_line(&format!(
+                "*(uint32_t*)({core} + {}) = (uint32_t){v1};",
+                off.core_b
+            ));
+            self.write_line(&format!(
+                "*(uint32_t*)({core} + {}) = (uint32_t){v2};",
+                off.core_c
+            ));
+        } else {
+            self.write_line(&format!(
+                "arena_store_u64_le({core} + {}, {v1});",
+                off.core_b
+            ));
+            self.write_line(&format!(
+                "arena_store_u64_le({core} + {}, {v2});",
+                off.core_c
+            ));
+        }
+        if off.core_local_opcode != usize::MAX {
+            self.write_line(&format!(
+                "*(uint8_t*)({core} + {}) = {}u;",
+                off.core_local_opcode, baked.local_opcode
+            ));
+        }
+        if let Some(w) = off.w {
+            self.write_line(&format!(
+                "*(uint16_t*)({rec} + {}) = (uint16_t)((uint64_t)({v1}) >> 32);",
+                w.rs1_high
+            ));
+            self.write_line(&format!(
+                "*(uint16_t*)({rec} + {}) = (uint16_t)((uint64_t)({v1}) >> 48);",
+                w.rs1_high + size_of::<u16>()
+            ));
+            self.write_line(&format!(
+                "*(uint16_t*)({rec} + {}) = (uint16_t)((uint64_t)({v2}) >> 32);",
+                w.rs2_high
+            ));
+            self.write_line(&format!(
+                "*(uint16_t*)({rec} + {}) = (uint16_t)((uint64_t)({v2}) >> 48);",
+                w.rs2_high + size_of::<u16>()
+            ));
+            let msl_store = match w.result_word_msl_bytes {
+                1 => "uint8_t",
+                2 => "uint16_t",
+                bytes => panic!("unsupported W result limb width {bytes}"),
+            };
+            self.write_line(&format!(
+                "*({msl_store}*)({rec} + {}) = ({msl_store})({res} >> {});",
+                w.result_word_msl, w.result_word_msl_shift
+            ));
+            if w.result_sign != usize::MAX {
+                self.write_line(&format!(
+                    "*(uint8_t*)({rec} + {}) = (uint8_t)(((uint32_t){res}) >> 31);",
+                    w.result_sign
+                ));
+            }
+        }
+        self.indent -= 1;
+        self.write_line("}");
+        self.end_arena_detail(&detail_started);
+    }
+
+    /// Emit the dedicated AddI path. Unlike the legacy mixed base-ALU
+    /// adapter, AddI has only an rs1 read and rd write, so the immediate does
+    /// not consume a timestamp slot.
+    pub(crate) fn emit_addi_inline(
+        &mut self,
+        rd: u8,
+        rs1: u8,
+        imm_value: u64,
+        arena: Option<ArenaAddIBaked>,
+    ) {
+        if self.g2_records {
+            debug_assert!(!self.delta_records);
+            debug_assert_eq!(self.current_g2_kind, 29);
+            let v1 = self.g2_read_reg(rs1);
+            let result = self.next_var();
+            self.write_line(&format!(
+                "uint64_t {result} = {v1} + 0x{imm_value:016x}ull;"
+            ));
+            self.g2_store_u64(rvr_openvm_ext_ffi_common::G2_PRODUCER_ADDI_SLOT, &result);
+            if self.g2_checked {
+                self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs1});"));
+                self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rd});"));
+            } else {
+                self.g2_floor_timestamp(2);
+            }
+            if rd != 0 {
+                self.write_line(&format!("reg_write(state, {rd}, {result});"));
+            }
+            return;
+        }
+        let chip = self.current_chip_idx;
+        let pc = hex_u32(self.current_pc as u32);
+        let fromts = self.next_var();
+        self.write_line(&format!("uint32_t {fromts} = state->tracer->timestamp;"));
+        let (v1, p1) = self.reg_read_capture(rs1);
+        let vimm = self.next_var();
+        self.write_line(&format!("uint64_t {vimm} = 0x{imm_value:016x}ull;"));
+        let res = self.next_var();
+        self.write_line(&format!("uint64_t {res} = {v1} + {vimm};"));
+        let arena = arena.filter(|_| self.arena_native_airs.contains_key(&chip));
+        let rdprev = (!self.delta_records || arena.is_some()).then(|| {
+            let rdprev = self.next_var();
+            self.write_line(&format!("uint64_t {rdprev} = state->regs[{rd}];"));
+            rdprev
+        });
+        let pw = self.reg_touch_capture(rd);
+        self.write_line(&format!("reg_write(state, {rd}, {res});"));
+        if let Some(baked) = arena {
+            self.emit_arena_addi_stores(
+                baked,
+                rd,
+                rs1,
+                &pc,
+                &fromts,
+                &p1,
+                &pw,
+                rdprev.as_deref().expect("arena record requires old rd"),
+                &v1,
+            );
+            if self.delta_records {
+                self.write_line(&format!(
+                    "preflight_set_last_program_write_value(state->tracer, {res});"
+                ));
+            }
+        } else if self.delta_records {
+            self.emit_delta2(&pc, &fromts, &v1, &vimm);
+        } else {
+            let rdprev = rdprev.as_deref().expect("compact record requires old rd");
+            self.write_line(&format!(
+                "preflight_emit_alu3(state, {chip}u, {pc}, {fromts}, {p1}, 0u, {pw}, {rdprev}, \
+                 {v1}, {vimm});"
+            ));
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn emit_arena_addi_stores(
+        &mut self,
+        baked: ArenaAddIBaked,
+        rd: u8,
+        rs1: u8,
+        pc: &str,
+        fromts: &str,
+        p1: &str,
+        pw: &str,
+        rdprev: &str,
+        v1: &str,
+    ) {
+        let chip = self.current_chip_idx;
+        let geom = self.arena_native_airs[&chip];
+        let crate::ArenaNativeLayout::AddI(off) = geom.layout else {
+            panic!("AddI air {chip} registered a non-AddI layout");
+        };
+        let detail_started = self.begin_arena_detail(chip);
+        let rec = self.next_var();
+        self.write_line(&format!(
+            "uint8_t* {rec} = (uint8_t*)preflight_claim_record(state, {chip}u);"
+        ));
+        self.write_line(&format!("if ({rec}) {{"));
+        self.indent += 1;
+        let core = self.next_var();
+        self.write_line(&format!(
+            "uint8_t* {core} = {rec} + state->tracer->chip_records[{chip}].core_off;"
+        ));
+        for (offset, value) in [
+            (off.from_pc, pc.to_string()),
+            (off.from_timestamp, fromts.to_string()),
+            (off.rd_ptr, format!("{}u", u32::from(rd) * 8)),
+            (off.rs1_ptr, format!("{}u", u32::from(rs1) * 8)),
+            (off.read_prev_ts, p1.to_string()),
+            (off.write_prev_ts, pw.to_string()),
+        ] {
+            self.write_line(&format!("*(uint32_t*)({rec} + {offset}) = {value};"));
+        }
+        self.write_line(&format!(
+            "arena_store_u64_le({rec} + {}, {rdprev});",
+            off.write_prev_data
+        ));
+        self.write_line(&format!(
+            "arena_store_u64_le({core} + {}, {v1});",
+            off.core_rs1
+        ));
+        self.write_line(&format!(
+            "*(uint16_t*)({core} + {}) = {}u;",
+            off.core_imm_low11, baked.imm_low11
+        ));
+        self.write_line(&format!(
+            "*(uint16_t*)({core} + {}) = {}u;",
+            off.core_imm_sign, baked.imm_sign
+        ));
+        self.indent -= 1;
+        self.write_line("}");
+        self.end_arena_detail(&detail_started);
+    }
+
+    /// R3: emit a register-immediate one-read-one-write instruction with an
+    /// inline compact alu3 record (touch-only accesses; see
+    /// [`Self::emit_reg3_inline`]). Develop's split-immediate adapters carry
+    /// the immediate as program metadata, so it consumes no timestamp;
+    /// `reads_aux[1].prev_timestamp` remains 0 only as compact-wire padding.
+    /// `imm_value` is the value recorded
+    /// as the c operand (sign-extended immediate, or the raw shift amount);
+    /// `result` renders the C expression computing rd from the read value and
+    /// the materialized immediate variable.
+    pub(crate) fn emit_reg2imm_inline(
+        &mut self,
+        rd: u8,
+        rs1: u8,
+        imm_value: u64,
+        arena: Option<ArenaAlu3Baked>,
+        result: impl FnOnce(&str, &str) -> String,
+    ) {
+        if self.g2_records {
+            debug_assert!(!self.delta_records);
+            debug_assert!(matches!(self.current_g2_kind, 31..=37));
+            let v1 = self.g2_read_reg(rs1);
+            let vimm = format!("0x{imm_value:016x}ull");
+            let res = self.next_var();
+            let result_expr = result(&v1, &vimm);
+            self.write_line(&format!("uint64_t {res} = {result_expr};"));
+            let slot =
+                rvr_openvm_ext_ffi_common::g2_standard_producer_slot(self.current_g2_kind, false)
+                    .expect("G2 one-value kind must have a producer lane");
+            self.g2_store_u64(slot, &res);
+            if self.g2_checked {
+                self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs1});"));
+                self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rd});"));
+            } else {
+                self.g2_floor_timestamp(2);
+            }
+            if rd != 0 {
+                self.write_line(&format!("reg_write(state, {rd}, {res});"));
+            }
+            return;
+        }
+        let chip = self.current_chip_idx;
+        let pc = hex_u32(self.current_pc as u32);
+        let fromts = self.next_var();
+        self.write_line(&format!("uint32_t {fromts} = state->tracer->timestamp;"));
+        let (v1, p1) = self.reg_read_capture(rs1);
+        let vimm = self.next_var();
+        self.write_line(&format!("uint64_t {vimm} = 0x{imm_value:016x}ull;"));
+        let res = self.next_var();
+        let result_expr = result(&v1, &vimm);
+        self.write_line(&format!("uint64_t {res} = {result_expr};"));
+        let arena = arena.filter(|_| self.arena_native_airs.contains_key(&chip));
+        let rdprev = (!self.delta_records || arena.is_some()).then(|| {
+            let rdprev = self.next_var();
+            self.write_line(&format!("uint64_t {rdprev} = state->regs[{rd}];"));
+            rdprev
+        });
+        let pw = self.reg_touch_capture(rd);
+        self.write_line(&format!("reg_write(state, {rd}, {res});"));
+        if let Some(baked) = arena {
+            let geom = self.arena_native_airs[&chip];
+            // The immediate's read slot has no block touch: prev_ts = 0, and
+            // the core c operand is the sign-extended immediate value (the
+            // same values the compact wire carries for the imm form).
+            self.emit_arena_alu3_stores(
+                geom,
+                baked,
+                rd,
+                rs1,
+                &pc,
+                &fromts,
+                &p1,
+                "0u",
+                &pw,
+                rdprev.as_deref().expect("arena record requires old rd"),
+                &v1,
+                &vimm,
+                &res,
+            );
+            if self.delta_records {
+                self.write_line(&format!(
+                    "preflight_set_last_program_write_value(state->tracer, {res});"
+                ));
+            }
+        } else if self.delta_records {
+            self.emit_delta2(&pc, &fromts, &v1, &vimm);
+        } else {
+            let rdprev = rdprev.as_deref().expect("compact record requires old rd");
+            self.write_line(&format!(
+                "preflight_emit_alu3(state, {chip}u, {pc}, {fromts}, {p1}, 0u, {pw}, {rdprev}, \
+                 {v1}, {vimm});"
+            ));
+        }
+    }
+
+    /// R3: emit a (conditionally) written single-register instruction
+    /// (Lui/Auipc/JAL link) with an inline compact wr1 record. `rd = None` or
+    /// `Some(0)` suppresses the register write but still consumes the tick
+    /// (matching `write_reg(0)`); the record's write fields are then zero and
+    /// the host uses the instruction's enable flag.
+    pub(crate) fn emit_wr1_inline(
+        &mut self,
+        rd: Option<u8>,
+        value: &str,
+        arena: Option<ArenaWr1Baked>,
+    ) {
+        if self.g2_records {
+            debug_assert!(!self.delta_records);
+            debug_assert!(matches!(self.current_g2_kind, 12 | 14));
+            if self.g2_checked {
+                if self.current_g2_kind == 14 || rd.is_some_and(|rd| rd != 0) {
+                    self.write_line(&format!(
+                        "preflight_g2_shadow_reg_touch(state, {});",
+                        rd.unwrap_or(0)
+                    ));
+                } else {
+                    self.write_line("trace_timestamp(state);");
+                }
+            } else {
+                self.g2_floor_timestamp(1);
+            }
+            if let Some(rd) = rd.filter(|&rd| rd != 0) {
+                let tmp = self.next_var();
+                self.write_line(&format!("uint64_t {tmp} = {value};"));
+                self.write_line(&format!("reg_write(state, {rd}, {tmp});"));
+            }
+            return;
+        }
+        let chip = self.current_chip_idx;
+        let pc = hex_u32(self.current_pc as u32);
+        let fromts = self.next_var();
+        self.write_line(&format!("uint32_t {fromts} = state->tracer->timestamp;"));
+        let arena = arena.filter(|_| self.arena_native_airs.contains_key(&chip));
+        match rd {
+            Some(rd) if rd != 0 => {
+                let tmp = self.next_var();
+                self.write_line(&format!("uint64_t {tmp} = {value};"));
+                let rdprev = (!self.delta_records || arena.is_some()).then(|| {
+                    let rdprev = self.next_var();
+                    self.write_line(&format!("uint64_t {rdprev} = state->regs[{rd}];"));
+                    rdprev
+                });
+                let pw = self.reg_touch_capture(rd);
+                self.write_line(&format!("reg_write(state, {rd}, {tmp});"));
+                if let Some(baked) = arena {
+                    self.emit_arena_wr1_stores(
+                        baked,
+                        &pc,
+                        &fromts,
+                        Some((
+                            &pw,
+                            rdprev.as_deref().expect("arena record requires old rd"),
+                        )),
+                    );
+                } else if self.delta_records {
+                    self.emit_delta2(&pc, &fromts, "0ull", "0ull");
+                } else {
+                    let rdprev = rdprev.as_deref().expect("compact record requires old rd");
+                    self.write_line(&format!(
+                        "preflight_emit_wr1(state, {chip}u, {pc}, {fromts}, {pw}, {rdprev});"
+                    ));
+                }
+            }
+            _ => {
+                self.write_line("trace_timestamp(state);");
+                if let Some(baked) = arena {
+                    self.emit_arena_wr1_stores(baked, &pc, &fromts, None);
+                } else if self.delta_records {
+                    self.emit_delta2(&pc, &fromts, "0ull", "0ull");
+                } else {
+                    self.write_line(&format!(
+                        "preflight_emit_wr1(state, {chip}u, {pc}, {fromts}, 0u, 0ull);"
+                    ));
+                }
+            }
+        }
+    }
+
+    /// R4: wr1 full-record stores. `write` is `(pw, rdprev)` for an enabled
+    /// link write; `None` stores the explicit u32::MAX rd_ptr sentinel and
+    /// leaves the zero-filled aux fields untouched. Core fields always store
+    /// (both cores are unconditional in the assemblers); the layout's
+    /// sentinels select the jal_lui vs auipc field set.
+    fn emit_arena_wr1_stores(
+        &mut self,
+        baked: ArenaWr1Baked,
+        pc: &str,
+        fromts: &str,
+        write: Option<(&str, &str)>,
+    ) {
+        let chip = self.current_chip_idx;
+        let geom = self.arena_native_airs[&chip];
+        let crate::ArenaNativeLayout::Wr1(off) = geom.layout else {
+            panic!("wr1 air {chip} registered a non-wr1 layout");
+        };
+        let detail_started = self.begin_arena_detail(chip);
+        let rec = self.next_var();
+        self.write_line(&format!(
+            "uint8_t* {rec} = (uint8_t*)preflight_claim_record(state, {chip}u);"
+        ));
+        self.write_line(&format!("if ({rec}) {{"));
+        self.indent += 1;
+        let core = self.next_var();
+        self.write_line(&format!(
+            "uint8_t* {core} = {rec} + state->tracer->chip_records[{chip}].core_off;"
+        ));
+        self.write_line(&format!("*(uint32_t*)({rec} + {}) = {pc};", off.from_pc));
+        self.write_line(&format!(
+            "*(uint32_t*)({rec} + {}) = {fromts};",
+            off.from_timestamp
+        ));
+        let rd_ptr = if write.is_some() {
+            baked.rd_ptr
+        } else {
+            u32::MAX
+        };
+        self.write_line(&format!(
+            "*(uint32_t*)({rec} + {}) = {rd_ptr}u;",
+            off.rd_ptr
+        ));
+        if let Some((pw, rdprev)) = write {
+            self.write_line(&format!("*(uint32_t*)({rec} + {}) = {pw};", off.rd_prev_ts));
+            self.write_line(&format!(
+                "arena_store_u64_le({rec} + {}, {rdprev});",
+                off.rd_prev_data
+            ));
+        }
+        self.write_line(&format!(
+            "*(uint32_t*)({core} + {}) = {}u;",
+            off.core_imm, baked.core_imm
+        ));
+        if off.core_rd_data != usize::MAX {
+            self.write_line(&format!(
+                "arena_store_u64_le({core} + {}, {}ull);",
+                off.core_rd_data, baked.rd_data
+            ));
+        }
+        if off.core_is_jal != usize::MAX {
+            self.write_line(&format!(
+                "*(uint8_t*)({core} + {}) = {}u;",
+                off.core_is_jal, baked.is_jal
+            ));
+        }
+        if off.core_from_pc != usize::MAX {
+            self.write_line(&format!(
+                "*(uint32_t*)({core} + {}) = {}u;",
+                off.core_from_pc, baked.core_from_pc
+            ));
+        }
+        self.indent -= 1;
+        self.write_line("}");
+        self.end_arena_detail(&detail_started);
+    }
+
+    /// R3: emit the two touch-only branch operand reads plus the inline
+    /// compact branch2 record; returns the C value expressions for the
+    /// branch condition.
+    pub(crate) fn emit_branch2_inline(
+        &mut self,
+        rs1: u8,
+        rs2: u8,
+        arena: Option<ArenaBranch2Baked>,
+    ) -> (String, String) {
+        if self.g2_records {
+            debug_assert!(!self.delta_records);
+            debug_assert!(matches!(self.current_g2_kind, 10 | 11));
+            let v1 = self.g2_read_reg(rs1);
+            let v2 = self.g2_read_reg(rs2);
+            if self.g2_checked {
+                self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs1});"));
+                self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs2});"));
+            } else {
+                self.g2_floor_timestamp(2);
+            }
+            return (v1, v2);
+        }
+        let chip = self.current_chip_idx;
+        let pc = hex_u32(self.current_pc as u32);
+        let fromts = self.next_var();
+        self.write_line(&format!("uint32_t {fromts} = state->tracer->timestamp;"));
+        let (v1, p1) = self.reg_read_capture(rs1);
+        let (v2, p2) = self.reg_read_capture(rs2);
+        match arena.filter(|_| self.arena_native_airs.contains_key(&chip)) {
+            Some(baked) => {
+                let geom = self.arena_native_airs[&chip];
+                let crate::ArenaNativeLayout::Branch2(off) = geom.layout else {
+                    panic!("branch2 air {chip} registered a non-branch2 layout");
+                };
+                let detail_started = self.begin_arena_detail(chip);
+                let rec = self.next_var();
+                self.write_line(&format!(
+                    "uint8_t* {rec} = (uint8_t*)preflight_claim_record(state, {chip}u);"
+                ));
+                self.write_line(&format!("if ({rec}) {{"));
+                self.indent += 1;
+                let core = self.next_var();
+                self.write_line(&format!(
+                    "uint8_t* {core} = {rec} + state->tracer->chip_records[{chip}].core_off;"
+                ));
+                for (offset, value) in [
+                    (off.from_pc, pc.clone()),
+                    (off.from_timestamp, fromts.clone()),
+                    (off.rs1_ptr, format!("{}u", baked.rs1_ptr)),
+                    (off.rs2_ptr, format!("{}u", baked.rs2_ptr)),
+                    (off.reads_aux0_prev_ts, p1.clone()),
+                    (off.reads_aux1_prev_ts, p2.clone()),
+                ] {
+                    self.write_line(&format!("*(uint32_t*)({rec} + {offset}) = {value};"));
+                }
+                self.write_line(&format!(
+                    "arena_store_u64_le({core} + {}, {v1});",
+                    off.core_a
+                ));
+                self.write_line(&format!(
+                    "arena_store_u64_le({core} + {}, {v2});",
+                    off.core_b
+                ));
+                self.write_line(&format!(
+                    "*(uint32_t*)({core} + {}) = {}u;",
+                    off.core_imm, baked.imm
+                ));
+                self.write_line(&format!(
+                    "*(uint8_t*)({core} + {}) = {}u;",
+                    off.core_local_opcode, baked.local_opcode
+                ));
+                self.indent -= 1;
+                self.write_line("}");
+                self.end_arena_detail(&detail_started);
+            }
+            None if self.delta_records => {
+                self.emit_delta2(&pc, &fromts, &v1, &v2);
+            }
+            None => {
+                self.write_line(&format!(
+                    "preflight_emit_branch2(state, {chip}u, {pc}, {fromts}, {p1}, {p2}, {v1}, {v2});"
+                ));
+            }
+        }
+        (v1, v2)
+    }
+
+    /// R3: emit the Jalr rs1 read + conditional link write with an inline
+    /// compact rw1 record; returns the C expression of the rs1 value for the
+    /// jump-target computation. `link_rd = None`/`Some(0)` suppresses the
+    /// write but still ticks.
+    pub(crate) fn emit_rw1_inline(
+        &mut self,
+        link_rd: Option<u8>,
+        rs1: u8,
+        link_value: &str,
+        arena: Option<ArenaRw1Baked>,
+    ) -> String {
+        if self.g2_records {
+            debug_assert!(!self.delta_records);
+            debug_assert_eq!(self.current_g2_kind, 13);
+            let v1 = self.g2_read_reg(rs1);
+            let v1 = self.materialize_u64(&v1);
+            if self.g2_checked {
+                self.write_line(&format!(
+                    "if (unlikely({v1} > UINT32_MAX)) rvr_g2->overflow = G2_REJECT_NARROW_VALUE;"
+                ));
+            }
+            if self.g2_checked {
+                self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs1});"));
+                if let Some(rd) = link_rd.filter(|&rd| rd != 0) {
+                    self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rd});"));
+                } else {
+                    self.write_line("trace_timestamp(state);");
+                }
+            } else {
+                self.g2_floor_timestamp(2);
+            }
+            if let Some(rd) = link_rd.filter(|&rd| rd != 0) {
+                let tmp = self.next_var();
+                self.write_line(&format!("uint64_t {tmp} = {link_value};"));
+                self.write_line(&format!("reg_write(state, {rd}, {tmp});"));
+            }
+            return v1;
+        }
+        let chip = self.current_chip_idx;
+        let pc = hex_u32(self.current_pc as u32);
+        let fromts = self.next_var();
+        self.write_line(&format!("uint32_t {fromts} = state->tracer->timestamp;"));
+        let (v1, p1) = self.reg_read_capture(rs1);
+        // The jump target must be computed from the PRE-write rs1 value when
+        // link_rd == rs1 (e.g. jalr ra, ra, 0).
+        let v1 = self.materialize_u64(&v1);
+        let arena = arena.filter(|_| self.arena_native_airs.contains_key(&chip));
+        match link_rd {
+            Some(rd) if rd != 0 => {
+                let tmp = self.next_var();
+                self.write_line(&format!("uint64_t {tmp} = {link_value};"));
+                let rdprev = (!self.delta_records || arena.is_some()).then(|| {
+                    let rdprev = self.next_var();
+                    self.write_line(&format!("uint64_t {rdprev} = state->regs[{rd}];"));
+                    rdprev
+                });
+                let pw = self.reg_touch_capture(rd);
+                self.write_line(&format!("reg_write(state, {rd}, {tmp});"));
+                if let Some(baked) = arena {
+                    self.emit_arena_rw1_stores(
+                        baked,
+                        &pc,
+                        &fromts,
+                        &v1,
+                        &p1,
+                        Some((
+                            &pw,
+                            rdprev.as_deref().expect("arena record requires old rd"),
+                        )),
+                    );
+                } else if self.delta_records {
+                    self.emit_delta2(&pc, &fromts, &v1, "0ull");
+                } else {
+                    let rdprev = rdprev.as_deref().expect("compact record requires old rd");
+                    self.write_line(&format!(
+                        "preflight_emit_rw1(state, {chip}u, {pc}, {fromts}, {p1}, {pw}, {v1}, \
+                         {rdprev});"
+                    ));
+                }
+            }
+            _ => {
+                self.write_line("trace_timestamp(state);");
+                if let Some(baked) = arena {
+                    self.emit_arena_rw1_stores(baked, &pc, &fromts, &v1, &p1, None);
+                } else if self.delta_records {
+                    self.emit_delta2(&pc, &fromts, &v1, "0ull");
+                } else {
+                    self.write_line(&format!(
+                        "preflight_emit_rw1(state, {chip}u, {pc}, {fromts}, {p1}, 0u, {v1}, \
+                         0ull);"
+                    ));
+                }
+            }
+        }
+        v1
+    }
+
+    /// R4: rw1 (Jalr) full-record stores; `write` as in wr1.
+    fn emit_arena_rw1_stores(
+        &mut self,
+        baked: ArenaRw1Baked,
+        pc: &str,
+        fromts: &str,
+        v1: &str,
+        p1: &str,
+        write: Option<(&str, &str)>,
+    ) {
+        let chip = self.current_chip_idx;
+        let geom = self.arena_native_airs[&chip];
+        let crate::ArenaNativeLayout::Rw1(off) = geom.layout else {
+            panic!("rw1 air {chip} registered a non-rw1 layout");
+        };
+        let detail_started = self.begin_arena_detail(chip);
+        let rec = self.next_var();
+        self.write_line(&format!(
+            "uint8_t* {rec} = (uint8_t*)preflight_claim_record(state, {chip}u);"
+        ));
+        self.write_line(&format!("if ({rec}) {{"));
+        self.indent += 1;
+        let core = self.next_var();
+        self.write_line(&format!(
+            "uint8_t* {core} = {rec} + state->tracer->chip_records[{chip}].core_off;"
+        ));
+        self.write_line(&format!("*(uint32_t*)({rec} + {}) = {pc};", off.from_pc));
+        self.write_line(&format!(
+            "*(uint32_t*)({rec} + {}) = {fromts};",
+            off.from_timestamp
+        ));
+        self.write_line(&format!(
+            "*(uint32_t*)({rec} + {}) = {}u;",
+            off.rs1_ptr, baked.rs1_ptr
+        ));
+        let rd_ptr = if write.is_some() {
+            baked.rd_ptr
+        } else {
+            u32::MAX
+        };
+        self.write_line(&format!(
+            "*(uint32_t*)({rec} + {}) = {rd_ptr}u;",
+            off.rd_ptr
+        ));
+        self.write_line(&format!(
+            "*(uint32_t*)({rec} + {}) = {p1};",
+            off.read_prev_ts
+        ));
+        if let Some((pw, rdprev)) = write {
+            self.write_line(&format!(
+                "*(uint32_t*)({rec} + {}) = {pw};",
+                off.write_prev_ts
+            ));
+            self.write_line(&format!(
+                "arena_store_u64_le({rec} + {}, {rdprev});",
+                off.write_prev_data
+            ));
+        }
+        self.write_line(&format!(
+            "*(uint16_t*)({core} + {}) = {}u;",
+            off.core_imm, baked.core_imm
+        ));
+        self.write_line(&format!(
+            "*(uint32_t*)({core} + {}) = {pc};",
+            off.core_from_pc
+        ));
+        self.write_line(&format!(
+            "*(uint32_t*)({core} + {}) = (uint32_t){v1};",
+            off.core_rs1_val
+        ));
+        self.write_line(&format!(
+            "*(uint8_t*)({core} + {}) = {}u;",
+            off.core_imm_sign, baked.core_imm_sign
+        ));
+        self.indent -= 1;
+        self.write_line("}");
+        self.end_arena_detail(&detail_started);
+    }
+
+    /// R3: emit a main-memory load with an inline compact alu3 record:
+    /// touch-only rs1 read and block touch, raw typed data read, conditional
+    /// rd write (rd = x0 ticks without writing, matching `write_reg(0)`).
+    /// The record's c value is the full block read value; the host derives
+    /// the aligned pointer and shift from the instruction and rs1 value.
+    pub(crate) fn emit_load_inline(
+        &mut self,
+        width: u8,
+        signed: bool,
+        rd: u8,
+        rs1: u8,
+        offset: i16,
+    ) {
+        self.uses_raw_memory = true;
+        if self.g2_records {
+            debug_assert!(!self.delta_records);
+            let kind = match (signed, width) {
+                (false, 1) => 8,
+                (true, 1) => 9,
+                (false, 2) => 20,
+                (false, 4) => 21,
+                (false, 8) => 22,
+                (true, 2) => 27,
+                (true, 4) => 28,
+                _ => unreachable!("invalid G2 load width {width}"),
+            };
+            let base = self.g2_read_reg(rs1);
+            if self.g2_checked {
+                self.write_line(&format!(
+                    "if (likely(preflight_g2_validate_pointer(state, {base}))) {{"
+                ));
+                self.indent += 1;
+            }
+            let addr = self.materialize_u64(&Self::addr_expr(&base, offset));
+            let block_addr = self.materialize_u64(&format!("preflight_block_addr({addr})"));
+            let block = self.next_var();
+            self.write_line(&format!(
+                "uint64_t {block} = read_mem_u64(memory, {block_addr});"
+            ));
+            let slot = rvr_openvm_ext_ffi_common::g2_standard_producer_slot(kind, false)
+                .expect("G2 load kind must have producer lanes");
+            self.g2_store_u32(slot, &base);
+            self.g2_store_u64(slot + 1, &block);
+            let mut floor_block1 = None;
+            if self.g2_checked {
+                self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs1});"));
+                if width == 1 {
+                    self.write_line(&format!(
+                        "preflight_g2_shadow_mem_touch(state, {block_addr}, {block});"
+                    ));
+                } else {
+                    let crosses = self.next_var();
+                    let block1 = self.next_var();
+                    let prev1 = self.next_var();
+                    self.write_line(&format!(
+                        "bool {crosses} = preflight_crosses_block({addr}, {width}u);"
+                    ));
+                    self.write_line(&format!("if (unlikely({crosses})) {{"));
+                    self.indent += 1;
+                    self.write_line(&format!("uint64_t {block1};"));
+                    self.write_line(&format!("uint32_t {prev1};"));
+                    self.write_line(&format!(
+                        "trace_crossing_mem_read_blocks(state, {block_addr}, {block}, &{block1}, &{prev1});"
+                    ));
+                    self.indent -= 1;
+                    self.write_line("} else {");
+                    self.indent += 1;
+                    self.write_line(&format!(
+                        "preflight_g2_shadow_mem_touch(state, {block_addr}, {block});"
+                    ));
+                    self.write_line("trace_timestamp(state);");
+                    self.indent -= 1;
+                    self.write_line("}");
+                }
+                if rd == 0 {
+                    self.write_line("trace_timestamp(state);");
+                } else {
+                    self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rd});"));
+                }
+            } else if width == 1 {
+                self.g2_floor_timestamp(3);
+            } else {
+                let crosses = self.next_var();
+                let block1 = self.next_var();
+                self.write_line(&format!(
+                    "bool {crosses} = preflight_crosses_block({addr}, {width}u);"
+                ));
+                self.write_line(&format!("uint64_t {block1} = 0u;"));
+                self.write_line(&format!("if (unlikely({crosses})) {{"));
+                self.indent += 1;
+                self.write_line(&format!(
+                    "preflight_g2_floor_crossing_load(state, {block_addr}, {block}, &{block1});"
+                ));
+                self.indent -= 1;
+                self.write_line("}");
+                self.g2_floor_timestamp(4);
+                floor_block1 = Some(block1);
+            }
+            if rd != 0 {
+                let value = self.next_var();
+                let (read_func, _, var_ty, _) = Self::read_mem_helper(width, signed);
+                if self.g2_checked {
+                    self.write_line(&format!("{var_ty} {value} = {read_func}(memory, {addr});"));
+                } else {
+                    let cast_ty = match (width, signed) {
+                        (1, false) => "uint8_t",
+                        (1, true) => "int8_t",
+                        (2, false) => "uint16_t",
+                        (2, true) => "int16_t",
+                        (4, false) => "uint32_t",
+                        (4, true) => "int32_t",
+                        (8, _) => "uint64_t",
+                        _ => unreachable!("invalid G2 load width {width}"),
+                    };
+                    self.write_line(&format!(
+                        "{var_ty} {value} = ({cast_ty})preflight_g2_floor_load_value({block}, {}, {addr});",
+                        floor_block1.as_deref().unwrap_or("0u")
+                    ));
+                }
+                let reg_value = if signed {
+                    format!("(uint64_t)(int64_t){value}")
+                } else {
+                    value
+                };
+                self.write_line(&format!("reg_write(state, {rd}, {reg_value});"));
+            }
+            if self.g2_checked {
+                self.indent -= 1;
+                self.write_line("}");
+            }
+            return;
+        }
+        let chip = self.current_chip_idx;
+        let pc = hex_u32(self.current_pc as u32);
+        let fromts = self.next_var();
+        self.write_line(&format!("uint32_t {fromts} = state->tracer->timestamp;"));
+        let (v1, p1) = self.reg_read_capture(rs1);
+        let addr = self.materialize_u64(&Self::addr_expr(&v1, offset));
+        let blockaddr = self.materialize_u64(&format!("preflight_block_addr({addr})"));
+        let block = self.next_var();
+        self.write_line(&format!(
+            "uint64_t {block} = read_mem_u64(memory, {blockaddr});"
+        ));
+        let p2 = self.next_var();
+        let mut crossing_flag = None;
+        let mut block_second = None;
+        let mut p2_second = None;
+        if width == 1 {
+            self.write_line(&format!(
+                "uint32_t {p2} = trace_mem_touch(state, {blockaddr}, {block});"
+            ));
+        } else {
+            let crosses = self.next_var();
+            crossing_flag = Some(crosses.clone());
+            let block1 = self.next_var();
+            let p2_1 = self.next_var();
+            block_second = Some(block1.clone());
+            p2_second = Some(p2_1.clone());
+            self.write_line(&format!(
+                "bool {crosses} = preflight_crosses_block({addr}, {width}u);"
+            ));
+            self.write_line(&format!("uint32_t {p2};"));
+            self.write_line(&format!("uint64_t {block1} = 0u;"));
+            self.write_line(&format!("uint32_t {p2_1} = UINT32_MAX;"));
+            self.write_line(&format!("if (unlikely({crosses})) {{"));
+            self.indent += 1;
+            self.write_line(&format!(
+                "{p2} = trace_crossing_mem_read_blocks(state, {blockaddr}, {block}, &{block1}, \
+                 &{p2_1});"
+            ));
+            self.write_line(&format!(
+                "preflight_mark_program_crossing_residual(state->tracer, {pc}, {fromts});"
+            ));
+            self.indent -= 1;
+            self.write_line("} else {");
+            self.indent += 1;
+            self.write_line(&format!(
+                "{p2} = trace_mem_touch(state, {blockaddr}, {block});"
+            ));
+            self.write_line("trace_timestamp(state);");
+            self.indent -= 1;
+            self.write_line("}");
+        }
+        let arena_geom = self.arena_native_airs.get(&chip).copied();
+        let ls_baked = |rd_rs2_ptr: u32| ArenaLoadStoreBaked {
+            rs1_ptr: (rs1 as u32) * 8,
+            rd_rs2_ptr,
+            imm: offset as u16,
+            imm_sign: (offset < 0) as u8,
+            mem_as: 2,
+            local_opcode: match (signed, width) {
+                (false, 8) => 0, // LOADD
+                (false, 1) => 1, // LOADBU
+                (false, 2) => 2, // LOADHU
+                (false, 4) => 3, // LOADWU
+                _ => 0,          // sign-extend core: sentinel skips the store
+            },
+            is_byte: (signed && width == 1) as u8,
+            is_word: (signed && width == 4) as u8,
+        };
+        if rd == 0 {
+            // The typed data read is only needed for the suppressed rd write;
+            // the record already carries the full block value.
+            self.write_line("trace_timestamp(state);");
+            if let Some(geom) = arena_geom {
+                let baked = ls_baked(u32::from(u8::MAX));
+                self.emit_arena_loadstore_stores(
+                    geom,
+                    baked,
+                    &pc,
+                    &fromts,
+                    &v1,
+                    &p1,
+                    &p2,
+                    p2_second.as_deref(),
+                    &addr,
+                    &block,
+                    block_second.as_deref(),
+                    None,
+                    None,
+                    None,
+                    None,
+                );
+            } else if self.delta_records {
+                self.emit_delta2(&pc, &fromts, &v1, &block);
+            } else {
+                self.write_line(&format!(
+                    "preflight_emit_alu3(state, {chip}u, {pc}, {fromts}, {p1}, {p2}, 0u, 0ull, \
+                     {v1}, {block});"
+                ));
+            }
+        } else {
+            let val = self.next_var();
+            let (read_func, _, var_ty, _) = Self::read_mem_helper(width, signed);
+            self.write_line(&format!("{var_ty} {val} = {read_func}(memory, {addr});"));
+            let rdprev = (!self.delta_records || arena_geom.is_some()).then(|| {
+                let rdprev = self.next_var();
+                self.write_line(&format!("uint64_t {rdprev} = state->regs[{rd}];"));
+                rdprev
+            });
+            let pw = self.reg_touch_capture(rd);
+            let reg_value = if signed {
+                format!("(uint64_t)(int64_t){val}")
+            } else {
+                val.clone()
+            };
+            self.write_line(&format!("reg_write(state, {rd}, {reg_value});"));
+            if let Some(geom) = arena_geom {
+                let baked = ls_baked((rd as u32) * 8);
+                self.emit_arena_loadstore_stores(
+                    geom,
+                    baked,
+                    &pc,
+                    &fromts,
+                    &v1,
+                    &p1,
+                    &p2,
+                    p2_second.as_deref(),
+                    &addr,
+                    &block,
+                    block_second.as_deref(),
+                    Some(&pw),
+                    None,
+                    Some(rdprev.as_deref().expect("arena record requires old rd")),
+                    None,
+                );
+            } else if self.delta_records {
+                let delta_value = crossing_flag.as_ref().map_or_else(
+                    || block.clone(),
+                    |crosses| format!("({crosses} ? (uint64_t){val} : {block})"),
+                );
+                self.emit_delta2(&pc, &fromts, &v1, &delta_value);
+            } else {
+                let rdprev = rdprev.as_deref().expect("compact record requires old rd");
+                self.write_line(&format!(
+                    "preflight_emit_alu3(state, {chip}u, {pc}, {fromts}, {p1}, {p2}, {pw}, \
+                     {rdprev}, {v1}, {block});"
+                ));
+            }
+        }
+    }
+
+    /// R3: emit a main-memory store with an inline compact alu3 record:
+    /// touch-only rs1/rs2 reads and block touch, raw typed data write. The
+    /// record's c value is the full rs2 value and prev is the block's value
+    /// before the store (read here, before the raw write).
+    pub(crate) fn emit_store_inline(&mut self, width: u8, rs1: u8, rs2: u8, offset: i16) {
+        self.uses_raw_memory = true;
+        if self.g2_records {
+            debug_assert!(!self.delta_records);
+            let kind = match width {
+                1 => 23,
+                2 => 24,
+                4 => 25,
+                8 => 26,
+                _ => unreachable!("invalid G2 store width {width}"),
+            };
+            let base = self.g2_read_reg(rs1);
+            let source = self.g2_read_reg(rs2);
+            if self.g2_checked {
+                self.write_line(&format!(
+                    "if (likely(preflight_g2_validate_pointer(state, {base}))) {{"
+                ));
+                self.indent += 1;
+            }
+            let addr = self.materialize_u64(&Self::addr_expr(&base, offset));
+            let block_addr = self.materialize_u64(&format!("preflight_block_addr({addr})"));
+            let block = self.next_var();
+            self.write_line(&format!(
+                "uint64_t {block} = read_mem_u64(memory, {block_addr});"
+            ));
+            let slot = rvr_openvm_ext_ffi_common::g2_standard_producer_slot(kind, false)
+                .expect("G2 store kind must have producer lanes");
+            self.g2_store_u32(slot, &base);
+            self.g2_store_u64(slot + 1, &block);
+            if self.g2_checked {
+                self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs1});"));
+                self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {rs2});"));
+                if width == 1 {
+                    self.write_line(&format!(
+                        "preflight_g2_shadow_mem_store_touch(state, {block_addr});"
+                    ));
+                } else {
+                    let crosses = self.next_var();
+                    let prev0 = self.next_var();
+                    let prev1 = self.next_var();
+                    let prev_ts1 = self.next_var();
+                    self.write_line(&format!(
+                        "bool {crosses} = preflight_crosses_block({addr}, {width}u);"
+                    ));
+                    self.write_line(&format!("if (unlikely({crosses})) {{"));
+                    self.indent += 1;
+                    self.write_line(&format!("uint64_t {prev0};"));
+                    self.write_line(&format!("uint64_t {prev1};"));
+                    self.write_line(&format!("uint32_t {prev_ts1};"));
+                    self.write_line(&format!(
+                        "trace_crossing_store_blocks(state, {addr}, {width}u, {source}, AS_MEMORY, &{prev0}, &{prev1}, &{prev_ts1});"
+                    ));
+                    self.indent -= 1;
+                    self.write_line("} else {");
+                    self.indent += 1;
+                    self.write_line(&format!(
+                        "preflight_g2_shadow_mem_store_touch(state, {block_addr});"
+                    ));
+                    self.write_line("trace_timestamp(state);");
+                    self.indent -= 1;
+                    self.write_line("}");
+                }
+            } else if width == 1 {
+                self.g2_floor_timestamp(3);
+            } else {
+                let crosses = self.next_var();
+                self.write_line(&format!(
+                    "bool {crosses} = preflight_crosses_block({addr}, {width}u);"
+                ));
+                self.write_line(&format!("if (unlikely({crosses})) {{"));
+                self.indent += 1;
+                self.write_line(&format!(
+                    "preflight_g2_floor_crossing_store(state, {addr}, {width}u, {source}, AS_MEMORY, {block});"
+                ));
+                self.indent -= 1;
+                self.write_line("}");
+                self.g2_floor_timestamp(4);
+            }
+            let (write, _, cast) = Self::write_mem_helper(width);
+            self.write_line(&format!("{write}(memory, {addr}, ({cast})({source}));"));
+            if self.g2_checked {
+                self.indent -= 1;
+                self.write_line("}");
+            }
+            return;
+        }
+        let chip = self.current_chip_idx;
+        let pc = hex_u32(self.current_pc as u32);
+        let fromts = self.next_var();
+        self.write_line(&format!("uint32_t {fromts} = state->tracer->timestamp;"));
+        let (v1, p1) = self.reg_read_capture(rs1);
+        let (v2, p2) = self.reg_read_capture(rs2);
+        let addr = self.materialize_u64(&Self::addr_expr(&v1, offset));
+        let blockaddr = self.materialize_u64(&format!("preflight_block_addr({addr})"));
+        let arena_geom = self.arena_native_airs.get(&chip).copied();
+        let prev = (width > 1 || !self.delta_records || arena_geom.is_some()).then(|| {
+            let prev = self.next_var();
+            if width > 1 && self.delta_records && arena_geom.is_none() {
+                self.write_line(&format!("uint64_t {prev} = 0u;"));
+            } else {
+                self.write_line(&format!(
+                    "uint64_t {prev} = read_mem_u64(memory, {blockaddr});"
+                ));
+            }
+            prev
+        });
+        let pw = self.next_var();
+        let mut prev_second = None;
+        let mut pw_second = None;
+        if width == 1 {
+            if let Some(prev) = prev.as_deref() {
+                self.write_line(&format!(
+                    "uint32_t {pw} = trace_mem_touch(state, {blockaddr}, {prev});"
+                ));
+            } else {
+                self.write_line(&format!(
+                    "uint32_t {pw} = trace_mem_store_touch(state, {blockaddr});"
+                ));
+            }
+        } else {
+            let crosses = self.next_var();
+            let prev1 = self.next_var();
+            let pw1 = self.next_var();
+            prev_second = Some(prev1.clone());
+            pw_second = Some(pw1.clone());
+            let prev = prev
+                .as_deref()
+                .expect("multi-byte store declares block zero");
+            self.write_line(&format!(
+                "bool {crosses} = preflight_crosses_block({addr}, {width}u);"
+            ));
+            self.write_line(&format!("uint32_t {pw};"));
+            self.write_line(&format!("uint64_t {prev1} = 0u;"));
+            self.write_line(&format!("uint32_t {pw1} = UINT32_MAX;"));
+            self.write_line(&format!("if (unlikely({crosses})) {{"));
+            self.indent += 1;
+            self.write_line(&format!(
+                "{pw} = trace_crossing_store_blocks(state, {addr}, {width}u, {v2}, AS_MEMORY, \
+                 &{prev}, &{prev1}, &{pw1});"
+            ));
+            self.write_line(&format!(
+                "preflight_mark_program_crossing_residual(state->tracer, {pc}, {fromts});"
+            ));
+            self.indent -= 1;
+            self.write_line("} else {");
+            self.indent += 1;
+            if self.delta_records && arena_geom.is_none() {
+                self.write_line(&format!(
+                    "{pw} = trace_mem_store_touch(state, {blockaddr});"
+                ));
+            } else {
+                self.write_line(&format!(
+                    "{pw} = trace_mem_touch(state, {blockaddr}, {prev});"
+                ));
+            }
+            self.write_line("trace_timestamp(state);");
+            self.indent -= 1;
+            self.write_line("}");
+        }
+        let (wr_func, _, cast_ty) = Self::write_mem_helper(width);
+        self.write_line(&format!("{wr_func}(memory, {addr}, ({cast_ty})({v2}));"));
+        if let Some(geom) = arena_geom {
+            let baked = ArenaLoadStoreBaked {
+                rs1_ptr: (rs1 as u32) * 8,
+                rd_rs2_ptr: (rs2 as u32) * 8,
+                imm: offset as u16,
+                imm_sign: (offset < 0) as u8,
+                mem_as: 2,
+                local_opcode: match width {
+                    8 => 4, // STORED
+                    4 => 5, // STOREW
+                    2 => 6, // STOREH
+                    _ => 7, // STOREB
+                },
+                is_byte: 0,
+                is_word: 0,
+            };
+            self.emit_arena_loadstore_stores(
+                geom,
+                baked,
+                &pc,
+                &fromts,
+                &v1,
+                &p1,
+                &p2,
+                None,
+                &addr,
+                &v2,
+                None,
+                Some(&pw),
+                pw_second.as_deref(),
+                Some(prev.as_deref().expect("arena record requires old block")),
+                prev_second.as_deref(),
+            );
+        } else if self.delta_records {
+            self.emit_delta2(&pc, &fromts, &v1, &v2);
+        } else {
+            let prev = prev.as_deref().expect("compact record requires old block");
+            self.write_line(&format!(
+                "preflight_emit_alu3(state, {chip}u, {pc}, {fromts}, {p1}, {p2}, {pw}, {prev}, \
+                 {v1}, {v2});"
+            ));
+        }
+    }
+
+    /// Emit the LoadStore witness for an extension-provided full-word store.
+    fn trace_store_u64_as_inline(
+        &mut self,
+        src: Variable,
+        ptr: Variable,
+        offset: i32,
+        addr_space: u32,
+        local_opcode: u8,
+    ) -> (String, String) {
+        let src_reg = reg_index(src);
+        let ptr_reg = reg_index(ptr);
+        if self.g2_records {
+            debug_assert_eq!(addr_space, PUBLIC_VALUES_AS);
+            debug_assert_eq!(local_opcode, 4);
+            let ptr = self.g2_read_reg(ptr_reg);
+            let src = self.g2_read_reg(src_reg);
+            if self.g2_checked {
+                self.write_line(&format!("preflight_g2_validate_pointer(state, {ptr});"));
+            }
+            let addr_expr = match offset.cmp(&0) {
+                std::cmp::Ordering::Less => {
+                    format!("{ptr} - {}", hex_u32(offset.unsigned_abs()))
+                }
+                std::cmp::Ordering::Equal => ptr.clone(),
+                std::cmp::Ordering::Greater => format!("{ptr} + {}", hex_u32(offset as u32)),
+            };
+            let addr = self.materialize_u64(&addr_expr);
+            let block_addr = self.materialize_u64(&format!("preflight_block_addr({addr})"));
+            let block = self.next_var();
+            self.write_line(&format!(
+                "uint64_t {block} = preflight_read_pv_block(state->tracer, {block_addr});"
+            ));
+            let slot = rvr_openvm_ext_ffi_common::g2_standard_producer_slot(26, false)
+                .expect("G2 store kind must have producer lanes");
+            self.g2_store_u32(slot, &ptr);
+            self.g2_store_u64(slot + 1, &block);
+            let crosses = self.next_var();
+            self.write_line(&format!(
+                "bool {crosses} = preflight_crosses_block({addr}, 8u);"
+            ));
+            if self.g2_checked {
+                self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {ptr_reg});"));
+                self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {src_reg});"));
+                let prev0 = self.next_var();
+                let prev1 = self.next_var();
+                let prev_ts1 = self.next_var();
+                self.write_line(&format!("if (unlikely({crosses})) {{"));
+                self.indent += 1;
+                self.write_line(&format!("uint64_t {prev0};"));
+                self.write_line(&format!("uint64_t {prev1};"));
+                self.write_line(&format!("uint32_t {prev_ts1};"));
+                self.write_line(&format!(
+                    "trace_crossing_store_blocks(state, {addr}, 8u, {src}, AS_PUBLIC_VALUES, &{prev0}, &{prev1}, &{prev_ts1});"
+                ));
+                self.indent -= 1;
+                self.write_line("} else {");
+                self.indent += 1;
+                self.write_line(&format!(
+                    "preflight_g2_shadow_pv_touch(state, {block_addr});"
+                ));
+                self.write_line("trace_timestamp(state);");
+                self.indent -= 1;
+                self.write_line("}");
+            } else {
+                self.write_line(&format!("if (unlikely({crosses})) {{"));
+                self.indent += 1;
+                self.write_line(&format!(
+                    "preflight_g2_floor_crossing_store(state, {addr}, 8u, {src}, AS_PUBLIC_VALUES, {block});"
+                ));
+                self.indent -= 1;
+                self.write_line("}");
+                self.g2_floor_timestamp(4);
+            }
+            return (src, ptr);
+        }
+        if !self.inline_records_enabled() {
+            let ptr = self.read_reg(ptr_reg);
+            let src = self.read_reg(src_reg);
+            let addr = match offset.cmp(&0) {
+                std::cmp::Ordering::Less => {
+                    format!("({ptr} - {})", hex_u32(offset.unsigned_abs()))
+                }
+                std::cmp::Ordering::Equal => ptr.clone(),
+                std::cmp::Ordering::Greater => format!("({ptr} + {})", hex_u32(offset as u32)),
+            };
+            self.trace_wr_as_u64(&addr, &src, addr_space);
+            return (src, ptr);
+        }
+
+        assert_eq!(
+            addr_space, PUBLIC_VALUES_AS,
+            "inline extension store currently supports public values only"
+        );
+        let chip = self.current_chip_idx;
+        let pc = hex_u32(self.current_pc as u32);
+        let fromts = self.next_var();
+        self.write_line(&format!("uint32_t {fromts} = state->tracer->timestamp;"));
+        let (ptr, ptr_prev_ts) = self.reg_read_capture(ptr_reg);
+        let (src, src_prev_ts) = self.reg_read_capture(src_reg);
+        let addr_expr = match offset.cmp(&0) {
+            std::cmp::Ordering::Less => {
+                format!("{ptr} - {}", hex_u32(offset.unsigned_abs()))
+            }
+            std::cmp::Ordering::Equal => ptr.clone(),
+            std::cmp::Ordering::Greater => format!("{ptr} + {}", hex_u32(offset as u32)),
+        };
+        let addr = self.materialize_u64(&addr_expr);
+        let block_addr = self.materialize_u64(&format!("preflight_block_addr({addr})"));
+        let arena_geom = self.arena_native_airs.get(&chip).copied();
+        let prev = self.next_var();
+        if self.delta_records && arena_geom.is_none() {
+            self.write_line(&format!("uint64_t {prev} = 0u;"));
+        } else {
+            self.write_line(&format!(
+                "uint64_t {prev} = preflight_read_pv_block(state->tracer, {block_addr});"
+            ));
+        }
+        let write_prev_ts = self.next_var();
+        let write_prev_ts1 = self.next_var();
+        let crosses = self.next_var();
+        let prev1 = self.next_var();
+        self.write_line(&format!(
+            "bool {crosses} = preflight_crosses_block({addr}, 8u);"
+        ));
+        self.write_line(&format!("uint32_t {write_prev_ts};"));
+        self.write_line(&format!("uint32_t {write_prev_ts1} = UINT32_MAX;"));
+        self.write_line(&format!("uint64_t {prev1} = 0u;"));
+        self.write_line(&format!("if (unlikely({crosses})) {{"));
+        self.indent += 1;
+        self.write_line(&format!(
+            "{write_prev_ts} = trace_crossing_store_blocks(state, {addr}, 8u, {src}, \
+             AS_PUBLIC_VALUES, &{prev}, &{prev1}, &{write_prev_ts1});"
+        ));
+        self.write_line(&format!(
+            "preflight_mark_program_crossing_residual(state->tracer, {pc}, {fromts});"
+        ));
+        self.indent -= 1;
+        self.write_line("} else {");
+        self.indent += 1;
+        self.write_line(&format!(
+            "{write_prev_ts} = trace_pv_touch(state, {block_addr});"
+        ));
+        self.write_line("trace_timestamp(state);");
+        self.indent -= 1;
+        self.write_line("}");
+
+        if let Some(geom) = arena_geom {
+            let baked = ArenaLoadStoreBaked {
+                rs1_ptr: u32::from(ptr_reg) * 8,
+                rd_rs2_ptr: u32::from(src_reg) * 8,
+                imm: offset as u16,
+                imm_sign: (offset < 0) as u8,
+                mem_as: addr_space as u8,
+                local_opcode,
+                is_byte: 0,
+                is_word: 0,
+            };
+            self.emit_arena_loadstore_stores(
+                geom,
+                baked,
+                &pc,
+                &fromts,
+                &ptr,
+                &ptr_prev_ts,
+                &src_prev_ts,
+                None,
+                &addr,
+                &src,
+                None,
+                Some(&write_prev_ts),
+                Some(&write_prev_ts1),
+                Some(&prev),
+                Some(&prev1),
+            );
+        } else if self.delta_records {
+            self.emit_delta2(&pc, &fromts, &ptr, &src);
+        } else {
+            self.write_line(&format!(
+                "preflight_emit_alu3(state, {chip}u, {pc}, {fromts}, {ptr_prev_ts}, \
+                 {src_prev_ts}, {write_prev_ts}, {prev}, {ptr}, {src});"
+            ));
+        }
+        (src, ptr)
+    }
+
+    fn trace_reveal_compact_inline(
+        &mut self,
+        src: Variable,
+        ptr: Variable,
+        offset: i32,
+        width: u8,
+        addr_space: u32,
+        full_word_local_opcode: u8,
+    ) -> bool {
+        if !self.g2_records {
+            return false;
+        }
+        let src_reg = reg_index(src);
+        let ptr_reg = reg_index(ptr);
+        debug_assert_eq!(addr_space, PUBLIC_VALUES_AS);
+        debug_assert_eq!(full_word_local_opcode, 4);
+        debug_assert!(matches!(width, 1 | 2 | 4 | 8));
+        let kind = match width {
+            1 => 23,
+            2 => 24,
+            4 => 25,
+            8 => 26,
+            _ => unreachable!("validated REVEAL width"),
+        };
+
+        let ptr = self.g2_read_reg(ptr_reg);
+        let src = self.g2_read_reg(src_reg);
+        let addr_expr = match offset.cmp(&0) {
+            std::cmp::Ordering::Less => {
+                format!("{ptr} - {}", hex_u32(offset.unsigned_abs()))
+            }
+            std::cmp::Ordering::Equal => ptr.clone(),
+            std::cmp::Ordering::Greater => format!("{ptr} + {}", hex_u32(offset as u32)),
+        };
+        let addr = self.materialize_u64(&addr_expr);
+        if self.g2_checked {
+            self.write_line(&format!(
+                "if (unlikely(!preflight_g2_validate_pointer(state, {ptr}))) {{"
+            ));
+            self.emit_trap();
+            self.write_line("}");
+        }
+        self.write_line(&format!(
+            "if (unlikely(!openvm_validate_reveal({addr}, {width}u))) {{"
+        ));
+        self.emit_trap();
+        self.write_line("}");
+        let block_addr = self.materialize_u64(&format!("preflight_block_addr({addr})"));
+        let block = self.next_var();
+        self.write_line(&format!(
+            "uint64_t {block} = preflight_read_pv_block(state->tracer, {block_addr});"
+        ));
+        let slot = rvr_openvm_ext_ffi_common::g2_standard_producer_slot(kind, false)
+            .expect("G2 reveal kind must have producer lanes");
+        self.g2_store_u32(slot, &ptr);
+        self.g2_store_u64(slot + 1, &block);
+        if self.g2_checked {
+            self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {ptr_reg});"));
+            self.write_line(&format!("preflight_g2_shadow_reg_touch(state, {src_reg});"));
+            if width == 1 {
+                self.write_line(&format!(
+                    "preflight_g2_shadow_pv_touch(state, {block_addr});"
+                ));
+            } else {
+                let crosses = self.next_var();
+                let prev0 = self.next_var();
+                let prev1 = self.next_var();
+                let prev_ts1 = self.next_var();
+                self.write_line(&format!(
+                    "bool {crosses} = preflight_crosses_block({addr}, {width}u);"
+                ));
+                self.write_line(&format!("if (unlikely({crosses})) {{"));
+                self.indent += 1;
+                self.write_line(&format!("uint64_t {prev0};"));
+                self.write_line(&format!("uint64_t {prev1};"));
+                self.write_line(&format!("uint32_t {prev_ts1};"));
+                self.write_line(&format!(
+                    "trace_crossing_store_blocks(state, {addr}, {width}u, {src}, AS_PUBLIC_VALUES, &{prev0}, &{prev1}, &{prev_ts1});"
+                ));
+                self.indent -= 1;
+                self.write_line("} else {");
+                self.indent += 1;
+                self.write_line(&format!(
+                    "preflight_g2_shadow_pv_touch(state, {block_addr});"
+                ));
+                self.write_line("trace_timestamp(state);");
+                self.indent -= 1;
+                self.write_line("}");
+            }
+        } else if width == 1 {
+            self.g2_floor_timestamp(3);
+        } else {
+            let crosses = self.next_var();
+            self.write_line(&format!(
+                "bool {crosses} = preflight_crosses_block({addr}, {width}u);"
+            ));
+            self.write_line(&format!("if (unlikely({crosses})) {{"));
+            self.indent += 1;
+            self.write_line(&format!(
+                "preflight_g2_floor_crossing_store(state, {addr}, {width}u, {src}, AS_PUBLIC_VALUES, {block});"
+            ));
+            self.indent -= 1;
+            self.write_line("}");
+            self.g2_floor_timestamp(4);
+        }
+        self.write_line(&format!(
+            "if (unlikely(!openvm_reveal({src}, {addr}, {width}u))) {{"
+        ));
+        self.emit_trap();
+        self.write_line("}");
+        true
     }
 
     fn write_reg_direct(&mut self, idx: u8, val: &str) {
@@ -296,6 +2459,11 @@ impl<'a> EmitContext<'a> {
         }
     }
 
+    /// Write a variable without emitting a trace event.
+    pub fn write_var_raw(&mut self, var: Variable, val: &str) {
+        self.write_reg_direct(reg_index(var), val);
+    }
+
     fn addr_expr(base: &str, offset: i16) -> String {
         if offset == 0 {
             base.to_string()
@@ -306,25 +2474,28 @@ impl<'a> EmitContext<'a> {
         }
     }
 
-    fn read_mem_helper(width: u8, signed: bool) -> (&'static str, &'static str, &'static str) {
+    fn read_mem_helper(
+        width: u8,
+        signed: bool,
+    ) -> (&'static str, &'static str, &'static str, &'static str) {
         match (width, signed) {
-            (1, false) => ("read_mem_u8", "trace_read_mem_u8", "uint32_t"),
-            (1, true) => ("read_mem_i8", "trace_read_mem_i8", "int32_t"),
-            (2, false) => ("read_mem_u16", "trace_read_mem_u16", "uint32_t"),
-            (2, true) => ("read_mem_i16", "trace_read_mem_i16", "int32_t"),
-            (4, false) => ("read_mem_u32", "trace_read_mem_u32", "uint32_t"),
-            (4, true) => ("read_mem_i32", "trace_read_mem_i32", "int32_t"),
-            (8, _) => ("read_mem_u64", "trace_read_mem_u64", "uint64_t"),
+            (1, false) => ("read_mem_u8", "trace_rd_mem_u8", "uint32_t", "uint8_t"),
+            (1, true) => ("read_mem_i8", "trace_rd_mem_i8", "int32_t", "int8_t"),
+            (2, false) => ("read_mem_u16", "trace_rd_mem_u16", "uint32_t", "uint16_t"),
+            (2, true) => ("read_mem_i16", "trace_rd_mem_i16", "int32_t", "int16_t"),
+            (4, false) => ("read_mem_u32", "trace_rd_mem_u32", "uint32_t", "uint32_t"),
+            (4, true) => ("read_mem_i32", "trace_rd_mem_i32", "int32_t", "int32_t"),
+            (8, _) => ("read_mem_u64", "trace_rd_mem_u64", "uint64_t", "uint64_t"),
             _ => unreachable!("invalid memory width {width}"),
         }
     }
 
     fn write_mem_helper(width: u8) -> (&'static str, &'static str, &'static str) {
         match width {
-            1 => ("write_mem_u8", "trace_write_mem_u8", "uint8_t"),
-            2 => ("write_mem_u16", "trace_write_mem_u16", "uint16_t"),
-            4 => ("write_mem_u32", "trace_write_mem_u32", "uint32_t"),
-            8 => ("write_mem_u64", "trace_write_mem_u64", "uint64_t"),
+            1 => ("write_mem_u8", "trace_wr_mem_u8", "uint8_t"),
+            2 => ("write_mem_u16", "trace_wr_mem_u16", "uint16_t"),
+            4 => ("write_mem_u32", "trace_wr_mem_u32", "uint32_t"),
+            8 => ("write_mem_u64", "trace_wr_mem_u64", "uint64_t"),
             _ => unreachable!("invalid memory width {width}"),
         }
     }
@@ -337,12 +2508,14 @@ impl<'a> EmitContext<'a> {
         );
         let addr = Self::addr_expr(base, offset);
         let var = self.next_var();
-        let (read_func, trace_func, var_ty) = Self::read_mem_helper(width, signed);
+        let (read_func, trace_func, var_ty, trace_ty) = Self::read_mem_helper(width, signed);
         self.uses_raw_memory = true;
 
         self.write_line(&format!("{var_ty} {var} = {read_func}(memory, {addr});"));
         if self.mode.traces_values() {
-            self.write_line(&format!("{trace_func}(state, {addr}, {var});"));
+            self.write_line(&format!(
+                "{trace_func}(state, {addr}, ({trace_ty})({var}));"
+            ));
         }
         if self.mode.traces_memory_pages() {
             self.emit_inline_page_record(&addr, width);
@@ -399,9 +2572,33 @@ impl<'a> EmitContext<'a> {
         }
     }
 
-    /// Emit a PC read when value tracing is enabled.
-    pub fn trace_pc(&mut self, pc: u64) {
-        if self.mode.traces_values() {
+    /// Emit a trace_pc call. Per-instruction chip accounting is rolled into
+    /// the per-block chip update emitted at block entry by
+    /// `CProject::emit_block_function`, not here.
+    pub fn trace_pc(
+        &mut self,
+        pc: u64,
+        exec_idx: u32,
+        single_pass_inline: bool,
+        detail_family: u32,
+    ) {
+        if self.g2_records {
+            return;
+        }
+        if self.mode == EmitMode::ValueTrace {
+            let inline_chip = if single_pass_inline {
+                self.current_chip_idx
+            } else {
+                u32::MAX
+            };
+            let delta_inline = self.delta_records
+                && single_pass_inline
+                && !self.arena_native_airs.contains_key(&self.current_chip_idx);
+            self.write_line(&format!(
+                "trace_pc_indexed(state, 0x{pc:08x}ull, {exec_idx}u, {inline_chip}u, {}, {detail_family}u);",
+                if delta_inline { "true" } else { "false" }
+            ));
+        } else {
             self.write_line(&format!("trace_pc(state, 0x{pc:08x}ull);"));
         }
     }
@@ -445,7 +2642,7 @@ impl<'a> EmitContext<'a> {
         if chip_idx == u32::MAX {
             return;
         }
-        if !matches!(self.mode, EmitMode::ValueTrace | EmitMode::Direct) {
+        if !matches!(self.mode, EmitMode::Direct) {
             let num_airs = self
                 .num_airs
                 .expect("metered code generation requires the AIR count");
@@ -455,7 +2652,10 @@ impl<'a> EmitContext<'a> {
             }
         }
         match self.mode {
-            EmitMode::ValueTrace | EmitMode::Direct => {}
+            EmitMode::ValueTrace => {
+                self.write_line(&format!("trace_chip(state, {chip_idx}u, {count_expr});"));
+            }
+            EmitMode::Direct => {}
             EmitMode::Metered { .. } => {
                 self.write_line(&format!("(*trace_heights)[{chip_idx}] += {count_expr};"));
             }
@@ -480,7 +2680,7 @@ impl<'a> EmitContext<'a> {
     }
 
     pub fn trace_chip_if_nonzero(&mut self, chip_idx: u32, count_expr: &str) {
-        if chip_idx == u32::MAX || matches!(self.mode, EmitMode::ValueTrace | EmitMode::Direct) {
+        if chip_idx == u32::MAX || matches!(self.mode, EmitMode::Direct) {
             return;
         }
         self.write_line(&format!("if (({count_expr}) != 0u) {{"));
@@ -536,6 +2736,30 @@ impl<'a> EmitContext<'a> {
         }
     }
 
+    pub fn trace_mem_access_u64_range(
+        &mut self,
+        base_addr: &str,
+        num_dwords: &str,
+        addr_space: PageAddressSpace,
+    ) {
+        if self.mode.traces_values() {
+            self.write_line(&format!(
+                "trace_mem_access_u64_range(state, {base_addr}, {num_dwords}, {}u);",
+                addr_space.id()
+            ));
+        } else {
+            self.trace_page_access_u64_range(base_addr, num_dwords, addr_space);
+        }
+    }
+
+    pub fn trace_wr_as_u64(&mut self, addr: &str, val: &str, addr_space: u32) {
+        self.flush_page_locals();
+        self.write_line(&format!(
+            "trace_wr_as_u64(state, {addr}, {val}, {addr_space}u);"
+        ));
+        self.reload_page_locals();
+    }
+
     fn sorted_hot_regs(&self) -> Vec<u8> {
         let mut regs: Vec<u8> = self.hot_regs.iter().copied().collect();
         regs.sort();
@@ -550,7 +2774,9 @@ impl<'a> EmitContext<'a> {
         }
         match self.block_abi {
             BlockAbi::Plain => {}
-            BlockAbi::InstretCountdown => args.push_str(", instret_remaining"),
+            BlockAbi::InstretCountdown | BlockAbi::PreflightInstretCountdown => {
+                args.push_str(", instret_remaining");
+            }
             BlockAbi::Metered => args.push_str(", check_counter, trace_heights"),
         }
         args
@@ -571,6 +2797,7 @@ impl<'a> EmitContext<'a> {
                     "state->mode_state.retired = state->mode_state.target - instret_remaining;",
                 );
             }
+            BlockAbi::PreflightInstretCountdown => {}
             BlockAbi::Metered => {
                 self.write_line("state->mode_state.check_counter = check_counter;");
             }
@@ -586,16 +2813,141 @@ impl<'a> EmitContext<'a> {
 }
 
 impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
+    fn inline_record_enabled(&self) -> bool {
+        self.inline_records_enabled()
+    }
+
     fn read_var(&mut self, var: Variable) -> String {
         EmitContext::read_reg(self, reg_index(var))
+    }
+
+    fn read_var_with_trace(&mut self, var: Variable) -> (String, String, String) {
+        EmitContext::read_var_with_trace(self, var)
     }
 
     fn peek_var(&mut self, var: Variable) -> String {
         EmitContext::peek_reg(self, reg_index(var))
     }
 
+    fn read_var_raw(&mut self, var: Variable) -> String {
+        EmitContext::read_var_raw(self, var)
+    }
+
     fn write_var(&mut self, var: Variable, val: &str) {
         EmitContext::write_reg(self, reg_index(var), val)
+    }
+
+    fn write_var_raw(&mut self, var: Variable, val: &str) {
+        EmitContext::write_var_raw(self, var, val)
+    }
+
+    fn emit_reg3_inline(
+        &mut self,
+        rd: Variable,
+        rs1: Variable,
+        rs2: Variable,
+        arena: Option<ArenaAlu3Baked>,
+        result_template: &str,
+    ) -> bool {
+        if !self.inline_records_enabled() {
+            return false;
+        }
+        EmitContext::emit_reg3_inline(
+            self,
+            reg_index(rd),
+            reg_index(rs1),
+            reg_index(rs2),
+            arena,
+            |lhs, rhs| {
+                result_template
+                    .replace("__RVR_LHS__", lhs)
+                    .replace("__RVR_RHS__", rhs)
+            },
+        );
+        true
+    }
+
+    fn emit_reg2imm_inline(
+        &mut self,
+        rd: Variable,
+        rs1: Variable,
+        imm_value: u64,
+        arena: Option<ArenaAlu3Baked>,
+        result_template: &str,
+    ) -> bool {
+        if !self.inline_records_enabled() {
+            return false;
+        }
+        EmitContext::emit_reg2imm_inline(
+            self,
+            reg_index(rd),
+            reg_index(rs1),
+            imm_value,
+            arena,
+            |lhs, rhs| {
+                result_template
+                    .replace("__RVR_LHS__", lhs)
+                    .replace("__RVR_RHS__", rhs)
+            },
+        );
+        true
+    }
+
+    fn emit_addi_inline(
+        &mut self,
+        rd: Variable,
+        rs1: Variable,
+        imm_value: u64,
+        arena: Option<ArenaAddIBaked>,
+    ) -> bool {
+        if !self.inline_records_enabled() {
+            return false;
+        }
+        EmitContext::emit_addi_inline(self, reg_index(rd), reg_index(rs1), imm_value, arena);
+        true
+    }
+
+    fn emit_wr1_inline(
+        &mut self,
+        rd: Option<Variable>,
+        value: &str,
+        arena: Option<ArenaWr1Baked>,
+    ) -> bool {
+        if !self.inline_records_enabled() {
+            return false;
+        }
+        EmitContext::emit_wr1_inline(self, rd.map(reg_index), value, arena);
+        true
+    }
+
+    fn emit_load_inline(
+        &mut self,
+        width: u8,
+        signed: bool,
+        rd: Option<Variable>,
+        base: Variable,
+        offset: i16,
+    ) -> bool {
+        if !self.inline_records_enabled() {
+            return false;
+        }
+        EmitContext::emit_load_inline(
+            self,
+            width,
+            signed,
+            rd.map_or(0, reg_index),
+            reg_index(base),
+            offset,
+        );
+        true
+    }
+
+    fn emit_store_inline(&mut self, width: u8, base: Variable, src: Variable, offset: i16) -> bool {
+        if !self.inline_records_enabled() {
+            return false;
+        }
+        EmitContext::emit_store_inline(self, width, reg_index(base), reg_index(src), offset);
+        true
     }
 
     fn write_line(&mut self, s: &str) {
@@ -614,7 +2966,15 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
         EmitContext::write_mem(self, base, offset, val, width);
     }
 
+    fn trace_absent_second_block(&mut self, base: &str, offset: i16, width: u8) {
+        EmitContext::trace_absent_second_block(self, base, offset, width);
+    }
+
     fn emit_call(&mut self, name: &str, args: &[&str]) {
+        EmitContext::emit_call(self, name, args);
+    }
+
+    fn extern_call(&mut self, name: &str, args: &[&str]) {
         EmitContext::emit_call(self, name, args);
     }
 
@@ -622,7 +2982,15 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
         EmitContext::emit_call_without_page_flush(self, name, args);
     }
 
+    fn extern_call_without_page_flush(&mut self, name: &str, args: &[&str]) {
+        EmitContext::emit_call_without_page_flush(self, name, args);
+    }
+
     fn emit_call_expr(&mut self, ret_ty: &str, name: &str, args: &[&str]) -> String {
+        EmitContext::emit_call_expr(self, ret_ty, name, args)
+    }
+
+    fn extern_call_expr(&mut self, ret_ty: &str, name: &str, args: &[&str]) -> String {
         EmitContext::emit_call_expr(self, ret_ty, name, args)
     }
 
@@ -654,6 +3022,142 @@ impl rvr_openvm_ir::ExtEmitCtx for EmitContext<'_> {
         addr_space: PageAddressSpace,
     ) {
         EmitContext::trace_page_access_u64_range(self, base_addr, num_dwords, addr_space);
+    }
+
+    fn trace_mem_access_u64_range(
+        &mut self,
+        base_addr: &str,
+        num_dwords: &str,
+        addr_space: PageAddressSpace,
+    ) {
+        EmitContext::trace_mem_access_u64_range(self, base_addr, num_dwords, addr_space);
+    }
+
+    fn trace_wr_as_u64(&mut self, addr: &str, val: &str, addr_space: u32) {
+        EmitContext::trace_wr_as_u64(self, addr, val, addr_space);
+    }
+
+    fn trace_store_u64_as(
+        &mut self,
+        src: Variable,
+        ptr: Variable,
+        offset: i32,
+        addr_space: u32,
+        local_opcode: u8,
+    ) -> (String, String) {
+        self.trace_store_u64_as_inline(src, ptr, offset, addr_space, local_opcode)
+    }
+
+    fn trace_reveal_compact(
+        &mut self,
+        src: Variable,
+        ptr: Variable,
+        offset: i32,
+        width: u8,
+        addr_space: u32,
+        full_word_local_opcode: u8,
+    ) -> bool {
+        self.trace_reveal_compact_inline(
+            src,
+            ptr,
+            offset,
+            width,
+            addr_space,
+            full_word_local_opcode,
+        )
+    }
+
+    fn emit_reveal(
+        &mut self,
+        src: Variable,
+        ptr: Variable,
+        offset: i32,
+        width: MemWidth,
+        addr_space: PageAddressSpace,
+        full_word_local_opcode: u8,
+    ) {
+        if self.trace_reveal_compact_inline(
+            src,
+            ptr,
+            offset,
+            width.bytes(),
+            addr_space.id(),
+            full_word_local_opcode,
+        ) {
+            return;
+        }
+
+        let addr_from_ptr = |ptr: &str| match offset.cmp(&0) {
+            std::cmp::Ordering::Less => {
+                format!("({ptr} - 0x{:08x}ull)", offset.unsigned_abs())
+            }
+            std::cmp::Ordering::Equal => ptr.to_string(),
+            std::cmp::Ordering::Greater => format!("({ptr} + 0x{offset:08x}ull)"),
+        };
+        let width_arg = format!("{}u", width.bytes());
+
+        if !self.mode.traces_values() {
+            let src = EmitContext::read_reg(self, reg_index(src));
+            let ptr = EmitContext::read_reg(self, reg_index(ptr));
+            let addr = addr_from_ptr(&ptr);
+            self.write_line(&format!(
+                "if (unlikely(!openvm_reveal({src}, {addr}, {width_arg}))) {{"
+            ));
+            self.emit_trap();
+            self.write_line("}");
+            self.trace_page_access(&addr, width, addr_space);
+            return;
+        }
+
+        let (src, addr) = if width == MemWidth::Double {
+            let (src, ptr) = self.trace_store_u64_as_inline(
+                src,
+                ptr,
+                offset,
+                addr_space.id(),
+                full_word_local_opcode,
+            );
+            (src, addr_from_ptr(&ptr))
+        } else {
+            let ptr = EmitContext::read_reg(self, reg_index(ptr));
+            let src = EmitContext::read_reg(self, reg_index(src));
+            let addr = addr_from_ptr(&ptr);
+            let width = width.bytes().to_string();
+            self.emit_call_without_page_flush(
+                "trace_wr_as",
+                &[
+                    "state",
+                    &addr,
+                    &src,
+                    &width,
+                    &format!("{}u", addr_space.id()),
+                ],
+            );
+            (src, addr)
+        };
+        self.write_line(&format!(
+            "if (unlikely(!openvm_reveal({src}, {addr}, {width_arg}))) {{"
+        ));
+        self.emit_trap();
+        self.write_line("}");
+    }
+
+    fn trace_timestamp(&mut self) {
+        EmitContext::trace_timestamp(self);
+    }
+
+    fn trace_phantom_record(&mut self, operands: [u32; 3]) {
+        if self.inline_records_enabled() {
+            self.write_line(&format!(
+                "preflight_emit_phantom(state, {}u, 0x{:08x}u, state->tracer->timestamp, {}u, {}u, {}u);",
+                self.current_chip_idx,
+                self.current_pc as u32,
+                operands[0],
+                operands[1],
+                operands[2]
+            ));
+        }
+        self.trace_timestamp();
     }
 }
 
@@ -692,5 +3196,23 @@ mod tests {
         assert!(ctx
             .buf()
             .contains("trace_memory_access_span(&trace_memory, addr, 8u);"));
+    }
+
+    #[test]
+    fn metered_stateful_call_synchronizes_page_cursors() {
+        let mut ctx = metered_memory_ctx();
+        ctx.emit_call_expr("bool", "callback", &["state"]);
+
+        let source = ctx.buf();
+        let flush = source
+            .find("trace_memory_flush(&state->mode_state, &trace_memory);")
+            .expect("stateful calls must flush block-local page touches");
+        let call = source
+            .find("bool _v0 = callback(state);")
+            .expect("callback must be emitted");
+        let reload = source
+            .find("trace_memory_reload(&state->mode_state, &trace_memory);")
+            .expect("stateful calls must reload the global page cursor");
+        assert!(flush < call && call < reload);
     }
 }

@@ -11,11 +11,13 @@ use openvm_instructions::{
 };
 use openvm_keccak256_transpiler::{KeccakfOpcode, XorinOpcode};
 use rvr_openvm_ir::{
-    CfgEffect, ExtEmitCtx, ExtInstr, FixedTraceRows, InstrAt, LiftedInstr, Variable,
+    CfgEffect, ExtEmitCtx, ExtInstr, FixedTraceRows, InlineRecordShape, InstrAt, LiftedInstr,
+    Variable,
 };
 use rvr_openvm_lift::{
-    decode_variable, fixed_trace_rows_for_chip, max_main_memory_pages_for_contiguous_range,
-    opcode_air_idx, AirIndex, ExtensionError, RvrExtension, RvrExtensionCtx, RvrInstruction,
+    air_index_codegen_fingerprint, air_index_to_c, decode_variable, fixed_trace_rows_for_chip,
+    max_main_memory_pages_for_contiguous_range, opcode_air_idx, AirIndex, ExtensionError,
+    RvrExtension, RvrExtensionCtx, RvrInstruction,
 };
 
 fn decode_reg(value: u32) -> Variable {
@@ -34,10 +36,18 @@ const KECCAK_MAX_MAIN_MEMORY_PAGES_PER_INSTRUCTION: usize = if XORIN_MAX_PAGES >
     KECCAKF_MAX_PAGES
 };
 
+/// Byte size shared by the generated-C, host-arena, and CUDA KeccakF record
+/// ABIs. The C and CUDA mirrors each carry a compile-time size assertion.
+pub const KECCAKF_DIRECT_RECORD_SIZE: usize = 320;
+pub const XORIN_DIRECT_RECORD_SIZE: usize = 656;
+
 /// keccak-f\[1600\]: read 200 bytes via `buffer_ptr_reg`, permute in place.
 #[derive(Debug, Clone)]
 pub struct KeccakfInstr {
+    pub from_pc: u32,
     pub buffer_ptr_reg: Variable,
+    /// KeccakfOp chip (1 row per instruction).
+    pub op_chip_idx: Option<AirIndex>,
     /// KeccakfPerm chip (24 rows per instruction).
     pub perm_chip_idx: Option<AirIndex>,
 }
@@ -48,12 +58,37 @@ impl ExtInstr for KeccakfInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let buf = ctx.read_var(self.buffer_ptr_reg);
-        ctx.emit_call("rvr_ext_keccakf", &["state", &buf]);
+        let (buf, from_timestamp, rd_prev_timestamp) = ctx.read_var_with_trace(self.buffer_ptr_reg);
+        let from_pc = format!("{}u", self.from_pc);
+        let rd_ptr = format!("{}u", self.buffer_ptr_reg.index() * 8);
+        let op = if ctx.inline_record_enabled() {
+            air_index_to_c(self.op_chip_idx)
+        } else {
+            u32::MAX
+        };
+        let op = format!("{op}u");
+        ctx.emit_call(
+            "rvr_ext_keccakf",
+            &[
+                "state",
+                &buf,
+                &from_pc,
+                &from_timestamp,
+                &rd_ptr,
+                &rd_prev_timestamp,
+                &op,
+            ],
+        );
     }
 
     fn fixed_trace_rows(&self) -> Vec<FixedTraceRows> {
         fixed_trace_rows_for_chip(self.perm_chip_idx, KECCAK_NUM_ROUNDS)
+    }
+
+    fn inline_record_shape(&self) -> Option<InlineRecordShape> {
+        Some(InlineRecordShape::Custom {
+            record_size: KECCAKF_DIRECT_RECORD_SIZE,
+        })
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -68,9 +103,11 @@ impl ExtInstr for KeccakfInstr {
 /// XORIN: XOR `len_reg` bytes from `input_ptr_reg` into `buffer_ptr_reg` in place.
 #[derive(Debug, Clone)]
 pub struct XorinInstr {
+    pub from_pc: u32,
     pub buffer_ptr_reg: Variable,
     pub input_ptr_reg: Variable,
     pub len_reg: Variable,
+    pub chip_idx: Option<AirIndex>,
 }
 
 impl ExtInstr for XorinInstr {
@@ -79,10 +116,44 @@ impl ExtInstr for XorinInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let buf_ptr = ctx.read_var(self.buffer_ptr_reg);
-        let input = ctx.read_var(self.input_ptr_reg);
-        let len = ctx.read_var(self.len_reg);
-        ctx.emit_checked_call("rvr_ext_xorin", &["state", &buf_ptr, &input, &len]);
+        let (buf_ptr, from_timestamp, buffer_prev_timestamp) =
+            ctx.read_var_with_trace(self.buffer_ptr_reg);
+        let (input, _, input_prev_timestamp) = ctx.read_var_with_trace(self.input_ptr_reg);
+        let (len, _, len_prev_timestamp) = ctx.read_var_with_trace(self.len_reg);
+        let from_pc = format!("{}u", self.from_pc);
+        let buffer_ptr_reg = format!("{}u", self.buffer_ptr_reg.index() * 8);
+        let input_ptr_reg = format!("{}u", self.input_ptr_reg.index() * 8);
+        let len_reg = format!("{}u", self.len_reg.index() * 8);
+        let chip = if ctx.inline_record_enabled() {
+            air_index_to_c(self.chip_idx)
+        } else {
+            u32::MAX
+        };
+        let chip = format!("{chip}u");
+        ctx.emit_checked_call(
+            "rvr_ext_xorin",
+            &[
+                "state",
+                &buf_ptr,
+                &input,
+                &len,
+                &from_pc,
+                &from_timestamp,
+                &buffer_ptr_reg,
+                &input_ptr_reg,
+                &len_reg,
+                &buffer_prev_timestamp,
+                &input_prev_timestamp,
+                &len_prev_timestamp,
+                &chip,
+            ],
+        );
+    }
+
+    fn inline_record_shape(&self) -> Option<InlineRecordShape> {
+        Some(InlineRecordShape::Custom {
+            record_size: XORIN_DIRECT_RECORD_SIZE,
+        })
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -96,24 +167,39 @@ impl ExtInstr for XorinInstr {
 
 /// Keccak-256 extension. Register with the `ExtensionRegistry`.
 pub struct KeccakExtension {
+    xorin_chip_idx: Option<AirIndex>,
+    keccakf_op_chip_idx: Option<AirIndex>,
     keccakf_perm_chip_idx: Option<AirIndex>,
 }
 
 impl KeccakExtension {
     pub fn new(ctx: Option<&RvrExtensionCtx>) -> Result<Self, ExtensionError> {
-        opcode_air_idx(ctx, XorinOpcode::XORIN)?;
+        let xorin_chip_idx = opcode_air_idx(ctx, XorinOpcode::XORIN)?;
         let keccakf_op_chip_idx = opcode_air_idx(ctx, KeccakfOpcode::KECCAKF)?;
         // KeccakfPerm is registered adjacent to KeccakfOp and assigned the next
         // AIR index (keccakf_op_chip_idx + 1) due to reverse registration order.
         let keccakf_perm_chip_idx = keccakf_op_chip_idx.map(AirIndex::next);
 
         Ok(Self {
+            xorin_chip_idx,
+            keccakf_op_chip_idx,
             keccakf_perm_chip_idx,
         })
     }
 }
 
 impl RvrExtension for KeccakExtension {
+    fn codegen_fingerprint(&self) -> Option<Vec<u8>> {
+        Some(air_index_codegen_fingerprint(
+            b"openvm-keccak-rvr-v1",
+            &[
+                self.xorin_chip_idx,
+                self.keccakf_op_chip_idx,
+                self.keccakf_perm_chip_idx,
+            ],
+        ))
+    }
+
     fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
 
@@ -122,7 +208,9 @@ impl RvrExtension for KeccakExtension {
             return Some(LiftedInstr::Body(InstrAt {
                 pc,
                 instr: Box::new(KeccakfInstr {
+                    from_pc: pc as u32,
                     buffer_ptr_reg,
+                    op_chip_idx: self.keccakf_op_chip_idx,
                     perm_chip_idx: self.keccakf_perm_chip_idx,
                 }),
                 source_loc: None,
@@ -136,9 +224,11 @@ impl RvrExtension for KeccakExtension {
             return Some(LiftedInstr::Body(InstrAt {
                 pc,
                 instr: Box::new(XorinInstr {
+                    from_pc: pc as u32,
                     buffer_ptr_reg,
                     input_ptr_reg,
                     len_reg,
+                    chip_idx: self.xorin_chip_idx,
                 }),
                 source_loc: None,
             }));

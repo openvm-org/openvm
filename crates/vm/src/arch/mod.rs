@@ -1,4 +1,7 @@
 mod config;
+/// CUDA-specific support (pinned host-memory pool for record arenas).
+#[cfg(feature = "cuda")]
+pub(crate) mod cuda;
 /// Streams-like deferral state
 pub mod deferral;
 /// Instruction execution traits and types.
@@ -12,6 +15,8 @@ mod extensions;
 mod hint_stream;
 /// Traits and wrappers to facilitate VM chip integration
 mod integration_api;
+#[cfg(any(feature = "cuda", test))]
+mod pending_return;
 /// [RecordArena] trait definitions and implementations. Currently there are two concrete
 /// implementations: [MatrixRecordArena] and [DenseRecordArena].
 mod record_arena;

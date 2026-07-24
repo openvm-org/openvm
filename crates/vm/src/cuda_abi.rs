@@ -324,6 +324,12 @@ pub mod program {
             terminate_opcode: usize,
             stream: cudaStream_t,
         ) -> i32;
+        fn _program_frequency_tracegen(
+            d_trace: *mut F,
+            height: usize,
+            d_frequencies: DeviceBufferView,
+            stream: cudaStream_t,
+        ) -> i32;
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -343,6 +349,20 @@ pub mod program {
             d_records.view(),
             pc_base,
             terminate_opcode,
+            stream,
+        ))
+    }
+
+    pub unsafe fn frequency_tracegen(
+        d_trace: &DeviceBuffer<F>,
+        height: usize,
+        d_frequencies: &DeviceBuffer<u32>,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_program_frequency_tracegen(
+            d_trace.as_mut_ptr(),
+            height,
+            d_frequencies.view(),
             stream,
         ))
     }

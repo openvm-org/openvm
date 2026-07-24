@@ -107,10 +107,35 @@ impl VmBuilder<E> for Sha2Rv64GpuBuilder {
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, &config.rv64i, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, &config.rv64m, inventory)?;
-        VmProverExtension::<E, _, _>::extend_prover(&Rv64ImGpuProverExt, &config.io, inventory)?;
+        VmProverExtension::<E, _, _>::extend_prover(
+            &Rv64ImGpuProverExt::default(),
+            &config.rv64i,
+            inventory,
+        )?;
+        VmProverExtension::<E, _, _>::extend_prover(
+            &Rv64ImGpuProverExt::default(),
+            &config.rv64m,
+            inventory,
+        )?;
+        VmProverExtension::<E, _, _>::extend_prover(
+            &Rv64ImGpuProverExt::default(),
+            &config.io,
+            inventory,
+        )?;
         VmProverExtension::<E, _, _>::extend_prover(&Sha2GpuProverExt, &config.sha2, inventory)?;
         Ok(chip_complex)
+    }
+
+    #[cfg(feature = "rvr")]
+    fn create_rvr_log_native_assembler_registry(
+        &self,
+        config: &Self::VmConfig,
+    ) -> LogNativeAssemblerRegistry<Val<<E as StarkEngine>::SC>, Self::RecordArena>
+    where
+        Val<<E as StarkEngine>::SC>: PrimeField32,
+    {
+        let mut registry = LogNativeAssemblerRegistry::new();
+        config.extend_rvr_log_native(&mut registry);
+        registry
     }
 }

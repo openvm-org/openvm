@@ -19,6 +19,8 @@ use crate::{Sha2Config, Sha2RecordLayout, Sha2RecordMut};
 
 mod cuda_abi;
 
+const SHA256_DIRECT_RECORD_SIZE: usize = 272;
+
 pub struct Sha2SharedRecordsGpu {
     d_records: DeviceBuffer<u8>,
     d_record_offsets: DeviceBuffer<usize>,
@@ -55,21 +57,35 @@ where
     C: Sha2Config,
 {
     fn generate_proving_ctx(&self, mut arena: DenseRecordArena) -> AirProvingContext<GpuBackend> {
+        #[cfg(feature = "rvr")]
+        let g2_segment_id = arena.rvr_g2_segment_id;
         let records = arena.allocated_mut();
         if records.is_empty() {
             return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
         }
 
-        let mut record_offsets = Vec::<usize>::new();
-        let mut offset = 0usize;
-        while offset < records.len() {
-            record_offsets.push(offset);
-            let _record =
-                RecordSeeker::<DenseRecordArena, Sha2RecordMut, Sha2RecordLayout>::get_record_at(
-                    &mut offset,
-                    records,
-                );
-        }
+        let record_offsets = if u32::from(C::VARIANT) == u32::from(Sha2Variant::Sha256) {
+            assert_eq!(
+                records.len() % SHA256_DIRECT_RECORD_SIZE,
+                0,
+                "SHA-256 direct-final arena must contain only complete records"
+            );
+            (0..records.len())
+                .step_by(SHA256_DIRECT_RECORD_SIZE)
+                .collect::<Vec<_>>()
+        } else {
+            let mut record_offsets = Vec::<usize>::new();
+            let mut offset = 0usize;
+            while offset < records.len() {
+                record_offsets.push(offset);
+                let _record = RecordSeeker::<
+                    DenseRecordArena,
+                    Sha2RecordMut,
+                    Sha2RecordLayout,
+                >::get_record_at(&mut offset, records);
+            }
+            record_offsets
+        };
 
         let num_records = record_offsets.len();
         let trace_height = next_power_of_two_or_zero(num_records);
@@ -77,7 +93,15 @@ where
         let trace =
             DeviceMatrix::<F>::with_capacity_on(trace_height, C::MAIN_CHIP_WIDTH, device_ctx);
 
+        #[cfg(feature = "rvr")]
+        let h2d_timer = g2_segment_id.and_then(|_| {
+            openvm_circuit::arch::rvr::gpu_profile::CudaStageTimer::start(device_ctx)
+        });
         let d_records = records.to_device_on(device_ctx).unwrap();
+        #[cfg(feature = "rvr")]
+        if let (Some(timer), Some(segment_id)) = (h2d_timer, g2_segment_id) {
+            timer.finish("opaque_h2d", segment_id, records.len());
+        }
         let d_record_offsets = record_offsets.to_device_on(device_ctx).unwrap();
 
         unsafe {

@@ -18,7 +18,7 @@ pub mod opcode;
 pub use cfg::build_blocks;
 pub use convert::{convert_vmexe_to_ir, convert_vmexe_to_ir_with_debug, ConvertError};
 pub use extension::{
-    air_index_to_c, decode_variable, fixed_trace_rows_for_chip,
+    air_index_codegen_fingerprint, air_index_to_c, decode_variable, fixed_trace_rows_for_chip,
     max_main_memory_pages_for_contiguous_range, opcode_air_idx, AirIndex, ExtensionError,
     ExtensionRegistry, RvrExtension, RvrExtensionCtx, RvrExtensions, RvrRuntimeExtension,
     TraceChipIndex, VmRvrExtension, MAIN_MEMORY_PAGE_BYTES,

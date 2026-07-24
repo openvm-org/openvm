@@ -41,6 +41,7 @@ serde = { workspace = true, features = ["derive", "std"] }
 openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
 openvm-circuit = { path = "../../../crates/vm", default-features = false, features = ["test-utils"] }
 test-case.workspace = true
+tempfile.workspace = true
 
 [build-dependencies]
 openvm-cuda-builder = { workspace = true, optional = true }

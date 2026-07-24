@@ -37,11 +37,15 @@ pub const FP2_BLOCKS_32: usize = 2 * MODULAR_BLOCKS_32;
 pub const FP2_BLOCKS_48: usize = 2 * MODULAR_BLOCKS_48;
 
 pub mod fp2_chip;
+#[cfg(feature = "rvr")]
+pub mod log_native;
 pub mod modular_chip;
 
 mod execution;
 mod fp2;
 pub use fp2::*;
+#[cfg(feature = "cuda")]
+pub mod cuda;
 mod extension;
 pub use extension::*;
 pub mod fields;

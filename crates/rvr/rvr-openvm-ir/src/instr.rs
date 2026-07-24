@@ -1,4 +1,4 @@
-use crate::{ExtEmitCtx, FixedTraceRows};
+use crate::{ExtEmitCtx, FixedTraceRows, InlineRecordShape};
 
 /// Opaque machine-state variable identifier.
 ///
@@ -190,6 +190,11 @@ pub trait ExtInstr: std::fmt::Debug + Send + Sync {
         "ext"
     }
 
+    /// Compact record shape emitted for this instruction, when migrated.
+    fn inline_record_shape(&self) -> Option<InlineRecordShape> {
+        None
+    }
+
     /// Report this instruction's additional variable writes.
     ///
     /// CFG analysis combines these writes with link writes from `cfg_term()` to
@@ -198,6 +203,16 @@ pub trait ExtInstr: std::fmt::Debug + Send + Sync {
 
     /// Control-flow behavior, if this instruction ends a basic block.
     fn cfg_term(&self, _pc: u64, _fall_pc: u64) -> Option<CfgTerm> {
+        None
+    }
+
+    /// Underlying variable read by an indirect-jump terminator.
+    ///
+    /// CFG analysis may represent a variable with a known value as a constant
+    /// in [`CfgTerm::JumpIndirect`]. Code generation still needs the original
+    /// variable to preserve its architectural read event. Return it here when
+    /// this instruction owns such an operand.
+    fn indirect_base_var(&self) -> Option<Variable> {
         None
     }
 

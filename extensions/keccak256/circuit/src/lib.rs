@@ -12,6 +12,11 @@ mod keccakf_perm;
 /// AIR that handles the `xorin` opcode.
 pub mod xorin;
 
+#[cfg(feature = "rvr")]
+mod log_native;
+#[cfg(feature = "rvr")]
+pub use log_native::*;
+
 #[cfg(feature = "cuda")]
 mod cuda;
 #[cfg(feature = "cuda")]
@@ -21,3 +26,6 @@ mod constants;
 mod extension;
 pub use constants::*;
 pub use extension::*;
+
+#[cfg(all(test, feature = "rvr"))]
+mod rvr_preflight_tests;

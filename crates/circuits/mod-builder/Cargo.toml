@@ -17,6 +17,8 @@ openvm-circuit = { workspace = true }
 openvm-instructions = { workspace = true }
 halo2curves-axiom = { workspace = true, optional = true }
 openvm-pairing-guest = { workspace = true, optional = true }
+openvm-cuda-backend = { workspace = true, optional = true }
+openvm-cuda-common = { workspace = true, optional = true }
 
 rand.workspace = true
 rand08 = { package = "rand", version = "0.8.5", features = ["std_rng"] }
@@ -32,12 +34,20 @@ halo2curves-axiom = { workspace = true }
 openvm-circuit = { path = "../../vm", default-features = false, features = ["test-utils"] }
 rand08 = { package = "rand", version = "0.8.5", features = ["std_rng"] }
 
+[build-dependencies]
+openvm-cuda-builder = { workspace = true, optional = true }
+
 [features]
 default = []
 cuda = [
+    "dep:openvm-cuda-builder",
+    "dep:openvm-cuda-common",
+    "dep:openvm-cuda-backend",
     "openvm-circuit-primitives/cuda",
+    "openvm-circuit/cuda",
 ]
 parallel = ["openvm-stark-backend/parallel", "openvm-circuit/parallel"]
+rvr = ["openvm-circuit/rvr"]
 test-utils = [
     "dep:halo2curves-axiom",
     "dep:openvm-pairing-guest",

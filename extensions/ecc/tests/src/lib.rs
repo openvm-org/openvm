@@ -1,6 +1,9 @@
 #[cfg(test)]
 mod test_vectors;
 
+#[cfg(all(test, feature = "rvr"))]
+mod rvr_preflight_tests;
+
 #[cfg(test)]
 mod tests {
     use core::str::FromStr;
@@ -182,7 +185,7 @@ mod tests {
             &config,
         )?;
         let openvm_exe = VmExe::from_elf(elf, config.transpiler())?;
-        air_test(SdkVmBuilder, config, openvm_exe);
+        air_test(SdkVmBuilder::new(), config, openvm_exe);
         Ok(())
     }
 
@@ -198,7 +201,7 @@ mod tests {
         let openvm_exe = VmExe::from_elf(elf, config.transpiler())?;
         let mut input = StdIn::default();
         input.write(&P256_RECOVERY_TEST_VECTORS.to_vec());
-        air_test_with_min_segments(SdkVmBuilder, config, openvm_exe, input, 1);
+        air_test_with_min_segments(SdkVmBuilder::new(), config, openvm_exe, input, 1);
         Ok(())
     }
 
@@ -214,7 +217,7 @@ mod tests {
         let openvm_exe = VmExe::from_elf(elf, config.transpiler())?;
         let mut input = StdIn::default();
         input.write(&K256_RECOVERY_TEST_VECTORS.to_vec());
-        air_test_with_min_segments(SdkVmBuilder, config, openvm_exe, input, 1);
+        air_test_with_min_segments(SdkVmBuilder::new(), config, openvm_exe, input, 1);
         Ok(())
     }
 
@@ -230,7 +233,7 @@ mod tests {
         let openvm_exe = VmExe::from_elf(elf, config.transpiler())?;
         let mut input = StdIn::default();
         input.write(&k256_sec1_decoding_test_vectors());
-        air_test_with_min_segments(SdkVmBuilder, config, openvm_exe, input, 1);
+        air_test_with_min_segments(SdkVmBuilder::new(), config, openvm_exe, input, 1);
         Ok(())
     }
 

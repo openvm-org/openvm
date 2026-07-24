@@ -5,6 +5,8 @@
 #include "primitives/trace_access.h"
 #include "primitives/utils.cuh"
 #include "riscv/adapters/jalr.cuh"
+#include "riscv/rvr_compact.cuh"
+#include "riscv/rvr_g2_trace.cuh"
 
 using namespace riscv;
 using namespace program;
@@ -150,3 +152,70 @@ extern "C" int _jalr_tracegen(
     );
     return CHECK_KERNEL();
 }
+
+// M-GPUDEC (G2): tracegen from compact wire records + the per-exe operand
+// table; materializes the same record structs in registers and calls the SAME
+// fill methods as jalr_tracegen.
+template <typename RecordView>
+__global__ void jalr_tracegen_compact(
+    Fp *trace,
+    size_t height,
+    RecordView records,
+    RvrOperandEntry const *operand_table,
+    uint32_t pc_base,
+    uint32_t *range_checker_ptr,
+    uint32_t range_checker_num_bins,
+    uint32_t timestamp_max_bits
+) {
+    uint32_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    RowSlice row(trace + idx, height);
+
+    if (idx < records.len()) {
+        RvrRw1Compact const rec = records[idx];
+        RvrOperandEntry const entry = rvr_operand_entry(operand_table, pc_base, rec.from_pc);
+
+        Rv64JalrRecord full;
+        full.adapter = rvr_decode_rw1_jalr_adapter(rec, entry);
+        full.core.imm = (uint16_t)entry.c;
+        full.core.from_pc = rec.from_pc;
+        full.core.rs1_val = rec.b[0];
+        full.core.imm_sign = (entry.flags & RVR_OPERAND_FLAG_JALR_IMM_SIGN) ? 1 : 0;
+        Rv64JalrAdapter adapter(
+            VariableRangeChecker(range_checker_ptr, range_checker_num_bins), timestamp_max_bits
+        );
+        adapter.fill_trace_row(row, full.adapter);
+        Rv64JalrCore core(VariableRangeChecker(range_checker_ptr, range_checker_num_bins));
+        core.fill_trace_row(row.slice_from(COL_INDEX(Rv64JalrCols, core)), full.core);
+    } else {
+        row.fill_zero(0, sizeof(Rv64JalrCols<uint8_t>));
+    }
+}
+
+extern "C" int _jalr_tracegen_compact(
+    Fp *d_trace,
+    size_t height,
+    size_t width,
+    DeviceBufferConstView<RvrRw1Compact> d_records,
+    RvrOperandEntry const *d_operand_table,
+    uint32_t pc_base,
+    uint32_t *d_rc,
+    uint32_t rc_bins,
+    uint32_t timestamp_max_bits,
+    cudaStream_t stream
+) {
+#ifdef OPENVM_RVR_CUDA_G2_ONLY
+    return int(cudaErrorNotSupported);
+#else
+    assert(width == sizeof(Rv64JalrCols<uint8_t>));
+    auto [grid, block] = kernel_launch_params(height);
+    jalr_tracegen_compact<<<grid, block, 0, stream>>>(
+        d_trace, height, d_records, d_operand_table, pc_base, d_rc, rc_bins, timestamp_max_bits
+    );
+    return CHECK_KERNEL();
+#endif
+}
+
+DEFINE_RVR_G2_TRACEGEN_LAUNCHER(
+    _jalr_tracegen_g2, Rv64JalrCols, jalr_tracegen_compact, RvrRw1Compact, 256,
+    operand_table, pc_base, range_checker, range_checker_num_bins, timestamp_max_bits
+)

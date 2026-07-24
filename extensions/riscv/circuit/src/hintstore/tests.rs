@@ -93,7 +93,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
     arena: &mut RA,
     rng: &mut StdRng,
     opcode: Rv64HintStoreOpcode,
-) {
+) -> u32 {
     let num_words = match opcode {
         HINT_STORED => 1,
         HINT_BUFFER => rng.random_range(1..28),
@@ -152,6 +152,7 @@ fn set_and_execute<RA: Arena, E: PreflightExecutor<F, RA>>(
             .unwrap();
         assert_eq!(data, expected);
     }
+    num_words
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
@@ -528,6 +529,8 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> GpuHarness {
         tester.range_checker(),
         tester.address_bits(),
         tester.timestamp_max_bits(),
+        #[cfg(all(feature = "cuda", feature = "rvr"))]
+        Arc::default(),
     );
 
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
@@ -541,20 +544,25 @@ fn test_cuda_rand_hintstore_tracegen() {
 
     let mut harness = create_cuda_harness(&tester);
     let num_ops = 50;
+    let mut rows_used = 0usize;
     for _ in 0..num_ops {
         let opcode = if rng.random_bool(0.5) {
             HINT_STORED
         } else {
             HINT_BUFFER
         };
-        set_and_execute(
+        rows_used += set_and_execute(
             &mut tester,
             &mut harness.executor,
             &mut harness.dense_arena,
             &mut rng,
             opcode,
-        );
+        ) as usize;
     }
+
+    // Exercise the direct-final production branch: row offsets must be
+    // derived from the packed records by CUDA, with no host record scan.
+    harness.dense_arena.rvr_variable_rows = Some(rows_used);
 
     harness
         .dense_arena

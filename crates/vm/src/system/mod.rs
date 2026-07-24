@@ -85,6 +85,11 @@ pub trait SystemChipComplex<RA, PB: ProverBackend> {
         record_arenas: Vec<RA>,
     ) -> Vec<AirProvingContext<PB>>;
 
+    /// Merge any device-owned continuation write set into the state that will
+    /// become the next segment's initial memory. CPU inventories and device
+    /// routes without such a side channel have nothing to do.
+    fn merge_device_continuation_dirty_pages(&mut self, _memory: &mut GuestMemory) {}
+
     /// Returns the top merkle sub-tree of the memory merkle tree
     /// as a segment tree with `2 * (2^addr_space_height) - 1` nodes, representing the Merkle
     /// tree formed from the roots of the sub-trees for each address space.
@@ -109,8 +114,28 @@ pub struct SystemRecords<F> {
     /// `i` -> frequency of instruction in `i`th row of trace matrix. This requires filtering
     /// `program.instructions_and_debug_infos` to remove gaps.
     pub filtered_exec_frequencies: Vec<u32>,
+    /// Prover-only routing bit for the CUDA all-direct delta path. When set,
+    /// execution frequencies are reconstructed from native block runs by the
+    /// device decoder. The host vector remains a pooled lease and is empty
+    /// except when the fail-hard replay oracle retains a reference result.
+    pub program_frequencies_on_device: bool,
+    /// RVR-only first-touch metadata and owning pool for the execution-frequency table. System
+    /// trace generation consumes the frequencies, scrubs exactly these indices, and returns both
+    /// allocations to the compiled executor's cross-segment pool.
+    #[cfg(feature = "rvr")]
+    pub(crate) rvr_exec_frequencies_touched: Vec<u32>,
+    #[cfg(feature = "rvr")]
+    pub(crate) rvr_exec_frequencies_pool: Option<crate::arch::rvr::RvrPreflightBufferPool>,
     // Perf[jpw]: this should be computed on-device and changed to just touched blocks
     pub touched_memory: TouchedMemory<F>,
+    /// Prover-only routing bit for the CUDA all-direct delta path. When set,
+    /// the sorted final touched blocks are reconstructed by the device replay
+    /// instead of by the host preflight normalizer.
+    pub touched_memory_on_device: bool,
+    /// Fail-hard routing bit for byte-equal device-versus-host replay checks.
+    /// Checked G2 emission sets this unconditionally; production may opt in
+    /// through its explicit diagnostic environment switch.
+    pub device_replay_oracle: bool,
 }
 
 /// A memory block touched during a segment: final values and last-access
@@ -374,11 +399,37 @@ where
             to_state,
             exit_code,
             filtered_exec_frequencies,
+            program_frequencies_on_device,
+            #[cfg(feature = "rvr")]
+            rvr_exec_frequencies_touched,
+            #[cfg(feature = "rvr")]
+            rvr_exec_frequencies_pool,
             touched_memory,
+            touched_memory_on_device,
+            device_replay_oracle,
         } = system_records;
+        assert!(
+            !touched_memory_on_device,
+            "CPU system inventory cannot consume device-replayed touched memory"
+        );
+        assert!(
+            !program_frequencies_on_device,
+            "CPU system inventory cannot consume device-reconstructed program frequencies"
+        );
+        assert!(
+            !device_replay_oracle,
+            "CPU system inventory cannot consume the device replay oracle"
+        );
 
         self.program_chip.filtered_exec_frequencies = filtered_exec_frequencies;
         let program_ctx = self.program_chip.generate_proving_ctx(());
+        #[cfg(feature = "rvr")]
+        if let Some(pool) = rvr_exec_frequencies_pool {
+            pool.recycle_exec_frequencies(
+                std::mem::take(&mut self.program_chip.filtered_exec_frequencies),
+                rvr_exec_frequencies_touched,
+            );
+        }
         self.connector_chip.begin(from_state);
         self.connector_chip.end(to_state, exit_code);
         let connector_ctx = self.connector_chip.generate_proving_ctx(());

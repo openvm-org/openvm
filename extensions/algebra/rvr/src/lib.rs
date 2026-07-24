@@ -13,7 +13,10 @@ pub(crate) use common::{
     ArithKind, FieldArithInstr, FieldIsEqInstr, FieldKind, FieldSetupInstr, IsEqKind, SetupKind,
 };
 pub use fp2::Fp2RvrExtension;
-pub use modular::{HintNonQrInstr, HintSqrtInstr, ModularRvrExtension};
+pub use modular::{
+    HintNonQrInstr, HintSqrtInstr, ModIsEqRecordDescriptor, ModularRvrExtension,
+    VecHeapRecordDescriptor,
+};
 use num_bigint::BigUint;
 use openvm_instructions::riscv::{RV64_NUM_REGISTERS, RV64_REGISTER_BYTES};
 use rvr_openvm_ir::Variable;
@@ -37,6 +40,9 @@ fn pad_modulus(modulus: &BigUint) -> (Vec<u8>, u32) {
     modulus_bytes.resize(num_limbs as usize, 0);
     (modulus_bytes, num_limbs)
 }
+
+/// Shared generated-C implementation for direct-final VecHeap records.
+pub const VEC_HEAP_RECORD_C_HEADER: &str = include_str!("../c/rvr_ext_vec_heap_record.h");
 
 // ── Modular arithmetic operations ────────────────────────────────────────────
 

@@ -14,7 +14,9 @@ SANITIZERS ?= -fsanitize=undefined,bounds -fsanitize-trap=all
 WARNINGS += -Wno-c++-compat -Wno-c++98-compat \
 	-Wno-pre-c11-compat -Wno-pre-c23-compat -Wno-pre-c2y-compat \
 	-Wno-declaration-after-statement \
-	-Wno-gcc-install-dir-libstdcxx
+	-Wno-gcc-install-dir-libstdcxx \
+	-Wno-pedantic -Wno-unused-parameter -Wno-padded \
+	-Wno-cast-align -Wno-unsafe-buffer-usage
 
 # Do not apply OpenVM warning flags to third-party C. Compiler errors still
 # fail the build.
@@ -22,7 +24,8 @@ VENDOR_WARNINGS = -Wno-everything
 # The core runtime uses raw buffers with explicit bounds checks. Clang raises
 # this warning when raw pointers could be replaced with checked containers, so
 # it is not useful for these low-level files.
-CORE_WARNINGS = -Wno-unsafe-buffer-usage
+CORE_WARNINGS = -Wno-unsafe-buffer-usage -Wno-unused-variable \
+	-Wno-unused-but-set-variable
 CFLAGS = -std=c2y $(OPT) $(DEBUG) $(WARNINGS) -fPIC -march=native -falign-functions=32
 CFLAGS += $(SANITIZERS)
 LTO ?=
@@ -30,6 +33,12 @@ CFLAGS += $(LTO)
 LDFLAGS ?=
 LDFLAGS += -fuse-ld=$(LINKER)
 LDLIBS ?=
+THINLTO_JOBS ?= 1
+THINLTO_CACHE_DIR ?=
+THINLTO_LDFLAGS = -Wl,--thinlto-jobs=$(THINLTO_JOBS)
+ifneq ($(strip $(THINLTO_CACHE_DIR)),)
+THINLTO_LDFLAGS += -Wl,--thinlto-cache-dir="$(THINLTO_CACHE_DIR)"
+endif
 
 # On ELF platforms, bind symbols when the library loads. Lazy PLT binding can
 # overwrite `preserve_none` argument registers such as r11 on x86_64.
@@ -60,7 +69,7 @@ $(VENDOR_OBJS): CFLAGS += $(EXT_CFLAGS) $(VENDOR_WARNINGS)
 shared: $(LIB)
 
 $(LIB): $(ALL_OBJS)
-	$(CC) -shared $(CFLAGS) $(LDFLAGS) -o $@ $^ $(EXT_LIBS) $(LDLIBS)
+	$(CC) -shared $(CFLAGS) $(LDFLAGS) $(THINLTO_LDFLAGS) -o $@ $^ $(EXT_LIBS) $(LDLIBS)
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c -o $@ $<

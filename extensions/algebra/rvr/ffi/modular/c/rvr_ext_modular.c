@@ -18,6 +18,115 @@ static constexpr uint32_t SECP256K1_ELEM_BYTES = 32;
 static constexpr uint32_t SECP256K1_ELEM_WORDS =
     SECP256K1_ELEM_BYTES / WORD_SIZE;
 
+/* ── Direct-final modular IS_EQ record descriptor ─────────────── */
+
+#ifdef OPENVM_TRACER_PREFLIGHT_H
+typedef struct RvrModIsEqRecordDescriptor {
+  uint32_t blocks;
+  uint32_t u16_limbs;
+  uint32_t adapter_size;
+  uint32_t core_size;
+  uint32_t record_size;
+  uint32_t heap_read_aux;
+  uint32_t rd_ptr;
+  uint32_t writes_aux;
+} RvrModIsEqRecordDescriptor;
+
+static inline RvrModIsEqRecordDescriptor rvr_mod_iseq_descriptor(
+    uint32_t num_limbs) {
+  uint32_t blocks = num_limbs / WORD_SIZE;
+  uint32_t u16_limbs = num_limbs / 2u;
+  uint32_t heap_read_aux = 32u;
+  uint32_t rd_ptr = heap_read_aux + 8u * blocks;
+  uint32_t writes_aux = rd_ptr + 4u;
+  uint32_t adapter_size = writes_aux + 12u;
+  uint32_t core_size = 2u + 4u * u16_limbs;
+  return (RvrModIsEqRecordDescriptor){
+      .blocks = blocks,
+      .u16_limbs = u16_limbs,
+      .adapter_size = adapter_size,
+      .core_size = core_size,
+      .record_size = (adapter_size + core_size + 3u) & ~3u,
+      .heap_read_aux = heap_read_aux,
+      .rd_ptr = rd_ptr,
+      .writes_aux = writes_aux,
+  };
+}
+
+static inline uint8_t* rvr_claim_mod_iseq_record(RvState* state,
+                                                 uint32_t chip_idx,
+                                                 uint32_t compact_core_off,
+                                                 uint32_t record_size,
+                                                 uint8_t** core) {
+  uint8_t* record = (uint8_t*)preflight_claim_record(state, chip_idx);
+  if (unlikely(record == NULL)) {
+    return NULL;
+  }
+  ChipRecordBuf* buf = &state->tracer->chip_records[chip_idx];
+  if (unlikely(buf->stride < record_size)) {
+    buf->flags |= PREFLIGHT_RECORD_OVERFLOW;
+    return NULL;
+  }
+  if ((buf->flags & PREFLIGHT_RECORD_DIRECT_FINAL) == 0u) {
+    memset(record, 0, record_size);
+  }
+  uint32_t core_off = buf->core_off == 0u ? compact_core_off : buf->core_off;
+  *core = record + core_off;
+  return record;
+}
+#endif
+
+void rvr_ext_emit_mod_iseq_record(RvState* state, uint32_t from_pc,
+                                  uint32_t local_opcode, uint32_t num_limbs,
+                                  uint32_t chip_idx) {
+#ifdef OPENVM_TRACER_PREFLIGHT_H
+  RvrModIsEqRecordDescriptor d = rvr_mod_iseq_descriptor(num_limbs);
+  uint32_t event_count = 3u + 2u * d.blocks;
+  Tracer* tracer = state->tracer;
+  MemoryLogEntry* events =
+      preflight_take_custom_memory_events(tracer, event_count);
+  if (unlikely(events == NULL)) {
+    return;
+  }
+  uint8_t* core;
+  uint8_t* record = rvr_claim_mod_iseq_record(
+      state, chip_idx, d.adapter_size, d.record_size, &core);
+  if (unlikely(record == NULL)) {
+    return;
+  }
+
+  *(uint32_t*)(record + 0) = from_pc;
+  *(uint32_t*)(record + 4) = events[0].timestamp;
+  for (uint32_t i = 0; i < 2u; i++) {
+    *(uint32_t*)(record + 8u + 4u * i) = (uint32_t)events[i].address;
+    *(uint32_t*)(record + 16u + 4u * i) = (uint32_t)events[i].value;
+    preflight_store_prev_timestamp(
+        tracer, (uint32_t*)(record + 24u + 4u * i),
+        events[i].prev_timestamp);
+  }
+  uint32_t heap_start = 2u;
+  for (uint32_t read = 0; read < 2u; read++) {
+    for (uint32_t block = 0; block < d.blocks; block++) {
+      uint32_t idx = heap_start + read * d.blocks + block;
+      uint32_t flat = read * d.blocks + block;
+      preflight_store_prev_timestamp(
+          tracer, (uint32_t*)(record + d.heap_read_aux + 4u * flat),
+          events[idx].prev_timestamp);
+      preflight_store_prev_value(
+          tracer, core + 2u + 2u * d.u16_limbs * read + 8u * block,
+          events[idx].prev_timestamp, events[idx].prev_value);
+    }
+  }
+  MemoryLogEntry* write = &events[event_count - 1u];
+  *(uint32_t*)(record + d.rd_ptr) = (uint32_t)write->address;
+  preflight_store_prev_timestamp(
+      tracer, (uint32_t*)(record + d.writes_aux), write->prev_timestamp);
+  preflight_store_prev_value(tracer, record + d.writes_aux + 4u,
+                             write->prev_timestamp, write->prev_value);
+  *core = (uint8_t)(local_opcode == 7u);
+#endif
+}
+
 /* ── libsecp256k1 amalgamation (ECC modules always enabled) ──────────── */
 #include "secp256k1.c"
 

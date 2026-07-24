@@ -35,8 +35,32 @@ void write_mem_u64_range_wrapper(RvState* state, uint64_t base_addr,
   write_mem_u64_range(state, base_addr, vals, num_words);
 }
 
+void touch_mem_u64_range_wrapper(RvState* state, uint64_t base_addr,
+                                 uint64_t* out, uint32_t num_words) {
+  peek_mem_u64_range(state, base_addr, out, num_words);
+  trace_mem_access_u64_range(state, base_addr, num_words, AS_MEMORY);
+}
+
 void record_page_access_u64_range_wrapper(RvState* state, uint64_t base_addr,
                                           uint32_t num_words,
                                           uint32_t addr_space) {
   trace_page_access_u64_range(state, base_addr, num_words, addr_space);
 }
+
+void trace_rd_mem_u64_range_wrapper(RvState* state, uint64_t base_addr,
+                                    const uint64_t* vals,
+                                    uint32_t num_words) {
+  trace_rd_mem_u64_range(state, base_addr, vals, num_words);
+}
+
+void trace_wr_mem_u64_range_wrapper(RvState* state, uint64_t base_addr,
+                                    const uint64_t* vals,
+                                    uint32_t num_words) {
+  trace_wr_mem_u64_range(state, base_addr, vals, num_words);
+}
+
+void trace_chip_wrapper(RvState* state, uint32_t chip_idx, uint32_t count) {
+  trace_chip(state, chip_idx, count);
+}
+
+void trace_timestamp_wrapper(RvState* s) { trace_timestamp(s); }

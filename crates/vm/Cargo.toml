@@ -19,6 +19,7 @@ openvm-circuit-primitives-derive = { workspace = true }
 openvm-circuit-derive = { workspace = true }
 openvm-instructions = { workspace = true }
 openvm-platform.workspace = true
+rvr-openvm-ext-ffi-common = { workspace = true, optional = true }
 rvr-openvm-ir = { workspace = true, optional = true }
 rvr-state = { workspace = true, optional = true }
 rvr-openvm = { workspace = true, optional = true }
@@ -38,6 +39,8 @@ backtrace.workspace = true
 rand.workspace = true
 serde.workspace = true
 serde-big-array.workspace = true
+sha2 = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
 metrics = { workspace = true, optional = true }
 thiserror.workspace = true
 rustc-hash.workspace = true
@@ -93,6 +96,7 @@ test-utils = ["dep:openvm-stark-sdk", "openvm-stark-backend/test-utils"]
 tco = ["openvm-circuit-derive/tco"]
 # rvr execution backend
 rvr = [
+    "dep:rvr-openvm-ext-ffi-common",
     "dep:rvr-openvm",
     "dep:rvr-openvm-lift",
     "dep:rvr-openvm-ir",
@@ -100,6 +104,8 @@ rvr = [
     "dep:libloading",
     "dep:tempfile",
     "dep:nix",
+    "dep:sha2",
+    "dep:serde_json",
     "openvm-circuit-derive/rvr",
 ]
 # Disable bounds checking in memory operations for performance

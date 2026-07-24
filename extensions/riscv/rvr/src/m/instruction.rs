@@ -1,6 +1,8 @@
 //! RV64M instruction nodes and C code generation.
 
-use rvr_openvm_ir::{CfgEffect, CfgOp, CfgResultWidth, ExtEmitCtx, ExtInstr};
+use rvr_openvm_ir::{
+    ArenaAlu3Baked, CfgEffect, CfgOp, CfgResultWidth, ExtEmitCtx, ExtInstr, InlineRecordShape,
+};
 
 use crate::instruction::{reg_operand, Reg};
 
@@ -70,7 +72,27 @@ impl ExtInstr for Rv64MInstr {
         false
     }
 
+    fn inline_record_shape(&self) -> Option<InlineRecordShape> {
+        Some(InlineRecordShape::Alu3)
+    }
+
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
+        let result_template = muldiv_expr(self.op, self.word, "__RVR_LHS__", "__RVR_RHS__");
+        let local_opcode = match self.op {
+            MulDivOp::Mul | MulDivOp::MulHighSigned | MulDivOp::DivSigned => 0,
+            MulDivOp::MulHighSignedUnsigned | MulDivOp::DivUnsigned => 1,
+            MulDivOp::MulHighUnsigned | MulDivOp::RemSigned => 2,
+            MulDivOp::RemUnsigned => 3,
+        };
+        let arena = Some(ArenaAlu3Baked {
+            rs2_field: self.rhs.index() * 8,
+            rs2_as: 0,
+            rs2_imm_sign: 0,
+            local_opcode,
+        });
+        if ctx.emit_reg3_inline(self.rd, self.lhs, self.rhs, arena, &result_template) {
+            return;
+        }
         let lhs = ctx.read_var(self.lhs);
         let rhs = ctx.read_var(self.rhs);
         ctx.write_var(self.rd, &muldiv_expr(self.op, self.word, &lhs, &rhs));

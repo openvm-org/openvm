@@ -44,6 +44,10 @@ impl Default for Rv64IExtension {
 }
 
 impl RvrExtension for Rv64IExtension {
+    fn codegen_fingerprint(&self) -> Option<Vec<u8>> {
+        Some(b"openvm-rv64i-rvr-v2-two-block".to_vec())
+    }
+
     fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
         try_lift(insn, pc)
     }
@@ -456,6 +460,13 @@ fn lift_lui(insn: &RvrInstruction, pc: u64) -> LiftedInstr {
             name: "lui",
             rd,
             value: sign_extend_32(insn.c << 12),
+            arena: rvr_openvm_ir::ArenaWr1Baked {
+                rd_ptr: rd.index() * 8,
+                core_imm: insn.c & 0x000f_ffff,
+                rd_data: sign_extend_32(insn.c << 12),
+                is_jal: 0,
+                core_from_pc: 0,
+            },
         },
     )
 }
@@ -476,6 +487,13 @@ fn lift_auipc(insn: &RvrInstruction, pc: u64) -> LiftedInstr {
             name: "auipc",
             rd,
             value: pc.wrapping_add(sign_extend_32(upper)),
+            arena: rvr_openvm_ir::ArenaWr1Baked {
+                rd_ptr: rd.index() * 8,
+                core_imm: insn.c,
+                rd_data: 0,
+                is_jal: 0,
+                core_from_pc: pc as u32,
+            },
         },
     )
 }

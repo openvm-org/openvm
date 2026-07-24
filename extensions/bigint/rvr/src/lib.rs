@@ -20,8 +20,8 @@ use rvr_openvm_ir::{
     CfgEffect, CfgTerm, ExtEmitCtx, ExtInstr, InstrAt, LiftedInstr, Terminator, Variable,
 };
 use rvr_openvm_lift::{
-    decode_variable, max_main_memory_pages_for_contiguous_range, opcode_air_idx, AirIndex,
-    ExtensionError, RvrExtension, RvrExtensionCtx, RvrInstruction,
+    air_index_codegen_fingerprint, decode_variable, max_main_memory_pages_for_contiguous_range,
+    opcode_air_idx, AirIndex, ExtensionError, RvrExtension, RvrExtensionCtx, RvrInstruction,
 };
 use strum::EnumCount;
 
@@ -117,10 +117,13 @@ impl ExtInstr for Int256AluInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rd = ctx.read_var(self.rd_reg);
         let rs1 = ctx.read_var(self.rs1_reg);
         let rs2 = ctx.read_var(self.rs2_reg);
-        ctx.emit_call(self.op.ffi_name(), &["state", &rd, &rs1, &rs2]);
+        // Match Rv64VecHeapAdapterExecutor's preflight order: source pointers first, then the
+        // destination pointer. This ordering is observable because every traced access advances
+        // the shared OpenVM timestamp.
+        let rd = ctx.read_var(self.rd_reg);
+        ctx.extern_call(self.op.ffi_name(), &["state", &rd, &rs1, &rs2]);
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -315,6 +318,22 @@ impl Int256Extension {
 }
 
 impl RvrExtension for Int256Extension {
+    fn codegen_fingerprint(&self) -> Option<Vec<u8>> {
+        Some(air_index_codegen_fingerprint(
+            b"openvm-int256-rvr-v1",
+            &[
+                self.add_sub_chip_idx,
+                self.bitwise_logic_chip_idx,
+                self.shift_logical_chip_idx,
+                self.shift_right_arithmetic_chip_idx,
+                self.less_than_chip_idx,
+                self.mul_chip_idx,
+                self.branch_eq_chip_idx,
+                self.branch_lt_chip_idx,
+            ],
+        ))
+    }
+
     fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
         let opcode = insn.opcode.as_usize();
 

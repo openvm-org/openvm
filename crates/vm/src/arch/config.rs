@@ -7,6 +7,8 @@ use std::{
 
 use derive_new::new;
 use getset::{Setters, WithSetters};
+#[cfg(feature = "rvr")]
+use openvm_instructions::exe::VmExe;
 use openvm_instructions::{
     riscv::{RV64_IMM_AS, RV64_MEMORY_AS, RV64_REGISTER_AS},
     DEFERRAL_AS, PUBLIC_VALUES_AS, VM_DIGEST_WIDTH,
@@ -22,7 +24,13 @@ use openvm_stark_backend::{
 use rvr_openvm_lift::RvrExtensions;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
+#[cfg(feature = "rvr")]
+use super::ExecutionError;
 use super::{AnyEnum, VmChipComplex, BOUNDARY_AIR_ID, CONNECTOR_AIR_ID, PROGRAM_AIR_ID};
+#[cfg(feature = "rvr")]
+use crate::arch::rvr::RvrPreflightOutput;
+#[cfg(feature = "rvr")]
+use crate::arch::rvr::{generate_record_arenas_from_logs, LogNativeAssemblerRegistry};
 use crate::{
     arch::{
         execution_mode::metered::segment_ctx::DEFAULT_MAX_MEMORY, AirInventory, AirInventoryError,
@@ -146,6 +154,11 @@ pub trait VmCircuitConfig<SC: StarkProtocolConfig> {
 /// around Rust orphan rules.
 pub trait VmBuilder<E: StarkEngine>: Sized {
     type VmConfig: VmConfig<E::SC>;
+    /// With the rvr feature, arenas must also know how to stage themselves
+    /// as R4 arena-native write targets for the generated C.
+    #[cfg(feature = "rvr")]
+    type RecordArena: Arena + Send + crate::arch::rvr::preflight::RvrArenaNativeTarget;
+    #[cfg(not(feature = "rvr"))]
     type RecordArena: Arena;
     type SystemChipInventory: SystemChipComplex<Self::RecordArena, E::PB>;
 
@@ -161,6 +174,133 @@ pub trait VmBuilder<E: StarkEngine>: Sized {
         VmChipComplex<E::SC, Self::RecordArena, E::PB, Self::SystemChipInventory>,
         ChipInventoryError,
     >;
+
+    /// Default preflight engine for the proving path when neither the
+    /// per-instance override nor `OPENVM_RVR_PREFLIGHT_ENGINE` is set.
+    ///
+    /// CPU prover builders keep the trait default (`Interpreter`): at reth
+    /// scale the interpreter's fused execute+arena-fill pass beats the rvr
+    /// inline path, whose host compact→arena assembly dominates its cost on
+    /// CPU (see [`crate::arch::rvr::RvrPreflightEngine`] for the measured
+    /// rationale). GPU builders override to `Rvr`: the assembly pass does not
+    /// exist in the GPU shape, and compact records shrink the H2D payload.
+    #[cfg(feature = "rvr")]
+    fn default_rvr_preflight_engine(&self) -> crate::arch::rvr::RvrPreflightEngine {
+        crate::arch::rvr::RvrPreflightEngine::Interpreter
+    }
+
+    /// CUDA/G2: create an owned module/context prewarm task. GPU builders
+    /// override this so it can run concurrently with CPU metering without
+    /// borrowing the builder across threads.
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    fn rvr_cuda_device_prewarm_task(
+        &self,
+    ) -> Option<Box<dyn FnOnce() -> Result<(), String> + Send + 'static>> {
+        None
+    }
+
+    /// CUDA/G2: seal the default async allocation pool at the size reached by
+    /// the real-shape warm pass and report its resulting counters.
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    fn finish_rvr_cuda_device_prewarm(&self, _reserve_bytes: usize) -> Result<(), String> {
+        Ok(())
+    }
+
+    /// Profiling-only snapshot of the default CUDA async allocation pool:
+    /// reserved current/high, used current/high, and release threshold.
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    fn rvr_cuda_device_pool_stats(&self) -> Result<Option<[u64; 5]>, String> {
+        Ok(None)
+    }
+
+    /// CUDA/G2: return unused pages from the default async allocation pool at
+    /// the decode-to-prove boundary while retaining a small warm floor.
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    fn trim_rvr_cuda_device_pool(
+        &self,
+        _retain_bytes: usize,
+        _segment_idx: usize,
+    ) -> Result<(), String> {
+        Ok(())
+    }
+
+    /// CUDA/G2: release the current segment's device trace-source bundle once
+    /// trace generation and device continuation-state merging are complete.
+    ///
+    /// GPU builders with G2 state override this hook. Executable-wide device
+    /// caches and CUDA module state must remain bound for later segments.
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    fn release_rvr_cuda_device_trace_sources(&self) {}
+
+    /// Build the registry used by rvr preflight routing and record assembly.
+    ///
+    /// A composed builder adds its inner config's registrations first, then
+    /// calls [`crate::arch::rvr::VmRvrLogNativeExtension::extend_rvr_log_native`]
+    /// for each extension it owns.
+    #[cfg(feature = "rvr")]
+    #[allow(unused_variables)]
+    fn create_rvr_log_native_assembler_registry(
+        &self,
+        config: &Self::VmConfig,
+    ) -> LogNativeAssemblerRegistry<Val<E::SC>, Self::RecordArena>
+    where
+        Val<E::SC>: PrimeField32,
+    {
+        LogNativeAssemblerRegistry::new()
+    }
+
+    /// G2: airs whose inline records the proving path should stage as compact
+    /// WIRE write targets — the generated C writes packed wire records
+    /// straight into the arena backing that
+    /// [`Self::generate_rvr_record_arenas_from_logs`]'s result hands to the
+    /// chips (one alloc, no copy; the arena is marked wire-mode). Default:
+    /// none. Only meaningful for dense record arenas whose chips can consume
+    /// wire records (the GPU compact-decode path); a requested air must be
+    /// compiled compact (NOT arena-native) — the proving path errors loudly
+    /// on a mismatch instead of silently measuring the wrong emission.
+    #[cfg(feature = "rvr")]
+    #[allow(unused_variables)]
+    fn rvr_wire_record_airs(
+        &self,
+        config: &Self::VmConfig,
+        exe: &VmExe<Val<E::SC>>,
+        pc_to_air_idx: &[Option<usize>],
+        inline_meta: &crate::arch::rvr::RvrInlineRecordsMeta,
+    ) -> std::collections::HashSet<usize>
+    where
+        Val<E::SC>: PrimeField32,
+    {
+        Default::default()
+    }
+
+    /// Optional rvr log-native record assembly hook.
+    ///
+    /// Builders normally customize this by overriding
+    /// [`Self::create_rvr_log_native_assembler_registry`] and composing the
+    /// registrations from their inner config plus their own extensions. An
+    /// empty registry returns `None`; the proving path reports that as an
+    /// explicit unsupported error rather than falling back to interpreter
+    /// records after rvr execution.
+    #[cfg(feature = "rvr")]
+    #[allow(unused_variables)]
+    fn generate_rvr_record_arenas_from_logs(
+        &self,
+        config: &Self::VmConfig,
+        exe: &VmExe<Val<E::SC>>,
+        output: &mut RvrPreflightOutput<Val<E::SC>>,
+        capacities: &[(usize, usize)],
+        pc_to_air_idx: &[Option<usize>],
+    ) -> Result<Option<Vec<Self::RecordArena>>, ExecutionError>
+    where
+        Val<E::SC>: PrimeField32,
+    {
+        let registry = self.create_rvr_log_native_assembler_registry(config);
+        if registry.is_empty() {
+            return Ok(None);
+        }
+        generate_record_arenas_from_logs(&registry, exe, output, capacities, pc_to_air_idx)
+            .map(Some)
+    }
 }
 
 impl<SC, VC> VmConfig<SC> for VC
@@ -268,7 +408,7 @@ impl MemoryConfig {
         addr_spaces
     }
 
-    /// Config for aggregation usage with only deferral address space.
+    /// Config for aggregation usage with only native address space.
     pub fn aggregation() -> Self {
         let mut addr_spaces =
             Self::empty_address_space_configs((1 << 3) + ADDR_SPACE_OFFSET as usize);

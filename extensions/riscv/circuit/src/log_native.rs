@@ -1,0 +1,4616 @@
+use openvm_circuit::{
+    arch::{
+        rvr::{
+            generate_record_arenas_from_logs, AddIArenaFieldOffsets, Alu3ArenaFieldOffsets,
+            Alu3WArenaFieldOffsets, AluImmArenaFieldOffsets, ArenaNativeGeometry,
+            ArenaNativeLayout, Branch2ArenaFieldOffsets, DeltaAccessPattern,
+            LoadStoreArenaFieldOffsets, LogNativeAccessView, LogNativeAssemblerRegistry,
+            PreflightMemoryAccessAux, RvrPreflightOutput, Rw1ArenaFieldOffsets,
+            VmRvrLogNativeExtension, Wr1ArenaFieldOffsets, PREFLIGHT_ADDSUB_RECORD_SIZE,
+            PREFLIGHT_BRANCH2_RECORD_SIZE, PREFLIGHT_MEMORY_KIND_READ, PREFLIGHT_MEMORY_KIND_WRITE,
+            PREFLIGHT_RW1_RECORD_SIZE, PREFLIGHT_WR1_RECORD_SIZE,
+        },
+        AdapterTraceExecutor, Arena, EmptyAdapterCoreLayout, EmptyMultiRowLayout, ExecutionError,
+        MultiRowLayout, RecordArena, BLOCK_FE_WIDTH,
+    },
+    system::{
+        memory::offline_checker::{
+            MemoryReadAuxRecord, MemoryWriteAuxRecord, MemoryWriteBytesAuxRecord,
+        },
+        phantom::PhantomRecord,
+    },
+};
+use openvm_instructions::{
+    exe::VmExe,
+    instruction::Instruction,
+    program::DEFAULT_PC_STEP,
+    riscv::{RV64_IMM_AS, RV64_MEMORY_AS, RV64_REGISTER_AS},
+    LocalOpcode, SystemOpcode, PUBLIC_VALUES_AS,
+};
+use openvm_riscv_transpiler::{
+    BaseAluImmOpcode, BaseAluOpcode, BaseAluWImmOpcode, BaseAluWOpcode, BranchEqualOpcode,
+    BranchLessThanOpcode, DivRemOpcode, DivRemWOpcode, LessThanImmOpcode, LessThanOpcode,
+    MulHOpcode, MulOpcode, MulWOpcode, Rv64AuipcOpcode, Rv64HintStoreOpcode, Rv64JalLuiOpcode,
+    Rv64JalrOpcode, Rv64LoadStoreOpcode, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode,
+    ShiftWOpcode,
+};
+use openvm_stark_backend::p3_field::PrimeField32;
+use rvr_openvm_ext_riscv::HintStoreRecordDescriptor;
+use strum::IntoEnumIterator;
+
+use crate::{
+    adapters::{
+        imm_to_rv64_u64, rv64_bytes_to_u16_block, rv64_u16_block_to_bytes, rv64_u32_to_u16_block,
+        Rv64BaseAluImmAdapterExecutor, Rv64BaseAluImmAdapterRecord,
+        Rv64BaseAluImmU16AdapterExecutor, Rv64BaseAluImmU16AdapterRecord,
+        Rv64BaseAluRegAdapterExecutor, Rv64BaseAluRegAdapterRecord,
+        Rv64BaseAluRegU16AdapterExecutor, Rv64BaseAluRegU16AdapterRecord,
+        Rv64BaseAluWImmU16AdapterExecutor, Rv64BaseAluWImmU16AdapterRecord,
+        Rv64BaseAluWRegU16AdapterExecutor, Rv64BaseAluWRegU16AdapterRecord,
+        Rv64BranchAdapterExecutor, Rv64BranchAdapterRecord, Rv64CondRdWriteAdapterExecutor,
+        Rv64JalrAdapterExecutor, Rv64JalrAdapterRecord, Rv64LoadByteAdapterExecutor,
+        Rv64LoadByteAdapterRecord, Rv64LoadMultiByteAdapterExecutor,
+        Rv64LoadMultiByteAdapterRecord, Rv64MultAdapterExecutor, Rv64MultAdapterRecord,
+        Rv64MultWAdapterExecutor, Rv64MultWAdapterRecord, Rv64RdWriteAdapterExecutor,
+        Rv64RdWriteAdapterRecord, Rv64StoreByteAdapterExecutor, Rv64StoreByteAdapterRecord,
+        Rv64StoreMultiByteAdapterExecutor, Rv64StoreMultiByteAdapterRecord,
+        DOUBLEWORD_ACCESS_WIDTH, HALFWORD_ACCESS_WIDTH, RV64_BYTE_BITS, RV64_REGISTER_NUM_LIMBS,
+        RV64_WORD_NUM_LIMBS, RV64_WORD_U16_LIMBS, U16_BITS, WORD_ACCESS_WIDTH,
+    },
+    AddICoreRecord, AddSubCoreRecord, BitwiseLogicCoreRecord, BitwiseLogicImmCoreRecord,
+    BranchEqualCoreRecord, BranchLessThanCoreRecord, DivRemCoreRecord, LessThanCoreRecord,
+    LessThanImmCoreRecord, LoadByteRecord, LoadRecord, MulHCoreRecord, MultiplicationCoreRecord,
+    Rv64AuipcCoreRecord, Rv64HintStoreLayout, Rv64HintStoreMetadata, Rv64HintStoreRecordHeader,
+    Rv64HintStoreRecordMut, Rv64HintStoreVar, Rv64JalLuiCoreRecord, Rv64JalrCoreRecord,
+    ShiftLogicalCoreRecord, ShiftLogicalImmCoreRecord, ShiftRightArithmeticCoreRecord,
+    ShiftRightArithmeticImmCoreRecord, StoreByteRecord, StoreRecord,
+};
+
+const JAL: usize = Rv64JalLuiOpcode::JAL as usize;
+
+type Rv64BaseAluAdapterRecord = Rv64BaseAluRegAdapterRecord;
+type Rv64BaseAluU16AdapterExecutor = Rv64BaseAluRegU16AdapterExecutor;
+type Rv64BaseAluU16AdapterRecord = Rv64BaseAluRegU16AdapterRecord;
+type Rv64BaseAluWU16AdapterExecutor = Rv64BaseAluWRegU16AdapterExecutor;
+type Rv64BaseAluWU16AdapterRecord = Rv64BaseAluWRegU16AdapterRecord;
+
+pub(crate) type BaseAluU16Layout<F> = EmptyAdapterCoreLayout<F, Rv64BaseAluU16AdapterExecutor>;
+pub(crate) type BaseAluRegU16Layout<F> =
+    EmptyAdapterCoreLayout<F, Rv64BaseAluRegU16AdapterExecutor>;
+pub(crate) type BaseAluImmU16Layout<F> =
+    EmptyAdapterCoreLayout<F, Rv64BaseAluImmU16AdapterExecutor>;
+pub(crate) type BaseAluImmBytesLayout<F> = EmptyAdapterCoreLayout<F, Rv64BaseAluImmAdapterExecutor>;
+pub(crate) type BaseAluWImmU16Layout<F> =
+    EmptyAdapterCoreLayout<F, Rv64BaseAluWImmU16AdapterExecutor>;
+pub(crate) type BaseAluBytesLayout<F> = EmptyAdapterCoreLayout<F, Rv64BaseAluRegAdapterExecutor>;
+pub(crate) type BaseAluWU16Layout<F> = EmptyAdapterCoreLayout<F, Rv64BaseAluWU16AdapterExecutor>;
+pub(crate) type BranchLayout<F> = EmptyAdapterCoreLayout<F, Rv64BranchAdapterExecutor>;
+pub(crate) type CondRdWriteLayout<F> = EmptyAdapterCoreLayout<F, Rv64CondRdWriteAdapterExecutor>;
+pub(crate) type JalrLayout<F> = EmptyAdapterCoreLayout<F, Rv64JalrAdapterExecutor>;
+pub(crate) type RdWriteLayout<F> = EmptyAdapterCoreLayout<F, Rv64RdWriteAdapterExecutor>;
+pub(crate) type LoadByteLayout<F> = EmptyAdapterCoreLayout<F, Rv64LoadByteAdapterExecutor>;
+pub(crate) type LoadHalfwordLayout<F> =
+    EmptyAdapterCoreLayout<F, Rv64LoadMultiByteAdapterExecutor<HALFWORD_ACCESS_WIDTH>>;
+pub(crate) type LoadWordLayout<F> =
+    EmptyAdapterCoreLayout<F, Rv64LoadMultiByteAdapterExecutor<WORD_ACCESS_WIDTH>>;
+pub(crate) type LoadDoublewordLayout<F> =
+    EmptyAdapterCoreLayout<F, Rv64LoadMultiByteAdapterExecutor<DOUBLEWORD_ACCESS_WIDTH>>;
+pub(crate) type StoreByteLayout<F> = EmptyAdapterCoreLayout<F, Rv64StoreByteAdapterExecutor>;
+pub(crate) type StoreHalfwordLayout<F> =
+    EmptyAdapterCoreLayout<F, Rv64StoreMultiByteAdapterExecutor<HALFWORD_ACCESS_WIDTH>>;
+pub(crate) type StoreWordLayout<F> =
+    EmptyAdapterCoreLayout<F, Rv64StoreMultiByteAdapterExecutor<WORD_ACCESS_WIDTH>>;
+pub(crate) type StoreDoublewordLayout<F> =
+    EmptyAdapterCoreLayout<F, Rv64StoreMultiByteAdapterExecutor<DOUBLEWORD_ACCESS_WIDTH>>;
+pub(crate) type MultLayout<F> = EmptyAdapterCoreLayout<F, Rv64MultAdapterExecutor>;
+pub(crate) type MultWLayout<F> = EmptyAdapterCoreLayout<F, Rv64MultWAdapterExecutor>;
+
+fn g2_alu_imm_geometry<F, A, AR, C>(layout: AluImmArenaFieldOffsets) -> ArenaNativeGeometry
+where
+    F: PrimeField32,
+    A: AdapterTraceExecutor<F>,
+{
+    ArenaNativeGeometry {
+        adapter_size: size_of::<AR>(),
+        adapter_align: align_of::<AR>(),
+        core_size: size_of::<C>(),
+        core_align: align_of::<C>(),
+        core_off_matrix: A::WIDTH * size_of::<F>(),
+        layout: ArenaNativeLayout::AluImm(layout),
+    }
+}
+
+fn imm_u16_layout(
+    core_b: usize,
+    core_imm_low11: usize,
+    core_imm_sign: usize,
+    core_shamt: usize,
+    core_local_opcode: usize,
+    core_b_limb_count: u8,
+) -> AluImmArenaFieldOffsets {
+    AluImmArenaFieldOffsets {
+        from_pc: core::mem::offset_of!(Rv64BaseAluImmU16AdapterRecord, from_pc),
+        from_timestamp: core::mem::offset_of!(Rv64BaseAluImmU16AdapterRecord, from_timestamp),
+        rd_ptr: core::mem::offset_of!(Rv64BaseAluImmU16AdapterRecord, rd_ptr),
+        rs1_ptr: core::mem::offset_of!(Rv64BaseAluImmU16AdapterRecord, rs1_ptr),
+        read_prev_ts: core::mem::offset_of!(Rv64BaseAluImmU16AdapterRecord, reads_aux)
+            + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+        write_prev_ts: core::mem::offset_of!(Rv64BaseAluImmU16AdapterRecord, writes_aux)
+            + core::mem::offset_of!(MemoryWriteAuxRecord<u16, BLOCK_FE_WIDTH>, prev_timestamp),
+        write_prev_data: core::mem::offset_of!(Rv64BaseAluImmU16AdapterRecord, writes_aux)
+            + core::mem::offset_of!(MemoryWriteAuxRecord<u16, BLOCK_FE_WIDTH>, prev_data),
+        rs1_high: usize::MAX,
+        result_high: usize::MAX,
+        core_b,
+        core_imm_low11,
+        core_imm_sign,
+        core_shamt,
+        core_local_opcode,
+        core_b_limb_bytes: 2,
+        core_b_limb_count,
+    }
+}
+
+fn w_imm_u16_layout(
+    core_b: usize,
+    core_imm_low11: usize,
+    core_imm_sign: usize,
+    core_shamt: usize,
+    core_local_opcode: usize,
+) -> AluImmArenaFieldOffsets {
+    AluImmArenaFieldOffsets {
+        from_pc: core::mem::offset_of!(Rv64BaseAluWImmU16AdapterRecord, from_pc),
+        from_timestamp: core::mem::offset_of!(Rv64BaseAluWImmU16AdapterRecord, from_timestamp),
+        rd_ptr: core::mem::offset_of!(Rv64BaseAluWImmU16AdapterRecord, rd_ptr),
+        rs1_ptr: core::mem::offset_of!(Rv64BaseAluWImmU16AdapterRecord, rs1_ptr),
+        read_prev_ts: core::mem::offset_of!(Rv64BaseAluWImmU16AdapterRecord, reads_aux)
+            + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+        write_prev_ts: core::mem::offset_of!(Rv64BaseAluWImmU16AdapterRecord, writes_aux)
+            + core::mem::offset_of!(MemoryWriteAuxRecord<u16, BLOCK_FE_WIDTH>, prev_timestamp),
+        write_prev_data: core::mem::offset_of!(Rv64BaseAluWImmU16AdapterRecord, writes_aux)
+            + core::mem::offset_of!(MemoryWriteAuxRecord<u16, BLOCK_FE_WIDTH>, prev_data),
+        rs1_high: core::mem::offset_of!(Rv64BaseAluWImmU16AdapterRecord, rs1_high),
+        result_high: core::mem::offset_of!(Rv64BaseAluWImmU16AdapterRecord, result_high),
+        core_b,
+        core_imm_low11,
+        core_imm_sign,
+        core_shamt,
+        core_local_opcode,
+        core_b_limb_bytes: 2,
+        core_b_limb_count: RV64_WORD_U16_LIMBS as u8,
+    }
+}
+
+fn imm_bytes_layout() -> AluImmArenaFieldOffsets {
+    AluImmArenaFieldOffsets {
+        from_pc: core::mem::offset_of!(Rv64BaseAluImmAdapterRecord, from_pc),
+        from_timestamp: core::mem::offset_of!(Rv64BaseAluImmAdapterRecord, from_timestamp),
+        rd_ptr: core::mem::offset_of!(Rv64BaseAluImmAdapterRecord, rd_ptr),
+        rs1_ptr: core::mem::offset_of!(Rv64BaseAluImmAdapterRecord, rs1_ptr),
+        read_prev_ts: core::mem::offset_of!(Rv64BaseAluImmAdapterRecord, reads_aux)
+            + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+        write_prev_ts: core::mem::offset_of!(Rv64BaseAluImmAdapterRecord, writes_aux)
+            + core::mem::offset_of!(
+                MemoryWriteBytesAuxRecord<RV64_REGISTER_NUM_LIMBS>,
+                prev_timestamp
+            ),
+        write_prev_data: core::mem::offset_of!(Rv64BaseAluImmAdapterRecord, writes_aux)
+            + core::mem::offset_of!(
+                MemoryWriteBytesAuxRecord<RV64_REGISTER_NUM_LIMBS>,
+                prev_data
+            ),
+        rs1_high: usize::MAX,
+        result_high: usize::MAX,
+        core_b: core::mem::offset_of!(BitwiseLogicImmCoreRecord<RV64_REGISTER_NUM_LIMBS>, b),
+        core_imm_low11: core::mem::offset_of!(
+            BitwiseLogicImmCoreRecord<RV64_REGISTER_NUM_LIMBS>,
+            c_low
+        ),
+        core_imm_sign: core::mem::offset_of!(
+            BitwiseLogicImmCoreRecord<RV64_REGISTER_NUM_LIMBS>,
+            imm_sign
+        ),
+        core_shamt: usize::MAX,
+        core_local_opcode: core::mem::offset_of!(
+            BitwiseLogicImmCoreRecord<RV64_REGISTER_NUM_LIMBS>,
+            local_opcode
+        ),
+        core_b_limb_bytes: 1,
+        core_b_limb_count: RV64_REGISTER_NUM_LIMBS as u8,
+    }
+}
+
+pub(crate) type AddSubRecordMut<'a> = (
+    &'a mut Rv64BaseAluRegU16AdapterRecord,
+    &'a mut AddSubCoreRecord<BLOCK_FE_WIDTH>,
+);
+pub(crate) type AddIRecordMut<'a> = (
+    &'a mut Rv64BaseAluImmU16AdapterRecord,
+    &'a mut AddICoreRecord<BLOCK_FE_WIDTH>,
+);
+pub(crate) type AddIWRecordMut<'a> = (
+    &'a mut Rv64BaseAluWImmU16AdapterRecord,
+    &'a mut AddICoreRecord<RV64_WORD_U16_LIMBS>,
+);
+pub(crate) type LessThanImmRecordMut<'a> = (
+    &'a mut Rv64BaseAluImmU16AdapterRecord,
+    &'a mut LessThanImmCoreRecord<BLOCK_FE_WIDTH, U16_BITS>,
+);
+pub(crate) type BitwiseImmRecordMut<'a> = (
+    &'a mut Rv64BaseAluImmAdapterRecord,
+    &'a mut BitwiseLogicImmCoreRecord<RV64_REGISTER_NUM_LIMBS>,
+);
+pub(crate) type ShiftLogicalImmRecordMut<'a> = (
+    &'a mut Rv64BaseAluImmU16AdapterRecord,
+    &'a mut ShiftLogicalImmCoreRecord<BLOCK_FE_WIDTH, U16_BITS>,
+);
+pub(crate) type ShiftRightArithmeticImmRecordMut<'a> = (
+    &'a mut Rv64BaseAluImmU16AdapterRecord,
+    &'a mut ShiftRightArithmeticImmCoreRecord<BLOCK_FE_WIDTH, U16_BITS>,
+);
+pub(crate) type ShiftWLogicalImmRecordMut<'a> = (
+    &'a mut Rv64BaseAluWImmU16AdapterRecord,
+    &'a mut ShiftLogicalImmCoreRecord<RV64_WORD_U16_LIMBS, U16_BITS>,
+);
+pub(crate) type ShiftWRightArithmeticImmRecordMut<'a> = (
+    &'a mut Rv64BaseAluWImmU16AdapterRecord,
+    &'a mut ShiftRightArithmeticImmCoreRecord<RV64_WORD_U16_LIMBS, U16_BITS>,
+);
+pub(crate) type LessThanRecordMut<'a> = (
+    &'a mut Rv64BaseAluU16AdapterRecord,
+    &'a mut LessThanCoreRecord<BLOCK_FE_WIDTH, U16_BITS>,
+);
+pub(crate) type BitwiseRecordMut<'a> = (
+    &'a mut Rv64BaseAluAdapterRecord,
+    &'a mut BitwiseLogicCoreRecord<RV64_REGISTER_NUM_LIMBS>,
+);
+pub(crate) type ShiftLogicalRecordMut<'a> = (
+    &'a mut Rv64BaseAluU16AdapterRecord,
+    &'a mut ShiftLogicalCoreRecord<BLOCK_FE_WIDTH, U16_BITS>,
+);
+pub(crate) type ShiftRightArithmeticRecordMut<'a> = (
+    &'a mut Rv64BaseAluU16AdapterRecord,
+    &'a mut ShiftRightArithmeticCoreRecord<BLOCK_FE_WIDTH, U16_BITS>,
+);
+pub(crate) type AddSubWRecordMut<'a> = (
+    &'a mut Rv64BaseAluWU16AdapterRecord,
+    &'a mut AddSubCoreRecord<RV64_WORD_U16_LIMBS>,
+);
+pub(crate) type ShiftWLogicalRecordMut<'a> = (
+    &'a mut Rv64BaseAluWU16AdapterRecord,
+    &'a mut ShiftLogicalCoreRecord<RV64_WORD_U16_LIMBS, U16_BITS>,
+);
+pub(crate) type ShiftWRightArithmeticRecordMut<'a> = (
+    &'a mut Rv64BaseAluWU16AdapterRecord,
+    &'a mut ShiftRightArithmeticCoreRecord<RV64_WORD_U16_LIMBS, U16_BITS>,
+);
+pub(crate) type BranchEqRecordMut<'a> = (
+    &'a mut Rv64BranchAdapterRecord,
+    &'a mut BranchEqualCoreRecord<BLOCK_FE_WIDTH>,
+);
+pub(crate) type BranchLtRecordMut<'a> = (
+    &'a mut Rv64BranchAdapterRecord,
+    &'a mut BranchLessThanCoreRecord<BLOCK_FE_WIDTH, U16_BITS>,
+);
+pub(crate) type JalLuiRecordMut<'a> = (
+    &'a mut Rv64RdWriteAdapterRecord,
+    &'a mut Rv64JalLuiCoreRecord,
+);
+pub(crate) type JalrRecordMut<'a> = (&'a mut Rv64JalrAdapterRecord, &'a mut Rv64JalrCoreRecord);
+pub(crate) type AuipcRecordMut<'a> = (
+    &'a mut Rv64RdWriteAdapterRecord,
+    &'a mut Rv64AuipcCoreRecord,
+);
+pub(crate) type MulRecordMut<'a> = (
+    &'a mut Rv64MultAdapterRecord,
+    &'a mut MultiplicationCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>,
+);
+pub(crate) type MulHRecordMut<'a> = (
+    &'a mut Rv64MultAdapterRecord,
+    &'a mut MulHCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>,
+);
+pub(crate) type MulWRecordMut<'a> = (
+    &'a mut Rv64MultWAdapterRecord,
+    &'a mut MultiplicationCoreRecord<RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>,
+);
+pub(crate) type LoadByteRecordMut<'a> = (&'a mut Rv64LoadByteAdapterRecord, &'a mut LoadByteRecord);
+pub(crate) type LoadMultiByteRecordMut<'a> =
+    (&'a mut Rv64LoadMultiByteAdapterRecord, &'a mut LoadRecord);
+pub(crate) type StoreByteRecordMut<'a> =
+    (&'a mut Rv64StoreByteAdapterRecord, &'a mut StoreByteRecord);
+pub(crate) type StoreMultiByteRecordMut<'a> =
+    (&'a mut Rv64StoreMultiByteAdapterRecord, &'a mut StoreRecord);
+pub(crate) type DivRemRecordMut<'a> = (
+    &'a mut Rv64MultAdapterRecord,
+    &'a mut DivRemCoreRecord<RV64_REGISTER_NUM_LIMBS>,
+);
+pub(crate) type DivRemWRecordMut<'a> = (
+    &'a mut Rv64MultWAdapterRecord,
+    &'a mut DivRemCoreRecord<RV64_WORD_NUM_LIMBS>,
+);
+pub(crate) type HintStoreRecordMut<'a> = Rv64HintStoreRecordMut<'a>;
+pub(crate) type PhantomRecordMut<'a> = &'a mut PhantomRecord;
+
+pub trait Rv64IRecordArena<F>:
+    Arena
+    + for<'a> RecordArena<'a, BaseAluRegU16Layout<F>, AddSubRecordMut<'a>>
+    + for<'a> RecordArena<'a, BaseAluImmU16Layout<F>, AddIRecordMut<'a>>
+    + for<'a> RecordArena<'a, BaseAluWImmU16Layout<F>, AddIWRecordMut<'a>>
+    + for<'a> RecordArena<'a, BaseAluImmU16Layout<F>, LessThanImmRecordMut<'a>>
+    + for<'a> RecordArena<'a, BaseAluImmBytesLayout<F>, BitwiseImmRecordMut<'a>>
+    + for<'a> RecordArena<'a, BaseAluImmU16Layout<F>, ShiftLogicalImmRecordMut<'a>>
+    + for<'a> RecordArena<'a, BaseAluImmU16Layout<F>, ShiftRightArithmeticImmRecordMut<'a>>
+    + for<'a> RecordArena<'a, BaseAluWImmU16Layout<F>, ShiftWLogicalImmRecordMut<'a>>
+    + for<'a> RecordArena<'a, BaseAluWImmU16Layout<F>, ShiftWRightArithmeticImmRecordMut<'a>>
+    + for<'a> RecordArena<'a, BaseAluU16Layout<F>, LessThanRecordMut<'a>>
+    + for<'a> RecordArena<'a, BaseAluBytesLayout<F>, BitwiseRecordMut<'a>>
+    + for<'a> RecordArena<'a, BaseAluU16Layout<F>, ShiftLogicalRecordMut<'a>>
+    + for<'a> RecordArena<'a, BaseAluU16Layout<F>, ShiftRightArithmeticRecordMut<'a>>
+    + for<'a> RecordArena<'a, BaseAluWU16Layout<F>, AddSubWRecordMut<'a>>
+    + for<'a> RecordArena<'a, BaseAluWU16Layout<F>, ShiftWLogicalRecordMut<'a>>
+    + for<'a> RecordArena<'a, BaseAluWU16Layout<F>, ShiftWRightArithmeticRecordMut<'a>>
+    + for<'a> RecordArena<'a, BranchLayout<F>, BranchEqRecordMut<'a>>
+    + for<'a> RecordArena<'a, BranchLayout<F>, BranchLtRecordMut<'a>>
+    + for<'a> RecordArena<'a, CondRdWriteLayout<F>, JalLuiRecordMut<'a>>
+    + for<'a> RecordArena<'a, JalrLayout<F>, JalrRecordMut<'a>>
+    + for<'a> RecordArena<'a, RdWriteLayout<F>, AuipcRecordMut<'a>>
+    + for<'a> RecordArena<'a, LoadByteLayout<F>, LoadByteRecordMut<'a>>
+    + for<'a> RecordArena<'a, LoadHalfwordLayout<F>, LoadMultiByteRecordMut<'a>>
+    + for<'a> RecordArena<'a, LoadWordLayout<F>, LoadMultiByteRecordMut<'a>>
+    + for<'a> RecordArena<'a, LoadDoublewordLayout<F>, LoadMultiByteRecordMut<'a>>
+    + for<'a> RecordArena<'a, StoreByteLayout<F>, StoreByteRecordMut<'a>>
+    + for<'a> RecordArena<'a, StoreHalfwordLayout<F>, StoreMultiByteRecordMut<'a>>
+    + for<'a> RecordArena<'a, StoreWordLayout<F>, StoreMultiByteRecordMut<'a>>
+    + for<'a> RecordArena<'a, StoreDoublewordLayout<F>, StoreMultiByteRecordMut<'a>>
+    + for<'a> RecordArena<'a, EmptyMultiRowLayout, PhantomRecordMut<'a>>
+{
+}
+
+impl<F, RA> Rv64IRecordArena<F> for RA where
+    RA: Arena
+        + for<'a> RecordArena<'a, BaseAluRegU16Layout<F>, AddSubRecordMut<'a>>
+        + for<'a> RecordArena<'a, BaseAluImmU16Layout<F>, AddIRecordMut<'a>>
+        + for<'a> RecordArena<'a, BaseAluWImmU16Layout<F>, AddIWRecordMut<'a>>
+        + for<'a> RecordArena<'a, BaseAluImmU16Layout<F>, LessThanImmRecordMut<'a>>
+        + for<'a> RecordArena<'a, BaseAluImmBytesLayout<F>, BitwiseImmRecordMut<'a>>
+        + for<'a> RecordArena<'a, BaseAluImmU16Layout<F>, ShiftLogicalImmRecordMut<'a>>
+        + for<'a> RecordArena<'a, BaseAluImmU16Layout<F>, ShiftRightArithmeticImmRecordMut<'a>>
+        + for<'a> RecordArena<'a, BaseAluWImmU16Layout<F>, ShiftWLogicalImmRecordMut<'a>>
+        + for<'a> RecordArena<'a, BaseAluWImmU16Layout<F>, ShiftWRightArithmeticImmRecordMut<'a>>
+        + for<'a> RecordArena<'a, BaseAluU16Layout<F>, LessThanRecordMut<'a>>
+        + for<'a> RecordArena<'a, BaseAluBytesLayout<F>, BitwiseRecordMut<'a>>
+        + for<'a> RecordArena<'a, BaseAluU16Layout<F>, ShiftLogicalRecordMut<'a>>
+        + for<'a> RecordArena<'a, BaseAluU16Layout<F>, ShiftRightArithmeticRecordMut<'a>>
+        + for<'a> RecordArena<'a, BaseAluWU16Layout<F>, AddSubWRecordMut<'a>>
+        + for<'a> RecordArena<'a, BaseAluWU16Layout<F>, ShiftWLogicalRecordMut<'a>>
+        + for<'a> RecordArena<'a, BaseAluWU16Layout<F>, ShiftWRightArithmeticRecordMut<'a>>
+        + for<'a> RecordArena<'a, BranchLayout<F>, BranchEqRecordMut<'a>>
+        + for<'a> RecordArena<'a, BranchLayout<F>, BranchLtRecordMut<'a>>
+        + for<'a> RecordArena<'a, CondRdWriteLayout<F>, JalLuiRecordMut<'a>>
+        + for<'a> RecordArena<'a, JalrLayout<F>, JalrRecordMut<'a>>
+        + for<'a> RecordArena<'a, RdWriteLayout<F>, AuipcRecordMut<'a>>
+        + for<'a> RecordArena<'a, LoadByteLayout<F>, LoadByteRecordMut<'a>>
+        + for<'a> RecordArena<'a, LoadHalfwordLayout<F>, LoadMultiByteRecordMut<'a>>
+        + for<'a> RecordArena<'a, LoadWordLayout<F>, LoadMultiByteRecordMut<'a>>
+        + for<'a> RecordArena<'a, LoadDoublewordLayout<F>, LoadMultiByteRecordMut<'a>>
+        + for<'a> RecordArena<'a, StoreByteLayout<F>, StoreByteRecordMut<'a>>
+        + for<'a> RecordArena<'a, StoreHalfwordLayout<F>, StoreMultiByteRecordMut<'a>>
+        + for<'a> RecordArena<'a, StoreWordLayout<F>, StoreMultiByteRecordMut<'a>>
+        + for<'a> RecordArena<'a, StoreDoublewordLayout<F>, StoreMultiByteRecordMut<'a>>
+        + for<'a> RecordArena<'a, EmptyMultiRowLayout, PhantomRecordMut<'a>>
+{
+}
+
+pub trait Rv64MRecordArena<F>:
+    Arena
+    + for<'a> RecordArena<'a, MultLayout<F>, MulRecordMut<'a>>
+    + for<'a> RecordArena<'a, MultLayout<F>, MulHRecordMut<'a>>
+    + for<'a> RecordArena<'a, MultWLayout<F>, MulWRecordMut<'a>>
+    + for<'a> RecordArena<'a, MultLayout<F>, DivRemRecordMut<'a>>
+    + for<'a> RecordArena<'a, MultWLayout<F>, DivRemWRecordMut<'a>>
+{
+}
+
+impl<F, RA> Rv64MRecordArena<F> for RA where
+    RA: Arena
+        + for<'a> RecordArena<'a, MultLayout<F>, MulRecordMut<'a>>
+        + for<'a> RecordArena<'a, MultLayout<F>, MulHRecordMut<'a>>
+        + for<'a> RecordArena<'a, MultWLayout<F>, MulWRecordMut<'a>>
+        + for<'a> RecordArena<'a, MultLayout<F>, DivRemRecordMut<'a>>
+        + for<'a> RecordArena<'a, MultWLayout<F>, DivRemWRecordMut<'a>>
+{
+}
+
+pub trait Rv64IoRecordArena<F>:
+    Arena + for<'a> RecordArena<'a, Rv64HintStoreLayout, HintStoreRecordMut<'a>>
+{
+}
+
+impl<F, RA> Rv64IoRecordArena<F> for RA where
+    RA: Arena + for<'a> RecordArena<'a, Rv64HintStoreLayout, HintStoreRecordMut<'a>>
+{
+}
+
+/// Arena union for the composed RV64IM configuration.
+pub trait Rv64StandardRecordArena<F>:
+    Rv64IRecordArena<F> + Rv64MRecordArena<F> + Rv64IoRecordArena<F>
+{
+}
+
+impl<F, RA> Rv64StandardRecordArena<F> for RA where
+    RA: Rv64IRecordArena<F> + Rv64MRecordArena<F> + Rv64IoRecordArena<F>
+{
+}
+
+type AccessView<'a, F> = LogNativeAccessView<'a, F>;
+
+trait Rv64AccessView<F> {
+    fn expect_reg_read(
+        &self,
+        timestamp: u32,
+        reg_ptr: u32,
+        pc: u32,
+    ) -> Result<&PreflightMemoryAccessAux<F>, ExecutionError>;
+
+    fn expect_reg_write(
+        &self,
+        timestamp: u32,
+        reg_ptr: u32,
+        pc: u32,
+    ) -> Result<&PreflightMemoryAccessAux<F>, ExecutionError>;
+
+    fn expect_memory_read(
+        &self,
+        timestamp: u32,
+        address: u32,
+        pc: u32,
+    ) -> Result<&PreflightMemoryAccessAux<F>, ExecutionError>;
+
+    fn expect_memory_write(
+        &self,
+        timestamp: u32,
+        addr_space: u32,
+        address: u32,
+        pc: u32,
+    ) -> Result<&PreflightMemoryAccessAux<F>, ExecutionError>;
+}
+
+impl<F: PrimeField32> Rv64AccessView<F> for AccessView<'_, F> {
+    fn expect_reg_read(
+        &self,
+        timestamp: u32,
+        reg_ptr: u32,
+        pc: u32,
+    ) -> Result<&PreflightMemoryAccessAux<F>, ExecutionError> {
+        self.expect(
+            timestamp,
+            PREFLIGHT_MEMORY_KIND_READ,
+            RV64_REGISTER_AS,
+            u64::from(reg_ptr),
+            RV64_REGISTER_NUM_LIMBS,
+            pc,
+        )
+    }
+
+    fn expect_reg_write(
+        &self,
+        timestamp: u32,
+        reg_ptr: u32,
+        pc: u32,
+    ) -> Result<&PreflightMemoryAccessAux<F>, ExecutionError> {
+        self.expect(
+            timestamp,
+            PREFLIGHT_MEMORY_KIND_WRITE,
+            RV64_REGISTER_AS,
+            u64::from(reg_ptr),
+            RV64_REGISTER_NUM_LIMBS,
+            pc,
+        )
+    }
+
+    fn expect_memory_read(
+        &self,
+        timestamp: u32,
+        address: u32,
+        pc: u32,
+    ) -> Result<&PreflightMemoryAccessAux<F>, ExecutionError> {
+        self.expect(
+            timestamp,
+            PREFLIGHT_MEMORY_KIND_READ,
+            RV64_MEMORY_AS,
+            u64::from(address),
+            RV64_REGISTER_NUM_LIMBS,
+            pc,
+        )
+    }
+
+    fn expect_memory_write(
+        &self,
+        timestamp: u32,
+        addr_space: u32,
+        address: u32,
+        pc: u32,
+    ) -> Result<&PreflightMemoryAccessAux<F>, ExecutionError> {
+        self.expect(
+            timestamp,
+            PREFLIGHT_MEMORY_KIND_WRITE,
+            addr_space,
+            u64::from(address),
+            RV64_REGISTER_NUM_LIMBS,
+            pc,
+        )
+    }
+}
+
+pub fn generate_rv64im_record_arenas_from_logs<
+    F: PrimeField32,
+    RA: Rv64StandardRecordArena<F> + Send,
+>(
+    exe: &VmExe<F>,
+    output: &mut RvrPreflightOutput<F>,
+    capacities: &[(usize, usize)],
+    pc_to_air_idx: &[Option<usize>],
+) -> Result<Vec<RA>, ExecutionError> {
+    let mut registry = LogNativeAssemblerRegistry::new();
+    crate::Rv64ImConfig::default().extend_rvr_log_native(&mut registry);
+    generate_record_arenas_from_logs(&registry, exe, output, capacities, pc_to_air_idx)
+}
+
+/// Host mirror of the C `PreflightAddSubRecord` (R3 L1+L5 compact record),
+/// shared by every migrated 2-read-1-write single-row shape ("alu3"): the
+/// dynamic witness only — program-redundant operands are re-derived from the
+/// instruction at `from_pc` by the per-opcode inline assemblers. The 8-byte
+/// read/write values are kept as u64s; shape-specific limb views come from
+/// [`u16x4`] / [`bytes8`]. Parsed field-by-field from little-endian bytes, so
+/// no alignment requirements.
+struct PreflightAlu3Compact {
+    from_pc: u32,
+    from_timestamp: u32,
+    reads_prev_timestamp: [u32; 2],
+    write_prev_timestamp: u32,
+    write_prev_data: u64,
+    b: u64,
+    c: u64,
+}
+
+// Drift guard: the compact stride must match the C record the preflight
+// tracer writes (guarded by `_Static_assert`s on the C side).
+const _: () = assert!(PREFLIGHT_ADDSUB_RECORD_SIZE == 44);
+
+impl PreflightAlu3Compact {
+    /// Parse + order guard: the C emits one record per migrated retired
+    /// instruction in program-log order, so the record's `from_pc` must match
+    /// the program-log pc being assembled.
+    fn read_for_pc(bytes: &[u8], pc: u32) -> Result<Self, ExecutionError> {
+        debug_assert_eq!(bytes.len(), PREFLIGHT_ADDSUB_RECORD_SIZE);
+        let u32_at =
+            |at: usize| u32::from_le_bytes(bytes[at..at + 4].try_into().expect("4-byte field"));
+        let u64_at =
+            |at: usize| u64::from_le_bytes(bytes[at..at + 8].try_into().expect("8-byte field"));
+        let compact = Self {
+            from_pc: u32_at(0),
+            from_timestamp: u32_at(4),
+            reads_prev_timestamp: [u32_at(8), u32_at(12)],
+            write_prev_timestamp: u32_at(16),
+            write_prev_data: u64_at(20),
+            b: u64_at(28),
+            c: u64_at(36),
+        };
+        if compact.from_pc != pc {
+            return Err(ExecutionError::RvrExecution(format!(
+                "inline record order mismatch: record from_pc {:#x} vs program-log pc {pc:#x}",
+                compact.from_pc
+            )));
+        }
+        Ok(compact)
+    }
+}
+
+/// u16 limb view of an 8-byte register value (U16-cell chips).
+fn u16x4(value: u64) -> [u16; BLOCK_FE_WIDTH] {
+    core::array::from_fn(|i| (value >> (16 * i)) as u16)
+}
+
+/// Byte limb view of an 8-byte register value (byte-cell chips).
+fn bytes8(value: u64) -> [u8; RV64_REGISTER_NUM_LIMBS] {
+    value.to_le_bytes()
+}
+
+/// Expand one C-written compact record into the register-only AddSub record.
+fn assemble_add_sub_inline<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError> {
+    let compact = PreflightAlu3Compact::read_for_pc(compact, pc)?;
+    let (adapter_record, core_record): (
+        &mut Rv64BaseAluRegU16AdapterRecord,
+        &mut AddSubCoreRecord<BLOCK_FE_WIDTH>,
+    ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64BaseAluRegU16AdapterExecutor>::new());
+    adapter_record.from_pc = pc;
+    adapter_record.from_timestamp = compact.from_timestamp;
+    adapter_record.rd_ptr = instruction.a.as_canonical_u32();
+    adapter_record.rs1_ptr = instruction.b.as_canonical_u32();
+    adapter_record.rs2_ptr = instruction.c.as_canonical_u32();
+    adapter_record.reads_aux[0].prev_timestamp = compact.reads_prev_timestamp[0];
+    adapter_record.reads_aux[1].prev_timestamp = compact.reads_prev_timestamp[1];
+    adapter_record.writes_aux = MemoryWriteAuxRecord {
+        prev_timestamp: compact.write_prev_timestamp,
+        prev_data: u16x4(compact.write_prev_data),
+    };
+    core_record.b = u16x4(compact.b);
+    core_record.c = u16x4(compact.c);
+    core_record.local_opcode = instruction
+        .opcode
+        .local_opcode_idx(BaseAluOpcode::CLASS_OFFSET) as u8;
+    Ok(())
+}
+
+fn assemble_addi_inline<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError> {
+    let compact = PreflightAlu3Compact::read_for_pc(compact, pc)?;
+    let (adapter_record, core_record): (
+        &mut Rv64BaseAluImmU16AdapterRecord,
+        &mut AddICoreRecord<BLOCK_FE_WIDTH>,
+    ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64BaseAluImmU16AdapterExecutor>::new());
+    adapter_record.from_pc = pc;
+    adapter_record.from_timestamp = compact.from_timestamp;
+    adapter_record.rd_ptr = instruction.a.as_canonical_u32();
+    adapter_record.rs1_ptr = instruction.b.as_canonical_u32();
+    adapter_record.reads_aux.prev_timestamp = compact.reads_prev_timestamp[0];
+    adapter_record.writes_aux = MemoryWriteAuxRecord {
+        prev_timestamp: compact.write_prev_timestamp,
+        prev_data: u16x4(compact.write_prev_data),
+    };
+    core_record.rs1 = u16x4(compact.b);
+    let immediate = instruction.c.as_canonical_u32();
+    core_record.imm_low11 = (immediate & 0x7ff) as u16;
+    core_record.imm_sign = ((immediate >> 11) & 1) as u16;
+    Ok(())
+}
+
+fn fill_imm_u16_from_compact<F: PrimeField32>(
+    compact: &PreflightAlu3Compact,
+    instruction: &Instruction<F>,
+    pc: u32,
+    record: &mut Rv64BaseAluImmU16AdapterRecord,
+) {
+    record.from_pc = pc;
+    record.from_timestamp = compact.from_timestamp;
+    record.rd_ptr = instruction.a.as_canonical_u32();
+    record.rs1_ptr = instruction.b.as_canonical_u32();
+    record.reads_aux.prev_timestamp = compact.reads_prev_timestamp[0];
+    record.writes_aux = MemoryWriteAuxRecord {
+        prev_timestamp: compact.write_prev_timestamp,
+        prev_data: u16x4(compact.write_prev_data),
+    };
+}
+
+fn fill_imm_bytes_from_compact<F: PrimeField32>(
+    compact: &PreflightAlu3Compact,
+    instruction: &Instruction<F>,
+    pc: u32,
+    record: &mut Rv64BaseAluImmAdapterRecord,
+) {
+    record.from_pc = pc;
+    record.from_timestamp = compact.from_timestamp;
+    record.rd_ptr = instruction.a.as_canonical_u32();
+    record.rs1_ptr = instruction.b.as_canonical_u32();
+    record.reads_aux.prev_timestamp = compact.reads_prev_timestamp[0];
+    record.writes_aux = MemoryWriteAuxRecord {
+        prev_timestamp: compact.write_prev_timestamp,
+        prev_data: bytes8(compact.write_prev_data),
+    };
+}
+
+fn split_imm_result<F: PrimeField32>(instruction: &Instruction<F>, source: u64) -> u64 {
+    let opcode = instruction.opcode.as_usize();
+    let immediate = instruction.c.as_canonical_u32();
+    let signed_imm = ((immediate << 20) as i32 >> 20) as i64 as u64;
+    if opcode == BaseAluWImmOpcode::ADDIW.global_opcode_usize() {
+        (source as u32).wrapping_add(signed_imm as u32) as i32 as i64 as u64
+    } else if opcode == ShiftWImmOpcode::SLLIW.global_opcode_usize() {
+        (source as u32).wrapping_shl(immediate & 31) as i32 as i64 as u64
+    } else if opcode == ShiftWImmOpcode::SRLIW.global_opcode_usize() {
+        (source as u32).wrapping_shr(immediate & 31) as i32 as i64 as u64
+    } else if opcode == ShiftWImmOpcode::SRAIW.global_opcode_usize() {
+        ((source as u32 as i32) >> (immediate & 31)) as i64 as u64
+    } else {
+        unreachable!("non-W opcode passed to split_imm_result")
+    }
+}
+
+fn fill_w_imm_u16_from_compact<F: PrimeField32>(
+    compact: &PreflightAlu3Compact,
+    instruction: &Instruction<F>,
+    pc: u32,
+    record: &mut Rv64BaseAluWImmU16AdapterRecord,
+) -> [u16; RV64_WORD_U16_LIMBS] {
+    let source = u16x4(compact.b);
+    let result = u16x4(split_imm_result(instruction, compact.b));
+    record.from_pc = pc;
+    record.from_timestamp = compact.from_timestamp;
+    record.rd_ptr = instruction.a.as_canonical_u32();
+    record.rs1_ptr = instruction.b.as_canonical_u32();
+    record.rs1_high = [source[2], source[3]];
+    record.result_high = result[RV64_WORD_U16_LIMBS - 1];
+    record.reads_aux.prev_timestamp = compact.reads_prev_timestamp[0];
+    record.writes_aux = MemoryWriteAuxRecord {
+        prev_timestamp: compact.write_prev_timestamp,
+        prev_data: u16x4(compact.write_prev_data),
+    };
+    source[..RV64_WORD_U16_LIMBS].try_into().unwrap()
+}
+
+fn assemble_addiw_inline<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError> {
+    let compact = PreflightAlu3Compact::read_for_pc(compact, pc)?;
+    let (adapter, core): AddIWRecordMut<'_> = arena.alloc(BaseAluWImmU16Layout::<F>::new());
+    core.rs1 = fill_w_imm_u16_from_compact(&compact, instruction, pc, adapter);
+    let immediate = instruction.c.as_canonical_u32();
+    core.imm_low11 = (immediate & 0x7ff) as u16;
+    core.imm_sign = ((immediate >> 11) & 1) as u16;
+    Ok(())
+}
+
+fn assemble_bitwise_imm_inline<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError> {
+    let compact = PreflightAlu3Compact::read_for_pc(compact, pc)?;
+    let (adapter, core): BitwiseImmRecordMut<'_> = arena.alloc(BaseAluImmBytesLayout::<F>::new());
+    fill_imm_bytes_from_compact(&compact, instruction, pc, adapter);
+    core.b = bytes8(compact.b);
+    let immediate = instruction.c.as_canonical_u32();
+    core.c_low = [immediate as u8, ((immediate >> 8) & 0x07) as u8];
+    core.imm_sign = ((immediate >> 11) & 1) as u8;
+    core.local_opcode = instruction
+        .opcode
+        .local_opcode_idx(BaseAluImmOpcode::CLASS_OFFSET) as u8;
+    Ok(())
+}
+
+fn assemble_less_than_imm_inline<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError> {
+    let compact = PreflightAlu3Compact::read_for_pc(compact, pc)?;
+    let (adapter, core): LessThanImmRecordMut<'_> = arena.alloc(BaseAluImmU16Layout::<F>::new());
+    fill_imm_u16_from_compact(&compact, instruction, pc, adapter);
+    core.b = u16x4(compact.b);
+    let immediate = instruction.c.as_canonical_u32();
+    core.imm_low11 = (immediate & 0x7ff) as u16;
+    core.imm_sign = ((immediate >> 11) & 1) as u8;
+    core.local_opcode = instruction
+        .opcode
+        .local_opcode_idx(LessThanImmOpcode::CLASS_OFFSET) as u8;
+    Ok(())
+}
+
+fn assemble_shift_imm_inline<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError> {
+    let compact = PreflightAlu3Compact::read_for_pc(compact, pc)?;
+    let local = instruction
+        .opcode
+        .local_opcode_idx(ShiftImmOpcode::CLASS_OFFSET) as u8;
+    if local == ShiftImmOpcode::SRAI as u8 {
+        let (adapter, core): ShiftRightArithmeticImmRecordMut<'_> =
+            arena.alloc(BaseAluImmU16Layout::<F>::new());
+        fill_imm_u16_from_compact(&compact, instruction, pc, adapter);
+        core.b = u16x4(compact.b);
+        core.shamt = instruction.c.as_canonical_u32() as u8;
+    } else {
+        let (adapter, core): ShiftLogicalImmRecordMut<'_> =
+            arena.alloc(BaseAluImmU16Layout::<F>::new());
+        fill_imm_u16_from_compact(&compact, instruction, pc, adapter);
+        core.b = u16x4(compact.b);
+        core.shamt = instruction.c.as_canonical_u32() as u8;
+        core.local_opcode = local;
+    }
+    Ok(())
+}
+
+fn assemble_shift_w_imm_inline<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError> {
+    let compact = PreflightAlu3Compact::read_for_pc(compact, pc)?;
+    let local = instruction
+        .opcode
+        .local_opcode_idx(ShiftWImmOpcode::CLASS_OFFSET) as u8;
+    if local == ShiftWImmOpcode::SRAIW as u8 {
+        let (adapter, core): ShiftWRightArithmeticImmRecordMut<'_> =
+            arena.alloc(BaseAluWImmU16Layout::<F>::new());
+        core.b = fill_w_imm_u16_from_compact(&compact, instruction, pc, adapter);
+        core.shamt = instruction.c.as_canonical_u32() as u8;
+    } else {
+        let (adapter, core): ShiftWLogicalImmRecordMut<'_> =
+            arena.alloc(BaseAluWImmU16Layout::<F>::new());
+        core.b = fill_w_imm_u16_from_compact(&compact, instruction, pc, adapter);
+        core.shamt = instruction.c.as_canonical_u32() as u8;
+        core.local_opcode = local;
+    }
+    Ok(())
+}
+
+/// Fill the W u16 adapter from an alu3 compact record. The W adapter keeps
+/// the source high halves and result-word sign witness in addition to the
+/// common alu3 fields.
+fn fill_base_alu_w_u16_from_compact<F: PrimeField32>(
+    compact: &PreflightAlu3Compact,
+    instruction: &Instruction<F>,
+    pc: u32,
+    result_word: u32,
+    record: &mut Rv64BaseAluWU16AdapterRecord,
+) {
+    let rs1 = u16x4(compact.b);
+    let rs2 = u16x4(compact.c);
+    record.from_pc = pc;
+    record.from_timestamp = compact.from_timestamp;
+    record.rd_ptr = instruction.a.as_canonical_u32();
+    record.rs1_ptr = instruction.b.as_canonical_u32();
+    record.rs1_high = [rs1[2], rs1[3]];
+    record.rs2_ptr = instruction.c.as_canonical_u32();
+    record.rs2_high = [rs2[2], rs2[3]];
+    record.result_high = (result_word >> U16_BITS) as u16;
+    record.reads_aux[0].prev_timestamp = compact.reads_prev_timestamp[0];
+    record.reads_aux[1].prev_timestamp = compact.reads_prev_timestamp[1];
+    record.writes_aux = MemoryWriteAuxRecord {
+        prev_timestamp: compact.write_prev_timestamp,
+        prev_data: u16x4(compact.write_prev_data),
+    };
+}
+
+fn assemble_add_sub_w_inline<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError> {
+    let compact = PreflightAlu3Compact::read_for_pc(compact, pc)?;
+    let local_opcode = BaseAluWOpcode::from_repr(
+        instruction
+            .opcode
+            .local_opcode_idx(BaseAluWOpcode::CLASS_OFFSET),
+    )
+    .expect("opcode already classified");
+    let result = match local_opcode {
+        BaseAluWOpcode::ADDW => (compact.b as u32).wrapping_add(compact.c as u32),
+        BaseAluWOpcode::SUBW => (compact.b as u32).wrapping_sub(compact.c as u32),
+    };
+    let (adapter_record, core_record): (
+        &mut Rv64BaseAluWU16AdapterRecord,
+        &mut AddSubCoreRecord<RV64_WORD_U16_LIMBS>,
+    ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64BaseAluWU16AdapterExecutor>::new());
+    fill_base_alu_w_u16_from_compact(&compact, instruction, pc, result, adapter_record);
+    core_record.b = u16x4(compact.b)[..RV64_WORD_U16_LIMBS].try_into().unwrap();
+    core_record.c = u16x4(compact.c)[..RV64_WORD_U16_LIMBS].try_into().unwrap();
+    core_record.local_opcode = match local_opcode {
+        BaseAluWOpcode::ADDW => BaseAluOpcode::ADD as u8,
+        BaseAluWOpcode::SUBW => BaseAluOpcode::SUB as u8,
+    };
+    Ok(())
+}
+
+/// Fill a Mult adapter record (Mul/MulH/DivRem) from a compact alu3 record,
+/// mirroring [`fill_mult_adapter`]'s derivation from the log path.
+fn fill_mult_adapter_from_compact<F: PrimeField32>(
+    compact: &PreflightAlu3Compact,
+    instruction: &Instruction<F>,
+    pc: u32,
+    record: &mut Rv64MultAdapterRecord,
+) {
+    record.from_pc = pc;
+    record.from_timestamp = compact.from_timestamp;
+    record.rs1_ptr = instruction.b.as_canonical_u32();
+    record.rs2_ptr = instruction.c.as_canonical_u32();
+    record.rd_ptr = instruction.a.as_canonical_u32();
+    record.reads_aux[0].prev_timestamp = compact.reads_prev_timestamp[0];
+    record.reads_aux[1].prev_timestamp = compact.reads_prev_timestamp[1];
+    record.writes_aux = MemoryWriteAuxRecord {
+        prev_timestamp: compact.write_prev_timestamp,
+        prev_data: bytes8(compact.write_prev_data),
+    };
+}
+
+fn assemble_mul_inline<F: PrimeField32, RA: Rv64MRecordArena<F>>(
+    arena: &mut RA,
+    instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError> {
+    let compact = PreflightAlu3Compact::read_for_pc(compact, pc)?;
+    let (adapter_record, core_record): (
+        &mut Rv64MultAdapterRecord,
+        &mut MultiplicationCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>,
+    ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64MultAdapterExecutor>::new());
+    fill_mult_adapter_from_compact(&compact, instruction, pc, adapter_record);
+    core_record.b = bytes8(compact.b);
+    core_record.c = bytes8(compact.c);
+    Ok(())
+}
+
+fn assemble_mulh_inline<F: PrimeField32, RA: Rv64MRecordArena<F>>(
+    arena: &mut RA,
+    instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError> {
+    let compact = PreflightAlu3Compact::read_for_pc(compact, pc)?;
+    let (adapter_record, core_record): (
+        &mut Rv64MultAdapterRecord,
+        &mut MulHCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>,
+    ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64MultAdapterExecutor>::new());
+    fill_mult_adapter_from_compact(&compact, instruction, pc, adapter_record);
+    core_record.b = bytes8(compact.b);
+    core_record.c = bytes8(compact.c);
+    core_record.local_opcode = instruction
+        .opcode
+        .local_opcode_idx(MulHOpcode::CLASS_OFFSET) as u8;
+    Ok(())
+}
+
+fn assemble_divrem_inline<F: PrimeField32, RA: Rv64MRecordArena<F>>(
+    arena: &mut RA,
+    instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError> {
+    let compact = PreflightAlu3Compact::read_for_pc(compact, pc)?;
+    let (adapter_record, core_record): (
+        &mut Rv64MultAdapterRecord,
+        &mut DivRemCoreRecord<RV64_REGISTER_NUM_LIMBS>,
+    ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64MultAdapterExecutor>::new());
+    fill_mult_adapter_from_compact(&compact, instruction, pc, adapter_record);
+    core_record.b = bytes8(compact.b);
+    core_record.c = bytes8(compact.c);
+    core_record.local_opcode = instruction
+        .opcode
+        .local_opcode_idx(DivRemOpcode::CLASS_OFFSET) as u8;
+    Ok(())
+}
+
+/// RV64 W-op result kinds; see [`run_mul_div_w_result`].
+#[derive(Clone, Copy)]
+enum MulDivWKind {
+    Mul,
+    Div,
+    Divu,
+    Rem,
+    Remu,
+}
+
+/// RV64 W-op result word, matching the generated C's `rv_divw`-family
+/// semantics (div-by-zero -> all ones / dividend, MIN/-1 overflow -> MIN).
+/// Needed because the compact record does not carry the written value, from
+/// which [`fill_mult_w_adapter`] derives `result_word_msl`/`result_sign`.
+fn run_mul_div_w_result(op: MulDivWKind, b: u32, c: u32) -> u32 {
+    match op {
+        MulDivWKind::Mul => b.wrapping_mul(c),
+        MulDivWKind::Div => {
+            let (b, c) = (b as i32, c as i32);
+            if c == 0 {
+                u32::MAX
+            } else if b == i32::MIN && c == -1 {
+                b as u32
+            } else {
+                (b / c) as u32
+            }
+        }
+        MulDivWKind::Divu => {
+            if c == 0 {
+                u32::MAX
+            } else {
+                b / c
+            }
+        }
+        MulDivWKind::Rem => {
+            let (b, c) = (b as i32, c as i32);
+            if c == 0 {
+                b as u32
+            } else if b == i32::MIN && c == -1 {
+                0
+            } else {
+                (b % c) as u32
+            }
+        }
+        MulDivWKind::Remu => {
+            if c == 0 {
+                b
+            } else {
+                b % c
+            }
+        }
+    }
+}
+
+/// Fill a MultW adapter record from a compact alu3 record, mirroring
+/// [`fill_mult_w_adapter`]: the register-read high bytes come from the full
+/// 8-byte values the compact record carries, and the result word (for
+/// `result_word_msl`/`result_sign`) is recomputed from the operands.
+fn fill_mult_w_adapter_from_compact<F: PrimeField32>(
+    compact: &PreflightAlu3Compact,
+    instruction: &Instruction<F>,
+    pc: u32,
+    result_word: u32,
+    record: &mut Rv64MultWAdapterRecord,
+) {
+    let rs1_full = bytes8(compact.b);
+    let rs2_full = bytes8(compact.c);
+    record.from_pc = pc;
+    record.from_timestamp = compact.from_timestamp;
+    record.rs1_ptr = instruction.b.as_canonical_u32();
+    record.rs2_ptr = instruction.c.as_canonical_u32();
+    record.rd_ptr = instruction.a.as_canonical_u32();
+    record
+        .rs1_high
+        .copy_from_slice(&rs1_full[RV64_WORD_NUM_LIMBS..]);
+    record
+        .rs2_high
+        .copy_from_slice(&rs2_full[RV64_WORD_NUM_LIMBS..]);
+    record.reads_aux[0].prev_timestamp = compact.reads_prev_timestamp[0];
+    record.reads_aux[1].prev_timestamp = compact.reads_prev_timestamp[1];
+    record.result_word_msl = result_word.to_le_bytes()[RV64_WORD_NUM_LIMBS - 1];
+    record.result_sign = record.result_word_msl >> (RV64_BYTE_BITS as u8 - 1);
+    record.writes_aux = MemoryWriteAuxRecord {
+        prev_timestamp: compact.write_prev_timestamp,
+        prev_data: bytes8(compact.write_prev_data),
+    };
+}
+
+fn assemble_mul_w_inline<F: PrimeField32, RA: Rv64MRecordArena<F>>(
+    arena: &mut RA,
+    instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError> {
+    let compact = PreflightAlu3Compact::read_for_pc(compact, pc)?;
+    let (adapter_record, core_record): (
+        &mut Rv64MultWAdapterRecord,
+        &mut MultiplicationCoreRecord<RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>,
+    ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64MultWAdapterExecutor>::new());
+    let result = run_mul_div_w_result(MulDivWKind::Mul, compact.b as u32, compact.c as u32);
+    fill_mult_w_adapter_from_compact(&compact, instruction, pc, result, adapter_record);
+    core_record.b = bytes8(compact.b)[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
+    core_record.c = bytes8(compact.c)[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
+    Ok(())
+}
+
+fn assemble_divrem_w_inline<F: PrimeField32, RA: Rv64MRecordArena<F>>(
+    arena: &mut RA,
+    instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError> {
+    let compact = PreflightAlu3Compact::read_for_pc(compact, pc)?;
+    let local_opcode = DivRemWOpcode::from_repr(
+        instruction
+            .opcode
+            .local_opcode_idx(DivRemWOpcode::CLASS_OFFSET),
+    )
+    .expect("opcode already classified");
+    let kind = match local_opcode {
+        DivRemWOpcode::DIVW => MulDivWKind::Div,
+        DivRemWOpcode::DIVUW => MulDivWKind::Divu,
+        DivRemWOpcode::REMW => MulDivWKind::Rem,
+        DivRemWOpcode::REMUW => MulDivWKind::Remu,
+    };
+    let (adapter_record, core_record): (
+        &mut Rv64MultWAdapterRecord,
+        &mut DivRemCoreRecord<RV64_WORD_NUM_LIMBS>,
+    ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64MultWAdapterExecutor>::new());
+    let result = run_mul_div_w_result(kind, compact.b as u32, compact.c as u32);
+    fill_mult_w_adapter_from_compact(&compact, instruction, pc, result, adapter_record);
+    core_record.b = bytes8(compact.b)[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
+    core_record.c = bytes8(compact.c)[..RV64_WORD_NUM_LIMBS].try_into().unwrap();
+    core_record.local_opcode = local_opcode as u8;
+    Ok(())
+}
+
+fn base_alu_w_arena_geometry<F: PrimeField32>(
+    core_size: usize,
+    core_align: usize,
+    core_b: usize,
+    core_c: usize,
+    core_local_opcode: usize,
+) -> ArenaNativeGeometry {
+    ArenaNativeGeometry {
+        adapter_size: size_of::<Rv64BaseAluWU16AdapterRecord>(),
+        adapter_align: align_of::<Rv64BaseAluWU16AdapterRecord>(),
+        core_size,
+        core_align,
+        core_off_matrix: <Rv64BaseAluWU16AdapterExecutor as AdapterTraceExecutor<F>>::WIDTH
+            * size_of::<F>(),
+        layout: ArenaNativeLayout::Alu3(Alu3ArenaFieldOffsets {
+            from_pc: core::mem::offset_of!(Rv64BaseAluWU16AdapterRecord, from_pc),
+            from_timestamp: core::mem::offset_of!(Rv64BaseAluWU16AdapterRecord, from_timestamp),
+            rd_ptr: core::mem::offset_of!(Rv64BaseAluWU16AdapterRecord, rd_ptr),
+            rs1_ptr: core::mem::offset_of!(Rv64BaseAluWU16AdapterRecord, rs1_ptr),
+            rs2: core::mem::offset_of!(Rv64BaseAluWU16AdapterRecord, rs2_ptr),
+            rs2_as: usize::MAX,
+            rs2_imm_sign: usize::MAX,
+            reads_aux0_prev_ts: core::mem::offset_of!(Rv64BaseAluWU16AdapterRecord, reads_aux)
+                + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+            reads_aux1_prev_ts: core::mem::offset_of!(Rv64BaseAluWU16AdapterRecord, reads_aux)
+                + size_of::<MemoryReadAuxRecord>()
+                + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+            write_prev_ts: core::mem::offset_of!(Rv64BaseAluWU16AdapterRecord, writes_aux)
+                + core::mem::offset_of!(
+                    MemoryWriteAuxRecord<u16, BLOCK_FE_WIDTH>,
+                    prev_timestamp
+                ),
+            write_prev_data: core::mem::offset_of!(Rv64BaseAluWU16AdapterRecord, writes_aux)
+                + core::mem::offset_of!(MemoryWriteAuxRecord<u16, BLOCK_FE_WIDTH>, prev_data),
+            core_b,
+            core_c,
+            core_local_opcode,
+            w: Some(Alu3WArenaFieldOffsets {
+                rs1_high: core::mem::offset_of!(Rv64BaseAluWU16AdapterRecord, rs1_high),
+                rs2_high: core::mem::offset_of!(Rv64BaseAluWU16AdapterRecord, rs2_high),
+                result_word_msl: core::mem::offset_of!(Rv64BaseAluWU16AdapterRecord, result_high),
+                result_sign: usize::MAX,
+                result_word_msl_shift: U16_BITS as u8,
+                result_word_msl_bytes: size_of::<u16>() as u8,
+            }),
+        }),
+    }
+}
+
+fn mult_w_arena_geometry<F: PrimeField32>(
+    core_size: usize,
+    core_align: usize,
+    core_b: usize,
+    core_c: usize,
+    core_local_opcode: usize,
+) -> ArenaNativeGeometry {
+    ArenaNativeGeometry {
+        adapter_size: size_of::<Rv64MultWAdapterRecord>(),
+        adapter_align: align_of::<Rv64MultWAdapterRecord>(),
+        core_size,
+        core_align,
+        core_off_matrix: <Rv64MultWAdapterExecutor as AdapterTraceExecutor<F>>::WIDTH
+            * size_of::<F>(),
+        layout: ArenaNativeLayout::Alu3(Alu3ArenaFieldOffsets {
+            from_pc: core::mem::offset_of!(Rv64MultWAdapterRecord, from_pc),
+            from_timestamp: core::mem::offset_of!(Rv64MultWAdapterRecord, from_timestamp),
+            rd_ptr: core::mem::offset_of!(Rv64MultWAdapterRecord, rd_ptr),
+            rs1_ptr: core::mem::offset_of!(Rv64MultWAdapterRecord, rs1_ptr),
+            rs2: core::mem::offset_of!(Rv64MultWAdapterRecord, rs2_ptr),
+            rs2_as: usize::MAX,
+            rs2_imm_sign: usize::MAX,
+            reads_aux0_prev_ts: core::mem::offset_of!(Rv64MultWAdapterRecord, reads_aux)
+                + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+            reads_aux1_prev_ts: core::mem::offset_of!(Rv64MultWAdapterRecord, reads_aux)
+                + size_of::<MemoryReadAuxRecord>()
+                + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+            write_prev_ts: core::mem::offset_of!(Rv64MultWAdapterRecord, writes_aux)
+                + core::mem::offset_of!(
+                    MemoryWriteAuxRecord<u8, RV64_REGISTER_NUM_LIMBS>,
+                    prev_timestamp
+                ),
+            write_prev_data: core::mem::offset_of!(Rv64MultWAdapterRecord, writes_aux)
+                + core::mem::offset_of!(
+                    MemoryWriteAuxRecord<u8, RV64_REGISTER_NUM_LIMBS>,
+                    prev_data
+                ),
+            core_b,
+            core_c,
+            core_local_opcode,
+            w: Some(Alu3WArenaFieldOffsets {
+                rs1_high: core::mem::offset_of!(Rv64MultWAdapterRecord, rs1_high),
+                rs2_high: core::mem::offset_of!(Rv64MultWAdapterRecord, rs2_high),
+                result_word_msl: core::mem::offset_of!(Rv64MultWAdapterRecord, result_word_msl),
+                result_sign: core::mem::offset_of!(Rv64MultWAdapterRecord, result_sign),
+                result_word_msl_shift: (RV64_BYTE_BITS * (RV64_WORD_NUM_LIMBS - 1)) as u8,
+                result_word_msl_bytes: size_of::<u8>() as u8,
+            }),
+        }),
+    }
+}
+
+fn load_multi_arena_geometry<F: PrimeField32, const WIDTH: usize>() -> ArenaNativeGeometry {
+    ArenaNativeGeometry {
+        adapter_size: size_of::<Rv64LoadMultiByteAdapterRecord>(),
+        adapter_align: align_of::<Rv64LoadMultiByteAdapterRecord>(),
+        core_size: size_of::<LoadRecord>(),
+        core_align: align_of::<LoadRecord>(),
+        core_off_matrix: <Rv64LoadMultiByteAdapterExecutor<WIDTH> as AdapterTraceExecutor<F>>::WIDTH
+            * size_of::<F>(),
+        layout: ArenaNativeLayout::LoadStore(LoadStoreArenaFieldOffsets {
+            from_pc: core::mem::offset_of!(Rv64LoadMultiByteAdapterRecord, from_pc),
+            from_timestamp: core::mem::offset_of!(Rv64LoadMultiByteAdapterRecord, from_timestamp),
+            rs1_ptr: core::mem::offset_of!(Rv64LoadMultiByteAdapterRecord, rs1_ptr),
+            rs1_val: core::mem::offset_of!(Rv64LoadMultiByteAdapterRecord, rs1_val),
+            rs1_aux_prev_ts: core::mem::offset_of!(Rv64LoadMultiByteAdapterRecord, rs1_aux_record)
+                + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+            rd_rs2_ptr: core::mem::offset_of!(Rv64LoadMultiByteAdapterRecord, rd_ptr),
+            read_data_aux_prev_ts: core::mem::offset_of!(
+                Rv64LoadMultiByteAdapterRecord,
+                read_data_aux
+            ) + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+            read_data_aux_prev_ts2: core::mem::offset_of!(
+                Rv64LoadMultiByteAdapterRecord,
+                read_data_aux
+            ) + size_of::<MemoryReadAuxRecord>()
+                + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+            imm: core::mem::offset_of!(Rv64LoadMultiByteAdapterRecord, imm),
+            imm_sign: core::mem::offset_of!(Rv64LoadMultiByteAdapterRecord, imm_sign),
+            mem_as: usize::MAX,
+            write_prev_ts: core::mem::offset_of!(
+                Rv64LoadMultiByteAdapterRecord,
+                write_prev_timestamp
+            ),
+            write_prev_ts2: usize::MAX,
+            write_prev_data: core::mem::offset_of!(Rv64LoadMultiByteAdapterRecord, write_prev_data),
+            core_local_opcode: usize::MAX,
+            core_is_byte: usize::MAX,
+            core_is_word: usize::MAX,
+            core_shift_amount: usize::MAX,
+            core_read_data: core::mem::offset_of!(LoadRecord, read_data),
+            core_read_data2: core::mem::offset_of!(LoadRecord, read_data)
+                + size_of::<[u16; BLOCK_FE_WIDTH]>(),
+            core_prev_data: usize::MAX,
+            core_prev_data2: usize::MAX,
+        }),
+    }
+}
+
+fn store_multi_arena_geometry<F: PrimeField32, const WIDTH: usize>() -> ArenaNativeGeometry {
+    ArenaNativeGeometry {
+        adapter_size: size_of::<Rv64StoreMultiByteAdapterRecord>(),
+        adapter_align: align_of::<Rv64StoreMultiByteAdapterRecord>(),
+        core_size: size_of::<StoreRecord>(),
+        core_align: align_of::<StoreRecord>(),
+        core_off_matrix:
+            <Rv64StoreMultiByteAdapterExecutor<WIDTH> as AdapterTraceExecutor<F>>::WIDTH
+                * size_of::<F>(),
+        layout: ArenaNativeLayout::LoadStore(LoadStoreArenaFieldOffsets {
+            from_pc: core::mem::offset_of!(Rv64StoreMultiByteAdapterRecord, from_pc),
+            from_timestamp: core::mem::offset_of!(Rv64StoreMultiByteAdapterRecord, from_timestamp),
+            rs1_ptr: core::mem::offset_of!(Rv64StoreMultiByteAdapterRecord, rs1_ptr),
+            rs1_val: core::mem::offset_of!(Rv64StoreMultiByteAdapterRecord, rs1_val),
+            rs1_aux_prev_ts: core::mem::offset_of!(Rv64StoreMultiByteAdapterRecord, rs1_aux_record)
+                + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+            rd_rs2_ptr: core::mem::offset_of!(Rv64StoreMultiByteAdapterRecord, rs2_ptr),
+            read_data_aux_prev_ts: core::mem::offset_of!(
+                Rv64StoreMultiByteAdapterRecord,
+                read_data_aux
+            ) + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+            read_data_aux_prev_ts2: usize::MAX,
+            imm: core::mem::offset_of!(Rv64StoreMultiByteAdapterRecord, imm),
+            imm_sign: core::mem::offset_of!(Rv64StoreMultiByteAdapterRecord, imm_sign),
+            mem_as: core::mem::offset_of!(Rv64StoreMultiByteAdapterRecord, mem_as),
+            write_prev_ts: core::mem::offset_of!(
+                Rv64StoreMultiByteAdapterRecord,
+                write_prev_timestamps
+            ),
+            write_prev_ts2: core::mem::offset_of!(
+                Rv64StoreMultiByteAdapterRecord,
+                write_prev_timestamps
+            ) + size_of::<u32>(),
+            write_prev_data: usize::MAX,
+            core_local_opcode: usize::MAX,
+            core_is_byte: usize::MAX,
+            core_is_word: usize::MAX,
+            core_shift_amount: usize::MAX,
+            core_read_data: core::mem::offset_of!(StoreRecord, read_data),
+            core_read_data2: usize::MAX,
+            core_prev_data: core::mem::offset_of!(StoreRecord, prev_data),
+            core_prev_data2: core::mem::offset_of!(StoreRecord, prev_data)
+                + size_of::<[u16; BLOCK_FE_WIDTH]>(),
+        }),
+    }
+}
+
+impl<F, RA> VmRvrLogNativeExtension<F, RA> for crate::Rv64I
+where
+    F: PrimeField32,
+    RA: Rv64IRecordArena<F>,
+{
+    fn extend_rvr_log_native(&self, registry: &mut LogNativeAssemblerRegistry<F, RA>) {
+        registry.register_delta_decode(crate::rvr_gpu_decode::gpu_decode_precompute::<F>);
+        registry.register_delta_write_value(crate::rvr_gpu_decode::delta_post_write_value::<F>);
+        registry.register(
+            [BaseAluOpcode::ADD, BaseAluOpcode::SUB].map(|opcode| opcode.global_opcode()),
+            assemble_add_sub::<F, RA>,
+        );
+        registry.register_inline_arena_native(
+            [BaseAluOpcode::ADD, BaseAluOpcode::SUB].map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_ADDSUB_RECORD_SIZE,
+            assemble_add_sub_inline::<F, RA>,
+            ArenaNativeGeometry {
+                adapter_size: size_of::<Rv64BaseAluRegU16AdapterRecord>(),
+                adapter_align: align_of::<Rv64BaseAluRegU16AdapterRecord>(),
+                core_size: size_of::<AddSubCoreRecord<BLOCK_FE_WIDTH>>(),
+                core_align: align_of::<AddSubCoreRecord<BLOCK_FE_WIDTH>>(),
+                core_off_matrix:
+                    <Rv64BaseAluRegU16AdapterExecutor as AdapterTraceExecutor<F>>::WIDTH
+                        * size_of::<F>(),
+                layout: ArenaNativeLayout::Alu3(Alu3ArenaFieldOffsets {
+                    from_pc: core::mem::offset_of!(Rv64BaseAluRegU16AdapterRecord, from_pc),
+                    from_timestamp: core::mem::offset_of!(
+                        Rv64BaseAluRegU16AdapterRecord,
+                        from_timestamp
+                    ),
+                    rd_ptr: core::mem::offset_of!(Rv64BaseAluRegU16AdapterRecord, rd_ptr),
+                    rs1_ptr: core::mem::offset_of!(Rv64BaseAluRegU16AdapterRecord, rs1_ptr),
+                    rs2: core::mem::offset_of!(Rv64BaseAluRegU16AdapterRecord, rs2_ptr),
+                    rs2_as: usize::MAX,
+                    rs2_imm_sign: usize::MAX,
+                    reads_aux0_prev_ts: core::mem::offset_of!(
+                        Rv64BaseAluRegU16AdapterRecord,
+                        reads_aux
+                    ) + core::mem::offset_of!(
+                        MemoryReadAuxRecord,
+                        prev_timestamp
+                    ),
+                    reads_aux1_prev_ts: core::mem::offset_of!(
+                        Rv64BaseAluRegU16AdapterRecord,
+                        reads_aux
+                    ) + size_of::<MemoryReadAuxRecord>()
+                        + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+                    write_prev_ts: core::mem::offset_of!(
+                        Rv64BaseAluRegU16AdapterRecord,
+                        writes_aux
+                    ) + core::mem::offset_of!(
+                        MemoryWriteAuxRecord<u16, BLOCK_FE_WIDTH>,
+                        prev_timestamp
+                    ),
+                    write_prev_data: core::mem::offset_of!(
+                        Rv64BaseAluRegU16AdapterRecord,
+                        writes_aux
+                    ) + core::mem::offset_of!(
+                        MemoryWriteAuxRecord<u16, BLOCK_FE_WIDTH>,
+                        prev_data
+                    ),
+                    core_b: core::mem::offset_of!(AddSubCoreRecord<BLOCK_FE_WIDTH>, b),
+                    core_c: core::mem::offset_of!(AddSubCoreRecord<BLOCK_FE_WIDTH>, c),
+                    core_local_opcode: core::mem::offset_of!(
+                        AddSubCoreRecord<BLOCK_FE_WIDTH>,
+                        local_opcode
+                    ),
+                    w: None,
+                }),
+            },
+        );
+        registry.register(
+            [BaseAluImmOpcode::ADDI].map(|opcode| opcode.global_opcode()),
+            assemble_addi::<F, RA>,
+        );
+        registry.register(
+            BaseAluWImmOpcode::iter().map(|opcode| opcode.global_opcode()),
+            assemble_addiw::<F, RA>,
+        );
+        registry.register(
+            [
+                BaseAluImmOpcode::XORI,
+                BaseAluImmOpcode::ORI,
+                BaseAluImmOpcode::ANDI,
+            ]
+            .map(|opcode| opcode.global_opcode()),
+            assemble_bitwise_imm::<F, RA>,
+        );
+        registry.register(
+            LessThanImmOpcode::iter().map(|opcode| opcode.global_opcode()),
+            assemble_less_than_imm::<F, RA>,
+        );
+        registry.register(
+            ShiftImmOpcode::iter().map(|opcode| opcode.global_opcode()),
+            assemble_shift_imm::<F, RA>,
+        );
+        registry.register(
+            ShiftWImmOpcode::iter().map(|opcode| opcode.global_opcode()),
+            assemble_shift_w_imm::<F, RA>,
+        );
+        registry.register_inline_arena_native(
+            [BaseAluImmOpcode::ADDI].map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_ADDSUB_RECORD_SIZE,
+            assemble_addi_inline::<F, RA>,
+            ArenaNativeGeometry {
+                adapter_size: size_of::<Rv64BaseAluImmU16AdapterRecord>(),
+                adapter_align: align_of::<Rv64BaseAluImmU16AdapterRecord>(),
+                core_size: size_of::<AddICoreRecord<BLOCK_FE_WIDTH>>(),
+                core_align: align_of::<AddICoreRecord<BLOCK_FE_WIDTH>>(),
+                core_off_matrix:
+                    <Rv64BaseAluImmU16AdapterExecutor as AdapterTraceExecutor<F>>::WIDTH
+                        * size_of::<F>(),
+                layout: ArenaNativeLayout::AddI(AddIArenaFieldOffsets {
+                    from_pc: core::mem::offset_of!(Rv64BaseAluImmU16AdapterRecord, from_pc),
+                    from_timestamp: core::mem::offset_of!(
+                        Rv64BaseAluImmU16AdapterRecord,
+                        from_timestamp
+                    ),
+                    rd_ptr: core::mem::offset_of!(Rv64BaseAluImmU16AdapterRecord, rd_ptr),
+                    rs1_ptr: core::mem::offset_of!(Rv64BaseAluImmU16AdapterRecord, rs1_ptr),
+                    read_prev_ts: core::mem::offset_of!(Rv64BaseAluImmU16AdapterRecord, reads_aux)
+                        + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+                    write_prev_ts: core::mem::offset_of!(
+                        Rv64BaseAluImmU16AdapterRecord,
+                        writes_aux
+                    ) + core::mem::offset_of!(
+                        MemoryWriteAuxRecord<u16, BLOCK_FE_WIDTH>,
+                        prev_timestamp
+                    ),
+                    write_prev_data: core::mem::offset_of!(
+                        Rv64BaseAluImmU16AdapterRecord,
+                        writes_aux
+                    ) + core::mem::offset_of!(
+                        MemoryWriteAuxRecord<u16, BLOCK_FE_WIDTH>,
+                        prev_data
+                    ),
+                    core_rs1: core::mem::offset_of!(AddICoreRecord<BLOCK_FE_WIDTH>, rs1),
+                    core_imm_low11: core::mem::offset_of!(
+                        AddICoreRecord<BLOCK_FE_WIDTH>,
+                        imm_low11
+                    ),
+                    core_imm_sign: core::mem::offset_of!(AddICoreRecord<BLOCK_FE_WIDTH>, imm_sign),
+                }),
+            },
+        );
+        registry.register_inline_g2(
+            [
+                BaseAluImmOpcode::XORI,
+                BaseAluImmOpcode::ORI,
+                BaseAluImmOpcode::ANDI,
+            ]
+            .map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_ADDSUB_RECORD_SIZE,
+            assemble_bitwise_imm_inline::<F, RA>,
+            g2_alu_imm_geometry::<
+                F,
+                Rv64BaseAluImmAdapterExecutor,
+                Rv64BaseAluImmAdapterRecord,
+                BitwiseLogicImmCoreRecord<RV64_REGISTER_NUM_LIMBS>,
+            >(imm_bytes_layout()),
+        );
+        registry.register_inline_g2(
+            LessThanImmOpcode::iter().map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_ADDSUB_RECORD_SIZE,
+            assemble_less_than_imm_inline::<F, RA>,
+            g2_alu_imm_geometry::<
+                F,
+                Rv64BaseAluImmU16AdapterExecutor,
+                Rv64BaseAluImmU16AdapterRecord,
+                LessThanImmCoreRecord<BLOCK_FE_WIDTH, U16_BITS>,
+            >(imm_u16_layout(
+                core::mem::offset_of!(LessThanImmCoreRecord<BLOCK_FE_WIDTH, U16_BITS>, b),
+                core::mem::offset_of!(
+                    LessThanImmCoreRecord<BLOCK_FE_WIDTH, U16_BITS>,
+                    imm_low11
+                ),
+                core::mem::offset_of!(
+                    LessThanImmCoreRecord<BLOCK_FE_WIDTH, U16_BITS>,
+                    imm_sign
+                ),
+                usize::MAX,
+                core::mem::offset_of!(
+                    LessThanImmCoreRecord<BLOCK_FE_WIDTH, U16_BITS>,
+                    local_opcode
+                ),
+                BLOCK_FE_WIDTH as u8,
+            )),
+        );
+        registry.register_inline_g2(
+            [ShiftImmOpcode::SLLI, ShiftImmOpcode::SRLI].map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_ADDSUB_RECORD_SIZE,
+            assemble_shift_imm_inline::<F, RA>,
+            g2_alu_imm_geometry::<
+                F,
+                Rv64BaseAluImmU16AdapterExecutor,
+                Rv64BaseAluImmU16AdapterRecord,
+                ShiftLogicalImmCoreRecord<BLOCK_FE_WIDTH, U16_BITS>,
+            >(imm_u16_layout(
+                core::mem::offset_of!(
+                    ShiftLogicalImmCoreRecord<BLOCK_FE_WIDTH, U16_BITS>,
+                    b
+                ),
+                usize::MAX,
+                usize::MAX,
+                core::mem::offset_of!(
+                    ShiftLogicalImmCoreRecord<BLOCK_FE_WIDTH, U16_BITS>,
+                    shamt
+                ),
+                core::mem::offset_of!(
+                    ShiftLogicalImmCoreRecord<BLOCK_FE_WIDTH, U16_BITS>,
+                    local_opcode
+                ),
+                BLOCK_FE_WIDTH as u8,
+            )),
+        );
+        registry.register_inline_g2(
+            [ShiftImmOpcode::SRAI].map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_ADDSUB_RECORD_SIZE,
+            assemble_shift_imm_inline::<F, RA>,
+            g2_alu_imm_geometry::<
+                F,
+                Rv64BaseAluImmU16AdapterExecutor,
+                Rv64BaseAluImmU16AdapterRecord,
+                ShiftRightArithmeticImmCoreRecord<BLOCK_FE_WIDTH, U16_BITS>,
+            >(imm_u16_layout(
+                core::mem::offset_of!(
+                    ShiftRightArithmeticImmCoreRecord<BLOCK_FE_WIDTH, U16_BITS>,
+                    b
+                ),
+                usize::MAX,
+                usize::MAX,
+                core::mem::offset_of!(
+                    ShiftRightArithmeticImmCoreRecord<BLOCK_FE_WIDTH, U16_BITS>,
+                    shamt
+                ),
+                usize::MAX,
+                BLOCK_FE_WIDTH as u8,
+            )),
+        );
+        registry.register_inline_g2(
+            [BaseAluWImmOpcode::ADDIW].map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_ADDSUB_RECORD_SIZE,
+            assemble_addiw_inline::<F, RA>,
+            g2_alu_imm_geometry::<
+                F,
+                Rv64BaseAluWImmU16AdapterExecutor,
+                Rv64BaseAluWImmU16AdapterRecord,
+                AddICoreRecord<RV64_WORD_U16_LIMBS>,
+            >(w_imm_u16_layout(
+                core::mem::offset_of!(AddICoreRecord<RV64_WORD_U16_LIMBS>, rs1),
+                core::mem::offset_of!(AddICoreRecord<RV64_WORD_U16_LIMBS>, imm_low11),
+                core::mem::offset_of!(AddICoreRecord<RV64_WORD_U16_LIMBS>, imm_sign),
+                usize::MAX,
+                usize::MAX,
+            )),
+        );
+        registry.register_inline_g2(
+            [ShiftWImmOpcode::SLLIW, ShiftWImmOpcode::SRLIW].map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_ADDSUB_RECORD_SIZE,
+            assemble_shift_w_imm_inline::<F, RA>,
+            g2_alu_imm_geometry::<
+                F,
+                Rv64BaseAluWImmU16AdapterExecutor,
+                Rv64BaseAluWImmU16AdapterRecord,
+                ShiftLogicalImmCoreRecord<RV64_WORD_U16_LIMBS, U16_BITS>,
+            >(w_imm_u16_layout(
+                core::mem::offset_of!(
+                    ShiftLogicalImmCoreRecord<RV64_WORD_U16_LIMBS, U16_BITS>,
+                    b
+                ),
+                usize::MAX,
+                usize::MAX,
+                core::mem::offset_of!(
+                    ShiftLogicalImmCoreRecord<RV64_WORD_U16_LIMBS, U16_BITS>,
+                    shamt
+                ),
+                core::mem::offset_of!(
+                    ShiftLogicalImmCoreRecord<RV64_WORD_U16_LIMBS, U16_BITS>,
+                    local_opcode
+                ),
+            )),
+        );
+        registry.register_inline_g2(
+            [ShiftWImmOpcode::SRAIW].map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_ADDSUB_RECORD_SIZE,
+            assemble_shift_w_imm_inline::<F, RA>,
+            g2_alu_imm_geometry::<
+                F,
+                Rv64BaseAluWImmU16AdapterExecutor,
+                Rv64BaseAluWImmU16AdapterRecord,
+                ShiftRightArithmeticImmCoreRecord<RV64_WORD_U16_LIMBS, U16_BITS>,
+            >(w_imm_u16_layout(
+                core::mem::offset_of!(
+                    ShiftRightArithmeticImmCoreRecord<RV64_WORD_U16_LIMBS, U16_BITS>,
+                    b
+                ),
+                usize::MAX,
+                usize::MAX,
+                core::mem::offset_of!(
+                    ShiftRightArithmeticImmCoreRecord<RV64_WORD_U16_LIMBS, U16_BITS>,
+                    shamt
+                ),
+                usize::MAX,
+            )),
+        );
+        registry.register_inline_arena_native(
+            [BaseAluOpcode::XOR, BaseAluOpcode::OR, BaseAluOpcode::AND]
+                .map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_ADDSUB_RECORD_SIZE,
+            assemble_bitwise_inline::<F, RA>,
+            ArenaNativeGeometry {
+                adapter_size: size_of::<Rv64BaseAluAdapterRecord>(),
+                adapter_align: align_of::<Rv64BaseAluAdapterRecord>(),
+                core_size: size_of::<BitwiseLogicCoreRecord<RV64_REGISTER_NUM_LIMBS>>(),
+                core_align: align_of::<BitwiseLogicCoreRecord<RV64_REGISTER_NUM_LIMBS>>(),
+                core_off_matrix: <Rv64BaseAluRegAdapterExecutor as AdapterTraceExecutor<F>>::WIDTH
+                    * size_of::<F>(),
+                layout: ArenaNativeLayout::Alu3(Alu3ArenaFieldOffsets {
+                    from_pc: core::mem::offset_of!(Rv64BaseAluAdapterRecord, from_pc),
+                    from_timestamp: core::mem::offset_of!(Rv64BaseAluAdapterRecord, from_timestamp),
+                    rd_ptr: core::mem::offset_of!(Rv64BaseAluAdapterRecord, rd_ptr),
+                    rs1_ptr: core::mem::offset_of!(Rv64BaseAluAdapterRecord, rs1_ptr),
+                    rs2: core::mem::offset_of!(Rv64BaseAluAdapterRecord, rs2_ptr),
+                    rs2_as: usize::MAX,
+                    // The byte adapter has no imm-sign field.
+                    rs2_imm_sign: usize::MAX,
+                    reads_aux0_prev_ts: core::mem::offset_of!(Rv64BaseAluAdapterRecord, reads_aux)
+                        + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+                    reads_aux1_prev_ts: core::mem::offset_of!(Rv64BaseAluAdapterRecord, reads_aux)
+                        + size_of::<MemoryReadAuxRecord>()
+                        + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+                    write_prev_ts: core::mem::offset_of!(Rv64BaseAluAdapterRecord, writes_aux)
+                        + core::mem::offset_of!(
+                            MemoryWriteAuxRecord<u8, RV64_REGISTER_NUM_LIMBS>,
+                            prev_timestamp
+                        ),
+                    write_prev_data: core::mem::offset_of!(Rv64BaseAluAdapterRecord, writes_aux)
+                        + core::mem::offset_of!(
+                            MemoryWriteAuxRecord<u8, RV64_REGISTER_NUM_LIMBS>,
+                            prev_data
+                        ),
+                    core_b: core::mem::offset_of!(
+                        BitwiseLogicCoreRecord<RV64_REGISTER_NUM_LIMBS>,
+                        b
+                    ),
+                    core_c: core::mem::offset_of!(
+                        BitwiseLogicCoreRecord<RV64_REGISTER_NUM_LIMBS>,
+                        c
+                    ),
+                    core_local_opcode: core::mem::offset_of!(
+                        BitwiseLogicCoreRecord<RV64_REGISTER_NUM_LIMBS>,
+                        local_opcode
+                    ),
+                    w: None,
+                }),
+            },
+        );
+        registry.register_inline_arena_native(
+            LessThanOpcode::iter().map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_ADDSUB_RECORD_SIZE,
+            assemble_less_than_inline::<F, RA>,
+            ArenaNativeGeometry {
+                adapter_size: size_of::<Rv64BaseAluU16AdapterRecord>(),
+                adapter_align: align_of::<Rv64BaseAluU16AdapterRecord>(),
+                core_size: size_of::<LessThanCoreRecord<BLOCK_FE_WIDTH, U16_BITS>>(),
+                core_align: align_of::<LessThanCoreRecord<BLOCK_FE_WIDTH, U16_BITS>>(),
+                core_off_matrix: <Rv64BaseAluU16AdapterExecutor as AdapterTraceExecutor<F>>::WIDTH
+                    * size_of::<F>(),
+                layout: ArenaNativeLayout::Alu3(Alu3ArenaFieldOffsets {
+                    from_pc: core::mem::offset_of!(Rv64BaseAluU16AdapterRecord, from_pc),
+                    from_timestamp: core::mem::offset_of!(
+                        Rv64BaseAluU16AdapterRecord,
+                        from_timestamp
+                    ),
+                    rd_ptr: core::mem::offset_of!(Rv64BaseAluU16AdapterRecord, rd_ptr),
+                    rs1_ptr: core::mem::offset_of!(Rv64BaseAluU16AdapterRecord, rs1_ptr),
+                    rs2: core::mem::offset_of!(Rv64BaseAluU16AdapterRecord, rs2_ptr),
+                    rs2_as: usize::MAX,
+                    rs2_imm_sign: usize::MAX,
+                    reads_aux0_prev_ts: core::mem::offset_of!(
+                        Rv64BaseAluU16AdapterRecord,
+                        reads_aux
+                    ) + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+                    reads_aux1_prev_ts: core::mem::offset_of!(
+                        Rv64BaseAluU16AdapterRecord,
+                        reads_aux
+                    ) + size_of::<MemoryReadAuxRecord>()
+                        + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+                    write_prev_ts: core::mem::offset_of!(Rv64BaseAluU16AdapterRecord, writes_aux)
+                        + core::mem::offset_of!(
+                            MemoryWriteAuxRecord<u16, BLOCK_FE_WIDTH>,
+                            prev_timestamp
+                        ),
+                    write_prev_data: core::mem::offset_of!(Rv64BaseAluU16AdapterRecord, writes_aux)
+                        + core::mem::offset_of!(
+                            MemoryWriteAuxRecord<u16, BLOCK_FE_WIDTH>,
+                            prev_data
+                        ),
+                    core_b: core::mem::offset_of!(LessThanCoreRecord<BLOCK_FE_WIDTH, U16_BITS>, b),
+                    core_c: core::mem::offset_of!(LessThanCoreRecord<BLOCK_FE_WIDTH, U16_BITS>, c),
+                    core_local_opcode: core::mem::offset_of!(LessThanCoreRecord<BLOCK_FE_WIDTH, U16_BITS>, local_opcode),
+                    w: None,
+                }),
+            },
+        );
+        registry.register_inline_arena_native(
+            [ShiftOpcode::SLL, ShiftOpcode::SRL].map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_ADDSUB_RECORD_SIZE,
+            assemble_shift_inline::<F, RA>,
+            ArenaNativeGeometry {
+                adapter_size: size_of::<Rv64BaseAluU16AdapterRecord>(),
+                adapter_align: align_of::<Rv64BaseAluU16AdapterRecord>(),
+                core_size: size_of::<ShiftLogicalCoreRecord<BLOCK_FE_WIDTH, U16_BITS>>(),
+                core_align: align_of::<ShiftLogicalCoreRecord<BLOCK_FE_WIDTH, U16_BITS>>(),
+                core_off_matrix: <Rv64BaseAluU16AdapterExecutor as AdapterTraceExecutor<F>>::WIDTH
+                    * size_of::<F>(),
+                layout: ArenaNativeLayout::Alu3(Alu3ArenaFieldOffsets {
+                    from_pc: core::mem::offset_of!(Rv64BaseAluU16AdapterRecord, from_pc),
+                    from_timestamp: core::mem::offset_of!(
+                        Rv64BaseAluU16AdapterRecord,
+                        from_timestamp
+                    ),
+                    rd_ptr: core::mem::offset_of!(Rv64BaseAluU16AdapterRecord, rd_ptr),
+                    rs1_ptr: core::mem::offset_of!(Rv64BaseAluU16AdapterRecord, rs1_ptr),
+                    rs2: core::mem::offset_of!(Rv64BaseAluU16AdapterRecord, rs2_ptr),
+                    rs2_as: usize::MAX,
+                    rs2_imm_sign: usize::MAX,
+                    reads_aux0_prev_ts: core::mem::offset_of!(
+                        Rv64BaseAluU16AdapterRecord,
+                        reads_aux
+                    ) + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+                    reads_aux1_prev_ts: core::mem::offset_of!(
+                        Rv64BaseAluU16AdapterRecord,
+                        reads_aux
+                    ) + size_of::<MemoryReadAuxRecord>()
+                        + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+                    write_prev_ts: core::mem::offset_of!(Rv64BaseAluU16AdapterRecord, writes_aux)
+                        + core::mem::offset_of!(
+                            MemoryWriteAuxRecord<u16, BLOCK_FE_WIDTH>,
+                            prev_timestamp
+                        ),
+                    write_prev_data: core::mem::offset_of!(Rv64BaseAluU16AdapterRecord, writes_aux)
+                        + core::mem::offset_of!(
+                            MemoryWriteAuxRecord<u16, BLOCK_FE_WIDTH>,
+                            prev_data
+                        ),
+                    core_b: core::mem::offset_of!(ShiftLogicalCoreRecord<BLOCK_FE_WIDTH, U16_BITS>, b),
+                    core_c: core::mem::offset_of!(ShiftLogicalCoreRecord<BLOCK_FE_WIDTH, U16_BITS>, c),
+                    core_local_opcode: core::mem::offset_of!(ShiftLogicalCoreRecord<BLOCK_FE_WIDTH, U16_BITS>, local_opcode),
+                    w: None,
+                }),
+            },
+        );
+        registry.register_inline_arena_native(
+            [ShiftOpcode::SRA].map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_ADDSUB_RECORD_SIZE,
+            assemble_shift_inline::<F, RA>,
+            // SRA's core record has no local_opcode field: the sentinel
+            // tells the emitter to skip that store.
+            ArenaNativeGeometry {
+                adapter_size: size_of::<Rv64BaseAluU16AdapterRecord>(),
+                adapter_align: align_of::<Rv64BaseAluU16AdapterRecord>(),
+                core_size: size_of::<ShiftRightArithmeticCoreRecord<BLOCK_FE_WIDTH, U16_BITS>>(),
+                core_align: align_of::<ShiftRightArithmeticCoreRecord<BLOCK_FE_WIDTH, U16_BITS>>(),
+                core_off_matrix: <Rv64BaseAluU16AdapterExecutor as AdapterTraceExecutor<F>>::WIDTH
+                    * size_of::<F>(),
+                layout: ArenaNativeLayout::Alu3(Alu3ArenaFieldOffsets {
+                    from_pc: core::mem::offset_of!(Rv64BaseAluU16AdapterRecord, from_pc),
+                    from_timestamp: core::mem::offset_of!(
+                        Rv64BaseAluU16AdapterRecord,
+                        from_timestamp
+                    ),
+                    rd_ptr: core::mem::offset_of!(Rv64BaseAluU16AdapterRecord, rd_ptr),
+                    rs1_ptr: core::mem::offset_of!(Rv64BaseAluU16AdapterRecord, rs1_ptr),
+                    rs2: core::mem::offset_of!(Rv64BaseAluU16AdapterRecord, rs2_ptr),
+                    rs2_as: usize::MAX,
+                    rs2_imm_sign: usize::MAX,
+                    reads_aux0_prev_ts: core::mem::offset_of!(
+                        Rv64BaseAluU16AdapterRecord,
+                        reads_aux
+                    ) + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+                    reads_aux1_prev_ts: core::mem::offset_of!(
+                        Rv64BaseAluU16AdapterRecord,
+                        reads_aux
+                    ) + size_of::<MemoryReadAuxRecord>()
+                        + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+                    write_prev_ts: core::mem::offset_of!(Rv64BaseAluU16AdapterRecord, writes_aux)
+                        + core::mem::offset_of!(
+                            MemoryWriteAuxRecord<u16, BLOCK_FE_WIDTH>,
+                            prev_timestamp
+                        ),
+                    write_prev_data: core::mem::offset_of!(Rv64BaseAluU16AdapterRecord, writes_aux)
+                        + core::mem::offset_of!(
+                            MemoryWriteAuxRecord<u16, BLOCK_FE_WIDTH>,
+                            prev_data
+                        ),
+                    core_b: core::mem::offset_of!(ShiftRightArithmeticCoreRecord<BLOCK_FE_WIDTH, U16_BITS>, b),
+                    core_c: core::mem::offset_of!(ShiftRightArithmeticCoreRecord<BLOCK_FE_WIDTH, U16_BITS>, c),
+                    core_local_opcode: usize::MAX,
+                    w: None,
+                }),
+            },
+        );
+        registry.register_inline_arena_native(
+            BranchEqualOpcode::iter().map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_BRANCH2_RECORD_SIZE,
+            assemble_branch_eq_inline::<F, RA>,
+            ArenaNativeGeometry {
+                adapter_size: size_of::<Rv64BranchAdapterRecord>(),
+                adapter_align: align_of::<Rv64BranchAdapterRecord>(),
+                core_size: size_of::<BranchEqualCoreRecord<BLOCK_FE_WIDTH>>(),
+                core_align: align_of::<BranchEqualCoreRecord<BLOCK_FE_WIDTH>>(),
+                core_off_matrix: <Rv64BranchAdapterExecutor as AdapterTraceExecutor<F>>::WIDTH
+                    * size_of::<F>(),
+                layout: ArenaNativeLayout::Branch2(Branch2ArenaFieldOffsets {
+                    from_pc: core::mem::offset_of!(Rv64BranchAdapterRecord, from_pc),
+                    from_timestamp: core::mem::offset_of!(Rv64BranchAdapterRecord, from_timestamp),
+                    rs1_ptr: core::mem::offset_of!(Rv64BranchAdapterRecord, rs1_ptr),
+                    rs2_ptr: core::mem::offset_of!(Rv64BranchAdapterRecord, rs2_ptr),
+                    reads_aux0_prev_ts: core::mem::offset_of!(Rv64BranchAdapterRecord, reads_aux)
+                        + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+                    reads_aux1_prev_ts: core::mem::offset_of!(Rv64BranchAdapterRecord, reads_aux)
+                        + size_of::<MemoryReadAuxRecord>()
+                        + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+                    core_a: core::mem::offset_of!(BranchEqualCoreRecord<BLOCK_FE_WIDTH>, a),
+                    core_b: core::mem::offset_of!(BranchEqualCoreRecord<BLOCK_FE_WIDTH>, b),
+                    core_imm: core::mem::offset_of!(BranchEqualCoreRecord<BLOCK_FE_WIDTH>, imm),
+                    core_local_opcode: core::mem::offset_of!(
+                        BranchEqualCoreRecord<BLOCK_FE_WIDTH>,
+                        local_opcode
+                    ),
+                }),
+            },
+        );
+        registry.register_inline_arena_native(
+            BranchLessThanOpcode::iter().map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_BRANCH2_RECORD_SIZE,
+            assemble_branch_lt_inline::<F, RA>,
+            ArenaNativeGeometry {
+                adapter_size: size_of::<Rv64BranchAdapterRecord>(),
+                adapter_align: align_of::<Rv64BranchAdapterRecord>(),
+                core_size: size_of::<BranchLessThanCoreRecord<BLOCK_FE_WIDTH, U16_BITS>>(),
+                core_align: align_of::<BranchLessThanCoreRecord<BLOCK_FE_WIDTH, U16_BITS>>(),
+                core_off_matrix: <Rv64BranchAdapterExecutor as AdapterTraceExecutor<F>>::WIDTH
+                    * size_of::<F>(),
+                layout: ArenaNativeLayout::Branch2(Branch2ArenaFieldOffsets {
+                    from_pc: core::mem::offset_of!(Rv64BranchAdapterRecord, from_pc),
+                    from_timestamp: core::mem::offset_of!(Rv64BranchAdapterRecord, from_timestamp),
+                    rs1_ptr: core::mem::offset_of!(Rv64BranchAdapterRecord, rs1_ptr),
+                    rs2_ptr: core::mem::offset_of!(Rv64BranchAdapterRecord, rs2_ptr),
+                    reads_aux0_prev_ts: core::mem::offset_of!(Rv64BranchAdapterRecord, reads_aux)
+                        + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+                    reads_aux1_prev_ts: core::mem::offset_of!(Rv64BranchAdapterRecord, reads_aux)
+                        + size_of::<MemoryReadAuxRecord>()
+                        + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+                    core_a: core::mem::offset_of!(BranchLessThanCoreRecord<BLOCK_FE_WIDTH, U16_BITS>, a),
+                    core_b: core::mem::offset_of!(BranchLessThanCoreRecord<BLOCK_FE_WIDTH, U16_BITS>, b),
+                    core_imm: core::mem::offset_of!(BranchLessThanCoreRecord<BLOCK_FE_WIDTH, U16_BITS>, imm),
+                    core_local_opcode: core::mem::offset_of!(BranchLessThanCoreRecord<BLOCK_FE_WIDTH, U16_BITS>, local_opcode),
+                }),
+            },
+        );
+        registry.register_inline_arena_native(
+            Rv64JalLuiOpcode::iter().map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_WR1_RECORD_SIZE,
+            assemble_jal_lui_inline::<F, RA>,
+            ArenaNativeGeometry {
+                adapter_size: size_of::<Rv64RdWriteAdapterRecord>(),
+                adapter_align: align_of::<Rv64RdWriteAdapterRecord>(),
+                core_size: size_of::<Rv64JalLuiCoreRecord>(),
+                core_align: align_of::<Rv64JalLuiCoreRecord>(),
+                core_off_matrix: <Rv64CondRdWriteAdapterExecutor as AdapterTraceExecutor<F>>::WIDTH
+                    * size_of::<F>(),
+                layout: ArenaNativeLayout::Wr1(Wr1ArenaFieldOffsets {
+                    from_pc: core::mem::offset_of!(Rv64RdWriteAdapterRecord, from_pc),
+                    from_timestamp: core::mem::offset_of!(Rv64RdWriteAdapterRecord, from_timestamp),
+                    rd_ptr: core::mem::offset_of!(Rv64RdWriteAdapterRecord, rd_ptr),
+                    rd_prev_ts: core::mem::offset_of!(Rv64RdWriteAdapterRecord, rd_aux_record)
+                        + core::mem::offset_of!(
+                            MemoryWriteAuxRecord<u16, BLOCK_FE_WIDTH>,
+                            prev_timestamp
+                        ),
+                    rd_prev_data: core::mem::offset_of!(Rv64RdWriteAdapterRecord, rd_aux_record)
+                        + core::mem::offset_of!(
+                            MemoryWriteAuxRecord<u16, BLOCK_FE_WIDTH>,
+                            prev_data
+                        ),
+                    core_imm: core::mem::offset_of!(Rv64JalLuiCoreRecord, imm),
+                    core_rd_data: core::mem::offset_of!(Rv64JalLuiCoreRecord, rd_data),
+                    core_is_jal: core::mem::offset_of!(Rv64JalLuiCoreRecord, is_jal),
+                    core_from_pc: usize::MAX,
+                }),
+            },
+        );
+        registry.register_inline_arena_native(
+            Rv64AuipcOpcode::iter().map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_WR1_RECORD_SIZE,
+            assemble_auipc_inline::<F, RA>,
+            ArenaNativeGeometry {
+                adapter_size: size_of::<Rv64RdWriteAdapterRecord>(),
+                adapter_align: align_of::<Rv64RdWriteAdapterRecord>(),
+                core_size: size_of::<Rv64AuipcCoreRecord>(),
+                core_align: align_of::<Rv64AuipcCoreRecord>(),
+                core_off_matrix: <Rv64RdWriteAdapterExecutor as AdapterTraceExecutor<F>>::WIDTH
+                    * size_of::<F>(),
+                layout: ArenaNativeLayout::Wr1(Wr1ArenaFieldOffsets {
+                    from_pc: core::mem::offset_of!(Rv64RdWriteAdapterRecord, from_pc),
+                    from_timestamp: core::mem::offset_of!(Rv64RdWriteAdapterRecord, from_timestamp),
+                    rd_ptr: core::mem::offset_of!(Rv64RdWriteAdapterRecord, rd_ptr),
+                    rd_prev_ts: core::mem::offset_of!(Rv64RdWriteAdapterRecord, rd_aux_record)
+                        + core::mem::offset_of!(
+                            MemoryWriteAuxRecord<u16, BLOCK_FE_WIDTH>,
+                            prev_timestamp
+                        ),
+                    rd_prev_data: core::mem::offset_of!(Rv64RdWriteAdapterRecord, rd_aux_record)
+                        + core::mem::offset_of!(
+                            MemoryWriteAuxRecord<u16, BLOCK_FE_WIDTH>,
+                            prev_data
+                        ),
+                    core_imm: core::mem::offset_of!(Rv64AuipcCoreRecord, imm),
+                    core_rd_data: usize::MAX,
+                    core_is_jal: usize::MAX,
+                    core_from_pc: core::mem::offset_of!(Rv64AuipcCoreRecord, from_pc),
+                }),
+            },
+        );
+        registry.register_inline_arena_native(
+            Rv64JalrOpcode::iter().map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_RW1_RECORD_SIZE,
+            assemble_jalr_inline::<F, RA>,
+            ArenaNativeGeometry {
+                adapter_size: size_of::<Rv64JalrAdapterRecord>(),
+                adapter_align: align_of::<Rv64JalrAdapterRecord>(),
+                core_size: size_of::<Rv64JalrCoreRecord>(),
+                core_align: align_of::<Rv64JalrCoreRecord>(),
+                core_off_matrix: <Rv64JalrAdapterExecutor as AdapterTraceExecutor<F>>::WIDTH
+                    * size_of::<F>(),
+                layout: ArenaNativeLayout::Rw1(Rw1ArenaFieldOffsets {
+                    from_pc: core::mem::offset_of!(Rv64JalrAdapterRecord, from_pc),
+                    from_timestamp: core::mem::offset_of!(Rv64JalrAdapterRecord, from_timestamp),
+                    rs1_ptr: core::mem::offset_of!(Rv64JalrAdapterRecord, rs1_ptr),
+                    rd_ptr: core::mem::offset_of!(Rv64JalrAdapterRecord, rd_ptr),
+                    read_prev_ts: core::mem::offset_of!(Rv64JalrAdapterRecord, reads_aux)
+                        + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+                    write_prev_ts: core::mem::offset_of!(Rv64JalrAdapterRecord, writes_aux)
+                        + core::mem::offset_of!(
+                            MemoryWriteAuxRecord<u16, BLOCK_FE_WIDTH>,
+                            prev_timestamp
+                        ),
+                    write_prev_data: core::mem::offset_of!(Rv64JalrAdapterRecord, writes_aux)
+                        + core::mem::offset_of!(
+                            MemoryWriteAuxRecord<u16, BLOCK_FE_WIDTH>,
+                            prev_data
+                        ),
+                    core_imm: core::mem::offset_of!(Rv64JalrCoreRecord, imm),
+                    core_from_pc: core::mem::offset_of!(Rv64JalrCoreRecord, from_pc),
+                    core_rs1_val: core::mem::offset_of!(Rv64JalrCoreRecord, rs1_val),
+                    core_imm_sign: core::mem::offset_of!(Rv64JalrCoreRecord, imm_sign),
+                }),
+            },
+        );
+        registry.register_inline_arena_native(
+            [Rv64LoadStoreOpcode::LOADBU, Rv64LoadStoreOpcode::LOADB]
+                .map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_ADDSUB_RECORD_SIZE,
+            assemble_load_byte_inline::<F, RA>,
+            ArenaNativeGeometry {
+                adapter_size: size_of::<Rv64LoadByteAdapterRecord>(),
+                adapter_align: align_of::<Rv64LoadByteAdapterRecord>(),
+                core_size: size_of::<LoadByteRecord>(),
+                core_align: align_of::<LoadByteRecord>(),
+                core_off_matrix: <Rv64LoadByteAdapterExecutor as AdapterTraceExecutor<F>>::WIDTH
+                    * size_of::<F>(),
+                layout: ArenaNativeLayout::LoadStore(LoadStoreArenaFieldOffsets {
+                    from_pc: core::mem::offset_of!(Rv64LoadByteAdapterRecord, from_pc),
+                    from_timestamp: core::mem::offset_of!(
+                        Rv64LoadByteAdapterRecord,
+                        from_timestamp
+                    ),
+                    rs1_ptr: core::mem::offset_of!(Rv64LoadByteAdapterRecord, rs1_ptr),
+                    rs1_val: core::mem::offset_of!(Rv64LoadByteAdapterRecord, rs1_val),
+                    rs1_aux_prev_ts: core::mem::offset_of!(
+                        Rv64LoadByteAdapterRecord,
+                        rs1_aux_record
+                    ) + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+                    rd_rs2_ptr: core::mem::offset_of!(Rv64LoadByteAdapterRecord, rd_ptr),
+                    read_data_aux_prev_ts: core::mem::offset_of!(
+                        Rv64LoadByteAdapterRecord,
+                        read_data_aux
+                    ) + core::mem::offset_of!(
+                        MemoryReadAuxRecord,
+                        prev_timestamp
+                    ),
+                    read_data_aux_prev_ts2: usize::MAX,
+                    imm: core::mem::offset_of!(Rv64LoadByteAdapterRecord, imm),
+                    imm_sign: core::mem::offset_of!(Rv64LoadByteAdapterRecord, imm_sign),
+                    mem_as: usize::MAX,
+                    write_prev_ts: core::mem::offset_of!(
+                        Rv64LoadByteAdapterRecord,
+                        write_prev_timestamp
+                    ),
+                    write_prev_ts2: usize::MAX,
+                    write_prev_data: core::mem::offset_of!(
+                        Rv64LoadByteAdapterRecord,
+                        write_prev_data
+                    ),
+                    core_local_opcode: usize::MAX,
+                    core_is_byte: usize::MAX,
+                    core_is_word: usize::MAX,
+                    core_shift_amount: usize::MAX,
+                    core_read_data: core::mem::offset_of!(LoadByteRecord, read_data),
+                    core_read_data2: usize::MAX,
+                    core_prev_data: usize::MAX,
+                    core_prev_data2: usize::MAX,
+                }),
+            },
+        );
+        registry.register_inline_arena_native(
+            [Rv64LoadStoreOpcode::STOREB].map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_ADDSUB_RECORD_SIZE,
+            assemble_store_byte_inline::<F, RA>,
+            ArenaNativeGeometry {
+                adapter_size: size_of::<Rv64StoreByteAdapterRecord>(),
+                adapter_align: align_of::<Rv64StoreByteAdapterRecord>(),
+                core_size: size_of::<StoreByteRecord>(),
+                core_align: align_of::<StoreByteRecord>(),
+                core_off_matrix: <Rv64StoreByteAdapterExecutor as AdapterTraceExecutor<F>>::WIDTH
+                    * size_of::<F>(),
+                layout: ArenaNativeLayout::LoadStore(LoadStoreArenaFieldOffsets {
+                    from_pc: core::mem::offset_of!(Rv64StoreByteAdapterRecord, from_pc),
+                    from_timestamp: core::mem::offset_of!(
+                        Rv64StoreByteAdapterRecord,
+                        from_timestamp
+                    ),
+                    rs1_ptr: core::mem::offset_of!(Rv64StoreByteAdapterRecord, rs1_ptr),
+                    rs1_val: core::mem::offset_of!(Rv64StoreByteAdapterRecord, rs1_val),
+                    rs1_aux_prev_ts: core::mem::offset_of!(
+                        Rv64StoreByteAdapterRecord,
+                        rs1_aux_record
+                    ) + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+                    rd_rs2_ptr: core::mem::offset_of!(Rv64StoreByteAdapterRecord, rs2_ptr),
+                    read_data_aux_prev_ts: core::mem::offset_of!(
+                        Rv64StoreByteAdapterRecord,
+                        read_data_aux
+                    ) + core::mem::offset_of!(
+                        MemoryReadAuxRecord,
+                        prev_timestamp
+                    ),
+                    read_data_aux_prev_ts2: usize::MAX,
+                    imm: core::mem::offset_of!(Rv64StoreByteAdapterRecord, imm),
+                    imm_sign: core::mem::offset_of!(Rv64StoreByteAdapterRecord, imm_sign),
+                    mem_as: core::mem::offset_of!(Rv64StoreByteAdapterRecord, mem_as),
+                    write_prev_ts: core::mem::offset_of!(
+                        Rv64StoreByteAdapterRecord,
+                        write_prev_timestamp
+                    ),
+                    write_prev_ts2: usize::MAX,
+                    write_prev_data: usize::MAX,
+                    core_local_opcode: usize::MAX,
+                    core_is_byte: usize::MAX,
+                    core_is_word: usize::MAX,
+                    core_shift_amount: usize::MAX,
+                    core_read_data: core::mem::offset_of!(StoreByteRecord, read_data),
+                    core_read_data2: usize::MAX,
+                    core_prev_data: core::mem::offset_of!(StoreByteRecord, prev_data),
+                    core_prev_data2: usize::MAX,
+                }),
+            },
+        );
+        registry.register_inline_arena_native(
+            [Rv64LoadStoreOpcode::LOADHU, Rv64LoadStoreOpcode::LOADH]
+                .map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_ADDSUB_RECORD_SIZE,
+            assemble_load_multi_inline::<F, RA, HALFWORD_ACCESS_WIDTH>,
+            load_multi_arena_geometry::<F, HALFWORD_ACCESS_WIDTH>(),
+        );
+        registry.register_inline_crossing(
+            [Rv64LoadStoreOpcode::LOADHU, Rv64LoadStoreOpcode::LOADH]
+                .map(|opcode| opcode.global_opcode()),
+            assemble_load_multi_crossing::<F, RA, HALFWORD_ACCESS_WIDTH>,
+        );
+        registry.register_inline_arena_native(
+            [Rv64LoadStoreOpcode::LOADWU, Rv64LoadStoreOpcode::LOADW]
+                .map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_ADDSUB_RECORD_SIZE,
+            assemble_load_multi_inline::<F, RA, WORD_ACCESS_WIDTH>,
+            load_multi_arena_geometry::<F, WORD_ACCESS_WIDTH>(),
+        );
+        registry.register_inline_crossing(
+            [Rv64LoadStoreOpcode::LOADWU, Rv64LoadStoreOpcode::LOADW]
+                .map(|opcode| opcode.global_opcode()),
+            assemble_load_multi_crossing::<F, RA, WORD_ACCESS_WIDTH>,
+        );
+        registry.register_inline_arena_native(
+            [Rv64LoadStoreOpcode::LOADD].map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_ADDSUB_RECORD_SIZE,
+            assemble_load_multi_inline::<F, RA, DOUBLEWORD_ACCESS_WIDTH>,
+            load_multi_arena_geometry::<F, DOUBLEWORD_ACCESS_WIDTH>(),
+        );
+        registry.register_inline_crossing(
+            [Rv64LoadStoreOpcode::LOADD].map(|opcode| opcode.global_opcode()),
+            assemble_load_multi_crossing::<F, RA, DOUBLEWORD_ACCESS_WIDTH>,
+        );
+        registry.register_inline_arena_native(
+            [Rv64LoadStoreOpcode::STOREH].map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_ADDSUB_RECORD_SIZE,
+            assemble_store_multi_inline::<F, RA, HALFWORD_ACCESS_WIDTH>,
+            store_multi_arena_geometry::<F, HALFWORD_ACCESS_WIDTH>(),
+        );
+        registry.register_inline_crossing(
+            [Rv64LoadStoreOpcode::STOREH].map(|opcode| opcode.global_opcode()),
+            assemble_store_multi_crossing::<F, RA, HALFWORD_ACCESS_WIDTH>,
+        );
+        registry.register_inline_arena_native(
+            [Rv64LoadStoreOpcode::STOREW].map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_ADDSUB_RECORD_SIZE,
+            assemble_store_multi_inline::<F, RA, WORD_ACCESS_WIDTH>,
+            store_multi_arena_geometry::<F, WORD_ACCESS_WIDTH>(),
+        );
+        registry.register_inline_crossing(
+            [Rv64LoadStoreOpcode::STOREW].map(|opcode| opcode.global_opcode()),
+            assemble_store_multi_crossing::<F, RA, WORD_ACCESS_WIDTH>,
+        );
+        registry.register_inline_arena_native(
+            [Rv64LoadStoreOpcode::STORED].map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_ADDSUB_RECORD_SIZE,
+            assemble_store_multi_inline::<F, RA, DOUBLEWORD_ACCESS_WIDTH>,
+            store_multi_arena_geometry::<F, DOUBLEWORD_ACCESS_WIDTH>(),
+        );
+        registry.register_inline_crossing(
+            [Rv64LoadStoreOpcode::STORED].map(|opcode| opcode.global_opcode()),
+            assemble_store_multi_crossing::<F, RA, DOUBLEWORD_ACCESS_WIDTH>,
+        );
+        registry.register_delta_pattern(
+            [BaseAluOpcode::ADD, BaseAluOpcode::SUB].map(|opcode| opcode.global_opcode()),
+            DeltaAccessPattern::Alu3Reg,
+        );
+        registry.register_delta_pattern(
+            [BaseAluImmOpcode::ADDI].map(|opcode| opcode.global_opcode()),
+            DeltaAccessPattern::AddI,
+        );
+        registry.register_delta_pattern(
+            [
+                BaseAluImmOpcode::XORI,
+                BaseAluImmOpcode::ORI,
+                BaseAluImmOpcode::ANDI,
+            ]
+            .map(|opcode| opcode.global_opcode())
+            .into_iter()
+            .chain(LessThanImmOpcode::iter().map(|opcode| opcode.global_opcode()))
+            .chain(ShiftImmOpcode::iter().map(|opcode| opcode.global_opcode()))
+            .chain(BaseAluWImmOpcode::iter().map(|opcode| opcode.global_opcode()))
+            .chain(ShiftWImmOpcode::iter().map(|opcode| opcode.global_opcode())),
+            DeltaAccessPattern::AddI,
+        );
+        registry.register_delta_pattern(
+            [BaseAluOpcode::XOR, BaseAluOpcode::OR, BaseAluOpcode::AND]
+                .map(|opcode| opcode.global_opcode())
+                .into_iter()
+                .chain(LessThanOpcode::iter().map(|opcode| opcode.global_opcode()))
+                .chain(ShiftOpcode::iter().map(|opcode| opcode.global_opcode())),
+            DeltaAccessPattern::Alu3,
+        );
+        registry.register_delta_pattern(
+            BranchEqualOpcode::iter()
+                .map(|opcode| opcode.global_opcode())
+                .chain(BranchLessThanOpcode::iter().map(|opcode| opcode.global_opcode())),
+            DeltaAccessPattern::Branch2,
+        );
+        registry.register_delta_pattern(
+            Rv64JalLuiOpcode::iter().map(|opcode| opcode.global_opcode()),
+            DeltaAccessPattern::Wr1,
+        );
+        registry.register_delta_pattern(
+            Rv64AuipcOpcode::iter().map(|opcode| opcode.global_opcode()),
+            DeltaAccessPattern::Wr1Always,
+        );
+        registry.register_delta_pattern(
+            Rv64JalrOpcode::iter().map(|opcode| opcode.global_opcode()),
+            DeltaAccessPattern::Rw1,
+        );
+        registry.register_delta_pattern(
+            Rv64LoadStoreOpcode::iter()
+                .take(Rv64LoadStoreOpcode::STORED as usize)
+                .chain(Rv64LoadStoreOpcode::iter().skip(Rv64LoadStoreOpcode::STOREB as usize + 1))
+                .map(|opcode| opcode.global_opcode()),
+            DeltaAccessPattern::Load,
+        );
+        registry.register_delta_pattern(
+            [
+                Rv64LoadStoreOpcode::STORED,
+                Rv64LoadStoreOpcode::STOREW,
+                Rv64LoadStoreOpcode::STOREH,
+                Rv64LoadStoreOpcode::STOREB,
+            ]
+            .map(|opcode| opcode.global_opcode()),
+            DeltaAccessPattern::Store,
+        );
+        registry.register_delta_memory_width(
+            [Rv64LoadStoreOpcode::STORED].map(|opcode| opcode.global_opcode()),
+            8,
+        );
+        registry.register_delta_memory_width(
+            [Rv64LoadStoreOpcode::STOREW].map(|opcode| opcode.global_opcode()),
+            4,
+        );
+        registry.register_delta_memory_width(
+            [Rv64LoadStoreOpcode::STOREH].map(|opcode| opcode.global_opcode()),
+            2,
+        );
+        registry.register_delta_memory_width(
+            [Rv64LoadStoreOpcode::STOREB].map(|opcode| opcode.global_opcode()),
+            1,
+        );
+        registry.register_delta_memory_width(
+            [Rv64LoadStoreOpcode::LOADD].map(|opcode| opcode.global_opcode()),
+            8,
+        );
+        registry.register_delta_memory_width(
+            [Rv64LoadStoreOpcode::LOADWU, Rv64LoadStoreOpcode::LOADW]
+                .map(|opcode| opcode.global_opcode()),
+            4,
+        );
+        registry.register_delta_memory_width(
+            [Rv64LoadStoreOpcode::LOADHU, Rv64LoadStoreOpcode::LOADH]
+                .map(|opcode| opcode.global_opcode()),
+            2,
+        );
+        registry.register_delta_memory_width(
+            [Rv64LoadStoreOpcode::LOADBU, Rv64LoadStoreOpcode::LOADB]
+                .map(|opcode| opcode.global_opcode()),
+            1,
+        );
+        registry.register(
+            [BaseAluOpcode::XOR, BaseAluOpcode::OR, BaseAluOpcode::AND]
+                .map(|opcode| opcode.global_opcode()),
+            assemble_bitwise::<F, RA>,
+        );
+        registry.register(
+            BaseAluWOpcode::iter().map(|opcode| opcode.global_opcode()),
+            assemble_add_sub_w::<F, RA>,
+        );
+        registry.register_inline_arena_native(
+            BaseAluWOpcode::iter().map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_ADDSUB_RECORD_SIZE,
+            assemble_add_sub_w_inline::<F, RA>,
+            base_alu_w_arena_geometry::<F>(
+                size_of::<AddSubCoreRecord<RV64_WORD_U16_LIMBS>>(),
+                align_of::<AddSubCoreRecord<RV64_WORD_U16_LIMBS>>(),
+                core::mem::offset_of!(AddSubCoreRecord<RV64_WORD_U16_LIMBS>, b),
+                core::mem::offset_of!(AddSubCoreRecord<RV64_WORD_U16_LIMBS>, c),
+                core::mem::offset_of!(AddSubCoreRecord<RV64_WORD_U16_LIMBS>, local_opcode),
+            ),
+        );
+        registry.register_delta_pattern(
+            BaseAluWOpcode::iter().map(|opcode| opcode.global_opcode()),
+            DeltaAccessPattern::Alu3,
+        );
+        registry.register(
+            LessThanOpcode::iter().map(|opcode| opcode.global_opcode()),
+            assemble_less_than::<F, RA>,
+        );
+        registry.register(
+            ShiftOpcode::iter().map(|opcode| opcode.global_opcode()),
+            assemble_shift::<F, RA>,
+        );
+        registry.register(
+            ShiftWOpcode::iter().map(|opcode| opcode.global_opcode()),
+            assemble_shift_w::<F, RA>,
+        );
+        registry.register_inline_arena_native(
+            [ShiftWOpcode::SLLW, ShiftWOpcode::SRLW].map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_ADDSUB_RECORD_SIZE,
+            assemble_shift_w_inline::<F, RA>,
+            base_alu_w_arena_geometry::<F>(
+                size_of::<ShiftLogicalCoreRecord<RV64_WORD_U16_LIMBS, U16_BITS>>(),
+                align_of::<ShiftLogicalCoreRecord<RV64_WORD_U16_LIMBS, U16_BITS>>(),
+                core::mem::offset_of!(
+                    ShiftLogicalCoreRecord<RV64_WORD_U16_LIMBS, U16_BITS>,
+                    b
+                ),
+                core::mem::offset_of!(
+                    ShiftLogicalCoreRecord<RV64_WORD_U16_LIMBS, U16_BITS>,
+                    c
+                ),
+                core::mem::offset_of!(
+                    ShiftLogicalCoreRecord<RV64_WORD_U16_LIMBS, U16_BITS>,
+                    local_opcode
+                ),
+            ),
+        );
+        registry.register_inline_arena_native(
+            [ShiftWOpcode::SRAW].map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_ADDSUB_RECORD_SIZE,
+            assemble_shift_w_inline::<F, RA>,
+            base_alu_w_arena_geometry::<F>(
+                size_of::<ShiftRightArithmeticCoreRecord<RV64_WORD_U16_LIMBS, U16_BITS>>(),
+                align_of::<ShiftRightArithmeticCoreRecord<RV64_WORD_U16_LIMBS, U16_BITS>>(),
+                core::mem::offset_of!(
+                    ShiftRightArithmeticCoreRecord<RV64_WORD_U16_LIMBS, U16_BITS>,
+                    b
+                ),
+                core::mem::offset_of!(
+                    ShiftRightArithmeticCoreRecord<RV64_WORD_U16_LIMBS, U16_BITS>,
+                    c
+                ),
+                usize::MAX,
+            ),
+        );
+        registry.register_delta_pattern(
+            ShiftWOpcode::iter().map(|opcode| opcode.global_opcode()),
+            DeltaAccessPattern::Alu3,
+        );
+        registry.register(
+            BranchEqualOpcode::iter().map(|opcode| opcode.global_opcode()),
+            assemble_branch_eq::<F, RA>,
+        );
+        registry.register(
+            BranchLessThanOpcode::iter().map(|opcode| opcode.global_opcode()),
+            assemble_branch_lt::<F, RA>,
+        );
+        registry.register(
+            Rv64JalLuiOpcode::iter().map(|opcode| opcode.global_opcode()),
+            assemble_jal_lui::<F, RA>,
+        );
+        registry.register(
+            Rv64JalrOpcode::iter().map(|opcode| opcode.global_opcode()),
+            assemble_jalr::<F, RA>,
+        );
+        registry.register(
+            Rv64AuipcOpcode::iter().map(|opcode| opcode.global_opcode()),
+            assemble_auipc::<F, RA>,
+        );
+        registry.register_if(
+            [Rv64LoadStoreOpcode::LOADBU, Rv64LoadStoreOpcode::LOADB]
+                .map(|opcode| opcode.global_opcode()),
+            is_rv64_memory_instruction,
+            assemble_load_byte::<F, RA>,
+        );
+        registry.register_if(
+            [Rv64LoadStoreOpcode::LOADHU, Rv64LoadStoreOpcode::LOADH]
+                .map(|opcode| opcode.global_opcode()),
+            is_rv64_memory_instruction,
+            assemble_load_multi::<F, RA, HALFWORD_ACCESS_WIDTH>,
+        );
+        registry.register_if(
+            [Rv64LoadStoreOpcode::LOADWU, Rv64LoadStoreOpcode::LOADW]
+                .map(|opcode| opcode.global_opcode()),
+            is_rv64_memory_instruction,
+            assemble_load_multi::<F, RA, WORD_ACCESS_WIDTH>,
+        );
+        registry.register_if(
+            [Rv64LoadStoreOpcode::LOADD].map(|opcode| opcode.global_opcode()),
+            is_rv64_memory_instruction,
+            assemble_load_multi::<F, RA, DOUBLEWORD_ACCESS_WIDTH>,
+        );
+        registry.register_if(
+            [Rv64LoadStoreOpcode::STOREB].map(|opcode| opcode.global_opcode()),
+            is_rv64_store_instruction,
+            assemble_store_byte::<F, RA>,
+        );
+        registry.register_if(
+            [Rv64LoadStoreOpcode::STOREH].map(|opcode| opcode.global_opcode()),
+            is_rv64_store_instruction,
+            assemble_store_multi::<F, RA, HALFWORD_ACCESS_WIDTH>,
+        );
+        registry.register_if(
+            [Rv64LoadStoreOpcode::STOREW].map(|opcode| opcode.global_opcode()),
+            is_rv64_store_instruction,
+            assemble_store_multi::<F, RA, WORD_ACCESS_WIDTH>,
+        );
+        registry.register_if(
+            [Rv64LoadStoreOpcode::STORED].map(|opcode| opcode.global_opcode()),
+            is_rv64_store_instruction,
+            assemble_store_multi::<F, RA, DOUBLEWORD_ACCESS_WIDTH>,
+        );
+        registry.register(
+            [SystemOpcode::PHANTOM.global_opcode()],
+            assemble_phantom::<F, RA>,
+        );
+        registry.register_inline_arena_native(
+            [SystemOpcode::PHANTOM.global_opcode()],
+            size_of::<PhantomRecord>(),
+            assemble_phantom_inline::<F, RA>,
+            ArenaNativeGeometry {
+                adapter_size: size_of::<PhantomRecord>(),
+                adapter_align: align_of::<PhantomRecord>(),
+                core_size: 0,
+                core_align: 1,
+                core_off_matrix: 0,
+                layout: ArenaNativeLayout::Custom {
+                    residual_memory_chronology: true,
+                    max_residual_events_per_record: 0,
+                    layout_id: "openvm.rvr.phantom-final.v1",
+                },
+            },
+        );
+    }
+}
+
+impl<F, RA> VmRvrLogNativeExtension<F, RA> for crate::Rv64M
+where
+    F: PrimeField32,
+    RA: Rv64MRecordArena<F>,
+{
+    fn extend_rvr_log_native(&self, registry: &mut LogNativeAssemblerRegistry<F, RA>) {
+        registry.register(
+            MulOpcode::iter().map(|opcode| opcode.global_opcode()),
+            assemble_mul::<F, RA>,
+        );
+        registry.register_inline_arena_native(
+            MulOpcode::iter().map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_ADDSUB_RECORD_SIZE,
+            assemble_mul_inline::<F, RA>,
+            ArenaNativeGeometry {
+                adapter_size: size_of::<Rv64MultAdapterRecord>(),
+                adapter_align: align_of::<Rv64MultAdapterRecord>(),
+                core_size: size_of::<MultiplicationCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>>(),
+                core_align: align_of::<MultiplicationCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>>(),
+                core_off_matrix: <Rv64MultAdapterExecutor as AdapterTraceExecutor<F>>::WIDTH
+                    * size_of::<F>(),
+                layout: ArenaNativeLayout::Alu3(Alu3ArenaFieldOffsets {
+                    from_pc: core::mem::offset_of!(Rv64MultAdapterRecord, from_pc),
+                    from_timestamp: core::mem::offset_of!(Rv64MultAdapterRecord, from_timestamp),
+                    rd_ptr: core::mem::offset_of!(Rv64MultAdapterRecord, rd_ptr),
+                    rs1_ptr: core::mem::offset_of!(Rv64MultAdapterRecord, rs1_ptr),
+                    rs2: core::mem::offset_of!(Rv64MultAdapterRecord, rs2_ptr),
+                    // The Mult adapter has neither rs2_as nor imm-sign.
+                    rs2_as: usize::MAX,
+                    rs2_imm_sign: usize::MAX,
+                    reads_aux0_prev_ts: core::mem::offset_of!(Rv64MultAdapterRecord, reads_aux)
+                        + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+                    reads_aux1_prev_ts: core::mem::offset_of!(Rv64MultAdapterRecord, reads_aux)
+                        + size_of::<MemoryReadAuxRecord>()
+                        + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+                    write_prev_ts: core::mem::offset_of!(Rv64MultAdapterRecord, writes_aux)
+                        + core::mem::offset_of!(
+                            MemoryWriteAuxRecord<u8, RV64_REGISTER_NUM_LIMBS>,
+                            prev_timestamp
+                        ),
+                    write_prev_data: core::mem::offset_of!(Rv64MultAdapterRecord, writes_aux)
+                        + core::mem::offset_of!(
+                            MemoryWriteAuxRecord<u8, RV64_REGISTER_NUM_LIMBS>,
+                            prev_data
+                        ),
+                    core_b: core::mem::offset_of!(MultiplicationCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>, b),
+                    core_c: core::mem::offset_of!(MultiplicationCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>, c),
+                    core_local_opcode: usize::MAX,
+                    w: None,
+                }),
+            },
+        );
+        registry.register_inline_arena_native(
+            MulHOpcode::iter().map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_ADDSUB_RECORD_SIZE,
+            assemble_mulh_inline::<F, RA>,
+            ArenaNativeGeometry {
+                adapter_size: size_of::<Rv64MultAdapterRecord>(),
+                adapter_align: align_of::<Rv64MultAdapterRecord>(),
+                core_size: size_of::<MulHCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>>(),
+                core_align: align_of::<MulHCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>>(),
+                core_off_matrix: <Rv64MultAdapterExecutor as AdapterTraceExecutor<F>>::WIDTH
+                    * size_of::<F>(),
+                layout: ArenaNativeLayout::Alu3(Alu3ArenaFieldOffsets {
+                    from_pc: core::mem::offset_of!(Rv64MultAdapterRecord, from_pc),
+                    from_timestamp: core::mem::offset_of!(Rv64MultAdapterRecord, from_timestamp),
+                    rd_ptr: core::mem::offset_of!(Rv64MultAdapterRecord, rd_ptr),
+                    rs1_ptr: core::mem::offset_of!(Rv64MultAdapterRecord, rs1_ptr),
+                    rs2: core::mem::offset_of!(Rv64MultAdapterRecord, rs2_ptr),
+                    // The Mult adapter has neither rs2_as nor imm-sign.
+                    rs2_as: usize::MAX,
+                    rs2_imm_sign: usize::MAX,
+                    reads_aux0_prev_ts: core::mem::offset_of!(Rv64MultAdapterRecord, reads_aux)
+                        + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+                    reads_aux1_prev_ts: core::mem::offset_of!(Rv64MultAdapterRecord, reads_aux)
+                        + size_of::<MemoryReadAuxRecord>()
+                        + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+                    write_prev_ts: core::mem::offset_of!(Rv64MultAdapterRecord, writes_aux)
+                        + core::mem::offset_of!(
+                            MemoryWriteAuxRecord<u8, RV64_REGISTER_NUM_LIMBS>,
+                            prev_timestamp
+                        ),
+                    write_prev_data: core::mem::offset_of!(Rv64MultAdapterRecord, writes_aux)
+                        + core::mem::offset_of!(
+                            MemoryWriteAuxRecord<u8, RV64_REGISTER_NUM_LIMBS>,
+                            prev_data
+                        ),
+                    core_b: core::mem::offset_of!(MulHCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>, b),
+                    core_c: core::mem::offset_of!(MulHCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>, c),
+                    core_local_opcode: core::mem::offset_of!(MulHCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>, local_opcode),
+                    w: None,
+                }),
+            },
+        );
+        registry.register_inline_arena_native(
+            MulWOpcode::iter().map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_ADDSUB_RECORD_SIZE,
+            assemble_mul_w_inline::<F, RA>,
+            mult_w_arena_geometry::<F>(
+                size_of::<MultiplicationCoreRecord<RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>>(),
+                align_of::<MultiplicationCoreRecord<RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>>(),
+                core::mem::offset_of!(
+                    MultiplicationCoreRecord<RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>,
+                    b
+                ),
+                core::mem::offset_of!(
+                    MultiplicationCoreRecord<RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>,
+                    c
+                ),
+                usize::MAX,
+            ),
+        );
+        registry.register_inline_arena_native(
+            DivRemOpcode::iter().map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_ADDSUB_RECORD_SIZE,
+            assemble_divrem_inline::<F, RA>,
+            ArenaNativeGeometry {
+                adapter_size: size_of::<Rv64MultAdapterRecord>(),
+                adapter_align: align_of::<Rv64MultAdapterRecord>(),
+                core_size: size_of::<DivRemCoreRecord<RV64_REGISTER_NUM_LIMBS>>(),
+                core_align: align_of::<DivRemCoreRecord<RV64_REGISTER_NUM_LIMBS>>(),
+                core_off_matrix: <Rv64MultAdapterExecutor as AdapterTraceExecutor<F>>::WIDTH
+                    * size_of::<F>(),
+                layout: ArenaNativeLayout::Alu3(Alu3ArenaFieldOffsets {
+                    from_pc: core::mem::offset_of!(Rv64MultAdapterRecord, from_pc),
+                    from_timestamp: core::mem::offset_of!(Rv64MultAdapterRecord, from_timestamp),
+                    rd_ptr: core::mem::offset_of!(Rv64MultAdapterRecord, rd_ptr),
+                    rs1_ptr: core::mem::offset_of!(Rv64MultAdapterRecord, rs1_ptr),
+                    rs2: core::mem::offset_of!(Rv64MultAdapterRecord, rs2_ptr),
+                    // The Mult adapter has neither rs2_as nor imm-sign.
+                    rs2_as: usize::MAX,
+                    rs2_imm_sign: usize::MAX,
+                    reads_aux0_prev_ts: core::mem::offset_of!(Rv64MultAdapterRecord, reads_aux)
+                        + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+                    reads_aux1_prev_ts: core::mem::offset_of!(Rv64MultAdapterRecord, reads_aux)
+                        + size_of::<MemoryReadAuxRecord>()
+                        + core::mem::offset_of!(MemoryReadAuxRecord, prev_timestamp),
+                    write_prev_ts: core::mem::offset_of!(Rv64MultAdapterRecord, writes_aux)
+                        + core::mem::offset_of!(
+                            MemoryWriteAuxRecord<u8, RV64_REGISTER_NUM_LIMBS>,
+                            prev_timestamp
+                        ),
+                    write_prev_data: core::mem::offset_of!(Rv64MultAdapterRecord, writes_aux)
+                        + core::mem::offset_of!(
+                            MemoryWriteAuxRecord<u8, RV64_REGISTER_NUM_LIMBS>,
+                            prev_data
+                        ),
+                    core_b: core::mem::offset_of!(DivRemCoreRecord<RV64_REGISTER_NUM_LIMBS>, b),
+                    core_c: core::mem::offset_of!(DivRemCoreRecord<RV64_REGISTER_NUM_LIMBS>, c),
+                    core_local_opcode: core::mem::offset_of!(
+                        DivRemCoreRecord<RV64_REGISTER_NUM_LIMBS>,
+                        local_opcode
+                    ),
+                    w: None,
+                }),
+            },
+        );
+        registry.register_inline_arena_native(
+            DivRemWOpcode::iter().map(|opcode| opcode.global_opcode()),
+            PREFLIGHT_ADDSUB_RECORD_SIZE,
+            assemble_divrem_w_inline::<F, RA>,
+            mult_w_arena_geometry::<F>(
+                size_of::<DivRemCoreRecord<RV64_WORD_NUM_LIMBS>>(),
+                align_of::<DivRemCoreRecord<RV64_WORD_NUM_LIMBS>>(),
+                core::mem::offset_of!(DivRemCoreRecord<RV64_WORD_NUM_LIMBS>, b),
+                core::mem::offset_of!(DivRemCoreRecord<RV64_WORD_NUM_LIMBS>, c),
+                core::mem::offset_of!(DivRemCoreRecord<RV64_WORD_NUM_LIMBS>, local_opcode),
+            ),
+        );
+        registry.register_delta_pattern(
+            MulOpcode::iter()
+                .map(|opcode| opcode.global_opcode())
+                .chain(MulHOpcode::iter().map(|opcode| opcode.global_opcode()))
+                .chain(MulWOpcode::iter().map(|opcode| opcode.global_opcode()))
+                .chain(DivRemOpcode::iter().map(|opcode| opcode.global_opcode()))
+                .chain(DivRemWOpcode::iter().map(|opcode| opcode.global_opcode())),
+            DeltaAccessPattern::Alu3Reg,
+        );
+        registry.register(
+            MulHOpcode::iter().map(|opcode| opcode.global_opcode()),
+            assemble_mulh::<F, RA>,
+        );
+        registry.register(
+            MulWOpcode::iter().map(|opcode| opcode.global_opcode()),
+            assemble_mul_w::<F, RA>,
+        );
+        registry.register(
+            DivRemOpcode::iter().map(|opcode| opcode.global_opcode()),
+            assemble_divrem::<F, RA>,
+        );
+        registry.register(
+            DivRemWOpcode::iter().map(|opcode| opcode.global_opcode()),
+            assemble_divrem_w::<F, RA>,
+        );
+    }
+}
+
+impl<F, RA> VmRvrLogNativeExtension<F, RA> for crate::Rv64Io
+where
+    F: PrimeField32,
+    RA: Rv64IoRecordArena<F>,
+{
+    fn extend_rvr_log_native(&self, registry: &mut LogNativeAssemblerRegistry<F, RA>) {
+        registry.register(
+            Rv64HintStoreOpcode::iter().map(|opcode| opcode.global_opcode()),
+            assemble_hintstore::<F, RA>,
+        );
+        let descriptor = HintStoreRecordDescriptor::new();
+        assert_eq!(
+            size_of::<Rv64HintStoreRecordHeader>(),
+            descriptor.header_size
+        );
+        assert_eq!(
+            align_of::<Rv64HintStoreRecordHeader>(),
+            descriptor.header_align
+        );
+        assert_eq!(size_of::<Rv64HintStoreVar>(), descriptor.var_size);
+        assert_eq!(align_of::<Rv64HintStoreVar>(), descriptor.var_align);
+        assert_eq!(descriptor.record_size(1), descriptor.capacity_per_row);
+        registry.register_inline_arena_native(
+            Rv64HintStoreOpcode::iter().map(|opcode| opcode.global_opcode()),
+            descriptor.capacity_per_row,
+            reject_hintstore_compact::<F, RA>,
+            ArenaNativeGeometry {
+                adapter_size: descriptor.header_size,
+                adapter_align: descriptor.header_align,
+                core_size: descriptor.var_size,
+                core_align: descriptor.var_align,
+                core_off_matrix: 0,
+                layout: ArenaNativeLayout::CustomVariableRows {
+                    residual_memory_chronology: true,
+                },
+            },
+        );
+    }
+}
+
+impl<F, RA> VmRvrLogNativeExtension<F, RA> for crate::Rv64IConfig
+where
+    F: PrimeField32,
+    RA: Rv64IRecordArena<F> + Rv64IoRecordArena<F>,
+{
+    fn extend_rvr_log_native(&self, registry: &mut LogNativeAssemblerRegistry<F, RA>) {
+        self.base.extend_rvr_log_native(registry);
+        self.io.extend_rvr_log_native(registry);
+    }
+}
+
+impl<F, RA> VmRvrLogNativeExtension<F, RA> for crate::Rv64ImConfig
+where
+    F: PrimeField32,
+    RA: Rv64StandardRecordArena<F>,
+{
+    fn extend_rvr_log_native(&self, registry: &mut LogNativeAssemblerRegistry<F, RA>) {
+        self.rv64i.extend_rvr_log_native(registry);
+        self.mul.extend_rvr_log_native(registry);
+    }
+}
+
+fn is_rv64_memory_instruction<F: PrimeField32>(instruction: &Instruction<F>) -> bool {
+    instruction.e.as_canonical_u32() == RV64_MEMORY_AS
+}
+
+fn is_rv64_store_instruction<F: PrimeField32>(instruction: &Instruction<F>) -> bool {
+    let mem_as = instruction.e.as_canonical_u32();
+    mem_as == RV64_MEMORY_AS || mem_as == PUBLIC_VALUES_AS
+}
+
+fn assemble_add_sub<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    access: &AccessView<'_, F>,
+    instruction: &Instruction<F>,
+    pc: u32,
+    timestamp: u32,
+) -> Result<(), ExecutionError> {
+    let local = instruction
+        .opcode
+        .local_opcode_idx(BaseAluOpcode::CLASS_OFFSET) as u8;
+    let (adapter_record, core_record): (
+        &mut Rv64BaseAluRegU16AdapterRecord,
+        &mut AddSubCoreRecord<BLOCK_FE_WIDTH>,
+    ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64BaseAluRegU16AdapterExecutor>::new());
+    adapter_record.from_pc = pc;
+    adapter_record.from_timestamp = timestamp;
+    adapter_record.rd_ptr = instruction.a.as_canonical_u32();
+    adapter_record.rs1_ptr = instruction.b.as_canonical_u32();
+    adapter_record.rs2_ptr = instruction.c.as_canonical_u32();
+    let rs1_aux = access.expect_reg_read(timestamp, adapter_record.rs1_ptr, pc)?;
+    adapter_record.reads_aux[0].prev_timestamp = rs1_aux.prev_timestamp;
+    let rs2_aux = access.expect_reg_read(timestamp + 1, adapter_record.rs2_ptr, pc)?;
+    adapter_record.reads_aux[1].prev_timestamp = rs2_aux.prev_timestamp;
+    let write_aux = access.expect_reg_write(timestamp + 2, adapter_record.rd_ptr, pc)?;
+    adapter_record.writes_aux = MemoryWriteAuxRecord {
+        prev_timestamp: write_aux.prev_timestamp,
+        prev_data: prev_u16(write_aux),
+    };
+    let rs1 = read_u16_block(rs1_aux.entry.value);
+    let rs2 = read_u16_block(rs2_aux.entry.value);
+    core_record.b = rs1;
+    core_record.c = rs2;
+    core_record.local_opcode = local;
+    Ok(())
+}
+
+fn assemble_addi<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    access: &AccessView<'_, F>,
+    instruction: &Instruction<F>,
+    pc: u32,
+    timestamp: u32,
+) -> Result<(), ExecutionError> {
+    let (adapter_record, core_record): (
+        &mut Rv64BaseAluImmU16AdapterRecord,
+        &mut AddICoreRecord<BLOCK_FE_WIDTH>,
+    ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64BaseAluImmU16AdapterExecutor>::new());
+    adapter_record.from_pc = pc;
+    adapter_record.from_timestamp = timestamp;
+    adapter_record.rd_ptr = instruction.a.as_canonical_u32();
+    adapter_record.rs1_ptr = instruction.b.as_canonical_u32();
+    let rs1_aux = access.expect_reg_read(timestamp, adapter_record.rs1_ptr, pc)?;
+    adapter_record.reads_aux.prev_timestamp = rs1_aux.prev_timestamp;
+    let write_aux = access.expect_reg_write(timestamp + 1, adapter_record.rd_ptr, pc)?;
+    adapter_record.writes_aux = MemoryWriteAuxRecord {
+        prev_timestamp: write_aux.prev_timestamp,
+        prev_data: prev_u16(write_aux),
+    };
+    core_record.rs1 = read_u16_block(rs1_aux.entry.value);
+    let immediate = instruction.c.as_canonical_u32();
+    core_record.imm_low11 = (immediate & 0x7ff) as u16;
+    core_record.imm_sign = ((immediate >> 11) & 1) as u16;
+    Ok(())
+}
+
+fn fill_imm_u16_adapter<F: PrimeField32>(
+    access: &AccessView<'_, F>,
+    instruction: &Instruction<F>,
+    pc: u32,
+    timestamp: u32,
+    record: &mut Rv64BaseAluImmU16AdapterRecord,
+) -> Result<[u16; BLOCK_FE_WIDTH], ExecutionError> {
+    record.from_pc = pc;
+    record.from_timestamp = timestamp;
+    record.rd_ptr = instruction.a.as_canonical_u32();
+    record.rs1_ptr = instruction.b.as_canonical_u32();
+    let rs1_aux = access.expect_reg_read(timestamp, record.rs1_ptr, pc)?;
+    record.reads_aux.prev_timestamp = rs1_aux.prev_timestamp;
+    let write_aux = access.expect_reg_write(timestamp + 1, record.rd_ptr, pc)?;
+    record.writes_aux = MemoryWriteAuxRecord {
+        prev_timestamp: write_aux.prev_timestamp,
+        prev_data: prev_u16(write_aux),
+    };
+    Ok(read_u16_block(rs1_aux.entry.value))
+}
+
+fn fill_imm_bytes_adapter<F: PrimeField32>(
+    access: &AccessView<'_, F>,
+    instruction: &Instruction<F>,
+    pc: u32,
+    timestamp: u32,
+    record: &mut Rv64BaseAluImmAdapterRecord,
+) -> Result<[u8; RV64_REGISTER_NUM_LIMBS], ExecutionError> {
+    record.from_pc = pc;
+    record.from_timestamp = timestamp;
+    record.rd_ptr = instruction.a.as_canonical_u32();
+    record.rs1_ptr = instruction.b.as_canonical_u32();
+    let rs1_aux = access.expect_reg_read(timestamp, record.rs1_ptr, pc)?;
+    record.reads_aux.prev_timestamp = rs1_aux.prev_timestamp;
+    let write_aux = access.expect_reg_write(timestamp + 1, record.rd_ptr, pc)?;
+    record.writes_aux = MemoryWriteAuxRecord {
+        prev_timestamp: write_aux.prev_timestamp,
+        prev_data: prev_bytes(write_aux),
+    };
+    Ok(read_bytes(rs1_aux.entry.value))
+}
+
+fn fill_w_imm_u16_adapter<F: PrimeField32>(
+    access: &AccessView<'_, F>,
+    instruction: &Instruction<F>,
+    pc: u32,
+    timestamp: u32,
+    record: &mut Rv64BaseAluWImmU16AdapterRecord,
+) -> Result<[u16; RV64_WORD_U16_LIMBS], ExecutionError> {
+    record.from_pc = pc;
+    record.from_timestamp = timestamp;
+    record.rd_ptr = instruction.a.as_canonical_u32();
+    record.rs1_ptr = instruction.b.as_canonical_u32();
+    let rs1_aux = access.expect_reg_read(timestamp, record.rs1_ptr, pc)?;
+    record.reads_aux.prev_timestamp = rs1_aux.prev_timestamp;
+    let rs1 = read_u16_block(rs1_aux.entry.value);
+    record.rs1_high = [rs1[2], rs1[3]];
+    let write_aux = access.expect_reg_write(timestamp + 1, record.rd_ptr, pc)?;
+    let result = read_u16_block(write_aux.entry.value);
+    record.result_high = result[RV64_WORD_U16_LIMBS - 1];
+    record.writes_aux = MemoryWriteAuxRecord {
+        prev_timestamp: write_aux.prev_timestamp,
+        prev_data: prev_u16(write_aux),
+    };
+    Ok(rs1[..RV64_WORD_U16_LIMBS].try_into().unwrap())
+}
+
+fn assemble_addiw<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    access: &AccessView<'_, F>,
+    instruction: &Instruction<F>,
+    pc: u32,
+    timestamp: u32,
+) -> Result<(), ExecutionError> {
+    let (adapter_record, core_record): AddIWRecordMut<'_> =
+        arena.alloc(BaseAluWImmU16Layout::<F>::new());
+    core_record.rs1 = fill_w_imm_u16_adapter(access, instruction, pc, timestamp, adapter_record)?;
+    let immediate = instruction.c.as_canonical_u32();
+    core_record.imm_low11 = (immediate & 0x7ff) as u16;
+    core_record.imm_sign = ((immediate >> 11) & 1) as u16;
+    Ok(())
+}
+
+fn assemble_less_than_imm<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    access: &AccessView<'_, F>,
+    instruction: &Instruction<F>,
+    pc: u32,
+    timestamp: u32,
+) -> Result<(), ExecutionError> {
+    let (adapter_record, core_record): LessThanImmRecordMut<'_> =
+        arena.alloc(BaseAluImmU16Layout::<F>::new());
+    core_record.b = fill_imm_u16_adapter(access, instruction, pc, timestamp, adapter_record)?;
+    let immediate = instruction.c.as_canonical_u32();
+    core_record.imm_low11 = (immediate & 0x7ff) as u16;
+    core_record.imm_sign = ((immediate >> 11) & 1) as u8;
+    core_record.local_opcode = instruction
+        .opcode
+        .local_opcode_idx(LessThanImmOpcode::CLASS_OFFSET) as u8;
+    Ok(())
+}
+
+fn assemble_bitwise_imm<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    access: &AccessView<'_, F>,
+    instruction: &Instruction<F>,
+    pc: u32,
+    timestamp: u32,
+) -> Result<(), ExecutionError> {
+    let (adapter_record, core_record): BitwiseImmRecordMut<'_> =
+        arena.alloc(BaseAluImmBytesLayout::<F>::new());
+    core_record.b = fill_imm_bytes_adapter(access, instruction, pc, timestamp, adapter_record)?;
+    let immediate = instruction.c.as_canonical_u32();
+    core_record.c_low = [immediate as u8, ((immediate >> 8) & 0x07) as u8];
+    core_record.imm_sign = ((immediate >> 11) & 1) as u8;
+    core_record.local_opcode = instruction
+        .opcode
+        .local_opcode_idx(BaseAluImmOpcode::CLASS_OFFSET) as u8;
+    Ok(())
+}
+
+fn assemble_shift_imm<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    access: &AccessView<'_, F>,
+    instruction: &Instruction<F>,
+    pc: u32,
+    timestamp: u32,
+) -> Result<(), ExecutionError> {
+    let local_opcode = instruction
+        .opcode
+        .local_opcode_idx(ShiftImmOpcode::CLASS_OFFSET) as u8;
+    if local_opcode == ShiftImmOpcode::SRAI as u8 {
+        let (adapter_record, core_record): ShiftRightArithmeticImmRecordMut<'_> =
+            arena.alloc(BaseAluImmU16Layout::<F>::new());
+        core_record.b = fill_imm_u16_adapter(access, instruction, pc, timestamp, adapter_record)?;
+        core_record.shamt = instruction.c.as_canonical_u32() as u8;
+    } else {
+        let (adapter_record, core_record): ShiftLogicalImmRecordMut<'_> =
+            arena.alloc(BaseAluImmU16Layout::<F>::new());
+        core_record.b = fill_imm_u16_adapter(access, instruction, pc, timestamp, adapter_record)?;
+        core_record.shamt = instruction.c.as_canonical_u32() as u8;
+        core_record.local_opcode = local_opcode;
+    }
+    Ok(())
+}
+
+fn assemble_shift_w_imm<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    access: &AccessView<'_, F>,
+    instruction: &Instruction<F>,
+    pc: u32,
+    timestamp: u32,
+) -> Result<(), ExecutionError> {
+    let local_opcode = instruction
+        .opcode
+        .local_opcode_idx(ShiftWImmOpcode::CLASS_OFFSET) as u8;
+    if local_opcode == ShiftWImmOpcode::SRAIW as u8 {
+        let (adapter_record, core_record): ShiftWRightArithmeticImmRecordMut<'_> =
+            arena.alloc(BaseAluWImmU16Layout::<F>::new());
+        core_record.b = fill_w_imm_u16_adapter(access, instruction, pc, timestamp, adapter_record)?;
+        core_record.shamt = instruction.c.as_canonical_u32() as u8;
+    } else {
+        let (adapter_record, core_record): ShiftWLogicalImmRecordMut<'_> =
+            arena.alloc(BaseAluWImmU16Layout::<F>::new());
+        core_record.b = fill_w_imm_u16_adapter(access, instruction, pc, timestamp, adapter_record)?;
+        core_record.shamt = instruction.c.as_canonical_u32() as u8;
+        core_record.local_opcode = local_opcode;
+    }
+    Ok(())
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct AddIOperands {
+    pub rd_ptr: u32,
+    pub rs1_ptr: u32,
+    pub immediate: u32,
+}
+
+pub(crate) fn derive_addi_operands<F: PrimeField32>(instruction: &Instruction<F>) -> AddIOperands {
+    AddIOperands {
+        rd_ptr: instruction.a.as_canonical_u32(),
+        rs1_ptr: instruction.b.as_canonical_u32(),
+        immediate: instruction.c.as_canonical_u32(),
+    }
+}
+
+/// The program-redundant BaseAluU16 adapter operands, derived from an
+/// instruction. Single source of truth for host expansion AND the GPU
+/// device operand table (M-GPUDEC): both consumers call this; the CUDA
+/// decoder consumes the table entries it produces.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct BaseAluU16Operands {
+    pub rd_ptr: u32,
+    pub rs1_ptr: u32,
+    pub rs2: u32,
+    pub rs2_as: u8,
+    pub rs2_imm_sign: bool,
+}
+
+pub(crate) fn derive_base_alu_u16_operands<F: PrimeField32>(
+    instruction: &Instruction<F>,
+) -> BaseAluU16Operands {
+    let (rs2_as, rs2, rs2_imm_sign) = if instruction.e.as_canonical_u32() == RV64_REGISTER_AS {
+        (
+            RV64_REGISTER_AS as u8,
+            instruction.c.as_canonical_u32(),
+            false,
+        )
+    } else {
+        let imm = instruction.c.as_canonical_u32();
+        let imm64 = imm_to_rv64_u64(imm);
+        (RV64_IMM_AS as u8, imm, ((imm64 >> U16_BITS) as u16) != 0)
+    };
+    BaseAluU16Operands {
+        rd_ptr: instruction.a.as_canonical_u32(),
+        rs1_ptr: instruction.b.as_canonical_u32(),
+        rs2,
+        rs2_as,
+        rs2_imm_sign,
+    }
+}
+
+/// Fill a BaseAluU16 adapter record from a compact alu3 record, mirroring
+/// [`fill_base_alu_u16_adapter`]'s derivation from the log path (shared by
+/// the LessThan and Shift inline assemblers; AddSub keeps its own inline fill
+/// with identical semantics).
+fn fill_base_alu_u16_from_compact<F: PrimeField32>(
+    compact: &PreflightAlu3Compact,
+    instruction: &Instruction<F>,
+    pc: u32,
+    record: &mut Rv64BaseAluU16AdapterRecord,
+) {
+    let operands = derive_base_alu_u16_operands(instruction);
+    record.from_pc = pc;
+    record.from_timestamp = compact.from_timestamp;
+    record.rs1_ptr = operands.rs1_ptr;
+    record.reads_aux[0].prev_timestamp = compact.reads_prev_timestamp[0];
+    record.reads_aux[1].prev_timestamp = compact.reads_prev_timestamp[1];
+    record.rs2_ptr = operands.rs2;
+    record.rd_ptr = operands.rd_ptr;
+    record.writes_aux = MemoryWriteAuxRecord {
+        prev_timestamp: compact.write_prev_timestamp,
+        prev_data: u16x4(compact.write_prev_data),
+    };
+}
+
+fn assemble_less_than_inline<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError> {
+    let compact = PreflightAlu3Compact::read_for_pc(compact, pc)?;
+    let (adapter_record, core_record): (
+        &mut Rv64BaseAluU16AdapterRecord,
+        &mut LessThanCoreRecord<BLOCK_FE_WIDTH, U16_BITS>,
+    ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64BaseAluU16AdapterExecutor>::new());
+    fill_base_alu_u16_from_compact(&compact, instruction, pc, adapter_record);
+    core_record.b = u16x4(compact.b);
+    core_record.c = u16x4(compact.c);
+    core_record.local_opcode = instruction
+        .opcode
+        .local_opcode_idx(LessThanOpcode::CLASS_OFFSET) as u8;
+    Ok(())
+}
+
+/// Mirrors [`assemble_shift`]: SRA fills the arithmetic core (no
+/// local_opcode); SLL/SRL fill the logical core.
+fn assemble_shift_inline<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError> {
+    let compact = PreflightAlu3Compact::read_for_pc(compact, pc)?;
+    let local_opcode = ShiftOpcode::from_repr(
+        instruction
+            .opcode
+            .local_opcode_idx(ShiftOpcode::CLASS_OFFSET),
+    )
+    .expect("opcode already classified");
+    if local_opcode == ShiftOpcode::SRA {
+        let (adapter_record, core_record): (
+            &mut Rv64BaseAluU16AdapterRecord,
+            &mut ShiftRightArithmeticCoreRecord<BLOCK_FE_WIDTH, U16_BITS>,
+        ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64BaseAluU16AdapterExecutor>::new());
+        fill_base_alu_u16_from_compact(&compact, instruction, pc, adapter_record);
+        core_record.b = u16x4(compact.b);
+        core_record.c = u16x4(compact.c);
+    } else {
+        let (adapter_record, core_record): (
+            &mut Rv64BaseAluU16AdapterRecord,
+            &mut ShiftLogicalCoreRecord<BLOCK_FE_WIDTH, U16_BITS>,
+        ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64BaseAluU16AdapterExecutor>::new());
+        fill_base_alu_u16_from_compact(&compact, instruction, pc, adapter_record);
+        core_record.b = u16x4(compact.b);
+        core_record.c = u16x4(compact.c);
+        core_record.local_opcode = local_opcode as u8;
+    }
+    Ok(())
+}
+
+fn assemble_shift_w_inline<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError> {
+    let compact = PreflightAlu3Compact::read_for_pc(compact, pc)?;
+    let local_opcode = ShiftWOpcode::from_repr(
+        instruction
+            .opcode
+            .local_opcode_idx(ShiftWOpcode::CLASS_OFFSET),
+    )
+    .expect("opcode already classified");
+    let b = compact.b as u32;
+    let shamt = compact.c as u32 & 31;
+    let result = match local_opcode {
+        ShiftWOpcode::SLLW => b.wrapping_shl(shamt),
+        ShiftWOpcode::SRLW => b.wrapping_shr(shamt),
+        ShiftWOpcode::SRAW => ((b as i32) >> shamt) as u32,
+    };
+    if local_opcode == ShiftWOpcode::SRAW {
+        let (adapter_record, core_record): (
+            &mut Rv64BaseAluWU16AdapterRecord,
+            &mut ShiftRightArithmeticCoreRecord<RV64_WORD_U16_LIMBS, U16_BITS>,
+        ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64BaseAluWU16AdapterExecutor>::new());
+        fill_base_alu_w_u16_from_compact(&compact, instruction, pc, result, adapter_record);
+        core_record.b = u16x4(compact.b)[..RV64_WORD_U16_LIMBS].try_into().unwrap();
+        core_record.c = u16x4(compact.c)[..RV64_WORD_U16_LIMBS].try_into().unwrap();
+    } else {
+        let (adapter_record, core_record): (
+            &mut Rv64BaseAluWU16AdapterRecord,
+            &mut ShiftLogicalCoreRecord<RV64_WORD_U16_LIMBS, U16_BITS>,
+        ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64BaseAluWU16AdapterExecutor>::new());
+        fill_base_alu_w_u16_from_compact(&compact, instruction, pc, result, adapter_record);
+        core_record.b = u16x4(compact.b)[..RV64_WORD_U16_LIMBS].try_into().unwrap();
+        core_record.c = u16x4(compact.c)[..RV64_WORD_U16_LIMBS].try_into().unwrap();
+        core_record.local_opcode = match local_opcode {
+            ShiftWOpcode::SLLW => ShiftOpcode::SLL as u8,
+            ShiftWOpcode::SRLW => ShiftOpcode::SRL as u8,
+            ShiftWOpcode::SRAW => unreachable!("handled above"),
+        };
+    }
+    Ok(())
+}
+
+/// Mirrors [`assemble_bitwise`] over the byte adapter (no `rs2_imm_sign`
+/// field; byte-limb operand views).
+fn assemble_bitwise_inline<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError> {
+    let compact = PreflightAlu3Compact::read_for_pc(compact, pc)?;
+    let (adapter_record, core_record): (
+        &mut Rv64BaseAluAdapterRecord,
+        &mut BitwiseLogicCoreRecord<RV64_REGISTER_NUM_LIMBS>,
+    ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64BaseAluRegAdapterExecutor>::new());
+    adapter_record.from_pc = pc;
+    adapter_record.from_timestamp = compact.from_timestamp;
+    adapter_record.rs1_ptr = instruction.b.as_canonical_u32();
+    adapter_record.reads_aux[0].prev_timestamp = compact.reads_prev_timestamp[0];
+    adapter_record.reads_aux[1].prev_timestamp = compact.reads_prev_timestamp[1];
+    adapter_record.rs2_ptr = instruction.c.as_canonical_u32();
+    adapter_record.rd_ptr = instruction.a.as_canonical_u32();
+    adapter_record.writes_aux = MemoryWriteAuxRecord {
+        prev_timestamp: compact.write_prev_timestamp,
+        prev_data: bytes8(compact.write_prev_data),
+    };
+    core_record.b = bytes8(compact.b);
+    core_record.c = bytes8(compact.c);
+    core_record.local_opcode = instruction
+        .opcode
+        .local_opcode_idx(BaseAluOpcode::CLASS_OFFSET) as u8;
+    Ok(())
+}
+
+/// Little-endian field readers for the compact wire shapes (no alignment
+/// requirements; each `read_for_pc` also order-guards against the program
+/// log like [`PreflightAlu3Compact::read_for_pc`]).
+fn compact_u32_at(bytes: &[u8], at: usize) -> u32 {
+    u32::from_le_bytes(bytes[at..at + 4].try_into().expect("4-byte field"))
+}
+
+fn compact_u64_at(bytes: &[u8], at: usize) -> u64 {
+    u64::from_le_bytes(bytes[at..at + 8].try_into().expect("8-byte field"))
+}
+
+fn compact_order_guard(from_pc: u32, pc: u32) -> Result<(), ExecutionError> {
+    if from_pc != pc {
+        return Err(ExecutionError::RvrExecution(format!(
+            "inline record order mismatch: record from_pc {from_pc:#x} vs program-log pc {pc:#x}"
+        )));
+    }
+    Ok(())
+}
+
+/// Host mirror of the C branch2 record (2 reads, no write).
+struct PreflightBranch2Compact {
+    from_timestamp: u32,
+    reads_prev_timestamp: [u32; 2],
+    b: u64,
+    c: u64,
+}
+
+impl PreflightBranch2Compact {
+    fn read_for_pc(bytes: &[u8], pc: u32) -> Result<Self, ExecutionError> {
+        debug_assert_eq!(bytes.len(), PREFLIGHT_BRANCH2_RECORD_SIZE);
+        compact_order_guard(compact_u32_at(bytes, 0), pc)?;
+        Ok(Self {
+            from_timestamp: compact_u32_at(bytes, 4),
+            reads_prev_timestamp: [compact_u32_at(bytes, 8), compact_u32_at(bytes, 12)],
+            b: compact_u64_at(bytes, 16),
+            c: compact_u64_at(bytes, 24),
+        })
+    }
+}
+
+/// Host mirror of the C wr1 record (one conditional write).
+struct PreflightWr1Compact {
+    from_timestamp: u32,
+    write_prev_timestamp: u32,
+    write_prev_data: u64,
+}
+
+impl PreflightWr1Compact {
+    fn read_for_pc(bytes: &[u8], pc: u32) -> Result<Self, ExecutionError> {
+        debug_assert_eq!(bytes.len(), PREFLIGHT_WR1_RECORD_SIZE);
+        compact_order_guard(compact_u32_at(bytes, 0), pc)?;
+        Ok(Self {
+            from_timestamp: compact_u32_at(bytes, 4),
+            write_prev_timestamp: compact_u32_at(bytes, 8),
+            write_prev_data: compact_u64_at(bytes, 12),
+        })
+    }
+}
+
+/// Host mirror of the C rw1 record (one read + one conditional write).
+struct PreflightRw1Compact {
+    from_timestamp: u32,
+    read_prev_timestamp: u32,
+    write_prev_timestamp: u32,
+    b: u64,
+    write_prev_data: u64,
+}
+
+impl PreflightRw1Compact {
+    fn read_for_pc(bytes: &[u8], pc: u32) -> Result<Self, ExecutionError> {
+        debug_assert_eq!(bytes.len(), PREFLIGHT_RW1_RECORD_SIZE);
+        compact_order_guard(compact_u32_at(bytes, 0), pc)?;
+        Ok(Self {
+            from_timestamp: compact_u32_at(bytes, 4),
+            read_prev_timestamp: compact_u32_at(bytes, 8),
+            write_prev_timestamp: compact_u32_at(bytes, 12),
+            b: compact_u64_at(bytes, 16),
+            write_prev_data: compact_u64_at(bytes, 24),
+        })
+    }
+}
+
+/// Fill a branch adapter record from a compact branch2 record, mirroring
+/// [`fill_branch_adapter`].
+fn fill_branch_adapter_from_compact<F: PrimeField32>(
+    compact: &PreflightBranch2Compact,
+    instruction: &Instruction<F>,
+    pc: u32,
+    record: &mut Rv64BranchAdapterRecord,
+) {
+    record.from_pc = pc;
+    record.from_timestamp = compact.from_timestamp;
+    record.rs1_ptr = instruction.a.as_canonical_u32();
+    record.rs2_ptr = instruction.b.as_canonical_u32();
+    record.reads_aux[0].prev_timestamp = compact.reads_prev_timestamp[0];
+    record.reads_aux[1].prev_timestamp = compact.reads_prev_timestamp[1];
+}
+
+fn assemble_branch_eq_inline<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError> {
+    let compact = PreflightBranch2Compact::read_for_pc(compact, pc)?;
+    let (adapter_record, core_record): (
+        &mut Rv64BranchAdapterRecord,
+        &mut BranchEqualCoreRecord<BLOCK_FE_WIDTH>,
+    ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64BranchAdapterExecutor>::new());
+    fill_branch_adapter_from_compact(&compact, instruction, pc, adapter_record);
+    core_record.a = u16x4(compact.b);
+    core_record.b = u16x4(compact.c);
+    core_record.imm = instruction.c.as_canonical_u32();
+    core_record.local_opcode = instruction
+        .opcode
+        .local_opcode_idx(BranchEqualOpcode::CLASS_OFFSET) as u8;
+    Ok(())
+}
+
+fn assemble_branch_lt_inline<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError> {
+    let compact = PreflightBranch2Compact::read_for_pc(compact, pc)?;
+    let (adapter_record, core_record): (
+        &mut Rv64BranchAdapterRecord,
+        &mut BranchLessThanCoreRecord<BLOCK_FE_WIDTH, U16_BITS>,
+    ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64BranchAdapterExecutor>::new());
+    fill_branch_adapter_from_compact(&compact, instruction, pc, adapter_record);
+    core_record.a = u16x4(compact.b);
+    core_record.b = u16x4(compact.c);
+    core_record.imm = instruction.c.as_canonical_u32();
+    core_record.local_opcode = instruction
+        .opcode
+        .local_opcode_idx(BranchLessThanOpcode::CLASS_OFFSET) as u8;
+    Ok(())
+}
+
+/// Fill a (conditional) rd-write adapter record from a compact wr1 record,
+/// mirroring [`fill_cond_rdwrite_adapter`] / [`fill_rdwrite_adapter`].
+fn fill_rdwrite_adapter_from_compact<F: PrimeField32>(
+    compact: &PreflightWr1Compact,
+    instruction: &Instruction<F>,
+    pc: u32,
+    write_enabled: bool,
+    record: &mut Rv64RdWriteAdapterRecord,
+) {
+    record.from_pc = pc;
+    record.from_timestamp = compact.from_timestamp;
+    if write_enabled {
+        record.rd_ptr = instruction.a.as_canonical_u32();
+        record.rd_aux_record = MemoryWriteAuxRecord {
+            prev_timestamp: compact.write_prev_timestamp,
+            prev_data: u16x4(compact.write_prev_data),
+        };
+    } else {
+        record.rd_ptr = u32::MAX;
+    }
+}
+
+fn assemble_jal_lui_inline<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError> {
+    let compact = PreflightWr1Compact::read_for_pc(compact, pc)?;
+    let (adapter_record, core_record): (&mut Rv64RdWriteAdapterRecord, &mut Rv64JalLuiCoreRecord) =
+        arena.alloc(EmptyAdapterCoreLayout::<F, Rv64CondRdWriteAdapterExecutor>::new());
+    fill_rdwrite_adapter_from_compact(
+        &compact,
+        instruction,
+        pc,
+        instruction.f.is_one(),
+        adapter_record,
+    );
+    let local = instruction
+        .opcode
+        .local_opcode_idx(Rv64JalLuiOpcode::CLASS_OFFSET);
+    let is_jal = local == JAL;
+    let imm = instruction.c.as_canonical_u32();
+    let signed_imm = if is_jal {
+        if imm < (1 << 20) {
+            imm as i32
+        } else {
+            let neg_imm = F::ORDER_U32 - imm;
+            -(neg_imm as i32)
+        }
+    } else {
+        imm as i32
+    };
+    core_record.imm = imm;
+    core_record.rd_data = run_jal_lui_value(is_jal, pc, signed_imm);
+    core_record.is_jal = is_jal;
+    Ok(())
+}
+
+fn assemble_auipc_inline<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError> {
+    let compact = PreflightWr1Compact::read_for_pc(compact, pc)?;
+    let (adapter_record, core_record): (&mut Rv64RdWriteAdapterRecord, &mut Rv64AuipcCoreRecord) =
+        arena.alloc(EmptyAdapterCoreLayout::<F, Rv64RdWriteAdapterExecutor>::new());
+    fill_rdwrite_adapter_from_compact(&compact, instruction, pc, true, adapter_record);
+    core_record.from_pc = pc;
+    core_record.imm = instruction.c.as_canonical_u32();
+    Ok(())
+}
+
+fn assemble_jalr_inline<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError> {
+    let compact = PreflightRw1Compact::read_for_pc(compact, pc)?;
+    let (adapter_record, core_record): (&mut Rv64JalrAdapterRecord, &mut Rv64JalrCoreRecord) =
+        arena.alloc(EmptyAdapterCoreLayout::<F, Rv64JalrAdapterExecutor>::new());
+    adapter_record.from_pc = pc;
+    adapter_record.from_timestamp = compact.from_timestamp;
+    adapter_record.rs1_ptr = instruction.b.as_canonical_u32();
+    adapter_record.reads_aux = MemoryReadAuxRecord {
+        prev_timestamp: compact.read_prev_timestamp,
+    };
+    if instruction.f.is_one() {
+        adapter_record.rd_ptr = instruction.a.as_canonical_u32();
+        adapter_record.writes_aux = MemoryWriteAuxRecord {
+            prev_timestamp: compact.write_prev_timestamp,
+            prev_data: u16x4(compact.write_prev_data),
+        };
+    } else {
+        adapter_record.rd_ptr = u32::MAX;
+    }
+    core_record.imm = instruction.c.as_canonical_u32() as u16;
+    core_record.from_pc = pc;
+    core_record.rs1_val = compact.b as u32;
+    core_record.imm_sign = instruction.g.is_one();
+    Ok(())
+}
+
+fn fill_load_byte_adapter_from_compact<F: PrimeField32>(
+    compact: &PreflightAlu3Compact,
+    instruction: &Instruction<F>,
+    pc: u32,
+    record: &mut Rv64LoadByteAdapterRecord,
+) {
+    record.from_pc = pc;
+    record.from_timestamp = compact.from_timestamp;
+    record.rs1_ptr = instruction.b.as_canonical_u32() as u8;
+    record.rs1_aux_record.prev_timestamp = compact.reads_prev_timestamp[0];
+    record.rs1_val = compact.b as u32;
+    record.rd_ptr = if instruction.f.is_one() {
+        instruction.a.as_canonical_u32() as u8
+    } else {
+        u8::MAX
+    };
+    record.read_data_aux.prev_timestamp = compact.reads_prev_timestamp[1];
+    record.imm = instruction.c.as_canonical_u32() as u16;
+    record.imm_sign = instruction.g.is_one();
+    if record.rd_ptr != u8::MAX {
+        record.write_prev_timestamp = compact.write_prev_timestamp;
+        record.write_prev_data = u16x4(compact.write_prev_data);
+    }
+}
+
+fn fill_load_multi_adapter_from_compact<F: PrimeField32>(
+    compact: &PreflightAlu3Compact,
+    instruction: &Instruction<F>,
+    pc: u32,
+    record: &mut Rv64LoadMultiByteAdapterRecord,
+) {
+    record.from_pc = pc;
+    record.from_timestamp = compact.from_timestamp;
+    record.rs1_ptr = instruction.b.as_canonical_u32() as u8;
+    record.rs1_aux_record.prev_timestamp = compact.reads_prev_timestamp[0];
+    record.rs1_val = compact.b as u32;
+    record.rd_ptr = if instruction.f.is_one() {
+        instruction.a.as_canonical_u32() as u8
+    } else {
+        u8::MAX
+    };
+    record.read_data_aux[0].prev_timestamp = compact.reads_prev_timestamp[1];
+    record.read_data_aux[1].prev_timestamp = u32::MAX;
+    record.imm = instruction.c.as_canonical_u32() as u16;
+    record.imm_sign = instruction.g.is_one();
+    if record.rd_ptr != u8::MAX {
+        record.write_prev_timestamp = compact.write_prev_timestamp;
+        record.write_prev_data = u16x4(compact.write_prev_data);
+    }
+}
+
+fn fill_store_byte_adapter_from_compact<F: PrimeField32>(
+    compact: &PreflightAlu3Compact,
+    instruction: &Instruction<F>,
+    pc: u32,
+    record: &mut Rv64StoreByteAdapterRecord,
+) {
+    record.from_pc = pc;
+    record.from_timestamp = compact.from_timestamp;
+    record.rs1_ptr = instruction.b.as_canonical_u32() as u8;
+    record.rs1_aux_record.prev_timestamp = compact.reads_prev_timestamp[0];
+    record.rs1_val = compact.b as u32;
+    record.rs2_ptr = instruction.a.as_canonical_u32() as u8;
+    record.read_data_aux.prev_timestamp = compact.reads_prev_timestamp[1];
+    record.imm = instruction.c.as_canonical_u32() as u16;
+    record.imm_sign = instruction.g.is_one();
+    record.mem_as = instruction.e.as_canonical_u32() as u8;
+    record.write_prev_timestamp = compact.write_prev_timestamp;
+}
+
+fn fill_store_multi_adapter_from_compact<F: PrimeField32>(
+    compact: &PreflightAlu3Compact,
+    instruction: &Instruction<F>,
+    pc: u32,
+    record: &mut Rv64StoreMultiByteAdapterRecord,
+) {
+    record.from_pc = pc;
+    record.from_timestamp = compact.from_timestamp;
+    record.rs1_ptr = instruction.b.as_canonical_u32() as u8;
+    record.rs1_aux_record.prev_timestamp = compact.reads_prev_timestamp[0];
+    record.rs1_val = compact.b as u32;
+    record.rs2_ptr = instruction.a.as_canonical_u32() as u8;
+    record.read_data_aux.prev_timestamp = compact.reads_prev_timestamp[1];
+    record.imm = instruction.c.as_canonical_u32() as u16;
+    record.imm_sign = instruction.g.is_one();
+    record.mem_as = instruction.e.as_canonical_u32() as u8;
+    record.write_prev_timestamps = [compact.write_prev_timestamp, u32::MAX];
+}
+
+fn ensure_load_memory_as<F: PrimeField32>(
+    instruction: &Instruction<F>,
+    pc: u32,
+) -> Result<(), ExecutionError> {
+    let mem_as = instruction.e.as_canonical_u32();
+    if mem_as != RV64_MEMORY_AS {
+        return Err(ExecutionError::RvrExecution(format!(
+            "inline load at pc {pc:#x} must target main memory, got AS {mem_as}"
+        )));
+    }
+    Ok(())
+}
+
+fn ensure_store_memory_as<F: PrimeField32>(
+    instruction: &Instruction<F>,
+    pc: u32,
+) -> Result<(), ExecutionError> {
+    let mem_as = instruction.e.as_canonical_u32();
+    if mem_as != RV64_MEMORY_AS && mem_as != PUBLIC_VALUES_AS {
+        return Err(ExecutionError::RvrExecution(format!(
+            "inline store at pc {pc:#x} must target main memory or public values, got AS {mem_as}"
+        )));
+    }
+    Ok(())
+}
+
+fn assemble_load_byte_inline<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError> {
+    let compact = PreflightAlu3Compact::read_for_pc(compact, pc)?;
+    ensure_load_memory_as(instruction, pc)?;
+    let (adapter_record, core_record): (&mut Rv64LoadByteAdapterRecord, &mut LoadByteRecord) =
+        arena.alloc(EmptyAdapterCoreLayout::<F, Rv64LoadByteAdapterExecutor>::new());
+    fill_load_byte_adapter_from_compact(&compact, instruction, pc, adapter_record);
+    core_record.read_data = u16x4(compact.c);
+    Ok(())
+}
+
+fn assemble_load_multi_inline<F: PrimeField32, RA, const WIDTH: usize>(
+    arena: &mut RA,
+    instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError>
+where
+    RA: Rv64IRecordArena<F>,
+    for<'a> RA: RecordArena<
+        'a,
+        EmptyAdapterCoreLayout<F, Rv64LoadMultiByteAdapterExecutor<WIDTH>>,
+        (&'a mut Rv64LoadMultiByteAdapterRecord, &'a mut LoadRecord),
+    >,
+{
+    let compact = PreflightAlu3Compact::read_for_pc(compact, pc)?;
+    ensure_load_memory_as(instruction, pc)?;
+    let (adapter_record, core_record): (&mut Rv64LoadMultiByteAdapterRecord, &mut LoadRecord) =
+        arena.alloc(EmptyAdapterCoreLayout::<
+            F,
+            Rv64LoadMultiByteAdapterExecutor<WIDTH>,
+        >::new());
+    fill_load_multi_adapter_from_compact(&compact, instruction, pc, adapter_record);
+    core_record.read_data = [u16x4(compact.c), [0; BLOCK_FE_WIDTH]];
+    Ok(())
+}
+
+fn assemble_store_byte_inline<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError> {
+    let compact = PreflightAlu3Compact::read_for_pc(compact, pc)?;
+    ensure_store_memory_as(instruction, pc)?;
+    let (adapter_record, core_record): (&mut Rv64StoreByteAdapterRecord, &mut StoreByteRecord) =
+        arena.alloc(EmptyAdapterCoreLayout::<F, Rv64StoreByteAdapterExecutor>::new());
+    fill_store_byte_adapter_from_compact(&compact, instruction, pc, adapter_record);
+    core_record.read_data = u16x4(compact.c);
+    core_record.prev_data = u16x4(compact.write_prev_data);
+    Ok(())
+}
+
+fn assemble_store_multi_inline<F: PrimeField32, RA, const WIDTH: usize>(
+    arena: &mut RA,
+    instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError>
+where
+    RA: Rv64IRecordArena<F>,
+    for<'a> RA: RecordArena<
+        'a,
+        EmptyAdapterCoreLayout<F, Rv64StoreMultiByteAdapterExecutor<WIDTH>>,
+        (&'a mut Rv64StoreMultiByteAdapterRecord, &'a mut StoreRecord),
+    >,
+{
+    let compact = PreflightAlu3Compact::read_for_pc(compact, pc)?;
+    ensure_store_memory_as(instruction, pc)?;
+    let (adapter_record, core_record): (&mut Rv64StoreMultiByteAdapterRecord, &mut StoreRecord) =
+        arena.alloc(EmptyAdapterCoreLayout::<
+            F,
+            Rv64StoreMultiByteAdapterExecutor<WIDTH>,
+        >::new());
+    fill_store_multi_adapter_from_compact(&compact, instruction, pc, adapter_record);
+    core_record.read_data = u16x4(compact.c);
+    core_record.prev_data = [u16x4(compact.write_prev_data), [0; BLOCK_FE_WIDTH]];
+    Ok(())
+}
+
+fn assemble_load_multi_crossing<F: PrimeField32, RA, const WIDTH: usize>(
+    arena: &mut RA,
+    access: &AccessView<'_, F>,
+    instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+    timestamp: u32,
+) -> Result<(), ExecutionError>
+where
+    RA: Rv64IRecordArena<F>,
+    for<'a> RA: RecordArena<
+        'a,
+        EmptyAdapterCoreLayout<F, Rv64LoadMultiByteAdapterExecutor<WIDTH>>,
+        (&'a mut Rv64LoadMultiByteAdapterRecord, &'a mut LoadRecord),
+    >,
+{
+    let compact = PreflightAlu3Compact::read_for_pc(compact, pc)?;
+    ensure_load_memory_as(instruction, pc)?;
+    let (adapter_record, core_record): (&mut Rv64LoadMultiByteAdapterRecord, &mut LoadRecord) =
+        arena.alloc(EmptyAdapterCoreLayout::<
+            F,
+            Rv64LoadMultiByteAdapterExecutor<WIDTH>,
+        >::new());
+    fill_load_multi_adapter_from_compact(&compact, instruction, pc, adapter_record);
+    let effective_ptr = adapter_record.rs1_val.wrapping_add(sign_extend_imm16(
+        u32::from(adapter_record.imm),
+        adapter_record.imm_sign,
+    ));
+    let aligned_ptr = effective_ptr & !7;
+    let read0 = access.expect_memory_read(timestamp + 1, aligned_ptr, pc)?;
+    let read1 = access.expect_memory_read(timestamp + 2, aligned_ptr + 8, pc)?;
+    adapter_record.read_data_aux[0].prev_timestamp = read0.prev_timestamp;
+    adapter_record.read_data_aux[1].prev_timestamp = read1.prev_timestamp;
+    core_record.read_data = [
+        read_u16_block(read0.entry.value),
+        read_u16_block(read1.entry.value),
+    ];
+    Ok(())
+}
+
+fn assemble_store_multi_crossing<F: PrimeField32, RA, const WIDTH: usize>(
+    arena: &mut RA,
+    access: &AccessView<'_, F>,
+    instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+    timestamp: u32,
+) -> Result<(), ExecutionError>
+where
+    RA: Rv64IRecordArena<F>,
+    for<'a> RA: RecordArena<
+        'a,
+        EmptyAdapterCoreLayout<F, Rv64StoreMultiByteAdapterExecutor<WIDTH>>,
+        (&'a mut Rv64StoreMultiByteAdapterRecord, &'a mut StoreRecord),
+    >,
+{
+    let compact = PreflightAlu3Compact::read_for_pc(compact, pc)?;
+    ensure_store_memory_as(instruction, pc)?;
+    let (adapter_record, core_record): (&mut Rv64StoreMultiByteAdapterRecord, &mut StoreRecord) =
+        arena.alloc(EmptyAdapterCoreLayout::<
+            F,
+            Rv64StoreMultiByteAdapterExecutor<WIDTH>,
+        >::new());
+    fill_store_multi_adapter_from_compact(&compact, instruction, pc, adapter_record);
+    let effective_ptr = adapter_record.rs1_val.wrapping_add(sign_extend_imm16(
+        u32::from(adapter_record.imm),
+        adapter_record.imm_sign,
+    ));
+    let aligned_ptr = effective_ptr & !7;
+    let mem_as = u32::from(adapter_record.mem_as);
+    let write0 = access.expect_memory_write(timestamp + 2, mem_as, aligned_ptr, pc)?;
+    let write1 = access.expect_memory_write(timestamp + 3, mem_as, aligned_ptr + 8, pc)?;
+    adapter_record.write_prev_timestamps = [write0.prev_timestamp, write1.prev_timestamp];
+    core_record.read_data = u16x4(compact.c);
+    core_record.prev_data = [prev_u16(write0), prev_u16(write1)];
+    Ok(())
+}
+
+fn assemble_less_than<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    access: &AccessView<'_, F>,
+    instruction: &Instruction<F>,
+    pc: u32,
+    timestamp: u32,
+) -> Result<(), ExecutionError> {
+    let (adapter_record, core_record): (
+        &mut Rv64BaseAluU16AdapterRecord,
+        &mut LessThanCoreRecord<BLOCK_FE_WIDTH, U16_BITS>,
+    ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64BaseAluU16AdapterExecutor>::new());
+    let [rs1, rs2] = fill_base_alu_u16_adapter(access, instruction, pc, timestamp, adapter_record)?;
+    core_record.b = rs1;
+    core_record.c = rs2;
+    core_record.local_opcode = instruction
+        .opcode
+        .local_opcode_idx(LessThanOpcode::CLASS_OFFSET) as u8;
+    Ok(())
+}
+
+fn assemble_bitwise<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    access: &AccessView<'_, F>,
+    instruction: &Instruction<F>,
+    pc: u32,
+    timestamp: u32,
+) -> Result<(), ExecutionError> {
+    let (adapter_record, core_record): (
+        &mut Rv64BaseAluAdapterRecord,
+        &mut BitwiseLogicCoreRecord<RV64_REGISTER_NUM_LIMBS>,
+    ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64BaseAluRegAdapterExecutor>::new());
+    let [rs1, rs2] =
+        fill_base_alu_bytes_adapter(access, instruction, pc, timestamp, adapter_record)?;
+    core_record.b = rs1;
+    core_record.c = rs2;
+    core_record.local_opcode = instruction
+        .opcode
+        .local_opcode_idx(BaseAluOpcode::CLASS_OFFSET) as u8;
+    Ok(())
+}
+
+fn assemble_shift<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    access: &AccessView<'_, F>,
+    instruction: &Instruction<F>,
+    pc: u32,
+    timestamp: u32,
+) -> Result<(), ExecutionError> {
+    let local_opcode = ShiftOpcode::from_repr(
+        instruction
+            .opcode
+            .local_opcode_idx(ShiftOpcode::CLASS_OFFSET),
+    )
+    .expect("opcode already classified");
+
+    if local_opcode == ShiftOpcode::SRA {
+        let (adapter_record, core_record): (
+            &mut Rv64BaseAluU16AdapterRecord,
+            &mut ShiftRightArithmeticCoreRecord<BLOCK_FE_WIDTH, U16_BITS>,
+        ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64BaseAluU16AdapterExecutor>::new());
+        let [rs1, rs2] =
+            fill_base_alu_u16_adapter(access, instruction, pc, timestamp, adapter_record)?;
+        core_record.b = rs1;
+        core_record.c = rs2;
+    } else {
+        let (adapter_record, core_record): (
+            &mut Rv64BaseAluU16AdapterRecord,
+            &mut ShiftLogicalCoreRecord<BLOCK_FE_WIDTH, U16_BITS>,
+        ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64BaseAluU16AdapterExecutor>::new());
+        let [rs1, rs2] =
+            fill_base_alu_u16_adapter(access, instruction, pc, timestamp, adapter_record)?;
+        core_record.b = rs1;
+        core_record.c = rs2;
+        core_record.local_opcode = local_opcode as u8;
+    }
+    Ok(())
+}
+
+fn assemble_add_sub_w<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    access: &AccessView<'_, F>,
+    instruction: &Instruction<F>,
+    pc: u32,
+    timestamp: u32,
+) -> Result<(), ExecutionError> {
+    let (adapter_record, core_record): (
+        &mut Rv64BaseAluWU16AdapterRecord,
+        &mut AddSubCoreRecord<RV64_WORD_U16_LIMBS>,
+    ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64BaseAluWU16AdapterExecutor>::new());
+    let [rs1, rs2] =
+        fill_base_alu_w_u16_adapter(access, instruction, pc, timestamp, adapter_record)?;
+    core_record.b = rs1;
+    core_record.c = rs2;
+    core_record.local_opcode = match BaseAluWOpcode::from_repr(
+        instruction
+            .opcode
+            .local_opcode_idx(BaseAluWOpcode::CLASS_OFFSET),
+    )
+    .expect("opcode already classified")
+    {
+        BaseAluWOpcode::ADDW => BaseAluOpcode::ADD as u8,
+        BaseAluWOpcode::SUBW => BaseAluOpcode::SUB as u8,
+    };
+    Ok(())
+}
+
+fn assemble_shift_w<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    access: &AccessView<'_, F>,
+    instruction: &Instruction<F>,
+    pc: u32,
+    timestamp: u32,
+) -> Result<(), ExecutionError> {
+    let local_opcode = ShiftWOpcode::from_repr(
+        instruction
+            .opcode
+            .local_opcode_idx(ShiftWOpcode::CLASS_OFFSET),
+    )
+    .expect("opcode already classified");
+
+    if local_opcode == ShiftWOpcode::SRAW {
+        let (adapter_record, core_record): (
+            &mut Rv64BaseAluWU16AdapterRecord,
+            &mut ShiftRightArithmeticCoreRecord<RV64_WORD_U16_LIMBS, U16_BITS>,
+        ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64BaseAluWU16AdapterExecutor>::new());
+        let [rs1, rs2] =
+            fill_base_alu_w_u16_adapter(access, instruction, pc, timestamp, adapter_record)?;
+        core_record.b = rs1;
+        core_record.c = rs2;
+    } else {
+        let (adapter_record, core_record): (
+            &mut Rv64BaseAluWU16AdapterRecord,
+            &mut ShiftLogicalCoreRecord<RV64_WORD_U16_LIMBS, U16_BITS>,
+        ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64BaseAluWU16AdapterExecutor>::new());
+        let [rs1, rs2] =
+            fill_base_alu_w_u16_adapter(access, instruction, pc, timestamp, adapter_record)?;
+        core_record.b = rs1;
+        core_record.c = rs2;
+        core_record.local_opcode = match local_opcode {
+            ShiftWOpcode::SLLW => ShiftOpcode::SLL as u8,
+            ShiftWOpcode::SRLW => ShiftOpcode::SRL as u8,
+            ShiftWOpcode::SRAW => unreachable!("handled above"),
+        };
+    }
+    Ok(())
+}
+
+fn assemble_branch_eq<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    access: &AccessView<'_, F>,
+    instruction: &Instruction<F>,
+    pc: u32,
+    timestamp: u32,
+) -> Result<(), ExecutionError> {
+    let (adapter_record, core_record): (
+        &mut Rv64BranchAdapterRecord,
+        &mut BranchEqualCoreRecord<BLOCK_FE_WIDTH>,
+    ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64BranchAdapterExecutor>::new());
+    let [rs1, rs2] = fill_branch_adapter(access, instruction, pc, timestamp, adapter_record)?;
+    core_record.a = rs1;
+    core_record.b = rs2;
+    core_record.imm = instruction.c.as_canonical_u32();
+    core_record.local_opcode = instruction
+        .opcode
+        .local_opcode_idx(BranchEqualOpcode::CLASS_OFFSET) as u8;
+    Ok(())
+}
+
+fn assemble_branch_lt<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    access: &AccessView<'_, F>,
+    instruction: &Instruction<F>,
+    pc: u32,
+    timestamp: u32,
+) -> Result<(), ExecutionError> {
+    let (adapter_record, core_record): (
+        &mut Rv64BranchAdapterRecord,
+        &mut BranchLessThanCoreRecord<BLOCK_FE_WIDTH, U16_BITS>,
+    ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64BranchAdapterExecutor>::new());
+    let [rs1, rs2] = fill_branch_adapter(access, instruction, pc, timestamp, adapter_record)?;
+    core_record.a = rs1;
+    core_record.b = rs2;
+    core_record.imm = instruction.c.as_canonical_u32();
+    core_record.local_opcode = instruction
+        .opcode
+        .local_opcode_idx(BranchLessThanOpcode::CLASS_OFFSET) as u8;
+    Ok(())
+}
+
+fn assemble_jal_lui<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    access: &AccessView<'_, F>,
+    instruction: &Instruction<F>,
+    pc: u32,
+    timestamp: u32,
+) -> Result<(), ExecutionError> {
+    let (adapter_record, core_record): (&mut Rv64RdWriteAdapterRecord, &mut Rv64JalLuiCoreRecord) =
+        arena.alloc(EmptyAdapterCoreLayout::<F, Rv64CondRdWriteAdapterExecutor>::new());
+    fill_cond_rdwrite_adapter(access, instruction, pc, timestamp, adapter_record)?;
+    let local = instruction
+        .opcode
+        .local_opcode_idx(Rv64JalLuiOpcode::CLASS_OFFSET);
+    let is_jal = local == JAL;
+    let imm = instruction.c.as_canonical_u32();
+    let signed_imm = if is_jal {
+        if imm < (1 << 20) {
+            imm as i32
+        } else {
+            let neg_imm = F::ORDER_U32 - imm;
+            -(neg_imm as i32)
+        }
+    } else {
+        imm as i32
+    };
+    core_record.imm = imm;
+    core_record.rd_data = run_jal_lui_value(is_jal, pc, signed_imm);
+    core_record.is_jal = is_jal;
+    Ok(())
+}
+
+fn assemble_jalr<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    access: &AccessView<'_, F>,
+    instruction: &Instruction<F>,
+    pc: u32,
+    timestamp: u32,
+) -> Result<(), ExecutionError> {
+    let (adapter_record, core_record): (&mut Rv64JalrAdapterRecord, &mut Rv64JalrCoreRecord) =
+        arena.alloc(EmptyAdapterCoreLayout::<F, Rv64JalrAdapterExecutor>::new());
+    adapter_record.from_pc = pc;
+    adapter_record.from_timestamp = timestamp;
+    adapter_record.rs1_ptr = instruction.b.as_canonical_u32();
+    let rs1_aux = access.expect_reg_read(timestamp, adapter_record.rs1_ptr, pc)?;
+    adapter_record.reads_aux = MemoryReadAuxRecord {
+        prev_timestamp: rs1_aux.prev_timestamp,
+    };
+    let rs1 = u32::from_le_bytes(read_bytes(rs1_aux.entry.value)[..4].try_into().unwrap());
+    if instruction.f.is_one() {
+        adapter_record.rd_ptr = instruction.a.as_canonical_u32();
+        let write_aux = access.expect_reg_write(timestamp + 1, adapter_record.rd_ptr, pc)?;
+        adapter_record.writes_aux = MemoryWriteAuxRecord {
+            prev_timestamp: write_aux.prev_timestamp,
+            prev_data: prev_u16(write_aux),
+        };
+    } else {
+        adapter_record.rd_ptr = u32::MAX;
+    }
+
+    core_record.imm = instruction.c.as_canonical_u32() as u16;
+    core_record.from_pc = pc;
+    core_record.rs1_val = rs1;
+    core_record.imm_sign = instruction.g.is_one();
+    Ok(())
+}
+
+fn assemble_auipc<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    access: &AccessView<'_, F>,
+    instruction: &Instruction<F>,
+    pc: u32,
+    timestamp: u32,
+) -> Result<(), ExecutionError> {
+    let (adapter_record, core_record): (&mut Rv64RdWriteAdapterRecord, &mut Rv64AuipcCoreRecord) =
+        arena.alloc(EmptyAdapterCoreLayout::<F, Rv64RdWriteAdapterExecutor>::new());
+    fill_rdwrite_adapter(access, instruction, pc, timestamp, adapter_record)?;
+    core_record.from_pc = pc;
+    core_record.imm = instruction.c.as_canonical_u32();
+    Ok(())
+}
+
+fn assemble_mul<F: PrimeField32, RA: Rv64MRecordArena<F>>(
+    arena: &mut RA,
+    access: &AccessView<'_, F>,
+    instruction: &Instruction<F>,
+    pc: u32,
+    timestamp: u32,
+) -> Result<(), ExecutionError> {
+    let (adapter_record, core_record): (
+        &mut Rv64MultAdapterRecord,
+        &mut MultiplicationCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>,
+    ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64MultAdapterExecutor>::new());
+    let [rs1, rs2] = fill_mult_adapter(access, instruction, pc, timestamp, adapter_record)?;
+    core_record.b = rs1;
+    core_record.c = rs2;
+    Ok(())
+}
+
+fn assemble_mulh<F: PrimeField32, RA: Rv64MRecordArena<F>>(
+    arena: &mut RA,
+    access: &AccessView<'_, F>,
+    instruction: &Instruction<F>,
+    pc: u32,
+    timestamp: u32,
+) -> Result<(), ExecutionError> {
+    let (adapter_record, core_record): (
+        &mut Rv64MultAdapterRecord,
+        &mut MulHCoreRecord<RV64_REGISTER_NUM_LIMBS, RV64_BYTE_BITS>,
+    ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64MultAdapterExecutor>::new());
+    let [rs1, rs2] = fill_mult_adapter(access, instruction, pc, timestamp, adapter_record)?;
+    core_record.b = rs1;
+    core_record.c = rs2;
+    core_record.local_opcode = instruction
+        .opcode
+        .local_opcode_idx(MulHOpcode::CLASS_OFFSET) as u8;
+    Ok(())
+}
+
+fn assemble_mul_w<F: PrimeField32, RA: Rv64MRecordArena<F>>(
+    arena: &mut RA,
+    access: &AccessView<'_, F>,
+    instruction: &Instruction<F>,
+    pc: u32,
+    timestamp: u32,
+) -> Result<(), ExecutionError> {
+    let (adapter_record, core_record): (
+        &mut Rv64MultWAdapterRecord,
+        &mut MultiplicationCoreRecord<RV64_WORD_NUM_LIMBS, RV64_BYTE_BITS>,
+    ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64MultWAdapterExecutor>::new());
+    let [rs1, rs2] = fill_mult_w_adapter(access, instruction, pc, timestamp, adapter_record)?;
+    core_record.b = rs1;
+    core_record.c = rs2;
+    Ok(())
+}
+
+fn assemble_load_byte<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    access: &AccessView<'_, F>,
+    instruction: &Instruction<F>,
+    pc: u32,
+    timestamp: u32,
+) -> Result<(), ExecutionError> {
+    let (adapter_record, core_record): (&mut Rv64LoadByteAdapterRecord, &mut LoadByteRecord) =
+        arena.alloc(EmptyAdapterCoreLayout::<F, Rv64LoadByteAdapterExecutor>::new());
+    let start = load_store_start(access, instruction, pc, timestamp)?;
+    fill_load_byte_start(adapter_record, start);
+    let aligned_ptr = start.effective_ptr & !7;
+    let read_aux = access.expect_memory_read(timestamp + 1, aligned_ptr, pc)?;
+    adapter_record.read_data_aux.prev_timestamp = read_aux.prev_timestamp;
+    core_record.read_data = read_u16_block(read_aux.entry.value);
+
+    if instruction.f.is_one() {
+        adapter_record.rd_ptr = instruction.a.as_canonical_u32() as u8;
+        let write_aux =
+            access.expect_reg_write(timestamp + 2, u32::from(adapter_record.rd_ptr), pc)?;
+        adapter_record.write_prev_timestamp = write_aux.prev_timestamp;
+        adapter_record.write_prev_data = prev_u16(write_aux);
+    } else {
+        adapter_record.rd_ptr = u8::MAX;
+    }
+    Ok(())
+}
+
+fn assemble_load_multi<F: PrimeField32, RA, const WIDTH: usize>(
+    arena: &mut RA,
+    access: &AccessView<'_, F>,
+    instruction: &Instruction<F>,
+    pc: u32,
+    timestamp: u32,
+) -> Result<(), ExecutionError>
+where
+    RA: Rv64IRecordArena<F>,
+    for<'a> RA: RecordArena<
+        'a,
+        EmptyAdapterCoreLayout<F, Rv64LoadMultiByteAdapterExecutor<WIDTH>>,
+        (&'a mut Rv64LoadMultiByteAdapterRecord, &'a mut LoadRecord),
+    >,
+{
+    let (adapter_record, core_record): (&mut Rv64LoadMultiByteAdapterRecord, &mut LoadRecord) =
+        arena.alloc(EmptyAdapterCoreLayout::<
+            F,
+            Rv64LoadMultiByteAdapterExecutor<WIDTH>,
+        >::new());
+    let start = load_store_start(access, instruction, pc, timestamp)?;
+    fill_load_multi_start(adapter_record, start);
+    let aligned_ptr = start.effective_ptr & !7;
+    let read0 = access.expect_memory_read(timestamp + 1, aligned_ptr, pc)?;
+    adapter_record.read_data_aux[0].prev_timestamp = read0.prev_timestamp;
+    core_record.read_data[0] = read_u16_block(read0.entry.value);
+    if (start.effective_ptr & 7) as usize + WIDTH > 8 {
+        let read1 = access.expect_memory_read(timestamp + 2, aligned_ptr + 8, pc)?;
+        adapter_record.read_data_aux[1].prev_timestamp = read1.prev_timestamp;
+        core_record.read_data[1] = read_u16_block(read1.entry.value);
+    } else {
+        adapter_record.read_data_aux[1].prev_timestamp = u32::MAX;
+        core_record.read_data[1] = [0; BLOCK_FE_WIDTH];
+    }
+    if instruction.f.is_one() {
+        adapter_record.rd_ptr = instruction.a.as_canonical_u32() as u8;
+        let write_aux =
+            access.expect_reg_write(timestamp + 3, u32::from(adapter_record.rd_ptr), pc)?;
+        adapter_record.write_prev_timestamp = write_aux.prev_timestamp;
+        adapter_record.write_prev_data = prev_u16(write_aux);
+    } else {
+        adapter_record.rd_ptr = u8::MAX;
+    }
+    Ok(())
+}
+
+fn assemble_store_byte<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    access: &AccessView<'_, F>,
+    instruction: &Instruction<F>,
+    pc: u32,
+    timestamp: u32,
+) -> Result<(), ExecutionError> {
+    let (adapter_record, core_record): (&mut Rv64StoreByteAdapterRecord, &mut StoreByteRecord) =
+        arena.alloc(EmptyAdapterCoreLayout::<F, Rv64StoreByteAdapterExecutor>::new());
+    let start = load_store_start(access, instruction, pc, timestamp)?;
+    fill_store_byte_start(adapter_record, start);
+    let aligned_ptr = start.effective_ptr & !7;
+    let mem_as = instruction.e.as_canonical_u32();
+    adapter_record.mem_as = mem_as as u8;
+    adapter_record.rs2_ptr = instruction.a.as_canonical_u32() as u8;
+    let read_aux = access.expect_reg_read(timestamp + 1, u32::from(adapter_record.rs2_ptr), pc)?;
+    adapter_record.read_data_aux.prev_timestamp = read_aux.prev_timestamp;
+    core_record.read_data = read_u16_block(read_aux.entry.value);
+
+    let write_aux = access.expect_memory_write(timestamp + 2, mem_as, aligned_ptr, pc)?;
+    adapter_record.write_prev_timestamp = write_aux.prev_timestamp;
+    core_record.prev_data = prev_u16(write_aux);
+    Ok(())
+}
+
+fn assemble_store_multi<F: PrimeField32, RA, const WIDTH: usize>(
+    arena: &mut RA,
+    access: &AccessView<'_, F>,
+    instruction: &Instruction<F>,
+    pc: u32,
+    timestamp: u32,
+) -> Result<(), ExecutionError>
+where
+    RA: Rv64IRecordArena<F>,
+    for<'a> RA: RecordArena<
+        'a,
+        EmptyAdapterCoreLayout<F, Rv64StoreMultiByteAdapterExecutor<WIDTH>>,
+        (&'a mut Rv64StoreMultiByteAdapterRecord, &'a mut StoreRecord),
+    >,
+{
+    let (adapter_record, core_record): (&mut Rv64StoreMultiByteAdapterRecord, &mut StoreRecord) =
+        arena.alloc(EmptyAdapterCoreLayout::<
+            F,
+            Rv64StoreMultiByteAdapterExecutor<WIDTH>,
+        >::new());
+    let start = load_store_start(access, instruction, pc, timestamp)?;
+    fill_store_multi_start(adapter_record, start);
+    let aligned_ptr = start.effective_ptr & !7;
+    let mem_as = instruction.e.as_canonical_u32();
+    adapter_record.mem_as = mem_as as u8;
+    adapter_record.rs2_ptr = instruction.a.as_canonical_u32() as u8;
+    let read_aux = access.expect_reg_read(timestamp + 1, u32::from(adapter_record.rs2_ptr), pc)?;
+    adapter_record.read_data_aux.prev_timestamp = read_aux.prev_timestamp;
+    core_record.read_data = read_u16_block(read_aux.entry.value);
+    let write0 = access.expect_memory_write(timestamp + 2, mem_as, aligned_ptr, pc)?;
+    adapter_record.write_prev_timestamps[0] = write0.prev_timestamp;
+    core_record.prev_data[0] = prev_u16(write0);
+    if (start.effective_ptr & 7) as usize + WIDTH > 8 {
+        let write1 = access.expect_memory_write(timestamp + 3, mem_as, aligned_ptr + 8, pc)?;
+        adapter_record.write_prev_timestamps[1] = write1.prev_timestamp;
+        core_record.prev_data[1] = prev_u16(write1);
+    } else {
+        adapter_record.write_prev_timestamps[1] = u32::MAX;
+        core_record.prev_data[1] = [0; BLOCK_FE_WIDTH];
+    }
+    Ok(())
+}
+
+fn assemble_divrem<F: PrimeField32, RA: Rv64MRecordArena<F>>(
+    arena: &mut RA,
+    access: &AccessView<'_, F>,
+    instruction: &Instruction<F>,
+    pc: u32,
+    timestamp: u32,
+) -> Result<(), ExecutionError> {
+    let (adapter_record, core_record): (
+        &mut Rv64MultAdapterRecord,
+        &mut DivRemCoreRecord<RV64_REGISTER_NUM_LIMBS>,
+    ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64MultAdapterExecutor>::new());
+    let [rs1, rs2] = fill_mult_adapter(access, instruction, pc, timestamp, adapter_record)?;
+    core_record.b = rs1;
+    core_record.c = rs2;
+    core_record.local_opcode = instruction
+        .opcode
+        .local_opcode_idx(DivRemOpcode::CLASS_OFFSET) as u8;
+    Ok(())
+}
+
+fn assemble_divrem_w<F: PrimeField32, RA: Rv64MRecordArena<F>>(
+    arena: &mut RA,
+    access: &AccessView<'_, F>,
+    instruction: &Instruction<F>,
+    pc: u32,
+    timestamp: u32,
+) -> Result<(), ExecutionError> {
+    let (adapter_record, core_record): (
+        &mut Rv64MultWAdapterRecord,
+        &mut DivRemCoreRecord<RV64_WORD_NUM_LIMBS>,
+    ) = arena.alloc(EmptyAdapterCoreLayout::<F, Rv64MultWAdapterExecutor>::new());
+    let [rs1, rs2] = fill_mult_w_adapter(access, instruction, pc, timestamp, adapter_record)?;
+    core_record.b = rs1;
+    core_record.c = rs2;
+    core_record.local_opcode = instruction
+        .opcode
+        .local_opcode_idx(DivRemWOpcode::CLASS_OFFSET) as u8;
+    Ok(())
+}
+
+fn assemble_hintstore<F: PrimeField32, RA: Rv64IoRecordArena<F>>(
+    arena: &mut RA,
+    access: &AccessView<'_, F>,
+    instruction: &Instruction<F>,
+    pc: u32,
+    timestamp: u32,
+) -> Result<(), ExecutionError> {
+    let local_opcode = Rv64HintStoreOpcode::from_repr(
+        instruction
+            .opcode
+            .local_opcode_idx(Rv64HintStoreOpcode::CLASS_OFFSET),
+    )
+    .expect("opcode already classified");
+    let mem_ptr_ptr = instruction.b.as_canonical_u32();
+    let mem_ptr_aux = access.expect_reg_read(timestamp, mem_ptr_ptr, pc)?;
+    let mem_ptr = read_low_u32(mem_ptr_aux.entry.value);
+
+    let (num_words, num_words_aux) = if local_opcode == Rv64HintStoreOpcode::HINT_STORED {
+        (1, None)
+    } else {
+        let num_words_ptr = instruction.a.as_canonical_u32();
+        let aux = access.expect_reg_read(timestamp + 1, num_words_ptr, pc)?;
+        (read_low_u32(aux.entry.value), Some(aux))
+    };
+    if num_words == 0 {
+        return Err(rvr_error(format!(
+            "hintstore at pc {pc:#x} requested zero rows"
+        )));
+    }
+
+    let record: Rv64HintStoreRecordMut<'_> = arena.alloc(MultiRowLayout::new(
+        Rv64HintStoreMetadata::new(num_words as usize),
+    ));
+    record.inner.num_words = num_words;
+    record.inner.from_pc = pc;
+    record.inner.timestamp = timestamp;
+    record.inner.mem_ptr_ptr = mem_ptr_ptr;
+    record.inner.mem_ptr = mem_ptr;
+    record.inner.mem_ptr_aux_record.prev_timestamp = mem_ptr_aux.prev_timestamp;
+    if let Some(aux) = num_words_aux {
+        record.inner.num_words_ptr = instruction.a.as_canonical_u32();
+        record.inner.num_words_read.prev_timestamp = aux.prev_timestamp;
+    } else {
+        record.inner.num_words_ptr = u32::MAX;
+        record.inner.num_words_read.prev_timestamp = 0;
+    }
+
+    for (idx, var) in record.var.iter_mut().enumerate() {
+        let write_timestamp = timestamp + 2 + idx as u32 * 3;
+        let write_addr = mem_ptr + idx as u32 * RV64_REGISTER_NUM_LIMBS as u32;
+        let write_aux =
+            access.expect_memory_write(write_timestamp, RV64_MEMORY_AS, write_addr, pc)?;
+        var.data = read_bytes(write_aux.entry.value);
+        var.data_write_aux = MemoryWriteBytesAuxRecord {
+            prev_timestamp: write_aux.prev_timestamp,
+            prev_data: prev_bytes(write_aux),
+        };
+    }
+    Ok(())
+}
+
+fn reject_hintstore_compact<F: PrimeField32, RA: Rv64IoRecordArena<F>>(
+    _arena: &mut RA,
+    _instruction: &Instruction<F>,
+    _compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError> {
+    Err(rvr_error(format!(
+        "HintStore at pc {pc:#x} requires its packed variable-row arena-native target"
+    )))
+}
+
+fn assemble_phantom<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    _access: &AccessView<'_, F>,
+    instruction: &Instruction<F>,
+    pc: u32,
+    timestamp: u32,
+) -> Result<(), ExecutionError> {
+    let record: &mut PhantomRecord = arena.alloc(EmptyMultiRowLayout::default());
+    record.pc = pc;
+    record.timestamp = timestamp;
+    record.operands = [instruction.a, instruction.b, instruction.c].map(|x| x.as_canonical_u32());
+    Ok(())
+}
+
+fn assemble_phantom_inline<F: PrimeField32, RA: Rv64IRecordArena<F>>(
+    arena: &mut RA,
+    _instruction: &Instruction<F>,
+    compact: &[u8],
+    pc: u32,
+) -> Result<(), ExecutionError> {
+    if compact.len() != size_of::<PhantomRecord>() {
+        return Err(rvr_error(format!(
+            "invalid Phantom inline record size {} at pc {pc:#x}; expected {}",
+            compact.len(),
+            size_of::<PhantomRecord>()
+        )));
+    }
+    let mut words = compact
+        .chunks_exact(size_of::<u32>())
+        .map(|word| u32::from_ne_bytes(word.try_into().unwrap()));
+    let record: &mut PhantomRecord = arena.alloc(EmptyMultiRowLayout::default());
+    record.pc = words.next().unwrap();
+    record.operands = [
+        words.next().unwrap(),
+        words.next().unwrap(),
+        words.next().unwrap(),
+    ];
+    record.timestamp = words.next().unwrap();
+    debug_assert!(words.next().is_none());
+    Ok(())
+}
+
+#[derive(Clone, Copy)]
+struct LoadStoreStart {
+    from_pc: u32,
+    from_timestamp: u32,
+    rs1_ptr: u8,
+    rs1_val: u32,
+    rs1_prev_timestamp: u32,
+    imm: u16,
+    imm_sign: bool,
+    effective_ptr: u32,
+}
+
+fn load_store_start<F: PrimeField32>(
+    access: &AccessView<'_, F>,
+    instruction: &Instruction<F>,
+    pc: u32,
+    timestamp: u32,
+) -> Result<LoadStoreStart, ExecutionError> {
+    let rs1_ptr = instruction.b.as_canonical_u32();
+    let rs1_aux = access.expect_reg_read(timestamp, rs1_ptr, pc)?;
+    let rs1_val = read_low_u32(rs1_aux.entry.value);
+    let imm = instruction.c.as_canonical_u32() as u16;
+    let imm_sign = instruction.g.is_one();
+    Ok(LoadStoreStart {
+        from_pc: pc,
+        from_timestamp: timestamp,
+        rs1_ptr: rs1_ptr as u8,
+        rs1_val,
+        rs1_prev_timestamp: rs1_aux.prev_timestamp,
+        imm,
+        imm_sign,
+        effective_ptr: rs1_val.wrapping_add(sign_extend_imm16(imm as u32, imm_sign)),
+    })
+}
+
+fn fill_load_byte_start(record: &mut Rv64LoadByteAdapterRecord, start: LoadStoreStart) {
+    record.from_pc = start.from_pc;
+    record.from_timestamp = start.from_timestamp;
+    record.rs1_ptr = start.rs1_ptr;
+    record.rs1_val = start.rs1_val;
+    record.rs1_aux_record.prev_timestamp = start.rs1_prev_timestamp;
+    record.imm = start.imm;
+    record.imm_sign = start.imm_sign;
+}
+
+fn fill_load_multi_start(record: &mut Rv64LoadMultiByteAdapterRecord, start: LoadStoreStart) {
+    record.from_pc = start.from_pc;
+    record.from_timestamp = start.from_timestamp;
+    record.rs1_ptr = start.rs1_ptr;
+    record.rs1_val = start.rs1_val;
+    record.rs1_aux_record.prev_timestamp = start.rs1_prev_timestamp;
+    record.imm = start.imm;
+    record.imm_sign = start.imm_sign;
+}
+
+fn fill_store_byte_start(record: &mut Rv64StoreByteAdapterRecord, start: LoadStoreStart) {
+    record.from_pc = start.from_pc;
+    record.from_timestamp = start.from_timestamp;
+    record.rs1_ptr = start.rs1_ptr;
+    record.rs1_val = start.rs1_val;
+    record.rs1_aux_record.prev_timestamp = start.rs1_prev_timestamp;
+    record.imm = start.imm;
+    record.imm_sign = start.imm_sign;
+}
+
+fn fill_store_multi_start(record: &mut Rv64StoreMultiByteAdapterRecord, start: LoadStoreStart) {
+    record.from_pc = start.from_pc;
+    record.from_timestamp = start.from_timestamp;
+    record.rs1_ptr = start.rs1_ptr;
+    record.rs1_val = start.rs1_val;
+    record.rs1_aux_record.prev_timestamp = start.rs1_prev_timestamp;
+    record.imm = start.imm;
+    record.imm_sign = start.imm_sign;
+}
+
+fn fill_base_alu_u16_adapter<F: PrimeField32>(
+    access: &AccessView<'_, F>,
+    instruction: &Instruction<F>,
+    pc: u32,
+    timestamp: u32,
+    record: &mut Rv64BaseAluU16AdapterRecord,
+) -> Result<[[u16; BLOCK_FE_WIDTH]; 2], ExecutionError> {
+    record.from_pc = pc;
+    record.from_timestamp = timestamp;
+    record.rs1_ptr = instruction.b.as_canonical_u32();
+    let rs1_aux = access.expect_reg_read(timestamp, record.rs1_ptr, pc)?;
+    record.reads_aux[0].prev_timestamp = rs1_aux.prev_timestamp;
+    let rs1 = read_u16_block(rs1_aux.entry.value);
+
+    record.rs2_ptr = instruction.c.as_canonical_u32();
+    let rs2_aux = access.expect_reg_read(timestamp + 1, record.rs2_ptr, pc)?;
+    record.reads_aux[1].prev_timestamp = rs2_aux.prev_timestamp;
+    let rs2 = read_u16_block(rs2_aux.entry.value);
+
+    record.rd_ptr = instruction.a.as_canonical_u32();
+    let write_aux = access.expect_reg_write(timestamp + 2, record.rd_ptr, pc)?;
+    record.writes_aux = MemoryWriteAuxRecord {
+        prev_timestamp: write_aux.prev_timestamp,
+        prev_data: prev_u16(write_aux),
+    };
+    Ok([rs1, rs2])
+}
+
+fn fill_base_alu_bytes_adapter<F: PrimeField32>(
+    access: &AccessView<'_, F>,
+    instruction: &Instruction<F>,
+    pc: u32,
+    timestamp: u32,
+    record: &mut Rv64BaseAluAdapterRecord,
+) -> Result<[[u8; RV64_REGISTER_NUM_LIMBS]; 2], ExecutionError> {
+    record.from_pc = pc;
+    record.from_timestamp = timestamp;
+    record.rs1_ptr = instruction.b.as_canonical_u32();
+    let rs1_aux = access.expect_reg_read(timestamp, record.rs1_ptr, pc)?;
+    record.reads_aux[0].prev_timestamp = rs1_aux.prev_timestamp;
+    let rs1 = read_bytes(rs1_aux.entry.value);
+
+    record.rs2_ptr = instruction.c.as_canonical_u32();
+    let rs2_aux = access.expect_reg_read(timestamp + 1, record.rs2_ptr, pc)?;
+    record.reads_aux[1].prev_timestamp = rs2_aux.prev_timestamp;
+    let rs2 = read_bytes(rs2_aux.entry.value);
+
+    record.rd_ptr = instruction.a.as_canonical_u32();
+    let write_aux = access.expect_reg_write(timestamp + 2, record.rd_ptr, pc)?;
+    record.writes_aux = MemoryWriteAuxRecord {
+        prev_timestamp: write_aux.prev_timestamp,
+        prev_data: prev_bytes(write_aux),
+    };
+    Ok([rs1, rs2])
+}
+
+fn fill_base_alu_w_u16_adapter<F: PrimeField32>(
+    access: &AccessView<'_, F>,
+    instruction: &Instruction<F>,
+    pc: u32,
+    timestamp: u32,
+    record: &mut Rv64BaseAluWU16AdapterRecord,
+) -> Result<[[u16; RV64_WORD_U16_LIMBS]; 2], ExecutionError> {
+    record.from_pc = pc;
+    record.from_timestamp = timestamp;
+    record.rs1_ptr = instruction.b.as_canonical_u32();
+    let rs1_aux = access.expect_reg_read(timestamp, record.rs1_ptr, pc)?;
+    record.reads_aux[0].prev_timestamp = rs1_aux.prev_timestamp;
+    let rs1_full = read_u16_block(rs1_aux.entry.value);
+    record.rs1_high = [rs1_full[2], rs1_full[3]];
+    let rs1 = [rs1_full[0], rs1_full[1]];
+
+    record.rs2_ptr = instruction.c.as_canonical_u32();
+    let rs2_aux = access.expect_reg_read(timestamp + 1, record.rs2_ptr, pc)?;
+    record.reads_aux[1].prev_timestamp = rs2_aux.prev_timestamp;
+    let rs2_full = read_u16_block(rs2_aux.entry.value);
+    record.rs2_high = [rs2_full[2], rs2_full[3]];
+    let rs2 = [rs2_full[0], rs2_full[1]];
+
+    record.rd_ptr = instruction.a.as_canonical_u32();
+    let write_aux = access.expect_reg_write(timestamp + 2, record.rd_ptr, pc)?;
+    let write_full = read_u16_block(write_aux.entry.value);
+    record.result_high = write_full[RV64_WORD_U16_LIMBS - 1];
+    record.writes_aux = MemoryWriteAuxRecord {
+        prev_timestamp: write_aux.prev_timestamp,
+        prev_data: prev_u16(write_aux),
+    };
+    Ok([rs1, rs2])
+}
+
+fn fill_branch_adapter<F: PrimeField32>(
+    access: &AccessView<'_, F>,
+    instruction: &Instruction<F>,
+    pc: u32,
+    timestamp: u32,
+    record: &mut Rv64BranchAdapterRecord,
+) -> Result<[[u16; BLOCK_FE_WIDTH]; 2], ExecutionError> {
+    record.from_pc = pc;
+    record.from_timestamp = timestamp;
+    record.rs1_ptr = instruction.a.as_canonical_u32();
+    let rs1_aux = access.expect_reg_read(timestamp, record.rs1_ptr, pc)?;
+    record.reads_aux[0].prev_timestamp = rs1_aux.prev_timestamp;
+    record.rs2_ptr = instruction.b.as_canonical_u32();
+    let rs2_aux = access.expect_reg_read(timestamp + 1, record.rs2_ptr, pc)?;
+    record.reads_aux[1].prev_timestamp = rs2_aux.prev_timestamp;
+    Ok([
+        read_u16_block(rs1_aux.entry.value),
+        read_u16_block(rs2_aux.entry.value),
+    ])
+}
+
+fn fill_rdwrite_adapter<F: PrimeField32>(
+    access: &AccessView<'_, F>,
+    instruction: &Instruction<F>,
+    pc: u32,
+    timestamp: u32,
+    record: &mut Rv64RdWriteAdapterRecord,
+) -> Result<(), ExecutionError> {
+    record.from_pc = pc;
+    record.from_timestamp = timestamp;
+    record.rd_ptr = instruction.a.as_canonical_u32();
+    let write_aux = access.expect_reg_write(timestamp, record.rd_ptr, pc)?;
+    record.rd_aux_record = MemoryWriteAuxRecord {
+        prev_timestamp: write_aux.prev_timestamp,
+        prev_data: prev_u16(write_aux),
+    };
+    Ok(())
+}
+
+fn fill_cond_rdwrite_adapter<F: PrimeField32>(
+    access: &AccessView<'_, F>,
+    instruction: &Instruction<F>,
+    pc: u32,
+    timestamp: u32,
+    record: &mut Rv64RdWriteAdapterRecord,
+) -> Result<(), ExecutionError> {
+    record.from_pc = pc;
+    record.from_timestamp = timestamp;
+    if instruction.f.is_one() {
+        record.rd_ptr = instruction.a.as_canonical_u32();
+        let write_aux = access.expect_reg_write(timestamp, record.rd_ptr, pc)?;
+        record.rd_aux_record = MemoryWriteAuxRecord {
+            prev_timestamp: write_aux.prev_timestamp,
+            prev_data: prev_u16(write_aux),
+        };
+    } else {
+        record.rd_ptr = u32::MAX;
+    }
+    Ok(())
+}
+
+fn fill_mult_adapter<F: PrimeField32>(
+    access: &AccessView<'_, F>,
+    instruction: &Instruction<F>,
+    pc: u32,
+    timestamp: u32,
+    record: &mut Rv64MultAdapterRecord,
+) -> Result<[[u8; RV64_REGISTER_NUM_LIMBS]; 2], ExecutionError> {
+    record.from_pc = pc;
+    record.from_timestamp = timestamp;
+    record.rs1_ptr = instruction.b.as_canonical_u32();
+    let rs1_aux = access.expect_reg_read(timestamp, record.rs1_ptr, pc)?;
+    record.reads_aux[0].prev_timestamp = rs1_aux.prev_timestamp;
+    record.rs2_ptr = instruction.c.as_canonical_u32();
+    let rs2_aux = access.expect_reg_read(timestamp + 1, record.rs2_ptr, pc)?;
+    record.reads_aux[1].prev_timestamp = rs2_aux.prev_timestamp;
+    record.rd_ptr = instruction.a.as_canonical_u32();
+    let write_aux = access.expect_reg_write(timestamp + 2, record.rd_ptr, pc)?;
+    record.writes_aux = MemoryWriteAuxRecord {
+        prev_timestamp: write_aux.prev_timestamp,
+        prev_data: prev_bytes(write_aux),
+    };
+    Ok([
+        read_bytes(rs1_aux.entry.value),
+        read_bytes(rs2_aux.entry.value),
+    ])
+}
+
+fn fill_mult_w_adapter<F: PrimeField32>(
+    access: &AccessView<'_, F>,
+    instruction: &Instruction<F>,
+    pc: u32,
+    timestamp: u32,
+    record: &mut Rv64MultWAdapterRecord,
+) -> Result<[[u8; RV64_WORD_NUM_LIMBS]; 2], ExecutionError> {
+    record.from_pc = pc;
+    record.from_timestamp = timestamp;
+    record.rs1_ptr = instruction.b.as_canonical_u32();
+    let rs1_aux = access.expect_reg_read(timestamp, record.rs1_ptr, pc)?;
+    record.reads_aux[0].prev_timestamp = rs1_aux.prev_timestamp;
+    let rs1_full = read_bytes(rs1_aux.entry.value);
+    record
+        .rs1_high
+        .copy_from_slice(&rs1_full[RV64_WORD_NUM_LIMBS..]);
+
+    record.rs2_ptr = instruction.c.as_canonical_u32();
+    let rs2_aux = access.expect_reg_read(timestamp + 1, record.rs2_ptr, pc)?;
+    record.reads_aux[1].prev_timestamp = rs2_aux.prev_timestamp;
+    let rs2_full = read_bytes(rs2_aux.entry.value);
+    record
+        .rs2_high
+        .copy_from_slice(&rs2_full[RV64_WORD_NUM_LIMBS..]);
+
+    record.rd_ptr = instruction.a.as_canonical_u32();
+    let write_aux = access.expect_reg_write(timestamp + 2, record.rd_ptr, pc)?;
+    let write_full = read_bytes(write_aux.entry.value);
+    record.result_word_msl = write_full[RV64_WORD_NUM_LIMBS - 1];
+    record.result_sign = record.result_word_msl >> (RV64_BYTE_BITS as u8 - 1);
+    record.writes_aux = MemoryWriteAuxRecord {
+        prev_timestamp: write_aux.prev_timestamp,
+        prev_data: prev_bytes(write_aux),
+    };
+    Ok([
+        rs1_full[..RV64_WORD_NUM_LIMBS].try_into().unwrap(),
+        rs2_full[..RV64_WORD_NUM_LIMBS].try_into().unwrap(),
+    ])
+}
+
+fn read_bytes(value: u64) -> [u8; RV64_REGISTER_NUM_LIMBS] {
+    value.to_le_bytes()
+}
+
+fn read_low_u32(value: u64) -> u32 {
+    u32::from_le_bytes(read_bytes(value)[..RV64_WORD_NUM_LIMBS].try_into().unwrap())
+}
+
+fn sign_extend_imm16(imm: u32, sign: bool) -> u32 {
+    imm + (sign as u32) * (u32::MAX << U16_BITS)
+}
+
+fn read_u16_block(value: u64) -> [u16; BLOCK_FE_WIDTH] {
+    rv64_bytes_to_u16_block(read_bytes(value))
+}
+
+fn prev_u16<F: PrimeField32>(aux: &PreflightMemoryAccessAux<F>) -> [u16; BLOCK_FE_WIDTH] {
+    aux.prev_data
+        .map(|cell| cell.as_canonical_u32().try_into().expect("u16 memory cell"))
+}
+
+fn prev_bytes<F: PrimeField32>(aux: &PreflightMemoryAccessAux<F>) -> [u8; RV64_REGISTER_NUM_LIMBS] {
+    rv64_u16_block_to_bytes(prev_u16(aux))
+}
+
+fn run_jal_lui_value(is_jal: bool, pc: u32, imm: i32) -> [u16; BLOCK_FE_WIDTH] {
+    if is_jal {
+        let rd_low = pc.wrapping_add(DEFAULT_PC_STEP);
+        rv64_u32_to_u16_block(rd_low)
+    } else {
+        let rd_low = (imm as u32) << 12;
+        let lo = (rd_low & u16::MAX as u32) as u16;
+        let hi = (rd_low >> U16_BITS) as u16;
+        let sign = if (hi >> (U16_BITS - 1)) & 1 == 1 {
+            u16::MAX
+        } else {
+            0
+        };
+        [lo, hi, sign, sign]
+    }
+}
+
+fn rvr_error(message: impl Into<String>) -> ExecutionError {
+    ExecutionError::RvrExecution(message.into())
+}

@@ -87,7 +87,7 @@ where
             .agg_node_tracegen
             .generate_post_verifier_subcircuit_ctxs(proofs, proofs_type, child_is_app, device_ctx);
 
-        ProvingContext {
+        let ctx = ProvingContext {
             per_trace: pre_data
                 .air_proving_ctxs
                 .into_iter()
@@ -95,6 +95,11 @@ where
                 .chain(post_ctxs)
                 .enumerate()
                 .collect_vec(),
+        };
+        #[cfg(feature = "cuda")]
+        if std::env::var("OPENVM_GPU_E2E_PROFILE").as_deref() == Ok("1") {
+            openvm_cuda_common::stream::device_synchronize().unwrap();
         }
+        ctx
     }
 }

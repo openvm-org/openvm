@@ -7,14 +7,16 @@ use openvm_instructions::{riscv::RV64_REGISTER_BYTES, LocalOpcode, SystemOpcode}
 use openvm_platform::memory::MEM_SIZE;
 use openvm_riscv_transpiler::Rv64Phantom;
 use rand::Rng;
-use rvr_openvm_ir::{CfgEffect, ExtEmitCtx, ExtInstr, InstrAt, LiftedInstr};
+use rvr_openvm_ir::{CfgEffect, ExtEmitCtx, ExtInstr, InlineRecordShape, InstrAt, LiftedInstr};
 use rvr_openvm_lift::{ExtensionError, RvrExtension, RvrInstruction, RvrRuntimeExtension};
 
 use crate::instruction::{decode_reg, Reg};
 
 /// HINT_INPUT: make the next input record available through the hint stream.
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct HintInputInstr;
+pub(crate) struct HintInputInstr {
+    operands: [u32; 3],
+}
 
 impl ExtInstr for HintInputInstr {
     fn opname(&self) -> &str {
@@ -23,6 +25,11 @@ impl ExtInstr for HintInputInstr {
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         ctx.emit_call_without_page_flush("openvm_hint_input", &[]);
+        ctx.trace_phantom_record(self.operands);
+    }
+
+    fn inline_record_shape(&self) -> Option<InlineRecordShape> {
+        Some(InlineRecordShape::Custom { record_size: 20 })
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -39,6 +46,7 @@ impl ExtInstr for HintInputInstr {
 pub(crate) struct PrintStrInstr {
     pub(crate) ptr_reg: Reg,
     pub(crate) len_reg: Reg,
+    operands: [u32; 3],
 }
 
 impl ExtInstr for PrintStrInstr {
@@ -50,6 +58,11 @@ impl ExtInstr for PrintStrInstr {
         let ptr = ctx.peek_var(self.ptr_reg);
         let len = ctx.peek_var(self.len_reg);
         ctx.emit_checked_call_without_page_flush("openvm_print_str", &[&ptr, &len]);
+        ctx.trace_phantom_record(self.operands);
+    }
+
+    fn inline_record_shape(&self) -> Option<InlineRecordShape> {
+        Some(InlineRecordShape::Custom { record_size: 20 })
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -66,6 +79,7 @@ impl ExtInstr for PrintStrInstr {
 #[derive(Debug, Clone)]
 pub(crate) struct HintRandomInstr {
     pub(crate) num_words_reg: Reg,
+    operands: [u32; 3],
 }
 
 impl ExtInstr for HintRandomInstr {
@@ -76,6 +90,11 @@ impl ExtInstr for HintRandomInstr {
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         let num_words = ctx.peek_var(self.num_words_reg);
         ctx.emit_checked_call_without_page_flush("openvm_hint_random", &[&num_words]);
+        ctx.trace_phantom_record(self.operands);
+    }
+
+    fn inline_record_shape(&self) -> Option<InlineRecordShape> {
+        Some(InlineRecordShape::Custom { record_size: 20 })
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -103,19 +122,26 @@ impl Default for Rv64PhantomExtension {
 }
 
 impl RvrExtension for Rv64PhantomExtension {
+    fn codegen_fingerprint(&self) -> Option<Vec<u8>> {
+        Some(b"openvm-rv64phantom-rvr-v2".to_vec())
+    }
+
     fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr> {
         if insn.opcode.as_usize() != SystemOpcode::PHANTOM.global_opcode_usize() {
             return None;
         }
         let phantom = Rv64Phantom::from_repr((insn.c & 0xffff) as u16)?;
+        let operands = [insn.a, insn.b, insn.c];
         let instr: Box<dyn ExtInstr> = match phantom {
-            Rv64Phantom::HintInput => Box::new(HintInputInstr),
+            Rv64Phantom::HintInput => Box::new(HintInputInstr { operands }),
             Rv64Phantom::PrintStr => Box::new(PrintStrInstr {
                 ptr_reg: decode_reg(insn.a),
                 len_reg: decode_reg(insn.b),
+                operands,
             }),
             Rv64Phantom::HintRandom => Box::new(HintRandomInstr {
                 num_words_reg: decode_reg(insn.a),
+                operands,
             }),
         };
         Some(LiftedInstr::Body(InstrAt {

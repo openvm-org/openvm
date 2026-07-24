@@ -6,6 +6,7 @@
 typedef struct {
   bool (*hint_storew)(void* ctx, uint64_t dest_addr);
   bool (*hint_buffer)(void* ctx, uint64_t dest_addr, uint16_t num_words);
+  bool (*validate_reveal)(void* ctx, uint64_t addr, uint8_t width);
   bool (*reveal)(void* ctx, uint64_t src_val, uint64_t addr, uint8_t width);
 } Rv64IoHostCallbacks;
 
@@ -17,8 +18,17 @@ void register_rv64io_host_callbacks(const Rv64IoHostCallbacks* cb);
  * consumers (HINT_STOREW, HINT_BUFFER) and public-values stores routed through
  * openvm_reveal. Backed by a thread-local dispatch table installed at execution
  * time by `Rv64IoRuntimeHooks`. */
-bool openvm_hint_storew(uint64_t dest_addr);
-bool openvm_hint_buffer(uint64_t dest_addr, uint16_t num_words);
+bool openvm_hint_storew(void* state, uint64_t dest_addr, uint32_t from_pc,
+                        uint32_t from_timestamp, uint32_t mem_ptr_ptr,
+                        uint32_t mem_ptr_prev_timestamp, uint32_t chip_idx);
+bool openvm_hint_buffer(void* state, uint64_t dest_addr, uint16_t num_words,
+                        uint32_t from_pc, uint32_t from_timestamp,
+                        uint32_t mem_ptr_ptr,
+                        uint32_t mem_ptr_prev_timestamp,
+                        uint32_t num_words_ptr,
+                        uint32_t num_words_prev_timestamp,
+                        uint32_t chip_idx);
+bool openvm_validate_reveal(uint64_t addr, uint8_t width);
 bool openvm_reveal(uint64_t src_val, uint64_t addr, uint8_t width);
 
 #endif /* RV64IO_CALLBACKS_H */

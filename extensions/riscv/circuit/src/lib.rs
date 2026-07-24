@@ -2,6 +2,8 @@
 #![cfg_attr(feature = "tco", feature(explicit_tail_calls))]
 #![cfg_attr(feature = "tco", allow(internal_features))]
 #![cfg_attr(feature = "tco", feature(core_intrinsics))]
+#[cfg(feature = "rvr")]
+use openvm_circuit::arch::rvr::{LogNativeAssemblerRegistry, VmRvrLogNativeExtension};
 use openvm_circuit::{
     arch::{
         AirInventory, ChipInventoryError, InitFileGenerator, MatrixRecordArena, SystemConfig,
@@ -72,8 +74,13 @@ pub use store::*;
 mod extension;
 pub use extension::*;
 
+#[cfg(feature = "rvr")]
+pub mod log_native;
+
 cfg_if::cfg_if! {
     if #[cfg(feature = "cuda")] {
+        #[cfg(feature = "rvr")]
+        use openvm_circuit::arch::Arena;
         use openvm_circuit::arch::DenseRecordArena;
         use openvm_circuit::system::cuda::{extensions::SystemGpuBuilder, SystemChipInventoryGPU};
         use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend};
@@ -91,6 +98,8 @@ cfg_if::cfg_if! {
     }
 }
 
+#[cfg(all(test, feature = "rvr"))]
+mod rvr_preflight_tests;
 #[cfg(any(test, feature = "test-utils"))]
 mod test_utils;
 
@@ -151,8 +160,14 @@ impl Rv64ImConfig {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct Rv64ICpuBuilder;
+
+impl Rv64ICpuBuilder {
+    pub const fn new() -> Self {
+        Self
+    }
+}
 
 impl<SC, E> VmBuilder<E> for Rv64ICpuBuilder
 where
@@ -185,10 +200,29 @@ where
         VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.io, inventory)?;
         Ok(chip_complex)
     }
+
+    #[cfg(feature = "rvr")]
+    fn create_rvr_log_native_assembler_registry(
+        &self,
+        config: &Self::VmConfig,
+    ) -> LogNativeAssemblerRegistry<Val<E::SC>, Self::RecordArena>
+    where
+        Val<E::SC>: openvm_stark_backend::p3_field::PrimeField32,
+    {
+        let mut registry = LogNativeAssemblerRegistry::new();
+        config.extend_rvr_log_native(&mut registry);
+        registry
+    }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct Rv64ImCpuBuilder;
+
+impl Rv64ImCpuBuilder {
+    pub const fn new() -> Self {
+        Self
+    }
+}
 
 impl<SC, E> VmBuilder<E> for Rv64ImCpuBuilder
 where
@@ -220,11 +254,41 @@ where
         VmProverExtension::<E, _, _>::extend_prover(&Rv64ImCpuProverExt, &config.mul, inventory)?;
         Ok(chip_complex)
     }
+
+    #[cfg(feature = "rvr")]
+    fn create_rvr_log_native_assembler_registry(
+        &self,
+        config: &Self::VmConfig,
+    ) -> LogNativeAssemblerRegistry<Val<E::SC>, Self::RecordArena>
+    where
+        Val<E::SC>: openvm_stark_backend::p3_field::PrimeField32,
+    {
+        let mut registry = LogNativeAssemblerRegistry::new();
+        config.extend_rvr_log_native(&mut registry);
+        registry
+    }
+}
+
+// The operand-table classifier is host-only and is also the independent CPU
+// oracle for compact compiler metadata; only its device upload is CUDA-gated.
+#[cfg(feature = "rvr")]
+pub mod rvr_gpu_decode;
+
+#[cfg(feature = "cuda")]
+#[derive(Clone, Default)]
+pub struct Rv64IGpuBuilder {
+    /// M-GPUDEC shared producer/consumer state (device operand table +
+    /// per-segment emission modes); cloned into migrated GPU chips.
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    pub rvr_decode: std::sync::Arc<rvr_gpu_decode::RvrGpuDecodeState>,
 }
 
 #[cfg(feature = "cuda")]
-#[derive(Clone)]
-pub struct Rv64IGpuBuilder;
+impl Rv64IGpuBuilder {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
 
 #[cfg(feature = "cuda")]
 impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64IGpuBuilder {
@@ -252,24 +316,547 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64IGpuBuilder {
             circuit,
             device_ctx,
         )?;
+        #[cfg(feature = "rvr")]
+        chip_complex
+            .system
+            .set_device_touched_memory_provider(self.rvr_decode.clone());
+        #[cfg(feature = "rvr")]
+        chip_complex
+            .system
+            .set_device_program_frequencies_provider(self.rvr_decode.clone());
         let inventory = &mut chip_complex.inventory;
+        let prover_ext = Rv64ImGpuProverExt {
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
+            rvr_decode: self.rvr_decode.clone(),
+        };
         VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
-            &Rv64ImGpuProverExt,
+            &prover_ext,
             &config.base,
             inventory,
         )?;
         VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
-            &Rv64ImGpuProverExt,
+            &prover_ext,
             &config.io,
             inventory,
         )?;
         Ok(chip_complex)
     }
+
+    #[cfg(feature = "rvr")]
+    fn create_rvr_log_native_assembler_registry(
+        &self,
+        config: &Self::VmConfig,
+    ) -> LogNativeAssemblerRegistry<Val<BabyBearPoseidon2Config>, Self::RecordArena>
+    where
+        Val<BabyBearPoseidon2Config>: openvm_stark_backend::p3_field::PrimeField32,
+    {
+        let mut registry = LogNativeAssemblerRegistry::new();
+        config.extend_rvr_log_native(&mut registry);
+        registry
+    }
+
+    #[cfg(feature = "rvr")]
+    fn generate_rvr_record_arenas_from_logs(
+        &self,
+        config: &Self::VmConfig,
+        exe: &openvm_instructions::exe::VmExe<Val<BabyBearPoseidon2Config>>,
+        output: &mut openvm_circuit::arch::rvr::RvrPreflightOutput<Val<BabyBearPoseidon2Config>>,
+        capacities: &[(usize, usize)],
+        pc_to_air_idx: &[Option<usize>],
+    ) -> Result<Option<Vec<Self::RecordArena>>, openvm_circuit::arch::ExecutionError>
+    where
+        Val<BabyBearPoseidon2Config>: openvm_stark_backend::p3_field::PrimeField32,
+    {
+        let registry = self.create_rvr_log_native_assembler_registry(config);
+        generate_gpu_rvr_record_arenas(
+            &registry,
+            &self.rvr_decode,
+            exe,
+            output,
+            capacities,
+            pc_to_air_idx,
+        )
+    }
+
+    #[cfg(feature = "rvr")]
+    fn rvr_wire_record_airs(
+        &self,
+        _config: &Self::VmConfig,
+        exe: &openvm_instructions::exe::VmExe<Val<BabyBearPoseidon2Config>>,
+        pc_to_air_idx: &[Option<usize>],
+        inline_meta: &openvm_circuit::arch::rvr::RvrInlineRecordsMeta,
+    ) -> std::collections::HashSet<usize>
+    where
+        Val<BabyBearPoseidon2Config>: openvm_stark_backend::p3_field::PrimeField32,
+    {
+        rvr_gpu_wire_record_airs(&self.rvr_decode, exe, pc_to_air_idx, inline_meta)
+    }
+
+    /// GPU backend: default to the rvr inline preflight engine — the host
+    /// compact→arena assembly pass that dominates the CPU path does not
+    /// exist in the GPU shape, and compact records shrink the H2D payload.
+    #[cfg(feature = "rvr")]
+    fn default_rvr_preflight_engine(&self) -> openvm_circuit::arch::rvr::RvrPreflightEngine {
+        openvm_circuit::arch::rvr::RvrPreflightEngine::Rvr
+    }
+
+    #[cfg(feature = "rvr")]
+    fn rvr_cuda_device_prewarm_task(
+        &self,
+    ) -> Option<Box<dyn FnOnce() -> Result<(), String> + Send + 'static>> {
+        Some(rvr_gpu_decode::g2_device_prewarm_task())
+    }
+
+    #[cfg(feature = "rvr")]
+    fn finish_rvr_cuda_device_prewarm(&self, reserve_bytes: usize) -> Result<(), String> {
+        rvr_gpu_decode::finish_g2_device_prewarm(reserve_bytes)
+    }
+
+    #[cfg(feature = "rvr")]
+    fn rvr_cuda_device_pool_stats(&self) -> Result<Option<[u64; 5]>, String> {
+        rvr_gpu_decode::g2_device_pool_stats().map(Some)
+    }
+
+    #[cfg(feature = "rvr")]
+    fn trim_rvr_cuda_device_pool(
+        &self,
+        retain_bytes: usize,
+        segment_idx: usize,
+    ) -> Result<(), String> {
+        rvr_gpu_decode::trim_g2_device_pool(retain_bytes, segment_idx)
+    }
+
+    #[cfg(feature = "rvr")]
+    fn release_rvr_cuda_device_trace_sources(&self) {
+        self.rvr_decode.release_consumed_g2_device_trace_sources();
+    }
+}
+
+/// G2: the airs whose inline records the proving path should stage as compact
+/// wire targets for this shared decode `state` — the device-decodable set,
+/// bound per exe (taint keeps mixed programs correct). Empty unless
+/// `OPENVM_RVR_GPU_RECORDS=compact`. In delta mode the same whole-AIR set is
+/// returned as authoritative direct-device coverage; the VM cache consumes it
+/// for route classification and then suppresses per-AIR wire staging because
+/// delta owns one global backing. Shared by every wired GPU builder's
+/// `rvr_wire_record_airs` override, including composed-config builders.
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+pub fn rvr_gpu_wire_record_airs(
+    _state: &rvr_gpu_decode::RvrGpuDecodeState,
+    exe: &openvm_instructions::exe::VmExe<Val<BabyBearPoseidon2Config>>,
+    pc_to_air_idx: &[Option<usize>],
+    inline_meta: &openvm_circuit::arch::rvr::RvrInlineRecordsMeta,
+) -> std::collections::HashSet<usize> {
+    use crate::rvr_gpu_decode::{configured_emission_mode, InlineEmissionMode};
+    match configured_emission_mode() {
+        Some(InlineEmissionMode::CompactWire | InlineEmissionMode::Delta) => {
+            rvr_gpu_decode::RvrGpuDecodeState::compact_record_airs(
+                exe,
+                pc_to_air_idx,
+                &inline_meta.pc_slots,
+                inline_meta.delta_decode.as_deref(),
+            )
+        }
+        Some(InlineEmissionMode::G2) if inline_meta.g2.is_some() => {
+            rvr_gpu_decode::RvrGpuDecodeState::compact_record_airs(
+                exe,
+                pc_to_air_idx,
+                &inline_meta.pc_slots,
+                inline_meta.delta_decode.as_deref(),
+            )
+        }
+        _ => Default::default(),
+    }
+}
+
+/// Shared M-GPUDEC record-arena hook for the GPU builders: with
+/// `OPENVM_RVR_GPU_RECORDS=compact`, migrated AIRs' records stay in wire form
+/// for on-device decode; default keeps the gate-validated expanded path.
+/// Public so composed-config GPU builders (e.g. the SDK builder) can opt their
+/// VMs into the same compact path with their own shared decode state.
+///
+/// On the proving path the wire records already sit in C-staged arena
+/// backings (zero-copy — see [`rvr_gpu_wire_record_airs`]) and arrive here
+/// only as counts to verify; the adoption loop below is the UNSTAGED fallback
+/// (one alloc + memcpy per compact air), used by harnesses that execute
+/// without arena targets.
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+#[allow(clippy::type_complexity)]
+pub fn generate_gpu_rvr_record_arenas(
+    registry: &LogNativeAssemblerRegistry<Val<BabyBearPoseidon2Config>, DenseRecordArena>,
+    state: &rvr_gpu_decode::RvrGpuDecodeState,
+    exe: &openvm_instructions::exe::VmExe<Val<BabyBearPoseidon2Config>>,
+    output: &mut openvm_circuit::arch::rvr::RvrPreflightOutput<Val<BabyBearPoseidon2Config>>,
+    capacities: &[(usize, usize)],
+    pc_to_air_idx: &[Option<usize>],
+) -> Result<Option<Vec<DenseRecordArena>>, openvm_circuit::arch::ExecutionError> {
+    use openvm_circuit::arch::rvr::generate_record_arenas_from_logs_with_compact;
+
+    use crate::rvr_gpu_decode::{configured_emission_mode, InlineEmissionMode};
+    let detailed_profile =
+        std::env::var("OPENVM_RVR_PREFLIGHT_PROFILE_DETAIL").as_deref() == Ok("1");
+    let detail_started = std::time::Instant::now();
+    if registry.is_empty() {
+        return Ok(None);
+    }
+    let compact_requested = matches!(
+        configured_emission_mode(),
+        Some(InlineEmissionMode::CompactWire)
+    );
+    let delta_requested = matches!(configured_emission_mode(), Some(InlineEmissionMode::Delta));
+    let g2_requested = matches!(configured_emission_mode(), Some(InlineEmissionMode::G2))
+        && output.g2_meta.is_some();
+    if !delta_requested && !g2_requested {
+        state.clear_delta_segment();
+    }
+    if !compact_requested {
+        state.clear_compact_residual_segment();
+    }
+    let mode_finished = std::time::Instant::now();
+    let compact_airs = if compact_requested || g2_requested {
+        state.bind_compact_segment(
+            exe,
+            pc_to_air_idx,
+            &output.inline_pc_slots,
+            output.delta_decode_precomputed.as_deref(),
+        )
+    } else if delta_requested {
+        state.bind_delta_airs(
+            exe,
+            pc_to_air_idx,
+            &output.inline_pc_slots,
+            output.delta_decode_precomputed.as_deref(),
+        )
+    } else {
+        Default::default()
+    };
+    let air_bind_finished = std::time::Instant::now();
+    if g2_requested {
+        if !output.raw_logs.program_log.is_empty()
+            || !output.raw_logs.program_runs.is_empty()
+            || !output.raw_logs.memory_log.is_empty()
+            || !output.raw_logs.delta_memory_log.is_empty()
+            || !output.access_aux.is_empty()
+            || !output.inline_records.is_empty()
+        {
+            return Err(openvm_circuit::arch::ExecutionError::RvrExecution(
+                "G2 route performed a forbidden host record pass".to_string(),
+            ));
+        }
+        if std::env::var("OPENVM_RVR_G2_ASSERT_ZERO_HOST_RECORD_PASS").as_deref() == Ok("1") {
+            eprintln!("OPENVM_RVR_G2_HOST_RECORD_PASSES=0");
+        }
+        let segment = output.g2_segment.take().ok_or_else(|| {
+            openvm_circuit::arch::ExecutionError::RvrExecution(
+                "G2 mode requested but native preflight emitted no segment".to_string(),
+            )
+        })?;
+        let meta = output.g2_meta.clone().ok_or_else(|| {
+            openvm_circuit::arch::ExecutionError::RvrExecution(
+                "G2 mode requested without compiled schema metadata".to_string(),
+            )
+        })?;
+        let precomputed = output.delta_decode_precomputed.as_deref().ok_or_else(|| {
+            openvm_circuit::arch::ExecutionError::RvrExecution(
+                "G2 mode requested without an operand table".to_string(),
+            )
+        })?;
+        let device_replay_oracle = std::env::var("OPENVM_RVR_DEVICE_REPLAY_ORACLE").as_deref()
+            == Ok("1")
+            || meta.checked_emission();
+        let (oracle_expected, program_frequency_reference) = if device_replay_oracle {
+            let mut initial_registers = [0u64; 32];
+            let mut initial_blocks = std::collections::BTreeMap::new();
+            for touched in &output.raw_logs.touched {
+                let address_space = u8::try_from(touched.addr_space).map_err(|_| {
+                    openvm_circuit::arch::ExecutionError::RvrExecution(format!(
+                        "G2 oracle address space {} exceeds u8",
+                        touched.addr_space
+                    ))
+                })?;
+                initial_blocks.insert((address_space, touched.block_addr), touched.initial_value);
+                if touched.addr_space == 1
+                    && touched.block_addr.is_multiple_of(8)
+                    && touched.block_addr < 32 * 8
+                {
+                    initial_registers[touched.block_addr as usize / 8] = touched.initial_value;
+                }
+            }
+            let reference = openvm_circuit::arch::rvr::decode_reference_v1(
+                &segment,
+                &meta,
+                precomputed,
+                initial_registers,
+                &initial_blocks,
+                output.system_records.from_state.timestamp,
+            )?;
+            if reference.final_timestamp != output.system_records.to_state.timestamp {
+                return Err(openvm_circuit::arch::ExecutionError::RvrExecution(format!(
+                    "G2 CPU reference ended at timestamp {} instead of {}",
+                    reference.final_timestamp, output.system_records.to_state.timestamp
+                )));
+            }
+            let mut expected = std::collections::HashMap::new();
+            for (kind, bytes) in reference.compact_records {
+                let air_idx = meta.air_idx(kind).ok_or_else(|| {
+                    openvm_circuit::arch::ExecutionError::RvrExecution(format!(
+                        "G2 CPU reference emitted unbound kind {kind}"
+                    ))
+                })?;
+                if expected.insert(air_idx, bytes).is_some() {
+                    return Err(openvm_circuit::arch::ExecutionError::RvrExecution(format!(
+                        "G2 CPU reference emitted duplicate AIR {air_idx}"
+                    )));
+                }
+            }
+            let mut frequencies = vec![0u32; output.system_records.filtered_exec_frequencies.len()];
+            for &slot in &reference.expanded_program_slots {
+                let entry = precomputed.entries.get(slot as usize).ok_or_else(|| {
+                    openvm_circuit::arch::ExecutionError::RvrExecution(format!(
+                        "G2 CPU reference program slot {slot} exceeds the operand table"
+                    ))
+                })?;
+                let frequency = frequencies
+                    .get_mut(entry.filtered_index as usize)
+                    .ok_or_else(|| {
+                        openvm_circuit::arch::ExecutionError::RvrExecution(format!(
+                            "G2 CPU reference filtered program index {} exceeds the trace",
+                            entry.filtered_index
+                        ))
+                    })?;
+                *frequency = frequency.checked_add(1).ok_or_else(|| {
+                    openvm_circuit::arch::ExecutionError::RvrExecution(
+                        "G2 CPU reference program frequency exceeds u32".to_string(),
+                    )
+                })?;
+            }
+            (expected, frequencies)
+        } else {
+            Default::default()
+        };
+        let device_aux_patches = std::mem::take(&mut output.raw_logs.device_aux_patches);
+        let device_aux_references = std::mem::take(&mut output.raw_logs.device_aux_references);
+        let device_aux_arena_references =
+            std::mem::take(&mut output.raw_logs.device_aux_arena_references);
+        let bound = state.bind_g2_segment(
+            exe,
+            pc_to_air_idx,
+            &output.inline_pc_slots,
+            precomputed,
+            segment,
+            meta,
+            output.system_records.from_state.timestamp,
+            &output.raw_logs.chip_counts,
+            output.system_records.filtered_exec_frequencies.len(),
+            device_aux_patches,
+            device_aux_references,
+            oracle_expected,
+            device_aux_arena_references,
+            program_frequency_reference,
+        )?;
+        if bound != compact_airs {
+            return Err(openvm_circuit::arch::ExecutionError::RvrExecution(
+                "G2 bound AIR set drifted from its negotiated consumer".to_string(),
+            ));
+        }
+        // G2 owns the complete negotiated executable. Empty arenas are
+        // placeholders; migrated tracegen obtains compact buffers from the
+        // shared device predecode after the system inventory initiates it.
+        let arenas = capacities
+            .iter()
+            .enumerate()
+            .map(|(air, &(height, width))| {
+                if bound.contains(&air) {
+                    DenseRecordArena::with_capacity(0, width)
+                } else {
+                    DenseRecordArena::with_capacity(height, width)
+                }
+            })
+            .collect();
+        return Ok(Some(arenas));
+    }
+    let device_replay_oracle =
+        delta_requested && std::env::var("OPENVM_RVR_DEVICE_REPLAY_ORACLE").as_deref() == Ok("1");
+    let mut oracle_expected = std::collections::HashMap::new();
+    if device_replay_oracle {
+        let original_program_log = output.raw_logs.program_log.clone();
+        assert!(
+            output.inline_records.is_empty(),
+            "device delta oracle requires an unexpanded chronological stream"
+        );
+        let delta = openvm_circuit::arch::rvr::log_native::expand_delta_records(
+            registry,
+            exe,
+            output,
+            pc_to_air_idx,
+        )?
+        .ok_or_else(|| {
+            openvm_circuit::arch::ExecutionError::RvrExecution(
+                "device delta oracle found no chronological backing".to_string(),
+            )
+        })?;
+        for records in std::mem::take(&mut output.inline_records) {
+            assert!(
+                oracle_expected
+                    .insert(records.air_idx, records.bytes)
+                    .is_none(),
+                "device delta oracle produced duplicate AIR {}",
+                records.air_idx
+            );
+        }
+        output.raw_logs.program_log = original_program_log;
+        output.delta_records = Some(delta);
+    }
+    let saved_delta = if delta_requested {
+        Some(output.delta_records.take().ok_or_else(|| {
+            openvm_circuit::arch::ExecutionError::RvrExecution(
+                "GPU delta mode requested but native preflight emitted no delta backing"
+                    .to_string(),
+            )
+        })?)
+    } else {
+        None
+    };
+    let delta_take_finished = std::time::Instant::now();
+    let (mut arenas, wire_buffers) = generate_record_arenas_from_logs_with_compact(
+        registry,
+        exe,
+        output,
+        capacities,
+        pc_to_air_idx,
+        &compact_airs,
+    )?;
+    let generic_finished = std::time::Instant::now();
+    if delta_requested && !wire_buffers.is_empty() {
+        return Err(openvm_circuit::arch::ExecutionError::RvrExecution(
+            "GPU delta mode unexpectedly produced host compact buffers".to_string(),
+        ));
+    }
+    // Silent-mode guard (the gate-#4 class): under the compact opt-in every
+    // decodable air must be accounted for — either C-staged by the caller
+    // (reported in arena_native_written) or adopted below. An air that is
+    // neither ran a different emission than the label claims.
+    if compact_requested {
+        for &air in &compact_airs {
+            let staged = output
+                .arena_native_written
+                .iter()
+                .any(|&(written_air, _)| written_air == air);
+            let adopted = wire_buffers.iter().any(|chip| chip.air_idx == air);
+            if !staged && !adopted {
+                return Err(openvm_circuit::arch::ExecutionError::RvrExecution(format!(
+                    "compact air {air} was neither wire-staged nor adopted; the compiled \
+                     library did not emit compact wire records for it (fused-compiled \
+                     library under a compact opt-in?)"
+                )));
+            }
+        }
+    }
+    let wire_buffer_count = wire_buffers.len();
+    for chip in wire_buffers {
+        let arena = arenas.get_mut(chip.air_idx).ok_or_else(|| {
+            openvm_circuit::arch::ExecutionError::RvrExecution(format!(
+                "compact air_idx {} out of arena range",
+                chip.air_idx
+            ))
+        })?;
+        // Unstaged fallback adoption: one alloc + memcpy of the wire buffer
+        // (NOT zero-copy — the zero-copy path is the staged one above).
+        let mut dense = DenseRecordArena::with_byte_capacity(chip.bytes.len());
+        dense
+            .alloc_bytes(chip.bytes.len())
+            .copy_from_slice(&chip.bytes);
+        // The mode travels with the data: this is what routes the arena to the
+        // chip's compact-decode branch instead of the expanded-record kernel.
+        dense.rvr_wire = true;
+        *arena = dense;
+    }
+    if compact_requested {
+        state.bind_compact_residual_segment(std::mem::take(&mut output.raw_logs.memory_log));
+    }
+    let adoption_finished = std::time::Instant::now();
+    let mut bound_airs_len = 0usize;
+    if let Some(delta) = saved_delta {
+        let memory_log = std::mem::take(&mut output.raw_logs.memory_log);
+        let delta_memory_log = std::mem::take(&mut output.raw_logs.delta_memory_log);
+        let program_log = std::mem::take(&mut output.raw_logs.program_log);
+        let program_runs = std::mem::take(&mut output.raw_logs.program_runs);
+        let device_program_references =
+            std::mem::take(&mut output.raw_logs.device_program_references);
+        let program_frequency_count = output.system_records.filtered_exec_frequencies.len();
+        let program_frequency_reference = if device_replay_oracle {
+            output.system_records.filtered_exec_frequencies.clone()
+        } else {
+            Vec::new()
+        };
+        let touched = std::mem::take(&mut output.raw_logs.touched);
+        let device_aux_patches = std::mem::take(&mut output.raw_logs.device_aux_patches);
+        let device_aux_references = std::mem::take(&mut output.raw_logs.device_aux_references);
+        let device_aux_arena_references =
+            std::mem::take(&mut output.raw_logs.device_aux_arena_references);
+        let bound_airs = state.bind_delta_segment(
+            exe,
+            pc_to_air_idx,
+            &output.inline_pc_slots,
+            output.delta_decode_precomputed.as_deref(),
+            delta,
+            memory_log,
+            delta_memory_log,
+            program_log,
+            program_runs,
+            device_program_references,
+            program_frequency_count,
+            program_frequency_reference,
+            touched,
+            device_aux_patches,
+            device_aux_references,
+            oracle_expected,
+            device_aux_arena_references,
+            &output.raw_logs.chip_counts,
+            &output.arena_native_written,
+        )?;
+        if !bound_airs.is_subset(&compact_airs) {
+            return Err(openvm_circuit::arch::ExecutionError::RvrExecution(
+                "GPU delta bound AIR set drifted from the compiled decode set".to_string(),
+            ));
+        }
+        bound_airs_len = bound_airs.len();
+    }
+    let delta_bind_finished = std::time::Instant::now();
+    if detailed_profile {
+        eprintln!(
+            "OPENVM_RVR_GPU_FINALIZE_DETAIL mode_us={} air_bind_us={} delta_take_us={} \
+             generic_us={} adoption_us={} delta_bind_us={} compact_airs={} bound_airs={} \
+             wire_buffers={} delta_requested={}",
+            (mode_finished - detail_started).as_micros(),
+            (air_bind_finished - mode_finished).as_micros(),
+            (delta_take_finished - air_bind_finished).as_micros(),
+            (generic_finished - delta_take_finished).as_micros(),
+            (adoption_finished - generic_finished).as_micros(),
+            (delta_bind_finished - adoption_finished).as_micros(),
+            compact_airs.len(),
+            bound_airs_len,
+            wire_buffer_count,
+            delta_requested as u8,
+        );
+    }
+    Ok(Some(arenas))
 }
 
 #[cfg(feature = "cuda")]
-#[derive(Clone)]
-pub struct Rv64ImGpuBuilder;
+#[derive(Clone, Default)]
+pub struct Rv64ImGpuBuilder {
+    /// See [`Rv64IGpuBuilder::rvr_decode`]; one shared state per VM.
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    pub rvr_decode: std::sync::Arc<rvr_gpu_decode::RvrGpuDecodeState>,
+}
+
+#[cfg(feature = "cuda")]
+impl Rv64ImGpuBuilder {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
 
 #[cfg(feature = "cuda")]
 impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64ImGpuBuilder {
@@ -292,17 +879,112 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64ImGpuBuilder {
         ChipInventoryError,
     > {
         let mut chip_complex = VmBuilder::<GpuBabyBearPoseidon2Engine>::create_chip_complex(
-            &Rv64IGpuBuilder,
+            &Rv64IGpuBuilder {
+                #[cfg(all(feature = "cuda", feature = "rvr"))]
+                rvr_decode: self.rvr_decode.clone(),
+            },
             &config.rv64i,
             circuit,
             device_ctx,
         )?;
         let inventory = &mut chip_complex.inventory;
         VmProverExtension::<GpuBabyBearPoseidon2Engine, _, _>::extend_prover(
-            &Rv64ImGpuProverExt,
+            &Rv64ImGpuProverExt {
+                #[cfg(all(feature = "cuda", feature = "rvr"))]
+                rvr_decode: self.rvr_decode.clone(),
+            },
             &config.mul,
             inventory,
         )?;
         Ok(chip_complex)
+    }
+
+    #[cfg(feature = "rvr")]
+    fn create_rvr_log_native_assembler_registry(
+        &self,
+        config: &Self::VmConfig,
+    ) -> LogNativeAssemblerRegistry<Val<BabyBearPoseidon2Config>, Self::RecordArena>
+    where
+        Val<BabyBearPoseidon2Config>: openvm_stark_backend::p3_field::PrimeField32,
+    {
+        let mut registry = LogNativeAssemblerRegistry::new();
+        config.extend_rvr_log_native(&mut registry);
+        registry
+    }
+
+    #[cfg(feature = "rvr")]
+    fn generate_rvr_record_arenas_from_logs(
+        &self,
+        config: &Self::VmConfig,
+        exe: &openvm_instructions::exe::VmExe<Val<BabyBearPoseidon2Config>>,
+        output: &mut openvm_circuit::arch::rvr::RvrPreflightOutput<Val<BabyBearPoseidon2Config>>,
+        capacities: &[(usize, usize)],
+        pc_to_air_idx: &[Option<usize>],
+    ) -> Result<Option<Vec<Self::RecordArena>>, openvm_circuit::arch::ExecutionError>
+    where
+        Val<BabyBearPoseidon2Config>: openvm_stark_backend::p3_field::PrimeField32,
+    {
+        let registry = self.create_rvr_log_native_assembler_registry(config);
+        generate_gpu_rvr_record_arenas(
+            &registry,
+            &self.rvr_decode,
+            exe,
+            output,
+            capacities,
+            pc_to_air_idx,
+        )
+    }
+
+    #[cfg(feature = "rvr")]
+    fn rvr_wire_record_airs(
+        &self,
+        _config: &Self::VmConfig,
+        exe: &openvm_instructions::exe::VmExe<Val<BabyBearPoseidon2Config>>,
+        pc_to_air_idx: &[Option<usize>],
+        inline_meta: &openvm_circuit::arch::rvr::RvrInlineRecordsMeta,
+    ) -> std::collections::HashSet<usize>
+    where
+        Val<BabyBearPoseidon2Config>: openvm_stark_backend::p3_field::PrimeField32,
+    {
+        rvr_gpu_wire_record_airs(&self.rvr_decode, exe, pc_to_air_idx, inline_meta)
+    }
+
+    /// GPU backend: default to the rvr inline preflight engine — the host
+    /// compact→arena assembly pass that dominates the CPU path does not
+    /// exist in the GPU shape, and compact records shrink the H2D payload.
+    #[cfg(feature = "rvr")]
+    fn default_rvr_preflight_engine(&self) -> openvm_circuit::arch::rvr::RvrPreflightEngine {
+        openvm_circuit::arch::rvr::RvrPreflightEngine::Rvr
+    }
+
+    #[cfg(feature = "rvr")]
+    fn rvr_cuda_device_prewarm_task(
+        &self,
+    ) -> Option<Box<dyn FnOnce() -> Result<(), String> + Send + 'static>> {
+        Some(rvr_gpu_decode::g2_device_prewarm_task())
+    }
+
+    #[cfg(feature = "rvr")]
+    fn finish_rvr_cuda_device_prewarm(&self, reserve_bytes: usize) -> Result<(), String> {
+        rvr_gpu_decode::finish_g2_device_prewarm(reserve_bytes)
+    }
+
+    #[cfg(feature = "rvr")]
+    fn rvr_cuda_device_pool_stats(&self) -> Result<Option<[u64; 5]>, String> {
+        rvr_gpu_decode::g2_device_pool_stats().map(Some)
+    }
+
+    #[cfg(feature = "rvr")]
+    fn trim_rvr_cuda_device_pool(
+        &self,
+        retain_bytes: usize,
+        segment_idx: usize,
+    ) -> Result<(), String> {
+        rvr_gpu_decode::trim_g2_device_pool(retain_bytes, segment_idx)
+    }
+
+    #[cfg(feature = "rvr")]
+    fn release_rvr_cuda_device_trace_sources(&self) {
+        self.rvr_decode.release_consumed_g2_device_trace_sources();
     }
 }

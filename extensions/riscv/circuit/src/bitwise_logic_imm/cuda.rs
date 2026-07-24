@@ -23,6 +23,8 @@ pub struct Rv64BitwiseLogicImmChipGpu {
     pub range_checker: Arc<VariableRangeCheckerChipGPU>,
     pub bitwise_lookup: Arc<BitwiseOperationLookupChipGPU<RV64_BYTE_BITS>>,
     pub timestamp_max_bits: usize,
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    pub rvr_decode: Arc<crate::rvr_gpu_decode::RvrGpuDecodeState>,
 }
 
 impl Chip<DenseRecordArena, GpuBackend> for Rv64BitwiseLogicImmChipGpu {
@@ -31,8 +33,24 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64BitwiseLogicImmChipGpu {
             Rv64BaseAluImmAdapterRecord,
             BitwiseLogicImmCoreRecord<RV64_REGISTER_NUM_LIMBS>,
         )>();
+        #[cfg(feature = "rvr")]
+        let rvr_wire = arena.rvr_wire;
         let records = arena.allocated();
-        if records.is_empty() {
+        #[cfg(feature = "rvr")]
+        let delta_records = self.rvr_decode.device_delta_records(
+            crate::rvr_gpu_decode::DeltaAirKind::BitwiseImm,
+            &self.range_checker.device_ctx,
+        );
+        #[cfg(feature = "rvr")]
+        let g2_records = self.rvr_decode.device_g2_trace_input(
+            crate::rvr_gpu_decode::DeltaAirKind::BitwiseImm,
+            &self.range_checker.device_ctx,
+        );
+        #[cfg(feature = "rvr")]
+        let no_compact_records = delta_records.is_none() && g2_records.is_none();
+        #[cfg(not(feature = "rvr"))]
+        let no_compact_records = true;
+        if records.is_empty() && no_compact_records {
             return AirProvingContext::simple_no_pis(DeviceMatrix::dummy());
         }
         debug_assert_eq!(records.len() % RECORD_SIZE, 0);
@@ -42,6 +60,52 @@ impl Chip<DenseRecordArena, GpuBackend> for Rv64BitwiseLogicImmChipGpu {
                 + Rv64BaseAluImmAdapterCols::<F>::width();
         let trace_height = next_power_of_two_or_zero(records.len() / RECORD_SIZE);
         let device_ctx = &self.range_checker.device_ctx;
+
+        #[cfg(feature = "rvr")]
+        if let Some(g2_records) = g2_records {
+            return AirProvingContext::simple_no_pis(g2_records.tracegen(
+                trace_width,
+                0,
+                &self.range_checker.count,
+                Some(&self.bitwise_lookup.count),
+                None,
+                crate::cuda_abi::UInt2::new(0, 0),
+                self.timestamp_max_bits as u32,
+                device_ctx,
+            ));
+        }
+        #[cfg(feature = "rvr")]
+        if rvr_wire || delta_records.is_some() {
+            use openvm_circuit::arch::rvr::PREFLIGHT_ADDSUB_RECORD_SIZE;
+            let compact_len = delta_records
+                .as_ref()
+                .map_or(records.len(), |buf| buf.len());
+            assert_eq!(compact_len % PREFLIGHT_ADDSUB_RECORD_SIZE, 0);
+            let trace_height =
+                next_power_of_two_or_zero(compact_len / PREFLIGHT_ADDSUB_RECORD_SIZE);
+            let (table, pc_base) = self
+                .rvr_decode
+                .device_operand_table(device_ctx)
+                .expect("compact BitwiseImm segment without operand table");
+            let compact = delta_records
+                .unwrap_or_else(|| Arc::new(records.to_device_on(device_ctx).unwrap()));
+            let trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
+            unsafe {
+                crate::cuda_abi::bitwise_logic_imm_cuda::tracegen_compact(
+                    trace.buffer(),
+                    trace_height,
+                    &compact,
+                    &table,
+                    pc_base,
+                    &self.range_checker.count,
+                    &self.bitwise_lookup.count,
+                    self.timestamp_max_bits as u32,
+                    device_ctx.stream.as_raw(),
+                )
+                .unwrap();
+            }
+            return AirProvingContext::simple_no_pis(trace);
+        }
 
         let d_records = tracing::info_span!("trace_gen.h2d_records")
             .in_scope(|| records.to_device_on(device_ctx))

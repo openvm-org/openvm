@@ -17,6 +17,8 @@ use openvm_instructions::{
     program::Program,
     VM_DIGEST_WIDTH,
 };
+#[cfg(feature = "rvr")]
+use openvm_instructions::{LocalOpcode, SystemOpcode};
 #[cfg(any(debug_assertions, feature = "test-utils", feature = "stark-debug"))]
 use openvm_stark_backend::AirRef;
 use openvm_stark_backend::{
@@ -34,18 +36,25 @@ use openvm_stark_backend::{
 };
 use p3_baby_bear::BabyBear;
 #[cfg(feature = "rvr")]
-use rvr_openvm_lift::RvrExtensions;
+use rvr_openvm_lift::{RvrExtensions, RvrRuntimeExtension};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{info_span, instrument};
 
 #[cfg(feature = "rvr")]
 use super::rvr::{
-    bridge::map_rvr_compile_error, build_pc_to_chip, compile, compile_metered,
+    bridge::map_rvr_compile_error,
+    build_pc_to_chip, classify_preflight_opcodes_with_extensions, compile, compile_metered,
     compile_metered_cost, compile_metered_segment_boundary, compile_with_instret_tracking,
-    load_compiled_from_path, ChipMapping, GuestDebugMap, RvrExecutionKind, RvrInitialImage,
-    RvrMeteredCostInstance, RvrMeteredInstance, RvrMeteredSegmentInstance, RvrPureInstance,
-    RvrPureWithInstretTrackingInstance,
+    load_compiled_from_path,
+    preflight::execute_rvr_preflight,
+    preflight::{ChipRecordBuf, RvrArenaNativeTarget},
+    rvr_preflight_engine_env_override, ArenaNativeGeometry, ChipMapping, GuestDebugMap,
+    LogNativeOpcodeAdmitter, PreflightMemoryAccessAux, PreflightRawLogs, RvrCompiled,
+    RvrDeltaRecords, RvrExecutionKind, RvrInitialImage, RvrInlineChipRecords,
+    RvrMeteredCostInstance, RvrMeteredInstance, RvrMeteredSegmentInstance, RvrPreflightBufferPool,
+    RvrPreflightEngine, RvrPreflightInstance, RvrPreflightOpcodeClass, RvrPreflightOutput,
+    RvrPreflightRoute, RvrPureInstance, RvrPureWithInstretTrackingInstance,
 };
 use super::{
     execution_mode::{
@@ -89,6 +98,281 @@ pub const BABYBEAR_S_BOX_DEGREE: u64 = 7;
 
 pub trait VmField: PrimeField32 + InjectiveMonomial<BABYBEAR_S_BOX_DEGREE> {}
 impl<T> VmField for T where T: PrimeField32 + InjectiveMonomial<BABYBEAR_S_BOX_DEGREE> {}
+
+#[cfg(feature = "rvr")]
+type VmRvrPreflightRoute<'a, F, VC> =
+    RvrPreflightRoute<'a, F, <VC as VmExecutionConfig<F>>::Executor>;
+
+#[cfg(feature = "rvr")]
+trait CachedRvrMeteredExecutor: Send + Sync {
+    fn execute_metered(
+        &self,
+        inputs: Streams,
+        ctx: MeteredCtx,
+    ) -> Result<(Vec<Segment>, VmState<GuestMemory>), ExecutionError>;
+}
+
+#[cfg(feature = "rvr")]
+impl CachedRvrMeteredExecutor for RvrMeteredInstance<'static> {
+    fn execute_metered(
+        &self,
+        inputs: Streams,
+        ctx: MeteredCtx,
+    ) -> Result<(Vec<Segment>, VmState<GuestMemory>), ExecutionError> {
+        RvrMeteredInstance::execute_metered(self, inputs, ctx)
+    }
+}
+
+#[cfg(feature = "rvr")]
+trait CachedRvrPreflightExecutor<F>: Send + Sync {
+    #[allow(clippy::too_many_arguments)]
+    fn execute(
+        &self,
+        exe: &VmExe<F>,
+        state: VmState<GuestMemory>,
+        num_insns: Option<u64>,
+        record_capacity_rows: Option<&[u32]>,
+        arena_targets: Option<&std::collections::BTreeMap<usize, ChipRecordBuf>>,
+    ) -> Result<RvrPreflightOutput<F>, ExecutionError>;
+
+    /// Return a consumed segment output's large buffers to the executor's
+    /// pool (the record arenas hold expanded copies by this point) so the
+    /// next segment's `execute` reuses them.
+    fn recycle_segment_buffers(
+        &self,
+        raw_logs: PreflightRawLogs,
+        inline_records: Vec<RvrInlineChipRecords>,
+        delta_records: Option<RvrDeltaRecords>,
+    );
+    /// Return the final-layout access replay after log-native assembly has consumed it.
+    fn recycle_access_aux(&self, access_aux: Vec<PreflightMemoryAccessAux<F>>);
+
+    /// R4: airs whose records the compiled library writes arena-native.
+    fn arena_native_airs(&self) -> &[(usize, ArenaNativeGeometry)];
+
+    /// R3/G2: `(air, packed wire record size)` for every air the compiled
+    /// library emits inline compact records for.
+    fn inline_wire_airs(&self) -> &[(usize, usize)];
+
+    /// VmExe-keyed static PC-to-AIR route, built once with the compiled
+    /// preflight executor rather than once per continuation segment.
+    fn pc_to_air_idx(&self) -> &[Option<usize>];
+
+    fn wire_airs(&self) -> &[usize];
+
+    fn buffer_pool(&self) -> &RvrPreflightBufferPool;
+
+    /// Grow and fault in all direct-final compact backings before the timed
+    /// per-segment preflight call.
+    fn prepare_wire_backings(&self, trace_heights: &[u32]);
+
+    /// CUDA: reserve resident maximum-shape arena-native backings before the segment loop.
+    #[cfg(feature = "cuda")]
+    fn prepare_arena_native_backings(
+        &self,
+        trace_heights: &[u32],
+        g2_capacity_bytes: Option<usize>,
+    );
+
+    /// CUDA/G2: return the backing capacity for one actual metered segment.
+    /// Taking the maximum of these scalar joint shapes avoids constructing an
+    /// impossible shape from independent per-AIR maxima.
+    #[cfg(feature = "cuda")]
+    fn g2_capacity_bytes(&self, trace_heights: &[u32], num_insns: u64) -> Option<usize>;
+
+    #[cfg(feature = "cuda")]
+    fn g2_air_indices(&self) -> Vec<usize>;
+}
+
+/// The program-dependent, owned pieces of an rvr preflight instance.
+#[cfg(feature = "rvr")]
+struct CachedRvrCompiledPreflight {
+    compiled: RvrCompiled,
+    runtime_hooks: Vec<Box<dyn RvrRuntimeExtension>>,
+    chip_counts_len: usize,
+    pool: RvrPreflightBufferPool,
+    pc_to_air_idx: Vec<Option<usize>>,
+    wire_airs: Vec<usize>,
+    /// False only when compiler metadata plus the builder's whole-AIR device
+    /// coverage prove that no program slot can reach the host log assembler.
+    build_access_aux: bool,
+    /// True only for a fully-direct delta route backed by the builder's
+    /// device decoder. CPU and all-custom arena-only routes keep the full
+    /// host memory schema even when they can safely omit access aux.
+    compact_delta_memory: bool,
+    /// True only when the backend has bound the CUDA replay consumer that can
+    /// replace host touched-memory finalization.
+    device_touched_memory: bool,
+}
+
+#[cfg(feature = "rvr")]
+impl<F: PrimeField32> CachedRvrPreflightExecutor<F> for CachedRvrCompiledPreflight {
+    fn execute(
+        &self,
+        exe: &VmExe<F>,
+        state: VmState<GuestMemory>,
+        num_insns: Option<u64>,
+        record_capacity_rows: Option<&[u32]>,
+        arena_targets: Option<&std::collections::BTreeMap<usize, ChipRecordBuf>>,
+    ) -> Result<RvrPreflightOutput<F>, ExecutionError> {
+        execute_rvr_preflight(
+            exe,
+            &self.runtime_hooks,
+            &self.compiled,
+            self.chip_counts_len,
+            &self.pool,
+            state,
+            num_insns,
+            record_capacity_rows,
+            arena_targets,
+            self.build_access_aux,
+            self.compact_delta_memory,
+            self.device_touched_memory,
+        )
+    }
+
+    fn recycle_segment_buffers(
+        &self,
+        raw_logs: PreflightRawLogs,
+        inline_records: Vec<RvrInlineChipRecords>,
+        delta_records: Option<RvrDeltaRecords>,
+    ) {
+        self.pool
+            .recycle_segment_buffers(raw_logs, inline_records, delta_records);
+    }
+    fn recycle_access_aux(&self, access_aux: Vec<PreflightMemoryAccessAux<F>>) {
+        self.pool.recycle_access_aux(access_aux);
+    }
+
+    fn arena_native_airs(&self) -> &[(usize, ArenaNativeGeometry)] {
+        &self.compiled.inline_records().arena_native_airs
+    }
+
+    fn inline_wire_airs(&self) -> &[(usize, usize)] {
+        &self.compiled.inline_records().airs
+    }
+
+    fn pc_to_air_idx(&self) -> &[Option<usize>] {
+        &self.pc_to_air_idx
+    }
+
+    fn wire_airs(&self) -> &[usize] {
+        &self.wire_airs
+    }
+
+    fn buffer_pool(&self) -> &RvrPreflightBufferPool {
+        &self.pool
+    }
+
+    fn prepare_wire_backings(&self, trace_heights: &[u32]) {
+        for &air in &self.wire_airs {
+            let wire_size = self
+                .compiled
+                .inline_records()
+                .airs
+                .iter()
+                .find(|&&(wire_air, _)| wire_air == air)
+                .map(|&(_, size)| size)
+                .expect("cached wire air missing compiled record size");
+            self.pool
+                .prepare_wire_backing(air, trace_heights[air] as usize * wire_size);
+        }
+    }
+
+    #[cfg(feature = "cuda")]
+    fn prepare_arena_native_backings(
+        &self,
+        trace_heights: &[u32],
+        g2_capacity_bytes: Option<usize>,
+    ) {
+        let stats_enabled = crate::arch::cuda::pinned::stats_enabled();
+        let before = stats_enabled.then(crate::arch::cuda::pinned::PoolStatsSnapshot::capture);
+        let prewarm_started = stats_enabled.then(std::time::Instant::now);
+        for &(air, ref geometry) in &self.compiled.inline_records().arena_native_airs {
+            let capacity_bytes = trace_heights[air] as usize * geometry.stride_dense();
+            self.pool.prepare_arena_native_dense_backings(
+                crate::arch::rvr::preflight_pool::ArenaNativeBackingKey::new(
+                    air,
+                    geometry.stride_dense(),
+                    capacity_bytes,
+                ),
+            );
+        }
+        if let Some(capacity_bytes) = g2_capacity_bytes {
+            if std::env::var("OPENVM_RVR_G2_GPU_PROFILE").as_deref() == Ok("1") {
+                eprintln!("OPENVM_RVR_G2_JOINT_PREWARM capacity_bytes={capacity_bytes}");
+            }
+            let g2 = self
+                .compiled
+                .inline_records()
+                .g2
+                .as_deref()
+                .expect("G2 capacity requires compiled G2 metadata");
+            let route = if g2.checked_emission() {
+                super::rvr::preflight_pool::G2BackingRoute::Checked
+            } else {
+                super::rvr::preflight_pool::G2BackingRoute::Production
+            };
+            self.pool.prepare_g2_backings(capacity_bytes, route);
+        }
+        if let Some(before) = before {
+            let after = crate::arch::cuda::pinned::PoolStatsSnapshot::capture();
+            eprintln!(
+                "OPENVM_RVR_CUDA_POOL_PREWARM elapsed_ms={} hits={} misses={} populate_calls={} \
+                 populate_bytes={} ready_buffers={} ready_bytes={} pending={} \
+                 quarantined_total={} sync_failures_total={}",
+                prewarm_started
+                    .expect("pool prewarm timer missing with stats enabled")
+                    .elapsed()
+                    .as_millis(),
+                after.hits.saturating_sub(before.hits),
+                after.misses.saturating_sub(before.misses),
+                after.populate_calls.saturating_sub(before.populate_calls),
+                after.populate_bytes.saturating_sub(before.populate_bytes),
+                after.ready_buffers,
+                after.ready_bytes,
+                after.pending,
+                after.quarantined,
+                after.sync_failures,
+            );
+        }
+    }
+
+    #[cfg(feature = "cuda")]
+    fn g2_capacity_bytes(&self, trace_heights: &[u32], num_insns: u64) -> Option<usize> {
+        let g2 = self.compiled.inline_records().g2.as_deref()?;
+        let capacities =
+            super::rvr::g2::RvrG2CapacitiesV1::for_metered_segment(g2, trace_heights, num_insns)
+                .expect("G2 metered capacity model overflow");
+        Some(
+            super::rvr::g2::RvrG2PreparedV1::capacity_bytes(&capacities)
+                .expect("G2 segment capacity overflow"),
+        )
+    }
+
+    #[cfg(feature = "cuda")]
+    fn g2_air_indices(&self) -> Vec<usize> {
+        self.compiled
+            .inline_records()
+            .g2
+            .as_deref()
+            .map(|g2| {
+                g2.air_bindings
+                    .iter()
+                    .map(|binding| binding.air_idx)
+                    .chain(g2.opaque_bindings.iter().map(|binding| binding.air_idx))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+}
+
+/// Cached program-derived preflight route for a fixed [`VmInstance`].
+#[cfg(feature = "rvr")]
+enum CachedRvrPreflight<F> {
+    Rvr(Box<dyn CachedRvrPreflightExecutor<F>>),
+    Interpreter,
+}
 
 #[derive(Error, Debug)]
 pub enum GenerationError {
@@ -473,6 +757,69 @@ where
         ))
     }
 
+    pub fn preflight_routed_instance(
+        &self,
+        exe: &VmExe<F>,
+        executor_idx_to_air_idx: &[usize],
+        num_airs: usize,
+        guest_debug_map: Option<&GuestDebugMap>,
+        assembler_admitter: &dyn LogNativeOpcodeAdmitter<F>,
+        gpu_records_default: Option<&str>,
+    ) -> Result<RvrPreflightRoute<'_, F, VC::Executor>, StaticProgramError> {
+        let extensions = self.build_rvr_extensions(Some(executor_idx_to_air_idx));
+        // Pure capability routing: Rvr iff every opcode is on the rvr
+        // preflight surface. The backend-keyed engine DEFAULT (CPU →
+        // interpreter, GPU → rvr) is applied by the proving path in
+        // `VmInstance::prove_continuations`, not here, so this stays usable
+        // as a capability query and an explicit rvr constructor.
+        match classify_preflight_opcodes_with_extensions(
+            exe,
+            extensions.lifters(),
+            assembler_admitter,
+        ) {
+            RvrPreflightOpcodeClass::Supported => {
+                #[cfg(feature = "metrics")]
+                let _compilation_span =
+                    tracing::info_span!("compile_preflight", backend = "rvr").entered();
+                let chips = ChipMapping {
+                    num_airs,
+                    pc_to_chip: build_pc_to_chip(exe, &self.inventory, executor_idx_to_air_idx)
+                        .map_err(map_rvr_compile_error)?,
+                    chip_widths: None,
+                };
+                let compiled = super::rvr::compile::compile_preflight_with_extensions_and_default(
+                    exe,
+                    extensions.lifters(),
+                    assembler_admitter,
+                    &chips,
+                    guest_debug_map,
+                    gpu_records_default,
+                )
+                .map_err(map_rvr_compile_error)?;
+                let runtime_hooks = extensions.into_runtime_hooks();
+                Ok(RvrPreflightRoute::Rvr(RvrPreflightInstance::new(
+                    self.inventory.config(),
+                    Arc::new(exe.clone()),
+                    runtime_hooks,
+                    compiled,
+                    &chips,
+                )))
+            }
+            _ => {
+                #[cfg(feature = "metrics")]
+                let _compilation_span =
+                    tracing::info_span!("compile_preflight", backend = "interpreter").entered();
+                Ok(RvrPreflightRoute::Interpreter(
+                    PreflightInterpretedInstance::new(
+                        &exe.program,
+                        self.inventory.clone(),
+                        executor_idx_to_air_idx.to_vec(),
+                    )?,
+                ))
+            }
+        }
+    }
+
     pub fn metered_cost_instance(
         &self,
         exe: &VmExe<F>,
@@ -670,6 +1017,8 @@ where
     #[getset(get = "pub", get_mut = "pub")]
     pk: DeviceMultiStarkProvingKey<E::PB>,
     chip_complex: VmChipComplex<E::SC, VB::RecordArena, E::PB, VB::SystemChipInventory>,
+    #[cfg(feature = "rvr")]
+    builder: VB,
 }
 
 impl<E, VB> VirtualMachine<E, VB>
@@ -692,6 +1041,8 @@ where
             executor,
             pk: d_pk,
             chip_complex,
+            #[cfg(feature = "rvr")]
+            builder,
         })
     }
 
@@ -712,9 +1063,9 @@ where
         &self.executor.config
     }
 
-    /// Pure execution instance.
+    /// Pure interpreter.
     #[cfg(not(feature = "rvr"))]
-    pub fn instance(
+    pub fn interpreter(
         &self,
         exe: &VmExe<Val<E::SC>>,
     ) -> Result<InterpretedInstance<'_, ExecutionCtx>, StaticProgramError>
@@ -726,7 +1077,7 @@ where
     }
 
     #[cfg(feature = "rvr")]
-    pub fn instance(
+    pub fn interpreter(
         &self,
         exe: &VmExe<Val<E::SC>>,
     ) -> Result<RvrPureInstance<'_>, StaticProgramError>
@@ -749,9 +1100,9 @@ where
         self.executor().rvr_instance(exe, None)
     }
 
-    // Interpreter access when RVR is enabled.
+    // Pure RVR execution with interpreter access for equivalence checking.
     #[cfg(feature = "rvr")]
-    pub fn interpreter_instance(
+    pub fn naive_interpreter(
         &self,
         exe: &VmExe<Val<E::SC>>,
     ) -> Result<InterpretedInstance<'_, ExecutionCtx>, StaticProgramError>
@@ -763,7 +1114,7 @@ where
     }
 
     #[cfg(not(feature = "rvr"))]
-    pub fn metered_instance(
+    pub fn metered_interpreter(
         &self,
         exe: &VmExe<Val<E::SC>>,
     ) -> Result<InterpretedInstance<'_, MeteredCtx>, StaticProgramError>
@@ -777,7 +1128,7 @@ where
     }
 
     #[cfg(feature = "rvr")]
-    pub fn metered_instance(
+    pub fn metered_interpreter(
         &self,
         exe: &VmExe<Val<E::SC>>,
     ) -> Result<RvrMeteredInstance<'_>, StaticProgramError>
@@ -823,7 +1174,7 @@ where
     }
 
     #[cfg(feature = "rvr")]
-    pub fn load_metered_instance(
+    pub fn load_metered_interpreter(
         &self,
         lib_path: &std::path::Path,
         exe: &VmExe<Val<E::SC>>,
@@ -853,7 +1204,7 @@ where
     }
 
     #[cfg(feature = "rvr")]
-    pub fn metered_interpreter_instance(
+    pub fn naive_metered_interpreter(
         &self,
         exe: &VmExe<Val<E::SC>>,
     ) -> Result<InterpretedInstance<'_, MeteredCtx>, StaticProgramError>
@@ -867,7 +1218,7 @@ where
     }
 
     #[cfg(not(feature = "rvr"))]
-    pub fn metered_cost_instance(
+    pub fn metered_cost_interpreter(
         &self,
         exe: &VmExe<Val<E::SC>>,
     ) -> Result<InterpretedInstance<'_, MeteredCostCtx>, StaticProgramError>
@@ -881,7 +1232,7 @@ where
     }
 
     #[cfg(feature = "rvr")]
-    pub fn metered_cost_instance(
+    pub fn metered_cost_interpreter(
         &self,
         exe: &VmExe<Val<E::SC>>,
     ) -> Result<RvrMeteredCostInstance<'_>, StaticProgramError>
@@ -913,7 +1264,7 @@ where
     }
 
     #[cfg(feature = "rvr")]
-    pub fn load_metered_cost_instance(
+    pub fn load_metered_cost_interpreter(
         &self,
         lib_path: &std::path::Path,
         exe: &VmExe<Val<E::SC>>,
@@ -944,9 +1295,46 @@ where
         )
     }
 
-    /// Preflight execution until termination using an interpreter. Preflight execution must be
-    /// provided with `trace_heights` instrumentation data collected from a previous metered run so
-    /// that it knows how much memory to allocate for record arenas.
+    #[cfg(feature = "rvr")]
+    pub fn preflight_routed_instance(
+        &self,
+        exe: &VmExe<Val<E::SC>>,
+    ) -> Result<VmRvrPreflightRoute<'_, Val<E::SC>, VB::VmConfig>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
+    {
+        self.preflight_routed_instance_with_gpu_records_default(exe, None)
+    }
+
+    #[cfg(feature = "rvr")]
+    fn preflight_routed_instance_with_gpu_records_default(
+        &self,
+        exe: &VmExe<Val<E::SC>>,
+        gpu_records_default: Option<&str>,
+    ) -> Result<VmRvrPreflightRoute<'_, Val<E::SC>, VB::VmConfig>, StaticProgramError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: MeteredExecutor<Val<E::SC>>,
+    {
+        let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
+        let assembler_registry = self
+            .builder
+            .create_rvr_log_native_assembler_registry(self.config());
+        self.executor().preflight_routed_instance(
+            exe,
+            &executor_idx_to_air_idx,
+            self.num_airs(),
+            None,
+            &assembler_registry,
+            gpu_records_default,
+        )
+    }
+
+    /// Preflight execution for a single segment. Executes for exactly `num_insns` instructions
+    /// using an interpreter. Preflight execution must be provided with `trace_heights`
+    /// instrumentation data that was collected from a previous run of metered execution so that the
+    /// preflight execution knows how much memory to allocate for record arenas.
     ///
     /// This function should rarely be called on its own. Users are advised to call
     /// [`prove`](Self::prove) directly.
@@ -1001,16 +1389,7 @@ where
             .iter()
             .all(|&air_idx| air_idx < trace_heights.len()));
 
-        // TODO[jpw]: figure out how to compute RA specific main_widths
-        let main_widths = self
-            .pk
-            .per_air
-            .iter()
-            .map(|pk| pk.vk.params.width.main_width())
-            .collect_vec();
-        let capacities = zip_eq(trace_heights, main_widths)
-            .map(|(&h, w)| (h as usize, w))
-            .collect::<Vec<_>>();
+        let capacities = self.preflight_capacities(trace_heights);
         let ctx = PreflightCtx::new_with_capacity(&capacities, num_insns);
 
         let pc = state.pc();
@@ -1034,9 +1413,10 @@ where
             interpreter.opcode_counts_by_air::<VB::RecordArena>(),
         );
         let touched_memory = exec_state.vm_state.memory.finalize::<Val<E::SC>>();
-        // Grow the touched-page sets on the carried-forward memory image so the next segment's
-        // host-to-device transfer (`set_initial_memory`) stays a correct superset of non-zero
-        // pages.
+        // Keep the sparse GPU initial-memory image in sync with the state carried to the next
+        // continuation segment. Interpreter preflight writes through TracingMemory, whose
+        // finalized touched blocks are the authoritative record of pages that may now be
+        // non-zero.
         exec_state
             .vm_state
             .memory
@@ -1055,7 +1435,14 @@ where
             to_state,
             exit_code,
             filtered_exec_frequencies,
+            program_frequencies_on_device: false,
+            #[cfg(feature = "rvr")]
+            rvr_exec_frequencies_touched: Vec::new(),
+            #[cfg(feature = "rvr")]
+            rvr_exec_frequencies_pool: None,
             touched_memory,
+            touched_memory_on_device: false,
+            device_replay_oracle: false,
         };
         let record_arenas = exec_state.ctx.arenas;
         let to_state = VmState::new(
@@ -1071,6 +1458,332 @@ where
             record_arenas,
             to_state,
         })
+    }
+
+    #[cfg(feature = "rvr")]
+    fn execute_rvr_preflight_for_proving(
+        &self,
+        rvr_preflight: &CachedRvrPreflight<Val<E::SC>>,
+        interpreter: &mut PreflightInterpretedInstance2<Val<E::SC>, VB::VmConfig>,
+        exe: &VmExe<Val<E::SC>>,
+        state: VmState<GuestMemory>,
+        num_insns: Option<u64>,
+        trace_heights: &[u32],
+    ) -> Result<PreflightExecutionOutput<Val<E::SC>, VB::RecordArena>, ExecutionError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
+            MeteredExecutor<Val<E::SC>> + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
+    {
+        match rvr_preflight {
+            CachedRvrPreflight::Rvr(rvr_preflight) => {
+                let _preflight_span = tracing::info_span!("execute_preflight").entered();
+                // `state` moves in whole: `execute_rvr_preflight` clones it
+                // internally for its capacity-retry loop, and a guest-state
+                // clone is the dominant per-segment fixed cost (~hundreds of
+                // ms), so it must not be paid twice.
+                let detail_wrapper_started = std::time::Instant::now();
+                #[cfg(any(feature = "stark-debug", feature = "cuda"))]
+                let split_t0 = std::time::Instant::now();
+                let detailed_profile =
+                    std::env::var("OPENVM_RVR_PREFLIGHT_PROFILE_DETAIL").as_deref() == Ok("1");
+                let capacities = self.preflight_capacities(trace_heights);
+                let capacities_finished = std::time::Instant::now();
+                let pc_to_air_idx = rvr_preflight.pc_to_air_idx();
+                // R4: stage arena-native targets so the C writes those airs'
+                // full records directly into their final arena backings.
+                let arena_native = rvr_preflight.arena_native_airs().to_vec();
+                let mut staged: Vec<(usize, ArenaNativeGeometry, VB::RecordArena)> = Vec::new();
+                let mut targets = std::collections::BTreeMap::new();
+                for &(air, geometry) in &arena_native {
+                    let (height, width) = capacities[air];
+                    let (arena, buf) =
+                        <VB::RecordArena as RvrArenaNativeTarget>::stage_arena_native_pooled(
+                            height,
+                            width,
+                            &geometry,
+                            air,
+                            rvr_preflight.buffer_pool(),
+                        );
+                    targets.insert(air, buf);
+                    staged.push((air, geometry, arena));
+                }
+                let arena_staging_finished = std::time::Instant::now();
+                // G2: stage compact WIRE targets for the airs the builder
+                // requests — the C writes packed wire records straight into
+                // the adopted backing (one alloc, no copy); the chips decode
+                // them (GPU on-device). A requested air must be compiled
+                // compact: wire-staging a fused-compiled air would hand the C
+                // a wire-stride descriptor for full-record emission, so the
+                // toggle mismatch fails here instead of corrupting records.
+                let wire_airs = rvr_preflight.wire_airs();
+                let mut staged_wire: Vec<(usize, usize, VB::RecordArena)> = Vec::new();
+                if !wire_airs.is_empty() {
+                    let inline_wire = rvr_preflight.inline_wire_airs().to_vec();
+                    for &air in wire_airs {
+                        if arena_native
+                            .iter()
+                            .any(|&(native_air, _)| native_air == air)
+                        {
+                            return Err(ExecutionError::RvrExecution(format!(
+                                "air {air} is compiled arena-native but the builder requested \
+                                 compact wire staging; recompile with the compact opt-in \
+                                 (OPENVM_RVR_GPU_RECORDS=compact) or drop the request"
+                            )));
+                        }
+                        let &(_, wire_size) = inline_wire
+                            .iter()
+                            .find(|&&(wire_air, _)| wire_air == air)
+                            .ok_or_else(|| {
+                                ExecutionError::RvrExecution(format!(
+                                    "builder requested wire staging for air {air} but the \
+                                     compiled library emits no inline records for it"
+                                ))
+                            })?;
+                        let (arena, buf) =
+                            <VB::RecordArena as RvrArenaNativeTarget>::stage_rvr_wire_pooled(
+                                capacities[air].0,
+                                wire_size,
+                                air,
+                                rvr_preflight.buffer_pool(),
+                            );
+                        targets.insert(air, buf);
+                        staged_wire.push((air, wire_size, arena));
+                    }
+                }
+                let wire_staging_finished = std::time::Instant::now();
+                let staged_count = staged.len();
+                let staged_wire_count = staged_wire.len();
+                let staged_capacity_bytes = targets
+                    .values()
+                    .map(|target| u64::from(target.cap))
+                    .sum::<u64>();
+                let mut rvr_output = rvr_preflight.execute(
+                    exe,
+                    state,
+                    num_insns,
+                    Some(trace_heights),
+                    (!targets.is_empty()).then_some(&targets),
+                )?;
+                let execute_call_finished = std::time::Instant::now();
+                #[cfg(any(feature = "stark-debug", feature = "cuda"))]
+                let split_t1 = std::time::Instant::now();
+                #[cfg(any(feature = "stark-debug", feature = "cuda"))]
+                let split_t2 = std::time::Instant::now();
+                #[cfg(feature = "stark-debug")]
+                if std::env::var("OPENVM_STARK_DEBUG_TRACE_ONLY").as_deref() == Ok("1")
+                    && std::env::var("OPENVM_STARK_DEBUG_RVR_AIR_ROUTES").as_deref() == Ok("1")
+                {
+                    let mut routed = vec![[0u64; 3]; self.pk.per_air.len()];
+                    let arena_native = rvr_output
+                        .arena_native_written
+                        .iter()
+                        .map(|&(air, _)| air)
+                        .collect::<std::collections::BTreeSet<_>>();
+                    let pc_base = u64::from(exe.program.pc_base);
+                    let pc_step = u64::from(openvm_instructions::program::DEFAULT_PC_STEP);
+                    for entry in &rvr_output.raw_logs.program_log {
+                        let Some(slot) = u64::from(entry.pc())
+                            .checked_sub(pc_base)
+                            .map(|offset| (offset / pc_step) as usize)
+                        else {
+                            continue;
+                        };
+                        let Some(air) = pc_to_air_idx.get(slot).copied().flatten() else {
+                            continue;
+                        };
+                        let route = if rvr_output
+                            .inline_pc_slots
+                            .get(slot)
+                            .copied()
+                            .unwrap_or(false)
+                        {
+                            usize::from(!arena_native.contains(&air))
+                        } else {
+                            2
+                        };
+                        routed[air][route] += 1;
+                    }
+                    for (air, [native, compact, verbose]) in routed.into_iter().enumerate() {
+                        if native + compact + verbose == 0 {
+                            continue;
+                        }
+                        eprintln!(
+                            "OPENVM_STARK_DEBUG_RVR_AIR_ROUTE air={air} name={:?} native={} \
+                             compact={} verbose={}",
+                            self.pk.per_air[air].air_name, native, compact, verbose
+                        );
+                    }
+                }
+                let generic_assembly_started = std::time::Instant::now();
+                let rvr_g2_segment_id = rvr_output
+                    .g2_segment
+                    .as_ref()
+                    .map(|segment| segment.header_acquire().map(|header| header.segment_id))
+                    .transpose()?;
+                let mut record_arenas = self
+                    .builder
+                    .generate_rvr_record_arenas_from_logs(
+                        self.config(),
+                        exe,
+                        &mut rvr_output,
+                        &capacities,
+                        pc_to_air_idx,
+                    )?
+                    .ok_or_else(|| {
+                        ExecutionError::RvrExecution(
+                            "rvr log-native tracegen is not implemented for this VM builder"
+                                .to_string(),
+                        )
+                    })?;
+                let generic_assembly_finished = std::time::Instant::now();
+                for (air, geometry, mut arena) in staged {
+                    let written = rvr_output
+                        .arena_native_written
+                        .iter()
+                        .find(|&&(written_air, _)| written_air == air)
+                        .map(|&(_, count)| count as usize)
+                        .ok_or_else(|| {
+                            ExecutionError::RvrExecution(format!(
+                                "arena-native air {air} reported no written count"
+                            ))
+                        })?;
+                    let written_bytes = rvr_output
+                        .arena_native_written_bytes
+                        .iter()
+                        .find(|&&(written_air, _)| written_air == air)
+                        .map(|&(_, bytes)| bytes as usize)
+                        .ok_or_else(|| {
+                            ExecutionError::RvrExecution(format!(
+                                "arena-native air {air} reported no written byte cursor"
+                            ))
+                        })?;
+                    arena.finish_arena_native_sized(written, written_bytes, &geometry);
+                    if let Some(segment_id) = rvr_g2_segment_id {
+                        arena.set_rvr_g2_segment_id(segment_id);
+                    }
+                    record_arenas[air] = arena;
+                }
+                let arena_finish_finished = std::time::Instant::now();
+                for (air, wire_size, mut arena) in staged_wire {
+                    let written = rvr_output
+                        .arena_native_written
+                        .iter()
+                        .find(|&&(written_air, _)| written_air == air)
+                        .map(|&(_, count)| count as usize)
+                        .ok_or_else(|| {
+                            ExecutionError::RvrExecution(format!(
+                                "wire-staged air {air} reported no written count"
+                            ))
+                        })?;
+                    arena.finish_rvr_wire(written, wire_size);
+                    record_arenas[air] = arena;
+                }
+                let wire_finish_finished = std::time::Instant::now();
+                #[cfg(any(feature = "stark-debug", feature = "cuda"))]
+                if std::env::var("OPENVM_STARK_DEBUG_TRACE_ONLY").as_deref() == Ok("1")
+                    || std::env::var("OPENVM_GPU_E2E_PROFILE").as_deref() == Ok("1")
+                {
+                    let split_t3 = std::time::Instant::now();
+                    eprintln!(
+                        "OPENVM_STARK_DEBUG_RVR_PREFLIGHT_SPLIT cexec_us={} setup_us={} \
+                         assembly_us={}",
+                        (split_t1 - split_t0).as_micros(),
+                        (split_t2 - split_t1).as_micros(),
+                        (split_t3 - split_t2).as_micros()
+                    );
+                }
+
+                // The arenas hold expanded records; the raw logs and compact
+                // record bytes are dead — return them to the executor's pool
+                // so the next segment skips their fresh-mapping fault cost.
+                let RvrPreflightOutput {
+                    system_records,
+                    to_state,
+                    raw_logs,
+                    access_aux,
+                    inline_records,
+                    delta_records,
+                    ..
+                } = rvr_output;
+                let recycle_started = std::time::Instant::now();
+                rvr_preflight.recycle_access_aux(access_aux);
+                rvr_preflight.recycle_segment_buffers(raw_logs, inline_records, delta_records);
+                let recycle_finished = std::time::Instant::now();
+                if detailed_profile {
+                    eprintln!(
+                        "OPENVM_RVR_WRAPPER_DETAIL capacities_us={} arena_stage_us={} \
+                         wire_stage_us={} execute_call_us={} generic_assembly_us={} \
+                         arena_finish_us={} wire_finish_us={} recycle_us={} staged_airs={} \
+                         staged_wire_airs={} staged_capacity_bytes={}",
+                        (capacities_finished - detail_wrapper_started).as_micros(),
+                        (arena_staging_finished - capacities_finished).as_micros(),
+                        (wire_staging_finished - arena_staging_finished).as_micros(),
+                        (execute_call_finished - wire_staging_finished).as_micros(),
+                        (generic_assembly_finished - generic_assembly_started).as_micros(),
+                        (arena_finish_finished - generic_assembly_finished).as_micros(),
+                        (wire_finish_finished - arena_finish_finished).as_micros(),
+                        (recycle_finished - recycle_started).as_micros(),
+                        staged_count,
+                        staged_wire_count,
+                        staged_capacity_bytes,
+                    );
+                }
+
+                Ok(PreflightExecutionOutput {
+                    system_records,
+                    record_arenas,
+                    to_state,
+                })
+            }
+            CachedRvrPreflight::Interpreter => {
+                self.execute_preflight_inner(interpreter, state, num_insns, trace_heights)
+            }
+        }
+    }
+
+    fn preflight_capacities(&self, trace_heights: &[u32]) -> Vec<(usize, usize)> {
+        // TODO[jpw]: figure out how to compute RA specific main_widths
+        let main_widths = self
+            .pk
+            .per_air
+            .iter()
+            .map(|pk| pk.vk.params.width.main_width())
+            .collect_vec();
+        zip_eq(trace_heights, main_widths)
+            .map(|(&h, w)| (h as usize, w))
+            .collect()
+    }
+
+    #[cfg(feature = "rvr")]
+    /// Maps defined program instruction slots to AIR IDs for rvr log-native record routing.
+    pub fn pc_to_air_idx(
+        &self,
+        exe: &VmExe<Val<E::SC>>,
+    ) -> Result<Vec<Option<usize>>, StaticProgramError> {
+        let terminate_opcode = SystemOpcode::TERMINATE.global_opcode();
+        let executor_idx_to_air_idx = self.executor_idx_to_air_idx();
+        exe.program
+            .instructions_and_debug_infos
+            .iter()
+            .map(|slot| {
+                let Some((inst, _)) = slot else {
+                    return Ok(None);
+                };
+                if inst.opcode == terminate_opcode {
+                    return Ok(None);
+                }
+                let executor_idx = *self
+                    .executor
+                    .inventory
+                    .instruction_lookup
+                    .get(&inst.opcode)
+                    .ok_or(StaticProgramError::ExecutorNotFound {
+                        opcode: inst.opcode,
+                    })? as usize;
+                Ok(Some(executor_idx_to_air_idx[executor_idx]))
+            })
+            .collect()
     }
 
     /// Calls [`VmState::initial`] but sets more information for
@@ -1176,8 +1889,13 @@ where
                 });
             }
         }
+        // OPENVM_SKIP_DEBUG=1 skips debug-mode constraint checking, consistent with its
+        // meaning in `stark_utils::air_test`; the checker otherwise dominates trace-only
+        // timing runs (~tens of seconds per segment at reth scale).
         #[cfg(feature = "stark-debug")]
-        self.debug_proving_ctx(&ctx);
+        if std::env::var("OPENVM_SKIP_DEBUG").as_deref() != Ok("1") {
+            self.debug_proving_ctx(&ctx);
+        }
 
         Ok(ctx)
     }
@@ -1255,6 +1973,15 @@ where
         self.chip_complex
             .system
             .transport_init_memory_to_device(memory);
+    }
+
+    /// Consume the device-replayed write-only page bitmap into the carried
+    /// state. The segment loop calls this immediately after trace generation,
+    /// before any subsequent initial-memory H2D can observe the state.
+    pub fn merge_device_continuation_dirty_pages(&mut self, memory: &mut GuestMemory) {
+        self.chip_complex
+            .system
+            .merge_device_continuation_dirty_pages(memory);
     }
 
     /// See [`SystemChipComplex::memory_top_tree`].
@@ -1425,6 +2152,20 @@ where
 {
     pub vm: VirtualMachine<E, VB>,
     pub interpreter: PreflightInterpretedInstance2<Val<E::SC>, VB::VmConfig>,
+    #[cfg(feature = "rvr")]
+    rvr_metered: Option<Box<dyn CachedRvrMeteredExecutor>>,
+    #[cfg(feature = "rvr")]
+    rvr_preflight: Option<CachedRvrPreflight<Val<E::SC>>>,
+    #[cfg(feature = "rvr")]
+    rvr_preflight_engine: Option<RvrPreflightEngine>,
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    rvr_cuda_module_prewarmed: bool,
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    rvr_cuda_paths_prewarmed: bool,
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    rvr_cuda_pool_reserve_bytes: usize,
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    rvr_cuda_pool_trim_enabled: Option<bool>,
     #[getset(get = "pub")]
     program_commitment: <E::PB as ProverBackend>::Commitment,
     #[getset(get = "pub")]
@@ -1450,10 +2191,167 @@ where
         Ok(Self {
             vm,
             interpreter,
+            #[cfg(feature = "rvr")]
+            rvr_metered: None,
+            #[cfg(feature = "rvr")]
+            rvr_preflight: None,
+            #[cfg(feature = "rvr")]
+            rvr_preflight_engine: None,
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
+            rvr_cuda_module_prewarmed: false,
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
+            rvr_cuda_paths_prewarmed: false,
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
+            rvr_cuda_pool_reserve_bytes: 0,
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
+            rvr_cuda_pool_trim_enabled: None,
             program_commitment,
             exe,
             state: Some(state),
         })
+    }
+
+    /// Per-instance preflight engine override, strongest in the resolution
+    /// order (instance override > `OPENVM_RVR_PREFLIGHT_ENGINE` > the
+    /// builder's backend-keyed default). `None` restores default resolution.
+    ///
+    /// Must be called before proving: the routed engine is cached at the
+    /// first proven segment and reused for the instance's lifetime.
+    #[cfg(feature = "rvr")]
+    pub fn set_rvr_preflight_engine(&mut self, engine: Option<RvrPreflightEngine>) {
+        assert!(
+            self.rvr_preflight.is_none(),
+            "preflight engine already resolved for this instance; set the override before proving"
+        );
+        self.rvr_preflight_engine = engine;
+    }
+
+    /// Compile and cache the program-specialized RVR executors used by app
+    /// proving. Callers can invoke this before entering a timed proving span;
+    /// repeated calls are no-ops.
+    #[cfg(feature = "rvr")]
+    pub fn warm_rvr_proving(&mut self) -> Result<(), VirtualMachineError>
+    where
+        Val<E::SC>: PrimeField32,
+        <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor:
+            MeteredExecutor<Val<E::SC>> + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
+    {
+        #[cfg(all(feature = "cuda", feature = "rvr"))]
+        let cuda_module_prewarm = (!self.rvr_cuda_module_prewarmed
+            && rvr_cuda_g2_module_prewarm_enabled())
+        .then(|| self.vm.builder.rvr_cuda_device_prewarm_task())
+        .flatten()
+        .map(std::thread::spawn);
+        if self.rvr_metered.is_none() {
+            let metered = self.vm.metered_interpreter(&self.exe)?.into_owned();
+            self.rvr_metered = Some(Box::new(metered));
+        }
+        if self.rvr_preflight.is_some() {
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
+            if let Some(task) = cuda_module_prewarm {
+                task.join()
+                    .map_err(|_| {
+                        ExecutionError::RvrExecution(
+                            "CUDA device prewarm worker panicked".to_string(),
+                        )
+                    })?
+                    .map_err(ExecutionError::RvrExecution)?;
+                self.rvr_cuda_module_prewarmed = true;
+            }
+            return Ok(());
+        }
+
+        let vm = &mut self.vm;
+        // Engine resolution: per-instance override, then the
+        // OPENVM_RVR_PREFLIGHT_ENGINE environment override, then the
+        // builder's backend-keyed default (CPU → interpreter, GPU → rvr;
+        // rationale on `RvrPreflightEngine`). `Rvr` remains subject to
+        // opcode-capability routing.
+        let engine = self
+            .rvr_preflight_engine
+            .or_else(rvr_preflight_engine_env_override)
+            .unwrap_or_else(|| vm.builder.default_rvr_preflight_engine());
+        let gpu_records_default =
+            (vm.builder.default_rvr_preflight_engine() == RvrPreflightEngine::Rvr).then_some("g2");
+        let cached = match engine {
+            RvrPreflightEngine::Interpreter => CachedRvrPreflight::Interpreter,
+            RvrPreflightEngine::Rvr => match vm.preflight_routed_instance_with_gpu_records_default(
+                &self.exe,
+                gpu_records_default,
+            )? {
+                RvrPreflightRoute::Rvr(RvrPreflightInstance {
+                    runtime_hooks,
+                    compiled,
+                    chip_counts_len,
+                    pool,
+                    ..
+                }) => {
+                    let pc_to_air_idx = vm.pc_to_air_idx(&self.exe)?;
+                    let mut wire_airs = vm
+                        .builder
+                        .rvr_wire_record_airs(
+                            vm.config(),
+                            &self.exe,
+                            &pc_to_air_idx,
+                            compiled.inline_records(),
+                        )
+                        .into_iter()
+                        .collect::<Vec<_>>();
+                    // Compiler-scope proof, including mixed-AIR taint: every
+                    // defined routed slot must both emit inline and belong to
+                    // a whole AIR owned by the device or an arena-native
+                    // consumer. Otherwise retain the complete host access
+                    // replay and fail-closed generic assembly path.
+                    let fully_direct_delta = compiled.inline_records().fully_direct_delta;
+                    let g2 = compiled.inline_records().g2.is_some();
+                    // The AOT classification is backend-neutral. CPU builders
+                    // intentionally advertise no delta-wire AIRs and must
+                    // retain the full host replay. The only safe empty-wire
+                    // exception is an all-custom arena route, whose AOT decode
+                    // map is empty because no delta record can reach
+                    // finalization.
+                    let has_device_delta_route = !wire_airs.is_empty();
+                    let all_custom_arena = compiled
+                        .inline_records()
+                        .delta_decode
+                        .as_ref()
+                        .is_some_and(|precomputed| precomputed.kind_to_air.is_empty());
+                    if compiled.inline_records().delta_records || g2 {
+                        // Stage-2 uses one cross-AIR chronological backing,
+                        // not the per-AIR G2 wire targets.
+                        wire_airs.clear();
+                    }
+                    let compact_delta_memory = fully_direct_delta && has_device_delta_route;
+                    let device_touched_memory =
+                        (fully_direct_delta || g2) && has_device_delta_route;
+                    wire_airs.sort_unstable();
+                    CachedRvrPreflight::Rvr(Box::new(CachedRvrCompiledPreflight {
+                        compiled,
+                        runtime_hooks,
+                        chip_counts_len,
+                        pool,
+                        pc_to_air_idx,
+                        wire_airs,
+                        build_access_aux: !((fully_direct_delta || g2)
+                            && (has_device_delta_route || all_custom_arena)),
+                        compact_delta_memory,
+                        device_touched_memory,
+                    }))
+                }
+                RvrPreflightRoute::Interpreter(_) => CachedRvrPreflight::Interpreter,
+            },
+        };
+        self.rvr_preflight = Some(cached);
+        #[cfg(all(feature = "cuda", feature = "rvr"))]
+        if let Some(task) = cuda_module_prewarm {
+            task.join()
+                .map_err(|_| {
+                    ExecutionError::RvrExecution("CUDA device prewarm worker panicked".to_string())
+                })?
+                .map_err(ExecutionError::RvrExecution)?;
+            self.rvr_cuda_module_prewarmed = true;
+        }
+        Ok(())
     }
 
     #[instrument(name = "vm.reset_state", level = "debug", skip_all)]
@@ -1469,11 +2367,183 @@ where
     }
 }
 
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+fn rvr_cuda_device_prewarm_depth() -> usize {
+    std::env::var("OPENVM_RVR_CUDA_DEVICE_PREWARM_DEPTH")
+        .or_else(|_| std::env::var("OPENVM_RVR_CUDA_G2_PREWARM_DEPTH"))
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        // Prime the exact pinned-host and trace-generation shapes used by the first three
+        // segments. This is no longer a proof replay: it registers fresh arena allocations in the
+        // foreground, launches trace kernels, and drains buffers before real segment zero.
+        .unwrap_or(3)
+        .min(8)
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+fn rvr_cuda_g2_module_prewarm_enabled() -> bool {
+    let g2_route = std::env::var("OPENVM_RVR_GPU_RECORDS").map_or(true, |records| records == "g2");
+    g2_route
+        && std::env::var("OPENVM_RVR_CUDA_MODULE_PREWARM").map_or(true, |enabled| enabled != "0")
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+fn rvr_cuda_device_pool_prewarm_bytes(max_g2_capacity_bytes: usize, trim_enabled: bool) -> usize {
+    const DEFAULT_WARM_FLOOR_BYTES: usize = 256 * 1024 * 1024;
+
+    std::env::var("OPENVM_RVR_CUDA_DEVICE_POOL_PREWARM_BYTES")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or_else(|| {
+            let legacy_reserve = max_g2_capacity_bytes.saturating_mul(3);
+            if trim_enabled {
+                // Retain small/frequent allocations, but let each sequential
+                // segment regrow the large chronology and radix-sort workspace
+                // on demand. Cap the floor at the old shape-scaled reserve so
+                // small or non-G2 workloads never pre-reserve more memory.
+                DEFAULT_WARM_FLOOR_BYTES.min(legacy_reserve)
+            } else {
+                // Preserve the pre-Fix-B reserve for one-knob A/B runs.
+                legacy_reserve
+            }
+        })
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+fn rvr_cuda_device_pool_trim_enabled() -> bool {
+    std::env::var("OPENVM_RVR_CUDA_POOL_TRIM").map_or(true, |enabled| enabled != "0")
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+impl<E, VB> VmInstance<E, VB>
+where
+    E: StarkEngine,
+    Val<E::SC>: PrimeField32,
+    VB: VmBuilder<E>,
+    <E::PD as ProverDevice<E::PB, E::TS>>::DeviceCtx: 'static,
+    <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
+        + MeteredExecutor<Val<E::SC>>
+        + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
+{
+    fn prewarm_cuda_device_paths(
+        &mut self,
+        input: Streams,
+        segments: &[Segment],
+        selected: &[usize],
+        device_pool_reserve_bytes: usize,
+    ) -> Result<(), VirtualMachineError> {
+        if selected.is_empty() {
+            self.vm
+                .builder
+                .finish_rvr_cuda_device_prewarm(device_pool_reserve_bytes)
+                .map_err(ExecutionError::RvrExecution)?;
+            self.rvr_cuda_paths_prewarmed = true;
+            self.rvr_cuda_pool_reserve_bytes = device_pool_reserve_bytes;
+            return Ok(());
+        }
+        let selected_set = selected
+            .iter()
+            .copied()
+            .collect::<std::collections::BTreeSet<_>>();
+        let last_selected = *selected_set
+            .last()
+            .expect("non-empty CUDA warm selection has a final segment");
+        let started = std::time::Instant::now();
+        let mut state = self.state.take();
+        for (seg_idx, segment) in segments.iter().enumerate() {
+            let from_state = state.take().expect("CUDA warm pass state missing");
+            let warm_this_segment = selected_set.contains(&seg_idx);
+            if warm_this_segment {
+                self.vm.transport_init_memory_to_device(&from_state.memory);
+            }
+            let rvr_preflight = self
+                .rvr_preflight
+                .as_ref()
+                .expect("RVR preflight executor must be warmed before CUDA device warmup");
+            let execute = || {
+                if let CachedRvrPreflight::Rvr(rvr) = rvr_preflight {
+                    rvr.prepare_wire_backings(&segment.trace_heights);
+                }
+                self.vm.execute_rvr_preflight_for_proving(
+                    rvr_preflight,
+                    &mut self.interpreter,
+                    &self.exe,
+                    from_state,
+                    Some(segment.num_insns),
+                    &segment.trace_heights,
+                )
+            };
+            let PreflightExecutionOutput {
+                system_records,
+                record_arenas,
+                to_state,
+            } = if warm_this_segment {
+                crate::arch::cuda::pinned::with_eager_registration(execute)?
+            } else {
+                execute()?
+            };
+            state = Some(to_state);
+            if warm_this_segment {
+                // Run trace generation, but deliberately stop before STARK proving. This launches
+                // the non-G2 system/extension trace kernels and materializes their exact device
+                // buffer shapes; the direct G2 kernel preloader alone cannot cover those paths.
+                let ctx = self
+                    .vm
+                    .generate_proving_ctx(system_records, record_arenas)?;
+                // Trace warmup exercises the same device-owned predecessor/touched-memory path
+                // as a real continuation. Consume its dirty-page result before binding the next
+                // warm segment; reset_state below restores the production initial state after the
+                // selected prefix has finished.
+                self.vm.merge_device_continuation_dirty_pages(
+                    &mut state
+                        .as_mut()
+                        .expect("CUDA trace prewarm produced no continuation state")
+                        .memory,
+                );
+                openvm_cuda_common::stream::device_synchronize().map_err(|error| {
+                    ExecutionError::RvrExecution(format!(
+                        "CUDA trace prewarm synchronization failed: {error:?}"
+                    ))
+                })?;
+                drop(ctx);
+                if !crate::arch::cuda::pinned::drain_returns(std::time::Duration::from_secs(30)) {
+                    return Err(ExecutionError::RvrExecution(
+                        "CUDA pinned-host prewarm timed out draining returned arenas".to_string(),
+                    )
+                    .into());
+                }
+            } else {
+                drop(system_records);
+                drop(record_arenas);
+            }
+            if seg_idx == last_selected {
+                break;
+            }
+        }
+        self.state = state;
+        self.reset_state(input);
+        self.vm
+            .builder
+            .finish_rvr_cuda_device_prewarm(device_pool_reserve_bytes)
+            .map_err(ExecutionError::RvrExecution)?;
+        self.rvr_cuda_paths_prewarmed = true;
+        self.rvr_cuda_pool_reserve_bytes = device_pool_reserve_bytes;
+        eprintln!(
+            "OPENVM_RVR_CUDA_DEVICE_PREWARM phase=paths elapsed_ms={} selected={:?} \
+             pinned_host_pool_warm=1 trace_warm=1 proof_warm=0",
+            started.elapsed().as_millis(),
+            selected,
+        );
+        Ok(())
+    }
+}
+
 impl<E, VB> ContinuationVmProver<E::SC> for VmInstance<E, VB>
 where
     E: StarkEngine,
     Val<E::SC>: PrimeField32,
     VB: VmBuilder<E>,
+    <E::PD as ProverDevice<E::PB, E::TS>>::DeviceCtx: 'static,
     <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
         + MeteredExecutor<Val<E::SC>>
         + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
@@ -1494,6 +2564,7 @@ where
     E: StarkEngine,
     Val<E::SC>: PrimeField32,
     VB: VmBuilder<E>,
+    <E::PD as ProverDevice<E::PB, E::TS>>::DeviceCtx: 'static,
     <VB::VmConfig as VmExecutionConfig<Val<E::SC>>>::Executor: Executor<Val<E::SC>>
         + MeteredExecutor<Val<E::SC>>
         + PreflightExecutor<Val<E::SC>, VB::RecordArena>,
@@ -1508,11 +2579,141 @@ where
     ) -> Result<ContinuationVmProof<E::SC>, VirtualMachineError> {
         let input = input.into();
         self.reset_state(input.clone());
+        #[cfg(feature = "rvr")]
+        self.warm_rvr_proving()?;
+        #[cfg(all(feature = "cuda", feature = "rvr"))]
+        let device_prewarm_depth = rvr_cuda_device_prewarm_depth();
         let vm = &mut self.vm;
         let metered_ctx = vm.build_metered_ctx(&self.exe);
-        let metered_instance = vm.metered_instance(&self.exe)?;
-        let (segments, _) = metered_instance.execute_metered(input, metered_ctx)?;
-        let mut proofs = Vec::with_capacity(segments.len());
+        #[cfg(feature = "rvr")]
+        let metered_interpreter = self
+            .rvr_metered
+            .as_ref()
+            .expect("RVR metered executor must be warmed before proving");
+        #[cfg(not(feature = "rvr"))]
+        let metered_interpreter = vm.metered_interpreter(&self.exe)?;
+        let (segments, _) = metered_interpreter.execute_metered(input.clone(), metered_ctx)?;
+        let num_segments = segments.len();
+        #[cfg(all(feature = "cuda", feature = "rvr"))]
+        let mut max_g2_capacity_bytes = 0usize;
+        #[cfg(all(feature = "cuda", feature = "rvr"))]
+        if let Some(CachedRvrPreflight::Rvr(rvr)) = self.rvr_preflight.as_ref() {
+            let num_airs = segments
+                .first()
+                .map_or(0, |segment| segment.trace_heights.len());
+            let mut max_trace_heights = vec![0u32; num_airs];
+            for segment in &segments {
+                assert_eq!(
+                    segment.trace_heights.len(),
+                    num_airs,
+                    "metered segments disagree on AIR count"
+                );
+                for (maximum, &height) in max_trace_heights.iter_mut().zip(&segment.trace_heights) {
+                    *maximum = (*maximum).max(height);
+                }
+            }
+            max_g2_capacity_bytes = segments
+                .iter()
+                .filter_map(|segment| {
+                    rvr.g2_capacity_bytes(&segment.trace_heights, segment.num_insns)
+                })
+                .max()
+                .unwrap_or(0);
+            rvr.prepare_arena_native_backings(
+                &max_trace_heights,
+                (max_g2_capacity_bytes != 0).then_some(max_g2_capacity_bytes),
+            );
+        }
+        #[cfg(all(feature = "cuda", feature = "rvr"))]
+        let device_pool_trim_enabled = rvr_cuda_device_pool_trim_enabled();
+        #[cfg(all(feature = "cuda", feature = "rvr"))]
+        let device_pool_reserve_bytes =
+            rvr_cuda_device_pool_prewarm_bytes(max_g2_capacity_bytes, device_pool_trim_enabled);
+        #[cfg(all(feature = "cuda", feature = "rvr"))]
+        if device_prewarm_depth != 0 && !self.rvr_cuda_paths_prewarmed {
+            let selected = if let Some(CachedRvrPreflight::Rvr(rvr)) = self.rvr_preflight.as_ref() {
+                let g2_airs = rvr.g2_air_indices();
+                if g2_airs.is_empty() {
+                    Vec::new()
+                } else {
+                    // The direct module preloader covers the G2 per-kind kernels. Prefix trace
+                    // passes cover the decoder, the remaining VM trace kernels, and synchronously
+                    // pinned arena shapes; retain the configured depth because later early
+                    // segments can introduce a larger size class.
+                    let selected =
+                        (0..segments.len().min(device_prewarm_depth)).collect::<Vec<_>>();
+                    let mut uncovered = g2_airs
+                        .into_iter()
+                        .filter(|&air| {
+                            segments.iter().any(|segment| {
+                                segment.trace_heights.get(air).copied().unwrap_or(0) != 0
+                            })
+                        })
+                        .collect::<std::collections::BTreeSet<_>>();
+                    for &index in &selected {
+                        uncovered.retain(|&air| {
+                            segments[index].trace_heights.get(air).copied().unwrap_or(0) == 0
+                        });
+                    }
+                    eprintln!(
+                        "OPENVM_RVR_CUDA_DEVICE_PREWARM phase=select depth={} selected={:?} uncovered_active_g2_airs={:?}",
+                        device_prewarm_depth,
+                        selected,
+                        uncovered,
+                    );
+                    selected
+                }
+            } else {
+                Vec::new()
+            };
+            let _ = vm;
+            self.prewarm_cuda_device_paths(
+                input.clone(),
+                &segments,
+                &selected,
+                device_pool_reserve_bytes,
+            )?;
+        } else if !self.rvr_cuda_paths_prewarmed {
+            // Populate the async device pool without replaying workload segments when no pinned
+            // host-pool prefix was requested.
+            self.prewarm_cuda_device_paths(
+                input.clone(),
+                &segments,
+                &[],
+                device_pool_reserve_bytes,
+            )?;
+        } else {
+            let restore_untrimmed_threshold =
+                self.rvr_cuda_pool_trim_enabled == Some(true) && !device_pool_trim_enabled;
+            if device_pool_reserve_bytes > self.rvr_cuda_pool_reserve_bytes
+                || restore_untrimmed_threshold
+            {
+                self.vm
+                    .builder
+                    .finish_rvr_cuda_device_prewarm(device_pool_reserve_bytes)
+                    .map_err(ExecutionError::RvrExecution)?;
+            }
+            self.rvr_cuda_pool_reserve_bytes = device_pool_reserve_bytes;
+        }
+        #[cfg(all(feature = "cuda", feature = "rvr"))]
+        {
+            self.rvr_cuda_pool_trim_enabled = Some(device_pool_trim_enabled);
+        }
+        #[cfg(all(feature = "cuda", feature = "rvr"))]
+        let device_pool_trim_active = device_pool_trim_enabled && max_g2_capacity_bytes != 0;
+        #[cfg(all(feature = "cuda", feature = "rvr"))]
+        if !device_pool_trim_enabled && max_g2_capacity_bytes != 0 {
+            eprintln!(
+                "OPENVM_RVR_CUDA_DEVICE_POOL_TRIM enabled=0 \
+                 requested_retain={device_pool_reserve_bytes}"
+            );
+        }
+        let vm = &mut self.vm;
+        #[cfg(feature = "stark-debug")]
+        if std::env::var("OPENVM_STARK_DEBUG_TRACE_ONLY").as_deref() == Ok("1") {
+            eprintln!("OPENVM_STARK_DEBUG_TOTAL_SEGMENTS={num_segments}");
+        }
+        let mut proofs = Vec::with_capacity(num_segments);
         let mut state = self.state.take();
         for (seg_idx, segment) in segments.into_iter().enumerate() {
             let _segment_span = info_span!("prove_segment", segment = seg_idx).entered();
@@ -1524,7 +2725,62 @@ where
                 ..
             } = segment;
             let from_state = Option::take(&mut state).unwrap();
+            #[cfg(feature = "cuda")]
+            let gpu_e2e_profile = std::env::var("OPENVM_GPU_E2E_PROFILE").as_deref() == Ok("1");
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
+            let device_pool_entry = gpu_e2e_profile
+                .then(|| vm.builder.rvr_cuda_device_pool_stats().unwrap())
+                .flatten();
+            #[cfg(feature = "cuda")]
+            if gpu_e2e_profile {
+                openvm_cuda_common::stream::device_synchronize().unwrap();
+            }
+            #[cfg(feature = "cuda")]
+            let init_h2d_started = std::time::Instant::now();
+            #[cfg(feature = "cuda")]
+            let init_memory_span =
+                gpu_e2e_profile.then(|| info_span!("gpu_e2e_init_memory_h2d_build").entered());
             vm.transport_init_memory_to_device(&from_state.memory);
+            #[cfg(feature = "cuda")]
+            if gpu_e2e_profile {
+                openvm_cuda_common::stream::device_synchronize().unwrap();
+            }
+            #[cfg(feature = "cuda")]
+            drop(init_memory_span);
+            #[cfg(feature = "cuda")]
+            let init_memory_h2d_build_elapsed = init_h2d_started.elapsed();
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
+            let device_pool_after_init = gpu_e2e_profile
+                .then(|| vm.builder.rvr_cuda_device_pool_stats().unwrap())
+                .flatten();
+            #[cfg(feature = "rvr")]
+            let rvr_preflight = self
+                .rvr_preflight
+                .as_ref()
+                .expect("RVR preflight executor must be warmed before proving");
+            #[cfg(feature = "rvr")]
+            if let CachedRvrPreflight::Rvr(rvr) = rvr_preflight {
+                rvr.prepare_wire_backings(&trace_heights);
+            }
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
+            let arena_pool_before = crate::arch::cuda::pinned::stats_enabled()
+                .then(crate::arch::cuda::pinned::PoolStatsSnapshot::capture);
+            #[cfg(any(feature = "stark-debug", feature = "cuda"))]
+            let preflight_started = std::time::Instant::now();
+            #[cfg(feature = "rvr")]
+            let PreflightExecutionOutput {
+                system_records,
+                record_arenas,
+                to_state,
+            } = vm.execute_rvr_preflight_for_proving(
+                rvr_preflight,
+                &mut self.interpreter,
+                &self.exe,
+                from_state,
+                Some(num_insns),
+                &trace_heights,
+            )?;
+            #[cfg(not(feature = "rvr"))]
             let PreflightExecutionOutput {
                 system_records,
                 record_arenas,
@@ -1535,11 +2791,136 @@ where
                 num_insns,
                 &trace_heights,
             )?;
+            #[cfg(any(feature = "stark-debug", feature = "cuda"))]
+            let preflight_elapsed = preflight_started.elapsed();
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
+            let device_pool_after_preflight = gpu_e2e_profile
+                .then(|| vm.builder.rvr_cuda_device_pool_stats().unwrap())
+                .flatten();
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
+            if let Some(before) = arena_pool_before {
+                crate::arch::cuda::pinned::emit_segment_stats(seg_idx, before);
+            }
             state = Some(to_state);
 
+            #[cfg(any(feature = "stark-debug", feature = "cuda"))]
+            let tracegen_started = std::time::Instant::now();
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
+            let tracegen_gpu_timer =
+                crate::arch::rvr::gpu_profile::CudaStageTimer::start_from_device_ctx(
+                    vm.engine.device().device_ctx(),
+                );
             let mut ctx = vm.generate_proving_ctx(system_records, record_arenas)?;
+            vm.merge_device_continuation_dirty_pages(
+                &mut state
+                    .as_mut()
+                    .expect("preflight produced no continuation state")
+                    .memory,
+            );
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
+            vm.builder.release_rvr_cuda_device_trace_sources();
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
+            if device_pool_trim_active {
+                vm.builder
+                    .trim_rvr_cuda_device_pool(device_pool_reserve_bytes, seg_idx)
+                    .map_err(ExecutionError::RvrExecution)?;
+            }
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
+            if let Some(timer) = tracegen_gpu_timer {
+                timer.finish(
+                    "tracegen",
+                    u32::try_from(seg_idx).expect("G2 tracegen segment index exceeds u32"),
+                    0,
+                );
+            }
+            #[cfg(feature = "cuda")]
+            if gpu_e2e_profile {
+                openvm_cuda_common::stream::device_synchronize().unwrap();
+            }
+            #[cfg(any(feature = "stark-debug", feature = "cuda"))]
+            let tracegen_elapsed = tracegen_started.elapsed();
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
+            let device_pool_after_tracegen = gpu_e2e_profile
+                .then(|| vm.builder.rvr_cuda_device_pool_stats().unwrap())
+                .flatten();
             modify_ctx(seg_idx, &mut ctx);
+            #[cfg(feature = "stark-debug")]
+            if std::env::var("OPENVM_STARK_DEBUG_TRACE_ONLY").as_deref() == Ok("1") {
+                eprintln!(
+                    "OPENVM_STARK_DEBUG_SEGMENT_TIMING seg={seg_idx} insns={num_insns} \
+                     preflight_us={} tracegen_us={}",
+                    preflight_elapsed.as_micros(),
+                    tracegen_elapsed.as_micros()
+                );
+                eprintln!("OPENVM_STARK_DEBUG_SEGMENT_BALANCED={seg_idx}");
+                let stop_after = std::env::var("OPENVM_STARK_DEBUG_STOP_AFTER_SEGMENT")
+                    .ok()
+                    .and_then(|value| value.parse::<usize>().ok());
+                // Trace-only mode never produces proofs, so exit cleanly after the last
+                // segment (or an explicit early stop) instead of falling through to the
+                // proof-consuming code with an empty proof vector.
+                if stop_after == Some(seg_idx) || seg_idx + 1 == num_segments {
+                    eprintln!("OPENVM_STARK_DEBUG_CHECKED_SEGMENTS={}", seg_idx + 1);
+                    eprintln!("OPENVM_STARK_DEBUG_TRACE_ONLY_COMPLETE=1");
+                    std::process::exit(0);
+                }
+                continue;
+            }
+            #[cfg(feature = "cuda")]
+            let prove_started = std::time::Instant::now();
             let proof = vm.engine.prove(vm.pk(), ctx).unwrap();
+            #[cfg(feature = "cuda")]
+            if gpu_e2e_profile {
+                openvm_cuda_common::stream::device_synchronize().unwrap();
+                let prove_elapsed = prove_started.elapsed();
+                #[cfg(feature = "rvr")]
+                if let (
+                    Some(entry),
+                    Some(after_init),
+                    Some(after_preflight),
+                    Some(after_tracegen),
+                ) = (
+                    device_pool_entry,
+                    device_pool_after_init,
+                    device_pool_after_preflight,
+                    device_pool_after_tracegen,
+                ) {
+                    let after_prove = vm
+                        .builder
+                        .rvr_cuda_device_pool_stats()
+                        .unwrap()
+                        .expect("CUDA builder omitted device-pool profiling stats");
+                    eprintln!(
+                        "OPENVM_GPU_E2E_DEVICE_POOL seg={seg_idx} \
+                         entry_reserved={} init_reserved={} preflight_reserved={} \
+                         tracegen_reserved={} prove_reserved={} reserved_high={} \
+                         entry_used={} init_used={} preflight_used={} tracegen_used={} \
+                         prove_used={} used_high={} release_threshold={}",
+                        entry[0],
+                        after_init[0],
+                        after_preflight[0],
+                        after_tracegen[0],
+                        after_prove[0],
+                        after_prove[1],
+                        entry[2],
+                        after_init[2],
+                        after_preflight[2],
+                        after_tracegen[2],
+                        after_prove[2],
+                        after_prove[3],
+                        after_prove[4],
+                    );
+                }
+                eprintln!(
+                    "OPENVM_GPU_E2E_SEGMENT_TIMING seg={seg_idx} insns={num_insns} \
+                     init_memory_h2d_build_us={} preflight_us={} \
+                     tracegen_including_h2d_us={} prove_us={}",
+                    init_memory_h2d_build_elapsed.as_micros(),
+                    preflight_elapsed.as_micros(),
+                    tracegen_elapsed.as_micros(),
+                    prove_elapsed.as_micros()
+                );
+            }
             proofs.push(proof);
         }
         let to_state = state.unwrap();

@@ -12,6 +12,63 @@ pub struct FixedTraceRows {
     pub count: u32,
 }
 
+/// Compact inline-record wire shapes. Each migrated instruction stores its
+/// dynamic witness while the host re-derives program operands from PC.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InlineRecordShape {
+    Alu3,
+    Branch2,
+    Wr1,
+    Rw1,
+    /// Extension-owned record bytes with an extension-defined consumer.
+    Custom {
+        record_size: usize,
+    },
+    /// Extension-owned packed records with a runtime row count. These records
+    /// are valid only with a matching arena-native target: `capacity_per_row`
+    /// sizes the backing from the metered AIR height, while the extension
+    /// advances the target byte cursor by each record's actual packed size.
+    CustomVariableRows {
+        capacity_per_row: usize,
+    },
+}
+
+/// Program-redundant fields required when an ALU compact record is emitted
+/// directly into its arena-native record layout.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ArenaAlu3Baked {
+    pub rs2_field: u32,
+    pub rs2_as: u8,
+    pub rs2_imm_sign: u8,
+    pub local_opcode: u8,
+}
+
+/// Program-redundant fields for the dedicated AddI arena-native record.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ArenaAddIBaked {
+    pub imm_low11: u16,
+    pub imm_sign: u16,
+}
+
+/// Program-redundant fields for a conditional one-write record.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ArenaWr1Baked {
+    pub rd_ptr: u32,
+    pub core_imm: u32,
+    pub rd_data: u64,
+    pub is_jal: u8,
+    pub core_from_pc: u32,
+}
+
+/// Program-redundant fields for a read/conditional-write JALR record.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ArenaRw1Baked {
+    pub rs1_ptr: u32,
+    pub rd_ptr: u32,
+    pub core_imm: u16,
+    pub core_imm_sign: u8,
+}
+
 /// Address space classification used by page-access metering.
 ///
 /// Main memory is distinct because generated metered code caches its current
@@ -44,14 +101,105 @@ impl PageAddressSpace {
 /// recorded read or write advances it. A peek reads the current value and
 /// preserves the current timestamp.
 pub trait ExtEmitCtx {
+    /// Whether this instruction may emit its compiler-approved custom record.
+    fn inline_record_enabled(&self) -> bool {
+        false
+    }
+
     /// Read a variable through a VM memory access.
     fn read_var(&mut self, var: Variable) -> String;
+
+    /// Read a variable while retaining its ordinary memory chronology and
+    /// return `(value, from_timestamp, previous_timestamp)`.
+    fn read_var_with_trace(&mut self, var: Variable) -> (String, String, String) {
+        (self.read_var(var), "0u".to_string(), "0u".to_string())
+    }
 
     /// Read a variable at the current logical memory timestamp.
     fn peek_var(&mut self, var: Variable) -> String;
 
+    /// Read a variable without emitting any trace event.
+    fn read_var_raw(&mut self, var: Variable) -> String {
+        self.peek_var(var)
+    }
+
     /// Write a variable through a VM memory access.
     fn write_var(&mut self, var: Variable, val: &str);
+
+    /// Write a variable without emitting any trace event.
+    fn write_var_raw(&mut self, var: Variable, val: &str) {
+        self.write_var(var, val);
+    }
+
+    /// Emit a compact two-read/one-write record using a result expression
+    /// template. `__RVR_LHS__` and `__RVR_RHS__` are replaced with the traced
+    /// operand expressions by the concrete emitter.
+    fn emit_reg3_inline(
+        &mut self,
+        _rd: Variable,
+        _rs1: Variable,
+        _rs2: Variable,
+        _arena: Option<ArenaAlu3Baked>,
+        _result_template: &str,
+    ) -> bool {
+        false
+    }
+
+    /// Emit a compact register/immediate/write record. The result template
+    /// uses the same placeholders as [`Self::emit_reg3_inline`].
+    fn emit_reg2imm_inline(
+        &mut self,
+        _rd: Variable,
+        _rs1: Variable,
+        _imm_value: u64,
+        _arena: Option<ArenaAlu3Baked>,
+        _result_template: &str,
+    ) -> bool {
+        false
+    }
+
+    /// Emit the dedicated AddI compact record. Unlike the legacy mixed-ALU
+    /// adapter, AddI consumes no timestamp for its immediate operand.
+    fn emit_addi_inline(
+        &mut self,
+        _rd: Variable,
+        _rs1: Variable,
+        _imm_value: u64,
+        _arena: Option<ArenaAddIBaked>,
+    ) -> bool {
+        false
+    }
+
+    /// Emit a compact conditional single-register write.
+    fn emit_wr1_inline(
+        &mut self,
+        _rd: Option<Variable>,
+        _value: &str,
+        _arena: Option<ArenaWr1Baked>,
+    ) -> bool {
+        false
+    }
+
+    fn emit_load_inline(
+        &mut self,
+        _width: u8,
+        _signed: bool,
+        _rd: Option<Variable>,
+        _base: Variable,
+        _offset: i16,
+    ) -> bool {
+        false
+    }
+
+    fn emit_store_inline(
+        &mut self,
+        _width: u8,
+        _base: Variable,
+        _src: Variable,
+        _offset: i16,
+    ) -> bool {
+        false
+    }
 
     /// Append a line of C code (indented).
     fn write_line(&mut self, s: &str);
@@ -65,15 +213,34 @@ pub trait ExtEmitCtx {
     /// Write guest memory.
     fn write_mem(&mut self, base: &str, offset: i16, val: &str, width: u8);
 
+    /// Reserve the optional second-block timestamp for a non-crossing RV64
+    /// multi-byte access. The RV64 instruction node owns this adapter detail.
+    fn trace_absent_second_block(&mut self, _base: &str, _offset: i16, _width: u8) {}
+
     /// Flush local page state, emit a C call, then reload the page state.
     fn emit_call(&mut self, name: &str, args: &[&str]);
+
+    /// Emit an opaque C call that may update state observed by the tracer.
+    fn extern_call(&mut self, name: &str, args: &[&str]) {
+        self.emit_call(name, args);
+    }
 
     /// Emit a C call that cannot access RVR state, without flushing page state.
     fn emit_call_without_page_flush(&mut self, name: &str, args: &[&str]);
 
+    /// Emit an opaque C call without flushing local page trace state.
+    fn extern_call_without_page_flush(&mut self, name: &str, args: &[&str]) {
+        self.emit_call_without_page_flush(name, args);
+    }
+
     /// Flush local page state, emit a C call that returns a value, then reload
     /// the page state.
     fn emit_call_expr(&mut self, ret_ty: &str, name: &str, args: &[&str]) -> String;
+
+    /// Emit an opaque C call that returns a value.
+    fn extern_call_expr(&mut self, ret_ty: &str, name: &str, args: &[&str]) -> String {
+        self.emit_call_expr(ret_ty, name, args)
+    }
 
     /// Emit a call and save its result only when chip tracing needs it.
     ///
@@ -94,6 +261,10 @@ pub trait ExtEmitCtx {
     }
 
     /// Emit a call without flushing page state and trap if it returns `false`.
+    ///
+    /// The callee must not append main-memory page touches through `RvState`.
+    /// Use [`Self::emit_checked_call`] for callbacks that trace main memory so
+    /// metered block-local page cursors are synchronized around the call.
     fn emit_checked_call_without_page_flush(&mut self, name: &str, args: &[&str]) {
         self.write_line(&format!("if (unlikely(!{name}({}))) {{", args.join(", ")));
         self.emit_trap();
@@ -120,4 +291,104 @@ pub trait ExtEmitCtx {
         num_dwords: &str,
         addr_space: PageAddressSpace,
     );
+
+    /// Emit a dword-range memory trace (one dword is 8 bytes).
+    fn trace_mem_access_u64_range(
+        &mut self,
+        base_addr: &str,
+        num_dwords: &str,
+        addr_space: PageAddressSpace,
+    );
+
+    /// Emit a value-carrying full-word (rv64: 8-byte, block-aligned) write
+    /// trace to an arbitrary address space. Preflight logs a WRITE entry with
+    /// the written value; metered records the page; pure is a no-op.
+    fn trace_wr_as_u64(&mut self, addr: &str, val: &str, addr_space: u32);
+
+    /// Emit a full-word store and return the resolved `(src, ptr)` values.
+    /// Preflight overrides this to emit the shared LoadStore compact record.
+    fn trace_store_u64_as(
+        &mut self,
+        src: Variable,
+        ptr: Variable,
+        offset: i32,
+        addr_space: u32,
+        _local_opcode: u8,
+    ) -> (String, String) {
+        let ptr = self.read_var(ptr);
+        let src = self.read_var(src);
+        let addr = match offset.cmp(&0) {
+            std::cmp::Ordering::Less => {
+                format!("({ptr} - 0x{:08x}ull)", offset.unsigned_abs())
+            }
+            std::cmp::Ordering::Equal => ptr.clone(),
+            std::cmp::Ordering::Greater => format!("({ptr} + 0x{offset:08x}ull)"),
+        };
+        self.trace_wr_as_u64(&addr, &src, addr_space);
+        (src, ptr)
+    }
+
+    /// Emit a compact, implementation-owned REVEAL when the active transport
+    /// can do so safely. Returning `true` means the complete instruction,
+    /// including the external reveal callback, has been emitted.
+    fn trace_reveal_compact(
+        &mut self,
+        _src: Variable,
+        _ptr: Variable,
+        _offset: i32,
+        _width: u8,
+        _addr_space: u32,
+        _full_word_local_opcode: u8,
+    ) -> bool {
+        false
+    }
+
+    /// Emit a public-values store (REVEAL) with mode-correct trace ordering.
+    ///
+    /// Pure and metered execution perform the host write first and then account
+    /// for the touched page. Value-tracing implementations override this so
+    /// they can capture the previous public-values block before the host write.
+    fn emit_reveal(
+        &mut self,
+        src: Variable,
+        ptr: Variable,
+        offset: i32,
+        width: MemWidth,
+        addr_space: PageAddressSpace,
+        full_word_local_opcode: u8,
+    ) {
+        if self.trace_reveal_compact(
+            src,
+            ptr,
+            offset,
+            width.bytes(),
+            addr_space.id(),
+            full_word_local_opcode,
+        ) {
+            return;
+        }
+        let src = self.read_var(src);
+        let ptr = self.read_var(ptr);
+        let addr = match offset.cmp(&0) {
+            std::cmp::Ordering::Less => {
+                format!("({ptr} - 0x{:08x}ull)", offset.unsigned_abs())
+            }
+            std::cmp::Ordering::Equal => ptr,
+            std::cmp::Ordering::Greater => format!("({ptr} + 0x{offset:08x}ull)"),
+        };
+        let width_arg = format!("{}u", width.bytes());
+        self.emit_checked_call_without_page_flush("openvm_reveal", &[&src, &addr, &width_arg]);
+        self.trace_page_access(&addr, width, addr_space);
+    }
+
+    /// Emit a timestamp-only trace tick.
+    fn trace_timestamp(&mut self);
+
+    /// Emit the fixed Phantom consumer record for the current instruction and
+    /// advance its single timestamp. Preflight codegen overrides this to use
+    /// the compiler-selected whole-AIR direct-final target; other contexts
+    /// retain the ordinary timestamp-only behavior.
+    fn trace_phantom_record(&mut self, _operands: [u32; 3]) {
+        self.trace_timestamp();
+    }
 }

@@ -9,7 +9,25 @@ use openvm_stark_backend::prover::{
 };
 use p3_field::PrimeCharacteristicRing;
 
+use super::memory::DeviceInitialMemory;
 use crate::cuda_abi::program;
+
+/// Gap-filtered program execution frequencies reconstructed on device from
+/// the native preflight block-run stream.
+pub struct DeviceProgramFrequencies {
+    pub frequencies: DeviceBuffer<u32>,
+}
+
+/// Optional producer for the CUDA all-direct chronology route. The initial
+/// memory descriptors are passed through because the shared RVR predecode
+/// reconstructs memory and program chronology in one launch sequence.
+pub trait DeviceProgramFrequenciesProvider: Send + Sync {
+    fn take_device_program_frequencies(
+        &self,
+        device_ctx: &GpuDeviceCtx,
+        initial_memory: &[DeviceInitialMemory],
+    ) -> Option<DeviceProgramFrequencies>;
+}
 
 pub struct ProgramChipGPU {
     pub cached: Option<CommittedTraceData<GpuBackend>>,
@@ -87,16 +105,11 @@ impl ProgramChipGPU {
             trace,
         }
     }
-}
 
-impl Default for ProgramChipGPU {
-    fn default() -> Self {
-        panic!("ProgramChipGPU requires an explicit GpuDeviceCtx")
-    }
-}
-
-impl Chip<Vec<u32>, GpuBackend> for ProgramChipGPU {
-    fn generate_proving_ctx(&self, filtered_exec_freqs: Vec<u32>) -> AirProvingContext<GpuBackend> {
+    pub(crate) fn generate_proving_ctx_from_frequencies(
+        &self,
+        filtered_exec_freqs: &[u32],
+    ) -> AirProvingContext<GpuBackend> {
         let cached = self.cached.clone().expect("Cached program must be loaded");
         let height = cached.height();
         let filtered_len = filtered_exec_freqs.len();
@@ -108,7 +121,7 @@ impl Chip<Vec<u32>, GpuBackend> for ProgramChipGPU {
 
         // Upload the raw u32 frequencies through a pooled pinned buffer and
         // convert to field elements on device (also zero-filling the tail).
-        let bytes = filtered_len * std::mem::size_of::<u32>();
+        let bytes = std::mem::size_of_val(filtered_exec_freqs);
         let mut h_freqs = pinned::take(bytes + std::mem::size_of::<u32>());
         let off = h_freqs.as_ptr().align_offset(std::mem::size_of::<u32>());
         // SAFETY: the ranges are in-bounds, disjoint allocations, and the
@@ -143,6 +156,47 @@ impl Chip<Vec<u32>, GpuBackend> for ProgramChipGPU {
             common_main,
             public_values: vec![],
         }
+    }
+
+    pub(crate) fn generate_proving_ctx_from_device_frequencies(
+        &self,
+        frequencies: DeviceProgramFrequencies,
+    ) -> AirProvingContext<GpuBackend> {
+        let cached = self.cached.clone().expect("Cached program must be loaded");
+        let height = cached.height();
+        assert!(
+            frequencies.frequencies.len() <= height,
+            "device program frequencies len={} > cached trace height={height}",
+            frequencies.frequencies.len()
+        );
+        let buffer = DeviceBuffer::<F>::with_capacity_on(height, &self.device_ctx);
+        unsafe {
+            program::frequency_tracegen(
+                &buffer,
+                height,
+                &frequencies.frequencies,
+                self.device_ctx.stream.as_raw(),
+            )
+            .expect("Failed to generate device program-frequency trace");
+        }
+        let common_main = DeviceMatrix::new(Arc::new(buffer), height, 1);
+        AirProvingContext {
+            cached_mains: vec![cached],
+            common_main,
+            public_values: vec![],
+        }
+    }
+}
+
+impl Default for ProgramChipGPU {
+    fn default() -> Self {
+        panic!("ProgramChipGPU requires an explicit GpuDeviceCtx")
+    }
+}
+
+impl Chip<Vec<u32>, GpuBackend> for ProgramChipGPU {
+    fn generate_proving_ctx(&self, filtered_exec_freqs: Vec<u32>) -> AirProvingContext<GpuBackend> {
+        self.generate_proving_ctx_from_frequencies(&filtered_exec_freqs)
     }
 }
 

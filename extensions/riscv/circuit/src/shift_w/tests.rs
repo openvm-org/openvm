@@ -783,8 +783,12 @@ fn create_cuda_logical_harness(tester: &GpuChipTestBuilder) -> GpuLogicalHarness
         dummy_range_checker,
         tester.dummy_memory_helper(),
     );
-    let gpu_chip =
-        Rv64ShiftWLogicalChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
+    let gpu_chip = Rv64ShiftWLogicalChipGpu::new(
+        tester.range_checker(),
+        tester.timestamp_max_bits(),
+        #[cfg(feature = "rvr")]
+        Default::default(),
+    );
 
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
 }
@@ -800,8 +804,12 @@ fn create_cuda_right_arithmetic_harness(tester: &GpuChipTestBuilder) -> GpuRight
         dummy_range_checker,
         tester.dummy_memory_helper(),
     );
-    let gpu_chip =
-        Rv64ShiftWRightArithmeticChipGpu::new(tester.range_checker(), tester.timestamp_max_bits());
+    let gpu_chip = Rv64ShiftWRightArithmeticChipGpu::new(
+        tester.range_checker(),
+        tester.timestamp_max_bits(),
+        #[cfg(feature = "rvr")]
+        Default::default(),
+    );
 
     GpuTestChipHarness::with_capacity(executor, air, gpu_chip, cpu_chip, MAX_INS_CAPACITY)
 }

@@ -163,6 +163,15 @@ pub enum ExtensionError {
     },
     #[error("AIR index {air_idx} for opcode {opcode:?} does not fit in u32")]
     AirIndexOutOfBounds { opcode: VmOpcode, air_idx: usize },
+    #[error(
+        "opcodes {first_opcode:?} and {second_opcode:?} must share one AIR, got {first_air:?} and {second_air:?}"
+    )]
+    SharedAirMismatch {
+        first_opcode: VmOpcode,
+        second_opcode: VmOpcode,
+        first_air: Option<AirIndex>,
+        second_air: Option<AirIndex>,
+    },
     #[error("failed to register host callbacks: {0}")]
     HostCallbackRegistration(String),
     #[error(
@@ -183,6 +192,17 @@ pub trait RvrExtension: Send + Sync {
     /// Return `None` if this extension doesn't handle the opcode.
     /// Chip indices are stored on the extension and baked into IR nodes.
     fn try_lift(&self, insn: &RvrInstruction, pc: u64) -> Option<LiftedInstr>;
+
+    /// Canonical identity of instance state that can change lifted IR or
+    /// generated C. Returning `None` disables the input-key cache fast path;
+    /// callers then validate by regenerating and hashing the full project.
+    ///
+    /// Static implementation/code changes and embedded asset contents are
+    /// fingerprinted separately by the compiler. Implementations should use a
+    /// versioned type tag and encode every behavior-affecting instance field.
+    fn codegen_fingerprint(&self) -> Option<Vec<u8>> {
+        None
+    }
 
     /// C header files for this extension, as `(filename, content)` pairs.
     /// Written to the output directory and `#include`d in the generated code.
@@ -325,6 +345,15 @@ impl ExtensionRegistry {
         Ok(lifted.map(|(_, instruction)| instruction))
     }
 
+    /// Ordered canonical fingerprints for all registered extension instances.
+    /// Returns `None` if any extension has not opted into input-key caching.
+    pub fn codegen_fingerprints(&self) -> Option<Vec<Vec<u8>>> {
+        self.extensions
+            .iter()
+            .map(|ext| ext.extension.codegen_fingerprint())
+            .collect()
+    }
+
     /// Collect all C headers from all registered extensions.
     pub fn c_headers(&self) -> Vec<(&'static str, &'static str)> {
         self.extensions
@@ -404,6 +433,23 @@ impl ExtensionRegistry {
             .flat_map(|ext| ext.extension.extra_cflags())
             .collect()
     }
+}
+
+/// Encode a versioned extension tag plus optional AIR indices canonically.
+pub fn air_index_codegen_fingerprint(tag: &[u8], indices: &[Option<AirIndex>]) -> Vec<u8> {
+    let mut fingerprint = Vec::with_capacity(tag.len() + 1 + indices.len() * 5);
+    fingerprint.extend_from_slice(tag);
+    fingerprint.push(0);
+    for index in indices {
+        match index {
+            Some(index) => {
+                fingerprint.push(1);
+                fingerprint.extend_from_slice(&index.as_u32().to_le_bytes());
+            }
+            None => fingerprint.push(0),
+        }
+    }
+    fingerprint
 }
 
 /// Rvr lifters and runtime hooks contributed by a VM configuration.
