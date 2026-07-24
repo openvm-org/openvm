@@ -558,6 +558,17 @@ mod tests {
         let full = executor.rvr_preflight_instance(&exe, None)?;
         let checkpoint = executor.rvr_experimental_checkpoint_preflight_instance(&exe, None)?;
 
+        let exact_error = match checkpoint.execute_from_state_for_exact(
+            checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new()),
+            openvm_circuit::arch::rvr::RvrCheckpointPreflightLimits::new(5, 0, 2),
+        ) {
+            Ok(_) => panic!("an early termination must not satisfy a metered segment boundary"),
+            Err(error) => error,
+        };
+        assert!(exact_error
+            .to_string()
+            .contains("retired 4 instructions, expected 5"));
+
         let full_first = full.execute_for(
             Vec::<Vec<u8>>::new(),
             openvm_circuit::arch::rvr::RvrPreflightLimits::new(3, 8),

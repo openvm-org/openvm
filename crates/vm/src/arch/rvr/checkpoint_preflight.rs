@@ -452,6 +452,19 @@ impl<'a> RvrCheckpointPreflightInstance<'a> {
         self.execute_from_state_inner(state, limits, true, None)
     }
 
+    /// Execute exactly the instruction count in `limits` from `state`.
+    ///
+    /// Metered continuation boundaries use this entry point so an early
+    /// termination or block-boundary mismatch is rejected before the returned
+    /// state can be carried into the next segment.
+    pub fn execute_from_state_for_exact(
+        &self,
+        state: VmState<GuestMemory>,
+        limits: RvrCheckpointPreflightLimits,
+    ) -> Result<RvrCheckpointPreflightExecution, ExecutionError> {
+        require_exact_retired(self.execute_from_state_for(state, limits)?, limits)
+    }
+
     pub fn execute_from_state_for_reusing(
         &self,
         state: VmState<GuestMemory>,
@@ -459,6 +472,19 @@ impl<'a> RvrCheckpointPreflightInstance<'a> {
         reuse: RvrCheckpointPreflightTranscript,
     ) -> Result<RvrCheckpointPreflightExecution, ExecutionError> {
         self.execute_from_state_inner(state, limits, true, Some(reuse))
+    }
+
+    /// Reusing variant of [`Self::execute_from_state_for_exact`].
+    pub fn execute_from_state_for_exact_reusing(
+        &self,
+        state: VmState<GuestMemory>,
+        limits: RvrCheckpointPreflightLimits,
+        reuse: RvrCheckpointPreflightTranscript,
+    ) -> Result<RvrCheckpointPreflightExecution, ExecutionError> {
+        require_exact_retired(
+            self.execute_from_state_for_reusing(state, limits, reuse)?,
+            limits,
+        )
     }
 
     fn execute_from_state_inner(
@@ -499,6 +525,24 @@ impl<'a> RvrCheckpointPreflightInstance<'a> {
     pub fn save_generated_sources(&self, dir: &Path) -> Result<(), CompileError> {
         self.inner.compiled.save_generated_sources(dir)
     }
+}
+
+fn require_exact_retired(
+    execution: RvrCheckpointPreflightExecution,
+    limits: RvrCheckpointPreflightLimits,
+) -> Result<RvrCheckpointPreflightExecution, ExecutionError> {
+    let expected_retired = u32::try_from(limits.max_instructions).map_err(|_| {
+        ExecutionError::RvrExecution(
+            "checkpoint-preflight instruction limit exceeds u32".to_string(),
+        )
+    })?;
+    if execution.retired != expected_retired {
+        return Err(ExecutionError::RvrExecution(format!(
+            "checkpoint execution retired {} instructions, expected {expected_retired}",
+            execution.retired
+        )));
+    }
+    Ok(execution)
 }
 
 #[cfg(test)]
