@@ -14,6 +14,8 @@ use itertools::{zip_eq, Itertools};
 use openvm_circuit::system::program::trace::compute_exe_commit;
 #[cfg(feature = "rvr")]
 use openvm_circuit_primitives::AnyChip;
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use openvm_cuda_common::memory_manager::MemTracker;
 use openvm_instructions::{
     exe::{SparseMemoryImage, VmExe},
     program::Program,
@@ -1483,31 +1485,41 @@ where
             GenerationError,
         >,
     ) -> Result<ProvingContext<openvm_cuda_backend::GpuBackend>, GenerationError> {
-        let ctx = self.chip_complex.generate_proving_ctx_from_rvr(
-            program,
-            transcript,
-            replay_plan,
-            generate_extension,
-        );
+        // Reset once around the complete segment tracegen phase. Nested CUDA
+        // components may report their own deltas, but must not reset this
+        // phase-wide high-water mark. The allocator's logical peak is the
+        // source of truth for live buffers; reserved pool pages are reported
+        // separately and may remain mapped after a correct drop.
+        let memory = MemTracker::start_and_reset_peak("tracegen.rvr_segment");
+        let result = (|| {
+            let ctx = self.chip_complex.generate_proving_ctx_from_rvr(
+                program,
+                transcript,
+                replay_plan,
+                generate_extension,
+            );
 
-        // Every system and extension kernel above uses raw views borrowed from
-        // `transcript` and `replay_plan`. Synchronize the common stream even
-        // when trace generation failed, so this safe API never returns while
-        // those owners are still in use.
-        let replay_sync = transcript
-            .synchronize()
-            .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()));
-        let ctx = ctx?;
-        replay_sync?;
-        let replay_error = transcript
-            .error_code()
-            .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
-        if replay_error != 0 {
-            return Err(GenerationError::ExtensionTracegen(format!(
-                "RVR GPU trace generation rejected transcript with code {replay_error}"
-            )));
-        }
-        self.validate_proving_ctx(ctx)
+            // Every system and extension kernel above uses raw views borrowed from
+            // `transcript` and `replay_plan`. Synchronize the common stream even
+            // when trace generation failed, so this safe API never returns while
+            // those owners are still in use.
+            let replay_sync = transcript
+                .synchronize()
+                .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()));
+            let ctx = ctx?;
+            replay_sync?;
+            let replay_error = transcript
+                .error_code()
+                .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
+            if replay_error != 0 {
+                return Err(GenerationError::ExtensionTracegen(format!(
+                    "RVR GPU trace generation rejected transcript with code {replay_error}"
+                )));
+            }
+            self.validate_proving_ctx(ctx)
+        })();
+        memory.emit_metrics();
+        result
     }
 }
 
