@@ -202,6 +202,8 @@ pub struct CProject {
     pub num_airs: Option<u32>,
     /// Compile with native debug info (`-g -fno-omit-frame-pointer`).
     pub native_debug_info: bool,
+    /// Compile the generated C with trap-mode UBSan and bounds sanitizers.
+    pub sanitize: bool,
 }
 
 impl CProject {
@@ -222,6 +224,7 @@ impl CProject {
             chip_widths: None,
             num_airs: None,
             native_debug_info: false,
+            sanitize: false,
         }
     }
 
@@ -1279,6 +1282,9 @@ impl CProject {
         }
         if self.native_debug_info {
             args.push("DEBUG=-g -fno-omit-frame-pointer".to_string());
+        }
+        if self.sanitize {
+            args.push("SANITIZERS=-fsanitize=undefined,bounds -fsanitize-trap=all".to_string());
         }
         args
     }
