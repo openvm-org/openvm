@@ -1502,10 +1502,17 @@ where
                         "initial main-memory image was not transported to the GPU".to_string(),
                     )
                 })?;
+            // The table contains device pointers only. Chronology reads the
+            // already-uploaded segment-start images without copying their bytes.
+            let initial_memory_images = initial_memory
+                .iter()
+                .map(|image| image.view())
+                .collect::<Vec<_>>();
             program.expand_checkpoint_replay(
                 execution,
                 initial_registers.view(),
                 initial_main_memory.view(),
+                &initial_memory_images,
                 opcodes,
             )
         })();

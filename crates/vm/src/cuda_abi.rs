@@ -173,6 +173,43 @@ pub mod rvr_postflight {
             stream: cudaStream_t,
         ) -> i32;
 
+        fn _rvr_memory_chronology_get_temp_bytes(
+            num_entries: usize,
+            h_temp_bytes_out: *mut usize,
+            stream: cudaStream_t,
+        ) -> i32;
+
+        fn _rvr_memory_chronology_sort_and_count(
+            memory: DeviceBufferView,
+            write_masks: DeviceBufferView,
+            address_spaces: DeviceBufferView,
+            address_space_offset: u32,
+            address_space_height: u32,
+            pointer_max_bits: u32,
+            workspace: *mut u64,
+            sorted_keys: *mut u64,
+            counts: *mut u32,
+            temp_storage: *mut std::ffi::c_void,
+            temp_storage_bytes: usize,
+            error: *mut u32,
+            stream: cudaStream_t,
+        ) -> i32;
+
+        fn _rvr_memory_chronology_resolve(
+            memory: DeviceBufferView,
+            write_masks: DeviceBufferView,
+            initial_memory: DeviceBufferView,
+            sorted_keys: *const u64,
+            workspace: *mut u64,
+            predecessors: *mut u32,
+            seeds: DeviceBufferView,
+            touched: DeviceBufferView,
+            temp_storage: *mut std::ffi::c_void,
+            temp_storage_bytes: usize,
+            error: *mut u32,
+            stream: cudaStream_t,
+        ) -> i32;
+
         fn _rvr_program_index_get_temp_bytes(
             num_steps: usize,
             h_temp_bytes_out: *mut usize,
@@ -273,6 +310,82 @@ pub mod rvr_postflight {
             touched_positions.as_mut_ptr(),
             touched_blocks,
             num_touched_blocks.as_mut_ptr(),
+            temp_storage.as_mut_raw_ptr(),
+            temp_storage_bytes,
+            error.as_mut_ptr(),
+            stream,
+        ))
+    }
+
+    pub unsafe fn memory_chronology_get_temp_bytes(
+        num_entries: usize,
+        h_temp_bytes_out: &mut usize,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_rvr_memory_chronology_get_temp_bytes(
+            num_entries,
+            h_temp_bytes_out,
+            stream,
+        ))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn memory_chronology_sort_and_count(
+        memory: DeviceBufferView,
+        write_masks: DeviceBufferView,
+        address_spaces: DeviceBufferView,
+        address_space_offset: u32,
+        address_space_height: u32,
+        pointer_max_bits: u32,
+        workspace: &DeviceBuffer<u64>,
+        sorted_keys: &DeviceBuffer<u64>,
+        counts: &DeviceBuffer<u32>,
+        temp_storage: &DeviceBuffer<u8>,
+        temp_storage_bytes: usize,
+        error: &DeviceBuffer<u32>,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_rvr_memory_chronology_sort_and_count(
+            memory,
+            write_masks,
+            address_spaces,
+            address_space_offset,
+            address_space_height,
+            pointer_max_bits,
+            workspace.as_mut_ptr(),
+            sorted_keys.as_mut_ptr(),
+            counts.as_mut_ptr(),
+            temp_storage.as_mut_raw_ptr(),
+            temp_storage_bytes,
+            error.as_mut_ptr(),
+            stream,
+        ))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn memory_chronology_resolve(
+        memory: DeviceBufferView,
+        write_masks: DeviceBufferView,
+        initial_memory: DeviceBufferView,
+        sorted_keys: &DeviceBuffer<u64>,
+        workspace: &DeviceBuffer<u64>,
+        predecessors: &DeviceBuffer<u32>,
+        seeds: DeviceBufferView,
+        touched: DeviceBufferView,
+        temp_storage: &DeviceBuffer<u8>,
+        temp_storage_bytes: usize,
+        error: &DeviceBuffer<u32>,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_rvr_memory_chronology_resolve(
+            memory,
+            write_masks,
+            initial_memory,
+            sorted_keys.as_ptr(),
+            workspace.as_mut_ptr(),
+            predecessors.as_mut_ptr(),
+            seeds,
+            touched,
             temp_storage.as_mut_raw_ptr(),
             temp_storage_bytes,
             error.as_mut_ptr(),
@@ -383,23 +496,7 @@ pub mod rvr_checkpoint_replay {
             initial_timestamp: u32,
             program: DeviceBufferView,
             memory: DeviceBufferView,
-            error: *mut u32,
-            stream: cudaStream_t,
-        ) -> i32;
-
-        fn _rvr_checkpoint_seed_count(
-            memory: DeviceBufferView,
-            register_as: u32,
-            seed_count: *mut u32,
-            error: *mut u32,
-            stream: cudaStream_t,
-        ) -> i32;
-
-        fn _rvr_checkpoint_seed_emit(
-            memory: DeviceBufferView,
-            initial_registers: DeviceBufferView,
-            register_as: u32,
-            seeds: DeviceBufferView,
+            write_masks: DeviceBufferView,
             error: *mut u32,
             stream: cudaStream_t,
         ) -> i32;
@@ -458,6 +555,7 @@ pub mod rvr_checkpoint_replay {
         initial_timestamp: u32,
         program: DeviceBufferView,
         memory: DeviceBufferView,
+        write_masks: DeviceBufferView,
         error: &DeviceBuffer<u32>,
         stream: cudaStream_t,
     ) -> Result<(), CudaError> {
@@ -478,40 +576,7 @@ pub mod rvr_checkpoint_replay {
             initial_timestamp,
             program,
             memory,
-            error.as_mut_ptr(),
-            stream,
-        ))
-    }
-
-    pub unsafe fn seed_count(
-        memory: DeviceBufferView,
-        register_as: u32,
-        seed_count: &DeviceBuffer<u32>,
-        error: &DeviceBuffer<u32>,
-        stream: cudaStream_t,
-    ) -> Result<(), CudaError> {
-        CudaError::from_result(_rvr_checkpoint_seed_count(
-            memory,
-            register_as,
-            seed_count.as_mut_ptr(),
-            error.as_mut_ptr(),
-            stream,
-        ))
-    }
-
-    pub unsafe fn seed_emit(
-        memory: DeviceBufferView,
-        initial_registers: DeviceBufferView,
-        register_as: u32,
-        seeds: DeviceBufferView,
-        error: &DeviceBuffer<u32>,
-        stream: cudaStream_t,
-    ) -> Result<(), CudaError> {
-        CudaError::from_result(_rvr_checkpoint_seed_emit(
-            memory,
-            initial_registers,
-            register_as,
-            seeds,
+            write_masks,
             error.as_mut_ptr(),
             stream,
         ))

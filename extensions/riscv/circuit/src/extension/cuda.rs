@@ -83,10 +83,10 @@ pub struct Rv64ImRvrGpuTracegen<'a> {
 
 #[cfg(feature = "rvr")]
 impl<'a> Rv64ImRvrGpuTracegen<'a> {
-    /// Checkpoint replay for register-only and control-flow RV64I, RV64M,
-    /// phantom, and the narrow aligned-`LOADD` path. Device replay derives the
-    /// ordinary three logs and then reuses the unchanged trace generators;
-    /// other memory opcodes remain fail-closed.
+    /// Checkpoint replay for RV64IM and phantom execution. Loads and stores
+    /// first become unresolved block intents; the VM chronology pass resolves
+    /// those intents before the ordinary transcript indexes and unchanged
+    /// trace generators consume them.
     pub fn expand_checkpoint_replay<VB>(
         vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
         program: &GpuRvrProgram,

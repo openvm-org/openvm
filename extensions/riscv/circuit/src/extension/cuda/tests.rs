@@ -704,6 +704,181 @@ fn rvr_checkpoint_gpu_replay_proves_bounded_rv64i_slice_differentially() {
 }
 
 #[test]
+fn rvr_checkpoint_gpu_replay_proves_all_memory_intent_shapes() {
+    let memory_instruction = |opcode: Rv64LoadStoreOpcode,
+                              reg_operand: usize,
+                              offset: u16,
+                              offset_is_negative: bool,
+                              is_load: bool| {
+        Instruction::from_usize(
+            opcode.global_opcode(),
+            [
+                reg(reg_operand),
+                reg(1),
+                usize::from(offset),
+                RV64_REGISTER_AS as usize,
+                RV64_MEMORY_AS as usize,
+                usize::from(!is_load || reg_operand != 0),
+                usize::from(offset_is_negative),
+            ],
+        )
+    };
+    let block_boundary = || {
+        Instruction::from_usize(
+            Rv64JalLuiOpcode::JAL.global_opcode(),
+            [0, 0, 4, RV64_REGISTER_AS as usize, 0, 0, 0],
+        )
+    };
+
+    let mut instructions = Vec::new();
+    let mut append_store_load = |store, load, rd, offset: u16, offset_is_negative: bool| {
+        instructions.push(memory_instruction(
+            store,
+            2,
+            offset,
+            offset_is_negative,
+            false,
+        ));
+        // Force a basic-block/checkpoint boundary between the store and
+        // dependent load, so device chunks cannot rely on mutable memory.
+        instructions.push(block_boundary());
+        instructions.push(memory_instruction(
+            load,
+            rd,
+            offset,
+            offset_is_negative,
+            true,
+        ));
+        instructions.push(block_boundary());
+    };
+    append_store_load(
+        Rv64LoadStoreOpcode::STOREB,
+        Rv64LoadStoreOpcode::LOADBU,
+        3,
+        0,
+        false,
+    );
+    append_store_load(
+        Rv64LoadStoreOpcode::STOREH,
+        Rv64LoadStoreOpcode::LOADH,
+        4,
+        7,
+        false,
+    );
+    append_store_load(
+        Rv64LoadStoreOpcode::STOREW,
+        Rv64LoadStoreOpcode::LOADW,
+        5,
+        6,
+        false,
+    );
+    append_store_load(
+        Rv64LoadStoreOpcode::STORED,
+        Rv64LoadStoreOpcode::LOADD,
+        6,
+        u16::MAX,
+        true,
+    );
+    instructions.extend([
+        memory_instruction(Rv64LoadStoreOpcode::LOADB, 7, 6, false, true),
+        memory_instruction(Rv64LoadStoreOpcode::LOADH, 10, 5, false, true),
+        memory_instruction(Rv64LoadStoreOpcode::LOADW, 11, 3, false, true),
+        memory_instruction(Rv64LoadStoreOpcode::LOADHU, 8, 7, false, true),
+        memory_instruction(Rv64LoadStoreOpcode::LOADWU, 9, 6, false, true),
+        // A disabled destination still reserves its AIR timestamp slot but
+        // appends no residual and no register-write event.
+        memory_instruction(Rv64LoadStoreOpcode::LOADD, 0, u16::MAX, true, true),
+        Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
+    ]);
+
+    let program = Program::from_instructions(&instructions);
+    let initial_registers = [(1usize, 40u64), (2, 0x8877_6655_4433_2211u64)]
+        .into_iter()
+        .flat_map(|(register, value)| {
+            value
+                .to_le_bytes()
+                .into_iter()
+                .enumerate()
+                .map(move |(offset, byte)| {
+                    ((RV64_REGISTER_AS, (reg(register) + offset) as u32), byte)
+                })
+        })
+        .collect();
+    let exe = VmExe::new(program.clone()).with_init_memory(initial_registers);
+    let config = Rv64ImConfig {
+        rv64i: Rv64IConfig {
+            system: test_system_config(),
+            ..Default::default()
+        },
+        mul: Default::default(),
+    };
+    let executor = VmExecutor::new(config.clone()).unwrap();
+    let checkpoint = executor
+        .rvr_experimental_checkpoint_preflight_instance(&exe, None)
+        .unwrap();
+    let checkpoint_state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
+    let (mut checkpoint_vm, checkpoint_pk) =
+        VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64ImGpuBuilder, config.clone())
+            .unwrap();
+    let cached_program = checkpoint_vm.commit_program_on_device(&program);
+    checkpoint_vm.load_program(cached_program);
+    checkpoint_vm.transport_init_memory_to_device(&checkpoint_state.memory);
+    let checkpoint_execution = checkpoint
+        .execute_from_state(
+            checkpoint_state,
+            RvrCheckpointPreflightLimits::new(instructions.len(), 16, 1),
+        )
+        .unwrap();
+
+    assert!(checkpoint_execution.transcript.checkpoints.len() >= 4);
+    assert_eq!(
+        checkpoint_execution.transcript.residuals,
+        [
+            0x11,
+            0x2211,
+            0x4433_2211,
+            0x8877_6655_4433_2211,
+            0xffff_ffff_ffff_ff88,
+            0xffff_ffff_ffff_8877,
+            0xffff_ffff_8877_6655,
+            0x3322,
+            0x4433_2288,
+        ]
+    );
+    let checkpoint_program = GpuRvrProgram::upload(
+        &program,
+        &config.rv64i.system.memory_config,
+        &checkpoint_vm.engine.device().device_ctx,
+    )
+    .unwrap();
+    let (checkpoint_transcript, checkpoint_plan) = Rv64ImRvrGpuTracegen::expand_checkpoint_replay(
+        &checkpoint_vm,
+        &checkpoint_program,
+        &checkpoint_execution,
+    )
+    .unwrap();
+    let checkpoint_tracegen = Rv64ImRvrGpuTracegen::new(
+        &checkpoint_program,
+        &checkpoint_transcript,
+        &checkpoint_plan,
+    )
+    .unwrap();
+    let checkpoint_ctx = checkpoint_tracegen
+        .generate_proving_ctx(&mut checkpoint_vm)
+        .unwrap();
+    drop(checkpoint_plan);
+    drop(checkpoint_transcript);
+    let proof = checkpoint_vm
+        .engine
+        .prove(checkpoint_vm.pk(), checkpoint_ctx)
+        .unwrap();
+    checkpoint_vm
+        .engine
+        .verify(&checkpoint_pk.get_vk(), &proof)
+        .unwrap();
+}
+
+#[test]
 fn rvr_gpu_tracegen_proves_rv64m_airs_without_record_arenas() {
     let m_operands = |rd, rs1, rs2| {
         [
