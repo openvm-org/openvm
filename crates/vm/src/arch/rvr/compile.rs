@@ -323,9 +323,15 @@ pub struct CompileOptions<'a> {
     pub guest_debug_map: Option<&'a GuestDebugMap>,
     /// Compile with `-g -fno-omit-frame-pointer` for profiling.
     pub native_debug_info: bool,
+    /// Compile the generated C with trap-mode UBSan and bounds sanitizers.
+    /// Too slow for production proving or profiling runs.
+    pub sanitize: bool,
     /// Keep the generated native project after the compiled library is dropped.
     pub keep_artifacts: bool,
 }
+
+/// Sanitize in debug/test builds, but never when profiling.
+const DEFAULT_SANITIZE: bool = cfg!(debug_assertions) && !cfg!(feature = "profiling");
 
 pub fn compile_with_options<F: PrimeField32>(
     exe: &VmExe<F>,
@@ -349,6 +355,7 @@ pub fn compile<F: PrimeField32>(
             chips: None,
             guest_debug_map,
             native_debug_info: cfg!(feature = "profiling"),
+            sanitize: DEFAULT_SANITIZE,
             keep_artifacts: false,
         },
     )
@@ -369,6 +376,7 @@ pub fn compile_with_instret_tracking<F: PrimeField32>(
             chips: None,
             guest_debug_map,
             native_debug_info: cfg!(feature = "profiling"),
+            sanitize: DEFAULT_SANITIZE,
             keep_artifacts: false,
         },
     )
@@ -390,6 +398,7 @@ pub fn compile_metered<F: PrimeField32>(
             chips: Some(chips),
             guest_debug_map,
             native_debug_info: cfg!(feature = "profiling"),
+            sanitize: DEFAULT_SANITIZE,
             keep_artifacts: false,
         },
     )
@@ -411,6 +420,7 @@ pub fn compile_metered_segment_boundary<F: PrimeField32>(
             chips: Some(chips),
             guest_debug_map,
             native_debug_info: cfg!(feature = "profiling"),
+            sanitize: DEFAULT_SANITIZE,
             keep_artifacts: false,
         },
     )
@@ -432,6 +442,7 @@ pub fn compile_metered_cost<F: PrimeField32>(
             chips: Some(chips),
             guest_debug_map,
             native_debug_info: cfg!(feature = "profiling"),
+            sanitize: DEFAULT_SANITIZE,
             keep_artifacts: false,
         },
     )
@@ -604,6 +615,7 @@ fn compile_impl<F: PrimeField32>(
     }
 
     project.native_debug_info = opts.native_debug_info;
+    project.sanitize = opts.sanitize;
 
     let entry_point = u64::from(exe.pc_start);
     let text_start = u64::from(exe.program.pc_base);
