@@ -3,10 +3,9 @@ LINKER ?= lld
 OPT ?= -O3
 DEBUG ?=
 WARNINGS = -Weverything -Werror
-# `bounds` adds local array checks that are not part of the `undefined` group.
-# Trap mode keeps the generated shared library self-contained. Override with
-# `make SANITIZERS=` only for performance-sensitive runs.
-SANITIZERS ?= -fsanitize=undefined,bounds -fsanitize-trap=all
+# Sanitizer flags for debug/test builds, e.g.
+# `-fsanitize=undefined,bounds -fsanitize-trap=all`.
+SANITIZERS ?=
 
 # The generated sources target C2y, not C++ or older C language revisions.
 # This C-only project also does not use the libstdc++ installation selected by
