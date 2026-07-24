@@ -397,6 +397,7 @@ pub fn compile_preflight<F: PrimeField32>(
             chips: None,
             guest_debug_map,
             native_debug_info: cfg!(feature = "profiling"),
+            sanitize: DEFAULT_SANITIZE,
             keep_artifacts: false,
         },
     )
@@ -417,6 +418,7 @@ pub fn compile_checkpoint_preflight<F: PrimeField32>(
             chips: None,
             guest_debug_map,
             native_debug_info: cfg!(feature = "profiling"),
+            sanitize: DEFAULT_SANITIZE,
             keep_artifacts: false,
         },
     )

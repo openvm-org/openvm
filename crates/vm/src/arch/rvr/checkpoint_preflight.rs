@@ -4,7 +4,7 @@ use std::path::Path;
 
 use openvm_instructions::{
     riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
-    PUBLIC_VALUES_AS,
+    DEFERRAL_AS, PUBLIC_VALUES_AS,
 };
 use rvr_openvm_lift::RvrRuntimeExtension;
 use rvr_state::{CheckpointPreflightState, RvrCheckpoint, CHECKPOINT_DIRTY_PAGE_BYTES};
@@ -120,6 +120,7 @@ pub(crate) struct CheckpointPreflightBuffers {
 pub(crate) struct CheckpointDirtyPages {
     memory: Box<[u64]>,
     public_values: Box<[u64]>,
+    deferral: Box<[u64]>,
 }
 
 impl CheckpointDirtyPages {
@@ -127,12 +128,18 @@ impl CheckpointDirtyPages {
         Ok(Self {
             memory: zeroed_dirty_page_words(memory.mem[RV64_MEMORY_AS as usize].size())?,
             public_values: zeroed_dirty_page_words(memory.mem[PUBLIC_VALUES_AS as usize].size())?,
+            deferral: zeroed_dirty_page_words(memory.mem[DEFERRAL_AS as usize].size())?,
         })
+    }
+
+    pub(crate) fn deferral_mut(&mut self) -> &mut [u64] {
+        &mut self.deferral
     }
 
     pub(crate) fn merge_into(&self, memory: &mut AddressMap) {
         merge_dirty_page_words(memory, RV64_MEMORY_AS, &self.memory);
         merge_dirty_page_words(memory, PUBLIC_VALUES_AS, &self.public_values);
+        merge_dirty_page_words(memory, DEFERRAL_AS, &self.deferral);
 
         // Generated execution keeps registers in RvState and copies them back
         // only after a successful execution boundary. Mark their single page
@@ -559,5 +566,22 @@ mod tests {
         ffi.timestamp = 4;
         let error = unsafe { buffers.finish(&ffi, 2, &dirty) }.unwrap_err();
         assert!(error.contains("outside the configured 2-bit domain"));
+    }
+
+    #[test]
+    fn merges_executor_only_deferral_dirty_pages_into_initial_image_metadata() {
+        let mut memory = AddressMap::default();
+        assert!(memory.touched_pages[DEFERRAL_AS as usize]
+            .touched_byte_ranges(PAGE_SIZE)
+            .is_empty());
+
+        let mut dirty = CheckpointDirtyPages::new(&memory).unwrap();
+        dirty.deferral[0] = 1;
+        dirty.merge_into(&mut memory);
+
+        assert_eq!(
+            memory.touched_pages[DEFERRAL_AS as usize].touched_byte_ranges(PAGE_SIZE),
+            vec![(0, PAGE_SIZE)]
+        );
     }
 }

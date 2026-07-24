@@ -387,6 +387,12 @@ The implementation order should be:
 6. Delete `RecordArena` and interpreter preflight only after all production
    consumers have migrated.
 
+For the current implementation pass, finish the replay producer for every
+configured AIR before attempting the full `openvm-eth` Reth proof. While each AIR
+family is added, run the sibling `rvr-openvm` execution workload against this
+checkout and compare output hash, instruction count, segment boundaries, and
+runtime; do not wait until the final proof to discover an execution regression.
+
 GPU tracegen is the important feasibility target. Do not build a CPU-first generic
 framework or migrate every extension before measuring RISC-V GPU replay.
 
@@ -427,6 +433,21 @@ The implementation design must also preserve these code-derived constraints:
   non-deterministic, proof-visible value not recoverable from static instructions,
   immutable inputs, or logged memory. Final state may validate endpoints but cannot
   reconstruct an ordered history of nondeterministic observations.
+- The selected physical executor output is smaller than that semantic baseline:
+  periodic block-boundary checkpoints plus one ordered `u64` residual stream.
+  Program/memory/seed logs are reconstructed on the GPU and are not serial
+  preflight writes.
+- Extension replay composition uses immutable access schedules owned beside RVR
+  execution, not a growing VM-core opcode schema. Schedules describe only register
+  reads, bounded memory spans, clock gaps, residual/zero/static writes, and PC or
+  register effects; Deferral CALL requires a real six-span schedule.
+- Setup residual minimality is semantic, not opcode-name based. Modular setup and
+  ECC double setup are config-static. Fp2 setup and ECC add setup accept
+  execution-dependent inputs and therefore retain destination postimages.
+- AS4 contains four 32-bit field cells per memory-bus block, twice the payload of
+  the existing U16 event. Preserve one event per timestamp and attach exact-sized
+  GPU-derived field-value/seed sidecars; do not split one logical access or widen
+  every U16 event.
 
 The RISC-V GPU milestone is a real go/no-go gate: exact legacy matrices where row
 order is defined and equal canonicalized lookup-request multisets otherwise, no

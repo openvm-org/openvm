@@ -11,8 +11,9 @@ use rvr_openvm_lift::{max_main_memory_pages_for_contiguous_range, RvrExtension, 
 use strum::EnumCount;
 
 use crate::{
-    decode_reg, format_c_byte_array, pad_modulus, ArithKind, FieldArithInstr, FieldIsEqInstr,
-    FieldKind, FieldSetupInstr, IsEqKind, KnownField, ModOp, SetupKind,
+    decode_reg, emit_word_alignment_guard, format_c_byte_array, pad_modulus, ArithKind,
+    FieldArithInstr, FieldIsEqInstr, FieldKind, FieldSetupInstr, IsEqKind, KnownField, ModOp,
+    SetupKind,
 };
 
 include!(concat!(env!("OUT_DIR"), "/secp256k1_files.rs"));
@@ -58,11 +59,17 @@ fn make_modulus_info(modulus: &BigUint, rng: &mut StdRng) -> ModulusInfo {
 pub(crate) struct ModArithKind;
 
 impl FieldKind for ModArithKind {
+    const SETUP_OUTPUT_IS_STATIC_ZERO: bool = true;
+
     fn c_prefix() -> &'static str {
         "mod"
     }
     fn known_suffix(field: KnownField) -> Option<&'static str> {
         Some(field.c_suffix())
+    }
+
+    fn supports_checkpoint_preflight() -> bool {
+        true
     }
 }
 
@@ -110,6 +117,8 @@ impl ExtInstr for ModSetupIsEqInstr {
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         let rs1 = ctx.read_var(self.rs1_reg);
         let rs2 = ctx.read_var(self.rs2_reg);
+        ctx.advance_checkpoint_timestamp(self.num_limbs * 2 / 8);
+        emit_word_alignment_guard(ctx, &[&rs1, &rs2]);
         let mod_literal = format_c_byte_array(&self.modulus);
         let num_limbs = format!("{}u", self.num_limbs);
         ctx.write_line("{");
@@ -132,6 +141,10 @@ impl ExtInstr for ModSetupIsEqInstr {
 
     fn cfg_effect(&self) -> CfgEffect {
         CfgEffect::WriteUnknown { dst: self.rd_reg }
+    }
+
+    fn supports_checkpoint_preflight(&self) -> bool {
+        true
     }
 }
 
@@ -159,6 +172,7 @@ impl ExtInstr for HintNonQrInstr {
         let len = format!("{}u", self.non_qr_bytes.len());
         ctx.emit_call_without_page_flush("ext_hint_stream_set", &["nqr", &len]);
         ctx.write_line("}");
+        ctx.advance_timestamp(1);
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -167,6 +181,10 @@ impl ExtInstr for HintNonQrInstr {
 
     fn cfg_effect(&self) -> CfgEffect {
         CfgEffect::None
+    }
+
+    fn supports_preflight(&self) -> bool {
+        true
     }
 }
 
@@ -197,6 +215,7 @@ impl ExtInstr for HintSqrtInstr {
             &["state", &rs1, &num_limbs, "mod_", "nqr"],
         );
         ctx.write_line("}");
+        ctx.advance_timestamp(1);
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -205,6 +224,10 @@ impl ExtInstr for HintSqrtInstr {
 
     fn cfg_effect(&self) -> CfgEffect {
         CfgEffect::None
+    }
+
+    fn supports_preflight(&self) -> bool {
+        true
     }
 }
 
@@ -326,6 +349,380 @@ impl RvrExtension for ModularRvrExtension {
             // internally.)
             "-DENABLE_MODULE_RECOVERY".to_string(),
         ]
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rvr_openvm_ir::{MemWidth, PageAddressSpace};
+
+    use super::*;
+
+    struct TestEmitCtx {
+        operations: Vec<String>,
+        checkpoint: bool,
+        next_tmp: usize,
+    }
+
+    impl Default for TestEmitCtx {
+        fn default() -> Self {
+            Self {
+                operations: Vec::new(),
+                checkpoint: false,
+                next_tmp: 0,
+            }
+        }
+    }
+
+    impl TestEmitCtx {
+        fn checkpoint() -> Self {
+            Self {
+                checkpoint: true,
+                ..Self::default()
+            }
+        }
+    }
+
+    impl ExtEmitCtx for TestEmitCtx {
+        fn is_checkpoint_preflight(&self) -> bool {
+            self.checkpoint
+        }
+
+        fn read_var(&mut self, var: Variable) -> String {
+            self.operations.push(format!("read(r{});", var.index()));
+            format!("r{}", var.index())
+        }
+
+        fn peek_var(&mut self, var: Variable) -> String {
+            format!("r{}", var.index())
+        }
+
+        fn advance_timestamp(&mut self, slots: u32) {
+            self.operations.push(format!("advance_timestamp({slots});"));
+        }
+
+        fn write_var(&mut self, var: Variable, val: &str) {
+            self.operations
+                .push(format!("write(r{}, {val});", var.index()));
+        }
+
+        fn write_line(&mut self, line: &str) {
+            self.operations.push(line.to_string());
+        }
+
+        fn emit_trap(&mut self) {
+            self.operations.push("trap;".to_string());
+        }
+
+        fn read_mem(&mut self, _base: &str, _offset: i16, _width: u8, _signed: bool) -> String {
+            unreachable!()
+        }
+
+        fn write_mem(&mut self, _base: &str, _offset: i16, _val: &str, _width: u8) {
+            unreachable!()
+        }
+
+        fn write_aligned_mem_block(&mut self, _addr: &str, _val: &str) {
+            unreachable!()
+        }
+
+        fn reserve_preflight_writes(&mut self, _writes: &str, _slots: &str) {
+            unreachable!()
+        }
+
+        fn append_replay_value(&mut self, value: &str) {
+            if self.checkpoint {
+                self.operations.push(format!("residual({value});"));
+            }
+        }
+
+        fn advance_checkpoint_timestamp(&mut self, slots: u32) {
+            if self.checkpoint {
+                self.operations.push(format!("checkpoint_slots({slots});"));
+            }
+        }
+
+        fn emit_call(&mut self, name: &str, args: &[&str]) {
+            self.operations
+                .push(format!("{name}({});", args.join(", ")));
+        }
+
+        fn emit_call_without_page_flush(&mut self, name: &str, args: &[&str]) {
+            self.emit_call(name, args)
+        }
+
+        fn emit_call_expr(&mut self, ret_ty: &str, name: &str, args: &[&str]) -> String {
+            let value = format!("tmp{}", self.next_tmp);
+            self.next_tmp += 1;
+            self.operations
+                .push(format!("{ret_ty} {value} = {name}({});", args.join(", ")));
+            value
+        }
+
+        fn emit_call_with_trace_result(
+            &mut self,
+            _ret_ty: &str,
+            _name: &str,
+            _args: &[&str],
+        ) -> Option<String> {
+            unreachable!()
+        }
+
+        fn trace_chip(&mut self, _chip_idx: u32, _count_expr: &str) {
+            unreachable!()
+        }
+
+        fn trace_chip_if_nonzero(&mut self, _chip_idx: u32, _count_expr: &str) {
+            unreachable!()
+        }
+
+        fn trace_page_access(
+            &mut self,
+            _addr: &str,
+            _width: MemWidth,
+            _addr_space: PageAddressSpace,
+        ) {
+            unreachable!()
+        }
+
+        fn trace_page_access_u64_range(
+            &mut self,
+            _base_addr: &str,
+            _num_dwords: &str,
+            _addr_space: PageAddressSpace,
+        ) {
+            unreachable!()
+        }
+    }
+
+    #[test]
+    fn hint_non_qr_advances_one_timestamp() {
+        let instr = HintNonQrInstr {
+            non_qr_bytes: vec![1; 32],
+        };
+        assert!(instr.supports_preflight());
+
+        let mut ctx = TestEmitCtx::default();
+        instr.emit_c(&mut ctx);
+
+        assert!(!ctx.operations.iter().any(|op| op.starts_with("read(")));
+        assert!(ctx
+            .operations
+            .iter()
+            .any(|op| op.starts_with("ext_hint_stream_set(nqr,")));
+        assert_eq!(
+            ctx.operations
+                .iter()
+                .filter(|op| op.as_str() == "advance_timestamp(1);")
+                .count(),
+            1
+        );
+        assert_eq!(
+            ctx.operations.last().map(String::as_str),
+            Some("advance_timestamp(1);")
+        );
+    }
+
+    #[test]
+    fn hint_sqrt_peeks_pointer_and_advances_one_timestamp() {
+        let instr = HintSqrtInstr {
+            rs1_reg: Variable::new(10),
+            num_limbs: 32,
+            modulus: vec![0; 32],
+            non_qr_bytes: vec![0; 32],
+        };
+        assert!(instr.supports_preflight());
+
+        let mut ctx = TestEmitCtx::default();
+        instr.emit_c(&mut ctx);
+
+        assert!(!ctx.operations.iter().any(|op| op.starts_with("read(")));
+        assert!(ctx
+            .operations
+            .iter()
+            .any(|op| op.starts_with("rvr_ext_algebra_hint_sqrt(state, r10,")));
+        assert_eq!(
+            ctx.operations
+                .iter()
+                .filter(|op| op.as_str() == "advance_timestamp(1);")
+                .count(),
+            1
+        );
+        assert_eq!(
+            ctx.operations.last().map(String::as_str),
+            Some("advance_timestamp(1);")
+        );
+    }
+
+    #[test]
+    fn modular_arithmetic_checkpoint_emits_air_order_and_minimal_postimage() {
+        for num_limbs in [32, 48] {
+            for op in [ModOp::Add, ModOp::Sub, ModOp::Mul, ModOp::Div] {
+                let instr = ModArithInstr::new(
+                    op,
+                    Variable::new(1),
+                    Variable::new(2),
+                    Variable::new(3),
+                    num_limbs,
+                    vec![7; num_limbs as usize],
+                );
+                assert!(instr.supports_checkpoint_preflight());
+
+                let mut checkpoint = TestEmitCtx::checkpoint();
+                instr.emit_c(&mut checkpoint);
+                assert_eq!(
+                    &checkpoint.operations[..4],
+                    [
+                        "read(r2);",
+                        "read(r3);",
+                        "read(r1);",
+                        &format!("checkpoint_slots({});", num_limbs * 3 / 8),
+                    ]
+                );
+                assert!(checkpoint
+                    .operations
+                    .iter()
+                    .any(|operation| operation.contains("& 7ull")));
+                let residuals: Vec<_> = checkpoint
+                    .operations
+                    .iter()
+                    .filter(|operation| operation.starts_with("residual("))
+                    .cloned()
+                    .collect();
+                assert_eq!(residuals.len(), num_limbs as usize / 8);
+                for (word, residual) in residuals.iter().enumerate() {
+                    assert_eq!(
+                        residual,
+                        &format!("residual(peek_mem_u64(state, r1 + {}ull));", word * 8)
+                    );
+                }
+
+                let mut legacy = TestEmitCtx::default();
+                instr.emit_c(&mut legacy);
+                assert_eq!(
+                    &legacy.operations[..3],
+                    ["read(r1);", "read(r2);", "read(r3);"]
+                );
+                assert!(!legacy
+                    .operations
+                    .iter()
+                    .any(|operation| operation.starts_with("checkpoint_slots(")
+                        || operation.starts_with("residual(")));
+            }
+        }
+    }
+
+    #[test]
+    fn modular_setup_checkpoint_has_no_residual() {
+        for num_limbs in [32, 48] {
+            // SETUP_ADDSUB and SETUP_MULDIV both lift to this node.
+            let instr = ModSetupInstr::new(
+                Variable::new(1),
+                Variable::new(2),
+                Variable::new(3),
+                num_limbs,
+                vec![11; num_limbs as usize],
+            );
+            assert!(instr.supports_checkpoint_preflight());
+
+            let mut checkpoint = TestEmitCtx::checkpoint();
+            instr.emit_c(&mut checkpoint);
+            assert_eq!(
+                &checkpoint.operations[..4],
+                [
+                    "read(r2);",
+                    "read(r3);",
+                    "read(r1);",
+                    &format!("checkpoint_slots({});", num_limbs * 3 / 8),
+                ]
+            );
+            assert!(checkpoint
+                .operations
+                .iter()
+                .any(|operation| operation.contains("& 7ull")));
+            assert!(!checkpoint
+                .operations
+                .iter()
+                .any(|operation| operation.starts_with("residual(")));
+        }
+    }
+
+    #[test]
+    fn modular_iseq_checkpoint_emits_only_result_residual() {
+        for num_limbs in [32, 48] {
+            let instr = ModIsEqInstr::new(
+                Variable::new(1),
+                Variable::new(2),
+                Variable::new(3),
+                num_limbs,
+                vec![13; num_limbs as usize],
+            );
+            assert!(instr.supports_checkpoint_preflight());
+
+            let mut checkpoint = TestEmitCtx::checkpoint();
+            instr.emit_c(&mut checkpoint);
+            assert_eq!(
+                &checkpoint.operations[..3],
+                [
+                    "read(r2);",
+                    "read(r3);",
+                    &format!("checkpoint_slots({});", num_limbs * 2 / 8),
+                ]
+            );
+            assert!(checkpoint
+                .operations
+                .iter()
+                .any(|operation| operation.contains("& 7ull")));
+            assert_eq!(
+                checkpoint
+                    .operations
+                    .iter()
+                    .filter(|operation| operation.starts_with("residual("))
+                    .count(),
+                1
+            );
+            assert!(checkpoint
+                .operations
+                .iter()
+                .any(|operation| operation == "residual(tmp0);"));
+            assert!(checkpoint
+                .operations
+                .iter()
+                .any(|operation| operation == "write(r1, tmp0);"));
+        }
+    }
+
+    #[test]
+    fn modular_setup_iseq_checkpoint_result_is_derivable() {
+        for num_limbs in [32, 48] {
+            let instr = ModSetupIsEqInstr {
+                rd_reg: Variable::new(1),
+                rs1_reg: Variable::new(2),
+                rs2_reg: Variable::new(3),
+                num_limbs,
+                modulus: vec![17; num_limbs as usize],
+            };
+            assert!(instr.supports_checkpoint_preflight());
+
+            let mut checkpoint = TestEmitCtx::checkpoint();
+            instr.emit_c(&mut checkpoint);
+            assert_eq!(
+                &checkpoint.operations[..3],
+                [
+                    "read(r2);",
+                    "read(r3);",
+                    &format!("checkpoint_slots({});", num_limbs * 2 / 8),
+                ]
+            );
+            assert!(checkpoint
+                .operations
+                .iter()
+                .any(|operation| operation.contains("& 7ull")));
+            assert!(!checkpoint
+                .operations
+                .iter()
+                .any(|operation| operation.starts_with("residual(")));
+        }
     }
 }
 

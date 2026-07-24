@@ -14,7 +14,10 @@ use super::{
     DeferralCallAdapterCols, DeferralCallAdapterRecord, DeferralCallCoreCols,
     DeferralCallCoreRecord,
 };
-use crate::{cuda_abi::call, poseidon2::DeferralPoseidon2SharedBuffer};
+use crate::{
+    cuda_abi::call,
+    poseidon2::{DeferralPoseidon2ProducerBuffer, DeferralPoseidon2SharedBuffer},
+};
 
 #[derive(new)]
 pub struct DeferralCallChipGpu {
@@ -46,6 +49,7 @@ impl Chip<DenseRecordArena, GpuBackend> for DeferralCallChipGpu {
 
         let d_records = records.to_device_on(device_ctx).unwrap();
         let trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
+        let poseidon2 = DeferralPoseidon2ProducerBuffer::new(num_records * 2, device_ctx);
 
         unsafe {
             call::tracegen(
@@ -59,16 +63,17 @@ impl Chip<DenseRecordArena, GpuBackend> for DeferralCallChipGpu {
                 &self.range_checker.count,
                 self.timestamp_max_bits as u32,
                 &self.bitwise_lookup.count,
-                &self.poseidon2.records,
-                &self.poseidon2.counts,
-                &self.poseidon2.idx,
+                &poseidon2.records,
+                &poseidon2.counts,
+                &poseidon2.idx,
                 // Length in F elements; the CUDA side converts to record count.
-                self.poseidon2.records.len(),
+                poseidon2.records.len(),
                 self.address_bits,
                 device_ctx.stream.as_raw(),
             )
             .expect("Failed to generate deferral call trace");
         }
+        self.poseidon2.push(poseidon2);
 
         AirProvingContext::simple_no_pis(trace)
     }

@@ -1364,7 +1364,7 @@ mod tests {
 
     #[test]
     #[cfg(feature = "rvr")]
-    fn test_rvr_hint_store_rejects_before_consuming_or_writing() -> Result<()> {
+    fn test_hint_store_uses_the_air_u16_alignment_contract() -> Result<()> {
         let instructions = [
             hint_store_instruction(Rv64HintStoreOpcode::HINT_BUFFER, 1, 2),
             Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
@@ -1397,6 +1397,67 @@ mod tests {
             Err(error) => error,
         };
         assert!(error.to_string().contains("error code: 3"));
+
+        let interpreter = executor.interpreter_instance(&exe)?;
+        let odd = configure_hint_state(
+            pure.create_initial_vm_state(Vec::<Vec<u8>>::new()),
+            &[(1, 1), (2, 1)],
+            &[0x0123_4567_89ab_cdef],
+        );
+        let error = match interpreter.execute_from_state(odd) {
+            Ok(_) => panic!("odd hint destination unexpectedly succeeded"),
+            Err(error) => error,
+        };
+        assert!(error.to_string().contains("eight-byte aligned"), "{error}");
+
+        // A proof-visible memory event is one fixed eight-byte block. Both
+        // executors reject a two-byte-aligned pointer that is not block-aligned.
+        let hint = 0x0123_4567_89ab_cdefu64;
+        let rvr_unaligned = configure_hint_state(
+            pure.create_initial_vm_state(Vec::<Vec<u8>>::new()),
+            &[(1, 2), (2, 1)],
+            &[hint],
+        );
+        let error = match pure.execute_from_state(rvr_unaligned) {
+            Ok(_) => panic!("two-byte-aligned hint destination unexpectedly succeeded"),
+            Err(error) => error,
+        };
+        assert!(error.to_string().contains("error code: 3"));
+        let interpreter_unaligned = configure_hint_state(
+            pure.create_initial_vm_state(Vec::<Vec<u8>>::new()),
+            &[(1, 2), (2, 1)],
+            &[hint],
+        );
+        let error = match interpreter.execute_from_state(interpreter_unaligned) {
+            Ok(_) => panic!("two-byte-aligned hint destination unexpectedly succeeded"),
+            Err(error) => error,
+        };
+        assert!(error.to_string().contains("eight-byte aligned"), "{error}");
+
+        let rvr_initial = configure_hint_state(
+            pure.create_initial_vm_state(Vec::<Vec<u8>>::new()),
+            &[(1, 8), (2, 1)],
+            &[hint],
+        );
+        let interpreter_initial = configure_hint_state(
+            pure.create_initial_vm_state(Vec::<Vec<u8>>::new()),
+            &[(1, 8), (2, 1)],
+            &[hint],
+        );
+        let rvr_state = pure.execute_from_state(rvr_initial)?;
+        let interpreter_state = interpreter.execute_from_state(interpreter_initial)?;
+        for state in [&rvr_state, &interpreter_state] {
+            let bytes: [u8; 8] = unsafe {
+                state
+                    .memory
+                    .memory
+                    .get_memory()
+                    .get_unchecked(RV64_MEMORY_AS as usize)
+                    .read(8)
+            };
+            assert_eq!(bytes, hint.to_le_bytes());
+            assert_eq!(state.streams.hint_stream.remaining(), 0);
+        }
         Ok(())
     }
 

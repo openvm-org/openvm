@@ -11,14 +11,107 @@ use openvm_stark_sdk::{config::baby_bear_poseidon2::*, p3_baby_bear::BabyBear};
 
 use crate::{
     test_utils::*, utils::biguint_to_limbs_vec, ExprBuilder, ExprBuilderConfig, FieldExpr,
-    FieldExprCols, FieldExpressionCoreRecordMut, FieldExpressionProgram, FieldVariable,
-    SymbolicExpr,
+    FieldExprCols, FieldExpressionCoreRecordMut, FieldExpressionFiller, FieldExpressionProgram,
+    FieldExpressionTraceError, FieldVariable, SymbolicExpr,
 };
 
 const LIMB_BITS: usize = 8;
 use std::sync::Arc;
 
 use openvm_circuit_primitives::var_range::{VariableRangeCheckerBus, VariableRangeCheckerChip};
+
+#[test]
+fn record_free_field_expression_fill_matches_direct_and_is_transactional() {
+    let prime = secp256k1_coord_prime();
+    let (template_checker, builder) = setup(&prime);
+    let x = ExprBuilder::new_input(builder.clone());
+    let y = ExprBuilder::new_input(builder.clone());
+    let mut sum = x + y;
+    sum.save_output();
+    let program = FieldExpressionProgram::new(builder.borrow().clone(), false);
+    let bus = template_checker.bus();
+    let expr = FieldExpr::new(program, bus);
+    let direct_checker = Arc::new(VariableRangeCheckerChip::new(bus));
+    let replay_checker = Arc::new(VariableRangeCheckerChip::new(bus));
+    let filler = FieldExpressionFiller::new(
+        (),
+        expr.clone(),
+        vec![0],
+        vec![],
+        replay_checker.clone(),
+        false,
+    );
+    let width = BaseAir::<BabyBear>::width(&expr);
+    let x = BigUint::from_bytes_le(&[0xcd, 0xab, 0x02, 0x01]);
+    let y = BigUint::from(17u32);
+    let input_bytes = [
+        biguint_to_limbs_vec(&x, expr.program().canonical_num_limbs()),
+        biguint_to_limbs_vec(&y, expr.program().canonical_num_limbs()),
+    ]
+    .concat();
+    let output = (&x + &y) % &prime;
+    let output_bytes = biguint_to_limbs_vec(&output, expr.program().canonical_num_limbs());
+
+    let mut direct = BabyBear::zero_vec(width);
+    expr.generate_subrow((&direct_checker, vec![x, y], vec![]), &mut direct);
+    let mut replay = BabyBear::zero_vec(width);
+    filler
+        .fill_trace_row_from_execution_data(
+            &replay_checker,
+            0,
+            &input_bytes,
+            Some(&output_bytes),
+            &mut replay,
+        )
+        .unwrap();
+    assert_eq!(replay, direct);
+    assert!(direct_checker
+        .count
+        .iter()
+        .zip(&replay_checker.count)
+        .all(|(a, b)| a.load(std::sync::atomic::Ordering::Relaxed)
+            == b.load(std::sync::atomic::Ordering::Relaxed)));
+
+    let failed_checker = VariableRangeCheckerChip::new(bus);
+    let mut failed_row = BabyBear::zero_vec(width);
+    let mut corrupt_output = output_bytes.clone();
+    corrupt_output[0] ^= 1;
+    assert_eq!(
+        filler.fill_trace_row_from_execution_data(
+            &failed_checker,
+            0,
+            &input_bytes,
+            Some(&corrupt_output),
+            &mut failed_row,
+        ),
+        Err(FieldExpressionTraceError::OutputMismatch)
+    );
+    assert_eq!(failed_row, BabyBear::zero_vec(width));
+    assert!(failed_checker
+        .count
+        .iter()
+        .all(|count| count.load(std::sync::atomic::Ordering::Relaxed) == 0));
+
+    let mut malformed_row = BabyBear::zero_vec(width);
+    assert_eq!(
+        filler.fill_trace_row_from_execution_data(
+            &failed_checker,
+            0,
+            &input_bytes[..input_bytes.len() - 1],
+            Some(&output_bytes),
+            &mut malformed_row,
+        ),
+        Err(FieldExpressionTraceError::InvalidInputLength {
+            expected: input_bytes.len(),
+            actual: input_bytes.len() - 1,
+        })
+    );
+    assert_eq!(malformed_row, BabyBear::zero_vec(width));
+    assert!(failed_checker
+        .count
+        .iter()
+        .all(|count| count.load(std::sync::atomic::Ordering::Relaxed) == 0));
+}
 
 #[test]
 #[should_panic(expected = "expression and range bus must use the same range capacity")]

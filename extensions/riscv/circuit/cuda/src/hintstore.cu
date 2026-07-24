@@ -219,3 +219,7 @@ extern "C" int _hintstore_tracegen(
     );
     return CHECK_KERNEL();
 }
+
+#ifdef OPENVM_RVR_REPLAY
+#include "../rvr/src/hintstore.inc.cuh"
+#endif

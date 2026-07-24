@@ -98,6 +98,35 @@ impl<
     }
 }
 
+impl<const NUM_READS: usize, const BLOCKS: usize>
+    Rv64VecHeapAdapterFiller<NUM_READS, BLOCKS, BLOCKS>
+{
+    pub fn fill_trace_row_from_projection<F: PrimeField32>(
+        &self,
+        range_checker: &openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
+        mem_helper: &MemoryAuxColsFactory<F>,
+        adapter_row: &mut [F],
+        input: &VecHeapTraceInput<NUM_READS, BLOCKS>,
+    ) {
+        self.fill_trace_row_from_values(
+            range_checker,
+            mem_helper,
+            adapter_row,
+            input.from_pc,
+            input.from_timestamp,
+            &input.rs_ptrs,
+            input.rd_ptr,
+            &input.rs_vals,
+            input.rd_val,
+            &input.rs_prev_timestamps,
+            input.rd_prev_timestamp,
+            &input.heap_prev_timestamps,
+            &input.write_prev_timestamps,
+            &input.write_predecessors,
+        );
+    }
+}
+
 impl<
         AB: InteractionBuilder,
         const NUM_READS: usize,
@@ -254,6 +283,68 @@ pub struct Rv64VecHeapAdapterRecord<
     pub writes_aux: [MemoryWriteBytesAuxRecord<MEMORY_BLOCK_BYTES>; BLOCKS_PER_WRITE],
 }
 
+/// Minimal, record-free input needed to fill one vector-heap adapter trace row.
+///
+/// Checkpoint replay projects this value directly from the immutable program and
+/// chronology-resolved memory log. It intentionally contains neither AIR columns
+/// nor arena/layout metadata.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct VecHeapTraceInput<const NUM_READS: usize, const BLOCKS: usize> {
+    pub from_pc: u32,
+    pub from_timestamp: u32,
+    pub local_opcode: u32,
+    pub rs_ptrs: [u32; NUM_READS],
+    pub rd_ptr: u32,
+    pub rs_vals: [u32; NUM_READS],
+    pub rd_val: u32,
+    pub rs_prev_timestamps: [u32; NUM_READS],
+    pub rd_prev_timestamp: u32,
+    pub heap_prev_timestamps: [[u32; BLOCKS]; NUM_READS],
+    pub write_prev_timestamps: [u32; BLOCKS],
+    pub heap_reads: [[[u16; BLOCK_FE_WIDTH]; BLOCKS]; NUM_READS],
+    pub writes: [[u16; BLOCK_FE_WIDTH]; BLOCKS],
+    pub write_predecessors: [[u16; BLOCK_FE_WIDTH]; BLOCKS],
+}
+
+/// The layout must match `VecHeapTraceInput` in `vec_heap_replay.cuh`, whose
+/// size is `VEC_HEAP_TRACE_INPUT_BYTES` and whose alignment is that of
+/// `uint32_t`, for every replay shape the projection launcher instantiates.
+const fn vec_heap_trace_input_layout_matches<const NUM_READS: usize, const BLOCKS: usize>() -> bool
+{
+    size_of::<VecHeapTraceInput<NUM_READS, BLOCKS>>()
+        == 24 + 12 * NUM_READS + 12 * NUM_READS * BLOCKS + 20 * BLOCKS
+        && align_of::<VecHeapTraceInput<NUM_READS, BLOCKS>>() == align_of::<u32>()
+}
+
+const _: () = assert!(vec_heap_trace_input_layout_matches::<2, 4>());
+const _: () = assert!(vec_heap_trace_input_layout_matches::<2, 6>());
+const _: () = assert!(vec_heap_trace_input_layout_matches::<2, 8>());
+const _: () = assert!(vec_heap_trace_input_layout_matches::<2, 12>());
+const _: () = assert!(vec_heap_trace_input_layout_matches::<1, 8>());
+const _: () = assert!(vec_heap_trace_input_layout_matches::<1, 12>());
+
+pub fn vec_heap_u16_blocks_to_bytes<'a>(limbs: impl IntoIterator<Item = &'a u16>) -> Vec<u8> {
+    limbs
+        .into_iter()
+        .flat_map(|limb| limb.to_le_bytes())
+        .collect()
+}
+
+#[cfg(test)]
+mod projection_tests {
+    use super::vec_heap_u16_blocks_to_bytes;
+
+    #[test]
+    fn projection_preserves_both_bytes_of_each_memory_cell() {
+        let limbs = [0xabcd, 0x0102, 0xff00, 0x0080];
+        assert_eq!(
+            vec_heap_u16_blocks_to_bytes(&limbs),
+            [0xcd, 0xab, 0x02, 0x01, 0x00, 0xff, 0x80, 0x00]
+        );
+    }
+}
+
 #[derive(derive_new::new, Clone, Copy)]
 pub struct Rv64VecHeapAdapterExecutor<
     const NUM_READS: usize,
@@ -387,79 +478,132 @@ impl<
         let record: &Rv64VecHeapAdapterRecord<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE> =
             unsafe { get_record_from_slice(&mut adapter_row, ()) };
 
+        let from_pc = record.from_pc;
+        let from_timestamp = record.from_timestamp;
+        let rs_ptrs = record.rs_ptrs;
+        let rd_ptr = record.rd_ptr;
+        let rs_vals = record.rs_vals;
+        let rd_val = record.rd_val;
+        let rs_prev_timestamps = record.rs_read_aux.each_ref().map(|aux| aux.prev_timestamp);
+        let rd_prev_timestamp = record.rd_read_aux.prev_timestamp;
+        let heap_prev_timestamps = record
+            .reads_aux
+            .each_ref()
+            .map(|reads| reads.each_ref().map(|aux| aux.prev_timestamp));
+        let write_prev_timestamps = record.writes_aux.each_ref().map(|aux| aux.prev_timestamp);
+        let write_predecessors = record.writes_aux.each_ref().map(|aux| {
+            from_fn(|i| u16::from_le_bytes([aux.prev_data[2 * i], aux.prev_data[2 * i + 1]]))
+        });
+        self.fill_trace_row_from_values(
+            self.range_checker_chip.as_ref(),
+            mem_helper,
+            adapter_row,
+            from_pc,
+            from_timestamp,
+            &rs_ptrs,
+            rd_ptr,
+            &rs_vals,
+            rd_val,
+            &rs_prev_timestamps,
+            rd_prev_timestamp,
+            &heap_prev_timestamps,
+            &write_prev_timestamps,
+            &write_predecessors,
+        );
+    }
+}
+
+impl<const NUM_READS: usize, const BLOCKS_PER_READ: usize, const BLOCKS_PER_WRITE: usize>
+    Rv64VecHeapAdapterFiller<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE>
+{
+    /// Fills adapter columns from semantic replay values rather than a chip record.
+    ///
+    /// `BLOCKS_PER_READ == BLOCKS_PER_WRITE` is encoded by the input type used by
+    /// all current field-expression adapters.
+    pub fn fill_trace_row_from_values<F: PrimeField32>(
+        &self,
+        range_checker: &openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
+        mem_helper: &MemoryAuxColsFactory<F>,
+        adapter_row: &mut [F],
+        from_pc: u32,
+        from_timestamp: u32,
+        rs_ptrs: &[u32; NUM_READS],
+        rd_ptr: u32,
+        rs_vals: &[u32; NUM_READS],
+        rd_val: u32,
+        rs_prev_timestamps: &[u32; NUM_READS],
+        rd_prev_timestamp: u32,
+        heap_prev_timestamps: &[[u32; BLOCKS_PER_READ]; NUM_READS],
+        write_prev_timestamps: &[u32; BLOCKS_PER_WRITE],
+        write_predecessors: &[[u16; BLOCK_FE_WIDTH]; BLOCKS_PER_WRITE],
+    ) {
         let cols: &mut Rv64VecHeapAdapterCols<F, NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE> =
             adapter_row.borrow_mut();
 
-        for &ptr in record.rs_vals.iter().chain(once(&record.rd_val)) {
-            self.range_checker_chip
-                .add_count(ptr_bound_from_ptr(ptr, self.pointer_max_bits), U16_BITS);
+        for &ptr in rs_vals.iter().chain(once(&rd_val)) {
+            range_checker.add_count(ptr_bound_from_ptr(ptr, self.pointer_max_bits), U16_BITS);
         }
 
         let timestamp_delta = NUM_READS + 1 + NUM_READS * BLOCKS_PER_READ + BLOCKS_PER_WRITE;
-        let mut timestamp = record.from_timestamp + timestamp_delta as u32;
+        let mut timestamp = from_timestamp + timestamp_delta as u32;
         let mut timestamp_mm = || {
             timestamp -= 1;
             timestamp
         };
 
-        // **NOTE**: Must iterate everything in reverse order to avoid overwriting the records
-        record
-            .writes_aux
+        write_prev_timestamps
             .iter()
             .rev()
+            .zip(write_predecessors.iter().rev())
             .zip(cols.writes_aux.iter_mut().rev())
-            .for_each(|(write, cols_write)| {
-                cols_write.set_prev_data(pack_u8_block_bytes(&write.prev_data));
-                mem_helper.fill(write.prev_timestamp, timestamp_mm(), cols_write.as_mut());
+            .for_each(|((prev_timestamp, predecessor), cols_write)| {
+                let mut predecessor_bytes = [0u8; MEMORY_BLOCK_BYTES];
+                for (bytes, &limb) in predecessor_bytes.chunks_exact_mut(2).zip(predecessor) {
+                    bytes.copy_from_slice(&limb.to_le_bytes());
+                }
+                cols_write.set_prev_data(pack_u8_block_bytes(&predecessor_bytes));
+                mem_helper.fill(*prev_timestamp, timestamp_mm(), cols_write.as_mut());
             });
 
-        record
-            .reads_aux
+        heap_prev_timestamps
             .iter()
             .zip(cols.reads_aux.iter_mut())
             .rev()
             .for_each(|(reads, cols_reads)| {
-                reads
-                    .iter()
-                    .zip(cols_reads.iter_mut())
-                    .rev()
-                    .for_each(|(read, cols_read)| {
-                        mem_helper.fill(read.prev_timestamp, timestamp_mm(), cols_read.as_mut());
-                    });
+                reads.iter().zip(cols_reads.iter_mut()).rev().for_each(
+                    |(prev_timestamp, cols_read)| {
+                        mem_helper.fill(*prev_timestamp, timestamp_mm(), cols_read.as_mut());
+                    },
+                );
             });
 
-        mem_helper.fill(
-            record.rd_read_aux.prev_timestamp,
-            timestamp_mm(),
-            cols.rd_read_aux.as_mut(),
-        );
+        mem_helper.fill(rd_prev_timestamp, timestamp_mm(), cols.rd_read_aux.as_mut());
 
-        record
-            .rs_read_aux
+        rs_prev_timestamps
             .iter()
             .zip(cols.rs_read_aux.iter_mut())
             .rev()
-            .for_each(|(aux, cols_aux)| {
-                mem_helper.fill(aux.prev_timestamp, timestamp_mm(), cols_aux.as_mut());
+            .for_each(|(prev_timestamp, cols_aux)| {
+                mem_helper.fill(*prev_timestamp, timestamp_mm(), cols_aux.as_mut());
             });
 
-        cols.rd_val = ptr_to_field_u16_limbs(record.rd_val);
+        cols.rd_val = ptr_to_field_u16_limbs(rd_val);
         cols.rs_val
             .iter_mut()
             .rev()
-            .zip(record.rs_vals.iter().rev())
+            .zip(rs_vals.iter().rev())
             .for_each(|(cols_val, val)| {
                 *cols_val = ptr_to_field_u16_limbs(*val);
             });
-        cols.rd_ptr = F::from_u32(record.rd_ptr);
+        cols.rd_ptr = F::from_u32(rd_ptr);
         cols.rs_ptr
             .iter_mut()
             .rev()
-            .zip(record.rs_ptrs.iter().rev())
+            .zip(rs_ptrs.iter().rev())
             .for_each(|(cols_ptr, ptr)| {
                 *cols_ptr = F::from_u32(*ptr);
             });
-        cols.from_state.timestamp = F::from_u32(record.from_timestamp);
-        cols.from_state.pc = F::from_u32(record.from_pc);
+        cols.from_state.timestamp = F::from_u32(from_timestamp);
+        cols.from_state.pc = F::from_u32(from_pc);
     }
 }

@@ -45,6 +45,13 @@ impl PageAddressSpace {
 /// slots without a memory event. A peek reads the current value and preserves
 /// the current timestamp.
 pub trait ExtEmitCtx {
+    /// Whether this emitter is producing the minimal checkpoint transcript.
+    /// Instruction nodes use this only when checkpoint memory order differs
+    /// from an older execution mode whose generated code must remain stable.
+    fn is_checkpoint_preflight(&self) -> bool {
+        false
+    }
+
     /// Read a variable through a VM memory access.
     fn read_var(&mut self, var: Variable) -> String;
 
@@ -72,7 +79,7 @@ pub trait ExtEmitCtx {
     /// Write guest memory.
     fn write_mem(&mut self, base: &str, offset: i16, val: &str, width: u8);
 
-    /// Write one aligned eight-byte main-memory block.
+    /// Write one naturally aligned eight-byte main-memory block.
     ///
     /// Unlike a scalar doubleword store, this is one enabled memory event and
     /// does not reserve a second block-access slot.
@@ -95,6 +102,27 @@ pub trait ExtEmitCtx {
     /// Values are untagged and ordered by execution. Checkpoint replay knows
     /// which instruction consumes each value from the program itself.
     fn append_replay_value(&mut self, _value: &str) {}
+
+    /// Append a post-write range of aligned main-memory words to checkpoint
+    /// replay values.
+    ///
+    /// This emits nothing outside checkpoint preflight, so instructions can
+    /// expose replay outputs without adding loads or stack buffers to pure and
+    /// metered execution.
+    fn append_replay_memory_u64_range(&mut self, _base: &str, _count: &str) {}
+
+    /// Commit mode-local execution metadata before emitting a control transfer.
+    ///
+    /// Instruction-owned terminators must call this after their final logged
+    /// access or replay value and before writing any branch or return.
+    fn flush_before_control_transfer(&mut self) {}
+
+    /// Account for memory-bus slots performed inside an opaque extension call.
+    ///
+    /// This is checkpoint-preflight-only bookkeeping. In particular, it must
+    /// not add timestamp operations to legacy value tracing, whose memory
+    /// wrappers already emit the call's events.
+    fn advance_checkpoint_timestamp(&mut self, _slots: u32) {}
 
     /// Flush local page state, emit a C call, then reload the page state.
     fn emit_call(&mut self, name: &str, args: &[&str]);

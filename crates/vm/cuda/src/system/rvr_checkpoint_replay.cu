@@ -19,6 +19,7 @@ namespace {
 static constexpr uint32_t BABY_BEAR_ORDER = 2013265921u;
 static constexpr uint32_t REGISTER_BYTES = 8;
 static constexpr uint32_t NUM_REGISTERS = 32;
+static constexpr uint32_t MAX_HINT_WORDS = 1023;
 
 static constexpr uint32_t ERROR_BAD_CHUNK = 301;
 static constexpr uint32_t ERROR_BAD_PC = 302;
@@ -29,6 +30,7 @@ static constexpr uint32_t ERROR_BAD_RESIDUAL = 306;
 static constexpr uint32_t ERROR_BAD_ANCHOR = 307;
 static constexpr uint32_t ERROR_BAD_TERMINATION = 308;
 static constexpr uint32_t ERROR_OUTPUT_BOUNDS = 309;
+static constexpr uint32_t ERROR_BAD_ENDPOINT = 310;
 static constexpr uint8_t FULL_WRITE_MASK = 0xff;
 
 struct RvrCheckpoint {
@@ -71,11 +73,46 @@ struct RvrCheckpointOpcodeBases {
     uint32_t less_than_imm;
     uint32_t base_alu_w_imm;
     uint32_t shift_w_imm;
+    uint32_t hint_store;
     uint32_t phantom;
     uint32_t terminate;
 };
 
-static_assert(sizeof(RvrCheckpointOpcodeBases) == 23 * sizeof(uint32_t));
+static_assert(sizeof(RvrCheckpointOpcodeBases) == 24 * sizeof(uint32_t));
+
+struct RvrCheckpointAccessSchedule {
+    uint32_t first_span;
+    uint32_t num_spans;
+    uint8_t register_operands[3];
+    uint8_t num_register_reads;
+    uint8_t effect;
+    uint8_t effect_operand;
+    uint8_t register_write_source;
+    uint8_t register_write_operand;
+};
+
+static_assert(sizeof(RvrCheckpointAccessSchedule) == 16);
+
+struct RvrCheckpointAccessSpan {
+    uint32_t address_space;
+    uint32_t count;
+    uint8_t base_register;
+    uint8_t count_register;
+    uint8_t count_shift;
+    uint8_t flags;
+};
+
+static_assert(sizeof(RvrCheckpointAccessSpan) == 12);
+
+static constexpr uint32_t NO_SCHEDULE = UINT32_MAX;
+static constexpr uint8_t SPAN_WRITE_RESIDUAL = 1;
+static constexpr uint8_t SPAN_COUNT_FROM_REGISTER = 2;
+static constexpr uint8_t SPAN_WRITE_ZERO = 4;
+static constexpr uint8_t EFFECT_NEXT = 0;
+static constexpr uint8_t EFFECT_BRANCH_RESIDUAL = 1;
+static constexpr uint8_t REGISTER_WRITE_NONE = 0;
+static constexpr uint8_t REGISTER_WRITE_ZERO = 1;
+static constexpr uint8_t REGISTER_WRITE_RESIDUAL = 2;
 
 __device__ __forceinline__ uint64_t load_u64_le(uint8_t const *bytes) {
     uint64_t value = 0;
@@ -341,6 +378,54 @@ struct LoadStoreInstruction {
     bool needs_write;
 };
 
+struct HintStoreInstruction {
+    bool is_single;
+    uint32_t num_words;
+    uint32_t mem_ptr_reg;
+    uint32_t num_words_reg;
+    uint32_t mem_ptr;
+};
+
+__device__ __forceinline__ bool validate_hint_store(
+    RvrReplayInstruction const &instruction,
+    RvrCheckpointOpcodeBases const &opcodes,
+    uint32_t register_as,
+    uint32_t memory_as,
+    uint32_t pointer_max_bits,
+    ReplayState const &state,
+    size_t initial_memory_bytes,
+    HintStoreInstruction &decoded
+) {
+    uint32_t local;
+    if (!opcode_in_family(instruction.words[0], opcodes.hint_store, 2, local) ||
+        instruction.words[3] != 0 || instruction.words[4] != register_as ||
+        instruction.words[5] != memory_as || instruction.words[6] != 0 ||
+        instruction.words[7] != 0 || !decode_register(instruction.words[2], decoded.mem_ptr_reg)) {
+        return false;
+    }
+    decoded.is_single = local == 0;
+    if (decoded.is_single) {
+        if (instruction.words[1] != 0) return false;
+        decoded.num_words_reg = 0;
+        decoded.num_words = 1;
+    } else {
+        if (!decode_register(instruction.words[1], decoded.num_words_reg)) return false;
+        uint64_t num_words = state.regs[decoded.num_words_reg];
+        if (num_words == 0 || num_words > MAX_HINT_WORDS) return false;
+        decoded.num_words = uint32_t(num_words);
+    }
+
+    uint64_t mem_ptr = state.regs[decoded.mem_ptr_reg];
+    if ((mem_ptr >> 32) != 0 || (mem_ptr & (REGISTER_BYTES - 1)) != 0) return false;
+    uint64_t end = mem_ptr + uint64_t(decoded.num_words) * REGISTER_BYTES;
+    if (end < mem_ptr || end > initial_memory_bytes ||
+        (pointer_max_bits < 32 && end > (uint64_t(1) << pointer_max_bits))) {
+        return false;
+    }
+    decoded.mem_ptr = uint32_t(mem_ptr);
+    return true;
+}
+
 __device__ __forceinline__ uint64_t normalize_load_result(
     uint64_t value, uint32_t width, bool sign_extend
 ) {
@@ -409,10 +494,11 @@ __device__ __forceinline__ bool validate_load_store(
     decoded.aligned_address = decoded.address - decoded.shift;
     decoded.crosses = decoded.shift + decoded.width > 8;
     uint64_t block_end = uint64_t(decoded.aligned_address) + (decoded.crosses ? 16 : 8);
-    // Memory-bus pointers address u16 cells; effective addresses are bytes.
-    // Therefore a `pointer_max_bits` cell domain has one additional byte bit.
+    // The load/store adapter AIRs range check the byte address's high u16 limb to
+    // `pointer_max_bits - U16_BITS` bits, committing the byte-address domain
+    // `[0, 2^pointer_max_bits)`.
     if ((decoded.is_load && block_end > initial_memory_bytes) ||
-        (pointer_max_bits < 32 && block_end > (uint64_t(1) << (pointer_max_bits + 1)))) {
+        (pointer_max_bits < 32 && block_end > (uint64_t(1) << pointer_max_bits))) {
         return false;
     }
     return true;
@@ -545,6 +631,206 @@ __device__ __forceinline__ void write_memory_intent(
     if (write_mask != nullptr) *write_mask = mask;
 }
 
+__device__ __forceinline__ bool replay_access_schedule(
+    RvrReplayInstruction const &instruction,
+    RvrCheckpointAccessSchedule const &schedule,
+    DeviceBufferConstView<RvrCheckpointAccessSpan> spans,
+    DeviceBufferConstView<uint64_t> residuals,
+    DeviceBufferConstView<uint8_t> initial_memory,
+    uint32_t register_as,
+    uint32_t pointer_max_bits,
+    ReplayState &state,
+    PreflightMemoryEvent *memory,
+    uint8_t *write_masks,
+    size_t memory_capacity,
+    uint32_t memory_start,
+    uint32_t &emitted,
+    uint32_t *error
+) {
+    if (uint64_t(schedule.first_span) + schedule.num_spans > spans.len()) {
+        preflight_set_error(error, ERROR_BAD_INSTRUCTION);
+        return false;
+    }
+    if (schedule.effect != EFFECT_NEXT && schedule.effect != EFFECT_BRANCH_RESIDUAL) {
+        preflight_set_error(error, ERROR_BAD_INSTRUCTION);
+        return false;
+    }
+    bool has_register_write = schedule.register_write_source != REGISTER_WRITE_NONE;
+    if ((schedule.register_write_source != REGISTER_WRITE_NONE &&
+         schedule.register_write_source != REGISTER_WRITE_ZERO &&
+         schedule.register_write_source != REGISTER_WRITE_RESIDUAL) ||
+        (has_register_write ? !(schedule.register_write_operand >= 1 &&
+                                schedule.register_write_operand < 8)
+                            : schedule.register_write_operand != 0)) {
+        preflight_set_error(error, ERROR_BAD_INSTRUCTION);
+        return false;
+    }
+    uint32_t write_register = 0;
+    if (has_register_write &&
+        !decode_register(instruction.words[schedule.register_write_operand], write_register)) {
+        preflight_set_error(error, ERROR_BAD_INSTRUCTION);
+        return false;
+    }
+    bool register_write_enabled = has_register_write && write_register != 0;
+
+    uint64_t register_values[3] = {};
+    for (uint32_t index = 0; index < schedule.num_register_reads; index++) {
+        uint8_t operand = schedule.register_operands[index];
+        uint32_t reg = instruction.words[operand] / REGISTER_BYTES;
+        register_values[index] = state.regs[reg];
+    }
+
+    // Validate the complete instruction before mutating replay state or output.
+    // Count and emit therefore fail at the same boundary, and a malformed later
+    // span cannot leave a partial memory schedule behind.
+    uint64_t span_events = 0;
+    uint64_t write_residuals = 0;
+    for (uint32_t span_index = 0; span_index < schedule.num_spans; span_index++) {
+        auto const &span = spans[schedule.first_span + span_index];
+        constexpr uint8_t KNOWN_SPAN_FLAGS =
+            SPAN_WRITE_RESIDUAL | SPAN_COUNT_FROM_REGISTER | SPAN_WRITE_ZERO;
+        if ((span.flags & ~KNOWN_SPAN_FLAGS) != 0) {
+            preflight_set_error(error, ERROR_BAD_INSTRUCTION);
+            return false;
+        }
+        uint32_t count = span.count;
+        if ((span.flags & SPAN_COUNT_FROM_REGISTER) != 0) {
+            uint64_t encoded_count = register_values[span.count_register];
+            uint64_t low_mask = span.count_shift == 0 ? 0 : (uint64_t(1) << span.count_shift) - 1;
+            uint64_t shifted = encoded_count >> span.count_shift;
+            if ((encoded_count & low_mask) != 0 || shifted > span.count) {
+                preflight_set_error(error, ERROR_BAD_INSTRUCTION);
+                return false;
+            }
+            count = uint32_t(shifted);
+        } else if (count == 0) {
+            preflight_set_error(error, ERROR_BAD_INSTRUCTION);
+            return false;
+        }
+        if (uint64_t(count) > UINT32_MAX - span_events) {
+            preflight_set_error(error, ERROR_BAD_INSTRUCTION);
+            return false;
+        }
+        span_events += count;
+        if (count == 0) continue;
+
+        uint64_t base = register_values[span.base_register];
+        uint64_t byte_len = uint64_t(count) * REGISTER_BYTES;
+        uint64_t end = base + byte_len;
+        if ((base >> 32) != 0 || (base & (REGISTER_BYTES - 1)) != 0 || end < base ||
+            end > uint64_t(UINT32_MAX) + 1 || end > initial_memory.len() ||
+            (pointer_max_bits < 32 && end > (uint64_t(1) << pointer_max_bits))) {
+            preflight_set_error(error, ERROR_BAD_INSTRUCTION);
+            return false;
+        }
+        if ((span.flags & SPAN_WRITE_RESIDUAL) != 0 &&
+            (span.flags & SPAN_WRITE_ZERO) != 0) {
+            preflight_set_error(error, ERROR_BAD_INSTRUCTION);
+            return false;
+        }
+        if ((span.flags & SPAN_WRITE_RESIDUAL) != 0) write_residuals += count;
+    }
+
+    uint64_t timestamp_slots = uint64_t(schedule.num_register_reads) + span_events +
+                               uint64_t(has_register_write);
+    uint64_t total_events = uint64_t(schedule.num_register_reads) + span_events +
+                            uint64_t(register_write_enabled);
+    if (timestamp_slots > UINT32_MAX - state.timestamp || total_events > UINT32_MAX - emitted) {
+        preflight_set_error(error, ERROR_BAD_INSTRUCTION);
+        return false;
+    }
+    if (memory != nullptr && uint64_t(memory_start) + emitted + total_events > memory_capacity) {
+        preflight_set_error(error, ERROR_OUTPUT_BOUNDS);
+        return false;
+    }
+    uint64_t register_write_residuals =
+        schedule.register_write_source == REGISTER_WRITE_RESIDUAL ? 1u : 0u;
+    uint64_t effect_residual_index = uint64_t(state.residual_cursor) + write_residuals +
+                                     register_write_residuals;
+    uint64_t required_residuals = write_residuals + register_write_residuals +
+                                  (schedule.effect == EFFECT_BRANCH_RESIDUAL ? 1u : 0u);
+    if (required_residuals > UINT32_MAX - state.residual_cursor ||
+        uint64_t(state.residual_cursor) + required_residuals > residuals.len()) {
+        preflight_set_error(error, ERROR_BAD_RESIDUAL);
+        return false;
+    }
+    uint64_t effect_residual = 0;
+    if (schedule.effect == EFFECT_BRANCH_RESIDUAL) {
+        effect_residual = residuals[effect_residual_index];
+        if (effect_residual > 1) {
+            preflight_set_error(error, ERROR_BAD_RESIDUAL);
+            return false;
+        }
+    }
+
+    for (uint32_t index = 0; index < schedule.num_register_reads; index++) {
+        uint8_t operand = schedule.register_operands[index];
+        uint32_t reg = instruction.words[operand] / REGISTER_BYTES;
+        if (memory != nullptr) {
+            uint32_t cursor = memory_start + emitted;
+            write_event(memory[cursor], &write_masks[cursor], state.timestamp, register_as,
+                        instruction.words[operand] / 2, false, state.regs[reg]);
+        }
+        emitted++;
+        state.timestamp++;
+    }
+
+    for (uint32_t span_index = 0; span_index < schedule.num_spans; span_index++) {
+        auto const &span = spans[schedule.first_span + span_index];
+        uint32_t count = span.count;
+        if ((span.flags & SPAN_COUNT_FROM_REGISTER) != 0) {
+            count = uint32_t(register_values[span.count_register] >> span.count_shift);
+        }
+        if (count == 0) continue;
+
+        uint64_t base = register_values[span.base_register];
+        bool is_residual_write = (span.flags & SPAN_WRITE_RESIDUAL) != 0;
+        bool is_write = is_residual_write || (span.flags & SPAN_WRITE_ZERO) != 0;
+        for (uint32_t word = 0; word < count; word++) {
+            if (memory != nullptr) {
+                uint32_t cursor = memory_start + emitted;
+                uint64_t value =
+                    is_residual_write ? residuals[state.residual_cursor + word] : 0;
+                write_memory_intent(memory[cursor], &write_masks[cursor], state.timestamp,
+                                    span.address_space,
+                                    uint32_t(base) + REGISTER_BYTES * word, value,
+                                    is_write ? FULL_WRITE_MASK : 0);
+            }
+            emitted++;
+            state.timestamp++;
+        }
+        if (is_residual_write) state.residual_cursor += count;
+    }
+    if (has_register_write) {
+        uint64_t value = schedule.register_write_source == REGISTER_WRITE_RESIDUAL
+                             ? residuals[state.residual_cursor]
+                             : 0;
+        if (register_write_enabled) {
+            if (memory != nullptr) {
+                uint32_t cursor = memory_start + emitted;
+                write_event(memory[cursor], &write_masks[cursor], state.timestamp, register_as,
+                            instruction.words[schedule.register_write_operand] / 2, true, value);
+            }
+            emitted++;
+            state.regs[write_register] = value;
+        }
+        if (schedule.register_write_source == REGISTER_WRITE_RESIDUAL) {
+            state.residual_cursor++;
+        }
+        state.timestamp++;
+    }
+    if (schedule.effect == EFFECT_BRANCH_RESIDUAL) {
+        // All write residuals, if any, precede the terminal control residual.
+        state.residual_cursor++;
+        state.pc = effect_residual != 0
+                       ? branch_target(state.pc, instruction.words[schedule.effect_operand])
+                       : state.pc + 4;
+    } else {
+        state.pc += 4;
+    }
+    return true;
+}
+
 __device__ bool replay_chunk(
     DeviceBufferConstView<RvrReplayInstruction> instructions,
     uint32_t pc_base,
@@ -552,6 +838,9 @@ __device__ bool replay_chunk(
     DeviceBufferConstView<uint8_t> initial_memory,
     DeviceBufferConstView<RvrCheckpoint> anchors,
     DeviceBufferConstView<uint64_t> residuals,
+    DeviceBufferConstView<uint32_t> schedule_dispatch,
+    DeviceBufferConstView<RvrCheckpointAccessSchedule> schedules,
+    DeviceBufferConstView<RvrCheckpointAccessSpan> spans,
     size_t chunk,
     RvrCheckpointOpcodeBases opcodes,
     uint32_t register_as,
@@ -560,6 +849,7 @@ __device__ bool replay_chunk(
     uint32_t pointer_max_bits,
     uint32_t initial_pc,
     uint32_t initial_timestamp,
+    uint32_t endpoint_kind,
     PreflightProgramEvent *program,
     PreflightMemoryEvent *memory,
     uint8_t *write_masks,
@@ -568,6 +858,10 @@ __device__ bool replay_chunk(
     uint32_t &memory_count,
     uint32_t *error
 ) {
+    if (endpoint_kind > 1) {
+        preflight_set_error(error, ERROR_BAD_ENDPOINT);
+        return false;
+    }
     ReplayState state{};
     if (chunk == 0) {
         if (initial_registers.len() < NUM_REGISTERS * 8) {
@@ -587,6 +881,11 @@ __device__ bool replay_chunk(
     uint32_t expected_steps = end.retired - state.retired;
     uint32_t emitted = 0;
     bool terminated = false;
+    // Fixed-arity opcode paths advance `state.timestamp` by at most 4 per step and
+    // carry no overflow guard: a wrapped timestamp cannot pass the strictly
+    // monotonic per-address chronology check, the host timestamp-domain checks, or
+    // the end-anchor comparison. Variable-length paths (hint store, access
+    // schedules) bound their own timestamp advance explicitly.
     for (uint32_t local_step = 0; local_step < expected_steps; local_step++) {
         auto instruction = resolve_instruction(instructions, pc_base, state.pc);
         if (instruction == nullptr) {
@@ -639,6 +938,54 @@ __device__ bool replay_chunk(
             state.regs[rd] = result;
             state.pc += 4;
             state.timestamp += 2;
+        } else if (opcode >= opcodes.hint_store && opcode < opcodes.hint_store + 2) {
+            HintStoreInstruction decoded{};
+            if (!validate_hint_store(*instruction, opcodes, register_as, memory_as,
+                                     pointer_max_bits, state, initial_memory.len(), decoded)) {
+                preflight_set_error(error, ERROR_BAD_INSTRUCTION);
+                return false;
+            }
+            uint32_t event_count = decoded.num_words + (decoded.is_single ? 1 : 2);
+            if (state.residual_cursor > residuals.len() ||
+                size_t(decoded.num_words) > residuals.len() - state.residual_cursor) {
+                preflight_set_error(error, ERROR_BAD_RESIDUAL);
+                return false;
+            }
+            if (decoded.num_words > (UINT32_MAX - state.timestamp) / 3) {
+                preflight_set_error(error, ERROR_BAD_INSTRUCTION);
+                return false;
+            }
+            if (memory != nullptr) {
+                if (uint64_t(memory_start) + emitted + event_count > memory_capacity) {
+                    preflight_set_error(error, ERROR_OUTPUT_BOUNDS);
+                    return false;
+                }
+                write_event(memory[memory_start + emitted], &write_masks[memory_start + emitted],
+                            state.timestamp, register_as, instruction->words[2] / 2, false,
+                            state.regs[decoded.mem_ptr_reg]);
+                uint32_t write_start = emitted + 1;
+                if (!decoded.is_single) {
+                    write_event(memory[memory_start + emitted + 1],
+                                &write_masks[memory_start + emitted + 1], state.timestamp + 1,
+                                register_as, instruction->words[1] / 2, false,
+                                state.regs[decoded.num_words_reg]);
+                    write_start++;
+                }
+                for (uint32_t word = 0; word < decoded.num_words; word++) {
+                    size_t residual_index = state.residual_cursor + word;
+                    uint32_t event_index = memory_start + write_start + word;
+                    write_memory_intent(
+                        memory[event_index], &write_masks[event_index],
+                        state.timestamp + 2 + 3 * word, memory_as,
+                        decoded.mem_ptr + REGISTER_BYTES * word, residuals[residual_index],
+                        FULL_WRITE_MASK
+                    );
+                }
+            }
+            emitted += event_count;
+            state.residual_cursor += decoded.num_words;
+            state.pc += 4;
+            state.timestamp += 3 * decoded.num_words;
         } else if (opcode >= opcodes.load_store && opcode < opcodes.load_store + 11) {
             LoadStoreInstruction decoded{};
             if (!validate_load_store(*instruction, opcodes, register_as, memory_as,
@@ -875,11 +1222,25 @@ __device__ bool replay_chunk(
                 state.pc += 4;
                 state.timestamp++;
             } else if (opcode == opcodes.terminate) {
-                if (local_step + 1 != expected_steps || chunk + 1 != anchors.len()) {
+                if (endpoint_kind != 0 || local_step + 1 != expected_steps ||
+                    chunk + 1 != anchors.len()) {
                     preflight_set_error(error, ERROR_BAD_TERMINATION);
                     return false;
                 }
                 terminated = true;
+            } else if (opcode < schedule_dispatch.len() &&
+                       schedule_dispatch[opcode] != NO_SCHEDULE) {
+                uint32_t schedule_index = schedule_dispatch[opcode];
+                if (schedule_index >= schedules.len() ||
+                    !replay_access_schedule(*instruction, schedules[schedule_index], spans,
+                                            residuals, initial_memory, register_as,
+                                            pointer_max_bits, state, memory, write_masks,
+                                            memory_capacity, memory_start, emitted, error)) {
+                    if (schedule_index >= schedules.len()) {
+                        preflight_set_error(error, ERROR_BAD_INSTRUCTION);
+                    }
+                    return false;
+                }
             } else {
                 preflight_set_error(error, ERROR_UNSUPPORTED_OPCODE);
                 return false;
@@ -888,7 +1249,8 @@ __device__ bool replay_chunk(
         state.retired++;
     }
 
-    if ((chunk + 1 == anchors.len()) != terminated) {
+    bool is_final_chunk = chunk + 1 == anchors.len();
+    if (is_final_chunk ? (terminated != (endpoint_kind == 0)) : terminated) {
         preflight_set_error(error, ERROR_BAD_TERMINATION);
         return false;
     }
@@ -907,6 +1269,9 @@ __global__ void checkpoint_count(
     DeviceBufferConstView<uint8_t> initial_memory,
     DeviceBufferConstView<RvrCheckpoint> anchors,
     DeviceBufferConstView<uint64_t> residuals,
+    DeviceBufferConstView<uint32_t> schedule_dispatch,
+    DeviceBufferConstView<RvrCheckpointAccessSchedule> schedules,
+    DeviceBufferConstView<RvrCheckpointAccessSpan> spans,
     RvrCheckpointOpcodeBases opcodes,
     uint32_t register_as,
     uint32_t memory_as,
@@ -914,6 +1279,7 @@ __global__ void checkpoint_count(
     uint32_t pointer_max_bits,
     uint32_t initial_pc,
     uint32_t initial_timestamp,
+    uint32_t endpoint_kind,
     uint32_t *memory_counts,
     uint32_t *error
 ) {
@@ -921,8 +1287,9 @@ __global__ void checkpoint_count(
     if (chunk >= anchors.len()) return;
     uint32_t count = 0;
     if (replay_chunk(instructions, pc_base, initial_registers, initial_memory, anchors, residuals,
-                     chunk, opcodes, register_as, memory_as, immediate_as, pointer_max_bits, initial_pc,
-                     initial_timestamp, nullptr, nullptr, nullptr, 0, 0, count, error)) {
+                     schedule_dispatch, schedules, spans, chunk, opcodes, register_as, memory_as, immediate_as,
+                     pointer_max_bits, initial_pc, initial_timestamp, endpoint_kind, nullptr,
+                     nullptr, nullptr, 0, 0, count, error)) {
         memory_counts[chunk] = count;
     }
 }
@@ -935,6 +1302,9 @@ __global__ void checkpoint_emit(
     DeviceBufferConstView<RvrCheckpoint> anchors,
     DeviceBufferConstView<uint64_t> residuals,
     DeviceBufferConstView<uint32_t> memory_offsets,
+    DeviceBufferConstView<uint32_t> schedule_dispatch,
+    DeviceBufferConstView<RvrCheckpointAccessSchedule> schedules,
+    DeviceBufferConstView<RvrCheckpointAccessSpan> spans,
     RvrCheckpointOpcodeBases opcodes,
     uint32_t register_as,
     uint32_t memory_as,
@@ -942,6 +1312,7 @@ __global__ void checkpoint_emit(
     uint32_t pointer_max_bits,
     uint32_t initial_pc,
     uint32_t initial_timestamp,
+    uint32_t endpoint_kind,
     DeviceBufferView<PreflightProgramEvent> program,
     DeviceBufferView<PreflightMemoryEvent> memory,
     DeviceBufferView<uint8_t> write_masks,
@@ -951,9 +1322,10 @@ __global__ void checkpoint_emit(
     if (chunk >= anchors.len()) return;
     uint32_t count = 0;
     replay_chunk(instructions, pc_base, initial_registers, initial_memory, anchors, residuals,
-                 chunk, opcodes, register_as, memory_as, immediate_as, pointer_max_bits, initial_pc,
-                 initial_timestamp, program.data(), memory.data(), write_masks.data(), memory.len(),
-                 memory_offsets[chunk], count, error);
+                 schedule_dispatch, schedules, spans, chunk, opcodes, register_as, memory_as, immediate_as,
+                 pointer_max_bits, initial_pc, initial_timestamp, endpoint_kind, program.data(),
+                 memory.data(), write_masks.data(), memory.len(), memory_offsets[chunk], count,
+                 error);
     if (chunk + 1 == anchors.len()) {
         auto const &final_anchor = anchors[chunk];
         if (final_anchor.retired >= program.len()) {
@@ -974,6 +1346,9 @@ extern "C" int _rvr_checkpoint_count(
     DeviceBufferConstView<uint8_t> initial_memory,
     DeviceBufferConstView<RvrCheckpoint> anchors,
     DeviceBufferConstView<uint64_t> residuals,
+    DeviceBufferConstView<uint32_t> schedule_dispatch,
+    DeviceBufferConstView<RvrCheckpointAccessSchedule> schedules,
+    DeviceBufferConstView<RvrCheckpointAccessSpan> spans,
     RvrCheckpointOpcodeBases opcodes,
     uint32_t register_as,
     uint32_t memory_as,
@@ -981,6 +1356,7 @@ extern "C" int _rvr_checkpoint_count(
     uint32_t pointer_max_bits,
     uint32_t initial_pc,
     uint32_t initial_timestamp,
+    uint32_t endpoint_kind,
     uint32_t *memory_counts,
     uint32_t *error,
     cudaStream_t stream
@@ -989,9 +1365,9 @@ extern "C" int _rvr_checkpoint_count(
     auto [grid, block] = kernel_launch_params(anchors.len());
     checkpoint_count<<<grid, block, 0, stream>>>(
         instructions, pc_base, initial_registers, initial_memory, anchors, residuals,
-        opcodes, register_as,
+        schedule_dispatch, schedules, spans, opcodes, register_as,
         memory_as, immediate_as, pointer_max_bits, initial_pc, initial_timestamp,
-        memory_counts, error
+        endpoint_kind, memory_counts, error
     );
     return CHECK_KERNEL();
 }
@@ -1004,6 +1380,9 @@ extern "C" int _rvr_checkpoint_emit(
     DeviceBufferConstView<RvrCheckpoint> anchors,
     DeviceBufferConstView<uint64_t> residuals,
     DeviceBufferConstView<uint32_t> memory_offsets,
+    DeviceBufferConstView<uint32_t> schedule_dispatch,
+    DeviceBufferConstView<RvrCheckpointAccessSchedule> schedules,
+    DeviceBufferConstView<RvrCheckpointAccessSpan> spans,
     RvrCheckpointOpcodeBases opcodes,
     uint32_t register_as,
     uint32_t memory_as,
@@ -1011,6 +1390,7 @@ extern "C" int _rvr_checkpoint_emit(
     uint32_t pointer_max_bits,
     uint32_t initial_pc,
     uint32_t initial_timestamp,
+    uint32_t endpoint_kind,
     DeviceBufferView<PreflightProgramEvent> program,
     DeviceBufferView<PreflightMemoryEvent> memory,
     DeviceBufferView<uint8_t> write_masks,
@@ -1023,9 +1403,9 @@ extern "C" int _rvr_checkpoint_emit(
     auto [grid, block] = kernel_launch_params(anchors.len());
     checkpoint_emit<<<grid, block, 0, stream>>>(
         instructions, pc_base, initial_registers, initial_memory, anchors, residuals,
-        memory_offsets, opcodes,
+        memory_offsets, schedule_dispatch, schedules, spans, opcodes,
         register_as, memory_as, immediate_as, pointer_max_bits, initial_pc, initial_timestamp,
-        program, memory, write_masks, error
+        endpoint_kind, program, memory, write_masks, error
     );
     return CHECK_KERNEL();
 }

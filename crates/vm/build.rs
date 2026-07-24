@@ -8,9 +8,8 @@ fn main() {
             return; // Skip CUDA compilation
         }
 
-        // The source list is discovered by glob. Watch the directories as well
-        // as the files so adding a new kernel invalidates an existing build.
-        println!("cargo:rerun-if-changed=cuda/src/system");
+        // Keep checkpoint replay out of ordinary CUDA builds. These translation
+        // units are large and have no symbols used unless the RVR feature is on.
         println!("cargo:rerun-if-changed=cuda/src/testing");
 
         let builder = CudaBuilder::new()
@@ -22,11 +21,25 @@ fn main() {
             .flag("-Xcompiler=-Wno-maybe-uninitialized");
         builder.emit_link_directives();
 
-        builder
-            .clone()
-            .library_name("tracegen_gpu_system")
-            .files_from_glob("cuda/src/system/**/*.cu")
-            .build();
+        let mut system_builder = builder.clone().library_name("tracegen_gpu_system").files([
+            "cuda/src/system/boundary.cu",
+            "cuda/src/system/inventory.cu",
+            "cuda/src/system/memory/merkle_tree.cu",
+            "cuda/src/system/phantom.cu",
+            "cuda/src/system/poseidon2.cu",
+            "cuda/src/system/program.cu",
+        ]);
+        if cfg!(feature = "rvr") {
+            system_builder = system_builder
+                .include("cuda/rvr/include")
+                .watch("cuda/rvr/src")
+                .flag("-DOPENVM_RVR_REPLAY")
+                .files([
+                    "cuda/src/system/rvr_checkpoint_replay.cu",
+                    "cuda/src/system/rvr_postflight.cu",
+                ]);
+        }
+        system_builder.build();
 
         #[cfg(any(test, feature = "test-utils"))]
         {

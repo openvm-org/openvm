@@ -3,6 +3,8 @@
 #ifndef OPENVM_TRACER_CHECKPOINT_PREFLIGHT_H
 #define OPENVM_TRACER_CHECKPOINT_PREFLIGHT_H
 
+#include <assert.h>
+
 #include "openvm_state.h"
 
 static constexpr uint32_t CHECKPOINT_PREFLIGHT_ERROR_NONE = 0u;
@@ -73,11 +75,13 @@ checkpoint_preflight_local_flush(
 /* Dirty pages are executor bookkeeping for sparse state transfer. They are
  * deliberately not part of the replay transcript. Rust owns exact-size
  * bitsets, and the normal memory bounds checks imply these indices fit. */
+#pragma clang unsafe_buffer_usage begin
 static __attribute__((always_inline)) inline void
 checkpoint_preflight_mark_dirty_page(uint64_t* restrict dirty_pages,
                                      uint64_t dirty_page_words,
                                      uint64_t page) {
   uint64_t word = page >> 6;
+  assert(dirty_pages != NULL && word < dirty_page_words);
   assume(dirty_pages != NULL && word < dirty_page_words);
   dirty_pages[word] |= 1ull << (page & 63ull);
 }
@@ -219,6 +223,7 @@ checkpoint_preflight_append_checkpoint(
   p->last_checkpoint_retired = p->retired;
   return true;
 }
+#pragma clang unsafe_buffer_usage end
 
 /* Extension callbacks use one tracing ABI in every execution mode. Timestamp
  * and residual accounting for checkpoint preflight stays block-local, so the

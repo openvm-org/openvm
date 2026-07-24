@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{borrow::Borrow, sync::Arc};
 
 use openvm_circuit::{
     arch::{
@@ -407,8 +407,8 @@ macro_rules! store_replay_test {
                 .iter()
                 .all(|&count| count == F::ZERO));
 
-            // Public-values stores retain the legacy executor path, but direct RVR replay is
-            // deliberately AS2-only until the transcript logs those side effects.
+            // Public-values stores share the same opcode and row shape. Replay must carry the
+            // instruction's address space into the row rather than replacing it with AS2.
             let public_store = Instruction::<F>::from_usize(
                 $opcode.global_opcode(),
                 [
@@ -425,17 +425,30 @@ macro_rules! store_replay_test {
                 public_store,
                 Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
             ]);
+            let mut public_init = init_memory.clone();
+            for offset in 0..RV64_REGISTER_NUM_LIMBS {
+                public_init.insert((RV64_REGISTER_AS, (reg(1) + offset) as u32), 0);
+            }
+            let public_execution = VmExecutor::new(Rv64IConfig {
+                system: test_system_config(),
+                ..Default::default()
+            })
+            .unwrap()
+            .rvr_preflight_instance(
+                &VmExe::new(public_program.clone()).with_init_memory(public_init),
+                None,
+            )
+            .unwrap()
+            .execute(Vec::<Vec<u8>>::new(), RvrPreflightLimits::new(4, 8))
+            .unwrap();
+            assert_eq!(
+                public_execution.transcript.memory_log[2].address_space(),
+                PUBLIC_VALUES_AS
+            );
             let d_public_program =
                 GpuRvrProgram::upload(&public_program, &memory_config, &device_ctx).unwrap();
             let (d_public, d_public_plan) = d_public_program
-                .upload_transcript(
-                    &RvrPreflightTranscript {
-                        program_log: noncross_execution.transcript.program_log.clone(),
-                        memory_log: noncross_execution.transcript.memory_log.clone(),
-                        initial_write_log: noncross_execution.transcript.initial_write_log.clone(),
-                    },
-                    RvrPreflightEndpoint::Terminated,
-                )
+                .upload_transcript(&public_execution.transcript, public_execution.endpoint)
                 .unwrap();
             let public_range = Arc::new(VariableRangeCheckerChipGPU::new(
                 default_var_range_checker_bus(),
@@ -448,17 +461,67 @@ macro_rules! store_replay_test {
                 address_bits,
                 timestamp_max_bits,
             );
-            public_chip
+            let public_ctx = public_chip
                 .generate_proving_ctx_from_rvr(&d_public_program, &d_public, &d_public_plan)
                 .unwrap();
-            assert_eq!(d_public.error_code().unwrap(), 264);
-            assert!(public_range
+            assert_eq!(d_public.error_code().unwrap(), 0);
+            let public_trace =
+                transport_matrix_d2h_row_major(&public_ctx.common_main, &device_ctx).unwrap();
+            let public_row = public_trace.row_slice(0).unwrap();
+            let (adapter_row, _) = public_row.split_at(Rv64StoreMultiByteAdapterCols::<F>::width());
+            let public_adapter: &Rv64StoreMultiByteAdapterCols<F> = adapter_row.borrow();
+            assert_eq!(public_adapter.mem_as, F::from_u32(PUBLIC_VALUES_AS));
+
+            // Any address space outside the two AIR-supported store spaces fails before lookup
+            // histograms are touched.
+            let unsupported_store = Instruction::<F>::from_usize(
+                $opcode.global_opcode(),
+                [
+                    reg(2),
+                    reg(1),
+                    0,
+                    RV64_REGISTER_AS as usize,
+                    PUBLIC_VALUES_AS as usize + 1,
+                    1,
+                    0,
+                ],
+            );
+            let unsupported_program = Program::from_instructions(&[
+                unsupported_store,
+                Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
+            ]);
+            let d_unsupported_program =
+                GpuRvrProgram::upload(&unsupported_program, &memory_config, &device_ctx).unwrap();
+            let (d_unsupported, d_unsupported_plan) = d_unsupported_program
+                .upload_transcript(&public_execution.transcript, public_execution.endpoint)
+                .unwrap();
+            let unsupported_range = Arc::new(VariableRangeCheckerChipGPU::new(
+                default_var_range_checker_bus(),
+                device_ctx.clone(),
+            ));
+            let unsupported_bitwise =
+                Arc::new(BitwiseOperationLookupChipGPU::new(device_ctx.clone()));
+            let unsupported_chip = $gpu_chip::new(
+                unsupported_range.clone(),
+                unsupported_bitwise.clone(),
+                address_bits,
+                timestamp_max_bits,
+            );
+            unsupported_chip
+                .generate_proving_ctx_from_rvr(
+                    &d_unsupported_program,
+                    &d_unsupported,
+                    &d_unsupported_plan,
+                )
+                .unwrap();
+            assert_eq!(d_unsupported.error_code().unwrap(), 264);
+            assert!(unsupported_range
                 .count
                 .to_host_on(&device_ctx)
                 .unwrap()
                 .iter()
                 .all(|&count| count == F::ZERO));
-            assert!(public_bitwise
+            assert!(unsupported_bitwise
                 .count
                 .to_host_on(&device_ctx)
                 .unwrap()

@@ -15,7 +15,7 @@ use {
     },
     openvm_instructions::{
         riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
-        LocalOpcode,
+        LocalOpcode, PUBLIC_VALUES_AS,
     },
     openvm_riscv_transpiler::Rv64LoadStoreOpcode,
 };
@@ -37,10 +37,7 @@ pub struct Rv64StoreByteChipGpu {
 
 #[cfg(feature = "rvr")]
 impl Rv64StoreByteChipGpu {
-    /// Replays the ordinary RV64I main-memory STOREB shape.
-    ///
-    /// Public-values stores use a separate RV64IO execution shape and remain
-    /// fail-closed until that replay path is ported.
+    /// Replays RV64I main-memory and RV64IO public-values STOREB rows.
     pub fn generate_proving_ctx_from_rvr(
         &self,
         program: &GpuRvrProgram,
@@ -74,6 +71,7 @@ impl Rv64StoreByteChipGpu {
                 Rv64LoadStoreOpcode::STOREB.global_opcode().as_usize() as u32,
                 RV64_REGISTER_AS,
                 RV64_MEMORY_AS,
+                PUBLIC_VALUES_AS,
                 self.pointer_max_bits,
                 &self.range_checker.count,
                 &self.bitwise_lookup.count,

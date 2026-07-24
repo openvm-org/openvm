@@ -63,7 +63,10 @@ pub enum ExecuteError {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-fn build_io_state_borrowed(vm_state: &mut VmState<GuestMemory>) -> OpenVmIoState<'_> {
+fn build_io_state_borrowed<'a>(
+    vm_state: &'a mut VmState<GuestMemory>,
+    checkpoint_deferral_dirty_pages: Option<&'a mut [u64]>,
+) -> OpenVmIoState<'a> {
     let memory_ptr = rv64_memory_ptr(vm_state);
     let (deferral_memory, deferral_memory_len_bytes) =
         deferral_memory_ptr(&mut vm_state.memory.memory);
@@ -76,6 +79,7 @@ fn build_io_state_borrowed(vm_state: &mut VmState<GuestMemory>) -> OpenVmIoState
         public_values: public_values_slice(&mut vm_state.memory.memory),
         deferral_memory,
         deferral_memory_len_bytes,
+        checkpoint_deferral_dirty_pages,
         deferrals: &mut streams.deferrals,
     }
 }
@@ -171,8 +175,9 @@ fn run_and_finalize<ModeState>(
     vm_state: &mut VmState<GuestMemory>,
     state: &mut RvState<ModeState>,
     allow_suspended: bool,
+    checkpoint_deferral_dirty_pages: Option<&mut [u64]>,
 ) -> Result<ExecutionStatus, ExecuteError> {
-    let mut io_state = build_io_state_borrowed(vm_state);
+    let mut io_state = build_io_state_borrowed(vm_state, checkpoint_deferral_dirty_pages);
     unsafe {
         register_openvm_io_ctx(compiled, &mut io_state)?;
         for hook in runtime_hooks {
@@ -224,7 +229,7 @@ pub(super) fn execute_pure(
     let initial_regs = read_rv64_registers(vm_state);
     let mut state: PureRvState = init_rvr_state(vm_state, pc);
     state.regs = initial_regs;
-    run_and_finalize(compiled, runtime_hooks, vm_state, &mut state, false)
+    run_and_finalize(compiled, runtime_hooks, vm_state, &mut state, false, None)
         .inspect_err(|error| tracing::warn!(%error, "rvr pure execution failed"))?;
     Ok(())
 }
@@ -256,6 +261,7 @@ pub(super) fn execute_preflight(
         vm_state,
         &mut state,
         allow_suspended,
+        None,
     );
     if state.mode_state.error != 0 {
         return Err(ExecuteError::InvalidPreflightContext(format!(
@@ -325,6 +331,7 @@ pub(super) fn execute_checkpoint_preflight(
         vm_state,
         &mut state,
         allow_suspended,
+        Some(dirty_pages.deferral_mut()),
     );
     if state.mode_state.error != 0 {
         return Err(ExecuteError::InvalidPreflightContext(format!(
@@ -411,6 +418,7 @@ fn execute_pure_with_instret_tracking_impl(
         vm_state,
         &mut state,
         allow_suspended,
+        None,
     )
     .inspect_err(|error| tracing::warn!(%error, "rvr tracked pure execution failed"))?;
     Ok(TrackedExecutionResult {
@@ -432,7 +440,7 @@ pub(super) fn execute_metered_cost(
     let mut state: MeteredCostRvState = init_rvr_state(vm_state, pc);
     state.regs = initial_regs;
 
-    run_and_finalize(compiled, runtime_hooks, vm_state, &mut state, false)
+    run_and_finalize(compiled, runtime_hooks, vm_state, &mut state, false, None)
         .inspect_err(|error| tracing::warn!(%error, "rvr metered-cost execution failed"))?;
     Ok(RvrMeteredCostResult {
         instret: state.mode_state.instret,
@@ -515,6 +523,7 @@ fn execute_metered_impl(
         vm_state,
         &mut state,
         allow_suspended,
+        None,
     )
     .inspect_err(|error| tracing::warn!(%error, "rvr metered execution failed"))?;
 

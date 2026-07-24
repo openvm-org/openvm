@@ -39,26 +39,23 @@ static __device__ bool replay_load_byte(
     ReplayLoadByteInput &out,
     uint32_t *error
 ) {
-    size_t program_index = step.program_index;
-    if (program_index + 1 >= program.len()) {
-        preflight_set_error(error, 221);
+    ReplayProgramTransition transition;
+    if (!replay_program_transition(
+            instructions,
+            pc_base,
+            program,
+            step.program_index,
+            3u,
+            ReplayPcEffect::Sequential,
+            transition,
+            error,
+            221
+        )) {
         return false;
     }
-    auto const &from = program[program_index];
-    auto const &to = program[program_index + 1];
-    if (from.pc < pc_base || (from.pc - pc_base) % DEFAULT_PC_STEP != 0 ||
-        from.pc > UINT32_MAX - DEFAULT_PC_STEP || from.timestamp > UINT32_MAX - 3 ||
-        to.pc != from.pc + DEFAULT_PC_STEP || to.timestamp != from.timestamp + 3) {
-        preflight_set_error(error, 222);
-        return false;
-    }
-
-    size_t instruction_index = (from.pc - pc_base) / DEFAULT_PC_STEP;
-    if (instruction_index >= instructions.len()) {
-        preflight_set_error(error, 223);
-        return false;
-    }
-    auto const &instruction = instructions[instruction_index];
+    auto const &from = *transition.from;
+    auto const &to = *transition.to;
+    auto const &instruction = *transition.instruction;
     uint32_t rd_ptr = instruction.words[1];
     uint32_t rs1_ptr = instruction.words[2];
     uint32_t imm = instruction.words[3];

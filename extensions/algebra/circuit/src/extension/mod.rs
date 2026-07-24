@@ -39,6 +39,9 @@ cfg_if::cfg_if! {
     }
 }
 
+#[cfg(all(test, feature = "rvr"))]
+mod rvr_tests;
+
 pub struct AlgebraCpuProverExt;
 
 #[derive(Clone, Debug, VmConfig, Serialize, Deserialize)]

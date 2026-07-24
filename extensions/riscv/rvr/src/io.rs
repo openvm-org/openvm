@@ -341,7 +341,7 @@ extern "C" fn host_hint_prepare(ctx: *mut c_void, dest_addr: u64, num_words: u32
     let num_words = num_words as usize;
     if num_words == 0
         || num_words > MAX_HINT_BUFFER_DWORDS
-        || !dest_addr.is_multiple_of(RV64_REGISTER_BYTES)
+        || !dest_addr.is_multiple_of(RV64_REGISTER_BYTES as u64)
         || io.memory_ptr.is_null()
     {
         return false;
@@ -763,6 +763,7 @@ mod tests {
             public_values: &mut public_values,
             deferral_memory: null_mut(),
             deferral_memory_len_bytes: 0,
+            checkpoint_deferral_dirty_pages: None,
             deferrals: &mut deferrals,
         };
 
@@ -799,6 +800,7 @@ mod tests {
             public_values: &mut public_values,
             deferral_memory: null_mut(),
             deferral_memory_len_bytes: 0,
+            checkpoint_deferral_dirty_pages: None,
             deferrals: &mut deferrals,
         };
 
@@ -830,6 +832,7 @@ mod tests {
             public_values: &mut public_values,
             deferral_memory: null_mut(),
             deferral_memory_len_bytes: 0,
+            checkpoint_deferral_dirty_pages: None,
             deferrals: &mut deferrals,
         };
         let mut plan = Rv64RevealPlan::default();
@@ -874,6 +877,7 @@ mod tests {
             public_values: &mut public_values,
             deferral_memory: null_mut(),
             deferral_memory_len_bytes: 0,
+            checkpoint_deferral_dirty_pages: None,
             deferrals: &mut deferrals,
         };
         let ctx = &mut io as *mut OpenVmIoState<'_> as *mut c_void;
@@ -910,6 +914,7 @@ mod tests {
             public_values: &mut public_values,
             deferral_memory: null_mut(),
             deferral_memory_len_bytes: 0,
+            checkpoint_deferral_dirty_pages: None,
             deferrals: &mut deferrals,
         };
         let ctx = &mut io as *mut OpenVmIoState<'_> as *mut c_void;
@@ -945,6 +950,7 @@ mod tests {
             public_values: &mut public_values,
             deferral_memory: std::ptr::null_mut(),
             deferral_memory_len_bytes: 0,
+            checkpoint_deferral_dirty_pages: None,
             deferrals: &mut deferrals,
         };
         let ctx = &mut io as *mut OpenVmIoState<'_> as *mut c_void;
@@ -985,6 +991,7 @@ mod tests {
             public_values: &mut public_values,
             deferral_memory: null_mut(),
             deferral_memory_len_bytes: 0,
+            checkpoint_deferral_dirty_pages: None,
             deferrals: &mut deferrals,
         };
         let ctx = &mut io as *mut OpenVmIoState<'_> as *mut c_void;

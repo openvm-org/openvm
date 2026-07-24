@@ -15,6 +15,7 @@ struct ReplayStoreMultiByteInput {
     uint32_t rs1_prev_timestamp;
     uint32_t rs2_prev_timestamp;
     uint32_t write_prev_timestamps[2];
+    uint32_t memory_as;
     uint16_t imm;
     uint8_t imm_sign;
     uint8_t shift;
@@ -41,7 +42,8 @@ static __device__ bool replay_store_multibyte(
     RvrReplayStep const &step,
     uint32_t expected_opcode,
     uint32_t register_as,
-    uint32_t memory_as,
+    uint32_t main_memory_as,
+    uint32_t public_values_as,
     size_t pointer_max_bits,
     ReplayStoreMultiByteInput &out,
     uint32_t *error
@@ -51,29 +53,27 @@ static __device__ bool replay_store_multibyte(
         WIDTH_BYTES == DOUBLEWORD_ACCESS_WIDTH
     );
 
-    size_t program_index = step.program_index;
-    if (program.len() < 2 || program_index >= program.len() - 1) {
-        preflight_set_error(error, 261);
+    ReplayProgramTransition transition;
+    if (!replay_program_transition(
+            instructions,
+            pc_base,
+            program,
+            step.program_index,
+            4u,
+            ReplayPcEffect::Sequential,
+            transition,
+            error,
+            261
+        )) {
         return false;
     }
-    auto const &from = program[program_index];
-    auto const &to = program[program_index + 1];
-    if (from.pc < pc_base || (from.pc - pc_base) % DEFAULT_PC_STEP != 0 ||
-        from.pc > UINT32_MAX - DEFAULT_PC_STEP || from.timestamp > UINT32_MAX - 4 ||
-        to.pc != from.pc + DEFAULT_PC_STEP || to.timestamp != from.timestamp + 4) {
-        preflight_set_error(error, 262);
-        return false;
-    }
-
-    size_t instruction_index = (from.pc - pc_base) / DEFAULT_PC_STEP;
-    if (instruction_index >= instructions.len()) {
-        preflight_set_error(error, 263);
-        return false;
-    }
-    auto const &instruction = instructions[instruction_index];
+    auto const &from = *transition.from;
+    auto const &to = *transition.to;
+    auto const &instruction = *transition.instruction;
     uint32_t rs2_ptr = instruction.words[1];
     uint32_t rs1_ptr = instruction.words[2];
     uint32_t imm = instruction.words[3];
+    uint32_t memory_as = instruction.words[5];
     uint32_t is_valid = instruction.words[6];
     uint32_t imm_sign = instruction.words[7];
     constexpr uint32_t REGISTER_FILE_BYTES = 32 * RV64_REGISTER_NUM_LIMBS;
@@ -82,7 +82,8 @@ static __device__ bool replay_store_multibyte(
     bool rs2_is_canonical =
         rs2_ptr < REGISTER_FILE_BYTES && rs2_ptr % RV64_REGISTER_NUM_LIMBS == 0;
     if (instruction.words[0] != expected_opcode || instruction.words[4] != register_as ||
-        instruction.words[5] != memory_as || imm > UINT16_MAX || is_valid != 1 ||
+        (memory_as != main_memory_as && memory_as != public_values_as) || imm > UINT16_MAX ||
+        is_valid != 1 ||
         imm_sign > 1 || !rs1_is_canonical || !rs2_is_canonical) {
         preflight_set_error(error, 264);
         return false;
@@ -236,6 +237,7 @@ static __device__ bool replay_store_multibyte(
     out.rs2_prev_timestamp = rs2_previous.timestamp;
     out.write_prev_timestamps[0] = write0_previous.timestamp;
     out.write_prev_timestamps[1] = crosses ? write1_previous.timestamp : UINT32_MAX;
+    out.memory_as = memory_as;
     out.imm = static_cast<uint16_t>(imm);
     out.imm_sign = imm_sign;
     out.shift = shift;

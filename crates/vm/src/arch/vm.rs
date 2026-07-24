@@ -698,6 +698,17 @@ pub enum VirtualMachineError {
     ProgramIsNotCommitted,
 }
 
+#[cfg(any(test, all(feature = "cuda", feature = "rvr")))]
+fn begin_rvr_tracegen_session(poisoned: &mut bool) -> Result<(), GenerationError> {
+    if *poisoned {
+        return Err(GenerationError::ExtensionTracegen(
+            "VM is poisoned by an incomplete or failed RVR tracegen session".to_string(),
+        ));
+    }
+    *poisoned = true;
+    Ok(())
+}
+
 /// The [VirtualMachine] struct contains the API to generate proofs for _arbitrary_ programs for a
 /// fixed set of OpenVM instructions and a fixed VM circuit corresponding to those instructions. The
 /// API is specific to a particular [StarkEngine], which specifies a fixed [StarkProtocolConfig] and
@@ -719,6 +730,11 @@ where
     #[getset(get = "pub", get_mut = "pub")]
     pk: DeviceMultiStarkProvingKey<E::PB>,
     chip_complex: VmChipComplex<E::SC, VB::RecordArena, E::PB, VB::SystemChipInventory>,
+    /// RVR trace generation mutates shared lookup histograms. Once a segment
+    /// starts, the VM remains poisoned until its outermost coordinator has
+    /// validated every producer and explicitly completes the session.
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    rvr_tracegen_poisoned: bool,
 }
 
 impl<E, VB> VirtualMachine<E, VB>
@@ -741,6 +757,8 @@ where
             executor,
             pk: d_pk,
             chip_complex,
+            #[cfg(all(feature = "cuda", feature = "rvr"))]
+            rvr_tracegen_poisoned: false,
         })
     }
 
@@ -1168,6 +1186,12 @@ where
         system_records: SystemRecords<Val<E::SC>>,
         record_arenas: Vec<VB::RecordArena>,
     ) -> Result<ProvingContext<E::PB>, GenerationError> {
+        #[cfg(all(feature = "cuda", feature = "rvr"))]
+        if self.rvr_tracegen_poisoned {
+            return Err(GenerationError::ExtensionTracegen(
+                "VM is poisoned by an incomplete or failed RVR tracegen session".to_string(),
+            ));
+        }
         // main tracegen call:
         let ctx = self
             .chip_complex
@@ -1193,6 +1217,12 @@ where
             GenerationError,
         >,
     ) -> Result<ProvingContext<E::PB>, GenerationError> {
+        #[cfg(all(feature = "cuda", feature = "rvr"))]
+        if self.rvr_tracegen_poisoned {
+            return Err(GenerationError::ExtensionTracegen(
+                "VM is poisoned by an incomplete or failed RVR tracegen session".to_string(),
+            ));
+        }
         let ctx = self
             .chip_complex
             .generate_proving_ctx_with_extension_tracegen(
@@ -1475,6 +1505,7 @@ where
         &self,
         program: &crate::arch::rvr::cuda::GpuRvrProgram,
         execution: &crate::arch::rvr::RvrCheckpointPreflightExecution,
+        expected_retired: u32,
         opcodes: crate::arch::rvr::cuda::RvrCheckpointOpcodeBases,
     ) -> Result<
         (
@@ -1510,6 +1541,7 @@ where
                 .collect::<Vec<_>>();
             program.expand_checkpoint_replay(
                 execution,
+                expected_retired,
                 initial_registers.view(),
                 initial_main_memory.view(),
                 &initial_memory_images,
@@ -1539,6 +1571,7 @@ where
             GenerationError,
         >,
     ) -> Result<ProvingContext<openvm_cuda_backend::GpuBackend>, GenerationError> {
+        begin_rvr_tracegen_session(&mut self.rvr_tracegen_poisoned)?;
         // Reset once around the complete segment tracegen phase. Nested CUDA
         // components may report their own deltas, but must not reset this
         // phase-wide high-water mark. The allocator's logical peak is the
@@ -1575,12 +1608,32 @@ where
         memory.emit_metrics();
         result
     }
+
+    /// Clears the RVR poison only after the outermost extension coordinator has
+    /// checked complete opcode ownership. Errors deliberately leave the VM
+    /// poisoned because per-producer lookup counts are not rolled back.
+    #[doc(hidden)]
+    pub fn complete_rvr_tracegen_session(&mut self) {
+        debug_assert!(self.rvr_tracegen_poisoned);
+        self.rvr_tracegen_poisoned = false;
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{SystemConfig, VirtualMachine, CONNECTOR_AIR_ID, PROGRAM_AIR_ID};
+    use super::{
+        begin_rvr_tracegen_session, SystemConfig, VirtualMachine, CONNECTOR_AIR_ID, PROGRAM_AIR_ID,
+    };
     use crate::{system::SystemCpuBuilder, utils::test_cpu_engine};
+
+    #[test]
+    fn late_rvr_coverage_failure_poison_rejects_retry() {
+        let mut poisoned = false;
+        begin_rvr_tracegen_session(&mut poisoned).unwrap();
+        // A late coverage failure deliberately does not complete the session.
+        let retry = begin_rvr_tracegen_session(&mut poisoned).unwrap_err();
+        assert!(retry.to_string().contains("poisoned"));
+    }
 
     #[test]
     fn keygen_marks_required_airs_for_continuations() {

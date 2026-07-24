@@ -725,15 +725,21 @@ impl CProject {
             self.execution_kind,
             RvrExecutionKind::Preflight | RvrExecutionKind::CheckpointPreflight
         ) {
-            if extensions.uses_memory_wrappers() {
+            // Legacy value tracing needs every extension access to flow through
+            // its event logger. Checkpoint preflight deliberately uses the raw
+            // range wrappers: execution records only residual results here, and
+            // GPU replay reconstructs the timed accesses later.
+            if self.execution_kind == RvrExecutionKind::Preflight
+                && extensions.uses_memory_wrappers()
+            {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidInput,
-                    "RVR preflight does not yet support extension memory wrappers",
+                    "RVR value-trace preflight does not support extension memory wrappers",
                 ));
             }
             for block in blocks {
                 for instruction in &block.instructions {
-                    if !instruction.instr.supports_preflight() {
+                    if !supports_preflight_mode(self.execution_kind, instruction.instr.as_ref()) {
                         return Err(io::Error::new(
                             io::ErrorKind::InvalidInput,
                             format!(
@@ -745,7 +751,7 @@ impl CProject {
                     }
                 }
                 if let Terminator::Instruction { node, .. } = &block.terminator {
-                    if !node.supports_preflight() {
+                    if !supports_preflight_mode(self.execution_kind, node.as_ref()) {
                         return Err(io::Error::new(
                             io::ErrorKind::InvalidInput,
                             format!(
@@ -1694,6 +1700,14 @@ fn instr_accesses_memory(instr: &dyn ExtInstr) -> bool {
     instr.accesses_memory()
 }
 
+fn supports_preflight_mode(kind: RvrExecutionKind, instr: &dyn ExtInstr) -> bool {
+    match kind {
+        RvrExecutionKind::Preflight => instr.supports_preflight(),
+        RvrExecutionKind::CheckpointPreflight => instr.supports_checkpoint_preflight(),
+        _ => true,
+    }
+}
+
 fn terminator_accesses_memory(terminator: &Terminator) -> bool {
     match terminator {
         Terminator::Instruction { node, .. } => node.accesses_memory(),
@@ -1715,7 +1729,7 @@ mod tests {
 
     use rvr_openvm_ir::{Block, CfgEffect, ExtEmitCtx, ExtInstr, InstrAt, Terminator, Variable};
 
-    use super::{CProject, EmitContext, EmitMode, RvrExecutionKind};
+    use super::{supports_preflight_mode, CProject, EmitContext, EmitMode, RvrExecutionKind};
 
     #[test]
     fn metered_state_layout_includes_memory_flush_callback() {
@@ -1785,6 +1799,38 @@ mod tests {
         fn clone_box(&self) -> Box<dyn ExtInstr> {
             Box::new(self.clone())
         }
+    }
+
+    #[derive(Clone, Debug)]
+    struct CheckpointOnlyInstr;
+
+    impl ExtInstr for CheckpointOnlyInstr {
+        fn emit_c(&self, _ctx: &mut dyn ExtEmitCtx) {}
+
+        fn supports_checkpoint_preflight(&self) -> bool {
+            true
+        }
+
+        fn cfg_effect(&self) -> CfgEffect {
+            CfgEffect::None
+        }
+
+        fn clone_box(&self) -> Box<dyn ExtInstr> {
+            Box::new(self.clone())
+        }
+    }
+
+    #[test]
+    fn checkpoint_only_instruction_stays_rejected_by_legacy_value_trace() {
+        let instruction = CheckpointOnlyInstr;
+        assert!(!supports_preflight_mode(
+            RvrExecutionKind::Preflight,
+            &instruction
+        ));
+        assert!(supports_preflight_mode(
+            RvrExecutionKind::CheckpointPreflight,
+            &instruction
+        ));
     }
 
     fn block_with_instruction(instruction: Box<dyn ExtInstr>) -> Block {

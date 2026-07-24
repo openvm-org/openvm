@@ -11,10 +11,288 @@ use openvm_circuit_primitives::range_tuple::RangeTupleCheckerChipGPU;
 use openvm_cuda_backend::{BabyBearPoseidon2GpuEngine as GpuBabyBearPoseidon2Engine, GpuBackend};
 use openvm_riscv_circuit::Rv64ImGpuProverExt;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
+#[cfg(feature = "rvr")]
+use {
+    openvm_bigint_transpiler::{
+        Rv64BaseAlu256Opcode, Rv64BranchEqual256Opcode, Rv64BranchLessThan256Opcode,
+        Rv64LessThan256Opcode, Rv64Mul256Opcode, Rv64Shift256Opcode,
+    },
+    openvm_circuit::arch::{
+        rvr::{
+            cuda::{
+                GpuRvrInputError, GpuRvrProgram, GpuRvrReplayPlan, GpuRvrTranscript,
+                RvrCheckpointAccessRegistry, RvrCheckpointAccessSpan,
+            },
+            RvrCheckpointPreflightExecution,
+        },
+        GenerationError, MemoryConfig, VirtualMachine,
+    },
+    openvm_circuit_primitives::AnyChip,
+    openvm_cuda_common::stream::GpuDeviceCtx,
+    openvm_instructions::{program::Program, riscv::RV64_MEMORY_AS, LocalOpcode},
+    openvm_riscv_circuit::Rv64ImRvrGpuTracegen,
+    openvm_stark_backend::{
+        p3_field::PrimeField32,
+        prover::{AirProvingContext, ProvingContext},
+    },
+};
 
 use super::*;
 
 pub struct Int256GpuProverExt;
+
+#[cfg(feature = "rvr")]
+pub struct Int256RvrGpuTracegen<'a> {
+    program: &'a GpuRvrProgram,
+    transcript: &'a GpuRvrTranscript,
+    replay_plan: &'a GpuRvrReplayPlan,
+    pending_add_sub: bool,
+    pending_bitwise: bool,
+    pending_less_than: bool,
+    pending_branch_equal: bool,
+    pending_branch_less_than: bool,
+    pending_mul: bool,
+    pending_shift_logical: bool,
+    pending_shift_arithmetic: bool,
+}
+
+#[cfg(feature = "rvr")]
+impl<'a> Int256RvrGpuTracegen<'a> {
+    fn opcodes<T: LocalOpcode>(opcodes: impl IntoIterator<Item = T>) -> Vec<u32> {
+        opcodes
+            .into_iter()
+            .map(|opcode| opcode.global_opcode().as_usize() as u32)
+            .collect()
+    }
+
+    fn extension_opcodes() -> Vec<u32> {
+        Self::opcodes(Rv64BaseAlu256Opcode::iter())
+            .into_iter()
+            .chain(Self::opcodes(Rv64Shift256Opcode::iter()))
+            .chain(Self::opcodes(Rv64LessThan256Opcode::iter()))
+            .chain(Self::opcodes(Rv64BranchEqual256Opcode::iter()))
+            .chain(Self::opcodes(Rv64BranchLessThan256Opcode::iter()))
+            .chain(Self::opcodes(Rv64Mul256Opcode::iter()))
+            .collect()
+    }
+
+    #[doc(hidden)]
+    pub fn register_checkpoint_access_schedules(
+        registry: &mut RvrCheckpointAccessRegistry,
+    ) -> Result<(), GpuRvrInputError> {
+        let alu_spans = [
+            RvrCheckpointAccessSpan::read_fixed(RV64_MEMORY_AS, 0, 4),
+            RvrCheckpointAccessSpan::read_fixed(RV64_MEMORY_AS, 1, 4),
+            RvrCheckpointAccessSpan::write_fixed_from_residuals(RV64_MEMORY_AS, 2, 4),
+        ];
+        for opcode in Self::opcodes(Rv64BaseAlu256Opcode::iter())
+            .into_iter()
+            .chain(Self::opcodes(Rv64Shift256Opcode::iter()))
+            .chain(Self::opcodes(Rv64LessThan256Opcode::iter()))
+            .chain(Self::opcodes(Rv64Mul256Opcode::iter()))
+        {
+            registry.register(opcode, &[2, 3, 1], (1 << 6) | (1 << 7), 4, 5, &alu_spans)?;
+        }
+        let branch_spans = [
+            RvrCheckpointAccessSpan::read_fixed(RV64_MEMORY_AS, 0, 4),
+            RvrCheckpointAccessSpan::read_fixed(RV64_MEMORY_AS, 1, 4),
+        ];
+        for opcode in Self::opcodes(Rv64BranchEqual256Opcode::iter())
+            .into_iter()
+            .chain(Self::opcodes(Rv64BranchLessThan256Opcode::iter()))
+        {
+            registry.register_branch_residual(
+                opcode,
+                &[1, 2],
+                (1 << 6) | (1 << 7),
+                4,
+                5,
+                &branch_spans,
+                3,
+            )?;
+        }
+        Ok(())
+    }
+
+    pub fn upload_checkpoint_program<F: PrimeField32>(
+        program: &Program<F>,
+        memory_config: &MemoryConfig,
+        device_ctx: &GpuDeviceCtx,
+    ) -> Result<GpuRvrProgram, GpuRvrInputError> {
+        let mut registry = RvrCheckpointAccessRegistry::default();
+        Self::register_checkpoint_access_schedules(&mut registry)?;
+        registry.validate_no_native_collisions(Rv64ImRvrGpuTracegen::checkpoint_opcode_bases())?;
+        GpuRvrProgram::upload_with_checkpoint_access_registry(
+            program,
+            memory_config,
+            &registry,
+            device_ctx,
+        )
+    }
+
+    pub fn expand_checkpoint_replay<VB>(
+        vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
+        program: &GpuRvrProgram,
+        execution: &RvrCheckpointPreflightExecution,
+        expected_retired: u32,
+    ) -> Result<(GpuRvrTranscript, GpuRvrReplayPlan), GpuRvrInputError>
+    where
+        VB: VmBuilder<
+            GpuBabyBearPoseidon2Engine,
+            RecordArena = DenseRecordArena,
+            SystemChipInventory = SystemChipInventoryGPU,
+        >,
+    {
+        vm.expand_rvr_checkpoint_replay(
+            program,
+            execution,
+            expected_retired,
+            Rv64ImRvrGpuTracegen::checkpoint_opcode_bases(),
+        )
+    }
+
+    pub fn new(
+        program: &'a GpuRvrProgram,
+        transcript: &'a GpuRvrTranscript,
+        replay_plan: &'a GpuRvrReplayPlan,
+    ) -> Self {
+        let has_any = |opcodes: Vec<u32>| {
+            opcodes.into_iter().any(|opcode| {
+                !replay_plan
+                    .opcode_range(openvm_instructions::VmOpcode::from_usize(opcode as usize))
+                    .is_empty()
+            })
+        };
+        Self {
+            program,
+            transcript,
+            replay_plan,
+            pending_add_sub: has_any(
+                Self::opcodes(Rv64BaseAlu256Opcode::iter())
+                    .into_iter()
+                    .take(2)
+                    .collect(),
+            ),
+            pending_bitwise: has_any(
+                Self::opcodes(Rv64BaseAlu256Opcode::iter())
+                    .into_iter()
+                    .skip(2)
+                    .collect(),
+            ),
+            pending_less_than: has_any(Self::opcodes(Rv64LessThan256Opcode::iter())),
+            pending_branch_equal: has_any(Self::opcodes(Rv64BranchEqual256Opcode::iter())),
+            pending_branch_less_than: has_any(Self::opcodes(Rv64BranchLessThan256Opcode::iter())),
+            pending_mul: has_any(Self::opcodes(Rv64Mul256Opcode::iter())),
+            pending_shift_logical: has_any(
+                Self::opcodes(Rv64Shift256Opcode::iter())
+                    .into_iter()
+                    .take(2)
+                    .collect(),
+            ),
+            pending_shift_arithmetic: has_any(
+                Self::opcodes(Rv64Shift256Opcode::iter())
+                    .into_iter()
+                    .skip(2)
+                    .collect(),
+            ),
+        }
+    }
+
+    pub fn generate_for_chip(
+        &mut self,
+        chip: &dyn AnyChip<DenseRecordArena, GpuBackend>,
+    ) -> Result<Option<AirProvingContext<GpuBackend>>, GpuRvrInputError> {
+        macro_rules! generate {
+            ($chip_ty:ty, $pending:ident) => {
+                if let Some(chip) = chip.as_any().downcast_ref::<$chip_ty>() {
+                    self.$pending = false;
+                    return chip
+                        .generate_proving_ctx_from_rvr(
+                            self.program,
+                            self.transcript,
+                            self.replay_plan,
+                        )
+                        .map(Some);
+                }
+            };
+        }
+        generate!(AddSub256ChipGpu, pending_add_sub);
+        generate!(BitwiseLogic256ChipGpu, pending_bitwise);
+        generate!(LessThan256ChipGpu, pending_less_than);
+        generate!(BranchEqual256ChipGpu, pending_branch_equal);
+        generate!(BranchLessThan256ChipGpu, pending_branch_less_than);
+        generate!(Multiplication256ChipGpu, pending_mul);
+        generate!(ShiftLogical256ChipGpu, pending_shift_logical);
+        generate!(ShiftRightArithmetic256ChipGpu, pending_shift_arithmetic);
+        Ok(None)
+    }
+
+    pub fn finish(self) -> Result<(), GpuRvrInputError> {
+        let pending = [
+            (self.pending_add_sub, "AddSub256"),
+            (self.pending_bitwise, "BitwiseLogic256"),
+            (self.pending_less_than, "LessThan256"),
+            (self.pending_branch_equal, "BranchEqual256"),
+            (self.pending_branch_less_than, "BranchLessThan256"),
+            (self.pending_mul, "Multiplication256"),
+            (self.pending_shift_logical, "ShiftLogical256"),
+            (self.pending_shift_arithmetic, "ShiftRightArithmetic256"),
+        ]
+        .into_iter()
+        .filter_map(|(pending, name)| pending.then_some(name))
+        .collect::<Vec<_>>();
+        if pending.is_empty() {
+            Ok(())
+        } else {
+            Err(GpuRvrInputError::InvalidTranscript(format!(
+                "Int256 RVR GPU tracegen did not visit producers {pending:?}"
+            )))
+        }
+    }
+
+    pub fn generate_proving_ctx<VB>(
+        mut self,
+        vm: &mut VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
+    ) -> Result<ProvingContext<GpuBackend>, GenerationError>
+    where
+        VB: VmBuilder<
+            GpuBabyBearPoseidon2Engine,
+            RecordArena = DenseRecordArena,
+            SystemChipInventory = SystemChipInventoryGPU,
+        >,
+    {
+        let extension_opcodes = Self::extension_opcodes();
+        let mut rv64 = Rv64ImRvrGpuTracegen::new_after_claiming_extension_opcodes(
+            self.program,
+            self.transcript,
+            self.replay_plan,
+            &extension_opcodes,
+        )
+        .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
+        let ctx = vm.generate_proving_ctx_from_rvr_unchecked_coverage(
+            self.program,
+            self.transcript,
+            self.replay_plan,
+            |insertion_idx, chip| {
+                if let Some(ctx) = self
+                    .generate_for_chip(chip)
+                    .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?
+                {
+                    Ok(ctx)
+                } else {
+                    rv64.generate_for_chip(insertion_idx, chip)
+                        .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))
+                }
+            },
+        )?;
+        self.finish()
+            .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
+        rv64.finish()
+            .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
+        vm.complete_rvr_tracegen_session();
+        Ok(ctx)
+    }
+}
 
 // This implementation is specific to GpuBackend because the lookup chips
 // (VariableRangeCheckerChipGPU, BitwiseOperationLookupChipGPU) are specific to GpuBackend.
@@ -159,3 +437,6 @@ impl VmBuilder<E> for Int256Rv64GpuBuilder {
         Ok(chip_complex)
     }
 }
+
+#[cfg(all(test, feature = "rvr"))]
+mod tests;
