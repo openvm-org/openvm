@@ -23,7 +23,7 @@ use crate::{
 use crate::{
     arch::{
         rvr::{cuda::GpuRvrProgram, RvrPreflightEndpoint, RvrPreflightTranscript},
-        Arena, DenseRecordArena, EmptyMultiRowLayout, MemoryConfig, RecordArena,
+        DenseRecordArena, EmptyMultiRowLayout, MemoryConfig, RecordArena,
     },
     system::{
         cuda::phantom::PhantomChipGPU,

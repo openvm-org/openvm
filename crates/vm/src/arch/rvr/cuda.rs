@@ -27,7 +27,7 @@ use thiserror::Error;
 use super::postflight::RvrReplayData;
 use super::{
     bridge::read_rv64_registers, checkpoint_preflight::RvrCheckpointPreflightExecution,
-    postflight::RvrReplayStep, RvrPreflightEndpoint, RvrPreflightTranscript,
+    RvrPreflightEndpoint, RvrPreflightTranscript,
 };
 use crate::{
     arch::{
@@ -43,6 +43,15 @@ use crate::{
 pub struct RvrReplayInstruction {
     /// Global opcode followed by the seven canonical instruction operands.
     pub words: [u32; 8],
+}
+
+/// Location of one executed instruction and the first timed memory event in
+/// its timestamp interval. The final program sentinel has no entry.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) struct RvrReplayStep {
+    pub program_index: u32,
+    pub memory_start: u32,
 }
 
 const _: () = assert!(size_of::<RvrReplayInstruction>() == 32);
