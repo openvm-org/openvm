@@ -283,6 +283,29 @@ remove per-PC logging, avoid raw seed candidates, and replace general 20-byte
 events with only the narrow values required for parallel replay; “omit reads” by
 itself is not an acceptable design.
 
+An exact post-run audit of the same 3.051-billion-instruction Reth workload found
+456,833,245 enabled RV64 loads and 3,819,217 materialized hint/advice words. None
+of the loads targeted x0 and `HINT_RANDOM` did not execute. This makes the exact
+minimal ordered residual stream 460,652,462 `u64` values, or 3.685 GB and 1.208
+bytes per guest instruction.
+
+The selected executor experiment uses periodic block-boundary checkpoints plus
+that single residual stream. Each 264-byte checkpoint stores PC, timestamp,
+cumulative retired count, residual cursor, and x1-x31. The existing initial and
+final VM states anchor the chain and are not duplicated. There is no header,
+schema version, per-PC stream, general memory log, seed log, or record arena.
+The first checkpoint target is 512 instructions, delayed to the next actual RVR
+block entry. Estimated total output is about 5.26 GB before measuring the exact
+delayed-boundary count, roughly 36x smaller than the rejected transcript.
+
+GPU replay must retain the immutable segment-start memory image, replay chunks,
+derive transient access descriptors, and perform a chronology join to recover
+full four-cell values and predecessor timestamps. Seeds are removable only under
+that initial-memory lifetime invariant. Descriptor/sort scratch must be released
+before proving and must not move the existing approximately 15 GB proof/GKR peak
+into trace generation. Continuation dirty-page tracking is reused as execution
+transfer metadata in VM state, not added as another transcript log.
+
 ### PR #3020 is a reference, not the architecture
 
 OpenVM PR #3020 should be audited exhaustively for reusable implementation ideas
