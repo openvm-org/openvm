@@ -7,6 +7,8 @@ mod evm;
 mod halo2;
 #[cfg(feature = "root-prover")]
 mod root;
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+mod rvr;
 mod stark;
 pub mod vm;
 
