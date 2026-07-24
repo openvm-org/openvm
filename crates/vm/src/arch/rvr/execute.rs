@@ -16,6 +16,9 @@ use super::{
         deferral_memory_ptr, public_values_slice, read_rv64_registers, rv64_memory_ptr,
         write_rv64_registers,
     },
+    checkpoint_preflight::{
+        CheckpointPreflightBuffers, RvrCheckpointPreflightLimits, RvrCheckpointPreflightTranscript,
+    },
     compile::RvrCompiled,
     io::{host_hint_stream_set, OpenVmIoState},
     metered::{metered_periodic_check, RvrMeteredExecutionOutcome, SegmentationState},
@@ -24,8 +27,8 @@ use super::{
         PreflightBuffers, RvrPreflightEndpoint, RvrPreflightLimits, RvrPreflightTranscript,
     },
     state::{
-        init_rvr_state, MeteredCostRvState, MeteredRvState, PreflightRvState, PureRvState,
-        PureWithInstretTrackingRvState,
+        init_rvr_state, CheckpointPreflightRvState, MeteredCostRvState, MeteredRvState,
+        PreflightRvState, PureRvState, PureWithInstretTrackingRvState,
     },
 };
 use crate::{arch::VmState, system::memory::online::GuestMemory};
@@ -278,6 +281,75 @@ pub(super) fn execute_preflight(
         unsafe { buffers.finish(&state.mode_state, final_pc, timestamp_max_bits, vm_state) }
             .map_err(ExecuteError::InvalidPreflightContext)?;
     Ok((transcript, endpoint))
+}
+
+/// Execute the experimental checkpoint-and-residual preflight artifact.
+pub(super) fn execute_checkpoint_preflight(
+    compiled: &RvrCompiled,
+    runtime_hooks: &[Box<dyn RvrRuntimeExtension>],
+    vm_state: &mut VmState<GuestMemory>,
+    limits: RvrCheckpointPreflightLimits,
+    timestamp_max_bits: usize,
+    allow_suspended: bool,
+    reuse: Option<RvrCheckpointPreflightTranscript>,
+) -> Result<
+    (
+        RvrCheckpointPreflightTranscript,
+        RvrPreflightEndpoint,
+        u32,
+        u32,
+    ),
+    ExecuteError,
+> {
+    require_execution_kind(
+        compiled,
+        "CheckpointPreflight",
+        &[RvrExecutionKind::CheckpointPreflight],
+    )?;
+    let pc = vm_state.pc();
+    let mut buffers = match reuse {
+        Some(transcript) => CheckpointPreflightBuffers::reuse(limits, transcript),
+        None => CheckpointPreflightBuffers::new(limits),
+    }
+    .map_err(ExecuteError::InvalidPreflightContext)?;
+    let mut state: CheckpointPreflightRvState = init_rvr_state(vm_state, pc);
+    state.regs = read_rv64_registers(vm_state);
+    state.mode_state = buffers.ffi_state();
+
+    let execution = run_and_finalize(
+        compiled,
+        runtime_hooks,
+        vm_state,
+        &mut state,
+        allow_suspended,
+    );
+    if state.mode_state.error != 0 {
+        return Err(ExecuteError::InvalidPreflightContext(format!(
+            "generated checkpoint-preflight logger failed with code {}",
+            state.mode_state.error
+        )));
+    }
+    let status = execution
+        .inspect_err(|error| tracing::warn!(%error, "rvr checkpoint preflight execution failed"))?;
+    let final_pc = u32::try_from(state.pc).map_err(|_| {
+        ExecuteError::InvalidPreflightContext("final PC does not fit in u32".to_string())
+    })?;
+    let final_timestamp = state.mode_state.timestamp;
+    let endpoint = match status {
+        ExecutionStatus::Terminated => RvrPreflightEndpoint::Terminated,
+        ExecutionStatus::Suspended => RvrPreflightEndpoint::Suspended {
+            resume_pc: final_pc,
+            final_timestamp,
+        },
+        _ => unreachable!("run_and_finalize accepted an invalid checkpoint-preflight status"),
+    };
+    // SAFETY: the raw state was created from `buffers` immediately above and
+    // neither vector can reallocate during generated execution.
+    let (transcript, checked_timestamp, retired) =
+        unsafe { buffers.finish(&state.mode_state, timestamp_max_bits) }
+            .map_err(ExecuteError::InvalidPreflightContext)?;
+    debug_assert_eq!(final_timestamp, checked_timestamp);
+    Ok((transcript, endpoint, checked_timestamp, retired))
 }
 
 /// Execute an instret-tracking pure artifact until termination.

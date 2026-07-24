@@ -1,9 +1,11 @@
 //! Machine state shared with the generated rvr-openvm runtime.
 
+mod checkpoint_preflight;
 mod instret;
 mod preflight;
 mod state;
 
+pub use checkpoint_preflight::{CheckpointPreflightState, RvrCheckpoint};
 pub use instret::InstretTrackingState;
 pub use preflight::{
     PreflightInitialWrite, PreflightMemoryEvent, PreflightProgramEvent, PreflightState,

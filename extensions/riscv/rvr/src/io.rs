@@ -41,10 +41,12 @@ impl ExtInstr for HintStoreWInstr {
         let ptr = ctx.read_var(self.ptr_reg);
         ctx.emit_checked_call_without_page_flush("openvm_hint_prepare", &[&ptr, "1u"]);
         ctx.reserve_preflight_writes("1u", "2u");
+        ctx.reserve_replay_values("1u");
         ctx.write_line("uint64_t hint_word;");
         ctx.emit_call_without_page_flush("openvm_hint_read_words", &["&hint_word", "1u"]);
         ctx.advance_timestamp(1);
         ctx.write_aligned_mem_block(&ptr, "hint_word");
+        ctx.append_replay_value("hint_word");
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -85,20 +87,23 @@ impl ExtInstr for HintBufferInstr {
         let callback_count = format!("(uint32_t)({n})");
         ctx.emit_checked_call_without_page_flush("openvm_hint_prepare", &[&ptr, &callback_count]);
         ctx.reserve_preflight_writes(&callback_count, &format!("((uint32_t)({n}) * 3u - 2u)"));
+        ctx.reserve_replay_values(&callback_count);
         ctx.write_line(&format!("uint64_t hint_words[{MAX_HINT_BUFFER_DWORDS}u];"));
         ctx.emit_call_without_page_flush(
             "openvm_hint_read_words",
             &["hint_words", &callback_count],
         );
-        ctx.write_aligned_mem_block(&ptr, "hint_words[0]");
         ctx.write_line(&format!(
-            "for (uint32_t hint_idx = 1u; hint_idx < (uint32_t)({n}); ++hint_idx) {{"
+            "for (uint32_t hint_idx = 0u; hint_idx < (uint32_t)({n}); ++hint_idx) {{"
         ));
+        ctx.write_line("if (hint_idx != 0u) {");
         ctx.advance_timestamp(2);
+        ctx.write_line("}");
         ctx.write_aligned_mem_block(
             &format!("({ptr} + (uint64_t)hint_idx * 8ull)"),
             "hint_words[hint_idx]",
         );
+        ctx.append_replay_value("hint_words[hint_idx]");
         ctx.write_line("}");
         // Block entry credits one row; runtime metering adds the remaining
         // `(n - 1)` rows.
@@ -150,6 +155,17 @@ impl ExtInstr for RevealInstr {
             std::cmp::Ordering::Greater => format!("({ptr} + 0x{:08x}ull)", self.offset),
         };
         let width = format!("{}u", self.width.bytes());
+        let slots = if self.width == MemWidth::Byte {
+            "1u"
+        } else {
+            "2u"
+        };
+        // The callback emits the proof-visible public-values memory events.
+        // Reserve only their logical clock here so compact checkpoint
+        // preflight can preserve the schedule without logging those events.
+        // Full preflight still performs its exact write reservation inside the
+        // callback after materializing the crossing-access plan.
+        ctx.reserve_preflight_writes("0u", slots);
         ctx.emit_checked_call("openvm_reveal", &["state", &src, &ptr, &addr, &width]);
         ctx.trace_page_access(&addr, self.width, PageAddressSpace::Other(PUBLIC_VALUES_AS));
     }
@@ -500,6 +516,14 @@ mod tests {
             self.write_line(&format!("reserve_preflight_writes({writes}, {slots});"));
         }
 
+        fn reserve_replay_values(&mut self, count: &str) {
+            self.write_line(&format!("reserve_replay_values({count});"));
+        }
+
+        fn append_replay_value(&mut self, value: &str) {
+            self.write_line(&format!("append_replay_value({value});"));
+        }
+
         fn emit_call(&mut self, name: &str, args: &[&str]) {
             self.write_line(&format!("{name}({});", args.join(", ")));
         }
@@ -582,9 +606,16 @@ mod tests {
         instr.emit_c(&mut ctx);
         assert_eq!(
             ctx.lines[0],
-            format!("bool tmp0 = openvm_reveal(state, r1, r2, r2, {width}u);")
+            format!(
+                "reserve_preflight_writes(0u, {}u);",
+                if width == 1 { 1 } else { 2 }
+            )
         );
-        assert_eq!(ctx.lines[1], "if (unlikely(!tmp0)) {");
+        assert_eq!(
+            ctx.lines[1],
+            format!("bool tmp1 = openvm_reveal(state, r1, r2, r2, {width}u);")
+        );
+        assert_eq!(ctx.lines[2], "if (unlikely(!tmp1)) {");
     }
 
     #[test]
@@ -637,13 +668,14 @@ mod tests {
         assert!(instr.supports_preflight());
         instr.emit_c(&mut ctx);
 
+        assert_eq!(ctx.lines[0], "reserve_preflight_writes(0u, 2u);");
         assert_eq!(
-            ctx.lines[0],
-            "bool tmp0 = openvm_reveal(state, r5, r10, (r10 + 0x0000000cull), 4u);"
+            ctx.lines[1],
+            "bool tmp1 = openvm_reveal(state, r5, r10, (r10 + 0x0000000cull), 4u);"
         );
-        assert_eq!(ctx.lines[1], "if (unlikely(!tmp0)) {");
+        assert_eq!(ctx.lines[2], "if (unlikely(!tmp1)) {");
         assert_eq!(
-            ctx.lines[4],
+            ctx.lines[5],
             format!("trace_page_access(state, (r10 + 0x0000000cull), 4u, {PUBLIC_VALUES_AS}u);")
         );
     }
@@ -665,10 +697,12 @@ mod tests {
                 "trap;",
                 "}",
                 "reserve_preflight_writes(1u, 2u);",
+                "reserve_replay_values(1u);",
                 "uint64_t hint_word;",
                 "openvm_hint_read_words(&hint_word, 1u);",
                 "advance_timestamp(1);",
                 "write_aligned_mem_block(r5, hint_word);",
+                "append_replay_value(hint_word);",
             ]
         );
     }
@@ -690,13 +724,17 @@ mod tests {
         assert!(emitted.contains("if (unlikely(!openvm_hint_prepare(r5, (uint32_t)(r6)))) {"));
         assert!(emitted
             .contains("reserve_preflight_writes((uint32_t)(r6), ((uint32_t)(r6) * 3u - 2u));"));
+        assert!(emitted.contains("reserve_replay_values((uint32_t)(r6));"));
         assert!(emitted.contains("uint64_t hint_words[1023u];"));
         assert!(emitted.contains("openvm_hint_read_words(hint_words, (uint32_t)(r6));"));
-        assert!(emitted.contains("write_aligned_mem_block(r5, hint_words[0]);"));
+        assert!(emitted
+            .contains("for (uint32_t hint_idx = 0u; hint_idx < (uint32_t)(r6); ++hint_idx) {"));
+        assert!(emitted.contains("if (hint_idx != 0u) {"));
         assert!(emitted.contains("advance_timestamp(2);"));
         assert!(emitted.contains(
             "write_aligned_mem_block((r5 + (uint64_t)hint_idx * 8ull), hint_words[hint_idx]);"
         ));
+        assert!(emitted.contains("append_replay_value(hint_words[hint_idx]);"));
         assert!(!emitted.contains("trace_page_access"));
     }
 

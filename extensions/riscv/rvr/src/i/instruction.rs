@@ -211,6 +211,8 @@ impl ExtInstr for Rv64IInstr {
                     // the temporary. Preflight's write_var call below reserves
                     // the disabled destination slot.
                     ctx.write_line(&format!("(void){value};"));
+                } else {
+                    ctx.append_replay_value(&value);
                 }
                 ctx.write_var(*rd, &value);
             }
@@ -388,5 +390,122 @@ fn known_branch_result(cond: CfgBranchCond, lhs: Reg, rhs: Reg) -> Option<bool> 
         CfgBranchCond::LessThanUnsigned if rhs == ZERO => Some(false),
         CfgBranchCond::GreaterEqualUnsigned if rhs == ZERO => Some(true),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rvr_openvm_ir::PageAddressSpace;
+
+    use super::*;
+
+    #[derive(Default)]
+    struct RecordingCtx {
+        operations: Vec<String>,
+    }
+
+    impl ExtEmitCtx for RecordingCtx {
+        fn read_var(&mut self, var: Reg) -> String {
+            format!("r{}", var.index())
+        }
+
+        fn peek_var(&mut self, var: Reg) -> String {
+            self.read_var(var)
+        }
+
+        fn advance_timestamp(&mut self, _slots: u32) {}
+
+        fn write_var(&mut self, var: Reg, val: &str) {
+            self.operations
+                .push(format!("write:r{}={val}", var.index()));
+        }
+
+        fn write_line(&mut self, line: &str) {
+            self.operations.push(format!("line:{line}"));
+        }
+
+        fn emit_trap(&mut self) {
+            unreachable!()
+        }
+
+        fn read_mem(&mut self, _base: &str, _offset: i16, _width: u8, _signed: bool) -> String {
+            "loaded".to_string()
+        }
+
+        fn write_mem(&mut self, _base: &str, _offset: i16, _val: &str, _width: u8) {
+            unreachable!()
+        }
+
+        fn write_aligned_mem_block(&mut self, _addr: &str, _val: &str) {
+            unreachable!()
+        }
+
+        fn reserve_preflight_writes(&mut self, _writes: &str, _slots: &str) {}
+
+        fn append_replay_value(&mut self, value: &str) {
+            self.operations.push(format!("append:{value}"));
+        }
+
+        fn emit_call(&mut self, _name: &str, _args: &[&str]) {
+            unreachable!()
+        }
+
+        fn emit_call_without_page_flush(&mut self, _name: &str, _args: &[&str]) {
+            unreachable!()
+        }
+
+        fn emit_call_expr(&mut self, _ret_ty: &str, _name: &str, _args: &[&str]) -> String {
+            unreachable!()
+        }
+
+        fn emit_call_with_trace_result(
+            &mut self,
+            _ret_ty: &str,
+            _name: &str,
+            _args: &[&str],
+        ) -> Option<String> {
+            unreachable!()
+        }
+
+        fn trace_chip(&mut self, _chip_idx: u32, _count_expr: &str) {}
+
+        fn trace_chip_if_nonzero(&mut self, _chip_idx: u32, _count_expr: &str) {}
+
+        fn trace_page_access(
+            &mut self,
+            _addr: &str,
+            _width: MemWidth,
+            _addr_space: PageAddressSpace,
+        ) {
+        }
+
+        fn trace_page_access_u64_range(
+            &mut self,
+            _base_addr: &str,
+            _num_dwords: &str,
+            _addr_space: PageAddressSpace,
+        ) {
+        }
+    }
+
+    fn load(rd: Reg) -> Rv64IInstr {
+        Rv64IInstr::Load {
+            width: MemWidth::Word,
+            signed: true,
+            rd,
+            base: Reg::new(2),
+            offset: 4,
+        }
+    }
+
+    #[test]
+    fn load_appends_only_architectural_destination_results() {
+        let mut enabled = RecordingCtx::default();
+        load(Reg::new(3)).emit_c(&mut enabled);
+        assert_eq!(enabled.operations, ["append:loaded", "write:r3=loaded"]);
+
+        let mut x0 = RecordingCtx::default();
+        load(ZERO).emit_c(&mut x0);
+        assert_eq!(x0.operations, ["line:(void)loaded;", "write:r0=loaded"]);
     }
 }

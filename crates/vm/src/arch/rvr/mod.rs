@@ -2,6 +2,7 @@
 
 mod abi_consts;
 pub mod bridge;
+pub mod checkpoint_preflight;
 pub mod compile;
 #[cfg(feature = "cuda")]
 pub mod cuda;
@@ -17,8 +18,12 @@ pub mod preflight;
 pub mod pure;
 pub mod state;
 
+pub use checkpoint_preflight::{
+    RvrCheckpointPreflightExecution, RvrCheckpointPreflightInstance, RvrCheckpointPreflightLimits,
+    RvrCheckpointPreflightTranscript,
+};
 pub use compile::{
-    build_pc_to_chip, compile, compile_metered, compile_metered_cost,
+    build_pc_to_chip, compile, compile_checkpoint_preflight, compile_metered, compile_metered_cost,
     compile_metered_segment_boundary, compile_preflight, compile_with_instret_tracking,
     compile_with_options, load_compiled_from_path, ChipMapping, CompileError, CompileOptions,
     RvrCompiled,
