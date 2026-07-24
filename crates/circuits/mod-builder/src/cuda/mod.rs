@@ -1,11 +1,11 @@
 //! GPU tracegen for FieldExpr-based chips: the kernel in `cuda/src/field_expr.cu`
-//! interprets the device program serialized by [`crate::device_program`] (one thread
-//! per row, grid-stride), filling both the Rv64VecHeapAdapter columns and the core
-//! FieldExpr columns.
+//! interprets the encoded [`crate::tracegen_ir::TracegenIr`] (one thread per row,
+//! grid-stride), filling both the Rv64VecHeapAdapter columns and the core FieldExpr
+//! columns.
 //!
 //! The core-column interpreter is validated bit-exact against
 //! `FieldExpressionFiller::fill_trace_row` (rows and range-checker counts); see the
-//! `device_program_tests` module.
+//! `tracegen_ir_tests` module.
 
 use std::sync::Arc;
 
@@ -14,7 +14,7 @@ use openvm_cuda_backend::{base::DeviceMatrix, prelude::F, GpuBackend};
 use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
 use openvm_stark_backend::{p3_air::BaseAir, prover::AirProvingContext};
 
-use crate::{device_program::serialize_field_expr, FieldExpressionFiller};
+use crate::{tracegen_ir::compile_tracegen_ir, FieldExpressionFiller};
 
 pub mod cuda_abi;
 
@@ -53,15 +53,15 @@ impl FieldExprChipGpu {
         range_checker: Arc<VariableRangeCheckerChipGPU>,
     ) -> Self {
         let core_width = BaseAir::<F>::width(&filler.expr);
-        let prog = serialize_field_expr(
+        let ir = compile_tracegen_ir(
             &filler.expr,
             filler.local_opcode_idx.clone(),
             filler.opcode_flag_idx.clone(),
             core_width,
-        );
-        let aux_words =
-            (prog.num_value_slots + prog.num_vars) * prog.k + prog.scratch_len + 4 * prog.k;
-        let blob = prog.to_blob();
+        )
+        .expect("FieldExpr must be supported by CUDA trace generation");
+        let aux_words = ir.aux_words();
+        let blob = ir.encode();
         let d_blob = blob.to_device_on(&range_checker.device_ctx).unwrap();
         Self {
             d_blob,
@@ -97,6 +97,7 @@ impl FieldExprChipGpu {
         assert!(n_threads * self.aux_words * 4 <= MAX_AUX_BYTES);
         let d_aux = DeviceBuffer::<u32>::with_capacity_on(n_threads * self.aux_words, device_ctx);
         let d_err = DeviceBuffer::<u32>::with_capacity_on(1, device_ctx);
+        d_err.fill_zero_on(device_ctx).unwrap();
 
         unsafe {
             cuda_abi::field_expr_tracegen(

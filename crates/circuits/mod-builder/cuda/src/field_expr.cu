@@ -1,6 +1,6 @@
 // Generic GPU tracegen for mod-builder FieldExpr chips.
-// Interprets the "device program" blob produced by device_program.rs (see that
-// file for the semantics contract). One thread per row, grid-stride.
+// Interprets the trace-generation IR encoded by tracegen_ir (see that module
+// for the semantics contract). One thread per row, grid-stride.
 //
 // The core-column interpreter is validated bit-exact against
 // FieldExpressionFiller::fill_trace_row (rows and range-checker histograms) on
@@ -11,27 +11,13 @@
 #include "primitives/trace_access.h"
 #include "riscv-adapters/vec_heap.cuh"
 #include "system/memory/params.cuh"
+#include "tracegen_abi.cuh"
 
 #include <cstdint>
 
-#define MB_MAX_K 12        // up to 384-bit fields (BLS12-381)
-#define MB_BB_P 0x78000001u // BabyBear modulus (canonical arithmetic on carries/q)
-#define MAX_K MB_MAX_K
-#define F_P MB_BB_P
-
-// Value-phase opcodes
-enum { VOP_LOAD_INPUT = 0, VOP_CONST, VOP_ADD, VOP_SUB, VOP_MUL, VOP_DIV,
-       VOP_INTADD, VOP_INTMUL, VOP_SELECT, VOP_SAVE_VAR };
-// Limb-phase opcodes
-enum { LOP_INPUT = 0, LOP_VAR, LOP_CONST, LOP_ADD, LOP_SUB, LOP_MUL,
-       LOP_INTADD, LOP_INTMUL, LOP_SELECT };
-
-// Header word indices (see device_program.rs to_blob)
-enum { H_NUM_LIMBS = 0, H_LIMB_BITS, H_K, H_NUM_INPUT, H_NUM_VARS, H_NUM_FLAGS,
-       H_NEEDS_SETUP, H_WIDTH, H_NUM_SLOTS, H_N_VOPS, H_N_LOPS, H_N_CONS,
-       H_SCRATCH_LEN, H_P8_LEN, H_N_LOCAL_OPS, H_N_OP_FLAGS,
-       H_OFF_VOPS, H_OFF_LOPS, H_OFF_CONS, H_OFF_P, H_OFF_R2, H_OFF_PM2,
-       H_OFF_PINV, H_OFF_P8, H_OFF_MONT, H_OFF_CLIMBS, H_OFF_OPTAB, H_MPRIME };
+static constexpr uint32_t MB_BB_P = 0x78000001u; // canonical arithmetic on carries/q
+// Required configuration boundary for shared field headers.
+#define F_P 0x78000001u
 
 struct FieldExprProg {
     int num_limbs, limb_bits, k, num_input, num_vars, num_flags, needs_setup, width;
@@ -60,9 +46,9 @@ __device__ __forceinline__ FieldExprProg load_prog(const uint32_t *blob) {
     return s;
 }
 
-// ---- K-limb Montgomery arithmetic (k <= MAX_K, runtime loops) ----
+// ---- K-limb Montgomery arithmetic (k <= TRACEGEN_MAX_K, runtime loops) ----
 __device__ void mont_mul(const Prog &s, const uint32_t *a, const uint32_t *b, uint32_t *r) {
-    uint32_t t[MAX_K + 2];
+    uint32_t t[TRACEGEN_MAX_K + 2];
     const int k = s.k;
     for (int i = 0; i < k + 2; i++) t[i] = 0;
     for (int i = 0; i < k; i++) {
@@ -87,7 +73,7 @@ __device__ void mont_mul(const Prog &s, const uint32_t *a, const uint32_t *b, ui
         t[k] = t[k + 1] + (uint32_t)(cur3 >> 32);
         t[k + 1] = 0;
     }
-    uint32_t sub[MAX_K];
+    uint32_t sub[TRACEGEN_MAX_K];
     uint32_t borrow = 0;
     for (int j = 0; j < k; j++) {
         uint64_t cur = (uint64_t)t[j] - s.p[j] - borrow;
@@ -100,14 +86,14 @@ __device__ void mont_mul(const Prog &s, const uint32_t *a, const uint32_t *b, ui
 
 __device__ void add_mod(const Prog &s, const uint32_t *a, const uint32_t *b, uint32_t *r) {
     const int k = s.k;
-    uint32_t t[MAX_K];
+    uint32_t t[TRACEGEN_MAX_K];
     uint64_t carry = 0;
     for (int j = 0; j < k; j++) {
         uint64_t cur = (uint64_t)a[j] + b[j] + carry;
         t[j] = (uint32_t)cur;
         carry = cur >> 32;
     }
-    uint32_t sub[MAX_K];
+    uint32_t sub[TRACEGEN_MAX_K];
     uint32_t borrow = 0;
     for (int j = 0; j < k; j++) {
         uint64_t cur = (uint64_t)t[j] - s.p[j] - borrow;
@@ -139,7 +125,7 @@ __device__ void sub_mod(const Prog &s, const uint32_t *a, const uint32_t *b, uin
 // a^(p-2) via square-and-multiply; inv(0) = 0 by convention.
 __device__ void mont_inv(const Prog &s, const uint32_t *a, uint32_t *r) {
     const int k = s.k;
-    uint32_t acc[MAX_K];
+    uint32_t acc[TRACEGEN_MAX_K];
     bool started = false;
     for (int bit = 32 * k - 1; bit >= 0; bit--) {
         if (started) mont_mul(s, acc, acc, acc);
@@ -163,7 +149,7 @@ __device__ __forceinline__ uint32_t f_of_i64(int64_t v) {
     return (uint32_t)m;
 }
 
-// Fill the core sub-row (validated logic; see device_program.rs reference interpreter).
+// Fill the core sub-row (validated logic; see tracegen_ir reference interpreter).
 // `core_row` must point at the first core column. When `is_dummy`, inputs are zero,
 // flags false, range checks skipped, is_valid = 0 (mirrors fill_dummy_trace_row).
 __device__ void field_expr_fill_core_row(
@@ -185,7 +171,7 @@ __device__ void field_expr_fill_core_row(
     const uint8_t *in_limbs = rec + 1;
 
     // flags
-    bool flags[32];
+    bool flags[TRACEGEN_MAX_FLAGS];
     for (int f = 0; f < s.num_flags; f++) flags[f] = false;
     if (s.needs_setup && !is_dummy) {
         for (int posn = 0; posn < s.n_local_ops; posn++) {
@@ -197,7 +183,7 @@ __device__ void field_expr_fill_core_row(
     }
 
     // ---- value phase ----
-    uint32_t one[MB_MAX_K];
+    uint32_t one[TRACEGEN_MAX_K];
     for (int j = 0; j < k; j++) one[j] = j == 0 ? 1 : 0;
     for (int i = 0; i < s.num_slots * k; i++) slots[i] = 0;
     for (int io = 0; io < s.n_vops; io++) {
@@ -208,7 +194,7 @@ __device__ void field_expr_fill_core_row(
         const uint32_t *pb = slots + b * k;
         switch (opc) {
             case VOP_LOAD_INPUT: {
-                uint32_t canon[MB_MAX_K];
+                uint32_t canon[TRACEGEN_MAX_K];
                 for (int j = 0; j < k; j++) canon[j] = 0;
                 if (!is_dummy) {
                     const uint8_t *src = in_limbs + a * nl;
@@ -225,7 +211,7 @@ __device__ void field_expr_fill_core_row(
             case VOP_SUB: sub_mod(s, pa, pb, d); break;
             case VOP_MUL: mont_mul(s, pa, pb, d); break;
             case VOP_DIV: {
-                uint32_t inv[MB_MAX_K];
+                uint32_t inv[TRACEGEN_MAX_K];
                 mont_inv(s, pb, inv);
                 mont_mul(s, pa, inv, d);
                 break;
@@ -372,7 +358,7 @@ __device__ void field_expr_fill_core_row(
                 carry = cur >> 32;
             }
         }
-        int32_t ql[80];
+        int32_t ql[TRACEGEN_MAX_Q_LIMBS];
         for (uint32_t i = 0; i < q_limbs_n; i++) {
             int32_t byte = (int32_t)((q512[i / 4] >> ((i % 4) * 8)) & 0xff);
             ql[i] = neg ? -byte : byte;
