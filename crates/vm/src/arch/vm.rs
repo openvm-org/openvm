@@ -43,11 +43,11 @@ use tracing::{info_span, instrument};
 
 #[cfg(feature = "rvr")]
 use super::rvr::{
-    bridge::map_rvr_compile_error, build_pc_to_chip, compile, compile_metered,
-    compile_metered_cost, compile_metered_segment_boundary, compile_preflight,
+    bridge::map_rvr_compile_error, build_pc_to_chip, compile, compile_checkpoint_preflight,
+    compile_metered, compile_metered_cost, compile_metered_segment_boundary, compile_preflight,
     compile_with_instret_tracking, load_compiled_from_path, ChipMapping, GuestDebugMap,
-    RvrExecutionKind, RvrInitialImage, RvrMeteredCostInstance, RvrMeteredInstance,
-    RvrMeteredSegmentInstance, RvrPreflightInstance, RvrPureInstance,
+    RvrCheckpointPreflightInstance, RvrExecutionKind, RvrInitialImage, RvrMeteredCostInstance,
+    RvrMeteredInstance, RvrMeteredSegmentInstance, RvrPreflightInstance, RvrPureInstance,
     RvrPureWithInstretTrackingInstance,
 };
 use super::{
@@ -319,6 +319,29 @@ where
         let compiled = compile_preflight(exe, extensions.lifters(), guest_debug_map)
             .map_err(map_rvr_compile_error)?;
         Ok(RvrPreflightInstance::new(
+            self.inventory.config(),
+            RvrInitialImage::from(exe),
+            compiled,
+            extensions.into_runtime_hooks(),
+        ))
+    }
+
+    /// Compile the experimental compact checkpoint-and-residual preflight executor.
+    ///
+    /// This is intentionally separate from production preflight while its
+    /// replay feasibility and end-to-end performance are being evaluated.
+    pub fn rvr_experimental_checkpoint_preflight_instance(
+        &self,
+        exe: &VmExe<F>,
+        guest_debug_map: Option<&GuestDebugMap>,
+    ) -> Result<RvrCheckpointPreflightInstance<'_>, StaticProgramError> {
+        #[cfg(feature = "metrics")]
+        let _compilation_span =
+            tracing::info_span!("compile_checkpoint_preflight", backend = "rvr").entered();
+        let extensions = self.build_rvr_extensions(None);
+        let compiled = compile_checkpoint_preflight(exe, extensions.lifters(), guest_debug_map)
+            .map_err(map_rvr_compile_error)?;
+        Ok(RvrCheckpointPreflightInstance::new(
             self.inventory.config(),
             RvrInitialImage::from(exe),
             compiled,

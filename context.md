@@ -199,6 +199,15 @@ test. GPU system/continuation tracegen follows, then other extensions, with CPU
 tracegen only if it remains useful. Only after every production consumer has
 migrated should `RecordArena` and interpreter preflight be deleted.
 
+GPU memory is a hard feasibility constraint, not spare capacity for tracegen.
+The existing proving/GKR phase is normally the peak and is budgeted at roughly
+15 GB so several proofs can be packed onto one GPU. Checkpoint uploads, residuals,
+replay indexes, sort scratch, and completed traces must therefore be measured by
+phase and released at explicit synchronization points before proving. The new
+path is rejected if it creates a larger tracegen peak, moves the overall peak out
+of proving, or otherwise invalidates the existing metering and concurrent-proof
+packing assumptions, even if its kernels are faster.
+
 The design should be idiomatic, clean, minimal, and performance-first. It should be
 reviewed adversarially against current RVR execution, memory semantics, every
 tracegen consumer, system AIRs, continuations, migration risk, and prior RVR

@@ -59,7 +59,7 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
                 }
                 CfgOperand::Const(value) => hex_u64(value),
                 CfgOperand::ReadConst { source, value } => {
-                    if ctx.traces_values() {
+                    if ctx.preserves_logical_schedule() {
                         ctx.read_var(source);
                     }
                     hex_u64(value)
@@ -91,7 +91,7 @@ pub fn emit_terminator(ctx: &mut EmitContext, term: &Terminator, pc: u64, tc: &T
             known,
         } => {
             if let Some(taken) = known {
-                if ctx.traces_values() {
+                if ctx.preserves_logical_schedule() {
                     ctx.read_var(lhs);
                     ctx.read_var(rhs);
                 }
@@ -165,7 +165,7 @@ fn static_tail_call(target: u64, args: &str, valid_blocks: &HashSet<u64>) -> Str
 }
 
 fn emit_tail_call(ctx: &mut EmitContext, target: u64, args: &str, tc: &TermCtx<'_>) {
-    if ctx.traces_values() && target == tc.current_block {
+    if ctx.writes_full_events() && target == tc.current_block {
         ctx.write_line("goto preflight_block_loop;");
         return;
     }
@@ -242,7 +242,7 @@ mod tests {
     }
 
     #[test]
-    fn known_branch_reads_operands_only_for_value_tracing() {
+    fn known_branch_preserves_preflight_operand_schedule() {
         let term = Terminator::instruction(KnownBranch);
         let valid_blocks = HashSet::from([8]);
         let tc = TermCtx {
@@ -269,6 +269,17 @@ mod tests {
         );
         emit_terminator(&mut tracing, &term, 0, &tc);
         assert_eq!(tracing.buf().matches("preflight_local_reg_read").count(), 2);
+
+        let mut checkpoint = EmitContext::new(
+            HashSet::new(),
+            EmitMode::CheckpointPreflight,
+            BlockAbi::Plain,
+            None,
+            None,
+        );
+        emit_terminator(&mut checkpoint, &term, 0, &tc);
+        assert!(!checkpoint.buf().contains("preflight_local_reg_read"));
+        assert_eq!(checkpoint.checkpoint_preflight_budget(), (2, 0));
     }
 
     #[test]

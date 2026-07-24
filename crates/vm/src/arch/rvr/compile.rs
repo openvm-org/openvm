@@ -402,6 +402,26 @@ pub fn compile_preflight<F: PrimeField32>(
     )
 }
 
+/// Compile a VmExe for the experimental checkpoint-and-residual preflight executor.
+pub fn compile_checkpoint_preflight<F: PrimeField32>(
+    exe: &VmExe<F>,
+    extensions: &ExtensionRegistry,
+    guest_debug_map: Option<&GuestDebugMap>,
+) -> Result<RvrCompiled, CompileError> {
+    compile_impl(
+        exe,
+        &CompileOptions {
+            base_name: None,
+            execution_kind: RvrExecutionKind::CheckpointPreflight,
+            extensions,
+            chips: None,
+            guest_debug_map,
+            native_debug_info: cfg!(feature = "profiling"),
+            keep_artifacts: false,
+        },
+    )
+}
+
 /// Compile a VmExe with per-chip metered execution.
 pub fn compile_metered<F: PrimeField32>(
     exe: &VmExe<F>,
@@ -517,6 +537,7 @@ fn load_num_airs(
         RvrExecutionKind::Pure
             | RvrExecutionKind::PureWithInstretTracking
             | RvrExecutionKind::Preflight
+            | RvrExecutionKind::CheckpointPreflight
     ) {
         return Ok(None);
     }
@@ -571,7 +592,8 @@ fn compile_impl<F: PrimeField32>(
     match opts.execution_kind {
         RvrExecutionKind::Pure
         | RvrExecutionKind::PureWithInstretTracking
-        | RvrExecutionKind::Preflight => {}
+        | RvrExecutionKind::Preflight
+        | RvrExecutionKind::CheckpointPreflight => {}
         RvrExecutionKind::Metered
         | RvrExecutionKind::MeteredSegment
         | RvrExecutionKind::MeteredCost => {
@@ -633,7 +655,8 @@ fn compile_impl<F: PrimeField32>(
                 }
                 RvrExecutionKind::Pure
                 | RvrExecutionKind::PureWithInstretTracking
-                | RvrExecutionKind::Preflight => {
+                | RvrExecutionKind::Preflight
+                | RvrExecutionKind::CheckpointPreflight => {
                     unreachable!()
                 }
             }

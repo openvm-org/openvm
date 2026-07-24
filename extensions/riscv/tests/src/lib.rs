@@ -161,6 +161,32 @@ mod tests {
     }
 
     #[cfg(feature = "rvr")]
+    fn read_register(state: &VmState<GuestMemory>, index: usize) -> u64 {
+        let limbs: [u16; 4] = unsafe {
+            state.memory.read(
+                RV64_REGISTER_AS,
+                (index * RV64_REGISTER_NUM_LIMBS / 2) as u32,
+            )
+        };
+        u64::from(limbs[0])
+            | (u64::from(limbs[1]) << 16)
+            | (u64::from(limbs[2]) << 32)
+            | (u64::from(limbs[3]) << 48)
+    }
+
+    #[cfg(feature = "rvr")]
+    fn final_preflight_timestamp(
+        execution: &openvm_circuit::arch::rvr::RvrPreflightExecution,
+    ) -> u32 {
+        execution
+            .transcript
+            .program_log
+            .last()
+            .expect("preflight always appends a final program event")
+            .timestamp
+    }
+
+    #[cfg(feature = "rvr")]
     fn hint_store_instruction(
         opcode: Rv64HintStoreOpcode,
         ptr_reg: usize,
@@ -495,6 +521,317 @@ mod tests {
         };
         assert!(memory_error.to_string().contains("code 2"));
 
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(feature = "rvr")]
+    fn test_rvr_checkpoint_preflight_matches_branch_suspension_and_resume() -> Result<()> {
+        let reg = |index: usize| index * RV64_REGISTER_NUM_LIMBS;
+        let instructions = [
+            Instruction::<F>::from_isize(
+                BaseAluImmOpcode::ADDI.global_opcode(),
+                reg(1) as isize,
+                reg(0) as isize,
+                1,
+                RV64_REGISTER_AS as isize,
+                RV64_IMM_AS as isize,
+            ),
+            Instruction::<F>::from_isize(
+                BranchEqualOpcode::BNE.global_opcode(),
+                reg(1) as isize,
+                reg(0) as isize,
+                8,
+                RV64_REGISTER_AS as isize,
+                RV64_REGISTER_AS as isize,
+            ),
+            Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 1, 0, 0),
+            Instruction::<F>::from_usize(
+                Rv64JalLuiOpcode::JAL.global_opcode(),
+                [0, 0, 8, RV64_REGISTER_AS as usize, 0, 0],
+            ),
+            Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 2, 0, 0),
+            Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+        ];
+        let exe = VmExe::from(Program::from_instructions(&instructions));
+        let executor = VmExecutor::new(test_rv64im_config())?;
+        let full = executor.rvr_preflight_instance(&exe, None)?;
+        let checkpoint = executor.rvr_experimental_checkpoint_preflight_instance(&exe, None)?;
+
+        let full_first = full.execute_for(
+            Vec::<Vec<u8>>::new(),
+            openvm_circuit::arch::rvr::RvrPreflightLimits::new(3, 8),
+        )?;
+        let checkpoint_first = checkpoint.execute_for(
+            Vec::<Vec<u8>>::new(),
+            openvm_circuit::arch::rvr::RvrCheckpointPreflightLimits::new(3, 0, 2),
+        )?;
+        assert_eq!(checkpoint_first.endpoint, full_first.endpoint);
+        assert_eq!(checkpoint_first.state.pc(), full_first.state.pc());
+        assert_eq!(
+            checkpoint_first.to_state,
+            openvm_circuit::arch::ExecutionState::new(
+                full_first.state.pc(),
+                final_preflight_timestamp(&full_first),
+            )
+        );
+        assert_eq!(checkpoint_first.retired, 3);
+        assert_eq!(checkpoint_first.transcript.checkpoints.len(), 1);
+        let boundary = checkpoint_first.transcript.checkpoints[0];
+        assert_eq!(
+            (boundary.pc, boundary.timestamp, boundary.retired),
+            (12, 5, 2)
+        );
+        assert_eq!(boundary.residual_cursor, 0);
+        assert_eq!(boundary.regs[0], 1);
+        assert!(checkpoint_first.transcript.residuals.is_empty());
+
+        let full_second = full.execute_from_state_for(
+            full_first.state,
+            openvm_circuit::arch::rvr::RvrPreflightLimits::new(1, 0),
+        )?;
+        let checkpoint_second = checkpoint.execute_from_state_for(
+            checkpoint_first.state,
+            openvm_circuit::arch::rvr::RvrCheckpointPreflightLimits::new(1, 0, 2),
+        )?;
+        assert_eq!(checkpoint_second.endpoint, full_second.endpoint);
+        assert_eq!(checkpoint_second.state.pc(), full_second.state.pc());
+        assert_eq!(
+            checkpoint_second.to_state,
+            openvm_circuit::arch::ExecutionState::new(
+                full_second.state.pc(),
+                final_preflight_timestamp(&full_second),
+            )
+        );
+        assert_eq!(read_register(&checkpoint_second.state, 1), 1);
+        assert_eq!(
+            read_register(&checkpoint_second.state, 1),
+            read_register(&full_second.state, 1)
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(feature = "rvr")]
+    fn test_rvr_checkpoint_preflight_load_residuals_omit_x0() -> Result<()> {
+        let reg = |index: usize| index * RV64_REGISTER_NUM_LIMBS;
+        let load = |opcode: Rv64LoadStoreOpcode, rd: usize, offset: usize| {
+            Instruction::<F>::from_usize(
+                opcode.global_opcode(),
+                [
+                    reg(rd),
+                    reg(1),
+                    offset,
+                    RV64_REGISTER_AS as usize,
+                    RV64_MEMORY_AS as usize,
+                    1,
+                    0,
+                ],
+            )
+        };
+        let instructions = [
+            Instruction::<F>::from_usize(
+                BaseAluImmOpcode::ADDI.global_opcode(),
+                [
+                    reg(1),
+                    reg(0),
+                    0,
+                    RV64_REGISTER_AS as usize,
+                    RV64_IMM_AS as usize,
+                    1,
+                    0,
+                ],
+            ),
+            load(Rv64LoadStoreOpcode::LOADD, 2, 0),
+            load(Rv64LoadStoreOpcode::LOADD, 0, 8),
+            load(Rv64LoadStoreOpcode::LOADW, 3, 16),
+            Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+        ];
+        let exe = VmExe::from(Program::from_instructions(&instructions));
+        let executor = VmExecutor::new(test_rv64im_config())?;
+        let full = executor.rvr_preflight_instance(&exe, None)?;
+        let checkpoint = executor.rvr_experimental_checkpoint_preflight_instance(&exe, None)?;
+        let loaded = 0x0123_4567_89ab_cdefu64;
+        let x0_only = 0xfedc_ba98_7654_3210u64;
+        let sign_extended = 0xffff_ffff_8000_0001u64;
+
+        let mut full_initial = full.create_initial_vm_state(Vec::<Vec<u8>>::new());
+        let mut checkpoint_initial = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
+        for state in [&mut full_initial, &mut checkpoint_initial] {
+            unsafe {
+                state
+                    .memory
+                    .write_bytes(RV64_MEMORY_AS, 0, loaded.to_le_bytes());
+                state
+                    .memory
+                    .write_bytes(RV64_MEMORY_AS, 8, x0_only.to_le_bytes());
+                state
+                    .memory
+                    .write_bytes(RV64_MEMORY_AS, 16, (sign_extended as u32).to_le_bytes());
+            }
+        }
+
+        let full_execution = full.execute_from_state(
+            full_initial,
+            openvm_circuit::arch::rvr::RvrPreflightLimits::new(instructions.len(), 16),
+        )?;
+        let checkpoint_execution = checkpoint.execute_from_state(
+            checkpoint_initial,
+            openvm_circuit::arch::rvr::RvrCheckpointPreflightLimits::new(instructions.len(), 2, 2),
+        )?;
+        assert_eq!(checkpoint_execution.endpoint, full_execution.endpoint);
+        assert_eq!(checkpoint_execution.state.pc(), full_execution.state.pc());
+        assert_eq!(
+            checkpoint_execution.to_state.timestamp,
+            final_preflight_timestamp(&full_execution)
+        );
+        assert_eq!(
+            checkpoint_execution.transcript.residuals,
+            vec![loaded, sign_extended]
+        );
+        assert_eq!(read_register(&checkpoint_execution.state, 0), 0);
+        assert_eq!(read_register(&checkpoint_execution.state, 2), loaded);
+        assert_eq!(read_register(&checkpoint_execution.state, 3), sign_extended);
+        assert_eq!(
+            read_register(&checkpoint_execution.state, 2),
+            read_register(&full_execution.state, 2)
+        );
+        assert_eq!(
+            read_register(&checkpoint_execution.state, 3),
+            read_register(&full_execution.state, 3)
+        );
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(feature = "rvr")]
+    fn test_rvr_checkpoint_preflight_hint_residual_order_and_memory() -> Result<()> {
+        let instructions = [
+            hint_store_instruction(Rv64HintStoreOpcode::HINT_STORED, 1, 0),
+            hint_store_instruction(Rv64HintStoreOpcode::HINT_BUFFER, 2, 3),
+            Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+        ];
+        let exe = VmExe::from(Program::from_instructions(&instructions));
+        let executor = VmExecutor::new(test_rv64im_config())?;
+        let full = executor.rvr_preflight_instance(&exe, None)?;
+        let checkpoint = executor.rvr_experimental_checkpoint_preflight_instance(&exe, None)?;
+        let hint_words = [
+            0x0123_4567_89ab_cdef,
+            0x1111_2222_3333_4444,
+            0xaaaa_bbbb_cccc_dddd,
+        ];
+        let registers = [(1, 32), (2, 64), (3, 2)];
+        let full_initial = configure_hint_state(
+            full.create_initial_vm_state(Vec::<Vec<u8>>::new()),
+            &registers,
+            &hint_words,
+        );
+        let checkpoint_initial = configure_hint_state(
+            checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new()),
+            &registers,
+            &hint_words,
+        );
+
+        let full_execution = full.execute_from_state(
+            full_initial,
+            openvm_circuit::arch::rvr::RvrPreflightLimits::new(instructions.len(), 8),
+        )?;
+        let checkpoint_execution = checkpoint.execute_from_state(
+            checkpoint_initial,
+            openvm_circuit::arch::rvr::RvrCheckpointPreflightLimits::new(
+                instructions.len(),
+                hint_words.len(),
+                2,
+            ),
+        )?;
+        assert_eq!(checkpoint_execution.endpoint, full_execution.endpoint);
+        assert_eq!(checkpoint_execution.state.pc(), full_execution.state.pc());
+        assert_eq!(
+            checkpoint_execution.to_state.timestamp,
+            final_preflight_timestamp(&full_execution)
+        );
+        assert_eq!(checkpoint_execution.transcript.residuals, hint_words);
+        assert_eq!(
+            checkpoint_execution.state.streams.hint_stream.remaining(),
+            0
+        );
+        assert_eq!(full_execution.state.streams.hint_stream.remaining(), 0);
+        for (address, expected) in [
+            (32, hint_words[0]),
+            (64, hint_words[1]),
+            (72, hint_words[2]),
+        ] {
+            assert_eq!(
+                read_main_word(&checkpoint_execution.state, address),
+                expected
+            );
+            assert_eq!(
+                read_main_word(&checkpoint_execution.state, address),
+                read_main_word(&full_execution.state, address)
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(feature = "rvr")]
+    fn test_rvr_checkpoint_preflight_reveal_matches_clock_and_public_values() -> Result<()> {
+        let mut config = test_rv64im_config();
+        config.rv64i.system = config.rv64i.system.with_public_values_bytes(16);
+        let instructions = [
+            reveal_instruction(Rv64LoadStoreOpcode::STOREB, 1, 2, 0),
+            // A word at byte address 7 crosses an eight-byte memory block.
+            reveal_instruction(Rv64LoadStoreOpcode::STOREW, 3, 4, 0),
+            Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+        ];
+        let exe = VmExe::from(Program::from_instructions(&instructions));
+        let executor = VmExecutor::new(config)?;
+        let full = executor.rvr_preflight_instance(&exe, None)?;
+        let checkpoint = executor.rvr_experimental_checkpoint_preflight_instance(&exe, None)?;
+        let registers = [(1, 0xa5), (2, 2), (3, 0x1122_3344), (4, 7)];
+        let initial_public_values = (0u8..16).collect::<Vec<_>>();
+        let full_initial = configure_reveal_state(
+            full.create_initial_vm_state(Vec::<Vec<u8>>::new()),
+            &registers,
+            &initial_public_values,
+        );
+        let checkpoint_initial = configure_reveal_state(
+            checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new()),
+            &registers,
+            &initial_public_values,
+        );
+
+        let full_execution = full.execute_from_state(
+            full_initial,
+            openvm_circuit::arch::rvr::RvrPreflightLimits::new(instructions.len(), 7),
+        )?;
+        let checkpoint_execution = checkpoint.execute_from_state(
+            checkpoint_initial,
+            openvm_circuit::arch::rvr::RvrCheckpointPreflightLimits::new(instructions.len(), 0, 2),
+        )?;
+
+        assert_eq!(checkpoint_execution.endpoint, full_execution.endpoint);
+        assert_eq!(checkpoint_execution.state.pc(), full_execution.state.pc());
+        assert_eq!(
+            checkpoint_execution.to_state.timestamp,
+            final_preflight_timestamp(&full_execution)
+        );
+        // Two register reads plus one memory slot for STOREB, followed by two
+        // register reads plus two slots for the crossing STOREW.
+        assert_eq!(checkpoint_execution.to_state.timestamp, 8);
+        assert!(checkpoint_execution.transcript.residuals.is_empty());
+
+        let mut expected = initial_public_values;
+        expected[2] = 0xa5;
+        expected[7..11].copy_from_slice(&0x1122_3344u32.to_le_bytes());
+        assert_eq!(
+            extract_public_values(16, &checkpoint_execution.state.memory.memory),
+            expected
+        );
+        assert_eq!(
+            extract_public_values(16, &checkpoint_execution.state.memory.memory),
+            extract_public_values(16, &full_execution.state.memory.memory)
+        );
         Ok(())
     }
 

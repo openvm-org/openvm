@@ -84,6 +84,18 @@ pub trait ExtEmitCtx {
     /// Pure and metered emitters preserve their existing execution behavior.
     fn reserve_preflight_writes(&mut self, writes: &str, slots: &str);
 
+    /// Reserve space for a runtime-sized sequence of replay values.
+    ///
+    /// Checkpoint preflight uses this before consuming host advice. Other
+    /// execution modes do not maintain a replay-value stream.
+    fn reserve_replay_values(&mut self, _count: &str) {}
+
+    /// Append one architectural `u64` value to the replay-value stream.
+    ///
+    /// Values are untagged and ordered by execution. Checkpoint replay knows
+    /// which instruction consumes each value from the program itself.
+    fn append_replay_value(&mut self, _value: &str) {}
+
     /// Flush local page state, emit a C call, then reload the page state.
     fn emit_call(&mut self, name: &str, args: &[&str]);
 
