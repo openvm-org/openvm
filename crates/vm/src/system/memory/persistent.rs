@@ -19,7 +19,7 @@ use openvm_stark_backend::{
 };
 use tracing::instrument;
 
-use super::{merkle::SerialReceiver, online::INITIAL_TIMESTAMP};
+use super::merkle::SerialReceiver;
 use crate::{
     arch::{hasher::Hasher, ADDR_SPACE_OFFSET, BLOCK_FE_WIDTH},
     primitives::Chip,
@@ -32,32 +32,38 @@ use crate::{
 /// Number of memory-bus blocks covered by one merkle leaf.
 pub const BLOCKS_PER_LEAF: usize = VM_DIGEST_WIDTH / BLOCK_FE_WIDTH;
 
-/// The values describe one merkle leaf (`DIGEST_WIDTH` cells)---the data together with the
-/// last accessed timestamp---in either the initial or final memory state.
+/// Each row describes one touched merkle leaf (`DIGEST_WIDTH` cells): its data and hash in both
+/// the initial and final memory state, together with the per-block final timestamps.
+/// Initial timestamps are always zero.
 #[repr(C)]
 #[derive(Debug, AlignedBorrow, StructReflection)]
 pub struct PersistentBoundaryCols<T, const DIGEST_WIDTH: usize> {
-    // `expand_direction` =  1 corresponds to initial memory state
-    // `expand_direction` = -1 corresponds to final memory state
-    // `expand_direction` =  0 corresponds to irrelevant row (all interactions multiplicity 0)
-    pub expand_direction: T,
+    pub is_valid: T,
+    pub is_dirty: T,
     pub address_space: T,
     pub leaf_label: T,
-    pub values: [T; DIGEST_WIDTH],
-    pub hash: [T; DIGEST_WIDTH],
+    pub initial_values: [T; DIGEST_WIDTH],
+    pub final_values: [T; DIGEST_WIDTH],
+    pub initial_hash: [T; DIGEST_WIDTH],
+    pub final_hash: [T; DIGEST_WIDTH],
     /// Per-block timestamps. Each BLOCK_FE_WIDTH block within the leaf has its own timestamp.
     /// For untouched blocks, timestamp stays at 0 (balances: boundary sends at t=0 init, receives
     /// at t=0 final).
-    pub timestamps: [T; BLOCKS_PER_LEAF],
+    pub final_timestamps: [T; BLOCKS_PER_LEAF],
 }
 
 /// Imposes the following constraints:
-/// - `expand_direction` should be -1, 0, 1
+/// - `is_valid` and `is_dirty` are boolean, and `is_dirty` implies `is_valid`
+/// - on clean rows (`is_valid = 1, is_dirty = 0`), final values and hash equal initial ones
 ///
-/// Sends the following interactions:
-/// - if `expand_direction` is 1, sends `[0, 0, address_space_label, leaf_label]` to `merkle_bus`.
-/// - if `expand_direction` is -1, receives `[1, 0, address_space_label, leaf_label]` from
-///   `merkle_bus`.
+/// Sends the following interactions (one row per touched leaf):
+/// - merkle bus: initial leaf `[1, 0, as_label, leaf_label, initial_hash]` with multiplicity
+///   `is_valid`; final leaf `[-1, 0, as_label, leaf_label, final_hash]` with multiplicity
+///   `-is_dirty`.
+/// - compression bus: `(initial_values, 0, initial_hash)` with multiplicity `is_valid`;
+///   `(final_values, 0, final_hash)` with multiplicity `is_dirty`.
+/// - memory bus: opens the block at timestamp 0 with `initial_values` (multiplicity `is_valid`) and
+///   closes it at `final_timestamps` with `final_values` (multiplicity `-is_valid`).
 #[derive(Clone, Debug, ColumnsAir)]
 #[columns_via(PersistentBoundaryCols<u8, DIGEST_WIDTH>)]
 pub struct PersistentBoundaryAir<const DIGEST_WIDTH: usize> {
@@ -86,54 +92,87 @@ impl<const DIGEST_WIDTH: usize, AB: InteractionBuilder> Air<AB>
         let local = main.row_slice(0).expect("window should have two elements");
         let local: &PersistentBoundaryCols<AB::Var, DIGEST_WIDTH> = (*local).borrow();
 
-        // `direction` should be -1, 0, 1
-        builder.assert_eq(
-            local.expand_direction,
-            local.expand_direction * local.expand_direction * local.expand_direction,
-        );
+        builder.assert_bool(local.is_valid);
+        builder.assert_bool(local.is_dirty);
+        // `is_dirty` may only be set on valid rows
+        builder
+            .when(AB::Expr::ONE - local.is_valid)
+            .assert_zero(local.is_dirty);
 
-        // Constrain that an "initial" row has all timestamp zero.
-        // Since `direction` is constrained to be in {-1, 0, 1}, we can select `direction == 1`
-        // with the constraint below.
-        let mut when_initial =
-            builder.when(local.expand_direction * (local.expand_direction + AB::F::ONE));
-        for i in 0..BLOCKS_PER_LEAF {
-            when_initial.assert_zero(local.timestamps[i]);
+        // If the leaf is clean, its final values and hash must match the initial ones.
+        // Since both bits are boolean and `is_dirty` implies `is_valid`, the selector below
+        // is 1 exactly on clean valid rows.
+        let mut when_clean = builder.when(local.is_valid - local.is_dirty);
+        for i in 0..DIGEST_WIDTH {
+            when_clean.assert_eq(local.initial_values[i], local.final_values[i]);
+            when_clean.assert_eq(local.initial_hash[i], local.final_hash[i]);
         }
 
+        // merkle-bus interaction: initial leaf
         let mut expand_fields = vec![
-            // direction =  1 => is_final = 0
-            // direction = -1 => is_final = 1
-            local.expand_direction.into(),
+            AB::Expr::ONE,
             AB::Expr::ZERO,
             local.address_space - AB::F::from_u32(ADDR_SPACE_OFFSET),
             local.leaf_label.into(),
         ];
-        expand_fields.extend(local.hash.map(Into::into));
+        expand_fields.extend(local.initial_hash.map(Into::into));
         self.merkle_bus
-            .interact(builder, expand_fields, local.expand_direction.into());
+            .interact(builder, expand_fields, local.is_valid.into());
+        // merkle-bus interaction: final leaf
+        let mut expand_fields = vec![
+            AB::Expr::NEG_ONE,
+            AB::Expr::ZERO,
+            local.address_space - AB::F::from_u32(ADDR_SPACE_OFFSET),
+            local.leaf_label.into(),
+        ];
+        expand_fields.extend(local.final_hash.map(Into::into));
+        self.merkle_bus
+            .interact(builder, expand_fields, AB::Expr::ZERO - local.is_dirty);
 
+        // compression bus interaction: initial leaf
         self.compression_bus.interact(
             builder,
             iter::empty()
-                .chain(local.values.map(Into::into))
+                .chain(local.initial_values.map(Into::into))
                 .chain(iter::repeat_n(AB::Expr::ZERO, DIGEST_WIDTH))
-                .chain(local.hash.map(Into::into)),
-            local.expand_direction * local.expand_direction,
+                .chain(local.initial_hash.map(Into::into)),
+            local.is_valid,
+        );
+        // compression bus interaction: final leaf
+        self.compression_bus.interact(
+            builder,
+            iter::empty()
+                .chain(local.final_values.map(Into::into))
+                .chain(iter::repeat_n(AB::Expr::ZERO, DIGEST_WIDTH))
+                .chain(local.final_hash.map(Into::into)),
+            local.is_dirty,
         );
 
+        // memory bus interactions
         let leaf_ptr = local.leaf_label * AB::F::from_usize(DIGEST_WIDTH);
         for block_idx in 0..BLOCKS_PER_LEAF {
             let ptr = leaf_ptr.clone() + AB::F::from_usize(block_idx * BLOCK_FE_WIDTH);
             // Each block uses its own timestamp; untouched blocks stay at t=0.
+            // initial block
+            self.memory_bus
+                .send(
+                    MemoryAddress::new(local.address_space, ptr.clone()),
+                    local.initial_values
+                        [block_idx * BLOCK_FE_WIDTH..(block_idx + 1) * BLOCK_FE_WIDTH]
+                        .to_vec(),
+                    AB::Expr::ZERO,
+                )
+                .eval(builder, local.is_valid);
+            // final block
             self.memory_bus
                 .send(
                     MemoryAddress::new(local.address_space, ptr),
-                    local.values[block_idx * BLOCK_FE_WIDTH..(block_idx + 1) * BLOCK_FE_WIDTH]
+                    local.final_values
+                        [block_idx * BLOCK_FE_WIDTH..(block_idx + 1) * BLOCK_FE_WIDTH]
                         .to_vec(),
-                    local.timestamps[block_idx],
+                    local.final_timestamps[block_idx],
                 )
-                .eval(builder, local.expand_direction);
+                .eval(builder, AB::Expr::ZERO - local.is_valid);
         }
     }
 }
@@ -273,7 +312,7 @@ where
                 .expect("Cannot generate trace before finalization");
             let width = PersistentBoundaryCols::<Val<SC>, DIGEST_WIDTH>::width();
             // Boundary AIR should always present in order to fix the AIR ID of merkle AIR.
-            let mut height = (2 * touched_labels.len()).next_power_of_two();
+            let mut height = touched_labels.len().next_power_of_two();
             if let Some(mut oh) = self.overridden_height {
                 oh = oh.next_power_of_two();
                 assert!(
@@ -284,26 +323,20 @@ where
             }
             let mut rows = Val::<SC>::zero_vec(height * width);
 
-            rows.par_chunks_mut(2 * width)
+            rows.par_chunks_mut(width)
                 .zip(touched_labels.par_iter())
                 .for_each(|(row, touched_label)| {
-                    let (initial_row, final_row) = row.split_at_mut(width);
-                    *initial_row.borrow_mut() = PersistentBoundaryCols {
-                        expand_direction: Val::<SC>::ONE,
+                    *row.borrow_mut() = PersistentBoundaryCols {
+                        is_valid: Val::<SC>::ONE,
+                        // TODO: set is_dirty only when it is actually dirty
+                        is_dirty: Val::<SC>::ONE,
                         address_space: Val::<SC>::from_u32(touched_label.address_space),
                         leaf_label: Val::<SC>::from_u32(touched_label.label),
-                        values: touched_label.init_values,
-                        hash: touched_label.init_hash,
-                        timestamps: [Val::<SC>::from_u32(INITIAL_TIMESTAMP); BLOCKS_PER_LEAF],
-                    };
-
-                    *final_row.borrow_mut() = PersistentBoundaryCols {
-                        expand_direction: Val::<SC>::NEG_ONE,
-                        address_space: Val::<SC>::from_u32(touched_label.address_space),
-                        leaf_label: Val::<SC>::from_u32(touched_label.label),
-                        values: touched_label.final_values,
-                        hash: touched_label.final_hash,
-                        timestamps: touched_label.final_timestamps.map(Val::<SC>::from_u32),
+                        initial_values: touched_label.init_values,
+                        final_values: touched_label.final_values,
+                        initial_hash: touched_label.init_hash,
+                        final_hash: touched_label.final_hash,
+                        final_timestamps: touched_label.final_timestamps.map(Val::<SC>::from_u32),
                     };
                 });
             RowMajorMatrix::new(rows, width)
