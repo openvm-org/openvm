@@ -139,6 +139,34 @@ fn modular_checkpoint_executor_records_only_irreducible_results() {
     assert_eq!(execution.transcript.residuals, [12, 0, 0, 0, 1]);
 }
 
+#[test]
+fn modular_is_equal_rejects_x0_destination_before_execution() {
+    for opcode in [
+        Rv64ModularArithmeticOpcode::IS_EQ,
+        Rv64ModularArithmeticOpcode::SETUP_ISEQ,
+    ] {
+        let program = Program::from_instructions(&[
+            Instruction::<BabyBear>::from_usize(
+                opcode.global_opcode(),
+                [
+                    reg(0),
+                    reg(1),
+                    reg(2),
+                    RV64_REGISTER_AS as usize,
+                    RV64_MEMORY_AS as usize,
+                ],
+            ),
+            Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0; 5]),
+        ]);
+        let exe = VmExe::new(program);
+        let executor = VmExecutor::new(config()).unwrap();
+        assert!(executor.interpreter_instance(&exe).is_err());
+        assert!(executor
+            .rvr_experimental_checkpoint_preflight_instance(&exe, None)
+            .is_err());
+    }
+}
+
 #[cfg(feature = "cuda")]
 #[test]
 fn modular_checkpoint_expansion_proves_without_records() {

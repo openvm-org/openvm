@@ -345,6 +345,12 @@ where
     ) -> Result<(), ExecutionError> {
         let Instruction { opcode, .. } = instruction;
 
+        if instruction.a.as_canonical_u32() == 0 {
+            return Err(ExecutionError::Static(
+                StaticProgramError::InvalidInstruction(*state.pc),
+            ));
+        }
+
         let local_opcode =
             Rv64ModularArithmeticOpcode::from_usize(opcode.local_opcode_idx(self.offset));
         debug_assert!(matches!(
@@ -506,7 +512,7 @@ impl<const NUM_LANES: usize, const TOTAL_READ_SIZE: usize>
         let c = c.as_canonical_u32();
         let d = d.as_canonical_u32();
         let e = e.as_canonical_u32();
-        if d != RV64_REGISTER_AS || e != RV64_MEMORY_AS {
+        if a == 0 || d != RV64_REGISTER_AS || e != RV64_MEMORY_AS {
             return Err(StaticProgramError::InvalidInstruction(pc));
         }
 
