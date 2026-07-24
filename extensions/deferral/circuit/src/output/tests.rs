@@ -5,7 +5,7 @@ use openvm_circuit::arch::{
     testing::{
         memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
     },
-    to_byte_ptr_bits, Arena, MatrixRecordArena, MemoryConfig, PreflightExecutor,
+    to_byte_ptr_bits, Arena, MatrixRecordArena, MemoryConfig, PreflightExecutor, BLOCK_FE_WIDTH,
     MEMORY_BLOCK_BYTES,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
@@ -502,9 +502,9 @@ fn test_cuda_rand_deferral_output_tracegen() {
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
 fn test_output_rvr_replay_proves_without_records_and_rejects_corruption() {
-    assert!(super::checked_replay_trace_shape(u64::MAX, 1, usize::MAX).is_err());
-    assert!(super::checked_replay_trace_shape(3, 1, 2).is_err());
-    assert!(super::checked_replay_trace_shape(2, usize::MAX, 2).is_err());
+    assert!(super::cuda::checked_replay_trace_shape(u64::MAX, 1, usize::MAX).is_err());
+    assert!(super::cuda::checked_replay_trace_shape(3, 1, 2).is_err());
+    assert!(super::cuda::checked_replay_trace_shape(2, usize::MAX, 2).is_err());
 
     let rd = 8usize;
     let rs = 16usize;
@@ -600,7 +600,7 @@ fn test_output_rvr_replay_proves_without_records_and_rejects_corruption() {
     init_streams(&mut tester, NUM_DEFERRALS);
     let state = &mut tester.streams_mut().deferrals[deferral_idx];
     state.store_input(result.input.clone(), vec![]);
-    state.store_output(result.input, result.output_commit, result.output_raw);
+    state.store_output(&result.input, result.output_commit, result.output_raw);
     tester.write_bytes(
         RV64_REGISTER_AS as usize,
         rd,

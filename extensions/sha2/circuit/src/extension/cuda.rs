@@ -63,7 +63,8 @@ pub struct Sha2RvrGpuTracegen<'a> {
 
 #[cfg(feature = "rvr")]
 impl<'a> Sha2RvrGpuTracegen<'a> {
-    fn extension_opcodes() -> [u32; 2] {
+    #[doc(hidden)]
+    pub fn extension_opcodes() -> [u32; 2] {
         [
             Rv64Sha2Opcode::SHA256.global_opcode().as_usize() as u32,
             Rv64Sha2Opcode::SHA512.global_opcode().as_usize() as u32,

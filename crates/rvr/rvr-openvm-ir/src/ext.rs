@@ -52,6 +52,14 @@ pub trait ExtEmitCtx {
         false
     }
 
+    /// Whether replay values must be counted for exact segment sizing.
+    ///
+    /// This is true while writing checkpoint preflight and while metering RVR
+    /// execution. Only checkpoint preflight materializes the values.
+    fn counts_checkpoint_residuals(&self) -> bool {
+        self.is_checkpoint_preflight()
+    }
+
     /// Read a variable through a VM memory access.
     fn read_var(&mut self, var: Variable) -> String;
 
@@ -93,9 +101,17 @@ pub trait ExtEmitCtx {
 
     /// Reserve space for a runtime-sized sequence of replay values.
     ///
-    /// Checkpoint preflight uses this before consuming host advice. Other
-    /// execution modes do not maintain a replay-value stream.
+    /// Checkpoint preflight uses this before consuming host advice. Metered
+    /// execution uses the same count without materializing a replay-value stream.
     fn reserve_replay_values(&mut self, _count: &str) {}
+
+    /// Count a statically known number of replay values without materializing
+    /// them. Metered execution folds these counts into one update per block.
+    fn count_fixed_replay_values(&mut self, _count: u32) {}
+
+    /// Count a runtime-sized replay-value sequence after its producing
+    /// operation succeeds, without opening a materialization reservation.
+    fn count_replay_values(&mut self, _count: &str) {}
 
     /// Append one architectural `u64` value to the replay-value stream.
     ///
@@ -106,9 +122,8 @@ pub trait ExtEmitCtx {
     /// Append a post-write range of aligned main-memory words to checkpoint
     /// replay values.
     ///
-    /// This emits nothing outside checkpoint preflight, so instructions can
-    /// expose replay outputs without adding loads or stack buffers to pure and
-    /// metered execution.
+    /// This emits no loads outside checkpoint preflight; metered execution only
+    /// accounts for the already-reserved range length.
     fn append_replay_memory_u64_range(&mut self, _base: &str, _count: &str) {}
 
     /// Commit mode-local execution metadata before emitting a control transfer.

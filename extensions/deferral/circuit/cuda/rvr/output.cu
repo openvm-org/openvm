@@ -4,6 +4,7 @@
 #include "poseidon2-air/params.cuh"
 #include "poseidon2-air/tracegen.cuh"
 #include "primitives/buffer_view.cuh"
+#include "primitives/constants.h"
 #include "riscv/replay.cuh"
 
 using namespace riscv;
@@ -87,11 +88,12 @@ static __device__ bool deferral_output_resolve_step(
     }
     auto const from = program[step.program_index];
     auto const to = program[step.program_index + 1];
-    if (from.pc < pc_base || (from.pc - pc_base) % DEFAULT_PC_STEP != 0) {
+    if (from.pc < pc_base ||
+        (from.pc - pc_base) % ::program::DEFAULT_PC_STEP != 0) {
         preflight_set_error(error, DEFERRAL_OUTPUT_REPLAY_ERROR);
         return false;
     }
-    size_t resolved_idx = (from.pc - pc_base) / DEFAULT_PC_STEP;
+    size_t resolved_idx = (from.pc - pc_base) / ::program::DEFAULT_PC_STEP;
     if (resolved_idx >= instructions.len()) {
         preflight_set_error(error, DEFERRAL_OUTPUT_REPLAY_ERROR);
         return false;
@@ -117,7 +119,8 @@ static __device__ bool deferral_output_resolve_step(
     uint32_t words = len / MEMORY_BLOCK_BYTES;
     if (len % DIGEST_SIZE != 0 || from.timestamp > UINT32_MAX - 7u - words ||
         to.timestamp != from.timestamp + 7u + words ||
-        to.pc != from.pc + DEFAULT_PC_STEP || memory.len() - step.memory_start < 7u + words) {
+        to.pc != from.pc + ::program::DEFAULT_PC_STEP ||
+        memory.len() - step.memory_start < 7u + words) {
         preflight_set_error(error, DEFERRAL_OUTPUT_REPLAY_ERROR);
         return false;
     }

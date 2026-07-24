@@ -47,6 +47,8 @@ use crate::{
 mod cuda;
 #[cfg(feature = "cuda")]
 pub use cuda::*;
+#[cfg(all(test, feature = "rvr"))]
+mod rvr_tests;
 
 #[derive(Clone, Debug, VmConfig, derive_new::new, Serialize, Deserialize)]
 pub struct Keccak256Rv64Config {

@@ -26,6 +26,11 @@ static constexpr uint32_t COMMIT_WORDS = DEFERRAL_COMMIT_NUM_BYTES / WORD_SIZE;
 static constexpr uint32_t OUTPUT_KEY_WORDS =
     DEFERRAL_OUTPUT_KEY_BYTES / WORD_SIZE;
 static constexpr uint32_t DIGEST_MEMORY_OPS = DEFERRAL_DIGEST_SIZE / WORD_SIZE;
+static constexpr uint32_t ACCUMULATOR_WORDS = 2u * DIGEST_MEMORY_OPS;
+typedef struct DeferralCallReplay {
+  uint64_t output_key[OUTPUT_KEY_WORDS];
+  uint64_t accumulators[ACCUMULATOR_WORDS];
+} DeferralCallReplay;
 /* Page size from the configured leaves per page and byte addresses per leaf. */
 static constexpr uint64_t MAIN_MEMORY_PAGE_BYTES =
     1ull << (TRACER_BYTE_SPACE_PTRS_PER_LEAF_BITS + TRACER_PAGE_BITS);
@@ -66,16 +71,16 @@ bool rvr_ext_deferral_call(RvState* restrict state, uint64_t output_ptr,
 
   /* Look up output_key + update accumulators (Rust side, on byte buffers). */
   uint64_t key_words[OUTPUT_KEY_WORDS];
-  uint64_t* accumulators_out =
-      replay_out ? replay_out + OUTPUT_KEY_WORDS : NULL;
+  DeferralCallReplay* replay = (DeferralCallReplay*)replay_out;
+  uint64_t* accumulators_out = replay ? replay->accumulators : NULL;
   if (unlikely(!g_deferral.call_lookup(
           g_deferral.ctx, openvm_get_io_ctx(), def_idx,
           (const uint8_t*)commit_words, (uint8_t*)key_words,
           accumulators_out))) {
     return false;
   }
-  if (replay_out) {
-    memcpy(replay_out, key_words, sizeof(key_words));
+  if (replay) {
+    memcpy(replay->output_key, key_words, sizeof(key_words));
   }
 
   /* Write output_key (OUTPUT_KEY_WORDS words) to guest memory. */

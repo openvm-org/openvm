@@ -50,9 +50,16 @@ impl ExtInstr for KeccakfInstr {
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
         let buf = ctx.read_var(self.buffer_ptr_reg);
         ctx.reserve_preflight_writes("25u", "25u");
-        ctx.reserve_replay_values("25u");
+        let checkpoint = ctx.is_checkpoint_preflight();
+        if checkpoint {
+            ctx.reserve_replay_values("25u");
+        } else if ctx.counts_checkpoint_residuals() {
+            ctx.count_fixed_replay_values(25);
+        }
         ctx.emit_call("rvr_ext_keccakf", &["state", &buf]);
-        ctx.append_replay_memory_u64_range(&buf, "25u");
+        if checkpoint {
+            ctx.append_replay_memory_u64_range(&buf, "25u");
+        }
     }
 
     fn fixed_trace_rows(&self) -> Vec<FixedTraceRows> {
@@ -91,8 +98,16 @@ impl ExtInstr for XorinInstr {
         let len = ctx.read_var(self.len_reg);
         let words = format!("((uint32_t)(({len} + 7ull) / 8ull))");
         ctx.reserve_preflight_writes(&words, &format!("{words} * 3u"));
-        ctx.reserve_replay_values(&words);
+        let checkpoint = ctx.is_checkpoint_preflight();
+        if checkpoint {
+            ctx.reserve_replay_values(&words);
+        }
         ctx.emit_checked_call("rvr_ext_xorin", &["state", &buf_ptr, &input, &len]);
+        if !checkpoint {
+            // Metered execution counts the dynamic postimage only after the
+            // checked extension call has succeeded. Other modes ignore this.
+            ctx.reserve_replay_values(&words);
+        }
         ctx.append_replay_memory_u64_range(&buf_ptr, &words);
     }
 
@@ -192,6 +207,7 @@ mod tests {
         lines: Vec<String>,
         next_tmp: usize,
         record_checkpoint: bool,
+        count_residuals: bool,
     }
 
     impl Default for TestEmitCtx {
@@ -200,6 +216,7 @@ mod tests {
                 lines: Vec::new(),
                 next_tmp: 0,
                 record_checkpoint: true,
+                count_residuals: true,
             }
         }
     }
@@ -208,12 +225,29 @@ mod tests {
         fn pure() -> Self {
             Self {
                 record_checkpoint: false,
+                count_residuals: false,
+                ..Self::default()
+            }
+        }
+
+        fn metered() -> Self {
+            Self {
+                record_checkpoint: false,
+                count_residuals: true,
                 ..Self::default()
             }
         }
     }
 
     impl ExtEmitCtx for TestEmitCtx {
+        fn is_checkpoint_preflight(&self) -> bool {
+            self.record_checkpoint
+        }
+
+        fn counts_checkpoint_residuals(&self) -> bool {
+            self.count_residuals
+        }
+
         fn read_var(&mut self, var: Variable) -> String {
             let value = format!("r{}", var.index());
             self.lines.push(format!("read({value})"));
@@ -259,13 +293,13 @@ mod tests {
         }
 
         fn reserve_replay_values(&mut self, count: &str) {
-            if self.record_checkpoint {
+            if self.count_residuals {
                 self.lines.push(format!("reserve_replay({count})"));
             }
         }
 
         fn append_replay_memory_u64_range(&mut self, base: &str, count: &str) {
-            if self.record_checkpoint {
+            if self.count_residuals {
                 self.lines.push(format!("append_range({base}, {count})"));
             }
         }
@@ -366,6 +400,20 @@ mod tests {
         assert_eq!(ctx.lines[7], "trap");
         assert_eq!(ctx.lines[8], "}");
         assert_eq!(ctx.lines[9], format!("append_range(r5, {words})"));
+
+        let mut metered = TestEmitCtx::metered();
+        instruction.emit_c(&mut metered);
+        let checked = metered
+            .lines
+            .iter()
+            .position(|line| line == "bool tmp0 = rvr_ext_xorin(state, r5, r6, r7)")
+            .unwrap();
+        let counted = metered
+            .lines
+            .iter()
+            .position(|line| line == &format!("reserve_replay({words})"))
+            .unwrap();
+        assert!(checked < counted);
     }
 
     #[test]

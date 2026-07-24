@@ -26,7 +26,7 @@ use {
             RvrCheckpointAccessRegistry, RvrCheckpointAccessSpan,
         },
         rvr::RvrCheckpointPreflightExecution,
-        GenerationError, MemoryConfig, VirtualMachine,
+        GenerationError, MemoryConfig, VirtualMachine, MEMORY_BLOCK_BYTES,
     },
     openvm_circuit_primitives::AnyChip,
     openvm_cuda_common::stream::GpuDeviceCtx,
@@ -49,10 +49,8 @@ pub struct DeferralGpuProverExt;
 
 /// Concrete arena-free Deferral + RV64/system checkpoint coordinator.
 ///
-/// CALL is claimed but rejected at construction until checkpoint expansion
-/// produces its typed AS4 events. OUTPUT records into the exact shared
-/// Poseidon producer, so reverse inventory order must visit OUTPUT before the
-/// Poseidon and Count peripheries.
+/// CALL expands its typed AS4 chronology. OUTPUT consumes its dynamic write
+/// count and postimages directly from the checkpoint residual stream.
 #[cfg(feature = "rvr")]
 pub struct DeferralRvrGpuTracegen<'a> {
     program: &'a GpuRvrProgram,
@@ -117,6 +115,14 @@ impl DeferralRvrCoverage {
 #[cfg(feature = "rvr")]
 impl<'a> DeferralRvrGpuTracegen<'a> {
     #[doc(hidden)]
+    pub fn extension_opcodes() -> [u32; 2] {
+        [
+            DeferralOpcode::CALL.global_opcode().as_usize() as u32,
+            DeferralOpcode::OUTPUT.global_opcode().as_usize() as u32,
+        ]
+    }
+
+    #[doc(hidden)]
     pub fn register_checkpoint_access_schedules(
         registry: &mut RvrCheckpointAccessRegistry,
     ) -> Result<(), GpuRvrInputError> {
@@ -134,6 +140,21 @@ impl<'a> DeferralRvrGpuTracegen<'a> {
                 RvrCheckpointAccessSpan::write_fixed_from_residuals(RV64_MEMORY_AS, 0, 5),
                 RvrCheckpointAccessSpan::write_deferral_input_accumulator(3),
                 RvrCheckpointAccessSpan::write_deferral_output_accumulator(3),
+            ],
+        )?;
+        registry.register(
+            DeferralOpcode::OUTPUT.global_opcode().as_usize() as u32,
+            &[1, 2],
+            (1 << 6) | (1 << 7),
+            4,
+            5,
+            &[
+                RvrCheckpointAccessSpan::read_fixed(RV64_MEMORY_AS, 1, 5),
+                RvrCheckpointAccessSpan::write_count_from_residual_from_residuals(
+                    RV64_MEMORY_AS,
+                    0,
+                    u32::MAX / MEMORY_BLOCK_BYTES as u32,
+                ),
             ],
         )
     }
@@ -269,10 +290,7 @@ impl<'a> DeferralRvrGpuTracegen<'a> {
             SystemChipInventory = SystemChipInventoryGPU,
         >,
     {
-        let extension_opcodes = [
-            DeferralOpcode::CALL.global_opcode().as_usize() as u32,
-            DeferralOpcode::OUTPUT.global_opcode().as_usize() as u32,
-        ];
+        let extension_opcodes = Self::extension_opcodes();
         let mut rv64 = Rv64ImRvrGpuTracegen::new_after_claiming_extension_opcodes(
             self.program,
             self.transcript,

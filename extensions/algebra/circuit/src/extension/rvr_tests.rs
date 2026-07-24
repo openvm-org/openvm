@@ -1,8 +1,8 @@
 use num_bigint::BigUint;
 use openvm_algebra_transpiler::Rv64ModularArithmeticOpcode;
 use openvm_circuit::{
-    arch::{rvr::RvrCheckpointPreflightLimits, VmExecutor},
-    utils::test_system_config,
+    arch::{rvr::RvrCheckpointPreflightLimits, VirtualMachine, VmExecutor},
+    utils::{test_cpu_engine, test_system_config},
 };
 use openvm_circuit_primitives::bigint::utils::secp256k1_coord_prime;
 use openvm_instructions::{
@@ -14,7 +14,7 @@ use openvm_instructions::{
 };
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
-use super::Rv64ModularConfig;
+use super::{modular_is_eq_x0_destination, Rv64ModularConfig, Rv64ModularCpuBuilder};
 
 const SETUP_DST_PTR: u32 = 0x100;
 const SUM_PTR: u32 = 0x200;
@@ -146,6 +146,24 @@ fn modular_checkpoint_executor_records_only_irreducible_results() {
 }
 
 #[test]
+fn modular_metering_counts_only_irreducible_results() {
+    let (_, exe) = fixture();
+    let (vm, _) =
+        VirtualMachine::new_with_keygen(test_cpu_engine(), Rv64ModularCpuBuilder, config())
+            .unwrap();
+    let metered_ctx = vm.build_metered_ctx(&exe);
+    let (segments, _) = vm
+        .metered_instance(&exe)
+        .unwrap()
+        .execute_metered(Vec::<Vec<u8>>::new(), metered_ctx)
+        .unwrap();
+
+    assert_eq!(segments.len(), 1);
+    assert_eq!(segments[0].num_insns, 5);
+    assert_eq!(segments[0].num_checkpoint_residuals, 5);
+}
+
+#[test]
 fn modular_is_equal_rejects_x0_destination_before_execution() {
     for opcode in [
         Rv64ModularArithmeticOpcode::IS_EQ,
@@ -164,6 +182,7 @@ fn modular_is_equal_rejects_x0_destination_before_execution() {
             ),
             Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0; 5]),
         ]);
+        assert_eq!(modular_is_eq_x0_destination(&program, 1), Some(0));
         let exe = VmExe::new(program);
         let executor = VmExecutor::new(config()).unwrap();
         assert!(executor.interpreter_instance(&exe).is_err());

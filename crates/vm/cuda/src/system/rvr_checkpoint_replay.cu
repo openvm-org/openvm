@@ -128,6 +128,7 @@ static constexpr uint8_t SPAN_BASE_DEFERRAL_INPUT = 1;
 static constexpr uint8_t SPAN_BASE_DEFERRAL_OUTPUT = 2;
 static constexpr uint8_t SPAN_COUNT_FIXED = 0;
 static constexpr uint8_t SPAN_COUNT_REGISTER = 1;
+static constexpr uint8_t SPAN_COUNT_RESIDUAL = 2;
 static constexpr uint8_t SPAN_READ_U16 = 0;
 static constexpr uint8_t SPAN_WRITE_U16_RESIDUAL = 1;
 static constexpr uint8_t SPAN_WRITE_U16_ZERO = 2;
@@ -657,6 +658,52 @@ __device__ __forceinline__ void write_memory_intent(
     if (write_mask != nullptr) *write_mask = mask;
 }
 
+__device__ __forceinline__ bool resolve_access_span_count(
+    RvrCheckpointAccessSpan const &span,
+    RvrCheckpointAccessSchedule const &schedule,
+    uint64_t const (&register_values)[3],
+    DeviceBufferConstView<uint64_t> residuals,
+    uint64_t residual_index,
+    uint32_t &count,
+    uint32_t *error
+) {
+    if (span.count_source == SPAN_COUNT_FIXED) {
+        if (span.count == 0 || span.count_register != 0 || span.count_shift != 0) {
+            preflight_set_error(error, ERROR_BAD_INSTRUCTION);
+            return false;
+        }
+        count = span.count;
+        return true;
+    }
+    if (span.count_source == SPAN_COUNT_REGISTER) {
+        if (span.count_register >= schedule.num_register_reads || span.count_shift >= 64) {
+            preflight_set_error(error, ERROR_BAD_INSTRUCTION);
+            return false;
+        }
+        uint64_t encoded_count = register_values[span.count_register];
+        uint64_t low_mask =
+            span.count_shift == 0 ? 0 : (uint64_t(1) << span.count_shift) - 1;
+        uint64_t shifted = encoded_count >> span.count_shift;
+        if ((encoded_count & low_mask) != 0 || shifted > span.count) {
+            preflight_set_error(error, ERROR_BAD_INSTRUCTION);
+            return false;
+        }
+        count = uint32_t(shifted);
+        return true;
+    }
+    if (span.count_source == SPAN_COUNT_RESIDUAL) {
+        if (span.count == 0 || span.count_register != 0 || span.count_shift != 0 ||
+            residual_index >= residuals.len() || residuals[residual_index] > span.count) {
+            preflight_set_error(error, ERROR_BAD_RESIDUAL);
+            return false;
+        }
+        count = uint32_t(residuals[residual_index]);
+        return true;
+    }
+    preflight_set_error(error, ERROR_BAD_INSTRUCTION);
+    return false;
+}
+
 __device__ __forceinline__ bool replay_access_schedule(
     RvrReplayInstruction const &instruction,
     RvrCheckpointAccessSchedule const &schedule,
@@ -718,7 +765,7 @@ __device__ __forceinline__ bool replay_access_schedule(
     // Count and emit therefore fail at the same boundary, and a malformed later
     // span cannot leave a partial memory schedule behind.
     uint64_t span_events = 0;
-    uint64_t write_residuals = 0;
+    uint64_t span_residuals = 0;
     uint64_t field_events = 0;
     for (uint32_t span_index = 0; span_index < schedule.num_spans; span_index++) {
         auto const &span = spans[schedule.first_span + span_index];
@@ -731,8 +778,9 @@ __device__ __forceinline__ bool replay_access_schedule(
         bool known_base = span.base_source == SPAN_BASE_REGISTER ||
                           span.base_source == SPAN_BASE_DEFERRAL_INPUT ||
                           span.base_source == SPAN_BASE_DEFERRAL_OUTPUT;
-        bool known_count =
-            span.count_source == SPAN_COUNT_FIXED || span.count_source == SPAN_COUNT_REGISTER;
+        bool known_count = span.count_source == SPAN_COUNT_FIXED ||
+                           span.count_source == SPAN_COUNT_REGISTER ||
+                           span.count_source == SPAN_COUNT_RESIDUAL;
         bool static_write = span.value_source == SPAN_WRITE_U16_STATIC;
         if (!known_value || !known_base || !known_count ||
             (field ? span.address_space != deferral_as : span.address_space != memory_as) ||
@@ -746,24 +794,21 @@ __device__ __forceinline__ bool replay_access_schedule(
             preflight_set_error(error, ERROR_BAD_INSTRUCTION);
             return false;
         }
-        uint32_t count = span.count;
-        if (span.count_source == SPAN_COUNT_REGISTER) {
-            if (span.count_register >= schedule.num_register_reads || span.count_shift >= 64) {
-                preflight_set_error(error, ERROR_BAD_INSTRUCTION);
-                return false;
-            }
-            uint64_t encoded_count = register_values[span.count_register];
-            uint64_t low_mask = span.count_shift == 0 ? 0 : (uint64_t(1) << span.count_shift) - 1;
-            uint64_t shifted = encoded_count >> span.count_shift;
-            if ((encoded_count & low_mask) != 0 || shifted > span.count) {
-                preflight_set_error(error, ERROR_BAD_INSTRUCTION);
-                return false;
-            }
-            count = uint32_t(shifted);
-        } else if (count == 0 || span.count_register != 0 || span.count_shift != 0) {
-            preflight_set_error(error, ERROR_BAD_INSTRUCTION);
+        if (span_residuals > UINT32_MAX - state.residual_cursor) {
+            preflight_set_error(error, ERROR_BAD_RESIDUAL);
             return false;
         }
+        uint32_t count;
+        if (!resolve_access_span_count(
+                span,
+                schedule,
+                register_values,
+                residuals,
+                uint64_t(state.residual_cursor) + span_residuals,
+                count,
+                error
+            )) return false;
+        if (span.count_source == SPAN_COUNT_RESIDUAL) span_residuals++;
         if (uint64_t(count) > UINT32_MAX - span_events) {
             preflight_set_error(error, ERROR_BAD_INSTRUCTION);
             return false;
@@ -799,9 +844,9 @@ __device__ __forceinline__ bool replay_access_schedule(
             preflight_set_error(error, ERROR_BAD_INSTRUCTION);
             return false;
         }
-        if (span.value_source == SPAN_WRITE_U16_RESIDUAL) write_residuals += count;
+        if (span.value_source == SPAN_WRITE_U16_RESIDUAL) span_residuals += count;
         if (span.value_source == SPAN_WRITE_FIELD32_CANONICAL_PAIRS) {
-            write_residuals += 2u * count;
+            span_residuals += 2u * count;
         }
     }
 
@@ -824,9 +869,9 @@ __device__ __forceinline__ bool replay_access_schedule(
     }
     uint64_t register_write_residuals =
         schedule.register_write_source == REGISTER_WRITE_RESIDUAL ? 1u : 0u;
-    uint64_t effect_residual_index = uint64_t(state.residual_cursor) + write_residuals +
+    uint64_t effect_residual_index = uint64_t(state.residual_cursor) + span_residuals +
                                      register_write_residuals;
-    uint64_t required_residuals = write_residuals + register_write_residuals +
+    uint64_t required_residuals = span_residuals + register_write_residuals +
                                   (schedule.effect == EFFECT_BRANCH_RESIDUAL ? 1u : 0u);
     if (required_residuals > UINT32_MAX - state.residual_cursor ||
         uint64_t(state.residual_cursor) + required_residuals > residuals.len()) {
@@ -836,9 +881,11 @@ __device__ __forceinline__ bool replay_access_schedule(
     uint64_t checked_residual = state.residual_cursor;
     for (uint32_t span_index = 0; span_index < schedule.num_spans; span_index++) {
         auto const &span = spans[schedule.first_span + span_index];
-        uint32_t count = span.count_source == SPAN_COUNT_REGISTER
-                             ? uint32_t(register_values[span.count_register] >> span.count_shift)
-                             : span.count;
+        uint32_t count;
+        if (!resolve_access_span_count(
+                span, schedule, register_values, residuals, checked_residual, count, error
+            )) return false;
+        if (span.count_source == SPAN_COUNT_RESIDUAL) checked_residual++;
         if (span.value_source == SPAN_WRITE_U16_RESIDUAL) {
             checked_residual += count;
         } else if (span.value_source == SPAN_WRITE_FIELD32_CANONICAL_PAIRS) {
@@ -878,9 +925,17 @@ __device__ __forceinline__ bool replay_access_schedule(
 
     for (uint32_t span_index = 0; span_index < schedule.num_spans; span_index++) {
         auto const &span = spans[schedule.first_span + span_index];
-        uint32_t count = span.count_source == SPAN_COUNT_REGISTER
-                             ? uint32_t(register_values[span.count_register] >> span.count_shift)
-                             : span.count;
+        uint32_t count;
+        if (!resolve_access_span_count(
+                span,
+                schedule,
+                register_values,
+                residuals,
+                state.residual_cursor,
+                count,
+                error
+            )) return false;
+        if (span.count_source == SPAN_COUNT_RESIDUAL) state.residual_cursor++;
         if (count == 0) continue;
 
         bool field = span.value_source == SPAN_READ_FIELD32 ||
