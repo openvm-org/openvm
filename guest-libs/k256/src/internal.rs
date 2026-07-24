@@ -1,4 +1,4 @@
-use core::ops::{Add, Neg};
+use core::ops::Add;
 
 use hex_literal::hex;
 use openvm_algebra_guest::IntMod;
@@ -41,6 +41,7 @@ impl CyclicGroup for Secp256k1Point {
         y: Secp256k1Coord::from_const_bytes(hex!(
             "B8D410FB8FD0479C195485A648B417FDA808110EFCFBA45D65C4A32677DA3A48"
         )),
+        z: Secp256k1Coord::from_const_u8(1),
     };
     const NEG_GENERATOR: Self = Secp256k1Point {
         x: Secp256k1Coord::from_const_bytes(hex!(
@@ -49,6 +50,7 @@ impl CyclicGroup for Secp256k1Point {
         y: Secp256k1Coord::from_const_bytes(hex!(
             "7727EF046F2FB863E6AB7A59B74BE80257F7EEF103045BA29A3B5CD98825C5B7"
         )),
+        z: Secp256k1Coord::from_const_u8(1),
     };
 }
 
@@ -74,10 +76,12 @@ impl IntrinsicCurve for Secp256k1 {
 
 impl Secp256k1Point {
     pub fn x_be_bytes(&self) -> [u8; 32] {
-        <Self as WeierstrassPoint>::x(self).to_be_bytes()
+        let n = self.normalize();
+        <Self as WeierstrassPoint>::x(&n).to_be_bytes()
     }
 
     pub fn y_be_bytes(&self) -> [u8; 32] {
-        <Self as WeierstrassPoint>::y(self).to_be_bytes()
+        let n = self.normalize();
+        <Self as WeierstrassPoint>::y(&n).to_be_bytes()
     }
 }
