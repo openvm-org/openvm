@@ -571,7 +571,7 @@ fn rvr_checkpoint_gpu_replay_proves_an_empty_suspended_segment() {
 
 #[test]
 fn rvr_checkpoint_gpu_replay_rejects_terminate_in_a_suspended_segment() {
-    let instructions = [Instruction::from_usize(
+    let instructions: [Instruction<F>; 1] = [Instruction::from_usize(
         SystemOpcode::TERMINATE.global_opcode(),
         [0, 0, 0, 0, 0],
     )];

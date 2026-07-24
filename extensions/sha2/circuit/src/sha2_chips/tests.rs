@@ -821,6 +821,7 @@ fn create_cuda_harness<C: Sha2Config>(tester: &GpuChipTestBuilder) -> GpuHarness
         shared_records_gpu.clone(),
         tester.bitwise_op_lookup(),
         tester.range_checker(),
+        tester.address_bits() as u32,
     );
 
     let bitwise_gpu = tester.bitwise_op_lookup();

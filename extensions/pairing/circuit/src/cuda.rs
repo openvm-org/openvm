@@ -91,6 +91,7 @@ mod tests {
         exe::VmExe, instruction::Instruction, program::Program, LocalOpcode, SystemOpcode,
     };
     use openvm_pairing_guest::bn254::BN254_COMPLEX_STRUCT_NAME;
+    use openvm_stark_backend::StarkEngine;
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
     use rvr_state::PreflightProgramEvent;
 

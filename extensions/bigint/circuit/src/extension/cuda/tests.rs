@@ -24,7 +24,7 @@ use openvm_riscv_transpiler::{
     BaseAluImmOpcode, BaseAluOpcode, BranchEqualOpcode, BranchLessThanOpcode, LessThanOpcode,
     MulOpcode, ShiftOpcode,
 };
-use openvm_stark_backend::StarkEngine;
+use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine};
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 use super::{Int256Rv64GpuBuilder, Int256RvrGpuTracegen};

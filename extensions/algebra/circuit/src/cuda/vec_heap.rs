@@ -145,7 +145,7 @@ pub fn gather_vec_heap_trace_inputs_device<const NUM_READS: usize, const BLOCKS:
     })?;
     if num_rows == 0 {
         return Ok(DeviceVecHeapProjection {
-            inputs: DeviceBuffer::with_capacity_on(0, device_ctx),
+            inputs: DeviceBuffer::new(),
         });
     }
     if num_rows > MAX_ALGEBRA_TRACE_HEIGHT

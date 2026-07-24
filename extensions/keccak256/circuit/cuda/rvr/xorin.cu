@@ -161,8 +161,10 @@ __global__ void xorin_replay_tracegen(
     uint32_t num_blocks = len / DEFAULT_BLOCK_SIZE;
     uint64_t domain_end = pointer_max_bits < 32 ? (uint64_t(1) << pointer_max_bits)
                                                 : (uint64_t(1) << 32);
-    if (len > XORIN_RATE_BYTES || len % DEFAULT_BLOCK_SIZE != 0 || (buffer_ptr & 1) != 0 ||
-        (input_ptr & 1) != 0 || buffer_ptr >= domain_end || input_ptr >= domain_end ||
+    // Zero-length XORIN has no main-memory accesses, so its byte pointers need not be aligned.
+    if (len > XORIN_RATE_BYTES || len % DEFAULT_BLOCK_SIZE != 0 ||
+        (num_blocks != 0 && ((buffer_ptr & 1) != 0 || (input_ptr & 1) != 0)) ||
+        buffer_ptr >= domain_end || input_ptr >= domain_end ||
         static_cast<uint64_t>(buffer_ptr) + len > domain_end ||
         static_cast<uint64_t>(input_ptr) + len > domain_end ||
         from.timestamp > UINT32_MAX - (XORIN_REGISTER_READS + 3 * num_blocks) ||

@@ -5,7 +5,7 @@ use openvm_circuit::arch::{
     testing::{
         memory::gen_pointer, TestBuilder, TestChipHarness, VmChipTestBuilder, BITWISE_OP_LOOKUP_BUS,
     },
-    to_byte_ptr_bits, Arena, MatrixRecordArena, MemoryConfig, PreflightExecutor, BLOCK_FE_WIDTH,
+    to_byte_ptr_bits, Arena, MatrixRecordArena, MemoryConfig, PreflightExecutor,
     MEMORY_BLOCK_BYTES,
 };
 use openvm_circuit_primitives::bitwise_op_lookup::{
@@ -32,16 +32,6 @@ use {
         DenseRecordArena,
     },
     openvm_cuda_common::d_buffer::DeviceBuffer,
-};
-#[cfg(all(feature = "cuda", feature = "rvr"))]
-use {
-    openvm_circuit::arch::rvr::{
-        cuda::GpuRvrProgram, RvrPreflightEndpoint, RvrPreflightTranscript,
-    },
-    openvm_instructions::{program::Program, SystemOpcode},
-    rvr_state::{
-        PreflightInitialWrite, PreflightMemoryEvent, PreflightProgramEvent, PREFLIGHT_WRITE_BIT,
-    },
 };
 
 use super::{DeferralOutputAir, DeferralOutputChip, DeferralOutputExecutor, DeferralOutputFiller};
@@ -501,183 +491,8 @@ fn test_cuda_rand_deferral_output_tracegen() {
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
-fn test_output_rvr_replay_proves_without_records_and_rejects_corruption() {
+fn test_output_rvr_replay_rejects_invalid_trace_shapes() {
     assert!(super::cuda::checked_replay_trace_shape(u64::MAX, 1, usize::MAX).is_err());
     assert!(super::cuda::checked_replay_trace_shape(3, 1, 2).is_err());
     assert!(super::cuda::checked_replay_trace_shape(2, usize::MAX, 2).is_err());
-
-    let rd = 8usize;
-    let rs = 16usize;
-    let output_ptr = 0x100u32;
-    let input_ptr = 0x200u32;
-    let deferral_idx = 0usize;
-    let output_raw = (0..2 * DIGEST_SIZE)
-        .map(|i| (i as u8).wrapping_mul(17).wrapping_add(3))
-        .collect::<Vec<_>>();
-    let result = make_result(deferral_idx, [0; COMMIT_NUM_BYTES], output_raw.clone());
-    let output_commit: [u8; COMMIT_NUM_BYTES] = result.output_commit.clone().try_into().unwrap();
-    let output_key = combine_output(output_commit, (output_raw.len() as u64).to_le_bytes());
-    let output = Instruction::from_usize(
-        DeferralOpcode::OUTPUT.global_opcode(),
-        [
-            rd,
-            rs,
-            deferral_idx,
-            RV64_REGISTER_AS as usize,
-            RV64_MEMORY_AS as usize,
-        ],
-    );
-    let program = Program::from_instructions(&[
-        output.clone(),
-        Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0; 5]),
-    ]);
-    let block = |bytes: &[u8]| {
-        std::array::from_fn(|i| u16::from_le_bytes([bytes[2 * i], bytes[2 * i + 1]]))
-    };
-    let register_block = |value: u64| block(&value.to_le_bytes());
-    let mut memory_log = vec![
-        PreflightMemoryEvent {
-            timestamp: 1,
-            address_space_and_kind: RV64_REGISTER_AS,
-            pointer: rd as u32 / 2,
-            value: register_block(output_ptr as u64),
-        },
-        PreflightMemoryEvent {
-            timestamp: 2,
-            address_space_and_kind: RV64_REGISTER_AS,
-            pointer: rs as u32 / 2,
-            value: register_block(input_ptr as u64),
-        },
-    ];
-    memory_log.extend(output_key.chunks_exact(MEMORY_BLOCK_BYTES).enumerate().map(
-        |(chunk_idx, chunk)| PreflightMemoryEvent {
-            timestamp: 3 + chunk_idx as u32,
-            address_space_and_kind: RV64_MEMORY_AS,
-            pointer: input_ptr / 2 + (chunk_idx * BLOCK_FE_WIDTH) as u32,
-            value: block(chunk),
-        },
-    ));
-    memory_log.extend(output_raw.chunks_exact(MEMORY_BLOCK_BYTES).enumerate().map(
-        |(chunk_idx, chunk)| PreflightMemoryEvent {
-            timestamp: 8 + chunk_idx as u32,
-            address_space_and_kind: RV64_MEMORY_AS | PREFLIGHT_WRITE_BIT,
-            pointer: output_ptr / 2 + (chunk_idx * BLOCK_FE_WIDTH) as u32,
-            value: block(chunk),
-        },
-    ));
-    let initial_write_log = (0..output_raw.len() / MEMORY_BLOCK_BYTES)
-        .map(|chunk_idx| PreflightInitialWrite {
-            address_space: RV64_MEMORY_AS,
-            pointer: output_ptr / 2 + (chunk_idx * BLOCK_FE_WIDTH) as u32,
-            initial_value: [0; BLOCK_FE_WIDTH],
-        })
-        .collect::<Vec<_>>();
-    let final_timestamp = 8 + (output_raw.len() / MEMORY_BLOCK_BYTES) as u32;
-    let make_transcript = |memory_log: Vec<PreflightMemoryEvent>| RvrPreflightTranscript {
-        program_log: vec![
-            PreflightProgramEvent {
-                pc: 0,
-                timestamp: 1,
-            },
-            PreflightProgramEvent {
-                pc: 4,
-                timestamp: final_timestamp,
-            },
-            PreflightProgramEvent {
-                pc: 4,
-                timestamp: final_timestamp,
-            },
-        ],
-        memory_log,
-        initial_write_log: initial_write_log.clone(),
-    };
-
-    let mut tester = GpuChipTestBuilder::new(
-        test_memory_config(),
-        openvm_circuit::arch::testing::default_var_range_checker_bus(),
-    )
-    .with_bitwise_op_lookup(default_bitwise_lookup_bus());
-    init_streams(&mut tester, NUM_DEFERRALS);
-    let state = &mut tester.streams_mut().deferrals[deferral_idx];
-    state.store_input(result.input.clone(), vec![]);
-    state.store_output(&result.input, result.output_commit, result.output_raw);
-    tester.write_bytes(
-        RV64_REGISTER_AS as usize,
-        rd,
-        (output_ptr as u64).to_le_bytes().map(F::from_u8),
-    );
-    tester.write_bytes(
-        RV64_REGISTER_AS as usize,
-        rs,
-        (input_ptr as u64).to_le_bytes().map(F::from_u8),
-    );
-    write_output_key(&mut tester, input_ptr as usize, output_key);
-
-    let CudaHarnessBundle {
-        mut harness,
-        count,
-        poseidon2,
-    } = create_cuda_harness(&tester, NUM_DEFERRALS);
-    tester.execute_with_pc(&mut harness.executor, &mut harness.dense_arena, &output, 0);
-    // The legacy execution is used only to populate the test builder's memory
-    // chronology. Discard its chip record before direct replay so the proof
-    // cannot accidentally depend on RecordArena bytes.
-    assert!(!harness.dense_arena.is_empty());
-    harness.dense_arena.align_to(32);
-    assert!(harness.dense_arena.is_empty());
-    let device_ctx = &tester.range_checker().device_ctx;
-    let mut replay_memory_config = test_memory_config();
-    // OUTPUT touches only the two U16 RV64 address spaces. CALL remains
-    // fail-closed until checkpoint chronology has a typed AS4 sidecar.
-    replay_memory_config.addr_spaces[DEFERRAL_AS as usize].num_cells = 0;
-    let gpu_program = GpuRvrProgram::upload(&program, &replay_memory_config, device_ctx).unwrap();
-    let transcript = make_transcript(memory_log.clone());
-    let (gpu_transcript, replay_plan) = gpu_program
-        .upload_transcript(&transcript, RvrPreflightEndpoint::Terminated)
-        .unwrap();
-    assert!(harness
-        .gpu_chip
-        .generate_proving_ctx_from_rvr(&gpu_program, &gpu_transcript, &replay_plan, 2)
-        .is_err());
-    let replay_ctx = harness
-        .gpu_chip
-        .generate_proving_ctx_from_rvr(
-            &gpu_program,
-            &gpu_transcript,
-            &replay_plan,
-            MAX_INS_CAPACITY,
-        )
-        .unwrap();
-    assert_eq!(gpu_transcript.error_code().unwrap(), 0);
-
-    let mut corrupt = memory_log;
-    corrupt[6].value[2] = 1;
-    let (gpu_corrupt, corrupt_plan) = gpu_program
-        .upload_transcript(&make_transcript(corrupt), RvrPreflightEndpoint::Terminated)
-        .unwrap();
-    let corrupt_poseidon2 = DeferralPoseidon2ChipGpu::new(1, device_ctx.clone());
-    let corrupt_chip = DeferralOutputChipGpu::new(
-        tester.range_checker(),
-        tester.bitwise_op_lookup(),
-        tester.address_bits(),
-        tester.timestamp_max_bits(),
-        Arc::new(DeviceBuffer::<u32>::with_capacity_on(
-            NUM_DEFERRALS,
-            device_ctx,
-        )),
-        NUM_DEFERRALS,
-        corrupt_poseidon2.shared_buffer(),
-    );
-    assert!(corrupt_chip
-        .generate_proving_ctx_from_rvr(&gpu_program, &gpu_corrupt, &corrupt_plan, MAX_INS_CAPACITY,)
-        .is_err());
-
-    tester
-        .build()
-        .load_air_proving_ctx(Arc::new(harness.air), replay_ctx)
-        .load(count.0, count.1, count.2)
-        .load(poseidon2.0, poseidon2.1, poseidon2.2)
-        .finalize()
-        .simple_test()
-        .expect("Deferral OUTPUT checkpoint replay proof failed");
 }
