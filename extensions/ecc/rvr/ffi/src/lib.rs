@@ -1,7 +1,7 @@
 //! Rust FFI for projective P-256, BN254, and BLS12-381 point operations and
 //! setup operations for all supported curves.
 //!
-//! Point operations use the circuit's native projective formulas (see [`ec`]) so
+//! Point operations use the circuit's native projective formulas so
 //! rvr execution matches the circuit exactly. Setup operations evaluate OpenVM's
 //! precomputed field expressions and validate the on-chip curve parameters.
 
