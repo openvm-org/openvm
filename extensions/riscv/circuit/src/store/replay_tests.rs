@@ -36,12 +36,12 @@ use openvm_instructions::{
     LocalOpcode, SystemOpcode, PUBLIC_VALUES_AS,
 };
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, STORED, STOREH, STOREW};
-use openvm_stark_backend::p3_field::PrimeCharacteristicRing;
+use openvm_stark_backend::{p3_field::PrimeCharacteristicRing, p3_matrix::Matrix};
 
 use crate::{
     adapters::{
-        Rv64StoreMultiByteAdapterAir, Rv64StoreMultiByteAdapterExecutor,
-        Rv64StoreMultiByteAdapterFiller, RV64_BYTE_BITS,
+        Rv64StoreMultiByteAdapterAir, Rv64StoreMultiByteAdapterCols,
+        Rv64StoreMultiByteAdapterExecutor, Rv64StoreMultiByteAdapterFiller, RV64_BYTE_BITS,
     },
     store::{
         Rv64StoreDoublewordAir, Rv64StoreDoublewordChip, Rv64StoreDoublewordChipGpu,

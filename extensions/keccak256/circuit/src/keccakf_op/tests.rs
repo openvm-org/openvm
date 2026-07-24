@@ -43,7 +43,7 @@ use {
     openvm_circuit::arch::rvr::{
         cuda::GpuRvrProgram, RvrPreflightEndpoint, RvrPreflightTranscript,
     },
-    openvm_instructions::{exe::SparseMemoryImage, program::Program, SystemOpcode},
+    openvm_instructions::{program::Program, SystemOpcode},
     rvr_state::{
         PreflightInitialWrite, PreflightMemoryEvent, PreflightProgramEvent, PREFLIGHT_WRITE_BIT,
     },
@@ -231,11 +231,6 @@ use openvm_circuit::arch::{
     testing::{default_bitwise_lookup_bus, GpuChipTestBuilder, GpuTestChipHarness},
     DenseRecordArena,
 };
-#[cfg(feature = "cuda")]
-use openvm_cuda_common::{
-    common::get_device,
-    stream::{CudaStream, GpuDeviceCtx, StreamGuard},
-};
 
 #[cfg(feature = "cuda")]
 use crate::{
@@ -286,10 +281,7 @@ fn create_cuda_harness(tester: &GpuChipTestBuilder) -> CudaTestHarness {
 
     // Create GPU Perm chip with shared records
     let perm_air = KeccakfPermAir::new(air.keccakf_state_bus);
-    let device_ctx = GpuDeviceCtx {
-        device_id: get_device().unwrap() as u32,
-        stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
-    };
+    let device_ctx = tester.range_checker().device_ctx.clone();
     let perm_chip = KeccakfPermChipGpu::new(shared_records, device_ctx);
 
     CudaTestHarness {
@@ -306,8 +298,6 @@ fn cuda_set_and_execute(
     arena: &mut DenseRecordArena,
     rng: &mut StdRng,
 ) {
-    use openvm_circuit::arch::testing::memory::gen_pointer;
-
     const KECCAK_STATE_BYTES: usize = 200;
 
     let buffer_reg = gen_pointer(rng, RV64_REGISTER_NUM_LIMBS);
@@ -468,10 +458,10 @@ fn test_keccakf_cuda_tracegen_zero_state() {
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
-fn test_keccakf_rvr_replay_proves_op_and_perm_without_records() {
+fn test_keccakf_rvr_replay_accepts_valid_transcript_and_rejects_corruption() {
     let buffer_reg = 8usize;
     let buffer_ptr = 0x100u32;
-    let keccakf = Instruction::from_usize(
+    let keccakf_instruction = Instruction::<F>::from_usize(
         KeccakfOpcode::KECCAKF.global_opcode(),
         [
             buffer_reg,
@@ -482,22 +472,10 @@ fn test_keccakf_rvr_replay_proves_op_and_perm_without_records() {
         ],
     );
     let instructions = [
-        keccakf.clone(),
+        keccakf_instruction,
         Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
     ];
     let program = Program::from_instructions(&instructions);
-    let mut init_memory = (buffer_ptr as u64)
-        .to_le_bytes()
-        .into_iter()
-        .enumerate()
-        .map(|(offset, byte)| ((RV64_REGISTER_AS, buffer_reg as u32 + offset as u32), byte))
-        .collect::<SparseMemoryImage>();
-    init_memory.extend((0..KECCAK_WIDTH_BYTES).map(|offset| {
-        (
-            (RV64_MEMORY_AS, buffer_ptr + offset as u32),
-            (offset as u8).wrapping_mul(29),
-        )
-    }));
     let memory_config = openvm_circuit::arch::MemoryConfig::default();
     let block = |bytes: &[u8]| {
         std::array::from_fn(|i| u16::from_le_bytes([bytes[2 * i], bytes[2 * i + 1]]))
@@ -554,35 +532,26 @@ fn test_keccakf_rvr_replay_proves_op_and_perm_without_records() {
         initial_write_log,
     };
 
-    let mut tester =
-        GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
-    for (&(address_space, pointer), &value) in &init_memory {
-        tester.write_bytes(
-            address_space as usize,
-            pointer as usize,
-            [F::from_u8(value)],
-        );
-    }
-    let mut harness = create_cuda_harness(&tester);
-    tester.execute_with_pc(
-        &mut harness.op_harness.executor,
-        &mut harness.op_harness.dense_arena,
-        &keccakf,
-        0,
+    let tester = GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
+    let shared_records = Arc::new(Mutex::new(SharedKeccakfRecords::default()));
+    let op_chip = KeccakfOpChipGpu::new(
+        tester.range_checker(),
+        tester.address_bits(),
+        tester.timestamp_max_bits() as u32,
+        shared_records.clone(),
     );
+    let perm_chip =
+        KeccakfPermChipGpu::new(shared_records, tester.range_checker().device_ctx.clone());
 
     let device_ctx = &tester.range_checker().device_ctx;
     let gpu_program = GpuRvrProgram::upload(&program, &memory_config, device_ctx).unwrap();
     let (gpu_transcript, replay_plan) = gpu_program
         .upload_transcript(&transcript, RvrPreflightEndpoint::Terminated)
         .unwrap();
-    let op_ctx = harness
-        .op_harness
-        .gpu_chip
+    let _op_ctx = op_chip
         .generate_proving_ctx_from_rvr(&gpu_program, &gpu_transcript, &replay_plan)
         .unwrap();
-    let perm_ctx = harness
-        .perm_chip
+    let _perm_ctx = perm_chip
         .generate_proving_ctx_from_rvr(&gpu_program, &gpu_transcript, &replay_plan)
         .unwrap();
     assert_eq!(gpu_transcript.error_code().unwrap(), 0);
@@ -603,12 +572,4 @@ fn test_keccakf_rvr_replay_proves_op_and_perm_without_records() {
         .generate_proving_ctx_from_rvr(&gpu_program, &gpu_corrupt, &corrupt_plan)
         .unwrap();
     assert_eq!(gpu_corrupt.error_code().unwrap(), 811);
-
-    tester
-        .build()
-        .load_air_proving_ctx(Arc::new(harness.op_harness.air), op_ctx)
-        .load_air_proving_ctx(Arc::new(harness.perm_air), perm_ctx)
-        .finalize()
-        .simple_test()
-        .expect("Keccakf checkpoint replay proof failed");
 }

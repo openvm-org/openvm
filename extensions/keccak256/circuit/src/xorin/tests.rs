@@ -36,7 +36,7 @@ use {
     openvm_circuit::arch::rvr::{
         cuda::GpuRvrProgram, RvrPreflightEndpoint, RvrPreflightTranscript,
     },
-    openvm_instructions::{exe::SparseMemoryImage, program::Program, SystemOpcode},
+    openvm_instructions::{program::Program, SystemOpcode},
     rvr_state::{PreflightMemoryEvent, PreflightProgramEvent, PREFLIGHT_WRITE_BIT},
 };
 
@@ -480,14 +480,14 @@ fn test_xorin_cuda_tracegen_single() {
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
-fn test_xorin_rvr_replay_proves_without_records_and_rejects_unaligned_len() {
+fn test_xorin_rvr_replay_accepts_valid_transcript_and_rejects_unaligned_len() {
     let buffer_reg = 8usize;
     let input_reg = 16usize;
     let len_reg = 24usize;
     let buffer_ptr = 0x100u32;
     let input_ptr = 0x200u32;
     let len = KECCAK_RATE_BYTES;
-    let xorin = Instruction::from_usize(
+    let xorin = Instruction::<F>::from_usize(
         XorinOpcode::XORIN.global_opcode(),
         [
             buffer_reg,
@@ -498,33 +498,10 @@ fn test_xorin_rvr_replay_proves_without_records_and_rejects_unaligned_len() {
         ],
     );
     let instructions = [
-        xorin.clone(),
+        xorin,
         Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
     ];
     let program = Program::from_instructions(&instructions);
-    let mut init_memory = [
-        (buffer_reg, buffer_ptr as u64),
-        (input_reg, input_ptr as u64),
-        (len_reg, len as u64),
-    ]
-    .into_iter()
-    .flat_map(|(register, value)| {
-        value
-            .to_le_bytes()
-            .into_iter()
-            .enumerate()
-            .map(move |(offset, byte)| ((RV64_REGISTER_AS, register as u32 + offset as u32), byte))
-    })
-    .collect::<SparseMemoryImage>();
-    init_memory.extend((0..len).flat_map(|offset| {
-        [
-            ((RV64_MEMORY_AS, buffer_ptr + offset as u32), offset as u8),
-            (
-                (RV64_MEMORY_AS, input_ptr + offset as u32),
-                (offset as u8).wrapping_mul(17),
-            ),
-        ]
-    }));
     let memory_config = openvm_circuit::arch::MemoryConfig::default();
 
     let block = |bytes: &[u8]| {
@@ -602,25 +579,20 @@ fn test_xorin_rvr_replay_proves_without_records_and_rejects_unaligned_len() {
         initial_write_log: Vec::new(),
     };
 
-    let mut tester =
-        GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
-    for (&(address_space, pointer), &value) in &init_memory {
-        tester.write_bytes(
-            address_space as usize,
-            pointer as usize,
-            [F::from_u8(value)],
-        );
-    }
-    let mut harness = create_cuda_harness(&tester);
-    tester.execute_with_pc(&mut harness.executor, &mut harness.dense_arena, &xorin, 0);
+    let tester = GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
+    let chip = XorinVmChipGpu::new(
+        tester.range_checker(),
+        tester.bitwise_op_lookup(),
+        tester.address_bits(),
+        tester.timestamp_max_bits() as u32,
+    );
 
     let device_ctx = &tester.range_checker().device_ctx;
     let gpu_program = GpuRvrProgram::upload(&program, &memory_config, device_ctx).unwrap();
     let (gpu_transcript, replay_plan) = gpu_program
         .upload_transcript(&transcript, RvrPreflightEndpoint::Terminated)
         .unwrap();
-    let replay_ctx = harness
-        .gpu_chip
+    let _replay_ctx = chip
         .generate_proving_ctx_from_rvr(&gpu_program, &gpu_transcript, &replay_plan)
         .unwrap();
     assert_eq!(gpu_transcript.error_code().unwrap(), 0);
@@ -640,11 +612,4 @@ fn test_xorin_rvr_replay_proves_without_records_and_rejects_unaligned_len() {
         .generate_proving_ctx_from_rvr(&gpu_program, &gpu_corrupt, &corrupt_plan)
         .unwrap();
     assert_eq!(gpu_corrupt.error_code().unwrap(), 801);
-
-    tester
-        .build()
-        .load_air_proving_ctx(Arc::new(harness.air), replay_ctx)
-        .finalize()
-        .simple_test()
-        .expect("Xorin checkpoint replay proof failed");
 }

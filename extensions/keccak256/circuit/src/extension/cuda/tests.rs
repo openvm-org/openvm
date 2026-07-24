@@ -2,8 +2,7 @@ use openvm_circuit::{
     arch::{
         rvr::{
             cuda::{GpuRvrProgram, RvrCheckpointAccessRegistry, RvrCheckpointAccessSpan},
-            PreflightProgramEvent, RvrCheckpointPreflightLimits, RvrPreflightEndpoint,
-            RvrPreflightTranscript,
+            RvrCheckpointPreflightLimits, RvrPreflightEndpoint, RvrPreflightTranscript,
         },
         VirtualMachine, VmExecutor,
     },
@@ -16,13 +15,15 @@ use openvm_instructions::{
     riscv::{RV64_IMM_AS, RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_BYTES},
     LocalOpcode, SystemOpcode, VmOpcode,
 };
+use openvm_keccak256_transpiler::{KeccakfOpcode, XorinOpcode};
 use openvm_riscv_circuit::Rv64ImRvrGpuTracegen;
 use openvm_riscv_transpiler::BaseAluImmOpcode;
 use openvm_stark_backend::StarkEngine;
 use openvm_stark_sdk::p3_baby_bear::BabyBear;
+use rvr_state::PreflightProgramEvent;
 
 use super::{Keccak256Rv64GpuBuilder, Keccak256RvrGpuTracegen};
-use crate::{Keccak256Rv64Config, KeccakfOpcode, XorinOpcode};
+use crate::Keccak256Rv64Config;
 
 type F = BabyBear;
 
@@ -188,7 +189,8 @@ fn checkpoint_replay_expands_keccak_schedules_and_rejects_missing_residuals() {
         &config.system.memory_config,
         &vm.engine.device().device_ctx,
     )
-    .unwrap_err();
+    .err()
+    .expect("an instruction incompatible with the Keccak schedule must be rejected");
     assert!(
         malformed
             .to_string()
@@ -208,7 +210,8 @@ fn checkpoint_replay_expands_keccak_schedules_and_rejects_missing_residuals() {
         &execution,
         execution.retired,
     )
-    .unwrap_err();
+    .err()
+    .expect("expansion without Keccak access schedules must fail");
     assert!(unclaimed.to_string().contains("code 303"), "{unclaimed}");
 
     let gpu_program = Keccak256RvrGpuTracegen::upload_checkpoint_program(
@@ -280,10 +283,12 @@ fn checkpoint_replay_expands_keccak_schedules_and_rejects_missing_residuals() {
     vm.engine.verify(&pk.get_vk(), &proof).unwrap();
 
     let mut invalid_state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
-    invalid_state
-        .memory
-        .write_bytes(RV64_REGISTER_AS, reg(3) as u32, 7u64.to_le_bytes());
-    vm.transport_init_memory_to_device(&invalid_state.memory);
+    // The fixture register lies within the configured RV64 register space.
+    unsafe {
+        invalid_state
+            .memory
+            .write_bytes(RV64_REGISTER_AS, reg(3) as u32, 7u64.to_le_bytes());
+    }
     let invalid = checkpoint.execute_from_state(
         invalid_state,
         RvrCheckpointPreflightLimits::new(instructions.len(), 26, 1),
