@@ -613,6 +613,85 @@ mod tests {
 
     #[test]
     #[cfg(feature = "rvr")]
+    fn test_rvr_checkpoint_preflight_carries_dirty_memory_across_segments() -> Result<()> {
+        let reg = |index: usize| index * RV64_REGISTER_NUM_LIMBS;
+        let memory = |opcode: Rv64LoadStoreOpcode, value: usize, base: usize| {
+            Instruction::<F>::from_usize(
+                opcode.global_opcode(),
+                [
+                    reg(value),
+                    reg(base),
+                    0,
+                    RV64_REGISTER_AS as usize,
+                    RV64_MEMORY_AS as usize,
+                    1,
+                    0,
+                ],
+            )
+        };
+        let jump_to_next = || {
+            Instruction::<F>::from_usize(
+                Rv64JalLuiOpcode::JAL.global_opcode(),
+                [0, 0, 4, RV64_REGISTER_AS as usize, 0, 0],
+            )
+        };
+        let instructions = [
+            memory(Rv64LoadStoreOpcode::STORED, 2, 1),
+            jump_to_next(),
+            memory(Rv64LoadStoreOpcode::LOADD, 3, 1),
+            memory(Rv64LoadStoreOpcode::STORED, 0, 1),
+            jump_to_next(),
+            Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
+        ];
+        let exe = VmExe::from(Program::from_instructions(&instructions));
+        let executor = VmExecutor::new(test_rv64im_config())?;
+        let checkpoint = executor.rvr_experimental_checkpoint_preflight_instance(&exe, None)?;
+        let address = PAGE_SIZE as u64 + 8;
+        let value = 0x0123_4567_89ab_cdef;
+        let initial = configure_hint_state(
+            checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new()),
+            &[(1, address), (2, value)],
+            &[],
+        );
+        let page_is_marked = |state: &VmState<GuestMemory>| {
+            state.memory.memory.touched_pages[RV64_MEMORY_AS as usize]
+                .touched_byte_ranges(2 * PAGE_SIZE)
+                .iter()
+                .any(|&(start, end)| start <= address as usize && (address as usize) < end)
+        };
+        assert!(!page_is_marked(&initial));
+
+        let first = checkpoint.execute_from_state_for(
+            initial,
+            openvm_circuit::arch::rvr::RvrCheckpointPreflightLimits::new(2, 0, 2),
+        )?;
+        assert_eq!(
+            first.endpoint,
+            openvm_circuit::arch::rvr::RvrPreflightEndpoint::Suspended {
+                resume_pc: 8,
+                final_timestamp: 6,
+            }
+        );
+        assert_eq!(read_main_word(&first.state, address as u32), value);
+        assert!(page_is_marked(&first.state));
+        assert!(
+            !first.state.memory.memory.touched_pages[RV64_REGISTER_AS as usize]
+                .touched_byte_ranges(RV64_REGISTER_NUM_LIMBS * 32 * 2)
+                .is_empty()
+        );
+
+        let second = checkpoint.execute_from_state_for(
+            first.state,
+            openvm_circuit::arch::rvr::RvrCheckpointPreflightLimits::new(3, 1, 2),
+        )?;
+        assert_eq!(read_register(&second.state, 3), value);
+        assert_eq!(read_main_word(&second.state, address as u32), 0);
+        assert!(page_is_marked(&second.state));
+        Ok(())
+    }
+
+    #[test]
+    #[cfg(feature = "rvr")]
     fn test_rvr_checkpoint_preflight_load_residuals_omit_x0() -> Result<()> {
         let reg = |index: usize| index * RV64_REGISTER_NUM_LIMBS;
         let load = |opcode: Rv64LoadStoreOpcode, rd: usize, offset: usize| {
@@ -831,6 +910,11 @@ mod tests {
         assert_eq!(
             extract_public_values(16, &checkpoint_execution.state.memory.memory),
             extract_public_values(16, &full_execution.state.memory.memory)
+        );
+        assert_eq!(
+            checkpoint_execution.state.memory.memory.touched_pages[PUBLIC_VALUES_AS as usize]
+                .touched_byte_ranges(16),
+            vec![(0, 16)]
         );
         Ok(())
     }

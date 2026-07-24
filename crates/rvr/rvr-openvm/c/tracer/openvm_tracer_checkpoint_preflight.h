@@ -27,9 +27,11 @@ typedef struct CheckpointPreflightLocal {
   uint32_t last_checkpoint_retired;
   uint32_t error;
   uint32_t instruction_limit;
+  uint32_t last_memory_dirty_page;
+  uint32_t padding;
 } CheckpointPreflightLocal;
 
-static_assert(sizeof(CheckpointPreflightLocal) == 80);
+static_assert(sizeof(CheckpointPreflightLocal) == 88);
 static_assert(alignof(CheckpointPreflightLocal) == 8);
 
 static __attribute__((always_inline)) inline CheckpointPreflightLocal
@@ -49,6 +51,8 @@ checkpoint_preflight_local_load(RvState* restrict state) {
       .last_checkpoint_retired = p->last_checkpoint_retired,
       .error = p->error,
       .instruction_limit = p->instruction_limit,
+      .last_memory_dirty_page = p->last_memory_dirty_page,
+      .padding = 0u,
   };
 }
 
@@ -63,6 +67,57 @@ checkpoint_preflight_local_flush(
   p->retired = local->retired;
   p->last_checkpoint_retired = local->last_checkpoint_retired;
   p->error = local->error;
+  p->last_memory_dirty_page = local->last_memory_dirty_page;
+}
+
+/* Dirty pages are executor bookkeeping for sparse state transfer. They are
+ * deliberately not part of the replay transcript. Rust owns exact-size
+ * bitsets, and the normal memory bounds checks imply these indices fit. */
+static __attribute__((always_inline)) inline void
+checkpoint_preflight_mark_dirty_page(uint64_t* restrict dirty_pages,
+                                     uint64_t dirty_page_words,
+                                     uint64_t page) {
+  uint64_t word = page >> 6;
+  assume(dirty_pages != NULL && word < dirty_page_words);
+  dirty_pages[word] |= 1ull << (page & 63ull);
+}
+
+static __attribute__((always_inline)) inline void
+checkpoint_preflight_local_mark_memory_write(
+    RvState* restrict state, CheckpointPreflightLocal* restrict local,
+    uint64_t address, uint64_t size) {
+  assume(size != 0u);
+  CheckpointPreflightState* restrict p = &state->mode_state;
+  uint32_t first = (uint32_t)(address >> CHECKPOINT_DIRTY_PAGE_BITS);
+  uint32_t last =
+      (uint32_t)((address + size - 1u) >> CHECKPOINT_DIRTY_PAGE_BITS);
+  if (first != local->last_memory_dirty_page) {
+    checkpoint_preflight_mark_dirty_page(
+        p->memory_dirty_pages, p->memory_dirty_page_words, first);
+  }
+  if (last != first && last != local->last_memory_dirty_page) {
+    checkpoint_preflight_mark_dirty_page(
+        p->memory_dirty_pages, p->memory_dirty_page_words, last);
+  }
+  local->last_memory_dirty_page = last;
+}
+
+static __attribute__((always_inline)) inline void
+checkpoint_preflight_mark_memory_range(RvState* restrict state,
+                                       uint64_t address, uint64_t size) {
+  if (size == 0u) return;
+  CheckpointPreflightState* restrict p = &state->mode_state;
+  uint32_t first = (uint32_t)(address >> CHECKPOINT_DIRTY_PAGE_BITS);
+  uint32_t last =
+      (uint32_t)((address + size - 1u) >> CHECKPOINT_DIRTY_PAGE_BITS);
+  for (uint32_t page = first;; ++page) {
+    if (page != p->last_memory_dirty_page) {
+      checkpoint_preflight_mark_dirty_page(
+          p->memory_dirty_pages, p->memory_dirty_page_words, page);
+    }
+    if (page == last) break;
+  }
+  p->last_memory_dirty_page = last;
 }
 
 static __attribute__((always_inline)) inline void
@@ -177,9 +232,16 @@ trace_reserve_memory_writes(RvState* restrict state [[maybe_unused]],
 
 static __attribute__((always_inline)) inline bool
 trace_write_other_block_u64(
-    RvState* restrict state [[maybe_unused]],
-    uint32_t address_space [[maybe_unused]], uint32_t pointer [[maybe_unused]],
+    RvState* restrict state,
+    uint32_t address_space, uint32_t pointer,
     uint64_t value [[maybe_unused]], uint64_t previous_value [[maybe_unused]]) {
+  if (address_space == AS_PUBLIC_VALUES) {
+    CheckpointPreflightState* restrict p = &state->mode_state;
+    uint64_t byte_address = (uint64_t)pointer * sizeof(uint16_t);
+    uint64_t page = byte_address >> CHECKPOINT_DIRTY_PAGE_BITS;
+    checkpoint_preflight_mark_dirty_page(
+        p->public_values_dirty_pages, p->public_values_dirty_page_words, page);
+  }
   return true;
 }
 
@@ -196,6 +258,8 @@ static __attribute__((always_inline)) inline void write_mem_u64_range(
     RvState* restrict state, uint64_t base_addr,
     const uint64_t* restrict values, uint32_t num_words) {
   write_mem_u64_range_raw(state, base_addr, values, num_words);
+  checkpoint_preflight_mark_memory_range(
+      state, base_addr, (uint64_t)num_words * sizeof(uint64_t));
 }
 
 static __attribute__((always_inline)) inline uint64_t peek_mem_u64(

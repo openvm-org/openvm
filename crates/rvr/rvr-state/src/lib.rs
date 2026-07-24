@@ -5,7 +5,9 @@ mod instret;
 mod preflight;
 mod state;
 
-pub use checkpoint_preflight::{CheckpointPreflightState, RvrCheckpoint};
+pub use checkpoint_preflight::{
+    CheckpointPreflightState, RvrCheckpoint, CHECKPOINT_DIRTY_PAGE_BYTES,
+};
 pub use instret::InstretTrackingState;
 pub use preflight::{
     PreflightInitialWrite, PreflightMemoryEvent, PreflightProgramEvent, PreflightState,

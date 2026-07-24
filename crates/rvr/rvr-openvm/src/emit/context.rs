@@ -510,6 +510,11 @@ impl<'a> EmitContext<'a> {
             self.write_line(&format!(
                 "{write_func}(memory, {addr}, ({cast_ty})({val}));"
             ));
+            if self.mode.uses_checkpoint_local() {
+                self.write_line(&format!(
+                    "checkpoint_preflight_local_mark_memory_write(state, &checkpoint_preflight, {addr}, {width}u);"
+                ));
+            }
         }
     }
 
@@ -538,6 +543,11 @@ impl<'a> EmitContext<'a> {
             self.write_line(&format!(
                 "write_mem_u64(memory, {addr}, (uint64_t)({val}));"
             ));
+            if self.mode.uses_checkpoint_local() {
+                self.write_line(&format!(
+                    "checkpoint_preflight_local_mark_memory_write(state, &checkpoint_preflight, {addr}, 8u);"
+                ));
+            }
         }
     }
 
@@ -1071,10 +1081,16 @@ mod tests {
         ctx.advance_timestamp(3);
 
         assert_eq!(ctx.checkpoint_preflight_budget(), (11, 0));
-        assert!(!ctx.buf().contains("preflight_local_"));
+        assert!(!ctx.buf().contains("preflight_local_reg"));
         assert!(!ctx.buf().contains("trace_read"));
         assert!(!ctx.buf().contains("trace_write"));
         assert!(!ctx.buf().contains("trace_reg"));
+        assert_eq!(
+            ctx.buf()
+                .matches("checkpoint_preflight_local_mark_memory_write")
+                .count(),
+            2
+        );
     }
 
     #[test]
