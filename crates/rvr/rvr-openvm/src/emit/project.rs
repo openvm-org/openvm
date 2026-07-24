@@ -202,10 +202,16 @@ impl RvrExecutionKind {
                 writeln!(out, "  uint32_t last_checkpoint_retired;").unwrap();
                 writeln!(out, "  uint32_t error;").unwrap();
                 writeln!(out, "  uint32_t instruction_limit;").unwrap();
+                writeln!(out, "  uint64_t* memory_dirty_pages;").unwrap();
+                writeln!(out, "  uint64_t* public_values_dirty_pages;").unwrap();
+                writeln!(out, "  uint64_t memory_dirty_page_words;").unwrap();
+                writeln!(out, "  uint64_t public_values_dirty_page_words;").unwrap();
+                writeln!(out, "  uint32_t last_memory_dirty_page;").unwrap();
+                writeln!(out, "  uint32_t padding;").unwrap();
                 writeln!(out, "}} CheckpointPreflightState;").unwrap();
                 writeln!(
                     out,
-                    "static_assert(sizeof(CheckpointPreflightState) == 72);"
+                    "static_assert(sizeof(CheckpointPreflightState) == 112);"
                 )
                 .unwrap();
                 writeln!(
@@ -251,6 +257,36 @@ impl RvrExecutionKind {
                 writeln!(
                     out,
                     "static_assert(offsetof(CheckpointPreflightState, instruction_limit) == 68);"
+                )
+                .unwrap();
+                writeln!(
+                    out,
+                    "static_assert(offsetof(CheckpointPreflightState, memory_dirty_pages) == 72);"
+                )
+                .unwrap();
+                writeln!(
+                    out,
+                    "static_assert(offsetof(CheckpointPreflightState, public_values_dirty_pages) == 80);"
+                )
+                .unwrap();
+                writeln!(
+                    out,
+                    "static_assert(offsetof(CheckpointPreflightState, memory_dirty_page_words) == 88);"
+                )
+                .unwrap();
+                writeln!(
+                    out,
+                    "static_assert(offsetof(CheckpointPreflightState, public_values_dirty_page_words) == 96);"
+                )
+                .unwrap();
+                writeln!(
+                    out,
+                    "static_assert(offsetof(CheckpointPreflightState, last_memory_dirty_page) == 104);"
+                )
+                .unwrap();
+                writeln!(
+                    out,
+                    "static_assert(offsetof(CheckpointPreflightState, padding) == 108);"
                 )
                 .unwrap();
             }
@@ -1869,7 +1905,9 @@ mod tests {
 
         assert!(header.contains("uint64_t regs[31];"));
         assert!(header.contains("static_assert(sizeof(RvrCheckpoint) == 264);"));
-        assert!(header.contains("static_assert(sizeof(CheckpointPreflightState) == 72);"));
+        assert!(header.contains("static_assert(sizeof(CheckpointPreflightState) == 112);"));
+        assert!(header.contains("uint64_t* memory_dirty_pages;"));
+        assert!(header.contains("uint64_t* public_values_dirty_pages;"));
         assert!(header.contains("CheckpointPreflightState mode_state;"));
         assert!(!header.contains("PreflightProgramEvent"));
         assert!(!header.contains("PreflightMemoryEvent"));

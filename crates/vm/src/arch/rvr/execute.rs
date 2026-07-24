@@ -17,7 +17,8 @@ use super::{
         write_rv64_registers,
     },
     checkpoint_preflight::{
-        CheckpointPreflightBuffers, RvrCheckpointPreflightLimits, RvrCheckpointPreflightTranscript,
+        CheckpointDirtyPages, CheckpointPreflightBuffers, RvrCheckpointPreflightLimits,
+        RvrCheckpointPreflightTranscript,
     },
     compile::RvrCompiled,
     io::{host_hint_stream_set, OpenVmIoState},
@@ -312,9 +313,11 @@ pub(super) fn execute_checkpoint_preflight(
         None => CheckpointPreflightBuffers::new(limits),
     }
     .map_err(ExecuteError::InvalidPreflightContext)?;
+    let mut dirty_pages = CheckpointDirtyPages::new(&vm_state.memory.memory)
+        .map_err(ExecuteError::InvalidPreflightContext)?;
     let mut state: CheckpointPreflightRvState = init_rvr_state(vm_state, pc);
     state.regs = read_rv64_registers(vm_state);
-    state.mode_state = buffers.ffi_state();
+    state.mode_state = buffers.ffi_state(&mut dirty_pages);
 
     let execution = run_and_finalize(
         compiled,
@@ -346,8 +349,9 @@ pub(super) fn execute_checkpoint_preflight(
     // SAFETY: the raw state was created from `buffers` immediately above and
     // neither vector can reallocate during generated execution.
     let (transcript, checked_timestamp, retired) =
-        unsafe { buffers.finish(&state.mode_state, timestamp_max_bits) }
+        unsafe { buffers.finish(&state.mode_state, timestamp_max_bits, &dirty_pages) }
             .map_err(ExecuteError::InvalidPreflightContext)?;
+    dirty_pages.merge_into(&mut vm_state.memory.memory);
     debug_assert_eq!(final_timestamp, checked_timestamp);
     Ok((transcript, endpoint, checked_timestamp, retired))
 }
