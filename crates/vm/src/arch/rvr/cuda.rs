@@ -140,6 +140,7 @@ const RVR_CHECKPOINT_SPAN_WRITE_U16_RESIDUAL: u8 = 1;
 const RVR_CHECKPOINT_SPAN_WRITE_U16_ZERO: u8 = 2;
 const RVR_CHECKPOINT_SPAN_READ_FIELD32: u8 = 3;
 const RVR_CHECKPOINT_SPAN_WRITE_FIELD32_CANONICAL_PAIRS: u8 = 4;
+const RVR_CHECKPOINT_SPAN_WRITE_U16_STATIC: u8 = 5;
 const RVR_CHECKPOINT_DEFERRAL_DIGEST_BLOCKS: u32 = 2;
 
 /// One contiguous sequence of fixed-width memory-bus accesses in an
@@ -161,7 +162,7 @@ pub struct RvrCheckpointAccessSpan {
     count_shift: u8,
     count_source: u8,
     value_source: u8,
-    _padding: [u8; 2],
+    value_index: u16,
 }
 
 const _: () = assert!(size_of::<RvrCheckpointAccessSpan>() == 16);
@@ -169,6 +170,7 @@ const _: () = assert!(std::mem::offset_of!(RvrCheckpointAccessSpan, address_spac
 const _: () = assert!(std::mem::offset_of!(RvrCheckpointAccessSpan, count) == 4);
 const _: () = assert!(std::mem::offset_of!(RvrCheckpointAccessSpan, base_index) == 8);
 const _: () = assert!(std::mem::offset_of!(RvrCheckpointAccessSpan, value_source) == 13);
+const _: () = assert!(std::mem::offset_of!(RvrCheckpointAccessSpan, value_index) == 14);
 
 impl RvrCheckpointAccessSpan {
     pub const fn read_fixed(address_space: u32, base_register: u8, count: u32) -> Self {
@@ -181,7 +183,7 @@ impl RvrCheckpointAccessSpan {
             count_shift: 0,
             count_source: RVR_CHECKPOINT_SPAN_COUNT_FIXED,
             value_source: RVR_CHECKPOINT_SPAN_READ_U16,
-            _padding: [0; 2],
+            value_index: 0,
         }
     }
 
@@ -221,7 +223,7 @@ impl RvrCheckpointAccessSpan {
             count_shift,
             count_source: RVR_CHECKPOINT_SPAN_COUNT_REGISTER,
             value_source: RVR_CHECKPOINT_SPAN_READ_U16,
-            _padding: [0; 2],
+            value_index: 0,
         }
     }
 
@@ -297,7 +299,7 @@ impl RvrCheckpointAccessSpan {
             count_shift: 0,
             count_source: RVR_CHECKPOINT_SPAN_COUNT_FIXED,
             value_source,
-            _padding: [0; 2],
+            value_index: 0,
         }
     }
 }
@@ -339,8 +341,8 @@ struct RvrCheckpointInstructionLayout {
 /// describe access order only and are not part of the preflight transcript.
 ///
 /// This is an experimental composition seam, not a stable extension API. Its
-/// only current control effect is a boolean residual selecting a field-encoded
-/// branch target; later extension families require a broader finite POD shape.
+/// The supported sources remain a finite POD set: residuals, zero, program-owned
+/// constants, and Deferral's field accumulator blocks.
 #[doc(hidden)]
 #[derive(Clone, Debug, Default)]
 pub struct RvrCheckpointAccessRegistry {
@@ -348,9 +350,50 @@ pub struct RvrCheckpointAccessRegistry {
     schedules: Vec<RvrCheckpointAccessSchedule>,
     instruction_layouts: Vec<RvrCheckpointInstructionLayout>,
     spans: Vec<RvrCheckpointAccessSpan>,
+    static_values: Vec<u64>,
 }
 
 impl RvrCheckpointAccessRegistry {
+    /// Adds one fixed sequence of eight-byte write values to the program-owned
+    /// replay data and returns the span that consumes it. This is used for
+    /// setup instructions whose postimage depends only on VM configuration.
+    #[doc(hidden)]
+    pub fn write_fixed_from_static(
+        &mut self,
+        address_space: u32,
+        base_register: u8,
+        values: &[u64],
+    ) -> Result<RvrCheckpointAccessSpan, GpuRvrInputError> {
+        let count = u32::try_from(values.len()).map_err(|_| {
+            GpuRvrInputError::InvalidAccessSchedule("static write span is too large".to_string())
+        })?;
+        if count == 0 {
+            return Err(GpuRvrInputError::InvalidAccessSchedule(
+                "static write span must not be empty".to_string(),
+            ));
+        }
+        let value_index = u16::try_from(self.static_values.len()).map_err(|_| {
+            GpuRvrInputError::InvalidAccessSchedule(
+                "static write table exceeds its u16 index domain".to_string(),
+            )
+        })?;
+        self.static_values
+            .len()
+            .checked_add(values.len())
+            .filter(|&end| end <= usize::from(u16::MAX) + 1)
+            .ok_or_else(|| {
+                GpuRvrInputError::InvalidAccessSchedule(
+                    "static write table exceeds its u16 index domain".to_string(),
+                )
+            })?;
+        self.static_values.extend_from_slice(values);
+        Ok(RvrCheckpointAccessSpan {
+            value_source: RVR_CHECKPOINT_SPAN_WRITE_U16_STATIC,
+            value_index,
+            ..RvrCheckpointAccessSpan::read_fixed(address_space, base_register, count)
+        })
+    }
+
     #[doc(hidden)]
     #[allow(clippy::too_many_arguments)]
     pub fn register(
@@ -578,7 +621,11 @@ impl RvrCheckpointAccessRegistry {
                     | RVR_CHECKPOINT_SPAN_WRITE_U16_ZERO
                     | RVR_CHECKPOINT_SPAN_READ_FIELD32
                     | RVR_CHECKPOINT_SPAN_WRITE_FIELD32_CANONICAL_PAIRS
+                    | RVR_CHECKPOINT_SPAN_WRITE_U16_STATIC
             );
+            let static_end = usize::from(span.value_index)
+                .checked_add(span.count as usize)
+                .filter(|&end| end <= self.static_values.len());
             if !base_valid
                 || !count_valid
                 || !value_valid
@@ -593,7 +640,11 @@ impl RvrCheckpointAccessRegistry {
                 || (!field && span.base_source != RVR_CHECKPOINT_SPAN_BASE_REGISTER)
                 || (field && span.count_source != RVR_CHECKPOINT_SPAN_COUNT_FIXED)
                 || (field && span.count != RVR_CHECKPOINT_DEFERRAL_DIGEST_BLOCKS)
-                || span._padding != [0; 2]
+                || (span.value_source == RVR_CHECKPOINT_SPAN_WRITE_U16_STATIC
+                    && (span.count_source != RVR_CHECKPOINT_SPAN_COUNT_FIXED
+                        || static_end.is_none()))
+                || (span.value_source != RVR_CHECKPOINT_SPAN_WRITE_U16_STATIC
+                    && span.value_index != 0)
             {
                 return Err(GpuRvrInputError::InvalidAccessSchedule(
                     "invalid access span".to_string(),
@@ -810,6 +861,7 @@ pub struct GpuRvrProgram {
     checkpoint_schedule_dispatch: DeviceBuffer<u32>,
     checkpoint_schedules: DeviceBuffer<RvrCheckpointAccessSchedule>,
     checkpoint_spans: DeviceBuffer<RvrCheckpointAccessSpan>,
+    checkpoint_static_values: DeviceBuffer<u64>,
     checkpoint_schedule_opcodes: Vec<u32>,
     memory_address_spaces: DeviceBuffer<RvrMemoryAddressSpace>,
     address_space_height: u32,
@@ -966,6 +1018,7 @@ impl GpuRvrProgram {
             checkpoint_schedule_dispatch: upload(&registry.dispatch, device_ctx)?,
             checkpoint_schedules: upload(&registry.schedules, device_ctx)?,
             checkpoint_spans: upload(&registry.spans, device_ctx)?,
+            checkpoint_static_values: upload(&registry.static_values, device_ctx)?,
             checkpoint_schedule_opcodes,
             memory_address_spaces: upload(&memory_address_spaces, device_ctx)?,
             address_space_height: memory_config.addr_space_height as u32,
@@ -1105,6 +1158,7 @@ impl GpuRvrProgram {
                 self.checkpoint_schedule_dispatch.view(),
                 self.checkpoint_schedules.view(),
                 self.checkpoint_spans.view(),
+                self.checkpoint_static_values.view(),
                 opcodes,
                 address_spaces,
                 self.byte_pointer_max_bits,
@@ -1177,6 +1231,7 @@ impl GpuRvrProgram {
                 self.checkpoint_schedule_dispatch.view(),
                 self.checkpoint_schedules.view(),
                 self.checkpoint_spans.view(),
+                self.checkpoint_static_values.view(),
                 opcodes,
                 address_spaces,
                 self.byte_pointer_max_bits,
@@ -2330,6 +2385,7 @@ mod tests {
             checkpoint_schedule_dispatch: DeviceBuffer::new(),
             checkpoint_schedules: DeviceBuffer::new(),
             checkpoint_spans: DeviceBuffer::new(),
+            checkpoint_static_values: DeviceBuffer::new(),
             checkpoint_schedule_opcodes: Vec::new(),
             memory_address_spaces: upload(&memory_address_spaces, device_ctx).unwrap(),
             address_space_height: config.addr_space_height as u32,

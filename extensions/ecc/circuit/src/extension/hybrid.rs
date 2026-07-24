@@ -47,10 +47,64 @@ use {
 };
 
 use crate::{
-    get_ec_addne_chip, get_ec_double_chip, EccRecord, Rv64WeierstrassConfig, WeierstrassAir,
-    WeierstrassChip, WeierstrassExtension, ECC_BLOCKS_32, ECC_BLOCKS_48, NUM_LIMBS_32,
-    NUM_LIMBS_48,
+    get_ec_addne_chip, get_ec_double_chip, CurveConfig, EccRecord, Rv64WeierstrassConfig,
+    WeierstrassAir, WeierstrassChip, WeierstrassExtension, ECC_BLOCKS_32, ECC_BLOCKS_48,
+    NUM_LIMBS_32, NUM_LIMBS_48,
 };
+
+#[cfg(feature = "rvr")]
+fn ec_double_setup_words(
+    curve: &CurveConfig,
+    coordinate_bytes: usize,
+) -> Result<Vec<u64>, GpuRvrInputError> {
+    if curve.modulus == Default::default()
+        || curve.a >= curve.modulus
+        || curve.modulus.bits().div_ceil(8) as usize > coordinate_bytes
+        || coordinate_bytes % std::mem::size_of::<u64>() != 0
+    {
+        return Err(GpuRvrInputError::InvalidAccessSchedule(format!(
+            "invalid setup constants for curve {}",
+            curve.struct_name
+        )));
+    }
+    // In a setup row the expression inputs are x1 = p and y1 = a. Modulo p,
+    // lambda = a, so the fixed postimage is (a^2, -a^3-a).
+    let x = (&curve.a * &curve.a) % &curve.modulus;
+    let neg_y = ((&x * &curve.a) + &curve.a) % &curve.modulus;
+    let y = if neg_y == Default::default() {
+        Default::default()
+    } else {
+        &curve.modulus - neg_y
+    };
+    let mut bytes = vec![0u8; 2 * coordinate_bytes];
+    for (index, value) in [x, y].iter().enumerate() {
+        let value = value.to_bytes_le();
+        bytes[index * coordinate_bytes..index * coordinate_bytes + value.len()]
+            .copy_from_slice(&value);
+    }
+    Ok(bytes
+        .chunks_exact(std::mem::size_of::<u64>())
+        .map(|word| u64::from_le_bytes(word.try_into().unwrap()))
+        .collect())
+}
+
+#[cfg(all(test, feature = "rvr"))]
+mod checkpoint_tests {
+    use super::*;
+    use crate::{P256_CONFIG, SECP256K1_CONFIG};
+
+    #[test]
+    fn ec_double_setup_words_match_configured_expression() {
+        assert_eq!(
+            ec_double_setup_words(&P256_CONFIG, NUM_LIMBS_32).unwrap(),
+            [9, 0, 0, 0, 30, 0, 0, 0]
+        );
+        assert_eq!(
+            ec_double_setup_words(&SECP256K1_CONFIG, NUM_LIMBS_32).unwrap(),
+            [0; ECC_BLOCKS_32]
+        );
+    }
+}
 
 pub struct HybridWeierstrassChip<F, const NUM_READS: usize, const BLOCKS: usize> {
     cpu: WeierstrassChip<F, NUM_READS, BLOCKS>,
@@ -295,11 +349,30 @@ impl<'a> WeierstrassRvrGpuTracegen<'a> {
                 5,
                 &double_spans,
             )?;
-
-            // SETUP_EC_DOUBLE writes the configured field-expression program's
-            // output without emitting residuals. The finite checkpoint schedule
-            // ABI currently has no computed-write source, so it deliberately
-            // remains unscheduled and fails closed during replay.
+            let setup_words = ec_double_setup_words(
+                curve,
+                blocks * openvm_circuit::arch::MEMORY_BLOCK_BYTES / 2,
+            )?;
+            let setup_double_spans = [
+                RvrCheckpointAccessSpan::read_fixed(
+                    openvm_instructions::riscv::RV64_MEMORY_AS,
+                    0,
+                    blocks as u32,
+                ),
+                registry.write_fixed_from_static(
+                    openvm_instructions::riscv::RV64_MEMORY_AS,
+                    1,
+                    &setup_words,
+                )?,
+            ];
+            registry.register(
+                opcode(Rv64WeierstrassOpcode::SETUP_EC_DOUBLE)?,
+                &[2, 1],
+                (1 << 3) | (1 << 6) | (1 << 7),
+                4,
+                5,
+                &setup_double_spans,
+            )?;
         }
         Ok(())
     }
