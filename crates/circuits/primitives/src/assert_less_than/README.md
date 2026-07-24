@@ -19,6 +19,23 @@ Range checking is performed using a lookup table via interactions.
 **Aux Columns:**
 - `diff_decomp`: Array of limbs for range checking
 
+## Deriving `x` from `diff_decomp`
+
+Since `diff_decomp` is a complete decomposition of `y - x - 1`, the constraint determines any one
+of `x`, `y`, `diff_decomp` from the other two. `eval_derive_x` uses this to return
+
+```math
+x = y - 1 - \texttt{compose(diff_decomp)}
+```
+
+of degree $`\max(1, \deg(y))`$. The returned expression uses `y` and the committed `diff_decomp`
+columns. The range checks bound $`\texttt{compose(diff_decomp)}`$ to
+$`[0, 2^{\texttt{max\_bits}})`$, so `x < y` holds.
+
+The prover chooses `diff_decomp`, which determines `x` through the expression above. The caller
+constrains that derived `x` outside this SubAir. The memory offline checker does this by matching on
+the memory bus.
+
 **Proof**
 
 Given input values $`x, y \in [0, 2^{\texttt{max\_bits}})`$.

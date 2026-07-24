@@ -47,14 +47,14 @@ impl<T> AssertLessThanIo<T> {
     }
 }
 
-/// These columns are owned by the SubAir. Typically used with `T = AB::Var`.
-/// `AUX_LEN` is the number of AUX columns
-/// we have that AUX_LEN = max_bits.div_ceil(bus.range_max_bits)
+/// Auxiliary columns owned by the SubAir. Typically used with `T = AB::Var`.
+///
+/// `AUX_LEN` must equal `max_bits.div_ceil(bus.range_max_bits)`.
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection, Clone, Copy, Debug, new)]
 pub struct LessThanAuxCols<T, const AUX_LEN: usize> {
-    // diff_decomp consists of the limbs of size bus.range_max_bits that the SubAir range checks
-    // note: the final limb might have less than bus.range_max_bits bits
+    /// The decomposition limbs range checked by the SubAir. The final limb may use fewer bits than
+    /// `bus.range_max_bits`.
     pub diff_decomp: [T; AUX_LEN],
 }
 
@@ -103,31 +103,56 @@ impl AssertLtSubAir {
         self.bus.range_max_bits
     }
 
-    /// FOR INTERNAL USE ONLY.
-    /// This AIR is only sound if interactions are enabled
+    /// Reconstructs the value that `diff_decomp` decomposes.
     ///
-    /// Constraints between `io` and `aux` are only enforced when `count != 0`.
-    /// This means `aux` can be all zero independent on what `io` is by setting `count = 0`.
+    /// The returned expression has degree 1.
     #[inline(always)]
-    fn eval_without_range_checks<AB: AirBuilder<Var: Copy>>(
+    fn compose<AB: AirBuilder<Var: Copy>>(&self, diff_decomp: &[AB::Var]) -> AB::Expr {
+        assert_eq!(diff_decomp.len(), self.decomp_limbs);
+        diff_decomp
+            .iter()
+            .enumerate()
+            .fold(AB::Expr::ZERO, |acc, (i, &val)| {
+                acc + val * AB::Expr::from_usize(1 << (i * self.range_max_bits()))
+            })
+    }
+
+    /// Range checks `diff_decomp` and returns `x = y - 1 - compose(diff_decomp)`.
+    ///
+    /// Since `diff_decomp` is a complete decomposition of `y - x - 1`, the returned expression uses
+    /// `y` and the committed `diff_decomp` columns. It has degree `max(1, deg(y))`.
+    ///
+    /// When `count != 0`, the range checks bound `compose(diff_decomp)` to `[0, 2^max_bits)`, so
+    /// `x < y` holds. Callers use the returned value in their external constraints or interactions
+    /// on enabled rows.
+    #[must_use]
+    #[inline(always)]
+    pub fn eval_derive_x<AB: InteractionBuilder>(
+        &self,
+        builder: &mut AB,
+        y: AB::Expr,
+        diff_decomp: &[AB::Var],
+        count: impl Into<AB::Expr>,
+    ) -> AB::Expr {
+        self.eval_range_checks(builder, diff_decomp, count);
+        y - AB::Expr::ONE - self.compose::<AB>(diff_decomp)
+    }
+
+    /// Constrains `diff_decomp` to compose to `y - x - 1` when `io.count != 0`.
+    #[inline(always)]
+    fn eval_composition<AB: AirBuilder<Var: Copy>>(
         &self,
         builder: &mut AB,
         io: AssertLessThanIo<AB::Expr>,
         diff_decomp: &[AB::Var],
     ) {
-        assert_eq!(diff_decomp.len(), self.decomp_limbs);
         // this is the desired intermediate value (i.e. y - x - 1)
         // deg(intermed_val) = deg(io)
         let intermed_val = io.y - io.x - AB::Expr::ONE;
 
         // each limb of diff_decomp will be range checked
         // deg(composed) = 1
-        let composed = diff_decomp
-            .iter()
-            .enumerate()
-            .fold(AB::Expr::ZERO, |acc, (i, &val)| {
-                acc + val * AB::Expr::from_usize(1 << (i * self.range_max_bits()))
-            });
+        let composed = self.compose::<AB>(diff_decomp);
 
         // constrain that y - x - 1 is equal to the composed value.
         // this enforces that the intermediate value is in the range [0, 2^max_bits - 1], which is
@@ -179,7 +204,7 @@ impl<AB: InteractionBuilder> SubAir<AB> for AssertLtSubAir {
     {
         // Note: every AIR that uses this sub-AIR must include the range checks for soundness
         self.eval_range_checks(builder, diff_decomp, io.count.clone());
-        self.eval_without_range_checks(builder, io, diff_decomp);
+        self.eval_composition(builder, io, diff_decomp);
     }
 }
 

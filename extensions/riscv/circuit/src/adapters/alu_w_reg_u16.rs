@@ -1,6 +1,7 @@
 use std::{
     array,
     borrow::{Borrow, BorrowMut},
+    mem::size_of,
 };
 
 use openvm_circuit::{
@@ -54,6 +55,8 @@ pub struct Rv64BaseAluWRegU16AdapterCols<T> {
     pub reads_aux: [MemoryReadAuxCols<T>; 2],
     pub writes_aux: MemoryWriteAuxCols<T, BLOCK_FE_WIDTH>,
 }
+
+const _: () = assert!(size_of::<Rv64BaseAluWRegU16AdapterCols<u8>>() == 20);
 
 /// Exposes the low 32-bit words of two register operands to the core and sign-extends the result.
 #[derive(Clone, Copy, Debug, derive_new::new, ColumnsAir)]

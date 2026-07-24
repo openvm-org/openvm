@@ -243,12 +243,9 @@ pub struct MemoryAuxColsFactory<'a, F> {
 }
 
 impl<F: PrimeField32> MemoryAuxColsFactory<'_, F> {
-    /// Fill the trace assuming `prev_timestamp` is already provided in `buffer`.
+    /// Fills `timestamp_lt_aux` with the decomposition of `timestamp - prev_timestamp - 1`.
     pub fn fill(&self, prev_timestamp: u32, timestamp: u32, buffer: &mut MemoryBaseAuxCols<F>) {
         self.generate_timestamp_lt(prev_timestamp, timestamp, &mut buffer.timestamp_lt_aux);
-        // Safety: even if prev_timestamp were obtained by transmute_ref from
-        // `buffer.prev_timestamp`, this should still work because it is a direct assignment
-        buffer.prev_timestamp = F::from_u32(prev_timestamp);
     }
 
     /// # Safety
