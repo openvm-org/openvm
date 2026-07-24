@@ -18,7 +18,7 @@ openvm-pairing-guest = { workspace = true, features = [
     "halo2curves",
     "bls12_381",
     "bn254",
-    "blstrs"
+    "blst"
 ] }
 openvm-instructions = { workspace = true }
 openvm-mod-circuit-builder = { workspace = true }
