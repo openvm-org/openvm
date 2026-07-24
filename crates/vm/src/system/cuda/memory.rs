@@ -724,4 +724,93 @@ mod tests {
 
         assert_eq!(expected_root, gpu_merkle_root(&ctxs));
     }
+
+    /// CPU and GPU must generate the *same* Merkle trace, row for row.
+    #[test]
+    fn test_merkle_trace_matches_between_cpu_and_gpu() {
+        use std::collections::{BTreeMap, BTreeSet};
+
+        use openvm_circuit::{
+            arch::ADDR_SPACE_OFFSET,
+            system::memory::{
+                merkle::{memory_to_vec_partition, MemoryMerkleChip},
+                persistent::DirtyLeaves,
+            },
+        };
+        use openvm_cuda_backend::data_transporter::assert_eq_host_and_device_matrix_col_maj;
+        use openvm_stark_backend::{interaction::PermutationCheckBus, prover::ColMajorMatrix};
+        use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
+
+        let (mem_config, memory) = single_block_setup();
+        let mut final_memory = memory.clone();
+        let touched_bytes = [101u8, 102, 103, 104, 105, 106, 107, 108];
+        let touched_bytes_late = [111u8, 112, 113, 114, 115, 116, 117, 118];
+        unsafe {
+            final_memory.write_bytes::<MEMORY_BLOCK_BYTES>(RV64_MEMORY_AS, 0, touched_bytes);
+            final_memory.write_bytes::<MEMORY_BLOCK_BYTES>(
+                RV64_MEMORY_AS,
+                MEMORY_BLOCK_BYTES as u32,
+                touched_bytes_late,
+            );
+        }
+
+        // GPU trace: both blocks written (is_dirty = 1), forming one dirty leaf.
+        let touched_memory = vec![
+            TouchedBlock {
+                address_space: RV64_MEMORY_AS,
+                ptr: 0,
+                is_dirty: 1,
+                timestamp: 1,
+                values: pack_u8_block_value(&touched_bytes.map(F::from_u8)),
+            },
+            TouchedBlock {
+                address_space: RV64_MEMORY_AS,
+                ptr: BLOCK_FE_WIDTH as u32,
+                is_dirty: 1,
+                timestamp: 3,
+                values: pack_u8_block_value(&touched_bytes_late.map(F::from_u8)),
+            },
+        ];
+        let ctxs = run_inventory(&mem_config, &memory.memory, touched_memory);
+        let gpu_merkle = ctxs
+            .iter()
+            .find(|ctx| ctx.public_values.len() >= 2 * VM_DIGEST_WIDTH)
+            .expect("missing merkle ctx");
+
+        // CPU reference trace via the merkle chip, which applies the reverse+swap that
+        // defines the committed row order.
+        let md = mem_config.memory_dimensions();
+        let hasher = Poseidon2PeripheryChip::new(vm_poseidon2_config(), 3);
+
+        // The two written blocks fall in one 8-cell leaf at (RV64_MEMORY_AS, label 0).
+        let touched_labels: BTreeSet<(u32, u32)> = BTreeSet::from([(RV64_MEMORY_AS, 0)]);
+        let final_partition: BTreeMap<(u32, u32), [F; VM_DIGEST_WIDTH]> =
+            memory_to_vec_partition::<F, VM_DIGEST_WIDTH>(&final_memory.memory, &md)
+                .into_iter()
+                .map(|(idx, values)| {
+                    let address_space = (idx >> md.address_height) as u32 + ADDR_SPACE_OFFSET;
+                    let label = (idx & ((1 << md.address_height) - 1)) as u32;
+                    ((address_space, label * VM_DIGEST_WIDTH as u32), values)
+                })
+                .filter(|((address_space, ptr), _)| {
+                    touched_labels.contains(&(*address_space, ptr / VM_DIGEST_WIDTH as u32))
+                })
+                .collect();
+        // Every touched block sets is_dirty = 1, so the leaf is dirty (matches the GPU input).
+        let dirty_leaves: DirtyLeaves = final_partition.keys().copied().collect();
+
+        let bus = PermutationCheckBus::new(0); // bus index does not affect the main trace
+        let mut cpu_chip = MemoryMerkleChip::<VM_DIGEST_WIDTH, F>::new(md, bus, bus);
+        cpu_chip.finalize(&memory.memory, &final_partition, &dirty_leaves, &hasher);
+        let cpu_trace = cpu_chip
+            .generate_proving_ctx::<BabyBearPoseidon2Config>()
+            .common_main;
+        let cpu_trace_cm = ColMajorMatrix::from_row_major(&cpu_trace);
+
+        let device_ctx = GpuDeviceCtx {
+            device_id: get_device().unwrap() as u32,
+            stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
+        };
+        assert_eq_host_and_device_matrix_col_maj(&cpu_trace_cm, &gpu_merkle.common_main, &device_ctx);
+    }
 }
