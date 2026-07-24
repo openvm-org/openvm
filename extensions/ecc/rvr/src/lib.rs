@@ -150,7 +150,7 @@ pub struct CurveInfo {
     curve: Option<KnownCurve>,
 }
 
-/// The ECC extension: handles Weierstrass EC opcodes (EC_ADD_NE, EC_DOUBLE + setups).
+/// The ECC extension: handles Weierstrass EC opcodes (SW_EC_ADD_PROJ, SW_EC_DOUBLE_PROJ + setups).
 pub struct EccExtension {
     curves: Vec<CurveInfo>,
 }

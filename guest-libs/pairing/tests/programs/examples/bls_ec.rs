@@ -5,7 +5,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use openvm::io::reveal_bytes32;
-use openvm_ecc_guest::{weierstrass::WeierstrassPoint, CyclicGroup, Group};
+use openvm_ecc_guest::{algebra::IntMod, weierstrass::WeierstrassPoint, CyclicGroup, Group};
 use openvm_pairing::bls12_381::Bls12_381G1Affine;
 
 openvm::init!("openvm_init_bls_ec_bls12_381.rs");
@@ -32,7 +32,11 @@ pub fn main() {
     let mut digest = [0u8; 32];
     let mut position = 0;
     for result in [&doubled, &sum] {
-        absorb(&mut digest, &mut position, result.as_le_bytes());
+        // Hash the affine coordinates (normalize to z = 1) so the digest reflects the point,
+        // not the incidental projective (X, Y, Z) encoding.
+        let affine = result.normalize();
+        absorb(&mut digest, &mut position, affine.x().as_le_bytes());
+        absorb(&mut digest, &mut position, affine.y().as_le_bytes());
     }
     assert_eq!(digest, EXPECTED_DIGEST);
     reveal_bytes32(digest);
