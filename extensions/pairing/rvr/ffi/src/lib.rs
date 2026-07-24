@@ -36,10 +36,6 @@ unsafe fn set_hint_stream(bytes: &[u8]) {
     ext_hint_stream_set(bytes.as_ptr(), len);
 }
 
-unsafe fn clear_hint_stream() {
-    set_hint_stream(&[]);
-}
-
 // ── Helpers ──────────────────────────────────────────────────────────────
 
 /// Peek at `N` bytes in guest memory.
@@ -179,11 +175,12 @@ pub unsafe extern "C" fn rvr_ext_pairing_hint_final_exp_bn254(
     state: *mut c_void,
     rs1_val: u64,
     rs2_val: u64,
-) {
+) -> bool {
     if let Some(hint_bytes) = hint_bn254(state, rs1_val, rs2_val) {
         set_hint_stream(&hint_bytes);
+        true
     } else {
-        clear_hint_stream();
+        false
     }
 }
 
@@ -194,10 +191,11 @@ pub unsafe extern "C" fn rvr_ext_pairing_hint_final_exp_bls12_381(
     state: *mut c_void,
     rs1_val: u64,
     rs2_val: u64,
-) {
+) -> bool {
     if let Some(hint_bytes) = hint_bls12_381(state, rs1_val, rs2_val) {
         set_hint_stream(&hint_bytes);
+        true
     } else {
-        clear_hint_stream();
+        false
     }
 }

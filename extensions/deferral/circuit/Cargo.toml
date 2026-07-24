@@ -43,6 +43,7 @@ openvm-cuda-builder = { workspace = true, optional = true }
 [dev-dependencies]
 openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
 openvm-circuit = { path = "../../../crates/vm", default-features = false, features = ["test-utils"] }
+rvr-state.workspace = true
 
 [features]
 default = ["parallel", "jemalloc"]

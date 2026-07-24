@@ -17,7 +17,7 @@ use openvm_riscv_transpiler::{
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 
-use super::{validate_hint_buffer_num_words, Rv64HintStoreExecutor};
+use super::{validate_hint_buffer_num_words, validate_hint_store_mem_ptr, Rv64HintStoreExecutor};
 use crate::adapters::rv64_bytes_to_u32;
 
 #[derive(AlignedBytesBorrow, Clone)]
@@ -159,7 +159,7 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait, const IS_HINT_STORED: bool>(
     let pc = exec_state.pc();
     let mem_ptr_limbs =
         exec_state.vm_read_bytes::<RV64_REGISTER_NUM_LIMBS>(RV64_REGISTER_AS, pre_compute.b as u32);
-    let mem_ptr = rv64_bytes_to_u32(mem_ptr_limbs);
+    let mem_ptr = validate_hint_store_mem_ptr(pc, rv64_bytes_to_u32(mem_ptr_limbs))?;
 
     let num_words = if IS_HINT_STORED {
         1u64

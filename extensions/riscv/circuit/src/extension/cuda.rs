@@ -34,8 +34,9 @@ use {
     openvm_riscv_transpiler::{
         BaseAluImmOpcode, BaseAluOpcode, BaseAluWImmOpcode, BaseAluWOpcode, BranchEqualOpcode,
         BranchLessThanOpcode, DivRemOpcode, DivRemWOpcode, LessThanImmOpcode, LessThanOpcode,
-        MulHOpcode, MulOpcode, MulWOpcode, Rv64AuipcOpcode, Rv64JalLuiOpcode, Rv64JalrOpcode,
-        Rv64LoadStoreOpcode, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode, ShiftWOpcode,
+        MulHOpcode, MulOpcode, MulWOpcode, Rv64AuipcOpcode, Rv64HintStoreOpcode, Rv64JalLuiOpcode,
+        Rv64JalrOpcode, Rv64LoadStoreOpcode, ShiftImmOpcode, ShiftOpcode, ShiftWImmOpcode,
+        ShiftWOpcode,
     },
     openvm_stark_backend::prover::{AirProvingContext, ProvingContext},
 };
@@ -83,6 +84,36 @@ pub struct Rv64ImRvrGpuTracegen<'a> {
 
 #[cfg(feature = "rvr")]
 impl<'a> Rv64ImRvrGpuTracegen<'a> {
+    #[doc(hidden)]
+    pub fn checkpoint_opcode_bases() -> RvrCheckpointOpcodeBases {
+        RvrCheckpointOpcodeBases {
+            base_alu: Self::opcode(BaseAluOpcode::ADD),
+            shift: Self::opcode(ShiftOpcode::SLL),
+            less_than: Self::opcode(LessThanOpcode::SLT),
+            load_store: Self::opcode(Rv64LoadStoreOpcode::LOADD),
+            branch_equal: Self::opcode(BranchEqualOpcode::BEQ),
+            branch_less_than: Self::opcode(BranchLessThanOpcode::BLT),
+            jal_lui: Self::opcode(Rv64JalLuiOpcode::JAL),
+            jalr: Self::opcode(Rv64JalrOpcode::JALR),
+            auipc: Self::opcode(Rv64AuipcOpcode::AUIPC),
+            mul: Self::opcode(MulOpcode::MUL),
+            mulh: Self::opcode(MulHOpcode::MULH),
+            divrem: Self::opcode(DivRemOpcode::DIV),
+            base_alu_w: Self::opcode(BaseAluWOpcode::ADDW),
+            shift_w: Self::opcode(ShiftWOpcode::SLLW),
+            mul_w: Self::opcode(MulWOpcode::MULW),
+            divrem_w: Self::opcode(DivRemWOpcode::DIVW),
+            base_alu_imm: Self::opcode(BaseAluImmOpcode::ADDI),
+            shift_imm: Self::opcode(ShiftImmOpcode::SLLI),
+            less_than_imm: Self::opcode(LessThanImmOpcode::SLTI),
+            base_alu_w_imm: Self::opcode(BaseAluWImmOpcode::ADDIW),
+            shift_w_imm: Self::opcode(ShiftWImmOpcode::SLLIW),
+            hint_store: Self::opcode(Rv64HintStoreOpcode::HINT_STORED),
+            phantom: SystemOpcode::PHANTOM.global_opcode().as_usize() as u32,
+            terminate: SystemOpcode::TERMINATE.global_opcode().as_usize() as u32,
+        }
+    }
+
     /// Checkpoint replay for RV64IM and phantom execution. Loads and stores
     /// first become unresolved block intents; the VM chronology pass resolves
     /// those intents before the ordinary transcript indexes and unchanged
@@ -91,6 +122,7 @@ impl<'a> Rv64ImRvrGpuTracegen<'a> {
         vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
         program: &GpuRvrProgram,
         execution: &RvrCheckpointPreflightExecution,
+        expected_retired: u32,
     ) -> Result<(GpuRvrTranscript, GpuRvrReplayPlan), GpuRvrInputError>
     where
         VB: VmBuilder<
@@ -102,31 +134,8 @@ impl<'a> Rv64ImRvrGpuTracegen<'a> {
         vm.expand_rvr_checkpoint_replay(
             program,
             execution,
-            RvrCheckpointOpcodeBases {
-                base_alu: Self::opcode(BaseAluOpcode::ADD),
-                shift: Self::opcode(ShiftOpcode::SLL),
-                less_than: Self::opcode(LessThanOpcode::SLT),
-                load_store: Self::opcode(Rv64LoadStoreOpcode::LOADD),
-                branch_equal: Self::opcode(BranchEqualOpcode::BEQ),
-                branch_less_than: Self::opcode(BranchLessThanOpcode::BLT),
-                jal_lui: Self::opcode(Rv64JalLuiOpcode::JAL),
-                jalr: Self::opcode(Rv64JalrOpcode::JALR),
-                auipc: Self::opcode(Rv64AuipcOpcode::AUIPC),
-                mul: Self::opcode(MulOpcode::MUL),
-                mulh: Self::opcode(MulHOpcode::MULH),
-                divrem: Self::opcode(DivRemOpcode::DIV),
-                base_alu_w: Self::opcode(BaseAluWOpcode::ADDW),
-                shift_w: Self::opcode(ShiftWOpcode::SLLW),
-                mul_w: Self::opcode(MulWOpcode::MULW),
-                divrem_w: Self::opcode(DivRemWOpcode::DIVW),
-                base_alu_imm: Self::opcode(BaseAluImmOpcode::ADDI),
-                shift_imm: Self::opcode(ShiftImmOpcode::SLLI),
-                less_than_imm: Self::opcode(LessThanImmOpcode::SLTI),
-                base_alu_w_imm: Self::opcode(BaseAluWImmOpcode::ADDIW),
-                shift_w_imm: Self::opcode(ShiftWImmOpcode::SLLIW),
-                phantom: SystemOpcode::PHANTOM.global_opcode().as_usize() as u32,
-                terminate: SystemOpcode::TERMINATE.global_opcode().as_usize() as u32,
-            },
+            expected_retired,
+            Self::checkpoint_opcode_bases(),
         )
     }
 
@@ -135,10 +144,30 @@ impl<'a> Rv64ImRvrGpuTracegen<'a> {
         transcript: &'a GpuRvrTranscript,
         replay_plan: &'a GpuRvrReplayPlan,
     ) -> Result<Self, GpuRvrInputError> {
+        Self::new_after_claiming_extension_opcodes(program, transcript, replay_plan, &[])
+    }
+
+    /// Constructs the RV64 producer after a concrete outer coordinator has
+    /// claimed its extension opcodes.
+    ///
+    /// The caller remains responsible for visiting and finishing the claimed
+    /// extension producers. Every remaining executed opcode is still checked
+    /// against RV64's exact supported set here.
+    #[doc(hidden)]
+    pub fn new_after_claiming_extension_opcodes(
+        program: &'a GpuRvrProgram,
+        transcript: &'a GpuRvrTranscript,
+        replay_plan: &'a GpuRvrReplayPlan,
+        extension_opcodes: &[u32],
+    ) -> Result<Self, GpuRvrInputError> {
         let terminate = SystemOpcode::TERMINATE.global_opcode().as_usize() as u32;
+        let extension_opcodes = extension_opcodes
+            .iter()
+            .copied()
+            .collect::<std::collections::BTreeSet<_>>();
         let pending_opcodes = replay_plan
             .executed_opcodes()
-            .filter(|&opcode| opcode != terminate)
+            .filter(|&opcode| opcode != terminate && !extension_opcodes.contains(&opcode))
             .collect::<std::collections::BTreeSet<_>>();
         if let Some(&opcode) = pending_opcodes
             .iter()
@@ -203,8 +232,7 @@ impl<'a> Rv64ImRvrGpuTracegen<'a> {
             Rv64LoadStoreOpcode::LOADW.global_opcode(),
             Rv64LoadStoreOpcode::LOADWU.global_opcode(),
             Rv64LoadStoreOpcode::LOADD.global_opcode(),
-            // The concrete replay kernel accepts the RV64I main-memory shape.
-            // RV64IO public-values stores fail closed in instruction validation.
+            // Store replay accepts the AIR-supported main-memory and public-values spaces.
             Rv64LoadStoreOpcode::STOREB.global_opcode(),
             Rv64LoadStoreOpcode::STOREH.global_opcode(),
             Rv64LoadStoreOpcode::STOREW.global_opcode(),
@@ -222,6 +250,8 @@ impl<'a> Rv64ImRvrGpuTracegen<'a> {
             DivRemWOpcode::DIVUW.global_opcode(),
             DivRemWOpcode::REMW.global_opcode(),
             DivRemWOpcode::REMUW.global_opcode(),
+            Rv64HintStoreOpcode::HINT_STORED.global_opcode(),
+            Rv64HintStoreOpcode::HINT_BUFFER.global_opcode(),
             SystemOpcode::PHANTOM.global_opcode(),
         ]
         .into_iter()
@@ -267,6 +297,7 @@ impl<'a> Rv64ImRvrGpuTracegen<'a> {
         )?;
         self.finish()
             .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
+        vm.complete_rvr_tracegen_session();
         Ok(ctx)
     }
 
@@ -371,6 +402,13 @@ impl<'a> Rv64ImRvrGpuTracegen<'a> {
         replay_chip!(Rv64StoreHalfwordChipGpu, [Rv64LoadStoreOpcode::STOREH]);
         replay_chip!(Rv64StoreWordChipGpu, [Rv64LoadStoreOpcode::STOREW]);
         replay_chip!(Rv64StoreDoublewordChipGpu, [Rv64LoadStoreOpcode::STORED]);
+        replay_chip!(
+            Rv64HintStoreChipGpu,
+            [
+                Rv64HintStoreOpcode::HINT_STORED,
+                Rv64HintStoreOpcode::HINT_BUFFER,
+            ]
+        );
         replay_chip!(Rv64MultiplicationChipGpu, [MulOpcode::MUL]);
         replay_chip!(Rv64MulWChipGpu, [MulWOpcode::MULW]);
         replay_chip!(
@@ -465,7 +503,8 @@ impl<'a> Rv64ImRvrGpuTracegen<'a> {
     /// sticky-error read after every kernel has been submitted. This final
     /// check only proves that the reverse inventory walk visited a producer for
     /// every executed opcode.
-    fn finish(self) -> Result<(), GpuRvrInputError> {
+    #[doc(hidden)]
+    pub fn finish(self) -> Result<(), GpuRvrInputError> {
         if !self.pending_opcodes.is_empty() {
             return Err(GpuRvrInputError::InvalidTranscript(format!(
                 "RV64IM RVR GPU tracegen did not visit chips for executed opcodes {:?}",

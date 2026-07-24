@@ -13,11 +13,21 @@ fn main() {
             .include("../../../crates/circuits/primitives/cuda/include")
             .include("../../../crates/vm/cuda/include")
             .include("cuda/include")
-            .watch("cuda")
-            .watch("../../../crates/circuits/primitives/cuda")
-            .watch("../../../crates/vm/cuda")
+            .watch("cuda/src")
             .library_name("tracegen_gpu_keccak256")
             .files_from_glob("cuda/src/*.cu");
+
+        let builder = if std::env::var_os("CARGO_FEATURE_RVR").is_some() {
+            builder
+                .flag("-I../../riscv/circuit/cuda/rvr/include")
+                .flag("-I../../../crates/vm/cuda/rvr/include")
+                .watch("../../riscv/circuit/cuda/rvr/include/riscv/replay.cuh")
+                .watch("../../../crates/vm/cuda/rvr/include/arch/rvr/preflight.cuh")
+                .watch("cuda/rvr")
+                .files_from_glob("cuda/rvr/*.cu")
+        } else {
+            builder
+        };
 
         builder.emit_link_directives();
         builder.build();

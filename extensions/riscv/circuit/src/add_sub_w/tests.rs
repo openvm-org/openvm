@@ -660,7 +660,7 @@ fn test_cuda_add_sub_w_tracegen_from_rvr_transcript() {
     corrupt_chip
         .generate_proving_ctx_from_rvr(&d_program, &d_corrupt, &d_corrupt_plan)
         .unwrap();
-    assert_eq!(d_corrupt.error_code().unwrap(), 118);
+    assert_eq!(d_corrupt.error_code().unwrap(), 1018);
 
     // A destination x0 instruction is normally canonicalized to NOP by the transpiler. If a
     // malformed program presents it to this AIR anyway, replay must not synthesize a disabled
@@ -682,7 +682,7 @@ fn test_cuda_add_sub_w_tracegen_from_rvr_transcript() {
     x0_chip
         .generate_proving_ctx_from_rvr(&d_x0_program, &d_x0, &d_x0_plan)
         .unwrap();
-    assert_eq!(d_x0.error_code().unwrap(), 114);
+    assert_eq!(d_x0.error_code().unwrap(), 1014);
 
     // On the final rd == rs1 == rs2 row, alter only the second read and make the logged result
     // arithmetically consistent with it. Expected-result checking then passes, but predecessor
@@ -727,7 +727,7 @@ fn test_cuda_add_sub_w_tracegen_from_rvr_transcript() {
     alias_corrupt_chip
         .generate_proving_ctx_from_rvr(&d_program, &d_alias_corrupt, &d_alias_corrupt_plan)
         .unwrap();
-    assert_eq!(d_alias_corrupt.error_code().unwrap(), 119);
+    assert_eq!(d_alias_corrupt.error_code().unwrap(), 1019);
 
     let legacy_range_checker = Arc::new(
         openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU::new(

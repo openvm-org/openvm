@@ -31,6 +31,14 @@ use openvm_stark_backend::{
 };
 use openvm_stark_sdk::{p3_baby_bear::BabyBear, utils::create_seeded_rng};
 use rand::{rngs::StdRng, Rng};
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use {
+    openvm_circuit::arch::rvr::{
+        cuda::GpuRvrProgram, RvrPreflightEndpoint, RvrPreflightTranscript,
+    },
+    openvm_instructions::{exe::SparseMemoryImage, program::Program, SystemOpcode},
+    rvr_state::{PreflightMemoryEvent, PreflightProgramEvent, PREFLIGHT_WRITE_BIT},
+};
 
 use crate::{
     xorin::{
@@ -468,4 +476,175 @@ fn test_xorin_cuda_tracegen_single() {
         .finalize()
         .simple_test()
         .unwrap();
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+#[test]
+fn test_xorin_rvr_replay_proves_without_records_and_rejects_unaligned_len() {
+    let buffer_reg = 8usize;
+    let input_reg = 16usize;
+    let len_reg = 24usize;
+    let buffer_ptr = 0x100u32;
+    let input_ptr = 0x200u32;
+    let len = KECCAK_RATE_BYTES;
+    let xorin = Instruction::from_usize(
+        XorinOpcode::XORIN.global_opcode(),
+        [
+            buffer_reg,
+            input_reg,
+            len_reg,
+            RV64_REGISTER_AS as usize,
+            RV64_MEMORY_AS as usize,
+        ],
+    );
+    let instructions = [
+        xorin.clone(),
+        Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
+    ];
+    let program = Program::from_instructions(&instructions);
+    let mut init_memory = [
+        (buffer_reg, buffer_ptr as u64),
+        (input_reg, input_ptr as u64),
+        (len_reg, len as u64),
+    ]
+    .into_iter()
+    .flat_map(|(register, value)| {
+        value
+            .to_le_bytes()
+            .into_iter()
+            .enumerate()
+            .map(move |(offset, byte)| ((RV64_REGISTER_AS, register as u32 + offset as u32), byte))
+    })
+    .collect::<SparseMemoryImage>();
+    init_memory.extend((0..len).flat_map(|offset| {
+        [
+            ((RV64_MEMORY_AS, buffer_ptr + offset as u32), offset as u8),
+            (
+                (RV64_MEMORY_AS, input_ptr + offset as u32),
+                (offset as u8).wrapping_mul(17),
+            ),
+        ]
+    }));
+    let memory_config = openvm_circuit::arch::MemoryConfig::default();
+
+    let block = |bytes: &[u8]| {
+        std::array::from_fn(|i| u16::from_le_bytes([bytes[2 * i], bytes[2 * i + 1]]))
+    };
+    let register_block = |value: u64| block(&value.to_le_bytes());
+    let mut memory_log = vec![
+        PreflightMemoryEvent {
+            timestamp: 1,
+            address_space_and_kind: RV64_REGISTER_AS,
+            pointer: buffer_reg as u32 / 2,
+            value: register_block(buffer_ptr as u64),
+        },
+        PreflightMemoryEvent {
+            timestamp: 2,
+            address_space_and_kind: RV64_REGISTER_AS,
+            pointer: input_reg as u32 / 2,
+            value: register_block(input_ptr as u64),
+        },
+        PreflightMemoryEvent {
+            timestamp: 3,
+            address_space_and_kind: RV64_REGISTER_AS,
+            pointer: len_reg as u32 / 2,
+            value: register_block(len as u64),
+        },
+    ];
+    let buffer_bytes = (0..len).map(|offset| offset as u8).collect::<Vec<_>>();
+    let input_bytes = (0..len)
+        .map(|offset| (offset as u8).wrapping_mul(17))
+        .collect::<Vec<_>>();
+    let num_blocks = len / MEMORY_BLOCK_BYTES;
+    for i in 0..num_blocks {
+        memory_log.push(PreflightMemoryEvent {
+            timestamp: 4 + i as u32,
+            address_space_and_kind: RV64_MEMORY_AS,
+            pointer: buffer_ptr / 2 + (i * 4) as u32,
+            value: block(&buffer_bytes[i * 8..][..8]),
+        });
+    }
+    for i in 0..num_blocks {
+        memory_log.push(PreflightMemoryEvent {
+            timestamp: 4 + num_blocks as u32 + i as u32,
+            address_space_and_kind: RV64_MEMORY_AS,
+            pointer: input_ptr / 2 + (i * 4) as u32,
+            value: block(&input_bytes[i * 8..][..8]),
+        });
+    }
+    for i in 0..num_blocks {
+        let output =
+            std::array::from_fn::<_, 8, _>(|j| buffer_bytes[i * 8 + j] ^ input_bytes[i * 8 + j]);
+        memory_log.push(PreflightMemoryEvent {
+            timestamp: 4 + 2 * num_blocks as u32 + i as u32,
+            address_space_and_kind: RV64_MEMORY_AS | PREFLIGHT_WRITE_BIT,
+            pointer: buffer_ptr / 2 + (i * 4) as u32,
+            value: block(&output),
+        });
+    }
+    let final_timestamp = 4 + 3 * num_blocks as u32;
+    let transcript = RvrPreflightTranscript {
+        program_log: vec![
+            PreflightProgramEvent {
+                pc: 0,
+                timestamp: 1,
+            },
+            PreflightProgramEvent {
+                pc: 4,
+                timestamp: final_timestamp,
+            },
+            PreflightProgramEvent {
+                pc: 4,
+                timestamp: final_timestamp,
+            },
+        ],
+        memory_log,
+        initial_write_log: Vec::new(),
+    };
+
+    let mut tester =
+        GpuChipTestBuilder::default().with_bitwise_op_lookup(default_bitwise_lookup_bus());
+    for (&(address_space, pointer), &value) in &init_memory {
+        tester.write_bytes(
+            address_space as usize,
+            pointer as usize,
+            [F::from_u8(value)],
+        );
+    }
+    let mut harness = create_cuda_harness(&tester);
+    tester.execute_with_pc(&mut harness.executor, &mut harness.dense_arena, &xorin, 0);
+
+    let device_ctx = &tester.range_checker().device_ctx;
+    let gpu_program = GpuRvrProgram::upload(&program, &memory_config, device_ctx).unwrap();
+    let (gpu_transcript, replay_plan) = gpu_program
+        .upload_transcript(&transcript, RvrPreflightEndpoint::Terminated)
+        .unwrap();
+    let replay_ctx = harness
+        .gpu_chip
+        .generate_proving_ctx_from_rvr(&gpu_program, &gpu_transcript, &replay_plan)
+        .unwrap();
+    assert_eq!(gpu_transcript.error_code().unwrap(), 0);
+
+    let mut corrupt = transcript;
+    corrupt.memory_log[2].value[0] = 7;
+    let (gpu_corrupt, corrupt_plan) = gpu_program
+        .upload_transcript(&corrupt, RvrPreflightEndpoint::Terminated)
+        .unwrap();
+    let corrupt_chip = XorinVmChipGpu::new(
+        tester.range_checker(),
+        tester.bitwise_op_lookup(),
+        tester.address_bits(),
+        tester.timestamp_max_bits() as u32,
+    );
+    corrupt_chip
+        .generate_proving_ctx_from_rvr(&gpu_program, &gpu_corrupt, &corrupt_plan)
+        .unwrap();
+    assert_eq!(gpu_corrupt.error_code().unwrap(), 801);
+
+    tester
+        .build()
+        .load_air_proving_ctx(Arc::new(harness.air), replay_ctx)
+        .finalize()
+        .simple_test()
+        .expect("Xorin checkpoint replay proof failed");
 }

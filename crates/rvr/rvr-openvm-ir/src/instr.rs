@@ -237,6 +237,17 @@ pub trait ExtInstr: std::fmt::Debug + Send + Sync {
         false
     }
 
+    /// Whether this node emits enough replay values and logical clock slots
+    /// for compact checkpoint preflight.
+    ///
+    /// Most instructions share one schedule across both preflight modes, so
+    /// the default follows [`Self::supports_preflight`]. Instructions whose
+    /// timed accesses are reconstructed later may opt into checkpoint replay
+    /// without making legacy value tracing silently incomplete.
+    fn supports_checkpoint_preflight(&self) -> bool {
+        self.supports_preflight()
+    }
+
     /// Clone into a boxed trait object.
     fn clone_box(&self) -> Box<dyn ExtInstr>;
 }

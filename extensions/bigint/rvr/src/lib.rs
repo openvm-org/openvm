@@ -117,10 +117,28 @@ impl ExtInstr for Int256AluInstr {
     }
 
     fn emit_c(&self, ctx: &mut dyn ExtEmitCtx) {
-        let rd = ctx.read_var(self.rd_reg);
-        let rs1 = ctx.read_var(self.rs1_reg);
-        let rs2 = ctx.read_var(self.rs2_reg);
+        // Checkpoint replay follows the AIR's source-read then destination-read
+        // schedule. Preserve the historical destination-first order in every
+        // other execution mode: changing it needlessly perturbs pure and
+        // metered generated C.
+        let (rd, rs1, rs2) = if ctx.is_checkpoint_preflight() {
+            let rs1 = ctx.read_var(self.rs1_reg);
+            let rs2 = ctx.read_var(self.rs2_reg);
+            let rd = ctx.read_var(self.rd_reg);
+            (rd, rs1, rs2)
+        } else {
+            let rd = ctx.read_var(self.rd_reg);
+            let rs1 = ctx.read_var(self.rs1_reg);
+            let rs2 = ctx.read_var(self.rs2_reg);
+            (rd, rs1, rs2)
+        };
+        // The FFI performs eight aligned heap reads followed by four aligned
+        // heap writes. Checkpoint replay reconstructs those events from the
+        // postimage; pure and metered modes emit neither reservation nor peek.
+        ctx.reserve_preflight_writes("4u", "12u");
+        ctx.reserve_replay_values("4u");
         ctx.emit_call(self.op.ffi_name(), &["state", &rd, &rs1, &rs2]);
+        ctx.append_replay_memory_u64_range(&rd, "4u");
     }
 
     fn clone_box(&self) -> Box<dyn ExtInstr> {
@@ -129,6 +147,10 @@ impl ExtInstr for Int256AluInstr {
 
     fn cfg_effect(&self) -> CfgEffect {
         CfgEffect::None
+    }
+
+    fn supports_checkpoint_preflight(&self) -> bool {
+        true
     }
 }
 
@@ -167,6 +189,12 @@ impl ExtInstr for Int256BranchEqInstr {
             "rvr_ext_int256_beq"
         };
         let cond = ctx.emit_call_expr("bool", fn_name, &["state", &rs1, &rs2]);
+        // The predicate call performs eight aligned heap reads. Its one-bit
+        // result is the minimum information needed by independent GPU chunks
+        // to recover the dynamic successor before memory chronology exists.
+        ctx.advance_checkpoint_timestamp(8);
+        ctx.append_replay_value(&cond);
+        ctx.flush_before_control_transfer();
         ctx.write_line(&format!("if ({cond}) {{"));
         ctx.write_line(&format!("  {}", branch_to(self.target_pc)));
         ctx.write_line("} else {");
@@ -186,6 +214,10 @@ impl ExtInstr for Int256BranchEqInstr {
         Some(CfgTerm::Opaque {
             successors: vec![self.target_pc, self.fall_pc],
         })
+    }
+
+    fn supports_checkpoint_preflight(&self) -> bool {
+        true
     }
 }
 
@@ -219,6 +251,9 @@ impl ExtInstr for Int256BranchLtInstr {
         let rs1 = ctx.read_var(self.rs1_reg);
         let rs2 = ctx.read_var(self.rs2_reg);
         let cond = ctx.emit_call_expr("bool", self.op.ffi_name(), &["state", &rs1, &rs2]);
+        ctx.advance_checkpoint_timestamp(8);
+        ctx.append_replay_value(&cond);
+        ctx.flush_before_control_transfer();
         ctx.write_line(&format!("if ({cond}) {{"));
         ctx.write_line(&format!("  {}", branch_to(self.target_pc)));
         ctx.write_line("} else {");
@@ -238,6 +273,10 @@ impl ExtInstr for Int256BranchLtInstr {
         Some(CfgTerm::Opaque {
             successors: vec![self.target_pc, self.fall_pc],
         })
+    }
+
+    fn supports_checkpoint_preflight(&self) -> bool {
+        true
     }
 }
 
@@ -468,7 +507,178 @@ impl Int256Extension {
 
 #[cfg(test)]
 mod tests {
+    use rvr_openvm_ir::{MemWidth, PageAddressSpace};
+
     use super::*;
+
+    struct TestEmitCtx {
+        lines: Vec<String>,
+        next_tmp: usize,
+        mode: TestEmitMode,
+    }
+
+    #[derive(Clone, Copy, PartialEq, Eq)]
+    enum TestEmitMode {
+        Checkpoint,
+        Direct,
+        Metered,
+    }
+
+    impl Default for TestEmitCtx {
+        fn default() -> Self {
+            Self {
+                lines: Vec::new(),
+                next_tmp: 0,
+                mode: TestEmitMode::Checkpoint,
+            }
+        }
+    }
+
+    impl TestEmitCtx {
+        fn execution(mode: TestEmitMode) -> Self {
+            Self {
+                mode,
+                ..Self::default()
+            }
+        }
+
+        fn records_checkpoint(&self) -> bool {
+            self.mode == TestEmitMode::Checkpoint
+        }
+    }
+
+    impl ExtEmitCtx for TestEmitCtx {
+        fn is_checkpoint_preflight(&self) -> bool {
+            self.records_checkpoint()
+        }
+
+        fn read_var(&mut self, var: Variable) -> String {
+            let value = format!("r{}", var.index());
+            self.lines.push(format!("read({value})"));
+            value
+        }
+
+        fn peek_var(&mut self, var: Variable) -> String {
+            format!("r{}", var.index())
+        }
+
+        fn advance_timestamp(&mut self, slots: u32) {
+            if self.records_checkpoint() {
+                self.lines.push(format!("advance({slots})"));
+            }
+        }
+
+        fn advance_checkpoint_timestamp(&mut self, slots: u32) {
+            if self.records_checkpoint() {
+                self.lines.push(format!("advance_checkpoint({slots})"));
+            }
+        }
+
+        fn write_var(&mut self, _var: Variable, _val: &str) {
+            unreachable!()
+        }
+
+        fn write_line(&mut self, line: &str) {
+            self.lines.push(line.to_string());
+        }
+
+        fn emit_trap(&mut self) {
+            self.lines.push("trap".to_string());
+        }
+
+        fn read_mem(&mut self, _base: &str, _offset: i16, _width: u8, _signed: bool) -> String {
+            unreachable!()
+        }
+
+        fn write_mem(&mut self, _base: &str, _offset: i16, _val: &str, _width: u8) {
+            unreachable!()
+        }
+
+        fn write_aligned_mem_block(&mut self, _addr: &str, _val: &str) {
+            unreachable!()
+        }
+
+        fn reserve_preflight_writes(&mut self, writes: &str, slots: &str) {
+            if self.records_checkpoint() {
+                self.lines.push(format!("reserve({writes}, {slots})"));
+            }
+        }
+
+        fn reserve_replay_values(&mut self, count: &str) {
+            if self.records_checkpoint() {
+                self.lines.push(format!("reserve_replay({count})"));
+            }
+        }
+
+        fn append_replay_value(&mut self, value: &str) {
+            if self.records_checkpoint() {
+                self.lines.push(format!("append({value})"));
+            }
+        }
+
+        fn append_replay_memory_u64_range(&mut self, base: &str, count: &str) {
+            if self.records_checkpoint() {
+                self.lines.push(format!("append_range({base}, {count})"));
+            }
+        }
+
+        fn flush_before_control_transfer(&mut self) {
+            if self.records_checkpoint() {
+                self.lines.push("flush".to_string());
+            }
+        }
+
+        fn emit_call(&mut self, name: &str, args: &[&str]) {
+            self.lines.push(format!("{name}({})", args.join(", ")));
+        }
+
+        fn emit_call_without_page_flush(&mut self, name: &str, args: &[&str]) {
+            self.emit_call(name, args);
+        }
+
+        fn emit_call_expr(&mut self, ret_ty: &str, name: &str, args: &[&str]) -> String {
+            let tmp = format!("tmp{}", self.next_tmp);
+            self.next_tmp += 1;
+            self.lines
+                .push(format!("{ret_ty} {tmp} = {name}({})", args.join(", ")));
+            tmp
+        }
+
+        fn emit_call_with_trace_result(
+            &mut self,
+            _ret_ty: &str,
+            _name: &str,
+            _args: &[&str],
+        ) -> Option<String> {
+            unreachable!()
+        }
+
+        fn trace_chip(&mut self, _chip_idx: u32, _count_expr: &str) {
+            unreachable!()
+        }
+
+        fn trace_chip_if_nonzero(&mut self, _chip_idx: u32, _count_expr: &str) {
+            unreachable!()
+        }
+
+        fn trace_page_access(
+            &mut self,
+            _addr: &str,
+            _width: MemWidth,
+            _addr_space: PageAddressSpace,
+        ) {
+            unreachable!()
+        }
+
+        fn trace_page_access_u64_range(
+            &mut self,
+            _base_addr: &str,
+            _num_dwords: &str,
+            _addr_space: PageAddressSpace,
+        ) {
+            unreachable!()
+        }
+    }
 
     fn instruction(opcode: impl LocalOpcode, c: u32) -> RvrInstruction {
         RvrInstruction::from_canonical(opcode.global_opcode(), [8, 16, c, 0, 0, 0, 0], 101)
@@ -495,5 +705,113 @@ mod tests {
                 [pc - 12, pc + 4]
             );
         }
+    }
+
+    #[test]
+    fn int256_alu_checkpoint_emits_exact_schedule_and_postimage() {
+        let instruction = Int256AluInstr {
+            rd_reg: Variable::new(1),
+            rs1_reg: Variable::new(2),
+            rs2_reg: Variable::new(3),
+            op: Int256AluOp::Add,
+            chip_idx: None,
+        };
+        assert!(!instruction.supports_preflight());
+        assert!(instruction.supports_checkpoint_preflight());
+
+        let mut checkpoint = TestEmitCtx::default();
+        instruction.emit_c(&mut checkpoint);
+        assert_eq!(
+            checkpoint.lines,
+            [
+                "read(r2)",
+                "read(r3)",
+                "read(r1)",
+                "reserve(4u, 12u)",
+                "reserve_replay(4u)",
+                "rvr_ext_int256_add(state, r1, r2, r3)",
+                "append_range(r1, 4u)",
+            ]
+        );
+
+        for mode in [TestEmitMode::Direct, TestEmitMode::Metered] {
+            let mut execution = TestEmitCtx::execution(mode);
+            instruction.emit_c(&mut execution);
+            assert_eq!(
+                execution.lines,
+                [
+                    "read(r1)",
+                    "read(r2)",
+                    "read(r3)",
+                    "rvr_ext_int256_add(state, r1, r2, r3)",
+                ]
+            );
+        }
+    }
+
+    #[test]
+    fn int256_branches_checkpoint_emit_only_the_decision_residual() {
+        let instruction = Int256BranchEqInstr {
+            rs1_reg: Variable::new(2),
+            rs2_reg: Variable::new(3),
+            target_pc: 40,
+            fall_pc: 44,
+            is_ne: false,
+            chip_idx: None,
+        };
+        assert!(!instruction.supports_preflight());
+        assert!(instruction.supports_checkpoint_preflight());
+
+        let mut checkpoint = TestEmitCtx::default();
+        instruction.emit_c_term(&mut checkpoint, &|pc| format!("goto_{pc}"));
+        assert_eq!(
+            checkpoint.lines,
+            [
+                "read(r2)",
+                "read(r3)",
+                "bool tmp0 = rvr_ext_int256_beq(state, r2, r3)",
+                "advance_checkpoint(8)",
+                "append(tmp0)",
+                "flush",
+                "if (tmp0) {",
+                "  goto_40",
+                "} else {",
+                "  goto_44",
+                "}",
+            ]
+        );
+
+        let mut pure = TestEmitCtx::execution(TestEmitMode::Direct);
+        instruction.emit_c_term(&mut pure, &|pc| format!("goto_{pc}"));
+        assert_eq!(
+            pure.lines,
+            [
+                "read(r2)",
+                "read(r3)",
+                "bool tmp0 = rvr_ext_int256_beq(state, r2, r3)",
+                "if (tmp0) {",
+                "  goto_40",
+                "} else {",
+                "  goto_44",
+                "}",
+            ]
+        );
+
+        let instruction = Int256BranchLtInstr {
+            rs1_reg: Variable::new(2),
+            rs2_reg: Variable::new(3),
+            target_pc: 40,
+            fall_pc: 44,
+            op: Int256BranchLtOp::Bltu,
+            chip_idx: None,
+        };
+        let mut checkpoint = TestEmitCtx::default();
+        instruction.emit_c_term(&mut checkpoint, &|pc| format!("goto_{pc}"));
+        assert_eq!(checkpoint.lines[3], "advance_checkpoint(8)");
+        assert_eq!(checkpoint.lines[5], "flush");
+        assert_eq!(
+            checkpoint.lines[2],
+            "bool tmp0 = rvr_ext_int256_bltu(state, r2, r3)"
+        );
     }
 }

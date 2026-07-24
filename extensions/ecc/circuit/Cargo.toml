@@ -45,6 +45,7 @@ halo2curves-axiom = { workspace = true }
 blstrs = { workspace = true }
 
 [dev-dependencies]
+rvr-state = { workspace = true }
 openvm-pairing-guest = { workspace = true, features = ["halo2curves"] }
 openvm-stark-sdk = { workspace = true, features = ["cpu-backend"] }
 openvm-mod-circuit-builder = { workspace = true, features = ["test-utils"] }

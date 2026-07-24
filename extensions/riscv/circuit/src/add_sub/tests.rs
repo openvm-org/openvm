@@ -442,7 +442,7 @@ fn test_cuda_add_sub_tracegen_from_rvr_transcript() {
     corrupt_chip
         .generate_proving_ctx_from_rvr(&d_program, &d_corrupt, &d_corrupt_plan)
         .unwrap();
-    assert_eq!(d_corrupt.error_code().unwrap(), 108);
+    assert_eq!(d_corrupt.error_code().unwrap(), 1008);
 
     let legacy_range_checker = Arc::new(
         openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU::new(

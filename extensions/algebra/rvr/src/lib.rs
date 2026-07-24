@@ -10,7 +10,8 @@ mod fp2;
 mod modular;
 
 pub(crate) use common::{
-    ArithKind, FieldArithInstr, FieldIsEqInstr, FieldKind, FieldSetupInstr, IsEqKind, SetupKind,
+    emit_word_alignment_guard, ArithKind, FieldArithInstr, FieldIsEqInstr, FieldKind,
+    FieldSetupInstr, IsEqKind, SetupKind,
 };
 pub use fp2::Fp2RvrExtension;
 pub use modular::{HintNonQrInstr, HintSqrtInstr, ModularRvrExtension};

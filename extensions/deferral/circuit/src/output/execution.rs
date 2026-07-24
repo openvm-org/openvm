@@ -34,6 +34,33 @@ struct DeferralOutputPrecompute {
     deferral_idx: u32,
 }
 
+#[inline(always)]
+fn checked_output_len(pc: u32, output_len: [u8; 8]) -> Result<u32, ExecutionError> {
+    let output_len =
+        u32::try_from(u64::from_le_bytes(output_len)).map_err(|_| ExecutionError::Fail {
+            pc,
+            msg: "deferral output length exceeds u32",
+        })?;
+    if !output_len.is_multiple_of(DIGEST_SIZE as u32) {
+        return Err(ExecutionError::Fail {
+            pc,
+            msg: "deferral output length must be a whole sponge row",
+        });
+    }
+    Ok(output_len)
+}
+
+#[inline(always)]
+fn check_block_aligned_ptr(pc: u32, ptr: u32) -> Result<u32, ExecutionError> {
+    if !ptr.is_multiple_of(MEMORY_BLOCK_BYTES as u32) {
+        return Err(ExecutionError::Fail {
+            pc,
+            msg: "deferral pointers must be eight-byte aligned",
+        });
+    }
+    Ok(ptr)
+}
+
 impl DeferralOutputExecutor {
     #[inline(always)]
     fn pre_compute_impl<F: PrimeField32>(
@@ -85,7 +112,7 @@ impl<F: PrimeField32> InterpreterExecutor<F> for DeferralOutputExecutor {
     {
         let pre_compute: &mut DeferralOutputPrecompute = data.borrow_mut();
         self.pre_compute_impl(pc, inst, pre_compute)?;
-        Ok(execute_e1_impl::<_>)
+        Ok(execute_e1_handler::<_>)
     }
 
     #[cfg(feature = "tco")]
@@ -123,7 +150,7 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for DeferralOutputExecutor {
         let pre_compute: &mut E2PreCompute<DeferralOutputPrecompute> = data.borrow_mut();
         pre_compute.chip_idx = air_idx as u32;
         self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
-        Ok(execute_e2_impl::<_>)
+        Ok(execute_e2_handler::<_>)
     }
 
     #[cfg(feature = "tco")]
@@ -148,28 +175,35 @@ impl<F: PrimeField32> InterpreterMeteredExecutor<F> for DeferralOutputExecutor {
 unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait>(
     pre_compute: &DeferralOutputPrecompute,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
-) -> u32 {
-    let output_ptr =
-        rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.rd_ptr));
-    let input_ptr =
-        rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.rs_ptr));
+) -> Result<u32, ExecutionError> {
+    let pc = exec_state.pc();
+    let output_ptr = check_block_aligned_ptr(
+        pc,
+        rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.rd_ptr)),
+    )?;
+    let input_ptr = check_block_aligned_ptr(
+        pc,
+        rv64_bytes_to_u32(exec_state.vm_read_bytes(RV64_REGISTER_AS, pre_compute.rs_ptr)),
+    )?;
     let output_key_chunks: [[u8; MEMORY_BLOCK_BYTES]; OUTPUT_TOTAL_MEMORY_OPS] = from_fn(|i| {
         exec_state.vm_read_bytes(RV64_MEMORY_AS, input_ptr + (i * MEMORY_BLOCK_BYTES) as u32)
     });
     let output_key: [u8; OUTPUT_TOTAL_BYTES] = join_byte_memory_ops(output_key_chunks);
     let (output_commit, output_len) = split_output(output_key);
 
-    let output_len_val = rv64_bytes_to_u32(output_len) as usize;
+    let output_len_val = checked_output_len(pc, output_len)? as usize;
 
     // Bytes are sponge-hashed and constrained against output_commit. The
     // sponge rate is DIGEST_SIZE.
     let num_rows = output_len_val / DIGEST_SIZE + 1;
-    debug_assert!(output_len_val.is_multiple_of(DIGEST_SIZE));
-
     let output_raw = exec_state.streams.deferrals[pre_compute.deferral_idx as usize]
-        .get_output(&output_commit.to_vec())
-        .clone();
-    debug_assert_eq!(output_raw.len(), output_len_val);
+        .try_get_output(&output_commit.to_vec())
+        .filter(|output| output.len() == output_len_val)
+        .cloned()
+        .ok_or(ExecutionError::Fail {
+            pc,
+            msg: "deferral output advice is missing or has the wrong length",
+        })?;
 
     for (row_idx, output_chunk) in output_raw.chunks_exact(DIGEST_SIZE).enumerate() {
         let row_output_ptr = output_ptr + (row_idx * DIGEST_SIZE) as u32;
@@ -182,9 +216,36 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait>(
         }
     }
 
-    let pc = exec_state.pc();
     exec_state.set_pc(pc.wrapping_add(DEFAULT_PC_STEP));
-    num_rows as u32
+    Ok(num_rows as u32)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{checked_output_len, DIGEST_SIZE};
+
+    #[test]
+    fn output_length_accepts_u32_boundary_and_rejects_high_word() {
+        let max_aligned = u32::MAX - (DIGEST_SIZE as u32 - 1);
+        assert_eq!(
+            checked_output_len(7, u64::from(max_aligned).to_le_bytes()).unwrap(),
+            max_aligned
+        );
+        let error = checked_output_len(7, (u64::from(u32::MAX) + 1).to_le_bytes()).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "execution failed at pc 7, err: deferral output length exceeds u32"
+        );
+    }
+
+    #[test]
+    fn output_length_rejects_partial_sponge_row() {
+        let error = checked_output_len(7, 1u64.to_le_bytes()).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "execution failed at pc 7, err: deferral output length must be a whole sponge row"
+        );
+    }
 }
 
 #[create_handler]
@@ -192,10 +253,11 @@ unsafe fn execute_e12_impl<CTX: ExecutionCtxTrait>(
 unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
-) {
+) -> Result<(), ExecutionError> {
     let pre_compute: &DeferralOutputPrecompute =
         from_raw_parts(pre_compute, size_of::<DeferralOutputPrecompute>()).borrow();
-    execute_e12_impl(pre_compute, exec_state);
+    execute_e12_impl(pre_compute, exec_state)?;
+    Ok(())
 }
 
 #[create_handler]
@@ -203,13 +265,13 @@ unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait>(
 unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
-) {
+) -> Result<(), ExecutionError> {
     let pre_compute: &E2PreCompute<DeferralOutputPrecompute> = from_raw_parts(
         pre_compute,
         size_of::<E2PreCompute<DeferralOutputPrecompute>>(),
     )
     .borrow();
-    let height = execute_e12_impl(&pre_compute.data, exec_state);
+    let height = execute_e12_impl(&pre_compute.data, exec_state)?;
     exec_state
         .ctx
         .on_height_change(pre_compute.chip_idx as usize, height);
@@ -221,4 +283,5 @@ unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait>(
         pre_compute.chip_idx as usize + (OUTPUT_AIR_REL_IDX - POSEIDON2_AIR_REL_IDX),
         height,
     );
+    Ok(())
 }

@@ -18,6 +18,19 @@ use openvm_cuda_backend::{
 use openvm_cuda_common::d_buffer::DeviceBuffer;
 use openvm_riscv_circuit::Rv64ImGpuProverExt;
 use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
+#[cfg(feature = "rvr")]
+use {
+    openvm_circuit::arch::{
+        rvr::cuda::{GpuRvrInputError, GpuRvrProgram, GpuRvrReplayPlan, GpuRvrTranscript},
+        GenerationError, VirtualMachine,
+    },
+    openvm_circuit_primitives::AnyChip,
+    openvm_cuda_backend::base::DeviceMatrix,
+    openvm_deferral_transpiler::DeferralOpcode,
+    openvm_instructions::LocalOpcode,
+    openvm_riscv_circuit::Rv64ImRvrGpuTracegen,
+    openvm_stark_backend::prover::{AirProvingContext, ProvingContext},
+};
 
 use crate::{
     call::{DeferralCallAir, DeferralCallChipGpu},
@@ -29,7 +42,208 @@ use crate::{
 
 pub struct DeferralGpuProverExt;
 
-const DEFAULT_DEFERRAL_POSEIDON2_MAX_TRACE_HEIGHT: usize = 1 << 24;
+/// Concrete arena-free Deferral + RV64/system checkpoint coordinator.
+///
+/// CALL is claimed but rejected at construction until checkpoint expansion
+/// produces its typed AS4 events. OUTPUT records into the exact shared
+/// Poseidon producer, so reverse inventory order must visit OUTPUT before the
+/// Poseidon and Count peripheries.
+#[cfg(feature = "rvr")]
+pub struct DeferralRvrGpuTracegen<'a> {
+    program: &'a GpuRvrProgram,
+    transcript: &'a GpuRvrTranscript,
+    replay_plan: &'a GpuRvrReplayPlan,
+    max_trace_height: usize,
+    coverage: DeferralRvrCoverage,
+}
+
+#[cfg(feature = "rvr")]
+struct DeferralRvrCoverage {
+    pending_output: bool,
+    pending_call: bool,
+    pending_poseidon2: bool,
+    pending_count: bool,
+}
+
+#[cfg(feature = "rvr")]
+impl DeferralRvrCoverage {
+    fn new() -> Self {
+        Self {
+            pending_output: true,
+            pending_call: true,
+            pending_poseidon2: true,
+            pending_count: true,
+        }
+    }
+
+    fn claim(pending: &mut bool, name: &str) -> Result<(), GpuRvrInputError> {
+        if !std::mem::replace(pending, false) {
+            return Err(GpuRvrInputError::InvalidTranscript(format!(
+                "Deferral RVR GPU tracegen visited duplicate {name} producer"
+            )));
+        }
+        Ok(())
+    }
+
+    fn finish(self) -> Result<(), GpuRvrInputError> {
+        let mut missing = Vec::new();
+        if self.pending_output {
+            missing.push("Output");
+        }
+        if self.pending_call {
+            missing.push("Call");
+        }
+        if self.pending_poseidon2 {
+            missing.push("Poseidon2");
+        }
+        if self.pending_count {
+            missing.push("Count");
+        }
+        if missing.is_empty() {
+            Ok(())
+        } else {
+            Err(GpuRvrInputError::InvalidTranscript(format!(
+                "Deferral RVR GPU tracegen did not visit producers {missing:?}"
+            )))
+        }
+    }
+}
+
+#[cfg(feature = "rvr")]
+impl<'a> DeferralRvrGpuTracegen<'a> {
+    pub fn new(
+        program: &'a GpuRvrProgram,
+        transcript: &'a GpuRvrTranscript,
+        replay_plan: &'a GpuRvrReplayPlan,
+        max_trace_height: usize,
+    ) -> Result<Self, GpuRvrInputError> {
+        if !replay_plan
+            .opcode_range(DeferralOpcode::CALL.global_opcode())
+            .is_empty()
+        {
+            return Err(GpuRvrInputError::InvalidTranscript(
+                "Deferral CALL checkpoint replay requires the Phase-B AS4 event producer"
+                    .to_string(),
+            ));
+        }
+        Ok(Self {
+            program,
+            transcript,
+            replay_plan,
+            max_trace_height,
+            coverage: DeferralRvrCoverage::new(),
+        })
+    }
+
+    /// Handles exactly one Deferral-owned inventory chip. Returning `None`
+    /// delegates the same reverse-walk position to RV64/system coverage.
+    pub fn generate_for_chip(
+        &mut self,
+        chip: &dyn AnyChip<DenseRecordArena, GpuBackend>,
+    ) -> Result<Option<AirProvingContext<GpuBackend>>, GpuRvrInputError> {
+        if let Some(chip) = chip.as_any().downcast_ref::<DeferralOutputChipGpu>() {
+            DeferralRvrCoverage::claim(&mut self.coverage.pending_output, "Output")?;
+            return chip
+                .generate_proving_ctx_from_rvr(
+                    self.program,
+                    self.transcript,
+                    self.replay_plan,
+                    self.max_trace_height,
+                )
+                .map(Some);
+        }
+        if chip.as_any().is::<DeferralCallChipGpu>() {
+            DeferralRvrCoverage::claim(&mut self.coverage.pending_call, "Call")?;
+            return Ok(Some(
+                AirProvingContext::simple_no_pis(DeviceMatrix::dummy()),
+            ));
+        }
+        if let Some(chip) = chip
+            .as_any()
+            .downcast_ref::<Arc<DeferralPoseidon2ChipGpu>>()
+        {
+            if self.coverage.pending_output || self.coverage.pending_call {
+                return Err(GpuRvrInputError::InvalidTranscript(
+                    "Deferral Poseidon2 producer was visited before executor producers".to_string(),
+                ));
+            }
+            DeferralRvrCoverage::claim(&mut self.coverage.pending_poseidon2, "Poseidon2")?;
+            return chip
+                .generate_proving_ctx_direct(self.max_trace_height)
+                .map(Some);
+        }
+        if let Some(chip) = chip
+            .as_any()
+            .downcast_ref::<Arc<DeferralCircuitCountChipGpu>>()
+        {
+            if self.coverage.pending_output
+                || self.coverage.pending_call
+                || self.coverage.pending_poseidon2
+            {
+                return Err(GpuRvrInputError::InvalidTranscript(
+                    "Deferral Count producer was visited before dependent producers".to_string(),
+                ));
+            }
+            DeferralRvrCoverage::claim(&mut self.coverage.pending_count, "Count")?;
+            return chip
+                .generate_proving_ctx_direct(self.max_trace_height)
+                .map(Some);
+        }
+        Ok(None)
+    }
+
+    pub fn finish(self) -> Result<(), GpuRvrInputError> {
+        self.coverage.finish()
+    }
+
+    /// Generates one complete Deferral + RV64/system segment in the VM's
+    /// single reverse inventory walk, then verifies both coverage sets.
+    pub fn generate_proving_ctx<VB>(
+        mut self,
+        vm: &mut VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
+    ) -> Result<ProvingContext<GpuBackend>, GenerationError>
+    where
+        VB: VmBuilder<
+            GpuBabyBearPoseidon2Engine,
+            RecordArena = DenseRecordArena,
+            SystemChipInventory = SystemChipInventoryGPU,
+        >,
+    {
+        let extension_opcodes = [
+            DeferralOpcode::CALL.global_opcode().as_usize() as u32,
+            DeferralOpcode::OUTPUT.global_opcode().as_usize() as u32,
+        ];
+        let mut rv64 = Rv64ImRvrGpuTracegen::new_after_claiming_extension_opcodes(
+            self.program,
+            self.transcript,
+            self.replay_plan,
+            &extension_opcodes,
+        )
+        .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
+        let ctx = vm.generate_proving_ctx_from_rvr_unchecked_coverage(
+            self.program,
+            self.transcript,
+            self.replay_plan,
+            |insertion_idx, chip| {
+                if let Some(ctx) = self
+                    .generate_for_chip(chip)
+                    .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?
+                {
+                    Ok(ctx)
+                } else {
+                    rv64.generate_for_chip(insertion_idx, chip)
+                        .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))
+                }
+            },
+        )?;
+        self.finish()
+            .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
+        rv64.finish()
+            .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
+        vm.complete_rvr_tracegen_session();
+        Ok(ctx)
+    }
+}
 
 impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, DeferralExtension>
     for DeferralGpuProverExt
@@ -65,7 +279,6 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, DeferralExt
 
         inventory.next_air::<DeferralPoseidon2Air<CudaF>>()?;
         let poseidon2_chip = Arc::new(DeferralPoseidon2ChipGpu::new(
-            DEFAULT_DEFERRAL_POSEIDON2_MAX_TRACE_HEIGHT,
             1,
             range_checker.device_ctx.clone(),
         ));
@@ -152,3 +365,6 @@ impl VmBuilder<GpuBabyBearPoseidon2Engine> for Rv64DeferralGpuBuilder {
         Ok(chip_complex)
     }
 }
+
+#[cfg(all(test, feature = "rvr"))]
+mod tests;

@@ -1,3 +1,5 @@
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use std::borrow::Borrow;
 use std::{borrow::BorrowMut, sync::Arc};
 
 #[cfg(feature = "cuda")]
@@ -14,9 +16,9 @@ use openvm_circuit_primitives::bitwise_op_lookup::{
     BitwiseOperationLookupAir, BitwiseOperationLookupBus, BitwiseOperationLookupChip,
     SharedBitwiseOperationLookupChip,
 };
-use openvm_instructions::{instruction::Instruction, LocalOpcode};
+use openvm_instructions::LocalOpcode;
 #[cfg(feature = "cuda")]
-use openvm_instructions::{riscv::RV64_MEMORY_AS, PUBLIC_VALUES_AS};
+use openvm_instructions::{instruction::Instruction, riscv::RV64_MEMORY_AS, PUBLIC_VALUES_AS};
 use openvm_riscv_transpiler::Rv64LoadStoreOpcode::{self, STOREB};
 use openvm_stark_backend::{
     p3_air::BaseAir,
@@ -60,6 +62,8 @@ use {
     },
 };
 
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use crate::adapters::Rv64StoreByteAdapterCols;
 use crate::{
     adapters::{
         rv64_bytes_to_u16_block, Rv64StoreByteAdapterAir, Rv64StoreByteAdapterExecutor,
@@ -539,8 +543,8 @@ fn test_cuda_storeb_tracegen_from_rvr_transcript() {
         .iter()
         .all(|&count| count == F::ZERO));
 
-    // Invalid execution fields, noncanonical register pointers, and the separate RV64IO
-    // public-values shape all fail closed before trace or lookup writes.
+    // Invalid execution fields, noncanonical register pointers, and unsupported address spaces
+    // all fail closed before trace or lookup writes.
     for invalid_instruction in [
         Instruction::<F>::from_usize(
             STOREB.global_opcode(),
@@ -573,7 +577,7 @@ fn test_cuda_storeb_tracegen_from_rvr_transcript() {
                 reg(1),
                 0,
                 RV64_REGISTER_AS as usize,
-                PUBLIC_VALUES_AS as usize,
+                PUBLIC_VALUES_AS as usize + 1,
                 1,
                 0,
             ],
@@ -619,6 +623,69 @@ fn test_cuda_storeb_tracegen_from_rvr_transcript() {
             .iter()
             .all(|&count| count == F::ZERO));
     }
+
+    // The RV64IO public-values shape shares STOREB's opcode. Its actual instruction address
+    // space must be preserved in the trace row.
+    let public_store = Instruction::<F>::from_usize(
+        STOREB.global_opcode(),
+        [
+            reg(2),
+            reg(1),
+            0,
+            RV64_REGISTER_AS as usize,
+            PUBLIC_VALUES_AS as usize,
+            1,
+            0,
+        ],
+    );
+    let public_program = Program::from_instructions(&[
+        public_store,
+        Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
+    ]);
+    let mut public_init = init_memory.clone();
+    for offset in 0..RV64_REGISTER_NUM_LIMBS {
+        public_init.insert((RV64_REGISTER_AS, (reg(1) + offset) as u32), 0);
+    }
+    let public_execution = VmExecutor::new(Rv64IConfig {
+        system: test_system_config(),
+        ..Default::default()
+    })
+    .unwrap()
+    .rvr_preflight_instance(
+        &VmExe::new(public_program.clone()).with_init_memory(public_init),
+        None,
+    )
+    .unwrap()
+    .execute(Vec::<Vec<u8>>::new(), RvrPreflightLimits::new(4, 8))
+    .unwrap();
+    assert_eq!(
+        public_execution.transcript.memory_log[2].address_space(),
+        PUBLIC_VALUES_AS
+    );
+    let d_public_program =
+        GpuRvrProgram::upload(&public_program, &memory_config, &device_ctx).unwrap();
+    let (d_public, d_public_plan) = d_public_program
+        .upload_transcript(&public_execution.transcript, public_execution.endpoint)
+        .unwrap();
+    let public_chip = Rv64StoreByteChipGpu::new(
+        Arc::new(VariableRangeCheckerChipGPU::new(
+            default_var_range_checker_bus(),
+            device_ctx.clone(),
+        )),
+        Arc::new(BitwiseOperationLookupChipGPU::new(device_ctx.clone())),
+        address_bits,
+        timestamp_max_bits,
+    );
+    let public_ctx = public_chip
+        .generate_proving_ctx_from_rvr(&d_public_program, &d_public, &d_public_plan)
+        .unwrap();
+    assert_eq!(d_public.error_code().unwrap(), 0);
+    let public_trace =
+        transport_matrix_d2h_row_major(&public_ctx.common_main, &device_ctx).unwrap();
+    let public_row = public_trace.row_slice(0).unwrap();
+    let (adapter_row, _) = public_row.split_at(Rv64StoreByteAdapterCols::<F>::width());
+    let public_adapter: &Rv64StoreByteAdapterCols<F> = adapter_row.borrow();
+    assert_eq!(public_adapter.mem_as, F::from_u32(PUBLIC_VALUES_AS));
 
     // The containing block must be the one selected by the effective byte address.
     let mut wrong_block = RvrPreflightTranscript {

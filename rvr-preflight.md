@@ -2,15 +2,17 @@
 
 ## Status
 
-This document proposes a replacement for interpreter preflight, `RecordArena`, and
-chip-shaped execution records. It deliberately separates two questions:
+This document records the selected replacement for interpreter preflight,
+`RecordArena`, and chip-shaped execution records, together with the semantic
+model and rejected intermediate encodings that led to it. It deliberately
+separates two questions:
 
 1. What happened during serial execution?
 2. Which traces should be generated from what happened?
 
-The first implementation milestone is only an RVR preflight executor which answers
-the first question. Existing proof generation remains in place until a later
-migration milestone.
+The first implementation milestone is the RVR checkpoint executor which answers
+the first question. Proof generation moves one concrete AIR family at a time and
+remains fail-closed for every family without a replay producer.
 
 The proposal is based on the current RVR and preflight implementations, including
 the system AIRs and continuation path. It is a semantic design: the physical log
@@ -18,29 +20,41 @@ layout is an explicit benchmark decision, not part of the proof interface.
 
 ## Decision
 
-Preflight is normal RVR execution with an append-only transcript of OpenVM's
-**logical** instruction and memory operations. It does not know about AIR IDs,
-chips, trace heights, record layouts, or prover backends.
+Preflight is normal RVR execution with exactly two append-only arrays:
 
-After a segment finishes, an indexing step freezes the transcript and derives the
-views needed by trace generators. CPU or GPU trace generators then replay each
-instruction against a read-only view of that transcript. Exactly one trace must
-emit the instruction's execution/program interactions; additional traces may use
-the same instruction for one-to-many cases such as Keccak.
+```text
+checkpoints: periodic (pc, timestamp, retired, residual_cursor, x1..x31)
+residuals:   ordered u64 values not recoverable from checkpoints, program, and initial state
+```
+
+There is no header, schema version, per-PC entry, generic memory event, seed log,
+observation arena, AIR ID, chip ID, trace height, or record layout. Checkpoints
+are delayed to existing RVR block boundaries. The initial/final VM state anchors
+the chain and is not duplicated in the transcript.
+
+After a segment finishes, GPU checkpoint expansion re-executes independent chunks
+from their checkpoints and reconstructs the ordinary logical program and memory
+events. One chronology pass resolves those events against the immutable
+segment-start memory image. Trace generators then consume this read-only derived
+view. Exactly one trace emits the instruction's execution/program interactions;
+additional traces may use the same instruction for one-to-many cases such as
+Keccak.
 
 ```text
                 serial, mutable                    parallel, immutable
 
- program ──► RVR execution ──► preflight transcript ──► transcript indexes
-                    │                                      │
-                    └──► final VM state                    ├──► system traces
-                                                           ├──► chip trace A
-                                                           ├──► chip trace B
-                                                           └──► chip trace N
+ program ──► RVR execution ──► checkpoints + residuals ──► GPU expansion/indexes
+                    │                                             │
+                    └──► final VM state                           ├──► system traces
+                                                                  ├──► chip trace A
+                                                                  ├──► chip trace B
+                                                                  └──► chip trace N
 ```
 
-The authoritative preflight output contains no per-chip records. `RecordArena` is
-removed after all trace generators consume the transcript directly.
+The authoritative preflight output is only those two arrays. The program/memory
+logs discussed below are the semantic replay model and a derived GPU artifact,
+not executor output. `RecordArena` is removed after all trace generators consume
+that derived view directly.
 
 ## Why a PC log and a write log are not enough
 
@@ -63,7 +77,7 @@ It must also log reads, not only writes. A timed read changes a block's last-acc
 timestamp and therefore affects offline memory-checker and final touched-memory
 rows even when the value is unchanged.
 
-## Minimal preflight output
+## Semantic log model and rejected direct-logging baseline
 
 Preflight is an in-process phase, not a portable artifact format. The program,
 configuration, initial state, and final `VmState` already exist at the call site; we
@@ -71,7 +85,7 @@ should not serialize their identities into every segment. There is no schema
 version, program digest, VM-config digest, header object, or generic observation
 arena.
 
-The baseline hot path appends only these arrays:
+The first baseline considered appending these arrays directly:
 
 ```text
 program_log: [(pc, start_timestamp), ... , (final_pc, final_timestamp)]
@@ -81,6 +95,12 @@ memory_log:  [(timestamp, address_space_and_kind, pointer, post_value), ...]
 initial_write_log:
     [(address_space, pointer, initial_value), ...]
 ```
+
+This layout remains useful for specifying timestamp, peek, predecessor, and
+continuation semantics, and it is the view produced by checkpoint expansion.
+It is not the selected serial transcript: real Reth measurements below rejected
+its per-instruction/per-access write volume in favor of checkpoints plus the
+minimal residual stream.
 
 `program_log` uses two `u32`s per fetched instruction and one final sentinel. The
 vector index is execution order. The last entry is never counted or routed. On
@@ -101,7 +121,10 @@ those with timestamps in:
 Postflight indexing finds those ranges with one linear merge; preflight does not
 write an access cursor per instruction. If a future opcode legitimately has a
 zero-clock transition, this invariant must be revisited explicitly rather than
-silently adding metadata for every current instruction.
+silently adding metadata for every current instruction. The bet is bounded, not
+existential: the known escape hatch is an explicit end timestamp per derived
+program event, which in the checkpoint design costs only derived-view bytes
+during expansion, not serial executor writes.
 
 Every proof-visible timed read and write appends one `memory_log` event.
 `pointer` is aligned and expressed in the address space's native field-cell
@@ -187,7 +210,8 @@ generic byte arena, per-instruction observation cursor, or extensible schema bef
 a real consumer needs one. Streams, RNG state, deferral caches, printing, and other
 host state remain in `VmState` and are never re-executed by tracegen.
 
-Accordingly, M1's RISC-V baseline has exactly the three logs above. A fourth,
+Accordingly, the rejected direct-logging RISC-V baseline had exactly the three
+logs above. A fourth,
 instruction-specific observation array is added only if the M0 audit identifies a
 current proof-visible input that cannot be recovered from static instructions,
 immutable execution inputs, or logged memory. Final stream, RNG, and deferral state
@@ -195,10 +219,11 @@ can validate endpoints but cannot reconstruct an ordered history. The concrete
 observation layout and measured write cost must be part of that change; it is not
 an always-present transcript component.
 
-Timestamps restart at one per continuation segment. The executor returns the three
-arrays, final PC/timestamp/exit status, and the normal final `VmState`. Finalization
-also extends `AddressMap::touched_pages` from timed accesses before that memory is
-used by another segment or sparse host-to-device transfer.
+Timestamps restart at one per continuation segment. In the selected design the
+executor returns checkpoints, residuals, final PC/timestamp/exit status, and the
+normal final `VmState`; GPU expansion constructs the three semantic arrays.
+Finalization also extends `AddressMap::touched_pages` from timed accesses before
+that memory is used by another segment or sparse host-to-device transfer.
 
 ## RVR executor design
 
@@ -369,12 +394,19 @@ timestamp, its derived memory-event range, and the shared version index. A small
 local cursor may expose operations such as:
 
 ```rust
-read(address_space, pointer, timestamp) -> MemoryBlock
-write(address_space, pointer, timestamp, expected_new_value) -> MemoryBlock
-peek(address_space, pointer, logical_point) -> MemoryBlock
+read(address_space, pointer, timestamp) -> (MemoryBlock, prev_timestamp)
+write(address_space, pointer, timestamp, expected_new_value) -> (MemoryBlock, prev_timestamp)
+peek(address_space, pointer) -> MemoryBlock
 advance_timestamp(slots)
 finish(expected_next_pc)
 ```
+
+The `timestamp` and `expected_new_value` arguments are producer-computed
+expectations checked against the indexed events, not lookups by free key. `peek`
+takes no logical point because the cursor already holds it: the instruction
+ordinal, consumed timed-event prefix, and current timestamp. Reads and writes
+return the indexed predecessor timestamp alongside the block because every
+adapter's offline-checker aux columns need it.
 
 These are memory-bus operations, not heap-specific operations. `address_space`
 selects registers (`RV64_REGISTER_AS`), main memory, public values, deferral memory,
@@ -462,10 +494,18 @@ VM state forward, and never retain event references across segments.
 
 ## Migration plan
 
+M0 through the first M2 experiments below describe the direct-log prototype and
+the measurements that rejected it. The later checkpoint-executor decision
+supersedes their physical transcript layout while retaining their semantic tests.
+
 ### M0: lock down semantics
 
 - Add reference tests that extract PC, timestamp, timed access, touched-memory,
-  touched-page metadata, and final-state facts from current interpreter preflight.
+  touched-page metadata, and final-state facts from current interpreter
+  preflight. The global access sequence is not exposed today — records are
+  per-chip and destroyed during fill — so this requires test-build
+  instrumentation of `TracingMemory` and the interpreter loop, not record
+  inspection.
 - Cover register `x0`, disabled writes, immediates, crossing and non-crossing
   unaligned loads/stores, all address spaces, peeks, phantom, hintstore, public
   values, RNG, deferral, termination, traps, timestamp limits,
@@ -1378,9 +1418,10 @@ at about 235.8 MiB and 259.4 MiB respectively, so checkpoint expansion did not
 become the peak phase.
 
 This completes the RV64IM feasibility slice, not the full cutover. Public-values
-stores, advice/hint scheduling, suspended continuation endpoints, and every
-non-RISC-V extension still fail closed until their concrete replay producers are
-ported and proven. Each following AIR family must also pass the ordinary
+stores, hint-store scheduling, and suspended continuation endpoints have since
+gained live replay producers with their own negative tests. Modular arithmetic,
+Fp2, ECC, and Deferral tracegen still fail closed until their concrete replay
+producers are ported and proven. Each following AIR family must also pass the ordinary
 `rvr-openvm` execution regression before the next family is enabled.
 
 ### M3: complete the GPU proving path
@@ -1413,9 +1454,9 @@ producer. For one program it:
    state;
 5. executes preflight to the metered instruction boundary, requires the exact
    retired-step count and expected suspended-or-terminated endpoint, uploads the
-   three logs, generates the system and extension contexts, checks the single
-   sticky replay error, and then drops the per-segment GPU transcript and replay
-   plan before proving; and
+   checkpoints and residuals, expands the three derived logs, generates the
+   system and extension contexts, checks the single sticky replay error, and then
+   drops the per-segment GPU transcript and replay plan before proving; and
 6. carries only the returned final `VmState` to the next segment. Final public
    values use the final segment's completed memory top tree.
 
@@ -1448,6 +1489,76 @@ Each extension's RVR execution path must support safe preflight logging before i
 tracegen is enabled. Logger-aware callbacks are required for every proof-visible
 address space.
 
+#### Current extension slice
+
+The migration remains fail-closed, but the checkpoint executor side now has
+exact schedules for Keccak, SHA-2, Int256, Pairing phantoms, Modular, Fp2, ECC,
+and Deferral CALL/OUTPUT.
+These paths add only postimages or control values that cannot be recovered from
+the checkpoint state and immutable program configuration. Modular setup writes
+zero by construction and therefore appends no output residual. Fp2 setup only
+checks the first coordinate against the modulus and computes the second
+coordinate from guest input, so it appends its destination postimage. ECC setup
+is opcode-specific: add-setup validates only the modulus and still computes from
+three guest-provided coordinates, so it appends its destination postimage;
+double-setup validates both configured inputs `(p, a)` and is config-static, so
+replay carries those few static words with the program rather than repeating
+them in every execution transcript.
+Pure, metered, and legacy value-trace emission remains on the old code path.
+
+Arena-free trace generation has concrete direct-log implementations for
+Keccak, SHA-2, Int256, and Modular IsEqual. The Modular arithmetic, Fp2, and ECC
+chips still use the shared `FieldExpressionProgram` witness machinery. PR #3020's
+implementation is not a suitable shortcut: it consumes record-shaped input,
+imports a large serializer/interpreter surface, and permits up to 1 GiB of
+auxiliary GPU scratch. The clean follow-up is one bounded record-free field-
+expression backend shared by those AIRs, with exact scratch lifetimes and the
+same phase-specific GPU-memory gate as M2.
+
+Extension opcodes must not keep growing `RvrCheckpointOpcodeBases` or the VM-core
+CUDA replay switch. Mixed extension and RV64 instructions can occur inside one
+checkpoint interval, so independent after-the-fact replay kernels are not
+correct: they would not share the evolving PC, registers, timestamp, and
+residual cursor. The selected composition boundary must run inside that one
+sequential chunk replay and be built from extension-owned, static execution
+metadata. It must not add per-step transcript data or a second record schema.
+
+The concrete seam is a small access-schedule registry uploaded once with the
+program. A dense opcode dispatch selects either the existing native RV64 handler
+or an extension-owned schedule. A schedule contains only ordered register reads,
+bounded contiguous memory spans, explicit clock gaps, a residual/zero/static
+write source, and the PC or residual-backed register effect. It has no general
+arithmetic, temporaries, jumps, callbacks, or versioning. Count and emit run the
+same templated schedule routine with different sinks, so mixed RV64 and extension
+instructions advance one shared replay state inside a checkpoint chunk.
+
+The span list is variable length because Deferral CALL has six real ranges across
+AS2 and AS4; imposing a three-span bound would be another false abstraction.
+Dynamic counts are limited to a checked register-derived count or one control
+residual, as required by Deferral OUTPUT. Memory layout determines how many
+residual words materialize one four-cell block: one `u64` for U16 and two for a
+four-field-cell AS4 block. This registry is immutable program metadata, not data
+written by preflight.
+
+The first implementation slices do not freeze that full ABI. They keep the
+registry types internal/experimental and support AS2 spans with fixed or
+register-derived counts, residual-backed writes, and one terminal boolean
+residual effect for Int256 branches. Keccak, SHA-2, and Int256 each register
+their schedules into a caller-owned registry so opcode ownership already
+composes. Gaps, tail effects, static/zero write sources, residual-derived span
+counts, residual-backed register writes, and AS4 are added only with the
+extension that proves each shape is needed. The uploaded device POD contains
+only replay-time fields; immutable instruction operands are validated once when
+the program is uploaded. Each concrete RV64+extension coordinator owns its
+program-upload constructor, installs its schedules automatically, and rejects
+collisions with native RV64 ownership before any segment replay.
+
+Before enabling an extension in production, run its generated-C regression and
+then the real `rvr-openvm` workload against this checkout. The gate compares
+output hash, guest instruction count, segment boundaries, pure and metered
+behavior, and representative runtime. Unit/code-generation tests are useful but
+do not replace this workload gate.
+
 ### M5: CPU tracegen if still required
 
 GPU feasibility comes first. If CPU tracegen remains a supported backend, port it
@@ -1465,19 +1576,26 @@ migration. It must not enter the production architecture.
 - Remove `RecordArena` only after repository-wide search shows no execution,
   system, CPU tracegen, GPU tracegen, or test consumer remains.
 - Revisit whether metered execution can collapse to a single segmentation metric
-  after preflight and proving use the same RVR block model.
+  after preflight and proving use the same RVR block model. This is constrained
+  by verifying-key semantics, not only performance: segmentation must respect the
+  per-AIR height and interaction bounds committed in the verifying key, and a
+  single scalar metric cannot guarantee them (Poseidon2/Merkle heights depend on
+  touched-memory patterns, not instruction count). Metering stays per-AIR until
+  that constraint model itself changes; removing records does not remove
+  chip-shaped accounting from metering.
 
 ## Required invariants
 
 The implementation is acceptable only if all of these remain true:
 
-1. The baseline three logs contain no chip, AIR, executor, trace-height, schema, digest, or
-   record-layout identifier.
+1. The two serial arrays and the three derived logs contain no chip, AIR,
+   executor, trace-height, schema, digest, or record-layout identifier.
 2. Every fetched PC is ordered, including termination; instruction order is not
    inferred from timestamps.
 3. Every logical timed read and write produces exactly one canonical block event.
 4. Clock-only slots advance the timestamp without producing fake memory events.
-5. Peeks neither advance the timestamp nor mark memory touched.
+5. Peeks neither advance the timestamp nor mark memory touched; they append
+   nothing and create no memory-proof claim.
 6. No proof-visible address-space mutation bypasses the logger.
 7. Replay consumes exactly the timestamp-derived instruction slice and reproduces its complete
    logical access and clock schedule.
@@ -1496,12 +1614,11 @@ The implementation is acceptable only if all of these remain true:
     access is a write; returned final memory carries complete touched-page metadata.
 15. A failed/trapped run returns no transcript or final-state result, and every
     timestamp endpoint stays inside the configured proof domain.
-16. Peeks append nothing and create no memory-proof claim.
-17. The first event for a block in every segment has predecessor timestamp zero,
+16. The first event for a block in every segment has predecessor timestamp zero,
     and no predecessor link crosses a segment boundary.
-18. Every logged memory event is exactly four canonically packed field cells; a
+17. Every logged memory event is exactly four canonically packed field cells; a
     configuration with another memory-bus width is rejected.
-19. Reconstructing an initial Merkle view never mutates the final `VmState` carried
+18. Reconstructing an initial Merkle view never mutates the final `VmState` carried
     to the next segment, and final public values use the final segment's Merkle top
     tree.
 

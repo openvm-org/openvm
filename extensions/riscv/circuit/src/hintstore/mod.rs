@@ -79,6 +79,17 @@ fn validate_hint_buffer_num_words(pc: u32, num_words: u64) -> Result<u16, Execut
     Ok(num_words as u16)
 }
 
+#[inline]
+fn validate_hint_store_mem_ptr(pc: u32, mem_ptr: u32) -> Result<u32, ExecutionError> {
+    if !mem_ptr.is_multiple_of(MEMORY_BLOCK_BYTES as u32) {
+        return Err(ExecutionError::Fail {
+            pc,
+            msg: "hint destination must be eight-byte aligned",
+        });
+    }
+    Ok(mem_ptr)
+}
+
 #[repr(C)]
 #[derive(AlignedBorrow, StructReflection, Debug)]
 pub struct Rv64HintStoreCols<T> {
@@ -457,12 +468,15 @@ where
         record.inner.timestamp = state.memory.timestamp;
         record.inner.mem_ptr_ptr = b;
 
-        record.inner.mem_ptr = tracing_read_reg_ptr(
-            state.memory,
-            b,
-            &mut record.inner.mem_ptr_aux_record.prev_timestamp,
-            self.pointer_max_bits,
-        );
+        record.inner.mem_ptr = validate_hint_store_mem_ptr(
+            *state.pc,
+            tracing_read_reg_ptr(
+                state.memory,
+                b,
+                &mut record.inner.mem_ptr_aux_record.prev_timestamp,
+                self.pointer_max_bits,
+            ),
+        )?;
 
         debug_assert!(num_words <= (1 << self.pointer_max_bits));
 

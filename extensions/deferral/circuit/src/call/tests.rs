@@ -350,8 +350,7 @@ fn create_cuda_harness(
         &device_ctx,
     ));
     count.fill_zero_on(&device_ctx).unwrap();
-    let poseidon2_chip_gpu =
-        DeferralPoseidon2ChipGpu::new(MAX_INS_CAPACITY.max(1), 1, device_ctx.clone());
+    let poseidon2_chip_gpu = DeferralPoseidon2ChipGpu::new(1, device_ctx.clone());
     let gpu_chip = DeferralCallChipGpu::new(
         tester.range_checker(),
         tester.bitwise_op_lookup(),

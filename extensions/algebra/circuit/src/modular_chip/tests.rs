@@ -33,7 +33,7 @@ use {
     openvm_circuit::arch::testing::{
         default_var_range_checker_bus, GpuChipTestBuilder, GpuTestChipHarness,
     },
-    openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
+    openvm_circuit_primitives::{var_range::VariableRangeCheckerChip, Chip},
 };
 
 use crate::{
@@ -132,15 +132,23 @@ mod addsub_tests {
         );
 
         // Use hybrid chip wrapping the CPU chip
-        let hybrid_chip = HybridModularChip::new(
-            get_modular_addsub_chip(
-                config,
-                tester.cpu_memory_helper(),
-                tester.cpu_range_checker(),
-                tester.address_bits(),
-            ),
-            tester.range_checker().device_ctx.clone(),
+        let replay_cpu_chip = get_modular_addsub_chip(
+            config,
+            tester.cpu_memory_helper(),
+            tester.cpu_range_checker(),
+            tester.address_bits(),
         );
+        #[cfg(feature = "rvr")]
+        let hybrid_chip = HybridModularChip::new_with_replay(
+            replay_cpu_chip,
+            tester.range_checker().device_ctx.clone(),
+            offset,
+            tester.address_bits(),
+            tester.timestamp_max_bits(),
+        );
+        #[cfg(not(feature = "rvr"))]
+        let hybrid_chip =
+            HybridModularChip::new(replay_cpu_chip, tester.range_checker().device_ctx.clone());
 
         GpuHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
     }
@@ -374,6 +382,233 @@ mod addsub_tests {
             50,
         );
     }
+
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    #[test]
+    fn cuda_rvr_modular_add_projection_matches_legacy_and_rejects_corrupt_output() {
+        use openvm_circuit::arch::{
+            rvr::{cuda::GpuRvrProgram, RvrPreflightEndpoint, RvrPreflightTranscript},
+            DenseRecordArena,
+        };
+        use openvm_cuda_common::copy::MemCopyD2H;
+        use openvm_instructions::{program::Program, SystemOpcode};
+        use rvr_state::{
+            PreflightInitialWrite, PreflightMemoryEvent, PreflightProgramEvent, PREFLIGHT_WRITE_BIT,
+        };
+
+        const BLOCKS: usize = MODULAR_BLOCKS_32;
+        let modulus = secp256k1_coord_prime();
+        let opcode_base = Rv64ModularArithmeticOpcode::CLASS_OFFSET;
+        let config = ExprBuilderConfig {
+            modulus: modulus.clone(),
+            num_limbs: NUM_LIMBS_32,
+            limb_bits: LIMB_BITS,
+        };
+        let rd_reg = 8usize;
+        let b_reg = 16usize;
+        let c_reg = 24usize;
+        let rd_ptr = 0x100u32;
+        let b_ptr = 0x200u32;
+        let c_ptr = 0x300u32;
+        let b = BigUint::from(0x0102_abcdu32);
+        let c = BigUint::from(17u32);
+        let result = (&b + &c) % &modulus;
+        let to_cells = |value: &BigUint| {
+            let bytes = biguint_to_limbs_vec(value, NUM_LIMBS_32);
+            std::array::from_fn::<u16, { BLOCKS * 4 }, _>(|index| {
+                u16::from_le_bytes([bytes[2 * index], bytes[2 * index + 1]])
+            })
+        };
+        let b_cells = to_cells(&b);
+        let c_cells = to_cells(&c);
+        let result_cells = to_cells(&result);
+        assert_eq!(b_cells[0], 0xabcd);
+        assert_eq!(b_cells[1], 0x0102);
+
+        let instruction = Instruction::from_usize(
+            VmOpcode::from_usize(opcode_base + Rv64ModularArithmeticOpcode::ADD as usize),
+            [
+                rd_reg,
+                b_reg,
+                c_reg,
+                RV64_REGISTER_AS as usize,
+                RV64_MEMORY_AS as usize,
+            ],
+        );
+        let program = Program::from_instructions(&[
+            instruction.clone(),
+            Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
+        ]);
+        let mut tester = GpuChipTestBuilder::default();
+        let mut harness = create_cuda_harness::<BLOCKS>(&tester, config, opcode_base);
+        let register_block = |pointer: u32| [pointer as u16, (pointer >> 16) as u16, 0, 0];
+        for (register, pointer) in [(rd_reg, rd_ptr), (b_reg, b_ptr), (c_reg, c_ptr)] {
+            unsafe {
+                tester.memory.memory.data.write::<u16, 4>(
+                    RV64_REGISTER_AS,
+                    register as u32 / 2,
+                    register_block(pointer),
+                );
+            }
+        }
+        for (pointer, cells) in [(b_ptr, b_cells), (c_ptr, c_cells)] {
+            for block in 0..BLOCKS {
+                unsafe {
+                    tester.memory.memory.data.write::<u16, 4>(
+                        RV64_MEMORY_AS,
+                        pointer / 2 + (block * 4) as u32,
+                        std::array::from_fn(|limb| cells[block * 4 + limb]),
+                    );
+                }
+            }
+        }
+        tester
+            .memory
+            .inventory
+            .set_initial_memory(&tester.memory.memory.data.memory);
+        tester.execute_with_pc(
+            &mut harness.executor,
+            &mut harness.dense_arena,
+            &instruction,
+            0,
+        );
+
+        let legacy_arena = std::mem::replace(
+            &mut harness.dense_arena,
+            DenseRecordArena::with_byte_capacity(0),
+        );
+        let legacy_ctx =
+            Chip::<DenseRecordArena, openvm_cuda_backend::GpuBackend>::generate_proving_ctx(
+                &harness.gpu_chip,
+                legacy_arena,
+            );
+        let device_ctx = &tester.range_checker().device_ctx;
+        let legacy_trace = legacy_ctx
+            .common_main
+            .buffer()
+            .to_host_on(device_ctx)
+            .unwrap();
+        let legacy_counts = tester
+            .cpu_range_checker()
+            .count
+            .iter()
+            .map(|count| count.load(std::sync::atomic::Ordering::Relaxed))
+            .collect::<Vec<_>>();
+        tester.cpu_range_checker().clear();
+
+        let event_count = (3 + 3 * BLOCKS) as u32;
+        let mut memory_log = vec![
+            PreflightMemoryEvent {
+                timestamp: 1,
+                address_space_and_kind: RV64_REGISTER_AS,
+                pointer: b_reg as u32 / 2,
+                value: register_block(b_ptr),
+            },
+            PreflightMemoryEvent {
+                timestamp: 2,
+                address_space_and_kind: RV64_REGISTER_AS,
+                pointer: c_reg as u32 / 2,
+                value: register_block(c_ptr),
+            },
+            PreflightMemoryEvent {
+                timestamp: 3,
+                address_space_and_kind: RV64_REGISTER_AS,
+                pointer: rd_reg as u32 / 2,
+                value: register_block(rd_ptr),
+            },
+        ];
+        for (read, (pointer, cells)) in [(b_ptr, b_cells), (c_ptr, c_cells)].into_iter().enumerate()
+        {
+            for block in 0..BLOCKS {
+                memory_log.push(PreflightMemoryEvent {
+                    timestamp: 4 + (read * BLOCKS + block) as u32,
+                    address_space_and_kind: RV64_MEMORY_AS,
+                    pointer: pointer / 2 + (block * 4) as u32,
+                    value: std::array::from_fn(|limb| cells[block * 4 + limb]),
+                });
+            }
+        }
+        for block in 0..BLOCKS {
+            memory_log.push(PreflightMemoryEvent {
+                timestamp: 4 + (2 * BLOCKS + block) as u32,
+                address_space_and_kind: RV64_MEMORY_AS | PREFLIGHT_WRITE_BIT,
+                pointer: rd_ptr / 2 + (block * 4) as u32,
+                value: std::array::from_fn(|limb| result_cells[block * 4 + limb]),
+            });
+        }
+        let transcript = RvrPreflightTranscript {
+            program_log: vec![
+                PreflightProgramEvent {
+                    pc: 0,
+                    timestamp: 1,
+                },
+                PreflightProgramEvent {
+                    pc: 4,
+                    timestamp: 1 + event_count,
+                },
+                PreflightProgramEvent {
+                    pc: 4,
+                    timestamp: 1 + event_count,
+                },
+            ],
+            memory_log,
+            initial_write_log: (0..BLOCKS)
+                .map(|block| PreflightInitialWrite {
+                    address_space: RV64_MEMORY_AS,
+                    pointer: rd_ptr / 2 + (block * 4) as u32,
+                    initial_value: [0; 4],
+                })
+                .collect(),
+        };
+        let memory_config = openvm_circuit::arch::MemoryConfig::default();
+        let gpu_program = GpuRvrProgram::upload(&program, &memory_config, device_ctx).unwrap();
+        let (gpu_transcript, replay_plan) = gpu_program
+            .upload_transcript(&transcript, RvrPreflightEndpoint::Terminated)
+            .unwrap();
+        let replay_ctx = harness
+            .gpu_chip
+            .generate_proving_ctx_from_rvr(&gpu_program, &gpu_transcript, &replay_plan)
+            .unwrap();
+        let replay_trace = replay_ctx
+            .common_main
+            .buffer()
+            .to_host_on(device_ctx)
+            .unwrap();
+        assert_eq!(replay_trace, legacy_trace);
+        let replay_counts = tester
+            .cpu_range_checker()
+            .count
+            .iter()
+            .map(|count| count.load(std::sync::atomic::Ordering::Relaxed))
+            .collect::<Vec<_>>();
+        assert_eq!(replay_counts, legacy_counts);
+
+        let mut corrupt = transcript;
+        corrupt.memory_log.last_mut().unwrap().value[0] ^= 1;
+        let (gpu_corrupt, corrupt_plan) = gpu_program
+            .upload_transcript(&corrupt, RvrPreflightEndpoint::Terminated)
+            .unwrap();
+        assert!(harness
+            .gpu_chip
+            .generate_proving_ctx_from_rvr(&gpu_program, &gpu_corrupt, &corrupt_plan)
+            .is_err());
+        assert_eq!(
+            tester
+                .cpu_range_checker()
+                .count
+                .iter()
+                .map(|count| count.load(std::sync::atomic::Ordering::Relaxed))
+                .collect::<Vec<_>>(),
+            replay_counts
+        );
+
+        tester
+            .build()
+            .load_air_proving_ctx(Arc::new(harness.air), replay_ctx)
+            .finalize()
+            .simple_test()
+            .expect("record-free Modular ADD checkpoint replay proof failed");
+    }
 }
 
 #[cfg(test)]
@@ -457,15 +692,23 @@ mod muldiv_tests {
         );
 
         // Use hybrid chip wrapping the CPU chip
-        let hybrid_chip = HybridModularChip::new(
-            get_modular_muldiv_chip(
-                config,
-                tester.cpu_memory_helper(),
-                tester.cpu_range_checker(),
-                tester.address_bits(),
-            ),
-            tester.range_checker().device_ctx.clone(),
+        let replay_cpu_chip = get_modular_muldiv_chip(
+            config,
+            tester.cpu_memory_helper(),
+            tester.cpu_range_checker(),
+            tester.address_bits(),
         );
+        #[cfg(feature = "rvr")]
+        let hybrid_chip = HybridModularChip::new_with_replay(
+            replay_cpu_chip,
+            tester.range_checker().device_ctx.clone(),
+            offset,
+            tester.address_bits(),
+            tester.timestamp_max_bits(),
+        );
+        #[cfg(not(feature = "rvr"))]
+        let hybrid_chip =
+            HybridModularChip::new(replay_cpu_chip, tester.range_checker().device_ctx.clone());
 
         GpuHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
     }
@@ -718,6 +961,16 @@ mod is_equal_tests {
         },
         utils::disable_debug_builder,
     };
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    use {
+        openvm_circuit::arch::rvr::{
+            cuda::GpuRvrProgram, RvrPreflightEndpoint, RvrPreflightTranscript,
+        },
+        openvm_instructions::{program::Program, SystemOpcode},
+        rvr_state::{
+            PreflightInitialWrite, PreflightMemoryEvent, PreflightProgramEvent, PREFLIGHT_WRITE_BIT,
+        },
+    };
 
     use super::*;
 
@@ -920,22 +1173,31 @@ mod is_equal_tests {
             tester.dummy_memory_helper(),
         );
 
-        // Use hybrid chip wrapping the CPU chip
-        let hybrid_chip = HybridModularIsEqualChip::new(
-            ModularIsEqualU16Chip::<F, NUM_LANES, TOTAL_LIMBS>::new(
-                ModularIsEqualFiller::new(
-                    Rv64IsEqualModU16AdapterFiller::new(
-                        tester.address_bits(),
-                        tester.cpu_range_checker(),
-                    ),
-                    offset,
-                    modulus_limbs,
+        let gpu_cpu_chip = ModularIsEqualU16Chip::<F, NUM_LANES, TOTAL_LIMBS>::new(
+            ModularIsEqualFiller::new(
+                Rv64IsEqualModU16AdapterFiller::new(
+                    tester.address_bits(),
                     tester.cpu_range_checker(),
                 ),
-                tester.cpu_memory_helper(),
+                offset,
+                modulus_limbs,
+                tester.cpu_range_checker(),
             ),
-            tester.range_checker().device_ctx.clone(),
+            tester.cpu_memory_helper(),
         );
+        #[cfg(feature = "rvr")]
+        let hybrid_chip = HybridModularIsEqualChip::new_with_replay(
+            gpu_cpu_chip,
+            tester.range_checker().device_ctx.clone(),
+            modulus_limbs,
+            offset,
+            tester.address_bits(),
+            tester.timestamp_max_bits(),
+            tester.range_checker(),
+        );
+        #[cfg(not(feature = "rvr"))]
+        let hybrid_chip =
+            HybridModularIsEqualChip::new(gpu_cpu_chip, tester.range_checker().device_ctx.clone());
 
         GpuHarness::with_capacity(executor, air, hybrid_chip, cpu_chip, MAX_INS_CAPACITY)
     }
@@ -1021,6 +1283,228 @@ mod is_equal_tests {
             17,
             BLS12_381_MODULUS.clone(),
             50,
+        );
+    }
+
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    fn run_rvr_replay_is_equal_test<const BLOCKS: usize, const LIMBS: usize>(modulus: BigUint) {
+        let opcode_base = Rv64ModularArithmeticOpcode::CLASS_OFFSET;
+        let modulus_limbs =
+            biguint_to_limbs::<LIMBS>(modulus.clone(), U16_BITS).map(|limb| limb as u16);
+        let value_limbs = std::array::from_fn(|index| if index == 0 { 5 } else { 0 });
+
+        let setup_rd = 8usize;
+        let modulus_reg = 16usize;
+        let is_eq_rd = 24usize;
+        let b_reg = 32usize;
+        let c_reg = 40usize;
+        let modulus_ptr = 0x100u32;
+        let b_ptr = 0x200u32;
+        let c_ptr = 0x300u32;
+
+        let setup = Instruction::from_usize(
+            VmOpcode::from_usize(opcode_base + Rv64ModularArithmeticOpcode::SETUP_ISEQ as usize),
+            [
+                setup_rd,
+                modulus_reg,
+                0,
+                RV64_REGISTER_AS as usize,
+                RV64_MEMORY_AS as usize,
+            ],
+        );
+        let is_eq = Instruction::from_usize(
+            VmOpcode::from_usize(opcode_base + Rv64ModularArithmeticOpcode::IS_EQ as usize),
+            [
+                is_eq_rd,
+                b_reg,
+                c_reg,
+                RV64_REGISTER_AS as usize,
+                RV64_MEMORY_AS as usize,
+            ],
+        );
+        let program = Program::from_instructions(&[
+            setup.clone(),
+            is_eq.clone(),
+            Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
+        ]);
+
+        let mut tester = GpuChipTestBuilder::default();
+        let mut harness =
+            create_cuda_harness::<BLOCKS, LIMBS>(&tester, modulus, modulus_limbs, opcode_base);
+        for (register, pointer) in [(modulus_reg, modulus_ptr), (b_reg, b_ptr), (c_reg, c_ptr)] {
+            unsafe {
+                tester.memory.memory.data.write::<u16, 4>(
+                    RV64_REGISTER_AS,
+                    register as u32 / 2,
+                    [pointer as u16, (pointer >> U16_BITS) as u16, 0, 0],
+                );
+            }
+        }
+        for (pointer, limbs) in [
+            (modulus_ptr, modulus_limbs),
+            (b_ptr, value_limbs),
+            (c_ptr, value_limbs),
+        ] {
+            for block in 0..BLOCKS {
+                unsafe {
+                    tester.memory.memory.data.write::<u16, 4>(
+                        RV64_MEMORY_AS,
+                        pointer / 2 + (block * 4) as u32,
+                        std::array::from_fn(|limb| limbs[block * 4 + limb]),
+                    );
+                }
+            }
+        }
+        tester
+            .memory
+            .inventory
+            .set_initial_memory(&tester.memory.memory.data.memory);
+        tester.execute_with_pc(&mut harness.executor, &mut harness.dense_arena, &setup, 0);
+        tester.execute_with_pc(&mut harness.executor, &mut harness.dense_arena, &is_eq, 4);
+
+        let register_block = |pointer: u32| [pointer as u16, (pointer >> U16_BITS) as u16, 0, 0];
+        let mut memory_log = Vec::with_capacity(2 * (2 + 2 * BLOCKS + 1));
+        memory_log.push(PreflightMemoryEvent {
+            timestamp: 1,
+            address_space_and_kind: RV64_REGISTER_AS,
+            pointer: modulus_reg as u32 / 2,
+            value: register_block(modulus_ptr),
+        });
+        memory_log.push(PreflightMemoryEvent {
+            timestamp: 2,
+            address_space_and_kind: RV64_REGISTER_AS,
+            pointer: 0,
+            value: [0; 4],
+        });
+        for block in 0..BLOCKS {
+            memory_log.push(PreflightMemoryEvent {
+                timestamp: 3 + block as u32,
+                address_space_and_kind: RV64_MEMORY_AS,
+                pointer: modulus_ptr / 2 + (block * 4) as u32,
+                value: std::array::from_fn(|limb| modulus_limbs[block * 4 + limb]),
+            });
+        }
+        for block in 0..BLOCKS {
+            memory_log.push(PreflightMemoryEvent {
+                timestamp: 3 + BLOCKS as u32 + block as u32,
+                address_space_and_kind: RV64_MEMORY_AS,
+                pointer: (block * 4) as u32,
+                value: [0; 4],
+            });
+        }
+        let first_delta = (2 + 2 * BLOCKS + 1) as u32;
+        memory_log.push(PreflightMemoryEvent {
+            timestamp: first_delta,
+            address_space_and_kind: RV64_REGISTER_AS | PREFLIGHT_WRITE_BIT,
+            pointer: setup_rd as u32 / 2,
+            value: [0; 4],
+        });
+        memory_log.push(PreflightMemoryEvent {
+            timestamp: 1 + first_delta,
+            address_space_and_kind: RV64_REGISTER_AS,
+            pointer: b_reg as u32 / 2,
+            value: register_block(b_ptr),
+        });
+        memory_log.push(PreflightMemoryEvent {
+            timestamp: 2 + first_delta,
+            address_space_and_kind: RV64_REGISTER_AS,
+            pointer: c_reg as u32 / 2,
+            value: register_block(c_ptr),
+        });
+        for read in 0..2 {
+            let pointer = if read == 0 { b_ptr } else { c_ptr };
+            for block in 0..BLOCKS {
+                memory_log.push(PreflightMemoryEvent {
+                    timestamp: 3 + first_delta + (read * BLOCKS + block) as u32,
+                    address_space_and_kind: RV64_MEMORY_AS,
+                    pointer: pointer / 2 + (block * 4) as u32,
+                    value: std::array::from_fn(|limb| value_limbs[block * 4 + limb]),
+                });
+            }
+        }
+        let final_timestamp = 1 + 2 * first_delta;
+        memory_log.push(PreflightMemoryEvent {
+            timestamp: final_timestamp - 1,
+            address_space_and_kind: RV64_REGISTER_AS | PREFLIGHT_WRITE_BIT,
+            pointer: is_eq_rd as u32 / 2,
+            value: [1, 0, 0, 0],
+        });
+        let transcript = RvrPreflightTranscript {
+            program_log: vec![
+                PreflightProgramEvent {
+                    pc: 0,
+                    timestamp: 1,
+                },
+                PreflightProgramEvent {
+                    pc: 4,
+                    timestamp: 1 + first_delta,
+                },
+                PreflightProgramEvent {
+                    pc: 8,
+                    timestamp: final_timestamp,
+                },
+                PreflightProgramEvent {
+                    pc: 8,
+                    timestamp: final_timestamp,
+                },
+            ],
+            memory_log,
+            initial_write_log: vec![
+                PreflightInitialWrite {
+                    address_space: RV64_REGISTER_AS,
+                    pointer: setup_rd as u32 / 2,
+                    initial_value: [0; 4],
+                },
+                PreflightInitialWrite {
+                    address_space: RV64_REGISTER_AS,
+                    pointer: is_eq_rd as u32 / 2,
+                    initial_value: [0; 4],
+                },
+            ],
+        };
+
+        let memory_config = openvm_circuit::arch::MemoryConfig::default();
+        let device_ctx = &tester.range_checker().device_ctx;
+        let gpu_program = GpuRvrProgram::upload(&program, &memory_config, device_ctx).unwrap();
+        let (gpu_transcript, replay_plan) = gpu_program
+            .upload_transcript(&transcript, RvrPreflightEndpoint::Terminated)
+            .unwrap();
+        let replay_ctx = harness
+            .gpu_chip
+            .generate_proving_ctx_from_rvr(&gpu_program, &gpu_transcript, &replay_plan)
+            .unwrap();
+        assert_eq!(gpu_transcript.error_code().unwrap(), 0);
+        let committed_counts = tester.range_checker().count.to_host_on(device_ctx).unwrap();
+
+        let mut corrupt = transcript;
+        corrupt.memory_log[1 + first_delta as usize].value[0] |= 1;
+        let (gpu_corrupt, corrupt_plan) = gpu_program
+            .upload_transcript(&corrupt, RvrPreflightEndpoint::Terminated)
+            .unwrap();
+        assert!(harness
+            .gpu_chip
+            .generate_proving_ctx_from_rvr(&gpu_program, &gpu_corrupt, &corrupt_plan)
+            .is_err());
+        assert_ne!(gpu_corrupt.error_code().unwrap(), 0);
+        assert_eq!(
+            tester.range_checker().count.to_host_on(device_ctx).unwrap(),
+            committed_counts
+        );
+
+        tester
+            .build()
+            .load_air_proving_ctx(Arc::new(harness.air), replay_ctx)
+            .finalize()
+            .simple_test()
+            .expect("ModularIsEqual checkpoint replay proof failed");
+    }
+
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    #[test]
+    fn cuda_rvr_replay_modular_is_equal_proves_without_records_and_rejects_odd_pointer() {
+        run_rvr_replay_is_equal_test::<MODULAR_BLOCKS_32, NUM_LIMBS_32_U16>(secp256k1_coord_prime());
+        run_rvr_replay_is_equal_test::<MODULAR_BLOCKS_48, NUM_LIMBS_48_U16>(
+            BLS12_381_MODULUS.clone(),
         );
     }
 

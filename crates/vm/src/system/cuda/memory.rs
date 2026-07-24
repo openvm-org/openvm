@@ -512,6 +512,21 @@ impl MemoryInventoryGPU {
             {
                 self.unpadded_merkle_height = merkle_rows;
             }
+
+            // The merge has produced `d_out_records`, and the metadata copy
+            // above (when present) has fenced its borrowed scratch. Release
+            // every merge-only allocation before Poseidon and Merkle buffers
+            // are prepared so trace generation does not retain two phases'
+            // working sets at once. DeviceBuffer destruction is ordered on
+            // the same stream as the merge kernel.
+            drop((
+                d_tmp_records,
+                d_metadata,
+                d_flags,
+                d_positions,
+                d_initial_mem,
+                d_temp_storage,
+            ));
             {
                 let _span = tracing::info_span!("poseidon2_prepare").entered();
                 self.prepare_poseidon2_records(out_num_records, num_dirty_leaves, merkle_rows);
@@ -546,13 +561,17 @@ impl MemoryInventoryGPU {
         let merkle_proof_ctx = {
             let _span = tracing::info_span!("merkle_update").entered();
             self.merkle_tree.finalize();
-            self.merkle_tree.update_with_touched_blocks(
+            let merkle_records = self.merkle_records.take().expect("missing merkle records");
+            let ctx = self.merkle_tree.update_with_touched_blocks(
                 merkle_rows,
-                self.merkle_records
-                    .as_ref()
-                    .expect("missing merkle records"),
+                &merkle_records,
                 in_num_records == 0,
-            )
+            );
+            // `update_with_touched_blocks` synchronizes its final device-to-host
+            // root copy before returning, so no kernel can still borrow these
+            // records when they are released.
+            drop(merkle_records);
+            ctx
         };
         mem.tracing_info("boundary tracegen");
         let ret = {

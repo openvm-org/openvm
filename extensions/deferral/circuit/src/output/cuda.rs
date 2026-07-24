@@ -13,6 +13,19 @@ use openvm_cuda_common::{copy::MemCopyH2D, d_buffer::DeviceBuffer};
 use openvm_instructions::riscv::RV64_BYTE_BITS;
 use openvm_stark_backend::{p3_field::PrimeCharacteristicRing, prover::AirProvingContext};
 use openvm_stark_sdk::config::baby_bear_poseidon2::DIGEST_SIZE;
+#[cfg(feature = "rvr")]
+use {
+    crate::cuda_abi::output::DeferralOutputReplayCall,
+    openvm_circuit::arch::rvr::cuda::{
+        GpuRvrInputError, GpuRvrProgram, GpuRvrReplayPlan, GpuRvrTranscript,
+    },
+    openvm_cuda_common::copy::MemCopyD2H,
+    openvm_deferral_transpiler::DeferralOpcode,
+    openvm_instructions::{
+        riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+        LocalOpcode,
+    },
+};
 
 use super::{
     DeferralOutputCols, DeferralOutputLayout, DeferralOutputMetadata, DeferralOutputRecordHeader,
@@ -20,7 +33,9 @@ use super::{
 };
 use crate::{
     cuda_abi::output::{self, DeferralOutputPerCall, DeferralOutputPerRow},
-    poseidon2::{deferral_poseidon2_chip, DeferralPoseidon2SharedBuffer},
+    poseidon2::{
+        deferral_poseidon2_chip, DeferralPoseidon2ProducerBuffer, DeferralPoseidon2SharedBuffer,
+    },
     utils::f_commit_to_bytes,
 };
 
@@ -33,6 +48,174 @@ pub struct DeferralOutputChipGpu {
     pub count: Arc<DeviceBuffer<u32>>,
     pub num_deferral_circuits: usize,
     pub poseidon2: DeferralPoseidon2SharedBuffer,
+}
+
+#[cfg(feature = "rvr")]
+fn checked_replay_trace_shape(
+    rows_used: u64,
+    trace_width: usize,
+    max_trace_height: usize,
+) -> Result<(usize, usize), GpuRvrInputError> {
+    let rows_used = usize::try_from(rows_used).map_err(|_| {
+        GpuRvrInputError::InvalidTranscript("Deferral OUTPUT row count exceeds usize".to_string())
+    })?;
+    let trace_height = rows_used.checked_next_power_of_two().ok_or_else(|| {
+        GpuRvrInputError::InvalidTranscript("Deferral OUTPUT trace height overflow".to_string())
+    })?;
+    if trace_height > max_trace_height {
+        return Err(GpuRvrInputError::InvalidTranscript(format!(
+            "Deferral OUTPUT padded trace height {trace_height} exceeds segment limit {max_trace_height}"
+        )));
+    }
+    let trace_elements = trace_height.checked_mul(trace_width).ok_or_else(|| {
+        GpuRvrInputError::InvalidTranscript("Deferral OUTPUT trace allocation overflow".to_string())
+    })?;
+    trace_elements.checked_mul(size_of::<F>()).ok_or_else(|| {
+        GpuRvrInputError::InvalidTranscript(
+            "Deferral OUTPUT trace byte allocation overflow".to_string(),
+        )
+    })?;
+    rows_used
+        .checked_mul(2 * DIGEST_SIZE)
+        .and_then(|elements| elements.checked_mul(size_of::<F>()))
+        .ok_or_else(|| {
+            GpuRvrInputError::InvalidTranscript(
+                "Deferral OUTPUT Poseidon producer allocation overflow".to_string(),
+            )
+        })?;
+    Ok((rows_used, trace_height))
+}
+
+#[cfg(feature = "rvr")]
+impl DeferralOutputChipGpu {
+    /// Generates OUTPUT directly from canonical program/memory logs. The only
+    /// CPU-derived data is the compact call/row prefix index; no execution
+    /// record or record-shaped byte buffer is materialized. The caller must
+    /// pass the VM's existing padded segment trace-height limit; it is checked
+    /// before allocating the main trace or Poseidon producer.
+    pub fn generate_proving_ctx_from_rvr(
+        &self,
+        program: &GpuRvrProgram,
+        transcript: &GpuRvrTranscript,
+        replay_plan: &GpuRvrReplayPlan,
+        max_trace_height: usize,
+    ) -> Result<AirProvingContext<GpuBackend>, GpuRvrInputError> {
+        let device_ctx = &self.range_checker.device_ctx;
+        program.ensure_replay_inputs(transcript, replay_plan, device_ctx)?;
+        let step_range = replay_plan.opcode_range(DeferralOpcode::OUTPUT.global_opcode());
+        if step_range.is_empty() {
+            return Ok(AirProvingContext::simple_no_pis(DeviceMatrix::dummy()));
+        }
+
+        let d_row_counts = DeviceBuffer::<u32>::with_capacity_on(step_range.len(), device_ctx);
+        unsafe {
+            output::replay_count_rows(
+                &d_row_counts,
+                program.instructions(),
+                program.pc_base(),
+                transcript.program_log(),
+                transcript.memory_log(),
+                replay_plan.steps(),
+                step_range.start,
+                step_range.len(),
+                DeferralOpcode::OUTPUT.global_opcode().as_usize() as u32,
+                RV64_REGISTER_AS,
+                RV64_MEMORY_AS,
+                u32::try_from(self.num_deferral_circuits).map_err(|_| {
+                    GpuRvrInputError::InvalidTranscript(
+                        "deferral circuit count exceeds u32".to_string(),
+                    )
+                })?,
+                transcript.error_ptr(),
+                device_ctx.stream.as_raw(),
+            )?;
+        }
+        let counts = d_row_counts.to_host_on(device_ctx)?;
+        let replay_error = transcript.error_code()?;
+        if replay_error != 0 {
+            return Err(GpuRvrInputError::InvalidTranscript(format!(
+                "Deferral OUTPUT row indexing rejected replay with code {replay_error}"
+            )));
+        }
+
+        let mut calls = Vec::with_capacity(counts.len());
+        let mut rows_used = 0u64;
+        for num_rows in counts {
+            if num_rows == 0 {
+                return Err(GpuRvrInputError::InvalidTranscript(
+                    "Deferral OUTPUT replay produced an empty call".to_string(),
+                ));
+            }
+            let row_start = u32::try_from(rows_used).map_err(|_| {
+                GpuRvrInputError::InvalidTranscript(
+                    "Deferral OUTPUT row count exceeds u32".to_string(),
+                )
+            })?;
+            calls.push(DeferralOutputReplayCall {
+                row_start,
+                num_rows,
+            });
+            rows_used = rows_used.checked_add(u64::from(num_rows)).ok_or_else(|| {
+                GpuRvrInputError::InvalidTranscript(
+                    "Deferral OUTPUT row count overflow".to_string(),
+                )
+            })?;
+        }
+        drop(d_row_counts);
+
+        let trace_width = DeferralOutputCols::<F>::width();
+        let (rows_used, trace_height) =
+            checked_replay_trace_shape(rows_used, trace_width, max_trace_height)?;
+        let trace = DeviceMatrix::<F>::with_capacity_on(trace_height, trace_width, device_ctx);
+        trace.buffer().fill_zero_on(device_ctx)?;
+        let d_calls = calls.to_device_on(device_ctx)?;
+        let poseidon2 = DeferralPoseidon2ProducerBuffer::new(rows_used, device_ctx);
+        unsafe {
+            output::replay_tracegen(
+                trace.buffer(),
+                trace_height,
+                trace_width,
+                program.instructions(),
+                program.pc_base(),
+                transcript.program_log(),
+                transcript.memory_log(),
+                transcript.initial_write_log(),
+                transcript.memory_predecessors(),
+                replay_plan.steps(),
+                step_range.start,
+                step_range.len(),
+                &d_calls,
+                rows_used,
+                DeferralOpcode::OUTPUT.global_opcode().as_usize() as u32,
+                RV64_REGISTER_AS,
+                RV64_MEMORY_AS,
+                self.address_bits as u32,
+                &self.count,
+                self.num_deferral_circuits,
+                &self.range_checker.count,
+                self.timestamp_max_bits as u32,
+                &self.bitwise_lookup.count,
+                self.address_bits,
+                &poseidon2.records,
+                &poseidon2.counts,
+                &poseidon2.idx,
+                transcript.error_ptr(),
+                device_ctx.stream.as_raw(),
+            )?;
+        }
+        // CUDA owns these compact replay views only until the queued kernels
+        // complete. They never survive trace generation into proving.
+        transcript.synchronize()?;
+        drop(d_calls);
+        let replay_error = transcript.error_code()?;
+        if replay_error != 0 {
+            return Err(GpuRvrInputError::InvalidTranscript(format!(
+                "Deferral OUTPUT tracegen rejected replay with code {replay_error}"
+            )));
+        }
+        self.poseidon2.push(poseidon2);
+        Ok(AirProvingContext::simple_no_pis(trace))
+    }
 }
 
 impl Chip<DenseRecordArena, GpuBackend> for DeferralOutputChipGpu {
@@ -118,6 +301,7 @@ impl Chip<DenseRecordArena, GpuBackend> for DeferralOutputChipGpu {
         let d_raw_records = records.to_device_on(device_ctx).unwrap();
         let d_per_call = per_call.to_device_on(device_ctx).unwrap();
         let d_per_row = per_row.to_device_on(device_ctx).unwrap();
+        let poseidon2 = DeferralPoseidon2ProducerBuffer::new(rows_used, device_ctx);
 
         unsafe {
             output::tracegen(
@@ -134,15 +318,16 @@ impl Chip<DenseRecordArena, GpuBackend> for DeferralOutputChipGpu {
                 self.timestamp_max_bits as u32,
                 &self.bitwise_lookup.count,
                 self.address_bits,
-                &self.poseidon2.records,
-                &self.poseidon2.counts,
-                &self.poseidon2.idx,
+                &poseidon2.records,
+                &poseidon2.counts,
+                &poseidon2.idx,
                 // Length in F elements; the CUDA side converts to record count.
-                self.poseidon2.records.len(),
+                poseidon2.records.len(),
                 device_ctx.stream.as_raw(),
             )
             .expect("Failed to generate deferral output trace");
         }
+        self.poseidon2.push(poseidon2);
 
         AirProvingContext::simple_no_pis(trace)
     }

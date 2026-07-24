@@ -63,6 +63,9 @@ cfg_if::cfg_if! {
     }
 }
 
+#[cfg(all(test, feature = "rvr"))]
+mod rvr_tests;
+
 // =================================== VM Extension Implementation =================================
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct Int256 {

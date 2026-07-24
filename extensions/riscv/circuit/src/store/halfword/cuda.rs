@@ -15,7 +15,7 @@ use {
     },
     openvm_instructions::{
         riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
-        LocalOpcode,
+        LocalOpcode, PUBLIC_VALUES_AS,
     },
     openvm_riscv_transpiler::Rv64LoadStoreOpcode,
 };
@@ -71,6 +71,7 @@ impl Rv64StoreHalfwordChipGpu {
                 Rv64LoadStoreOpcode::STOREH.global_opcode().as_usize() as u32,
                 RV64_REGISTER_AS,
                 RV64_MEMORY_AS,
+                PUBLIC_VALUES_AS,
                 self.pointer_max_bits,
                 &self.range_checker.count,
                 &self.bitwise_lookup.count,

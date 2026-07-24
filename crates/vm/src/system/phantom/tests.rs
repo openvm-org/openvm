@@ -198,5 +198,5 @@ fn test_cuda_phantom_rvr_replay() {
     let (d_corrupt, d_corrupt_plan) = d_program.upload_transcript(&corrupt, endpoint).unwrap();
     chip.generate_proving_ctx_from_rvr(&d_program, &d_corrupt, &d_corrupt_plan)
         .unwrap();
-    assert_eq!(d_corrupt.error_code().unwrap(), 235);
+    assert_eq!(d_corrupt.error_code().unwrap(), 855);
 }

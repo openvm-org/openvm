@@ -28,10 +28,16 @@ static constexpr uint32_t ERROR_MEMORY_ADDRESS = 107;
 static constexpr uint32_t ERROR_MEMORY_MASK = 108;
 static constexpr uint32_t ERROR_INITIAL_MEMORY = 109;
 static constexpr uint32_t ERROR_MEMORY_CHRONOLOGY = 110;
+static constexpr uint32_t ERROR_FIELD_VALUE = 118;
+static constexpr uint32_t ERROR_FIELD_REFERENCE = 119;
+
+static constexpr uint32_t MEMORY_CELL_U16 = 1;
+static constexpr uint32_t MEMORY_CELL_FIELD32 = 2;
+static constexpr uint8_t FIELD_FULL_WRITE_MASK = 0xff;
 
 struct RvrMemoryAddressSpace {
     uint64_t num_cells;
-    uint32_t is_u16;
+    uint32_t cell_kind;
     uint32_t padding;
 };
 
@@ -82,8 +88,12 @@ __device__ bool compact_block_key(
     uint32_t address_space_offset,
     uint32_t address_space_height,
     uint32_t pointer_max_bits,
+    bool allow_field,
     uint32_t &out
 ) {
+    // Pointers here count AS-native cells (u16 or field32 per `cell_kind`), so the
+    // per-AS `num_cells` check below is the authoritative pointer-domain bound;
+    // `pointer_limit` only guarantees the packed key fits `block_pointer_bits`.
     uint64_t address_space_limit =
         static_cast<uint64_t>(address_space_offset) + (uint64_t{1} << address_space_height);
     uint64_t pointer_limit = uint64_t{1} << pointer_max_bits;
@@ -92,7 +102,9 @@ __device__ bool compact_block_key(
         return false;
     }
     auto const &config = address_spaces[address_space];
-    if (config.is_u16 != 1 || static_cast<uint64_t>(pointer) + 4 > config.num_cells) {
+    if ((config.cell_kind != MEMORY_CELL_U16 &&
+         !(allow_field && config.cell_kind == MEMORY_CELL_FIELD32)) ||
+        static_cast<uint64_t>(pointer) + 4 > config.num_cells) {
         return false;
     }
     uint32_t block_pointer_bits = pointer_max_bits - 2;
@@ -100,28 +112,84 @@ __device__ bool compact_block_key(
     return true;
 }
 
-__device__ bool initial_block(
+__device__ bool initial_quad(
     uint32_t address_space,
     uint32_t pointer,
+    uint32_t byte_offset,
+    DeviceBufferConstView<RvrMemoryAddressSpace> address_spaces,
     DeviceBufferConstView<DeviceRawBufferConstView> initial_memory,
-    uint8_t (&out)[8]
+    uint8_t (&out)[4]
 ) {
-    if (address_space >= initial_memory.len()) return false;
+    if (address_space >= address_spaces.len() || address_space >= initial_memory.len()) {
+        return false;
+    }
+    auto const &config = address_spaces[address_space];
+    uint32_t cell_bytes;
+    if (config.cell_kind == MEMORY_CELL_U16) {
+        cell_bytes = 2;
+    } else if (config.cell_kind == MEMORY_CELL_FIELD32) {
+        cell_bytes = 4;
+    } else {
+        return false;
+    }
+    if (byte_offset + 4 > 4 * cell_bytes) return false;
     auto image = initial_memory[address_space].as_typed<uint8_t>();
-    uint64_t byte_pointer = uint64_t(pointer) * sizeof(uint16_t);
-    if (byte_pointer + 8 > image.len()) return false;
+    uint64_t byte_pointer = uint64_t(pointer) * cell_bytes + byte_offset;
+    if (byte_pointer + 4 > image.len()) return false;
 #pragma unroll
-    for (uint32_t lane = 0; lane < 8; ++lane) out[lane] = image[byte_pointer + lane];
+    for (uint32_t lane = 0; lane < 4; ++lane) out[lane] = image[byte_pointer + lane];
     return true;
+}
+
+__device__ __forceinline__ uint32_t field_reference(PreflightMemoryEvent const &event) {
+    return uint32_t(event.value[0]) | (uint32_t(event.value[1]) << 16);
+}
+
+__device__ __forceinline__ void set_field_reference(uint16_t (&value)[4], uint32_t reference) {
+    value[0] = uint16_t(reference);
+    value[1] = uint16_t(reference >> 16);
+    value[2] = 0;
+    value[3] = 0;
+}
+
+__device__ __forceinline__ bool field_block_is_valid(RvrFieldBlock const &block) {
+#pragma unroll
+    for (uint32_t lane = 0; lane < 4; ++lane) {
+        if (block.values[lane] >= Fp::P) return false;
+    }
+    return true;
+}
+
+__device__ bool load_initial_field_block(
+    uint32_t address_space,
+    uint32_t pointer,
+    DeviceBufferConstView<RvrMemoryAddressSpace> address_spaces,
+    DeviceBufferConstView<DeviceRawBufferConstView> initial_memory,
+    RvrFieldBlock &out
+) {
+#pragma unroll
+    for (uint32_t quad = 0; quad < 4; ++quad) {
+        uint8_t bytes[4];
+        if (!initial_quad(
+                address_space, pointer, 4 * quad, address_spaces, initial_memory, bytes
+            )) {
+            return false;
+        }
+        out.values[quad] = uint32_t(bytes[0]) | (uint32_t(bytes[1]) << 8) |
+                           (uint32_t(bytes[2]) << 16) | (uint32_t(bytes[3]) << 24);
+    }
+    return field_block_is_valid(out);
 }
 
 __global__ void prepare_chronology_entries(
     DeviceBufferConstView<PreflightMemoryEvent> memory,
     DeviceBufferConstView<uint8_t> write_masks,
+    DeviceBufferConstView<RvrFieldBlock> field_values,
     DeviceBufferConstView<RvrMemoryAddressSpace> address_spaces,
     uint32_t address_space_offset,
     uint32_t address_space_height,
     uint32_t pointer_max_bits,
+    uint32_t field_address_space,
     uint64_t *keys,
     uint32_t *error
 ) {
@@ -130,25 +198,52 @@ __global__ void prepare_chronology_entries(
     auto const &event = memory[ordinal];
     uint8_t mask = write_masks[ordinal];
     uint32_t compact_key;
-    if (!compact_block_key(
+    bool address_valid = compact_block_key(
             preflight_address_space(event),
             event.pointer,
             address_spaces,
             address_space_offset,
             address_space_height,
             pointer_max_bits,
+            true,
             compact_key
-        )) {
+        );
+    if (!address_valid) {
         preflight_set_error(error, ERROR_MEMORY_ADDRESS);
         compact_key = 0;
     }
     bool is_write = preflight_is_write(event);
     if (is_write != (mask != 0)) preflight_set_error(error, ERROR_MEMORY_MASK);
-    auto const *patch = reinterpret_cast<uint8_t const *>(event.value);
-#pragma unroll
-    for (uint32_t lane = 0; lane < 8; ++lane) {
-        if ((mask & (1u << lane)) == 0 && patch[lane] != 0) {
+    uint32_t cell_kind = address_valid
+                             ? address_spaces[preflight_address_space(event)].cell_kind
+                             : MEMORY_CELL_U16;
+    if (cell_kind == MEMORY_CELL_FIELD32) {
+        if (preflight_address_space(event) != field_address_space) {
+            preflight_set_error(error, ERROR_MEMORY_ADDRESS);
+        }
+        uint32_t reference = field_reference(event);
+        if (event.value[2] != 0 || event.value[3] != 0 || reference >= field_values.len()) {
+            preflight_set_error(error, ERROR_FIELD_REFERENCE);
+        } else if ((is_write && mask != FIELD_FULL_WRITE_MASK) ||
+                   (!is_write && mask != 0)) {
             preflight_set_error(error, ERROR_MEMORY_MASK);
+        } else if (is_write && !field_block_is_valid(field_values[reference])) {
+            preflight_set_error(error, ERROR_FIELD_VALUE);
+        } else if (!is_write) {
+#pragma unroll
+            for (uint32_t lane = 0; lane < 4; ++lane) {
+                if (field_values[reference].values[lane] != 0) {
+                    preflight_set_error(error, ERROR_FIELD_VALUE);
+                }
+            }
+        }
+    } else {
+        auto const *patch = reinterpret_cast<uint8_t const *>(event.value);
+#pragma unroll
+        for (uint32_t lane = 0; lane < 8; ++lane) {
+            if ((mask & (1u << lane)) == 0 && patch[lane] != 0) {
+                preflight_set_error(error, ERROR_MEMORY_MASK);
+            }
         }
     }
     keys[ordinal] = (uint64_t(compact_key) << 32) | uint32_t(ordinal);
@@ -174,17 +269,61 @@ __global__ void mark_chronology_metadata(
     packed_flags[pos] = seed | touched;
 }
 
+__device__ size_t chronology_key_lower_bound(
+    uint64_t const *sorted_keys,
+    size_t num_entries,
+    uint64_t target
+) {
+    size_t left = 0;
+    size_t right = num_entries;
+    while (left < right) {
+        size_t middle = left + (right - left) / 2;
+        if ((sorted_keys[middle] >> 32) < target) {
+            left = middle + 1;
+        } else {
+            right = middle;
+        }
+    }
+    return left;
+}
+
+__device__ uint32_t chronology_seed_prefix(
+    DeviceBufferConstView<uint8_t> write_masks,
+    uint64_t const *sorted_keys,
+    uint64_t const *packed_positions,
+    size_t end
+) {
+    if (end == 0) return 0;
+    size_t last = end - 1;
+    uint32_t ordinal = uint32_t(sorted_keys[last]);
+    bool head = last == 0 ||
+                uint32_t(sorted_keys[last - 1] >> 32) !=
+                    uint32_t(sorted_keys[last] >> 32);
+    return uint32_t(packed_positions[last]) +
+           uint32_t(head && write_masks[ordinal] != 0);
+}
+
 __global__ void finish_chronology_counts(
     DeviceBufferConstView<uint8_t> write_masks,
     uint64_t const *sorted_keys,
     uint64_t const *packed_positions,
     size_t num_entries,
+    uint32_t address_space_offset,
+    uint32_t pointer_max_bits,
+    uint32_t field_address_space,
+    bool count_field_metadata,
     uint32_t *counts
 ) {
     if (blockIdx.x != 0 || threadIdx.x != 0) return;
     if (num_entries == 0) {
         counts[0] = 0;
         counts[1] = 0;
+        if (count_field_metadata) {
+            counts[2] = 0;
+            counts[3] = 0;
+            counts[4] = 0;
+            counts[5] = 0;
+        }
         return;
     }
     size_t pos = num_entries - 1;
@@ -195,11 +334,31 @@ __global__ void finish_chronology_counts(
                      (uint64_t{1} << 32);
     counts[0] = uint32_t(total);
     counts[1] = uint32_t(total >> 32);
+    if (!count_field_metadata) return;
+
+    uint32_t block_pointer_bits = pointer_max_bits - 2;
+    uint64_t field_key_begin =
+        uint64_t(field_address_space - address_space_offset) << block_pointer_bits;
+    uint64_t field_key_end =
+        uint64_t(field_address_space - address_space_offset + 1) << block_pointer_bits;
+    size_t field_begin =
+        chronology_key_lower_bound(sorted_keys, num_entries, field_key_begin);
+    size_t field_end =
+        chronology_key_lower_bound(sorted_keys, num_entries, field_key_end);
+    uint32_t field_seed_begin =
+        chronology_seed_prefix(write_masks, sorted_keys, packed_positions, field_begin);
+    uint32_t field_seed_end =
+        chronology_seed_prefix(write_masks, sorted_keys, packed_positions, field_end);
+    counts[2] = uint32_t(field_begin);
+    counts[3] = uint32_t(field_end);
+    counts[4] = field_seed_begin;
+    counts[5] = field_seed_end - field_seed_begin;
 }
 
 __global__ void scatter_chronology_metadata(
     DeviceBufferConstView<PreflightMemoryEvent> memory,
     DeviceBufferConstView<uint8_t> write_masks,
+    DeviceBufferConstView<RvrMemoryAddressSpace> address_spaces,
     DeviceBufferConstView<DeviceRawBufferConstView> initial_memory,
     uint64_t const *sorted_keys,
     uint64_t const *packed_positions,
@@ -207,6 +366,9 @@ __global__ void scatter_chronology_metadata(
     uint32_t *predecessors,
     PreflightInitialWrite *seeds,
     size_t num_seeds,
+    RvrFieldBlock *field_seeds,
+    size_t num_field_seeds,
+    uint32_t field_seed_base,
     RvrTouchedBlock *touched,
     size_t num_touched,
     uint32_t *error
@@ -229,20 +391,56 @@ __global__ void scatter_chronology_metadata(
                 preflight_set_error(error, ERROR_MEMORY_CHRONOLOGY);
                 return;
             }
-            uint8_t initial[8];
-            if (!initial_block(
-                    preflight_address_space(event), event.pointer, initial_memory, initial
-                )) {
-                preflight_set_error(error, ERROR_INITIAL_MEMORY);
-                return;
-            }
             auto &seed = seeds[seed_index];
             seed.address_space = preflight_address_space(event);
             seed.pointer = event.pointer;
+            auto const &config = address_spaces[preflight_address_space(event)];
+            if (config.cell_kind == MEMORY_CELL_FIELD32) {
+                if (seed_index < field_seed_base ||
+                    seed_index - field_seed_base >= num_field_seeds) {
+                    preflight_set_error(error, ERROR_MEMORY_CHRONOLOGY);
+                    return;
+                }
+                uint32_t field_seed_index = seed_index - field_seed_base;
+                RvrFieldBlock initial;
+                if (!load_initial_field_block(
+                        preflight_address_space(event),
+                        event.pointer,
+                        address_spaces,
+                        initial_memory,
+                        initial
+                    )) {
+                    preflight_set_error(error, ERROR_INITIAL_MEMORY);
+                    return;
+                }
+                field_seeds[field_seed_index] = initial;
+                set_field_reference(seed.initial_value, field_seed_index);
+            } else {
+                uint8_t initial[8];
 #pragma unroll
-            for (uint32_t lane = 0; lane < 4; ++lane) {
-                seed.initial_value[lane] = uint16_t(initial[2 * lane]) |
-                                           (uint16_t(initial[2 * lane + 1]) << 8);
+                for (uint32_t quad = 0; quad < 2; ++quad) {
+                    uint8_t bytes[4];
+                    if (!initial_quad(
+                            preflight_address_space(event),
+                            event.pointer,
+                            4 * quad,
+                            address_spaces,
+                            initial_memory,
+                            bytes
+                        )) {
+                        preflight_set_error(error, ERROR_INITIAL_MEMORY);
+                        return;
+                    }
+#pragma unroll
+                    for (uint32_t lane = 0; lane < 4; ++lane) {
+                        initial[4 * quad + lane] = bytes[lane];
+                    }
+                }
+#pragma unroll
+                for (uint32_t lane = 0; lane < 4; ++lane) {
+                    seed.initial_value[lane] = uint16_t(initial[2 * lane]) |
+                                               (uint16_t(initial[2 * lane + 1]) << 8);
+                }
             }
             predecessors[ordinal] = MEMORY_PREDECESSOR_SEED_BIT | seed_index;
         }
@@ -275,8 +473,11 @@ __global__ void scatter_chronology_metadata(
 __global__ void prepare_byte_quads(
     DeviceBufferConstView<PreflightMemoryEvent> memory,
     DeviceBufferConstView<uint8_t> write_masks,
+    DeviceBufferConstView<RvrMemoryAddressSpace> address_spaces,
     DeviceBufferConstView<DeviceRawBufferConstView> initial_memory,
+    DeviceBufferConstView<RvrFieldBlock> field_values,
     uint64_t const *sorted_keys,
+    size_t sorted_offset,
     size_t num_entries,
     uint32_t byte_offset,
     ByteQuad *quads,
@@ -284,26 +485,48 @@ __global__ void prepare_byte_quads(
 ) {
     size_t pos = blockIdx.x * static_cast<size_t>(blockDim.x) + threadIdx.x;
     if (pos >= num_entries) return;
-    uint32_t key = uint32_t(sorted_keys[pos] >> 32);
-    uint32_t ordinal = uint32_t(sorted_keys[pos]);
-    bool head = pos == 0 || uint32_t(sorted_keys[pos - 1] >> 32) != key;
+    size_t sorted_pos = sorted_offset + pos;
+    uint32_t key = uint32_t(sorted_keys[sorted_pos] >> 32);
+    uint32_t ordinal = uint32_t(sorted_keys[sorted_pos]);
+    bool head = sorted_pos == 0 || uint32_t(sorted_keys[sorted_pos - 1] >> 32) != key;
     auto const &event = memory[ordinal];
+    auto const &config = address_spaces[preflight_address_space(event)];
     ByteQuad quad{0, 0};
     if (head) {
-        uint8_t initial[8];
-        if (!initial_block(preflight_address_space(event), event.pointer, initial_memory, initial)) {
+        uint8_t initial[4];
+        if (!initial_quad(
+                preflight_address_space(event),
+                event.pointer,
+                byte_offset,
+                address_spaces,
+                initial_memory,
+                initial
+            )) {
             preflight_set_error(error, ERROR_INITIAL_MEMORY);
-            quads[pos] = quad;
+            quads[sorted_pos] = quad;
             return;
         }
 #pragma unroll
         for (uint32_t lane = 0; lane < 4; ++lane) {
-            quad.bytes |= uint32_t(initial[byte_offset + lane]) << (8 * lane);
+            quad.bytes |= uint32_t(initial[lane]) << (8 * lane);
         }
         quad.valid = 0xf;
     }
-    uint8_t mask = write_masks[ordinal] >> byte_offset;
-    auto const *patch = reinterpret_cast<uint8_t const *>(event.value);
+    uint8_t mask;
+    uint8_t const *patch;
+    if (config.cell_kind == MEMORY_CELL_FIELD32) {
+        uint32_t reference = field_reference(event);
+        if (reference >= field_values.len()) {
+            preflight_set_error(error, ERROR_FIELD_REFERENCE);
+            quads[sorted_pos] = quad;
+            return;
+        }
+        mask = write_masks[ordinal] == FIELD_FULL_WRITE_MASK ? 0xf : 0;
+        patch = reinterpret_cast<uint8_t const *>(&field_values[reference]);
+    } else {
+        mask = write_masks[ordinal] >> byte_offset;
+        patch = reinterpret_cast<uint8_t const *>(event.value);
+    }
 #pragma unroll
     for (uint32_t lane = 0; lane < 4; ++lane) {
         uint32_t bit = 1u << lane;
@@ -314,12 +537,15 @@ __global__ void prepare_byte_quads(
             quad.valid |= bit;
         }
     }
-    quads[pos] = quad;
+    quads[sorted_pos] = quad;
 }
 
 __global__ void scatter_byte_quads(
     MutableDeviceBufferView<PreflightMemoryEvent> memory,
+    DeviceBufferConstView<RvrMemoryAddressSpace> address_spaces,
+    MutableDeviceBufferView<RvrFieldBlock> field_values,
     uint64_t const *sorted_keys,
+    size_t sorted_offset,
     size_t num_entries,
     uint32_t byte_offset,
     ByteQuad const *quads,
@@ -327,21 +553,42 @@ __global__ void scatter_byte_quads(
 ) {
     size_t pos = blockIdx.x * static_cast<size_t>(blockDim.x) + threadIdx.x;
     if (pos >= num_entries) return;
-    uint32_t ordinal = uint32_t(sorted_keys[pos]);
-    auto const &quad = quads[pos];
+    size_t sorted_pos = sorted_offset + pos;
+    uint32_t ordinal = uint32_t(sorted_keys[sorted_pos]);
+    auto const &quad = quads[sorted_pos];
     if ((quad.valid & 0xf) != 0xf) {
         preflight_set_error(error, ERROR_MEMORY_CHRONOLOGY);
         return;
     }
-    auto *bytes = reinterpret_cast<uint8_t *>(memory[ordinal].value);
+    auto const &event = memory[ordinal];
+    auto const &config = address_spaces[preflight_address_space(event)];
+    uint8_t *bytes;
+    if (config.cell_kind == MEMORY_CELL_FIELD32) {
+        uint32_t reference = field_reference(event);
+        if (reference >= field_values.len()) {
+            preflight_set_error(error, ERROR_FIELD_REFERENCE);
+            return;
+        }
+        bytes = reinterpret_cast<uint8_t *>(&field_values[reference]);
+    } else {
+        bytes = reinterpret_cast<uint8_t *>(memory[ordinal].value);
+    }
 #pragma unroll
     for (uint32_t lane = 0; lane < 4; ++lane) {
         bytes[byte_offset + lane] = uint8_t(quad.bytes >> (8 * lane));
+    }
+    if (config.cell_kind == MEMORY_CELL_FIELD32) {
+        uint32_t reference = field_reference(event);
+        if (!field_block_is_valid(field_values[reference])) {
+            preflight_set_error(error, ERROR_FIELD_VALUE);
+        }
     }
 }
 
 __global__ void finalize_chronology_touched(
     DeviceBufferConstView<PreflightMemoryEvent> memory,
+    DeviceBufferConstView<RvrMemoryAddressSpace> address_spaces,
+    DeviceBufferConstView<RvrFieldBlock> field_values,
     RvrTouchedBlock *touched,
     size_t num_touched,
     uint32_t *error
@@ -355,9 +602,22 @@ __global__ void finalize_chronology_touched(
         return;
     }
     auto const &event = memory[ordinal];
+    auto const &config = address_spaces[preflight_address_space(event)];
+    if (config.cell_kind == MEMORY_CELL_FIELD32) {
+        uint32_t reference = field_reference(event);
+        if (reference >= field_values.len() || !field_block_is_valid(field_values[reference])) {
+            preflight_set_error(error, ERROR_FIELD_VALUE);
+            return;
+        }
 #pragma unroll
-    for (uint32_t lane = 0; lane < 4; ++lane) {
-        record.values[lane] = Fp(event.value[lane]).asRaw();
+        for (uint32_t lane = 0; lane < 4; ++lane) {
+            record.values[lane] = field_values[reference].values[lane];
+        }
+    } else {
+#pragma unroll
+        for (uint32_t lane = 0; lane < 4; ++lane) {
+            record.values[lane] = Fp(event.value[lane]).asRaw();
+        }
     }
 }
 
@@ -386,6 +646,7 @@ __global__ void prepare_entries(
                 address_space_offset,
                 address_space_height,
                 pointer_max_bits,
+                false,
                 compact_key
             )) {
             preflight_set_error(error, ERROR_MEMORY_ADDRESS);
@@ -405,6 +666,7 @@ __global__ void prepare_entries(
             address_space_offset,
             address_space_height,
             pointer_max_bits,
+            false,
             compact_key
         )) {
         preflight_set_error(error, ERROR_MEMORY_ADDRESS);
@@ -721,10 +983,13 @@ extern "C" int _rvr_memory_chronology_get_temp_bytes(
 extern "C" int _rvr_memory_chronology_sort_and_count(
     DeviceBufferConstView<PreflightMemoryEvent> memory,
     DeviceBufferConstView<uint8_t> write_masks,
+    DeviceBufferConstView<RvrFieldBlock> field_values,
     DeviceBufferConstView<RvrMemoryAddressSpace> address_spaces,
     uint32_t address_space_offset,
     uint32_t address_space_height,
     uint32_t pointer_max_bits,
+    uint32_t field_address_space,
+    uint32_t count_field_metadata,
     uint64_t *workspace,
     uint64_t *sorted_keys,
     uint32_t *counts,
@@ -734,9 +999,19 @@ extern "C" int _rvr_memory_chronology_sort_and_count(
     cudaStream_t stream
 ) {
     if (memory.len() != write_masks.len()) return int(cudaErrorInvalidValue);
+    uint64_t address_space_limit =
+        uint64_t(address_space_offset) + (uint64_t{1} << address_space_height);
+    bool has_field_metadata = count_field_metadata != 0;
+    if (pointer_max_bits < 2 ||
+        (has_field_metadata &&
+         (field_address_space < address_space_offset ||
+          field_address_space >= address_space_limit))) {
+        return int(cudaErrorInvalidValue);
+    }
     size_t num_entries = memory.len();
     if (num_entries == 0) {
-        if (cudaError_t err = cudaMemsetAsync(counts, 0, 2 * sizeof(uint32_t), stream);
+        size_t count_bytes = count_field_metadata != 0 ? 6 : 2;
+        if (cudaError_t err = cudaMemsetAsync(counts, 0, count_bytes * sizeof(uint32_t), stream);
             err != cudaSuccess) {
             return err;
         }
@@ -747,10 +1022,12 @@ extern "C" int _rvr_memory_chronology_sort_and_count(
     prepare_chronology_entries<<<grid, block, 0, stream>>>(
         memory,
         write_masks,
+        field_values,
         address_spaces,
         address_space_offset,
         address_space_height,
         pointer_max_bits,
+        field_address_space,
         workspace,
         error
     );
@@ -784,7 +1061,15 @@ extern "C" int _rvr_memory_chronology_sort_and_count(
         return err;
     }
     finish_chronology_counts<<<1, 1, 0, stream>>>(
-        write_masks, sorted_keys, workspace, num_entries, counts
+        write_masks,
+        sorted_keys,
+        workspace,
+        num_entries,
+        address_space_offset,
+        pointer_max_bits,
+        field_address_space,
+        has_field_metadata,
+        counts
     );
     return CHECK_KERNEL();
 }
@@ -792,11 +1077,17 @@ extern "C" int _rvr_memory_chronology_sort_and_count(
 extern "C" int _rvr_memory_chronology_resolve(
     MutableDeviceBufferView<PreflightMemoryEvent> memory,
     DeviceBufferConstView<uint8_t> write_masks,
+    DeviceBufferConstView<RvrMemoryAddressSpace> address_spaces,
     DeviceBufferConstView<DeviceRawBufferConstView> initial_memory,
+    MutableDeviceBufferView<RvrFieldBlock> field_values,
     uint64_t const *sorted_keys,
     uint64_t *workspace,
     uint32_t *predecessors,
     MutableDeviceBufferView<PreflightInitialWrite> seeds,
+    MutableDeviceBufferView<RvrFieldBlock> field_seeds,
+    uint32_t field_begin,
+    uint32_t field_end,
+    uint32_t field_seed_base,
     MutableDeviceBufferView<RvrTouchedBlock> touched,
     void *temp_storage,
     size_t temp_storage_bytes,
@@ -810,6 +1101,7 @@ extern "C" int _rvr_memory_chronology_resolve(
     scatter_chronology_metadata<<<grid, block, 0, stream>>>(
         DeviceBufferConstView<PreflightMemoryEvent>{memory.ptr, memory.size},
         write_masks,
+        address_spaces,
         initial_memory,
         sorted_keys,
         workspace,
@@ -817,6 +1109,9 @@ extern "C" int _rvr_memory_chronology_resolve(
         predecessors,
         seeds.ptr,
         seeds.len(),
+        field_seeds.ptr,
+        field_seeds.len(),
+        field_seed_base,
         touched.ptr,
         touched.len(),
         error
@@ -828,8 +1123,11 @@ extern "C" int _rvr_memory_chronology_resolve(
         prepare_byte_quads<<<grid, block, 0, stream>>>(
             DeviceBufferConstView<PreflightMemoryEvent>{memory.ptr, memory.size},
             write_masks,
+            address_spaces,
             initial_memory,
+            DeviceBufferConstView<RvrFieldBlock>{field_values.ptr, field_values.size},
             sorted_keys,
+            0,
             num_entries,
             byte_offset,
             quads,
@@ -851,15 +1149,76 @@ extern "C" int _rvr_memory_chronology_resolve(
             return err;
         }
         scatter_byte_quads<<<grid, block, 0, stream>>>(
-            memory, sorted_keys, num_entries, byte_offset, quads, error
+            memory,
+            address_spaces,
+            field_values,
+            sorted_keys,
+            0,
+            num_entries,
+            byte_offset,
+            quads,
+            error
         );
         if (int err = CHECK_KERNEL(); err) return err;
+    }
+
+    if (field_end < field_begin || field_end > num_entries ||
+        size_t(field_end - field_begin) != field_values.len()) {
+        return int(cudaErrorInvalidValue);
+    }
+    size_t num_field_entries = field_end - field_begin;
+    if (num_field_entries != 0) {
+        auto [field_grid, field_block] = kernel_launch_params(num_field_entries);
+        for (uint32_t byte_offset = 8; byte_offset < 16; byte_offset += 4) {
+            prepare_byte_quads<<<field_grid, field_block, 0, stream>>>(
+                DeviceBufferConstView<PreflightMemoryEvent>{memory.ptr, memory.size},
+                write_masks,
+                address_spaces,
+                initial_memory,
+                DeviceBufferConstView<RvrFieldBlock>{field_values.ptr, field_values.size},
+                sorted_keys,
+                field_begin,
+                num_field_entries,
+                byte_offset,
+                quads,
+                error
+            );
+            if (int err = CHECK_KERNEL(); err) return err;
+            if (cudaError_t err = cub::DeviceScan::InclusiveScanByKey(
+                    temp_storage,
+                    temp_storage_bytes,
+                    sorted_keys + field_begin,
+                    quads + field_begin,
+                    quads + field_begin,
+                    LastWriteWins{},
+                    num_field_entries,
+                    BlockKeyEqual{},
+                    stream
+                );
+                err != cudaSuccess) {
+                return err;
+            }
+            scatter_byte_quads<<<field_grid, field_block, 0, stream>>>(
+                memory,
+                address_spaces,
+                field_values,
+                sorted_keys,
+                field_begin,
+                num_field_entries,
+                byte_offset,
+                quads,
+                error
+            );
+            if (int err = CHECK_KERNEL(); err) return err;
+        }
     }
 
     if (touched.len() != 0) {
         auto [touched_grid, touched_block] = kernel_launch_params(touched.len());
         finalize_chronology_touched<<<touched_grid, touched_block, 0, stream>>>(
             DeviceBufferConstView<PreflightMemoryEvent>{memory.ptr, memory.size},
+            address_spaces,
+            DeviceBufferConstView<RvrFieldBlock>{field_values.ptr, field_values.size},
             touched.ptr,
             touched.len(),
             error

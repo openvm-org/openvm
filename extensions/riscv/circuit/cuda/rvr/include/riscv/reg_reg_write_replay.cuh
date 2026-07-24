@@ -29,11 +29,9 @@ static __device__ __forceinline__ void replay_u16_to_bytes(
 }
 
 static __device__ bool replay_reg_reg_write(
-    RvrReplayInstruction const &instruction,
+    ReplayProgramTransition const &transition,
     uint32_t expected_opcode,
     uint32_t register_address_space,
-    PreflightProgramEvent const &from,
-    PreflightProgramEvent const &to,
     RvrReplayStep const &step,
     DeviceBufferConstView<PreflightMemoryEvent> memory,
     DeviceBufferConstView<PreflightInitialWrite> seeds,
@@ -42,6 +40,9 @@ static __device__ bool replay_reg_reg_write(
     uint32_t *error,
     uint32_t error_base
 ) {
+    auto const &instruction = *transition.instruction;
+    auto const &from = *transition.from;
+    auto const &to = *transition.to;
     uint32_t rd_ptr = instruction.words[1];
     uint32_t rs1_ptr = instruction.words[2];
     uint32_t rs2_ptr = instruction.words[3];
@@ -49,8 +50,7 @@ static __device__ bool replay_reg_reg_write(
         instruction.words[4] != register_address_space || instruction.words[5] != 0 ||
         instruction.words[6] != 0 || instruction.words[7] != 0 || rd_ptr == 0 ||
         rd_ptr >= 32 * 8 || rs1_ptr >= 32 * 8 || rs2_ptr >= 32 * 8 || (rd_ptr & 7) != 0 ||
-        (rs1_ptr & 7) != 0 || (rs2_ptr & 7) != 0 || from.timestamp > UINT32_MAX - 3 ||
-        from.pc > UINT32_MAX - 4 || from.timestamp + 3 != to.timestamp || to.pc != from.pc + 4) {
+        (rs1_ptr & 7) != 0 || (rs2_ptr & 7) != 0) {
         preflight_set_error(error, error_base);
         return false;
     }
