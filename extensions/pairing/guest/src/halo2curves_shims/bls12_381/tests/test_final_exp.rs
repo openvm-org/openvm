@@ -42,7 +42,7 @@ fn test_bls12_381_final_exp_hint() {
 fn test_blst_final_exp_hint_matches_basic() {
     let mut inputs = vec![Fq12::ZERO, Fq12::ONE];
     let mut rng = StdRng::seed_from_u64(0x41b5_1238);
-    inputs.extend((0..4).map(|_| Fq12::random(&mut rng)));
+    inputs.extend((0..16).map(|_| Fq12::random(&mut rng)));
 
     for f in inputs {
         let expected = final_exp_hint_basic(&f);
