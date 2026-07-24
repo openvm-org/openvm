@@ -15,8 +15,10 @@ openvm-deferral-circuit = { path = "../../../extensions/deferral/circuit" }
 openvm-recursion-circuit = { path = "../../../crates/recursion" }
 openvm-sdk = { path = "../../../crates/sdk" }
 openvm-sdk-config = { path = "../../../crates/sdk-config" }
-openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2.1.0", default-features = false }
-openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", branch = "develop-v2.1.0", default-features = false, features = ["cpu-backend"] }
+openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", branch = "experimental-v2.1.0", default-features = false }
+openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", branch = "experimental-v2.1.0", default-features = false, features = [
+    "cpu-backend",
+] }
 openvm-verify-stark-circuit = { path = "../../../guest-libs/verify-stark/circuit" }
 openvm-verify-stark-host = { path = "../../../crates/verify" }
 serde = { version = "1.0.201", features = ["derive"] }
@@ -24,7 +26,4 @@ toml = "0.8.14"
 
 [features]
 default = []
-cuda = [
-    "openvm-sdk/cuda",
-    "openvm-verify-stark-circuit/cuda",
-]
+cuda = ["openvm-sdk/cuda", "openvm-verify-stark-circuit/cuda"]
