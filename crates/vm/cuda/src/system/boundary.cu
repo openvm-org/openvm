@@ -14,12 +14,15 @@ template <size_t CHUNK, size_t BLOCKS> struct BoundaryRecord {
 };
 
 template <typename T> struct PersistentBoundaryCols {
-    T expand_direction;
+    T is_valid;
+    T is_dirty;
     T address_space;
     T leaf_label;
-    T values[DIGEST_WIDTH];
-    T hash[DIGEST_WIDTH];
-    T timestamps[BLOCKS_PER_LEAF];
+    T initial_values[DIGEST_WIDTH];
+    T final_values[DIGEST_WIDTH];
+    T initial_hash[DIGEST_WIDTH];
+    T final_hash[DIGEST_WIDTH];
+    T final_timestamps[BLOCKS_PER_LEAF];
 };
 
 __global__ void cukernel_persistent_boundary_tracegen(
@@ -34,12 +37,16 @@ __global__ void cukernel_persistent_boundary_tracegen(
     size_t poseidon2_capacity
 ) {
     size_t row_idx = blockIdx.x * blockDim.x + threadIdx.x;
-    size_t record_idx = row_idx / 2;
     RowSlice row = RowSlice(trace + row_idx, height);
 
-    if (record_idx < num_records) {
-        BoundaryRecord<DIGEST_WIDTH, BLOCKS_PER_LEAF> record = records[record_idx];
+    if (row_idx < num_records) {
+        BoundaryRecord<DIGEST_WIDTH, BLOCKS_PER_LEAF> record = records[row_idx];
         Poseidon2Buffer poseidon2(poseidon2_buffer, poseidon2_buffer_idx, poseidon2_capacity);
+        COL_WRITE_VALUE(row, PersistentBoundaryCols, is_valid, Fp::one());
+        // TODO(follow-up): set real dirtiness (`final_values != init_values`) once
+        // MemoryMerkleAir supports skipping clean leaves in the final expansion. Until
+        // then every touched leaf is treated as dirty, matching the CPU tracegen.
+        COL_WRITE_VALUE(row, PersistentBoundaryCols, is_dirty, Fp::one());
         COL_WRITE_VALUE(row, PersistentBoundaryCols, address_space, record.address_space);
         COL_WRITE_VALUE(
             row,
@@ -47,57 +54,53 @@ __global__ void cukernel_persistent_boundary_tracegen(
             leaf_label,
             record.ptr / DIGEST_WIDTH
         );
-        if (row_idx % 2 == 0) {
-            FpArray<DIGEST_WIDTH> init_values;
-            uint32_t addr_space_idx = record.address_space - 1;
-            if (initial_mem[addr_space_idx]) {
-                // `ptr` is an address-space pointer:
-                //   - DEFERRAL_AS: pointer into F cells; initial memory is already raw Montgomery Fp.
-                //   - Non-deferral ASes: pointer into u16 cells; initial memory is little-endian bytes,
-                //     so convert the pointer to a byte offset with `U16_CELL_SIZE`.
-                if (record.address_space == DEFERRAL_AS) {
-                    init_values = FpArray<DIGEST_WIDTH>::from_raw_array(
-                        reinterpret_cast<uint32_t const *>(initial_mem[addr_space_idx]) +
-                        record.ptr
-                    );
-                } else {
-                    uint8_t const *bytes =
-                        initial_mem[addr_space_idx] + U16_CELL_SIZE * record.ptr;
-                    uint16_t cells[DIGEST_WIDTH];
-                    #pragma unroll
-                    for (int i = 0; i < DIGEST_WIDTH; ++i) {
-                        cells[i] = u16_from_bytes_le(bytes + U16_CELL_SIZE * i);
-                    }
-                    init_values = FpArray<DIGEST_WIDTH>::from_u16_array(cells);
-                }
+
+        FpArray<DIGEST_WIDTH> init_values;
+        uint32_t addr_space_idx = record.address_space - 1;
+        if (initial_mem[addr_space_idx]) {
+            // `ptr` is an address-space pointer:
+            //   - DEFERRAL_AS: pointer into F cells; initial memory is already raw Montgomery Fp.
+            //   - Non-deferral ASes: pointer into u16 cells; initial memory is little-endian bytes,
+            //     so convert the pointer to a byte offset with `U16_CELL_SIZE`.
+            if (record.address_space == DEFERRAL_AS) {
+                init_values = FpArray<DIGEST_WIDTH>::from_raw_array(
+                    reinterpret_cast<uint32_t const *>(initial_mem[addr_space_idx]) +
+                    record.ptr
+                );
             } else {
+                uint8_t const *bytes =
+                    initial_mem[addr_space_idx] + U16_CELL_SIZE * record.ptr;
+                uint16_t cells[DIGEST_WIDTH];
                 #pragma unroll
                 for (int i = 0; i < DIGEST_WIDTH; ++i) {
-                    init_values.v[i] = 0;
+                    cells[i] = u16_from_bytes_le(bytes + U16_CELL_SIZE * i);
                 }
+                init_values = FpArray<DIGEST_WIDTH>::from_u16_array(cells);
             }
-            FpArray<DIGEST_WIDTH> init_hash = poseidon2.hash_and_record(init_values);
-            COL_WRITE_VALUE(row, PersistentBoundaryCols, expand_direction, Fp::one());
-            COL_WRITE_ARRAY(
-                row, PersistentBoundaryCols, values, reinterpret_cast<Fp const *>(init_values.v)
-            );
-            COL_WRITE_ARRAY(
-                row, PersistentBoundaryCols, hash, reinterpret_cast<Fp const *>(init_hash.v)
-            );
-            row.fill_zero(COL_INDEX(PersistentBoundaryCols, timestamps), BLOCKS_PER_LEAF);
         } else {
-            // record.values are already Montgomery-encoded (see read_initial_chunk in inventory.cu)
-            FpArray<DIGEST_WIDTH> final_values = FpArray<DIGEST_WIDTH>::from_raw_array(record.values);
-            FpArray<DIGEST_WIDTH> final_hash = poseidon2.hash_and_record(final_values);
-            COL_WRITE_VALUE(row, PersistentBoundaryCols, expand_direction, Fp::neg_one());
-            COL_WRITE_ARRAY(
-                row, PersistentBoundaryCols, values, reinterpret_cast<Fp const *>(final_values.v)
-            );
-            COL_WRITE_ARRAY(
-                row, PersistentBoundaryCols, hash, reinterpret_cast<Fp const *>(final_hash.v)
-            );
-            COL_WRITE_ARRAY(row, PersistentBoundaryCols, timestamps, record.timestamps);
+            #pragma unroll
+            for (int i = 0; i < DIGEST_WIDTH; ++i) {
+                init_values.v[i] = 0;
+            }
         }
+        FpArray<DIGEST_WIDTH> init_hash = poseidon2.hash_and_record(init_values);
+        COL_WRITE_ARRAY(
+            row, PersistentBoundaryCols, initial_values, reinterpret_cast<Fp const *>(init_values.v)
+        );
+        COL_WRITE_ARRAY(
+            row, PersistentBoundaryCols, initial_hash, reinterpret_cast<Fp const *>(init_hash.v)
+        );
+
+        // record.values are already Montgomery-encoded (see read_initial_chunk in inventory.cu)
+        FpArray<DIGEST_WIDTH> final_values = FpArray<DIGEST_WIDTH>::from_raw_array(record.values);
+        FpArray<DIGEST_WIDTH> final_hash = poseidon2.hash_and_record(final_values);
+        COL_WRITE_ARRAY(
+            row, PersistentBoundaryCols, final_values, reinterpret_cast<Fp const *>(final_values.v)
+        );
+        COL_WRITE_ARRAY(
+            row, PersistentBoundaryCols, final_hash, reinterpret_cast<Fp const *>(final_hash.v)
+        );
+        COL_WRITE_ARRAY(row, PersistentBoundaryCols, final_timestamps, record.timestamps);
     } else {
         row.fill_zero(0, width);
     }
