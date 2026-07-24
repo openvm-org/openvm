@@ -65,7 +65,7 @@ __global__ void sha2_first_pass_phase1_replay(
     }
 
     Sha2ReplayInput input;
-    if (!replay_sha2_instruction(
+    if (!replay_sha2_instruction<V>(
             instructions,
             pc_base,
             program,

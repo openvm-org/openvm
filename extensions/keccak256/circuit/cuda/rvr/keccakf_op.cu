@@ -16,6 +16,7 @@
 
 using namespace keccak256;
 using namespace keccakf_op;
+using namespace program;
 using namespace riscv;
 using openvm::U16_BITS;
 
