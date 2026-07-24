@@ -344,6 +344,7 @@ pub mod rvr_postflight {
 
 pub mod rvr_checkpoint_replay {
     use super::*;
+    use crate::arch::rvr::cuda::RvrCheckpointOpcodeBases;
 
     extern "C" {
         fn _rvr_checkpoint_count(
@@ -353,10 +354,7 @@ pub mod rvr_checkpoint_replay {
             initial_memory: DeviceBufferView,
             anchors: DeviceBufferView,
             residuals: DeviceBufferView,
-            addi_opcode: u32,
-            load_doubleword_opcode: u32,
-            bne_opcode: u32,
-            terminate_opcode: u32,
+            opcodes: RvrCheckpointOpcodeBases,
             register_as: u32,
             memory_as: u32,
             immediate_as: u32,
@@ -376,10 +374,7 @@ pub mod rvr_checkpoint_replay {
             anchors: DeviceBufferView,
             residuals: DeviceBufferView,
             memory_offsets: DeviceBufferView,
-            addi_opcode: u32,
-            load_doubleword_opcode: u32,
-            bne_opcode: u32,
-            terminate_opcode: u32,
+            opcodes: RvrCheckpointOpcodeBases,
             register_as: u32,
             memory_as: u32,
             immediate_as: u32,
@@ -418,7 +413,7 @@ pub mod rvr_checkpoint_replay {
         initial_memory: DeviceBufferView,
         anchors: DeviceBufferView,
         residuals: DeviceBufferView,
-        opcodes: [u32; 4],
+        opcodes: RvrCheckpointOpcodeBases,
         address_spaces: [u32; 3],
         pointer_max_bits: u32,
         initial_pc: u32,
@@ -434,10 +429,7 @@ pub mod rvr_checkpoint_replay {
             initial_memory,
             anchors,
             residuals,
-            opcodes[0],
-            opcodes[1],
-            opcodes[2],
-            opcodes[3],
+            opcodes,
             address_spaces[0],
             address_spaces[1],
             address_spaces[2],
@@ -459,7 +451,7 @@ pub mod rvr_checkpoint_replay {
         anchors: DeviceBufferView,
         residuals: DeviceBufferView,
         memory_offsets: DeviceBufferView,
-        opcodes: [u32; 4],
+        opcodes: RvrCheckpointOpcodeBases,
         address_spaces: [u32; 3],
         pointer_max_bits: u32,
         initial_pc: u32,
@@ -477,10 +469,7 @@ pub mod rvr_checkpoint_replay {
             anchors,
             residuals,
             memory_offsets,
-            opcodes[0],
-            opcodes[1],
-            opcodes[2],
-            opcodes[3],
+            opcodes,
             address_spaces[0],
             address_spaces[1],
             address_spaces[2],
