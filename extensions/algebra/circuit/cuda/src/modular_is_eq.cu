@@ -1,4 +1,5 @@
 #include "launcher.cuh"
+#include "primitives/constants.h"
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
 #include "riscv-adapters/vec_heap.cuh"
@@ -7,6 +8,9 @@
 
 #include <cstddef>
 #include <cstdint>
+
+using namespace program;
+using openvm::U16_BITS;
 
 template <typename T, size_t NUM_READS, size_t BLOCKS_PER_READ>
 struct Rv64IsEqualModU16AdapterCols {

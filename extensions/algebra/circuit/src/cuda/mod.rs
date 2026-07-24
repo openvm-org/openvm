@@ -14,11 +14,12 @@ use openvm_instructions::{
     VmOpcode,
 };
 use openvm_riscv_adapters::Rv64IsEqualModU16AdapterCols;
-use openvm_stark_backend::{p3_air::BaseAir, prover::AirProvingContext};
+use openvm_stark_backend::prover::AirProvingContext;
 
 use crate::modular_chip::ModularIsEqualCoreCols;
 
 mod cuda_abi;
+pub(crate) mod modular_addsub;
 pub mod vec_heap;
 
 const MAX_ALGEBRA_TRACE_HEIGHT: usize = 1 << 26;

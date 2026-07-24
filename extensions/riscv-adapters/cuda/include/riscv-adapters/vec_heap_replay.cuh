@@ -99,13 +99,16 @@ __global__ void vec_heap_replay_gather(
     auto const &from = program[program_index];
     auto const &to = program[program_index + 1];
     constexpr uint32_t EVENT_COUNT = NUM_READS + 1 + NUM_READS * BLOCKS + BLOCKS;
-    if (from.pc < pc_base || (from.pc - pc_base) % DEFAULT_PC_STEP != 0 ||
-        from.pc > UINT32_MAX - DEFAULT_PC_STEP || from.timestamp > UINT32_MAX - EVENT_COUNT ||
-        to.pc != from.pc + DEFAULT_PC_STEP || to.timestamp != from.timestamp + EVENT_COUNT) {
+    if (from.pc < pc_base ||
+        (from.pc - pc_base) % program::DEFAULT_PC_STEP != 0 ||
+        from.pc > UINT32_MAX - program::DEFAULT_PC_STEP ||
+        from.timestamp > UINT32_MAX - EVENT_COUNT ||
+        to.pc != from.pc + program::DEFAULT_PC_STEP ||
+        to.timestamp != from.timestamp + EVENT_COUNT) {
         preflight_set_error(error, VEC_HEAP_REPLAY_ERROR);
         return;
     }
-    size_t instruction_index = (from.pc - pc_base) / DEFAULT_PC_STEP;
+    size_t instruction_index = (from.pc - pc_base) / program::DEFAULT_PC_STEP;
     if (instruction_index >= instructions.len()) {
         preflight_set_error(error, VEC_HEAP_REPLAY_ERROR);
         return;
@@ -156,7 +159,7 @@ __global__ void vec_heap_replay_gather(
             return;
         }
         input.rs_vals[read] = static_cast<uint32_t>(event.value[0]) |
-                              (static_cast<uint32_t>(event.value[1]) << U16_BITS);
+                              (static_cast<uint32_t>(event.value[1]) << openvm::U16_BITS);
         input.rs_prev_timestamps[read] = previous.timestamp;
     }
     if (!vec_heap_replay_event(
@@ -179,7 +182,7 @@ __global__ void vec_heap_replay_gather(
         return;
     }
     input.rd_val = static_cast<uint32_t>(rd_event.value[0]) |
-                   (static_cast<uint32_t>(rd_event.value[1]) << U16_BITS);
+                   (static_cast<uint32_t>(rd_event.value[1]) << openvm::U16_BITS);
     input.rd_prev_timestamp = previous.timestamp;
 
     uint64_t pointer_limit = pointer_max_bits < 32 ? uint64_t(1) << pointer_max_bits

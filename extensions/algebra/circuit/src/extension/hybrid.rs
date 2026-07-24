@@ -57,6 +57,8 @@ pub struct HybridModularChip<F, const BLOCKS: usize> {
     device_ctx: GpuDeviceCtx,
     #[cfg(feature = "rvr")]
     replay: Option<FieldExpressionReplayConfig>,
+    #[cfg(feature = "rvr")]
+    direct_addsub: Option<crate::cuda::modular_addsub::ModularAddSubReplayChipGpu<BLOCKS>>,
 }
 
 #[cfg(feature = "rvr")]
@@ -117,6 +119,8 @@ impl<const BLOCKS: usize> HybridModularChip<F, BLOCKS> {
             device_ctx,
             #[cfg(feature = "rvr")]
             replay: None,
+            #[cfg(feature = "rvr")]
+            direct_addsub: None,
         }
     }
 
@@ -136,6 +140,41 @@ impl<const BLOCKS: usize> HybridModularChip<F, BLOCKS> {
                 pointer_max_bits,
                 timestamp_max_bits,
             }),
+            direct_addsub: None,
+        }
+    }
+
+    #[cfg(feature = "rvr")]
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_addsub_with_replay(
+        cpu: ModularChip<F, BLOCKS>,
+        device_ctx: GpuDeviceCtx,
+        modulus: &num_bigint::BigUint,
+        opcode_base: usize,
+        pointer_max_bits: usize,
+        timestamp_max_bits: usize,
+        range_checker: std::sync::Arc<
+            openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU,
+        >,
+    ) -> Self {
+        let direct_addsub = crate::cuda::modular_addsub::ModularAddSubReplayChipGpu::new(
+            &cpu,
+            modulus,
+            opcode_base,
+            pointer_max_bits,
+            timestamp_max_bits,
+            range_checker,
+        )
+        .expect("valid modular add/sub replay configuration");
+        Self {
+            cpu,
+            device_ctx,
+            replay: Some(FieldExpressionReplayConfig {
+                opcode_base,
+                pointer_max_bits,
+                timestamp_max_bits,
+            }),
+            direct_addsub,
         }
     }
 
@@ -147,6 +186,9 @@ impl<const BLOCKS: usize> HybridModularChip<F, BLOCKS> {
         replay_plan: &openvm_circuit::arch::rvr::cuda::GpuRvrReplayPlan,
     ) -> Result<AirProvingContext<GpuBackend>, openvm_circuit::arch::rvr::cuda::GpuRvrInputError>
     {
+        if let Some(direct) = &self.direct_addsub {
+            return direct.generate_proving_ctx(program, transcript, replay_plan);
+        }
         let replay = self.replay.ok_or_else(|| {
             openvm_circuit::arch::rvr::cuda::GpuRvrInputError::InvalidTranscript(
                 "Modular chip was constructed without checkpoint replay".to_string(),
@@ -167,6 +209,11 @@ impl<const BLOCKS: usize> HybridModularChip<F, BLOCKS> {
             replay.timestamp_max_bits,
             &self.device_ctx,
         )
+    }
+
+    #[cfg(all(test, feature = "rvr"))]
+    pub(crate) fn uses_direct_addsub_replay(&self) -> bool {
+        self.direct_addsub.is_some()
     }
 
     #[cfg(feature = "rvr")]
@@ -380,12 +427,14 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                     byte_ptr_max_bits,
                 );
                 #[cfg(feature = "rvr")]
-                let addsub = HybridModularChip::new_with_replay(
+                let addsub = HybridModularChip::new_addsub_with_replay(
                     addsub,
                     device_ctx.clone(),
+                    modulus,
                     start_offset,
                     byte_ptr_max_bits,
                     timestamp_max_bits,
+                    range_checker_gpu.clone(),
                 );
                 #[cfg(not(feature = "rvr"))]
                 let addsub = HybridModularChip::new(addsub, device_ctx.clone());
@@ -459,12 +508,14 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, ModularExte
                     byte_ptr_max_bits,
                 );
                 #[cfg(feature = "rvr")]
-                let addsub = HybridModularChip::new_with_replay(
+                let addsub = HybridModularChip::new_addsub_with_replay(
                     addsub,
                     device_ctx.clone(),
+                    modulus,
                     start_offset,
                     byte_ptr_max_bits,
                     timestamp_max_bits,
+                    range_checker_gpu.clone(),
                 );
                 #[cfg(not(feature = "rvr"))]
                 let addsub = HybridModularChip::new(addsub, device_ctx.clone());
