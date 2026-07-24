@@ -1,3 +1,5 @@
+#[cfg(feature = "blst")]
+mod blst;
 mod curve;
 mod final_exp;
 mod line;
