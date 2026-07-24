@@ -128,17 +128,17 @@ impl PreflightBuffers {
         initial_write_candidates.clear();
         if program_log.capacity() < program_capacity {
             program_log
-                .try_reserve_exact(program_capacity - program_log.capacity())
+                .try_reserve_exact(program_capacity)
                 .map_err(|error| format!("failed to reserve preflight program log: {error}"))?;
         }
         if memory_log.capacity() < limits.max_memory_events {
             memory_log
-                .try_reserve_exact(limits.max_memory_events - memory_log.capacity())
+                .try_reserve_exact(limits.max_memory_events)
                 .map_err(|error| format!("failed to reserve preflight memory log: {error}"))?;
         }
         if initial_write_candidates.capacity() < limits.max_memory_events {
             initial_write_candidates
-                .try_reserve_exact(limits.max_memory_events - initial_write_candidates.capacity())
+                .try_reserve_exact(limits.max_memory_events)
                 .map_err(|error| {
                     format!("failed to reserve preflight initial-write log: {error}")
                 })?;
@@ -559,5 +559,22 @@ mod tests {
         // capacities were changed.
         let error = unsafe { rejected.finish(&rejected_ffi, 0, 2, &mut state) }.unwrap_err();
         assert!(error.contains("outside the configured 2-bit domain"));
+    }
+
+    #[test]
+    fn reused_buffers_grow_to_the_next_segments_limits() {
+        let initial_limits = RvrPreflightLimits::new(8, 16);
+        let initial = PreflightBuffers::new(initial_limits).unwrap();
+        let transcript = RvrPreflightTranscript {
+            program_log: initial.program_log,
+            memory_log: initial.memory_log,
+            initial_write_log: initial.initial_write_candidates,
+        };
+
+        let next_limits = RvrPreflightLimits::new(32, 64);
+        let reused = PreflightBuffers::reuse(next_limits, transcript).unwrap();
+        assert!(reused.program_log.capacity() > next_limits.max_instructions);
+        assert!(reused.memory_log.capacity() >= next_limits.max_memory_events);
+        assert!(reused.initial_write_candidates.capacity() >= next_limits.max_memory_events);
     }
 }
