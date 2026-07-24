@@ -717,6 +717,15 @@ the legacy tracegen peak and the existing proving/GKR peak (operationally about
 15 GiB), and that the handoff to proving retains no checkpoint, residual,
 chronology, sort, or replay-index allocation.
 
+The first correct continuation implementation adds executor-only dirty-page
+bitsets for main memory and public values. It does not change transcript size,
+but its per-store page check increased the same Reth median from 1.325 seconds to
+1.938 seconds (+46.3%); metered execution in that run was 2.652 seconds. This is
+accepted as a correctness baseline while AIR replay is built, not as the final
+performance result. The regression is tracked explicitly and the final all-AIR
+end-to-end gate must either remove it or show that it is immaterial to total
+preflight plus tracegen time.
+
 ### M2: RISC-V GPU feasibility slice
 
 Before designing the rest of tracegen, test the central bet on the most important
