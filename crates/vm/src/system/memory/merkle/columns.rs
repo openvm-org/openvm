@@ -23,10 +23,9 @@ pub struct MemoryMerkleCols<T, const DIGEST_WIDTH: usize> {
     pub left_child_hash: [T; DIGEST_WIDTH],
     pub right_child_hash: [T; DIGEST_WIDTH],
 
-    // indicate whether `expand_direction` is different from origin
-    // when `expand_direction` != -1, must be 0
-    pub left_direction_different: T,
-    pub right_direction_different: T,
+    // Encodes each child's Merkle-bus interaction for this row.
+    pub left_child_mode: T,
+    pub right_child_mode: T,
 }
 
 #[derive(Debug, Clone, Copy, AlignedBorrow, StructReflection)]
