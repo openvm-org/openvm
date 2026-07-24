@@ -3,7 +3,7 @@ use std::sync::Arc;
 use std::{borrow::BorrowMut, str::FromStr};
 
 use num_bigint::BigUint;
-use num_traits::Zero;
+use num_traits::{One, Zero};
 use openvm_algebra_transpiler::Rv64ModularArithmeticOpcode;
 use openvm_circuit::arch::{
     instructions::LocalOpcode,
@@ -33,7 +33,9 @@ use {
     openvm_circuit::arch::testing::{
         default_var_range_checker_bus, GpuChipTestBuilder, GpuTestChipHarness,
     },
+    openvm_circuit::system::cuda::memory::MemoryInventoryGPU,
     openvm_circuit_primitives::{var_range::VariableRangeCheckerChip, Chip},
+    openvm_cuda_common::copy::MemCopyD2H,
 };
 
 use crate::{
@@ -51,6 +53,19 @@ use crate::{
 const LIMB_BITS: usize = 8;
 const MAX_INS_CAPACITY: usize = 128;
 type F = BabyBear;
+
+#[cfg(feature = "cuda")]
+fn reset_gpu_initial_memory(tester: &mut GpuChipTestBuilder) {
+    tester.memory.memory.data.memory.recompute_touched_pages();
+    let device_ctx = tester.range_checker().device_ctx.clone();
+    let hasher_chip = tester.memory.hasher_chip.clone().unwrap();
+    tester.memory.inventory =
+        MemoryInventoryGPU::new(tester.memory.config.clone(), hasher_chip, device_ctx);
+    tester
+        .memory
+        .inventory
+        .set_initial_memory(&tester.memory.memory.data.memory);
+}
 
 #[cfg(test)]
 mod addsub_tests {
@@ -132,6 +147,8 @@ mod addsub_tests {
         );
 
         // Use hybrid chip wrapping the CPU chip
+        #[cfg(feature = "rvr")]
+        let replay_modulus = config.modulus.clone();
         let replay_cpu_chip = get_modular_addsub_chip(
             config,
             tester.cpu_memory_helper(),
@@ -139,12 +156,14 @@ mod addsub_tests {
             tester.address_bits(),
         );
         #[cfg(feature = "rvr")]
-        let hybrid_chip = HybridModularChip::new_with_replay(
+        let hybrid_chip = HybridModularChip::new_addsub_with_replay(
             replay_cpu_chip,
             tester.range_checker().device_ctx.clone(),
+            &replay_modulus,
             offset,
             tester.address_bits(),
             tester.timestamp_max_bits(),
+            tester.range_checker(),
         );
         #[cfg(not(feature = "rvr"))]
         let hybrid_chip =
@@ -384,8 +403,12 @@ mod addsub_tests {
     }
 
     #[cfg(all(feature = "cuda", feature = "rvr"))]
-    #[test]
-    fn cuda_rvr_modular_add_projection_matches_legacy_and_rejects_corrupt_output() {
+    fn run_cuda_rvr_modular_addsub_projection_test(
+        modulus: BigUint,
+        local_opcode: Rv64ModularArithmeticOpcode,
+        b: BigUint,
+        c: BigUint,
+    ) {
         use openvm_circuit::arch::{
             rvr::{cuda::GpuRvrProgram, RvrPreflightEndpoint, RvrPreflightTranscript},
             DenseRecordArena,
@@ -397,7 +420,6 @@ mod addsub_tests {
         };
 
         const BLOCKS: usize = MODULAR_BLOCKS_32;
-        let modulus = secp256k1_coord_prime();
         let opcode_base = Rv64ModularArithmeticOpcode::CLASS_OFFSET;
         let config = ExprBuilderConfig {
             modulus: modulus.clone(),
@@ -410,9 +432,14 @@ mod addsub_tests {
         let rd_ptr = 0x100u32;
         let b_ptr = 0x200u32;
         let c_ptr = 0x300u32;
-        let b = BigUint::from(0x0102_abcdu32);
-        let c = BigUint::from(17u32);
-        let result = (&b + &c) % &modulus;
+        let result = match local_opcode {
+            Rv64ModularArithmeticOpcode::ADD => (&b + &c) % &modulus,
+            Rv64ModularArithmeticOpcode::SUB => {
+                ((&b % &modulus) + &modulus - (&c % &modulus)) % &modulus
+            }
+            Rv64ModularArithmeticOpcode::SETUP_ADDSUB => &b % &modulus,
+            _ => unreachable!(),
+        };
         let to_cells = |value: &BigUint| {
             let bytes = biguint_to_limbs_vec(value, NUM_LIMBS_32);
             std::array::from_fn::<u16, { BLOCKS * 4 }, _>(|index| {
@@ -422,11 +449,8 @@ mod addsub_tests {
         let b_cells = to_cells(&b);
         let c_cells = to_cells(&c);
         let result_cells = to_cells(&result);
-        assert_eq!(b_cells[0], 0xabcd);
-        assert_eq!(b_cells[1], 0x0102);
-
         let instruction = Instruction::from_usize(
-            VmOpcode::from_usize(opcode_base + Rv64ModularArithmeticOpcode::ADD as usize),
+            VmOpcode::from_usize(opcode_base + local_opcode as usize),
             [
                 rd_reg,
                 b_reg,
@@ -441,6 +465,10 @@ mod addsub_tests {
         ]);
         let mut tester = GpuChipTestBuilder::default();
         let mut harness = create_cuda_harness::<BLOCKS>(&tester, config, opcode_base);
+        assert!(
+            harness.gpu_chip.uses_direct_addsub_replay(),
+            "test requires the direct CUDA modular add/sub replay path"
+        );
         let register_block = |pointer: u32| [pointer as u16, (pointer >> 16) as u16, 0, 0];
         for (register, pointer) in [(rd_reg, rd_ptr), (b_reg, b_ptr), (c_reg, c_ptr)] {
             unsafe {
@@ -462,10 +490,7 @@ mod addsub_tests {
                 }
             }
         }
-        tester
-            .memory
-            .inventory
-            .set_initial_memory(&tester.memory.memory.data.memory);
+        reset_gpu_initial_memory(&mut tester);
         tester.execute_with_pc(
             &mut harness.executor,
             &mut harness.dense_arena,
@@ -565,6 +590,7 @@ mod addsub_tests {
         let (gpu_transcript, replay_plan) = gpu_program
             .upload_transcript(&transcript, RvrPreflightEndpoint::Terminated)
             .unwrap();
+        let gpu_counts_before = tester.range_checker().count.to_host_on(device_ctx).unwrap();
         let replay_ctx = harness
             .gpu_chip
             .generate_proving_ctx_from_rvr(&gpu_program, &gpu_transcript, &replay_plan)
@@ -575,13 +601,20 @@ mod addsub_tests {
             .to_host_on(device_ctx)
             .unwrap();
         assert_eq!(replay_trace, legacy_trace);
-        let replay_counts = tester
-            .cpu_range_checker()
-            .count
+        let replay_counts = tester.range_checker().count.to_host_on(device_ctx).unwrap();
+        assert_eq!(replay_counts.len(), legacy_counts.len());
+        for ((before, after), expected) in gpu_counts_before
             .iter()
-            .map(|count| count.load(std::sync::atomic::Ordering::Relaxed))
-            .collect::<Vec<_>>();
-        assert_eq!(replay_counts, legacy_counts);
+            .zip(&replay_counts)
+            .zip(&legacy_counts)
+        {
+            // GPU lookup histograms store ordinary u32 counters in an F-sized buffer.
+            // SAFETY: BabyBear and u32 have the same representation size, as required by
+            // VariableRangeCheckerChipGPU.
+            let before = unsafe { std::mem::transmute::<F, u32>(*before) };
+            let after = unsafe { std::mem::transmute::<F, u32>(*after) };
+            assert_eq!(after - before, *expected);
+        }
 
         let mut corrupt = transcript;
         corrupt.memory_log.last_mut().unwrap().value[0] ^= 1;
@@ -593,12 +626,7 @@ mod addsub_tests {
             .generate_proving_ctx_from_rvr(&gpu_program, &gpu_corrupt, &corrupt_plan)
             .is_err());
         assert_eq!(
-            tester
-                .cpu_range_checker()
-                .count
-                .iter()
-                .map(|count| count.load(std::sync::atomic::Ordering::Relaxed))
-                .collect::<Vec<_>>(),
+            tester.range_checker().count.to_host_on(device_ctx).unwrap(),
             replay_counts
         );
 
@@ -607,7 +635,44 @@ mod addsub_tests {
             .load_air_proving_ctx(Arc::new(harness.air), replay_ctx)
             .finalize()
             .simple_test()
-            .expect("record-free Modular ADD checkpoint replay proof failed");
+            .expect("record-free Modular ADD/SUB checkpoint replay proof failed");
+    }
+
+    #[cfg(all(feature = "cuda", feature = "rvr"))]
+    #[test]
+    fn cuda_rvr_modular_addsub_projection_matches_legacy_and_rejects_corrupt_output() {
+        run_cuda_rvr_modular_addsub_projection_test(
+            secp256k1_coord_prime(),
+            Rv64ModularArithmeticOpcode::ADD,
+            BigUint::from(0x0102_abcdu32),
+            BigUint::from(17u32),
+        );
+        let modulus = secp256k1_coord_prime();
+        run_cuda_rvr_modular_addsub_projection_test(
+            modulus.clone(),
+            Rv64ModularArithmeticOpcode::ADD,
+            &modulus - BigUint::one(),
+            &modulus - BigUint::one(),
+        );
+        let max_u256 = (BigUint::one() << 256usize) - BigUint::one();
+        run_cuda_rvr_modular_addsub_projection_test(
+            modulus.clone(),
+            Rv64ModularArithmeticOpcode::ADD,
+            max_u256.clone(),
+            max_u256,
+        );
+        run_cuda_rvr_modular_addsub_projection_test(
+            modulus.clone(),
+            Rv64ModularArithmeticOpcode::SUB,
+            BigUint::from(5u32),
+            BigUint::from(17u32),
+        );
+        run_cuda_rvr_modular_addsub_projection_test(
+            modulus.clone(),
+            Rv64ModularArithmeticOpcode::SETUP_ADDSUB,
+            modulus,
+            BigUint::zero(),
+        );
     }
 }
 
@@ -1355,10 +1420,7 @@ mod is_equal_tests {
                 }
             }
         }
-        tester
-            .memory
-            .inventory
-            .set_initial_memory(&tester.memory.memory.data.memory);
+        reset_gpu_initial_memory(&mut tester);
         tester.execute_with_pc(&mut harness.executor, &mut harness.dense_arena, &setup, 0);
         tester.execute_with_pc(&mut harness.executor, &mut harness.dense_arena, &is_eq, 4);
 

@@ -43,6 +43,25 @@ declare_replay_launcher!(_modular_is_eq_replay_tracegen_l4);
 declare_replay_launcher!(_modular_is_eq_replay_tracegen_l6);
 
 unsafe extern "C" {
+    fn _modular_addsub_replay_tracegen(
+        d_trace: *mut F,
+        height: usize,
+        width: usize,
+        blocks: usize,
+        d_projection: *const std::ffi::c_void,
+        projection_len: usize,
+        d_modulus: *const u8,
+        add_local_opcode: u32,
+        sub_local_opcode: u32,
+        setup_local_opcode: u32,
+        d_range_checker: *mut u32,
+        range_checker_bins: usize,
+        pointer_max_bits: u32,
+        timestamp_max_bits: u32,
+        d_error: *mut u32,
+        stream: cudaStream_t,
+    ) -> i32;
+
     fn _algebra_merge_range_counts(
         destination: *mut u32,
         source: *const u32,
@@ -73,6 +92,42 @@ unsafe extern "C" {
         d_error: *mut u32,
         stream: cudaStream_t,
     ) -> i32;
+}
+
+#[allow(clippy::too_many_arguments)]
+pub unsafe fn modular_addsub_replay_tracegen<const NUM_READS: usize, const BLOCKS: usize>(
+    d_trace: &DeviceBuffer<F>,
+    height: usize,
+    d_projection: &DeviceBuffer<VecHeapTraceInput<NUM_READS, BLOCKS>>,
+    d_modulus: &DeviceBuffer<u8>,
+    add_local_opcode: u32,
+    sub_local_opcode: u32,
+    setup_local_opcode: u32,
+    d_range_checker: &DeviceBuffer<F>,
+    pointer_max_bits: u32,
+    timestamp_max_bits: u32,
+    d_error: *mut u32,
+    stream: cudaStream_t,
+) -> Result<(), CudaError> {
+    debug_assert_eq!(NUM_READS, 2);
+    CudaError::from_result(_modular_addsub_replay_tracegen(
+        d_trace.as_mut_ptr(),
+        height,
+        d_trace.len() / height,
+        BLOCKS,
+        d_projection.as_ptr().cast(),
+        d_projection.len(),
+        d_modulus.as_ptr(),
+        add_local_opcode,
+        sub_local_opcode,
+        setup_local_opcode,
+        d_range_checker.as_mut_ptr().cast(),
+        d_range_checker.len(),
+        pointer_max_bits,
+        timestamp_max_bits,
+        d_error,
+        stream,
+    ))
 }
 
 pub unsafe fn merge_range_counts(

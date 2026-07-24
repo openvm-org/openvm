@@ -6,12 +6,12 @@ use std::{
 use openvm_circuit::{
     arch::{
         rvr::cuda::{GpuRvrInputError, GpuRvrProgram, GpuRvrReplayPlan, GpuRvrTranscript},
-        AdapterTraceFiller, VmChipWrapper,
+        TraceFiller, VmChipWrapper,
     },
     system::memory::SharedMemoryHelper,
 };
 use openvm_circuit_primitives::{
-    hybrid_chip::cpu_proving_ctx_to_gpu, var_range::VariableRangeCheckerChip, ColumnsAir,
+    hybrid_chip::cpu_proving_ctx_to_gpu, var_range::VariableRangeCheckerChip,
 };
 use openvm_cpu_backend::CpuBackend;
 use openvm_cuda_backend::{
@@ -39,7 +39,7 @@ use super::cuda_abi;
 // check therefore permits at most 2^(27 - ceil(log2(3 - 1))) rows.
 const MAX_ALGEBRA_TRACE_HEIGHT: usize = 1 << 26;
 
-fn checked_trace_shape(
+pub(crate) fn checked_trace_shape(
     num_rows: usize,
     width: usize,
     timestamp_max_bits: usize,
@@ -71,8 +71,25 @@ fn checked_trace_shape(
 
 /// Projects only the semantic values required by a vector-heap adapter and a
 /// field-expression core. The device allocation has exactly one entry per
-/// selected execution and is released before this function returns.
-pub fn gather_vec_heap_trace_inputs<const NUM_READS: usize, const BLOCKS: usize>(
+/// selected execution.
+pub struct DeviceVecHeapProjection<const NUM_READS: usize, const BLOCKS: usize> {
+    pub(crate) inputs: DeviceBuffer<VecHeapTraceInput<NUM_READS, BLOCKS>>,
+}
+
+impl<const NUM_READS: usize, const BLOCKS: usize> DeviceVecHeapProjection<NUM_READS, BLOCKS> {
+    pub fn len(&self) -> usize {
+        self.inputs.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.inputs.len() == 0
+    }
+}
+
+/// Gathers the bounded VecHeap replay projection without copying it back to the
+/// host. Direct GPU trace generators consume this allocation and drop it before
+/// proving starts.
+pub fn gather_vec_heap_trace_inputs_device<const NUM_READS: usize, const BLOCKS: usize>(
     program: &GpuRvrProgram,
     transcript: &GpuRvrTranscript,
     replay_plan: &GpuRvrReplayPlan,
@@ -80,7 +97,7 @@ pub fn gather_vec_heap_trace_inputs<const NUM_READS: usize, const BLOCKS: usize>
     local_opcodes: &[usize],
     pointer_max_bits: usize,
     device_ctx: &GpuDeviceCtx,
-) -> Result<Vec<VecHeapTraceInput<NUM_READS, BLOCKS>>, GpuRvrInputError> {
+) -> Result<DeviceVecHeapProjection<NUM_READS, BLOCKS>, GpuRvrInputError> {
     program.ensure_replay_inputs(transcript, replay_plan, device_ctx)?;
     if !matches!(
         (NUM_READS, BLOCKS),
@@ -127,7 +144,9 @@ pub fn gather_vec_heap_trace_inputs<const NUM_READS: usize, const BLOCKS: usize>
         })
     })?;
     if num_rows == 0 {
-        return Ok(Vec::new());
+        return Ok(DeviceVecHeapProjection {
+            inputs: DeviceBuffer::with_capacity_on(0, device_ctx),
+        });
     }
     if num_rows > MAX_ALGEBRA_TRACE_HEIGHT
         || num_rows
@@ -174,15 +193,37 @@ pub fn gather_vec_heap_trace_inputs<const NUM_READS: usize, const BLOCKS: usize>
         output_start += range.len();
     }
     debug_assert_eq!(output_start, num_rows);
-    let host = projection.to_host_on(device_ctx)?;
-    drop(projection);
+    transcript.synchronize()?;
     let error = transcript.error_code()?;
     if error != 0 {
         return Err(GpuRvrInputError::InvalidTranscript(format!(
             "VecHeap projection rejected transcript with code {error}"
         )));
     }
-    Ok(host)
+    Ok(DeviceVecHeapProjection { inputs: projection })
+}
+
+pub fn gather_vec_heap_trace_inputs<const NUM_READS: usize, const BLOCKS: usize>(
+    program: &GpuRvrProgram,
+    transcript: &GpuRvrTranscript,
+    replay_plan: &GpuRvrReplayPlan,
+    opcode_base: usize,
+    local_opcodes: &[usize],
+    pointer_max_bits: usize,
+    device_ctx: &GpuDeviceCtx,
+) -> Result<Vec<VecHeapTraceInput<NUM_READS, BLOCKS>>, GpuRvrInputError> {
+    gather_vec_heap_trace_inputs_device(
+        program,
+        transcript,
+        replay_plan,
+        opcode_base,
+        local_opcodes,
+        pointer_max_bits,
+        device_ctx,
+    )?
+    .inputs
+    .to_host_on(device_ctx)
+    .map_err(Into::into)
 }
 
 fn flatten_blocks<const OUTER: usize, const BLOCKS: usize>(
@@ -256,7 +297,7 @@ pub fn generate_field_expression_ctx_from_projection<
                 adapter_row,
                 input,
             );
-            Ok(())
+            Ok::<(), GpuRvrInputError>(())
         })?;
     if projection.len() < height {
         let mut dummy_row = F::zero_vec(width);
