@@ -101,7 +101,7 @@ impl<F: VmField> InterpreterExecutor<F> for DeferralCallExecutor {
     {
         let pre_compute: &mut DeferralCallPrecompute = data.borrow_mut();
         self.pre_compute_impl(pc, inst, pre_compute)?;
-        Ok(execute_e1_impl::<F, _>)
+        Ok(execute_e1_handler::<_, F>)
     }
 
     #[cfg(feature = "tco")]
@@ -116,7 +116,7 @@ impl<F: VmField> InterpreterExecutor<F> for DeferralCallExecutor {
     {
         let pre_compute: &mut DeferralCallPrecompute = data.borrow_mut();
         self.pre_compute_impl(pc, inst, pre_compute)?;
-        Ok(execute_e1_handler::<F, _>)
+        Ok(execute_e1_handler::<_, F>)
     }
 }
 
@@ -139,7 +139,7 @@ impl<F: VmField> InterpreterMeteredExecutor<F> for DeferralCallExecutor {
         let pre_compute: &mut E2PreCompute<DeferralCallPrecompute> = data.borrow_mut();
         pre_compute.chip_idx = air_idx as u32;
         self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
-        Ok(execute_e2_impl::<F, _>)
+        Ok(execute_e2_handler::<_, F>)
     }
 
     #[cfg(feature = "tco")]
@@ -156,7 +156,7 @@ impl<F: VmField> InterpreterMeteredExecutor<F> for DeferralCallExecutor {
         let pre_compute: &mut E2PreCompute<DeferralCallPrecompute> = data.borrow_mut();
         pre_compute.chip_idx = air_idx as u32;
         self.pre_compute_impl(pc, inst, &mut pre_compute.data)?;
-        Ok(execute_e2_handler::<F, _>)
+        Ok(execute_e2_handler::<_, F>)
     }
 }
 
@@ -251,7 +251,7 @@ unsafe fn execute_e12_impl<F: VmField, CTX: ExecutionCtxTrait>(
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e1_impl<F: VmField, CTX: ExecutionCtxTrait>(
+unsafe fn execute_e1_impl<CTX: ExecutionCtxTrait, F: VmField>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
@@ -262,7 +262,7 @@ unsafe fn execute_e1_impl<F: VmField, CTX: ExecutionCtxTrait>(
 
 #[create_handler]
 #[inline(always)]
-unsafe fn execute_e2_impl<F: VmField, CTX: MeteredExecutionCtxTrait>(
+unsafe fn execute_e2_impl<CTX: MeteredExecutionCtxTrait, F: VmField>(
     pre_compute: *const u8,
     exec_state: &mut VmExecState<GuestMemory, CTX>,
 ) -> Result<(), ExecutionError> {
