@@ -92,7 +92,8 @@ pub struct RvrCheckpointOpcodeBases {
 const _: () = assert!(size_of::<RvrCheckpointOpcodeBases>() == 24 * size_of::<u32>());
 
 impl RvrCheckpointOpcodeBases {
-    fn owns(self, opcode: u32) -> bool {
+    #[doc(hidden)]
+    pub fn owns(self, opcode: u32) -> bool {
         let family =
             |base: u32, count: u32| opcode.checked_sub(base).is_some_and(|local| local < count);
         family(self.base_alu, 5)
@@ -124,45 +125,63 @@ impl RvrCheckpointOpcodeBases {
 
 const RVR_CHECKPOINT_NO_SCHEDULE: u32 = u32::MAX;
 const RVR_CHECKPOINT_MAX_DENSE_OPCODE: u32 = u16::MAX as u32;
-const RVR_CHECKPOINT_SPAN_WRITE_RESIDUAL: u8 = 1;
-const RVR_CHECKPOINT_SPAN_COUNT_FROM_REGISTER: u8 = 2;
-const RVR_CHECKPOINT_SPAN_WRITE_ZERO: u8 = 4;
 const RVR_CHECKPOINT_EFFECT_NEXT: u8 = 0;
 const RVR_CHECKPOINT_EFFECT_BRANCH_RESIDUAL: u8 = 1;
 const RVR_CHECKPOINT_REGISTER_WRITE_NONE: u8 = 0;
 const RVR_CHECKPOINT_REGISTER_WRITE_ZERO: u8 = 1;
 const RVR_CHECKPOINT_REGISTER_WRITE_RESIDUAL: u8 = 2;
+const RVR_CHECKPOINT_SPAN_BASE_REGISTER: u8 = 0;
+const RVR_CHECKPOINT_SPAN_BASE_DEFERRAL_INPUT: u8 = 1;
+const RVR_CHECKPOINT_SPAN_BASE_DEFERRAL_OUTPUT: u8 = 2;
+const RVR_CHECKPOINT_SPAN_COUNT_FIXED: u8 = 0;
+const RVR_CHECKPOINT_SPAN_COUNT_REGISTER: u8 = 1;
+const RVR_CHECKPOINT_SPAN_READ_U16: u8 = 0;
+const RVR_CHECKPOINT_SPAN_WRITE_U16_RESIDUAL: u8 = 1;
+const RVR_CHECKPOINT_SPAN_WRITE_U16_ZERO: u8 = 2;
+const RVR_CHECKPOINT_SPAN_READ_FIELD32: u8 = 3;
+const RVR_CHECKPOINT_SPAN_WRITE_FIELD32_CANONICAL_PAIRS: u8 = 4;
+const RVR_CHECKPOINT_DEFERRAL_DIGEST_BLOCKS: u32 = 2;
 
-/// One contiguous sequence of eight-byte memory accesses in an extension-owned
-/// checkpoint replay schedule.
+/// One contiguous sequence of fixed-width memory-bus accesses in an
+/// extension-owned checkpoint replay schedule. U16 spans access eight bytes per
+/// event; FIELD32 spans access four field cells per event.
 ///
-/// This phase ABI is internal and intentionally limited to AS2 replay with
-/// fixed/register-bounded spans and residual- or zero-backed writes. It is not the
-/// stable shape for extensions with gaps, tail writes, static values, or AS4
-/// accesses.
+/// The finite source tags distinguish ordinary RV64 heap blocks from Deferral
+/// accumulator blocks. This is intentionally not a general address-expression
+/// language: each supported source has one canonical interpretation in replay.
 #[doc(hidden)]
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RvrCheckpointAccessSpan {
     address_space: u32,
     count: u32,
-    base_register: u8,
+    base_index: u8,
+    base_source: u8,
     count_register: u8,
     count_shift: u8,
-    flags: u8,
+    count_source: u8,
+    value_source: u8,
+    _padding: [u8; 2],
 }
 
-const _: () = assert!(size_of::<RvrCheckpointAccessSpan>() == 12);
+const _: () = assert!(size_of::<RvrCheckpointAccessSpan>() == 16);
+const _: () = assert!(std::mem::offset_of!(RvrCheckpointAccessSpan, address_space) == 0);
+const _: () = assert!(std::mem::offset_of!(RvrCheckpointAccessSpan, count) == 4);
+const _: () = assert!(std::mem::offset_of!(RvrCheckpointAccessSpan, base_index) == 8);
+const _: () = assert!(std::mem::offset_of!(RvrCheckpointAccessSpan, value_source) == 13);
 
 impl RvrCheckpointAccessSpan {
     pub const fn read_fixed(address_space: u32, base_register: u8, count: u32) -> Self {
         Self {
             address_space,
             count,
-            base_register,
+            base_index: base_register,
+            base_source: RVR_CHECKPOINT_SPAN_BASE_REGISTER,
             count_register: 0,
             count_shift: 0,
-            flags: 0,
+            count_source: RVR_CHECKPOINT_SPAN_COUNT_FIXED,
+            value_source: RVR_CHECKPOINT_SPAN_READ_U16,
+            _padding: [0; 2],
         }
     }
 
@@ -172,7 +191,7 @@ impl RvrCheckpointAccessSpan {
         count: u32,
     ) -> Self {
         Self {
-            flags: RVR_CHECKPOINT_SPAN_WRITE_RESIDUAL,
+            value_source: RVR_CHECKPOINT_SPAN_WRITE_U16_RESIDUAL,
             ..Self::read_fixed(address_space, base_register, count)
         }
     }
@@ -181,7 +200,7 @@ impl RvrCheckpointAccessSpan {
     /// write slots without adding redundant zeroes to the serial transcript.
     pub const fn write_fixed_zero(address_space: u32, base_register: u8, count: u32) -> Self {
         Self {
-            flags: RVR_CHECKPOINT_SPAN_WRITE_ZERO,
+            value_source: RVR_CHECKPOINT_SPAN_WRITE_U16_ZERO,
             ..Self::read_fixed(address_space, base_register, count)
         }
     }
@@ -196,10 +215,13 @@ impl RvrCheckpointAccessSpan {
         Self {
             address_space,
             count: max_count,
-            base_register,
+            base_index: base_register,
+            base_source: RVR_CHECKPOINT_SPAN_BASE_REGISTER,
             count_register,
             count_shift,
-            flags: RVR_CHECKPOINT_SPAN_COUNT_FROM_REGISTER,
+            count_source: RVR_CHECKPOINT_SPAN_COUNT_REGISTER,
+            value_source: RVR_CHECKPOINT_SPAN_READ_U16,
+            _padding: [0; 2],
         }
     }
 
@@ -211,7 +233,7 @@ impl RvrCheckpointAccessSpan {
         max_count: u32,
     ) -> Self {
         Self {
-            flags: RVR_CHECKPOINT_SPAN_WRITE_RESIDUAL | RVR_CHECKPOINT_SPAN_COUNT_FROM_REGISTER,
+            value_source: RVR_CHECKPOINT_SPAN_WRITE_U16_RESIDUAL,
             ..Self::read_count_from_register(
                 address_space,
                 base_register,
@@ -221,7 +243,75 @@ impl RvrCheckpointAccessSpan {
             )
         }
     }
+
+    /// Two consecutive four-cell reads of a Deferral input accumulator. The
+    /// base is `16 * instruction[deferral_idx_operand]` in AS4 cell units.
+    pub const fn read_deferral_input_accumulator(deferral_idx_operand: u8) -> Self {
+        Self::deferral_accumulator(
+            deferral_idx_operand,
+            RVR_CHECKPOINT_SPAN_BASE_DEFERRAL_INPUT,
+            RVR_CHECKPOINT_SPAN_READ_FIELD32,
+        )
+    }
+
+    /// Two consecutive four-cell reads of a Deferral output accumulator. The
+    /// base is `16 * instruction[deferral_idx_operand] + 8` in AS4 cell units.
+    pub const fn read_deferral_output_accumulator(deferral_idx_operand: u8) -> Self {
+        Self::deferral_accumulator(
+            deferral_idx_operand,
+            RVR_CHECKPOINT_SPAN_BASE_DEFERRAL_OUTPUT,
+            RVR_CHECKPOINT_SPAN_READ_FIELD32,
+        )
+    }
+
+    /// Two consecutive four-cell writes of a Deferral input accumulator. Each
+    /// block consumes two u64 residuals containing four canonical u32 cells.
+    pub const fn write_deferral_input_accumulator(deferral_idx_operand: u8) -> Self {
+        Self::deferral_accumulator(
+            deferral_idx_operand,
+            RVR_CHECKPOINT_SPAN_BASE_DEFERRAL_INPUT,
+            RVR_CHECKPOINT_SPAN_WRITE_FIELD32_CANONICAL_PAIRS,
+        )
+    }
+
+    /// Two consecutive four-cell writes of a Deferral output accumulator.
+    pub const fn write_deferral_output_accumulator(deferral_idx_operand: u8) -> Self {
+        Self::deferral_accumulator(
+            deferral_idx_operand,
+            RVR_CHECKPOINT_SPAN_BASE_DEFERRAL_OUTPUT,
+            RVR_CHECKPOINT_SPAN_WRITE_FIELD32_CANONICAL_PAIRS,
+        )
+    }
+
+    const fn deferral_accumulator(
+        deferral_idx_operand: u8,
+        base_source: u8,
+        value_source: u8,
+    ) -> Self {
+        Self {
+            address_space: DEFERRAL_AS,
+            count: RVR_CHECKPOINT_DEFERRAL_DIGEST_BLOCKS,
+            base_index: deferral_idx_operand,
+            base_source,
+            count_register: 0,
+            count_shift: 0,
+            count_source: RVR_CHECKPOINT_SPAN_COUNT_FIXED,
+            value_source,
+            _padding: [0; 2],
+        }
+    }
 }
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) struct RvrCheckpointEventCount {
+    pub(crate) memory: u32,
+    pub(crate) field: u32,
+}
+
+const _: () = assert!(size_of::<RvrCheckpointEventCount>() == 2 * size_of::<u32>());
+const _: () = assert!(std::mem::offset_of!(RvrCheckpointEventCount, memory) == 0);
+const _: () = assert!(std::mem::offset_of!(RvrCheckpointEventCount, field) == 4);
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -452,19 +542,58 @@ impl RvrCheckpointAccessRegistry {
             )));
         }
         for span in spans {
-            let dynamic = span.flags & RVR_CHECKPOINT_SPAN_COUNT_FROM_REGISTER != 0;
-            let known_flags = RVR_CHECKPOINT_SPAN_WRITE_RESIDUAL
-                | RVR_CHECKPOINT_SPAN_COUNT_FROM_REGISTER
-                | RVR_CHECKPOINT_SPAN_WRITE_ZERO;
-            if span.flags & !known_flags != 0
-                || span.flags & RVR_CHECKPOINT_SPAN_WRITE_RESIDUAL != 0
-                    && span.flags & RVR_CHECKPOINT_SPAN_WRITE_ZERO != 0
-                || span.address_space != RV64_MEMORY_AS
-                || usize::from(span.base_register) >= register_operands.len()
-                || (dynamic
-                    && (usize::from(span.count_register) >= register_operands.len()
-                        || span.count_shift >= u64::BITS as u8))
-                || (!dynamic && span.count == 0)
+            let field = matches!(
+                span.value_source,
+                RVR_CHECKPOINT_SPAN_READ_FIELD32
+                    | RVR_CHECKPOINT_SPAN_WRITE_FIELD32_CANONICAL_PAIRS
+            );
+            let base_valid = match span.base_source {
+                RVR_CHECKPOINT_SPAN_BASE_REGISTER => {
+                    usize::from(span.base_index) < register_operands.len()
+                }
+                RVR_CHECKPOINT_SPAN_BASE_DEFERRAL_INPUT
+                | RVR_CHECKPOINT_SPAN_BASE_DEFERRAL_OUTPUT => {
+                    (1..8).contains(&span.base_index)
+                        && !register_operands.contains(&span.base_index)
+                        && span.base_index != register_as_operand
+                        && span.base_index != memory_as_operand
+                        && zero_operand_mask & (1 << span.base_index) == 0
+                }
+                _ => false,
+            };
+            let count_valid = match span.count_source {
+                RVR_CHECKPOINT_SPAN_COUNT_FIXED => {
+                    span.count != 0 && span.count_register == 0 && span.count_shift == 0
+                }
+                RVR_CHECKPOINT_SPAN_COUNT_REGISTER => {
+                    usize::from(span.count_register) < register_operands.len()
+                        && span.count_shift < u64::BITS as u8
+                }
+                _ => false,
+            };
+            let value_valid = matches!(
+                span.value_source,
+                RVR_CHECKPOINT_SPAN_READ_U16
+                    | RVR_CHECKPOINT_SPAN_WRITE_U16_RESIDUAL
+                    | RVR_CHECKPOINT_SPAN_WRITE_U16_ZERO
+                    | RVR_CHECKPOINT_SPAN_READ_FIELD32
+                    | RVR_CHECKPOINT_SPAN_WRITE_FIELD32_CANONICAL_PAIRS
+            );
+            if !base_valid
+                || !count_valid
+                || !value_valid
+                || field != (span.address_space == DEFERRAL_AS)
+                || (!field && span.address_space != RV64_MEMORY_AS)
+                || (field
+                    && !matches!(
+                        span.base_source,
+                        RVR_CHECKPOINT_SPAN_BASE_DEFERRAL_INPUT
+                            | RVR_CHECKPOINT_SPAN_BASE_DEFERRAL_OUTPUT
+                    ))
+                || (!field && span.base_source != RVR_CHECKPOINT_SPAN_BASE_REGISTER)
+                || (field && span.count_source != RVR_CHECKPOINT_SPAN_COUNT_FIXED)
+                || (field && span.count != RVR_CHECKPOINT_DEFERRAL_DIGEST_BLOCKS)
+                || span._padding != [0; 2]
             {
                 return Err(GpuRvrInputError::InvalidAccessSchedule(
                     "invalid access span".to_string(),
@@ -527,6 +656,8 @@ impl RvrCheckpointAccessRegistry {
     fn validate_instruction(
         &self,
         instruction: &RvrReplayInstruction,
+        cell_pointer_max_bits: usize,
+        deferral_num_cells: usize,
     ) -> Result<(), GpuRvrInputError> {
         let opcode = instruction.words[0] as usize;
         let Some(&schedule_index) = self.dispatch.get(opcode) else {
@@ -548,6 +679,23 @@ impl RvrCheckpointAccessRegistry {
                     "schedule is missing its host instruction layout".to_string(),
                 )
             })?;
+        let invalid_deferral_span = self.spans
+            [schedule.first_span as usize..(schedule.first_span + schedule.num_spans) as usize]
+            .iter()
+            .filter(|span| {
+                matches!(
+                    span.base_source,
+                    RVR_CHECKPOINT_SPAN_BASE_DEFERRAL_INPUT
+                        | RVR_CHECKPOINT_SPAN_BASE_DEFERRAL_OUTPUT
+                )
+            })
+            .any(|span| {
+                let base = u64::from(instruction.words[span.base_index as usize]) * 16
+                    + u64::from(span.base_source == RVR_CHECKPOINT_SPAN_BASE_DEFERRAL_OUTPUT) * 8;
+                let end = base + u64::from(span.count) * BLOCK_FE_WIDTH as u64;
+                let pointer_limit = 1u64 << cell_pointer_max_bits;
+                end < base || end > pointer_limit || end > deferral_num_cells as u64
+            });
         if instruction.words[layout.register_as_operand as usize] != RV64_REGISTER_AS
             || instruction.words[layout.memory_as_operand as usize] != RV64_MEMORY_AS
             || (1..8).any(|word| {
@@ -568,6 +716,7 @@ impl RvrCheckpointAccessRegistry {
             })
             || (schedule.effect == RVR_CHECKPOINT_EFFECT_BRANCH_RESIDUAL
                 && instruction.words[schedule.effect_operand as usize] >= BabyBear::ORDER_U32)
+            || invalid_deferral_span
         {
             return Err(GpuRvrInputError::InvalidAccessSchedule(format!(
                 "opcode {} has an instruction incompatible with its access schedule",
@@ -767,7 +916,11 @@ impl GpuRvrProgram {
             .collect::<Result<Vec<_>, _>>()?;
         for instruction in &instructions {
             if instruction.words[0] != u32::MAX {
-                registry.validate_instruction(instruction)?;
+                registry.validate_instruction(
+                    instruction,
+                    memory_config.pointer_max_bits,
+                    memory_config.addr_spaces[DEFERRAL_AS as usize].num_cells,
+                )?;
             }
         }
         let opcodes: Vec<u32> = instructions
@@ -938,9 +1091,9 @@ impl GpuRvrProgram {
         let anchors = upload(&anchors, &self.device_ctx)?;
         let residuals = upload(&execution.transcript.residuals, &self.device_ctx)?;
         let error = [0u32].to_device_on(&self.device_ctx)?;
-        let memory_counts = gpu_buffer::<u32>(anchors.len(), &self.device_ctx);
-        memory_counts.fill_zero_on(&self.device_ctx)?;
-        let address_spaces = [RV64_REGISTER_AS, RV64_MEMORY_AS, RV64_IMM_AS];
+        let event_counts = gpu_buffer::<RvrCheckpointEventCount>(anchors.len(), &self.device_ctx);
+        event_counts.fill_zero_on(&self.device_ctx)?;
+        let address_spaces = [RV64_REGISTER_AS, RV64_MEMORY_AS, RV64_IMM_AS, DEFERRAL_AS];
         unsafe {
             rvr_checkpoint_replay::count(
                 self.instructions.view(),
@@ -955,10 +1108,11 @@ impl GpuRvrProgram {
                 opcodes,
                 address_spaces,
                 self.byte_pointer_max_bits,
+                self.cell_pointer_max_bits,
                 execution.from_state.pc,
                 execution.from_state.timestamp,
                 endpoint_kind,
-                &memory_counts,
+                &event_counts,
                 &error,
                 self.device_ctx.stream.as_raw(),
             )?;
@@ -969,14 +1123,23 @@ impl GpuRvrProgram {
                 "checkpoint GPU count replay rejected execution with code {count_error}"
             )));
         }
-        let counts = memory_counts.to_host_on(&self.device_ctx)?;
+        let counts = event_counts.to_host_on(&self.device_ctx)?;
         let mut total_memory = 0u32;
+        let mut total_fields = 0u32;
         let mut offsets = Vec::with_capacity(counts.len());
         for count in counts {
-            offsets.push(total_memory);
-            total_memory = total_memory.checked_add(count).ok_or_else(|| {
+            offsets.push(RvrCheckpointEventCount {
+                memory: total_memory,
+                field: total_fields,
+            });
+            total_memory = total_memory.checked_add(count.memory).ok_or_else(|| {
                 GpuRvrInputError::InvalidTranscript(
                     "checkpoint replay memory-event count exceeds u32".to_string(),
+                )
+            })?;
+            total_fields = total_fields.checked_add(count.field).ok_or_else(|| {
+                GpuRvrInputError::InvalidTranscript(
+                    "checkpoint replay field-event count exceeds u32".to_string(),
                 )
             })?;
         }
@@ -996,6 +1159,7 @@ impl GpuRvrProgram {
         let program_log = gpu_buffer::<PreflightProgramEvent>(program_len, &self.device_ctx);
         let memory_log =
             gpu_buffer::<PreflightMemoryEvent>(total_memory as usize, &self.device_ctx);
+        let field_values = gpu_buffer::<RvrFieldBlock>(total_fields as usize, &self.device_ctx);
         // One transient byte per event is enough to distinguish reads, full
         // writes, and partial block writes. The chronology pass consumes and
         // releases this before opcode trace generation.
@@ -1016,12 +1180,14 @@ impl GpuRvrProgram {
                 opcodes,
                 address_spaces,
                 self.byte_pointer_max_bits,
+                self.cell_pointer_max_bits,
                 execution.from_state.pc,
                 execution.from_state.timestamp,
                 endpoint_kind,
                 program_log.view(),
                 memory_log.view(),
                 write_masks.view(),
+                field_values.view(),
                 &error,
                 self.device_ctx.stream.as_raw(),
             )?;
@@ -1036,11 +1202,8 @@ impl GpuRvrProgram {
         // replay inputs before chronology allocates its sort/scan scratch.
         drop(anchors);
         drop(residuals);
-        drop(memory_counts);
+        drop(event_counts);
         drop(offsets);
-        // Extension access schedules add AS4 values here without widening the
-        // compact U16 memory-event ABI. The base RV64 replay emits none.
-        let field_values = DeviceBuffer::new();
         let (initial_write_log, field_initial_values, memory_index) = build_gpu_memory_chronology(
             &memory_log,
             &write_masks,

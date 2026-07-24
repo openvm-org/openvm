@@ -21,14 +21,19 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 #[cfg(feature = "rvr")]
 use {
     openvm_circuit::arch::{
-        rvr::cuda::{GpuRvrInputError, GpuRvrProgram, GpuRvrReplayPlan, GpuRvrTranscript},
-        GenerationError, VirtualMachine,
+        rvr::cuda::{
+            GpuRvrInputError, GpuRvrProgram, GpuRvrReplayPlan, GpuRvrTranscript,
+            RvrCheckpointAccessRegistry, RvrCheckpointAccessSpan,
+        },
+        rvr::RvrCheckpointPreflightExecution,
+        GenerationError, MemoryConfig, VirtualMachine,
     },
     openvm_circuit_primitives::AnyChip,
-    openvm_cuda_backend::base::DeviceMatrix,
+    openvm_cuda_common::stream::GpuDeviceCtx,
     openvm_deferral_transpiler::DeferralOpcode,
-    openvm_instructions::LocalOpcode,
+    openvm_instructions::{program::Program, riscv::RV64_MEMORY_AS, LocalOpcode},
     openvm_riscv_circuit::Rv64ImRvrGpuTracegen,
+    openvm_stark_backend::p3_field::PrimeField32,
     openvm_stark_backend::prover::{AirProvingContext, ProvingContext},
 };
 
@@ -111,21 +116,71 @@ impl DeferralRvrCoverage {
 
 #[cfg(feature = "rvr")]
 impl<'a> DeferralRvrGpuTracegen<'a> {
+    #[doc(hidden)]
+    pub fn register_checkpoint_access_schedules(
+        registry: &mut RvrCheckpointAccessRegistry,
+    ) -> Result<(), GpuRvrInputError> {
+        registry.register(
+            DeferralOpcode::CALL.global_opcode().as_usize() as u32,
+            // CALL first reads the output and input heap pointers from rd/rs.
+            &[1, 2],
+            (1 << 6) | (1 << 7),
+            4,
+            5,
+            &[
+                RvrCheckpointAccessSpan::read_fixed(RV64_MEMORY_AS, 1, 4),
+                RvrCheckpointAccessSpan::read_deferral_input_accumulator(3),
+                RvrCheckpointAccessSpan::read_deferral_output_accumulator(3),
+                RvrCheckpointAccessSpan::write_fixed_from_residuals(RV64_MEMORY_AS, 0, 5),
+                RvrCheckpointAccessSpan::write_deferral_input_accumulator(3),
+                RvrCheckpointAccessSpan::write_deferral_output_accumulator(3),
+            ],
+        )
+    }
+
+    pub fn upload_checkpoint_program<T: PrimeField32>(
+        program: &Program<T>,
+        memory_config: &MemoryConfig,
+        device_ctx: &GpuDeviceCtx,
+    ) -> Result<GpuRvrProgram, GpuRvrInputError> {
+        let mut registry = RvrCheckpointAccessRegistry::default();
+        Self::register_checkpoint_access_schedules(&mut registry)?;
+        registry.validate_no_native_collisions(Rv64ImRvrGpuTracegen::checkpoint_opcode_bases())?;
+        GpuRvrProgram::upload_with_checkpoint_access_registry(
+            program,
+            memory_config,
+            &registry,
+            device_ctx,
+        )
+    }
+
+    pub fn expand_checkpoint_replay<VB>(
+        vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
+        program: &GpuRvrProgram,
+        execution: &RvrCheckpointPreflightExecution,
+        expected_retired: u32,
+    ) -> Result<(GpuRvrTranscript, GpuRvrReplayPlan), GpuRvrInputError>
+    where
+        VB: VmBuilder<
+            GpuBabyBearPoseidon2Engine,
+            RecordArena = DenseRecordArena,
+            SystemChipInventory = SystemChipInventoryGPU,
+        >,
+    {
+        vm.expand_rvr_checkpoint_replay(
+            program,
+            execution,
+            expected_retired,
+            Rv64ImRvrGpuTracegen::checkpoint_opcode_bases(),
+        )
+    }
+
     pub fn new(
         program: &'a GpuRvrProgram,
         transcript: &'a GpuRvrTranscript,
         replay_plan: &'a GpuRvrReplayPlan,
         max_trace_height: usize,
     ) -> Result<Self, GpuRvrInputError> {
-        if !replay_plan
-            .opcode_range(DeferralOpcode::CALL.global_opcode())
-            .is_empty()
-        {
-            return Err(GpuRvrInputError::InvalidTranscript(
-                "Deferral CALL checkpoint replay requires the Phase-B AS4 event producer"
-                    .to_string(),
-            ));
-        }
         Ok(Self {
             program,
             transcript,
@@ -152,11 +207,16 @@ impl<'a> DeferralRvrGpuTracegen<'a> {
                 )
                 .map(Some);
         }
-        if chip.as_any().is::<DeferralCallChipGpu>() {
+        if let Some(chip) = chip.as_any().downcast_ref::<DeferralCallChipGpu>() {
             DeferralRvrCoverage::claim(&mut self.coverage.pending_call, "Call")?;
-            return Ok(Some(
-                AirProvingContext::simple_no_pis(DeviceMatrix::dummy()),
-            ));
+            return chip
+                .generate_proving_ctx_from_rvr(
+                    self.program,
+                    self.transcript,
+                    self.replay_plan,
+                    self.max_trace_height,
+                )
+                .map(Some);
         }
         if let Some(chip) = chip
             .as_any()
