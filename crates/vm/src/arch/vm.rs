@@ -1441,12 +1441,13 @@ where
         SystemChipInventory = crate::system::cuda::SystemChipInventoryGPU,
     >,
 {
-    /// Generates all system and extension traces from one RVR segment without
-    /// allocating record arenas. The segment's initial memory must be uploaded
-    /// before RVR consumes its host state; continuation coordinators must
-    /// repeat that upload for every segment.
+    /// Low-level RVR trace-generation seam used by a concrete extension
+    /// coordinator. It fences borrowed GPU inputs and validates trace heights,
+    /// but does not know whether the callback visited every executed opcode.
+    /// Callers should expose a coverage-checked extension entry point instead.
+    #[doc(hidden)]
     #[instrument(name = "trace_gen", skip_all)]
-    pub fn generate_proving_ctx_from_rvr(
+    pub fn generate_proving_ctx_from_rvr_unchecked_coverage(
         &mut self,
         program: &crate::arch::rvr::cuda::GpuRvrProgram,
         transcript: &crate::arch::rvr::cuda::GpuRvrTranscript,
@@ -1464,7 +1465,25 @@ where
             transcript,
             replay_plan,
             generate_extension,
-        )?;
+        );
+
+        // Every system and extension kernel above uses raw views borrowed from
+        // `transcript` and `replay_plan`. Synchronize the common stream even
+        // when trace generation failed, so this safe API never returns while
+        // those owners are still in use.
+        let replay_sync = transcript
+            .synchronize()
+            .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()));
+        let ctx = ctx?;
+        replay_sync?;
+        let replay_error = transcript
+            .error_code()
+            .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
+        if replay_error != 0 {
+            return Err(GenerationError::ExtensionTracegen(format!(
+                "RVR GPU trace generation rejected transcript with code {replay_error}"
+            )));
+        }
         self.validate_proving_ctx(ctx)
     }
 }

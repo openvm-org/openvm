@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use openvm_cuda_common::{
-    copy::{MemCopyD2H, MemCopyH2D},
+    copy::{cuda_memcpy_on, MemCopyD2H, MemCopyH2D},
     d_buffer::{DeviceBuffer, DeviceBufferView},
     error::{CudaError, MemCopyError},
     stream::GpuDeviceCtx,
@@ -374,6 +374,12 @@ impl GpuRvrProgram {
         let num_memory = transcript.memory_log.len();
         let num_entries = num_memory + transcript.initial_write_log.len();
         let num_steps = transcript.program_log.len().saturating_sub(1);
+        let num_touched = transcript
+            .memory_log
+            .iter()
+            .map(|event| (event.address_space(), event.pointer))
+            .collect::<std::collections::HashSet<_>>()
+            .len();
         let mut memory_temp = 0usize;
         let mut program_temp = 0usize;
         unsafe {
@@ -396,15 +402,28 @@ impl GpuRvrProgram {
         let memory_sort_stage = 16 * num_entries + memory_temp;
         let memory_scatter_stage =
             16 * num_entries + 32 * num_memory + memory_temp + size_of::<u32>();
-        let program_stage = 32 * num_memory
+        let compact_touched = num_touched < num_memory && num_touched <= num_memory / 2;
+        let memory_compaction_stage = if compact_touched {
+            32 * num_memory + 28 * num_touched
+        } else {
+            32 * num_memory
+        };
+        let retained_touched = if compact_touched {
+            num_touched
+        } else {
+            num_memory
+        };
+        let retained_memory_index = 4 * num_memory + 28 * retained_touched;
+        let program_stage = retained_memory_index
             + 24 * num_steps
             + 8 * self.active_opcodes.len()
             + 4 * self.num_program_rows
             + program_temp;
-        let steady = 32 * num_memory + 8 * num_steps + 4 * self.num_program_rows;
+        let steady = retained_memory_index + 8 * num_steps + 4 * self.num_program_rows;
         Ok((
             memory_sort_stage
                 .max(memory_scatter_stage)
+                .max(memory_compaction_stage)
                 .max(program_stage),
             steady,
         ))
@@ -502,8 +521,8 @@ fn build_gpu_memory_index(
     let memory_predecessors = gpu_buffer::<u32>(memory.len(), device_ctx);
     let touched_flags = gpu_buffer::<u32>(num_entries, device_ctx);
     let touched_positions = gpu_buffer::<u32>(num_entries, device_ctx);
-    let touched_blocks = gpu_buffer::<TouchedBlock<BabyBear>>(memory.len(), device_ctx);
-    let num_touched_blocks = [0u32].to_device_on(device_ctx)?;
+    let touched_blocks_upper_bound = gpu_buffer::<TouchedBlock<BabyBear>>(memory.len(), device_ctx);
+    let num_touched_blocks_device = [0u32].to_device_on(device_ctx)?;
     unsafe {
         rvr_postflight::memory_index_scatter(
             memory.view(),
@@ -513,20 +532,51 @@ fn build_gpu_memory_index(
             &memory_predecessors,
             &touched_flags,
             &touched_positions,
-            touched_blocks.as_mut_raw_ptr(),
-            &num_touched_blocks,
+            touched_blocks_upper_bound.as_mut_raw_ptr(),
+            &num_touched_blocks_device,
             &temp_storage,
             temp_bytes,
             error,
             device_ctx.stream.as_raw(),
         )?;
     }
-    let num_touched_blocks = num_touched_blocks.to_host_on(device_ctx)?[0] as usize;
+    let num_touched_blocks = num_touched_blocks_device.to_host_on(device_ctx)?[0] as usize;
     if num_touched_blocks > memory.len() {
         return Err(GpuRvrInputError::InvalidTranscript(
             "GPU touched-block count exceeds the memory log".to_string(),
         ));
     }
+    // The scatter needs an upper-bound output because the unique count is not
+    // known until its device scan completes. Do not retain that worst-case
+    // allocation while all trace matrices are being generated when the unique
+    // prefix is substantially smaller. Compaction itself temporarily owns both
+    // buffers, so only compact at or below half occupancy: its 32M + 28U live
+    // bytes are then bounded by the preceding scatter's minimum 48M bytes.
+    // At higher occupancy, retain the upper bound and expose only its initialized
+    // prefix rather than creating a larger tracegen peak for a small saving.
+    drop(keys_out);
+    drop(touched_flags);
+    drop(touched_positions);
+    drop(temp_storage);
+    drop(num_touched_blocks_device);
+    let compact_touched =
+        num_touched_blocks < memory.len() && num_touched_blocks <= memory.len() / 2;
+    let touched_blocks = if compact_touched {
+        let compact = gpu_buffer::<TouchedBlock<BabyBear>>(num_touched_blocks, device_ctx);
+        if num_touched_blocks != 0 {
+            unsafe {
+                cuda_memcpy_on::<true, true>(
+                    compact.as_mut_raw_ptr(),
+                    touched_blocks_upper_bound.as_raw_ptr(),
+                    num_touched_blocks * size_of::<TouchedBlock<BabyBear>>(),
+                    device_ctx,
+                )?;
+            }
+        }
+        compact
+    } else {
+        touched_blocks_upper_bound
+    };
     Ok(GpuMemoryIndex {
         predecessors: memory_predecessors,
         touched_blocks,
@@ -602,6 +652,16 @@ impl GpuRvrTranscript {
 
     pub fn error_code(&self) -> Result<u32, MemCopyError> {
         Ok(self.error.to_host_on(&self.device_ctx)?[0])
+    }
+
+    /// Waits for every replay kernel submitted on this transcript's stream.
+    ///
+    /// Safe orchestration code must call this before returning ownership to a
+    /// caller that may release the transcript or replay plan. This fence is
+    /// separate from [`Self::error_code`] so a failed D2H enqueue cannot skip
+    /// synchronization of earlier kernels.
+    pub fn synchronize(&self) -> Result<(), CudaError> {
+        self.device_ctx.stream.synchronize()
     }
 
     pub fn program_log(&self) -> DeviceBufferView {
@@ -691,8 +751,8 @@ impl GpuRvrReplayPlan {
         let steps_in = gpu_buffer::<RvrReplayStep>(num_steps, &program.device_ctx);
         let steps_out = gpu_buffer::<RvrReplayStep>(num_steps, &program.device_ctx);
         let ranges = gpu_buffer::<u32>(2 * program.active_opcodes.len(), &program.device_ctx);
-        let program_frequencies =
-            upload(&vec![0u32; program.num_program_rows], &program.device_ctx)?;
+        let program_frequencies = gpu_buffer::<u32>(program.num_program_rows, &program.device_ctx);
+        program_frequencies.fill_zero_on(&program.device_ctx)?;
         let mut temp_bytes = 0usize;
         unsafe {
             rvr_postflight::program_index_get_temp_bytes(
@@ -936,7 +996,7 @@ mod tests {
         memory: &[PreflightMemoryEvent],
         seeds: &[PreflightInitialWrite],
         config: &MemoryConfig,
-    ) -> (Vec<u32>, Vec<TouchedBlock<BabyBear>>, u32) {
+    ) -> (Vec<u32>, Vec<TouchedBlock<BabyBear>>, usize, u32) {
         let device_ctx = GpuDeviceCtx::for_current_device().unwrap();
         let memory = upload(memory, &device_ctx).unwrap();
         let seeds = upload(seeds, &device_ctx).unwrap();
@@ -961,11 +1021,14 @@ mod tests {
             &device_ctx,
         )
         .unwrap();
+        assert!(index.touched_blocks.len() >= index.num_touched_blocks);
+        let touched_capacity = index.touched_blocks.len();
         let mut touched = index.touched_blocks.to_host_on(&device_ctx).unwrap();
         touched.truncate(index.num_touched_blocks);
         (
             index.predecessors.to_host_on(&device_ctx).unwrap(),
             touched,
+            touched_capacity,
             error.to_host_on(&device_ctx).unwrap()[0],
         )
     }
@@ -1161,7 +1224,7 @@ mod tests {
             cpu.read::<u16, 4>(RV64_MEMORY_AS, 0);
         }
         let expected = cpu.finalize::<BabyBear>();
-        let (_, actual, error) = gpu_memory_index_with_config(&memory, &seeds, &config);
+        let (_, actual, _, error) = gpu_memory_index_with_config(&memory, &seeds, &config);
         assert_eq!(error, 0);
         assert_eq!(actual, expected);
         assert_eq!(
@@ -1182,12 +1245,12 @@ mod tests {
         use openvm_instructions::riscv::RV64_REGISTER_AS;
 
         let config = MemoryConfig::default();
-        let (_, touched, error) = gpu_memory_index_with_config(&[], &[], &config);
+        let (_, touched, _, error) = gpu_memory_index_with_config(&[], &[], &config);
         assert_eq!(error, 0);
         assert!(touched.is_empty());
 
         let pointer = config.addr_spaces[RV64_REGISTER_AS as usize].num_cells as u32 - 4;
-        let (_, touched, error) = gpu_memory_index_with_config(
+        let (_, touched, _, error) = gpu_memory_index_with_config(
             &[event_value(
                 1,
                 RV64_REGISTER_AS,
@@ -1208,13 +1271,44 @@ mod tests {
     }
 
     #[test]
+    fn gpu_touched_block_compaction_never_raises_the_scatter_peak() {
+        use openvm_instructions::riscv::RV64_MEMORY_AS;
+
+        let config = MemoryConfig::default();
+        let at_half = [
+            event(1, RV64_MEMORY_AS, 0, false),
+            event(2, RV64_MEMORY_AS, 0, false),
+            event(3, RV64_MEMORY_AS, 4, false),
+            event(4, RV64_MEMORY_AS, 4, false),
+        ];
+        let (_, touched, capacity, error) = gpu_memory_index_with_config(&at_half, &[], &config);
+        assert_eq!(error, 0);
+        assert_eq!(touched.len(), 2);
+        assert_eq!(capacity, 2, "half-full prefixes should compact exactly");
+
+        let above_half = [
+            event(1, RV64_MEMORY_AS, 0, false),
+            event(2, RV64_MEMORY_AS, 4, false),
+            event(3, RV64_MEMORY_AS, 8, false),
+            event(4, RV64_MEMORY_AS, 8, false),
+        ];
+        let (_, touched, capacity, error) = gpu_memory_index_with_config(&above_half, &[], &config);
+        assert_eq!(error, 0);
+        assert_eq!(touched.len(), 3);
+        assert_eq!(
+            capacity, 4,
+            "high-occupancy prefixes should retain the upper bound"
+        );
+    }
+
+    #[test]
     fn gpu_memory_metadata_fails_closed_for_bad_layout_and_bounds() {
         use openvm_instructions::{riscv::RV64_REGISTER_AS, DEFERRAL_AS};
 
         let config = MemoryConfig::default();
         let assert_rejected =
             |memory: &[PreflightMemoryEvent], seeds: &[PreflightInitialWrite], config| {
-                let (_, _, error) = gpu_memory_index_with_config(memory, seeds, config);
+                let (_, _, _, error) = gpu_memory_index_with_config(memory, seeds, config);
                 assert_ne!(error, 0);
             };
 

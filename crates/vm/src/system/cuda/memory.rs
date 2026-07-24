@@ -176,6 +176,28 @@ impl MemoryInventoryGPU {
                 raw_mem.len(),
                 runs.len()
             );
+            // Sparse H2D zero-fills every unmarked page, whereas the CPU backend keeps the full
+            // host image. Fail at this boundary if a writer mutated memory without marking its
+            // page; otherwise the divergence surfaces much later as a memory-bus imbalance.
+            // The scan is linear in the host address-space size, so keep it out of release builds.
+            #[cfg(any(debug_assertions, feature = "stark-debug"))]
+            {
+                let mut cursor = 0usize;
+                let sentinel = (raw_mem.len(), raw_mem.len());
+                for &(start, end) in runs.iter().chain(std::iter::once(&sentinel)) {
+                    if let Some(position) =
+                        raw_mem[cursor..start].iter().position(|&byte| byte != 0)
+                    {
+                        let offset = cursor + position;
+                        panic!(
+                            "address space {addr_sp}: nonzero byte at offset {offset} (page {}) \
+                             is outside touched_pages; sparse H2D would zero it on device",
+                            offset / crate::system::memory::online::PAGE_SIZE,
+                        );
+                    }
+                    cursor = end;
+                }
+            }
             self.initial_memory.push(Arc::new(if raw_mem.is_empty() {
                 DeviceBuffer::new()
             } else {
@@ -964,5 +986,21 @@ mod tests {
             &gpu_merkle.common_main,
             &device_ctx,
         );
+    }
+
+    #[cfg(any(debug_assertions, feature = "stark-debug"))]
+    #[test]
+    #[should_panic(expected = "is outside touched_pages; sparse H2D would zero it on device")]
+    fn test_set_initial_memory_rejects_nonzero_unmarked_page() {
+        let (mem_config, _) = single_block_setup();
+        let mut memory = GuestMemory::new(AddressMap::from_mem_config(&mem_config));
+        unsafe {
+            memory.write_bytes::<MEMORY_BLOCK_BYTES>(RV64_MEMORY_AS, 0, [1, 2, 3, 4, 5, 6, 7, 8]);
+        }
+        assert!(memory.memory.touched_pages[RV64_MEMORY_AS as usize]
+            .touched_byte_ranges(MEMORY_BLOCK_BYTES)
+            .is_empty());
+
+        run_inventory(&mem_config, &memory.memory, Vec::new());
     }
 }

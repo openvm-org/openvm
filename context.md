@@ -257,6 +257,59 @@ convenient and decide from generated code size, native instruction count, append
 bandwidth, and end-to-end benchmarks. The semantic design must not depend on Rust
 collection abstractions.
 
+### Performance is an acceptance criterion
+
+The point of the migration is to make both preflight execution and trace
+generation faster. A functionally correct RVR executor is not useful if it merely
+replaces the interpreter with something of similar speed. Microbenchmarks are
+diagnostic only; the authoritative host benchmark is the real segmented Reth
+workload in the sibling `rvr-openvm` harness.
+
+The working expectation is that RVR preflight should be several times faster than
+interpreter preflight and should land near twice metered execution, not an order of
+magnitude slower. The feedback loop must measure pure, metered, interpreter
+preflight, and RVR preflight from equivalent states; check endpoints, output, final
+state, and segment boundaries; and report transcript bytes, compile wall time,
+compiler RSS, generated source/object size, host RSS, and warm execution
+statistics. Compile-time specialization must not recreate PR #3020's roughly
+20-minute build behavior when ordinary metered compilation is around five minutes.
+
+The first full Reth result rejected the all-access transcript: 46.854 seconds and
+189.536 GB of output for 3.051 billion instructions, versus 2.628 seconds metered.
+A disposable write-only/per-PC experiment preserved every timestamp and endpoint
+but still took 28.915 seconds and wrote 89.960 GB on the hot path. Of its 2.968
+billion writes, 86.98% were register writes. Future executor work must therefore
+remove per-PC logging, avoid raw seed candidates, and replace general 20-byte
+events with only the narrow values required for parallel replay; “omit reads” by
+itself is not an acceptable design.
+
+### PR #3020 is a reference, not the architecture
+
+OpenVM PR #3020 should be audited exhaustively for reusable implementation ideas
+and code so this effort does not rediscover solved problems. Adopt an idea only
+when it remains clean under the minimal transcript model. In particular, do not
+import per-chip records under new names, `RecordArena` geometry, per-AIR lanes,
+schema headers, provider flags, background arena cleaners, speculative pools, or
+prewarm paths that retain large capacities. Clean independent ideas such as
+compiled-executor reuse, block-local cursors, static program upload, device-side
+chronology reconstruction, exact-lifetime device buffers, and fail-closed sparse
+memory checks should be reused and improved where measured.
+
+### GPU peak memory must not move into tracegen
+
+The existing proving/GKR phase normally sets the device-memory peak, with an
+operational ceiling around 15 GB so multiple proofs can be packed onto one GPU.
+RVR logs, H2D copies, sort/scan scratch, replay indexes, compaction copies, and
+trace outputs must not create a new larger tracegen peak or remain live into
+proving and invalidate the metered packing model. A compaction is acceptable only
+when its old-plus-new transient allocation is bounded by an already-paid phase
+peak; otherwise retain the larger allocation and expose an initialized prefix.
+Measure current, local peak, and reserved device bytes by phase on the real proof
+workload. After the synchronized final replay-error check, release the segment
+transcript and replay indexes before proving; keep only the immutable static
+program. Do not overlap the next segment's device upload/indexing with the current
+proof until the memory budget proves that safe.
+
 ### Preserve semantic reasoning while simplifying storage
 
 Minimizing the physical log does not justify deleting useful semantic cases from
