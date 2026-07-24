@@ -457,13 +457,16 @@ __global__ void update_merkle_layer(
     uintptr_t *d_subtrees,
     Fp *const merkle_trace,
     size_t const trace_height,
-    // Inclusive prefix sum of per-parent dirtiness for this layer; a dirty parent's
-    // final row goes at `num_parents + prefix[idx] - 1` within the layer's region.
+    // Inclusive prefix sum of per-parent dirtiness for this layer, used to place each
+    // node's rows in the CPU-matching order (see the slot computation below).
     uint32_t const *parent_dirty_prefix,
     // Set only for the topmost layer when it holds the true root (single-subtree
     // configs): the root's final row must exist even if it is clean, since the AIR pins
     // the first two rows to the root public values.
     bool const force_final,
+    // Total rows this layer occupies (`num_parents + num_dirty`, or `num_parents + 1`
+    // when `force_final`). Needed to mirror row placement into the CPU order.
+    uint32_t const layer_rows,
     Fp *poseidon2_buffer,
     uint32_t *poseidon2_buffer_idx,
     size_t poseidon2_capacity
@@ -519,11 +522,17 @@ __global__ void update_merkle_layer(
     bool const node_dirty = left_dirty || right_dirty;
     bool const emits_final = node_dirty || force_final;
 
+    // Match the CPU tracegen row order. force_final is for roots, so it is hardcoded
+    uint32_t const rank = parent_dirty_prefix[idx] - (node_dirty ? 1 : 0);
+    uint32_t const s = idx + rank;
+    uint32_t const init_slot = force_final ? 0 : (layer_rows - 1 - s);
+    uint32_t const final_slot = force_final ? 1 : (layer_rows - 2 - s);
+
     digest_t old_parent;
     { // initial (old values) trace row -- one per touched node
         COPY_DIGEST(cells, &old_left_digest);
         COPY_DIGEST(cells + CELLS_OUT, &old_right_digest);
-        RowSlice row(merkle_trace + idx, trace_height);
+        RowSlice row(merkle_trace + init_slot, trace_height);
         fill_merkle_trace_row(
             row,
             false,
@@ -572,10 +581,7 @@ __global__ void update_merkle_layer(
             COPY_DIGEST(cells + CELLS_OUT, &old_right_digest);
         }
         if (emits_final) {
-            // Dirty finals are packed after the layer's initial rows in prefix order; a
-            // clean forced root (rank 0 in a single-node layer) lands there trivially.
-            uint32_t const rank = parent_dirty_prefix[idx] - (node_dirty ? 1 : 0);
-            RowSlice row(merkle_trace + num_parents + rank, trace_height);
+            RowSlice row(merkle_trace + final_slot, trace_height);
             fill_merkle_trace_row(
                 row,
                 true,
@@ -659,9 +665,13 @@ __global__ void update_to_root(
         bool const emits_final = node_dirty || out_idx == 0;
 
         merkle_trace_offset -= emits_final ? 2 : 1;
+        uint32_t const init_off =
+            (out_idx == 0 || !emits_final) ? merkle_trace_offset : merkle_trace_offset + 1;
+        uint32_t const final_off =
+            (out_idx == 0) ? merkle_trace_offset + 1 : merkle_trace_offset;
         digest_t old_parent;
         {
-            RowSlice row(merkle_trace + merkle_trace_offset, trace_height);
+            RowSlice row(merkle_trace + init_off, trace_height);
             COPY_DIGEST(cells, &out[2 * out_idx + 1]);
             COPY_DIGEST(cells + CELLS_OUT, &out[2 * out_idx + 2]);
             fill_merkle_trace_row(
@@ -697,7 +707,7 @@ __global__ void update_to_root(
         }
         layer[layer_ids[surely_surviving_child]].label = out_idx;
         if (emits_final) {
-            RowSlice row(merkle_trace + merkle_trace_offset + 1, trace_height);
+            RowSlice row(merkle_trace + final_off, trace_height);
             fill_merkle_trace_row(
                 row,
                 true,
@@ -981,6 +991,7 @@ extern "C" int _update_merkle_tree(
             trace_height,
             dirty_buf,
             force_final,
+            layer_rows,
             d_poseidon2_raw_buffer,
             d_poseidon2_buffer_idx,
             poseidon2_record_capacity
