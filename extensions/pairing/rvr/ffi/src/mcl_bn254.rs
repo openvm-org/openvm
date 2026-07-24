@@ -126,7 +126,7 @@ mod tests {
     fn matches_production_exponents() {
         let mut rng = StdRng::seed_from_u64(0x4d43_4c42_4e32_3534);
         let values = std::iter::once(test_value())
-            .chain((0..4).map(|_| Fq12::random(&mut rng)))
+            .chain((0..16).map(|_| Fq12::random(&mut rng)))
             .collect::<Vec<_>>();
         for value in values {
             for digits in final_exp_hint_naf_exponents() {
