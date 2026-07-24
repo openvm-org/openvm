@@ -1,6 +1,6 @@
-//! Serialization of a finalized [`FieldExpr`] into a flat "device program" that a GPU
-//! kernel can interpret to perform trace generation (one thread per row), plus a CPU
-//! reference interpreter that defines the exact semantics the CUDA kernel must match.
+//! Compilation of a finalized [`FieldExpr`] into trace-generation IR, encoding of that
+//! IR for the GPU interpreter, and a CPU reference interpreter that defines the exact
+//! semantics the CUDA kernel must match.
 //!
 //! Layout of the work per row (mirrors `FieldExpressionFiller::fill_trace_row`):
 //! 1. Decode record: opcode byte + input limbs. Map opcode -> flags.
@@ -19,32 +19,46 @@ use num_traits::{One, Zero};
 
 use crate::{ExprBuilder, FieldExpr, SymbolicExpr};
 
-/// Value-phase opcodes (field arithmetic over slots of K u32 limbs, Montgomery form).
-pub const VOP_LOAD_INPUT: u32 = 0; // dst <- mont(input[a])
-pub const VOP_CONST: u32 = 1; // dst <- mont_const[payload a]
-pub const VOP_ADD: u32 = 2; // dst <- a + b
-pub const VOP_SUB: u32 = 3; // dst <- a - b
-pub const VOP_MUL: u32 = 4; // dst <- a * b
-pub const VOP_DIV: u32 = 5; // dst <- a * b^(p-2)
-pub const VOP_INTADD: u32 = 6; // dst <- a + mont_imm[payload b]
-pub const VOP_INTMUL: u32 = 7; // dst <- a * mont_imm[payload b]
-pub const VOP_SELECT: u32 = 8; // dst <- flag ? a : b
-pub const VOP_SAVE_VAR: u32 = 9; // var[a] <- canonical(slot b)
+mod abi;
+mod encoding;
+use abi::*;
 
-/// Limb-phase opcodes (signed limb vectors in an i32 scratch arena).
-pub const LOP_INPUT: u32 = 0; // scratch[dst..dst+n] <- input limbs (unsigned)
-pub const LOP_VAR: u32 = 1; // scratch[dst..dst+n] <- var canonical limbs
-pub const LOP_CONST: u32 = 2; // scratch[dst..dst+n] <- const limbs (payload)
-pub const LOP_ADD: u32 = 3;
-pub const LOP_SUB: u32 = 4;
-pub const LOP_MUL: u32 = 5; // convolution, dst_len = a_len + b_len - 1
-pub const LOP_INTADD: u32 = 6; // limb 0 += imm
-pub const LOP_INTMUL: u32 = 7; // all limbs *= imm
-pub const LOP_SELECT: u32 = 8; // flag ? a : b, zero-padded to dst_len
+/// Value-phase operations over `K`-word Montgomery field elements.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[repr(u32)]
+pub enum ValueOpcode {
+    #[default]
+    LoadInput = VOP_LOAD_INPUT,
+    Constant = VOP_CONST,
+    Add = VOP_ADD,
+    Sub = VOP_SUB,
+    Mul = VOP_MUL,
+    Div = VOP_DIV,
+    IntAdd = VOP_INTADD,
+    IntMul = VOP_INTMUL,
+    Select = VOP_SELECT,
+    SaveVar = VOP_SAVE_VAR,
+}
+
+/// Limb-phase operations over signed vectors in the scratch arena.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[repr(u32)]
+pub enum LimbOpcode {
+    #[default]
+    Input = LOP_INPUT,
+    Var = LOP_VAR,
+    Constant = LOP_CONST,
+    Add = LOP_ADD,
+    Sub = LOP_SUB,
+    Mul = LOP_MUL,
+    IntAdd = LOP_INTADD,
+    IntMul = LOP_INTMUL,
+    Select = LOP_SELECT,
+}
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct ValueOp {
-    pub opcode: u32,
+    pub opcode: ValueOpcode,
     pub flag: u32,
     pub dst: u32,
     pub a: u32,
@@ -53,7 +67,7 @@ pub struct ValueOp {
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct LimbOp {
-    pub opcode: u32,
+    pub opcode: LimbOpcode,
     pub flag: u32,
     pub dst_off: u32,
     pub dst_len: u32,
@@ -79,45 +93,56 @@ pub struct ConstraintMeta {
     pub carry_bits: u32,
 }
 
-/// Host-side representation. `to_blob` flattens it for the device.
+/// Validated host-side trace-generation IR. [`Self::encode`] flattens it for CUDA.
 #[derive(Clone, Debug)]
-pub struct DeviceFieldExprProgram {
-    pub num_limbs: usize,
-    pub limb_bits: usize,
+pub struct TracegenIr {
+    num_limbs: usize,
+    limb_bits: usize,
     /// K: number of u32 limbs per field element.
-    pub k: usize,
-    pub num_input: usize,
-    pub num_vars: usize,
-    pub num_flags: usize,
-    pub needs_setup: bool,
+    k: usize,
+    num_input: usize,
+    num_vars: usize,
+    num_flags: usize,
+    needs_setup: bool,
     /// Trace sub-row width (must equal `BaseAir::width(&expr)`).
-    pub width: usize,
+    width: usize,
 
-    pub value_ops: Vec<ValueOp>,
-    pub num_value_slots: usize,
-    pub limb_ops: Vec<LimbOp>,
-    pub scratch_len: usize,
-    pub constraints: Vec<ConstraintMeta>,
+    value_ops: Vec<ValueOp>,
+    num_value_slots: usize,
+    limb_ops: Vec<LimbOp>,
+    scratch_len: usize,
+    constraints: Vec<ConstraintMeta>,
 
     // Field constants (u32 little-endian limbs)
-    pub p_u32: Vec<u32>,
-    pub mprime: u32,
-    pub r2_u32: Vec<u32>,
-    pub pm2_u32: Vec<u32>,
+    p_u32: Vec<u32>,
+    mprime: u32,
+    r2_u32: Vec<u32>,
+    pm2_u32: Vec<u32>,
     /// p^{-1} mod 2^(32*2K), 2K limbs (for exact division).
-    pub pinv_u32: Vec<u32>,
+    pinv_u32: Vec<u32>,
     /// Prime as `ceil(p.bits()/limb_bits)` canonical limbs (matches `prime_overflow`).
-    pub p8: Vec<i32>,
+    p8: Vec<i32>,
 
     /// Montgomery-form payload for VOP_CONST / VOP_INTADD / VOP_INTMUL (K limbs each).
-    pub mont_payload: Vec<u32>,
+    mont_payload: Vec<u32>,
     /// Limb payload for LOP_CONST (concatenated, offsets stored in op.b_off).
-    pub const_limbs_payload: Vec<i32>,
+    const_limbs_payload: Vec<i32>,
 
     /// Opcode -> flags mapping (from FieldExpressionFiller): position of the record's
     /// local opcode in `local_opcode_idx`; if < opcode_flag_idx.len(), that flag is set.
-    pub local_opcode_idx: Vec<usize>,
-    pub opcode_flag_idx: Vec<usize>,
+    local_opcode_idx: Vec<usize>,
+    opcode_flag_idx: Vec<usize>,
+}
+
+impl TracegenIr {
+    pub fn width(&self) -> usize {
+        self.width
+    }
+
+    #[cfg(feature = "cuda")]
+    pub(crate) fn aux_words(&self) -> usize {
+        (self.num_value_slots + self.num_vars) * self.k + self.scratch_len + 4 * self.k
+    }
 }
 
 fn biguint_to_u32s(x: &BigUint, k: usize) -> Vec<u32> {
@@ -127,7 +152,7 @@ fn biguint_to_u32s(x: &BigUint, k: usize) -> Vec<u32> {
     v
 }
 
-struct Serializer<'a> {
+struct TracegenCompiler<'a> {
     builder: &'a ExprBuilder,
     k: usize,
     value_ops: Vec<ValueOp>,
@@ -139,7 +164,7 @@ struct Serializer<'a> {
     r: BigUint, // 2^(32K) mod p
 }
 
-impl<'a> Serializer<'a> {
+impl<'a> TracegenCompiler<'a> {
     fn mont(&self, x: &BigUint) -> Vec<u32> {
         biguint_to_u32s(&((x * &self.r) % &self.builder.prime), self.k)
     }
@@ -176,7 +201,7 @@ impl<'a> Serializer<'a> {
                 let payload = self.push_mont_payload(&val);
                 let dst = alloc(self);
                 self.value_ops.push(ValueOp {
-                    opcode: VOP_CONST,
+                    opcode: ValueOpcode::Constant,
                     dst,
                     a: payload,
                     ..Default::default()
@@ -190,10 +215,10 @@ impl<'a> Serializer<'a> {
                 let a = self.emit_value(l);
                 let b = self.emit_value(r2);
                 let opcode = match node {
-                    SymbolicExpr::Add(..) => VOP_ADD,
-                    SymbolicExpr::Sub(..) => VOP_SUB,
-                    SymbolicExpr::Mul(..) => VOP_MUL,
-                    _ => VOP_DIV,
+                    SymbolicExpr::Add(..) => ValueOpcode::Add,
+                    SymbolicExpr::Sub(..) => ValueOpcode::Sub,
+                    SymbolicExpr::Mul(..) => ValueOpcode::Mul,
+                    _ => ValueOpcode::Div,
                 };
                 let dst = alloc(self);
                 self.value_ops.push(ValueOp {
@@ -210,9 +235,9 @@ impl<'a> Serializer<'a> {
                 let imm = self.imm_to_field(*s);
                 let payload = self.push_mont_payload(&imm);
                 let opcode = if matches!(node, SymbolicExpr::IntAdd(..)) {
-                    VOP_INTADD
+                    ValueOpcode::IntAdd
                 } else {
-                    VOP_INTMUL
+                    ValueOpcode::IntMul
                 };
                 let dst = alloc(self);
                 self.value_ops.push(ValueOp {
@@ -229,7 +254,7 @@ impl<'a> Serializer<'a> {
                 let b = self.emit_value(r2);
                 let dst = alloc(self);
                 self.value_ops.push(ValueOp {
-                    opcode: VOP_SELECT,
+                    opcode: ValueOpcode::Select,
                     flag: *flag as u32,
                     dst,
                     a,
@@ -252,7 +277,7 @@ impl<'a> Serializer<'a> {
             SymbolicExpr::Input(i) => {
                 let off = alloc(self, num_limbs as u32);
                 self.limb_ops.push(LimbOp {
-                    opcode: LOP_INPUT,
+                    opcode: LimbOpcode::Input,
                     dst_off: off,
                     dst_len: num_limbs as u32,
                     a_off: *i as u32,
@@ -263,7 +288,7 @@ impl<'a> Serializer<'a> {
             SymbolicExpr::Var(i) => {
                 let off = alloc(self, num_limbs as u32);
                 self.limb_ops.push(LimbOp {
-                    opcode: LOP_VAR,
+                    opcode: LimbOpcode::Var,
                     dst_off: off,
                     dst_len: num_limbs as u32,
                     a_off: *i as u32,
@@ -279,7 +304,7 @@ impl<'a> Serializer<'a> {
                     .extend(limbs.iter().map(|&x| x as i32));
                 let off = alloc(self, *nl as u32);
                 self.limb_ops.push(LimbOp {
-                    opcode: LOP_CONST,
+                    opcode: LimbOpcode::Constant,
                     dst_off: off,
                     dst_len: *nl as u32,
                     a_off: payload,
@@ -294,9 +319,9 @@ impl<'a> Serializer<'a> {
                 let off = alloc(self, len);
                 self.limb_ops.push(LimbOp {
                     opcode: if matches!(node, SymbolicExpr::Add(..)) {
-                        LOP_ADD
+                        LimbOpcode::Add
                     } else {
-                        LOP_SUB
+                        LimbOpcode::Sub
                     },
                     dst_off: off,
                     dst_len: len,
@@ -314,7 +339,7 @@ impl<'a> Serializer<'a> {
                 let len = al + bl - 1;
                 let off = alloc(self, len);
                 self.limb_ops.push(LimbOp {
-                    opcode: LOP_MUL,
+                    opcode: LimbOpcode::Mul,
                     dst_off: off,
                     dst_len: len,
                     a_off: ao,
@@ -330,9 +355,9 @@ impl<'a> Serializer<'a> {
                 let off = alloc(self, al);
                 self.limb_ops.push(LimbOp {
                     opcode: if matches!(node, SymbolicExpr::IntAdd(..)) {
-                        LOP_INTADD
+                        LimbOpcode::IntAdd
                     } else {
-                        LOP_INTMUL
+                        LimbOpcode::IntMul
                     },
                     dst_off: off,
                     dst_len: al,
@@ -349,7 +374,7 @@ impl<'a> Serializer<'a> {
                 let len = al.max(bl);
                 let off = alloc(self, len);
                 self.limb_ops.push(LimbOp {
-                    opcode: LOP_SELECT,
+                    opcode: LimbOpcode::Select,
                     flag: *flag as u32,
                     dst_off: off,
                     dst_len: len,
@@ -366,18 +391,91 @@ impl<'a> Serializer<'a> {
     }
 }
 
-pub fn serialize_field_expr(
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TracegenCompileError(String);
+
+impl std::fmt::Display for TracegenCompileError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for TracegenCompileError {}
+
+fn require_device_capabilities(
+    expr: &FieldExpr,
+    local_opcode_idx: &[usize],
+    opcode_flag_idx: &[usize],
+    width: usize,
+) -> Result<(), TracegenCompileError> {
+    let b = expr.program().builder();
+    let k = (b.num_limbs * b.limb_bits).div_ceil(32);
+    let reject = |message: String| Err(TracegenCompileError(message));
+
+    if !b.is_finalized() {
+        return reject("tracegen IR requires a finalized FieldExpr".to_owned());
+    }
+    if b.limb_bits != 8 {
+        return reject(format!(
+            "CUDA tracegen requires 8-bit limbs, got {}",
+            b.limb_bits
+        ));
+    }
+    if k > TRACEGEN_MAX_K as usize {
+        return reject(format!(
+            "field uses {k} u32 words; CUDA tracegen supports at most {TRACEGEN_MAX_K}"
+        ));
+    }
+    if b.num_flags > TRACEGEN_MAX_FLAGS as usize {
+        return reject(format!(
+            "expression uses {} flags; CUDA tracegen supports at most {TRACEGEN_MAX_FLAGS}",
+            b.num_flags
+        ));
+    }
+    if let Some(&q_limbs) = b
+        .q_limbs
+        .iter()
+        .find(|&&q| q > TRACEGEN_MAX_Q_LIMBS as usize)
+    {
+        return reject(format!(
+            "constraint uses {q_limbs} quotient limbs; CUDA tracegen supports at most \
+             {TRACEGEN_MAX_Q_LIMBS}"
+        ));
+    }
+    if width != expr.program().width() {
+        return reject(format!(
+            "trace width {width} does not match FieldExpr width {}",
+            expr.program().width()
+        ));
+    }
+    if local_opcode_idx
+        .iter()
+        .any(|&opcode| opcode > u8::MAX as usize)
+    {
+        return reject("local opcode does not fit in the record's opcode byte".to_owned());
+    }
+    if let Some(&flag) = opcode_flag_idx.iter().find(|&&flag| flag >= b.num_flags) {
+        return reject(format!(
+            "opcode table references flag {flag}, but expression has {} flags",
+            b.num_flags
+        ));
+    }
+    Ok(())
+}
+
+/// Compiles a finalized expression into trace-generation IR validated for the CUDA interpreter.
+pub fn compile_tracegen_ir(
     expr: &FieldExpr,
     local_opcode_idx: Vec<usize>,
     opcode_flag_idx: Vec<usize>,
     width: usize,
-) -> DeviceFieldExprProgram {
+) -> Result<TracegenIr, TracegenCompileError> {
+    require_device_capabilities(expr, &local_opcode_idx, &opcode_flag_idx, width)?;
     let b = expr.program().builder();
-    assert!(b.is_finalized());
     let k = (b.num_limbs * b.limb_bits).div_ceil(32);
     let r = (BigUint::one() << (32 * k)) % &b.prime;
 
-    let mut ser = Serializer {
+    let mut ser = TracegenCompiler {
         builder: b,
         k,
         value_ops: vec![],
@@ -392,7 +490,7 @@ pub fn serialize_field_expr(
     // Load inputs once into their preassigned slots.
     for i in 0..b.num_input {
         ser.value_ops.push(ValueOp {
-            opcode: VOP_LOAD_INPUT,
+            opcode: ValueOpcode::LoadInput,
             dst: i as u32,
             a: i as u32,
             ..Default::default()
@@ -402,7 +500,7 @@ pub fn serialize_field_expr(
     for (i, compute) in b.computes.iter().enumerate() {
         let src = ser.emit_value(compute);
         ser.value_ops.push(ValueOp {
-            opcode: VOP_SAVE_VAR,
+            opcode: ValueOpcode::SaveVar,
             dst: (b.num_input + i) as u32,
             a: i as u32,
             b: src,
@@ -435,10 +533,14 @@ pub fn serialize_field_expr(
     let prime_overflow = OverflowInt::<isize>::from_biguint(&b.prime, b.limb_bits, None);
 
     let mut constraints = vec![];
+    let mut scratch_len = 0;
     for (i, constraint) in b.constraints.iter().enumerate() {
+        // Constraint tapes execute sequentially, so they can share the same scratch arena.
+        ser.scratch_top = 0;
         let tape_start = ser.limb_ops.len();
         let (result_off, result_len) = ser.emit_limb(constraint);
         let tape_len = ser.limb_ops.len() - tape_start;
+        scratch_len = scratch_len.max(ser.scratch_top as usize);
 
         // Bound propagation only (limb values are zeros; bounds are data independent).
         // NOTE: for Select nodes the two sides must have identical static bounds, which
@@ -487,7 +589,7 @@ pub fn serialize_field_expr(
     pinv_u32.resize(2 * k, 0);
     let p8: Vec<i32> = b.prime_limbs.iter().map(|&x| x as i32).collect();
 
-    DeviceFieldExprProgram {
+    Ok(TracegenIr {
         num_limbs: b.num_limbs,
         limb_bits: b.limb_bits,
         k,
@@ -499,7 +601,7 @@ pub fn serialize_field_expr(
         num_value_slots: ser.next_slot,
         value_ops: ser.value_ops,
         limb_ops: ser.limb_ops,
-        scratch_len: ser.scratch_top as usize,
+        scratch_len,
         constraints,
         p_u32,
         mprime,
@@ -511,91 +613,7 @@ pub fn serialize_field_expr(
         const_limbs_payload: ser.const_limbs_payload,
         local_opcode_idx,
         opcode_flag_idx,
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Flat blob encoding (shared with the CUDA kernel).
-// Header (u32 words):
-//  0: num_limbs   1: limb_bits  2: k          3: num_input
-//  4: num_vars    5: num_flags  6: needs_setup 7: width
-//  8: num_value_slots  9: n_value_ops  10: n_limb_ops  11: n_constraints
-//  12: scratch_len 13: p8_len  14: n_local_opcodes  15: n_opcode_flags
-//  16..: section offsets (in u32 words from blob start):
-//  16: value_ops  17: limb_ops  18: constraint_meta  19: p_u32  20: r2  21: pm2
-//  22: pinv  23: p8  24: mont_payload  25: const_limbs  26: opcode_tables  27: mprime
-// ---------------------------------------------------------------------------
-impl DeviceFieldExprProgram {
-    pub fn to_blob(&self) -> Vec<u32> {
-        let mut blob = vec![0u32; 28];
-        blob[0] = self.num_limbs as u32;
-        blob[1] = self.limb_bits as u32;
-        blob[2] = self.k as u32;
-        blob[3] = self.num_input as u32;
-        blob[4] = self.num_vars as u32;
-        blob[5] = self.num_flags as u32;
-        blob[6] = self.needs_setup as u32;
-        blob[7] = self.width as u32;
-        blob[8] = self.num_value_slots as u32;
-        blob[9] = self.value_ops.len() as u32;
-        blob[10] = self.limb_ops.len() as u32;
-        blob[11] = self.constraints.len() as u32;
-        blob[12] = self.scratch_len as u32;
-        blob[13] = self.p8.len() as u32;
-        blob[14] = self.local_opcode_idx.len() as u32;
-        blob[15] = self.opcode_flag_idx.len() as u32;
-
-        blob[16] = blob.len() as u32;
-        for op in &self.value_ops {
-            blob.extend([op.opcode, op.flag, op.dst, op.a, op.b]);
-        }
-        blob[17] = blob.len() as u32;
-        for op in &self.limb_ops {
-            blob.extend([
-                op.opcode,
-                op.flag,
-                op.dst_off,
-                op.dst_len,
-                op.a_off,
-                op.a_len,
-                op.b_off,
-                op.b_len,
-                op.imm as u32,
-            ]);
-        }
-        blob[18] = blob.len() as u32;
-        for c in &self.constraints {
-            blob.extend([
-                c.tape_start as u32,
-                c.tape_len as u32,
-                c.result_off,
-                c.result_len,
-                c.q_limbs as u32,
-                c.carry_limbs as u32,
-                c.carry_min_abs,
-                c.carry_bits,
-            ]);
-        }
-        blob[19] = blob.len() as u32;
-        blob.extend(&self.p_u32);
-        blob[20] = blob.len() as u32;
-        blob.extend(&self.r2_u32);
-        blob[21] = blob.len() as u32;
-        blob.extend(&self.pm2_u32);
-        blob[22] = blob.len() as u32;
-        blob.extend(&self.pinv_u32);
-        blob[23] = blob.len() as u32;
-        blob.extend(self.p8.iter().map(|&x| x as u32));
-        blob[24] = blob.len() as u32;
-        blob.extend(&self.mont_payload);
-        blob[25] = blob.len() as u32;
-        blob.extend(self.const_limbs_payload.iter().map(|&x| x as u32));
-        blob[26] = blob.len() as u32;
-        blob.extend(self.local_opcode_idx.iter().map(|&x| x as u32));
-        blob.extend(self.opcode_flag_idx.iter().map(|&x| x as u32));
-        blob[27] = self.mprime;
-        blob
-    }
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -610,7 +628,7 @@ fn f_of_i64(v: i64) -> u32 {
 }
 
 pub struct ReferenceInterpreter<'a> {
-    pub prog: &'a DeviceFieldExprProgram,
+    pub prog: &'a TracegenIr,
 }
 
 impl<'a> ReferenceInterpreter<'a> {
@@ -750,7 +768,7 @@ impl<'a> ReferenceInterpreter<'a> {
                 prog.mont_payload[idx as usize * k..(idx as usize + 1) * k].to_vec()
             };
             match op.opcode {
-                VOP_LOAD_INPUT => {
+                ValueOpcode::LoadInput => {
                     let mut canon = vec![0u32; k];
                     let base = op.a as usize * nl;
                     for (i, &byte) in input_limbs[base..base + nl].iter().enumerate() {
@@ -758,42 +776,41 @@ impl<'a> ReferenceInterpreter<'a> {
                     }
                     slots[op.dst as usize] = self.mont_mul(&canon, &prog.r2_u32);
                 }
-                VOP_CONST => slots[op.dst as usize] = payload(op.a),
-                VOP_ADD => {
+                ValueOpcode::Constant => slots[op.dst as usize] = payload(op.a),
+                ValueOpcode::Add => {
                     slots[op.dst as usize] =
                         self.add_mod(&slots[op.a as usize], &slots[op.b as usize])
                 }
-                VOP_SUB => {
+                ValueOpcode::Sub => {
                     slots[op.dst as usize] =
                         self.sub_mod(&slots[op.a as usize], &slots[op.b as usize])
                 }
-                VOP_MUL => {
+                ValueOpcode::Mul => {
                     slots[op.dst as usize] =
                         self.mont_mul(&slots[op.a as usize], &slots[op.b as usize])
                 }
-                VOP_DIV => {
+                ValueOpcode::Div => {
                     let inv = self.mont_inv(&slots[op.b as usize]);
                     slots[op.dst as usize] = self.mont_mul(&slots[op.a as usize], &inv);
                 }
-                VOP_INTADD => {
+                ValueOpcode::IntAdd => {
                     slots[op.dst as usize] = self.add_mod(&slots[op.a as usize], &payload(op.b))
                 }
-                VOP_INTMUL => {
+                ValueOpcode::IntMul => {
                     slots[op.dst as usize] = self.mont_mul(&slots[op.a as usize], &payload(op.b))
                 }
-                VOP_SELECT => {
+                ValueOpcode::Select => {
                     slots[op.dst as usize] = if flags[op.flag as usize] {
                         slots[op.a as usize].clone()
                     } else {
                         slots[op.b as usize].clone()
                     }
                 }
-                VOP_SAVE_VAR => {
+                ValueOpcode::SaveVar => {
                     var_canon[op.a as usize] = self.mont_mul(&slots[op.b as usize], &one);
                     // Var slot keeps the Montgomery form for later computes.
                     slots[op.dst as usize] = slots[op.b as usize].clone();
                 }
-                _ => unreachable!(),
             }
         }
 
@@ -813,23 +830,23 @@ impl<'a> ReferenceInterpreter<'a> {
             for op in &prog.limb_ops[c.tape_start..c.tape_start + c.tape_len] {
                 let (d, dl) = (op.dst_off as usize, op.dst_len as usize);
                 match op.opcode {
-                    LOP_INPUT => {
+                    LimbOpcode::Input => {
                         let base = op.a_off as usize * nl;
                         for i in 0..dl {
                             scratch[d + i] = input_limbs[base + i] as i64;
                         }
                     }
-                    LOP_VAR => {
+                    LimbOpcode::Var => {
                         for i in 0..dl {
                             scratch[d + i] = var_limbs[op.a_off as usize][i] as i64;
                         }
                     }
-                    LOP_CONST => {
+                    LimbOpcode::Constant => {
                         for i in 0..dl {
                             scratch[d + i] = prog.const_limbs_payload[op.a_off as usize + i] as i64;
                         }
                     }
-                    LOP_ADD | LOP_SUB => {
+                    LimbOpcode::Add | LimbOpcode::Sub => {
                         for i in 0..dl {
                             let a = if i < op.a_len as usize {
                                 scratch[op.a_off as usize + i]
@@ -841,10 +858,14 @@ impl<'a> ReferenceInterpreter<'a> {
                             } else {
                                 0
                             };
-                            scratch[d + i] = if op.opcode == LOP_ADD { a + b } else { a - b };
+                            scratch[d + i] = if op.opcode == LimbOpcode::Add {
+                                a + b
+                            } else {
+                                a - b
+                            };
                         }
                     }
-                    LOP_MUL => {
+                    LimbOpcode::Mul => {
                         for i in 0..dl {
                             let mut acc = 0i64;
                             let lo = (i + 1).saturating_sub(op.b_len as usize);
@@ -856,18 +877,18 @@ impl<'a> ReferenceInterpreter<'a> {
                             scratch[d + i] = acc;
                         }
                     }
-                    LOP_INTADD => {
+                    LimbOpcode::IntAdd => {
                         for i in 0..dl {
                             scratch[d + i] = scratch[op.a_off as usize + i];
                         }
                         scratch[d] += op.imm as i64;
                     }
-                    LOP_INTMUL => {
+                    LimbOpcode::IntMul => {
                         for i in 0..dl {
                             scratch[d + i] = scratch[op.a_off as usize + i] * op.imm as i64;
                         }
                     }
-                    LOP_SELECT => {
+                    LimbOpcode::Select => {
                         let (src, sl) = if flags[op.flag as usize] {
                             (op.a_off as usize, op.a_len as usize)
                         } else {
@@ -877,7 +898,6 @@ impl<'a> ReferenceInterpreter<'a> {
                             scratch[d + i] = if i < sl { scratch[src + i] } else { 0 };
                         }
                     }
-                    _ => unreachable!(),
                 }
             }
 
@@ -1004,7 +1024,7 @@ impl<'a> ReferenceInterpreter<'a> {
 // Tests: the reference interpreter must reproduce generate_subrow bit-for-bit.
 // ---------------------------------------------------------------------------
 #[cfg(test)]
-mod device_program_tests {
+mod tracegen_ir_tests {
     use std::sync::{atomic::Ordering, Arc};
 
     use num_bigint::BigUint;
@@ -1019,13 +1039,35 @@ mod device_program_tests {
     use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
     use super::*;
-    use crate::{test_utils::*, utils::biguint_to_limbs_vec, ExprBuilder, FieldVariable};
+    use crate::{
+        test_utils::*, utils::biguint_to_limbs_vec, ExprBuilder, ExprBuilderConfig, FieldExpr,
+        FieldExpressionProgram, FieldVariable,
+    };
 
     fn lcg(state: &mut u64) -> u8 {
         *state = state
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
         (*state >> 33) as u8
+    }
+
+    #[test]
+    fn compiler_rejects_non_byte_limbs() {
+        let range_bus = openvm_circuit_primitives::var_range::VariableRangeCheckerBus::new(1, 16);
+        let builder = ExprBuilder::new(
+            ExprBuilderConfig {
+                modulus: BigUint::from(17u32),
+                num_limbs: 2,
+                limb_bits: 4,
+            },
+            range_bus.range_max_bits,
+        );
+        let expr = FieldExpr::new(FieldExpressionProgram::new(builder, false), range_bus);
+        let error = compile_tracegen_ir(&expr, vec![0], vec![], 1).unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "CUDA tracegen requires 8-bit limbs, got 4"
+        );
     }
 
     /// rows: (opcode, optional explicit inputs); None means random inputs mod p.
@@ -1038,13 +1080,14 @@ mod device_program_tests {
         n_random_repeats: usize,
     ) {
         let width = BaseAir::<BabyBear>::width(&expr);
-        let prog = serialize_field_expr(
+        let prog = compile_tracegen_ir(
             &expr,
             local_opcode_idx.clone(),
             opcode_flag_idx.clone(),
             width,
-        );
-        assert_eq!(prog.width, width);
+        )
+        .unwrap();
+        assert_eq!(prog.width(), width);
         let interp = ReferenceInterpreter { prog: &prog };
         let ref_checker = Arc::new(VariableRangeCheckerChip::new(range_checker.bus()));
 
@@ -1105,7 +1148,7 @@ mod device_program_tests {
     }
 
     #[test]
-    fn device_program_matches_subrow_ec_add_ne() {
+    fn tracegen_ir_matches_subrow_ec_add_ne() {
         // Same expression as ec_add_ne_expr (weierstrass chip).
         let prime = secp256k1_coord_prime();
         let (range_checker, builder) = setup(&prime);
@@ -1127,7 +1170,7 @@ mod device_program_tests {
     }
 
     #[test]
-    fn device_program_matches_subrow_muldiv_flags() {
+    fn tracegen_ir_matches_subrow_muldiv_flags() {
         // Same expression as modular muldiv_expr: Select in constraint and compute,
         // Div under Select, two flags + setup rows.
         let prime = secp256k1_coord_prime();
@@ -1172,7 +1215,7 @@ mod device_program_tests {
     }
 
     #[test]
-    fn device_program_matches_subrow_int_ops() {
+    fn tracegen_ir_matches_subrow_int_ops() {
         // EcDouble-flavored expression covering IntMul and IntAdd.
         let prime = secp256k1_coord_prime();
         let (range_checker, builder) = setup(&prime);
@@ -1196,9 +1239,9 @@ mod device_program_tests {
 }
 
 #[cfg(test)]
-mod device_program_dump {
+mod tracegen_ir_dump {
     //! Dumps GPU validation vectors: blob, records, expected rows, rc counts.
-    //! Run with DEVICE_PROGRAM_DUMP_DIR=/path cargo test ... -- --ignored dump_gpu_vectors
+    //! Run with TRACEGEN_IR_DUMP_DIR=/path cargo test ... -- --ignored dump_gpu_vectors
     use std::{fs, io::Write, sync::atomic::Ordering};
 
     use num_bigint::BigUint;
@@ -1242,13 +1285,14 @@ mod device_program_dump {
         rows: usize,
     ) {
         let width = BaseAir::<BabyBear>::width(&expr);
-        let prog = serialize_field_expr(
+        let prog = compile_tracegen_ir(
             &expr,
             local_opcode_idx.clone(),
             opcode_flag_idx.clone(),
             width,
-        );
-        let blob = prog.to_blob();
+        )
+        .unwrap();
+        let blob = prog.encode();
 
         let nl = expr.program().canonical_num_limbs();
         let prime = expr.program().prime().clone();
@@ -1305,7 +1349,8 @@ mod device_program_dump {
     #[test]
     #[ignore]
     fn dump_gpu_vectors() {
-        let dir = std::env::var("DEVICE_PROGRAM_DUMP_DIR").unwrap_or("/tmp/dp_vectors".into());
+        let dir =
+            std::env::var("TRACEGEN_IR_DUMP_DIR").unwrap_or("/tmp/tracegen_ir_vectors".into());
         fs::create_dir_all(&dir).unwrap();
 
         // EcAddNe shape
