@@ -10,7 +10,7 @@ use rustc_hash::FxHashMap;
 use rvr_state::{PreflightInitialWrite, PreflightMemoryEvent, PreflightProgramEvent};
 use thiserror::Error;
 
-use super::{RvrPreflightEndpoint, RvrPreflightTranscript};
+use super::{cuda::RvrReplayStep, RvrPreflightEndpoint, RvrPreflightTranscript};
 
 /// No earlier timed event exists for this block. This is valid for a first read,
 /// whose logged value is the segment's initial value.
@@ -32,15 +32,6 @@ impl RvrPreflightIndexError {
     fn new(message: impl Into<String>) -> Self {
         Self(message.into())
     }
-}
-
-/// Location of one executed instruction and the first timed memory event in
-/// its timestamp interval. The final program sentinel has no entry.
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub(crate) struct RvrReplayStep {
-    pub program_index: u32,
-    pub memory_start: u32,
 }
 
 fn build_step_memory_starts(
