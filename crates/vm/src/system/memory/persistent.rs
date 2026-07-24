@@ -54,7 +54,7 @@ pub struct PersistentBoundaryCols<T, const DIGEST_WIDTH: usize> {
 
 /// Imposes the following constraints:
 /// - `is_valid` and `is_dirty` are boolean, and `is_dirty` implies `is_valid`
-/// - on clean rows (`is_valid = 1, is_dirty = 0`), final values and hash equal initial ones
+/// - on clean rows (`is_valid = 1, is_dirty = 0`), final values equal initial ones
 ///
 /// Sends the following interactions (one row per touched leaf):
 /// - merkle bus: initial leaf `[1, 0, as_label, leaf_label, initial_hash]` with multiplicity
@@ -97,14 +97,15 @@ impl<const DIGEST_WIDTH: usize, AB: InteractionBuilder> Air<AB>
         // `is_dirty` may only be set on valid rows
         builder.when(local.is_dirty).assert_one(local.is_valid);
 
-        // If the leaf is clean, its final values and hash must match the initial ones.
+        // If the leaf is clean, its final values must match the initial ones.
         // Since both bits are boolean and `is_dirty` implies `is_valid`, the selector below
         // is 1 exactly on clean valid rows.
         let mut when_clean = builder.when(local.is_valid - local.is_dirty);
         for i in 0..DIGEST_WIDTH {
             when_clean.assert_eq(local.initial_values[i], local.final_values[i]);
-            when_clean.assert_eq(local.initial_hash[i], local.final_hash[i]);
         }
+        // `final_hash` needs no clean-row constraint: both interactions that contain it
+        // have multiplicity `is_dirty`, so it is unused here.
 
         // merkle-bus interaction: initial leaf
         let mut expand_fields = vec![

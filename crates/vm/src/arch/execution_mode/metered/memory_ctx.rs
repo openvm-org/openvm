@@ -303,7 +303,7 @@ impl MemoryCtx {
 
     /// Applies memory height deltas recorded since the last checkpoint.
     ///
-    /// - BOUNDARY_AIR: `2 * segment_leaves` rows
+    /// - BOUNDARY_AIR: `segment_leaves` rows
     /// - MERKLE_AIR:   `2 * segment_merkle_nodes` rows
     /// - Poseidon2:    hashes at the end of the segment plus hashes at its start
     ///
