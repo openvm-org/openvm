@@ -175,7 +175,7 @@ mod ec_add_tests {
         );
         let executor = get_ec_add_executor(
             config.clone(),
-            range_bus,
+            range_bus.range_max_bits,
             tester.address_bits(),
             offset,
             a.clone(),
@@ -709,7 +709,7 @@ mod ec_double_tests {
         );
         let executor = get_ec_double_executor(
             config.clone(),
-            range_bus,
+            range_bus.range_max_bits,
             tester.address_bits(),
             offset,
             a_biguint.clone(),
