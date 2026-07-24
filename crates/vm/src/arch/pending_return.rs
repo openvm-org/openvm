@@ -51,6 +51,31 @@ pub(crate) enum PendingReturnMessage<T> {
     Shutdown,
 }
 
+pub(crate) trait PendingReturnSender<T> {
+    fn send_pending(
+        &self,
+        message: PendingReturnMessage<T>,
+    ) -> Result<(), mpsc::SendError<PendingReturnMessage<T>>>;
+}
+
+impl<T> PendingReturnSender<T> for mpsc::Sender<PendingReturnMessage<T>> {
+    fn send_pending(
+        &self,
+        message: PendingReturnMessage<T>,
+    ) -> Result<(), mpsc::SendError<PendingReturnMessage<T>>> {
+        self.send(message)
+    }
+}
+
+impl<T> PendingReturnSender<T> for mpsc::SyncSender<PendingReturnMessage<T>> {
+    fn send_pending(
+        &self,
+        message: PendingReturnMessage<T>,
+    ) -> Result<(), mpsc::SendError<PendingReturnMessage<T>>> {
+        self.send(message)
+    }
+}
+
 /// Run the batching and shutdown half of an asynchronous cleanup worker.
 /// Receiving shutdown or channel closure with a partial batch drops only the
 /// wrappers, which quarantines every underlying value without invoking
@@ -120,13 +145,16 @@ pub(crate) fn run_pending_return_worker<T>(
 /// the shutdown transition. Existing work finishes behind `work_gate`; queued
 /// values remain wrapped and are quarantined when the worker receives the
 /// shutdown message.
-pub(crate) fn shutdown_pending_return_worker<T>(
+pub(crate) fn shutdown_pending_return_worker<T, S>(
     shutting_down: &AtomicBool,
     lifecycle_gate: &Mutex<()>,
     work_gate: &Mutex<()>,
-    sender: &Mutex<Option<mpsc::Sender<PendingReturnMessage<T>>>>,
+    sender: &Mutex<Option<S>>,
     worker: &Mutex<Option<JoinHandle<()>>>,
-) {
+    on_shutdown: impl FnOnce(),
+) where
+    S: PendingReturnSender<T>,
+{
     let _lifecycle = lifecycle_gate
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -138,6 +166,7 @@ pub(crate) fn shutdown_pending_return_worker<T>(
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     shutting_down.store(true, Ordering::Release);
+    on_shutdown();
     drop(work);
 
     if let Some(sender) = sender
@@ -145,7 +174,7 @@ pub(crate) fn shutdown_pending_return_worker<T>(
         .unwrap_or_else(|poisoned| poisoned.into_inner())
         .take()
     {
-        let _ = sender.send(PendingReturnMessage::Shutdown);
+        let _ = sender.send_pending(PendingReturnMessage::Shutdown);
         drop(sender);
     }
     if let Some(worker) = worker
@@ -328,6 +357,7 @@ mod tests {
                 &work_gate,
                 &sender,
                 &worker,
+                || {},
             );
             assert_eq!(cleanup_calls.load(Ordering::SeqCst), 0);
             assert_eq!(DROPS.load(Ordering::SeqCst), 1);

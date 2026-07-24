@@ -21,16 +21,17 @@
 //! right after enqueueing its copy. From *pinned* memory the call returns
 //! immediately with the DMA still in flight, so a returned buffer must not be
 //! zeroed or reused until previously enqueued work has drained. The cleaner
-//! therefore calls `cudaDeviceSynchronize` (batched over every buffer waiting
-//! in its queue) before touching buffer contents.
+//! therefore records the current CUDA device on return and calls
+//! `cudaDeviceSynchronize` on that device (batched by device) before touching
+//! buffer contents.
 
 use std::{
     cell::Cell,
-    collections::{BTreeMap, HashSet},
+    collections::{BTreeMap, HashMap, VecDeque},
     ffi::c_void,
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
-        mpsc, Mutex, MutexGuard, OnceLock,
+        mpsc, Condvar, Mutex, MutexGuard, OnceLock,
     },
     thread::JoinHandle,
 };
@@ -40,10 +41,239 @@ use crate::arch::pending_return::{
     PendingReturn, PendingReturnMessage,
 };
 
-/// A dropped arena buffer together with its dirty-prefix length, quarantined
-/// until the cleaner has synchronized the CUDA device.
-type ReturnedBuffer = PendingReturn<(Vec<u8>, usize)>;
-type CleanerMessage = PendingReturnMessage<(Vec<u8>, usize)>;
+const MAX_REGISTERED_BYTES: usize = 2 * 1024 * 1024 * 1024;
+const MAX_READY_SIZE_CLASSES: usize = 16;
+const MAX_READY_BUFFERS_PER_CLASS: usize = 4;
+const CLEANER_QUEUE_CAPACITY: usize = 128;
+const MAX_PENDING_BYTES: usize = 2 * 1024 * 1024 * 1024;
+
+/// Device association is kept outside the inner quarantine wrapper so the
+/// cleaner can batch fences without releasing a backing before it is idle.
+struct ReturnedBuffer {
+    device: i32,
+    pending: PendingBuffer,
+}
+
+type PendingBuffer = PendingReturn<(Vec<u8>, usize, PendingBytePermit)>;
+type PendingReturnedBuffer = PendingReturn<ReturnedBuffer>;
+type CleanerMessage = PendingReturnMessage<ReturnedBuffer>;
+type ReturnsByDevice = BTreeMap<i32, Vec<PendingBuffer>>;
+
+struct ReadyBuffer {
+    returned_at: u64,
+    buffer: Vec<u8>,
+}
+
+#[derive(Default)]
+struct ReadyPool {
+    buffers: BTreeMap<usize, VecDeque<ReadyBuffer>>,
+    bytes: usize,
+    next_return: u64,
+}
+
+impl ReadyPool {
+    fn buffer_count(&self) -> usize {
+        self.buffers.values().map(VecDeque::len).sum()
+    }
+
+    fn take(&mut self, size: usize) -> Option<Vec<u8>> {
+        let (buffer, remove_class) = {
+            let class = self.buffers.get_mut(&size)?;
+            let buffer = class.pop_back()?.buffer;
+            (buffer, class.is_empty())
+        };
+        if remove_class {
+            self.buffers.remove(&size);
+        }
+        self.bytes -= size;
+        Some(buffer)
+    }
+
+    fn insert(&mut self, buffer: Vec<u8>) -> Vec<Vec<u8>> {
+        self.insert_with_limits(
+            buffer,
+            MAX_REGISTERED_BYTES,
+            MAX_READY_SIZE_CLASSES,
+            MAX_READY_BUFFERS_PER_CLASS,
+        )
+    }
+
+    fn insert_with_limits(
+        &mut self,
+        buffer: Vec<u8>,
+        max_bytes: usize,
+        max_size_classes: usize,
+        max_buffers_per_class: usize,
+    ) -> Vec<Vec<u8>> {
+        let size = buffer.len();
+        let returned_at = self.next_return;
+        self.next_return = self.next_return.saturating_add(1);
+        self.buffers
+            .entry(size)
+            .or_default()
+            .push_back(ReadyBuffer {
+                returned_at,
+                buffer,
+            });
+        self.bytes = self.bytes.saturating_add(size);
+
+        let mut evicted = Vec::new();
+        while self
+            .buffers
+            .get(&size)
+            .is_some_and(|class| class.len() > max_buffers_per_class)
+        {
+            let oldest = self
+                .buffers
+                .get_mut(&size)
+                .and_then(VecDeque::pop_front)
+                .expect("overfull ready-buffer class was empty");
+            self.bytes -= size;
+            evicted.push(oldest.buffer);
+        }
+        if self.buffers.get(&size).is_some_and(VecDeque::is_empty) {
+            self.buffers.remove(&size);
+        }
+
+        while self.buffers.len() > max_size_classes {
+            let oldest_class = self
+                .oldest_class()
+                .expect("overfull ready pool had no size class");
+            self.evict_class(oldest_class, &mut evicted);
+        }
+        while self.bytes > max_bytes {
+            let Some(oldest_class) = self.oldest_class() else {
+                break;
+            };
+            self.evict_oldest_from_class(oldest_class, &mut evicted);
+        }
+        evicted
+    }
+
+    fn evict_oldest_bytes(&mut self, bytes: usize) -> Vec<Vec<u8>> {
+        let target = self.bytes.saturating_sub(bytes);
+        let mut evicted = Vec::new();
+        while self.bytes > target {
+            let Some(oldest_class) = self.oldest_class() else {
+                break;
+            };
+            self.evict_oldest_from_class(oldest_class, &mut evicted);
+        }
+        evicted
+    }
+
+    fn oldest_class(&self) -> Option<usize> {
+        self.buffers
+            .iter()
+            .filter_map(|(&size, class)| class.front().map(|buffer| (buffer.returned_at, size)))
+            .min()
+            .map(|(_, size)| size)
+    }
+
+    fn evict_oldest_from_class(&mut self, size: usize, evicted: &mut Vec<Vec<u8>>) {
+        let (oldest, remove_class) = {
+            let class = self
+                .buffers
+                .get_mut(&size)
+                .expect("selected ready-buffer class disappeared");
+            let oldest = class
+                .pop_front()
+                .expect("selected ready-buffer class was empty");
+            (oldest, class.is_empty())
+        };
+        if remove_class {
+            self.buffers.remove(&size);
+        }
+        self.bytes -= size;
+        evicted.push(oldest.buffer);
+    }
+
+    fn evict_class(&mut self, size: usize, evicted: &mut Vec<Vec<u8>>) {
+        let class = self
+            .buffers
+            .remove(&size)
+            .expect("selected ready-buffer class disappeared");
+        self.bytes -= size * class.len();
+        evicted.extend(class.into_iter().map(|buffer| buffer.buffer));
+    }
+
+    fn drain(&mut self) -> Vec<Vec<u8>> {
+        let buffers = std::mem::take(&mut self.buffers)
+            .into_values()
+            .flatten()
+            .map(|buffer| buffer.buffer)
+            .collect();
+        self.bytes = 0;
+        buffers
+    }
+}
+
+#[derive(Default)]
+struct RegisteredRegions {
+    sizes: HashMap<usize, usize>,
+    bytes: usize,
+}
+
+#[derive(Default)]
+struct PendingByteBudget {
+    bytes: Mutex<usize>,
+    available: Condvar,
+}
+
+struct PendingBytePermit {
+    bytes: usize,
+}
+
+impl PendingByteBudget {
+    fn wake_all(&self) {
+        // Take the predicate mutex so a waiter cannot miss the notification
+        // between observing SHUTTING_DOWN=false and entering Condvar::wait.
+        let _pending = lock_unpoisoned(&self.bytes);
+        self.available.notify_all();
+    }
+}
+
+impl PendingBytePermit {
+    fn acquire(bytes: usize) -> Option<Self> {
+        let budget = &state().pending_bytes;
+        let mut pending = lock_unpoisoned(&budget.bytes);
+        loop {
+            if SHUTTING_DOWN.load(Ordering::Acquire) {
+                return None;
+            }
+            if pending_bytes_fit(*pending, bytes) {
+                *pending = pending.saturating_add(bytes);
+                return Some(Self { bytes });
+            }
+            pending = budget
+                .available
+                .wait(pending)
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+        }
+    }
+}
+
+impl Drop for PendingBytePermit {
+    fn drop(&mut self) {
+        let budget = &state().pending_bytes;
+        let mut pending = lock_unpoisoned(&budget.bytes);
+        *pending = pending
+            .checked_sub(self.bytes)
+            .expect("pinned cleaner pending-byte accounting underflow");
+        budget.available.notify_all();
+    }
+}
+
+fn pending_bytes_fit(current: usize, requested: usize) -> bool {
+    if requested > MAX_PENDING_BYTES {
+        // A single arena can legitimately exceed the pool budget. Let it
+        // make progress only after all ordinary returns have drained, then
+        // hold every other producer until that oversized return is safe.
+        current == 0
+    } else {
+        current <= MAX_PENDING_BYTES - requested
+    }
+}
 
 #[derive(Default)]
 struct PoolStats {
@@ -68,8 +298,9 @@ struct PoolStats {
 #[derive(Default)]
 struct PoolState {
     stats: PoolStats,
-    ready: Mutex<BTreeMap<usize, Vec<Vec<u8>>>>,
-    registered: Mutex<HashSet<usize>>,
+    ready: Mutex<ReadyPool>,
+    registered: Mutex<RegisteredRegions>,
+    pending_bytes: PendingByteBudget,
 }
 
 /// All state a cleaner thread may touch has process lifetime. In particular,
@@ -112,11 +343,8 @@ impl PoolStatsSnapshot {
     pub(crate) fn capture() -> Self {
         let stats = stats();
         let ready = pool().lock().unwrap();
-        let ready_buffers = ready.values().map(|buffers| buffers.len() as u64).sum();
-        let ready_bytes = ready
-            .iter()
-            .map(|(&size, buffers)| size as u64 * buffers.len() as u64)
-            .sum();
+        let ready_buffers = ready.buffer_count() as u64;
+        let ready_bytes = ready.bytes as u64;
         Self {
             hits: stats.hits.load(Ordering::Relaxed),
             misses: stats.misses.load(Ordering::Relaxed),
@@ -202,17 +430,12 @@ pub(crate) fn register_pool_region(buffer: &mut [u8]) -> bool {
     if SHUTTING_DOWN.load(Ordering::Acquire) {
         return false;
     }
-    let ptr = buffer.as_mut_ptr();
-    if registered().lock().unwrap().contains(&(ptr as usize)) {
-        return true;
-    }
-    if !register_region_inner(ptr, buffer.len()) {
+    if !register_owned_region(buffer.as_mut_ptr(), buffer.len()) {
         stats()
             .registration_failures
             .fetch_add(1, Ordering::Relaxed);
         return false;
     }
-    registered().lock().unwrap().insert(ptr as usize);
     true
 }
 
@@ -251,18 +474,104 @@ fn unregister_region_inner(ptr: *mut u8) -> bool {
 }
 
 /// Registered, all-zero buffers ready for reuse, keyed by allocation size.
-fn pool() -> &'static Mutex<BTreeMap<usize, Vec<Vec<u8>>>> {
+fn pool() -> &'static Mutex<ReadyPool> {
     &state().ready
 }
 
-/// Base pointers of buffers whose `cudaHostRegister` succeeded.
-fn registered() -> &'static Mutex<HashSet<usize>> {
+/// Base pointers and lengths of pool-owned buffers whose `cudaHostRegister` succeeded.
+fn registered() -> &'static Mutex<RegisteredRegions> {
     &state().registered
 }
 
+/// Serialize registration admission so eager prewarm and the cleaner cannot
+/// both pass the byte-limit check.
+static REGISTRATION_GATE: Mutex<()> = Mutex::new(());
+
+fn register_owned_region(ptr: *mut u8, len: usize) -> bool {
+    let _registration = lock_unpoisoned(&REGISTRATION_GATE);
+    if registered()
+        .lock()
+        .unwrap()
+        .sizes
+        .contains_key(&(ptr as usize))
+    {
+        return true;
+    }
+    if len > MAX_REGISTERED_BYTES {
+        return false;
+    }
+
+    let bytes_to_evict = {
+        let registered = registered().lock().unwrap();
+        registered
+            .bytes
+            .saturating_add(len)
+            .saturating_sub(MAX_REGISTERED_BYTES)
+    };
+    if bytes_to_evict != 0 {
+        let evicted = pool().lock().unwrap().evict_oldest_bytes(bytes_to_evict);
+        retire_idle_buffers(evicted);
+    }
+
+    let mut registered = registered().lock().unwrap();
+    if registered.bytes.saturating_add(len) > MAX_REGISTERED_BYTES {
+        return false;
+    }
+    if !register_region_inner(ptr, len) {
+        return false;
+    }
+    registered.sizes.insert(ptr as usize, len);
+    registered.bytes += len;
+    true
+}
+
+/// Unregister and free buffers already removed from the ready map. Every
+/// caller must first establish that no CUDA work can still reference them.
+fn retire_idle_buffers(buffers: Vec<Vec<u8>>) {
+    for mut buffer in buffers {
+        let ptr = buffer.as_ptr() as usize;
+        let mut registered = registered().lock().unwrap();
+        if let Some(&size) = registered.sizes.get(&ptr) {
+            if unregister_region_inner(buffer.as_mut_ptr()) {
+                registered.sizes.remove(&ptr);
+                registered.bytes -= size;
+            } else {
+                // Keep failed unregistrations charged against the global cap.
+                drop(registered);
+                quarantine_pending(buffer);
+            }
+        }
+    }
+}
+
+/// Transfer a registered, unused startup reserve into the bounded ready pool.
+/// No CUDA work has ever referenced this backing, so it needs no device fence.
+#[cfg(feature = "rvr")]
+pub(crate) fn recycle_idle_pool_region(buffer: Vec<u8>) {
+    if buffer.is_empty() {
+        return;
+    }
+    let _lifecycle = lock_unpoisoned(&LIFECYCLE_GATE);
+    if SHUTTING_DOWN.load(Ordering::Acquire) {
+        quarantine_pending(buffer);
+        return;
+    }
+    let _registration = lock_unpoisoned(&REGISTRATION_GATE);
+    let is_registered = registered()
+        .lock()
+        .unwrap()
+        .sizes
+        .contains_key(&(buffer.as_ptr() as usize));
+    if !is_registered || !buffer.len().is_power_of_two() {
+        retire_idle_buffers(vec![buffer]);
+        return;
+    }
+    let evicted = pool().lock().unwrap().insert(buffer);
+    retire_idle_buffers(evicted);
+}
+
 struct CleanerRuntime {
-    device: i32,
-    sender: Mutex<Option<mpsc::Sender<CleanerMessage>>>,
+    sender: Mutex<Option<mpsc::SyncSender<CleanerMessage>>>,
     worker: Mutex<Option<JoinHandle<()>>>,
 }
 
@@ -330,72 +639,94 @@ fn shutdown_cleaner() {
         &CLEANER_WORK_GATE,
         &runtime.sender,
         &runtime.worker,
+        || state().pending_bytes.wake_all(),
     );
 }
 
-fn process_returned_batch(batch: Vec<ReturnedBuffer>, batch_idx: usize) {
-    // The H2D copies reading these buffers were enqueued before the owning
-    // arenas dropped; wait for them (and anything else in flight) before
-    // touching contents. Unique label per batch: the timing metric derived
-    // from this span is a gauge, so identical label sets overwrite.
-    let _span = tracing::info_span!("arena_cleaner_batch", batch = batch_idx.to_string()).entered();
-    let rc = unsafe { cudaDeviceSynchronize() };
-    if rc != 0 {
-        // No usable CUDA context: the buffers cannot be proven idle. Dropping
-        // the wrappers quarantines their allocations.
-        tracing::debug!(
-            "cudaDeviceSynchronize failed with {rc}; quarantining {} record arena buffers",
-            batch.len()
-        );
-        stats().sync_failures.fetch_add(1, Ordering::Relaxed);
-        stats()
-            .quarantined
-            .fetch_add(batch.len() as u64, Ordering::Relaxed);
-        stats()
-            .pending
-            .fetch_sub(batch.len() as u64, Ordering::Relaxed);
-        return;
+fn group_returned_by_device(batch: Vec<PendingReturnedBuffer>) -> ReturnsByDevice {
+    let mut by_device = BTreeMap::<_, Vec<_>>::new();
+    for returned in batch {
+        let ReturnedBuffer { device, pending } = returned.release();
+        by_device.entry(device).or_default().push(pending);
     }
+    by_device
+}
 
+fn process_returned_batch(batch: Vec<PendingReturnedBuffer>, batch_idx: usize) {
+    // The H2D copies reading these buffers were enqueued before the owning
+    // arenas dropped. Fence the originating device of each return before
+    // touching contents; grouping retains one synchronization per device,
+    // rather than one per buffer. Unique label per batch: the timing metric
+    // derived from this span is a gauge, so identical label sets overwrite.
+    let _span = tracing::info_span!("arena_cleaner_batch", batch = batch_idx.to_string()).entered();
     let mut zeroed_bytes = 0u64;
     let mut zero_time_us = 0u64;
-    for returned in batch {
-        let (mut buffer, dirty_len) = returned.release();
-        stats().returns_synchronized.fetch_add(1, Ordering::Relaxed);
-        (|| {
-            if buffer.is_empty() || !buffer.len().is_power_of_two() {
-                return; // synchronized but not pool-shaped
-            }
-            let ptr = buffer.as_mut_ptr();
-            let is_new = !registered().lock().unwrap().contains(&(ptr as usize));
-            if is_new {
-                if !register_region_inner(ptr, buffer.len()) {
-                    // Out of pinnable memory: drop the buffer, never pool it.
+    let mut current_device = {
+        let mut device = 0;
+        (unsafe { cudaGetDevice(&mut device) } == 0).then_some(device)
+    };
+    for (device, returned_buffers) in group_returned_by_device(batch) {
+        let device_rc = if current_device == Some(device) {
+            0
+        } else {
+            unsafe { cudaSetDevice(device) }
+        };
+        if device_rc == 0 {
+            current_device = Some(device);
+        }
+        let sync_rc = if device_rc == 0 {
+            unsafe { cudaDeviceSynchronize() }
+        } else {
+            device_rc
+        };
+        if sync_rc != 0 {
+            // The buffers cannot be proven idle. Dropping the inner wrappers
+            // quarantines their allocations without touching their contents.
+            tracing::debug!(
+                "CUDA device {device} synchronization failed with {sync_rc}; quarantining {} \
+                 record arena buffers",
+                returned_buffers.len()
+            );
+            stats().sync_failures.fetch_add(1, Ordering::Relaxed);
+            stats()
+                .quarantined
+                .fetch_add(returned_buffers.len() as u64, Ordering::Relaxed);
+            stats()
+                .pending
+                .fetch_sub(returned_buffers.len() as u64, Ordering::Release);
+            continue;
+        }
+
+        for returned in returned_buffers {
+            let (mut buffer, dirty_len, _pending_bytes) = returned.release();
+            stats().returns_synchronized.fetch_add(1, Ordering::Relaxed);
+            (|| {
+                if buffer.is_empty() || !buffer.len().is_power_of_two() {
+                    return; // synchronized but not pool-shaped
+                }
+                if !register_owned_region(buffer.as_mut_ptr(), buffer.len()) {
+                    // Registration cap or CUDA failure: drop the synchronized
+                    // pageable buffer instead of retaining it.
                     stats()
                         .registration_failures
                         .fetch_add(1, Ordering::Relaxed);
                     return;
                 }
-                registered().lock().unwrap().insert(ptr as usize);
-            }
-            // Restore the fresh-arena invariant (all zero). Bytes past the dirty
-            // prefix were never written or were cleared on an earlier cycle.
-            let dirty_len = dirty_len.min(buffer.len());
-            let zero_started = std::time::Instant::now();
-            buffer[..dirty_len].fill(0);
-            zero_time_us += zero_started.elapsed().as_micros() as u64;
-            zeroed_bytes += dirty_len as u64;
-            pool()
-                .lock()
-                .unwrap()
-                .entry(buffer.len())
-                .or_default()
-                .push(buffer);
-            stats().returns_pooled.fetch_add(1, Ordering::Relaxed);
-        })();
-        // Publish completion only after a reusable buffer has reached the ready map (or after a
-        // failed/non-pool-shaped return has been disposed of). Startup drain relies on this order.
-        stats().pending.fetch_sub(1, Ordering::Release);
+                // Restore the fresh-arena invariant (all zero). Bytes past the dirty
+                // prefix were never written or were cleared on an earlier cycle.
+                let dirty_len = dirty_len.min(buffer.len());
+                let zero_started = std::time::Instant::now();
+                buffer[..dirty_len].fill(0);
+                zero_time_us += zero_started.elapsed().as_micros() as u64;
+                zeroed_bytes += dirty_len as u64;
+                let evicted = pool().lock().unwrap().insert(buffer);
+                retire_idle_buffers(evicted);
+                stats().returns_pooled.fetch_add(1, Ordering::Relaxed);
+            })();
+            // Publish completion only after a reusable buffer has reached the ready map (or after
+            // a failed/non-pool-shaped return has been disposed of). Startup drain relies on this.
+            stats().pending.fetch_sub(1, Ordering::Release);
+        }
     }
     stats()
         .zeroed_bytes
@@ -449,9 +780,8 @@ fn cleaner() -> Option<&'static CleanerRuntime> {
         return None;
     }
 
-    let (sender, receiver) = mpsc::channel();
+    let (sender, receiver) = mpsc::sync_channel(CLEANER_QUEUE_CAPACITY);
     let runtime = Box::leak(Box::new(CleanerRuntime {
-        device,
         sender: Mutex::new(Some(sender)),
         worker: Mutex::new(None),
     }));
@@ -465,20 +795,9 @@ fn cleaner() -> Option<&'static CleanerRuntime> {
         return None;
     }
 
-    let cleaner_device = runtime.device;
     let worker = std::thread::Builder::new()
         .name("record-arena-pinner".into())
-        .spawn(move || {
-            {
-                let _work = lock_unpoisoned(&CLEANER_WORK_GATE);
-                if SHUTTING_DOWN.load(Ordering::Acquire)
-                    || unsafe { cudaSetDevice(cleaner_device) } != 0
-                {
-                    return;
-                }
-            }
-            run_cleaner(receiver);
-        })
+        .spawn(move || run_cleaner(receiver))
         .expect("failed to spawn record-arena pinner thread");
     *lock_unpoisoned(&runtime.worker) = Some(worker);
     Some(runtime)
@@ -493,12 +812,7 @@ pub(crate) fn take_with_prefault_status(min_size: usize) -> (Vec<u8>, bool) {
     if SHUTTING_DOWN.load(Ordering::Acquire) {
         return (vec![0u8; size], true);
     }
-    if let Some(buffer) = pool()
-        .lock()
-        .unwrap()
-        .get_mut(&size)
-        .and_then(|bufs| bufs.pop())
-    {
+    if let Some(buffer) = pool().lock().unwrap().take(size) {
         debug_assert_eq!(buffer.len(), size);
         stats().hits.fetch_add(1, Ordering::Relaxed);
         return (buffer, false);
@@ -508,18 +822,15 @@ pub(crate) fn take_with_prefault_status(min_size: usize) -> (Vec<u8>, bool) {
     stats().misses.fetch_add(1, Ordering::Relaxed);
     let mut buffer = vec![0u8; size];
     let eager = EAGER_REGISTRATION.with(Cell::get);
-    let registered_eagerly = eager && {
-        let ptr = buffer.as_mut_ptr();
-        if register_region_inner(ptr, buffer.len()) {
-            registered().lock().unwrap().insert(ptr as usize);
+    let registered_eagerly = eager
+        && if register_owned_region(buffer.as_mut_ptr(), buffer.len()) {
             true
         } else {
             stats()
                 .registration_failures
                 .fetch_add(1, Ordering::Relaxed);
             false
-        }
-    };
+        };
     if registered_eagerly {
         (buffer, false)
     } else {
@@ -594,20 +905,61 @@ pub(crate) fn give_back(buffer: Vec<u8>, dirty_len: usize) {
     if buffer.is_empty() {
         return;
     }
+    let buffer_len = buffer.len();
     // If the send races process teardown, `PendingReturn` deliberately leaks
     // the backing: without the cleaner's sync, freeing it is not safe.
-    let returned = PendingReturn::new((buffer, dirty_len));
-    let _lifecycle = lock_unpoisoned(&LIFECYCLE_GATE);
-    if SHUTTING_DOWN.load(Ordering::Acquire) {
-        return;
-    }
-    let Some(cleaner) = cleaner() else {
+    let pending = PendingReturn::new((buffer, dirty_len));
+    let device = {
+        let _lifecycle = lock_unpoisoned(&LIFECYCLE_GATE);
+        if SHUTTING_DOWN.load(Ordering::Acquire) {
+            return;
+        }
+        let mut device = 0;
+        let device_rc = unsafe { cudaGetDevice(&mut device) };
+        if device_rc != 0 {
+            tracing::debug!(
+                "cudaGetDevice failed with {device_rc}; returned record arena stays quarantined"
+            );
+            stats().quarantined.fetch_add(1, Ordering::Relaxed);
+            return;
+        }
+        if cleaner().is_none() {
+            stats().quarantined.fetch_add(1, Ordering::Relaxed);
+            return;
+        }
+        device
+    };
+
+    // Capacity admission must not hold the lifecycle gate: shutdown sets the
+    // flag and wakes this wait so teardown can always make progress.
+    let Some(pending_bytes) = PendingBytePermit::acquire(buffer_len) else {
+        stats().quarantined.fetch_add(1, Ordering::Relaxed);
         return;
     };
-    let sender = lock_unpoisoned(&cleaner.sender);
-    let Some(sender) = sender.as_ref() else {
-        return;
+    let (buffer, dirty_len) = pending.release();
+    let pending = PendingReturn::new((buffer, dirty_len, pending_bytes));
+
+    let sender = {
+        let _lifecycle = lock_unpoisoned(&LIFECYCLE_GATE);
+        if SHUTTING_DOWN.load(Ordering::Acquire) {
+            return;
+        }
+        let cleaner = CLEANER
+            .get()
+            .copied()
+            .expect("initialized pinned cleaner disappeared");
+        let sender = lock_unpoisoned(&cleaner.sender);
+        let Some(sender) = sender.as_ref() else {
+            stats().quarantined.fetch_add(1, Ordering::Relaxed);
+            return;
+        };
+        sender.clone()
     };
+    // Bound queued storage by bytes as well as item count. The permit remains
+    // inside the quarantine wrapper, so a return whose DMA cannot be proven
+    // complete continues to consume budget instead of admitting an unbounded
+    // succession of unsafe allocations.
+    let returned = PendingReturn::new(ReturnedBuffer { device, pending });
     let pending = stats().pending.fetch_add(1, Ordering::Relaxed) + 1;
     stats().pending_peak.fetch_max(pending, Ordering::Relaxed);
     match sender.send(CleanerMessage::Return(returned)) {
@@ -617,7 +969,7 @@ pub(crate) fn give_back(buffer: Vec<u8>, dirty_len: usize) {
         Err(error) => {
             stats().pending.fetch_sub(1, Ordering::Relaxed);
             stats().quarantined.fetch_add(1, Ordering::Relaxed);
-            // Dropping the PendingReturn from SendError intentionally leaks the allocation.
+            // Dropping the nested PendingReturn from SendError intentionally leaks the allocation.
             drop(error);
         }
     }
@@ -656,15 +1008,79 @@ pub(crate) fn clear() {
     if SHUTTING_DOWN.load(Ordering::Acquire) {
         return;
     }
-    let mut pool = pool().lock().unwrap();
-    let mut reg = registered().lock().unwrap();
-    for (_, bufs) in pool.iter_mut() {
-        for mut buf in bufs.drain(..) {
-            reg.remove(&(buf.as_ptr() as usize));
-            if !unregister_region_inner(buf.as_mut_ptr()) {
-                drop(PendingReturn::new(buf));
-            }
-        }
+    let _work = lock_unpoisoned(&CLEANER_WORK_GATE);
+    let _registration = lock_unpoisoned(&REGISTRATION_GATE);
+    let buffers = pool().lock().unwrap().drain();
+    retire_idle_buffers(buffers);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        group_returned_by_device, pending_bytes_fit, PendingBytePermit, PendingReturn, ReadyPool,
+        ReturnedBuffer, MAX_PENDING_BYTES,
+    };
+
+    #[test]
+    fn ready_pool_evicts_oldest_buffers_at_each_limit() {
+        let mut pool = ReadyPool::default();
+
+        let oldest = vec![0u8; 4];
+        let oldest_ptr = oldest.as_ptr();
+        assert!(pool.insert_with_limits(oldest, 32, 2, 1).is_empty());
+
+        let newer_same_class = vec![0u8; 4];
+        let newer_same_class_ptr = newer_same_class.as_ptr();
+        let evicted = pool.insert_with_limits(newer_same_class, 32, 2, 1);
+        assert_eq!(evicted.len(), 1);
+        assert_eq!(evicted[0].as_ptr(), oldest_ptr);
+
+        let second_class = vec![0u8; 8];
+        assert!(pool.insert_with_limits(second_class, 32, 2, 1).is_empty());
+        let third_class = vec![0u8; 16];
+        let evicted = pool.insert_with_limits(third_class, 32, 2, 1);
+        assert_eq!(evicted.len(), 1);
+        assert_eq!(evicted[0].as_ptr(), newer_same_class_ptr);
+        assert_eq!(pool.buffers.len(), 2);
+        assert_eq!(pool.bytes, 24);
+
+        let over_byte_limit = vec![0u8; 16];
+        let evicted = pool.insert_with_limits(over_byte_limit, 20, 2, 2);
+        assert_eq!(evicted.iter().map(Vec::len).sum::<usize>(), 24);
+        assert!(pool.bytes <= 20);
     }
-    pool.clear();
+
+    #[test]
+    fn returned_buffers_keep_their_originating_device_until_fenced() {
+        let returned = |device, marker| {
+            PendingReturn::new(ReturnedBuffer {
+                device,
+                pending: PendingReturn::new((vec![marker], 1, PendingBytePermit { bytes: 0 })),
+            })
+        };
+        let mut grouped =
+            group_returned_by_device(vec![returned(1, 10), returned(0, 20), returned(1, 30)]);
+
+        assert_eq!(grouped.keys().copied().collect::<Vec<_>>(), vec![0, 1]);
+        let device_zero = grouped.remove(&0).unwrap();
+        assert_eq!(device_zero.len(), 1);
+        assert_eq!(device_zero.into_iter().next().unwrap().release().0, [20]);
+        let device_one = grouped.remove(&1).unwrap();
+        assert_eq!(
+            device_one
+                .into_iter()
+                .map(|returned| returned.release().0[0])
+                .collect::<Vec<_>>(),
+            vec![10, 30]
+        );
+    }
+
+    #[test]
+    fn pending_byte_budget_admits_one_oversized_return_exclusively() {
+        assert!(pending_bytes_fit(0, MAX_PENDING_BYTES));
+        assert!(!pending_bytes_fit(1, MAX_PENDING_BYTES));
+        assert!(!pending_bytes_fit(MAX_PENDING_BYTES, 1));
+        assert!(pending_bytes_fit(0, MAX_PENDING_BYTES + 1));
+        assert!(!pending_bytes_fit(1, MAX_PENDING_BYTES + 1));
+    }
 }

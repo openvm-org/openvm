@@ -148,9 +148,6 @@ struct PoolInner {
 #[cfg(feature = "cuda")]
 struct PreparedDenseBacking {
     buffer: Vec<u8>,
-    /// Pool hits are CUDA-registered. Fresh prefaulted reserves have never
-    /// been registered or exposed to H2D and remain safe to free normally.
-    registered: bool,
 }
 
 impl Drop for PoolInner {
@@ -158,11 +155,10 @@ impl Drop for PoolInner {
         #[cfg(feature = "cuda")]
         for buffers in self.arena_native_dense_prepared.values_mut() {
             for prepared in buffers.drain(..) {
-                if prepared.registered {
-                    // Never start pool or CUDA work from Drop. A registered
-                    // allocation is quarantined for process reclamation.
-                    crate::arch::pending_return::quarantine(prepared.buffer);
-                }
+                // Prepared reserves have never been exposed to CUDA work.
+                // Return them directly to the bounded global ready pool;
+                // shutdown still quarantines them without touching CUDA.
+                crate::arch::cuda::pinned::recycle_idle_pool_region(prepared.buffer);
             }
         }
     }
@@ -859,18 +855,19 @@ impl RvrPreflightBufferPool {
             if needs_populate {
                 crate::arch::cuda::pinned::populate_write(&mut backing);
             }
-            let registered =
-                !needs_populate || crate::arch::cuda::pinned::register_pool_region(&mut backing);
+            if needs_populate && !crate::arch::cuda::pinned::register_pool_region(&mut backing) {
+                // The global pinned-byte cap is full (or CUDA registration
+                // failed). Do not retain an unregistered populated reserve;
+                // the ordinary pageable miss path remains correct.
+                return;
+            }
             let prepared_key =
                 ArenaNativeBackingKey::new(key.air, key.stride_bytes, backing.len() - 32);
             self.lock()
                 .arena_native_dense_prepared
                 .entry(prepared_key)
                 .or_default()
-                .push(PreparedDenseBacking {
-                    buffer: backing,
-                    registered,
-                });
+                .push(PreparedDenseBacking { buffer: backing });
         }
     }
 
