@@ -18,6 +18,8 @@ use openvm_platform::WORD_SIZE;
 use rvr_openvm_ext_algebra_ffi_common::{BLS12_381_ELEM_BYTES, FIELD_256_BYTES};
 use rvr_openvm_ext_ffi_common::{ext_hint_stream_set, peek_mem_u64, peek_mem_words};
 
+mod mcl_bn254;
+
 /// BN254 base field element size in bytes.
 const BN254_FQ_BYTES: u64 = FIELD_256_BYTES as u64;
 const BN254_FQ_WORDS: usize = FIELD_256_BYTES / WORD_SIZE;
@@ -136,7 +138,11 @@ unsafe fn hint_bn254(state: *mut c_void, rs1_val: u64, rs2_val: u64) -> Option<V
         bn256::Fq2::new,
     )?;
     let f: bn256::Fq12 = Bn254::multi_miller_loop(&p, &q);
-    let (c, u) = Bn254::final_exp_hint(&f);
+    let (c, u) = openvm_pairing_guest::halo2curves_shims::bn254::try_final_exp_hint_with_pow(
+        &f,
+        mcl_bn254::pow_naf,
+    )
+    .unwrap_or_else(|error| panic!("MCL BN254 exponentiation failed: {error:?}"));
     Some(
         c.to_coeffs()
             .into_iter()

@@ -177,6 +177,71 @@ pub fn build_rust_staticlib(
     lib_path
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RustStaticlib {
+    pub archive_path: PathBuf,
+    pub native_link_args: Vec<String>,
+}
+
+/// Build a Rust staticlib and retain the native arguments needed to link it.
+pub fn build_rust_staticlib_with_link_args(
+    manifest_path: &Path,
+    target_dir: &Path,
+    lib_name: &str,
+    crate_name: &str,
+) -> RustStaticlib {
+    let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
+    let output = Command::new(&cargo)
+        .args([
+            "rustc",
+            "--lib",
+            "--release",
+            "--config",
+            "profile.release.lto=false",
+            "--color=never",
+            "--manifest-path",
+        ])
+        .arg(manifest_path)
+        .arg("--target-dir")
+        .arg(target_dir)
+        .args(["--", "--print=native-static-libs"])
+        .output()
+        .unwrap_or_else(|e| panic!("failed to spawn cargo for {crate_name}: {e}"));
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if !output.status.success() {
+        panic!("cargo build for {crate_name} failed\nstdout:\n{stdout}\nstderr:\n{stderr}");
+    }
+
+    let archive_path = target_dir.join("release").join(lib_name);
+    assert!(
+        archive_path.exists(),
+        "expected staticlib at {} after cargo build",
+        archive_path.display()
+    );
+    let native_link_args = parse_native_static_link_args(&stderr).unwrap_or_else(|error| {
+        panic!("cargo did not report native link arguments for {crate_name}: {error}\nstderr:\n{stderr}")
+    });
+    RustStaticlib {
+        archive_path,
+        native_link_args,
+    }
+}
+
+fn parse_native_static_link_args(output: &str) -> Result<Vec<String>, &'static str> {
+    let mut records = output.lines().filter_map(|line| {
+        line.trim()
+            .strip_prefix("note: native-static-libs:")
+            .map(str::trim)
+    });
+    let args = records.next().ok_or("missing native-static-libs record")?;
+    if records.next().is_some() {
+        return Err("multiple native-static-libs records");
+    }
+    Ok(args.split_ascii_whitespace().map(str::to_string).collect())
+}
+
 fn env_command(name: &str) -> Option<String> {
     std::env::var(name)
         .ok()
@@ -204,7 +269,10 @@ fn is_executable_file(path: &Path) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{clang_version_suffix, is_clang_command, parse_clang_version_output};
+    use super::{
+        clang_version_suffix, is_clang_command, parse_clang_version_output,
+        parse_native_static_link_args,
+    };
 
     #[test]
     fn detects_clang_command_names() {
@@ -253,5 +321,38 @@ mod tests {
             Some((false, 19))
         );
         assert_eq!(parse_clang_version_output("gcc (GCC) 13.2.0"), None);
+    }
+
+    #[test]
+    fn parses_native_static_link_args_in_order() {
+        let output = "Compiling ffi\nnote: native-static-libs: -lc++ -lc -lm -liconv -lSystem -lc -lm\nFinished release";
+        assert_eq!(
+            parse_native_static_link_args(output),
+            Ok(["-lc++", "-lc", "-lm", "-liconv", "-lSystem", "-lc", "-lm"]
+                .map(str::to_string)
+                .to_vec())
+        );
+    }
+
+    #[test]
+    fn parses_paired_native_link_args() {
+        assert_eq!(
+            parse_native_static_link_args("note: native-static-libs: -framework Security"),
+            Ok(["-framework", "Security"].map(str::to_string).to_vec())
+        );
+    }
+
+    #[test]
+    fn requires_one_native_static_link_args_record() {
+        assert_eq!(
+            parse_native_static_link_args("Finished release"),
+            Err("missing native-static-libs record")
+        );
+        assert_eq!(
+            parse_native_static_link_args(
+                "note: native-static-libs: -lc\nnote: native-static-libs: -lm"
+            ),
+            Err("multiple native-static-libs records")
+        );
     }
 }

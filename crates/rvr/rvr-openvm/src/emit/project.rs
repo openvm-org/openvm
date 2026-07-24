@@ -1289,6 +1289,7 @@ impl CProject {
         ext_sources: &[String],
         vendor_sources: &[String],
         ext_cflags: &[String],
+        native_link_args: &[&str],
     ) -> Vec<String> {
         let mut args = self.make_args();
         if !ext_sources.is_empty() {
@@ -1308,6 +1309,9 @@ impl CProject {
         }
         if !ext_cflags.is_empty() {
             args.push(format!("EXT_CFLAGS={}", ext_cflags.join(" ")));
+        }
+        if !native_link_args.is_empty() {
+            args.push(format!("EXT_LDLIBS={}", native_link_args.join(" ")));
         }
         args
     }
