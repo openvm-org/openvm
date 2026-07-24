@@ -11,19 +11,27 @@ use openvm_cuda_common::{
     stream::GpuDeviceCtx,
 };
 use openvm_instructions::{
-    instruction::Instruction, program::Program, LocalOpcode, SystemOpcode, VmOpcode,
+    instruction::Instruction,
+    program::Program,
+    riscv::{RV64_IMM_AS, RV64_MEMORY_AS, RV64_REGISTER_AS},
+    LocalOpcode, SystemOpcode, VmOpcode,
 };
 use openvm_stark_backend::p3_field::PrimeField32;
 use p3_baby_bear::BabyBear;
-use rvr_state::{PreflightInitialWrite, PreflightMemoryEvent, PreflightProgramEvent};
+use rvr_state::{
+    PreflightInitialWrite, PreflightMemoryEvent, PreflightProgramEvent, RvrCheckpoint,
+};
 use thiserror::Error;
 
 #[cfg(feature = "test-utils")]
 use super::postflight::RvrReplayData;
-use super::{postflight::RvrReplayStep, RvrPreflightEndpoint, RvrPreflightTranscript};
+use super::{
+    bridge::read_rv64_registers, checkpoint_preflight::RvrCheckpointPreflightExecution,
+    postflight::RvrReplayStep, RvrPreflightEndpoint, RvrPreflightTranscript,
+};
 use crate::{
     arch::{ExecutionState, MemoryCellType, MemoryConfig, ADDR_SPACE_OFFSET, BLOCK_FE_WIDTH},
-    cuda_abi::rvr_postflight,
+    cuda_abi::{rvr_checkpoint_replay, rvr_postflight},
     system::TouchedBlock,
 };
 
@@ -265,6 +273,203 @@ impl GpuRvrProgram {
             segment_identity,
         )?;
         Ok((gpu, plan))
+    }
+
+    /// Expands the first deliberately narrow checkpoint-replay slice entirely
+    /// on the device, then feeds the resulting buffers into the existing
+    /// transcript indexes. The supported executed opcodes are exactly the four
+    /// supplied by the RV64I coordinator; every other opcode fails closed.
+    #[doc(hidden)]
+    #[allow(clippy::too_many_arguments)]
+    pub fn expand_checkpoint_replay(
+        &self,
+        execution: &RvrCheckpointPreflightExecution,
+        initial_registers: DeviceBufferView,
+        initial_memory: DeviceBufferView,
+        addi_opcode: u32,
+        load_doubleword_opcode: u32,
+        bne_opcode: u32,
+        terminate_opcode: u32,
+    ) -> Result<(GpuRvrTranscript, GpuRvrReplayPlan), GpuRvrInputError> {
+        if execution.endpoint != RvrPreflightEndpoint::Terminated {
+            return Err(GpuRvrInputError::InvalidTranscript(
+                "checkpoint GPU replay currently requires a terminated segment".to_string(),
+            ));
+        }
+        if execution.from_state.timestamp != 1
+            || execution.to_state.pc != execution.state.pc()
+            || execution.to_state.timestamp >= (1u32 << self.timestamp_max_bits)
+        {
+            return Err(GpuRvrInputError::InvalidTranscript(
+                "checkpoint execution has an invalid boundary".to_string(),
+            ));
+        }
+        let residual_cursor =
+            u32::try_from(execution.transcript.residuals.len()).map_err(|_| {
+                GpuRvrInputError::InvalidTranscript(
+                    "checkpoint residual stream exceeds the u32 cursor domain".to_string(),
+                )
+            })?;
+        let final_registers = read_rv64_registers(&execution.state);
+        let mut final_anchor = RvrCheckpoint {
+            pc: execution.to_state.pc,
+            timestamp: execution.to_state.timestamp,
+            retired: execution.retired,
+            residual_cursor,
+            regs: [0; 31],
+        };
+        final_anchor.regs.copy_from_slice(&final_registers[1..]);
+        let mut anchors = execution.transcript.checkpoints.clone();
+        anchors.push(final_anchor);
+        let anchors = upload(&anchors, &self.device_ctx)?;
+        let residuals = upload(&execution.transcript.residuals, &self.device_ctx)?;
+        let error = [0u32].to_device_on(&self.device_ctx)?;
+        let memory_counts = gpu_buffer::<u32>(anchors.len(), &self.device_ctx);
+        memory_counts.fill_zero_on(&self.device_ctx)?;
+        let opcodes = [
+            addi_opcode,
+            load_doubleword_opcode,
+            bne_opcode,
+            terminate_opcode,
+        ];
+        let address_spaces = [RV64_REGISTER_AS, RV64_MEMORY_AS, RV64_IMM_AS];
+        unsafe {
+            rvr_checkpoint_replay::count(
+                self.instructions.view(),
+                self.pc_base,
+                initial_registers,
+                initial_memory,
+                anchors.view(),
+                residuals.view(),
+                opcodes,
+                address_spaces,
+                self.pointer_max_bits,
+                execution.from_state.pc,
+                execution.from_state.timestamp,
+                &memory_counts,
+                &error,
+                self.device_ctx.stream.as_raw(),
+            )?;
+        }
+        let count_error = error.to_host_on(&self.device_ctx)?[0];
+        if count_error != 0 {
+            return Err(GpuRvrInputError::InvalidTranscript(format!(
+                "checkpoint GPU count replay rejected execution with code {count_error}"
+            )));
+        }
+        let counts = memory_counts.to_host_on(&self.device_ctx)?;
+        let mut total_memory = 0u32;
+        let mut offsets = Vec::with_capacity(counts.len());
+        for count in counts {
+            offsets.push(total_memory);
+            total_memory = total_memory.checked_add(count).ok_or_else(|| {
+                GpuRvrInputError::InvalidTranscript(
+                    "checkpoint replay memory-event count exceeds u32".to_string(),
+                )
+            })?;
+        }
+        if total_memory >= (1u32 << 31) {
+            return Err(GpuRvrInputError::InvalidTranscript(
+                "checkpoint replay memory log exceeds packed predecessor indexes".to_string(),
+            ));
+        }
+        let program_len = usize::try_from(execution.retired)
+            .ok()
+            .and_then(|retired| retired.checked_add(1))
+            .ok_or_else(|| {
+                GpuRvrInputError::InvalidTranscript(
+                    "checkpoint replay program-log length overflow".to_string(),
+                )
+            })?;
+        let program_log = gpu_buffer::<PreflightProgramEvent>(program_len, &self.device_ctx);
+        let memory_log =
+            gpu_buffer::<PreflightMemoryEvent>(total_memory as usize, &self.device_ctx);
+        let offsets = upload(&offsets, &self.device_ctx)?;
+        unsafe {
+            rvr_checkpoint_replay::emit(
+                self.instructions.view(),
+                self.pc_base,
+                initial_registers,
+                initial_memory,
+                anchors.view(),
+                residuals.view(),
+                offsets.view(),
+                opcodes,
+                address_spaces,
+                self.pointer_max_bits,
+                execution.from_state.pc,
+                execution.from_state.timestamp,
+                program_log.view(),
+                memory_log.view(),
+                &error,
+                self.device_ctx.stream.as_raw(),
+            )?;
+        }
+        let seed_count_device = [0u32].to_device_on(&self.device_ctx)?;
+        unsafe {
+            rvr_checkpoint_replay::seed_count(
+                memory_log.view(),
+                RV64_REGISTER_AS,
+                &seed_count_device,
+                &error,
+                self.device_ctx.stream.as_raw(),
+            )?;
+        }
+        let emit_error = error.to_host_on(&self.device_ctx)?[0];
+        if emit_error != 0 {
+            return Err(GpuRvrInputError::InvalidTranscript(format!(
+                "checkpoint GPU emit replay rejected execution with code {emit_error}"
+            )));
+        }
+        // The host reads above synchronize the emit stream. Release compact
+        // replay inputs before memory indexing allocates its sort/scan scratch.
+        drop(anchors);
+        drop(residuals);
+        drop(memory_counts);
+        drop(offsets);
+        let seed_count = seed_count_device.to_host_on(&self.device_ctx)?[0] as usize;
+        drop(seed_count_device);
+        let initial_write_log = gpu_buffer::<PreflightInitialWrite>(seed_count, &self.device_ctx);
+        unsafe {
+            rvr_checkpoint_replay::seed_emit(
+                memory_log.view(),
+                initial_registers,
+                RV64_REGISTER_AS,
+                initial_write_log.view(),
+                &error,
+                self.device_ctx.stream.as_raw(),
+            )?;
+        }
+        let seed_error = error.to_host_on(&self.device_ctx)?[0];
+        if seed_error != 0 {
+            return Err(GpuRvrInputError::InvalidTranscript(format!(
+                "checkpoint GPU seed replay rejected execution with code {seed_error}"
+            )));
+        }
+
+        let segment_identity = Arc::new(());
+        let transcript = GpuRvrTranscript::from_device_logs(
+            program_log,
+            memory_log,
+            initial_write_log,
+            self.address_space_height,
+            self.pointer_max_bits,
+            self.memory_address_spaces.view(),
+            error,
+            &self.device_ctx,
+            self.identity.clone(),
+            segment_identity.clone(),
+        )?;
+        let boundary = (execution.from_state, execution.to_state, Some(0));
+        let plan = GpuRvrReplayPlan::build(
+            self,
+            &transcript,
+            execution.endpoint,
+            boundary,
+            self.identity.clone(),
+            segment_identity,
+        )?;
+        Ok((transcript, plan))
     }
 
     /// Benchmark-only split of synchronized raw-log upload plus memory indexing
@@ -636,6 +841,48 @@ impl GpuRvrTranscript {
             &error,
             device_ctx,
         )?;
+        Ok(Self {
+            program_log,
+            memory_log,
+            initial_write_log,
+            memory_predecessors: memory_index.predecessors,
+            touched_blocks: memory_index.touched_blocks,
+            num_touched_blocks: memory_index.num_touched_blocks,
+            error,
+            device_ctx: device_ctx.clone(),
+            program_identity,
+            segment_identity,
+        })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn from_device_logs(
+        program_log: DeviceBuffer<PreflightProgramEvent>,
+        memory_log: DeviceBuffer<PreflightMemoryEvent>,
+        initial_write_log: DeviceBuffer<PreflightInitialWrite>,
+        address_space_height: u32,
+        pointer_max_bits: u32,
+        address_spaces: DeviceBufferView,
+        error: DeviceBuffer<u32>,
+        device_ctx: &GpuDeviceCtx,
+        program_identity: Arc<()>,
+        segment_identity: Arc<()>,
+    ) -> Result<Self, GpuRvrInputError> {
+        let memory_index = build_gpu_memory_index(
+            &memory_log,
+            &initial_write_log,
+            address_space_height,
+            pointer_max_bits,
+            address_spaces,
+            &error,
+            device_ctx,
+        )?;
+        let index_error = error.to_host_on(device_ctx)?[0];
+        if index_error != 0 {
+            return Err(GpuRvrInputError::InvalidTranscript(format!(
+                "checkpoint GPU memory index rejected logs with code {index_error}"
+            )));
+        }
         Ok(Self {
             program_log,
             memory_log,

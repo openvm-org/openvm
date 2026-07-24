@@ -342,6 +342,193 @@ pub mod rvr_postflight {
     }
 }
 
+pub mod rvr_checkpoint_replay {
+    use super::*;
+
+    extern "C" {
+        fn _rvr_checkpoint_count(
+            instructions: DeviceBufferView,
+            pc_base: u32,
+            initial_registers: DeviceBufferView,
+            initial_memory: DeviceBufferView,
+            anchors: DeviceBufferView,
+            residuals: DeviceBufferView,
+            addi_opcode: u32,
+            load_doubleword_opcode: u32,
+            bne_opcode: u32,
+            terminate_opcode: u32,
+            register_as: u32,
+            memory_as: u32,
+            immediate_as: u32,
+            pointer_max_bits: u32,
+            initial_pc: u32,
+            initial_timestamp: u32,
+            memory_counts: *mut u32,
+            error: *mut u32,
+            stream: cudaStream_t,
+        ) -> i32;
+
+        fn _rvr_checkpoint_emit(
+            instructions: DeviceBufferView,
+            pc_base: u32,
+            initial_registers: DeviceBufferView,
+            initial_memory: DeviceBufferView,
+            anchors: DeviceBufferView,
+            residuals: DeviceBufferView,
+            memory_offsets: DeviceBufferView,
+            addi_opcode: u32,
+            load_doubleword_opcode: u32,
+            bne_opcode: u32,
+            terminate_opcode: u32,
+            register_as: u32,
+            memory_as: u32,
+            immediate_as: u32,
+            pointer_max_bits: u32,
+            initial_pc: u32,
+            initial_timestamp: u32,
+            program: DeviceBufferView,
+            memory: DeviceBufferView,
+            error: *mut u32,
+            stream: cudaStream_t,
+        ) -> i32;
+
+        fn _rvr_checkpoint_seed_count(
+            memory: DeviceBufferView,
+            register_as: u32,
+            seed_count: *mut u32,
+            error: *mut u32,
+            stream: cudaStream_t,
+        ) -> i32;
+
+        fn _rvr_checkpoint_seed_emit(
+            memory: DeviceBufferView,
+            initial_registers: DeviceBufferView,
+            register_as: u32,
+            seeds: DeviceBufferView,
+            error: *mut u32,
+            stream: cudaStream_t,
+        ) -> i32;
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn count(
+        instructions: DeviceBufferView,
+        pc_base: u32,
+        initial_registers: DeviceBufferView,
+        initial_memory: DeviceBufferView,
+        anchors: DeviceBufferView,
+        residuals: DeviceBufferView,
+        opcodes: [u32; 4],
+        address_spaces: [u32; 3],
+        pointer_max_bits: u32,
+        initial_pc: u32,
+        initial_timestamp: u32,
+        memory_counts: &DeviceBuffer<u32>,
+        error: &DeviceBuffer<u32>,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_rvr_checkpoint_count(
+            instructions,
+            pc_base,
+            initial_registers,
+            initial_memory,
+            anchors,
+            residuals,
+            opcodes[0],
+            opcodes[1],
+            opcodes[2],
+            opcodes[3],
+            address_spaces[0],
+            address_spaces[1],
+            address_spaces[2],
+            pointer_max_bits,
+            initial_pc,
+            initial_timestamp,
+            memory_counts.as_mut_ptr(),
+            error.as_mut_ptr(),
+            stream,
+        ))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub unsafe fn emit(
+        instructions: DeviceBufferView,
+        pc_base: u32,
+        initial_registers: DeviceBufferView,
+        initial_memory: DeviceBufferView,
+        anchors: DeviceBufferView,
+        residuals: DeviceBufferView,
+        memory_offsets: DeviceBufferView,
+        opcodes: [u32; 4],
+        address_spaces: [u32; 3],
+        pointer_max_bits: u32,
+        initial_pc: u32,
+        initial_timestamp: u32,
+        program: DeviceBufferView,
+        memory: DeviceBufferView,
+        error: &DeviceBuffer<u32>,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_rvr_checkpoint_emit(
+            instructions,
+            pc_base,
+            initial_registers,
+            initial_memory,
+            anchors,
+            residuals,
+            memory_offsets,
+            opcodes[0],
+            opcodes[1],
+            opcodes[2],
+            opcodes[3],
+            address_spaces[0],
+            address_spaces[1],
+            address_spaces[2],
+            pointer_max_bits,
+            initial_pc,
+            initial_timestamp,
+            program,
+            memory,
+            error.as_mut_ptr(),
+            stream,
+        ))
+    }
+
+    pub unsafe fn seed_count(
+        memory: DeviceBufferView,
+        register_as: u32,
+        seed_count: &DeviceBuffer<u32>,
+        error: &DeviceBuffer<u32>,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_rvr_checkpoint_seed_count(
+            memory,
+            register_as,
+            seed_count.as_mut_ptr(),
+            error.as_mut_ptr(),
+            stream,
+        ))
+    }
+
+    pub unsafe fn seed_emit(
+        memory: DeviceBufferView,
+        initial_registers: DeviceBufferView,
+        register_as: u32,
+        seeds: DeviceBufferView,
+        error: &DeviceBuffer<u32>,
+        stream: cudaStream_t,
+    ) -> Result<(), CudaError> {
+        CudaError::from_result(_rvr_checkpoint_seed_emit(
+            memory,
+            initial_registers,
+            register_as,
+            seeds,
+            error.as_mut_ptr(),
+            stream,
+        ))
+    }
+}
+
 pub mod poseidon2 {
     use super::*;
 
