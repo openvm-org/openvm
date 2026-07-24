@@ -1466,6 +1466,59 @@ where
         SystemChipInventory = crate::system::cuda::SystemChipInventoryGPU,
     >,
 {
+    /// Expands one compact RV64I checkpoint execution against the segment's
+    /// already-uploaded immutable memory image. This is intentionally a narrow
+    /// seam for the first feasibility slice, not a generic replay interface.
+    #[doc(hidden)]
+    #[allow(clippy::too_many_arguments)]
+    pub fn expand_rvr_checkpoint_replay(
+        &self,
+        program: &crate::arch::rvr::cuda::GpuRvrProgram,
+        execution: &crate::arch::rvr::RvrCheckpointPreflightExecution,
+        addi_opcode: u32,
+        load_doubleword_opcode: u32,
+        bne_opcode: u32,
+        terminate_opcode: u32,
+    ) -> Result<
+        (
+            crate::arch::rvr::cuda::GpuRvrTranscript,
+            crate::arch::rvr::cuda::GpuRvrReplayPlan,
+        ),
+        crate::arch::rvr::cuda::GpuRvrInputError,
+    > {
+        let memory = MemTracker::start_and_reset_peak("tracegen.rvr_checkpoint_expand");
+        let result = (|| {
+            use openvm_instructions::riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS};
+
+            let initial_memory = &self.chip_complex.system.memory_inventory.initial_memory;
+            let initial_registers =
+                initial_memory
+                    .get(RV64_REGISTER_AS as usize)
+                    .ok_or_else(|| {
+                        crate::arch::rvr::cuda::GpuRvrInputError::InvalidTranscript(
+                            "initial register image was not transported to the GPU".to_string(),
+                        )
+                    })?;
+            let initial_main_memory =
+                initial_memory.get(RV64_MEMORY_AS as usize).ok_or_else(|| {
+                    crate::arch::rvr::cuda::GpuRvrInputError::InvalidTranscript(
+                        "initial main-memory image was not transported to the GPU".to_string(),
+                    )
+                })?;
+            program.expand_checkpoint_replay(
+                execution,
+                initial_registers.view(),
+                initial_main_memory.view(),
+                addi_opcode,
+                load_doubleword_opcode,
+                bne_opcode,
+                terminate_opcode,
+            )
+        })();
+        memory.emit_metrics();
+        result
+    }
+
     /// Low-level RVR trace-generation seam used by a concrete extension
     /// coordinator. It fences borrowed GPU inputs and validates trace heights,
     /// but does not know whether the callback visited every executed opcode.

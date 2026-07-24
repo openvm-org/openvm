@@ -8,6 +8,11 @@ fn main() {
             return; // Skip CUDA compilation
         }
 
+        // The source list is discovered by glob. Watch the directories as well
+        // as the files so adding a new kernel invalidates an existing build.
+        println!("cargo:rerun-if-changed=cuda/src/system");
+        println!("cargo:rerun-if-changed=cuda/src/testing");
+
         let builder = CudaBuilder::new()
             .include_from_dep("DEP_CUDA_COMMON_INCLUDE")
             .include("../circuits/primitives/cuda/include")

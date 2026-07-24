@@ -3,7 +3,8 @@ use std::sync::Arc;
 use openvm_circuit::{
     arch::{
         rvr::{
-            cuda::GpuRvrProgram, RvrPreflightEndpoint, RvrPreflightLimits, RvrPreflightTranscript,
+            cuda::GpuRvrProgram, RvrCheckpointPreflightLimits, RvrPreflightEndpoint,
+            RvrPreflightLimits, RvrPreflightTranscript,
         },
         VirtualMachine, VmExecutor,
     },
@@ -362,6 +363,190 @@ fn rvr_gpu_tracegen_proves_system_and_rv64i_airs_without_record_arenas() {
 
     let proof = vm.engine.prove(vm.pk(), proving_ctx).unwrap();
     vm.engine.verify(&pk.get_vk(), &proof).unwrap();
+}
+
+#[test]
+fn rvr_checkpoint_gpu_replay_proves_bounded_rv64i_slice_differentially() {
+    let instructions = [
+        instruction(
+            BaseAluImmOpcode::ADDI,
+            [
+                reg(31),
+                reg(0),
+                8,
+                RV64_REGISTER_AS as usize,
+                RV64_IMM_AS as usize,
+            ],
+        ),
+        Instruction::from_usize(
+            Rv64LoadStoreOpcode::LOADD.global_opcode(),
+            [
+                reg(2),
+                reg(31),
+                0,
+                RV64_REGISTER_AS as usize,
+                RV64_MEMORY_AS as usize,
+                1,
+                0,
+            ],
+        ),
+        instruction(
+            BaseAluImmOpcode::ADDI,
+            [
+                reg(3),
+                reg(2),
+                1,
+                RV64_REGISTER_AS as usize,
+                RV64_IMM_AS as usize,
+            ],
+        ),
+        Instruction::from_usize(
+            BranchEqualOpcode::BNE.global_opcode(),
+            [
+                reg(3),
+                reg(2),
+                8,
+                RV64_REGISTER_AS as usize,
+                RV64_REGISTER_AS as usize,
+            ],
+        ),
+        Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 1, 0, 0]),
+        Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
+    ];
+    let program = Program::from_instructions(&instructions);
+    let loaded = 0x8877_6655_4433_2211u64;
+    let init_memory = loaded
+        .to_le_bytes()
+        .into_iter()
+        .enumerate()
+        .map(|(offset, byte)| ((RV64_MEMORY_AS, 8 + offset as u32), byte))
+        .collect();
+    let exe = VmExe::new(program.clone()).with_init_memory(init_memory);
+    let config = Rv64IConfig {
+        system: test_system_config(),
+        ..Default::default()
+    };
+    let executor = VmExecutor::new(config.clone()).unwrap();
+    let full = executor.rvr_preflight_instance(&exe, None).unwrap();
+    let checkpoint = executor
+        .rvr_experimental_checkpoint_preflight_instance(&exe, None)
+        .unwrap();
+
+    let full_execution = full
+        .execute(Vec::<Vec<u8>>::new(), RvrPreflightLimits::new(5, 16))
+        .unwrap();
+    let checkpoint_state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
+
+    let (mut checkpoint_vm, checkpoint_pk) =
+        VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64IGpuBuilder, config.clone())
+            .unwrap();
+    let cached_program = checkpoint_vm.commit_program_on_device(&program);
+    checkpoint_vm.load_program(cached_program);
+    checkpoint_vm.transport_init_memory_to_device(&checkpoint_state.memory);
+    let checkpoint_execution = checkpoint
+        .execute_from_state(checkpoint_state, RvrCheckpointPreflightLimits::new(5, 1, 2))
+        .unwrap();
+    assert_eq!(checkpoint_execution.transcript.checkpoints.len(), 1);
+    assert_eq!(checkpoint_execution.transcript.residuals, vec![loaded]);
+    let checkpoint_anchor = checkpoint_execution.transcript.checkpoints[0];
+    assert_eq!(
+        (
+            checkpoint_anchor.pc,
+            checkpoint_anchor.timestamp,
+            checkpoint_anchor.retired,
+            checkpoint_anchor.residual_cursor,
+        ),
+        (20, 11, 4, 1),
+    );
+    assert_eq!(checkpoint_anchor.regs[30], 8);
+    assert_eq!(checkpoint_execution.to_state.pc, full_execution.state.pc());
+    assert_eq!(
+        checkpoint_execution.to_state.timestamp,
+        full_execution
+            .transcript
+            .program_log
+            .last()
+            .unwrap()
+            .timestamp
+    );
+    assert_eq!(checkpoint_execution.endpoint, full_execution.endpoint);
+    assert_eq!(checkpoint_execution.retired, 5);
+    for register in [2, 3, 31] {
+        let pointer = (reg(register) / 2) as u32;
+        let checkpoint_value: [u16; 4] = unsafe {
+            checkpoint_execution
+                .state
+                .memory
+                .read(RV64_REGISTER_AS, pointer)
+        };
+        let full_value: [u16; 4] =
+            unsafe { full_execution.state.memory.read(RV64_REGISTER_AS, pointer) };
+        assert_eq!(checkpoint_value, full_value);
+    }
+
+    let checkpoint_program = GpuRvrProgram::upload(
+        &program,
+        &config.system.memory_config,
+        &checkpoint_vm.engine.device().device_ctx,
+    )
+    .unwrap();
+    let (checkpoint_transcript, checkpoint_plan) = Rv64ImRvrGpuTracegen::expand_checkpoint_replay(
+        &checkpoint_vm,
+        &checkpoint_program,
+        &checkpoint_execution,
+    )
+    .unwrap();
+    let checkpoint_tracegen = Rv64ImRvrGpuTracegen::new(
+        &checkpoint_program,
+        &checkpoint_transcript,
+        &checkpoint_plan,
+    )
+    .unwrap();
+    let checkpoint_ctx = checkpoint_tracegen
+        .generate_proving_ctx(&mut checkpoint_vm)
+        .unwrap();
+    drop(checkpoint_plan);
+    drop(checkpoint_transcript);
+    let checkpoint_proof = checkpoint_vm
+        .engine
+        .prove(checkpoint_vm.pk(), checkpoint_ctx)
+        .unwrap();
+    checkpoint_vm
+        .engine
+        .verify(&checkpoint_pk.get_vk(), &checkpoint_proof)
+        .unwrap();
+
+    let legacy_state = full.create_initial_vm_state(Vec::<Vec<u8>>::new());
+    let (mut legacy_vm, legacy_pk) =
+        VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64IGpuBuilder, config.clone())
+            .unwrap();
+    let cached_program = legacy_vm.commit_program_on_device(&program);
+    legacy_vm.load_program(cached_program);
+    legacy_vm.transport_init_memory_to_device(&legacy_state.memory);
+    let legacy_execution = full
+        .execute_from_state(legacy_state, RvrPreflightLimits::new(5, 16))
+        .unwrap();
+    let legacy_program = GpuRvrProgram::upload(
+        &program,
+        &config.system.memory_config,
+        &legacy_vm.engine.device().device_ctx,
+    )
+    .unwrap();
+    let (legacy_transcript, legacy_plan) = legacy_program
+        .upload_transcript(&legacy_execution.transcript, legacy_execution.endpoint)
+        .unwrap();
+    let legacy_tracegen =
+        Rv64ImRvrGpuTracegen::new(&legacy_program, &legacy_transcript, &legacy_plan).unwrap();
+    let legacy_ctx = legacy_tracegen
+        .generate_proving_ctx(&mut legacy_vm)
+        .unwrap();
+    drop(legacy_plan);
+    drop(legacy_transcript);
+    let legacy_proof = legacy_vm.engine.prove(legacy_vm.pk(), legacy_ctx).unwrap();
+    legacy_vm
+        .engine
+        .verify(&legacy_pk.get_vk(), &legacy_proof)
+        .unwrap();
 }
 
 #[test]

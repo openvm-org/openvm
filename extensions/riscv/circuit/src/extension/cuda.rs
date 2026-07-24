@@ -16,7 +16,10 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 #[cfg(feature = "rvr")]
 use {
     openvm_circuit::arch::{
-        rvr::cuda::{GpuRvrInputError, GpuRvrProgram, GpuRvrReplayPlan, GpuRvrTranscript},
+        rvr::{
+            cuda::{GpuRvrInputError, GpuRvrProgram, GpuRvrReplayPlan, GpuRvrTranscript},
+            RvrCheckpointPreflightExecution,
+        },
         GenerationError, VirtualMachine, VmBuilder,
     },
     openvm_circuit::system::cuda::{
@@ -77,6 +80,31 @@ pub struct Rv64ImRvrGpuTracegen<'a> {
 
 #[cfg(feature = "rvr")]
 impl<'a> Rv64ImRvrGpuTracegen<'a> {
+    /// First checkpoint-replay feasibility slice: ADDI, aligned LOADD with a
+    /// nonzero destination, BNE, and the final TERMINATE. Device replay derives
+    /// the ordinary three logs and then reuses the unchanged trace generators.
+    pub fn expand_checkpoint_replay<VB>(
+        vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
+        program: &GpuRvrProgram,
+        execution: &RvrCheckpointPreflightExecution,
+    ) -> Result<(GpuRvrTranscript, GpuRvrReplayPlan), GpuRvrInputError>
+    where
+        VB: VmBuilder<
+            GpuBabyBearPoseidon2Engine,
+            RecordArena = DenseRecordArena,
+            SystemChipInventory = SystemChipInventoryGPU,
+        >,
+    {
+        vm.expand_rvr_checkpoint_replay(
+            program,
+            execution,
+            Self::opcode(BaseAluImmOpcode::ADDI),
+            Self::opcode(Rv64LoadStoreOpcode::LOADD),
+            Self::opcode(BranchEqualOpcode::BNE),
+            SystemOpcode::TERMINATE.global_opcode().as_usize() as u32,
+        )
+    }
+
     pub fn new(
         program: &'a GpuRvrProgram,
         transcript: &'a GpuRvrTranscript,
