@@ -33,9 +33,8 @@ use openvm_stark_sdk::{
     utils::setup_tracing,
 };
 use openvm_static_verifier::{
-    backend::Halo2Backend, log_heights_per_air_from_proof, Fr, Halo2Params,
-    Halo2ProvingMetadata, Halo2ProvingPinning, StaticVerifierCircuit, StaticVerifierProof,
-    StaticVerifierShape,
+    backend::Halo2Backend, log_heights_per_air_from_proof, Fr, Halo2Params, Halo2ProvingMetadata,
+    Halo2ProvingPinning, StaticVerifierCircuit, StaticVerifierProof, StaticVerifierShape,
 };
 use rand_chacha::{rand_core::SeedableRng, ChaCha20Rng};
 

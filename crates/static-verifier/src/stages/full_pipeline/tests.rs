@@ -22,13 +22,13 @@ use openvm_stark_sdk::{
 
 use super::*;
 use crate::{
+    backend::Halo2Backend,
     circuit::build_stacked_layouts_for_static_vk,
     config::{STATIC_VERIFIER_LOOKUP_ADVICE_COLS, STATIC_VERIFIER_NUM_ADVICE_COLS},
     field::baby_bear::{
         clear_recorded_ext_base_consts, take_recorded_ext_base_consts, RecordedExtBaseConst,
         BABY_BEAR_MODULUS_U64,
     },
-    backend::Halo2Backend,
     stages::proof_shape::{log_heights_per_air_from_proof, trace_id_order_from_static_heights},
     RootF, StaticVerifierCircuit,
 };

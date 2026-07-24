@@ -14,7 +14,7 @@ use openvm_stark_sdk::p3_baby_bear::BabyBear;
 
 use crate::{
     chip_traits::{
-        BabyBearExt4Inst, BabyBearInst, ChipBase, Poseidon2Inst, GateInst, PopulateInputs,
+        BabyBearExt4Inst, BabyBearInst, ChipBase, GateInst, PopulateInputs, Poseidon2Inst,
         TranscriptInst,
     },
     field::baby_bear::{

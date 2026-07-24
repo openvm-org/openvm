@@ -15,7 +15,7 @@ use openvm_stark_sdk::{
 
 use crate::{
     chip_traits::{
-        BabyBearExt4Inst, BabyBearInst, Poseidon2Inst, GateInst, PopulateInputs, TranscriptInst,
+        BabyBearExt4Inst, BabyBearInst, GateInst, PopulateInputs, Poseidon2Inst, TranscriptInst,
     },
     field::baby_bear::{
         BabyBearExt4Wire, BabyBearExtWire, BabyBearWire, ReducedBabyBearExtWire,

@@ -11,7 +11,7 @@ use openvm_stark_sdk::{
 };
 
 use crate::{
-    chip_traits::{Poseidon2Inst, PopulateInputs, TranscriptInst},
+    chip_traits::{PopulateInputs, Poseidon2Inst, TranscriptInst},
     field::baby_bear::ReducedBabyBearWire,
     stages::{
         batch_constraints::{
