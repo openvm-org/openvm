@@ -95,9 +95,7 @@ impl<const DIGEST_WIDTH: usize, AB: InteractionBuilder> Air<AB>
         builder.assert_bool(local.is_valid);
         builder.assert_bool(local.is_dirty);
         // `is_dirty` may only be set on valid rows
-        builder
-            .when(AB::Expr::ONE - local.is_valid)
-            .assert_zero(local.is_dirty);
+        builder.when(local.is_dirty).assert_one(local.is_valid);
 
         // If the leaf is clean, its final values and hash must match the initial ones.
         // Since both bits are boolean and `is_dirty` implies `is_valid`, the selector below
