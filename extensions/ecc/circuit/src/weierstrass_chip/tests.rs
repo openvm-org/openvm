@@ -29,6 +29,7 @@ use {
     openvm_circuit::arch::testing::{
         default_var_range_checker_bus, GpuChipTestBuilder, GpuTestChipHarness,
     },
+    openvm_circuit::system::cuda::memory::MemoryInventoryGPU,
     openvm_circuit_primitives::var_range::VariableRangeCheckerChip,
 };
 #[cfg(all(feature = "cuda", feature = "rvr"))]
@@ -43,13 +44,21 @@ use {
     openvm_circuit_primitives::Chip,
     openvm_cuda_backend::{base::DeviceMatrix, GpuBackend},
     openvm_cuda_common::copy::MemCopyD2H,
-    openvm_instructions::{exe::VmExe, program::Program, SystemOpcode},
+    openvm_instructions::{
+        exe::{SparseMemoryImage, VmExe},
+        program::Program,
+        SystemOpcode,
+    },
     openvm_mod_circuit_builder::{run_field_expression_precomputed, FieldExpressionProgram},
-    openvm_stark_backend::prover::{AirProvingContext, MatrixDimensions},
+    openvm_stark_backend::{
+        prover::{AirProvingContext, MatrixDimensions},
+        StarkEngine,
+    },
     rvr_state::{
         PreflightInitialWrite, PreflightMemoryEvent, PreflightProgramEvent, PREFLIGHT_WRITE_BIT,
     },
     std::sync::atomic::Ordering,
+    strum::EnumCount,
 };
 
 use crate::{
@@ -226,6 +235,19 @@ fn field_expression_output(
 }
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
+fn reset_gpu_initial_memory(tester: &mut GpuChipTestBuilder) {
+    tester.memory.memory.data.memory.recompute_touched_pages();
+    let device_ctx = tester.range_checker().device_ctx.clone();
+    let hasher_chip = tester.memory.hasher_chip.clone().unwrap();
+    tester.memory.inventory =
+        MemoryInventoryGPU::new(tester.memory.config.clone(), hasher_chip, device_ctx);
+    tester
+        .memory
+        .inventory
+        .set_initial_memory(&tester.memory.memory.data.memory);
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
 fn initialize_vec_heap_memory<const NUM_READS: usize, const BLOCKS: usize>(
     tester: &mut GpuChipTestBuilder,
     rs_ptrs: [u32; NUM_READS],
@@ -272,10 +294,7 @@ fn initialize_vec_heap_memory<const NUM_READS: usize, const BLOCKS: usize>(
             );
         }
     }
-    tester
-        .memory
-        .inventory
-        .set_initial_memory(&tester.memory.memory.data.memory);
+    reset_gpu_initial_memory(tester);
 }
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
@@ -786,9 +805,11 @@ mod ec_addne_tests {
 
         let device_ctx = tester.range_checker().device_ctx.clone();
         let cpu_range_checker = tester.cpu_range_checker();
-        let legacy_ctx = harness
-            .gpu_chip
-            .generate_proving_ctx(std::mem::take(&mut harness.dense_arena));
+        let legacy_arena = std::mem::replace(
+            &mut harness.dense_arena,
+            DenseRecordArena::with_byte_capacity(0),
+        );
+        let legacy_ctx = harness.gpu_chip.generate_proving_ctx(legacy_arena);
         let legacy_counts = range_counts(&cpu_range_checker);
         cpu_range_checker.clear();
 
@@ -977,7 +998,8 @@ mod ec_addne_tests {
         );
         let error = incomplete
             .finish()
-            .expect_err("the second curve's opcode must remain unclaimed");
+            .err()
+            .expect("the second curve's opcode must remain unclaimed");
         assert!(error
             .to_string()
             .contains(&(second_base as u32).to_string()));
@@ -1005,7 +1027,7 @@ mod ec_addne_tests {
         // Exercise the actual reverse inventory walk and its ECC -> Algebra -> RV64 fallthrough
         // on the same expanded transcript. Both curve instances have the same concrete chip types;
         // only their opcode bases distinguish them.
-        let mut init_memory = Vec::new();
+        let mut init_memory = SparseMemoryImage::default();
         for (register, pointer) in [
             (8u32, 0x300u32),
             (16, 0x100),
@@ -1071,7 +1093,8 @@ mod ec_addne_tests {
             &poisoned_plan,
         )
         .generate_proving_ctx(&mut poisoned_vm, &incomplete_config.modular.modular, None)
-        .expect_err("the VM inventory omits the second configured curve");
+        .err()
+        .expect("the VM inventory omits the second configured curve");
         assert!(late_coverage_error
             .to_string()
             .contains(&(second_base as u32).to_string()));
@@ -1082,7 +1105,8 @@ mod ec_addne_tests {
             &poisoned_plan,
         )
         .generate_proving_ctx(&mut poisoned_vm, &incomplete_config.modular.modular, None)
-        .expect_err("a failed RVR tracegen session must poison retries");
+        .err()
+        .expect("a failed RVR tracegen session must poison retries");
         assert!(retry_error.to_string().contains("poisoned"));
 
         let (mut vm, pk) = VirtualMachine::new_with_keygen(
@@ -1691,9 +1715,11 @@ mod ec_double_tests {
 
         let device_ctx = tester.range_checker().device_ctx.clone();
         let cpu_range_checker = tester.cpu_range_checker();
-        let legacy_ctx = harness
-            .gpu_chip
-            .generate_proving_ctx(std::mem::take(&mut harness.dense_arena));
+        let legacy_arena = std::mem::replace(
+            &mut harness.dense_arena,
+            DenseRecordArena::with_byte_capacity(0),
+        );
+        let legacy_ctx = harness.gpu_chip.generate_proving_ctx(legacy_arena);
         let legacy_counts = range_counts(&cpu_range_checker);
         cpu_range_checker.clear();
 
