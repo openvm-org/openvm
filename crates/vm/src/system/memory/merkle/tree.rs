@@ -250,9 +250,9 @@ impl<F: PrimeField32, const DIGEST_WIDTH: usize> MerkleTree<F, DIGEST_WIDTH> {
                                 parent_hash: combined,
                                 left_child_hash: *left,
                                 right_child_hash: *right,
-                                // Final-row child mode = dd bit: 1 when the child is
-                                // "not expanded finally" (untouched *or* touched-clean,
-                                // borrowed from the initial tree), 0 when it is dirty.
+                                // Final-row child mode: 1 when the child is untouched or
+                                // touched-clean and therefore borrowed from the initial
+                                // tree, 0 when it is dirty.
                                 left_child_mode: F::from_bool(!left_dirty),
                                 right_child_mode: F::from_bool(!right_dirty),
                             });
@@ -328,22 +328,36 @@ impl<F: PrimeField32, const DIGEST_WIDTH: usize> MerkleTree<F, DIGEST_WIDTH> {
             let index = 1 << self.height;
             vec![(index, self.get_node(index), false)]
         };
-        // Upper bound: one initial row per touched-spanning node plus at most one final
-        // row each.
-        let touched_spanning_nodes = layer
-            .iter()
-            .zip(layer.iter().skip(1))
-            .fold(md.overall_height(), |acc, ((lhs, _, _), (rhs, _, _))| {
-                acc + (lhs ^ rhs).ilog2() as usize
-            });
-        let mut rows = Vec::with_capacity(2 * touched_spanning_nodes);
+        let tree_height = md.overall_height();
+        let mut touched_nodes = tree_height;
+        let mut dirty_nodes = 0;
+        let mut previous_touched = layer[0].0;
+        let mut previous_dirty: Option<u64> = None;
+        for &(index, _, is_dirty) in &layer {
+            if index != previous_touched {
+                touched_nodes += (index ^ previous_touched).ilog2() as usize;
+                previous_touched = index;
+            }
+            if is_dirty {
+                dirty_nodes += match previous_dirty {
+                    None => tree_height,
+                    Some(previous) => (index ^ previous).ilog2() as usize,
+                };
+                previous_dirty = Some(index);
+            }
+        }
+        // One initial row per touched node and one final row per dirty node. The final
+        // root row is present even when no node is dirty.
+        let num_rows = touched_nodes + dirty_nodes.max(1);
+        let mut rows = Vec::with_capacity(num_rows);
         self.process_layers(layer, md, Some(&mut rows), |left, right| {
             hasher.compress_and_record(left, right)
         });
+        debug_assert_eq!(rows.len(), num_rows);
         if touched.is_empty() {
             // The artificial touch seeds the walk so the root pair exists, but there is
             // no boundary row supplying the leaf's claim, so the height-1 initial row
-            // (rows[0]) must treat the leaf as *untouched*: one dd-borrowed reference if
+            // (rows[0]) must treat the leaf as *untouched*: one borrowed reference if
             // the row's final counterpart exists (root case, mode 1), none otherwise
             // (mode 0).
             rows[0].left_child_mode = F::from_bool(rows[0].is_root == F::ONE);

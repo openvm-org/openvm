@@ -20,8 +20,7 @@ use openvm_instructions::VM_DIGEST_WIDTH;
 use openvm_stark_backend::{
     p3_field::PrimeCharacteristicRing,
     p3_maybe_rayon::prelude::{
-        IndexedParallelIterator, IntoParallelIterator, ParallelIterator, ParallelSlice,
-        ParallelSliceMut,
+        IndexedParallelIterator, ParallelIterator, ParallelSlice, ParallelSliceMut,
     },
     prover::AirProvingContext,
 };
@@ -353,21 +352,6 @@ impl MemoryInventoryGPU {
                 .expect("merge_records failed");
             }
 
-            // The merged record count is a pure function of input adjacency
-            // (the device merge flags a record iff its (address_space,
-            // ptr / VM_DIGEST_WIDTH) differs from its predecessor's, and the
-            // partition is sorted), so it can be computed here and the
-            // mid-merge D2H sync dropped entirely.
-            let out_num_records = 1
-                + (1..in_num_records)
-                    .into_par_iter()
-                    .filter(|&i| {
-                        let (a, b) = (&partition[i], &partition[i - 1]);
-                        (a.address_space, a.ptr / VM_DIGEST_WIDTH as u32)
-                            != (b.address_space, b.ptr / VM_DIGEST_WIDTH as u32)
-                    })
-                    .count();
-
             // Host work overlapping the merge kernels: the compacted leaf keys and
             // their dirty bits are pure functions of the sorted partition (the same
             // dedup rule the device merge uses; a leaf is dirty iff some of its blocks
@@ -393,7 +377,9 @@ impl MemoryInventoryGPU {
                     num_dirty_leaves += 1;
                 }
             }
-            debug_assert_eq!(num_touched_leaves, out_num_records);
+            // The GPU merge groups records the same way, so this count avoids a
+            // device-to-host copy before the next kernels are queued.
+            let out_num_records = num_touched_leaves;
             // One initial row per touched node, one final row per dirty node; the
             // final root row exists even when nothing is dirty.
             let merkle_rows = touched_nodes.nodes

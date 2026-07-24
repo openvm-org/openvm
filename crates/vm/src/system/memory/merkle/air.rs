@@ -21,17 +21,17 @@ pub struct MemoryMerkleAir<const DIGEST_WIDTH: usize> {
 
 /// Returns the direction and multiplicity of one child interaction.
 ///
-/// On initial rows, `mode` is the number of initial interactions received. On final
-/// rows, mode 0 selects the final state and mode 1 selects the initial state.
+/// On initial rows, `mode` is the number of initial claims consumed. On final rows,
+/// mode 0 selects the final state and mode 1 selects the initial state.
 ///
-/// +---------+------------+-----------------+--------------+
-/// | Row     | mode       | child direction | multiplicity |
-/// +---------+------------+-----------------+--------------+
-/// | Initial | 0, 1, or 2 |               1 |        -mode |
-/// | Final   |          0 |              -1 |            1 |
-/// | Final   |          1 |               1 |            1 |
-/// | Padding |          0 |               0 |            0 |
-/// +---------+------------+-----------------+--------------+
+/// +---------+---------------+------------+-----------------+--------------+
+/// | Row     | row direction | mode       | child direction | multiplicity |
+/// +---------+---------------+------------+-----------------+--------------+
+/// | Initial |             1 | 0, 1, or 2 |               1 |        -mode |
+/// | Final   |            -1 |          0 |              -1 |            1 |
+/// | Final   |            -1 |          1 |               1 |            1 |
+/// | Padding |             0 |          0 |               0 |            0 |
+/// +---------+---------------+------------+-----------------+--------------+
 fn child_bus_interaction<AB: InteractionBuilder>(
     row_direction: AB::Var,
     mode: AB::Var,

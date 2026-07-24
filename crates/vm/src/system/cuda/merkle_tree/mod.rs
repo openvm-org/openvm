@@ -911,7 +911,7 @@ mod tests {
             .collect::<Vec<[F; VM_DIGEST_WIDTH]>>();
         // Make every third touched leaf *clean* (final values equal to initial ones):
         // random values are almost surely dirty, and the mixed case is what exercises
-        // skipped final rows, dd-borrows of clean leaves, and the reference-count flags.
+        // skipped final rows, initial-state borrows, and the child modes.
         for (i, (&(address_space, ptr), values)) in
             touched_ptrs.iter().zip(new_data.iter_mut()).enumerate()
         {
