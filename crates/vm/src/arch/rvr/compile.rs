@@ -2,7 +2,7 @@
 
 use std::{
     collections::{BTreeMap, BTreeSet},
-    ffi::OsStr,
+    ffi::{OsStr, OsString},
     fmt::{self, Write as _},
     fs::{self, File},
     io::Read,
@@ -2075,11 +2075,54 @@ struct RvrNativeCacheManifest {
 
 const DEFAULT_THINLTO_JOBS_MAX: usize = 32;
 const THINLTO_CACHE_VERSION: &str = "v1";
+const NATIVE_MAKEFILE: &str = include_str!("../../../../rvr/rvr-openvm/c/Makefile");
+const NATIVE_MAKE_CONTROL_ENV_VARS: &[&str] = &["MAKEFLAGS", "GNUMAKEFLAGS", "MFLAGS", "MAKEFILES"];
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct ThinLtoBuildOptions {
     jobs: usize,
     cache_dir: Option<PathBuf>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct NativeBuildConfig(Vec<(String, OsString)>);
+
+impl NativeBuildConfig {
+    fn from_env() -> Self {
+        Self::from_lookup(|name| std::env::var_os(name))
+    }
+
+    fn from_lookup(mut lookup: impl FnMut(&str) -> Option<OsString>) -> Self {
+        Self(
+            NATIVE_MAKEFILE
+                .lines()
+                .filter_map(|line| line.split_once("?="))
+                .map(|(name, default)| {
+                    let name = name.trim();
+                    let value =
+                        lookup(name).unwrap_or_else(|| OsString::from(default.trim_start()));
+                    (name.to_string(), value)
+                })
+                .collect(),
+        )
+    }
+
+    fn update_cache_key(&self, hasher: &mut Sha256) {
+        update_framed(hasher, NATIVE_MAKEFILE.as_bytes());
+        for (name, value) in &self.0 {
+            update_framed(hasher, name.as_bytes());
+            update_framed(hasher, value.as_encoded_bytes());
+        }
+    }
+
+    fn apply_to_command(&self, command: &mut Command) {
+        for name in NATIVE_MAKE_CONTROL_ENV_VARS {
+            command.env_remove(name);
+        }
+        for (name, value) in &self.0 {
+            command.env(name, value);
+        }
+    }
 }
 
 fn compile_impl<F: PrimeField32>(
@@ -2101,6 +2144,7 @@ fn compile_impl<F: PrimeField32>(
     }
 
     let toolchain = ensure_toolchain_available()?;
+    let native_build_config = NativeBuildConfig::from_env();
     if let Some(launcher) = toolchain.unavailable_compiler_launcher.as_deref() {
         tracing::warn!(
             launcher,
@@ -2292,6 +2336,7 @@ fn compile_impl<F: PrimeField32>(
             native_opt.as_deref(),
             &inline_meta,
             &toolchain,
+            &native_build_config,
         )?;
         input_key_elapsed = input_key_started.elapsed();
         if input_key.is_none() {
@@ -2601,7 +2646,9 @@ fn compile_impl<F: PrimeField32>(
 
     let hash_started = Instant::now();
     let project_key = (cache.is_some() || thinlto_cache_root.is_some())
-        .then(|| generated_project_cache_key(output_dir, &make_args, &toolchain))
+        .then(|| {
+            generated_project_cache_key(output_dir, &make_args, &toolchain, &native_build_config)
+        })
         .transpose()?;
     let hash_elapsed = hash_started.elapsed();
     if cache.is_some() || thinlto_cache_root.is_some() {
@@ -2657,7 +2704,13 @@ fn compile_impl<F: PrimeField32>(
             .zip(project_key.as_deref())
             .map(|(root, key)| root.join(THINLTO_CACHE_VERSION).join(key)),
     };
-    compile_generated_project(output_dir, &make_args, &toolchain, &thinlto)?;
+    compile_generated_project(
+        output_dir,
+        &make_args,
+        &toolchain,
+        &native_build_config,
+        &thinlto,
+    )?;
 
     let lib_path = find_shared_lib(output_dir)?;
     let lib = unsafe {
@@ -2988,6 +3041,7 @@ fn generated_project_input_cache_key<F: PrimeField32>(
     native_opt: Option<&str>,
     inline_meta: &RvrInlineRecordsMeta,
     toolchain: &rvr_openvm::RuntimeToolchain,
+    native_build_config: &NativeBuildConfig,
 ) -> Result<Option<String>, CompileError> {
     let Some(extension_fingerprints) = opts.extensions.codegen_fingerprints() else {
         return Ok(None);
@@ -3148,26 +3202,7 @@ fn generated_project_input_cache_key<F: PrimeField32>(
     }
 
     update_native_build_identity(&mut hasher, toolchain)?;
-    for name in [
-        "OPT",
-        "DEBUG",
-        "LTO",
-        "LDFLAGS",
-        "LDLIBS",
-        "EXT_LIBS",
-        "EXT_SRCS",
-        "EXT_CFLAGS",
-        "LIB",
-        "HOST_OS",
-    ] {
-        update_framed(&mut hasher, name.as_bytes());
-        update_optional(
-            &mut hasher,
-            std::env::var_os(name)
-                .as_ref()
-                .map(|value| value.as_encoded_bytes()),
-        );
-    }
+    native_build_config.update_cache_key(&mut hasher);
 
     Ok(Some(hex_digest(hasher.finalize())))
 }
@@ -3263,6 +3298,7 @@ fn generated_project_cache_key(
     output_dir: &Path,
     make_args: &[String],
     toolchain: &rvr_openvm::RuntimeToolchain,
+    native_build_config: &NativeBuildConfig,
 ) -> Result<String, CompileError> {
     fn collect_files(dir: &Path, files: &mut Vec<PathBuf>) -> Result<(), CompileError> {
         for entry in fs::read_dir(dir).map_err(|source| CompileError::CProject {
@@ -3313,25 +3349,7 @@ fn generated_project_cache_key(
         &toolchain.compiler,
         &["-march=native", "-###", "-E", "-x", "c", "-"],
     )?;
-    for name in [
-        "OPT",
-        "DEBUG",
-        "LTO",
-        "LDFLAGS",
-        "LDLIBS",
-        "EXT_LIBS",
-        "EXT_SRCS",
-        "EXT_CFLAGS",
-        "LIB",
-        "HOST_OS",
-    ] {
-        hasher.update(name.as_bytes());
-        hasher.update([0]);
-        if let Some(value) = std::env::var_os(name) {
-            hasher.update(value.as_encoded_bytes());
-        }
-        hasher.update([0]);
-    }
+    native_build_config.update_cache_key(&mut hasher);
 
     let output_dir_text = output_dir.to_string_lossy();
     for arg in make_args {
@@ -3437,6 +3455,7 @@ fn compile_generated_project(
     output_dir: &Path,
     make_args: &[String],
     toolchain: &rvr_openvm::RuntimeToolchain,
+    native_build_config: &NativeBuildConfig,
     thinlto: &ThinLtoBuildOptions,
 ) -> Result<(), CompileError> {
     let stdout_path = output_dir.join("make.stdout.log");
@@ -3489,6 +3508,7 @@ fn compile_generated_project(
     );
 
     let mut make = Command::new(&toolchain.make);
+    native_build_config.apply_to_command(&mut make);
     make.arg("-C")
         .arg(output_dir)
         .arg("-j")
@@ -3565,13 +3585,20 @@ fn compile_generated_project(
                     compiler = %toolchain.compiler,
                     "rvr compiler launcher build failed; cleaning and retrying directly"
                 );
-                clean_generated_project(output_dir, make_args, toolchain, &failure)?;
+                clean_generated_project(
+                    output_dir,
+                    make_args,
+                    toolchain,
+                    native_build_config,
+                    &failure,
+                )?;
                 let mut direct_toolchain = toolchain.clone();
                 direct_toolchain.compiler_launcher = None;
                 return compile_generated_project(
                     output_dir,
                     make_args,
                     &direct_toolchain,
+                    native_build_config,
                     thinlto,
                 );
             }
@@ -3586,9 +3613,12 @@ fn clean_generated_project(
     output_dir: &Path,
     make_args: &[String],
     toolchain: &rvr_openvm::RuntimeToolchain,
+    native_build_config: &NativeBuildConfig,
     original_failure: &str,
 ) -> Result<(), CompileError> {
-    let output = Command::new(&toolchain.make)
+    let mut make = Command::new(&toolchain.make);
+    native_build_config.apply_to_command(&mut make);
+    let output = make
         .arg("-C")
         .arg(output_dir)
         .arg("-s")
@@ -3818,6 +3848,7 @@ mod tests {
             dir.path(),
             &[],
             &toolchain,
+            &NativeBuildConfig::from_lookup(|_| None),
             &ThinLtoBuildOptions {
                 jobs: 1,
                 cache_dir: None,
@@ -3923,6 +3954,33 @@ mod tests {
         assert_eq!(registry.codegen_fingerprints(), Some(Vec::new()));
         registry.register(UnfingerprintedExtension);
         assert_eq!(registry.codegen_fingerprints(), None);
+    }
+
+    #[test]
+    fn native_cache_key_distinguishes_sanitizer_policy() {
+        fn cache_key(config: &NativeBuildConfig) -> String {
+            let mut hasher = Sha256::new();
+            config.update_cache_key(&mut hasher);
+            hex_digest(hasher.finalize())
+        }
+        fn sanitizer_value(config: &NativeBuildConfig) -> &OsStr {
+            config
+                .0
+                .iter()
+                .find_map(|(name, value)| (name == "SANITIZERS").then_some(value.as_os_str()))
+                .unwrap()
+        }
+
+        let sanitized = NativeBuildConfig::from_lookup(|_| None);
+        let unsanitized =
+            NativeBuildConfig::from_lookup(|name| (name == "SANITIZERS").then(OsString::new));
+
+        assert_eq!(
+            sanitizer_value(&sanitized),
+            OsStr::new("-fsanitize=undefined,bounds -fsanitize-trap=all")
+        );
+        assert_eq!(sanitizer_value(&unsanitized), OsStr::new(""));
+        assert_ne!(cache_key(&sanitized), cache_key(&unsanitized));
     }
 
     #[test]
