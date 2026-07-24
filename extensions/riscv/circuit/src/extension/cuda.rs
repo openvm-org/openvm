@@ -17,7 +17,10 @@ use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 use {
     openvm_circuit::arch::{
         rvr::{
-            cuda::{GpuRvrInputError, GpuRvrProgram, GpuRvrReplayPlan, GpuRvrTranscript},
+            cuda::{
+                GpuRvrInputError, GpuRvrProgram, GpuRvrReplayPlan, GpuRvrTranscript,
+                RvrCheckpointOpcodeBases,
+            },
             RvrCheckpointPreflightExecution,
         },
         GenerationError, VirtualMachine, VmBuilder,
@@ -80,9 +83,10 @@ pub struct Rv64ImRvrGpuTracegen<'a> {
 
 #[cfg(feature = "rvr")]
 impl<'a> Rv64ImRvrGpuTracegen<'a> {
-    /// First checkpoint-replay feasibility slice: ADDI, aligned LOADD with a
-    /// nonzero destination, BNE, and the final TERMINATE. Device replay derives
-    /// the ordinary three logs and then reuses the unchanged trace generators.
+    /// Checkpoint replay for register-only and control-flow RV64I, RV64M,
+    /// phantom, and the narrow aligned-`LOADD` path. Device replay derives the
+    /// ordinary three logs and then reuses the unchanged trace generators;
+    /// other memory opcodes remain fail-closed.
     pub fn expand_checkpoint_replay<VB>(
         vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
         program: &GpuRvrProgram,
@@ -98,10 +102,31 @@ impl<'a> Rv64ImRvrGpuTracegen<'a> {
         vm.expand_rvr_checkpoint_replay(
             program,
             execution,
-            Self::opcode(BaseAluImmOpcode::ADDI),
-            Self::opcode(Rv64LoadStoreOpcode::LOADD),
-            Self::opcode(BranchEqualOpcode::BNE),
-            SystemOpcode::TERMINATE.global_opcode().as_usize() as u32,
+            RvrCheckpointOpcodeBases {
+                base_alu: Self::opcode(BaseAluOpcode::ADD),
+                shift: Self::opcode(ShiftOpcode::SLL),
+                less_than: Self::opcode(LessThanOpcode::SLT),
+                load_store: Self::opcode(Rv64LoadStoreOpcode::LOADD),
+                branch_equal: Self::opcode(BranchEqualOpcode::BEQ),
+                branch_less_than: Self::opcode(BranchLessThanOpcode::BLT),
+                jal_lui: Self::opcode(Rv64JalLuiOpcode::JAL),
+                jalr: Self::opcode(Rv64JalrOpcode::JALR),
+                auipc: Self::opcode(Rv64AuipcOpcode::AUIPC),
+                mul: Self::opcode(MulOpcode::MUL),
+                mulh: Self::opcode(MulHOpcode::MULH),
+                divrem: Self::opcode(DivRemOpcode::DIV),
+                base_alu_w: Self::opcode(BaseAluWOpcode::ADDW),
+                shift_w: Self::opcode(ShiftWOpcode::SLLW),
+                mul_w: Self::opcode(MulWOpcode::MULW),
+                divrem_w: Self::opcode(DivRemWOpcode::DIVW),
+                base_alu_imm: Self::opcode(BaseAluImmOpcode::ADDI),
+                shift_imm: Self::opcode(ShiftImmOpcode::SLLI),
+                less_than_imm: Self::opcode(LessThanImmOpcode::SLTI),
+                base_alu_w_imm: Self::opcode(BaseAluWImmOpcode::ADDIW),
+                shift_w_imm: Self::opcode(ShiftWImmOpcode::SLLIW),
+                phantom: SystemOpcode::PHANTOM.global_opcode().as_usize() as u32,
+                terminate: SystemOpcode::TERMINATE.global_opcode().as_usize() as u32,
+            },
         )
     }
 

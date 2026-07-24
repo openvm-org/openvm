@@ -51,6 +51,63 @@ fn instruction(opcode: impl LocalOpcode, operands: [usize; 5]) -> Instruction<F>
     Instruction::from_usize(opcode.global_opcode(), operands)
 }
 
+fn checkpoint_ri(
+    opcode: impl LocalOpcode,
+    rd: usize,
+    rs1: usize,
+    immediate: usize,
+) -> Instruction<F> {
+    instruction(
+        opcode,
+        [
+            reg(rd),
+            reg(rs1),
+            immediate,
+            RV64_REGISTER_AS as usize,
+            RV64_IMM_AS as usize,
+        ],
+    )
+}
+
+fn checkpoint_rr(opcode: impl LocalOpcode, rd: usize, rs1: usize, rs2: usize) -> Instruction<F> {
+    instruction(
+        opcode,
+        [
+            reg(rd),
+            reg(rs1),
+            reg(rs2),
+            RV64_REGISTER_AS as usize,
+            RV64_REGISTER_AS as usize,
+        ],
+    )
+}
+
+fn checkpoint_m(opcode: impl LocalOpcode, rd: usize, rs1: usize, rs2: usize) -> Instruction<F> {
+    instruction(
+        opcode,
+        [
+            reg(rd),
+            reg(rs1),
+            reg(rs2),
+            RV64_REGISTER_AS as usize,
+            RV64_IMM_AS as usize,
+        ],
+    )
+}
+
+fn checkpoint_branch(opcode: impl LocalOpcode, rs1: usize, rs2: usize) -> Instruction<F> {
+    Instruction::from_usize(
+        opcode.global_opcode(),
+        [
+            reg(rs1),
+            reg(rs2),
+            4,
+            RV64_REGISTER_AS as usize,
+            RV64_REGISTER_AS as usize,
+        ],
+    )
+}
+
 #[test]
 fn rvr_gpu_tracegen_proves_system_and_rv64i_airs_without_record_arenas() {
     let register_operands = |rd, rs1, rs2| {
@@ -367,22 +424,110 @@ fn rvr_gpu_tracegen_proves_system_and_rv64i_airs_without_record_arenas() {
 
 #[test]
 fn rvr_checkpoint_gpu_replay_proves_bounded_rv64i_slice_differentially() {
-    let instructions = [
-        instruction(
-            BaseAluImmOpcode::ADDI,
+    let jal = |rd| {
+        Instruction::from_usize(
+            Rv64JalLuiOpcode::JAL.global_opcode(),
             [
-                reg(31),
-                reg(0),
-                8,
+                reg(rd),
+                0,
+                4,
                 RV64_REGISTER_AS as usize,
-                RV64_IMM_AS as usize,
+                0,
+                usize::from(rd != 0),
+                0,
             ],
+        )
+    };
+    let jalr = |rd, rs1| {
+        Instruction::from_usize(
+            Rv64JalrOpcode::JALR.global_opcode(),
+            [
+                reg(rd),
+                reg(rs1),
+                0,
+                RV64_REGISTER_AS as usize,
+                0,
+                usize::from(rd != 0),
+                0,
+            ],
+        )
+    };
+
+    let mut instructions = vec![
+        checkpoint_ri(BaseAluImmOpcode::ADDI, 1, 0, 9),
+        checkpoint_ri(BaseAluImmOpcode::ADDI, 2, 0, 5),
+        checkpoint_ri(BaseAluImmOpcode::ADDI, 29, 0, 0xff_ffff),
+        checkpoint_ri(BaseAluImmOpcode::ADDI, 28, 0, 1),
+        checkpoint_ri(ShiftImmOpcode::SLLI, 28, 28, 63),
+        checkpoint_rr(BaseAluOpcode::ADD, 3, 0, 2),
+        checkpoint_rr(BaseAluOpcode::SUB, 4, 1, 2),
+        checkpoint_rr(BaseAluOpcode::XOR, 5, 1, 2),
+        checkpoint_rr(BaseAluOpcode::OR, 5, 1, 2),
+        checkpoint_rr(BaseAluOpcode::AND, 5, 1, 2),
+        checkpoint_rr(LessThanOpcode::SLT, 6, 29, 1),
+        checkpoint_rr(LessThanOpcode::SLTU, 6, 29, 1),
+        checkpoint_rr(ShiftOpcode::SLL, 7, 1, 2),
+        checkpoint_rr(ShiftOpcode::SRL, 7, 28, 2),
+        checkpoint_rr(ShiftOpcode::SRA, 8, 28, 2),
+        checkpoint_rr(BaseAluWOpcode::ADDW, 9, 28, 2),
+        checkpoint_rr(BaseAluWOpcode::SUBW, 9, 28, 2),
+        checkpoint_rr(ShiftWOpcode::SLLW, 10, 1, 2),
+        checkpoint_rr(ShiftWOpcode::SRLW, 10, 28, 2),
+        checkpoint_rr(ShiftWOpcode::SRAW, 11, 28, 2),
+        checkpoint_ri(BaseAluImmOpcode::XORI, 13, 29, 0x123),
+        checkpoint_ri(BaseAluImmOpcode::ORI, 13, 29, 0x123),
+        checkpoint_ri(BaseAluImmOpcode::ANDI, 13, 29, 0x123),
+        checkpoint_ri(LessThanImmOpcode::SLTI, 14, 29, 0),
+        checkpoint_ri(LessThanImmOpcode::SLTIU, 14, 29, 0),
+        checkpoint_ri(ShiftImmOpcode::SRLI, 15, 28, 1),
+        checkpoint_ri(ShiftImmOpcode::SRAI, 16, 28, 1),
+        checkpoint_ri(BaseAluWImmOpcode::ADDIW, 17, 28, 0xff_ffff),
+        checkpoint_ri(ShiftWImmOpcode::SLLIW, 18, 1, 3),
+        checkpoint_ri(ShiftWImmOpcode::SRLIW, 18, 28, 3),
+        checkpoint_ri(ShiftWImmOpcode::SRAIW, 19, 28, 3),
+        checkpoint_branch(BranchEqualOpcode::BEQ, 1, 1),
+        checkpoint_branch(BranchEqualOpcode::BNE, 1, 2),
+        checkpoint_branch(BranchLessThanOpcode::BLT, 29, 1),
+        checkpoint_branch(BranchLessThanOpcode::BLTU, 1, 29),
+        checkpoint_branch(BranchLessThanOpcode::BGE, 1, 29),
+        checkpoint_branch(BranchLessThanOpcode::BGEU, 29, 1),
+        Instruction::from_usize(
+            Rv64JalLuiOpcode::LUI.global_opcode(),
+            [reg(20), 0, 0x8_0000, RV64_REGISTER_AS as usize, 0, 1, 0],
         ),
+        Instruction::from_usize(
+            Rv64AuipcOpcode::AUIPC.global_opcode(),
+            [reg(21), 0, 0, RV64_REGISTER_AS as usize, 0, 0, 0],
+        ),
+        jal(0),
+        jal(22),
+    ];
+
+    // The source is deliberately odd: JALR must read the old x31 value,
+    // clear target bit zero, and only then overwrite the aliased destination.
+    let jalr_alias_target = (instructions.len() + 2) * 4 + 1;
+    instructions.push(checkpoint_ri(
+        BaseAluImmOpcode::ADDI,
+        31,
+        0,
+        jalr_alias_target,
+    ));
+    instructions.push(jalr(31, 31));
+    let jalr_gap_target = (instructions.len() + 2) * 4;
+    instructions.push(checkpoint_ri(
+        BaseAluImmOpcode::ADDI,
+        30,
+        0,
+        jalr_gap_target,
+    ));
+    instructions.push(jalr(0, 30));
+    instructions.extend([
+        checkpoint_ri(BaseAluImmOpcode::ADDI, 27, 0, 8),
         Instruction::from_usize(
             Rv64LoadStoreOpcode::LOADD.global_opcode(),
             [
-                reg(2),
-                reg(31),
+                reg(26),
+                reg(27),
                 0,
                 RV64_REGISTER_AS as usize,
                 RV64_MEMORY_AS as usize,
@@ -390,29 +535,35 @@ fn rvr_checkpoint_gpu_replay_proves_bounded_rv64i_slice_differentially() {
                 0,
             ],
         ),
-        instruction(
-            BaseAluImmOpcode::ADDI,
-            [
-                reg(3),
-                reg(2),
-                1,
-                RV64_REGISTER_AS as usize,
-                RV64_IMM_AS as usize,
-            ],
+        checkpoint_m(MulOpcode::MUL, 23, 1, 2),
+        checkpoint_m(MulHOpcode::MULH, 24, 29, 2),
+        checkpoint_m(MulHOpcode::MULHSU, 25, 29, 2),
+        checkpoint_m(MulHOpcode::MULHU, 26, 29, 2),
+        checkpoint_m(MulWOpcode::MULW, 27, 29, 2),
+        checkpoint_m(DivRemOpcode::DIV, 3, 28, 29),
+        checkpoint_m(DivRemOpcode::REM, 4, 28, 29),
+        checkpoint_m(DivRemOpcode::DIV, 5, 1, 0),
+        checkpoint_m(DivRemOpcode::REM, 6, 1, 0),
+        checkpoint_m(DivRemOpcode::DIVU, 7, 1, 0),
+        checkpoint_m(DivRemOpcode::REMU, 8, 1, 0),
+        checkpoint_m(DivRemOpcode::DIVU, 7, 1, 2),
+        checkpoint_m(DivRemOpcode::REMU, 8, 1, 2),
+        checkpoint_ri(BaseAluImmOpcode::ADDI, 30, 0, 1),
+        checkpoint_ri(ShiftImmOpcode::SLLI, 30, 30, 31),
+        checkpoint_m(DivRemWOpcode::DIVW, 9, 30, 29),
+        checkpoint_m(DivRemWOpcode::REMW, 10, 30, 29),
+        checkpoint_m(DivRemWOpcode::DIVUW, 11, 1, 0),
+        checkpoint_m(DivRemWOpcode::REMUW, 12, 1, 0),
+        checkpoint_m(DivRemWOpcode::DIVUW, 11, 1, 2),
+        checkpoint_m(DivRemWOpcode::REMUW, 12, 1, 2),
+        Instruction::phantom(
+            PhantomDiscriminant(SysPhantom::Nop as u16),
+            F::ZERO,
+            F::ZERO,
+            0,
         ),
-        Instruction::from_usize(
-            BranchEqualOpcode::BNE.global_opcode(),
-            [
-                reg(3),
-                reg(2),
-                8,
-                RV64_REGISTER_AS as usize,
-                RV64_REGISTER_AS as usize,
-            ],
-        ),
-        Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 1, 0, 0]),
         Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
-    ];
+    ]);
     let program = Program::from_instructions(&instructions);
     let loaded = 0x8877_6655_4433_2211u64;
     let init_memory = loaded
@@ -422,43 +573,43 @@ fn rvr_checkpoint_gpu_replay_proves_bounded_rv64i_slice_differentially() {
         .map(|(offset, byte)| ((RV64_MEMORY_AS, 8 + offset as u32), byte))
         .collect();
     let exe = VmExe::new(program.clone()).with_init_memory(init_memory);
-    let config = Rv64IConfig {
-        system: test_system_config(),
-        ..Default::default()
+    let config = Rv64ImConfig {
+        rv64i: Rv64IConfig {
+            system: test_system_config(),
+            ..Default::default()
+        },
+        mul: Default::default(),
     };
     let executor = VmExecutor::new(config.clone()).unwrap();
     let full = executor.rvr_preflight_instance(&exe, None).unwrap();
     let checkpoint = executor
         .rvr_experimental_checkpoint_preflight_instance(&exe, None)
         .unwrap();
+    let max_instructions = instructions.len();
+    let max_memory_events = max_instructions * 3;
 
     let full_execution = full
-        .execute(Vec::<Vec<u8>>::new(), RvrPreflightLimits::new(5, 16))
+        .execute(
+            Vec::<Vec<u8>>::new(),
+            RvrPreflightLimits::new(max_instructions, max_memory_events),
+        )
         .unwrap();
     let checkpoint_state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
 
     let (mut checkpoint_vm, checkpoint_pk) =
-        VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64IGpuBuilder, config.clone())
+        VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64ImGpuBuilder, config.clone())
             .unwrap();
     let cached_program = checkpoint_vm.commit_program_on_device(&program);
     checkpoint_vm.load_program(cached_program);
     checkpoint_vm.transport_init_memory_to_device(&checkpoint_state.memory);
     let checkpoint_execution = checkpoint
-        .execute_from_state(checkpoint_state, RvrCheckpointPreflightLimits::new(5, 1, 2))
+        .execute_from_state(
+            checkpoint_state,
+            RvrCheckpointPreflightLimits::new(max_instructions, 1, 8),
+        )
         .unwrap();
-    assert_eq!(checkpoint_execution.transcript.checkpoints.len(), 1);
+    assert!(!checkpoint_execution.transcript.checkpoints.is_empty());
     assert_eq!(checkpoint_execution.transcript.residuals, vec![loaded]);
-    let checkpoint_anchor = checkpoint_execution.transcript.checkpoints[0];
-    assert_eq!(
-        (
-            checkpoint_anchor.pc,
-            checkpoint_anchor.timestamp,
-            checkpoint_anchor.retired,
-            checkpoint_anchor.residual_cursor,
-        ),
-        (20, 11, 4, 1),
-    );
-    assert_eq!(checkpoint_anchor.regs[30], 8);
     assert_eq!(checkpoint_execution.to_state.pc, full_execution.state.pc());
     assert_eq!(
         checkpoint_execution.to_state.timestamp,
@@ -470,8 +621,8 @@ fn rvr_checkpoint_gpu_replay_proves_bounded_rv64i_slice_differentially() {
             .timestamp
     );
     assert_eq!(checkpoint_execution.endpoint, full_execution.endpoint);
-    assert_eq!(checkpoint_execution.retired, 5);
-    for register in [2, 3, 31] {
+    assert_eq!(checkpoint_execution.retired as usize, max_instructions);
+    for register in 1..32 {
         let pointer = (reg(register) / 2) as u32;
         let checkpoint_value: [u16; 4] = unsafe {
             checkpoint_execution
@@ -486,7 +637,7 @@ fn rvr_checkpoint_gpu_replay_proves_bounded_rv64i_slice_differentially() {
 
     let checkpoint_program = GpuRvrProgram::upload(
         &program,
-        &config.system.memory_config,
+        &config.rv64i.system.memory_config,
         &checkpoint_vm.engine.device().device_ctx,
     )
     .unwrap();
@@ -518,17 +669,20 @@ fn rvr_checkpoint_gpu_replay_proves_bounded_rv64i_slice_differentially() {
 
     let legacy_state = full.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut legacy_vm, legacy_pk) =
-        VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64IGpuBuilder, config.clone())
+        VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64ImGpuBuilder, config.clone())
             .unwrap();
     let cached_program = legacy_vm.commit_program_on_device(&program);
     legacy_vm.load_program(cached_program);
     legacy_vm.transport_init_memory_to_device(&legacy_state.memory);
     let legacy_execution = full
-        .execute_from_state(legacy_state, RvrPreflightLimits::new(5, 16))
+        .execute_from_state(
+            legacy_state,
+            RvrPreflightLimits::new(max_instructions, max_memory_events),
+        )
         .unwrap();
     let legacy_program = GpuRvrProgram::upload(
         &program,
-        &config.system.memory_config,
+        &config.rv64i.system.memory_config,
         &legacy_vm.engine.device().device_ctx,
     )
     .unwrap();

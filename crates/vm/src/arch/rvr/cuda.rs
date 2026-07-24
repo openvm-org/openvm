@@ -45,6 +45,39 @@ pub struct RvrReplayInstruction {
 const _: () = assert!(size_of::<RvrReplayInstruction>() == 32);
 const _: () = assert!(size_of::<TouchedBlock<BabyBear>>() == 7 * size_of::<u32>());
 
+/// Compact opcode-family ABI for checkpoint replay. One base identifies each
+/// contiguous RV64I/M family; this is passed by value and never uploaded as a
+/// per-segment opcode table.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct RvrCheckpointOpcodeBases {
+    pub base_alu: u32,
+    pub shift: u32,
+    pub less_than: u32,
+    pub load_store: u32,
+    pub branch_equal: u32,
+    pub branch_less_than: u32,
+    pub jal_lui: u32,
+    pub jalr: u32,
+    pub auipc: u32,
+    pub mul: u32,
+    pub mulh: u32,
+    pub divrem: u32,
+    pub base_alu_w: u32,
+    pub shift_w: u32,
+    pub mul_w: u32,
+    pub divrem_w: u32,
+    pub base_alu_imm: u32,
+    pub shift_imm: u32,
+    pub less_than_imm: u32,
+    pub base_alu_w_imm: u32,
+    pub shift_w_imm: u32,
+    pub phantom: u32,
+    pub terminate: u32,
+}
+
+const _: () = assert!(size_of::<RvrCheckpointOpcodeBases>() == 23 * size_of::<u32>());
+
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
 struct RvrMemoryAddressSpace {
@@ -275,10 +308,10 @@ impl GpuRvrProgram {
         Ok((gpu, plan))
     }
 
-    /// Expands the first deliberately narrow checkpoint-replay slice entirely
-    /// on the device, then feeds the resulting buffers into the existing
-    /// transcript indexes. The supported executed opcodes are exactly the four
-    /// supplied by the RV64I coordinator; every other opcode fails closed.
+    /// Expands register-only, control-flow, RV64M, phantom, and the deliberately
+    /// narrow aligned-`LOADD` checkpoint-replay slice entirely on the device,
+    /// then feeds the resulting buffers into the existing transcript indexes.
+    /// Every other memory opcode fails closed pending general chronology.
     #[doc(hidden)]
     #[allow(clippy::too_many_arguments)]
     pub fn expand_checkpoint_replay(
@@ -286,10 +319,7 @@ impl GpuRvrProgram {
         execution: &RvrCheckpointPreflightExecution,
         initial_registers: DeviceBufferView,
         initial_memory: DeviceBufferView,
-        addi_opcode: u32,
-        load_doubleword_opcode: u32,
-        bne_opcode: u32,
-        terminate_opcode: u32,
+        opcodes: RvrCheckpointOpcodeBases,
     ) -> Result<(GpuRvrTranscript, GpuRvrReplayPlan), GpuRvrInputError> {
         if execution.endpoint != RvrPreflightEndpoint::Terminated {
             return Err(GpuRvrInputError::InvalidTranscript(
@@ -326,12 +356,6 @@ impl GpuRvrProgram {
         let error = [0u32].to_device_on(&self.device_ctx)?;
         let memory_counts = gpu_buffer::<u32>(anchors.len(), &self.device_ctx);
         memory_counts.fill_zero_on(&self.device_ctx)?;
-        let opcodes = [
-            addi_opcode,
-            load_doubleword_opcode,
-            bne_opcode,
-            terminate_opcode,
-        ];
         let address_spaces = [RV64_REGISTER_AS, RV64_MEMORY_AS, RV64_IMM_AS];
         unsafe {
             rvr_checkpoint_replay::count(

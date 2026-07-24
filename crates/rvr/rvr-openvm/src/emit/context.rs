@@ -340,7 +340,9 @@ impl<'a> EmitContext<'a> {
             name.to_string()
         } else {
             let var = self.next_var();
-            self.write_line(&format!("uint64_t {var} = reg_read(state, {idx});"));
+            self.write_line(&format!(
+                "[[maybe_unused]] uint64_t {var} = reg_read(state, {idx});"
+            ));
             var
         };
 

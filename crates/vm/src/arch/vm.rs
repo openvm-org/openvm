@@ -1475,10 +1475,7 @@ where
         &self,
         program: &crate::arch::rvr::cuda::GpuRvrProgram,
         execution: &crate::arch::rvr::RvrCheckpointPreflightExecution,
-        addi_opcode: u32,
-        load_doubleword_opcode: u32,
-        bne_opcode: u32,
-        terminate_opcode: u32,
+        opcodes: crate::arch::rvr::cuda::RvrCheckpointOpcodeBases,
     ) -> Result<
         (
             crate::arch::rvr::cuda::GpuRvrTranscript,
@@ -1509,10 +1506,7 @@ where
                 execution,
                 initial_registers.view(),
                 initial_main_memory.view(),
-                addi_opcode,
-                load_doubleword_opcode,
-                bne_opcode,
-                terminate_opcode,
+                opcodes,
             )
         })();
         memory.emit_metrics();
