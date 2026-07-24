@@ -119,13 +119,14 @@ pub struct SystemRecords<F> {
 ///
 /// `repr(C)` with 4-byte fields: for a 4-byte field type its bytes are plain
 /// data and the struct is exactly the GPU memory-inventory input-record
-/// layout (7 u32 words), so the device path uploads the vector's bytes
+/// layout (8 u32 words), so the device path uploads the vector's bytes
 /// without repacking. Keep in sync with `InRec` in `inventory.cu`.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TouchedBlock<F> {
     pub address_space: u32,
     pub ptr: u32,
+    pub is_dirty: u32,
     pub timestamp: u32,
     pub values: [F; BLOCK_FE_WIDTH],
 }
