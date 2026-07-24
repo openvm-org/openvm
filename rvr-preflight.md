@@ -1345,6 +1345,44 @@ variants, zero divisors, signed overflow, corrupt results and predecessor links,
 and the fail-closed raw `rd = x0` shape. The combined system-plus-RV64IM context
 completes a GPU prove-and-verify without a production `RecordArena`.
 
+#### Complete RV64IM checkpoint replay and memory chronology (2026-07-24)
+
+Checkpoint replay now covers every RV64IM load and store as well as the
+register, control-flow, and M-extension instructions above. The serial RVR
+transcript remains only checkpoints plus ordered residual `u64`s. GPU expansion
+derives program and memory events as scratch; it does not add access descriptors,
+seeds, masks, or chip records to the host transcript.
+
+Loads consume residuals only when their destination is not x0. Their memory
+events begin as unresolved reads. Stores derive byte-positioned patches and
+byte masks from replayed registers. One radix sort by address-space block and
+global event ordinal then serves both memory chronology and predecessor-index
+construction. Two in-place four-byte segmented scans resolve complete
+post-event blocks from the immutable segment-start images. First writes produce
+exact initial values, every read-only or written block produces one final tail,
+and register events stay in the same ordering pass so their predecessor links
+remain correct. All chronology masks, keys, scan workspace, initial-image pointer
+tables, checkpoints, and residual uploads are released before trace matrices and
+proving.
+
+The fixed chronology high-water term is `41M + T(M)` bytes for `M` memory events
+and the maximum reusable CUB temporary storage `T(M)`, in addition to the program
+log and exact initial-write and touched-block outputs. It performs one sort and
+does not sort seeds or allocate a second transform input/output pair. The focused
+CUDA fixture covers every load/store width and signedness, unaligned crossings,
+negative offsets, x0 destinations, and a store followed by a load across forced
+checkpoint boundaries. That fixture and the exhaustive register/control/RV64M
+fixture both complete GPU trace generation, proof, and verification. Their
+measured tracegen peaks were about 46.7 MiB and 70.3 MiB, while proof/GKR peaked
+at about 235.8 MiB and 259.4 MiB respectively, so checkpoint expansion did not
+become the peak phase.
+
+This completes the RV64IM feasibility slice, not the full cutover. Public-values
+stores, advice/hint scheduling, suspended continuation endpoints, and every
+non-RISC-V extension still fail closed until their concrete replay producers are
+ported and proven. Each following AIR family must also pass the ordinary
+`rvr-openvm` execution regression before the next family is enabled.
+
 ### M3: complete the GPU proving path
 
 With the system and initial RISC-V replay seam established:
