@@ -746,6 +746,14 @@ impl ModularRvrExtension {
         if mod_idx >= self.moduli.len() {
             return None;
         }
+        if insn.a == 0
+            && matches!(
+                Rv64ModularArithmeticOpcode::from_repr(local),
+                Some(Rv64ModularArithmeticOpcode::IS_EQ | Rv64ModularArithmeticOpcode::SETUP_ISEQ)
+            )
+        {
+            return None;
+        }
 
         let info = &self.moduli[mod_idx];
         let rd_reg = decode_reg(insn.a);

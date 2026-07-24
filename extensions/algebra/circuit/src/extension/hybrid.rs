@@ -68,6 +68,37 @@ struct FieldExpressionReplayConfig {
 }
 
 #[cfg(feature = "rvr")]
+fn validate_modular_is_eq_destinations<F: PrimeField32>(
+    program: &Program<F>,
+    num_moduli: usize,
+) -> Result<(), GpuRvrInputError> {
+    let opcode_base = Rv64ModularArithmeticOpcode::CLASS_OFFSET;
+    let opcode_count = Rv64ModularArithmeticOpcode::COUNT;
+    for (slot, entry) in program.instructions_and_debug_infos.iter().enumerate() {
+        let Some((instruction, _)) = entry else {
+            continue;
+        };
+        let opcode = instruction.opcode.as_usize();
+        let Some(relative) = opcode.checked_sub(opcode_base) else {
+            continue;
+        };
+        let local = relative % opcode_count;
+        if relative / opcode_count < num_moduli
+            && matches!(
+                Rv64ModularArithmeticOpcode::from_usize(local),
+                Rv64ModularArithmeticOpcode::IS_EQ | Rv64ModularArithmeticOpcode::SETUP_ISEQ
+            )
+            && instruction.a.as_canonical_u32() == 0
+        {
+            return Err(GpuRvrInputError::InvalidTranscript(format!(
+                "modular is-equal destination is x0 at program slot {slot}"
+            )));
+        }
+    }
+    Ok(())
+}
+
+#[cfg(feature = "rvr")]
 fn checked_replay_opcode(
     base: usize,
     local: usize,
@@ -831,6 +862,7 @@ impl<'a> AlgebraRvrGpuTracegen<'a> {
         fp2: Option<&Fp2Extension>,
         device_ctx: &GpuDeviceCtx,
     ) -> Result<GpuRvrProgram, GpuRvrInputError> {
+        validate_modular_is_eq_destinations(program, modular.supported_moduli.len())?;
         let mut registry = RvrCheckpointAccessRegistry::default();
         Self::register_checkpoint_access_schedules(&mut registry, modular, fp2)?;
         registry.validate_no_native_collisions(Rv64ImRvrGpuTracegen::checkpoint_opcode_bases())?;
