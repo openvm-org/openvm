@@ -270,10 +270,57 @@ mod guest_tests {
 }
 
 mod host_tests {
+    use elliptic_curve::subtle::ConstantTimeEq;
     use hex_literal::hex;
     use openvm_algebra_guest::IntMod;
-    use openvm_ecc_guest::{msm, weierstrass::WeierstrassPoint, Group};
-    use p256::{P256Coord, P256Point, P256Scalar};
+    use openvm_ecc_guest::{
+        msm,
+        weierstrass::{CachedMulTable, WeierstrassPoint},
+        CyclicGroup, Group,
+    };
+    use p256::{NistP256, P256Coord, P256Point, P256Scalar};
+
+    #[test]
+    fn test_projective_coordinate_contracts() {
+        let generator = P256Point::GENERATOR;
+        let expected = generator.into_affine_coords().unwrap();
+        assert_eq!(expected.0, generator.x().clone());
+        assert_eq!(expected.1, generator.y().clone());
+
+        let scale = P256Coord::from_u32(7);
+        let scaled = unsafe {
+            P256Point::from_xyz_unchecked(
+                generator.x() * &scale,
+                generator.y() * &scale,
+                generator.z() * &scale,
+            )
+        };
+        assert_eq!(scaled.into_affine_coords(), Some(expected));
+        assert!(<P256Point as WeierstrassPoint>::IDENTITY
+            .into_affine_coords()
+            .is_none());
+
+        let malformed_identity = unsafe {
+            P256Point::from_xyz_unchecked(P256Coord::ZERO, P256Coord::ZERO, P256Coord::ZERO)
+        };
+        assert_ne!(malformed_identity, generator);
+        assert!(!bool::from(malformed_identity.ct_eq(&generator)));
+
+        let encoded = serde_json::to_vec(&malformed_identity).unwrap();
+        let decoded: P256Point = serde_json::from_slice(&encoded).unwrap();
+        assert!(Group::is_identity(&decoded));
+        assert_ne!(decoded, generator);
+    }
+
+    #[test]
+    fn test_cached_mul_table_matches_msm() {
+        let bases = [P256Point::GENERATOR];
+        let table = CachedMulTable::<NistP256>::new_with_prime_order(&bases, 4);
+        for scalar in [0, 1, 2, 3, 7, 15, 16, 255] {
+            let scalar = P256Scalar::from_u32(scalar);
+            assert_eq!(table.windowed_mul(&[scalar]), msm(&[scalar], &bases));
+        }
+    }
 
     #[test]
     fn test_host_p256() {

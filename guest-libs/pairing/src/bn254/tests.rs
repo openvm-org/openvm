@@ -6,7 +6,7 @@ use halo2curves_axiom::bn256::{
 use num_bigint::BigUint;
 use num_traits::One;
 use openvm_algebra_guest::{field::FieldExtension, IntMod};
-use openvm_ecc_guest::{weierstrass::WeierstrassPoint, AffinePoint};
+use openvm_ecc_guest::{weierstrass::WeierstrassPoint, AffinePoint, CyclicGroup};
 use openvm_pairing_guest::{
     bn254::{BN254_MODULUS, BN254_ORDER},
     pairing::{FinalExp, MultiMillerLoop, PairingCheck, PairingIntrinsics},
@@ -25,6 +25,26 @@ use crate::{
     },
     operations::{fp2_invert_assign, fp6_invert_assign, fp6_square_assign},
 };
+
+#[test]
+fn test_projective_to_affine_adapter() {
+    use crate::bn254::G1Affine as OpenVmG1Affine;
+
+    let generator = OpenVmG1Affine::GENERATOR;
+    let expected = openvm_pairing_guest::projective_to_affine(generator.clone());
+    assert!(!expected.is_infinity());
+
+    let scale = Fp::from_u8(7);
+    let scaled = unsafe {
+        OpenVmG1Affine::from_xyz_unchecked(
+            generator.x() * &scale,
+            generator.y() * &scale,
+            generator.z() * &scale,
+        )
+    };
+    assert_eq!(openvm_pairing_guest::projective_to_affine(scaled), expected);
+    assert!(openvm_pairing_guest::projective_to_affine(OpenVmG1Affine::IDENTITY).is_infinity());
+}
 
 #[test]
 fn test_bn254_frobenius_coeffs() {

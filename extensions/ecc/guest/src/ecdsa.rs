@@ -498,8 +498,7 @@ where
 
         let neg_u1 = z.div_unsafe(&r);
         let u2 = s.div_unsafe(&r);
-        let NEG_G = C::Point::NEG_GENERATOR;
-        let point = <C as IntrinsicCurve>::msm(&[neg_u1, u2], &[NEG_G, R]);
+        let point = <C as IntrinsicCurve>::lincomb_neg_generator(&neg_u1, &u2, &R);
         let vk = VerifyingKey::from_affine(point)?;
 
         Ok(vk)
@@ -548,10 +547,9 @@ where
     let u1 = z.div_unsafe(&s);
     let u2 = (&r).div_unsafe(&s);
 
-    let G = C::Point::GENERATOR;
     // public key
     let Q = pubkey;
-    let R = <C as IntrinsicCurve>::msm(&[u1, u2], &[G, Q]);
+    let R = <C as IntrinsicCurve>::lincomb_generator(&u1, &u2, &Q);
     // For Coordinate<C>: IntMod, the internal implementation of is_identity will assert z
     // coordinate of R is reduced.
     if Group::is_identity(&R) {
