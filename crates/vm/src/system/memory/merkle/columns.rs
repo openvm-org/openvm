@@ -23,17 +23,25 @@ pub struct MemoryMerkleCols<T, const DIGEST_WIDTH: usize> {
     pub left_child_hash: [T; DIGEST_WIDTH],
     pub right_child_hash: [T; DIGEST_WIDTH],
 
-    // One child-reference descriptor per side, in {0, 1, 2}. Its meaning depends on
-    // `expand_direction`
+    // Each child has a mode in {0, 1, 2}. Its meaning depends on `expand_direction`.
     //
-    // Initial row (`expand_direction` = 1): number of times this row consumes the child's
-    // *initial* claim (count `-mode`) — one copy for a touched child, plus one more when
-    // this node's final row dd-borrows the child's initial hash. An untouched child of a
-    // node that emits no final row consumes nothing (`mode` = 0).
+    // +---------+------------------+------------+------------------------------------+
+    // | Row     | expand_direction | mode       | Child interaction                  |
+    // +---------+------------------+------------+------------------------------------+
+    // | Initial |                1 | 0, 1, or 2 | Initial multiplicity is `-mode`    |
+    // | Final   |               -1 |          0 | Final multiplicity is `+1`         |
+    // | Final   |               -1 |          1 | Initial multiplicity is `+1`       |
+    // | Padding |                0 |          0 | None                               |
+    // +---------+------------------+------------+------------------------------------+
     //
-    // Final row (`expand_direction` = -1): the "direction different" bit in {0, 1} —
-    // 1 iff the child is borrowed from the initial tree (untouched or touched-clean)
-    // rather than expanded as the final child. The count is `+1` regardless.
+    // Initial row (`expand_direction` = 1): the negative multiplicity of the child's
+    // initial interaction — one for a touched child, plus one when this node's final row
+    // uses the child's initial hash. An untouched child of a node with no final row has
+    // mode 0.
+    //
+    // Final row (`expand_direction` = -1): mode 1 borrows the child from the initial
+    // tree (untouched or touched-clean), while mode 0 uses the final child. The
+    // multiplicity is `+1` in either case.
     //
     // Padding row (`expand_direction` = 0): must be 0.
     pub left_child_mode: T,

@@ -436,8 +436,8 @@ fn final_direction_different(direction: BabyBear, child_has_expansion: bool) -> 
 }
 
 /// The merged `*_child_mode` value for these hand-built fixtures. They reference each
-/// touched child exactly once, so an initial row's mode is always 1; a final row's mode
-/// is the dd bit (1 iff the child is borrowed from the initial tree); padding is 0.
+/// touched child exactly once, so an initial row's mode is always 1. A final row uses
+/// mode 1 for an initial child state and mode 0 for a final child state. Padding uses 0.
 fn child_mode(direction: BabyBear, child_has_expansion: bool) -> BabyBear {
     if direction == BabyBear::ONE {
         BabyBear::ONE

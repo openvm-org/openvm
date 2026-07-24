@@ -200,11 +200,9 @@ template <typename T> struct MerkleCols {
 struct LabeledDigest {
     uint32_t address_space_idx;
     uint32_t label;
-    /// "This node's value changed": arrives precomputed for leaves in the record's third
-    /// word (the inventory record-conversion kernel compares final against initial
-    /// values; see `MemoryMerkleRecord`) and is OR-propagated upward by
-    /// `update_merkle_layer`. Dirtiness decides whether a node emits a final-direction
-    /// trace row.
+    /// Whether this subtree contains a leaf written during execution. Leaves receive
+    /// this bit in the record's third word from the inventory record-conversion kernel;
+    /// `update_merkle_layer` ORs it upward. Dirty nodes emit final-direction rows.
     uint32_t is_dirty;
     uint32_t digest_raw[CELLS_OUT];
 };
@@ -279,8 +277,9 @@ __global__ void group_by_parent(
 
 /// The `*_child_mode` value for a merkle row (see `MemoryMerkleCols` in columns.rs).
 /// Initial rows (`!new_values`) carry the reference count in {0, 1, 2}: one if the child
-/// is on the touched path, plus one if this node's final row dd-borrows it. Final rows
-/// carry the dd bit: 1 iff the child is borrowed from the initial tree (not dirty).
+/// is present on the touched path, plus one if this node's final row uses the clean
+/// child's initial state. On final rows, mode 0 uses the final state and mode 1 uses the
+/// initial state.
 __device__ inline Fp child_mode(bool new_values, bool present, bool dirty, bool emits_final) {
     if (new_values) {
         return Fp((uint32_t)(!dirty));
@@ -925,7 +924,6 @@ extern "C" int _update_merkle_tree(
             }
         }
         bool const force_final = (num_subtrees == 1) && (h == subtree_height);
-        // TODO: might need to think of better layout, or maybe different way of storing
         // Count this layer's dirty parents (each contributes a final row) and prefix-sum
         // so every dirty parent knows its final-row slot. Launched over `num_children`
         // with the parent count read on device, so a single sync fetches both counts.

@@ -19,6 +19,33 @@ pub struct MemoryMerkleAir<const DIGEST_WIDTH: usize> {
     pub compression_bus: PermutationCheckBus,
 }
 
+/// Returns the direction and multiplicity of one child interaction.
+///
+/// On initial rows, `mode` is the number of initial interactions received. On final
+/// rows, mode 0 selects the final state and mode 1 selects the initial state.
+///
+/// +---------+------------+-----------------+--------------+
+/// | Row     | mode       | child direction | multiplicity |
+/// +---------+------------+-----------------+--------------+
+/// | Initial | 0, 1, or 2 |               1 |        -mode |
+/// | Final   |          0 |              -1 |            1 |
+/// | Final   |          1 |               1 |            1 |
+/// | Padding |          0 |               0 |            0 |
+/// +---------+------------+-----------------+--------------+
+fn child_bus_interaction<AB: InteractionBuilder>(
+    row_direction: AB::Var,
+    mode: AB::Var,
+) -> (AB::Expr, AB::Expr) {
+    let child_direction = row_direction + mode * (AB::Expr::ONE - row_direction);
+
+    // The numerator is -2*mode on initial rows, 2 on final rows, and 0 on padding rows.
+    let multiplicity = (row_direction * (row_direction - AB::Expr::ONE)
+        - mode * (AB::Expr::ONE + row_direction))
+        * AB::Expr::from(AB::F::TWO.inverse());
+
+    (child_direction, multiplicity)
+}
+
 impl<const DIGEST_WIDTH: usize, F: Field> PartitionedBaseAir<F> for MemoryMerkleAir<DIGEST_WIDTH> {}
 impl<const DIGEST_WIDTH: usize, F: Field> BaseAir<F> for MemoryMerkleAir<DIGEST_WIDTH> {
     fn width(&self) -> usize {
@@ -51,16 +78,15 @@ impl<const DIGEST_WIDTH: usize, AB: InteractionBuilder + AirBuilderWithPublicVal
             local.expand_direction * local.expand_direction * local.expand_direction,
         );
 
-        // the following set of constrains enforces left/right_child_mode value depending on
-        // expand_direction
+        // Child modes depend on `expand_direction`.
         for m in [local.left_child_mode, local.right_child_mode] {
-            // mode must be in 0, 1, 2
+            // Initial rows allow modes in {0, 1, 2}.
             builder.assert_zero(m * (AB::Expr::ONE - m) * (AB::Expr::TWO - m));
-            // mode must not be 2 when expand_direction=-1 or expand_direction=0
+            // Final and padding rows only allow modes in {0, 1}.
             builder
                 .when_ne(local.expand_direction, AB::Expr::ONE)
                 .assert_zero(m * (AB::Expr::ONE - m));
-            // if mode is not 0, then expand direction is -1 or 1
+            // Padding rows must have mode 0.
             builder
                 .when(m)
                 .assert_zero(AB::Expr::ONE - local.expand_direction * local.expand_direction);
@@ -168,46 +194,27 @@ impl<const DIGEST_WIDTH: usize> MemoryMerkleAir<DIGEST_WIDTH> {
             (AB::Expr::ONE - local.is_root) * local.expand_direction,
         );
 
-        // The child interactions reuse one `*_child_mode` column per side (see
-        // `MemoryMerkleCols`). Writing `dir = expand_direction` and `m = *_child_mode`:
-        //
-        //   tag   = dir + m*(1 - dir)
-        //             dir= 1 (initial):  1              (m does not affect the tag)
-        //             dir=-1 (final):    2*m - 1        (m is the dd bit: 0 -> -1, 1 -> +1)
-        //             dir= 0 (padding):  0              (m is forced 0)
-        //   count = (dir*(dir - 1) - m*(1 + dir)) / 2
-        //             dir= 1 (initial): -m              (consume the child's initial claim m times)
-        //             dir=-1 (final):   +1              (send; independent of m)
-        //             dir= 0 (padding):  0
-        let one_half = AB::F::TWO.inverse();
-
-        let left_tag = local.expand_direction
-            + local.left_child_mode * (AB::Expr::ONE - local.expand_direction);
-        let left_count = (local.expand_direction * (local.expand_direction - AB::Expr::ONE)
-            - local.left_child_mode * (AB::Expr::ONE + local.expand_direction))
-            * AB::Expr::from(one_half);
+        let (left_direction, left_multiplicity) =
+            child_bus_interaction::<AB>(local.expand_direction, local.left_child_mode);
         self.merkle_bus.interact(
             builder,
             [
-                left_tag,
+                left_direction,
                 local.parent_height - AB::F::ONE,
                 local.parent_as_label * (AB::Expr::ONE + local.height_section),
                 local.parent_address_label * (AB::Expr::TWO - local.height_section),
             ]
             .into_iter()
             .chain(local.left_child_hash.into_iter().map(Into::into)),
-            left_count,
+            left_multiplicity,
         );
 
-        let right_tag = local.expand_direction
-            + local.right_child_mode * (AB::Expr::ONE - local.expand_direction);
-        let right_count = (local.expand_direction * (local.expand_direction - AB::Expr::ONE)
-            - local.right_child_mode * (AB::Expr::ONE + local.expand_direction))
-            * AB::Expr::from(one_half);
+        let (right_direction, right_multiplicity) =
+            child_bus_interaction::<AB>(local.expand_direction, local.right_child_mode);
         self.merkle_bus.interact(
             builder,
             [
-                right_tag,
+                right_direction,
                 local.parent_height - AB::F::ONE,
                 (local.parent_as_label * (AB::Expr::ONE + local.height_section))
                     + local.height_section,
@@ -216,7 +223,7 @@ impl<const DIGEST_WIDTH: usize> MemoryMerkleAir<DIGEST_WIDTH> {
             ]
             .into_iter()
             .chain(local.right_child_hash.into_iter().map(Into::into)),
-            right_count,
+            right_multiplicity,
         );
 
         let compress_fields = iter::empty()

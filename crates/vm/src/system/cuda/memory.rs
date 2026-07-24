@@ -811,6 +811,10 @@ mod tests {
             device_id: get_device().unwrap() as u32,
             stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
         };
-        assert_eq_host_and_device_matrix_col_maj(&cpu_trace_cm, &gpu_merkle.common_main, &device_ctx);
+        assert_eq_host_and_device_matrix_col_maj(
+            &cpu_trace_cm,
+            &gpu_merkle.common_main,
+            &device_ctx,
+        );
     }
 }

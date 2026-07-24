@@ -31,12 +31,10 @@ fn parent_label_parts(
     (parent_as_label, parent_address_label)
 }
 
-/// The `*_child_mode` value for an *initial* row (see `MemoryMerkleCols`): how many
-/// times the row references the child's initial claim, in {0, 1, 2}. One reference if
-/// the child is on the touched path, plus one if this node's final row dd-borrows it
-/// (touched-clean or untouched child of a node that emits a final row).
-fn initial_child_mode<F: PrimeField32>(emits_final: bool, changed: bool, dirty: bool) -> F {
-    F::from_bool(changed) + F::from_bool(emits_final && !dirty)
+/// The `*_child_mode` value for an initial row: one if the child is present on the
+/// touched path, plus one if this node's final row uses the clean child's initial state.
+fn initial_child_mode<F: PrimeField32>(emits_final: bool, present: bool, dirty: bool) -> F {
+    F::from_bool(present) + F::from_bool(emits_final && !dirty)
 }
 
 #[derive(Debug)]
@@ -88,9 +86,9 @@ impl<F: PrimeField32, const DIGEST_WIDTH: usize> MerkleTree<F, DIGEST_WIDTH> {
     ///
     /// Each layer entry carries an `is_dirty` bit: for leaves it says the leaf was
     /// *written* during execution (tracked by `TracingMemory`, independent of the
-    /// written content), and for inner nodes it is the OR of the children's bits. A node emits a
-    /// final-direction row (and records a final compression) only if it is dirty — or if it is
-    /// the root, whose final row is pinned to the public values.
+    /// written content), and for inner nodes it is the OR of the children's bits. A node
+    /// emits a final-direction row (and records a final compression) only if it is dirty
+    /// — or if it is the root, whose final row is pinned to the public values.
     fn process_layers<CompressFn>(
         &mut self,
         layer: Vec<(u64, [F; DIGEST_WIDTH], bool)>,
@@ -180,11 +178,8 @@ impl<F: PrimeField32, const DIGEST_WIDTH: usize> MerkleTree<F, DIGEST_WIDTH> {
                         .map(|(par_index, left, right)| {
                             let (parent_as_label, parent_address_label) =
                                 parent_label_parts(md, self.height, par_index, height);
-                            // `changed_*` says the child is on the touched path (its
-                            // layer entry exists); `*_dirty` says its value actually
-                            // changed. Untouched children carry `dirty = false`.
                             let left_node;
-                            let (left, old_left, left_dirty, changed_left) = match left {
+                            let (left, old_left, left_dirty, left_present) = match left {
                                 Some((left, old_left, dirty)) => (left, old_left, dirty, true),
                                 None => {
                                     left_node = self.get_node_at_height(2 * par_index, height - 1);
@@ -192,7 +187,7 @@ impl<F: PrimeField32, const DIGEST_WIDTH: usize> MerkleTree<F, DIGEST_WIDTH> {
                                 }
                             };
                             let right_node;
-                            let (right, old_right, right_dirty, changed_right) = match right {
+                            let (right, old_right, right_dirty, right_present) = match right {
                                 Some((right, old_right, dirty)) => (right, old_right, dirty, true),
                                 None => {
                                     right_node =
@@ -204,8 +199,8 @@ impl<F: PrimeField32, const DIGEST_WIDTH: usize> MerkleTree<F, DIGEST_WIDTH> {
                             // Final rows are emitted only for dirty nodes, except the
                             // root: the AIR pins the first two rows to the initial/final
                             // root public values, so the root's final row always exists.
-                            // A forced root row does not redefine a clean root as dirty:
-                            // `node_dirty`, not `emits_final`, is what propagates upward.
+                            // `node_dirty` propagates upward; `emits_final` controls row
+                            // emission.
                             let emits_final = node_dirty || is_root;
 
                             let par_old_values = self.get_node_at_height(par_index, height);
@@ -235,12 +230,12 @@ impl<F: PrimeField32, const DIGEST_WIDTH: usize> MerkleTree<F, DIGEST_WIDTH> {
                                 // (see MemoryMerkleCols).
                                 left_child_mode: initial_child_mode::<F>(
                                     emits_final,
-                                    changed_left,
+                                    left_present,
                                     left_dirty,
                                 ),
                                 right_child_mode: initial_child_mode::<F>(
                                     emits_final,
-                                    changed_right,
+                                    right_present,
                                     right_dirty,
                                 ),
                             };
