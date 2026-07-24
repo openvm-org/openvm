@@ -186,6 +186,10 @@ impl ExtInstr for HintNonQrInstr {
     fn supports_preflight(&self) -> bool {
         true
     }
+
+    fn supports_checkpoint_preflight(&self) -> bool {
+        true
+    }
 }
 
 /// IR node for HintSqrt phantom instruction.
@@ -227,6 +231,10 @@ impl ExtInstr for HintSqrtInstr {
     }
 
     fn supports_preflight(&self) -> bool {
+        true
+    }
+
+    fn supports_checkpoint_preflight(&self) -> bool {
         true
     }
 }
@@ -501,6 +509,7 @@ mod tests {
             non_qr_bytes: vec![1; 32],
         };
         assert!(instr.supports_preflight());
+        assert!(instr.supports_checkpoint_preflight());
 
         let mut ctx = TestEmitCtx::default();
         instr.emit_c(&mut ctx);
@@ -532,6 +541,7 @@ mod tests {
             non_qr_bytes: vec![0; 32],
         };
         assert!(instr.supports_preflight());
+        assert!(instr.supports_checkpoint_preflight());
 
         let mut ctx = TestEmitCtx::default();
         instr.emit_c(&mut ctx);
