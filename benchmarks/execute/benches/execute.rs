@@ -373,6 +373,13 @@ impl BenchExecutor for MeteredExecution {
 
     fn build_instance(exe: &VmExe<BabyBear>) -> Self::Instance {
         let (ctx, executor_idx_to_air_idx) = build_metered_ctx_for(exe);
+        #[cfg(feature = "rvr")]
+        let instance = Self::unwrap_instance(executor().metered_instance(
+            exe,
+            &executor_idx_to_air_idx,
+            ctx.trace_heights.len(),
+        ));
+        #[cfg(not(feature = "rvr"))]
         let instance =
             Self::unwrap_instance(executor().metered_instance(exe, &executor_idx_to_air_idx));
         (instance, ctx)
