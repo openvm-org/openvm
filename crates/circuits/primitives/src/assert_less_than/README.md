@@ -17,7 +17,7 @@ Range checking is performed using a lookup table via interactions.
 - `count`: Activation flag $`s`$ (constraints only apply when $`s \neq 0`$)
 
 **Aux Columns:**
-- `lower_decomp`: Array of limbs for range checking
+- `diff_decomp`: Array of limbs for range checking
 
 **Proof**
 

@@ -269,7 +269,7 @@ impl<F: PrimeField32> MemoryAuxColsFactory<'_, F> {
         );
         self.timestamp_lt_air.generate_subrow(
             (self.range_checker, prev_timestamp, timestamp),
-            &mut buffer.lower_decomp,
+            &mut buffer.diff_decomp,
         );
     }
 }
