@@ -369,3 +369,62 @@ impl Chip<DenseRecordArena, GpuBackend> for KeccakfPermChipGpu {
         AirProvingContext::simple_no_pis(d_trace)
     }
 }
+
+#[cfg(all(test, feature = "rvr"))]
+mod tests {
+    use openvm_circuit::utils::test_gpu_engine;
+    use openvm_cuda_common::{
+        copy::{MemCopyD2H, MemCopyH2D},
+        d_buffer::DeviceBuffer,
+    };
+    use openvm_stark_backend::StarkEngine;
+    use rvr_state::PreflightProgramEvent;
+
+    use super::*;
+    use crate::KECCAK_WIDTH_U64S;
+
+    #[test]
+    fn keccakf_permutation_replay_rejects_wrapped_program_index() {
+        let engine = test_gpu_engine();
+        let device_ctx = &engine.device().device_ctx;
+        let height = 32usize;
+        let program = [
+            PreflightProgramEvent {
+                pc: 0,
+                timestamp: 1,
+            },
+            PreflightProgramEvent {
+                pc: 4,
+                timestamp: 27,
+            },
+        ]
+        .to_device_on(device_ctx)
+        .unwrap();
+        let steps = [[u32::MAX, 0u32]].to_device_on(device_ctx).unwrap();
+        let preimages = [0u64; KECCAK_WIDTH_U64S].to_device_on(device_ctx).unwrap();
+        let blocks_to_fill = height.div_ceil(NUM_ROUNDS);
+        let round_states = DeviceBuffer::<u64>::with_capacity_on(
+            blocks_to_fill * NUM_ROUNDS * KECCAK_WIDTH_U64S,
+            device_ctx,
+        );
+        let trace = DeviceBuffer::<F>::with_capacity_on(height * NUM_KECCAKF_PERM_COLS, device_ctx);
+        let error = [0u32].to_device_on(device_ctx).unwrap();
+
+        unsafe {
+            cuda_abi::keccakf_perm::replay_tracegen(
+                &trace,
+                height,
+                program.view(),
+                steps.view(),
+                0,
+                1,
+                &preimages,
+                &round_states,
+                error.as_mut_ptr(),
+                device_ctx.stream.as_raw(),
+            )
+            .unwrap();
+        }
+        assert_eq!(error.to_host_on(device_ctx).unwrap()[0], 821);
+    }
+}

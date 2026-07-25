@@ -200,6 +200,14 @@ static_assert(!int256_pointer_range((uint64_t(1) << 32) - 31, 32));
 static_assert(!int256_pointer_range((uint64_t(1) << 32) - 30, 32));
 static_assert(!int256_pointer_range(0, 33));
 
+__host__ __device__ constexpr bool int256_sequential_pc(uint32_t from_pc, uint32_t to_pc) {
+    return from_pc <= UINT32_MAX - program::DEFAULT_PC_STEP &&
+           to_pc == from_pc + program::DEFAULT_PC_STEP;
+}
+
+static_assert(int256_sequential_pc(0, program::DEFAULT_PC_STEP));
+static_assert(!int256_sequential_pc(UINT32_MAX - 3, 0));
+
 __device__ __forceinline__ bool int256_expected_event(
     PreflightMemoryEvent const &event,
     uint32_t timestamp,
@@ -226,6 +234,7 @@ __device__ bool load_int256_replay_row(
     uint32_t memory_address_space,
     uint32_t pointer_max_bits,
     bool has_write,
+    ReplayPcEffect pc_effect,
     Int256ReplayRow &out,
     uint32_t *error
 ) {
@@ -237,12 +246,17 @@ __device__ bool load_int256_replay_row(
     auto const &from = program_log[program_index];
     auto const &to = program_log[program_index + 1];
     uint32_t timestamp_delta = has_write ? 15u : 10u;
-    if (from.pc < pc_base || (from.pc - pc_base) % 4 != 0 ||
-        from.timestamp + timestamp_delta != to.timestamp) {
+    bool invalid_timestamp = from.timestamp > UINT32_MAX - timestamp_delta ||
+                             from.timestamp + timestamp_delta != to.timestamp;
+    bool invalid_sequential =
+        pc_effect == ReplayPcEffect::Sequential &&
+        !int256_sequential_pc(from.pc, to.pc);
+    if (from.pc < pc_base || (from.pc - pc_base) % program::DEFAULT_PC_STEP != 0 ||
+        invalid_timestamp || invalid_sequential) {
         preflight_set_error(error, INT256_REPLAY_BAD_STEP);
         return false;
     }
-    size_t instruction_index = (from.pc - pc_base) / 4;
+    size_t instruction_index = (from.pc - pc_base) / program::DEFAULT_PC_STEP;
     if (instruction_index >= instructions.len()) {
         preflight_set_error(error, INT256_REPLAY_BAD_INSTRUCTION);
         return false;
@@ -850,6 +864,7 @@ __device__ bool int256_replay_load_alu(
         inputs.memory_address_space,
         inputs.pointer_max_bits,
         true,
+        ReplayPcEffect::Sequential,
         replay,
         inputs.error
     );
@@ -881,6 +896,7 @@ __device__ bool int256_replay_load_branch(
         inputs.memory_address_space,
         inputs.pointer_max_bits,
         false,
+        ReplayPcEffect::Dynamic,
         replay,
         inputs.error
     );
@@ -901,10 +917,6 @@ __global__ void add_sub256_replay_tracegen(
     if (idx >= inputs.num_steps) return;
     Int256ReplayRow replay{};
     if (!int256_replay_load_alu(inputs, idx, 0, 2, replay)) return;
-    if (replay.to_pc != replay.from_pc + 4) {
-        preflight_set_error(inputs.error, INT256_REPLAY_BAD_STEP);
-        return;
-    }
     uint16_t b[INT256_NUM_U16_LIMBS], c[INT256_NUM_U16_LIMBS];
     uint16_t expected[INT256_NUM_U16_LIMBS];
     uint32_t carry[INT256_NUM_U16_LIMBS];
@@ -946,10 +958,6 @@ __global__ void bitwise_logic256_replay_tracegen(
     if (idx >= inputs.num_steps) return;
     Int256ReplayRow replay{};
     if (!int256_replay_load_alu(inputs, idx, 2, 3, replay)) return;
-    if (replay.to_pc != replay.from_pc + 4) {
-        preflight_set_error(inputs.error, INT256_REPLAY_BAD_STEP);
-        return;
-    }
     uint8_t b[INT256_NUM_U8_LIMBS], c[INT256_NUM_U8_LIMBS];
     uint8_t expected[INT256_NUM_U8_LIMBS];
     int256_flatten_u8_reads(replay, b, c);
@@ -993,10 +1001,6 @@ __global__ void less_than256_replay_tracegen(
     if (idx >= inputs.num_steps) return;
     Int256ReplayRow replay{};
     if (!int256_replay_load_alu(inputs, idx, 0, 2, replay)) return;
-    if (replay.to_pc != replay.from_pc + 4) {
-        preflight_set_error(inputs.error, INT256_REPLAY_BAD_STEP);
-        return;
-    }
     uint16_t b[INT256_NUM_U16_LIMBS], c[INT256_NUM_U16_LIMBS];
     uint16_t expected[INT256_NUM_U16_LIMBS] = {0};
     int256_flatten_u16_reads(replay, b, c);
@@ -1036,10 +1040,6 @@ __global__ void shift_logical256_replay_tracegen(
     if (idx >= inputs.num_steps) return;
     Int256ReplayRow replay{};
     if (!int256_replay_load_alu(inputs, idx, 0, 2, replay)) return;
-    if (replay.to_pc != replay.from_pc + 4) {
-        preflight_set_error(inputs.error, INT256_REPLAY_BAD_STEP);
-        return;
-    }
     uint16_t b[INT256_NUM_U16_LIMBS], c[INT256_NUM_U16_LIMBS];
     uint16_t expected[INT256_NUM_U16_LIMBS];
     size_t limb_shift, bit_shift;
@@ -1086,10 +1086,6 @@ __global__ void shift_right_arithmetic256_replay_tracegen(
     if (idx >= inputs.num_steps) return;
     Int256ReplayRow replay{};
     if (!int256_replay_load_alu(inputs, idx, 2, 1, replay)) return;
-    if (replay.to_pc != replay.from_pc + 4) {
-        preflight_set_error(inputs.error, INT256_REPLAY_BAD_STEP);
-        return;
-    }
     uint16_t b[INT256_NUM_U16_LIMBS], c[INT256_NUM_U16_LIMBS];
     uint16_t expected[INT256_NUM_U16_LIMBS];
     size_t limb_shift, bit_shift;
@@ -1131,10 +1127,6 @@ __global__ void multiplication256_replay_tracegen(
     if (idx >= inputs.num_steps) return;
     Int256ReplayRow replay{};
     if (!int256_replay_load_alu(inputs, idx, 0, 1, replay)) return;
-    if (replay.to_pc != replay.from_pc + 4) {
-        preflight_set_error(inputs.error, INT256_REPLAY_BAD_STEP);
-        return;
-    }
     uint8_t b[INT256_NUM_U8_LIMBS], c[INT256_NUM_U8_LIMBS];
     uint8_t expected[INT256_NUM_U8_LIMBS];
     uint32_t carry[INT256_NUM_U8_LIMBS];
@@ -1188,9 +1180,10 @@ __global__ void branch_equal256_replay_tracegen(
 #pragma unroll
     for (size_t i = 0; i < INT256_NUM_U16_LIMBS; i++) equal &= a[i] == b[i];
     bool take = replay.local_opcode == 0 ? equal : !equal;
-    uint32_t expected_pc = take ? int256_branch_target(replay.from_pc, replay.immediate)
-                                : replay.from_pc + 4;
-    if (replay.to_pc != expected_pc) {
+    bool valid_pc =
+        take ? replay.to_pc == int256_branch_target(replay.from_pc, replay.immediate)
+             : int256_sequential_pc(replay.from_pc, replay.to_pc);
+    if (!valid_pc) {
         preflight_set_error(inputs.error, INT256_REPLAY_BAD_BRANCH);
         return;
     }
@@ -1255,9 +1248,10 @@ __global__ void branch_less_than256_replay_tracegen(
     uint16_t a[INT256_NUM_U16_LIMBS], b[INT256_NUM_U16_LIMBS];
     int256_flatten_u16_reads(replay, a, b);
     bool take = int256_branch_less_than(a, b, replay.local_opcode);
-    uint32_t expected_pc = take ? int256_branch_target(replay.from_pc, replay.immediate)
-                                : replay.from_pc + 4;
-    if (replay.to_pc != expected_pc) {
+    bool valid_pc =
+        take ? replay.to_pc == int256_branch_target(replay.from_pc, replay.immediate)
+             : int256_sequential_pc(replay.from_pc, replay.to_pc);
+    if (!valid_pc) {
         preflight_set_error(inputs.error, INT256_REPLAY_BAD_BRANCH);
         return;
     }

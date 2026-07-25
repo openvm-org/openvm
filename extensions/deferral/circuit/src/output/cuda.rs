@@ -332,3 +332,105 @@ impl Chip<DenseRecordArena, GpuBackend> for DeferralOutputChipGpu {
         AirProvingContext::simple_no_pis(trace)
     }
 }
+
+#[cfg(all(test, feature = "rvr"))]
+mod tests {
+    use openvm_circuit::{arch::rvr::cuda::RvrReplayInstruction, utils::test_gpu_engine};
+    use openvm_cuda_common::{
+        copy::{MemCopyD2H, MemCopyH2D},
+        d_buffer::DeviceBuffer,
+        stream::GpuDeviceCtx,
+    };
+    use openvm_deferral_transpiler::DeferralOpcode;
+    use openvm_instructions::{
+        riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
+        LocalOpcode,
+    };
+    use openvm_stark_backend::StarkEngine;
+    use rvr_state::{PreflightMemoryEvent, PreflightProgramEvent};
+
+    use super::*;
+
+    fn output_replay_count_error(
+        device_ctx: &GpuDeviceCtx,
+        pc_base: u32,
+        program: [PreflightProgramEvent; 2],
+        program_index: u32,
+    ) -> u32 {
+        let opcode = DeferralOpcode::OUTPUT.global_opcode().as_usize() as u32;
+        let instruction = RvrReplayInstruction {
+            words: [opcode, 8, 16, 0, RV64_REGISTER_AS, RV64_MEMORY_AS, 0, 0],
+        };
+        let mut memory = [PreflightMemoryEvent::default(); 11];
+        memory[6] = PreflightMemoryEvent {
+            timestamp: 7,
+            address_space_and_kind: RV64_MEMORY_AS,
+            pointer: 0,
+            value: [DIGEST_SIZE as u16, 0, 0, 0],
+        };
+        let steps = [[program_index, 0u32]];
+        let instructions = [instruction].to_device_on(device_ctx).unwrap();
+        let program = program.to_device_on(device_ctx).unwrap();
+        let memory = memory.to_device_on(device_ctx).unwrap();
+        let steps = steps.to_device_on(device_ctx).unwrap();
+        let counts = DeviceBuffer::<u32>::with_capacity_on(1, device_ctx);
+        let error = [0u32].to_device_on(device_ctx).unwrap();
+
+        unsafe {
+            output::replay_count_rows(
+                &counts,
+                instructions.view(),
+                pc_base,
+                program.view(),
+                memory.view(),
+                steps.view(),
+                0,
+                1,
+                opcode,
+                RV64_REGISTER_AS,
+                RV64_MEMORY_AS,
+                1,
+                error.as_mut_ptr(),
+                device_ctx.stream.as_raw(),
+            )
+            .unwrap();
+        }
+        error.to_host_on(device_ctx).unwrap()[0]
+    }
+
+    #[test]
+    fn output_replay_rejects_wrapped_program_index_and_pc() {
+        let engine = test_gpu_engine();
+        let device_ctx = &engine.device().device_ctx;
+        let ordinary_program = [
+            PreflightProgramEvent {
+                pc: 0,
+                timestamp: 1,
+            },
+            PreflightProgramEvent {
+                pc: 4,
+                timestamp: 12,
+            },
+        ];
+        assert_eq!(
+            output_replay_count_error(device_ctx, 0, ordinary_program, u32::MAX),
+            1101
+        );
+
+        let overflowing_pc = u32::MAX - 3;
+        let wrapped_program = [
+            PreflightProgramEvent {
+                pc: overflowing_pc,
+                timestamp: 1,
+            },
+            PreflightProgramEvent {
+                pc: 0,
+                timestamp: 12,
+            },
+        ];
+        assert_eq!(
+            output_replay_count_error(device_ctx, overflowing_pc, wrapped_program, 0),
+            1101
+        );
+    }
+}
