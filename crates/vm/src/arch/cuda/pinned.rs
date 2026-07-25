@@ -46,6 +46,15 @@ const MAX_READY_SIZE_CLASSES: usize = 16;
 const MAX_READY_BUFFERS_PER_CLASS: usize = 4;
 const CLEANER_QUEUE_CAPACITY: usize = 128;
 const MAX_PENDING_BYTES: usize = 2 * 1024 * 1024 * 1024;
+/// Upper bound on how many returns one cleaner batch coalesces before it
+/// fences and recycles them. A batch pays a single full-device
+/// `cudaDeviceSynchronize` per originating device, so this must comfortably
+/// exceed a segment's return burst (empirically ~37, peaking near the
+/// [`CLEANER_QUEUE_CAPACITY`]) — otherwise a large burst splits across batches
+/// and each split pays another redundant device fence. It is only a safety cap
+/// against an unbounded batch under a sustained producer; the in-flight count
+/// is already bounded by [`CLEANER_QUEUE_CAPACITY`] plus blocked producers.
+const CLEANER_BATCH_LIMIT: usize = 1024;
 
 /// Device association is kept outside the inner quarantine wrapper so the
 /// cleaner can batch fences without releasing a backing before it is idle.
@@ -745,7 +754,7 @@ fn run_cleaner(rx: mpsc::Receiver<CleanerMessage>) {
         &SHUTTING_DOWN,
         &CLEANER_WORK_GATE,
         std::time::Duration::from_millis(100),
-        64,
+        CLEANER_BATCH_LIMIT,
         process_returned_batch,
     );
 }

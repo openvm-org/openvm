@@ -103,7 +103,40 @@ pub(crate) fn run_pending_return_worker<T>(
         #[cfg(any(feature = "rvr", test))]
         let mut acknowledge = None;
         let mut terminate = false;
+        // Coalesce the whole return burst into a single batch. `consume`
+        // (the pinned cleaner) fences the batch with one full-device
+        // synchronize per originating device; every buffer's H2D copy was
+        // enqueued before its `give_back`, which precedes that synchronize, so
+        // one fence covers the entire drained set. Splitting the burst across
+        // several batches instead pays a redundant "wait for the device to go
+        // idle" for each chunk while the device is busy with unrelated proving
+        // work. The greedy `try_recv` pass drains everything already queued
+        // without waiting; the `recv_timeout` tail then absorbs stragglers of
+        // the same burst before the batch closes. `batch_limit` remains an
+        // upper bound so a sustained producer cannot grow the batch without end.
         while batch.len() < batch_limit {
+            match receiver.try_recv() {
+                Ok(PendingReturnMessage::Return(next)) => {
+                    batch.push(next);
+                    continue;
+                }
+                #[cfg(any(feature = "rvr", test))]
+                Ok(PendingReturnMessage::Barrier(sender)) => {
+                    acknowledge = Some(sender);
+                    break;
+                }
+                Ok(PendingReturnMessage::Shutdown) => {
+                    terminate = true;
+                    break;
+                }
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    terminate = true;
+                    break;
+                }
+                // Nothing more is queued right now: fall through to a short
+                // blocking wait for a straggler of the same burst.
+                Err(mpsc::TryRecvError::Empty) => {}
+            }
             match receiver.recv_timeout(idle_window) {
                 Ok(PendingReturnMessage::Return(next)) => batch.push(next),
                 #[cfg(any(feature = "rvr", test))]
