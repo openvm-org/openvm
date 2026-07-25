@@ -8,10 +8,6 @@ fn main() {
             return; // Skip CUDA compilation
         }
 
-        // Keep checkpoint replay out of ordinary CUDA builds. These translation
-        // units are large and have no symbols used unless the RVR feature is on.
-        println!("cargo:rerun-if-changed=cuda/src/testing");
-
         let builder = CudaBuilder::new()
             .include_from_dep("DEP_CUDA_COMMON_INCLUDE")
             .include("../circuits/primitives/cuda/include")
@@ -32,7 +28,7 @@ fn main() {
         if cfg!(feature = "rvr") {
             system_builder = system_builder
                 .include("cuda/rvr/include")
-                .watch("cuda/rvr/src")
+                .watch("cuda/rvr")
                 .flag("-DOPENVM_RVR_REPLAY")
                 .files([
                     "cuda/src/system/rvr_checkpoint_replay.cu",

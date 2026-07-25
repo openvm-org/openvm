@@ -1401,14 +1401,16 @@ __global__ void prepare_program_steps(
     }
 
     size_t memory_start = memory_lower_bound(memory, from.timestamp);
-    size_t memory_end = memory_lower_bound(memory, to.timestamp);
-    if ((program_index == 0 && memory_start != 0) ||
-        (program_index + 1 == num_steps && memory_end != memory.len())) {
+    if (program_index == 0 && memory_start != 0) {
         preflight_set_error(error, ERROR_MEMORY_BOUNDARY);
         return;
     }
 
     if (program_index + 1 == num_steps) {
+        if (memory_lower_bound(memory, to.timestamp) != memory.len()) {
+            preflight_set_error(error, ERROR_MEMORY_BOUNDARY);
+            return;
+        }
         if (to.timestamp >= (uint32_t{1} << timestamp_max_bits)) {
             preflight_set_error(error, ERROR_TIMESTAMP_DOMAIN);
             return;

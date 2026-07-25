@@ -51,6 +51,11 @@ impl SdkVmGpuBuilder {
         program: &Program<F>,
     ) -> Result<GpuRvrProgram, GpuRvrInputError> {
         let config = vm.config().to_inner();
+        validate_checkpoint_config(
+            config.modular.is_some(),
+            config.fp2.is_some(),
+            config.ecc.is_some(),
+        )?;
         let mut registry = RvrCheckpointAccessRegistry::default();
         if config.keccak.is_some() {
             Keccak256RvrGpuTracegen::register_checkpoint_access_schedules(&mut registry)?;
@@ -68,17 +73,8 @@ impl SdkVmGpuBuilder {
                 modular,
                 config.fp2.as_ref(),
             )?;
-        } else if config.fp2.is_some() {
-            return Err(GpuRvrInputError::InvalidAccessSchedule(
-                "Fp2 checkpoint replay requires the Modular extension".to_string(),
-            ));
         }
         if let Some(ecc) = &config.ecc {
-            if config.modular.is_none() {
-                return Err(GpuRvrInputError::InvalidAccessSchedule(
-                    "Weierstrass checkpoint replay requires the Modular extension".to_string(),
-                ));
-            }
             WeierstrassRvrGpuTracegen::register_checkpoint_access_schedules(&mut registry, ecc)?;
         }
         if config.deferral.is_some() {
@@ -144,6 +140,11 @@ impl<'a> SdkRvrGpuTracegen<'a> {
         replay_plan: &'a GpuRvrReplayPlan,
         max_trace_height: usize,
     ) -> Result<Self, GpuRvrInputError> {
+        validate_checkpoint_config(
+            config.modular.is_some(),
+            config.fp2.is_some(),
+            config.ecc.is_some(),
+        )?;
         let keccak = config
             .keccak
             .as_ref()
@@ -156,35 +157,23 @@ impl<'a> SdkRvrGpuTracegen<'a> {
             .bigint
             .as_ref()
             .map(|_| Int256RvrGpuTracegen::new(program, transcript, replay_plan));
-        let algebra = match &config.modular {
-            Some(modular) => Some(AlgebraRvrGpuTracegen::new(
-                program,
-                transcript,
-                replay_plan,
-                modular,
-                config.fp2.as_ref(),
-            )?),
-            None if config.fp2.is_some() => {
-                return Err(GpuRvrInputError::InvalidTranscript(
-                    "Fp2 checkpoint replay requires the Modular extension".to_string(),
-                ));
-            }
-            None => None,
-        };
-        let ecc = match &config.ecc {
-            Some(ecc) if config.modular.is_some() => Some(WeierstrassRvrGpuTracegen::new(
-                ecc,
-                program,
-                transcript,
-                replay_plan,
-            )),
-            Some(_) => {
-                return Err(GpuRvrInputError::InvalidTranscript(
-                    "Weierstrass checkpoint replay requires the Modular extension".to_string(),
-                ));
-            }
-            None => None,
-        };
+        let algebra = config
+            .modular
+            .as_ref()
+            .map(|modular| {
+                AlgebraRvrGpuTracegen::new(
+                    program,
+                    transcript,
+                    replay_plan,
+                    modular,
+                    config.fp2.as_ref(),
+                )
+            })
+            .transpose()?;
+        let ecc = config
+            .ecc
+            .as_ref()
+            .map(|ecc| WeierstrassRvrGpuTracegen::new(ecc, program, transcript, replay_plan));
         let deferral = config
             .deferral
             .as_ref()
@@ -307,6 +296,24 @@ impl<'a> SdkRvrGpuTracegen<'a> {
 
 fn extension_error(error: GpuRvrInputError) -> GenerationError {
     GenerationError::ExtensionTracegen(error.to_string())
+}
+
+fn validate_checkpoint_config(
+    has_modular: bool,
+    has_fp2: bool,
+    has_ecc: bool,
+) -> Result<(), GpuRvrInputError> {
+    if !has_modular && has_fp2 {
+        return Err(GpuRvrInputError::InvalidAccessSchedule(
+            "Fp2 checkpoint replay requires the Modular extension".to_string(),
+        ));
+    }
+    if !has_modular && has_ecc {
+        return Err(GpuRvrInputError::InvalidAccessSchedule(
+            "Weierstrass checkpoint replay requires the Modular extension".to_string(),
+        ));
+    }
+    Ok(())
 }
 
 struct OpcodeOwnership {

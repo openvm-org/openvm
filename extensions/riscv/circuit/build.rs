@@ -24,7 +24,8 @@ fn main() {
             builder = builder
                 .include("cuda/rvr/include")
                 .include("../../../crates/vm/cuda/rvr/include")
-                .watch("cuda/rvr/src")
+                .watch("cuda/rvr")
+                .watch("../../../crates/vm/cuda/rvr/include")
                 .flag("-DOPENVM_RVR_REPLAY");
         }
 
