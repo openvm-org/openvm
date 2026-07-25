@@ -46,6 +46,30 @@ fn check_memcpy(src: &[u8; CAP], dest: &mut [u8; CAP]) {
     }
 }
 
+fn check_memset(dest: &mut [u8; CAP]) {
+    for n in LENS {
+        for dest_off in 0..OFFSETS {
+            *dest = [FILL; CAP];
+            unsafe {
+                core::ptr::write_bytes(
+                    black_box(dest.as_mut_ptr().add(dest_off)),
+                    black_box(0x5Cu8),
+                    black_box(n),
+                );
+            }
+            for k in 0..n {
+                assert_eq!(dest[dest_off + k], 0x5C);
+            }
+            for k in 0..dest_off {
+                assert_eq!(dest[k], FILL);
+            }
+            for k in dest_off + n..CAP {
+                assert_eq!(dest[k], FILL);
+            }
+        }
+    }
+}
+
 pub fn main() {
     let mut src = [0u8; CAP];
     for (i, b) in src.iter_mut().enumerate() {
@@ -54,4 +78,5 @@ pub fn main() {
     let mut dest = [0u8; CAP];
 
     check_memcpy(&src, &mut dest);
+    check_memset(&mut dest);
 }

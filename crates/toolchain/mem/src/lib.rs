@@ -115,5 +115,67 @@ pub unsafe extern "C" fn memcpy(dest: *mut u8, src: *const u8, n: usize) -> *mut
     dest
 }
 
+/// Writes `WORDS` words at `dest` and `WORDS` more ending at `dest + n`.
+#[inline(always)]
+unsafe fn set_overlapping<const WORDS: usize>(dest: *mut u8, word: u64, n: usize) {
+    let back = n - WORDS * 8;
+    let mut i = 0;
+    while i < WORDS {
+        write_u64(dest.add(i * 8), word);
+        write_u64(dest.add(back + i * 8), word);
+        i += 1;
+    }
+}
+
+/// Writes `n < BLOCK` copies of `word`'s low byte using two overlapping runs of stores.
+///
+/// Overlapping stores of the same value are idempotent, so no ordering care is needed.
+#[inline(always)]
+unsafe fn set_tail(dest: *mut u8, word: u64, n: usize) {
+    if n >= 32 {
+        set_overlapping::<4>(dest, word, n);
+    } else if n >= 16 {
+        set_overlapping::<2>(dest, word, n);
+    } else if n >= 8 {
+        set_overlapping::<1>(dest, word, n);
+    } else if n >= 4 {
+        write_u32(dest, word as u32);
+        write_u32(dest.add(n - 4), word as u32);
+    } else if n >= 2 {
+        write_u16(dest, word as u16);
+        write_u16(dest.add(n - 2), word as u16);
+    } else if n == 1 {
+        *dest = word as u8;
+    }
+}
+
+/// Fills `n` bytes with `val`.
+///
+/// # Safety
+///
+/// `dest` must be valid for writes of `n` bytes.
+#[inline(always)]
+pub unsafe fn set_bytes(dest: *mut u8, val: u8, n: usize) {
+    let word = u64::from_ne_bytes([val; 8]);
+    let (mut dest, mut rem) = (dest, n);
+    while rem >= BLOCK {
+        let mut i = 0;
+        while i < BLOCK / 8 {
+            write_u64(dest.add(i * 8), word);
+            i += 1;
+        }
+        dest = dest.add(BLOCK);
+        rem -= BLOCK;
+    }
+    set_tail(dest, word, rem);
+}
+
+#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
+#[no_mangle]
+pub unsafe extern "C" fn memset(dest: *mut u8, val: core::ffi::c_int, n: usize) -> *mut u8 {
+    set_bytes(dest, val as u8, n);
+    dest
+}
+
 #[cfg(test)]
 mod tests;

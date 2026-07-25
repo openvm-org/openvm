@@ -17,6 +17,25 @@ fn pattern(len: usize) -> Vec<u8> {
 }
 
 #[test]
+fn set_bytes_matches_fill() {
+    for n in 0..=MAX_LEN {
+        for dest_off in 0..OFFSETS {
+            let mut dest = vec![PAD; MAX_LEN + 2 * OFFSETS];
+            unsafe { set_bytes(dest.as_mut_ptr().add(dest_off), 0x5C, n) };
+            assert!(
+                dest[dest_off..dest_off + n].iter().all(|&b| b == 0x5C),
+                "n={n} dest_off={dest_off}"
+            );
+            assert!(
+                dest[..dest_off].iter().all(|&b| b == PAD)
+                    && dest[dest_off + n..].iter().all(|&b| b == PAD),
+                "wrote outside the destination range: n={n} dest_off={dest_off}"
+            );
+        }
+    }
+}
+
+#[test]
 fn copy_forward_matches_slice_copy() {
     let src = pattern(MAX_LEN + 2 * OFFSETS);
     for n in 0..=MAX_LEN {

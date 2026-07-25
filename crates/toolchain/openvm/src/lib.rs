@@ -32,8 +32,6 @@ pub mod utils;
 #[cfg(not(any(openvm_intrinsics, target_os = "openvm")))]
 pub mod host;
 
-#[cfg(any(openvm_intrinsics, target_os = "openvm"))]
-core::arch::global_asm!(include_str!("memset.s"));
 // `openvm-mem` defines `memcpy` and friends; the dependency exists purely so its object is on the
 // link line ahead of `compiler_builtins`, whose definitions are weak.
 #[cfg(any(openvm_intrinsics, target_os = "openvm"))]
