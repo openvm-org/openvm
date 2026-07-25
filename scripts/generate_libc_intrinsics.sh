@@ -28,6 +28,9 @@
 #      plus the matching `COPYRIGHT` file for license attribution.
 #   2. Strips `#include` lines and prepends minimal inline typedefs so each
 #      source can be compiled with `-nostdlib -fno-builtin`.
+#   2b. Applies `scripts/musl-rv64-<fn>.patch` if one exists, so local changes
+#      are expressed against musl's source instead of the generated assembly
+#      and the output stays reproducible.
 #   3. Compiles each file with:
 #         clang -target riscv64 -march=rv64im -O3 -S \
 #               -nostdlib -fno-builtin -funroll-loops
@@ -113,6 +116,7 @@ TYPEDEFS_MEMCPY=$(cat <<'EOF'
 typedef unsigned long size_t;
 typedef unsigned int uint32_t;
 typedef unsigned long uintptr_t;
+typedef unsigned long long uint64_t;
 EOF
 )
 
@@ -141,6 +145,14 @@ regen_one() {
     printf '%s\n\n' "${typedefs}"
     curl -fsSL "${src_url}" | sed '/^#include /d'
   } > "${c}"
+
+  # Local modifications live as patches against musl's source rather than as edits to the
+  # generated assembly, so the output stays reproducible from a musl commit plus this repo.
+  local patch_file="${REPO_ROOT}/scripts/musl-rv64-${fn}.patch"
+  if [[ -f "${patch_file}" ]]; then
+    echo "gen: applying $(basename "${patch_file}")"
+    patch --silent --no-backup-if-mismatch "${c}" < "${patch_file}"
+  fi
 
   echo "gen: compiling ${fn}.c -> ${fn}.s (riscv64im, O3, -funroll-loops)"
   "${CLANG}" -target riscv64 -march=rv64im -O3 -S \
@@ -175,6 +187,10 @@ regen_one() {
     printf '//\n'
     printf '// src/string/%s.c\n' "${fn}"
     printf '//\n'
+    if [[ -f "${patch_file}" ]]; then
+      printf '// with scripts/musl-rv64-%s.patch applied.\n' "${fn}"
+      printf '//\n'
+    fi
     printf '// This was compiled into assembly with:\n'
     printf '//\n'
     printf '//     clang -target riscv64 -march=rv64im -O3 -S %s.c -nostdlib -fno-builtin -funroll-loops\n' "${fn}"

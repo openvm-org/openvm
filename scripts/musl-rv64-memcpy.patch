@@ -1,0 +1,50 @@
+--- musl_memcpy.c	2026-07-25 09:59:04
++++ musl_memcpy_patched.c	2026-07-25 11:00:55
+@@ -18,11 +18,39 @@
+ #endif
+ 
+ 	typedef uint32_t __attribute__((__may_alias__)) u32;
++	typedef uint64_t __attribute__((__may_alias__)) u64;
+ 	uint32_t w, x;
+ 
+ 	for (; (uintptr_t)s % 4 && n; n--) *d++ = *s++;
+ 
+ 	if ((uintptr_t)d % 4 == 0) {
++		/* On a 64-bit target a word load moves twice the bytes for the same
++		 * instruction count, so prefer 64-bit words when both pointers can
++		 * reach 8-byte alignment together. They can only do so if they sit
++		 * the same distance past it, and one 32-bit word brings them both up
++		 * when that distance is 4. The 32-bit path below is left as the
++		 * fallback, so no copy that could not widen is affected. */
++		if (n >= 16 && ((uintptr_t)s & 4) == ((uintptr_t)d & 4)) {
++			if ((uintptr_t)s & 4) {
++				*(u32 *)d = *(u32 *)s;
++				d += 4; s += 4; n -= 4;
++			}
++			for (; n>=32; s+=32, d+=32, n-=32) {
++				*(u64 *)(d+0) = *(u64 *)(s+0);
++				*(u64 *)(d+8) = *(u64 *)(s+8);
++				*(u64 *)(d+16) = *(u64 *)(s+16);
++				*(u64 *)(d+24) = *(u64 *)(s+24);
++			}
++			if (n&16) {
++				*(u64 *)(d+0) = *(u64 *)(s+0);
++				*(u64 *)(d+8) = *(u64 *)(s+8);
++				d += 16; s += 16;
++			}
++			if (n&8) {
++				*(u64 *)(d+0) = *(u64 *)(s+0);
++				d += 8; s += 8;
++			}
++		} else {
+ 		for (; n>=16; s+=16, d+=16, n-=16) {
+ 			*(u32 *)(d+0) = *(u32 *)(s+0);
+ 			*(u32 *)(d+4) = *(u32 *)(s+4);
+@@ -34,6 +62,7 @@
+ 			*(u32 *)(d+4) = *(u32 *)(s+4);
+ 			d += 8; s += 8;
+ 		}
++		}
+ 		if (n&4) {
+ 			*(u32 *)(d+0) = *(u32 *)(s+0);
+ 			d += 4; s += 4;
