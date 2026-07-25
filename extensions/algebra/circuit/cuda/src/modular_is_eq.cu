@@ -149,33 +149,33 @@ __global__ void modular_is_eq_replay_tracegen(
         return;
     }
     auto const &step = steps[step_start + row_index];
-    size_t program_index = step.program_index;
-    if (program_index + 1 >= program.len() || predecessors.len() != memory.len()) {
+    if (predecessors.len() != memory.len()) {
         preflight_set_error(error, MODULAR_IS_EQ_REPLAY_ERROR);
         return;
     }
-    auto const &from = program[program_index];
-    auto const &to = program[program_index + 1];
-    if (from.pc < pc_base || (from.pc - pc_base) % DEFAULT_PC_STEP != 0 ||
-        from.pc > UINT32_MAX - DEFAULT_PC_STEP || from.timestamp > UINT32_MAX - EVENT_COUNT) {
+    ReplayProgramTransition transition;
+    if (resolve_replay_program_transition(
+            instructions,
+            pc_base,
+            program,
+            step.program_index,
+            EVENT_COUNT,
+            ReplayPcEffect::Sequential,
+            transition
+        ) != ReplayProgramTransitionError::None) {
         preflight_set_error(error, MODULAR_IS_EQ_REPLAY_ERROR);
         return;
     }
-    size_t instruction_index = (from.pc - pc_base) / DEFAULT_PC_STEP;
-    if (instruction_index >= instructions.len()) {
-        preflight_set_error(error, MODULAR_IS_EQ_REPLAY_ERROR);
-        return;
-    }
-    auto const &instruction = instructions[instruction_index];
+    auto const &from = *transition.from;
+    auto const &to = *transition.to;
+    auto const &instruction = *transition.instruction;
     bool is_setup = instruction.words[0] == opcode_base + MODULAR_SETUP_IS_EQ_LOCAL_OPCODE;
     if ((!is_setup && instruction.words[0] != opcode_base + MODULAR_IS_EQ_LOCAL_OPCODE) ||
         instruction.words[4] != register_as || instruction.words[5] != memory_as ||
         instruction.words[6] != 0 || instruction.words[7] != 0 ||
         !modular_is_eq_canonical_register(instruction.words[1]) ||
         !modular_is_eq_canonical_register(instruction.words[2]) ||
-        !modular_is_eq_canonical_register(instruction.words[3]) || pointer_max_bits > 32 ||
-        to.pc != from.pc + DEFAULT_PC_STEP ||
-        to.timestamp != from.timestamp + EVENT_COUNT) {
+        !modular_is_eq_canonical_register(instruction.words[3]) || pointer_max_bits > 32) {
         preflight_set_error(error, MODULAR_IS_EQ_REPLAY_ERROR);
         return;
     }

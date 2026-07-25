@@ -238,30 +238,28 @@ __device__ bool load_int256_replay_row(
     Int256ReplayRow &out,
     uint32_t *error
 ) {
-    size_t program_index = step.program_index;
-    if (program_index + 1 >= program_log.len()) {
-        preflight_set_error(error, INT256_REPLAY_BAD_STEP);
-        return false;
-    }
-    auto const &from = program_log[program_index];
-    auto const &to = program_log[program_index + 1];
     uint32_t timestamp_delta = has_write ? 15u : 10u;
-    bool invalid_timestamp = from.timestamp > UINT32_MAX - timestamp_delta ||
-                             from.timestamp + timestamp_delta != to.timestamp;
-    bool invalid_sequential =
-        pc_effect == ReplayPcEffect::Sequential &&
-        !int256_sequential_pc(from.pc, to.pc);
-    if (from.pc < pc_base || (from.pc - pc_base) % program::DEFAULT_PC_STEP != 0 ||
-        invalid_timestamp || invalid_sequential) {
-        preflight_set_error(error, INT256_REPLAY_BAD_STEP);
+    ReplayProgramTransition transition;
+    ReplayProgramTransitionError transition_error = resolve_replay_program_transition(
+        instructions,
+        pc_base,
+        program_log,
+        step.program_index,
+        timestamp_delta,
+        pc_effect,
+        transition
+    );
+    if (transition_error != ReplayProgramTransitionError::None) {
+        uint32_t error_code =
+            transition_error == ReplayProgramTransitionError::MissingInstruction
+                ? INT256_REPLAY_BAD_INSTRUCTION
+                : INT256_REPLAY_BAD_STEP;
+        preflight_set_error(error, error_code);
         return false;
     }
-    size_t instruction_index = (from.pc - pc_base) / program::DEFAULT_PC_STEP;
-    if (instruction_index >= instructions.len()) {
-        preflight_set_error(error, INT256_REPLAY_BAD_INSTRUCTION);
-        return false;
-    }
-    auto const &instruction = instructions[instruction_index];
+    auto const &from = *transition.from;
+    auto const &to = *transition.to;
+    auto const &instruction = *transition.instruction;
     uint32_t local_opcode = instruction.words[0] - expected_opcode_base;
     if (instruction.words[0] < expected_opcode_base || local_opcode < first_local_opcode ||
         local_opcode - first_local_opcode >= num_local_opcodes ||

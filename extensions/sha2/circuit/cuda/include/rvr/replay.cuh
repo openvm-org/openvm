@@ -80,19 +80,20 @@ static __device__ bool replay_sha2_instruction(
     uint32_t pointer_max_bits,
     Sha2ReplayInput &out
 ) {
-    size_t program_index = step.program_index;
-    if (program_index + 1 >= program.len()) return false;
-    auto const &from = program[program_index];
-    auto const &to = program[program_index + 1];
-    if (from.pc < pc_base || (from.pc - pc_base) % DEFAULT_PC_STEP != 0 ||
-        from.pc > UINT32_MAX - DEFAULT_PC_STEP || from.timestamp > UINT32_MAX - V::TIMESTAMP_DELTA ||
-        to.pc != from.pc + DEFAULT_PC_STEP ||
-        to.timestamp != from.timestamp + V::TIMESTAMP_DELTA) {
+    ReplayProgramTransition transition;
+    if (resolve_replay_program_transition(
+            instructions,
+            pc_base,
+            program,
+            step.program_index,
+            V::TIMESTAMP_DELTA,
+            ReplayPcEffect::Sequential,
+            transition
+        ) != ReplayProgramTransitionError::None) {
         return false;
     }
-    size_t instruction_index = (from.pc - pc_base) / DEFAULT_PC_STEP;
-    if (instruction_index >= instructions.len()) return false;
-    auto const &instruction = instructions[instruction_index];
+    auto const &from = *transition.from;
+    auto const &instruction = *transition.instruction;
     if (instruction.words[0] != expected_opcode || instruction.words[4] != register_as ||
         instruction.words[5] != memory_as || instruction.words[6] != 0 ||
         instruction.words[7] != 0 ||

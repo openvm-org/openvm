@@ -1466,9 +1466,9 @@ where
         SystemChipInventory = crate::system::cuda::SystemChipInventoryGPU,
     >,
 {
-    /// Expands one compact RV64I checkpoint execution against the segment's
-    /// already-uploaded immutable memory image. This is intentionally a narrow
-    /// seam for the first feasibility slice, not a generic replay interface.
+    /// Expands one compact RV64 checkpoint execution against the segment's
+    /// already-uploaded immutable memory image into the read-only replay data
+    /// consumed by system and instruction trace generation.
     #[doc(hidden)]
     #[allow(clippy::too_many_arguments)]
     #[instrument(name = "expand_checkpoint_replay", skip_all)]

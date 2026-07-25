@@ -89,29 +89,23 @@ __global__ void vec_heap_replay_gather(
         return;
     }
     auto const &step = steps[step_start + index];
-    size_t program_index = step.program_index;
-    if (program_index + 1 >= program.len()) {
-        preflight_set_error(error, VEC_HEAP_REPLAY_ERROR);
-        return;
-    }
-    auto const &from = program[program_index];
-    auto const &to = program[program_index + 1];
     constexpr uint32_t EVENT_COUNT = NUM_READS + 1 + NUM_READS * BLOCKS + BLOCKS;
-    if (from.pc < pc_base ||
-        (from.pc - pc_base) % program::DEFAULT_PC_STEP != 0 ||
-        from.pc > UINT32_MAX - program::DEFAULT_PC_STEP ||
-        from.timestamp > UINT32_MAX - EVENT_COUNT ||
-        to.pc != from.pc + program::DEFAULT_PC_STEP ||
-        to.timestamp != from.timestamp + EVENT_COUNT) {
+    ReplayProgramTransition transition;
+    if (resolve_replay_program_transition(
+            instructions,
+            pc_base,
+            program,
+            step.program_index,
+            EVENT_COUNT,
+            ReplayPcEffect::Sequential,
+            transition
+        ) != ReplayProgramTransitionError::None) {
         preflight_set_error(error, VEC_HEAP_REPLAY_ERROR);
         return;
     }
-    size_t instruction_index = (from.pc - pc_base) / program::DEFAULT_PC_STEP;
-    if (instruction_index >= instructions.len()) {
-        preflight_set_error(error, VEC_HEAP_REPLAY_ERROR);
-        return;
-    }
-    auto const &instruction = instructions[instruction_index];
+    auto const &from = *transition.from;
+    auto const &to = *transition.to;
+    auto const &instruction = *transition.instruction;
     if (instruction.words[0] != expected_opcode || instruction.words[4] != register_as ||
         instruction.words[5] != memory_as || instruction.words[6] != 0 ||
         instruction.words[7] != 0 || !vec_heap_canonical_register(instruction.words[1]) ||
