@@ -597,7 +597,7 @@ impl RvrCheckpointAccessRegistry {
         }
         if opcode > RVR_CHECKPOINT_MAX_DENSE_OPCODE {
             return Err(GpuRvrInputError::InvalidAccessSchedule(format!(
-                "opcode {opcode} exceeds the phase-one dense dispatch bound"
+                "opcode {opcode} exceeds the dense checkpoint dispatch bound"
             )));
         }
         let dispatch_len = usize::try_from(opcode)
@@ -766,8 +766,22 @@ impl RvrCheckpointAccessRegistry {
                     "schedule is missing its host instruction layout".to_string(),
                 )
             })?;
-        let invalid_deferral_span = self.spans
-            [schedule.first_span as usize..(schedule.first_span + schedule.num_spans) as usize]
+        let span_start = schedule.first_span as usize;
+        let span_end = schedule
+            .first_span
+            .checked_add(schedule.num_spans)
+            .map(|end| end as usize)
+            .ok_or_else(|| {
+                GpuRvrInputError::InvalidAccessSchedule(
+                    "schedule span range exceeds the u32 index domain".to_string(),
+                )
+            })?;
+        let schedule_spans = self.spans.get(span_start..span_end).ok_or_else(|| {
+            GpuRvrInputError::InvalidAccessSchedule(
+                "schedule references a missing access span".to_string(),
+            )
+        })?;
+        let invalid_deferral_span = schedule_spans
             .iter()
             .filter(|span| {
                 matches!(
@@ -1711,10 +1725,11 @@ fn build_gpu_memory_index(
     error: &DeviceBuffer<u32>,
     device_ctx: &GpuDeviceCtx,
 ) -> Result<GpuMemoryIndex, GpuRvrInputError> {
-    let num_entries = memory
-        .len()
-        .checked_add(seeds.len())
-        .expect("memory index entry count overflow");
+    let num_entries = memory.len().checked_add(seeds.len()).ok_or_else(|| {
+        GpuRvrInputError::InvalidTranscript(
+            "memory index entry count exceeds the host index domain".to_string(),
+        )
+    })?;
     let keys_in = gpu_buffer::<u64>(num_entries, device_ctx);
     let keys_out = gpu_buffer::<u64>(num_entries, device_ctx);
 
