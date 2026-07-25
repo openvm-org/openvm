@@ -346,53 +346,59 @@ during trace generation versus 1.5 GiB during proving, and BLS12-381 used about
 560 MiB versus 2.2 GiB. These small tests validate lifetimes but do not replace
 the full-workload GPU-memory gate.
 
-The exact-source legacy and checkpoint 63-segment Reth proofs both completed:
+The exact-source legacy and prepared-checkpoint 63-segment Reth proofs both
+completed:
 
 ```text
-phase                              legacy records   checkpoint replay
-guest instructions / segments     620,281,236 / 63 620,281,236 / 63
-serial preflight                       38.202 s          1.654 s
-GPU replay expansion                        -           3.517 s
-trace generation                        6.596 s          3.023 s
-proving excluding tracegen              74.672 s         71.790 s
-total segment work                     121.893 s         82.488 s
-estimated warm runner wall             148.121 s        105.446 s
+phase                               legacy records   prepared checkpoint
+guest instructions / segments      620,281,236 / 63   620,281,236 / 63
+one-time executor preparation          138.596 s          334.138 s
+reusable app proof                     123.966 s           83.513 s
+metered execution                        1.588 s            1.959 s
+serial preflight                        38.202 s            1.685 s
+GPU replay expansion                         -             3.462 s
+trace generation                         6.596 s            3.035 s
+proving excluding tracegen              74.672 s           70.916 s
+sum of the timed phases above          121.058 s           81.057 s
+warm runner wall                       148.121 s          103.962 s
 
 checkpoint expansion allocation peak                      2.613 GiB
-checkpoint tracegen allocation peak                       5.901 GiB
+checkpoint tracegen allocation peak                       5.902 GiB
 checkpoint proving allocation peak                       14.882 GiB
-checkpoint sampled process peak                          15.482 GiB
+checkpoint sampled process peak                          15.479 GiB
 ```
 
 Expansion and trace generation remain well below proving, and replay buffers
-are not retained at the proving peak. Serial preflight is 23.1 times faster,
-trace generation is 54.2% faster, and total segment work is 32.3% faster. The
-warm runner values are currently derived by subtracting generated compilation
-from otherwise exact runs. The prepared-prover acceptance run replaces that
-estimate with a direct measurement.
+are not retained at the proving peak. Serial preflight is 22.7 times faster,
+trace generation is 54.0% faster, the timed phase sum is 33.0% faster, and
+the reusable app proof is 32.6% faster. The prepared app-proof value is a direct
+metric. The legacy app-proof and both warm runner values subtract one-time
+generated compilation from otherwise exact runs because the legacy benchmark
+did not expose a prepared prover.
 
-One-time preparation remains visible: legacy metered compilation took 138.596
-seconds; the checkpoint path took 167.763 seconds for metered compilation and
-198.883 seconds for checkpoint compilation. The host fat-LTO build increased
-from 10m34.35s to 11m22.62s. These are setup and build costs, not per-proof
-costs, but both remain compile-time acceptance metrics.
+The definitive prepared run verified every segment, endpoint continuity, the
+final public-values Merkle proof, and the output
+`b0c6920a15b5f11db176fcd1b22754fe845f9f5b24a245f1c67b997f353f3878`
+followed by the expected zero half. The preparation and proof spans were
+siblings: `compile_metered` took 159.002 seconds,
+`compile_checkpoint_preflight` took 175.052 seconds, immutable program upload
+took 34 milliseconds, and no compilation or upload occurred inside the
+83.513-second app-proof span.
 
-## Remaining acceptance work
+One-time compilation remains an optimization target, not a proof-time cost.
+Repeated full-workload generated-C runs put metered compilation in the
+159.0-167.8 second range and checkpoint compilation in the 154.3-198.9 second
+range. The like-for-like host fat-LTO build increased from 10m34.35s to
+11m22.62s; later incremental relinks ranged from 8m18.57s to 10m33.20s with
+about 14.2 GiB peak host RSS.
 
-Before calling the cutover complete:
+## Follow-up work
 
-1. Run the prepared 63-segment Reth mode and verify that the prepared-proof
-   metric contains no generated compilation or immutable program upload.
-   Re-check proofs, public values, output hash, endpoint continuity, and
-   phase-specific GPU memory.
-2. Repeat cold generated-code compilation enough to separate stable source-size
-   cost from machine noise. Keep runtime optimization unchanged unless a
-   full-workload comparison justifies a mode-specific alternative.
-3. Rebase on the latest `origin/develop-v2.1.0` and finish the aggregate diff
-   review for simple ownership, module-scoped imports, shared replay helpers,
-   typed malformed-input errors, and consistent pointer bounds.
-4. Decide separately whether legacy CPU/interpreter support is migrated far
-   enough to remove `RecordArena` from shared builder traits.
+1. Reduce cold generated-C compilation only when a full-workload comparison
+   preserves runtime performance and does not increase Rust/CUDA build cost.
+2. Decide separately whether legacy CPU/interpreter support is migrated far
+   enough to remove `RecordArena` from shared builder traits. The prepared RVR
+   proving path already avoids it.
 
 ## Performance and maintainability gates
 
