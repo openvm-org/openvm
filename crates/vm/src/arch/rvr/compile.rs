@@ -382,7 +382,7 @@ pub fn compile_with_instret_tracking<F: PrimeField32>(
     )
 }
 
-/// Compile a VmExe for append-only RVR preflight execution.
+/// Compile a `VmExe` for append-only full-log preflight execution.
 pub fn compile_full_log_preflight<F: PrimeField32>(
     exe: &VmExe<F>,
     extensions: &ExtensionRegistry,

@@ -52,7 +52,7 @@ impl FullLogPreflightLimits {
     }
 }
 
-/// Minimal append-only output from one RVR preflight run.
+/// Minimal append-only output from one full-log preflight run.
 #[derive(Debug)]
 pub struct FullLogPreflightTranscript {
     pub program_log: Vec<PreflightProgramEvent>,
@@ -399,7 +399,7 @@ struct FullLogPreflightInstanceInner<'a> {
     runtime_hooks: Vec<Box<dyn RvrRuntimeExtension>>,
 }
 
-/// Compiled append-only RVR preflight executor.
+/// Compiled append-only full-log preflight executor.
 pub struct FullLogPreflightInstance<'a> {
     inner: FullLogPreflightInstanceInner<'a>,
 }
