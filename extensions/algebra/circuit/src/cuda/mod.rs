@@ -19,6 +19,7 @@ use openvm_stark_backend::prover::AirProvingContext;
 use crate::modular_chip::ModularIsEqualCoreCols;
 
 mod cuda_abi;
+pub mod field_expr;
 pub(crate) mod modular_addsub;
 pub mod vec_heap;
 

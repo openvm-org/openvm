@@ -1,4 +1,6 @@
-//! Prover extension for the GPU backend which still does trace generation on CPU.
+//! GPU prover extension. Record-based trace generation uses the CPU fallback. RVR checkpoint
+//! replay uses record-free GPU trace generation for recognized fields and an arena-free CPU
+//! projection for other field expressions.
 
 use openvm_algebra_circuit::Rv64ModularHybridBuilder;
 use openvm_circuit::{
@@ -22,10 +24,8 @@ use openvm_stark_backend::{p3_air::BaseAir, prover::AirProvingContext};
 #[cfg(feature = "rvr")]
 use {
     openvm_algebra_circuit::{
-        cuda::vec_heap::{
-            gather_vec_heap_trace_inputs, generate_field_expression_ctx_from_projection,
-        },
-        AlgebraRvrGpuTracegen, Fp2Extension, ModularExtension,
+        cuda::field_expr::FieldExprReplayChip, AlgebraRvrGpuTracegen, Fp2Extension,
+        ModularExtension,
     },
     openvm_circuit::arch::{
         rvr::{
@@ -37,12 +37,12 @@ use {
         },
         GenerationError, VirtualMachine,
     },
-    openvm_circuit_primitives::AnyChip,
+    openvm_circuit_primitives::{var_range::VariableRangeCheckerChipGPU, AnyChip},
     openvm_ecc_transpiler::Rv64WeierstrassOpcode,
     openvm_instructions::{program::Program, LocalOpcode},
     openvm_riscv_circuit::Rv64ImRvrGpuTracegen,
     openvm_stark_backend::{p3_field::PrimeField32, prover::ProvingContext},
-    std::collections::BTreeSet,
+    std::{collections::BTreeSet, sync::Arc},
     strum::EnumCount,
 };
 
@@ -110,15 +110,7 @@ pub struct HybridWeierstrassChip<F, const NUM_READS: usize, const BLOCKS: usize>
     cpu: WeierstrassChip<F, NUM_READS, BLOCKS>,
     device_ctx: GpuDeviceCtx,
     #[cfg(feature = "rvr")]
-    replay: Option<WeierstrassReplayConfig>,
-}
-
-#[cfg(feature = "rvr")]
-#[derive(Clone, Copy)]
-struct WeierstrassReplayConfig {
-    opcode_base: usize,
-    pointer_max_bits: usize,
-    timestamp_max_bits: usize,
+    replay: Option<FieldExprReplayChip<NUM_READS, BLOCKS>>,
 }
 
 impl<const NUM_READS: usize, const BLOCKS: usize> HybridWeierstrassChip<F, NUM_READS, BLOCKS> {
@@ -136,17 +128,14 @@ impl<const NUM_READS: usize, const BLOCKS: usize> HybridWeierstrassChip<F, NUM_R
         cpu: WeierstrassChip<F, NUM_READS, BLOCKS>,
         device_ctx: GpuDeviceCtx,
         opcode_base: usize,
-        pointer_max_bits: usize,
-        timestamp_max_bits: usize,
+        range_checker: Arc<VariableRangeCheckerChipGPU>,
     ) -> Self {
+        let replay = FieldExprReplayChip::new(&cpu, opcode_base, range_checker)
+            .expect("valid Weierstrass field-expression replay configuration");
         Self {
             cpu,
             device_ctx,
-            replay: Some(WeierstrassReplayConfig {
-                opcode_base,
-                pointer_max_bits,
-                timestamp_max_bits,
-            }),
+            replay: Some(replay),
         }
     }
 
@@ -169,7 +158,7 @@ impl<const NUM_READS: usize, const BLOCKS: usize> HybridWeierstrassChip<F, NUM_R
 
     #[cfg(feature = "rvr")]
     pub fn opcode_base(&self) -> Option<usize> {
-        self.replay.map(|replay| replay.opcode_base)
+        self.replay.as_ref().map(|replay| replay.opcode_base())
     }
 
     #[cfg(feature = "rvr")]
@@ -179,27 +168,12 @@ impl<const NUM_READS: usize, const BLOCKS: usize> HybridWeierstrassChip<F, NUM_R
         transcript: &GpuRvrTranscript,
         replay_plan: &GpuRvrReplayPlan,
     ) -> Result<AirProvingContext<GpuBackend>, GpuRvrInputError> {
-        let replay = self.replay.ok_or_else(|| {
+        let replay = self.replay.as_ref().ok_or_else(|| {
             GpuRvrInputError::InvalidTranscript(
                 "Weierstrass chip was constructed without checkpoint replay".to_string(),
             )
         })?;
-        let local_opcodes = Self::local_opcodes()?;
-        let projection = gather_vec_heap_trace_inputs::<NUM_READS, BLOCKS>(
-            program,
-            transcript,
-            replay_plan,
-            replay.opcode_base,
-            &local_opcodes,
-            replay.pointer_max_bits,
-            &self.device_ctx,
-        )?;
-        generate_field_expression_ctx_from_projection(
-            &self.cpu,
-            projection,
-            replay.timestamp_max_bits,
-            &self.device_ctx,
-        )
+        replay.generate_proving_ctx(&self.cpu, program, transcript, replay_plan)
     }
 }
 
@@ -623,8 +597,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                     addne,
                     device_ctx.clone(),
                     opcode_base,
-                    byte_ptr_max_bits,
-                    timestamp_max_bits,
+                    range_checker_gpu.clone(),
                 );
                 #[cfg(not(feature = "rvr"))]
                 let addne = HybridWeierstrassChip::new(addne, device_ctx.clone());
@@ -643,8 +616,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                     double,
                     device_ctx.clone(),
                     opcode_base,
-                    byte_ptr_max_bits,
-                    timestamp_max_bits,
+                    range_checker_gpu.clone(),
                 );
                 #[cfg(not(feature = "rvr"))]
                 let double = HybridWeierstrassChip::new(double, device_ctx.clone());
@@ -668,8 +640,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                     addne,
                     device_ctx.clone(),
                     opcode_base,
-                    byte_ptr_max_bits,
-                    timestamp_max_bits,
+                    range_checker_gpu.clone(),
                 );
                 #[cfg(not(feature = "rvr"))]
                 let addne = HybridWeierstrassChip::new(addne, device_ctx.clone());
@@ -688,8 +659,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
                     double,
                     device_ctx.clone(),
                     opcode_base,
-                    byte_ptr_max_bits,
-                    timestamp_max_bits,
+                    range_checker_gpu.clone(),
                 );
                 #[cfg(not(feature = "rvr"))]
                 let double = HybridWeierstrassChip::new(double, device_ctx.clone());
@@ -703,8 +673,7 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Weierstrass
     }
 }
 
-/// This builder will do tracegen for the RV64IM extensions on GPU but the modular and ecc
-/// extensions on CPU.
+/// GPU builder for RV64IM, modular, and elliptic-curve extensions.
 #[derive(Clone)]
 pub struct Rv64WeierstrassHybridBuilder;
 

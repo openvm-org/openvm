@@ -43,6 +43,42 @@ declare_replay_launcher!(_modular_is_eq_replay_tracegen_l4);
 declare_replay_launcher!(_modular_is_eq_replay_tracegen_l6);
 
 unsafe extern "C" {
+    fn _field_expr_replay_launch_config(
+        num_reads: usize,
+        blocks: usize,
+        height: usize,
+        aux_words_per_thread: usize,
+        max_scratch_words: usize,
+        grid_blocks: *mut usize,
+        block_threads: *mut usize,
+        scratch_words: *mut usize,
+        active_threads: *mut usize,
+        local_bytes_per_thread: *mut usize,
+    ) -> i32;
+
+    fn _field_expr_replay_tracegen(
+        d_trace: *mut F,
+        height: usize,
+        width: usize,
+        num_reads: usize,
+        blocks: usize,
+        d_projection: *const std::ffi::c_void,
+        projection_len: usize,
+        d_blob: *const u32,
+        blob_words: usize,
+        d_range_delta: *mut u32,
+        range_bins: usize,
+        d_scratch: *mut u32,
+        scratch_words: usize,
+        aux_words_per_thread: usize,
+        grid_blocks: usize,
+        block_threads: usize,
+        pointer_max_bits: u32,
+        timestamp_max_bits: u32,
+        d_error: *mut u32,
+        stream: cudaStream_t,
+    ) -> i32;
+
     fn _modular_addsub_replay_tracegen(
         d_trace: *mut F,
         height: usize,
@@ -92,6 +128,82 @@ unsafe extern "C" {
         d_error: *mut u32,
         stream: cudaStream_t,
     ) -> i32;
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FieldExprReplayLaunchConfig {
+    pub grid_blocks: usize,
+    pub block_threads: usize,
+    pub scratch_words: usize,
+    pub active_threads: usize,
+    pub local_bytes_per_thread: usize,
+}
+
+pub unsafe fn field_expr_replay_launch_config<const NUM_READS: usize, const BLOCKS: usize>(
+    height: usize,
+    aux_words_per_thread: usize,
+    max_scratch_words: usize,
+) -> Result<FieldExprReplayLaunchConfig, CudaError> {
+    let mut config = FieldExprReplayLaunchConfig {
+        grid_blocks: 0,
+        block_threads: 0,
+        scratch_words: 0,
+        active_threads: 0,
+        local_bytes_per_thread: 0,
+    };
+    CudaError::from_result(_field_expr_replay_launch_config(
+        NUM_READS,
+        BLOCKS,
+        height,
+        aux_words_per_thread,
+        max_scratch_words,
+        &mut config.grid_blocks,
+        &mut config.block_threads,
+        &mut config.scratch_words,
+        &mut config.active_threads,
+        &mut config.local_bytes_per_thread,
+    ))?;
+    Ok(config)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub unsafe fn field_expr_replay_tracegen<const NUM_READS: usize, const BLOCKS: usize>(
+    d_trace: &DeviceBuffer<F>,
+    height: usize,
+    d_projection: &DeviceBuffer<VecHeapTraceInput<NUM_READS, BLOCKS>>,
+    d_blob: &DeviceBuffer<u32>,
+    d_range_delta: &DeviceBuffer<F>,
+    d_scratch: &DeviceBuffer<u32>,
+    aux_words_per_thread: usize,
+    launch: FieldExprReplayLaunchConfig,
+    pointer_max_bits: u32,
+    timestamp_max_bits: u32,
+    d_error: *mut u32,
+    stream: cudaStream_t,
+) -> Result<(), CudaError> {
+    debug_assert_eq!(d_scratch.len(), launch.scratch_words);
+    CudaError::from_result(_field_expr_replay_tracegen(
+        d_trace.as_mut_ptr(),
+        height,
+        d_trace.len() / height,
+        NUM_READS,
+        BLOCKS,
+        d_projection.as_ptr().cast(),
+        d_projection.len(),
+        d_blob.as_ptr(),
+        d_blob.len(),
+        d_range_delta.as_mut_ptr().cast(),
+        d_range_delta.len(),
+        d_scratch.as_mut_ptr(),
+        d_scratch.len(),
+        aux_words_per_thread,
+        launch.grid_blocks,
+        launch.block_threads,
+        pointer_max_bits,
+        timestamp_max_bits,
+        d_error,
+        stream,
+    ))
 }
 
 #[allow(clippy::too_many_arguments)]

@@ -364,6 +364,14 @@ pub struct Rv64VecHeapAdapterFiller<
     pub range_checker_chip: SharedVariableRangeCheckerChip,
 }
 
+impl<const NUM_READS: usize, const BLOCKS_PER_READ: usize, const BLOCKS_PER_WRITE: usize>
+    Rv64VecHeapAdapterFiller<NUM_READS, BLOCKS_PER_READ, BLOCKS_PER_WRITE>
+{
+    pub fn pointer_max_bits(&self) -> usize {
+        self.pointer_max_bits
+    }
+}
+
 impl<
         F: PrimeField32,
         const NUM_READS: usize,

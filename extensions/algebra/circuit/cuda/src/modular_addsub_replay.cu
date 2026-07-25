@@ -1,8 +1,7 @@
+#include "algebra/vec_heap_replay.cuh"
 #include "launcher.cuh"
 #include "primitives/histogram.cuh"
 #include "primitives/trace_access.h"
-#include "riscv-adapters/vec_heap.cuh"
-#include "riscv-adapters/vec_heap_replay.cuh"
 
 #include <cstddef>
 #include <cstdint>
@@ -98,44 +97,6 @@ static __device__ void sub_mod(
     uint8_t modulus_array[BYTES];
     for (size_t i = 0; i < BYTES; i++) modulus_array[i] = modulus[i];
     subtract_bytes(out, modulus_array, difference);
-}
-
-template <size_t NUM_READS, size_t BLOCKS>
-static __device__ void fill_adapter_from_projection(
-    RowSlice row,
-    VecHeapTraceInput<NUM_READS, BLOCKS> const &input,
-    VariableRangeChecker range_checker,
-    uint32_t pointer_max_bits,
-    uint32_t timestamp_max_bits
-) {
-    Rv64VecHeapAdapterRecord<NUM_READS, BLOCKS, BLOCKS> record = {};
-    record.from_pc = input.from_pc;
-    record.from_timestamp = input.from_timestamp;
-    record.rd_ptr = input.rd_ptr;
-    record.rd_val = input.rd_val;
-    record.rd_read_aux.prev_timestamp = input.rd_prev_timestamp;
-    for (size_t read = 0; read < NUM_READS; read++) {
-        record.rs_ptrs[read] = input.rs_ptrs[read];
-        record.rs_vals[read] = input.rs_vals[read];
-        record.rs_read_aux[read].prev_timestamp = input.rs_prev_timestamps[read];
-        for (size_t block = 0; block < BLOCKS; block++) {
-            record.reads_aux[read][block].prev_timestamp =
-                input.heap_prev_timestamps[read][block];
-        }
-    }
-    for (size_t block = 0; block < BLOCKS; block++) {
-        record.writes_aux[block].prev_timestamp = input.write_prev_timestamps[block];
-        for (size_t limb = 0; limb < BLOCK_FE_WIDTH; limb++) {
-            uint16_t packed = input.write_predecessors[block][limb];
-            record.writes_aux[block].prev_data[2 * limb] = static_cast<uint8_t>(packed);
-            record.writes_aux[block].prev_data[2 * limb + 1] =
-                static_cast<uint8_t>(packed >> 8);
-        }
-    }
-    Rv64VecHeapAdapter<NUM_READS, BLOCKS, BLOCKS> adapter(
-        pointer_max_bits, range_checker, timestamp_max_bits
-    );
-    adapter.fill_trace_row(row, record);
 }
 
 template <size_t BLOCKS>
@@ -260,7 +221,7 @@ __global__ void modular_addsub_replay_tracegen(
     }
 
     VariableRangeChecker range_checker(range_checker_counts, range_checker_bins);
-    fill_adapter_from_projection(
+    fill_vec_heap_adapter_from_projection(
         row, input, range_checker, pointer_max_bits, timestamp_max_bits
     );
     RowSlice core = row.slice_from(ADAPTER_WIDTH);
