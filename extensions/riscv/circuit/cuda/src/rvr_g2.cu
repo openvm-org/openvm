@@ -117,6 +117,12 @@ static constexpr uint32_t G2_NO_RECORD = UINT32_MAX;
 static constexpr uint64_t G2_INVALID_ADDRESS = UINT64_MAX;
 static constexpr uint32_t G2_REGISTER_COUNT = 32;
 static constexpr uint32_t G2_REGISTER_REPLAY_CHUNK = 4096;
+// Threads per block for the register chronology summarize/fill passes. Each
+// thread still owns one contiguous `G2_REGISTER_REPLAY_CHUNK`-event chunk, so
+// the algorithm is unchanged; packing many chunks per block (instead of the
+// prior one-thread-per-block launch) restores full-warp occupancy so the
+// dominant per-chunk timeline reads are latency-hidden across the warp.
+static constexpr uint32_t G2_REGISTER_REPLAY_BLOCK = 128;
 static constexpr uint32_t G2_MAIN_MEMORY_ADDRESS_SPACE = 2;
 static constexpr uint64_t G2_CONTINUATION_PAGE_BYTES = 4096;
 
@@ -1845,8 +1851,8 @@ __global__ void g2_summarize_register_chunks(
     size_t chunk_capacity,
     uint32_t *error
 ) {
-    size_t chunk = blockIdx.x;
-    if (threadIdx.x != 0 || chunk >= chunk_capacity || *error != 0) return;
+    size_t chunk = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+    if (chunk >= chunk_capacity || *error != 0) return;
     uint32_t length = *timeline_length;
     size_t begin = chunk * G2_REGISTER_REPLAY_CHUNK;
     if (begin >= length || length > timeline_capacity) {
@@ -1941,8 +1947,8 @@ __global__ void g2_fill_register_chunks(
     size_t residual_count,
     uint32_t *error
 ) {
-    size_t chunk = blockIdx.x;
-    if (threadIdx.x != 0 || chunk >= chunk_capacity || *error != 0) return;
+    size_t chunk = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+    if (chunk >= chunk_capacity || *error != 0) return;
     uint32_t length = *timeline_length;
     size_t begin = chunk * G2_REGISTER_REPLAY_CHUNK;
     if (begin >= length || length > timeline_capacity) return;
@@ -3922,7 +3928,9 @@ extern "C" int _rvr_g2_predecode(
     G2_PROFILE_CHECKPOINT(6);
 
     if (chunk_capacity != 0) {
-        g2_summarize_register_chunks<<<chunk_capacity, 1, 0, stream>>>(
+        size_t register_chunk_grid =
+            (chunk_capacity + G2_REGISTER_REPLAY_BLOCK - 1) / G2_REGISTER_REPLAY_BLOCK;
+        g2_summarize_register_chunks<<<register_chunk_grid, G2_REGISTER_REPLAY_BLOCK, 0, stream>>>(
             d_timeline,
             timestamp_budget,
             d_timestamp_offsets + instruction_count,
@@ -3943,7 +3951,7 @@ extern "C" int _rvr_g2_predecode(
             d_error
         );
         G2_TRY(cudaGetLastError());
-        g2_fill_register_chunks<<<chunk_capacity, 1, 0, stream>>>(
+        g2_fill_register_chunks<<<register_chunk_grid, G2_REGISTER_REPLAY_BLOCK, 0, stream>>>(
             d_timeline,
             timestamp_budget,
             d_timestamp_offsets + instruction_count,
