@@ -19,7 +19,9 @@ use openvm_cuda_common::{
 use openvm_instructions::VM_DIGEST_WIDTH;
 use openvm_stark_backend::{
     p3_field::PrimeCharacteristicRing,
-    p3_maybe_rayon::prelude::{ParallelSlice, ParallelSliceMut},
+    p3_maybe_rayon::prelude::{
+        IndexedParallelIterator, ParallelIterator, ParallelSlice, ParallelSliceMut,
+    },
     prover::AirProvingContext,
 };
 use tracing::instrument;
@@ -42,11 +44,16 @@ const _: () = assert!(
     "CUDA memory inventory only supports (BLOCK_FE_WIDTH, VM_DIGEST_WIDTH) == (4, 8)"
 );
 
-// `TouchedBlock<F>` must be exactly the 8-word `InRec` layout in `inventory.cu`
-// so the merge path can upload the vector's bytes without repacking.
+// `TouchedBlock<F>` must exactly match the CUDA `MemoryTouchedBlock` layout so
+// the merge path can upload the vector's bytes without repacking.
 const _: () = assert!(
-    std::mem::size_of::<TouchedBlock<F>>() == (4 + BLOCK_FE_WIDTH) * std::mem::size_of::<u32>(),
-    "TouchedBlock<F> must match the 8-u32-word InRec layout in inventory.cu"
+    std::mem::size_of::<TouchedBlock<F>>() == (4 + BLOCK_FE_WIDTH) * std::mem::size_of::<u32>()
+        && std::mem::offset_of!(TouchedBlock<F>, address_space) == 0
+        && std::mem::offset_of!(TouchedBlock<F>, ptr) == std::mem::size_of::<u32>()
+        && std::mem::offset_of!(TouchedBlock<F>, is_dirty) == 2 * std::mem::size_of::<u32>()
+        && std::mem::offset_of!(TouchedBlock<F>, timestamp) == 3 * std::mem::size_of::<u32>()
+        && std::mem::offset_of!(TouchedBlock<F>, values) == 4 * std::mem::size_of::<u32>(),
+    "TouchedBlock<F> must match MemoryTouchedBlock in system/memory/touched_block.cuh"
 );
 
 pub struct MemoryInventoryGPU {
@@ -129,6 +136,15 @@ impl MemoryInventoryGPU {
         unsafe { std::mem::transmute::<F, u32>(value) }
     }
 
+    fn clear_initial_memory(&mut self) {
+        // Initial-memory buffers are also owned by in-flight Merkle subtrees.
+        // Fence and release those handles before dropping or replacing the
+        // buffers themselves.
+        self.merkle_tree.drop_subtrees();
+        self.boundary.initial_leaves.clear();
+        self.initial_memory.clear();
+    }
+
     pub fn new(
         config: MemoryConfig,
         hasher_chip: Arc<Poseidon2PeripheryChipGPU>,
@@ -150,6 +166,9 @@ impl MemoryInventoryGPU {
     #[instrument(name = "set_initial_memory", skip_all)]
     pub fn set_initial_memory(&mut self, initial_memory: &AddressMap) {
         let mem = MemTracker::start("set initial memory");
+        if !self.initial_memory.is_empty() {
+            self.clear_initial_memory();
+        }
         // Only transfer pages that may contain non-zero data; the rest are zero-filled
         // on-device. The merkle kernel reads the full address-space region, so the device
         // buffer is full-size and the skipped pages must read as zero.
@@ -581,9 +600,8 @@ impl MemoryInventoryGPU {
         mem.tracing_info("dropping merkle tree");
         {
             let _span = tracing::info_span!("merkle_drop").entered();
-            self.merkle_tree.drop_subtrees();
+            self.clear_initial_memory();
         }
-        self.initial_memory = Vec::new();
         mem.emit_metrics();
         ret
     }
@@ -608,31 +626,34 @@ impl MemoryInventoryGPU {
 
 impl Drop for MemoryInventoryGPU {
     fn drop(&mut self) {
-        // WARNING: The merkle subtree events must be completed before dropping the initial memory
-        // buffers. This prevents buffers from dropping before build_async completes.
-        self.merkle_tree.drop_subtrees();
-        self.initial_memory.clear();
+        self.clear_initial_memory();
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use std::{
+        collections::{BTreeMap, BTreeSet},
+        sync::Arc,
+    };
 
     use openvm_circuit::{
-        arch::{vm_poseidon2_config, MemoryConfig, MEMORY_BLOCK_BYTES},
+        arch::{vm_poseidon2_config, MemoryConfig, ADDR_SPACE_OFFSET, MEMORY_BLOCK_BYTES},
         system::{
             memory::{
-                merkle::MerkleTree,
+                merkle::{memory_to_vec_partition, MemoryMerkleChip, MerkleTree},
                 offline_checker::pack_u8_block_value,
                 online::{GuestMemory, PAGE_SIZE},
+                persistent::DirtyLeaves,
                 ptr_bits_from_address_height, AddressMap,
             },
             poseidon2::Poseidon2PeripheryChip,
             TouchedBlock,
         },
     };
-    use openvm_cuda_backend::prelude::F;
+    use openvm_cuda_backend::{
+        data_transporter::assert_eq_host_and_device_matrix_col_maj, prelude::F,
+    };
     use openvm_cuda_common::{
         common::get_device,
         copy::{MemCopyD2H, MemCopyH2D},
@@ -643,7 +664,11 @@ mod tests {
         exe::SparseMemoryImage,
         riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS},
     };
-    use openvm_stark_backend::prover::MatrixDimensions;
+    use openvm_stark_backend::{
+        interaction::PermutationCheckBus,
+        prover::{ColMajorMatrix, MatrixDimensions},
+    };
+    use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
 
     use super::*;
 
@@ -789,15 +814,16 @@ mod tests {
         assert_eq!(expected_root, gpu_merkle_root(&ctxs));
     }
 
-    // Touched-memory merge path: writes two 8-byte (BLOCK_FE_WIDTH = 4 u16 cells) blocks into
-    // RV64_MEMORY_AS and routes them through `inventory.cu`'s `<4, 1> -> <8, 2>` merge kernel.
+    // Touched-memory merge path: each address space has one clean and one dirty
+    // 8-byte block in the same leaf, routed through the `<4, 1> -> <8, 2>` merge.
     #[test]
     fn test_touched_memory_device_path_matches_legacy_across_address_spaces() {
         let (mem_config, memory) = single_block_setup();
 
         let mut final_memory = memory.clone();
+        let clean_register_bytes = [1u8, 2, 3, 4, 5, 6, 7, 8];
+        let clean_memory_bytes = [9u8, 10, 11, 12, 0, 0, 0, 0];
         let touched_register_bytes = [81u8, 82, 83, 84, 85, 86, 87, 88];
-        let touched_bytes = [101u8, 102, 103, 104, 105, 106, 107, 108];
         let touched_bytes_late = [111u8, 112, 113, 114, 115, 116, 117, 118];
         unsafe {
             final_memory.write_bytes::<MEMORY_BLOCK_BYTES>(
@@ -805,7 +831,6 @@ mod tests {
                 MEMORY_BLOCK_BYTES as u32,
                 touched_register_bytes,
             );
-            final_memory.write_bytes::<MEMORY_BLOCK_BYTES>(RV64_MEMORY_AS, 0, touched_bytes);
             final_memory.write_bytes::<MEMORY_BLOCK_BYTES>(
                 RV64_MEMORY_AS,
                 MEMORY_BLOCK_BYTES as u32,
@@ -818,23 +843,30 @@ mod tests {
         let touched_memory = vec![
             TouchedBlock {
                 address_space: RV64_REGISTER_AS,
+                ptr: 0,
+                is_dirty: 0,
+                timestamp: 1,
+                values: pack_u8_block_value(&clean_register_bytes.map(F::from_u8)),
+            },
+            TouchedBlock {
+                address_space: RV64_REGISTER_AS,
                 ptr: BLOCK_FE_WIDTH as u32,
                 is_dirty: 1,
-                timestamp: 1,
+                timestamp: 2,
                 values: pack_u8_block_value(&touched_register_bytes.map(F::from_u8)),
             },
             TouchedBlock {
                 address_space: RV64_MEMORY_AS,
                 ptr: 0,
-                is_dirty: 1,
-                timestamp: 2,
-                values: pack_u8_block_value(&touched_bytes.map(F::from_u8)),
+                is_dirty: 0,
+                timestamp: 3,
+                values: pack_u8_block_value(&clean_memory_bytes.map(F::from_u8)),
             },
             TouchedBlock {
                 address_space: RV64_MEMORY_AS,
                 ptr: BLOCK_FE_WIDTH as u32,
                 is_dirty: 1,
-                timestamp: 3,
+                timestamp: 4,
                 values: pack_u8_block_value(&touched_bytes_late.map(F::from_u8)),
             },
         ];
@@ -917,19 +949,6 @@ mod tests {
     /// CPU and GPU must generate the *same* Merkle trace, row for row.
     #[test]
     fn test_merkle_trace_matches_between_cpu_and_gpu() {
-        use std::collections::{BTreeMap, BTreeSet};
-
-        use openvm_circuit::{
-            arch::ADDR_SPACE_OFFSET,
-            system::memory::{
-                merkle::{memory_to_vec_partition, MemoryMerkleChip},
-                persistent::DirtyLeaves,
-            },
-        };
-        use openvm_cuda_backend::data_transporter::assert_eq_host_and_device_matrix_col_maj;
-        use openvm_stark_backend::{interaction::PermutationCheckBus, prover::ColMajorMatrix};
-        use openvm_stark_sdk::config::baby_bear_poseidon2::BabyBearPoseidon2Config;
-
         let (mem_config, memory) = single_block_setup();
         let mut final_memory = memory.clone();
         let touched_bytes = [101u8, 102, 103, 104, 105, 106, 107, 108];
@@ -1005,6 +1024,41 @@ mod tests {
             &gpu_merkle.common_main,
             &device_ctx,
         );
+    }
+
+    #[test]
+    fn test_set_initial_memory_replaces_unfinished_upload() {
+        let (mem_config, first_memory) = single_block_setup();
+        let mut second_memory = first_memory.clone();
+        unsafe {
+            second_memory.write_bytes::<MEMORY_BLOCK_BYTES>(
+                RV64_MEMORY_AS,
+                0,
+                [31, 32, 33, 34, 35, 36, 37, 38],
+            );
+        }
+        second_memory.memory.touched_pages[RV64_MEMORY_AS as usize]
+            .mark_byte_range(0, MEMORY_BLOCK_BYTES);
+        let expected_root = cpu_merkle_root(&second_memory.memory, &mem_config);
+
+        let device_ctx = GpuDeviceCtx {
+            device_id: get_device().unwrap() as u32,
+            stream: StreamGuard::new(CudaStream::new_non_blocking().unwrap()),
+        };
+        let hasher_chip = Arc::new(Poseidon2PeripheryChipGPU::new(1, device_ctx.clone()));
+        let mut inventory =
+            MemoryInventoryGPU::new(mem_config.clone(), hasher_chip, device_ctx.clone());
+
+        inventory.set_initial_memory(&first_memory.memory);
+        inventory.set_initial_memory(&second_memory.memory);
+        assert_eq!(
+            inventory.initial_memory.len(),
+            second_memory.memory.get_memory().len()
+        );
+
+        let contexts = inventory.generate_proving_ctxs(Vec::new());
+        device_ctx.stream.synchronize().unwrap();
+        assert_eq!(expected_root, gpu_merkle_root(&contexts));
     }
 
     #[cfg(any(debug_assertions, feature = "stark-debug"))]

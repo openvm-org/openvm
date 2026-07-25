@@ -513,6 +513,94 @@ fn rvr_checkpoint_gpu_replay_proves_a_suspended_segment() {
 }
 
 #[test]
+fn rvr_checkpoint_gpu_replay_carries_a_register_across_segments() {
+    let instructions = [
+        checkpoint_ri(BaseAluImmOpcode::ADDI, 1, 0, 7),
+        Instruction::from_usize(
+            Rv64JalLuiOpcode::JAL.global_opcode(),
+            [0, 0, 4, RV64_REGISTER_AS as usize, 0, 0, 0],
+        ),
+        checkpoint_ri(BaseAluImmOpcode::ADDI, 2, 1, 5),
+        Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]),
+    ];
+    let program = Program::from_instructions(&instructions);
+    let exe = VmExe::new(program.clone());
+    let config = Rv64IConfig {
+        system: test_system_config(),
+        ..Default::default()
+    };
+    let executor = VmExecutor::new(config.clone()).unwrap();
+    let checkpoint = executor
+        .rvr_experimental_checkpoint_preflight_instance(&exe, None)
+        .unwrap();
+    let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
+    let (mut vm, pk) =
+        VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64IGpuBuilder, config.clone())
+            .unwrap();
+    let cached_program = vm.commit_program_on_device(&program);
+    vm.load_program(cached_program);
+    vm.transport_init_memory_to_device(&state.memory);
+    let execution = checkpoint
+        .execute_from_state_for_exact(state, RvrCheckpointPreflightLimits::new(2, 0, 2))
+        .unwrap();
+    assert_eq!(
+        execution.endpoint,
+        RvrPreflightEndpoint::Suspended {
+            resume_pc: 8,
+            final_timestamp: 4,
+        }
+    );
+    assert_eq!(execution.retired, 2);
+
+    let gpu_program = GpuRvrProgram::upload(
+        &program,
+        &config.system.memory_config,
+        &vm.engine.device().device_ctx,
+    )
+    .unwrap();
+    let (transcript, replay_plan) = Rv64ImRvrGpuTracegen::expand_checkpoint_replay(
+        &vm,
+        &gpu_program,
+        &execution,
+        execution.retired,
+    )
+    .unwrap();
+    let tracegen = Rv64ImRvrGpuTracegen::new(&gpu_program, &transcript, &replay_plan).unwrap();
+    let proving_ctx = tracegen.generate_proving_ctx(&mut vm).unwrap();
+    drop(replay_plan);
+    drop(transcript);
+    let proof = vm.engine.prove(vm.pk(), proving_ctx).unwrap();
+    vm.engine.verify(&pk.get_vk(), &proof).unwrap();
+
+    vm.transport_init_memory_to_device(&execution.state.memory);
+    let execution = checkpoint
+        .execute_from_state_for_exact(execution.state, RvrCheckpointPreflightLimits::new(2, 0, 1))
+        .unwrap();
+    assert_eq!(execution.endpoint, RvrPreflightEndpoint::Terminated);
+    let x2: [u16; 4] = unsafe {
+        execution
+            .state
+            .memory
+            .read(RV64_REGISTER_AS, (reg(2) / 2) as u32)
+    };
+    assert_eq!(x2, [12, 0, 0, 0]);
+
+    let (transcript, replay_plan) = Rv64ImRvrGpuTracegen::expand_checkpoint_replay(
+        &vm,
+        &gpu_program,
+        &execution,
+        execution.retired,
+    )
+    .unwrap();
+    let tracegen = Rv64ImRvrGpuTracegen::new(&gpu_program, &transcript, &replay_plan).unwrap();
+    let proving_ctx = tracegen.generate_proving_ctx(&mut vm).unwrap();
+    drop(replay_plan);
+    drop(transcript);
+    let proof = vm.engine.prove(vm.pk(), proving_ctx).unwrap();
+    vm.engine.verify(&pk.get_vk(), &proof).unwrap();
+}
+
+#[test]
 fn rvr_checkpoint_gpu_replay_proves_an_empty_suspended_segment() {
     let instructions = [Instruction::from_usize(
         SystemOpcode::TERMINATE.global_opcode(),

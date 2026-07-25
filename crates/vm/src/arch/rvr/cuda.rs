@@ -55,7 +55,7 @@ pub(crate) struct RvrReplayStep {
 }
 
 const _: () = assert!(size_of::<RvrReplayInstruction>() == 32);
-const _: () = assert!(size_of::<TouchedBlock<BabyBear>>() == 7 * size_of::<u32>());
+const _: () = assert!(size_of::<TouchedBlock<BabyBear>>() == 8 * size_of::<u32>());
 
 /// Four native field cells in the raw Montgomery representation used by CUDA.
 #[repr(C)]
@@ -1458,21 +1458,26 @@ impl GpuRvrProgram {
         // sorts an 8-byte step value beside each 32-bit opcode key.
         // They run sequentially, so peak incremental allocation is the larger
         // stage rather than their sum.
+        let touched_block_bytes = size_of::<TouchedBlock<BabyBear>>();
         let memory_sort_stage = 16 * num_entries + memory_temp;
-        let memory_scatter_stage =
-            16 * num_entries + 32 * num_memory + memory_temp + size_of::<u32>();
+        let memory_scatter_stage = 16 * num_entries
+            + (size_of::<u32>() + touched_block_bytes) * num_memory
+            + memory_temp
+            + size_of::<u32>();
         let compact_touched = num_touched < num_memory && num_touched <= num_memory / 2;
         let memory_compaction_stage = if compact_touched {
-            32 * num_memory + 28 * num_touched
+            (size_of::<u32>() + touched_block_bytes) * num_memory
+                + touched_block_bytes * num_touched
         } else {
-            32 * num_memory
+            (size_of::<u32>() + touched_block_bytes) * num_memory
         };
         let retained_touched = if compact_touched {
             num_touched
         } else {
             num_memory
         };
-        let retained_memory_index = 4 * num_memory + 28 * retained_touched;
+        let retained_memory_index =
+            size_of::<u32>() * num_memory + touched_block_bytes * retained_touched;
         let program_stage = retained_memory_index
             + 24 * num_steps
             + 8 * self.active_opcodes.len()
@@ -1764,8 +1769,9 @@ fn build_gpu_memory_index(
     // known until its device scan completes. Do not retain that worst-case
     // allocation while all trace matrices are being generated when the unique
     // prefix is substantially smaller. Compaction itself temporarily owns both
-    // buffers, so only compact at or below half occupancy: its 32M + 28U live
-    // bytes are then bounded by the preceding scatter's minimum 48M bytes.
+    // buffers, so only compact at or below half occupancy. Then predecessors
+    // plus the upper-bound and compact touched buffers remain bounded by the
+    // preceding scatter phase.
     // At higher occupancy, retain the upper bound and expose only its initialized
     // prefix rather than creating a larger tracegen peak for a small saving.
     drop(keys_out);
@@ -2568,6 +2574,7 @@ mod tests {
         let (_, actual, _, error) = gpu_memory_index_with_config(&memory, &seeds, &config);
         assert_eq!(error, 0);
         assert_eq!(actual, expected);
+        assert!(actual.iter().all(|block| block.is_dirty == 1));
         assert_eq!(
             actual
                 .iter()
@@ -2603,6 +2610,7 @@ mod tests {
         assert_eq!(error, 0);
         assert_eq!(touched.len(), 1);
         assert_eq!(touched[0].ptr, pointer);
+        assert_eq!(touched[0].is_dirty, 0);
         assert_eq!(
             touched[0].values.map(|value| value.as_canonical_u32()),
             [u16::MAX as u32; 4]
@@ -2771,6 +2779,13 @@ mod tests {
         );
         assert_eq!(touched[1].values.map(raw_baby_bear), first_write.values);
         assert_eq!(touched[2].values.map(raw_baby_bear), second_write.values);
+        assert_eq!(
+            touched
+                .iter()
+                .map(|block| block.is_dirty)
+                .collect::<Vec<_>>(),
+            [1, 1, 1]
+        );
     }
 
     #[test]
@@ -2794,6 +2809,17 @@ mod tests {
         assert!(field_seeds.is_empty());
         assert_eq!(predecessors, [0]);
         assert_eq!(touched.len(), 1);
+        assert_eq!(touched[0].is_dirty, 0);
+
+        // Dirtiness records the write itself, even when the value is unchanged
+        // and a later read is the block's final event.
+        let write = event_value(1, RV64_MEMORY_AS, 0, true, [1, 2, 3, 4]);
+        let read = event_value(2, RV64_MEMORY_AS, 0, false, [0; 4]);
+        let (_, _, _, _, _, touched) =
+            gpu_chronology_with_fields(&[write, read], &[0xff, 0], &[], &initial_memory, &config)
+                .unwrap();
+        assert_eq!(touched.len(), 1);
+        assert_eq!(touched[0].is_dirty, 1);
     }
 
     #[test]

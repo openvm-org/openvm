@@ -2011,6 +2011,8 @@ mod tests {
         assert!(tracer.contains(".residual_log_reserved = p->residual_log_len"));
         assert!(tracer.contains("p->residual_log_cap - p->residual_log_reserved"));
         assert!(tracer.contains("p->residual_log_reserved += residuals;"));
+        assert!(tracer.contains("debug_assume(dirty_pages != NULL && word < dirty_page_words);"));
+        assert!(!tracer.contains("\n  assume(dirty_pages != NULL"));
 
         let reserves = |capacity: u64, initial_len: u64, fixed: u32, dynamic: u32| {
             let Some(after_fixed) = initial_len.checked_add(u64::from(fixed)) else {
