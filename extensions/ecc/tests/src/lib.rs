@@ -297,7 +297,7 @@ mod tests {
         // setup program. Dirty-page state is intentionally private and cannot be observed after the
         // consumed state returns `Err`; `execute_checkpoint_preflight` merges it only on success.
         let checkpoint = executor
-            .rvr_checkpoint_preflight_instance(&openvm_exe, None)
+            .checkpoint_preflight_instance(&openvm_exe, None)
             .unwrap();
         let result = checkpoint.execute(
             vec![],

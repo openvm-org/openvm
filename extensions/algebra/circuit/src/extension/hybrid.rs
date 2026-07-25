@@ -898,7 +898,7 @@ impl<'a> AlgebraRvrGpuTracegen<'a> {
             SystemChipInventory = SystemChipInventoryGPU,
         >,
     {
-        vm.expand_rvr_checkpoint_replay(
+        vm.postflight(
             program,
             execution,
             expected_retired,
@@ -1086,7 +1086,7 @@ impl<'a> AlgebraRvrGpuTracegen<'a> {
             &extension_opcodes,
         )
         .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
-        let ctx = vm.generate_proving_ctx_from_rvr_unchecked_coverage(
+        let ctx = vm.generate_preflight_proving_ctx_unchecked_coverage(
             self.program,
             self.transcript,
             self.replay_plan,
@@ -1126,11 +1126,11 @@ impl VmProverExtension<GpuBabyBearPoseidon2Engine, DenseRecordArena, Fp2Extensio
         let mem_helper = SharedMemoryHelper::new(range_checker.clone(), timestamp_max_bits);
         let device_ctx = range_checker_gpu.device_ctx.clone();
 
-        for (_, modulus) in &extension.supported_moduli {
+        for (i, (_, modulus)) in extension.supported_moduli.iter().enumerate() {
             // determine the number of bytes needed to represent a prime field element
             let bytes = modulus.bits().div_ceil(8) as usize;
             #[cfg(feature = "rvr")]
-            let start_offset = Fp2Opcode::CLASS_OFFSET + _i * Fp2Opcode::COUNT;
+            let start_offset = Fp2Opcode::CLASS_OFFSET + i * Fp2Opcode::COUNT;
 
             if bytes <= NUM_LIMBS_32 {
                 let config = ExprBuilderConfig {

@@ -399,7 +399,7 @@ fn test_sdk_fibonacci() -> Result<()> {
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 #[test]
-fn test_rvr_checkpoint_prover_reuse() -> Result<()> {
+fn test_preflight_app_prover_reuse() -> Result<()> {
     setup_tracing();
     let (sdk, _, _) = make_fib_sdk();
     let elf = Elf::decode(
@@ -407,9 +407,8 @@ fn test_rvr_checkpoint_prover_reuse() -> Result<()> {
         MEM_SIZE as u32,
     )?;
     let exe = sdk.convert_to_exe(elf)?;
-    let mut app_prover = sdk.app_prover(exe)?;
-    app_prover.set_program_name("fibonacci_rvr_checkpoint");
-    let mut prover = sdk.prepare_rvr_checkpoint_app_prover(app_prover)?;
+    let app_prover = sdk.app_prover(exe)?;
+    let mut prover = sdk.prepare_preflight_app_prover(app_prover)?;
 
     let error = match prover.prove(StdIn::default()) {
         Ok(_) => panic!("missing guest input must fail"),
@@ -417,7 +416,7 @@ fn test_rvr_checkpoint_prover_reuse() -> Result<()> {
     };
     assert!(
         matches!(error, VirtualMachineError::Execution(_)),
-        "unexpected checkpoint proof error: {error}"
+        "unexpected preflight proof error: {error}"
     );
 
     let mut stdin = StdIn::default();
@@ -432,6 +431,25 @@ fn test_rvr_checkpoint_prover_reuse() -> Result<()> {
         first.user_public_values.public_values,
         second.user_public_values.public_values
     );
+    Ok(())
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr", not(feature = "root-prover")))]
+#[test]
+fn test_preflight_stark_prover() -> Result<()> {
+    setup_tracing();
+    let (sdk, _, _) = make_fib_sdk();
+    let elf = Elf::decode(
+        include_bytes!("../programs/examples/fibonacci.elf"),
+        MEM_SIZE as u32,
+    )?;
+    let exe = sdk.convert_to_exe(elf)?;
+    let app_prover = sdk.app_prover(exe)?;
+    let mut prover = sdk.prepare_preflight_stark_prover(app_prover)?;
+    let mut stdin = StdIn::default();
+    stdin.write(&1000u64);
+    let proof = prover.prove(stdin, &[])?.0;
+    Sdk::verify_proof((*sdk.agg_vk()).clone(), prover.generate_baseline(), &proof)?;
     Ok(())
 }
 

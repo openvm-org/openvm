@@ -509,7 +509,7 @@ impl<'a> RvrCheckpointPreflightInstance<'a> {
     ) -> Result<RvrCheckpointPreflightExecution, ExecutionError> {
         let from_state = ExecutionState::new(state.pc(), 1u32);
         let (transcript, endpoint, final_timestamp, retired) =
-            tracing::info_span!("execute_checkpoint_preflight")
+            tracing::info_span!("execute_preflight", backend = "rvr")
                 .in_scope(|| {
                     execute_checkpoint_preflight(
                         &self.inner.compiled,

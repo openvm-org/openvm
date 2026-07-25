@@ -1197,6 +1197,7 @@ impl GpuRvrProgram {
         let event_counts = gpu_buffer::<RvrCheckpointEventCount>(anchors.len(), &self.device_ctx);
         event_counts.fill_zero_on(&self.device_ctx)?;
         let address_spaces = [RV64_REGISTER_AS, RV64_MEMORY_AS, RV64_IMM_AS, DEFERRAL_AS];
+        let count_span = tracing::info_span!("postflight_replay_count").entered();
         unsafe {
             rvr_checkpoint_replay::count(
                 self.instructions.view(),
@@ -1252,6 +1253,7 @@ impl GpuRvrProgram {
                 "checkpoint replay memory log exceeds packed predecessor indexes".to_string(),
             ));
         }
+        drop(count_span);
         let program_len = usize::try_from(execution.retired)
             .ok()
             .and_then(|retired| retired.checked_add(1))
@@ -1269,6 +1271,7 @@ impl GpuRvrProgram {
         // releases this before opcode trace generation.
         let write_masks = gpu_buffer::<u8>(total_memory as usize, &self.device_ctx);
         let offsets = upload(&offsets, &self.device_ctx)?;
+        let emit_span = tracing::info_span!("postflight_replay_emit").entered();
         unsafe {
             rvr_checkpoint_replay::emit(
                 self.instructions.view(),
@@ -1303,23 +1306,27 @@ impl GpuRvrProgram {
                 "checkpoint GPU emit replay rejected execution with code {emit_error}"
             )));
         }
+        drop(emit_span);
         // The host reads above synchronize the emit stream. Release compact
         // replay inputs before chronology allocates its sort/scan scratch.
         drop(anchors);
         drop(residuals);
         drop(event_counts);
         drop(offsets);
-        let (initial_write_log, field_initial_values, memory_index) = build_gpu_memory_chronology(
-            &memory_log,
-            &write_masks,
-            &field_values,
-            initial_memory_images,
-            self.address_space_height,
-            self.cell_pointer_max_bits,
-            self.memory_address_spaces.view(),
-            &error,
-            &self.device_ctx,
-        )?;
+        let (initial_write_log, field_initial_values, memory_index) =
+            tracing::info_span!("postflight_memory_chronology").in_scope(|| {
+                build_gpu_memory_chronology(
+                    &memory_log,
+                    &write_masks,
+                    &field_values,
+                    initial_memory_images,
+                    self.address_space_height,
+                    self.cell_pointer_max_bits,
+                    self.memory_address_spaces.view(),
+                    &error,
+                    &self.device_ctx,
+                )
+            })?;
         drop(write_masks);
 
         let segment_identity = Arc::new(());
@@ -1338,14 +1345,16 @@ impl GpuRvrProgram {
             segment_identity: segment_identity.clone(),
         };
         let boundary = (execution.from_state, execution.to_state, exit_code);
-        let plan = GpuRvrReplayPlan::build(
-            self,
-            &transcript,
-            execution.endpoint,
-            boundary,
-            self.identity.clone(),
-            segment_identity,
-        )?;
+        let plan = tracing::info_span!("postflight_program_index").in_scope(|| {
+            GpuRvrReplayPlan::build(
+                self,
+                &transcript,
+                execution.endpoint,
+                boundary,
+                self.identity.clone(),
+                segment_identity,
+            )
+        })?;
         Ok((transcript, plan))
     }
 

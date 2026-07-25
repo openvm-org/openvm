@@ -13,10 +13,11 @@ For a segment proof, the following metrics are collected:
 - `execute_preflight_time_ms` (gauge): The preflight execution time of the segment in milliseconds.
   - If this is a segment in a VM with continuations enabled, a `segment: segment_idx` label is added to the metric.
   - `memory_finalize_time_ms` (gauge): The time at the end of preflight execution spent on memory finalization.
-- `compile_pure_time_ms`, `compile_metered_time_ms`, `compile_metered_segment_time_ms`, `compile_metered_cost_time_ms`, `compile_checkpoint_preflight_time_ms` (gauge): Time to build an execution instance in milliseconds. The metric name identifies the execution mode, and the `backend` label identifies the backend.
-- `prepare_rvr_checkpoint_time_ms` (gauge): One-time preparation of a fixed-program RVR checkpoint prover, including its metered and checkpoint executors and immutable GPU program.
-- `upload_checkpoint_program_time_ms` (gauge): The immutable GPU replay-program upload within RVR checkpoint preparation.
-- `app_prove_rvr_checkpoint_time_ms` (gauge): Prepared RVR checkpoint proving time. It excludes generated-code compilation and immutable program upload.
+- `compile_pure_time_ms`, `compile_metered_time_ms`, `compile_metered_segment_time_ms`, `compile_metered_cost_time_ms`, `compile_preflight_time_ms` (gauge): Time to build an execution instance in milliseconds. The metric name identifies the execution mode, and the `backend` label identifies the backend.
+- `prepare_preflight_time_ms` (gauge): One-time preparation of a fixed-program compiled preflight prover, including its metered and preflight executors and immutable GPU program.
+- `upload_preflight_program_time_ms` (gauge): The immutable GPU replay-program upload within preflight preparation.
+- `app_prove_time_ms` (gauge): Prepared app proving time. It excludes generated-code compilation and immutable program upload.
+- `postflight_time_ms` (gauge): GPU replay and read-only index construction for one segment. Its subphases are `postflight_replay_count_time_ms`, `postflight_replay_emit_time_ms`, `postflight_memory_chronology_time_ms`, and `postflight_program_index_time_ms`.
 - `trace_gen_time_ms` (gauge): The time to generate non-cached trace matrices from execution records.
   - If this is a segment in a VM with continuations enabled, a `segment: segment_idx` label is added to the metric.
 - All metrics collected by [`openvm-stark-backend`](https://github.com/openvm-org/stark-backend/blob/main/docs/metrics.md), in particular `stark_prove_excluding_trace_time_ms` (gauge).
@@ -24,12 +25,12 @@ For a segment proof, the following metrics are collected:
   - The sum `execute_preflight_time_ms + trace_gen_time_ms + stark_prove_excluding_trace_time_ms`. The `execute_metered_time_ms` is excluded for app proofs because it is not run on a per-segment basis.
 - `execute_pure_insns` (counter): The total number of instructions executed in pure execution mode.
 - `execute_metered_insns` (counter): The total number of instructions executed in metered execution mode.
-- `execute_checkpoint_preflight_insns` (counter): The number of instructions executed by
-  checkpoint preflight in each segment of a prepared RVR proof. It carries the `segment` label and
+- `execute_preflight_insns` (counter): The number of instructions executed by
+  preflight in each segment of a prepared proof. It carries the `segment` label and
   is emitted only after the whole proof succeeds; summing the series gives the proof-level total.
-- `execute_checkpoint_preflight_checkpoints`, `execute_checkpoint_preflight_residuals`, and
-  `execute_checkpoint_preflight_transcript_bytes` (counters): The compact authoritative transcript
-  size across all segments in one prepared RVR proof. Transcript bytes measure the logical
+- `execute_preflight_checkpoints`, `execute_preflight_residuals`, and
+  `execute_preflight_transcript_bytes` (counters): The compact authoritative transcript
+  size across all segments in one prepared proof. Transcript bytes measure the logical
   initialized checkpoint and residual payload, not vector capacity or allocator overhead. These
   are emitted once after a successful proof rather than once per segment.
 - `main_cells_used` (counter): The total number of main trace cells used by all chips in the segment. This does not include cells needed to pad rows to power-of-two matrix heights. Only main trace cells, not preprocessed or permutation trace cells, are counted.

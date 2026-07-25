@@ -282,9 +282,7 @@ fn all_int256_opcodes_checkpoint_expand_and_prove() {
         ..Default::default()
     };
     let executor = VmExecutor::new(config.clone()).unwrap();
-    let checkpoint = executor
-        .rvr_checkpoint_preflight_instance(&exe, None)
-        .unwrap();
+    let checkpoint = executor.checkpoint_preflight_instance(&exe, None).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, pk) =
         VirtualMachine::new_with_keygen(test_gpu_engine(), Int256Rv64GpuBuilder, config.clone())
@@ -418,9 +416,7 @@ fn int256_checkpoint_replay_rejects_wrapping_transitions() {
         ..Default::default()
     };
     let executor = VmExecutor::new(config.clone()).unwrap();
-    let checkpoint = executor
-        .rvr_checkpoint_preflight_instance(&exe, None)
-        .unwrap();
+    let checkpoint = executor.checkpoint_preflight_instance(&exe, None).unwrap();
     let initial_state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut source_vm, _) =
         VirtualMachine::new_with_keygen(test_gpu_engine(), Int256Rv64GpuBuilder, config.clone())
@@ -515,9 +511,7 @@ fn mixed_rv64_int256_checkpoint_expansion_proves_both_branch_outcomes() {
             ..Default::default()
         };
         let executor = VmExecutor::new(config.clone()).unwrap();
-        let checkpoint = executor
-            .rvr_checkpoint_preflight_instance(&exe, None)
-            .unwrap();
+        let checkpoint = executor.checkpoint_preflight_instance(&exe, None).unwrap();
         let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
         let (mut vm, pk) = VirtualMachine::new_with_keygen(
             test_gpu_engine(),

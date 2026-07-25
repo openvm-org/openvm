@@ -152,7 +152,7 @@ impl<'a> Keccak256RvrGpuTracegen<'a> {
         >,
     {
         let opcodes = Rv64ImRvrGpuTracegen::checkpoint_opcode_bases();
-        vm.expand_rvr_checkpoint_replay(program, execution, expected_retired, opcodes)
+        vm.postflight(program, execution, expected_retired, opcodes)
     }
 
     pub fn new(
@@ -245,7 +245,7 @@ impl<'a> Keccak256RvrGpuTracegen<'a> {
             &extension_opcodes,
         )
         .map_err(|error| GenerationError::ExtensionTracegen(error.to_string()))?;
-        let ctx = vm.generate_proving_ctx_from_rvr_unchecked_coverage(
+        let ctx = vm.generate_preflight_proving_ctx_unchecked_coverage(
             self.program,
             self.transcript,
             self.replay_plan,

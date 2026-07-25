@@ -6,6 +6,8 @@ use openvm_circuit::arch::{
     execution_mode::MeteredCtx,
     rvr::{cuda::GpuRvrProgram, RvrCheckpointPreflightInstance, RvrMeteredInstance},
 };
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use openvm_circuit::system::memory::merkle::MerkleTree;
 use openvm_circuit::{
     arch::{
         hasher::poseidon2::{vm_poseidon2_hasher, Poseidon2Hasher},
@@ -28,14 +30,20 @@ use openvm_stark_backend::{
     StarkEngine, Val,
 };
 use openvm_stark_sdk::config::baby_bear_poseidon2::Digest;
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use openvm_verify_stark_host::{vk::VerificationBaseline, VmStarkProof};
 use tracing::instrument;
 
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use super::{stark::aggregate_app_proof, AggProver, InternalLayerMetadata};
 use crate::{
     keygen::AppVerifyingKey,
     prover::vm::{new_local_prover, types::VmProvingKey},
     util::check_max_constraint_degrees,
     SdkError, StdIn, F, SC,
 };
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use crate::{DeferralInput, DeferralSetup};
 
 #[derive(Getters)]
 pub struct AppProver<E, VB>
@@ -168,13 +176,13 @@ where
 }
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
-pub struct RvrCheckpointAppProver<'a> {
+pub struct PreflightAppProver<'a> {
     app: AppProver<BabyBearPoseidon2GpuEngine, SdkVmGpuBuilder>,
     runtime: super::rvr::RvrCheckpointRuntime<'a>,
 }
 
 #[cfg(all(feature = "cuda", feature = "rvr"))]
-impl<'a> RvrCheckpointAppProver<'a> {
+impl<'a> PreflightAppProver<'a> {
     pub(crate) fn new(
         app: AppProver<BabyBearPoseidon2GpuEngine, SdkVmGpuBuilder>,
         metered: RvrMeteredInstance<'a>,
@@ -206,9 +214,12 @@ impl<'a> RvrCheckpointAppProver<'a> {
     /// counts are not transactional, so retries fail closed and callers must
     /// prepare a new prover.
     #[instrument(
-        name = "app_prove_rvr_checkpoint",
+        name = "app_prove",
         skip_all,
-        fields(group = self.app.program_name.as_ref().unwrap_or(&"app_proof".to_string()))
+        fields(
+            group = self.app.program_name.as_ref().unwrap_or(&"app_proof".to_string()),
+            backend = "rvr"
+        )
     )]
     pub fn prove(&mut self, input: StdIn) -> Result<ContinuationVmProof<SC>, VirtualMachineError> {
         check_max_constraint_degrees(
@@ -225,6 +236,109 @@ impl<'a> RvrCheckpointAppProver<'a> {
         )
         .expect("app proof verification failed");
         Ok(proof)
+    }
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+pub struct PreflightStarkProver<'a> {
+    app: PreflightAppProver<'a>,
+    agg_prover: Arc<AggProver>,
+    deferral_setup: DeferralSetup,
+}
+
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+impl<'a> PreflightStarkProver<'a> {
+    pub(crate) fn new(
+        app: PreflightAppProver<'a>,
+        agg_prover: Arc<AggProver>,
+        deferral_setup: DeferralSetup,
+    ) -> Self {
+        Self {
+            app,
+            agg_prover,
+            deferral_setup,
+        }
+    }
+
+    /// Generates the app proof through compiled preflight and then runs
+    /// the ordinary recursive aggregation pipeline.
+    pub fn prove(
+        &mut self,
+        input: StdIn,
+        def_inputs: &[DeferralInput],
+    ) -> eyre::Result<(VmStarkProof, InternalLayerMetadata)> {
+        let has_deferrals = self.deferral_setup.hook_commit().is_some();
+        let memory_dimensions = self.app.app.memory_dimensions();
+        let initial_merkle_tree = if has_deferrals {
+            let memory = &self
+                .app
+                .app
+                .instance()
+                .state()
+                .as_ref()
+                .expect("initial state should exist before proving")
+                .memory
+                .memory;
+            Some(MerkleTree::from_memory(
+                memory,
+                &memory_dimensions,
+                &vm_poseidon2_hasher(),
+            ))
+        } else {
+            None
+        };
+
+        let app_proof = self.app.prove(input)?;
+        let final_merkle_tree = if has_deferrals {
+            let memory = &self
+                .app
+                .app
+                .instance()
+                .state()
+                .as_ref()
+                .expect("final state should exist after proving")
+                .memory
+                .memory;
+            Some(MerkleTree::from_memory(
+                memory,
+                &memory_dimensions,
+                &vm_poseidon2_hasher(),
+            ))
+        } else {
+            None
+        };
+
+        aggregate_app_proof(
+            &self.agg_prover,
+            &self.deferral_setup,
+            app_proof,
+            def_inputs,
+            memory_dimensions,
+            initial_merkle_tree.as_ref(),
+            final_merkle_tree.as_ref(),
+        )
+    }
+
+    pub fn generate_baseline(&self) -> VerificationBaseline {
+        VerificationBaseline {
+            app_exe_commit: self.app.app.app_exe_commit(),
+            memory_dimensions: self.app.app.memory_dimensions(),
+            num_user_pvs: self.app.app.num_user_pvs(),
+            app_vk_commit: self.agg_prover.leaf_prover.get_vk_commit(false),
+            leaf_vk_commit: self
+                .agg_prover
+                .internal_for_leaf_prover
+                .get_vk_commit(false),
+            internal_for_leaf_vk_commit: self
+                .agg_prover
+                .internal_recursive_prover
+                .get_vk_commit(false),
+            internal_recursive_vk_commit: self
+                .agg_prover
+                .internal_recursive_prover
+                .get_vk_commit(true),
+            expected_def_hook_commit: self.deferral_setup.hook_commit(),
+        }
     }
 }
 
