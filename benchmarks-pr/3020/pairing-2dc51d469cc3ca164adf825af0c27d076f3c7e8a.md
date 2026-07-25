@@ -1,9 +1,9 @@
 | Summary | Proof Time (s) | Parallel Proof Time (s) | Parallel Proof Time (32 provers) (s) |
 |:---|---:|---:|---:|
-| Total |  0.90 |  0.90 |  0.89 |
+| Total |  0.90 |  0.90 |  0.90 |
 | app_proof |  0.32 |  0.32 |  0.32 |
 | leaf |  0.19 |  0.19 |  0.19 |
-| internal_for_leaf |  0.17 |  0.17 |  0.17 |
+| internal_for_leaf |  0.16 |  0.16 |  0.16 |
 | internal_recursive.0 |  0.12 |  0.12 |  0.12 |
 | internal_recursive.1 |  0.11 |  0.11 |  0.11 |
 
@@ -11,23 +11,23 @@
 | app_proof |||||
 |:---|---:|---:|---:|---:|
 |metric|avg|sum|max|min|
-| `total_proof_time_ms ` |  274 |  274 |  274 |  274 |
-| `compile_metered_time_ms` |  5 |  5 |  5 |  5 |
+| `total_proof_time_ms ` |  275 |  275 |  275 |  275 |
+| `compile_metered_time_ms` |  6 |  6 |  6 |  6 |
 | `execute_metered_time_ms` |  47 | -          | -          | -          |
 | `execute_metered_insns` |  592,827 | -          | -          | -          |
-| `execute_metered_insn_mi/s` |  12.54 | -          |  12.54 |  12.54 |
+| `execute_metered_insn_mi/s` |  12.41 | -          |  12.41 |  12.41 |
 | `execute_preflight_insns` |  592,827 |  592,827 |  592,827 |  592,827 |
 | `execute_preflight_time_ms` |  69 |  69 |  69 |  69 |
-| `execute_preflight_insn_mi/s` |  10.89 | -          |  10.89 |  10.89 |
-| `trace_gen_time_ms   ` |  29 |  29 |  29 |  29 |
+| `execute_preflight_insn_mi/s` |  10.82 | -          |  10.82 |  10.82 |
+| `trace_gen_time_ms   ` |  30 |  30 |  30 |  30 |
 | `set_initial_memory_time_ms` |  0 |  0 |  0 |  0 |
-| `memory_finalize_time_ms` |  1 |  1 |  1 |  1 |
+| `memory_finalize_time_ms` |  0 |  0 |  0 |  0 |
 | __Prover__ |||||
-| `stark_prove_excluding_trace_time_ms` |  174 |  174 |  174 |  174 |
+| `stark_prove_excluding_trace_time_ms` |  175 |  175 |  175 |  175 |
 | `prover.main_trace_commit_time_ms` |  20 |  20 |  20 |  20 |
-| `prover.rap_constraints_time_ms` |  121 |  121 |  121 |  121 |
-| `prover.openings_time_ms` |  31 |  31 |  31 |  31 |
-| `prover.rap_constraints.logup_gkr_time_ms` |  36 |  36 |  36 |  36 |
+| `prover.rap_constraints_time_ms` |  122 |  122 |  122 |  122 |
+| `prover.openings_time_ms` |  32 |  32 |  32 |  32 |
+| `prover.rap_constraints.logup_gkr_time_ms` |  37 |  37 |  37 |  37 |
 | `prover.rap_constraints.round0_time_ms` |  40 |  40 |  40 |  40 |
 | `prover.rap_constraints.mle_rounds_time_ms` |  44 |  44 |  44 |  44 |
 | `prover.openings.stacked_reduction_time_ms` |  9 |  9 |  9 |  9 |
@@ -38,82 +38,82 @@
 | leaf |||||
 |:---|---:|---:|---:|---:|
 |metric|avg|sum|max|min|
-| `total_proof_time_ms ` |  185 |  185 |  185 |  185 |
+| `total_proof_time_ms ` |  187 |  187 |  187 |  187 |
 | `execute_preflight_time_ms` |  3 |  3 |  3 |  3 |
-| `trace_gen_time_ms   ` |  31 |  31 |  31 |  31 |
+| `trace_gen_time_ms   ` |  32 |  32 |  32 |  32 |
 | `generate_blob_total_time_ms` |  0 |  0 |  0 |  0 |
 | __Prover__ |||||
-| `stark_prove_excluding_trace_time_ms` |  153 |  153 |  153 |  153 |
+| `stark_prove_excluding_trace_time_ms` |  154 |  154 |  154 |  154 |
 | `prover.main_trace_commit_time_ms` |  32 |  32 |  32 |  32 |
-| `prover.rap_constraints_time_ms` |  81 |  81 |  81 |  81 |
-| `prover.openings_time_ms` |  39 |  39 |  39 |  39 |
+| `prover.rap_constraints_time_ms` |  82 |  82 |  82 |  82 |
+| `prover.openings_time_ms` |  40 |  40 |  40 |  40 |
 | `prover.rap_constraints.logup_gkr_time_ms` |  23 |  23 |  23 |  23 |
 | `prover.rap_constraints.round0_time_ms` |  34 |  34 |  34 |  34 |
 | `prover.rap_constraints.mle_rounds_time_ms` |  23 |  23 |  23 |  23 |
 | `prover.openings.stacked_reduction_time_ms` |  9 |  9 |  9 |  9 |
 | `prover.openings.stacked_reduction.round0_time_ms` |  2 |  2 |  2 |  2 |
 | `prover.openings.stacked_reduction.mle_rounds_time_ms` |  6 |  6 |  6 |  6 |
-| `prover.openings.whir_time_ms` |  30 |  30 |  30 |  30 |
+| `prover.openings.whir_time_ms` |  31 |  31 |  31 |  31 |
 
 | internal_for_leaf |||||
 |:---|---:|---:|---:|---:|
 |metric|avg|sum|max|min|
-| `total_proof_time_ms ` |  166 |  166 |  166 |  166 |
+| `total_proof_time_ms ` |  163 |  163 |  163 |  163 |
 | `execute_preflight_time_ms` |  2 |  2 |  2 |  2 |
-| `trace_gen_time_ms   ` |  14 |  14 |  14 |  14 |
+| `trace_gen_time_ms   ` |  15 |  15 |  15 |  15 |
 | `generate_blob_total_time_ms` |  0 |  0 |  0 |  0 |
 | __Prover__ |||||
-| `stark_prove_excluding_trace_time_ms` |  151 |  151 |  151 |  151 |
+| `stark_prove_excluding_trace_time_ms` |  148 |  148 |  148 |  148 |
 | `prover.main_trace_commit_time_ms` |  33 |  33 |  33 |  33 |
-| `prover.rap_constraints_time_ms` |  74 |  74 |  74 |  74 |
-| `prover.openings_time_ms` |  43 |  43 |  43 |  43 |
-| `prover.rap_constraints.logup_gkr_time_ms` |  15 |  15 |  15 |  15 |
+| `prover.rap_constraints_time_ms` |  73 |  73 |  73 |  73 |
+| `prover.openings_time_ms` |  41 |  41 |  41 |  41 |
+| `prover.rap_constraints.logup_gkr_time_ms` |  14 |  14 |  14 |  14 |
 | `prover.rap_constraints.round0_time_ms` |  26 |  26 |  26 |  26 |
 | `prover.rap_constraints.mle_rounds_time_ms` |  33 |  33 |  33 |  33 |
 | `prover.openings.stacked_reduction_time_ms` |  9 |  9 |  9 |  9 |
 | `prover.openings.stacked_reduction.round0_time_ms` |  2 |  2 |  2 |  2 |
-| `prover.openings.stacked_reduction.mle_rounds_time_ms` |  6 |  6 |  6 |  6 |
-| `prover.openings.whir_time_ms` |  34 |  34 |  34 |  34 |
+| `prover.openings.stacked_reduction.mle_rounds_time_ms` |  7 |  7 |  7 |  7 |
+| `prover.openings.whir_time_ms` |  31 |  31 |  31 |  31 |
 
 | internal_recursive.0 |||||
 |:---|---:|---:|---:|---:|
 |metric|avg|sum|max|min|
-| `total_proof_time_ms ` |  117 |  117 |  117 |  117 |
+| `total_proof_time_ms ` |  120 |  120 |  120 |  120 |
 | `execute_preflight_time_ms` |  2 |  2 |  2 |  2 |
 | `trace_gen_time_ms   ` |  10 |  10 |  10 |  10 |
 | `generate_blob_total_time_ms` |  0 |  0 |  0 |  0 |
 | __Prover__ |||||
-| `stark_prove_excluding_trace_time_ms` |  106 |  106 |  106 |  106 |
+| `stark_prove_excluding_trace_time_ms` |  109 |  109 |  109 |  109 |
 | `prover.main_trace_commit_time_ms` |  20 |  20 |  20 |  20 |
 | `prover.rap_constraints_time_ms` |  56 |  56 |  56 |  56 |
-| `prover.openings_time_ms` |  30 |  30 |  30 |  30 |
-| `prover.rap_constraints.logup_gkr_time_ms` |  10 |  10 |  10 |  10 |
+| `prover.openings_time_ms` |  32 |  32 |  32 |  32 |
+| `prover.rap_constraints.logup_gkr_time_ms` |  11 |  11 |  11 |  11 |
 | `prover.rap_constraints.round0_time_ms` |  22 |  22 |  22 |  22 |
 | `prover.rap_constraints.mle_rounds_time_ms` |  23 |  23 |  23 |  23 |
 | `prover.openings.stacked_reduction_time_ms` |  7 |  7 |  7 |  7 |
 | `prover.openings.stacked_reduction.round0_time_ms` |  1 |  1 |  1 |  1 |
 | `prover.openings.stacked_reduction.mle_rounds_time_ms` |  6 |  6 |  6 |  6 |
-| `prover.openings.whir_time_ms` |  22 |  22 |  22 |  22 |
+| `prover.openings.whir_time_ms` |  24 |  24 |  24 |  24 |
 
 | internal_recursive.1 |||||
 |:---|---:|---:|---:|---:|
 |metric|avg|sum|max|min|
-| `total_proof_time_ms ` |  106 |  106 |  106 |  106 |
+| `total_proof_time_ms ` |  109 |  109 |  109 |  109 |
 | `execute_preflight_time_ms` |  2 |  2 |  2 |  2 |
-| `trace_gen_time_ms   ` |  9 |  9 |  9 |  9 |
+| `trace_gen_time_ms   ` |  10 |  10 |  10 |  10 |
 | `generate_blob_total_time_ms` |  0 |  0 |  0 |  0 |
 | __Prover__ |||||
-| `stark_prove_excluding_trace_time_ms` |  96 |  96 |  96 |  96 |
+| `stark_prove_excluding_trace_time_ms` |  99 |  99 |  99 |  99 |
 | `prover.main_trace_commit_time_ms` |  15 |  15 |  15 |  15 |
 | `prover.rap_constraints_time_ms` |  54 |  54 |  54 |  54 |
-| `prover.openings_time_ms` |  27 |  27 |  27 |  27 |
+| `prover.openings_time_ms` |  29 |  29 |  29 |  29 |
 | `prover.rap_constraints.logup_gkr_time_ms` |  11 |  11 |  11 |  11 |
 | `prover.rap_constraints.round0_time_ms` |  21 |  21 |  21 |  21 |
 | `prover.rap_constraints.mle_rounds_time_ms` |  21 |  21 |  21 |  21 |
 | `prover.openings.stacked_reduction_time_ms` |  7 |  7 |  7 |  7 |
 | `prover.openings.stacked_reduction.round0_time_ms` |  1 |  1 |  1 |  1 |
 | `prover.openings.stacked_reduction.mle_rounds_time_ms` |  5 |  5 |  5 |  5 |
-| `prover.openings.whir_time_ms` |  19 |  19 |  19 |  19 |
+| `prover.openings.whir_time_ms` |  22 |  22 |  22 |  22 |
 
 
 
@@ -123,37 +123,37 @@
 
 | Module | Max (GB) | Max At |
 | --- | ---: | --- |
-| frac_sumcheck.gkr_rounds | 1.33 | app_proof.prover.0 |
 | prover.batch_constraints.before_round0 | 1.33 | app_proof.prover.0 |
+| frac_sumcheck.gkr_rounds | 1.33 | app_proof.prover.0 |
 | frac_sumcheck.segment_tree | 1.29 | app_proof.prover.0 |
 | prover.gkr_input_evals | 1.29 | app_proof.prover.0 |
 | prover.stacked_commit | 1.02 | internal_for_leaf.0.prover |
 | prover.openings | 0.98 | internal_for_leaf.0.prover |
-| prover.merkle_tree | 0.98 | internal_for_leaf.0.prover |
 | prover.prove_whir_opening | 0.98 | internal_for_leaf.0.prover |
+| prover.merkle_tree | 0.98 | internal_for_leaf.0.prover |
 | prover.rs_code_matrix | 0.98 | internal_for_leaf.0.prover |
 | generate mem proving ctxs | 0.88 | app_proof.0 |
 | set initial memory | 0.87 | app_proof.0 |
 | prover.rap_constraints | 0.79 | internal_for_leaf.0.prover |
-| prover.batch_constraints.fold_ple_evals | 0.47 | app_proof.prover.0 |
 | prover.batch_constraints.round0 | 0.47 | app_proof.prover.0 |
+| prover.batch_constraints.fold_ple_evals | 0.47 | app_proof.prover.0 |
 | prover.before_gkr_input_evals | 0.35 | app_proof.prover.0 |
-| tracegen.whir_final_poly_query_eval | 0.31 | leaf.0 |
-| tracegen.exp_bits_len | 0.31 | leaf.0 |
 | tracegen.pow_checker | 0.31 | leaf.0 |
+| tracegen.exp_bits_len | 0.31 | leaf.0 |
+| tracegen.whir_final_poly_query_eval | 0.31 | leaf.0 |
 | tracegen.whir_folding | 0.25 | leaf.0 |
 | tracegen.whir_non_initial_opened_values | 0.24 | leaf.0 |
 | tracegen.whir_initial_opened_values | 0.24 | leaf.0 |
 | tracegen.public_values | 0.24 | leaf.0 |
-| tracegen.proof_shape | 0.24 | leaf.0 |
 | tracegen.range_checker | 0.24 | leaf.0 |
+| tracegen.proof_shape | 0.24 | leaf.0 |
 
 <details>
 <summary>Detailed Metrics</summary>
 
 | transport_pk_to_device_time_ms | proof_size_bytes.total | proof_size_bytes.compressed | memory_to_vec_partition_time_ms |
 | --- | --- | --- | --- |
-| 126 | 267,239 | 228,804 | 32 | 
+| 126 | 267,239 | 228,293 | 18 | 
 
 | air_id | air_name | need_rot | interactions | constraints | constraint_deg |
 | --- | --- | --- | --- | --- | --- |
@@ -217,16 +217,16 @@
 
 | batch | pinned_cleaner_batch_time_ms | arena_cleaner_batch_time_ms |
 | --- | --- | --- |
-| 0 | 8 | 29 | 
+| 0 | 0 | 30 | 
 
 | group | transport_pk_to_device_time_ms | single_leaf_agg_time_ms | single_internal_agg_time_ms | prove_segment_time_ms | new_time_ms | execute_metered_time_ms | execute_metered_insns | execute_metered_insn_mi/s | compute_user_public_values_proof_time_ms | app_prove_time_ms | agg_layer_time_ms |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| agg_keygen | 59 |  |  |  | 292 |  |  |  |  |  |  | 
-| app_proof |  |  |  | 274 |  | 47 | 592,827 | 12.54 | 0 | 330 |  | 
-| internal_for_leaf |  |  | 166 |  |  |  |  |  |  |  | 166 | 
-| internal_recursive.0 |  |  | 117 |  |  |  |  |  |  |  | 117 | 
-| internal_recursive.1 |  |  | 107 |  |  |  |  |  |  |  | 107 | 
-| leaf |  | 185 |  |  |  |  |  |  |  |  | 185 | 
+| agg_keygen | 59 |  |  |  | 299 |  |  |  |  |  |  | 
+| app_proof |  |  |  | 275 |  | 47 | 592,827 | 12.41 | 0 | 332 |  | 
+| internal_for_leaf |  |  | 163 |  |  |  |  |  |  |  | 163 | 
+| internal_recursive.0 |  |  | 120 |  |  |  |  |  |  |  | 120 | 
+| internal_recursive.1 |  |  | 109 |  |  |  |  |  |  |  | 109 | 
+| leaf |  | 187 |  |  |  |  |  |  |  |  | 187 | 
 
 | group | air | generate_cached_trace_time_ms |
 | --- | --- | --- |
@@ -632,21 +632,21 @@
 
 | group | backend | compile_metered_time_ms |
 | --- | --- | --- |
-| app_proof | interpreter | 5 | 
+| app_proof | interpreter | 6 | 
 
 | group | idx | trace_gen_time_ms | total_proof_time_ms | subcircuit_generate_proving_ctxs_time_ms | generate_proving_ctxs_time_ms | generate_blob_time_ms | execute_preflight_time_ms | compute_merkle_precomputation_cuda_time_ms | apply_merkle_precomputation_time_ms |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| internal_for_leaf | 0 | 14 | 166 | 14 | 4 | 0 | 2 | 0 | 0 | 
-| internal_recursive.0 | 1 | 10 | 117 | 10 | 1 | 0 | 2 | 0 | 0 | 
-| internal_recursive.1 | 1 | 9 | 106 | 9 | 1 | 0 | 2 | 0 | 0 | 
-| leaf | 0 | 31 | 185 | 31 | 9 | 0 | 3 | 8 | 8 | 
+| internal_for_leaf | 0 | 15 | 163 | 14 | 5 | 0 | 2 | 0 | 0 | 
+| internal_recursive.0 | 1 | 10 | 120 | 10 | 1 | 0 | 2 | 1 | 1 | 
+| internal_recursive.1 | 1 | 10 | 109 | 9 | 1 | 0 | 2 | 0 | 0 | 
+| leaf | 0 | 32 | 187 | 31 | 10 | 0 | 3 | 8 | 8 | 
 
 | group | idx | phase | total_cells | stark_prove_excluding_trace_time_ms | stacked_commit_time_ms | s'_0 -> s_0 cpu interpolations_time_ms | rs_code_matrix_time_ms | prover.rap_constraints_time_ms | prover.rap_constraints.round0_time_ms | prover.rap_constraints.ple_round0_time_ms | prover.rap_constraints.mle_rounds_time_ms | prover.rap_constraints.logup_gkr_time_ms | prover.rap_constraints.logup_gkr.input_evals_time_ms | prover.openings_time_ms | prover.openings.whir_time_ms | prover.openings.stacked_reduction_time_ms | prover.openings.stacked_reduction.round0_time_ms | prover.openings.stacked_reduction.mle_rounds_time_ms | prover.main_trace_commit_time_ms | prover.commit_time_ms | prove_zerocheck_and_logup_gpu_time_ms | opened_rows_d2h_time_ms | merkle_tree_time_ms | fractional_sumcheck_gpu_time_ms | batch_open_rows_time_ms | LogupZerocheck::sumcheck_polys_batch_eval_time_ms |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| internal_for_leaf | 0 | prover | 26,560,317 | 151 | 33 | 0 | 0 | 74 | 26 | 25 | 33 | 15 | 0 | 43 | 34 | 9 | 2 | 6 | 33 | 33 | 74 | 0 | 1 | 12 | 0 | 0 | 
-| internal_recursive.0 | 1 | prover | 15,378,769 | 106 | 20 | 0 | 0 | 56 | 22 | 21 | 23 | 10 | 0 | 30 | 22 | 7 | 1 | 6 | 20 | 20 | 56 | 0 | 1 | 10 | 0 | 0 | 
-| internal_recursive.1 | 1 | prover | 9,750,865 | 96 | 14 | 0 | 0 | 54 | 21 | 20 | 21 | 11 | 0 | 27 | 19 | 7 | 1 | 5 | 15 | 14 | 54 | 0 | 1 | 10 | 0 | 0 | 
-| leaf | 0 | prover | 44,715,709 | 153 | 32 | 0 | 0 | 81 | 34 | 33 | 23 | 23 | 0 | 39 | 30 | 9 | 2 | 6 | 32 | 32 | 81 | 0 | 3 | 22 | 0 | 0 | 
+| internal_for_leaf | 0 | prover | 26,560,317 | 148 | 33 | 0 | 0 | 73 | 26 | 25 | 33 | 14 | 0 | 41 | 31 | 9 | 2 | 7 | 33 | 33 | 73 | 0 | 1 | 12 | 0 | 0 | 
+| internal_recursive.0 | 1 | prover | 15,378,769 | 109 | 20 | 0 | 0 | 56 | 22 | 21 | 23 | 11 | 0 | 32 | 24 | 7 | 1 | 6 | 20 | 20 | 56 | 0 | 1 | 10 | 0 | 0 | 
+| internal_recursive.1 | 1 | prover | 9,750,865 | 99 | 14 | 0 | 0 | 54 | 21 | 20 | 21 | 11 | 0 | 29 | 22 | 7 | 1 | 5 | 15 | 14 | 54 | 0 | 1 | 10 | 0 | 0 | 
+| leaf | 0 | prover | 44,715,709 | 154 | 32 | 0 | 0 | 82 | 34 | 33 | 23 | 23 | 0 | 40 | 31 | 9 | 2 | 6 | 32 | 32 | 82 | 0 | 3 | 22 | 0 | 0 | 
 
 | group | idx | phase | trace_height_constraint | weighted_sum | threshold |
 | --- | --- | --- | --- | --- | --- |
@@ -657,11 +657,11 @@
 
 | group | phase | stacked_commit_time_ms | rs_code_matrix_time_ms | prover.commit_time_ms | merkle_tree_time_ms |
 | --- | --- | --- | --- | --- | --- |
-| agg_keygen | prover | 6 | 0 | 6 | 6 | 
+| agg_keygen | prover | 7 | 0 | 7 | 7 | 
 
 | group | phase | segment | total_cells | stark_prove_excluding_trace_time_ms | stacked_commit_time_ms | s'_0 -> s_0 cpu interpolations_time_ms | rs_code_matrix_time_ms | prover.rap_constraints_time_ms | prover.rap_constraints.round0_time_ms | prover.rap_constraints.ple_round0_time_ms | prover.rap_constraints.mle_rounds_time_ms | prover.rap_constraints.logup_gkr_time_ms | prover.rap_constraints.logup_gkr.input_evals_time_ms | prover.openings_time_ms | prover.openings.whir_time_ms | prover.openings.stacked_reduction_time_ms | prover.openings.stacked_reduction.round0_time_ms | prover.openings.stacked_reduction.mle_rounds_time_ms | prover.main_trace_commit_time_ms | prover.commit_time_ms | prove_zerocheck_and_logup_gpu_time_ms | opened_rows_d2h_time_ms | merkle_tree_time_ms | fractional_sumcheck_gpu_time_ms | batch_open_rows_time_ms | LogupZerocheck::sumcheck_polys_batch_eval_time_ms |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| app_proof | prover | 0 | 52,884,284 | 174 | 20 | 0 | 0 | 121 | 40 | 39 | 44 | 36 | 0 | 31 | 22 | 9 | 3 | 6 | 20 | 20 | 121 | 0 | 1 | 35 | 0 | 0 | 
+| app_proof | prover | 0 | 52,884,284 | 175 | 20 | 0 | 0 | 122 | 40 | 39 | 44 | 37 | 0 | 32 | 22 | 9 | 3 | 6 | 20 | 20 | 122 | 0 | 1 | 35 | 0 | 0 | 
 
 | group | phase | segment | trace_height_constraint | weighted_sum | threshold |
 | --- | --- | --- | --- | --- | --- |
@@ -669,11 +669,11 @@
 
 | group | segment | vm.transport_init_memory_time_ms | update_merkle_tree_time_ms | trace_gen_time_ms | total_proof_time_ms | system_trace_gen_time_ms | set_initial_memory_time_ms | program_trace_gen_time_ms | poseidon2_prepare_time_ms | metered_memory_unpadded_bytes | metered_memory_padding_bytes | metered_memory_bytes | metered_interaction_memory_overhead_bytes | merkle_update_time_ms | merkle_drop_time_ms | memory_finalize_time_ms | mem_merge_records_time_ms | generate_proving_ctxs_time_ms | executor_trace_gen_time_ms | execute_preflight_time_ms | execute_preflight_insns | execute_preflight_insn_mi/s | connector_trace_gen_time_ms | boundary_trace_gen_time_ms |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| app_proof | 0 | 0 | 2 | 29 | 274 | 3 | 0 | 0 | 0 | 910,009,863 | 346,484,145 | 1,256,494,008 | 2,097,152 | 2 | 0 | 1 | 0 | 3 | 25 | 69 | 592,827 | 10.89 | 0 | 0 | 
+| app_proof | 0 | 0 | 2 | 30 | 275 | 3 | 0 | 0 | 0 | 910,009,863 | 346,484,145 | 1,256,494,008 | 2,097,152 | 2 | 0 | 0 | 0 | 3 | 26 | 69 | 592,827 | 10.82 | 0 | 0 | 
 
 | phase | stacked_commit_time_ms | rs_code_matrix_time_ms | prover.commit_time_ms | merkle_tree_time_ms |
 | --- | --- | --- | --- | --- |
-| prover | 6 | 0 | 6 | 6 | 
+| prover | 7 | 0 | 7 | 7 | 
 
 </details>
 
@@ -685,4 +685,4 @@ Instance Type: g7.4xlarge
 
 Memory Allocator: jemalloc
 
-[Benchmark Workflow](https://github.com/openvm-org/openvm/actions/runs/30143632800)
+[Benchmark Workflow](https://github.com/openvm-org/openvm/actions/runs/30146546394)
