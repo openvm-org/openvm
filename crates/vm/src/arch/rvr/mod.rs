@@ -2,6 +2,7 @@
 
 mod abi_consts;
 pub mod bridge;
+mod cache;
 pub mod checkpoint_preflight;
 pub mod compile;
 #[cfg(feature = "cuda")]
