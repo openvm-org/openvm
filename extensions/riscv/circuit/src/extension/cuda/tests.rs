@@ -454,7 +454,7 @@ fn rvr_checkpoint_gpu_replay_proves_a_suspended_segment() {
     };
     let executor = VmExecutor::new(config.clone()).unwrap();
     let checkpoint = executor
-        .rvr_experimental_checkpoint_preflight_instance(&exe, None)
+        .rvr_checkpoint_preflight_instance(&exe, None)
         .unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, pk) =
@@ -541,7 +541,7 @@ fn rvr_checkpoint_gpu_replay_expands_more_than_one_launch_block() {
     };
     let executor = VmExecutor::new(config.clone()).unwrap();
     let checkpoint = executor
-        .rvr_experimental_checkpoint_preflight_instance(&exe, None)
+        .rvr_checkpoint_preflight_instance(&exe, None)
         .unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, _) =
@@ -606,7 +606,7 @@ fn rvr_checkpoint_gpu_replay_launches_high_register_m_kernels() {
     };
     let executor = VmExecutor::new(config.clone()).unwrap();
     let checkpoint = executor
-        .rvr_experimental_checkpoint_preflight_instance(&exe, None)
+        .rvr_checkpoint_preflight_instance(&exe, None)
         .unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, _) =
@@ -658,7 +658,7 @@ fn rvr_checkpoint_gpu_replay_carries_a_register_across_segments() {
     };
     let executor = VmExecutor::new(config.clone()).unwrap();
     let checkpoint = executor
-        .rvr_experimental_checkpoint_preflight_instance(&exe, None)
+        .rvr_checkpoint_preflight_instance(&exe, None)
         .unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, pk) =
@@ -741,7 +741,7 @@ fn rvr_checkpoint_gpu_replay_proves_an_empty_suspended_segment() {
     };
     let executor = VmExecutor::new(config.clone()).unwrap();
     let checkpoint = executor
-        .rvr_experimental_checkpoint_preflight_instance(&exe, None)
+        .rvr_checkpoint_preflight_instance(&exe, None)
         .unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, pk) =
@@ -798,7 +798,7 @@ fn rvr_checkpoint_gpu_replay_rejects_terminate_in_a_suspended_segment() {
     };
     let executor = VmExecutor::new(config.clone()).unwrap();
     let checkpoint = executor
-        .rvr_experimental_checkpoint_preflight_instance(&exe, None)
+        .rvr_checkpoint_preflight_instance(&exe, None)
         .unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, _) =
@@ -990,7 +990,7 @@ fn rvr_checkpoint_gpu_replay_proves_bounded_rv64i_slice_differentially() {
     let executor = VmExecutor::new(config.clone()).unwrap();
     let full = executor.rvr_preflight_instance(&exe, None).unwrap();
     let checkpoint = executor
-        .rvr_experimental_checkpoint_preflight_instance(&exe, None)
+        .rvr_checkpoint_preflight_instance(&exe, None)
         .unwrap();
     let max_instructions = instructions.len();
     let max_memory_events = max_instructions * 3;
@@ -1222,7 +1222,7 @@ fn rvr_checkpoint_gpu_replay_proves_all_memory_intent_shapes() {
     };
     let executor = VmExecutor::new(config.clone()).unwrap();
     let checkpoint = executor
-        .rvr_experimental_checkpoint_preflight_instance(&exe, None)
+        .rvr_checkpoint_preflight_instance(&exe, None)
         .unwrap();
     let checkpoint_state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut checkpoint_vm, checkpoint_pk) =
@@ -1597,7 +1597,7 @@ fn rvr_checkpoint_gpu_replay_proves_hint_store_without_record_arenas() {
     };
     let executor = VmExecutor::new(config.clone()).unwrap();
     let checkpoint = executor
-        .rvr_experimental_checkpoint_preflight_instance(&exe, None)
+        .rvr_checkpoint_preflight_instance(&exe, None)
         .unwrap();
     let mut state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let hint_words = [

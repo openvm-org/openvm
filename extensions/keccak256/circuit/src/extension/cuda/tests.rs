@@ -62,7 +62,7 @@ fn checkpoint_access_registry_rejects_duplicate_and_invalid_schedules() {
         .register(u32::MAX, &[1], 0, 4, 5, &[span])
         .unwrap_err();
     assert!(
-        oversized.to_string().contains("dense dispatch"),
+        oversized.to_string().contains("dense checkpoint dispatch"),
         "{oversized}"
     );
 
@@ -149,7 +149,7 @@ fn checkpoint_replay_expands_keccak_schedules_and_rejects_missing_residuals() {
     };
     let executor = VmExecutor::new(config.clone()).unwrap();
     let checkpoint = executor
-        .rvr_experimental_checkpoint_preflight_instance(&exe, None)
+        .rvr_checkpoint_preflight_instance(&exe, None)
         .unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, pk) =
@@ -325,7 +325,7 @@ fn checkpoint_replay_expands_keccak_schedules_and_rejects_missing_residuals() {
         .collect();
     let zero_exe = VmExe::new(zero_program.clone()).with_init_memory(zero_memory);
     let zero_checkpoint = executor
-        .rvr_experimental_checkpoint_preflight_instance(&zero_exe, None)
+        .rvr_checkpoint_preflight_instance(&zero_exe, None)
         .unwrap();
     let zero_state = zero_checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let zero_cached_program = vm.commit_program_on_device(&zero_program);

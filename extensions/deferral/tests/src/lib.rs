@@ -221,7 +221,7 @@ mod tests {
             ..Default::default()
         };
         let executor = VmExecutor::new(config)?;
-        let checkpoint = executor.rvr_experimental_checkpoint_preflight_instance(&exe, None)?;
+        let checkpoint = executor.rvr_checkpoint_preflight_instance(&exe, None)?;
         let mut initial = checkpoint.create_initial_vm_state(streams);
         let deferral_bytes = initial.memory.memory.mem[DEFERRAL_AS as usize].size();
         initial.memory.memory.touched_pages[DEFERRAL_AS as usize] =
@@ -289,7 +289,7 @@ mod tests {
         assert_rvr_trap(pure_error);
 
         let checkpoint_error = executor
-            .rvr_experimental_checkpoint_preflight_instance(&exe, None)?
+            .rvr_checkpoint_preflight_instance(&exe, None)?
             .execute(
                 Streams::default(),
                 RvrCheckpointPreflightLimits::new(instructions.len(), 0, 1),

@@ -403,7 +403,7 @@ pub fn compile_preflight<F: PrimeField32>(
     )
 }
 
-/// Compile a VmExe for the experimental checkpoint-and-residual preflight executor.
+/// Compile a VmExe for the checkpoint-and-residual preflight executor.
 pub fn compile_checkpoint_preflight<F: PrimeField32>(
     exe: &VmExe<F>,
     extensions: &ExtensionRegistry,

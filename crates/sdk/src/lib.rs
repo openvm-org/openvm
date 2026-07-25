@@ -289,7 +289,7 @@ impl GenericSdk<GpuBabyBearPoseidon2Engine, SdkVmGpuBuilder> {
             .map_err(VirtualMachineError::from)?;
         let checkpoint = self
             .executor
-            .rvr_experimental_checkpoint_preflight_instance(&exe, None)
+            .rvr_checkpoint_preflight_instance(&exe, None)
             .map_err(VirtualMachineError::from)?;
         let gpu_program = tracing::info_span!("upload_checkpoint_program")
             .in_scope(|| SdkVmGpuBuilder::upload_checkpoint_program(app.vm(), &exe.program))
@@ -475,6 +475,35 @@ where
             ExecutableFormat::SharedVmExe(exe) => exe,
         };
         Ok(exe)
+    }
+
+    /// Generates the app proving key once and caches it. Future calls will return the cached key.
+    ///
+    /// # Panics
+    /// This function will panic if the app keygen fails.
+    pub fn app_pk(&self) -> &AppProvingKey<VB::VmConfig> {
+        // TODO[jpw]: use `get_or_try_init` once it is stable
+        self.app_pk.get_or_init(|| {
+            AppProvingKey::keygen(self.app_config.clone()).expect("app_keygen failed")
+        })
+    }
+
+    /// This constructor is for generating app proofs that do not require a single aggregate STARK
+    /// proof of the full program execution. For a single STARK proof, use
+    /// [`prove`](Self::prove).
+    ///
+    /// Creates an app prover instance specific to the provided executable,
+    /// generating the [AppProvingKey] if it does not already exist.
+    /// Execution-mode-specific bounds are enforced by the corresponding prove
+    /// method rather than by this constructor.
+    pub fn app_prover(&self, exe: impl Into<ExecutableFormat>) -> Result<AppProver<E, VB>, SdkError>
+    where
+        VB: Clone,
+    {
+        let exe = self.convert_to_exe(exe)?;
+        let app_pk = self.app_pk();
+        let prover = AppProver::<E, VB>::new(self.app_vm_builder.clone(), &app_pk.app_vm_pk, exe)?;
+        Ok(prover)
     }
 
     fn compile_input(
@@ -881,23 +910,6 @@ where
 
     // ========================= Prover Constructors =========================
 
-    /// This constructor is for generating app proofs that do not require a single aggregate STARK
-    /// proof of the full program execution. For a single STARK proof, use the
-    /// [`prove`](Self::prove) method instead.
-    ///
-    /// Creates an app prover instance specific to the provided exe.
-    /// This function will generate the [AppProvingKey] if it doesn't already exist and use it to
-    /// construct the [AppProver].
-    pub fn app_prover(
-        &self,
-        exe: impl Into<ExecutableFormat>,
-    ) -> Result<AppProver<E, VB>, SdkError> {
-        let exe = self.convert_to_exe(exe)?;
-        let app_pk = self.app_pk();
-        let prover = AppProver::<E, VB>::new(self.app_vm_builder.clone(), &app_pk.app_vm_pk, exe)?;
-        Ok(prover)
-    }
-
     /// Constructs a new [StarkProver] instance for the given executable.
     /// This function will generate the [AppProvingKey] if it does not already
     /// exist.
@@ -1054,17 +1066,6 @@ where
         let pk = self.app_pk().clone();
         let vk = pk.get_app_vk();
         (pk, vk)
-    }
-
-    /// Generates the app proving key once and caches it. Future calls will return the cached key.
-    ///
-    /// # Panics
-    /// This function will panic if the app keygen fails.
-    pub fn app_pk(&self) -> &AppProvingKey<VB::VmConfig> {
-        // TODO[jpw]: use `get_or_try_init` once it is stable
-        self.app_pk.get_or_init(|| {
-            AppProvingKey::keygen(self.app_config.clone()).expect("app_keygen failed")
-        })
     }
 
     /// Returns the app verifying key derived from the cached app proving key.

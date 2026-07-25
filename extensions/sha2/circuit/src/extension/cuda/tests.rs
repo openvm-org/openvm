@@ -272,7 +272,7 @@ fn mixed_rv64_sha_checkpoint_expansion_proves() {
     };
     let executor = VmExecutor::new(config.clone()).unwrap();
     let checkpoint = executor
-        .rvr_experimental_checkpoint_preflight_instance(&exe, None)
+        .rvr_checkpoint_preflight_instance(&exe, None)
         .unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, pk) =

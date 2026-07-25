@@ -332,11 +332,10 @@ where
         ))
     }
 
-    /// Compile the experimental compact checkpoint-and-residual preflight executor.
+    /// Compile the compact checkpoint-and-residual preflight executor.
     ///
-    /// This is intentionally separate from production preflight while its
-    /// replay feasibility and end-to-end performance are being evaluated.
-    pub fn rvr_experimental_checkpoint_preflight_instance(
+    /// The compact transcript is the serial input to record-free GPU replay.
+    pub fn rvr_checkpoint_preflight_instance(
         &self,
         exe: &VmExe<F>,
         guest_debug_map: Option<&GuestDebugMap>,

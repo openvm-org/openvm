@@ -24,6 +24,13 @@ For a segment proof, the following metrics are collected:
   - The sum `execute_preflight_time_ms + trace_gen_time_ms + stark_prove_excluding_trace_time_ms`. The `execute_metered_time_ms` is excluded for app proofs because it is not run on a per-segment basis.
 - `execute_pure_insns` (counter): The total number of instructions executed in pure execution mode.
 - `execute_metered_insns` (counter): The total number of instructions executed in metered execution mode.
+- `execute_checkpoint_preflight_insns` (counter): The total number of instructions executed by
+  checkpoint preflight across all segments in one prepared RVR proof.
+- `execute_checkpoint_preflight_checkpoints`, `execute_checkpoint_preflight_residuals`, and
+  `execute_checkpoint_preflight_transcript_bytes` (counters): The compact authoritative transcript
+  size across all segments in one prepared RVR proof. Transcript bytes measure the logical
+  initialized checkpoint and residual payload, not vector capacity or allocator overhead. These
+  are emitted once after a successful proof rather than once per segment.
 - `main_cells_used` (counter): The total number of main trace cells used by all chips in the segment. This does not include cells needed to pad rows to power-of-two matrix heights. Only main trace cells, not preprocessed or permutation trace cells, are counted.
 - `total_cells_used` (counter): The total number of preprocessed, main, and permutation trace cells used by all chips in the segment. This does not include cells needed to pad rows to power-of-two matrix heights.
 

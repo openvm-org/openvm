@@ -797,6 +797,12 @@ pub const EXECUTE_PURE_INSN_MI_S_LABEL: &str = "execute_pure_insn_mi/s";
 pub const EXECUTE_METERED_TIME_LABEL: &str = "execute_metered_time_ms";
 pub const EXECUTE_METERED_INSN_MI_S_LABEL: &str = "execute_metered_insn_mi/s";
 pub const EXECUTE_CHECKPOINT_PREFLIGHT_INSNS_LABEL: &str = "execute_checkpoint_preflight_insns";
+pub const EXECUTE_CHECKPOINT_PREFLIGHT_CHECKPOINTS_LABEL: &str =
+    "execute_checkpoint_preflight_checkpoints";
+pub const EXECUTE_CHECKPOINT_PREFLIGHT_RESIDUALS_LABEL: &str =
+    "execute_checkpoint_preflight_residuals";
+pub const EXECUTE_CHECKPOINT_PREFLIGHT_TRANSCRIPT_BYTES_LABEL: &str =
+    "execute_checkpoint_preflight_transcript_bytes";
 pub const EXECUTE_CHECKPOINT_PREFLIGHT_TIME_LABEL: &str = "execute_checkpoint_preflight_time_ms";
 pub const EXECUTE_CHECKPOINT_PREFLIGHT_INSN_MI_S_LABEL: &str =
     "execute_checkpoint_preflight_insn_mi/s";
@@ -841,6 +847,9 @@ pub const AGGREGATED_METRIC_NAMES: &[&str] = &[
     EXECUTE_METERED_COST_INSNS_LABEL,
     EXECUTE_METERED_INSN_MI_S_LABEL,
     EXECUTE_CHECKPOINT_PREFLIGHT_INSNS_LABEL,
+    EXECUTE_CHECKPOINT_PREFLIGHT_CHECKPOINTS_LABEL,
+    EXECUTE_CHECKPOINT_PREFLIGHT_RESIDUALS_LABEL,
+    EXECUTE_CHECKPOINT_PREFLIGHT_TRANSCRIPT_BYTES_LABEL,
     EXECUTE_CHECKPOINT_PREFLIGHT_TIME_LABEL,
     EXECUTE_CHECKPOINT_PREFLIGHT_INSN_MI_S_LABEL,
     EXECUTE_PREFLIGHT_INSNS_LABEL,

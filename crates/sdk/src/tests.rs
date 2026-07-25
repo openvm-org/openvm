@@ -2,11 +2,11 @@ use std::{slice::from_ref, sync::Arc};
 
 use eyre::Result;
 use openvm::platform::memory::MEM_SIZE;
-#[cfg(all(feature = "cuda", feature = "rvr"))]
-use openvm_circuit::arch::verify_segments;
 #[cfg(feature = "rvr")]
 use openvm_circuit::arch::ExecutionOutcome;
 use openvm_circuit::arch::{instructions::exe::VmExe, U16_CELL_SIZE};
+#[cfg(all(feature = "cuda", feature = "rvr"))]
+use openvm_circuit::arch::{verify_segments, VirtualMachineError};
 use openvm_continuations::prover::DeferralCircuitProver;
 use openvm_sdk_config::{
     deferral::{DeferralConfig, SupportedDeferral},
@@ -410,6 +410,15 @@ fn test_rvr_checkpoint_prover_reuse() -> Result<()> {
     let mut app_prover = sdk.app_prover(exe)?;
     app_prover.set_program_name("fibonacci_rvr_checkpoint");
     let mut prover = sdk.prepare_rvr_checkpoint_app_prover(app_prover)?;
+
+    let error = match prover.prove(StdIn::default()) {
+        Ok(_) => panic!("missing guest input must fail"),
+        Err(error) => error,
+    };
+    assert!(
+        matches!(error, VirtualMachineError::Execution(_)),
+        "unexpected checkpoint proof error: {error}"
+    );
 
     let mut stdin = StdIn::default();
     stdin.write(&1000u64);
