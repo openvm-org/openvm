@@ -3,12 +3,10 @@ use std::{borrow::Borrow, sync::Arc};
 use eyre::Result;
 use openvm_circuit::{
     arch::{
-        hasher::poseidon2::vm_poseidon2_hasher,
-        instructions::{exe::VmExe, VM_DIGEST_WIDTH},
-        ContinuationVmProof, Executor, MeteredExecutor, PreflightExecutor, VmBuilder,
-        VmExecutionConfig,
+        hasher::poseidon2::vm_poseidon2_hasher, instructions::exe::VmExe, Executor,
+        MeteredExecutor, PreflightExecutor, VmBuilder, VmExecutionConfig,
     },
-    system::memory::{dimensions::MemoryDimensions, merkle::MerkleTree},
+    system::memory::merkle::MerkleTree,
 };
 use openvm_stark_backend::{p3_field::PrimeField32, StarkEngine, Val};
 use openvm_stark_sdk::config::baby_bear_poseidon2::{Digest, F};
@@ -49,8 +47,20 @@ where
         agg_prover: Arc<AggProver>,
         deferral_setup: DeferralSetup,
     ) -> Result<Self> {
+        Self::from_app_prover(
+            AppProver::new(vm_builder, app_vm_pk, app_exe)?,
+            agg_prover,
+            deferral_setup,
+        )
+    }
+
+    pub(crate) fn from_app_prover(
+        app_prover: AppProver<E, VB>,
+        agg_prover: Arc<AggProver>,
+        deferral_setup: DeferralSetup,
+    ) -> Result<Self> {
         Ok(Self {
-            app_prover: AppProver::new(vm_builder, app_vm_pk, app_exe)?,
+            app_prover,
             agg_prover,
             deferral_setup,
         })
@@ -100,7 +110,38 @@ where
         };
 
         let continuation_proof = self.app_prover.prove(vm_input)?;
-        let final_merkle_tree = if has_deferrals {
+        let (mut stark_proof, mut internal_metadata) =
+            self.agg_prover.prove_vm(continuation_proof)?;
+
+        // Skip aggregation unless some circuit received a deferred call. Note that
+        // deferrals are also skipped if def_inputs is an empty slice.
+        if def_inputs.iter().any(|input| !input.is_empty()) {
+            let def_agg_prover = self.deferral_setup.prover().ok_or_else(|| {
+                eyre::eyre!("non-empty deferral inputs require a deferral aggregation prover")
+            })?;
+            let def_hook_proofs = def_agg_prover
+                .multi_deferral_circuit_prover
+                .prove(def_inputs)?;
+            let (def_proof, def_internal_recursive_layer) =
+                def_agg_prover.agg_prover.prove_def(def_hook_proofs)?;
+            stark_proof = self.agg_prover.prove_mixed(
+                stark_proof,
+                def_proof,
+                &mut internal_metadata,
+                def_internal_recursive_layer,
+            )?;
+        }
+
+        // We add one additional internal_recursive layer to reduce the proof size.
+        const ADDITIONAL_INTERNAL_RECURSIVE_LAYERS: usize = 1;
+        for _ in 0..ADDITIONAL_INTERNAL_RECURSIVE_LAYERS {
+            stark_proof = self
+                .agg_prover
+                .wrap_proof(stark_proof, &mut internal_metadata)?;
+        }
+
+        // Generate deferral merkle proofs if deferrals are enabled.
+        if has_deferrals {
             let hasher = vm_poseidon2_hasher();
             let final_memory = &self
                 .app_prover
@@ -110,24 +151,23 @@ where
                 .expect("final state should exist after proving")
                 .memory
                 .memory;
-            Some(MerkleTree::from_memory(
-                final_memory,
-                &memory_dimensions,
-                &hasher,
-            ))
-        } else {
-            None
-        };
+            let final_merkle_tree =
+                MerkleTree::from_memory(final_memory, &memory_dimensions, &hasher);
 
-        aggregate_app_proof(
-            &self.agg_prover,
-            &self.deferral_setup,
-            continuation_proof,
-            def_inputs,
-            memory_dimensions,
-            initial_merkle_tree.as_ref(),
-            final_merkle_tree.as_ref(),
-        )
+            let def_pvs: &DeferralPvs<F> = stark_proof.inner.public_values[DEF_PVS_AIR_ID]
+                .as_slice()
+                .borrow();
+            let depth = def_pvs.depth.as_canonical_u32() as usize;
+
+            stark_proof.deferral_merkle_proofs = Some(compute_deferral_merkle_proofs(
+                memory_dimensions,
+                initial_merkle_tree.as_ref().unwrap(),
+                &final_merkle_tree,
+                depth,
+            ));
+        }
+
+        Ok((stark_proof, internal_metadata))
     }
 
     pub fn generate_baseline(&self) -> VerificationBaseline {
@@ -155,61 +195,4 @@ where
     pub fn app_vm_commit(&self) -> Digest {
         self.agg_prover.vm_or_hook_commit()
     }
-}
-
-pub(crate) fn aggregate_app_proof(
-    agg_prover: &AggProver,
-    deferral_setup: &DeferralSetup,
-    continuation_proof: ContinuationVmProof<SC>,
-    def_inputs: &[DeferralInput],
-    memory_dimensions: MemoryDimensions,
-    initial_merkle_tree: Option<&MerkleTree<F, { VM_DIGEST_WIDTH }>>,
-    final_merkle_tree: Option<&MerkleTree<F, { VM_DIGEST_WIDTH }>>,
-) -> Result<(VmStarkProof, InternalLayerMetadata)> {
-    let mut result = agg_prover.prove_vm(continuation_proof)?;
-
-    // Skip aggregation unless some circuit received a deferred call. Note that
-    // deferrals are also skipped if def_inputs is an empty slice.
-    if def_inputs.iter().any(|input| !input.is_empty()) {
-        let def_agg_prover = deferral_setup.prover().ok_or_else(|| {
-            eyre::eyre!("non-empty deferral inputs require a deferral aggregation prover")
-        })?;
-        let def_hook_proofs = def_agg_prover
-            .multi_deferral_circuit_prover
-            .prove(def_inputs)?;
-        let (def_proof, def_internal_recursive_layer) =
-            def_agg_prover.agg_prover.prove_def(def_hook_proofs)?;
-        result.0 = agg_prover.prove_mixed(
-            result.0,
-            def_proof,
-            &mut result.1,
-            def_internal_recursive_layer,
-        )?;
-    }
-
-    // We add one additional internal_recursive layer to reduce the proof size.
-    const ADDITIONAL_INTERNAL_RECURSIVE_LAYERS: usize = 1;
-    for _ in 0..ADDITIONAL_INTERNAL_RECURSIVE_LAYERS {
-        result.0 = agg_prover.wrap_proof(result.0, &mut result.1)?;
-    }
-
-    if deferral_setup.hook_commit().is_some() {
-        let initial_merkle_tree = initial_merkle_tree.ok_or_else(|| {
-            eyre::eyre!("deferral-aware proof requires initial memory Merkle tree")
-        })?;
-        let final_merkle_tree = final_merkle_tree
-            .ok_or_else(|| eyre::eyre!("deferral-aware proof requires final memory Merkle tree"))?;
-        let def_pvs: &DeferralPvs<F> = result.0.inner.public_values[DEF_PVS_AIR_ID]
-            .as_slice()
-            .borrow();
-        let depth = def_pvs.depth.as_canonical_u32() as usize;
-        result.0.deferral_merkle_proofs = Some(compute_deferral_merkle_proofs(
-            memory_dimensions,
-            initial_merkle_tree,
-            final_merkle_tree,
-            depth,
-        ));
-    }
-
-    Ok(result)
 }

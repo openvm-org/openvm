@@ -31,8 +31,8 @@ use {
     openvm_circuit::{
         arch::{
             rvr::{
-                cuda::GpuRvrProgram, RvrPreflightEndpoint, RvrPreflightLimits,
-                RvrPreflightTranscript,
+                cuda::GpuRvrProgram, FullLogPreflightLimits, FullLogPreflightTranscript,
+                PreflightEndpoint,
             },
             MatrixRecordArena, VmExecutor,
         },
@@ -466,9 +466,9 @@ fn test_cuda_bitwise_logic_tracegen_from_rvr_transcript() {
     let memory_config = config.system.memory_config.clone();
     let execution = VmExecutor::new(config)
         .unwrap()
-        .rvr_preflight_instance(&exe, None)
+        .full_log_preflight_instance(&exe, None)
         .unwrap()
-        .execute(Vec::<Vec<u8>>::new(), RvrPreflightLimits::new(8, 21))
+        .execute(Vec::<Vec<u8>>::new(), FullLogPreflightLimits::new(8, 21))
         .unwrap();
 
     let mut tester =
@@ -526,14 +526,14 @@ fn test_cuda_bitwise_logic_tracegen_from_rvr_transcript() {
     let replay_range_counts = range_checker.count.to_host_on(device_ctx).unwrap();
     let replay_bitwise_counts = bitwise_lookup.count.to_host_on(device_ctx).unwrap();
 
-    let mut corrupt_transcript = RvrPreflightTranscript {
+    let mut corrupt_transcript = FullLogPreflightTranscript {
         program_log: execution.transcript.program_log.clone(),
         memory_log: execution.transcript.memory_log.clone(),
         initial_write_log: execution.transcript.initial_write_log.clone(),
     };
     corrupt_transcript.memory_log[2].value[0] ^= 1;
     let (d_corrupt, d_corrupt_plan) = d_program
-        .upload_transcript(&corrupt_transcript, RvrPreflightEndpoint::Terminated)
+        .upload_transcript(&corrupt_transcript, PreflightEndpoint::Terminated)
         .unwrap();
     let corrupt_chip = Rv64BitwiseLogicChipGpu::new(
         Arc::new(VariableRangeCheckerChipGPU::new(
@@ -551,7 +551,7 @@ fn test_cuda_bitwise_logic_tracegen_from_rvr_transcript() {
     // On the final rd == rs1 == rs2 row, alter only the second read and make the logged result
     // arithmetically consistent with it. Expected-result checking then passes, but predecessor
     // resolution must reject the second read because the first read is its immediate predecessor.
-    let mut alias_corrupt_transcript = RvrPreflightTranscript {
+    let mut alias_corrupt_transcript = FullLogPreflightTranscript {
         program_log: execution.transcript.program_log.clone(),
         memory_log: execution.transcript.memory_log.clone(),
         initial_write_log: execution.transcript.initial_write_log.clone(),
@@ -571,7 +571,7 @@ fn test_cuda_bitwise_logic_tracegen_from_rvr_transcript() {
         alias_corrupt_transcript.memory_log[write_index].value[limb] = result;
     }
     let (d_alias_corrupt, d_alias_corrupt_plan) = d_program
-        .upload_transcript(&alias_corrupt_transcript, RvrPreflightEndpoint::Terminated)
+        .upload_transcript(&alias_corrupt_transcript, PreflightEndpoint::Terminated)
         .unwrap();
     let alias_corrupt_chip = Rv64BitwiseLogicChipGpu::new(
         Arc::new(VariableRangeCheckerChipGPU::new(

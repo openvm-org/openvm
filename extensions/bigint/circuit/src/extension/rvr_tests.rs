@@ -1,6 +1,6 @@
 use openvm_bigint_transpiler::{Rv64BaseAlu256Opcode, Rv64BranchEqual256Opcode};
 use openvm_circuit::{
-    arch::{rvr::RvrCheckpointPreflightLimits, VmExecutor},
+    arch::{rvr::PreflightLimits, VmExecutor},
     utils::test_system_config,
 };
 use openvm_instructions::{
@@ -113,12 +113,10 @@ fn checkpoint_execution_preserves_int256_branch_outcomes() {
     };
     let executor = VmExecutor::new(config).unwrap();
     for (equal, expected_pc, expected_branch_residual) in [(false, 8, 0u64), (true, 12, 1u64)] {
-        let checkpoint = executor
-            .checkpoint_preflight_instance(&fixture(equal), None)
-            .unwrap();
+        let checkpoint = executor.preflight_instance(&fixture(equal), None).unwrap();
         let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
         let execution = checkpoint
-            .execute_from_state(state, RvrCheckpointPreflightLimits::new(3, 5, 1))
+            .execute_from_state(state, PreflightLimits::new(3, 5, 1))
             .unwrap();
         assert_eq!(execution.to_state.pc, expected_pc);
         assert_eq!(execution.to_state.timestamp, 26);

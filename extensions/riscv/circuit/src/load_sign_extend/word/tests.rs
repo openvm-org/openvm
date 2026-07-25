@@ -28,7 +28,7 @@ use {
     crate::Rv64IConfig,
     openvm_circuit::{
         arch::{
-            rvr::{cuda::GpuRvrProgram, RvrPreflightLimits},
+            rvr::{cuda::GpuRvrProgram, FullLogPreflightLimits},
             MatrixRecordArena, VmExecutor,
         },
         system::{
@@ -378,9 +378,9 @@ fn test_cuda_loadw_tracegen_from_rvr_transcript() {
     let memory_config = config.system.memory_config.clone();
     let execution = VmExecutor::new(config)
         .unwrap()
-        .rvr_preflight_instance(&exe, None)
+        .full_log_preflight_instance(&exe, None)
         .unwrap()
-        .execute(Vec::<Vec<u8>>::new(), RvrPreflightLimits::new(8, 24))
+        .execute(Vec::<Vec<u8>>::new(), FullLogPreflightLimits::new(8, 24))
         .unwrap();
 
     let mut tester =

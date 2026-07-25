@@ -28,8 +28,8 @@ use {
     openvm_circuit::{
         arch::{
             rvr::{
-                cuda::GpuRvrProgram, RvrPreflightEndpoint, RvrPreflightLimits,
-                RvrPreflightTranscript,
+                cuda::GpuRvrProgram, FullLogPreflightLimits, FullLogPreflightTranscript,
+                PreflightEndpoint,
             },
             MatrixRecordArena, VmExecutor,
         },
@@ -568,9 +568,9 @@ fn test_cuda_add_sub_w_tracegen_from_rvr_transcript() {
     let memory_config = config.system.memory_config.clone();
     let execution = VmExecutor::new(config)
         .unwrap()
-        .rvr_preflight_instance(&exe, None)
+        .full_log_preflight_instance(&exe, None)
         .unwrap()
-        .execute(Vec::<Vec<u8>>::new(), RvrPreflightLimits::new(8, 21))
+        .execute(Vec::<Vec<u8>>::new(), FullLogPreflightLimits::new(8, 21))
         .unwrap();
 
     let mut tester = GpuChipTestBuilder::default();
@@ -636,7 +636,7 @@ fn test_cuda_add_sub_w_tracegen_from_rvr_transcript() {
 
     // The first ADDW wraps to zero. Corrupt only its upper sign-extension limb so the low-word
     // arithmetic remains valid; replay must still reject the full-width register write.
-    let mut corrupt_transcript = RvrPreflightTranscript {
+    let mut corrupt_transcript = FullLogPreflightTranscript {
         program_log: execution.transcript.program_log.clone(),
         memory_log: execution.transcript.memory_log.clone(),
         initial_write_log: execution.transcript.initial_write_log.clone(),
@@ -649,7 +649,7 @@ fn test_cuda_add_sub_w_tracegen_from_rvr_transcript() {
         .unwrap();
     first_write.value[2] ^= 1;
     let (d_corrupt, d_corrupt_plan) = d_program
-        .upload_transcript(&corrupt_transcript, RvrPreflightEndpoint::Terminated)
+        .upload_transcript(&corrupt_transcript, PreflightEndpoint::Terminated)
         .unwrap();
     let corrupt_range_checker = Arc::new(
         openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU::new(
@@ -688,7 +688,7 @@ fn test_cuda_add_sub_w_tracegen_from_rvr_transcript() {
     // On the final rd == rs1 == rs2 row, alter only the second read and make the logged result
     // arithmetically consistent with it. Expected-result checking then passes, but predecessor
     // resolution must reject the second read because the first read is its immediate version.
-    let mut alias_corrupt_transcript = RvrPreflightTranscript {
+    let mut alias_corrupt_transcript = FullLogPreflightTranscript {
         program_log: execution.transcript.program_log.clone(),
         memory_log: execution.transcript.memory_log.clone(),
         initial_write_log: execution.transcript.initial_write_log.clone(),
@@ -715,7 +715,7 @@ fn test_cuda_add_sub_w_tracegen_from_rvr_transcript() {
         sign_extension,
     ];
     let (d_alias_corrupt, d_alias_corrupt_plan) = d_program
-        .upload_transcript(&alias_corrupt_transcript, RvrPreflightEndpoint::Terminated)
+        .upload_transcript(&alias_corrupt_transcript, PreflightEndpoint::Terminated)
         .unwrap();
     let alias_corrupt_range_checker = Arc::new(
         openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU::new(

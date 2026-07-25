@@ -41,7 +41,7 @@ use tiny_keccak::keccakf;
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
     openvm_circuit::arch::rvr::{
-        cuda::GpuRvrProgram, RvrPreflightEndpoint, RvrPreflightTranscript,
+        cuda::GpuRvrProgram, FullLogPreflightTranscript, PreflightEndpoint,
     },
     openvm_instructions::{program::Program, SystemOpcode},
     rvr_state::{
@@ -513,7 +513,7 @@ fn test_keccakf_rvr_replay_accepts_valid_transcript_and_rejects_corruption() {
             value: block(&postimage[i * 8..][..8]),
         });
     }
-    let transcript = RvrPreflightTranscript {
+    let transcript = FullLogPreflightTranscript {
         program_log: vec![
             PreflightProgramEvent {
                 pc: 0,
@@ -546,7 +546,7 @@ fn test_keccakf_rvr_replay_accepts_valid_transcript_and_rejects_corruption() {
     let device_ctx = &tester.range_checker().device_ctx;
     let gpu_program = GpuRvrProgram::upload(&program, &memory_config, device_ctx).unwrap();
     let (gpu_transcript, replay_plan) = gpu_program
-        .upload_transcript(&transcript, RvrPreflightEndpoint::Terminated)
+        .upload_transcript(&transcript, PreflightEndpoint::Terminated)
         .unwrap();
     let _op_ctx = op_chip
         .generate_proving_ctx_from_rvr(&gpu_program, &gpu_transcript, &replay_plan)
@@ -559,7 +559,7 @@ fn test_keccakf_rvr_replay_accepts_valid_transcript_and_rejects_corruption() {
     let mut corrupt = transcript;
     corrupt.memory_log[1].value[0] ^= 1;
     let (gpu_corrupt, corrupt_plan) = gpu_program
-        .upload_transcript(&corrupt, RvrPreflightEndpoint::Terminated)
+        .upload_transcript(&corrupt, PreflightEndpoint::Terminated)
         .unwrap();
     let corrupt_shared = Arc::new(Mutex::new(SharedKeccakfRecords::default()));
     let corrupt_chip = KeccakfOpChipGpu::new(

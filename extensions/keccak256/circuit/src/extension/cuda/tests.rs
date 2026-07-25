@@ -2,7 +2,7 @@ use openvm_circuit::{
     arch::{
         rvr::{
             cuda::{GpuRvrProgram, RvrCheckpointAccessRegistry, RvrCheckpointAccessSpan},
-            RvrCheckpointPreflightLimits, RvrPreflightEndpoint, RvrPreflightTranscript,
+            FullLogPreflightTranscript, PreflightEndpoint, PreflightLimits,
         },
         VirtualMachine, VmExecutor,
     },
@@ -148,7 +148,7 @@ fn checkpoint_replay_expands_keccak_schedules_and_rejects_missing_residuals() {
         ..Default::default()
     };
     let executor = VmExecutor::new(config.clone()).unwrap();
-    let checkpoint = executor.checkpoint_preflight_instance(&exe, None).unwrap();
+    let checkpoint = executor.preflight_instance(&exe, None).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, pk) =
         VirtualMachine::new_with_keygen(test_gpu_engine(), Keccak256Rv64GpuBuilder, config.clone())
@@ -157,10 +157,7 @@ fn checkpoint_replay_expands_keccak_schedules_and_rejects_missing_residuals() {
     vm.load_program(cached_program);
     vm.transport_init_memory_to_device(&state.memory);
     let mut execution = checkpoint
-        .execute_from_state(
-            state,
-            RvrCheckpointPreflightLimits::new(instructions.len(), 42, 1),
-        )
+        .execute_from_state(state, PreflightLimits::new(instructions.len(), 42, 1))
         .unwrap();
 
     // ADDI: one register read and one write. XORIN: 3 register reads +
@@ -289,7 +286,7 @@ fn checkpoint_replay_expands_keccak_schedules_and_rejects_missing_residuals() {
     }
     let invalid = checkpoint.execute_from_state(
         invalid_state,
-        RvrCheckpointPreflightLimits::new(instructions.len(), 26, 1),
+        PreflightLimits::new(instructions.len(), 26, 1),
     );
     assert!(
         invalid.is_err(),
@@ -322,15 +319,13 @@ fn checkpoint_replay_expands_keccak_schedules_and_rejects_missing_residuals() {
         })
         .collect();
     let zero_exe = VmExe::new(zero_program.clone()).with_init_memory(zero_memory);
-    let zero_checkpoint = executor
-        .checkpoint_preflight_instance(&zero_exe, None)
-        .unwrap();
+    let zero_checkpoint = executor.preflight_instance(&zero_exe, None).unwrap();
     let zero_state = zero_checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let zero_cached_program = vm.commit_program_on_device(&zero_program);
     vm.load_program(zero_cached_program);
     vm.transport_init_memory_to_device(&zero_state.memory);
     let zero_execution = zero_checkpoint
-        .execute_from_state(zero_state, RvrCheckpointPreflightLimits::new(2, 0, 1))
+        .execute_from_state(zero_state, PreflightLimits::new(2, 0, 1))
         .unwrap();
     assert_eq!(zero_execution.to_state.timestamp, 4);
     assert!(zero_execution.transcript.residuals.is_empty());
@@ -365,7 +360,7 @@ fn combined_keccak_coordinator_rejects_an_unclaimed_opcode() {
         Instruction::<F>::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0; 5]),
     ];
     let program = Program::from_instructions(&instructions);
-    let transcript = RvrPreflightTranscript {
+    let transcript = FullLogPreflightTranscript {
         program_log: vec![
             PreflightProgramEvent {
                 pc: 0,
@@ -388,7 +383,7 @@ fn combined_keccak_coordinator_rejects_an_unclaimed_opcode() {
     let device_ctx = &engine.device().device_ctx;
     let gpu_program = GpuRvrProgram::upload(&program, &memory_config, device_ctx).unwrap();
     let (gpu_transcript, replay_plan) = gpu_program
-        .upload_transcript(&transcript, RvrPreflightEndpoint::Terminated)
+        .upload_transcript(&transcript, PreflightEndpoint::Terminated)
         .unwrap();
     let claimed = [
         XorinOpcode::XORIN.global_opcode().as_usize() as u32,

@@ -1,19 +1,19 @@
-# RVR checkpoint preflight
+# Compiled preflight and record-free trace generation
 
 This document describes the current design. The original problem statement and
 review context are preserved in [`context.md`](context.md).
 
 ## Objective
 
-Execution should be owned by opcodes, not by trace-generating chips. Preflight
-therefore runs the same compiled RVR instruction semantics as ordinary
-execution. Its extra job is narrowly defined:
+Execution should be owned by opcodes, not by trace-generating chips. With the
+`rvr` feature, preflight runs the same compiled instruction semantics as
+ordinary execution. Its extra job is narrowly defined:
 
 > Convert serial execution over mutable random-access memory into the smallest
 > replay seed from which the GPU can derive an immutable execution history.
 
 Trace generation re-executes from that history. It does not consume chip-shaped
-execution records, and the active checkpoint proving path does not construct a
+execution records, and the active proving path does not construct a
 `RecordArena`.
 
 ## Three execution modes
@@ -30,19 +30,18 @@ metered
     program + mutable VM state
         -> final VM state + per-AIR segment plan + replay-size bounds
 
-checkpoint preflight
+preflight
     program + mutable VM state
         -> final VM state + checkpoints + ordered residuals
 ```
 
 Pure execution is the performance floor. Metering still tracks the AIR height
 and touched-memory constraints needed to choose valid segment boundaries.
-Checkpoint preflight executes one exact metered segment and produces the compact
-input for proving it.
+Preflight executes one metered segment and produces the compact input for
+proving it.
 
-Metering and checkpoint preflight stop only at RVR basic-block boundaries. The
-production continuation entry point requires the checkpoint executor to retire
-the exact instruction count selected by metering; an early termination,
+Metering and preflight stop only at compiled basic-block boundaries. Preflight
+must retire the instruction count selected by metering; an early termination,
 over-retirement, or wrong suspended endpoint is an error.
 
 ## Pipeline
@@ -53,7 +52,7 @@ over-retirement, or wrong suspended endpoint is an error.
  program + segment-start state
               |
               v
-       compiled RVR execution
+       compiled preflight execution
               |
               +----> final VM state
               |
@@ -85,31 +84,30 @@ The first GPU pass is sometimes called expansion or postflight. It is not a
 second authoritative record format. It is a derived, device-resident view whose
 lifetime ends before the proving/GKR memory peak.
 
-### Prepared prover lifecycle
+### Fixed-program preparation
 
 Generated executors and immutable program data belong to the fixed program, not
-to one proof input. The SDK therefore exposes an explicit prepared checkpoint
-prover:
+to one proof input. Under `cuda + rvr`, the ordinary `app_prover`, `prover`,
+`prove-app`, and `prove-stark` APIs prepare them automatically:
 
 ```text
-prepare once
+construct ordinary app prover
     compile metered executor
-    compile checkpoint executor
+    compile preflight executor
     upload immutable replay program
              |
              v
 prove(input) repeatedly
-    metered execution -> checkpoint execution -> GPU replay -> prove
+    metered execution -> preflight execution -> postflight -> tracegen -> prove
 ```
 
 Preparation and proof execution have separate metric scopes. A warm proof does
-not compile generated C or upload the program again. The prepared prover borrows
-the SDK's existing executor, following the same ownership model as the compiled
-pure and metered SDK executors; it does not add a generic artifact framework or
-store proof records. The caller names the ordinary app prover before preparing
-it, so setup and proof metrics share the same low-cardinality app group.
+not compile generated C or upload the program again. `AppProver` retains the
+compiled metered and preflight execution instances and the immutable GPU
+program; there is no second public prover type, execution mode, artifact
+framework, or proof-record store.
 
-Successful proofs and failures before an RVR trace-generation session begins
+Successful proofs and failures before a trace-generation session begins
 leave the prepared prover reusable. A failure while that session is active is
 terminal: producer lookup counts are not transactional, so the VM remains
 poisoned and retries fail closed rather than proving from partially mutated
@@ -117,7 +115,7 @@ state. The caller must prepare a new prover after such an error.
 
 ## Authoritative serial output
 
-One successful checkpoint execution returns:
+One successful preflight execution returns:
 
 ```text
 checkpoints:
@@ -348,7 +346,7 @@ pointer, timestamp, cursor, opcode, canonical value, or unsupported schedule.
 Metering selects segment boundaries. For each segment the proving coordinator:
 
 1. uploads the immutable segment-start memory image before execution mutates it;
-2. executes checkpoint preflight to the exact metered boundary;
+2. executes preflight to the metered boundary;
 3. expands checkpoints and residuals on the GPU;
 4. generates all system and extension traces from the derived history;
 5. synchronizes and releases transcript, chronology, sort, and replay-index
@@ -368,7 +366,7 @@ completed memory top tree.
 
 ## RecordArena boundary
 
-The active RVR checkpoint executor, GPU expansion, standard SDK GPU tracegen,
+The active compiled preflight executor, GPU expansion, standard SDK GPU tracegen,
 and continuation proving path do not construct a `RecordArena`.
 
 The direct full-log RVR preflight executor remains available as a correctness
@@ -378,9 +376,9 @@ its integration callers have an appropriate feature boundary; deleting its
 coverage or routing production through it would be a regression.
 
 `RecordArena` still exists for legacy interpreter preflight, legacy/default GPU
-builders, CPU trace generation, and tests that have not moved to checkpoint
+builders, CPU trace generation, and tests that have not moved to read-only
 replay. Removing it from those APIs is a separate repository-wide migration.
-The checkpoint path must not reintroduce a record adapter merely to make that
+The compiled path must not reintroduce a record adapter merely to make that
 cleanup look complete.
 
 ## Current implementation status
@@ -404,7 +402,7 @@ The clean exact-source standalone execution comparison reports:
 mode        median execution   generated-C compilation
 pure          738.586 ms              87.004 s
 metered      1390.368 ms             153.896 s
-checkpoint   1369.164 ms             145.622 s
+preflight   1369.164 ms             145.622 s
 ```
 
 All three modes retired 501,243,291 guest instructions and passed the exact
@@ -420,9 +418,9 @@ during trace generation versus 1.5 GiB during proving, and BLS12-381 used about
 560 MiB versus 2.2 GiB. These small tests validate lifetimes but do not replace
 the full-workload GPU-memory gate.
 
-The exact-source legacy and prepared-checkpoint Reth proofs used the same
+The exact-source legacy and compiled-preflight Reth proofs used the same
 release binary, input, 15 GiB segmentation estimate, and PID-scoped 0.2-second
-GPU sampler. The prepared checkpoint proof verified all 55 segments and the
+GPU sampler. The compiled preflight proof verified all 55 segments and the
 expected output:
 
 ```text
@@ -434,7 +432,7 @@ input SHA-256 97097c091120b2c09657917d4d3b95c61ec2e3dd25b3b210414f087d80c5a898
 ```
 
 ```text
-phase                               legacy records   prepared checkpoint
+phase                               legacy records   compiled preflight
 guest instructions / segments      501,246,918 / 55   501,246,918 / 55
 one-time executor preparation          133.576 s          278.097 s
 reusable app proof                     103.075 s           68.695 s
@@ -446,10 +444,10 @@ proving excluding tracegen              62.605 s           58.046 s
 sum of the timed phases above          100.661 s           66.519 s
 warm process wall                      122.714 s           84.976 s
 
-checkpoint expansion allocation peak                      2.518 GiB
-checkpoint tracegen allocation peak                       5.907 GiB
+postflight allocation peak                                2.518 GiB
+preflight tracegen allocation peak                        5.907 GiB
 legacy proving allocation peak          15.069 GiB
-checkpoint proving allocation peak                         15.077 GiB
+compiled proving allocation peak                          15.077 GiB
 PID-scoped process peak                 16,428 MiB       16,440 MiB
 PID-scoped process peak delta                                +12 MiB
 ```
@@ -467,7 +465,7 @@ remained in proving rather than moving to expansion or trace generation. The
 allocator's proving peak increased by about 8 MiB. Both paths exceed a strict
 15.0 GiB process cap because the 15 GiB segmentation value estimates proof
 buffers rather than the CUDA context and allocator pool. Packing that requires
-a lower segmentation limit, but checkpoint replay is not responsible for the
+a lower segmentation limit, but postflight replay is not responsible for the
 existing proving peak.
 
 The definitive prepared run verified every segment, endpoint continuity, the
@@ -475,7 +473,7 @@ final public-values Merkle proof, and the output
 `b0c6920a15b5f11db176fcd1b22754fe845f9f5b24a245f1c67b997f353f3878`
 followed by the expected zero half. The preparation and proof spans were
 siblings: `compile_metered` took 133.412 seconds,
-`compile_checkpoint_preflight` took 144.583 seconds, immutable program upload
+`compile_preflight` took 144.583 seconds, immutable program upload
 took 50 milliseconds, and no compilation or upload occurred inside the
 68.695-second app-proof span. The checkpoint transcript contained 962,366
 checkpoints and 129,268,505 residual words, or 1,288,212,664 logical payload
@@ -485,7 +483,7 @@ One-time compilation remains an optimization target, not a proof-time cost.
 The clean host release build used the repository's existing fat-LTO profile and
 took 5 minutes after the independently built guest. Generated executors use
 thin LTO. The exact standalone comparison above remains the like-for-like
-compile-time gate for pure, metered, and checkpoint execution.
+compile-time gate for pure, metered, and preflight execution.
 
 ## Follow-up work
 
@@ -495,7 +493,7 @@ compile-time gate for pure, metered, and checkpoint execution.
    closed-interval count overlap only if the whole Reth proof improves without
    increasing expansion or tracegen peak GPU memory.
 3. Decide separately whether legacy CPU/interpreter support is migrated far
-   enough to remove `RecordArena` from shared builder traits. The prepared RVR
+   enough to remove `RecordArena` from shared builder traits. The compiled
    proving path already avoids it.
 
 ## Performance and maintainability gates
@@ -549,7 +547,7 @@ weakening the execution contract or extending the serial transcript. In
 particular:
 
 - no per-chip buffers or proof-shaped metadata on the serial hot path;
-- no compatibility records in the active checkpoint path;
+- no compatibility records in the active preflight path;
 - no unbounded tracegen scratch allocation;
 - no retained replay allocation at the proving peak;
 - no large generic framework whose only purpose is hiding concrete AIR logic;

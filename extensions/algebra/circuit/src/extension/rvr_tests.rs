@@ -5,7 +5,7 @@ use openvm_algebra_transpiler::Rv64ModularArithmeticOpcode;
 #[cfg(feature = "cuda")]
 use openvm_circuit::utils::test_gpu_engine;
 use openvm_circuit::{
-    arch::{rvr::RvrCheckpointPreflightLimits, VirtualMachine, VmExecutor},
+    arch::{rvr::PreflightLimits, VirtualMachine, VmExecutor},
     utils::{test_cpu_engine, test_system_config},
 };
 use openvm_circuit_primitives::bigint::utils::secp256k1_coord_prime;
@@ -305,7 +305,7 @@ fn prove_field_expr_checkpoint_replay(modulus: BigUint) {
     let (program, exe) = field_expr_fixture(&modulus);
     let config = field_expr_config(modulus);
     let executor = VmExecutor::new(config.clone()).unwrap();
-    let checkpoint = executor.checkpoint_preflight_instance(&exe, None).unwrap();
+    let checkpoint = executor.preflight_instance(&exe, None).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, pk) = VirtualMachine::new_with_keygen(
         test_gpu_engine(),
@@ -317,7 +317,7 @@ fn prove_field_expr_checkpoint_replay(modulus: BigUint) {
     vm.load_program(cached_program);
     vm.transport_init_memory_to_device(&state.memory);
     let execution = checkpoint
-        .execute_from_state(state, RvrCheckpointPreflightLimits::new(10, 256, 1))
+        .execute_from_state(state, PreflightLimits::new(10, 256, 1))
         .unwrap();
     assert_eq!(execution.retired, 10);
 
@@ -370,10 +370,10 @@ fn prove_field_expr_checkpoint_replay(modulus: BigUint) {
 fn modular_checkpoint_executor_records_only_irreducible_results() {
     let (_, exe) = fixture();
     let executor = VmExecutor::new(config()).unwrap();
-    let checkpoint = executor.checkpoint_preflight_instance(&exe, None).unwrap();
+    let checkpoint = executor.preflight_instance(&exe, None).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let execution = checkpoint
-        .execute_from_state(state, RvrCheckpointPreflightLimits::new(5, 5, 1))
+        .execute_from_state(state, PreflightLimits::new(5, 5, 1))
         .unwrap();
 
     // SETUP_ADDSUB and SETUP_ISEQ are derivable without residuals. ADD needs
@@ -425,7 +425,7 @@ fn modular_is_equal_rejects_x0_destination_before_execution() {
         let exe = VmExe::new(program);
         let executor = VmExecutor::new(config()).unwrap();
         assert!(executor.interpreter_instance(&exe).is_err());
-        assert!(executor.checkpoint_preflight_instance(&exe, None).is_err());
+        assert!(executor.preflight_instance(&exe, None).is_err());
     }
 }
 
@@ -466,7 +466,7 @@ fn modular_checkpoint_expansion_proves_without_records() {
     let (program, exe) = fixture();
     let config = config();
     let executor = VmExecutor::new(config.clone()).unwrap();
-    let checkpoint = executor.checkpoint_preflight_instance(&exe, None).unwrap();
+    let checkpoint = executor.preflight_instance(&exe, None).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, pk) = VirtualMachine::new_with_keygen(
         test_gpu_engine(),
@@ -478,7 +478,7 @@ fn modular_checkpoint_expansion_proves_without_records() {
     vm.load_program(cached_program);
     vm.transport_init_memory_to_device(&state.memory);
     let mut execution = checkpoint
-        .execute_from_state(state, RvrCheckpointPreflightLimits::new(5, 5, 1))
+        .execute_from_state(state, PreflightLimits::new(5, 5, 1))
         .unwrap();
     assert_eq!(execution.retired, 5);
     assert_eq!(execution.to_state.timestamp, 53);

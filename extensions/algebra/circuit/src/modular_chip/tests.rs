@@ -76,7 +76,7 @@ fn reset_gpu_initial_memory(tester: &mut GpuChipTestBuilder) {
 mod addsub_tests {
     #[cfg(all(feature = "cuda", feature = "rvr"))]
     use openvm_circuit::arch::{
-        rvr::{cuda::GpuRvrProgram, RvrPreflightEndpoint, RvrPreflightTranscript},
+        rvr::{cuda::GpuRvrProgram, FullLogPreflightTranscript, PreflightEndpoint},
         DenseRecordArena,
     };
     #[cfg(all(feature = "cuda", feature = "rvr"))]
@@ -568,7 +568,7 @@ mod addsub_tests {
                 value: std::array::from_fn(|limb| result_cells[block * 4 + limb]),
             });
         }
-        let transcript = RvrPreflightTranscript {
+        let transcript = FullLogPreflightTranscript {
             program_log: vec![
                 PreflightProgramEvent {
                     pc: 0,
@@ -595,7 +595,7 @@ mod addsub_tests {
         let memory_config = openvm_circuit::arch::MemoryConfig::default();
         let gpu_program = GpuRvrProgram::upload(&program, &memory_config, device_ctx).unwrap();
         let (gpu_transcript, replay_plan) = gpu_program
-            .upload_transcript(&transcript, RvrPreflightEndpoint::Terminated)
+            .upload_transcript(&transcript, PreflightEndpoint::Terminated)
             .unwrap();
         let gpu_counts_before = tester.range_checker().count.to_host_on(device_ctx).unwrap();
         let replay_ctx = harness
@@ -626,7 +626,7 @@ mod addsub_tests {
         let mut corrupt = transcript;
         corrupt.memory_log.last_mut().unwrap().value[0] ^= 1;
         let (gpu_corrupt, corrupt_plan) = gpu_program
-            .upload_transcript(&corrupt, RvrPreflightEndpoint::Terminated)
+            .upload_transcript(&corrupt, PreflightEndpoint::Terminated)
             .unwrap();
         assert!(harness
             .gpu_chip
@@ -1035,7 +1035,7 @@ mod is_equal_tests {
     #[cfg(all(feature = "cuda", feature = "rvr"))]
     use {
         openvm_circuit::arch::rvr::{
-            cuda::GpuRvrProgram, RvrPreflightEndpoint, RvrPreflightTranscript,
+            cuda::GpuRvrProgram, FullLogPreflightTranscript, PreflightEndpoint,
         },
         openvm_instructions::{program::Program, SystemOpcode},
         rvr_state::{
@@ -1497,7 +1497,7 @@ mod is_equal_tests {
             pointer: is_eq_rd as u32 / 2,
             value: [1, 0, 0, 0],
         });
-        let transcript = RvrPreflightTranscript {
+        let transcript = FullLogPreflightTranscript {
             program_log: vec![
                 PreflightProgramEvent {
                     pc: 0,
@@ -1535,7 +1535,7 @@ mod is_equal_tests {
         let device_ctx = &tester.range_checker().device_ctx;
         let gpu_program = GpuRvrProgram::upload(&program, &memory_config, device_ctx).unwrap();
         let (gpu_transcript, replay_plan) = gpu_program
-            .upload_transcript(&transcript, RvrPreflightEndpoint::Terminated)
+            .upload_transcript(&transcript, PreflightEndpoint::Terminated)
             .unwrap();
         let replay_ctx = harness
             .gpu_chip
@@ -1547,7 +1547,7 @@ mod is_equal_tests {
         let mut corrupt = transcript;
         corrupt.memory_log[1 + first_delta as usize].value[0] |= 1;
         let (gpu_corrupt, corrupt_plan) = gpu_program
-            .upload_transcript(&corrupt, RvrPreflightEndpoint::Terminated)
+            .upload_transcript(&corrupt, PreflightEndpoint::Terminated)
             .unwrap();
         assert!(harness
             .gpu_chip

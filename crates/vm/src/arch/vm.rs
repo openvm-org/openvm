@@ -51,11 +51,11 @@ use tracing::{info_span, instrument};
 use super::rvr::cuda::GpuRvrReplayPlan;
 #[cfg(feature = "rvr")]
 use super::rvr::{
-    bridge::map_rvr_compile_error, build_pc_to_chip, compile, compile_checkpoint_preflight,
+    bridge::map_rvr_compile_error, build_pc_to_chip, compile, compile_full_log_preflight,
     compile_metered, compile_metered_cost, compile_metered_segment_boundary, compile_preflight,
-    compile_with_instret_tracking, load_compiled_from_path, ChipMapping, GuestDebugMap,
-    RvrCheckpointPreflightInstance, RvrExecutionKind, RvrInitialImage, RvrMeteredCostInstance,
-    RvrMeteredInstance, RvrMeteredSegmentInstance, RvrPreflightInstance, RvrPureInstance,
+    compile_with_instret_tracking, load_compiled_from_path, ChipMapping, FullLogPreflightInstance,
+    GuestDebugMap, PreflightInstance, RvrExecutionKind, RvrInitialImage, RvrMeteredCostInstance,
+    RvrMeteredInstance, RvrMeteredSegmentInstance, RvrPureInstance,
     RvrPureWithInstretTrackingInstance,
 };
 use super::{
@@ -321,19 +321,20 @@ where
     ///
     /// This path supports differential testing and direct transcript
     /// validation. Production checkpoint proving uses
-    /// [`Self::checkpoint_preflight_instance`] and derives the full logs
+    /// [`Self::preflight_instance`] and derives the full logs
     /// by GPU replay.
-    pub fn rvr_preflight_instance(
+    pub fn full_log_preflight_instance(
         &self,
         exe: &VmExe<F>,
         guest_debug_map: Option<&GuestDebugMap>,
-    ) -> Result<RvrPreflightInstance<'_>, StaticProgramError> {
+    ) -> Result<FullLogPreflightInstance<'_>, StaticProgramError> {
         #[cfg(feature = "metrics")]
-        let _compilation_span = tracing::info_span!("compile_preflight", backend = "rvr").entered();
+        let _compilation_span =
+            tracing::info_span!("compile_preflight", backend = "full_log").entered();
         let extensions = self.build_rvr_extensions(None);
-        let compiled = compile_preflight(exe, extensions.lifters(), guest_debug_map)
+        let compiled = compile_full_log_preflight(exe, extensions.lifters(), guest_debug_map)
             .map_err(map_rvr_compile_error)?;
-        Ok(RvrPreflightInstance::new(
+        Ok(FullLogPreflightInstance::new(
             self.inventory.config(),
             RvrInitialImage::from(exe),
             compiled,
@@ -344,17 +345,17 @@ where
     /// Compile the compact checkpoint-and-residual preflight executor.
     ///
     /// The compact transcript is the serial input to record-free GPU replay.
-    pub fn checkpoint_preflight_instance(
+    pub fn preflight_instance(
         &self,
         exe: &VmExe<F>,
         guest_debug_map: Option<&GuestDebugMap>,
-    ) -> Result<RvrCheckpointPreflightInstance<'_>, StaticProgramError> {
+    ) -> Result<PreflightInstance<'_>, StaticProgramError> {
         #[cfg(feature = "metrics")]
         let _compilation_span = tracing::info_span!("compile_preflight", backend = "rvr").entered();
         let extensions = self.build_rvr_extensions(None);
-        let compiled = compile_checkpoint_preflight(exe, extensions.lifters(), guest_debug_map)
+        let compiled = compile_preflight(exe, extensions.lifters(), guest_debug_map)
             .map_err(map_rvr_compile_error)?;
-        Ok(RvrCheckpointPreflightInstance::new(
+        Ok(PreflightInstance::new(
             self.inventory.config(),
             RvrInitialImage::from(exe),
             compiled,
@@ -1482,7 +1483,7 @@ where
     pub fn postflight(
         &self,
         program: &crate::arch::rvr::cuda::GpuRvrProgram,
-        execution: &crate::arch::rvr::RvrCheckpointPreflightExecution,
+        execution: &crate::arch::rvr::PreflightExecution,
         expected_retired: u32,
         opcodes: crate::arch::rvr::cuda::RvrCheckpointOpcodeBases,
     ) -> Result<

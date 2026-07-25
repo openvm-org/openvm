@@ -10,7 +10,7 @@ mod tests {
     use num_bigint::BigUint;
     use openvm_algebra_transpiler::ModularTranspilerExtension;
     #[cfg(feature = "rvr")]
-    use openvm_circuit::arch::{rvr::RvrCheckpointPreflightLimits, ExecutionError, VmExecutor};
+    use openvm_circuit::arch::{rvr::PreflightLimits, ExecutionError, VmExecutor};
     use openvm_circuit::{
         arch::instructions::exe::VmExe,
         utils::{air_test, air_test_with_min_segments, test_system_config},
@@ -295,14 +295,9 @@ mod tests {
         // The checkpoint API owns its input state and returns neither an execution object nor a
         // transcript on failure. This exercises that public failure boundary with the same invalid
         // setup program. Dirty-page state is intentionally private and cannot be observed after the
-        // consumed state returns `Err`; `execute_checkpoint_preflight` merges it only on success.
-        let checkpoint = executor
-            .checkpoint_preflight_instance(&openvm_exe, None)
-            .unwrap();
-        let result = checkpoint.execute(
-            vec![],
-            RvrCheckpointPreflightLimits::new(1_000_000, 1024, 1024),
-        );
+        // Consumed state returns `Err`; preflight merges it only on success.
+        let checkpoint = executor.preflight_instance(&openvm_exe, None).unwrap();
+        let result = checkpoint.execute(vec![], PreflightLimits::new(1_000_000, 1024, 1024));
         match result {
             Err(ExecutionError::RvrExecution(message)) => {
                 assert_eq!(message, "execution returned error code: 3");

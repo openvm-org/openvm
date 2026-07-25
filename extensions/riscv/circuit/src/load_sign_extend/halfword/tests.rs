@@ -29,8 +29,8 @@ use {
     openvm_circuit::{
         arch::{
             rvr::{
-                cuda::GpuRvrProgram, RvrPreflightEndpoint, RvrPreflightLimits,
-                RvrPreflightTranscript,
+                cuda::GpuRvrProgram, FullLogPreflightLimits, FullLogPreflightTranscript,
+                PreflightEndpoint,
             },
             MatrixRecordArena, VmExecutor,
         },
@@ -370,9 +370,9 @@ fn test_cuda_loadh_tracegen_from_rvr_transcript() {
     let memory_config = config.system.memory_config.clone();
     let execution = VmExecutor::new(config)
         .unwrap()
-        .rvr_preflight_instance(&exe, None)
+        .full_log_preflight_instance(&exe, None)
         .unwrap()
-        .execute(Vec::<Vec<u8>>::new(), RvrPreflightLimits::new(16, 48))
+        .execute(Vec::<Vec<u8>>::new(), FullLogPreflightLimits::new(16, 48))
         .unwrap();
 
     let mut tester =
@@ -469,14 +469,14 @@ fn test_cuda_loadh_tracegen_from_rvr_transcript() {
         ..Default::default()
     })
     .unwrap()
-    .rvr_preflight_instance(
+    .full_log_preflight_instance(
         &VmExe::new(single_program.clone()).with_init_memory(init_memory),
         None,
     )
     .unwrap()
-    .execute(Vec::<Vec<u8>>::new(), RvrPreflightLimits::new(4, 8))
+    .execute(Vec::<Vec<u8>>::new(), FullLogPreflightLimits::new(4, 8))
     .unwrap();
-    let mut corrupt_result = RvrPreflightTranscript {
+    let mut corrupt_result = FullLogPreflightTranscript {
         program_log: single_execution.transcript.program_log.clone(),
         memory_log: single_execution.transcript.memory_log.clone(),
         initial_write_log: single_execution.transcript.initial_write_log.clone(),
@@ -491,7 +491,7 @@ fn test_cuda_loadh_tracegen_from_rvr_transcript() {
     let d_single_program =
         GpuRvrProgram::upload(&single_program, &memory_config, &device_ctx).unwrap();
     let (d_corrupt, d_corrupt_plan) = d_single_program
-        .upload_transcript(&corrupt_result, RvrPreflightEndpoint::Terminated)
+        .upload_transcript(&corrupt_result, PreflightEndpoint::Terminated)
         .unwrap();
     let corrupt_range = Arc::new(VariableRangeCheckerChipGPU::new(
         openvm_circuit::arch::testing::default_var_range_checker_bus(),

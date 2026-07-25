@@ -33,8 +33,8 @@ use {
     openvm_circuit::{
         arch::{
             rvr::{
-                cuda::GpuRvrProgram, RvrPreflightEndpoint, RvrPreflightLimits,
-                RvrPreflightTranscript,
+                cuda::GpuRvrProgram, FullLogPreflightLimits, FullLogPreflightTranscript,
+                PreflightEndpoint,
             },
             MatrixRecordArena, VmExecutor,
         },
@@ -740,9 +740,9 @@ fn test_cuda_jalr_tracegen_from_rvr_transcript() {
     let memory_config = config.system.memory_config.clone();
     let execution = VmExecutor::new(config.clone())
         .unwrap()
-        .rvr_preflight_instance(&exe, None)
+        .full_log_preflight_instance(&exe, None)
         .unwrap()
-        .execute(Vec::<Vec<u8>>::new(), RvrPreflightLimits::new(8, 16))
+        .execute(Vec::<Vec<u8>>::new(), FullLogPreflightLimits::new(8, 16))
         .unwrap();
 
     let mut tester = GpuChipTestBuilder::default();
@@ -799,7 +799,7 @@ fn test_cuda_jalr_tracegen_from_rvr_transcript() {
     assert_eq!(replay_counts.iter().map(raw_count).sum::<u32>(), 6 * 8 + 6);
 
     let run_corrupt = |corrupt_program: &Program<F>,
-                       transcript: RvrPreflightTranscript,
+                       transcript: FullLogPreflightTranscript,
                        expected_error: u32,
                        expected_lookup_count: u32| {
         let corrupt_range_checker = Arc::new(
@@ -811,7 +811,7 @@ fn test_cuda_jalr_tracegen_from_rvr_transcript() {
         let d_corrupt_program =
             GpuRvrProgram::upload(corrupt_program, &memory_config, device_ctx).unwrap();
         let (d_corrupt, d_corrupt_plan) = d_corrupt_program
-            .upload_transcript(&transcript, RvrPreflightEndpoint::Terminated)
+            .upload_transcript(&transcript, PreflightEndpoint::Terminated)
             .unwrap();
         Rv64JalrChipGpu::new(corrupt_range_checker.clone(), tester.timestamp_max_bits())
             .generate_proving_ctx_from_rvr(&d_corrupt_program, &d_corrupt, &d_corrupt_plan)
@@ -829,7 +829,7 @@ fn test_cuda_jalr_tracegen_from_rvr_transcript() {
             "a rejected row must not update the shared lookup histogram"
         );
     };
-    let transcript = || RvrPreflightTranscript {
+    let transcript = || FullLogPreflightTranscript {
         program_log: execution.transcript.program_log.clone(),
         memory_log: execution.transcript.memory_log.clone(),
         initial_write_log: execution.transcript.initial_write_log.clone(),
@@ -888,12 +888,12 @@ fn test_cuda_jalr_tracegen_from_rvr_transcript() {
         0,
         0,
     ];
-    let boundary_transcript = RvrPreflightTranscript {
+    let boundary_transcript = FullLogPreflightTranscript {
         program_log: vec![boundary_from, boundary_to],
         memory_log: vec![boundary_read],
         initial_write_log: Vec::new(),
     };
-    let boundary_endpoint = RvrPreflightEndpoint::Suspended {
+    let boundary_endpoint = PreflightEndpoint::Suspended {
         resume_pc: boundary_pc,
         final_timestamp: boundary_to.timestamp,
     };
@@ -940,11 +940,11 @@ fn test_cuda_jalr_tracegen_from_rvr_transcript() {
     let predecessor_program = Program::from_instructions(&predecessor_instructions);
     let predecessor_execution = VmExecutor::new(config)
         .unwrap()
-        .rvr_preflight_instance(&VmExe::new(predecessor_program.clone()), None)
+        .full_log_preflight_instance(&VmExe::new(predecessor_program.clone()), None)
         .unwrap()
-        .execute(Vec::<Vec<u8>>::new(), RvrPreflightLimits::new(3, 4))
+        .execute(Vec::<Vec<u8>>::new(), FullLogPreflightLimits::new(3, 4))
         .unwrap();
-    let mut predecessor_corrupt = RvrPreflightTranscript {
+    let mut predecessor_corrupt = FullLogPreflightTranscript {
         program_log: predecessor_execution.transcript.program_log,
         memory_log: predecessor_execution.transcript.memory_log,
         initial_write_log: predecessor_execution.transcript.initial_write_log,

@@ -35,8 +35,8 @@ use {
     openvm_circuit::{
         arch::{
             rvr::{
-                cuda::GpuRvrProgram, RvrPreflightEndpoint, RvrPreflightLimits,
-                RvrPreflightTranscript,
+                cuda::GpuRvrProgram, FullLogPreflightLimits, FullLogPreflightTranscript,
+                PreflightEndpoint,
             },
             testing::default_var_range_checker_bus,
             MatrixRecordArena, VmExecutor,
@@ -607,9 +607,9 @@ fn test_cuda_auipc_tracegen_from_rvr_transcript() {
     let memory_config = config.system.memory_config.clone();
     let execution = VmExecutor::new(config.clone())
         .unwrap()
-        .rvr_preflight_instance(&exe, None)
+        .full_log_preflight_instance(&exe, None)
         .unwrap()
-        .execute(Vec::<Vec<u8>>::new(), RvrPreflightLimits::new(16, 16))
+        .execute(Vec::<Vec<u8>>::new(), FullLogPreflightLimits::new(16, 16))
         .unwrap();
 
     // The first result is 0x8000_0000 with zero upper limbs. It must not be
@@ -677,8 +677,8 @@ fn test_cuda_auipc_tracegen_from_rvr_transcript() {
     assert_eq!(replay_counts.iter().map(raw_count).sum::<u32>(), 7 * 9);
 
     let run_corrupt = |corrupt_program: &Program<F>,
-                       transcript: RvrPreflightTranscript,
-                       endpoint: RvrPreflightEndpoint,
+                       transcript: FullLogPreflightTranscript,
+                       endpoint: PreflightEndpoint,
                        expected_error: u32,
                        expected_lookup_count: u32| {
         let corrupt_range_checker = Arc::new(
@@ -708,7 +708,7 @@ fn test_cuda_auipc_tracegen_from_rvr_transcript() {
             "a rejected row must not update the shared lookup histogram"
         );
     };
-    let transcript = || RvrPreflightTranscript {
+    let transcript = || FullLogPreflightTranscript {
         program_log: execution.transcript.program_log.clone(),
         memory_log: execution.transcript.memory_log.clone(),
         initial_write_log: execution.transcript.initial_write_log.clone(),
@@ -719,7 +719,7 @@ fn test_cuda_auipc_tracegen_from_rvr_transcript() {
     run_corrupt(
         &program,
         result_corrupt,
-        RvrPreflightEndpoint::Terminated,
+        PreflightEndpoint::Terminated,
         197,
         6 * 9,
     );
@@ -729,7 +729,7 @@ fn test_cuda_auipc_tracegen_from_rvr_transcript() {
     run_corrupt(
         &Program::new_without_debug_infos(&bound_instructions, pc_base),
         transcript(),
-        RvrPreflightEndpoint::Terminated,
+        PreflightEndpoint::Terminated,
         194,
         6 * 9,
     );
@@ -739,7 +739,7 @@ fn test_cuda_auipc_tracegen_from_rvr_transcript() {
     run_corrupt(
         &Program::new_without_debug_infos(&x0_instructions, pc_base),
         transcript(),
-        RvrPreflightEndpoint::Terminated,
+        PreflightEndpoint::Terminated,
         194,
         6 * 9,
     );
@@ -753,7 +753,7 @@ fn test_cuda_auipc_tracegen_from_rvr_transcript() {
     let mut boundary_write = execution.transcript.memory_log[0];
     boundary_write.timestamp = boundary_from.timestamp;
     boundary_write.value = [0, 0, 0, 0];
-    let boundary_transcript = RvrPreflightTranscript {
+    let boundary_transcript = FullLogPreflightTranscript {
         program_log: vec![boundary_from, boundary_to],
         memory_log: vec![boundary_write],
         initial_write_log: execution.transcript.initial_write_log[..1].to_vec(),
@@ -761,7 +761,7 @@ fn test_cuda_auipc_tracegen_from_rvr_transcript() {
     run_corrupt(
         &boundary_program,
         boundary_transcript,
-        RvrPreflightEndpoint::Suspended {
+        PreflightEndpoint::Suspended {
             resume_pc: boundary_pc,
             final_timestamp: boundary_to.timestamp,
         },

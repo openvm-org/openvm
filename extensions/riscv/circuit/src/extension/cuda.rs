@@ -19,7 +19,7 @@ use {
                 GpuRvrInputError, GpuRvrProgram, GpuRvrReplayPlan, GpuRvrTranscript,
                 RvrCheckpointOpcodeBases,
             },
-            RvrCheckpointPreflightExecution,
+            PreflightExecution,
         },
         GenerationError, VirtualMachine, VmBuilder,
     },
@@ -122,7 +122,7 @@ impl<'a> Rv64ImRvrGpuTracegen<'a> {
     pub fn expand_checkpoint_replay<VB>(
         vm: &VirtualMachine<GpuBabyBearPoseidon2Engine, VB>,
         program: &GpuRvrProgram,
-        execution: &RvrCheckpointPreflightExecution,
+        execution: &PreflightExecution,
         expected_retired: u32,
     ) -> Result<(GpuRvrTranscript, GpuRvrReplayPlan), GpuRvrInputError>
     where

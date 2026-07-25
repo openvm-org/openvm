@@ -3,8 +3,8 @@ use std::sync::Arc;
 use openvm_circuit::{
     arch::{
         rvr::{
-            cuda::GpuRvrProgram, RvrCheckpointPreflightLimits, RvrPreflightEndpoint,
-            RvrPreflightLimits, RvrPreflightTranscript,
+            cuda::GpuRvrProgram, FullLogPreflightLimits, FullLogPreflightTranscript,
+            PreflightEndpoint, PreflightLimits,
         },
         VirtualMachine, VmExecutor,
     },
@@ -403,7 +403,7 @@ fn rvr_gpu_tracegen_proves_system_and_rv64i_airs_without_record_arenas() {
     };
 
     let executor = VmExecutor::new(config.clone()).unwrap();
-    let rvr = executor.rvr_preflight_instance(&exe, None).unwrap();
+    let rvr = executor.full_log_preflight_instance(&exe, None).unwrap();
     let state = rvr.create_initial_vm_state(Vec::<Vec<u8>>::new());
 
     let (mut vm, pk) =
@@ -415,7 +415,7 @@ fn rvr_gpu_tracegen_proves_system_and_rv64i_airs_without_record_arenas() {
     // Upload it before RVR consumes the host state and produces the final image.
     vm.transport_init_memory_to_device(&state.memory);
     let rvr_execution = rvr
-        .execute_from_state(state, RvrPreflightLimits::new(64, 192))
+        .execute_from_state(state, FullLogPreflightLimits::new(64, 192))
         .unwrap();
     let device_ctx = &vm.engine.device().device_ctx;
     let gpu_program =
@@ -453,7 +453,7 @@ fn rvr_checkpoint_gpu_replay_proves_a_suspended_segment() {
         ..Default::default()
     };
     let executor = VmExecutor::new(config.clone()).unwrap();
-    let checkpoint = executor.checkpoint_preflight_instance(&exe, None).unwrap();
+    let checkpoint = executor.preflight_instance(&exe, None).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, pk) =
         VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64IGpuBuilder, config.clone())
@@ -462,11 +462,11 @@ fn rvr_checkpoint_gpu_replay_proves_a_suspended_segment() {
     vm.load_program(cached_program);
     vm.transport_init_memory_to_device(&state.memory);
     let mut execution = checkpoint
-        .execute_from_state_for(state, RvrCheckpointPreflightLimits::new(2, 0, 2))
+        .execute_from_state_for(state, PreflightLimits::new(2, 0, 2))
         .unwrap();
     assert_eq!(
         execution.endpoint,
-        RvrPreflightEndpoint::Suspended {
+        PreflightEndpoint::Suspended {
             resume_pc: 8,
             final_timestamp: 4,
         }
@@ -480,7 +480,7 @@ fn rvr_checkpoint_gpu_replay_proves_a_suspended_segment() {
     )
     .unwrap();
     let endpoint = execution.endpoint;
-    execution.endpoint = RvrPreflightEndpoint::Suspended {
+    execution.endpoint = PreflightEndpoint::Suspended {
         resume_pc: execution.to_state.pc + 4,
         final_timestamp: execution.to_state.timestamp,
     };
@@ -538,7 +538,7 @@ fn rvr_checkpoint_gpu_replay_expands_more_than_one_launch_block() {
         ..Default::default()
     };
     let executor = VmExecutor::new(config.clone()).unwrap();
-    let checkpoint = executor.checkpoint_preflight_instance(&exe, None).unwrap();
+    let checkpoint = executor.preflight_instance(&exe, None).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, _) =
         VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64IGpuBuilder, config.clone())
@@ -547,7 +547,7 @@ fn rvr_checkpoint_gpu_replay_expands_more_than_one_launch_block() {
     vm.load_program(cached_program);
     vm.transport_init_memory_to_device(&state.memory);
     let execution = checkpoint
-        .execute_from_state_for_exact(state, RvrCheckpointPreflightLimits::new(RETIRED, 0, 1))
+        .execute_from_state_for(state, PreflightLimits::new(RETIRED, 0, 1))
         .unwrap();
     assert_eq!(execution.retired as usize, RETIRED);
     // The suspended endpoint becomes one additional replay anchor, crossing
@@ -601,7 +601,7 @@ fn rvr_checkpoint_gpu_replay_launches_high_register_m_kernels() {
         mul: Default::default(),
     };
     let executor = VmExecutor::new(config.clone()).unwrap();
-    let checkpoint = executor.checkpoint_preflight_instance(&exe, None).unwrap();
+    let checkpoint = executor.preflight_instance(&exe, None).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, _) =
         VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64ImGpuBuilder, config.clone())
@@ -610,7 +610,7 @@ fn rvr_checkpoint_gpu_replay_launches_high_register_m_kernels() {
     vm.load_program(cached_program);
     vm.transport_init_memory_to_device(&state.memory);
     let execution = checkpoint
-        .execute_from_state_for_exact(state, RvrCheckpointPreflightLimits::new(RETIRED, 0, 512))
+        .execute_from_state_for(state, PreflightLimits::new(RETIRED, 0, 512))
         .unwrap();
     assert_eq!(execution.retired as usize, RETIRED);
 
@@ -651,7 +651,7 @@ fn rvr_checkpoint_gpu_replay_carries_a_register_across_segments() {
         ..Default::default()
     };
     let executor = VmExecutor::new(config.clone()).unwrap();
-    let checkpoint = executor.checkpoint_preflight_instance(&exe, None).unwrap();
+    let checkpoint = executor.preflight_instance(&exe, None).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, pk) =
         VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64IGpuBuilder, config.clone())
@@ -660,11 +660,11 @@ fn rvr_checkpoint_gpu_replay_carries_a_register_across_segments() {
     vm.load_program(cached_program);
     vm.transport_init_memory_to_device(&state.memory);
     let execution = checkpoint
-        .execute_from_state_for_exact(state, RvrCheckpointPreflightLimits::new(2, 0, 2))
+        .execute_from_state_for(state, PreflightLimits::new(2, 0, 2))
         .unwrap();
     assert_eq!(
         execution.endpoint,
-        RvrPreflightEndpoint::Suspended {
+        PreflightEndpoint::Suspended {
             resume_pc: 8,
             final_timestamp: 4,
         }
@@ -693,9 +693,9 @@ fn rvr_checkpoint_gpu_replay_carries_a_register_across_segments() {
 
     vm.transport_init_memory_to_device(&execution.state.memory);
     let execution = checkpoint
-        .execute_from_state_for_exact(execution.state, RvrCheckpointPreflightLimits::new(2, 0, 1))
+        .execute_from_state_for(execution.state, PreflightLimits::new(2, 0, 1))
         .unwrap();
-    assert_eq!(execution.endpoint, RvrPreflightEndpoint::Terminated);
+    assert_eq!(execution.endpoint, PreflightEndpoint::Terminated);
     let x2: [u16; 4] = unsafe {
         execution
             .state
@@ -732,7 +732,7 @@ fn rvr_checkpoint_gpu_replay_proves_an_empty_suspended_segment() {
         ..Default::default()
     };
     let executor = VmExecutor::new(config.clone()).unwrap();
-    let checkpoint = executor.checkpoint_preflight_instance(&exe, None).unwrap();
+    let checkpoint = executor.preflight_instance(&exe, None).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, pk) =
         VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64IGpuBuilder, config.clone())
@@ -741,11 +741,11 @@ fn rvr_checkpoint_gpu_replay_proves_an_empty_suspended_segment() {
     vm.load_program(cached_program);
     vm.transport_init_memory_to_device(&state.memory);
     let execution = checkpoint
-        .execute_from_state_for(state, RvrCheckpointPreflightLimits::new(0, 0, 1))
+        .execute_from_state_for(state, PreflightLimits::new(0, 0, 1))
         .unwrap();
     assert_eq!(
         execution.endpoint,
-        RvrPreflightEndpoint::Suspended {
+        PreflightEndpoint::Suspended {
             resume_pc: 0,
             final_timestamp: 1,
         }
@@ -787,16 +787,16 @@ fn rvr_checkpoint_gpu_replay_rejects_terminate_in_a_suspended_segment() {
         ..Default::default()
     };
     let executor = VmExecutor::new(config.clone()).unwrap();
-    let checkpoint = executor.checkpoint_preflight_instance(&exe, None).unwrap();
+    let checkpoint = executor.preflight_instance(&exe, None).unwrap();
     let state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, _) =
         VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64IGpuBuilder, config.clone())
             .unwrap();
     vm.transport_init_memory_to_device(&state.memory);
     let mut execution = checkpoint
-        .execute_from_state(state, RvrCheckpointPreflightLimits::new(1, 0, 1))
+        .execute_from_state(state, PreflightLimits::new(1, 0, 1))
         .unwrap();
-    execution.endpoint = RvrPreflightEndpoint::Suspended {
+    execution.endpoint = PreflightEndpoint::Suspended {
         resume_pc: execution.to_state.pc,
         final_timestamp: execution.to_state.timestamp,
     };
@@ -976,15 +976,15 @@ fn rvr_checkpoint_gpu_replay_proves_bounded_rv64i_slice_differentially() {
         mul: Default::default(),
     };
     let executor = VmExecutor::new(config.clone()).unwrap();
-    let full = executor.rvr_preflight_instance(&exe, None).unwrap();
-    let checkpoint = executor.checkpoint_preflight_instance(&exe, None).unwrap();
+    let full = executor.full_log_preflight_instance(&exe, None).unwrap();
+    let checkpoint = executor.preflight_instance(&exe, None).unwrap();
     let max_instructions = instructions.len();
     let max_memory_events = max_instructions * 3;
 
     let full_execution = full
         .execute(
             Vec::<Vec<u8>>::new(),
-            RvrPreflightLimits::new(max_instructions, max_memory_events),
+            FullLogPreflightLimits::new(max_instructions, max_memory_events),
         )
         .unwrap();
     let checkpoint_state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
@@ -998,7 +998,7 @@ fn rvr_checkpoint_gpu_replay_proves_bounded_rv64i_slice_differentially() {
     let checkpoint_execution = checkpoint
         .execute_from_state(
             checkpoint_state,
-            RvrCheckpointPreflightLimits::new(max_instructions, 1, 8),
+            PreflightLimits::new(max_instructions, 1, 8),
         )
         .unwrap();
     assert!(!checkpoint_execution.transcript.checkpoints.is_empty());
@@ -1071,7 +1071,7 @@ fn rvr_checkpoint_gpu_replay_proves_bounded_rv64i_slice_differentially() {
     let legacy_execution = full
         .execute_from_state(
             legacy_state,
-            RvrPreflightLimits::new(max_instructions, max_memory_events),
+            FullLogPreflightLimits::new(max_instructions, max_memory_events),
         )
         .unwrap();
     let legacy_program = GpuRvrProgram::upload(
@@ -1207,7 +1207,7 @@ fn rvr_checkpoint_gpu_replay_proves_all_memory_intent_shapes() {
         mul: Default::default(),
     };
     let executor = VmExecutor::new(config.clone()).unwrap();
-    let checkpoint = executor.checkpoint_preflight_instance(&exe, None).unwrap();
+    let checkpoint = executor.preflight_instance(&exe, None).unwrap();
     let checkpoint_state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut checkpoint_vm, checkpoint_pk) =
         VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64ImGpuBuilder, config.clone())
@@ -1218,7 +1218,7 @@ fn rvr_checkpoint_gpu_replay_proves_all_memory_intent_shapes() {
     let checkpoint_execution = checkpoint
         .execute_from_state(
             checkpoint_state,
-            RvrCheckpointPreflightLimits::new(instructions.len(), 16, 1),
+            PreflightLimits::new(instructions.len(), 16, 1),
         )
         .unwrap();
 
@@ -1333,7 +1333,7 @@ fn rvr_gpu_tracegen_proves_rv64m_airs_without_record_arenas() {
         mul: Default::default(),
     };
     let executor = VmExecutor::new(config.clone()).unwrap();
-    let rvr = executor.rvr_preflight_instance(&exe, None).unwrap();
+    let rvr = executor.full_log_preflight_instance(&exe, None).unwrap();
     let state = rvr.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let (mut vm, pk) =
         VirtualMachine::new_with_keygen(test_gpu_engine(), Rv64ImGpuBuilder, config.clone())
@@ -1342,7 +1342,7 @@ fn rvr_gpu_tracegen_proves_rv64m_airs_without_record_arenas() {
     vm.load_program(cached_program);
     vm.transport_init_memory_to_device(&state.memory);
     let execution = rvr
-        .execute_from_state(state, RvrPreflightLimits::new(32, 96))
+        .execute_from_state(state, FullLogPreflightLimits::new(32, 96))
         .unwrap();
     assert_eq!(execution.transcript.memory_log.len(), 21 * 3);
 
@@ -1392,9 +1392,9 @@ fn rvr_mul_replay_rejects_corrupt_results_and_predecessors_before_lookups() {
     };
     let execution = VmExecutor::new(config.clone())
         .unwrap()
-        .rvr_preflight_instance(&exe, None)
+        .full_log_preflight_instance(&exe, None)
         .unwrap()
-        .execute(Vec::<Vec<u8>>::new(), RvrPreflightLimits::new(4, 4))
+        .execute(Vec::<Vec<u8>>::new(), FullLogPreflightLimits::new(4, 4))
         .unwrap();
     assert_eq!(execution.transcript.memory_log.len(), 3);
     let engine = test_gpu_engine();
@@ -1402,9 +1402,9 @@ fn rvr_mul_replay_rejects_corrupt_results_and_predecessors_before_lookups() {
     let gpu_program =
         GpuRvrProgram::upload(&program, &config.rv64i.system.memory_config, device_ctx).unwrap();
 
-    let reject = |transcript: &RvrPreflightTranscript, expected_code| {
+    let reject = |transcript: &FullLogPreflightTranscript, expected_code| {
         let (gpu_transcript, replay_plan) = gpu_program
-            .upload_transcript(transcript, RvrPreflightEndpoint::Terminated)
+            .upload_transcript(transcript, PreflightEndpoint::Terminated)
             .unwrap();
         let range_checker = Arc::new(VariableRangeCheckerChipGPU::new(
             openvm_circuit::arch::testing::default_var_range_checker_bus(),
@@ -1433,7 +1433,7 @@ fn rvr_mul_replay_rejects_corrupt_results_and_predecessors_before_lookups() {
         }
     };
 
-    let mut corrupt_result = RvrPreflightTranscript {
+    let mut corrupt_result = FullLogPreflightTranscript {
         program_log: execution.transcript.program_log.clone(),
         memory_log: execution.transcript.memory_log.clone(),
         initial_write_log: execution.transcript.initial_write_log.clone(),
@@ -1441,7 +1441,7 @@ fn rvr_mul_replay_rejects_corrupt_results_and_predecessors_before_lookups() {
     corrupt_result.memory_log[2].value[0] = 5;
     reject(&corrupt_result, 609);
 
-    let mut corrupt_predecessor = RvrPreflightTranscript {
+    let mut corrupt_predecessor = FullLogPreflightTranscript {
         program_log: execution.transcript.program_log.clone(),
         memory_log: execution.transcript.memory_log.clone(),
         initial_write_log: execution.transcript.initial_write_log.clone(),
@@ -1489,9 +1489,9 @@ fn rvr_mul_replay_rejects_raw_x0_destination_without_lookups() {
     };
     let execution = VmExecutor::new(config.clone())
         .unwrap()
-        .rvr_preflight_instance(&exe, None)
+        .full_log_preflight_instance(&exe, None)
         .unwrap()
-        .execute(Vec::<Vec<u8>>::new(), RvrPreflightLimits::new(4, 3))
+        .execute(Vec::<Vec<u8>>::new(), FullLogPreflightLimits::new(4, 3))
         .unwrap();
     assert_eq!(execution.transcript.memory_log.len(), 2);
 
@@ -1580,7 +1580,7 @@ fn rvr_checkpoint_gpu_replay_proves_hint_store_without_record_arenas() {
         ..Default::default()
     };
     let executor = VmExecutor::new(config.clone()).unwrap();
-    let checkpoint = executor.checkpoint_preflight_instance(&exe, None).unwrap();
+    let checkpoint = executor.preflight_instance(&exe, None).unwrap();
     let mut state = checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new());
     let hint_words = [
         0x0123_4567_89ab_cdefu64,
@@ -1603,7 +1603,7 @@ fn rvr_checkpoint_gpu_replay_proves_hint_store_without_record_arenas() {
     let mut execution = checkpoint
         .execute_from_state(
             state,
-            RvrCheckpointPreflightLimits::new(instructions.len(), hint_words.len(), 1),
+            PreflightLimits::new(instructions.len(), hint_words.len(), 1),
         )
         .unwrap();
     assert_eq!(execution.transcript.residuals, hint_words);

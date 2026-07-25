@@ -31,8 +31,8 @@ use {
     openvm_circuit::{
         arch::{
             rvr::{
-                cuda::GpuRvrProgram, RvrPreflightEndpoint, RvrPreflightLimits,
-                RvrPreflightTranscript,
+                cuda::GpuRvrProgram, FullLogPreflightLimits, FullLogPreflightTranscript,
+                PreflightEndpoint,
             },
             MatrixRecordArena, VmExecutor,
         },
@@ -375,9 +375,9 @@ fn test_cuda_loadd_tracegen_from_rvr_transcript() {
     let memory_config = config.system.memory_config.clone();
     let execution = VmExecutor::new(config)
         .unwrap()
-        .rvr_preflight_instance(&exe, None)
+        .full_log_preflight_instance(&exe, None)
         .unwrap()
-        .execute(Vec::<Vec<u8>>::new(), RvrPreflightLimits::new(8, 24))
+        .execute(Vec::<Vec<u8>>::new(), FullLogPreflightLimits::new(8, 24))
         .unwrap();
 
     let mut tester =
@@ -466,14 +466,14 @@ fn test_cuda_loadd_tracegen_from_rvr_transcript() {
         ..Default::default()
     })
     .unwrap()
-    .rvr_preflight_instance(
+    .full_log_preflight_instance(
         &VmExe::new(crossing_program.clone()).with_init_memory(init_memory),
         None,
     )
     .unwrap()
-    .execute(Vec::<Vec<u8>>::new(), RvrPreflightLimits::new(4, 8))
+    .execute(Vec::<Vec<u8>>::new(), FullLogPreflightLimits::new(4, 8))
     .unwrap();
-    let crossing_transcript = || RvrPreflightTranscript {
+    let crossing_transcript = || FullLogPreflightTranscript {
         program_log: crossing_execution.transcript.program_log.clone(),
         memory_log: crossing_execution.transcript.memory_log.clone(),
         initial_write_log: crossing_execution.transcript.initial_write_log.clone(),
@@ -533,7 +533,7 @@ fn test_cuda_loadd_tracegen_from_rvr_transcript() {
         let d_boundary_program =
             GpuRvrProgram::upload(&crossing_program, &boundary_config, &device_ctx).unwrap();
         let (d_boundary, d_boundary_plan) = d_boundary_program
-            .upload_transcript(&boundary_transcript, RvrPreflightEndpoint::Terminated)
+            .upload_transcript(&boundary_transcript, PreflightEndpoint::Terminated)
             .unwrap();
         let boundary_range = Arc::new(VariableRangeCheckerChipGPU::new(
             default_var_range_checker_bus(),

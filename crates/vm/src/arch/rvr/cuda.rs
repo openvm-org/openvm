@@ -1,4 +1,4 @@
-//! GPU expansion, indexing, and read-only replay for RVR checkpoint preflight.
+//! GPU postflight expansion, indexing, and read-only replay for compiled preflight.
 //!
 //! This module owns three phases:
 //!
@@ -35,8 +35,8 @@ use thiserror::Error;
 #[cfg(feature = "test-utils")]
 use super::postflight::RvrReplayData;
 use super::{
-    bridge::read_rv64_registers, checkpoint_preflight::RvrCheckpointPreflightExecution,
-    RvrPreflightEndpoint, RvrPreflightTranscript,
+    bridge::read_rv64_registers, checkpoint_preflight::PreflightExecution,
+    FullLogPreflightTranscript, PreflightEndpoint,
 };
 use crate::{
     arch::{
@@ -883,8 +883,8 @@ fn upload<T>(values: &[T], device_ctx: &GpuDeviceCtx) -> Result<DeviceBuffer<T>,
 pub(crate) type ConnectorBoundary = (ExecutionState<u32>, ExecutionState<u32>, Option<u32>);
 
 fn replay_boundary(
-    transcript: &RvrPreflightTranscript,
-    endpoint: RvrPreflightEndpoint,
+    transcript: &FullLogPreflightTranscript,
+    endpoint: PreflightEndpoint,
 ) -> Result<ConnectorBoundary, GpuRvrInputError> {
     let first = transcript.program_log.first().ok_or_else(|| {
         GpuRvrInputError::InvalidTranscript(
@@ -895,7 +895,7 @@ fn replay_boundary(
     Ok((
         ExecutionState::new(first.pc, first.timestamp),
         ExecutionState::new(last.pc, last.timestamp),
-        matches!(endpoint, RvrPreflightEndpoint::Terminated).then_some(0),
+        matches!(endpoint, PreflightEndpoint::Terminated).then_some(0),
     ))
 }
 
@@ -1095,8 +1095,8 @@ impl GpuRvrProgram {
     /// program that happens to have the same length.
     pub fn upload_transcript(
         &self,
-        transcript: &RvrPreflightTranscript,
-        endpoint: RvrPreflightEndpoint,
+        transcript: &FullLogPreflightTranscript,
+        endpoint: PreflightEndpoint,
     ) -> Result<(GpuRvrTranscript, GpuRvrReplayPlan), GpuRvrInputError> {
         let boundary = replay_boundary(transcript, endpoint)?;
         let segment_identity = Arc::new(());
@@ -1127,7 +1127,7 @@ impl GpuRvrProgram {
     #[allow(clippy::too_many_arguments)]
     pub fn expand_checkpoint_replay(
         &self,
-        execution: &RvrCheckpointPreflightExecution,
+        execution: &PreflightExecution,
         expected_retired: u32,
         initial_registers: DeviceBufferView,
         initial_memory: DeviceBufferView,
@@ -1136,7 +1136,7 @@ impl GpuRvrProgram {
     ) -> Result<(GpuRvrTranscript, GpuRvrReplayPlan), GpuRvrInputError> {
         if execution.retired != expected_retired {
             return Err(GpuRvrInputError::InvalidTranscript(format!(
-                "checkpoint execution retired {} instructions, expected {expected_retired}",
+                "preflight retired {} instructions, expected {expected_retired}",
                 execution.retired
             )));
         }
@@ -1151,8 +1151,8 @@ impl GpuRvrProgram {
             )));
         }
         let (endpoint_kind, exit_code) = match execution.endpoint {
-            RvrPreflightEndpoint::Terminated => (0, Some(0)),
-            RvrPreflightEndpoint::Suspended {
+            PreflightEndpoint::Terminated => (0, Some(0)),
+            PreflightEndpoint::Suspended {
                 resume_pc,
                 final_timestamp,
             } if (resume_pc, final_timestamp)
@@ -1160,7 +1160,7 @@ impl GpuRvrProgram {
             {
                 (1, None)
             }
-            RvrPreflightEndpoint::Suspended { .. } => {
+            PreflightEndpoint::Suspended { .. } => {
                 return Err(GpuRvrInputError::InvalidTranscript(
                     "checkpoint suspended endpoint does not match its final boundary".to_string(),
                 ));
@@ -1171,7 +1171,7 @@ impl GpuRvrProgram {
             || execution.to_state.timestamp >= (1u32 << self.timestamp_max_bits)
         {
             return Err(GpuRvrInputError::InvalidTranscript(
-                "checkpoint execution has an invalid boundary".to_string(),
+                "preflight has an invalid boundary".to_string(),
             ));
         }
         let residual_cursor =
@@ -1364,8 +1364,8 @@ impl GpuRvrProgram {
     #[doc(hidden)]
     pub fn upload_transcript_profiled(
         &self,
-        transcript: &RvrPreflightTranscript,
-        endpoint: RvrPreflightEndpoint,
+        transcript: &FullLogPreflightTranscript,
+        endpoint: PreflightEndpoint,
     ) -> Result<(GpuRvrTranscript, GpuRvrReplayPlan, Duration, Duration), GpuRvrInputError> {
         let boundary = replay_boundary(transcript, endpoint)?;
         self.device_ctx.stream.synchronize()?;
@@ -1419,7 +1419,7 @@ impl GpuRvrProgram {
     #[cfg(feature = "test-utils")]
     #[doc(hidden)]
     pub fn cpu_memory_predecessors(
-        transcript: &RvrPreflightTranscript,
+        transcript: &FullLogPreflightTranscript,
     ) -> Result<Vec<u32>, GpuRvrInputError> {
         super::postflight::build_memory_predecessors(
             &transcript.memory_log,
@@ -1433,8 +1433,8 @@ impl GpuRvrProgram {
     #[allow(clippy::type_complexity)]
     pub fn cpu_replay_plan(
         &self,
-        transcript: &RvrPreflightTranscript,
-        endpoint: RvrPreflightEndpoint,
+        transcript: &FullLogPreflightTranscript,
+        endpoint: PreflightEndpoint,
     ) -> Result<
         (
             Vec<[u32; 2]>,
@@ -1460,7 +1460,7 @@ impl GpuRvrProgram {
     /// shared error word, raw logs, and the static program.
     pub fn gpu_index_memory_bytes(
         &self,
-        transcript: &RvrPreflightTranscript,
+        transcript: &FullLogPreflightTranscript,
     ) -> Result<(usize, usize), GpuRvrInputError> {
         let num_memory = transcript.memory_log.len();
         let num_entries = num_memory + transcript.initial_write_log.len();
@@ -1861,7 +1861,7 @@ pub struct GpuRvrTranscript {
 
 impl GpuRvrTranscript {
     fn upload(
-        transcript: &RvrPreflightTranscript,
+        transcript: &FullLogPreflightTranscript,
         address_space_height: u32,
         pointer_max_bits: u32,
         address_spaces: DeviceBufferView,
@@ -2041,7 +2041,7 @@ impl GpuRvrReplayPlan {
     fn build(
         program: &GpuRvrProgram,
         transcript: &GpuRvrTranscript,
-        endpoint: RvrPreflightEndpoint,
+        endpoint: PreflightEndpoint,
         boundary: ConnectorBoundary,
         program_identity: Arc<()>,
         segment_identity: Arc<()>,
@@ -2075,8 +2075,8 @@ impl GpuRvrReplayPlan {
         }
         let temp_storage = gpu_buffer::<u8>(temp_bytes, &program.device_ctx);
         let (endpoint_kind, resume_pc, final_timestamp) = match endpoint {
-            RvrPreflightEndpoint::Terminated => (0, 0, 0),
-            RvrPreflightEndpoint::Suspended {
+            PreflightEndpoint::Terminated => (0, 0, 0),
+            PreflightEndpoint::Suspended {
                 resume_pc,
                 final_timestamp,
             } => (1, resume_pc, final_timestamp),
@@ -2491,8 +2491,8 @@ mod tests {
 
     fn gpu_plan(
         program: &GpuRvrProgram,
-        transcript: &RvrPreflightTranscript,
-        endpoint: RvrPreflightEndpoint,
+        transcript: &FullLogPreflightTranscript,
+        endpoint: PreflightEndpoint,
     ) -> Result<GpuRvrReplayPlan, GpuRvrInputError> {
         let boundary = replay_boundary(transcript, endpoint)?;
         let segment_identity = Arc::new(());
@@ -3035,7 +3035,7 @@ mod tests {
         let terminate = SystemOpcode::TERMINATE.global_opcode().as_usize() as u32;
         let opcodes = [100, 200, terminate];
         let program = gpu_program(&opcodes, &device_ctx);
-        let transcript = RvrPreflightTranscript {
+        let transcript = FullLogPreflightTranscript {
             program_log: vec![
                 PreflightProgramEvent {
                     pc: 0,
@@ -3065,7 +3065,7 @@ mod tests {
             memory_log: vec![],
             initial_write_log: vec![],
         };
-        let endpoint = RvrPreflightEndpoint::Terminated;
+        let endpoint = PreflightEndpoint::Terminated;
         let expected =
             super::super::postflight::RvrReplayData::build(0, &opcodes, &transcript, endpoint)
                 .unwrap();
@@ -3095,7 +3095,7 @@ mod tests {
         let terminate = SystemOpcode::TERMINATE.global_opcode().as_usize() as u32;
         let mut program = gpu_program(&[100, u32::MAX, 200, 300, terminate], &device_ctx);
         program.pc_base = 0x100;
-        let transcript = RvrPreflightTranscript {
+        let transcript = FullLogPreflightTranscript {
             program_log: vec![
                 PreflightProgramEvent {
                     pc: 0x100,
@@ -3121,7 +3121,7 @@ mod tests {
             memory_log: vec![],
             initial_write_log: vec![],
         };
-        let plan = gpu_plan(&program, &transcript, RvrPreflightEndpoint::Terminated).unwrap();
+        let plan = gpu_plan(&program, &transcript, PreflightEndpoint::Terminated).unwrap();
         assert_eq!(
             plan.program_frequencies.to_host_on(&device_ctx).unwrap(),
             vec![2, 1, 0, 1]
@@ -3135,7 +3135,7 @@ mod tests {
             )
         );
 
-        let suspended = RvrPreflightTranscript {
+        let suspended = FullLogPreflightTranscript {
             program_log: vec![
                 PreflightProgramEvent {
                     pc: 0x100,
@@ -3152,7 +3152,7 @@ mod tests {
         let plan = gpu_plan(
             &program,
             &suspended,
-            RvrPreflightEndpoint::Suspended {
+            PreflightEndpoint::Suspended {
                 resume_pc: 0x108,
                 final_timestamp: 2,
             },
@@ -3171,7 +3171,7 @@ mod tests {
             )
         );
 
-        let empty = RvrPreflightTranscript {
+        let empty = FullLogPreflightTranscript {
             program_log: vec![PreflightProgramEvent {
                 pc: 0x100,
                 timestamp: 1,
@@ -3182,7 +3182,7 @@ mod tests {
         let plan = gpu_plan(
             &program,
             &empty,
-            RvrPreflightEndpoint::Suspended {
+            PreflightEndpoint::Suspended {
                 resume_pc: 0x100,
                 final_timestamp: 1,
             },
@@ -3200,7 +3200,7 @@ mod tests {
         let mut program = gpu_program(&[100, u32::MAX, 200], &device_ctx);
         program.pc_base = 0x100;
         for invalid_pc in [0xfc, 0x102, 0x104, 0x10c] {
-            let transcript = RvrPreflightTranscript {
+            let transcript = FullLogPreflightTranscript {
                 program_log: vec![
                     PreflightProgramEvent {
                         pc: invalid_pc,
@@ -3217,7 +3217,7 @@ mod tests {
             assert!(gpu_plan(
                 &program,
                 &transcript,
-                RvrPreflightEndpoint::Suspended {
+                PreflightEndpoint::Suspended {
                     resume_pc: invalid_pc,
                     final_timestamp: 2,
                 },
@@ -3230,7 +3230,7 @@ mod tests {
     fn gpu_program_index_accepts_an_empty_suspended_segment() {
         let device_ctx = GpuDeviceCtx::for_current_device().unwrap();
         let program = gpu_program(&[100], &device_ctx);
-        let transcript = RvrPreflightTranscript {
+        let transcript = FullLogPreflightTranscript {
             program_log: vec![PreflightProgramEvent {
                 pc: 0,
                 timestamp: 1,
@@ -3238,7 +3238,7 @@ mod tests {
             memory_log: vec![],
             initial_write_log: vec![],
         };
-        let endpoint = RvrPreflightEndpoint::Suspended {
+        let endpoint = PreflightEndpoint::Suspended {
             resume_pc: 0,
             final_timestamp: 1,
         };
@@ -3252,7 +3252,7 @@ mod tests {
         let device_ctx = GpuDeviceCtx::for_current_device().unwrap();
         let mut program = gpu_program(&[100], &device_ctx);
         program.timestamp_max_bits = 2;
-        let transcript = |final_timestamp| RvrPreflightTranscript {
+        let transcript = |final_timestamp| FullLogPreflightTranscript {
             program_log: vec![
                 PreflightProgramEvent {
                     pc: 0,
@@ -3269,7 +3269,7 @@ mod tests {
         program
             .upload_transcript(
                 &transcript(3),
-                RvrPreflightEndpoint::Suspended {
+                PreflightEndpoint::Suspended {
                     resume_pc: 0,
                     final_timestamp: 3,
                 },
@@ -3278,7 +3278,7 @@ mod tests {
         assert!(program
             .upload_transcript(
                 &transcript(4),
-                RvrPreflightEndpoint::Suspended {
+                PreflightEndpoint::Suspended {
                     resume_pc: 0,
                     final_timestamp: 4,
                 },
@@ -3291,7 +3291,7 @@ mod tests {
         let device_ctx = GpuDeviceCtx::for_current_device().unwrap();
         let terminate = SystemOpcode::TERMINATE.global_opcode().as_usize() as u32;
         let program = gpu_program(&[100, terminate], &device_ctx);
-        let transcript = |program_log| RvrPreflightTranscript {
+        let transcript = |program_log| FullLogPreflightTranscript {
             program_log,
             memory_log: vec![],
             initial_write_log: vec![],
@@ -3310,7 +3310,7 @@ mod tests {
         assert!(gpu_plan(
             &program,
             &undefined_pc,
-            RvrPreflightEndpoint::Suspended {
+            PreflightEndpoint::Suspended {
                 resume_pc: 12,
                 final_timestamp: 2,
             },
@@ -3327,12 +3327,7 @@ mod tests {
                 timestamp: 2,
             },
         ]);
-        assert!(gpu_plan(
-            &program,
-            &missing_terminate,
-            RvrPreflightEndpoint::Terminated,
-        )
-        .is_err());
+        assert!(gpu_plan(&program, &missing_terminate, PreflightEndpoint::Terminated,).is_err());
 
         let timestamp_regression = transcript(vec![
             PreflightProgramEvent {
@@ -3347,7 +3342,7 @@ mod tests {
         assert!(gpu_plan(
             &program,
             &timestamp_regression,
-            RvrPreflightEndpoint::Terminated,
+            PreflightEndpoint::Terminated,
         )
         .is_err());
     }

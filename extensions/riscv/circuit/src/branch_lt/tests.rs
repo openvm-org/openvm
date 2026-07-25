@@ -33,8 +33,8 @@ use {
     openvm_circuit::{
         arch::{
             rvr::{
-                cuda::GpuRvrProgram, RvrPreflightEndpoint, RvrPreflightLimits,
-                RvrPreflightTranscript,
+                cuda::GpuRvrProgram, FullLogPreflightLimits, FullLogPreflightTranscript,
+                PreflightEndpoint,
             },
             MatrixRecordArena, VmExecutor,
         },
@@ -791,9 +791,9 @@ fn test_cuda_branch_lt_tracegen_from_rvr_transcript() {
     let memory_config = config.system.memory_config.clone();
     let execution = VmExecutor::new(config)
         .unwrap()
-        .rvr_preflight_instance(&exe, None)
+        .full_log_preflight_instance(&exe, None)
         .unwrap()
-        .execute(Vec::<Vec<u8>>::new(), RvrPreflightLimits::new(10, 18))
+        .execute(Vec::<Vec<u8>>::new(), FullLogPreflightLimits::new(10, 18))
         .unwrap();
 
     let mut tester = GpuChipTestBuilder::default();
@@ -905,7 +905,7 @@ fn test_cuda_branch_lt_tracegen_from_rvr_transcript() {
     negative_first_read.timestamp = 1;
     let mut negative_second_read = execution.transcript.memory_log[alias_read_index + 1];
     negative_second_read.timestamp = 2;
-    let negative_transcript = RvrPreflightTranscript {
+    let negative_transcript = FullLogPreflightTranscript {
         program_log: vec![negative_from, negative_terminate, negative_terminate],
         memory_log: vec![negative_first_read, negative_second_read],
         initial_write_log: Vec::new(),
@@ -913,7 +913,7 @@ fn test_cuda_branch_lt_tracegen_from_rvr_transcript() {
     let d_negative_program =
         GpuRvrProgram::upload(&negative_program, &memory_config, device_ctx).unwrap();
     let (d_negative, d_negative_plan) = d_negative_program
-        .upload_transcript(&negative_transcript, RvrPreflightEndpoint::Terminated)
+        .upload_transcript(&negative_transcript, PreflightEndpoint::Terminated)
         .unwrap();
     let negative_range_checker = Arc::new(
         openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU::new(
@@ -936,37 +936,38 @@ fn test_cuda_branch_lt_tracegen_from_rvr_transcript() {
         6
     );
 
-    let run_corrupt =
-        |transcript: RvrPreflightTranscript, expected_error: u32, expected_lookup_count: u32| {
-            let corrupt_range_checker = Arc::new(
-                openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU::new(
-                    openvm_circuit::arch::testing::default_var_range_checker_bus(),
-                    device_ctx.clone(),
-                ),
-            );
-            let corrupt_chip = Rv64BranchLessThanChipGpu::new(
-                corrupt_range_checker.clone(),
-                tester.timestamp_max_bits(),
-            );
-            let (d_corrupt, d_corrupt_plan) = d_program
-                .upload_transcript(&transcript, RvrPreflightEndpoint::Terminated)
-                .unwrap();
-            corrupt_chip
-                .generate_proving_ctx_from_rvr(&d_program, &d_corrupt, &d_corrupt_plan)
-                .unwrap();
-            assert_eq!(d_corrupt.error_code().unwrap(), expected_error);
-            assert_eq!(
-                corrupt_range_checker
-                    .count
-                    .to_host_on(device_ctx)
-                    .unwrap()
-                    .iter()
-                    .map(raw_count)
-                    .sum::<u32>(),
-                expected_lookup_count,
-                "the rejected row must not update the shared lookup histogram"
-            );
-        };
+    let run_corrupt = |transcript: FullLogPreflightTranscript,
+                       expected_error: u32,
+                       expected_lookup_count: u32| {
+        let corrupt_range_checker = Arc::new(
+            openvm_circuit_primitives::var_range::VariableRangeCheckerChipGPU::new(
+                openvm_circuit::arch::testing::default_var_range_checker_bus(),
+                device_ctx.clone(),
+            ),
+        );
+        let corrupt_chip = Rv64BranchLessThanChipGpu::new(
+            corrupt_range_checker.clone(),
+            tester.timestamp_max_bits(),
+        );
+        let (d_corrupt, d_corrupt_plan) = d_program
+            .upload_transcript(&transcript, PreflightEndpoint::Terminated)
+            .unwrap();
+        corrupt_chip
+            .generate_proving_ctx_from_rvr(&d_program, &d_corrupt, &d_corrupt_plan)
+            .unwrap();
+        assert_eq!(d_corrupt.error_code().unwrap(), expected_error);
+        assert_eq!(
+            corrupt_range_checker
+                .count
+                .to_host_on(device_ctx)
+                .unwrap()
+                .iter()
+                .map(raw_count)
+                .sum::<u32>(),
+            expected_lookup_count,
+            "the rejected row must not update the shared lookup histogram"
+        );
+    };
 
     let final_row_timestamp = execution
         .transcript
@@ -985,7 +986,7 @@ fn test_cuda_branch_lt_tracegen_from_rvr_transcript() {
     // Change the final BGE's unique rs1 value from i64::MIN to two. The logged row falls through,
     // but the corrupted comparison takes the field-encoded -4 target. Using the final unique read
     // avoids also corrupting a later event's predecessor chain.
-    let mut target_corrupt = RvrPreflightTranscript {
+    let mut target_corrupt = FullLogPreflightTranscript {
         program_log: execution.transcript.program_log.clone(),
         memory_log: execution.transcript.memory_log.clone(),
         initial_write_log: execution.transcript.initial_write_log.clone(),
@@ -993,7 +994,7 @@ fn test_cuda_branch_lt_tracegen_from_rvr_transcript() {
     target_corrupt.memory_log[final_unique_read].value = [2, 0, 0, 0];
     run_corrupt(target_corrupt, 18, 54);
 
-    let mut schedule_corrupt = RvrPreflightTranscript {
+    let mut schedule_corrupt = FullLogPreflightTranscript {
         program_log: execution.transcript.program_log.clone(),
         memory_log: execution.transcript.memory_log.clone(),
         initial_write_log: execution.transcript.initial_write_log.clone(),
@@ -1007,7 +1008,7 @@ fn test_cuda_branch_lt_tracegen_from_rvr_transcript() {
     // On the non-x0 rs1 == rs2 row, change only the second read while preserving BGEU=true.
     // Target validation therefore passes, but the second read no longer matches its immediate
     // predecessor.
-    let mut predecessor_corrupt = RvrPreflightTranscript {
+    let mut predecessor_corrupt = FullLogPreflightTranscript {
         program_log: execution.transcript.program_log.clone(),
         memory_log: execution.transcript.memory_log.clone(),
         initial_write_log: execution.transcript.initial_write_log.clone(),

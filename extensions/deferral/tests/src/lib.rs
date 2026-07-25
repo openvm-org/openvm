@@ -13,9 +13,7 @@ mod tests {
     };
     #[cfg(feature = "rvr")]
     use openvm_circuit::{
-        arch::{
-            rvr::RvrCheckpointPreflightLimits, ExecutionError, VirtualMachine, VmExecutor, VmState,
-        },
+        arch::{rvr::PreflightLimits, ExecutionError, VirtualMachine, VmExecutor, VmState},
         system::memory::online::{GuestMemory, LinearMemory, TouchedPages, PAGE_SIZE},
         utils::test_cpu_engine,
     };
@@ -221,7 +219,7 @@ mod tests {
             ..Default::default()
         };
         let executor = VmExecutor::new(config)?;
-        let checkpoint = executor.checkpoint_preflight_instance(&exe, None)?;
+        let checkpoint = executor.preflight_instance(&exe, None)?;
         let mut initial = checkpoint.create_initial_vm_state(streams);
         let deferral_bytes = initial.memory.memory.mem[DEFERRAL_AS as usize].size();
         initial.memory.memory.touched_pages[DEFERRAL_AS as usize] =
@@ -231,11 +229,11 @@ mod tests {
             .is_empty());
         let split_initial = initial.clone();
 
-        let first = checkpoint
-            .execute_from_state_for(split_initial, RvrCheckpointPreflightLimits::new(2, 13, 1))?;
+        let first =
+            checkpoint.execute_from_state_for(split_initial, PreflightLimits::new(2, 13, 1))?;
         assert!(matches!(
             first.endpoint,
-            openvm_circuit::arch::rvr::RvrPreflightEndpoint::Suspended { resume_pc: 8, .. }
+            openvm_circuit::arch::rvr::PreflightEndpoint::Suspended { resume_pc: 8, .. }
         ));
         assert_eq!(
             first.state.memory.memory.touched_pages[DEFERRAL_AS as usize]
@@ -243,10 +241,8 @@ mod tests {
             vec![(0, PAGE_SIZE)]
         );
 
-        let split = checkpoint
-            .execute_from_state(first.state, RvrCheckpointPreflightLimits::new(2, 13, 1))?;
-        let unbounded =
-            checkpoint.execute_from_state(initial, RvrCheckpointPreflightLimits::new(4, 26, 1))?;
+        let split = checkpoint.execute_from_state(first.state, PreflightLimits::new(2, 13, 1))?;
+        let unbounded = checkpoint.execute_from_state(initial, PreflightLimits::new(4, 26, 1))?;
         assert_eq!(split.state.pc(), unbounded.state.pc());
         assert_sparse_state_eq(&split.state, &unbounded.state);
         Ok(())
@@ -289,10 +285,10 @@ mod tests {
         assert_rvr_trap(pure_error);
 
         let checkpoint_error = executor
-            .checkpoint_preflight_instance(&exe, None)?
+            .preflight_instance(&exe, None)?
             .execute(
                 Streams::default(),
-                RvrCheckpointPreflightLimits::new(instructions.len(), 0, 1),
+                PreflightLimits::new(instructions.len(), 0, 1),
             )
             .err()
             .expect("checkpoint RVR must trap before its OUTPUT sizing peek");

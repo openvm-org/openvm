@@ -5,18 +5,18 @@
 //! ```text
 //! pure        program + mutable VM state -> final VM state
 //! metered     program + mutable VM state -> final VM state + segment plan
-//! checkpoint  program + mutable VM state -> final VM state + checkpoints + residuals
+//! preflight   program + mutable VM state -> final VM state + replay seed
 //! ```
 //!
-//! Checkpoint preflight is the proving path. Its two append-only arrays are a
-//! compact replay seed, not chip records. GPU expansion re-executes independent
-//! checkpoint intervals to derive the immutable program and memory history used
-//! by system, RISC-V, and extension trace generators.
+//! Preflight emits two append-only arrays containing checkpoints and residuals.
+//! They are a compact replay seed, not chip records. Postflight re-executes
+//! independent intervals on the GPU to derive the immutable program and memory
+//! history used by system, RISC-V, and extension trace generators.
 
 mod abi_consts;
 pub mod bridge;
 mod cache;
-pub mod checkpoint_preflight;
+mod checkpoint_preflight;
 pub mod compile;
 #[cfg(feature = "cuda")]
 pub mod cuda;
@@ -28,16 +28,15 @@ pub mod metered;
 pub mod metered_cost;
 #[cfg(all(feature = "cuda", any(test, feature = "test-utils")))]
 mod postflight;
-pub mod preflight;
+mod preflight;
 pub mod pure;
 pub mod state;
 
 pub use checkpoint_preflight::{
-    RvrCheckpointPreflightExecution, RvrCheckpointPreflightInstance, RvrCheckpointPreflightLimits,
-    RvrCheckpointPreflightTranscript,
+    PreflightEndpoint, PreflightExecution, PreflightInstance, PreflightLimits, PreflightTranscript,
 };
 pub use compile::{
-    build_pc_to_chip, compile, compile_checkpoint_preflight, compile_metered, compile_metered_cost,
+    build_pc_to_chip, compile, compile_full_log_preflight, compile_metered, compile_metered_cost,
     compile_metered_segment_boundary, compile_preflight, compile_with_instret_tracking,
     compile_with_options, load_compiled_from_path, ChipMapping, CompileError, CompileOptions,
     RvrCompiled,
@@ -48,8 +47,8 @@ pub use initial_image::RvrInitialImage;
 pub use metered::{RvrMeteredExecutionOutcome, RvrMeteredInstance, RvrMeteredSegmentInstance};
 pub use metered_cost::{MeteredCostState, RvrMeteredCostInstance};
 pub use preflight::{
-    RvrPreflightEndpoint, RvrPreflightExecution, RvrPreflightInstance, RvrPreflightLimits,
-    RvrPreflightTranscript,
+    FullLogPreflightExecution, FullLogPreflightInstance, FullLogPreflightLimits,
+    FullLogPreflightTranscript,
 };
 pub use pure::{
     RvrPureInstance, RvrPureWithInstretTrackingInstance, RvrTrackedExecution,

@@ -1,9 +1,9 @@
-//! Record-free GPU proving from RVR checkpoint execution.
+//! Record-free GPU proving from compiled preflight execution.
 //!
 //! ```text
-//! metered RVR -> exact segment boundaries
+//! metered execution -> segment boundaries
 //!                         |
-//! segment-start memory ---+--> checkpoint RVR -> final mutable VM state
+//! segment-start memory ---+--> preflight -> final mutable VM state
 //!                                      |
 //!                              checkpoints + residuals
 //!                                      |
@@ -18,7 +18,7 @@
 //!                         drop replay scratch -> prove
 //! ```
 //!
-//! Segment-start memory is uploaded before checkpoint execution mutates the
+//! Segment-start memory is uploaded before preflight mutates the
 //! host state. The checkpoint log seeds parallel replay; the derived program
 //! and memory logs are not executor output and do not survive into the proving
 //! memory peak.
@@ -31,8 +31,8 @@ use openvm_circuit::{
         execution_mode::{MeteredCtx, Segment},
         hasher::poseidon2::vm_poseidon2_hasher,
         rvr::{
-            cuda::GpuRvrProgram, RvrCheckpointPreflightExecution, RvrCheckpointPreflightInstance,
-            RvrCheckpointPreflightLimits, RvrMeteredInstance, RvrPreflightEndpoint,
+            cuda::GpuRvrProgram, PreflightEndpoint, PreflightExecution, PreflightInstance,
+            PreflightLimits, RvrMeteredInstance,
         },
         ContinuationVmProof, ExecutionError, GenerationError, Streams, VirtualMachineError,
         VmInstance,
@@ -48,45 +48,29 @@ use crate::{StdIn, SC};
 
 const CHECKPOINT_INTERVAL: usize = 512;
 
-/// Program-specific executors and device data prepared once and reused by
-/// every checkpoint proof.
-pub(super) struct RvrCheckpointRuntime<'a> {
-    metered: RvrMeteredInstance<'a>,
-    metered_ctx: MeteredCtx,
-    checkpoint: RvrCheckpointPreflightInstance<'a>,
-    gpu_program: GpuRvrProgram,
-}
-
-impl<'a> RvrCheckpointRuntime<'a> {
-    pub(crate) fn new(
-        metered: RvrMeteredInstance<'a>,
-        metered_ctx: MeteredCtx,
-        checkpoint: RvrCheckpointPreflightInstance<'a>,
-        gpu_program: GpuRvrProgram,
-    ) -> Self {
-        Self {
-            metered,
-            metered_ctx,
-            checkpoint,
-            gpu_program,
-        }
-    }
-}
-
-/// Explicit continuation driver for compact RVR checkpoint preflight and
-/// record-free GPU trace generation.
+/// Continuation driver for compiled preflight and record-free GPU trace generation.
 pub(super) fn prove(
     instance: &mut VmInstance<BabyBearPoseidon2GpuEngine, SdkVmGpuBuilder>,
     input: StdIn,
-    runtime: &RvrCheckpointRuntime<'_>,
+    metered: &RvrMeteredInstance<'_>,
+    metered_ctx: &MeteredCtx,
+    preflight: &PreflightInstance<'_>,
+    gpu_program: &GpuRvrProgram,
 ) -> Result<ContinuationVmProof<SC>, VirtualMachineError> {
     let input: Streams = input.into();
     instance.reset_state(input.clone());
     let exe = instance.exe().clone();
 
-    let result = prove_inner(instance, input, runtime);
+    let result = prove_inner(
+        instance,
+        input,
+        metered,
+        metered_ctx,
+        preflight,
+        gpu_program,
+    );
     if result.is_err() && instance.state().is_none() {
-        // Checkpoint execution consumes the segment state. If it fails before
+        // Preflight consumes the segment state. If it fails before
         // returning that state, restore an allocated initial state so the
         // fixed-program instance remains reusable. The next proof resets its
         // memory and streams before execution.
@@ -98,13 +82,14 @@ pub(super) fn prove(
 fn prove_inner(
     instance: &mut VmInstance<BabyBearPoseidon2GpuEngine, SdkVmGpuBuilder>,
     input: Streams,
-    runtime: &RvrCheckpointRuntime<'_>,
+    metered: &RvrMeteredInstance<'_>,
+    metered_ctx: &MeteredCtx,
+    preflight: &PreflightInstance<'_>,
+    gpu_program: &GpuRvrProgram,
 ) -> Result<ContinuationVmProof<SC>, VirtualMachineError> {
     // Meter once. Its exact instruction and residual counts are the only
-    // capacities supplied to checkpoint preflight for each segment.
-    let (segments, _) = runtime
-        .metered
-        .execute_metered(input, runtime.metered_ctx.clone())?;
+    // capacities supplied to preflight for each segment.
+    let (segments, _) = metered.execute_metered(input, metered_ctx.clone())?;
 
     let num_segments = segments.len();
     let mut proofs = Vec::with_capacity(num_segments);
@@ -114,11 +99,11 @@ fn prove_inner(
         .ok_or_else(|| execution_error("VM instance has no execution state"))?;
     let mut reuse = None;
     #[cfg(feature = "metrics")]
-    let mut checkpoint_execution_time = Duration::ZERO;
+    let mut preflight_time = Duration::ZERO;
     #[cfg(feature = "metrics")]
-    let mut checkpoint_retired = 0u64;
+    let mut preflight_retired = 0u64;
     #[cfg(feature = "metrics")]
-    let mut checkpoint_retired_by_segment = Vec::with_capacity(num_segments);
+    let mut preflight_retired_by_segment = Vec::with_capacity(num_segments);
     #[cfg(feature = "metrics")]
     let mut checkpoint_count = 0u64;
     #[cfg(feature = "metrics")]
@@ -138,30 +123,34 @@ fn prove_inner(
             .map_err(|_| execution_error("metered segment instruction count exceeds usize"))?;
         let expected_retired = u32::try_from(num_insns)
             .map_err(|_| execution_error("metered segment instruction count exceeds u32"))?;
-        let limits = RvrCheckpointPreflightLimits::new(
+        let limits = PreflightLimits::new(
             num_insns,
             num_checkpoint_residuals as usize,
             CHECKPOINT_INTERVAL,
         );
 
         // Replay resolves its first reads against this immutable segment-start
-        // image, so upload it before checkpoint execution mutates host memory.
+        // image, so upload it before preflight mutates host memory.
         instance.vm.transport_init_memory_to_device(&state.memory);
         #[cfg(feature = "metrics")]
-        let checkpoint_execution_started = Instant::now();
+        let preflight_started = Instant::now();
         let execution = match reuse.take() {
-            Some(transcript) => runtime
-                .checkpoint
-                .execute_from_state_for_exact_reusing(state, limits, transcript)?,
-            None => runtime
-                .checkpoint
-                .execute_from_state_for_exact(state, limits)?,
+            Some(transcript) => {
+                preflight.execute_from_state_for_reusing(state, limits, transcript)?
+            }
+            None => preflight.execute_from_state_for(state, limits)?,
         };
+        if execution.retired != expected_retired {
+            return Err(execution_error(format!(
+                "preflight retired {} instructions, expected {expected_retired}",
+                execution.retired
+            )));
+        }
         #[cfg(feature = "metrics")]
         {
-            checkpoint_execution_time += checkpoint_execution_started.elapsed();
-            checkpoint_retired += u64::from(execution.retired);
-            checkpoint_retired_by_segment.push(u64::from(execution.retired));
+            preflight_time += preflight_started.elapsed();
+            preflight_retired += u64::from(execution.retired);
+            preflight_retired_by_segment.push(u64::from(execution.retired));
             checkpoint_count += execution.transcript.checkpoints.len() as u64;
             residual_count += execution.transcript.residuals.len() as u64;
             transcript_bytes += std::mem::size_of_val(execution.transcript.checkpoints.as_slice())
@@ -170,21 +159,17 @@ fn prove_inner(
         }
         validate_endpoint(&execution, segment_idx + 1 == num_segments)?;
 
-        let (gpu_transcript, replay_plan) = SdkVmGpuBuilder::postflight(
-            &instance.vm,
-            &runtime.gpu_program,
-            &execution,
-            expected_retired,
-        )
-        .map_err(generation_error)?;
+        let (gpu_transcript, replay_plan) =
+            SdkVmGpuBuilder::postflight(&instance.vm, gpu_program, &execution, expected_retired)
+                .map_err(generation_error)?;
         let ctx = SdkVmGpuBuilder::generate_preflight_proving_ctx(
             &mut instance.vm,
-            &runtime.gpu_program,
+            gpu_program,
             &gpu_transcript,
             &replay_plan,
         )?;
 
-        let RvrCheckpointPreflightExecution {
+        let PreflightExecution {
             state: next_state,
             mut transcript,
             ..
@@ -224,8 +209,8 @@ fn prove_inner(
     // failed proof never leaves a partial segment series.
     #[cfg(feature = "metrics")]
     {
-        let elapsed_micros = checkpoint_execution_time.as_secs_f64().max(1e-9) * 1_000_000.0;
-        for (segment, retired) in checkpoint_retired_by_segment.into_iter().enumerate() {
+        let elapsed_micros = preflight_time.as_secs_f64().max(1e-9) * 1_000_000.0;
+        for (segment, retired) in preflight_retired_by_segment.into_iter().enumerate() {
             metrics::counter!("execute_preflight_insns", "segment" => segment.to_string())
                 .absolute(retired);
         }
@@ -233,7 +218,7 @@ fn prove_inner(
         metrics::counter!("execute_preflight_residuals").absolute(residual_count);
         metrics::counter!("execute_preflight_transcript_bytes").absolute(transcript_bytes);
         metrics::gauge!("execute_preflight_insn_mi/s")
-            .set(checkpoint_retired as f64 / elapsed_micros);
+            .set(preflight_retired as f64 / elapsed_micros);
     }
 
     Ok(ContinuationVmProof {
@@ -243,12 +228,12 @@ fn prove_inner(
 }
 
 fn validate_endpoint(
-    execution: &RvrCheckpointPreflightExecution,
+    execution: &PreflightExecution,
     is_final_segment: bool,
 ) -> Result<(), VirtualMachineError> {
     let valid = matches!(
         (&execution.endpoint, is_final_segment),
-        (RvrPreflightEndpoint::Suspended { .. }, false) | (RvrPreflightEndpoint::Terminated, true)
+        (PreflightEndpoint::Suspended { .. }, false) | (PreflightEndpoint::Terminated, true)
     );
     if valid {
         Ok(())

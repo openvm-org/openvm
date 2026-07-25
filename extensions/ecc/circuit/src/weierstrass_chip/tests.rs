@@ -34,7 +34,7 @@ use {
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 use {
     openvm_circuit::arch::rvr::{
-        cuda::GpuRvrProgram, RvrPreflightEndpoint, RvrPreflightTranscript,
+        cuda::GpuRvrProgram, FullLogPreflightTranscript, PreflightEndpoint,
     },
     openvm_circuit::system::cuda::memory::MemoryInventoryGPU,
     openvm_circuit::{
@@ -143,7 +143,7 @@ fn make_vec_heap_transcript<const NUM_READS: usize, const BLOCKS: usize>(
     rd_val: u32,
     input_bytes: &[u8],
     output_bytes: &[u8],
-) -> (Program<F>, RvrPreflightTranscript) {
+) -> (Program<F>, FullLogPreflightTranscript) {
     let bytes_per_value = BLOCKS * MEMORY_BLOCK_BYTES;
     assert_eq!(input_bytes.len(), NUM_READS * bytes_per_value);
     assert_eq!(output_bytes.len(), bytes_per_value);
@@ -203,7 +203,7 @@ fn make_vec_heap_transcript<const NUM_READS: usize, const BLOCKS: usize>(
         Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0, 0, 0, 0, 0]);
     (
         Program::from_instructions(&[instruction, terminate]),
-        RvrPreflightTranscript {
+        FullLogPreflightTranscript {
             program_log: vec![
                 PreflightProgramEvent {
                     pc: 0,
@@ -333,10 +333,10 @@ fn assert_range_count_delta(before: &[u32], after: &[u32], expected: &[u32]) {
 #[cfg(all(feature = "cuda", feature = "rvr"))]
 fn combine_two_vec_heap_transcripts(
     first_instruction: Instruction<F>,
-    mut first: RvrPreflightTranscript,
+    mut first: FullLogPreflightTranscript,
     second_instruction: Instruction<F>,
-    mut second: RvrPreflightTranscript,
-) -> (Program<F>, RvrPreflightTranscript) {
+    mut second: FullLogPreflightTranscript,
+) -> (Program<F>, FullLogPreflightTranscript) {
     let second_start = first.program_log[1].timestamp;
     let timestamp_shift = second_start - second.program_log[0].timestamp;
     for event in &mut second.memory_log {
@@ -853,7 +853,7 @@ mod ec_addne_tests {
         )
         .unwrap();
         let (gpu_transcript, replay_plan) = gpu_program
-            .upload_transcript(&transcript, RvrPreflightEndpoint::Terminated)
+            .upload_transcript(&transcript, PreflightEndpoint::Terminated)
             .unwrap();
         let replay_ctx = harness
             .gpu_chip
@@ -889,7 +889,7 @@ mod ec_addne_tests {
         let write_start = 3 + 2 * BLOCKS;
         transcript.memory_log[write_start].value[0] ^= 1;
         let (corrupt_transcript, corrupt_plan) = gpu_program
-            .upload_transcript(&transcript, RvrPreflightEndpoint::Terminated)
+            .upload_transcript(&transcript, PreflightEndpoint::Terminated)
             .unwrap();
         assert!(harness
             .gpu_chip
@@ -1001,7 +1001,7 @@ mod ec_addne_tests {
         )
         .unwrap();
         let (gpu_transcript, replay_plan) = gpu_program
-            .upload_transcript(&transcript, RvrPreflightEndpoint::Terminated)
+            .upload_transcript(&transcript, PreflightEndpoint::Terminated)
             .unwrap();
         let extension = crate::WeierstrassExtension::new(vec![
             crate::SECP256K1_CONFIG.clone(),
@@ -1117,7 +1117,7 @@ mod ec_addne_tests {
         )
         .unwrap();
         let (poisoned_transcript, poisoned_plan) = poisoned_gpu_program
-            .upload_transcript(&transcript, RvrPreflightEndpoint::Terminated)
+            .upload_transcript(&transcript, PreflightEndpoint::Terminated)
             .unwrap();
         let late_coverage_error = crate::WeierstrassRvrGpuTracegen::new(
             &extension,
@@ -1158,7 +1158,7 @@ mod ec_addne_tests {
         )
         .unwrap();
         let (vm_transcript, vm_plan) = vm_gpu_program
-            .upload_transcript(&transcript, RvrPreflightEndpoint::Terminated)
+            .upload_transcript(&transcript, PreflightEndpoint::Terminated)
             .unwrap();
         let proving_ctx = crate::WeierstrassRvrGpuTracegen::new(
             &vm_config.weierstrass,
@@ -1177,7 +1177,7 @@ mod ec_addne_tests {
         // coordination clears the session poison, so restore the fixture's input image first.
         vm.transport_init_memory_to_device(&state.memory);
         let (retry_transcript, retry_plan) = vm_gpu_program
-            .upload_transcript(&transcript, RvrPreflightEndpoint::Terminated)
+            .upload_transcript(&transcript, PreflightEndpoint::Terminated)
             .unwrap();
         let retry_ctx = crate::WeierstrassRvrGpuTracegen::new(
             &vm_config.weierstrass,
@@ -1780,7 +1780,7 @@ mod ec_double_tests {
         )
         .unwrap();
         let (gpu_transcript, replay_plan) = gpu_program
-            .upload_transcript(&transcript, RvrPreflightEndpoint::Terminated)
+            .upload_transcript(&transcript, PreflightEndpoint::Terminated)
             .unwrap();
         let replay_ctx = harness
             .gpu_chip
@@ -1816,7 +1816,7 @@ mod ec_double_tests {
         let write_start = 2 + BLOCKS;
         transcript.memory_log[write_start].value[0] ^= 1;
         let (corrupt_transcript, corrupt_plan) = gpu_program
-            .upload_transcript(&transcript, RvrPreflightEndpoint::Terminated)
+            .upload_transcript(&transcript, PreflightEndpoint::Terminated)
             .unwrap();
         assert!(harness
             .gpu_chip

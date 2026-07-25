@@ -183,7 +183,7 @@ mod tests {
 
     #[cfg(feature = "rvr")]
     fn final_preflight_timestamp(
-        execution: &openvm_circuit::arch::rvr::RvrPreflightExecution,
+        execution: &openvm_circuit::arch::rvr::FullLogPreflightExecution,
     ) -> u32 {
         execution
             .transcript
@@ -319,10 +319,10 @@ mod tests {
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
         let executor = VmExecutor::new(test_rv64im_config())?;
-        let instance = executor.rvr_preflight_instance(&exe, None)?;
+        let instance = executor.full_log_preflight_instance(&exe, None)?;
         let execution = instance.execute(
             Vec::<Vec<u8>>::new(),
-            openvm_circuit::arch::rvr::RvrPreflightLimits::new(3, 5),
+            openvm_circuit::arch::rvr::FullLogPreflightLimits::new(3, 5),
         )?;
 
         let program = &execution.transcript.program_log;
@@ -361,7 +361,7 @@ mod tests {
 
         let capacity_error = match instance.execute(
             Vec::<Vec<u8>>::new(),
-            openvm_circuit::arch::rvr::RvrPreflightLimits::new(0, 0),
+            openvm_circuit::arch::rvr::FullLogPreflightLimits::new(0, 0),
         ) {
             Ok(_) => panic!("zero-capacity execution unexpectedly succeeded"),
             Err(error) => error,
@@ -372,7 +372,7 @@ mod tests {
 
         let allocation_error = match instance.execute(
             Vec::<Vec<u8>>::new(),
-            openvm_circuit::arch::rvr::RvrPreflightLimits::new(0, usize::MAX),
+            openvm_circuit::arch::rvr::FullLogPreflightLimits::new(0, usize::MAX),
         ) {
             Ok(_) => panic!("impossible capacity unexpectedly succeeded"),
             Err(error) => error,
@@ -409,15 +409,15 @@ mod tests {
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
         let executor = VmExecutor::new(test_rv64im_config())?;
-        let instance = executor.rvr_preflight_instance(&exe, None)?;
+        let instance = executor.full_log_preflight_instance(&exe, None)?;
 
         let too_small = instance.execute_for(
             Vec::<Vec<u8>>::new(),
-            openvm_circuit::arch::rvr::RvrPreflightLimits::new(1, 8),
+            openvm_circuit::arch::rvr::FullLogPreflightLimits::new(1, 8),
         )?;
         assert_eq!(
             too_small.endpoint,
-            openvm_circuit::arch::rvr::RvrPreflightEndpoint::Suspended {
+            openvm_circuit::arch::rvr::PreflightEndpoint::Suspended {
                 resume_pc: 0,
                 final_timestamp: 1,
             }
@@ -434,11 +434,11 @@ mod tests {
 
         let first = instance.execute_for(
             Vec::<Vec<u8>>::new(),
-            openvm_circuit::arch::rvr::RvrPreflightLimits::new(2, 8),
+            openvm_circuit::arch::rvr::FullLogPreflightLimits::new(2, 8),
         )?;
         assert_eq!(
             first.endpoint,
-            openvm_circuit::arch::rvr::RvrPreflightEndpoint::Suspended {
+            openvm_circuit::arch::rvr::PreflightEndpoint::Suspended {
                 resume_pc: 12,
                 final_timestamp: 5,
             }
@@ -456,11 +456,11 @@ mod tests {
 
         let second = instance.execute_from_state_for(
             first.state,
-            openvm_circuit::arch::rvr::RvrPreflightLimits::new(1, 0),
+            openvm_circuit::arch::rvr::FullLogPreflightLimits::new(1, 0),
         )?;
         assert_eq!(
             second.endpoint,
-            openvm_circuit::arch::rvr::RvrPreflightEndpoint::Terminated
+            openvm_circuit::arch::rvr::PreflightEndpoint::Terminated
         );
         assert_eq!(
             second
@@ -476,7 +476,7 @@ mod tests {
 
         let unbounded = instance.execute(
             Vec::<Vec<u8>>::new(),
-            openvm_circuit::arch::rvr::RvrPreflightLimits::new(3, 4),
+            openvm_circuit::arch::rvr::FullLogPreflightLimits::new(3, 4),
         )?;
         let segmented_pcs = first
             .transcript
@@ -510,7 +510,7 @@ mod tests {
 
         let termination_required = match instance.execute(
             Vec::<Vec<u8>>::new(),
-            openvm_circuit::arch::rvr::RvrPreflightLimits::new(2, 8),
+            openvm_circuit::arch::rvr::FullLogPreflightLimits::new(2, 8),
         ) {
             Ok(_) => panic!("termination-required preflight unexpectedly suspended successfully"),
             Err(error) => error,
@@ -521,7 +521,7 @@ mod tests {
 
         let memory_error = match instance.execute_for(
             Vec::<Vec<u8>>::new(),
-            openvm_circuit::arch::rvr::RvrPreflightLimits::new(2, 3),
+            openvm_circuit::arch::rvr::FullLogPreflightLimits::new(2, 3),
         ) {
             Ok(_) => panic!("mid-block memory exhaustion unexpectedly suspended"),
             Err(error) => error,
@@ -562,12 +562,12 @@ mod tests {
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
         let executor = VmExecutor::new(test_rv64im_config())?;
-        let full = executor.rvr_preflight_instance(&exe, None)?;
-        let checkpoint = executor.checkpoint_preflight_instance(&exe, None)?;
+        let full = executor.full_log_preflight_instance(&exe, None)?;
+        let checkpoint = executor.preflight_instance(&exe, None)?;
 
-        let exact_error = match checkpoint.execute_from_state_for_exact(
+        let exact_error = match checkpoint.execute_from_state_for(
             checkpoint.create_initial_vm_state(Vec::<Vec<u8>>::new()),
-            openvm_circuit::arch::rvr::RvrCheckpointPreflightLimits::new(5, 0, 2),
+            openvm_circuit::arch::rvr::PreflightLimits::new(5, 0, 2),
         ) {
             Ok(_) => panic!("an early termination must not satisfy a metered segment boundary"),
             Err(error) => error,
@@ -578,11 +578,11 @@ mod tests {
 
         let full_first = full.execute_for(
             Vec::<Vec<u8>>::new(),
-            openvm_circuit::arch::rvr::RvrPreflightLimits::new(3, 8),
+            openvm_circuit::arch::rvr::FullLogPreflightLimits::new(3, 8),
         )?;
         let checkpoint_first = checkpoint.execute_for(
             Vec::<Vec<u8>>::new(),
-            openvm_circuit::arch::rvr::RvrCheckpointPreflightLimits::new(3, 0, 2),
+            openvm_circuit::arch::rvr::PreflightLimits::new(3, 0, 2),
         )?;
         assert_eq!(checkpoint_first.endpoint, full_first.endpoint);
         assert_eq!(checkpoint_first.state.pc(), full_first.state.pc());
@@ -606,11 +606,11 @@ mod tests {
 
         let full_second = full.execute_from_state_for(
             full_first.state,
-            openvm_circuit::arch::rvr::RvrPreflightLimits::new(1, 0),
+            openvm_circuit::arch::rvr::FullLogPreflightLimits::new(1, 0),
         )?;
         let checkpoint_second = checkpoint.execute_from_state_for(
             checkpoint_first.state,
-            openvm_circuit::arch::rvr::RvrCheckpointPreflightLimits::new(1, 0, 2),
+            openvm_circuit::arch::rvr::PreflightLimits::new(1, 0, 2),
         )?;
         assert_eq!(checkpoint_second.endpoint, full_second.endpoint);
         assert_eq!(checkpoint_second.state.pc(), full_second.state.pc());
@@ -663,7 +663,7 @@ mod tests {
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
         let executor = VmExecutor::new(test_rv64im_config())?;
-        let checkpoint = executor.checkpoint_preflight_instance(&exe, None)?;
+        let checkpoint = executor.preflight_instance(&exe, None)?;
         let address = PAGE_SIZE as u64 + 8;
         let value = 0x0123_4567_89ab_cdef;
         let initial = configure_hint_state(
@@ -681,11 +681,11 @@ mod tests {
 
         let first = checkpoint.execute_from_state_for(
             initial,
-            openvm_circuit::arch::rvr::RvrCheckpointPreflightLimits::new(2, 0, 2),
+            openvm_circuit::arch::rvr::PreflightLimits::new(2, 0, 2),
         )?;
         assert_eq!(
             first.endpoint,
-            openvm_circuit::arch::rvr::RvrPreflightEndpoint::Suspended {
+            openvm_circuit::arch::rvr::PreflightEndpoint::Suspended {
                 resume_pc: 8,
                 final_timestamp: 6,
             }
@@ -700,7 +700,7 @@ mod tests {
 
         let second = checkpoint.execute_from_state_for(
             first.state,
-            openvm_circuit::arch::rvr::RvrCheckpointPreflightLimits::new(3, 1, 2),
+            openvm_circuit::arch::rvr::PreflightLimits::new(3, 1, 2),
         )?;
         assert_eq!(read_register(&second.state, 3), value);
         assert_eq!(read_main_word(&second.state, address as u32), 0);
@@ -746,8 +746,8 @@ mod tests {
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
         let executor = VmExecutor::new(test_rv64im_config())?;
-        let full = executor.rvr_preflight_instance(&exe, None)?;
-        let checkpoint = executor.checkpoint_preflight_instance(&exe, None)?;
+        let full = executor.full_log_preflight_instance(&exe, None)?;
+        let checkpoint = executor.preflight_instance(&exe, None)?;
         let loaded = 0x0123_4567_89ab_cdefu64;
         let x0_only = 0xfedc_ba98_7654_3210u64;
         let sign_extended = 0xffff_ffff_8000_0001u64;
@@ -770,11 +770,11 @@ mod tests {
 
         let full_execution = full.execute_from_state(
             full_initial,
-            openvm_circuit::arch::rvr::RvrPreflightLimits::new(instructions.len(), 16),
+            openvm_circuit::arch::rvr::FullLogPreflightLimits::new(instructions.len(), 16),
         )?;
         let checkpoint_execution = checkpoint.execute_from_state(
             checkpoint_initial,
-            openvm_circuit::arch::rvr::RvrCheckpointPreflightLimits::new(instructions.len(), 2, 2),
+            openvm_circuit::arch::rvr::PreflightLimits::new(instructions.len(), 2, 2),
         )?;
         assert_eq!(checkpoint_execution.endpoint, full_execution.endpoint);
         assert_eq!(checkpoint_execution.state.pc(), full_execution.state.pc());
@@ -837,8 +837,8 @@ mod tests {
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
         let executor = VmExecutor::new(test_rv64im_config())?;
-        let full = executor.rvr_preflight_instance(&exe, None)?;
-        let checkpoint = executor.checkpoint_preflight_instance(&exe, None)?;
+        let full = executor.full_log_preflight_instance(&exe, None)?;
+        let checkpoint = executor.preflight_instance(&exe, None)?;
         let hint_words = [
             0x0123_4567_89ab_cdef,
             0x1111_2222_3333_4444,
@@ -858,11 +858,11 @@ mod tests {
 
         let full_execution = full.execute_from_state(
             full_initial,
-            openvm_circuit::arch::rvr::RvrPreflightLimits::new(instructions.len(), 8),
+            openvm_circuit::arch::rvr::FullLogPreflightLimits::new(instructions.len(), 8),
         )?;
         let checkpoint_execution = checkpoint.execute_from_state(
             checkpoint_initial,
-            openvm_circuit::arch::rvr::RvrCheckpointPreflightLimits::new(
+            openvm_circuit::arch::rvr::PreflightLimits::new(
                 instructions.len(),
                 hint_words.len(),
                 2,
@@ -910,8 +910,8 @@ mod tests {
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
         let executor = VmExecutor::new(config)?;
-        let full = executor.rvr_preflight_instance(&exe, None)?;
-        let checkpoint = executor.checkpoint_preflight_instance(&exe, None)?;
+        let full = executor.full_log_preflight_instance(&exe, None)?;
+        let checkpoint = executor.preflight_instance(&exe, None)?;
         let registers = [(1, 0xa5), (2, 2), (3, 0x1122_3344), (4, 7)];
         let initial_public_values = (0u8..16).collect::<Vec<_>>();
         let full_initial = configure_reveal_state(
@@ -927,11 +927,11 @@ mod tests {
 
         let full_execution = full.execute_from_state(
             full_initial,
-            openvm_circuit::arch::rvr::RvrPreflightLimits::new(instructions.len(), 7),
+            openvm_circuit::arch::rvr::FullLogPreflightLimits::new(instructions.len(), 7),
         )?;
         let checkpoint_execution = checkpoint.execute_from_state(
             checkpoint_initial,
-            openvm_circuit::arch::rvr::RvrCheckpointPreflightLimits::new(instructions.len(), 0, 2),
+            openvm_circuit::arch::rvr::PreflightLimits::new(instructions.len(), 0, 2),
         )?;
 
         assert_eq!(checkpoint_execution.endpoint, full_execution.endpoint);
@@ -996,15 +996,15 @@ mod tests {
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
         let executor = VmExecutor::new(test_rv64im_config())?;
-        let preflight = executor.rvr_preflight_instance(&exe, None)?;
+        let preflight = executor.full_log_preflight_instance(&exe, None)?;
 
         let suspended = preflight.execute_for(
             Vec::<Vec<u8>>::new(),
-            openvm_circuit::arch::rvr::RvrPreflightLimits::new(3, 0),
+            openvm_circuit::arch::rvr::FullLogPreflightLimits::new(3, 0),
         )?;
         assert_eq!(
             suspended.endpoint,
-            openvm_circuit::arch::rvr::RvrPreflightEndpoint::Suspended {
+            openvm_circuit::arch::rvr::PreflightEndpoint::Suspended {
                 resume_pc: 0,
                 final_timestamp: 1,
             }
@@ -1023,11 +1023,11 @@ mod tests {
 
         let execution = preflight.execute(
             Vec::<Vec<u8>>::new(),
-            openvm_circuit::arch::rvr::RvrPreflightLimits::new(4, 0),
+            openvm_circuit::arch::rvr::FullLogPreflightLimits::new(4, 0),
         )?;
         assert_eq!(
             execution.endpoint,
-            openvm_circuit::arch::rvr::RvrPreflightEndpoint::Terminated
+            openvm_circuit::arch::rvr::PreflightEndpoint::Terminated
         );
         assert_eq!(
             execution
@@ -1053,18 +1053,18 @@ mod tests {
     fn test_rvr_callback_phantoms_are_serial_without_memory_events() -> Result<()> {
         let exe = callback_phantom_exe();
         let executor = VmExecutor::new(test_rv64im_config())?;
-        let preflight = executor.rvr_preflight_instance(&exe, None)?;
+        let preflight = executor.full_log_preflight_instance(&exe, None)?;
         let inputs = vec![b"first".to_vec(), b"second".to_vec()];
         let initial_state =
             configure_callback_state(preflight.create_initial_vm_state(inputs.clone()));
 
         let suspended = preflight.execute_from_state_for(
             initial_state,
-            openvm_circuit::arch::rvr::RvrPreflightLimits::new(2, 0),
+            openvm_circuit::arch::rvr::FullLogPreflightLimits::new(2, 0),
         )?;
         assert_eq!(
             suspended.endpoint,
-            openvm_circuit::arch::rvr::RvrPreflightEndpoint::Suspended {
+            openvm_circuit::arch::rvr::PreflightEndpoint::Suspended {
                 resume_pc: 8,
                 final_timestamp: 3,
             }
@@ -1103,11 +1103,11 @@ mod tests {
 
         let mut execution = preflight.execute_from_state_for(
             suspended.state,
-            openvm_circuit::arch::rvr::RvrPreflightLimits::new(3, 0),
+            openvm_circuit::arch::rvr::FullLogPreflightLimits::new(3, 0),
         )?;
         assert_eq!(
             execution.endpoint,
-            openvm_circuit::arch::rvr::RvrPreflightEndpoint::Terminated
+            openvm_circuit::arch::rvr::PreflightEndpoint::Terminated
         );
         assert_eq!(
             execution
@@ -1168,7 +1168,7 @@ mod tests {
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
         let executor = VmExecutor::new(test_rv64im_config())?;
-        let instance = executor.rvr_preflight_instance(&exe, None)?;
+        let instance = executor.full_log_preflight_instance(&exe, None)?;
         let word_counts = [1usize, 3, MAX_HINT_BUFFER_DWORDS];
         let destinations = [0u64, 16, 64];
         let registers = [
@@ -1190,7 +1190,7 @@ mod tests {
         let total_memory_events = 2 * word_counts.len() + hint_words.len();
         let execution = instance.execute_from_state(
             initial,
-            openvm_circuit::arch::rvr::RvrPreflightLimits::new(
+            openvm_circuit::arch::rvr::FullLogPreflightLimits::new(
                 instructions.len(),
                 total_memory_events,
             ),
@@ -1294,7 +1294,7 @@ mod tests {
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
         let executor = VmExecutor::new(test_rv64im_config())?;
-        let instance = executor.rvr_preflight_instance(&exe, None)?;
+        let instance = executor.full_log_preflight_instance(&exe, None)?;
         let hint_words = [0x0123_4567_89ab_cdef, 0xfedc_ba98_7654_3210];
         let initial = configure_hint_state(
             instance.create_initial_vm_state(Vec::<Vec<u8>>::new()),
@@ -1303,7 +1303,7 @@ mod tests {
         );
         let execution = instance.execute_from_state(
             initial,
-            openvm_circuit::arch::rvr::RvrPreflightLimits::new(3, 4),
+            openvm_circuit::arch::rvr::FullLogPreflightLimits::new(3, 4),
         )?;
 
         assert_eq!(
@@ -1354,7 +1354,7 @@ mod tests {
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
         let executor = VmExecutor::new(test_rv64im_config())?;
-        let instance = executor.rvr_preflight_instance(&exe, None)?;
+        let instance = executor.full_log_preflight_instance(&exe, None)?;
         let hint_words = [0x0123_4567_89ab_cdef, 0xfedc_ba98_7654_3210];
         let initial = configure_hint_state(
             instance.create_initial_vm_state(Vec::<Vec<u8>>::new()),
@@ -1364,11 +1364,11 @@ mod tests {
 
         let first = instance.execute_from_state_for(
             initial,
-            openvm_circuit::arch::rvr::RvrPreflightLimits::new(2, 2),
+            openvm_circuit::arch::rvr::FullLogPreflightLimits::new(2, 2),
         )?;
         assert_eq!(
             first.endpoint,
-            openvm_circuit::arch::rvr::RvrPreflightEndpoint::Suspended {
+            openvm_circuit::arch::rvr::PreflightEndpoint::Suspended {
                 resume_pc: 8,
                 final_timestamp: 5,
             }
@@ -1387,11 +1387,11 @@ mod tests {
 
         let second = instance.execute_from_state(
             first.state,
-            openvm_circuit::arch::rvr::RvrPreflightLimits::new(2, 2),
+            openvm_circuit::arch::rvr::FullLogPreflightLimits::new(2, 2),
         )?;
         assert_eq!(
             second.endpoint,
-            openvm_circuit::arch::rvr::RvrPreflightEndpoint::Terminated
+            openvm_circuit::arch::rvr::PreflightEndpoint::Terminated
         );
         assert_eq!(
             second
@@ -1416,7 +1416,7 @@ mod tests {
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
         let executor = VmExecutor::new(test_rv64im_config())?;
-        let instance = executor.rvr_preflight_instance(&exe, None)?;
+        let instance = executor.full_log_preflight_instance(&exe, None)?;
         let initial = configure_hint_state(
             instance.create_initial_vm_state(Vec::<Vec<u8>>::new()),
             &[(1, 0), (2, 3)],
@@ -1424,7 +1424,7 @@ mod tests {
         );
         let error = match instance.execute_from_state(
             initial,
-            openvm_circuit::arch::rvr::RvrPreflightLimits::new(2, 4),
+            openvm_circuit::arch::rvr::FullLogPreflightLimits::new(2, 4),
         ) {
             Ok(_) => panic!("undersized whole-operation reservation unexpectedly succeeded"),
             Err(error) => error,
@@ -1583,10 +1583,10 @@ mod tests {
             instructions.len() as u64,
             &segment.trace_heights,
         )?;
-        let rvr = vm.executor().rvr_preflight_instance(&exe, None)?;
+        let rvr = vm.executor().full_log_preflight_instance(&exe, None)?;
         let execution = rvr.execute_from_state(
             initial,
-            openvm_circuit::arch::rvr::RvrPreflightLimits::new(instructions.len(), 17),
+            openvm_circuit::arch::rvr::FullLogPreflightLimits::new(instructions.len(), 17),
         )?;
 
         assert_eq!(
@@ -1758,7 +1758,7 @@ mod tests {
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
         let executor = VmExecutor::new(config)?;
-        let instance = executor.rvr_preflight_instance(&exe, None)?;
+        let instance = executor.full_log_preflight_instance(&exe, None)?;
         let initial = configure_reveal_state(
             instance.create_initial_vm_state(Vec::<Vec<u8>>::new()),
             &[(1, 0xaabb_ccdd), (2, 8), (3, 0xee), (4, 9)],
@@ -1767,11 +1767,11 @@ mod tests {
 
         let first = instance.execute_from_state_for(
             initial,
-            openvm_circuit::arch::rvr::RvrPreflightLimits::new(2, 3),
+            openvm_circuit::arch::rvr::FullLogPreflightLimits::new(2, 3),
         )?;
         assert_eq!(
             first.endpoint,
-            openvm_circuit::arch::rvr::RvrPreflightEndpoint::Suspended {
+            openvm_circuit::arch::rvr::PreflightEndpoint::Suspended {
                 resume_pc: 8,
                 final_timestamp: 6,
             }
@@ -1802,11 +1802,11 @@ mod tests {
 
         let second = instance.execute_from_state_for(
             first.state,
-            openvm_circuit::arch::rvr::RvrPreflightLimits::new(2, 3),
+            openvm_circuit::arch::rvr::FullLogPreflightLimits::new(2, 3),
         )?;
         assert_eq!(
             second.endpoint,
-            openvm_circuit::arch::rvr::RvrPreflightEndpoint::Terminated
+            openvm_circuit::arch::rvr::PreflightEndpoint::Terminated
         );
         assert_eq!(
             second
@@ -1844,7 +1844,7 @@ mod tests {
             Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ]));
         let executor = VmExecutor::new(config.clone())?;
-        let instance = executor.rvr_preflight_instance(&capacity_exe, None)?;
+        let instance = executor.full_log_preflight_instance(&capacity_exe, None)?;
         let initial = configure_reveal_state(
             instance.create_initial_vm_state(Vec::<Vec<u8>>::new()),
             &[(1, u64::MAX), (2, 4)],
@@ -1852,7 +1852,7 @@ mod tests {
         );
         let error = match instance.execute_from_state(
             initial,
-            openvm_circuit::arch::rvr::RvrPreflightLimits::new(2, 3),
+            openvm_circuit::arch::rvr::FullLogPreflightLimits::new(2, 3),
         ) {
             Ok(_) => panic!("undersized REVEAL reservation unexpectedly succeeded"),
             Err(error) => error,
@@ -1865,7 +1865,7 @@ mod tests {
             reveal_instruction(Rv64LoadStoreOpcode::STOREB, 1, 2, 1),
             Instruction::<F>::from_isize(SystemOpcode::TERMINATE.global_opcode(), 0, 0, 0, 0, 0),
         ]));
-        let preflight = executor.rvr_preflight_instance(&address_exe, None)?;
+        let preflight = executor.full_log_preflight_instance(&address_exe, None)?;
         let invalid = configure_reveal_state(
             preflight.create_initial_vm_state(Vec::<Vec<u8>>::new()),
             &[(1, 0xff), (2, u64::MAX)],
@@ -1873,7 +1873,7 @@ mod tests {
         );
         let error = match preflight.execute_from_state(
             invalid,
-            openvm_circuit::arch::rvr::RvrPreflightLimits::new(2, 3),
+            openvm_circuit::arch::rvr::FullLogPreflightLimits::new(2, 3),
         ) {
             Ok(_) => panic!("wrapped REVEAL address unexpectedly succeeded"),
             Err(error) => error,
@@ -1910,10 +1910,10 @@ mod tests {
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
         let executor = VmExecutor::new(test_rv64im_config())?;
-        let preflight = executor.rvr_preflight_instance(&exe, None)?;
+        let preflight = executor.full_log_preflight_instance(&exe, None)?;
         let preflight_error = match preflight.execute(
             Vec::<Vec<u8>>::new(),
-            openvm_circuit::arch::rvr::RvrPreflightLimits::new(2, 0),
+            openvm_circuit::arch::rvr::FullLogPreflightLimits::new(2, 0),
         ) {
             Ok(_) => panic!("empty HINT_INPUT unexpectedly succeeded in preflight"),
             Err(error) => error,
@@ -1967,10 +1967,10 @@ mod tests {
         let mut config = test_rv64im_config();
         config.rv64i.system.memory_config.timestamp_max_bits = 2;
         let executor = VmExecutor::new(config)?;
-        let instance = executor.rvr_preflight_instance(&exe, None)?;
+        let instance = executor.full_log_preflight_instance(&exe, None)?;
         let error = match instance.execute(
             Vec::<Vec<u8>>::new(),
-            openvm_circuit::arch::rvr::RvrPreflightLimits::new(3, 4),
+            openvm_circuit::arch::rvr::FullLogPreflightLimits::new(3, 4),
         ) {
             Ok(_) => panic!("out-of-domain preflight unexpectedly succeeded"),
             Err(error) => error,
@@ -2018,9 +2018,9 @@ mod tests {
         let pure = executor.instance(&exe)?.execute(Vec::<Vec<u8>>::new())?;
         assert_eq!(pure.pc(), 12);
 
-        let preflight = executor.rvr_preflight_instance(&exe, None)?.execute(
+        let preflight = executor.full_log_preflight_instance(&exe, None)?.execute(
             Vec::<Vec<u8>>::new(),
-            openvm_circuit::arch::rvr::RvrPreflightLimits::new(3, 2),
+            openvm_circuit::arch::rvr::FullLogPreflightLimits::new(3, 2),
         )?;
         assert_eq!(preflight.state.pc(), 12);
         assert_eq!(
@@ -2101,13 +2101,15 @@ mod tests {
             .ok_or_else(|| eyre::eyre!("benchmark memory-event capacity overflow"))?;
 
         let pure = vm.get_rvr_instance(&exe)?;
-        let rvr = vm.executor().rvr_preflight_instance(&exe, None)?;
+        let rvr = vm.executor().full_log_preflight_instance(&exe, None)?;
         if let Some(path) = std::env::var_os("RVR_PREFLIGHT_BENCH_SOURCES") {
             rvr.save_generated_sources(std::path::Path::new(&path))?;
         }
         let mut interpreter = vm.preflight_interpreter(&exe)?;
-        let limits =
-            openvm_circuit::arch::rvr::RvrPreflightLimits::new(max_instructions, max_memory_events);
+        let limits = openvm_circuit::arch::rvr::FullLogPreflightLimits::new(
+            max_instructions,
+            max_memory_events,
+        );
         let mut interpreter_times = Vec::with_capacity(REPETITIONS);
         let mut pure_times = Vec::with_capacity(REPETITIONS);
         let mut metered_times = Vec::with_capacity(REPETITIONS);
@@ -2277,9 +2279,9 @@ mod tests {
         ];
         let exe = VmExe::from(Program::from_instructions(&instructions));
         let executor = VmExecutor::new(test_rv64im_config())?;
-        let execution = executor.rvr_preflight_instance(&exe, None)?.execute(
+        let execution = executor.full_log_preflight_instance(&exe, None)?.execute(
             Vec::<Vec<u8>>::new(),
-            openvm_circuit::arch::rvr::RvrPreflightLimits::new(8, 19),
+            openvm_circuit::arch::rvr::FullLogPreflightLimits::new(8, 19),
         )?;
 
         assert_eq!(

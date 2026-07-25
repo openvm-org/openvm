@@ -10,7 +10,7 @@ use rustc_hash::FxHashMap;
 use rvr_state::{PreflightInitialWrite, PreflightMemoryEvent, PreflightProgramEvent};
 use thiserror::Error;
 
-use super::{cuda::RvrReplayStep, RvrPreflightEndpoint, RvrPreflightTranscript};
+use super::{cuda::RvrReplayStep, FullLogPreflightTranscript, PreflightEndpoint};
 
 /// No earlier timed event exists for this block. This is valid for a first read,
 /// whose logged value is the segment's initial value.
@@ -26,9 +26,9 @@ const fn memory_key(address_space: u32, pointer: u32) -> u64 {
 
 #[derive(Debug, Error)]
 #[error("invalid RVR preflight transcript: {0}")]
-pub(crate) struct RvrPreflightIndexError(String);
+pub(crate) struct PreflightIndexError(String);
 
-impl RvrPreflightIndexError {
+impl PreflightIndexError {
     fn new(message: impl Into<String>) -> Self {
         Self(message.into())
     }
@@ -37,14 +37,14 @@ impl RvrPreflightIndexError {
 fn build_step_memory_starts(
     program: &[PreflightProgramEvent],
     memory: &[PreflightMemoryEvent],
-) -> Result<Vec<u32>, RvrPreflightIndexError> {
+) -> Result<Vec<u32>, PreflightIndexError> {
     if program.is_empty() {
-        return Err(RvrPreflightIndexError::new(
+        return Err(PreflightIndexError::new(
             "transcript must contain a final sentinel",
         ));
     }
     if program[0].timestamp != 1 {
-        return Err(RvrPreflightIndexError::new(
+        return Err(PreflightIndexError::new(
             "segment transcript must start at timestamp 1",
         ));
     }
@@ -54,7 +54,7 @@ fn build_step_memory_starts(
     for (program_index, boundary) in program.windows(2).enumerate() {
         let [from, to] = boundary else { unreachable!() };
         if to.timestamp < from.timestamp {
-            return Err(RvrPreflightIndexError::new(format!(
+            return Err(PreflightIndexError::new(format!(
                 "program timestamp moved backwards at step {program_index}"
             )));
         }
@@ -62,21 +62,23 @@ fn build_step_memory_starts(
             .get(memory_cursor)
             .is_some_and(|event| event.timestamp < from.timestamp)
         {
-            return Err(RvrPreflightIndexError::new(format!(
+            return Err(PreflightIndexError::new(format!(
                 "memory event {memory_cursor} precedes step {program_index}"
             )));
         }
 
-        step_memory_starts.push(u32::try_from(memory_cursor).map_err(|_| {
-            RvrPreflightIndexError::new("memory log has more than u32::MAX entries")
-        })?);
+        step_memory_starts.push(
+            u32::try_from(memory_cursor).map_err(|_| {
+                PreflightIndexError::new("memory log has more than u32::MAX entries")
+            })?,
+        );
         while memory
             .get(memory_cursor)
             .is_some_and(|event| event.timestamp < to.timestamp)
         {
             let timestamp = memory[memory_cursor].timestamp;
             if previous_memory_timestamp.is_some_and(|previous| previous >= timestamp) {
-                return Err(RvrPreflightIndexError::new(
+                return Err(PreflightIndexError::new(
                     "memory timestamps are not strictly increasing",
                 ));
             }
@@ -85,7 +87,7 @@ fn build_step_memory_starts(
         }
     }
     if memory_cursor != memory.len() {
-        return Err(RvrPreflightIndexError::new(format!(
+        return Err(PreflightIndexError::new(format!(
             "{} memory events occur at or after the final sentinel",
             memory.len() - memory_cursor
         )));
@@ -104,9 +106,9 @@ impl RvrReplayData {
     pub(crate) fn build(
         pc_base: u32,
         opcodes: &[u32],
-        transcript: &RvrPreflightTranscript,
-        endpoint: RvrPreflightEndpoint,
-    ) -> Result<Self, RvrPreflightIndexError> {
+        transcript: &FullLogPreflightTranscript,
+        endpoint: PreflightEndpoint,
+    ) -> Result<Self, PreflightIndexError> {
         let step_memory_starts =
             build_step_memory_starts(&transcript.program_log, &transcript.memory_log)?;
         let mut opcode_counts = BTreeMap::<u32, usize>::new();
@@ -135,7 +137,7 @@ impl RvrReplayData {
                 .expect("opcode count was collected in the first pass");
             steps[*destination] = RvrReplayStep {
                 program_index: u32::try_from(program_index).map_err(|_| {
-                    RvrPreflightIndexError::new("program log has more than u32::MAX entries")
+                    PreflightIndexError::new("program log has more than u32::MAX entries")
                 })?,
                 memory_start,
             };
@@ -160,15 +162,15 @@ fn resolve_opcode(
     pc_base: u32,
     opcodes: &[u32],
     event: &PreflightProgramEvent,
-) -> Result<u32, RvrPreflightIndexError> {
+) -> Result<u32, PreflightIndexError> {
     let delta = event.pc.checked_sub(pc_base).ok_or_else(|| {
-        RvrPreflightIndexError::new(format!(
+        PreflightIndexError::new(format!(
             "program log PC {:#x} precedes program base",
             event.pc
         ))
     })?;
     if delta % DEFAULT_PC_STEP != 0 {
-        return Err(RvrPreflightIndexError::new(format!(
+        return Err(PreflightIndexError::new(format!(
             "program log PC {:#x} is not instruction-aligned",
             event.pc
         )));
@@ -179,7 +181,7 @@ fn resolve_opcode(
         .copied()
         .filter(|&opcode| opcode != u32::MAX)
         .ok_or_else(|| {
-            RvrPreflightIndexError::new(format!(
+            PreflightIndexError::new(format!(
                 "program log PC {:#x} points to an undefined instruction",
                 event.pc
             ))
@@ -191,22 +193,22 @@ fn validate_step_endpoint(
     opcode: u32,
     program_index: usize,
     log: &[PreflightProgramEvent],
-    endpoint: RvrPreflightEndpoint,
-) -> Result<(), RvrPreflightIndexError> {
+    endpoint: PreflightEndpoint,
+) -> Result<(), PreflightIndexError> {
     let terminate = SystemOpcode::TERMINATE.global_opcode().as_usize() as u32;
     let from = log[program_index];
     let to = log[program_index + 1];
     if opcode == terminate {
-        if !matches!(endpoint, RvrPreflightEndpoint::Terminated)
+        if !matches!(endpoint, PreflightEndpoint::Terminated)
             || program_index + 2 != log.len()
             || from != to
         {
-            return Err(RvrPreflightIndexError::new(
+            return Err(PreflightIndexError::new(
                 "TERMINATE must be the final fetched instruction and duplicate the final sentinel",
             ));
         }
     } else if to.timestamp == from.timestamp {
-        return Err(RvrPreflightIndexError::new(format!(
+        return Err(PreflightIndexError::new(format!(
             "non-TERMINATE instruction {program_index} did not advance the timestamp"
         )));
     }
@@ -216,13 +218,13 @@ fn validate_step_endpoint(
 fn validate_endpoint(
     pc_base: u32,
     opcodes: &[u32],
-    transcript: &RvrPreflightTranscript,
-    endpoint: RvrPreflightEndpoint,
-) -> Result<(), RvrPreflightIndexError> {
+    transcript: &FullLogPreflightTranscript,
+    endpoint: PreflightEndpoint,
+) -> Result<(), PreflightIndexError> {
     match endpoint {
-        RvrPreflightEndpoint::Terminated => {
+        PreflightEndpoint::Terminated => {
             if transcript.program_log.len() < 2 {
-                return Err(RvrPreflightIndexError::new(
+                return Err(PreflightIndexError::new(
                     "terminated transcript has no fetched TERMINATE instruction",
                 ));
             }
@@ -230,18 +232,18 @@ fn validate_endpoint(
             if resolve_opcode(pc_base, opcodes, last)?
                 != SystemOpcode::TERMINATE.global_opcode().as_usize() as u32
             {
-                return Err(RvrPreflightIndexError::new(
+                return Err(PreflightIndexError::new(
                     "terminated transcript does not end with TERMINATE",
                 ));
             }
         }
-        RvrPreflightEndpoint::Suspended {
+        PreflightEndpoint::Suspended {
             resume_pc,
             final_timestamp,
         } => {
             let sentinel = transcript.program_log.last().unwrap();
             if sentinel.pc != resume_pc || sentinel.timestamp != final_timestamp {
-                return Err(RvrPreflightIndexError::new(
+                return Err(PreflightIndexError::new(
                     "suspended transcript sentinel does not match the execution boundary",
                 ));
             }
@@ -254,11 +256,11 @@ fn validate_endpoint(
 pub(crate) fn build_memory_predecessors(
     memory: &[PreflightMemoryEvent],
     seeds: &[PreflightInitialWrite],
-) -> Result<Vec<u32>, RvrPreflightIndexError> {
+) -> Result<Vec<u32>, PreflightIndexError> {
     if memory.len() >= MEMORY_PREDECESSOR_INDEX_MASK as usize
         || seeds.len() >= MEMORY_PREDECESSOR_INDEX_MASK as usize
     {
-        return Err(RvrPreflightIndexError::new(
+        return Err(PreflightIndexError::new(
             "memory or initial-write log is too large for packed predecessor indexes",
         ));
     }
@@ -272,7 +274,7 @@ pub(crate) fn build_memory_predecessors(
             )
             .is_some()
         {
-            return Err(RvrPreflightIndexError::new(format!(
+            return Err(PreflightIndexError::new(format!(
                 "duplicate initial-write seed for AS={} pointer={}",
                 seed.address_space, seed.pointer
             )));
@@ -294,7 +296,7 @@ pub(crate) fn build_memory_predecessors(
             Entry::Vacant(vacant) => {
                 let predecessor = if event.is_write() {
                     let seed_index = seed_by_block.remove(&key).ok_or_else(|| {
-                        RvrPreflightIndexError::new(format!(
+                        PreflightIndexError::new(format!(
                             "first event is a write without a seed for AS={} pointer={}",
                             address_space, event.pointer
                         ))
@@ -311,7 +313,7 @@ pub(crate) fn build_memory_predecessors(
     }
 
     if !seed_by_block.is_empty() {
-        return Err(RvrPreflightIndexError::new(format!(
+        return Err(PreflightIndexError::new(format!(
             "{} initial-write seeds were not used",
             seed_by_block.len()
         )));
@@ -347,7 +349,7 @@ mod tests {
 
     #[test]
     fn builds_step_offsets_and_memory_predecessors() {
-        let transcript = RvrPreflightTranscript {
+        let transcript = FullLogPreflightTranscript {
             program_log: vec![
                 PreflightProgramEvent {
                     pc: 0,
@@ -397,7 +399,7 @@ mod tests {
 
     #[test]
     fn rejects_a_first_write_without_exactly_one_seed() {
-        let transcript = RvrPreflightTranscript {
+        let transcript = FullLogPreflightTranscript {
             program_log: vec![
                 PreflightProgramEvent {
                     pc: 0,
@@ -487,7 +489,7 @@ mod tests {
     #[test]
     fn accepts_a_suspended_segment_boundary() {
         let phantom = SystemOpcode::PHANTOM.global_opcode().as_usize() as u32;
-        let transcript = RvrPreflightTranscript {
+        let transcript = FullLogPreflightTranscript {
             program_log: vec![
                 PreflightProgramEvent {
                     pc: 8,
@@ -505,7 +507,7 @@ mod tests {
             8,
             &[phantom, phantom],
             &transcript,
-            RvrPreflightEndpoint::Suspended {
+            PreflightEndpoint::Suspended {
                 resume_pc: 12,
                 final_timestamp: 3,
             },
@@ -522,7 +524,7 @@ mod tests {
             8,
             &[phantom, phantom],
             &transcript,
-            RvrPreflightEndpoint::Suspended {
+            PreflightEndpoint::Suspended {
                 resume_pc: 16,
                 final_timestamp: 3,
             },
