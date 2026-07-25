@@ -1,4 +1,15 @@
-//! Experimental checkpoint-and-residual RVR preflight execution.
+//! Compact checkpoint-and-residual RVR preflight execution.
+//!
+//! Serial execution still uses mutable random-access VM memory. Its
+//! authoritative preflight output contains only periodic architectural
+//! checkpoints and ordered residual values that deterministic replay cannot
+//! recover from the program and segment-start state. GPU expansion converts
+//! those arrays into a read-only logical execution history for parallel
+//! tracegen.
+//!
+//! Dirty-page bitsets are transfer metadata, not transcript data: they identify
+//! host writes that must be copied before the next segment. Proof-visible reads
+//! and their predecessor timestamps are reconstructed later by GPU chronology.
 
 use std::path::Path;
 
@@ -23,7 +34,7 @@ use crate::{
 
 const _: () = assert!(CHECKPOINT_DIRTY_PAGE_BYTES == PAGE_SIZE);
 
-/// Resource limits for one experimental checkpoint-preflight execution call.
+/// Resource limits for one checkpoint-preflight execution call.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RvrCheckpointPreflightLimits {
     pub max_instructions: usize,

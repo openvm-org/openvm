@@ -1,3 +1,28 @@
+//! Record-free GPU proving from RVR checkpoint execution.
+//!
+//! ```text
+//! metered RVR -> exact segment boundaries
+//!                         |
+//! segment-start memory ---+--> checkpoint RVR -> final mutable VM state
+//!                                      |
+//!                              checkpoints + residuals
+//!                                      |
+//!                         GPU count/emit expansion
+//!                                      |
+//!                       chronology + opcode indexes
+//!                                      |
+//!                     immutable read-only replay view
+//!                         |          |          |
+//!                       system     RV64     extensions
+//!                                      |
+//!                         drop replay scratch -> prove
+//! ```
+//!
+//! Segment-start memory is uploaded before checkpoint execution mutates the
+//! host state. The checkpoint log seeds parallel replay; the derived program
+//! and memory logs are not executor output and do not survive into the proving
+//! memory peak.
+
 use openvm_circuit::{
     arch::{
         execution_mode::Segment,
@@ -20,8 +45,8 @@ use crate::{StdIn, F, SC};
 
 const CHECKPOINT_INTERVAL: usize = 512;
 
-/// Explicit experimental continuation driver for compact RVR checkpoint
-/// preflight and record-free GPU trace generation.
+/// Explicit continuation driver for compact RVR checkpoint preflight and
+/// record-free GPU trace generation.
 pub(super) fn prove(
     instance: &mut VmInstance<BabyBearPoseidon2GpuEngine, SdkVmGpuBuilder>,
     input: StdIn,

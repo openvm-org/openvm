@@ -1,4 +1,17 @@
-//! OpenVM-owned rvr integration layer.
+//! OpenVM-owned RVR execution.
+//!
+//! The execution modes share opcode semantics but produce different outputs:
+//!
+//! ```text
+//! pure        program + mutable VM state -> final VM state
+//! metered     program + mutable VM state -> final VM state + segment plan
+//! checkpoint  program + mutable VM state -> final VM state + checkpoints + residuals
+//! ```
+//!
+//! Checkpoint preflight is the proving path. Its two append-only arrays are a
+//! compact replay seed, not chip records. GPU expansion re-executes independent
+//! checkpoint intervals to derive the immutable program and memory history used
+//! by system, RISC-V, and extension trace generators.
 
 mod abi_consts;
 pub mod bridge;

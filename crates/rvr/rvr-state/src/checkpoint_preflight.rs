@@ -1,4 +1,8 @@
-//! C-compatible buffers used by experimental checkpoint preflight execution.
+//! C-compatible buffers used by checkpoint preflight execution.
+//!
+//! The hot-path ABI has two append-only outputs: architectural checkpoints and
+//! residual values. Dirty-page words are separate host-to-device transfer
+//! metadata and are not part of the replay transcript.
 
 use core::mem::{align_of, offset_of, size_of};
 
