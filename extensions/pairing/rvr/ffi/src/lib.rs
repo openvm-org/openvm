@@ -3,7 +3,10 @@
 //! Computes the multi-Miller loop and final exponentiation hint, then sets
 //! the hint stream to the result bytes.
 
-use std::ffi::c_void;
+use std::{
+    ffi::c_void,
+    panic::{catch_unwind, AssertUnwindSafe},
+};
 
 use halo2curves_axiom::{bls12_381, bn256, ff::PrimeField};
 use openvm_ecc_guest::{
@@ -16,7 +19,9 @@ use openvm_pairing_guest::{
 };
 use openvm_platform::WORD_SIZE;
 use rvr_openvm_ext_algebra_ffi_common::{BLS12_381_ELEM_BYTES, FIELD_256_BYTES};
-use rvr_openvm_ext_ffi_common::{ext_hint_stream_set, peek_mem_u64, peek_mem_words};
+use rvr_openvm_ext_ffi_common::{
+    checked_guest_memory_range, checked_peek_mem_words, ext_hint_stream_set, peek_mem_words,
+};
 
 /// BN254 base field element size in bytes.
 const BN254_FQ_BYTES: u64 = FIELD_256_BYTES as u64;
@@ -28,8 +33,6 @@ const BLS12_381_FQ_WORDS: usize = BLS12_381_ELEM_BYTES / WORD_SIZE;
 const G1_AFFINE_COORDS: u64 = 2;
 /// G2 affine point: two Fp2 coordinates, each containing two Fp elements.
 const G2_AFFINE_COORDS: u64 = 4;
-/// Offset of `len` in a guest slice header `(data_ptr, len)`.
-const SLICE_LEN_OFFSET: u64 = WORD_SIZE as u64;
 
 unsafe fn set_hint_stream(bytes: &[u8]) {
     let len = u64::try_from(bytes.len()).unwrap();
@@ -38,7 +41,7 @@ unsafe fn set_hint_stream(bytes: &[u8]) {
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
-/// Peek at `N` bytes in guest memory.
+/// Peek at `N` bytes in a range validated by [`read_pairing_points`].
 unsafe fn read_bytes<const N: usize, const WORDS: usize>(state: *mut c_void, ptr: u64) -> [u8; N] {
     const {
         assert!(N == WORDS * WORD_SIZE, "word count must cover N bytes");
@@ -64,8 +67,8 @@ unsafe fn read_bls12_381_fq(state: *mut c_void, ptr: u64) -> Option<bls12_381::F
     Option::from(bls12_381::Fq::from_repr(bytes.into()))
 }
 
-fn point_base(ptr: u64, idx: u64, words_per_point: u64) -> Option<u64> {
-    let offset = idx.checked_mul(words_per_point)?;
+fn point_base(ptr: u64, idx: usize, bytes_per_point: u64) -> Option<u64> {
+    let offset = u64::try_from(idx).ok()?.checked_mul(bytes_per_point)?;
     ptr.checked_add(offset)
 }
 
@@ -86,36 +89,58 @@ unsafe fn read_pairing_points<Fq: Field, Fq2: Field>(
     read_fq: impl Fn(*mut c_void, u64) -> Option<Fq>,
     make_fq2: impl Fn(Fq, Fq) -> Fq2,
 ) -> Option<PairingPoints<Fq, Fq2>> {
-    let p_ptr = peek_mem_u64(state, rs1_val);
-    let p_len = peek_mem_u64(state, rs1_val + SLICE_LEN_OFFSET);
-    let q_ptr = peek_mem_u64(state, rs2_val);
-    let q_len = peek_mem_u64(state, rs2_val + SLICE_LEN_OFFSET);
+    const SLICE_HEADER_BYTES: u64 = 2 * WORD_SIZE as u64;
+
+    // Validate both slice headers before reading either one.
+    checked_guest_memory_range(rs1_val, SLICE_HEADER_BYTES)?;
+    checked_guest_memory_range(rs2_val, SLICE_HEADER_BYTES)?;
+
+    let mut p_header = [0u64; 2];
+    let mut q_header = [0u64; 2];
+    checked_peek_mem_words(state, rs1_val, &mut p_header)?;
+    checked_peek_mem_words(state, rs2_val, &mut q_header)?;
+    let [p_ptr, p_len] = p_header;
+    let [q_ptr, q_len] = q_header;
 
     if p_len != q_len {
         return None;
     }
 
-    let p: Vec<_> = (0..p_len)
-        .map(|i| {
-            let base = point_base(p_ptr, i, G1_AFFINE_COORDS * fq_bytes)?;
-            Some(AffinePoint::new(
-                read_fq(state, base)?,
-                read_fq(state, base + fq_bytes)?,
-            ))
-        })
-        .collect::<Option<_>>()?;
+    let p_point_bytes = G1_AFFINE_COORDS.checked_mul(fq_bytes)?;
+    let q_point_bytes = G2_AFFINE_COORDS.checked_mul(fq_bytes)?;
+    let p_bytes = p_len.checked_mul(p_point_bytes)?;
+    let q_bytes = q_len.checked_mul(q_point_bytes)?;
+    // Point payloads are not read or allocated until both complete ranges
+    // have been checked.
+    if !p_ptr.is_multiple_of(WORD_SIZE as u64) || !q_ptr.is_multiple_of(WORD_SIZE as u64) {
+        return None;
+    }
+    checked_guest_memory_range(p_ptr, p_bytes)?;
+    checked_guest_memory_range(q_ptr, q_bytes)?;
 
-    let q: Vec<_> = (0..q_len)
-        .map(|i| {
-            let base = point_base(q_ptr, i, G2_AFFINE_COORDS * fq_bytes)?;
-            let x = make_fq2(read_fq(state, base)?, read_fq(state, base + fq_bytes)?);
-            let y = make_fq2(
-                read_fq(state, base + 2 * fq_bytes)?,
-                read_fq(state, base + 3 * fq_bytes)?,
-            );
-            Some(AffinePoint::new(x, y))
-        })
-        .collect::<Option<_>>()?;
+    let len = usize::try_from(p_len).ok()?;
+    let mut p = Vec::new();
+    let mut q = Vec::new();
+    p.try_reserve_exact(len).ok()?;
+    q.try_reserve_exact(len).ok()?;
+    for i in 0..len {
+        let base = point_base(p_ptr, i, p_point_bytes)?;
+        p.push(AffinePoint::new(
+            read_fq(state, base)?,
+            read_fq(state, base.checked_add(fq_bytes)?)?,
+        ));
+
+        let base = point_base(q_ptr, i, q_point_bytes)?;
+        let x = make_fq2(
+            read_fq(state, base)?,
+            read_fq(state, base.checked_add(fq_bytes)?)?,
+        );
+        let y = make_fq2(
+            read_fq(state, base.checked_add(2 * fq_bytes)?)?,
+            read_fq(state, base.checked_add(3 * fq_bytes)?)?,
+        );
+        q.push(AffinePoint::new(x, y));
+    }
 
     Some((p, q))
 }
@@ -166,6 +191,22 @@ unsafe fn hint_bls12_381(state: *mut c_void, rs1_val: u64, rs2_val: u64) -> Opti
     )
 }
 
+unsafe fn run_hint(
+    state: *mut c_void,
+    rs1_val: u64,
+    rs2_val: u64,
+    hint: unsafe fn(*mut c_void, u64, u64) -> Option<Vec<u8>>,
+) -> bool {
+    catch_unwind(AssertUnwindSafe(|| {
+        let Some(hint_bytes) = hint(state, rs1_val, rs2_val) else {
+            return false;
+        };
+        set_hint_stream(&hint_bytes);
+        true
+    }))
+    .unwrap_or(false)
+}
+
 // ── FFI entry point ─────────────────────────────────────────────────────
 
 /// # Safety
@@ -176,12 +217,7 @@ pub unsafe extern "C" fn rvr_ext_pairing_hint_final_exp_bn254(
     rs1_val: u64,
     rs2_val: u64,
 ) -> bool {
-    if let Some(hint_bytes) = hint_bn254(state, rs1_val, rs2_val) {
-        set_hint_stream(&hint_bytes);
-        true
-    } else {
-        false
-    }
+    run_hint(state, rs1_val, rs2_val, hint_bn254)
 }
 
 /// # Safety
@@ -192,10 +228,5 @@ pub unsafe extern "C" fn rvr_ext_pairing_hint_final_exp_bls12_381(
     rs1_val: u64,
     rs2_val: u64,
 ) -> bool {
-    if let Some(hint_bytes) = hint_bls12_381(state, rs1_val, rs2_val) {
-        set_hint_stream(&hint_bytes);
-        true
-    } else {
-        false
-    }
+    run_hint(state, rs1_val, rs2_val, hint_bls12_381)
 }

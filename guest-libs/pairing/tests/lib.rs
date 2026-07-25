@@ -15,6 +15,11 @@ mod bn254 {
         air_test, air_test_impl, air_test_with_min_segments, test_system_config,
         TestStarkEngine as Engine,
     };
+    #[cfg(feature = "rvr")]
+    use openvm_circuit::{
+        arch::{ExecutionError, Streams, VmExecutor},
+        system::memory::online::LinearMemory,
+    };
     use openvm_ecc_circuit::{
         CurveConfig, Rv64WeierstrassBuilder, Rv64WeierstrassConfig, WeierstrassExtension,
     };
@@ -24,6 +29,13 @@ mod bn254 {
     };
     use openvm_ecc_transpiler::EccTranspilerExtension;
     use openvm_instructions::exe::VmExe;
+    #[cfg(feature = "rvr")]
+    use openvm_instructions::{
+        instruction::Instruction,
+        program::Program,
+        riscv::{RV64_MEMORY_AS, RV64_REGISTER_AS, RV64_REGISTER_NUM_LIMBS},
+        LocalOpcode, PhantomDiscriminant, SystemOpcode,
+    };
     use openvm_pairing_circuit::{
         PairingCurve, PairingExtension, Rv64PairingBuilder, Rv64PairingConfig,
     };
@@ -33,6 +45,8 @@ mod bn254 {
         pairing::{EvaluatedLine, FinalExp, LineMulDType, MillerStep, MultiMillerLoop},
     };
     use openvm_pairing_transpiler::PairingTranspilerExtension;
+    #[cfg(feature = "rvr")]
+    use openvm_platform::memory::MEM_SIZE;
     use openvm_riscv_transpiler::{
         Rv64ITranspilerExtension, Rv64IoTranspilerExtension, Rv64MTranspilerExtension,
     };
@@ -444,6 +458,116 @@ mod bn254 {
         let io = io.into_iter().flat_map(|w| w.to_le_bytes()).collect();
         air_test_with_min_segments(Rv64PairingBuilder, config, openvm_exe, vec![io], 1);
         Ok(())
+    }
+
+    #[cfg(feature = "rvr")]
+    #[test]
+    fn pairing_hint_rejects_malformed_guest_ranges_with_typed_traps() -> Result<()> {
+        const P_REGISTER: usize = 10;
+        const Q_REGISTER: usize = 11;
+        const P_HEADER: u64 = 0x1000;
+        const Q_HEADER: u64 = 0x1020;
+        const Q_DATA: u64 = 0x2000;
+        const BN254_G1_BYTES: u64 = 64;
+
+        let instructions = [
+            Instruction::phantom(
+                PhantomDiscriminant(openvm_pairing_transpiler::PairingPhantom::HintFinalExp as u16),
+                F::new((P_REGISTER * RV64_REGISTER_NUM_LIMBS) as u32),
+                F::new((Q_REGISTER * RV64_REGISTER_NUM_LIMBS) as u32),
+                PairingCurve::Bn254 as u16,
+            ),
+            Instruction::from_usize(SystemOpcode::TERMINATE.global_opcode(), [0; 5]),
+        ];
+        let exe = VmExe::from(Program::from_instructions(&instructions));
+        let executor = VmExecutor::new(get_testing_config())?;
+        let rvr = executor.rvr_instance(&exe, None)?;
+
+        let cases = [
+            (
+                "truncated slice header",
+                MEM_SIZE as u64 - 8,
+                None,
+                0,
+                Q_DATA,
+                0,
+            ),
+            (
+                "wrapped point pointer",
+                P_HEADER,
+                Some(u64::MAX - 31),
+                1,
+                Q_DATA,
+                1,
+            ),
+            (
+                "out-of-range point span",
+                P_HEADER,
+                Some(MEM_SIZE as u64 - BN254_G1_BYTES + 8),
+                1,
+                Q_DATA,
+                1,
+            ),
+            (
+                "excessive point count",
+                P_HEADER,
+                Some(0),
+                MEM_SIZE as u64 / BN254_G1_BYTES + 1,
+                0,
+                MEM_SIZE as u64 / BN254_G1_BYTES + 1,
+            ),
+        ];
+
+        for (name, p_header, p_ptr, p_len, q_ptr, q_len) in cases {
+            let mut state = rvr.create_initial_vm_state(Streams::default());
+            write_u64(
+                &mut state.memory.memory.mem[RV64_REGISTER_AS as usize],
+                P_REGISTER * RV64_REGISTER_NUM_LIMBS,
+                p_header,
+            );
+            write_u64(
+                &mut state.memory.memory.mem[RV64_REGISTER_AS as usize],
+                Q_REGISTER * RV64_REGISTER_NUM_LIMBS,
+                Q_HEADER,
+            );
+            if let Some(p_ptr) = p_ptr {
+                write_slice_header(
+                    &mut state.memory.memory.mem[RV64_MEMORY_AS as usize],
+                    P_HEADER as usize,
+                    p_ptr,
+                    p_len,
+                );
+            }
+            write_slice_header(
+                &mut state.memory.memory.mem[RV64_MEMORY_AS as usize],
+                Q_HEADER as usize,
+                q_ptr,
+                q_len,
+            );
+
+            let error = match rvr.execute_from_state(state) {
+                Ok(_) => panic!("{name}: malformed pairing input must trap"),
+                Err(error) => error,
+            };
+            match error {
+                ExecutionError::RvrExecution(message) => {
+                    assert_eq!(message, "execution returned error code: 3", "{name}");
+                }
+                error => panic!("{name}: expected a typed RVR trap, got {error}"),
+            }
+        }
+        Ok(())
+    }
+
+    #[cfg(feature = "rvr")]
+    fn write_slice_header(memory: &mut impl LinearMemory, address: usize, data_ptr: u64, len: u64) {
+        write_u64(memory, address, data_ptr);
+        write_u64(memory, address + 8, len);
+    }
+
+    #[cfg(feature = "rvr")]
+    fn write_u64(memory: &mut impl LinearMemory, address: usize, value: u64) {
+        memory.as_mut_slice()[address..address + 8].copy_from_slice(&value.to_le_bytes());
     }
 }
 
