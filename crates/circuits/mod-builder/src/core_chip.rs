@@ -360,6 +360,8 @@ pub enum FieldExpressionTraceError {
     InvalidProgramOutput(usize),
     InvalidVariableCount { expected: usize, actual: usize },
     OutputMismatch,
+    ProgramTooLarge,
+    UnsupportedDeviceProgram(&'static str),
 }
 
 impl<A> FieldExpressionFiller<A> {
