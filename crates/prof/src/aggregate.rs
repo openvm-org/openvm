@@ -987,7 +987,7 @@ mod tests {
             ),
             (
                 EXECUTE_CHECKPOINT_PREFLIGHT_INSNS_LABEL.to_string(),
-                vec![(100.0, labels(None))],
+                vec![(40.0, labels(Some(0))), (60.0, labels(Some(1)))],
             ),
         ]);
 
