@@ -63,7 +63,9 @@ impl RvrCheckpointPreflightLimits {
         // when basic blocks overshoot an interval boundary.
         let max_checkpoints = (self.max_instructions / self.checkpoint_interval)
             .checked_add(usize::from(
-                self.max_instructions % self.checkpoint_interval != 0,
+                !self
+                    .max_instructions
+                    .is_multiple_of(self.checkpoint_interval),
             ))
             .ok_or_else(|| "checkpoint-preflight checkpoint bound overflow".to_string())?;
         let max_checkpoints_u64 = u64::try_from(max_checkpoints)

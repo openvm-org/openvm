@@ -48,6 +48,7 @@ dashmap.workspace = true
 cfg-if.workspace = true
 libloading = { workspace = true, optional = true }
 tempfile = { workspace = true, optional = true }
+sha2 = { workspace = true, optional = true }
 nix = { workspace = true, optional = true }
 bytesize.workspace = true
 
@@ -99,6 +100,7 @@ rvr = [
     "dep:rvr-state",
     "dep:libloading",
     "dep:tempfile",
+    "dep:sha2",
     "dep:nix",
     "openvm-circuit-derive/rvr",
 ]
